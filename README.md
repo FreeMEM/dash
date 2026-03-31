@@ -68,13 +68,66 @@ end
 - **Double Buffering** — Animación sin flicker
 - **FFI** — Llamadas directas a funciones C/AmigaOS
 
-## Requisitos
+## Instalación rápida
 
-- **Python 3.10+** con librería [Lark](https://github.com/lark-parser/lark)
-- **m68k-amigaos-gcc** — Cross-compiler ([BlitterStudio](https://github.com/BlitterStudio/m68k-amigaos-gcc))
-- **Linux**, macOS o Windows (WSL2)
+### Ubuntu / Debian
 
-Ver [docs/INSTALACION.md](docs/INSTALACION.md) para la guía completa de instalación.
+```bash
+# 1. Dependencias del sistema
+sudo apt update
+sudo apt install -y python3 python3-pip make wget git gcc g++ \
+    lhasa libgmp-dev libmpfr-dev libmpc-dev flex bison \
+    gettext texinfo ncurses-dev autoconf rsync libreadline-dev
+
+# 2. Parser de Dash
+pip install lark --break-system-packages
+
+# 3. Cross-compiler para Amiga (m68k-amigaos-gcc)
+git clone https://github.com/BlitterStudio/m68k-amigaos-gcc.git ~/m68k-amigaos-gcc
+cd ~/m68k-amigaos-gcc
+make update
+sudo mkdir -p /opt/amiga && sudo chown $USER /opt/amiga
+make all -j$(nproc)
+
+# 4. Añadir al PATH
+echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# 5. Clonar Dash y probar
+git clone https://github.com/FreeMEM/dash.git
+cd dash
+./dash examples/hola.dash -o bin/hola
+```
+
+### CachyOS / Arch Linux
+
+```bash
+# 1. Dependencias del sistema
+sudo pacman -S --needed python python-pip make wget git gcc \
+    lhasa gmp mpfr libmpc flex bison gettext texinfo \
+    ncurses autoconf rsync readline
+
+# 2. Parser de Dash
+pip install lark --break-system-packages
+
+# 3. Cross-compiler para Amiga (m68k-amigaos-gcc)
+git clone https://github.com/BlitterStudio/m68k-amigaos-gcc.git ~/m68k-amigaos-gcc
+cd ~/m68k-amigaos-gcc
+make update
+sudo mkdir -p /opt/amiga && sudo chown $USER /opt/amiga
+make all -j$(nproc)
+
+# 4. Añadir al PATH
+echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# 5. Clonar Dash y probar
+git clone https://github.com/FreeMEM/dash.git
+cd dash
+./dash examples/hola.dash -o bin/hola
+```
+
+> La compilación del cross-compiler tarda entre 30 minutos y 2 horas según tu hardware. Ver [docs/INSTALACION.md](docs/INSTALACION.md) para la guía completa, resolución de problemas y opciones avanzadas (macOS, versiones de GCC, elf2hunk).
 
 ## Uso
 
