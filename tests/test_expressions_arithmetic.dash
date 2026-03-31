@@ -1,0 +1,42 @@
+# Test: Arithmetic Expressions
+# Verifica operaciones aritméticas y precedencia
+
+Window TestWin
+    title "Arithmetic Test"
+    width 200
+    height 100
+end
+
+Main
+    # Basic operations
+    a = 10
+    b = 3
+
+    sum = a + b
+    diff = a - b
+    prod = a * b
+    quot = a / b
+    remainder = a % b
+
+    # Negative numbers
+    neg = -10
+    negSum = neg + 5
+
+    # Precedence (multiplication before addition)
+    prec1 = 2 + 3 * 4     # Should be 14
+    prec2 = (2 + 3) * 4   # Should be 20
+
+    # Complex expressions
+    complex = (a + b) * (a - b)
+    nested = ((a + 1) * 2) + ((b - 1) / 2)
+
+    # Chained operations
+    chain = 1 + 2 + 3 + 4 + 5
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

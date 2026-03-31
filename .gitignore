@@ -1,0 +1,38 @@
+# Build artifacts
+bin/
+build/
+output.c
+*.o
+
+# Archives
+*.zip
+
+# Emulator config
+*.fs-uae
+
+# Session logs
+sesion.txt
+
+# Old test directory
+test/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+
+# Claude
+.claude/
+CLAUDE.md
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

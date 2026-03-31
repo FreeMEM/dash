@@ -1,0 +1,292 @@
+# Test Software Sprites - Multiple Bouncing Sprites
+# RTG Compatible - Correct update order for multiple sprites
+
+Window win
+    title "Software Sprites"
+    width 400
+    height 250
+end
+
+Main
+    win.open
+
+    Print "=== Software Sprites ==="
+    Print "8 bouncing sprites"
+    Print "Close window to exit"
+
+    # Sprite positions and velocities
+    x0 = 20
+    y0 = 30
+    dx0 = 3
+    dy0 = 2
+
+    x1 = 100
+    y1 = 50
+    dx1 = -2
+    dy1 = 3
+
+    x2 = 200
+    y2 = 100
+    dx2 = 2
+    dy2 = -2
+
+    x3 = 300
+    y3 = 150
+    dx3 = -3
+    dy3 = 1
+
+    x4 = 150
+    y4 = 180
+    dx4 = 2
+    dy4 = 2
+
+    x5 = 50
+    y5 = 120
+    dx5 = 1
+    dy5 = -3
+
+    x6 = 250
+    y6 = 60
+    dx6 = -1
+    dy6 = 2
+
+    x7 = 350
+    y7 = 200
+    dx7 = -2
+    dy7 = -1
+
+    # Create sprites
+    soft_sprite_create(0, 12, 12, 4)
+    for yy in (1..10)
+        for xx in (1..10)
+            soft_sprite_pixel(0, xx, yy, 2)
+        end
+    end
+
+    soft_sprite_create(1, 10, 10, 4)
+    for yy in (0..9)
+        for xx in (0..9)
+            soft_sprite_pixel(1, xx, yy, 1)
+        end
+    end
+
+    soft_sprite_create(2, 14, 14, 4)
+    for yy in (0..13)
+        for xx in (0..13)
+            cx = xx - 6
+            cy = yy - 6
+            dist = cx * cx + cy * cy
+            if dist < 40
+                soft_sprite_pixel(2, xx, yy, 3)
+            end
+        end
+    end
+
+    soft_sprite_create(3, 8, 8, 4)
+    for yy in (0..7)
+        for xx in (0..7)
+            soft_sprite_pixel(3, xx, yy, 3)
+        end
+    end
+
+    soft_sprite_create(4, 10, 10, 4)
+    for i in (0..9)
+        soft_sprite_pixel(4, 4, i, 1)
+        soft_sprite_pixel(4, 5, i, 1)
+        soft_sprite_pixel(4, i, 4, 1)
+        soft_sprite_pixel(4, i, 5, 1)
+    end
+
+    soft_sprite_create(5, 10, 10, 4)
+    for yy in (0..9)
+        for xx in (0..9)
+            cx = xx - 4
+            cy = yy - 4
+            dist = cx * cx + cy * cy
+            if dist < 20
+                soft_sprite_pixel(5, xx, yy, 2)
+            end
+            if dist < 8
+                soft_sprite_pixel(5, xx, yy, 3)
+            end
+        end
+    end
+
+    soft_sprite_create(6, 6, 6, 4)
+    for yy in (1..4)
+        for xx in (1..4)
+            soft_sprite_pixel(6, xx, yy, 1)
+        end
+    end
+
+    soft_sprite_create(7, 10, 10, 4)
+    for yy in (0..9)
+        for xx in (0..9)
+            ax = xx - 4
+            ay = yy - 4
+            if ax < 0
+                ax = 0 - ax
+            end
+            if ay < 0
+                ay = 0 - ay
+            end
+            if ax + ay < 5
+                soft_sprite_pixel(7, xx, yy, 3)
+            end
+        end
+    end
+
+    # Initial show - set positions first, then show all
+    soft_sprite_pos(0, x0, y0)
+    soft_sprite_pos(1, x1, y1)
+    soft_sprite_pos(2, x2, y2)
+    soft_sprite_pos(3, x3, y3)
+    soft_sprite_pos(4, x4, y4)
+    soft_sprite_pos(5, x5, y5)
+    soft_sprite_pos(6, x6, y6)
+    soft_sprite_pos(7, x7, y7)
+
+    soft_sprite_show(0)
+    soft_sprite_show(1)
+    soft_sprite_show(2)
+    soft_sprite_show(3)
+    soft_sprite_show(4)
+    soft_sprite_show(5)
+    soft_sprite_show(6)
+    soft_sprite_show(7)
+
+    # Animation loop
+    running = true
+    while running
+        # STEP 1: Hide ALL sprites first (restore all backgrounds)
+        soft_sprite_hide(7)
+        soft_sprite_hide(6)
+        soft_sprite_hide(5)
+        soft_sprite_hide(4)
+        soft_sprite_hide(3)
+        soft_sprite_hide(2)
+        soft_sprite_hide(1)
+        soft_sprite_hide(0)
+
+        # STEP 2: Update all positions
+        x0 = x0 + dx0
+        y0 = y0 + dy0
+        if x0 < 5 or x0 > 375
+            dx0 = 0 - dx0
+        end
+        if y0 < 15 or y0 > 220
+            dy0 = 0 - dy0
+        end
+
+        x1 = x1 + dx1
+        y1 = y1 + dy1
+        if x1 < 5 or x1 > 375
+            dx1 = 0 - dx1
+        end
+        if y1 < 15 or y1 > 220
+            dy1 = 0 - dy1
+        end
+
+        x2 = x2 + dx2
+        y2 = y2 + dy2
+        if x2 < 5 or x2 > 370
+            dx2 = 0 - dx2
+        end
+        if y2 < 15 or y2 > 215
+            dy2 = 0 - dy2
+        end
+
+        x3 = x3 + dx3
+        y3 = y3 + dy3
+        if x3 < 5 or x3 > 380
+            dx3 = 0 - dx3
+        end
+        if y3 < 15 or y3 > 225
+            dy3 = 0 - dy3
+        end
+
+        x4 = x4 + dx4
+        y4 = y4 + dy4
+        if x4 < 5 or x4 > 375
+            dx4 = 0 - dx4
+        end
+        if y4 < 15 or y4 > 220
+            dy4 = 0 - dy4
+        end
+
+        x5 = x5 + dx5
+        y5 = y5 + dy5
+        if x5 < 5 or x5 > 375
+            dx5 = 0 - dx5
+        end
+        if y5 < 15 or y5 > 220
+            dy5 = 0 - dy5
+        end
+
+        x6 = x6 + dx6
+        y6 = y6 + dy6
+        if x6 < 5 or x6 > 380
+            dx6 = 0 - dx6
+        end
+        if y6 < 15 or y6 > 225
+            dy6 = 0 - dy6
+        end
+
+        x7 = x7 + dx7
+        y7 = y7 + dy7
+        if x7 < 5 or x7 > 375
+            dx7 = 0 - dx7
+        end
+        if y7 < 15 or y7 > 220
+            dy7 = 0 - dy7
+        end
+
+        # STEP 3: Set new positions and show ALL sprites
+        soft_sprite_pos(0, x0, y0)
+        soft_sprite_pos(1, x1, y1)
+        soft_sprite_pos(2, x2, y2)
+        soft_sprite_pos(3, x3, y3)
+        soft_sprite_pos(4, x4, y4)
+        soft_sprite_pos(5, x5, y5)
+        soft_sprite_pos(6, x6, y6)
+        soft_sprite_pos(7, x7, y7)
+
+        soft_sprite_show(0)
+        soft_sprite_show(1)
+        soft_sprite_show(2)
+        soft_sprite_show(3)
+        soft_sprite_show(4)
+        soft_sprite_show(5)
+        soft_sprite_show(6)
+        soft_sprite_show(7)
+
+        # Sync with display
+        wait_vblank()
+
+        # Check for window close
+        if window_check_close()
+            running = false
+        end
+    end
+
+    # Cleanup
+    soft_sprite_hide(0)
+    soft_sprite_hide(1)
+    soft_sprite_hide(2)
+    soft_sprite_hide(3)
+    soft_sprite_hide(4)
+    soft_sprite_hide(5)
+    soft_sprite_hide(6)
+    soft_sprite_hide(7)
+
+    soft_sprite_free(0)
+    soft_sprite_free(1)
+    soft_sprite_free(2)
+    soft_sprite_free(3)
+    soft_sprite_free(4)
+    soft_sprite_free(5)
+    soft_sprite_free(6)
+    soft_sprite_free(7)
+
+    close_window()
+end

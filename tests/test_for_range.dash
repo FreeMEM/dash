@@ -1,0 +1,27 @@
+# Test for-range loops
+Window win
+    title "For Range Test"
+    width 400
+    height 200
+end
+
+Main
+    win.open
+
+    # Simple range loop 1 to 5
+    for i in (1..5)
+        Print i
+    end
+
+    # Range with expressions
+    n = 3
+    for j in (1..n)
+        Print j * 10
+    end
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

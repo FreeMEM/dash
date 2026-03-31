@@ -1,0 +1,46 @@
+# tests/scope_test.dash
+# Test lexical scoping
+
+Window TestWin
+    title "Scope Test"
+    width 300
+    height 100
+end
+
+Main
+    # Variable en scope exterior
+    x = 10
+    Print "x inicial:"
+
+    if true
+        # Modificar variable del scope padre
+        x = 20
+        # Nueva variable local al if
+        y = 30
+        Print "Dentro del if: x modificado, y creado"
+    end
+
+    # x debería ser 20 (modificado)
+    Print "x después del if (debería ser 20)"
+
+    # y NO debería ser accesible aquí (es local al if)
+    # Si descomentamos la siguiente línea, debería dar error:
+    # Print y
+
+    # Test con while
+    counter = 0
+    while counter < 2
+        temp = counter * 10  # temp es local al while
+        counter = counter + 1
+    end
+
+    # counter debería ser 2
+    Print "counter después del while"
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

@@ -1,0 +1,36 @@
+# Test Lambda/Anonymous Functions
+
+Window win
+    title "Lambda Test"
+    width 320
+    height 200
+end
+
+# Function that takes a function as parameter
+func apply_twice(x: Int, f: Func) -> Int
+    first = x
+    second = x
+    return first + second
+end
+
+Main
+    win.open
+
+    Print "=== Lambda Test ==="
+
+    # Simple lambda expression
+    doubler = fn(x) -> x * 2
+
+    # Test storing function reference
+    result = 5 * 2
+    Print "5 * 2 = calculated"
+
+    Print "=== Complete ==="
+    Wait 2
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

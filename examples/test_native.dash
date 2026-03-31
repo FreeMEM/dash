@@ -1,0 +1,36 @@
+# Test @native - inline C code
+
+# A native function that reads the hardware clock
+@native func peek_byte(addr: Pointer) -> Int
+"""
+    volatile UBYTE *p = (volatile UBYTE *)addr;
+    return (LONG)*p;
+"""
+end
+
+# Native function to poke a byte
+@native func poke_byte(addr: Pointer, val: Int)
+"""
+    volatile UBYTE *p = (volatile UBYTE *)addr;
+    *p = (UBYTE)val;
+"""
+end
+
+# Native function for direct custom chip access
+@native func read_custom(offset: Int) -> Int
+"""
+    volatile UWORD *custom = (volatile UWORD *)0xDFF000;
+    return (LONG)custom[offset / 2];
+"""
+end
+
+Main
+    Print "=== Native C Test ==="
+
+    # Read mouse X counter from hardware
+    x = read_custom(10)  # DMACONR
+    Print x
+
+    Print "=== Test Complete ==="
+    Wait 2
+end

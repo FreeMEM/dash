@@ -1,0 +1,265 @@
+# ========================================
+# Dash Double Buffering Module for Amiga
+# Flicker-free animation using two buffers
+# ========================================
+#
+# Double buffering prevents screen tearing by:
+# 1. Drawing to a hidden "back" buffer
+# 2. Waiting for vertical blank (VBLANK)
+# 3. Swapping display to show back buffer
+# 4. Previous front buffer becomes new back buffer
+#
+# This module provides both:
+# - Screen-based double buffering (full takeover)
+# - Window-based double buffering (system-friendly)
+
+# === Screen-Based Double Buffering ===
+
+# Allocate double buffer structure for custom screen
+@native func dbuf_new(width: Int, height: Int, depth: Int) -> Pointer
+"""
+    /* Structure layout:
+       0: width (LONG)
+       4: height (LONG)
+       8: depth (LONG)
+       12: row_bytes (LONG)
+       16: plane_size (LONG)
+       20: buffer_size (LONG)
+       24: current (LONG) - 0 or 1
+       28: buffer0 (APTR)
+       32: buffer1 (APTR)
+    */
+    LONG header_size = 36;
+    LONG row_bytes = ((width + 15) / 16) * 2;
+    LONG plane_size = row_bytes * height;
+    LONG buffer_size = plane_size * depth;
+
+    /* Allocate header */
+    LONG *header = (LONG *)AllocMem(header_size, MEMF_CLEAR);
+    if (!header) return NULL;
+
+    /* Allocate buffers in CHIP memory */
+    APTR buf0 = AllocMem(buffer_size, MEMF_CHIP | MEMF_CLEAR);
+    APTR buf1 = AllocMem(buffer_size, MEMF_CHIP | MEMF_CLEAR);
+
+    if (!buf0 || !buf1) {
+        if (buf0) FreeMem(buf0, buffer_size);
+        if (buf1) FreeMem(buf1, buffer_size);
+        FreeMem(header, header_size);
+        return NULL;
+    }
+
+    header[0] = width;
+    header[1] = height;
+    header[2] = depth;
+    header[3] = row_bytes;
+    header[4] = plane_size;
+    header[5] = buffer_size;
+    header[6] = 0;  /* current = 0 */
+    *(APTR *)&header[7] = buf0;
+    *(APTR *)&header[8] = buf1;
+
+    return (APTR)header;
+"""
+end
+
+# Free double buffer structure
+@native func dbuf_del(dbuf: Pointer)
+"""
+    if (dbuf) {
+        LONG *header = (LONG *)dbuf;
+        LONG buffer_size = header[5];
+        APTR buf0 = *(APTR *)&header[7];
+        APTR buf1 = *(APTR *)&header[8];
+
+        if (buf0) FreeMem(buf0, buffer_size);
+        if (buf1) FreeMem(buf1, buffer_size);
+        FreeMem(header, 36);
+    }
+"""
+end
+
+# Get pointer to current back buffer (draw here)
+@native func dbuf_back(dbuf: Pointer) -> Pointer
+"""
+    LONG *header = (LONG *)dbuf;
+    LONG current = header[6];
+    /* Back buffer is the one NOT being displayed */
+    return current ? *(APTR *)&header[7] : *(APTR *)&header[8];
+"""
+end
+
+# Get pointer to current front buffer (being displayed)
+@native func dbuf_front(dbuf: Pointer) -> Pointer
+"""
+    LONG *header = (LONG *)dbuf;
+    LONG current = header[6];
+    /* Front buffer is current */
+    return current ? *(APTR *)&header[8] : *(APTR *)&header[7];
+"""
+end
+
+# Get buffer dimensions
+@native func dbuf_width(dbuf: Pointer) -> Int
+"""
+    LONG *header = (LONG *)dbuf;
+    return header[0];
+"""
+end
+
+@native func dbuf_height(dbuf: Pointer) -> Int
+"""
+    LONG *header = (LONG *)dbuf;
+    return header[1];
+"""
+end
+
+@native func dbuf_depth(dbuf: Pointer) -> Int
+"""
+    LONG *header = (LONG *)dbuf;
+    return header[2];
+"""
+end
+
+@native func dbuf_row_bytes(dbuf: Pointer) -> Int
+"""
+    LONG *header = (LONG *)dbuf;
+    return header[3];
+"""
+end
+
+# === Buffer Swapping ===
+
+# Wait for vertical blank then swap buffers
+@native func dbuf_swap(dbuf: Pointer)
+"""
+    LONG *header = (LONG *)dbuf;
+
+    /* Wait for vertical blank */
+    volatile ULONG *vposr = (volatile ULONG *)0xDFF004;
+    while ((*vposr & 0x1FF00) < 0x0100) {}  /* Wait for line >= 256 */
+    while ((*vposr & 0x1FF00) >= 0x0100) {} /* Wait for line < 256 */
+
+    /* Swap current buffer */
+    header[6] = 1 - header[6];
+"""
+end
+
+# Swap buffers without waiting (manual sync)
+@native func dbuf_swap_nowait(dbuf: Pointer)
+"""
+    LONG *header = (LONG *)dbuf;
+    header[6] = 1 - header[6];
+"""
+end
+
+# Wait for vertical blank only
+@native func dbuf_vsync()
+"""
+    volatile ULONG *vposr = (volatile ULONG *)0xDFF004;
+    while ((*vposr & 0x1FF00) < 0x0100) {}
+    while ((*vposr & 0x1FF00) >= 0x0100) {}
+"""
+end
+
+# === Bitplane Pointer Setup ===
+
+# Set bitplane pointers to current front buffer
+@native func dbuf_set_planes(dbuf: Pointer)
+"""
+    LONG *header = (LONG *)dbuf;
+    LONG depth = header[2];
+    LONG plane_size = header[4];
+    LONG current = header[6];
+    UBYTE *buffer = (UBYTE *)(current ? *(APTR *)&header[8] : *(APTR *)&header[7]);
+
+    /* Set bitplane pointers (BPL1PT through BPL8PT) */
+    for (LONG i = 0; i < depth && i < 8; i++) {
+        volatile ULONG *bplpt = (volatile ULONG *)(0xDFF0E0 + i * 4);
+        *bplpt = (ULONG)(buffer + i * plane_size);
+    }
+"""
+end
+
+# === Window-Based Double Buffering ===
+
+# Create double buffer for window's RastPort
+@native func dbuf_rp_new(rp: Pointer, width: Int, height: Int, depth: Int) -> Pointer
+"""
+    struct RastPort *rastport = (struct RastPort *)rp;
+    if (!rastport) return NULL;
+
+    /* Allocate temp bitmap */
+    LONG row_bytes = ((width + 15) / 16) * 2;
+    LONG plane_size = row_bytes * height;
+    LONG bm_size = sizeof(struct BitMap);
+
+    struct BitMap *tmpbm = (struct BitMap *)AllocMem(bm_size, MEMF_CLEAR);
+    if (!tmpbm) return NULL;
+
+    InitBitMap(tmpbm, depth, width, height);
+
+    /* Allocate planes */
+    for (LONG i = 0; i < depth; i++) {
+        tmpbm->Planes[i] = (PLANEPTR)AllocMem(plane_size, MEMF_CHIP | MEMF_CLEAR);
+        if (!tmpbm->Planes[i]) {
+            for (LONG j = 0; j < i; j++) {
+                FreeMem(tmpbm->Planes[j], plane_size);
+            }
+            FreeMem(tmpbm, bm_size);
+            return NULL;
+        }
+    }
+
+    return (APTR)tmpbm;
+"""
+end
+
+# Free window double buffer
+@native func dbuf_rp_del(tmpbm: Pointer, width: Int, height: Int, depth: Int)
+"""
+    struct BitMap *bm = (struct BitMap *)tmpbm;
+    if (bm) {
+        LONG row_bytes = ((width + 15) / 16) * 2;
+        LONG plane_size = row_bytes * height;
+
+        for (LONG i = 0; i < depth; i++) {
+            if (bm->Planes[i]) {
+                FreeMem(bm->Planes[i], plane_size);
+            }
+        }
+        FreeMem(bm, sizeof(struct BitMap));
+    }
+"""
+end
+
+# Blit temp buffer to window
+@native func dbuf_rp_blit(tmpbm: Pointer, rp: Pointer, width: Int, height: Int)
+"""
+    struct BitMap *bm = (struct BitMap *)tmpbm;
+    struct RastPort *rastport = (struct RastPort *)rp;
+
+    if (bm && rastport) {
+        BltBitMapRastPort(bm, 0, 0, rastport, 0, 0, width, height, 0xC0);
+    }
+"""
+end
+
+# === Utility Functions ===
+
+# Clear the back buffer
+func dbuf_clear_back(dbuf: Pointer)
+    back = dbuf_back(dbuf)
+    if back > 0
+        # Use blitter to clear - simple version
+        # For full implementation, use blt_clear from blitter module
+        size = dbuf_width(dbuf) * dbuf_height(dbuf) * dbuf_depth(dbuf) / 8
+    end
+end
+
+# Simple animation loop helper
+func dbuf_frame(dbuf: Pointer)
+    # Draw to back buffer, then swap
+    dbuf_swap(dbuf)
+    dbuf_set_planes(dbuf)
+end

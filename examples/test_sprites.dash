@@ -1,0 +1,102 @@
+# Test Hardware Sprites - Full Screen Animation
+# Bouncing sprite at 50fps (PAL) / 60fps (NTSC)
+# Click mouse to exit
+
+Main
+    # Sprites require a custom screen (4 bitplanes = 16 colors)
+    screen_open(4, "Hardware Sprites - Click to exit")
+
+    # Get screen dimensions
+    screen_w = screen_width()
+    screen_h = screen_height()
+
+    # Create sprite (id=0, width=16, height=13)
+    if sprite_create(0, 16, 13)
+        # Create arrow shape (pointing right)
+        sprite_set_row(0, 0,  32768, 0)
+        sprite_set_row(0, 1,  49152, 0)
+        sprite_set_row(0, 2,  57344, 0)
+        sprite_set_row(0, 3,  61440, 0)
+        sprite_set_row(0, 4,  63488, 0)
+        sprite_set_row(0, 5,  64512, 0)
+        sprite_set_row(0, 6,  65024, 0)
+        sprite_set_row(0, 7,  64512, 0)
+        sprite_set_row(0, 8,  63488, 0)
+        sprite_set_row(0, 9,  61440, 0)
+        sprite_set_row(0, 10, 57344, 0)
+        sprite_set_row(0, 11, 49152, 0)
+        sprite_set_row(0, 12, 32768, 0)
+
+        # Set sprite colors (white, orange, yellow)
+        sprite_color(0, 0, 15, 15, 15)
+        sprite_color(0, 1, 15, 8, 0)
+        sprite_color(0, 2, 15, 15, 0)
+
+        # Initial position (center of screen) and velocity
+        x = screen_w / 2
+        y = screen_h / 2
+        dx = 4
+        dy = 3
+
+        # Calculate bounce limits (full screen minus title bar and sprite size)
+        min_x = 16
+        max_x = screen_w - 32
+        min_y = 20
+        max_y = screen_h - 20
+
+        # Show sprite
+        sprite_pos(0, x, y)
+        sprite_show(0)
+
+        # Animation loop - exit on ESC or mouse click
+        running = true
+        while running
+            # Update position
+            x = x + dx
+            y = y + dy
+
+            # Bounce off screen edges
+            if x < min_x
+                x = min_x
+                dx = 0 - dx
+            end
+            if x > max_x
+                x = max_x
+                dx = 0 - dx
+            end
+            if y < min_y
+                y = min_y
+                dy = 0 - dy
+            end
+            if y > max_y
+                y = max_y
+                dy = 0 - dy
+            end
+
+            # Move sprite
+            sprite_pos(0, x, y)
+
+            # Wait for vertical blank (smooth 50/60fps)
+            wait_vblank()
+
+            # Check for exit (mouse click)
+            if check_mouse()
+                running = false
+            end
+        end
+
+        # Cleanup
+        sprite_hide(0)
+        sprite_free(0)
+    else
+        Print "Hardware sprites require"
+        Print "native chipset screen."
+        Print ""
+        Print "Click to exit..."
+        while not check_mouse()
+            wait_vblank()
+        end
+    end
+
+    screen_close()
+end

@@ -1,0 +1,98 @@
+# Test advanced graphics functions
+Window win
+    title "Advanced Graphics"
+    width 400
+    height 300
+end
+
+Main
+    win.open
+    time_delay(5)
+
+    # Custom colors using RGB (4-bit: 0-15)
+    gfx_rgb(4, 15, 0, 0)    # Color 4 = Red
+    gfx_rgb(5, 0, 15, 0)    # Color 5 = Green
+    gfx_rgb(6, 0, 0, 15)    # Color 6 = Blue
+    gfx_rgb(7, 15, 15, 0)   # Color 7 = Yellow
+
+    # Draw with custom colors
+    gfx_pen(4)
+    gfx_rect(10, 15, 60, 50)
+
+    gfx_pen(5)
+    gfx_rect(70, 15, 120, 50)
+
+    gfx_pen(6)
+    gfx_rect(130, 15, 180, 50)
+
+    gfx_pen(7)
+    gfx_rect(190, 15, 240, 50)
+
+    # Filled ellipse
+    gfx_pen(4)
+    gfx_ellipse_fill(300, 35, 30, 18)
+
+    # Multiple circles
+    gfx_pen(5)
+    gfx_circle(50, 100, 30)
+    gfx_pen(6)
+    gfx_circle(50, 100, 20)
+    gfx_pen(7)
+    gfx_circle(50, 100, 10)
+
+    # Filled circle
+    gfx_pen(4)
+    gfx_circle_fill(150, 100, 25)
+
+    # Ellipse outline
+    gfx_pen(6)
+    gfx_ellipse(250, 100, 50, 25)
+
+    # Polygon - triangle
+    gfx_pen(5)
+    gfx_poly_begin(330, 130)
+    gfx_poly_add(300, 70)
+    gfx_poly_add(360, 70)
+    gfx_poly_end()
+
+    # Draw pixels pattern
+    gfx_pen(1)
+    for x in (10..100)
+        gfx_pixel(x, 150)
+        gfx_pixel(x, 160)
+    end
+
+    # Lines pattern
+    gfx_pen(2)
+    for i in (0..10)
+        y1 = 170 + i * 2
+        gfx_line(10, y1, 100, 190)
+    end
+
+    # Random rectangles
+    for i in (1..5)
+        c = random_range(4, 7)
+        gfx_pen(c)
+        x1 = random_range(120, 250)
+        y1 = random_range(150, 220)
+        x2 = x1 + random_range(20, 50)
+        y2 = y1 + random_range(15, 40)
+        gfx_rect(x1, y1, x2, y2)
+    end
+
+    # Text labels
+    gfx_pen(1)
+    gfx_text_at(10, 250, "RGB Colors")
+    gfx_text_at(120, 250, "Shapes")
+    gfx_text_at(250, 250, "Random")
+
+    # Box around the whole thing
+    gfx_pen(1)
+    gfx_box(5, 10, 390, 270)
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

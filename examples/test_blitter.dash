@@ -1,0 +1,56 @@
+# Test Blitter Operations
+# Visual demo of blitter-accelerated graphics
+
+Window win
+    title "Blitter Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    Print "=== Blitter Test ==="
+    Print "Drawing shapes..."
+
+    # Draw filled rectangles using RectFill (uses blitter internally)
+    gfx_pen(1)
+    gfx_rect(20, 30, 100, 80)
+
+    gfx_pen(2)
+    gfx_rect(120, 50, 200, 120)
+
+    gfx_pen(3)
+    gfx_rect(60, 100, 180, 160)
+
+    # Draw some lines
+    gfx_pen(1)
+    for i in (0..10)
+        gfx_line(220, 30 + i * 3, 300, 60 + i * 5)
+    end
+
+    # Draw circles/ellipses
+    gfx_pen(2)
+    gfx_ellipse(260, 140, 40, 30)
+
+    gfx_pen(3)
+    gfx_circle(60, 50, 20)
+
+    # Draw a pattern with XOR mode
+    gfx_mode(2)  # COMPLEMENT mode (XOR)
+    gfx_pen(1)
+    for y in (0..5)
+        for x in (0..10)
+            gfx_rect(20 + x * 28, 30 + y * 25, 40 + x * 28, 50 + y * 25)
+        end
+    end
+    gfx_mode(1)  # Back to normal JAM2
+
+    Print "Done! Close window to exit."
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

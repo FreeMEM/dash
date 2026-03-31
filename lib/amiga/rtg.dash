@@ -1,0 +1,203 @@
+# RTG (Retargetable Graphics) Module for Dash
+# Provides CyberGraphX / Picasso96 support for high-color graphics
+#
+# This module enables:
+# - Detection of RTG screens
+# - 24-bit and 32-bit color operations
+# - High-resolution screen modes (up to 1920x1080)
+# - Hardware-accelerated bitmap operations
+
+# Color depth constants
+const DEPTH_4BIT = 4
+const DEPTH_8BIT = 8
+const DEPTH_15BIT = 15
+const DEPTH_16BIT = 16
+const DEPTH_24BIT = 24
+const DEPTH_32BIT = 32
+
+# Common screen resolutions
+const RES_VGA_W = 640
+const RES_VGA_H = 480
+const RES_SVGA_W = 800
+const RES_SVGA_H = 600
+const RES_XGA_W = 1024
+const RES_XGA_H = 768
+const RES_HD_W = 1280
+const RES_HD_H = 720
+const RES_FHD_W = 1920
+const RES_FHD_H = 1080
+
+# Common colors (24-bit RGB) - decimal values
+# Format: (R << 16) | (G << 8) | B
+const COLOR_BLACK = 0
+const COLOR_WHITE = 16777215
+const COLOR_RED = 16711680
+const COLOR_GREEN = 65280
+const COLOR_BLUE = 255
+const COLOR_YELLOW = 16776960
+const COLOR_CYAN = 65535
+const COLOR_MAGENTA = 16711935
+const COLOR_GRAY = 8421504
+const COLOR_DARK_GRAY = 4210752
+const COLOR_LIGHT_GRAY = 12632256
+const COLOR_ORANGE = 16744448
+const COLOR_PURPLE = 8388863
+const COLOR_PINK = 16744640
+
+# Initialize RTG subsystem
+# Returns true if RTG is available
+func rtg_init() -> Bool
+    return rtg_available()
+end
+
+# Check if we're running on an RTG screen
+func is_rtg_mode() -> Bool
+    if not rtg_available()
+        return false
+    end
+    return rtg_is_active()
+end
+
+# Get screen information
+func get_screen_info() -> Int
+    # Returns packed info: (depth << 24) | (height << 12) | width
+    depth = rtg_get_depth()
+    width = rtg_get_width()
+    height = rtg_get_height()
+    return (depth * 16777216) + (height * 4096) + width
+end
+
+# Create a color from RGB components (0-255 each)
+func make_color(r: Int, g: Int, b: Int) -> Int
+    return rtg_rgb(r, g, b)
+end
+
+# Create a color with alpha from ARGB components (0-255 each)
+func make_color_alpha(a: Int, r: Int, g: Int, b: Int) -> Int
+    return rtg_argb(a, r, g, b)
+end
+
+# Extract color components
+func get_red(color: Int) -> Int
+    return rtg_rgb_r(color)
+end
+
+func get_green(color: Int) -> Int
+    return rtg_rgb_g(color)
+end
+
+func get_blue(color: Int) -> Int
+    return rtg_rgb_b(color)
+end
+
+# Blend two colors with alpha (0-255, 0=color1, 255=color2)
+func blend_colors(color1: Int, color2: Int, alpha: Int) -> Int
+    r1 = get_red(color1)
+    g1 = get_green(color1)
+    b1 = get_blue(color1)
+    r2 = get_red(color2)
+    g2 = get_green(color2)
+    b2 = get_blue(color2)
+
+    inv_alpha = 255 - alpha
+    r = (r1 * inv_alpha + r2 * alpha) / 255
+    g = (g1 * inv_alpha + g2 * alpha) / 255
+    b = (b1 * inv_alpha + b2 * alpha) / 255
+
+    return make_color(r, g, b)
+end
+
+# Darken a color by a percentage (0-100)
+func darken(color: Int, percent: Int) -> Int
+    r = get_red(color)
+    g = get_green(color)
+    b = get_blue(color)
+
+    factor = 100 - percent
+    r = (r * factor) / 100
+    g = (g * factor) / 100
+    b = (b * factor) / 100
+
+    return make_color(r, g, b)
+end
+
+# Lighten a color by a percentage (0-100)
+func lighten(color: Int, percent: Int) -> Int
+    r = get_red(color)
+    g = get_green(color)
+    b = get_blue(color)
+
+    r = r + ((255 - r) * percent) / 100
+    g = g + ((255 - g) * percent) / 100
+    b = b + ((255 - b) * percent) / 100
+
+    return make_color(r, g, b)
+end
+
+# Convert grayscale value (0-255) to RGB color
+func grayscale(value: Int) -> Int
+    return make_color(value, value, value)
+end
+
+# Draw a filled rectangle with 24-bit color
+func draw_rect_rgb(x: Int, y: Int, w: Int, h: Int, color: Int)
+    rtg_fill_rect(x, y, w, h, color)
+end
+
+# Draw a single pixel with 24-bit color
+func draw_pixel_rgb(x: Int, y: Int, color: Int)
+    rtg_write_pixel(x, y, color)
+end
+
+# Read a pixel and return 24-bit color
+func read_pixel_rgb(x: Int, y: Int) -> Int
+    return rtg_read_pixel(x, y)
+end
+
+# Draw a horizontal line with 24-bit color
+func draw_hline_rgb(x1: Int, x2: Int, y: Int, color: Int)
+    if x1 > x2
+        tmp = x1
+        x1 = x2
+        x2 = tmp
+    end
+    w = x2 - x1 + 1
+    rtg_fill_rect(x1, y, w, 1, color)
+end
+
+# Draw a vertical line with 24-bit color
+func draw_vline_rgb(x: Int, y1: Int, y2: Int, color: Int)
+    if y1 > y2
+        tmp = y1
+        y1 = y2
+        y2 = tmp
+    end
+    h = y2 - y1 + 1
+    rtg_fill_rect(x, y1, 1, h, color)
+end
+
+# Draw a box outline with 24-bit color
+func draw_box_rgb(x: Int, y: Int, w: Int, h: Int, color: Int)
+    draw_hline_rgb(x, x + w - 1, y, color)
+    draw_hline_rgb(x, x + w - 1, y + h - 1, color)
+    draw_vline_rgb(x, y, y + h - 1, color)
+    draw_vline_rgb(x + w - 1, y, y + h - 1, color)
+end
+
+# Clear screen with a 24-bit color
+func clear_rgb(color: Int)
+    w = rtg_get_width()
+    h = rtg_get_height()
+    rtg_fill_rect(0, 0, w, h, color)
+end
+
+# Open an RTG screen with specified parameters
+# Returns true if successful
+func open_rtg_screen(width: Int, height: Int, depth: Int, title: String) -> Bool
+    return rtg_open_screen(width, height, depth, title)
+end
+
+# Find the best display mode for given dimensions
+func find_best_mode(width: Int, height: Int, depth: Int) -> Int
+    return rtg_best_mode(width, height, depth)
+end

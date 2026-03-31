@@ -1,0 +1,36 @@
+# Test string operations
+Window win
+    title "String Test"
+    width 400
+    height 200
+end
+
+Main
+    win.open
+
+    # String variables
+    nombre = "Amiga"
+    saludo = "Hola, "
+
+    # String concatenation
+    mensaje = saludo + nombre
+    Print mensaje
+
+    # Concatenate with literal
+    completo = mensaje + "!"
+    Print completo
+
+    # String length
+    len = nombre.length
+    Print len
+
+    # Character access
+    inicial = nombre[0]
+    Print inicial
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

@@ -1,0 +1,66 @@
+# Test: Lexical Scope
+# Verifica scope léxico de variables
+
+Window TestWin
+    title "Scope Test"
+    width 200
+    height 100
+end
+
+Main
+    # Variable en scope global
+    x = 10
+
+    # If block - nuevo scope
+    if true
+        x = 20          # modifica variable del padre
+        localIf = 30    # variable local al if
+    end
+    # x debería ser 20 aquí
+    # localIf NO es accesible aquí
+
+    # Else block - scope separado
+    if false
+        a = 1
+    else
+        b = 2           # local al else
+    end
+
+    # While block - nuevo scope
+    counter = 0
+    while counter < 3
+        temp = counter * 10   # local al while
+        counter = counter + 1 # modifica padre
+    end
+    # counter es 3, temp NO es accesible
+
+    # Nested scopes
+    level1 = 1
+    if true
+        level1 = 10     # modifica padre
+        level2 = 2
+        if true
+            level1 = 100    # modifica abuelo
+            level2 = 20     # modifica padre
+            level3 = 3      # local
+        end
+        # level1=100, level2=20, level3 NO accesible
+    end
+    # level1=100, level2 y level3 NO accesibles
+
+    # Variable shadowing test
+    shadow = 1
+    if true
+        # Esto crea nueva variable local, no modifica padre
+        # (en nuestro diseño, SÍ modifica padre - es Python style)
+        shadow = 2
+    end
+    # shadow es 2
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

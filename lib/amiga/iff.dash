@@ -1,0 +1,320 @@
+# ========================================
+# Dash IFF/ILBM Module for Amiga
+# Load IFF image files (ILBM format)
+# ========================================
+#
+# IFF (Interchange File Format) is the standard Amiga file format
+# ILBM (Interleaved Bitmap) is the image subformat
+#
+# Structure:
+#   FORM xxxx ILBM
+#     BMHD (header: width, height, depth, compression)
+#     CMAP (color map / palette)
+#     BODY (bitmap data, possibly compressed)
+
+# === IFF Image Structure ===
+
+# Allocate IFF image structure
+@native func iff_new() -> Pointer
+"""
+    /* Structure:
+       0: width (UWORD)
+       2: height (UWORD)
+       4: depth (UBYTE)
+       5: compression (UBYTE)
+       6: reserved (UWORD)
+       8: bitmap_size (ULONG)
+       12: bitmap_ptr (APTR)
+       16: num_colors (UWORD)
+       18: reserved (UWORD)
+       20: palette[256*3] (UBYTE array)
+    */
+    LONG size = 20 + 256 * 3;  /* header + max palette */
+    APTR img = AllocMem(size, MEMF_CLEAR);
+    return img;
+"""
+end
+
+# Free IFF image structure and bitmap
+@native func iff_del(img: Pointer)
+"""
+    if (img) {
+        UWORD *header = (UWORD *)img;
+        ULONG *sizes = (ULONG *)((UBYTE *)img + 8);
+        APTR *ptrs = (APTR *)((UBYTE *)img + 12);
+
+        /* Free bitmap if allocated */
+        if (*ptrs && sizes[0] > 0) {
+            FreeMem(*ptrs, sizes[0]);
+        }
+
+        /* Free structure */
+        FreeMem(img, 20 + 256 * 3);
+    }
+"""
+end
+
+# === IFF Getters ===
+
+@native func iff_width(img: Pointer) -> Int
+"""
+    UWORD *header = (UWORD *)img;
+    return (LONG)header[0];
+"""
+end
+
+@native func iff_height(img: Pointer) -> Int
+"""
+    UWORD *header = (UWORD *)img;
+    return (LONG)header[1];
+"""
+end
+
+@native func iff_depth(img: Pointer) -> Int
+"""
+    UBYTE *header = (UBYTE *)img;
+    return (LONG)header[4];
+"""
+end
+
+@native func iff_colors(img: Pointer) -> Int
+"""
+    UWORD *header = (UWORD *)img;
+    return (LONG)header[8];  /* num_colors at offset 16 as UWORD index 8 */
+"""
+end
+
+@native func iff_bitmap(img: Pointer) -> Pointer
+"""
+    APTR *ptrs = (APTR *)((UBYTE *)img + 12);
+    return *ptrs;
+"""
+end
+
+# Get palette entry (R, G, B values 0-255)
+@native func iff_pal_r(img: Pointer, index: Int) -> Int
+"""
+    UBYTE *palette = (UBYTE *)img + 20;
+    return (LONG)palette[index * 3];
+"""
+end
+
+@native func iff_pal_g(img: Pointer, index: Int) -> Int
+"""
+    UBYTE *palette = (UBYTE *)img + 20;
+    return (LONG)palette[index * 3 + 1];
+"""
+end
+
+@native func iff_pal_b(img: Pointer, index: Int) -> Int
+"""
+    UBYTE *palette = (UBYTE *)img + 20;
+    return (LONG)palette[index * 3 + 2];
+"""
+end
+
+# === IFF Loading ===
+
+# Load IFF ILBM file from disk
+@native func iff_load(img: Pointer, filename: String) -> Int
+"""
+    BPTR file = Open((STRPTR)filename, MODE_OLDFILE);
+    if (!file) return 0;
+
+    UBYTE header[12];
+    LONG read = Read(file, header, 12);
+    if (read != 12) { Close(file); return 0; }
+
+    /* Check FORM header */
+    if (header[0] != 'F' || header[1] != 'O' ||
+        header[2] != 'R' || header[3] != 'M') {
+        Close(file); return 0;
+    }
+
+    /* Check ILBM type */
+    if (header[8] != 'I' || header[9] != 'L' ||
+        header[10] != 'B' || header[11] != 'M') {
+        Close(file); return 0;
+    }
+
+    UWORD *img_header = (UWORD *)img;
+    UBYTE *img_bytes = (UBYTE *)img;
+    ULONG *img_sizes = (ULONG *)((UBYTE *)img + 8);
+    APTR *img_ptrs = (APTR *)((UBYTE *)img + 12);
+    UBYTE *palette = (UBYTE *)img + 20;
+
+    UBYTE chunk_header[8];
+    LONG width = 0, height = 0, depth = 0, compression = 0;
+    LONG body_found = 0;
+
+    while (Read(file, chunk_header, 8) == 8 && !body_found) {
+        ULONG chunk_size = (chunk_header[4] << 24) | (chunk_header[5] << 16) |
+                          (chunk_header[6] << 8) | chunk_header[7];
+
+        if (chunk_header[0] == 'B' && chunk_header[1] == 'M' &&
+            chunk_header[2] == 'H' && chunk_header[3] == 'D') {
+            /* BMHD - Bitmap Header */
+            UBYTE bmhd[20];
+            Read(file, bmhd, chunk_size > 20 ? 20 : chunk_size);
+            if (chunk_size > 20) Seek(file, chunk_size - 20, OFFSET_CURRENT);
+
+            width = (bmhd[0] << 8) | bmhd[1];
+            height = (bmhd[2] << 8) | bmhd[3];
+            depth = bmhd[8];
+            compression = bmhd[10];
+
+            img_header[0] = width;
+            img_header[1] = height;
+            img_bytes[4] = depth;
+            img_bytes[5] = compression;
+        }
+        else if (chunk_header[0] == 'C' && chunk_header[1] == 'M' &&
+                 chunk_header[2] == 'A' && chunk_header[3] == 'P') {
+            /* CMAP - Color Map */
+            LONG num_colors = chunk_size / 3;
+            if (num_colors > 256) num_colors = 256;
+            img_header[8] = num_colors;
+
+            Read(file, palette, num_colors * 3);
+            if (chunk_size > num_colors * 3) {
+                Seek(file, chunk_size - num_colors * 3, OFFSET_CURRENT);
+            }
+        }
+        else if (chunk_header[0] == 'B' && chunk_header[1] == 'O' &&
+                 chunk_header[2] == 'D' && chunk_header[3] == 'Y') {
+            /* BODY - Bitmap Data */
+            LONG row_bytes = ((width + 15) / 16) * 2;
+            LONG plane_size = row_bytes * height;
+            LONG bitmap_size = plane_size * depth;
+
+            UBYTE *bitmap = (UBYTE *)AllocMem(bitmap_size, MEMF_CHIP | MEMF_CLEAR);
+            if (!bitmap) { Close(file); return 0; }
+
+            img_sizes[0] = bitmap_size;
+            *img_ptrs = bitmap;
+
+            if (compression == 0) {
+                /* Uncompressed */
+                for (LONG y = 0; y < height; y++) {
+                    for (LONG p = 0; p < depth; p++) {
+                        UBYTE *dest = bitmap + p * plane_size + y * row_bytes;
+                        Read(file, dest, row_bytes);
+                    }
+                }
+            }
+            else if (compression == 1) {
+                /* ByteRun1 compression */
+                for (LONG y = 0; y < height; y++) {
+                    for (LONG p = 0; p < depth; p++) {
+                        UBYTE *dest = bitmap + p * plane_size + y * row_bytes;
+                        LONG bytes_written = 0;
+
+                        while (bytes_written < row_bytes) {
+                            BYTE n;
+                            Read(file, &n, 1);
+
+                            if (n >= 0) {
+                                /* Copy n+1 bytes literally */
+                                LONG count = n + 1;
+                                Read(file, dest + bytes_written, count);
+                                bytes_written += count;
+                            }
+                            else if (n != -128) {
+                                /* Repeat next byte 1-n times */
+                                LONG count = 1 - n;
+                                UBYTE val;
+                                Read(file, &val, 1);
+                                for (LONG i = 0; i < count && bytes_written < row_bytes; i++) {
+                                    dest[bytes_written++] = val;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            body_found = 1;
+        }
+        else {
+            /* Skip unknown chunk */
+            Seek(file, chunk_size, OFFSET_CURRENT);
+        }
+
+        /* Align to word boundary */
+        if (chunk_size & 1) Seek(file, 1, OFFSET_CURRENT);
+    }
+
+    Close(file);
+    return body_found ? 1 : 0;
+"""
+end
+
+# === IFF Display ===
+
+# Apply IFF palette to screen colors
+@native func iff_apply_pal(img: Pointer, vp: Pointer)
+"""
+    UWORD *header = (UWORD *)img;
+    UBYTE *palette = (UBYTE *)img + 20;
+    LONG num_colors = header[8];
+
+    struct ViewPort *viewport = (struct ViewPort *)vp;
+
+    for (LONG i = 0; i < num_colors && i < 32; i++) {
+        ULONG r = palette[i * 3] >> 4;
+        ULONG g = palette[i * 3 + 1] >> 4;
+        ULONG b = palette[i * 3 + 2] >> 4;
+        SetRGB4(viewport, i, r, g, b);
+    }
+"""
+end
+
+# Copy IFF bitmap to window RastPort
+@native func iff_blit_to_rp(img: Pointer, rp: Pointer, x: Int, y: Int)
+"""
+    UWORD *header = (UWORD *)img;
+    UBYTE *img_bytes = (UBYTE *)img;
+    APTR *img_ptrs = (APTR *)((UBYTE *)img + 12);
+
+    LONG width = header[0];
+    LONG height = header[1];
+    LONG depth = img_bytes[4];
+    UBYTE *bitmap = (UBYTE *)*img_ptrs;
+
+    if (!bitmap) return;
+
+    struct RastPort *rastport = (struct RastPort *)rp;
+    struct BitMap *src_bm = AllocMem(sizeof(struct BitMap), MEMF_CLEAR);
+    if (!src_bm) return;
+
+    LONG row_bytes = ((width + 15) / 16) * 2;
+    LONG plane_size = row_bytes * height;
+
+    InitBitMap(src_bm, depth, width, height);
+    for (LONG p = 0; p < depth; p++) {
+        src_bm->Planes[p] = (PLANEPTR)(bitmap + p * plane_size);
+    }
+
+    BltBitMapRastPort(src_bm, 0, 0, rastport, x, y, width, height, 0xC0);
+
+    FreeMem(src_bm, sizeof(struct BitMap));
+"""
+end
+
+# === Convenience Functions ===
+
+# Load and display IFF image in window
+func iff_show(filename: String, x: Int, y: Int) -> Pointer
+    img = iff_new()
+    if img > 0
+        result = iff_load(img, filename)
+        if result > 0
+            # Note: would need access to _dash_rp here
+            # iff_blit_to_rp(img, _dash_rp, x, y)
+            return img
+        else
+            iff_del(img)
+            return 0
+        end
+    end
+    return 0
+end

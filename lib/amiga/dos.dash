@@ -1,0 +1,248 @@
+# ========================================
+# Dash DOS Module for Amiga
+# High-level file I/O and buffer API
+# ========================================
+
+# File mode constants
+const MODE_READ = 1005      # MODE_OLDFILE - Open existing for reading
+const MODE_WRITE = 1006     # MODE_NEWFILE - Create/truncate for writing
+const MODE_READWRITE = 1004 # MODE_READWRITE - Open/create for read/write
+
+# Seek mode constants (AmigaDOS uses -1 for beginning, but we use 0,1,2)
+# Note: These are passed to file_seek which handles the conversion
+const SEEK_START = 0    # OFFSET_BEGINNING
+const SEEK_CURRENT = 1  # OFFSET_CURRENT
+const SEEK_END = 2      # OFFSET_END
+
+# === File Handle Helpers ===
+
+# Open a file for reading
+# Returns file handle or 0 on failure
+func open_read(path: String) -> Int
+    return file_open(path, MODE_READ)
+end
+
+# Open a file for writing (creates if not exists)
+# Returns file handle or 0 on failure
+func open_write(path: String) -> Int
+    return file_open(path, MODE_WRITE)
+end
+
+# Open a file for read/write
+# Returns file handle or 0 on failure
+func open_readwrite(path: String) -> Int
+    return file_open(path, MODE_READWRITE)
+end
+
+# Close a file
+func close_file(handle: Int)
+    file_close(handle)
+end
+
+# === Reading Operations ===
+
+# Read a single character (returns -1 on EOF)
+func read_char(handle: Int) -> Int
+    return file_read_byte(handle)
+end
+
+# Check if at end of file
+func at_eof(handle: Int) -> Bool
+    return file_eof(handle)
+end
+
+# === Writing Operations ===
+
+# Write a single character
+func write_char(handle: Int, c: Int)
+    file_write_byte(handle, c)
+end
+
+# Write a line of text (adds newline)
+func write_line(handle: Int, text: String)
+    file_write_line(handle, text)
+end
+
+# === Position Operations ===
+
+# Get current file position
+func get_position(handle: Int) -> Int
+    return file_pos(handle)
+end
+
+# Get file size by filename
+func get_file_size(filename: String) -> Int
+    return file_size(filename)
+end
+
+# Seek to position from start of file
+# AmigaDOS OFFSET_BEGINNING = -1, but we pass 0-1=-1
+func seek_start(handle: Int, pos: Int)
+    file_seek(handle, pos, 0 - 1)
+end
+
+# Seek to position from current location
+# AmigaDOS OFFSET_CURRENT = 0
+func seek_forward(handle: Int, offset: Int)
+    file_seek(handle, offset, 0)
+end
+
+# Seek to position from end of file
+# AmigaDOS OFFSET_END = 1
+func seek_end(handle: Int, offset: Int)
+    file_seek(handle, offset, 1)
+end
+
+# Rewind to start of file
+func seek_rewind(handle: Int)
+    file_seek(handle, 0, 0 - 1)
+end
+
+# === File Management ===
+
+# Check if file exists
+func exists(path: String) -> Bool
+    return file_exists(path)
+end
+
+# Delete a file
+func delete_file(path: String) -> Bool
+    return file_delete(path)
+end
+
+# Rename a file
+func rename_file(old_path: String, new_path: String) -> Bool
+    return file_rename(old_path, new_path)
+end
+
+# Copy a file
+func copy_file(src_path: String, dest_path: String) -> Bool
+    return file_copy(src_path, dest_path)
+end
+
+# === Directory Operations ===
+
+# Create a directory
+func make_dir(path: String) -> Bool
+    return dir_create(path)
+end
+
+# === Binary File I/O ===
+
+# Load entire file into buffer
+# Returns bytes read or -1 on error
+func load_file(filename: String, buf: Int, max_size: Int) -> Int
+    return file_load(filename, buf, max_size)
+end
+
+# Save buffer to file
+# Returns bytes written
+func save_file(filename: String, buf: Int, size: Int) -> Int
+    return file_save(filename, buf, size)
+end
+
+# Load file with automatic buffer allocation
+# Returns buffer pointer (0 on failure)
+# Caller must free with free_buffer()
+func load_file_alloc(filename: String) -> Int
+    size = file_size(filename)
+    if size < 0
+        return 0
+    end
+
+    buf = buffer_alloc(size)
+    if buf == 0
+        return 0
+    end
+
+    bytes_read = file_load(filename, buf, size)
+    if bytes_read < 0
+        buffer_free(buf)
+        return 0
+    end
+
+    return buf
+end
+
+# === Buffer Operations ===
+
+# Allocate a memory buffer
+func alloc_buffer(size: Int) -> Int
+    return buffer_alloc(size)
+end
+
+# Free a memory buffer
+func free_buffer(buf: Int)
+    buffer_free(buf)
+end
+
+# Get byte at offset
+func get_byte(buf: Int, offset: Int) -> Int
+    return buffer_get_byte(buf, offset)
+end
+
+# Set byte at offset
+func set_byte(buf: Int, offset: Int, value: Int)
+    buffer_set_byte(buf, offset, value)
+end
+
+# Get 16-bit word at offset (big-endian)
+func get_word(buf: Int, offset: Int) -> Int
+    return buffer_get_word(buf, offset)
+end
+
+# Set 16-bit word at offset (big-endian)
+func set_word(buf: Int, offset: Int, value: Int)
+    buffer_set_word(buf, offset, value)
+end
+
+# Get 32-bit long at offset (big-endian)
+func get_long(buf: Int, offset: Int) -> Int
+    return buffer_get_long(buf, offset)
+end
+
+# Set 32-bit long at offset (big-endian)
+func set_long(buf: Int, offset: Int, value: Int)
+    buffer_set_long(buf, offset, value)
+end
+
+# Copy bytes between buffers
+func copy_bytes(dest: Int, dest_off: Int, src: Int, src_off: Int, len: Int)
+    buffer_copy(dest, dest_off, src, src_off, len)
+end
+
+# Fill buffer region with byte value
+func fill_bytes(buf: Int, offset: Int, len: Int, value: Int)
+    buffer_fill(buf, offset, len, value)
+end
+
+# === IFF Chunk Helpers ===
+
+# Check if buffer starts with IFF FORM header
+func is_iff_form(buf: Int) -> Bool
+    # Check for "FORM" at offset 0
+    if get_byte(buf, 0) != 70   # 'F'
+        return false
+    end
+    if get_byte(buf, 1) != 79   # 'O'
+        return false
+    end
+    if get_byte(buf, 2) != 82   # 'R'
+        return false
+    end
+    if get_byte(buf, 3) != 77   # 'M'
+        return false
+    end
+    return true
+end
+
+# Get IFF FORM type (4 bytes at offset 8)
+func get_iff_type(buf: Int) -> Int
+    return get_long(buf, 8)
+end
+
+# Get IFF FORM size (4 bytes at offset 4)
+func get_iff_size(buf: Int) -> Int
+    return get_long(buf, 4)
+end
+

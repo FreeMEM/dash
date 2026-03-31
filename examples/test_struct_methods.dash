@@ -1,0 +1,51 @@
+# Test structs with methods
+
+struct Player
+    x: Int = 0
+    y: Int = 0
+    health: Int = 100
+
+    func move(dx, dy)
+        self.x = self.x + dx
+        self.y = self.y + dy
+    end
+
+    func take_damage(amount)
+        self.health = self.health - amount
+        if self.health < 0
+            self.health = 0
+        end
+    end
+
+    func is_alive() -> Bool
+        return self.health > 0
+    end
+end
+
+Main
+    Print "=== Struct Methods Test ==="
+
+    # Create a player
+    p = Player(10, 20, 100)
+    Print "Initial position:"
+    Print p.x
+    Print p.y
+
+    # Move the player
+    p.move(5, -3)
+    Print "After move(5, -3):"
+    Print p.x
+    Print p.y
+
+    # Take some damage
+    p.take_damage(30)
+    Print "Health after damage:"
+    Print p.health
+
+    # Check if alive
+    if p.is_alive()
+        Print "Player is alive!"
+    end
+
+    Print "=== Test Complete ==="
+end

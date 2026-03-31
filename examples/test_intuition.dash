@@ -1,0 +1,52 @@
+# Test the Intuition module
+
+import "lib/amiga/intuition.dash"
+
+Window win
+    title "Intuition Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    # Show an alert
+    alert("Welcome", "Dash Intuition Module Test")
+
+    # Ask for confirmation
+    result = confirm("Question", "Do you like Dash?")
+    if result
+        Print "User said Yes!"
+    else
+        Print "User said No!"
+    end
+
+    # Custom buttons dialog
+    choice = ask("Choose", "Pick an option:", "Option A|Option B|Cancel")
+    Print choice
+
+    # Draw some button-like boxes
+    gfx_clear()
+    gfx_pen(3)
+    gfx_text_at(10, 20, "Button Demo:")
+
+    draw_button_box(20, 40, 80, 20, false)
+    gfx_pen(1)
+    gfx_text_at(35, 54, "Normal")
+
+    draw_button_box(120, 40, 80, 20, true)
+    gfx_pen(1)
+    gfx_text_at(132, 54, "Pressed")
+
+    # Change window title
+    set_title("Test Complete!")
+
+    Wait 3
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

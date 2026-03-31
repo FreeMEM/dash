@@ -1,0 +1,160 @@
+# ========================================
+# Dash Intuition Module for Amiga
+# High-level GUI API
+# ========================================
+
+# === Alert/Requester Functions ===
+
+# Show a simple alert message with OK button
+@native func alert(title: String, message: String)
+"""
+    struct EasyStruct es = {
+        sizeof(struct EasyStruct),
+        0,
+        (STRPTR)title,
+        (STRPTR)message,
+        "OK"
+    };
+    EasyRequest(_dash_win, &es, NULL, NULL);
+"""
+end
+
+# Show a Yes/No confirmation dialog
+# Returns true if user clicks Yes, false for No
+@native func confirm(title: String, message: String) -> Bool
+"""
+    struct EasyStruct es = {
+        sizeof(struct EasyStruct),
+        0,
+        (STRPTR)title,
+        (STRPTR)message,
+        "Yes|No"
+    };
+    return EasyRequest(_dash_win, &es, NULL, NULL) == 1;
+"""
+end
+
+# Show a dialog with custom buttons
+# buttons: "OK|Cancel|Retry" format
+# Returns button number (1, 2, 3...) or 0 for rightmost
+@native func ask(title: String, message: String, buttons: String) -> Int
+"""
+    struct EasyStruct es = {
+        sizeof(struct EasyStruct),
+        0,
+        (STRPTR)title,
+        (STRPTR)message,
+        (STRPTR)buttons
+    };
+    return (LONG)EasyRequest(_dash_win, &es, NULL, NULL);
+"""
+end
+
+# === Window Management (uses _dash_win) ===
+
+# Set window title
+@native func set_title(title: String)
+"""
+    SetWindowTitles(_dash_win, (STRPTR)title, (UBYTE *)-1);
+"""
+end
+
+# Move window to position
+@native func move_window(x: Int, y: Int)
+"""
+    MoveWindow(_dash_win, x - _dash_win->LeftEdge, y - _dash_win->TopEdge);
+"""
+end
+
+# Resize window
+@native func resize_window(w: Int, h: Int)
+"""
+    SizeWindow(_dash_win, w - _dash_win->Width, h - _dash_win->Height);
+"""
+end
+
+# Bring window to front
+@native func to_front()
+"""
+    WindowToFront(_dash_win);
+"""
+end
+
+# Send window to back
+@native func to_back()
+"""
+    WindowToBack(_dash_win);
+"""
+end
+
+# Activate window (give focus)
+@native func activate()
+"""
+    ActivateWindow(_dash_win);
+"""
+end
+
+# Get window width
+@native func win_width() -> Int
+"""
+    return _dash_win ? _dash_win->Width : 0;
+"""
+end
+
+# Get window height
+@native func win_height() -> Int
+"""
+    return _dash_win ? _dash_win->Height : 0;
+"""
+end
+
+# Get inner width (excluding borders)
+@native func win_inner_width() -> Int
+"""
+    return _dash_win ? _dash_win->Width - _dash_win->BorderLeft - _dash_win->BorderRight : 0;
+"""
+end
+
+# Get inner height (excluding borders)
+@native func win_inner_height() -> Int
+"""
+    return _dash_win ? _dash_win->Height - _dash_win->BorderTop - _dash_win->BorderBottom : 0;
+"""
+end
+
+# === Simple Gadget Helpers ===
+
+# Draw a simple 3D button box (for custom gadgets)
+func draw_button_box(x: Int, y: Int, w: Int, h: Int, pressed: Bool)
+    if pressed
+        gfx_pen(2)  # Dark color
+        gfx_box(x, y, x + w - 1, y + h - 1)
+        gfx_pen(1)  # Light color
+        gfx_line(x + 1, y + 1, x + w - 2, y + 1)
+        gfx_line(x + 1, y + 1, x + 1, y + h - 2)
+    else
+        gfx_pen(1)  # Light color
+        gfx_box(x, y, x + w - 1, y + h - 1)
+        gfx_pen(2)  # Dark color
+        gfx_line(x + 1, y + h - 1, x + w - 1, y + h - 1)
+        gfx_line(x + w - 1, y + 1, x + w - 1, y + h - 1)
+    end
+end
+
+# Check if point is inside rectangle
+func point_in_rect(px: Int, py: Int, x: Int, y: Int, w: Int, h: Int) -> Bool
+    if px >= x and px < x + w
+        if py >= y and py < y + h
+            return true
+        end
+    end
+    return false
+end
+
+# Draw a label centered in a rectangle
+func draw_label(x: Int, y: Int, w: Int, h: Int, text: String)
+    # Approximate centering (8 pixels per char)
+    tx = x + 4
+    ty = y + h - 6
+    gfx_text_at(tx, ty, text)
+end

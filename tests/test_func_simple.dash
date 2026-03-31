@@ -1,0 +1,33 @@
+# Test: Simple Functions
+# Verifica funciones simples sin parámetros
+
+Window TestWin
+    title "Functions Test"
+    width 200
+    height 100
+end
+
+# Function without return
+func saludar()
+    Print "Hola!"
+end
+
+# Function with return value
+func obtener_valor()
+    return 42
+end
+
+Main
+    # Call function without return
+    saludar()
+
+    # Call function with return and use value
+    x = obtener_valor()
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

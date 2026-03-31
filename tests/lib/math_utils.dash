@@ -1,0 +1,31 @@
+# Math utilities library
+# Functions starting with _ are private
+
+# Public: Double a number
+func duplicar(n)
+    return n * 2
+end
+
+# Public: Square a number
+func square(n)
+    return n * n
+end
+
+# Public: Sum from 1 to n
+func sum_to(n)
+    result = 0
+    for i in (1..n)
+        result = result + i
+    end
+    return result
+end
+
+# Private: Internal helper (should not be accessible from outside)
+func _internal_helper(x)
+    return x + 100
+end
+
+# Private: Another internal function
+func _secret_calc(a, b)
+    return a * b * 2
+end

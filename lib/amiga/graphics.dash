@@ -1,0 +1,100 @@
+# ========================================
+# Dash Graphics Module for Amiga
+# High-level graphics API
+# ========================================
+
+# === Convenience Drawing Functions ===
+
+# Draw a horizontal line
+func draw_hline(x1, y1, x2)
+    gfx_move(x1, y1)
+    gfx_draw(x2, y1)
+end
+
+# Draw a vertical line
+func draw_vline(x, y1, y2)
+    gfx_move(x, y1)
+    gfx_draw(x, y2)
+end
+
+# Draw a line between two points
+func draw_line(x1, y1, x2, y2)
+    gfx_line(x1, y1, x2, y2)
+end
+
+# Draw a rectangle outline
+func draw_rect(x, y, w, h)
+    gfx_box(x, y, x + w - 1, y + h - 1)
+end
+
+# Draw a filled rectangle
+func draw_fill_rect(x, y, w, h)
+    gfx_rect(x, y, x + w - 1, y + h - 1)
+end
+
+# Draw a filled circle (convenience wrapper)
+func draw_fill_circle(cx, cy, r)
+    gfx_circle_fill(cx, cy, r)
+end
+
+# Draw a circle outline
+func draw_circle(cx, cy, r)
+    gfx_circle(cx, cy, r)
+end
+
+# === Color Helpers ===
+
+# Set foreground color
+func set_color(c)
+    gfx_pen(c)
+end
+
+# Set background color
+func set_bgcolor(c)
+    gfx_pen_bg(c)
+end
+
+# === Text Functions ===
+
+# Print text at position
+func draw_text(x, y, msg: String)
+    gfx_text_at(x, y, msg)
+end
+
+# === Screen Functions ===
+
+# Clear the screen/window with color 0
+func clear_screen()
+    gfx_clear(0)
+end
+
+# Clear with specific color
+func clear_with_color(c)
+    gfx_clear(c)
+end
+
+# === Animation Helpers ===
+
+# Wait for vertical blank (useful for animation)
+func vsync()
+    wait_vblank()
+end
+
+# Small delay for animation timing (ticks = 1/50th second)
+func wait_frames(n)
+    time_delay(n)
+end
+
+# === Sprite-like Helpers ===
+
+# Draw a "sprite" as a filled rectangle
+func draw_sprite(x, y, w, h, color)
+    gfx_pen(color)
+    gfx_rect(x, y, x + w - 1, y + h - 1)
+end
+
+# Erase a sprite (draw background color over it)
+func erase_sprite(x, y, w, h, bg_color)
+    gfx_pen(bg_color)
+    gfx_rect(x, y, x + w - 1, y + h - 1)
+end

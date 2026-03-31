@@ -1,0 +1,24 @@
+# examples/event_loop_test.dash
+#
+# This example opens a window and waits for the user to click
+# the close gadget.
+
+Window MyWindow
+    title "Event Loop Test"
+    width 400
+    height 100
+end
+
+Main
+    Print "Opening window..."
+    MyWindow.open
+
+    EventLoop
+        On Close
+            Print "Close gadget clicked. Exiting."
+            Stop
+        end
+    end
+
+    Print "Program finished."
+end

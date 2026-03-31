@@ -1,0 +1,1820 @@
+# Blixel - Pixel Art Editor for Amiga
+# A multi-animation pixel art editor with layers
+#
+# Features:
+# - Multiple layers per frame
+# - ReAction interface (AmigaOS 3.2+)
+# - 64x64 canvas with zoom
+# - 16-color palette
+
+import "lib/amiga/dos.dash"
+import "lib/amiga/rtg.dash"
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+const APP_VERSION = "0.3"
+
+# Canvas settings
+const CANVAS_SIZE = 64
+const PIXEL_SIZE = 6
+
+# Layer settings
+const MAX_LAYERS = 8
+
+# Timeline/frame settings
+const MAX_FRAMES = 32
+const FRAME_THUMB_W = 16
+const FRAME_THUMB_H = 16
+const FRAME_GAP = 2
+
+# Dynamic canvas position (set after window open from Space gadget)
+var canvas_x: Int = 0
+var canvas_y: Int = 0
+var canvas_area_w: Int = 400
+var canvas_area_h: Int = 400
+
+# File format constants
+# BLX1 format: Magic(4) + Version(2) + Width(2) + Height(2) + NumFrames(2) + Reserved(4) = 16 byte header
+const BLX_MAGIC_B = 66      # 'B'
+const BLX_MAGIC_L = 76      # 'L'
+const BLX_MAGIC_X = 88      # 'X'
+const BLX_MAGIC_1 = 49      # '1'
+const BLX_VERSION = 1
+const BLX_HEADER_SIZE = 16
+
+# Gadget IDs
+const BTN_PENCIL = 1
+const BTN_ERASER = 2
+const BTN_LINE = 3
+const BTN_RECT = 4
+const BTN_FILL = 5
+const BTN_EYEDROP = 6
+const BTN_CLEAR = 7
+const BTN_NEW = 8
+const BTN_LOAD = 9
+const BTN_SAVE = 10
+const SLD_COLOR = 11
+const SLD_ZOOM = 12
+const BTN_LAYER_ADD = 20
+const BTN_LAYER_DEL = 21
+const BTN_LAYER_UP = 22
+const BTN_LAYER_DOWN = 23
+const BTN_LAYER_MERGE = 24
+
+# Timeline gadget IDs
+const BTN_FRAME_PREV = 30
+const BTN_FRAME_NEXT = 31
+const BTN_FRAME_ADD = 32
+const BTN_FRAME_DEL = 33
+const BTN_FRAME_DUP = 34
+const BTN_PLAY = 35
+const BTN_STOP = 36
+const GAD_CANVAS = 40
+
+# Tool IDs
+const TOOL_PENCIL = 0
+const TOOL_ERASER = 1
+const TOOL_LINE = 2
+const TOOL_RECT = 3
+const TOOL_FILL = 4
+const TOOL_EYEDROP = 5
+
+# Maximum values
+const MAX_CANVAS = 256
+
+# Transparent color index (color 0 is transparent in layers)
+const TRANSPARENT = 0
+
+# =============================================================================
+# Global State
+# =============================================================================
+
+# Canvas dimensions
+var canvas_width: Int = 64
+var canvas_height: Int = 64
+
+# Layer data - array of buffer pointers
+var layer_data: Int = 0        # Buffer holding layer buffer pointers
+var layer_visible: Int = 0     # Buffer holding visibility flags (1 byte each)
+var layer_names: Int = 0       # Buffer for layer names (32 bytes each)
+var num_layers: Int = 1
+var current_layer: Int = 0
+
+# Composite buffer (for display)
+var composite_buffer: Int = 0
+
+# Animation/frame data
+var frame_buffers: Int = 0     # Buffer holding frame buffer pointers
+var num_frames: Int = 1
+var current_frame: Int = 0
+var playing: Bool = false
+var anim_fps: Int = 12
+var frame_counter: Int = 0
+
+# Project file state
+var project_modified: Bool = false
+
+# View state
+var zoom_level: Int = 6
+var scroll_x: Int = 0
+var scroll_y: Int = 0
+
+# Tool state
+var current_tool: Int = 0
+var current_color: Int = 1
+var brush_size: Int = 1
+
+# Drawing state
+var drawing: Bool = false
+var start_x: Int = 0
+var start_y: Int = 0
+var last_x: Int = 0
+var last_y: Int = 0
+
+# =============================================================================
+# Coordinate Conversion
+# =============================================================================
+
+func to_screen_x(px: Int) -> Int
+    return canvas_x + (px - scroll_x) * zoom_level
+end
+
+func to_screen_y(py: Int) -> Int
+    return canvas_y + (py - scroll_y) * zoom_level
+end
+
+func to_pixel_x(sx: Int) -> Int
+    result = (sx - canvas_x) / zoom_level + scroll_x
+    if result < 0
+        return 0
+    end
+    if result >= canvas_width
+        return canvas_width - 1
+    end
+    return result
+end
+
+func to_pixel_y(sy: Int) -> Int
+    result = (sy - canvas_y) / zoom_level + scroll_y
+    if result < 0
+        return 0
+    end
+    if result >= canvas_height
+        return canvas_height - 1
+    end
+    return result
+end
+
+func in_canvas(mx: Int, my: Int) -> Bool
+    right = canvas_x + canvas_width * zoom_level
+    bottom = canvas_y + canvas_height * zoom_level
+    if mx >= canvas_x and mx < right
+        if my >= canvas_y and my < bottom
+            return true
+        end
+    end
+    return false
+end
+
+# Check if screen position is within the visible canvas AREA (clipped)
+func in_canvas_area(sx: Int, sy: Int) -> Bool
+    if sx >= canvas_x and sx < canvas_x + canvas_area_w
+        if sy >= canvas_y and sy < canvas_y + canvas_area_h
+            return true
+        end
+    end
+    return false
+end
+
+# Clip a rectangle to the canvas area, returns false if completely outside
+func clip_rect(x1: Int, y1: Int, x2: Int, y2: Int) -> Bool
+    # Check if completely outside
+    if x2 < canvas_x or x1 >= canvas_x + canvas_area_w
+        return false
+    end
+    if y2 < canvas_y or y1 >= canvas_y + canvas_area_h
+        return false
+    end
+    return true
+end
+
+# =============================================================================
+# Layer Management
+# =============================================================================
+
+func init_layers() -> Bool
+    # Allocate layer pointer array (8 layers * 4 bytes per pointer)
+    layer_data = buffer_alloc(MAX_LAYERS * 4)
+    if layer_data == 0
+        return false
+    end
+    fill_bytes(layer_data, 0, MAX_LAYERS * 4, 0)
+
+    # Allocate visibility flags (8 layers * 1 byte)
+    layer_visible = buffer_alloc(MAX_LAYERS)
+    if layer_visible == 0
+        buffer_free(layer_data)
+        return false
+    end
+    # All layers visible by default
+    fill_bytes(layer_visible, 0, MAX_LAYERS, 1)
+
+    # Allocate layer names (8 layers * 32 bytes)
+    layer_names = buffer_alloc(MAX_LAYERS * 32)
+    if layer_names == 0
+        buffer_free(layer_data)
+        buffer_free(layer_visible)
+        return false
+    end
+    fill_bytes(layer_names, 0, MAX_LAYERS * 32, 0)
+
+    # Allocate composite buffer
+    size = MAX_CANVAS * MAX_CANVAS
+    composite_buffer = buffer_alloc(size)
+    if composite_buffer == 0
+        buffer_free(layer_data)
+        buffer_free(layer_visible)
+        buffer_free(layer_names)
+        return false
+    end
+    fill_bytes(composite_buffer, 0, size, 0)
+
+    # Create first layer
+    num_layers = 0
+    current_layer = 0
+    if not add_layer()
+        return false
+    end
+
+    set_layer_name(0, "Background")
+    return true
+end
+
+func cleanup_layers()
+    # Free all layer buffers
+    i = 0
+    while i < MAX_LAYERS
+        buf = get_layer_buffer(i)
+        if buf != 0
+            buffer_free(buf)
+        end
+        i = i + 1
+    end
+
+    if layer_data != 0
+        buffer_free(layer_data)
+        layer_data = 0
+    end
+    if layer_visible != 0
+        buffer_free(layer_visible)
+        layer_visible = 0
+    end
+    if layer_names != 0
+        buffer_free(layer_names)
+        layer_names = 0
+    end
+    if composite_buffer != 0
+        buffer_free(composite_buffer)
+        composite_buffer = 0
+    end
+end
+
+func get_layer_buffer(layer_idx: Int) -> Int
+    if layer_data == 0
+        return 0
+    end
+    if layer_idx < 0 or layer_idx >= MAX_LAYERS
+        return 0
+    end
+    return get_long(layer_data, layer_idx * 4)
+end
+
+func set_layer_buffer(layer_idx: Int, buf: Int)
+    if layer_data == 0
+        return
+    end
+    if layer_idx < 0 or layer_idx >= MAX_LAYERS
+        return
+    end
+    set_long(layer_data, layer_idx * 4, buf)
+end
+
+func is_layer_visible(layer_idx: Int) -> Bool
+    if layer_visible == 0
+        return false
+    end
+    if layer_idx < 0 or layer_idx >= num_layers
+        return false
+    end
+    return get_byte(layer_visible, layer_idx) != 0
+end
+
+func set_layer_visible(layer_idx: Int, visible: Bool)
+    if layer_visible == 0
+        return
+    end
+    if layer_idx < 0 or layer_idx >= num_layers
+        return
+    end
+    if visible
+        set_byte(layer_visible, layer_idx, 1)
+    else
+        set_byte(layer_visible, layer_idx, 0)
+    end
+end
+
+func toggle_layer_visible(layer_idx: Int)
+    if is_layer_visible(layer_idx)
+        set_layer_visible(layer_idx, false)
+    else
+        set_layer_visible(layer_idx, true)
+    end
+end
+
+func set_layer_name(layer_idx: Int, name: String)
+    # Store layer name (up to 31 chars + null)
+    if layer_names == 0
+        return
+    end
+    if layer_idx < 0 or layer_idx >= MAX_LAYERS
+        return
+    end
+    # For now, just use default names based on index
+    # (Dash doesn't have easy string copying to buffers)
+end
+
+func add_layer() -> Bool
+    if num_layers >= MAX_LAYERS
+        return false
+    end
+
+    # Allocate new layer buffer
+    size = MAX_CANVAS * MAX_CANVAS
+    buf = buffer_alloc(size)
+    if buf == 0
+        return false
+    end
+    # Clear to transparent
+    fill_bytes(buf, 0, size, TRANSPARENT)
+
+    # Store buffer pointer
+    set_layer_buffer(num_layers, buf)
+    set_layer_visible(num_layers, true)
+
+    num_layers = num_layers + 1
+    current_layer = num_layers - 1
+
+    return true
+end
+
+func delete_layer() -> Bool
+    if num_layers <= 1
+        # Can't delete the last layer
+        return false
+    end
+
+    # Free the current layer buffer
+    buf = get_layer_buffer(current_layer)
+    if buf != 0
+        buffer_free(buf)
+    end
+
+    # Shift layers down
+    i = current_layer
+    while i < num_layers - 1
+        # Move buffer pointer
+        next_buf = get_layer_buffer(i + 1)
+        set_layer_buffer(i, next_buf)
+        # Move visibility
+        next_vis = is_layer_visible(i + 1)
+        set_layer_visible(i, next_vis)
+        i = i + 1
+    end
+
+    # Clear the last slot
+    set_layer_buffer(num_layers - 1, 0)
+
+    num_layers = num_layers - 1
+
+    # Adjust current layer if needed
+    if current_layer >= num_layers
+        current_layer = num_layers - 1
+    end
+
+    return true
+end
+
+func move_layer_up() -> Bool
+    if current_layer >= num_layers - 1
+        return false
+    end
+
+    # Swap with layer above
+    buf1 = get_layer_buffer(current_layer)
+    buf2 = get_layer_buffer(current_layer + 1)
+    vis1 = is_layer_visible(current_layer)
+    vis2 = is_layer_visible(current_layer + 1)
+
+    set_layer_buffer(current_layer, buf2)
+    set_layer_buffer(current_layer + 1, buf1)
+    set_layer_visible(current_layer, vis2)
+    set_layer_visible(current_layer + 1, vis1)
+
+    current_layer = current_layer + 1
+    return true
+end
+
+func move_layer_down() -> Bool
+    if current_layer <= 0
+        return false
+    end
+
+    # Swap with layer below
+    buf1 = get_layer_buffer(current_layer)
+    buf2 = get_layer_buffer(current_layer - 1)
+    vis1 = is_layer_visible(current_layer)
+    vis2 = is_layer_visible(current_layer - 1)
+
+    set_layer_buffer(current_layer, buf2)
+    set_layer_buffer(current_layer - 1, buf1)
+    set_layer_visible(current_layer, vis2)
+    set_layer_visible(current_layer - 1, vis1)
+
+    current_layer = current_layer - 1
+    return true
+end
+
+func merge_layer_down() -> Bool
+    if current_layer <= 0
+        return false
+    end
+
+    # Merge current layer onto the one below
+    src_buf = get_layer_buffer(current_layer)
+    dst_buf = get_layer_buffer(current_layer - 1)
+
+    if src_buf == 0 or dst_buf == 0
+        return false
+    end
+
+    # Copy non-transparent pixels
+    y = 0
+    while y < canvas_height
+        x = 0
+        while x < canvas_width
+            offset = y * MAX_CANVAS + x
+            src_color = get_byte(src_buf, offset)
+            if src_color != TRANSPARENT
+                set_byte(dst_buf, offset, src_color)
+            end
+            x = x + 1
+        end
+        y = y + 1
+    end
+
+    # Delete the current layer (now merged)
+    delete_layer()
+
+    return true
+end
+
+# =============================================================================
+# Layer Pixel Access
+# =============================================================================
+
+func get_layer_pixel(layer_idx: Int, x: Int, y: Int) -> Int
+    buf = get_layer_buffer(layer_idx)
+    if buf == 0
+        return TRANSPARENT
+    end
+    if x < 0 or x >= canvas_width
+        return TRANSPARENT
+    end
+    if y < 0 or y >= canvas_height
+        return TRANSPARENT
+    end
+    offset = y * MAX_CANVAS + x
+    return get_byte(buf, offset)
+end
+
+func set_layer_pixel(layer_idx: Int, x: Int, y: Int, color: Int)
+    buf = get_layer_buffer(layer_idx)
+    if buf == 0
+        return
+    end
+    if x < 0 or x >= canvas_width
+        return
+    end
+    if y < 0 or y >= canvas_height
+        return
+    end
+    offset = y * MAX_CANVAS + x
+    set_byte(buf, offset, color % 16)
+end
+
+func get_current_pixel(x: Int, y: Int) -> Int
+    return get_layer_pixel(current_layer, x, y)
+end
+
+func set_current_pixel(x: Int, y: Int, color: Int)
+    set_layer_pixel(current_layer, x, y, color)
+end
+
+func clear_current_layer()
+    buf = get_layer_buffer(current_layer)
+    if buf == 0
+        return
+    end
+    size = MAX_CANVAS * MAX_CANVAS
+    fill_bytes(buf, 0, size, TRANSPARENT)
+end
+
+# =============================================================================
+# Layer Compositing
+# =============================================================================
+
+func composite_layers()
+    # Clear composite buffer to background
+    if composite_buffer == 0
+        return
+    end
+    size = MAX_CANVAS * MAX_CANVAS
+    fill_bytes(composite_buffer, 0, size, 0)
+
+    # Composite from bottom to top
+    layer_idx = 0
+    while layer_idx < num_layers
+        if is_layer_visible(layer_idx)
+            buf = get_layer_buffer(layer_idx)
+            if buf != 0
+                y = 0
+                while y < canvas_height
+                    x = 0
+                    while x < canvas_width
+                        offset = y * MAX_CANVAS + x
+                        color = get_byte(buf, offset)
+                        if color != TRANSPARENT
+                            set_byte(composite_buffer, offset, color)
+                        end
+                        x = x + 1
+                    end
+                    y = y + 1
+                end
+            end
+        end
+        layer_idx = layer_idx + 1
+    end
+end
+
+func get_composite_pixel(x: Int, y: Int) -> Int
+    if composite_buffer == 0
+        return 0
+    end
+    if x < 0 or x >= canvas_width
+        return 0
+    end
+    if y < 0 or y >= canvas_height
+        return 0
+    end
+    offset = y * MAX_CANVAS + x
+    return get_byte(composite_buffer, offset)
+end
+
+# =============================================================================
+# Frame/Animation Management
+# =============================================================================
+
+func init_frames() -> Bool
+    # Allocate frame buffer pointer array (MAX_FRAMES * 4 bytes)
+    frame_buffers = buffer_alloc(MAX_FRAMES * 4)
+    if frame_buffers == 0
+        return false
+    end
+    fill_bytes(frame_buffers, 0, MAX_FRAMES * 4, 0)
+
+    # Create first frame (copy from current layers)
+    size = MAX_CANVAS * MAX_CANVAS
+    buf = buffer_alloc(size)
+    if buf == 0
+        buffer_free(frame_buffers)
+        frame_buffers = 0
+        return false
+    end
+    fill_bytes(buf, 0, size, 0)
+    set_long(frame_buffers, 0, buf)
+
+    num_frames = 1
+    current_frame = 0
+    return true
+end
+
+func cleanup_frames()
+    if frame_buffers == 0
+        return
+    end
+
+    # Free all frame buffers
+    i = 0
+    while i < MAX_FRAMES
+        buf = get_long(frame_buffers, i * 4)
+        if buf != 0
+            buffer_free(buf)
+        end
+        i = i + 1
+    end
+
+    buffer_free(frame_buffers)
+    frame_buffers = 0
+end
+
+func get_frame_buffer(frame_idx: Int) -> Int
+    if frame_buffers == 0
+        return 0
+    end
+    if frame_idx < 0 or frame_idx >= MAX_FRAMES
+        return 0
+    end
+    return get_long(frame_buffers, frame_idx * 4)
+end
+
+func set_frame_buffer(frame_idx: Int, buf: Int)
+    if frame_buffers == 0
+        return
+    end
+    if frame_idx < 0 or frame_idx >= MAX_FRAMES
+        return
+    end
+    set_long(frame_buffers, frame_idx * 4, buf)
+end
+
+func save_current_frame()
+    # Save composited layers to current frame buffer
+    if composite_buffer == 0
+        return
+    end
+
+    buf = get_frame_buffer(current_frame)
+    if buf == 0
+        return
+    end
+
+    # Copy composite to frame buffer
+    size = MAX_CANVAS * MAX_CANVAS
+    copy_bytes(buf, 0, composite_buffer, 0, size)
+end
+
+func load_frame(frame_idx: Int)
+    # Load frame into background layer
+    buf = get_frame_buffer(frame_idx)
+    if buf == 0
+        return
+    end
+
+    # Clear all layers first
+    i = 0
+    while i < num_layers
+        layer_buf = get_layer_buffer(i)
+        if layer_buf != 0
+            size = MAX_CANVAS * MAX_CANVAS
+            fill_bytes(layer_buf, 0, size, TRANSPARENT)
+        end
+        i = i + 1
+    end
+
+    # Copy frame to first layer (background)
+    layer_buf = get_layer_buffer(0)
+    if layer_buf != 0
+        size = MAX_CANVAS * MAX_CANVAS
+        copy_bytes(layer_buf, 0, buf, 0, size)
+    end
+
+    current_frame = frame_idx
+end
+
+func goto_frame(frame_idx: Int)
+    if frame_idx < 0 or frame_idx >= num_frames
+        return
+    end
+    if frame_idx == current_frame
+        return
+    end
+
+    # Save current frame
+    composite_layers()
+    save_current_frame()
+
+    # Load new frame
+    load_frame(frame_idx)
+    composite_layers()
+end
+
+func add_frame() -> Bool
+    if num_frames >= MAX_FRAMES
+        return false
+    end
+
+    # Save current frame first
+    composite_layers()
+    save_current_frame()
+
+    # Allocate new frame buffer
+    size = MAX_CANVAS * MAX_CANVAS
+    buf = buffer_alloc(size)
+    if buf == 0
+        return false
+    end
+    fill_bytes(buf, 0, size, TRANSPARENT)
+
+    # Insert after current frame - shift all frames after
+    i = num_frames
+    while i > current_frame + 1
+        prev_buf = get_frame_buffer(i - 1)
+        set_frame_buffer(i, prev_buf)
+        i = i - 1
+    end
+
+    # Set new frame
+    set_frame_buffer(current_frame + 1, buf)
+    num_frames = num_frames + 1
+
+    # Navigate to new frame
+    current_frame = current_frame + 1
+    load_frame(current_frame)
+    composite_layers()
+
+    return true
+end
+
+func delete_frame() -> Bool
+    if num_frames <= 1
+        return false
+    end
+
+    # Free current frame buffer
+    buf = get_frame_buffer(current_frame)
+    if buf != 0
+        buffer_free(buf)
+    end
+
+    # Shift frames down
+    i = current_frame
+    while i < num_frames - 1
+        next_buf = get_frame_buffer(i + 1)
+        set_frame_buffer(i, next_buf)
+        i = i + 1
+    end
+
+    # Clear last slot
+    set_frame_buffer(num_frames - 1, 0)
+    num_frames = num_frames - 1
+
+    # Adjust current frame
+    if current_frame >= num_frames
+        current_frame = num_frames - 1
+    end
+
+    # Load adjusted frame
+    load_frame(current_frame)
+    composite_layers()
+
+    return true
+end
+
+func duplicate_frame() -> Bool
+    if num_frames >= MAX_FRAMES
+        return false
+    end
+
+    # Save current frame first
+    composite_layers()
+    save_current_frame()
+
+    src_buf = get_frame_buffer(current_frame)
+    if src_buf == 0
+        return false
+    end
+
+    # Allocate new frame buffer
+    size = MAX_CANVAS * MAX_CANVAS
+    new_buf = buffer_alloc(size)
+    if new_buf == 0
+        return false
+    end
+
+    # Copy source to new
+    copy_bytes(new_buf, 0, src_buf, 0, size)
+
+    # Insert after current frame
+    i = num_frames
+    while i > current_frame + 1
+        prev_buf = get_frame_buffer(i - 1)
+        set_frame_buffer(i, prev_buf)
+        i = i - 1
+    end
+
+    set_frame_buffer(current_frame + 1, new_buf)
+    num_frames = num_frames + 1
+
+    # Navigate to new frame
+    current_frame = current_frame + 1
+    load_frame(current_frame)
+    composite_layers()
+
+    return true
+end
+
+func prev_frame()
+    if current_frame > 0
+        goto_frame(current_frame - 1)
+    end
+end
+
+func next_frame()
+    if current_frame < num_frames - 1
+        goto_frame(current_frame + 1)
+    end
+end
+
+# =============================================================================
+# File Save/Load (.blx format)
+# =============================================================================
+
+func save_project(filename: String) -> Bool
+    # Save current frame first
+    composite_layers()
+    save_current_frame()
+
+    # Calculate file size: header + all frames
+    frame_size = canvas_width * canvas_height
+    file_size = BLX_HEADER_SIZE + num_frames * frame_size
+
+    # Allocate file buffer
+    file_buf = buffer_alloc(file_size)
+    if file_buf == 0
+        return false
+    end
+
+    # Write header
+    # Magic: BLX1
+    set_byte(file_buf, 0, BLX_MAGIC_B)
+    set_byte(file_buf, 1, BLX_MAGIC_L)
+    set_byte(file_buf, 2, BLX_MAGIC_X)
+    set_byte(file_buf, 3, BLX_MAGIC_1)
+
+    # Version (2 bytes, big-endian)
+    set_byte(file_buf, 4, 0)
+    set_byte(file_buf, 5, BLX_VERSION)
+
+    # Width (2 bytes, big-endian)
+    set_byte(file_buf, 6, canvas_width / 256)
+    set_byte(file_buf, 7, canvas_width % 256)
+
+    # Height (2 bytes, big-endian)
+    set_byte(file_buf, 8, canvas_height / 256)
+    set_byte(file_buf, 9, canvas_height % 256)
+
+    # Number of frames (2 bytes, big-endian)
+    set_byte(file_buf, 10, num_frames / 256)
+    set_byte(file_buf, 11, num_frames % 256)
+
+    # Reserved (4 bytes)
+    set_byte(file_buf, 12, 0)
+    set_byte(file_buf, 13, 0)
+    set_byte(file_buf, 14, 0)
+    set_byte(file_buf, 15, 0)
+
+    # Write frame data
+    frame_idx = 0
+    while frame_idx < num_frames
+        frame_buf = get_frame_buffer(frame_idx)
+        if frame_buf != 0
+            dest_offset = BLX_HEADER_SIZE + frame_idx * frame_size
+            # Copy frame pixel data row by row (canvas_width pixels per row)
+            y = 0
+            while y < canvas_height
+                src_offset = y * MAX_CANVAS
+                row_dest = dest_offset + y * canvas_width
+                x = 0
+                while x < canvas_width
+                    pixel = get_byte(frame_buf, src_offset + x)
+                    set_byte(file_buf, row_dest + x, pixel)
+                    x = x + 1
+                end
+                y = y + 1
+            end
+        end
+        frame_idx = frame_idx + 1
+    end
+
+    # Save to file
+    result = save_file(filename, file_buf, file_size)
+
+    # Free buffer
+    buffer_free(file_buf)
+
+    if result == file_size
+        project_modified = false
+        return true
+    end
+    return false
+end
+
+func load_project(filename: String) -> Bool
+    # Get file size
+    fsize = file_size(filename)
+    if fsize < BLX_HEADER_SIZE
+        return false
+    end
+
+    # Allocate and load file
+    file_buf = buffer_alloc(fsize)
+    if file_buf == 0
+        return false
+    end
+
+    bytes_read = load_file(filename, file_buf, fsize)
+    if bytes_read != fsize
+        buffer_free(file_buf)
+        return false
+    end
+
+    # Verify magic
+    if get_byte(file_buf, 0) != BLX_MAGIC_B
+        buffer_free(file_buf)
+        return false
+    end
+    if get_byte(file_buf, 1) != BLX_MAGIC_L
+        buffer_free(file_buf)
+        return false
+    end
+    if get_byte(file_buf, 2) != BLX_MAGIC_X
+        buffer_free(file_buf)
+        return false
+    end
+    if get_byte(file_buf, 3) != BLX_MAGIC_1
+        buffer_free(file_buf)
+        return false
+    end
+
+    # Read dimensions
+    new_width = get_byte(file_buf, 6) * 256 + get_byte(file_buf, 7)
+    new_height = get_byte(file_buf, 8) * 256 + get_byte(file_buf, 9)
+    new_num_frames = get_byte(file_buf, 10) * 256 + get_byte(file_buf, 11)
+
+    # Validate
+    if new_width > MAX_CANVAS or new_height > MAX_CANVAS
+        buffer_free(file_buf)
+        return false
+    end
+    if new_num_frames < 1 or new_num_frames > MAX_FRAMES
+        buffer_free(file_buf)
+        return false
+    end
+
+    # Clear existing frames
+    cleanup_frames()
+
+    # Update canvas size
+    canvas_width = new_width
+    canvas_height = new_height
+
+    # Allocate new frame buffers array
+    frame_buffers = buffer_alloc(MAX_FRAMES * 4)
+    if frame_buffers == 0
+        buffer_free(file_buf)
+        return false
+    end
+    fill_bytes(frame_buffers, 0, MAX_FRAMES * 4, 0)
+
+    # Load each frame
+    frame_size = new_width * new_height
+    frame_idx = 0
+    while frame_idx < new_num_frames
+        # Allocate frame buffer (using MAX_CANVAS stride)
+        fbuf = buffer_alloc(MAX_CANVAS * MAX_CANVAS)
+        if fbuf == 0
+            buffer_free(file_buf)
+            return false
+        end
+        fill_bytes(fbuf, 0, MAX_CANVAS * MAX_CANVAS, 0)
+
+        # Copy pixel data row by row
+        src_offset = BLX_HEADER_SIZE + frame_idx * frame_size
+        y = 0
+        while y < new_height
+            dest_row = y * MAX_CANVAS
+            src_row = src_offset + y * new_width
+            x = 0
+            while x < new_width
+                pixel = get_byte(file_buf, src_row + x)
+                set_byte(fbuf, dest_row + x, pixel)
+                x = x + 1
+            end
+            y = y + 1
+        end
+
+        set_frame_buffer(frame_idx, fbuf)
+        frame_idx = frame_idx + 1
+    end
+
+    num_frames = new_num_frames
+    current_frame = 0
+
+    # Free file buffer
+    buffer_free(file_buf)
+
+    # Load first frame into layers
+    load_frame(0)
+    composite_layers()
+
+    project_modified = false
+    return true
+end
+
+func new_project()
+    # Clear all frames
+    cleanup_frames()
+
+    # Reset canvas size
+    canvas_width = 64
+    canvas_height = 64
+
+    # Reinitialize frames
+    init_frames()
+
+    # Clear layers
+    i = 0
+    while i < num_layers
+        layer_buf = get_layer_buffer(i)
+        if layer_buf != 0
+            fill_bytes(layer_buf, 0, MAX_CANVAS * MAX_CANVAS, TRANSPARENT)
+        end
+        i = i + 1
+    end
+
+    current_frame = 0
+    composite_layers()
+    project_modified = false
+end
+
+# =============================================================================
+# Drawing Functions
+# =============================================================================
+
+func plot_pixel(px: Int, py: Int, color: Int)
+    if px >= 0 and px < canvas_width
+        if py >= 0 and py < canvas_height
+            # Store in current layer
+            set_current_pixel(px, py, color)
+            # Update composite and draw to screen
+            composite_layers()
+            draw_single_pixel(px, py)
+        end
+    end
+end
+
+func draw_single_pixel(px: Int, py: Int)
+    # Draw a single pixel from composite to screen
+    color = get_composite_pixel(px, py)
+    sx = to_screen_x(px)
+    sy = to_screen_y(py)
+    gfx_pen(color)
+    gfx_rect(sx, sy, sx + zoom_level - 1, sy + zoom_level - 1)
+end
+
+func draw_line_pixels(x1: Int, y1: Int, x2: Int, y2: Int, color: Int)
+    # Bresenham line algorithm
+    dx = x2 - x1
+    dy = y2 - y1
+    if dx < 0
+        dx = 0 - dx
+    end
+    if dy < 0
+        dy = 0 - dy
+    end
+
+    sx = 1
+    if x1 > x2
+        sx = 0 - 1
+    end
+    sy = 1
+    if y1 > y2
+        sy = 0 - 1
+    end
+
+    err = dx - dy
+    x = x1
+    y = y1
+
+    while true
+        set_current_pixel(x, y, color)
+        if x == x2 and y == y2
+            composite_layers()
+            draw_full_canvas()
+            return
+        end
+        e2 = err * 2
+        if e2 > 0 - dy
+            err = err - dy
+            x = x + sx
+        end
+        if e2 < dx
+            err = err + dx
+            y = y + sy
+        end
+    end
+end
+
+func draw_rect_outline(x1: Int, y1: Int, x2: Int, y2: Int, color: Int)
+    if x1 > x2
+        tmp = x1
+        x1 = x2
+        x2 = tmp
+    end
+    if y1 > y2
+        tmp = y1
+        y1 = y2
+        y2 = tmp
+    end
+
+    # Top and bottom
+    x = x1
+    while x <= x2
+        set_current_pixel(x, y1, color)
+        set_current_pixel(x, y2, color)
+        x = x + 1
+    end
+    # Left and right
+    y = y1
+    while y <= y2
+        set_current_pixel(x1, y, color)
+        set_current_pixel(x2, y, color)
+        y = y + 1
+    end
+
+    composite_layers()
+    draw_full_canvas()
+end
+
+func flood_fill(start_x: Int, start_y: Int, new_color: Int)
+    old_color = get_current_pixel(start_x, start_y)
+    if old_color == new_color
+        return
+    end
+    do_fill(start_x, start_y, old_color, new_color)
+    composite_layers()
+    draw_full_canvas()
+end
+
+func do_fill(x: Int, y: Int, old_color: Int, new_color: Int)
+    if x < 0 or x >= canvas_width
+        return
+    end
+    if y < 0 or y >= canvas_height
+        return
+    end
+    if get_current_pixel(x, y) != old_color
+        return
+    end
+
+    # Fill this line
+    left = x
+    while left > 0 and get_current_pixel(left - 1, y) == old_color
+        left = left - 1
+    end
+
+    right = x
+    while right < canvas_width - 1 and get_current_pixel(right + 1, y) == old_color
+        right = right + 1
+    end
+
+    # Fill the line
+    fx = left
+    while fx <= right
+        set_current_pixel(fx, y, new_color)
+        fx = fx + 1
+    end
+
+    # Check lines above and below
+    fx = left
+    while fx <= right
+        if y > 0 and get_current_pixel(fx, y - 1) == old_color
+            do_fill(fx, y - 1, old_color, new_color)
+        end
+        if y < canvas_height - 1 and get_current_pixel(fx, y + 1) == old_color
+            do_fill(fx, y + 1, old_color, new_color)
+        end
+        fx = fx + 1
+    end
+end
+
+# =============================================================================
+# Canvas Rendering
+# =============================================================================
+
+# Update canvas position from render hook bounds
+func update_canvas_bounds()
+    canvas_x = ra_canvas_left()
+    canvas_y = ra_canvas_top()
+    canvas_area_w = ra_canvas_width()
+    canvas_area_h = ra_canvas_height()
+end
+
+# This function is called by the render hook when the Space gadget needs redrawing
+func render_canvas()
+    # Get current bounds from the render hook
+    update_canvas_bounds()
+
+    # Only draw if we have valid bounds
+    if canvas_area_w > 0 and canvas_area_h > 0
+        # Redraw the canvas content
+        composite_layers()
+        draw_full_canvas_content()
+    end
+end
+
+# Draw just the canvas content (clipped to canvas area)
+func draw_full_canvas_content()
+    # Calculate clipping bounds
+    clip_right = canvas_x + canvas_area_w
+    clip_bottom = canvas_y + canvas_area_h
+
+    # Draw all pixels from composite (with clipping)
+    py = 0
+    while py < canvas_height
+        px = 0
+        while px < canvas_width
+            color = get_composite_pixel(px, py)
+            if color > 0
+                sx = to_screen_x(px)
+                sy = to_screen_y(py)
+                # Only draw if pixel starts within visible area
+                if sx < clip_right and sy < clip_bottom
+                    # Clip the pixel rectangle
+                    ex = sx + zoom_level - 1
+                    ey = sy + zoom_level - 1
+                    if ex >= clip_right
+                        ex = clip_right - 1
+                    end
+                    if ey >= clip_bottom
+                        ey = clip_bottom - 1
+                    end
+                    if sx >= canvas_x and sy >= canvas_y
+                        gfx_pen(color)
+                        gfx_rect(sx, sy, ex, ey)
+                    end
+                end
+            end
+            px = px + 1
+        end
+        py = py + 1
+    end
+
+    # Draw grid if zoomed in enough
+    if zoom_level >= 4
+        draw_grid()
+    end
+end
+
+func draw_canvas_background()
+    # Calculate zoomed canvas size
+    canvas_w = canvas_width * zoom_level
+    canvas_h = canvas_height * zoom_level
+
+    # Clip to actual canvas area
+    draw_w = canvas_w
+    draw_h = canvas_h
+    if draw_w > canvas_area_w
+        draw_w = canvas_area_w
+    end
+    if draw_h > canvas_area_h
+        draw_h = canvas_area_h
+    end
+
+    # Draw background (clipped)
+    gfx_pen(3)
+    gfx_rect(canvas_x, canvas_y, canvas_x + draw_w - 1, canvas_y + draw_h - 1)
+
+    # Draw border around visible area
+    gfx_pen(1)
+    gfx_box(canvas_x - 1, canvas_y - 1, canvas_x + draw_w, canvas_y + draw_h)
+end
+
+func draw_full_canvas()
+    # Update bounds from render hook (in case they changed)
+    update_canvas_bounds()
+
+    # Draw background first (render hook clears, but we draw checkerboard)
+    draw_canvas_background()
+
+    # Draw the canvas content
+    draw_full_canvas_content()
+end
+
+func draw_grid()
+    # Clip dimensions
+    clip_right = canvas_x + canvas_area_w
+    clip_bottom = canvas_y + canvas_area_h
+
+    gfx_pen(0)
+
+    # Draw vertical lines every 8 pixels (clipped)
+    x = 0
+    while x <= canvas_width
+        if x % 8 == 0
+            sx = canvas_x + x * zoom_level
+            if sx < clip_right and sx >= canvas_x
+                ey = canvas_y + canvas_height * zoom_level - 1
+                if ey >= clip_bottom
+                    ey = clip_bottom - 1
+                end
+                gfx_line(sx, canvas_y, sx, ey)
+            end
+        end
+        x = x + 1
+    end
+
+    # Draw horizontal lines every 8 pixels (clipped)
+    y = 0
+    while y <= canvas_height
+        if y % 8 == 0
+            sy = canvas_y + y * zoom_level
+            if sy < clip_bottom and sy >= canvas_y
+                ex = canvas_x + canvas_width * zoom_level - 1
+                if ex >= clip_right
+                    ex = clip_right - 1
+                end
+                gfx_line(canvas_x, sy, ex, sy)
+            end
+        end
+        y = y + 1
+    end
+end
+
+# =============================================================================
+# Layer Panel (handled by ReAction gadgets)
+# =============================================================================
+
+func draw_layer_panel()
+    # Layer panel is now ReAction buttons - no custom drawing needed
+end
+
+func draw_layer_slot(slot: Int)
+    # No-op - ReAction handles layer display
+end
+
+func handle_layer_panel_click(mx: Int, my: Int)
+    # No-op - ReAction handles layer clicks via buttons
+end
+
+# =============================================================================
+# Timeline Panel (handled by ReAction gadgets)
+# =============================================================================
+
+func draw_timeline()
+    # Timeline is now ReAction buttons - no custom drawing needed
+end
+
+func draw_frame_thumb(frame_idx: Int)
+    # No-op - frame display handled by ReAction
+end
+
+func handle_timeline_click(mx: Int, my: Int)
+    # No-op - Timeline clicks handled by ReAction buttons
+end
+
+func update_playback()
+    if not playing
+        return
+    end
+
+    frame_counter = frame_counter + 1
+
+    # Simple timing: advance frame every N iterations
+    # At ~50 iterations/sec and 12 fps, that's about 4 iterations per frame
+    frames_per_tick = 50 / anim_fps
+    if frames_per_tick < 1
+        frames_per_tick = 1
+    end
+
+    if frame_counter >= frames_per_tick
+        frame_counter = 0
+
+        # Advance to next frame
+        new_frame = current_frame + 1
+        if new_frame >= num_frames
+            new_frame = 0
+        end
+
+        goto_frame(new_frame)
+        draw_full_canvas()
+        draw_timeline()
+    end
+end
+
+func start_playback()
+    if num_frames <= 1
+        return
+    end
+    playing = true
+    frame_counter = 0
+end
+
+func stop_playback()
+    playing = false
+end
+
+# =============================================================================
+# UI Drawing
+# =============================================================================
+
+func draw_palette()
+    # Palette is now a ReAction slider - this function is a no-op
+    # Color selection is via SLD_COLOR slider
+end
+
+func draw_tool_indicator()
+    # Tool indicator is now via ReAction toolbar buttons - no-op
+end
+
+func handle_palette_click(mx: Int, my: Int)
+    # Palette is now a ReAction slider - no-op
+end
+
+# =============================================================================
+# Main Program
+# =============================================================================
+
+Main
+    # Open screen with 16 colors
+    screen_open(4, "Blixel 0.3")
+
+    # Create ReAction window
+    ra_window_create("Blixel - Pixel Art Editor", 640, 500)
+
+    # === ROW 1: Toolbar (weight=5 - small height) ===
+    ra_layout_hgroup_weighted(5)
+    ra_add_button(BTN_NEW, "New")
+    ra_add_button(BTN_LOAD, "Load")
+    ra_add_button(BTN_SAVE, "Save")
+    ra_add_vspace()
+    ra_add_button(BTN_PENCIL, "Pen")
+    ra_add_button(BTN_ERASER, "Era")
+    ra_add_button(BTN_LINE, "Lin")
+    ra_add_button(BTN_RECT, "Rec")
+    ra_add_button(BTN_FILL, "Fil")
+    ra_add_button(BTN_EYEDROP, "Eye")
+    ra_add_vspace()
+    ra_add_button(BTN_CLEAR, "Clear")
+    ra_layout_group_end_weighted()
+
+    # === ROW 2: Main area (weight=80 - most of the space) ===
+    ra_layout_hgroup_weighted(80)
+
+    # Left column: Layer controls (weight=10)
+    ra_layout_vgroup_weighted(10)
+    ra_add_label("Layers")
+    ra_add_button(BTN_LAYER_ADD, "+")
+    ra_add_button(BTN_LAYER_DEL, "-")
+    ra_add_button(BTN_LAYER_UP, "Up")
+    ra_add_button(BTN_LAYER_DOWN, "Dn")
+    ra_add_button(BTN_LAYER_MERGE, "Mrg")
+    ra_add_label("Zoom")
+    ra_add_slider(SLD_ZOOM, 2, 16, 6)
+    ra_layout_group_end_weighted()
+
+    # Center: Canvas area (Space gadget with weight=80)
+    ra_add_drawing_area(GAD_CANVAS, 400, 400)
+
+    # Right column: Color/palette (weight=10)
+    ra_layout_vgroup_weighted(10)
+    ra_add_label("Color")
+    ra_add_slider(SLD_COLOR, 0, 15, 1)
+    ra_layout_group_end_weighted()
+
+    ra_layout_group_end_weighted()
+
+    # === ROW 3: Timeline (weight=10) ===
+    ra_layout_hgroup_weighted(10)
+    ra_add_button(BTN_FRAME_PREV, "<")
+    ra_add_button(BTN_FRAME_NEXT, ">")
+    ra_add_button(BTN_FRAME_ADD, "+F")
+    ra_add_button(BTN_FRAME_DEL, "-F")
+    ra_add_button(BTN_FRAME_DUP, "Dup")
+    ra_add_vspace()
+    ra_add_button(BTN_PLAY, "Play")
+    ra_add_button(BTN_STOP, "Stop")
+    ra_layout_group_end_weighted()
+
+    # Initialize layers and frames BEFORE opening window
+    # (render hook needs data ready when window opens)
+    if init_layers()
+        Print "Layers initialized"
+    else
+        Print "Failed to initialize layers!"
+    end
+
+    if init_frames()
+        Print "Frames initialized"
+    else
+        Print "Failed to initialize frames!"
+    end
+
+    # Open window
+    ra_window_open()
+
+    # Get RastPort for custom drawing
+    ra_get_rastport()
+
+    # Get canvas bounds from Space gadget AFTER window is open
+    ra_get_drawing_bounds(GAD_CANVAS)
+    canvas_x = ra_canvas_left()
+    canvas_y = ra_canvas_top()
+    canvas_area_w = ra_canvas_width()
+    canvas_area_h = ra_canvas_height()
+
+    # Setup palette colors
+    gfx_rgb(0, 10, 10, 10)    # Gray (transparent indicator)
+    gfx_rgb(1, 0, 0, 0)       # Black
+    gfx_rgb(2, 15, 15, 15)    # White
+    gfx_rgb(3, 6, 6, 8)       # Selection highlight
+    gfx_rgb(4, 15, 0, 0)      # Red
+    gfx_rgb(5, 0, 15, 0)      # Green
+    gfx_rgb(6, 0, 0, 15)      # Blue
+    gfx_rgb(7, 15, 15, 0)     # Yellow
+    gfx_rgb(8, 15, 0, 15)     # Magenta
+    gfx_rgb(9, 0, 15, 15)     # Cyan
+    gfx_rgb(10, 15, 8, 0)     # Orange
+    gfx_rgb(11, 8, 4, 0)      # Brown
+    gfx_rgb(12, 15, 12, 12)   # Pink
+    gfx_rgb(13, 0, 8, 0)      # Dark green
+    gfx_rgb(14, 0, 0, 8)      # Dark blue
+    gfx_rgb(15, 8, 0, 8)      # Purple
+
+    # Initial draw of canvas
+    draw_full_canvas()
+
+    # State variables
+    running = true
+    prev_button = false
+
+    # Main event loop
+    while running
+        event = ra_wait_event()
+
+        # Handle window close
+        if event == RA_EVENT_CLOSE()
+            running = false
+        end
+
+        # Handle tool buttons
+        if event == BTN_PENCIL
+            current_tool = TOOL_PENCIL
+            draw_tool_indicator()
+        end
+        if event == BTN_ERASER
+            current_tool = TOOL_ERASER
+            draw_tool_indicator()
+        end
+        if event == BTN_LINE
+            current_tool = TOOL_LINE
+            draw_tool_indicator()
+        end
+        if event == BTN_RECT
+            current_tool = TOOL_RECT
+            draw_tool_indicator()
+        end
+        if event == BTN_FILL
+            current_tool = TOOL_FILL
+            draw_tool_indicator()
+        end
+        if event == BTN_EYEDROP
+            current_tool = TOOL_EYEDROP
+            draw_tool_indicator()
+        end
+
+        # Handle file operations
+        if event == BTN_NEW
+            new_project()
+            draw_full_canvas()
+            draw_palette()
+            draw_layer_panel()
+            draw_timeline()
+        end
+        if event == BTN_LOAD
+            if file_open_dialog("Load Blixel Project", "#?.blx")
+                if load_project(file_fullpath())
+                    draw_full_canvas()
+                    draw_palette()
+                    draw_layer_panel()
+                    draw_timeline()
+                    Print "Project loaded!"
+                else
+                    Print "Failed to load project!"
+                end
+            end
+        end
+        if event == BTN_SAVE
+            if file_save_dialog("Save Blixel Project", "#?.blx")
+                if save_project(file_fullpath())
+                    Print "Project saved!"
+                else
+                    Print "Failed to save project!"
+                end
+            end
+        end
+
+        # Handle clear
+        if event == BTN_CLEAR
+            clear_current_layer()
+            composite_layers()
+            draw_full_canvas()
+        end
+
+        # Handle layer buttons
+        if event == BTN_LAYER_ADD
+            if add_layer()
+                composite_layers()
+                draw_full_canvas()
+                draw_layer_panel()
+            end
+        end
+        if event == BTN_LAYER_DEL
+            if delete_layer()
+                composite_layers()
+                draw_full_canvas()
+                draw_layer_panel()
+            end
+        end
+        if event == BTN_LAYER_UP
+            if move_layer_up()
+                composite_layers()
+                draw_full_canvas()
+                draw_layer_panel()
+            end
+        end
+        if event == BTN_LAYER_DOWN
+            if move_layer_down()
+                composite_layers()
+                draw_full_canvas()
+                draw_layer_panel()
+            end
+        end
+        if event == BTN_LAYER_MERGE
+            if merge_layer_down()
+                composite_layers()
+                draw_full_canvas()
+                draw_layer_panel()
+            end
+        end
+
+        # Handle frame/timeline buttons
+        if event == BTN_FRAME_PREV
+            stop_playback()
+            prev_frame()
+            draw_full_canvas()
+            draw_timeline()
+        end
+        if event == BTN_FRAME_NEXT
+            stop_playback()
+            next_frame()
+            draw_full_canvas()
+            draw_timeline()
+        end
+        if event == BTN_FRAME_ADD
+            stop_playback()
+            if add_frame()
+                draw_full_canvas()
+                draw_timeline()
+            end
+        end
+        if event == BTN_FRAME_DEL
+            stop_playback()
+            if delete_frame()
+                draw_full_canvas()
+                draw_timeline()
+            end
+        end
+        if event == BTN_FRAME_DUP
+            stop_playback()
+            if duplicate_frame()
+                draw_full_canvas()
+                draw_timeline()
+            end
+        end
+        if event == BTN_PLAY
+            start_playback()
+        end
+        if event == BTN_STOP
+            stop_playback()
+        end
+
+        # Handle sliders
+        if event == SLD_COLOR
+            current_color = ra_get_value(SLD_COLOR)
+            draw_palette()
+        end
+        if event == SLD_ZOOM
+            zoom_level = ra_get_value(SLD_ZOOM)
+            composite_layers()
+            draw_full_canvas()
+            draw_palette()
+            draw_layer_panel()
+        end
+
+        # Handle mouse input
+        mx = mouse_x()
+        my = mouse_y()
+        button = mouse_button(0)
+
+        clicked = false
+        if button and not prev_button
+            clicked = true
+        end
+
+        released = false
+        if not button and prev_button
+            released = true
+        end
+
+        # Layer panel, palette, and timeline are now handled by ReAction gadgets
+        # Only canvas interactions need mouse handling
+
+        # Handle canvas interactions
+        if clicked and in_canvas(mx, my)
+            drawing = true
+            px = to_pixel_x(mx)
+            py = to_pixel_y(my)
+            start_x = px
+            start_y = py
+            last_x = px
+            last_y = py
+
+            if current_tool == TOOL_PENCIL
+                plot_pixel(px, py, current_color)
+            end
+            if current_tool == TOOL_ERASER
+                plot_pixel(px, py, TRANSPARENT)
+            end
+            if current_tool == TOOL_FILL
+                flood_fill(px, py, current_color)
+            end
+            if current_tool == TOOL_EYEDROP
+                current_color = get_composite_pixel(px, py)
+                draw_palette()
+                ra_set_value(SLD_COLOR, current_color)
+            end
+        end
+
+        # Handle dragging
+        if button and drawing and in_canvas(mx, my)
+            px = to_pixel_x(mx)
+            py = to_pixel_y(my)
+
+            if current_tool == TOOL_PENCIL
+                if px != last_x or py != last_y
+                    draw_line_pixels(last_x, last_y, px, py, current_color)
+                    last_x = px
+                    last_y = py
+                end
+            end
+            if current_tool == TOOL_ERASER
+                if px != last_x or py != last_y
+                    draw_line_pixels(last_x, last_y, px, py, TRANSPARENT)
+                    last_x = px
+                    last_y = py
+                end
+            end
+        end
+
+        # Handle release for shape tools
+        if released and drawing
+            drawing = false
+
+            if in_canvas(mx, my)
+                px = to_pixel_x(mx)
+                py = to_pixel_y(my)
+
+                if current_tool == TOOL_LINE
+                    draw_line_pixels(start_x, start_y, px, py, current_color)
+                end
+                if current_tool == TOOL_RECT
+                    draw_rect_outline(start_x, start_y, px, py, current_color)
+                end
+            end
+        end
+
+        # Update animation playback
+        update_playback()
+
+        prev_button = button
+    end
+
+    # Cleanup
+    cleanup_frames()
+    cleanup_layers()
+    ra_window_close()
+    screen_close()
+end

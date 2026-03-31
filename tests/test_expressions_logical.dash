@@ -1,0 +1,49 @@
+# Test: Logical Expressions
+# Verifica operadores lógicos
+
+Window TestWin
+    title "Logical Test"
+    width 200
+    height 100
+end
+
+Main
+    t = true
+    f = false
+
+    # AND operator
+    and1 = t and t    # true
+    and2 = t and f    # false
+    and3 = f and t    # false
+    and4 = f and f    # false
+
+    # OR operator
+    or1 = t or t      # true
+    or2 = t or f      # true
+    or3 = f or t      # true
+    or4 = f or f      # false
+
+    # NOT operator
+    not1 = not t      # false
+    not2 = not f      # true
+
+    # Combined expressions
+    combo1 = t and t or f       # true
+    combo2 = f or t and t       # true
+    combo3 = not f and t        # true
+    combo4 = not (t and f)      # true
+
+    # With comparisons
+    x = 10
+    y = 20
+    valid = x > 0 and y > 0
+    inRange = x >= 0 and x <= 100
+    outOfRange = x < 0 or x > 100
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

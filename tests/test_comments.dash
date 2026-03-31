@@ -1,0 +1,41 @@
+# Test: Comments
+# This file tests that comments are properly ignored
+
+# Comment at start of file
+
+Window TestWin
+    title "Comments Test"
+    width 200
+    height 100
+end
+
+# Comment between blocks
+# Another comment here
+
+Main
+    # Comment at start of main
+    x = 10
+
+    # Multiple
+    # consecutive
+    # comments
+
+    if true
+        # inside if
+        y = 20
+    end
+
+    # Before event loop
+    TestWin.open
+
+    EventLoop
+        # Inside event loop
+        On Close
+            # Inside handler
+            Stop
+        end
+    end
+    # After event loop
+end
+
+# Comment at end of file

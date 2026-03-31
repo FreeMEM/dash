@@ -1,0 +1,31 @@
+# Test Constants
+
+const MAX_ENEMIES = 100
+const SCREEN_WIDTH = 320
+const SCREEN_HEIGHT = 200
+const GAME_TITLE = "Space Invaders"
+const DEBUG_MODE = true
+
+Main
+    Print "=== Constants Test ==="
+
+    Print GAME_TITLE
+
+    Print "Screen size:"
+    Print SCREEN_WIDTH
+    Print SCREEN_HEIGHT
+
+    Print "Max enemies:"
+    Print MAX_ENEMIES
+
+    if DEBUG_MODE
+        Print "Debug mode is ON"
+    end
+
+    # Use in expressions
+    half_width = SCREEN_WIDTH / 2
+    Print "Half width:"
+    Print half_width
+
+    Print "=== Test Complete ==="
+end

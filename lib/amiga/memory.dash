@@ -1,0 +1,74 @@
+# ========================================
+# Dash Memory Module for Amiga
+# Memory allocation and cleanup utilities
+# ========================================
+
+# === Low-level Memory Operations ===
+
+# Allocate memory
+# flags: 0 = any, 1 = MEMF_PUBLIC, 2 = MEMF_CHIP, 65536 = MEMF_CLEAR
+@native func mem_alloc(size: Int, flags: Int) -> Pointer
+"""
+    return (APTR)AllocMem(size, flags);
+"""
+end
+
+# Free memory
+@native func mem_free(ptr: Pointer, size: Int)
+"""
+    if (ptr) FreeMem(ptr, size);
+"""
+end
+
+# Get available memory (in bytes)
+@native func mem_available(flags: Int) -> Int
+"""
+    return (LONG)AvailMem(flags);
+"""
+end
+
+# Get total free memory (chip + fast)
+@native func mem_free_total() -> Int
+"""
+    return (LONG)AvailMem(0);
+"""
+end
+
+# Get free chip memory
+@native func mem_free_chip() -> Int
+"""
+    return (LONG)AvailMem(MEMF_CHIP);
+"""
+end
+
+# Get free fast memory
+@native func mem_free_fast() -> Int
+"""
+    return (LONG)AvailMem(MEMF_FAST);
+"""
+end
+
+# === Array Cleanup ===
+
+# Free an array (and its data)
+@native func free_array(arr: Pointer)
+"""
+    DashArrayLong *a = (DashArrayLong *)arr;
+    if (a) {
+        if (a->data && a->capacity > 0) {
+            FreeMem(a->data, sizeof(LONG) * a->capacity);
+        }
+        FreeMem(a, sizeof(DashArrayLong));
+    }
+"""
+end
+
+# === Struct Cleanup ===
+
+# Free a struct (generic - only frees the pointer)
+# For structs with nested allocations, use specific cleanup
+@native func free_struct(ptr: Pointer, size: Int)
+"""
+    if (ptr) FreeMem(ptr, size);
+"""
+end

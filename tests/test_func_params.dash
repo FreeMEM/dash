@@ -1,0 +1,45 @@
+# Test: Functions with Parameters
+# Verifica funciones con parámetros
+
+Window TestWin
+    title "Function Params Test"
+    width 200
+    height 100
+end
+
+# Function with one parameter
+func doble(x)
+    return x * 2
+end
+
+# Function with two parameters
+func suma(a, b)
+    return a + b
+end
+
+# Function with three parameters
+func clamp(valor, minimo, maximo)
+    if valor < minimo
+        return minimo
+    end
+    if valor > maximo
+        return maximo
+    end
+    return valor
+end
+
+Main
+    # Call functions with parameters
+    resultado1 = doble(5)
+    resultado2 = suma(3, 4)
+    resultado3 = clamp(15, 0, 10)
+    resultado4 = clamp(-5, 0, 10)
+    resultado5 = clamp(5, 0, 10)
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

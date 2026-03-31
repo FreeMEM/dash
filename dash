@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""
+Dash - Amiga Programming Language Compiler CLI
+Compiles .dash source files to native Amiga executables.
+"""
+
+import argparse
+import glob
+import os
+import subprocess
+import sys
+
+def find_elf2hunk():
+    """Busca elf2hunk en ubicaciones conocidas."""
+    locations = [
+        "/opt/amiga/bin/elf2hunk",
+    ]
+
+    # Buscar en extensiones de VS Code (cualquier versión)
+    vscode_ext_path = os.path.expanduser("~/.vscode/extensions/")
+    if os.path.exists(vscode_ext_path):
+        for entry in os.listdir(vscode_ext_path):
+            if entry.startswith("bartmanabyss.amiga-debug"):
+                candidate = os.path.join(vscode_ext_path, entry, "bin/linux/elf2hunk")
+                if os.path.exists(candidate):
+                    locations.insert(0, candidate)
+
+    for loc in locations:
+        if os.path.exists(loc):
+            return loc
+
+    return None
+
+def run_command(command, env=None):
+    """Runs a command and prints its output in real-time, exiting on error."""
+    print(f"Executing: {' '.join(command)}")
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+
+    while True:
+        output = process.stdout.readline()
+        if output:
+            sys.stdout.write(output)
+
+        return_code = process.poll()
+        if return_code is not None:
+            if return_code != 0:
+                print(f"Error: Command failed with exit code {return_code}", file=sys.stderr)
+                sys.exit(return_code)
+            break
+
+def main():
+    parser = argparse.ArgumentParser(description="Dash - Amiga Programming Language Compiler")
+    parser.add_argument("input_file", help="Input Dash source file (.dash)")
+    parser.add_argument("-o", "--output", required=True, help="Output Amiga executable file")
+    parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")
+    parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
+    args = parser.parse_args()
+
+    input_filename = args.input_file
+    output_filename = args.output
+
+    base_name = os.path.splitext(os.path.basename(input_filename))[0]
+
+    build_dir = "build"
+    os.makedirs(build_dir, exist_ok=True)
+
+    # --- Toolchain Paths ---
+    amiga_toolchain_bin = "/opt/amiga/bin"
+    amiga_ndk_include = "/opt/amiga/m68k-amigaos/ndk-include"
+    amiga_lib_path = "/opt/amiga/m68k-amigaos/lib"
+
+    # Verificar que el toolchain existe
+    if not os.path.exists(f"{amiga_toolchain_bin}/m68k-amigaos-gcc"):
+        print("Error: m68k-amigaos-gcc not found in /opt/amiga/bin/", file=sys.stderr)
+        print("Please install the Amiga cross-compiler toolchain.", file=sys.stderr)
+        sys.exit(1)
+
+    # --- Step 1: Transpile Dash to C ---
+    print("--- Transpiling Dash to C ---")
+
+    if args.multifile:
+        # Multi-file mode: generate multiple .c and .h files
+        # Create a subdirectory for this specific build to avoid mixing with other builds
+        multifile_build_dir = os.path.join(build_dir, f"{base_name}_multi")
+        os.makedirs(multifile_build_dir, exist_ok=True)
+
+        # Clean previous generated files
+        for old_file in glob.glob(os.path.join(multifile_build_dir, "*.[ch]")):
+            os.remove(old_file)
+
+        transpile_command = [
+            "python3", "-m", "compiler.main",
+            input_filename,
+            "-o", multifile_build_dir,
+            "--multifile"
+        ]
+        if args.verbose:
+            transpile_command.append("-v")
+        run_command(transpile_command)
+
+        # Find all generated .c files in the multifile build directory
+        c_files = glob.glob(os.path.join(multifile_build_dir, "*.c"))
+        if not c_files:
+            print("Error: No C files generated", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found {len(c_files)} C file(s) to compile")
+
+        # Update build_dir for include path and ELF output
+        build_dir = multifile_build_dir
+        elf_output_file = os.path.join(build_dir, f"{base_name}.elf")
+    else:
+        # Single-file mode (default)
+        c_output_file = os.path.join(build_dir, f"{base_name}.c")
+        elf_output_file = os.path.join(build_dir, f"{base_name}.elf")
+        transpile_command = ["python3", "-m", "compiler.main", input_filename, "-o", c_output_file]
+        if args.verbose:
+            transpile_command.append("-v")
+        run_command(transpile_command)
+        c_files = [c_output_file]
+
+    # --- Step 2: Compile C to Amiga executable ---
+    print("\n--- Compiling C to Amiga executable ---")
+    env = os.environ.copy()
+    env["PATH"] = f"{amiga_toolchain_bin}:{env['PATH']}"
+
+    compile_command = [
+        "m68k-amigaos-gcc",
+        "-noixemul",
+        "-I" + amiga_ndk_include,
+        "-I" + build_dir,  # For local headers
+        "-L" + amiga_lib_path,
+    ]
+    compile_command.extend(c_files)
+    compile_command.extend([
+        "-o",
+        output_filename if args.no_hunk else elf_output_file,
+    ])
+    run_command(compile_command, env=env)
+
+    # --- Step 3: Convert ELF to Hunk (if needed) ---
+    if not args.no_hunk:
+        print("\n--- Converting ELF to Hunk ---")
+        elf2hunk = find_elf2hunk()
+        if not elf2hunk:
+            print("Warning: elf2hunk not found. Executable remains in ELF format.", file=sys.stderr)
+            print(f"Note: GCC with -noixemul generates native Hunk format directly.", file=sys.stderr)
+            os.rename(elf_output_file, output_filename)
+        else:
+            convert_command = [elf2hunk, elf_output_file, output_filename]
+            run_command(convert_command)
+
+    print(f"\nSuccess! Amiga executable created at '{output_filename}'")
+
+if __name__ == "__main__":
+    main()

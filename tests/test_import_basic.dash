@@ -1,0 +1,28 @@
+# Test basic imports
+import "lib/math_utils.dash"
+
+Window win
+    title "Import Test"
+    width 300
+    height 200
+end
+
+Main
+    win.open
+
+    # Use imported functions
+    x = duplicar(5)
+    Print x
+
+    y = square(4)
+    Print y
+
+    z = sum_to(10)
+    Print z
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

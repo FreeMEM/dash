@@ -1,0 +1,251 @@
+# ========================================
+# Dash Copper Module for Amiga
+# Hardware Copper (co-processor) control
+# ========================================
+#
+# The Copper is a co-processor that can:
+# - WAIT for a specific screen position (X, Y)
+# - MOVE a value to a hardware register
+# - Create color gradients, split screens, sprite multiplexing
+#
+# Copper Instructions:
+#   WAIT: Wait for beam to reach position
+#   MOVE: Write value to register
+#   SKIP: Skip next instruction if beam past position
+#
+# Register addresses are relative to 0xDFF000
+
+# === Copper List Management ===
+
+# Create a new copper list (max_size in instructions)
+@native func cop_new(max_size: Int) -> Pointer
+"""
+    /* Each instruction is 4 bytes (2 words) */
+    /* Add 4 bytes for terminator */
+    LONG size = (max_size + 1) * 4;
+    UWORD *copper = (UWORD *)AllocMem(size, MEMF_CHIP | MEMF_CLEAR);
+    if (!copper) return NULL;
+
+    /* Store size in first location (will be overwritten when building) */
+    /* We'll track position separately */
+    return (APTR)copper;
+"""
+end
+
+# Free copper list
+@native func cop_del(copper: Pointer)
+"""
+    /* Note: caller must track size for proper freeing */
+    /* For simplicity, we'll use a fixed max size approach */
+    if (copper) {
+        FreeMem(copper, 1024);  /* Assume max 256 instructions */
+    }
+"""
+end
+
+# === Copper Instruction Building ===
+
+# Add WAIT instruction (wait for beam position)
+# X: 0-226 (horizontal), Y: 0-312 (vertical PAL) / 0-262 (NTSC)
+@native func cop_wait(copper: Pointer, pos: Int, x: Int, y: Int)
+"""
+    UWORD *cop = (UWORD *)copper;
+    LONG idx = pos * 2;
+
+    /* WAIT instruction format:
+       Word 1: VP7-VP0 | HP8-HP1 | 1
+       Word 2: VMask | HMask | 0 | 1
+    */
+    UWORD vp = (y & 0xFF);
+    UWORD hp = (x & 0xFE);  /* HP bit 0 is always 0 */
+
+    cop[idx] = (vp << 8) | hp | 0x0001;  /* Wait bit = 1 */
+    cop[idx + 1] = 0xFFFE;  /* Standard mask, bit 0 = 0 for WAIT */
+"""
+end
+
+# Add MOVE instruction (write value to register)
+# reg: register offset from 0xDFF000 (e.g., 0x180 for COLOR00)
+@native func cop_move(copper: Pointer, pos: Int, reg: Int, value: Int)
+"""
+    UWORD *cop = (UWORD *)copper;
+    LONG idx = pos * 2;
+
+    /* MOVE instruction format:
+       Word 1: Register address (must be even, bit 0 = 0)
+       Word 2: Data to write
+    */
+    cop[idx] = reg & 0x1FE;  /* Ensure even, max 0x1FE */
+    cop[idx + 1] = value;
+"""
+end
+
+# Add SKIP instruction (skip next if beam past position)
+@native func cop_skip(copper: Pointer, pos: Int, x: Int, y: Int)
+"""
+    UWORD *cop = (UWORD *)copper;
+    LONG idx = pos * 2;
+
+    /* SKIP instruction format:
+       Same as WAIT but bit 0 of word 2 = 1
+    */
+    UWORD vp = (y & 0xFF);
+    UWORD hp = (x & 0xFE);
+
+    cop[idx] = (vp << 8) | hp | 0x0001;
+    cop[idx + 1] = 0xFFFF;  /* Bit 0 = 1 for SKIP */
+"""
+end
+
+# Add END instruction (illegal wait that never triggers)
+@native func cop_end(copper: Pointer, pos: Int)
+"""
+    UWORD *cop = (UWORD *)copper;
+    LONG idx = pos * 2;
+
+    /* End copper list with impossible wait */
+    cop[idx] = 0xFFFF;
+    cop[idx + 1] = 0xFFFE;
+"""
+end
+
+# === Register Constants ===
+# Common register offsets for copper MOVE instructions:
+# COLOR00-COLOR31: 0x180-0x1BE (color palette)
+# BPL1PTH/L: 0x0E0/0x0E2 (bitplane 1 pointer)
+# BPLCON0: 0x100 (bitplane control)
+# DIWSTRT: 0x08E (display window start)
+# DIWSTOP: 0x090 (display window stop)
+# DDFSTRT: 0x092 (data fetch start)
+# DDFSTOP: 0x094 (data fetch stop)
+
+# === Copper Activation ===
+
+# Install copper list (replaces system copper)
+@native func cop_install(copper: Pointer)
+"""
+    volatile ULONG *cop1lc = (volatile ULONG *)0xDFF080;
+    volatile UWORD *copjmp1 = (volatile UWORD *)0xDFF088;
+
+    *cop1lc = (ULONG)copper;
+    *copjmp1 = 0;  /* Strobe to load copper */
+"""
+end
+
+# Install copper list 2 (for LOF/interlace)
+@native func cop_install2(copper: Pointer)
+"""
+    volatile ULONG *cop2lc = (volatile ULONG *)0xDFF084;
+    volatile UWORD *copjmp2 = (volatile UWORD *)0xDFF08A;
+
+    *cop2lc = (ULONG)copper;
+    *copjmp2 = 0;
+"""
+end
+
+# === Utility Functions ===
+
+# Build a simple color gradient copper list
+func cop_gradient(copper: Pointer, start_color: Int, end_color: Int, start_y: Int, end_y: Int) -> Int
+    # Extract RGB components
+    sr = (start_color / 256) % 16
+    sg = (start_color / 16) % 16
+    sb = start_color % 16
+
+    er = (end_color / 256) % 16
+    eg = (end_color / 16) % 16
+    eb = end_color % 16
+
+    pos = 0
+    lines = end_y - start_y
+    if lines < 1
+        lines = 1
+    end
+
+    for i in (0..lines)
+        y = start_y + i
+
+        # Interpolate color
+        r = sr + ((er - sr) * i) / lines
+        g = sg + ((eg - sg) * i) / lines
+        b = sb + ((eb - sb) * i) / lines
+
+        color = r * 256 + g * 16 + b
+
+        # Wait for line
+        cop_wait(copper, pos, 0, y)
+        pos = pos + 1
+
+        # Set color (COLOR00 = 0x180)
+        cop_move(copper, pos, 384, color)
+        pos = pos + 1
+    end
+
+    # End copper list
+    cop_end(copper, pos)
+
+    return pos + 1
+end
+
+# Build copper list for rainbow effect (all colors cycle)
+func cop_rainbow(copper: Pointer, start_y: Int, height: Int) -> Int
+    pos = 0
+
+    for i in (0..height - 1)
+        y = start_y + i
+
+        # Generate rainbow color (simple hue cycle)
+        hue = (i * 16) / height
+        r = 0
+        g = 0
+        b = 0
+        if hue < 5
+            r = 15
+            g = hue * 3
+            b = 0
+        end
+        if hue >= 5
+            if hue < 10
+                r = 15 - ((hue - 5) * 3)
+                g = 15
+                b = 0
+            end
+        end
+        if hue >= 10
+            r = 0
+            g = 15
+            b = (hue - 10) * 3
+        end
+
+        color = r * 256 + g * 16 + b
+
+        cop_wait(copper, pos, 0, y)
+        pos = pos + 1
+        cop_move(copper, pos, 384, color)
+        pos = pos + 1
+    end
+
+    cop_end(copper, pos)
+    return pos + 1
+end
+
+# Build copper list for split screen (change background at line)
+func cop_split(copper: Pointer, split_y: Int, top_color: Int, bottom_color: Int) -> Int
+    pos = 0
+
+    # Set top color at start
+    cop_move(copper, pos, 384, top_color)
+    pos = pos + 1
+
+    # Wait for split line
+    cop_wait(copper, pos, 0, split_y)
+    pos = pos + 1
+
+    # Set bottom color
+    cop_move(copper, pos, 384, bottom_color)
+    pos = pos + 1
+
+    # End
+    cop_end(copper, pos)
+    return pos + 1
+end

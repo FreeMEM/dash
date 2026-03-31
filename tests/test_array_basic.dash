@@ -1,0 +1,38 @@
+# Test: Basic Arrays
+# Verifica operaciones básicas de arrays
+
+Window TestWin
+    title "Array Test"
+    width 200
+    height 100
+end
+
+Main
+    # Create array with literal
+    numeros = [1, 2, 3, 4, 5]
+
+    # Access elements
+    primero = numeros[0]
+    segundo = numeros[1]
+    ultimo = numeros[4]
+
+    # Get length
+    longitud = numeros.length
+
+    # Modify element
+    numeros[2] = 100
+
+    # Read modified element
+    modificado = numeros[2]
+
+    # Empty array
+    vacio = []
+    len_vacio = vacio.length
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

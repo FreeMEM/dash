@@ -1,0 +1,41 @@
+# Test: Variables and Types
+# Verifica declaración e inferencia de tipos
+
+Window TestWin
+    title "Variables Test"
+    width 200
+    height 100
+end
+
+Main
+    # Integer variables
+    x = 10
+    y = 20
+    z = 0
+    negative = -5
+
+    # String variables
+    name = "Dash"
+    empty = ""
+    message = "Hello World"
+
+    # Boolean variables
+    active = true
+    disabled = false
+
+    # Reassignment
+    x = 100
+    name = "Updated"
+    active = false
+
+    # Variable in expression
+    sum = x + y
+    doubled = x * 2
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

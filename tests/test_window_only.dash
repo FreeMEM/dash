@@ -1,0 +1,17 @@
+# Test minimal window - no graphics functions
+Window win
+    title "Window Only Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    # Just wait for close - no graphics
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

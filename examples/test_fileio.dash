@@ -1,0 +1,156 @@
+# Binary File I/O Test
+# Demonstrates buffer operations and binary file handling
+
+import "lib/amiga/dos.dash"
+
+Window win
+    title "File I/O Test"
+    width 640
+    height 400
+end
+
+Main
+    win.open
+    gfx_clear()
+
+    Print "Binary File I/O Test"
+    Print "===================="
+
+    # Test buffer allocation
+    Print "Allocating 1024 byte buffer..."
+    buf = alloc_buffer(1024)
+
+    if buf != 0
+        Print "Buffer allocated successfully"
+
+        # Test byte operations
+        Print "Testing byte operations..."
+        set_byte(buf, 0, 65)    # 'A'
+        set_byte(buf, 1, 66)    # 'B'
+        set_byte(buf, 2, 67)    # 'C'
+        set_byte(buf, 3, 68)    # 'D'
+
+        b0 = get_byte(buf, 0)
+        b1 = get_byte(buf, 1)
+        b2 = get_byte(buf, 2)
+        b3 = get_byte(buf, 3)
+
+        if b0 == 65
+            Print "Byte read OK"
+        else
+            Print "Byte read FAILED"
+        end
+
+        # Test word operations (big-endian)
+        Print "Testing word operations..."
+        set_word(buf, 10, 4660)  # 0x1234
+        w = get_word(buf, 10)
+
+        if w == 4660
+            Print "Word read OK"
+        else
+            Print "Word read FAILED"
+        end
+
+        # Test long operations (big-endian)
+        Print "Testing long operations..."
+        set_long(buf, 20, 305419896)  # 0x12345678
+        l = get_long(buf, 20)
+
+        if l == 305419896
+            Print "Long read OK"
+        else
+            Print "Long read FAILED"
+        end
+
+        # Test buffer fill
+        Print "Testing buffer fill..."
+        fill_bytes(buf, 100, 50, 255)
+
+        fb = get_byte(buf, 125)
+        if fb == 255
+            Print "Fill OK"
+        else
+            Print "Fill FAILED"
+        end
+
+        # Test buffer copy
+        Print "Testing buffer copy..."
+        buf2 = alloc_buffer(256)
+        if buf2 != 0
+            copy_bytes(buf2, 0, buf, 0, 4)
+            cb = get_byte(buf2, 0)
+            if cb == 65
+                Print "Copy OK"
+            else
+                Print "Copy FAILED"
+            end
+            free_buffer(buf2)
+        end
+
+        # Test file save
+        Print "Testing file save..."
+        set_byte(buf, 0, 84)   # 'T'
+        set_byte(buf, 1, 69)   # 'E'
+        set_byte(buf, 2, 83)   # 'S'
+        set_byte(buf, 3, 84)   # 'T'
+        set_byte(buf, 4, 10)   # newline
+        set_byte(buf, 5, 0)    # null terminator
+
+        written = save_file("RAM:test_output.txt", buf, 5)
+        if written == 5
+            Print "File save OK"
+        else
+            Print "File save FAILED"
+        end
+
+        # Test file exists
+        if exists("RAM:test_output.txt")
+            Print "File exists check OK"
+        else
+            Print "File exists check FAILED"
+        end
+
+        # Test file size
+        fsize = get_file_size("RAM:test_output.txt")
+        if fsize == 5
+            Print "File size OK"
+        else
+            Print "File size FAILED"
+        end
+
+        # Test file load
+        Print "Testing file load..."
+        fill_bytes(buf, 0, 10, 0)  # Clear buffer
+        bytes_read = load_file("RAM:test_output.txt", buf, 1024)
+        if bytes_read == 5
+            rb = get_byte(buf, 0)
+            if rb == 84  # 'T'
+                Print "File load OK"
+            else
+                Print "File load content FAILED"
+            end
+        else
+            Print "File load FAILED"
+        end
+
+        # Clean up test file
+        delete_file("RAM:test_output.txt")
+
+        # Free buffer
+        free_buffer(buf)
+        Print "Buffer freed"
+    else
+        Print "Buffer allocation FAILED"
+    end
+
+    Print ""
+    Print "All tests complete!"
+    Print "Click to exit..."
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

@@ -1,0 +1,17 @@
+# examples/hola.dash
+# Simple example that opens a window and waits 5 seconds
+
+Window MiVentana
+  title "Hola Dash"
+  width 400
+  height 150
+end
+
+Main
+  Print "Starting Dash..."
+  MiVentana.open
+  Print "Window 'Hola Dash' opened."
+  # Wait 5 seconds before closing
+  Wait 5
+  Print "Closing window and exiting."
+end

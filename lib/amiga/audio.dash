@@ -1,0 +1,287 @@
+# ========================================
+# Dash Audio Module for Amiga
+# Paula chip audio control (4 channels)
+# ========================================
+#
+# The Amiga has 4 DMA-driven audio channels:
+# - Channels 0,3: left speaker
+# - Channels 1,2: right speaker
+# - 8-bit signed PCM samples in CHIP memory
+# - Each channel has: period, volume, sample ptr, length
+#
+# Period values (NTSC 3.58MHz base):
+#   Period = 3579545 / frequency
+#   e.g., 428 = ~8363 Hz (MOD standard)
+
+# === Audio Channel Control ===
+
+# Set audio channel sample pointer
+@native func aud_set_ptr(channel: Int, sample: Pointer)
+"""
+    volatile ULONG *audlc = (volatile ULONG *)(0xDFF0A0 + channel * 16);
+    *audlc = (ULONG)sample;
+"""
+end
+
+# Set audio channel length (in words, not bytes!)
+@native func aud_set_len(channel: Int, length: Int)
+"""
+    volatile UWORD *audlen = (volatile UWORD *)(0xDFF0A4 + channel * 16);
+    *audlen = (UWORD)length;
+"""
+end
+
+# Set audio channel period (frequency divisor)
+# Period = 3579545 / desired_frequency
+@native func aud_set_period(channel: Int, period: Int)
+"""
+    volatile UWORD *audper = (volatile UWORD *)(0xDFF0A6 + channel * 16);
+    *audper = (UWORD)period;
+"""
+end
+
+# Set audio channel volume (0-64)
+@native func aud_set_vol(channel: Int, volume: Int)
+"""
+    volatile UWORD *audvol = (volatile UWORD *)(0xDFF0A8 + channel * 16);
+    *audvol = (UWORD)(volume & 0x7F);
+"""
+end
+
+# Set audio channel data directly (for small samples)
+@native func aud_set_data(channel: Int, data: Int)
+"""
+    volatile UWORD *auddat = (volatile UWORD *)(0xDFF0AA + channel * 16);
+    *auddat = (UWORD)data;
+"""
+end
+
+# === DMA Control ===
+
+# Enable audio DMA for specific channels (bitmask: bit 0 = ch0, etc.)
+@native func aud_dma_on(channels: Int)
+"""
+    volatile UWORD *dmacon = (volatile UWORD *)0xDFF096;
+    *dmacon = 0x8000 | ((channels & 0x0F) << 0);  /* Set bits */
+"""
+end
+
+# Disable audio DMA for specific channels
+@native func aud_dma_off(channels: Int)
+"""
+    volatile UWORD *dmacon = (volatile UWORD *)0xDFF096;
+    *dmacon = (channels & 0x0F) << 0;  /* Clear bits (no 0x8000) */
+"""
+end
+
+# === Sample Allocation ===
+
+# Allocate sample buffer in CHIP memory
+@native func aud_alloc(size: Int) -> Pointer
+"""
+    /* Samples must be in CHIP memory, word-aligned, even length */
+    LONG aligned_size = (size + 1) & ~1;  /* Ensure even */
+    return (APTR)AllocMem(aligned_size, MEMF_CHIP | MEMF_CLEAR);
+"""
+end
+
+# Free sample buffer
+@native func aud_free_buf(sample: Pointer, size: Int)
+"""
+    if (sample) {
+        LONG aligned_size = (size + 1) & ~1;
+        FreeMem(sample, aligned_size);
+    }
+"""
+end
+
+# === Sample Generation ===
+
+# Generate sine wave sample
+@native func aud_gen_sine(sample: Pointer, length: Int, amplitude: Int)
+"""
+    BYTE *s = (BYTE *)sample;
+    for (LONG i = 0; i < length; i++) {
+        /* Simple sine approximation using lookup or formula */
+        LONG angle = (i * 256) / length;  /* 0-255 */
+        LONG sine;
+
+        /* Quadrant-based sine approximation */
+        if (angle < 64) {
+            sine = (angle * amplitude) / 64;
+        } else if (angle < 128) {
+            sine = ((128 - angle) * amplitude) / 64;
+        } else if (angle < 192) {
+            sine = -((angle - 128) * amplitude) / 64;
+        } else {
+            sine = -((256 - angle) * amplitude) / 64;
+        }
+
+        s[i] = (BYTE)sine;
+    }
+"""
+end
+
+# Generate square wave sample
+@native func aud_gen_square(sample: Pointer, length: Int, amplitude: Int)
+"""
+    BYTE *s = (BYTE *)sample;
+    LONG half = length / 2;
+    for (LONG i = 0; i < length; i++) {
+        s[i] = (i < half) ? (BYTE)amplitude : (BYTE)-amplitude;
+    }
+"""
+end
+
+# Generate sawtooth wave sample
+@native func aud_gen_saw(sample: Pointer, length: Int, amplitude: Int)
+"""
+    BYTE *s = (BYTE *)sample;
+    for (LONG i = 0; i < length; i++) {
+        s[i] = (BYTE)(((i * amplitude * 2) / length) - amplitude);
+    }
+"""
+end
+
+# Generate white noise sample
+@native func aud_gen_noise(sample: Pointer, length: Int, amplitude: Int)
+"""
+    BYTE *s = (BYTE *)sample;
+    static ULONG seed = 12345;
+    for (LONG i = 0; i < length; i++) {
+        seed = seed * 1103515245 + 12345;  /* LCG */
+        s[i] = (BYTE)(((seed >> 16) % (amplitude * 2)) - amplitude);
+    }
+"""
+end
+
+# === Convenience Functions ===
+
+# Calculate period for a frequency with given sample length
+# sample_len = number of bytes in one cycle of the waveform
+func aud_freq_to_period(freq: Int, sample_len: Int) -> Int
+    if freq < 1 or sample_len < 1
+        return 65535
+    end
+    # Period = Clock / (Frequency × SampleLength)
+    # Clock = 3579545 (NTSC) or 3546895 (PAL)
+    return 3579545 / (freq * sample_len)
+end
+
+# Calculate period for a frequency (assumes 256-byte sample)
+func aud_period(freq: Int) -> Int
+    return aud_freq_to_period(freq, 256)
+end
+
+# Play a sample on a channel
+func aud_play(channel: Int, sample: Pointer, length: Int, period: Int, volume: Int)
+    # Stop channel first
+    aud_dma_off(1 + channel)  # Single channel bit
+
+    # Set up channel
+    aud_set_ptr(channel, sample)
+    aud_set_len(channel, length / 2)  # Length in words
+    aud_set_period(channel, period)
+    aud_set_vol(channel, volume)
+
+    # Start channel
+    aud_dma_on(1 + channel)
+end
+
+# Stop a channel
+func aud_stop(channel: Int)
+    aud_dma_off(1 + channel)
+    aud_set_vol(channel, 0)
+end
+
+# Stop all channels
+func aud_stop_all()
+    aud_dma_off(15)  # All 4 channels
+    aud_set_vol(0, 0)
+    aud_set_vol(1, 0)
+    aud_set_vol(2, 0)
+    aud_set_vol(3, 0)
+end
+
+# === Note Frequencies (for music) ===
+# Standard tuning A4 = 440Hz
+# Period values for common notes (PAL approximation):
+#
+# C-1 = 856    C-2 = 428    C-3 = 214
+# C#  = 808    C#  = 404    C#  = 202
+# D   = 762    D   = 381    D   = 190
+# D#  = 720    D#  = 360    D#  = 180
+# E   = 678    E   = 339    E   = 170
+# F   = 640    F   = 320    F   = 160
+# F#  = 604    F#  = 302    F#  = 151
+# G   = 570    G   = 285    G   = 143
+# G#  = 538    G#  = 269    G#  = 135
+# A   = 508    A   = 254    A   = 127  (A4 = 440Hz approx)
+# A#  = 480    A#  = 240    A#  = 120
+# B   = 453    B   = 226    B   = 113
+
+# Get period for MIDI note number (60 = middle C)
+func aud_note_period(note: Int) -> Int
+    # Base: C-2 (note 36) = period 428
+    # Each octave halves the period
+    # Each semitone multiplies by 2^(1/12) ≈ 0.9439
+
+    base_period = 428
+    base_note = 36  # C-2
+
+    diff = note - base_note
+
+    # Calculate octave offset
+    octave = diff / 12
+    semi = diff % 12
+
+    # Adjust for octave
+    if octave > 0
+        for i in (0..octave - 1)
+            base_period = base_period / 2
+        end
+    end
+    if octave < 0
+        for i in (0..(0 - octave) - 1)
+            base_period = base_period * 2
+        end
+    end
+
+    # Adjust for semitone (approximation using lookup)
+    # Semitone ratios: 1.0, 0.944, 0.891, 0.841, 0.794, 0.749, 0.707...
+    if semi == 1
+        base_period = base_period * 944 / 1000
+    end
+    if semi == 2
+        base_period = base_period * 891 / 1000
+    end
+    if semi == 3
+        base_period = base_period * 841 / 1000
+    end
+    if semi == 4
+        base_period = base_period * 794 / 1000
+    end
+    if semi == 5
+        base_period = base_period * 749 / 1000
+    end
+    if semi == 6
+        base_period = base_period * 707 / 1000
+    end
+    if semi == 7
+        base_period = base_period * 667 / 1000
+    end
+    if semi == 8
+        base_period = base_period * 630 / 1000
+    end
+    if semi == 9
+        base_period = base_period * 595 / 1000
+    end
+    if semi == 10
+        base_period = base_period * 561 / 1000
+    end
+    if semi == 11
+        base_period = base_period * 530 / 1000
+    end
+
+    return base_period
+end

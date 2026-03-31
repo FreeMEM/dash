@@ -1,0 +1,63 @@
+# Test: While Loop
+# Verifica bucles while
+
+Window TestWin
+    title "While Test"
+    width 200
+    height 100
+end
+
+Main
+    # Simple counter
+    i = 0
+    while i < 5
+        i = i + 1
+    end
+
+    # Countdown
+    count = 10
+    while count > 0
+        count = count - 1
+    end
+
+    # While with condition
+    x = 100
+    while x > 1
+        x = x / 2
+    end
+
+    # Nested while
+    outer = 0
+    while outer < 3
+        inner = 0
+        while inner < 3
+            inner = inner + 1
+        end
+        outer = outer + 1
+    end
+
+    # While with boolean
+    active = true
+    steps = 0
+    while active
+        steps = steps + 1
+        if steps >= 5
+            active = false
+        end
+    end
+
+    # While with complex condition
+    a = 0
+    b = 10
+    while a < 10 and b > 0
+        a = a + 1
+        b = b - 1
+    end
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

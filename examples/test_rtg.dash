@@ -1,0 +1,103 @@
+# RTG Test - Demonstrates CyberGraphX / Picasso96 support
+# This example tests 24-bit color operations
+
+import "lib/amiga/rtg.dash"
+
+Window win
+    title "RTG Test"
+    width 640
+    height 480
+end
+
+Main
+    win.open
+    gfx_clear()
+
+    # Check if RTG is available
+    if rtg_available()
+        Print "RTG is available!"
+
+        if rtg_is_active()
+            Print "Running on RTG screen"
+
+            depth = rtg_get_depth()
+            Print "Screen depth detected"
+
+            # Draw gradient bar using 24-bit colors
+            Print "Drawing RGB gradient..."
+            for x in (0..255)
+                # Red gradient
+                color = rtg_rgb(x, 0, 0)
+                rtg_fill_rect(10 + x, 30, 1, 20, color)
+
+                # Green gradient
+                color = rtg_rgb(0, x, 0)
+                rtg_fill_rect(10 + x, 60, 1, 20, color)
+
+                # Blue gradient
+                color = rtg_rgb(0, 0, x)
+                rtg_fill_rect(10 + x, 90, 1, 20, color)
+
+                # Grayscale gradient
+                color = rtg_rgb(x, x, x)
+                rtg_fill_rect(10 + x, 120, 1, 20, color)
+            end
+
+            # Draw color boxes
+            Print "Drawing color boxes..."
+            rtg_fill_rect(10, 160, 50, 50, COLOR_RED)
+            rtg_fill_rect(70, 160, 50, 50, COLOR_GREEN)
+            rtg_fill_rect(130, 160, 50, 50, COLOR_BLUE)
+            rtg_fill_rect(190, 160, 50, 50, COLOR_YELLOW)
+            rtg_fill_rect(250, 160, 50, 50, COLOR_CYAN)
+            rtg_fill_rect(310, 160, 50, 50, COLOR_MAGENTA)
+
+            # Test color blending
+            Print "Testing color blending..."
+            base_color = COLOR_RED
+            for i in (0..10)
+                blended = blend_colors(COLOR_RED, COLOR_BLUE, i * 25)
+                rtg_fill_rect(10 + i * 30, 230, 25, 25, blended)
+            end
+
+            # Test darken/lighten
+            Print "Testing darken/lighten..."
+            for i in (0..10)
+                dark = darken(COLOR_GREEN, i * 10)
+                rtg_fill_rect(10 + i * 30, 270, 25, 25, dark)
+
+                light = lighten(COLOR_BLUE, i * 10)
+                rtg_fill_rect(10 + i * 30, 310, 25, 25, light)
+            end
+
+            # Draw some colored text info
+            gfx_pen(1)
+            gfx_text_at(10, 360, "RTG 24-bit Color Test Complete!")
+
+        else
+            Print "Not running on RTG screen (using native chipset)"
+            Print "Colors will be approximated to palette"
+
+            # Fallback demo with standard colors
+            gfx_pen(1)
+            gfx_text_at(10, 50, "Native chipset mode - limited colors")
+
+            for i in (0..15)
+                gfx_pen(i)
+                gfx_rect(10 + i * 20, 80, 28 + i * 20, 100)
+            end
+        end
+    else
+        Print "RTG (CyberGraphX/P96) not available"
+        gfx_pen(1)
+        gfx_text_at(10, 50, "RTG libraries not found")
+    end
+
+    Print "Click to exit..."
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

@@ -1,0 +1,39 @@
+# Test Amiga graphics builtins
+Window win
+    title "Graphics Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    # Small delay to let window settle
+    time_delay(5)
+
+    # Set pen color and draw lines (within safe area)
+    gfx_pen(1)
+    gfx_line(20, 20, 80, 60)
+
+    # Draw a rectangle
+    gfx_pen(2)
+    gfx_rect(100, 30, 180, 70)
+
+    # Draw a circle (smaller, centered)
+    gfx_pen(3)
+    gfx_circle(250, 50, 25)
+
+    # Draw text (lower in window, after title bar)
+    gfx_pen(1)
+    gfx_text_at(20, 100, "Hello Amiga!")
+
+    # Draw a box outline
+    gfx_pen(2)
+    gfx_box(20, 110, 290, 170)
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

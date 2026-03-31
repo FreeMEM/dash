@@ -1,0 +1,49 @@
+# examples/variables_test.dash
+#
+# Test variables and expressions in Dash
+
+Window MyWindow
+    title "Variables Test"
+    width 400
+    height 150
+end
+
+Main
+    # Variables (first assignment declares)
+    x = 10
+    y = 20
+    result = x + y
+
+    Print "Testing variables..."
+
+    MyWindow.open
+
+    # Control flow
+    if result > 25
+        Print "Result is greater than 25"
+    else
+        Print "Result is 25 or less"
+    end
+
+    # While loop
+    counter = 0
+    while counter < 3
+        Print "Counting..."
+        counter = counter + 1
+    end
+
+    # Boolean expressions
+    is_done = true
+    if is_done
+        Print "All done!"
+    end
+
+    EventLoop
+        On Close
+            Print "Goodbye!"
+            Stop
+        end
+    end
+
+    Print "Program finished."
+end

@@ -1,0 +1,30 @@
+# Test for-each loops over arrays
+Window win
+    title "For Each Test"
+    width 400
+    height 200
+end
+
+Main
+    win.open
+
+    # Create array and iterate over it
+    nums = [10, 20, 30, 40, 50]
+
+    for n in nums
+        Print n
+    end
+
+    # Calculate sum using for-each
+    total = 0
+    for x in nums
+        total = total + x
+    end
+    Print total
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

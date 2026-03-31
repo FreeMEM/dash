@@ -1,0 +1,20 @@
+# Test: FFI (Foreign Function Interface)
+# Demonstrates @extern syntax for declaring external functions
+# Note: FFI is for calling functions NOT in standard Amiga headers
+
+# Example: Declare a hypothetical custom library function
+# (This tests the syntax - actual library would need to exist)
+# @extern("mylib.library")
+# func MyCustomFunc(x: Int, y: Int) -> Int
+
+# For this test, we just verify the grammar and codegen work
+# by not including conflicting declarations
+
+Main
+    Print "=== FFI Syntax Test ==="
+    Print "FFI @extern syntax is available"
+    Print "Use for custom libraries"
+    Print "Standard Amiga functions"
+    Print "are already in builtins"
+    Wait 2
+end

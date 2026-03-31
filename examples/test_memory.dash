@@ -1,0 +1,69 @@
+# Test Reference Counting and Arena Allocator
+
+struct Enemy
+    x: Int = 0
+    y: Int = 0
+    health: Int = 50
+
+    func move(dx, dy)
+        self.x = self.x + dx
+        self.y = self.y + dy
+    end
+
+    func hit(damage)
+        self.health = self.health - damage
+    end
+end
+
+Main
+    Print "=== Memory Management Test ==="
+
+    # Test 1: Reference Counting
+    Print "--- Reference Counting ---"
+
+    e1 = Enemy(10, 20, 100)
+    Print "Created enemy e1"
+    Print refcount(e1)
+
+    # Assign to another variable (manual retain for now)
+    e2 = e1
+    retain(e2)
+    Print "After e2 = e1 + retain:"
+    Print refcount(e1)
+
+    # Release one reference
+    release(e2)
+    Print "After release(e2):"
+    Print refcount(e1)
+
+    # Test 2: Arena Allocator (for high-performance scenarios)
+    Print "--- Arena Allocator ---"
+
+    # Create arena with 64KB
+    arena = arena_new(65536)
+    Print "Created 64KB arena"
+    Print arena_available(arena)
+
+    # Allocate some memory from arena (very fast!)
+    for i in (1..10)
+        ptr = arena_alloc(arena, 100)
+    end
+    Print "After 10 allocations of 100 bytes:"
+    Print arena_used(arena)
+    Print arena_available(arena)
+
+    # Reset arena (instant - just resets offset)
+    arena_reset(arena)
+    Print "After arena_reset:"
+    Print arena_used(arena)
+
+    # Free the arena when done
+    arena_free(arena)
+    Print "Arena freed"
+
+    # Clean up struct
+    release(e1)
+    Print "e1 released"
+
+    Print "=== Test Complete ==="
+end

@@ -1,0 +1,38 @@
+# Test: Print and Wait Commands
+# Verifica comandos básicos
+
+Window TestWin
+    title "Commands Test"
+    width 200
+    height 100
+end
+
+Main
+    # Print strings
+    Print "Hello World"
+    Print "Testing Dash"
+    Print ""
+
+    # Print after variable operations
+    x = 42
+    Print "Variable set"
+
+    # Multiple prints
+    Print "Line 1"
+    Print "Line 2"
+    Print "Line 3"
+
+    TestWin.open
+
+    # Wait command (commented out for fast tests)
+    # Wait 1
+
+    EventLoop
+        On Close
+            Print "Goodbye"
+            Stop
+        end
+    end
+
+    Print "End of program"
+end

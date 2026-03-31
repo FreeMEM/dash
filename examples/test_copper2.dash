@@ -1,0 +1,105 @@
+# Test Copper Gradient Demo
+# Muestra un gradiente de color cambiando la paleta en cada línea
+
+Window win
+    title "Copper Demo"
+    width 300
+    height 180
+end
+
+# Para efectos copper necesitamos manipular la paleta con un enfoque diferente
+# Usaremos un gradiente estático en la paleta que simula el efecto
+
+@native func setup_gradient_palette(start_color, end_color) -> LONG
+"""
+    if (!_dash_screen) return 0;
+
+    struct ViewPort *vp = &_dash_screen->ViewPort;
+    struct ColorMap *cm = vp->ColorMap;
+
+    /* Extract RGB components */
+    LONG sr = (start_color >> 8) & 0xF;
+    LONG sg = (start_color >> 4) & 0xF;
+    LONG sb = start_color & 0xF;
+    LONG er = (end_color >> 8) & 0xF;
+    LONG eg = (end_color >> 4) & 0xF;
+    LONG eb = end_color & 0xF;
+
+    /* Set colors 0-3 as gradient steps */
+    SetRGB4(vp, 0, sr, sg, sb);
+
+    /* Intermediate colors */
+    LONG r1 = sr + (er - sr) / 3;
+    LONG g1 = sg + (eg - sg) / 3;
+    LONG b1 = sb + (eb - sb) / 3;
+    SetRGB4(vp, 2, r1, g1, b1);
+
+    LONG r2 = sr + 2*(er - sr) / 3;
+    LONG g2 = sg + 2*(eg - sg) / 3;
+    LONG b2 = sb + 2*(eb - sb) / 3;
+    SetRGB4(vp, 3, r2, g2, b2);
+
+    return 1;
+"""
+end
+
+# Demostración simple de copper usando VBlank interrupt para cambiar colores
+@native func animate_colors() -> LONG
+"""
+    static LONG frame = 0;
+    if (!_dash_screen) return 0;
+
+    struct ViewPort *vp = &_dash_screen->ViewPort;
+
+    /* Cycle through colors for a simple animation effect */
+    frame++;
+    LONG phase = (frame >> 2) & 0xF;
+
+    /* Animate background color */
+    LONG r = (phase < 8) ? phase : (15 - phase);
+    LONG g = ((phase + 5) & 0xF);
+    LONG b = 8 + (phase >> 1);
+
+    if (g > 15) g = 15;
+    if (b > 15) b = 15;
+
+    SetRGB4(vp, 0, r >> 1, g >> 1, b);
+
+    return frame;
+"""
+end
+
+Main
+    # Abrir screen con 4 colores (2 bitplanes)
+    screen_open(2, "Copper Demo")
+
+    win.open
+
+    # Configurar paleta inicial
+    gfx_rgb(0, 1, 2, 6)    # Color 0: azul oscuro
+    gfx_rgb(1, 15, 15, 15) # Color 1: blanco
+    gfx_rgb(2, 0, 8, 12)   # Color 2: cyan oscuro
+    gfx_rgb(3, 0, 12, 15)  # Color 3: cyan claro
+
+    # Mensaje
+    gfx_pen(1)
+    gfx_text_at(60, 30, "Copper Color Demo")
+    gfx_text_at(30, 50, "Animating background color")
+    gfx_text_at(50, 150, "Click close to exit")
+
+    # Loop principal con animación de colores
+    running = true
+    while running
+        if window_check_close()
+            running = false
+        end
+
+        # Animar colores en cada frame
+        animate_colors()
+
+        wait_vblank()
+    end
+
+    close_window()
+    screen_close()
+end

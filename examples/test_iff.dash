@@ -1,0 +1,48 @@
+# Test IFF Image Loading
+
+import "lib/amiga/iff.dash"
+
+Window win
+    title "IFF Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    Print "=== IFF/ILBM Test ==="
+
+    # Create image structure
+    img = iff_new()
+
+    if img > 0
+        Print "Image structure allocated"
+
+        # Try to load a test image
+        # Note: You would need an actual IFF file
+        # result = iff_load(img, "test.iff")
+        # if result > 0
+        #     Print "Image loaded!"
+        #     w = iff_width(img)
+        #     h = iff_height(img)
+        #     d = iff_depth(img)
+        #     Print "Dimensions obtained"
+        # end
+
+        # Free image
+        iff_del(img)
+        Print "Image freed"
+    else
+        Print "Failed to allocate image"
+    end
+
+    Print "=== Complete ==="
+    Wait 2
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

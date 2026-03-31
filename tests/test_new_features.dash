@@ -1,0 +1,75 @@
+# Test: Enums, Optional Types, and FFI
+# Tests the new features added to Dash
+
+# === ENUMS ===
+enum Direction
+    UP
+    DOWN
+    LEFT
+    RIGHT
+end
+
+enum State
+    IDLE = 0
+    RUNNING = 1
+    PAUSED = 2
+    STOPPED = 10
+end
+
+# === OPTIONAL TYPES ===
+# Function with typed parameters and return type
+func add(a: Int, b: Int) -> Int
+    return a + b
+end
+
+# Function with mixed types
+func greet(name: String) -> String
+    return name
+end
+
+# Function without types (backwards compatible)
+func multiply(x, y)
+    return x * y
+end
+
+# === STRUCTS (already tested) ===
+struct Player
+    x: Int
+    y: Int
+    direction: Int
+end
+
+Main
+    Print "=== Enum Test ==="
+    dir = Direction.UP
+    Print dir
+
+    state = State.RUNNING
+    Print state
+
+    paused = State.PAUSED
+    Print paused
+
+    stopped = State.STOPPED
+    Print stopped
+
+    Print "=== Typed Function Test ==="
+    result = add(10, 20)
+    Print result
+
+    product = multiply(5, 6)
+    Print product
+
+    Print "=== Struct with Enum ==="
+    player = Player(100, 50, Direction.RIGHT)
+    Print player.x
+    Print player.y
+    Print player.direction
+
+    # Change direction
+    player.direction = Direction.LEFT
+    Print player.direction
+
+    Print "=== Test Complete ==="
+    Wait 3
+end

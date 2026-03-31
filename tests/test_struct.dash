@@ -1,0 +1,39 @@
+# Test: Struct support in Dash Language
+# Tests struct definition, instantiation, and member access
+
+struct Player
+    name: String
+    x: Int
+    y: Int
+    score: Int
+end
+
+struct Enemy
+    x: Int
+    y: Int
+    health: Int
+end
+
+Main
+    Print "=== Dash Struct Test ==="
+
+    # Create player
+    player = Player("Hero", 100, 50, 0)
+    Print player.name
+    Print player.x
+    Print player.y
+
+    # Modify members
+    player.x = player.x + 10
+    player.score = 500
+    Print player.x
+    Print player.score
+
+    # Create enemy
+    enemy = Enemy(200, 150, 100)
+    Print enemy.x
+    Print enemy.health
+
+    Print "=== Test Complete ==="
+    Wait 3
+end

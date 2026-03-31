@@ -1,0 +1,370 @@
+# Epic Chip Music Demo
+# Real-time waveform visualization + 4-channel music
+# Click to exit
+
+import "lib/amiga/audio.dash"
+
+Window win
+    title "Epic Chip Demo"
+    width 320
+    height 200
+end
+
+# Global variables for samples
+var g_bass: Pointer
+var g_lead: Pointer
+var g_arp: Pointer
+var g_drum: Pointer
+var g_len: Int
+
+# Draw animated waveform for a channel
+func draw_wave(ch: Int, sample: Pointer, vol: Int, phase: Int)
+    # Position for each channel
+    x = 10
+    y = 25 + ch * 42
+    w = 300
+    h = 36
+
+    # Clear previous wave
+    gfx_pen(0)
+    gfx_rect(x, y, x + w, y + h)
+
+    # Draw center line
+    gfx_pen(1)
+    gfx_line(x, y + h / 2, x + w, y + h / 2)
+
+    # Color per channel
+    color = 2
+    if ch == 1 or ch == 3
+        color = 3
+    end
+    gfx_pen(color)
+
+    # Draw waveform with phase offset (animation)
+    center_y = y + h / 2
+    prev_py = center_y
+
+    for i in (0..w - 1)
+        # Sample index with phase offset for animation
+        idx = ((i * g_len) / w + phase) % g_len
+
+        # Get sample value
+        val = peek_byte(sample + idx)
+        if val > 127
+            val = val - 256
+        end
+
+        # Scale by volume
+        val = (val * vol) / 64
+
+        # Scale to display
+        py = center_y - (val * h) / 256
+
+        if i > 0
+            gfx_line(x + i - 1, prev_py, x + i, py)
+        end
+        prev_py = py
+    end
+end
+
+# Play note helper
+func play_note(ch: Int, sample: Pointer, freq: Int, vol: Int)
+    if freq > 0
+        period = aud_freq_to_period(freq, g_len)
+        aud_play(ch, sample, g_len, period, vol)
+    else
+        aud_stop(ch)
+    end
+end
+
+Main
+    win.open
+    gfx_clear()
+
+    # Title
+    gfx_pen(1)
+    gfx_text_at(80, 10, "EPIC CHIP DEMO")
+
+    # Channel labels
+    gfx_pen(2)
+    gfx_text_at(10, 20, "BASS")
+    gfx_text_at(10, 62, "LEAD")
+    gfx_pen(3)
+    gfx_text_at(10, 104, "ARP")
+    gfx_text_at(10, 146, "DRUM")
+
+    # Sample length (global)
+    g_len = 128
+
+    # Allocate samples (global variables)
+    g_bass = aud_alloc(g_len)
+    g_lead = aud_alloc(g_len)
+    g_arp = aud_alloc(g_len)
+    g_drum = aud_alloc(g_len)
+
+    if g_bass > 0 and g_lead > 0 and g_arp > 0 and g_drum > 0
+        # Generate waveforms
+        aud_gen_saw(g_bass, g_len, 80)
+        aud_gen_square(g_lead, g_len, 64)
+        aud_gen_sine(g_arp, g_len, 50)
+        aud_gen_noise(g_drum, g_len, 60)
+
+        # Epic melody data - frequencies for each step
+        # 0 = silence, frequencies in Hz
+        # Bass line (CH0) - driving rhythm
+        # Lead (CH1) - epic melody
+        # Arp (CH2) - arpeggios
+        # Drum (CH3) - kick/snare pattern
+
+        # Tempo: each step = 150ms (6.6 steps/sec)
+        # 30 seconds = ~200 steps, let's do 192 (loop friendly)
+
+        tick = 0
+        phase = 0
+        running = true
+
+        # Current volumes for visualization
+        vol0 = 0
+        vol1 = 0
+        vol2 = 0
+        vol3 = 0
+
+        while running and tick < 200
+            # Pattern position (32 steps per pattern, 6 patterns)
+            pos = tick % 32
+            pattern = tick / 32
+
+            # === BASS (CH0) - Powerful saw bass ===
+            bass_freq = 0
+            if pos == 0 or pos == 8 or pos == 16 or pos == 24
+                # Root notes change per pattern
+                if pattern == 0 or pattern == 3
+                    bass_freq = 65   # C2
+                end
+                if pattern == 1 or pattern == 4
+                    bass_freq = 87   # F2
+                end
+                if pattern == 2 or pattern == 5
+                    bass_freq = 98   # G2
+                end
+                vol0 = 55
+            end
+            if pos == 4 or pos == 12 or pos == 20 or pos == 28
+                bass_freq = 0
+                vol0 = 0
+            end
+
+            # === LEAD (CH1) - Epic melody ===
+            lead_freq = 0
+            vol1 = 50
+
+            # Intro (pattern 0)
+            if pattern == 0
+                if pos == 0
+                    lead_freq = 523  # C5
+                end
+                if pos == 4
+                    lead_freq = 587  # D5
+                end
+                if pos == 8
+                    lead_freq = 659  # E5
+                end
+                if pos == 12
+                    lead_freq = 698  # F5
+                end
+                if pos == 16
+                    lead_freq = 784  # G5
+                end
+                if pos == 24
+                    lead_freq = 659  # E5
+                end
+            end
+
+            # Build up (pattern 1)
+            if pattern == 1
+                if pos == 0
+                    lead_freq = 698  # F5
+                end
+                if pos == 8
+                    lead_freq = 784  # G5
+                end
+                if pos == 12
+                    lead_freq = 880  # A5
+                end
+                if pos == 16
+                    lead_freq = 784  # G5
+                end
+                if pos == 24
+                    lead_freq = 698  # F5
+                end
+            end
+
+            # Climax (pattern 2)
+            if pattern == 2
+                if pos == 0
+                    lead_freq = 1047 # C6
+                end
+                if pos == 4
+                    lead_freq = 988  # B5
+                end
+                if pos == 8
+                    lead_freq = 880  # A5
+                end
+                if pos == 12
+                    lead_freq = 784  # G5
+                end
+                if pos == 16
+                    lead_freq = 880  # A5
+                end
+                if pos == 20
+                    lead_freq = 988  # B5
+                end
+                if pos == 24
+                    lead_freq = 1047 # C6
+                end
+            end
+
+            # Repeat with variation (patterns 3-5)
+            if pattern >= 3
+                if pos == 0
+                    lead_freq = 784  # G5
+                end
+                if pos == 8
+                    lead_freq = 880  # A5
+                end
+                if pos == 16
+                    lead_freq = 1047 # C6
+                end
+                if pos == 24
+                    lead_freq = 880  # A5
+                end
+            end
+
+            if lead_freq == 0
+                vol1 = 0
+            end
+
+            # === ARP (CH2) - Fast arpeggios ===
+            arp_freq = 0
+            vol2 = 35
+            arp_pos = pos % 4
+
+            # C major arp: C-E-G-C
+            if pattern == 0 or pattern == 3
+                if arp_pos == 0
+                    arp_freq = 262
+                end
+                if arp_pos == 1
+                    arp_freq = 330
+                end
+                if arp_pos == 2
+                    arp_freq = 392
+                end
+                if arp_pos == 3
+                    arp_freq = 523
+                end
+            end
+            # F major arp
+            if pattern == 1 or pattern == 4
+                if arp_pos == 0
+                    arp_freq = 175
+                end
+                if arp_pos == 1
+                    arp_freq = 220
+                end
+                if arp_pos == 2
+                    arp_freq = 262
+                end
+                if arp_pos == 3
+                    arp_freq = 349
+                end
+            end
+            # G major arp
+            if pattern == 2 or pattern == 5
+                if arp_pos == 0
+                    arp_freq = 196
+                end
+                if arp_pos == 1
+                    arp_freq = 247
+                end
+                if arp_pos == 2
+                    arp_freq = 294
+                end
+                if arp_pos == 3
+                    arp_freq = 392
+                end
+            end
+
+            # === DRUM (CH3) - Kick and snare ===
+            drum_freq = 0
+            vol3 = 0
+            if pos == 0 or pos == 8 or pos == 16 or pos == 24
+                drum_freq = 80   # Kick
+                vol3 = 50
+            end
+            if pos == 4 or pos == 12 or pos == 20 or pos == 28
+                drum_freq = 200  # Snare
+                vol3 = 40
+            end
+
+            # Play the notes
+            play_note(0, g_bass, bass_freq, vol0)
+            play_note(1, g_lead, lead_freq, vol1)
+            play_note(2, g_arp, arp_freq, vol2)
+            play_note(3, g_drum, drum_freq, vol3)
+
+            # Animate waveforms
+            draw_wave(0, g_bass, vol0, phase)
+            draw_wave(1, g_lead, vol1, phase * 2)
+            draw_wave(2, g_arp, vol2, phase * 3)
+            draw_wave(3, g_drum, vol3, phase)
+
+            # Progress bar
+            gfx_pen(0)
+            gfx_rect(10, 188, 310, 195)
+            gfx_pen(2)
+            progress = (tick * 300) / 200
+            gfx_rect(10, 188, 10 + progress, 195)
+
+            # Wait and advance
+            time_delay(7)  # ~140ms per tick
+            phase = phase + 8
+            tick = tick + 1
+
+            # Check for exit
+            if check_mouse()
+                running = false
+            end
+        end
+
+        # Fade out
+        for fade in (0..10)
+            v = 50 - fade * 5
+            aud_set_vol(0, v)
+            aud_set_vol(1, v)
+            aud_set_vol(2, v)
+            aud_set_vol(3, v)
+            time_delay(3)
+        end
+
+        aud_stop_all()
+
+        # Free samples
+        aud_free_buf(g_bass, g_len)
+        aud_free_buf(g_lead, g_len)
+        aud_free_buf(g_arp, g_len)
+        aud_free_buf(g_drum, g_len)
+
+        gfx_pen(1)
+        gfx_text_at(100, 188, "THE END")
+    else
+        Print "Failed to allocate samples"
+    end
+
+    EventLoop
+        On Close
+            aud_stop_all()
+            Stop
+        end
+    end
+end

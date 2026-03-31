@@ -1,0 +1,126 @@
+# ========================================
+# Dash Hardware Sprites Module for Amiga
+# Direct hardware sprite control
+# ========================================
+#
+# Amiga has 8 hardware sprites (0-7)
+# Each sprite is 16 pixels wide, variable height
+
+# === Sprite Allocation ===
+
+# Allocate sprite data in CHIP memory
+@native func spr_alloc(height: Int) -> Pointer
+"""
+    LONG size = (height + 2) * 4;
+    UWORD *data = (UWORD *)AllocMem(size, MEMF_CHIP | MEMF_CLEAR);
+    return (APTR)data;
+"""
+end
+
+# Free sprite data
+@native func spr_free(data: Pointer, height: Int)
+"""
+    if (data) {
+        LONG size = (height + 2) * 4;
+        FreeMem(data, size);
+    }
+"""
+end
+
+# === Sprite Data Manipulation ===
+
+# Set a pixel row in sprite data
+@native func spr_set_row(data: Pointer, row: Int, plane0: Int, plane1: Int)
+"""
+    UWORD *p = (UWORD *)data;
+    p[2 + row * 2] = (UWORD)plane0;
+    p[2 + row * 2 + 1] = (UWORD)plane1;
+"""
+end
+
+# Clear all sprite data
+@native func spr_clear(data: Pointer, height: Int)
+"""
+    UWORD *p = (UWORD *)data;
+    for (int i = 0; i < height * 2 + 4; i++) {
+        p[i] = 0;
+    }
+"""
+end
+
+# Set sprite control words (position)
+@native func spr_control(data: Pointer, x: Int, y: Int, height: Int)
+"""
+    UWORD *p = (UWORD *)data;
+    UBYTE hstart = x >> 1;
+    UBYTE vstart = y;
+    UBYTE vstop = y + height;
+    p[0] = (vstart << 8) | hstart;
+    p[1] = (vstop << 8) | ((vstop >> 8) << 1) | (x & 1) | ((vstart >> 8) << 2);
+"""
+end
+
+# === Sprite Colors (using direct color registers) ===
+
+@native func spr_set_color(reg: Int, r: Int, g: Int, b: Int)
+"""
+    volatile UWORD *color = (volatile UWORD *)(0xDFF180 + reg * 2);
+    *color = ((r & 0xF) << 8) | ((g & 0xF) << 4) | (b & 0xF);
+"""
+end
+
+# === Simple Sprite Shapes ===
+
+# Create arrow sprite
+func spr_make_arrow(data: Pointer)
+    spr_set_row(data, 0,  32768, 0)
+    spr_set_row(data, 1,  49152, 0)
+    spr_set_row(data, 2,  57344, 0)
+    spr_set_row(data, 3,  61440, 0)
+    spr_set_row(data, 4,  63488, 0)
+    spr_set_row(data, 5,  64512, 0)
+    spr_set_row(data, 6,  65024, 0)
+    spr_set_row(data, 7,  64512, 0)
+    spr_set_row(data, 8,  63488, 0)
+    spr_set_row(data, 9,  61440, 0)
+    spr_set_row(data, 10, 57344, 0)
+    spr_set_row(data, 11, 49152, 0)
+    spr_set_row(data, 12, 32768, 0)
+end
+
+# Create box sprite
+func spr_make_box(data: Pointer, height: Int)
+    for row in (0..height - 1)
+        if row == 0 or row == height - 1
+            spr_set_row(data, row, 65535, 0)
+        else
+            spr_set_row(data, row, 32769, 0)  # Left and right edges
+        end
+    end
+end
+
+# Create filled sprite
+func spr_make_filled(data: Pointer, height: Int)
+    for row in (0..height - 1)
+        spr_set_row(data, row, 65535, 0)
+    end
+end
+
+# === Sprite Pointer Setup ===
+
+# Set sprite pointer in DMA slot (direct hardware access)
+@native func spr_set_ptr(sprite_num: Int, data: Pointer)
+"""
+    volatile ULONG *sprpt = (volatile ULONG *)(0xDFF120 + sprite_num * 4);
+    *sprpt = (ULONG)data;
+"""
+end
+
+# Disable sprite (point to empty data)
+@native func spr_disable(sprite_num: Int)
+"""
+    static UWORD empty[4] = {0, 0, 0, 0};
+    volatile ULONG *sprpt = (volatile ULONG *)(0xDFF120 + sprite_num * 4);
+    *sprpt = (ULONG)empty;
+"""
+end

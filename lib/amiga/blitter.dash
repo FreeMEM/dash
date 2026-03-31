@@ -1,0 +1,369 @@
+# ========================================
+# Dash Blitter Module for Amiga
+# Hardware blitter operations and BOBs
+# ========================================
+#
+# The Amiga blitter is a DMA-driven hardware unit that can:
+# - Copy rectangular regions of memory
+# - Perform logical operations on up to 3 sources
+# - Draw lines
+# - Fill areas
+#
+# === Blitter Minterm Constants ===
+# BLIT_COPY   = 192 (0xC0) - D = A
+# BLIT_INVERT = 48  (0x30) - D = ~A
+# BLIT_OR     = 252 (0xFC) - D = A | B
+# BLIT_AND    = 192 (0xC0) - D = A & B
+# BLIT_XOR    = 96  (0x60) - D = A ^ B
+# BLIT_CLEAR  = 0   (0x00) - D = 0
+# BLIT_SET    = 255 (0xFF) - D = 1
+
+# === Low-Level Blitter Access ===
+
+# Wait for blitter to finish (MUST call before any blit operation)
+@native func blt_wait()
+"""
+    volatile UWORD *dmaconr = (volatile UWORD *)0xDFF002;
+    while (*dmaconr & 0x4000) {}  /* Wait for BBUSY to clear */
+"""
+end
+
+# Own the blitter (disable other tasks using it)
+@native func blt_own()
+"""
+    OwnBlitter();
+"""
+end
+
+# Release blitter
+@native func blt_release()
+"""
+    DisownBlitter();
+"""
+end
+
+# === Simple Blitter Operations ===
+
+# Clear a rectangular area in chip memory
+@native func blt_clear(dest: Pointer, width_words: Int, height: Int, modulo: Int)
+"""
+    volatile UWORD *bltcon0 = (volatile UWORD *)0xDFF040;
+    volatile UWORD *bltcon1 = (volatile UWORD *)0xDFF042;
+    volatile UWORD *bltdpt = (volatile UWORD *)0xDFF054;
+    volatile UWORD *bltdmod = (volatile UWORD *)0xDFF066;
+    volatile UWORD *bltsize = (volatile UWORD *)0xDFF058;
+    volatile UWORD *dmaconr = (volatile UWORD *)0xDFF002;
+
+    /* Wait for blitter */
+    while (*dmaconr & 0x4000) {}
+
+    /* Set up for clear (D channel only, minterm = 0) */
+    *bltcon0 = 0x0100;  /* USE D, minterm 0 */
+    *bltcon1 = 0;
+    *(volatile ULONG *)0xDFF054 = (ULONG)dest;  /* BLTDPT */
+    *bltdmod = modulo;
+
+    /* Start blit: height in upper 10 bits, width in lower 6 bits */
+    *bltsize = (height << 6) | width_words;
+"""
+end
+
+# Copy a rectangular area using blitter
+@native func blt_copy(src: Pointer, dest: Pointer, width_words: Int, height: Int, src_mod: Int, dest_mod: Int)
+"""
+    volatile UWORD *bltcon0 = (volatile UWORD *)0xDFF040;
+    volatile UWORD *bltcon1 = (volatile UWORD *)0xDFF042;
+    volatile UWORD *bltamod = (volatile UWORD *)0xDFF064;
+    volatile UWORD *bltdmod = (volatile UWORD *)0xDFF066;
+    volatile UWORD *bltsize = (volatile UWORD *)0xDFF058;
+    volatile UWORD *dmaconr = (volatile UWORD *)0xDFF002;
+
+    /* Wait for blitter */
+    while (*dmaconr & 0x4000) {}
+
+    /* Set up for copy (A -> D, minterm 0xF0 = copy A) */
+    *bltcon0 = 0x09F0;  /* USE A+D, minterm F0 */
+    *bltcon1 = 0;
+    *(volatile ULONG *)0xDFF050 = (ULONG)src;   /* BLTAPT */
+    *(volatile ULONG *)0xDFF054 = (ULONG)dest;  /* BLTDPT */
+    *(volatile UWORD *)0xDFF044 = 0xFFFF;       /* BLTAFWM */
+    *(volatile UWORD *)0xDFF046 = 0xFFFF;       /* BLTALWM */
+    *bltamod = src_mod;
+    *bltdmod = dest_mod;
+
+    /* Start blit */
+    *bltsize = (height << 6) | width_words;
+"""
+end
+
+# === Cookie-Cut Blitting (Masked Copy) ===
+
+# Copy with mask (for transparent sprites/BOBs)
+@native func blt_cookie(src: Pointer, mask: Pointer, dest: Pointer, width_words: Int, height: Int, src_mod: Int, dest_mod: Int)
+"""
+    volatile UWORD *bltcon0 = (volatile UWORD *)0xDFF040;
+    volatile UWORD *bltcon1 = (volatile UWORD *)0xDFF042;
+    volatile UWORD *bltamod = (volatile UWORD *)0xDFF064;
+    volatile UWORD *bltbmod = (volatile UWORD *)0xDFF062;
+    volatile UWORD *bltcmod = (volatile UWORD *)0xDFF060;
+    volatile UWORD *bltdmod = (volatile UWORD *)0xDFF066;
+    volatile UWORD *bltsize = (volatile UWORD *)0xDFF058;
+    volatile UWORD *dmaconr = (volatile UWORD *)0xDFF002;
+
+    /* Wait for blitter */
+    while (*dmaconr & 0x4000) {}
+
+    /* Cookie cut: D = (A & B) | (~B & C)
+       A = source image
+       B = mask
+       C = destination (for background)
+       D = destination
+       Minterm = 0xCA
+    */
+    *bltcon0 = 0x0FCA;  /* USE A+B+C+D, minterm CA */
+    *bltcon1 = 0;
+    *(volatile ULONG *)0xDFF050 = (ULONG)src;   /* BLTAPT */
+    *(volatile ULONG *)0xDFF04C = (ULONG)mask;  /* BLTBPT */
+    *(volatile ULONG *)0xDFF048 = (ULONG)dest;  /* BLTCPT */
+    *(volatile ULONG *)0xDFF054 = (ULONG)dest;  /* BLTDPT */
+    *(volatile UWORD *)0xDFF044 = 0xFFFF;       /* BLTAFWM */
+    *(volatile UWORD *)0xDFF046 = 0xFFFF;       /* BLTALWM */
+    *bltamod = src_mod;
+    *bltbmod = src_mod;
+    *bltcmod = dest_mod;
+    *bltdmod = dest_mod;
+
+    /* Start blit */
+    *bltsize = (height << 6) | width_words;
+"""
+end
+
+# === BOB (Blitter Object) Structure ===
+
+# Allocate BOB data structure
+@native func blt_bob_new(width: Int, height: Int, depth: Int) -> Pointer
+"""
+    /* Calculate sizes */
+    LONG width_words = (width + 15) / 16;
+    LONG plane_size = width_words * 2 * height;
+    LONG image_size = plane_size * depth;
+    LONG mask_size = plane_size;
+    LONG total_size = image_size + mask_size + 32;  /* +32 for header */
+
+    /* Allocate in CHIP memory */
+    UBYTE *bob = (UBYTE *)AllocMem(total_size, MEMF_CHIP | MEMF_CLEAR);
+    if (!bob) return NULL;
+
+    /* Store dimensions in header */
+    UWORD *header = (UWORD *)bob;
+    header[0] = width;
+    header[1] = height;
+    header[2] = depth;
+    header[3] = width_words;
+    header[4] = plane_size;
+    header[5] = total_size;
+
+    return (APTR)bob;
+"""
+end
+
+# Free BOB data
+@native func blt_bob_del(bob: Pointer)
+"""
+    if (bob) {
+        UWORD *header = (UWORD *)bob;
+        LONG total_size = header[5];
+        FreeMem(bob, total_size);
+    }
+"""
+end
+
+# Get pointer to BOB image plane
+@native func blt_bob_plane(bob: Pointer, plane: Int) -> Pointer
+"""
+    UWORD *header = (UWORD *)bob;
+    LONG plane_size = header[4];
+    UBYTE *data = (UBYTE *)bob + 32;  /* Skip header */
+    return (APTR)(data + plane * plane_size);
+"""
+end
+
+# Get pointer to BOB mask
+@native func blt_bob_mask(bob: Pointer) -> Pointer
+"""
+    UWORD *header = (UWORD *)bob;
+    LONG depth = header[2];
+    LONG plane_size = header[4];
+    UBYTE *data = (UBYTE *)bob + 32;  /* Skip header */
+    return (APTR)(data + depth * plane_size);
+"""
+end
+
+# Set a row of pixels in a BOB plane (16-bit aligned)
+@native func blt_bob_row(bob: Pointer, plane: Int, row: Int, word_index: Int, value: Int)
+"""
+    UWORD *header = (UWORD *)bob;
+    LONG width_words = header[3];
+    LONG plane_size = header[4];
+    UWORD *data = (UWORD *)((UBYTE *)bob + 32 + plane * plane_size);
+    data[row * width_words + word_index] = (UWORD)value;
+"""
+end
+
+# Set a row in the BOB mask
+@native func blt_bob_mask_row(bob: Pointer, row: Int, word_index: Int, value: Int)
+"""
+    UWORD *header = (UWORD *)bob;
+    LONG depth = header[2];
+    LONG width_words = header[3];
+    LONG plane_size = header[4];
+    UWORD *data = (UWORD *)((UBYTE *)bob + 32 + depth * plane_size);
+    data[row * width_words + word_index] = (UWORD)value;
+"""
+end
+
+# === BOB Drawing ===
+
+# Draw BOB to screen bitplanes
+@native func blt_bob_draw(bob: Pointer, screen: Pointer, screen_width: Int, x: Int, y: Int)
+"""
+    UWORD *header = (UWORD *)bob;
+    LONG bob_width = header[0];
+    LONG bob_height = header[1];
+    LONG bob_depth = header[2];
+    LONG bob_width_words = header[3];
+    LONG bob_plane_size = header[4];
+
+    LONG screen_width_bytes = screen_width / 8;
+    LONG screen_offset = (y * screen_width_bytes) + (x / 8);
+    LONG shift = x & 7;
+
+    UBYTE *bob_data = (UBYTE *)bob + 32;
+    UBYTE *mask_data = bob_data + bob_depth * bob_plane_size;
+
+    volatile UWORD *dmaconr = (volatile UWORD *)0xDFF002;
+    volatile UWORD *bltcon0 = (volatile UWORD *)0xDFF040;
+    volatile UWORD *bltcon1 = (volatile UWORD *)0xDFF042;
+    volatile UWORD *bltamod = (volatile UWORD *)0xDFF064;
+    volatile UWORD *bltbmod = (volatile UWORD *)0xDFF062;
+    volatile UWORD *bltcmod = (volatile UWORD *)0xDFF060;
+    volatile UWORD *bltdmod = (volatile UWORD *)0xDFF066;
+    volatile UWORD *bltsize = (volatile UWORD *)0xDFF058;
+
+    /* Wait for blitter */
+    while (*dmaconr & 0x4000) {}
+
+    /* Draw each plane with cookie-cut */
+    LONG dest_mod = screen_width_bytes - bob_width_words * 2;
+
+    for (LONG p = 0; p < bob_depth; p++) {
+        UBYTE *src_plane = bob_data + p * bob_plane_size;
+        UBYTE *dest_plane = (UBYTE *)screen + p * (screen_width_bytes * 256) + screen_offset;
+
+        while (*dmaconr & 0x4000) {}
+
+        *bltcon0 = 0x0FCA | (shift << 12);
+        *bltcon1 = (shift << 12);
+        *(volatile ULONG *)0xDFF050 = (ULONG)src_plane;
+        *(volatile ULONG *)0xDFF04C = (ULONG)mask_data;
+        *(volatile ULONG *)0xDFF048 = (ULONG)dest_plane;
+        *(volatile ULONG *)0xDFF054 = (ULONG)dest_plane;
+        *(volatile UWORD *)0xDFF044 = 0xFFFF;
+        *(volatile UWORD *)0xDFF046 = 0x0000;
+        *bltamod = 0;
+        *bltbmod = 0;
+        *bltcmod = dest_mod;
+        *bltdmod = dest_mod;
+        *bltsize = (bob_height << 6) | (bob_width_words + 1);
+    }
+"""
+end
+
+# === Blitter Line Drawing ===
+
+# Draw a line using the blitter (Bresenham)
+@native func blt_line(dest: Pointer, width_bytes: Int, x1: Int, y1: Int, x2: Int, y2: Int)
+"""
+    volatile UWORD *dmaconr = (volatile UWORD *)0xDFF002;
+    volatile UWORD *bltcon0 = (volatile UWORD *)0xDFF040;
+    volatile UWORD *bltcon1 = (volatile UWORD *)0xDFF042;
+    volatile UWORD *bltapt = (volatile UWORD *)0xDFF050;
+    volatile UWORD *bltcpt = (volatile UWORD *)0xDFF048;
+    volatile UWORD *bltdpt = (volatile UWORD *)0xDFF054;
+    volatile UWORD *bltamod = (volatile UWORD *)0xDFF064;
+    volatile UWORD *bltbmod = (volatile UWORD *)0xDFF062;
+    volatile UWORD *bltcmod = (volatile UWORD *)0xDFF060;
+    volatile UWORD *bltdmod = (volatile UWORD *)0xDFF066;
+    volatile UWORD *bltsize = (volatile UWORD *)0xDFF058;
+    volatile UWORD *bltadat = (volatile UWORD *)0xDFF074;
+    volatile UWORD *bltbdat = (volatile UWORD *)0xDFF072;
+
+    LONG dx = x2 - x1;
+    LONG dy = y2 - y1;
+    UWORD octant = 0;
+
+    if (dx < 0) { dx = -dx; octant |= 1; }
+    if (dy < 0) { dy = -dy; octant |= 2; }
+    if (dx < dy) { LONG t = dx; dx = dy; dy = t; octant |= 4; }
+
+    LONG apt = 4 * dy - 2 * dx;
+    LONG amod = 4 * (dy - dx);
+    LONG bmod = 4 * dy;
+
+    UBYTE *start = (UBYTE *)dest + y1 * width_bytes + (x1 / 8);
+    UWORD startbit = 0x8000 >> (x1 & 15);
+
+    /* Wait for blitter */
+    while (*dmaconr & 0x4000) {}
+
+    *bltcon0 = 0x0B4A | ((x1 & 15) << 12);
+    *bltcon1 = ((octant & 4) << 2) | ((octant & 3) << 0) | 0x0001 | ((x1 & 15) << 12);
+    *bltadat = 0x8000;
+    *(volatile UWORD *)0xDFF044 = 0xFFFF;
+    *(volatile UWORD *)0xDFF046 = 0xFFFF;
+    *bltbdat = startbit;
+    *(volatile ULONG *)0xDFF050 = apt;
+    *(volatile ULONG *)0xDFF048 = (ULONG)start;
+    *(volatile ULONG *)0xDFF054 = (ULONG)start;
+    *(volatile WORD *)0xDFF064 = amod;
+    *(volatile WORD *)0xDFF062 = bmod;
+    *bltcmod = width_bytes;
+    *bltdmod = width_bytes;
+
+    *bltsize = ((dx + 1) << 6) | 2;
+"""
+end
+
+# === Utility Functions ===
+
+# Create simple BOB shapes
+
+# Create a filled rectangle BOB
+func blt_bob_rect(bob: Pointer, width: Int, height: Int)
+    blt_wait()
+    words = (width + 15) / 16
+    for row in (0..height - 1)
+        for w in (0..words - 1)
+            blt_bob_row(bob, 0, row, w, 65535)
+            blt_bob_mask_row(bob, row, w, 65535)
+        end
+    end
+end
+
+# Create a simple ball BOB (circular-ish)
+func blt_bob_ball(bob: Pointer, size: Int)
+    # Simple approximation using filled rows
+    blt_wait()
+    center = size / 2
+    for row in (0..size - 1)
+        dist = row - center
+        if dist < 0
+            dist = 0 - dist
+        end
+        half_width = center - dist
+        if half_width > 0
+            blt_bob_row(bob, 0, row, 0, 65535)
+            blt_bob_mask_row(bob, row, 0, 65535)
+        end
+    end
+end

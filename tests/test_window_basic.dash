@@ -1,0 +1,23 @@
+# Test: Basic Window
+# Verifica creación de ventana simple
+
+Window MyWindow
+    title "Basic Window Test"
+    width 320
+    height 200
+end
+
+Main
+    Print "Opening window..."
+    MyWindow.open
+    Print "Window opened"
+
+    EventLoop
+        On Close
+            Print "Closing..."
+            Stop
+        end
+    end
+
+    Print "Done"
+end

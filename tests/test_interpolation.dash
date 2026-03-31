@@ -1,0 +1,30 @@
+# Test: String Interpolation
+# Tests the #{variable} syntax inside strings
+
+Main
+    name = "Amiga"
+    version = "3.1"
+
+    # Simple interpolation
+    msg1 = "Hello #{name}!"
+    Print msg1
+
+    # Multiple interpolations
+    msg2 = "System: #{name} #{version}"
+    Print msg2
+
+    # Interpolation at start
+    msg3 = "#{name} rules!"
+    Print msg3
+
+    # Interpolation at end
+    msg4 = "Welcome to #{name}"
+    Print msg4
+
+    # Regular string (no interpolation)
+    msg5 = "No interpolation here"
+    Print msg5
+
+    Print "Test complete!"
+    Wait 2
+end

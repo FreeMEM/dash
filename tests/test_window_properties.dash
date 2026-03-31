@@ -1,0 +1,28 @@
+# Test: Window Properties
+# Verifica propiedades de ventana
+
+Window SmallWindow
+    title "Small"
+    width 100
+    height 50
+end
+
+Window LargeWindow
+    title "Large Window with Long Title"
+    width 640
+    height 400
+end
+
+Window DefaultsWindow
+    title "Defaults"
+end
+
+Main
+    SmallWindow.open
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

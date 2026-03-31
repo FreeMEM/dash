@@ -1,0 +1,45 @@
+# Test Copper List Operations
+
+import "lib/amiga/copper.dash"
+
+Window win
+    title "Copper Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    Print "=== Copper Test ==="
+
+    # Allocate copper list (256 instructions max)
+    copper = cop_new(256)
+
+    if copper > 0
+        Print "Copper list allocated"
+
+        # Build a gradient effect
+        size = cop_gradient(copper, 0, 255, 50, 150)
+        Print "Gradient built"
+
+        # Note: Installing would override system copper
+        # Only do this if you know what you're doing!
+        # cop_install(copper)
+
+        # Free copper list
+        cop_del(copper)
+        Print "Copper list freed"
+    else
+        Print "Failed to allocate copper"
+    end
+
+    Print "=== Complete ==="
+    Wait 2
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

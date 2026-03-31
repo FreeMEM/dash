@@ -1,0 +1,50 @@
+# Test ReAction GUI - Modern AmigaOS 3.2+ / 4.x GUI
+# Uses ReAction/BOOPSI classes for native modern look
+
+const BTN_OK = 1
+const BTN_CANCEL = 2
+const CHK_OPTION = 3
+const SLD_VALUE = 4
+const STR_NAME = 5
+
+Main
+    # Create ReAction window with auto-layout
+    ra_window_create("ReAction Demo", 300, 200)
+
+    # Add gadgets to the layout
+    ra_add_label("Welcome to ReAction!")
+    ra_add_string(STR_NAME, "Enter your name", 64)
+    ra_add_checkbox(CHK_OPTION, "Enable feature", 0)
+    ra_add_slider(SLD_VALUE, 0, 100, 50)
+    ra_add_button(BTN_OK, "OK")
+    ra_add_button(BTN_CANCEL, "Cancel")
+
+    # Open the window
+    ra_window_open()
+
+    # Event loop
+    running = true
+    while running
+        # Wait for and handle events
+        event = ra_wait_event()
+
+        if event == RA_EVENT_CLOSE()
+            running = false
+        end
+
+        if event == BTN_OK
+            # Get values from gadgets
+            slider_val = ra_get_value(SLD_VALUE)
+            checkbox_val = ra_get_value(CHK_OPTION)
+            # name_str = ra_get_string(STR_NAME)
+            running = false
+        end
+
+        if event == BTN_CANCEL
+            running = false
+        end
+    end
+
+    # Cleanup
+    ra_window_close()
+end

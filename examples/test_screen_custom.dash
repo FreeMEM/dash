@@ -1,0 +1,48 @@
+# Test custom screen dimensions
+# Demonstrates screen_open_custom vs screen_open
+
+Window TestWin
+    title "Test Window"
+    width 300
+    height 150
+    left 20
+    top 30
+end
+
+Main
+    # Open a 640x256 screen with 5 bitplanes (32 colors)
+    screen_open_custom(640, 256, 5, "Custom 640x256x32")
+
+    TestWin.open
+
+    # Set up palette
+    gfx_rgb(0, 0, 0, 8)     # Dark blue background
+    gfx_rgb(1, 15, 15, 15)  # White
+    gfx_rgb(2, 15, 0, 0)    # Red
+    gfx_rgb(3, 0, 15, 0)    # Green
+    gfx_rgb(4, 0, 0, 15)    # Blue
+
+    # Draw colored rectangles
+    gfx_pen(1)
+    gfx_rect(10, 10, 100, 50)
+
+    gfx_pen(2)
+    gfx_rect(110, 10, 200, 50)
+
+    gfx_pen(3)
+    gfx_rect(10, 60, 100, 100)
+
+    gfx_pen(4)
+    gfx_rect(110, 60, 200, 100)
+
+    # Draw text
+    gfx_pen(1)
+    gfx_text_at(10, 120, "Custom screen 640x256, 32 colors")
+    gfx_text_at(10, 130, "Press any key to exit...")
+
+    # Wait for key
+    key_wait()
+
+    close_window()
+    screen_close()
+end

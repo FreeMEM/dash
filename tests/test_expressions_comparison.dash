@@ -1,0 +1,54 @@
+# Test: Comparison Expressions
+# Verifica operadores de comparación
+
+Window TestWin
+    title "Comparison Test"
+    width 200
+    height 100
+end
+
+Main
+    a = 10
+    b = 20
+    c = 10
+
+    # Equality
+    eq1 = a == c      # true
+    eq2 = a == b      # false
+
+    # Inequality
+    neq1 = a != b     # true
+    neq2 = a != c     # false
+
+    # Less than
+    lt1 = a < b       # true
+    lt2 = b < a       # false
+    lt3 = a < c       # false
+
+    # Greater than
+    gt1 = b > a       # true
+    gt2 = a > b       # false
+    gt3 = a > c       # false
+
+    # Less than or equal
+    lte1 = a <= b     # true
+    lte2 = a <= c     # true
+    lte3 = b <= a     # false
+
+    # Greater than or equal
+    gte1 = b >= a     # true
+    gte2 = a >= c     # true
+    gte3 = a >= b     # false
+
+    # Comparison in conditions
+    if a < b
+        result = 1
+    end
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

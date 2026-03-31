@@ -1,0 +1,51 @@
+# Test de Screen Propio
+# Abre un screen con 16 colores y dibuja
+
+Window MainWindow
+    title "Test Screen"
+    width 320
+    height 200
+end
+
+Main
+    # Abrir screen clonando Workbench con 4 bitplanes (16 colores)
+    # Usa: screen_open(depth, title) - clona Workbench
+    # O:   screen_open_custom(width, height, depth, title) - custom
+    screen_open(4, "Dash Screen")
+
+    # Abrir ventana en el screen
+    MainWindow.open
+
+    # Configurar paleta personalizada
+    gfx_rgb(0, 0, 0, 5)     # Azul oscuro (fondo)
+    gfx_rgb(1, 15, 15, 15)  # Blanco
+    gfx_rgb(2, 15, 0, 0)    # Rojo
+    gfx_rgb(3, 0, 15, 0)    # Verde
+    gfx_rgb(4, 0, 0, 15)    # Azul
+    gfx_rgb(5, 15, 15, 0)   # Amarillo
+    gfx_rgb(6, 15, 0, 15)   # Magenta
+    gfx_rgb(7, 0, 15, 15)   # Cyan
+
+    # Dibujar algo con cada color
+    for i in (1..7)
+        gfx_pen(i)
+        gfx_rect(20 + i * 35, 30, 45 + i * 35, 80)
+    end
+
+    # Texto
+    gfx_pen(1)
+    gfx_text_at(80, 120, "Screen propio con 16 colores!")
+    gfx_text_at(80, 140, "Cierra la ventana para salir")
+
+    # Esperar cierre
+    running = true
+    while running
+        if window_check_close()
+            running = false
+        end
+        wait_vblank()
+    end
+
+    close_window()
+    screen_close()
+end

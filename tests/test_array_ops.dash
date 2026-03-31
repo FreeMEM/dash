@@ -1,0 +1,58 @@
+# Test: Array Operations
+# Verifica operaciones con arrays en expresiones
+
+Window TestWin
+    title "Array Ops Test"
+    width 200
+    height 100
+end
+
+# Function that uses array
+func suma_array(arr)
+    total = 0
+    i = 0
+    while i < arr.length
+        total = total + arr[i]
+        i = i + 1
+    end
+    return total
+end
+
+# Function that returns array element
+func obtener_elemento(arr, indice)
+    return arr[indice]
+end
+
+Main
+    # Create arrays
+    datos = [10, 20, 30, 40, 50]
+
+    # Use array in function
+    suma = suma_array(datos)
+
+    # Use array access in expressions
+    resultado = datos[0] + datos[1]
+    doble = datos[2] * 2
+
+    # Array in conditions
+    if datos[0] > 5
+        x = 1
+    end
+
+    # Array in while condition
+    indice = 0
+    while indice < datos.length
+        valor = datos[indice]
+        indice = indice + 1
+    end
+
+    # Get element via function
+    elem = obtener_elemento(datos, 2)
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

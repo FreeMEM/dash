@@ -1,0 +1,57 @@
+# Test Double Buffering
+
+import "lib/amiga/doublebuf.dash"
+
+Window win
+    title "Double Buffer Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    Print "=== Double Buffer Test ==="
+
+    # Create double buffer (320x200, 4 planes)
+    dbuf = dbuf_new(320, 200, 4)
+
+    if dbuf > 0
+        Print "Double buffer allocated"
+
+        # Get buffer info
+        w = dbuf_width(dbuf)
+        h = dbuf_height(dbuf)
+        d = dbuf_depth(dbuf)
+        Print "Dimensions obtained"
+
+        # Get back buffer pointer
+        back = dbuf_back(dbuf)
+        Print "Back buffer pointer obtained"
+
+        # Simple animation loop test
+        for frame in (0..10)
+            # Draw to back buffer (placeholder)
+            # ... drawing code here ...
+
+            # Wait for vsync
+            dbuf_vsync()
+        end
+        Print "Animation loop completed"
+
+        # Free double buffer
+        dbuf_del(dbuf)
+        Print "Double buffer freed"
+    else
+        Print "Failed to allocate double buffer"
+    end
+
+    Print "=== Complete ==="
+    Wait 2
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

@@ -1,0 +1,48 @@
+# Test: Recursive Functions
+# Verifica funciones recursivas
+
+Window TestWin
+    title "Recursive Test"
+    width 200
+    height 100
+end
+
+# Factorial recursive
+func factorial(n)
+    if n <= 1
+        return 1
+    end
+    return n * factorial(n - 1)
+end
+
+# Fibonacci recursive
+func fibonacci(n)
+    if n <= 1
+        return n
+    end
+    return fibonacci(n - 1) + fibonacci(n - 2)
+end
+
+# Helper function called by another
+func helper(x)
+    return x + 1
+end
+
+# Function that calls another function
+func usar_helper(valor)
+    temp = helper(valor)
+    return temp * 2
+end
+
+Main
+    fact5 = factorial(5)
+    fib10 = fibonacci(10)
+    result = usar_helper(5)
+
+    TestWin.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

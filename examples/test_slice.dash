@@ -1,0 +1,44 @@
+# Test Array Slicing
+
+Window win
+    title "Slice Test"
+    width 320
+    height 200
+end
+
+Main
+    win.open
+
+    Print "=== Array Slice Test ==="
+
+    # Create an array
+    arr = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    Print "Original array created"
+
+    # Test full slice [start:end]
+    slice1 = arr[2:5]
+    Print "Slice [2:5] created"
+
+    # Test slice from start [:end]
+    slice2 = arr[:3]
+    Print "Slice [:3] created"
+
+    # Test slice to end [start:]
+    slice3 = arr[7:]
+    Print "Slice [7:] created"
+
+    # Print lengths
+    len1 = slice1.length
+    len2 = slice2.length
+    len3 = slice3.length
+    Print "Slice lengths obtained"
+
+    Print "=== Complete ==="
+    Wait 2
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end

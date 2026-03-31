@@ -1,0 +1,104 @@
+# Test de GadTools - Gadgets nativos de Workbench
+# Demuestra botones, palette, slider y menus
+
+Window MainWindow
+    title "GadTools Test"
+    width 320
+    height 200
+    left 50
+    top 50
+end
+
+# IDs de menus
+const MENU_NEW = 1
+const MENU_OPEN = 2
+const MENU_SAVE = 3
+const MENU_QUIT = 4
+const MENU_ABOUT = 10
+
+Main
+    # Abrir screen clonando Workbench
+    screen_open(4, "GadTools Demo")
+
+    # Abrir ventana
+    MainWindow.open
+
+    # Inicializar GadTools
+    gt_init()
+
+    # Crear menus
+    menu_title("Project")
+    menu_item("New", "N", MENU_NEW)
+    menu_item("Open...", "O", MENU_OPEN)
+    menu_item("Save...", "S", MENU_SAVE)
+    menu_separator()
+    menu_item("Quit", "Q", MENU_QUIT)
+
+    menu_title("Help")
+    menu_item("About...", "?", MENU_ABOUT)
+
+    menu_attach()
+
+    # Crear gadgets
+    btn_ok = gt_button(20, 20, 80, 20, "OK")
+    btn_cancel = gt_button(120, 20, 80, 20, "Cancel")
+
+    slider = gt_slider(20, 60, 180, 15, "Value:", 0, 100, 50)
+
+    palette = gt_palette(20, 100, 180, 50, "Color:", 4, 1)
+
+    status = gt_text(20, 160, 180, 15, "", "Ready")
+
+    # Attach gadgets to window
+    gt_attach()
+
+    # Variables
+    current_color = 1
+    slider_val = 50
+
+    # Event loop
+    running = true
+    while running
+        event = gt_event()
+
+        if event == -2
+            # Close requested
+            running = false
+        end
+
+        if event == btn_ok
+            # OK clicked - do nothing for now
+            noop = 0
+        end
+
+        if event == btn_cancel
+            running = false
+        end
+
+        if event == slider
+            slider_val = gt_get_value(slider)
+        end
+
+        if event == palette
+            current_color = gt_get_value(palette)
+        end
+
+        # Check menus
+        menu = menu_event()
+        if menu == MENU_QUIT
+            running = false
+        end
+        if menu == MENU_OPEN
+            if file_open_dialog("Open File", "#?")
+                path = file_get_path()
+                name = file_get_name()
+            end
+        end
+
+        wait_vblank()
+    end
+
+    gt_cleanup()
+    close_window()
+    screen_close()
+end

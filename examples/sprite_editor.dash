@@ -1,0 +1,546 @@
+# ============================================
+# DashPaint - Sprite Editor para Amiga
+# Editor de sprites 32x32
+# Usa colores del Workbench (no modifica paleta)
+# ============================================
+
+# --- Constantes ---
+const SPRITE_SIZE = 32
+const PIXEL_SIZE = 5
+const CANVAS_X = 90
+const CANVAS_Y = 20
+const PALETTE_X = 8
+const PALETTE_Y = 20
+const TOOLS_X = 268
+const TOOLS_Y = 20
+const STATUS_Y = 190
+
+# Herramientas
+const TOOL_PENCIL = 0
+const TOOL_LINE = 1
+const TOOL_RECT = 2
+const TOOL_RECT_FILL = 3
+const TOOL_CIRCLE = 4
+const TOOL_ERASER = 5
+
+# Colores del Workbench (no modificamos la paleta)
+# 0 = Gris fondo, 1 = Negro, 2 = Blanco, 3 = Azul
+
+# --- Ventana Principal ---
+Window MainWindow
+    title "DashPaint - Sprite Editor"
+    width 340
+    height 210
+end
+
+# --- Funciones de Conversion ---
+
+func to_screen_x(px)
+    return CANVAS_X + px * PIXEL_SIZE
+end
+
+func to_screen_y(py)
+    return CANVAS_Y + py * PIXEL_SIZE
+end
+
+func to_pixel_x(sx)
+    result = (sx - CANVAS_X) / PIXEL_SIZE
+    if result < 0
+        return 0
+    end
+    if result >= SPRITE_SIZE
+        return SPRITE_SIZE - 1
+    end
+    return result
+end
+
+func to_pixel_y(sy)
+    result = (sy - CANVAS_Y) / PIXEL_SIZE
+    if result < 0
+        return 0
+    end
+    if result >= SPRITE_SIZE
+        return SPRITE_SIZE - 1
+    end
+    return result
+end
+
+# --- Funciones de Deteccion de Areas ---
+
+func in_canvas(mx, my)
+    right = CANVAS_X + SPRITE_SIZE * PIXEL_SIZE
+    bottom = CANVAS_Y + SPRITE_SIZE * PIXEL_SIZE
+    if mx >= CANVAS_X and mx < right
+        if my >= CANVAS_Y and my < bottom
+            return true
+        end
+    end
+    return false
+end
+
+func in_palette(mx, my)
+    # 2 columnas x 4 filas (8 colores), 30x20 cada celda
+    if mx >= PALETTE_X and mx < PALETTE_X + 60
+        if my >= PALETTE_Y and my < PALETTE_Y + 80
+            return true
+        end
+    end
+    return false
+end
+
+func in_tools(mx, my)
+    # 6 herramientas, 50x25 cada una
+    if mx >= TOOLS_X and mx < TOOLS_X + 60
+        if my >= TOOLS_Y and my < TOOLS_Y + 156
+            return true
+        end
+    end
+    return false
+end
+
+func in_clear_btn(mx, my)
+    if mx >= 8 and mx < 68
+        if my >= 110 and my < 130
+            return true
+        end
+    end
+    return false
+end
+
+# --- Funciones de Paleta ---
+
+func get_palette_color(mx, my)
+    col = (mx - PALETTE_X) / 30
+    row = (my - PALETTE_Y) / 20
+    color = row * 2 + col
+    if color > 7
+        return 7
+    end
+    return color
+end
+
+func get_tool(mx, my)
+    tool = (my - TOOLS_Y) / 26
+    if tool > 5
+        return 5
+    end
+    return tool
+end
+
+# --- Funciones de Dibujo de UI ---
+
+func draw_palette(selected)
+    gfx_pen(1)
+    gfx_text_at(PALETTE_X, PALETTE_Y - 8, "Color")
+
+    # Dibujar 8 "colores" como cuadros con numero
+    for i in (0..7)
+        col = i % 2
+        row = i / 2
+        x1 = PALETTE_X + col * 30
+        y1 = PALETTE_Y + row * 20
+        x2 = x1 + 28
+        y2 = y1 + 18
+
+        # Fondo alternado para distinguir
+        if i % 2 == 0
+            gfx_pen(2)
+        else
+            gfx_pen(0)
+        end
+        gfx_rect(x1 + 1, y1 + 1, x2 - 1, y2 - 1)
+
+        # Borde (resaltado si seleccionado)
+        if i == selected
+            gfx_pen(1)
+            gfx_box(x1 - 1, y1 - 1, x2 + 1, y2 + 1)
+        end
+        gfx_pen(1)
+        gfx_box(x1, y1, x2, y2)
+
+        # Numero del color
+        gfx_pen(1)
+        if i % 2 == 0
+            gfx_pen(1)
+        else
+            gfx_pen(2)
+        end
+    end
+end
+
+func draw_tools(selected)
+    gfx_pen(1)
+    gfx_text_at(TOOLS_X, TOOLS_Y - 8, "Tools")
+
+    for i in (0..5)
+        y1 = TOOLS_Y + i * 26
+        y2 = y1 + 24
+
+        # Fondo
+        if i == selected
+            gfx_pen(2)
+        else
+            gfx_pen(0)
+        end
+        gfx_rect(TOOLS_X, y1, TOOLS_X + 58, y2)
+
+        # Borde
+        gfx_pen(1)
+        gfx_box(TOOLS_X, y1, TOOLS_X + 58, y2)
+
+        # Icono
+        gfx_pen(1)
+        cx = TOOLS_X + 29
+        cy = y1 + 12
+
+        if i == TOOL_PENCIL
+            # Punto
+            gfx_rect(cx - 2, cy - 2, cx + 2, cy + 2)
+        end
+        if i == TOOL_LINE
+            # Linea diagonal
+            gfx_line(TOOLS_X + 10, y2 - 6, TOOLS_X + 48, y1 + 6)
+        end
+        if i == TOOL_RECT
+            # Rectangulo outline
+            gfx_box(TOOLS_X + 12, y1 + 6, TOOLS_X + 46, y2 - 6)
+        end
+        if i == TOOL_RECT_FILL
+            # Rectangulo relleno
+            gfx_rect(TOOLS_X + 12, y1 + 6, TOOLS_X + 46, y2 - 6)
+        end
+        if i == TOOL_CIRCLE
+            # Circulo
+            gfx_circle(cx, cy, 9)
+        end
+        if i == TOOL_ERASER
+            # X para borrador
+            gfx_line(TOOLS_X + 14, y1 + 8, TOOLS_X + 44, y2 - 8)
+            gfx_line(TOOLS_X + 44, y1 + 8, TOOLS_X + 14, y2 - 8)
+        end
+    end
+end
+
+func draw_canvas()
+    canvas_w = SPRITE_SIZE * PIXEL_SIZE
+    canvas_h = SPRITE_SIZE * PIXEL_SIZE
+
+    # Fondo blanco del canvas
+    gfx_pen(2)
+    gfx_rect(CANVAS_X, CANVAS_Y, CANVAS_X + canvas_w, CANVAS_Y + canvas_h)
+
+    # Cuadricula cada 8 pixeles
+    gfx_pen(0)
+    for i in (0..4)
+        x = CANVAS_X + i * 8 * PIXEL_SIZE
+        gfx_line(x, CANVAS_Y, x, CANVAS_Y + canvas_h)
+        y = CANVAS_Y + i * 8 * PIXEL_SIZE
+        gfx_line(CANVAS_X, y, CANVAS_X + canvas_w, y)
+    end
+
+    # Borde
+    gfx_pen(1)
+    gfx_box(CANVAS_X - 1, CANVAS_Y - 1, CANVAS_X + canvas_w + 1, CANVAS_Y + canvas_h + 1)
+end
+
+func draw_clear_button()
+    gfx_pen(0)
+    gfx_rect(8, 110, 68, 130)
+    gfx_pen(1)
+    gfx_box(8, 110, 68, 130)
+    gfx_text_at(18, 124, "Clear")
+end
+
+func draw_status(msg: String)
+    gfx_pen(0)
+    gfx_rect(0, STATUS_Y, 339, STATUS_Y + 15)
+    gfx_pen(1)
+    gfx_text_at(5, STATUS_Y + 12, msg)
+end
+
+# --- Funciones de Dibujo en Canvas ---
+
+func plot_pixel(px, py, color)
+    if px >= 0 and px < SPRITE_SIZE
+        if py >= 0 and py < SPRITE_SIZE
+            sx = to_screen_x(px)
+            sy = to_screen_y(py)
+            # Usar color 1 (negro) para dibujar, 2 (blanco) para borrar
+            if color == 0
+                gfx_pen(2)
+            else
+                gfx_pen(1)
+            end
+            gfx_rect(sx, sy, sx + PIXEL_SIZE - 1, sy + PIXEL_SIZE - 1)
+        end
+    end
+end
+
+func draw_line_pixels(x1, y1, x2, y2, color)
+    # Bresenham
+    dx = x2 - x1
+    dy = y2 - y1
+    if dx < 0
+        dx = 0 - dx
+    end
+    if dy < 0
+        dy = 0 - dy
+    end
+
+    sx = 1
+    if x1 > x2
+        sx = 0 - 1
+    end
+    sy = 1
+    if y1 > y2
+        sy = 0 - 1
+    end
+
+    err = dx - dy
+    x = x1
+    y = y1
+
+    while true
+        plot_pixel(x, y, color)
+        if x == x2 and y == y2
+            return 0
+        end
+        e2 = err * 2
+        if e2 > 0 - dy
+            err = err - dy
+            x = x + sx
+        end
+        if e2 < dx
+            err = err + dx
+            y = y + sy
+        end
+    end
+    return 0
+end
+
+func draw_rect_outline(x1, y1, x2, y2, color)
+    if x1 > x2
+        tmp = x1
+        x1 = x2
+        x2 = tmp
+    end
+    if y1 > y2
+        tmp = y1
+        y1 = y2
+        y2 = tmp
+    end
+
+    for x in (x1..x2)
+        plot_pixel(x, y1, color)
+        plot_pixel(x, y2, color)
+    end
+    for y in (y1..y2)
+        plot_pixel(x1, y, color)
+        plot_pixel(x2, y, color)
+    end
+end
+
+func draw_rect_filled(x1, y1, x2, y2, color)
+    if x1 > x2
+        tmp = x1
+        x1 = x2
+        x2 = tmp
+    end
+    if y1 > y2
+        tmp = y1
+        y1 = y2
+        y2 = tmp
+    end
+
+    for y in (y1..y2)
+        for x in (x1..x2)
+            plot_pixel(x, y, color)
+        end
+    end
+end
+
+func draw_circle_outline(cx, cy, r, color)
+    x = r
+    y = 0
+    err = 0
+
+    while x >= y
+        plot_pixel(cx + x, cy + y, color)
+        plot_pixel(cx + y, cy + x, color)
+        plot_pixel(cx - y, cy + x, color)
+        plot_pixel(cx - x, cy + y, color)
+        plot_pixel(cx - x, cy - y, color)
+        plot_pixel(cx - y, cy - x, color)
+        plot_pixel(cx + y, cy - x, color)
+        plot_pixel(cx + x, cy - y, color)
+
+        y = y + 1
+        if err <= 0
+            err = err + 2 * y + 1
+        end
+        if err > 0
+            x = x - 1
+            err = err - 2 * x + 1
+        end
+    end
+end
+
+# --- Programa Principal ---
+
+Main
+    MainWindow.open
+
+    # Estado del editor
+    current_color = 1
+    current_tool = TOOL_PENCIL
+    drawing = false
+    start_x = 0
+    start_y = 0
+    last_x = 0
+    last_y = 0
+    prev_button = false
+
+    # Dibujar UI inicial (sin modificar paleta!)
+    draw_palette(current_color)
+    draw_tools(current_tool)
+    draw_canvas()
+    draw_clear_button()
+    draw_status("Ready - Click to draw")
+
+    # Bucle principal
+    running = true
+
+    while running
+        if window_check_close()
+            running = false
+        end
+
+        mx = mouse_x()
+        my = mouse_y()
+        button = mouse_button(0)
+
+        clicked = false
+        if button and not prev_button
+            clicked = true
+        end
+
+        released = false
+        if not button and prev_button
+            released = true
+        end
+
+        if clicked
+            if in_palette(mx, my)
+                current_color = get_palette_color(mx, my)
+                draw_palette(current_color)
+                draw_status("Color selected")
+            end
+
+            if in_tools(mx, my)
+                current_tool = get_tool(mx, my)
+                draw_tools(current_tool)
+
+                if current_tool == TOOL_PENCIL
+                    draw_status("Pencil tool")
+                end
+                if current_tool == TOOL_LINE
+                    draw_status("Line tool")
+                end
+                if current_tool == TOOL_RECT
+                    draw_status("Rectangle outline")
+                end
+                if current_tool == TOOL_RECT_FILL
+                    draw_status("Filled rectangle")
+                end
+                if current_tool == TOOL_CIRCLE
+                    draw_status("Circle tool")
+                end
+                if current_tool == TOOL_ERASER
+                    draw_status("Eraser tool")
+                end
+            end
+
+            if in_clear_btn(mx, my)
+                draw_canvas()
+                draw_status("Canvas cleared")
+            end
+
+            if in_canvas(mx, my)
+                drawing = true
+                px = to_pixel_x(mx)
+                py = to_pixel_y(my)
+                start_x = px
+                start_y = py
+                last_x = px
+                last_y = py
+
+                if current_tool == TOOL_PENCIL
+                    plot_pixel(px, py, current_color)
+                end
+                if current_tool == TOOL_ERASER
+                    plot_pixel(px, py, 0)
+                end
+            end
+        end
+
+        if button and drawing and in_canvas(mx, my)
+            px = to_pixel_x(mx)
+            py = to_pixel_y(my)
+
+            if current_tool == TOOL_PENCIL
+                if px != last_x or py != last_y
+                    draw_line_pixels(last_x, last_y, px, py, current_color)
+                    last_x = px
+                    last_y = py
+                end
+            end
+            if current_tool == TOOL_ERASER
+                if px != last_x or py != last_y
+                    draw_line_pixels(last_x, last_y, px, py, 0)
+                    last_x = px
+                    last_y = py
+                end
+            end
+        end
+
+        if released and drawing
+            drawing = false
+            px = to_pixel_x(mx)
+            py = to_pixel_y(my)
+
+            if current_tool == TOOL_LINE
+                draw_line_pixels(start_x, start_y, px, py, current_color)
+            end
+
+            if current_tool == TOOL_RECT
+                draw_rect_outline(start_x, start_y, px, py, current_color)
+            end
+
+            if current_tool == TOOL_RECT_FILL
+                draw_rect_filled(start_x, start_y, px, py, current_color)
+            end
+
+            if current_tool == TOOL_CIRCLE
+                dx = px - start_x
+                dy = py - start_y
+                if dx < 0
+                    dx = 0 - dx
+                end
+                if dy < 0
+                    dy = 0 - dy
+                end
+                r = dx
+                if dy > dx
+                    r = dy
+                end
+                draw_circle_outline(start_x, start_y, r, current_color)
+            end
+        end
+
+        prev_button = button
+        wait_vblank()
+    end
+
+    # Cerrar ventana correctamente
+    close_window()
+end
