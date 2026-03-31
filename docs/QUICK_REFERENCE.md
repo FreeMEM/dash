@@ -28,7 +28,7 @@ and  or  not                # Logical
 +                           # String concatenation
 ```
 
-## Control Dash
+## Control de Flujo
 ```
 if cond                     while cond
     ...                         ...
@@ -179,6 +179,8 @@ random_range(min, max)      # Random in range
 ```
 
 ## Memory Management
+> **Nota:** Estas funciones están planificadas pero aún no implementadas.
+
 ```
 # Reference Counting (automatic for structs)
 refcount(obj)               # Get count

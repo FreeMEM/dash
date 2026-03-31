@@ -1,7 +1,7 @@
 # D.A.S.H. Language - Hoja de Ruta de Desarrollo
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
-**Versión del documento:** 1.0
+**Versión del documento:** 2.0
 **Fecha de inicio:** 2025-01-01
 **Objetivo:** Crear un lenguaje de programación completo para Amiga
 
@@ -398,21 +398,22 @@ Combinar:
 - **FFI** (Estrategia B): Escape hatch para acceso directo cuando sea necesario
 
 ### 3.1 Módulos Built-in
-**Estado:** ⬜ Pendiente
+**Estado:** ✅ Completado (161 funciones)
 **Prioridad:** Alta
 **Complejidad:** Alta
 
-**Módulos planificados:**
-```
-amiga/
-├── intuition      # Ventanas, Gadgets, Menús, Requesters
-├── graphics       # Primitivas 2D, RastPort, BitMaps
-├── dos            # Archivos, Directorios, CLI
-├── exec           # Memoria, Signals, Tasks, Libraries
-├── audio          # Canales Paula, samples
-├── input          # Keyboard, Mouse, Joystick
-└── hardware       # Acceso directo a custom chips
-```
+**Nota:** Los builtins están implementados como templates de codegen en `amiga_builtins.py`, cubriendo:
+- **Graphics:** drawing, colors, bitmaps
+- **Sprites:** hardware + soft sprites
+- **Copper:** copper list manipulation
+- **Blitter/BOBs:** blitting operations
+- **Audio:** canales Paula, samples
+- **Input:** keyboard, mouse, joystick
+- **DOS:** files, directories
+- **Intuition:** windows, gadgets, screens, requesters
+- **RTG:** retargetable graphics
+- **Double Buffering:** pantalla doble buffer
+- **System:** memoria, signals, tasks
 
 **Ejemplo - amiga/graphics:**
 ```ruby
@@ -438,11 +439,6 @@ El compilador traduce `Graphics.line(win, x, y)` a:
 Move(win->RPort, currentX, currentY);
 Draw(win->RPort, x, y);
 ```
-
-**Módulos prioritarios:**
-1. `amiga/intuition` - Ya tenemos Window básico, expandir
-2. `amiga/graphics` - Dibujo 2D
-3. `amiga/dos` - Archivos
 
 ---
 
@@ -656,31 +652,21 @@ runtime/
 ### Estructura de Tests
 ```
 tests/
-├── phase1/
-│   ├── scope_basic.dash
-│   ├── scope_nested.dash
-│   ├── func_simple.dash
-│   ├── func_recursive.dash
-│   ├── array_basic.dash
-│   └── ...
-├── phase2/
-│   ├── import_basic.dash
-│   └── ...
-├── phase3/
-│   ├── intuition_window.dash
-│   ├── graphics_draw.dash
-│   └── ...
+├── test_*.dash          # Todos los tests en directorio raíz
+├── lib/                 # Módulos de librería para tests de import
+│   └── math_utils.dash
 └── run_tests.py
 ```
 
 ### Criterios de Completitud
 
 **Fase 1 completa cuando:**
-- [ ] Todos los tests de scope pasan
-- [ ] Todos los tests de funciones pasan
-- [ ] Todos los tests de arrays pasan
-- [ ] Ejemplos originales siguen funcionando
-- [ ] Documentación actualizada
+- [x] Todos los tests de scope pasan
+- [x] Todos los tests de funciones pasan
+- [x] Todos los tests de arrays pasan
+- [x] Todos los tests de strings pasan
+- [x] Ejemplos originales siguen funcionando
+- [x] Documentación actualizada
 
 ---
 
@@ -713,7 +699,7 @@ tests/
   - Runtime DashArrayLong inline
   - Bounds checking en runtime
   - Tests: `test_array_basic.dash`, `test_array_ops.dash`
-- [x] Test suite: 17 tests pasando
+- [x] Test suite: 29 tests pasando
 
 ### Sesión 3 (Fecha: 2026-01-01)
 - [x] **1.5 For Loops** - Implementado completamente:
@@ -736,7 +722,7 @@ tests/
   - Protección contra imports circulares
   - Caché de módulos cargados
   - Tests: `test_import_basic.dash`, `lib/math_utils.dash`
-- [x] Test suite: 21 tests pasando
+- [x] Test suite: 29 tests pasando
 
 ### Sesión 4 (Fecha: 2026-01-01)
 - [x] **3.1 Amiga Builtins** - 161 funciones nativas implementadas:

@@ -7,13 +7,13 @@ Plataforma Host: Sistemas Modernos (Linux, macOS, Windows)
 
 Plataforma Target: Commodore Amiga (M68k / PPC)
 
-Estado: Fase de Arquitectura 2.0
+Estado: Fase de Desarrollo Activo (29 tests pasando)
 
 ## 1. Filosofía del Proyecto
 
 Dash nace de la necesidad de programar para el Amiga utilizando paradigmas de desarrollo actuales. Mientras que C es propenso a errores de punteros y ASM es lento de escribir, Dash ofrece una sintaxis inspirada en Ruby/Python que se transpila a C optimizado y seguro.
 
-El nombre "Dash" representa el estado mental de fluidez que el programador experimenta cuando puede concentrarse en la lógica de su programa sin fricciones técnicas.
+**D.A.S.H.** significa *Development Amiga Synthesis Hub* — el centro de operaciones que conecta un entorno de desarrollo moderno con el ecosistema Amiga.
 
 ## 2. Arquitectura de Desarrollo Cruzado (Cross-Development)
 
@@ -37,17 +37,17 @@ El flujo de trabajo está optimizado para que el desarrollador nunca tenga que s
 
 ### 3.2 Tipado Dinámico Inteligente
 
-Dash detecta el tamaño necesario para los datos para optimizar la memoria:
+Dash infiere los tipos automáticamente en la primera asignación:
 
-- **Byte (8-bit):** Para valores 0…255.
-- **Word (16-bit):** Para coordenadas de pantalla y contadores cortos.
-- **Long (32-bit):** Para direcciones de memoria y punteros.
-- **String:** Gestión automática de STRPTR con terminación nula.
+- **LONG (32-bit):** Todos los valores enteros y punteros.
+- **STRPTR:** Cadenas de texto con terminación nula.
+- **BOOL:** Valores booleanos (`true`/`false`).
 
 ### 3.3 Estructuras de Datos Modernas
 
-- **Listas:** `mi_lista = ["Sprite1", "Sprite2"]` (Traducido a Arrays o Listas Exec).
-- **Diccionarios:** `config = { "vol" => 64 }` (Traducido a tablas de búsqueda rápidas).
+- **Arrays:** `numeros = [1, 2, 3]` (Traducido a runtime DashArrayLong con bounds checking).
+  - Acceso: `numeros[0]`, asignación: `numeros[2] = 100`, longitud: `numeros.length`
+- **Diccionarios:** No implementado (planificado para fases futuras).
 
 ## 4. Requisitos Funcionales (Roadmap)
 
@@ -78,32 +78,45 @@ Para evitar el Guru Meditation, el transpilador inyecta:
 ## 6. Ejemplo de Código
 
 ```ruby
-# Un reproductor simple en Dash
+# Aplicación Dash con ventana y arrays
 
-Window Player
-  title "Dash Player"
-  width 320, height 100
+Window MiApp
+    title "Dash Demo"
+    width 320
+    height 200
+end
+
+func factorial(n)
+    if n <= 1
+        return 1
+    end
+    return n * factorial(n - 1)
 end
 
 Main
-  app = Player.open
-  song = Tracker.load "music/stardust.mod", :chip
+    MiApp.open
 
-  EventLoop
-    On Close
-      song.stop
-      Stop
+    nombres = ["Amiga", "Dash", "Flow"]
+    for nombre in nombres
+        Print nombre
     end
 
-    On Key("p")
-      song.play
+    resultado = factorial(5)
+    Print resultado
+
+    EventLoop
+        On Close
+            Print "Cerrando"
+            Stop
+        end
     end
-  end
 end
 ```
 
 ## 7. Próximos Pasos Técnicos
 
-1. Finalizar el Transpilador Python (Lark-based).
-2. Crear el archivo `dash_core.h` (Wrappers de C para las funciones de Amiga).
-3. Implementar el CLI `dash` para compilar con un solo comando: `dash build juego.dash`.
+1. Implementar `unless` y `switch/case` como estructuras de control adicionales.
+2. Añadir diccionarios como estructura de datos nativa.
+3. Expandir módulos Amiga built-in (Graphics, DOS, Input de alto nivel).
+4. Soporte de red via abstracción de `bsdsocket.library`.
+5. Garbage collection o gestión automática de memoria con helpers.

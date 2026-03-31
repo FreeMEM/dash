@@ -158,33 +158,31 @@ El código C generado incluye automáticamente:
 - **Limpieza automática**: Las librerías se cierran al salir del programa.
 - **Manejo de IDCMP**: El EventLoop gestiona correctamente los mensajes de Intuition.
 
-## 7. Roadmap (Funcionalidades Futuras)
+## 7. Funcionalidades Futuras
+
+> **Nota:** Para ver todo lo implementado, consulta el Manual de Referencia y la API de Amiga. Flow ya incluye control de flujo completo (if/else, while, for), funciones, arrays, strings, structs, enums, imports, FFI, screens, GadTools, ReAction y 161 funciones built-in de Amiga (graphics, sprites, copper, blitter, audio, input, gadgets, etc.).
 
 Las siguientes funcionalidades están planificadas pero **aún no implementadas**:
 
-### 7.1 Control de Flujo
-- `if / else / end` - Condicionales
+### 7.1 Control de Flujo Adicional
 - `unless / end` - Condicional inverso
-- `while / end` - Bucles
-- `for i in (1..10) / end` - Iteración por rango
+- `switch / case` - Selección múltiple
+- `break` / `next` - Control dentro de bucles
 
-### 7.2 Eventos Adicionales
-- `On Key("x")` - Manejo de teclas
-- `On Gadget(id)` - Manejo de gadgets
+### 7.2 Estructuras de Datos
+- Diccionarios (key-value maps)
 
 ### 7.3 Módulo Bare Metal
-- `System.takeover` / `System.restore` - Control del hardware
-- `Custom.colorXX` - Acceso a registros del chipset
-- `Sprite[0-7]` - Control de sprites de hardware
-- `Copper` - Listas del Copper
-- `Blitter` - Operaciones de blitter
+- `System.takeover` / `System.restore` - Apagado del OS para control total del hardware
 
-### 7.4 Sonido
-- `Tracker.load` / `Tracker.play` - Reproducción de módulos .mod
-- `Sample.load` / `Sample.play` - Efectos de sonido
+### 7.4 Redes
+- Soporte de `bsdsocket.library` - Network / HTTP
 
-### 7.5 Redes
-- `Http.get` - Peticiones HTTP (requiere pila TCP/IP)
+### 7.5 Gestión de Memoria
+- Garbage collection / limpieza automática de memoria
+
+### 7.6 Herramientas
+- `install_dash.py` - Script de instalación
 
 ## 8. Código C Generado
 
