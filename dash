@@ -143,6 +143,9 @@ def main():
     # -O2 by default: tested in FS-UAE (Kickstart 3.1) with the 30 examples and the
     # emu tests, same output as -O0 and about half the size
     compile_command.append("-O0" if args.no_optimize else "-O2")
+    # no link/unlk in every function, and one more free address register
+    if not args.no_optimize:
+        compile_command.append("-fomit-frame-pointer")
     if args.fpu:
         compile_command.extend(["-m68020", "-m68881"])
     compile_command.extend(c_files)

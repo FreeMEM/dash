@@ -9,7 +9,7 @@
 #include <string.h>
 #include <limits.h>
 #include <stdint.h>
-typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE;
+typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef const char *CONST_STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE;
 #define MEMF_ANY 0
 #define MEMF_CLEAR 0x10000
 static APTR CreatePool(ULONG r, ULONG p, ULONG t){ return malloc(1); }
@@ -23,7 +23,7 @@ static void DeletePool(APTR pool){ free(pool); }
 /*RUNTIME*/
 
 /* blocks parked in the small-string free lists count as freed */
-static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_STR_CLASSES;c++) for(_DashStrHdr*h=_dash_str_free_list[c];h;h=h->next) n++; return n; }
+static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_SMALL_CLASSES;c++) for(APTR b=_dash_small_free[c];b;b=*(APTR*)b) n++; return n; }
 #define LIVE (live - cached_blocks())
 #define CHECK(c) do{ if(!(c)){ printf("FALLO linea %d: %s\n", __LINE__, #c); fails++; } }while(0)
 int main(void){ int fails=0;

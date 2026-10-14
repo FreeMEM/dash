@@ -118,7 +118,8 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       funciones), 26b arrays (`DashArray_get/set`, `%`, for-each), 26c strings (concat, interpolación, from_int, set),
       26d Float por software (rutinas propias), 26d2 suma y multiplicación Float en ensamblador 68000, 26d3 suma y multiplicación Float con menos ciclos
       (exponente sin desplazar, mantisa `<< 8` para que el producto alto ya sea la mantisa, menos registros; meta: la
-      suma de la ROM, `IEEESPAdd`, que en A500 da 88.865 ns frente a 125.864 de la mía), 26e llamadas y return, 26f gráficos y texto (plantillas con `${str}`
+      suma de la ROM, `IEEESPAdd`, que en A500 da 88.865 ns frente a 125.864 de la mía), 26e llamadas y return, 26e2 no marcar/soltar temporales en bucles y funciones que no los crean (análisis en
+      codegen), 26f gráficos y texto (plantillas con `${str}`
       doble). Detalle original:: cada función del runtime (`DashString_*`,
       `DashArray_*`, `_dash_str_*`, `_dash_tmp_*`, objetos, Float, gráficos...) con su microbenchmark en
       `tests/bench/` (ciclos por llamada en 68000 y 68020) y su ensamblador (`-S`); mejorarlas una a una y
@@ -586,3 +587,27 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   3.1 ya falló con la multiplicación en FS-UAE: no me fío sin probarla en hardware real. Lo dejo así.
 - Tests: 170/170 (`--emu --emu-a500`).
 - Tamaño: 268.248 → 268.144 bytes.
+
+### 2026-10-14 — Tarea 26e (llamadas, return, concatenación, objetos)
+- Base: 170/170 (`--emu --emu-a500`). Después: 173/173 (tests nuevos: `test_int_to_string_amiga`).
+- Medido primero por piezas (programa propio en el scratchpad, A500): `AllocPooled` + `FreePooled` de 28 bytes 2.026
+  ciclos; `DashString_from_int` de 4 cifras 1.409; reservar y soltar un string corto ~640; `"x" + "1234"` con su
+  liberación 2.448 (el `memcpy` de libnix es una llamada genérica); bucle vacío 53.
+- Hecho:
+  - Caché de bloques pequeños común (`_dash_block_get`, `_dash_block_get_clear`, `_dash_block_put`): hasta 64 bytes,
+    listas libres por clase de 16 bytes. La usaban solo los strings; ahora también structs, cabeceras de array y sus
+    datos (que antes iban siempre al pool). Los bloques de objetos se reciclan borrados, como `MEMF_CLEAR`.
+  - `_dash_copy`: copia de menos de 32 bytes en línea (`move.b`/`dbra`) en `DashString_concat` y `_dash_str_dup`.
+  - `DashString_from_int`: dos cifras por `divu.w #100` y tabla `"00".."99"` (200 bytes).
+  - `-fomit-frame-pointer` con `-O2` (sin `link`/`unlk`, a5 libre). Casi no se nota en las medidas.
+  - Harness del PC: `CONST_STRPTR`, lista de bloques en caché genérica. Con AddressSanitizer: 0 errores (las fugas que
+    señala son bloques que en el Amiga borra `DeletePool` al salir).
+- Probado y descartado: comprobar en la macro `_dash_tmp_release` la cabeza de las dos listas en vez del número de serie
+  (evita llamar a `_dash_tmp_release_f` cuando todo se adoptó). La macro crece en cada bucle y función, GCC deja de
+  expandir en línea funciones pequeñas (`suma1`) y los bucles sin strings ya no sacan la comprobación: `func_call` x6,
+  `int_loop` +40 %. Medido, anotado y deshecho. Lo de fondo es que codegen marca y suelta temporales en todos los bucles
+  y funciones: queda como 26e2.
+- Medido (A500 ns): `array_literal_new` 894.879 → 452.037 (x2), `struct_new_field` 539.900 → 312.675 (-42 %),
+  `nested_struct_new` 1.614.554 → 1.039.195 (-36 %), `string_concat_int` 619.737 → 459.234 (-26 %), `string_interp`
+  -17 %, `string_return` -23 %. El resto igual (±1 %). A1200 parecido.
+- Tamaño: 268.144 → 269.360 bytes (tabla de cifras y rutinas en línea).

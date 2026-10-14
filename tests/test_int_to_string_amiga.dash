@@ -1,0 +1,51 @@
+# Test: Int to String (two digits per divu.w #100, from a table) against a
+# plain digit-by-digit conversion, on the Amiga itself: borders of every
+# number of digits, of the 16-bit quotient path (6553599 / 6553600), the
+# extremes of a LONG and pseudo-random values of every size.
+#
+# expect-out: 0
+# expect-out: -2147483648 0 7 10 99 100 6553600 2147483647
+# expect-out: x-42 y
+
+@native func comparar(n: Int) -> Int
+"""
+    static const LONG borders[] = {0, 1, 9, 10, 11, 99, 100, 101, 999, 1000, 9999, 10000, 65535, 65536,
+        99999, 100000, 655359, 655360, 999999, 1000000, 6553599, 6553600, 6553601, 9999999, 10000000,
+        99999999, 100000000, 999999999, 1000000000, 2147483647};
+    char ref[16], *p;
+    ULONG s = 2463534242UL, bad = 0, u;
+    LONG i, k, v;
+    for (i = 0; i < n; i++) {
+        if (i < 60) {
+            v = borders[i >> 1];
+            if (i & 1) v = -v;
+        } else {
+            s ^= s << 13; s ^= s >> 17; s ^= s << 5;
+            v = (LONG)(s >> (s & 31));          /* every size */
+            if (s & 0x100) v = -v;
+        }
+        p = ref + 15; *p = 0;
+        u = v < 0 ? -(ULONG)v : (ULONG)v;
+        do { *--p = '0' + (u % 10); u /= 10; } while (u);
+        if (v < 0) *--p = '-';
+        if (strcmp(p, (char *)DashString_from_int(v)) != 0) bad++;
+    }
+    k = (LONG)0x80000000UL;
+    if (strcmp((char *)DashString_from_int(k), "-2147483648") != 0) bad++;
+    return bad;
+"""
+end
+
+Main
+    Print comparar(20000)
+    m = -2147483647 - 1
+    a = 0
+    b = 7
+    c = 10
+    d = 99
+    e = 100
+    f = 6553600
+    g = 2147483647
+    Print "#{m} #{a} #{b} #{c} #{d} #{e} #{f} #{g}"
+    Print "x" + -42 + " y"
+end

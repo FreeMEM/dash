@@ -113,6 +113,56 @@ static APTR _dash_alloc(ULONG size) {
     return AllocPooled(_dash_pool, size);
 }
 
+/* Small blocks (up to 64 bytes: strings, structs, array headers and data)
+   are recycled through free lists by 16-byte class instead of going back to
+   the exec pool: AllocPooled + FreePooled cost about 2000 cycles on a 68000,
+   a free list a few dozen. A loop that makes a short string, a struct or a
+   small array per iteration reuses the same blocks. The size given to
+   _dash_block_put must be the one given to _dash_block_get. */
+#define _DASH_SMALL_CLASSES 4
+#define _DASH_SMALL_MAX (16 * _DASH_SMALL_CLASSES)
+static APTR _dash_small_free[_DASH_SMALL_CLASSES];
+
+/* contents undefined (a recycled block is not cleared) */
+static __inline__ APTR _dash_block_get(ULONG size) {
+    if (size <= _DASH_SMALL_MAX) {
+        ULONG c = (size - 1) >> 4;
+        APTR b = _dash_small_free[c];
+        if (b) {
+            _dash_small_free[c] = *(APTR *)b;
+            return b;
+        }
+        return _dash_alloc((c + 1) << 4);
+    }
+    return _dash_alloc(size);
+}
+
+/* cleared, like a fresh block of the pool (MEMF_CLEAR) */
+static APTR _dash_block_get_clear(ULONG size) {
+    if (size <= _DASH_SMALL_MAX) {
+        ULONG c = (size - 1) >> 4;
+        ULONG *b = (ULONG *)_dash_small_free[c];
+        if (b) {
+            ULONG *q = b;
+            _dash_small_free[c] = *(APTR *)b;
+            do { q[0] = 0; q[1] = 0; q[2] = 0; q[3] = 0; q += 4; } while (c--);
+            return b;
+        }
+        return _dash_alloc((c + 1) << 4);
+    }
+    return _dash_alloc(size);
+}
+
+static __inline__ void _dash_block_put(APTR b, ULONG size) {
+    if (size <= _DASH_SMALL_MAX) {
+        ULONG c = (size - 1) >> 4;
+        *(APTR *)b = _dash_small_free[c];
+        _dash_small_free[c] = b;
+        return;
+    }
+    FreePooled(_dash_pool, b, size);
+}
+
 /* Strings made at run time carry a header in front of the text.
    Temporaries (results of +, interpolation, conversions) are linked in a list,
    newest first, and released in bulk with _dash_tmp_release(). A String
@@ -130,25 +180,10 @@ typedef struct _DashStrHdr {
 static _DashStrHdr *_dash_tmp = NULL;
 static ULONG _dash_tmp_serial = 0;
 
-/* Small strings (up to 64 bytes with the header) are recycled through free
-   lists by 16-byte class instead of going back to the exec pool each time:
-   a loop that builds a short string per iteration reuses the same block. */
-#define _DASH_STR_CLASSES 4
-static _DashStrHdr *_dash_str_free_list[_DASH_STR_CLASSES];
-
 static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     ULONG size = sizeof(_DashStrHdr) + len + 1;
-    _DashStrHdr *h;
+    _DashStrHdr *h = (_DashStrHdr *)_dash_block_get(size);
     STRPTR text;
-    if (size <= 16 * _DASH_STR_CLASSES) {
-        ULONG c = (size - 1) >> 4;
-        size = (c + 1) << 4;
-        h = _dash_str_free_list[c];
-        if (h) _dash_str_free_list[c] = h->next;
-        else h = (_DashStrHdr *)_dash_alloc(size);
-    } else {
-        h = (_DashStrHdr *)_dash_alloc(size);
-    }
     if (!h) return NULL;
     h->size = size;
     h->next = NULL;
@@ -164,14 +199,7 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
 }
 
 static void _dash_str_drop(_DashStrHdr *h) {
-    ULONG size = h->size & ~_DASH_STR_KEEP;
-    if (size <= 16 * _DASH_STR_CLASSES) {
-        ULONG c = (size - 1) >> 4;
-        h->next = _dash_str_free_list[c];
-        _dash_str_free_list[c] = h;
-        return;
-    }
-    FreePooled(_dash_pool, h, size);
+    _dash_block_put(h, h->size & ~_DASH_STR_KEEP);
 }
 
 /* Marks are serial numbers: removing a temporary from the list never breaks them */
@@ -213,10 +241,20 @@ static BOOL _dash_tmp_take(STRPTR p) {
     return FALSE;
 }
 
+/* Short copies byte by byte in line: libnix's memcpy is a call that first
+   sorts out alignment, too much for the few bytes of most strings */
+static __inline__ void _dash_copy(STRPTR d, CONST_STRPTR s, ULONG n) {
+    if (n >= 32) {
+        memcpy(d, s, n);
+        return;
+    }
+    while (n--) *d++ = *s++;
+}
+
 static STRPTR _dash_str_dup(STRPTR s, BOOL temp) {
     ULONG len = s ? strlen((char *)s) : 0;
     STRPTR d = _dash_str_alloc(len, temp);
-    if (d && len) memcpy(d, s, len);
+    if (d && len) _dash_copy(d, s, len);
     return d;
 }
 
@@ -296,7 +334,7 @@ static void _dash_otmp_push(_Dash_RefHeader *h) {
 }
 
 static void *_dash_rc_alloc_obj(LONG size, void (*destroy)(void *)) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_alloc(sizeof(_Dash_RefHeader) + size);
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get_clear(sizeof(_Dash_RefHeader) + size);
     if (!hdr) return NULL;
     hdr->_refcount = 0;
     hdr->_size = size;
@@ -311,7 +349,7 @@ static void *_dash_rc_alloc(LONG size) {
 
 static void _dash_obj_free(_Dash_RefHeader *h) {
     if (h->destroy) h->destroy(_DASH_FROM_HEADER(h));
-    FreePooled(_dash_pool, h, sizeof(_Dash_RefHeader) + h->_size);
+    _dash_block_put(h, sizeof(_Dash_RefHeader) + h->_size);
 }
 
 /* A temporary that gets a reference leaves the temporaries list */
@@ -386,7 +424,7 @@ static void _dash_mem_cleanup(void) {
     }
     _dash_tmp = NULL;
     _dash_otmp = NULL;
-    memset(_dash_str_free_list, 0, sizeof(_dash_str_free_list));
+    memset(_dash_small_free, 0, sizeof(_dash_small_free));
 }
 
 """
@@ -402,7 +440,7 @@ typedef struct {
 
 static void DashArray_destroy(void *obj) {
     DashArrayLong *arr = (DashArrayLong *)obj;
-    if (arr->data) FreePooled(_dash_pool, arr->data, sizeof(LONG) * arr->capacity);
+    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * arr->capacity);
 }
 
 /* A new array is a temporary until a variable adopts it (memory runtime) */
@@ -410,7 +448,7 @@ static DashArrayLong* DashArray_create(LONG size) {
     DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(sizeof(DashArrayLong), DashArray_destroy);
     if (!arr) return NULL;
     if (size > 0) {
-        arr->data = (LONG *)_dash_alloc(sizeof(LONG) * size);
+        arr->data = (LONG *)_dash_block_get_clear(sizeof(LONG) * size);
         if (!arr->data) return NULL;
     }
     arr->length = size;
@@ -466,8 +504,8 @@ static STRPTR DashString_concat(STRPTR a, STRPTR b) {
     LONG len_b = b ? strlen(b) : 0;
     STRPTR result = _dash_str_alloc(len_a + len_b, TRUE);  /* a temporary */
     if (!result) return NULL;
-    if (len_a) memcpy(result, a, len_a);
-    if (len_b) memcpy(result + len_a, b, len_b);
+    _dash_copy(result, a, len_a);
+    _dash_copy(result + len_a, b, len_b);
     return result;
 }
 
@@ -497,25 +535,37 @@ static STRPTR DashString_from_char(char c) {
 
 /* Integer to string. Rotates 8 static buffers so several conversions
    can appear in one expression; the result is copied by DashString_concat. */
+static const char _dash_digits2[] =
+    "00010203040506070809101112131415161718192021222324252627282930313233343536373839"
+    "40414243444546474849505152535455565758596061626364656667686970717273747576777879"
+    "8081828384858687888990919293949596979899";
+
+/* Two digits per division, from a table */
 static STRPTR DashString_from_int(LONG n) {
     static char buffers[16][12];
     static LONG next = 0;
     char *end = buffers[next] + 11;
-    ULONG u = n < 0 ? -(ULONG)n : (ULONG)n;
+    ULONG u = n < 0 ? -(ULONG)n : (ULONG)n, q, rem;
+    const char *d;
     next = (next + 1) & 15;
     *end = '\\0';
     do {
 #if defined(__mc68000__) && !defined(__mc68020__)
-        if (u < 655360UL) {        /* quotient fits in 16 bits: one divu.w, no libgcc */
+        if (u < 6553600UL) {       /* quotient fits in 16 bits: one divu.w, no libgcc */
             ULONG r = u;
-            __asm__ ("divu.w #10,%0" : "+d"(r) : : "cc");
-            *--end = '0' + (r >> 16);
-            u = (UWORD)r;
-            continue;
-        }
+            __asm__ ("divu.w #100,%0" : "+d"(r) : : "cc");
+            q = (UWORD)r;
+            rem = r >> 16;
+        } else
 #endif
-        *--end = '0' + (u % 10);
-        u /= 10;
+        {
+            q = u / 100;
+            rem = u - q * 100;
+        }
+        d = _dash_digits2 + (rem << 1);
+        *--end = d[1];
+        if (q || rem >= 10) *--end = d[0];
+        u = q;
     } while (u);
     if (n < 0) *--end = '-';
     return end;
