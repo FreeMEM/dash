@@ -38,6 +38,29 @@ class CTemplates:
 #include <proto/dos.h>
 """
 
+    # Memory runtime (included with arrays or strings): one exec pool,
+    # deleted at exit, so runtime allocations never outlive the program
+    MEMORY_RUNTIME = """\
+/* Dash Memory Runtime */
+static APTR _dash_pool = NULL;
+
+static APTR _dash_alloc(ULONG size) {
+    if (!_dash_pool) {
+        _dash_pool = CreatePool(MEMF_ANY | MEMF_CLEAR, 4096, 1024);
+        if (!_dash_pool) return NULL;
+    }
+    return AllocPooled(_dash_pool, size);
+}
+
+static void _dash_mem_cleanup(void) {
+    if (_dash_pool) {
+        DeletePool(_dash_pool);
+        _dash_pool = NULL;
+    }
+}
+
+"""
+
     # Array runtime (included when arrays are used)
     ARRAY_RUNTIME = """\
 /* Dash Array Runtime */
@@ -48,14 +71,22 @@ typedef struct {
 } DashArrayLong;
 
 static DashArrayLong* DashArray_create(LONG size) {
-    DashArrayLong *arr = (DashArrayLong *)AllocMem(sizeof(DashArrayLong), MEMF_CLEAR);
+    DashArrayLong *arr = (DashArrayLong *)_dash_alloc(sizeof(DashArrayLong));
     if (!arr) return NULL;
     if (size > 0) {
-        arr->data = (LONG *)AllocMem(sizeof(LONG) * size, MEMF_CLEAR);
-        if (!arr->data) { FreeMem(arr, sizeof(DashArrayLong)); return NULL; }
-    } else { arr->data = NULL; }
+        arr->data = (LONG *)_dash_alloc(sizeof(LONG) * size);
+        if (!arr->data) return NULL;
+    }
     arr->length = size;
     arr->capacity = size;
+    return arr;
+}
+
+static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
+    DashArrayLong *arr = DashArray_create(size);
+    if (arr) {
+        for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
+    }
     return arr;
 }
 
@@ -98,7 +129,7 @@ static STRPTR DashString_concat(STRPTR a, STRPTR b) {
     LONG len_a = a ? strlen(a) : 0;
     LONG len_b = b ? strlen(b) : 0;
     LONG total = len_a + len_b + 1;
-    STRPTR result = (STRPTR)AllocMem(total, MEMF_CLEAR);
+    STRPTR result = (STRPTR)_dash_alloc(total);
     if (!result) return NULL;
     if (a) strcpy(result, a);
     if (b) strcpy(result + len_a, b);
@@ -112,6 +143,17 @@ static LONG DashString_length(STRPTR s) {
 static char DashString_char_at(STRPTR s, LONG index) {
     if (!s || index < 0 || index >= strlen(s)) return 0;
     return s[index];
+}
+
+/* Character to string, with the same rotating buffers idea as below. */
+static STRPTR DashString_from_char(char c) {
+    static char buffers[8][2];
+    static LONG next = 0;
+    STRPTR s = buffers[next];
+    next = (next + 1) & 7;
+    s[0] = c;
+    s[1] = '\\0';
+    return s;
 }
 
 /* Integer to string. Rotates 8 static buffers so several conversions
@@ -2932,7 +2974,7 @@ $body$indent    }
 
     FOR_EACH_STMT = Template("""\
 $indent    for (LONG _idx_$var = 0; _idx_$var < DashArray_length($array); _idx_$var++) {
-$indent        LONG $var = DashArray_get($array, _idx_$var);
+$indent        $elem_type $var = ${cast}DashArray_get($array, _idx_$var);
 $body$indent    }
 """)
 
@@ -3104,6 +3146,10 @@ class CodeGenerator(ASTVisitor):
             for header in self.custom_headers:
                 parts.append(header + "\n")
 
+        # Add memory runtime (arrays and strings allocate from its pool)
+        if self.uses_arrays or self.uses_strings:
+            parts.append(CTemplates.MEMORY_RUNTIME)
+
         # Add array runtime if needed
         if self.uses_arrays:
             parts.append(CTemplates.ARRAY_RUNTIME)
@@ -3204,7 +3250,10 @@ class CodeGenerator(ASTVisitor):
         # Generate main with appropriate library initialization
         main_template = self._get_main_template()
         user_code = "".join(self.main_code)
-        parts.append(main_template.substitute(user_code=user_code))
+        main_code = main_template.substitute(user_code=user_code)
+        if self.uses_arrays or self.uses_strings:
+            main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n    _dash_mem_cleanup();\n", 1)
+        parts.append(main_code)
 
         return "\n".join(parts)
 
@@ -3667,8 +3716,14 @@ static {ret_type} {method_name}({params_str}) {{
         # Special handling for array literals
         if isinstance(node.value, ArrayLiteral):
             self.uses_arrays = True
-            self.var_types[node.name] = "array"
-            self._generate_array_init(node.name, node.value, indent)
+            is_strings = bool(node.value.elements) and self._is_string_expr(node.value.elements[0])
+            self.var_types[node.name] = "array:string" if is_strings else "array"
+            value = self._generate_array_literal(node.value)
+            if not self.context.is_declared(node.name):
+                self.context.declare_var(node.name)
+                self.emit(f"{indent}DashArrayLong *{node.name} = {value};\n")
+            else:
+                self.emit(f"{indent}{node.name} = {value};\n")
             return
 
         value = self._generate_expression(node.value)
@@ -3679,6 +3734,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "string"
         elif var_type == "char":
             self.var_types[node.name] = "char"
+        elif var_type == "DashArrayLong *":
+            self.var_types[node.name] = "array"
         elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
             self.var_types[node.name] = "func"
         elif var_type.startswith("_Dash_") and var_type.endswith(" *"):
@@ -3696,28 +3753,13 @@ static {ret_type} {method_name}({params_str}) {{
             # Reassignment to existing variable
             self.emit(f"{indent}{node.name} = {value};\n")
 
-    def _generate_array_init(self, name: str, array: ArrayLiteral, indent: str):
-        """Generate array initialization code."""
-        size = len(array.elements)
-
-        if not self.context.is_declared(name):
-            self.context.declare_var(name)
-            self.emit(f"{indent}DashArrayLong *{name} = DashArray_create({size});\n")
-        else:
-            self.emit(f"{indent}{name} = DashArray_create({size});\n")
-
-        # Set each element
-        for i, elem in enumerate(array.elements):
-            value = self._generate_expression(elem)
-            self.emit(f"{indent}DashArray_set({name}, {i}, {value});\n")
-
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
         if isinstance(node, StringLiteral):
             return "STRPTR"
         elif isinstance(node, BoolLiteral):
             return "BOOL"
-        elif isinstance(node, ArrayLiteral):
+        elif isinstance(node, (ArrayLiteral, ArraySlice)):
             return "DashArrayLong *"
         elif isinstance(node, ArrayAccess):
             # Check if accessing a string or array
@@ -3738,6 +3780,10 @@ static {ret_type} {method_name}({params_str}) {{
             var_type = self.var_types.get(node.name)
             if var_type == "string":
                 return "STRPTR"
+            elif var_type and var_type.startswith("array"):
+                return "DashArrayLong *"
+            elif var_type == "func":
+                return "APTR"
             elif var_type and var_type.startswith("struct:"):
                 struct_name = var_type[7:]  # Remove "struct:" prefix
                 return f"_Dash_{struct_name} *"
@@ -3873,10 +3919,13 @@ static {ret_type} {method_name}({params_str}) {{
             return
 
         self.uses_arrays = True
-        array = self._generate_expression(node.iterable)
-        body = self._generate_loop_body(node, "number")
+        array = self._array_ref(node.iterable)
+        strings = self._is_string_array(node.iterable)
+        body = self._generate_loop_body(node, "string" if strings else "number")
 
         code = CTemplates.FOR_EACH_STMT.substitute(
+            elem_type="STRPTR" if strings else "LONG",
+            cast="(STRPTR)" if strings else "",
             indent=indent,
             var=node.variable,
             array=array,
@@ -3979,9 +4028,11 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate code for array element assignment."""
         self.uses_arrays = True
         indent = self.context.indent
-        array_name = self._generate_expression(node.array)
+        array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
         value = self._generate_expression(node.value)
+        if self._is_string_expr(node.value):
+            value = f"(LONG){value}"
         self.emit(f"{indent}DashArray_set({array_name}, {index}, {value});\n")
 
     def visit_FunctionCall(self, node: FunctionCall):
@@ -3994,8 +4045,20 @@ static {ret_type} {method_name}({params_str}) {{
             self.emit(f"{indent}{c_code};\n")
             return
 
-        args = ", ".join(self._generate_expression(a) for a in node.arguments)
-        self.emit(f"{self.context.indent}{self._callee(node)}({args});\n")
+        self.emit(f"{self.context.indent}{self._callee(node)}({self._call_args(node)});\n")
+
+    def _call_args(self, node: FunctionCall) -> str:
+        """Arguments of a call; pointers passed to untyped (LONG) parameters are cast."""
+        func = self.analysis.program.get_function(node.name)
+        args = []
+        for i, arg in enumerate(node.arguments):
+            code = self._generate_expression(arg)
+            param = func.params[i] if func and i < len(func.params) else None
+            untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
+            if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
+                code = f"(LONG){code}"
+            args.append(code)
+        return ", ".join(args)
 
     def _callee(self, node: FunctionCall) -> str:
         """Name to call; function pointers (lambdas, Func params) are cast first."""
@@ -4067,8 +4130,7 @@ static {ret_type} {method_name}({params_str}) {{
             struct = self.analysis.program.get_struct(node.name)
             if struct:
                 return self._generate_struct_instantiation(struct, node.arguments)
-            args = ", ".join(self._generate_expression(a) for a in node.arguments)
-            return f"{self._callee(node)}({args})"
+            return f"{self._callee(node)}({self._call_args(node)})"
         elif isinstance(node, ArrayLiteral):
             self.uses_arrays = True
             return self._generate_array_literal(node)
@@ -4080,13 +4142,15 @@ static {ret_type} {method_name}({params_str}) {{
                 index = self._generate_expression(node.index)
                 return f"DashString_char_at({str_name}, {index})"
             self.uses_arrays = True
-            array_name = self._generate_expression(node.array)
+            array_name = self._array_ref(node.array)
             index = self._generate_expression(node.index)
+            if self._is_string_array(node.array):
+                return f"(STRPTR)DashArray_get({array_name}, {index})"
             return f"DashArray_get({array_name}, {index})"
         elif isinstance(node, ArraySlice):
             # Array slicing - generates a new array
             self.uses_arrays = True
-            array_name = self._generate_expression(node.array)
+            array_name = self._array_ref(node.array)
             start = self._generate_expression(node.start) if node.start else "0"
             if node.end:
                 end = self._generate_expression(node.end)
@@ -4101,7 +4165,7 @@ static {ret_type} {method_name}({params_str}) {{
                     self.uses_strings = True
                     return f"DashString_length({obj})"
                 self.uses_arrays = True
-                return f"DashArray_length({obj})"
+                return f"DashArray_length({self._array_ref(node.object)})"
             # Check if object is self (struct member access)
             if isinstance(node.object, SelfRef):
                 return f"self->{node.property}"
@@ -4127,7 +4191,7 @@ static {ret_type} {method_name}({params_str}) {{
                     self.uses_strings = True
                     return f"DashString_length({node.object_name})"
                 self.uses_arrays = True
-                return f"DashArray_length({node.object_name})"
+                return f"DashArray_length({self._array_ref(VarRef(name=node.object_name))})"
             # Struct member access - use pointer notation
             return f"{node.object_name}->{node.member}"
         elif isinstance(node, LambdaFunc):
@@ -4280,6 +4344,8 @@ static {ret_type} {method_name}({params_str}) {{
             return False
         elif isinstance(node, BinaryOp) and node.operator == "+":
             return self._is_string_expr(node.left) or self._is_string_expr(node.right)
+        elif isinstance(node, ArrayAccess):
+            return self._is_string_array(node.array)
         elif isinstance(node, FunctionCall):
             return self._call_returns_string(node.name)
         elif isinstance(node, MemberAccess):
@@ -4308,8 +4374,10 @@ static {ret_type} {method_name}({params_str}) {{
     def _string_operand(self, node: ASTNode, is_string: bool) -> str:
         """C code for one side of a concatenation, converting numbers to strings."""
         code = self._generate_expression(node)
-        if is_string or self._is_char_expr(node):
+        if is_string:
             return code
+        if self._is_char_expr(node):
+            return f"DashString_from_char({code})"
         return f"DashString_from_int({code})"
 
     def _call_returns_string(self, name: str) -> bool:
@@ -4352,6 +4420,22 @@ static {ret_type} {method_name}({params_str}) {{
             else:
                 self.var_types[p.name] = "number"
 
+    def _array_ref(self, node: ASTNode) -> str:
+        """C expression for an array operand; values not known to be arrays
+        (e.g. untyped parameters, held in a LONG) are cast."""
+        code = self._generate_expression(node)
+        if isinstance(node, (ArrayLiteral, ArraySlice)):
+            return code
+        if isinstance(node, VarRef) and (self.var_types.get(node.name) or "").startswith("array"):
+            return code
+        if self._infer_c_type(node) == "DashArrayLong *":
+            return code
+        return f"((DashArrayLong *){code})"
+
+    def _is_string_array(self, node: ASTNode) -> bool:
+        """True for a variable holding an array of strings."""
+        return isinstance(node, VarRef) and self.var_types.get(node.name) == "array:string"
+
     def _is_char_expr(self, node: ASTNode) -> bool:
         """Check if an expression evaluates to a character."""
         if isinstance(node, VarRef):
@@ -4368,13 +4452,12 @@ static {ret_type} {method_name}({params_str}) {{
         size = len(node.elements)
         if size == 0:
             return "DashArray_create(0)"
-
-        # Generate inline initialization
-        # This works because C allows compound literals
-        elements_str = ", ".join(self._generate_expression(e) for e in node.elements)
-        # We'll return a call that creates and initializes the array
-        # This requires storing in a temp, which is handled by assignment
-        return f"DashArray_create({size}) /* init: {elements_str} */"
+        # Values go through a C99 compound literal; strings are stored as LONG
+        elements = []
+        for e in node.elements:
+            code = self._generate_expression(e)
+            elements.append(f"(LONG){code}" if self._is_string_expr(e) else code)
+        return f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
 
     def _returns_value(self, stmts) -> bool:
         """True if any statement in stmts (or nested blocks) returns a value."""

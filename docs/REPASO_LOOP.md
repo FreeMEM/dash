@@ -42,9 +42,10 @@ Corrección antes que velocidad. Nada de refactors grandes.
 
 ## Límites
 
-- No instales el toolchain de Amiga ni paquetes del sistema. Si falta
-  `/opt/amiga/bin/m68k-amigaos-gcc`, el runner solo comprueba la transpilación:
-  revisa el C generado a ojo y dilo en la bitácora.
+- No instales paquetes del sistema. El toolchain está en `/opt/amiga` (GCC 6.5.0b, instalado
+  el 2026-10-14). Comprueba también los ejemplos con `./compile_all.sh`.
+- GCC 6 solo avisa de conversiones entero/puntero que un GCC moderno trata como error:
+  revisa los avisos de `-Wint-conversion` en el C generado.
 - No cambies la sintaxis del lenguaje ni decisiones de diseño. Si crees que hace falta, propónlo.
 - No borres tests ni ejemplos. No toques `sesion.txt`, `*.zip` ni `amiga1200_rtg.fs-uae`.
 - Si una zona exige una decisión del usuario, déjala `[?]` con la pregunta y pasa a la siguiente.
@@ -60,7 +61,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 5. `compiler/codegen.py` — expresiones, variables y scope.
 - [x] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
 - [x] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
-- [ ] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
+- [x] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
 - [ ] 9. `compiler/codegen.py` — structs, métodos, enums, const.
 - [ ] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
 - [ ] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
@@ -208,3 +209,24 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Propuestas: funciones que devuelven tipos mezclados (`"pos"` y `0`) no dan error; llamar a un
   constructor de struct como sentencia (`P(1)` suelto) genera C inválido; no hay expresiones como
   sentencia (`f(1) + 2` no parsea).
+
+### 2026-10-14 — Zona 8 (codegen: arrays, slicing, strings, memoria)
+- Toolchain instalado durante la zona: `m68k-amigaos-gcc` 6.5.0b en `/opt/amiga`.
+  Tests 46/46 compilan de verdad para Amiga. Ejemplos: 26/30 compilan (`./compile_all.sh`).
+  Fallan, y ya fallaban en `main`: `test_dos_module` (`read_line`), `flowpaint3` y `test_reaction`
+  (`render_canvas` sin definir al enlazar), `test_rtg` (falta `cybergraphx/cybergraphics.h` en el NDK).
+- Errores arreglados (test: `tests/test_arrays_adv.dash` con `expect-c`, fallaba antes):
+  - Un array literal fuera de una asignación directa perdía sus valores: `return [1, 2, 3]` o `f([4, 5])`
+    generaban `DashArray_create(3) /* init: ... */`, un array de ceros. Ahora `DashArray_from(3, (LONG[]){1, 2, 3})`.
+  - Fugas permanentes: arrays y strings se pedían con `AllocMem` y nunca se liberaban; en AmigaOS esa
+    memoria se pierde hasta reiniciar. Ahora salen de un pool de exec (`_dash_alloc`) que se borra al
+    final del programa (`_dash_mem_cleanup()` antes de cerrar librerías). Requiere exec V39 (OS 3.0).
+  - Arrays de strings: se guardaban sin cast y se imprimían como número. Ahora se guardan como `(LONG)`
+    y se leen como `(STRPTR)`, también en for-each.
+  - `"x" + s[0]` pasaba un `char` como `STRPTR`. Ahora `DashString_from_char`.
+  - Arrays pasados a parámetros sin tipo (y leídos dentro) mezclaban `LONG` y puntero: ahora hay cast en
+    la llamada (`(LONG)arr`) y dentro (`(DashArrayLong *)arr`). El resultado de un slice se declara como array.
+- Optimización: un array literal asignado es una sola llamada en vez de `create` + un `set` por elemento.
+- Pendiente: los strings y arrays siguen sin liberarse durante la ejecución (solo al salir); un bucle
+  que concatena crece sin límite. Decisión de diseño abierta (GC o manual).
+- Para zona 12: `render_canvas` se usa pero no se define.

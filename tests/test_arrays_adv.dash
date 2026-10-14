@@ -1,0 +1,42 @@
+# Test: arrays and strings in expressions
+# Array literals outside plain assignment keep their values,
+# string arrays, char concatenation, pooled memory freed at exit
+#
+# expect-c: DashArrayLong *nums = DashArray_from(3, (LONG[]){10, 20, 30});
+# expect-c: return DashArray_from(3, (LONG[]){1, 2, 3});
+# expect-c: Printf("%ld\n", suma((LONG)DashArray_from(2, (LONG[]){4, 5})));
+# expect-c: DashArrayLong *nombres = DashArray_from(2, (LONG[]){(LONG)"Ana", (LONG)"Bea"});
+# expect-c: Printf("%s\n", (STRPTR)DashArray_get(nombres, 1));
+# expect-c: STRPTR n = (STRPTR)DashArray_get(nombres, _idx_n);
+# expect-c: DashString_from_char(DashString_char_at(palabra, 0))
+# expect-c: _dash_mem_cleanup();
+
+func lista()
+    return [1, 2, 3]
+end
+
+func suma(a)
+    total = 0
+    for v in a
+        total = total + v
+    end
+    return total
+end
+
+Main
+    nums = [10, 20, 30]
+    Print nums[1]
+    l = lista()
+    Print l[2]
+    Print suma([4, 5])
+
+    nombres = ["Ana", "Bea"]
+    Print nombres[1]
+    for n in nombres
+        Print n
+    end
+
+    palabra = "Hola"
+    inicial = "Letra: " + palabra[0]
+    Print inicial
+end
