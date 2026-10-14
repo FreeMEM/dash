@@ -109,6 +109,21 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
             duration=time.time() - start_time
         )
 
+    # Step 1b: lines '# expect-c: <text>' must appear in the generated C
+    c_text = c_file.read_text(errors="replace")
+    for line in test_file.read_text().splitlines():
+        if line.startswith("# expect-c:"):
+            wanted = line[len("# expect-c:"):].strip()
+            if wanted not in c_text:
+                return TestResult(
+                    name=name,
+                    passed=False,
+                    transpile_ok=True,
+                    compile_ok=False,
+                    error_message=f"generated C lacks: {wanted}",
+                    duration=time.time() - start_time
+                )
+
     # Step 2: Compile C to Amiga executable
     gcc_path = "/opt/amiga/bin/m68k-amigaos-gcc"
     if not os.path.exists(gcc_path):

@@ -417,6 +417,13 @@ class SemanticAnalyzer(ASTVisitor):
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
             self.error(f"Cannot assign to '{node.name}' - it's not a variable", node)
         else:
+            # The C variable keeps its first type: a string cannot become a number or vice versa
+            new_type = self._infer_type(node.value)
+            known = (DashType.UNKNOWN,)
+            if (symbol.dash_type not in known and new_type not in known
+                    and (symbol.dash_type == DashType.STRING) != (new_type == DashType.STRING)):
+                self.error(f"Cannot assign a {new_type.name.lower()} to '{node.name}', "
+                           f"which holds a {symbol.dash_type.name.lower()}", node)
             symbol.is_initialized = True
 
     def visit_VarRef(self, node: VarRef):

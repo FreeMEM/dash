@@ -114,6 +114,20 @@ static char DashString_char_at(STRPTR s, LONG index) {
     return s[index];
 }
 
+/* Integer to string. Rotates 8 static buffers so several conversions
+   can appear in one expression; the result is copied by DashString_concat. */
+static STRPTR DashString_from_int(LONG n) {
+    static char buffers[8][12];
+    static LONG next = 0;
+    char *end = buffers[next] + 11;
+    ULONG u = n < 0 ? -(ULONG)n : (ULONG)n;
+    next = (next + 1) & 7;
+    *end = '\\0';
+    do { *--end = '0' + (u % 10); u /= 10; } while (u);
+    if (n < 0) *--end = '-';
+    return end;
+}
+
 """
 
     # Reference counting runtime (included when structs are used)
@@ -3469,6 +3483,9 @@ static void {struct.name}_release({c_name} *obj) {{
         # Save current state
         old_struct_context = getattr(self, '_current_struct', None)
         self._current_struct = struct.name
+        saved_var_types = self.var_types
+        self.var_types = dict(saved_var_types)
+        self._seed_param_types(method.params)
 
         self.context.enter_scope()
         # Declare parameters in scope
@@ -3487,6 +3504,7 @@ static void {struct.name}_release({c_name} *obj) {{
 
         # Restore state
         self._current_struct = old_struct_context
+        self.var_types = saved_var_types
 
         # Method name: StructName_methodname
         method_name = f"{struct.name}_{method.name}"
@@ -3614,24 +3632,18 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate code for Print statement."""
         indent = self.context.indent
         if isinstance(node.message, StringLiteral):
-            # String literal - print directly
-            self.emit(f'{indent}Printf({node.message.value});\n{indent}Printf("\\n");\n')
-        elif self._is_string_constant(node.message):
-            # String constant (macro) - print directly, macro expands to string literal
+            # String literal is the format itself: escape % and append the newline
+            text = node.message.value[1:-1].replace("%", "%%")
+            self.emit(f'{indent}Printf("{text}\\n");\n')
+        elif self._is_string_expr(node.message) or self._is_string_constant(node.message):
             value = self._generate_expression(node.message)
-            self.emit(f'{indent}Printf({value});\n{indent}Printf("\\n");\n')
-        elif self._is_string_expr(node.message):
-            # String expression - use %s format
-            value = self._generate_expression(node.message)
-            self.emit(f'{indent}Printf("%s", {value});\n{indent}Printf("\\n");\n')
+            self.emit(f'{indent}Printf("%s\\n", {value});\n')
         elif self._is_char_expr(node.message):
-            # Character expression - use %c format
             value = self._generate_expression(node.message)
-            self.emit(f'{indent}Printf("%c", {value});\n{indent}Printf("\\n");\n')
+            self.emit(f'{indent}Printf("%c\\n", {value});\n')
         else:
-            # Expression - print as number
             value = self._generate_expression(node.message)
-            self.emit(f'{indent}Printf("%ld", {value});\n{indent}Printf("\\n");\n')
+            self.emit(f'{indent}Printf("%ld\\n", {value});\n')
 
     def visit_WaitStmt(self, node: WaitStmt):
         """Generate code for Wait statement."""
@@ -3733,7 +3745,7 @@ static {ret_type} {method_name}({params_str}) {{
             return "LONG"
         elif isinstance(node, BinaryOp):
             # String concatenation returns string
-            if node.operator == "+" and self._is_string_expr(node.left):
+            if node.operator == "+" and self._is_string_expr(node):
                 return "STRPTR"
             return "LONG"
         elif isinstance(node, VarRef):
@@ -3750,6 +3762,8 @@ static {ret_type} {method_name}({params_str}) {{
             struct = self.analysis.program.get_struct(node.name)
             if struct:
                 return f"_Dash_{struct.name} *"
+            if self._call_returns_string(node.name):
+                return "STRPTR"
             return "LONG"
         else:
             return "LONG"
@@ -3865,6 +3879,10 @@ static {ret_type} {method_name}({params_str}) {{
     def visit_FunctionDef(self, node: FunctionDef):
         """Generate code for function definition."""
         self.current_function = node
+        # Variable types are per function: save the caller's and seed the params
+        saved_var_types = self.var_types
+        self.var_types = dict(saved_var_types)
+        self._seed_param_types(node.params)
 
         # Type map for annotations
         type_map = {
@@ -3874,12 +3892,6 @@ static {ret_type} {method_name}({params_str}) {{
             "Pointer": "APTR",
             "Void": "void",
         }
-
-        # Determine return type - use explicit if provided, otherwise infer
-        if node.return_type:
-            return_type = type_map.get(node.return_type, "LONG")
-        else:
-            return_type = self._infer_function_return_type(node)
 
         # Generate parameter list with optional types
         param_strs = []
@@ -3894,17 +3906,9 @@ static {ret_type} {method_name}({params_str}) {{
                 param_names.append(p)
         params = ", ".join(param_strs) if param_strs else "void"
 
-        # Generate prototype
-        proto = CTemplates.FUNCTION_PROTO.substitute(
-            return_type=return_type,
-            name=node.name,
-            params=params
-        )
-        self.prototypes.append(proto)
-
-        # Generate function body with new scope
+        # Generate function body with new scope (before inferring the return
+        # type, so the types of local variables are known)
         self.context.enter_scope()
-        # Declare parameters in scope
         for p_name in param_names:
             self.context.declare_var(p_name)
 
@@ -3913,6 +3917,21 @@ static {ret_type} {method_name}({params_str}) {{
             body += self._generate_statement(s)
 
         self.context.exit_scope()
+
+        # Determine return type - use explicit if provided, otherwise infer
+        if node.return_type:
+            return_type = type_map.get(node.return_type, "LONG")
+        else:
+            return_type = self._infer_function_return_type(node)
+        self.var_types = saved_var_types
+
+        # Generate prototype
+        proto = CTemplates.FUNCTION_PROTO.substitute(
+            return_type=return_type,
+            name=node.name,
+            params=params
+        )
+        self.prototypes.append(proto)
 
         # Generate function definition
         code = CTemplates.FUNCTION_DEF.substitute(
@@ -3926,10 +3945,9 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _infer_function_return_type(self, node: FunctionDef) -> str:
         """Infer function return type by looking at return statements."""
-        for stmt in node.body:
-            if isinstance(stmt, ReturnStmt) and stmt.value is not None:
-                return self._infer_c_type(stmt.value)
-            # TODO: Also check nested blocks for return statements
+        value = self._find_return_value(node.body)
+        if value is not None:
+            return self._infer_c_type(value)
         return "void"
 
     def visit_ReturnStmt(self, node: ReturnStmt):
@@ -3990,12 +4008,20 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, VarRef):
             return node.name
         elif isinstance(node, BinaryOp):
-            # Check if this is string concatenation
-            if node.operator == "+" and self._is_string_expr(node.left):
+            left_str = self._is_string_expr(node.left)
+            right_str = self._is_string_expr(node.right)
+            # String concatenation: numbers on either side are converted
+            if node.operator == "+" and (left_str or right_str):
+                self.uses_strings = True
+                left = self._string_operand(node.left, left_str)
+                right = self._string_operand(node.right, right_str)
+                return f"DashString_concat({left}, {right})"
+            # String comparison compares contents, not pointers
+            if node.operator in ("==", "!=") and (left_str or right_str):
                 self.uses_strings = True
                 left = self._generate_expression(node.left)
                 right = self._generate_expression(node.right)
-                return f"DashString_concat({left}, {right})"
+                return f"(strcmp({left}, {right}) {node.operator} 0)"
             left = self._generate_expression(node.left)
             right = self._generate_expression(node.right)
             op = self._translate_operator(node.operator)
@@ -4226,10 +4252,9 @@ static {ret_type} {method_name}({params_str}) {{
                 return True
             return False
         elif isinstance(node, BinaryOp) and node.operator == "+":
-            return self._is_string_expr(node.left)
+            return self._is_string_expr(node.left) or self._is_string_expr(node.right)
         elif isinstance(node, FunctionCall):
-            # Could check function return types, for now assume not string
-            return False
+            return self._call_returns_string(node.name)
         elif isinstance(node, MemberAccess):
             # Check if the struct field is a string type
             var_type = self.var_types.get(node.object_name)
@@ -4242,6 +4267,51 @@ static {ret_type} {method_name}({params_str}) {{
                         return True
             return False
         return False
+
+    def _string_operand(self, node: ASTNode, is_string: bool) -> str:
+        """C code for one side of a concatenation, converting numbers to strings."""
+        code = self._generate_expression(node)
+        if is_string or self._is_char_expr(node):
+            return code
+        return f"DashString_from_int({code})"
+
+    def _call_returns_string(self, name: str) -> bool:
+        """True if calling the named function yields a string."""
+        builtin = get_builtin(name)
+        if builtin:
+            return builtin.return_type == "STRPTR"
+        func = self.analysis.program.get_function(name)
+        if func:
+            if func.return_type:
+                return func.return_type == "String"
+            ret = self._find_return_value(func.body)
+            return ret is not None and isinstance(ret, StringLiteral)
+        return False
+
+    def _find_return_value(self, stmts):
+        """First returned value in stmts, searching nested blocks."""
+        for stmt in stmts:
+            if isinstance(stmt, ReturnStmt) and stmt.value is not None:
+                return stmt.value
+            for attr in ("then_body", "else_body", "body"):
+                nested = getattr(stmt, attr, None)
+                if isinstance(nested, list):
+                    found = self._find_return_value(nested)
+                    if found is not None:
+                        return found
+        return None
+
+    def _seed_param_types(self, params):
+        """Record parameter types so string/struct params are handled in the body."""
+        for p in params:
+            if not isinstance(p, FunctionParam) or not p.param_type:
+                continue
+            if p.param_type == "String":
+                self.var_types[p.name] = "string"
+            elif self.analysis.program.get_struct(p.param_type):
+                self.var_types[p.name] = f"struct:{p.param_type}"
+            else:
+                self.var_types[p.name] = "number"
 
     def _is_char_expr(self, node: ASTNode) -> bool:
         """Check if an expression evaluates to a character."""
@@ -4303,11 +4373,15 @@ static {ret_type} {method_name}({params_str}) {{
             return_type = "LONG"  # Assume LONG for now
         else:
             # Block body
+            saved_var_types = self.var_types
+            self.var_types = dict(saved_var_types)
+            self._seed_param_types(node.params)
             self.context.enter_scope()
             for p in node.params:
                 self.context.declare_var(p.name if isinstance(p, FunctionParam) else p)
             body = "".join(self._generate_statement(stmt) for stmt in node.body).rstrip("\n")
             self.context.exit_scope()
+            self.var_types = saved_var_types
             return_type = "LONG" if self._returns_value(node.body) else "void"
 
         # Generate the lambda function

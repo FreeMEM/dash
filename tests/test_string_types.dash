@@ -1,0 +1,53 @@
+# Test: string typing in expressions
+# String params, string returns, string == comparison,
+# number + string concatenation, not precedence, % in Print
+#
+# expect-c: STRPTR saluda(STRPTR nombre) {
+# expect-c: STRPTR nombre_fijo(void)
+# expect-c: void eco(LONG s) {
+# expect-c: Printf("%ld\n", s);
+# expect-c: strcmp(nombre_fijo(), "Ana") == 0
+# expect-c: strcmp(msg, "otro") != 0
+# expect-c: STRPTR total = DashString_concat("Total: ", DashString_from_int(n));
+# expect-c: STRPTR cuenta = DashString_concat(DashString_from_int(n), " items");
+# expect-c: LONG x = (!(a == b));
+# expect-c: Printf("100%% hecho\n");
+
+func saluda(nombre: String) -> String
+    return "Hola " + nombre + "!"
+end
+
+func nombre_fijo()
+    return "Ana"
+end
+
+func eco(s)
+    Print s
+end
+
+Main
+    msg = saluda("Dash")
+    Print msg
+
+    if nombre_fijo() == "Ana"
+        Print "igual"
+    end
+    if msg != "otro"
+        Print "distinto"
+    end
+
+    n = 5
+    total = "Total: " + n
+    Print total
+    cuenta = n + " items"
+    Print cuenta
+    Print "Valor #{n}"
+
+    a = 1
+    b = 2
+    x = not a == b
+    Print x
+
+    Print "100% hecho"
+    eco(7)
+end

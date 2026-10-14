@@ -300,7 +300,9 @@ dash_grammar_minimal = r"""
     ?expression: or_expr
 
     ?or_expr: and_expr ("or" and_expr)*
-    ?and_expr: compare_expr ("and" compare_expr)*
+    ?and_expr: not_test ("and" not_test)*
+    ?not_test: "not" not_test -> not_expr
+             | compare_expr
 
     ?compare_expr: add_expr (COMP_OP add_expr)?
     COMP_OP: "==" | "!=" | "<=" | ">=" | "<" | ">"
@@ -311,8 +313,7 @@ dash_grammar_minimal = r"""
     ?mul_expr: unary_expr ((MUL_OP) unary_expr)*
     MUL_OP: "*" | "/" | "%"
 
-    ?unary_expr: "not" unary_expr -> not_expr
-              | "-" unary_expr -> neg_expr
+    ?unary_expr: "-" unary_expr -> neg_expr
               | primary
 
     ?primary: postfix_expr

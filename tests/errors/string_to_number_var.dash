@@ -1,0 +1,5 @@
+# expect: Cannot assign a string to 'x'
+Main
+    x = 1
+    x = "hola"
+end

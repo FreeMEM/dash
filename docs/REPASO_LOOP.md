@@ -57,7 +57,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
       que no parsean (p. ej. `enum State IDLE, RUN end` de QUICK_REFERENCE).
 - [x] 3. `compiler/transformer.py` + `compiler/ast_nodes.py`
 - [x] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
-- [ ] 5. `compiler/codegen.py` — expresiones, variables y scope.
+- [x] 5. `compiler/codegen.py` — expresiones, variables y scope.
 - [ ] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
 - [ ] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
 - [ ] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
@@ -149,3 +149,26 @@ Corrección antes que velocidad. Nada de refactors grandes.
   - Las funciones privadas (`_x`) de un módulo se descartan al fusionar: si una pública las llama, el C queda sin ellas.
   - Los `@header` de módulos importados se pierden (solo se conservan los del programa principal).
 - Para zona 7: el codegen da prioridad a los builtins sobre funciones de usuario; hoy queda cubierto por el error nuevo.
+
+### 2026-10-14 — Zona 5 (codegen: expresiones, variables, scope)
+- Base: tests 38/38, ejemplos 29/30. Tras la zona: tests 40/40, ejemplos 29/30.
+- Novedad en el runner: líneas `# expect-c: <texto>` en un test exigen ese texto en el C generado.
+  Sin GCC es la única forma de detectar regresiones de contenido.
+- Errores arreglados (test: `tests/test_string_types.dash` con `expect-c`, y `tests/errors/string_to_number_var.dash`; fallaban antes):
+  - Parámetros `String` se trataban como número: `nombre + "!"` era aritmética de punteros.
+  - `a == "x"` comparaba punteros. Ahora `strcmp(a, "x") == 0` (igual con `!=`).
+  - `"Total: " + n` pasaba un `LONG` como `STRPTR`. Ahora `DashString_from_int(n)` (nuevo en el runtime,
+    8 buffers rotatorios; probado en host con 0, negativos, `LONG_MIN` y concatenación anidada).
+    También `n + " items"` y la interpolación `"#{n}"` con números.
+  - `not a == b` se leía `(not a) == b`. Ahora `not` va por debajo de las comparaciones, como en Python.
+  - El tipo de las variables (`var_types`) se compartía entre funciones: un parámetro `s` salía con `%s`
+    porque otra función tenía un `s` string. Ahora cada función, método y lambda tiene su copia.
+  - Funciones que devuelven string (`-> String`, `return "..."` o builtins `STRPTR`) se trataban como `LONG`.
+    El tipo de retorno ahora se busca también en bloques anidados y tras generar el cuerpo.
+  - `Print "100%"` usaba el texto como formato de `Printf`. Ahora se escapa `%`.
+  - Reasignar una variable con otro tipo (`x = 1` luego `x = "hola"`) generaba C inválido. Ahora es error.
+- Optimización: `Print` genera una sola llamada (`Printf("texto\n")`) en vez de dos. C de 68000 más corto.
+- Efecto en ejemplos: `test_gadtools` declara `path`/`name` como `STRPTR` (antes `LONG`). Resto: solo `Printf`.
+- Pendiente (zona 8): `DashString_concat` reserva memoria que nunca se libera.
+- Pendiente (zona 11): `runtime/*.h` no se usa; el codegen lleva su propia copia del runtime.
+- Pendiente: concatenar un carácter (`s + s[0]`) pasa un `char` como `STRPTR`.
