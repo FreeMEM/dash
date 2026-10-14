@@ -14,6 +14,7 @@ Main ... end                # Entry point
 ## Variables & Types
 ```
 x = 42                      # Int
+v = 1.5                     # Float (Int(v), Float(n), 7 significant digits)
 mask = 0xFF                 # hex (also $DFF000), binary 0b1010
 name = "Dash"               # String
 active = true               # Bool

@@ -148,6 +148,7 @@ vacio = []
 | Tipo | Descripcion | Ejemplo |
 |------|-------------|---------|
 | Int | Entero 32-bit con signo | `42`, `-100`, `0xFF`, `$DFF000`, `0b1010` |
+| Float | Decimal de 32 bits (unos 7 digitos) | `1.5`, `-0.25`, `2.0e3` |
 | String | Cadena de texto | `"Hola"` |
 | Bool | Valor booleano | `true`, `false` |
 | Array | Coleccion de elementos | `[1, 2, 3]` |
@@ -162,7 +163,35 @@ x = 10          # Int
 name = "Dash"   # String
 flag = true     # Bool
 nums = [1,2,3]  # Array de Int
+v = 1.5         # Float
 ```
+
+### Float
+
+```
+v = 2.5
+area = 3.14159 * r * r      # Int y Float se mezclan: el resultado es Float
+n = Int(v)                  # 2 (trunca hacia cero)
+f = Float(7) / 2            # 3.5 (7 / 2 entre enteros da 3)
+Print "v = " + v            # v = 2.5
+Print "#{v} metros"
+
+struct Cuerpo
+    masa: Float
+end
+
+func doble(x: Float) -> Float
+    return x * 2.0
+end
+```
+
+- Un literal decimal necesita digitos a los dos lados del punto: `1.0`, no `1.` (asi `1..10` sigue siendo un rango).
+- Una variable que empezo siendo Int no puede recibir un Float (`n = 0` y luego `n = 2.5` es error):
+  declarala con `n = 0.0` o convierte con `Int()`.
+- `%` solo con enteros. Los arrays guardan enteros o strings, no Float.
+- Un 68000 no tiene FPU: las operaciones son por software (rutinas de GCC en
+  `runtime/softfloat`, unos 4 KB, solo si el programa usa Float). No dependen de
+  `mathieeesingbas.library`, que con Kickstart 3.1 sin FPU se cuelga en FS-UAE.
 
 ---
 

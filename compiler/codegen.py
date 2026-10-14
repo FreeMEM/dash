@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
     PropertyAccess, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod, SelfRef,
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
-    ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES
+    ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
 from compiler.analyzer import AnalysisResult
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
@@ -25,6 +25,14 @@ from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 # =============================================================================
 # C CODE TEMPLATES
 # =============================================================================
+
+
+def c_float_literal(value: float) -> str:
+    """C text for a Dash Float literal (a C float)."""
+    text = repr(float(value))
+    if "inf" in text or "nan" in text:
+        raise ValueError(f"Float literal {value} is out of range")
+    return f"({text}f)" if value < 0 else f"{text}f"
 
 
 def c_int_literal(value: int) -> str:
@@ -187,6 +195,56 @@ static STRPTR DashString_from_int(LONG n) {
     do { *--end = '0' + (u % 10); u /= 10; } while (u);
     if (n < 0) *--end = '-';
     return end;
+}
+
+"""
+
+    # Float runtime: Float is a C float (32-bit IEEE). A 68000 has no FPU, so GCC
+    # links its software floating point routines; text conversion is done here
+    # (libnix printf has no %f) with about 7 significant digits, like a float.
+    FLOAT_RUNTIME = """\
+/* Dash Float Runtime */
+static STRPTR DashString_from_float(float f) {
+    static char buffers[8][24];
+    static LONG next = 0;
+    char *s = buffers[next], *p = s, digits[12];
+    LONG exp10 = 0, decimals, n, i;
+    ULONG ip, frac, scale;
+    next = (next + 1) & 7;
+    if (f != f) { s[0] = 'n'; s[1] = 'a'; s[2] = 'n'; s[3] = 0; return s; }
+    if (f < 0.0f) { *p++ = '-'; f = -f; }
+    if (f > 3.4e38f) { p[0] = 'i'; p[1] = 'n'; p[2] = 'f'; p[3] = 0; return s; }
+    if (f >= 1e9f) {
+        while (f >= 10.0f) { f /= 10.0f; exp10++; }
+    } else if (f != 0.0f && f < 1e-4f) {
+        while (f < 0.99999995f) { f *= 10.0f; exp10--; }  /* margin: x10 rounds down */
+    }
+    ip = (ULONG)f;
+    n = 0; scale = ip;
+    do { n++; scale /= 10; } while (scale);
+    decimals = 7 - n;                       /* a float has about 7 significant digits */
+    if (decimals < 1) decimals = 1;
+    if (decimals > 6) decimals = 6;
+    scale = 1;
+    for (i = 0; i < decimals; i++) scale *= 10;
+    frac = (ULONG)((f - (float)ip) * (float)scale + 0.5f);
+    if (frac >= scale) { ip++; frac -= scale; }
+    n = 0;
+    do { digits[n++] = '0' + ip % 10; ip /= 10; } while (ip);
+    while (n) *p++ = digits[--n];
+    *p++ = '.';
+    for (i = decimals - 1; i >= 0; i--) { p[i] = '0' + frac % 10; frac /= 10; }
+    p += decimals;
+    while (p[-1] == '0' && p[-2] != '.') p--;   /* 1.500000 -> 1.5, keep 2.0 */
+    if (exp10) {
+        *p++ = 'e';
+        if (exp10 < 0) { *p++ = '-'; exp10 = -exp10; }
+        n = 0;
+        do { digits[n++] = '0' + exp10 % 10; exp10 /= 10; } while (exp10);
+        while (n) *p++ = digits[--n];
+    }
+    *p = 0;
+    return s;
 }
 
 """
@@ -3141,6 +3199,7 @@ _RUNTIME_FLAGS = [
     ("MEMORY_RUNTIME", "uses_strings"),
     ("ARRAY_RUNTIME", "uses_arrays"),
     ("STRING_RUNTIME", "uses_strings"),
+    ("FLOAT_RUNTIME", "uses_float"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
     ("ARENA_RUNTIME", "uses_arenas"),
     ("WINDOW_RUNTIME", "uses_windows"),
@@ -3322,6 +3381,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_reaction: bool = False  # Track if ReAction is used
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
+        self.uses_float: bool = False  # Float values: DashString_from_float
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
         self.extern_libraries: Set[str] = set()
@@ -3408,6 +3468,9 @@ class CodeGenerator(ASTVisitor):
         # Add memory runtime (arrays, strings and structs allocate from its pool)
         if self._uses_pool():
             parts.append(CTemplates.MEMORY_RUNTIME)
+
+        if self.uses_float:
+            parts.append(CTemplates.FLOAT_RUNTIME)
 
         # Add array runtime if needed
         if self.uses_arrays:
@@ -3622,6 +3685,8 @@ class CodeGenerator(ASTVisitor):
         elif isinstance(value, BoolLiteral):
             c_val = "TRUE" if value.value else "FALSE"
             self.const_defines.append(f"#define {const.name} {c_val}")
+        elif isinstance(value, FloatLiteral):
+            self.const_defines.append(f"#define {const.name} {c_float_literal(value.value)}")
 
     def _generate_global_var(self, gvar: GlobalVarDecl):
         """Generate C global variable declaration."""
@@ -3647,6 +3712,8 @@ class CodeGenerator(ASTVisitor):
         # Track variable type for later use
         if c_type == "STRPTR":
             self.var_types[gvar.name] = "string"
+        elif c_type == "float":
+            self.var_types[gvar.name] = "float"
         else:
             self.var_types[gvar.name] = "number"
 
@@ -3979,6 +4046,10 @@ static {ret_type} {method_name}({params_str}) {{
         elif self._is_string_expr(node.message) or self._is_string_constant(node.message):
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%s\\n", {value});\n')
+        elif self._is_float_expr(node.message):
+            self.uses_float = True
+            value = self._generate_expression(node.message)
+            self.emit(f'{indent}Printf("%s\\n", DashString_from_float({value}));\n')
         elif self._is_char_expr(node.message):
             # dos Printf (RawDoFmt) reads %c as a 16-bit WORD but C passes an int:
             # %lc with an explicit LONG prints the right character
@@ -4051,6 +4122,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "string"
         elif var_type == "char":
             self.var_types[node.name] = "char"
+        elif var_type == "float":
+            self.var_types[node.name] = "float"
         elif var_type == "DashArrayLong *":
             self.var_types[node.name] = "array"
         elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
@@ -4072,6 +4145,8 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
+        if self._is_float_expr(node):
+            return "float"
         if isinstance(node, StringLiteral):
             return "STRPTR"
         elif isinstance(node, BoolLiteral):
@@ -4433,6 +4508,8 @@ static {ret_type} {method_name}({params_str}) {{
             return node.value
         elif isinstance(node, NumberLiteral):
             return c_int_literal(node.value)
+        elif isinstance(node, FloatLiteral):
+            return c_float_literal(node.value)
         elif isinstance(node, BoolLiteral):
             return "TRUE" if node.value else "FALSE"
         elif isinstance(node, VarRef):
@@ -4467,6 +4544,10 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"(!{operand})"
             return f"({node.operator}{operand})"
         elif isinstance(node, FunctionCall):
+            # Int(x) truncates toward zero; Float(x) converts
+            if node.name in ("Int", "Float") and len(node.arguments) == 1:
+                arg = self._generate_expression(node.arguments[0])
+                return f"((LONG)({arg}))" if node.name == "Int" else f"((float)({arg}))"
             # Check if it's a builtin function
             builtin = get_builtin(node.name)
             if builtin:
@@ -4762,6 +4843,9 @@ static {ret_type} {method_name}({params_str}) {{
             return code
         if self._is_char_expr(node):
             return f"DashString_from_char({code})"
+        if self._is_float_expr(node):
+            self.uses_float = True
+            return f"DashString_from_float({code})"
         return f"DashString_from_int({code})"
 
     def _call_returns_string(self, name: str) -> bool:
@@ -4806,6 +4890,8 @@ static {ret_type} {method_name}({params_str}) {{
                 continue
             if p.param_type == "String":
                 self.var_types[p.name] = "string"
+            elif p.param_type == "Float":
+                self.var_types[p.name] = "float"
             elif p.param_type == "Func":
                 self.var_types[p.name] = "func"
             elif self.analysis.program.get_struct(p.param_type):
@@ -4879,6 +4965,39 @@ static {ret_type} {method_name}({params_str}) {{
     def _is_string_array(self, node: ASTNode) -> bool:
         """True for a variable holding an array of strings."""
         return isinstance(node, VarRef) and self.var_types.get(node.name) == "array:string"
+
+    def _is_float_expr(self, node: ASTNode) -> bool:
+        """True if the expression yields a Float (C float)."""
+        if isinstance(node, FloatLiteral):
+            return True
+        if isinstance(node, VarRef):
+            if self.var_types.get(node.name) == "float":
+                return True
+            const = self.analysis.program.get_constant(node.name)
+            return bool(const and isinstance(const.value, FloatLiteral))
+        if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/"):
+            if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
+                return False
+            return self._is_float_expr(node.left) or self._is_float_expr(node.right)
+        if isinstance(node, UnaryOp) and node.operator == "-":
+            return self._is_float_expr(node.operand)
+        if isinstance(node, FunctionCall):
+            if node.name == "Float":
+                return True
+            if node.name == "Int" or get_builtin(node.name):
+                return False
+            func = self.analysis.program.get_function(node.name)
+            if func:
+                return self._function_c_type(func) == "float"
+            foreign = self._foreign_func(node.name)
+            return bool(foreign and foreign.return_type == "Float")
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "Float")
+        if isinstance(node, MethodCall):
+            method = self._method_of(node)
+            return bool(method and self._method_c_type(method) == "float")
+        return False
 
     def _is_char_expr(self, node: ASTNode) -> bool:
         """Check if an expression evaluates to a character."""
@@ -4978,6 +5097,7 @@ static {return_type} {lambda_name}({param_str}) {{
 
     _BASE_C_TYPES = {
         "Int": "LONG",
+        "Float": "float",
         "String": "STRPTR",
         "Bool": "BOOL",
         "Pointer": "APTR",
@@ -5270,6 +5390,8 @@ class MultiFileGenerator:
         """Convert a constant value to C representation."""
         if isinstance(value, NumberLiteral):
             return c_int_literal(value.value)
+        elif isinstance(value, FloatLiteral):
+            return c_float_literal(value.value)
         elif isinstance(value, StringLiteral):
             return value.value
         elif isinstance(value, BoolLiteral):

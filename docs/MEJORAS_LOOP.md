@@ -84,7 +84,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
 - [x] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
 - [x] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
-- [ ] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
+- [x] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
       conversión a texto y `Int()`/`Float()`.
 - [ ] 12. Memoria (1/4): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
       liberación por marca. Tests en el PC (`tests/runtime/host_harness.c`).
@@ -233,3 +233,21 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - Error previo arreglado: `_dash_key_pressed` leía `msg->Class` después de `ReplyMsg`.
 - Probado en FS-UAE de punta a punta: el test escribe en su propia ventana con `input.device`
   (`IND_WRITEEVENT`) y los handlers reciben "a", 0x21 ("s") y ESC. Ejemplos con gráficos siguen terminando con RC=0.
+
+### 2026-10-14 — Tarea 11 (Float)
+- Base: 100/100 con `--emu`, ejemplos 30/30. Después: 105/105 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_float` con salida en FS-UAE; `errors/float_in_int_var`, `errors/float_modulo`,
+  `errors/float_array`):
+  - `FloatLiteral` (`FLOAT.2`: dígitos a los dos lados del punto, para que `1..10` siga siendo rango),
+    tipo `Float` → C `float` en variables, parámetros, retornos, campos, globales y `const`.
+  - `Int(x)` (trunca) y `Float(x)`. Mezcla Int/Float como en C. `_is_float_expr()` en el codegen,
+    `DashType.FLOAT` en el analyzer (que ahora también infiere `+ - * /` entre enteros como INT).
+  - `DashString_from_float`: unos 7 dígitos significativos, quita ceros (`1.5`, `2.0`, `0.333333`,
+    `1.0e-5`, `1.0e9`); probado en el PC con 19 valores y en FS-UAE.
+  - Errores: Float en una variable Int, `%` con Float, Float en arrays.
+- Problema encontrado en el emulador: con libnix `-lm` las operaciones llaman a `mathieeesingbas.library`
+  de la ROM, y con el Kickstart 3.1 original (CRC32 1483A091) sin FPU `IEEESPMul` no vuelve nunca
+  (probado con CPU exacta, 68020 y 68030). Con 3.2.3, con AROS o con FPU funciona. Solución: el
+  `fp-bit.c` de libgcc (GPL + excepción de runtime) en `runtime/softfloat/`, compilado una vez en
+  `build/` (`compiler/softfloat.py`) y enlazado solo si el programa usa Float. ~3,7 KB.
+- No verificado: si el cuelgue de `mathieeesingbas` 3.1 pasa también en un A1200 real o es del emulador.

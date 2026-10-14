@@ -12,6 +12,8 @@ dash_grammar_minimal = r"""
     const_decl: "const" ID "=" const_value
     ?const_value: INT -> const_int
                 | "-" INT -> const_neg_int
+                | FLOAT -> const_float
+                | "-" FLOAT -> const_neg_float
                 | ESCAPED_STRING -> const_string
                 | "true" -> const_true
                 | "false" -> const_false
@@ -27,7 +29,7 @@ dash_grammar_minimal = r"""
     struct_member: struct_field | struct_method | comment_line
     struct_field: ID ":" TYPE_NAME ("=" expression)?
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
-    TYPE_NAME: "Int" | "String" | "Bool" | "Pointer" | "Func" | ID
+    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID
 
     // Enum definition
     enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
@@ -161,7 +163,8 @@ dash_grammar_minimal = r"""
     // Postfix expressions (array access, member access chains)
     postfix_expr: atom postfix_op*
 
-    ?atom: INT -> number_literal
+    ?atom: FLOAT -> float_literal
+         | INT -> number_literal
          | ESCAPED_STRING -> string_literal
          | "true" -> true_literal
          | "false" -> false_literal
@@ -191,6 +194,8 @@ dash_grammar_minimal = r"""
 
     // Tokens
     ID: /[a-zA-Z_][a-zA-Z0-9_]*/
+    // Float: digits on both sides of the point (so 1..10 stays a range)
+    FLOAT.2: /\d+\.\d+([eE][+-]?\d+)?/
     // Decimal, hexadecimal (0xDFF000 or $DFF000) and binary (0b1010)
     INT: /0[xX][0-9a-fA-F]+|\$[0-9a-fA-F]+|0[bB][01]+|\d+/
 

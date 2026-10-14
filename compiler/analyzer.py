@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES
+    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -37,6 +37,7 @@ class SymbolType(Enum):
 class DashType(Enum):
     """Dash language types (for future type checking)."""
     INT = auto()
+    FLOAT = auto()
     STRING = auto()
     BOOL = auto()
     VOID = auto()
@@ -474,6 +475,9 @@ class SemanticAnalyzer(ASTVisitor):
                     and (symbol.dash_type == DashType.STRING) != (new_type == DashType.STRING)):
                 self.error(f"Cannot assign a {new_type.name.lower()} to '{node.name}', "
                            f"which holds a {symbol.dash_type.name.lower()}", node)
+            elif symbol.dash_type == DashType.INT and new_type == DashType.FLOAT:
+                self.error(f"Cannot assign a float to '{node.name}', which holds an int "
+                           f"(declare it with a float: {node.name} = 0.0, or use Int())", node)
             symbol.is_initialized = True
 
     def visit_VarRef(self, node: VarRef):
@@ -630,6 +634,16 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_FunctionCall(self, node: FunctionCall):
         """Visit a function call."""
+        # Int(x) / Float(x): conversions
+        if node.name in ("Int", "Float"):
+            if len(node.arguments) != 1:
+                self.error(f"{node.name}() expects 1 argument, got {len(node.arguments)}", node)
+            for arg in node.arguments:
+                self.visit(arg)
+                if self._infer_type(arg) == DashType.STRING:
+                    self.error(f"{node.name}() converts numbers, not strings", node)
+            return
+
         # Check if it's a builtin function
         builtin = get_builtin(node.name)
         if builtin:
@@ -711,6 +725,12 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit an array literal."""
         for element in node.elements:
             self.visit(element)
+            self._check_not_float_element(element)
+
+    def _check_not_float_element(self, value: ASTNode):
+        if self._infer_type(value) == DashType.FLOAT:
+            self.error("Arrays hold integers or strings, not Float values "
+                       "(use a struct with Float fields, or scale to integers)", value)
 
     def visit_ArrayAccess(self, node: ArrayAccess):
         """Visit an array access."""
@@ -722,6 +742,7 @@ class SemanticAnalyzer(ASTVisitor):
         self.visit(node.array)
         self.visit(node.index)
         self.visit(node.value)
+        self._check_not_float_element(node.value)
 
     def visit_PropertyAccess(self, node: PropertyAccess):
         """Visit a property access."""
@@ -838,6 +859,9 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit a binary operation."""
         self.visit(node.left)
         self.visit(node.right)
+        if node.operator == "%" and DashType.FLOAT in (self._infer_type(node.left),
+                                                       self._infer_type(node.right)):
+            self.error("% needs integers; use Int() to convert a Float", node)
 
     def visit_UnaryOp(self, node: UnaryOp):
         """Visit a unary operation."""
@@ -871,6 +895,26 @@ class SemanticAnalyzer(ASTVisitor):
             return DashType.STRING
         elif isinstance(node, NumberLiteral):
             return DashType.INT
+        elif isinstance(node, FloatLiteral):
+            return DashType.FLOAT
+        elif isinstance(node, BinaryOp):
+            left, right = self._infer_type(node.left), self._infer_type(node.right)
+            if node.operator == "+" and DashType.STRING in (left, right):
+                return DashType.STRING
+            if node.operator in ("+", "-", "*", "/", "%"):
+                if DashType.FLOAT in (left, right):
+                    return DashType.FLOAT
+                if left == right == DashType.INT:
+                    return DashType.INT
+            return DashType.UNKNOWN
+        elif isinstance(node, UnaryOp) and node.operator == "-":
+            return self._infer_type(node.operand)
+        elif isinstance(node, FunctionCall) and node.name in ("Int", "Float"):
+            return DashType.FLOAT if node.name == "Float" else DashType.INT
+        elif isinstance(node, FunctionCall) and self.program and self.program.get_function(node.name):
+            func = self.program.get_function(node.name)
+            if func.return_type in ("Int", "Float", "String", "Bool"):
+                return self._type_annotation_to_dash_type(func.return_type)
         elif isinstance(node, BoolLiteral):
             return DashType.BOOL
         elif isinstance(node, VarRef):
@@ -918,6 +962,7 @@ class SemanticAnalyzer(ASTVisitor):
             return DashType.UNKNOWN
         type_map = {
             "Int": DashType.INT,
+            "Float": DashType.FLOAT,
             "String": DashType.STRING,
             "Bool": DashType.BOOL,
             "Pointer": DashType.UNKNOWN,

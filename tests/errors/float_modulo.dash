@@ -1,0 +1,7 @@
+# Test: % needs integers
+# expect: % needs integers
+
+Main
+    x = 5.5
+    Print x % 2
+end

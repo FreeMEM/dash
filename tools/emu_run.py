@@ -66,7 +66,7 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0) -> No
 
 
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
-                 kickstart: str = None, autoclose: int = 0):
+                 kickstart: str = None, autoclose: int = 0, extra_config: str = ""):
     """programs: list of .dash sources or Amiga executables.
     Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
@@ -94,7 +94,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         if kickstart and not Path(kickstart).is_file():
             raise RuntimeError(f"Kickstart ROM not found: {kickstart}")
         ks_line = f"kickstart_file = {kickstart}\n" if kickstart else ""
-        config.write_text(FSUAE_CONFIG.format(hd=hd, kickstart=ks_line))
+        config.write_text(FSUAE_CONFIG.format(hd=hd, kickstart=ks_line) + extra_config)
 
         env = dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy")
         proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env,
@@ -137,10 +137,14 @@ def main():
                         help="compile .dash in test mode: the program ends by itself after SECONDS "
                              "(for programs that wait for the close gadget)")
     parser.add_argument("--kickstart", help="Kickstart ROM (default: $DASH_KICKSTART, else AROS)")
+    parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                        help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
     args = parser.parse_args()
     try:
         results = run_programs(args.programs, args.timeout, args.opt, args.kickstart,
-                               args.autoclose)
+                               args.autoclose,
+                               "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
+                                       for kv in args.set))
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

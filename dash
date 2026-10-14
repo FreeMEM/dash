@@ -141,9 +141,17 @@ def main():
     # emu tests, same output as -O0 and about half the size
     compile_command.append("-O0" if args.no_optimize else "-O2")
     compile_command.extend(c_files)
+    # Float: GCC's own software floating point (runtime/softfloat), linked before
+    # -lm so it does not go through mathieeesingbas.library
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from compiler.softfloat import softfloat_object, uses_float
+    if any(uses_float(open(f).read()) for f in c_files):
+        compile_command.append(softfloat_object(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
+                                                build_dir))
     compile_command.extend([
         "-o",
         output_filename if args.no_hunk else elf_output_file,
+        "-lm",
     ])
     run_command(compile_command, env=env)
 

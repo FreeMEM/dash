@@ -1,0 +1,7 @@
+# Test: arrays hold LONG values, a Float would be truncated
+# expect: Arrays hold integers or strings, not Float values
+
+Main
+    a = [1.5, 2.5]
+    Print a[0]
+end

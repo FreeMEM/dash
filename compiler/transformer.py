@@ -8,7 +8,7 @@ from typing import List, Any, Optional
 from compiler.ast_nodes import (
     Program, WindowDef, WindowProperty, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
-    StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
+    FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
     SourceLocation, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
@@ -123,6 +123,15 @@ class DashASTBuilder(Transformer):
     def const_int(self, items) -> NumberLiteral:
         """Build a number literal for constant."""
         return NumberLiteral(value=parse_int(items[0].value))
+
+    def const_float(self, items) -> FloatLiteral:
+        return FloatLiteral(value=float(items[0].value))
+
+    def const_neg_float(self, items) -> FloatLiteral:
+        return FloatLiteral(value=-float(items[0].value))
+
+    def float_literal(self, items) -> FloatLiteral:
+        return FloatLiteral(value=float(items[0].value))
 
     def const_neg_int(self, items) -> NumberLiteral:
         """Build a negative number literal for constant."""

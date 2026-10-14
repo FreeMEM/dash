@@ -1,0 +1,63 @@
+# Test: Float values (C float; software floating point on a 68000)
+# Literals, arithmetic mixed with Int, Int()/Float(), text conversion,
+# Float fields, parameters, return types and constants
+#
+# expect-c: float x = 1.5f;
+# expect-c: #define GRAVEDAD 9.81f
+# expect-out: 1.5
+# expect-out: 3.75
+# expect-out: 0.333333
+# expect-out: 3
+# expect-out: 2.0
+# expect-out: -3
+# expect-out: x = 1.5
+# expect-out: 7.5 metros
+# expect-out: 19.62
+# expect-out: mayor
+# expect-out: 0.3
+# expect-out: 6.2
+# expect-out: 1.0e-5
+# expect-out: 2.5
+
+const GRAVEDAD = 9.81
+
+struct Cuerpo
+    masa: Float
+    altura: Float = 0.0
+end
+
+func area(r: Float) -> Float
+    return 3.14159 * r * r
+end
+
+func doble(v: Float) -> Float
+    return v * 2.0
+end
+
+Main
+    x = 1.5
+    Print x
+    y = x * 2.5
+    Print y
+    Print 1.0 / 3.0
+    Print Int(y)
+    Print Float(4) / 2
+    Print Int(-3.9)
+    Print "x = " + x
+    d = 7.5
+    Print "#{d} metros"
+    c = Cuerpo(2.0)
+    c.altura = c.masa * GRAVEDAD
+    Print c.altura
+    if y > 3
+        Print "mayor"
+    end
+    Print 0.1 + 0.2
+    Print doble(3.1)
+    Print 0.00001
+    suma = 0.0
+    for i in (1..5)
+        suma = suma + 0.5
+    end
+    Print suma
+end

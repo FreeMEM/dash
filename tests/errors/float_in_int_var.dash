@@ -1,0 +1,8 @@
+# Test: an Int variable cannot silently take a Float (the C variable is a LONG)
+# expect: Cannot assign a float to 'n', which holds an int
+
+Main
+    n = 0
+    n = 2.5
+    Print n
+end

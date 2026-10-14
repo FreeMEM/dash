@@ -324,6 +324,13 @@ class BinaryOp(ASTNode):
 
 
 @dataclass
+class FloatLiteral(ASTNode):
+    """Float literal: 1.5, 2.0e3 (C float: 32-bit, software floating point on 68000)."""
+    value: float
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class UnaryOp(ASTNode):
     """Unary operation (future)."""
     operator: str
