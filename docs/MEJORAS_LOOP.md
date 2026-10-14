@@ -565,3 +565,24 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   sí funciona) medía 88.865 ns en A500; la mía aún cuesta unos 260 ciclos más. Cuento ~710 ciclos por suma: `movem`
   84, sacar exponentes 84, preparar las dos mantisas 104, bit pegajoso ~100, recomponer ~146. Queda para 26d3.
 - Tamaño: 268.464 → 268.248 bytes.
+
+### 2026-10-14 — Tarea 26d3 (suma y multiplicación Float con menos ciclos)
+- Multiplicación: `ma << 8`, así los 32 bits altos del producto de 56 ya son la mantisa (o les falta un bit) y los
+  32 bajos son el resto para redondear (`add.l d5,d5`: C = medio, Z = nada debajo). Exponentes como `e << 7` en la
+  palabra alta, sin desplazar; `d2` lleva el signo en el bit 31 y `(e - 1) << 7` abajo, con una sola comparación
+  sin signo para el rango. `mid` puede pasar de 32 bits (ah ahora es de 16): su bit 32 entra con `addx.w`.
+- Suma: mantisas con el bit implícito en el 31 y ocho bits de guarda; el acarreo vuelve con `roxr`. Solo d2-d3
+  guardados (`x` en a0, `y` en a1). Los casos raros llaman a la suma de fp-bit con `x` e `y` (la resta entra como
+  `a + (-b)`). El resultado se monta con `move.b e` + `ror.l #8` + `roxr.l #1` con X = signo.
+- `test_fastfp_amiga` por tipos de pares (`i & 7`): aleatorios, mismo exponente, exponentes cercanos, mantisas
+  cortas (empates exactos, bit suelto) y sumas que acarrean con bit pegajoso. Antes no había ningún empate exacto
+  en la multiplicación. Mutaciones (redondeo de la mult., redondeo de la suma, umbral del bit pegajoso, bit
+  perdido en el acarreo, bit pegajoso de la alineación, bit 32 de `mid`): las seis dan diferencias (1 a 1.699).
+  Además, una pasada de 1.000.000 de pares (3 millones de operaciones) en el emulador: 0 diferencias.
+- Medido (`26d3: ...`): `float_mul` A500 152.386 → 122.073 ns, A1200 34.322 → 29.677; `float_mul_add` (suma)
+  A500 125.864 → 107.830, A1200 26.389 → 23.451. Desde la versión en C (26d): mult. -30 %, suma -33 %.
+- Pendiente: la suma de la ROM sigue más rápida en A500 (88.865 ns, ~135 ciclos menos); en A1200 la mía gana
+  (23.451 frente a 33.990). Elegir la de la ROM según la CPU es posible (`AttnFlags`), pero la `mathieeesingbas` de
+  3.1 ya falló con la multiplicación en FS-UAE: no me fío sin probarla en hardware real. Lo dejo así.
+- Tests: 170/170 (`--emu --emu-a500`).
+- Tamaño: 268.248 → 268.144 bytes.

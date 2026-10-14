@@ -1,9 +1,10 @@
 # Test: Dash's fast Float multiply/add/sub against the exact fp-bit routines,
 # bit by bit, on the Amiga itself (the 68000 assembly of __mulsf3/__addsf3
 # only runs here; tools/fastfp_check.py checks the C version on the PC).
-# A quarter of the pairs share the exponent and another quarter are close
-# (difference -16..15), so add and sub go through alignment, sticky bits,
-# cancellation and carries, not only through "one operand is negligible".
+# The pairs come in kinds (i & 7): random, same exponent, close exponents,
+# short mantissas (exact ties, a stray low bit) and adds that carry with a
+# sticky bit, so add and sub go through alignment, sticky bits, cancellation
+# and carries, not only through "one operand is negligible".
 #
 # expect-out: 0
 # expect-out: 1.5
@@ -16,16 +17,32 @@
     extern float __dash_fb_subsf3(float, float);
     union { float f; ULONG u; } a, b, r1, r2;
     ULONG s = 12345, bad = 0;
-    LONG i, e;
+    LONG i, e, k;
     for (i = 0; i < n; i++) {
         s ^= s << 13; s ^= s >> 17; s ^= s << 5; a.u = s;
         s ^= s << 13; s ^= s >> 17; s ^= s << 5; b.u = s;
-        if ((i & 3) == 1) b.u = (b.u & 0x807FFFFF) | (a.u & 0x7F800000);
-        if ((i & 3) == 2) {
+        k = i & 7;
+        if (k == 1 || k == 5)                 /* same exponent */
+            b.u = (b.u & 0x807FFFFF) | (a.u & 0x7F800000);
+        if (k == 2 || k == 6 || k == 3) {     /* close exponents, -16..15 */
             e = (LONG)((a.u >> 23) & 0xFF) + (LONG)(s >> 27) - 16;
             if (e < 1) e = 1;
             if (e > 254) e = 254;
             b.u = (b.u & 0x807FFFFF) | ((ULONG)e << 23);
+        }
+        if (k == 3) {
+            /* short mantissas: exact ties when rounding, and a stray low bit
+               in b so the sticky bit of the add matters */
+            a.u &= 0xFFFFF800;
+            b.u &= 0xFFFFF000 | (s & 0x101);
+        }
+        if (k == 7) {
+            /* a's mantissa almost full and b 9..24 binades below, same sign:
+               the add carries and loses the sticky bit unless it is kept */
+            a.u |= 0x007FFF00;
+            e = (LONG)((a.u >> 23) & 0xFF) - 9 - (LONG)(s >> 28);
+            if (e < 1) e = 1;
+            b.u = (b.u & 0x007FFFFF) | (a.u & 0x80000000) | ((ULONG)e << 23);
         }
         r1.f = a.f * b.f;
         r2.f = __dash_fb_mulsf3(a.f, b.f);
