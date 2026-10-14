@@ -79,7 +79,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       Si van igual, `-O2` por defecto y `-O0` para desactivarlo.
 - [x] 4. Literales hexadecimales `0xDFF000` / `$DFF000` y binarios `0b1010`.
 - [x] 5. `break` y `continue` (con error si están fuera de un bucle).
-- [ ] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
+- [x] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
 - [ ] 7. Enums con valores negativos.
 - [ ] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
 - [ ] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
@@ -173,4 +173,15 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - Analyzer: `loop_depth`. Funciones, métodos, lambdas y manejadores de `EventLoop` empiezan en 0:
     en C un manejador es un `case` de un `switch`, y `break` saldría del `switch`, no del bucle Dash.
   - Variables llamadas `breaking`/`continued` siguen funcionando; `break` y `continue` pasan a ser palabras reservadas.
+- Docs: MANUAL_REFERENCIA y QUICK_REFERENCE.
+
+### 2026-10-14 — Tarea 6 (rangos descendentes y `step`)
+- Base: 83/83 con `--emu`, ejemplos 30/30. Después: 86/86 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_range_step` con `expect-c` y salida en FS-UAE, `errors/step_zero`):
+  - `(a..b)` baja cuando los dos límites son constantes (literal, negativo o `const`) y `a > b`.
+    Con límites variables sigue subiendo: `(1..n)` con `n = 0` no da vueltas, como antes (no rompe código existente).
+  - `(a..b step s)`: con `s` constante el C usa `<=`/`>=` y `++`/`--`/`+= s`; con `s` variable se evalúa
+    una vez y su signo decide la dirección. `step 0` es error.
+  - `constant_int()` en `ast_nodes.py` (literal, negación o `const`), compartida por analyzer y codegen.
+  - Un fin constante (`const`) ya no crea la variable `_end_`.
 - Docs: MANUAL_REFERENCIA y QUICK_REFERENCE.

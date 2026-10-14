@@ -536,8 +536,14 @@ class DashASTBuilder(Transformer):
         filtered = [i for i in items[1:] if not (isinstance(i, Token) and i.type == 'RANGE_OP')]
         start = filtered[0]
         end = filtered[1]
-        body = self._flatten_statements(filtered[2:])
-        return ForRangeStmt(variable=var_name, start=start, end=end, body=body)
+        rest = filtered[2:]
+        step = None
+        if rest and isinstance(rest[0], Token) and rest[0].type == 'STEP':
+            step = rest[1]
+            rest = rest[2:]
+        body = self._flatten_statements(rest)
+        return ForRangeStmt(variable=var_name, start=start, end=end, body=body, step=step,
+                            location=self._get_location(items[0]))
 
     def for_each_stmt(self, items) -> ForEachStmt:
         """Build a for-each statement: for item in array."""

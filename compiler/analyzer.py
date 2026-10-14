@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod, LambdaFunc, FunctionRef
+    StructMethod, LambdaFunc, FunctionRef, constant_int
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -143,6 +143,7 @@ class SemanticAnalyzer(ASTVisitor):
         self.opened_windows: List[str] = []
         self.in_event_loop = False
         self.in_function = False
+        self.program: Optional[Program] = None
         self.loop_depth = 0  # while/for loops around the current statement (for break/continue)
         self.current_window: Optional[str] = None
         self.current_module: Optional[str] = None  # Module whose code is being analyzed
@@ -150,6 +151,7 @@ class SemanticAnalyzer(ASTVisitor):
 
     def analyze(self, program: Program) -> AnalysisResult:
         """Perform semantic analysis on the program."""
+        self.program = program
         self.visit(program)
 
         return AnalysisResult(
@@ -487,6 +489,10 @@ class SemanticAnalyzer(ASTVisitor):
         # Visit range expressions
         self.visit(node.start)
         self.visit(node.end)
+        if node.step is not None:
+            self.visit(node.step)
+            if constant_int(node.step, self.program) == 0:
+                self.error("for loop step cannot be 0", node.step)
 
         self.enter_scope("for_range")
         # Define loop variable

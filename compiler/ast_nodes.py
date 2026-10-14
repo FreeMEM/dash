@@ -245,12 +245,13 @@ class WhileStmt(ASTNode):
 
 @dataclass
 class ForRangeStmt(ASTNode):
-    """For loop over a range: for i in (start..end)."""
+    """For loop over a range: for i in (start..end) or (start..end step n)."""
     variable: str
     start: ASTNode  # Start expression
     end: ASTNode    # End expression
     body: List[ASTNode] = field(default_factory=list)
     location: Optional[SourceLocation] = None
+    step: Optional[ASTNode] = None  # None: 1, or -1 when both limits are constants and start > end
 
 
 @dataclass
@@ -663,3 +664,18 @@ class ASTVisitor:
             if isinstance(node, ASTNode):
                 results.append(self.visit(node))
         return results
+
+
+def constant_int(node: Optional[ASTNode], program: Optional['Program'] = None) -> Optional[int]:
+    """Integer value of a node known at compile time: a number literal, its
+    negation, or an integer const. None when it is only known at run time."""
+    if isinstance(node, NumberLiteral):
+        return node.value
+    if isinstance(node, UnaryOp) and node.operator == "-":
+        inner = constant_int(node.operand, program)
+        return -inner if inner is not None else None
+    if isinstance(node, VarRef) and program is not None:
+        const = program.get_constant(node.name)
+        if const is not None and isinstance(const.value, NumberLiteral):
+            return const.value.value
+    return None

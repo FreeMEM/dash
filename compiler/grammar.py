@@ -115,7 +115,8 @@ dash_grammar_minimal = r"""
     while_stmt: "while" expression instruction* "end"
 
     // For loops
-    for_range_stmt: "for" ID "in" "(" expression RANGE_OP expression ")" instruction* "end"
+    for_range_stmt: "for" ID "in" "(" expression RANGE_OP expression (STEP expression)? ")" instruction* "end"
+    STEP: "step"
     for_each_stmt: "for" ID "in" ID instruction* "end"
     RANGE_OP: ".."
 

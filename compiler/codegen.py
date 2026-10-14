@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
     PropertyAccess, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod, SelfRef,
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
-    ExternFunc, NativeFunc, LambdaFunc, FunctionRef
+    ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int
 )
 from compiler.analyzer import AnalysisResult
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
@@ -3042,7 +3042,7 @@ $body$indent_base    }
 """)
 
     FOR_RANGE_STMT = Template("""\
-$indent    for (LONG $var = $start; $var <= $end; $var++) {
+$indent    for (LONG $var = $start; $cond; $incr) {
 $body$indent    }
 """)
 
@@ -4099,27 +4099,42 @@ static {ret_type} {method_name}({params_str}) {{
         self.emit(code)
 
     def visit_ForRangeStmt(self, node: ForRangeStmt):
-        """Generate code for for-range statement."""
+        """Generate code for for-range statement.
+        (a..b) counts up; it counts down when a and b are both constants and a > b.
+        (a..b step s) uses s; with a run-time s the direction is chosen by its sign."""
+        program = self.analysis.program
         start = self._generate_expression(node.start)
         end = self._generate_expression(node.end)
         indent = self.context.indent
+        var = node.variable
+        init = start
 
         # Evaluate a non-literal end once, like a range
-        if isinstance(node.end, NumberLiteral):
-            init = start
+        if constant_int(node.end, program) is None:
+            init += f", _end_{var} = {end}"
+            end = f"_end_{var}"
+
+        if node.step is None:
+            a, b = constant_int(node.start, program), constant_int(node.end, program)
+            step = -1 if a is not None and b is not None and a > b else 1
         else:
-            init = f"{start}, _end_{node.variable} = {end}"
-            end = f"_end_{node.variable}"
+            step = constant_int(node.step, program)
+
+        if step is None:
+            init += f", _step_{var} = {self._generate_expression(node.step)}"
+            cond = f"(_step_{var} > 0) ? ({var} <= {end}) : ({var} >= {end})"
+            incr = f"{var} += _step_{var}"
+        elif step > 0:
+            cond = f"{var} <= {end}"
+            incr = f"{var}++" if step == 1 else f"{var} += {step}"
+        else:
+            cond = f"{var} >= {end}"
+            incr = f"{var}--" if step == -1 else f"{var} -= {-step}"
 
         body = self._generate_loop_body(node, "number")
 
         code = CTemplates.FOR_RANGE_STMT.substitute(
-            indent=indent,
-            var=node.variable,
-            start=init,
-            end=end,
-            body=body
-        )
+            indent=indent, var=var, start=init, cond=cond, incr=incr, body=body)
         self.emit(code)
 
     def _generate_loop_body(self, node, var_type: str) -> str:

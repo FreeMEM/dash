@@ -1,0 +1,8 @@
+# Test: step 0 would loop forever
+# expect: for loop step cannot be 0
+
+Main
+    for i in (1..5 step 0)
+        Print i
+    end
+end

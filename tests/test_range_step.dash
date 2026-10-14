@@ -1,0 +1,60 @@
+# Test: descending ranges and step
+# (a..b) counts down when both limits are constants and a > b;
+# step chooses the increment (its sign chooses the direction at run time)
+#
+# expect-c: for (LONG i = 3; i >= 1; i--) {
+# expect-c: for (LONG j = 0; j <= 10; j += 5) {
+# expect-c: for (LONG v = 1, _end_v = n, _step_v = paso; (_step_v > 0) ? (v <= _end_v) : (v >= _end_v); v += _step_v) {
+# expect-out: 3
+# expect-out: 2
+# expect-out: 1
+# expect-out: 0
+# expect-out: 5
+# expect-out: 10
+# expect-out: 10
+# expect-out: 7
+# expect-out: 4
+# expect-out: 1
+# expect-out: 2
+# expect-out: 1
+# expect-out: -1
+# expect-out: 1
+# expect-out: 3
+# expect-out: 5
+# expect-out: 0
+# expect-out: 0
+
+const ALTO = 2
+
+Main
+    for i in (3..1)
+        Print i
+    end
+    for j in (0..10 step 5)
+        Print j
+    end
+    for k in (10..1 step -3)
+        Print k
+    end
+    for c in (ALTO..-1)
+        if c == 0
+            continue
+        end
+        Print c
+    end
+    n = 5
+    paso = 2
+    for v in (1..n step paso)
+        Print v
+    end
+    # A variable range keeps counting up: (1..0) runs zero times
+    vacio = 0
+    for w in (1..vacio)
+        Print 99
+    end
+    Print vacio
+    paso = -1
+    for x in (0..0 step paso)
+        Print x
+    end
+end

@@ -39,7 +39,9 @@ if cond                     for i in (1..10)
     ...                         ...
 else                        end
     ...
-end                         for item in array
+end                         for i in (10..1)       # down
+                            for i in (0..n step 2)
+                            for item in array
                                 ...
                             end
 

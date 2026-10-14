@@ -315,11 +315,27 @@ for i in (1..5)
     Print i
 end
 
-# Cuenta regresiva usando variable
-for i in (1..n)
-    Print n - i + 1
+# Hacia atrás: 5, 4, 3, 2, 1 (los dos límites son constantes y inicio > fin)
+for i in (5..1)
+    Print i
+end
+
+# Con paso: 0, 5, 10 / 10, 7, 4, 1
+for i in (0..10 step 5)
+    Print i
+end
+for i in (10..1 step -3)
+    Print i
+end
+
+# Cuenta regresiva usando variable: con límites variables el rango
+# siempre sube ((1..0) no da vueltas), así que hace falta step -1
+for i in (n..1 step -1)
+    Print i
 end
 ```
+
+`step` no puede ser 0. Si es una variable, su signo decide al ejecutar si el bucle sube o baja.
 
 ### For Each (Iteracion de Arrays)
 
