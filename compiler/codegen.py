@@ -2898,6 +2898,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
 
     # Event loop templates
     EVENT_LOOP_START = Template("""\
+    {
     BOOL running = TRUE;
     struct IntuiMessage *msg;
     ULONG msg_class;
@@ -2908,6 +2909,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         while ((msg = (struct IntuiMessage *)GetMsg(win_$window->UserPort))) {
             msg_class = msg->Class;
             msg_code = msg->Code;
+            (void)msg_code;
             ReplyMsg((struct Message *)msg);
 
             switch (msg_class) {
@@ -3229,6 +3231,18 @@ class CodeGenerator(ASTVisitor):
         if self.globals:
             parts.append("\n".join(self.globals))
 
+        # close_window() must also clear the win_<Name> pointer it closes,
+        # so the EventLoop and the final cleanup do not close it again
+        if getattr(self, "uses_close_window", False):
+            clears = "".join(f"    if (_dash_win == win_{w.name}) win_{w.name} = NULL;\n"
+                             for w in self.analysis.program.windows)
+            parts.append("static void _dash_close_window(void) {\n"
+                         "    if (!_dash_win) return;\n"
+                         f"{clears}"
+                         "    CloseWindow(_dash_win);\n"
+                         "    _dash_win = NULL;\n"
+                         "}\n")
+
         # Add extern function prototypes
         if self.extern_protos:
             parts.append("\n// Extern Function Prototypes\n")
@@ -3258,8 +3272,16 @@ class CodeGenerator(ASTVisitor):
         main_template = self._get_main_template()
         user_code = "".join(self.main_code)
         main_code = main_template.substitute(user_code=user_code)
+        cleanup = []
+        if self.uses_windows:
+            # Windows still open (no EventLoop closed them) must not outlive the program
+            for window in self.analysis.program.windows:
+                if window.name in self.context.opened_windows:
+                    cleanup.append(f"    if (win_{window.name}) CloseWindow(win_{window.name});\n")
         if self._uses_pool():
-            main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n    _dash_mem_cleanup();\n", 1)
+            cleanup.append("    _dash_mem_cleanup();\n")
+        if cleanup:
+            main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n" + "".join(cleanup), 1)
         parts.append(main_code)
 
         return "\n".join(parts)
@@ -3628,6 +3650,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.emit(f"        CloseWindow(win_{window});\n")
         self.emit(f"        win_{window} = NULL;\n")
         self.emit(f"    }}\n")
+        self.emit("    }\n")  # Close the block that scopes the loop variables
 
         self.context.in_event_loop = False
 
@@ -4237,6 +4260,9 @@ static {ret_type} {method_name}({params_str}) {{
         if builtin.needs_rtg:
             self.needs_rtg = True
             self.needs_gfx = True  # RTG also requires graphics.library
+
+        if builtin.name == "close_window":
+            self.uses_close_window = True
 
         # Track arena usage
         if builtin.name.startswith("arena_"):

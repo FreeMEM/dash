@@ -63,7 +63,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
 - [x] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
 - [x] 9. `compiler/codegen.py` — structs, métodos, enums, const.
-- [ ] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
+- [x] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
 - [ ] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
 - [ ] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
 - [ ] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
@@ -249,3 +249,26 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Propuestas: valores de enum negativos (`A = -1`) no parsean; `retain`/`release` no se generan solos
   (el refcount solo sirve si el usuario lo llama).
 - Para zona 13: el CLI compila sin `-O`: el código para 68000 sale sin optimizar.
+
+### 2026-10-14 — Zona 10 (codegen: ventanas, EventLoop, FFI)
+- Base: tests 47/47, ejemplos 26/30. Tras la zona: tests 49/49, ejemplos 26/30 (los mismos 4).
+- Errores arreglados (test: `tests/test_windows_adv.dash` con `expect-c` y `tests/errors/stop_outside_loop.dash`; fallaban antes):
+  - Doble `CloseWindow`: el builtin `close_window()` cerraba `_dash_win` pero dejaba `win_<Nombre>` apuntando
+    a la ventana cerrada, y el final del `EventLoop` la volvía a cerrar. Afectaba a 8 ejemplos
+    (flowpaint, sprite_editor, test_screen...). En AmigaOS suele colgar la máquina. Ahora el builtin llama a
+    `_dash_close_window()`, generada por programa, que también anula el `win_<Nombre>`.
+  - Dos `EventLoop` en el mismo bloque no compilaban (`running`, `msg`... redeclarados). Cada bucle va en su bloque.
+  - Una ventana abierta sin `EventLoop` no se cerraba nunca: quedaba en pantalla al salir. Ahora la limpieza
+    final cierra las ventanas abiertas que sigan abiertas.
+  - `Stop` fuera de un `EventLoop` era un aviso, pero el C no compilaba (`running` sin declarar). Ahora es error.
+  - Aviso `msg_code set but not used` en todos los programas con ventana: `(void)msg_code`.
+- FFI: `@extern` genera el prototipo y `@native` la función; correctos con GCC.
+- Propuestas / pendiente:
+  - Si `OpenWindowTags` falla, `return 20` sale sin cerrar `graphics.library`, la pantalla, el pool ni otras
+    ventanas, y en una función ni siquiera es válido. Necesita una salida común (`goto` a la limpieza o `exit` con limpieza registrada).
+  - `On Key` está en el codegen pero no en la gramática activa; además el flag `IDCMP_RAWKEY` se añadiría
+    después de abrir la ventana, así que no llegarían teclas.
+  - Un `EventLoop` dentro de una función da "requires an open window" porque el analyzer revisa las funciones antes que `Main`.
+- Para zona 12 (builtins): `_dash_open_screen(...) != NULL;` como sentencia (valor no usado), `InitBitMap`,
+  `BltBitMapRastPort`, `SetRGB4`, `NewList` y `strncpy` sin declarar (faltan includes), y conversiones
+  entero/puntero en copper, fileio, iff y doublebuf.

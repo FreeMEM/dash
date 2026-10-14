@@ -720,7 +720,7 @@ INPUT_FUNCTIONS = {
         name="close_window",
         params=[],
         return_type="void",
-        c_template="if (_dash_win) { CloseWindow(_dash_win); _dash_win = NULL; }",
+        c_template="_dash_close_window()",  # Generated per program: also clears win_<Name>
         description="Close the current window"
     ),
 

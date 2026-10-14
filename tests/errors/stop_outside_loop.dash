@@ -1,0 +1,5 @@
+# expect: Stop can only be used inside an EventLoop
+Main
+    Print "x"
+    Stop
+end

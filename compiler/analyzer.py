@@ -381,7 +381,7 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_StopStmt(self, node: StopStmt):
         """Visit a stop statement."""
         if not self.in_event_loop:
-            self.warning("Stop used outside of EventLoop has no effect", node)
+            self.error("Stop can only be used inside an EventLoop handler", node)
 
     def visit_VarDecl(self, node: VarDecl):
         """Visit a variable declaration."""

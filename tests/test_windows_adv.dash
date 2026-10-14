@@ -1,0 +1,47 @@
+# Test: windows and event loops
+# Two event loops in a row, windows closed at exit when no
+# EventLoop closed them
+#
+# expect-c: if (win_Segunda) CloseWindow(win_Segunda);
+# expect-c: (void)msg_code;
+# expect-c: if (_dash_win == win_Tercera) win_Tercera = NULL;
+
+Window Primera
+    title "Primera"
+    width 200
+    height 100
+end
+
+Window Segunda
+    title "Segunda"
+    width 200
+    height 100
+end
+
+Window Tercera
+    title "Tercera"
+    width 200
+    height 100
+end
+
+Main
+    Primera.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+
+    Tercera.open
+    close_window()
+    Tercera.open
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+
+    Segunda.open
+    Print "Sin EventLoop"
+    Wait 1
+end
