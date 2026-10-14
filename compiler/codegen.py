@@ -130,10 +130,25 @@ typedef struct _DashStrHdr {
 static _DashStrHdr *_dash_tmp = NULL;
 static ULONG _dash_tmp_serial = 0;
 
+/* Small strings (up to 64 bytes with the header) are recycled through free
+   lists by 16-byte class instead of going back to the exec pool each time:
+   a loop that builds a short string per iteration reuses the same block. */
+#define _DASH_STR_CLASSES 4
+static _DashStrHdr *_dash_str_free_list[_DASH_STR_CLASSES];
+
 static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     ULONG size = sizeof(_DashStrHdr) + len + 1;
-    _DashStrHdr *h = (_DashStrHdr *)_dash_alloc(size);
+    _DashStrHdr *h;
     STRPTR text;
+    if (size <= 16 * _DASH_STR_CLASSES) {
+        ULONG c = (size - 1) >> 4;
+        size = (c + 1) << 4;
+        h = _dash_str_free_list[c];
+        if (h) _dash_str_free_list[c] = h->next;
+        else h = (_DashStrHdr *)_dash_alloc(size);
+    } else {
+        h = (_DashStrHdr *)_dash_alloc(size);
+    }
     if (!h) return NULL;
     h->size = size;
     h->next = NULL;
@@ -149,7 +164,14 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
 }
 
 static void _dash_str_drop(_DashStrHdr *h) {
-    FreePooled(_dash_pool, h, h->size & ~_DASH_STR_KEEP);
+    ULONG size = h->size & ~_DASH_STR_KEEP;
+    if (size <= 16 * _DASH_STR_CLASSES) {
+        ULONG c = (size - 1) >> 4;
+        h->next = _dash_str_free_list[c];
+        _dash_str_free_list[c] = h;
+        return;
+    }
+    FreePooled(_dash_pool, h, size);
 }
 
 /* Marks are serial numbers: removing a temporary from the list never breaks them */
@@ -364,6 +386,7 @@ static void _dash_mem_cleanup(void) {
     }
     _dash_tmp = NULL;
     _dash_otmp = NULL;
+    memset(_dash_str_free_list, 0, sizeof(_dash_str_free_list));
 }
 
 """
@@ -463,10 +486,10 @@ static char DashString_char_at(STRPTR s, LONG index) {
 
 /* Character to string, with the same rotating buffers idea as below. */
 static STRPTR DashString_from_char(char c) {
-    static char buffers[8][2];
+    static char buffers[16][2];
     static LONG next = 0;
     STRPTR s = buffers[next];
-    next = (next + 1) & 7;
+    next = (next + 1) & 15;
     s[0] = c;
     s[1] = '\\0';
     return s;
@@ -475,15 +498,42 @@ static STRPTR DashString_from_char(char c) {
 /* Integer to string. Rotates 8 static buffers so several conversions
    can appear in one expression; the result is copied by DashString_concat. */
 static STRPTR DashString_from_int(LONG n) {
-    static char buffers[8][12];
+    static char buffers[16][12];
     static LONG next = 0;
     char *end = buffers[next] + 11;
     ULONG u = n < 0 ? -(ULONG)n : (ULONG)n;
-    next = (next + 1) & 7;
+    next = (next + 1) & 15;
     *end = '\\0';
-    do { *--end = '0' + (u % 10); u /= 10; } while (u);
+    do {
+#if defined(__mc68000__) && !defined(__mc68020__)
+        if (u < 655360UL) {        /* quotient fits in 16 bits: one divu.w, no libgcc */
+            ULONG r = u;
+            __asm__ ("divu.w #10,%0" : "+d"(r) : : "cc");
+            *--end = '0' + (r >> 16);
+            u = (UWORD)r;
+            continue;
+        }
+#endif
+        *--end = '0' + (u % 10);
+        u /= 10;
+    } while (u);
     if (n < 0) *--end = '-';
     return end;
+}
+
+/* a + b + c ...: one allocation and one copy for the whole chain */
+static STRPTR DashString_join(LONG n, STRPTR *parts) {
+    LONG i, total = 0;
+    STRPTR result, p;
+    for (i = 0; i < n; i++) if (parts[i]) total += strlen((char *)parts[i]);
+    result = _dash_str_alloc(total, TRUE);
+    if (!result) return NULL;
+    p = result;
+    for (i = 0; i < n; i++) {
+        STRPTR s = parts[i];
+        if (s) while ((*p = *s++)) p++;
+    }
+    return result;
 }
 
 """
@@ -494,12 +544,12 @@ static STRPTR DashString_from_int(LONG n) {
     FLOAT_RUNTIME = """\
 /* Dash Float Runtime */
 static STRPTR DashString_from_float(float f) {
-    static char buffers[8][24];
+    static char buffers[16][24];
     static LONG next = 0;
     char *s = buffers[next], *p = s, digits[12];
     LONG exp10 = 0, decimals, n, i;
     ULONG ip, frac, scale;
-    next = (next + 1) & 7;
+    next = (next + 1) & 15;
     if (f != f) { s[0] = 'n'; s[1] = 'a'; s[2] = 'n'; s[3] = 0; return s; }
     if (f < 0.0f) { *p++ = '-'; f = -f; }
     if (f > 3.4e38f) { p[0] = 'i'; p[1] = 'n'; p[2] = 'f'; p[3] = 0; return s; }
@@ -6648,9 +6698,17 @@ static {ret_type} {method_name}({params_str}) {{
             # String concatenation: numbers on either side are converted
             if node.operator == "+" and (left_str or right_str):
                 self.uses_strings = True
-                left = self._string_operand(node.left, left_str)
-                right = self._string_operand(node.right, right_str)
-                return f"DashString_concat({left}, {right})"
+                parts = self._concat_parts(node)
+                if len(parts) == 2:
+                    return f"DashString_concat({parts[0]}, {parts[1]})"
+                # a + b + c...: one allocation for the whole chain, in groups of 6
+                # (numbers are converted into 16 rotating buffers)
+                code = None
+                while parts:
+                    group = ([code] if code else []) + parts[:6 - (1 if code else 0)]
+                    parts = parts[6 - (1 if code else 0):]
+                    code = f"DashString_join({len(group)}, (STRPTR[]){{{', '.join(group)}}})"
+                return code
             # A character compared with a one-letter string literal: compare chars
             if node.operator in ("==", "!="):
                 char_cmp = self._char_comparison(node)
@@ -7038,6 +7096,12 @@ static {ret_type} {method_name}({params_str}) {{
                 literal = "'\\''" if char == "'" else f"'{char}'"
                 return f"({self._generate_expression(char_side)} {node.operator} {literal})"
         return None
+
+    def _concat_parts(self, node: ASTNode) -> List[str]:
+        """C operands of a chain of string concatenations, left to right."""
+        if isinstance(node, BinaryOp) and node.operator == "+" and self._is_string_expr(node):
+            return self._concat_parts(node.left) + self._concat_parts(node.right)
+        return [self._string_operand(node, self._is_string_expr(node))]
 
     def _string_operand(self, node: ASTNode, is_string: bool) -> str:
         """C code for one side of a concatenation, converting numbers to strings."""

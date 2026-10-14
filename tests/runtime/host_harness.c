@@ -22,6 +22,9 @@ static void DeletePool(APTR pool){ free(pool); }
 
 /*RUNTIME*/
 
+/* blocks parked in the small-string free lists count as freed */
+static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_STR_CLASSES;c++) for(_DashStrHdr*h=_dash_str_free_list[c];h;h=h->next) n++; return n; }
+#define LIVE (live - cached_blocks())
 #define CHECK(c) do{ if(!(c)){ printf("FALLO linea %d: %s\n", __LINE__, #c); fails++; } }while(0)
 int main(void){ int fails=0;
  DashArrayLong *a = DashArray_from(5, (LONG[]){1,2,3,4,5});
@@ -43,9 +46,9 @@ int main(void){ int fails=0;
  CHECK(strcmp(DashString_from_char('x'),"x")==0);
  /* String memory: temporaries, marks, ownership, escapes */
  {
-  long base = live; ULONG m0 = _dash_tmp_mark(), m = m0; STRPTR v = NULL, w = NULL, t;
-  t = DashString_concat("ab", "cd"); CHECK(live == base + 1);
-  _dash_tmp_release(m); CHECK(live == base); CHECK(_dash_tmp == NULL || _dash_tmp->serial <= m);
+  long base = LIVE; ULONG m0 = _dash_tmp_mark(), m = m0; STRPTR v = NULL, w = NULL, t;
+  t = DashString_concat("ab", "cd"); CHECK(LIVE == base + 1);
+  _dash_tmp_release(m); CHECK(LIVE == base); CHECK(_dash_tmp == NULL || _dash_tmp->serial <= m);
   /* a loop that concatenates keeps one live block per variable */
   m = _dash_tmp_mark();
   for (int i = 0; i < 1000; i++) {
@@ -53,56 +56,56 @@ int main(void){ int fails=0;
    _dash_str_set(&v, DashString_concat(DashString_concat(v, "x"), ""));   /* two temporaries, one adopted */
    _dash_tmp_release(it);
   }
-  CHECK(strlen(v) == 1000); CHECK(live == base + 1);
+  CHECK(strlen(v) == 1000); CHECK(LIVE == base + 1);
   /* copying a variable makes an independent copy; literals are copied too */
-  _dash_str_set(&w, v); CHECK(w != v && strcmp(w, v) == 0); CHECK(live == base + 2);
-  _dash_str_set(&w, "lit"); CHECK(strcmp(w, "lit") == 0); CHECK(live == base + 2);
-  _dash_str_set(&w, w); CHECK(strcmp(w, "lit") == 0); CHECK(live == base + 2);
+  _dash_str_set(&w, v); CHECK(w != v && strcmp(w, v) == 0); CHECK(LIVE == base + 2);
+  _dash_str_set(&w, "lit"); CHECK(strcmp(w, "lit") == 0); CHECK(LIVE == base + 2);
+  _dash_str_set(&w, w); CHECK(strcmp(w, "lit") == 0); CHECK(LIVE == base + 2);
   /* a temporary taken out of the middle of the list does not break marks */
   m = _dash_tmp_mark();
   t = DashString_concat("1", "");  DashString_concat("2", ""); DashString_concat("3", "");
-  _dash_str_set(&w, t); CHECK(live == base + 4);   /* old w freed, t adopted, k and "3" still temporaries */
-  _dash_tmp_release(m); CHECK(live == base + 2); CHECK(strcmp(w, "1") == 0);
+  _dash_str_set(&w, t); CHECK(LIVE == base + 4);   /* old w freed, t adopted, k and "3" still temporaries */
+  _dash_tmp_release(m); CHECK(LIVE == base + 2); CHECK(strcmp(w, "1") == 0);
   /* escaped text is never freed by its owner */
   t = _dash_str_escape(DashString_concat("kept", "")); _dash_tmp_release(m0); CHECK(strcmp(t, "kept") == 0);
-  CHECK(live == base + 3);
+  CHECK(LIVE == base + 3);
   { STRPTR e = _dash_str_escape(w); CHECK(e != w && strcmp(e, w) == 0); }   /* owned text: a permanent copy */
-  CHECK(live == base + 4); _dash_str_set(&w, "otro"); CHECK(live == base + 4);   /* the copy stays */
+  CHECK(LIVE == base + 4); _dash_str_set(&w, "otro"); CHECK(LIVE == base + 4);   /* the copy stays */
   CHECK(_dash_str_escape(NULL) == NULL);
   /* return values survive the callee's release and become the caller's temporaries */
   m = _dash_tmp_mark();
   { ULONG fm = _dash_tmp_mark(); STRPTR r = DashString_concat("ret", ""); DashString_concat("tmp", "");
-    _dash_tmp_release_keep(fm, r); CHECK(live == base + 5); CHECK(strcmp(r, "ret") == 0);
-    CHECK(_dash_str_ret(r) == r); CHECK(_dash_str_ret(v) != v); CHECK(live == base + 6); }
-  _dash_tmp_release(m); CHECK(live == base + 4);
-  _dash_str_set(&v, NULL); _dash_str_set(&w, NULL); CHECK(live == base + 2);   /* t and the kept old w remain */
+    _dash_tmp_release_keep(fm, r); CHECK(LIVE == base + 5); CHECK(strcmp(r, "ret") == 0);
+    CHECK(_dash_str_ret(r) == r); CHECK(_dash_str_ret(v) != v); CHECK(LIVE == base + 6); }
+  _dash_tmp_release(m); CHECK(LIVE == base + 4);
+  _dash_str_set(&v, NULL); _dash_str_set(&w, NULL); CHECK(LIVE == base + 2);   /* t and the kept old w remain */
   CHECK(_dash_tmp_take("literal") == FALSE); CHECK(_dash_tmp_take(NULL) == FALSE);
  }
  /* Objects (arrays, structs): new ones are temporaries; references keep them */
  {
-  long base = live; ULONG m = _dash_tmp_mark(); DashArrayLong *a1 = NULL, *a2 = NULL;
+  long base = LIVE; ULONG m = _dash_tmp_mark(); DashArrayLong *a1 = NULL, *a2 = NULL;
   void *o = _dash_rc_alloc(16); CHECK(_dash_refcount(o) == 0);
   _dash_retain(o); CHECK(_dash_refcount(o) == 1); _dash_retain(o); CHECK(_dash_refcount(o) == 2);
-  _dash_release(o); _dash_release(o); CHECK(live == base);              /* last reference: freed */
-  DashArray_from(3, (LONG[]){1, 2, 3}); CHECK(live == base + 2);         /* object + data */
-  _dash_tmp_release(m); CHECK(live == base);                             /* unused temporary */
+  _dash_release(o); _dash_release(o); CHECK(LIVE == base);              /* last reference: freed */
+  DashArray_from(3, (LONG[]){1, 2, 3}); CHECK(LIVE == base + 2);         /* object + data */
+  _dash_tmp_release(m); CHECK(LIVE == base);                             /* unused temporary */
   for (int i = 0; i < 1000; i++) {                                       /* a = [..] in a loop */
    ULONG it = _dash_tmp_mark();
    _dash_obj_set((void **)&a1, DashArray_from(2, (LONG[]){i, i}));
    _dash_tmp_release(it);
   }
-  CHECK(live == base + 2); CHECK(DashArray_get(a1, 1) == 999);
+  CHECK(LIVE == base + 2); CHECK(DashArray_get(a1, 1) == 999);
   _dash_obj_set((void **)&a2, a1); CHECK(_dash_refcount(a1) == 2);       /* shared */
-  _dash_obj_set((void **)&a1, NULL); CHECK(live == base + 2); CHECK(DashArray_get(a2, 0) == 999);
+  _dash_obj_set((void **)&a1, NULL); CHECK(LIVE == base + 2); CHECK(DashArray_get(a2, 0) == 999);
   /* a returned object survives the callee and becomes the caller's temporary */
   m = _dash_tmp_mark();
   { ULONG fm = _dash_tmp_mark(); DashArrayLong *r = DashArray_create(4);
     _dash_retain(r); _dash_tmp_release(fm); _dash_obj_float(r);
-    CHECK(live == base + 4); CHECK(_dash_refcount(r) == 0); }
-  _dash_tmp_release(m); CHECK(live == base + 2);
+    CHECK(LIVE == base + 4); CHECK(_dash_refcount(r) == 0); }
+  _dash_tmp_release(m); CHECK(LIVE == base + 2);
   /* a returned object someone else holds is not a temporary */
   _dash_retain(a2); _dash_obj_float(a2); CHECK(_dash_refcount(a2) == 1);
-  _dash_obj_escape(a2); _dash_obj_set((void **)&a2, NULL); CHECK(live == base + 2);   /* escaped: kept */
+  _dash_obj_escape(a2); _dash_obj_set((void **)&a2, NULL); CHECK(LIVE == base + 2);   /* escaped: kept */
   _dash_release(NULL); _dash_retain(NULL); CHECK(_dash_obj_float(NULL) == NULL);
  }
  _dash_mem_cleanup(); CHECK(_dash_pool==NULL);

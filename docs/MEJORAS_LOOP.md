@@ -512,3 +512,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - A500 (ns): `array_get_set` 159.859 → 73.957 (x2,2), `for_each_10` 251.354 → 212.802 (-15 %), `gfx_pixel` 476.837 → 394.530
   (-17 %, usa `%`), `gfx_line` -5 %. A1200: `array_get_set` -45 %, `for_each_10` -14 %.
 - Tamaño: 260.192 → 261.924 bytes.
+
+### 2026-10-14 — Tarea 26c (strings)
+- Base: 164/164 (`--emu --emu-a500`). Después: 167/167 (test nuevo: `test_string_join`, 12 números en una interpolación).
+- Hecho:
+  - `DashString_join(n, partes)`: una cadena de `+` (y la interpolación) reserva una vez y copia en una pasada, en grupos de
+    6 partes (las conversiones de números usan buffers rotativos, ahora 16 por tipo).
+  - Caché de bloques pequeños: los strings de hasta 64 bytes (con cabecera) van a listas libres por clase de 16 bytes en
+    vez de volver al pool; un bucle que crea un string corto por vuelta reutiliza el mismo bloque.
+  - `DashString_from_int`: cada dígito con `divu.w #10` mientras el número quepa (< 655.360), sin libgcc.
+  - Harness: los bloques en caché cuentan como libres (`LIVE`); sin errores con AddressSanitizer.
+- A500 (ns): `string_concat_int` 1.146.631 → 619.796 (x1,85), `string_interp` 2.244.846 → 786.585 (x2,85),
+  `string_return` 1.261.345 → 735.371 (x1,7), `nested_struct_new` -23 %, `gfx_text_concat` -10 %. A1200 parecido.
+- Tamaño: 261.924 → 263.864 bytes.
+- Pendiente (26e): una concatenación aún cuesta ~4.400 ciclos en 68000; mirar el ensamblador (strlen/memcpy de libnix,
+  `_dash_str_set`, la marca del bucle).
