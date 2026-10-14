@@ -149,10 +149,10 @@ def main():
     # Float: GCC's own software floating point (runtime/softfloat), linked before
     # -lm so it does not go through mathieeesingbas.library
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from compiler.softfloat import softfloat_object, uses_float
+    from compiler.softfloat import softfloat_objects, uses_float
     if not args.fpu and any(uses_float(open(f).read()) for f in c_files):
-        compile_command.append(softfloat_object(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
-                                                build_dir))
+        compile_command.extend(softfloat_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
+                                                 build_dir))
     compile_command.extend([
         "-o",
         output_filename if args.no_hunk else elf_output_file,

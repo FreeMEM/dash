@@ -116,7 +116,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       Pedido por el usuario el 2026-10-14: "un lenguaje que aproveche muy bien la máquina".
 - [~] 26. Optimización (2/3) — ciclos, función por función. Partes: 26a marcas de temporales (bucles y
       funciones), 26b arrays (`DashArray_get/set`, `%`, for-each), 26c strings (concat, interpolación, from_int, set),
-      26d Float por software (rutinas propias), 26e llamadas y return, 26f gráficos y texto (plantillas con `${str}`
+      26d Float por software (rutinas propias), 26d2 suma y multiplicación Float en ensamblador 68000, 26e llamadas y return, 26f gráficos y texto (plantillas con `${str}`
       doble). Detalle original:: cada función del runtime (`DashString_*`,
       `DashArray_*`, `_dash_str_*`, `_dash_tmp_*`, objetos, Float, gráficos...) con su microbenchmark en
       `tests/bench/` (ciclos por llamada en 68000 y 68020) y su ensamblador (`-S`); mejorarlas una a una y
@@ -527,3 +527,17 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Tamaño: 261.924 → 263.864 bytes.
 - Pendiente (26e): una concatenación aún cuesta ~4.400 ciclos en 68000; mirar el ensamblador (strlen/memcpy de libnix,
   `_dash_str_set`, la marca del bucle).
+
+### 2026-10-14 — Tarea 26d (Float por software)
+- Base: 167/167 (`--emu --emu-a500`). Después: igual.
+- Hecho: `runtime/softfloat/fastfp.c`: `__mulsf3`, `__addsf3`, `__subsf3` para el caso normal (24x24 con cuatro `mulu.w`,
+  redondeo al par), con los casos especiales a las de fp-bit renombradas por `objcopy` (`__dash_fb_*`).
+  `tools/fastfp_check.py` las compara bit a bit con la FPU del PC: 0 diferencias en 9 millones de operaciones.
+- Error encontrado: el soft float de Dash solo se enlazaba si el programa imprimía o concatenaba un Float (la marca del
+  runtime). Un programa que solo calculaba enlazaba la libm de libnix → `mathieeesingbas.library` de la ROM, la que
+  cuelga multiplicando en Kickstart 3.1 sin FPU. Ahora cualquier Float (literal, variable, campo, parámetro, retorno,
+  `Float()`) activa el runtime.
+- Benchmark nuevo `float_mul` (en `float_mul_add` GCC saca la multiplicación del bucle). A500: `float_mul` 175.275 ns,
+  `float_mul_add` 161.701 (antes 88.865, pero eso era la suma de la ROM, en ensamblador, que en 3.1 sí funciona).
+  Mis rutinas en C cuestan ~1.150-1.250 ciclos por operación en 68000: hay que bajarlas (26d2).
+- Tamaño: 263.864 → 268.464 bytes (programas con Float llevan ahora sus rutinas).

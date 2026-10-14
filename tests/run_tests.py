@@ -158,9 +158,9 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
         "-o", str(exe_file),
         "-lm",
     ]
-    from compiler.softfloat import softfloat_object, uses_float
+    from compiler.softfloat import softfloat_objects, uses_float
     if uses_float(c_file.read_text()):
-        compile_cmd.insert(-3, softfloat_object(gcc_path))  # same as ./dash
+        compile_cmd[-3:-3] = softfloat_objects(gcc_path)  # same as ./dash
 
     try:
         result = subprocess.run(
@@ -293,8 +293,8 @@ def run_multifile_test(test_file: Path) -> TestResult:
         gcc_path = "/opt/amiga/bin/m68k-amigaos-gcc"
         if os.path.exists(gcc_path):
             c_files = [str(f) for f in sorted(out_dir.glob("*.c"))]
-            from compiler.softfloat import softfloat_object, uses_float
-            softfloat = ([softfloat_object(gcc_path)]
+            from compiler.softfloat import softfloat_objects, uses_float
+            softfloat = (softfloat_objects(gcc_path)
                          if any(uses_float(Path(f).read_text()) for f in c_files) else [])
             build = subprocess.run(
                 [gcc_path, "-noixemul", "-O2", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}",

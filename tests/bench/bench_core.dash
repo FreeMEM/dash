@@ -53,6 +53,13 @@ Main
     bench_end("float_mul_add", m)
 
     bench_start()
+    h = 1.0
+    for i in (1..m)
+        h = h * 1.0001
+    end
+    bench_end("float_mul", m)
+
+    bench_start()
     a = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     for i in (1..n)
         a[i % 10] = a[(i + 1) % 10] + 1
@@ -126,5 +133,5 @@ Main
         end
     end
     bench_end("string_chars_26", 200)
-    Print x + y + total + iguales + largo + k + Int(f)
+    Print x + y + total + iguales + largo + k + Int(f) + Int(h)
 end

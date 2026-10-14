@@ -6124,6 +6124,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "char"
         elif var_type == "float":
             self.var_types[node.name] = "float"
+            self.uses_float = True
         elif var_type == "DashArrayLong *":
             self.var_types[node.name] = "array"
         elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
@@ -6687,6 +6688,7 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, NumberLiteral):
             return c_int_literal(node.value)
         elif isinstance(node, FloatLiteral):
+            self.uses_float = True   # links Dash's soft float (not libm's mathieeesingbas)
             return c_float_literal(node.value)
         elif isinstance(node, BoolLiteral):
             return "TRUE" if node.value else "FALSE"
@@ -6736,6 +6738,7 @@ static {ret_type} {method_name}({params_str}) {{
             # Int(x) truncates toward zero; Float(x) converts
             if node.name in ("Int", "Float") and len(node.arguments) == 1:
                 arg = self._generate_expression(node.arguments[0])
+                self.uses_float = True
                 return f"((LONG)({arg}))" if node.name == "Int" else f"((float)({arg}))"
             # Check if it's a builtin function
             builtin = get_builtin(node.name)
@@ -7159,6 +7162,7 @@ static {ret_type} {method_name}({params_str}) {{
                 self.var_types[p.name] = "string"
             elif p.param_type == "Float":
                 self.var_types[p.name] = "float"
+                self.uses_float = True
             elif p.param_type == "Func":
                 self.var_types[p.name] = "func"
             elif self.analysis.program.get_struct(p.param_type):
@@ -7401,6 +7405,8 @@ static {return_type} {lambda_name}({param_str}) {{
 
     def _dash_type_to_c(self, dash_type: Optional[str], default: str = "LONG") -> str:
         """Convert a Dash type annotation to its C type (struct names become pointers)."""
+        if dash_type == "Float":
+            self.uses_float = True   # any Float links Dash's soft float
         if dash_type in self._BASE_C_TYPES:
             return self._BASE_C_TYPES[dash_type]
         if dash_type and self.analysis.program.get_struct(dash_type):

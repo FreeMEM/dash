@@ -14,5 +14,10 @@ These routines are plain C, so a Dash program behaves the same on every Kickstar
 License: GPL v3 with the GCC Runtime Library Exception (`COPYING.RUNTIME`), which
 allows linking them into programs under any license.
 
-`compiler/softfloat.py` compiles this file once per toolchain into `build/` and the
-CLI and the test runner link it when a program uses `Float`.
+`fastfp.c` (Dash's own) does add, subtract and multiply for the common case faster
+and falls back to fp-bit's (renamed `__dash_fb_*` with objcopy) for zeros,
+denormals, infinities, NaNs, overflow and underflow. `tools/fastfp_check.py`
+checks it bit by bit against the host FPU.
+
+`compiler/softfloat.py` compiles both once per toolchain into `build/` and the CLI
+and the test runner link them whenever a program uses `Float`.
