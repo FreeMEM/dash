@@ -65,7 +65,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 9. `compiler/codegen.py` — structs, métodos, enums, const.
 - [x] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
 - [x] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
-- [ ] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
+- [x] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
 - [ ] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
 - [ ] 14. `lib/amiga/*.dash` + `examples/`: `examples/test_dos_module.dash` no transpila
       (`read_line` no definida). Que todos los ejemplos transpilen.
@@ -285,3 +285,26 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Sin errores encontrados en el runtime embebido.
 - Optimizaciones (68000): `DashString_concat` copia con `memcpy` usando las longitudes ya calculadas
   (antes `strcpy` volvía a recorrer); `DashString_char_at` ya no hace `strlen` completo en cada acceso.
+
+### 2026-10-14 — Zona 12 (`compiler/amiga_builtins.py`)
+- Base: tests 50/50, ejemplos 26/30. Tras la zona: tests 52/52, ejemplos **29/30** (solo falla `test_dos_module`).
+- Método: un programa mínimo por cada uno de los 318 builtins, transpilado, compilado y **enlazado** con GCC.
+  Antes: 180 no enlazaban. Ahora: 245 limpios, 72 dan error claro de "no implementado", 1 aviso (artefacto de la prueba).
+- Instalado el SDK de CyberGraphX en el toolchain (`make sdk=cgx`): `test_rtg` ya compila.
+- Errores arreglados (test: `tests/test_builtins_runtime.dash` con `expect-c` y `tests/errors/unimplemented_builtin.dash`; fallaban antes):
+  - 72 builtins documentados no tienen implementación en C (sonido, música, bobs, bitmaps, copper,
+    diálogos, `window_create` y familia, `button_*`, `checkbox_*`, `listview_*`, `slider_*`, `textfield_*`,
+    `key_text`, `key_raw`, `dir_*`). Fallaban al enlazar. Ahora el analyzer da
+    "Builtin 'x' is declared but not implemented yet". La lista se calcula sola (`unimplemented_builtins()`).
+  - El runtime se elegía por flags fijos: `random`, `joy_*`, `key_*`, `mouse_button`, `window_check_close`,
+    `random_seed` no enlazaban sin un `gfx_*` en el programa. Ahora cada builtin activa el runtime que define
+    los nombres `_dash_*` que usa (`runtime_index()`). GadTools activa también gfx y ASL (su `main` los abre).
+  - ReAction: los 64 builtins `ra_*` exigían una función de usuario `render_canvas` (no enlazaba sin ella).
+    Ahora solo se registra si existe. Además ReAction dibuja con `graphics.library` y no la abría: ahora sí.
+    Arreglados `NewList` sin declarar y dos avisos de tipos de punteros. `flowpaint3` y `test_reaction` ya compilan.
+  - Handles (buffers, ficheros, rastport) viajan como `LONG` en Dash: ahora se hace cast al tipo del parámetro
+    del runtime y del resultado (`runtime_signatures()`), sin avisos `-Wint-conversion`.
+  - `SetDrPt`/`SetOPen` sin declarar: se incluye `graphics/gfxmacros.h`. `string.h` siempre incluido.
+  - Builtins con valor llamados como sentencia (`screen_open(...)`) daban "value computed is not used": `(void)(...)`.
+- Pendiente zona 14: avisos en `lib/amiga` (doublebuf, iff, copper: conversiones entero/puntero y funciones sin declarar).
+- Pendiente zona 15: la documentación lista los 72 builtins no implementados como disponibles.

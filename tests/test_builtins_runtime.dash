@@ -1,0 +1,21 @@
+# Test: builtins pull in the runtime they need
+# random()/joystick/keyboard without any gfx_ call used to fail to link;
+# buffer handles are LONG in Dash and cast to APTR for the runtime.
+#
+# expect-c: static LONG _dash_random(void)
+# expect-c: _dash_buffer_set_byte((APTR)buf, 0, 65);
+# expect-c: LONG buf = (LONG)_dash_alloc_buffer(16);
+
+Main
+    r = random_range(1, 6)
+    Print r
+    j = joy_x(1)
+    Print j
+    if key_pressed()
+        Print "tecla"
+    end
+    buf = buffer_alloc(16)
+    buffer_set_byte(buf, 0, 65)
+    Print buffer_get_byte(buf, 0)
+    buffer_free(buf)
+end

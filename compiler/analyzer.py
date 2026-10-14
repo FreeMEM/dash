@@ -568,6 +568,10 @@ class SemanticAnalyzer(ASTVisitor):
         # Check if it's a builtin function
         builtin = get_builtin(node.name)
         if builtin:
+            from compiler.codegen import unimplemented_builtins  # lazy: codegen imports this module
+            if node.name in unimplemented_builtins():
+                self.error(f"Builtin '{node.name}' is declared but not implemented yet "
+                           f"(no C runtime for it)", node)
             # Validate argument count for builtin
             expected = len(builtin.params)
             actual = len(node.arguments)

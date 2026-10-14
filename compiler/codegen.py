@@ -36,6 +36,7 @@ class CTemplates:
 #include <proto/exec.h>
 #include <proto/intuition.h>
 #include <proto/dos.h>
+#include <string.h>
 """
 
     # Memory runtime (included with arrays or strings): one exec pool,
@@ -1715,6 +1716,7 @@ static void _dash_buffer_fill(APTR buffer, LONG offset, LONG length, UBYTE value
 #define ALL_REACTION_CLASSES
 #define ALL_REACTION_MACROS
 #include <reaction/reaction.h>
+#include <clib/alib_protos.h>
 #include <classes/window.h>
 #include <gadgets/layout.h>
 #include <gadgets/button.h>
@@ -2034,7 +2036,7 @@ static STRPTR ra_get_string(LONG id) {
 
     STRPTR text = NULL;
     GetAttr(STRINGA_TextVal, _ra_gadgets[id], (ULONG *)&text);
-    return text ? text : "";
+    return text ? text : (STRPTR)"";
 }
 
 /* Set gadget value */
@@ -2358,7 +2360,7 @@ static ULONG _ra_space_render_hook_func(struct Hook *hook, Object *obj, struct g
 /* Hook structure for Space gadget render */
 static struct Hook _ra_space_render_hook = {
     {NULL, NULL},
-    (HOOKFUNC)_ra_space_render_hook_func,
+    (ULONG (*)())_ra_space_render_hook_func,
     NULL,
     NULL
 };
@@ -3008,6 +3010,85 @@ $body}
 # CODE GENERATOR
 # =============================================================================
 
+# Runtime template -> CodeGenerator flag that makes it part of the program
+_RUNTIME_FLAGS = [
+    ("MEMORY_RUNTIME", "uses_strings"),
+    ("ARRAY_RUNTIME", "uses_arrays"),
+    ("STRING_RUNTIME", "uses_strings"),
+    ("REFCOUNT_RUNTIME", "uses_refcount"),
+    ("ARENA_RUNTIME", "uses_arenas"),
+    ("WINDOW_RUNTIME", "uses_windows"),
+    ("GRAPHICS_RUNTIME", "needs_gfx"),
+    ("INPUT_RUNTIME", "needs_gfx"),
+    ("GADTOOLS_RUNTIME", "needs_gadtools"),
+    ("MENU_RUNTIME", "needs_gadtools"),
+    ("ASL_RUNTIME", "needs_asl"),
+    ("FILEIO_RUNTIME", "needs_fileio"),
+    ("REACTION_RUNTIME", "needs_reaction"),
+    ("RTG_RUNTIME", "needs_rtg"),
+]
+
+# Runtime names emitted by the code generator itself, outside the templates
+_GENERATED_NAMES = {"_dash_close_window"}
+
+_runtime_index_cache: Optional[Dict[str, str]] = None
+
+
+def runtime_index() -> Dict[str, str]:
+    """Map each _dash_* name defined by a runtime template to the flag that includes it."""
+    global _runtime_index_cache
+    if _runtime_index_cache is None:
+        import re
+        index: Dict[str, str] = {}
+        pattern = re.compile(r"^(?:static\s+)?[A-Za-z_][\w\s\*]*?\b(_dash_\w+)\s*[(\[=;]", re.M)
+        for template, flag in _RUNTIME_FLAGS:
+            for name in pattern.findall(getattr(CTemplates, template)):
+                index.setdefault(name, flag)
+        _runtime_index_cache = index
+    return _runtime_index_cache
+
+
+_runtime_signatures_cache: Optional[Dict[str, tuple]] = None
+
+
+def _is_c_pointer(c_type: str) -> bool:
+    """True for C pointer types, including the exec pointer typedefs."""
+    return "*" in c_type or c_type in ("APTR", "STRPTR", "CONST_STRPTR")
+
+
+def runtime_signatures() -> Dict[str, tuple]:
+    """Map each runtime function _dash_* to (return type, [parameter types])."""
+    global _runtime_signatures_cache
+    if _runtime_signatures_cache is None:
+        import re
+        sigs: Dict[str, tuple] = {}
+        pattern = re.compile(r"^static\s+([\w\s\*]+?)\s*\b((?:_dash|ra)_\w+)\s*\(([^)]*)\)\s*\{", re.M)
+        for template, _flag in _RUNTIME_FLAGS:
+            for ret, name, params in pattern.findall(getattr(CTemplates, template)):
+                types = []
+                for param in params.split(","):
+                    param = param.strip()
+                    if param in ("", "void"):
+                        continue
+                    types.append(re.sub(r"\b\w+$", "", param).strip())
+                sigs.setdefault(name, (ret.strip(), types))
+        _runtime_signatures_cache = sigs
+    return _runtime_signatures_cache
+
+
+def unimplemented_builtins() -> Set[str]:
+    """Builtins whose C template uses a _dash_* name that no runtime defines."""
+    import re
+    from compiler.amiga_builtins import get_all_builtins
+    known = set(runtime_index()) | _GENERATED_NAMES
+    missing = set()
+    for name, builtin in get_all_builtins().items():
+        used = set(re.findall(r"\b_dash_\w+", builtin.c_template))
+        if used - known:
+            missing.add(name)
+    return missing
+
+
 @dataclass
 class CodeGenContext:
     """Context for code generation."""
@@ -3135,6 +3216,7 @@ class CodeGenerator(ASTVisitor):
             parts.append("#include <proto/graphics.h>\n")
             parts.append("#include <graphics/gfxbase.h>\n")
             parts.append("#include <graphics/displayinfo.h>\n")
+            parts.append("#include <graphics/gfxmacros.h>\n")
             parts.append("#include <string.h>\n")
 
         # Add audio includes if needed
@@ -3225,7 +3307,13 @@ class CodeGenerator(ASTVisitor):
 
         # Add ReAction runtime if needed
         if self.needs_reaction:
-            parts.append(CTemplates.REACTION_RUNTIME)
+            reaction = CTemplates.REACTION_RUNTIME
+            if not self.analysis.program.get_function("render_canvas"):
+                # No Dash render_canvas(): register no canvas renderer
+                reaction = reaction.replace("void render_canvas(void);\n", "")
+                reaction = reaction.replace("ra_set_canvas_renderer(render_canvas);",
+                                            "ra_set_canvas_renderer(NULL);")
+            parts.append(reaction)
 
         # Add RTG runtime if needed
         if self.needs_rtg:
@@ -4074,6 +4162,8 @@ static {ret_type} {method_name}({params_str}) {{
         builtin = get_builtin(node.name)
         if builtin:
             c_code = self._generate_builtin_call(builtin, node.arguments)
+            if builtin.return_type != "void":
+                c_code = f"(void)({c_code})"  # result discarded on purpose
             indent = self.context.indent
             self.emit(f"{indent}{c_code};\n")
             return
@@ -4268,6 +4358,20 @@ static {ret_type} {method_name}({params_str}) {{
         if builtin.name == "close_window":
             self.uses_close_window = True
 
+        # Include every runtime that defines a name the template uses
+        import re
+        for name in re.findall(r"\b_dash_\w+", builtin.c_template):
+            flag = runtime_index().get(name)
+            if flag:
+                setattr(self, flag, True)
+        # The GadTools main template also opens graphics.library and asl.library
+        if self.needs_gadtools:
+            self.needs_gfx = True
+            self.needs_asl = True
+        # The ReAction runtime draws with graphics.library (SetAPen, RectFill)
+        if self.needs_reaction:
+            self.needs_gfx = True
+
         # Track arena usage
         if builtin.name.startswith("arena_"):
             self.uses_arenas = True
@@ -4284,9 +4388,30 @@ static {ret_type} {method_name}({params_str}) {{
             else:
                 param_values[param_name] = "0"  # Default for missing params
 
+        # Dash keeps handles (buffers, files...) in LONG variables. When the
+        # template is a plain call to a runtime function, cast pointer
+        # arguments to the parameter type and a pointer result to LONG.
+        import re
+        call = re.fullmatch(r"((?:_dash|ra)_\w+)\((.*)\)", builtin.c_template.strip())
+        sig = runtime_signatures().get(call.group(1)) if call else None
+        if sig:
+            ret_type, param_types = sig
+            slots = [a.strip() for a in call.group(2).split(",")] if call.group(2).strip() else []
+            for i, slot in enumerate(slots):
+                placeholder = re.fullmatch(r"\$\{(\w+)\}", slot)
+                if not placeholder or i >= len(param_types) or not _is_c_pointer(param_types[i]):
+                    continue
+                name = placeholder.group(1)
+                arg_index = builtin.params.index(name) if name in builtin.params else -1
+                if 0 <= arg_index < len(arguments) and self._infer_c_type(arguments[arg_index]) == "LONG":
+                    param_values[name] = f"({param_types[i]}){param_values[name]}"
+
         # Substitute into template
         template = Template(builtin.c_template)
-        return template.substitute(param_values)
+        code = template.substitute(param_values)
+        if sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR":
+            code = f"(LONG){code}"
+        return code
 
     def _generate_struct_instantiation(self, struct: StructDef, arguments: List[ASTNode]) -> str:
         """Generate C code for struct instantiation."""
