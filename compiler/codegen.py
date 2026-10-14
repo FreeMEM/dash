@@ -26,6 +26,17 @@ from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 # C CODE TEMPLATES
 # =============================================================================
 
+
+def c_int_literal(value: int) -> str:
+    """C text for a Dash integer literal (a LONG). Negative values go in
+    parentheses so "a - N" never becomes "a--1"; values above 0x7FFFFFFF
+    (hex masks like 0xFFFF0000) keep their 32 bits as a LONG."""
+    if value < 0:
+        return f"({value})"
+    if value > 0x7FFFFFFF:
+        return f"((LONG)0x{value:X}UL)"
+    return str(value)
+
 class CTemplates:
     """Templates for generating C code."""
 
@@ -3529,8 +3540,7 @@ class CodeGenerator(ASTVisitor):
         """Generate C #define for a constant."""
         value = const.value
         if isinstance(value, NumberLiteral):
-            num = f"({value.value})" if value.value < 0 else value.value
-            self.const_defines.append(f"#define {const.name} {num}")
+            self.const_defines.append(f"#define {const.name} {c_int_literal(value.value)}")
         elif isinstance(value, StringLiteral):
             self.const_defines.append(f"#define {const.name} {value.value}")
         elif isinstance(value, BoolLiteral):
@@ -4308,7 +4318,7 @@ static {ret_type} {method_name}({params_str}) {{
         if isinstance(node, StringLiteral):
             return node.value
         elif isinstance(node, NumberLiteral):
-            return str(node.value)
+            return c_int_literal(node.value)
         elif isinstance(node, BoolLiteral):
             return "TRUE" if node.value else "FALSE"
         elif isinstance(node, VarRef):
@@ -4877,7 +4887,7 @@ static {return_type} {lambda_name}({param_str}) {{
         if prop is None:
             return str(default)
         if isinstance(prop, NumberLiteral):
-            return str(prop.value)
+            return c_int_literal(prop.value)
         if isinstance(prop, BoolLiteral):
             return "TRUE" if prop.value else "FALSE"
         if isinstance(prop, StringLiteral):
@@ -5134,7 +5144,7 @@ class MultiFileGenerator:
     def _const_value_to_c(self, value) -> str:
         """Convert a constant value to C representation."""
         if isinstance(value, NumberLiteral):
-            return f"({value.value})" if value.value < 0 else str(value.value)
+            return c_int_literal(value.value)
         elif isinstance(value, StringLiteral):
             return value.value
         elif isinstance(value, BoolLiteral):

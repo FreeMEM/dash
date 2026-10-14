@@ -1,0 +1,35 @@
+# Test: hexadecimal and binary literals
+# 0x and $ (Amiga style) are hexadecimal, 0b is binary; values above
+# 0x7FFFFFFF keep their 32 bits as a LONG
+#
+# expect-c: #define CUSTOM 14675968
+# expect-c: ((LONG)0xFFFF0000UL)
+# expect-out: 14675968
+# expect-out: 255
+# expect-out: 10
+# expect-out: 15
+# expect-out: -65536
+# expect-out: 1
+# expect-out: 4096
+
+const CUSTOM = 0xDFF000
+
+Window W
+    title "Hex"
+    width $C8
+    height 0b1100100
+end
+
+Main
+    Print CUSTOM
+    Print $FF
+    Print 0b1010
+    mascara = 0x0F
+    Print mascara
+    alto = 0xFFFF0000
+    Print alto
+    if alto < 0
+        Print 1
+    end
+    Print 0x10 * 0X100
+end

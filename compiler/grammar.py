@@ -180,7 +180,8 @@ dash_grammar_minimal = r"""
 
     // Tokens
     ID: /[a-zA-Z_][a-zA-Z0-9_]*/
-    INT: /\d+/
+    // Decimal, hexadecimal (0xDFF000 or $DFF000) and binary (0b1010)
+    INT: /0[xX][0-9a-fA-F]+|\$[0-9a-fA-F]+|0[bB][01]+|\d+/
 
     %import common.ESCAPED_STRING
     %import common.WS

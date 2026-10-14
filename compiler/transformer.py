@@ -18,6 +18,23 @@ from compiler.ast_nodes import (
 )
 
 
+
+def parse_int(text) -> int:
+    """Value of an INT token: decimal, 0x/$ hexadecimal or 0b binary.
+    Must fit in 32 bits (a LONG; 0x80000000..0xFFFFFFFF keep their bits)."""
+    text = str(text)
+    if text[:2] in ("0x", "0X"):
+        value = int(text[2:], 16)
+    elif text.startswith("$"):
+        value = int(text[1:], 16)
+    elif text[:2] in ("0b", "0B"):
+        value = int(text[2:], 2)
+    else:
+        value = int(text, 10)
+    if value > 0xFFFFFFFF:
+        raise ValueError(f"number {text} does not fit in 32 bits")
+    return value
+
 class _NativeCode(str):
     """C code from a native_body, kept apart from the return type string."""
 
@@ -105,11 +122,11 @@ class DashASTBuilder(Transformer):
 
     def const_int(self, items) -> NumberLiteral:
         """Build a number literal for constant."""
-        return NumberLiteral(value=int(items[0].value))
+        return NumberLiteral(value=parse_int(items[0].value))
 
     def const_neg_int(self, items) -> NumberLiteral:
         """Build a negative number literal for constant."""
-        return NumberLiteral(value=-int(items[0].value))
+        return NumberLiteral(value=-parse_int(items[0].value))
 
     def const_string(self, items) -> StringLiteral:
         """Build a string literal for constant."""
@@ -229,7 +246,7 @@ class DashASTBuilder(Transformer):
         name = items[0].value if isinstance(items[0], Token) else str(items[0])
         value = None
         if len(items) > 1 and isinstance(items[1], Token):
-            value = int(items[1].value)
+            value = parse_int(items[1].value)
         return EnumValue(name=name, value=value, location=self._get_location(items[0]))
 
     # === FFI - External Functions ===
@@ -362,7 +379,7 @@ class DashASTBuilder(Transformer):
             if value.type == 'ESCAPED_STRING':
                 value = StringLiteral(value=value.value)
             elif value.type in ('NUMBER', 'INT'):
-                value = NumberLiteral(value=int(value.value))
+                value = NumberLiteral(value=parse_int(value.value))
         return WindowProperty(name=name, value=value)
 
     # === Statements ===
@@ -416,14 +433,14 @@ class DashASTBuilder(Transformer):
         """Build a wait statement node."""
         seconds = items[0]
         if not isinstance(seconds, NumberLiteral):
-            seconds = NumberLiteral(value=int(seconds))
+            seconds = NumberLiteral(value=parse_int(seconds))
         return WaitStmt(seconds=seconds)
 
     def wait_cmd(self, items) -> WaitStmt:
         """Build a wait command node (legacy grammar)."""
         value = items[0]
         if isinstance(value, Token):
-            seconds = NumberLiteral(value=int(value.value))
+            seconds = NumberLiteral(value=parse_int(value.value))
         else:
             seconds = value
         return WaitStmt(seconds=seconds)
@@ -542,7 +559,7 @@ class DashASTBuilder(Transformer):
         # Convert raw tokens to AST nodes if needed
         if isinstance(value, Token):
             if value.type in ('NUMBER', 'INT'):
-                value = NumberLiteral(value=int(value.value))
+                value = NumberLiteral(value=parse_int(value.value))
             elif value.type == 'ESCAPED_STRING':
                 value = StringLiteral(value=value.value)
         return VarAssign(name=name, value=value)
@@ -908,7 +925,7 @@ class DashASTBuilder(Transformer):
     def number_literal(self, items) -> NumberLiteral:
         """Build a number literal node."""
         value = items[0].value if isinstance(items[0], Token) else str(items[0])
-        return NumberLiteral(value=int(value))
+        return NumberLiteral(value=parse_int(value))
 
     def true_lit(self, items) -> BoolLiteral:
         """Build a true literal node."""
@@ -935,7 +952,7 @@ class DashASTBuilder(Transformer):
     def number_value(self, items) -> NumberLiteral:
         """Handle number value."""
         value = items[0].value if isinstance(items[0], Token) else str(items[0])
-        return NumberLiteral(value=int(value))
+        return NumberLiteral(value=parse_int(value))
 
     def bool_true(self, items) -> BoolLiteral:
         """Handle true value."""
@@ -951,7 +968,7 @@ class DashASTBuilder(Transformer):
             if items[0].type == 'ESCAPED_STRING':
                 return StringLiteral(value=items[0].value)
             elif items[0].type in ('NUMBER', 'INT'):
-                return NumberLiteral(value=int(items[0].value))
+                return NumberLiteral(value=parse_int(items[0].value))
         return items[0]
 
     # === Comments ===

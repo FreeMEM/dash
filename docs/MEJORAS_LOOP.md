@@ -77,7 +77,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       ejecución en el runner. Si no se puede sin ventana visible, anotarlo y seguir.
 - [x] 3. `-O2`: compilar los ejemplos con y sin `-O2`, ejecutarlos en el emulador y comparar.
       Si van igual, `-O2` por defecto y `-O0` para desactivarlo.
-- [ ] 4. Literales hexadecimales `0xDFF000` y binarios `%1010` / `0b1010`.
+- [x] 4. Literales hexadecimales `0xDFF000` / `$DFF000` y binarios `0b1010`.
 - [ ] 5. `break` y `continue` (con error si están fuera de un bucle).
 - [ ] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
 - [ ] 7. Enums con valores negativos.
@@ -154,3 +154,13 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   quedaba en una línea). Ahora `FPuts` + `FPutC('\\n')`, devuelve 0 o -1 (test: `emu/test_fileio_lines`).
 - No verificado: lo que se dibuja en pantalla (no hay captura de imagen), solo que no se cuelga y la salida de texto.
 - Docs: README (`-O0`, `tools/emu_run.py`, `--emu`), `docs/BUILTINS.md` regenerado.
+
+### 2026-10-14 — Tarea 4 (hexadecimal y binario)
+- Base: 76/76 con `--emu`, ejemplos 30/30. Después: 63/63 sin emulador (+16 `emu/`), ejemplos 30/30.
+- Hecho (tests: `test_hex_literals` con `expect-out` en FS-UAE, `errors/hex_too_big`):
+  - `0xDFF000`, `$DFF000` (estilo Amiga) y `0b1010`, en expresiones, `const`, propiedades de ventana y enums.
+  - `parse_int()` en el transformer; más de 32 bits es error ("does not fit in 32 bits").
+  - `c_int_literal()` en el codegen: de 0x80000000 a 0xFFFFFFFF sale `((LONG)0x...UL)` (conserva los bits,
+    `0xFFFF0000` vale -65536) y los negativos entre paréntesis.
+- Descartado: `%1010` para binario, choca con el operador módulo (`a %10`).
+- Docs: MANUAL_REFERENCIA (ya decía `0xFF` sin funcionar) y QUICK_REFERENCE.

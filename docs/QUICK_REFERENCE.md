@@ -14,6 +14,7 @@ Main ... end                # Entry point
 ## Variables & Types
 ```
 x = 42                      # Int
+mask = 0xFF                 # hex (also $DFF000), binary 0b1010
 name = "Dash"               # String
 active = true               # Bool
 nums = [1,2,3]              # Array

@@ -127,7 +127,8 @@ Las variables se declaran implicitamente en su primera asignacion:
 # Enteros
 edad = 25
 puntuacion = -100
-hex_value = 0xFF
+hex_value = 0xFF       # hexadecimal (también $FF, al estilo Amiga)
+bits = 0b1010          # binario
 
 # Strings
 nombre = "Amiga"
@@ -146,7 +147,7 @@ vacio = []
 
 | Tipo | Descripcion | Ejemplo |
 |------|-------------|---------|
-| Int | Entero 32-bit con signo | `42`, `-100`, `0xFF` |
+| Int | Entero 32-bit con signo | `42`, `-100`, `0xFF`, `$DFF000`, `0b1010` |
 | String | Cadena de texto | `"Hola"` |
 | Bool | Valor booleano | `true`, `false` |
 | Array | Coleccion de elementos | `[1, 2, 3]` |

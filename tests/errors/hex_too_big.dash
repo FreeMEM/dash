@@ -1,0 +1,7 @@
+# Test: a literal wider than 32 bits is an error
+# expect: does not fit in 32 bits
+
+Main
+    x = 0x100000000
+    Print x
+end
