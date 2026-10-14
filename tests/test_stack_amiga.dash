@@ -1,0 +1,33 @@
+# Test: a Dash program runs on a stack of at least 16 KB (libnix's swapstack
+# module, __stack), although the Kickstart 3.1 shell starts it with 4 KB.
+# The recursion below needs about 11 KB: 40 levels of 256 bytes plus frames.
+#
+# expect-c: unsigned long __stack = DASH_STACK;
+# expect-out: 1
+# expect-out: 820
+
+@native func pila_ok() -> Int
+"""
+    struct Task *t = FindTask(NULL);
+    return ((ULONG)t->tc_SPUpper - (ULONG)t->tc_SPLower) >= 16384;
+"""
+end
+
+@native func hondo(n: Int) -> Int
+"""
+    volatile char pad[256];
+    LONG i;
+    for (i = 0; i < 256; i++) pad[i] = (char)n;
+    if (n == 0) return 0;
+    return hondo(n - 1) + pad[255] - n + 1;
+"""
+end
+
+func suma(n)
+    return n * (n + 1) / 2
+end
+
+Main
+    Print pila_ok()
+    Print hondo(40) - 40 + suma(40)
+end

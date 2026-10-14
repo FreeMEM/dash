@@ -130,7 +130,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `-m68000` vs `-m68020` por defecto, `-fno-...` que estorben, divisiones y módulos por potencias de 2, `Print`
       sin `Printf` cuando el formato es fijo. Cada cambio con antes/después de la tabla de la tarea 25.
 - [~] 27. Optimización (3/3) — memoria y tamaño. Partes: 27a funciones `static` y `--small` (hecha), 27b pila
-      (`__stack` + `swapstack` de libnix; el shell de 3.1 da 4 KB), 27c pool y cabeceras, 27d bucle de caracteres
+      (`__stack` + `swapstack` de libnix; el shell de 3.1 da 4 KB; hecha), 27c pool y cabeceras, 27d bucle de caracteres
       (`string_chars_26` va el doble de rápido con `-Os` que con `-O2`: mirar el C). Detalle original: cabeceras de strings/objetos, tamaño de puddle del pool,
       runtime que no se usa (secciones, `-ffunction-sections -Wl,--gc-sections` si el linker de Amiga lo admite),
       `-Os` frente a `-O2` por programa, código de arranque de libnix, strings duplicados. Antes/después en bytes.
@@ -674,3 +674,16 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   Probados con `--small` en A500 `test_int_to_string_amiga`, `test_tmp_marks` y `test_fastfp_amiga`: misma salida.
 - Velocidad con `static` (tabla `27a`): igual (±1 %), `string_return` -3 %; `string_chars_26` +8 % (160.521 →
   173.412): queda para 27d.
+
+### 2026-10-15 — Tarea 27b (pila)
+- Base: 179/179. Después: 182/182 (`--emu --emu-a500`; test nuevo: `test_stack_amiga`); 30/30 ejemplos.
+- Problema: el shell de Kickstart 3.1 (y un icono sin `Stack`) arranca los programas con 4 KB de pila. Una recursión
+  algo honda o un array local grande en un `@native` la desborda y el Amiga se cuelga sin avisar. Comprobado: el test
+  nuevo (40 niveles de 256 bytes, ~11 KB) se queda colgado en el emulador sin el cambio.
+- Hecho: el C de cada programa pide `__stack = DASH_STACK` y referencia `__stkinit`, lo que enlaza el módulo
+  `swapstack` de libnix: antes de `main()` pasa a una pila de ese tamaño si la actual es menor, y vuelve al salir.
+  Por defecto 16 KB; `./dash --stack N` la cambia y `--stack 0` lo quita. El test comprueba `tc_SPUpper - tc_SPLower`
+  y que la recursión acaba bien, en A1200 y A500; `--stack 32768` probado aparte.
+- Coste: 720 bytes por programa (`swapstack` 324 + `__request` 120 + estructura del ejecutable): `hola` 4.276 → 4.996.
+  Lo dejo por defecto: un desbordamiento de pila cuelga la máquina; quien quiera los bytes tiene `--stack 0`.
+  En memoria, 16 KB más mientras corre el programa (solo si arrancó con menos).

@@ -5044,6 +5044,24 @@ $body$indent    }
 """)
 
     # Function templates
+    # The Kickstart shell starts a program with 4 KB of stack unless told
+    # otherwise ("stack" command, icon). libnix's swapstack module (pulled in by
+    # the reference to __stkinit) moves the program to a stack of __stack bytes
+    # before main() when the current one is smaller, and back at exit.
+    STACK_REQUEST = """\
+/* Stack: at least DASH_STACK bytes (./dash --stack N, 0 = as started), see
+   libnix swapstack (about 720 bytes of code) */
+#ifndef DASH_STACK
+#define DASH_STACK 16384
+#endif
+#if DASH_STACK > 0
+extern void __stkinit(void);
+void *__stkinit_ref = (void *)__stkinit;
+unsigned long __stack = DASH_STACK;
+#endif
+
+"""
+
     # static: everything is in one C file, so GCC drops the functions nobody
     # calls (library modules bring many) and inlines the ones called once
     FUNCTION_PROTO = Template("static $return_type $name($params) __attribute__((unused));\n")
@@ -5363,7 +5381,7 @@ class CodeGenerator(ASTVisitor):
 
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
-        parts = [CTemplates.PROGRAM_HEADER]
+        parts = [CTemplates.PROGRAM_HEADER, CTemplates.STACK_REQUEST]
         if self.autoclose:
             parts.append(CTemplates.AUTOCLOSE_RUNTIME.substitute(seconds=self.autoclose))
 

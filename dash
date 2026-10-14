@@ -56,6 +56,9 @@ def main():
     parser.add_argument("-o", "--output", required=True, help="Output Amiga executable file")
     parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")
     parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
+    parser.add_argument("--stack", type=int, metavar="BYTES",
+                        help="Minimum stack for the program (default 16384; the 3.1 shell gives 4096). "
+                             "0: keep the stack it was started with (720 bytes smaller)")
     parser.add_argument("--small", action="store_true",
                         help="Optimize for size (gcc -Os): about 7%% smaller, 10-50%% slower in loops")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
@@ -151,6 +154,8 @@ def main():
         compile_command.append("-fomit-frame-pointer")
     if args.fpu:
         compile_command.extend(["-m68020", "-m68881"])
+    if args.stack is not None:
+        compile_command.append(f"-DDASH_STACK={args.stack}")
     # extra gcc options, for experiments (e.g. DASH_CFLAGS="-Os")
     compile_command.extend(shlex.split(os.environ.get("DASH_CFLAGS", "")))
     compile_command.extend(c_files)
