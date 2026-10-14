@@ -129,7 +129,9 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       y bucles que no crean strings ni objetos, `WORD` donde baste en 68000 (multiplicación 16x16), `-fomit-frame-pointer`,
       `-m68000` vs `-m68020` por defecto, `-fno-...` que estorben, divisiones y módulos por potencias de 2, `Print`
       sin `Printf` cuando el formato es fijo. Cada cambio con antes/después de la tabla de la tarea 25.
-- [ ] 27. Optimización (3/3) — memoria y tamaño: cabeceras de strings/objetos, tamaño de puddle del pool,
+- [~] 27. Optimización (3/3) — memoria y tamaño. Partes: 27a funciones `static` y `--small` (hecha), 27b pila
+      (`__stack` + `swapstack` de libnix; el shell de 3.1 da 4 KB), 27c pool y cabeceras, 27d bucle de caracteres
+      (`string_chars_26` va el doble de rápido con `-Os` que con `-O2`: mirar el C). Detalle original: cabeceras de strings/objetos, tamaño de puddle del pool,
       runtime que no se usa (secciones, `-ffunction-sections -Wl,--gc-sections` si el linker de Amiga lo admite),
       `-Os` frente a `-O2` por programa, código de arranque de libnix, strings duplicados. Antes/después en bytes.
 - [ ] 28. Artefacto de comparativas: página publicada (Artifact) con las tablas y gráficas de
@@ -650,3 +652,25 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `string_interp` 2.238.460 → 651.378, `string_concat_int` 1.141.401 → 459.880, `for_each_10` 696.067 → 86.753,
   `struct_new_field` 531.440 → 311.913, Float (`float_mul_add`) 123.427 → 104.612. Tamaño 250.460 → 252.728 bytes
   (con 2 benchmarks más y Float propio).
+
+### 2026-10-15 — Tarea 27a (funciones static, `--small`)
+- Base: 179/179 (`--emu --emu-a500`). Después: igual; 30/30 ejemplos.
+- `dash`: `DASH_CFLAGS` añade opciones a GCC (para pruebas). Medido el total de los 32 programas (benchmarks y
+  ejemplos), 252.728 bytes de partida:
+  | opciones | bytes |
+  |---|---|
+  | `-O2` (antes) | 252.728 |
+  | `-ffunction-sections -fdata-sections -Wl,--gc-sections` | 234.964 (unos crecen, otros bajan hasta 3 KB) |
+  | `-Os` | 231.700 |
+  | funciones `static` (hecho) | 230.048 |
+  | `static` + gc-sections | 231.060 (ya no aporta) |
+  | `static` + `-Os` | 213.852 |
+- Hecho: las funciones de usuario y las `@native` se generan `static` (prototipo con `__attribute__((unused))`). Todo
+  el programa va en un solo C (también con `--multifile`, que solo compila `main.c`), así que GCC quita las que nadie
+  llama, sobre todo de los módulos de `lib/amiga`, y expande en línea las que se llaman una vez. -9 %, ningún
+  programa crece (`test_fileio` 10.644 → 7.512, `test_rtg` 11.580 → 8.496).
+- `-Os` cuesta velocidad (A500): `for_each_10` +52 %, `gfx_pixel` +17 %, strings +20 %, `array_literal_new` +11 %; solo
+  `string_chars_26` mejora (173.412 → 95.682). Por defecto sigue `-O2`; nueva opción `./dash --small` (`-Os`).
+  Probados con `--small` en A500 `test_int_to_string_amiga`, `test_tmp_marks` y `test_fastfp_amiga`: misma salida.
+- Velocidad con `static` (tabla `27a`): igual (±1 %), `string_return` -3 %; `string_chars_26` +8 % (160.521 →
+  173.412): queda para 27d.

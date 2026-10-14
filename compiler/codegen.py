@@ -5044,10 +5044,12 @@ $body$indent    }
 """)
 
     # Function templates
-    FUNCTION_PROTO = Template("$return_type $name($params);\n")
+    # static: everything is in one C file, so GCC drops the functions nobody
+    # calls (library modules bring many) and inlines the ones called once
+    FUNCTION_PROTO = Template("static $return_type $name($params) __attribute__((unused));\n")
 
     FUNCTION_DEF = Template("""\
-$return_type $name($params) {
+static $return_type $name($params) {
 $body}
 """)
 
@@ -5775,13 +5777,13 @@ class CodeGenerator(ASTVisitor):
         params_str = ", ".join(params) if params else "void"
 
         # Generate function prototype
-        proto = f"{ret_type} {native.name}({params_str});\n"
+        proto = f"static {ret_type} {native.name}({params_str}) __attribute__((unused));\n"
         self.prototypes.append(proto)
 
         # Generate function with inline C body
         c_code = native.c_code.strip()
         func_code = f"""
-{ret_type} {native.name}({params_str}) {{
+static {ret_type} {native.name}({params_str}) {{
 {c_code}
 }}
 """

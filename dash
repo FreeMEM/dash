@@ -7,6 +7,7 @@ Compiles .dash source files to native Amiga executables.
 import argparse
 import glob
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -55,6 +56,8 @@ def main():
     parser.add_argument("-o", "--output", required=True, help="Output Amiga executable file")
     parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")
     parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
+    parser.add_argument("--small", action="store_true",
+                        help="Optimize for size (gcc -Os): about 7%% smaller, 10-50%% slower in loops")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
     parser.add_argument("-O", "--optimize", action="store_true",
                         help="Optimize the generated 68000 code with gcc -O2 (default)")
@@ -142,12 +145,14 @@ def main():
     ]
     # -O2 by default: tested in FS-UAE (Kickstart 3.1) with the 30 examples and the
     # emu tests, same output as -O0 and about half the size
-    compile_command.append("-O0" if args.no_optimize else "-O2")
+    compile_command.append("-O0" if args.no_optimize else "-Os" if args.small else "-O2")
     # no link/unlk in every function, and one more free address register
     if not args.no_optimize:
         compile_command.append("-fomit-frame-pointer")
     if args.fpu:
         compile_command.extend(["-m68020", "-m68881"])
+    # extra gcc options, for experiments (e.g. DASH_CFLAGS="-Os")
+    compile_command.extend(shlex.split(os.environ.get("DASH_CFLAGS", "")))
     compile_command.extend(c_files)
     # Float: GCC's own software floating point (runtime/softfloat), linked before
     # -lm so it does not go through mathieeesingbas.library
