@@ -2,6 +2,7 @@
 Dash Language Semantic Analyzer
 Performs semantic analysis, builds symbol table, and validates the AST.
 """
+import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Any
 from enum import Enum, auto
@@ -143,6 +144,7 @@ class SemanticAnalyzer(ASTVisitor):
         self.in_event_loop = False
         self.in_function = False
         self.current_window: Optional[str] = None
+        self.current_module: Optional[str] = None  # Module whose code is being analyzed
 
     def analyze(self, program: Program) -> AnalysisResult:
         """Perform semantic analysis on the program."""
@@ -430,6 +432,7 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_VarRef(self, node: VarRef):
         """Visit a variable reference."""
         symbol = self.lookup_symbol(node.name)
+        self._check_private(node.name, symbol, node)
         if not symbol:
             self.error(f"Variable '{node.name}' is not defined", node)
         elif symbol.symbol_type == SymbolType.VARIABLE and not symbol.is_initialized:
@@ -498,8 +501,17 @@ class SemanticAnalyzer(ASTVisitor):
             self.visit(stmt)
         self.exit_scope()
 
+    def _check_private(self, name: str, symbol: Optional[Symbol], node: ASTNode):
+        """A name starting with _ defined in a module is usable only inside that module."""
+        if not symbol or not name.startswith("_") or symbol.node is None:
+            return
+        owner = getattr(symbol.node, "module", None)
+        if owner is not None and owner != self.current_module:
+            self.error(f"'{name}' is private to module '{os.path.basename(owner)}'", node)
+
     def visit_FunctionDef(self, node: FunctionDef):
         """Visit a function definition."""
+        self.current_module = getattr(node, "module", None)
         self.in_function = True
         self.enter_scope(f"func_{node.name}")
 
@@ -525,6 +537,7 @@ class SemanticAnalyzer(ASTVisitor):
 
         self.exit_scope()
         self.in_function = False
+        self.current_module = None
 
     def visit_LambdaFunc(self, node: LambdaFunc):
         """Visit a lambda. It becomes a top-level C function, so it only sees
@@ -582,6 +595,7 @@ class SemanticAnalyzer(ASTVisitor):
             return
 
         symbol = self.lookup_symbol(node.name)
+        self._check_private(node.name, symbol, node)
         if not symbol:
             self.error(f"Function '{node.name}' is not defined", node)
         elif symbol.symbol_type == SymbolType.STRUCT:

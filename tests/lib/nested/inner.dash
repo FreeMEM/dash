@@ -1,0 +1,14 @@
+# Private helper and header kept for the module's own code
+@header "#include <exec/lists.h>"
+
+func inner_value()
+    return _base() * 2
+end
+
+func _base()
+    return 20
+end
+
+func scale(x: Int) -> Int
+    return x * 3
+end

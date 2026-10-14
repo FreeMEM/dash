@@ -1,0 +1,14 @@
+# Test: nested imports
+# A module imports another relative to its own directory; a public
+# function uses a private helper; module @header directives are kept.
+#
+# expect-c: #include <exec/lists.h>
+# expect-c: LONG _base(void) {
+# expect-c: return (inner_value() + 1);
+
+import "lib/nested/outer.dash"
+
+Main
+    Print outer_value()
+    Print scale(2)
+end

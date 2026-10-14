@@ -5034,6 +5034,14 @@ class MultiFileGenerator:
             return "TRUE" if value.value else "FALSE"
         return "0"
 
+    def _dash_type_to_c(self, dash_type: Optional[str], default: str = "LONG") -> str:
+        """Convert a Dash type annotation to its C type (same mapping as CodeGenerator)."""
+        if dash_type in CodeGenerator._BASE_C_TYPES:
+            return CodeGenerator._BASE_C_TYPES[dash_type]
+        if dash_type and self.analysis.program.get_struct(dash_type):
+            return f"_Dash_{dash_type} *"
+        return default
+
     def _get_default_init(self, c_type: str) -> str:
         """Get default initialization for a C type."""
         if c_type in ("STRPTR", "APTR"):

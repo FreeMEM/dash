@@ -1,0 +1,6 @@
+# expect: '_base' is private to module 'inner.dash'
+import "../lib/nested/inner.dash"
+
+Main
+    Print _base()
+end

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from lark import Lark
 from typing import Optional, Set, List, Dict, Tuple
 
-from compiler.grammar import dash_grammar, dash_grammar_minimal
+from compiler.grammar import dash_grammar_minimal
 from compiler.transformer import DashASTBuilder
 from compiler.analyzer import SemanticAnalyzer, AnalysisResult
 from compiler.codegen import CodeGenerator
@@ -43,12 +43,10 @@ class DashCompiler:
     5. Generate: Convert AST to C code
     """
 
-    def __init__(self, use_extended_grammar: bool = False, verbose: bool = False):
+    def __init__(self, verbose: bool = False):
         self.verbose = verbose
-        self.use_extended_grammar = use_extended_grammar
-        grammar = dash_grammar if use_extended_grammar else dash_grammar_minimal
         self.parser = Lark(
-            grammar,
+            dash_grammar_minimal,
             parser="lalr",
             propagate_positions=True
         )
@@ -144,31 +142,40 @@ class DashCompiler:
         merged_enums: List[EnumDef] = []
         merged_extern_funcs: List[ExternFunc] = []
         merged_native_funcs: List[NativeFunc] = []
+        merged_headers: List[str] = []
 
         # First, load all imports
         for import_stmt in main_ast.imports:
+            module_path = self._resolve_import_path(import_stmt.path)
             module_ast = self._load_module(import_stmt.path)
 
-            # Recursively process nested imports
+            # Recursively process nested imports, relative to the module's own directory
             if module_ast.imports:
-                module_ast = self._merge_modules(module_ast)
+                saved_base_dir = self._base_dir
+                self._base_dir = os.path.dirname(module_path)
+                try:
+                    module_ast = self._merge_modules(module_ast)
+                finally:
+                    self._base_dir = saved_base_dir
+
+            # Remember which module each definition comes from: private names
+            # (_x) are kept, because the module's own code needs them, but the
+            # analyzer only lets that module use them
+            for item in (module_ast.constants + module_ast.global_vars + module_ast.functions
+                         + module_ast.structs + module_ast.enums + module_ast.extern_funcs
+                         + module_ast.native_funcs):
+                if getattr(item, "module", None) is None:
+                    item.module = module_path
+            merged_headers.extend(h for h in module_ast.headers if h not in merged_headers)
 
             # Add public constants (not starting with _)
-            for const in module_ast.constants:
-                if not self._is_private(const.name):
-                    merged_constants.append(const)
+            merged_constants.extend(module_ast.constants)
 
             # Add public global variables (not starting with _)
-            for gvar in module_ast.global_vars:
-                if not self._is_private(gvar.name):
-                    merged_global_vars.append(gvar)
+            merged_global_vars.extend(module_ast.global_vars)
 
             # Add public functions (not starting with _)
-            for func in module_ast.functions:
-                if not self._is_private(func.name):
-                    merged_functions.append(func)
-                elif self.verbose:
-                    print(f"    Skipping private function: {func.name}", file=sys.stderr)
+            merged_functions.extend(module_ast.functions)
 
             # Add public windows (not starting with _)
             for window in module_ast.windows:
@@ -176,24 +183,16 @@ class DashCompiler:
                     merged_windows.append(window)
 
             # Add public structs
-            for struct in module_ast.structs:
-                if not self._is_private(struct.name):
-                    merged_structs.append(struct)
+            merged_structs.extend(module_ast.structs)
 
             # Add public enums
-            for enum in module_ast.enums:
-                if not self._is_private(enum.name):
-                    merged_enums.append(enum)
+            merged_enums.extend(module_ast.enums)
 
             # Add extern functions
-            for extern in module_ast.extern_funcs:
-                if not self._is_private(extern.name):
-                    merged_extern_funcs.append(extern)
+            merged_extern_funcs.extend(module_ast.extern_funcs)
 
             # Add native functions
-            for native in module_ast.native_funcs:
-                if not self._is_private(native.name):
-                    merged_native_funcs.append(native)
+            merged_native_funcs.extend(module_ast.native_funcs)
 
         # Merge with main program's definitions
         # Imported items come first, then main program's items
@@ -218,7 +217,7 @@ class DashCompiler:
             functions=all_functions,
             extern_funcs=all_extern_funcs,
             native_funcs=all_native_funcs,
-            headers=main_ast.headers
+            headers=merged_headers + [h for h in main_ast.headers if h not in merged_headers]
         )
 
     def compile(self, source: str, filename: str = "<input>") -> tuple[str, AnalysisResult]:
@@ -332,6 +331,16 @@ class DashCompiler:
             if path in modules:
                 return
 
+            # Imports are relative to the importing module's directory
+            saved_base_dir = self._base_dir
+            self._base_dir = os.path.dirname(path)
+            try:
+                collect_imports(ast, path)
+            finally:
+                self._base_dir = saved_base_dir
+
+        def collect_imports(ast: Program, path: str):
+            """Register a module and load its imports (with _base_dir set to its directory)."""
             # Get dependencies from imports
             deps = []
             for imp in ast.imports:
@@ -464,14 +473,13 @@ class CompilationError(Exception):
 
 
 def transpile(source: str, filename: str = "<input>",
-              extended: bool = False, verbose: bool = False) -> str:
+              verbose: bool = False) -> str:
     """
     Convenience function to transpile Dash source to C.
 
     Args:
         source: Dash source code
         filename: Source filename for error messages
-        extended: Use extended grammar with future features
         verbose: Print compilation stages
 
     Returns:
@@ -480,7 +488,7 @@ def transpile(source: str, filename: str = "<input>",
     Raises:
         CompilationError: If compilation fails
     """
-    compiler = DashCompiler(use_extended_grammar=extended, verbose=verbose)
+    compiler = DashCompiler(verbose=verbose)
     c_code, _ = compiler.compile(source, filename)
     return c_code
 
@@ -495,8 +503,6 @@ def main():
                         help="Output C file (.c) or directory for multifile mode")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Show compilation stages")
-    parser.add_argument("--extended", action="store_true",
-                        help="Use extended grammar (experimental)")
     parser.add_argument("--multifile", action="store_true",
                         help="Generate multiple C files (one per module)")
     args = parser.parse_args()
@@ -517,7 +523,7 @@ def main():
 
     # Compile
     try:
-        compiler = DashCompiler(use_extended_grammar=args.extended, verbose=args.verbose)
+        compiler = DashCompiler(verbose=args.verbose)
 
         if args.multifile:
             # Multi-file mode: generate separate .c/.h files

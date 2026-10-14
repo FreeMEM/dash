@@ -1,0 +1,6 @@
+# Module imported with a path relative to this file
+import "inner.dash"
+
+func outer_value()
+    return inner_value() + 1
+end

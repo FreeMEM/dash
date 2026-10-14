@@ -7,6 +7,7 @@ Compiles .dash source files to native Amiga executables.
 import argparse
 import glob
 import os
+import shutil
 import subprocess
 import sys
 
@@ -55,6 +56,8 @@ def main():
     parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")
     parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
+    parser.add_argument("-O", "--optimize", action="store_true",
+                        help="Optimize the generated 68000 code (gcc -O2)")
     args = parser.parse_args()
 
     input_filename = args.input_file
@@ -132,6 +135,8 @@ def main():
         "-I" + build_dir,  # For local headers
         "-L" + amiga_lib_path,
     ]
+    if args.optimize:
+        compile_command.append("-O2")
     compile_command.extend(c_files)
     compile_command.extend([
         "-o",
@@ -139,15 +144,19 @@ def main():
     ])
     run_command(compile_command, env=env)
 
-    # --- Step 3: Convert ELF to Hunk (if needed) ---
+    # --- Step 3: Convert ELF to Hunk (only if gcc produced ELF) ---
     if not args.no_hunk:
-        print("\n--- Converting ELF to Hunk ---")
-        elf2hunk = find_elf2hunk()
-        if not elf2hunk:
+        with open(elf_output_file, "rb") as f:
+            is_elf = f.read(4) == b"\x7fELF"
+        elf2hunk = find_elf2hunk() if is_elf else None
+        if not is_elf:
+            # m68k-amigaos-gcc already writes the native Hunk format
+            shutil.move(elf_output_file, output_filename)
+        elif not elf2hunk:
             print("Warning: elf2hunk not found. Executable remains in ELF format.", file=sys.stderr)
-            print(f"Note: GCC with -noixemul generates native Hunk format directly.", file=sys.stderr)
-            os.rename(elf_output_file, output_filename)
+            shutil.move(elf_output_file, output_filename)
         else:
+            print("\n--- Converting ELF to Hunk ---")
             convert_command = [elf2hunk, elf_output_file, output_filename]
             run_command(convert_command)
 

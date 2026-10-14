@@ -66,7 +66,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
 - [x] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
 - [x] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
-- [ ] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
+- [x] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
 - [ ] 14. `lib/amiga/*.dash` + `examples/`: `examples/test_dos_module.dash` no transpila
       (`read_line` no definida). Que todos los ejemplos transpilen.
 - [ ] 15. Documentación: que `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md`,
@@ -308,3 +308,24 @@ Corrección antes que velocidad. Nada de refactors grandes.
   - Builtins con valor llamados como sentencia (`screen_open(...)`) daban "value computed is not used": `(void)(...)`.
 - Pendiente zona 14: avisos en `lib/amiga` (doublebuf, iff, copper: conversiones entero/puntero y funciones sin declarar).
 - Pendiente zona 15: la documentación lista los 72 builtins no implementados como disponibles.
+
+### 2026-10-14 — Zona 13 (`compiler/main.py` + CLI `dash`)
+- Base: tests 52/52, ejemplos 29/30. Tras la zona: tests 56/56 (incluye 2 `multifile/`), ejemplos 29/30.
+- Errores arreglados (tests: `tests/test_import_nested.dash` + `tests/lib/nested/`, `tests/errors/private_from_module.dash`,
+  y `multifile/*` en el runner; fallaban antes):
+  - Un módulo que importa otro con ruta relativa a sí mismo no lo encontraba (se resolvía desde el programa
+    principal). Arreglado en el modo normal y en `--multifile`.
+  - Las funciones privadas (`_x`) de un módulo se descartaban al importar: si una pública las usaba, el C
+    quedaba sin ellas. Ahora se conservan y el analyzer impide usarlas fuera de su módulo
+    ("'_x' is private to module 'm.dash'"). Igual para constantes, structs, etc. con `_`.
+  - Los `@header` de los módulos importados se perdían. Ahora se conservan (sin duplicados).
+  - **Regresión mía de la zona 7, arreglada**: el segundo `_dash_type_to_c` que borré era de `MultiFileGenerator`.
+    `--multifile` fallaba con cualquier módulo con parámetros tipados (test_graphics_module, test_copper...).
+    Restaurado usando el mapa común. El runner ahora compila en `--multifile` los tests que importan módulos.
+  - CLI `dash`: `os.rename` fallaba si la salida estaba en otro disco (`/tmp`): ahora `shutil.move`.
+  - CLI `dash`: si había un `elf2hunk` instalado, intentaba convertir un fichero que ya es Hunk
+    (bebbo gcc genera Hunk). Ahora solo convierte si el fichero empieza por `\x7fELF`.
+- Código muerto borrado: la gramática `dash_grammar` y la opción `--extended` (no construía).
+- Optimización (opcional): `./dash -O` compila con `-O2`. flowpaint: 24.692 → 12.940 bytes.
+  No activada por defecto: falta probar los ejecutables optimizados en emulador (fs-uae está instalado).
+- Pendiente: dos módulos con una función privada del mismo nombre chocarían en C.

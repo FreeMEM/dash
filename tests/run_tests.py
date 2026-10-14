@@ -262,6 +262,36 @@ def run_runtime_host_test() -> Optional[TestResult]:
                       duration=time.time() - start_time)
 
 
+def run_multifile_test(test_file: Path) -> TestResult:
+    """Transpile a test that imports modules with --multifile and compile every .c."""
+    import shutil
+    name = f"multifile/{test_file.stem}"
+    start_time = time.time()
+    out_dir = PROJECT_ROOT / "build" / f"{test_file.stem}_multi"
+    shutil.rmtree(out_dir, ignore_errors=True)
+    result = subprocess.run(
+        [sys.executable, "-m", "compiler.main", str(test_file), "-o", str(out_dir), "--multifile"],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=60
+    )
+    error = None
+    if result.returncode != 0:
+        error = (result.stderr or "multifile transpile failed").strip()[:200]
+    else:
+        gcc_path = "/opt/amiga/bin/m68k-amigaos-gcc"
+        if os.path.exists(gcc_path):
+            c_files = [str(f) for f in sorted(out_dir.glob("*.c"))]
+            build = subprocess.run(
+                [gcc_path, "-noixemul", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}",
+                 "-L/opt/amiga/m68k-amigaos/lib", *c_files, "-o", str(out_dir / "a.out")],
+                capture_output=True, text=True, timeout=120
+            )
+            if build.returncode != 0:
+                error = build.stderr.strip()[:200]
+    return TestResult(name=name, passed=error is None, transpile_ok=error is None,
+                      compile_ok=error is None, error_message=error,
+                      duration=time.time() - start_time)
+
+
 def print_results(results: List[TestResult]):
     """Print test results summary."""
     passed = sum(1 for r in results if r.passed)
@@ -339,6 +369,15 @@ def main():
     for test_file in find_tests(error_dir, args.pattern) if error_dir.exists() else []:
         print(f"Testing: errors/{test_file.stem}...", end=" ", flush=True)
         result = run_error_test(test_file)
+        results.append(result)
+        print("OK" if result.passed else "FAIL")
+
+    # Tests that import modules are also built in --multifile mode
+    for test_file in tests:
+        if "import " not in test_file.read_text():
+            continue
+        print(f"Testing: multifile/{test_file.stem}...", end=" ", flush=True)
+        result = run_multifile_test(test_file)
         results.append(result)
         print("OK" if result.passed else "FAIL")
 

@@ -571,7 +571,7 @@ class DashASTBuilder(Transformer):
                 if item and (isinstance(item[0], FunctionParam) or isinstance(item[0], str)):
                     params = item
                 else:
-                    # Body as list (from extended grammar)
+                    # Body given as a list
                     body.extend(self._flatten_statements(item))
             elif isinstance(item, str) and item not in ('', None):
                 # Return type
