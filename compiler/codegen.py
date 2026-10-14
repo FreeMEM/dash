@@ -129,10 +129,10 @@ static STRPTR DashString_concat(STRPTR a, STRPTR b) {
     LONG len_a = a ? strlen(a) : 0;
     LONG len_b = b ? strlen(b) : 0;
     LONG total = len_a + len_b + 1;
-    STRPTR result = (STRPTR)_dash_alloc(total);
+    STRPTR result = (STRPTR)_dash_alloc(total);  /* pool memory is cleared */
     if (!result) return NULL;
-    if (a) strcpy(result, a);
-    if (b) strcpy(result + len_a, b);
+    if (len_a) memcpy(result, a, len_a);
+    if (len_b) memcpy(result + len_a, b, len_b);
     return result;
 }
 
@@ -141,7 +141,11 @@ static LONG DashString_length(STRPTR s) {
 }
 
 static char DashString_char_at(STRPTR s, LONG index) {
-    if (!s || index < 0 || index >= strlen(s)) return 0;
+    LONG i;
+    if (!s || index < 0) return 0;
+    for (i = 0; i < index; i++) {   /* stop at the end without a full strlen */
+        if (!s[i]) return 0;
+    }
     return s[index];
 }
 

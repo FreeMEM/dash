@@ -232,7 +232,7 @@ LONG x = DashArray_get(numeros, 1);
 - [x] `transformer.py`: Procesar nuevos nodos de arrays
 - [x] `analyzer.py`: Tipos ARRAY_INT, ARRAY_STRING, visitors para arrays
 - [x] `codegen.py`: Generar código con runtime de arrays inline
-- [x] `runtime/dash_array.h`: Runtime library para arrays
+- [x] Runtime de arrays (embebido en `compiler/codegen.py`, `CTemplates.ARRAY_RUNTIME`)
 - [x] Tests: `test_array_basic.dash`, `test_array_ops.dash`
 
 **Consideraciones:**
@@ -277,7 +277,7 @@ LONG longitud = DashString_length(nombre);
 - [x] `grammar.py`: Operador `+` ya soportado, `str[i]` usa array_access
 - [x] `analyzer.py`: Detecta operaciones string vs numéricas con _is_string_expr
 - [x] `codegen.py`: Genera llamadas a runtime de strings, tracking de tipos
-- [x] `runtime/dash_string.h`: DashString_concat, DashString_length, DashString_char_at
+- [x] Runtime de strings (embebido en `CTemplates.STRING_RUNTIME`): DashString_concat, DashString_length, DashString_char_at
 - [x] Tests: `test_string_ops.dash`
 
 **Consideraciones:**
@@ -629,16 +629,13 @@ state = State.RUNNING
 
 ## Runtime Library
 
-Para soportar arrays, strings, y otras features, necesitamos una pequeña runtime library en C que se linkea con cada programa Dash.
+El runtime en C va embebido en `compiler/codegen.py` (`CTemplates`) y solo se incluye
+en el C generado la parte que el programa usa:
 
-**Archivos:**
-```
-runtime/
-├── dash_runtime.h     # Headers
-├── dash_array.c       # Operaciones de array
-├── dash_string.c      # Operaciones de string
-└── dash_memory.c      # Gestión de memoria (wrappers de AllocMem/FreeMem)
-```
+- `MEMORY_RUNTIME`: pool de exec (`_dash_alloc`), borrado al salir (`_dash_mem_cleanup`)
+- `ARRAY_RUNTIME`: `DashArrayLong`, create/from/get/set/length/slice
+- `STRING_RUNTIME`: concat, length, char_at, from_int, from_char
+- `REFCOUNT_RUNTIME`: cabecera de refcount para structs
 
 **Consideraciones Amiga:**
 - Usar `AllocMem`/`FreeMem` de exec.library

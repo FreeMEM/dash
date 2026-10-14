@@ -234,6 +234,34 @@ def run_error_test(test_file: Path) -> TestResult:
                       compile_ok=False, error_message=error, duration=duration)
 
 
+def run_runtime_host_test() -> Optional[TestResult]:
+    """Build and run tests/runtime/host_harness.c with the host gcc.
+    Returns None when no host gcc is available."""
+    import shutil
+    if not shutil.which("gcc"):
+        return None
+    from compiler.codegen import CTemplates
+    start_time = time.time()
+    harness = (PROJECT_ROOT / "tests" / "runtime" / "host_harness.c").read_text()
+    runtime = "".join([CTemplates.MEMORY_RUNTIME, CTemplates.ARRAY_RUNTIME,
+                       CTemplates.STRING_RUNTIME, CTemplates.REFCOUNT_RUNTIME])
+    build_dir = PROJECT_ROOT / "build"
+    build_dir.mkdir(exist_ok=True)
+    src = build_dir / "runtime_host.c"
+    exe = build_dir / "runtime_host"
+    src.write_text(harness.replace("/*RUNTIME*/", runtime))
+    build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", "-o", str(exe), str(src)],
+                           capture_output=True, text=True)
+    if build.returncode != 0:
+        error = "host build failed: " + build.stderr.strip()[:200]
+    else:
+        run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
+        error = None if run.returncode == 0 else run.stdout.strip()[:200]
+    return TestResult(name="runtime/host", passed=error is None, transpile_ok=True,
+                      compile_ok=error is None, error_message=error,
+                      duration=time.time() - start_time)
+
+
 def print_results(results: List[TestResult]):
     """Print test results summary."""
     passed = sum(1 for r in results if r.passed)
@@ -313,6 +341,15 @@ def main():
         result = run_error_test(test_file)
         results.append(result)
         print("OK" if result.passed else "FAIL")
+
+    if args.pattern is None or args.pattern in "runtime":
+        print("Testing: runtime/host...", end=" ", flush=True)
+        result = run_runtime_host_test()
+        if result is None:
+            print("SKIP (no host gcc)")
+        else:
+            results.append(result)
+            print("OK" if result.passed else "FAIL")
 
     success = print_results(results)
     sys.exit(0 if success else 1)

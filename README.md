@@ -153,7 +153,6 @@ compiler/             Transpilador (Python/Lark)
   analyzer.py         Análisis semántico
   codegen.py          Generación de código C
   amiga_builtins.py   Bindings de la API Amiga
-runtime/              Headers del runtime (arrays, strings)
 lib/amiga/            Módulos estándar de Amiga
 examples/             Programas de ejemplo
 tests/                Suite de tests

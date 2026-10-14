@@ -64,7 +64,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
 - [x] 9. `compiler/codegen.py` — structs, métodos, enums, const.
 - [x] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
-- [ ] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
+- [x] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
 - [ ] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
 - [ ] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
 - [ ] 14. `lib/amiga/*.dash` + `examples/`: `examples/test_dos_module.dash` no transpila
@@ -272,3 +272,16 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Para zona 12 (builtins): `_dash_open_screen(...) != NULL;` como sentencia (valor no usado), `InitBitMap`,
   `BltBitMapRastPort`, `SetRGB4`, `NewList` y `strncpy` sin declarar (faltan includes), y conversiones
   entero/puntero en copper, fileio, iff y doublebuf.
+
+### 2026-10-14 — Zona 11 (runtime en C)
+- Base: tests 49/49, ejemplos 26/30. Tras la zona: tests 50/50 (nuevo `runtime/host`), ejemplos 26/30.
+- `runtime/dash_array.h` y `runtime/dash_string.h` no los usaba nadie: el codegen lleva su propia copia
+  (`CTemplates`) y ya habían divergido (sin slice, sin pool, con `AllocMem`). Borrados; README y ROADMAP
+  apuntan ahora al runtime embebido.
+- Nuevo test `runtime/host`: `tests/runtime/host_harness.c` incluye el runtime real (memoria, arrays,
+  strings, refcount) con stubs de exec y lo ejecuta en el PC. Casos límite: índices negativos y fuera de
+  rango, slices invertidos/fuera de rango, NULL, `INT32_MIN`, refcount. Pasa limpio también con
+  ASan + UBSan (probado a mano). Verificado que falla si se rompe el bounds check de `DashArray_get`.
+- Sin errores encontrados en el runtime embebido.
+- Optimizaciones (68000): `DashString_concat` copia con `memcpy` usando las longitudes ya calculadas
+  (antes `strcpy` volvía a recorrer); `DashString_char_at` ya no hace `strlen` completo en cada acceso.
