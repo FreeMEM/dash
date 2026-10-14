@@ -499,3 +499,16 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - `run_tests.py --emu-a500`: la batería de salida en 68000.
 - Pendiente: `@native` del usuario y los módulos de `lib/amiga` pueden tener el mismo problema; documentarlo.
   Tamaño total 250.460 → 260.192 bytes (+3,9 %: la comprobación inline en cada bucle); se mira en la tarea 27.
+
+### 2026-10-14 — Tarea 26b (aritmética entera y arrays)
+- Base: 161/161 (`--emu --emu-a500`). Después: 164/164.
+- Hecho (test: `test_int_ops`, en A1200 y A500: negativos, cocientes de más de 16 bits, divisores > 65535, productos grandes):
+  - `*`, `/`, `%` entre enteros → `_DASH_MUL/_DIV/_MOD`. En 68000: si caben en 16 bits, una instrucción `muls.w`/`divu.w`
+    (inline asm); si no, libgcc. En 68020+ (`--fpu`) son los operadores normales. No se usan con constantes potencia de 2
+    (desplazamientos) ni en `*` por constante (GCC ya hace sumas y desplazamientos).
+  - `for each` sobre arrays: longitud leída una vez, acceso directo a `data[i]` (los arrays no cambian de tamaño), el array
+    retenido durante el bucle (un `return` dentro lo suelta).
+  - GCC ya hacía inline de `DashArray_get/set`.
+- A500 (ns): `array_get_set` 159.859 → 73.957 (x2,2), `for_each_10` 251.354 → 212.802 (-15 %), `gfx_pixel` 476.837 → 394.530
+  (-17 %, usa `%`), `gfx_line` -5 %. A1200: `array_get_set` -45 %, `for_each_10` -14 %.
+- Tamaño: 260.192 → 261.924 bytes.

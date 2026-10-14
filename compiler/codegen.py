@@ -60,6 +60,43 @@ class CTemplates:
 
 static void _dash_exit(int code);
 
+/* Integer *, / and % of two LONGs. A 68000 has no 32-bit multiply or divide:
+   GCC calls libgcc (__mulsi3, and __modsi3 = divide + multiply). When the
+   values fit in 16 bits one muls.w / divu.w instruction does it. On 68020+
+   the plain operators are single instructions already. */
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+#define _DASH_MUL(a, b) ((LONG)(a) * (LONG)(b))
+#define _DASH_DIV(a, b) ((LONG)(a) / (LONG)(b))
+#define _DASH_MOD(a, b) ((LONG)(a) % (LONG)(b))
+#else
+static __inline__ LONG _dash_imul(LONG a, LONG b) {
+    if ((WORD)a == a && (WORD)b == b) {
+        LONG r = (WORD)a;
+        __asm__ ("muls.w %1,%0" : "+d"(r) : "dmi"((WORD)b) : "cc");
+        return r;
+    }
+    return a * b;
+}
+static __inline__ LONG _dash_idiv(LONG a, LONG b) {
+    if (a >= 0 && b > 0 && b <= 0xFFFF && (ULONG)a < ((ULONG)b << 16)) {
+        ULONG r = (ULONG)a;
+        __asm__ ("divu.w %1,%0" : "+d"(r) : "dm"((UWORD)b) : "cc");
+        return (UWORD)r;
+    }
+    return a / b;
+}
+static __inline__ LONG _dash_imod(LONG a, LONG b) {
+    if (a >= 0 && b > 0 && b <= 0xFFFF && (ULONG)a < ((ULONG)b << 16)) {
+        ULONG r = (ULONG)a;
+        __asm__ ("divu.w %1,%0" : "+d"(r) : "dm"((UWORD)b) : "cc");
+        return r >> 16;
+    }
+    return a % b;
+}
+#define _DASH_MUL(a, b) _dash_imul((a), (b))
+#define _DASH_DIV(a, b) _dash_idiv((a), (b))
+#define _DASH_MOD(a, b) _dash_imod((a), (b))
+#endif
 """
 
     # Memory runtime (included with arrays or strings): one exec pool,
@@ -4887,10 +4924,16 @@ $indent    for (LONG $var = $start; $cond; $incr) {
 $body$indent    }
 """)
 
+    # The array is read once and held while the loop runs (the body may reassign
+    # the variable); arrays never change length, so no bounds check per element
     FOR_EACH_STMT = Template("""\
-$indent    for (LONG _idx_$var = 0; _idx_$var < DashArray_length($array); _idx_$var++) {
-$indent        $elem_type $var = ${cast}DashArray_get($array, _idx_$var);
+$indent    { DashArrayLong *_arr_$var = $array;
+$indent    LONG _len_$var = DashArray_length(_arr_$var);
+$indent    _dash_retain(_arr_$var);
+$indent    for (LONG _idx_$var = 0; _idx_$var < _len_$var; _idx_$var++) {
+$indent        $elem_type $var = ${cast}_arr_$var->data[_idx_$var];
 $body$indent    }
+$indent    _dash_release(_arr_$var); }
 """)
 
     FOR_EACH_CHAR_STMT = Template("""\
@@ -6288,7 +6331,11 @@ static {ret_type} {method_name}({params_str}) {{
         array = self._array_ref(node.iterable)
         strings = self._is_string_array(node.iterable)
         mark = self._new_tmp_mark()
+        # the held array: a return inside the loop must release it too
+        self.context.enter_scope("block")
+        self.context.own(f"_arr_{node.variable}", "obj")
         body = self._generate_loop_body(node, "string" if strings else "number", mark)
+        self.context.exit_scope()
 
         code = CTemplates.FOR_EACH_STMT.substitute(
             elem_type="STRPTR" if strings else "LONG",
@@ -6617,6 +6664,9 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"(strcmp({left}, {right}) {node.operator} 0)"
             left = self._generate_expression(node.left)
             right = self._generate_expression(node.right)
+            fast = self._fast_int_op(node)
+            if fast:
+                return f"{fast}({left}, {right})"
             op = self._translate_operator(node.operator)
             return f"({left} {op} {right})"
         elif isinstance(node, UnaryOp):
@@ -6832,6 +6882,23 @@ static {ret_type} {method_name}({params_str}) {{
         if sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR":
             code = f"(LONG){code}"
         return code
+
+    def _fast_int_op(self, node: BinaryOp) -> Optional[str]:
+        """_DASH_MUL/_DIV/_MOD for *, /, % between integers, unless GCC already does
+        better with a constant (powers of two: shifts; multiply by a constant)."""
+        names = {"*": "_DASH_MUL", "/": "_DASH_DIV", "%": "_DASH_MOD"}
+        if node.operator not in names or self._is_float_expr(node):
+            return None
+        if self._is_string_expr(node.left) or self._is_string_expr(node.right):
+            return None
+        program = self.analysis.program
+        right = constant_int(node.right, program)
+        left = constant_int(node.left, program)
+        if node.operator == "*" and (right is not None or left is not None):
+            return None
+        if right is not None and right > 0 and right & (right - 1) == 0:
+            return None
+        return names[node.operator]
 
     def _is_plain_value(self, node: ASTNode) -> bool:
         """A value that needs no computation: literal, variable, constant, enum value."""

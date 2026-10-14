@@ -1,0 +1,37 @@
+# Test: integer *, / and % (fast 16-bit paths on 68000, libgcc otherwise)
+# Results must match C semantics in every range: negative values, quotients
+# that do not fit in 16 bits, divisors above 65535, products above 16 bits.
+#
+# expect-c: _DASH_MOD(a, b)
+# expect-out: 63 -63 120000 -2000000000
+# expect-out: 14285 65535 100000 -14285 0
+# expect-out: 1 0 -2 2 1
+# expect-out: 100000 1
+# expect-out: 3 4
+
+func op(a, b)
+    return "" + _mul(a, b) + " " + a / b + " " + a % b
+end
+
+func _mul(a, b)
+    return a * b
+end
+
+Main
+    a = 7
+    b = 9
+    c = 40000
+    d = 3
+    e = -50000
+    f = 40000
+    Print "" + a * b + " " + (0 - a) * b + " " + c * d + " " + e * f
+    g = 100000
+    h = 7
+    Print "" + g / h + " " + 196607 / d + " " + 300000 / d + " " + (0 - g) / h + " " + 5 / h
+    Print "" + 70000 % d + " " + 300000 % d + " " + (0 - 100) % h + " " + 100 % (0 - h) + " " + 1000000 % h
+    big = 10000000
+    Print "" + big / 100 + " " + big % 9
+    m = 1000
+    n = 300
+    Print "" + m / n + " " + (m + 200) / n
+end
