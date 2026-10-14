@@ -37,6 +37,9 @@ class CTemplates:
 #include <proto/intuition.h>
 #include <proto/dos.h>
 #include <string.h>
+#include <stdlib.h>
+
+static void _dash_exit(int code);
 """
 
     # Memory runtime (included with arrays or strings): one exec pool,
@@ -272,30 +275,53 @@ static LONG _dash_arena_available(_Dash_Arena *arena) {
 
 """
 
+    # Every program gets one cleanup routine: main calls it at the end and
+    # _dash_exit() calls it on a fatal error (e.g. a window that cannot open),
+    # so libraries, screen, windows and the memory pool are always released.
     PROGRAM_MAIN = Template("""\
+
+static void _dash_exit_cleanup(void) {
+    // Cleanup
+    if (DOSBase) { CloseLibrary((struct Library *)DOSBase); DOSBase = NULL; }
+    if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
+}
+
+static void _dash_exit(int code) {
+    _dash_exit_cleanup();
+    exit(code);
+}
 
 int main() {
     // Initialize Libraries
     IntuitionBase = (struct IntuitionBase *)OpenLibrary("intuition.library", 37);
     DOSBase = (struct DosLibrary *)OpenLibrary("dos.library", 37);
 
-    if (!IntuitionBase || !DOSBase) {
-        if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
-        if (DOSBase) CloseLibrary((struct Library *)DOSBase);
-        return 10;
-    }
+    if (!IntuitionBase || !DOSBase) _dash_exit(10);
 
     // User Code
 $user_code
 
-    // Cleanup
-    CloseLibrary((struct Library *)DOSBase);
-    CloseLibrary((struct Library *)IntuitionBase);
+    _dash_exit_cleanup();
     return 0;
 }
 """)
 
     PROGRAM_MAIN_GFX = Template("""\
+
+static void _dash_exit_cleanup(void) {
+    // Cleanup
+    if (GfxBase) {
+        _dash_close_screen();
+        CloseLibrary((struct Library *)GfxBase); GfxBase = NULL;
+    }
+    if (DOSBase) { CloseLibrary((struct Library *)DOSBase); DOSBase = NULL; }
+    if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
+}
+
+static void _dash_exit(int code) {
+    _dash_exit_cleanup();
+    exit(code);
+}
 
 int main() {
     // Initialize Libraries
@@ -303,12 +329,7 @@ int main() {
     DOSBase = (struct DosLibrary *)OpenLibrary("dos.library", 37);
     GfxBase = (struct GfxBase *)OpenLibrary("graphics.library", 37);
 
-    if (!IntuitionBase || !DOSBase || !GfxBase) {
-        if (GfxBase) CloseLibrary((struct Library *)GfxBase);
-        if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
-        if (DOSBase) CloseLibrary((struct Library *)DOSBase);
-        return 10;
-    }
+    if (!IntuitionBase || !DOSBase || !GfxBase) _dash_exit(10);
 
     // Initialize random seed
     _dash_random_seed = (ULONG)&_dash_random_seed;
@@ -316,16 +337,28 @@ int main() {
     // User Code
 $user_code
 
-    // Cleanup
-    _dash_close_screen();
-    CloseLibrary((struct Library *)GfxBase);
-    CloseLibrary((struct Library *)DOSBase);
-    CloseLibrary((struct Library *)IntuitionBase);
+    _dash_exit_cleanup();
     return 0;
 }
 """)
 
     PROGRAM_MAIN_GADTOOLS = Template("""\
+
+static void _dash_exit_cleanup(void) {
+    // Cleanup
+    if (GadToolsBase) _dash_gt_cleanup();
+    if (AslBase) { _dash_asl_cleanup(); CloseLibrary(AslBase); AslBase = NULL; }
+    if (GfxBase) _dash_close_screen();
+    if (GadToolsBase) { CloseLibrary(GadToolsBase); GadToolsBase = NULL; }
+    if (GfxBase) { CloseLibrary((struct Library *)GfxBase); GfxBase = NULL; }
+    if (DOSBase) { CloseLibrary((struct Library *)DOSBase); DOSBase = NULL; }
+    if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
+}
+
+static void _dash_exit(int code) {
+    _dash_exit_cleanup();
+    exit(code);
+}
 
 int main() {
     // Initialize Libraries
@@ -335,14 +368,7 @@ int main() {
     GadToolsBase = OpenLibrary("gadtools.library", 37);
     AslBase = OpenLibrary("asl.library", 37);
 
-    if (!IntuitionBase || !DOSBase || !GfxBase || !GadToolsBase) {
-        if (AslBase) CloseLibrary(AslBase);
-        if (GadToolsBase) CloseLibrary(GadToolsBase);
-        if (GfxBase) CloseLibrary((struct Library *)GfxBase);
-        if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
-        if (DOSBase) CloseLibrary((struct Library *)DOSBase);
-        return 10;
-    }
+    if (!IntuitionBase || !DOSBase || !GfxBase || !GadToolsBase) _dash_exit(10);
 
     // Initialize random seed
     _dash_random_seed = (ULONG)&_dash_random_seed;
@@ -353,15 +379,7 @@ int main() {
     // User Code
 $user_code
 
-    // Cleanup
-    _dash_gt_cleanup();
-    _dash_asl_cleanup();
-    _dash_close_screen();
-    if (AslBase) CloseLibrary(AslBase);
-    CloseLibrary(GadToolsBase);
-    CloseLibrary((struct Library *)GfxBase);
-    CloseLibrary((struct Library *)DOSBase);
-    CloseLibrary((struct Library *)IntuitionBase);
+    _dash_exit_cleanup();
     return 0;
 }
 """)
@@ -1772,19 +1790,19 @@ static BOOL _ra_open_libs(void) {
 }
 
 static void _ra_close_libs(void) {
-    if (BevelBase) CloseLibrary(BevelBase);
-    if (LabelBase) CloseLibrary(LabelBase);
-    if (ScrollerBase) CloseLibrary(ScrollerBase);
-    if (ListBrowserBase) CloseLibrary(ListBrowserBase);
-    if (ChooserBase) CloseLibrary(ChooserBase);
-    if (PaletteBase) CloseLibrary(PaletteBase);
-    if (SliderBase) CloseLibrary(SliderBase);
-    if (CheckBoxBase) CloseLibrary(CheckBoxBase);
-    if (IntegerBase) CloseLibrary(IntegerBase);
-    if (StringBase) CloseLibrary(StringBase);
-    if (ButtonBase) CloseLibrary(ButtonBase);
-    if (LayoutBase) CloseLibrary(LayoutBase);
-    if (WindowBase) CloseLibrary(WindowBase);
+    if (BevelBase) { CloseLibrary(BevelBase); BevelBase = NULL; }
+    if (LabelBase) { CloseLibrary(LabelBase); LabelBase = NULL; }
+    if (ScrollerBase) { CloseLibrary(ScrollerBase); ScrollerBase = NULL; }
+    if (ListBrowserBase) { CloseLibrary(ListBrowserBase); ListBrowserBase = NULL; }
+    if (ChooserBase) { CloseLibrary(ChooserBase); ChooserBase = NULL; }
+    if (PaletteBase) { CloseLibrary(PaletteBase); PaletteBase = NULL; }
+    if (SliderBase) { CloseLibrary(SliderBase); SliderBase = NULL; }
+    if (CheckBoxBase) { CloseLibrary(CheckBoxBase); CheckBoxBase = NULL; }
+    if (IntegerBase) { CloseLibrary(IntegerBase); IntegerBase = NULL; }
+    if (StringBase) { CloseLibrary(StringBase); StringBase = NULL; }
+    if (ButtonBase) { CloseLibrary(ButtonBase); ButtonBase = NULL; }
+    if (LayoutBase) { CloseLibrary(LayoutBase); LayoutBase = NULL; }
+    if (WindowBase) { CloseLibrary(WindowBase); WindowBase = NULL; }
 }
 
 static BOOL _ra_open_class(struct Library **base, STRPTR name) {
@@ -2891,11 +2909,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
         TAG_DONE);
 
-    if (!win_$name) {
-        CloseLibrary((struct Library *)DOSBase);
-        CloseLibrary((struct Library *)IntuitionBase);
-        return 20;
-    }
+    if (!win_$name) _dash_exit(20);
     _dash_win = win_$name;
     _dash_rp = win_$name->RPort;
 """)
@@ -3397,6 +3411,8 @@ class CodeGenerator(ASTVisitor):
             for window in self.analysis.program.windows:
                 if window.name in self.context.opened_windows:
                     cleanup.append(f"    if (win_{window.name}) CloseWindow(win_{window.name});\n")
+        if self.needs_reaction:
+            cleanup.append("    ra_window_close();\n")
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
         if cleanup:

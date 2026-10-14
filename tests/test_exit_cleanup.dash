@@ -1,0 +1,27 @@
+# Test: common exit path
+# A window that cannot open (also inside a function) exits through
+# _dash_exit(), which closes windows, screen, pool and libraries
+#
+# expect-c: if (!win_Ventana) _dash_exit(20);
+# expect-c: static void _dash_exit_cleanup(void) {
+# expect-c: if (win_Ventana) CloseWindow(win_Ventana);
+
+Window Ventana
+    title "Salida"
+    width 200
+    height 100
+end
+
+func abrir()
+    Ventana.open
+end
+
+Main
+    nombre = "x" + "y"
+    abrir()
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end
