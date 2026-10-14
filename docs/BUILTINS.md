@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 319 funciones, 301 implementadas, 18 sin implementar.
+Total: 320 funciones, 312 implementadas, 8 sin implementar.
 
 ## Gráficos básicos
 
@@ -311,15 +311,16 @@ Total: 319 funciones, 301 implementadas, 18 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `sound_load(id, filename)` | `BOOL` | Load IFF 8SVX sound | **sin implementar** |
-| `sound_create(id, length, rate)` | `BOOL` | Create empty sound buffer | **sin implementar** |
-| `sound_free(id)` | `void` | Free sound memory | **sin implementar** |
-| `sound_play(id, channel)` | `void` | Play sound on channel (0-3) | **sin implementar** |
-| `sound_stop(channel)` | `void` | Stop channel | **sin implementar** |
-| `sound_loop(id, channel)` | `void` | Play sound looped | **sin implementar** |
-| `sound_playing(channel)` | `BOOL` | Check if channel is playing | **sin implementar** |
-| `sound_volume(channel, vol)` | `void` | Set channel volume (0-64) | **sin implementar** |
-| `sound_period(channel, period)` | `void` | Set channel period (pitch) | **sin implementar** |
+| `sound_load(id, filename)` | `BOOL` | Load an IFF 8SVX sound (uncompressed) |  |
+| `sound_sample(id, index, value)` | `void` | Set one sample (-128..127) of a sound made with sound_create |  |
+| `sound_create(id, length, rate)` | `BOOL` | Create a silent sound in chip memory: length in samples, rate in samples per second |  |
+| `sound_free(id)` | `void` | Free sound memory |  |
+| `sound_play(id, channel)` | `void` | Play a sound once on a channel (0-3) |  |
+| `sound_stop(channel)` | `void` | Stop channel |  |
+| `sound_loop(id, channel)` | `void` | Play a sound looped on a channel (until sound_stop) |  |
+| `sound_playing(channel)` | `BOOL` | Check if channel is playing |  |
+| `sound_volume(channel, vol)` | `void` | Set channel volume (0-64) |  |
+| `sound_period(channel, period)` | `void` | Set the channel period (pitch: lower = higher) |  |
 | `music_load(filename)` | `BOOL` | Load MOD file | **sin implementar** |
 | `music_play()` | `void` | Start music playback | **sin implementar** |
 | `music_stop()` | `void` | Stop music | **sin implementar** |
@@ -328,7 +329,7 @@ Total: 319 funciones, 301 implementadas, 18 sin implementar.
 | `music_volume(vol)` | `void` | Set music volume (0-64) | **sin implementar** |
 | `music_position(pos)` | `void` | Set music position | **sin implementar** |
 | `music_free()` | `void` | Free music data | **sin implementar** |
-| `tone_play(channel, freq, vol, duration)` | `void` | Play tone (frequency in Hz) | **sin implementar** |
+| `tone_play(channel, freq, vol, duration)` | `void` | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
 
 ## Intuition
 

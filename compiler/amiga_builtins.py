@@ -2193,7 +2193,15 @@ AUDIO_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_sound_load(${id}, ${filename})",
         needs_audio=True,
-        description="Load IFF 8SVX sound"
+        description="Load an IFF 8SVX sound (uncompressed)"
+    ),
+    "sound_sample": BuiltinFunc(
+        name="sound_sample",
+        params=["id", "index", "value"],
+        return_type="void",
+        c_template="_dash_sound_sample(${id}, ${index}, ${value})",
+        needs_audio=True,
+        description="Set one sample (-128..127) of a sound made with sound_create"
     ),
     "sound_create": BuiltinFunc(
         name="sound_create",
@@ -2201,7 +2209,7 @@ AUDIO_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_sound_create(${id}, ${length}, ${rate})",
         needs_audio=True,
-        description="Create empty sound buffer"
+        description="Create a silent sound in chip memory: length in samples, rate in samples per second"
     ),
     "sound_free": BuiltinFunc(
         name="sound_free",
@@ -2219,7 +2227,7 @@ AUDIO_FUNCTIONS = {
         return_type="void",
         c_template="_dash_sound_play(${id}, ${channel})",
         needs_audio=True,
-        description="Play sound on channel (0-3)"
+        description="Play a sound once on a channel (0-3)"
     ),
     "sound_stop": BuiltinFunc(
         name="sound_stop",
@@ -2235,7 +2243,7 @@ AUDIO_FUNCTIONS = {
         return_type="void",
         c_template="_dash_sound_loop(${id}, ${channel})",
         needs_audio=True,
-        description="Play sound looped"
+        description="Play a sound looped on a channel (until sound_stop)"
     ),
     "sound_playing": BuiltinFunc(
         name="sound_playing",
@@ -2261,7 +2269,7 @@ AUDIO_FUNCTIONS = {
         return_type="void",
         c_template="_dash_sound_period(${channel}, ${period})",
         needs_audio=True,
-        description="Set channel period (pitch)"
+        description="Set the channel period (pitch: lower = higher)"
     ),
 
     # Music (MOD/ProTracker)
@@ -2337,7 +2345,7 @@ AUDIO_FUNCTIONS = {
         return_type="void",
         c_template="_dash_tone_play(${channel}, ${freq}, ${vol}, ${duration})",
         needs_audio=True,
-        description="Play tone (frequency in Hz)"
+        description="Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once)"
     ),
 }
 

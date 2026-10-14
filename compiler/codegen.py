@@ -1152,6 +1152,227 @@ static void _dash_copper_install(void) {
 
 """
 
+    # Sound through audio.device (the system way): the four channels are
+    # allocated on first use; each channel has its own CMD_WRITE request
+    # (asynchronous) and a control request for volume/period changes.
+    SOUND_RUNTIME = """\
+/* Dash Sound */
+#include <devices/audio.h>
+#include <clib/alib_protos.h>   /* BeginIO (amiga.lib) */
+#include <graphics/gfxbase.h>
+#define _DASH_MAX_SOUNDS 32
+typedef struct { BYTE *data; LONG length; LONG rate; } _DashSound;
+static _DashSound _dash_sounds[_DASH_MAX_SOUNDS];
+static struct MsgPort *_dash_aport = NULL;
+static struct IOAudio *_dash_aopen = NULL;      /* the request that opened the device */
+static struct IOAudio *_dash_aplay[4];
+static struct IOAudio *_dash_actl[4];
+static BOOL _dash_abusy[4];
+static LONG _dash_avol[4] = { 64, 64, 64, 64 };
+static LONG _dash_aperiod[4] = { 0, 0, 0, 0 };
+static BYTE *_dash_tone_wave = NULL;            /* 32 samples of a sine, for tone_play */
+
+static LONG _dash_audio_clock(void) {
+    return (GfxBase->DisplayFlags & PAL) ? 3546895 : 3579545;
+}
+
+static BOOL _dash_audio_open(void) {
+    static UBYTE all_channels[] = { 15 };
+    LONG c;
+    if (_dash_aopen) return TRUE;
+    _dash_aport = CreateMsgPort();
+    if (!_dash_aport) return FALSE;
+    _dash_aopen = (struct IOAudio *)CreateIORequest(_dash_aport, sizeof(struct IOAudio));
+    if (!_dash_aopen) return FALSE;
+    _dash_aopen->ioa_Request.io_Message.mn_Node.ln_Pri = 0;
+    _dash_aopen->ioa_Data = all_channels;
+    _dash_aopen->ioa_Length = sizeof(all_channels);
+    if (OpenDevice((CONST_STRPTR)"audio.device", 0, (struct IORequest *)_dash_aopen, 0) != 0) {
+        DeleteIORequest((struct IORequest *)_dash_aopen);
+        _dash_aopen = NULL;
+        return FALSE;
+    }
+    for (c = 0; c < 4; c++) {
+        _dash_aplay[c] = (struct IOAudio *)CreateIORequest(_dash_aport, sizeof(struct IOAudio));
+        _dash_actl[c] = (struct IOAudio *)CreateIORequest(_dash_aport, sizeof(struct IOAudio));
+        if (!_dash_aplay[c] || !_dash_actl[c]) return FALSE;
+        CopyMem(_dash_aopen, _dash_aplay[c], sizeof(struct IOAudio));
+        CopyMem(_dash_aopen, _dash_actl[c], sizeof(struct IOAudio));
+        _dash_aplay[c]->ioa_Request.io_Message.mn_ReplyPort = _dash_aport;
+        _dash_actl[c]->ioa_Request.io_Message.mn_ReplyPort = _dash_aport;
+        _dash_aplay[c]->ioa_Request.io_Unit = (struct Unit *)(1L << c);
+        _dash_actl[c]->ioa_Request.io_Unit = (struct Unit *)(1L << c);
+    }
+    return TRUE;
+}
+
+static void _dash_sound_stop(LONG ch) {
+    if (ch < 0 || ch > 3 || !_dash_aopen || !_dash_abusy[ch]) return;
+    if (!CheckIO((struct IORequest *)_dash_aplay[ch])) AbortIO((struct IORequest *)_dash_aplay[ch]);
+    WaitIO((struct IORequest *)_dash_aplay[ch]);
+    _dash_abusy[ch] = FALSE;
+}
+
+static BOOL _dash_sound_playing(LONG ch) {
+    if (ch < 0 || ch > 3 || !_dash_aopen || !_dash_abusy[ch]) return FALSE;
+    if (!CheckIO((struct IORequest *)_dash_aplay[ch])) return TRUE;
+    WaitIO((struct IORequest *)_dash_aplay[ch]);   /* finished: take the reply off the port */
+    _dash_abusy[ch] = FALSE;
+    return FALSE;
+}
+
+static void _dash_audio_write(LONG ch, BYTE *data, LONG length, LONG period, LONG cycles) {
+    struct IOAudio *io;
+    if (ch < 0 || ch > 3 || !data || length < 2 || !_dash_audio_open()) return;
+    _dash_sound_stop(ch);
+    io = _dash_aplay[ch];
+    io->ioa_Request.io_Command = CMD_WRITE;
+    io->ioa_Request.io_Flags = ADIOF_PERVOL;
+    io->ioa_Data = (UBYTE *)data;
+    io->ioa_Length = length & ~1;          /* Paula plays words */
+    io->ioa_Period = period < 124 ? 124 : (period > 65535 ? 65535 : period);
+    io->ioa_Volume = _dash_avol[ch];
+    io->ioa_Cycles = cycles;               /* 0 = forever */
+    _dash_aperiod[ch] = io->ioa_Period;
+    BeginIO((struct IORequest *)io);
+    _dash_abusy[ch] = TRUE;
+}
+
+static _DashSound *_dash_sound_get(LONG id) {
+    if (id < 0 || id >= _DASH_MAX_SOUNDS || !_dash_sounds[id].data) return NULL;
+    return &_dash_sounds[id];
+}
+
+static void _dash_sound_free(LONG id) {
+    _DashSound *snd = _dash_sound_get(id);
+    LONG c;
+    if (!snd) return;
+    for (c = 0; c < 4; c++)                /* no channel may still read it */
+        if (_dash_abusy[c] && _dash_aplay[c]->ioa_Data == (UBYTE *)snd->data) _dash_sound_stop(c);
+    FreeMem(snd->data, snd->length);
+    snd->data = NULL;
+}
+
+/* An empty (silent) sound in chip memory; fill it with sound_sample */
+static BOOL _dash_sound_create(LONG id, LONG length, LONG rate) {
+    if (id < 0 || id >= _DASH_MAX_SOUNDS || length < 2 || rate < 1) return FALSE;
+    _dash_sound_free(id);
+    length = (length + 1) & ~1;
+    _dash_sounds[id].data = (BYTE *)AllocMem(length, MEMF_CHIP | MEMF_CLEAR);
+    if (!_dash_sounds[id].data) return FALSE;
+    _dash_sounds[id].length = length;
+    _dash_sounds[id].rate = rate;
+    return TRUE;
+}
+
+static void _dash_sound_sample(LONG id, LONG index, LONG value) {
+    _DashSound *snd = _dash_sound_get(id);
+    if (snd && index >= 0 && index < snd->length) snd->data[index] = (BYTE)value;
+}
+
+/* IFF 8SVX, uncompressed: the one-shot part plus the repeat part */
+static BOOL _dash_sound_load(LONG id, STRPTR filename) {
+    BPTR fh = Open(filename, MODE_OLDFILE);
+    UBYTE hdr[12], chunk[8], vhdr[20];
+    LONG rate = 0, comp = 0;
+    BOOL ok = FALSE;
+    if (!fh) return FALSE;
+    if (Read(fh, hdr, 12) == 12 && _dash_iff_u32(hdr) == 0x464F524D && _dash_iff_u32(hdr + 8) == 0x38535658) {
+        while (Read(fh, chunk, 8) == 8) {                          /* "FORM" ... "8SVX" */
+            ULONG type = _dash_iff_u32(chunk), len = _dash_iff_u32(chunk + 4), pad = len & 1;
+            if (type == 0x56484452 && len >= 20) {                 /* VHDR */
+                if (Read(fh, vhdr, 20) != 20) break;
+                rate = (vhdr[12] << 8) | vhdr[13];
+                comp = vhdr[15];
+                Seek(fh, len - 20 + pad, OFFSET_CURRENT);
+            } else if (type == 0x424F4459) {                       /* BODY */
+                if (comp != 0 || !_dash_sound_create(id, len, rate ? rate : 8363)) break;
+                ok = Read(fh, _dash_sounds[id].data, len) == (LONG)len;
+                if (!ok) _dash_sound_free(id);
+                break;
+            } else {
+                Seek(fh, len + pad, OFFSET_CURRENT);
+            }
+        }
+    }
+    Close(fh);
+    return ok;
+}
+
+static void _dash_sound_play(LONG id, LONG ch) {
+    _DashSound *snd = _dash_sound_get(id);
+    if (snd) _dash_audio_write(ch, snd->data, snd->length, _dash_audio_clock() / snd->rate, 1);
+}
+
+static void _dash_sound_loop(LONG id, LONG ch) {
+    _DashSound *snd = _dash_sound_get(id);
+    if (snd) _dash_audio_write(ch, snd->data, snd->length, _dash_audio_clock() / snd->rate, 0);
+}
+
+static void _dash_audio_pervol(LONG ch) {
+    struct IOAudio *io;
+    if (ch < 0 || ch > 3 || !_dash_audio_open() || !_dash_abusy[ch]) return;
+    io = _dash_actl[ch];
+    io->ioa_Request.io_Command = ADCMD_PERVOL;
+    io->ioa_Request.io_Flags = 0;
+    io->ioa_Period = _dash_aperiod[ch];
+    io->ioa_Volume = _dash_avol[ch];
+    DoIO((struct IORequest *)io);
+}
+
+static void _dash_sound_volume(LONG ch, LONG vol) {
+    if (ch < 0 || ch > 3) return;
+    _dash_avol[ch] = vol < 0 ? 0 : (vol > 64 ? 64 : vol);
+    _dash_audio_pervol(ch);
+}
+
+static void _dash_sound_period(LONG ch, LONG period) {
+    if (ch < 0 || ch > 3) return;
+    _dash_aperiod[ch] = period < 124 ? 124 : (period > 65535 ? 65535 : period);
+    _dash_audio_pervol(ch);
+}
+
+/* A sine tone of freq Hz for duration milliseconds (returns at once) */
+static void _dash_tone_play(LONG ch, LONG freq, LONG vol, LONG duration) {
+    static const BYTE sine[32] = { 0, 24, 48, 70, 89, 105, 117, 124, 127, 124, 117, 105, 89, 70, 48, 24,
+                                   0, -24, -48, -70, -89, -105, -117, -124, -127, -124, -117, -105, -89, -70, -48, -24 };
+    LONG cycles;
+    if (freq < 1 || ch < 0 || ch > 3) return;
+    if (!_dash_tone_wave) {
+        _dash_tone_wave = (BYTE *)AllocMem(32, MEMF_CHIP);
+        if (!_dash_tone_wave) return;
+        CopyMem((APTR)sine, _dash_tone_wave, 32);
+    }
+    cycles = freq * duration / 1000;
+    if (cycles < 1) cycles = 1;
+    if (cycles > 65535) cycles = 65535;
+    _dash_avol[ch] = vol < 0 ? 0 : (vol > 64 ? 64 : vol);
+    _dash_audio_write(ch, _dash_tone_wave, 32, _dash_audio_clock() / (freq * 32), cycles);
+}
+
+static void _dash_sound_cleanup(void) {
+    LONG c, i;
+    if (_dash_aopen) {
+        for (c = 0; c < 4; c++) _dash_sound_stop(c);
+        CloseDevice((struct IORequest *)_dash_aopen);   /* gives the channels back */
+    }
+    for (c = 0; c < 4; c++) {
+        if (_dash_aplay[c]) DeleteIORequest((struct IORequest *)_dash_aplay[c]);
+        if (_dash_actl[c]) DeleteIORequest((struct IORequest *)_dash_actl[c]);
+        _dash_aplay[c] = _dash_actl[c] = NULL;
+    }
+    if (_dash_aopen) { DeleteIORequest((struct IORequest *)_dash_aopen); _dash_aopen = NULL; }
+    if (_dash_aport) { DeleteMsgPort(_dash_aport); _dash_aport = NULL; }
+    for (i = 0; i < _DASH_MAX_SOUNDS; i++) _dash_sound_free(i);
+    if (_dash_tone_wave) { FreeMem(_dash_tone_wave, 32); _dash_tone_wave = NULL; }
+}
+
+static ULONG _dash_iff_u32(UBYTE *p) {
+    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
+}
+
+"""
+
     # Windows opened with window_create(): a table of handles 1..16; handle 0 is
     # the current window (_dash_win). Closed at exit by _dash_windows_cleanup().
     WINMGR_RUNTIME = """\
@@ -4364,6 +4585,7 @@ _RUNTIME_FLAGS = [
     ("WINMGR_RUNTIME", "uses_winmgr"),
     ("BITMAP_RUNTIME", "uses_bitmaps"),
     ("COPPER_RUNTIME", "uses_copper"),
+    ("SOUND_RUNTIME", "uses_sound"),
     ("DIR_RUNTIME", "uses_dirs"),
     ("GRAPHICS_RUNTIME", "needs_gfx"),
     ("INPUT_RUNTIME", "needs_gfx"),
@@ -4586,6 +4808,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_gadgets: bool = False  # button_create()... handles
         self.uses_bitmaps: bool = False  # bitmap_create()... ids
         self.uses_copper: bool = False   # copper_create()...
+        self.uses_sound: bool = False    # sound_*, tone_play
         self.uses_dirs: bool = False    # dir_change() / dir_current()
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
@@ -4751,6 +4974,9 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BITMAP_RUNTIME)
         if self.uses_copper:
             parts.append(CTemplates.COPPER_RUNTIME)
+        if self.uses_sound:
+            parts.append("static ULONG _dash_iff_u32(UBYTE *p);\n")
+            parts.append(CTemplates.SOUND_RUNTIME)
 
         # Add input runtime if needed (for key/mouse/joystick)
         if self.needs_gfx:
@@ -4855,6 +5081,8 @@ class CodeGenerator(ASTVisitor):
             cleanup.append("    _dash_bitmaps_cleanup();\n")
         if self.uses_copper:
             cleanup.append("    _dash_copper_free();\n")   # before the screen closes
+        if self.uses_sound:
+            cleanup.append("    _dash_sound_cleanup();\n")
         if self.needs_reaction:
             cleanup.append("    ra_window_close();\n")
         if self._uses_key_runtime():
@@ -6178,8 +6406,8 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
             self.needs_asl = True
-        if self.uses_bitmaps or self.uses_copper:
-            self.needs_gfx = True
+        if self.uses_bitmaps or self.uses_copper or self.uses_sound:
+            self.needs_gfx = True   # sound: GfxBase->DisplayFlags (PAL/NTSC clock)
         # Gadget handles live on GadTools (opened by the GadTools main template)
         if self.uses_gadgets:
             self.needs_gadtools = True

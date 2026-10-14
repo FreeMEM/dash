@@ -1109,9 +1109,25 @@ sound_loop(1, 1)        # Sonido 1 en canal 1, loop
 # Detener canal
 sound_stop(0)
 
-# Volumen (0-64)
+# Volumen (0-64) y periodo (tono: menor = mas agudo) de un canal
 sound_volume(0, 48)
+sound_period(0, 300)
+
+if sound_playing(0)          # sigue sonando?
+    Print "sonando"
+end
+
+# Sonido sintetizado: muestras de -128 a 127
+sound_create(2, 2000, 8000)  # id, muestras, muestras por segundo
+for i in (0..1999)
+    sound_sample(2, i, (i % 20) * 12 - 120)
+end
+sound_play(2, 0)
+sound_free(2)
 ```
+
+Usa `audio.device`: los cuatro canales se reservan al primer sonido y se devuelven al
+salir. Todo es asincrono: `sound_play` y `tone_play` vuelven enseguida. 8SVX sin comprimir.
 
 ### Musica MOD
 
@@ -1138,9 +1154,9 @@ music_free()
 ### Tonos Sintetizados
 
 ```
-# tone_play(canal, frecuencia_hz, volumen, duracion_ticks)
-tone_play(0, 440, 64, 50)   # La 440Hz
-tone_play(1, 523, 48, 25)   # Do
+# tone_play(canal, frecuencia_hz, volumen, duracion_ms)
+tone_play(0, 440, 64, 500)  # La 440 Hz, medio segundo (onda senoidal)
+tone_play(1, 523, 48, 250)  # Do
 ```
 
 ---

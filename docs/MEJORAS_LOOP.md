@@ -102,7 +102,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
 - [x] 20. Builtins: `bob_*`.
 - [x] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
-- [ ] 22. Builtins: `sound_*` y `tone_play` (audio.device).
+- [x] 22. Builtins: `sound_*` y `tone_play` (audio.device).
 - [ ] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
 - [ ] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
       `runtime/softfloat`), como las versiones FPU de LightWave. Probar en FS-UAE con `fpu=68882` y comparar
@@ -417,3 +417,15 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Probado: las instrucciones aparecen en la lista de copper real del sistema (`GfxBase->LOFlist`) tras instalar y
   desaparecen tras `copper_free`. Con pantalla propia, dos ejecuciones seguidas saliendo con la lista instalada.
 - No verificado: el efecto visual (no hay captura de pantalla).
+
+### 2026-10-14 — Tarea 22 (sonido)
+- Base: 123/123 con `--emu`, ejemplos 30/30. Después: 125/125 con `--emu`, ejemplos 30/30. Builtins sin código: 18 → 8 (solo `music_*`).
+- Hecho (test: `test_sound` en FS-UAE): `SOUND_RUNTIME` con audio.device: los 4 canales se reservan al primer uso
+  (mapa 15), una petición `CMD_WRITE` asíncrona por canal (`BeginIO`, `CheckIO`/`WaitIO`, `AbortIO`) y otra de control
+  para `ADCMD_PERVOL`. 32 sonidos en memoria chip: `sound_create` + `sound_sample` (builtin nuevo, para llenarlos),
+  `sound_load` (IFF 8SVX sin comprimir), `sound_play/loop/stop/playing/volume/period/free`. `tone_play`: seno de 32
+  muestras, duración en milisegundos (el manual decía "ticks"; corregido). Reloj PAL/NTSC según `GfxBase->DisplayFlags`.
+  Al salir: parar canales, cerrar el device (devuelve los canales) y liberar.
+- Probado en FS-UAE (la emulación de Paula corre aunque no haya salida de audio en el PC): un sonido de 0,25 s
+  termina, uno en bucle sigue hasta `sound_stop`, `tone_play` dura lo pedido, el 8SVX generado carga y suena.
+- No verificado: que se oiga bien (el emulador corre sin audio).

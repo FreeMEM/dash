@@ -1,4 +1,4 @@
-# expect: Builtin 'sound_play' is declared but not implemented yet
+# expect: Builtin 'music_play' is declared but not implemented yet
 Main
-    sound_play(0, 0)
+    music_play()
 end
