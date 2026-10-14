@@ -91,6 +91,9 @@ end
 Main
     MyWin.open
     EventLoop
+        On Key "ESC"        # also "a", 0x4C, UP/DOWN/F1..., or no key = any
+            Stop
+        end
         On Close
             Stop
         end

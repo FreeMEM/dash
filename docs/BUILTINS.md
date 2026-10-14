@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 318 funciones, 246 implementadas, 72 sin implementar.
+Total: 318 funciones, 248 implementadas, 70 sin implementar.
 
 ## Gráficos básicos
 
@@ -96,8 +96,8 @@ Total: 318 funciones, 246 implementadas, 72 sin implementar.
 | `key_pressed()` | `BOOL` | Check if key is available |  |
 | `key_get()` | `LONG` | Get key code |  |
 | `key_wait()` | `LONG` | Wait for and return key |  |
-| `key_raw()` | `LONG` | Get raw key code (no translation) | **sin implementar** |
-| `key_text(keycode)` | `STRPTR` | Convert keycode to text | **sin implementar** |
+| `key_raw()` | `LONG` | Get raw key code (no translation) |  |
+| `key_text(keycode)` | `STRPTR` | Convert keycode to text |  |
 | `mouse_x()` | `LONG` | Mouse X position relative to window inner area |  |
 | `mouse_y()` | `LONG` | Mouse Y position relative to window inner area |  |
 | `mouse_button(btn)` | `BOOL` | Check mouse button (0=left, 1=right) |  |

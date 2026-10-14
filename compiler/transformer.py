@@ -488,8 +488,11 @@ class DashASTBuilder(Transformer):
 
     def on_key(self, items) -> OnKeyHandler:
         """Build an On Key handler node."""
-        key = items[0].value if isinstance(items[0], Token) else str(items[0])
-        body = self._flatten_statements(items[1:])
+        key = None
+        if items and isinstance(items[0], Token) and items[0].type in ('ESCAPED_STRING', 'INT'):
+            token = items.pop(0)
+            key = token.value[1:-1] if token.type == 'ESCAPED_STRING' else parse_int(token.value)
+        body = self._flatten_statements(items)
         return OnKeyHandler(key=key, body=body)
 
     # === Control Flow ===

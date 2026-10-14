@@ -83,7 +83,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 7. Enums con valores negativos.
 - [x] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
 - [x] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
-- [ ] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
+- [x] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
 - [ ] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
       conversión a texto y `Int()`/`Float()`.
 - [ ] 12. Memoria (1/4): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
@@ -218,3 +218,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
     Ahora `Win.width/height/left/top/title` leen la ventana abierta o, si está cerrada, la definición.
 - No verificado: que `sizegadget` se vea y funcione (no hay captura de pantalla); el C y la ejecución sí.
 - Pendiente (tarea 16): `MiVentana.close` está documentado pero no existe en la gramática.
+
+### 2026-10-14 — Tarea 10 (`On Key`, `key_raw`, `key_text`)
+- Base: 97/97 con `--emu`, ejemplos 30/30. Después: 100/100 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_on_key`, `errors/on_key_unknown`):
+  - `On Key` (cualquier tecla), `On Key "a"` (carácter según el keymap), `On Key "ESC"` (nombres en
+    `KEY_NAMES`) y `On Key 0x4C` (código raw). Todos los `On Key` de un `EventLoop` en un único
+    `case IDCMP_RAWKEY` (antes dos handlers repetían la etiqueta del `case`); las teclas al soltarse se ignoran.
+  - `KEY_RUNTIME`: `_dash_key_record()` guarda el código y traduce con `MapRawKey` (keymap.library, abierta
+    al primer uso y cerrada en `_dash_exit_cleanup`) antes de `ReplyMsg`. `key_raw()` y `key_text(code)`
+    implementados (quedan 70 builtins sin código).
+  - Prescan: si el programa usa teclas, la ventana se abre ya con `IDCMP_RAWKEY`. Antes `key_get`/`key_wait`
+    nunca recibían teclas porque nadie pedía ese evento.
+  - Error previo arreglado: `_dash_key_pressed` leía `msg->Class` después de `ReplyMsg`.
+- Probado en FS-UAE de punta a punta: el test escribe en su propia ventana con `input.device`
+  (`IND_WRITEEVENT`) y los handlers reciben "a", 0x21 ("s") y ESC. Ejemplos con gráficos siguen terminando con RC=0.

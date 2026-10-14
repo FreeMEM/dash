@@ -131,9 +131,10 @@ dash_grammar_minimal = r"""
 
     // Event loop
     event_loop: "EventLoop" (event_handler | comment_line)* "end"
-    ?event_handler: on_close
+    ?event_handler: on_close | on_key
 
     on_close: "On" "Close" instruction* "end"
+    on_key: "On" "Key" (ESCAPED_STRING | INT)? instruction* "end"
 
     // Expressions with precedence
     ?expression: or_expr

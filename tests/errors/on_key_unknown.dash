@@ -1,0 +1,15 @@
+# Test: unknown key names in On Key
+# expect: Unknown key 'ESCAPE' in On Key
+
+Window W
+    title "x"
+end
+
+Main
+    W.open
+    EventLoop
+        On Key "ESCAPE"
+            Stop
+        end
+    end
+end

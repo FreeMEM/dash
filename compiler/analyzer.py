@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int
+    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -383,6 +383,12 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_OnKeyHandler(self, node: OnKeyHandler):
         """Visit an On Key handler."""
+        key = node.key
+        if isinstance(key, str) and len(key) != 1 and key.upper() not in KEY_NAMES:
+            self.error(f"Unknown key '{key}' in On Key: use one character (\"a\"), a raw code "
+                       f"(0x45) or a name ({', '.join(KEY_NAMES)})", node)
+        elif isinstance(key, int) and not 0 <= key <= 0x7F:
+            self.error(f"Raw key code {key} out of range (0..0x7F)", node)
         self.enter_scope("on_key")
         self._visit_new_body(node.body)
         self.exit_scope()

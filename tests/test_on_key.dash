@@ -1,0 +1,71 @@
+# Test: On Key in an EventLoop
+# The program types into its own window through input.device, as if a user
+# pressed the keys: "a" (raw 0x20 on the usa keymap), raw 0x21, then ESC.
+# Windows get IDCMP_RAWKEY when the program uses keys; all On Key handlers
+# share one case; key releases are ignored.
+#
+# expect-c: case IDCMP_RAWKEY:
+# expect-c: IDCMP_RAWKEY
+# expect-out: tecla a
+# expect-out: 32
+# expect-out: a
+# expect-out: 33
+# expect-out: s
+# expect-out: 69
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+
+Window W
+    title "Teclas"
+    width 200
+    height 80
+end
+
+@native func send_key(code: Int)
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    struct InputEvent ie;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWKEY;
+        ie.ie_Code = code;
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        DoIO((struct IORequest *)io);
+        ie.ie_Code = code | IECODE_UP_PREFIX;
+        DoIO((struct IORequest *)io);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+"""
+end
+
+Main
+    W.open
+    Wait 1
+    send_key(0x20)
+    send_key(0x21)
+    send_key(0x45)
+    EventLoop
+        On Key "a"
+            Print "tecla a"
+        end
+        On Key
+            Print key_raw()
+            if key_raw() != 0x45
+                Print key_text(key_raw())
+            end
+        end
+        On Key "ESC"
+            Print "fin"
+            Stop
+        end
+        On Close
+            Stop
+        end
+    end
+end

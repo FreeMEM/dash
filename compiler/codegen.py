@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
     PropertyAccess, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod, SelfRef,
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
-    ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int
+    ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES
 )
 from compiler.analyzer import AnalysisResult
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
@@ -628,7 +628,10 @@ static LONG _dash_wait_key(void) {
         ULONG code = 0;
         WaitPort(_dash_win->UserPort);
         while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
-            if (msg->Class == IDCMP_RAWKEY) code = msg->Code;
+            if (msg->Class == IDCMP_RAWKEY) {
+                code = msg->Code;
+                _dash_key_record(msg);
+            }
             ReplyMsg((struct Message *)msg);
             if (code && !(code & 0x80)) return code;
         }
@@ -1161,6 +1164,62 @@ static void _dash_cleanup_soft_sprites(void) {
 
 """
 
+    # Key runtime: every RAWKEY message is recorded (raw code + text through
+    # keymap.library) before it is replied, for On Key, key_raw() and key_text()
+    KEY_RUNTIME = """\
+/* Dash Key Runtime */
+#include <proto/keymap.h>
+#include <devices/inputevent.h>
+
+struct Library *KeymapBase = NULL;
+static LONG _dash_last_key = 0;
+static UBYTE _dash_last_key_text[8];
+
+static LONG _dash_map_key(UWORD code, UWORD qualifier, APTR prev, UBYTE *buf, LONG size) {
+    struct InputEvent ie;
+    LONG n;
+    buf[0] = 0;
+    if (code & IECODE_UP_PREFIX) return 0;
+    if (!KeymapBase) KeymapBase = OpenLibrary((CONST_STRPTR)"keymap.library", 37);
+    if (!KeymapBase) return 0;
+    ie.ie_NextEvent = NULL;
+    ie.ie_Class = IECLASS_RAWKEY;
+    ie.ie_SubClass = 0;
+    ie.ie_Code = code;
+    ie.ie_Qualifier = qualifier;
+    ie.ie_EventAddress = prev;
+    n = MapRawKey(&ie, (STRPTR)buf, size - 1, NULL);
+    if (n < 0) n = 0;
+    buf[n] = 0;
+    return n;
+}
+
+/* Call with a RAWKEY message before ReplyMsg (IAddress is only valid until then) */
+static void _dash_key_record(struct IntuiMessage *msg) {
+    _dash_last_key = msg->Code;
+    _dash_map_key(msg->Code, msg->Qualifier, msg->IAddress ? *(APTR *)msg->IAddress : NULL,
+                  _dash_last_key_text, sizeof(_dash_last_key_text));
+}
+
+static LONG _dash_key_raw(void) {
+    return _dash_last_key;
+}
+
+/* Text a raw key code produces with the current keymap and no qualifier */
+static STRPTR _dash_key_text(LONG keycode) {
+    UBYTE buf[8];
+    LONG n = _dash_map_key((UWORD)keycode, 0, NULL, buf, sizeof(buf));
+    STRPTR text = (STRPTR)_dash_alloc(n + 1);
+    if (text) CopyMem(buf, text, n + 1);
+    return text;
+}
+
+static void _dash_key_cleanup(void) {
+    if (KeymapBase) { CloseLibrary(KeymapBase); KeymapBase = NULL; }
+}
+
+"""
+
     # Input runtime helpers
     INPUT_RUNTIME = """\
 /* Dash Input Runtime */
@@ -1168,8 +1227,10 @@ static BOOL _dash_key_pressed(void) {
     if (!_dash_win) return FALSE;
     struct IntuiMessage *msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort);
     if (msg) {
+        ULONG cls = msg->Class;  /* read before ReplyMsg: the message is not ours after it */
+        if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
         ReplyMsg((struct Message *)msg);
-        return (msg->Class == IDCMP_RAWKEY);
+        return (cls == IDCMP_RAWKEY);
     }
     return FALSE;
 }
@@ -1180,6 +1241,7 @@ static LONG _dash_key_get(void) {
     while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
         ULONG cls = msg->Class;
         UWORD code = msg->Code;
+        if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
         ReplyMsg((struct Message *)msg);
         if (cls == IDCMP_RAWKEY) return code;
     }
@@ -1194,8 +1256,9 @@ static LONG _dash_key_wait(void) {
         while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
             ULONG cls = msg->Class;
             UWORD code = msg->Code;
+            if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
             ReplyMsg((struct Message *)msg);
-            if (cls == IDCMP_RAWKEY) return code;
+            if (cls == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) return code;
         }
     }
 }
@@ -2986,7 +3049,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
             msg_class = msg->Class;
             msg_code = msg->Code;
             (void)msg_code;
-            ReplyMsg((struct Message *)msg);
+$key_record            ReplyMsg((struct Message *)msg);
 
             switch (msg_class) {
 """)
@@ -3008,13 +3071,6 @@ $handler_code
                     break;
 """)
 
-    ON_KEY_HANDLER = Template("""\
-                case IDCMP_RAWKEY:
-                    if (msg_code == $keycode) {
-$handler_code
-                    }
-                    break;
-""")
 
     # Statement templates
     PRINT_STMT = Template('    Printf($message);\n    Printf("\\n");\n')
@@ -3088,6 +3144,7 @@ _RUNTIME_FLAGS = [
     ("REFCOUNT_RUNTIME", "uses_refcount"),
     ("ARENA_RUNTIME", "uses_arenas"),
     ("WINDOW_RUNTIME", "uses_windows"),
+    ("KEY_RUNTIME", "uses_keys"),
     ("GRAPHICS_RUNTIME", "needs_gfx"),
     ("INPUT_RUNTIME", "needs_gfx"),
     ("GADTOOLS_RUNTIME", "needs_gadtools"),
@@ -3265,6 +3322,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_reaction: bool = False  # Track if ReAction is used
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
+        self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
         self.extern_libraries: Set[str] = set()
         # Track struct variables in current scope for automatic release
@@ -3284,10 +3342,14 @@ class CodeGenerator(ASTVisitor):
         area_funcs = {"gfx_ellipse_fill", "gfx_circle_fill",
                       "gfx_poly_begin", "gfx_poly_add", "gfx_poly_end"}
 
+        key_funcs = {"key_pressed", "key_get", "key_wait", "wait_key", "key_raw", "key_text"}
+
         def scan(n):
             if isinstance(n, FunctionCall) and n.name in area_funcs:
                 self.needs_area = True
-                return  # Found, no need to continue
+            # Windows must ask Intuition for key events before they open
+            if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
+                self.uses_keys = True
             # Recursively scan children
             for attr in dir(n):
                 if attr.startswith('_'):
@@ -3304,7 +3366,11 @@ class CodeGenerator(ASTVisitor):
 
     def _uses_pool(self) -> bool:
         """True if the program needs the pooled memory runtime."""
-        return self.uses_arrays or self.uses_strings or self.uses_refcount
+        return self.uses_arrays or self.uses_strings or self.uses_refcount or self._uses_key_runtime()
+
+    def _uses_key_runtime(self) -> bool:
+        """Key runtime: key builtins, On Key, or the graphics/input runtimes that record keys."""
+        return self.uses_keys or self.needs_gfx
 
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
@@ -3384,6 +3450,10 @@ class CodeGenerator(ASTVisitor):
         # Also needed when using ReAction (for screen support)
         if self.uses_windows or self.needs_reaction:
             parts.append(CTemplates.WINDOW_RUNTIME)
+
+        # Key runtime (the graphics and input runtimes record keys through it)
+        if self._uses_key_runtime():
+            parts.append(CTemplates.KEY_RUNTIME)
 
         # Add graphics runtime if needed
         if self.needs_gfx:
@@ -3473,6 +3543,8 @@ class CodeGenerator(ASTVisitor):
                     cleanup.append(f"    if (win_{window.name}) CloseWindow(win_{window.name});\n")
         if self.needs_reaction:
             cleanup.append("    ra_window_close();\n")
+        if self._uses_key_runtime():
+            cleanup.append("    _dash_key_cleanup();\n")
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
         if cleanup:
@@ -3793,6 +3865,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.idcmp_flags.add("IDCMP_MOUSEMOVE")
             self.context.idcmp_flags.add("IDCMP_MENUPICK")
             self.context.idcmp_flags.add("IDCMP_REFRESHWINDOW")
+        if self.uses_keys:
+            self.context.idcmp_flags.add("IDCMP_RAWKEY")
         idcmp_str = " | ".join(sorted(self.context.idcmp_flags))
 
         # Get window properties with defaults
@@ -3830,11 +3904,17 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.in_event_loop = True
 
         # Start event loop
-        self.emit(CTemplates.EVENT_LOOP_START.substitute(window=window))
+        key_record = ("            if (msg_class == IDCMP_RAWKEY) _dash_key_record(msg);\n"
+                      if self.uses_keys else "")
+        self.emit(CTemplates.EVENT_LOOP_START.substitute(window=window, key_record=key_record))
 
-        # Generate handlers
+        # Generate handlers; all On Key handlers share one "case IDCMP_RAWKEY"
+        key_handlers = [h for h in node.handlers if isinstance(h, OnKeyHandler)]
         for handler in node.handlers:
-            self.visit(handler)
+            if not isinstance(handler, OnKeyHandler):
+                self.visit(handler)
+        if key_handlers:
+            self._generate_key_handlers(key_handlers)
 
         # End event loop - generate manually to insert Area cleanup
         self.emit("            }\n")  # Close switch
@@ -3866,22 +3946,28 @@ static {ret_type} {method_name}({params_str}) {{
         )
         self.emit(code)
 
-    def visit_OnKeyHandler(self, node: OnKeyHandler):
-        """Generate code for On Key handler."""
-        self.context.idcmp_flags.add("IDCMP_RAWKEY")
+    def _generate_key_handlers(self, handlers: List[OnKeyHandler]):
+        """One "case IDCMP_RAWKEY:" for every On Key of an EventLoop (key releases are
+        ignored). The key was recorded by _dash_key_record() before ReplyMsg."""
+        self.emit("                case IDCMP_RAWKEY:\n")
+        self.emit("                    if (msg_code & IECODE_UP_PREFIX) break;\n")
+        for handler in handlers:
+            body = "".join(self._generate_statement(stmt) for stmt in handler.body)
+            self.emit(f"                    if ({self._key_condition(handler.key)}) {{\n")
+            self.emit(body)
+            self.emit("                    }\n")
+        self.emit("                    break;\n")
 
-        handler_code = []
-        for stmt in node.body:
-            handler_code.append(self._generate_statement(stmt))
-
-        # Map key to Amiga raw key code (simplified)
-        keycode = self._key_to_rawkey(node.key)
-
-        code = CTemplates.ON_KEY_HANDLER.substitute(
-            keycode=keycode,
-            handler_code="".join(handler_code)
-        )
-        self.emit(code)
+    def _key_condition(self, key) -> str:
+        """C condition for an On Key handler."""
+        if key is None:
+            return "1"
+        if isinstance(key, int):
+            return f"msg_code == {c_int_literal(key)}"
+        if len(key) == 1:
+            ch = {"'": "\\'", "\\": "\\\\"}.get(key, key)
+            return f"_dash_last_key_text[0] == '{ch}' && _dash_last_key_text[1] == 0"
+        return f"msg_code == 0x{KEY_NAMES[key.upper()]:02X}"
 
     def visit_PrintStmt(self, node: PrintStmt):
         """Generate code for Print statement."""
@@ -4945,19 +5031,6 @@ static {return_type} {lambda_name}({param_str}) {{
         if isinstance(prop, StringLiteral):
             return prop.value
         return str(default)
-
-    def _key_to_rawkey(self, key: str) -> str:
-        """Convert a key character to Amiga raw key code."""
-        # Simplified mapping - would need full table for production
-        key_map = {
-            "ESC": "0x45",
-            "SPACE": "0x40",
-            "RETURN": "0x44",
-            "q": "0x10", "Q": "0x10",
-            "w": "0x11", "W": "0x11",
-            "e": "0x12", "E": "0x12",
-        }
-        return key_map.get(key.strip('"'), "0x00")
 
 
 def generate(analysis: AnalysisResult) -> str:

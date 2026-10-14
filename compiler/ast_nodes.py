@@ -213,10 +213,20 @@ class OnCloseHandler(ASTNode):
 
 @dataclass
 class OnKeyHandler(ASTNode):
-    """Handler for key press event (future)."""
-    key: str
+    """On Key handler: any key (key None), one character ('"a"'), a key name
+    ('"ESC"', see KEY_NAMES) or a raw key code (int)."""
+    key: Optional[Union[str, int]] = None
     body: List[ASTNode] = field(default_factory=list)
     location: Optional[SourceLocation] = None
+
+
+# On Key "NAME": Amiga raw key codes (the same on every keymap)
+KEY_NAMES = {
+    "SPACE": 0x40, "BACKSPACE": 0x41, "TAB": 0x42, "ENTER": 0x43, "RETURN": 0x44,
+    "ESC": 0x45, "DEL": 0x46, "HELP": 0x5F,
+    "UP": 0x4C, "DOWN": 0x4D, "RIGHT": 0x4E, "LEFT": 0x4F,
+    **{f"F{n}": 0x4F + n for n in range(1, 11)},
+}
 
 
 @dataclass

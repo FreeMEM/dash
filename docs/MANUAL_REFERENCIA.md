@@ -901,12 +901,37 @@ end
 # Esperar tecla (bloqueante)
 tecla = key_wait()
 
-# Obtener codigo raw
-raw = key_raw()            # sin implementar
+# Codigo raw de la ultima tecla (EventLoop, key_get, key_wait...)
+raw = key_raw()
 
-# Convertir a texto
-texto = key_text(tecla)    # sin implementar
+# Texto que produce un codigo raw con el teclado activo ("a", "1"...)
+texto = key_text(raw)
 ```
+
+### Teclas en el EventLoop
+
+```
+EventLoop
+    On Key "a"          # un caracter (segun el keymap: "a" no es "A")
+        Print "a"
+    end
+    On Key "ESC"        # un nombre: SPACE BACKSPACE TAB ENTER RETURN ESC DEL HELP
+        Stop            #            UP DOWN LEFT RIGHT F1..F10
+    end
+    On Key 0x4C         # un codigo raw
+        Print "arriba"
+    end
+    On Key              # cualquier tecla
+        Print key_raw()
+    end
+    On Close
+        Stop
+    end
+end
+```
+
+Si varios `On Key` encajan con la tecla, se ejecutan todos, en orden. Las teclas al
+soltarse no cuentan. Si el programa usa teclas, la ventana las pide a Intuition al abrirse.
 
 ### Raton
 
