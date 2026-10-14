@@ -25,15 +25,14 @@ Main
     Print "Created enemy e1"
     Print refcount(e1)
 
-    # Assign to another variable (manual retain for now)
+    # Assigning to another variable shares the struct: the count goes up by itself
     e2 = e1
-    retain(e2)
-    Print "After e2 = e1 + retain:"
+    Print "After e2 = e1:"
     Print refcount(e1)
 
-    # Release one reference
-    release(e2)
-    Print "After release(e2):"
+    # Reassigning e2 gives its reference back
+    e2 = Enemy(0, 0, 10)
+    Print "After e2 = another enemy:"
     Print refcount(e1)
 
     # Test 2: Arena Allocator (for high-performance scenarios)
@@ -61,9 +60,7 @@ Main
     arena_free(arena)
     Print "Arena freed"
 
-    # Clean up struct
-    release(e1)
-    Print "e1 released"
+    # No release needed: e1 is freed by itself when no variable uses it
 
     Print "=== Test Complete ==="
 end

@@ -193,11 +193,12 @@ random_range(min, max)      # Random in range
 ## Memory Management
 > Strings: se liberan solos (cada variable es dueña de su texto; los temporales se
 > liberan en cada vuelta de bucle/EventLoop y al salir de una función).
-> Arrays y structs salen de un pool que se libera al salir del programa.
-> Estas funciones son para gestión manual dentro del programa.
+> Arrays y structs: conteo de referencias automático (se liberan cuando nadie los usa;
+> los ciclos y lo guardado dentro de arrays, al salir).
+> Estas funciones son para casos avanzados.
 
 ```
-# Reference Counting (automatic for structs)
+# Reference Counting (automatic; manual calls only for advanced cases)
 refcount(obj)               # Get count
 retain(obj)                 # Increment
 release(obj)                # Decrement (frees at 0)

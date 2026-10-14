@@ -821,6 +821,16 @@ class SemanticAnalyzer(ASTVisitor):
         owner = text(node.target) if node.target is not None else node.object_name
         return f"{owner}.{node.member}" if last else owner
 
+    def _return_values(self, stmts):
+        """Values of the return statements in a body (nested blocks included)."""
+        for stmt in stmts or []:
+            if isinstance(stmt, ReturnStmt) and stmt.value is not None:
+                yield stmt.value
+            for attr in ("then_body", "else_body", "body"):
+                nested = getattr(stmt, attr, None)
+                if isinstance(nested, list):
+                    yield from self._return_values(nested)
+
     def _struct_type_name(self, type_name: Optional[str]) -> Optional[str]:
         """The type annotation itself when it names a struct."""
         if type_name and self.program and self.program.get_struct(type_name):
@@ -842,7 +852,15 @@ class SemanticAnalyzer(ASTVisitor):
             if prog.get_struct(expr.name):
                 return expr.name
             func = prog.get_function(expr.name)
-            return self._struct_type_name(func.return_type) if func else None
+            if not func:
+                return None
+            if func.return_type:
+                return self._struct_type_name(func.return_type)
+            # untyped: the struct a "return Struct(...)" in its body builds
+            for value in self._return_values(func.body):
+                if isinstance(value, FunctionCall) and prog.get_struct(value.name):
+                    return value.name
+            return None
         if isinstance(expr, MemberAccess):
             owner = self._struct_name_of(VarRef(name=expr.object_name))
             member = expr.member

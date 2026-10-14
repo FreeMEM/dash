@@ -78,6 +78,32 @@ int main(void){ int fails=0;
   _dash_str_set(&v, NULL); _dash_str_set(&w, NULL); CHECK(live == base + 2);   /* t and the kept old w remain */
   CHECK(_dash_tmp_take("literal") == FALSE); CHECK(_dash_tmp_take(NULL) == FALSE);
  }
- void *o = _dash_rc_alloc(16); CHECK(_dash_refcount(o)==1); _dash_retain(o); CHECK(_dash_refcount(o)==2); _dash_release(o); _dash_release(o);
+ /* Objects (arrays, structs): new ones are temporaries; references keep them */
+ {
+  long base = live; ULONG m = _dash_tmp_mark(); DashArrayLong *a1 = NULL, *a2 = NULL;
+  void *o = _dash_rc_alloc(16); CHECK(_dash_refcount(o) == 0);
+  _dash_retain(o); CHECK(_dash_refcount(o) == 1); _dash_retain(o); CHECK(_dash_refcount(o) == 2);
+  _dash_release(o); _dash_release(o); CHECK(live == base);              /* last reference: freed */
+  DashArray_from(3, (LONG[]){1, 2, 3}); CHECK(live == base + 2);         /* object + data */
+  _dash_tmp_release(m); CHECK(live == base);                             /* unused temporary */
+  for (int i = 0; i < 1000; i++) {                                       /* a = [..] in a loop */
+   ULONG it = _dash_tmp_mark();
+   _dash_obj_set((void **)&a1, DashArray_from(2, (LONG[]){i, i}));
+   _dash_tmp_release(it);
+  }
+  CHECK(live == base + 2); CHECK(DashArray_get(a1, 1) == 999);
+  _dash_obj_set((void **)&a2, a1); CHECK(_dash_refcount(a1) == 2);       /* shared */
+  _dash_obj_set((void **)&a1, NULL); CHECK(live == base + 2); CHECK(DashArray_get(a2, 0) == 999);
+  /* a returned object survives the callee and becomes the caller's temporary */
+  m = _dash_tmp_mark();
+  { ULONG fm = _dash_tmp_mark(); DashArrayLong *r = DashArray_create(4);
+    _dash_retain(r); _dash_tmp_release(fm); _dash_obj_float(r);
+    CHECK(live == base + 4); CHECK(_dash_refcount(r) == 0); }
+  _dash_tmp_release(m); CHECK(live == base + 2);
+  /* a returned object someone else holds is not a temporary */
+  _dash_retain(a2); _dash_obj_float(a2); CHECK(_dash_refcount(a2) == 1);
+  _dash_obj_escape(a2); _dash_obj_set((void **)&a2, NULL); CHECK(live == base + 2);   /* escaped: kept */
+  _dash_release(NULL); _dash_retain(NULL); CHECK(_dash_obj_float(NULL) == NULL);
+ }
  _dash_mem_cleanup(); CHECK(_dash_pool==NULL);
  printf("fallos: %d\n", fails); return fails; }

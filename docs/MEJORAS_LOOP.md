@@ -92,7 +92,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `return`, `break`/`continue`; marcas por vuelta de bucle y de `EventLoop`.
 - [x] 14. Memoria (3/4): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
       que concatena 100.000 veces sin crecer.
-- [ ] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
+- [x] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
 - [ ] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
       (documentado en MANUAL_REFERENCIA, pero la gramática solo tiene `.open`).
 - [ ] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
@@ -294,3 +294,24 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   Los 29 ejemplos que no esperan un clic terminan con RC=0 y la misma salida que antes.
 - Pendiente: los builtins cuya plantilla usa `${str}` dos veces (`gfx_text`: `Text(rp, s, strlen(s))`) evalúan
   la expresión dos veces (dos concatenaciones); no pierde memoria, solo tiempo.
+
+### 2026-10-14 — Tarea 15 (memoria 4/4: arrays y structs)
+- Base: 107/107 con `--emu`, ejemplos 30/30. Después: 109/109 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_object_memory` en FS-UAE, `runtime/host` con objetos):
+  - Cabecera de objeto de 20 bytes (enlace y serie de temporal, contador, tamaño, `destroy`), en `MEMORY_RUNTIME`
+    (comparte los números de serie con los strings; `_dash_tmp_release` suelta los dos).
+  - Objeto nuevo = temporal con contador 0; `_dash_obj_set` en variables, globales `var x: Struct` y campos struct
+    (también en el constructor) lo adopta (+1) y suelta el anterior. Al llegar a 0, `destroy` libera los datos del
+    array o los campos String y struct del struct. Variables de arrays/structs se sueltan al acabar su bloque, en
+    `break`/`continue`/`return`, igual que los strings.
+  - `return` de un objeto: se retiene, se limpian locales y temporales y `_dash_obj_float` lo deja como temporal del que llama.
+  - Escapes: objetos guardados en arrays, dados a `@native`/builtins o devueltos por lambdas: una referencia que nunca
+    se suelta. `refcount`/`retain`/`release` no cuentan como escape.
+  - Analyzer: una función sin tipo de retorno que hace `return Struct(...)` ya se reconoce como de ese struct
+    (para `a.b.c = x`).
+- Probado en FS-UAE: 20.000 vueltas creando structs anidados, arrays y trozos `a[1:3]`, con funciones que los
+  devuelven: la memoria no baja (< 8 KB); con el compilador anterior perdía 2,6 MB. Los 29 ejemplos terminan con
+  RC=0; solo cambian los contadores que imprime `test_memory`, que ahora suben solos (ejemplo actualizado y sin el
+  `release` manual que habría liberado una variable en uso).
+- Pendiente: strings dentro de arrays siguen siendo permanentes; alias de un global o campo struct pasado a una
+  función que reasigna ese global (el string sí está protegido, el objeto no).

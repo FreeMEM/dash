@@ -119,12 +119,15 @@ static ULONG _dash_tmp_mark(void) {
     return _dash_tmp_serial;
 }
 
+static void _dash_otmp_release(ULONG mark);
+
 static void _dash_tmp_release(ULONG mark) {
     while (_dash_tmp && _dash_tmp->serial > mark) {
         _DashStrHdr *h = _dash_tmp;
         _dash_tmp = h->next;
         _dash_str_drop(h);
     }
+    _dash_otmp_release(mark);
 }
 
 /* Unlink p from the temporaries if it is one (the caller now owns it).
@@ -205,12 +208,120 @@ static STRPTR _dash_str_ret(STRPTR p) {
     return _dash_str_dup(p, TRUE);
 }
 
+/* Arrays and structs (objects) carry a reference count. A new object is a
+   temporary (count 0, in _dash_otmp) until a variable, field or return value
+   adopts it; when the last reference goes, destroy() frees what the object
+   owns (array data, String fields, struct fields) and then the object. */
+typedef struct _Dash_RefHeader {
+    struct _Dash_RefHeader *next;  /* temporaries list */
+    ULONG serial;                  /* != 0 while it is a temporary */
+    LONG _refcount;
+    LONG _size;                    /* bytes after the header */
+    void (*destroy)(void *);
+} _Dash_RefHeader;
+
+#define _DASH_GET_HEADER(ptr) ((_Dash_RefHeader *)((UBYTE *)(ptr) - sizeof(_Dash_RefHeader)))
+#define _DASH_FROM_HEADER(hdr) ((void *)((UBYTE *)(hdr) + sizeof(_Dash_RefHeader)))
+
+static _Dash_RefHeader *_dash_otmp = NULL;
+
+static void _dash_otmp_push(_Dash_RefHeader *h) {
+    h->serial = ++_dash_tmp_serial;
+    h->next = _dash_otmp;
+    _dash_otmp = h;
+}
+
+static void *_dash_rc_alloc_obj(LONG size, void (*destroy)(void *)) {
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_alloc(sizeof(_Dash_RefHeader) + size);
+    if (!hdr) return NULL;
+    hdr->_refcount = 0;
+    hdr->_size = size;
+    hdr->destroy = destroy;
+    _dash_otmp_push(hdr);
+    return _DASH_FROM_HEADER(hdr);
+}
+
+static void *_dash_rc_alloc(LONG size) {
+    return _dash_rc_alloc_obj(size, NULL);
+}
+
+static void _dash_obj_free(_Dash_RefHeader *h) {
+    if (h->destroy) h->destroy(_DASH_FROM_HEADER(h));
+    FreePooled(_dash_pool, h, sizeof(_Dash_RefHeader) + h->_size);
+}
+
+/* A temporary that gets a reference leaves the temporaries list */
+static void _dash_otmp_take(_Dash_RefHeader *h) {
+    _Dash_RefHeader **link = &_dash_otmp;
+    while (*link) {
+        if (*link == h) { *link = h->next; break; }
+        link = &(*link)->next;
+    }
+    h->next = NULL;
+    h->serial = 0;
+}
+
+static void _dash_retain(void *ptr) {
+    _Dash_RefHeader *h;
+    if (!ptr) return;
+    h = _DASH_GET_HEADER(ptr);
+    if (h->serial) _dash_otmp_take(h);
+    h->_refcount++;
+}
+
+static void _dash_release(void *ptr) {
+    _Dash_RefHeader *h;
+    if (!ptr) return;
+    h = _DASH_GET_HEADER(ptr);
+    if (h->_refcount > 0 && --h->_refcount == 0 && !h->serial) _dash_obj_free(h);
+}
+
+static LONG _dash_refcount(void *ptr) {
+    if (!ptr) return 0;
+    return _DASH_GET_HEADER(ptr)->_refcount;
+}
+
+/* var = value for an array or struct variable or field */
+static void _dash_obj_set(void **var, void *value) {
+    void *old = *var;
+    if (value == old) return;
+    _dash_retain(value);
+    *var = value;
+    _dash_release(old);
+}
+
+/* A returned object: the reference the function took becomes a temporary of the caller */
+static void *_dash_obj_float(void *ptr) {
+    _Dash_RefHeader *h;
+    if (!ptr) return ptr;
+    h = _DASH_GET_HEADER(ptr);
+    if (h->_refcount > 0 && --h->_refcount == 0) _dash_otmp_push(h);
+    return ptr;
+}
+
+/* The object leaves Dash's control (stored in an array, given to C code): kept until exit */
+static void *_dash_obj_escape(void *ptr) {
+    _dash_retain(ptr);
+    return ptr;
+}
+
+static void _dash_otmp_release(ULONG mark) {
+    while (_dash_otmp && _dash_otmp->serial > mark) {
+        _Dash_RefHeader *h = _dash_otmp;
+        _dash_otmp = h->next;
+        h->next = NULL;
+        h->serial = 0;
+        if (h->_refcount == 0) _dash_obj_free(h);
+    }
+}
+
 static void _dash_mem_cleanup(void) {
     if (_dash_pool) {
         DeletePool(_dash_pool);
         _dash_pool = NULL;
     }
     _dash_tmp = NULL;
+    _dash_otmp = NULL;
 }
 
 """
@@ -224,8 +335,14 @@ typedef struct {
     LONG capacity;
 } DashArrayLong;
 
+static void DashArray_destroy(void *obj) {
+    DashArrayLong *arr = (DashArrayLong *)obj;
+    if (arr->data) FreePooled(_dash_pool, arr->data, sizeof(LONG) * arr->capacity);
+}
+
+/* A new array is a temporary until a variable adopts it (memory runtime) */
 static DashArrayLong* DashArray_create(LONG size) {
-    DashArrayLong *arr = (DashArrayLong *)_dash_alloc(sizeof(DashArrayLong));
+    DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(sizeof(DashArrayLong), DashArray_destroy);
     if (!arr) return NULL;
     if (size > 0) {
         arr->data = (LONG *)_dash_alloc(sizeof(LONG) * size);
@@ -380,46 +497,10 @@ static STRPTR DashString_from_float(float f) {
 """
 
     # Reference counting runtime (included when structs are used)
+    # Reference counting lives in MEMORY_RUNTIME (objects share the temporaries
+    # serial numbers with strings); kept as a name for the runtime flags
     REFCOUNT_RUNTIME = """\
-/* Dash Reference Counting Runtime */
-typedef struct {
-    LONG _refcount;
-    LONG _size;
-} _Dash_RefHeader;
-
-#define _DASH_GET_HEADER(ptr) ((_Dash_RefHeader *)((UBYTE *)(ptr) - sizeof(_Dash_RefHeader)))
-#define _DASH_FROM_HEADER(hdr) ((void *)((UBYTE *)(hdr) + sizeof(_Dash_RefHeader)))
-
-static void *_dash_rc_alloc(LONG size) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_alloc(sizeof(_Dash_RefHeader) + size);
-    if (!hdr) return NULL;
-    hdr->_refcount = 1;
-    hdr->_size = size;
-    return _DASH_FROM_HEADER(hdr);
-}
-
-static void _dash_retain(void *ptr) {
-    if (ptr) {
-        _Dash_RefHeader *hdr = _DASH_GET_HEADER(ptr);
-        hdr->_refcount++;
-    }
-}
-
-static void _dash_release(void *ptr) {
-    if (ptr) {
-        _Dash_RefHeader *hdr = _DASH_GET_HEADER(ptr);
-        hdr->_refcount--;
-        if (hdr->_refcount <= 0) {
-            FreePooled(_dash_pool, hdr, sizeof(_Dash_RefHeader) + hdr->_size);
-        }
-    }
-}
-
-static LONG _dash_refcount(void *ptr) {
-    if (!ptr) return 0;
-    return _DASH_GET_HEADER(ptr)->_refcount;
-}
-
+/* Dash Reference Counting: see the memory runtime */
 """
 
     # Arena allocator runtime (included when arenas are used)
@@ -3447,7 +3528,7 @@ class CodeGenContext:
     scope_stack: List[Set[str]] = field(default_factory=lambda: [set()])
     # Parallel stacks: String variables each scope owns (freed when it ends) and
     # the kind of scope ("main", "block", "loop", "func", "handler")
-    owned_stack: List[List[str]] = field(default_factory=lambda: [[]])
+    owned_stack: List[List[tuple]] = field(default_factory=lambda: [[]])
     kind_stack: List[str] = field(default_factory=lambda: ["main"])
 
     @property
@@ -3467,9 +3548,10 @@ class CodeGenContext:
             self.owned_stack.pop()
             self.kind_stack.pop()
 
-    def own(self, name: str):
-        """The current scope owns the String variable name (frees it when it ends)."""
-        self.owned_stack[-1].append(name)
+    def own(self, name: str, kind: str = "str"):
+        """The current scope owns the variable: "str" (String, freed) or "obj"
+        (array or struct, released) when the scope ends."""
+        self.owned_stack[-1].append((name, kind))
 
     def _frames_in_function(self):
         """Indexes of the scopes of the current function (or Main), innermost first."""
@@ -3479,7 +3561,7 @@ class CodeGenContext:
                 return
 
     def is_owned(self, name: str) -> bool:
-        return any(name in self.owned_stack[i] for i in self._frames_in_function())
+        return any(name == n for i in self._frames_in_function() for n, _ in self.owned_stack[i])
 
     def owned_until(self, kinds) -> Optional[List[str]]:
         """Owned variables from the innermost scope out to the first scope of one
@@ -3551,6 +3633,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
+        self.global_objects: Set[str] = set()  # struct globals: hold a reference
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
         self.extern_libraries: Set[str] = set()
@@ -3874,6 +3957,13 @@ class CodeGenerator(ASTVisitor):
             if gvar.initial_value:
                 init_val = self._generate_expression(gvar.initial_value)
                 self.emit(f"    _dash_str_set(&{gvar.name}, {init_val});\n")
+        elif self._is_obj_c_type(c_type):
+            # Holds a reference like any struct variable; the value is set when main starts
+            self.global_objects.add(gvar.name)
+            self.emit_global(f"{c_type}{gvar.name} = NULL;\n")
+            if gvar.initial_value:
+                init_val = self._generate_expression(gvar.initial_value)
+                self.emit(f"    _dash_obj_set((void **)&{gvar.name}, {init_val});\n")
         elif gvar.initial_value:
             init_val = self._generate_expression(gvar.initial_value)
             self.emit_global(f"{c_type} {gvar.name} = {init_val};\n")
@@ -3891,6 +3981,8 @@ class CodeGenerator(ASTVisitor):
         # Track variable type for later use
         if c_type == "STRPTR":
             self.var_types[gvar.name] = "string"
+        elif c_type.startswith("_Dash_"):
+            self.var_types[gvar.name] = f"struct:{gvar.var_type}"
         elif c_type == "float":
             self.var_types[gvar.name] = "float"
         else:
@@ -3991,25 +4083,37 @@ class CodeGenerator(ASTVisitor):
         typedef += "\n".join(fields)
         typedef += f"\n}};\n"
 
-        # Generate constructor function using refcount allocation
+        # Generate constructor function using refcount allocation. The struct
+        # owns its String fields and holds a reference to its struct fields;
+        # the destructor gives them back when the last reference goes.
         params = []
         assigns = []
+        frees = []
         for field in struct.fields:
             c_type = type_map.get(field.field_type, "LONG")
             params.append(f"{c_type} {field.name}")
             if c_type == "STRPTR":
-                # String fields own their text, like variables
                 self.uses_strings = True
                 assigns.append(f"    _dash_str_set(&s->{field.name}, {field.name});")
+                frees.append(f"    _dash_str_free(s->{field.name});")
+            elif self.analysis.program.get_struct(field.field_type):
+                assigns.append(f"    _dash_obj_set((void **)&s->{field.name}, {field.name});")
+                frees.append(f"    _dash_release(s->{field.name});")
             else:
                 assigns.append(f"    s->{field.name} = {field.name};")
 
         params_str = ", ".join(params)
         assigns_str = "\n".join(assigns)
+        frees_str = "\n".join(frees) or "    (void)s;"
 
         constructor = f"""
+static void _dash_struct_destroy_{struct.name}(void *obj) {{
+    {c_name} *s = ({c_name} *)obj;
+{frees_str}
+}}
+
 static {c_name}* _dash_struct_create_{struct.name}({params_str}) {{
-    {c_name} *s = ({c_name} *)_dash_rc_alloc(sizeof({c_name}));
+    {c_name} *s = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), _dash_struct_destroy_{struct.name});
     if (!s) return NULL;
 {assigns_str}
     return s;
@@ -4299,11 +4403,7 @@ static {ret_type} {method_name}({params_str}) {{
             is_strings = bool(node.value.elements) and self._is_string_expr(node.value.elements[0])
             self.var_types[node.name] = "array:string" if is_strings else "array"
             value = self._generate_array_literal(node.value)
-            if not self.context.is_declared(node.name):
-                self.context.declare_var(node.name)
-                self.emit(f"{indent}DashArrayLong *{node.name} = {value};\n")
-            else:
-                self.emit(f"{indent}{node.name} = {value};\n")
+            self._assign_object(node.name, "DashArrayLong *", value)
             return
 
         value = self._generate_expression(node.value)
@@ -4327,6 +4427,10 @@ static {ret_type} {method_name}({params_str}) {{
         else:
             self.var_types[node.name] = "number"
 
+        if self._is_obj_c_type(var_type):
+            self._assign_object(node.name, var_type, value)
+            return
+
         if self.var_types.get(node.name) == "string":
             # A String variable owns its text: _dash_str_set adopts a temporary or
             # copies, and frees the old text. Loop variables only borrow.
@@ -4349,6 +4453,20 @@ static {ret_type} {method_name}({params_str}) {{
         else:
             # Reassignment to existing variable
             self.emit(f"{indent}{node.name} = {value};\n")
+
+    def _assign_object(self, name: str, c_type: str, value: str):
+        """name = value for an array or struct variable: the variable holds a
+        reference (adopting a new object); loop variables only borrow."""
+        indent = self.context.indent
+        if not self.context.is_declared(name):
+            self.context.declare_var(name)
+            self.context.own(name, "obj")
+            self.emit(f"{indent}{c_type}{'' if c_type.endswith('*') else ' '}{name} = NULL;\n")
+            self.emit(f"{indent}_dash_obj_set((void **)&{name}, {value});\n")
+        elif self.context.is_owned(name) or name in self.global_objects:
+            self.emit(f"{indent}_dash_obj_set((void **)&{name}, {value});\n")
+        else:
+            self.emit(f"{indent}{name} = {value};\n")
 
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
@@ -4674,6 +4792,16 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True
             head = f"{indent}{{ STRPTR _dash_r = _dash_str_ret({value});\n"
             release = f"{indent}_dash_tmp_release_keep(_dash_fm, _dash_r);\n"
+        elif self._is_obj_expr(node.value) and getattr(self, "_lambda_depth", 0):
+            head = f"{indent}{{ LONG _dash_r = (LONG)_dash_obj_escape({value});\n"
+            release = f"{indent}_dash_tmp_release(_dash_fm);\n"
+        elif self._is_obj_expr(node.value):
+            # hold the object while locals and temporaries go, then hand it to the
+            # caller as a temporary
+            head = (f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
+                    f"{indent}_dash_retain(_dash_r);\n")
+            release = (f"{indent}_dash_tmp_release(_dash_fm);\n"
+                       f"{indent}_dash_obj_float(_dash_r);\n")
         else:
             head = f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
@@ -4686,8 +4814,8 @@ static {ret_type} {method_name}({params_str}) {{
         array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
         value = self._generate_expression(node.value)
-        if self._is_string_expr(node.value):
-            value = f"(LONG){self._escape(node.value, value)}"
+        if self._is_string_expr(node.value) or self._is_obj_expr(node.value):
+            value = f"(LONG){self._escape_any(node.value, value)}"
         self.emit(f"{indent}DashArray_set({array_name}, {index}, {value});\n")
 
     def visit_FunctionCall(self, node: FunctionCall):
@@ -4711,15 +4839,15 @@ static {ret_type} {method_name}({params_str}) {{
         args = []
         for i, arg in enumerate(node.arguments):
             code = self._generate_expression(arg)
-            if self._is_string_expr(arg):
-                if foreign is not None:
-                    code = self._escape(arg, code)  # C code may keep the pointer
-                elif func and (isinstance(arg, (MemberAccess, PropertyAccess))
-                               or (isinstance(arg, VarRef) and arg.name in self.global_strings)):
-                    # the callee could reassign that field or global and free the
-                    # text it received: pass a temporary copy
-                    self.uses_strings = True
-                    code = f"_dash_str_ret({code})"
+            if foreign is not None:
+                code = self._escape_any(arg, code)  # C code may keep the pointer
+            elif self._is_string_expr(arg) and func and (
+                    isinstance(arg, (MemberAccess, PropertyAccess))
+                    or (isinstance(arg, VarRef) and arg.name in self.global_strings)):
+                # the callee could reassign that field or global and free the
+                # text it received: pass a temporary copy
+                self.uses_strings = True
+                code = f"_dash_str_ret({code})"
             param = func.params[i] if func and i < len(func.params) else None
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
@@ -4740,19 +4868,40 @@ static {ret_type} {method_name}({params_str}) {{
 
     # === String memory (docs/MEJORAS_LOOP.md, "Memoria: método recomendado") ===
 
-    # Builtins that only read their string arguments during the call: they get
-    # temporaries as they are. Any other builtin may keep the pointer (gadget
-    # labels, titles...), so it gets a permanent copy (_dash_str_escape).
+    # Builtins that only read their string or object arguments during the call:
+    # they get temporaries as they are. Any other builtin may keep the pointer
+    # (gadget labels, titles...), so it gets a permanent copy (_dash_str_escape)
+    # or a reference that is never released (_dash_obj_escape).
     _STRING_READERS = {
         "console_write", "dir_create", "file_delete", "file_exists", "file_load",
         "file_open", "file_print", "file_rename", "file_save", "file_size",
         "file_write_line", "file_open_dialog", "file_save_dialog",
         "gfx_text", "gfx_text_at", "gfx_text_len", "sprite_load",
+        "refcount", "retain", "release",   # objects: they only look at the count
     }
 
-    def _frees(self, names) -> str:
-        """Free owned String variables (at the end of their scope, or before leaving it)."""
-        return "".join(f"{self.context.indent}_dash_str_free({n});\n" for n in names)
+    def _frees(self, owned) -> str:
+        """Free owned String variables and release owned arrays/structs (at the end
+        of their scope, or before leaving it)."""
+        return "".join(f"{self.context.indent}_dash_str_free({n});\n" if kind == "str"
+                       else f"{self.context.indent}_dash_release({n});\n"
+                       for n, kind in owned)
+
+    @staticmethod
+    def _is_obj_c_type(c_type: str) -> bool:
+        """Arrays and structs: reference counted objects."""
+        return c_type == "DashArrayLong *" or (c_type.startswith("_Dash_") and c_type.endswith(" *"))
+
+    def _is_obj_expr(self, node: ASTNode) -> bool:
+        return self._is_obj_c_type(self._infer_c_type(node))
+
+    def _escape_any(self, node: ASTNode, code: str) -> str:
+        """Escape a string or an object that leaves Dash's control."""
+        if self._is_string_expr(node):
+            return self._escape(node, code)
+        if self._is_obj_expr(node):
+            return f"_dash_obj_escape({code})"
+        return code
 
     def _new_tmp_mark(self) -> str:
         self._tm_counter = getattr(self, "_tm_counter", 0) + 1
@@ -4784,10 +4933,16 @@ static {ret_type} {method_name}({params_str}) {{
         assigned = self._assigned_names(body)
         for p in params:
             name = p.name if isinstance(p, FunctionParam) else p
-            if self.var_types.get(name) == "string" and name in assigned:
+            if name not in assigned:
+                continue
+            vt = self.var_types.get(name) or ""
+            if vt == "string":
                 self.uses_strings = True
                 code += f"    {name} = _dash_str_dup({name}, FALSE);\n"
                 self.context.own(name)
+            elif vt.startswith("struct:") or vt.startswith("array"):
+                code += f"    _dash_retain({name});\n"
+                self.context.own(name, "obj")
         return code
 
     def _function_epilogue(self) -> str:
@@ -5004,8 +5159,8 @@ static {ret_type} {method_name}({params_str}) {{
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
                 code = self._generate_expression(arguments[i])
-                if builtin.name not in self._STRING_READERS and self._is_string_expr(arguments[i]):
-                    code = self._escape(arguments[i], code)
+                if builtin.name not in self._STRING_READERS:
+                    code = self._escape_any(arguments[i], code)
                 param_values[param_name] = code
             else:
                 param_values[param_name] = "0"  # Default for missing params
@@ -5070,8 +5225,11 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True
             self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {value});\n")
             return
-        if self._is_string_expr(node.value):
-            value = self._escape(node.value, value)
+        if field and self.analysis.program.get_struct(field.field_type):
+            # and holds a reference to its struct fields
+            self.emit(f"{indent}_dash_obj_set((void **)&{owner}->{node.member}, {value});\n")
+            return
+        value = self._escape_any(node.value, value)
         self.emit(f"{indent}{owner}->{node.member} = {value};\n")
 
     def visit_MethodCall(self, node: MethodCall):
@@ -5344,7 +5502,8 @@ static {ret_type} {method_name}({params_str}) {{
         elements = []
         for e in node.elements:
             code = self._generate_expression(e)
-            elements.append(f"(LONG){self._escape(e, code)}" if self._is_string_expr(e) else code)
+            elements.append(f"(LONG){self._escape_any(e, code)}"
+                            if self._is_string_expr(e) or self._is_obj_expr(e) else code)
         return f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
 
     def _returns_value(self, stmts) -> bool:
@@ -5380,8 +5539,8 @@ static {ret_type} {method_name}({params_str}) {{
             # Single expression body (arrow function); it returns a LONG, so a
             # string result leaves Dash's control
             expr = self._generate_expression(node.body)
-            if self._is_string_expr(node.body):
-                expr = f"(LONG){self._escape(node.body, expr)}"
+            if self._is_string_expr(node.body) or self._is_obj_expr(node.body):
+                expr = f"(LONG){self._escape_any(node.body, expr)}"
             body = f"    return {expr};"
             return_type = "LONG"  # Assume LONG for now
         else:

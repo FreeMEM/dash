@@ -1,0 +1,69 @@
+# Test: arrays and structs are freed while the program runs
+# Reference counting: variables, struct fields and return values hold a
+# reference; new objects are temporaries until something adopts them.
+#
+# expect-c: _dash_obj_set((void **)&s->pos, pos);
+# expect-c: _dash_obj_float(_dash_r);
+# expect-out: estable
+# expect-out: 20000
+# expect-out: 7
+# expect-out: 3
+# expect-out: 5
+# expect-out: 2
+
+@native func mem_libre() -> Int
+"""
+    return (LONG)AvailMem(MEMF_ANY);
+"""
+end
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Sprite
+    nombre: String
+    pos: Punto
+end
+
+func crear(i)
+    p = Punto(i, i)
+    return Sprite("s" + i, p)
+end
+
+func suma(lista)
+    total = 0
+    for v in lista
+        total = total + v
+    end
+    return total
+end
+
+Main
+    guardado = crear(0)
+    antes = mem_libre()
+    for i in (1..20000)
+        s = crear(i)
+        s.pos = Punto(i, 7)
+        a = [i, i + 1, i + 2]
+        b = a[1:3]
+        guardado = s
+        if suma(b) < 0
+            Print "nunca"
+        end
+    end
+    despues = mem_libre()
+    if antes - despues < 8192
+        Print "estable"
+    else
+        Print antes - despues
+    end
+    Print guardado.pos.x
+    Print guardado.pos.y
+    otro = guardado
+    otro.pos.x = 3
+    Print guardado.pos.x
+    Print suma([2, 3])
+    Print refcount(guardado)
+end

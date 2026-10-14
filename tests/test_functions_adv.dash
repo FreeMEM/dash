@@ -7,9 +7,9 @@
 # expect-c: LONG aplica(APTR f, LONG v) {
 # expect-c: _dash_r = ((LONG (*)(LONG))f)(v);
 # expect-c: DashArrayLong * lista(void)
-# expect-c: DashArrayLong * l = lista();
+# expect-c: _dash_obj_set((void **)&l, lista());
 # expect-c: _Dash_Punto * crea(void)
-# expect-c: _Dash_Punto * p = crea();
+# expect-c: _dash_obj_set((void **)&p, crea());
 # expect-c: void muestra(_Dash_Punto * q) {
 #
 # expect-out: 8

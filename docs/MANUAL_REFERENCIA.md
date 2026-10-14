@@ -1151,9 +1151,12 @@ ni pausas:
 
 Un bucle que concatena 100.000 veces ocupa lo mismo al final que al principio.
 
-### Reference Counting
+### Arrays y structs (automatico, conteo de referencias)
 
-Dash usa conteo de referencias para structs y arrays (manual por ahora):
+Varias variables pueden compartir el mismo array o struct, asi que cada uno lleva un
+contador de quien lo usa (20 bytes de cabecera). Se suma al asignarlo a una variable,
+a un campo o al devolverlo, y se resta cuando esa variable se reasigna o su bloque
+termina. Al llegar a 0 se libera, con sus Strings y sus structs.
 
 ```
 struct Objeto
@@ -1161,20 +1164,20 @@ struct Objeto
 end
 
 Main
-    obj = Objeto(42)        # refcount = 1
-
-    # Verificar contador
-    Print refcount(obj)     # Imprime: 1
-
-    # Compartir referencia
-    otro = obj
-    retain(otro)            # refcount = 2
-
-    # Liberar referencia
-    release(otro)           # refcount = 1
+    obj = Objeto(42)        # refcount(obj) = 1
+    otro = obj              # 2: comparten el mismo struct
+    otro.valor = 7          # obj.valor tambien vale 7
+    otro = Objeto(1)        # obj vuelve a 1
 end
-# Al salir de Main, obj se libera automaticamente
 ```
+
+- Un array o struct nuevo que nadie guarda (`suma([1, 2])`) se libera al final de la
+  vuelta del bucle, como los textos temporales.
+- Lo que se guarda dentro de un array (`lista[0] = Objeto(1)`) o se entrega a codigo C
+  queda fijo hasta que el programa termina.
+- Ciclos: si un struct apunta a otro que apunta al primero, no se liberan hasta salir.
+- `refcount(x)`, `retain(x)` y `release(x)` siguen existiendo para casos avanzados; un
+  `release` de mas libera algo que una variable aun usa.
 
 ### Arena Allocator (Manual)
 

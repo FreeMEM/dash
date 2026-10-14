@@ -2,10 +2,10 @@
 # Array literals outside plain assignment keep their values,
 # string arrays, char concatenation, pooled memory freed at exit
 #
-# expect-c: DashArrayLong *nums = DashArray_from(3, (LONG[]){10, 20, 30});
+# expect-c: _dash_obj_set((void **)&nums, DashArray_from(3, (LONG[]){10, 20, 30}));
 # expect-c: _dash_r = DashArray_from(3, (LONG[]){1, 2, 3});
 # expect-c: Printf("%ld\n", suma((LONG)DashArray_from(2, (LONG[]){4, 5})));
-# expect-c: DashArrayLong *nombres = DashArray_from(2, (LONG[]){(LONG)"Ana", (LONG)"Bea"});
+# expect-c: _dash_obj_set((void **)&nombres, DashArray_from(2, (LONG[]){(LONG)"Ana", (LONG)"Bea"}));
 # expect-c: Printf("%s\n", (STRPTR)DashArray_get(nombres, 1));
 # expect-c: STRPTR n = (STRPTR)DashArray_get(nombres, _idx_n);
 # expect-c: DashString_from_char(DashString_char_at(palabra, 0))
