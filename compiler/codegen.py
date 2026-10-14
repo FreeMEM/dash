@@ -122,7 +122,7 @@ static ULONG _dash_tmp_mark(void) {
 
 static void _dash_otmp_release(ULONG mark);
 
-static void _dash_tmp_release(ULONG mark) {
+static void _dash_tmp_release_f(ULONG mark) {
     while (_dash_tmp && _dash_tmp->serial > mark) {
         _DashStrHdr *h = _dash_tmp;
         _dash_tmp = h->next;
@@ -130,6 +130,10 @@ static void _dash_tmp_release(ULONG mark) {
     }
     _dash_otmp_release(mark);
 }
+
+/* Fast path: nothing was created since the mark (the usual case in a loop
+   iteration that made no strings or objects) costs one comparison, no call */
+#define _dash_tmp_release(m) do { if (_dash_tmp_serial > (ULONG)(m)) _dash_tmp_release_f(m); } while (0)
 
 /* Unlink p from the temporaries if it is one (the caller now owns it).
    p may be any string: its header is only read once found in the list. */
@@ -161,7 +165,7 @@ static STRPTR _dash_str_dup(STRPTR s, BOOL temp) {
    (a function's return value survives the function's own release) */
 static void _dash_tmp_release_keep(ULONG mark, STRPTR keep) {
     BOOL kept = _dash_tmp_take(keep);
-    _dash_tmp_release(mark);
+    _dash_tmp_release_f(mark);
     if (kept) {
         _DashStrHdr *h = _DASH_STR_HDR(keep);
         h->serial = ++_dash_tmp_serial;
@@ -916,8 +920,12 @@ static BOOL _dash_bitmap_save(LONG id, STRPTR filename) {
     ok = ok && Write(fh, "BODY", 4) == 4 && _dash_iff_put(fh, body_len);
     WaitBlit();
     for (y = 0; ok && y < b->h; y++)
-        for (p = 0; ok && p < b->depth; p++)
-            ok = Write(fh, b->bm->Planes[p] + y * b->bm->BytesPerRow, row_bytes) == row_bytes;
+        for (p = 0; ok && p < b->depth; p++) {
+            /* 32-bit multiply = a libgcc call on 68000: never inside an OS call's
+               arguments (the inline macro's registers would be clobbered) */
+            UBYTE * volatile row = b->bm->Planes[p] + y * b->bm->BytesPerRow;
+            ok = Write(fh, row, row_bytes) == row_bytes;
+        }
     Close(fh);
     return ok;
 }
@@ -1030,8 +1038,11 @@ static void _dash_bob_draw(LONG id) {
         o->back_rp.BitMap = o->back;
     }
     ClipBlit(_dash_rp, o->x, o->y, &o->back_rp, 0, 0, o->fw, b->h, 0xC0);
-    BltMaskBitMapRastPort(b->bm, o->frame * o->fw, 0, _dash_rp, o->x, o->y, o->fw, b->h,
-                          (ABC | ABNC | ANBC), o->mask->Planes[0]);
+    {
+        volatile LONG sx = o->frame * o->fw;   /* libgcc multiply on 68000: outside the macro */
+        BltMaskBitMapRastPort(b->bm, sx, 0, _dash_rp, o->x, o->y, o->fw, b->h,
+                              (ABC | ABNC | ANBC), o->mask->Planes[0]);
+    }
     o->drawn = TRUE;
     o->drawn_rp = _dash_rp;
     o->bx = o->x;
@@ -5962,11 +5973,11 @@ static {ret_type} {method_name}({params_str}) {{
     def visit_WaitStmt(self, node: WaitStmt):
         """Generate code for Wait statement."""
         if isinstance(node.seconds, NumberLiteral):
-            seconds = node.seconds.value
-        else:
-            seconds = f"({self._generate_expression(node.seconds)})"
-        code = CTemplates.WAIT_STMT.substitute(seconds=seconds)
-        self.emit(code)
+            self.emit(CTemplates.WAIT_STMT.substitute(seconds=node.seconds.value))
+            return
+        # n * 50 is a libgcc call on 68000: compute it outside Delay()'s register macro
+        seconds = self._generate_expression(node.seconds)
+        self.emit(f"    {{ volatile LONG _dash_ticks = ({seconds}) * 50; Delay(_dash_ticks); }}\n")
 
     def visit_BreakStmt(self, node: BreakStmt):
         self.emit(self._frees(self.context.owned_until({"loop"}) or []) + f"{self.context.indent}    break;\n")
@@ -6770,13 +6781,27 @@ static {ret_type} {method_name}({params_str}) {{
         if builtin.name in ("refcount", "retain", "release"):
             self.uses_refcount = True
 
-        # Build parameter mapping
+        # Build parameter mapping. Arguments that are not plain values are computed
+        # first into volatile temporaries: the NDK inline macros
+        # put arguments in fixed registers (register asm), and on a 68000 an
+        # argument like "i % 200" is a libgcc call (__modsi3) that GCC may place
+        # after those registers are loaded, clobbering them (seen: BltBitMapRastPort
+        # got garbage and hung an A500). It also evaluates an argument once when
+        # the template uses it twice (Text(rp, s, strlen(s))).
         param_values = {}
+        hoisted = []
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
                 code = self._generate_expression(arguments[i])
                 if builtin.name not in self._STRING_READERS:
                     code = self._escape_any(arguments[i], code)
+                if not self._is_plain_value(arguments[i]):
+                    self._arg_counter = getattr(self, "_arg_counter", 0) + 1
+                    tmp = f"_dash_a{self._arg_counter}"
+                    # volatile: GCC treats libgcc calls as pure and would move
+                    # them past a barrier; a volatile store pins the result first
+                    hoisted.append(f"volatile __typeof__({code}) {tmp} = ({code});")
+                    code = tmp
                 param_values[param_name] = code
             else:
                 param_values[param_name] = "0"  # Default for missing params
@@ -6802,9 +6827,21 @@ static {ret_type} {method_name}({params_str}) {{
         # Substitute into template
         template = Template(builtin.c_template)
         code = template.substitute(param_values)
+        if hoisted:
+            code = "({ " + " ".join(hoisted) + " " + code + "; })"
         if sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR":
             code = f"(LONG){code}"
         return code
+
+    def _is_plain_value(self, node: ASTNode) -> bool:
+        """A value that needs no computation: literal, variable, constant, enum value."""
+        if isinstance(node, (NumberLiteral, StringLiteral, BoolLiteral, FloatLiteral, VarRef)):
+            return True
+        if isinstance(node, UnaryOp) and node.operator == "-":
+            return self._is_plain_value(node.operand)
+        if isinstance(node, MemberAccess) and self.analysis.program.get_enum(node.object_name):
+            return True
+        return False
 
     def _generate_struct_instantiation(self, struct: StructDef, arguments: List[ASTNode]) -> str:
         """Generate C code for struct instantiation."""

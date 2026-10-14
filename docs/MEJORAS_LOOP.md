@@ -30,7 +30,8 @@ Aplicar las cinco decisiones del usuario del 2026-10-14 sobre las propuestas del
    `export DASH_KICKSTART="/home/freemem/Descargas/Telegram Desktop/ks31a1200.rom"`
    (sin la variable se usa el AROS de FS-UAE). Benchmarks: `tools/bench.py` (A500 con
    `export DASH_KICKSTART_A500=~/.cache/dash-emu/kick/kick31_a500.rom`, CRC FC24AE0D; A1200 con `DASH_KICKSTART`);
-   `--save "etiqueta"` guarda la ejecución en `tests/bench/results.json`. Para lo que necesita Workbench (asl.library...):
+   `--save "etiqueta"` guarda la ejecución en `tests/bench/results.json`. `run_tests.py --emu-a500` ejecuta los tests de
+   salida también en un A500 (68000): úsalo cuando cambie el runtime o el codegen. Para lo que necesita Workbench (asl.library...):
    `export DASH_EMU_SYS=~/.cache/dash-emu/sys31` (sacado de `~/Amiberry/HardDrives/system3.1.hdf` con
    `tools/emu_sys_from_hdf.sh`; no va a git). Tests con `# emu-needs: x.library`.
 5. **Verificar.** Repite el paso 2. Nada que antes funcionaba puede romperse.
@@ -113,7 +114,10 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       contador de VBlank) bucles de enteros, Float, strings, arrays, structs, llamadas y gráficos, más el tamaño de
       cada ejecutable. Guardar la tabla base en la bitácora. CPU de la prueba: 68000 (A500) y 68020 (A1200).
       Pedido por el usuario el 2026-10-14: "un lenguaje que aproveche muy bien la máquina".
-- [ ] 26. Optimización (2/3) — ciclos, función por función: cada función del runtime (`DashString_*`,
+- [~] 26. Optimización (2/3) — ciclos, función por función. Partes: 26a marcas de temporales (bucles y
+      funciones), 26b arrays (`DashArray_get/set`, `%`, for-each), 26c strings (concat, interpolación, from_int, set),
+      26d Float por software (rutinas propias), 26e llamadas y return, 26f gráficos y texto (plantillas con `${str}`
+      doble). Detalle original:: cada función del runtime (`DashString_*`,
       `DashArray_*`, `_dash_str_*`, `_dash_tmp_*`, objetos, Float, gráficos...) con su microbenchmark en
       `tests/bench/` (ciclos por llamada en 68000 y 68020) y su ensamblador (`-S`); mejorarlas una a una y
       guardar antes/después en `tests/bench/results.json` (versión = commit). Revisar también el C generado.
@@ -474,3 +478,24 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `_dash_tmp_release` en cada vuelta aunque el cuerpo no cree temporales), `func_call` ~580 ciclos (marca y
   liberación de temporales en cada función, `__typeof__` en el return), `array_get_set` (llamadas a `DashArray_get/set`
   y `%` en 68000 sin división de 32 bits).
+
+### 2026-10-14 — Tarea 26a (temporales y un fallo grave de GCC en 68000)
+- Base: 127/127 con `--emu`. Después: 161/161 con `--emu --emu-a500` (los 34 tests de salida también en un A500).
+- Hecho:
+  - `_dash_tmp_release(m)` es una macro con vía rápida: si no se creó nada desde la marca (serie igual) no hay llamada.
+    A500: `int_loop` 41.423 → 6.663 ns (x6,2), `func_call` 82.036 → 6.617 (x12), `for_each_10` 696.067 → 251.354 (x2,8),
+    `string_chars_26` x4,1, `array_get_set` -19 %, `float_mul_add` -28 %, `string_compare` -33 %. A1200 parecido.
+- Fallo grave encontrado al medir (el benchmark gráfico colgaba el A500): las macros inline del NDK pasan los argumentos
+  en registros fijos (`register asm`). En 68000, `i % 200` o `a * b` de 32 bits es una llamada a libgcc (`__modsi3`,
+  `__mulsi3`) que GCC trata como pura y coloca después de cargar esos registros: la llamada los machaca y la función
+  del sistema recibe basura (aquí `BltBitMapRastPort`). En 68020 esas operaciones son instrucciones, por eso no se veía.
+  Una barrera `asm("" ::: "memory")` no basta (GCC mueve igual una llamada pura).
+  - Arreglo: en cada builtin, los argumentos que no son valores simples se calculan antes en temporales `volatile`
+    (también evita evaluar dos veces `${str}` en `gfx_text`: `gfx_text_concat` -18 %). `Wait expr` igual.
+  - Runtime revisado: dos multiplicaciones de 32 bits dentro de llamadas al sistema (`bitmap_save`, `bob_draw`) pasan a
+    temporales `volatile`.
+  - Las cifras base de `bitmap_blit_32` eran de código mal compilado (blit con basura, por eso rápido). La medida real
+    en A1200 es 645.026 ns.
+  - `run_tests.py --emu-a500`: la batería de salida en 68000.
+- Pendiente: `@native` del usuario y los módulos de `lib/amiga` pueden tener el mismo problema; documentarlo.
+  Tamaño total 250.460 → 260.192 bytes (+3,9 %: la comprobación inline en cada bucle); se mira en la tarea 27.

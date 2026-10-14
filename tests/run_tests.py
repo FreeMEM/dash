@@ -327,7 +327,7 @@ def emu_needs_met(test_file: Path) -> bool:
     return not missing
 
 
-def run_emu_tests(tests: List[Path], compiled: set) -> List[TestResult]:
+def run_emu_tests(tests: List[Path], compiled: set, a500: bool = False) -> List[TestResult]:
     """Run the compiled tests that declare '# expect-out:' in FS-UAE, all in one boot."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
@@ -337,7 +337,16 @@ def run_emu_tests(tests: List[Path], compiled: set) -> List[TestResult]:
         return []
     start_time = time.time()
     try:
-        runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected], timeout=180)
+        if a500:
+            # 68000: catches what a 68020 forgives (libgcc calls for 32-bit mul/div/mod,
+            # odd addresses). Kickstart 3.1 A500 ROM in $DASH_KICKSTART_A500
+            rom = os.environ.get("DASH_KICKSTART_A500")
+            if not rom:
+                raise RuntimeError("--emu-a500 needs $DASH_KICKSTART_A500 (Kickstart for the A500)")
+            runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected], timeout=400,
+                                kickstart=rom, extra_config="amiga_model = A500\n")
+        else:
+            runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected], timeout=180)
     except RuntimeError as e:
         return [TestResult(name="emu", passed=False, transpile_ok=True, compile_ok=True,
                            error_message=str(e))]
@@ -355,7 +364,7 @@ def run_emu_tests(tests: List[Path], compiled: set) -> List[TestResult]:
                      f"expected {wanted[diff] if diff < len(wanted) else '<end>'!r}")
         else:
             error = None
-        results.append(TestResult(name=f"emu/{test_file.stem}", passed=error is None,
+        results.append(TestResult(name=f"{'emu500' if a500 else 'emu'}/{test_file.stem}", passed=error is None,
                                   transpile_ok=True, compile_ok=True,
                                   error_message=error, duration=duration))
     return results
@@ -406,6 +415,8 @@ def main():
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--emu", action="store_true",
                         help="Also run tests with '# expect-out:' lines in FS-UAE")
+    parser.add_argument("--emu-a500", action="store_true",
+                        help="Also run them on an emulated A500 (68000; needs $DASH_KICKSTART_A500)")
     args = parser.parse_args()
 
     test_dir = PROJECT_ROOT / "tests"
@@ -472,10 +483,12 @@ def main():
             results.append(result)
             print("OK" if result.passed else "FAIL")
 
-    if args.emu:
-        compiled = {r.name for r in results if r.passed and r.compile_ok}
-        print("Testing: emu (FS-UAE)...", flush=True)
-        for result in run_emu_tests(tests, compiled):
+    compiled = {r.name for r in results if r.passed and r.compile_ok}
+    for enabled, a500, label in ((args.emu, False, "FS-UAE A1200"), (args.emu_a500, True, "FS-UAE A500")):
+        if not enabled:
+            continue
+        print(f"Testing: emu ({label})...", flush=True)
+        for result in run_emu_tests(tests, compiled, a500):
             results.append(result)
             print(f"  {result.name}: {'OK' if result.passed else 'FAIL'}")
 
