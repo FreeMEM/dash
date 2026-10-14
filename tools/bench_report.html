@@ -1,0 +1,410 @@
+<style>
+  .bx { display: flex; flex-direction: column; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); }
+  .bx-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--cds-gap-md); }
+  .bx-head h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .bx-take { color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 0; max-width: 62ch; }
+  .bx-seg { display: inline-flex; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); overflow: hidden; }
+  .bx-seg button { font: inherit; padding: var(--cds-pad-xs) var(--cds-pad-md); background: transparent; color: var(--color-fg-muted); border: 0; cursor: pointer; }
+  .bx-seg button[aria-pressed="true"] { background: var(--color-panel); color: var(--color-fg); font-weight: var(--cds-font-weight-medium); }
+  .bx-seg button:focus-visible { outline: 2px solid var(--color-fg); outline-offset: -2px; }
+  .bx-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: var(--cds-gap-md); }
+  .bx-tile, .bx-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); min-width: 0; }
+  .bx-tile .k { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .bx-tile .v { font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin-top: var(--cds-gap-xs); min-height: 1.3em; }
+  .bx-tile .n { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-top: var(--cds-gap-xs); }
+  .bx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); }
+  .bx-card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+  .bx-card .note { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: var(--cds-gap-xs) 0 var(--cds-gap-md); }
+  .bx-scroll { overflow-x: auto; max-height: 34rem; overflow-y: auto; }
+  .bx table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: var(--cds-font-size-body); }
+  .bx th { position: sticky; top: 0; background: var(--color-panel); text-align: right; font-weight: var(--cds-font-weight-medium); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .bx td { text-align: right; padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .bx th:first-child, .bx td:first-child { text-align: left; }
+  .bx td.name { font-family: ui-monospace, Menlo, monospace; font-size: var(--cds-font-size-caption); }
+  .bx tr.pick { cursor: pointer; }
+  .bx tr.pick:hover td { background: var(--color-bg); }
+  .bx tr.sel td { background: var(--color-bg); font-weight: var(--cds-font-weight-medium); }
+  .bx .up { color: var(--color-ok); }
+  .bx .down { color: var(--color-bad); }
+  .bx .flat { color: var(--color-fg-muted); }
+  .bx-chart { position: relative; min-height: 15rem; }
+  .bx-chart svg text { fill: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .bx-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; }
+  .bx-tip .t { color: var(--cds-text-secondary); }
+  .bx td.label { text-align: left; white-space: normal; min-width: 14rem; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  [data-dash-source-state=empty] { color: transparent; }
+</style>
+
+<div class="bx">
+  <header class="bx-head" id="cabecera">
+    <div>
+      <h1>Rendimiento de Dash</h1>
+      <p class="bx-take" id="resumen-frase" data-source="resumen">—</p>
+    </div>
+    <div class="bx-seg" role="group" aria-label="Máquina">
+      <button type="button" data-machine="a500">A500 · 68000 7 MHz</button>
+      <button type="button" data-machine="a1200">A1200 · 68020 14 MHz</button>
+    </div>
+  </header>
+
+  <section class="bx-tiles" id="cifras">
+    <div class="bx-tile">
+      <div class="k">Pruebas más rápidas que en su primera medida</div>
+      <div class="v"><span class="t-faster" data-source="resumen" data-field="faster">—</span> <span class="n">de <span class="t-total" data-source="resumen" data-field="total">—</span></span></div>
+      <div class="n">un 2 % o más</div>
+    </div>
+    <div class="bx-tile">
+      <div class="k">Mayor mejora</div>
+      <div class="v"><span class="t-best" data-source="resumen" data-field="best_factor">—</span> <span class="n">veces más rápida</span></div>
+      <div class="n t-bestname" data-source="resumen" data-field="best">—</div>
+    </div>
+    <div class="bx-tile">
+      <div class="k">Tamaño de los programas</div>
+      <div class="v"><span class="t-size" data-source="tamano" data-field="last_kb">—</span> <span class="n">KB</span></div>
+      <div class="n"><span class="t-size0" data-source="tamano" data-field="first_kb">—</span> KB en la primera medida · <span class="t-progs" data-source="tamano" data-field="programs">—</span> programas</div>
+    </div>
+    <div class="bx-tile">
+      <div class="k">Memoria de 1.000 strings cortos</div>
+      <div class="v"><span class="t-mem" data-source="mem">—</span> <span class="n">bytes</span></div>
+      <div class="n">medida desde 27c</div>
+    </div>
+  </section>
+
+  <section class="bx-grid">
+    <div class="bx-card" id="pruebas">
+      <h2>Cada prueba, de su primera medida a la última</h2>
+      <p class="note">Nanosegundos por vuelta del bucle, menos es mejor. Veces más rápida: primera entre última. Pulsa una fila para ver su evolución.</p>
+      <div class="bx-scroll">
+        <table class="t-cmp" data-source="comparacion" data-row-key="machine,benchmark">
+          <thead><tr>
+            <th data-field="benchmark">Prueba</th>
+            <th data-field="first_ns">Primera (ns)</th>
+            <th data-field="last_ns">Última (ns)</th>
+            <th data-field="factor">Veces más rápida</th>
+            <th>Tendencia</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bx-card" id="evolucion">
+      <h2 class="t-evo-title">Evolución</h2>
+      <p class="note t-evo-note">—</p>
+      <div class="bx-chart c-evo" data-source="ns"></div>
+    </div>
+  </section>
+
+  <section class="bx-grid">
+    <div class="bx-card" id="tamano">
+      <h2>Tamaño total de los ejecutables</h2>
+      <p class="note">Suma de los ejecutables de benchmarks y ejemplos en cada versión, en KB. Desde 27b cada programa lleva el código que le da una pila mínima de 16 KB.</p>
+      <div class="bx-chart c-size" data-source="runs"></div>
+    </div>
+    <div class="bx-card" id="memoria">
+      <h2>Memoria que queda ocupada</h2>
+      <p class="note">Bytes que retienen 1.000 strings cortos y 1.000 structs de dos campos.</p>
+      <div class="bx-scroll">
+        <table class="t-mem" data-source="mem" data-row-key="run,machine,name">
+          <thead><tr>
+            <th data-field="short">Versión</th>
+            <th data-field="name">Medida</th>
+            <th data-field="bytes">Bytes</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="bx-card" id="versiones">
+    <h2>Versiones medidas</h2>
+    <p class="note">Cada fila es una ejecución de <code>tools/bench.py --save</code>, en orden. El commit es el de antes del cambio que nombra.</p>
+    <div class="bx-scroll">
+      <table class="t-runs" data-source="runs" data-row-key="run">
+        <thead><tr>
+          <th data-field="short">Versión</th>
+          <th data-field="label">Cambio</th>
+          <th data-field="commit">Commit</th>
+          <th data-field="date">Fecha</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  // first and last measurement of each benchmark with its current definition
+  dash.calc('comparacion', {
+    title: 'Primera y última medida',
+    description: 'Por máquina y prueba: la primera y la última medida con la definición actual de la prueba, y cuántas veces más rápida es la última.',
+    inputs: ['ns'],
+    fn: (ns) => {
+      const groups = new Map();
+      for (const r of ns) {
+        const key = r.machine + '|' + r.benchmark;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ run: Number(r.run), ns: Number(r.ns), def: Number(r.def) });
+      }
+      const out = [];
+      for (const [key, list] of groups) {
+        const [machine, benchmark] = key.split('|');
+        const last = list.reduce((a, b) => (b.run > a.run ? b : a));
+        const same = list.filter((x) => x.def === last.def);
+        const first = same.reduce((a, b) => (b.run < a.run ? b : a));
+        out.push({ machine, benchmark, first_run: first.run, first_ns: first.ns, last_run: last.run,
+                   last_ns: last.ns, factor: Math.round((first.ns / last.ns) * 100) / 100 });
+      }
+      return out;
+    },
+  });
+
+  dash.calc('resumen', {
+    title: 'Resumen por máquina',
+    description: 'Cuántas pruebas van un 2 % o más rápido que en su primera medida, y la que más ha mejorado.',
+    inputs: ['comparacion'],
+    fn: (comparacion) => {
+      const out = [];
+      for (const machine of [...new Set(comparacion.map((r) => r.machine))]) {
+        const rows = comparacion.filter((r) => r.machine === machine);
+        const best = rows.reduce((a, b) => (b.factor > a.factor ? b : a));
+        out.push({ machine, total: rows.length, faster: rows.filter((r) => r.factor >= 1.02).length,
+                   slower: rows.filter((r) => r.factor <= 0.98).length, best: best.benchmark, best_factor: best.factor });
+      }
+      return out;
+    },
+  });
+
+  dash.calc('tamano', {
+    title: 'Tamaño, primera y última medida',
+    description: 'Suma de los ejecutables en la primera y en la última ejecución, en KB.',
+    inputs: ['runs'],
+    fn: (runs) => {
+      const rows = runs.map((r) => ({ run: Number(r.run), bytes: Number(r.total_bytes), programs: Number(r.programs) }));
+      const first = rows.reduce((a, b) => (b.run < a.run ? b : a));
+      const last = rows.reduce((a, b) => (b.run > a.run ? b : a));
+      return [{ first_kb: Math.round(first.bytes / 102.4) / 10, last_kb: Math.round(last.bytes / 102.4) / 10, programs: last.programs }];
+    },
+  });
+
+  const fmtNs = (v) => (v >= 1e6 ? d3.format(',.2f')(v / 1e6) + ' ms' : v >= 1e3 ? d3.format(',.1f')(v / 1e3) + ' µs' : d3.format(',')(v) + ' ns');
+  const cls = (f) => (f >= 1.02 ? 'up' : f <= 0.98 ? 'down' : 'flat');
+  const root = document.querySelector('.bx');
+  const tip = document.createElement('div');
+  tip.className = 'bx-tip';
+  tip.hidden = true;
+
+  for (const b of document.querySelectorAll('.bx-seg button')) {
+    b.addEventListener('click', () => dash.setParams({ machine: b.dataset.machine }));
+  }
+  document.querySelector('.t-cmp tbody').addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-bench]');
+    if (tr) dash.setParams({ bench: tr.dataset.bench });
+  });
+
+  function sparkline(svg, values) {
+    const w = 72, h = 18;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.setAttribute('width', w);
+    svg.setAttribute('height', h);
+    if (values.length < 2) return;
+    const x = d3.scaleLinear([0, values.length - 1], [2, w - 2]);
+    const y = d3.scaleLinear([0, d3.max(values)], [h - 2, 2]);
+    d3.select(svg).append('path').attr('d', d3.line((v, i) => x(i), (v) => y(v))(values))
+      .attr('fill', 'none').attr('stroke', dash.colors[0]).attr('stroke-width', 1.5)
+      .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round');
+  }
+
+  function lineChart(box, points, runs) {
+    box.replaceChildren();
+    const width = box.clientWidth || 400, height = 240;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${width} ${height}`);
+    const y = d3.scaleLinear([0, d3.max(points, (p) => p.ns) * 1.08], [height - 28, 8]).nice();
+    const ticks = y.ticks(4);
+    const probe = svg.append('text').text(fmtNs(ticks[ticks.length - 1]));
+    const left = probe.node().getComputedTextLength() + 10;
+    probe.remove();
+    const x = d3.scalePoint(runs.map((r) => r.short), [left + 6, width - 8]);
+    for (const t of ticks) {
+      svg.append('line').attr('x1', left).attr('x2', width).attr('y1', y(t)).attr('y2', y(t)).attr('stroke', 'var(--cds-chart-grid)');
+      svg.append('text').attr('x', left - 6).attr('y', y(t) + 4).attr('text-anchor', 'end').text(fmtNs(t));
+    }
+    const step = Math.max(1, Math.ceil(runs.length / Math.max(2, Math.floor((width - left) / 44))));
+    runs.forEach((r, i) => {
+      if (i % step === 0 || i === runs.length - 1) {
+        svg.append('text').attr('x', x(r.short)).attr('y', height - 8).attr('text-anchor', 'middle').text(r.short);
+      }
+    });
+    for (const d of [...new Set(points.map((p) => p.def))]) {
+      const seg = points.filter((p) => p.def === d);
+      svg.append('path').attr('d', d3.line((p) => x(p.short), (p) => y(p.ns))(seg)).attr('fill', 'none')
+        .attr('stroke', d === points[points.length - 1].def ? dash.colors[0] : 'var(--cds-chart-muted)')
+        .attr('stroke-width', 2).attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round');
+    }
+    svg.selectAll('circle').data(points).join('circle').attr('cx', (p) => x(p.short)).attr('cy', (p) => y(p.ns)).attr('r', 3.5)
+      .attr('fill', (p) => (p.def === points[points.length - 1].def ? dash.colors[0] : 'var(--cds-chart-muted)'))
+      .on('mouseenter', (event, p) => {
+        tip.replaceChildren();
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = p.label;
+        const v = document.createElement('div');
+        v.textContent = fmtNs(p.ns) + ' por vuelta';
+        tip.append(t, v);
+        tip.hidden = false;
+        const bx = box.getBoundingClientRect(), cx = event.clientX - bx.left;
+        tip.style.left = Math.min(Math.max(0, cx - 60), box.clientWidth - tip.offsetWidth) + 'px';
+        tip.style.top = Math.max(0, event.clientY - bx.top - 52) + 'px';
+      })
+      .on('mouseleave', () => { tip.hidden = true; });
+    box.append(tip);
+  }
+
+  function barChart(box, rows) {
+    box.replaceChildren();
+    const width = box.clientWidth || 400, height = 240;
+    const svg = d3.select(box).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${width} ${height}`);
+    const kb = (b) => b / 1024;
+    const y = d3.scaleLinear([0, d3.max(rows, (r) => kb(r.bytes)) * 1.1], [height - 28, 8]).nice();
+    const ticks = y.ticks(4);
+    const left = 44;
+    const x = d3.scaleBand(rows.map((r) => r.short), [left, width - 4]).padding(0.25);
+    for (const t of ticks) {
+      svg.append('line').attr('x1', left).attr('x2', width).attr('y1', y(t)).attr('y2', y(t)).attr('stroke', 'var(--cds-chart-grid)');
+      svg.append('text').attr('x', left - 6).attr('y', y(t) + 4).attr('text-anchor', 'end').text(d3.format(',')(t) + ' KB');
+    }
+    const step = Math.max(1, Math.ceil(rows.length / Math.max(2, Math.floor((width - left) / 44))));
+    svg.selectAll('rect').data(rows).join('rect').attr('x', (r) => x(r.short)).attr('width', Math.min(32, x.bandwidth()))
+      .attr('y', (r) => y(kb(r.bytes))).attr('height', (r) => y(0) - y(kb(r.bytes))).attr('rx', 4)
+      .attr('fill', (r, i) => (i === rows.length - 1 ? dash.colors[0] : 'var(--cds-chart-muted)'))
+      .on('mouseenter', (event, r) => {
+        tip.replaceChildren();
+        const t = document.createElement('div');
+        t.className = 't';
+        t.textContent = r.label;
+        const v = document.createElement('div');
+        v.textContent = d3.format(',')(r.bytes) + ' bytes';
+        tip.append(t, v);
+        tip.hidden = false;
+        const bx = box.getBoundingClientRect();
+        tip.style.left = Math.min(Math.max(0, event.clientX - bx.left - 60), box.clientWidth - tip.offsetWidth) + 'px';
+        tip.style.top = Math.max(0, event.clientY - bx.top - 52) + 'px';
+      })
+      .on('mouseleave', () => { tip.hidden = true; });
+    rows.forEach((r, i) => {
+      if (i % step === 0 || i === rows.length - 1) {
+        svg.append('text').attr('x', x(r.short) + Math.min(32, x.bandwidth()) / 2).attr('y', height - 8).attr('text-anchor', 'middle').text(r.short);
+      }
+    });
+    box.append(tip);
+  }
+
+  dash.onData(() => {
+    const machine = dash.params().machine || 'a500';
+    for (const b of document.querySelectorAll('.bx-seg button')) b.setAttribute('aria-pressed', String(b.dataset.machine === machine));
+    const name = machine === 'a500' ? 'A500' : 'A1200';
+
+    const runsD = dash.data('runs'), nsD = dash.data('ns'), cmpD = dash.data('comparacion');
+    const resD = dash.data('resumen'), sizeD = dash.data('tamano'), memD = dash.data('mem');
+    const runs = runsD.status === 'ok' ? runsD.data.map((r) => ({ ...r, run: Number(r.run), total_bytes: Number(r.total_bytes) })) : [];
+    const byRun = new Map(runs.map((r) => [r.run, r]));
+
+    // header and tiles
+    const res = resD.status === 'ok' ? resD.data.find((r) => r.machine === machine) : null;
+    for (const el of root.querySelectorAll('[data-source="resumen"][data-field]')) el.setAttribute('data-where', 'machine=' + machine);
+    root.querySelector('.t-faster').textContent = res ? res.faster : '—';
+    root.querySelector('.t-total').textContent = res ? res.total : '—';
+    root.querySelector('.t-best').textContent = res ? d3.format('.2f')(res.best_factor) : '—';
+    root.querySelector('.t-bestname').textContent = res ? res.best : '—';
+    root.querySelector('#resumen-frase').textContent = res
+      ? `En el ${name}, ${res.faster} de ${res.total} pruebas van más rápido que en su primera medida y ${res.slower} van más despacio; la que más ha mejorado, ${res.best}, es ${d3.format('.1f')(res.best_factor)} veces más rápida.`
+      : '—';
+    const size = sizeD.status === 'ok' ? sizeD.data[0] : null;
+    root.querySelector('.t-size').textContent = size ? d3.format(',.1f')(size.last_kb) : '—';
+    root.querySelector('.t-size0').textContent = size ? d3.format(',.1f')(size.first_kb) : '—';
+    root.querySelector('.t-progs').textContent = size ? size.programs : '—';
+
+    const mem = memD.status === 'ok' ? memD.data.map((r) => ({ ...r, run: Number(r.run), bytes: Number(r.bytes) })) : [];
+    const memRows = mem.filter((r) => r.machine === machine);
+    const lastMem = memRows.filter((r) => r.name === 'mem_1000_strings').reduce((a, b) => (!a || b.run > a.run ? b : a), null);
+    const memTile = root.querySelector('.t-mem');
+    memTile.textContent = lastMem ? d3.format(',')(lastMem.bytes) : '—';
+    if (lastMem) {
+      memTile.setAttribute('data-field', 'bytes');
+      memTile.setAttribute('data-where', `run=${lastMem.run}&machine=${machine}&name=mem_1000_strings`);
+    }
+
+    // comparison table
+    const cmp = cmpD.status === 'ok' ? cmpD.data.filter((r) => r.machine === machine) : [];
+    cmp.sort((a, b) => b.factor - a.factor);
+    const ns = nsD.status === 'ok' ? nsD.data.map((r) => ({ ...r, run: Number(r.run), ns: Number(r.ns), def: Number(r.def) })) : [];
+    let bench = dash.params().bench;
+    if (!bench || !cmp.some((r) => r.benchmark === bench)) bench = cmp.length ? cmp[0].benchmark : null;
+    const tbody = root.querySelector('.t-cmp tbody');
+    tbody.replaceChildren(...cmp.map((r) => {
+      const tr = document.createElement('tr');
+      tr.className = 'pick' + (r.benchmark === bench ? ' sel' : '');
+      tr.dataset.bench = r.benchmark;
+      tr.dataset.key = encodeURIComponent(r.machine) + ',' + encodeURIComponent(r.benchmark);
+      const cells = [r.benchmark, d3.format(',')(r.first_ns), d3.format(',')(r.last_ns), d3.format('.2f')(r.factor)];
+      cells.forEach((text, i) => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i === 0) td.className = 'name';
+        if (i === 3) td.className = cls(r.factor);
+        tr.append(td);
+      });
+      const td = document.createElement('td');
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      sparkline(svg, ns.filter((p) => p.machine === machine && p.benchmark === r.benchmark && p.def === ns.filter((q) => q.machine === machine && q.benchmark === r.benchmark).reduce((a, b) => (b.run > a.run ? b : a)).def).sort((a, b) => a.run - b.run).map((p) => p.ns));
+      td.append(svg);
+      tr.append(td);
+      return tr;
+    }));
+
+    // evolution of the picked benchmark
+    const evo = root.querySelector('.c-evo');
+    const pts = ns.filter((p) => p.machine === machine && p.benchmark === bench).sort((a, b) => a.run - b.run)
+      .map((p) => ({ ...p, label: (byRun.get(p.run) || {}).label || p.short }));
+    root.querySelector('.t-evo-title').textContent = bench ? `Evolución de ${bench}` : 'Evolución';
+    const defs = new Set(pts.map((p) => p.def));
+    root.querySelector('.t-evo-note').textContent = !bench ? '—'
+      : `${name}, nanosegundos por vuelta en cada versión.` + (defs.size > 1 ? ' En gris, medidas de la prueba antes de cambiar lo que medía: no se comparan.' : '');
+    if (pts.length && runs.length) lineChart(evo, pts, runs.filter((r) => pts.some((p) => p.run === r.run)));
+    else evo.replaceChildren();
+
+    // size per run
+    const sizeBox = root.querySelector('.c-size');
+    if (runs.length) barChart(sizeBox, runs.map((r) => ({ short: r.short, label: r.label, bytes: r.total_bytes })));
+    else sizeBox.replaceChildren();
+
+    // memory table
+    root.querySelector('.t-mem tbody').replaceChildren(...memRows.sort((a, b) => a.run - b.run || a.name.localeCompare(b.name)).map((r) => {
+      const tr = document.createElement('tr');
+      tr.dataset.key = [r.run, r.machine, r.name].map((v) => encodeURIComponent(String(v))).join(',');
+      for (const [i, text] of [r.short, r.name, d3.format(',')(r.bytes)].entries()) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i === 1) td.className = 'name';
+        tr.append(td);
+      }
+      return tr;
+    }));
+
+    // runs table
+    root.querySelector('.t-runs tbody').replaceChildren(...runs.map((r) => {
+      const tr = document.createElement('tr');
+      tr.dataset.key = String(r.run);
+      for (const [i, text] of [r.short, r.label, r.commit, r.date].entries()) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (i === 1) td.className = 'label';
+        if (i === 2) td.className = 'name';
+        tr.append(td);
+      }
+      return tr;
+    }));
+  });
+</script>

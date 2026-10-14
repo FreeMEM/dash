@@ -134,7 +134,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       (hecha). Detalle original: cabeceras de strings/objetos, tamaño de puddle del pool,
       runtime que no se usa (secciones, `-ffunction-sections -Wl,--gc-sections` si el linker de Amiga lo admite),
       `-Os` frente a `-O2` por programa, código de arranque de libnix, strings duplicados. Antes/después en bytes.
-- [ ] 28. Artefacto de comparativas: página publicada (Artifact) con las tablas y gráficas de
+- [x] 28. Artefacto de comparativas (https://claude.ai/artifact/9XyJ1JNSGuDo5q6NCRzM2N): página publicada (Artifact) con las tablas y gráficas de
       `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
       después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
 - [ ] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
@@ -718,3 +718,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Con esto la tarea 27 queda cerrada. Total de los 32 programas: 252.728 → 254.016 bytes, con 16 KB de pila mínima
   (720 bytes cada uno) y medidas nuevas en los benchmarks; sin la pila serían ~231.000 (-9 %). 1000 strings cortos
   ocupan un 29 % menos.
+
+### 2026-10-15 — Tarea 28 (artefacto de comparativas)
+- Hecho: panel "Rendimiento de Dash", https://claude.ai/artifact/9XyJ1JNSGuDo5q6NCRzM2N (privado: hay que compartirlo
+  desde su menú para que otros lo abran). Tipo Dashboard de claude.ai: la página lee tres ficheros de datos.
+  - Selector A500 / A1200; cifras: pruebas más rápidas que en su primera medida, la que más mejora, tamaño total y
+    memoria de 1.000 strings; frase de resumen calculada.
+  - Tabla de cada prueba (primera medida, última, veces más rápida, minigráfica); al pulsar una fila, su evolución
+    por versión. Barras del tamaño total por versión, tabla de memoria y lista de versiones con commit y fecha.
+- `tools/bench_report.py`: lee `tests/bench/results.json` y escribe en `build/bench_report/` `runs.csv`, `ns.csv`,
+  `mem.csv`, `sizes.csv` y la página (`tools/bench_report.html`). Marca los cambios de definición de los benchmarks
+  (`def`: bucles con `bench_sink` desde 26e2, caracteres desde 27d) para no comparar pruebas distintas, y deja fuera
+  los Float de la ejecución en la que fastfp aún no se enlazaba.
+- Para actualizarlo tras un `bench.py --save`: `python3 tools/bench_report.py` y pedir a Claude que suba de nuevo los
+  CSV (y la página si cambió) a ese panel.
+- No comprobado: no lo he visto dibujado (el tipo pide no renderizarlo); solo la sintaxis del script (`node --check`).
