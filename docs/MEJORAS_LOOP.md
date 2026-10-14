@@ -129,9 +129,9 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       y bucles que no crean strings ni objetos, `WORD` donde baste en 68000 (multiplicación 16x16), `-fomit-frame-pointer`,
       `-m68000` vs `-m68020` por defecto, `-fno-...` que estorben, divisiones y módulos por potencias de 2, `Print`
       sin `Printf` cuando el formato es fijo. Cada cambio con antes/después de la tabla de la tarea 25.
-- [~] 27. Optimización (3/3) — memoria y tamaño. Partes: 27a funciones `static` y `--small` (hecha), 27b pila
+- [x] 27. Optimización (3/3) — memoria y tamaño. Partes: 27a funciones `static` y `--small` (hecha), 27b pila
       (`__stack` + `swapstack` de libnix; el shell de 3.1 da 4 KB; hecha), 27c pool y cabeceras (clases de 8 bytes, hecha), 27d bucle de caracteres
-      (`string_chars_26` va el doble de rápido con `-Os` que con `-O2`: mirar el C). Detalle original: cabeceras de strings/objetos, tamaño de puddle del pool,
+      (hecha). Detalle original: cabeceras de strings/objetos, tamaño de puddle del pool,
       runtime que no se usa (secciones, `-ffunction-sections -Wl,--gc-sections` si el linker de Amiga lo admite),
       `-Os` frente a `-O2` por programa, código de arranque de libnix, strings duplicados. Antes/después en bytes.
 - [ ] 28. Artefacto de comparativas: página publicada (Artifact) con las tablas y gráficas de
@@ -703,3 +703,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - No hecho: cabecera de objetos de 20 a 16 bytes (un struct de 2 campos pasaría de 32 a 24). `serial` y `_refcount`
   no se usan a la vez y podrían compartir sitio, pero toca toda la lógica de referencias: lo dejo anotado.
 - Tamaño: 253.088 → 254.032 bytes (los benchmarks tienen dos funciones nuevas).
+
+### 2026-10-15 — Tarea 27d (bucle de caracteres)
+- Base: 182/182. Después: 185/185 (`--emu --emu-a500`; test nuevo: `test_for_each_chars`); 30/30 ejemplos.
+- Lo de `-Os` más rápido era del benchmark: el bucle no usaba el carácter (`largo = largo + 1`), con `-Os` GCC lo
+  convertía en `largo += strlen(abc)` y con `-O2` en un bucle que contaba de uno en uno. Ahora suma el carácter
+  (`largo = largo + c`); con ese benchmark `-O2` 216.600 ns y `-Os` 227.200 (A500).
+- Hecho: `for c in s` va hasta el NUL, sin pasar antes `strlen` (`FOR_EACH_CHAR_FAST_STMT`). Si el cuerpo asigna `s`,
+  se queda la forma de antes, con la longitud del principio. La gramática solo deja recorrer un nombre, así que la
+  expresión no se evalúa varias veces. Test: suma de `a`..`z`, string vacío, `break`, `continue` y el caso que
+  reasigna el string; en A1200 y A500. `test_loops` esperaba la forma antigua: actualizado.
+- Medido (A500, mismo benchmark nuevo): `string_chars_26` 216.600 → 137.444 ns (-37 %); A1200 → 40.980. El resto igual.
+- Tamaño: 254.032 → 254.016 bytes.
+- Con esto la tarea 27 queda cerrada. Total de los 32 programas: 252.728 → 254.016 bytes, con 16 KB de pila mínima
+  (720 bytes cada uno) y medidas nuevas en los benchmarks; sin la pila serían ~231.000 (-9 %). 1000 strings cortos
+  ocupan un 29 % menos.

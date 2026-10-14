@@ -2,8 +2,8 @@
 # String iteration, loop variable typing, range end evaluated once,
 # char comparison with one-letter strings
 #
-# expect-c: for (LONG _idx_c = 0, _len_c = DashString_length(nombre); _idx_c < _len_c; _idx_c++) {
-# expect-c: char c = nombre[_idx_c];
+# expect-c: char c = nombre ? nombre[_idx_c] : 0;
+# expect-c: if (!c) break;
 # expect-c: (c == 'n')
 # expect-c: Printf("%lc\n", (LONG)(UBYTE)(c));
 # expect-c: for (LONG i = 1, _end_i = limite(); i <= _end_i; i++) {

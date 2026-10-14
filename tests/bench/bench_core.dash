@@ -152,7 +152,7 @@ Main
     abc = "abcdefghijklmnopqrstuvwxyz"
     for i in (1..200)
         for c in abc
-            largo = largo + 1
+            largo = largo + c
         end
     end
     bench_end("string_chars_26", 200)

@@ -1,0 +1,52 @@
+# Test: for-each over the characters of a String. Without assigning the string
+# in the body it runs up to the NUL (no strlen first); assigning it keeps the
+# length taken at the start. Empty strings, break and continue.
+#
+# expect-c: if (!c) break;
+# expect-c: _len_d = DashString_length(t)
+# expect-out: 2847
+# expect-out: 0
+# expect-out: 3
+# expect-out: 6
+# expect-out: 4
+
+Main
+    s = "abcdefghijklmnopqrstuvwxyz"
+    total = 0
+    for c in s
+        total = total + c
+    end
+    Print total
+    vacio = ""
+    n = 0
+    for c in vacio
+        n = n + 1
+    end
+    Print n
+    # break at the 4th, continue skips the vowels
+    n = 0
+    for c in s
+        if c == 100
+            break
+        end
+        n = n + 1
+    end
+    Print n
+    n = 0
+    p = "hola mundo"
+    for c in p
+        if c == 97 or c == 101 or c == 105 or c == 111 or c == 117
+            continue
+        end
+        n = n + 1
+    end
+    Print n
+    # the body assigns the string: the length of the start counts
+    t = "abcd"
+    k = 0
+    for d in t
+        t = "x"
+        k = k + 1
+    end
+    Print k
+end

@@ -5044,6 +5044,15 @@ $indent        char $var = $string[_idx_$var];
 $body$indent    }
 """)
 
+    # The usual case (the body does not assign the string): up to the NUL, no
+    # strlen pass first (about 18 cycles per character less on a 68000)
+    FOR_EACH_CHAR_FAST_STMT = Template("""\
+$indent    for (LONG _idx_$var = 0; ; _idx_$var++) {
+$indent        char $var = $string ? $string[_idx_$var] : 0;
+$indent        if (!$var) break;
+$body$indent    }
+""")
+
     # Function templates
     # The Kickstart shell starts a program with 4 KB of stack unless told
     # otherwise ("stack" command, icon). libnix's swapstack module (pulled in by
@@ -6446,7 +6455,10 @@ static {ret_type} {method_name}({params_str}) {{
             string = self._generate_expression(node.iterable)
             mark = self._new_tmp_mark()
             body = self._generate_loop_body(node, "char", mark)
-            self.emit(self._wrap_loop(indent, mark, CTemplates.FOR_EACH_CHAR_STMT.substitute(
+            name = getattr(node.iterable, "name", None)
+            template = (CTemplates.FOR_EACH_CHAR_STMT if name is None or name in self._assigned_names(node.body)
+                        else CTemplates.FOR_EACH_CHAR_FAST_STMT)
+            self.emit(self._wrap_loop(indent, mark, template.substitute(
                 indent=indent, var=node.variable, string=string, body=body)))
             return
 
