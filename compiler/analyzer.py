@@ -14,7 +14,8 @@ from compiler.ast_nodes import (
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
-    EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl
+    EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
+    StructMethod
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -267,7 +268,21 @@ class SemanticAnalyzer(ASTVisitor):
             )
             self.define_symbol(symbol, native)
 
+        # User definitions must not hide builtins: calls would still go to the builtin
+        for defn in list(node.functions) + list(node.native_funcs) + list(node.structs):
+            if is_builtin(defn.name):
+                self.error(f"'{defn.name}' is a builtin function name and cannot be redefined", defn)
+
+        # Analyze function and method bodies
+        for func in node.functions:
+            self.visit(func)
+        for struct in node.structs:
+            for method in struct.methods:
+                self._visit_struct_method(method)
+
         # Fourth pass: analyze main block
+        for extra in node.extra_mains:
+            self.error("Program has more than one Main block", extra)
         if node.main:
             self.visit(node.main)
         else:
@@ -354,12 +369,13 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_PrintStmt(self, node: PrintStmt):
         """Visit a print statement."""
-        pass  # Always valid with a string
+        self.visit(node.message)
 
     def visit_WaitStmt(self, node: WaitStmt):
         """Visit a wait statement."""
         if isinstance(node.seconds, NumberLiteral) and node.seconds.value < 0:
             self.error("Wait time cannot be negative", node)
+        self.visit(node.seconds)
 
     def visit_StopStmt(self, node: StopStmt):
         """Visit a stop statement."""
@@ -398,7 +414,7 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True
             )
             self.define_symbol(symbol, node)
-        elif symbol.symbol_type != SymbolType.VARIABLE:
+        elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
             self.error(f"Cannot assign to '{node.name}' - it's not a variable", node)
         else:
             symbol.is_initialized = True
@@ -499,6 +515,23 @@ class SemanticAnalyzer(ASTVisitor):
         for stmt in node.body:
             self.visit(stmt)
 
+        self.exit_scope()
+        self.in_function = False
+
+    def _visit_struct_method(self, node: StructMethod):
+        """Visit a struct method body; 'self' is an implicit parameter."""
+        self.in_function = True
+        self.enter_scope(f"method_{node.name}")
+        self.define_symbol(Symbol(name="self", symbol_type=SymbolType.PARAMETER,
+                                  is_initialized=True), node)
+        for param in node.params:
+            name = param.name if isinstance(param, FunctionParam) else param
+            dash_type = (self._type_annotation_to_dash_type(param.param_type)
+                         if isinstance(param, FunctionParam) else DashType.UNKNOWN)
+            self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
+                                      dash_type=dash_type, is_initialized=True), node)
+        for stmt in node.body:
+            self.visit(stmt)
         self.exit_scope()
         self.in_function = False
 

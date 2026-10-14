@@ -56,7 +56,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 2. `compiler/grammar.py`: ambigüedades, precedencia de operadores, formas documentadas
       que no parsean (p. ej. `enum State IDLE, RUN end` de QUICK_REFERENCE).
 - [x] 3. `compiler/transformer.py` + `compiler/ast_nodes.py`
-- [ ] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
+- [x] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
 - [ ] 5. `compiler/codegen.py` — expresiones, variables y scope.
 - [ ] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
 - [ ] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
@@ -127,3 +127,25 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Para zona 4: dos bloques `Main` se aceptan y el primero se descarta sin avisar.
 - Para zona 7: `f = fn(x) -> ...` genera `LONG f = (APTR)_dash_lambda_1;` (puntero en un `LONG`).
 - `ast_nodes.py`: dataclasses simples, sin errores encontrados.
+
+### 2026-10-14 — Zona 4 (`compiler/analyzer.py`)
+- Base: tests 31/31, ejemplos 29/30. Tras la zona: tests 38/38 (32 normales + 6 de error), ejemplos 29/30.
+- Novedad en el runner: `tests/errors/*.dash` son tests que deben FALLAR con el texto de su línea `# expect: ...`.
+- Errores arreglados (tests en `tests/errors/`, todos fallaban antes; caso válido en `tests/test_analyzer_checks.dash`):
+  - El cuerpo de las funciones y métodos nunca se analizaba: variables o funciones inexistentes
+    pasaban y daban C inválido. Ahora se analizan; los métodos ven `self` y sus parámetros.
+  - Reasignar un parámetro (`n = n + 1`) daba "not a variable" (latente hasta analizar funciones).
+  - `Print` no analizaba su expresión: `Print y` con `y` local a un `if` pasaba y el C no compilaba.
+    `Wait` tampoco analizaba la suya.
+  - Una función de usuario con nombre de builtin (`func random()`) se ignoraba: la llamada iba al builtin.
+    Ahora es error.
+  - Dos bloques `Main`: el segundo sustituía al primero sin aviso. Ahora es error (`Program.extra_mains`).
+- Fallos destapados por el análisis de funciones, arreglados:
+  - `lib/amiga/graphics.dash`: `clear_with_color(c)` llamaba a `gfx_clear(c)`, que ignora el argumento
+    y borraba siempre con color 0. Ahora usa `gfx_clear_color(c)`.
+  - `examples/test_native.dash`: sus `@native peek_byte/poke_byte` chocaban con builtins del mismo nombre.
+    Renombradas a `native_peek/native_poke`.
+- Para zona 13 (`main.py`, imports):
+  - Las funciones privadas (`_x`) de un módulo se descartan al fusionar: si una pública las llama, el C queda sin ellas.
+  - Los `@header` de módulos importados se pierden (solo se conservan los del programa principal).
+- Para zona 7: el codegen da prioridad a los builtins sobre funciones de usuario; hoy queda cubierto por el error nuevo.

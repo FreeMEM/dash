@@ -1,0 +1,7 @@
+# expect: more than one Main block
+Main
+    Print "a"
+end
+Main
+    Print "b"
+end

@@ -67,11 +67,10 @@ class DashASTBuilder(Transformer):
 
     def program(self, items) -> Program:
         """Build the program node."""
-        main_block = None
-        for item in items:
-            if isinstance(item, MainBlock):
-                main_block = item
+        mains = [item for item in items if isinstance(item, MainBlock)]
+        main_block = mains[0] if mains else None
         return Program(
+            extra_mains=mains[1:],
             imports=self._imports,
             constants=self._constants,
             global_vars=self._global_vars,

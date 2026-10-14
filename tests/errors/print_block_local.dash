@@ -1,0 +1,7 @@
+# expect: Variable 'y' is not defined
+Main
+    if true
+        y = 1
+    end
+    Print y
+end

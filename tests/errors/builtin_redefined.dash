@@ -1,0 +1,7 @@
+# expect: 'random' is a builtin function name
+func random()
+    return 4
+end
+Main
+    Print random()
+end

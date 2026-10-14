@@ -1,0 +1,30 @@
+# Test: analyzer checks that must still accept valid code
+# Function bodies are analyzed: params can be reassigned,
+# methods see self, Print/Wait expressions are checked.
+
+const LIMITE = 10
+
+struct Contador
+    valor: Int = 0
+
+    func sumar(n)
+        n = n + 1
+        self.valor = self.valor + n
+    end
+end
+
+func acotar(x)
+    if x > LIMITE
+        x = LIMITE
+    end
+    return x
+end
+
+Main
+    c = Contador(0)
+    c.sumar(2)
+    r = acotar(50)
+    Print r
+    Wait r / 10
+    Print c.valor
+end

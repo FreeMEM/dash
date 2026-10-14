@@ -1,0 +1,7 @@
+# expect: Variable 'zzz' is not defined
+func f()
+    return zzz + 1
+end
+Main
+    Print f()
+end

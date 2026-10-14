@@ -1,7 +1,7 @@
 # Test @native - inline C code
 
 # A native function that reads the hardware clock
-@native func peek_byte(addr: Pointer) -> Int
+@native func native_peek(addr: Pointer) -> Int
 """
     volatile UBYTE *p = (volatile UBYTE *)addr;
     return (LONG)*p;
@@ -9,7 +9,7 @@
 end
 
 # Native function to poke a byte
-@native func poke_byte(addr: Pointer, val: Int)
+@native func native_poke(addr: Pointer, val: Int)
 """
     volatile UBYTE *p = (volatile UBYTE *)addr;
     *p = (UBYTE)val;

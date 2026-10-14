@@ -65,12 +65,12 @@ end
 
 # Clear the screen/window with color 0
 func clear_screen()
-    gfx_clear(0)
+    gfx_clear()
 end
 
 # Clear with specific color
 func clear_with_color(c)
-    gfx_clear(c)
+    gfx_clear_color(c)
 end
 
 # === Animation Helpers ===

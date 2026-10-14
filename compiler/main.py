@@ -214,6 +214,7 @@ class DashCompiler:
             enums=all_enums,
             windows=all_windows,
             main=main_ast.main,
+            extra_mains=main_ast.extra_mains,
             functions=all_functions,
             extern_funcs=all_extern_funcs,
             native_funcs=all_native_funcs,

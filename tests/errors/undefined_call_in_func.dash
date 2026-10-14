@@ -1,0 +1,7 @@
+# expect: Function 'nada' is not defined
+func f()
+    nada(3)
+end
+Main
+    f()
+end

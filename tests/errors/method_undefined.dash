@@ -1,0 +1,10 @@
+# expect: Variable 'nope' is not defined
+struct P
+    x: Int
+    func f()
+        self.x = nope
+    end
+end
+Main
+    p = P(1)
+end

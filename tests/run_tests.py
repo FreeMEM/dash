@@ -185,6 +185,40 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
     )
 
 
+def run_error_test(test_file: Path) -> TestResult:
+    """Run a test that must fail to transpile with an expected message.
+
+    The file declares the message with a line '# expect: <text>'.
+    """
+    name = f"errors/{test_file.stem}"
+    start_time = time.time()
+    expected = None
+    for line in test_file.read_text().splitlines():
+        if line.startswith("# expect:"):
+            expected = line[len("# expect:"):].strip()
+            break
+
+    result = subprocess.run(
+        [sys.executable, "-m", "compiler.main", str(test_file),
+         "-o", str(PROJECT_ROOT / "build" / f"err_{test_file.stem}.c")],
+        capture_output=True, text=True, cwd=str(PROJECT_ROOT), timeout=30
+    )
+    output = result.stdout + result.stderr
+    duration = time.time() - start_time
+
+    if expected is None:
+        error = "missing '# expect:' line"
+    elif result.returncode == 0:
+        error = f"transpiled but should fail with: {expected}"
+    elif expected not in output:
+        error = f"expected '{expected}', got: {output.strip()[:200]}"
+    else:
+        error = None
+
+    return TestResult(name=name, passed=error is None, transpile_ok=False,
+                      compile_ok=False, error_message=error, duration=duration)
+
+
 def print_results(results: List[TestResult]):
     """Print test results summary."""
     passed = sum(1 for r in results if r.passed)
@@ -238,7 +272,7 @@ def main():
 
     tests = find_tests(test_dir, args.pattern)
 
-    if not tests:
+    if not tests and not list((test_dir / "errors").glob("*.dash")):
         print("No tests found")
         sys.exit(1)
 
@@ -257,6 +291,13 @@ def main():
             print("OK")
         else:
             print("FAIL")
+
+    error_dir = test_dir / "errors"
+    for test_file in find_tests(error_dir, args.pattern) if error_dir.exists() else []:
+        print(f"Testing: errors/{test_file.stem}...", end=" ", flush=True)
+        result = run_error_test(test_file)
+        results.append(result)
+        print("OK" if result.passed else "FAIL")
 
     success = print_results(results)
     sys.exit(0 if success else 1)
