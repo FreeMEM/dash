@@ -1,0 +1,52 @@
+# Graphics benchmarks in a window (the window's RastPort, through the system).
+import "bench_lib.dash"
+
+Window W
+    title "bench"
+    width 320
+    height 200
+end
+
+Main
+    W.open
+    bench_start()
+    for i in (1..2000)
+        gfx_pen(i % 4)
+        gfx_pixel(i % 300, i % 180)
+    end
+    bench_end("gfx_pixel", 2000)
+
+    bench_start()
+    for i in (1..500)
+        gfx_pen(i % 4)
+        gfx_rect(10, 10, 60, 60)
+    end
+    bench_end("gfx_rect_50", 500)
+
+    bench_start()
+    for i in (1..500)
+        gfx_line(0, 0, 200, i % 180)
+    end
+    bench_end("gfx_line", 500)
+
+    bench_start()
+    for i in (1..300)
+        gfx_text_at(10, 100, "Puntos: " + i)
+    end
+    bench_end("gfx_text_concat", 300)
+
+    bitmap_create(0, 32, 32, 2)
+    bench_start()
+    for i in (1..500)
+        bitmap_blit(0, 0, 0, 32, 32, i % 200, 50)
+    end
+    bench_end("bitmap_blit_32", 500)
+
+    bob_create(1, 16, 16, 2)
+    bench_start()
+    for i in (1..300)
+        bob_pos(1, i % 200, 120)
+        bob_draw(1)
+    end
+    bench_end("bob_move_draw_16", 300)
+end

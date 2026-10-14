@@ -1,0 +1,30 @@
+# Benchmark helpers: the EClock of timer.device (about 709 kHz on PAL)
+# bench_start() then bench_end("name", iterations) prints
+#   BENCH name iterations eclock_ticks eclock_frequency
+# tools/bench.py turns it into nanoseconds per iteration.
+
+@header "#include <devices/timer.h>"
+@header "#include <proto/timer.h>"
+@header "struct Device *TimerBase = NULL; static struct timerequest *_bench_tr; static struct EClockVal _bench_t0; static ULONG _bench_freq;"
+
+@native func bench_start()
+"""
+    if (!TimerBase) {
+        struct MsgPort *port = CreateMsgPort();
+        _bench_tr = (struct timerequest *)CreateIORequest(port, sizeof(struct timerequest));
+        if (_bench_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)_bench_tr, 0) == 0)
+            TimerBase = _bench_tr->tr_node.io_Device;
+    }
+    if (TimerBase) _bench_freq = ReadEClock(&_bench_t0);
+"""
+end
+
+@native func bench_end(name: String, iterations: Int)
+"""
+    struct EClockVal t1;
+    if (!TimerBase) return;
+    ReadEClock(&t1);
+    /* the low 32 bits are enough: they wrap after 100 minutes */
+    Printf("BENCH %s %ld %lu %lu\n", name, iterations, t1.ev_lo - _bench_t0.ev_lo, _bench_freq);
+"""
+end

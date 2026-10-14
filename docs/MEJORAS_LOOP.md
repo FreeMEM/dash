@@ -28,7 +28,9 @@ Aplicar las cinco decisiones del usuario del 2026-10-14 sobre las propuestas del
    Prueba en el emulador lo que se pueda ejecutar: `# expect-out:` en el test y
    `python3 tests/run_tests.py --emu` (unos 30 s). Usa el Kickstart 3.1 real del usuario:
    `export DASH_KICKSTART="/home/freemem/Descargas/Telegram Desktop/ks31a1200.rom"`
-   (sin la variable se usa el AROS de FS-UAE). Para lo que necesita Workbench (asl.library...):
+   (sin la variable se usa el AROS de FS-UAE). Benchmarks: `tools/bench.py` (A500 con
+   `export DASH_KICKSTART_A500=~/.cache/dash-emu/kick/kick31_a500.rom`, CRC FC24AE0D; A1200 con `DASH_KICKSTART`);
+   `--save "etiqueta"` guarda la ejecución en `tests/bench/results.json`. Para lo que necesita Workbench (asl.library...):
    `export DASH_EMU_SYS=~/.cache/dash-emu/sys31` (sacado de `~/Amiberry/HardDrives/system3.1.hdf` con
    `tools/emu_sys_from_hdf.sh`; no va a git). Tests con `# emu-needs: x.library`.
 5. **Verificar.** Repite el paso 2. Nada que antes funcionaba puede romperse.
@@ -107,7 +109,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
       `runtime/softfloat`), como las versiones FPU de LightWave. Probar en FS-UAE con `fpu=68882` y comparar
       velocidad con la versión sin FPU. Pedido por el usuario el 2026-10-14.
-- [ ] 25. Optimización (1/3) — medir: `tests/bench/` con programas que cronometran en FS-UAE (ReadEClock o
+- [x] 25. Optimización (1/3) — medir: `tests/bench/` con programas que cronometran en FS-UAE (ReadEClock o
       contador de VBlank) bucles de enteros, Float, strings, arrays, structs, llamadas y gráficos, más el tamaño de
       cada ejecutable. Guardar la tabla base en la bitácora. CPU de la prueba: 68000 (A500) y 68020 (A1200).
       Pedido por el usuario el 2026-10-14: "un lenguaje que aproveche muy bien la máquina".
@@ -458,3 +460,17 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   comprueba antes: se quitó.
 - Para la tarea 26: `fp-bit.c` es lento (unos 145 µs por operación en un 68020 a 14 MHz). Merece unas rutinas
   propias de suma/multiplicación en enteros de 32 bits.
+
+### 2026-10-14 — Tarea 25 (optimización 1/3: medir)
+- Hecho: `tests/bench/bench_lib.dash` (EClock de timer.device, ~709 kHz), `bench_core.dash` (14 pruebas: bucles, llamadas,
+  Float, arrays, structs, strings) y `bench_gfx.dash` (6: píxel, rectángulo, línea, texto, blit, bob). `tools/bench.py`
+  las compila, las ejecuta en FS-UAE a velocidad real (A500 68000 con Kickstart 3.1 A500 extraído de los zips del
+  usuario —el `ob` era un volcado malo, se usa el `!`—, y A1200 68020), calcula ns por vuelta, mide el tamaño de 32
+  ejecutables (pruebas + ejemplos) y guarda en `tests/bench/results.json`. Base guardada: "base (antes de optimizar)".
+- Base (ns por vuelta, A500 / A1200): `int_loop` 41.423 / 9.334, `func_call` 82.036 / 18.348, `array_get_set`
+  197.203 / 36.216, `string_concat_int` 1.141.401 / 246.752, `float_mul_add` 123.427 / 31.285, `gfx_pixel` 497.871 / 122.221.
+  Tamaño total: 250.460 bytes.
+- Primeras sospechas para la tarea 26: una vuelta vacía de bucle cuesta ~290 ciclos en el 68000 (la llamada
+  `_dash_tmp_release` en cada vuelta aunque el cuerpo no cree temporales), `func_call` ~580 ciclos (marca y
+  liberación de temporales en cada función, `__typeof__` en el return), `array_get_set` (llamadas a `DashArray_get/set`
+  y `%` en 68000 sin división de 32 bits).
