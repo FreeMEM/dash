@@ -3585,7 +3585,7 @@ class CodeGenerator(ASTVisitor):
             if val.value is not None:
                 current_value = val.value
             comma = "," if i < len(enum.values) - 1 else ""
-            lines.append(f"    {enum.name}_{val.name} = {current_value}{comma}")
+            lines.append(f"    {enum.name}_{val.name} = {c_int_literal(current_value)}{comma}")
             current_value += 1
         lines.append(f"}} {enum.name};")
         self.enum_defines.append("\n".join(lines))
@@ -5197,7 +5197,7 @@ class MultiFileGenerator:
             if val.value is not None:
                 current_value = val.value
             comma = "," if i < len(enum.values) - 1 else ""
-            lines.append(f"    {enum.name}_{val.name} = {current_value}{comma}")
+            lines.append(f"    {enum.name}_{val.name} = {c_int_literal(current_value)}{comma}")
             current_value += 1
         lines.append(f"}} {enum.name};")
         return lines

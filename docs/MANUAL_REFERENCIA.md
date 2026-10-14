@@ -499,7 +499,14 @@ enum Direccion
     IZQUIERDA = 2
     DERECHA = 3
 end
+
+enum Resultado
+    ERROR = -1      # valores negativos y hexadecimales (0xFF) permitidos
+    OK              # sigue contando: 0
+end
 ```
+
+Sin `=`, cada valor es el anterior + 1 (el primero, 0).
 
 ### Uso
 

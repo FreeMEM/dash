@@ -249,6 +249,12 @@ class DashASTBuilder(Transformer):
             value = parse_int(items[1].value)
         return EnumValue(name=name, value=value, location=self._get_location(items[0]))
 
+    def enum_value_neg(self, items) -> EnumValue:
+        """Enum value with a negative number: A = -1."""
+        node = self.enum_value(items)
+        node.value = -node.value
+        return node
+
     # === FFI - External Functions ===
 
     def extern_func(self, items) -> str:

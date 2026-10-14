@@ -80,7 +80,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 4. Literales hexadecimales `0xDFF000` / `$DFF000` y binarios `0b1010`.
 - [x] 5. `break` y `continue` (con error si están fuera de un bucle).
 - [x] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
-- [ ] 7. Enums con valores negativos.
+- [x] 7. Enums con valores negativos.
 - [ ] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
 - [ ] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
 - [ ] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
@@ -185,3 +185,10 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - `constant_int()` en `ast_nodes.py` (literal, negación o `const`), compartida por analyzer y codegen.
   - Un fin constante (`const`) ya no crea la variable `_end_`.
 - Docs: MANUAL_REFERENCIA y QUICK_REFERENCE.
+
+### 2026-10-14 — Tarea 7 (enums negativos)
+- Base: 86/86 con `--emu`, ejemplos 30/30. Después: 88/88 con `--emu`, ejemplos 30/30.
+- Hecho (test: `test_enum_negative`, salida comprobada en FS-UAE): `A = -1` (regla `enum_value_neg`),
+  también en la forma de una línea con comas; después de un negativo se sigue contando (`-1`, `0`).
+  Los valores salen por `c_int_literal()`: negativos entre paréntesis y hexadecimales grandes con sus 32 bits.
+- Docs: MANUAL_REFERENCIA.

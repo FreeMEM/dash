@@ -32,6 +32,7 @@ dash_grammar_minimal = r"""
     // Enum definition
     enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
     enum_value: ID ("=" INT)?
+              | ID "=" "-" INT -> enum_value_neg
 
     // Window definition
     window_def: "Window" ID (property | comment_line)* "end"

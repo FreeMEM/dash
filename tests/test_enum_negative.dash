@@ -1,0 +1,30 @@
+# Test: enum values can be negative (and hexadecimal)
+# After a negative value the next ones keep counting up
+#
+# expect-c: Resultado_ERROR = (-1),
+# expect-c: Resultado_OK = 0
+# expect-out: -1
+# expect-out: 0
+# expect-out: -10
+# expect-out: -9
+# expect-out: 255
+# expect-out: menor
+
+enum Resultado
+    ERROR = -1
+    OK
+end
+
+enum Nivel BAJO = -10, MEDIO, ALTO = 0xFF end
+
+Main
+    Print Resultado.ERROR
+    Print Resultado.OK
+    Print Nivel.BAJO
+    Print Nivel.MEDIO
+    Print Nivel.ALTO
+    r = Resultado.ERROR
+    if r < Resultado.OK
+        Print "menor"
+    end
+end
