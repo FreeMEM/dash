@@ -2568,7 +2568,7 @@ INTUITION_EXPANDED = {
         return_type="STRPTR",
         c_template="_dash_dialog_file(${title}, ${pattern}, ${save_mode})",
         needs_asl=True,
-        description="Show file requester"
+        description="File requester: full path of the chosen file, \"\" if cancelled (save_mode true: save requester)"
     ),
     "dialog_color": BuiltinFunc(
         name="dialog_color",
@@ -2576,7 +2576,8 @@ INTUITION_EXPANDED = {
         return_type="LONG",
         c_template="_dash_dialog_color(${title}, ${initial})",
         needs_asl=True,
-        description="Show color requester"
+        needs_gfx=True,
+        description="Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial"
     ),
     "dialog_font": BuiltinFunc(
         name="dialog_font",
@@ -2584,7 +2585,7 @@ INTUITION_EXPANDED = {
         return_type="STRPTR",
         c_template="_dash_dialog_font(${title})",
         needs_asl=True,
-        description="Show font requester"
+        description="Font requester: \"name.font/size\", \"\" if cancelled"
     ),
 }
 

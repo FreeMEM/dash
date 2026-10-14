@@ -17,6 +17,8 @@ A test can list the exact output it must print when run on the Amiga with
 "# expect-out: <line>" lines (one per printed line, in order). With --emu
 those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
 or the AROS ROM built into FS-UAE) and their output is compared.
+"# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS/Libs has it
+(tools/emu_sys_from_hdf.sh extracts Libs/ and C/ from a Workbench hard file).
 """
 
 import os
@@ -313,11 +315,24 @@ def expected_output(test_file: Path) -> Optional[List[str]]:
     return lines or None
 
 
+def emu_needs_met(test_file: Path) -> bool:
+    """'# emu-needs: x.library': run only if $DASH_EMU_SYS/Libs has it (Workbench
+    libraries are not in the Kickstart ROM)."""
+    needs = [l.split("# emu-needs:", 1)[1].strip()
+             for l in test_file.read_text().splitlines() if l.startswith("# emu-needs:")]
+    system = os.environ.get("DASH_EMU_SYS")
+    missing = [n for n in needs if not (system and (Path(system) / "Libs" / n).exists())]
+    if missing:
+        print(f"  emu/{test_file.stem}: SKIP (needs {', '.join(missing)} in $DASH_EMU_SYS/Libs)")
+    return not missing
+
+
 def run_emu_tests(tests: List[Path], compiled: set) -> List[TestResult]:
     """Run the compiled tests that declare '# expect-out:' in FS-UAE, all in one boot."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
-    selected = [(t, expected_output(t)) for t in tests if t.stem in compiled and expected_output(t)]
+    selected = [(t, expected_output(t)) for t in tests
+                if t.stem in compiled and expected_output(t) and emu_needs_met(t)]
     if not selected:
         return []
     start_time = time.time()

@@ -1,0 +1,148 @@
+# Test: ASL requesters (needs asl.library from a Workbench disk: DASH_EMU_SYS)
+# Helper processes click the requester's OK (gadget 1) or Cancel (gadget 2)
+# button, or type, through input.device while the requester waits.
+#
+# emu-needs: asl.library
+# expect-out: topaz.font/8
+# expect-out: vacio
+# expect-out: vacio
+# expect-out: a
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "#include <intuition/intuitionbase.h>"
+@header "static LONG teclas[4], n_teclas; static volatile LONG teclas_hechas;"
+@header "static volatile LONG clic_hecho; static LONG clic_id;"
+
+Window W
+    title "Dialogos"
+    width 300
+    height 120
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    LONG i;
+    Delay(150);   /* asl.library loads from disk: let the requester open first */
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        for (i = 0; i < n_teclas; i++) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWKEY;
+            ie.ie_Code = teclas[i];
+            io->io_Command = IND_WRITEEVENT;
+            io->io_Data = &ie;
+            io->io_Length = sizeof(ie);
+            DoIO((struct IORequest *)io);
+            ie.ie_Code = teclas[i] | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+            Delay(5);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    teclas_hechas = 1;
+"""
+end
+
+@native func teclear(a: Int, b: Int, c: Int)
+"""
+    teclas[0] = a; teclas[1] = b; teclas[2] = c;
+    n_teclas = c ? 3 : (b ? 2 : 1);
+    teclas_hechas = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE);
+"""
+end
+
+@native func esperar_teclas()
+"""
+    while (!teclas_hechas) Delay(2);
+"""
+end
+
+@native func proceso_clic()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    struct Window *w;
+    struct Gadget *g;
+    LONG x = -1, y = -1;
+    Delay(150);
+    w = IntuitionBase->ActiveWindow;
+    for (g = w ? w->FirstGadget : NULL; g; g = g->NextGadget) {
+        if (g->GadgetID == clic_id && (g->GadgetType & GTYP_GTYPEMASK) == GTYP_BOOLGADGET && g->Width > 30) {
+            x = w->LeftEdge + g->LeftEdge + g->Width / 2;
+            y = w->TopEdge + g->TopEdge + g->Height / 2;
+            break;
+        }
+    }
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (x >= 0 && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        memset(&ie, 0, sizeof(ie));
+        pp.iepp_Screen = w->WScreen;
+        pp.iepp_Position.X = x;
+        pp.iepp_Position.Y = y;
+        ie.ie_Class = IECLASS_NEWPOINTERPOS;
+        ie.ie_SubClass = IESUBCLASS_PIXEL;
+        ie.ie_EventAddress = (APTR)&pp;
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_LBUTTON;
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+        DoIO((struct IORequest *)io);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    clic_hecho = 1;
+"""
+end
+
+@native func clic(id: Int)
+"""
+    clic_id = id;
+    clic_hecho = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_clic, NP_Name, (ULONG)"dash_clic", TAG_DONE);
+"""
+end
+
+@native func esperar_clic()
+"""
+    while (!clic_hecho) Delay(2);
+"""
+end
+
+Main
+    W.open
+    clic(1)
+    Print dialog_font("Fuente")
+    esperar_clic()
+    clic(2)
+    if dialog_font("Fuente") == ""
+        Print "vacio"
+    end
+    esperar_clic()
+    teclear(0x44, 0, 0)
+    if dialog_file("Abrir", "#?", false) == ""
+        Print "vacio"
+    end
+    esperar_teclas()
+    teclear(0x20, 0x44, 0)
+    Print dialog_file("Guardar", "", true)
+    esperar_teclas()
+end

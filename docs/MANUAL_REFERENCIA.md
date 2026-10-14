@@ -1367,7 +1367,17 @@ end
 if file_save_dialog("Guardar Como", "#?.iff")
     # El usuario eligio donde guardar
 end
+
+# Devuelven directamente lo elegido ("" si se cancela)
+ruta = dialog_file("Abrir", "#?.iff", false)      # true: selector de guardar
+fuente = dialog_font("Tipo de letra")            # "topaz.font/8"
+color = dialog_color("Color de pluma", 1)        # numero de color de la pantalla
 ```
+
+`asl.library` esta en el disco de Workbench (`LIBS:`), no en la ROM: sin ella los dialogos
+ASL devuelven `""` (o falso). `dialog_color` no usa ASL (la 3.1 no tiene selector de color):
+abre una ventana con la paleta de la pantalla; se elige con el raton o con las flechas y
+Return, y Esc o el boton de cerrar devuelven el color inicial.
 
 ### Ejemplo Completo con GadTools
 

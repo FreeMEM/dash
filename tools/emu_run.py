@@ -13,6 +13,10 @@ S:Startup-Sequence runs each program with its output redirected to a file.
 
     tools/emu_run.py --autoclose 3 ventana.dash  # ends by itself after 3 s
 
+Libraries that are not in the Kickstart ROM (asl.library, diskfont.library...)
+come from $DASH_EMU_SYS: a directory with Libs/ and C/ (Assign, MakeDir) taken
+from a Workbench disk (see tools/emu_sys_from_hdf.sh).
+
 A program that never ends (an EventLoop waiting for the close gadget
 without --autoclose, a crash) stops the boot: it and the ones after it are reported as TIMEOUT.
 """
@@ -66,7 +70,8 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0) -> No
 
 
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
-                 kickstart: str = None, autoclose: int = 0, extra_config: str = ""):
+                 kickstart: str = None, autoclose: int = 0, extra_config: str = "",
+                 keep: str = None):
     """programs: list of .dash sources or Amiga executables.
     Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
@@ -75,8 +80,24 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         tmp = Path(tmp)
         hd = tmp / "hd"
         (hd / "S").mkdir(parents=True)
+        # Optional mini system from a Workbench disk ($DASH_EMU_SYS): Libs/ (asl,
+        # diskfont... are not in the ROM) and C/ (Assign, MakeDir). The boot
+        # volume's drawers are LIBS:, C:, FONTS:...; with C:Assign the volumes the
+        # Workbench Startup-Sequence assigns are created too, or the first Lock on
+        # ENV: or LOCALE: opens a "please insert volume" requester and waits.
+        for drawer in ("Fonts", "Locale", "Devs/Keymaps"):
+            (hd / drawer).mkdir(parents=True)
         lines = []
         names = []
+        system = os.environ.get("DASH_EMU_SYS")
+        if system:
+            for sub in ("Libs", "C"):
+                if (Path(system) / sub).is_dir():
+                    shutil.copytree(Path(system) / sub, hd / sub, dirs_exist_ok=True)
+            if (hd / "C" / "Assign").exists() and (hd / "C" / "MakeDir").exists():
+                lines += ["C:MakeDir RAM:T RAM:ENV RAM:ENV/Sys RAM:Clipboards",
+                          "C:Assign ENV: RAM:ENV", "C:Assign T: RAM:T", "C:Assign CLIPS: RAM:Clipboards",
+                          "C:Assign LOCALE: SYS:Locale", "C:Assign KEYMAPS: DEVS:Keymaps"]
         for i, prog in enumerate(programs):
             prog = Path(prog)
             exe = hd / f"p{i}"
@@ -114,6 +135,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 pass
             proc.wait()
 
+        if keep:
+            shutil.copytree(hd, keep, dirs_exist_ok=True)
         results = []
         for i, name in enumerate(names):
             out_file, rc_file = hd / f"out{i}.txt", hd / f"rc{i}.txt"
@@ -137,6 +160,7 @@ def main():
                         help="compile .dash in test mode: the program ends by itself after SECONDS "
                              "(for programs that wait for the close gadget)")
     parser.add_argument("--kickstart", help="Kickstart ROM (default: $DASH_KICKSTART, else AROS)")
+    parser.add_argument("--keep", metavar="DIR", help="copy the emulated disk (outputs, files the programs wrote) to DIR")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
     args = parser.parse_args()
@@ -144,7 +168,8 @@ def main():
         results = run_programs(args.programs, args.timeout, args.opt, args.kickstart,
                                args.autoclose,
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
-                                       for kv in args.set))
+                                       for kv in args.set),
+                               args.keep)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

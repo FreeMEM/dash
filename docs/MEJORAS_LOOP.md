@@ -28,7 +28,9 @@ Aplicar las cinco decisiones del usuario del 2026-10-14 sobre las propuestas del
    Prueba en el emulador lo que se pueda ejecutar: `# expect-out:` en el test y
    `python3 tests/run_tests.py --emu` (unos 30 s). Usa el Kickstart 3.1 real del usuario:
    `export DASH_KICKSTART="/home/freemem/Descargas/Telegram Desktop/ks31a1200.rom"`
-   (sin la variable se usa el AROS de FS-UAE).
+   (sin la variable se usa el AROS de FS-UAE). Para lo que necesita Workbench (asl.library...):
+   `export DASH_EMU_SYS=~/.cache/dash-emu/sys31` (sacado de `~/Amiberry/HardDrives/system3.1.hdf` con
+   `tools/emu_sys_from_hdf.sh`; no va a git). Tests con `# emu-needs: x.library`.
 5. **Verificar.** Repite el paso 2. Nada que antes funcionaba puede romperse.
    Si algo se rompe y no lo arreglas en esta iteración, revierte.
 6. **Documentar.** Actualiza `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md` y, si cambian
@@ -95,7 +97,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
 - [x] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
       (documentado en MANUAL_REFERENCIA, pero la gramática solo tiene `.open`).
-- [ ] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
+- [x] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
 - [ ] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
 - [ ] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
 - [ ] 20. Builtins: `bob_*`.
@@ -105,7 +107,26 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [ ] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
       `runtime/softfloat`), como las versiones FPU de LightWave. Probar en FS-UAE con `fpu=68882` y comparar
       velocidad con la versión sin FPU. Pedido por el usuario el 2026-10-14.
-- [ ] 25. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
+- [ ] 25. Optimización (1/3) — medir: `tests/bench/` con programas que cronometran en FS-UAE (ReadEClock o
+      contador de VBlank) bucles de enteros, Float, strings, arrays, structs, llamadas y gráficos, más el tamaño de
+      cada ejecutable. Guardar la tabla base en la bitácora. CPU de la prueba: 68000 (A500) y 68020 (A1200).
+      Pedido por el usuario el 2026-10-14: "un lenguaje que aproveche muy bien la máquina".
+- [ ] 26. Optimización (2/3) — ciclos, función por función: cada función del runtime (`DashString_*`,
+      `DashArray_*`, `_dash_str_*`, `_dash_tmp_*`, objetos, Float, gráficos...) con su microbenchmark en
+      `tests/bench/` (ciclos por llamada en 68000 y 68020) y su ensamblador (`-S`); mejorarlas una a una y
+      guardar antes/después en `tests/bench/results.json` (versión = commit). Revisar también el C generado.
+      Ideas a medir una a una: plantillas que evalúan un argumento dos veces (`gfx_text`), `DashArray_get/set`
+      como macros o `static inline` con la comprobación de límites barata, no marcar/soltar temporales en funciones
+      y bucles que no crean strings ni objetos, `WORD` donde baste en 68000 (multiplicación 16x16), `-fomit-frame-pointer`,
+      `-m68000` vs `-m68020` por defecto, `-fno-...` que estorben, divisiones y módulos por potencias de 2, `Print`
+      sin `Printf` cuando el formato es fijo. Cada cambio con antes/después de la tabla de la tarea 25.
+- [ ] 27. Optimización (3/3) — memoria y tamaño: cabeceras de strings/objetos, tamaño de puddle del pool,
+      runtime que no se usa (secciones, `-ffunction-sections -Wl,--gc-sections` si el linker de Amiga lo admite),
+      `-Os` frente a `-O2` por programa, código de arranque de libnix, strings duplicados. Antes/después en bytes.
+- [ ] 28. Artefacto de comparativas: página publicada (Artifact) con las tablas y gráficas de
+      `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
+      después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
+- [ ] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
 
 ## Bitácora
 
@@ -330,3 +351,19 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Encontrado en el emulador: abrir una ventana de 0x0 cuelga Intuition 3.1 → tamaño mínimo 40x20.
 - Aviso: `dir_change("VOLUMEN:")` de un volumen que no existe abre el requester del sistema "inserte el volumen"
   y espera a que alguien lo cierre (comportamiento normal de AmigaOS).
+
+### 2026-10-14 — Tarea 17 (diálogos ASL)
+- Base: 111/111 con `--emu`, ejemplos 30/30. Después: 115/115 con `--emu` (con `DASH_EMU_SYS`), ejemplos 30/30.
+  Builtins sin código: 60 → 57.
+- Hecho (tests: `test_dialogs`, `test_dialogs_asl` con `# emu-needs: asl.library`):
+  - `dialog_file(title, pattern, save)` → ruta completa o `""`; `dialog_font(title)` → `"nombre.font/tamaño"` o `""`;
+    `dialog_color(title, inicial)`: asl.library 3.1 no tiene selector de color, así que es una ventana propia con la
+    paleta de la pantalla (ratón, flechas + Return; Esc/cerrar devuelve el inicial).
+  - asl.library se abre en el primer uso (antes solo la abría la plantilla de GadTools: `file_open_dialog` fallaba
+    siempre en los demás programas) y se cierra en `_dash_exit_cleanup`.
+- Banco de pruebas: el usuario tiene discos duros con Workbench en `~/Amiberry/HardDrives/`. `tools/emu_sys_from_hdf.sh`
+  saca `Libs/` y `C/Assign`, `C/MakeDir` (con amitools) a `~/.cache/dash-emu/sys31`; `emu_run.py` los copia al disco
+  emulado (`$DASH_EMU_SYS`), crea `Fonts`, `Locale`, `Devs/Keymaps` y las asignaciones `ENV:`, `T:`, `LOCALE:`...
+  (sin ellas ASL abre un "inserte el volumen" y se queda esperando). `--keep DIR` guarda el disco emulado.
+- Los tests pulsan teclas y hacen clic de verdad desde un proceso auxiliar (`input.device`): el botón OK/Cancelar de
+  ASL se busca por su `GadgetID` (1 y 2). Esc no cierra el requester de ficheros de ASL 3.1 y Return no cierra el de fuentes.

@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 318 funciones, 258 implementadas, 60 sin implementar.
+Total: 318 funciones, 261 implementadas, 57 sin implementar.
 
 ## Gráficos básicos
 
@@ -360,9 +360,9 @@ Total: 318 funciones, 258 implementadas, 60 sin implementar.
 | `listview_add(gad, text)` | `void` | Add item to listview | **sin implementar** |
 | `listview_clear(gad)` | `void` | Clear listview | **sin implementar** |
 | `listview_selected(gad)` | `LONG` | Get selected index (-1 if none) | **sin implementar** |
-| `dialog_file(title, pattern, save_mode)` | `STRPTR` | Show file requester | **sin implementar** |
-| `dialog_color(title, initial)` | `LONG` | Show color requester | **sin implementar** |
-| `dialog_font(title)` | `STRPTR` | Show font requester | **sin implementar** |
+| `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
+| `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
+| `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
 
 ## RTG (CyberGraphX / Picasso96)
 

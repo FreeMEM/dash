@@ -1,0 +1,86 @@
+# Test: dialog_file (Return with nothing chosen) and dialog_color
+# A helper process types into the active window through input.device
+# while the dialog waits. Return with no file gives ""; without asl.library
+# in LIBS: (Workbench disk, not the Kickstart ROM) dialog_file returns "" too.
+# (Esc does not close the asl.library 3.1 file requester.)
+# test_dialogs_asl.dash checks the ASL requesters themselves.
+#
+# expect-c: static LONG _dash_dialog_color(STRPTR title, LONG initial)
+# expect-out: vacio
+# expect-out: 3
+# expect-out: 2
+# expect-out: 1
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static LONG teclas[4], n_teclas; static volatile LONG teclas_hechas;"
+
+Window W
+    title "Dialogos"
+    width 300
+    height 120
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    LONG i;
+    Delay(150);   /* asl.library loads from disk: let the requester open first */
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        for (i = 0; i < n_teclas; i++) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWKEY;
+            ie.ie_Code = teclas[i];
+            io->io_Command = IND_WRITEEVENT;
+            io->io_Data = &ie;
+            io->io_Length = sizeof(ie);
+            DoIO((struct IORequest *)io);
+            ie.ie_Code = teclas[i] | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+            Delay(5);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    teclas_hechas = 1;
+"""
+end
+
+@native func teclear(a: Int, b: Int, c: Int)
+"""
+    teclas[0] = a; teclas[1] = b; teclas[2] = c;
+    n_teclas = c ? 3 : (b ? 2 : 1);
+    teclas_hechas = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE);
+"""
+end
+
+@native func esperar_teclas()
+"""
+    while (!teclas_hechas) Delay(2);
+"""
+end
+
+Main
+    W.open
+    teclear(0x44, 0, 0)
+    f = dialog_file("Abrir", "#?", false)
+    esperar_teclas()
+    if f == ""
+        Print "vacio"
+    end
+    teclear(0x4E, 0x4E, 0x44)
+    Print dialog_color("Color", 1)
+    esperar_teclas()
+    teclear(0x45, 0, 0)
+    Print dialog_color("Color", 2)
+    esperar_teclas()
+    teclear(0x4F, 0x44, 0)
+    Print dialog_color("Color", 2)
+    esperar_teclas()
+end

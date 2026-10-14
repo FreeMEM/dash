@@ -2058,13 +2058,21 @@ static LONG _dash_menu_event(void) {
     # ASL runtime
     ASL_RUNTIME = """\
 /* Dash ASL Runtime */
+#include <devices/inputevent.h>
 struct Library *AslBase = NULL;
 static struct FileRequester *_dash_freq = NULL;
 static char _dash_asl_path[512];
 static char _dash_asl_file[256];
 
+/* asl.library is opened by the GadTools main template, or here on first use */
+static BOOL _dash_asl_open(void) {
+    if (!AslBase) AslBase = OpenLibrary((CONST_STRPTR)"asl.library", 37);
+    return AslBase != NULL;
+}
+
 static BOOL _dash_asl_init(void) {
-    _dash_freq = AllocAslRequestTags(ASL_FileRequest, TAG_DONE);
+    if (!_dash_freq && _dash_asl_open())
+        _dash_freq = AllocAslRequestTags(ASL_FileRequest, TAG_DONE);
     return (_dash_freq != NULL);
 }
 
@@ -2076,7 +2084,7 @@ static void _dash_asl_cleanup(void) {
 }
 
 static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
-    if (!_dash_freq) return FALSE;
+    if (!_dash_asl_init()) return FALSE;
     BOOL result = AslRequestTags(_dash_freq,
         ASLFR_TitleText, (ULONG)title,
         ASLFR_InitialPattern, (ULONG)pattern,
@@ -2108,6 +2116,109 @@ static char _dash_asl_fullpath[768];
 static STRPTR _dash_file_fullpath(void) {
     _dash_get_fullpath(_dash_asl_fullpath, sizeof(_dash_asl_fullpath));
     return _dash_asl_fullpath;
+}
+
+/* dialog_file: full path of the chosen file, "" if cancelled (a temporary string) */
+static STRPTR _dash_dialog_file(STRPTR title, STRPTR pattern, LONG save_mode) {
+    if (!_dash_file_request(title, (pattern && pattern[0]) ? pattern : (STRPTR)"#?", save_mode != 0))
+        return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup(_dash_file_fullpath(), TRUE);
+}
+
+/* dialog_font: "name.font/size" ("topaz.font/8"), "" if cancelled */
+static STRPTR _dash_dialog_font(STRPTR title) {
+    struct FontRequester *fo;
+    char buf[128];
+    LONG len, size, n;
+    buf[0] = 0;
+    if (_dash_asl_open() && (fo = (struct FontRequester *)AllocAslRequestTags(ASL_FontRequest, TAG_DONE))) {
+        if (AslRequestTags(fo, ASLFO_TitleText, (ULONG)title,
+                           _dash_win ? ASLFO_Window : TAG_IGNORE, (ULONG)_dash_win,
+                           TAG_DONE) && fo->fo_Attr.ta_Name) {
+            strncpy(buf, (char *)fo->fo_Attr.ta_Name, 100);
+            buf[100] = 0;
+            len = strlen(buf);
+            buf[len++] = '/';
+            size = fo->fo_Attr.ta_YSize;
+            n = 1;
+            while (n * 10 <= size) n *= 10;
+            for (; n; n /= 10) buf[len++] = '0' + (size / n) % 10;
+            buf[len] = 0;
+        }
+        FreeAslRequest(fo);
+    }
+    return _dash_str_dup((STRPTR)buf, TRUE);
+}
+
+/* dialog_color: asl.library 3.1 has no colour requester, so a small window with
+   the screen's palette: click a colour, or arrows + Return; Esc or the close
+   gadget keep the initial pen. Returns the chosen pen. */
+static void _dash_color_draw(struct Window *w, LONG n, LONG cols, LONG sel) {
+    LONG i;
+    for (i = 0; i < n; i++) {
+        LONG x = 4 + (i % cols) * 18, y = 4 + (i / cols) * 14;
+        SetAPen(w->RPort, 1);
+        RectFill(w->RPort, x - 2, y - 2, x + 15, y + 11);
+        SetAPen(w->RPort, i == sel ? 2 : 0);
+        RectFill(w->RPort, x - 1, y - 1, x + 14, y + 10);
+        SetAPen(w->RPort, i);
+        RectFill(w->RPort, x + 1, y + 1, x + 12, y + 8);
+    }
+}
+
+static LONG _dash_dialog_color(STRPTR title, LONG initial) {
+    struct Screen *scr = _dash_screen ? _dash_screen : (_dash_win ? _dash_win->WScreen : NULL);
+    struct Screen *locked = NULL;
+    struct Window *w;
+    struct IntuiMessage *msg;
+    LONG n, cols, rows, sel = initial, result = initial;
+    BOOL done = FALSE;
+    if (!scr) scr = locked = LockPubScreen(NULL);
+    if (!scr) return initial;
+    n = 1L << scr->RastPort.BitMap->Depth;
+    if (n > 256) n = 256;
+    cols = n < 8 ? n : (n <= 64 ? 8 : 16);
+    rows = (n + cols - 1) / cols;
+    if (sel < 0 || sel >= n) sel = 0;
+    w = OpenWindowTags(NULL,
+        WA_Title, (ULONG)title, WA_InnerWidth, cols * 18 + 6, WA_InnerHeight, rows * 14 + 6,
+        WA_CloseGadget, TRUE, WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_Activate, TRUE,
+        WA_GimmeZeroZero, TRUE, WA_RMBTrap, TRUE,
+        WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY,
+        WA_CustomScreen, (ULONG)scr, TAG_DONE);
+    if (w) {
+        _dash_color_draw(w, n, cols, sel);
+        while (!done) {
+            WaitPort(w->UserPort);
+            while (!done && (msg = (struct IntuiMessage *)GetMsg(w->UserPort))) {
+                ULONG cls = msg->Class;
+                UWORD code = msg->Code;
+                WORD mx = msg->MouseX - w->BorderLeft, my = msg->MouseY - w->BorderTop;
+                ReplyMsg((struct Message *)msg);
+                if (cls == IDCMP_CLOSEWINDOW) {
+                    done = TRUE;
+                } else if (cls == IDCMP_MOUSEBUTTONS && code == SELECTDOWN) {
+                    LONG c = (mx - 2) / 18, r = (my - 2) / 14;
+                    if (mx >= 2 && my >= 2 && c < cols && r < rows && r * cols + c < n) {
+                        result = r * cols + c;
+                        done = TRUE;
+                    }
+                } else if (cls == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) {
+                    LONG old = sel;
+                    if (code == 0x45) done = TRUE;                                  /* Esc */
+                    else if (code == 0x44 || code == 0x43) { result = sel; done = TRUE; }  /* Return */
+                    else if (code == 0x4E && sel + 1 < n) sel++;                     /* right */
+                    else if (code == 0x4F && sel > 0) sel--;                         /* left */
+                    else if (code == 0x4D && sel + cols < n) sel += cols;            /* down */
+                    else if (code == 0x4C && sel - cols >= 0) sel -= cols;           /* up */
+                    if (sel != old) _dash_color_draw(w, n, cols, sel);
+                }
+            }
+        }
+        CloseWindow(w);
+    }
+    if (locked) UnlockPubScreen(NULL, locked);
+    return result;
 }
 
 """
@@ -4031,6 +4142,9 @@ class CodeGenerator(ASTVisitor):
             cleanup.append("    _dash_key_cleanup();\n")
         if self.uses_dirs:
             cleanup.append("    _dash_dir_cleanup();\n")
+        if self.needs_asl and not self.needs_gadtools:
+            cleanup.append("    _dash_asl_cleanup();\n"
+                           "    if (AslBase) { CloseLibrary(AslBase); AslBase = NULL; }\n")
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
         if cleanup:
@@ -5322,6 +5436,10 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
             self.needs_asl = True
+        # The ASL runtime returns strings and draws the colour dialog
+        if self.needs_asl:
+            self.needs_gfx = True
+            self.uses_strings = True
         # The ReAction runtime draws with graphics.library (SetAPen, RectFill)
         if self.needs_reaction:
             self.needs_gfx = True
