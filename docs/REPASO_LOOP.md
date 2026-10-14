@@ -62,7 +62,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
 - [x] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
 - [x] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
-- [ ] 9. `compiler/codegen.py` — structs, métodos, enums, const.
+- [x] 9. `compiler/codegen.py` — structs, métodos, enums, const.
 - [ ] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
 - [ ] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
 - [ ] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
@@ -230,3 +230,22 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Pendiente: los strings y arrays siguen sin liberarse durante la ejecución (solo al salir); un bucle
   que concatena crece sin límite. Decisión de diseño abierta (GC o manual).
 - Para zona 12: `render_canvas` se usa pero no se define.
+
+### 2026-10-14 — Zona 9 (codegen: structs, métodos, enums, const)
+- Base: tests 46/46, ejemplos 26/30. Tras la zona: tests 47/47, ejemplos 26/30 (los mismos 4 de siempre).
+- Comprobado con el GCC de Amiga (`-Wall -Wno-pointer-sign`; `STRPTR` es `unsigned char *` y ese aviso es ruido).
+- Errores arreglados (test: `tests/test_struct_adv.dash` con `expect-c`, fallaba antes):
+  - Un struct con un campo de su propio tipo (`sig: Nodo`) o de un struct definido después no compilaba
+    (`unknown type name`). Ahora hay `typedef struct _Dash_X _Dash_X;` adelantados para todos.
+  - Regresión de la zona 5: `"Hola " + self.nombre` convertía el campo string con `DashString_from_int`.
+    El codegen no conocía el tipo de los campos accedidos por `self.x` ni por cadenas `a.b.c`.
+    Ahora `_struct_of`/`_field_of`/`_method_of` resuelven el tipo de variables, `self`, campos,
+    constructores, funciones y métodos.
+  - Métodos que devuelven string se trataban como `LONG` al llamarlos (`s = p.saludo()` declaraba `LONG s`).
+    La definición y las llamadas usan ahora el mismo tipo (`_method_c_type`).
+  - Los structs se pedían con `AllocMem` y nunca se liberaban (nadie llama a `release`): ahora salen
+    del pool y se liberan al salir.
+- Sin errores: enums (valores auto e explícitos), constantes string/bool, campos `Bool` y valores por defecto.
+- Propuestas: valores de enum negativos (`A = -1`) no parsean; `retain`/`release` no se generan solos
+  (el refcount solo sirve si el usuario lo llama).
+- Para zona 13: el CLI compila sin `-O`: el código para 68000 sale sin optimizar.

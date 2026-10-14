@@ -184,7 +184,7 @@ typedef struct {
 #define _DASH_FROM_HEADER(hdr) ((void *)((UBYTE *)(hdr) + sizeof(_Dash_RefHeader)))
 
 static void *_dash_rc_alloc(LONG size) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)AllocMem(sizeof(_Dash_RefHeader) + size, MEMF_CLEAR);
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_alloc(sizeof(_Dash_RefHeader) + size);
     if (!hdr) return NULL;
     hdr->_refcount = 1;
     hdr->_size = size;
@@ -203,7 +203,7 @@ static void _dash_release(void *ptr) {
         _Dash_RefHeader *hdr = _DASH_GET_HEADER(ptr);
         hdr->_refcount--;
         if (hdr->_refcount <= 0) {
-            FreeMem(hdr, sizeof(_Dash_RefHeader) + hdr->_size);
+            FreePooled(_dash_pool, hdr, sizeof(_Dash_RefHeader) + hdr->_size);
         }
     }
 }
@@ -3116,6 +3116,10 @@ class CodeGenerator(ASTVisitor):
 
         scan(node)
 
+    def _uses_pool(self) -> bool:
+        """True if the program needs the pooled memory runtime."""
+        return self.uses_arrays or self.uses_strings or self.uses_refcount
+
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
         parts = [CTemplates.PROGRAM_HEADER]
@@ -3146,8 +3150,8 @@ class CodeGenerator(ASTVisitor):
             for header in self.custom_headers:
                 parts.append(header + "\n")
 
-        # Add memory runtime (arrays and strings allocate from its pool)
-        if self.uses_arrays or self.uses_strings:
+        # Add memory runtime (arrays, strings and structs allocate from its pool)
+        if self._uses_pool():
             parts.append(CTemplates.MEMORY_RUNTIME)
 
         # Add array runtime if needed
@@ -3178,9 +3182,12 @@ class CodeGenerator(ASTVisitor):
             parts.append("\n".join(self.enum_defines))
             parts.append("\n")
 
-        # Add struct type definitions
+        # Add struct type definitions (forward typedefs first, so fields can
+        # point to the same struct or to one defined later)
         if self.struct_typedefs:
             parts.append("\n/* Struct Definitions */\n")
+            parts.append("".join(f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
+                                 for st in self.analysis.program.structs))
             parts.append("\n".join(self.struct_typedefs))
             parts.append("\n")
 
@@ -3251,7 +3258,7 @@ class CodeGenerator(ASTVisitor):
         main_template = self._get_main_template()
         user_code = "".join(self.main_code)
         main_code = main_template.substitute(user_code=user_code)
-        if self.uses_arrays or self.uses_strings:
+        if self._uses_pool():
             main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n    _dash_mem_cleanup();\n", 1)
         parts.append(main_code)
 
@@ -3442,9 +3449,9 @@ class CodeGenerator(ASTVisitor):
             c_type = type_map.get(field.field_type, "LONG")
             fields.append(f"    {c_type} {field.name};")
 
-        typedef = f"typedef struct {{\n"
+        typedef = f"struct {c_name} {{\n"
         typedef += "\n".join(fields)
-        typedef += f"\n}} {c_name};\n"
+        typedef += f"\n}};\n"
 
         # Generate constructor function using refcount allocation
         params = []
@@ -3491,15 +3498,7 @@ static void {struct.name}_release({c_name} *obj) {{
                                 type_map: dict, c_name: str) -> str:
         """Generate a struct method as a standalone function."""
         # Determine return type
-        if method.return_type:
-            ret_type = type_map.get(method.return_type, "LONG")
-        else:
-            # Infer from return statements
-            ret_type = "void"
-            for stmt in method.body:
-                if isinstance(stmt, ReturnStmt) and stmt.value:
-                    ret_type = "LONG"  # Default inference
-                    break
+        ret_type = self._method_c_type(method)
 
         # Build parameter list with self as first param
         params = [f"{c_name} *self"]
@@ -3766,9 +3765,16 @@ static {ret_type} {method_name}({params_str}) {{
             if self._is_string_expr(node.array):
                 return "char"  # Character access
             return "LONG"  # Array elements are LONG
-        elif isinstance(node, PropertyAccess):
-            if node.property == "length":
-                return "LONG"
+        elif isinstance(node, (PropertyAccess, MemberAccess)):
+            field = self._field_of(node)
+            if field:
+                return self._dash_type_to_c(field.field_type)
+            return "LONG"
+        elif isinstance(node, MethodCall):
+            method = self._method_of(node)
+            if method:
+                c_type = self._method_c_type(method)
+                return "LONG" if c_type == "void" else c_type
             return "LONG"
         elif isinstance(node, BinaryOp):
             # String concatenation returns string
@@ -4290,12 +4296,9 @@ static {ret_type} {method_name}({params_str}) {{
         # Get the object and determine its type
         obj_expr = self._generate_expression(node.object)
 
-        # Try to determine struct type from the object
-        struct_name = None
-        if isinstance(node.object, VarRef):
-            var_type = self.var_types.get(node.object.name)
-            if var_type and var_type.startswith("struct:"):
-                struct_name = var_type[7:]  # Remove "struct:" prefix
+        # Determine the struct type of the object (variable, self, field, call...)
+        owner = self._struct_of(node.object)
+        struct_name = owner.name if owner else None
 
         if struct_name:
             # Known struct type - generate StructName_methodname(obj, args...)
@@ -4348,17 +4351,12 @@ static {ret_type} {method_name}({params_str}) {{
             return self._is_string_array(node.array)
         elif isinstance(node, FunctionCall):
             return self._call_returns_string(node.name)
-        elif isinstance(node, MemberAccess):
-            # Check if the struct field is a string type
-            var_type = self.var_types.get(node.object_name)
-            if var_type and var_type.startswith("struct:"):
-                struct_name = var_type[7:]  # Remove "struct:" prefix
-                struct = self.analysis.program.get_struct(struct_name)
-                if struct:
-                    field = struct.get_field(node.member)
-                    if field and field.field_type == "String":
-                        return True
-            return False
+        elif isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "String")
+        elif isinstance(node, MethodCall):
+            method = self._method_of(node)
+            return bool(method and self._method_c_type(method) == "STRPTR")
         return False
 
     def _char_comparison(self, node: BinaryOp) -> Optional[str]:
@@ -4419,6 +4417,57 @@ static {ret_type} {method_name}({params_str}) {{
                 self.var_types[p.name] = f"struct:{p.param_type}"
             else:
                 self.var_types[p.name] = "number"
+
+    def _struct_of(self, node: ASTNode) -> Optional[StructDef]:
+        """Struct definition of the value an expression yields, if known."""
+        prog = self.analysis.program
+        name = None
+        if isinstance(node, VarRef):
+            vt = self.var_types.get(node.name) or ""
+            if vt.startswith("struct:"):
+                name = vt[7:]
+        elif isinstance(node, SelfRef):
+            name = getattr(self, "_current_struct", None)
+        elif isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            name = field.field_type if field else None
+        elif isinstance(node, FunctionCall):
+            if prog.get_struct(node.name):
+                name = node.name
+            else:
+                func = prog.get_function(node.name)
+                if func and func.return_type:
+                    name = func.return_type
+        elif isinstance(node, MethodCall):
+            method = self._method_of(node)
+            name = method.return_type if method else None
+        return prog.get_struct(name) if name else None
+
+    def _field_of(self, node) -> Optional[StructField]:
+        """Struct field read by a member access (p.x, self.x, a.b.c)."""
+        if isinstance(node, MemberAccess):
+            owner = self._struct_of(VarRef(name=node.object_name))
+            member = node.member
+        elif isinstance(node, PropertyAccess):
+            owner = self._struct_of(node.object)
+            member = node.property
+        else:
+            return None
+        return owner.get_field(member) if owner else None
+
+    def _method_of(self, node: MethodCall) -> Optional[StructMethod]:
+        """Struct method invoked by a method call."""
+        owner = self._struct_of(node.object)
+        return owner.get_method(node.method) if owner else None
+
+    def _method_c_type(self, method: StructMethod) -> str:
+        """C return type of a struct method, as callers see it."""
+        if method.return_type:
+            return self._dash_type_to_c(method.return_type)
+        value = self._find_return_value(method.body)
+        if isinstance(value, StringLiteral):
+            return "STRPTR"
+        return "LONG" if value is not None else "void"
 
     def _array_ref(self, node: ASTNode) -> str:
         """C expression for an array operand; values not known to be arrays

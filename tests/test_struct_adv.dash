@@ -1,0 +1,48 @@
+# Test: struct typing
+# Self-referencing and forward-referenced structs, string fields in
+# expressions, methods returning strings, chained member access
+#
+# expect-c: typedef struct _Dash_Nodo _Dash_Nodo;
+# expect-c: _Dash_Nodo * sig;
+# expect-c: _Dash_Caja * caja;
+# expect-c: Printf("%ld\n", b->sig->valor);
+# expect-c: return DashString_concat("Hola ", self->nombre);
+# expect-c: STRPTR s = Persona_saludo(p);
+# expect-c: Printf("%s\n", Persona_saludo(p));
+# expect-c: _dash_alloc(sizeof(_Dash_RefHeader) + size)
+
+struct Nodo
+    valor: Int
+    sig: Nodo
+end
+
+struct Estante
+    caja: Caja
+end
+
+struct Caja
+    peso: Int
+end
+
+struct Persona
+    nombre: String
+
+    func saludo() -> String
+        return "Hola " + self.nombre
+    end
+end
+
+Main
+    a = Nodo(1, 0)
+    b = Nodo(2, a)
+    Print b.sig.valor
+
+    c = Caja(5)
+    e = Estante(c)
+    Print e.caja.peso
+
+    p = Persona("Ana")
+    s = p.saludo()
+    Print s
+    Print p.saludo()
+end
