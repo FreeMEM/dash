@@ -189,6 +189,139 @@ float DASH_MULSF3(float a, float b)
 
 #endif
 
+#if defined(__mc68000__) && !defined(DASH_FASTFP_C_ONLY)
+/* Hand-written 68000 version of the add below (same algorithm and rounding).
+   x is the operand with the larger magnitude; a0 keeps it for the sign, a1
+   the exact fp-bit routine for the special cases (add or sub, with the
+   arguments still on the stack). Checked by tests/test_fastfp_amiga.dash. */
+__asm__(
+"   .text\n"
+"   .even\n"
+"   .globl ___addsf3\n"
+"   .globl ___subsf3\n"
+"___subsf3:\n"
+"   lea ___dash_fb_subsf3,a1\n"
+"   move.l 4(sp),d0\n"
+"   move.l 8(sp),d1\n"
+"   bchg #31,d1\n"               /* a - b = a + (-b) */
+"   bra.s .La_go\n"
+"___addsf3:\n"
+"   lea ___dash_fb_addsf3,a1\n"
+"   move.l 4(sp),d0\n"
+"   move.l 8(sp),d1\n"
+".La_go:\n"
+"   movem.l d2-d5,-(sp)\n"
+"   move.l d0,d2\n"
+"   add.l d2,d2\n"               /* |x| << 1 */
+"   move.l d1,d3\n"
+"   add.l d3,d3\n"               /* |y| << 1 */
+"   cmp.l d3,d2\n"
+"   bcc.s .La_order\n"
+"   exg d0,d1\n"                 /* now |x| >= |y| */
+"   exg d2,d3\n"
+".La_order:\n"
+"   swap d2\n"
+"   lsr.w #8,d2\n"               /* ea (>= eb) */
+"   cmp.w #0xFF,d2\n"
+"   beq .La_slow\n"              /* inf or NaN */
+"   swap d3\n"
+"   lsr.w #8,d3\n"               /* eb */
+"   beq .La_slow\n"              /* zero or denormal */
+"   sub.w d2,d3\n"
+"   neg.w d3\n"                  /* d = ea - eb */
+"   move.l d1,d5\n"
+"   and.l #0x7FFFFF,d5\n"
+"   bset #23,d5\n"
+"   lsl.l #6,d5\n"               /* mb: implicit bit at 29, six guard bits */
+"   eor.l d0,d1\n"               /* bit 31: the signs differ */
+"   move.l d0,a0\n"
+"   move.l d0,d4\n"
+"   and.l #0x7FFFFF,d4\n"
+"   bset #23,d4\n"
+"   lsl.l #6,d4\n"               /* ma */
+"   tst.w d3\n"
+"   beq.s .La_aligned\n"
+"   cmp.w #6,d3\n"
+"   bhi.s .La_sticky\n"
+"   lsr.l d3,d5\n"               /* only the six zero guard bits go out */
+"   bra.s .La_aligned\n"
+".La_sticky:\n"
+"   cmp.w #30,d3\n"
+"   bhi.s .La_far\n"
+"   moveq #-1,d0\n"
+"   lsl.l d3,d0\n"
+"   not.l d0\n"
+"   and.l d5,d0\n"               /* the bits shifted out */
+"   lsr.l d3,d5\n"
+"   tst.l d0\n"
+"   beq.s .La_aligned\n"
+"   or.b #1,d5\n"                /* sticky bit */
+"   bra.s .La_aligned\n"
+".La_far:\n"
+"   moveq #1,d5\n"
+".La_aligned:\n"
+"   tst.l d1\n"
+"   bpl.s .La_add\n"
+"   sub.l d5,d4\n"               /* m = ma - mb */
+"   beq.s .La_zero\n"
+"   btst #29,d4\n"
+"   bne.s .La_round\n"
+".La_norm:\n"
+"   add.l d4,d4\n"
+"   subq.w #1,d2\n"
+"   btst #29,d4\n"
+"   beq.s .La_norm\n"
+"   bra.s .La_round\n"
+".La_add:\n"
+"   add.l d5,d4\n"               /* m = ma + mb */
+"   btst #30,d4\n"
+"   beq.s .La_round\n"
+"   lsr.l #1,d4\n"
+"   bcc.s .La_carry\n"
+"   or.b #1,d4\n"                /* keep the lost bit as sticky */
+".La_carry:\n"
+"   addq.w #1,d2\n"
+".La_round:\n"                   /* round to nearest even */
+"   moveq #0x3F,d0\n"
+"   and.w d4,d0\n"               /* rest */
+"   lsr.l #6,d4\n"               /* mant */
+"   cmp.w #0x20,d0\n"
+"   bhi.s .La_up\n"
+"   bne.s .La_done\n"
+"   btst #0,d4\n"
+"   beq.s .La_done\n"
+".La_up:\n"
+"   addq.l #1,d4\n"
+"   btst #24,d4\n"
+"   beq.s .La_done\n"
+"   lsr.l #1,d4\n"
+"   addq.w #1,d2\n"
+".La_done:\n"
+"   tst.w d2\n"                  /* overflow / underflow: exact routine */
+"   ble.s .La_slow\n"
+"   cmp.w #0xFF,d2\n"
+"   bge.s .La_slow\n"
+"   subq.w #1,d2\n"              /* mant has the implicit bit: (e - 1) << 23 + mant */
+"   lsl.w #7,d2\n"
+"   swap d2\n"
+"   clr.w d2\n"
+"   move.l d4,d0\n"
+"   add.l d2,d0\n"
+"   move.l a0,d1\n"
+"   bpl.s .La_pos\n"
+"   bset #31,d0\n"
+".La_pos:\n"
+"   movem.l (sp)+,d2-d5\n"
+"   rts\n"
+".La_zero:\n"
+"   moveq #0,d0\n"               /* x - x = +0 */
+"   movem.l (sp)+,d2-d5\n"
+"   rts\n"
+".La_slow:\n"
+"   movem.l (sp)+,d2-d5\n"
+"   jmp (a1)\n"
+);
+#else
 float DASH_ADDSF3(float a, float b)
 {
     fu x, y, r;
@@ -252,3 +385,5 @@ float DASH_SUBSF3(float a, float b)
     y.u ^= 0x80000000UL;
     return DASH_ADDSF3(a, y.f);
 }
+
+#endif

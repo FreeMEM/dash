@@ -116,7 +116,9 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       Pedido por el usuario el 2026-10-14: "un lenguaje que aproveche muy bien la máquina".
 - [~] 26. Optimización (2/3) — ciclos, función por función. Partes: 26a marcas de temporales (bucles y
       funciones), 26b arrays (`DashArray_get/set`, `%`, for-each), 26c strings (concat, interpolación, from_int, set),
-      26d Float por software (rutinas propias), 26d2 suma y multiplicación Float en ensamblador 68000, 26e llamadas y return, 26f gráficos y texto (plantillas con `${str}`
+      26d Float por software (rutinas propias), 26d2 suma y multiplicación Float en ensamblador 68000, 26d3 suma y multiplicación Float con menos ciclos
+      (exponente sin desplazar, mantisa `<< 8` para que el producto alto ya sea la mantisa, menos registros; meta: la
+      suma de la ROM, `IEEESPAdd`, que en A500 da 88.865 ns frente a 125.864 de la mía), 26e llamadas y return, 26f gráficos y texto (plantillas con `${str}`
       doble). Detalle original:: cada función del runtime (`DashString_*`,
       `DashArray_*`, `_dash_str_*`, `_dash_tmp_*`, objetos, Float, gráficos...) con su microbenchmark en
       `tests/bench/` (ciclos por llamada en 68000 y 68020) y su ensamblador (`-S`); mejorarlas una a una y
@@ -546,4 +548,20 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Hecho: `__mulsf3` escrito a mano en 68000 dentro de `fastfp.c` (cuatro `mulu.w`, `addx` para el acarreo, solo d2-d5
   guardados, sin marco); casos especiales y desbordes a `__dash_fb_mulsf3`. Test nuevo `test_fastfp_amiga` (emu):
   compara multiplicación y suma con fp-bit bit a bit en el propio Amiga, 20.000 pares: 0 diferencias en A1200 y A500.
-- Pendiente: medir con `tools/bench.py` y hacer lo mismo con `__addsf3`.
+- Medido (`26d2: __mulsf3 en asm`): `float_mul` A500 175.275 → 152.388 ns, A1200 38.701 → 33.772. Solo un 13 %:
+  el desensamblado del bucle es limpio; la rutina cuesta ~960 ciclos en 68000 (cuatro `mulu.w` ~220, sacar
+  exponentes con `lsr` ~70, recomponer mantisa y exponente ~340, `movem` ~84). Ideas para 26d3.
+- Hecho después: `__addsf3`/`__subsf3` en 68000 (misma lógica que la versión en C). `|x| >= |y|` comparando los
+  valores `<< 1`, así solo hacen falta dos comprobaciones de exponente. Sin bit pegajoso cuando la diferencia de
+  exponentes es <= 6 (los seis bits de guarda son ceros). Exponente final como `(e - 1) << 23 + mant`, que ya
+  lleva el bit implícito. La resta entra por `___subsf3` cambiando el signo; el caso raro salta (`jmp (a1)`) a la
+  de fp-bit que toca, suma o resta, con los argumentos intactos en la pila.
+- `test_fastfp_amiga` ampliado: resta contra `__dash_fb_subsf3`, y una cuarta parte de los pares con exponentes
+  cercanos (-16..15), para pasar por alineación, bit pegajoso, cancelación y acarreo. 0 diferencias en A1200 y A500.
+  Prueba de que el test sirve: con el redondeo estropeado a propósito (`cmp.w #0x1F`) da 1.736 diferencias.
+- Tests: 170/170 (`--emu --emu-a500`).
+- Medido (`26d2: __addsf3/__subsf3 en asm`): `float_mul_add` (en el bucle solo queda la suma) A500 163.428 →
+  125.864 ns, A1200 34.715 → 26.389. Aviso: la suma de la ROM (`IEEESPAdd` de `mathieeesingbas.library`, que en 3.1
+  sí funciona) medía 88.865 ns en A500; la mía aún cuesta unos 260 ciclos más. Cuento ~710 ciclos por suma: `movem`
+  84, sacar exponentes 84, preparar las dos mantisas 104, bit pegajoso ~100, recomponer ~146. Queda para 26d3.
+- Tamaño: 268.464 → 268.248 bytes.
