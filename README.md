@@ -140,6 +140,9 @@ cd dash
 # Sin optimizar (más fácil de depurar)
 ./dash -O0 archivo.dash -o bin/archivo
 
+# Para Amigas con FPU 68881/68882 (Float con instrucciones de FPU; 68020+)
+./dash --fpu archivo.dash -o bin/archivo
+
 # Ejecutar en FS-UAE sin ventana y ver la salida (Kickstart en $DASH_KICKSTART o AROS)
 tools/emu_run.py archivo.dash
 tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s

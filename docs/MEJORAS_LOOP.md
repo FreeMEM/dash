@@ -104,7 +104,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
 - [x] 22. Builtins: `sound_*` y `tone_play` (audio.device).
 - [x] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
-- [ ] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
+- [x] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
       `runtime/softfloat`), como las versiones FPU de LightWave. Probar en FS-UAE con `fpu=68882` y comparar
       velocidad con la versión sin FPU. Pedido por el usuario el 2026-10-14.
 - [ ] 25. Optimización (1/3) — medir: `tests/bench/` con programas que cronometran en FS-UAE (ReadEClock o
@@ -444,3 +444,17 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - No verificado: cómo suena (sin audio en el emulador); sí que avanza, salta (`B01`), pausa y reanuda.
 - Pendiente (optimización): pila de 4 KB del shell. Recursión profunda o locales grandes la desbordan; mirar
   `__stack`/`StackSwap` en el arranque de libnix.
+
+### 2026-10-14 — Tarea 24 (`--fpu`)
+- Base: 127/127 con `--emu`. Después: igual (sin tests nuevos en el runner; el runner no varía la CPU emulada).
+- Hecho: `./dash --fpu` añade `-m68020 -m68881` y no enlaza `runtime/softfloat` (GCC usa instrucciones de FPU; el
+  enlazador toma libnix `libm020`/FPU). `tools/emu_run.py --fpu` para compilar así (con `--set fpu=68882`).
+- Probado en FS-UAE: `test_float` compilado con `--fpu` en un A1200 con 68882 da la misma salida que la versión sin FPU.
+  Bucle de 20.000 vueltas con 2 multiplicaciones y 1 suma: software 433 ticks (8,7 s) a velocidad real; con FPU 2
+  ticks, pero FS-UAE no cuenta los ciclos reales de la FPU, así que esa cifra no vale como medida. Tamaño: 9.396 →
+  4.992 bytes.
+- Sin FPU: libnix (`__fpucheck`, antes de `main`) muestra un Alert de sistema (0x68881) y sale con 20. Probé un
+  constructor propio para avisar con texto, pero GCC guarda registros de la FPU al entrar en `main` y libnix ya lo
+  comprueba antes: se quitó.
+- Para la tarea 26: `fp-bit.c` es lento (unos 145 µs por operación en un 68020 a 14 MHz). Merece unas rutinas
+  propias de suma/multiplicación en enteros de 32 bits.

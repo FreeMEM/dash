@@ -59,6 +59,7 @@ class CTemplates:
 #include <stdlib.h>
 
 static void _dash_exit(int code);
+
 """
 
     # Memory runtime (included with arrays or strings): one exec pool,

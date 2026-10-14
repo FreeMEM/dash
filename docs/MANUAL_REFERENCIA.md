@@ -189,7 +189,10 @@ end
 - Una variable que empezo siendo Int no puede recibir un Float (`n = 0` y luego `n = 2.5` es error):
   declarala con `n = 0.0` o convierte con `Int()`.
 - `%` solo con enteros. Los arrays guardan enteros o strings, no Float.
-- Un 68000 no tiene FPU: las operaciones son por software (rutinas de GCC en
+- `./dash --fpu` compila para 68020 + FPU 68881/68882: los Float usan instrucciones de la FPU
+  (mucho mas rapido, y el ejecutable es mas pequeno). En una maquina sin FPU, libnix muestra un
+  aviso del sistema y el programa termina. Como LightWave: una version para cada maquina.
+- Sin `--fpu` (un 68000 no tiene FPU) las operaciones son por software (rutinas de GCC en
   `runtime/softfloat`, unos 4 KB, solo si el programa usa Float). No dependen de
   `mathieeesingbas.library`, que con Kickstart 3.1 sin FPU se cuelga en FS-UAE.
 

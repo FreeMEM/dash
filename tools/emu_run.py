@@ -57,10 +57,12 @@ class EmuResult:
         return self.rc is None
 
 
-def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0) -> None:
+def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: bool = False) -> None:
     cmd = [sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)]
     if optimize:
         cmd.append("-O")
+    if fpu:
+        cmd.append("--fpu")
     env = dict(os.environ)
     if autoclose:
         env["DASH_TEST_AUTOCLOSE"] = str(autoclose)
@@ -71,7 +73,7 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0) -> No
 
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
-                 keep: str = None):
+                 keep: str = None, fpu: bool = False):
     """programs: list of .dash sources or Amiga executables.
     Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
@@ -102,7 +104,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             prog = Path(prog)
             exe = hd / f"p{i}"
             if prog.suffix == ".dash":
-                compile_dash(prog, exe, optimize, autoclose)
+                compile_dash(prog, exe, optimize, autoclose, fpu)
             else:
                 shutil.copy(prog, exe)
             names.append(prog.name)
@@ -160,6 +162,7 @@ def main():
                         help="compile .dash in test mode: the program ends by itself after SECONDS "
                              "(for programs that wait for the close gadget)")
     parser.add_argument("--kickstart", help="Kickstart ROM (default: $DASH_KICKSTART, else AROS)")
+    parser.add_argument("--fpu", action="store_true", help="compile .dash with --fpu (use --set fpu=68882)")
     parser.add_argument("--keep", metavar="DIR", help="copy the emulated disk (outputs, files the programs wrote) to DIR")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
@@ -169,7 +172,7 @@ def main():
                                args.autoclose,
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
-                               args.keep)
+                               args.keep, args.fpu)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
