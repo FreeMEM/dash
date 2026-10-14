@@ -69,7 +69,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
 - [x] 14. `lib/amiga/*.dash` + `examples/`: `examples/test_dos_module.dash` no transpila
       (`read_line` no definida). Que todos los ejemplos transpilen.
-- [ ] 15. Documentación: que `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md`,
+- [x] 15. Documentación: que `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md`,
       `README.md` y `CLAUDE.md` digan lo mismo que el código.
 
 ## Bitácora
@@ -346,3 +346,43 @@ Corrección antes que velocidad. Nada de refactors grandes.
   - Los mensajes salían con el prefijo doble "Warning: Warning:" / "Error: Error:".
   - `compile_all.sh` tenía la ruta del proyecto fija y usaba `/tmp/compile_out.txt` compartido: ahora usa
     su propio directorio y un temporal propio.
+
+### 2026-10-14 — Zona 15 (documentación)
+- Tras la zona: tests 58/58 (nuevo `docs/builtins`), ejemplos 30/30.
+- Nuevo `docs/BUILTINS.md`, generado desde el código por `tools/gen_builtins_doc.py` (318 builtins,
+  246 implementados, 72 marcados "sin implementar"). El runner falla si queda desactualizado.
+- `AMIGA_API.md`: aviso de que es el diseño original (60 nombres que no existen) y enlace a BUILTINS.md.
+- `MANUAL_REFERENCIA.md`, `QUICK_REFERENCE.md`, `CHULETA_LENGUAJE.md`: audio (`sound_*`, `music_*`, `tone_play`),
+  `key_raw`, `key_text`, `dir_*`, `bob_*`, `copper_*`, `bitmap_*` marcados sin implementar. Precedencia de `not`
+  corregida (va tras las comparaciones). QUICK_REFERENCE decía que `refcount`/`retain`/`arena_*` no estaban
+  implementados: sí lo están (compilan y enlazan).
+- README: `./dash -O`, `./compile_all.sh`, `make sdk=cgx` en la instalación, `tools/`, tipos de tests.
+- ROADMAP: sesión 5 en el registro y preguntas abiertas nuevas. CLAUDE.md (local, en `.gitignore`) al día.
+
+## Resumen final del repaso (2026-10-14)
+
+- 15 zonas revisadas, 15 commits en la rama local `repaso` (sin push, `main` intacta).
+- Tests: de 29 (solo transpilación, sin toolchain) a 58 resultados que compilan y enlazan con GCC de Amiga:
+  normales, de error (`tests/errors/`), `--multifile`, runtime en el PC y documentación.
+- Ejemplos: de 26/30 a 30/30 compilando.
+- Fallos graves arreglados (colgaban o corrompían en un Amiga real):
+  - Doble `CloseWindow` en 8 ejemplos (`close_window()` + fin del `EventLoop`).
+  - `graphics.library` sin abrir: ReAction y los módulos `doublebuf`/`iff`.
+  - Memoria de strings/arrays/structs perdida hasta reiniciar: ahora pool liberado al salir.
+  - Arrays literales fuera de una asignación directa se quedaban a cero.
+  - Comparar strings comparaba punteros; concatenar números pasaba un `LONG` como `STRPTR`.
+- El analyzer ahora revisa funciones, métodos y lambdas, y da error en lugar de generar C inválido
+  (variables fuera de scope, funciones sin valor usadas como valor, `Stop` fuera de un EventLoop,
+  builtins sin implementar, privados de otro módulo, dos `Main`...).
+- Regresiones mías detectadas y arregladas dentro del propio repaso: `self.campo` en concatenaciones
+  (zona 5 → 9) y `MultiFileGenerator._dash_type_to_c` (zona 7 → 13).
+- Sin verificar: nada se ha ejecutado en un Amiga ni en emulador. Todo lo comprobado es transpilar,
+  compilar, enlazar y ejecutar el runtime C en el PC.
+
+Propuestas abiertas (no aplicadas, piden decisión):
+1. Gestión de memoria durante la ejecución (GC, refcount automático o manual).
+2. Implementar los 72 builtins declarados sin código, o quitarlos.
+3. `-O2` por defecto (flowpaint: 24.692 → 12.940 bytes) tras probarlo en fs-uae.
+4. Salida común de error en `main` (fallo al abrir ventana: hoy no libera todo).
+5. Lenguaje: hexadecimal, floats, `break`/`continue`, rangos descendentes, `On Key`,
+   asignación anidada `a.b.c = x`, enums negativos, propiedades de ventana booleanas.

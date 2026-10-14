@@ -135,6 +135,8 @@ joy_left(0) joy_right(0)
 ```
 
 ## Audio Functions
+> **Sin implementar** (dan error al compilar). Ver `lib/amiga/audio.dash` y [BUILTINS.md](BUILTINS.md).
+
 ```
 sound_load(id, "file.8svx") # Load sound
 sound_play(id, channel)     # Play (channels 0-3)
@@ -179,7 +181,8 @@ random_range(min, max)      # Random in range
 ```
 
 ## Memory Management
-> **Nota:** Estas funciones están planificadas pero aún no implementadas.
+> Strings, arrays y structs salen de un pool que se libera al salir del programa.
+> Estas funciones son para gestión manual dentro del programa.
 
 ```
 # Reference Counting (automatic for structs)

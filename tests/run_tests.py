@@ -381,6 +381,17 @@ def main():
         results.append(result)
         print("OK" if result.passed else "FAIL")
 
+    if args.pattern is None or args.pattern in "docs/builtins":
+        print("Testing: docs/builtins...", end=" ", flush=True)
+        start_time = time.time()
+        check = subprocess.run([sys.executable, str(PROJECT_ROOT / "tools" / "gen_builtins_doc.py"), "--check"],
+                               capture_output=True, text=True)
+        results.append(TestResult(name="docs/builtins", passed=check.returncode == 0,
+                                  transpile_ok=True, compile_ok=True,
+                                  error_message=check.stdout.strip() or None,
+                                  duration=time.time() - start_time))
+        print("OK" if check.returncode == 0 else "FAIL")
+
     if args.pattern is None or args.pattern in "runtime":
         print("Testing: runtime/host...", end=" ", flush=True)
         result = run_runtime_host_test()

@@ -253,12 +253,13 @@ Print saludo
 
 ### Precedencia de Operadores
 
-1. `-`, `not` (unarios)
+1. `-` (unario)
 2. `*`, `/`, `%`
 3. `+`, `-`
 4. `==`, `!=`, `<`, `>`, `<=`, `>=`
-5. `and`
-6. `or`
+5. `not` (como en Python: `not a == b` es `not (a == b)`)
+6. `and`
+7. `or`
 
 ---
 
@@ -825,10 +826,10 @@ end
 tecla = key_wait()
 
 # Obtener codigo raw
-raw = key_raw()
+raw = key_raw()            # sin implementar
 
 # Convertir a texto
-texto = key_text(tecla)
+texto = key_text(tecla)    # sin implementar
 ```
 
 ### Raton
@@ -875,6 +876,8 @@ end
 ---
 
 ## 15. Audio y Musica
+
+> **Sin implementar:** estas funciones están declaradas pero no tienen código C; usarlas da error de compilación. Para audio, ver el módulo `lib/amiga/audio.dash`. Lista real y actualizada: [docs/BUILTINS.md](BUILTINS.md).
 
 ### Cargar y Reproducir Sonidos
 
@@ -994,8 +997,8 @@ file_copy("original.dat", "backup.dat")
 
 ```
 dir_create("saves")
-dir_change("work:")
-dir_current(buffer, 256)    # Obtener directorio actual
+dir_change("work:")         # sin implementar
+dir_current(buffer, 256)    # sin implementar
 ```
 
 ---
@@ -1859,6 +1862,8 @@ end
 
 ### Ejemplo 6: Sonido y Musica
 
+> **Sin implementar:** estas funciones están declaradas pero no tienen código C; usarlas da error de compilación. Para audio, ver el módulo `lib/amiga/audio.dash`. Lista real y actualizada: [docs/BUILTINS.md](BUILTINS.md).
+
 ```
 Window SoundWin
     title "Demo Audio"
@@ -1917,14 +1922,16 @@ end
 
 ### Funciones por Categoria
 
+Lista completa, con las que están sin implementar: [docs/BUILTINS.md](BUILTINS.md).
+
 | Categoria | Cantidad | Ejemplos |
 |-----------|----------|----------|
 | Graficos Basicos | 28 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
-| Graficos Avanzados | 32 | `sprite_*`, `bob_*`, `copper_*`, `bitmap_*` |
+| Graficos Avanzados | 32 | `sprite_*`, `gfx_*` (`bob_*`, `copper_*`, `bitmap_*` sin implementar; ver `lib/amiga`) |
 | Entrada | 16 | `key_*`, `mouse_*`, `joy_*` |
 | Sistema | 18 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Archivos | 22 | `file_*`, `dir_*`, `console_*` |
-| Audio | 18 | `sound_*`, `music_*`, `tone_*` |
+| Audio | 18 | `sound_*`, `music_*`, `tone_*` (sin implementar) |
 | Screens | 3 | `screen_open`, `screen_open_custom`, `screen_close` |
 | GadTools | 15 | `gt_init`, `gt_button`, `gt_palette`, `menu_*` |
 | ReAction | 16 | `ra_window_*`, `ra_add_*`, `ra_get_*` |

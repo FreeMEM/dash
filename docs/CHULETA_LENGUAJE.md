@@ -56,7 +56,7 @@ Esta es una guía de referencia rápida ("cheatsheet") para Dash, diseñada para
 | --- | --- | --- |
 | `gfx_rgb()` | Define colores de la paleta (builtin implementado). | `gfx_rgb(indice, r, g, b)` |
 | `Sample` | Carga y gestiona sonidos en formato 8-bit (IFF/8SVX/RAW). **(pendiente)** | `file: "sonido.8svx"` |
-| `tone_play` / `music_play` | Reproduce tonos o musica (builtins implementados). | `tone_play(freq, dur, vol)` / `music_play(file)` |
+| `tone_play` / `music_play` | Tonos o música: **sin implementar** (dan error al compilar); ver `lib/amiga/audio.dash`. | `tone_play(freq, dur, vol)` / `music_play(file)` |
 | `Audio.play_raw` | Reproduce una onda de sonido desde memoria. **(pendiente)** | `channel`, `period`, `length` |
 
 ## Redes (AmiNet / bsdsocket.library) - **(toda la seccion pendiente)**

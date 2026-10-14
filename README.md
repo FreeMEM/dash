@@ -88,6 +88,7 @@ cd ~/m68k-amigaos-gcc
 make update
 sudo mkdir -p /opt/amiga && sudo chown $USER /opt/amiga
 make all -j$(nproc)
+make sdk=cgx            # cabeceras CyberGraphX (funciones rtg_*)
 
 # 4. Añadir al PATH
 echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.bashrc
@@ -116,6 +117,7 @@ cd ~/m68k-amigaos-gcc
 make update
 sudo mkdir -p /opt/amiga && sudo chown $USER /opt/amiga
 make all -j$(nproc)
+make sdk=cgx            # cabeceras CyberGraphX (funciones rtg_*)
 
 # 4. Añadir al PATH
 echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.zshrc
@@ -134,6 +136,12 @@ cd dash
 ```bash
 # Compilar a ejecutable Amiga
 ./dash archivo.dash -o bin/archivo
+
+# Con optimización (gcc -O2, ejecutable más pequeño y rápido)
+./dash -O archivo.dash -o bin/archivo
+
+# Compilar todos los ejemplos
+./compile_all.sh
 
 # Solo transpilar a C (sin compilar)
 python3 -m compiler.main archivo.dash -o build/archivo.c
@@ -154,8 +162,9 @@ compiler/             Transpilador (Python/Lark)
   codegen.py          Generación de código C
   amiga_builtins.py   Bindings de la API Amiga
 lib/amiga/            Módulos estándar de Amiga
+tools/                Utilidades (gen_builtins_doc.py)
 examples/             Programas de ejemplo
-tests/                Suite de tests
+tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC)
 docs/                 Documentación
 ```
 
@@ -164,7 +173,8 @@ docs/                 Documentación
 - [Documentación del lenguaje](docs/DOCUMENTACION_LENGUAJE.md) — Guía completa
 - [Manual de referencia](docs/MANUAL_REFERENCIA.md) — Referencia del programador
 - [Quick Reference](docs/QUICK_REFERENCE.md) — Cheat sheet
-- [API Amiga](docs/AMIGA_API.md) — Referencia de la API
+- [Funciones built-in](docs/BUILTINS.md) — Lista real, generada desde el código
+- [API Amiga](docs/AMIGA_API.md) — Catálogo de diseño de la API
 - [Instalación](docs/INSTALACION.md) — Setup del entorno
 - [Roadmap](docs/ROADMAP.md) — Plan de desarrollo
 

@@ -749,6 +749,15 @@ tests/
   - Para librerías custom no en SDK
 - [x] Tests gráficos verificados en Amiga real
 
+### Sesión 5 (Fecha: 2026-10-14) — Repaso completo
+- [x] Toolchain instalado (`m68k-amigaos-gcc` 6.5.0b + SDK CyberGraphX): los tests compilan y enlazan de verdad
+- [x] Repaso por zonas de todo el compilador (detalle en `docs/REPASO_LOOP.md`)
+- [x] Ejemplos: de 26/30 a **30/30** compilando
+- [x] Builtins: 246 de 318 implementados; los 72 restantes dan error claro (ver `docs/BUILTINS.md`)
+- [x] Memoria: strings, arrays y structs salen de un pool de exec liberado al salir
+- [x] Corregidos fallos que colgaban el Amiga: doble `CloseWindow`, `graphics.library` sin abrir
+- [x] Test suite: 58 tests (normales, `tests/errors/`, `multifile/`, runtime en el PC, documentación)
+
 ---
 
 ## Notas y Decisiones
@@ -761,7 +770,9 @@ tests/
 5. **Amiga:** Estrategia híbrida (módulos built-in + FFI)
 
 ### Preguntas abiertas:
-- ¿Garbage collection o gestión manual con helpers?
+- ¿Garbage collection o gestión manual con helpers? (hoy: pool liberado al salir; nada se libera durante la ejecución)
+- ¿Implementar los 72 builtins declarados sin código (audio, bobs, copper, bitmaps, diálogos, gadgets)?
+- ¿Activar `-O2` por defecto? (falta probar en emulador)
 - ¿Soporte para OOP? (Probablemente no en v3.0)
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 

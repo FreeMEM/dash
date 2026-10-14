@@ -1,6 +1,9 @@
 # Dash Language - API Completa de Amiga
 
-Catálogo completo de funciones built-in para AmigaOS.
+Catálogo de diseño de las funciones built-in para AmigaOS.
+
+> **Ojo:** este documento es el diseño original. Muchos nombres no existen o están sin
+> implementar. La lista real, generada desde el código, está en [BUILTINS.md](BUILTINS.md).
 
 ---
 

@@ -1,0 +1,391 @@
+# Funciones built-in
+
+> Generado por `tools/gen_builtins_doc.py` desde `compiler/amiga_builtins.py`. No editar a mano.
+
+Las marcadas **sin implementar** están declaradas pero no tienen código C:
+usarlas da el error `Builtin 'x' is declared but not implemented yet`.
+
+Total: 318 funciones, 246 implementadas, 72 sin implementar.
+
+## Gráficos básicos
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `gfx_pen(color)` | `void` | Set foreground pen color |  |
+| `gfx_pen_bg(color)` | `void` | Set background pen color |  |
+| `gfx_pen_outline(color)` | `void` | Set outline pen color for area fills |  |
+| `gfx_mode(mode)` | `void` | Set drawing mode (JAM1, JAM2, COMPLEMENT, INVERSVID) |  |
+| `gfx_pattern(pattern)` | `void` | Set line pattern (16-bit) |  |
+| `gfx_rgb(index, r, g, b)` | `void` | Set palette color (4-bit components 0-15) |  |
+| `gfx_rgb8(index, r, g, b)` | `void` | Set palette color (8-bit components, AGA) |  |
+| `gfx_move(x, y)` | `void` | Move graphics cursor |  |
+| `gfx_draw(x, y)` | `void` | Draw line from cursor to point |  |
+| `gfx_line(x1, y1, x2, y2)` | `void` | Draw line between two points |  |
+| `gfx_pixel(x, y)` | `void` | Draw single pixel |  |
+| `gfx_pixel_read(x, y)` | `LONG` | Read pixel color |  |
+| `gfx_rect(x1, y1, x2, y2)` | `void` | Draw filled rectangle |  |
+| `gfx_box(x1, y1, x2, y2)` | `void` | Draw rectangle outline |  |
+| `gfx_ellipse(cx, cy, rx, ry)` | `void` | Draw ellipse outline |  |
+| `gfx_circle(cx, cy, r)` | `void` | Draw circle outline |  |
+| `gfx_ellipse_fill(cx, cy, rx, ry)` | `void` | Draw filled ellipse |  |
+| `gfx_circle_fill(cx, cy, r)` | `void` | Draw filled circle |  |
+| `gfx_flood(x, y, mode)` | `void` | Flood fill |  |
+| `gfx_text(str)` | `void` | Draw text at cursor |  |
+| `gfx_text_at(x, y, str)` | `void` | Draw text at position |  |
+| `gfx_text_len(str)` | `LONG` | Get text width in pixels |  |
+| `gfx_clear()` | `void` | Clear with color 0 |  |
+| `gfx_clear_color(color)` | `void` | Clear with specified color |  |
+| `gfx_scroll(dx, dy, x1, y1, x2, y2)` | `void` | Scroll region |  |
+| `gfx_poly_begin(x, y)` | `void` | Begin polygon at point |  |
+| `gfx_poly_add(x, y)` | `void` | Add polygon vertex |  |
+| `gfx_poly_end()` | `void` | Close and fill polygon |  |
+| `gfx_copy(sx, sy, w, h, dx, dy)` | `void` | Copy region within window |  |
+
+## Gráficos avanzados
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `sprite_load(id, filename)` | `BOOL` | Load sprite from file |  |
+| `sprite_create(id, width, height)` | `BOOL` | Create empty sprite |  |
+| `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
+| `sprite_show(id)` | `void` | Make sprite visible |  |
+| `sprite_hide(id)` | `void` | Hide sprite |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Set sprite color |  |
+| `sprite_frame(id, frame)` | `void` | Set sprite animation frame |  |
+| `sprite_free(id)` | `void` | Free sprite memory |  |
+| `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |
+| `sprite_set_row(id, row, plane0, plane1)` | `void` | Set sprite data row (2 bitplanes) |  |
+| `soft_sprite_create(id, width, height, depth)` | `BOOL` | Create software sprite (RTG compatible) |  |
+| `soft_sprite_free(id)` | `void` | Free software sprite |  |
+| `soft_sprite_pixel(id, x, y, color)` | `void` | Set pixel in software sprite |  |
+| `soft_sprite_clear(id, color)` | `void` | Clear software sprite with color |  |
+| `soft_sprite_row(id, row, plane0, plane1)` | `void` | Set sprite row (hardware sprite format compatible) |  |
+| `soft_sprite_show(id)` | `void` | Show software sprite |  |
+| `soft_sprite_hide(id)` | `void` | Hide software sprite |  |
+| `soft_sprite_pos(id, x, y)` | `void` | Set software sprite position |  |
+| `soft_sprite_x(id)` | `LONG` | Get software sprite X position |  |
+| `soft_sprite_y(id)` | `LONG` | Get software sprite Y position |  |
+| `bob_load(id, filename)` | `BOOL` | Load BOB from file | **sin implementar** |
+| `bob_create(id, width, height, depth)` | `BOOL` | Create empty BOB | **sin implementar** |
+| `bob_pos(id, x, y)` | `void` | Set BOB position | **sin implementar** |
+| `bob_draw(id)` | `void` | Draw BOB | **sin implementar** |
+| `bob_erase(id)` | `void` | Erase BOB (restore background) | **sin implementar** |
+| `bob_frame(id, frame)` | `void` | Set BOB animation frame | **sin implementar** |
+| `bob_free(id)` | `void` | Free BOB memory | **sin implementar** |
+| `bob_collision(id1, id2)` | `BOOL` | Check BOB collision | **sin implementar** |
+| `copper_create(size)` | `BOOL` | Create copper list | **sin implementar** |
+| `copper_wait(y, x)` | `void` | Add copper WAIT instruction | **sin implementar** |
+| `copper_move(reg, value)` | `void` | Add copper MOVE instruction | **sin implementar** |
+| `copper_color(index, rgb)` | `void` | Add copper color change | **sin implementar** |
+| `copper_end()` | `void` | End copper list | **sin implementar** |
+| `copper_install()` | `void` | Install copper list | **sin implementar** |
+| `copper_free()` | `void` | Free copper list | **sin implementar** |
+| `bitmap_create(id, width, height, depth)` | `BOOL` | Create bitmap | **sin implementar** |
+| `bitmap_load(id, filename)` | `BOOL` | Load IFF bitmap | **sin implementar** |
+| `bitmap_save(id, filename)` | `BOOL` | Save IFF bitmap | **sin implementar** |
+| `bitmap_free(id)` | `void` | Free bitmap | **sin implementar** |
+| `bitmap_blit(src_id, sx, sy, w, h, dx, dy)` | `void` | Blit from bitmap to screen | **sin implementar** |
+| `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)` | `void` | Masked blit from bitmap | **sin implementar** |
+| `bitmap_draw_to(id)` | `void` | Set bitmap as drawing target | **sin implementar** |
+| `bitmap_draw_screen()` | `void` | Set screen as drawing target | **sin implementar** |
+
+## Entrada (teclado, ratón, joystick)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `key_pressed()` | `BOOL` | Check if key is available |  |
+| `key_get()` | `LONG` | Get key code |  |
+| `key_wait()` | `LONG` | Wait for and return key |  |
+| `key_raw()` | `LONG` | Get raw key code (no translation) | **sin implementar** |
+| `key_text(keycode)` | `STRPTR` | Convert keycode to text | **sin implementar** |
+| `mouse_x()` | `LONG` | Mouse X position relative to window inner area |  |
+| `mouse_y()` | `LONG` | Mouse Y position relative to window inner area |  |
+| `mouse_button(btn)` | `BOOL` | Check mouse button (0=left, 1=right) |  |
+| `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
+| `close_window()` | `void` | Close the current window |  |
+| `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
+| `screen_open_custom(width, height, depth, title)` | `BOOL` | Open a custom screen with specific dimensions and depth |  |
+| `screen_close()` | `void` | Close the screen |  |
+| `screen_width()` | `LONG` | Get the screen width in pixels |  |
+| `screen_height()` | `LONG` | Get the screen height in pixels |  |
+| `check_lmb()` | `BOOL` | Check if left mouse button is pressed (hardware) |  |
+| `check_rmb()` | `BOOL` | Check if right mouse button is pressed (hardware) |  |
+| `check_mouse()` | `BOOL` | Check if any mouse button is pressed (hardware) |  |
+| `check_esc()` | `BOOL` | Check if ESC key is pressed (hardware) |  |
+| `wait_click()` | `LONG` | Wait for mouse click (press and release) |  |
+| `wait_key()` | `LONG` | Wait for any key and return its code |  |
+| `joy_x(port)` | `LONG` | Joystick X direction (-1, 0, 1) |  |
+| `joy_y(port)` | `LONG` | Joystick Y direction (-1, 0, 1) |  |
+| `joy_button(port)` | `BOOL` | Joystick button state |  |
+| `joy_up(port)` | `BOOL` | Joystick up |  |
+| `joy_down(port)` | `BOOL` | Joystick down |  |
+| `joy_left(port)` | `BOOL` | Joystick left |  |
+| `joy_right(port)` | `BOOL` | Joystick right |  |
+| `joy_fire(port)` | `BOOL` | Joystick fire button |  |
+
+## GadTools
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `gt_init()` | `BOOL` | Initialize GadTools context (call after window open) |  |
+| `gt_cleanup()` | `void` | Cleanup GadTools resources |  |
+| `gt_attach()` | `void` | Attach gadgets to window (call after creating all gadgets) |  |
+| `gt_button(x, y, w, h, label)` | `LONG` | Create a button gadget, returns gadget ID |  |
+| `gt_checkbox(x, y, w, h, label, checked)` | `LONG` | Create a checkbox gadget |  |
+| `gt_string(x, y, w, h, label, initial, maxchars)` | `LONG` | Create a string input gadget |  |
+| `gt_integer(x, y, w, h, label, initial)` | `LONG` | Create an integer input gadget |  |
+| `gt_slider(x, y, w, h, label, min, max, level)` | `LONG` | Create a slider gadget |  |
+| `gt_palette(x, y, w, h, label, depth, color)` | `LONG` | Create a palette selector gadget |  |
+| `gt_text(x, y, w, h, label, text)` | `LONG` | Create a static text gadget |  |
+| `gt_get_value(gad_id)` | `LONG` | Get numeric value from gadget (slider, palette, etc.) |  |
+| `gt_set_value(gad_id, value)` | `void` | Set numeric value of gadget |  |
+| `gt_get_string(gad_id)` | `STRPTR` | Get string value from string gadget |  |
+| `gt_event()` | `LONG` | Check for gadget event, returns gadget ID or -1 (none) or -2 (close) |  |
+| `gt_wait_event()` | `LONG` | Wait for gadget event, returns gadget ID or -2 (close) |  |
+
+## Menús
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `menu_title(label)` | `void` | Add a menu title |  |
+| `menu_item(label, shortcut, id)` | `void` | Add a menu item with keyboard shortcut and ID |  |
+| `menu_sub(label, shortcut, id)` | `void` | Add a submenu item |  |
+| `menu_separator()` | `void` | Add a menu separator bar |  |
+| `menu_attach()` | `BOOL` | Attach menus to window (call after defining all menus) |  |
+| `menu_event()` | `LONG` | Check for menu event, returns menu item ID or -1/-2 |  |
+
+## Requesters ASL
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `file_open_dialog(title, pattern)` | `BOOL` | Show file open dialog, returns true if file selected |  |
+| `file_save_dialog(title, pattern)` | `BOOL` | Show file save dialog, returns true if file selected |  |
+| `file_get_path()` | `STRPTR` | Get selected directory path from last dialog |  |
+| `file_get_name()` | `STRPTR` | Get selected filename from last dialog |  |
+| `file_fullpath()` | `STRPTR` | Get full path (dir + filename) from last dialog |  |
+
+## ReAction
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `ra_window_create(title, width, height)` | `LONG` | Create ReAction window with layout |  |
+| `ra_window_open()` | `LONG` | Open the ReAction window |  |
+| `ra_window_close()` | `void` | Close ReAction window and free resources |  |
+| `ra_window_sigmask()` | `ULONG` | Get window signal mask for Wait() |  |
+| `ra_handle_events()` | `LONG` | Handle window events (non-blocking), returns gadget ID or -1 for close |  |
+| `ra_wait_event()` | `LONG` | Wait for and handle window events, returns gadget ID or -1 for close |  |
+| `ra_add_button(id, label)` | `LONG` | Add button gadget to layout |  |
+| `ra_add_string(id, initial, maxchars)` | `LONG` | Add string input gadget |  |
+| `ra_add_checkbox(id, label, checked)` | `LONG` | Add checkbox gadget |  |
+| `ra_add_slider(id, min, max, initial)` | `LONG` | Add horizontal slider gadget |  |
+| `ra_add_integer(id, initial, min, max)` | `LONG` | Add integer input gadget |  |
+| `ra_add_label(text)` | `LONG` | Add text label |  |
+| `ra_get_value(id)` | `LONG` | Get gadget numeric value (checkbox, slider, integer) |  |
+| `ra_get_string(id)` | `STRPTR` | Get string gadget text |  |
+| `ra_set_value(id, value)` | `void` | Set gadget value |  |
+| `ra_refresh_layout()` | `void` | Refresh window layout after adding gadgets |  |
+| `RA_EVENT_CLOSE()` | `LONG` | Close window event code (-1) |  |
+| `RA_EVENT_NONE()` | `LONG` | No event code (0) |  |
+| `ra_get_rastport()` | `APTR` | Get RastPort for custom drawing (also sets _dash_rp) |  |
+| `ra_get_inner_left()` | `LONG` | Get inner left border of window |  |
+| `ra_get_inner_top()` | `LONG` | Get inner top border of window |  |
+| `ra_get_inner_width()` | `LONG` | Get inner width of window |  |
+| `ra_get_inner_height()` | `LONG` | Get inner height of window |  |
+| `ra_add_palette(id, depth, initial_color)` | `LONG` | Add color palette gadget |  |
+| `ra_get_palette_color(id)` | `LONG` | Get selected color from palette |  |
+| `ra_set_palette_color(id, color)` | `void` | Set selected color in palette |  |
+| `ra_add_chooser(id)` | `LONG` | Add dropdown/chooser gadget |  |
+| `ra_chooser_add_item(id, label)` | `LONG` | Add item to chooser |  |
+| `ra_get_chooser_selected(id)` | `LONG` | Get selected index from chooser |  |
+| `ra_set_chooser_selected(id, index)` | `void` | Set selected index in chooser |  |
+| `ra_add_scroller(id, min, max, visible, initial)` | `LONG` | Add horizontal scroller gadget |  |
+| `ra_add_scroller_vert(id, min, max, visible, initial)` | `LONG` | Add vertical scroller gadget |  |
+| `ra_get_scroller(id)` | `LONG` | Get scroller position |  |
+| `ra_set_scroller(id, pos)` | `void` | Set scroller position |  |
+| `ra_enable_gadget(id)` | `void` | Enable a gadget |  |
+| `ra_disable_gadget(id)` | `void` | Disable a gadget |  |
+| `ra_set_string(id, text)` | `void` | Set string gadget text |  |
+| `ra_set_text(id, text)` | `void` | Set button/label text |  |
+| `ra_layout_hgroup_begin()` | `LONG` | Begin horizontal layout group |  |
+| `ra_layout_vgroup_begin()` | `LONG` | Begin vertical layout group |  |
+| `ra_layout_group_end()` | `LONG` | End layout group |  |
+| `ra_add_space()` | `void` | Add horizontal separator |  |
+| `ra_add_vspace()` | `void` | Add vertical separator |  |
+| `ra_layout_hgroup_weighted(weight)` | `LONG` | Begin horizontal layout group with weight hint |  |
+| `ra_layout_vgroup_weighted(weight)` | `LONG` | Begin vertical layout group with weight hint |  |
+| `ra_layout_group_end_weighted()` | `LONG` | End weighted layout group |  |
+| `ra_add_drawing_area(id, min_width, min_height)` | `LONG` | Add Space gadget for custom drawing area |  |
+| `ra_get_drawing_bounds(id)` | `LONG` | Query Space gadget bounds (call after window open) |  |
+| `ra_drawing_left()` | `LONG` | Get drawing area left position |  |
+| `ra_drawing_top()` | `LONG` | Get drawing area top position |  |
+| `ra_drawing_width()` | `LONG` | Get drawing area width |  |
+| `ra_drawing_height()` | `LONG` | Get drawing area height |  |
+| `ra_calc_drawing_area(toolbar_h, timeline_h, left_w, right_w)` | `LONG` | Calculate drawing area from window dimensions (fallback) |  |
+| `ra_refresh_canvas(id)` | `void` | Trigger canvas Space gadget refresh (calls render hook) |  |
+| `ra_canvas_left()` | `LONG` | Get canvas left position from render hook |  |
+| `ra_canvas_top()` | `LONG` | Get canvas top position from render hook |  |
+| `ra_canvas_width()` | `LONG` | Get canvas width from render hook |  |
+| `ra_canvas_height()` | `LONG` | Get canvas height from render hook |  |
+| `ra_init_canvas_render()` | `void` | Register render_canvas() as the canvas render callback |  |
+| `ra_canvas_enable()` | `void` | Enable canvas rendering (call after all init is done) |  |
+| `ra_gadget_exists(id)` | `LONG` | Check if gadget exists |  |
+| `ra_window_width()` | `LONG` | Get window width |  |
+| `ra_window_height()` | `LONG` | Get window height |  |
+| `ra_window_is_open()` | `LONG` | Check if window is open |  |
+
+## Sistema y memoria
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `mem_chip_free()` | `LONG` | Available chip RAM |  |
+| `mem_fast_free()` | `LONG` | Available fast RAM |  |
+| `mem_total()` | `LONG` | Total available memory |  |
+| `peek_byte(addr)` | `LONG` | Read byte from memory address |  |
+| `peek_word(addr)` | `LONG` | Read word from memory address |  |
+| `peek_long(addr)` | `LONG` | Read long from memory address |  |
+| `poke_byte(addr, value)` | `void` | Write byte to memory address |  |
+| `poke_word(addr, value)` | `void` | Write word to memory address |  |
+| `poke_long(addr, value)` | `void` | Write long to memory address |  |
+| `time_delay(ticks)` | `void` | Delay in ticks (50 per second) |  |
+| `time_delay_ms(ms)` | `void` | Delay in milliseconds |  |
+| `random()` | `LONG` | Random number |  |
+| `random_range(min, max)` | `LONG` | Random in range [min, max] |  |
+| `random_seed(seed)` | `void` | Set random seed |  |
+| `wait_vblank()` | `void` | Wait for vertical blank |  |
+| `wait_blit()` | `void` | Wait for blitter |  |
+| `arena_new(size)` | `LONG` | Create arena allocator with given size in bytes |  |
+| `arena_alloc(arena, size)` | `LONG` | Allocate from arena (fast bump allocator) |  |
+| `arena_reset(arena)` | `void` | Reset arena (reuse memory without freeing) |  |
+| `arena_free(arena)` | `void` | Free arena and all its memory |  |
+| `arena_used(arena)` | `LONG` | Get bytes used in arena |  |
+| `arena_available(arena)` | `LONG` | Get bytes available in arena |  |
+| `refcount(obj)` | `LONG` | Get reference count of object |  |
+| `retain(obj)` | `void` | Manually increment reference count |  |
+| `release(obj)` | `void` | Manually decrement reference count (frees if 0) |  |
+
+## Ficheros (DOS)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `file_open(filename, mode)` | `LONG` | Open file (mode: MODE_OLDFILE, MODE_NEWFILE, MODE_READWRITE) |  |
+| `file_close(handle)` | `void` | Close file |  |
+| `file_read_byte(handle)` | `LONG` | Read single byte |  |
+| `file_read_line(handle, buffer, maxlen)` | `STRPTR` | Read line into buffer |  |
+| `file_read(handle, buffer, length)` | `LONG` | Read bytes into buffer |  |
+| `file_eof(handle)` | `BOOL` | Check end of file |  |
+| `file_write_byte(handle, byte)` | `LONG` | Write single byte |  |
+| `file_write_line(handle, str)` | `LONG` | Write string |  |
+| `file_write(handle, buffer, length)` | `LONG` | Write bytes from buffer |  |
+| `file_print(handle, str)` | `void` | Print string to file |  |
+| `file_seek(handle, position, mode)` | `LONG` | Seek in file (mode: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |
+| `file_pos(handle)` | `LONG` | Get current position |  |
+| `file_size(filename)` | `LONG` | Get file size |  |
+| `file_exists(filename)` | `BOOL` | Check if file exists |  |
+| `file_delete(filename)` | `BOOL` | Delete file |  |
+| `file_rename(oldname, newname)` | `BOOL` | Rename file |  |
+| `file_copy(src, dest)` | `BOOL` | Copy file |  |
+| `dir_create(path)` | `BOOL` | Create directory |  |
+| `dir_change(path)` | `BOOL` | Change current directory | **sin implementar** |
+| `dir_current(buffer, maxlen)` | `BOOL` | Get current directory | **sin implementar** |
+| `console_read(buffer, maxlen)` | `LONG` | Read from console |  |
+| `console_write(str)` | `void` | Write to console |  |
+| `file_load(filename, buffer, maxsize)` | `LONG` | Load entire file into buffer, returns bytes read or -1 |  |
+| `file_save(filename, buffer, size)` | `LONG` | Save buffer to file, returns bytes written |  |
+
+## Buffers
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `buffer_alloc(size)` | `APTR` | Allocate memory buffer |  |
+| `buffer_free(buffer)` | `void` | Free memory buffer |  |
+| `buffer_get_byte(buffer, offset)` | `LONG` | Get byte at offset |  |
+| `buffer_set_byte(buffer, offset, value)` | `void` | Set byte at offset |  |
+| `buffer_get_word(buffer, offset)` | `LONG` | Get 16-bit word at offset (big-endian) |  |
+| `buffer_set_word(buffer, offset, value)` | `void` | Set 16-bit word at offset (big-endian) |  |
+| `buffer_get_long(buffer, offset)` | `LONG` | Get 32-bit long at offset (big-endian) |  |
+| `buffer_set_long(buffer, offset, value)` | `void` | Set 32-bit long at offset (big-endian) |  |
+| `buffer_copy(dest, dest_offset, src, src_offset, length)` | `void` | Copy bytes between buffers |  |
+| `buffer_fill(buffer, offset, length, value)` | `void` | Fill buffer region with byte value |  |
+
+## Audio
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `sound_load(id, filename)` | `BOOL` | Load IFF 8SVX sound | **sin implementar** |
+| `sound_create(id, length, rate)` | `BOOL` | Create empty sound buffer | **sin implementar** |
+| `sound_free(id)` | `void` | Free sound memory | **sin implementar** |
+| `sound_play(id, channel)` | `void` | Play sound on channel (0-3) | **sin implementar** |
+| `sound_stop(channel)` | `void` | Stop channel | **sin implementar** |
+| `sound_loop(id, channel)` | `void` | Play sound looped | **sin implementar** |
+| `sound_playing(channel)` | `BOOL` | Check if channel is playing | **sin implementar** |
+| `sound_volume(channel, vol)` | `void` | Set channel volume (0-64) | **sin implementar** |
+| `sound_period(channel, period)` | `void` | Set channel period (pitch) | **sin implementar** |
+| `music_load(filename)` | `BOOL` | Load MOD file | **sin implementar** |
+| `music_play()` | `void` | Start music playback | **sin implementar** |
+| `music_stop()` | `void` | Stop music | **sin implementar** |
+| `music_pause()` | `void` | Pause music | **sin implementar** |
+| `music_resume()` | `void` | Resume music | **sin implementar** |
+| `music_volume(vol)` | `void` | Set music volume (0-64) | **sin implementar** |
+| `music_position(pos)` | `void` | Set music position | **sin implementar** |
+| `music_free()` | `void` | Free music data | **sin implementar** |
+| `tone_play(channel, freq, vol, duration)` | `void` | Play tone (frequency in Hz) | **sin implementar** |
+
+## Intuition
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `window_create(title, x, y, w, h, flags)` | `LONG` | Create window (returns handle) | **sin implementar** |
+| `window_close(handle)` | `void` | Close window | **sin implementar** |
+| `window_title(handle, title)` | `void` | Set window title | **sin implementar** |
+| `window_move(handle, x, y)` | `void` | Move window | **sin implementar** |
+| `window_resize(handle, w, h)` | `void` | Resize window | **sin implementar** |
+| `window_to_front(handle)` | `void` | Bring window to front | **sin implementar** |
+| `window_to_back(handle)` | `void` | Send window to back | **sin implementar** |
+| `window_activate(handle)` | `void` | Activate window | **sin implementar** |
+| `screen_to_front()` | `void` | Bring custom screen to front |  |
+| `screen_to_back()` | `void` | Send custom screen to back |  |
+| `button_create(win, x, y, w, h, label)` | `LONG` | Create button gadget | **sin implementar** |
+| `button_enable(gad)` | `void` | Enable button | **sin implementar** |
+| `button_disable(gad)` | `void` | Disable button | **sin implementar** |
+| `textfield_create(win, x, y, w, h, maxlen)` | `LONG` | Create text input field | **sin implementar** |
+| `textfield_get(gad)` | `STRPTR` | Get text field content | **sin implementar** |
+| `textfield_set(gad, text)` | `void` | Set text field content | **sin implementar** |
+| `checkbox_create(win, x, y, label)` | `LONG` | Create checkbox | **sin implementar** |
+| `checkbox_get(gad)` | `BOOL` | Get checkbox state | **sin implementar** |
+| `checkbox_set(gad, state)` | `void` | Set checkbox state | **sin implementar** |
+| `slider_create(win, x, y, w, h, min, max, value)` | `LONG` | Create slider | **sin implementar** |
+| `slider_get(gad)` | `LONG` | Get slider value | **sin implementar** |
+| `slider_set(gad, value)` | `void` | Set slider value | **sin implementar** |
+| `listview_create(win, x, y, w, h)` | `LONG` | Create listview | **sin implementar** |
+| `listview_add(gad, text)` | `void` | Add item to listview | **sin implementar** |
+| `listview_clear(gad)` | `void` | Clear listview | **sin implementar** |
+| `listview_selected(gad)` | `LONG` | Get selected index (-1 if none) | **sin implementar** |
+| `dialog_file(title, pattern, save_mode)` | `STRPTR` | Show file requester | **sin implementar** |
+| `dialog_color(title, initial)` | `LONG` | Show color requester | **sin implementar** |
+| `dialog_font(title)` | `STRPTR` | Show font requester | **sin implementar** |
+
+## RTG (CyberGraphX / Picasso96)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `rtg_available()` | `BOOL` | Check if CyberGraphX or Picasso96 is available |  |
+| `rtg_is_active()` | `BOOL` | Check if current screen is using RTG |  |
+| `rtg_get_depth()` | `LONG` | Get current screen bit depth |  |
+| `rtg_get_width()` | `LONG` | Get current screen width |  |
+| `rtg_get_height()` | `LONG` | Get current screen height |  |
+| `rtg_alloc_bitmap(width, height, depth)` | `APTR` | Allocate RTG-compatible bitmap |  |
+| `rtg_free_bitmap(bitmap)` | `void` | Free RTG bitmap |  |
+| `rtg_write_pixel(x, y, rgb)` | `void` | Write single pixel with 24-bit RGB color |  |
+| `rtg_read_pixel(x, y)` | `LONG` | Read pixel, returns 24-bit RGB color |  |
+| `rtg_fill_rect(x, y, w, h, rgb)` | `void` | Fill rectangle with 24-bit RGB color |  |
+| `rtg_write_array(buffer, bpr, x, y, w, h)` | `void` | Write pixel array (buffer is ARGB 32-bit, bpr is bytes per row) |  |
+| `rtg_read_array(buffer, bpr, x, y, w, h)` | `void` | Read pixel array from screen into buffer |  |
+| `rtg_rgb(r, g, b)` | `LONG` | Create 24-bit RGB color value from components |  |
+| `rtg_argb(a, r, g, b)` | `LONG` | Create 32-bit ARGB color value from components |  |
+| `rtg_rgb_r(color)` | `LONG` | Extract red component from RGB color |  |
+| `rtg_rgb_g(color)` | `LONG` | Extract green component from RGB color |  |
+| `rtg_rgb_b(color)` | `LONG` | Extract blue component from RGB color |  |
+| `rtg_best_mode(width, height, depth)` | `LONG` | Find best RTG display mode for given dimensions |  |
+| `rtg_open_screen(width, height, depth, title)` | `BOOL` | Open RTG screen with specified dimensions |  |
+| `rtg_blit(src, sx, sy, dx, dy, w, h)` | `void` | Blit from bitmap to screen |  |
+| `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)` | `void` | Scaled blit from bitmap to screen |  |
