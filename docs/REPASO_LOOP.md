@@ -58,7 +58,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 3. `compiler/transformer.py` + `compiler/ast_nodes.py`
 - [x] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
 - [x] 5. `compiler/codegen.py` — expresiones, variables y scope.
-- [ ] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
+- [x] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
 - [ ] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
 - [ ] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
 - [ ] 9. `compiler/codegen.py` — structs, métodos, enums, const.
@@ -172,3 +172,18 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Pendiente (zona 8): `DashString_concat` reserva memoria que nunca se libera.
 - Pendiente (zona 11): `runtime/*.h` no se usa; el codegen lleva su propia copia del runtime.
 - Pendiente: concatenar un carácter (`s + s[0]`) pasa un `char` como `STRPTR`.
+
+### 2026-10-14 — Zona 6 (codegen: if, while, for-range, for-each)
+- Base: tests 40/40, ejemplos 29/30. Tras la zona: tests 41/41, ejemplos 29/30.
+- Errores arreglados (test: `tests/test_loops.dash` con `expect-c`, fallaba antes):
+  - `for c in texto` usaba `DashArray_length` sobre un `STRPTR`. Ahora recorre los caracteres (`char c`).
+  - La variable del bucle heredaba el tipo de otra con el mismo nombre (`for s in nums` imprimía con `%s`).
+  - El final del rango se evaluaba en cada vuelta (`for i in (1..f())` llamaba a `f` cada vez).
+    Ahora se evalúa una vez, como un rango de Python (`_end_i`). Si es un literal se deja tal cual.
+  - `c == "n"` con `c` carácter (o `s[0] == "A"`) llamaba a `strcmp` con un `char`. Ahora compara `'n'`.
+- Comprobación nueva: cabeceras Amiga falsas en el scratchpad para pasar `gcc -fsyntax-only` en el host.
+  `test_loops` y `test_string_types` compilan limpios. Faltan stubs de ventanas (zona 10).
+  Confirmado con ella: `f = fn(x) -> ...` mete un puntero en un `LONG` (error en GCC moderno) → zona 7.
+- Sin cambios: `if`/`while` correctos. La variable de un `for` es local al bucle (coherente con el scope de bloque).
+- Propuestas: `break`/`continue` no existen; rangos descendentes (`10..1`) no iteran.
+  Cosmético: las plantillas de `if`/`while` sangran 4 espacios de más.

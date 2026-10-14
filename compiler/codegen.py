@@ -2936,6 +2936,12 @@ $indent        LONG $var = DashArray_get($array, _idx_$var);
 $body$indent    }
 """)
 
+    FOR_EACH_CHAR_STMT = Template("""\
+$indent    for (LONG _idx_$var = 0, _len_$var = DashString_length($string); _idx_$var < _len_$var; _idx_$var++) {
+$indent        char $var = $string[_idx_$var];
+$body$indent    }
+""")
+
     # Function templates
     FUNCTION_PROTO = Template("$return_type $name($params);\n")
 
@@ -3833,32 +3839,28 @@ static {ret_type} {method_name}({params_str}) {{
         end = self._generate_expression(node.end)
         indent = self.context.indent
 
-        # Generate body with new scope
-        self.context.indent_level += 1
-        self.context.enter_scope()
-        self.context.declare_var(node.variable)  # Loop var is declared by for
-        body = ""
-        for s in node.body:
-            body += self._generate_statement(s)
-        self.context.exit_scope()
-        self.context.indent_level -= 1
+        # Evaluate a non-literal end once, like a range
+        if isinstance(node.end, NumberLiteral):
+            init = start
+        else:
+            init = f"{start}, _end_{node.variable} = {end}"
+            end = f"_end_{node.variable}"
+
+        body = self._generate_loop_body(node, "number")
 
         code = CTemplates.FOR_RANGE_STMT.substitute(
             indent=indent,
             var=node.variable,
-            start=start,
+            start=init,
             end=end,
             body=body
         )
         self.emit(code)
 
-    def visit_ForEachStmt(self, node: ForEachStmt):
-        """Generate code for for-each statement."""
-        self.uses_arrays = True
-        array = self._generate_expression(node.iterable)
-        indent = self.context.indent
-
-        # Generate body with new scope
+    def _generate_loop_body(self, node, var_type: str) -> str:
+        """Generate a for-loop body; the loop variable has its own scope and type."""
+        saved_type = self.var_types.get(node.variable)
+        self.var_types[node.variable] = var_type
         self.context.indent_level += 1
         self.context.enter_scope()
         self.context.declare_var(node.variable)  # Loop var is declared by for
@@ -3867,6 +3869,28 @@ static {ret_type} {method_name}({params_str}) {{
             body += self._generate_statement(s)
         self.context.exit_scope()
         self.context.indent_level -= 1
+        if saved_type is None:
+            self.var_types.pop(node.variable, None)
+        else:
+            self.var_types[node.variable] = saved_type
+        return body
+
+    def visit_ForEachStmt(self, node: ForEachStmt):
+        """Generate code for for-each statement."""
+        indent = self.context.indent
+
+        # Iterating a string yields its characters
+        if self._is_string_expr(node.iterable):
+            self.uses_strings = True
+            string = self._generate_expression(node.iterable)
+            body = self._generate_loop_body(node, "char")
+            self.emit(CTemplates.FOR_EACH_CHAR_STMT.substitute(
+                indent=indent, var=node.variable, string=string, body=body))
+            return
+
+        self.uses_arrays = True
+        array = self._generate_expression(node.iterable)
+        body = self._generate_loop_body(node, "number")
 
         code = CTemplates.FOR_EACH_STMT.substitute(
             indent=indent,
@@ -4016,6 +4040,11 @@ static {ret_type} {method_name}({params_str}) {{
                 left = self._string_operand(node.left, left_str)
                 right = self._string_operand(node.right, right_str)
                 return f"DashString_concat({left}, {right})"
+            # A character compared with a one-letter string literal: compare chars
+            if node.operator in ("==", "!="):
+                char_cmp = self._char_comparison(node)
+                if char_cmp:
+                    return char_cmp
             # String comparison compares contents, not pointers
             if node.operator in ("==", "!=") and (left_str or right_str):
                 self.uses_strings = True
@@ -4267,6 +4296,16 @@ static {ret_type} {method_name}({params_str}) {{
                         return True
             return False
         return False
+
+    def _char_comparison(self, node: BinaryOp) -> Optional[str]:
+        """c == "a" where c is a character: compare with the char literal 'a'."""
+        for char_side, lit_side in ((node.left, node.right), (node.right, node.left)):
+            if (self._is_char_expr(char_side) and isinstance(lit_side, StringLiteral)
+                    and len(lit_side.value) == 3):
+                char = lit_side.value[1]
+                literal = "'\\''" if char == "'" else f"'{char}'"
+                return f"({self._generate_expression(char_side)} {node.operator} {literal})"
+        return None
 
     def _string_operand(self, node: ASTNode, is_string: bool) -> str:
         """C code for one side of a concatenation, converting numbers to strings."""
