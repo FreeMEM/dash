@@ -3282,12 +3282,7 @@ class CodeGenerator(ASTVisitor):
     def _generate_global_var(self, gvar: GlobalVarDecl):
         """Generate C global variable declaration."""
         # Map Dash types to C types
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-        }
+        type_map = self._c_type_map
         c_type = type_map.get(gvar.var_type, "LONG")
 
         # Generate initial value if present
@@ -3333,13 +3328,7 @@ class CodeGenerator(ASTVisitor):
         self.extern_libraries.add(extern.library)
 
         # Map Dash types to C types
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-            "Void": "void",
-        }
+        type_map = self._c_type_map
 
         # Generate return type
         ret_type = type_map.get(extern.return_type, "LONG") if extern.return_type else "void"
@@ -3360,13 +3349,7 @@ class CodeGenerator(ASTVisitor):
     def _generate_native_func(self, native: NativeFunc):
         """Generate native function with inline C code."""
         # Map Dash types to C types
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-            "Void": "void",
-        }
+        type_map = self._c_type_map
 
         # Generate return type
         ret_type = type_map.get(native.return_type, "LONG") if native.return_type else "void"
@@ -3399,13 +3382,7 @@ class CodeGenerator(ASTVisitor):
         # Mark that we're using reference counting
         self.uses_refcount = True
 
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-            "Void": "void"
-        }
+        type_map = self._c_type_map
 
         # Use _Dash_ prefix to avoid collision with Amiga SDK types
         c_name = f"_Dash_{struct.name}"
@@ -3702,6 +3679,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "string"
         elif var_type == "char":
             self.var_types[node.name] = "char"
+        elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
+            self.var_types[node.name] = "func"
         elif var_type.startswith("_Dash_") and var_type.endswith(" *"):
             # Struct pointer - track as struct:StructName
             struct_name = var_type[6:-2]  # Remove "_Dash_" prefix and " *" suffix
@@ -3770,7 +3749,12 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"_Dash_{struct.name} *"
             if self._call_returns_string(node.name):
                 return "STRPTR"
+            func = self.analysis.program.get_function(node.name)
+            if func:
+                return self._function_c_type(func)
             return "LONG"
+        elif isinstance(node, (LambdaFunc, FunctionRef)):
+            return "APTR"
         else:
             return "LONG"
 
@@ -3909,13 +3893,7 @@ static {ret_type} {method_name}({params_str}) {{
         self._seed_param_types(node.params)
 
         # Type map for annotations
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-            "Void": "void",
-        }
+        type_map = self._c_type_map
 
         # Generate parameter list with optional types
         param_strs = []
@@ -3974,6 +3952,20 @@ static {ret_type} {method_name}({params_str}) {{
             return self._infer_c_type(value)
         return "void"
 
+    def _function_c_type(self, func: FunctionDef) -> str:
+        """C return type of a user function, as its callers see it."""
+        if func.return_type:
+            return self._dash_type_to_c(func.return_type)
+        inferring = self.__dict__.setdefault("_inferring", set())
+        if func.name in inferring:  # recursion: assume LONG
+            return "LONG"
+        inferring.add(func.name)
+        try:
+            c_type = self._infer_function_return_type(func)
+        finally:
+            inferring.discard(func.name)
+        return "LONG" if c_type == "void" else c_type
+
     def visit_ReturnStmt(self, node: ReturnStmt):
         """Generate code for return statement."""
         indent = self.context.indent
@@ -4003,8 +3995,14 @@ static {ret_type} {method_name}({params_str}) {{
             return
 
         args = ", ".join(self._generate_expression(a) for a in node.arguments)
-        code = CTemplates.FUNCTION_CALL.substitute(name=node.name, args=args)
-        self.emit(code)
+        self.emit(f"{self.context.indent}{self._callee(node)}({args});\n")
+
+    def _callee(self, node: FunctionCall) -> str:
+        """Name to call; function pointers (lambdas, Func params) are cast first."""
+        if self.var_types.get(node.name) != "func":
+            return node.name
+        params = ", ".join(["LONG"] * len(node.arguments)) or "void"
+        return f"((LONG (*)({params})){node.name})"
 
     def generic_visit(self, node: ASTNode):
         """Handle unknown nodes."""
@@ -4070,7 +4068,7 @@ static {ret_type} {method_name}({params_str}) {{
             if struct:
                 return self._generate_struct_instantiation(struct, node.arguments)
             args = ", ".join(self._generate_expression(a) for a in node.arguments)
-            return f"{node.name}({args})"
+            return f"{self._callee(node)}({args})"
         elif isinstance(node, ArrayLiteral):
             self.uses_arrays = True
             return self._generate_array_literal(node)
@@ -4194,7 +4192,7 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate C code for struct instantiation."""
         # Generate inline struct allocation and initialization
         # This creates a compound literal that allocates on the stack
-        type_map = {"Int": "LONG", "String": "STRPTR", "Bool": "BOOL"}
+        type_map = self._c_type_map
 
         parts = []
         for i, field in enumerate(struct.fields):
@@ -4347,6 +4345,8 @@ static {ret_type} {method_name}({params_str}) {{
                 continue
             if p.param_type == "String":
                 self.var_types[p.name] = "string"
+            elif p.param_type == "Func":
+                self.var_types[p.name] = "func"
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             else:
@@ -4449,17 +4449,33 @@ static {return_type} {lambda_name}({param_str}) {{
         }
         return op_map.get(op, op)
 
-    def _dash_type_to_c(self, dash_type: str) -> str:
-        """Convert Dash type annotation to C type."""
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-            "Void": "void",
-            "Func": "APTR",
-        }
-        return type_map.get(dash_type, "LONG")
+    _BASE_C_TYPES = {
+        "Int": "LONG",
+        "String": "STRPTR",
+        "Bool": "BOOL",
+        "Pointer": "APTR",
+        "Void": "void",
+        "Func": "APTR",
+    }
+
+    @property
+    def _c_type_map(self):
+        """dict-like view (``.get(name, default)``) over _dash_type_to_c."""
+        gen = self
+
+        class _CTypeMap:
+            def get(self, name, default="LONG"):
+                return gen._dash_type_to_c(name, default)
+
+        return _CTypeMap()
+
+    def _dash_type_to_c(self, dash_type: Optional[str], default: str = "LONG") -> str:
+        """Convert a Dash type annotation to its C type (struct names become pointers)."""
+        if dash_type in self._BASE_C_TYPES:
+            return self._BASE_C_TYPES[dash_type]
+        if dash_type and self.analysis.program.get_struct(dash_type):
+            return f"_Dash_{dash_type} *"
+        return default
 
     def _get_window_prop(self, window: WindowDef, name: str, default) -> str:
         """Get a window property value or default."""
@@ -4730,17 +4746,6 @@ class MultiFileGenerator:
         elif isinstance(value, BoolLiteral):
             return "TRUE" if value.value else "FALSE"
         return "0"
-
-    def _dash_type_to_c(self, dash_type: str) -> str:
-        """Convert Dash type to C type."""
-        type_map = {
-            "Int": "LONG",
-            "String": "STRPTR",
-            "Bool": "BOOL",
-            "Pointer": "APTR",
-            "Void": "void",
-        }
-        return type_map.get(dash_type, "LONG")
 
     def _get_default_init(self, c_type: str) -> str:
         """Get default initialization for a C type."""

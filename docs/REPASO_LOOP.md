@@ -59,7 +59,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
 - [x] 5. `compiler/codegen.py` — expresiones, variables y scope.
 - [x] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
-- [ ] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
+- [x] 7. `compiler/codegen.py` — funciones, return, recursión, lambdas.
 - [ ] 8. `compiler/codegen.py` — arrays, slicing y strings (concat, interpolación, memoria).
 - [ ] 9. `compiler/codegen.py` — structs, métodos, enums, const.
 - [ ] 10. `compiler/codegen.py` — ventanas, EventLoop, FFI (`@extern`, `@native`).
@@ -187,3 +187,24 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Sin cambios: `if`/`while` correctos. La variable de un `for` es local al bucle (coherente con el scope de bloque).
 - Propuestas: `break`/`continue` no existen; rangos descendentes (`10..1`) no iteran.
   Cosmético: las plantillas de `if`/`while` sangran 4 espacios de más.
+
+### 2026-10-14 — Zona 7 (codegen: funciones, return, recursión, lambdas)
+- Base: tests 41/41, ejemplos 29/30. Tras la zona: tests 45/45, ejemplos 29/30.
+- Errores arreglados (test: `tests/test_functions_adv.dash` con `expect-c`, compila limpio con stubs en host;
+  y `tests/errors/{lambda_capture,void_func_as_value,call_untyped_param}.dash`; todos fallaban antes):
+  - Las lambdas no se podían llamar (`doble(4)` daba "not a function") y se guardaban en un `LONG`.
+    Ahora se guardan en `APTR` y se llaman con cast: `((LONG (*)(LONG))doble)(4)`. Igual con parámetros `f: Func`.
+  - `_dash_type_to_c` estaba definido dos veces; la segunda anulaba la primera y perdía `Func`.
+    Había además 6 mapas de tipos copiados a mano. Ahora hay uno (`_BASE_C_TYPES`) que también
+    convierte nombres de struct en `_Dash_X *`.
+  - Parámetros de tipo struct (`q: Punto`) salían `LONG`: `q->x` no compilaba.
+  - El resultado de funciones que devuelven array o struct se guardaba en `LONG`. Ahora el llamante usa
+    el tipo de retorno (con protección contra recursión al inferirlo).
+  - Usar como valor una función sin `return` con valor (`v = nada()`) daba C inválido. Ahora es error
+    (`FunctionCall.is_statement` distingue la llamada como sentencia).
+  - Una lambda que usa variables locales de fuera generaba C inválido (es una función C de nivel superior).
+    Ahora es error con explicación. El analyzer ya revisa el cuerpo de las lambdas.
+- Cosmético: las llamadas como sentencia usaban siempre 4 espacios de sangría; ahora la del bloque.
+- Propuestas: funciones que devuelven tipos mezclados (`"pos"` y `0`) no dan error; llamar a un
+  constructor de struct como sentencia (`P(1)` suelto) genera C inválido; no hay expresiones como
+  sentencia (`f(1) + 2` no parsea).

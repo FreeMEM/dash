@@ -1,0 +1,6 @@
+# expect: lambdas cannot use local variables from outside
+Main
+    k = 3
+    suma = fn(x) -> x + k
+    Print suma(1)
+end

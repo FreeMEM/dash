@@ -15,7 +15,7 @@ from compiler.ast_nodes import (
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod
+    StructMethod, LambdaFunc, FunctionRef
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -43,6 +43,7 @@ class DashType(Enum):
     ARRAY_INT = auto()
     ARRAY_STRING = auto()
     ARRAY = auto()  # Generic array when type unknown
+    FUNC = auto()  # Lambda or function pointer
     UNKNOWN = auto()
 
 
@@ -525,6 +526,26 @@ class SemanticAnalyzer(ASTVisitor):
         self.exit_scope()
         self.in_function = False
 
+    def visit_LambdaFunc(self, node: LambdaFunc):
+        """Visit a lambda. It becomes a top-level C function, so it only sees
+        its parameters and global names (no captured local variables)."""
+        saved_scope, saved_in_function = self.current_scope, self.in_function
+        self.current_scope = Scope(name="lambda", level=1, parent=self.global_scope)
+        self.in_function = True
+        for param in node.params:
+            name = param.name if isinstance(param, FunctionParam) else param
+            dash_type = (self._type_annotation_to_dash_type(param.param_type)
+                         if isinstance(param, FunctionParam) else DashType.UNKNOWN)
+            self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
+                                      dash_type=dash_type, is_initialized=True), node)
+        before = len(self.errors)
+        for stmt in (node.body if isinstance(node.body, list) else [node.body]):
+            self.visit(stmt)
+        for err in self.errors[before:]:
+            if "is not defined" in err.message:
+                err.message += " (lambdas cannot use local variables from outside)"
+        self.current_scope, self.in_function = saved_scope, saved_in_function
+
     def _visit_struct_method(self, node: StructMethod):
         """Visit a struct method body; 'self' is an implicit parameter."""
         self.in_function = True
@@ -588,6 +609,11 @@ class SemanticAnalyzer(ASTVisitor):
                 actual = len(node.arguments)
                 if expected != actual:
                     self.error(f"Native function '{node.name}' expects {expected} arguments, got {actual}", node)
+        elif symbol.symbol_type in (SymbolType.VARIABLE, SymbolType.PARAMETER):
+            # Calling through a function pointer (lambda or Func parameter)
+            if symbol.dash_type != DashType.FUNC:
+                self.error(f"'{node.name}' is not a function; a parameter that receives "
+                           f"a function must be declared '{node.name}: Func'", node)
         elif symbol.symbol_type not in (SymbolType.FUNCTION, SymbolType.EXTERN_FUNC, SymbolType.NATIVE_FUNC):
             self.error(f"'{node.name}' is not a function or struct", node)
         else:
@@ -598,6 +624,8 @@ class SemanticAnalyzer(ASTVisitor):
                 actual = len(node.arguments)
                 if expected != actual:
                     self.error(f"Function '{node.name}' expects {expected} arguments, got {actual}", node)
+                if not node.is_statement and not self._returns_value(func_node):
+                    self.error(f"Function '{node.name}' does not return a value", node)
 
         for arg in node.arguments:
             self.visit(arg)
@@ -725,7 +753,26 @@ class SemanticAnalyzer(ASTVisitor):
         elif isinstance(node, PropertyAccess):
             if node.property == "length":
                 return DashType.INT
+        elif isinstance(node, (LambdaFunc, FunctionRef)):
+            return DashType.FUNC
         return DashType.UNKNOWN
+
+    def _returns_value(self, func: FunctionDef) -> bool:
+        """True if the function can return a value."""
+        if func.return_type:
+            return func.return_type != "Void"
+
+        def search(stmts):
+            for stmt in stmts:
+                if isinstance(stmt, ReturnStmt) and stmt.value is not None:
+                    return True
+                for attr in ("then_body", "else_body", "body"):
+                    nested = getattr(stmt, attr, None)
+                    if isinstance(nested, list) and search(nested):
+                        return True
+            return False
+
+        return search(func.body)
 
     def _type_annotation_to_dash_type(self, type_name: Optional[str]) -> DashType:
         """Convert a type annotation string to a DashType."""
@@ -737,6 +784,7 @@ class SemanticAnalyzer(ASTVisitor):
             "Bool": DashType.BOOL,
             "Pointer": DashType.UNKNOWN,
             "Void": DashType.VOID,
+            "Func": DashType.FUNC,
         }
         return type_map.get(type_name, DashType.UNKNOWN)
 

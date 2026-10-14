@@ -625,7 +625,10 @@ class DashASTBuilder(Transformer):
 
     def func_call_stmt(self, items) -> FunctionCall:
         """Handle function call as statement."""
-        return items[0] if items else None
+        call = items[0] if items else None
+        if isinstance(call, FunctionCall):
+            call.is_statement = True
+        return call
 
     def method_call_stmt(self, items) -> MethodCall:
         """Handle method call as statement (player.move(5, 0))."""

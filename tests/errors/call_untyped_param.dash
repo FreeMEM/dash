@@ -1,0 +1,7 @@
+# expect: must be declared 'f: Func'
+func aplica(f, v)
+    return f(v)
+end
+Main
+    Print aplica(3, 4)
+end

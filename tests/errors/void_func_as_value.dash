@@ -1,0 +1,7 @@
+# expect: Function 'nada' does not return a value
+func nada()
+    Print "x"
+end
+Main
+    v = nada()
+end

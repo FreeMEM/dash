@@ -327,6 +327,7 @@ class FunctionCall(ASTNode):
     name: str
     arguments: List[ASTNode] = field(default_factory=list)
     location: Optional[SourceLocation] = None
+    is_statement: bool = False  # Called for its effect; the result is discarded
 
 
 @dataclass

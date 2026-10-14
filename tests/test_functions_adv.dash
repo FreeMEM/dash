@@ -1,0 +1,62 @@
+# Test: functions and lambdas
+# Calling lambdas, Func parameters, functions returning arrays and
+# structs, struct-typed parameters, mutual recursion
+#
+# expect-c: APTR doble = (APTR)_dash_lambda_
+# expect-c: ((LONG (*)(LONG))doble)(4)
+# expect-c: LONG aplica(APTR f, LONG v) {
+# expect-c: return ((LONG (*)(LONG))f)(v);
+# expect-c: DashArrayLong * lista(void)
+# expect-c: DashArrayLong * l = lista();
+# expect-c: _Dash_Punto * crea(void)
+# expect-c: _Dash_Punto * p = crea();
+# expect-c: void muestra(_Dash_Punto * q) {
+
+struct Punto
+    x: Int
+end
+
+func aplica(f: Func, v)
+    return f(v)
+end
+
+func lista()
+    return [1, 2, 3]
+end
+
+func crea()
+    return Punto(7)
+end
+
+func muestra(q: Punto)
+    Print q.x
+end
+
+func par(n)
+    if n == 0
+        return true
+    end
+    return impar(n - 1)
+end
+
+func impar(n)
+    if n == 0
+        return false
+    end
+    return par(n - 1)
+end
+
+Main
+    doble = fn(x) -> x * 2
+    Print doble(4)
+    Print aplica(fn(x) -> x + 1, 3)
+
+    l = lista()
+    Print l.length
+
+    p = crea()
+    Print p.x
+    muestra(p)
+
+    Print par(4)
+end
