@@ -894,6 +894,31 @@ gfx_clear_color(color)          # Limpiar con color
 gfx_scroll(dx, dy, x1, y1, x2, y2)  # Scroll de region
 ```
 
+### Bitmaps fuera de pantalla
+
+Hasta 32 bitmaps (numeros 0..31) en memoria chip, para preparar imagenes y copiarlas:
+
+```
+bitmap_create(0, 64, 32, 4)          # id, ancho, alto, planos (colores = 2^planos)
+bitmap_draw_to(0)                    # gfx_* dibuja en el bitmap...
+gfx_pen(3)
+gfx_circle_fill(16, 16, 10)
+bitmap_draw_screen()                 # ...y vuelve a la ventana
+bitmap_blit(0, 0, 0, 64, 32, 10, 10) # id, origen x/y, ancho, alto, destino x/y
+
+bitmap_create(1, 64, 32, 1)          # mascara: 1 plano, mismo ancho
+bitmap_blit_mask(0, 1, 0, 0, 64, 32, 80, 10)   # solo donde la mascara tiene 1
+
+if bitmap_load(2, "Work:fondo.iff")  # IFF ILBM (ByteRun1 o sin comprimir)
+    bitmap_blit(2, 0, 0, 320, 200, 0, 0)
+end
+bitmap_save(0, "RAM:dibujo.iff")
+bitmap_free(0)
+```
+
+`bitmap_load` en una pantalla propia (`screen_open`) pone tambien los colores de la imagen;
+en el Workbench se dibuja con sus colores. Los bitmaps se liberan al salir.
+
 ### Ejemplo de Graficos
 
 ```
@@ -2139,7 +2164,7 @@ Lista completa, con las que están sin implementar: [docs/BUILTINS.md](BUILTINS.
 | Categoria | Cantidad | Ejemplos |
 |-----------|----------|----------|
 | Graficos Basicos | 28 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
-| Graficos Avanzados | 32 | `sprite_*`, `gfx_*` (`bob_*`, `copper_*`, `bitmap_*` sin implementar; ver `lib/amiga`) |
+| Graficos Avanzados | 32 | `sprite_*`, `gfx_*`, `bitmap_*` (`bob_*`, `copper_*` sin implementar; ver `lib/amiga`) |
 | Entrada | 16 | `key_*`, `mouse_*`, `joy_*` |
 | Sistema | 18 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Archivos | 22 | `file_*`, `dir_*`, `console_*` |

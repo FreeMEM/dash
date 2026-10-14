@@ -1,0 +1,72 @@
+# Test: off-screen bitmaps
+# Draw into a bitmap, blit it (plain and through a mask), save it as IFF
+# ILBM, load it back, and load a ByteRun1-compressed ILBM written here.
+#
+# expect-c: static BOOL _dash_bitmap_load(LONG id, STRPTR filename)
+# expect-out: 1
+# expect-out: 3
+# expect-out: 3
+# expect-out: 1
+# expect-out: 1
+# expect-out: 1
+# expect-out: 3
+# expect-out: 3
+# expect-out: 2
+# expect-out: 0
+# expect-out: comprimido 1
+# expect-out: 1 0 1 0
+
+Window W
+    title "Bitmaps"
+    width 200
+    height 100
+end
+
+Main
+    W.open
+    Print bitmap_create(0, 32, 16, 2)
+    bitmap_draw_to(0)
+    gfx_pen(3)
+    gfx_pixel(5, 5)
+    gfx_pen(1)
+    gfx_pixel(6, 5)
+    Print gfx_pixel_read(5, 5)
+    bitmap_draw_screen()
+
+    bitmap_blit(0, 0, 0, 32, 16, 10, 10)
+    Print gfx_pixel_read(15, 15)
+    Print gfx_pixel_read(16, 15)
+
+    Print bitmap_save(0, "RAM:dash_bm.iff")
+    Print bitmap_load(1, "RAM:dash_bm.iff")
+    bitmap_draw_to(1)
+    Print gfx_pixel_read(5, 5)
+    bitmap_draw_screen()
+
+    bitmap_create(2, 32, 16, 1)
+    bitmap_draw_to(2)
+    gfx_pen(1)
+    gfx_pixel(5, 5)
+    bitmap_draw_screen()
+    gfx_pen(2)
+    gfx_pixel(55, 15)
+    gfx_pixel(56, 15)
+    bitmap_blit_mask(0, 2, 0, 0, 32, 16, 50, 10)
+    Print gfx_pixel_read(55, 15)
+    Print gfx_pixel_read(56, 15)
+
+    bitmap_free(0)
+    bitmap_blit(0, 0, 0, 32, 16, 10, 10)
+    Print bitmap_load(3, "RAM:no_existe.iff")
+
+    datos = [70, 79, 82, 77, 0, 0, 0, 60, 73, 76, 66, 77, 66, 77, 72, 68, 0, 0, 0, 20, 0, 16, 0, 2, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 10, 11, 0, 16, 0, 2, 67, 77, 65, 80, 0, 0, 0, 6, 0, 0, 0, 255, 255, 255, 66, 79, 68, 89, 0, 0, 0, 5, 1, 255, 0, 255, 170, 0]
+    buf = buffer_alloc(68)
+    for i in (0..67)
+        buffer_set_byte(buf, i, datos[i])
+    end
+    file_save("RAM:dash_c.iff", buf, 68)
+    Print "comprimido " + bitmap_load(4, "RAM:dash_c.iff")
+    bitmap_draw_to(4)
+    Print "" + gfx_pixel_read(0, 0) + " " + gfx_pixel_read(8, 0) + " " + gfx_pixel_read(0, 1) + " " + gfx_pixel_read(1, 1)
+    bitmap_draw_screen()
+end

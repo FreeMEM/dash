@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 319 funciones, 278 implementadas, 41 sin implementar.
+Total: 319 funciones, 286 implementadas, 33 sin implementar.
 
 ## Gráficos básicos
 
@@ -80,14 +80,14 @@ Total: 319 funciones, 278 implementadas, 41 sin implementar.
 | `copper_end()` | `void` | End copper list | **sin implementar** |
 | `copper_install()` | `void` | Install copper list | **sin implementar** |
 | `copper_free()` | `void` | Free copper list | **sin implementar** |
-| `bitmap_create(id, width, height, depth)` | `BOOL` | Create bitmap | **sin implementar** |
-| `bitmap_load(id, filename)` | `BOOL` | Load IFF bitmap | **sin implementar** |
-| `bitmap_save(id, filename)` | `BOOL` | Save IFF bitmap | **sin implementar** |
-| `bitmap_free(id)` | `void` | Free bitmap | **sin implementar** |
-| `bitmap_blit(src_id, sx, sy, w, h, dx, dy)` | `void` | Blit from bitmap to screen | **sin implementar** |
-| `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)` | `void` | Masked blit from bitmap | **sin implementar** |
-| `bitmap_draw_to(id)` | `void` | Set bitmap as drawing target | **sin implementar** |
-| `bitmap_draw_screen()` | `void` | Set screen as drawing target | **sin implementar** |
+| `bitmap_create(id, width, height, depth)` | `BOOL` | Create bitmap |  |
+| `bitmap_load(id, filename)` | `BOOL` | Load IFF bitmap |  |
+| `bitmap_save(id, filename)` | `BOOL` | Save IFF bitmap |  |
+| `bitmap_free(id)` | `void` | Free bitmap |  |
+| `bitmap_blit(src_id, sx, sy, w, h, dx, dy)` | `void` | Blit from bitmap to screen |  |
+| `bitmap_blit_mask(src_id, mask_id, sx, sy, w, h, dx, dy)` | `void` | Masked blit from bitmap |  |
+| `bitmap_draw_to(id)` | `void` | Set bitmap as drawing target |  |
+| `bitmap_draw_screen()` | `void` | Set screen as drawing target |  |
 
 ## Entrada (teclado, ratón, joystick)
 

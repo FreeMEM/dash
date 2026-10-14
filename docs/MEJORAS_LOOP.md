@@ -99,7 +99,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       (documentado en MANUAL_REFERENCIA, pero la gramática solo tiene `.open`).
 - [x] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
 - [x] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
-- [ ] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
+- [x] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
 - [ ] 20. Builtins: `bob_*`.
 - [ ] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
 - [ ] 22. Builtins: `sound_*` y `tone_play` (audio.device).
@@ -387,3 +387,14 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - La limpieza de GadTools usaba `_dash_win` aunque la ventana ya estuviera cerrada; la limpieza final ahora pone
     `_dash_win` a NULL al cerrar las ventanas declaradas.
 - Pendiente: los `gt_*` antiguos tienen el mismo problema de GZZ en su listview (no se tocan en esta tarea).
+
+### 2026-10-14 — Tarea 19 (bitmaps)
+- Base: 117/117 con `--emu`, ejemplos 30/30. Después: 119/119 con `--emu`, ejemplos 30/30. Builtins sin código: 41 → 33.
+- Hecho (test: `test_bitmaps` en FS-UAE): `BITMAP_RUNTIME` con 32 bitmaps (`AllocBitMap` + `RastPort` propio).
+  `bitmap_create/free`, `bitmap_draw_to/draw_screen` (desvían `_dash_rp`), `bitmap_blit` (`BltBitMapRastPort`),
+  `bitmap_blit_mask` (`BltMaskBitMapRastPort` con el primer plano de otro bitmap del mismo ancho),
+  `bitmap_load` (IFF ILBM: BMHD, CMAP, BODY plano o ByteRun1, con comprobación de límites; en pantalla propia
+  aplica la paleta) y `bitmap_save` (ILBM sin comprimir con la paleta de la pantalla).
+- Probado: píxeles dentro del bitmap, tras el blit y tras el blit con máscara; guardar + cargar; un ILBM ByteRun1
+  generado byte a byte; fichero inexistente → 0. El IFF guardado se validó en el PC con otro lector (cabeceras,
+  tamaños y píxeles).

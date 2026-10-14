@@ -717,6 +717,215 @@ struct Screen *_dash_screen = NULL;
 
 """
 
+    # Off-screen bitmaps by id (0..31): planar chip memory bitmaps with their own
+    # RastPort. bitmap_draw_to() points the gfx_ functions at one of them;
+    # IFF ILBM load (ByteRun1 or plain) and save (plain). Freed at exit.
+    BITMAP_RUNTIME = """\
+/* Dash Bitmaps */
+#define _DASH_MAX_BITMAPS 32
+typedef struct {
+    struct BitMap *bm;
+    struct RastPort rp;
+    LONG w, h, depth;
+} _DashBitmap;
+static _DashBitmap _dash_bitmaps[_DASH_MAX_BITMAPS];
+static struct RastPort *_dash_screen_rp = NULL;   /* the window's while drawing to a bitmap */
+
+static _DashBitmap *_dash_bitmap_get(LONG id) {
+    if (id < 0 || id >= _DASH_MAX_BITMAPS || !_dash_bitmaps[id].bm) return NULL;
+    return &_dash_bitmaps[id];
+}
+
+static void _dash_bitmap_draw_screen(void) {
+    if (_dash_screen_rp) {
+        _dash_rp = _dash_screen_rp;
+        _dash_screen_rp = NULL;
+    }
+}
+
+static void _dash_bitmap_free(LONG id) {
+    _DashBitmap *b = _dash_bitmap_get(id);
+    if (!b) return;
+    if (_dash_rp == &b->rp) _dash_bitmap_draw_screen();
+    WaitBlit();
+    FreeBitMap(b->bm);
+    b->bm = NULL;
+}
+
+static BOOL _dash_bitmap_create(LONG id, LONG width, LONG height, LONG depth) {
+    _DashBitmap *b;
+    if (id < 0 || id >= _DASH_MAX_BITMAPS || width < 1 || height < 1 || depth < 1 || depth > 8) return FALSE;
+    _dash_bitmap_free(id);
+    b = &_dash_bitmaps[id];
+    b->bm = AllocBitMap(width, height, depth, BMF_CLEAR, NULL);
+    if (!b->bm) return FALSE;
+    InitRastPort(&b->rp);
+    b->rp.BitMap = b->bm;
+    b->w = width;
+    b->h = height;
+    b->depth = depth;
+    return TRUE;
+}
+
+/* gfx_ functions draw into the bitmap until bitmap_draw_screen() */
+static void _dash_bitmap_draw_to(LONG id) {
+    _DashBitmap *b = _dash_bitmap_get(id);
+    if (!b) return;
+    if (!_dash_screen_rp) _dash_screen_rp = _dash_rp;
+    _dash_rp = &b->rp;
+}
+
+static void _dash_bitmap_blit(LONG id, LONG sx, LONG sy, LONG w, LONG h, LONG dx, LONG dy) {
+    _DashBitmap *b = _dash_bitmap_get(id);
+    if (b && _dash_rp) BltBitMapRastPort(b->bm, sx, sy, _dash_rp, dx, dy, w, h, 0xC0);
+}
+
+/* Draw only where the mask bitmap's first plane has 1s (same width as the source) */
+static void _dash_bitmap_blit_mask(LONG id, LONG mask_id, LONG sx, LONG sy, LONG w, LONG h, LONG dx, LONG dy) {
+    _DashBitmap *b = _dash_bitmap_get(id), *m = _dash_bitmap_get(mask_id);
+    if (!b || !m || !_dash_rp || m->bm->BytesPerRow != b->bm->BytesPerRow) return;
+    BltMaskBitMapRastPort(b->bm, sx, sy, _dash_rp, dx, dy, w, h, (ABC | ABNC | ANBC), m->bm->Planes[0]);
+}
+
+static ULONG _dash_iff_long(UBYTE *p) {
+    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
+}
+
+static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
+    BPTR fh = Open(filename, MODE_OLDFILE);
+    UBYTE hdr[12], chunk[8], bmhd[20], *body = NULL;
+    UBYTE cmap[3 * 256];
+    LONG w = 0, h = 0, depth = 0, ncolors = 0, body_len = 0, comp = 0, masking = 0;
+    BOOL ok = FALSE;
+    if (!fh) return FALSE;
+    if (Read(fh, hdr, 12) != 12 || _dash_iff_long(hdr) != 0x464F524D || _dash_iff_long(hdr + 8) != 0x494C424D)
+        goto done;                                                   /* "FORM" ... "ILBM" */
+    while (Read(fh, chunk, 8) == 8) {
+        ULONG type = _dash_iff_long(chunk), len = _dash_iff_long(chunk + 4), pad = len & 1;
+        if (type == 0x424D4844 && len >= 20) {                       /* BMHD */
+            if (Read(fh, bmhd, 20) != 20) goto done;
+            w = (bmhd[0] << 8) | bmhd[1];
+            h = (bmhd[2] << 8) | bmhd[3];
+            depth = bmhd[8];
+            masking = bmhd[9];
+            comp = bmhd[10];
+            Seek(fh, len - 20 + pad, OFFSET_CURRENT);
+        } else if (type == 0x434D4150) {                             /* CMAP */
+            ncolors = len / 3 > 256 ? 256 : len / 3;
+            if (Read(fh, cmap, ncolors * 3) != ncolors * 3) goto done;
+            Seek(fh, len - ncolors * 3 + pad, OFFSET_CURRENT);
+        } else if (type == 0x424F4459) {                             /* BODY */
+            body = (UBYTE *)AllocVec(len, MEMF_ANY);
+            if (!body || Read(fh, body, len) != (LONG)len) goto done;
+            body_len = len;
+            break;
+        } else {
+            Seek(fh, len + pad, OFFSET_CURRENT);
+        }
+    }
+    if (!body || !w || !h || depth < 1 || depth > 8 || masking == 1) goto done;   /* masking 1: extra plane, not supported */
+    if (!_dash_bitmap_create(id, w, h, depth)) goto done;
+    {
+        struct BitMap *bm = _dash_bitmaps[id].bm;
+        LONG row_bytes = ((w + 15) >> 4) << 1, y, p, pos = 0;
+        for (y = 0; y < h; y++) {
+            for (p = 0; p < depth; p++) {
+                UBYTE *dst = bm->Planes[p] + y * bm->BytesPerRow;
+                LONG n = 0;
+                if (comp == 0) {
+                    if (pos + row_bytes > body_len) goto done;
+                    CopyMem(body + pos, dst, row_bytes);
+                    pos += row_bytes;
+                } else {                                             /* ByteRun1 */
+                    while (n < row_bytes && pos < body_len) {
+                        BYTE c = (BYTE)body[pos++];
+                        if (c >= 0) {
+                            LONG k = c + 1;
+                            if (n + k > row_bytes || pos + k > body_len) goto done;
+                            CopyMem(body + pos, dst + n, k);
+                            pos += k;
+                            n += k;
+                        } else if (c != -128) {
+                            LONG k = -c + 1;
+                            if (n + k > row_bytes || pos >= body_len) goto done;
+                            while (k--) dst[n++] = body[pos];
+                            pos++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* our own screen takes the picture's colours; the Workbench keeps its own */
+    if (_dash_own_screen && _dash_screen) {
+        LONG i;
+        for (i = 0; i < ncolors && i < (1L << _dash_screen->RastPort.BitMap->Depth); i++)
+            SetRGB32(&_dash_screen->ViewPort, i, (ULONG)cmap[i * 3] << 24, (ULONG)cmap[i * 3 + 1] << 24,
+                     (ULONG)cmap[i * 3 + 2] << 24);
+    }
+    ok = TRUE;
+done:
+    if (!ok && id >= 0 && id < _DASH_MAX_BITMAPS && body) _dash_bitmap_free(id);
+    if (body) FreeVec(body);
+    Close(fh);
+    return ok;
+}
+
+static BOOL _dash_iff_put(BPTR fh, ULONG v) {
+    UBYTE b[4];
+    b[0] = v >> 24; b[1] = v >> 16; b[2] = v >> 8; b[3] = v;
+    return Write(fh, b, 4) == 4;
+}
+
+/* Uncompressed ILBM; the colours come from the window's screen */
+static BOOL _dash_bitmap_save(LONG id, STRPTR filename) {
+    _DashBitmap *b = _dash_bitmap_get(id);
+    struct Screen *scr = _dash_screen ? _dash_screen : (_dash_win ? _dash_win->WScreen : NULL);
+    LONG row_bytes, ncolors, y, p, i;
+    ULONG body_len, cmap_len;
+    UBYTE bmhd[20];
+    BPTR fh;
+    BOOL ok;
+    if (!b) return FALSE;
+    row_bytes = ((b->w + 15) >> 4) << 1;
+    ncolors = 1L << b->depth;
+    body_len = row_bytes * b->h * b->depth;
+    cmap_len = ncolors * 3;
+    fh = Open(filename, MODE_NEWFILE);
+    if (!fh) return FALSE;
+    memset(bmhd, 0, sizeof(bmhd));
+    bmhd[0] = b->w >> 8; bmhd[1] = b->w; bmhd[2] = b->h >> 8; bmhd[3] = b->h;
+    bmhd[8] = b->depth;
+    bmhd[14] = 10; bmhd[15] = 11;                       /* pixel aspect */
+    bmhd[16] = b->w >> 8; bmhd[17] = b->w; bmhd[18] = b->h >> 8; bmhd[19] = b->h;
+    ok = Write(fh, "FORM", 4) == 4 && _dash_iff_put(fh, 4 + 8 + 20 + 8 + cmap_len + (cmap_len & 1) + 8 + body_len)
+      && Write(fh, "ILBMBMHD", 8) == 8 && _dash_iff_put(fh, 20) && Write(fh, bmhd, 20) == 20
+      && Write(fh, "CMAP", 4) == 4 && _dash_iff_put(fh, cmap_len);
+    for (i = 0; ok && i < ncolors; i++) {
+        ULONG rgb[3] = { 0, 0, 0 };
+        UBYTE c[3];
+        if (scr && i < scr->ViewPort.ColorMap->Count) GetRGB32(scr->ViewPort.ColorMap, i, 1, rgb);
+        c[0] = rgb[0] >> 24; c[1] = rgb[1] >> 24; c[2] = rgb[2] >> 24;
+        ok = Write(fh, c, 3) == 3;
+    }
+    if (ok && (cmap_len & 1)) ok = Write(fh, "", 1) == 1;
+    ok = ok && Write(fh, "BODY", 4) == 4 && _dash_iff_put(fh, body_len);
+    WaitBlit();
+    for (y = 0; ok && y < b->h; y++)
+        for (p = 0; ok && p < b->depth; p++)
+            ok = Write(fh, b->bm->Planes[p] + y * b->bm->BytesPerRow, row_bytes) == row_bytes;
+    Close(fh);
+    return ok;
+}
+
+static void _dash_bitmaps_cleanup(void) {
+    LONG i;
+    _dash_bitmap_draw_screen();
+    for (i = 0; i < _DASH_MAX_BITMAPS; i++) _dash_bitmap_free(i);
+}
+
+"""
+
     # Windows opened with window_create(): a table of handles 1..16; handle 0 is
     # the current window (_dash_win). Closed at exit by _dash_windows_cleanup().
     WINMGR_RUNTIME = """\
@@ -3927,6 +4136,7 @@ _RUNTIME_FLAGS = [
     ("WINDOW_RUNTIME", "uses_windows"),
     ("KEY_RUNTIME", "uses_keys"),
     ("WINMGR_RUNTIME", "uses_winmgr"),
+    ("BITMAP_RUNTIME", "uses_bitmaps"),
     ("DIR_RUNTIME", "uses_dirs"),
     ("GRAPHICS_RUNTIME", "needs_gfx"),
     ("INPUT_RUNTIME", "needs_gfx"),
@@ -4147,6 +4357,7 @@ class CodeGenerator(ASTVisitor):
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
         self.uses_winmgr: bool = False  # window_create() handles
         self.uses_gadgets: bool = False  # button_create()... handles
+        self.uses_bitmaps: bool = False  # bitmap_create()... ids
         self.uses_dirs: bool = False    # dir_change() / dir_current()
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
@@ -4308,6 +4519,9 @@ class CodeGenerator(ASTVisitor):
         if self.needs_gfx:
             parts.append(CTemplates.GRAPHICS_RUNTIME)
 
+        if self.uses_bitmaps:
+            parts.append(CTemplates.BITMAP_RUNTIME)
+
         # Add input runtime if needed (for key/mouse/joystick)
         if self.needs_gfx:
             parts.append(CTemplates.INPUT_RUNTIME)
@@ -4407,6 +4621,8 @@ class CodeGenerator(ASTVisitor):
                                    f"CloseWindow(win_{window.name}); win_{window.name} = NULL; }}\n")
         if self.uses_gadgets:
             cleanup.append("    _dash_gadgets_cleanup();\n")
+        if self.uses_bitmaps:
+            cleanup.append("    _dash_bitmaps_cleanup();\n")
         if self.needs_reaction:
             cleanup.append("    ra_window_close();\n")
         if self._uses_key_runtime():
@@ -5730,6 +5946,8 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
             self.needs_asl = True
+        if self.uses_bitmaps:
+            self.needs_gfx = True
         # Gadget handles live on GadTools (opened by the GadTools main template)
         if self.uses_gadgets:
             self.needs_gadtools = True
