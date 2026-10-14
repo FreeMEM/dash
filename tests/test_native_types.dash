@@ -5,6 +5,8 @@
 # expect-c: STRPTR s = saludo();
 # expect-c: Printf("%s\n", s);
 # expect-c: GfxBase = (struct GfxBase *)OpenLibrary("graphics.library"
+#
+# expect-out: hola
 
 @native func saludo() -> String
 """

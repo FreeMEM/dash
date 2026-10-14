@@ -25,7 +25,10 @@ Aplicar las cinco decisiones del usuario del 2026-10-14 sobre las propuestas del
 3. **Tarea.** Coge la primera tarea `[ ]`. Márcala `[~]` mientras trabajas. Una por iteración.
    Si es demasiado grande, divídela en la lista y haz solo la primera parte.
 4. **Hacer.** Cada cambio lleva su test en `tests/` (normal, de error o `# expect-c:`).
-   Si el emulador funciona (tarea 2), prueba ahí lo que se pueda ejecutar.
+   Prueba en el emulador lo que se pueda ejecutar: `# expect-out:` en el test y
+   `python3 tests/run_tests.py --emu` (unos 30 s). Usa el Kickstart 3.1 real del usuario:
+   `export DASH_KICKSTART="/home/freemem/Descargas/Telegram Desktop/ks31a1200.rom"`
+   (sin la variable se usa el AROS de FS-UAE).
 5. **Verificar.** Repite el paso 2. Nada que antes funcionaba puede romperse.
    Si algo se rompe y no lo arreglas en esta iteración, revierte.
 6. **Documentar.** Actualiza `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md` y, si cambian
@@ -57,13 +60,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - **Escape.** Si un string sale hacia algo que el compilador no controla (un array, una llamada al
   sistema que guarda el puntero como el título de una ventana, un `@native`), se marca como
   permanente y ya solo se libera al salir del programa con el pool.
-- Cabecera de 8 bytes por string (tamaño + enlace). Arrays y structs siguen en el pool hasta salir.
+- Cabecera de 8 bytes por string (tamaño + enlace).
+- **Listas y structs** (decisión del usuario: abarcar más que los textos): varias variables pueden
+  compartir la misma lista o struct, así que no sirve "un dueño". Contador de referencias: 4 bytes por
+  objeto y una suma/resta solo al asignar listas o structs. Las listas temporales (literales, trozos
+  `a[1:3]`) usan la misma lista de temporales por vuelta. Los ciclos (un struct que apunta a otro que
+  apunta al primero) no se liberan hasta salir del programa.
 
 ## Tareas
 
 - [x] 1. Salida común de error en `main`: si falla `OpenWindowTags` (u otra apertura), liberar
       todo lo abierto (librerías, pantalla, ventanas, pool) antes de salir. También dentro de funciones.
-- [ ] 2. Banco de pruebas en emulador: `fs-uae` con el Kickstart AROS que trae integrado (no hay ROM
+- [x] 2. Banco de pruebas en emulador: `fs-uae` con el Kickstart 3.1 del usuario o el AROS integrado (antes creía que no había ROM
       de Commodore en el equipo), un directorio como disco duro y `S:Startup-Sequence` que ejecuta el
       programa y guarda la salida en un fichero. Script `tools/emu_run.sh` y, si va estable, tests de
       ejecución en el runner. Si no se puede sin ventana visible, anotarlo y seguir.
@@ -78,21 +86,22 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [ ] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
 - [ ] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
       conversión a texto y `Int()`/`Float()`.
-- [ ] 12. Memoria (1/3): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
+- [ ] 12. Memoria (1/4): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
       liberación por marca. Tests en el PC (`tests/runtime/host_harness.c`).
-- [ ] 13. Memoria (2/3): codegen: asignaciones a String, liberación al salir de bloques, funciones,
+- [ ] 13. Memoria (2/4): codegen: asignaciones a String, liberación al salir de bloques, funciones,
       `return`, `break`/`continue`; marcas por vuelta de bucle y de `EventLoop`.
-- [ ] 14. Memoria (3/3): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
+- [ ] 14. Memoria (3/4): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
       que concatena 100.000 veces sin crecer.
-- [ ] 15. Builtins: `window_*` (9) y `dir_change`/`dir_current`.
-- [ ] 16. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
-- [ ] 17. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
-- [ ] 18. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
-- [ ] 19. Builtins: `bob_*`.
-- [ ] 20. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
-- [ ] 21. Builtins: `sound_*` y `tone_play` (audio.device).
-- [ ] 22. Builtins: `music_*` (reproductor de módulos ProTracker).
-- [ ] 23. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
+- [ ] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
+- [ ] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`.
+- [ ] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
+- [ ] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
+- [ ] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
+- [ ] 20. Builtins: `bob_*`.
+- [ ] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
+- [ ] 22. Builtins: `sound_*` y `tone_play` (audio.device).
+- [ ] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
+- [ ] 24. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
 
 ## Bitácora
 
@@ -114,3 +123,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
     de `OpenWindowTags` (20), que antes salía con `return 20` sin liberar casi nada (y en una función ni compilaba bien).
   - `_ra_close_libs` deja los punteros a NULL: ya no cierra dos veces si se llama otra vez.
 - Probado en emulador: no (tarea 2).
+
+### 2026-10-14 — Tarea 2 (emulador)
+- Base: tests 59/59, ejemplos 30/30. Después: 59/59 normales + 14 `emu/` = 73/73, ejemplos 30/30.
+- Hecho:
+  - `tools/emu_run.py`: compila (o copia) programas, los ejecuta todos en un solo arranque de FS-UAE
+    sin ventana (`SDL_VIDEODRIVER=offscreen`) y devuelve la salida y el código de retorno de cada uno.
+    ROM: `$DASH_KICKSTART` o `--kickstart`; sin ella, el AROS que trae FS-UAE. Unos 7 s por arranque.
+  - Funciona con el Kickstart 3.1 (40.68) de A1200 del usuario y con AROS.
+  - Runner: `# expect-out: <línea>` declara la salida exacta; `--emu` ejecuta esos tests en FS-UAE.
+    14 tests anotados (salidas revisadas a mano contra el código). `test_builtins_runtime` no, usa `random`.
+- Error encontrado al ejecutar por primera vez (no se veía compilando): `Print c` de un carácter
+  imprimía una línea vacía. El `Printf` de dos.library lee `%c` como WORD de 16 bits y C pasa un int
+  de 32. Ahora `Printf("%lc\n", (LONG)(UBYTE)(c))` (test: `emu/test_loops`).
+- Los programas con `EventLoop` esperan al botón de cerrar y se quedan colgados en el emulador
+  (salen como TIMEOUT). Para la tarea 3 hace falta una forma de cerrarlos solos.

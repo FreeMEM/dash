@@ -11,6 +11,12 @@ Usage:
     python3 tests/run_tests.py           # Run all tests
     python3 tests/run_tests.py test_x    # Run specific test
     python3 tests/run_tests.py --verbose # Show detailed output
+    python3 tests/run_tests.py --emu     # Also run tests with "# expect-out:" in FS-UAE
+
+A test can list the exact output it must print when run on the Amiga with
+"# expect-out: <line>" lines (one per printed line, in order). With --emu
+those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
+or the AROS ROM built into FS-UAE) and their output is compared.
 """
 
 import os
@@ -292,6 +298,46 @@ def run_multifile_test(test_file: Path) -> TestResult:
                       duration=time.time() - start_time)
 
 
+def expected_output(test_file: Path) -> Optional[List[str]]:
+    """Lines declared with '# expect-out:', or None if the test declares none."""
+    lines = [l.split("# expect-out:", 1)[1].strip()
+             for l in test_file.read_text().splitlines() if l.strip().startswith("# expect-out:")]
+    return lines or None
+
+
+def run_emu_tests(tests: List[Path], compiled: set) -> List[TestResult]:
+    """Run the compiled tests that declare '# expect-out:' in FS-UAE, all in one boot."""
+    sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+    from emu_run import run_programs
+    selected = [(t, expected_output(t)) for t in tests if t.stem in compiled and expected_output(t)]
+    if not selected:
+        return []
+    start_time = time.time()
+    try:
+        runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected], timeout=180)
+    except RuntimeError as e:
+        return [TestResult(name="emu", passed=False, transpile_ok=True, compile_ok=True,
+                           error_message=str(e))]
+    duration = (time.time() - start_time) / len(selected)
+    results = []
+    for (test_file, wanted), run in zip(selected, runs):
+        got = [l.rstrip() for l in (run.output or "").splitlines()]
+        if run.timed_out:
+            error = "timeout (program did not end)"
+        elif run.rc != 0:
+            error = f"return code {run.rc}"
+        elif got != wanted:
+            diff = next((i for i, (a, b) in enumerate(zip(got, wanted)) if a != b), min(len(got), len(wanted)))
+            error = (f"output line {diff + 1}: got {got[diff] if diff < len(got) else '<end>'!r}, "
+                     f"expected {wanted[diff] if diff < len(wanted) else '<end>'!r}")
+        else:
+            error = None
+        results.append(TestResult(name=f"emu/{test_file.stem}", passed=error is None,
+                                  transpile_ok=True, compile_ok=True,
+                                  error_message=error, duration=duration))
+    return results
+
+
 def print_results(results: List[TestResult]):
     """Print test results summary."""
     passed = sum(1 for r in results if r.passed)
@@ -335,6 +381,8 @@ def main():
     parser = argparse.ArgumentParser(description="Dash Language Test Runner")
     parser.add_argument("pattern", nargs="?", help="Test name pattern to filter")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument("--emu", action="store_true",
+                        help="Also run tests with '# expect-out:' lines in FS-UAE")
     args = parser.parse_args()
 
     test_dir = PROJECT_ROOT / "tests"
@@ -400,6 +448,13 @@ def main():
         else:
             results.append(result)
             print("OK" if result.passed else "FAIL")
+
+    if args.emu:
+        compiled = {r.name for r in results if r.passed and r.compile_ok}
+        print("Testing: emu (FS-UAE)...", flush=True)
+        for result in run_emu_tests(tests, compiled):
+            results.append(result)
+            print(f"  {result.name}: {'OK' if result.passed else 'FAIL'}")
 
     success = print_results(results)
     sys.exit(0 if success else 1)

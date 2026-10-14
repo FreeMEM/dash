@@ -10,6 +10,14 @@
 # expect-c: STRPTR n = (STRPTR)DashArray_get(nombres, _idx_n);
 # expect-c: DashString_from_char(DashString_char_at(palabra, 0))
 # expect-c: _dash_mem_cleanup();
+#
+# expect-out: 20
+# expect-out: 3
+# expect-out: 9
+# expect-out: Bea
+# expect-out: Ana
+# expect-out: Bea
+# expect-out: Letra: H
 
 func lista()
     return [1, 2, 3]

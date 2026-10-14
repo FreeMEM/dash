@@ -5,11 +5,26 @@
 # expect-c: for (LONG _idx_c = 0, _len_c = DashString_length(nombre); _idx_c < _len_c; _idx_c++) {
 # expect-c: char c = nombre[_idx_c];
 # expect-c: (c == 'n')
-# expect-c: Printf("%c\n", c);
+# expect-c: Printf("%lc\n", (LONG)(UBYTE)(c));
 # expect-c: for (LONG i = 1, _end_i = limite(); i <= _end_i; i++) {
 # expect-c: for (LONG k = 1; k <= 3; k++) {
 # expect-c: Printf("%ld\n", s);
 # expect-c: (DashString_char_at(nombre, 0) == 'A')
+#
+# expect-out: A
+# expect-out: ene
+# expect-out: n
+# expect-out: a
+# expect-out: 1
+# expect-out: 2
+# expect-out: 3
+# expect-out: 1
+# expect-out: 2
+# expect-out: 3
+# expect-out: texto
+# expect-out: 1
+# expect-out: 2
+# expect-out: empieza por A
 
 func limite()
     return 3

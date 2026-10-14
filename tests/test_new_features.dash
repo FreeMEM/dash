@@ -1,5 +1,20 @@
 # Test: Enums, Optional Types, and FFI
 # Tests the new features added to Dash
+#
+# expect-out: === Enum Test ===
+# expect-out: 0
+# expect-out: 1
+# expect-out: 2
+# expect-out: 10
+# expect-out: === Typed Function Test ===
+# expect-out: 30
+# expect-out: 30
+# expect-out: === Struct with Enum ===
+# expect-out: 100
+# expect-out: 50
+# expect-out: 3
+# expect-out: 2
+# expect-out: === Test Complete ===
 
 # === ENUMS ===
 enum Direction

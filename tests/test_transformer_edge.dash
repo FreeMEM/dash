@@ -1,5 +1,8 @@
 # Test: transformer edge cases
 # Wait with expressions, single-line @native body, block lambdas
+#
+# expect-out: 1
+# expect-out: Done
 
 @native func uno() -> Int
 """return 1;"""

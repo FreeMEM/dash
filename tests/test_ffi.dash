@@ -1,6 +1,12 @@
 # Test: FFI (Foreign Function Interface)
 # Demonstrates @extern syntax for declaring external functions
 # Note: FFI is for calling functions NOT in standard Amiga headers
+#
+# expect-out: === FFI Syntax Test ===
+# expect-out: FFI @extern syntax is available
+# expect-out: Use for custom libraries
+# expect-out: Standard Amiga functions
+# expect-out: are already in builtins
 
 # Example: Declare a hypothetical custom library function
 # (This tests the syntax - actual library would need to exist)

@@ -12,6 +12,16 @@
 # expect-c: STRPTR cuenta = DashString_concat(DashString_from_int(n), " items");
 # expect-c: LONG x = (!(a == b));
 # expect-c: Printf("100%% hecho\n");
+#
+# expect-out: Hola Dash!
+# expect-out: igual
+# expect-out: distinto
+# expect-out: Total: 5
+# expect-out: 5 items
+# expect-out: Valor 5
+# expect-out: 1
+# expect-out: 100% hecho
+# expect-out: 7
 
 func saluda(nombre: String) -> String
     return "Hola " + nombre + "!"

@@ -10,6 +10,11 @@
 # expect-c: STRPTR s = Persona_saludo(p);
 # expect-c: Printf("%s\n", Persona_saludo(p));
 # expect-c: _dash_alloc(sizeof(_Dash_RefHeader) + size)
+#
+# expect-out: 1
+# expect-out: 5
+# expect-out: Hola Ana
+# expect-out: Hola Ana
 
 struct Nodo
     valor: Int

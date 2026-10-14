@@ -1,5 +1,17 @@
 # Test: 2D Arrays (Matrices)
 # Tests nested array access: matrix[i][j]
+#
+# expect-out: === Matrix Test ===
+# expect-out: 1
+# expect-out: 5
+# expect-out: 9
+# expect-out: 10
+# expect-out: 50
+# expect-out: 100
+# expect-out: 200
+# expect-out: 300
+# expect-out: 999
+# expect-out: === Test Complete ===
 
 Main
     Print "=== Matrix Test ==="

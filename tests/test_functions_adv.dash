@@ -11,6 +11,13 @@
 # expect-c: _Dash_Punto * crea(void)
 # expect-c: _Dash_Punto * p = crea();
 # expect-c: void muestra(_Dash_Punto * q) {
+#
+# expect-out: 8
+# expect-out: 4
+# expect-out: 3
+# expect-out: 7
+# expect-out: 7
+# expect-out: 1
 
 struct Punto
     x: Int

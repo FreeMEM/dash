@@ -3832,8 +3832,10 @@ static {ret_type} {method_name}({params_str}) {{
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%s\\n", {value});\n')
         elif self._is_char_expr(node.message):
+            # dos Printf (RawDoFmt) reads %c as a 16-bit WORD but C passes an int:
+            # %lc with an explicit LONG prints the right character
             value = self._generate_expression(node.message)
-            self.emit(f'{indent}Printf("%c\\n", {value});\n')
+            self.emit(f'{indent}Printf("%lc\\n", (LONG)(UBYTE)({value}));\n')
         else:
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%ld\\n", {value});\n')

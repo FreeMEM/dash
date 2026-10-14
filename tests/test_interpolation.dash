@@ -1,5 +1,12 @@
 # Test: String Interpolation
 # Tests the #{variable} syntax inside strings
+#
+# expect-out: Hello Amiga!
+# expect-out: System: Amiga 3.1
+# expect-out: Amiga rules!
+# expect-out: Welcome to Amiga
+# expect-out: No interpolation here
+# expect-out: Test complete!
 
 Main
     name = "Amiga"

@@ -1,6 +1,9 @@
 # Test: analyzer checks that must still accept valid code
 # Function bodies are analyzed: params can be reassigned,
 # methods see self, Print/Wait expressions are checked.
+#
+# expect-out: 10
+# expect-out: 3
 
 const LIMITE = 10
 

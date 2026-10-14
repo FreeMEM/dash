@@ -1,5 +1,15 @@
 # Test: Struct support in Dash Language
 # Tests struct definition, instantiation, and member access
+#
+# expect-out: === Dash Struct Test ===
+# expect-out: Hero
+# expect-out: 100
+# expect-out: 50
+# expect-out: 110
+# expect-out: 500
+# expect-out: 200
+# expect-out: 100
+# expect-out: === Test Complete ===
 
 struct Player
     name: String
