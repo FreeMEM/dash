@@ -36,6 +36,7 @@ class TestResult:
     compile_ok: bool
     error_message: Optional[str] = None
     duration: float = 0.0
+    compile_skipped: bool = False
 
 
 def find_tests(test_dir: Path, pattern: Optional[str] = None) -> List[Path]:
@@ -119,8 +120,9 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
             name=name,
             passed=True,  # Pass if transpilation worked
             transpile_ok=True,
-            compile_ok=True,  # Assume it would compile
-            duration=duration
+            compile_ok=False,
+            duration=duration,
+            compile_skipped=True
         )
 
     compile_cmd = [
@@ -187,6 +189,7 @@ def print_results(results: List[TestResult]):
     """Print test results summary."""
     passed = sum(1 for r in results if r.passed)
     failed = len(results) - passed
+    skipped = sum(1 for r in results if r.compile_skipped)
 
     print("\n" + "=" * 60)
     print("TEST RESULTS")
@@ -204,7 +207,8 @@ def print_results(results: List[TestResult]):
     # Show passed tests
     for r in results:
         if r.passed:
-            print(f"  PASS: {r.name} ({r.duration:.2f}s)")
+            tag = "PASS (transpile only)" if r.compile_skipped else "PASS"
+            print(f"  {tag}: {r.name} ({r.duration:.2f}s)")
 
     print("-" * 60)
     print(f"Total: {len(results)} | Passed: {passed} | Failed: {failed}")
@@ -213,6 +217,9 @@ def print_results(results: List[TestResult]):
         print("\n✓ All tests passed!")
     else:
         print(f"\n✗ {failed} test(s) failed")
+
+    if skipped:
+        print(f"\n! GCC not found: {skipped} test(s) only transpiled, C not compiled")
 
     return failed == 0
 
@@ -244,7 +251,9 @@ def main():
         result = run_test(test_file, verbose=args.verbose)
         results.append(result)
 
-        if result.passed:
+        if result.passed and result.compile_skipped:
+            print("OK (transpile only)")
+        elif result.passed:
             print("OK")
         else:
             print("FAIL")

@@ -51,7 +51,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 
 ## Zonas
 
-- [ ] 1. `tests/run_tests.py`: da por bueno un test si falta GCC. Hacer que lo diga claro
+- [x] 1. `tests/run_tests.py`: da por bueno un test si falta GCC. Hacer que lo diga claro
       (estado "SKIP compile" o similar) en vez de contarlo como PASS completo.
 - [ ] 2. `compiler/grammar.py`: ambigüedades, precedencia de operadores, formas documentadas
       que no parsean (p. ej. `enum State IDLE, RUN end` de QUICK_REFERENCE).
@@ -86,3 +86,12 @@ Corrección antes que velocidad. Nada de refactors grandes.
 ### 2026-10-14 — Estado inicial
 - Base: tests 29/29 (solo transpilación: no hay toolchain Amiga en esta máquina), ejemplos 29/30 transpilan.
 - Conocido: `test_dos_module.dash` falla (`read_line`), enum en una línea no parsea.
+
+### 2026-10-14 — Zona 1 (`tests/run_tests.py`)
+- Base: tests 29/29 (solo transpilación), ejemplos 29/30 transpilan. Sin cambios.
+- Error arreglado: sin GCC, el runner marcaba `compile_ok=True` y contaba el test como PASS completo.
+  Ahora `compile_skipped=True`, cada test sale como "OK (transpile only)" y al final avisa
+  cuántos no se compilaron. Sin test de regresión: es el propio runner; verificado a mano.
+- Propuesta (no aplicada): los tests solo comprueban que compila, nunca la salida.
+  Se podría comparar el C generado con ficheros esperados (`tests/expected/*.c`) o ejecutar en emulador.
+- Nota: el usuario pidió instalar `m68k-amigaos-gcc` (README, BlitterStudio). En curso.
