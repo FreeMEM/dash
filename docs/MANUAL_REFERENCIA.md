@@ -1146,10 +1146,17 @@ music_volume(64)
 
 # Posicion
 music_position(0)       # Ir al inicio
+Print music_pos()       # posicion en la lista de patrones
+Print music_row()       # fila del patron (0-63)
 
 # Liberar
 music_free()
 ```
+
+Modulos ProTracker de 4 canales y 31 instrumentos (M.K., M!K!, FLT4, 4CHN). Suena con
+una interrupcion de VBlank (los BPM de `Fxx` se aproximan con un acumulador); efectos 0, 1,
+2, 3, 4, 5, 6, 9, A, B, C, D, F y E1, E2, EA, EB, EC. Mientras suena la musica, los canales
+son suyos: `music_play` para los `sound_*`.
 
 ### Tonos Sintetizados
 

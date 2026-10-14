@@ -1373,6 +1373,339 @@ static ULONG _dash_iff_u32(UBYTE *p) {
 
 """
 
+    # ProTracker MOD player (4 channels, 31 samples). The module is loaded into
+    # chip memory and played by a vertical blank interrupt server; the channels
+    # are allocated through audio.device (sound runtime) and then driven
+    # directly through Paula's registers, as system-friendly players do.
+    MUSIC_RUNTIME = """\
+/* Dash MOD player */
+#include <exec/interrupts.h>
+#include <hardware/intbits.h>
+#include <hardware/dmabits.h>
+#include <hardware/custom.h>
+#define _DASH_CUSTOM ((volatile struct Custom *)0xDFF000)
+
+static const UWORD _dash_mod_periods[36] = {
+    856,808,762,720,678,640,604,570,538,508,480,453,
+    428,404,381,360,339,320,302,285,269,254,240,226,
+    214,202,190,180,170,160,151,143,135,127,120,113 };
+
+typedef struct { BYTE *data; ULONG length, loop_start, loop_len; UBYTE volume; } _DashModSample;
+typedef struct {
+    _DashModSample *smp;
+    LONG period, target, vol, note;
+    UBYTE effect, param, porta_speed, vib_speed, vib_depth, vib_pos;
+    ULONG offset;
+    BOOL trigger, set_loop;
+} _DashModChan;
+
+static UBYTE *_dash_mod = NULL;
+static ULONG _dash_mod_size = 0;
+static _DashModSample _dash_mod_smp[32];
+static UBYTE *_dash_mod_pat = NULL;
+static UBYTE _dash_mod_order[128];
+static LONG _dash_mod_songlen = 0;
+static _DashModChan _dash_mod_ch[4];
+static volatile LONG _dash_mod_pos = 0, _dash_mod_row = 0;
+static LONG _dash_mod_tick = 0, _dash_mod_speed = 6, _dash_mod_bpm = 125, _dash_mod_acc = 0;
+static LONG _dash_mod_jump = -1, _dash_mod_break = -1;
+static LONG _dash_mod_master = 64;
+static volatile BOOL _dash_mod_playing = FALSE, _dash_mod_paused = FALSE;
+static BOOL _dash_mod_server = FALSE;
+static struct Interrupt _dash_mod_int;
+static BYTE *_dash_mod_silence = NULL;   /* 2 zero bytes in chip memory */
+
+static const UBYTE _dash_mod_sine[32] = { 0,24,49,74,97,120,141,161,180,197,212,224,235,244,250,253,
+                                          255,253,250,244,235,224,212,197,180,161,141,120,97,74,49,24 };
+
+static void _dash_mod_read_row(void) {
+    LONG c;
+    UBYTE *p = _dash_mod_pat + (ULONG)_dash_mod_order[_dash_mod_pos] * 1024 + _dash_mod_row * 16;
+    for (c = 0; c < 4; c++, p += 4) {
+        _DashModChan *ch = &_dash_mod_ch[c];
+        LONG smp = (p[0] & 0xF0) | (p[2] >> 4), period = ((p[0] & 0x0F) << 8) | p[1];
+        ch->effect = p[2] & 0x0F;
+        ch->param = p[3];
+        if (smp > 0 && smp < 32) {
+            ch->smp = &_dash_mod_smp[smp];
+            ch->vol = ch->smp->volume;
+            ch->offset = 0;
+        }
+        if (period) {
+            LONG n;
+            for (n = 0; n < 35 && _dash_mod_periods[n] > period; n++) ;
+            if (ch->effect == 3 || ch->effect == 5) {
+                ch->target = period;
+            } else {
+                ch->period = period;
+                ch->note = n;
+                ch->trigger = ch->smp != NULL;
+                ch->vib_pos = 0;
+            }
+        }
+        switch (ch->effect) {
+        case 0x3: if (ch->param) ch->porta_speed = ch->param; break;
+        case 0x4:
+            if (ch->param & 0xF0) ch->vib_speed = ch->param >> 4;
+            if (ch->param & 0x0F) ch->vib_depth = ch->param & 0x0F;
+            break;
+        case 0x9: if (ch->param) ch->offset = (ULONG)ch->param << 8; break;
+        case 0xB: _dash_mod_jump = ch->param; break;
+        case 0xC: ch->vol = ch->param > 64 ? 64 : ch->param; break;
+        case 0xD: _dash_mod_break = (ch->param >> 4) * 10 + (ch->param & 0x0F); break;
+        case 0xE:
+            switch (ch->param >> 4) {
+            case 0x1: ch->period -= ch->param & 0x0F; break;
+            case 0x2: ch->period += ch->param & 0x0F; break;
+            case 0xA: ch->vol += ch->param & 0x0F; break;
+            case 0xB: ch->vol -= ch->param & 0x0F; break;
+            }
+            break;
+        case 0xF:
+            if (ch->param == 0) break;
+            if (ch->param < 32) _dash_mod_speed = ch->param; else _dash_mod_bpm = ch->param;
+            break;
+        }
+        if (ch->vol < 0) ch->vol = 0;
+        if (ch->vol > 64) ch->vol = 64;
+    }
+}
+
+static LONG _dash_mod_effects(_DashModChan *ch) {
+    LONG out = ch->period, x = ch->param >> 4, y = ch->param & 0x0F;
+    switch (ch->effect) {
+    case 0x0:
+        if (ch->param) {
+            LONG n = ch->note + ((_dash_mod_tick % 3) == 1 ? x : (_dash_mod_tick % 3) == 2 ? y : 0);
+            out = _dash_mod_periods[n > 35 ? 35 : n];
+        }
+        break;
+    case 0x1: ch->period -= ch->param; out = ch->period; break;
+    case 0x2: ch->period += ch->param; out = ch->period; break;
+    case 0x3: case 0x5:
+        if (ch->target) {
+            if (ch->period < ch->target) { ch->period += ch->porta_speed; if (ch->period > ch->target) ch->period = ch->target; }
+            else if (ch->period > ch->target) { ch->period -= ch->porta_speed; if (ch->period < ch->target) ch->period = ch->target; }
+        }
+        out = ch->period;
+        if (ch->effect == 0x5) goto volslide;
+        break;
+    case 0x4: case 0x6: {
+        LONG d = (_dash_mod_sine[ch->vib_pos & 31] * ch->vib_depth) >> 7;
+        out = ch->period + ((ch->vib_pos & 32) ? -d : d);
+        ch->vib_pos += ch->vib_speed;
+        if (ch->effect == 0x6) goto volslide;
+        break; }
+    case 0xA:
+    volslide:
+        ch->vol += x ? x : -y;
+        if (ch->vol < 0) ch->vol = 0;
+        if (ch->vol > 64) ch->vol = 64;
+        break;
+    case 0xE:
+        if ((ch->param >> 4) == 0xC && _dash_mod_tick == y) ch->vol = 0;
+        break;
+    }
+    if (ch->period < 113) ch->period = 113;
+    if (ch->period > 856) ch->period = 856;
+    return out < 113 ? 113 : (out > 856 ? 856 : out);
+}
+
+static void _dash_mod_hw(LONG *periods) {
+    volatile struct Custom *hw = _DASH_CUSTOM;
+    UWORD start = 0;
+    LONG c;
+    for (c = 0; c < 4; c++) {
+        _DashModChan *ch = &_dash_mod_ch[c];
+        if (ch->set_loop) {                        /* the sample started last tick: now its loop */
+            _DashModSample *s = ch->smp;
+            if (s && s->loop_len > 2) {
+                hw->aud[c].ac_ptr = (UWORD *)(s->data + s->loop_start);
+                hw->aud[c].ac_len = s->loop_len >> 1;
+            } else {
+                hw->aud[c].ac_ptr = (UWORD *)_dash_mod_silence;
+                hw->aud[c].ac_len = 1;
+            }
+            ch->set_loop = FALSE;
+        }
+        if (ch->trigger && ch->smp && ch->smp->length > 2) {
+            hw->dmacon = 1 << c;                   /* stop, then restart below */
+            start |= 1 << c;
+        }
+    }
+    if (start) {
+        LONG lines;
+        for (lines = 0; lines < 4; lines++) {      /* let Paula see the DMA off */
+            UBYTE v = hw->vhposr >> 8;
+            while ((hw->vhposr >> 8) == v) ;
+        }
+    }
+    for (c = 0; c < 4; c++) {
+        _DashModChan *ch = &_dash_mod_ch[c];
+        if (start & (1 << c)) {
+            ULONG off = ch->offset < ch->smp->length ? ch->offset : 0;
+            hw->aud[c].ac_ptr = (UWORD *)(ch->smp->data + off);
+            hw->aud[c].ac_len = (ch->smp->length - off) >> 1;
+            ch->trigger = FALSE;
+            ch->set_loop = TRUE;
+        }
+        hw->aud[c].ac_per = periods[c];
+        hw->aud[c].ac_vol = (ch->vol * _dash_mod_master) >> 6;
+    }
+    if (start) hw->dmacon = DMAF_SETCLR | start;
+}
+
+static void _dash_mod_step(void) {
+    LONG c, periods[4];
+    if (_dash_mod_tick == 0) _dash_mod_read_row();
+    for (c = 0; c < 4; c++)
+        periods[c] = _dash_mod_tick == 0 ? (_dash_mod_ch[c].period ? _dash_mod_ch[c].period : 428)
+                                         : _dash_mod_effects(&_dash_mod_ch[c]);
+    _dash_mod_hw(periods);
+    if (++_dash_mod_tick >= _dash_mod_speed) {
+        _dash_mod_tick = 0;
+        if (_dash_mod_jump >= 0 || _dash_mod_break >= 0) {
+            _dash_mod_pos = _dash_mod_jump >= 0 ? _dash_mod_jump : _dash_mod_pos + 1;
+            _dash_mod_row = _dash_mod_break >= 0 && _dash_mod_break < 64 ? _dash_mod_break : 0;
+            _dash_mod_jump = _dash_mod_break = -1;
+        } else if (++_dash_mod_row >= 64) {
+            _dash_mod_row = 0;
+            _dash_mod_pos++;
+        }
+        if (_dash_mod_pos >= _dash_mod_songlen) _dash_mod_pos = 0;
+    }
+}
+
+/* Vertical blank server (50 Hz on PAL): BPM 125 = one tick per frame */
+static LONG _dash_mod_vblank(void) {
+    if (_dash_mod_playing && !_dash_mod_paused) {
+        _dash_mod_acc += _dash_mod_bpm;
+        while (_dash_mod_acc >= 125) {
+            _dash_mod_acc -= 125;
+            _dash_mod_step();
+        }
+    }
+    return 0;    /* Z set: the next server runs too */
+}
+
+static void _dash_mod_silence_hw(void) {
+    volatile struct Custom *hw = _DASH_CUSTOM;
+    LONG c;
+    hw->dmacon = DMAF_AUD0 | DMAF_AUD1 | DMAF_AUD2 | DMAF_AUD3;
+    for (c = 0; c < 4; c++) hw->aud[c].ac_vol = 0;
+}
+
+static void _dash_music_stop(void) {
+    if (_dash_mod_server) {
+        RemIntServer(INTB_VERTB, &_dash_mod_int);
+        _dash_mod_server = FALSE;
+    }
+    _dash_mod_playing = FALSE;
+    _dash_mod_paused = FALSE;
+    _dash_mod_silence_hw();
+}
+
+static void _dash_music_free(void) {
+    _dash_music_stop();
+    if (_dash_mod) { FreeMem(_dash_mod, _dash_mod_size); _dash_mod = NULL; }
+    if (_dash_mod_silence) { FreeMem(_dash_mod_silence, 2); _dash_mod_silence = NULL; }
+}
+
+static BOOL _dash_music_load(STRPTR filename) {
+    BPTR fh;
+    LONG i, npat = 0;
+    UBYTE *p;
+    ULONG off;
+    _dash_music_free();
+    fh = Open(filename, MODE_OLDFILE);
+    if (!fh) return FALSE;
+    Seek(fh, 0, OFFSET_END);
+    _dash_mod_size = Seek(fh, 0, OFFSET_BEGINNING);
+    if (_dash_mod_size < 1084 || !(_dash_mod = (UBYTE *)AllocMem(_dash_mod_size, MEMF_CHIP))
+        || Read(fh, _dash_mod, _dash_mod_size) != (LONG)_dash_mod_size) {
+        Close(fh);
+        if (_dash_mod) { FreeMem(_dash_mod, _dash_mod_size); _dash_mod = NULL; }
+        return FALSE;
+    }
+    Close(fh);
+    p = _dash_mod + 1080;                          /* 31-sample, 4-channel formats */
+    if (!((p[0] == 'M' && p[2] == 'K') || (p[0] == 'F' && p[1] == 'L' && p[2] == 'T' && p[3] == '4')
+          || (p[0] == '4' && p[1] == 'C' && p[2] == 'H' && p[3] == 'N'))) {
+        _dash_music_free();
+        return FALSE;
+    }
+    _dash_mod_songlen = _dash_mod[950];
+    if (_dash_mod_songlen < 1 || _dash_mod_songlen > 128) _dash_mod_songlen = 1;
+    for (i = 0; i < 128; i++) {
+        _dash_mod_order[i] = _dash_mod[952 + i];
+        if (_dash_mod_order[i] + 1 > npat) npat = _dash_mod_order[i] + 1;
+    }
+    _dash_mod_pat = _dash_mod + 1084;
+    off = 1084 + (ULONG)npat * 1024;
+    for (i = 1; i < 32; i++) {
+        UBYTE *h = _dash_mod + 20 + (i - 1) * 30;
+        _DashModSample *s = &_dash_mod_smp[i];
+        s->length = ((ULONG)((h[22] << 8) | h[23])) << 1;
+        s->volume = h[25] > 64 ? 64 : h[25];
+        s->loop_start = ((ULONG)((h[26] << 8) | h[27])) << 1;
+        s->loop_len = ((ULONG)((h[28] << 8) | h[29])) << 1;
+        if (off + s->length > _dash_mod_size) s->length = off < _dash_mod_size ? _dash_mod_size - off : 0;
+        if (s->loop_start + s->loop_len > s->length) s->loop_len = 0;
+        s->data = (BYTE *)_dash_mod + off;
+        off += s->length;
+    }
+    _dash_mod_silence = (BYTE *)AllocMem(2, MEMF_CHIP | MEMF_CLEAR);
+    return _dash_mod_silence != NULL;
+}
+
+static void _dash_music_position(LONG pos) {
+    Disable();
+    _dash_mod_pos = (pos >= 0 && pos < _dash_mod_songlen) ? pos : 0;
+    _dash_mod_row = 0;
+    _dash_mod_tick = 0;
+    Enable();
+}
+
+static void _dash_music_play(void) {
+    LONG c;
+    if (!_dash_mod || !_dash_audio_open()) return;
+    for (c = 0; c < 4; c++) _dash_sound_stop(c);   /* the player owns Paula now */
+    _dash_music_stop();
+    memset(_dash_mod_ch, 0, sizeof(_dash_mod_ch));
+    _dash_mod_pos = _dash_mod_row = _dash_mod_tick = _dash_mod_acc = 0;
+    _dash_mod_speed = 6;
+    _dash_mod_bpm = 125;
+    _dash_mod_jump = _dash_mod_break = -1;
+    _dash_mod_int.is_Node.ln_Type = NT_INTERRUPT;
+    _dash_mod_int.is_Node.ln_Pri = 0;
+    _dash_mod_int.is_Node.ln_Name = (char *)"dash mod";
+    _dash_mod_int.is_Code = (void (*)())_dash_mod_vblank;
+    _dash_mod_int.is_Data = NULL;
+    _dash_mod_playing = TRUE;
+    AddIntServer(INTB_VERTB, &_dash_mod_int);
+    _dash_mod_server = TRUE;
+}
+
+static void _dash_music_pause(void) {
+    if (_dash_mod_playing) { _dash_mod_paused = TRUE; _dash_mod_silence_hw(); }
+}
+
+static void _dash_music_resume(void) {
+    LONG c;
+    if (!_dash_mod_playing || !_dash_mod_paused) return;
+    for (c = 0; c < 4; c++) _dash_mod_ch[c].trigger = _dash_mod_ch[c].smp != NULL;
+    _dash_mod_paused = FALSE;
+}
+
+static void _dash_music_volume(LONG vol) {
+    _dash_mod_master = vol < 0 ? 0 : (vol > 64 ? 64 : vol);
+}
+
+static LONG _dash_music_pos(void) { return _dash_mod_pos; }
+static LONG _dash_music_row(void) { return _dash_mod_row; }
+
+"""
+
     # Windows opened with window_create(): a table of handles 1..16; handle 0 is
     # the current window (_dash_win). Closed at exit by _dash_windows_cleanup().
     WINMGR_RUNTIME = """\
@@ -4586,6 +4919,7 @@ _RUNTIME_FLAGS = [
     ("BITMAP_RUNTIME", "uses_bitmaps"),
     ("COPPER_RUNTIME", "uses_copper"),
     ("SOUND_RUNTIME", "uses_sound"),
+    ("MUSIC_RUNTIME", "uses_music"),
     ("DIR_RUNTIME", "uses_dirs"),
     ("GRAPHICS_RUNTIME", "needs_gfx"),
     ("INPUT_RUNTIME", "needs_gfx"),
@@ -4809,6 +5143,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_bitmaps: bool = False  # bitmap_create()... ids
         self.uses_copper: bool = False   # copper_create()...
         self.uses_sound: bool = False    # sound_*, tone_play
+        self.uses_music: bool = False    # music_* (MOD player; needs the sound runtime)
         self.uses_dirs: bool = False    # dir_change() / dir_current()
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
@@ -4977,6 +5312,8 @@ class CodeGenerator(ASTVisitor):
         if self.uses_sound:
             parts.append("static ULONG _dash_iff_u32(UBYTE *p);\n")
             parts.append(CTemplates.SOUND_RUNTIME)
+        if self.uses_music:
+            parts.append(CTemplates.MUSIC_RUNTIME)
 
         # Add input runtime if needed (for key/mouse/joystick)
         if self.needs_gfx:
@@ -5081,6 +5418,8 @@ class CodeGenerator(ASTVisitor):
             cleanup.append("    _dash_bitmaps_cleanup();\n")
         if self.uses_copper:
             cleanup.append("    _dash_copper_free();\n")   # before the screen closes
+        if self.uses_music:
+            cleanup.append("    _dash_music_free();\n")   # before the channels are given back
         if self.uses_sound:
             cleanup.append("    _dash_sound_cleanup();\n")
         if self.needs_reaction:
@@ -6406,6 +6745,8 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
             self.needs_asl = True
+        if self.uses_music:
+            self.uses_sound = True   # channels are allocated through audio.device
         if self.uses_bitmaps or self.uses_copper or self.uses_sound:
             self.needs_gfx = True   # sound: GfxBase->DisplayFlags (PAL/NTSC clock)
         # Gadget handles live on GadTools (opened by the GadTools main template)
@@ -6772,6 +7113,14 @@ static {ret_type} {method_name}({params_str}) {{
         size = len(node.elements)
         if size == 0:
             return "DashArray_create(0)"
+        # All constant: a static table (no stack copy; a big compound literal
+        # would overflow the 4 KB stack a Kickstart 3.1 shell gives programs)
+        values = [constant_int(e, self.analysis.program) for e in node.elements]
+        if all(v is not None for v in values):
+            self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
+            name = f"_dash_arrlit_{self._arrlit_counter}"
+            self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(c_int_literal(v) for v in values)}}};\n")
+            return f"DashArray_from({size}, {name})"
         # Values go through a C99 compound literal; strings are stored as LONG
         elements = []
         for e in node.elements:

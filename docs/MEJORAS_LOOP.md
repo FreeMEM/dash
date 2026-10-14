@@ -103,7 +103,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 20. Builtins: `bob_*`.
 - [x] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
 - [x] 22. Builtins: `sound_*` y `tone_play` (audio.device).
-- [ ] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
+- [x] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
 - [ ] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
       `runtime/softfloat`), como las versiones FPU de LightWave. Probar en FS-UAE con `fpu=68882` y comparar
       velocidad con la versión sin FPU. Pedido por el usuario el 2026-10-14.
@@ -429,3 +429,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Probado en FS-UAE (la emulación de Paula corre aunque no haya salida de audio en el PC): un sonido de 0,25 s
   termina, uno en bucle sigue hasta `sound_stop`, `tone_play` dura lo pedido, el 8SVX generado carga y suena.
 - No verificado: que se oiga bien (el emulador corre sin audio).
+
+### 2026-10-14 — Tarea 23 (música MOD)
+- Base: 125/125 con `--emu`, ejemplos 30/30. Después: 127/127 con `--emu`, ejemplos 30/30. Builtins sin código: 8 → 0.
+- Hecho (test: `test_music`, un módulo de dos patrones generado byte a byte, en FS-UAE): `MUSIC_RUNTIME`, reproductor
+  ProTracker propio: el módulo entero en memoria chip, servidor de interrupción VBlank (`AddIntServer(INTB_VERTB)`)
+  con acumulador para los BPM, canales reservados por audio.device y escritos directamente en Paula (DMA off,
+  4 líneas de espera, punteros, DMA on; el bucle del instrumento al tick siguiente). Efectos 0-6, 9, A-D, F, E1/E2/EA/EB/EC.
+  `music_pos()` y `music_row()` nuevos (para saber por dónde va).
+- Error real encontrado: un array literal grande (3164 elementos) colgaba el Amiga: el compound literal va a la pila
+  y el shell de Kickstart 3.1 da 4 KB. Los arrays literales con todos los valores constantes son ahora tablas
+  `static const` globales (sin pila y sin copia). El test de error `unimplemented_builtin` pasa a comprobar el
+  número de argumentos (ya no queda ningún builtin sin implementar).
+- No verificado: cómo suena (sin audio en el emulador); sí que avanza, salta (`B01`), pausa y reanuda.
+- Pendiente (optimización): pila de 4 KB del shell. Recursión profunda o locales grandes la desbordan; mirar
+  `__stack`/`StackSwap` en el arranque de libnix.

@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 320 funciones, 312 implementadas, 8 sin implementar.
+Total: 322 funciones, 322 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -321,14 +321,16 @@ Total: 320 funciones, 312 implementadas, 8 sin implementar.
 | `sound_playing(channel)` | `BOOL` | Check if channel is playing |  |
 | `sound_volume(channel, vol)` | `void` | Set channel volume (0-64) |  |
 | `sound_period(channel, period)` | `void` | Set the channel period (pitch: lower = higher) |  |
-| `music_load(filename)` | `BOOL` | Load MOD file | **sin implementar** |
-| `music_play()` | `void` | Start music playback | **sin implementar** |
-| `music_stop()` | `void` | Stop music | **sin implementar** |
-| `music_pause()` | `void` | Pause music | **sin implementar** |
-| `music_resume()` | `void` | Resume music | **sin implementar** |
-| `music_volume(vol)` | `void` | Set music volume (0-64) | **sin implementar** |
-| `music_position(pos)` | `void` | Set music position | **sin implementar** |
-| `music_free()` | `void` | Free music data | **sin implementar** |
+| `music_load(filename)` | `BOOL` | Load MOD file |  |
+| `music_play()` | `void` | Start music playback |  |
+| `music_stop()` | `void` | Stop music |  |
+| `music_pause()` | `void` | Pause music |  |
+| `music_resume()` | `void` | Resume music |  |
+| `music_volume(vol)` | `void` | Set music volume (0-64) |  |
+| `music_position(pos)` | `void` | Set music position |  |
+| `music_pos()` | `LONG` | Song position the music is playing (index in the order list) |  |
+| `music_row()` | `LONG` | Pattern row the music is playing (0-63) |  |
+| `music_free()` | `void` | Free music data |  |
 | `tone_play(channel, freq, vol, duration)` | `void` | Play a sine tone: frequency in Hz, volume 0-64, duration in milliseconds (returns at once) |  |
 
 ## Intuition

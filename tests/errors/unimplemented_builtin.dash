@@ -1,4 +1,7 @@
-# expect: Builtin 'music_play' is declared but not implemented yet
+# Test: builtins are called with their number of arguments
+# (all declared builtins are implemented now; the analyzer still rejects
+# a builtin with no C runtime, see unimplemented_builtins())
+# expect: Builtin 'music_play' expects 0 arguments, got 1
 Main
-    music_play()
+    music_play(1)
 end

@@ -2329,6 +2329,22 @@ AUDIO_FUNCTIONS = {
         needs_audio=True,
         description="Set music position"
     ),
+    "music_pos": BuiltinFunc(
+        name="music_pos",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_music_pos()",
+        needs_audio=True,
+        description="Song position the music is playing (index in the order list)"
+    ),
+    "music_row": BuiltinFunc(
+        name="music_row",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_music_row()",
+        needs_audio=True,
+        description="Pattern row the music is playing (0-63)"
+    ),
     "music_free": BuiltinFunc(
         name="music_free",
         params=[],
