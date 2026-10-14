@@ -919,6 +919,31 @@ bitmap_free(0)
 `bitmap_load` en una pantalla propia (`screen_open`) pone tambien los colores de la imagen;
 en el Workbench se dibuja con sus colores. Los bitmaps se liberan al salir.
 
+### Bobs
+
+Un bob es un bitmap que se mueve sobre la pantalla guardando lo que tapa. Usa como imagen
+el bitmap con su mismo numero (0..31): se pinta con `bitmap_draw_to` o se carga de un IFF.
+El color 0 es transparente.
+
+```
+bob_create(0, 16, 16, 4)            # o bob_load(0, "Work:nave.iff")
+bitmap_draw_to(0)
+gfx_pen(5)
+gfx_circle_fill(8, 8, 6)
+bitmap_draw_screen()
+
+bob_pos(0, x, y)
+bob_draw(0)                         # guarda el fondo y dibuja (si ya estaba, lo borra antes)
+bob_erase(0)                        # devuelve el fondo
+if bob_collision(0, 1)              # pixel a pixel
+    Print "choque"
+end
+bob_frame(0, 2)                     # una tira de cuadrados (48x16 = 3 frames de 16x16)
+bob_free(0)                         # lo quita de la pantalla y lo libera
+```
+
+Con varios bobs que se tapan: borrarlos en orden inverso al de dibujado.
+
 ### Ejemplo de Graficos
 
 ```
@@ -2164,7 +2189,7 @@ Lista completa, con las que están sin implementar: [docs/BUILTINS.md](BUILTINS.
 | Categoria | Cantidad | Ejemplos |
 |-----------|----------|----------|
 | Graficos Basicos | 28 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
-| Graficos Avanzados | 32 | `sprite_*`, `gfx_*`, `bitmap_*` (`bob_*`, `copper_*` sin implementar; ver `lib/amiga`) |
+| Graficos Avanzados | 32 | `sprite_*`, `gfx_*`, `bitmap_*`, `bob_*` (`copper_*` sin implementar; ver `lib/amiga`) |
 | Entrada | 16 | `key_*`, `mouse_*`, `joy_*` |
 | Sistema | 18 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Archivos | 22 | `file_*`, `dir_*`, `console_*` |

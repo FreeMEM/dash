@@ -100,7 +100,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
 - [x] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
 - [x] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
-- [ ] 20. Builtins: `bob_*`.
+- [x] 20. Builtins: `bob_*`.
 - [ ] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
 - [ ] 22. Builtins: `sound_*` y `tone_play` (audio.device).
 - [ ] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
@@ -398,3 +398,13 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Probado: píxeles dentro del bitmap, tras el blit y tras el blit con máscara; guardar + cargar; un ILBM ByteRun1
   generado byte a byte; fichero inexistente → 0. El IFF guardado se validó en el PC con otro lector (cabeceras,
   tamaños y píxeles).
+
+### 2026-10-14 — Tarea 20 (bobs)
+- Base: 119/119 con `--emu`, ejemplos 30/30. Después: 121/121 con `--emu`, ejemplos 30/30. Builtins sin código: 33 → 25.
+- Hecho (test: `test_bobs` en FS-UAE): los bobs reutilizan los bitmaps (misma id = su imagen). Máscara automática
+  (OR de los planos: color 0 transparente) rehecha cuando la imagen cambia (`_dash_bitmap_version`), fondo guardado
+  con `ClipBlit` (respeta las capas de la ventana) y dibujo con `BltMaskBitMapRastPort`. Tira de frames cuadrados
+  para `bob_frame`; `bob_collision` por cajas y luego máscara a máscara. `bob_draw` borra antes el dibujo anterior;
+  `bob_free` lo quita de la pantalla.
+- Error previo encontrado: una función sin tipo que devuelve una concatenación (`return "" + x`) se imprimía como
+  número (el puntero): `_call_returns_string` solo miraba literales. Ahora usa el tipo deducido de la función.

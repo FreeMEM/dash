@@ -729,6 +729,7 @@ typedef struct {
     LONG w, h, depth;
 } _DashBitmap;
 static _DashBitmap _dash_bitmaps[_DASH_MAX_BITMAPS];
+static ULONG _dash_bitmap_version[_DASH_MAX_BITMAPS];  /* bumped when the image may change (bob masks) */
 static struct RastPort *_dash_screen_rp = NULL;   /* the window's while drawing to a bitmap */
 
 static _DashBitmap *_dash_bitmap_get(LONG id) {
@@ -764,6 +765,7 @@ static BOOL _dash_bitmap_create(LONG id, LONG width, LONG height, LONG depth) {
     b->w = width;
     b->h = height;
     b->depth = depth;
+    _dash_bitmap_version[id]++;
     return TRUE;
 }
 
@@ -773,6 +775,7 @@ static void _dash_bitmap_draw_to(LONG id) {
     if (!b) return;
     if (!_dash_screen_rp) _dash_screen_rp = _dash_rp;
     _dash_rp = &b->rp;
+    _dash_bitmap_version[id]++;
 }
 
 static void _dash_bitmap_blit(LONG id, LONG sx, LONG sy, LONG w, LONG h, LONG dx, LONG dy) {
@@ -918,10 +921,157 @@ static BOOL _dash_bitmap_save(LONG id, STRPTR filename) {
     return ok;
 }
 
+/* Bobs: a bob's image is the bitmap with the same id (draw it with
+   bitmap_draw_to, or bob_load an IFF). Colour 0 is transparent: the mask is
+   made from the image when it changes. A strip of square frames (width a
+   multiple of the height) gives an animation for bob_frame. bob_draw saves
+   the background under the bob, bob_erase puts it back. */
+typedef struct {
+    BOOL used, drawn;
+    LONG x, y, frame, fw, frames;
+    struct BitMap *mask;         /* 1 plane, as wide as the image */
+    ULONG mask_version;
+    struct BitMap *back;         /* background under the bob */
+    struct RastPort back_rp;
+    struct RastPort *drawn_rp;
+    LONG bx, by;
+} _DashBob;
+static _DashBob _dash_bobs[_DASH_MAX_BITMAPS];
+
+static _DashBob *_dash_bob_get(LONG id) {
+    if (id < 0 || id >= _DASH_MAX_BITMAPS || !_dash_bobs[id].used || !_dash_bitmaps[id].bm) return NULL;
+    return &_dash_bobs[id];
+}
+
+static void _dash_bob_reset(LONG id) {
+    _DashBob *o = &_dash_bobs[id];
+    WaitBlit();
+    if (o->mask) FreeBitMap(o->mask);
+    if (o->back) FreeBitMap(o->back);
+    memset(o, 0, sizeof(*o));
+}
+
+static void _dash_bob_setup(LONG id) {
+    _DashBitmap *b = &_dash_bitmaps[id];
+    _DashBob *o = &_dash_bobs[id];
+    _dash_bob_reset(id);
+    o->used = TRUE;
+    o->fw = b->w;
+    o->frames = 1;
+    if (b->w > b->h && b->w % b->h == 0) {   /* strip of square frames */
+        o->fw = b->h;
+        o->frames = b->w / b->h;
+    }
+    o->mask_version = _dash_bitmap_version[id] - 1;   /* build it on first draw */
+}
+
+static BOOL _dash_bob_create(LONG id, LONG width, LONG height, LONG depth) {
+    if (!_dash_bitmap_create(id, width, height, depth)) return FALSE;
+    _dash_bob_setup(id);
+    return TRUE;
+}
+
+static BOOL _dash_bob_load(LONG id, STRPTR filename) {
+    if (!_dash_bitmap_load(id, filename)) return FALSE;
+    _dash_bob_setup(id);
+    return TRUE;
+}
+
+/* Mask = OR of all the image planes (colour 0 transparent) */
+static BOOL _dash_bob_mask(LONG id) {
+    _DashBitmap *b = &_dash_bitmaps[id];
+    _DashBob *o = &_dash_bobs[id];
+    LONG y, x, p, bpr;
+    if (o->mask && o->mask_version == _dash_bitmap_version[id]) return TRUE;
+    if (!o->mask) o->mask = AllocBitMap(b->w, b->h, 1, BMF_CLEAR, NULL);
+    if (!o->mask) return FALSE;
+    WaitBlit();
+    bpr = b->bm->BytesPerRow;
+    for (y = 0; y < b->h; y++) {
+        UBYTE *m = o->mask->Planes[0] + y * o->mask->BytesPerRow;
+        for (x = 0; x < bpr; x++) {
+            UBYTE v = 0;
+            for (p = 0; p < b->depth; p++) v |= b->bm->Planes[p][y * bpr + x];
+            m[x] = v;
+        }
+    }
+    o->mask_version = _dash_bitmap_version[id];
+    return TRUE;
+}
+
+static void _dash_bob_pos(LONG id, LONG x, LONG y) {
+    _DashBob *o = _dash_bob_get(id);
+    if (o) { o->x = x; o->y = y; }
+}
+
+static void _dash_bob_frame(LONG id, LONG frame) {
+    _DashBob *o = _dash_bob_get(id);
+    if (o) o->frame = ((frame % o->frames) + o->frames) % o->frames;
+}
+
+static void _dash_bob_erase(LONG id) {
+    _DashBob *o = _dash_bob_get(id);
+    if (!o || !o->drawn) return;
+    ClipBlit(&o->back_rp, 0, 0, o->drawn_rp, o->bx, o->by, o->fw, _dash_bitmaps[id].h, 0xC0);
+    o->drawn = FALSE;
+}
+
+static void _dash_bob_draw(LONG id) {
+    _DashBob *o = _dash_bob_get(id);
+    _DashBitmap *b;
+    if (!o || !_dash_rp || !_dash_bob_mask(id)) return;
+    b = &_dash_bitmaps[id];
+    if (o->drawn) _dash_bob_erase(id);
+    if (!o->back) {
+        o->back = AllocBitMap(o->fw, b->h, _dash_rp->BitMap->Depth, BMF_CLEAR, _dash_rp->BitMap);
+        if (!o->back) return;
+        InitRastPort(&o->back_rp);
+        o->back_rp.BitMap = o->back;
+    }
+    ClipBlit(_dash_rp, o->x, o->y, &o->back_rp, 0, 0, o->fw, b->h, 0xC0);
+    BltMaskBitMapRastPort(b->bm, o->frame * o->fw, 0, _dash_rp, o->x, o->y, o->fw, b->h,
+                          (ABC | ABNC | ANBC), o->mask->Planes[0]);
+    o->drawn = TRUE;
+    o->drawn_rp = _dash_rp;
+    o->bx = o->x;
+    o->by = o->y;
+}
+
+/* Bounding boxes first, then the masks pixel by pixel in the overlap */
+static BOOL _dash_bob_collision(LONG id1, LONG id2) {
+    _DashBob *a = _dash_bob_get(id1), *c = _dash_bob_get(id2);
+    LONG x0, y0, x1, y1, x, y;
+    if (!a || !c || id1 == id2 || !_dash_bob_mask(id1) || !_dash_bob_mask(id2)) return FALSE;
+    x0 = a->x > c->x ? a->x : c->x;
+    y0 = a->y > c->y ? a->y : c->y;
+    x1 = (a->x + a->fw < c->x + c->fw) ? a->x + a->fw : c->x + c->fw;
+    y1 = (a->y + _dash_bitmaps[id1].h < c->y + _dash_bitmaps[id2].h) ? a->y + _dash_bitmaps[id1].h
+                                                                       : c->y + _dash_bitmaps[id2].h;
+    for (y = y0; y < y1; y++) {
+        for (x = x0; x < x1; x++) {
+            LONG ax = a->frame * a->fw + x - a->x, cx = c->frame * c->fw + x - c->x;
+            UBYTE *ma = a->mask->Planes[0] + (y - a->y) * a->mask->BytesPerRow;
+            UBYTE *mc = c->mask->Planes[0] + (y - c->y) * c->mask->BytesPerRow;
+            if ((ma[ax >> 3] & (0x80 >> (ax & 7))) && (mc[cx >> 3] & (0x80 >> (cx & 7)))) return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static void _dash_bob_free(LONG id) {
+    if (id < 0 || id >= _DASH_MAX_BITMAPS || !_dash_bobs[id].used) return;
+    _dash_bob_erase(id);   /* off the screen first */
+    _dash_bob_reset(id);
+    _dash_bitmap_free(id);
+}
+
 static void _dash_bitmaps_cleanup(void) {
     LONG i;
     _dash_bitmap_draw_screen();
-    for (i = 0; i < _DASH_MAX_BITMAPS; i++) _dash_bitmap_free(i);
+    for (i = 0; i < _DASH_MAX_BITMAPS; i++) {
+        if (_dash_bobs[i].used) _dash_bob_reset(i);
+        _dash_bitmap_free(i);
+    }
 }
 
 """
@@ -6154,8 +6304,8 @@ static {ret_type} {method_name}({params_str}) {{
         if func:
             if func.return_type:
                 return func.return_type == "String"
-            ret = self._find_return_value(func.body)
-            return ret is not None and isinstance(ret, StringLiteral)
+            # untyped: what its return statement yields ("a" + b, a String local...)
+            return self._function_c_type(func) == "STRPTR"
         foreign = self._foreign_func(name)
         return bool(foreign and foreign.return_type == "String")
 

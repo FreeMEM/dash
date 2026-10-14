@@ -1,0 +1,74 @@
+# Test: bobs
+# The image is the bitmap with the same id; colour 0 is transparent.
+# bob_draw saves the background and bob_erase restores it; a strip of
+# square frames animates with bob_frame; drawing a bob again first erases
+# it where it was; bob_free takes it off the screen; collisions are pixel exact.
+# (Also: an untyped function returning a concatenation prints as a String.)
+#
+# expect-c: static BOOL _dash_bob_collision(LONG id1, LONG id2)
+# expect-out: 1
+# expect-out: 3 2
+# expect-out: 2 2
+# expect-out: 0
+# expect-out: 1
+# expect-out: 1
+# expect-out: 0 3
+# expect-out: 0
+
+Window W
+    title "Bobs"
+    width 200
+    height 100
+end
+
+func pixeles(x1, y1, x2, y2)
+    return "" + gfx_pixel_read(x1, y1) + " " + gfx_pixel_read(x2, y2)
+end
+
+Main
+    W.open
+    Print bob_create(0, 8, 8, 2)
+    bitmap_draw_to(0)
+    gfx_pen(3)
+    gfx_pixel(1, 1)
+    gfx_pen(1)
+    gfx_pixel(2, 1)
+    bitmap_draw_screen()
+
+    gfx_pen(2)
+    gfx_pixel(10, 10)
+    gfx_pixel(11, 11)
+    bob_pos(0, 10, 10)
+    bob_draw(0)
+    Print pixeles(11, 11, 10, 10)
+    bob_erase(0)
+    Print pixeles(11, 11, 10, 10)
+
+    bob_create(1, 8, 8, 2)
+    bitmap_draw_to(1)
+    gfx_pen(1)
+    gfx_pixel(2, 1)
+    bitmap_draw_screen()
+    bob_pos(1, 20, 10)
+    Print bob_collision(0, 1)
+    bob_pos(1, 9, 10)
+    Print bob_collision(0, 1)
+
+    bitmap_create(5, 16, 8, 2)
+    bitmap_draw_to(5)
+    gfx_pen(1)
+    gfx_pixel(0, 0)
+    gfx_pen(3)
+    gfx_pixel(8, 0)
+    bitmap_draw_screen()
+    bitmap_save(5, "RAM:dash_tira.iff")
+    Print bob_load(6, "RAM:dash_tira.iff")
+    bob_pos(6, 30, 30)
+    bob_draw(6)
+    bob_frame(6, 1)
+    bob_pos(6, 40, 30)
+    bob_draw(6)
+    Print pixeles(30, 30, 40, 30)
+    bob_free(6)
+    Print gfx_pixel_read(40, 30)
+end

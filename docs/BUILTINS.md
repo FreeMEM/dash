@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 319 funciones, 286 implementadas, 33 sin implementar.
+Total: 319 funciones, 294 implementadas, 25 sin implementar.
 
 ## Gráficos básicos
 
@@ -65,14 +65,14 @@ Total: 319 funciones, 286 implementadas, 33 sin implementar.
 | `soft_sprite_pos(id, x, y)` | `void` | Set software sprite position |  |
 | `soft_sprite_x(id)` | `LONG` | Get software sprite X position |  |
 | `soft_sprite_y(id)` | `LONG` | Get software sprite Y position |  |
-| `bob_load(id, filename)` | `BOOL` | Load BOB from file | **sin implementar** |
-| `bob_create(id, width, height, depth)` | `BOOL` | Create empty BOB | **sin implementar** |
-| `bob_pos(id, x, y)` | `void` | Set BOB position | **sin implementar** |
-| `bob_draw(id)` | `void` | Draw BOB | **sin implementar** |
-| `bob_erase(id)` | `void` | Erase BOB (restore background) | **sin implementar** |
-| `bob_frame(id, frame)` | `void` | Set BOB animation frame | **sin implementar** |
-| `bob_free(id)` | `void` | Free BOB memory | **sin implementar** |
-| `bob_collision(id1, id2)` | `BOOL` | Check BOB collision | **sin implementar** |
+| `bob_load(id, filename)` | `BOOL` | Load BOB from file |  |
+| `bob_create(id, width, height, depth)` | `BOOL` | Create empty BOB |  |
+| `bob_pos(id, x, y)` | `void` | Set BOB position |  |
+| `bob_draw(id)` | `void` | Draw BOB |  |
+| `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
+| `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
+| `bob_free(id)` | `void` | Free BOB memory |  |
+| `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list | **sin implementar** |
 | `copper_wait(y, x)` | `void` | Add copper WAIT instruction | **sin implementar** |
 | `copper_move(reg, value)` | `void` | Add copper MOVE instruction | **sin implementar** |
