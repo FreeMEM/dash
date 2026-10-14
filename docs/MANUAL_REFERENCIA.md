@@ -1,6 +1,6 @@
 # D.A.S.H. Language - Manual de Referencia del Programador
 
-**Version 1.1** | **D.A.S.H.** (*Development Amiga Synthesis Hub*) — Lenguaje de alto nivel para Amiga que compila a C
+**Version 1.2** | **D.A.S.H.** (*Development Amiga Synthesis Hub*) — Lenguaje de alto nivel para Amiga que compila a C
 
 *Actualizado: Enero 2026 - Incluye Screens, GadTools y ReAction*
 
@@ -59,8 +59,16 @@ end
 ### Compilacion
 
 ```bash
-./dash programa.dash -o programa
+./dash programa.dash -o programa              # gcc -O2, para 68000
+./dash -O0 programa.dash -o programa          # sin optimizar (para depurar)
+./dash --small programa.dash -o programa      # gcc -Os: ~7 % mas pequeno, bucles mas lentos
+./dash --stack 32768 programa.dash -o prog    # pila minima (por defecto 16 KB; 0 = la del shell)
+./dash --fpu programa.dash -o programa        # solo 68020 con FPU 68881/68882
 ```
+
+Los programas necesitan Kickstart 3.0 o superior. Al arrancar piden una pila de al menos 16 KB:
+el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 bytes por programa;
+`--stack 0` lo quita).
 
 ---
 
@@ -1094,8 +1102,6 @@ end
 
 ## 15. Audio y Musica
 
-> **Sin implementar:** estas funciones están declaradas pero no tienen código C; usarlas da error de compilación. Para audio, ver el módulo `lib/amiga/audio.dash`. Lista real y actualizada: [docs/BUILTINS.md](BUILTINS.md).
-
 ### Cargar y Reproducir Sonidos
 
 ```
@@ -1953,6 +1959,34 @@ Main
 end
 ```
 
+### Codigo C: @native y @extern
+
+`@native` escribe una funcion en C dentro del programa. Sus parametros y su resultado son los tipos
+de Dash (`Int` es `LONG`, `String` es `STRPTR`, `Pointer` es `APTR`):
+
+```
+@native func peek(addr: Pointer) -> Int
+"""
+    return (LONG)*(volatile UBYTE *)addr;
+"""
+end
+```
+
+`@extern("milib.library")` declara una funcion de una libreria que no esta en las cabeceras del NDK:
+
+```
+@extern("milib.library")
+func MiFuncion(x: Int, y: Int) -> Int
+```
+
+**Aviso (68000):** en el C de un `@native`, no pases a una funcion del sistema un argumento que lleve
+`*`, `/` o `%` de 32 bits (`SetAPen(rp, a * b)`). En un 68000 GCC lo calcula con una llamada a libgcc
+que puede borrar los registros que la macro de la libreria ya habia cargado. Calcula antes el valor en
+una variable y pasa la variable. Los builtins de Dash ya lo hacen asi.
+
+Un String que un `@native` guarda o devuelve al sistema queda fuera del control de Dash: se copia y
+se libera al salir del programa (ver [Gestion de Memoria](#17-gestion-de-memoria)).
+
 ---
 
 ## 22. Ejemplos Completos
@@ -2166,8 +2200,6 @@ end
 
 ### Ejemplo 6: Sonido y Musica
 
-> **Sin implementar:** estas funciones están declaradas pero no tienen código C; usarlas da error de compilación. Para audio, ver el módulo `lib/amiga/audio.dash`. Lista real y actualizada: [docs/BUILTINS.md](BUILTINS.md).
-
 ```
 Window SoundWin
     title "Demo Audio"
@@ -2217,30 +2249,34 @@ end
 | If/Else | `if cond ... else ... end` |
 | While | `while cond ... end` |
 | For Range | `for i in (a..b) ... end` |
-| For Each | `for x in array ... end` |
+| For Each | `for x in array ... end` (tambien los caracteres de un String) |
+| For con paso | `for i in (a..b step s) ... end`; `(10..1)` baja |
+| Salir / saltar | `break`, `continue` (dentro de `while`/`for`) |
 | Ventana | `Window Nombre ... end` |
 | Main | `Main ... end` |
 | EventLoop | `EventLoop ... end` |
 | On Close | `On Close ... end` |
+| On Key | `On Key "ESC" ... end` (tambien `"a"`, `0x4C` o sin tecla = cualquiera) |
 | Comentario | `# comentario` |
 
 ### Funciones por Categoria
 
-Lista completa, con las que están sin implementar: [docs/BUILTINS.md](BUILTINS.md).
+Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan implementadas.
 
 | Categoria | Cantidad | Ejemplos |
 |-----------|----------|----------|
-| Graficos Basicos | 28 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
-| Graficos Avanzados | 32 | `sprite_*`, `gfx_*`, `bitmap_*`, `bob_*`, `copper_*` |
-| Entrada | 16 | `key_*`, `mouse_*`, `joy_*` |
-| Sistema | 18 | `mem_*`, `time_*`, `random_*`, `arena_*` |
-| Archivos | 22 | `file_*`, `dir_*`, `console_*` |
-| Audio | 18 | `sound_*`, `music_*`, `tone_*` (sin implementar) |
-| Screens | 3 | `screen_open`, `screen_open_custom`, `screen_close` |
-| GadTools | 15 | `gt_init`, `gt_button`, `gt_palette`, `menu_*` |
-| ReAction | 16 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
-| UI/Dialogos | 6 | `file_open_dialog`, `file_save_dialog` |
-| **Total** | **170+** | |
+| Graficos basicos | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
+| Graficos avanzados | 43 | `sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
+| Entrada | 29 | `key_*`, `mouse_*`, `joy_*` |
+| GadTools y menus | 21 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
+| Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_get_path` |
+| ReAction | 64 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
+| Sistema y memoria | 25 | `mem_*`, `time_*`, `random_*`, `arena_*` |
+| Ficheros (DOS) y buffers | 34 | `file_*`, `dir_*`, `buffer_*` |
+| Audio | 21 | `sound_*`, `music_*`, `tone_play` |
+| Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
+| RTG | 21 | `rtg_*` |
+| **Total** | **322** | |
 
 ### Colores Estandar Amiga
 

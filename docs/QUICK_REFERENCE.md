@@ -1,6 +1,16 @@
 # D.A.S.H. Language - Quick Reference Card
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
+## Compile
+```
+./dash prog.dash -o prog            # gcc -O2, 68000, 16 KB stack minimum
+./dash -O0 prog.dash -o prog        # no optimization (debugging)
+./dash --small prog.dash -o prog    # gcc -Os: ~7% smaller, slower loops
+./dash --stack 32768 ...            # minimum stack (0: as the shell gives it)
+./dash --fpu prog.dash -o prog      # 68020 + 68881/68882 FPU only
+```
+Programs need Kickstart 3.0+.
+
 ## Program Structure
 ```
 const NAME = value          # Constants
@@ -145,19 +155,20 @@ joy_left(0) joy_right(0)
 ```
 
 ## Audio Functions
-> **Sin implementar** (dan error al compilar). Ver `lib/amiga/audio.dash` y [BUILTINS.md](BUILTINS.md).
-
 ```
-sound_load(id, "file.8svx") # Load sound
+sound_load(id, "file.8svx") # Load an IFF 8SVX sound
+sound_create(id, len, rate) # Silent sound in chip RAM; sound_sample(id, i, v) fills it
 sound_play(id, channel)     # Play (channels 0-3)
 sound_loop(id, channel)     # Play looped
 sound_stop(channel)         # Stop channel
 sound_volume(channel, 0-64) # Set volume
+tone_play(ch, hz, vol, ms)  # Sine tone, returns at once
 
-music_load("file.mod")      # Load MOD
+music_load("file.mod")      # Load a ProTracker MOD
 music_play()                # Start playback
-music_stop()                # Stop playback
+music_pause() music_resume()
 music_volume(0-64)          # Set volume
+music_stop()                # Stop playback
 ```
 
 ## File Functions

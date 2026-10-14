@@ -32,9 +32,11 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Expresiones aritméticas (`+`, `-`, `*`, `/`, `%`)
 - [x] Expresiones lógicas (`and`, `or`, `not`)
 - [x] Comparaciones (`==`, `!=`, `<`, `>`, `<=`, `>=`)
-- [x] Control de flujo (`if`/`else`/`end`, `while`/`end`)
+- [x] Control de flujo (`if`/`else`/`end`, `while`/`end`, `for`, `break`, `continue`)
 - [x] Comentarios (`# ...`)
-- [x] Tipos inferidos (LONG, STRPTR, BOOL)
+- [x] Tipos inferidos (LONG, STRPTR, BOOL) y `Float`
+- [x] Memoria automática (temporales por vuelta, contador de referencias)
+- [x] Los 322 builtins Amiga implementados (ver `docs/BUILTINS.md`)
 
 ### Arquitectura del Compilador ✅
 
@@ -632,15 +634,18 @@ state = State.RUNNING
 El runtime en C va embebido en `compiler/codegen.py` (`CTemplates`) y solo se incluye
 en el C generado la parte que el programa usa:
 
-- `MEMORY_RUNTIME`: pool de exec (`_dash_alloc`), borrado al salir (`_dash_mem_cleanup`)
+- `MEMORY_RUNTIME`: pool de exec (`_dash_alloc`), borrado al salir (`_dash_mem_cleanup`); caché de bloques de
+  hasta 128 bytes en clases de 8 (`_dash_block_get/put`); strings con cabecera y lista de temporales por marca;
+  objetos (arrays y structs) con contador de referencias y lista de temporales
 - `ARRAY_RUNTIME`: `DashArrayLong`, create/from/get/set/length/slice
-- `STRING_RUNTIME`: concat, length, char_at, from_int, from_char
-- `REFCOUNT_RUNTIME`: cabecera de refcount para structs
+- `STRING_RUNTIME`: concat, join, length, char_at, from_int (dos cifras por `divu`), from_char
+- `FLOAT_RUNTIME` y `runtime/softfloat/`: Float por software (fp-bit de GCC + suma y multiplicación en
+  ensamblador 68000); `--fpu` usa la FPU
+- `STACK_REQUEST`: pila mínima de 16 KB con el `swapstack` de libnix (`--stack N`)
 
 **Consideraciones Amiga:**
-- Usar `AllocMem`/`FreeMem` de exec.library
-- Memoria CHIP vs FAST según necesidad
-- Pool de memoria para eficiencia
+- Pool de exec (V39, Kickstart 3.0+); memoria CHIP solo donde la pide el hardware (sonido, bitmaps, sprites)
+- Velocidad, memoria y tamaño medidos en un A500 y un A1200 emulados: `tools/bench.py`, `tests/bench/`
 
 ---
 
@@ -758,6 +763,19 @@ tests/
 - [x] Corregidos fallos que colgaban el Amiga: doble `CloseWindow`, `graphics.library` sin abrir
 - [x] Test suite: 58 tests (normales, `tests/errors/`, `multifile/`, runtime en el PC, documentación)
 
+### Sesión 6 (Fecha: 2026-10-14/15) — Mejoras (rama `mejoras`, detalle en `docs/MEJORAS_LOOP.md`)
+- [x] Salida común de error: si falla una apertura se cierra todo lo abierto antes de salir
+- [x] Banco de pruebas en FS-UAE sin ventana (`tools/emu_run.py`), tests con salida esperada en A1200 y A500
+- [x] `-O2` por defecto (probado en emulador), `-O0` para depurar, `--small` (`-Os`), `--stack N`, `--fpu`
+- [x] Lenguaje: hex/binario, `break`/`continue`, rangos descendentes y `step`, enums negativos, `a.b.c = x`,
+      propiedades booleanas de ventana, `On Key`, `Float`
+- [x] Memoria automática: strings con dueño y temporales por vuelta; arrays y structs con referencias
+- [x] Los 72 builtins pendientes: ventanas, diálogos ASL, gadgets, bitmaps, bobs, copper, sonido y música
+- [x] Optimización medida: hasta x8 en bucles de arrays, x3,4 en interpolación, Float propio en asm,
+      funciones `static` (-9 % de tamaño), strings cortos un 29 % más pequeños
+- [x] Panel de comparativas: https://claude.ai/artifact/9XyJ1JNSGuDo5q6NCRzM2N (`tools/bench_report.py`)
+- [x] Test suite: 101 resultados (185 con `--emu --emu-a500`); ejemplos 30/30
+
 ---
 
 ## Notas y Decisiones
@@ -768,12 +786,14 @@ tests/
 3. **Imports:** Estilo ES6 (`import X from "y"`)
 4. **Arrays:** Sintaxis Python (`[1, 2, 3]`)
 5. **Amiga:** Estrategia híbrida (módulos built-in + FFI)
+6. **Memoria:** sin recolector; strings con dueño y temporales por vuelta, arrays y structs con contador
+   de referencias (los ciclos se liberan al salir con el pool)
+7. **Compilación:** `-O2` por defecto (probado en emulador); Kickstart 3.0+, 68000
 
 ### Preguntas abiertas:
-- ¿Garbage collection o gestión manual con helpers? (hoy: pool liberado al salir; nada se libera durante la ejecución)
-- ¿Implementar los 72 builtins declarados sin código (audio, bobs, copper, bitmaps, diálogos, gadgets)?
-- ¿Activar `-O2` por defecto? (falta probar en emulador)
 - ¿Soporte para OOP? (Probablemente no en v3.0)
+- ¿UI declarativa en Dash con vista previa por captura del emulador? (idea del 2026-10-14, en lugar de un
+  editor visual de MUI)
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
 ---

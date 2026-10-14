@@ -137,7 +137,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 28. Artefacto de comparativas (https://claude.ai/artifact/9XyJ1JNSGuDo5q6NCRzM2N): página publicada (Artifact) con las tablas y gráficas de
       `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
       después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
-- [ ] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
+- [x] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
 
 ## Bitácora
 
@@ -733,3 +733,16 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Para actualizarlo tras un `bench.py --save`: `python3 tools/bench_report.py` y pedir a Claude que suba de nuevo los
   CSV (y la página si cambió) a ese panel.
 - No comprobado: no lo he visto dibujado (el tipo pide no renderizarlo); solo la sintaxis del script (`node --check`).
+
+### 2026-10-15 — Tarea 29 (documentación final)
+- README: Float, literales hex/binarios, `break`/`continue`, `step`, memoria automática, Kickstart 3.0+, opciones
+  `--small`/`--stack`, tests `--emu --emu-a500` y sus variables, benchmarks y panel, `runtime/softfloat`, `tools/`.
+- QUICK_REFERENCE: apartado de compilación; audio ya implementado (firmas de `BUILTINS.md`: `tone_play(ch, hz,
+  vol, ms)`, `music_volume`, `sound_create`).
+- MANUAL_REFERENCIA (versión 1.2): opciones de compilación y pila; fuera los avisos de "sin implementar"; tabla
+  de categorías con las cuentas reales (322); referencia rápida con `step`, `break`/`continue`, `On Key`; apartado
+  nuevo "Código C: @native y @extern" con el aviso de libgcc y `register asm` en 68000 (ejemplo compilado).
+- ROADMAP: estado actual, runtime, sesión 6 con lo de esta rama, decisiones (memoria, `-O2`) y preguntas abiertas.
+- CLAUDE.md (local, no va a git): builtins 322, `tmp_marks.py`, softfloat, herramientas, memoria, pila, tests
+  (101 / 185), `expect-no-c`/`expect-out`/`emu-needs`, entorno del emulador, panel y problemas conocidos.
+- Tests: 101/101 sin emulador.

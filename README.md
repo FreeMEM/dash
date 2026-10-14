@@ -45,8 +45,10 @@ end
 
 ### Lenguaje
 - Variables con inferencia de tipos (sin declaraciones)
+- Enteros (también `0xDFF000`, `$DFF000`, `0b1010`) y `Float` (coma flotante propia, rápida en 68000)
 - Expresiones aritméticas, lógicas y de comparación
-- Control de flujo: `if`/`else`, `while`, `for`/`in`, `for`/`range`
+- Control de flujo: `if`/`else`, `while`, `for`/`in`, `for`/`range` (también descendente y con `step`),
+  `break` y `continue`
 - Funciones con parámetros, retorno y recursión
 - Arrays con literales, acceso por índice, slicing y `.length`
 - Strings con interpolación, concatenación y operaciones
@@ -54,6 +56,8 @@ end
 - Constantes y enumeraciones
 - Imports de módulos
 - Scope léxico
+- Memoria automática: strings, listas y structs se liberan solos (temporales por vuelta y contador
+  de referencias), sin recolector ni pausas
 
 ### Amiga API
 - **Intuition** — Ventanas, screens, event loops, GadTools, ReAction
@@ -67,6 +71,9 @@ end
 - **RTG** — Soporte para tarjetas gráficas
 - **Double Buffering** — Animación sin flicker
 - **FFI** — Llamadas directas a funciones C/AmigaOS
+
+Los programas necesitan Kickstart 3.0 o superior (usan los pools de memoria de exec V39) y funcionan en
+un 68000.
 
 ## Instalación rápida
 
@@ -140,6 +147,12 @@ cd dash
 # Sin optimizar (más fácil de depurar)
 ./dash -O0 archivo.dash -o bin/archivo
 
+# Más pequeño (gcc -Os): ~7 % menos de tamaño, 10-50 % más lento en bucles
+./dash --small archivo.dash -o bin/archivo
+
+# Pila mínima del programa (por defecto 16 KB; 0 = la que dé el shell, 720 bytes menos)
+./dash --stack 32768 archivo.dash -o bin/archivo
+
 # Para Amigas con FPU 68881/68882 (Float con instrucciones de FPU; 68020+)
 ./dash --fpu archivo.dash -o bin/archivo
 
@@ -153,10 +166,18 @@ tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s
 # Solo transpilar a C (sin compilar)
 python3 -m compiler.main archivo.dash -o build/archivo.c
 
-# Ejecutar tests (--emu: también los que comprueban la salida en FS-UAE)
+# Ejecutar tests (--emu: también los que comprueban la salida en FS-UAE; --emu-a500: además en un A500)
 python3 tests/run_tests.py
-python3 tests/run_tests.py --emu
+python3 tests/run_tests.py --emu --emu-a500
+
+# Medir velocidad, memoria y tamaño en un A500 y un A1200 emulados, y guardar la medida
+tools/bench.py --save "descripción del cambio"
+tools/bench_report.py        # datos y página del panel de comparativas (build/bench_report/)
 ```
+
+Variables del banco de pruebas: `DASH_KICKSTART` (ROM del A1200), `DASH_KICKSTART_A500` (ROM del A500),
+`DASH_EMU_SYS` (directorio con `Libs` y `C` de un Workbench, para los tests que lo necesitan; se puede
+sacar de un disco duro con `tools/emu_sys_from_hdf.sh`).
 
 ## Estructura del proyecto
 
@@ -170,9 +191,11 @@ compiler/             Transpilador (Python/Lark)
   codegen.py          Generación de código C
   amiga_builtins.py   Bindings de la API Amiga
 lib/amiga/            Módulos estándar de Amiga
-tools/                Utilidades (gen_builtins_doc.py)
+runtime/softfloat/    Coma flotante por software (suma y multiplicación en ensamblador 68000)
+tools/                Emulador (emu_run.py), benchmarks (bench.py, bench_report.py), gen_builtins_doc.py
 examples/             Programas de ejemplo
-tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC)
+tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC;
+                      tests/bench: benchmarks)
 docs/                 Documentación
 ```
 
