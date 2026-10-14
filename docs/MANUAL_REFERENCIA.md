@@ -331,11 +331,31 @@ for enemigo in enemigos
 end
 ```
 
+### break y continue
+
+```
+for i in (1..10)
+    if i % 2 == 0
+        continue        # salta los pares
+    end
+    if i > 7
+        break           # termina el bucle
+    end
+    Print i
+end
+```
+
+Solo valen dentro de un `while` o `for`. Dentro de un manejador `On Close`/`On Key`
+(aunque el `EventLoop` esté dentro de un bucle) son un error: para salir del
+`EventLoop` se usa `Stop`.
+
 ### Comandos de Control
 
 | Comando | Efecto |
 |---------|--------|
 | `Stop` | Sale del EventLoop y termina programa |
+| `break` | Sale del `while`/`for` más interno |
+| `continue` | Salta a la siguiente vuelta del `while`/`for` más interno |
 | `return valor` | Retorna de una funcion con valor |
 | `return` | Retorna de una funcion sin valor |
 

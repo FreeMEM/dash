@@ -10,7 +10,7 @@ from string import Template
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
-    StopStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
+    StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
     WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
@@ -3903,6 +3903,12 @@ static {ret_type} {method_name}({params_str}) {{
             seconds = f"({self._generate_expression(node.seconds)})"
         code = CTemplates.WAIT_STMT.substitute(seconds=seconds)
         self.emit(code)
+
+    def visit_BreakStmt(self, node: BreakStmt):
+        self.emit(f"{self.context.indent}    break;\n")
+
+    def visit_ContinueStmt(self, node: ContinueStmt):
+        self.emit(f"{self.context.indent}    continue;\n")
 
     def visit_StopStmt(self, node: StopStmt):
         """Generate code for Stop statement."""

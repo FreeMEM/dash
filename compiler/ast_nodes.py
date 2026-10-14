@@ -168,6 +168,18 @@ class StopStmt(ASTNode):
 
 
 @dataclass
+class BreakStmt(ASTNode):
+    """break: leave the innermost while/for loop."""
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class ContinueStmt(ASTNode):
+    """continue: jump to the next iteration of the innermost while/for loop."""
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class WindowOpen(ASTNode):
     """Window.open command."""
     window_name: str

@@ -42,6 +42,8 @@ else                        end
 end                         for item in array
                                 ...
                             end
+
+break / continue            # inside while/for only
 ```
 
 ## Functions

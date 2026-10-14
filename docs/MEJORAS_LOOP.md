@@ -78,7 +78,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 3. `-O2`: compilar los ejemplos con y sin `-O2`, ejecutarlos en el emulador y comparar.
       Si van igual, `-O2` por defecto y `-O0` para desactivarlo.
 - [x] 4. Literales hexadecimales `0xDFF000` / `$DFF000` y binarios `0b1010`.
-- [ ] 5. `break` y `continue` (con error si están fuera de un bucle).
+- [x] 5. `break` y `continue` (con error si están fuera de un bucle).
 - [ ] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
 - [ ] 7. Enums con valores negativos.
 - [ ] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
@@ -164,3 +164,13 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
     `0xFFFF0000` vale -65536) y los negativos entre paréntesis.
 - Descartado: `%1010` para binario, choca con el operador módulo (`a %10`).
 - Docs: MANUAL_REFERENCIA (ya decía `0xFF` sin funcionar) y QUICK_REFERENCE.
+
+### 2026-10-14 — Tarea 5 (`break` y `continue`)
+- Base: 63/63 (+16 `emu/`), ejemplos 30/30. Después: 83/83 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_break_continue` con salida comprobada en FS-UAE, `errors/break_outside_loop`,
+  `errors/continue_in_handler`):
+  - Nodos `BreakStmt`/`ContinueStmt`, terminales `BREAK`/`CONTINUE` (el error lleva línea y columna).
+  - Analyzer: `loop_depth`. Funciones, métodos, lambdas y manejadores de `EventLoop` empiezan en 0:
+    en C un manejador es un `case` de un `switch`, y `break` saldría del `switch`, no del bucle Dash.
+  - Variables llamadas `breaking`/`continued` siguen funcionando; `break` y `continue` pasan a ser palabras reservadas.
+- Docs: MANUAL_REFERENCIA y QUICK_REFERENCE.

@@ -10,7 +10,7 @@ from enum import Enum, auto
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
-    StopStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
+    StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
@@ -143,6 +143,7 @@ class SemanticAnalyzer(ASTVisitor):
         self.opened_windows: List[str] = []
         self.in_event_loop = False
         self.in_function = False
+        self.loop_depth = 0  # while/for loops around the current statement (for break/continue)
         self.current_window: Optional[str] = None
         self.current_module: Optional[str] = None  # Module whose code is being analyzed
         self.structs: List[StructDef] = []
@@ -357,11 +358,8 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_OnCloseHandler(self, node: OnCloseHandler):
         """Visit an On Close handler."""
         self.enter_scope("on_close")
-        has_stop = False
-        for stmt in node.body:
-            self.visit(stmt)
-            if isinstance(stmt, StopStmt):
-                has_stop = True
+        has_stop = any(isinstance(stmt, StopStmt) for stmt in node.body)
+        self._visit_new_body(node.body)
         if not has_stop:
             self.warning("On Close handler has no Stop command", node)
         self.exit_scope()
@@ -369,8 +367,7 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_OnKeyHandler(self, node: OnKeyHandler):
         """Visit an On Key handler."""
         self.enter_scope("on_key")
-        for stmt in node.body:
-            self.visit(stmt)
+        self._visit_new_body(node.body)
         self.exit_scope()
 
     def visit_PrintStmt(self, node: PrintStmt):
@@ -382,6 +379,29 @@ class SemanticAnalyzer(ASTVisitor):
         if isinstance(node.seconds, NumberLiteral) and node.seconds.value < 0:
             self.error("Wait time cannot be negative", node)
         self.visit(node.seconds)
+
+    def visit_BreakStmt(self, node: BreakStmt):
+        if self.loop_depth == 0:
+            self.error("break can only be used inside a while or for loop", node)
+
+    def visit_ContinueStmt(self, node: ContinueStmt):
+        if self.loop_depth == 0:
+            self.error("continue can only be used inside a while or for loop", node)
+
+    def _visit_loop_body(self, body):
+        self.loop_depth += 1
+        for stmt in body:
+            self.visit(stmt)
+        self.loop_depth -= 1
+
+    def _visit_new_body(self, body):
+        """A body that starts outside any loop: function, method, lambda or
+        EventLoop handler (in C a handler is a switch case, where break would
+        leave the switch instead of a Dash loop)."""
+        saved, self.loop_depth = self.loop_depth, 0
+        for stmt in body:
+            self.visit(stmt)
+        self.loop_depth = saved
 
     def visit_StopStmt(self, node: StopStmt):
         """Visit a stop statement."""
@@ -459,8 +479,7 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit a while statement."""
         self.visit(node.condition)
         self.enter_scope("while")
-        for stmt in node.body:
-            self.visit(stmt)
+        self._visit_loop_body(node.body)
         self.exit_scope()
 
     def visit_ForRangeStmt(self, node: ForRangeStmt):
@@ -480,8 +499,7 @@ class SemanticAnalyzer(ASTVisitor):
         )
         self.define_symbol(symbol, node)
 
-        for stmt in node.body:
-            self.visit(stmt)
+        self._visit_loop_body(node.body)
         self.exit_scope()
 
     def visit_ForEachStmt(self, node: ForEachStmt):
@@ -500,8 +518,7 @@ class SemanticAnalyzer(ASTVisitor):
         )
         self.define_symbol(symbol, node)
 
-        for stmt in node.body:
-            self.visit(stmt)
+        self._visit_loop_body(node.body)
         self.exit_scope()
 
     def _check_private(self, name: str, symbol: Optional[Symbol], node: ASTNode):
@@ -535,8 +552,7 @@ class SemanticAnalyzer(ASTVisitor):
             )
             self.define_symbol(symbol, node)
 
-        for stmt in node.body:
-            self.visit(stmt)
+        self._visit_new_body(node.body)
 
         self.exit_scope()
         self.in_function = False
@@ -555,8 +571,7 @@ class SemanticAnalyzer(ASTVisitor):
             self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
                                       dash_type=dash_type, is_initialized=True), node)
         before = len(self.errors)
-        for stmt in (node.body if isinstance(node.body, list) else [node.body]):
-            self.visit(stmt)
+        self._visit_new_body(node.body if isinstance(node.body, list) else [node.body])
         for err in self.errors[before:]:
             if "is not defined" in err.message:
                 err.message += " (lambdas cannot use local variables from outside)"
@@ -574,8 +589,7 @@ class SemanticAnalyzer(ASTVisitor):
                          if isinstance(param, FunctionParam) else DashType.UNKNOWN)
             self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
                                       dash_type=dash_type, is_initialized=True), node)
-        for stmt in node.body:
-            self.visit(stmt)
+        self._visit_new_body(node.body)
         self.exit_scope()
         self.in_function = False
 

@@ -8,7 +8,7 @@ from typing import List, Any, Optional
 from compiler.ast_nodes import (
     Program, WindowDef, WindowProperty, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
-    StopStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
+    StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
     SourceLocation, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
@@ -48,7 +48,7 @@ class DashASTBuilder(Transformer):
     """
 
     _STATEMENT_NODES = (
-        VarAssign, ReturnStmt, PrintStmt, WaitStmt, StopStmt, IfStmt, WhileStmt,
+        VarAssign, ReturnStmt, PrintStmt, WaitStmt, StopStmt, BreakStmt, ContinueStmt, IfStmt, WhileStmt,
         ForRangeStmt, ForEachStmt, ArrayAssign, MemberAssign, WindowOpen,
         EventLoop, Comment,
     )
@@ -448,6 +448,12 @@ class DashASTBuilder(Transformer):
     def stop_stmt(self, items) -> StopStmt:
         """Build a stop statement node."""
         return StopStmt()
+
+    def break_stmt(self, items) -> BreakStmt:
+        return BreakStmt(location=self._get_location(items[0]) if items else None)
+
+    def continue_stmt(self, items) -> ContinueStmt:
+        return ContinueStmt(location=self._get_location(items[0]) if items else None)
 
     def stop_cmd(self, items) -> StopStmt:
         """Build a stop command node (legacy grammar)."""

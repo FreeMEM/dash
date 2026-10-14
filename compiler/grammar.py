@@ -69,6 +69,8 @@ dash_grammar_minimal = r"""
                 | print_cmd
                 | event_loop
                 | stop_cmd
+                | break_stmt
+                | continue_stmt
                 | return_stmt
                 | array_assign
                 | self_member_assign
@@ -104,6 +106,10 @@ dash_grammar_minimal = r"""
 
     // Control flow
     stop_cmd: "Stop"
+    break_stmt: BREAK
+    continue_stmt: CONTINUE
+    BREAK: "break"
+    CONTINUE: "continue"
     if_stmt: "if" expression instruction* else_clause? "end"
     else_clause: "else" instruction*
     while_stmt: "while" expression instruction* "end"
