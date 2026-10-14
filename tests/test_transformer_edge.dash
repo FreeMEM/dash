@@ -1,0 +1,23 @@
+# Test: transformer edge cases
+# Wait with expressions, single-line @native body, block lambdas
+
+@native func uno() -> Int
+"""return 1;"""
+end
+
+Main
+    n = 1
+    Wait n
+    Wait n + 1
+
+    Print uno()
+
+    doble = fn(x) -> x * 2
+
+    suma_uno = fn(x)
+        y = x + 1
+        return y * 2
+    end
+
+    Print "Done"
+end

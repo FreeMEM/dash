@@ -3635,7 +3635,10 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_WaitStmt(self, node: WaitStmt):
         """Generate code for Wait statement."""
-        seconds = node.seconds.value if isinstance(node.seconds, NumberLiteral) else str(node.seconds)
+        if isinstance(node.seconds, NumberLiteral):
+            seconds = node.seconds.value
+        else:
+            seconds = f"({self._generate_expression(node.seconds)})"
         code = CTemplates.WAIT_STMT.substitute(seconds=seconds)
         self.emit(code)
 
@@ -4264,6 +4267,17 @@ static {ret_type} {method_name}({params_str}) {{
         # This requires storing in a temp, which is handled by assignment
         return f"DashArray_create({size}) /* init: {elements_str} */"
 
+    def _returns_value(self, stmts) -> bool:
+        """True if any statement in stmts (or nested blocks) returns a value."""
+        for stmt in stmts:
+            if isinstance(stmt, ReturnStmt) and stmt.value is not None:
+                return True
+            for attr in ("then_body", "else_body", "body"):
+                nested = getattr(stmt, attr, None)
+                if isinstance(nested, list) and self._returns_value(nested):
+                    return True
+        return False
+
     def _generate_lambda(self, node: LambdaFunc) -> str:
         """Generate code for lambda/anonymous function - returns function pointer."""
         # Generate unique name for this lambda
@@ -4289,13 +4303,12 @@ static {ret_type} {method_name}({params_str}) {{
             return_type = "LONG"  # Assume LONG for now
         else:
             # Block body
-            body_lines = []
-            for stmt in node.body:
-                stmt_code = self._generate_statement(stmt, "    ")
-                if stmt_code:
-                    body_lines.append(stmt_code)
-            body = "\n".join(body_lines)
-            return_type = "void"  # Assume void for block body without explicit return
+            self.context.enter_scope()
+            for p in node.params:
+                self.context.declare_var(p.name if isinstance(p, FunctionParam) else p)
+            body = "".join(self._generate_statement(stmt) for stmt in node.body).rstrip("\n")
+            self.context.exit_scope()
+            return_type = "LONG" if self._returns_value(node.body) else "void"
 
         # Generate the lambda function
         func_code = f"""

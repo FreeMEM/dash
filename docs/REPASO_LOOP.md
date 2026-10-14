@@ -55,7 +55,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
       (estado "SKIP compile" o similar) en vez de contarlo como PASS completo.
 - [x] 2. `compiler/grammar.py`: ambigüedades, precedencia de operadores, formas documentadas
       que no parsean (p. ej. `enum State IDLE, RUN end` de QUICK_REFERENCE).
-- [ ] 3. `compiler/transformer.py` + `compiler/ast_nodes.py`
+- [x] 3. `compiler/transformer.py` + `compiler/ast_nodes.py`
 - [ ] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
 - [ ] 5. `compiler/codegen.py` — expresiones, variables y scope.
 - [ ] 6. `compiler/codegen.py` — control de flujo (if, while, for-range, for-each).
@@ -112,3 +112,18 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Para zona 13: la gramática `dash_grammar` (flag `--extended`) ni siquiera construye
   (conflicto reduce/reduce en LALR). Es código muerto: candidata a borrar.
 - Comparaciones encadenadas (`1 < 2 < 3`) dan error de parseo: correcto, no es un fallo.
+
+### 2026-10-14 — Zona 3 (`transformer.py` + `ast_nodes.py`)
+- Base: tests 30/30, ejemplos 29/30. Tras la zona: tests 31/31, ejemplos 29/30.
+  El C de todos los tests y ejemplos previos sale idéntico byte a byte.
+- Errores arreglados (test: `tests/test_transformer_edge.dash`, fallaba antes):
+  - `Wait n` o `Wait n + 1` rompía el compilador (`int()` sobre un nodo). Ahora acepta
+    cualquier expresión: `Delay((n) * 50)`.
+  - `@native` con el cuerpo en una línea (`"""return 1;"""`) se tomaba como tipo de retorno
+    y la función salía vacía sin avisar. Ahora el cuerpo se marca con `_NativeCode`.
+  - Lambda de bloque (`fn(x) ... end`): solo quedaba la última sentencia, tratada como expresión
+    (`return /* unknown expr */`). Además el codegen llamaba a `_generate_statement` con 3 argumentos
+    y declaraba `void` aunque hubiera `return`. Ahora genera el cuerpo con su scope y tipo `LONG` si devuelve valor.
+- Para zona 4: dos bloques `Main` se aceptan y el primero se descarta sin avisar.
+- Para zona 7: `f = fn(x) -> ...` genera `LONG f = (APTR)_dash_lambda_1;` (puntero en un `LONG`).
+- `ast_nodes.py`: dataclasses simples, sin errores encontrados.

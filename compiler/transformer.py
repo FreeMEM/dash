@@ -18,6 +18,10 @@ from compiler.ast_nodes import (
 )
 
 
+class _NativeCode(str):
+    """C code from a native_body, kept apart from the return type string."""
+
+
 class DashASTBuilder(Transformer):
     """
     Transforms Lark parse tree into Dash AST nodes.
@@ -25,6 +29,12 @@ class DashASTBuilder(Transformer):
     This is a clean transformer that only builds the AST,
     without any code generation logic.
     """
+
+    _STATEMENT_NODES = (
+        VarAssign, ReturnStmt, PrintStmt, WaitStmt, StopStmt, IfStmt, WhileStmt,
+        ForRangeStmt, ForEachStmt, ArrayAssign, MemberAssign, WindowOpen,
+        EventLoop, Comment,
+    )
 
     def __init__(self):
         super().__init__()
@@ -260,11 +270,10 @@ class DashASTBuilder(Transformer):
         for item in items[1:]:
             if isinstance(item, list):
                 params = item
-            elif isinstance(item, str):
-                if item.startswith('"""') or '\n' in item:
-                    c_code = item
-                elif item not in ('', None):
-                    return_type = item
+            elif isinstance(item, _NativeCode):
+                c_code = str(item)
+            elif isinstance(item, str) and item:
+                return_type = item
 
         native = NativeFunc(
             name=name,
@@ -282,7 +291,7 @@ class DashASTBuilder(Transformer):
         # Remove triple quotes
         if code.startswith('"""') and code.endswith('"""'):
             code = code[3:-3]
-        return code
+        return _NativeCode(code)
 
     def header_directive(self, items) -> str:
         """Process @header directive - add custom C include/declaration."""
@@ -416,10 +425,8 @@ class DashASTBuilder(Transformer):
         value = items[0]
         if isinstance(value, Token):
             seconds = NumberLiteral(value=int(value.value))
-        elif isinstance(value, NumberLiteral):
-            seconds = value
         else:
-            seconds = NumberLiteral(value=int(value))
+            seconds = value
         return WaitStmt(seconds=seconds)
 
     def stop_stmt(self, items) -> StopStmt:
@@ -603,23 +610,19 @@ class DashASTBuilder(Transformer):
     def lambda_func(self, items) -> LambdaFunc:
         """Build a lambda/anonymous function node."""
         params = []
-        body = []
-        is_expression = False
+        rest = []
 
         for item in items:
-            if isinstance(item, list):
-                # This could be param_list or body statements
-                if item and (isinstance(item[0], FunctionParam) or isinstance(item[0], str)):
-                    params = item
-                else:
-                    body = item
-            elif item is not None and not isinstance(item, Token):
-                # Single expression body (arrow function style)
-                if not isinstance(item, list):
-                    body = item
-                    is_expression = True
+            if isinstance(item, list) and item and isinstance(item[0], (FunctionParam, str)):
+                params = item
+            elif item is not None and not isinstance(item, Token) and item != "":
+                rest.append(item)
 
-        return LambdaFunc(params=params, body=body, is_expression=is_expression)
+        # Arrow form (fn(x) -> expr) yields exactly one expression;
+        # block form (fn(x) ... end) yields zero or more statements.
+        if len(rest) == 1 and not isinstance(rest[0], self._STATEMENT_NODES):
+            return LambdaFunc(params=params, body=rest[0], is_expression=True)
+        return LambdaFunc(params=params, body=rest, is_expression=False)
 
     def func_call_stmt(self, items) -> FunctionCall:
         """Handle function call as statement."""
