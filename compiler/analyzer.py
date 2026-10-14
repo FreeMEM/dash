@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod, LambdaFunc, FunctionRef, constant_int
+    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -58,6 +58,7 @@ class Symbol:
     scope_level: int = 0
     is_opened: bool = False  # For windows
     is_initialized: bool = False  # For variables
+    struct_name: Optional[str] = None  # Struct type of the value, when known
 
 
 @dataclass
@@ -239,7 +240,8 @@ class SemanticAnalyzer(ASTVisitor):
                 symbol_type=SymbolType.VARIABLE,
                 dash_type=dash_type,
                 node=gvar,
-                is_initialized=True  # C globals start zeroed
+                is_initialized=True,  # C globals start zeroed
+                struct_name=self._struct_type_name(gvar.var_type)
             )
             self.define_symbol(symbol, gvar)
 
@@ -287,7 +289,7 @@ class SemanticAnalyzer(ASTVisitor):
             self.visit(func)
         for struct in node.structs:
             for method in struct.methods:
-                self._visit_struct_method(method)
+                self._visit_struct_method(method, struct.name)
 
         # Fourth pass: analyze main block
         for extra in node.extra_mains:
@@ -439,7 +441,8 @@ class SemanticAnalyzer(ASTVisitor):
                 symbol_type=SymbolType.VARIABLE,
                 dash_type=self._infer_type(node.value),
                 node=node,
-                is_initialized=True
+                is_initialized=True,
+                struct_name=self._struct_name_of(node.value)
             )
             self.define_symbol(symbol, node)
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
@@ -554,7 +557,8 @@ class SemanticAnalyzer(ASTVisitor):
                 name=param_name,
                 symbol_type=SymbolType.PARAMETER,
                 dash_type=dash_type,
-                is_initialized=True
+                is_initialized=True,
+                struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None)
             )
             self.define_symbol(symbol, node)
 
@@ -575,7 +579,10 @@ class SemanticAnalyzer(ASTVisitor):
             dash_type = (self._type_annotation_to_dash_type(param.param_type)
                          if isinstance(param, FunctionParam) else DashType.UNKNOWN)
             self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
-                                      dash_type=dash_type, is_initialized=True), node)
+                                      dash_type=dash_type, is_initialized=True,
+                                      struct_name=self._struct_type_name(
+                                          param.param_type if isinstance(param, FunctionParam) else None)),
+                               node)
         before = len(self.errors)
         self._visit_new_body(node.body if isinstance(node.body, list) else [node.body])
         for err in self.errors[before:]:
@@ -583,18 +590,21 @@ class SemanticAnalyzer(ASTVisitor):
                 err.message += " (lambdas cannot use local variables from outside)"
         self.current_scope, self.in_function = saved_scope, saved_in_function
 
-    def _visit_struct_method(self, node: StructMethod):
+    def _visit_struct_method(self, node: StructMethod, struct_name: Optional[str] = None):
         """Visit a struct method body; 'self' is an implicit parameter."""
         self.in_function = True
         self.enter_scope(f"method_{node.name}")
-        self.define_symbol(Symbol(name="self", symbol_type=SymbolType.PARAMETER,
+        self.define_symbol(Symbol(name="self", symbol_type=SymbolType.PARAMETER, struct_name=struct_name,
                                   is_initialized=True), node)
         for param in node.params:
             name = param.name if isinstance(param, FunctionParam) else param
             dash_type = (self._type_annotation_to_dash_type(param.param_type)
                          if isinstance(param, FunctionParam) else DashType.UNKNOWN)
             self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
-                                      dash_type=dash_type, is_initialized=True), node)
+                                      dash_type=dash_type, is_initialized=True,
+                                      struct_name=self._struct_type_name(
+                                          param.param_type if isinstance(param, FunctionParam) else None)),
+                               node)
         self._visit_new_body(node.body)
         self.exit_scope()
         self.in_function = False
@@ -729,15 +739,74 @@ class SemanticAnalyzer(ASTVisitor):
         # For now, we'll allow any member access and let codegen handle it
 
     def visit_MemberAssign(self, node: MemberAssign):
-        """Visit a member assignment (player.x = 10)."""
+        """Visit a member assignment (player.x = 10, a.b.c = 10)."""
         # Check if the object variable exists
         symbol = self.lookup_symbol(node.object_name)
         if not symbol:
             self.error(f"Variable '{node.object_name}' is not defined", node)
             return
 
+        if node.target is not None:
+            # a.b.c = x: every step before the last one must be a struct field
+            self.visit(node.target)
+            owner = self._struct_name_of(node.target)
+            if owner is None:
+                self.error(f"Cannot assign '{self._chain_text(node)}': "
+                           f"'{self._chain_text(node, last=False)}' is not a known struct "
+                           f"(give the variable or parameter a struct type)", node)
+        else:
+            owner = symbol.struct_name
+        struct = self.program.get_struct(owner) if (owner and self.program) else None
+        if struct and not struct.get_field(node.member):
+            self.error(f"Struct '{owner}' has no field '{node.member}'", node)
+
         # Visit the value being assigned
         self.visit(node.value)
+
+    def _chain_text(self, node: MemberAssign, last: bool = True) -> str:
+        """Source text of the assigned chain: a.b.c (or a.b without the last member)."""
+        def text(expr):
+            if isinstance(expr, MemberAccess):
+                return f"{expr.object_name}.{expr.member}"
+            if isinstance(expr, PropertyAccess):
+                return f"{text(expr.object)}.{expr.property}"
+            return "self" if isinstance(expr, SelfRef) else getattr(expr, "name", "?")
+        owner = text(node.target) if node.target is not None else node.object_name
+        return f"{owner}.{node.member}" if last else owner
+
+    def _struct_type_name(self, type_name: Optional[str]) -> Optional[str]:
+        """The type annotation itself when it names a struct."""
+        if type_name and self.program and self.program.get_struct(type_name):
+            return type_name
+        return None
+
+    def _struct_name_of(self, expr: Optional[ASTNode]) -> Optional[str]:
+        """Struct type of the value an expression yields, if known at compile time."""
+        prog = self.program
+        if prog is None or expr is None:
+            return None
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            return symbol.struct_name if symbol else None
+        if isinstance(expr, SelfRef):
+            symbol = self.lookup_symbol("self")
+            return symbol.struct_name if symbol else None
+        if isinstance(expr, FunctionCall):
+            if prog.get_struct(expr.name):
+                return expr.name
+            func = prog.get_function(expr.name)
+            return self._struct_type_name(func.return_type) if func else None
+        if isinstance(expr, MemberAccess):
+            owner = self._struct_name_of(VarRef(name=expr.object_name))
+            member = expr.member
+        elif isinstance(expr, PropertyAccess):
+            owner = self._struct_name_of(expr.object)
+            member = expr.property
+        else:
+            return None
+        struct = prog.get_struct(owner) if owner else None
+        field = struct.get_field(member) if struct else None
+        return self._struct_type_name(field.field_type) if field else None
 
     def visit_BinaryOp(self, node: BinaryOp):
         """Visit a binary operation."""

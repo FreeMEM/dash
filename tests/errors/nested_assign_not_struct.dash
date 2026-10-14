@@ -1,0 +1,11 @@
+# Test: a.b.c = x where a.b is not a struct
+# expect: 'p.x' is not a known struct
+
+struct Punto
+    x: Int
+end
+
+Main
+    p = Punto(1)
+    p.x.y = 2
+end

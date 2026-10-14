@@ -1,0 +1,60 @@
+# Test: nested member assignment a.b.c = x
+# Works on variables, self, struct-typed parameters and globals
+#
+# expect-c: e->caja->peso = 9;
+# expect-c: self->pos->x = (self->pos->x + dx);
+# expect-out: 9
+# expect-out: 15
+# expect-out: 7
+# expect-out: 42
+# expect-out: 3
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Caja
+    peso: Int
+end
+
+struct Estante
+    caja: Caja
+end
+
+struct Sprite
+    pos: Punto
+
+    func mover(dx)
+        self.pos.x = self.pos.x + dx
+    end
+end
+
+struct Nivel
+    estante: Estante
+end
+
+var global_nivel: Nivel
+
+func poner_y(s: Sprite, y)
+    s.pos.y = y
+end
+
+Main
+    c = Caja(1)
+    e = Estante(c)
+    e.caja.peso = 9
+    Print c.peso
+
+    s = Sprite(Punto(10, 0))
+    s.mover(5)
+    Print s.pos.x
+    poner_y(s, 7)
+    Print s.pos.y
+
+    global_nivel = Nivel(Estante(Caja(0)))
+    global_nivel.estante.caja.peso = 42
+    Print global_nivel.estante.caja.peso
+    e.caja.peso = 3
+    Print e.caja.peso
+end

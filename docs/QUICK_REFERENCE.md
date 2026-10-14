@@ -68,6 +68,7 @@ end
 
 enemy = Enemy(10, 50)
 enemy.move(5)
+boss.pos.x = 5              # nested structs (pos: Punto)
 ```
 
 ## Arrays

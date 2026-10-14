@@ -89,8 +89,8 @@ dash_grammar_minimal = r"""
     method_call_stmt: ID "." ID "(" arg_list? ")"
 
     // Member assignment (player.x = 10 or self.x = 10)
-    member_assign: ID "." ID "=" expression
-    self_member_assign: "self" "." ID "=" expression
+    member_assign: ID ("." ID)+ "=" expression
+    self_member_assign: "self" ("." ID)+ "=" expression
 
     // Return statement
     return_stmt: "return" expression?

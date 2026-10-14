@@ -771,17 +771,29 @@ class DashASTBuilder(Transformer):
         return ArrayAssign(array=result, index=indices[-1], value=value)
 
     def member_assign(self, items) -> MemberAssign:
-        """Build a member assignment node (player.x = 10)."""
-        obj_name = items[0].value if isinstance(items[0], Token) else str(items[0])
-        member = items[1].value if isinstance(items[1], Token) else str(items[1])
-        value = items[2]
-        return MemberAssign(object_name=obj_name, member=member, value=value)
+        """Build a member assignment node (player.x = 10, a.b.c = 10)."""
+        names = [i.value if isinstance(i, Token) else str(i) for i in items[:-1]]
+        return self._member_assign_chain(VarRef(name=names[0]), names[0], names[1:], items[-1],
+                                         self._get_location(items[0]))
 
     def self_member_assign(self, items) -> MemberAssign:
-        """Build a self member assignment node (self.x = 10)."""
-        member = items[0].value if isinstance(items[0], Token) else str(items[0])
-        value = items[1]
-        return MemberAssign(object_name="self", member=member, value=value)
+        """Build a self member assignment node (self.x = 10, self.a.b = 10)."""
+        names = [i.value if isinstance(i, Token) else str(i) for i in items[:-1]]
+        return self._member_assign_chain(SelfRef(), "self", names, items[-1],
+                                         self._get_location(items[0]))
+
+    def _member_assign_chain(self, root, root_name, members, value, location) -> MemberAssign:
+        """root.m1.m2...mn = value: the owner of mn is built like a read of root.m1...m(n-1)."""
+        target = None
+        if len(members) > 1:
+            target = root
+            for name in members[:-1]:
+                if isinstance(target, VarRef):
+                    target = MemberAccess(object_name=target.name, member=name)
+                else:
+                    target = PropertyAccess(object=target, property=name)
+        return MemberAssign(object_name=root_name, member=members[-1], value=value,
+                            location=location, target=target)
 
     # === Expressions ===
 

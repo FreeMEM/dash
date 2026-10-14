@@ -478,11 +478,14 @@ class MemberAccess(ASTNode):
 
 @dataclass
 class MemberAssign(ASTNode):
-    """Member assignment like player.x = 10."""
-    object_name: str  # The object being modified
+    """Member assignment like player.x = 10 or a.b.c = 10."""
+    object_name: str  # The object being modified (root variable, or "self")
     member: str       # The member name
     value: ASTNode    # The value to assign
     location: Optional[SourceLocation] = None
+    # Expression of the struct that owns 'member' when the chain is longer
+    # than one step (a.b.c = x: target is a.b); None for player.x = 10
+    target: Optional[ASTNode] = None
 
 
 # === Enums ===

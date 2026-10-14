@@ -81,7 +81,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 5. `break` y `continue` (con error si están fuera de un bucle).
 - [x] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
 - [x] 7. Enums con valores negativos.
-- [ ] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
+- [x] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
 - [ ] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
 - [ ] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
 - [ ] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
@@ -192,3 +192,16 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   también en la forma de una línea con comas; después de un negativo se sigue contando (`-1`, `0`).
   Los valores salen por `c_int_literal()`: negativos entre paréntesis y hexadecimales grandes con sus 32 bits.
 - Docs: MANUAL_REFERENCIA.
+
+### 2026-10-14 — Tarea 8 (asignación anidada `a.b.c = x`)
+- Base: 88/88 con `--emu`, ejemplos 30/30. Después: 92/92 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_nested_assign` con salida en FS-UAE; `errors/nested_assign_not_struct`,
+  `errors/member_assign_no_field`):
+  - Gramática: `ID ("." ID)+ = expr` y `self ("." ID)+ = expr`. `MemberAssign.target` guarda el dueño
+    del último campo, construido igual que una lectura (`MemberAccess`/`PropertyAccess`), así el C sale
+    de `_generate_expression`: `e->caja->peso = 9;`.
+  - Analyzer: `Symbol.struct_name` (de constructores, funciones con retorno struct, parámetros y globales
+    con tipo, `self` en métodos) y `_struct_name_of()`. Error si un paso intermedio no es un struct conocido
+    (antes habría salido C inválido) o si el struct no tiene ese campo (también con un solo nivel).
+  - Esta información de tipos servirá para la gestión de memoria (tareas 12-15).
+- Docs: MANUAL_REFERENCIA ("Structs dentro de structs") y QUICK_REFERENCE.

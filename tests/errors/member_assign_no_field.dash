@@ -1,0 +1,11 @@
+# Test: assigning a field the struct does not have
+# expect: Struct 'Punto' has no field 'z'
+
+struct Punto
+    x: Int
+end
+
+Main
+    p = Punto(1)
+    p.z = 2
+end

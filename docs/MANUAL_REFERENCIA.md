@@ -449,6 +449,30 @@ Print e1.nombre
 e1.vida = e1.vida - 10
 ```
 
+### Structs dentro de structs
+
+Un campo puede ser de otro tipo struct. Se lee y se asigna encadenando puntos:
+
+```
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Sprite
+    pos: Punto
+end
+
+s = Sprite(Punto(10, 20))
+s.pos.x = 15            # también self.pos.x dentro de un método
+Print s.pos.x
+```
+
+Para asignar `a.b.c` el compilador tiene que saber que `a.b` es un struct: la variable
+debe venir de un constructor (`Sprite(...)`), de una función con tipo de retorno struct,
+o ser un parámetro con tipo (`func f(s: Sprite)`). Si no, da error.
+Asignar un campo que el struct no tiene también es error.
+
 ### Metodos
 
 ```

@@ -4567,7 +4567,8 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate code for member assignment (player.x = 10)."""
         indent = self.context.indent
         value = self._generate_expression(node.value)
-        self.emit(f"{indent}{node.object_name}->{node.member} = {value};\n")
+        owner = self._generate_expression(node.target) if node.target is not None else node.object_name
+        self.emit(f"{indent}{owner}->{node.member} = {value};\n")
 
     def visit_MethodCall(self, node: MethodCall):
         """Generate code for method call as statement."""
