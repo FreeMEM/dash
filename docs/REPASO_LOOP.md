@@ -53,7 +53,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 
 - [x] 1. `tests/run_tests.py`: da por bueno un test si falta GCC. Hacer que lo diga claro
       (estado "SKIP compile" o similar) en vez de contarlo como PASS completo.
-- [ ] 2. `compiler/grammar.py`: ambigüedades, precedencia de operadores, formas documentadas
+- [x] 2. `compiler/grammar.py`: ambigüedades, precedencia de operadores, formas documentadas
       que no parsean (p. ej. `enum State IDLE, RUN end` de QUICK_REFERENCE).
 - [ ] 3. `compiler/transformer.py` + `compiler/ast_nodes.py`
 - [ ] 4. `compiler/analyzer.py`: scope, tipos, símbolos no definidos, errores que faltan.
@@ -95,3 +95,20 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Propuesta (no aplicada): los tests solo comprueban que compila, nunca la salida.
   Se podría comparar el C generado con ficheros esperados (`tests/expected/*.c`) o ejecutar en emulador.
 - Nota: el usuario pidió instalar `m68k-amigaos-gcc` (README, BlitterStudio). En curso.
+
+### 2026-10-14 — Zona 2 (`compiler/grammar.py`)
+- Base: tests 29/29 (solo transpilación), ejemplos 29/30. Tras la zona: tests 30/30, ejemplos 29/30.
+- Errores arreglados (test: `tests/test_grammar_edge.dash`, fallaba antes):
+  - Comentarios dentro de `struct`, `enum` y `Window` daban error de parseo (también al final de línea).
+  - `const N = -1` no parseaba. Añadido `const_neg_int`; el `#define` sale entre paréntesis `(-1)`
+    para que `a-N` no genere `a--1` (también en las cabeceras de módulos).
+  - `enum State IDLE, RUN end` (documentado en QUICK_REFERENCE) no parseaba: comas opcionales.
+- Propuestas (no aplicadas, cambian el lenguaje):
+  - Literales hexadecimales (`0xDFF000`): muy útiles en Amiga; hoy dan error de parseo.
+  - Asignación encadenada `q.p.x = 5` (structs anidados): no parsea.
+  - `On Key(...)` y `On Gadget(...)` existen en la gramática vieja pero no en la que se usa.
+  - Propiedades de ventana booleanas (`closegadget true`): solo se aceptan strings y enteros.
+  - Floats (`1.5`): no soportados (decisión de diseño, todo es `LONG`).
+- Para zona 13: la gramática `dash_grammar` (flag `--extended`) ni siquiera construye
+  (conflicto reduce/reduce en LALR). Es código muerto: candidata a borrar.
+- Comparaciones encadenadas (`1 < 2 < 3`) dan error de parseo: correcto, no es un fallo.

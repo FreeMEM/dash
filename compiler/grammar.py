@@ -180,6 +180,7 @@ dash_grammar_minimal = r"""
     // Constant declaration
     const_decl: "const" ID "=" const_value
     ?const_value: INT -> const_int
+                | "-" INT -> const_neg_int
                 | ESCAPED_STRING -> const_string
                 | "true" -> const_true
                 | "false" -> const_false
@@ -192,17 +193,17 @@ dash_grammar_minimal = r"""
 
     // Struct definition with optional methods
     struct_def: "struct" ID struct_member* "end"
-    struct_member: struct_field | struct_method
+    struct_member: struct_field | struct_method | comment_line
     struct_field: ID ":" TYPE_NAME ("=" expression)?
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
     TYPE_NAME: "Int" | "String" | "Bool" | "Pointer" | "Func" | ID
 
     // Enum definition
-    enum_def: "enum" ID enum_value* "end"
+    enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
     enum_value: ID ("=" INT)?
 
     // Window definition
-    window_def: "Window" ID property* "end"
+    window_def: "Window" ID (property | comment_line)* "end"
     property: ID value
 
     // Function definition with optional types

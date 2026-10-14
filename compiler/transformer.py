@@ -98,6 +98,10 @@ class DashASTBuilder(Transformer):
         """Build a number literal for constant."""
         return NumberLiteral(value=int(items[0].value))
 
+    def const_neg_int(self, items) -> NumberLiteral:
+        """Build a negative number literal for constant."""
+        return NumberLiteral(value=-int(items[0].value))
+
     def const_string(self, items) -> StringLiteral:
         """Build a string literal for constant."""
         return StringLiteral(value=items[0].value)

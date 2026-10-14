@@ -3251,7 +3251,8 @@ class CodeGenerator(ASTVisitor):
         """Generate C #define for a constant."""
         value = const.value
         if isinstance(value, NumberLiteral):
-            self.const_defines.append(f"#define {const.name} {value.value}")
+            num = f"({value.value})" if value.value < 0 else value.value
+            self.const_defines.append(f"#define {const.name} {num}")
         elif isinstance(value, StringLiteral):
             self.const_defines.append(f"#define {const.name} {value.value}")
         elif isinstance(value, BoolLiteral):
@@ -4597,7 +4598,7 @@ class MultiFileGenerator:
     def _const_value_to_c(self, value) -> str:
         """Convert a constant value to C representation."""
         if isinstance(value, NumberLiteral):
-            return str(value.value)
+            return f"({value.value})" if value.value < 0 else str(value.value)
         elif isinstance(value, StringLiteral):
             return value.value
         elif isinstance(value, BoolLiteral):

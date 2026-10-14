@@ -1,0 +1,47 @@
+# Test: grammar edge cases
+# Comments inside struct/enum/window bodies, negative constants,
+# single-line enum with commas
+
+const OFFSET = -5
+
+Window win
+    # window comment
+    title "Grammar Edge"   # trailing comment
+    width 320
+    height 200
+end
+
+struct Player
+    # struct comment
+    x: Int    # trailing comment
+    y: Int
+
+    # comment before method
+    func move(dx)
+        self.x = self.x + dx
+    end
+end
+
+enum Dir
+    # enum comment
+    UP
+    DOWN  # trailing comment
+end
+
+enum State IDLE, RUN, DONE end
+
+Main
+    win.open
+    p = Player(1, 2)
+    p.move(OFFSET)
+    Print p.x
+    Print Dir.DOWN
+    Print State.DONE
+    Print OFFSET
+
+    EventLoop
+        On Close
+            Stop
+        end
+    end
+end
