@@ -274,7 +274,7 @@ Total: 318 funciones, 246 implementadas, 72 sin implementar.
 | `file_read(handle, buffer, length)` | `LONG` | Read bytes into buffer |  |
 | `file_eof(handle)` | `BOOL` | Check end of file |  |
 | `file_write_byte(handle, byte)` | `LONG` | Write single byte |  |
-| `file_write_line(handle, str)` | `LONG` | Write string |  |
+| `file_write_line(handle, str)` | `LONG` | Write string followed by a newline (0 = ok, -1 = error) |  |
 | `file_write(handle, buffer, length)` | `LONG` | Write bytes from buffer |  |
 | `file_print(handle, str)` | `void` | Print string to file |  |
 | `file_seek(handle, position, mode)` | `LONG` | Seek in file (mode: OFFSET_BEGINNING, OFFSET_CURRENT, OFFSET_END) |  |

@@ -134,11 +134,15 @@ cd dash
 ## Uso
 
 ```bash
-# Compilar a ejecutable Amiga
+# Compilar a ejecutable Amiga (optimizado con gcc -O2)
 ./dash archivo.dash -o bin/archivo
 
-# Con optimización (gcc -O2, ejecutable más pequeño y rápido)
-./dash -O archivo.dash -o bin/archivo
+# Sin optimizar (más fácil de depurar)
+./dash -O0 archivo.dash -o bin/archivo
+
+# Ejecutar en FS-UAE sin ventana y ver la salida (Kickstart en $DASH_KICKSTART o AROS)
+tools/emu_run.py archivo.dash
+tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s
 
 # Compilar todos los ejemplos
 ./compile_all.sh
@@ -146,8 +150,9 @@ cd dash
 # Solo transpilar a C (sin compilar)
 python3 -m compiler.main archivo.dash -o build/archivo.c
 
-# Ejecutar tests
+# Ejecutar tests (--emu: también los que comprueban la salida en FS-UAE)
 python3 tests/run_tests.py
+python3 tests/run_tests.py --emu
 ```
 
 ## Estructura del proyecto

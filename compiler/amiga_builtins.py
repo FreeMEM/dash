@@ -1940,9 +1940,9 @@ DOS_FUNCTIONS = {
         name="file_write_line",
         params=["handle", "str"],
         return_type="LONG",
-        c_template="FPuts(${handle}, ${str})",
+        c_template="({ BPTR _fh = (BPTR)(${handle}); FPuts(_fh, ${str}) ? -1L : (FPutC(_fh, '\\n') < 0 ? -1L : 0L); })",
         needs_dos=True,
-        description="Write string"
+        description="Write string followed by a newline (0 = ok, -1 = error)"
     ),
     "file_write": BuiltinFunc(
         name="file_write",

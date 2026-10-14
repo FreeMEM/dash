@@ -75,7 +75,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       de Commodore en el equipo), un directorio como disco duro y `S:Startup-Sequence` que ejecuta el
       programa y guarda la salida en un fichero. Script `tools/emu_run.sh` y, si va estable, tests de
       ejecución en el runner. Si no se puede sin ventana visible, anotarlo y seguir.
-- [ ] 3. `-O2`: compilar los ejemplos con y sin `-O2`, ejecutarlos en el emulador y comparar.
+- [x] 3. `-O2`: compilar los ejemplos con y sin `-O2`, ejecutarlos en el emulador y comparar.
       Si van igual, `-O2` por defecto y `-O0` para desactivarlo.
 - [ ] 4. Literales hexadecimales `0xDFF000` y binarios `%1010` / `0b1010`.
 - [ ] 5. `break` y `continue` (con error si están fuera de un bucle).
@@ -138,3 +138,19 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   de 32. Ahora `Printf("%lc\n", (LONG)(UBYTE)(c))` (test: `emu/test_loops`).
 - Los programas con `EventLoop` esperan al botón de cerrar y se quedan colgados en el emulador
   (salen como TIMEOUT). Para la tarea 3 hace falta una forma de cerrarlos solos.
+
+### 2026-10-14 — Tarea 3 (`-O2` por defecto)
+- Base: 73/73 (con `--emu`), ejemplos 30/30. Después: 76/76 con `--emu`, ejemplos 30/30.
+- Modo prueba para el emulador: compilar con `DASH_TEST_AUTOCLOSE=<s>` (o `tools/emu_run.py --autoclose <s>`)
+  hace que el programa acabe solo con `_dash_exit(0)` pasados esos segundos. `WaitPort`/`Wait` pasan a
+  esperar comprobando la hora, y cada vuelta de `while` también la comprueba. Sin la variable no cambia nada.
+- Prueba (Kickstart 3.1, A1200): los 30 ejemplos compilados con `-O0` y con `-O2`.
+  29 terminan con RC=0 y la salida es idéntica byte a byte entre `-O0` y `-O2`.
+  `test_intuition` se queda esperando en un requester (`alert`/`confirm`) en los dos casos: necesita un clic.
+  Los 14 tests `emu/` también dan la misma salida con `-O2`. Sin avisos nuevos de GCC con `-O2 -Wall`.
+- Hecho: `./dash` compila con `-O2` por defecto; `-O0` (`--no-optimize`) lo quita; `-O` se acepta y no cambia nada.
+  El runner compila también con `-O2`.
+- Error encontrado al ejecutar los ejemplos: `file_write_line` no escribía el salto de línea (todo el fichero
+  quedaba en una línea). Ahora `FPuts` + `FPutC('\\n')`, devuelve 0 o -1 (test: `emu/test_fileio_lines`).
+- No verificado: lo que se dibuja en pantalla (no hay captura de imagen), solo que no se cuelga y la salida de texto.
+- Docs: README (`-O0`, `tools/emu_run.py`, `--emu`), `docs/BUILTINS.md` regenerado.

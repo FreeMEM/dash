@@ -11,8 +11,10 @@ S:Startup-Sequence runs each program with its output redirected to a file.
     tools/emu_run.py --opt prog.dash             # compile with -O
     tools/emu_run.py bin/programa                # already compiled
 
-A program that never ends (an EventLoop waiting for the close gadget, a
-crash) stops the boot: it and the ones after it are reported as TIMEOUT.
+    tools/emu_run.py --autoclose 3 ventana.dash  # ends by itself after 3 s
+
+A program that never ends (an EventLoop waiting for the close gadget
+without --autoclose, a crash) stops the boot: it and the ones after it are reported as TIMEOUT.
 """
 
 import argparse
@@ -51,17 +53,20 @@ class EmuResult:
         return self.rc is None
 
 
-def compile_dash(src: Path, exe: Path, optimize: bool) -> None:
+def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0) -> None:
     cmd = [sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)]
     if optimize:
         cmd.append("-O")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    env = dict(os.environ)
+    if autoclose:
+        env["DASH_TEST_AUTOCLOSE"] = str(autoclose)
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0 or not exe.exists():
         raise RuntimeError(f"{src}: compile failed\n{result.stdout}{result.stderr}")
 
 
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
-                 kickstart: str = None):
+                 kickstart: str = None, autoclose: int = 0):
     """programs: list of .dash sources or Amiga executables.
     Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
@@ -76,7 +81,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             prog = Path(prog)
             exe = hd / f"p{i}"
             if prog.suffix == ".dash":
-                compile_dash(prog, exe, optimize)
+                compile_dash(prog, exe, optimize, autoclose)
             else:
                 shutil.copy(prog, exe)
             names.append(prog.name)
@@ -128,10 +133,14 @@ def main():
     parser.add_argument("programs", nargs="+")
     parser.add_argument("--opt", "-O", action="store_true", help="compile with -O")
     parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--autoclose", type=int, default=0, metavar="SECONDS",
+                        help="compile .dash in test mode: the program ends by itself after SECONDS "
+                             "(for programs that wait for the close gadget)")
     parser.add_argument("--kickstart", help="Kickstart ROM (default: $DASH_KICKSTART, else AROS)")
     args = parser.parse_args()
     try:
-        results = run_programs(args.programs, args.timeout, args.opt, args.kickstart)
+        results = run_programs(args.programs, args.timeout, args.opt, args.kickstart,
+                               args.autoclose)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

@@ -275,6 +275,47 @@ static LONG _dash_arena_available(_Dash_Arena *arena) {
 
 """
 
+    # Test mode only (DASH_TEST_AUTOCLOSE=<seconds> while compiling, used by
+    # tools/emu_run.py): the program ends by itself through _dash_exit(0), so
+    # programs that wait for the close gadget can run unattended in an emulator
+    AUTOCLOSE_RUNTIME = Template("""\
+/* Test mode: end the program after $seconds seconds */
+static LONG _dash_ac_start = -1;
+
+static void _dash_ac_check(void) {
+    struct DateStamp ds;
+    LONG now;
+    if (!DOSBase) return;
+    DateStamp(&ds);
+    now = ds.ds_Minute * 3000 + ds.ds_Tick;
+    if (_dash_ac_start < 0) _dash_ac_start = now;
+    if (now - _dash_ac_start >= $seconds * 50) _dash_exit(0);
+}
+
+static void _dash_ac_waitport(struct MsgPort *port) {
+    while (port->mp_MsgList.lh_TailPred == (struct Node *)&port->mp_MsgList) {
+        _dash_ac_check();
+        Delay(1);
+    }
+}
+
+static ULONG _dash_ac_wait(ULONG mask) {
+    ULONG got;
+    while (!((got = SetSignal(0, 0)) & mask)) {
+        _dash_ac_check();
+        Delay(1);
+    }
+    SetSignal(0, got & mask);
+    return got & mask;
+}
+
+#undef WaitPort
+#define WaitPort(p) _dash_ac_waitport(p)
+#undef Wait
+#define Wait(m) _dash_ac_wait(m)
+
+""")
+
     # Every program gets one cleanup routine: main calls it at the end and
     # _dash_exit() calls it on a fatal error (e.g. a window that cannot open),
     # so libraries, screen, windows and the memory pool are always released.
@@ -3180,6 +3221,8 @@ class CodeGenerator(ASTVisitor):
     def __init__(self, analysis: AnalysisResult):
         self.analysis = analysis
         self.context = CodeGenContext()
+        # Test mode for the emulator bench: end the program after N seconds
+        self.autoclose = int(os.environ.get("DASH_TEST_AUTOCLOSE", "0") or 0)
         self.globals: List[str] = []
         self.prototypes: List[str] = []
         self.functions: List[str] = []
@@ -3251,6 +3294,8 @@ class CodeGenerator(ASTVisitor):
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
         parts = [CTemplates.PROGRAM_HEADER]
+        if self.autoclose:
+            parts.append(CTemplates.AUTOCLOSE_RUNTIME.substitute(seconds=self.autoclose))
 
         # Add graphics includes if needed
         if self.needs_gfx:
@@ -4024,7 +4069,7 @@ static {ret_type} {method_name}({params_str}) {{
         # Generate body with new scope
         self.context.indent_level += 1
         self.context.enter_scope()
-        body = ""
+        body = f"{self.context.indent}    _dash_ac_check();\n" if self.autoclose else ""
         for s in node.body:
             body += self._generate_statement(s)
         self.context.exit_scope()

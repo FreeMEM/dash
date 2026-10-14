@@ -57,7 +57,9 @@ def main():
     parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
     parser.add_argument("-O", "--optimize", action="store_true",
-                        help="Optimize the generated 68000 code (gcc -O2)")
+                        help="Optimize the generated 68000 code with gcc -O2 (default)")
+    parser.add_argument("-O0", "--no-optimize", dest="no_optimize", action="store_true",
+                        help="Do not optimize (gcc -O0): easier to debug")
     args = parser.parse_args()
 
     input_filename = args.input_file
@@ -135,8 +137,9 @@ def main():
         "-I" + build_dir,  # For local headers
         "-L" + amiga_lib_path,
     ]
-    if args.optimize:
-        compile_command.append("-O2")
+    # -O2 by default: tested in FS-UAE (Kickstart 3.1) with the 30 examples and the
+    # emu tests, same output as -O0 and about half the size
+    compile_command.append("-O0" if args.no_optimize else "-O2")
     compile_command.extend(c_files)
     compile_command.extend([
         "-o",

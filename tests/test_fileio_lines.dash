@@ -1,0 +1,21 @@
+# Test: text files written line by line
+# file_write_line adds the newline; the dos.dash module reads it back
+#
+# expect-out: uno
+# expect-out: dos
+# expect-out: 0
+
+import "../lib/amiga/dos.dash"
+
+Main
+    fh = open_write("RAM:dash_lineas.txt")
+    write_line(fh, "uno")
+    r = file_write_line(fh, "dos")
+    close_file(fh)
+    fh = open_read("RAM:dash_lineas.txt")
+    Print read_line(fh)
+    Print read_line(fh)
+    close_file(fh)
+    delete_file("RAM:dash_lineas.txt")
+    Print r
+end

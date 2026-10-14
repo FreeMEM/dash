@@ -149,6 +149,7 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
     compile_cmd = [
         gcc_path,
         "-noixemul",
+        "-O2",  # same as ./dash by default
         "-I/opt/amiga/m68k-amigaos/ndk-include",
         "-L/opt/amiga/m68k-amigaos/lib",
         str(c_file),
@@ -287,7 +288,7 @@ def run_multifile_test(test_file: Path) -> TestResult:
         if os.path.exists(gcc_path):
             c_files = [str(f) for f in sorted(out_dir.glob("*.c"))]
             build = subprocess.run(
-                [gcc_path, "-noixemul", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}",
+                [gcc_path, "-noixemul", "-O2", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}",
                  "-L/opt/amiga/m68k-amigaos/lib", *c_files, "-o", str(out_dir / "a.out")],
                 capture_output=True, text=True, timeout=120
             )
