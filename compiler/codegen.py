@@ -1076,6 +1076,82 @@ static void _dash_bitmaps_cleanup(void) {
 
 """
 
+    # A user copper list (UCopList) on the screen's ViewPort, the system-friendly
+    # way: graphics merges it into the display; removed (and freed) at exit.
+    COPPER_RUNTIME = """\
+/* Dash Copper */
+#include <graphics/copper.h>
+#include <hardware/custom.h>
+static struct UCopList *_dash_ucl = NULL;
+static struct ViewPort *_dash_ucl_vp = NULL;   /* where it is installed */
+
+static struct ViewPort *_dash_copper_vp(void) {
+    if (_dash_screen) return &_dash_screen->ViewPort;
+    if (_dash_win) return &_dash_win->WScreen->ViewPort;
+    return NULL;
+}
+
+static void _dash_copper_free(void) {
+    if (!_dash_ucl) return;
+    if (_dash_ucl_vp) {
+        Forbid();
+        _dash_ucl_vp->UCopIns = NULL;
+        Permit();
+        RethinkDisplay();
+        _dash_ucl_vp = NULL;
+    }
+    if (_dash_ucl->FirstCopList) FreeCopList(_dash_ucl->FirstCopList);
+    FreeMem(_dash_ucl, sizeof(struct UCopList));
+    _dash_ucl = NULL;
+}
+
+static BOOL _dash_copper_create(LONG size) {
+    _dash_copper_free();
+    _dash_ucl = (struct UCopList *)AllocMem(sizeof(struct UCopList), MEMF_PUBLIC | MEMF_CLEAR);
+    if (!_dash_ucl) return FALSE;
+    if (!UCopperListInit(_dash_ucl, size > 0 ? size : 64)) {
+        FreeMem(_dash_ucl, sizeof(struct UCopList));
+        _dash_ucl = NULL;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* reg: custom chip register offset (0x180 = COLOR00) */
+static void _dash_copper_move(LONG reg, LONG value) {
+    if (!_dash_ucl) return;
+    CMove(_dash_ucl, (APTR)(0xDFF000 + (reg & 0x1FE)), value);
+    CBump(_dash_ucl);
+}
+
+/* y, x: beam position relative to the top of the viewport */
+static void _dash_copper_wait(LONG y, LONG x) {
+    if (!_dash_ucl) return;
+    CWait(_dash_ucl, y, x);
+    CBump(_dash_ucl);
+}
+
+/* rgb: 12-bit 0xRGB */
+static void _dash_copper_color(LONG index, LONG rgb) {
+    _dash_copper_move(0x180 + ((index & 31) << 1), rgb & 0xFFF);
+}
+
+static void _dash_copper_end(void) {
+    if (_dash_ucl) _dash_copper_wait(10000, 255);   /* CEND */
+}
+
+static void _dash_copper_install(void) {
+    struct ViewPort *vp = _dash_copper_vp();
+    if (!_dash_ucl || !vp || _dash_ucl_vp) return;
+    Forbid();
+    vp->UCopIns = _dash_ucl;
+    Permit();
+    _dash_ucl_vp = vp;
+    RethinkDisplay();
+}
+
+"""
+
     # Windows opened with window_create(): a table of handles 1..16; handle 0 is
     # the current window (_dash_win). Closed at exit by _dash_windows_cleanup().
     WINMGR_RUNTIME = """\
@@ -4287,6 +4363,7 @@ _RUNTIME_FLAGS = [
     ("KEY_RUNTIME", "uses_keys"),
     ("WINMGR_RUNTIME", "uses_winmgr"),
     ("BITMAP_RUNTIME", "uses_bitmaps"),
+    ("COPPER_RUNTIME", "uses_copper"),
     ("DIR_RUNTIME", "uses_dirs"),
     ("GRAPHICS_RUNTIME", "needs_gfx"),
     ("INPUT_RUNTIME", "needs_gfx"),
@@ -4508,6 +4585,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_winmgr: bool = False  # window_create() handles
         self.uses_gadgets: bool = False  # button_create()... handles
         self.uses_bitmaps: bool = False  # bitmap_create()... ids
+        self.uses_copper: bool = False   # copper_create()...
         self.uses_dirs: bool = False    # dir_change() / dir_current()
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
@@ -4671,6 +4749,8 @@ class CodeGenerator(ASTVisitor):
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
+        if self.uses_copper:
+            parts.append(CTemplates.COPPER_RUNTIME)
 
         # Add input runtime if needed (for key/mouse/joystick)
         if self.needs_gfx:
@@ -4773,6 +4853,8 @@ class CodeGenerator(ASTVisitor):
             cleanup.append("    _dash_gadgets_cleanup();\n")
         if self.uses_bitmaps:
             cleanup.append("    _dash_bitmaps_cleanup();\n")
+        if self.uses_copper:
+            cleanup.append("    _dash_copper_free();\n")   # before the screen closes
         if self.needs_reaction:
             cleanup.append("    ra_window_close();\n")
         if self._uses_key_runtime():
@@ -6096,7 +6178,7 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
             self.needs_asl = True
-        if self.uses_bitmaps:
+        if self.uses_bitmaps or self.uses_copper:
             self.needs_gfx = True
         # Gadget handles live on GadTools (opened by the GadTools main template)
         if self.uses_gadgets:

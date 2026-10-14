@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 319 funciones, 294 implementadas, 25 sin implementar.
+Total: 319 funciones, 301 implementadas, 18 sin implementar.
 
 ## Gráficos básicos
 
@@ -73,13 +73,13 @@ Total: 319 funciones, 294 implementadas, 25 sin implementar.
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
-| `copper_create(size)` | `BOOL` | Create copper list | **sin implementar** |
-| `copper_wait(y, x)` | `void` | Add copper WAIT instruction | **sin implementar** |
-| `copper_move(reg, value)` | `void` | Add copper MOVE instruction | **sin implementar** |
-| `copper_color(index, rgb)` | `void` | Add copper color change | **sin implementar** |
-| `copper_end()` | `void` | End copper list | **sin implementar** |
-| `copper_install()` | `void` | Install copper list | **sin implementar** |
-| `copper_free()` | `void` | Free copper list | **sin implementar** |
+| `copper_create(size)` | `BOOL` | Create copper list |  |
+| `copper_wait(y, x)` | `void` | Add copper WAIT instruction |  |
+| `copper_move(reg, value)` | `void` | Add copper MOVE instruction |  |
+| `copper_color(index, rgb)` | `void` | Add copper color change |  |
+| `copper_end()` | `void` | End copper list |  |
+| `copper_install()` | `void` | Install copper list |  |
+| `copper_free()` | `void` | Free copper list |  |
 | `bitmap_create(id, width, height, depth)` | `BOOL` | Create bitmap |  |
 | `bitmap_load(id, filename)` | `BOOL` | Load IFF bitmap |  |
 | `bitmap_save(id, filename)` | `BOOL` | Save IFF bitmap |  |

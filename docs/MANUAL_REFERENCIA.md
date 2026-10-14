@@ -944,6 +944,22 @@ bob_free(0)                         # lo quita de la pantalla y lo libera
 
 Con varios bobs que se tapan: borrarlos en orden inverso al de dibujado.
 
+### Copper
+
+Una lista de copper de usuario (la forma que respeta el sistema): cambia registros del chip
+grafico en una linea concreta de la pantalla, por ejemplo colores para un degradado.
+
+```
+copper_create(32)              # instrucciones como maximo
+copper_wait(40, 0)             # esperar a la linea 40 (desde arriba de la pantalla)
+copper_color(0, 0xF00)         # color 0 = rojo (formato 0xRGB de 12 bits)
+copper_wait(80, 0)
+copper_move(0x180, 0x0F0)      # cualquier registro: 0x180 es COLOR00
+copper_end()
+copper_install()               # en la pantalla actual (la propia o la del Workbench)
+copper_free()                  # quitarla (al salir se quita sola)
+```
+
 ### Ejemplo de Graficos
 
 ```
@@ -2189,7 +2205,7 @@ Lista completa, con las que están sin implementar: [docs/BUILTINS.md](BUILTINS.
 | Categoria | Cantidad | Ejemplos |
 |-----------|----------|----------|
 | Graficos Basicos | 28 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
-| Graficos Avanzados | 32 | `sprite_*`, `gfx_*`, `bitmap_*`, `bob_*` (`copper_*` sin implementar; ver `lib/amiga`) |
+| Graficos Avanzados | 32 | `sprite_*`, `gfx_*`, `bitmap_*`, `bob_*`, `copper_*` |
 | Entrada | 16 | `key_*`, `mouse_*`, `joy_*` |
 | Sistema | 18 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Archivos | 22 | `file_*`, `dir_*`, `console_*` |

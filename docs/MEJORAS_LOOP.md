@@ -101,7 +101,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
 - [x] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
 - [x] 20. Builtins: `bob_*`.
-- [ ] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
+- [x] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
 - [ ] 22. Builtins: `sound_*` y `tone_play` (audio.device).
 - [ ] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
 - [ ] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
@@ -408,3 +408,12 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `bob_free` lo quita de la pantalla.
 - Error previo encontrado: una función sin tipo que devuelve una concatenación (`return "" + x`) se imprimía como
   número (el puntero): `_call_returns_string` solo miraba literales. Ahora usa el tipo deducido de la función.
+
+### 2026-10-14 — Tarea 21 (copper)
+- Base: 121/121 con `--emu`, ejemplos 30/30. Después: 122/122 con `--emu`, ejemplos 30/30. Builtins sin código: 25 → 18.
+- Hecho (test: `test_copper` en FS-UAE): `COPPER_RUNTIME` con una `UCopList` (`UCopperListInit`, `CMove`/`CWait` +
+  `CBump`) instalada en el ViewPort de la pantalla actual (`vp->UCopIns` + `RethinkDisplay`). `copper_free` la quita
+  (UCopIns a NULL, `RethinkDisplay`, `FreeCopList`) y la limpieza final lo hace antes de cerrar la pantalla propia.
+- Probado: las instrucciones aparecen en la lista de copper real del sistema (`GfxBase->LOFlist`) tras instalar y
+  desaparecen tras `copper_free`. Con pantalla propia, dos ejecuciones seguidas saliendo con la lista instalada.
+- No verificado: el efecto visual (no hay captura de pantalla).

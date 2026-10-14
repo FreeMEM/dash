@@ -1,0 +1,46 @@
+# Test: user copper list on the screen's ViewPort
+# After copper_install the MOVEs appear in the system copper list that
+# graphics.library builds (GfxBase->LOFlist); after copper_free they go.
+#
+# expect-c: CMove(_dash_ucl, (APTR)(0xDFF000 + (reg & 0x1FE)), value);
+# expect-out: 1
+# expect-out: 0
+# expect-out: 1
+# expect-out: 1
+# expect-out: 0
+
+@header "#include <graphics/gfxbase.h>"
+
+Window W
+    title "Copper"
+    width 200
+    height 100
+end
+
+@native func en_copper(reg: Int, valor: Int) -> Int
+"""
+    UWORD *c = GfxBase->LOFlist;
+    LONG n;
+    if (!c) return 0;
+    for (n = 0; n < 4096 && !(c[0] == 0xFFFF && c[1] == 0xFFFE); n++, c += 2) {
+        if (c[0] == (UWORD)reg && c[1] == (UWORD)valor) return 1;
+    }
+    return 0;
+"""
+end
+
+Main
+    W.open
+    Print copper_create(16)
+    copper_wait(40, 0)
+    copper_color(0, 0xF00)
+    copper_wait(80, 0)
+    copper_move(0x180, 0x0F0)
+    copper_end()
+    Print en_copper(0x180, 0xF00)
+    copper_install()
+    Print en_copper(0x180, 0xF00)
+    Print en_copper(0x180, 0x0F0)
+    copper_free()
+    Print en_copper(0x180, 0xF00)
+end
