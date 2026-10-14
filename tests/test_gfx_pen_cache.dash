@@ -1,0 +1,67 @@
+# Test: gfx_pen / gfx_pen_bg / gfx_mode only call SetAPen / SetBPen / SetDrMd
+# when the value changes (each call costs ~600 cycles on a 68000). The pen in
+# use is the one of the current RastPort: switching between the window and a
+# bitmap keeps each its own pen. Every pixel is read back.
+#
+# expect-c: ((UBYTE)_dash_rp->FgPen != (UBYTE)(2) ? SetAPen(_dash_rp, 2) : (void)0)
+# expect-out: 2 2 1 3
+# expect-out: 1 2
+# expect-out: 3 3
+# expect-out: 3 0
+
+Window W
+    title "Pens"
+    width 200
+    height 100
+end
+
+Main
+    W.open
+    gfx_pen(2)
+    gfx_pixel(5, 5)
+    gfx_pen(2)
+    gfx_pixel(6, 5)
+    gfx_pen(1)
+    gfx_pixel(7, 5)
+    gfx_pen(3)
+    gfx_pen(3)
+    gfx_pixel(8, 5)
+    p1 = gfx_pixel_read(5, 5)
+    p2 = gfx_pixel_read(6, 5)
+    p3 = gfx_pixel_read(7, 5)
+    p4 = gfx_pixel_read(8, 5)
+    Print "#{p1} #{p2} #{p3} #{p4}"
+
+    # COMPLEMENT (2) flips the pixel, a second time restores it; then JAM1 (0)
+    gfx_mode(2)
+    gfx_mode(2)
+    gfx_pixel(5, 5)
+    cambiado = 0
+    if gfx_pixel_read(5, 5) != 2
+        cambiado = 1
+    end
+    gfx_pixel(5, 5)
+    gfx_mode(0)
+    p1 = gfx_pixel_read(5, 5)
+    Print "#{cambiado} #{p1}"
+
+    # a bitmap has its own RastPort and pen; back in the window the pen is still 3
+    bitmap_create(0, 16, 16, 2)
+    bitmap_draw_to(0)
+    gfx_pen(3)
+    gfx_pixel(1, 1)
+    a = gfx_pixel_read(1, 1)
+    bitmap_draw_screen()
+    gfx_pixel(9, 5)
+    p1 = gfx_pixel_read(9, 5)
+    Print "#{a} #{p1}"
+
+    # the background pen: JAM2 rectangle in pen 3, then the bg pen does not paint pixels
+    gfx_mode(1)
+    gfx_pen_bg(0)
+    gfx_pen_bg(0)
+    gfx_rect(20, 20, 22, 22)
+    p1 = gfx_pixel_read(21, 21)
+    p2 = gfx_pixel_read(30, 30)
+    Print "#{p1} #{p2}"
+end

@@ -36,7 +36,8 @@ GRAPHICS_BASIC = {
         name="gfx_pen",
         params=["color"],
         return_type="void",
-        c_template="SetAPen(_dash_rp, ${color})",
+        # a library call only when the pen changes (drawing loops set it often)
+        c_template="((UBYTE)_dash_rp->FgPen != (UBYTE)(${color}) ? SetAPen(_dash_rp, ${color}) : (void)0)",
         needs_gfx=True,
         description="Set foreground pen color"
     ),
@@ -44,7 +45,7 @@ GRAPHICS_BASIC = {
         name="gfx_pen_bg",
         params=["color"],
         return_type="void",
-        c_template="SetBPen(_dash_rp, ${color})",
+        c_template="((UBYTE)_dash_rp->BgPen != (UBYTE)(${color}) ? SetBPen(_dash_rp, ${color}) : (void)0)",
         needs_gfx=True,
         description="Set background pen color"
     ),
@@ -60,7 +61,7 @@ GRAPHICS_BASIC = {
         name="gfx_mode",
         params=["mode"],
         return_type="void",
-        c_template="SetDrMd(_dash_rp, ${mode})",
+        c_template="((UBYTE)_dash_rp->DrawMode != (UBYTE)(${mode}) ? SetDrMd(_dash_rp, ${mode}) : (void)0)",
         needs_gfx=True,
         description="Set drawing mode (JAM1, JAM2, COMPLEMENT, INVERSVID)"
     ),

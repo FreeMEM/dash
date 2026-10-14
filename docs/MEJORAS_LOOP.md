@@ -114,7 +114,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       contador de VBlank) bucles de enteros, Float, strings, arrays, structs, llamadas y gráficos, más el tamaño de
       cada ejecutable. Guardar la tabla base en la bitácora. CPU de la prueba: 68000 (A500) y 68020 (A1200).
       Pedido por el usuario el 2026-10-14: "un lenguaje que aproveche muy bien la máquina".
-- [~] 26. Optimización (2/3) — ciclos, función por función. Partes: 26a marcas de temporales (bucles y
+- [x] 26. Optimización (2/3) — ciclos, función por función. Partes: 26a marcas de temporales (bucles y
       funciones), 26b arrays (`DashArray_get/set`, `%`, for-each), 26c strings (concat, interpolación, from_int, set),
       26d Float por software (rutinas propias), 26d2 suma y multiplicación Float en ensamblador 68000, 26d3 suma y multiplicación Float con menos ciclos
       (exponente sin desplazar, mantisa `<< 8` para que el producto alto ya sea la mantisa, menos registros; meta: la
@@ -631,3 +631,22 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `for_each_10` 209.640 → 86.753 (x2,4), `string_chars_26` 300.862 → 156.235 (x1,9), `array_get_set` -8 %,
   Float -4 %, gráficos -1 %. A1200 parecido.
 - Tamaño: 269.360 → 251.620 bytes (-6,6 %): menos código por bucle y función, y más funciones pequeñas en línea.
+
+### 2026-10-14 — Tarea 26f (gráficos y texto)
+- Base: 174/174. Después: 179/179 (`--emu --emu-a500`; test nuevo: `test_gfx_pen_cache`, lee los píxeles).
+- Medido: casi todo el tiempo de los gráficos está dentro de graphics.library (`WritePixel` ~1.800 ciclos, `Text` de
+  11 letras ~27.000, un bob = tres blits ~37.000). Las rutinas de Dash ya hacen lo mínimo. La plantilla con `${str}`
+  doble ya iba por un temporal (`volatile`, 26a).
+- Probado y descartado: ventana sin `WA_GimmeZeroZero`, y sin GZZ con región de recorte (`InstallClipRegion`). A500:
+  igual en todo (±1 %) y la región empeora las líneas (892.465 → 1.629.411 ns). Se queda GZZ.
+- Hecho: `gfx_pen`, `gfx_pen_bg` y `gfx_mode` llaman a `SetAPen`/`SetBPen`/`SetDrMd` solo si el valor cambia (lo
+  miran en el RastPort actual: `FgPen`, `BgPen`, `DrawMode`). Cada llamada cuesta ~600 ciclos aunque no cambie nada.
+  El argumento se evalúa una vez (temporal `volatile`, comprobado con `random()`).
+- Benchmark nuevo `gfx_pixel_same_pen` (el bucle típico: color y punto). A500: 2.511 → 1.886 ciclos por punto
+  (medido aparte); en la tabla 267.380 ns frente a los ~390.000 de `gfx_pixel`. Cuando el color cambia en cada vuelta
+  la comprobación cuesta un 1,5 % (`gfx_pixel` 388.844 → 394.621).
+- Tamaño: 251.620 → 252.728 bytes.
+- Con esto la tarea 26 queda cerrada. Resumen A500 desde la base (ns): `array_literal_new` 885.694 → 452.097,
+  `string_interp` 2.238.460 → 651.378, `string_concat_int` 1.141.401 → 459.880, `for_each_10` 696.067 → 86.753,
+  `struct_new_field` 531.440 → 311.913, Float (`float_mul_add`) 123.427 → 104.612. Tamaño 250.460 → 252.728 bytes
+  (con 2 benchmarks más y Float propio).

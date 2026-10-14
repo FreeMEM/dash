@@ -17,6 +17,13 @@ Main
     bench_end("gfx_pixel", 2000)
 
     bench_start()
+    for i in (1..2000)
+        gfx_pen(1)
+        gfx_pixel(i % 300, 60)
+    end
+    bench_end("gfx_pixel_same_pen", 2000)
+
+    bench_start()
     for i in (1..500)
         gfx_pen(i % 4)
         gfx_rect(10, 10, 60, 60)
