@@ -1,0 +1,131 @@
+# Test: gadgets by handle (GadTools) and On Gadget
+# A helper process clicks the button, the checkbox and the first listview
+# item through input.device; the EventLoop reports them with gadget_id().
+#
+# expect-c: _dash_gev = _dash_gadget_event(msg);
+# expect-out: 1
+# expect-out: 2
+# expect-out: 3
+# expect-out: 4
+# expect-out: 5
+# expect-out: hola
+# expect-out: 7
+# expect-out: 1
+# expect-out: boton 1
+# expect-out: casilla 0
+# expect-out: lista 0
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static LONG clic_x[4], clic_y[4], n_clics; static volatile LONG clics_hechos;"
+
+Window W
+    title "Gadgets"
+    width 300
+    height 120
+end
+
+@native func proceso_clics()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    LONG i;
+    Delay(100);
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        for (i = 0; i < n_clics; i++) {
+            memset(&ie, 0, sizeof(ie));
+            pp.iepp_Screen = _dash_win->WScreen;
+            pp.iepp_Position.X = _dash_win->LeftEdge + _dash_win->BorderLeft + clic_x[i];
+            pp.iepp_Position.Y = _dash_win->TopEdge + _dash_win->BorderTop + clic_y[i];
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+            io->io_Command = IND_WRITEEVENT;
+            io->io_Data = &ie;
+            io->io_Length = sizeof(ie);
+            DoIO((struct IORequest *)io);
+            Delay(5);
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = IECODE_LBUTTON;
+            DoIO((struct IORequest *)io);
+            Delay(5);
+            ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+            Delay(25);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    clics_hechos = 1;
+"""
+end
+
+@native func clics(x1: Int, y1: Int, x2: Int, y2: Int, x3: Int, y3: Int)
+"""
+    clic_x[0] = x1; clic_y[0] = y1; clic_x[1] = x2; clic_y[1] = y2; clic_x[2] = x3; clic_y[2] = y3;
+    n_clics = 3;
+    clics_hechos = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_clics, NP_Name, (ULONG)"dash_clics", TAG_DONE);
+"""
+end
+
+@native func esperar_clics()
+"""
+    while (!clics_hechos) Delay(2);
+"""
+end
+
+Main
+    W.open
+    b = button_create(0, 10, 10, 80, 14, "OK")
+    c = checkbox_create(0, 10, 30, "Activo")
+    s = slider_create(0, 10, 50, 100, 10, 0, 10, 3)
+    t = textfield_create(0, 10, 66, 120, 14, 20)
+    l = listview_create(0, 150, 10, 120, 60)
+    listview_add(l, "uno")
+    listview_add(l, "dos " + 2)
+    Print b
+    Print c
+    Print s
+    Print t
+    Print l
+    textfield_set(t, "hola")
+    Print textfield_get(t)
+    slider_set(s, 7)
+    Print slider_get(s)
+    checkbox_set(c, true)
+    Print checkbox_get(c)
+    button_disable(b)
+    button_enable(b)
+
+    clics(50, 17, 15, 35, 170, 14)
+    n = 0
+    EventLoop
+        On Gadget
+            g = gadget_id()
+            if g == b
+                Print "boton #{g}"
+            end
+            if g == c
+                Print "casilla " + checkbox_get(c)
+            end
+            if g == l
+                Print "lista " + listview_selected(l)
+            end
+            n = n + 1
+            if n == 3
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    esperar_clics()
+end

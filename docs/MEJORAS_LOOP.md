@@ -98,7 +98,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
       (documentado en MANUAL_REFERENCIA, pero la gramática solo tiene `.open`).
 - [x] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
-- [ ] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
+- [x] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
 - [ ] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
 - [ ] 20. Builtins: `bob_*`.
 - [ ] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
@@ -367,3 +367,23 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   (sin ellas ASL abre un "inserte el volumen" y se queda esperando). `--keep DIR` guarda el disco emulado.
 - Los tests pulsan teclas y hacen clic de verdad desde un proceso auxiliar (`input.device`): el botón OK/Cancelar de
   ASL se busca por su `GadgetID` (1 y 2). Esc no cierra el requester de ficheros de ASL 3.1 y Return no cierra el de fuentes.
+
+### 2026-10-14 — Tarea 18 (gadgets por número, `On Gadget`)
+- Base: 115/115 con `--emu`, ejemplos 30/30. Después: 117/117 con `--emu`, ejemplos 30/30. Builtins sin código: 57 → 41.
+- Hecho (test: `test_gadgets`, clics reales con `input.device` en FS-UAE):
+  - `GADGET_RUNTIME`: tabla de 64 gadgets; cada uno en su propia lista GadTools (contexto + gadget) añadida en el
+    momento (`AddGList`), así se crean en cualquier momento sin `gt_init`/`gt_attach`. Ventana: 0 = actual o número
+    de `window_create`. `button_*`, `checkbox_*`, `slider_*`, `textfield_*` (get devuelve String temporal),
+    `listview_*` (los textos de la lista escapan, son permanentes), `gadget_id()` (builtin nuevo).
+  - `On Gadget` en el `EventLoop` (nodo `OnGadgetHandler`). Con gadgets, el `EventLoop` usa `GT_GetIMsg`/`GT_ReplyIMsg`,
+    atiende `IDCMP_REFRESHWINDOW` y actualiza el estado del gadget antes de responder el mensaje.
+- Errores encontrados en el emulador:
+  - Al salir se colgaba: `AddGList` encadena las listas y `FreeGadgets` de la primera seguía hasta la segunda
+    (doble liberación). Se guarda el último gadget de cada lista y se corta la cadena antes de liberar.
+  - En ventanas GimmeZeroZero (todas las de Dash) los gadgets ya van en el área interior: sumar el borde los
+    desplazaba (el clic en la casilla caía en el botón).
+  - GadTools no admite GZZ: el listview calcula la fila con la posición exterior del ratón (una o dos filas de más).
+    `_dash_listview_row` la calcula bien (`GTLV_Top` + altura de la fuente) y corrige el resaltado.
+  - La limpieza de GadTools usaba `_dash_win` aunque la ventana ya estuviera cerrada; la limpieza final ahora pone
+    `_dash_win` a NULL al cerrar las ventanas declaradas.
+- Pendiente: los `gt_*` antiguos tienen el mismo problema de GZZ en su listview (no se tocan en esta tarea).

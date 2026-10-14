@@ -9,7 +9,7 @@ from string import Template
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -1749,13 +1749,14 @@ static BOOL _dash_gt_init(void) {
 }
 
 static void _dash_gt_cleanup(void) {
+    /* at exit the window may be closed already (_dash_win NULL): only free */
     if (_dash_menu) {
-        ClearMenuStrip(_dash_win);
+        if (_dash_win) ClearMenuStrip(_dash_win);
         FreeMenus(_dash_menu);
         _dash_menu = NULL;
     }
     if (_dash_glist) {
-        RemoveGList(_dash_win, _dash_glist, -1);
+        if (_dash_win) RemoveGList(_dash_win, _dash_glist, -1);
         FreeGadgets(_dash_glist);
         _dash_glist = NULL;
     }
@@ -1974,6 +1975,263 @@ static LONG _dash_gt_event(void) {
 static LONG _dash_gt_wait_event(void) {
     Wait(1L << _dash_win->UserPort->mp_SigBit);
     return _dash_gt_event();
+}
+
+"""
+
+    # Gadgets by handle (button_create, slider_create...): each gadget lives in its
+    # own GadTools list, added to its window at once, so gadgets can be created at
+    # any time. Handles 1..64; 0 = no gadget. The EventLoop reads messages with
+    # GT_GetIMsg and calls _dash_gadget_event() so "On Gadget" and gadget_id() work.
+    GADGET_RUNTIME = """\
+/* Dash Gadget Handles */
+#include <libraries/gadtools.h>
+#ifndef CHECKBOXWIDTH
+#define CHECKBOXWIDTH 26
+#define CHECKBOXHEIGHT 11
+#endif
+#define _DASH_MAX_GADS 64
+#define _DASH_GK_BUTTON 1
+#define _DASH_GK_CHECKBOX 2
+#define _DASH_GK_SLIDER 3
+#define _DASH_GK_TEXT 4
+#define _DASH_GK_LIST 5
+
+typedef struct {
+    struct Window *win;
+    struct Gadget *glist;     /* context + gadget: freed with FreeGadgets */
+    struct Gadget *gad;
+    struct Gadget *last;      /* end of this list: AddGList chains it to the next one */
+    APTR vi;
+    LONG kind;
+    LONG value;               /* checkbox state, slider level, listview selection */
+    struct List items;        /* listview labels */
+} _DashGad;
+
+static _DashGad _dash_gads[_DASH_MAX_GADS + 1];
+static LONG _dash_gadget_last = 0;
+
+static _DashGad *_dash_gad_get(LONG h) {
+    if (h < 1 || h > _DASH_MAX_GADS || !_dash_gads[h].gad) return NULL;
+    return &_dash_gads[h];
+}
+
+static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LONG y, LONG w, LONG h,
+                          STRPTR label, ULONG place, struct TagItem *tags) {
+    struct Window *win = _DASH_WIN_FROM_HANDLE(win_handle);
+    struct NewGadget ng;
+    struct Gadget *ctx;
+    _DashGad *g;
+    LONG i = 1;
+    if (!win || !GadToolsBase) return 0;
+    while (i <= _DASH_MAX_GADS && _dash_gads[i].gad) i++;
+    if (i > _DASH_MAX_GADS) return 0;
+    g = &_dash_gads[i];
+    g->vi = GetVisualInfoA(win->WScreen, NULL);
+    if (!g->vi) return 0;
+    g->glist = NULL;
+    ctx = CreateContext(&g->glist);
+    /* x, y inside the window, like gfx_: in a GimmeZeroZero window (all Dash
+       windows) application gadgets already live in the inner area */
+    ng.ng_LeftEdge = x + ((win->Flags & WFLG_GIMMEZEROZERO) ? 0 : win->BorderLeft);
+    ng.ng_TopEdge = y + ((win->Flags & WFLG_GIMMEZEROZERO) ? 0 : win->BorderTop);
+    ng.ng_Width = w;
+    ng.ng_Height = h;
+    ng.ng_GadgetText = label;
+    ng.ng_TextAttr = NULL;
+    ng.ng_GadgetID = i;
+    ng.ng_Flags = place;
+    ng.ng_VisualInfo = g->vi;
+    ng.ng_UserData = NULL;
+    g->gad = ctx ? CreateGadgetA(gt_kind, ctx, &ng, tags) : NULL;
+    if (!g->gad) {
+        FreeGadgets(g->glist);
+        FreeVisualInfo(g->vi);
+        memset(g, 0, sizeof(*g));
+        return 0;
+    }
+    g->win = win;
+    g->kind = kind;
+    for (g->last = g->glist; g->last->NextGadget; g->last = g->last->NextGadget) ;
+    ModifyIDCMP(win, win->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MOUSEMOVE |
+                     IDCMP_INTUITICKS | IDCMP_REFRESHWINDOW);
+    AddGList(win, g->glist, -1, -1, NULL);
+    RefreshGList(g->glist, win, NULL, -1);
+    GT_RefreshWindow(win, NULL);
+    return i;
+}
+
+/* Listview row under the mouse. GadTools does not support GimmeZeroZero windows
+   (all Dash windows are): it takes the outer-window mouse position for the
+   inner-window gadget and reports a row too far down, so the row is computed here. */
+static LONG _dash_listview_row(_DashGad *g, WORD mouse_y) {
+    LONG top = 0, n = 0, row;
+    struct Node *nd;
+    UWORD h = g->win->WScreen->Font ? g->win->WScreen->Font->ta_YSize : 8;
+    GT_GetGadgetAttrs(g->gad, g->win, NULL, GTLV_Top, (ULONG)&top, TAG_DONE);
+    for (nd = g->items.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    row = (mouse_y - g->win->BorderTop - g->gad->TopEdge - 2) / (h ? h : 8) + top;
+    return (row >= 0 && row < n) ? row : -1;
+}
+
+/* EventLoop: a message from a gadget updates its state; returns its handle (or 0) */
+static LONG _dash_gadget_event(struct IntuiMessage *msg) {
+    ULONG cls = msg->Class;
+    UWORD code = msg->Code;
+    struct Gadget *gad;
+    _DashGad *g;
+    if (cls != IDCMP_GADGETUP && cls != IDCMP_GADGETDOWN && cls != IDCMP_MOUSEMOVE) return 0;
+    gad = (struct Gadget *)msg->IAddress;
+    if (!gad || (cls == IDCMP_MOUSEMOVE && !(gad->GadgetType & GTYP_GADGETTYPE))) return 0;
+    g = _dash_gad_get(gad->GadgetID);
+    if (!g || g->gad != gad) return 0;
+    if (g->kind == _DASH_GK_CHECKBOX) g->value = (gad->Flags & GFLG_SELECTED) ? 1 : 0;
+    else if (g->kind == _DASH_GK_SLIDER) g->value = (WORD)code;
+    else if (g->kind == _DASH_GK_LIST && cls == IDCMP_GADGETUP) {
+        LONG row = (g->win->Flags & WFLG_GIMMEZEROZERO) ? _dash_listview_row(g, msg->MouseY) : (WORD)code;
+        if (row < 0) return 0;
+        g->value = row;
+        GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Selected, row, TAG_DONE);
+    }
+    if (cls == IDCMP_GADGETDOWN && g->kind != _DASH_GK_SLIDER) return 0;   /* the click ends in GADGETUP */
+    _dash_gadget_last = gad->GadgetID;
+    return _dash_gadget_last;
+}
+
+static LONG _dash_gadget_id(void) {
+    return _dash_gadget_last;
+}
+
+static LONG _dash_button_create(LONG win, LONG x, LONG y, LONG w, LONG h, STRPTR label) {
+    return _dash_gad_new(win, _DASH_GK_BUTTON, BUTTON_KIND, x, y, w, h, label, PLACETEXT_IN, NULL);
+}
+
+static void _dash_gadget_enable(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    if (g) GT_SetGadgetAttrs(g->gad, g->win, NULL, GA_Disabled, FALSE, TAG_DONE);
+}
+
+static void _dash_gadget_disable(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    if (g) GT_SetGadgetAttrs(g->gad, g->win, NULL, GA_Disabled, TRUE, TAG_DONE);
+}
+
+static LONG _dash_checkbox_create(LONG win, LONG x, LONG y, STRPTR label) {
+    return _dash_gad_new(win, _DASH_GK_CHECKBOX, CHECKBOX_KIND, x, y, CHECKBOXWIDTH, CHECKBOXHEIGHT,
+                         label, PLACETEXT_RIGHT, NULL);
+}
+
+static BOOL _dash_checkbox_get(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    return g ? (BOOL)g->value : FALSE;
+}
+
+static void _dash_checkbox_set(LONG h, LONG state) {
+    _DashGad *g = _dash_gad_get(h);
+    if (!g) return;
+    g->value = state ? 1 : 0;
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, GTCB_Checked, g->value, TAG_DONE);
+}
+
+static LONG _dash_slider_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG min, LONG max, LONG value) {
+    struct TagItem tags[] = {
+        { GTSL_Min, (ULONG)min }, { GTSL_Max, (ULONG)max }, { GTSL_Level, (ULONG)value },
+        { GA_RelVerify, TRUE }, { GA_Immediate, TRUE }, { TAG_DONE, 0 }
+    };
+    LONG hd = _dash_gad_new(win, _DASH_GK_SLIDER, SLIDER_KIND, x, y, w, h, NULL, 0, tags);
+    if (hd) _dash_gads[hd].value = value < min ? min : (value > max ? max : value);
+    return hd;
+}
+
+static LONG _dash_slider_get(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    return g ? g->value : 0;
+}
+
+static void _dash_slider_set(LONG h, LONG value) {
+    _DashGad *g = _dash_gad_get(h);
+    if (!g) return;
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, GTSL_Level, value, TAG_DONE);
+    g->value = value;
+}
+
+static LONG _dash_textfield_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG maxlen) {
+    struct TagItem tags[] = { { GTST_MaxChars, (ULONG)(maxlen > 0 ? maxlen : 64) }, { TAG_DONE, 0 } };
+    return _dash_gad_new(win, _DASH_GK_TEXT, STRING_KIND, x, y, w, h, NULL, 0, tags);
+}
+
+/* The text as a temporary string (the gadget's buffer changes while typing) */
+static STRPTR _dash_textfield_get(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    struct StringInfo *si = g ? (struct StringInfo *)g->gad->SpecialInfo : NULL;
+    return _dash_str_dup(si ? si->Buffer : (STRPTR)"", TRUE);
+}
+
+static void _dash_textfield_set(LONG h, STRPTR text) {
+    _DashGad *g = _dash_gad_get(h);
+    if (g) GT_SetGadgetAttrs(g->gad, g->win, NULL, GTST_String, (ULONG)text, TAG_DONE);
+}
+
+static LONG _dash_listview_create(LONG win, LONG x, LONG y, LONG w, LONG h) {
+    /* the label list must exist before the gadget: it goes in the slot that
+       _dash_gad_new will take (the first free one) */
+    LONG i = 1, hd;
+    while (i <= _DASH_MAX_GADS && _dash_gads[i].gad) i++;
+    if (i > _DASH_MAX_GADS) return 0;
+    {   /* NewList() is in amiga.lib: initialise the empty list by hand */
+        struct List *li = &_dash_gads[i].items;
+        li->lh_Head = (struct Node *)&li->lh_Tail;
+        li->lh_Tail = NULL;
+        li->lh_TailPred = (struct Node *)&li->lh_Head;
+    }
+    {
+        struct TagItem tags[] = { { GTLV_Labels, (ULONG)&_dash_gads[i].items }, { GTLV_ShowSelected, 0 },
+                                  { TAG_DONE, 0 } };
+        hd = _dash_gad_new(win, _DASH_GK_LIST, LISTVIEW_KIND, x, y, w, h, NULL, 0, tags);
+    }
+    if (hd) _dash_gads[hd].value = -1;
+    return hd;
+}
+
+static void _dash_listview_add(LONG h, STRPTR text) {
+    _DashGad *g = _dash_gad_get(h);
+    struct Node *n;
+    if (!g || g->kind != _DASH_GK_LIST) return;
+    n = (struct Node *)_dash_alloc(sizeof(struct Node));
+    if (!n) return;
+    n->ln_Name = (char *)_dash_str_escape(text);   /* the list keeps it */
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, ~0, TAG_DONE);   /* detach while changing */
+    AddTail(&g->items, n);
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, (ULONG)&g->items, TAG_DONE);
+}
+
+static void _dash_listview_clear(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    struct Node *n;
+    if (!g || g->kind != _DASH_GK_LIST) return;
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, ~0, TAG_DONE);
+    while ((n = RemHead(&g->items))) FreePooled(_dash_pool, n, sizeof(struct Node));
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, (ULONG)&g->items,
+                      GTLV_Selected, ~0, TAG_DONE);
+    g->value = -1;
+}
+
+static LONG _dash_listview_selected(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    return g ? g->value : -1;
+}
+
+/* At exit, after the windows are closed: free every gadget list */
+static void _dash_gadgets_cleanup(void) {
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_GADS; i++) {
+        _DashGad *g = &_dash_gads[i];
+        if (!g->gad) continue;
+        g->last->NextGadget = NULL;   /* or FreeGadgets would follow into the next list */
+        FreeGadgets(g->glist);
+        FreeVisualInfo(g->vi);
+        memset(g, 0, sizeof(*g));
+    }
 }
 
 """
@@ -3562,15 +3820,15 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
     ULONG msg_class;
     UWORD msg_code;
     ULONG _dash_tmev = _dash_tmp_mark();
-
+$decls
     while (running) {
         _dash_tmp_release(_dash_tmev);  /* temporaries of the previous messages */
         WaitPort(win_$window->UserPort);
-        while (win_$window && (msg = (struct IntuiMessage *)GetMsg(win_$window->UserPort))) {
+        while (win_$window && (msg = (struct IntuiMessage *)$getmsg(win_$window->UserPort))) {
             msg_class = msg->Class;
             msg_code = msg->Code;
             (void)msg_code;
-$key_record            ReplyMsg((struct Message *)msg);
+$key_record            $replymsg((struct Message *)msg);
 
             switch (msg_class) {
 """)
@@ -3674,6 +3932,7 @@ _RUNTIME_FLAGS = [
     ("INPUT_RUNTIME", "needs_gfx"),
     ("GADTOOLS_RUNTIME", "needs_gadtools"),
     ("MENU_RUNTIME", "needs_gadtools"),
+    ("GADGET_RUNTIME", "uses_gadgets"),
     ("ASL_RUNTIME", "needs_asl"),
     ("FILEIO_RUNTIME", "needs_fileio"),
     ("REACTION_RUNTIME", "needs_reaction"),
@@ -3887,6 +4146,7 @@ class CodeGenerator(ASTVisitor):
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
         self.uses_winmgr: bool = False  # window_create() handles
+        self.uses_gadgets: bool = False  # button_create()... handles
         self.uses_dirs: bool = False    # dir_change() / dir_current()
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
@@ -3916,6 +4176,10 @@ class CodeGenerator(ASTVisitor):
             # Windows must ask Intuition for key events before they open
             if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
                 self.uses_keys = True
+            if isinstance(n, OnGadgetHandler) or (isinstance(n, FunctionCall) and n.name.split("_")[0] in
+                    ("button", "checkbox", "slider", "textfield", "listview", "gadget")):
+                self.uses_gadgets = True
+                self.needs_gadtools = True
             # Win.close must know before the window_create() calls are generated
             if isinstance(n, FunctionCall) and n.name.startswith("window_") and n.name != "window_check_close":
                 self.uses_winmgr = True
@@ -4052,6 +4316,10 @@ class CodeGenerator(ASTVisitor):
         if self.needs_gadtools:
             parts.append(CTemplates.GADTOOLS_RUNTIME)
             parts.append(CTemplates.MENU_RUNTIME)
+        if self.uses_gadgets:
+            win_from = ("_dash_window_get(h)" if self.uses_winmgr else "((h) == 0 ? _dash_win : NULL)")
+            parts.append(f"#define _DASH_WIN_FROM_HANDLE(h) {win_from}\n")
+            parts.append(CTemplates.GADGET_RUNTIME)
 
         # Add ASL runtime if needed
         if self.needs_asl:
@@ -4135,7 +4403,10 @@ class CodeGenerator(ASTVisitor):
             # Windows still open (no EventLoop closed them) must not outlive the program
             for window in self.analysis.program.windows:
                 if window.name in self.context.opened_windows:
-                    cleanup.append(f"    if (win_{window.name}) CloseWindow(win_{window.name});\n")
+                    cleanup.append(f"    if (win_{window.name}) {{ if (_dash_win == win_{window.name}) _dash_win = NULL; "
+                                   f"CloseWindow(win_{window.name}); win_{window.name} = NULL; }}\n")
+        if self.uses_gadgets:
+            cleanup.append("    _dash_gadgets_cleanup();\n")
         if self.needs_reaction:
             cleanup.append("    ra_window_close();\n")
         if self._uses_key_runtime():
@@ -4556,7 +4827,20 @@ static {ret_type} {method_name}({params_str}) {{
         # Start event loop
         key_record = ("            if (msg_class == IDCMP_RAWKEY) _dash_key_record(msg);\n"
                       if self.uses_keys else "")
-        self.emit(CTemplates.EVENT_LOOP_START.substitute(window=window, key_record=key_record))
+        if self.uses_gadgets:
+            # GadTools gadgets need GT_GetIMsg; the gadget event is read before the reply
+            key_record += ("            _dash_gev = _dash_gadget_event(msg);\n"
+                           "            if (msg_class == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win_%s); "
+                           "GT_EndRefresh(win_%s, TRUE); }\n" % (window, window))
+            getmsg, replymsg = "GT_GetIMsg", "GT_ReplyIMsg"
+            decls = "    LONG _dash_gev = 0;\n"
+        else:
+            getmsg, replymsg, decls = "GetMsg", "ReplyMsg", ""
+        code = CTemplates.EVENT_LOOP_START.substitute(window=window, key_record=key_record,
+                                                      getmsg=getmsg, replymsg=replymsg, decls=decls)
+        if self.uses_gadgets:
+            code = code.replace("GT_ReplyIMsg((struct Message *)msg);", "GT_ReplyIMsg(msg);")
+        self.emit(code)
 
         # Generate handlers; all On Key handlers share one "case IDCMP_RAWKEY"
         key_handlers = [h for h in node.handlers if isinstance(h, OnKeyHandler)]
@@ -4599,6 +4883,16 @@ static {ret_type} {method_name}({params_str}) {{
             handler_code="".join(handler_code)
         )
         self.emit(code)
+
+    def visit_OnGadgetHandler(self, node: OnGadgetHandler):
+        """On Gadget: messages from button_create/slider_create... gadgets (gadget_id())."""
+        self.emit("                case IDCMP_GADGETUP:\n                case IDCMP_GADGETDOWN:\n"
+                  "                case IDCMP_MOUSEMOVE:\n                    if (_dash_gev) {\n")
+        self.context.enter_scope("handler")
+        body = "".join(self._generate_statement(stmt) for stmt in node.body)
+        body += self._frees(self.context.current_owned())
+        self.context.exit_scope()
+        self.emit(body + "                    }\n                    break;\n")
 
     def _generate_key_handlers(self, handlers: List[OnKeyHandler]):
         """One "case IDCMP_RAWKEY:" for every On Key of an EventLoop (key releases are
@@ -5436,6 +5730,10 @@ static {ret_type} {method_name}({params_str}) {{
         if self.needs_gadtools:
             self.needs_gfx = True
             self.needs_asl = True
+        # Gadget handles live on GadTools (opened by the GadTools main template)
+        if self.uses_gadgets:
+            self.needs_gadtools = True
+            self.uses_strings = True
         # The ASL runtime returns strings and draws the colour dialog
         if self.needs_asl:
             self.needs_gfx = True

@@ -2,7 +2,7 @@
 # Two event loops in a row, windows closed at exit when no
 # EventLoop closed them
 #
-# expect-c: if (win_Segunda) CloseWindow(win_Segunda);
+# expect-c: if (win_Segunda) { if (_dash_win == win_Segunda) _dash_win = NULL; CloseWindow(win_Segunda); win_Segunda = NULL; }
 # expect-c: (void)msg_code;
 # expect-c: if (_dash_win == win_Tercera) win_Tercera = NULL;
 

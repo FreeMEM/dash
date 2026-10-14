@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 318 funciones, 261 implementadas, 57 sin implementar.
+Total: 319 funciones, 278 implementadas, 41 sin implementar.
 
 ## Gráficos básicos
 
@@ -344,22 +344,23 @@ Total: 318 funciones, 261 implementadas, 57 sin implementar.
 | `window_activate(handle)` | `void` | Activate window (handle 0: current window) |  |
 | `screen_to_front()` | `void` | Bring custom screen to front |  |
 | `screen_to_back()` | `void` | Send custom screen to back |  |
-| `button_create(win, x, y, w, h, label)` | `LONG` | Create button gadget | **sin implementar** |
-| `button_enable(gad)` | `void` | Enable button | **sin implementar** |
-| `button_disable(gad)` | `void` | Disable button | **sin implementar** |
-| `textfield_create(win, x, y, w, h, maxlen)` | `LONG` | Create text input field | **sin implementar** |
-| `textfield_get(gad)` | `STRPTR` | Get text field content | **sin implementar** |
-| `textfield_set(gad, text)` | `void` | Set text field content | **sin implementar** |
-| `checkbox_create(win, x, y, label)` | `LONG` | Create checkbox | **sin implementar** |
-| `checkbox_get(gad)` | `BOOL` | Get checkbox state | **sin implementar** |
-| `checkbox_set(gad, state)` | `void` | Set checkbox state | **sin implementar** |
-| `slider_create(win, x, y, w, h, min, max, value)` | `LONG` | Create slider | **sin implementar** |
-| `slider_get(gad)` | `LONG` | Get slider value | **sin implementar** |
-| `slider_set(gad, value)` | `void` | Set slider value | **sin implementar** |
-| `listview_create(win, x, y, w, h)` | `LONG` | Create listview | **sin implementar** |
-| `listview_add(gad, text)` | `void` | Add item to listview | **sin implementar** |
-| `listview_clear(gad)` | `void` | Clear listview | **sin implementar** |
-| `listview_selected(gad)` | `LONG` | Get selected index (-1 if none) | **sin implementar** |
+| `gadget_id()` | `LONG` | Handle of the last gadget used (for On Gadget in the EventLoop) |  |
+| `button_create(win, x, y, w, h, label)` | `LONG` | Create button gadget |  |
+| `button_enable(gad)` | `void` | Enable button |  |
+| `button_disable(gad)` | `void` | Disable button |  |
+| `textfield_create(win, x, y, w, h, maxlen)` | `LONG` | Create text input field |  |
+| `textfield_get(gad)` | `STRPTR` | Get text field content |  |
+| `textfield_set(gad, text)` | `void` | Set text field content |  |
+| `checkbox_create(win, x, y, label)` | `LONG` | Create checkbox |  |
+| `checkbox_get(gad)` | `BOOL` | Get checkbox state |  |
+| `checkbox_set(gad, state)` | `void` | Set checkbox state |  |
+| `slider_create(win, x, y, w, h, min, max, value)` | `LONG` | Create slider |  |
+| `slider_get(gad)` | `LONG` | Get slider value |  |
+| `slider_set(gad, value)` | `void` | Set slider value |  |
+| `listview_create(win, x, y, w, h)` | `LONG` | Create listview |  |
+| `listview_add(gad, text)` | `void` | Add item to listview |  |
+| `listview_clear(gad)` | `void` | Clear listview |  |
+| `listview_selected(gad)` | `LONG` | Get selected index (-1 if none) |  |
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
 | `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
 | `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |

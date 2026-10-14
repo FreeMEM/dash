@@ -219,6 +219,14 @@ class OnCloseHandler(ASTNode):
 
 
 @dataclass
+class OnGadgetHandler(ASTNode):
+    """On Gadget: a gadget made with button_create/slider_create... was used
+    (gadget_id() tells which)."""
+    body: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class OnKeyHandler(ASTNode):
     """On Key handler: any key (key None), one character ('"a"'), a key name
     ('"ESC"', see KEY_NAMES) or a raw key code (int)."""

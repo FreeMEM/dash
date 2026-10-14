@@ -1379,6 +1379,41 @@ ASL devuelven `""` (o falso). `dialog_color` no usa ASL (la 3.1 no tiene selecto
 abre una ventana con la paleta de la pantalla; se elige con el raton o con las flechas y
 Return, y Esc o el boton de cerrar devuelven el color inicial.
 
+### Gadgets por numero (sin gt_init / gt_attach)
+
+Se crean en cualquier momento y aparecen enseguida. Devuelven un numero (1..64, 0 si falla).
+El primer parametro es la ventana: 0 = la actual (o el numero de `window_create`).
+Las coordenadas son dentro de la ventana, como las de `gfx_*`.
+
+```
+b = button_create(0, 10, 10, 80, 14, "OK")
+c = checkbox_create(0, 10, 30, "Activo")
+s = slider_create(0, 10, 50, 100, 10, 0, 10, 3)       # min, max, valor
+t = textfield_create(0, 10, 66, 120, 14, 20)          # hasta 20 caracteres
+l = listview_create(0, 150, 10, 120, 60)
+listview_add(l, "uno")
+
+EventLoop
+    On Gadget
+        g = gadget_id()
+        if g == b
+            Print textfield_get(t)
+        end
+        if g == l
+            Print listview_selected(l)                # fila, o -1
+        end
+    end
+    On Close
+        Stop
+    end
+end
+```
+
+Tambien: `button_enable/disable`, `checkbox_get/set`, `slider_get/set`, `textfield_set`,
+`listview_clear`. Los gadgets se liberan al salir; no se usan despues de cerrar su ventana.
+GadTools no admite ventanas GimmeZeroZero (todas las de Dash lo son): la fila elegida en un
+listview la calcula Dash con la posicion del raton.
+
 ### Ejemplo Completo con GadTools
 
 ```

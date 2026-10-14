@@ -2422,6 +2422,14 @@ INTUITION_EXPANDED = {
     ),
 
     # Gadgets - Buttons
+    "gadget_id": BuiltinFunc(
+        name="gadget_id",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_gadget_id()",
+        needs_gadtools=True,
+        description="Handle of the last gadget used (for On Gadget in the EventLoop)"
+    ),
     "button_create": BuiltinFunc(
         name="button_create",
         params=["win", "x", "y", "w", "h", "label"],

@@ -4,7 +4,7 @@
 #
 # expect-c: if (!win_Ventana) _dash_exit(20);
 # expect-c: static void _dash_exit_cleanup(void) {
-# expect-c: if (win_Ventana) CloseWindow(win_Ventana);
+# expect-c: if (win_Ventana) { if (_dash_win == win_Ventana) _dash_win = NULL; CloseWindow(win_Ventana); win_Ventana = NULL; }
 
 Window Ventana
     title "Salida"

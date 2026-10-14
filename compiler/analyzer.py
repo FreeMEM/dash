@@ -9,7 +9,7 @@ from enum import Enum, auto
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -387,6 +387,11 @@ class SemanticAnalyzer(ASTVisitor):
         self._visit_new_body(node.body)
         if not has_stop:
             self.warning("On Close handler has no Stop command", node)
+        self.exit_scope()
+
+    def visit_OnGadgetHandler(self, node: OnGadgetHandler):
+        self.enter_scope("on_gadget")
+        self._visit_new_body(node.body)
         self.exit_scope()
 
     def visit_OnKeyHandler(self, node: OnKeyHandler):
