@@ -6,6 +6,16 @@
 @header "#include <devices/timer.h>"
 @header "#include <proto/timer.h>"
 @header "struct Device *TimerBase = NULL; static struct timerequest *_bench_tr; static struct EClockVal _bench_t0; static ULONG _bench_freq;"
+@header "static volatile LONG _bench_sink;"
+
+# bench_sink(x) stores x where GCC cannot drop it: a loop whose result is never
+# used, or that has a closed form, would otherwise be computed at compile time
+# (one move.l to memory per call, inlined)
+@native func bench_sink(x: Int)
+"""
+    _bench_sink = x;
+"""
+end
 
 @native func bench_start()
 """

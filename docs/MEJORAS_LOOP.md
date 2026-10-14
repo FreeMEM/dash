@@ -118,8 +118,8 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       funciones), 26b arrays (`DashArray_get/set`, `%`, for-each), 26c strings (concat, interpolación, from_int, set),
       26d Float por software (rutinas propias), 26d2 suma y multiplicación Float en ensamblador 68000, 26d3 suma y multiplicación Float con menos ciclos
       (exponente sin desplazar, mantisa `<< 8` para que el producto alto ya sea la mantisa, menos registros; meta: la
-      suma de la ROM, `IEEESPAdd`, que en A500 da 88.865 ns frente a 125.864 de la mía), 26e llamadas y return, 26e2 no marcar/soltar temporales en bucles y funciones que no los crean (análisis en
-      codegen), 26f gráficos y texto (plantillas con `${str}`
+      suma de la ROM, `IEEESPAdd`, que en A500 da 88.865 ns frente a 125.864 de la mía), 26e llamadas y return, 26e2 no marcar/soltar temporales en bucles y funciones que no los crean (repaso del C
+      final, hecho), 26f gráficos y texto (plantillas con `${str}`
       doble). Detalle original:: cada función del runtime (`DashString_*`,
       `DashArray_*`, `_dash_str_*`, `_dash_tmp_*`, objetos, Float, gráficos...) con su microbenchmark en
       `tests/bench/` (ciclos por llamada en 68000 y 68020) y su ensamblador (`-S`); mejorarlas una a una y
@@ -611,3 +611,23 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `nested_struct_new` 1.614.554 → 1.039.195 (-36 %), `string_concat_int` 619.737 → 459.234 (-26 %), `string_interp`
   -17 %, `string_return` -23 %. El resto igual (±1 %). A1200 parecido.
 - Tamaño: 268.144 → 269.360 bytes (tabla de cifras y rutinas en línea).
+
+### 2026-10-14 — Tarea 26e2 (sin marcas de temporales donde no hacen falta)
+- Base: 173/173 (`--emu --emu-a500`). Después: 174/174 (test nuevo: `test_tmp_marks`).
+- Hecho: `compiler/tmp_marks.py`, un repaso del C final (al acabar `generate()`). Calcula qué funciones pueden dejar
+  temporales en las listas del que llama: las que meten en ellas (`_dash_otmp_push`, `_dash_tmp_release_keep`,
+  `_dash_str_alloc`/`_dash_str_dup` con `temp` distinto de `FALSE`) y las que llaman a esas, hasta no cambiar. Una
+  función con su propia marca solo cuenta por lo que devuelve (`_dash_str_ret`, `_dash_obj_float`, `release_keep`).
+  Las llamadas a funciones que no están en el fichero (sistema, libc) y por puntero no dejan nada. Un bucle o una
+  función sin llamadas de esas pierde la marca y sus liberaciones. Lee también funciones de una línea y firmas en
+  varias líneas: comprobado que reconoce todas las definiciones de los 103 tests y ejemplos.
+- Runner: `# expect-no-c: <texto>` (el C no debe contenerlo; `\n` = salto de línea).
+- Aviso, benchmarks: sin las marcas, GCC calculaba en tiempo de compilación los bucles sin efectos (`int_loop`,
+  `while_loop`, `func_call` daban 7 ns) y sacaba del bucle la comparación de `string_compare`. Ahora `bench_lib` tiene
+  `bench_sink(x)` (un `move.l` a una variable `volatile`) y esos bucles lo llaman en cada vuelta; `string_compare`
+  compara `pal[i % 2]`. Esos cuatro no se comparan con las ejecuciones anteriores.
+- Medido el antes justo (mismos benchmarks nuevos, C sin el repaso, A500 ns): `int_loop` 12.649 → 6.940 (-45 %),
+  `while_loop` 10.917 → 5.758, `func_call` 10.862 → 5.771, `string_compare` 66.169 → 60.406. Y en la tabla:
+  `for_each_10` 209.640 → 86.753 (x2,4), `string_chars_26` 300.862 → 156.235 (x1,9), `array_get_set` -8 %,
+  Float -4 %, gráficos -1 %. A1200 parecido.
+- Tamaño: 269.360 → 251.620 bytes (-6,6 %): menos código por bucle y función, y más funciones pequeñas en línea.

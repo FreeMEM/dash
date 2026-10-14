@@ -2,6 +2,7 @@
 Dash Language Code Generator
 Generates C code from the analyzed AST using templates.
 """
+from compiler.tmp_marks import strip_unused_marks
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
@@ -5313,7 +5314,7 @@ class CodeGenerator(ASTVisitor):
         # Pre-scan to detect Area fill usage before code generation
         self._prescan_for_area(self.analysis.program)
         self.visit(self.analysis.program)
-        return self._assemble_program()
+        return strip_unused_marks(self._assemble_program())
 
     def _prescan_for_area(self, node: ASTNode):
         """Pre-scan AST to detect if Area fill functions are used."""

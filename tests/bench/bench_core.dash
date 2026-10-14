@@ -26,6 +26,7 @@ Main
     x = 0
     for i in (1..n)
         x = x + i * 3
+        bench_sink(x)
     end
     bench_end("int_loop", n)
 
@@ -33,6 +34,7 @@ Main
     k = 0
     while k < n
         k = k + 1
+        bench_sink(k)
     end
     bench_end("while_loop", n)
 
@@ -40,6 +42,7 @@ Main
     y = 0
     for i in (1..n)
         y = suma1(y)
+        bench_sink(y)
     end
     bench_end("func_call", n)
 
@@ -110,8 +113,9 @@ Main
 
     bench_start()
     iguales = 0
+    pal = [s, "n4999"]
     for i in (1..n)
-        if s == "n5000"
+        if pal[i % 2] == "n5000"
             iguales = iguales + 1
         end
     end
