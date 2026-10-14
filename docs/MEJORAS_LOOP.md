@@ -130,7 +130,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `-m68000` vs `-m68020` por defecto, `-fno-...` que estorben, divisiones y módulos por potencias de 2, `Print`
       sin `Printf` cuando el formato es fijo. Cada cambio con antes/después de la tabla de la tarea 25.
 - [~] 27. Optimización (3/3) — memoria y tamaño. Partes: 27a funciones `static` y `--small` (hecha), 27b pila
-      (`__stack` + `swapstack` de libnix; el shell de 3.1 da 4 KB; hecha), 27c pool y cabeceras, 27d bucle de caracteres
+      (`__stack` + `swapstack` de libnix; el shell de 3.1 da 4 KB; hecha), 27c pool y cabeceras (clases de 8 bytes, hecha), 27d bucle de caracteres
       (`string_chars_26` va el doble de rápido con `-Os` que con `-O2`: mirar el C). Detalle original: cabeceras de strings/objetos, tamaño de puddle del pool,
       runtime que no se usa (secciones, `-ffunction-sections -Wl,--gc-sections` si el linker de Amiga lo admite),
       `-Os` frente a `-O2` por programa, código de arranque de libnix, strings duplicados. Antes/después en bytes.
@@ -687,3 +687,19 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Coste: 720 bytes por programa (`swapstack` 324 + `__request` 120 + estructura del ejecutable): `hola` 4.276 → 4.996.
   Lo dejo por defecto: un desbordamiento de pila cuelga la máquina; quien quiera los bytes tiene `--stack 0`.
   En memoria, 16 KB más mientras corre el programa (solo si arrancó con menos).
+
+### 2026-10-15 — Tarea 27c (caché de bloques en clases de 8 bytes)
+- Base: 182/182. Después: igual (`--emu --emu-a500`); 30/30 ejemplos. Harness del PC con AddressSanitizer: 0 errores.
+- Hecho: la caché de bloques pequeños (26e) pasa de clases de 16 bytes hasta 64 a clases de 8 bytes hasta 128
+  (16 listas). Un string corto (`"Puntos: 12"`, 11 letras + 1 + 12 de cabecera = 24) ocupaba un bloque de 32; ahora
+  de 24. Los strings de hasta ~115 letras también se reciclan en vez de ir al pool.
+- Medidas de memoria en los benchmarks: `bench_mem(nombre, bytes)` imprime `BENCHMEM`, `bench_free()` lee
+  `AvailMem`; `tools/bench.py` las guarda en `"mem"`. `bench_core` mide 1000 strings cortos y 1000 structs que
+  quedan vivos. A500, antes (generador del commit anterior) → después:
+  `mem_1000_strings` 28.952 → 20.680 bytes (-29 %), `mem_1000_structs` 33.088 → 33.088 (28 bytes caben en 32 con
+  las dos clases). Prueba aparte con 2000 strings guardados: 62.040 → 45.496 bytes; strings de ~80 letras en bucle
+  1.380.667 → 1.102.260 ns (-20 %, ya no van al pool).
+- Velocidad (tabla `27c`): igual (±1,5 %; el borrado de bloques recicla en pasos de 8 bytes).
+- No hecho: cabecera de objetos de 20 a 16 bytes (un struct de 2 campos pasaría de 32 a 24). `serial` y `_refcount`
+  no se usan a la vez y podrían compartir sitio, pero toca toda la lógica de referencias: lo dejo anotado.
+- Tamaño: 253.088 → 254.032 bytes (los benchmarks tienen dos funciones nuevas).

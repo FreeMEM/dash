@@ -19,6 +19,25 @@ func etiqueta(n)
     return "n" + n
 end
 
+# 1000 short strings and 1000 structs that stay alive (escaped: freed at exit)
+@native func guardar_strings(n: Int)
+"""
+    LONG i;
+    for (i = 1; i <= n; i++) {
+        ULONG m = _dash_tmp_mark();
+        _dash_str_escape(DashString_concat("Puntos: ", DashString_from_int(i)));
+        _dash_tmp_release(m);
+    }
+"""
+end
+
+@native func guardar_structs(n: Int)
+"""
+    LONG i;
+    for (i = 1; i <= n; i++) _dash_obj_escape(_dash_struct_create_Punto(i, i));
+"""
+end
+
 Main
     n = 20000
 
@@ -137,5 +156,11 @@ Main
         end
     end
     bench_end("string_chars_26", 200)
+    libre = bench_free()
+    guardar_strings(1000)
+    bench_mem("mem_1000_strings", libre - bench_free())
+    libre = bench_free()
+    guardar_structs(1000)
+    bench_mem("mem_1000_structs", libre - bench_free())
     Print x + y + total + iguales + largo + k + Int(f) + Int(h)
 end

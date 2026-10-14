@@ -114,26 +114,27 @@ static APTR _dash_alloc(ULONG size) {
     return AllocPooled(_dash_pool, size);
 }
 
-/* Small blocks (up to 64 bytes: strings, structs, array headers and data)
-   are recycled through free lists by 16-byte class instead of going back to
+/* Small blocks (up to 128 bytes: strings, structs, array headers and data)
+   are recycled through free lists by 8-byte class instead of going back to
    the exec pool: AllocPooled + FreePooled cost about 2000 cycles on a 68000,
    a free list a few dozen. A loop that makes a short string, a struct or a
-   small array per iteration reuses the same blocks. The size given to
+   small array per iteration reuses the same blocks. 8-byte classes waste 3.5
+   bytes per block on average (16-byte classes: 7.5). The size given to
    _dash_block_put must be the one given to _dash_block_get. */
-#define _DASH_SMALL_CLASSES 4
-#define _DASH_SMALL_MAX (16 * _DASH_SMALL_CLASSES)
+#define _DASH_SMALL_CLASSES 16
+#define _DASH_SMALL_MAX (8 * _DASH_SMALL_CLASSES)
 static APTR _dash_small_free[_DASH_SMALL_CLASSES];
 
 /* contents undefined (a recycled block is not cleared) */
 static __inline__ APTR _dash_block_get(ULONG size) {
     if (size <= _DASH_SMALL_MAX) {
-        ULONG c = (size - 1) >> 4;
+        ULONG c = (size - 1) >> 3;
         APTR b = _dash_small_free[c];
         if (b) {
             _dash_small_free[c] = *(APTR *)b;
             return b;
         }
-        return _dash_alloc((c + 1) << 4);
+        return _dash_alloc((c + 1) << 3);
     }
     return _dash_alloc(size);
 }
@@ -141,22 +142,22 @@ static __inline__ APTR _dash_block_get(ULONG size) {
 /* cleared, like a fresh block of the pool (MEMF_CLEAR) */
 static APTR _dash_block_get_clear(ULONG size) {
     if (size <= _DASH_SMALL_MAX) {
-        ULONG c = (size - 1) >> 4;
+        ULONG c = (size - 1) >> 3;
         ULONG *b = (ULONG *)_dash_small_free[c];
         if (b) {
             ULONG *q = b;
             _dash_small_free[c] = *(APTR *)b;
-            do { q[0] = 0; q[1] = 0; q[2] = 0; q[3] = 0; q += 4; } while (c--);
+            do { q[0] = 0; q[1] = 0; q += 2; } while (c--);
             return b;
         }
-        return _dash_alloc((c + 1) << 4);
+        return _dash_alloc((c + 1) << 3);
     }
     return _dash_alloc(size);
 }
 
 static __inline__ void _dash_block_put(APTR b, ULONG size) {
     if (size <= _DASH_SMALL_MAX) {
-        ULONG c = (size - 1) >> 4;
+        ULONG c = (size - 1) >> 3;
         *(APTR *)b = _dash_small_free[c];
         _dash_small_free[c] = b;
         return;

@@ -7,6 +7,7 @@
 
 Each tests/bench/bench_*.dash prints "BENCH name iterations eclock_ticks freq"
 (see bench_lib.dash); this script turns them into nanoseconds per iteration.
+"BENCHMEM name bytes" lines are memory kept by a piece of code (key "mem").
 Machines (cycle-exact speed, not "max"):
   a500   68000 7 MHz, Kickstart 3.1 A500 ROM ($DASH_KICKSTART_A500)
   a1200  68020 14 MHz, Kickstart 3.1 A1200 ROM ($DASH_KICKSTART)
@@ -47,13 +48,16 @@ def compile_all(paths, out_dir):
 
 
 def parse(output):
-    out = {}
+    """ns per iteration of each BENCH line, and bytes of each BENCHMEM line."""
+    out, mem = {}, {}
     for line in (output or "").splitlines():
         parts = line.split()
         if len(parts) == 5 and parts[0] == "BENCH":
             _, name, iters, ticks, freq = parts
             out[name] = round(int(ticks) * 1e9 / int(freq) / int(iters))   # ns per iteration
-    return out
+        elif len(parts) == 3 and parts[0] == "BENCHMEM":
+            mem[parts[1]] = int(parts[2])
+    return out, mem
 
 
 def main():
@@ -67,7 +71,8 @@ def main():
     examples = sorted((ROOT / "examples").glob("*.dash"))
     run = {"commit": subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True,
                                     text=True, cwd=ROOT).stdout.strip(),
-           "date": time.strftime("%Y-%m-%d %H:%M"), "label": args.save or "", "ns": {}, "sizes": {}}
+           "date": time.strftime("%Y-%m-%d %H:%M"), "label": args.save or "", "ns": {}, "mem": {},
+           "sizes": {}}
     with tempfile.TemporaryDirectory() as tmp:
         exes = compile_all(benches + examples, tmp)
         for src, exe in exes.items():
@@ -80,11 +85,13 @@ def main():
                 continue
             results = run_programs([exes[b] for b in benches if b in exes], timeout=900, kickstart=rom,
                                    extra_config=m["config"])
-            run["ns"][machine] = {}
+            run["ns"][machine], run["mem"][machine] = {}, {}
             for r in results:
                 if r.timed_out:
                     print(f"! {machine}/{r.name}: timeout", file=sys.stderr)
-                run["ns"][machine].update(parse(r.output))
+                ns, mem = parse(r.output)
+                run["ns"][machine].update(ns)
+                run["mem"][machine].update(mem)
 
     history = json.loads(RESULTS.read_text()) if RESULTS.exists() else []
     prev = history[-1] if history else None
@@ -95,6 +102,12 @@ def main():
         for m, vals in run["ns"].items():
             old = prev["ns"].get(m, {}).get(n) if prev else None
             row += f"{vals.get(n, '-'):>14}" + (f"{old:>10}" if old else f"{'':>10}")
+        print(row)
+    for n in sorted({n for m in run["mem"].values() for n in m}):
+        row = f"{n:22}"
+        for m, vals in run["mem"].items():
+            old = prev.get("mem", {}).get(m, {}).get(n) if prev else None
+            row += f"{str(vals.get(n, '-')) + ' B':>14}" + (f"{old:>10}" if old else f"{'':>10}")
         print(row)
     total = sum(v for k, v in run["sizes"].items())
     old_total = sum(prev["sizes"].values()) if prev else None

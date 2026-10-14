@@ -38,3 +38,17 @@ end
     Printf("BENCH %s %ld %lu %lu\n", name, iterations, t1.ev_lo - _bench_t0.ev_lo, _bench_freq);
 """
 end
+
+# bench_mem("name", bytes) prints "BENCHMEM name bytes": memory a piece of code
+# kept (measure it with bench_free() before and after)
+@native func bench_mem(name: String, bytes: Int)
+"""
+    Printf("BENCHMEM %s %ld\n", name, bytes);
+"""
+end
+
+@native func bench_free() -> Int
+"""
+    return (LONG)AvailMem(MEMF_ANY);
+"""
+end
