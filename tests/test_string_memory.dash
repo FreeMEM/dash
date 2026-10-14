@@ -1,0 +1,80 @@
+# Test: strings are freed while the program runs
+# 100.000 concatenations in loops, functions returning strings, struct
+# fields and globals reassigned: free memory must not keep going down.
+# Strings that escape (stored in an array) must stay valid.
+#
+# expect-c: _dash_str_set(&s, DashString_concat("x", DashString_from_int(i)));
+# expect-c: _dash_tmp_release_keep(_dash_fm, _dash_r);
+# expect-out: estable
+# expect-out: x100000-x100000
+# expect-out: nombre 10000
+# expect-out: g 10000
+# expect-out: a1
+# expect-out: a5
+# expect-out: 10
+
+@native func mem_libre() -> Int
+"""
+    return (LONG)AvailMem(MEMF_ANY);
+"""
+end
+
+struct Ficha
+    nombre: String
+end
+
+var g: String = "inicio"
+
+func etiqueta(n)
+    t = "nombre " + n
+    return t
+end
+
+func sin_usar(n)
+    u = "tmp" + n
+    if n > 5
+        return n
+    end
+    return 0
+end
+
+Main
+    s = ""
+    t = ""
+    f = Ficha("x")
+    antes = mem_libre()
+    for i in (1..100000)
+        s = "x" + i
+        t = s + "-" + s
+    end
+    k = 0
+    while k < 10000
+        k = k + 1
+        f.nombre = etiqueta(k)
+        g = "g " + k
+        if k % 2 == 0
+            continue
+        end
+        w = sin_usar(k)
+        if w > 20000
+            break
+        end
+    end
+    despues = mem_libre()
+    if antes - despues < 8192
+        Print "estable"
+    else
+        Print antes - despues
+    end
+    Print t
+    Print f.nombre
+    Print g
+
+    lista = ["", "", "", "", ""]
+    for j in (0..4)
+        lista[j] = "a" + (j + 1)
+    end
+    Print lista[0]
+    Print lista[4]
+    Print sin_usar(10)
+end

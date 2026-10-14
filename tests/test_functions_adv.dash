@@ -5,7 +5,7 @@
 # expect-c: APTR doble = (APTR)_dash_lambda_
 # expect-c: ((LONG (*)(LONG))doble)(4)
 # expect-c: LONG aplica(APTR f, LONG v) {
-# expect-c: return ((LONG (*)(LONG))f)(v);
+# expect-c: _dash_r = ((LONG (*)(LONG))f)(v);
 # expect-c: DashArrayLong * lista(void)
 # expect-c: DashArrayLong * l = lista();
 # expect-c: _Dash_Punto * crea(void)

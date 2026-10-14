@@ -191,7 +191,9 @@ random_range(min, max)      # Random in range
 ```
 
 ## Memory Management
-> Strings, arrays y structs salen de un pool que se libera al salir del programa.
+> Strings: se liberan solos (cada variable es dueña de su texto; los temporales se
+> liberan en cada vuelta de bucle/EventLoop y al salir de una función).
+> Arrays y structs salen de un pool que se libera al salir del programa.
 > Estas funciones son para gestión manual dentro del programa.
 
 ```

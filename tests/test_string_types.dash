@@ -8,8 +8,8 @@
 # expect-c: Printf("%ld\n", s);
 # expect-c: strcmp(nombre_fijo(), "Ana") == 0
 # expect-c: strcmp(msg, "otro") != 0
-# expect-c: STRPTR total = DashString_concat("Total: ", DashString_from_int(n));
-# expect-c: STRPTR cuenta = DashString_concat(DashString_from_int(n), " items");
+# expect-c: _dash_str_set(&total, DashString_concat("Total: ", DashString_from_int(n)));
+# expect-c: _dash_str_set(&cuenta, DashString_concat(DashString_from_int(n), " items"));
 # expect-c: LONG x = (!(a == b));
 # expect-c: Printf("100%% hecho\n");
 #

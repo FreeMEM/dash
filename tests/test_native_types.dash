@@ -2,7 +2,7 @@
 # Their declared return type is used by callers, and inline C that
 # calls graphics.library makes the program open it.
 #
-# expect-c: STRPTR s = saludo();
+# expect-c: _dash_str_set(&s, saludo());
 # expect-c: Printf("%s\n", s);
 # expect-c: GfxBase = (struct GfxBase *)OpenLibrary("graphics.library"
 #

@@ -185,13 +185,11 @@ static void _dash_str_set(STRPTR *var, STRPTR value) {
 }
 
 /* The text leaves Dash's control (stored in an array, kept by the OS...):
-   a temporary becomes permanent; owned text is marked so it is never freed */
-static STRPTR _dash_str_keep(STRPTR p) {
-    if (p && _dash_tmp_take(p)) _DASH_STR_HDR(p)->size |= _DASH_STR_KEEP;
-    return p;
-}
-
-static STRPTR _dash_str_keep_owned(STRPTR p) {
+   a temporary becomes permanent; anything else is copied into a permanent
+   string, because its owner may free it. Freed only at exit, with the pool. */
+static STRPTR _dash_str_escape(STRPTR p) {
+    if (!p) return p;
+    if (!_dash_tmp_take(p)) p = _dash_str_dup(p, FALSE);
     if (p) _DASH_STR_HDR(p)->size |= _DASH_STR_KEEP;
     return p;
 }
@@ -3232,8 +3230,10 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
     struct IntuiMessage *msg;
     ULONG msg_class;
     UWORD msg_code;
+    ULONG _dash_tmev = _dash_tmp_mark();
 
     while (running) {
+        _dash_tmp_release(_dash_tmev);  /* temporaries of the previous messages */
         WaitPort(win_$window->UserPort);
         while ((msg = (struct IntuiMessage *)GetMsg(win_$window->UserPort))) {
             msg_class = msg->Class;
@@ -3256,8 +3256,9 @@ $key_record            ReplyMsg((struct Message *)msg);
 """)
 
     ON_CLOSE_HANDLER = Template("""\
-                case IDCMP_CLOSEWINDOW:
+                case IDCMP_CLOSEWINDOW: {
 $handler_code
+                    }
                     break;
 """)
 
@@ -3444,19 +3445,54 @@ class CodeGenContext:
     idcmp_flags: Set[str] = field(default_factory=set)
     # Stack of scopes - each scope is a set of variable names declared in that scope
     scope_stack: List[Set[str]] = field(default_factory=lambda: [set()])
+    # Parallel stacks: String variables each scope owns (freed when it ends) and
+    # the kind of scope ("main", "block", "loop", "func", "handler")
+    owned_stack: List[List[str]] = field(default_factory=lambda: [[]])
+    kind_stack: List[str] = field(default_factory=lambda: ["main"])
 
     @property
     def indent(self) -> str:
         return "    " * self.indent_level
 
-    def enter_scope(self):
+    def enter_scope(self, kind: str = "block"):
         """Enter a new scope."""
         self.scope_stack.append(set())
+        self.owned_stack.append([])
+        self.kind_stack.append(kind)
 
     def exit_scope(self):
         """Exit current scope."""
         if len(self.scope_stack) > 1:
             self.scope_stack.pop()
+            self.owned_stack.pop()
+            self.kind_stack.pop()
+
+    def own(self, name: str):
+        """The current scope owns the String variable name (frees it when it ends)."""
+        self.owned_stack[-1].append(name)
+
+    def _frames_in_function(self):
+        """Indexes of the scopes of the current function (or Main), innermost first."""
+        for i in range(len(self.kind_stack) - 1, -1, -1):
+            yield i
+            if self.kind_stack[i] in ("func", "main"):
+                return
+
+    def is_owned(self, name: str) -> bool:
+        return any(name in self.owned_stack[i] for i in self._frames_in_function())
+
+    def owned_until(self, kinds) -> Optional[List[str]]:
+        """Owned variables from the innermost scope out to the first scope of one
+        of these kinds (included); None if there is no such scope."""
+        names: List[str] = []
+        for i in self._frames_in_function():
+            names.extend(reversed(self.owned_stack[i]))
+            if self.kind_stack[i] in kinds:
+                return names
+        return None
+
+    def current_owned(self) -> List[str]:
+        return list(reversed(self.owned_stack[-1]))
 
     def declare_var(self, name: str):
         """Declare a variable in the current scope."""
@@ -3514,6 +3550,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
+        self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
         self.extern_libraries: Set[str] = set()
@@ -3600,6 +3637,9 @@ class CodeGenerator(ASTVisitor):
         # Add memory runtime (arrays, strings and structs allocate from its pool)
         if self._uses_pool():
             parts.append(CTemplates.MEMORY_RUNTIME)
+        else:
+            # Loops and functions mark and release temporaries: nothing to do without strings
+            parts.append("#define _dash_tmp_mark() 0UL\n#define _dash_tmp_release(m) ((void)(m))\n")
 
         if self.uses_float:
             parts.append(CTemplates.FLOAT_RUNTIME)
@@ -3826,8 +3866,15 @@ class CodeGenerator(ASTVisitor):
         type_map = self._c_type_map
         c_type = type_map.get(gvar.var_type, "LONG")
 
-        # Generate initial value if present
-        if gvar.initial_value:
+        if c_type == "STRPTR":
+            # Owned like any String variable: starts NULL, the value is set when main starts
+            self.global_strings.add(gvar.name)
+            self.uses_strings = True
+            self.emit_global(f"STRPTR {gvar.name} = NULL;\n")
+            if gvar.initial_value:
+                init_val = self._generate_expression(gvar.initial_value)
+                self.emit(f"    _dash_str_set(&{gvar.name}, {init_val});\n")
+        elif gvar.initial_value:
             init_val = self._generate_expression(gvar.initial_value)
             self.emit_global(f"{c_type} {gvar.name} = {init_val};\n")
         else:
@@ -3950,7 +3997,12 @@ class CodeGenerator(ASTVisitor):
         for field in struct.fields:
             c_type = type_map.get(field.field_type, "LONG")
             params.append(f"{c_type} {field.name}")
-            assigns.append(f"    s->{field.name} = {field.name};")
+            if c_type == "STRPTR":
+                # String fields own their text, like variables
+                self.uses_strings = True
+                assigns.append(f"    _dash_str_set(&s->{field.name}, {field.name});")
+            else:
+                assigns.append(f"    s->{field.name} = {field.name};")
 
         params_str = ", ".join(params)
         assigns_str = "\n".join(assigns)
@@ -4009,7 +4061,7 @@ static void {struct.name}_release({c_name} *obj) {{
         self.var_types = dict(saved_var_types)
         self._seed_param_types(method.params)
 
-        self.context.enter_scope()
+        self.context.enter_scope("func")
         # Declare parameters in scope
         self.context.declare_var("self")
         for p in method.params:
@@ -4018,9 +4070,10 @@ static void {struct.name}_release({c_name} *obj) {{
             else:
                 self.context.declare_var(p)
 
-        body_code = ""
+        body_code = self._function_prologue(method.params, method.body)
         for stmt in method.body:
             body_code += self._generate_statement(stmt)
+        body_code += self._function_epilogue()
 
         self.context.exit_scope()
 
@@ -4130,6 +4183,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.emit(f"        CloseWindow(win_{window});\n")
         self.emit(f"        win_{window} = NULL;\n")
         self.emit(f"    }}\n")
+        self.emit("    _dash_tmp_release(_dash_tmev);\n")
         self.emit("    }\n")  # Close the block that scopes the loop variables
 
         self.context.in_event_loop = False
@@ -4137,8 +4191,11 @@ static {ret_type} {method_name}({params_str}) {{
     def visit_OnCloseHandler(self, node: OnCloseHandler):
         """Generate code for On Close handler."""
         handler_code = []
+        self.context.enter_scope("handler")
         for stmt in node.body:
             handler_code.append(self._generate_statement(stmt))
+        handler_code.append(self._frees(self.context.current_owned()))
+        self.context.exit_scope()
 
         code = CTemplates.ON_CLOSE_HANDLER.substitute(
             handler_code="".join(handler_code)
@@ -4151,7 +4208,10 @@ static {ret_type} {method_name}({params_str}) {{
         self.emit("                case IDCMP_RAWKEY:\n")
         self.emit("                    if (msg_code & IECODE_UP_PREFIX) break;\n")
         for handler in handlers:
+            self.context.enter_scope("handler")
             body = "".join(self._generate_statement(stmt) for stmt in handler.body)
+            body += self._frees(self.context.current_owned())
+            self.context.exit_scope()
             self.emit(f"                    if ({self._key_condition(handler.key)}) {{\n")
             self.emit(body)
             self.emit("                    }\n")
@@ -4201,10 +4261,10 @@ static {ret_type} {method_name}({params_str}) {{
         self.emit(code)
 
     def visit_BreakStmt(self, node: BreakStmt):
-        self.emit(f"{self.context.indent}    break;\n")
+        self.emit(self._frees(self.context.owned_until({"loop"}) or []) + f"{self.context.indent}    break;\n")
 
     def visit_ContinueStmt(self, node: ContinueStmt):
-        self.emit(f"{self.context.indent}    continue;\n")
+        self.emit(self._frees(self.context.owned_until({"loop"}) or []) + f"{self.context.indent}    continue;\n")
 
     def visit_StopStmt(self, node: StopStmt):
         """Generate code for Stop statement."""
@@ -4266,6 +4326,21 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = f"struct:{struct_name}"
         else:
             self.var_types[node.name] = "number"
+
+        if self.var_types.get(node.name) == "string":
+            # A String variable owns its text: _dash_str_set adopts a temporary or
+            # copies, and frees the old text. Loop variables only borrow.
+            self.uses_strings = True
+            if not self.context.is_declared(node.name):
+                self.context.declare_var(node.name)
+                self.context.own(node.name)
+                self.emit(f"{indent}STRPTR {node.name} = NULL;\n")
+                self.emit(f"{indent}_dash_str_set(&{node.name}, {value});\n")
+            elif self.context.is_owned(node.name) or node.name in self.global_strings:
+                self.emit(f"{indent}_dash_str_set(&{node.name}, {value});\n")
+            else:
+                self.emit(f"{indent}{node.name} = {value};\n")
+            return
 
         if not self.context.is_declared(node.name):
             # First assignment - declare the variable
@@ -4350,6 +4425,7 @@ static {ret_type} {method_name}({params_str}) {{
         then_body = ""
         for s in node.then_body:
             then_body += self._generate_statement(s)
+        then_body += self._frees(self.context.current_owned())
         self.context.exit_scope()
         self.context.indent_level -= 1
 
@@ -4360,6 +4436,7 @@ static {ret_type} {method_name}({params_str}) {{
             else_body = ""
             for s in node.else_body:
                 else_body += self._generate_statement(s)
+            else_body += self._frees(self.context.current_owned())
             self.context.exit_scope()
             self.context.indent_level -= 1
 
@@ -4383,11 +4460,14 @@ static {ret_type} {method_name}({params_str}) {{
         indent_base = self.context.indent
 
         # Generate body with new scope
+        mark = self._new_tmp_mark()
         self.context.indent_level += 1
-        self.context.enter_scope()
+        self.context.enter_scope("loop")
         body = f"{self.context.indent}    _dash_ac_check();\n" if self.autoclose else ""
+        body += self._loop_body_head(mark)
         for s in node.body:
             body += self._generate_statement(s)
+        body += self._frees(self.context.current_owned())
         self.context.exit_scope()
         self.context.indent_level -= 1
 
@@ -4396,7 +4476,7 @@ static {ret_type} {method_name}({params_str}) {{
             condition=condition,
             body=body
         )
-        self.emit(code)
+        self.emit(self._wrap_loop(indent_base, mark, code))
 
     def visit_ForRangeStmt(self, node: ForRangeStmt):
         """Generate code for for-range statement.
@@ -4431,22 +4511,24 @@ static {ret_type} {method_name}({params_str}) {{
             cond = f"{var} >= {end}"
             incr = f"{var}--" if step == -1 else f"{var} -= {-step}"
 
-        body = self._generate_loop_body(node, "number")
+        mark = self._new_tmp_mark()
+        body = self._generate_loop_body(node, "number", mark)
 
         code = CTemplates.FOR_RANGE_STMT.substitute(
             indent=indent, var=var, start=init, cond=cond, incr=incr, body=body)
-        self.emit(code)
+        self.emit(self._wrap_loop(indent, mark, code))
 
-    def _generate_loop_body(self, node, var_type: str) -> str:
+    def _generate_loop_body(self, node, var_type: str, mark: str) -> str:
         """Generate a for-loop body; the loop variable has its own scope and type."""
         saved_type = self.var_types.get(node.variable)
         self.var_types[node.variable] = var_type
         self.context.indent_level += 1
-        self.context.enter_scope()
-        self.context.declare_var(node.variable)  # Loop var is declared by for
-        body = ""
+        self.context.enter_scope("loop")
+        self.context.declare_var(node.variable)  # Loop var is declared by for (borrowed)
+        body = self._loop_body_head(mark)
         for s in node.body:
             body += self._generate_statement(s)
+        body += self._frees(self.context.current_owned())
         self.context.exit_scope()
         self.context.indent_level -= 1
         if saved_type is None:
@@ -4463,15 +4545,17 @@ static {ret_type} {method_name}({params_str}) {{
         if self._is_string_expr(node.iterable):
             self.uses_strings = True
             string = self._generate_expression(node.iterable)
-            body = self._generate_loop_body(node, "char")
-            self.emit(CTemplates.FOR_EACH_CHAR_STMT.substitute(
-                indent=indent, var=node.variable, string=string, body=body))
+            mark = self._new_tmp_mark()
+            body = self._generate_loop_body(node, "char", mark)
+            self.emit(self._wrap_loop(indent, mark, CTemplates.FOR_EACH_CHAR_STMT.substitute(
+                indent=indent, var=node.variable, string=string, body=body)))
             return
 
         self.uses_arrays = True
         array = self._array_ref(node.iterable)
         strings = self._is_string_array(node.iterable)
-        body = self._generate_loop_body(node, "string" if strings else "number")
+        mark = self._new_tmp_mark()
+        body = self._generate_loop_body(node, "string" if strings else "number", mark)
 
         code = CTemplates.FOR_EACH_STMT.substitute(
             elem_type="STRPTR" if strings else "LONG",
@@ -4481,7 +4565,7 @@ static {ret_type} {method_name}({params_str}) {{
             array=array,
             body=body
         )
-        self.emit(code)
+        self.emit(self._wrap_loop(indent, mark, code))
 
     def visit_FunctionDef(self, node: FunctionDef):
         """Generate code for function definition."""
@@ -4509,13 +4593,14 @@ static {ret_type} {method_name}({params_str}) {{
 
         # Generate function body with new scope (before inferring the return
         # type, so the types of local variables are known)
-        self.context.enter_scope()
+        self.context.enter_scope("func")
         for p_name in param_names:
             self.context.declare_var(p_name)
 
-        body = ""
+        body = self._function_prologue(node.params, node.body)
         for s in node.body:
             body += self._generate_statement(s)
+        body += self._function_epilogue()
 
         self.context.exit_scope()
 
@@ -4566,13 +4651,33 @@ static {ret_type} {method_name}({params_str}) {{
         return "LONG" if c_type == "void" else c_type
 
     def visit_ReturnStmt(self, node: ReturnStmt):
-        """Generate code for return statement."""
+        """Generate code for return statement. Inside a function: compute the value,
+        free the owned strings and release the function's temporaries (a returned
+        string survives as a temporary of the caller), then return."""
         indent = self.context.indent
-        if node.value:
-            value = self._generate_expression(node.value)
-            self.emit(f"{indent}return {value};\n")
+        owned = self.context.owned_until({"func"})
+        if owned is None:  # not inside a function
+            if node.value:
+                self.emit(f"{indent}return {self._generate_expression(node.value)};\n")
+            else:
+                self.emit(f"{indent}return;\n")
+            return
+        if not node.value:
+            self.emit(self._frees(owned) + f"{indent}_dash_tmp_release(_dash_fm);\n{indent}return;\n")
+            return
+        value = self._generate_expression(node.value)
+        if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
+            # lambdas return LONG: the string leaves Dash's control
+            head = f"{indent}{{ LONG _dash_r = (LONG){self._escape(node.value, value)};\n"
+            release = f"{indent}_dash_tmp_release(_dash_fm);\n"
+        elif self._is_string_expr(node.value):
+            self.uses_strings = True
+            head = f"{indent}{{ STRPTR _dash_r = _dash_str_ret({value});\n"
+            release = f"{indent}_dash_tmp_release_keep(_dash_fm, _dash_r);\n"
         else:
-            self.emit(f"{indent}return;\n")
+            head = f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
+            release = f"{indent}_dash_tmp_release(_dash_fm);\n"
+        self.emit(head + self._frees(owned) + release + f"{indent}return _dash_r; }}\n")
 
     def visit_ArrayAssign(self, node: ArrayAssign):
         """Generate code for array element assignment."""
@@ -4582,7 +4687,7 @@ static {ret_type} {method_name}({params_str}) {{
         index = self._generate_expression(node.index)
         value = self._generate_expression(node.value)
         if self._is_string_expr(node.value):
-            value = f"(LONG){value}"
+            value = f"(LONG){self._escape(node.value, value)}"
         self.emit(f"{indent}DashArray_set({array_name}, {index}, {value});\n")
 
     def visit_FunctionCall(self, node: FunctionCall):
@@ -4602,9 +4707,19 @@ static {ret_type} {method_name}({params_str}) {{
     def _call_args(self, node: FunctionCall) -> str:
         """Arguments of a call; pointers passed to untyped (LONG) parameters are cast."""
         func = self.analysis.program.get_function(node.name)
+        foreign = None if func else self._foreign_func(node.name)
         args = []
         for i, arg in enumerate(node.arguments):
             code = self._generate_expression(arg)
+            if self._is_string_expr(arg):
+                if foreign is not None:
+                    code = self._escape(arg, code)  # C code may keep the pointer
+                elif func and (isinstance(arg, (MemberAccess, PropertyAccess))
+                               or (isinstance(arg, VarRef) and arg.name in self.global_strings)):
+                    # the callee could reassign that field or global and free the
+                    # text it received: pass a temporary copy
+                    self.uses_strings = True
+                    code = f"_dash_str_ret({code})"
             param = func.params[i] if func and i < len(func.params) else None
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
@@ -4622,6 +4737,70 @@ static {ret_type} {method_name}({params_str}) {{
     def generic_visit(self, node: ASTNode):
         """Handle unknown nodes."""
         self.emit(f"    // TODO: {node.__class__.__name__}\n")
+
+    # === String memory (docs/MEJORAS_LOOP.md, "Memoria: método recomendado") ===
+
+    # Builtins that only read their string arguments during the call: they get
+    # temporaries as they are. Any other builtin may keep the pointer (gadget
+    # labels, titles...), so it gets a permanent copy (_dash_str_escape).
+    _STRING_READERS = {
+        "console_write", "dir_create", "file_delete", "file_exists", "file_load",
+        "file_open", "file_print", "file_rename", "file_save", "file_size",
+        "file_write_line", "file_open_dialog", "file_save_dialog",
+        "gfx_text", "gfx_text_at", "gfx_text_len", "sprite_load",
+    }
+
+    def _frees(self, names) -> str:
+        """Free owned String variables (at the end of their scope, or before leaving it)."""
+        return "".join(f"{self.context.indent}_dash_str_free({n});\n" for n in names)
+
+    def _new_tmp_mark(self) -> str:
+        self._tm_counter = getattr(self, "_tm_counter", 0) + 1
+        return f"_dash_tm{self._tm_counter}"
+
+    def _escape(self, node: ASTNode, code: str) -> str:
+        """A string that leaves Dash's control. Literals and constants are static: as they are."""
+        if isinstance(node, StringLiteral) or self._is_string_constant(node):
+            return code
+        self.uses_strings = True
+        return f"_dash_str_escape({code})"
+
+    def _assigned_names(self, stmts) -> Set[str]:
+        """Names assigned anywhere in a list of statements (nested blocks included)."""
+        names: Set[str] = set()
+        for stmt in stmts or []:
+            if isinstance(stmt, VarAssign):
+                names.add(stmt.name)
+            for attr in ("then_body", "else_body", "body", "handlers"):
+                nested = getattr(stmt, attr, None)
+                if isinstance(nested, list):
+                    names |= self._assigned_names(nested)
+        return names
+
+    def _function_prologue(self, params, body) -> str:
+        """Start of a function body: the temporaries mark, and owned copies of
+        String parameters the body assigns (the caller still owns the original)."""
+        code = "    ULONG _dash_fm = _dash_tmp_mark();\n"
+        assigned = self._assigned_names(body)
+        for p in params:
+            name = p.name if isinstance(p, FunctionParam) else p
+            if self.var_types.get(name) == "string" and name in assigned:
+                self.uses_strings = True
+                code += f"    {name} = _dash_str_dup({name}, FALSE);\n"
+                self.context.own(name)
+        return code
+
+    def _function_epilogue(self) -> str:
+        """End of a function body that falls off the end."""
+        return self._frees(self.context.current_owned()) + f"{self.context.indent}_dash_tmp_release(_dash_fm);\n"
+
+    def _loop_body_head(self, mark: str) -> str:
+        """First statement of every loop iteration: release the previous iteration's temporaries."""
+        return f"{self.context.indent}_dash_tmp_release({mark});\n"
+
+    def _wrap_loop(self, indent: str, mark: str, loop_code: str) -> str:
+        return (f"{indent}    {{ ULONG {mark} = _dash_tmp_mark();\n" + loop_code +
+                f"{indent}    _dash_tmp_release({mark}); }}\n")
 
     # === Helper Methods ===
 
@@ -4824,7 +5003,10 @@ static {ret_type} {method_name}({params_str}) {{
         param_values = {}
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
-                param_values[param_name] = self._generate_expression(arguments[i])
+                code = self._generate_expression(arguments[i])
+                if builtin.name not in self._STRING_READERS and self._is_string_expr(arguments[i]):
+                    code = self._escape(arguments[i], code)
+                param_values[param_name] = code
             else:
                 param_values[param_name] = "0"  # Default for missing params
 
@@ -4879,6 +5061,17 @@ static {ret_type} {method_name}({params_str}) {{
         indent = self.context.indent
         value = self._generate_expression(node.value)
         owner = self._generate_expression(node.target) if node.target is not None else node.object_name
+        owner_node = node.target if node.target is not None else (
+            SelfRef() if node.object_name == "self" else VarRef(name=node.object_name))
+        struct = self._struct_of(owner_node)
+        field = struct.get_field(node.member) if struct else None
+        if field and field.field_type == "String":
+            # the struct owns its String fields like a variable
+            self.uses_strings = True
+            self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {value});\n")
+            return
+        if self._is_string_expr(node.value):
+            value = self._escape(node.value, value)
         self.emit(f"{indent}{owner}->{node.member} = {value};\n")
 
     def visit_MethodCall(self, node: MethodCall):
@@ -5151,7 +5344,7 @@ static {ret_type} {method_name}({params_str}) {{
         elements = []
         for e in node.elements:
             code = self._generate_expression(e)
-            elements.append(f"(LONG){code}" if self._is_string_expr(e) else code)
+            elements.append(f"(LONG){self._escape(e, code)}" if self._is_string_expr(e) else code)
         return f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
 
     def _returns_value(self, stmts) -> bool:
@@ -5184,8 +5377,11 @@ static {ret_type} {method_name}({params_str}) {{
 
         # Generate function body
         if node.is_expression:
-            # Single expression body (arrow function)
+            # Single expression body (arrow function); it returns a LONG, so a
+            # string result leaves Dash's control
             expr = self._generate_expression(node.body)
+            if self._is_string_expr(node.body):
+                expr = f"(LONG){self._escape(node.body, expr)}"
             body = f"    return {expr};"
             return_type = "LONG"  # Assume LONG for now
         else:
@@ -5193,10 +5389,14 @@ static {ret_type} {method_name}({params_str}) {{
             saved_var_types = self.var_types
             self.var_types = dict(saved_var_types)
             self._seed_param_types(node.params)
-            self.context.enter_scope()
+            self.context.enter_scope("func")
             for p in node.params:
                 self.context.declare_var(p.name if isinstance(p, FunctionParam) else p)
-            body = "".join(self._generate_statement(stmt) for stmt in node.body).rstrip("\n")
+            self._lambda_depth = getattr(self, "_lambda_depth", 0) + 1
+            body = self._function_prologue(node.params, node.body)
+            body += "".join(self._generate_statement(stmt) for stmt in node.body)
+            body = (body + self._function_epilogue()).rstrip("\n")
+            self._lambda_depth -= 1
             self.context.exit_scope()
             self.var_types = saved_var_types
             return_type = "LONG" if self._returns_value(node.body) else "void"

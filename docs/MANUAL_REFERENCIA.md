@@ -1135,9 +1135,25 @@ dir_current(buffer, 256)    # sin implementar
 
 ## 17. Gestion de Memoria
 
-### Reference Counting (Automatico)
+### Strings (automatico)
 
-Dash usa conteo de referencias para structs y arrays:
+Los textos se liberan solos mientras el programa corre, sin recolector de basura
+ni pausas:
+
+- Cada variable String (local, global o campo de un struct) es duena de su texto.
+  Al reasignarla se libera el texto anterior; al salir de su bloque o funcion, tambien.
+- Los textos intermedios (`a + b`, `"#{x}"`, lo que devuelve una funcion) se liberan
+  al final de cada vuelta de un bucle o del `EventLoop`, y al salir de una funcion.
+- Un texto guardado en un array o entregado a una funcion del sistema que se queda
+  con el (etiqueta de un gadget, titulo de una pantalla, `@native`) se copia y queda
+  fijo hasta que el programa termina.
+- Coste: 12 bytes por texto y una copia corta al asignar un texto que no es temporal.
+
+Un bucle que concatena 100.000 veces ocupa lo mismo al final que al principio.
+
+### Reference Counting
+
+Dash usa conteo de referencias para structs y arrays (manual por ahora):
 
 ```
 struct Objeto

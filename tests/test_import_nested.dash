@@ -4,7 +4,7 @@
 #
 # expect-c: #include <exec/lists.h>
 # expect-c: LONG _base(void) {
-# expect-c: return (inner_value() + 1);
+# expect-c: _dash_r = (inner_value() + 1);
 #
 # expect-out: 41
 # expect-out: 6

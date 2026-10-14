@@ -88,9 +88,9 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       conversión a texto y `Int()`/`Float()`.
 - [x] 12. Memoria (1/4): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
       liberación por marca. Tests en el PC (`tests/runtime/host_harness.c`).
-- [ ] 13. Memoria (2/4): codegen: asignaciones a String, liberación al salir de bloques, funciones,
+- [x] 13. Memoria (2/4): codegen: asignaciones a String, liberación al salir de bloques, funciones,
       `return`, `break`/`continue`; marcas por vuelta de bucle y de `EventLoop`.
-- [ ] 14. Memoria (3/4): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
+- [x] 14. Memoria (3/4): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
       que concatena 100.000 veces sin crecer.
 - [ ] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
 - [ ] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
@@ -102,7 +102,10 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [ ] 21. Builtins: `copper_*` (lista de copper de usuario, `UCopList`).
 - [ ] 22. Builtins: `sound_*` y `tone_play` (audio.device).
 - [ ] 23. Builtins: `music_*` (reproductor de módulos ProTracker).
-- [ ] 24. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
+- [ ] 24. `./dash --fpu`: compilar para 68881/68882 (`-m68881`, instrucciones de FPU directas, sin
+      `runtime/softfloat`), como las versiones FPU de LightWave. Probar en FS-UAE con `fpu=68882` y comparar
+      velocidad con la versión sin FPU. Pedido por el usuario el 2026-10-14.
+- [ ] 25. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
 
 ## Bitácora
 
@@ -265,3 +268,29 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - Probado en el PC: un bucle de 1000 concatenaciones deja un solo bloque vivo; adopción, copia, escape,
     retorno y marcas con huecos. Sin errores con AddressSanitizer.
 - Cabecera de 12 bytes y no 8 como decía el plan: el número de serie hace falta para que las marcas sean seguras.
+
+### 2026-10-14 — Tareas 13 y 14 (memoria 2/4 y 3/4: codegen de strings y escapes)
+- Base: 105/105 con `--emu`, ejemplos 30/30. Después: 107/107 con `--emu`, ejemplos 30/30.
+- Las dos tareas van juntas: soltar temporales sin tratar los escapes habría dejado punteros colgando
+  (títulos de ventana, arrays) entre una y otra.
+- Hecho (test: `test_string_memory`, en FS-UAE con Kickstart 3.1):
+  - Variables String locales, globales (`var g: String`, se inicializan al empezar `main`) y campos String de
+    structs (también en el constructor): `_dash_str_set`. Las variables de bucle solo toman prestado.
+  - `CodeGenContext` lleva por cada scope sus Strings propios y su tipo (`main`, `block`, `loop`, `func`,
+    `handler`). Se liberan al final del bloque, antes de `break`/`continue` (hasta el bucle) y de `return`
+    (hasta la función). `return` calcula el valor primero (`__typeof__`) y un String devuelto sobrevive como
+    temporal del que llama (`_dash_str_ret` + `_dash_tmp_release_keep`).
+  - Marca de temporales por bucle (`while`, `for`, `for each`, `for` de caracteres): se liberan al empezar cada
+    vuelta y al salir; también por mensaje del `EventLoop` y al salir de funciones, métodos y lambdas.
+    Sin strings en el programa, `_dash_tmp_mark/_release` son macros vacías.
+  - Parámetros String que la función reasigna: se copian al entrar (el original es del que llama).
+  - Escapes (`_dash_str_escape`: el temporal pasa a permanente o se copia; los literales no): elementos de arrays,
+    argumentos de `@native`/`@extern`, builtins que pueden guardar el puntero (todos salvo `_STRING_READERS`:
+    texto, ficheros...), campos no String y lo que devuelve una lambda.
+  - Contra alias: un global o un campo String pasado a una función Dash va como copia temporal.
+  - `On Close` va entre llaves (antes una declaración justo después del `case` no compilaba).
+- Probado en FS-UAE: 100.000 concatenaciones + 10.000 vueltas con funciones, campos, globales, `break` y
+  `continue`: la memoria libre no baja (< 8 KB). Con el compilador anterior el mismo programa gastaba 8,6 MB.
+  Los 29 ejemplos que no esperan un clic terminan con RC=0 y la misma salida que antes.
+- Pendiente: los builtins cuya plantilla usa `${str}` dos veces (`gfx_text`: `Text(rp, s, strlen(s))`) evalúan
+  la expresión dos veces (dos concatenaciones); no pierde memoria, solo tiempo.

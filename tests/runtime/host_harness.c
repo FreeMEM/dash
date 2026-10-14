@@ -64,9 +64,11 @@ int main(void){ int fails=0;
   _dash_str_set(&w, t); CHECK(live == base + 4);   /* old w freed, t adopted, k and "3" still temporaries */
   _dash_tmp_release(m); CHECK(live == base + 2); CHECK(strcmp(w, "1") == 0);
   /* escaped text is never freed by its owner */
-  t = _dash_str_keep(DashString_concat("kept", "")); _dash_tmp_release(m0); CHECK(strcmp(t, "kept") == 0);
+  t = _dash_str_escape(DashString_concat("kept", "")); _dash_tmp_release(m0); CHECK(strcmp(t, "kept") == 0);
   CHECK(live == base + 3);
-  _dash_str_keep_owned(w); _dash_str_set(&w, "otro"); CHECK(live == base + 4);   /* old w stays */
+  { STRPTR e = _dash_str_escape(w); CHECK(e != w && strcmp(e, w) == 0); }   /* owned text: a permanent copy */
+  CHECK(live == base + 4); _dash_str_set(&w, "otro"); CHECK(live == base + 4);   /* the copy stays */
+  CHECK(_dash_str_escape(NULL) == NULL);
   /* return values survive the callee's release and become the caller's temporaries */
   m = _dash_tmp_mark();
   { ULONG fm = _dash_tmp_mark(); STRPTR r = DashString_concat("ret", ""); DashString_concat("tmp", "");
