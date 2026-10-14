@@ -75,11 +75,144 @@ static APTR _dash_alloc(ULONG size) {
     return AllocPooled(_dash_pool, size);
 }
 
+/* Strings made at run time carry a header in front of the text.
+   Temporaries (results of +, interpolation, conversions) are linked in a list,
+   newest first, and released in bulk with _dash_tmp_release(). A String
+   variable owns its own copy: _dash_str_set() adopts a temporary or copies
+   the value, and frees the text it held before. */
+typedef struct _DashStrHdr {
+    struct _DashStrHdr *next;   /* temporaries list */
+    ULONG size;                 /* bytes allocated, header included (+ KEEP bit) */
+    ULONG serial;               /* creation number of a temporary, 0 if owned */
+} _DashStrHdr;
+
+#define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
+#define _DASH_STR_HDR(p) ((_DashStrHdr *)((UBYTE *)(p) - sizeof(_DashStrHdr)))
+
+static _DashStrHdr *_dash_tmp = NULL;
+static ULONG _dash_tmp_serial = 0;
+
+static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
+    ULONG size = sizeof(_DashStrHdr) + len + 1;
+    _DashStrHdr *h = (_DashStrHdr *)_dash_alloc(size);
+    STRPTR text;
+    if (!h) return NULL;
+    h->size = size;
+    h->next = NULL;
+    h->serial = 0;
+    if (temp) {
+        h->serial = ++_dash_tmp_serial;
+        h->next = _dash_tmp;
+        _dash_tmp = h;
+    }
+    text = (STRPTR)(h + 1);
+    text[len] = 0;
+    return text;
+}
+
+static void _dash_str_drop(_DashStrHdr *h) {
+    FreePooled(_dash_pool, h, h->size & ~_DASH_STR_KEEP);
+}
+
+/* Marks are serial numbers: removing a temporary from the list never breaks them */
+static ULONG _dash_tmp_mark(void) {
+    return _dash_tmp_serial;
+}
+
+static void _dash_tmp_release(ULONG mark) {
+    while (_dash_tmp && _dash_tmp->serial > mark) {
+        _DashStrHdr *h = _dash_tmp;
+        _dash_tmp = h->next;
+        _dash_str_drop(h);
+    }
+}
+
+/* Unlink p from the temporaries if it is one (the caller now owns it).
+   p may be any string: its header is only read once found in the list. */
+static BOOL _dash_tmp_take(STRPTR p) {
+    _DashStrHdr **link = &_dash_tmp;
+    _DashStrHdr *h;
+    if (!p) return FALSE;
+    h = _DASH_STR_HDR(p);
+    while (*link) {
+        if (*link == h) {
+            *link = h->next;
+            h->next = NULL;
+            h->serial = 0;
+            return TRUE;
+        }
+        link = &(*link)->next;
+    }
+    return FALSE;
+}
+
+static STRPTR _dash_str_dup(STRPTR s, BOOL temp) {
+    ULONG len = s ? strlen((char *)s) : 0;
+    STRPTR d = _dash_str_alloc(len, temp);
+    if (d && len) memcpy(d, s, len);
+    return d;
+}
+
+/* Release the temporaries newer than mark except keep, which stays a temporary
+   (a function's return value survives the function's own release) */
+static void _dash_tmp_release_keep(ULONG mark, STRPTR keep) {
+    BOOL kept = _dash_tmp_take(keep);
+    _dash_tmp_release(mark);
+    if (kept) {
+        _DashStrHdr *h = _DASH_STR_HDR(keep);
+        h->serial = ++_dash_tmp_serial;
+        h->next = _dash_tmp;
+        _dash_tmp = h;
+    }
+}
+
+/* Owned text no longer used; escaped text stays until exit */
+static void _dash_str_free(STRPTR p) {
+    _DashStrHdr *h;
+    if (!p) return;
+    h = _DASH_STR_HDR(p);
+    if (!(h->size & _DASH_STR_KEEP)) _dash_str_drop(h);
+}
+
+/* var = value: adopt a temporary or copy anything else, then free the old text */
+static void _dash_str_set(STRPTR *var, STRPTR value) {
+    STRPTR old = *var;
+    if (value == old) return;
+    if (!value) *var = NULL;
+    else if (_dash_tmp_take(value)) *var = value;
+    else *var = _dash_str_dup(value, FALSE);
+    _dash_str_free(old);
+}
+
+/* The text leaves Dash's control (stored in an array, kept by the OS...):
+   a temporary becomes permanent; owned text is marked so it is never freed */
+static STRPTR _dash_str_keep(STRPTR p) {
+    if (p && _dash_tmp_take(p)) _DASH_STR_HDR(p)->size |= _DASH_STR_KEEP;
+    return p;
+}
+
+static STRPTR _dash_str_keep_owned(STRPTR p) {
+    if (p) _DASH_STR_HDR(p)->size |= _DASH_STR_KEEP;
+    return p;
+}
+
+/* A returned string becomes a temporary of the caller (copied unless it is one) */
+static STRPTR _dash_str_ret(STRPTR p) {
+    _DashStrHdr *h, *t;
+    if (!p) return p;
+    h = _DASH_STR_HDR(p);
+    for (t = _dash_tmp; t; t = t->next) {
+        if (t == h) return p;
+    }
+    return _dash_str_dup(p, TRUE);
+}
+
 static void _dash_mem_cleanup(void) {
     if (_dash_pool) {
         DeletePool(_dash_pool);
         _dash_pool = NULL;
     }
+    _dash_tmp = NULL;
 }
 
 """
@@ -151,8 +284,7 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
 static STRPTR DashString_concat(STRPTR a, STRPTR b) {
     LONG len_a = a ? strlen(a) : 0;
     LONG len_b = b ? strlen(b) : 0;
-    LONG total = len_a + len_b + 1;
-    STRPTR result = (STRPTR)_dash_alloc(total);  /* pool memory is cleared */
+    STRPTR result = _dash_str_alloc(len_a + len_b, TRUE);  /* a temporary */
     if (!result) return NULL;
     if (len_a) memcpy(result, a, len_a);
     if (len_b) memcpy(result + len_a, b, len_b);

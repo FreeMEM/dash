@@ -60,7 +60,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - **Escape.** Si un string sale hacia algo que el compilador no controla (un array, una llamada al
   sistema que guarda el puntero como el título de una ventana, un `@native`), se marca como
   permanente y ya solo se libera al salir del programa con el pool.
-- Cabecera de 8 bytes por string (tamaño + enlace).
+- Cabecera de 12 bytes por string (enlace, tamaño y número de serie).
 - **Listas y structs** (decisión del usuario: abarcar más que los textos): varias variables pueden
   compartir la misma lista o struct, así que no sirve "un dueño". Contador de referencias: 4 bytes por
   objeto y una suma/resta solo al asignar listas o structs. Las listas temporales (literales, trozos
@@ -86,7 +86,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
 - [x] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
       conversión a texto y `Int()`/`Float()`.
-- [ ] 12. Memoria (1/4): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
+- [x] 12. Memoria (1/4): runtime de strings con cabecera, lista de temporales, `_dash_str_set`,
       liberación por marca. Tests en el PC (`tests/runtime/host_harness.c`).
 - [ ] 13. Memoria (2/4): codegen: asignaciones a String, liberación al salir de bloques, funciones,
       `return`, `break`/`continue`; marcas por vuelta de bucle y de `EventLoop`.
@@ -251,3 +251,17 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `fp-bit.c` de libgcc (GPL + excepción de runtime) en `runtime/softfloat/`, compilado una vez en
   `build/` (`compiler/softfloat.py`) y enlazado solo si el programa usa Float. ~3,7 KB.
 - No verificado: si el cuelgue de `mathieeesingbas` 3.1 pasa también en un A1200 real o es del emulador.
+
+### 2026-10-14 — Tarea 12 (memoria 1/4: runtime de strings)
+- Base: 105/105 con `--emu`, ejemplos 30/30. Después: igual (el codegen aún no llama a las funciones nuevas).
+- Hecho (en `MEMORY_RUNTIME`; test: `runtime/host`, con contador de bloques vivos en los stubs del harness):
+  - Cabecera `_DashStrHdr` de 12 bytes delante de cada string creado en ejecución: enlace, tamaño
+    (para `FreePooled`, con un bit `KEEP` de "escapado") y número de serie.
+  - Lista de temporales (lo nuevo primero). Las marcas son números de serie, no punteros: sacar un
+    temporal del medio de la lista (al asignarlo) no rompe ninguna marca. `_dash_tmp_mark/_release`.
+  - `_dash_str_set(&var, v)`: adopta un temporal o copia cualquier otro valor (literales incluidos) y libera
+    el texto anterior. `_dash_str_keep` / `_keep_owned` (escape), `_dash_str_ret` y `_dash_tmp_release_keep`
+    (valor de retorno que sobrevive a la limpieza de la función). `DashString_concat` crea temporales.
+  - Probado en el PC: un bucle de 1000 concatenaciones deja un solo bloque vivo; adopción, copia, escape,
+    retorno y marcas con huecos. Sin errores con AddressSanitizer.
+- Cabecera de 12 bytes y no 8 como decía el plan: el número de serie hace falta para que las marcas sean seguras.
