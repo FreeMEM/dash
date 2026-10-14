@@ -315,6 +315,19 @@ class SemanticAnalyzer(ASTVisitor):
         )
         self.define_symbol(symbol, node)
 
+        for prop in node.properties:
+            kind = WindowDef.PROPERTY_KINDS.get(prop.name)
+            value = prop.value
+            if kind is None:
+                known = ", ".join(WindowDef.PROPERTY_KINDS)
+                self.error(f"Unknown window property '{prop.name}' (known: {known})", node)
+            elif kind == "bool" and not isinstance(value, BoolLiteral):
+                self.error(f"Window property '{prop.name}' takes true or false", node)
+            elif kind == "int" and not isinstance(value, NumberLiteral):
+                self.error(f"Window property '{prop.name}' takes a number", node)
+            elif kind == "string" and not isinstance(value, StringLiteral):
+                self.error(f"Window property '{prop.name}' takes a string", node)
+
         # Validate required properties
         if not node.get_property("title"):
             self.warning(f"Window '{node.name}' has no title, using default", node)
@@ -728,6 +741,13 @@ class SemanticAnalyzer(ASTVisitor):
         # Check if the object variable exists
         if not symbol:
             self.error(f"Variable '{node.object_name}' is not defined", node)
+            return
+
+        # Win.width/height/left/top/title: current size, position and title of a window
+        if symbol.symbol_type == SymbolType.WINDOW:
+            if node.member not in ("width", "height", "left", "top", "title"):
+                self.error(f"Window '{node.object_name}' has no readable property '{node.member}' "
+                           f"(width, height, left, top, title)", node)
             return
 
         # For array.length, allow it

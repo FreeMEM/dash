@@ -2955,7 +2955,11 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_CloseGadget, $closegadget,
         WA_DragBar, $dragbar,
         WA_DepthGadget, $depthgadget,
-        WA_Activate, TRUE,
+        WA_SizeGadget, $sizegadget,
+        WA_Borderless, $borderless,
+        WA_Activate, $activate,
+        WA_MinWidth, 40, WA_MinHeight, 20,
+        WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, $idcmp_flags,
         _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
@@ -3802,6 +3806,9 @@ static {ret_type} {method_name}({params_str}) {{
             closegadget=self._get_window_prop(window_def, "closegadget", "TRUE"),
             dragbar=self._get_window_prop(window_def, "dragbar", "TRUE"),
             depthgadget=self._get_window_prop(window_def, "depthgadget", "TRUE"),
+            sizegadget=self._get_window_prop(window_def, "sizegadget", "FALSE"),
+            borderless=self._get_window_prop(window_def, "borderless", "FALSE"),
+            activate=self._get_window_prop(window_def, "activate", "TRUE"),
             idcmp_flags=idcmp_str
         )
         self.emit(code)
@@ -4435,6 +4442,11 @@ static {ret_type} {method_name}({params_str}) {{
                 # Return the enum value name: EnumName_ValueName
                 return f"{node.object_name}_{node.member}"
 
+            # Win.width etc.: the open window's current value, or the definition's
+            window = self.analysis.program.get_window(node.object_name)
+            if window:
+                return self._window_member(window, node.member)
+
             # Handle member access like player.x or arr.length
             if node.member == "length":
                 # Could be array or string length
@@ -4637,6 +4649,9 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, FunctionCall):
             return self._call_returns_string(node.name)
         elif isinstance(node, (MemberAccess, PropertyAccess)):
+            if (isinstance(node, MemberAccess) and node.member == "title"
+                    and self.analysis.program.get_window(node.object_name)):
+                return True
             field = self._field_of(node)
             return bool(field and field.field_type == "String")
         elif isinstance(node, MethodCall):
@@ -4902,6 +4917,21 @@ static {return_type} {lambda_name}({param_str}) {{
         if dash_type and self.analysis.program.get_struct(dash_type):
             return f"_Dash_{dash_type} *"
         return default
+
+    _WINDOW_FIELDS = {"width": "Width", "height": "Height", "left": "LeftEdge",
+                      "top": "TopEdge", "title": "Title"}
+
+    def _window_member(self, window: WindowDef, member: str) -> str:
+        """C for Win.width/height/left/top/title: read from the window while it is
+        open (it may have been resized or moved), else the value in its definition."""
+        self.uses_windows = True
+        defaults = {"width": window.width, "height": window.height,
+                    "left": self._get_window_prop(window, "left", 50),
+                    "top": self._get_window_prop(window, "top", 50),
+                    "title": window.title}
+        cast = "(STRPTR)" if member == "title" else "(LONG)"
+        return (f"(win_{window.name} ? {cast}win_{window.name}->{self._WINDOW_FIELDS[member]} "
+                f": {cast}{defaults[member]})")
 
     def _get_window_prop(self, window: WindowDef, name: str, default) -> str:
         """Get a window property value or default."""

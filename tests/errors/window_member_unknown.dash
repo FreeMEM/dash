@@ -1,0 +1,11 @@
+# Test: windows only expose width, height, left, top and title
+# expect: has no readable property 'color'
+
+Window W
+    title "x"
+end
+
+Main
+    W.open
+    Print W.color
+end

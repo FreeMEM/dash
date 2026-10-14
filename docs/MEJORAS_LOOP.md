@@ -82,7 +82,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 6. Rangos descendentes: `for i in (10..1)` con límites constantes, y `step` para el resto.
 - [x] 7. Enums con valores negativos.
 - [x] 8. Asignación anidada `a.b.c = x` (structs dentro de structs).
-- [ ] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
+- [x] 9. Propiedades de ventana booleanas (`closegadget true`, `sizegadget false`...).
 - [ ] 10. `On Key` en el `EventLoop` (añadir `IDCMP_RAWKEY`/`VANILLAKEY` al abrir la ventana) y `key_raw`/`key_text`.
 - [ ] 11. Floats: tipo `Float` (C `float`, soft-float en 68000), literales `1.5`, operaciones,
       conversión a texto y `Int()`/`Float()`.
@@ -93,7 +93,8 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [ ] 14. Memoria (3/4): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
       que concatena 100.000 veces sin crecer.
 - [ ] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
-- [ ] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`.
+- [ ] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
+      (documentado en MANUAL_REFERENCIA, pero la gramática solo tiene `.open`).
 - [ ] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
 - [ ] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
 - [ ] 19. Builtins: `bitmap_*` (crear, liberar, copiar, con máscara, cargar/guardar IFF).
@@ -205,3 +206,15 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
     (antes habría salido C inválido) o si el struct no tiene ese campo (también con un solo nivel).
   - Esta información de tipos servirá para la gestión de memoria (tareas 12-15).
 - Docs: MANUAL_REFERENCIA ("Structs dentro de structs") y QUICK_REFERENCE.
+
+### 2026-10-14 — Tarea 9 (propiedades de ventana booleanas)
+- Base: 92/92 con `--emu`, ejemplos 30/30. Después: 97/97 con `--emu`, ejemplos 30/30.
+- Hecho (tests: `test_window_bool_props` con `expect-c` y salida en FS-UAE; `errors/window_prop_type`,
+  `errors/window_prop_unknown`, `errors/window_member_unknown`):
+  - `true`/`false` como valor de propiedad. Nuevas: `sizegadget` (con límites de tamaño para que se pueda
+    redimensionar de verdad), `borderless`, `activate`. `WindowDef.PROPERTY_KINDS` lista nombres y tipos.
+  - Analyzer: propiedad desconocida (antes una errata como `widht` se ignoraba en silencio) o de tipo equivocado → error.
+  - Error previo encontrado al probar: `Print Panel.width` generaba C inválido (`Panel->width`).
+    Ahora `Win.width/height/left/top/title` leen la ventana abierta o, si está cerrada, la definición.
+- No verificado: que `sizegadget` se vea y funcione (no hay captura de pantalla); el C y la ejecución sí.
+- Pendiente (tarea 16): `MiVentana.close` está documentado pero no existe en la gramática.

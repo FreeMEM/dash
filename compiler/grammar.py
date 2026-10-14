@@ -185,6 +185,8 @@ dash_grammar_minimal = r"""
 
     // Property values
     ?value: ESCAPED_STRING | INT
+          | "true" -> true_literal
+          | "false" -> false_literal
 
     // Tokens
     ID: /[a-zA-Z_][a-zA-Z0-9_]*/

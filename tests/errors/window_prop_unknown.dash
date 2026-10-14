@@ -1,0 +1,11 @@
+# Test: unknown window properties are errors (a typo used to be ignored)
+# expect: Unknown window property 'widht'
+
+Window W
+    title "x"
+    widht 100
+end
+
+Main
+    W.open
+end

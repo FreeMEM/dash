@@ -1,0 +1,11 @@
+# Test: a boolean window property needs true or false
+# expect: Window property 'closegadget' takes true or false
+
+Window W
+    title "x"
+    closegadget 1
+end
+
+Main
+    W.open
+end

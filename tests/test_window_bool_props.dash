@@ -1,0 +1,34 @@
+# Test: boolean window properties
+# true/false for the gadgets; sizegadget lets the window be resized
+#
+# expect-c: WA_CloseGadget, FALSE,
+# expect-c: WA_SizeGadget, TRUE,
+# expect-c: WA_DragBar, TRUE,
+# expect-c: WA_Borderless, FALSE,
+# expect-out: abierta
+# expect-out: 160
+# expect-out: Panel
+# expect-out: 200
+
+Window Panel
+    title "Panel"
+    width $A0
+    height 80
+    closegadget false
+    sizegadget true
+    dragbar true
+    activate true
+end
+
+Window Cerrada
+    title "Nunca abierta"
+    width 200
+end
+
+Main
+    Panel.open
+    Print "abierta"
+    Print Panel.width
+    Print Panel.title
+    Print Cerrada.width
+end

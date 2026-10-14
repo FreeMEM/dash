@@ -112,6 +112,15 @@ class WindowProperty(ASTNode):
 @dataclass
 class WindowDef(ASTNode):
     """Window definition block."""
+
+    # Property name -> kind of value it takes
+    PROPERTY_KINDS = {
+        "title": "string",
+        "width": "int", "height": "int", "left": "int", "top": "int",
+        "closegadget": "bool", "dragbar": "bool", "depthgadget": "bool",
+        "sizegadget": "bool", "borderless": "bool", "activate": "bool",
+    }
+
     name: str
     properties: List[WindowProperty] = field(default_factory=list)
     location: Optional[SourceLocation] = None

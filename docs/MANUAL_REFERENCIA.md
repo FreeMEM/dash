@@ -720,7 +720,15 @@ end
 | `closegadget` | Boton de cerrar | Bool |
 | `dragbar` | Barra para arrastrar | Bool |
 | `depthgadget` | Gadget de profundidad | Bool |
-| `sizegadget` | Permite redimensionar | Bool |
+| `sizegadget` | Permite redimensionar (por defecto `false`) | Bool |
+| `borderless` | Sin bordes (por defecto `false`) | Bool |
+| `activate` | Activa la ventana al abrirla (por defecto `true`) | Bool |
+
+`closegadget`, `dragbar` y `depthgadget` valen `true` por defecto. Una propiedad
+desconocida o con un valor del tipo equivocado (`closegadget 1`) es un error.
+
+Se pueden leer `MiVentana.width`, `.height`, `.left`, `.top` y `.title`: con la ventana
+abierta dan el valor actual (tras redimensionarla o moverla); si no, el de la definición.
 
 ### Abrir y Cerrar
 
