@@ -1,0 +1,34 @@
+# Test: Dash's fast Float multiply/add against the exact fp-bit routines,
+# bit by bit, on the Amiga itself (the 68000 assembly of __mulsf3 only runs
+# here; tools/fastfp_check.py checks the C version on the PC).
+#
+# expect-out: 0
+# expect-out: 1.5
+
+@native func comparar(n: Int) -> Int
+"""
+    extern float __dash_fb_mulsf3(float, float);
+    extern float __dash_fb_addsf3(float, float);
+    union { float f; ULONG u; } a, b, r1, r2;
+    ULONG s = 12345, bad = 0;
+    LONG i;
+    for (i = 0; i < n; i++) {
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5; a.u = s;
+        s ^= s << 13; s ^= s >> 17; s ^= s << 5; b.u = s;
+        if ((i & 3) == 1) b.u = (b.u & 0x807FFFFF) | (a.u & 0x7F800000);
+        r1.f = a.f * b.f;
+        r2.f = __dash_fb_mulsf3(a.f, b.f);
+        if (r1.u != r2.u && !((r1.u & 0x7FFFFFFF) > 0x7F800000 && (r2.u & 0x7FFFFFFF) > 0x7F800000)) bad++;
+        r1.f = a.f + b.f;
+        r2.f = __dash_fb_addsf3(a.f, b.f);
+        if (r1.u != r2.u && !((r1.u & 0x7FFFFFFF) > 0x7F800000 && (r2.u & 0x7FFFFFFF) > 0x7F800000)) bad++;
+    }
+    return bad;
+"""
+end
+
+Main
+    x = 0.5
+    Print comparar(20000)
+    Print x * 3.0
+end

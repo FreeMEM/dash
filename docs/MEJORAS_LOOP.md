@@ -541,3 +541,9 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `float_mul_add` 161.701 (antes 88.865, pero eso era la suma de la ROM, en ensamblador, que en 3.1 sí funciona).
   Mis rutinas en C cuestan ~1.150-1.250 ciclos por operación en 68000: hay que bajarlas (26d2).
 - Tamaño: 263.864 → 268.464 bytes (programas con Float llevan ahora sus rutinas).
+
+### 2026-10-14 — Tarea 26d2 (en curso: multiplicación Float en ensamblador)
+- Hecho: `__mulsf3` escrito a mano en 68000 dentro de `fastfp.c` (cuatro `mulu.w`, `addx` para el acarreo, solo d2-d5
+  guardados, sin marco); casos especiales y desbordes a `__dash_fb_mulsf3`. Test nuevo `test_fastfp_amiga` (emu):
+  compara multiplicación y suma con fp-bit bit a bit en el propio Amiga, 20.000 pares: 0 diferencias en A1200 y A500.
+- Pendiente: medir con `tools/bench.py` y hacer lo mismo con `__addsf3`.

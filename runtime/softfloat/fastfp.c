@@ -37,6 +37,114 @@ static inline u32 mul16(u16 a, u16 b)
 #endif
 }
 
+#if defined(__mc68000__) && !defined(DASH_FASTFP_C_ONLY)
+/* Hand-written 68000 version of the multiply below (same algorithm and
+   rounding): four mulu.w, addx for the carry, only d2-d5 saved, no frame.
+   Checked against fp-bit on the Amiga by tests/test_fastfp_amiga.dash. */
+__asm__(
+"   .text\n"
+"   .even\n"
+"   .globl ___mulsf3\n"
+"___mulsf3:\n"
+"   move.l 4(sp),d0\n"
+"   move.l 8(sp),d1\n"
+"   movem.l d2-d5,-(sp)\n"
+"   move.l d0,d2\n"
+"   swap d2\n"
+"   lsr.w #7,d2\n"
+"   and.w #0xFF,d2\n"            /* ea */
+"   beq .Lm_slow\n"
+"   cmp.w #0xFF,d2\n"
+"   beq .Lm_slow\n"
+"   move.l d1,d3\n"
+"   swap d3\n"
+"   lsr.w #7,d3\n"
+"   and.w #0xFF,d3\n"            /* eb */
+"   beq .Lm_slow\n"
+"   cmp.w #0xFF,d3\n"
+"   beq .Lm_slow\n"
+"   add.w d3,d2\n"
+"   sub.w #127,d2\n"             /* e = ea + eb - 127 */
+"   and.l #0x7FFFFF,d0\n"
+"   bset #23,d0\n"               /* ma = ah:al */
+"   and.l #0x7FFFFF,d1\n"
+"   bset #23,d1\n"               /* mb = bh:bl */
+"   move.l d0,d3\n"
+"   swap d3\n"                   /* d3.w = ah */
+"   move.l d1,d4\n"
+"   swap d4\n"                   /* d4.w = bh */
+"   move.w d0,d5\n"
+"   mulu.w d1,d5\n"              /* ll = al * bl */
+"   mulu.w d4,d0\n"              /* al * bh */
+"   mulu.w d3,d1\n"              /* ah * bl */
+"   mulu.w d4,d3\n"              /* hh = ah * bh */
+"   add.l d1,d0\n"               /* mid (< 2^25) */
+"   move.l d0,d1\n"
+"   swap d1\n"
+"   clr.w d1\n"                  /* mid << 16 */
+"   clr.w d0\n"
+"   swap d0\n"                   /* mid >> 16 */
+"   add.l d1,d5\n"               /* lo = ll + (mid << 16), X = carry */
+"   moveq #0,d1\n"
+"   addx.l d1,d0\n"
+"   add.l d3,d0\n"               /* hi = hh + (mid >> 16) + carry; product = d0:d5 */
+"   btst #15,d0\n"
+"   beq.s .Lm_b46\n"
+"   addq.w #1,d2\n"              /* bit 47 set: mantissa = bits 47..24 */
+"   lsl.l #8,d0\n"
+"   move.l d5,d1\n"
+"   rol.l #8,d1\n"
+"   move.b d1,d0\n"
+"   and.l #0xFFFFFF,d5\n"        /* rest */
+"   move.l #0x800000,d4\n"       /* half */
+"   bra.s .Lm_round\n"
+".Lm_b46:\n"                     /* bit 46 is the top: mantissa = bits 46..23 */
+"   lsl.l #8,d0\n"
+"   move.l d5,d1\n"
+"   rol.l #8,d1\n"
+"   move.b d1,d0\n"
+"   add.l d0,d0\n"
+"   btst #23,d5\n"
+"   beq.s .Lm_b23\n"
+"   addq.l #1,d0\n"
+".Lm_b23:\n"
+"   and.l #0x7FFFFF,d5\n"
+"   move.l #0x400000,d4\n"
+".Lm_round:\n"                   /* round to nearest even */
+"   cmp.l d4,d5\n"
+"   bhi.s .Lm_up\n"
+"   bne.s .Lm_done\n"
+"   btst #0,d0\n"
+"   beq.s .Lm_done\n"
+".Lm_up:\n"
+"   addq.l #1,d0\n"
+"   btst #24,d0\n"
+"   beq.s .Lm_done\n"
+"   lsr.l #1,d0\n"
+"   addq.w #1,d2\n"
+".Lm_done:\n"
+"   tst.w d2\n"                  /* overflow / underflow: exact routine */
+"   ble.s .Lm_slow\n"
+"   cmp.w #0xFF,d2\n"
+"   bge.s .Lm_slow\n"
+"   and.l #0x7FFFFF,d0\n"
+"   moveq #0,d1\n"
+"   move.w d2,d1\n"
+"   swap d1\n"
+"   lsl.l #7,d1\n"               /* e << 23 */
+"   or.l d1,d0\n"
+"   move.l 20(sp),d1\n"
+"   move.l 24(sp),d3\n"
+"   eor.l d3,d1\n"
+"   and.l #0x80000000,d1\n"
+"   or.l d1,d0\n"
+"   movem.l (sp)+,d2-d5\n"
+"   rts\n"
+".Lm_slow:\n"
+"   movem.l (sp)+,d2-d5\n"
+"   jmp ___dash_fb_mulsf3\n"
+);
+#else
 float DASH_MULSF3(float a, float b)
 {
     fu x, y, r;
@@ -78,6 +186,8 @@ float DASH_MULSF3(float a, float b)
     r.u = ((x.u ^ y.u) & 0x80000000UL) | ((u32)e << 23) | (mant & 0x7FFFFF);
     return r.f;
 }
+
+#endif
 
 float DASH_ADDSF3(float a, float b)
 {
