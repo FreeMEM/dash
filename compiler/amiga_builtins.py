@@ -2040,11 +2040,11 @@ DOS_FUNCTIONS = {
     ),
     "dir_current": BuiltinFunc(
         name="dir_current",
-        params=["buffer", "maxlen"],
-        return_type="BOOL",
-        c_template="_dash_dir_current(${buffer}, ${maxlen})",
+        params=[],
+        return_type="STRPTR",
+        c_template="_dash_dir_current()",
         needs_dos=True,
-        description="Get current directory"
+        description="Full name of the current directory (\"Ram Disk:\" ...)"
     ),
 
     # Console I/O
@@ -2353,56 +2353,56 @@ INTUITION_EXPANDED = {
         params=["title", "x", "y", "w", "h", "flags"],
         return_type="LONG",
         c_template="_dash_window_create(${title}, ${x}, ${y}, ${w}, ${h}, ${flags})",
-        description="Create window (returns handle)"
+        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget. It becomes the current window"
     ),
     "window_close": BuiltinFunc(
         name="window_close",
         params=["handle"],
         return_type="void",
         c_template="_dash_window_close(${handle})",
-        description="Close window"
+        description="Close window (handle 0: current window)"
     ),
     "window_title": BuiltinFunc(
         name="window_title",
         params=["handle", "title"],
         return_type="void",
-        c_template="SetWindowTitles(_dash_windows[${handle}], ${title}, (UBYTE *)-1)",
-        description="Set window title"
+        c_template="_dash_window_title(${handle}, ${title})",
+        description="Set window title (handle 0: current window)"
     ),
     "window_move": BuiltinFunc(
         name="window_move",
         params=["handle", "x", "y"],
         return_type="void",
-        c_template="MoveWindow(_dash_windows[${handle}], ${x}, ${y})",
-        description="Move window"
+        c_template="_dash_window_move(${handle}, ${x}, ${y})",
+        description="Move window to x, y (absolute; handle 0: current window)"
     ),
     "window_resize": BuiltinFunc(
         name="window_resize",
         params=["handle", "w", "h"],
         return_type="void",
-        c_template="SizeWindow(_dash_windows[${handle}], ${w}, ${h})",
-        description="Resize window"
+        c_template="_dash_window_resize(${handle}, ${w}, ${h})",
+        description="Resize window to w x h (handle 0: current window)"
     ),
     "window_to_front": BuiltinFunc(
         name="window_to_front",
         params=["handle"],
         return_type="void",
-        c_template="WindowToFront(_dash_windows[${handle}])",
-        description="Bring window to front"
+        c_template="_dash_window_to_front(${handle})",
+        description="Bring window to front (handle 0: current window)"
     ),
     "window_to_back": BuiltinFunc(
         name="window_to_back",
         params=["handle"],
         return_type="void",
-        c_template="WindowToBack(_dash_windows[${handle}])",
-        description="Send window to back"
+        c_template="_dash_window_to_back(${handle})",
+        description="Send window to back (handle 0: current window)"
     ),
     "window_activate": BuiltinFunc(
         name="window_activate",
         params=["handle"],
         return_type="void",
-        c_template="ActivateWindow(_dash_windows[${handle}])",
-        description="Activate window"
+        c_template="_dash_window_activate(${handle})",
+        description="Activate window (handle 0: current window)"
     ),
 
     # Screens (legacy - use screen_open/screen_close from INPUT_FUNCTIONS instead)

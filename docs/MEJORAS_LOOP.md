@@ -93,7 +93,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - [x] 14. Memoria (3/4): escapes (arrays, campos, llamadas al sistema, `@native`), prueba de un bucle
       que concatena 100.000 veces sin crecer.
 - [x] 15. Memoria (4/4): listas y structs con contador de referencias; listas temporales por vuelta.
-- [ ] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
+- [x] 16. Builtins: `window_*` (9) y `dir_change`/`dir_current`. También `MiVentana.close`
       (documentado en MANUAL_REFERENCIA, pero la gramática solo tiene `.open`).
 - [ ] 17. Builtins: diálogos ASL `dialog_file`, `dialog_font`, `dialog_color`.
 - [ ] 18. Builtins: gadgets GadTools `button_*`, `checkbox_*`, `slider_*`, `textfield_*`, `listview_*`.
@@ -315,3 +315,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `release` manual que habría liberado una variable en uso).
 - Pendiente: strings dentro de arrays siguen siendo permanentes; alias de un global o campo struct pasado a una
   función que reasigna ese global (el string sí está protegido, el objeto no).
+
+### 2026-10-14 — Tarea 16 (ventanas por número, `Win.close`, directorios)
+- Base: 109/109 con `--emu`, ejemplos 30/30. Después: 111/111 con `--emu`, ejemplos 30/30. Builtins sin código: 72 → 60.
+- Hecho (test: `test_window_handles` en FS-UAE):
+  - `WINMGR_RUNTIME`: tabla de 16 ventanas; `window_create` (flags 1 redimensionable, 2 sin bordes, 4 sin cerrar),
+    `window_move`/`resize` (absolutos con `ChangeWindowBox`; `MoveWindow`/`SizeWindow` son relativos), `title`,
+    `to_front`/`to_back`, `activate`, `close`. Número 0 = ventana actual; números no válidos no hacen nada.
+    `_dash_windows_cleanup` las cierra al salir. `close_window()` y `window_close` olvidan el número y el `win_<Nombre>`.
+  - `MiVentana.close` (estaba documentado y no existía): nodo `WindowClose`. Dentro de su `EventLoop` también
+    termina el bucle, y el bucle interno de mensajes comprueba que la ventana sigue abierta.
+  - `DIR_RUNTIME`: `dir_change(path)` y `dir_current()` (ahora devuelve un String temporal en vez de pedir un buffer).
+    El directorio inicial (del shell) se restaura al salir y solo se liberan los locks propios.
+- Encontrado en el emulador: abrir una ventana de 0x0 cuelga Intuition 3.1 → tamaño mínimo 40x20.
+- Aviso: `dir_change("VOLUMEN:")` de un volumen que no existe abre el requester del sistema "inserte el volumen"
+  y espera a que alguien lo cierre (comportamiento normal de AmigaOS).

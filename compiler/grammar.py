@@ -68,6 +68,7 @@ dash_grammar_minimal = r"""
 
     // Instructions
     ?instruction: window_open
+                | window_close
                 | wait_cmd
                 | print_cmd
                 | event_loop
@@ -102,6 +103,7 @@ dash_grammar_minimal = r"""
 
     // Window commands
     window_open: ID ".open"
+    window_close: ID ".close"
 
     // I/O commands
     wait_cmd: "Wait" expression

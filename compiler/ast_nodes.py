@@ -196,6 +196,13 @@ class WindowOpen(ASTNode):
 
 
 @dataclass
+class WindowClose(ASTNode):
+    """Window.close command."""
+    window_name: str
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class Comment(ASTNode):
     """Comment line (preserved for documentation)."""
     text: str

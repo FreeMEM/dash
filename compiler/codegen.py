@@ -9,7 +9,7 @@ from string import Template
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -714,6 +714,145 @@ struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
 struct Screen *_dash_screen = NULL;
 #endif
+
+"""
+
+    # Windows opened with window_create(): a table of handles 1..16; handle 0 is
+    # the current window (_dash_win). Closed at exit by _dash_windows_cleanup().
+    WINMGR_RUNTIME = """\
+/* Dash Window Handles */
+#define _DASH_MAX_WINDOWS 16
+static struct Window *_dash_windows[_DASH_MAX_WINDOWS + 1];
+
+static struct Window *_dash_window_get(LONG h) {
+    if (h == 0) return _dash_win;
+    if (h < 1 || h > _DASH_MAX_WINDOWS) return NULL;
+    return _dash_windows[h];
+}
+
+/* A window is closing: forget its handle and stop drawing into it */
+static void _dash_windows_forget(struct Window *win) {
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++) {
+        if (_dash_windows[i] == win) _dash_windows[i] = NULL;
+    }
+    if (_dash_win == win) { _dash_win = NULL; _dash_rp = NULL; }
+}
+
+static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LONG flags) {
+    struct Window *win;
+    LONG i = 1;
+    while (i <= _DASH_MAX_WINDOWS && _dash_windows[i]) i++;
+    if (i > _DASH_MAX_WINDOWS) return 0;
+    if (w < 40) w = 40;      /* Intuition 3.1 hangs opening a 0x0 window */
+    if (h < 20) h = 20;
+    win = OpenWindowTags(NULL,
+        WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
+        WA_Title, (ULONG)title,
+        WA_CloseGadget, !(flags & 4),
+        WA_DragBar, !(flags & 2),
+        WA_DepthGadget, !(flags & 2),
+        WA_SizeGadget, (flags & 1) != 0,
+        WA_Borderless, (flags & 2) != 0,
+        WA_MinWidth, 40, WA_MinHeight, 20,
+        WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
+        WA_Activate, TRUE,
+        WA_GimmeZeroZero, TRUE,
+        WA_IDCMP, _DASH_WIN_IDCMP,
+        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        TAG_DONE);
+    if (!win) return 0;
+    _dash_windows[i] = win;
+    _dash_win = win;
+    _dash_rp = win->RPort;
+    return i;
+}
+
+static void _dash_window_close(LONG h) {
+    struct Window *win = _dash_window_get(h);
+    if (!win) return;
+    _dash_windows_forget(win);
+    _dash_window_closed(win);   /* generated: clears win_<Name> */
+    CloseWindow(win);
+}
+
+/* ChangeWindowBox takes absolute values (MoveWindow/SizeWindow take deltas) */
+static void _dash_window_move(LONG h, LONG x, LONG y) {
+    struct Window *w = _dash_window_get(h);
+    if (w) ChangeWindowBox(w, x, y, w->Width, w->Height);
+}
+
+static void _dash_window_resize(LONG h, LONG width, LONG height) {
+    struct Window *w = _dash_window_get(h);
+    if (w) ChangeWindowBox(w, w->LeftEdge, w->TopEdge, width, height);
+}
+
+static void _dash_window_title(LONG h, STRPTR title) {
+    struct Window *w = _dash_window_get(h);
+    if (w) SetWindowTitles(w, title, (UBYTE *)~0);
+}
+
+static void _dash_window_to_front(LONG h) {
+    struct Window *w = _dash_window_get(h);
+    if (w) WindowToFront(w);
+}
+
+static void _dash_window_to_back(LONG h) {
+    struct Window *w = _dash_window_get(h);
+    if (w) WindowToBack(w);
+}
+
+static void _dash_window_activate(LONG h) {
+    struct Window *w = _dash_window_get(h);
+    if (w) ActivateWindow(w);
+}
+
+static void _dash_windows_cleanup(void) {
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++) {
+        if (_dash_windows[i]) _dash_window_close(i);
+    }
+}
+
+"""
+
+    # Current directory: dir_change() remembers the starting one, restored at exit
+    DIR_RUNTIME = """\
+/* Dash Directory Runtime */
+static BPTR _dash_orig_dir = 0;
+static BOOL _dash_dir_changed = FALSE;
+
+static BOOL _dash_dir_change(STRPTR path) {
+    BPTR lock = Lock(path, SHARED_LOCK);
+    BPTR old;
+    if (!lock) return FALSE;
+    old = CurrentDir(lock);
+    if (_dash_dir_changed) {
+        UnLock(old);             /* a lock of ours */
+    } else {
+        _dash_orig_dir = old;    /* the shell's: give it back at exit */
+        _dash_dir_changed = TRUE;
+    }
+    return TRUE;
+}
+
+static STRPTR _dash_dir_current(void) {
+    UBYTE buf[256];
+    BPTR lock = Lock((STRPTR)"", SHARED_LOCK);
+    buf[0] = 0;
+    if (lock) {
+        if (!NameFromLock(lock, (STRPTR)buf, sizeof(buf))) buf[0] = 0;
+        UnLock(lock);
+    }
+    return _dash_str_dup((STRPTR)buf, TRUE);
+}
+
+static void _dash_dir_cleanup(void) {
+    if (_dash_dir_changed) {
+        UnLock(CurrentDir(_dash_orig_dir));
+        _dash_dir_changed = FALSE;
+    }
+}
 
 """
 
@@ -3316,7 +3455,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
     while (running) {
         _dash_tmp_release(_dash_tmev);  /* temporaries of the previous messages */
         WaitPort(win_$window->UserPort);
-        while ((msg = (struct IntuiMessage *)GetMsg(win_$window->UserPort))) {
+        while (win_$window && (msg = (struct IntuiMessage *)GetMsg(win_$window->UserPort))) {
             msg_class = msg->Class;
             msg_code = msg->Code;
             (void)msg_code;
@@ -3418,6 +3557,8 @@ _RUNTIME_FLAGS = [
     ("ARENA_RUNTIME", "uses_arenas"),
     ("WINDOW_RUNTIME", "uses_windows"),
     ("KEY_RUNTIME", "uses_keys"),
+    ("WINMGR_RUNTIME", "uses_winmgr"),
+    ("DIR_RUNTIME", "uses_dirs"),
     ("GRAPHICS_RUNTIME", "needs_gfx"),
     ("INPUT_RUNTIME", "needs_gfx"),
     ("GADTOOLS_RUNTIME", "needs_gadtools"),
@@ -3634,6 +3775,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_float: bool = False  # Float values: DashString_from_float
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
+        self.uses_winmgr: bool = False  # window_create() handles
+        self.uses_dirs: bool = False    # dir_change() / dir_current()
         self.uses_keys: bool = False  # Key builtins or On Key: IDCMP_RAWKEY + keymap translation
         # Track libraries needed for extern functions
         self.extern_libraries: Set[str] = set()
@@ -3662,6 +3805,9 @@ class CodeGenerator(ASTVisitor):
             # Windows must ask Intuition for key events before they open
             if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
                 self.uses_keys = True
+            # Win.close must know before the window_create() calls are generated
+            if isinstance(n, FunctionCall) and n.name.startswith("window_") and n.name != "window_check_close":
+                self.uses_winmgr = True
             # Recursively scan children
             for attr in dir(n):
                 if attr.startswith('_'):
@@ -3678,7 +3824,8 @@ class CodeGenerator(ASTVisitor):
 
     def _uses_pool(self) -> bool:
         """True if the program needs the pooled memory runtime."""
-        return self.uses_arrays or self.uses_strings or self.uses_refcount or self._uses_key_runtime()
+        return (self.uses_arrays or self.uses_strings or self.uses_refcount or self.uses_dirs
+                or self._uses_key_runtime())
 
     def _uses_key_runtime(self) -> bool:
         """Key runtime: key builtins, On Key, or the graphics/input runtimes that record keys."""
@@ -3766,8 +3913,17 @@ class CodeGenerator(ASTVisitor):
 
         # Add window runtime if needed (for _dash_win, _dash_rp, _dash_screen)
         # Also needed when using ReAction (for screen support)
-        if self.uses_windows or self.needs_reaction:
+        if self.uses_windows or self.needs_reaction or self.uses_winmgr:
             parts.append(CTemplates.WINDOW_RUNTIME)
+
+        if self.uses_winmgr:
+            idcmp = "IDCMP_CLOSEWINDOW" + (" | IDCMP_RAWKEY" if self.uses_keys else "")
+            parts.append(f"#define _DASH_WIN_IDCMP ({idcmp})\n"
+                         "static void _dash_window_closed(struct Window *win);\n")
+            parts.append(CTemplates.WINMGR_RUNTIME)
+
+        if self.uses_dirs:
+            parts.append(CTemplates.DIR_RUNTIME)
 
         # Key runtime (the graphics and input runtimes record keys through it)
         if self._uses_key_runtime():
@@ -3814,14 +3970,22 @@ class CodeGenerator(ASTVisitor):
 
         # close_window() must also clear the win_<Name> pointer it closes,
         # so the EventLoop and the final cleanup do not close it again
+        if self.uses_winmgr:
+            # A window closed through its handle clears the win_<Name> that held it
+            clears = "".join(f"    if (win == win_{w.name}) win_{w.name} = NULL;\n"
+                             for w in self.analysis.program.windows)
+            parts.append("static void _dash_window_closed(struct Window *win) {\n"
+                         f"{clears}    (void)win;\n}}\n")
         if getattr(self, "uses_close_window", False):
             clears = "".join(f"    if (_dash_win == win_{w.name}) win_{w.name} = NULL;\n"
                              for w in self.analysis.program.windows)
+            forget = "    _dash_windows_forget(win);\n" if self.uses_winmgr else "    _dash_win = NULL;\n"
             parts.append("static void _dash_close_window(void) {\n"
-                         "    if (!_dash_win) return;\n"
+                         "    struct Window *win = _dash_win;\n"
+                         "    if (!win) return;\n"
                          f"{clears}"
-                         "    CloseWindow(_dash_win);\n"
-                         "    _dash_win = NULL;\n"
+                         f"{forget}"
+                         "    CloseWindow(win);\n"
                          "}\n")
 
         # Add extern function prototypes
@@ -3854,6 +4018,8 @@ class CodeGenerator(ASTVisitor):
         user_code = "".join(self.main_code)
         main_code = main_template.substitute(user_code=user_code)
         cleanup = []
+        if self.uses_winmgr:
+            cleanup.append("    _dash_windows_cleanup();\n")
         if self.uses_windows:
             # Windows still open (no EventLoop closed them) must not outlive the program
             for window in self.analysis.program.windows:
@@ -3863,6 +4029,8 @@ class CodeGenerator(ASTVisitor):
             cleanup.append("    ra_window_close();\n")
         if self._uses_key_runtime():
             cleanup.append("    _dash_key_cleanup();\n")
+        if self.uses_dirs:
+            cleanup.append("    _dash_dir_cleanup();\n")
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
         if cleanup:
@@ -4249,6 +4417,18 @@ static {ret_type} {method_name}({params_str}) {{
 
         self.context.opened_windows.append(node.window_name)
         self.context.current_window = node.window_name
+
+    def visit_WindowClose(self, node: WindowClose):
+        """Win.close: close the window if it is open. Inside its own EventLoop the
+        loop also ends (it would wait on a closed window)."""
+        self.uses_windows = True
+        indent = self.context.indent
+        w = node.window_name
+        forget = f"_dash_windows_forget(win_{w}); " if self.uses_winmgr else \
+            f"if (_dash_win == win_{w}) {{ _dash_win = NULL; _dash_rp = NULL; }} "
+        self.emit(f"{indent}if (win_{w}) {{ {forget}CloseWindow(win_{w}); win_{w} = NULL; }}\n")
+        if self.context.in_event_loop and self.context.current_window == w:
+            self.emit(f"{indent}running = FALSE;\n")
 
     def visit_EventLoop(self, node: EventLoop):
         """Generate code for an event loop."""

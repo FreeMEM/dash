@@ -763,8 +763,26 @@ abierta dan el valor actual (tras redimensionarla o moverla); si no, el de la de
 
 ```
 MiVentana.open      # Abre la ventana
-MiVentana.close     # Cierra la ventana
+MiVentana.close     # Cierra la ventana (dentro de su EventLoop, tambien lo termina)
 ```
+
+### Ventanas por numero
+
+Para abrir ventanas desde el codigo, sin declararlas con `Window`:
+
+```
+a = window_create("Herramientas", 10, 20, 200, 100, 0)   # devuelve 1..16 (0 si falla)
+window_move(a, 100, 30)         # posicion absoluta
+window_resize(a, 300, 150)
+window_title(a, "Nuevo titulo")
+window_to_front(a)              # tambien window_to_back, window_activate
+window_close(a)
+```
+
+- `flags`: 1 = se puede redimensionar, 2 = sin bordes, 4 = sin boton de cerrar (se suman).
+- La ventana creada pasa a ser la actual: los `gfx_*` dibujan en ella. El numero 0 es la ventana actual.
+- Un numero que no es una ventana abierta no hace nada. Las que sigan abiertas se cierran al salir.
+- Tamano minimo 40x20 (Intuition 3.1 se cuelga con una ventana de 0x0).
 
 ### Event Loop
 
@@ -1127,8 +1145,8 @@ file_copy("original.dat", "backup.dat")
 
 ```
 dir_create("saves")
-dir_change("work:")         # sin implementar
-dir_current(buffer, 256)    # sin implementar
+dir_change("work:")         # true si existe; al salir se vuelve al directorio inicial
+Print dir_current()         # nombre completo: "Work:", "Ram Disk:"...
 ```
 
 ---

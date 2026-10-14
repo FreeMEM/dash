@@ -7,7 +7,7 @@ from typing import List, Any, Optional
 
 from compiler.ast_nodes import (
     Program, WindowDef, WindowProperty, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -49,7 +49,7 @@ class DashASTBuilder(Transformer):
 
     _STATEMENT_NODES = (
         VarAssign, ReturnStmt, PrintStmt, WaitStmt, StopStmt, BreakStmt, ContinueStmt, IfStmt, WhileStmt,
-        ForRangeStmt, ForEachStmt, ArrayAssign, MemberAssign, WindowOpen,
+        ForRangeStmt, ForEachStmt, ArrayAssign, MemberAssign, WindowOpen, WindowClose,
         EventLoop, Comment,
     )
 
@@ -422,6 +422,10 @@ class DashASTBuilder(Transformer):
             window_name=name,
             location=self._get_location(items[0])
         )
+
+    def window_close(self, items) -> WindowClose:
+        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        return WindowClose(window_name=name, location=self._get_location(items[0]))
 
     def print_stmt(self, items) -> PrintStmt:
         """Build a print statement node."""

@@ -9,7 +9,7 @@ from enum import Enum, auto
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, WindowOpen, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -351,6 +351,13 @@ class SemanticAnalyzer(ASTVisitor):
             symbol.is_opened = True
             self.opened_windows.append(node.window_name)
             self.current_window = node.window_name
+
+    def visit_WindowClose(self, node: WindowClose):
+        symbol = self.lookup_symbol(node.window_name)
+        if not symbol:
+            self.error(f"Window '{node.window_name}' is not defined", node)
+        elif symbol.symbol_type != SymbolType.WINDOW:
+            self.error(f"'{node.window_name}' is not a Window", node)
 
     def visit_EventLoop(self, node: EventLoop):
         """Visit an event loop."""

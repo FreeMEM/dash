@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 318 funciones, 248 implementadas, 70 sin implementar.
+Total: 318 funciones, 258 implementadas, 60 sin implementar.
 
 ## Gráficos básicos
 
@@ -285,8 +285,8 @@ Total: 318 funciones, 248 implementadas, 70 sin implementar.
 | `file_rename(oldname, newname)` | `BOOL` | Rename file |  |
 | `file_copy(src, dest)` | `BOOL` | Copy file |  |
 | `dir_create(path)` | `BOOL` | Create directory |  |
-| `dir_change(path)` | `BOOL` | Change current directory | **sin implementar** |
-| `dir_current(buffer, maxlen)` | `BOOL` | Get current directory | **sin implementar** |
+| `dir_change(path)` | `BOOL` | Change current directory |  |
+| `dir_current()` | `STRPTR` | Full name of the current directory ("Ram Disk:" ...) |  |
 | `console_read(buffer, maxlen)` | `LONG` | Read from console |  |
 | `console_write(str)` | `void` | Write to console |  |
 | `file_load(filename, buffer, maxsize)` | `LONG` | Load entire file into buffer, returns bytes read or -1 |  |
@@ -334,14 +334,14 @@ Total: 318 funciones, 248 implementadas, 70 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `window_create(title, x, y, w, h, flags)` | `LONG` | Create window (returns handle) | **sin implementar** |
-| `window_close(handle)` | `void` | Close window | **sin implementar** |
-| `window_title(handle, title)` | `void` | Set window title | **sin implementar** |
-| `window_move(handle, x, y)` | `void` | Move window | **sin implementar** |
-| `window_resize(handle, w, h)` | `void` | Resize window | **sin implementar** |
-| `window_to_front(handle)` | `void` | Bring window to front | **sin implementar** |
-| `window_to_back(handle)` | `void` | Send window to back | **sin implementar** |
-| `window_activate(handle)` | `void` | Activate window | **sin implementar** |
+| `window_create(title, x, y, w, h, flags)` | `LONG` | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget. It becomes the current window |  |
+| `window_close(handle)` | `void` | Close window (handle 0: current window) |  |
+| `window_title(handle, title)` | `void` | Set window title (handle 0: current window) |  |
+| `window_move(handle, x, y)` | `void` | Move window to x, y (absolute; handle 0: current window) |  |
+| `window_resize(handle, w, h)` | `void` | Resize window to w x h (handle 0: current window) |  |
+| `window_to_front(handle)` | `void` | Bring window to front (handle 0: current window) |  |
+| `window_to_back(handle)` | `void` | Send window to back (handle 0: current window) |  |
+| `window_activate(handle)` | `void` | Activate window (handle 0: current window) |  |
 | `screen_to_front()` | `void` | Bring custom screen to front |  |
 | `screen_to_back()` | `void` | Send custom screen to back |  |
 | `button_create(win, x, y, w, h, label)` | `LONG` | Create button gadget | **sin implementar** |
