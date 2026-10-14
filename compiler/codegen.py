@@ -3076,6 +3076,33 @@ def runtime_signatures() -> Dict[str, tuple]:
     return _runtime_signatures_cache
 
 
+_GRAPHICS_FUNCS_FALLBACK = {
+    "SetAPen", "SetBPen", "SetDrMd", "SetRast", "Move", "Draw", "RectFill", "WritePixel",
+    "ReadPixel", "Text", "TextLength", "SetFont", "OpenFont", "CloseFont", "BltBitMap",
+    "BltBitMapRastPort", "BltClear", "InitBitMap", "InitRastPort", "AllocRaster", "FreeRaster",
+    "AllocBitMap", "FreeBitMap", "SetRGB4", "SetRGB32", "LoadRGB4", "LoadRGB32", "GetRGB4",
+    "WaitTOF", "WaitBlit", "OwnBlitter", "DisownBlitter", "ScrollRaster", "ObtainBestPenA",
+    "ReleasePen", "GetSprite", "FreeSprite", "ChangeSprite", "MoveSprite", "LoadView",
+}
+_graphics_funcs_cache: Optional[Set[str]] = None
+
+
+def graphics_functions() -> Set[str]:
+    """graphics.library function names, read from the NDK prototypes when available."""
+    global _graphics_funcs_cache
+    if _graphics_funcs_cache is None:
+        import re
+        names = set(_GRAPHICS_FUNCS_FALLBACK)
+        protos = "/opt/amiga/m68k-amigaos/ndk-include/clib/graphics_protos.h"
+        try:
+            with open(protos) as f:
+                names |= set(re.findall(r"^\s*[A-Za-z_][\w\s\*]*?\b([A-Z]\w+)\s*\(", f.read(), re.M))
+        except OSError:
+            pass
+        _graphics_funcs_cache = names
+    return _graphics_funcs_cache
+
+
 def unimplemented_builtins() -> Set[str]:
     """Builtins whose C template uses a _dash_* name that no runtime defines."""
     import re
@@ -3518,6 +3545,10 @@ class CodeGenerator(ASTVisitor):
 
     def _generate_native_func(self, native: NativeFunc):
         """Generate native function with inline C code."""
+        # Inline C that calls graphics.library needs GfxBase opened (and its protos)
+        import re
+        if "GfxBase" in native.c_code or set(re.findall(r"\b([A-Z]\w+)\s*\(", native.c_code)) & graphics_functions():
+            self.needs_gfx = True
         # Map Dash types to C types
         type_map = self._c_type_map
 
@@ -3919,6 +3950,10 @@ static {ret_type} {method_name}({params_str}) {{
             func = self.analysis.program.get_function(node.name)
             if func:
                 return self._function_c_type(func)
+            foreign = self._foreign_func(node.name)
+            if foreign and foreign.return_type:
+                c_type = self._dash_type_to_c(foreign.return_type)
+                return "LONG" if c_type == "void" else c_type
             return "LONG"
         elif isinstance(node, (LambdaFunc, FunctionRef)):
             return "APTR"
@@ -4544,7 +4579,16 @@ static {ret_type} {method_name}({params_str}) {{
                 return func.return_type == "String"
             ret = self._find_return_value(func.body)
             return ret is not None and isinstance(ret, StringLiteral)
-        return False
+        foreign = self._foreign_func(name)
+        return bool(foreign and foreign.return_type == "String")
+
+    def _foreign_func(self, name: str):
+        """@native or @extern function with that name, if any."""
+        program = self.analysis.program
+        for func in list(program.native_funcs) + list(program.extern_funcs):
+            if func.name == name:
+                return func
+        return None
 
     def _find_return_value(self, stmts):
         """First returned value in stmts, searching nested blocks."""

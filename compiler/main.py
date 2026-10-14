@@ -281,12 +281,12 @@ class DashCompiler:
 
         # Report warnings
         for warning in analysis.warnings:
-            print(f"Warning: {warning}", file=sys.stderr)
+            print(warning, file=sys.stderr)
 
         # Report errors and fail if any
         if analysis.has_errors:
             for error in analysis.errors:
-                print(f"Error: {error}", file=sys.stderr)
+                print(error, file=sys.stderr)
             raise CompilationError(
                 f"Semantic analysis failed with {len(analysis.errors)} error(s)",
                 stage="analyze"
@@ -428,11 +428,11 @@ class DashCompiler:
 
         # Report warnings
         for warning in analysis.warnings:
-            print(f"Warning: {warning}", file=sys.stderr)
+            print(warning, file=sys.stderr)
 
         if analysis.has_errors:
             for error in analysis.errors:
-                print(f"Error: {error}", file=sys.stderr)
+                print(error, file=sys.stderr)
             raise CompilationError(
                 f"Semantic analysis failed with {len(analysis.errors)} error(s)",
                 stage="analyze"

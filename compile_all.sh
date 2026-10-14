@@ -1,5 +1,7 @@
 #!/bin/bash
-cd /home/freemem/Projects/FreeMEMLang
+cd "$(dirname "$0")"
+LOG=$(mktemp)
+trap 'rm -f "$LOG"' EXIT
 
 echo "=== Compiling all examples ==="
 echo ""
@@ -12,8 +14,8 @@ for file in examples/*.dash; do
     name=$(basename "$file" .dash)
     printf "%-30s " "$name"
 
-    if ./dash "$file" -o "bin/$name" > /tmp/compile_out.txt 2>&1; then
-        if grep -q "Success" /tmp/compile_out.txt; then
+    if ./dash "$file" -o "bin/$name" > "$LOG" 2>&1; then
+        if grep -q "Success" "$LOG"; then
             echo "[OK]"
             SUCCESS=$((SUCCESS + 1))
         else

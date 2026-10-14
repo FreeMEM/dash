@@ -145,6 +145,7 @@ class SemanticAnalyzer(ASTVisitor):
         self.in_function = False
         self.current_window: Optional[str] = None
         self.current_module: Optional[str] = None  # Module whose code is being analyzed
+        self.structs: List[StructDef] = []
 
     def analyze(self, program: Program) -> AnalysisResult:
         """Perform semantic analysis on the program."""
@@ -193,6 +194,8 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_Program(self, node: Program):
         """Visit the program node."""
+        self.structs = list(node.structs)
+
         # First pass: register all structs
         for struct in node.structs:
             symbol = Symbol(
@@ -233,7 +236,7 @@ class SemanticAnalyzer(ASTVisitor):
                 symbol_type=SymbolType.VARIABLE,
                 dash_type=dash_type,
                 node=gvar,
-                is_initialized=(gvar.initial_value is not None)
+                is_initialized=True  # C globals start zeroed
             )
             self.define_symbol(symbol, gvar)
 
@@ -674,8 +677,10 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_PropertyAccess(self, node: PropertyAccess):
         """Visit a property access."""
         self.visit(node.object)
-        # For now, only .length is supported
-        if node.property != "length":
+        # .length, or a field of some struct (the object's struct type is not tracked here)
+        known = node.property == "length" or any(
+            struct.get_field(node.property) for struct in self.structs)
+        if not known:
             self.warning(f"Unknown property '{node.property}'", node)
 
     def visit_MemberAccess(self, node: MemberAccess):

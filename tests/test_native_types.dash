@@ -1,0 +1,25 @@
+# Test: @native functions
+# Their declared return type is used by callers, and inline C that
+# calls graphics.library makes the program open it.
+#
+# expect-c: STRPTR s = saludo();
+# expect-c: Printf("%s\n", s);
+# expect-c: GfxBase = (struct GfxBase *)OpenLibrary("graphics.library"
+
+@native func saludo() -> String
+"""
+    return (STRPTR)"hola";
+"""
+end
+
+@native func espera_vblank()
+"""
+    WaitTOF();
+"""
+end
+
+Main
+    s = saludo()
+    Print s
+    espera_vblank()
+end

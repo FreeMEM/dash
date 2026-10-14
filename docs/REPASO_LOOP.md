@@ -67,7 +67,7 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - [x] 11. `runtime/dash_array.h` + `runtime/dash_string.h`: fugas, bounds, NULL.
 - [x] 12. `compiler/amiga_builtins.py`: firmas, tipos, liberación de recursos al salir.
 - [x] 13. `compiler/main.py` + `dash` (CLI): imports, rutas, imports circulares, códigos de salida.
-- [ ] 14. `lib/amiga/*.dash` + `examples/`: `examples/test_dos_module.dash` no transpila
+- [x] 14. `lib/amiga/*.dash` + `examples/`: `examples/test_dos_module.dash` no transpila
       (`read_line` no definida). Que todos los ejemplos transpilen.
 - [ ] 15. Documentación: que `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md`,
       `README.md` y `CLAUDE.md` digan lo mismo que el código.
@@ -329,3 +329,20 @@ Corrección antes que velocidad. Nada de refactors grandes.
 - Optimización (opcional): `./dash -O` compila con `-O2`. flowpaint: 24.692 → 12.940 bytes.
   No activada por defecto: falta probar los ejecutables optimizados en emulador (fs-uae está instalado).
 - Pendiente: dos módulos con una función privada del mismo nombre chocarían en C.
+
+### 2026-10-14 — Zona 14 (`lib/amiga/*.dash` + `examples/`)
+- Base: tests 56/56, ejemplos 29/30. Tras la zona: tests 57/57, **ejemplos 30/30**, sin avisos de GCC
+  (salvo variables sin usar) ni del analyzer.
+- Errores arreglados (test: `tests/test_native_types.dash` con `expect-c`, fallaba antes):
+  - `examples/test_dos_module.dash` usaba `read_line`, que no existía. Añadida a `lib/amiga/dos.dash`
+    (`@native`, quita el salto de línea, `""` al final del fichero; el buffer se reutiliza en cada llamada).
+  - El tipo de retorno de `@native` y `@extern` se ignoraba: `line = read_line(fh)` declaraba `LONG`.
+  - `lib/amiga/doublebuf.dash` e `iff.dash` llaman a `graphics.library` desde `@native` (InitBitMap,
+    BltBitMapRastPort, SetRGB4) y el programa **no abría la librería**: `GfxBase` a NULL, cuelgue seguro.
+    Ahora el codegen detecta llamadas a funciones de `graphics.library` en el C nativo (lista sacada de
+    `clib/graphics_protos.h` del NDK) y la abre.
+  - Avisos falsos del analyzer: "Unknown property" con cualquier `self.campo`, y "may be used before
+    initialization" con globales (`var x: Int`, en C empiezan a cero).
+  - Los mensajes salían con el prefijo doble "Warning: Warning:" / "Error: Error:".
+  - `compile_all.sh` tenía la ruta del proyecto fija y usaba `/tmp/compile_out.txt` compartido: ahora usa
+    su propio directorio y un temporal propio.

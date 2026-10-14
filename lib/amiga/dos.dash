@@ -46,6 +46,23 @@ func read_char(handle: Int) -> Int
     return file_read_byte(handle)
 end
 
+# Read a line of text without its trailing newline ("" at end of file).
+# The returned string is reused by the next call: copy it to keep it
+# (for example with "" + line).
+@native func read_line(handle: Int) -> String
+"""
+    static UBYTE line[256];
+    LONG len;
+    if (!FGets((BPTR)handle, (STRPTR)line, sizeof(line))) {
+        line[0] = 0;
+        return (STRPTR)line;
+    }
+    len = strlen((char *)line);
+    if (len > 0 && line[len - 1] == '\n') line[len - 1] = 0;
+    return (STRPTR)line;
+"""
+end
+
 # Check if at end of file
 func at_eof(handle: Int) -> Bool
     return file_eof(handle)
