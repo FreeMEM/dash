@@ -1,0 +1,5 @@
+# expect: nil is only for structs, Arrays and Strings
+Main
+    n = 5
+    n = nil
+end

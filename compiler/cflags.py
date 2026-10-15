@@ -12,8 +12,13 @@
 # The default is "abcefhilmnprsz0"; without "e" and "r" the benchmarks keep their
 # speed and size.
 BBB = "-fbbb=abcfhilmnpsz0"
-OPTIMIZE = ["-O2", "-fomit-frame-pointer", BBB]
-SMALL = ["-Os", "-fomit-frame-pointer", BBB]
+# Address 0 is readable memory on an Amiga, and nil is C NULL. Without these, GCC
+# turns a read through a pointer it knows is NULL ("var n: Nodo = nil" then n.valor)
+# into a trap instruction (the program crashes instead of reading garbage), and drops
+# NULL checks that come after a dereference.
+NULL_OK = ["-fno-isolate-erroneous-paths-dereference", "-fno-delete-null-pointer-checks"]
+OPTIMIZE = ["-O2", "-fomit-frame-pointer", BBB] + NULL_OK
+SMALL = ["-Os", "-fomit-frame-pointer", BBB] + NULL_OK
 DEBUG = ["-O0"]
 
 

@@ -161,7 +161,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       temporal recién creado), camino rápido en línea; volver a mirar la cabecera de 16 bytes (27c) si sale barata.
       Cada cambio con antes/después en la bitácora y en el panel de comparativas.
       30f (hecha) documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
-      30g `nil` (pedido por el usuario el 2026-10-15): valor vacío para variables, campos y parámetros de tipo
+      30g (hecha) `nil` (pedido por el usuario el 2026-10-15): valor vacío para variables, campos y parámetros de tipo
       struct o `Array` (y String si es sencillo). `x = nil`, `if x == nil`, `Nodo(1, nil)`; comparar con `nil` en
       C es `NULL`. Acceder a un campo de `nil` (`x.campo`) no debe colgar el Amiga: decidir y medir entre un error
       claro en tiempo de ejecución (mensaje y salida limpia) o comprobarlo solo con `--memcheck`. Tests: lista
@@ -1000,3 +1000,37 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   Lo de listas de structs, préstamos y listas enlazadas ya estaba de 30c.
 - QUICK_REFERENCE: la nota de memoria decía que lo guardado en arrays se queda hasta el final; ya no es así.
 - Solo documentación: sin cambios de código.
+
+### 2026-10-15 — Tarea 30g (`nil`)
+- Base: 111/111 sin emulador, ejemplos 30/30.
+- Hecho:
+  - Gramática: literal `nil` (`NilLiteral`, C `NULL`) y declaración local con tipo `var x: Tipo (= valor)` (antes
+    solo global): una variable que empieza vacía necesita su tipo. La declaración es dueña de su valor como una
+    primera asignación (struct/Array: `_dash_obj_set`; String: `_dash_str_set`).
+  - `x = nil` suelta el valor (`_dash_obj_set`/`_dash_str_set` con `NULL`); `x == nil`/`x != nil` comparan punteros
+    también en textos (antes `==` en textos era `strcmp`). `nil` vale en literales de lista (no cambia el tipo de
+    elemento), en elementos (`pares[0] = nil` suelta el anterior), como argumento y como retorno.
+  - Analyzer: `x = nil` sin tipo da "does not say what 'x' holds: declare it with a type"; `nil` en un Int, Float o
+    Bool, "nil is only for structs, Arrays and Strings". La declaración `var` local valida el nombre del tipo.
+  - Campos de `nil`: medido en el emulador. Leer da basura (la dirección 0 es memoria normal en un Amiga);
+    escribir pisa los vectores del 68000 y ExecBase y cuelga el Amiga. Decisión: las escrituras de campos van por
+    `_DASH_NNW(p)` (si `p` es `NULL`, escriben en `_dash_nil_area`; una comparación y un salto), las lecturas no
+    se comprueban en el modo normal. Con `--memcheck` (el transpilador recibe `DASH_MEMCHECK_C=1` de `./dash` y
+    del runner) lecturas y escrituras pasan por `_DASH_NN` y avisan "campo de nil".
+  - Encontrado al probarlo: con `-O2` GCC convertía `n.valor` con `n` que sabe `NULL` en una instrucción de trampa
+    (el programa se colgaba en vez de leer basura), y puede quitar comprobaciones de `NULL` posteriores a una
+    lectura. `compiler/cflags.py` añade `-fno-isolate-erroneous-paths-dereference` y
+    `-fno-delete-null-pointer-checks` (en un Amiga la dirección 0 se puede leer).
+- Tests: `test_nil` (lista enlazada de 5.000 en Dash puro, búsqueda que devuelve `nil`, árbol binario recursivo,
+  campo "sin objetivo", texto vacío, hueco en una lista; `--memcheck`), `errors/nil_untyped`, `errors/nil_int`.
+  Cambiados (C esperado): `test_nested_assign` (`_DASH_NNW`), `test_refcount_borrow` (`_DASH_NN` en `--memcheck`).
+- Coste medido (A500, `bench_core`, misma tanda): `struct_new_field` 111.150 → 117.075 ns (+5 %); lo demás igual.
+  No es la comparación de la escritura sino `-fno-delete-null-pointer-checks`: sin ella GCC sabe que `p` no es `NULL`
+  tras leer `p.x` y quita la comprobación, pero entonces `p.x = p.x + 1` con `p` nil escribiría en la dirección 0.
+  Me quedo con la seguridad (sigue −64 % frente a antes de 30e).
+- `run_tests.py --memcheck` ya no mira `expect-c`/`expect-no-c` (describen el C normal; con `--memcheck` lleva
+  `_DASH_NN`), salvo en los tests `# memcheck`.
+- Tests: 114/114 sin emulador; 268/268 con `--emu --emu-a500 --emu-32`; con `--memcheck` todos (los dos que
+  fallaban eran solo `expect-c`); 60 programas aleatorios con `--memcheck` y 40 normales; ejemplos 30/30.
+- `tools/fuzz_refcount.py` no genera `nil`: tras `x = nil` sus expresiones leerían campos de `nil` y el modelo no
+  puede predecir la basura. Cubierto por `test_nil`.

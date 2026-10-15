@@ -31,6 +31,7 @@ name = "Dash"               # String
 active = true               # Bool
 nums = [1,2,3]              # Array
 player = Player(10,20)      # Struct instance
+var lista: Nodo = nil       # nil: no struct/list/String (x == nil, x = nil)
 ```
 
 ## Operators

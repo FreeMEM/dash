@@ -1,0 +1,122 @@
+# Test: nil. A linked list and a tree in plain Dash, "no target" in a struct
+# field, a String that starts empty, a hole in a list of structs. Checked
+# with --memcheck: nothing alive at exit.
+#
+# memcheck
+# expect-c: _Dash_Nodo *lista = NULL;
+# expect-out: 12502500
+# expect-out: 77
+# expect-out: no esta
+# expect-out: sin objetivo
+# expect-out: 77
+# expect-out: texto vacio
+# expect-out: hueco
+# expect-out: arbol 15 11
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Nodo
+    valor: Int
+    siguiente: Nodo
+end
+
+struct Arbol
+    valor: Int
+    izq: Arbol
+    der: Arbol
+end
+
+struct Nave
+    nombre: String
+    objetivo: Nodo
+end
+
+func suma(n: Nodo) -> Int
+    total = 0
+    while n != nil
+        total = total + n.valor
+        n = n.siguiente
+    end
+    return total
+end
+
+func buscar(n: Nodo, v) -> Nodo
+    while n != nil
+        if n.valor == v
+            return n
+        end
+        n = n.siguiente
+    end
+    return nil
+end
+
+func insertar(a: Arbol, v) -> Arbol
+    if a == nil
+        return Arbol(v, nil, nil)
+    end
+    if v < a.valor
+        a.izq = insertar(a.izq, v)
+    else
+        a.der = insertar(a.der, v)
+    end
+    return a
+end
+
+func suma_arbol(a: Arbol) -> Int
+    if a == nil
+        return 0
+    end
+    return a.valor + suma_arbol(a.izq) + suma_arbol(a.der)
+end
+
+func altura(a: Arbol) -> Int
+    if a == nil
+        return 0
+    end
+    i = altura(a.izq)
+    d = altura(a.der)
+    if i > d
+        return i + 1
+    end
+    return d + 1
+end
+
+Main
+    var lista: Nodo = nil
+    for i in (1..5000)
+        lista = Nodo(i, lista)
+    end
+    Print suma(lista)
+    e = buscar(lista, 77)
+    Print e.valor
+    if buscar(lista, 9999) == nil
+        Print "no esta"
+    end
+    nave = Nave("x", nil)
+    if nave.objetivo == nil
+        Print "sin objetivo"
+    end
+    nave.objetivo = e
+    Print nave.objetivo.valor
+    nave.objetivo = nil
+    var s: String = nil
+    if s == nil
+        Print "texto vacio"
+    end
+    s = "hola"
+    s = nil
+    pares = [Nodo(1, nil), nil, Nodo(3, nil)]
+    if pares[1] == nil
+        Print "hueco"
+    end
+    pares[0] = nil
+    var raiz: Arbol = nil
+    valores = [4, 2, 6, 1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    for v in valores
+        raiz = insertar(raiz, v)
+    end
+    Print "arbol " + (suma_arbol(raiz) - 105) + " " + altura(raiz)
+    lista = nil
+    raiz = nil
+    Print "fin"
+end

@@ -80,6 +80,7 @@ dash_grammar_minimal = r"""
                 | self_member_assign
                 | member_assign
                 | var_assign
+                | local_var_decl
                 | if_stmt
                 | while_stmt
                 | for_range_stmt
@@ -127,6 +128,8 @@ dash_grammar_minimal = r"""
 
     // Variables (Python style - first assignment declares)
     var_assign: ID "=" expression
+    // with a type, for a variable that starts empty: var actual: Nodo = nil
+    local_var_decl: "var" ID ":" TYPE_NAME ("=" expression)?
 
     // Arrays
     array_assign: ID index_chain "=" expression
@@ -171,6 +174,7 @@ dash_grammar_minimal = r"""
          | ESCAPED_STRING -> string_literal
          | "true" -> true_literal
          | "false" -> false_literal
+         | "nil" -> nil_literal
          | "self" -> self_ref
          | array_literal
          | lambda_func

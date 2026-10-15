@@ -15,7 +15,7 @@ from compiler.ast_nodes import (
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
-    WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
+    WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, NilLiteral,
     PropertyAccess, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod, SelfRef,
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
@@ -107,6 +107,30 @@ static __inline__ LONG _dash_imod(LONG a, LONG b) {
 /* Dash Memory Runtime */
 #define _DASH_MEMORY_RUNTIME 1
 static APTR _dash_pool = NULL;
+
+#ifdef DASH_MEMCHECK
+/* --memcheck: a field read or written through nil goes to this zeroed area
+   instead of address 0 (the 68000 exception vectors and ExecBase) */
+static LONG _dash_mc_nil_area[64];
+static void _dash_mc_error(CONST_STRPTR what);
+static void *_dash_mc_nn(void *p) {
+    LONG i;
+    if (p) return p;
+    _dash_mc_error((CONST_STRPTR)"campo de nil");
+    for (i = 0; i < 64; i++) _dash_mc_nil_area[i] = 0;
+    return _dash_mc_nil_area;
+}
+#define _DASH_NN(p) ((__typeof__(p))_dash_mc_nn((void *)(p)))
+#define _DASH_NNW(p) _DASH_NN(p)
+#else
+#define _DASH_NN(p) (p)
+/* Writing a field through nil would write at address 0 (the exception vectors,
+   ExecBase at 4) and hang the Amiga: field writes go to this area instead.
+   Reading through nil only reads low memory (garbage, no harm), so reads are
+   not checked: --memcheck reports both. */
+static LONG _dash_nil_area[64];
+#define _DASH_NNW(p) ({ __typeof__(p) _dash_w = (p); _dash_w ? _dash_w : (__typeof__(p))_dash_nil_area; })
+#endif
 
 #ifdef DASH_MEMCHECK
 /* ./dash --memcheck: counts live strings and objects, fills freed blocks with
@@ -5555,6 +5579,8 @@ class CodeGenerator(ASTVisitor):
         self.context = CodeGenContext()
         # Test mode for the emulator bench: end the program after N seconds
         self.autoclose = int(os.environ.get("DASH_TEST_AUTOCLOSE", "0") or 0)
+        # ./dash --memcheck: field accesses check for nil (_DASH_NN)
+        self.memcheck = os.environ.get("DASH_MEMCHECK_C") == "1"
         self.globals: List[str] = []
         self.prototypes: List[str] = []
         self.functions: List[str] = []
@@ -6453,8 +6479,37 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_VarDecl(self, node: VarDecl):
         """Generate code for variable declaration."""
-        value = self._generate_expression(node.initial_value) if node.initial_value else "0"
         indent = self.context.indent
+        if node.var_type:
+            # var name: Type (= value): owned like a first assignment
+            c_type = self._dash_type_to_c(node.var_type)
+            init = node.initial_value
+            if init is not None and isinstance(init, NilLiteral):
+                init = None
+            if self._is_obj_c_type(c_type):
+                self.var_types[node.name] = "array" if c_type == "DashArrayLong *" else f"struct:{node.var_type}"
+                self.context.declare_var(node.name)
+                self.context.own(node.name, "obj")
+                self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
+                if init is not None:
+                    value = self._generate_expression(init)
+                    self.emit(f"{indent}_dash_obj_set((void **)&{node.name}, {value});\n")
+            elif c_type == "STRPTR":
+                self.uses_strings = True
+                self.var_types[node.name] = "string"
+                self.context.declare_var(node.name)
+                self.context.own(node.name, "str")
+                self.emit(f"{indent}STRPTR {node.name} = NULL;\n")
+                if init is not None:
+                    self.emit(f"{indent}_dash_str_set(&{node.name}, {self._generate_expression(init)});\n")
+            else:
+                if c_type == "float":
+                    self.var_types[node.name] = "float"
+                value = self._generate_expression(init) if init is not None else "0"
+                self.context.declare_var(node.name)
+                self.emit(f"{indent}{c_type} {node.name} = {value};\n")
+            return
+        value = self._generate_expression(node.initial_value) if node.initial_value else "0"
 
         if isinstance(node.initial_value, StringLiteral):
             var_type = "STRPTR"
@@ -6469,6 +6524,18 @@ static {ret_type} {method_name}({params_str}) {{
     def visit_VarAssign(self, node: VarAssign):
         """Generate code for variable assignment (first use declares)."""
         indent = self.context.indent
+
+        if isinstance(node.value, NilLiteral):
+            # x = nil (the analyzer only lets it through for a declared struct, list or String)
+            vt = self.var_types.get(node.name) or ""
+            owned = self.context.is_owned(node.name)
+            if vt == "string" and (owned or node.name in self.global_strings):
+                self.emit(f"{indent}_dash_str_set(&{node.name}, NULL);\n")
+            elif owned or node.name in self.global_objects:
+                self.emit(f"{indent}_dash_obj_set((void **)&{node.name}, NULL);\n")
+            else:
+                self.emit(f"{indent}{node.name} = NULL;\n")
+            return
 
         # Special handling for array literals
         if isinstance(node.value, ArrayLiteral):
@@ -6953,7 +7020,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True
             self.emit(f"{indent}DashArray_set_str({array_name}, {index}, {value});\n")
             return
-        if elem and self._is_obj_expr(node.value):
+        if elem and (self._is_obj_expr(node.value) or isinstance(node.value, NilLiteral)):
             # the array holds a reference to its structs or arrays
             self.emit(f"{indent}DashArray_set_obj({array_name}, {index}, {value});\n")
             return
@@ -7117,8 +7184,16 @@ static {ret_type} {method_name}({params_str}) {{
             return c_float_literal(node.value)
         elif isinstance(node, BoolLiteral):
             return "TRUE" if node.value else "FALSE"
+        elif isinstance(node, NilLiteral):
+            return "NULL"
         elif isinstance(node, VarRef):
             return node.name
+        elif isinstance(node, BinaryOp) and node.operator in ("==", "!=") and (
+                isinstance(node.left, NilLiteral) or isinstance(node.right, NilLiteral)):
+            # x == nil: the pointer, also for Strings (not their contents)
+            left = self._generate_expression(node.left)
+            right = self._generate_expression(node.right)
+            return f"((void *)({left}) {node.operator} (void *)({right}))"
         elif isinstance(node, BinaryOp):
             left_str = self._is_string_expr(node.left)
             right_str = self._is_string_expr(node.right)
@@ -7228,9 +7303,9 @@ static {ret_type} {method_name}({params_str}) {{
             if isinstance(node.object, VarRef):
                 var_type = self.var_types.get(node.object.name)
                 if var_type and var_type.startswith("struct:"):
-                    return f"{obj}->{node.property}"
+                    return f"{self._nn(obj)}->{node.property}"
             # Generic property access as pointer dereference
-            return f"{obj}->{node.property}"
+            return f"{self._nn(obj)}->{node.property}"
         elif isinstance(node, MemberAccess):
             # Check if it's an enum value access (Direction.UP)
             enum = self.analysis.program.get_enum(node.object_name)
@@ -7253,7 +7328,7 @@ static {ret_type} {method_name}({params_str}) {{
                 self.uses_arrays = True
                 return f"DashArray_length({self._array_ref(VarRef(name=node.object_name))})"
             # Struct member access - use pointer notation
-            return f"{node.object_name}->{node.member}"
+            return f"{self._nn(node.object_name)}->{node.member}"
         elif isinstance(node, LambdaFunc):
             # Generate an anonymous function and return its pointer
             return self._generate_lambda(node)
@@ -7436,6 +7511,8 @@ static {ret_type} {method_name}({params_str}) {{
         owner = self._generate_expression(node.target) if node.target is not None else node.object_name
         owner_node = node.target if node.target is not None else (
             SelfRef() if node.object_name == "self" else VarRef(name=node.object_name))
+        if owner != "self":
+            owner = f"_DASH_NNW({owner})"   # a write through nil must not hit address 0
         struct = self._struct_of(owner_node)
         field = struct.get_field(node.member) if struct else None
         if field and field.field_type == "String":
@@ -7492,6 +7569,10 @@ static {ret_type} {method_name}({params_str}) {{
             args.extend(self._generate_expression(a) for a in node.arguments)
             args_str = ", ".join(args)
             return f"/* method call */ {node.method}({args_str})"
+
+    def _nn(self, code: str) -> str:
+        """The struct pointer of a field access; with --memcheck it is checked for nil."""
+        return f"_DASH_NN({code})" if self.memcheck else code
 
     def _lend(self, arg: ASTNode, code: str) -> str:
         """An argument for a Dash function or method that the callee could free while
@@ -7780,6 +7861,8 @@ static {ret_type} {method_name}({params_str}) {{
         "array", or None (Ints, or a mix)."""
         kinds = set()
         for e in node.elements:
+            if isinstance(e, NilLiteral):
+                continue      # nil fits a list of Strings, structs or lists
             if self._is_string_expr(e):
                 kinds.add("string")
             elif isinstance(e, ArrayLiteral) or self._infer_c_type(e) == "DashArrayLong *":
@@ -7787,7 +7870,7 @@ static {ret_type} {method_name}({params_str}) {{
             else:
                 struct = self._struct_of(e)
                 kinds.add(f"struct:{struct.name}" if struct and self._is_obj_expr(e) else None)
-        return kinds.pop() if len(kinds) == 1 else None
+        return kinds.pop() if len(kinds) == 1 and None not in kinds else None
 
     def _array_var_type(self, node: ASTNode) -> str:
         """var_types entry for a variable assigned an array expression."""

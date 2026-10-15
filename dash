@@ -73,6 +73,8 @@ def main():
                         help="Memory check build: reports objects or strings freed twice or used after "
                              "being freed, and what is still alive at exit (slower; for testing)")
     args = parser.parse_args()
+    if args.memcheck:
+        os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
 
     input_filename = args.input_file
     output_filename = args.output

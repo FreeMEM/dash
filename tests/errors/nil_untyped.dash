@@ -1,0 +1,4 @@
+# expect: does not say what 'x' holds
+Main
+    x = nil
+end

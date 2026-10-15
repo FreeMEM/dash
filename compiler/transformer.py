@@ -10,7 +10,7 @@ from compiler.ast_nodes import (
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
-    ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
+    ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, NilLiteral,
     SourceLocation, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
     PropertyAccess, ImportStmt, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod,
     SelfRef, MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
@@ -588,6 +588,16 @@ class DashASTBuilder(Transformer):
         name = items[0].value if isinstance(items[0], Token) else str(items[0])
         initial_value = items[1] if len(items) > 1 else None
         return VarDecl(name=name, initial_value=initial_value)
+
+    def nil_literal(self, items) -> NilLiteral:
+        return NilLiteral()
+
+    def local_var_decl(self, items) -> VarDecl:
+        """var name: Type (= value) inside a function or Main."""
+        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        var_type = items[1].value if isinstance(items[1], Token) else str(items[1])
+        return VarDecl(name=name, var_type=var_type, initial_value=items[2] if len(items) > 2 else None,
+                       location=self._get_location(items[0]))
 
     def var_assign(self, items) -> VarAssign:
         """Build a variable assignment node (also serves as declaration)."""

@@ -13,7 +13,7 @@ from compiler.ast_nodes import (
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
-    ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess,
+    ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess, NilLiteral,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
     StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral
@@ -448,17 +448,28 @@ class SemanticAnalyzer(ASTVisitor):
             self.error("Stop can only be used inside an EventLoop handler", node)
 
     def visit_VarDecl(self, node: VarDecl):
-        """Visit a variable declaration."""
+        """Visit a variable declaration (var name: Type = value inside a function or Main)."""
         # Analyze initial value first
         if node.initial_value:
             self.visit(node.initial_value)
 
+        if node.var_type:
+            known = self._TYPE_NAMES | {st.name for st in self.structs} | {
+                e.name for e in (self.program.enums if self.program else [])}
+            if node.var_type not in known:
+                self.error(f"Unknown type '{node.var_type}' (variable '{node.name}')", node)
+            dash_type = self._type_annotation_to_dash_type(node.var_type)
+            if isinstance(node.initial_value, NilLiteral) and dash_type in self._NO_NIL:
+                self.error(f"'{node.name}' is {node.var_type}: nil is only for structs, Arrays and Strings", node)
+        else:
+            dash_type = self._infer_type(node.initial_value) if node.initial_value else DashType.UNKNOWN
         symbol = Symbol(
             name=node.name,
             symbol_type=SymbolType.VARIABLE,
-            dash_type=self._infer_type(node.initial_value) if node.initial_value else DashType.UNKNOWN,
+            dash_type=dash_type,
             node=node,
-            is_initialized=node.initial_value is not None
+            is_initialized=True,
+            struct_name=self._struct_type_name(node.var_type) if node.var_type else None
         )
         self.define_symbol(symbol, node)
 
@@ -469,6 +480,14 @@ class SemanticAnalyzer(ASTVisitor):
 
         # Check if variable already exists
         symbol = self.lookup_symbol(node.name)
+        if isinstance(node.value, NilLiteral):
+            if not symbol:
+                self.error(f"'{node.name} = nil' does not say what '{node.name}' holds: "
+                           f"declare it with a type (var {node.name}: Tipo = nil)", node)
+            elif symbol.dash_type in self._NO_NIL:
+                self.error(f"'{node.name}' holds a {symbol.dash_type.name.lower()}: "
+                           f"nil is only for structs, Arrays and Strings", node)
+            return
         if not symbol:
             # First assignment - declare the variable
             symbol = Symbol(
@@ -858,7 +877,7 @@ class SemanticAnalyzer(ASTVisitor):
     def _elem_struct_of(self, expr: Optional[ASTNode]) -> Optional[str]:
         """Struct type of the elements of a list expression, when all are one struct."""
         if isinstance(expr, ArrayLiteral) and expr.elements:
-            names = {self._struct_name_of(e) for e in expr.elements}
+            names = {self._struct_name_of(e) for e in expr.elements if not isinstance(e, NilLiteral)}
             return names.pop() if len(names) == 1 else None
         if isinstance(expr, ArraySlice):
             expr = expr.array
@@ -931,6 +950,10 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_BoolLiteral(self, node: BoolLiteral):
         """Visit a boolean literal."""
+        pass
+
+    def visit_NilLiteral(self, node: NilLiteral):
+        """nil: C NULL."""
         pass
 
     def generic_visit(self, node: ASTNode):
@@ -1014,6 +1037,7 @@ class SemanticAnalyzer(ASTVisitor):
         return search(func.body)
 
     _TYPE_NAMES = {"Int", "Float", "String", "Bool", "Pointer", "Void", "Func", "Array"}
+    _NO_NIL = (DashType.INT, DashType.FLOAT, DashType.BOOL)
 
     def _check_type_names(self, program: Program):
         """Every type annotation names a type: an unknown name used to compile as

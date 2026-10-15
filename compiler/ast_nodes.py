@@ -93,6 +93,12 @@ class NumberLiteral(ASTNode):
 
 
 @dataclass
+class NilLiteral(ASTNode):
+    """nil: no struct, list or String (C NULL)."""
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class BoolLiteral(ASTNode):
     """Boolean literal value."""
     value: bool

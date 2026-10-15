@@ -666,6 +666,38 @@ filas = [[1, 2], [3, 4]]
 Print filas[1][0]
 ```
 
+### nil
+
+`nil` es "ningun struct, lista o texto". Una variable que empieza vacia necesita su tipo:
+
+```
+struct Nodo
+    valor: Int
+    siguiente: Nodo
+end
+
+var lista: Nodo = nil            # lista enlazada vacia
+for i in (1..10)
+    lista = Nodo(i, lista)
+end
+n = lista
+while n != nil
+    Print n.valor
+    n = n.siguiente
+end
+nave = Nave("x", nil)            # campo "sin objetivo"
+if buscar(lista, 3) == nil
+    Print "no esta"
+end
+```
+
+- `x = nil` suelta lo que tenia `x`; `x == nil` y `x != nil` comparan el puntero (tambien en textos).
+- Solo para structs, `Array` y `String`: `n = nil` con un entero da error, y `x = nil` sin `var x: Tipo`
+  tambien.
+- Leer un campo de `nil` da basura (normalmente 0); escribirlo no hace nada (sin la proteccion
+  escribiria en la direccion 0 y colgaria el Amiga). Con `--memcheck` los dos avisan:
+  `memcheck: ERROR campo de nil`.
+
 Limites: una lista que entra como parametro `Array` o sale de una funcion pierde el tipo de
 sus elementos (se leen como enteros), y no se puede asignar a un campo de un elemento
 (`enemigos[0].x = 5`): hay que usar una variable (`e = enemigos[0]` y `e.x = 5`).

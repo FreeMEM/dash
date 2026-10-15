@@ -106,12 +106,14 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
     ]
 
     try:
+        mc = memcheck or wants_memcheck(test_file)
         result = subprocess.run(
             transpile_cmd,
             capture_output=True,
             text=True,
             cwd=str(PROJECT_ROOT),
-            timeout=30
+            timeout=30,
+            env=dict(os.environ, DASH_MEMCHECK_C="1" if mc else "0")
         )
         transpile_ok = result.returncode == 0
 
@@ -150,7 +152,8 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
     # Step 1b: lines '# expect-c: <text>' must appear in the generated C, and
     # '# expect-no-c: <text>' must not ("\\n" in it stands for a line break)
     c_text = c_file.read_text(errors="replace")
-    for line in test_file.read_text().splitlines():
+    # with --memcheck the C has its checks (_DASH_NN...): the expected C is the normal one
+    for line in ([] if memcheck and not wants_memcheck(test_file) else test_file.read_text().splitlines()):
         problem = None
         if line.startswith("# expect-c:"):
             wanted = line[len("# expect-c:"):].strip()
