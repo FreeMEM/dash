@@ -1,0 +1,8 @@
+# Test: the element type of a list type must exist
+# expect: Unknown type '[Cosa]'
+
+func f(l: [Cosa])
+end
+
+Main
+end

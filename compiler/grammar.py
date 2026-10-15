@@ -29,7 +29,8 @@ dash_grammar_minimal = r"""
     struct_member: struct_field | struct_method | comment_line
     struct_field: ID ":" TYPE_NAME ("=" expression)?
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
-    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID
+    // [T]: a list whose elements are T ("[String]", "[Nodo]", "[[Int]]")
+    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[A-Za-z_][\[\]A-Za-z0-9_ \t]*\]/
 
     // Enum definition
     enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
@@ -124,7 +125,7 @@ dash_grammar_minimal = r"""
     // For loops
     for_range_stmt: "for" ID "in" "(" expression RANGE_OP expression (STEP expression)? ")" instruction* "end"
     STEP: "step"
-    for_each_stmt: "for" ID "in" ID instruction* "end"
+    for_each_stmt: "for" ID "in" expression instruction* "end"
     RANGE_OP: ".."
 
     // Variables (Python style - first assignment declares)

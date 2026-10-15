@@ -1,0 +1,90 @@
+# Test: list types [T] (globals, parameters, returns, struct fields, var) keep the element
+# type; for-each over any list expression (call, field, literal)
+# memcheck
+# expect-out: lt
+# expect-out: 34
+# expect-out: yz
+# expect-out: amp
+# expect-out: orden
+# expect-out: (html)
+# expect-out: head
+# expect-out: body
+# expect-out: body
+# expect-out: uno
+# expect-out: 60
+# expect-out: a!
+# expect-out: b!
+# expect-out: x
+# expect-out: y
+# expect-out: z
+# expect-out: 1
+# expect-out: 2
+# expect-out: 0
+# expect-out: 2
+# expect-out: 4
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Nodo
+    nombre: String
+    hijos: [Nodo]
+end
+
+var NOMBRES: [String] = ["amp", "lt", "quot"]
+var CODIGOS: [Int] = [38, 60, 34]
+
+func busca(i: Int) -> String
+    return NOMBRES[i]
+end
+
+func letras() -> [String]
+    return ["x", "y", "z"]
+end
+
+func primero(l: [String]) -> String
+    return l[0]
+end
+
+func nombres_de(n: Nodo) -> [String]
+    r = ["(" + n.nombre + ")"]
+    for h in n.hijos
+        r = r + [h.nombre]
+    end
+    return r
+end
+
+Main
+    Print busca(1)
+    Print CODIGOS[2]
+    l = letras()
+    s = l[1]
+    Print s + letras()[2]
+    Print primero(NOMBRES)
+    if NOMBRES[0] < NOMBRES[1]
+        Print "orden"
+    end
+    raiz = Nodo("html", [Nodo("head", []), Nodo("body", [])])
+    for x in nombres_de(raiz)
+        Print x
+    end
+    Print raiz.hijos[1].nombre
+    var vacia: [String] = []
+    vacia = vacia + ["uno"]
+    Print vacia[0]
+    t = 0
+    for k in [10, 20, 30]
+        t = t + k
+    end
+    Print t
+    for w in ["a", "b"]
+        Print w + "!"
+    end
+    for c in letras()
+        Print c
+    end
+    for i in (1..2)
+        Print i
+    end
+    for i in (0..4 step 2)
+        Print i
+    end
+end

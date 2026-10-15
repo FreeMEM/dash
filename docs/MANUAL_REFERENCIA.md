@@ -791,9 +791,33 @@ end
   escribiria en la direccion 0 y colgaria el Amiga). Con `--memcheck` los dos avisan:
   `memcheck: ERROR campo de nil`.
 
-Limites: una lista que entra como parametro `Array` o sale de una funcion pierde el tipo de
-sus elementos (se leen como enteros), y no se puede asignar a un campo de un elemento
-(`enemigos[0].x = 5`): hay que usar una variable (`e = enemigos[0]` y `e.x = 5`).
+### Tipos de lista: `[T]`
+
+`[T]` es una lista de `T`: `[Int]`, `[String]`, `[Enemigo]`, `[[Int]]`. Con ese tipo, la lista
+conserva el de sus elementos al pasar por una variable global, un parametro, el valor de una
+funcion o un campo de un struct:
+
+```
+var NOMBRES: [String] = ["Ana", "Bob"]
+
+struct Nodo
+    nombre: String
+    hijos: [Nodo]
+end
+
+func nombres_de(n: Nodo) -> [String]
+    r = [n.nombre]
+    for h in n.hijos             # for recorre cualquier lista: variable, campo, llamada o literal
+        r = r + [h.nombre]
+    end
+    return r
+end
+```
+
+`Array` sigue siendo una lista sin tipo (sus elementos se leen como enteros).
+
+Limite: no se puede asignar a un campo de un elemento (`enemigos[0].x = 5`): hay que usar
+una variable (`e = enemigos[0]` y `e.x = 5`).
 
 ---
 

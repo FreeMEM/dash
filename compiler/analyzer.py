@@ -21,6 +21,21 @@ from compiler.ast_nodes import (
 from compiler.amiga_builtins import is_builtin, get_builtin
 
 
+def list_elem_type(type_name: Optional[str]) -> Optional[str]:
+    """Element type of a list type annotation ("[String]" -> "String"), else None."""
+    if type_name and type_name.startswith("[") and type_name.endswith("]"):
+        return type_name[1:-1].strip()
+    return None
+
+
+def type_is_known(type_name: str, known) -> bool:
+    """A type name, or a list of one ("[Nodo]", "[[Int]]")."""
+    elem = list_elem_type(type_name)
+    if elem is not None:
+        return bool(elem) and elem not in ("Void", "Array") and type_is_known(elem, known)
+    return type_name in known
+
+
 class SymbolType(Enum):
     """Types of symbols in the symbol table."""
     WINDOW = auto()
@@ -246,7 +261,8 @@ class SemanticAnalyzer(ASTVisitor):
                 dash_type=dash_type,
                 node=gvar,
                 is_initialized=True,  # C globals start zeroed
-                struct_name=self._struct_type_name(gvar.var_type)
+                struct_name=self._struct_type_name(gvar.var_type),
+                elem_struct=self._list_elem_struct(gvar.var_type)
             )
             self.define_symbol(symbol, gvar)
 
@@ -462,7 +478,7 @@ class SemanticAnalyzer(ASTVisitor):
         if node.var_type:
             known = self._TYPE_NAMES | {st.name for st in self.structs} | {
                 e.name for e in (self.program.enums if self.program else [])}
-            if node.var_type not in known:
+            if not type_is_known(node.var_type, known):
                 self.error(f"Unknown type '{node.var_type}' (variable '{node.name}')", node)
             dash_type = self._type_annotation_to_dash_type(node.var_type)
             if isinstance(node.initial_value, NilLiteral) and dash_type in self._NO_NIL:
@@ -475,7 +491,8 @@ class SemanticAnalyzer(ASTVisitor):
             dash_type=dash_type,
             node=node,
             is_initialized=True,
-            struct_name=self._struct_type_name(node.var_type) if node.var_type else None
+            struct_name=self._struct_type_name(node.var_type) if node.var_type else None,
+            elem_struct=self._list_elem_struct(node.var_type)
         )
         self.define_symbol(symbol, node)
 
@@ -590,7 +607,9 @@ class SemanticAnalyzer(ASTVisitor):
         symbol = Symbol(
             name=node.variable,
             symbol_type=SymbolType.VARIABLE,
-            dash_type=DashType.UNKNOWN if elem else DashType.INT,  # ints unless a list of structs
+            # ints unless a list of structs or of Strings
+            dash_type=(DashType.UNKNOWN if elem else
+                       DashType.STRING if self._list_kind(node.iterable) == "string" else DashType.INT),
             node=node,
             is_initialized=True,
             struct_name=elem
@@ -628,7 +647,8 @@ class SemanticAnalyzer(ASTVisitor):
                 symbol_type=SymbolType.PARAMETER,
                 dash_type=dash_type,
                 is_initialized=True,
-                struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None)
+                struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None),
+                elem_struct=self._list_elem_struct(param.param_type if isinstance(param, FunctionParam) else None)
             )
             self.define_symbol(symbol, node)
 
@@ -651,6 +671,8 @@ class SemanticAnalyzer(ASTVisitor):
             self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
                                       dash_type=dash_type, is_initialized=True,
                                       struct_name=self._struct_type_name(
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      elem_struct=self._list_elem_struct(
                                           param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
         before = len(self.errors)
@@ -673,6 +695,8 @@ class SemanticAnalyzer(ASTVisitor):
             self.define_symbol(Symbol(name=name, symbol_type=SymbolType.PARAMETER,
                                       dash_type=dash_type, is_initialized=True,
                                       struct_name=self._struct_type_name(
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      elem_struct=self._list_elem_struct(
                                           param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
         self._visit_new_body(node.body)
@@ -881,6 +905,10 @@ class SemanticAnalyzer(ASTVisitor):
                 if isinstance(nested, list):
                     yield from self._return_values(nested)
 
+    def _list_elem_struct(self, type_name: Optional[str]) -> Optional[str]:
+        """For a list type "[Nodo]", the struct of its elements (dashweb D4a)."""
+        return self._struct_type_name(list_elem_type(type_name))
+
     def _struct_type_name(self, type_name: Optional[str]) -> Optional[str]:
         """The type annotation itself when it names a struct."""
         if type_name and self.program and self.program.get_struct(type_name):
@@ -920,6 +948,12 @@ class SemanticAnalyzer(ASTVisitor):
                 return f"struct:{symbol.elem_struct}"
             return {DashType.ARRAY_INT: "int", DashType.ARRAY_STRING: "string",
                     DashType.ARRAY: "any"}.get(symbol.dash_type)
+        declared = self._declared_list_type(expr)
+        if declared:
+            elem = list_elem_type(declared)
+            if self._struct_type_name(elem):
+                return f"struct:{elem}"
+            return {"Int": "int", "String": "string"}.get(elem, "list" if list_elem_type(elem) else "any")
         if isinstance(expr, FunctionCall) and self.program:
             func = self.program.get_function(expr.name)
             if func and func.return_type == "Array":
@@ -935,6 +969,24 @@ class SemanticAnalyzer(ASTVisitor):
                 return "any"
         return None
 
+    def _declared_list_type(self, expr: ASTNode) -> Optional[str]:
+        """The "[T]" type a call or a struct field declares for its list, if any."""
+        if not self.program:
+            return None
+        type_name = None
+        if isinstance(expr, FunctionCall):
+            func = self.program.get_function(expr.name)
+            type_name = func.return_type if func else None
+        elif isinstance(expr, (PropertyAccess, MemberAccess)):
+            if isinstance(expr, MemberAccess):
+                owner, member = self._struct_name_of(VarRef(name=expr.object_name)), expr.member
+            else:
+                owner, member = self._struct_name_of(expr.object), expr.property
+            struct = self.program.get_struct(owner) if owner else None
+            field = struct.get_field(member) if struct else None
+            type_name = field.field_type if field else None
+        return type_name if list_elem_type(type_name) is not None else None
+
     @staticmethod
     def _kind_text(kind: str) -> str:
         return {"int": "Ints", "string": "Strings", "list": "lists"}.get(kind, kind.split(":")[-1])
@@ -943,6 +995,9 @@ class SemanticAnalyzer(ASTVisitor):
         """Struct type of the elements of a list expression, when all are one struct."""
         if isinstance(expr, BinaryOp) and expr.operator == "+":
             return self._elem_struct_of(expr.left) or self._elem_struct_of(expr.right)
+        declared = self._declared_list_type(expr)
+        if declared:
+            return self._list_elem_struct(declared)
         if isinstance(expr, ArrayLiteral) and expr.elements:
             names = {self._struct_name_of(e) for e in expr.elements if not isinstance(e, NilLiteral)}
             return names.pop() if len(names) == 1 else None
@@ -1093,6 +1148,11 @@ class SemanticAnalyzer(ASTVisitor):
                     return DashType.STRING
                 if symbol and (symbol.elem_struct or symbol.dash_type == DashType.STRING):
                     return DashType.UNKNOWN
+            elem = list_elem_type(self._declared_list_type(node.array))
+            if elem == "String":
+                return DashType.STRING
+            if elem is not None and elem != "Int":
+                return DashType.UNKNOWN
             return DashType.INT
         elif isinstance(node, PropertyAccess) and node.property == "length":
             return DashType.INT
@@ -1136,7 +1196,7 @@ class SemanticAnalyzer(ASTVisitor):
         known = self._TYPE_NAMES | {s.name for s in program.structs} | {e.name for e in program.enums}
 
         def check(type_name, where):
-            if type_name and type_name not in known:
+            if type_name and not type_is_known(type_name, known):
                 self.error(f"Unknown type '{type_name}' ({where}); types are "
                            f"{', '.join(sorted(self._TYPE_NAMES))}, or a struct or enum name", where_node)
 
@@ -1161,6 +1221,9 @@ class SemanticAnalyzer(ASTVisitor):
         """Convert a type annotation string to a DashType."""
         if not type_name:
             return DashType.UNKNOWN
+        elem = list_elem_type(type_name)
+        if elem is not None:
+            return {"Int": DashType.ARRAY_INT, "String": DashType.ARRAY_STRING}.get(elem, DashType.ARRAY)
         type_map = {
             "Int": DashType.INT,
             "Float": DashType.FLOAT,

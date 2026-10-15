@@ -20,7 +20,7 @@ from compiler.ast_nodes import (
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
-from compiler.analyzer import AnalysisResult
+from compiler.analyzer import AnalysisResult, list_elem_type
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 
 
@@ -8145,6 +8145,8 @@ static LONG _dash_event_window_handle(void) {{
             self.var_types[gvar.name] = f"struct:{gvar.var_type}"
         elif c_type == "float":
             self.var_types[gvar.name] = "float"
+        elif c_type == "DashArrayLong *":
+            self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
         else:
             self.var_types[gvar.name] = "number"
 
@@ -8640,7 +8642,8 @@ static {ret_type} {method_name}({params_str}) {{
             if init is not None and isinstance(init, NilLiteral):
                 init = None
             if self._is_obj_c_type(c_type):
-                self.var_types[node.name] = "array" if c_type == "DashArrayLong *" else f"struct:{node.var_type}"
+                self.var_types[node.name] = (self._list_var_type(node.var_type) if c_type == "DashArrayLong *"
+                                             else f"struct:{node.var_type}")
                 self.context.declare_var(node.name)
                 self.context.own(node.name, "obj")
                 self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
@@ -10001,8 +10004,8 @@ static {ret_type} {method_name}({params_str}) {{
                 self.uses_fixed = True
             elif p.param_type == "Func":
                 self.var_types[p.name] = "func"
-            elif p.param_type == "Array":
-                self.var_types[p.name] = "array"
+            elif p.param_type == "Array" or list_elem_type(p.param_type) is not None:
+                self.var_types[p.name] = self._list_var_type(p.param_type)
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             else:
@@ -10075,8 +10078,8 @@ static {ret_type} {method_name}({params_str}) {{
         return f"((DashArrayLong *){code})"
 
     def _is_string_array(self, node: ASTNode) -> bool:
-        """True for a variable holding an array of strings."""
-        return isinstance(node, VarRef) and self.var_types.get(node.name) == "array:string"
+        """True for a list of strings (variable, or call or field declared [String])."""
+        return self._array_elem_type(node) == "string"
 
     def _is_fixed_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Fixed (16.16 in a LONG)."""
@@ -10240,6 +10243,10 @@ static {ret_type} {method_name}({params_str}) {{
             return self.var_types[node.name]
         if isinstance(node, ArraySlice) and isinstance(node.array, VarRef):
             return self.var_types.get(node.array.name) or "array"
+        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
+            declared = self._list_var_type(self._declared_list_type(node))
+            if declared:
+                return declared
         if isinstance(node, BinaryOp) and node.operator == "+":
             # a + b: the type of the first typed operand
             for side in (node.left, node.right):
@@ -10259,12 +10266,50 @@ static {ret_type} {method_name}({params_str}) {{
                         for side in (node.left, node.right)))
 
     def _array_elem_type(self, node: ASTNode) -> Optional[str]:
-        """Element type of a typed array variable ("string", "struct:Name", "array")."""
+        """Element type of a typed list ("string", "struct:Name", "array"): a variable, or a
+        call or struct field declared as [T]."""
         if isinstance(node, VarRef):
             vt = self.var_types.get(node.name) or ""
             if vt.startswith("array:"):
                 return vt[6:]
-        return None
+            return None
+        if isinstance(node, ArrayLiteral):
+            return self._literal_elem_type(node)
+        vt = self._list_var_type(self._declared_list_type(node))
+        return vt[6:] if vt and vt.startswith("array:") else None
+
+    def _list_var_type(self, type_name: Optional[str]) -> Optional[str]:
+        """var_types entry for a list type: "[String]" -> "array:string", "[Nodo]" ->
+        "array:struct:Nodo", "[[Int]]" -> "array:array", "[Int]" and "Array" -> "array"."""
+        if type_name == "Array":
+            return "array"
+        elem = list_elem_type(type_name)
+        if elem is None:
+            return None
+        if elem == "String":
+            return "array:string"
+        if list_elem_type(elem) is not None:
+            return "array:array"
+        if self.analysis.program.get_struct(elem):
+            return f"array:struct:{elem}"
+        return "array"
+
+    def _declared_list_type(self, node: ASTNode) -> Optional[str]:
+        """The [T] type a call or a struct field declares, if any."""
+        prog = self.analysis.program
+        type_name = None
+        if isinstance(node, FunctionCall):
+            func = prog.get_function(node.name)
+            type_name = func.return_type if func else None
+        elif isinstance(node, PropertyAccess):
+            struct = self._struct_of(node.object)
+            field = struct.get_field(node.property) if struct else None
+            type_name = field.field_type if field else None
+        elif isinstance(node, MemberAccess):
+            struct = self._struct_of(VarRef(name=node.object_name))
+            field = struct.get_field(node.member) if struct else None
+            type_name = field.field_type if field else None
+        return type_name if list_elem_type(type_name) is not None else None
 
     def _returns_value(self, stmts) -> bool:
         """True if any statement in stmts (or nested blocks) returns a value."""
@@ -10377,6 +10422,8 @@ static {return_type} {lambda_name}({param_str}) {{
             self.uses_fixed = True
         if dash_type in self._BASE_C_TYPES:
             return self._BASE_C_TYPES[dash_type]
+        if list_elem_type(dash_type) is not None:
+            return "DashArrayLong *"     # [T]: a list (dashweb D4a)
         if dash_type and self.analysis.program.get_struct(dash_type):
             return f"_Dash_{dash_type} *"
         return default

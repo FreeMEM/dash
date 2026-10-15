@@ -80,7 +80,7 @@ break / continue            # inside while/for only
 
 ## Functions
 ```
-func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum
+func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T]
     return a + b                return x * 2
 end                         end
 ```
@@ -109,6 +109,8 @@ arr[2] = 99                 # Modify
 arr.length                  # Length: 5
 arr[1:3]                    # Slice: [2, 3]
 arr + [6, 7]                # New list with both (same element type)
+var l: [String] = []        # list types [T]: [Int] [String] [Nodo] [[Int]] (params, returns, fields)
+for x in obj.lista          # for-each over any list expression
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 

@@ -524,6 +524,10 @@ class DashASTBuilder(Transformer):
 
     # === Control Flow ===
 
+    def TYPE_NAME(self, token):
+        """Type annotations without spaces: "[ Nodo ]" is "[Nodo]"."""
+        return token.update(value="".join(str(token).split()))
+
     def if_stmt(self, items) -> IfStmt:
         """Build an if statement node. "elif c ... " becomes an if inside the else."""
         condition = items[0]
@@ -593,9 +597,11 @@ class DashASTBuilder(Transformer):
     def for_each_stmt(self, items) -> ForEachStmt:
         """Build a for-each statement: for item in array."""
         var_name = items[0].value if isinstance(items[0], Token) else str(items[0])
-        iterable_name = items[1].value if isinstance(items[1], Token) else str(items[1])
+        iterable = items[1]
+        if isinstance(iterable, Token):
+            iterable = VarRef(name=iterable.value)
         body = self._flatten_statements(items[2:])
-        return ForEachStmt(variable=var_name, iterable=VarRef(name=iterable_name), body=body)
+        return ForEachStmt(variable=var_name, iterable=iterable, body=body)
 
     def range_expr(self, items):
         """Handle range expression - return start and end."""
