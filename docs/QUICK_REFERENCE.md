@@ -129,6 +129,8 @@ url = mui_string("http://", 200)        # mui_label, mui_checkbox(0), mui_cycle(
 bar = mui_gauge(100)                    # mui_slider(min, max, v)
 mui_set_value(bar, 40)                  # mui_get_value; mui_get_text/mui_set_text; mui_set_enabled
 mui_on_change(url, 2)                   # mui_on_ack(url, id): Return in a text field
+l = mui_list()                          # value = selected line (-1); mui_on_double(l, id)
+mui_list_add(l, "x")                    # _insert(l, pos, s) _remove(l, pos) _clear _count _get(l, pos) _quiet
 mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
 mui_window_open(win)
 ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)

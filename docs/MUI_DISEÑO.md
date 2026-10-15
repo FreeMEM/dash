@@ -58,7 +58,7 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 | `mui_cycle(opciones)` | `Cycle` (`"Uno|Dos|Tres"`) |
 | `mui_slider(min, max, valor)` | `Slider` |
 | `mui_gauge(max)` | `Gauge` horizontal (barra de progreso) |
-| `mui_list(lineas)` | `Listview` + `List` de textos (el objeto devuelto es el `List`) |
+| `mui_list()` | `Listview` + `List` de textos (el objeto devuelto es el `Listview`; el runtime usa su `List`) |
 | `mui_scrollbar(vertical)` | `Scrollbar` (`Prop`) |
 | `mui_canvas(ancho_min, alto_min)` | Clase propia de dibujo (abajo) |
 | `mui_image(fichero)` | `Dtpic` (PNG, JPEG, GIF por datatypes) |

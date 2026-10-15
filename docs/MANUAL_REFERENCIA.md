@@ -2144,6 +2144,12 @@ y `mui_press(boton)` lanza el evento del botón como si se pulsara.
 | `mui_get_value(obj)`, `mui_set_value(obj, v)` | Valor: casilla 1/0, opción del ciclo (desde 0), nivel del deslizador, progreso. Cambiarlo lanza su `mui_on_change`. |
 | `mui_get_text(obj)`, `mui_set_text(obj, texto)` | Texto de un campo, texto, botón o título de ventana. |
 | `mui_set_enabled(obj, si)` | Activa o desactiva (en gris). |
+| `mui_list()` | Lista de textos con barra de desplazamiento. Su valor es la línea elegida (-1 = ninguna). |
+| `mui_list_add(l, texto)`, `mui_list_insert(l, pos, texto)` | Añade al final o en `pos` (0 = primera). |
+| `mui_list_remove(l, pos)`, `mui_list_clear(l)` | Borra una línea o todas. |
+| `mui_list_count(l)`, `mui_list_get(l, pos)` | Número de líneas y texto de una (`""` fuera de la lista). |
+| `mui_list_quiet(l, si)` | Mientras está "quieta" no se redibuja: para añadir muchas líneas. |
+| `mui_on_double(l, id)` | Evento con doble clic en una línea. |
 | `mui_on_change(obj, id)` | Evento cuando cambia el valor o el texto. |
 | `mui_on_ack(campo, id)` | Evento al pulsar Intro en un campo de texto. |
 | `mui_window_open(ventana)` | Abre la ventana; falso si no pudo. |
@@ -2515,8 +2521,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 29 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_wait_event` |
-| **Total** | **351** | |
+| MUI | 38 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_wait_event` |
+| **Total** | **360** | |
 
 ### Colores Estandar Amiga
 

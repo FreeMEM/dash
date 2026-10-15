@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 351 funciones, 351 implementadas, 0 sin implementar.
+Total: 360 funciones, 360 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -425,5 +425,14 @@ Total: 351 funciones, 351 implementadas, 0 sin implementar.
 | `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object |  |
 | `mui_on_change(obj, id)` | `void` | mui_wait_event returns id when the value or text changes |  |
 | `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field |  |
+| `mui_list()` | `APTR` | List of texts with scroller; its value is the selected line (-1 none) |  |
+| `mui_list_add(list, text)` | `void` | Add a line at the end |  |
+| `mui_list_insert(list, pos, text)` | `void` | Insert a line at pos (0 = first) |  |
+| `mui_list_remove(list, pos)` | `void` | Remove the line at pos |  |
+| `mui_list_clear(list)` | `void` | Remove all lines |  |
+| `mui_list_count(list)` | `LONG` | Number of lines |  |
+| `mui_list_get(list, pos)` | `STRPTR` | Text of the line at pos ("" outside the list) |  |
+| `mui_list_quiet(list, quiet)` | `void` | While quiet the list is not redrawn (adding many lines) |  |
+| `mui_on_double(list, id)` | `void` | mui_wait_event returns id on a double click in the list |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
 | `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |

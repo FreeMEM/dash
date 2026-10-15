@@ -5223,7 +5223,7 @@ static LONG _dash_mui_npress = 0;
 /* What each object is, kept in its MUIA_UserData: mui_get_value and friends
    read and write the attribute of that kind */
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
-       _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW };
+       _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -5418,29 +5418,104 @@ static APTR _dash_mui_gauge(LONG max) {
         MUIA_Gauge_Max, max > 0 ? max : 100), _DASH_MUI_GAUGE);
 }
 
-/* The attribute holding an object's value (0: it has none) */
-static ULONG _dash_mui_value_attr(Object *obj) {
+/* A list is a Listview (the scroller around it) for the program; its entries
+   are in the List inside */
+static Object *_dash_mui_list_of(Object *obj) {
+    IPTR list = 0;
+    if (obj && _dash_mui_kind(obj) == _DASH_MUI_LIST) GetAttr(MUIA_Listview_List, obj, &list);
+    return (Object *)list;
+}
+
+/* The attribute holding an object's value (0: it has none); *target is the object
+   that has it (the List inside a Listview) */
+static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
+    *target = obj;
     switch (_dash_mui_kind(obj)) {
     case _DASH_MUI_CHECK:  return MUIA_Selected;
     case _DASH_MUI_CYCLE:  return MUIA_Cycle_Active;
     case _DASH_MUI_SLIDER: return MUIA_Numeric_Value;
     case _DASH_MUI_GAUGE:  return MUIA_Gauge_Current;
+    case _DASH_MUI_LIST:   *target = _dash_mui_list_of(obj); return *target ? MUIA_List_Active : 0;
     }
     return 0;
 }
 
+static ULONG _dash_mui_value_attr(Object *obj) {
+    Object *target;
+    return _dash_mui_value_attr_of(obj, &target);
+}
+
 static LONG _dash_mui_get_value(APTR obj) {
     IPTR value = 0;
-    ULONG attr = obj ? _dash_mui_value_attr(obj) : 0;
+    Object *target;
+    ULONG attr = obj ? _dash_mui_value_attr_of(obj, &target) : 0;
     if (!attr) return 0;
-    GetAttr(attr, obj, &value);
+    GetAttr(attr, target, &value);
     return attr == MUIA_Selected ? (value != 0) : (LONG)value;
 }
 
 /* Like the user changing it: the object's notifications (mui_on_change) fire */
 static void _dash_mui_set_value(APTR obj, LONG value) {
-    ULONG attr = obj ? _dash_mui_value_attr(obj) : 0;
-    if (attr) SetAttrs(obj, attr, attr == MUIA_Selected ? (value != 0) : value, TAG_DONE);
+    Object *target;
+    ULONG attr = obj ? _dash_mui_value_attr_of(obj, &target) : 0;
+    if (attr) SetAttrs(target, attr, attr == MUIA_Selected ? (value != 0) : value, TAG_DONE);
+}
+
+/* List of texts; MUI keeps its own copy of each line. Lines count from 0; the
+   value (mui_get_value) is the selected line, -1 when none */
+static APTR _dash_mui_list(void) {
+    Object *list = _DASH_MUI_NEW(MUIC_List,
+        MUIA_Frame, MUIV_Frame_InputList,
+        MUIA_List_ConstructHook, MUIV_List_ConstructHook_String,
+        MUIA_List_DestructHook, MUIV_List_DestructHook_String);
+    if (!list) return _dash_mui_add(NULL);
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Listview,
+        MUIA_Listview_Input, TRUE,
+        MUIA_CycleChain, 1,
+        MUIA_Listview_List, (IPTR)list), _DASH_MUI_LIST);
+}
+
+static void _dash_mui_list_insert(APTR obj, LONG pos, STRPTR text) {
+    Object *list = _dash_mui_list_of(obj);
+    if (list) _DASH_MUI_DO(list, MUIM_List_InsertSingle, (IPTR)(text ? text : (STRPTR)""),
+                           pos < 0 ? MUIV_List_Insert_Bottom : pos);
+}
+
+static void _dash_mui_list_remove(APTR obj, LONG pos) {
+    Object *list = _dash_mui_list_of(obj);
+    if (list && pos >= 0) _DASH_MUI_DO(list, MUIM_List_Remove, pos);
+}
+
+static void _dash_mui_list_clear(APTR obj) {
+    Object *list = _dash_mui_list_of(obj);
+    if (list) _DASH_MUI_DO(list, MUIM_List_Clear);
+}
+
+static LONG _dash_mui_list_count(APTR obj) {
+    IPTR n = 0;
+    Object *list = _dash_mui_list_of(obj);
+    if (list) GetAttr(MUIA_List_Entries, list, &n);
+    return (LONG)n;
+}
+
+/* The text of a line ("" outside the list); MUI's copy, Dash copies it when kept */
+static STRPTR _dash_mui_list_get(APTR obj, LONG pos) {
+    STRPTR text = NULL;
+    Object *list = _dash_mui_list_of(obj);
+    if (list && pos >= 0) _DASH_MUI_DO(list, MUIM_List_GetEntry, pos, (IPTR)&text);
+    return text ? text : (STRPTR)"";
+}
+
+/* While quiet, changes are not drawn (adding many lines) */
+static void _dash_mui_list_quiet(APTR obj, LONG quiet) {
+    Object *list = _dash_mui_list_of(obj);
+    if (list) SetAttrs(list, MUIA_List_Quiet, quiet ? TRUE : FALSE, TAG_DONE);
+}
+
+static void _dash_mui_on_double(APTR obj, LONG id) {
+    if (obj && _dash_mui_app && _dash_mui_kind(obj) == _DASH_MUI_LIST)
+        _DASH_MUI_DO(obj, MUIM_Notify, MUIA_Listview_DoubleClick, TRUE,
+                     (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 
 /* The attribute holding an object's text (0: none) */
@@ -5476,9 +5551,10 @@ static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
 /* mui_wait_event returns id when the value changes (by the user or mui_set_value) */
 static void _dash_mui_on_change(APTR obj, LONG id) {
     ULONG attr;
+    Object *target = obj;
     if (!obj || !_dash_mui_app) return;
-    attr = _dash_mui_kind(obj) == _DASH_MUI_STRING ? MUIA_String_Contents : _dash_mui_value_attr(obj);
-    if (attr) _DASH_MUI_DO(obj, MUIM_Notify, attr, MUIV_EveryTime,
+    attr = _dash_mui_kind(obj) == _DASH_MUI_STRING ? MUIA_String_Contents : _dash_mui_value_attr_of(obj, &target);
+    if (attr) _DASH_MUI_DO(target, MUIM_Notify, attr, MUIV_EveryTime,
                            (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 

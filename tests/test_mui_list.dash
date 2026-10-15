@@ -1,0 +1,61 @@
+# MUI lists: add, insert, remove, clear, count, read lines; the selected line is the
+# list's value, and mui_set_value fires its change event.
+# emu-needs: muimaster.library
+# expect-out: 4 líneas
+# expect-out: primera: Inicio
+# expect-out: 3 líneas tras borrar
+# expect-out: 0: Inicio
+# expect-out: 1: Aminet
+# expect-out: 2: Página de pruebas
+# expect-out: activa -1
+# expect-out: evento 7, activa 1
+# expect-out: fuera: ''
+# expect-out: 0 líneas
+# expect-out: fin
+
+const ID_LISTA = 7
+const ID_DOBLE = 8
+
+Main
+    if mui_app_begin("Listas", "DASHLIST") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Historial", 0)
+            lista = mui_list()
+        mui_window_end()
+        mui_on_change(lista, ID_LISTA)
+        mui_on_double(lista, ID_DOBLE)
+        mui_window_open(win)
+
+        mui_list_quiet(lista, true)
+        mui_list_add(lista, "Aminet")
+        mui_list_add(lista, "AmigaZen")
+        mui_list_add(lista, "Página de pruebas")
+        mui_list_insert(lista, 0, "Inicio")
+        mui_list_quiet(lista, false)
+        n = mui_list_count(lista)
+        Print "#{n} líneas"
+        p = mui_list_get(lista, 0)
+        Print "primera: #{p}"
+        mui_list_remove(lista, 2)
+        n = mui_list_count(lista)
+        Print "#{n} líneas tras borrar"
+        for i in (0..n - 1)
+            t = mui_list_get(lista, i)
+            Print "#{i}: #{t}"
+        end
+        a = mui_get_value(lista)
+        Print "activa #{a}"
+        mui_set_value(lista, 1)
+        ev = mui_wait_event()
+        a = mui_get_value(lista)
+        Print "evento #{ev}, activa #{a}"
+        f = mui_list_get(lista, 9)
+        Print "fuera: '#{f}'"
+        mui_list_clear(lista)
+        n = mui_list_count(lista)
+        Print "#{n} líneas"
+        mui_app_end()
+        Print "fin"
+    end
+end

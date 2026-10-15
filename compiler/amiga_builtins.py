@@ -3006,6 +3006,69 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_on_ack(${obj}, ${id})",
         description="mui_wait_event returns id when Return is pressed in a text field"
     ),
+    "mui_list": BuiltinFunc(
+        name="mui_list",
+        params=[],
+        return_type="APTR",
+        c_template="_dash_mui_list()",
+        description="List of texts with scroller; its value is the selected line (-1 none)"
+    ),
+    "mui_list_add": BuiltinFunc(
+        name="mui_list_add",
+        params=["list", "text"],
+        return_type="void",
+        c_template="_dash_mui_list_insert(${list}, -1, ${text})",
+        description="Add a line at the end"
+    ),
+    "mui_list_insert": BuiltinFunc(
+        name="mui_list_insert",
+        params=["list", "pos", "text"],
+        return_type="void",
+        c_template="_dash_mui_list_insert(${list}, ${pos}, ${text})",
+        description="Insert a line at pos (0 = first)"
+    ),
+    "mui_list_remove": BuiltinFunc(
+        name="mui_list_remove",
+        params=["list", "pos"],
+        return_type="void",
+        c_template="_dash_mui_list_remove(${list}, ${pos})",
+        description="Remove the line at pos"
+    ),
+    "mui_list_clear": BuiltinFunc(
+        name="mui_list_clear",
+        params=["list"],
+        return_type="void",
+        c_template="_dash_mui_list_clear(${list})",
+        description="Remove all lines"
+    ),
+    "mui_list_count": BuiltinFunc(
+        name="mui_list_count",
+        params=["list"],
+        return_type="LONG",
+        c_template="_dash_mui_list_count(${list})",
+        description="Number of lines"
+    ),
+    "mui_list_get": BuiltinFunc(
+        name="mui_list_get",
+        params=["list", "pos"],
+        return_type="STRPTR",
+        c_template="_dash_mui_list_get(${list}, ${pos})",
+        description="Text of the line at pos (\"\" outside the list)"
+    ),
+    "mui_list_quiet": BuiltinFunc(
+        name="mui_list_quiet",
+        params=["list", "quiet"],
+        return_type="void",
+        c_template="_dash_mui_list_quiet(${list}, ${quiet})",
+        description="While quiet the list is not redrawn (adding many lines)"
+    ),
+    "mui_on_double": BuiltinFunc(
+        name="mui_on_double",
+        params=["list", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_double(${list}, ${id})",
+        description="mui_wait_event returns id on a double click in the list"
+    ),
     "mui_wait_event": BuiltinFunc(
         name="mui_wait_event",
         params=[],

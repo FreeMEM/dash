@@ -107,7 +107,7 @@ otras señales (red, temporizador). El plan va en ese orden.
       (pulsación simulada con `MUIA_Pressed`/`set` o cierre por modo test). Ejemplo `examples/mui_hola.dash`.
 - [x] 4. **Valores.** Campo de texto (`mui_string`), casilla, ciclo, deslizador, barra de progreso
       (`Gauge`), `mui_get_text`/`mui_set_text`, `mui_get_value`/`mui_set_value`, deshabilitar, `on_change`/`on_ack`.
-- [ ] 5. **Listas.** `List` + `Listview` de textos: añadir, borrar, vaciar, activo, doble clic. Comprobar memoria.
+- [x] 5. **Listas.** `List` + `Listview` de textos: añadir, borrar, vaciar, activo, doble clic. Comprobar memoria.
 - [ ] 6. **Estructura.** Menús (`Menustrip`), pestañas (`Register`), `Balance`, `Scrollgroup`/`Virtgroup`,
       varias ventanas, barra de estado. `--memcheck` sin restos.
 - [ ] 7. **Zona de dibujo propia.** Clase propia (`MUI_CreateCustomClass`) con `AskMinMax`, `Draw`,
@@ -257,3 +257,15 @@ Formato:
   (`"#{mui_get_text(url)}"` da "Variable ... is not defined"). Apuntado para la auditoría (tarea 12).
 - Tests: 124/124 sin emulador; 293/293 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
 - Pendiente: `mui_on_ack` no se puede disparar sin teclado en el emulador (solo se comprueba que se monta).
+
+### 2026-10-15 — Tarea 5 (listas)
+- Hecho: 9 builtins: `mui_list()` (sin parámetro de líneas: MUI calcula el alto), `mui_list_add`, `mui_list_insert`,
+  `mui_list_remove`, `mui_list_clear`, `mui_list_count`, `mui_list_get`, `mui_list_quiet`, `mui_on_double`. El handle
+  es el `Listview` (tipo `_DASH_MUI_LIST` en su `UserData`); las funciones sacan el `List` de dentro con
+  `MUIA_Listview_List`. El valor (`mui_get/set_value`, `mui_on_change`) es `MUIA_List_Active` del `List` (-1 = ninguna).
+  Las líneas las copia MUI (`ConstructHook_String`/`DestructHook_String`), así que los temporales de Dash se pueden
+  liberar. `mui_list_get` devuelve la copia de MUI ("" fuera de rango) y Dash la copia al guardarla.
+- Probado en A1200 3.1 y 3.2 (`test_mui_list`, también `--memcheck`): insertar arriba, borrar en medio, recorrer,
+  línea activa con evento, fuera de rango, vaciar.
+- Tests: 125/125 sin emulador; 296/296 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
+- Pendiente: medir cuánto tarda añadir cientos de líneas (historial del navegador) en la tarea 11.
