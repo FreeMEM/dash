@@ -35,6 +35,13 @@ def parse_int(text) -> int:
         raise ValueError(f"number {text} does not fit in 32 bits")
     return value
 
+
+class _ElifClause:
+    """An "elif" branch while its if statement is being built."""
+    def __init__(self, condition, body):
+        self.condition = condition
+        self.body = body
+
 class _NativeCode(str):
     """C code from a native_body, kept apart from the return type string."""
 
@@ -518,24 +525,33 @@ class DashASTBuilder(Transformer):
     # === Control Flow ===
 
     def if_stmt(self, items) -> IfStmt:
-        """Build an if statement node."""
+        """Build an if statement node. "elif c ... " becomes an if inside the else."""
         condition = items[0]
         then_body = []
         else_body = []
+        elifs = []
 
-        # Collect then body (everything until else_clause or end)
+        # Collect then body (everything until elif/else clauses or end)
         for item in items[1:]:
-            if isinstance(item, list):
+            if isinstance(item, _ElifClause):
+                elifs.append(item)
+            elif isinstance(item, list):
                 # This is the else clause body
                 else_body = item
             elif item is not None and not isinstance(item, Token):
                 then_body.append(item)
 
+        for clause in reversed(elifs):
+            else_body = [IfStmt(condition=clause.condition, then_body=clause.body, else_body=else_body)]
         return IfStmt(
             condition=condition,
             then_body=then_body,
             else_body=else_body
         )
+
+    def elif_clause(self, items) -> "_ElifClause":
+        """elif condition + body, folded into nested ifs by if_stmt."""
+        return _ElifClause(items[0], self._flatten_statements(items[1:]))
 
     def else_clause(self, items) -> List:
         """Process else clause - return list of statements."""

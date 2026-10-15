@@ -64,12 +64,12 @@ end                         end
 
 if cond                     for i in (1..10)
     ...                         ...
-else                        end
+elif cond                   end
     ...
-end                         for i in (10..1)       # down
+else                        for i in (10..1)       # down
                             for i in (0..n step 2)
-                            for item in array
-                                ...
+    ...                     for item in array
+end                             ...
                             end
 
 break / continue            # inside while/for only

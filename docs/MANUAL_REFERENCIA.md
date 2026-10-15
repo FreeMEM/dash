@@ -403,19 +403,22 @@ else
 end
 ```
 
-### If Anidados
+### If / Elif / Else
+
+Con `elif` se encadenan condiciones sin anidar; se prueba cada una en orden y solo se ejecuta
+la primera que se cumple (o el `else`, si ninguna):
 
 ```
 if puntos >= 1000
     Print "Experto"
+elif puntos >= 500
+    Print "Intermedio"
 else
-    if puntos >= 500
-        Print "Intermedio"
-    else
-        Print "Principiante"
-    end
+    Print "Principiante"
 end
 ```
+
+Es lo mismo que anidar un `if` dentro del `else` (y genera el mismo C).
 
 ### While
 

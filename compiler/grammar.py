@@ -116,7 +116,8 @@ dash_grammar_minimal = r"""
     continue_stmt: CONTINUE
     BREAK: "break"
     CONTINUE: "continue"
-    if_stmt: "if" expression instruction* else_clause? "end"
+    if_stmt: "if" expression instruction* elif_clause* else_clause? "end"
+    elif_clause: "elif" expression instruction*
     else_clause: "else" instruction*
     while_stmt: "while" expression instruction* "end"
 

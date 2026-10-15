@@ -1,0 +1,39 @@
+# Test: elif chains (folded into nested if/else; each branch has its own scope)
+# expect-out: negativo
+# expect-out: cero
+# expect-out: pequeño
+# expect-out: grande
+# expect-out: dos
+# expect-out: fin
+
+func clase(n: Int) -> String
+    if n < 0
+        return "negativo"
+    elif n == 0
+        return "cero"
+    elif n < 10
+        return "pequeño"
+    else
+        return "grande"
+    end
+end
+
+Main
+    nums = [-5, 0, 3, 50]
+    for n in nums
+        Print clase(n)
+    end
+    x = 2
+    if x == 1
+        Print "uno"
+    elif x == 2
+        y = "dos"
+        Print y
+    end
+    if x == 9
+        Print "nueve"
+    elif x == 8
+        Print "ocho"
+    end
+    Print "fin"
+end
