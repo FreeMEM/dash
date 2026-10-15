@@ -10034,6 +10034,11 @@ static {ret_type} {method_name}({params_str}) {{
                 char = lit_side.value[1]
                 literal = "'\\''" if char == "'" else f"'{char}'"
                 return f"({self._generate_expression(char_side)} {node.operator} {literal})"
+            if (self._is_char_expr(char_side) and isinstance(lit_side, StringLiteral)
+                    and len(lit_side.value) == 4 and lit_side.value[1] == "\\"):
+                # one escaped character: "\n", "\r", "\t", "\\", "\"" (dashweb D15)
+                literal = f"'\\{lit_side.value[2]}'"
+                return f"({self._generate_expression(char_side)} {node.operator} {literal})"
         return None
 
     def _append_in_place(self, node: VarAssign) -> bool:
