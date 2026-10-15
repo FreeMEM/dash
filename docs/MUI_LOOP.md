@@ -110,7 +110,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 - [x] 5. **Listas.** `List` + `Listview` de textos: añadir, borrar, vaciar, activo, doble clic. Comprobar memoria.
 - [x] 6. **Estructura.** Menús (`Menustrip`), pestañas (`Register`), `Balance`, `Scrollgroup`/`Virtgroup`,
       varias ventanas, barra de estado. `--memcheck` sin restos.
-- [ ] 7. **Zona de dibujo propia.** Clase propia (`MUI_CreateCustomClass`) con `AskMinMax`, `Draw`,
+- [x] 7. **Zona de dibujo propia.** Clase propia (`MUI_CreateCustomClass`) con `AskMinMax`, `Draw`,
       `HandleEvent` (ratón, rueda, teclado) y scroll: dibujar con los builtins `gfx_` sobre el `RastPort`
       del objeto, y avisar a Dash con un número de evento cuando haya que repintar. Es la pieza del navegador:
       medir en el A1200 cuánto tarda en repintar.
@@ -287,3 +287,26 @@ Formato:
   espía, que ahora también vuelca menús y ventana activa). Se comprueba la cadena de objetos y notificaciones, no el
   dibujo. Hace falta una captura de pantalla (tarea 10) o probarlo a mano.
 - Tests: 126/126 sin emulador; 299/299 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
+
+### 2026-10-15 — Tarea 7 (zona de dibujo propia)
+- Hecho: plantilla aparte `CTemplates.MUI_CANVAS_RUNTIME` (flag `uses_mui_canvas`, que activa `needs_gfx` y
+  `needs_mui`: un programa MUI sin zona de dibujo no arrastra graphics). Clase propia sobre `Area` con
+  `MUI_CreateCustomClass`; despachador con parámetros en registros (`__asm("a0")`, `a2`, `a1`). Métodos:
+  `AskMinMax` (mínimo pedido, máximo `MUI_MAXMAX`), `Draw` (con `MADF_DRAWOBJECT`: `_dash_rp` = RastPort de la ventana,
+  `MUI_AddClipping` al interior del objeto, llama a la función Dash `f(x, y, ancho, alto)` y restaura `_dash_rp`),
+  `Setup`/`Cleanup` (manejador de eventos `IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY` solo si hay `mui_canvas_on_input`),
+  `HandleEvent` (clic dentro, rueda 0x7A/0x7B sobre la zona, teclas; guarda la entrada y devuelve el número con
+  `ReturnID`). Clase borrada en `_dash_mui_app_end` antes de cerrar MUI (`_dash_mui_end_hook`). Macros propias
+  `_DASH_MLEFT`... porque `_mleft`/`_rp` de mui.h están tras `MUI_NOSHORTCUTS`.
+  Barra de desplazamiento (`Scrollbar`, valor `MUIA_Prop_First`, `mui_set_range` = `Prop_Entries`/`Prop_Visible`).
+  11 builtins: `mui_canvas`, `mui_canvas_on_draw`, `mui_canvas_on_input`, `mui_canvas_redraw`, `mui_canvas_mouse_x/_y`,
+  `mui_canvas_button`, `mui_canvas_wheel`, `mui_canvas_key`, `mui_scrollbar`, `mui_set_range`. API igual a `MUI_DISEÑO.md`.
+- Probado en A1200 3.1 y 3.2 (`test_mui_canvas`, también `--memcheck`): MUI llama a la función al abrir, respeta el
+  tamaño mínimo, el píxel de la esquina es 1 y el del centro 2 (pinta dentro y en su sitio), `mui_canvas_redraw` llama
+  una vez, barra con rango, valor y evento. **No probado:** clic, rueda y teclas (sin ratón en el emulador).
+- Medido en A1200 3.1 emulado (programa en el scratchpad, `bench_canvas.dash`): repintar 320 x 200 = 20 ms el fondo;
+  con 20 líneas de 50 caracteres = 114 ms (unos 4,7 ms por línea). Para el navegador: repintar por partes y
+  desplazar con `ScrollRaster` en vez de repintar todo.
+- Visto de paso (para la auditoría): avisos de GCC en runtimes viejos (`diminfo` sin usar en `_dash_open_screen_custom`,
+  `_dash_nil_area` sin usar).
+- Tests: 127/127 sin emulador; 302/302 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.

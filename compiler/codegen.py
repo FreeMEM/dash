@@ -5218,6 +5218,7 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
+static void (*_dash_mui_end_hook)(void) = NULL;     /* frees custom classes before MUI closes */
 #define _DASH_MUI_PRESSES 64
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
@@ -5227,7 +5228,7 @@ static LONG _dash_mui_npress = 0;
    read and write the attribute of that kind */
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
        _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
-       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM };
+       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -5252,6 +5253,7 @@ static STRPTR *_dash_mui_entries(STRPTR options);
 static void _dash_mui_app_end(void) {
     if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
     _dash_mui_app = NULL;
+    if (_dash_mui_end_hook) { _dash_mui_end_hook(); _dash_mui_end_hook = NULL; }
     _dash_mui_first_win = NULL;
     _dash_mui_cur_win = NULL;
     _dash_mui_cur_menu = NULL;
@@ -5555,6 +5557,7 @@ static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
     case _DASH_MUI_GAUGE:  return MUIA_Gauge_Current;
     case _DASH_MUI_LIST:   *target = _dash_mui_list_of(obj); return *target ? MUIA_List_Active : 0;
     case _DASH_MUI_REGISTER: return MUIA_Group_ActivePage;
+    case _DASH_MUI_SCROLLBAR: return MUIA_Prop_First;
     }
     return 0;
 }
@@ -5741,6 +5744,187 @@ static LONG _dash_mui_poll_event(void) {
     if (!_dash_mui_app) return -1;
     id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
     return id == MUIV_Application_ReturnID_Quit ? -1 : id;
+}
+
+"""
+
+    # MUI drawing area (custom class) and scrollbar: needs the graphics runtime (_dash_rp)
+    MUI_CANVAS_RUNTIME = """\
+/* MUI drawing area: a custom class on Area. The program draws in it with the gfx_
+   builtins from a Dash function f(x, y, width, height) that MUI calls on MUIM_Draw,
+   with _dash_rp = the window's RastPort clipped to the area. Mouse clicks, the
+   wheel and keys over it become an event number (mui_canvas_on_input). */
+#define _DASH_MRI(obj)     muiRenderInfo(obj)
+#define _DASH_MAD(obj)     muiAreaData(obj)
+#define _DASH_MLEFT(obj)   (_DASH_MAD(obj)->mad_Box.Left + _DASH_MAD(obj)->mad_addleft)
+#define _DASH_MTOP(obj)    (_DASH_MAD(obj)->mad_Box.Top + _DASH_MAD(obj)->mad_addtop)
+#define _DASH_MWIDTH(obj)  (_DASH_MAD(obj)->mad_Box.Width - _DASH_MAD(obj)->mad_subwidth)
+#define _DASH_MHEIGHT(obj) (_DASH_MAD(obj)->mad_Box.Height - _DASH_MAD(obj)->mad_subheight)
+
+struct _DashCanvas {
+    APTR draw;                      /* Dash function (x, y, width, height) or NULL */
+    WORD min_width, min_height;
+    LONG input_id;                  /* 0: no input events */
+    LONG mouse_x, mouse_y;          /* relative to the area */
+    LONG button, wheel, key;        /* last input: 1 = left click; +1/-1; raw key code */
+    struct MUI_EventHandlerNode handler;
+    BOOL handler_added;
+};
+
+static struct MUI_CustomClass *_dash_canvas_class = NULL;
+static void _dash_canvas_cleanup(void);
+
+static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __asm("a2"),
+                                   Msg msg __asm("a1")) {
+    struct _DashCanvas *data;
+    switch (msg->MethodID) {
+    case MUIM_AskMinMax: {
+        struct MUI_MinMax *mm;
+        DoSuperMethodA(cl, obj, msg);
+        data = INST_DATA(cl, obj);
+        mm = ((struct MUIP_AskMinMax *)msg)->MinMaxInfo;
+        mm->MinWidth += data->min_width;
+        mm->MinHeight += data->min_height;
+        mm->DefWidth += data->min_width;
+        mm->DefHeight += data->min_height;
+        mm->MaxWidth += MUI_MAXMAX;
+        mm->MaxHeight += MUI_MAXMAX;
+        return 0;
+    }
+    case MUIM_Draw: {
+        DoSuperMethodA(cl, obj, msg);
+        data = INST_DATA(cl, obj);
+        if ((((struct MUIP_Draw *)msg)->flags & MADF_DRAWOBJECT) && data->draw) {
+            struct RastPort *old = _dash_rp;
+            LONG x = _DASH_MLEFT(obj), y = _DASH_MTOP(obj);
+            LONG w = _DASH_MWIDTH(obj), h = _DASH_MHEIGHT(obj);
+            APTR clip = MUI_AddClipping(_DASH_MRI(obj), x, y, w, h);
+            _dash_rp = _DASH_MRI(obj)->mri_RastPort;
+            ((void (*)(LONG, LONG, LONG, LONG))data->draw)(x, y, w, h);
+            _dash_rp = old;
+            MUI_RemoveClipping(_DASH_MRI(obj), clip);
+        }
+        return 0;
+    }
+    case MUIM_Setup:
+        if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
+        data = INST_DATA(cl, obj);
+        if (data->input_id) {
+            data->handler.ehn_Object = obj;
+            data->handler.ehn_Class = cl;
+            data->handler.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY;
+            data->handler.ehn_Priority = 0;
+            data->handler.ehn_Flags = 0;
+            _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
+            data->handler_added = TRUE;
+        }
+        return TRUE;
+    case MUIM_Cleanup:
+        data = INST_DATA(cl, obj);
+        if (data->handler_added) {
+            _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
+            data->handler_added = FALSE;
+        }
+        return DoSuperMethodA(cl, obj, msg);
+    case MUIM_HandleEvent: {
+        struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
+        LONG x, y, inside;
+        data = INST_DATA(cl, obj);
+        if (!im) return 0;
+        x = im->MouseX - _DASH_MLEFT(obj);
+        y = im->MouseY - _DASH_MTOP(obj);
+        inside = x >= 0 && y >= 0 && x < _DASH_MWIDTH(obj) && y < _DASH_MHEIGHT(obj);
+        if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
+            data->mouse_x = x; data->mouse_y = y;
+            data->button = 1; data->wheel = 0; data->key = -1;
+        } else if (im->Class == IDCMP_RAWKEY && (im->Code == 0x7A || im->Code == 0x7B)) {
+            if (!inside) return 0;           /* the wheel (NM_WHEEL_UP/DOWN) over the area */
+            data->mouse_x = x; data->mouse_y = y;
+            data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
+        } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
+            data->button = 0; data->wheel = 0; data->key = im->Code;
+        } else {
+            return 0;
+        }
+        _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, data->input_id);
+        return MUI_EventHandlerRC_Eat;
+    }
+    }
+    return DoSuperMethodA(cl, obj, msg);
+}
+
+static struct _DashCanvas *_dash_canvas_data(Object *obj) {
+    if (!obj || !_dash_canvas_class || _dash_mui_kind(obj) != _DASH_MUI_CANVAS) return NULL;
+    return INST_DATA(_dash_canvas_class->mcc_Class, obj);
+}
+
+static APTR _dash_mui_canvas(LONG min_width, LONG min_height) {
+    Object *obj;
+    struct _DashCanvas *data;
+    if (!_dash_canvas_class &&
+        !(_dash_canvas_class = MUI_CreateCustomClass(NULL, (CONST_STRPTR)MUIC_Area, NULL,
+                                                     sizeof(struct _DashCanvas), (APTR)_dash_canvas_dispatch))) {
+        _dash_mui_error("cannot create the drawing area class");
+        return NULL;
+    }
+    _dash_mui_end_hook = _dash_canvas_cleanup;
+    {
+        ULONG tags[] = { MUIA_CycleChain, 1, TAG_DONE };
+        obj = NewObjectA(_dash_canvas_class->mcc_Class, NULL, (struct TagItem *)tags);
+    }
+    if (!obj) return _dash_mui_add(NULL);
+    data = INST_DATA(_dash_canvas_class->mcc_Class, obj);
+    memset(data, 0, sizeof(*data));
+    data->min_width = min_width > 0 ? min_width : 16;
+    data->min_height = min_height > 0 ? min_height : 16;
+    data->key = -1;
+    return _dash_mui_add_kind(obj, _DASH_MUI_CANVAS);
+}
+
+static void _dash_mui_canvas_on_draw(APTR obj, APTR draw) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (data) data->draw = draw;
+}
+
+/* Must be called before the window opens (the event handler is added at MUIM_Setup) */
+static void _dash_mui_canvas_on_input(APTR obj, LONG id) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (data) data->input_id = id;
+}
+
+/* Draw it again now (only from the program's own task) */
+static void _dash_mui_canvas_redraw(APTR obj) {
+    if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
+}
+
+static LONG _dash_mui_canvas_input(APTR obj, LONG what) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data) return 0;
+    switch (what) {
+    case 0: return data->mouse_x;
+    case 1: return data->mouse_y;
+    case 2: return data->button;
+    case 3: return data->wheel;
+    case 4: return data->key;
+    }
+    return 0;
+}
+
+/* Scrollbar beside a drawing area: its value is the first line shown */
+static APTR _dash_mui_scrollbar(LONG vertical) {
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Scrollbar,
+        MUIA_Group_Horiz, vertical ? FALSE : TRUE), _DASH_MUI_SCROLLBAR);
+}
+
+/* total: size of the document; visible: how much of it fits */
+static void _dash_mui_set_range(APTR obj, LONG total, LONG visible) {
+    if (obj && _dash_mui_kind(obj) == _DASH_MUI_SCROLLBAR)
+        SetAttrs(obj, MUIA_Prop_Entries, total, MUIA_Prop_Visible, visible, TAG_DONE);
+}
+
+/* From _dash_mui_app_end(), once no object of the class is left and before MUI closes */
+static void _dash_canvas_cleanup(void) {
+    if (_dash_canvas_class) { MUI_DeleteCustomClass(_dash_canvas_class); _dash_canvas_class = NULL; }
 }
 
 """
@@ -6172,6 +6356,7 @@ _RUNTIME_FLAGS = [
     ("REACTION_RUNTIME", "needs_reaction"),
     ("RTG_RUNTIME", "needs_rtg"),
     ("MUI_RUNTIME", "needs_mui"),
+    ("MUI_CANVAS_RUNTIME", "uses_mui_canvas"),
 ]
 
 # Runtime names emitted by the code generator itself, outside the templates
@@ -6378,6 +6563,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_gadtools: bool = False
         self.needs_reaction: bool = False  # Track if ReAction is used
         self.needs_mui: bool = False  # MUI builtins (mui_*)
+        self.uses_mui_canvas: bool = False  # MUI drawing area / scrollbar
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
@@ -6591,6 +6777,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.RTG_RUNTIME)
         if self.needs_mui:
             parts.append(CTemplates.MUI_RUNTIME)
+        if self.uses_mui_canvas:
+            parts.append(CTemplates.MUI_CANVAS_RUNTIME)
 
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
@@ -8224,6 +8412,10 @@ static {ret_type} {method_name}({params_str}) {{
         # The ReAction runtime draws with graphics.library (SetAPen, RectFill)
         if self.needs_reaction:
             self.needs_gfx = True
+        # The MUI drawing area sets _dash_rp for the gfx_ builtins; it is part of MUI
+        if self.uses_mui_canvas:
+            self.needs_gfx = True
+            self.needs_mui = True
 
         # Track arena usage
         if builtin.name.startswith("arena_"):

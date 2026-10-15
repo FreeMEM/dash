@@ -3153,6 +3153,83 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_menu_end()",
         description="End the menu"
     ),
+    "mui_canvas": BuiltinFunc(
+        name="mui_canvas",
+        params=["min_width", "min_height"],
+        return_type="APTR",
+        c_template="_dash_mui_canvas(${min_width}, ${min_height})",
+        description="Drawing area (grows with the window); draw in it from mui_canvas_on_draw"
+    ),
+    "mui_canvas_on_draw": BuiltinFunc(
+        name="mui_canvas_on_draw",
+        params=["canvas", "func"],
+        return_type="void",
+        c_template="_dash_mui_canvas_on_draw(${canvas}, ${func})",
+        description="Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed)"
+    ),
+    "mui_canvas_on_input": BuiltinFunc(
+        name="mui_canvas_on_input",
+        params=["canvas", "id"],
+        return_type="void",
+        c_template="_dash_mui_canvas_on_input(${canvas}, ${id})",
+        description="mui_wait_event returns id on a click, wheel or key over the area (call before opening the window)"
+    ),
+    "mui_canvas_redraw": BuiltinFunc(
+        name="mui_canvas_redraw",
+        params=["canvas"],
+        return_type="void",
+        c_template="_dash_mui_canvas_redraw(${canvas})",
+        description="Draw the area again now"
+    ),
+    "mui_canvas_mouse_x": BuiltinFunc(
+        name="mui_canvas_mouse_x",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 0)",
+        description="X of the last click or wheel, from the area's left edge"
+    ),
+    "mui_canvas_mouse_y": BuiltinFunc(
+        name="mui_canvas_mouse_y",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 1)",
+        description="Y of the last click or wheel, from the area's top edge"
+    ),
+    "mui_canvas_button": BuiltinFunc(
+        name="mui_canvas_button",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 2)",
+        description="1 if the last input was a left click, else 0"
+    ),
+    "mui_canvas_wheel": BuiltinFunc(
+        name="mui_canvas_wheel",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 3)",
+        description="+1 / -1 if the last input was the mouse wheel (up/down), else 0"
+    ),
+    "mui_canvas_key": BuiltinFunc(
+        name="mui_canvas_key",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 4)",
+        description="Raw key code of the last input, -1 if it was not a key"
+    ),
+    "mui_scrollbar": BuiltinFunc(
+        name="mui_scrollbar",
+        params=["vertical"],
+        return_type="APTR",
+        c_template="_dash_mui_scrollbar(${vertical})",
+        description="Scrollbar; its value is the first line shown"
+    ),
+    "mui_set_range": BuiltinFunc(
+        name="mui_set_range",
+        params=["scrollbar", "total", "visible"],
+        return_type="void",
+        c_template="_dash_mui_set_range(${scrollbar}, ${total}, ${visible})",
+        description="Size of the document and of the part that fits"
+    ),
     "mui_wait_event": BuiltinFunc(
         name="mui_wait_event",
         params=[],

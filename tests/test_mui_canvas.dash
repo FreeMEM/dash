@@ -1,0 +1,70 @@
+# MUI drawing area: MUI calls a Dash function that draws with gfx_ on the area's
+# RastPort (clipped to it); a scrollbar beside it with its range and position.
+# emu-needs: muimaster.library
+# expect-out: dibujada
+# expect-out: tamaño mínimo respetado
+# expect-out: esquina 1, centro 2
+# expect-out: redibujada
+# expect-out: evento 31, barra 300
+# expect-out: sin entrada: botón 0, tecla -1
+# expect-out: fin
+
+var veces: Int = 0
+var ancho_visto: Int = 0
+var alto_visto: Int = 0
+var esquina: Int = 0
+var centro: Int = 0
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    veces = veces + 1
+    ancho_visto = ancho
+    alto_visto = alto
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(1)
+    gfx_rect(x, y, x + 9, y + 9)
+    esquina = gfx_pixel_read(x + 1, y + 1)
+    centro = gfx_pixel_read(x + ancho / 2, y + alto / 2)
+end
+
+const ID_RATON = 30
+const ID_BARRA = 31
+
+Main
+    if mui_app_begin("Lienzo", "DASHCANVAS") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Lienzo", 0)
+            mui_hgroup_begin()
+                lienzo = mui_canvas(120, 80)
+                barra = mui_scrollbar(true)
+            mui_group_end()
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_canvas_on_input(lienzo, ID_RATON)
+        mui_on_change(barra, ID_BARRA)
+        mui_window_open(win)
+        if veces > 0
+            Print "dibujada"
+        end
+        if ancho_visto >= 120 and alto_visto >= 80
+            Print "tamaño mínimo respetado"
+        end
+        Print "esquina #{esquina}, centro #{centro}"
+        antes = veces
+        mui_canvas_redraw(lienzo)
+        if veces == antes + 1
+            Print "redibujada"
+        end
+        mui_set_range(barra, 1000, 100)
+        mui_set_value(barra, 300)
+        ev = mui_wait_event()
+        v = mui_get_value(barra)
+        Print "evento #{ev}, barra #{v}"
+        b = mui_canvas_button(lienzo)
+        k = mui_canvas_key(lienzo)
+        Print "sin entrada: botón #{b}, tecla #{k}"
+        mui_app_end()
+        Print "fin"
+    end
+end

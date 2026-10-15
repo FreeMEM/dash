@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 372 funciones, 372 implementadas, 0 sin implementar.
+Total: 383 funciones, 383 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -446,5 +446,16 @@ Total: 372 funciones, 372 implementadas, 0 sin implementar.
 | `mui_menu_item(title, key, id)` | `APTR` | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
 | `mui_menu_separator()` | `void` | Separator line in the menu |  |
 | `mui_menu_end()` | `void` | End the menu |  |
+| `mui_canvas(min_width, min_height)` | `APTR` | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
+| `mui_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed) |  |
+| `mui_canvas_on_input(canvas, id)` | `void` | mui_wait_event returns id on a click, wheel or key over the area (call before opening the window) |  |
+| `mui_canvas_redraw(canvas)` | `void` | Draw the area again now |  |
+| `mui_canvas_mouse_x(canvas)` | `LONG` | X of the last click or wheel, from the area's left edge |  |
+| `mui_canvas_mouse_y(canvas)` | `LONG` | Y of the last click or wheel, from the area's top edge |  |
+| `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |
+| `mui_canvas_wheel(canvas)` | `LONG` | +1 / -1 if the last input was the mouse wheel (up/down), else 0 |  |
+| `mui_canvas_key(canvas)` | `LONG` | Raw key code of the last input, -1 if it was not a key |  |
+| `mui_scrollbar(vertical)` | `APTR` | Scrollbar; its value is the first line shown |  |
+| `mui_set_range(scrollbar, total, visible)` | `void` | Size of the document and of the part that fits |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
 | `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |

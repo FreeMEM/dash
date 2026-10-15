@@ -2146,6 +2146,13 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_menu_begin(titulo)` ... `mui_menu_end()` | Menú de la ventana que se está construyendo. |
 | `mui_menu_item(texto, tecla, id)` | Opción de menú: `tecla` = letra para Amiga+tecla (`""` = ninguna); devuelve el objeto (para `mui_set_enabled`). |
 | `mui_menu_separator()` | Línea de separación. |
+| `mui_canvas(ancho_min, alto_min)` | Zona de dibujo propia; crece con la ventana. |
+| `mui_canvas_on_draw(zona, funcion)` | Función `f(x, y, ancho, alto)` que la pinta con los `gfx_`. MUI la llama cuando hace falta (al abrir, al cambiar de tamaño...). Solo se puede pintar dentro. |
+| `mui_canvas_redraw(zona)` | La vuelve a pintar ahora. |
+| `mui_canvas_on_input(zona, id)` | Evento con un clic, la rueda o una tecla sobre la zona (antes de abrir la ventana). |
+| `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | La última entrada: posición dentro de la zona, 1 si fue clic, +1/-1 la rueda, código de tecla (-1 si no fue tecla). |
+| `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
+| `mui_set_range(barra, total, visible)` | Tamaño del documento y de lo que cabe. |
 | `mui_text(texto)` | Texto. |
 | `mui_label(texto)` | Etiqueta de un formulario (alineada a la derecha). |
 | `mui_button(texto)` | Botón. |
@@ -2172,6 +2179,28 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_app_end()` | Libera la aplicación, sus ventanas y objetos (también se hace al salir). |
 
 Los objetos dejan de valer después de `mui_app_end()`.
+
+Ejemplo de zona de dibujo con su barra:
+
+```ruby
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(1)
+    gfx_text_at(x + 4, y + 12, "Página")
+end
+...
+    mui_hgroup_begin()
+        pagina = mui_canvas(320, 200)
+        barra = mui_scrollbar(true)
+    mui_group_end()
+...
+mui_canvas_on_draw(pagina, pinta)
+mui_set_range(barra, 1000, 200)
+```
+
+En un A1200 (68020 a 14 MHz) repintar 320 x 200 cuesta unos 20 ms el fondo y unos 5 ms cada línea de
+50 caracteres: una página llena de texto, unos 115 ms. Mejor repintar solo lo que cambia.
 
 ---
 
@@ -2534,8 +2563,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 50 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_wait_event` |
-| **Total** | **372** | |
+| MUI | 61 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_wait_event` |
+| **Total** | **383** | |
 
 ### Colores Estandar Amiga
 

@@ -137,6 +137,9 @@ mui_set_value(bar, 40)                  # mui_get_value; mui_get_text/mui_set_te
 mui_on_change(url, 2)                   # mui_on_ack(url, id): Return in a text field
 l = mui_list()                          # value = selected line (-1); mui_on_double(l, id)
 mui_list_add(l, "x")                    # _insert(l, pos, s) _remove(l, pos) _clear _count _get(l, pos) _quiet
+c = mui_canvas(320, 200)                # drawing area; sb = mui_scrollbar(true), mui_set_range(sb, total, vis)
+mui_canvas_on_draw(c, paint)            # func paint(x, y, w, h) draws with gfx_; mui_canvas_redraw(c)
+mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y/_button/_wheel/_key(c)
 mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
 mui_window_open(win)
 ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)
