@@ -117,7 +117,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 - [x] 8. **Señales externas.** `mui_wait_event_signals(mask)` para atender sockets y temporizador sin
       bloquear la interfaz. Test con `timer.device` o una señal propia.
 - [x] 9. **Imágenes.** `Dtpic` (datatypes) para PNG/JPEG/GIF en un objeto; o dibujar un bitmap en la zona propia.
-- [ ] 10. **Ejemplo del navegador.** `examples/mui_navegador.dash`: la ventana del diseño (sin red), con
+- [x] 10. **Ejemplo del navegador.** `examples/mui_navegador.dash`: la ventana del diseño (sin red), con
       historial falso y la página pintada en la zona propia. Captura de pantalla en el emulador.
 - [ ] 11. **Repaso de MUI.** Tamaño del ejecutable, memoria (`--memcheck`), tiempos de apertura en A1200,
       revisión del C generado.
@@ -336,3 +336,25 @@ Formato:
 - Limitación: con un fichero que falta, MUI da al objeto un tamaño igual, así que el programa no puede saber si cargó.
   Para el navegador las imágenes irán pintadas en la zona de dibujo (tarea D12 de la sesión de dashweb), no con `Dtpic`.
 - Tests: 129/129 sin emulador; 308/308 con `--emu --emu-a500 --emu-32` (con datatypes en los cuatro sistemas); ejemplos 32/32.
+
+### 2026-10-16 — Tarea 10 (ejemplo del navegador y capturas)
+- Hecho:
+  - `examples/mui_navegador.dash` (33 ejemplos): la ventana del diseño con menú, barra de direcciones, atrás/adelante/
+    recargar, historial (lista con balance), página en una zona de dibujo con barra de desplazamiento y rueda, estado,
+    progreso animado con `mui_timer` y ventana "Acerca de".
+  - **Capturas de pantalla:** `tools/amiga/shot.c` (lee la pantalla delantera con `ReadPixelLine8` y su paleta
+    `GetRGB32`, escribe un PPM) y `tools/emu_run.py --screenshot SEGUNDOS fichero.png` (lo compila en
+    `~/.cache/dash-emu/shot`, lo lanza con `Run` antes del programa y pasa el PPM a PNG en Python sin paquetes).
+    Captura en `docs/img/mui_navegador.png`, enlazada desde el manual (20b).
+- Comprobado mirando las capturas (3.1 y 3.2): la ventana se dibuja entera, acentos bien ("Línea"), botones
+  desactivados en gris, lista, balance, página pintada con su barra.
+- Encontrado:
+  - La primera versión de `shot.c` escribía línea a línea (256 `Write`) y, si la captura coincidía con el final del
+    programa en 3.2 + Workbench, el programa no terminaba (TIMEOUT reproducible con autocierre 40 y captura a 30 s).
+    Con una sola escritura de toda la imagen termina en 50 s.
+  - Dos fallos de Dash al escribir el ejemplo: `lista + [x]` genera C inválido, y una lista declarada `var x: Array`
+    pierde el tipo de sus elementos (textos pasados como enteros). El primero está arreglado en la rama `dashweb`
+    (su D1); el segundo era un pendiente conocido. El ejemplo los evita.
+  - La barra de progreso al 0 % no se distingue del fondo con los colores por defecto de MUI (al 50 y 75 % sí se ve).
+- No visto: los menús (MUI 5 los dibuja al pulsar el botón derecho, sin ratón no salen).
+- Tests: 129/129 sin emulador; 308/308 con `--emu --emu-a500 --emu-32`; ejemplos 33/33.

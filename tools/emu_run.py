@@ -12,6 +12,7 @@ S:Startup-Sequence runs each program with its output redirected to a file.
     tools/emu_run.py bin/programa                # already compiled
 
     tools/emu_run.py --autoclose 3 ventana.dash  # ends by itself after 3 s
+    tools/emu_run.py --autoclose 20 --screenshot 15 shot.png ventana.dash   # picture of the screen
 
 Libraries that are not in the Kickstart ROM (asl.library, diskfont.library...)
 come from $DASH_EMU_SYS (or --system): a directory with Libs/, C/ (Assign, MakeDir)
@@ -78,11 +79,45 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: 
         raise RuntimeError(f"{src}: compile failed\n{result.stdout}{result.stderr}")
 
 
+SHOT_SOURCE = Path(__file__).resolve().parent / "amiga" / "shot.c"
+
+
+def shot_tool() -> Path:
+    """tools/amiga/shot.c built with the Amiga toolchain (cached next to the emulator files)."""
+    exe = Path(os.path.expanduser("~/.cache/dash-emu/shot"))
+    if not exe.exists() or exe.stat().st_mtime < SHOT_SOURCE.stat().st_mtime:
+        exe.parent.mkdir(parents=True, exist_ok=True)
+        gcc = "/opt/amiga/bin/m68k-amigaos-gcc"
+        build = subprocess.run([gcc, "-O2", "-noixemul", "-o", str(exe), str(SHOT_SOURCE)],
+                               capture_output=True, text=True)
+        if build.returncode != 0:
+            raise RuntimeError(f"cannot build {SHOT_SOURCE}: {build.stderr[-300:]}")
+    return exe
+
+
+def ppm_to_png(ppm: Path, png: Path):
+    """Binary PPM (P6) from shot.c to PNG, without extra Python packages."""
+    import struct
+    import zlib
+    data = ppm.read_bytes()
+    parts = data.split(b"\n", 3)
+    width, height = map(int, parts[1].split())
+    pixels = parts[3]
+    rows = b"".join(b"\0" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height))
+
+    def chunk(kind, body):
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
+    png.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+                    + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
+
+
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
-                 keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False):
+                 keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
+                 screenshot: tuple = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
-    files directory (default $DASH_EMU_SYS). Returns one EmuResult per program, in order."""
+    files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
+    front screen that many seconds after boot. Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
         raise RuntimeError("fs-uae not found")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
@@ -121,6 +156,10 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             if not (hd / "C" / "LoadWB").exists():
                 raise RuntimeError("--workbench needs C/LoadWB in the Workbench files (tools/emu_sys_from_hdf.sh)")
             lines.append("C:LoadWB")
+        if screenshot:
+            (hd / "C").mkdir(exist_ok=True)
+            shutil.copy(shot_tool(), hd / "C" / "dash_shot")
+            lines.append(f"Run >NIL: C:dash_shot {int(float(screenshot[0]) * 50)} DH0:shot.ppm")
         for i, prog in enumerate(programs):
             prog = Path(prog)
             exe = hd / f"p{i}"
@@ -160,6 +199,11 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
 
         if keep:
             shutil.copytree(hd, keep, dirs_exist_ok=True)
+        if screenshot:
+            if (hd / "shot.ppm").exists():
+                ppm_to_png(hd / "shot.ppm", Path(screenshot[1]))
+            else:
+                print(f"no screenshot (did a program still run after {screenshot[0]} s?)", file=sys.stderr)
         results = []
         for i, name in enumerate(names):
             out_file, rc_file = hd / f"out{i}.txt", hd / f"rc{i}.txt"
@@ -187,6 +231,9 @@ def main():
     parser.add_argument("--system", metavar="DIR", help="Workbench files (Libs/, C/, Classes/; default: $DASH_EMU_SYS)")
     parser.add_argument("--workbench", action="store_true", help="run C:LoadWB first (AmigaOS 3.2 ReAction needs it)")
     parser.add_argument("--keep", metavar="DIR", help="copy the emulated disk (outputs, files the programs wrote) to DIR")
+    parser.add_argument("--screenshot", nargs=2, metavar=("SECONDS", "FILE.png"),
+                        help="save the front screen SECONDS after boot (tools/amiga/shot.c); "
+                             "use --autoclose so the program is still open then")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
     args = parser.parse_args()
@@ -195,7 +242,7 @@ def main():
                                args.autoclose,
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
-                               args.keep, args.fpu, args.system, args.workbench)
+                               args.keep, args.fpu, args.system, args.workbench, args.screenshot)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

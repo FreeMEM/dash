@@ -2207,6 +2207,12 @@ mui_set_range(barra, 1000, 200)
 En un A1200 (68020 a 14 MHz) repintar 320 x 200 cuesta unos 20 ms el fondo y unos 5 ms cada línea de
 50 caracteres: una página llena de texto, unos 115 ms. Mejor repintar solo lo que cambia.
 
+Ejemplo completo: `examples/mui_navegador.dash`, el esqueleto de la ventana del navegador dashweb
+(barra de direcciones, historial, página pintada con su barra, estado, progreso con `mui_timer`, menú
+y una segunda ventana). Así se ve en un A1200 emulado con AmigaOS 3.1 y MUI 5:
+
+![Ventana del navegador en MUI](img/mui_navegador.png)
+
 ---
 
 ## 21. Modulos e Imports
