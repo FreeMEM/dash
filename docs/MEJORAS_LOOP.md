@@ -167,9 +167,9 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       claro en tiempo de ejecución (mensaje y salida limpia) o comprobarlo solo con `--memcheck`. Tests: lista
       enlazada en Dash puro (sin el `@native vacio()` de `test_refcount_chain`), árbol, "sin objetivo" en un
       struct; `--memcheck` y `tools/fuzz_refcount.py` con `nil` entre sus sentencias. Documentar.
-- [ ] 31. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
+- [~] 31. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
       juegos y cálculos rápidos en 68000, donde `Float` cuesta ~100 µs por suma. Partes:
-      31a diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
+      31a (hecha) diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
       literales y conversiones (`Fixed(x)`, `Int(f)`, `Float(f)`), mezcla con Int/Float, impresión, errores
       (desborde, división por cero); anotar la decisión en la bitácora antes de programar.
       31b runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
@@ -1034,3 +1034,24 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   fallaban eran solo `expect-c`); 60 programas aleatorios con `--memcheck` y 40 normales; ejemplos 30/30.
 - `tools/fuzz_refcount.py` no genera `nil`: tras `x = nil` sus expresiones leerían campos de `nil` y el modelo no
   puede predecir la basura. Cubierto por `test_nil`.
+
+### 2026-10-15 — Tarea 31a (coma fija 1/4: diseño)
+- Decisión (antes de programar):
+  - Tipo `Fixed`: 16.16 en un `LONG` (C `typedef LONG DashFixed`, para que el codegen lo distinga de Int).
+    Rango −32768 … 32767,99998; paso 1/65536 (unas 4,8 cifras decimales).
+  - Valores: `Fixed(x)`. Con un literal (`Fixed(1.5)`, `Fixed(3)`) se calcula al compilar (`98304`); con un Int
+    es `x << 16`; con un Float, `(LONG)(x * 65536)`. `v = Fixed(0.5)` declara `v` como Fixed; también
+    `var v: Fixed`, campos, parámetros y retornos `Fixed`.
+  - Conversiones: `Int(f)` trunca hacia cero, como `Int()` de un Float; `Float(f)` es `f / 65536.0`.
+  - Operaciones: `+`, `-` y comparaciones entre Fixed son las de enteros. Fixed `*` Fixed: producto de 64 bits
+    `>> 16` (68000: cuatro `mulu.w` en asm, como `__mulsf3`; 68020+: `muls.l` 64 bits). Fixed `/` Fixed:
+    `(a << 16) / b` (68000: división por software 64/32; 68020+: `divs.l`). Con un Int: `f * n` y `f / n` son
+    las de enteros (sin desplazar; las más rápidas); `f + n` y comparar con `n` convierten `n << 16`.
+  - Mezclar Fixed y Float es un error (hay que convertir con `Fixed()`/`Float()`): evita costes escondidos.
+  - Desborde: da la vuelta, como Int. División por cero: el máximo con el signo del dividendo (la división ya es
+    una función: la comprobación sale casi gratis; la de Int sigue sin comprobar).
+  - Texto: `Print f`, `"x = #{f}"`, concatenación: hasta 5 decimales redondeados, sin ceros de más (`1.5`,
+    `-0.25`, `3.0`).
+  - Funciones (31b, solo si se usan): `fx_sqrt(f)` (raíz entera de 32 bits, bit a bit), `fx_sin(a)`/`fx_cos(a)`
+    con el ángulo en grados Fixed y una tabla de 91 valores (0-90°) con interpolación lineal.
+  - Listas de Fixed (31c) solo si sale sencillo (son LONG: hace falta el tipo de elemento para imprimir y operar).
