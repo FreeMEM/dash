@@ -515,6 +515,25 @@ static void *_dash_obj_escape(void *ptr) {
     return ptr;
 }
 
+/* An object passed to a Dash function from a field, a global or a list element
+   is borrowed by the callee, which could replace that field or element and free
+   it while still using it. A small holder (a temporary object with one pointer)
+   keeps a reference until the caller's temporaries are released. */
+static void _dash_holder_destroy(void *obj) {
+    _dash_release_child(*(void **)obj);
+}
+
+static void *_dash_obj_lend(void *ptr) {
+    void **holder;
+    if (!ptr) return ptr;
+    holder = (void **)_dash_rc_alloc_obj(sizeof(void *), _dash_holder_destroy);
+    if (holder) {
+        *holder = ptr;
+        _dash_retain(ptr);
+    }
+    return ptr;
+}
+
 static void _dash_otmp_release(ULONG mark) {
     while (_dash_otmp && _dash_otmp->serial > mark) {
         _Dash_RefHeader *h = _dash_otmp;
@@ -553,12 +572,33 @@ static void _dash_mem_cleanup(void) {
 typedef struct {
     LONG *data;
     LONG length;
-    LONG capacity;
+    LONG capacity;   /* elements allocated (low 24 bits) and what they are (top byte) */
 } DashArrayLong;
+
+/* Arrays never change length, so the top byte of capacity says what the
+   elements are: Ints (0), objects the array holds a reference to (1: structs,
+   arrays) or Strings it owns (2). Kinds 1 and 2 let go of their elements when
+   overwritten and when the array is freed. */
+#define _DASH_ARR_CAP(a) ((a)->capacity & 0x00FFFFFF)
+#define _DASH_ARR_KIND(a) ((ULONG)(a)->capacity >> 24)
+#define _DASH_ARR_OBJS 1
+#define _DASH_ARR_STRS 2
+
+/* apart, so that freeing a list of Ints stays a short leaf function */
+static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
+    LONG i;
+    if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS) {
+        for (i = 0; i < arr->length; i++) _dash_release_child((void *)arr->data[i]);
+    } else {
+        for (i = 0; i < arr->length; i++) _dash_str_free((STRPTR)arr->data[i]);
+    }
+}
 
 static void DashArray_destroy(void *obj) {
     DashArrayLong *arr = (DashArrayLong *)obj;
-    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * arr->capacity);
+    if (!arr->data) return;
+    if (_DASH_ARR_KIND(arr)) DashArray_drop_elements(arr);
+    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
 }
 
 /* A new array is a temporary until a variable adopts it (memory runtime) */
@@ -596,6 +636,34 @@ static LONG DashArray_length(DashArrayLong *arr) {
     return arr ? arr->length : 0;
 }
 
+/* A new array (literal, slice) takes its elements: objects get a reference,
+   Strings become its own (a temporary is adopted, anything else copied) */
+static DashArrayLong *DashArray_own(DashArrayLong *arr, LONG kind) {
+    LONG i;
+    if (!arr) return arr;
+    arr->capacity |= kind << 24;
+    for (i = 0; i < arr->length; i++) {
+        if (kind == _DASH_ARR_OBJS) {
+            _dash_retain((void *)arr->data[i]);
+        } else {
+            STRPTR v = (STRPTR)arr->data[i];
+            arr->data[i] = 0;
+            _dash_str_set((STRPTR *)&arr->data[i], v);
+        }
+    }
+    return arr;
+}
+
+static void DashArray_set_obj(DashArrayLong *arr, LONG index, void *value) {
+    if (!arr || index < 0 || index >= arr->length) return;
+    _dash_obj_set((void **)&arr->data[index], value);
+}
+
+static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
+    if (!arr || index < 0 || index >= arr->length) return;
+    _dash_str_set((STRPTR *)&arr->data[index], value);
+}
+
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
     if (!arr) return NULL;
     if (start < 0) start = 0;
@@ -607,7 +675,7 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
     for (LONG i = 0; i < new_len; i++) {
         result->data[i] = arr->data[start + i];
     }
-    return result;
+    return _DASH_ARR_KIND(arr) ? DashArray_own(result, _DASH_ARR_KIND(arr)) : result;
 }
 
 """
@@ -6335,8 +6403,8 @@ static {ret_type} {method_name}({params_str}) {{
         # Special handling for array literals
         if isinstance(node.value, ArrayLiteral):
             self.uses_arrays = True
-            is_strings = bool(node.value.elements) and self._is_string_expr(node.value.elements[0])
-            self.var_types[node.name] = "array:string" if is_strings else "array"
+            elem = self._literal_elem_type(node.value)
+            self.var_types[node.name] = f"array:{elem}" if elem else "array"
             value = self._generate_array_literal(node.value)
             self._assign_object(node.name, "DashArrayLong *", value)
             return
@@ -6353,7 +6421,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "float"
             self.uses_float = True
         elif var_type == "DashArrayLong *":
-            self.var_types[node.name] = "array"
+            # a copy or a slice of a typed array keeps its element type
+            self.var_types[node.name] = self._array_var_type(node.value)
         elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
             self.var_types[node.name] = "func"
         elif var_type.startswith("_Dash_") and var_type.endswith(" *"):
@@ -6420,6 +6489,11 @@ static {ret_type} {method_name}({params_str}) {{
             # Check if accessing a string or array
             if self._is_string_expr(node.array):
                 return "char"  # Character access
+            elem = self._array_elem_type(node.array)
+            if elem == "array":
+                return "DashArrayLong *"
+            if elem and elem.startswith("struct:"):
+                return f"_Dash_{elem[7:]} *"
             return "LONG"  # Array elements are LONG
         elif isinstance(node, (PropertyAccess, MemberAccess)):
             field = self._field_of(node)
@@ -6582,6 +6656,11 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.enter_scope("loop")
         self.context.declare_var(node.variable)  # Loop var is declared by for (borrowed)
         body = self._loop_body_head(mark)
+        if var_type.startswith("struct:") or var_type == "array":
+            # an element of a list of objects: the body could replace it in the
+            # list, so it holds a reference for the iteration
+            self.context.own(node.variable, "obj")
+            body += f"{self.context.indent}_dash_retain({node.variable});\n"
         for s in node.body:
             body += self._generate_statement(s)
         body += self._frees(self.context.current_owned())
@@ -6613,16 +6692,25 @@ static {ret_type} {method_name}({params_str}) {{
         self.uses_arrays = True
         array = self._array_ref(node.iterable)
         strings = self._is_string_array(node.iterable)
+        elem = self._array_elem_type(node.iterable) or ""
+        if strings:
+            var_type, c_type = "string", "STRPTR"
+        elif elem.startswith("struct:"):
+            var_type, c_type = elem, f"_Dash_{elem[7:]} *"
+        elif elem == "array":
+            var_type, c_type = "array", "DashArrayLong *"
+        else:
+            var_type, c_type = "number", "LONG"
         mark = self._new_tmp_mark()
         # the held array: a return inside the loop must release it too
         self.context.enter_scope("block")
         self.context.own(f"_arr_{node.variable}", "obj")
-        body = self._generate_loop_body(node, "string" if strings else "number", mark)
+        body = self._generate_loop_body(node, var_type, mark)
         self.context.exit_scope()
 
         code = CTemplates.FOR_EACH_STMT.substitute(
-            elem_type="STRPTR" if strings else "LONG",
-            cast="(STRPTR)" if strings else "",
+            elem_type=c_type,
+            cast="" if c_type == "LONG" else f"({c_type})",
             indent=indent,
             var=node.variable,
             array=array,
@@ -6759,6 +6847,15 @@ static {ret_type} {method_name}({params_str}) {{
         array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
         value = self._generate_expression(node.value)
+        elem = self._array_elem_type(node.array)
+        if elem == "string":
+            self.uses_strings = True
+            self.emit(f"{indent}DashArray_set_str({array_name}, {index}, {value});\n")
+            return
+        if elem and self._is_obj_expr(node.value):
+            # the array holds a reference to its structs or arrays
+            self.emit(f"{indent}DashArray_set_obj({array_name}, {index}, {value});\n")
+            return
         if self._is_string_expr(node.value) or self._is_obj_expr(node.value):
             value = f"(LONG){self._escape_any(node.value, value)}"
         self.emit(f"{indent}DashArray_set({array_name}, {index}, {value});\n")
@@ -6786,13 +6883,8 @@ static {ret_type} {method_name}({params_str}) {{
             code = self._generate_expression(arg)
             if foreign is not None:
                 code = self._escape_any(arg, code)  # C code may keep the pointer
-            elif self._is_string_expr(arg) and func and (
-                    isinstance(arg, (MemberAccess, PropertyAccess))
-                    or (isinstance(arg, VarRef) and arg.name in self.global_strings)):
-                # the callee could reassign that field or global and free the
-                # text it received: pass a temporary copy
-                self.uses_strings = True
-                code = f"_dash_str_ret({code})"
+            elif func:
+                code = self._lend(arg, code)
             param = func.params[i] if func and i < len(func.params) else None
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
@@ -6996,6 +7088,11 @@ static {ret_type} {method_name}({params_str}) {{
             index = self._generate_expression(node.index)
             if self._is_string_array(node.array):
                 return f"(STRPTR)DashArray_get({array_name}, {index})"
+            elem = self._array_elem_type(node.array)
+            if elem == "array":
+                return f"((DashArrayLong *)DashArray_get({array_name}, {index}))"
+            if elem and elem.startswith("struct:"):
+                return f"((_Dash_{elem[7:]} *)DashArray_get({array_name}, {index}))"
             return f"DashArray_get({array_name}, {index})"
         elif isinstance(node, ArraySlice) and self._is_string_expr(node.array):
             # String slicing - a new temporary string; no end: up to the NUL
@@ -7269,8 +7366,8 @@ static {ret_type} {method_name}({params_str}) {{
 
         if struct_name:
             # Known struct type - generate StructName_methodname(obj, args...)
-            args = [obj_expr]
-            args.extend(self._generate_expression(a) for a in node.arguments)
+            args = [self._lend(node.object, obj_expr)]
+            args.extend(self._lend(a, self._generate_expression(a)) for a in node.arguments)
             args_str = ", ".join(args)
             return f"{struct_name}_{node.method}({args_str})"
         else:
@@ -7281,7 +7378,7 @@ static {ret_type} {method_name}({params_str}) {{
                 current_struct = getattr(self, '_current_struct', None)
                 if current_struct:
                     args = ["self"]
-                    args.extend(self._generate_expression(a) for a in node.arguments)
+                    args.extend(self._lend(a, self._generate_expression(a)) for a in node.arguments)
                     args_str = ", ".join(args)
                     return f"{current_struct}_{node.method}({args_str})"
 
@@ -7290,6 +7387,23 @@ static {ret_type} {method_name}({params_str}) {{
             args.extend(self._generate_expression(a) for a in node.arguments)
             args_str = ", ".join(args)
             return f"/* method call */ {node.method}({args_str})"
+
+    def _lend(self, arg: ASTNode, code: str) -> str:
+        """An argument for a Dash function or method that the callee could free while
+        using it: a field, a global or a list element (the callee may replace it).
+        Strings go as a temporary copy, objects with a reference held until the
+        caller's temporaries are released (_dash_obj_lend)."""
+        shared = isinstance(arg, (MemberAccess, PropertyAccess, ArrayAccess)) or (
+            isinstance(arg, VarRef) and (arg.name in self.global_strings or arg.name in self.global_objects))
+        if not shared:
+            return code
+        if self._is_string_expr(arg):
+            self.uses_strings = True
+            return f"_dash_str_ret({code})"
+        c_type = self._infer_c_type(arg)
+        if self._is_obj_c_type(c_type):
+            return f"(({c_type})_dash_obj_lend({code}))"
+        return code
 
     def _is_string_constant(self, node: ASTNode) -> bool:
         """Check if an expression is a string constant (macro)."""
@@ -7434,6 +7548,9 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, MethodCall):
             method = self._method_of(node)
             name = method.return_type if method else None
+        elif isinstance(node, ArrayAccess):
+            elem = self._array_elem_type(node.array) or ""
+            name = elem[7:] if elem.startswith("struct:") else None
         return prog.get_struct(name) if name else None
 
     def _field_of(self, node) -> Optional[StructField]:
@@ -7535,13 +7652,53 @@ static {ret_type} {method_name}({params_str}) {{
             name = f"_dash_arrlit_{self._arrlit_counter}"
             self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(c_int_literal(v) for v in values)}}};\n")
             return f"DashArray_from({size}, {name})"
-        # Values go through a C99 compound literal; strings are stored as LONG
+        # Values go through a C99 compound literal; strings are stored as LONG.
+        # A list of Strings, structs or arrays owns its elements (DashArray_own);
+        # a mixed one keeps what it stores until exit, as before.
+        elem = self._literal_elem_type(node)
         elements = []
         for e in node.elements:
             code = self._generate_expression(e)
-            elements.append(f"(LONG){self._escape_any(e, code)}"
-                            if self._is_string_expr(e) or self._is_obj_expr(e) else code)
-        return f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
+            if elem:
+                elements.append(f"(LONG){code}")
+            else:
+                elements.append(f"(LONG){self._escape_any(e, code)}"
+                                if self._is_string_expr(e) or self._is_obj_expr(e) else code)
+        literal = f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
+        if elem:
+            kind = "_DASH_ARR_STRS" if elem == "string" else "_DASH_ARR_OBJS"
+            return f"DashArray_own({literal}, {kind})"
+        return literal
+
+    def _literal_elem_type(self, node: ArrayLiteral) -> Optional[str]:
+        """What all the elements of an array literal are: "string", "struct:Name",
+        "array", or None (Ints, or a mix)."""
+        kinds = set()
+        for e in node.elements:
+            if self._is_string_expr(e):
+                kinds.add("string")
+            elif isinstance(e, ArrayLiteral) or self._infer_c_type(e) == "DashArrayLong *":
+                kinds.add("array")
+            else:
+                struct = self._struct_of(e)
+                kinds.add(f"struct:{struct.name}" if struct and self._is_obj_expr(e) else None)
+        return kinds.pop() if len(kinds) == 1 else None
+
+    def _array_var_type(self, node: ASTNode) -> str:
+        """var_types entry for a variable assigned an array expression."""
+        if isinstance(node, VarRef) and (self.var_types.get(node.name) or "").startswith("array"):
+            return self.var_types[node.name]
+        if isinstance(node, ArraySlice) and isinstance(node.array, VarRef):
+            return self.var_types.get(node.array.name) or "array"
+        return "array"
+
+    def _array_elem_type(self, node: ASTNode) -> Optional[str]:
+        """Element type of a typed array variable ("string", "struct:Name", "array")."""
+        if isinstance(node, VarRef):
+            vt = self.var_types.get(node.name) or ""
+            if vt.startswith("array:"):
+                return vt[6:]
+        return None
 
     def _returns_value(self, stmts) -> bool:
         """True if any statement in stmts (or nested blocks) returns a value."""

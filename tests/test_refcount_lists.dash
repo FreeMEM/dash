@@ -1,0 +1,72 @@
+# Test: lists of structs, Strings and lists hold their elements: replacing one
+# frees the old one, and freeing the list frees them all (--memcheck: nothing
+# alive at exit, nothing escaped). Elements read back with their type.
+#
+# memcheck
+# expect-c: DashArray_set_obj(enemigos,
+# expect-c: DashArray_set_str(nombres,
+# expect-out: 1000 10
+# expect-out: 998 1000 998
+# expect-out: n999 n1000 n998
+# expect-out: 7
+# expect-out: 3 2
+# expect-out: n1000
+# expect-out: 38
+# expect-out: estable
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@native func mem_libre() -> Int
+"""
+    return (LONG)AvailMem(MEMF_ANY);
+"""
+end
+
+struct Enemigo
+    x: Int
+    vida: Int
+end
+
+func ronda(n)
+    enemigos = [Enemigo(0, 1), Enemigo(0, 1), Enemigo(0, 1)]
+    nombres = ["a", "b", "c"]
+    for frame in (1..n)
+        enemigos[frame % 3] = Enemigo(frame, 10)
+        nombres[frame % 3] = "n" + frame
+    end
+    filas = [[1, 2], [3, 4]]
+    filas[1] = [5, 6, 7]
+    trozo = enemigos[1:3]
+    e = enemigos[1]
+    enemigos[1] = Enemigo(-1, -1)
+    copia = nombres[1]
+    nombres[1] = "otro"
+    total = 0
+    for f in filas
+        total = total + f[0]
+    end
+    for x in enemigos
+        total = total + x.vida
+    end
+    if n == 1000
+        Print "" + e.x + " " + trozo[1].vida
+        Print "" + trozo[1].x + " " + e.x + " " + enemigos[2].x
+        Print nombres[0] + " " + copia + " " + nombres[2]
+        Print filas[1][2]
+        Print "" + filas[1].length + " " + enemigos[0:2].length
+        Print copia
+        Print total - 1 + 10 + 4
+    end
+end
+
+Main
+    ronda(1000)
+    antes = mem_libre()
+    for k in (1..300)
+        ronda(50)
+    end
+    if antes - mem_libre() < 4096
+        Print "estable"
+    else
+        Print antes - mem_libre()
+    end
+end

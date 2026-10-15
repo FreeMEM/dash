@@ -1,5 +1,5 @@
 # Test: ./dash --memcheck. Normal code leaves nothing alive; a struct stored in a
-# list escapes (kept until exit); C code that frees twice or uses a freed object
+# list of Ints escapes (kept until exit), a String in a list of Strings does not; C code that frees twice or uses a freed object
 # is reported. The summary is printed at exit.
 #
 # memcheck
@@ -11,7 +11,7 @@
 # expect-out: memcheck: ERROR release de un objeto sin referencias
 # expect-out: memcheck: ERROR string liberado dos veces
 # expect-out: fin
-# expect-out: memcheck: vivos 1 objetos y 1 strings (escapados 1 y 1), errores 4
+# expect-out: memcheck: vivos 1 objetos y 0 strings (escapados 1 y 0), errores 4
 
 struct P
     x: Int

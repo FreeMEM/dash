@@ -7,7 +7,7 @@
 # expect-c: _dash_obj_set((void **)&nums, DashArray_from(3, _dash_arrlit_
 # expect-c: _dash_r = DashArray_from(3, _dash_arrlit_
 # expect-c: Printf("%ld\n", suma((LONG)DashArray_from(2, _dash_arrlit_
-# expect-c: _dash_obj_set((void **)&nombres, DashArray_from(2, (LONG[]){(LONG)"Ana", (LONG)"Bea"}));
+# expect-c: _dash_obj_set((void **)&nombres, DashArray_own(DashArray_from(2, (LONG[]){(LONG)"Ana", (LONG)"Bea"}), _DASH_ARR_STRS));
 # expect-c: Printf("%s\n", (STRPTR)DashArray_get(nombres, 1));
 # expect-c: STRPTR n = (STRPTR)_arr_n->data[_idx_n];
 # expect-c: DashString_from_char(DashString_char_at(palabra, 0))

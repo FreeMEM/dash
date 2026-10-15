@@ -150,7 +150,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `self`, métodos, globales, trozos `a[1:3]`, `for x in lista`, lambdas, `break`/`continue`/`return` dentro de
       bucles anidados y de `EventLoop`, recursión, structs dentro de structs) y apuntar en la bitácora qué hace
       cada uno. Un test por camino con `--memcheck`: 0 vivos al salir y memoria que no crece en 10.000 vueltas.
-      30c fallos y huecos conocidos: un objeto guardado en una lista, dado a C o devuelto por una lambda escapa y
+      30c (hecha) fallos y huecos conocidos: un objeto guardado en una lista, dado a C o devuelto por una lambda escapa y
       no se libera hasta salir (comprobar si un juego que crea enemigos en una lista en cada vuelta crece sin
       parar; si es así, listas de objetos que sueltan sus elementos al sobrescribirlos y al destruirse); los
       ciclos (documentar o detectar); desborde del contador.
@@ -882,3 +882,43 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Tamaño total: 254.016 → 254.564 bytes.
 - Tests: 107/107 sin emulador; 246/246 con `--emu --emu-a500 --emu-32`, también con `--memcheck`; ejemplos 30/30.
 - Documentado: tipos válidos y `Array` en MANUAL_REFERENCIA y QUICK_REFERENCE; CLAUDE.md local.
+
+### 2026-10-15 — Tarea 30c (conteo de referencias 3/6: listas de objetos, préstamos, huecos)
+- Base: 107/107 sin emulador, ejemplos 30/30.
+- Comprobado: un juego que cambia enemigos en una lista en cada vuelta crecía sin parar (cada struct guardado
+  escapaba). Peor: las listas de structs casi no funcionaban (`e = enemigos[1]` daba un entero y
+  `enemigos[2].vida` generaba C inválido). Igual con textos: `nombres[i] = "n" + i` perdía memoria en cada vuelta.
+- Hecho:
+  - Listas que saben lo que guardan: el byte alto de `capacity` (las listas no cambian de tamaño) dice si los
+    elementos son enteros (0), objetos con referencia (1: structs o listas) o textos propios (2). Sin coste de memoria.
+    `DashArray_own` (literal y trozo: retiene o adopta/copia), `DashArray_set_obj`/`DashArray_set_str` (sueltan el
+    anterior), y el destructor suelta todos (`_dash_release_child`, sin recursión).
+  - Codegen: el tipo de elemento sale del literal (todos del mismo struct, todos textos o todos listas;
+    `var_types` `array:struct:T`, `array:string`, `array:array`) y pasa a copias y trozos. `lista[i]` se lee con su
+    tipo (`((_Dash_T *)DashArray_get(...))`), sirve para `.campo`, para `e = lista[i]` (retiene) y en `for x in`.
+    El analyzer lleva lo mismo (`Symbol.elem_struct`) para validar `e.p.x = ...`.
+  - **Fallo encontrado y corregido: parámetros prestados leían memoria liberada.** `usa_campo(c, c.p)` con una
+    función que hace `c.p = Punto(5, 5)` y luego lee su parámetro: el `Punto` viejo se liberaba y la función leía
+    `0xDBDBDBDB` (en el modo normal, basura o un cuelgue). Lo mismo con globales y elementos de lista. Ahora el que
+    llama "presta" esos argumentos (campo, global o elemento) a funciones y métodos Dash: `_dash_obj_lend` crea un
+    temporal de 4 bytes que retiene el objeto hasta el final de la vuelta (los textos ya iban como copia temporal
+    desde un campo o global; ahora también desde un elemento y en los métodos). Los argumentos que son variables
+    locales no cambian (nadie más puede soltarlas).
+  - `for x in lista` de objetos retiene `x` durante la vuelta: el cuerpo puede reemplazar ese elemento.
+- Huecos que quedan (documentados en MANUAL_REFERENCIA, 10 y 17):
+  - Un struct guardado en una lista de enteros o mezclada, o dado a `@native`/`@extern`, escapa (hasta salir).
+  - Una lista que entra como parámetro `Array` o sale de una función pierde el tipo de sus elementos.
+  - `enemigos[0].x = 5` no lo admite la gramática (usar una variable).
+  - Ciclos: no se liberan hasta salir; `--memcheck` los cuenta como vivos. Detectarlos costaría un recorrido
+    tipo recolector: no compensa en un Amiga.
+  - Desborde del contador: imposible en la práctica (2.147 millones de referencias a un objeto no caben en la RAM).
+  - Lambdas que devuelven un objeto: escapa (devuelven LONG). Las lambdas son soporte parcial.
+  - Sin `nil` (ver 30b): pregunta para el usuario.
+- Tests nuevos: `test_refcount_lists` (structs, textos, listas de listas, trozos, reemplazo; 300 rondas sin perder
+  memoria), `test_refcount_borrow` (préstamos desde campo, global y elemento; `for` que reemplaza su elemento).
+- Tests cambiados: `test_arrays_adv` (C de la lista de textos con `DashArray_own`), `test_memcheck` (el texto en una
+  lista de textos ya no escapa).
+- Coste: con el destructor de listas en una sola función, `array_literal_new` +5 %; separando el bucle de soltar
+  elementos (`DashArray_drop_elements`, `noinline`) el caso de enteros vuelve a ser una función corta: +2 %
+  (465.288 → 475.666 ns en A500). Lo demás, dentro del ruido. Tamaño: 254.564 → 255.568 bytes.
+- Tests: 109/109 sin emulador; 251/251 con `--emu --emu-a500 --emu-32`, también con `--memcheck`; ejemplos 30/30.

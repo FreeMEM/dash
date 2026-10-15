@@ -1,0 +1,74 @@
+# Test: an object passed from a field, a global or a list element stays alive
+# while the function that got it replaces that field, global or element; and the
+# variable of "for x in lista" stays alive when the body replaces it in the list.
+# Before, the function read freed memory (--memcheck fills it with 0xDB).
+#
+# memcheck
+# expect-c: usa_campo(c, ((_Dash_Punto *)_dash_obj_lend(c->p)))
+# expect-out: 1
+# expect-out: 2
+# expect-out: 3
+# expect-out: 1
+# expect-out: 8
+# expect-out: 40
+# expect-out: hola
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Caja
+    p: Punto
+end
+
+var g: Caja
+
+func usa_campo(c: Caja, p: Punto)
+    c.p = Punto(5, 5)
+    return p.x
+end
+
+func usa_global(p: Punto)
+    g.p = Punto(6, 6)
+    return p.x
+end
+
+func usa_lista(l: Array, p: Punto)
+    return p.x
+end
+
+func toma_nombre(l: Array, s: String) -> String
+    return s
+end
+
+func cambia(c: Caja)
+    c.p = Punto(9, 9)
+end
+
+Main
+    c = Caja(Punto(1, 1))
+    Print usa_campo(c, c.p)
+    g = Caja(Punto(2, 2))
+    Print usa_global(g.p)
+    enemigos = [Punto(3, 3)]
+    Print usa_lista(enemigos, enemigos[0])
+    lista = [Punto(1, 1), Punto(2, 2)]
+    for x in lista
+        lista[0] = Punto(7, 7)
+        lista[1] = Punto(8, 8)
+        Print x.x
+        if x.x == 7
+            break
+        end
+    end
+    cajas = [Caja(Punto(4, 4))]
+    k = cajas[0]
+    k.p.x = 40
+    Print cajas[0].p.x
+    otra = c
+    otra.p = Punto(3, 3)
+    nombres = ["hola", "adios"]
+    Print toma_nombre(nombres, nombres[0])
+end

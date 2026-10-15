@@ -13,7 +13,7 @@ from compiler.ast_nodes import (
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
-    ArrayLiteral, ArrayAccess, ArrayAssign, PropertyAccess,
+    ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
     StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral
@@ -60,6 +60,7 @@ class Symbol:
     is_opened: bool = False  # For windows
     is_initialized: bool = False  # For variables
     struct_name: Optional[str] = None  # Struct type of the value, when known
+    elem_struct: Optional[str] = None  # For a list of structs: their struct type
 
 
 @dataclass
@@ -476,7 +477,8 @@ class SemanticAnalyzer(ASTVisitor):
                 dash_type=self._infer_type(node.value),
                 node=node,
                 is_initialized=True,
-                struct_name=self._struct_name_of(node.value)
+                struct_name=self._struct_name_of(node.value),
+                elem_struct=self._elem_struct_of(node.value)
             )
             self.define_symbol(symbol, node)
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
@@ -555,12 +557,14 @@ class SemanticAnalyzer(ASTVisitor):
 
         self.enter_scope("for_each")
         # Define loop variable (element type)
+        elem = self._elem_struct_of(node.iterable)
         symbol = Symbol(
             name=node.variable,
             symbol_type=SymbolType.VARIABLE,
-            dash_type=DashType.INT,  # Assume array of ints for now
+            dash_type=DashType.UNKNOWN if elem else DashType.INT,  # ints unless a list of structs
             node=node,
-            is_initialized=True
+            is_initialized=True,
+            struct_name=elem
         )
         self.define_symbol(symbol, node)
 
@@ -851,6 +855,18 @@ class SemanticAnalyzer(ASTVisitor):
             return type_name
         return None
 
+    def _elem_struct_of(self, expr: Optional[ASTNode]) -> Optional[str]:
+        """Struct type of the elements of a list expression, when all are one struct."""
+        if isinstance(expr, ArrayLiteral) and expr.elements:
+            names = {self._struct_name_of(e) for e in expr.elements}
+            return names.pop() if len(names) == 1 else None
+        if isinstance(expr, ArraySlice):
+            expr = expr.array
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            return symbol.elem_struct if symbol else None
+        return None
+
     def _struct_name_of(self, expr: Optional[ASTNode]) -> Optional[str]:
         """Struct type of the value an expression yields, if known at compile time."""
         prog = self.program
@@ -875,6 +891,8 @@ class SemanticAnalyzer(ASTVisitor):
                 if isinstance(value, FunctionCall) and prog.get_struct(value.name):
                     return value.name
             return None
+        if isinstance(expr, ArrayAccess):
+            return self._elem_struct_of(expr.array)
         if isinstance(expr, MemberAccess):
             owner = self._struct_name_of(VarRef(name=expr.object_name))
             member = expr.member

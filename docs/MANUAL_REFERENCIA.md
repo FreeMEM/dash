@@ -649,6 +649,27 @@ for num in numeros
 end
 ```
 
+### Listas de structs y de listas
+
+Una lista cuyo literal tiene solo structs del mismo tipo, solo textos o solo listas sabe
+lo que guarda: sus elementos se leen con su tipo y la lista es duena de ellos.
+
+```
+enemigos = [Enemigo(0, 10), Enemigo(50, 10)]
+enemigos[1] = Enemigo(80, 5)     # el Enemigo anterior se libera
+e = enemigos[0]                  # e es un Enemigo
+Print enemigos[1].vida
+for x in enemigos
+    Print x.x
+end
+filas = [[1, 2], [3, 4]]
+Print filas[1][0]
+```
+
+Limites: una lista que entra como parametro `Array` o sale de una funcion pierde el tipo de
+sus elementos (se leen como enteros), y no se puede asignar a un campo de un elemento
+(`enemigos[0].x = 5`): hay que usar una variable (`e = enemigos[0]` y `e.x = 5`).
+
 ---
 
 ## 11. Screens (Pantallas)
@@ -1282,9 +1303,10 @@ ni pausas:
   Al reasignarla se libera el texto anterior; al salir de su bloque o funcion, tambien.
 - Los textos intermedios (`a + b`, `"#{x}"`, lo que devuelve una funcion) se liberan
   al final de cada vuelta de un bucle o del `EventLoop`, y al salir de una funcion.
-- Un texto guardado en un array o entregado a una funcion del sistema que se queda
-  con el (etiqueta de un gadget, titulo de una pantalla, `@native`) se copia y queda
-  fijo hasta que el programa termina.
+- Una lista de textos (`nombres = ["a", "b"]`) es duena de sus textos: al reemplazar uno se
+  libera el anterior. Un texto entregado a una funcion del sistema que se queda con el
+  (etiqueta de un gadget, titulo de una pantalla, `@native`) se copia y queda fijo hasta
+  que el programa termina.
 - Coste: 12 bytes por texto y una copia corta al asignar un texto que no es temporal.
 
 Un bucle que concatena 100.000 veces ocupa lo mismo al final que al principio.
@@ -1311,9 +1333,16 @@ end
 
 - Un array o struct nuevo que nadie guarda (`suma([1, 2])`) se libera al final de la
   vuelta del bucle, como los textos temporales.
-- Lo que se guarda dentro de un array (`lista[0] = Objeto(1)`) o se entrega a codigo C
-  queda fijo hasta que el programa termina.
+- Una lista de structs o de listas (ver "Listas de structs y de listas") cuenta como una
+  referencia de cada elemento: al reemplazar uno o al liberarse la lista se sueltan.
+  Un struct guardado en una lista de enteros o mezclada, o entregado a codigo C
+  (`@native`, `@extern`), queda fijo hasta que el programa termina.
+- Un struct que llega a una funcion desde un campo, una global o un elemento de una lista
+  queda retenido hasta el final de la vuelta: la funcion puede reemplazar ese campo sin
+  que el struct que esta usando se libere.
+- Liberar una lista enlazada larga (miles de structs que apuntan al siguiente) no gasta pila.
 - Ciclos: si un struct apunta a otro que apunta al primero, no se liberan hasta salir.
+  `--memcheck` los muestra como vivos al salir.
 - `refcount(x)`, `retain(x)` y `release(x)` siguen existiendo para casos avanzados; un
   `release` de mas libera algo que una variable aun usa.
 
