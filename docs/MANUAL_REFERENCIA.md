@@ -1607,6 +1607,26 @@ if menu_ev == MENU_QUIT
 end
 ```
 
+`gt_event()` y `menu_event()` leen el mismo puerto de la ventana: lo que una lee para la otra queda
+guardado, así que se pueden llamar las dos en cada vuelta. `gt_event()` devuelve -1 si no hay nada y
+-2 al cerrar; `gt_wait_event()` espera. Las coordenadas de `gt_*` cuentan desde dentro de los bordes
+de la ventana.
+
+Con un `EventLoop`, el menú se atiende con `On Menu` y `menu_id()`:
+
+```
+EventLoop
+    On Menu
+        if menu_id() == MENU_QUIT
+            Stop
+        end
+    end
+end
+```
+
+Si se eligen varias opciones a la vez (arrastrando con el botón derecho y pulsando el izquierdo),
+`On Menu` se ejecuta una vez por cada una.
+
 ### Dialogos ASL
 
 ```
@@ -1741,6 +1761,7 @@ end
 | `menu_separator()` | Crear separador |
 | `menu_attach()` | Adjuntar menus |
 | `menu_event()` | Obtener evento de menu |
+| `menu_id()` | En `On Menu`: la opción elegida |
 
 ---
 

@@ -1063,6 +1063,14 @@ MENU_FUNCTIONS = {
         needs_gadtools=True,
         description="Check for menu event, returns menu item ID or -1/-2"
     ),
+    "menu_id": BuiltinFunc(
+        name="menu_id",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_menu_id()",
+        needs_gadtools=True,
+        description="In an EventLoop's On Menu: id of the menu item chosen"
+    ),
 }
 
 

@@ -109,6 +109,9 @@ Main
         On Key "ESC"        # also "a", 0x4C, UP/DOWN/F1..., or no key = any
             Stop
         end
+        On Menu            # menu_title/menu_item/menu_attach; menu_id() = item id
+            Stop
+        end
         On Close
             Stop
         end

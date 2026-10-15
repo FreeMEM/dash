@@ -225,6 +225,13 @@ class OnCloseHandler(ASTNode):
 
 
 @dataclass
+class OnMenuHandler(ASTNode):
+    """On Menu: an item of the menu_title/menu_item menus was chosen (menu_id() tells which)."""
+    body: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class OnGadgetHandler(ASTNode):
     """On Gadget: a gadget made with button_create/slider_create... was used
     (gadget_id() tells which)."""

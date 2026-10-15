@@ -1,0 +1,167 @@
+# Test: gt_* gadgets and menu_* menus get their events, gt_event and menu_event do not
+# steal each other's messages, and an EventLoop runs On Menu. A helper process clicks
+# the buttons and chooses menu items through input.device (right button down, pointer
+# on the item, button up), like a user.
+#
+# expect-c: case IDCMP_MENUPICK: {
+# expect-out: menú 1
+# expect-out: gadget 1
+# expect-out: gadget 0
+# expect-out: nada -1
+# expect-out: On Menu 2
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static LONG acc_kind[4], acc_x[4], acc_y[4], n_acc; static volatile LONG acc_hechas;"
+
+Window W
+    title "GadTools"
+    width 300
+    height 100
+end
+
+# Helper process: kind 0 = left click at window position (x, y) (inside the borders: the
+# window is GIMMEZEROZERO); kind 1 = choose item y of menu x: pointer on the menu title,
+# right button down, then one-step mouse moves until the screen's pointer is on the item
+# (a mouse step is not always a pixel), right button up.
+@native func proceso_acciones()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    LONG i, k, steps, tx, ty;
+    Delay(100);
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < n_acc; i++) {
+            struct Screen *scr = _dash_win->WScreen;
+            struct Menu *m = _dash_menu;
+            struct MenuItem *it = NULL;
+            UWORD button = acc_kind[i] == 1 ? IECODE_RBUTTON : IECODE_LBUTTON;
+            UWORD held = acc_kind[i] == 1 ? IEQUALIFIER_RBUTTON : IEQUALIFIER_LEFTBUTTON;
+            if (acc_kind[i] == 1) {
+                for (k = 0; k < acc_x[i] && m; k++) m = m->NextMenu;
+                it = m ? m->FirstItem : NULL;
+                for (k = 0; k < acc_y[i] && it; k++) it = it->NextItem;
+                if (!it) continue;
+                pp.iepp_Position.X = m->LeftEdge + m->Width / 2;
+                pp.iepp_Position.Y = scr->BarHeight / 2;
+            } else {
+                pp.iepp_Position.X = _dash_win->LeftEdge + _dash_win->BorderLeft + acc_x[i];
+                pp.iepp_Position.Y = _dash_win->TopEdge + _dash_win->BorderTop + acc_y[i];
+            }
+            memset(&ie, 0, sizeof(ie));
+            pp.iepp_Screen = scr;
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+            DoIO((struct IORequest *)io);
+            Delay(5);
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = button;
+            ie.ie_Qualifier = held | IEQUALIFIER_RELATIVEMOUSE;
+            DoIO((struct IORequest *)io);
+            Delay(10);
+            if (it) {
+                tx = m->LeftEdge + it->LeftEdge + it->Width / 2;
+                ty = scr->BarHeight + 1 + it->TopEdge + it->Height / 2;
+                steps = 0;
+                while ((scr->MouseX != tx || scr->MouseY != ty) && steps++ < 400) {
+                    memset(&ie, 0, sizeof(ie));
+                    ie.ie_Class = IECLASS_RAWMOUSE;
+                    ie.ie_Code = IECODE_NOBUTTON;
+                    ie.ie_Qualifier = held | IEQUALIFIER_RELATIVEMOUSE;
+                    ie.ie_X = scr->MouseX < tx ? 1 : scr->MouseX > tx ? -1 : 0;
+                    ie.ie_Y = scr->MouseY < ty ? 1 : scr->MouseY > ty ? -1 : 0;
+                    DoIO((struct IORequest *)io);
+                    Delay(1);
+                }
+                Delay(10);
+            }
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = button | IECODE_UP_PREFIX;
+            ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+            DoIO((struct IORequest *)io);
+            Delay(25);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    acc_hechas = 1;
+"""
+end
+
+@native func accion(i: Int, kind: Int, x: Int, y: Int)
+"""
+    acc_kind[i] = kind; acc_x[i] = x; acc_y[i] = y;
+    if (n_acc <= i) n_acc = i + 1;
+"""
+end
+
+@native func lanzar()
+"""
+    acc_hechas = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_acciones, NP_Name, (ULONG)"dash_acciones", TAG_DONE);
+"""
+end
+
+@native func esperar()
+"""
+    while (!acc_hechas) Delay(2);
+    n_acc = 0;
+"""
+end
+
+Main
+    W.open
+    gt_init()
+    menu_title("Proyecto")
+    menu_item("Nuevo", "N", 1)
+    menu_item("Salir", "Q", 2)
+    menu_attach()
+    uno = gt_button(20, 30, 80, 16, "Uno")
+    dos = gt_button(120, 30, 80, 16, "Dos")
+    gt_attach()
+
+    # A click on "Dos", the menu item "Nuevo", a click on "Uno"
+    accion(0, 0, 160, 38)
+    accion(1, 1, 0, 0)
+    accion(2, 0, 60, 38)
+    lanzar()
+    esperar()
+    m = menu_event()
+    Print "menú #{m}"
+    e = gt_event()
+    Print "gadget #{e}"
+    e = gt_event()
+    Print "gadget #{e}"
+    e = gt_event()
+    Print "nada #{e}"
+
+    # The same menus through an EventLoop
+    accion(0, 1, 0, 1)
+    lanzar()
+    EventLoop
+        On Menu
+            id = menu_id()
+            Print "On Menu #{id}"
+            if id == 2
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    esperar()
+    Print "fin"
+end

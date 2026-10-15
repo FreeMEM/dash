@@ -7,7 +7,7 @@ from typing import List, Any, Optional
 
 from compiler.ast_nodes import (
     Program, WindowDef, WindowProperty, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, NilLiteral,
@@ -487,7 +487,8 @@ class DashASTBuilder(Transformer):
 
     def event_loop(self, items) -> EventLoop:
         """Build an event loop node."""
-        handlers = [item for item in items if isinstance(item, (OnCloseHandler, OnKeyHandler, OnGadgetHandler))]
+        handlers = [item for item in items if isinstance(item, (OnCloseHandler, OnKeyHandler, OnGadgetHandler,
+                                                                OnMenuHandler))]
         return EventLoop(handlers=handlers)
 
     def event_handler(self, items):
@@ -496,6 +497,9 @@ class DashASTBuilder(Transformer):
 
     def on_gadget(self, items) -> OnGadgetHandler:
         return OnGadgetHandler(body=self._flatten_statements(items))
+
+    def on_menu(self, items) -> OnMenuHandler:
+        return OnMenuHandler(body=self._flatten_statements(items))
 
     def on_close(self, items) -> OnCloseHandler:
         """Build an On Close handler node."""

@@ -131,7 +131,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       Anotar en la bitácora: bugs (recursos sin liberar, `IDCMP` mal atendidos, valores que no se leen bien,
       textos que se liberan mientras el gadget los usa), qué falta para una aplicación normal, y qué cuesta
       de más (tamaño de runtime, trabajo por evento). Dividir las tareas 13-16 según lo que salga.
-- [ ] 13a. **Bugs de eventos GadTools/menús** (auditoría 1, 4, 5, 7, 9): la ventana no pide `IDCMP_GADGETUP`/
+- [x] 13a. **Bugs de eventos GadTools/menús** (auditoría 1, 4, 5, 7, 9): la ventana no pide `IDCMP_GADGETUP`/
       `MENUPICK` para `gt_*`/`menu_*` (nunca llegan eventos); las esperas devuelven el primer mensaje y dejan el resto en
       la cola; `gt_event` y `menu_event` se roban mensajes; `ItemAddress` NULL; filtro de `MOUSEMOVE` de los
       deslizadores; `On Menu` en `EventLoop`.
@@ -434,3 +434,27 @@ Formato:
   romper programas; la recomendada para programas nuevos con GadTools será la de número de gadget + `EventLoop`
   (se documenta así). Tarea 13 dividida en 13a, 13b y 13c.
 - Tests: sin cambios de código.
+
+### 2026-10-16 — Tarea 13a (eventos de GadTools y menús)
+- Hecho:
+  - `gt_*`/`menu_*` reciben eventos: el preescaneo marca `needs_gadtools` con cualquier `gt_`/`menu_` (la ventana abre
+    con `IDCMP_GADGETUP`, `MENUPICK`...) y además `gt_attach`/`menu_attach` hacen `ModifyIDCMP` (ventanas abiertas de
+    otra forma).
+  - `gt_event` y `menu_event` comparten un lector (`_dash_gt_read`) con una cola de 16 eventos: lo que una lee para la
+    otra queda guardado; `REFRESHWINDOW` con `GT_BeginRefresh`/`GT_EndRefresh`; solo cuenta lo que viene de sus gadgets
+    (por dirección); selección múltiple de menú completa, sin leer de NULL y con tope de 64.
+  - `gt_wait_event` solo duerme cuando no queda nada que leer.
+  - Gadgets por número: se reconocen por dirección (antes un filtro `GTYP_GADGETTYPE` descartaba todos los `MOUSEMOVE`
+    de los deslizadores GadTools); `gadget_id` sale de la tabla, no de `GadgetID`.
+  - `On Menu` en `EventLoop` (gramática, AST `OnMenuHandler`, analizador, codegen: `case IDCMP_MENUPICK` que recorre la
+    selección) y builtin `menu_id()`.
+- Probado en las tres máquinas (`test_gt_events`): un proceso mete clics y elecciones de menú por `input.device`;
+  llegan "Dos" y "Uno", `menu_event` devuelve el menú aunque antes hubiera un clic, y luego `gt_event` da los dos clics;
+  `On Menu` recibe la segunda opción.
+- Aprendido para tests de menús: Intuition no mueve el puntero con `NEWPOINTERPOS` mientras el menú está abierto; hay
+  que poner el puntero en el título, pulsar el botón derecho y bajar con movimientos relativos de un paso mirando
+  `screen->MouseX/Y` (un paso no es un píxel en vertical). Las coordenadas de `gt_*` cuentan desde dentro de los bordes
+  (ventanas `GIMMEZEROZERO`). Diagnóstico con capturas (`--screenshot`): la primera prueba fallaba por clicar encima de
+  los botones.
+- Sin probar: arrastrar un deslizador (los `MOUSEMOVE` deberían llegar ahora).
+- Tests: 131/131 sin emulador; 315/315 con `--emu --emu-a500 --emu-32`; ejemplos 33/33.

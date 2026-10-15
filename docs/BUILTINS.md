@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 389 funciones, 389 implementadas, 0 sin implementar.
+Total: 390 funciones, 390 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -153,6 +153,7 @@ Total: 389 funciones, 389 implementadas, 0 sin implementar.
 | `menu_separator()` | `void` | Add a menu separator bar |  |
 | `menu_attach()` | `BOOL` | Attach menus to window (call after defining all menus) |  |
 | `menu_event()` | `LONG` | Check for menu event, returns menu item ID or -1/-2 |  |
+| `menu_id()` | `LONG` | In an EventLoop's On Menu: id of the menu item chosen |  |
 
 ## Requesters ASL
 

@@ -11,7 +11,7 @@ from string import Template
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -3542,6 +3542,9 @@ static LONG _dash_gt_text(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR t
 
 static void _dash_gt_attach(void) {
     if (_dash_win && _dash_glist) {
+        /* the window may have been opened without the gadget events */
+        ModifyIDCMP(_dash_win, _dash_win->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
+                    IDCMP_MOUSEMOVE | IDCMP_MOUSEBUTTONS | IDCMP_INTUITICKS | IDCMP_REFRESHWINDOW);
         AddGList(_dash_win, _dash_glist, -1, -1, NULL);
         RefreshGList(_dash_glist, _dash_win, NULL, -1);
         GT_RefreshWindow(_dash_win, NULL);
@@ -3569,41 +3572,83 @@ static STRPTR _dash_gt_get_string(LONG gad_id) {
     return si ? si->Buffer : NULL;
 }
 
-/* Event handling - returns gadget ID or -1 */
-static LONG _dash_gt_event(void) {
-    if (!_dash_win) return -1;
-    struct IntuiMessage *imsg;
-    struct Gadget *gad;
-    _dash_last_gadget_id = -1;
+/* gt_event and menu_event read the same window port: what one of them reads for
+   the other waits here (kind 0 = gadget id, 1 = menu id, 2 = close) */
+#define _DASH_GT_PENDING 16
+static LONG _dash_gt_pend_kind[_DASH_GT_PENDING], _dash_gt_pend_id[_DASH_GT_PENDING];
+static LONG _dash_gt_npend = 0;
 
+static void _dash_gt_push(LONG kind, LONG id) {
+    if (_dash_gt_npend < _DASH_GT_PENDING) {
+        _dash_gt_pend_kind[_dash_gt_npend] = kind;
+        _dash_gt_pend_id[_dash_gt_npend++] = id;
+    }
+}
+
+/* Next event of that kind (0 gadget, 1 menu): its id, -2 for close, -1 if none */
+static LONG _dash_gt_read(LONG want) {
+    struct IntuiMessage *imsg;
+    LONG i, j;
+    for (i = 0; i < _dash_gt_npend; i++) {
+        if (_dash_gt_pend_kind[i] == want || _dash_gt_pend_kind[i] == 2) {
+            LONG id = _dash_gt_pend_kind[i] == 2 ? -2 : _dash_gt_pend_id[i];
+            for (j = i + 1; j < _dash_gt_npend; j++) {
+                _dash_gt_pend_kind[j - 1] = _dash_gt_pend_kind[j];
+                _dash_gt_pend_id[j - 1] = _dash_gt_pend_id[j];
+            }
+            _dash_gt_npend--;
+            return id;
+        }
+    }
+    if (!_dash_win) return -1;
     while ((imsg = GT_GetIMsg(_dash_win->UserPort))) {
         ULONG cls = imsg->Class;
         UWORD code = imsg->Code;
         APTR iaddr = imsg->IAddress;
+        LONG found = -1;
+        if (cls == IDCMP_REFRESHWINDOW) {
+            GT_BeginRefresh(_dash_win);
+            GT_EndRefresh(_dash_win, TRUE);
+        }
         GT_ReplyIMsg(imsg);
-
-        if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN) {
-            gad = (struct Gadget *)iaddr;
-            _dash_last_gadget_id = gad->GadgetID;
-            return _dash_last_gadget_id;
-        }
-        if (cls == IDCMP_MOUSEMOVE) {
-            gad = (struct Gadget *)iaddr;
-            if (gad) {
-                _dash_last_gadget_id = gad->GadgetID;
-                return _dash_last_gadget_id;
+        if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN || cls == IDCMP_MOUSEMOVE) {
+            /* only our gadgets: IAddress is not a gadget for every MOUSEMOVE */
+            for (i = 0; i < _dash_gadget_count; i++)
+                if (_dash_gadgets[i] == (struct Gadget *)iaddr) { found = i; break; }
+            if (found < 0) continue;
+            if (want == 0) return _dash_last_gadget_id = found;
+            _dash_gt_push(0, found);
+        } else if (cls == IDCMP_MENUPICK) {
+            /* every item of a multiple selection, in order */
+            LONG first = -1, guard = 64;   /* NextSelect chains end in MENUNULL; never loop forever */
+            while (code != MENUNULL && _dash_menu && guard--) {
+                struct MenuItem *item = ItemAddress(_dash_menu, code);
+                if (!item) break;
+                if (want == 1 && first < 0) first = (LONG)GTMENUITEM_USERDATA(item);
+                else _dash_gt_push(1, (LONG)GTMENUITEM_USERDATA(item));
+                code = item->NextSelect;
             }
-        }
-        if (cls == IDCMP_CLOSEWINDOW) {
-            return -2;  /* Special: close requested */
+            if (first >= 0) return first;
+        } else if (cls == IDCMP_CLOSEWINDOW) {
+            return -2;
         }
     }
     return -1;
 }
 
+/* Event handling - returns gadget ID, -1 (none) or -2 (close) */
+static LONG _dash_gt_event(void) {
+    _dash_last_gadget_id = -1;
+    return _dash_gt_read(0);
+}
+
+/* Waits only when nothing is left to read */
 static LONG _dash_gt_wait_event(void) {
-    Wait(1L << _dash_win->UserPort->mp_SigBit);
-    return _dash_gt_event();
+    LONG id;
+    if (!_dash_win) return -2;
+    while ((id = _dash_gt_event()) == -1)
+        Wait(1L << _dash_win->UserPort->mp_SigBit);
+    return id;
 }
 
 """
@@ -3711,9 +3756,15 @@ static LONG _dash_gadget_event(struct IntuiMessage *msg) {
     _DashGad *g;
     if (cls != IDCMP_GADGETUP && cls != IDCMP_GADGETDOWN && cls != IDCMP_MOUSEMOVE) return 0;
     gad = (struct Gadget *)msg->IAddress;
-    if (!gad || (cls == IDCMP_MOUSEMOVE && !(gad->GadgetType & GTYP_GADGETTYPE))) return 0;
-    g = _dash_gad_get(gad->GadgetID);
-    if (!g || g->gad != gad) return 0;
+    if (!gad) return 0;
+    /* by address: IAddress is not a gadget for every MOUSEMOVE (a GadTools slider's is) */
+    g = NULL;
+    {
+        LONG i;
+        for (i = 1; i <= _DASH_MAX_GADS; i++)
+            if (_dash_gads[i].gad == gad) { g = &_dash_gads[i]; break; }
+    }
+    if (!g) return 0;
     if (g->kind == _DASH_GK_CHECKBOX) g->value = (gad->Flags & GFLG_SELECTED) ? 1 : 0;
     else if (g->kind == _DASH_GK_SLIDER) g->value = (WORD)code;
     else if (g->kind == _DASH_GK_LIST && cls == IDCMP_GADGETUP) {
@@ -3723,7 +3774,7 @@ static LONG _dash_gadget_event(struct IntuiMessage *msg) {
         GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Selected, row, TAG_DONE);
     }
     if (cls == IDCMP_GADGETDOWN && g->kind != _DASH_GK_SLIDER) return 0;   /* the click ends in GADGETUP */
-    _dash_gadget_last = gad->GadgetID;
+    _dash_gadget_last = (LONG)(g - _dash_gads);
     return _dash_gadget_last;
 }
 
@@ -3910,34 +3961,20 @@ static BOOL _dash_menu_attach(void) {
         _dash_menu = NULL;
         return FALSE;
     }
+    ModifyIDCMP(_dash_win, _dash_win->IDCMPFlags | IDCMP_MENUPICK);
     SetMenuStrip(_dash_win, _dash_menu);
     return TRUE;
 }
 
+/* Menu item id, -1 (none) or -2 (close); the gadget events it reads wait for gt_event */
 static LONG _dash_menu_event(void) {
-    if (!_dash_win) return -1;
-    struct IntuiMessage *imsg;
+    return _dash_gt_read(1);
+}
 
-    while ((imsg = GT_GetIMsg(_dash_win->UserPort))) {
-        ULONG cls = imsg->Class;
-        UWORD code = imsg->Code;
-        GT_ReplyIMsg(imsg);
-
-        if (cls == IDCMP_MENUPICK) {
-            while (code != MENUNULL) {
-                struct MenuItem *item = ItemAddress(_dash_menu, code);
-                if (item) {
-                    LONG id = (LONG)GTMENUITEM_USERDATA(item);
-                    return id;
-                }
-                code = item->NextSelect;
-            }
-        }
-        if (cls == IDCMP_CLOSEWINDOW) {
-            return -2;
-        }
-    }
-    return -1;
+/* EventLoop's On Menu: the item being handled */
+static LONG _dash_menu_last = 0;
+static LONG _dash_menu_id(void) {
+    return _dash_menu_last;
 }
 
 """
@@ -6679,6 +6716,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_gadtools: bool = False
         self.needs_reaction: bool = False  # Track if ReAction is used
         self.needs_mui: bool = False  # MUI builtins (mui_*)
+        self.uses_menu_handler: bool = False  # EventLoop On Menu
         self.uses_mui_canvas: bool = False  # MUI drawing area / scrollbar
         self.uses_mui_timer: bool = False  # mui_timer (timer.device)
         self.needs_area: bool = False  # Track if Area fill functions are used
@@ -6726,6 +6764,11 @@ class CodeGenerator(ASTVisitor):
                     ("button", "checkbox", "slider", "textfield", "listview", "gadget")):
                 self.uses_gadgets = True
                 self.needs_gadtools = True
+            # gt_* and menu_* gadgets and menus: the window asks for their events when it opens
+            if isinstance(n, OnMenuHandler) or (isinstance(n, FunctionCall) and n.name.split("_")[0] in ("gt", "menu")):
+                self.needs_gadtools = True
+            if isinstance(n, OnMenuHandler):
+                self.uses_menu_handler = True
             # Win.close must know before the window_create() calls are generated
             if isinstance(n, FunctionCall) and n.name.startswith("window_") and n.name != "window_check_close":
                 self.uses_winmgr = True
@@ -7491,6 +7534,23 @@ static {ret_type} {method_name}({params_str}) {{
             handler_code="".join(handler_code)
         )
         self.emit(code)
+
+    def visit_OnMenuHandler(self, node: OnMenuHandler):
+        """On Menu: an item of the menus made with menu_title/menu_item... was chosen; the
+        body runs once per item of a multiple selection, menu_id() tells which."""
+        self.emit("                case IDCMP_MENUPICK: {\n"
+                  "                    UWORD _dash_mc = msg_code;\n"
+                  "                    LONG _dash_mguard = 64;\n"
+                  "                    while (running && _dash_mc != MENUNULL && _dash_menu && _dash_mguard--) {\n"
+                  "                        struct MenuItem *_dash_mi = ItemAddress(_dash_menu, _dash_mc);\n"
+                  "                        if (!_dash_mi) break;\n"
+                  "                        _dash_menu_last = (LONG)GTMENUITEM_USERDATA(_dash_mi);\n"
+                  "                        _dash_mc = _dash_mi->NextSelect;\n")
+        self.context.enter_scope("handler")
+        body = "".join(self._generate_statement(stmt) for stmt in node.body)
+        body += self._frees(self.context.current_owned())
+        self.context.exit_scope()
+        self.emit(body + "                    }\n                    break;\n                }\n")
 
     def visit_OnGadgetHandler(self, node: OnGadgetHandler):
         """On Gadget: messages from button_create/slider_create... gadgets (gadget_id())."""
