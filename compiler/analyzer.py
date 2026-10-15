@@ -38,6 +38,7 @@ class DashType(Enum):
     """Dash language types (for future type checking)."""
     INT = auto()
     FLOAT = auto()
+    FIXED = auto()   # 16.16 fixed point in a LONG
     STRING = auto()
     BOOL = auto()
     VOID = auto()
@@ -513,6 +514,10 @@ class SemanticAnalyzer(ASTVisitor):
             elif symbol.dash_type == DashType.INT and new_type == DashType.FLOAT:
                 self.error(f"Cannot assign a float to '{node.name}', which holds an int "
                            f"(declare it with a float: {node.name} = 0.0, or use Int())", node)
+            elif symbol.dash_type == DashType.INT and new_type == DashType.FIXED:
+                self.error(f"Cannot assign a Fixed to '{node.name}', which holds an int (use Int())", node)
+            elif DashType.FIXED in (symbol.dash_type, new_type) and DashType.FLOAT in (symbol.dash_type, new_type):
+                self.error(f"Cannot mix Fixed and Float in '{node.name}' (convert with Fixed() or Float())", node)
             symbol.is_initialized = True
 
     def visit_VarRef(self, node: VarRef):
@@ -671,8 +676,8 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_FunctionCall(self, node: FunctionCall):
         """Visit a function call."""
-        # Int(x) / Float(x): conversions
-        if node.name in ("Int", "Float"):
+        # Int(x) / Float(x) / Fixed(x): conversions; fx_*: Fixed functions
+        if node.name in ("Int", "Float", "Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
             if len(node.arguments) != 1:
                 self.error(f"{node.name}() expects 1 argument, got {len(node.arguments)}", node)
             for arg in node.arguments:
@@ -765,6 +770,9 @@ class SemanticAnalyzer(ASTVisitor):
             self._check_not_float_element(element)
 
     def _check_not_float_element(self, value: ASTNode):
+        if self._infer_type(value) == DashType.FIXED:
+            self.error("Arrays hold integers or strings, not Fixed values "
+                       "(use a struct with Fixed fields)", value)
         if self._infer_type(value) == DashType.FLOAT:
             self.error("Arrays hold integers or strings, not Float values "
                        "(use a struct with Float fields, or scale to integers)", value)
@@ -928,9 +936,11 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit a binary operation."""
         self.visit(node.left)
         self.visit(node.right)
-        if node.operator == "%" and DashType.FLOAT in (self._infer_type(node.left),
-                                                       self._infer_type(node.right)):
+        left, right = self._infer_type(node.left), self._infer_type(node.right)
+        if node.operator == "%" and DashType.FLOAT in (left, right):
             self.error("% needs integers; use Int() to convert a Float", node)
+        if DashType.FIXED in (left, right) and DashType.FLOAT in (left, right):
+            self.error("Cannot mix Fixed and Float (convert with Fixed() or Float())", node)
 
     def visit_UnaryOp(self, node: UnaryOp):
         """Visit a unary operation."""
@@ -977,6 +987,8 @@ class SemanticAnalyzer(ASTVisitor):
             if node.operator in ("+", "-", "*", "/", "%"):
                 if DashType.FLOAT in (left, right):
                     return DashType.FLOAT
+                if DashType.FIXED in (left, right):
+                    return DashType.FIXED
                 if left == right == DashType.INT:
                     return DashType.INT
             return DashType.UNKNOWN
@@ -984,9 +996,11 @@ class SemanticAnalyzer(ASTVisitor):
             return self._infer_type(node.operand)
         elif isinstance(node, FunctionCall) and node.name in ("Int", "Float"):
             return DashType.FLOAT if node.name == "Float" else DashType.INT
+        elif isinstance(node, FunctionCall) and node.name in ("Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
+            return DashType.FIXED
         elif isinstance(node, FunctionCall) and self.program and self.program.get_function(node.name):
             func = self.program.get_function(node.name)
-            if func.return_type in ("Int", "Float", "String", "Bool"):
+            if func.return_type in ("Int", "Float", "Fixed", "String", "Bool"):
                 return self._type_annotation_to_dash_type(func.return_type)
         elif isinstance(node, BoolLiteral):
             return DashType.BOOL
@@ -1012,9 +1026,18 @@ class SemanticAnalyzer(ASTVisitor):
                 if symbol and (symbol.elem_struct or symbol.dash_type == DashType.STRING):
                     return DashType.UNKNOWN
             return DashType.INT
-        elif isinstance(node, PropertyAccess):
-            if node.property == "length":
-                return DashType.INT
+        elif isinstance(node, PropertyAccess) and node.property == "length":
+            return DashType.INT
+        elif isinstance(node, (PropertyAccess, MemberAccess)):
+            # a struct field: its declared type (Int, Float, Fixed, String, Bool)
+            if isinstance(node, MemberAccess):
+                owner, member = self._struct_name_of(VarRef(name=node.object_name)), node.member
+            else:
+                owner, member = self._struct_name_of(node.object), node.property
+            struct = self.program.get_struct(owner) if (owner and self.program) else None
+            field = struct.get_field(member) if struct else None
+            if field and field.field_type in ("Int", "Float", "Fixed", "String", "Bool"):
+                return self._type_annotation_to_dash_type(field.field_type)
         elif isinstance(node, (LambdaFunc, FunctionRef)):
             return DashType.FUNC
         return DashType.UNKNOWN
@@ -1036,8 +1059,8 @@ class SemanticAnalyzer(ASTVisitor):
 
         return search(func.body)
 
-    _TYPE_NAMES = {"Int", "Float", "String", "Bool", "Pointer", "Void", "Func", "Array"}
-    _NO_NIL = (DashType.INT, DashType.FLOAT, DashType.BOOL)
+    _TYPE_NAMES = {"Int", "Float", "Fixed", "String", "Bool", "Pointer", "Void", "Func", "Array"}
+    _NO_NIL = (DashType.INT, DashType.FLOAT, DashType.FIXED, DashType.BOOL)
 
     def _check_type_names(self, program: Program):
         """Every type annotation names a type: an unknown name used to compile as
@@ -1073,6 +1096,7 @@ class SemanticAnalyzer(ASTVisitor):
         type_map = {
             "Int": DashType.INT,
             "Float": DashType.FLOAT,
+            "Fixed": DashType.FIXED,
             "String": DashType.STRING,
             "Bool": DashType.BOOL,
             "Pointer": DashType.UNKNOWN,

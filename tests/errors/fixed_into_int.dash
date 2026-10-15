@@ -1,0 +1,5 @@
+# expect: Cannot assign a Fixed to
+Main
+    n = 3
+    n = Fixed(1.5)
+end

@@ -1,0 +1,5 @@
+# expect: Cannot mix Fixed and Float
+Main
+    a = Fixed(1)
+    b = a + 1.5
+end

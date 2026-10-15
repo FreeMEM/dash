@@ -175,7 +175,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       31b (hecha) runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
       (`mulu.w` por partes, sin libgcc) y con `muls.l`/`divs.l` en `--fpu`/68020 si conviene; impresión con
       decimales; `sqrt`/`sin`/`cos` por tabla si caben pocos bytes.
-      31c lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
+      31c (hecha) lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
       31d pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
       benchmarks `fixed_mul`/`fixed_add` frente a `float_mul`/`float_mul_add`; documentación (QUICK_REFERENCE,
       MANUAL_REFERENCIA, README) y un ejemplo (p. ej. movimiento con velocidad y gravedad).
@@ -1075,3 +1075,24 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Medido (A500, ciclos por operación, bucle en C): multiplicación 646 → 387 (Float: 937), división 8.205 → 2.212,
   raíz 8.878 → 4.164, seno 1.632 → 1.362.
 - No hecho: el runner no prueba solo el camino 68020 (`--fpu`); queda la comprobación a mano de arriba.
+
+### 2026-10-15 — Tarea 31c (coma fija 3/4: en el lenguaje)
+- Base: 115/115 sin emulador.
+- Analyzer: `DashType.FIXED`; `Fixed` en los nombres de tipo; `Fixed()`, `fx_sqrt`, `fx_sin`, `fx_cos` conocidos;
+  `_infer_type` da FIXED para `Fixed(...)`, operaciones con un lado Fixed, funciones `-> Fixed` y (nuevo, sirve
+  para todos los tipos) campos de struct por su tipo declarado. Errores: Fixed con Float ("Cannot mix Fixed and
+  Float"), un Fixed en una variable Int, Fixed en literales de lista; `nil` no vale para Fixed.
+- Codegen: `DashFixed` como tipo C; `_is_fixed_expr` (variables, operaciones, `Fixed()`/`fx_*`, campos,
+  funciones y métodos `-> Fixed`); `_fixed_value` convierte al vuelo: un literal se calcula al compilar
+  (`Fixed(1.5)` → `98304`, también negativos), un Int con `<< 16`, un Float con `* 65536.0f`. `_fixed_binary`:
+  Fixed `*` Fixed → `_dash_fx_mul`; Fixed `*`/`/` Int → `_DASH_MUL`/`_DASH_DIV` (enteras, sin desplazar); `/` con
+  un Fixed abajo → `_dash_fx_div`; `+ - %` y comparaciones con los dos lados como Fixed. `Int(f)` → `_dash_fx_int`,
+  `Float(f)` → `f / 65536.0f`. Print, concatenación e interpolación con `DashString_from_fixed`.
+  Un Int dado a un Fixed se convierte: reasignar una variable Fixed, `var v: Fixed = 3`, campos (asignación y
+  constructor, también valores por defecto), parámetros de funciones y métodos, `return` en funciones y métodos
+  `-> Fixed`.
+- Test: `test_fixed` (operaciones, conversiones, texto, raíz y seno, una pelota que rebota en un struct con
+  campos Fixed y un método, funciones con parámetros y retornos Fixed, truncado de `Int()` con negativos): igual
+  en A1200 y A500. Errores: `errors/fixed_float_mix`, `errors/fixed_into_int`, `errors/fixed_array`.
+- No hecho: listas de Fixed (error claro por ahora: guardar los valores en un struct).
+- Tests: 120/120 sin emulador; 279/279 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.

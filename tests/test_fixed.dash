@@ -1,0 +1,91 @@
+# Test: Fixed (16.16). Literals computed at compile time, + - * / with Fixed and
+# Int, comparisons, Int()/Float()/Fixed() conversions, text, fx_sqrt/fx_sin,
+# struct fields, method and function parameters and returns (an Int given to a
+# Fixed is converted), a bouncing ball.
+#
+# expect-c: DashFixed v = ((DashFixed)98304);
+# expect-c: _dash_fx_mul(v, x)
+# expect-c: _DASH_MUL(v, 2)
+# expect-out: 14.5
+# expect-out: 1.0
+# expect-out: 7.25
+# expect-out: 4.8333
+# expect-out: 29.0
+# expect-out: 15
+# expect-out: 1.4142
+# expect-out: 0.5
+# expect-out: x = 14.5
+# expect-out: mayor
+# expect-out: 52.5
+# expect-out: -2.5
+# expect-out: 8.0
+# expect-out: 2.5
+# expect-out: 4.0
+# expect-out: 3.0
+# expect-out: -7.0
+# expect-out: -0.25 3 -3
+
+struct Bola
+    x: Fixed
+    y: Fixed
+    vy: Fixed
+
+    func caer(g: Fixed)
+        self.vy = self.vy + g
+        self.y = self.y + self.vy
+        if self.y > 100
+            self.y = 100
+            self.vy = -self.vy * 3 / 4
+        end
+    end
+
+    func altura() -> Fixed
+        return self.y
+    end
+end
+
+func mitad(v: Fixed) -> Fixed
+    return v / 2
+end
+
+func uno() -> Fixed
+    return 1
+end
+
+Main
+    v = Fixed(1.5)
+    g = Fixed(0.25)
+    x = Fixed(10)
+    for i in (1..4)
+        x = x + v
+        v = v - g
+    end
+    Print x
+    Print v * 2
+    Print v * x
+    Print x / 3
+    Print x / v
+    Print Int(x) + 1
+    Print fx_sqrt(Fixed(2))
+    Print fx_sin(Fixed(30))
+    Print "x = " + x
+    if x > 13
+        Print "mayor"
+    end
+    b = Bola(10, 0, 0)
+    for t in (1..30)
+        b.caer(Fixed(0.5))
+    end
+    Print b.altura()
+    Print b.vy
+    var w: Fixed = 3
+    w = 7
+    Print w + uno()
+    Print mitad(5)
+    b.x = 2
+    Print b.x * b.x
+    Print Float(b.x) * 1.5
+    Print -w
+    n = 3
+    Print "" + Fixed(-0.25) + " " + Int(Fixed(n) + Fixed(0.9)) + " " + Int(Fixed(-3.9))
+end

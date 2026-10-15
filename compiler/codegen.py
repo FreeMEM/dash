@@ -6436,6 +6436,8 @@ static void {struct.name}_release({c_name} *obj) {{
         # Save current state
         old_struct_context = getattr(self, '_current_struct', None)
         self._current_struct = struct.name
+        old_method_ret = getattr(self, "_method_ret", None)
+        self._method_ret = method.return_type
         saved_var_types = self.var_types
         self.var_types = dict(saved_var_types)
         self._seed_param_types(method.params)
@@ -6458,6 +6460,7 @@ static void {struct.name}_release({c_name} *obj) {{
 
         # Restore state
         self._current_struct = old_struct_context
+        self._method_ret = old_method_ret
         self.var_types = saved_var_types
 
         # Method name: StructName_methodname
@@ -6661,6 +6664,10 @@ static {ret_type} {method_name}({params_str}) {{
         elif self._is_string_expr(node.message) or self._is_string_constant(node.message):
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%s\\n", {value});\n')
+        elif self._is_fixed_expr(node.message):
+            self.uses_fixed = True
+            value = self._generate_expression(node.message)
+            self.emit(f'{indent}Printf("%s\\n", DashString_from_fixed({value}));\n')
         elif self._is_float_expr(node.message):
             self.uses_float = True
             value = self._generate_expression(node.message)
@@ -6725,7 +6732,11 @@ static {ret_type} {method_name}({params_str}) {{
             else:
                 if c_type == "float":
                     self.var_types[node.name] = "float"
-                value = self._generate_expression(init) if init is not None else "0"
+                if c_type == "DashFixed":
+                    self.var_types[node.name] = "fixed"
+                    value = self._fixed_value(init) if init is not None else "0"
+                else:
+                    value = self._generate_expression(init) if init is not None else "0"
                 self.context.declare_var(node.name)
                 self.emit(f"{indent}{c_type} {node.name} = {value};\n")
             return
@@ -6744,6 +6755,12 @@ static {ret_type} {method_name}({params_str}) {{
     def visit_VarAssign(self, node: VarAssign):
         """Generate code for variable assignment (first use declares)."""
         indent = self.context.indent
+
+        if (self.var_types.get(node.name) == "fixed" and self.context.is_declared(node.name)
+                and not self._is_fixed_expr(node.value)):
+            # an Int (or number) given to a Fixed variable becomes a Fixed
+            self.emit(f"{indent}{node.name} = {self._fixed_value(node.value)};\n")
+            return
 
         if isinstance(node.value, NilLiteral):
             # x = nil (the analyzer only lets it through for a declared struct, list or String)
@@ -6774,6 +6791,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "string"
         elif var_type == "char":
             self.var_types[node.name] = "char"
+        elif var_type == "DashFixed":
+            self.var_types[node.name] = "fixed"
         elif var_type == "float":
             self.var_types[node.name] = "float"
             self.uses_float = True
@@ -6863,6 +6882,9 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
+        if self._is_fixed_expr(node):
+            self.uses_fixed = True
+            return "DashFixed"
         if self._is_float_expr(node):
             return "float"
         if isinstance(node, StringLiteral):
@@ -7204,7 +7226,9 @@ static {ret_type} {method_name}({params_str}) {{
         if not node.value:
             self.emit(self._frees(owned) + f"{indent}_dash_tmp_release(_dash_fm);\n{indent}return;\n")
             return
-        value = self._generate_expression(node.value)
+        ret = getattr(self, "_method_ret", None) or (self.current_function.return_type if self.current_function else None)
+        value = (self._fixed_value(node.value) if ret == "Fixed" and not self._is_fixed_expr(node.value)
+                 else self._generate_expression(node.value))
         if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
             # lambdas return LONG: the string leaves Dash's control
             head = f"{indent}{{ LONG _dash_r = (LONG){self._escape(node.value, value)};\n"
@@ -7274,6 +7298,8 @@ static {ret_type} {method_name}({params_str}) {{
             elif func:
                 code = self._lend(arg, code)
             param = func.params[i] if func and i < len(func.params) else None
+            if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
+                code = self._fixed_value(arg)
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
                 code = f"(LONG){code}"
@@ -7408,6 +7434,10 @@ static {ret_type} {method_name}({params_str}) {{
             return "NULL"
         elif isinstance(node, VarRef):
             return node.name
+        elif isinstance(node, BinaryOp) and (self._is_fixed_expr(node) or (
+                node.operator in ("==", "!=", "<", ">", "<=", ">=")
+                and (self._is_fixed_expr(node.left) or self._is_fixed_expr(node.right)))):
+            return self._fixed_binary(node)
         elif isinstance(node, BinaryOp) and node.operator in ("==", "!=") and (
                 isinstance(node.left, NilLiteral) or isinstance(node.right, NilLiteral)):
             # x == nil: the pointer, also for Strings (not their contents)
@@ -7456,10 +7486,22 @@ static {ret_type} {method_name}({params_str}) {{
             return f"({node.operator}{operand})"
         elif isinstance(node, FunctionCall):
             # Int(x) truncates toward zero; Float(x) converts
+            if node.name in ("Int", "Float") and len(node.arguments) == 1 and self._is_fixed_expr(node.arguments[0]):
+                arg = self._generate_expression(node.arguments[0])
+                self.uses_fixed = True
+                if node.name == "Int":
+                    return f"_dash_fx_int({arg})"
+                self.uses_float = True
+                return f"((float)({arg}) / 65536.0f)"
             if node.name in ("Int", "Float") and len(node.arguments) == 1:
                 arg = self._generate_expression(node.arguments[0])
                 self.uses_float = True
                 return f"((LONG)({arg}))" if node.name == "Int" else f"((float)({arg}))"
+            if node.name == "Fixed" and len(node.arguments) == 1:
+                return self._fixed_value(node.arguments[0])
+            if node.name in ("fx_sqrt", "fx_sin", "fx_cos") and len(node.arguments) == 1:
+                self.uses_fixed = True
+                return f"_dash_{node.name}({self._fixed_value(node.arguments[0])})"
             # Check if it's a builtin function
             builtin = get_builtin(node.name)
             if builtin:
@@ -7711,8 +7753,12 @@ static {ret_type} {method_name}({params_str}) {{
 
         parts = []
         for i, field in enumerate(struct.fields):
-            if i < len(arguments):
+            if i < len(arguments) and field.field_type == "Fixed":
+                val = self._fixed_value(arguments[i])
+            elif i < len(arguments):
                 val = self._generate_expression(arguments[i])
+            elif field.default_value and field.field_type == "Fixed":
+                val = self._fixed_value(field.default_value)
             elif field.default_value:
                 val = self._generate_expression(field.default_value)
             else:
@@ -7735,6 +7781,8 @@ static {ret_type} {method_name}({params_str}) {{
             owner = f"_DASH_NNW({owner})"   # a write through nil must not hit address 0
         struct = self._struct_of(owner_node)
         field = struct.get_field(node.member) if struct else None
+        if field and field.field_type == "Fixed" and not self._is_fixed_expr(node.value):
+            value = self._fixed_value(node.value)
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
@@ -7769,7 +7817,7 @@ static {ret_type} {method_name}({params_str}) {{
         if struct_name:
             # Known struct type - generate StructName_methodname(obj, args...)
             args = [self._lend(node.object, obj_expr)]
-            args.extend(self._lend(a, self._generate_expression(a)) for a in node.arguments)
+            args.extend(self._method_arg(owner.get_method(node.method), i, a) for i, a in enumerate(node.arguments))
             args_str = ", ".join(args)
             return f"{struct_name}_{node.method}({args_str})"
         else:
@@ -7780,7 +7828,9 @@ static {ret_type} {method_name}({params_str}) {{
                 current_struct = getattr(self, '_current_struct', None)
                 if current_struct:
                     args = ["self"]
-                    args.extend(self._lend(a, self._generate_expression(a)) for a in node.arguments)
+                    st = self.analysis.program.get_struct(current_struct)
+                    meth = st.get_method(node.method) if st else None
+                    args.extend(self._method_arg(meth, i, a) for i, a in enumerate(node.arguments))
                     args_str = ", ".join(args)
                     return f"{current_struct}_{node.method}({args_str})"
 
@@ -7789,6 +7839,13 @@ static {ret_type} {method_name}({params_str}) {{
             args.extend(self._generate_expression(a) for a in node.arguments)
             args_str = ", ".join(args)
             return f"/* method call */ {node.method}({args_str})"
+
+    def _method_arg(self, method, i: int, arg: ASTNode) -> str:
+        """Argument i of a method call: lent if shared, converted for a Fixed parameter."""
+        param = method.params[i] if method and i < len(method.params) else None
+        if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
+            return self._fixed_value(arg)
+        return self._lend(arg, self._generate_expression(arg))
 
     def _nn(self, code: str) -> str:
         """The struct pointer of a field access; with --memcheck it is checked for nil."""
@@ -7874,6 +7931,9 @@ static {ret_type} {method_name}({params_str}) {{
             return code
         if self._is_char_expr(node):
             return f"DashString_from_char({code})"
+        if self._is_fixed_expr(node):
+            self.uses_fixed = True
+            return f"DashString_from_fixed({code})"
         if self._is_float_expr(node):
             self.uses_float = True
             return f"DashString_from_float({code})"
@@ -7924,6 +7984,9 @@ static {ret_type} {method_name}({params_str}) {{
             elif p.param_type == "Float":
                 self.var_types[p.name] = "float"
                 self.uses_float = True
+            elif p.param_type == "Fixed":
+                self.var_types[p.name] = "fixed"
+                self.uses_fixed = True
             elif p.param_type == "Func":
                 self.var_types[p.name] = "func"
             elif self.analysis.program.get_struct(p.param_type):
@@ -8000,6 +8063,71 @@ static {ret_type} {method_name}({params_str}) {{
     def _is_string_array(self, node: ASTNode) -> bool:
         """True for a variable holding an array of strings."""
         return isinstance(node, VarRef) and self.var_types.get(node.name) == "array:string"
+
+    def _is_fixed_expr(self, node: ASTNode) -> bool:
+        """True if the expression yields a Fixed (16.16 in a LONG)."""
+        if isinstance(node, VarRef):
+            return self.var_types.get(node.name) == "fixed"
+        if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/", "%"):
+            if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
+                return False
+            return self._is_fixed_expr(node.left) or self._is_fixed_expr(node.right)
+        if isinstance(node, UnaryOp) and node.operator == "-":
+            return self._is_fixed_expr(node.operand)
+        if isinstance(node, FunctionCall):
+            if node.name in ("Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
+                return True
+            if node.name in ("Int", "Float") or get_builtin(node.name):
+                return False
+            func = self.analysis.program.get_function(node.name)
+            if func:
+                return func.return_type == "Fixed"
+            return False
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "Fixed")
+        if isinstance(node, MethodCall):
+            method = self._method_of(node)
+            return bool(method and method.return_type == "Fixed")
+        return False
+
+    def _fixed_value(self, node: ASTNode) -> str:
+        """C for a value as a Fixed: a Fixed as it is, a number literal computed now
+        (Fixed(1.5) is 98304), an Int shifted, a Float scaled."""
+        self.uses_fixed = True
+        if self._is_fixed_expr(node):
+            return self._generate_expression(node)
+        neg = isinstance(node, UnaryOp) and node.operator == "-" and isinstance(node.operand, (NumberLiteral, FloatLiteral))
+        lit = node.operand if neg else node
+        if isinstance(lit, (NumberLiteral, FloatLiteral)):
+            v = int(round(float(lit.value) * 65536)) * (-1 if neg else 1)
+            v = max(-0x80000000, min(0x7FFFFFFF, v))
+            return f"((DashFixed){c_int_literal(v)})"
+        code = self._generate_expression(node)
+        if self._is_float_expr(node):
+            self.uses_float = True
+            return f"((DashFixed)((float)({code}) * 65536.0f))"
+        return f"((DashFixed)(LONG)({code}) << 16)"
+
+    def _fixed_binary(self, node: BinaryOp) -> str:
+        """An operation with a Fixed side. + - and comparisons: both as Fixed;
+        * and / by an Int: the integer operation (no shift); Fixed * Fixed and
+        Fixed / Fixed: the runtime (64-bit product / quotient)."""
+        self.uses_fixed = True
+        op = node.operator
+        lf, rf = self._is_fixed_expr(node.left), self._is_fixed_expr(node.right)
+        if op == "*" and lf and rf:
+            return f"_dash_fx_mul({self._generate_expression(node.left)}, {self._generate_expression(node.right)})"
+        if op == "*":                                   # Fixed * Int
+            f, n = (node.left, node.right) if lf else (node.right, node.left)
+            return f"_DASH_MUL({self._generate_expression(f)}, {self._generate_expression(n)})"
+        if op == "/" and lf and not rf:                 # Fixed / Int
+            return f"_DASH_DIV({self._generate_expression(node.left)}, {self._generate_expression(node.right)})"
+        if op == "/":
+            return f"_dash_fx_div({self._fixed_value(node.left)}, {self._fixed_value(node.right)})"
+        if op == "%":
+            return f"_DASH_MOD({self._fixed_value(node.left)}, {self._fixed_value(node.right)})"
+        return f"({self._fixed_value(node.left)} {self._translate_operator(op)} {self._fixed_value(node.right)})"
 
     def _is_float_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Float (C float)."""
@@ -8191,6 +8319,7 @@ static {return_type} {lambda_name}({param_str}) {{
     _BASE_C_TYPES = {
         "Int": "LONG",
         "Float": "float",
+        "Fixed": "DashFixed",
         "String": "STRPTR",
         "Bool": "BOOL",
         "Pointer": "APTR",
@@ -8214,6 +8343,8 @@ static {return_type} {lambda_name}({param_str}) {{
         """Convert a Dash type annotation to its C type (struct names become pointers)."""
         if dash_type == "Float":
             self.uses_float = True   # any Float links Dash's soft float
+        if dash_type == "Fixed":
+            self.uses_fixed = True
         if dash_type in self._BASE_C_TYPES:
             return self._BASE_C_TYPES[dash_type]
         if dash_type and self.analysis.program.get_struct(dash_type):
