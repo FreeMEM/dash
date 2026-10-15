@@ -177,6 +177,9 @@ python3 tests/run_tests.py --emu --emu-a500 --emu-32
 # Medir velocidad, memoria y tamaño en un A500 y un A1200 emulados, y guardar la medida
 tools/bench.py --save "descripción del cambio"
 tools/bench_report.py        # datos y página del panel de comparativas (build/bench_report/)
+
+# Programas aleatorios contra el conteo de referencias: salida comparada con un modelo y --memcheck
+tools/fuzz_refcount.py -n 100
 ```
 
 Variables del banco de pruebas: `DASH_KICKSTART` (ROM del A1200), `DASH_KICKSTART_A500` (ROM del A500),

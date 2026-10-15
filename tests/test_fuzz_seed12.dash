@@ -1,0 +1,121 @@
+# Test: random program 12 of tools/fuzz_refcount.py. Built with --memcheck it gave 139
+# instead of 144 on the A1200: bebbo's optimizer pass "e" (-fbbb) read a stale value.
+# compiler/cflags.py leaves that pass out.
+#
+# memcheck
+# expect-out: 144
+# expect-out: 163
+# expect-out: 167
+# expect-out: 171
+# expect-out: 175
+# expect-out: 179
+# expect-out: 183
+# expect-out: 187
+# expect-out: 191
+# expect-out: 195
+# expect-out: 199
+# expect-out: 203
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Caja
+    p: Punto
+    q: Punto
+    nombre: String
+    datos: Array
+
+    func mover(dx)
+        self.p = Punto(self.p.x + dx, self.p.y)
+        return self.p.x
+    end
+end
+
+var G: Caja
+
+func cambia(c: Caja, p: Punto) -> Int
+    c.p = Punto(p.x + 1, p.y)
+    return p.x
+end
+
+func cambia_global(p: Punto) -> Int
+    G.p = Punto(p.y, p.x)
+    return p.x + p.y
+end
+
+func nuevo(n) -> Punto
+    t = Punto(n, n + 2)
+    return t
+end
+
+func elige(a: Punto, b: Punto) -> Punto
+    if a.x > b.x
+        return a
+    end
+    return b
+end
+
+func caja_de(p: Punto) -> Caja
+    return Caja(p, Punto(p.y, p.x), "c", [p.x, p.y])
+end
+
+func ronda(k) -> Int
+    acc = 0
+    p1 = Punto(1, 2)
+    p2 = Punto(3, 4)
+    p3 = nuevo(k)
+    c1 = Caja(p1, p2, "a", [1, 2])
+    c2 = caja_de(p3)
+    L = [Punto(5, 6), Punto(7, 8), Punto(9, 10)]
+    L2 = L
+    T = L[0:2]
+    N = ["x", "y", "z"]
+    s = "s"
+    x = 0
+    w = 0
+    p2 = G.p
+    acc = acc + cambia(c1, L[1])
+    p2 = G.q
+    c1.nombre = N[2]
+    L[2] = Punto(L[1].x, L[1].x)
+    acc = acc + cambia_global(p2)
+    c2.q = Punto(p3.x + 2, k)
+    c2.q = Punto(4, 1)
+    s = N[1]
+    N[0] = "n" + (p2.x + 4)
+    p3 = Punto(N[2].length, 3)
+    p2 = elige(c1.p, L[2])
+    N[2] = s + "x"
+    p1 = p1
+    G = c2
+    p2 = c2.p
+    acc = acc + c1.mover(p3.x + 9)
+    p1 = nuevo(3)
+    c2.nombre = N[1]
+    c2.q = c2.p
+    c2 = Caja(p1, p2, "t" + (G.q.x - 6), [L[2].x, 1])
+    p3 = L[1]
+    for x in L
+        acc = acc + x.x
+        G.q = L[1]
+        c2.nombre = N[1]
+    end
+    N[0] = s + "x"
+    acc = acc + cambia(c2, L[1])
+    p3 = c2.q
+    p3 = p1
+    p3 = elige(c1.p, L[0])
+    L = [Punto(1, 1), L[2], L[0]]
+    acc = acc + cambia(G, G.p)
+    return acc + p1.x + p2.y + p3.x + c1.p.x + c1.q.y + c2.p.y + c2.q.x + G.p.x + G.q.y + L[0].x + L[1].y + L[2].x + N[0].length + N[2].length + s.length + c1.nombre.length + c2.datos[1] + L2[1].x
+end
+
+Main
+    G = Caja(Punto(0, 0), Punto(0, 0), "g", [0])
+    for k in (1..12)
+        Print ronda(k)
+    end
+end

@@ -149,12 +149,10 @@ def main():
         "-I" + build_dir,  # For local headers
         "-L" + amiga_lib_path,
     ]
-    # -O2 by default: tested in FS-UAE (Kickstart 3.1) with the 30 examples and the
-    # emu tests, same output as -O0 and about half the size
-    compile_command.append("-O0" if args.no_optimize else "-Os" if args.small else "-O2")
-    # no link/unlk in every function, and one more free address register
-    if not args.no_optimize:
-        compile_command.append("-fomit-frame-pointer")
+    # -O2 -fomit-frame-pointer and bebbo's optimizer without one pass: compiler/cflags.py
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from compiler.cflags import opt_flags
+    compile_command.extend(opt_flags(args.no_optimize, args.small))
     if args.fpu:
         compile_command.extend(["-m68020", "-m68881"])
     if args.stack is not None:

@@ -38,7 +38,8 @@ func ronda(n)
     trozo = enemigos[1:3]
     e = enemigos[1]
     enemigos[1] = Enemigo(-1, -1)
-    copia = nombres[1]
+    copia = "-"
+    copia = nombres[1]          # an element of a list of Strings is a String
     nombres[1] = "otro"
     total = 0
     for f in filas

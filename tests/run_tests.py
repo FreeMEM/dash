@@ -186,10 +186,11 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
             compile_skipped=True
         )
 
+    from compiler.cflags import opt_flags
     compile_cmd = [
         gcc_path,
         "-noixemul",
-        "-O2",  # same as ./dash by default
+        *opt_flags(),  # same as ./dash by default (compiler/cflags.py)
         "-I/opt/amiga/m68k-amigaos/ndk-include",
         "-L/opt/amiga/m68k-amigaos/lib",
         str(c_file),

@@ -980,8 +980,15 @@ class SemanticAnalyzer(ASTVisitor):
                     return DashType.ARRAY_STRING
             return DashType.ARRAY
         elif isinstance(node, ArrayAccess):
-            # Access returns the element type
-            return DashType.INT  # For now assume int arrays
+            # Access returns the element type: a list of Strings gives Strings, a
+            # list of structs a struct, a String a character, anything else an Int
+            if isinstance(node.array, VarRef):
+                symbol = self.lookup_symbol(node.array.name)
+                if symbol and symbol.dash_type == DashType.ARRAY_STRING:
+                    return DashType.STRING
+                if symbol and (symbol.elem_struct or symbol.dash_type == DashType.STRING):
+                    return DashType.UNKNOWN
+            return DashType.INT
         elif isinstance(node, PropertyAccess):
             if node.property == "length":
                 return DashType.INT

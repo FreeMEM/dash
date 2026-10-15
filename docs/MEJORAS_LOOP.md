@@ -154,7 +154,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       no se libera hasta salir (comprobar si un juego que crea enemigos en una lista en cada vuelta crece sin
       parar; si es así, listas de objetos que sueltan sus elementos al sobrescribirlos y al destruirse); los
       ciclos (documentar o detectar); desborde del contador.
-      30d prueba aleatoria: generador de programas Dash pequeños con asignaciones, llamadas y campos al azar,
+      30d (hecha) prueba aleatoria: generador de programas Dash pequeños con asignaciones, llamadas y campos al azar,
       ejecutados con `--memcheck` en el PC y en el emulador (A500); cada fallo encontrado pasa a ser un test.
       30e optimizar con medidas (`tools/bench.py`, A500 y A1200): `_dash_otmp_take` recorre la lista de
       temporales (lineal), quitar pares `retain`/`release` que se anulan (parámetros prestados, `obj_set` de un
@@ -922,3 +922,37 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   elementos (`DashArray_drop_elements`, `noinline`) el caso de enteros vuelve a ser una función corta: +2 %
   (465.288 → 475.666 ns en A500). Lo demás, dentro del ruido. Tamaño: 254.564 → 255.568 bytes.
 - Tests: 109/109 sin emulador; 251/251 con `--emu --emu-a500 --emu-32`, también con `--memcheck`; ejemplos 30/30.
+
+### 2026-10-15 — Tarea 30d (conteo de referencias 4/6: programas aleatorios)
+- Base: 109/109 sin emulador, ejemplos 30/30.
+- Hecho: `tools/fuzz_refcount.py`. Cada semilla da un programa con `Punto`, `Caja` (campos struct, String y Array),
+  una lista de structs, una de textos, un texto y una global, y 30 sentencias al azar entre ~45 tipos: asignar
+  variables, campos y elementos, trozos, `L2 = L` (listas compartidas), funciones que reemplazan el campo o la
+  global de la que recibieron el objeto, un método, `for x in` que reemplaza elementos, `if`, `while` con
+  `break`. Un modelo en Python ejecuta lo mismo y da la salida esperada (12 rondas, con suma de comprobación).
+  Se compilan con `--memcheck` (o `--normal`) y se ejecutan en FS-UAE de 20 en 20 por arranque. Falla si la
+  salida difiere, si hay avisos o si queda algo vivo.
+- Fallos encontrados:
+  1. **Analyzer**: un elemento de una lista de textos se tomaba como entero (`s = N[1]` daba "Cannot assign a int
+     to 's'"). Ahora `_infer_type(ArrayAccess)` da String en listas de textos y "desconocido" en listas de structs
+     o en un texto (carácter).
+  2. **GCC (optimizador de bebbo, `-fbbb`) generaba código erróneo**, en compilaciones `--memcheck` del A1200:
+     - semilla 29: `L = [Punto(1, 1), L[2], L[0]]` metía 0 como tercer elemento. Aislado quitando sentencias una
+       a una (21 variantes en un arranque) e instrumentando el C: el ensamblador hace `move.l a1,a0` creyendo que
+       `a1` aún tiene `L`, tras tres llamadas que cambian `a1` (`_dash_retain` lo usa sin guardarlo). Con -O0, -O1
+       o con frame pointer va bien; `-fno-ipa-ra` no lo arregla; `-fbbb=-` sí. Quitando letras: la culpa es de
+       `r` (renombrar registros) junto con `e` (quitar asignaciones muertas y cargas "redundantes").
+     - semilla 12: una suma daba 139 en vez de 144; la culpa es de `e` sola.
+     - Arreglo: `compiler/cflags.py` con las opciones de gcc para `./dash` y para el runner (que compilaba sin
+       `-fomit-frame-pointer`: los tests no usaban las mismas opciones que `./dash`). `-fbbb=abcfhilmnpsz0` (el
+       defecto sin `e` ni `r`). Medido en A500: misma velocidad (todas las pruebas de `bench_core` dentro del
+       ruido) y tamaño (+8 bytes en `bench_core`).
+- Tests nuevos: `test_fuzz_seed12`, `test_fuzz_seed29` (los dos programas que fallaban, con `# memcheck`);
+  `test_refcount_lists` asigna un elemento de lista de textos a un String ya declarado.
+- Resultado: 260 programas con `--memcheck` (200 en A1200, 60 en A500) y 100 normales en A1200: 0 fallos.
+- `--memcheck` avisa también de un bloque devuelto dos veces ("bloque devuelto dos veces"): solo mira la lista de
+  retenidos si el bloque ya está relleno de `0xDB` (mirarla siempre hacía que `test_string_memory`, 100.000
+  concatenaciones, no acabara a tiempo en el emulador). Probado en el harness del PC.
+- Benchmarks (`30d: ...`): todo dentro del ruido frente a 30c; tamaño 255.568 → 255.660 bytes.
+- Tests: 111/111 sin emulador; 262/262 con `--emu --emu-a500 --emu-32`; con `--memcheck` 211/211 en A1200 y A500
+  (3.2 ya pasaba con `--memcheck`); ejemplos 30/30.

@@ -138,6 +138,8 @@ int main(void){ int fails=0;
   /* more frees than the hold: the oldest held blocks are reused, still recognised while held */
   for (int i = 0; i < 3 * _DASH_MC_HOLD; i++) { void *k = _dash_rc_alloc(8); _dash_retain(k); _dash_release(k); }
   CHECK(_dash_mc_errors == 6);
+  APTR blk = _dash_block_get(16); _dash_block_put(blk, 16); _dash_block_put(blk, 16);
+  CHECK(_dash_mc_errors == 7);                                   /* a block returned twice */
  }
  #endif
  _dash_mem_cleanup(); CHECK(_dash_pool==NULL);

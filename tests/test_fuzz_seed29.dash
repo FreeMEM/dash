@@ -1,0 +1,97 @@
+# Test: reduced from random program 29 of tools/fuzz_refcount.py. Built with --memcheck,
+# the list literal [Punto(1, 1), L[2], L[0]] got L[0] as 0 on the A1200: bebbo's optimizer
+# passes "r" and "e" (-fbbb) kept L in a1 across calls that change a1.
+#
+# memcheck
+# expect-out: 3 1 3 1
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Caja
+    p: Punto
+    q: Punto
+    nombre: String
+    datos: Array
+
+    func mover(dx)
+        self.p = Punto(self.p.x + dx, self.p.y)
+        return self.p.x
+    end
+end
+
+var G: Caja
+
+func cambia(c: Caja, p: Punto) -> Int
+    c.p = Punto(p.x + 1, p.y)
+    return p.x
+end
+
+func cambia_global(p: Punto) -> Int
+    G.p = Punto(p.y, p.x)
+    return p.x + p.y
+end
+
+func nuevo(n) -> Punto
+    t = Punto(n, n + 2)
+    return t
+end
+
+func elige(a: Punto, b: Punto) -> Punto
+    if a.x > b.x
+        return a
+    end
+    return b
+end
+
+func caja_de(p: Punto) -> Caja
+    return Caja(p, Punto(p.y, p.x), "c", [p.x, p.y])
+end
+
+func ronda(k) -> Int
+    acc = 0
+    p1 = Punto(1, 2)
+    p2 = Punto(3, 4)
+    p3 = nuevo(k)
+    c1 = Caja(p1, p2, "a", [1, 2])
+    c2 = caja_de(p3)
+    L = [Punto(5, 6), Punto(7, 8), Punto(9, 10)]
+    L2 = L
+    T = L[0:2]
+    N = ["x", "y", "z"]
+    s = "s"
+    x = 0
+    w = 0
+    p3 = elige(c1.p, L[2])
+    p1 = c2.p
+    c1.q = Punto(c1.p.y, 0)
+    L = [Punto(1, 1), L[2], L[0]]
+    L2[1] = Punto(5, 0)
+    acc = acc + c2.datos[0]
+    L2[0] = Punto(N[0].length, 0)
+    p3 = elige(c1.p, L[0])
+    acc = acc + 2
+    c2.q = Punto(G.q.x - 0, k)
+    acc = acc + cambia(G, G.p)
+    c2.nombre = N[0]
+    acc = acc + c1.datos[0]
+    p3 = elige(c1.p, L[0])
+    acc = acc + T[0].x + T.length
+    c2.q = Punto(0, p3.x + 0)
+    c2.q = c1.p
+    p3 = Punto(p1.x + 8, c2.p.y)
+    G.q = L[1]
+    L[0] = Punto(c2.p.y, N[1].length)
+    q = L[0]
+    L = [Punto(1, 1), L[2], L[0]]
+    Print "" + q.x + " " + q.y + " " + L[2].x + " " + L[2].y
+    return 0
+end
+
+Main
+    G = Caja(Punto(0, 0), Punto(0, 0), "g", [0])
+    x = ronda(1)
+end

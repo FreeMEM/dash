@@ -129,6 +129,15 @@ static BOOL _dash_mc_hold(APTR *b, ULONG *size) {
     LONG i = _dash_mc_next;
     APTR old = _dash_mc_held[i];
     ULONG old_size = _dash_mc_held_size[i], n;
+    /* already filled with 0xDB: maybe returned twice (only then look in the held list) */
+    if (*size >= 8 && ((ULONG *)*b)[0] == _DASH_MC_DEAD && ((ULONG *)*b)[1] == _DASH_MC_DEAD) {
+        for (n = 0; n < _DASH_MC_HOLD; n++) {
+            if (_dash_mc_held[n] == *b) {
+                _dash_mc_error((CONST_STRPTR)"bloque devuelto dos veces");
+                return TRUE;
+            }
+        }
+    }
     for (n = 0; n < *size; n++) ((UBYTE *)*b)[n] = 0xDB;
     _dash_mc_held[i] = *b;
     _dash_mc_held_size[i] = *size;
