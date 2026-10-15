@@ -138,6 +138,18 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
       después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
 - [x] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
+- [ ] 30. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
+      juegos y cálculos rápidos en 68000, donde `Float` cuesta ~100 µs por suma. Partes:
+      30a diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
+      literales y conversiones (`Fixed(x)`, `Int(f)`, `Float(f)`), mezcla con Int/Float, impresión, errores
+      (desborde, división por cero); anotar la decisión en la bitácora antes de programar.
+      30b runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
+      (`mulu.w` por partes, sin libgcc) y con `muls.l`/`divs.l` en `--fpu`/68020 si conviene; impresión con
+      decimales; `sqrt`/`sin`/`cos` por tabla si caben pocos bytes.
+      30c lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
+      30d pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
+      benchmarks `fixed_mul`/`fixed_add` frente a `float_mul`/`float_mul_add`; documentación (QUICK_REFERENCE,
+      MANUAL_REFERENCIA, README) y un ejemplo (p. ej. movimiento con velocidad y gravedad).
 
 ## Bitácora
 

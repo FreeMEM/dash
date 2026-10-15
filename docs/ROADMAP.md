@@ -798,6 +798,9 @@ tests/
   editor visual de MUI)
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
+### Pendiente:
+- Coma fija (`Fixed`, 16.16): decimales rápidos en 68000. Tarea 30 de `docs/MEJORAS_LOOP.md`
+
 ---
 
 ## Referencias
