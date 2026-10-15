@@ -41,6 +41,7 @@ var lista: Nodo = nil       # nil: no struct/list/String (x == nil, x = nil)
 ==  !=  <  >  <=  >=        # Comparison
 and  or  not                # Logical
 +                           # String concatenation
+"abc" < "abd"               # Strings: == != compare text, < > <= >= the order (strcmp)
 ```
 
 ## Control de Flujo
@@ -92,6 +93,7 @@ arr[0]                      # Access: 1
 arr[2] = 99                 # Modify
 arr.length                  # Length: 5
 arr[1:3]                    # Slice: [2, 3]
+arr + [6, 7]                # New list with both (same element type)
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 

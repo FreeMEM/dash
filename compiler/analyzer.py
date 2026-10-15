@@ -887,8 +887,62 @@ class SemanticAnalyzer(ASTVisitor):
             return type_name
         return None
 
+    def _list_kind(self, expr: ASTNode) -> Optional[str]:
+        """What a list expression holds: "int", "string", "struct:Name", "list", "any"
+        (empty or unknown), or None if expr is not a list."""
+        if isinstance(expr, ArraySlice):
+            return self._list_kind(expr.array)
+        if isinstance(expr, BinaryOp) and expr.operator == "+":
+            kinds = [self._list_kind(expr.left), self._list_kind(expr.right)]
+            if None in kinds:
+                return None
+            known = [k for k in kinds if k != "any"]
+            return known[0] if known else "any"
+        if isinstance(expr, ArrayLiteral):
+            if not expr.elements:
+                return "any"
+            struct = self._elem_struct_of(expr)
+            if struct:
+                return f"struct:{struct}"
+            if all(isinstance(e, ArrayLiteral) for e in expr.elements):
+                return "list"
+            types = {self._infer_type(e) for e in expr.elements}
+            if types == {DashType.STRING}:
+                return "string"
+            if types <= {DashType.INT, DashType.BOOL}:
+                return "int"
+            return "any"
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            if not symbol:
+                return None
+            if symbol.elem_struct:
+                return f"struct:{symbol.elem_struct}"
+            return {DashType.ARRAY_INT: "int", DashType.ARRAY_STRING: "string",
+                    DashType.ARRAY: "any"}.get(symbol.dash_type)
+        if isinstance(expr, FunctionCall) and self.program:
+            func = self.program.get_function(expr.name)
+            if func and func.return_type == "Array":
+                return "any"
+        if isinstance(expr, (PropertyAccess, MemberAccess)) and self.program:
+            if isinstance(expr, MemberAccess):
+                owner, member = self._struct_name_of(VarRef(name=expr.object_name)), expr.member
+            else:
+                owner, member = self._struct_name_of(expr.object), expr.property
+            struct = self.program.get_struct(owner) if owner else None
+            field = struct.get_field(member) if struct else None
+            if field and field.field_type == "Array":
+                return "any"
+        return None
+
+    @staticmethod
+    def _kind_text(kind: str) -> str:
+        return {"int": "Ints", "string": "Strings", "list": "lists"}.get(kind, kind.split(":")[-1])
+
     def _elem_struct_of(self, expr: Optional[ASTNode]) -> Optional[str]:
         """Struct type of the elements of a list expression, when all are one struct."""
+        if isinstance(expr, BinaryOp) and expr.operator == "+":
+            return self._elem_struct_of(expr.left) or self._elem_struct_of(expr.right)
         if isinstance(expr, ArrayLiteral) and expr.elements:
             names = {self._struct_name_of(e) for e in expr.elements if not isinstance(e, NilLiteral)}
             return names.pop() if len(names) == 1 else None
@@ -946,6 +1000,12 @@ class SemanticAnalyzer(ASTVisitor):
             self.error("% needs integers; use Int() to convert a Float", node)
         if DashType.FIXED in (left, right) and DashType.FLOAT in (left, right):
             self.error("Cannot mix Fixed and Float (convert with Fixed() or Float())", node)
+        if node.operator == "+":
+            lk, rk = self._list_kind(node.left), self._list_kind(node.right)
+            if (lk is None) != (rk is None):
+                self.error("A list can only be added to another list", node)
+            elif lk and rk and "any" not in (lk, rk) and lk != rk:
+                self.error(f"Cannot add a list of {self._kind_text(lk)} to a list of {self._kind_text(rk)}", node)
 
     def visit_UnaryOp(self, node: UnaryOp):
         """Visit a unary operation."""
@@ -989,6 +1049,9 @@ class SemanticAnalyzer(ASTVisitor):
             left, right = self._infer_type(node.left), self._infer_type(node.right)
             if node.operator == "+" and DashType.STRING in (left, right):
                 return DashType.STRING
+            if node.operator == "+" and self._list_kind(node.left) is not None:
+                kind = self._list_kind(node)
+                return {"int": DashType.ARRAY_INT, "string": DashType.ARRAY_STRING}.get(kind, DashType.ARRAY)
             if node.operator in ("+", "-", "*", "/", "%"):
                 if DashType.FLOAT in (left, right):
                     return DashType.FLOAT

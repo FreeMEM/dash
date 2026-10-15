@@ -1,0 +1,7 @@
+# Test: lists of different element types cannot be added
+# expect: Cannot add a list of Ints to a list of Strings
+
+Main
+    a = [1, 2]
+    b = a + ["x"]
+end

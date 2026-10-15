@@ -1,0 +1,22 @@
+# Test: <, >, <= and >= on Strings compare the text (byte by byte, like strcmp)
+# expect-c: strcmp(
+# expect-out: menor
+# expect-out: mayor
+# expect-out: igual
+# expect-out: vacio
+
+Main
+    a = "abc"
+    if a < "abd"
+        Print "menor"
+    end
+    if "b" > a
+        Print "mayor"
+    end
+    if a <= "abc" and a >= "abc"
+        Print "igual"
+    end
+    if "" < a
+        Print "vacio"
+    end
+end

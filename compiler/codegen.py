@@ -758,6 +758,18 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
     return _DASH_ARR_KIND(arr) ? DashArray_own(result, _DASH_ARR_KIND(arr)) : result;
 }
 
+/* a + b: a new list with the elements of both. It holds what a list of the
+   first typed operand holds (an empty literal has no type) */
+static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
+    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind;
+    DashArrayLong *result = DashArray_create(la + lb);
+    if (!result) return NULL;
+    for (i = 0; i < la; i++) result->data[i] = a->data[i];
+    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
+    kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
+    return kind ? DashArray_own(result, kind) : result;
+}
+
 """
 
     # String runtime (included when string operations are used)
@@ -8540,6 +8552,8 @@ static {ret_type} {method_name}({params_str}) {{
             # String concatenation returns string
             if node.operator == "+" and self._is_string_expr(node):
                 return "STRPTR"
+            if node.operator == "+" and self._is_array_concat(node):
+                return "DashArrayLong *"
             return "LONG"
         elif isinstance(node, VarRef):
             # Check tracked variable types
@@ -9091,13 +9105,20 @@ static {ret_type} {method_name}({params_str}) {{
                     parts = parts[6 - (1 if code else 0):]
                     code = f"DashString_join({len(group)}, (STRPTR[]){{{', '.join(group)}}})"
                 return code
+            # List + list: a new list with the elements of both
+            if node.operator == "+" and self._is_array_concat(node):
+                self.uses_arrays = True
+                left = self._generate_expression(node.left)
+                right = self._generate_expression(node.right)
+                return f"DashArray_concat({left}, {right})"
             # A character compared with a one-letter string literal: compare chars
             if node.operator in ("==", "!="):
                 char_cmp = self._char_comparison(node)
                 if char_cmp:
                     return char_cmp
             # String comparison compares contents, not pointers
-            if node.operator in ("==", "!=") and (left_str or right_str):
+            if node.operator in ("==", "!=", "<", ">", "<=", ">=") and (left_str or right_str):
+                # order: byte by byte as unsigned (Latin-1), like strcmp
                 self.uses_strings = True
                 left = self._generate_expression(node.left)
                 right = self._generate_expression(node.right)
@@ -9631,6 +9652,8 @@ static {ret_type} {method_name}({params_str}) {{
                 self.uses_fixed = True
             elif p.param_type == "Func":
                 self.var_types[p.name] = "func"
+            elif p.param_type == "Array":
+                self.var_types[p.name] = "array"
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             else:
@@ -9868,7 +9891,23 @@ static {ret_type} {method_name}({params_str}) {{
             return self.var_types[node.name]
         if isinstance(node, ArraySlice) and isinstance(node.array, VarRef):
             return self.var_types.get(node.array.name) or "array"
+        if isinstance(node, BinaryOp) and node.operator == "+":
+            # a + b: the type of the first typed operand
+            for side in (node.left, node.right):
+                if isinstance(side, ArrayLiteral):
+                    elem = self._literal_elem_type(side)
+                    vt = f"array:{elem}" if elem else "array"
+                else:
+                    vt = self._array_var_type(side)
+                if vt != "array":
+                    return vt
         return "array"
+
+    def _is_array_concat(self, node: ASTNode) -> bool:
+        """a + b where both sides are lists."""
+        return (isinstance(node, BinaryOp) and node.operator == "+"
+                and all(isinstance(side, ArrayLiteral) or self._infer_c_type(side) == "DashArrayLong *"
+                        for side in (node.left, node.right)))
 
     def _array_elem_type(self, node: ASTNode) -> Optional[str]:
         """Element type of a typed array variable ("string", "struct:Name", "array")."""

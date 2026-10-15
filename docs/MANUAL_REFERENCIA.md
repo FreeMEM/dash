@@ -317,6 +317,9 @@ negativo = -valor
 | `<=` | Menor o igual |
 | `>=` | Mayor o igual |
 
+Con textos, `==` y `!=` comparan el contenido, y `<`, `>`, `<=`, `>=` el orden: byte a byte, como
+`strcmp` (`"abc" < "abd"`, `"" < "a"`, mayusculas antes que minusculas).
+
 ### Operadores Logicos
 
 | Operador | Significado |
@@ -684,6 +687,20 @@ for num in numeros
     Print num
 end
 ```
+
+### Unir listas
+
+`a + b` crea una lista nueva con los elementos de las dos (las originales no cambian). Sirve para
+listas de enteros, de textos, de structs y de listas; la nueva es del tipo de la primera que lo
+tenga (`[] + enemigos` es una lista de `Enemigo`).
+
+```
+numeros = numeros + [6, 7]
+todos = enemigos + [Enemigo(90, 3)]
+```
+
+Sumar listas de tipos distintos (`[1] + ["a"]`) o una lista con otra cosa (`lista + 3`) es un error.
+Cada suma copia la lista entera: para ir anadiendo uno a uno en un bucle largo es lento.
 
 ### Listas de structs y de listas
 

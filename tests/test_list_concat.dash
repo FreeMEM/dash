@@ -1,0 +1,56 @@
+# Test: a + b joins two lists into a new one; it keeps the element type of the
+# first typed operand and owns its Strings and structs like any list
+# memcheck
+# expect-out: 6
+# expect-out: 6
+# expect-out: z
+# expect-out: 6
+# expect-out: y
+# expect-out: 7
+# expect-out: 2
+# expect-out: 5
+# expect-out: 9
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct P
+    x: Int
+end
+
+struct Caja
+    cosas: Array
+end
+
+func dame() -> Array
+    return [1, 2]
+end
+
+func suma(l: Array) -> Array
+    return l + [9]
+end
+
+Main
+    a = [1, 2]
+    a = a + [3]
+    for i in (4..6)
+        a = a + [i]
+    end
+    Print a.length
+    Print a[5]
+    s = ["x", "y"]
+    s = s + ["z"]
+    Print s[2]
+    t = s + s
+    Print t.length
+    Print t[4]
+    ps = [P(1), P(2)]
+    q = ps + [P(7)]
+    Print q[2].x
+    vacia = []
+    u = vacia + ps
+    Print u.length
+    c = Caja([5])
+    b = c.cosas + dame() + [3]
+    d = suma(b)
+    Print d.length
+    Print d[4]
+end

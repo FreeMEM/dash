@@ -1,0 +1,7 @@
+# Test: a list only adds to another list
+# expect: A list can only be added to another list
+
+Main
+    a = [1, 2]
+    b = a + 3
+end
