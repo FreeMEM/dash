@@ -71,7 +71,7 @@ otras señales (red, temporizador). El plan va en ese orden.
   emite si el programa usa algún builtin `mui_`.
 - Si una tarea exige una decisión del usuario, déjala `[?]` con la pregunta y pasa a la siguiente.
 
-## Diseño propuesto (se fija en la tarea 2)
+## Diseño propuesto (fijado en la tarea 2: `docs/MUI_DISEÑO.md`, que manda sobre esta sección)
 
 - **Builtins `mui_`**, como `ra_`, pero con **objetos como valores** (`Pointer`) en vez de un único
   estado global: el navegador tendrá varias ventanas y muchos objetos.
@@ -98,7 +98,7 @@ otras señales (red, temporizador). El plan va en ese orden.
       de `hola_mui.c` (sacar la salida con `--keep` y captura de pantalla de FS-UAE si hace falta) hasta que
       abra y cierre la ventana. El runner usa ese sistema para los tests `# emu-needs: muimaster.library`.
       Probar también en `--emu-32` (OS 3.2).
-- [ ] 2. **Diseño.** Fijar la API (sección de arriba) con el caso del navegador delante: ventana con barra de
+- [x] 2. **Diseño.** Fijar la API (sección de arriba) con el caso del navegador delante: ventana con barra de
       URL, botones atrás/adelante/recargar, zona de página con scroll, barra de estado y progreso. Escribirlo
       en `docs/MUI_DISEÑO.md` con un ejemplo en Dash de esa ventana. Decidir si la sintaxis declarativa entra.
 - [ ] 3. **Núcleo.** `mui_app_begin(title, base)`, `mui_window_begin(title)`/`mui_window_end()`, grupos
@@ -200,3 +200,15 @@ Formato:
 - Tests: 121/121 sin emulador (antes 120); 283/283 con `--emu --emu-a500 --emu-32` (antes 280); ejemplos 31/31.
 - Pendiente / riesgos: el espía (`scratchpad/mui/spy.c`) no está en el repo; si hace falta más veces, pasarlo a
   `tools/` como opción de `emu_run.py`. MUI sin registrar no ha mostrado ninguna petición.
+
+### 2026-10-15 — Tarea 2 (diseño de la API de MUI)
+- Hecho: `docs/MUI_DISEÑO.md`. Builtins `mui_` con objetos como `Pointer`; árbol con pila (`*_begin`/`mui_group_end`,
+  hijos con `OM_ADDMEMBER`); eventos por número (`mui_on_press/change/ack/double/close`, menús) y `mui_wait_event`,
+  `mui_poll_event`, `mui_wait_event_signals`; valores por objeto (`mui_get/set_text`, `mui_get/set_value`, `enabled`,
+  `visible`, `range`); listas; zona de dibujo propia con una función Dash (`Func`, ya funciona pasar funciones como
+  valor) y barra de desplazamiento aparte; `mui_press` para tests y atajos. Ejemplo completo de la ventana del navegador.
+- Decidido: la sintaxis declarativa queda para la tarea 19, como capa sobre estos builtins y como formato del editor
+  visual (bloque Dash, sin fichero aparte). El usuario no recuerda el formato que se habló.
+- Tests: sin cambios de código (solo documentación).
+- Pendiente / riesgos: comprobar en la tarea 3 que `OM_ADDMEMBER` en grupos ya creados funciona antes de abrir la
+  ventana, y que un `Pointer` de Dash se puede comparar con `nil`.
