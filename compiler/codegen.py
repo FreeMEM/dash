@@ -866,6 +866,219 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
 
 """
 
+    # Fixed runtime: Fixed is a 16.16 number in a LONG (task 31 of docs/MEJORAS_LOOP.md).
+    # + - and comparisons are integer operations; these are the rest.
+    FIXED_RUNTIME = """\
+/* Dash Fixed Runtime: 16.16 fixed point in a LONG */
+typedef LONG DashFixed;
+
+/* 32/16 division on the 68000 (divu.w): quotient in the low word, remainder in
+   the high word. The quotient must fit in 16 bits. */
+#if defined(__mc68000__) || defined(__mc68020__) || defined(__m68k__)
+static __inline__ ULONG _dash_divu16(ULONG n, UWORD d) {
+    __asm__ ("divu.w %1,%0" : "+d"(n) : "dmi"(d) : "cc");
+    return n;
+}
+/* 16 x 16 -> 32 bits (mulu.w): GCC does not always see it and calls __mulsi3 */
+static __inline__ ULONG _dash_mulu16(UWORD a, UWORD b) {
+    ULONG r = a;
+    __asm__ ("mulu.w %1,%0" : "+d"(r) : "dmi"(b) : "cc");
+    return r;
+}
+#else
+static __inline__ ULONG _dash_divu16(ULONG n, UWORD d) {
+    return ((n % d) << 16) | (n / d);
+}
+static __inline__ ULONG _dash_mulu16(UWORD a, UWORD b) {
+    return (ULONG)a * b;
+}
+#endif
+
+/* a * b: the 64-bit product >> 16. On a 68000 from four 16x16 mulu.w (no libgcc) */
+static DashFixed _dash_fx_mul(DashFixed a, DashFixed b) {
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+    LONG hi, lo = a;
+    __asm__ ("muls.l %2,%0:%1" : "=d"(hi), "+d"(lo) : "dmi"(b) : "cc");
+    /* the shift rounds a negative product down: truncate toward zero like the 68000 code */
+    return (DashFixed)(((ULONG)lo >> 16) | ((ULONG)hi << 16)) + (hi < 0 && (lo & 0xFFFF));
+#else
+    ULONG ua = a < 0 ? -(ULONG)a : (ULONG)a, ub = b < 0 ? -(ULONG)b : (ULONG)b, r;
+    UWORD ah = ua >> 16, al = ua, bh = ub >> 16, bl = ub;
+    r = (_dash_mulu16(ah, bh) << 16) + _dash_mulu16(ah, bl) + _dash_mulu16(al, bh) + (_dash_mulu16(al, bl) >> 16);
+    return (a ^ b) < 0 ? -(LONG)r : (LONG)r;
+#endif
+}
+
+/* One quotient digit of a long division in base 65536 (Knuth's algorithm D):
+   (*r : u) / D with *r < D and D normalized (top bit set); *r gets the remainder */
+static __inline__ ULONG _dash_fx_digit(ULONG *r, UWORD u, ULONG D) {
+    UWORD d1 = D >> 16, d0 = D;
+    ULONG R = *r, qhat, rhat, p1, p0, qd_hi, qd_lo, borrow;
+    if ((R >> 16) == d1) {
+        qhat = 0xFFFF;
+        rhat = R - (((ULONG)d1 << 16) - d1);
+    } else {
+        ULONG t = _dash_divu16(R, d1);
+        qhat = t & 0xFFFF;
+        rhat = t >> 16;
+    }
+    while (rhat < 0x10000 && _dash_mulu16(qhat, d0) > ((rhat << 16) | u)) {
+        qhat--;
+        rhat += d1;
+    }
+    /* R:u - qhat * D, 48 bits; at most one too much: add back */
+    p1 = _dash_mulu16(qhat, d1);
+    p0 = _dash_mulu16(qhat, d0);
+    qd_hi = p1 + (p0 >> 16);
+    qd_lo = p0 & 0xFFFF;
+    if (R < qd_hi || (R == qd_hi && u < qd_lo)) {
+        qhat--;
+        qd_hi -= d1;
+        if (qd_lo < d0) qd_hi--;
+        qd_lo = (qd_lo - d0) & 0xFFFF;
+    }
+    borrow = u < qd_lo;
+    *r = ((R - qd_hi - borrow) << 16) | ((u - qd_lo) & 0xFFFF);
+    return qhat;
+}
+
+/* (ua << 16) / ub, unsigned, low 32 bits of the quotient. A 68000 has no 64-bit
+   division: two or three divu.w and a few mulu.w instead of 48 shift-subtract steps */
+static ULONG _dash_fx_udiv(ULONG ua, ULONG ub) {
+    if (ub <= 0xFFFF) {                       /* a one-digit divisor: three divu.w */
+        ULONG t = _dash_divu16(ua >> 16, ub), q1;
+        t = _dash_divu16((t & 0xFFFF0000UL) | (ua & 0xFFFF), ub);
+        q1 = t & 0xFFFF;
+        t = _dash_divu16(t & 0xFFFF0000UL, ub);
+        return (q1 << 16) | (t & 0xFFFF);
+    } else {
+        ULONG D = ub, hi, lo, q1, q0;
+        LONG s = 0;
+        while (!(D & 0x80000000UL)) { D <<= 1; s++; }   /* normalize: s is 0..15 */
+        hi = ua >> (16 - s);                             /* (ua << 16 << s) in hi:lo */
+        lo = ua << (16 + s);
+        if (hi >= D) hi %= D;                            /* |a / b| >= 32768: wraps, like Int */
+        q1 = _dash_fx_digit(&hi, lo >> 16, D);
+        q0 = _dash_fx_digit(&hi, 0, D);
+        return (q1 << 16) | q0;
+    }
+}
+
+/* a / b: (a << 16) / b. Division by zero gives the largest value with a's sign */
+static DashFixed _dash_fx_div(DashFixed a, DashFixed b) {
+    if (b == 0) return a < 0 ? -0x7FFFFFFF : 0x7FFFFFFF;
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+    {
+        LONG hi = a >> 16, lo = a << 16;
+        __asm__ ("divs.l %2,%0:%1" : "+d"(hi), "+d"(lo) : "dmi"(b) : "cc");
+        return lo;
+    }
+#else
+    {
+        ULONG ua = a < 0 ? -(ULONG)a : (ULONG)a, ub = b < 0 ? -(ULONG)b : (ULONG)b;
+        ULONG q = _dash_fx_udiv(ua, ub);
+        return (a ^ b) < 0 ? -(LONG)q : (LONG)q;
+    }
+#endif
+}
+
+/* Int(f): truncated toward zero, like Int() of a Float */
+static __inline__ LONG _dash_fx_int(DashFixed f) {
+    return f >= 0 ? f >> 16 : -((-f) >> 16);
+}
+
+/* Up to 4 decimals, rounded, without trailing zeros (1.5, -0.25, 3.0); rotating buffers.
+   The step is 1/65536 (0.0000153): a 5th decimal would show 0.1 as 0.09999 */
+static STRPTR DashString_from_fixed(DashFixed f) {
+    static char buffers[16][16];
+    static LONG next = 0;
+    char *s = buffers[next], *p = s, digits[8];
+    ULONG u = f < 0 ? -(ULONG)f : (ULONG)f, ip = u >> 16, frac;
+    LONG n, i;
+    next = (next + 1) & 15;
+    frac = ((u & 0xFFFF) * 10000 + 32768) >> 16;  /* x 10000 / 65536, rounded */
+    if (frac >= 10000) { ip++; frac -= 10000; }
+    if (f < 0 && (ip || frac)) *p++ = '-';
+    n = 0;
+    do { digits[n++] = '0' + ip % 10; ip /= 10; } while (ip);
+    while (n) *p++ = digits[--n];
+    *p++ = '.';
+    for (i = 3; i >= 0; i--) { p[i] = '0' + frac % 10; frac /= 10; }
+    p += 4;
+    while (p[-1] == '0' && p[-2] != '.') p--;
+    *p = 0;
+    return s;
+}
+
+/* integer square root of a 32-bit number (16 steps, 32-bit operations only) */
+static ULONG _dash_isqrt32(ULONG n) {
+    ULONG root = 0, bit = 1UL << 30;
+    while (bit > n) bit >>= 2;
+    while (bit) {
+        if (n >= root + bit) {
+            n -= root + bit;
+            root = (root >> 1) + bit;
+        } else {
+            root >>= 1;
+        }
+        bit >>= 2;
+    }
+    return root;
+}
+
+/* r * r > (f << 16)? r < 2^24, so r * r has 48 bits: from 16 x 16 products */
+static __inline__ BOOL _dash_fx_sq_above(ULONG r, ULONG f) {
+    UWORD rh = r >> 16, rl = r;
+    ULONG lo = _dash_mulu16(rl, rl), mid = _dash_mulu16(rh, rl) << 1;
+    ULONG hi = _dash_mulu16(rh, rh) + (mid >> 16), lo2 = lo + (mid << 16);
+    if (lo2 < lo) hi++;
+    return hi > (f >> 16) || (hi == (f >> 16) && lo2 > (f << 16));
+}
+
+/* fx_sqrt(f): the square root of a 16.16 is the integer square root of f << 16.
+   Shift f left by 2k bits as far as 32 bits allow: isqrt(f << 2k) << (8 - k) is
+   then off by less than 2^(8 - k); a Newton step r = (r + (f << 16) / r) / 2 from
+   above and a last check by multiplication give the exact floor */
+static DashFixed _dash_fx_sqrt(DashFixed f) {
+    ULONG t = (ULONG)f, r, next;
+    LONG k = 0;
+    if (f <= 0) return 0;
+    if (f <= 0xFFFF) return (DashFixed)_dash_isqrt32((ULONG)f << 16);
+    while (k < 8 && !(t & 0xC0000000UL)) { t <<= 2; k++; }
+    r = (_dash_isqrt32(t) + 1) << (8 - k);           /* rounded up: Newton goes down */
+    while (_dash_fx_sq_above(r, (ULONG)f)) {
+        next = (r + _dash_fx_udiv((ULONG)f, r)) >> 1;
+        if (next >= r) { r--; continue; }
+        r = next;
+    }
+    return (DashFixed)r;
+}
+
+/* sin(0..90 degrees) in 16.16 */
+static const LONG _dash_fx_sin_table[91] = {0, 1144, 2287, 3430, 4572, 5712, 6850, 7987, 9121, 10252, 11380, 12505, 13626, 14742, 15855, 16962, 18064, 19161, 20252, 21336, 22415, 23486, 24550, 25607, 26656, 27697, 28729, 29753, 30767, 31772, 32768, 33754, 34729, 35693, 36647, 37590, 38521, 39441, 40348, 41243, 42126, 42995, 43852, 44695, 45525, 46341, 47143, 47930, 48703, 49461, 50203, 50931, 51643, 52339, 53020, 53684, 54332, 54963, 55578, 56175, 56756, 57319, 57865, 58393, 58903, 59396, 59870, 60326, 60764, 61183, 61584, 61966, 62328, 62672, 62997, 63303, 63589, 63856, 64104, 64332, 64540, 64729, 64898, 65048, 65177, 65287, 65376, 65446, 65496, 65526, 65536};
+
+/* fx_sin(a): a in degrees (Fixed), table and linear interpolation */
+static DashFixed _dash_fx_sin(DashFixed a) {
+    LONG deg, frac, v, neg = 0;
+    if ((ULONG)a >= (360UL << 16)) {     /* % is a libgcc call on a 68000: only when needed */
+        a %= 360L << 16;
+        if (a < 0) a += 360L << 16;
+    }
+    if (a >= 180L << 16) { a -= 180L << 16; neg = 1; }
+    if (a > 90L << 16) a = (180L << 16) - a;
+    deg = a >> 16;
+    frac = a & 0xFFFF;
+    v = _dash_fx_sin_table[deg];
+    if (frac) v += ((_dash_fx_sin_table[deg + 1] - v) * frac) >> 16;
+    return neg ? -v : v;
+}
+
+static DashFixed _dash_fx_cos(DashFixed a) {
+    return _dash_fx_sin(a + (90L << 16));
+}
+
+"""
+
     # Float runtime: Float is a C float (32-bit IEEE). A 68000 has no FPU, so GCC
     # links its software floating point routines; text conversion is done here
     # (libnix printf has no %f) with about 7 significant digits, like a float.
@@ -5382,6 +5595,7 @@ _RUNTIME_FLAGS = [
     ("ARRAY_RUNTIME", "uses_arrays"),
     ("STRING_RUNTIME", "uses_strings"),
     ("FLOAT_RUNTIME", "uses_float"),
+    ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
     ("ARENA_RUNTIME", "uses_arenas"),
     ("WINDOW_RUNTIME", "uses_windows"),
@@ -5609,6 +5823,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
+        self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
         self.uses_winmgr: bool = False  # window_create() handles
@@ -5718,6 +5933,9 @@ class CodeGenerator(ASTVisitor):
 
         if self.uses_float:
             parts.append(CTemplates.FLOAT_RUNTIME)
+
+        if self.uses_fixed:
+            parts.append(CTemplates.FIXED_RUNTIME)
 
         # Add array runtime if needed
         if self.uses_arrays:
@@ -6075,6 +6293,8 @@ class CodeGenerator(ASTVisitor):
         import re
         if "GfxBase" in native.c_code or set(re.findall(r"\b([A-Z]\w+)\s*\(", native.c_code)) & graphics_functions():
             self.needs_gfx = True
+        if "_dash_fx_" in native.c_code or "DashFixed" in native.c_code:
+            self.uses_fixed = True        # C code may use the Fixed runtime
         # Map Dash types to C types
         type_map = self._c_type_map
 

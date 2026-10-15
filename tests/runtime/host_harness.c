@@ -10,7 +10,8 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdarg.h>
-typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef const char *CONST_STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE;
+#include <math.h>
+typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef const char *CONST_STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE; typedef uint16_t UWORD;
 #define MEMF_ANY 0
 #define MEMF_CLEAR 0x10000
 static APTR CreatePool(ULONG r, ULONG p, ULONG t){ return malloc(1); }
@@ -116,6 +117,51 @@ int main(void){ int fails=0;
   _dash_retain(a2); _dash_obj_float(a2); CHECK(_dash_refcount(a2) == 1);
   _dash_obj_escape(a2); _dash_obj_set((void **)&a2, NULL); CHECK(LIVE == base + 2);   /* escaped: kept */
   _dash_release(NULL); _dash_retain(NULL); CHECK(_dash_obj_float(NULL) == NULL);
+ }
+ /* Fixed 16.16: against the exact value (long double), many pairs */
+ {
+  #define FX(x) ((DashFixed)((x) * 65536.0))
+  CHECK(_dash_fx_mul(FX(1.5), FX(2)) == FX(3)); CHECK(_dash_fx_mul(FX(-1.5), FX(2)) == FX(-3));
+  CHECK(_dash_fx_mul(FX(0.5), FX(0.5)) == FX(0.25)); CHECK(_dash_fx_mul(FX(-0.5), FX(-0.5)) == FX(0.25));
+  CHECK(_dash_fx_div(FX(3), FX(2)) == FX(1.5)); CHECK(_dash_fx_div(FX(-3), FX(2)) == FX(-1.5));
+  CHECK(_dash_fx_div(FX(1), FX(3)) == 21845); CHECK(_dash_fx_div(FX(5), 0) == 0x7FFFFFFF);
+  CHECK(_dash_fx_div(FX(-5), 0) == -0x7FFFFFFF);
+  CHECK(_dash_fx_int(FX(2.75)) == 2); CHECK(_dash_fx_int(FX(-2.75)) == -2); CHECK(_dash_fx_int(FX(-0.5)) == 0);
+  CHECK(strcmp(DashString_from_fixed(FX(1.5)), "1.5") == 0);
+  CHECK(strcmp(DashString_from_fixed(FX(-0.25)), "-0.25") == 0);
+  CHECK(strcmp(DashString_from_fixed(FX(3)), "3.0") == 0);
+  CHECK(strcmp(DashString_from_fixed(FX(0.1)), "0.1") == 0);
+  CHECK(strcmp(DashString_from_fixed(FX(-32768)), "-32768.0") == 0);
+  CHECK(strcmp(DashString_from_fixed(0x7FFFFFFF), "32768.0") == 0);     /* 32767.99998 rounded */
+  CHECK(strcmp(DashString_from_fixed(1), "0.0") == 0);              /* below 0.00005 */
+  CHECK(strcmp(DashString_from_fixed(-7), "-0.0001") == 0);
+  CHECK(strcmp(DashString_from_fixed(FX(2.0001)), "2.0001") == 0);
+  CHECK(_dash_fx_sqrt(FX(4)) == FX(2)); CHECK(_dash_fx_sqrt(FX(2)) == 92681); CHECK(_dash_fx_sqrt(FX(-1)) == 0);
+  CHECK(_dash_fx_sqrt(0x7FFFFFFF) == 11863283);
+  CHECK(_dash_fx_sin(FX(30)) == FX(0.5)); CHECK(_dash_fx_sin(FX(90)) == FX(1)); CHECK(_dash_fx_sin(FX(-90)) == FX(-1));
+  CHECK(_dash_fx_sin(FX(180)) == 0); CHECK(_dash_fx_cos(FX(60)) == FX(0.5)); CHECK(_dash_fx_cos(FX(0)) == FX(1));
+  { int bad = 0; unsigned seed = 12345;
+    for (int i = 0; i < 200000; i++) {
+      seed = seed * 1103515245 + 12345; LONG a = (LONG)seed >> (seed % 17);
+      seed = seed * 1103515245 + 12345; LONG b = (LONG)seed >> (seed % 17);
+      long long p = ((long long)a * b);
+      LONG mul = (LONG)((p < 0 ? -((-p) >> 16) : p >> 16));          /* truncated toward zero */
+      if (_dash_fx_mul(a, b) != mul) bad++;
+      if (b != 0) {
+        long long q = ((long long)a * 65536) / b;                      /* C: toward zero */
+        if (q >= -2147483647LL && q <= 2147483647LL && _dash_fx_div(a, b) != (LONG)q) bad++;
+      }
+      if (a > 0) {
+        long double r = sqrtl((long double)a * 65536.0L); LONG s = _dash_fx_sqrt(a);
+        if (s != (LONG)r) bad++;
+      }
+    }
+    CHECK(bad == 0); if (bad) printf("fixed: %d differences\n", bad); }
+  { int worst = 0;
+    for (LONG a = -FX(720); a <= FX(720); a += 977) {
+      LONG s = _dash_fx_sin(a), exact = (LONG)lroundl(sinl(a / 65536.0L * 3.14159265358979323846L / 180) * 65536);
+      int d = s > exact ? s - exact : exact - s; if (d > worst) worst = d; }
+    CHECK(worst <= 12); if (worst > 12) printf("fx_sin worst %d\n", worst); }
  }
  #ifdef DASH_MEMCHECK
  /* --memcheck: the code above made no errors; freed objects and strings are recognised */

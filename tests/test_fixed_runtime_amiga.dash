@@ -1,0 +1,31 @@
+# Test: the Fixed (16.16) runtime on the Amiga gives the same results as on the PC
+# (where it matches exact arithmetic): checksums of 20.000 pseudo-random pairs for
+# multiplication, division, square root and sine, and text conversion. The 68000
+# build multiplies with mulu.w; with --fpu (68020) muls.l and divs.l are used.
+#
+# expect-out: mul 1595378401
+# expect-out: div 162237119
+# expect-out: sqrt 1727504502
+# expect-out: sin 3171604958
+# expect-out: 1.5 -0.25 0.3333
+
+@native func comprobar()
+"""
+    ULONG seed = 12345, cm = 0, cd = 0, cs = 0, cn = 0; LONG i;
+    for (i = 0; i < 20000; i++) {
+        LONG a, b;
+        seed = seed * 1103515245UL + 12345; a = (LONG)seed >> (seed % 17);
+        seed = seed * 1103515245UL + 12345; b = (LONG)seed >> (seed % 17);
+        cm = cm * 31 + (ULONG)_dash_fx_mul(a, b);
+        if (b != 0 && (a >> 15 == 0 || a >> 15 == -1)) cd = cd * 31 + (ULONG)_dash_fx_div(a, b);
+        if (a > 0) cs = cs * 31 + (ULONG)_dash_fx_sqrt(a);
+        cn = cn * 31 + (ULONG)_dash_fx_sin(a % (720L << 16));
+    }
+    Printf((CONST_STRPTR)"mul %lu\ndiv %lu\nsqrt %lu\nsin %lu\n", cm, cd, cs, cn);
+    Printf((CONST_STRPTR)"%s %s %s\n", DashString_from_fixed(98304), DashString_from_fixed(-16384), DashString_from_fixed(_dash_fx_div(65536, 3 << 16)));
+"""
+end
+
+Main
+    comprobar()
+end

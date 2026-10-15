@@ -172,7 +172,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       31a (hecha) diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
       literales y conversiones (`Fixed(x)`, `Int(f)`, `Float(f)`), mezcla con Int/Float, impresión, errores
       (desborde, división por cero); anotar la decisión en la bitácora antes de programar.
-      31b runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
+      31b (hecha) runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
       (`mulu.w` por partes, sin libgcc) y con `muls.l`/`divs.l` en `--fpu`/68020 si conviene; impresión con
       decimales; `sqrt`/`sin`/`cos` por tabla si caben pocos bytes.
       31c lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
@@ -1050,8 +1050,28 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   - Mezclar Fixed y Float es un error (hay que convertir con `Fixed()`/`Float()`): evita costes escondidos.
   - Desborde: da la vuelta, como Int. División por cero: el máximo con el signo del dividendo (la división ya es
     una función: la comprobación sale casi gratis; la de Int sigue sin comprobar).
-  - Texto: `Print f`, `"x = #{f}"`, concatenación: hasta 5 decimales redondeados, sin ceros de más (`1.5`,
+  - Texto: `Print f`, `"x = #{f}"`, concatenación: hasta 4 decimales redondeados (31b: con 5, 0,1 salía
+    `0.09999`, porque el paso es 1/65536), sin ceros de más (`1.5`,
     `-0.25`, `3.0`).
   - Funciones (31b, solo si se usan): `fx_sqrt(f)` (raíz entera de 32 bits, bit a bit), `fx_sin(a)`/`fx_cos(a)`
     con el ángulo en grados Fixed y una tabla de 91 valores (0-90°) con interpolación lineal.
   - Listas de Fixed (31c) solo si sale sencillo (son LONG: hace falta el tipo de elemento para imprimir y operar).
+
+### 2026-10-15 — Tarea 31b (coma fija 2/4: runtime)
+- Base: 114/114 sin emulador.
+- Hecho: `FIXED_RUNTIME` (incluido con `uses_fixed`; también si un `@native` usa `_dash_fx_`/`DashFixed`):
+  - `_dash_fx_mul`: 68000, cuatro `mulu.w` (`_dash_mulu16`, asm: GCC llamaba a `__mulsi3` con `(ULONG)(UWORD)a * b`);
+    68020+ (`--fpu`), `muls.l` 64 bits, corregido para truncar hacia cero como el del 68000.
+  - `_dash_fx_div`: división larga en base 65536 (algoritmo D de Knuth): divisor de 16 bits, tres `divu.w`; si no,
+    normalizado y dos dígitos con `divu.w` + `mulu.w` y corrección; 68020+, `divs.l` 64/32. Entre 0: el máximo con
+    el signo. `_dash_fx_int` (trunca hacia cero), `DashString_from_fixed` (4 decimales: con 5, `0.1` salía
+    `0.09999`), `_dash_fx_sqrt` (raíz entera de 32 bits con el número desplazado al máximo, un paso de Newton y
+    comprobación por multiplicación), `_dash_fx_sin`/`_dash_fx_cos` (grados, tabla de 91 valores calculada al
+    generar el código, interpolación; `%` solo fuera de 0-360).
+- Probado: harness del PC contra aritmética exacta (200.000 pares de mul/div/sqrt, seno con error ≤ 12/65536);
+  aparte, 2,57 millones de divisiones con casos límite y la raíz en todo el rango: 0 diferencias. En el Amiga,
+  `test_fixed_runtime_amiga` (sumas de comprobación de 20.000 pares iguales a las del PC): A1200 y A500 (68000) y,
+  a mano, `emu_run.py --fpu --set fpu=68882` (68020/68882): iguales.
+- Medido (A500, ciclos por operación, bucle en C): multiplicación 646 → 387 (Float: 937), división 8.205 → 2.212,
+  raíz 8.878 → 4.164, seno 1.632 → 1.362.
+- No hecho: el runner no prueba solo el camino 68020 (`--fpu`); queda la comprobación a mano de arriba.

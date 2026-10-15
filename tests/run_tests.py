@@ -302,7 +302,7 @@ def run_runtime_host_test() -> Optional[TestResult]:
     start_time = time.time()
     harness = (PROJECT_ROOT / "tests" / "runtime" / "host_harness.c").read_text()
     runtime = "".join([CTemplates.MEMORY_RUNTIME, CTemplates.ARRAY_RUNTIME,
-                       CTemplates.STRING_RUNTIME, CTemplates.REFCOUNT_RUNTIME])
+                       CTemplates.STRING_RUNTIME, CTemplates.REFCOUNT_RUNTIME, CTemplates.FIXED_RUNTIME])
     build_dir = PROJECT_ROOT / "build"
     build_dir.mkdir(exist_ok=True)
     src = build_dir / "runtime_host.c"
@@ -312,11 +312,11 @@ def run_runtime_host_test() -> Optional[TestResult]:
     # runtime that reads or writes outside its blocks) when the host gcc has it
     error = None
     for flags in ([], ["-DDASH_MEMCHECK", "-fsanitize=address,undefined", "-g"]):
-        build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", *flags, "-o", str(exe), str(src)],
+        build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", *flags, "-o", str(exe), str(src), "-lm"],
                                capture_output=True, text=True)
         if build.returncode != 0 and flags:
             build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", "-DDASH_MEMCHECK",
-                                    "-o", str(exe), str(src)], capture_output=True, text=True)
+                                    "-o", str(exe), str(src), "-lm"], capture_output=True, text=True)
         tag = " (memcheck)" if flags else ""
         if build.returncode != 0:
             error = f"host build failed{tag}: " + build.stderr.strip()[:200]
