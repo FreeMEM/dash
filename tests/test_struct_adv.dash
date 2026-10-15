@@ -9,7 +9,7 @@
 # expect-c: _dash_r = _dash_str_ret(DashString_concat("Hola ", self->nombre));
 # expect-c: _dash_str_set(&s, Persona_saludo(p));
 # expect-c: Printf("%s\n", Persona_saludo(p));
-# expect-c: _dash_block_get_clear(sizeof(_Dash_RefHeader) + size)
+# expect-c: _dash_block_get(sizeof(_Dash_RefHeader) + size)
 #
 # expect-out: 1
 # expect-out: 5

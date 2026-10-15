@@ -156,11 +156,17 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       ciclos (documentar o detectar); desborde del contador.
       30d (hecha) prueba aleatoria: generador de programas Dash pequeños con asignaciones, llamadas y campos al azar,
       ejecutados con `--memcheck` en el PC y en el emulador (A500); cada fallo encontrado pasa a ser un test.
-      30e optimizar con medidas (`tools/bench.py`, A500 y A1200): `_dash_otmp_take` recorre la lista de
+      30e (hecha) optimizar con medidas (`tools/bench.py`, A500 y A1200): `_dash_otmp_take` recorre la lista de
       temporales (lineal), quitar pares `retain`/`release` que se anulan (parámetros prestados, `obj_set` de un
       temporal recién creado), camino rápido en línea; volver a mirar la cabecera de 16 bytes (27c) si sale barata.
       Cada cambio con antes/después en la bitácora y en el panel de comparativas.
       30f documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
+      30g `nil` (pedido por el usuario el 2026-10-15): valor vacío para variables, campos y parámetros de tipo
+      struct o `Array` (y String si es sencillo). `x = nil`, `if x == nil`, `Nodo(1, nil)`; comparar con `nil` en
+      C es `NULL`. Acceder a un campo de `nil` (`x.campo`) no debe colgar el Amiga: decidir y medir entre un error
+      claro en tiempo de ejecución (mensaje y salida limpia) o comprobarlo solo con `--memcheck`. Tests: lista
+      enlazada en Dash puro (sin el `@native vacio()` de `test_refcount_chain`), árbol, "sin objetivo" en un
+      struct; `--memcheck` y `tools/fuzz_refcount.py` con `nil` entre sus sentencias. Documentar.
 - [ ] 31. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
       juegos y cálculos rápidos en 68000, donde `Float` cuesta ~100 µs por suma. Partes:
       31a diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
@@ -956,3 +962,32 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Benchmarks (`30d: ...`): todo dentro del ruido frente a 30c; tamaño 255.568 → 255.660 bytes.
 - Tests: 111/111 sin emulador; 262/262 con `--emu --emu-a500 --emu-32`; con `--memcheck` 211/211 en A1200 y A500
   (3.2 ya pasaba con `--memcheck`); ejemplos 30/30.
+
+### 2026-10-15 — Tarea 30e (conteo de referencias 5/6: optimizar)
+- Base: 111/111 sin emulador, ejemplos 30/30.
+- Medido primero por piezas en el A500 (programa con bucles en C de 5.000 vueltas, ciclos a 7,09 MHz con la
+  RAM lenta del A500): bucle vacío 44, reservar y devolver un bloque 578, `retain`+`release` 228, crear un struct
+  + retener + soltar 1.584, `p = Punto(i, i)` en un bucle Dash 1.985.
+- Hecho:
+  1. Los objetos se reservan sin poner el bloque a cero (`_dash_rc_alloc_obj` usa `_dash_block_get`): la
+     cabecera se rellena entera y los constructores asignan todos los campos (los String y struct/Array empiezan
+     en `NULL` antes de asignarlos). `DashArray_create` pone `data = NULL` si está vacía. `_dash_rc_alloc` (para
+     C) sigue dando el cuerpo a cero. Con `--memcheck` un campo sin asignar se vería como `0xDB`.
+  2. Un struct sin campos String, struct o Array no lleva destructor (`destroy = NULL`): liberarlo no llama a nada.
+  3. Constructores con una referencia: `_dash_struct_new_X` y `DashArray_from_new` crean el objeto con cuenta 1
+     y fuera de la lista de temporales; `p = Punto(...)`, `c.p = Punto(...)` y `b = [...]` los usan
+     (`_dash_obj_set_new` suelta el valor anterior). Así no se mete en la lista para sacarlo enseguida buscándolo.
+     `_dash_struct_create_X` (temporal: argumentos, elementos, retornos) tiene su propio cuerpo: llamar a `_new`
+     desde `_create` costaba ~280 ciclos más por objeto.
+  - Piezas tras 1 y 2: crear+retener+soltar 1.584 → 1.087 ciclos; `p = Punto(i, i)` 1.985 → 1.490; con 3: 779.
+- Medido (`bench_core`, A500, ns por vuelta, misma tanda): `struct_new_field` 323.020 → 111.850 (−65 %),
+  `array_literal_new` 475.498 → 243.645 (−49 %), `nested_struct_new` 1.051.126 → 777.694 (−26 %); lo demás igual.
+- `tools/bench.py --save` (A500 / A1200, ns): `struct_new_field` 323.235 → 112.376 / 75.274 → 23.761, `array_literal_new`
+  475.616 → 243.187 / 109.663 → 54.416, `nested_struct_new` 1.051.091 → 777.280 / 245.145 → 183.327. Tamaño total
+  255.660 → 255.292 bytes (los structs sin destructor compensan el segundo constructor).
+- Tests: 111/111 sin emulador; 262/262 con `--emu --emu-a500 --emu-32`, también con `--memcheck`; 100 programas
+  aleatorios con `--memcheck` y 60 normales sin fallos; ejemplos 30/30. Tests cambiados (C esperado):
+  `test_object_memory`, `test_struct_adv`, `test_arrays_adv`.
+- No hecho: cabecera de 16 bytes (27c). Con los objetos que ya no pasan por la lista de temporales, `next` y
+  `serial` siguen haciendo falta para los temporales; juntarlos con `_refcount` complica justo el código que
+  esta tarea ha medido. El usuario prefirió no hacerlo salvo que un programa real lo pida.

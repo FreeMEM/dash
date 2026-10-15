@@ -801,6 +801,11 @@ tests/
 ### Pendiente:
 - Coma fija (`Fixed`, 16.16): decimales rápidos en 68000. Tarea 31 de `docs/MEJORAS_LOOP.md`
 - Conteo de referencias: modo de depuración, auditoría, pruebas aleatorias y optimización. Tarea 30
+- `nil` para structs y listas (tarea 30g)
+
+### Próximo proyecto (pedido el 2026-10-15, después del plan de mejoras):
+- Navegador ligero escrito en Dash con interfaz MUI: XHTML, CSS, JavaScript moderno y HTTPS. Sirve para hacer
+  crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y exigente. Diseño y plan por hacer.
 
 ---
 

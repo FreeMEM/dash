@@ -1707,5 +1707,104 @@
    "test_struct_methods": 5364,
    "variables_test": 5280
   }
+ },
+ {
+  "commit": "6ac9146",
+  "date": "2026-10-15 13:11",
+  "label": "30e: objetos sin poner a cero, constructores con referencia",
+  "ns": {
+   "a500": {
+    "int_loop": 6941,
+    "while_loop": 5758,
+    "func_call": 5758,
+    "float_mul_add": 104898,
+    "float_mul": 117714,
+    "array_get_set": 69183,
+    "for_each_10": 83896,
+    "array_literal_new": 243187,
+    "struct_new_field": 112376,
+    "string_concat_int": 458452,
+    "string_interp": 652126,
+    "string_return": 544570,
+    "string_compare": 61020,
+    "nested_struct_new": 777280,
+    "string_chars_26": 137451,
+    "gfx_pixel": 392911,
+    "gfx_pixel_same_pen": 267401,
+    "gfx_rect_50": 912198,
+    "gfx_line": 891487,
+    "gfx_text_concat": 3888133,
+    "bitmap_blit_32": 1468961,
+    "bob_move_draw_16": 5237614
+   },
+   "a1200": {
+    "int_loop": 1617,
+    "while_loop": 1429,
+    "func_call": 1439,
+    "float_mul_add": 22040,
+    "float_mul": 28480,
+    "array_get_set": 14988,
+    "for_each_10": 20430,
+    "array_literal_new": 54416,
+    "struct_new_field": 23761,
+    "string_concat_int": 108894,
+    "string_interp": 154522,
+    "string_return": 129240,
+    "string_compare": 15251,
+    "nested_struct_new": 183327,
+    "string_chars_26": 39640,
+    "gfx_pixel": 104803,
+    "gfx_pixel_same_pen": 71329,
+    "gfx_rect_50": 568441,
+    "gfx_line": 751141,
+    "gfx_text_concat": 1264500,
+    "bitmap_blit_32": 638144,
+    "bob_move_draw_16": 1729405
+   }
+  },
+  "mem": {
+   "a500": {
+    "mem_1000_strings": 20680,
+    "mem_1000_structs": 33088
+   },
+   "a1200": {
+    "mem_1000_strings": 20680,
+    "mem_1000_structs": 33088
+   }
+  },
+  "sizes": {
+   "bench_core": 15140,
+   "bench_gfx": 10124,
+   "event_loop_test": 5180,
+   "flowpaint": 13316,
+   "flowpaint2": 12980,
+   "flowpaint3": 11848,
+   "hola": 4996,
+   "sprite_editor": 11808,
+   "test_audio": 10636,
+   "test_blitter": 6856,
+   "test_const": 4712,
+   "test_copper": 5780,
+   "test_copper2": 6772,
+   "test_dos_module": 6464,
+   "test_doublebuf": 6644,
+   "test_fileio": 8268,
+   "test_gadtools": 10716,
+   "test_graphics_module": 6892,
+   "test_iff": 6424,
+   "test_intuition": 7708,
+   "test_lambda": 5188,
+   "test_memory": 6232,
+   "test_native": 4496,
+   "test_reaction": 8520,
+   "test_rtg": 9256,
+   "test_screen": 6736,
+   "test_screen_custom": 6936,
+   "test_slice": 8056,
+   "test_soft_sprites": 9040,
+   "test_sprites": 7236,
+   "test_struct_methods": 5052,
+   "variables_test": 5280
+  }
  }
 ]

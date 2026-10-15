@@ -4,6 +4,7 @@ Generates C code from the analyzed AST using templates.
 """
 from compiler.tmp_marks import strip_unused_marks
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from string import Template
@@ -394,8 +395,10 @@ static void _dash_otmp_push(_Dash_RefHeader *h) {
     _dash_otmp = h;
 }
 
+/* The block is not cleared: the header is filled here and the constructors set
+   every field (a recycled block would cost a clearing loop per object) */
 static void *_dash_rc_alloc_obj(LONG size, void (*destroy)(void *)) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get_clear(sizeof(_Dash_RefHeader) + size);
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + size);
     if (!hdr) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_objs++;
@@ -407,8 +410,28 @@ static void *_dash_rc_alloc_obj(LONG size, void (*destroy)(void *)) {
     return _DASH_FROM_HEADER(hdr);
 }
 
+/* A new object that a variable or field adopts at once: count 1 and not a
+   temporary (no push to the temporaries list and no search to take it out) */
+static void *_dash_rc_new_obj(LONG size, void (*destroy)(void *)) {
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + size);
+    if (!hdr) return NULL;
+#ifdef DASH_MEMCHECK
+    _dash_mc_objs++;
+#endif
+    hdr->next = NULL;
+    hdr->serial = 0;
+    hdr->_refcount = 1;
+    hdr->_size = size;
+    hdr->destroy = destroy;
+    return _DASH_FROM_HEADER(hdr);
+}
+
+/* cleared, for C code that builds its own objects */
 static void *_dash_rc_alloc(LONG size) {
-    return _dash_rc_alloc_obj(size, NULL);
+    UBYTE *p = (UBYTE *)_dash_rc_alloc_obj(size, NULL);
+    LONG i;
+    if (p) for (i = 0; i < size; i++) p[i] = 0;
+    return p;
 }
 
 /* Freeing an object releases what it holds, which may free more objects: a
@@ -499,6 +522,13 @@ static void _dash_obj_set(void **var, void *value) {
     void *old = *var;
     if (value == old) return;
     _dash_retain(value);
+    *var = value;
+    _dash_release(old);
+}
+
+/* var = value for a new object made with one reference (_dash_struct_new_X) */
+static void _dash_obj_set_new(void **var, void *value) {
+    void *old = *var;
     *var = value;
     _dash_release(old);
 }
@@ -614,6 +644,7 @@ static void DashArray_destroy(void *obj) {
 static DashArrayLong* DashArray_create(LONG size) {
     DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(sizeof(DashArrayLong), DashArray_destroy);
     if (!arr) return NULL;
+    arr->data = NULL;
     if (size > 0) {
         arr->data = (LONG *)_dash_block_get_clear(sizeof(LONG) * size);
         if (!arr->data) return NULL;
@@ -628,6 +659,22 @@ static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
     if (arr) {
         for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
     }
+    return arr;
+}
+
+/* DashArray_from for "var = [...]": the new array has one reference and is not a
+   temporary (see _dash_rc_new_obj) */
+static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
+    DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(sizeof(DashArrayLong), DashArray_destroy);
+    if (!arr) return NULL;
+    arr->data = NULL;
+    if (size > 0) {
+        arr->data = (LONG *)_dash_block_get(sizeof(LONG) * size);
+        if (!arr->data) return NULL;
+        for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
+    }
+    arr->length = size;
+    arr->capacity = size;
     return arr;
 }
 
@@ -6060,28 +6107,42 @@ static {ret_type} {native.name}({params_str}) {{
         for field in struct.fields:
             c_type = type_map.get(field.field_type, "LONG")
             params.append(f"{c_type} {field.name}")
+            # the block is not cleared: owned fields start NULL before they are set
             if c_type == "STRPTR":
                 self.uses_strings = True
-                assigns.append(f"    _dash_str_set(&s->{field.name}, {field.name});")
+                assigns.append(f"    s->{field.name} = NULL;\n    _dash_str_set(&s->{field.name}, {field.name});")
                 frees.append(f"    _dash_str_free(s->{field.name});")
-            elif self._is_obj_c_type(c_type):   # struct or Array field
-                assigns.append(f"    _dash_obj_set((void **)&s->{field.name}, {field.name});")
+            elif self._is_obj_c_type(c_type):   # struct or Array field: a new reference
+                assigns.append(f"    s->{field.name} = {field.name};\n    _dash_retain({field.name});")
                 frees.append(f"    _dash_release_child(s->{field.name});")
             else:
                 assigns.append(f"    s->{field.name} = {field.name};")
 
         params_str = ", ".join(params)
         assigns_str = "\n".join(assigns)
-        frees_str = "\n".join(frees) or "    (void)s;"
-
-        constructor = f"""
+        # a struct without Strings, structs or Arrays has nothing to give back:
+        # no destructor, so freeing it calls nothing
+        destroy = f"_dash_struct_destroy_{struct.name}" if frees else "NULL"
+        destructor = f"""
 static void _dash_struct_destroy_{struct.name}(void *obj) {{
     {c_name} *s = ({c_name} *)obj;
-{frees_str}
+{chr(10).join(frees)}
+}}
+""" if frees else ""
+
+        # _new: with one reference, for "var = Struct(...)" (adopted at once);
+        # _create: a temporary, for anything else (arguments, lists, returns).
+        # Two bodies: calling one from the other cost ~280 cycles on a 68000
+        constructor = f"""{destructor}
+static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
+    {c_name} *s = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), {destroy});
+    if (!s) return NULL;
+{assigns_str}
+    return s;
 }}
 
 static {c_name}* _dash_struct_create_{struct.name}({params_str}) {{
-    {c_name} *s = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), _dash_struct_destroy_{struct.name});
+    {c_name} *s = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), {destroy});
     if (!s) return NULL;
 {assigns_str}
     return s;
@@ -6468,6 +6529,29 @@ static {ret_type} {method_name}({params_str}) {{
             # Reassignment to existing variable
             self.emit(f"{indent}{node.name} = {value};\n")
 
+    @staticmethod
+    def _new_object(value: str) -> Optional[str]:
+        """The same value made with one reference instead of as a temporary, when it
+        is exactly one constructor call or array literal: _dash_struct_new_X(args),
+        DashArray_from_new(...), DashArray_own(DashArray_from_new(...), kind)."""
+        def one_call(text):   # the call that starts text ends at its last character
+            depth = 0
+            for i, c in enumerate(text):
+                depth += c == "("
+                depth -= c == ")"
+                if depth == 0 and c == ")":
+                    return i == len(text) - 1
+            return False
+        if not one_call(value):
+            return None
+        m = re.match(r"_dash_struct_create_(\w+)\(", value)
+        if m:
+            return f"_dash_struct_new_{m.group(1)}{value[m.end() - 1:]}"
+        for prefix in ("DashArray_from(", "DashArray_own(DashArray_from("):
+            if value.startswith(prefix):
+                return value.replace("DashArray_from(", "DashArray_from_new(", 1)
+        return None
+
     def _assign_object(self, name: str, c_type: str, value: str):
         """name = value for an array or struct variable: the variable holds a
         reference (adopting a new object); loop variables only borrow."""
@@ -6476,9 +6560,17 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.declare_var(name)
             self.context.own(name, "obj")
             self.emit(f"{indent}{c_type}{'' if c_type.endswith('*') else ' '}{name} = NULL;\n")
-            self.emit(f"{indent}_dash_obj_set((void **)&{name}, {value});\n")
+            new = self._new_object(value)
+            if new:
+                self.emit(f"{indent}{name} = {new};\n")
+            else:
+                self.emit(f"{indent}_dash_obj_set((void **)&{name}, {value});\n")
         elif self.context.is_owned(name) or name in self.global_objects:
-            self.emit(f"{indent}_dash_obj_set((void **)&{name}, {value});\n")
+            new = self._new_object(value)
+            if new:
+                self.emit(f"{indent}_dash_obj_set_new((void **)&{name}, {new});\n")
+            else:
+                self.emit(f"{indent}_dash_obj_set((void **)&{name}, {value});\n")
         else:
             self.emit(f"{indent}{name} = {value};\n")
 
@@ -7353,7 +7445,11 @@ static {ret_type} {method_name}({params_str}) {{
             return
         if field and self._is_obj_c_type(self._dash_type_to_c(field.field_type)):
             # and holds a reference to its struct and Array fields
-            self.emit(f"{indent}_dash_obj_set((void **)&{owner}->{node.member}, {value});\n")
+            new = self._new_object(value)
+            if new:
+                self.emit(f"{indent}_dash_obj_set_new((void **)&{owner}->{node.member}, {new});\n")
+            else:
+                self.emit(f"{indent}_dash_obj_set((void **)&{owner}->{node.member}, {value});\n")
             return
         value = self._escape_any(node.value, value)
         self.emit(f"{indent}{owner}->{node.member} = {value};\n")
