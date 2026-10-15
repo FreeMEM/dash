@@ -140,10 +140,10 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
       después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
 - [x] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
-- [ ] 30. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
+- [~] 30. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
       más delicada: un fallo cuelga el Amiga (doble liberación, uso tras liberar) o pierde memoria sin avisar.
       Partes:
-      30a modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
+      30a (hecha) modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
       (relleno y contador imposible) y avisa de doble liberación, uso tras liberar y objetos vivos al salir.
       Apagado no cuesta nada. Probado en el harness del PC (con AddressSanitizer) y en el emulador.
       30b auditoría: repasar cada camino del codegen que toca objetos (asignar, parámetros, `return`, campos,
@@ -807,3 +807,29 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   `test_window_handles` compara solo `Disk:` (3.1 llama al disco RAM "Ram Disk", 3.2 "RAM Disk").
 - Resultado: 103/103 sin emulador; 233/233 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.
 - No hecho: los benchmarks (`tools/bench.py`) siguen midiendo solo A500 y A1200 con 3.1.
+
+### 2026-10-15 — Tarea 30a (conteo de referencias 1/6: modo `--memcheck`)
+- Base: 103/103 sin emulador (233 con las tres máquinas), ejemplos 30/30.
+- Hecho:
+  - `./dash --memcheck` compila con `-DDASH_MEMCHECK`. Todo va en `#ifdef` del runtime: sin la opción el ejecutable
+    sale idéntico byte a byte (comprobado con `bench_core` y otro programa, md5 igual antes y después).
+  - Cuenta strings y objetos vivos (alta en `_dash_str_alloc`/`_dash_rc_alloc_obj`, baja al soltarlos) y los
+    escapados (`_dash_str_escape`, `_dash_obj_escape`).
+  - Bloques liberados: se rellenan con `0xDB` y los 64 últimos quedan retenidos antes de volver a la caché, así
+    un objeto liberado tiene la cuenta `0xDBDBDBDB` y un string el tamaño `0xDBDBDBDB`. `retain`, `release`,
+    `obj_float`, `refcount`, `str_free` y `str_drop` lo comprueban: "objeto usado tras liberarse", "string
+    liberado dos veces". `release` de un objeto sin referencias (antes se ignoraba en silencio por el `> 0`):
+    "release de un objeto sin referencias". Hasta 20 avisos, en el momento.
+  - Al salir (`_dash_mem_cleanup`): `memcheck: vivos N objetos y M strings (escapados A y B), errores E`. Para que
+    sirva, al final de `Main` se sueltan sus variables y temporales (`#if defined(DASH_MEMCHECK)`); en el modo
+    normal lo sigue haciendo el borrado del pool.
+  - Runner: `# memcheck` en un test lo compila así (el resumen forma parte de la salida esperada). El harness del
+    PC se compila dos veces: normal y con `-DDASH_MEMCHECK -fsanitize=address,undefined` (sin ASan si el gcc no
+    lo tiene); comprueba altas, bajas, escapes, los cuatro avisos y que los bloques retenidos se reciclan.
+- Test: `test_memcheck` (funciones, bucle de 100 vueltas, struct y string guardados en listas, y C que libera dos
+  veces, usa un objeto liberado y suelta un temporal sin referencia): en A1200, A500 y 3.2 da 0 vivos salvo los
+  dos escapados, y los 4 errores provocados.
+- Limitación: un bloque liberado hace 65 liberaciones o más ya puede estar reutilizado y no se reconoce.
+- Tests: 104/104 sin emulador; 237/237 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.
+- Documentado: MANUAL_REFERENCIA (Compilación), QUICK_REFERENCE, README, CLAUDE.md local.
+- Siguiente: 30b, pasar todos los tests con `--memcheck` y repasar cada camino del codegen.

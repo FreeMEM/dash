@@ -69,6 +69,9 @@ def main():
     parser.add_argument("--fpu", action="store_true",
                         help="For Amigas with a 68881/68882 FPU: Float uses FPU instructions "
                              "(needs a 68020 or better; the program will not run without an FPU)")
+    parser.add_argument("--memcheck", action="store_true",
+                        help="Memory check build: reports objects or strings freed twice or used after "
+                             "being freed, and what is still alive at exit (slower; for testing)")
     args = parser.parse_args()
 
     input_filename = args.input_file
@@ -156,6 +159,8 @@ def main():
         compile_command.extend(["-m68020", "-m68881"])
     if args.stack is not None:
         compile_command.append(f"-DDASH_STACK={args.stack}")
+    if args.memcheck:
+        compile_command.append("-DDASH_MEMCHECK")
     # extra gcc options, for experiments (e.g. DASH_CFLAGS="-Os")
     compile_command.extend(shlex.split(os.environ.get("DASH_CFLAGS", "")))
     compile_command.extend(c_files)

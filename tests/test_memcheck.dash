@@ -1,0 +1,62 @@
+# Test: ./dash --memcheck. Normal code leaves nothing alive; a struct stored in a
+# list escapes (kept until exit); C code that frees twice or uses a freed object
+# is reported. The summary is printed at exit.
+#
+# memcheck
+# expect-c: _dash_tmp_release_f(0);
+# expect-out: 6
+# expect-out: 20
+# expect-out: memcheck: ERROR objeto usado tras liberarse
+# expect-out: memcheck: ERROR objeto usado tras liberarse
+# expect-out: memcheck: ERROR release de un objeto sin referencias
+# expect-out: memcheck: ERROR string liberado dos veces
+# expect-out: fin
+# expect-out: memcheck: vivos 1 objetos y 1 strings (escapados 1 y 1), errores 4
+
+struct P
+    x: Int
+    y: Int
+end
+
+func f(n)
+    a = [1, 2, n]
+    p = P(n, 2)
+    s = "v" + n
+    return a[2] + p.x
+end
+
+@native func errores()
+"""
+    DashArrayLong *a = DashArray_create(2);
+    STRPTR s = _dash_str_dup((STRPTR)"hola", FALSE);
+    _Dash_P *p = _dash_struct_create_P(1, 2);
+    _dash_retain(a);
+    _dash_release(a);          /* freed here */
+    _dash_retain(a);           /* used after being freed */
+    _dash_retain(p);
+    _dash_release(p);
+    _dash_release(p);          /* freed, then released again: also "used after" */
+    _dash_release(_dash_struct_create_P(3, 4));   /* a new temporary nobody retained */
+    _dash_str_free(s);
+    _dash_str_free(s);         /* freed twice */
+"""
+end
+
+Main
+    b = [1, 2]
+    q = P(1, 2)
+    t = "hola " + 3
+    Print f(3)
+    total = 0
+    for i in (1..100)
+        u = P(i, i)
+        total = total + f(1) - u.x + i
+    end
+    Print total / 10
+    lista = [0]
+    lista[0] = P(5, 6)
+    nombres = ["a"]
+    nombres[0] = "x" + total
+    errores()
+    Print "fin"
+end

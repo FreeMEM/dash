@@ -64,11 +64,25 @@ end
 ./dash --small programa.dash -o programa      # gcc -Os: ~7 % mas pequeno, bucles mas lentos
 ./dash --stack 32768 programa.dash -o prog    # pila minima (por defecto 16 KB; 0 = la del shell)
 ./dash --fpu programa.dash -o programa        # solo 68020 con FPU 68881/68882
+./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ```
 
 Los programas necesitan Kickstart 3.0 o superior. Al arrancar piden una pila de al menos 16 KB:
 el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 bytes por programa;
 `--stack 0` lo quita).
+
+`--memcheck` compila una version de prueba que vigila la memoria de listas, structs y textos. Avisa
+en cuanto algo se libera dos veces o se usa despues de liberarse (`memcheck: ERROR ...`) y, al
+salir, dice cuanto queda vivo:
+
+```
+memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+```
+
+"Escapados" son los que se guardaron dentro de una lista o se dieron a codigo C: se liberan al
+salir del programa. Para que la cuenta sea util, `Main` suelta sus variables al acabar (solo en
+este modo). Los bloques liberados se rellenan con `0xDB` y los 64 ultimos no se reutilizan, para
+reconocerlos. Es mas lento y gasta algo mas de memoria; sin la opcion no cuesta nada.
 
 ---
 

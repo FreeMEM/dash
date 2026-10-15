@@ -8,6 +8,7 @@
 ./dash --small prog.dash -o prog    # gcc -Os: ~7% smaller, slower loops
 ./dash --stack 32768 ...            # minimum stack (0: as the shell gives it)
 ./dash --fpu prog.dash -o prog      # 68020 + 68881/68882 FPU only
+./dash --memcheck prog.dash -o prog # memory check: double frees, use after free, live at exit
 ```
 Programs need Kickstart 3.0+.
 

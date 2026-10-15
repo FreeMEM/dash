@@ -172,6 +172,9 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
         "-o", str(exe_file),
         "-lm",
     ]
+    # '# memcheck': built as ./dash --memcheck (the exit summary is part of the output)
+    if any(l.strip() == "# memcheck" for l in test_file.read_text().splitlines()):
+        compile_cmd.insert(1, "-DDASH_MEMCHECK")
     from compiler.softfloat import softfloat_objects, uses_float
     if uses_float(c_file.read_text()):
         compile_cmd[-3:-3] = softfloat_objects(gcc_path)  # same as ./dash
@@ -277,13 +280,25 @@ def run_runtime_host_test() -> Optional[TestResult]:
     src = build_dir / "runtime_host.c"
     exe = build_dir / "runtime_host"
     src.write_text(harness.replace("/*RUNTIME*/", runtime))
-    build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", "-o", str(exe), str(src)],
-                           capture_output=True, text=True)
-    if build.returncode != 0:
-        error = "host build failed: " + build.stderr.strip()[:200]
-    else:
-        run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
-        error = None if run.returncode == 0 else run.stdout.strip()[:200]
+    # normal build, then the --memcheck build with AddressSanitizer (catches a
+    # runtime that reads or writes outside its blocks) when the host gcc has it
+    error = None
+    for flags in ([], ["-DDASH_MEMCHECK", "-fsanitize=address,undefined", "-g"]):
+        build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", *flags, "-o", str(exe), str(src)],
+                               capture_output=True, text=True)
+        if build.returncode != 0 and flags:
+            build = subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wno-unused-function", "-DDASH_MEMCHECK",
+                                    "-o", str(exe), str(src)], capture_output=True, text=True)
+        tag = " (memcheck)" if flags else ""
+        if build.returncode != 0:
+            error = f"host build failed{tag}: " + build.stderr.strip()[:200]
+            break
+        # the pool is deleted at exit without freeing each block: not leaks
+        run = subprocess.run([str(exe)], capture_output=True, text=True, timeout=60,
+                             env=dict(os.environ, ASAN_OPTIONS="detect_leaks=0"))
+        if run.returncode != 0:
+            error = (run.stdout.strip() + " " + run.stderr.strip())[:300] + tag
+            break
     return TestResult(name="runtime/host", passed=error is None, transpile_ok=True,
                       compile_ok=error is None, error_message=error,
                       duration=time.time() - start_time)

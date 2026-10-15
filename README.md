@@ -156,6 +156,9 @@ cd dash
 # Para Amigas con FPU 68881/68882 (Float con instrucciones de FPU; 68020+)
 ./dash --fpu archivo.dash -o bin/archivo
 
+# Comprobación de memoria: avisa de dobles liberaciones y usos tras liberar, y de lo que queda vivo al salir
+./dash --memcheck archivo.dash -o bin/archivo
+
 # Ejecutar en FS-UAE sin ventana y ver la salida (Kickstart en $DASH_KICKSTART o AROS)
 tools/emu_run.py archivo.dash
 tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s

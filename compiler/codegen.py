@@ -104,7 +104,41 @@ static __inline__ LONG _dash_imod(LONG a, LONG b) {
     # deleted at exit, so runtime allocations never outlive the program
     MEMORY_RUNTIME = """\
 /* Dash Memory Runtime */
+#define _DASH_MEMORY_RUNTIME 1
 static APTR _dash_pool = NULL;
+
+#ifdef DASH_MEMCHECK
+/* ./dash --memcheck: counts live strings and objects, fills freed blocks with
+   0xDB and holds the last _DASH_MC_HOLD of them back before they are reused,
+   so a freed object or string is recognised (its count or size reads
+   _DASH_MC_DEAD). Errors are printed as they happen; a summary at exit. */
+#define _DASH_MC_DEAD 0xDBDBDBDBUL
+#define _DASH_MC_HOLD 64
+static LONG _dash_mc_objs, _dash_mc_strs, _dash_mc_obj_esc, _dash_mc_str_esc, _dash_mc_errors;
+static APTR _dash_mc_held[_DASH_MC_HOLD];
+static ULONG _dash_mc_held_size[_DASH_MC_HOLD];
+static LONG _dash_mc_next;
+
+static void _dash_mc_error(CONST_STRPTR what) {
+    if (++_dash_mc_errors <= 20) Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
+}
+
+/* Poison *b and hold it; give back in *b the oldest held block to reuse (FALSE),
+   or TRUE when there is none yet */
+static BOOL _dash_mc_hold(APTR *b, ULONG *size) {
+    LONG i = _dash_mc_next;
+    APTR old = _dash_mc_held[i];
+    ULONG old_size = _dash_mc_held_size[i], n;
+    for (n = 0; n < *size; n++) ((UBYTE *)*b)[n] = 0xDB;
+    _dash_mc_held[i] = *b;
+    _dash_mc_held_size[i] = *size;
+    _dash_mc_next = (i + 1) % _DASH_MC_HOLD;
+    if (!old) return TRUE;
+    *b = old;
+    *size = old_size;
+    return FALSE;
+}
+#endif
 
 static APTR _dash_alloc(ULONG size) {
     if (!_dash_pool) {
@@ -156,6 +190,9 @@ static APTR _dash_block_get_clear(ULONG size) {
 }
 
 static __inline__ void _dash_block_put(APTR b, ULONG size) {
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_hold(&b, &size)) return;
+#endif
     if (size <= _DASH_SMALL_MAX) {
         ULONG c = (size - 1) >> 3;
         *(APTR *)b = _dash_small_free[c];
@@ -187,6 +224,9 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     _DashStrHdr *h = (_DashStrHdr *)_dash_block_get(size);
     STRPTR text;
     if (!h) return NULL;
+#ifdef DASH_MEMCHECK
+    _dash_mc_strs++;
+#endif
     h->size = size;
     h->next = NULL;
     h->serial = 0;
@@ -201,6 +241,10 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
 }
 
 static void _dash_str_drop(_DashStrHdr *h) {
+#ifdef DASH_MEMCHECK
+    if (h->size == _DASH_MC_DEAD) { _dash_mc_error((CONST_STRPTR)"string liberado dos veces"); return; }
+    _dash_mc_strs--;
+#endif
     _dash_block_put(h, h->size & ~_DASH_STR_KEEP);
 }
 
@@ -278,6 +322,9 @@ static void _dash_str_free(STRPTR p) {
     _DashStrHdr *h;
     if (!p) return;
     h = _DASH_STR_HDR(p);
+#ifdef DASH_MEMCHECK
+    if (h->size == _DASH_MC_DEAD) { _dash_mc_error((CONST_STRPTR)"string liberado dos veces"); return; }
+#endif
     if (!(h->size & _DASH_STR_KEEP)) _dash_str_drop(h);
 }
 
@@ -298,6 +345,9 @@ static STRPTR _dash_str_escape(STRPTR p) {
     if (!p) return p;
     if (!_dash_tmp_take(p)) p = _dash_str_dup(p, FALSE);
     if (p) _DASH_STR_HDR(p)->size |= _DASH_STR_KEEP;
+#ifdef DASH_MEMCHECK
+    if (p) _dash_mc_str_esc++;
+#endif
     return p;
 }
 
@@ -338,6 +388,9 @@ static void _dash_otmp_push(_Dash_RefHeader *h) {
 static void *_dash_rc_alloc_obj(LONG size, void (*destroy)(void *)) {
     _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get_clear(sizeof(_Dash_RefHeader) + size);
     if (!hdr) return NULL;
+#ifdef DASH_MEMCHECK
+    _dash_mc_objs++;
+#endif
     hdr->_refcount = 0;
     hdr->_size = size;
     hdr->destroy = destroy;
@@ -350,6 +403,9 @@ static void *_dash_rc_alloc(LONG size) {
 }
 
 static void _dash_obj_free(_Dash_RefHeader *h) {
+#ifdef DASH_MEMCHECK
+    _dash_mc_objs--;
+#endif
     if (h->destroy) h->destroy(_DASH_FROM_HEADER(h));
     _dash_block_put(h, sizeof(_Dash_RefHeader) + h->_size);
 }
@@ -365,10 +421,22 @@ static void _dash_otmp_take(_Dash_RefHeader *h) {
     h->serial = 0;
 }
 
+#ifdef DASH_MEMCHECK
+/* TRUE (and an error) if the object was freed */
+static BOOL _dash_mc_dead(_Dash_RefHeader *h) {
+    if ((ULONG)h->_refcount != _DASH_MC_DEAD) return FALSE;
+    _dash_mc_error((CONST_STRPTR)"objeto usado tras liberarse");
+    return TRUE;
+}
+#endif
+
 static void _dash_retain(void *ptr) {
     _Dash_RefHeader *h;
     if (!ptr) return;
     h = _DASH_GET_HEADER(ptr);
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_dead(h)) return;
+#endif
     if (h->serial) _dash_otmp_take(h);
     h->_refcount++;
 }
@@ -377,11 +445,18 @@ static void _dash_release(void *ptr) {
     _Dash_RefHeader *h;
     if (!ptr) return;
     h = _DASH_GET_HEADER(ptr);
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_dead(h)) return;
+    if (h->_refcount <= 0) _dash_mc_error((CONST_STRPTR)"release de un objeto sin referencias");
+#endif
     if (h->_refcount > 0 && --h->_refcount == 0 && !h->serial) _dash_obj_free(h);
 }
 
 static LONG _dash_refcount(void *ptr) {
     if (!ptr) return 0;
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_dead(_DASH_GET_HEADER(ptr))) return 0;
+#endif
     return _DASH_GET_HEADER(ptr)->_refcount;
 }
 
@@ -399,12 +474,18 @@ static void *_dash_obj_float(void *ptr) {
     _Dash_RefHeader *h;
     if (!ptr) return ptr;
     h = _DASH_GET_HEADER(ptr);
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_dead(h)) return ptr;
+#endif
     if (h->_refcount > 0 && --h->_refcount == 0) _dash_otmp_push(h);
     return ptr;
 }
 
 /* The object leaves Dash's control (stored in an array, given to C code): kept until exit */
 static void *_dash_obj_escape(void *ptr) {
+#ifdef DASH_MEMCHECK
+    if (ptr) _dash_mc_obj_esc++;
+#endif
     _dash_retain(ptr);
     return ptr;
 }
@@ -420,6 +501,15 @@ static void _dash_otmp_release(ULONG mark) {
 }
 
 static void _dash_mem_cleanup(void) {
+#ifdef DASH_MEMCHECK
+    static BOOL reported = FALSE;
+    if (!reported) {
+        reported = TRUE;
+        Printf((CONST_STRPTR)"memcheck: vivos %ld objetos y %ld strings (escapados %ld y %ld), errores %ld\\n",
+               _dash_mc_objs, _dash_mc_strs, _dash_mc_obj_esc, _dash_mc_str_esc, _dash_mc_errors);
+    }
+    { LONG i; for (i = 0; i < _DASH_MC_HOLD; i++) _dash_mc_held[i] = NULL; }
+#endif
     if (_dash_pool) {
         DeletePool(_dash_pool);
         _dash_pool = NULL;
@@ -5977,6 +6067,12 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate code for the main block."""
         for stmt in node.body:
             self.visit(stmt)
+        # --memcheck: Main's variables and temporaries are let go at the end, so
+        # the exit summary shows only what nothing could free (normally the pool
+        # deletion at exit frees them)
+        owned = self.context.current_owned()
+        self.emit("#if defined(DASH_MEMCHECK) && defined(_DASH_MEMORY_RUNTIME)\n"
+                  + self._frees(owned) + f"{self.context.indent}_dash_tmp_release_f(0);\n#endif\n")
 
     def visit_WindowOpen(self, node: WindowOpen):
         """Generate code to open a window."""

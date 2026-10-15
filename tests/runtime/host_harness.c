@@ -9,6 +9,7 @@
 #include <string.h>
 #include <limits.h>
 #include <stdint.h>
+#include <stdarg.h>
 typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef const char *CONST_STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE;
 #define MEMF_ANY 0
 #define MEMF_CLEAR 0x10000
@@ -19,11 +20,19 @@ static void FreePooled(APTR pool, APTR m, ULONG n){ live--; free(m); }
 #define TRUE 1
 #define FALSE 0
 static void DeletePool(APTR pool){ free(pool); }
+/* dos.library's Printf: LONG is 32 bits here, so %ld is printed as %d */
+static int Printf(CONST_STRPTR f, ...){ char fmt[256]; int j=0; va_list ap;
+ for(int i=0; f[i] && j<250; i++){ if(f[i]=='%' && f[i+1]=='l' && f[i+2]=='d'){ fmt[j++]='%'; fmt[j++]='d'; i+=2; } else fmt[j++]=f[i]; }
+ fmt[j]=0; va_start(ap,f); int n=vprintf(fmt,ap); va_end(ap); return n; }
 
 /*RUNTIME*/
 
 /* blocks parked in the small-string free lists count as freed */
-static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_SMALL_CLASSES;c++) for(APTR b=_dash_small_free[c];b;b=*(APTR*)b) n++; return n; }
+static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_SMALL_CLASSES;c++) for(APTR b=_dash_small_free[c];b;b=*(APTR*)b) n++;
+#ifdef DASH_MEMCHECK
+ for(int i=0;i<_DASH_MC_HOLD;i++) if(_dash_mc_held[i]) n++;   /* freed, held back by --memcheck */
+#endif
+ return n; }
 #define LIVE (live - cached_blocks())
 #define CHECK(c) do{ if(!(c)){ printf("FALLO linea %d: %s\n", __LINE__, #c); fails++; } }while(0)
 int main(void){ int fails=0;
@@ -108,5 +117,28 @@ int main(void){ int fails=0;
   _dash_obj_escape(a2); _dash_obj_set((void **)&a2, NULL); CHECK(LIVE == base + 2);   /* escaped: kept */
   _dash_release(NULL); _dash_retain(NULL); CHECK(_dash_obj_float(NULL) == NULL);
  }
+ #ifdef DASH_MEMCHECK
+ /* --memcheck: the code above made no errors; freed objects and strings are recognised */
+ {
+  CHECK(_dash_mc_errors == 0);
+  LONG objs = _dash_mc_objs, strs = _dash_mc_strs, obj_esc = _dash_mc_obj_esc, str_esc = _dash_mc_str_esc;
+  void *o = _dash_rc_alloc(8); CHECK(_dash_mc_objs == objs + 1);
+  _dash_retain(o); _dash_release(o); CHECK(_dash_mc_objs == objs);
+  _dash_retain(o); CHECK(_dash_mc_errors == 1);                 /* used after being freed */
+  _dash_release(o); CHECK(_dash_mc_errors == 2);
+  CHECK(_dash_refcount(o) == 0); CHECK(_dash_mc_errors == 3);
+  CHECK(_dash_obj_float(o) == o); CHECK(_dash_mc_errors == 4);
+  void *t = _dash_rc_alloc(8); _dash_release(t); CHECK(_dash_mc_errors == 5);   /* no reference to release */
+  STRPTR s = _dash_str_dup("hola", FALSE); CHECK(_dash_mc_strs == strs + 1);
+  _dash_str_free(s); CHECK(_dash_mc_strs == strs); CHECK(_dash_mc_errors == 5);
+  _dash_str_free(s); CHECK(_dash_mc_errors == 6);                /* freed twice */
+  STRPTR v = NULL; _dash_str_set(&v, "a"); _dash_str_set(&v, "b"); CHECK(_dash_mc_strs == strs + 1);
+  _dash_str_escape(DashString_concat("x", "y")); CHECK(_dash_mc_str_esc == str_esc + 1);
+  _dash_obj_escape(t); CHECK(_dash_mc_obj_esc == obj_esc + 1);
+  /* more frees than the hold: the oldest held blocks are reused, still recognised while held */
+  for (int i = 0; i < 3 * _DASH_MC_HOLD; i++) { void *k = _dash_rc_alloc(8); _dash_retain(k); _dash_release(k); }
+  CHECK(_dash_mc_errors == 6);
+ }
+ #endif
  _dash_mem_cleanup(); CHECK(_dash_pool==NULL);
  printf("fallos: %d\n", fails); return fails; }
