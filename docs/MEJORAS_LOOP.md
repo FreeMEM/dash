@@ -140,7 +140,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
       después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
 - [x] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
-- [~] 30. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
+- [x] 30. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
       más delicada: un fallo cuelga el Amiga (doble liberación, uso tras liberar) o pierde memoria sin avisar.
       Partes:
       30a (hecha) modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
