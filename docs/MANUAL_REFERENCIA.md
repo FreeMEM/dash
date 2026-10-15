@@ -782,6 +782,31 @@ filas = [[1, 2], [3, 4]]
 Print filas[1][0]
 ```
 
+### Diccionarios
+
+Un diccionario guarda valores por clave de texto. Su tipo es `{String: T}`:
+
+```
+edades = {"Ana": 30, "Bob": 25}
+edades["Eva"] = 41             # anade o cambia
+Print edades["Ana"]            # 30; una clave que no esta da 0 (nil en textos y structs)
+if edades.has("Bob")
+    edades.remove("Bob")
+end
+Print edades.length            # 2
+for nombre in edades.keys()    # lista de las claves (en cualquier orden)
+    Print nombre
+end
+
+var cabeceras: {String: String} = {}
+cabeceras["Host"] = "ejemplo.org"
+```
+
+Los valores pueden ser `Int`, `Bool`, `String`, structs o listas, y el diccionario es
+dueno de ellos como una lista. `d.clear()` lo vacia. Tambien se escribe a traves de campos
+(`hoja.reglas["color"] = "red"`). Buscar, anadir y quitar cuestan lo mismo con 10 claves
+que con 10.000 (tabla hash).
+
 ### nil
 
 `nil` es "ningun struct, lista o texto". Una variable que empieza vacia necesita su tipo:

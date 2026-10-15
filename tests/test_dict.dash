@@ -1,0 +1,77 @@
+# Test: dictionaries {String: T}: literal, d[k], d[k] = v (also through fields), has,
+# remove, keys, clear, length; Int, String and struct values; typed params and returns
+# memcheck
+# expect-out: 10 3 0 3
+# expect-out: has
+# expect-out: 2 2
+# expect-out: text/html otro.net
+# expect-out: nil
+# expect-out: 16
+# expect-out: 12
+# expect-out: red0
+# expect-out: 2001000 1000 1500 0
+# expect-out: 0
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+
+struct Punto
+    x: Int
+end
+
+struct Hoja
+    reglas: {String: String}
+end
+
+func cuenta(d: {String: Int}) -> Int
+    return d.length
+end
+
+func crea() -> {String: Punto}
+    r = {"a": Punto(1)}
+    r["b"] = Punto(2)
+    return r
+end
+
+Main
+    d = {"uno": 1, "dos": 2}
+    d["tres"] = 3
+    d["uno"] = 10
+    Print "" + d["uno"] + " " + d["tres"] + " " + d["nada"] + " " + d.length
+    if d.has("dos") and not d.has("cuatro")
+        Print "has"
+    end
+    d.remove("dos")
+    Print "" + d.length + " " + cuenta(d)
+    var c: {String: String} = {}
+    c["Content-Type"] = "text/html"
+    c["Host"] = "ejemplo.org"
+    c["Host"] = "otro" + ".net"
+    Print c["Content-Type"] + " " + c["Host"]
+    if c["falta"] == nil
+        Print "nil"
+    end
+    n = 0
+    for k in c.keys()
+        n = n + k.length
+    end
+    Print n
+    p = crea()
+    Print "" + p["a"].x + p["b"].x
+    h = Hoja({"color": "red"})
+    h.reglas["margin"] = "0"
+    Print h.reglas["color"] + h.reglas["margin"]
+    var g: {String: Int} = {}
+    for i in (1..2000)
+        g["k" + i] = i
+    end
+    s = 0
+    for i in (1..2000)
+        s = s + g["k" + i]
+    end
+    for i in (1..1000)
+        g.remove("k" + i)
+    end
+    Print "" + s + " " + g.length + " " + g["k1500"] + " " + g["k5"]
+    c.clear()
+    Print c.length
+end

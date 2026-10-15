@@ -17,10 +17,10 @@ from compiler.ast_nodes import (
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
     WindowProperty, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, NilLiteral,
     PropertyAccess, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod, SelfRef,
-    MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
+    MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
-from compiler.analyzer import AnalysisResult, list_elem_type
+from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 
 
@@ -862,6 +862,186 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
         if (s) while ((*p = *s++)) p++;
     }
     return result;
+}
+
+"""
+
+    # Dictionaries (dashweb D5): String -> value, a hash table with linear probing. Like
+    # lists, kind says what the values are (Ints, objects it holds, Strings it owns);
+    # the keys are its own copies.
+    DICT_RUNTIME = """\
+/* Dash Dict Runtime */
+typedef struct {
+    STRPTR *keys;      /* NULL = free slot */
+    LONG *vals;
+    LONG count;
+    LONG cap;          /* slots: 0 or a power of two */
+    LONG kind;         /* 0, _DASH_ARR_OBJS or _DASH_ARR_STRS */
+} DashDict;
+
+static ULONG _dash_dict_hash(STRPTR k) {
+    ULONG h = 5381;
+    while (*k) h = (h << 5) + h + (UBYTE)*k++;
+    return h;
+}
+
+static void _dash_dict_drop(DashDict *d, LONG v, BOOL child) {
+    if (d->kind == _DASH_ARR_OBJS) {
+        if (child) _dash_release_child((void *)v); else _dash_release((void *)v);
+    } else if (d->kind == _DASH_ARR_STRS) {
+        _dash_str_free((STRPTR)v);
+    }
+}
+
+static void DashDict_destroy(void *obj) {
+    DashDict *d = (DashDict *)obj;
+    LONG i;
+    if (!d->cap) return;
+    for (i = 0; i < d->cap; i++) {
+        if (d->keys[i]) { _dash_str_free(d->keys[i]); _dash_dict_drop(d, d->vals[i], TRUE); }
+    }
+    _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
+    _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+}
+
+/* A new empty dictionary: a temporary until a variable adopts it */
+static DashDict *DashDict_new(LONG kind) {
+    DashDict *d = (DashDict *)_dash_rc_alloc_obj(sizeof(DashDict), DashDict_destroy);
+    if (!d) return NULL;
+    d->keys = NULL;
+    d->vals = NULL;
+    d->count = 0;
+    d->cap = 0;
+    d->kind = kind;
+    return d;
+}
+
+/* The slot of key, or the free one where it would go (the table must exist) */
+static LONG _dash_dict_slot(DashDict *d, STRPTR key) {
+    ULONG mask = d->cap - 1, i = _dash_dict_hash(key) & mask;
+    while (d->keys[i] && strcmp((char *)d->keys[i], (char *)key)) i = (i + 1) & mask;
+    return (LONG)i;
+}
+
+static BOOL _dash_dict_grow(DashDict *d) {
+    LONG oldcap = d->cap, newcap = oldcap ? oldcap * 2 : 8, i, s;
+    STRPTR *oldkeys = d->keys;
+    LONG *oldvals = d->vals;
+    STRPTR *keys = (STRPTR *)_dash_block_get_clear(sizeof(STRPTR) * newcap);
+    LONG *vals = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
+    if (!keys || !vals) return FALSE;
+    d->keys = keys;
+    d->vals = vals;
+    d->cap = newcap;
+    for (i = 0; i < oldcap; i++) {
+        if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
+    }
+    if (oldcap) {
+        _dash_block_put(oldkeys, sizeof(STRPTR) * oldcap);
+        _dash_block_put(oldvals, sizeof(LONG) * oldcap);
+    }
+    return TRUE;
+}
+
+/* Slot for key, made if missing (own copy of the key, value 0); -1 without memory */
+static LONG _dash_dict_put(DashDict *d, STRPTR key) {
+    LONG s;
+    if (!d || !key) return -1;
+    if ((d->count + 1) * 4 > d->cap * 3 && !_dash_dict_grow(d)) return -1;
+    s = _dash_dict_slot(d, key);
+    if (!d->keys[s]) {
+        d->keys[s] = _dash_str_dup(key, FALSE);
+        d->vals[s] = 0;
+        d->count++;
+    }
+    return s;
+}
+
+static void DashDict_set(DashDict *d, STRPTR key, LONG value) {
+    LONG s = _dash_dict_put(d, key);
+    if (s >= 0) d->vals[s] = value;
+}
+
+static void DashDict_set_obj(DashDict *d, STRPTR key, void *value) {
+    LONG s = _dash_dict_put(d, key);
+    if (s < 0) return;
+    d->kind = _DASH_ARR_OBJS;
+    _dash_obj_set((void **)&d->vals[s], value);
+}
+
+static void DashDict_set_str(DashDict *d, STRPTR key, STRPTR value) {
+    LONG s = _dash_dict_put(d, key);
+    if (s < 0) return;
+    d->kind = _DASH_ARR_STRS;
+    _dash_str_set((STRPTR *)&d->vals[s], value);
+}
+
+/* The value, or 0 (nil, "" for nobody) if the key is not there */
+static LONG DashDict_get(DashDict *d, STRPTR key) {
+    LONG s;
+    if (!d || !key || !d->cap) return 0;
+    s = _dash_dict_slot(d, key);
+    return d->keys[s] ? d->vals[s] : 0;
+}
+
+static BOOL DashDict_has(DashDict *d, STRPTR key) {
+    return d && key && d->cap && d->keys[_dash_dict_slot(d, key)] != NULL;
+}
+
+/* Linear probing without tombstones: the entries after the hole move back */
+static void DashDict_remove(DashDict *d, STRPTR key) {
+    LONG s, j, h, mask;
+    if (!d || !key || !d->cap) return;
+    s = _dash_dict_slot(d, key);
+    if (!d->keys[s]) return;
+    _dash_str_free(d->keys[s]);
+    _dash_dict_drop(d, d->vals[s], FALSE);
+    d->keys[s] = NULL;
+    d->count--;
+    mask = d->cap - 1;
+    for (j = (s + 1) & mask; d->keys[j]; j = (j + 1) & mask) {
+        h = _dash_dict_hash(d->keys[j]) & mask;
+        if ((j > s && (h <= s || h > j)) || (j < s && h <= s && h > j)) {
+            d->keys[s] = d->keys[j];
+            d->vals[s] = d->vals[j];
+            d->keys[j] = NULL;
+            s = j;
+        }
+    }
+}
+
+static void DashDict_clear(DashDict *d) {
+    LONG i;
+    if (!d) return;
+    for (i = 0; i < d->cap; i++) {
+        if (d->keys[i]) { _dash_str_free(d->keys[i]); _dash_dict_drop(d, d->vals[i], FALSE); d->keys[i] = NULL; }
+    }
+    d->count = 0;
+}
+
+static LONG DashDict_length(DashDict *d) {
+    return d ? d->count : 0;
+}
+
+/* The keys, as a new list of Strings (in no particular order) */
+static DashArrayLong *DashDict_keys(DashDict *d) {
+    LONG i, j = 0;
+    DashArrayLong *arr = DashArray_create(d ? d->count : 0);
+    if (!arr || !d) return arr;
+    for (i = 0; i < d->cap; i++) if (d->keys[i]) arr->data[j++] = (LONG)d->keys[i];
+    return DashArray_own(arr, _DASH_ARR_STRS);
+}
+
+/* {"a": 1, ...} */
+static DashDict *DashDict_from(LONG kind, LONG n, STRPTR *keys, LONG *vals) {
+    DashDict *d = DashDict_new(kind);
+    LONG i;
+    for (i = 0; d && i < n; i++) {
+        if (kind == _DASH_ARR_OBJS) DashDict_set_obj(d, keys[i], (void *)vals[i]);
+        else if (kind == _DASH_ARR_STRS) DashDict_set_str(d, keys[i], (STRPTR)vals[i]);
+        else DashDict_set(d, keys[i], vals[i]);
+    }
+    return d;
 }
 
 """
@@ -7861,6 +8041,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_text: bool = False     # s[i], s.length, str_* (TEXT_RUNTIME)
         self.uses_array_concat: bool = False   # list + list (ARRAY_CONCAT_RUNTIME)
         self.uses_list_methods: bool = False   # l.push(x)... (LIST_RUNTIME)
+        self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
@@ -8016,6 +8197,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.ARRAY_CONCAT_RUNTIME)
         if self.uses_list_methods:
             parts.append(CTemplates.LIST_RUNTIME)
+        if self.uses_dicts:
+            parts.append(CTemplates.DICT_RUNTIME)
 
         # Add string runtime if needed
         if self.uses_strings:
@@ -8387,7 +8570,7 @@ static LONG _dash_event_window_handle(void) {{
             self.var_types[gvar.name] = f"struct:{gvar.var_type}"
         elif c_type == "float":
             self.var_types[gvar.name] = "float"
-        elif c_type == "DashArrayLong *":
+        elif c_type in ("DashArrayLong *", "DashDict *"):
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
         else:
             self.var_types[gvar.name] = "number"
@@ -8884,7 +9067,8 @@ static {ret_type} {method_name}({params_str}) {{
             if init is not None and isinstance(init, NilLiteral):
                 init = None
             if self._is_obj_c_type(c_type):
-                self.var_types[node.name] = (self._list_var_type(node.var_type) if c_type == "DashArrayLong *"
+                self.var_types[node.name] = (self._list_var_type(node.var_type)
+                                             if c_type in ("DashArrayLong *", "DashDict *")
                                              else f"struct:{node.var_type}")
                 self.context.declare_var(node.name)
                 self.context.own(node.name, "obj")
@@ -8973,6 +9157,8 @@ static {ret_type} {method_name}({params_str}) {{
         elif var_type == "DashArrayLong *":
             # a copy or a slice of a typed array keeps its element type
             self.var_types[node.name] = self._array_var_type(node.value)
+        elif var_type == "DashDict *":
+            self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
         elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
             self.var_types[node.name] = "func"
         elif var_type.startswith("_Dash_") and var_type.endswith(" *"):
@@ -9069,6 +9255,17 @@ static {ret_type} {method_name}({params_str}) {{
             return "STRPTR"
         elif isinstance(node, (ArrayLiteral, ArraySlice)):
             return "DashArrayLong *"
+        elif isinstance(node, DictLiteral):
+            return "DashDict *"
+        elif isinstance(node, ArrayAccess) and self._dict_value_kind(node.array) is not None:
+            kind = self._dict_value_kind(node.array)
+            if kind == "string":
+                return "STRPTR"
+            if kind == "array":
+                return "DashArrayLong *"
+            if kind.startswith("struct:"):
+                return f"_Dash_{kind[7:]} *"
+            return "LONG"
         elif isinstance(node, ArrayAccess):
             # Check if accessing a string or array
             if self._is_string_expr(node.array):
@@ -9085,6 +9282,8 @@ static {ret_type} {method_name}({params_str}) {{
                 return self._dash_type_to_c(field.field_type)
             return "LONG"
         elif isinstance(node, MethodCall):
+            if self._dict_value_kind(node.object) is not None and node.method in ("has", "remove", "keys", "clear"):
+                return {"keys": "DashArrayLong *", "has": "BOOL"}.get(node.method, "LONG")
             if self._is_list_method(node):
                 if node.method != "pop":
                     return "LONG"
@@ -9115,6 +9314,8 @@ static {ret_type} {method_name}({params_str}) {{
                 return "STRPTR"
             elif var_type and var_type.startswith("array"):
                 return "DashArrayLong *"
+            elif var_type and (var_type == "dict" or var_type.startswith("dict:")):
+                return "DashDict *"
             elif var_type == "func":
                 return "APTR"
             elif var_type and var_type.startswith("struct:"):
@@ -9443,6 +9644,20 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate code for array element assignment."""
         self.uses_arrays = True
         indent = self.context.indent
+        kind = self._dict_value_kind(node.array)
+        if kind is not None:
+            # d["clave"] = valor (dashweb D5)
+            self.uses_dicts = self.uses_strings = True
+            d = self._generate_expression(node.array)
+            key = self._generate_expression(node.index)
+            value = self._generate_expression(node.value)
+            if kind == "string":
+                self.emit(f"{indent}DashDict_set_str({d}, {key}, {value});\n")
+            elif kind != "int":
+                self.emit(f"{indent}DashDict_set_obj({d}, {key}, (void *)({value}));\n")
+            else:
+                self.emit(f"{indent}DashDict_set({d}, {key}, {value});\n")
+            return
         array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
         value = self._generate_expression(node.value)
@@ -9537,8 +9752,9 @@ static {ret_type} {method_name}({params_str}) {{
 
     @staticmethod
     def _is_obj_c_type(c_type: str) -> bool:
-        """Arrays and structs: reference counted objects."""
-        return c_type == "DashArrayLong *" or (c_type.startswith("_Dash_") and c_type.endswith(" *"))
+        """Arrays, dictionaries and structs: reference counted objects."""
+        return (c_type in ("DashArrayLong *", "DashDict *")
+                or (c_type.startswith("_Dash_") and c_type.endswith(" *")))
 
     def _is_obj_expr(self, node: ASTNode) -> bool:
         return self._is_obj_c_type(self._infer_c_type(node))
@@ -9725,6 +9941,20 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, ArrayLiteral):
             self.uses_arrays = True
             return self._generate_array_literal(node)
+        elif isinstance(node, DictLiteral):
+            return self._generate_dict_literal(node)
+        elif isinstance(node, ArrayAccess) and self._dict_value_kind(node.array) is not None:
+            # d["clave"]: the value, or 0 / nil when the key is missing
+            self.uses_dicts = self.uses_arrays = self.uses_strings = True
+            kind = self._dict_value_kind(node.array)
+            code = f"DashDict_get({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
+            if kind == "string":
+                return f"((STRPTR){code})"
+            if kind == "array":
+                return f"((DashArrayLong *){code})"
+            if kind.startswith("struct:"):
+                return f"((_Dash_{kind[7:]} *){code})"
+            return code
         elif isinstance(node, ArrayAccess):
             # Check if accessing a string or array
             if self._is_string_expr(node.array):
@@ -9764,6 +9994,9 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, PropertyAccess):
             obj = self._generate_expression(node.object)
             if node.property == "length":
+                if self._dict_value_kind(node.object) is not None:
+                    self.uses_dicts = True
+                    return f"DashDict_length({obj})"
                 # Check if it's a string or array
                 if self._is_string_expr(node.object):
                     self.uses_strings = True
@@ -9801,6 +10034,9 @@ static {ret_type} {method_name}({params_str}) {{
                     self.uses_strings = True
                     self.uses_text = True
                     return f"_dash_str_len({node.object_name})"
+                if var_type and (var_type == "dict" or var_type.startswith("dict:")):
+                    self.uses_dicts = True
+                    return f"DashDict_length({node.object_name})"
                 self.uses_arrays = True
                 return f"DashArray_length({self._array_ref(VarRef(name=node.object_name))})"
             # Struct member access - use pointer notation
@@ -10069,6 +10305,12 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate C code for a method call on a struct instance."""
         if self._is_list_method(node):
             return self._generate_list_method(node)
+        if self._dict_value_kind(node.object) is not None and node.method in ("has", "remove", "keys", "clear"):
+            # d.has(k), d.remove(k), d.keys(), d.clear() (dashweb D5)
+            self.uses_dicts = self.uses_arrays = self.uses_strings = True
+            d = self._generate_expression(node.object)
+            args = "".join(", " + self._generate_expression(a) for a in node.arguments)
+            return f"DashDict_{node.method}({d}{args})"
         # Get the object and determine its type
         obj_expr = self._generate_expression(node.object)
 
@@ -10154,7 +10396,7 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, BinaryOp) and node.operator == "+":
             return self._is_string_expr(node.left) or self._is_string_expr(node.right)
         elif isinstance(node, ArrayAccess):
-            return self._is_string_array(node.array)
+            return self._is_string_array(node.array) or self._dict_value_kind(node.array) == "string"
         elif isinstance(node, ArraySlice):
             return self._is_string_expr(node.array)
         elif isinstance(node, FunctionCall):
@@ -10294,7 +10536,8 @@ static {ret_type} {method_name}({params_str}) {{
                 self.uses_fixed = True
             elif p.param_type == "Func":
                 self.var_types[p.name] = "func"
-            elif p.param_type == "Array" or list_elem_type(p.param_type) is not None:
+            elif (p.param_type == "Array" or list_elem_type(p.param_type) is not None
+                  or dict_value_type(p.param_type) is not None):
                 self.var_types[p.name] = self._list_var_type(p.param_type)
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
@@ -10325,7 +10568,7 @@ static {ret_type} {method_name}({params_str}) {{
             method = self._method_of(node)
             name = method.return_type if method else None
         elif isinstance(node, ArrayAccess):
-            elem = self._array_elem_type(node.array) or ""
+            elem = self._dict_value_kind(node.array) or self._array_elem_type(node.array) or ""
             name = elem[7:] if elem.startswith("struct:") else None
         return prog.get_struct(name) if name else None
 
@@ -10477,6 +10720,18 @@ static {ret_type} {method_name}({params_str}) {{
             return self._is_string_expr(node.array)
         return False
 
+    def _generate_dict_literal(self, node: DictLiteral) -> str:
+        """{"a": 1, ...} -> DashDict_from(kind, n, keys, values) (dashweb D5)."""
+        self.uses_dicts = self.uses_arrays = self.uses_strings = True
+        value_kind = self._dict_value_kind(node)
+        kind = "_DASH_ARR_STRS" if value_kind == "string" else "0" if value_kind == "int" else "_DASH_ARR_OBJS"
+        if not node.keys:
+            return f"DashDict_new({kind})"
+        keys = ", ".join(self._generate_expression(k) for k in node.keys)
+        values = ", ".join(f"(LONG)({self._generate_expression(v)})" for v in node.values)
+        n = len(node.keys)
+        return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (LONG[]){{{values}}})"
+
     def _generate_array_literal(self, node: ArrayLiteral) -> str:
         """Generate code for array literal - returns a temp variable name."""
         # This is tricky - we need to generate initialization code
@@ -10565,6 +10820,8 @@ static {ret_type} {method_name}({params_str}) {{
             return None
         if isinstance(node, ArrayLiteral):
             return self._literal_elem_type(node)
+        if isinstance(node, MethodCall) and node.method == "keys" and self._dict_value_kind(node.object) is not None:
+            return "string"
         vt = self._list_var_type(self._declared_list_type(node))
         return vt[6:] if vt and vt.startswith("array:") else None
 
@@ -10573,6 +10830,11 @@ static {ret_type} {method_name}({params_str}) {{
         "array:struct:Nodo", "[[Int]]" -> "array:array", "[Int]" and "Array" -> "array"."""
         if type_name == "Array":
             return "array"
+        value = dict_value_type(type_name)
+        if value is not None:
+            # a dictionary: "dict:" + what its values are, like a list's elements
+            inner = self._list_var_type(f"[{value}]")
+            return "dict" + (inner[5:] if inner else "")
         elem = list_elem_type(type_name)
         if elem is None:
             return None
@@ -10583,6 +10845,47 @@ static {ret_type} {method_name}({params_str}) {{
         if self.analysis.program.get_struct(elem):
             return f"array:struct:{elem}"
         return "array"
+
+    def _dict_value_kind(self, node: ASTNode) -> Optional[str]:
+        """What a dictionary expression's values are: "int", "string", "struct:X", "array";
+        None if it is not a dictionary."""
+        if isinstance(node, DictLiteral):
+            if not node.values:
+                return "int"
+            first = node.values[0]
+            if self._is_string_expr(first):
+                return "string"
+            c_type = self._infer_c_type(first)
+            if c_type.startswith("_Dash_") and c_type.endswith(" *"):
+                return f"struct:{c_type[6:-2]}"
+            if self._is_obj_c_type(c_type) or isinstance(first, ArrayLiteral):
+                return "array"
+            return "int"
+        vt = None
+        if isinstance(node, VarRef):
+            vt = self.var_types.get(node.name)
+        elif isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
+            vt = self._list_var_type(self._declared_dict_type(node))
+        if vt and (vt == "dict" or vt.startswith("dict:")):
+            return vt[5:] or "int"
+        return None
+
+    def _declared_dict_type(self, node: ASTNode) -> Optional[str]:
+        """The {String: T} type a call or a struct field declares, if any."""
+        prog = self.analysis.program
+        type_name = None
+        if isinstance(node, FunctionCall):
+            func = prog.get_function(node.name)
+            type_name = func.return_type if func else None
+        elif isinstance(node, PropertyAccess):
+            struct = self._struct_of(node.object)
+            field = struct.get_field(node.property) if struct else None
+            type_name = field.field_type if field else None
+        elif isinstance(node, MemberAccess):
+            struct = self._struct_of(VarRef(name=node.object_name))
+            field = struct.get_field(node.member) if struct else None
+            type_name = field.field_type if field else None
+        return type_name if dict_value_type(type_name) is not None else None
 
     def _declared_list_type(self, node: ASTNode) -> Optional[str]:
         """The [T] type a call or a struct field declares, if any."""
@@ -10714,6 +11017,9 @@ static {return_type} {lambda_name}({param_str}) {{
             return self._BASE_C_TYPES[dash_type]
         if list_elem_type(dash_type) is not None:
             return "DashArrayLong *"     # [T]: a list (dashweb D4a)
+        if dict_value_type(dash_type) is not None:
+            self.uses_dicts = self.uses_arrays = self.uses_strings = True
+            return "DashDict *"          # {String: T} (dashweb D5)
         if dash_type and self.analysis.program.get_struct(dash_type):
             return f"_Dash_{dash_type} *"
         return default

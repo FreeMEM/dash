@@ -398,6 +398,14 @@ class FunctionCall(ASTNode):
 
 
 @dataclass
+class DictLiteral(ASTNode):
+    """{"clave": valor, ...} (dashweb D5)."""
+    keys: List[ASTNode] = field(default_factory=list)
+    values: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class MethodCall(ASTNode):
     """Method call on an object (player.move(5, 0))."""
     object: ASTNode  # The object on which method is called

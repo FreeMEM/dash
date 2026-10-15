@@ -30,7 +30,8 @@ dash_grammar_minimal = r"""
     struct_field: ID ":" TYPE_NAME ("=" expression)?
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
     // [T]: a list whose elements are T ("[String]", "[Nodo]", "[[Int]]")
-    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[A-Za-z_][\[\]A-Za-z0-9_ \t]*\]/
+    // {String: T}: a dictionary from String to T
+    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\]/ | /\{[ \t]*String[ \t]*:[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\}/
 
     // Enum definition
     enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
@@ -136,9 +137,14 @@ dash_grammar_minimal = r"""
     local_var_decl: "var" ID ":" TYPE_NAME ("=" expression)?
 
     // Arrays
-    array_assign: ID index_chain "=" expression
+    // also through fields: h.reglas["k"] = v, self.l[0] = v (dashweb D5)
+    array_assign: ID ("." ID)* index_chain "=" expression
+                | "self" ("." ID)+ index_chain "=" expression -> self_array_assign
     index_chain: ("[" expression "]")+
     array_literal: "[" (expression ("," expression)*)? "]"
+    // {"clave": valor, ...}: a dictionary with String keys (dashweb D5)
+    dict_literal: "{" (dict_entry ("," dict_entry)*)? "}"
+    dict_entry: expression ":" expression
 
     // Event loop
     event_loop: "EventLoop" (event_handler | comment_line)* "end"
@@ -182,6 +188,7 @@ dash_grammar_minimal = r"""
          | "nil" -> nil_literal
          | "self" -> self_ref
          | array_literal
+         | dict_literal
          | lambda_func
          | function_call
          | ID -> var_ref

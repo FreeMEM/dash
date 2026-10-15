@@ -1,0 +1,7 @@
+# Test: dictionaries have has, remove, keys and clear
+# expect: Dictionaries have no method 'push'
+
+Main
+    d = {"a": 1}
+    d.push(3)
+end

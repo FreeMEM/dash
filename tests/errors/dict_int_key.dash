@@ -1,0 +1,7 @@
+# Test: dictionary keys are Strings
+# expect: Dictionary keys are Strings
+
+Main
+    d = {"a": 1}
+    d[3] = 4
+end

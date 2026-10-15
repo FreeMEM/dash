@@ -13,7 +13,7 @@ from compiler.ast_nodes import (
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, NilLiteral,
     SourceLocation, ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice,
     PropertyAccess, ImportStmt, ConstDecl, GlobalVarDecl, StructDef, StructField, StructMethod,
-    SelfRef, MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam,
+    SelfRef, MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef
 )
 
@@ -741,6 +741,14 @@ class DashASTBuilder(Transformer):
 
     # === Arrays ===
 
+    def dict_literal(self, items) -> "DictLiteral":
+        """{"clave": valor, ...}"""
+        entries = [e for e in items if isinstance(e, tuple)]
+        return DictLiteral(keys=[k for k, _ in entries], values=[v for _, v in entries])
+
+    def dict_entry(self, items):
+        return (items[0], items[1])
+
     def array_literal(self, items) -> ArrayLiteral:
         """Build an array literal node."""
         elements = list(items) if items else []
@@ -824,18 +832,28 @@ class DashASTBuilder(Transformer):
         return list(items)
 
     def array_assign(self, items):
-        """Build an array assignment node (supports matrix[i][j] = value)."""
-        name = items[0].value if isinstance(items[0], Token) else str(items[0])
-        indices = items[1]  # List of indices from index_chain
-        value = items[2]
+        """Build an array assignment node (matrix[i][j] = value, h.reglas["k"] = value)."""
+        names = [t.value if isinstance(t, Token) else str(t) for t in items[:-2]]
+        result = VarRef(name=names[0])
+        for member in names[1:]:
+            result = (MemberAccess(object_name=result.name, member=member) if isinstance(result, VarRef)
+                      else PropertyAccess(object=result, property=member))
+        return self._index_assign(result, items[-2], items[-1])
 
-        # Build nested ArrayAccess for the target
-        result = VarRef(name=name)
-        for idx in indices[:-1]:  # All but last index
-            result = ArrayAccess(array=result, index=idx)
+    def self_array_assign(self, items):
+        """self.lista[i] = value"""
+        names = [t.value if isinstance(t, Token) else str(t) for t in items[:-2]]
+        result = SelfRef()
+        for member in names:
+            result = PropertyAccess(object=result, property=member)
+        return self._index_assign(result, items[-2], items[-1])
 
-        # Return ArrayAssign with the innermost target
-        return ArrayAssign(array=result, index=indices[-1], value=value)
+    @staticmethod
+    def _index_assign(target, indices, value):
+        # Build nested ArrayAccess for the target; ArrayAssign with the innermost index
+        for idx in indices[:-1]:
+            target = ArrayAccess(array=target, index=idx)
+        return ArrayAssign(array=target, index=indices[-1], value=value)
 
     def member_assign(self, items) -> MemberAssign:
         """Build a member assignment node (player.x = 10, a.b.c = 10)."""

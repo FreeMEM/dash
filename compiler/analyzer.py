@@ -12,7 +12,7 @@ from compiler.ast_nodes import (
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
-    BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, MethodCall,
+    BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, MethodCall, DictLiteral,
     ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess, NilLiteral,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
@@ -28,8 +28,19 @@ def list_elem_type(type_name: Optional[str]) -> Optional[str]:
     return None
 
 
+def dict_value_type(type_name: Optional[str]) -> Optional[str]:
+    """Value type of a dictionary type annotation ("{String:Int}" -> "Int"), else None."""
+    if type_name and type_name.startswith("{") and type_name.endswith("}") and ":" in type_name:
+        return type_name[1:-1].split(":", 1)[1].strip()
+    return None
+
+
 def type_is_known(type_name: str, known) -> bool:
-    """A type name, or a list of one ("[Nodo]", "[[Int]]")."""
+    """A type name, a list of one ("[Nodo]", "[[Int]]") or a dictionary ("{String:Nodo}")."""
+    value = dict_value_type(type_name)
+    if value is not None:
+        key = type_name[1:-1].split(":", 1)[0].strip()
+        return key == "String" and bool(value) and value not in ("Void", "Array") and type_is_known(value, known)
     elem = list_elem_type(type_name)
     if elem is not None:
         return bool(elem) and elem not in ("Void", "Array") and type_is_known(elem, known)
@@ -61,6 +72,7 @@ class DashType(Enum):
     ARRAY_INT = auto()
     ARRAY_STRING = auto()
     ARRAY = auto()  # Generic array when type unknown
+    DICT = auto()   # {String: T} (dashweb D5)
     FUNC = auto()  # Lambda or function pointer
     UNKNOWN = auto()
 
@@ -77,6 +89,7 @@ class Symbol:
     is_initialized: bool = False  # For variables
     struct_name: Optional[str] = None  # Struct type of the value, when known
     elem_struct: Optional[str] = None  # For a list of structs: their struct type
+    dict_value: Optional[str] = None   # For a dictionary: the type of its values ("Int", "Nodo"...)
 
 
 @dataclass
@@ -262,7 +275,8 @@ class SemanticAnalyzer(ASTVisitor):
                 node=gvar,
                 is_initialized=True,  # C globals start zeroed
                 struct_name=self._struct_type_name(gvar.var_type),
-                elem_struct=self._list_elem_struct(gvar.var_type)
+                elem_struct=self._list_elem_struct(gvar.var_type),
+                dict_value=dict_value_type(gvar.var_type)
             )
             self.define_symbol(symbol, gvar)
 
@@ -492,7 +506,8 @@ class SemanticAnalyzer(ASTVisitor):
             node=node,
             is_initialized=True,
             struct_name=self._struct_type_name(node.var_type) if node.var_type else None,
-            elem_struct=self._list_elem_struct(node.var_type)
+            elem_struct=self._list_elem_struct(node.var_type),
+            dict_value=dict_value_type(node.var_type)
         )
         self.define_symbol(symbol, node)
 
@@ -520,7 +535,8 @@ class SemanticAnalyzer(ASTVisitor):
                 node=node,
                 is_initialized=True,
                 struct_name=self._struct_name_of(node.value),
-                elem_struct=self._elem_struct_of(node.value)
+                elem_struct=self._elem_struct_of(node.value),
+                dict_value=self._dict_value_of(node.value)
             )
             self.define_symbol(symbol, node)
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
@@ -600,6 +616,8 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit a for-each statement."""
         # Visit the iterable
         self.visit(node.iterable)
+        if self._dict_value_of(node.iterable) is not None:
+            self.error("To go through a dictionary use 'for k in d.keys()'", node)
 
         self.enter_scope("for_each")
         # Define loop variable (element type)
@@ -648,7 +666,8 @@ class SemanticAnalyzer(ASTVisitor):
                 dash_type=dash_type,
                 is_initialized=True,
                 struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None),
-                elem_struct=self._list_elem_struct(param.param_type if isinstance(param, FunctionParam) else None)
+                elem_struct=self._list_elem_struct(param.param_type if isinstance(param, FunctionParam) else None),
+                dict_value=dict_value_type(param.param_type if isinstance(param, FunctionParam) else None)
             )
             self.define_symbol(symbol, node)
 
@@ -673,6 +692,8 @@ class SemanticAnalyzer(ASTVisitor):
                                       struct_name=self._struct_type_name(
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       elem_struct=self._list_elem_struct(
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      dict_value=dict_value_type(
                                           param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
         before = len(self.errors)
@@ -697,6 +718,8 @@ class SemanticAnalyzer(ASTVisitor):
                                       struct_name=self._struct_type_name(
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       elem_struct=self._list_elem_struct(
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      dict_value=dict_value_type(
                                           param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
         self._visit_new_body(node.body)
@@ -810,6 +833,17 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit an array access."""
         self.visit(node.array)
         self.visit(node.index)
+        if self._dict_value_of(node.array) is not None and self._infer_type(node.index) == DashType.INT:
+            self.error("Dictionary keys are Strings", node)
+
+    def visit_DictLiteral(self, node: DictLiteral):
+        """{"clave": valor}: String keys, values of one type."""
+        for key, value in zip(node.keys, node.values):
+            self.visit(key)
+            self.visit(value)
+            if self._infer_type(key) not in (DashType.STRING, DashType.UNKNOWN):
+                self.error("Dictionary keys are Strings", key)
+            self._check_not_float_element(value)
 
     def visit_ArrayAssign(self, node: ArrayAssign):
         """Visit an array assignment."""
@@ -817,6 +851,8 @@ class SemanticAnalyzer(ASTVisitor):
         self.visit(node.index)
         self.visit(node.value)
         self._check_not_float_element(node.value)
+        if self._dict_value_of(node.array) is not None and self._infer_type(node.index) == DashType.INT:
+            self.error("Dictionary keys are Strings", node)
 
     def visit_PropertyAccess(self, node: PropertyAccess):
         """Visit a property access."""
@@ -905,6 +941,37 @@ class SemanticAnalyzer(ASTVisitor):
                 if isinstance(nested, list):
                     yield from self._return_values(nested)
 
+    def _dict_value_of(self, expr: Optional[ASTNode]) -> Optional[str]:
+        """Type of the values ("Int", "String", "Nodo", "[Int]"...) if expr is a dictionary."""
+        if isinstance(expr, DictLiteral):
+            if not expr.values:
+                return "Int"
+            first = expr.values[0]
+            struct = self._struct_name_of(first)
+            if struct:
+                return struct
+            if isinstance(first, ArrayLiteral):
+                return "Array"
+            return "String" if self._infer_type(first) == DashType.STRING else "Int"
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            return symbol.dict_value if symbol else None
+        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess)) and self.program:
+            type_name = None
+            if isinstance(expr, FunctionCall):
+                func = self.program.get_function(expr.name)
+                type_name = func.return_type if func else None
+            else:
+                if isinstance(expr, MemberAccess):
+                    owner, member = self._struct_name_of(VarRef(name=expr.object_name)), expr.member
+                else:
+                    owner, member = self._struct_name_of(expr.object), expr.property
+                struct = self.program.get_struct(owner) if owner else None
+                field = struct.get_field(member) if struct else None
+                type_name = field.field_type if field else None
+            return dict_value_type(type_name)
+        return None
+
     def _list_elem_struct(self, type_name: Optional[str]) -> Optional[str]:
         """For a list type "[Nodo]", the struct of its elements (dashweb D4a)."""
         return self._struct_type_name(list_elem_type(type_name))
@@ -918,6 +985,8 @@ class SemanticAnalyzer(ASTVisitor):
     def _list_kind(self, expr: ASTNode) -> Optional[str]:
         """What a list expression holds: "int", "string", "struct:Name", "list", "any"
         (empty or unknown), or None if expr is not a list."""
+        if isinstance(expr, MethodCall) and expr.method == "keys" and self._dict_value_of(expr.object) is not None:
+            return "string"
         if isinstance(expr, ArraySlice):
             return self._list_kind(expr.array)
         if isinstance(expr, BinaryOp) and expr.operator == "+":
@@ -1033,6 +1102,9 @@ class SemanticAnalyzer(ASTVisitor):
                     return value.name
             return None
         if isinstance(expr, ArrayAccess):
+            value = self._dict_value_of(expr.array)
+            if value is not None:
+                return self._struct_type_name(value)
             return self._elem_struct_of(expr.array)
         if isinstance(expr, MethodCall) and expr.method == "pop" and self._list_kind(expr.object):
             return self._elem_struct_of(expr.object)
@@ -1093,6 +1165,18 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_MethodCall(self, node: MethodCall):
         """Methods of lists (dashweb D4b): push, pop, insert, remove, clear. Struct methods are
         checked by the code generator as before."""
+        if self._dict_value_of(node.object) is not None:
+            self.visit(node.object)
+            for arg in node.arguments:
+                self.visit(arg)
+            wanted = {"has": 1, "remove": 1, "keys": 0, "clear": 0}.get(node.method)
+            if wanted is None:
+                self.error(f"Dictionaries have no method '{node.method}' (they have has, remove, keys "
+                           f"and clear)", node)
+            elif len(node.arguments) != wanted:
+                self.error(f"{node.method}() on a dictionary takes {wanted} argument(s), "
+                           f"got {len(node.arguments)}", node)
+            return
         kind = self._list_kind(node.object)
         if kind is None or self._struct_name_of(node.object):
             return
@@ -1171,6 +1255,11 @@ class SemanticAnalyzer(ASTVisitor):
                 elif elem_type == DashType.STRING:
                     return DashType.ARRAY_STRING
             return DashType.ARRAY
+        elif isinstance(node, DictLiteral):
+            return DashType.DICT
+        elif isinstance(node, ArrayAccess) and self._dict_value_of(node.array) is not None:
+            value = self._dict_value_of(node.array)
+            return {"Int": DashType.INT, "String": DashType.STRING, "Bool": DashType.BOOL}.get(value, DashType.UNKNOWN)
         elif isinstance(node, ArrayAccess):
             # Access returns the element type: a list of Strings gives Strings, a
             # list of structs a struct, a String a character, anything else an Int
@@ -1259,6 +1348,8 @@ class SemanticAnalyzer(ASTVisitor):
         """Convert a type annotation string to a DashType."""
         if not type_name:
             return DashType.UNKNOWN
+        if dict_value_type(type_name) is not None:
+            return DashType.DICT
         elem = list_elem_type(type_name)
         if elem is not None:
             return {"Int": DashType.ARRAY_INT, "String": DashType.ARRAY_STRING}.get(elem, DashType.ARRAY)

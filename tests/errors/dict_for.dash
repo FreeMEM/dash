@@ -1,0 +1,9 @@
+# Test: a dictionary is gone through with keys()
+# expect: To go through a dictionary use 'for k in d.keys()'
+
+Main
+    d = {"a": 1}
+    for k in d
+        Print k
+    end
+end

@@ -80,7 +80,7 @@ break / continue            # inside while/for only
 
 ## Functions
 ```
-func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T]
+func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}
     return a + b                return x * 2
 end                         end
 ```
@@ -112,6 +112,8 @@ arr + [6, 7]                # New list with both (same element type)
 var l: [String] = []        # list types [T]: [Int] [String] [Nodo] [[Int]] (params, returns, fields)
 for x in obj.lista          # for-each over any list expression
 l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
+d = {"a": 1, "b": 2}        # dictionary {String: T}: d["c"] = 3, d["a"], d.has("a"),
+d.remove("a")  d.keys()  d.clear()  d.length    # missing key: 0 / nil
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 
