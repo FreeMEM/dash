@@ -1,0 +1,52 @@
+# Texts given to MUI are temporaries Dash frees at the end of each loop turn; MUI (or
+# the MUI runtime) keeps its own copy. With --memcheck freed blocks are filled with
+# 0xDB, so a kept pointer would read back as garbage.
+# memcheck
+# emu-needs: muimaster.library
+# expect-no-c: _dash_mui_text(_dash_str_escape(
+# expect-out: botón: Botón 3
+# expect-out: campo: Campo 3
+# expect-out: línea: Línea 3
+# expect-out: título: Ventana 3
+# expect-out: cambiado: Nuevo 3
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    if mui_app_begin("Textos", "DASHTXT") == 0
+        Print "sin MUI"
+    else
+        n = 3
+        t = 0
+        b = 0
+        c = 0
+        win = mui_window_begin("Ventana #{n}", 0)
+            for i in (1..3)
+                t = mui_text("Texto #{i}")
+                b = mui_button("Botón #{i}")
+                c = mui_string("Campo #{i}", 40)
+            end
+            l = mui_list()
+            ciclo = mui_cycle("Uno #{n}|Dos")
+        mui_window_end()
+        for i in (1..3)
+            mui_list_add(l, "Línea #{i}")
+        end
+        for i in (1..3)
+            mui_set_text(t, "Nuevo #{i}")
+        end
+        mui_window_open(win)
+        x = mui_get_text(b)
+        Print "botón: #{x}"
+        x = mui_get_text(c)
+        Print "campo: #{x}"
+        x = mui_list_get(l, 2)
+        Print "línea: #{x}"
+        x = mui_get_text(win)
+        Print "título: #{x}"
+        x = mui_get_text(t)
+        Print "cambiado: #{x}"
+        mui_app_end()
+        Print "fin"
+    end
+end

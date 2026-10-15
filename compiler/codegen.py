@@ -8203,6 +8203,11 @@ static {ret_type} {method_name}({params_str}) {{
         "file_write_line", "file_open_dialog", "file_save_dialog",
         "gfx_text", "gfx_text_at", "gfx_text_len", "sprite_load",
         "refcount", "retain", "release",   # objects: they only look at the count
+        # MUI copies the texts it shows (Text, String, list lines) and the MUI runtime
+        # keeps its own copy of those MUI only points to (titles, options, menus, files)
+        "mui_app_begin", "mui_window_begin", "mui_text", "mui_label", "mui_button", "mui_string",
+        "mui_cycle", "mui_register_begin", "mui_frame_begin", "mui_menu_begin", "mui_menu_item",
+        "mui_set_text", "mui_list_add", "mui_list_insert", "mui_image",
     }
 
     def _frees(self, owned) -> str:

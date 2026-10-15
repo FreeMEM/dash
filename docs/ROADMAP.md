@@ -783,6 +783,17 @@ tests/
 - [x] Tercera máquina de pruebas: A1200 con AmigaOS 3.2 y Workbench cargado (`--emu-32`), la única que prueba
       ReAction; encontró `ra_get_value`/`ra_set_value` mal y `s[a:b]` sobre strings, ya corregidos
 
+### Sesión 7 (Fecha: 2026-10-15/16) — MUI 5 (rama `mui`, detalle en `docs/MUI_LOOP.md`)
+- [x] 67 builtins `mui_` (diseño en `docs/MUI_DISEÑO.md`): aplicación, ventanas, grupos, marcos, columnas, pestañas,
+      desplazamiento, texto, botones, campos, casillas, ciclos, deslizadores, barras, listas, menús, imágenes por
+      datatypes, zona de dibujo propia con una función Dash y barra, eventos por número, temporizador y señales
+- [x] Entorno: SDK fuera de git (`tools/get_mui_sdk.sh`), máquinas con MUI en el banco de pruebas
+      (`tools/emu_sys_mui.sh`), pila de 32 KB en programas MUI, comprobación de 68020
+- [x] Capturas de pantalla del Amiga emulado (`tools/emu_run.py --screenshot`)
+- [x] Textos en Latin-1: los acentos llegaban al Amiga en UTF-8 (`compiler/latin1.py`)
+- [x] Ejemplos `mui_hola` y `mui_navegador` (esqueleto de la ventana de dashweb); 33/33
+- [x] Test suite: 130 resultados (311 con `--emu --emu-a500 --emu-32`; 193 con `--emu --memcheck`)
+
 ---
 
 ## Notas y Decisiones
@@ -805,10 +816,13 @@ tests/
 
 ### Pendiente:
 - Listas de `Fixed` (hoy dan error: guardar los valores en un struct)
+- La interpolación `#{...}` solo admite nombres de variable, no llamadas
+- Una lista declarada `var x: Array` pierde el tipo de sus elementos
 
 ### Próximo proyecto (pedido el 2026-10-15, después del plan de mejoras):
 - Navegador ligero escrito en Dash con interfaz MUI: XHTML, CSS, JavaScript moderno y HTTPS. Sirve para hacer
-  crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y exigente. Diseño y plan por hacer.
+  crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y exigente. Repo `FreeMEM/dashweb`
+  (`~/Projects/dashweb`, plan en su `docs/DASHWEB_LOOP.md`); la interfaz usa los `mui_` de la sesión 7.
 
 ---
 

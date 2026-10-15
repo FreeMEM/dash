@@ -119,7 +119,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 - [x] 9. **Imágenes.** `Dtpic` (datatypes) para PNG/JPEG/GIF en un objeto; o dibujar un bitmap en la zona propia.
 - [x] 10. **Ejemplo del navegador.** `examples/mui_navegador.dash`: la ventana del diseño (sin red), con
       historial falso y la página pintada en la zona propia. Captura de pantalla en el emulador.
-- [ ] 11. **Repaso de MUI.** Tamaño del ejecutable, memoria (`--memcheck`), tiempos de apertura en A1200,
+- [x] 11. **Repaso de MUI.** Tamaño del ejecutable, memoria (`--memcheck`), tiempos de apertura en A1200,
       revisión del C generado.
 
 ### ReAction y GadTools (petición del usuario del 2026-10-15: terminarlos, mejorarlos, optimizarlos, corregir bugs)
@@ -358,3 +358,22 @@ Formato:
   - La barra de progreso al 0 % no se distingue del fondo con los colores por defecto de MUI (al 50 y 75 % sí se ve).
 - No visto: los menús (MUI 5 los dibuja al pulsar el botón derecho, sin ratón no salen).
 - Tests: 129/129 sin emulador; 308/308 con `--emu --emu-a500 --emu-32`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 11 (repaso de MUI)
+- **Memoria (arreglado):** los textos que se pasaban a los `mui_` recibían una copia permanente (`_dash_str_escape`,
+  no se libera hasta salir): un bucle de `mui_list_add` o `mui_set_text` hacía crecer la memoria sin límite. Los `mui_`
+  que reciben texto van ahora en `_STRING_READERS` (codegen): MUI copia lo que muestra (Text, String, líneas de lista) y
+  el runtime ya copiaba al pool lo que MUI solo apunta (títulos, opciones, menús, ficheros). Test `test_mui_texts`
+  (`# memcheck`, que rellena lo liberado con 0xDB): texto, botón, campo, línea, título y texto cambiado se leen bien
+  después de liberar sus temporales, y el resumen dice 0 textos escapados. (La sesión de dashweb tiene en su rama un
+  campo `reads_only` para lo mismo; al juntar ramas, pasar estos nombres a ese campo.)
+- **Medidas** (A1200 3.1 emulado, `scratchpad/bench_mui.dash`): abrir MUI + ventana con 3 objetos, una lista y un texto:
+  1,9 s. `mui_list_add`: 35 ms por línea; con `mui_list_quiet`: 7 ms (×5). `mui_set_text` en un campo: 8 ms. Quitar la
+  copia permanente no cambia los tiempos: el coste está en MUI. Idea para luego: añadir muchas líneas de una vez
+  (`MUIM_List_Insert` con un array).
+- **Tamaño:** `mui_hola` 9.204 bytes (un programa con `Print` solo: 4.996), `mui_navegador` 18.736.
+- **C generado:** sin avisos de GCC con `-Wall` en el runtime MUI. Visto para la tarea 17: los argumentos no simples de
+  los builtins se calculan en temporales `volatile` (necesario para las macros con `register asm` del NDK), también en
+  las llamadas a funciones del runtime (`_dash_*`), donde no hace falta y obliga a pasar por memoria.
+- Documentación: `ROADMAP.md` (sesión 7 y pendientes del lenguaje), `CLAUDE.md` local.
+- Tests: 130/130 sin emulador; 311/311 con `--emu --emu-a500 --emu-32`; 193/193 con `--emu --memcheck`; ejemplos 33/33.
