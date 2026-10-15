@@ -1,0 +1,7 @@
+# Test: lists only have push, pop, insert, remove and clear
+# expect: Lists have no method 'append'
+
+Main
+    l = [1, 2]
+    l.append(3)
+end

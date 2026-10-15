@@ -1,0 +1,7 @@
+# Test: list methods check their number of arguments
+# expect: insert() on a list takes 2 argument(s), got 1
+
+Main
+    l = [1, 2]
+    l.insert(3)
+end

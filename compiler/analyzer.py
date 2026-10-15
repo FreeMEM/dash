@@ -12,7 +12,7 @@ from compiler.ast_nodes import (
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
-    BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
+    BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, MethodCall,
     ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess, NilLiteral,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
@@ -1034,6 +1034,8 @@ class SemanticAnalyzer(ASTVisitor):
             return None
         if isinstance(expr, ArrayAccess):
             return self._elem_struct_of(expr.array)
+        if isinstance(expr, MethodCall) and expr.method == "pop" and self._list_kind(expr.object):
+            return self._elem_struct_of(expr.object)
         if isinstance(expr, MemberAccess):
             owner = self._struct_name_of(VarRef(name=expr.object_name))
             member = expr.member
@@ -1085,6 +1087,36 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_NilLiteral(self, node: NilLiteral):
         """nil: C NULL."""
         pass
+
+    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0}
+
+    def visit_MethodCall(self, node: MethodCall):
+        """Methods of lists (dashweb D4b): push, pop, insert, remove, clear. Struct methods are
+        checked by the code generator as before."""
+        kind = self._list_kind(node.object)
+        if kind is None or self._struct_name_of(node.object):
+            return
+        self.visit(node.object)
+        for arg in node.arguments:
+            self.visit(arg)
+        wanted = self._LIST_METHODS.get(node.method)
+        if wanted is None:
+            self.error(f"Lists have no method '{node.method}' (they have push, pop, insert, remove "
+                       f"and clear)", node)
+            return
+        if len(node.arguments) != wanted:
+            self.error(f"{node.method}() on a list takes {wanted} argument(s), got {len(node.arguments)}", node)
+            return
+        if node.method in ("push", "insert") and kind not in ("any", "list"):
+            value = node.arguments[-1]
+            vtype = self._infer_type(value)
+            struct = self._struct_name_of(value)
+            wrong = ((kind == "int" and (vtype == DashType.STRING or struct))
+                     or (kind == "string" and vtype == DashType.INT)
+                     or (kind.startswith("struct:") and (vtype in (DashType.INT, DashType.STRING)
+                                                         or (struct and struct != kind[7:]))))
+            if wrong:
+                self.error(f"Cannot {node.method} that into a list of {self._kind_text(kind)}", node)
 
     def generic_visit(self, node: ASTNode):
         """Default visitor - just traverse children if possible."""
@@ -1168,6 +1200,12 @@ class SemanticAnalyzer(ASTVisitor):
                 return self._type_annotation_to_dash_type(field.field_type)
         elif isinstance(node, (LambdaFunc, FunctionRef)):
             return DashType.FUNC
+        elif isinstance(node, MethodCall) and node.method == "pop":
+            kind = self._list_kind(node.object)
+            if kind == "string":
+                return DashType.STRING
+            if kind == "int":
+                return DashType.INT
         return DashType.UNKNOWN
 
     def _returns_value(self, func: FunctionDef) -> bool:

@@ -1,0 +1,71 @@
+# Test: lists that grow: push, pop, insert, remove, clear (also through fields:
+# n.hijos.push(x)). The list owns its Strings and structs; pop hands them over.
+# memcheck
+# expect-out: 4 0123
+# expect-out: 3
+# expect-out: 2 1
+# expect-out: abc1
+# expect-out: c1 2
+# expect-out: b
+# expect-out: 0
+# expect-out: head 0
+# expect-out: body 1
+# expect-out: body 1
+# expect-out: 20000
+# expect-out: n500
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+
+struct Nodo
+    nombre: String
+    hijos: [Nodo]
+end
+
+func agrega(n: Nodo, nombre: String) -> Nodo
+    h = Nodo(nombre, [])
+    n.hijos.push(h)
+    return h
+end
+
+Main
+    nums = [1, 2]
+    nums.push(3)
+    nums.insert(0, 0)
+    Print "" + nums.length + " " + nums[0] + nums[1] + nums[2] + nums[3]
+    Print nums.pop()
+    nums.remove(0)
+    Print "" + nums.length + " " + nums[0]
+    var t: [String] = []
+    t.push("b")
+    t.insert(0, "a")
+    t.push("c" + 1)
+    Print t[0] + t[1] + t[2]
+    ultimo = t.pop()
+    Print ultimo + " " + t.length
+    t.remove(0)
+    Print t[0]
+    t.clear()
+    Print t.length
+    raiz = Nodo("html", [])
+    agrega(raiz, "head")
+    b = agrega(raiz, "body")
+    agrega(b, "p")
+    for h in raiz.hijos
+        Print h.nombre + " " + h.hijos.length
+    end
+    q = raiz.hijos.pop()
+    Print q.nombre + " " + raiz.hijos.length
+    grande = []
+    for i in (1..20000)
+        grande.push(i)
+    end
+    Print grande[19999]
+    var nodos: [Nodo] = []
+    for i in (1..500)
+        nodos.push(Nodo("n" + i, []))
+    end
+    while nodos.length > 1
+        nodos.remove(0)
+    end
+    Print nodos[0].nombre
+end

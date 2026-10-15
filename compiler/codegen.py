@@ -866,6 +866,106 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
 
 """
 
+    # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
+    # doubles when full, so adding n elements one by one costs O(n).
+    LIST_RUNTIME = """\
+/* Dash List Runtime */
+static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
+    LONG cap = _DASH_ARR_CAP(arr), newcap, i;
+    LONG *data;
+    if (need <= cap) return TRUE;
+    newcap = cap * 2;
+    if (newcap < 4) newcap = 4;
+    if (newcap < need) newcap = need;
+    data = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
+    if (!data) return FALSE;
+    for (i = 0; i < arr->length; i++) data[i] = arr->data[i];
+    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * cap);
+    arr->data = data;
+    arr->capacity = (arr->capacity & 0xFF000000) | newcap;
+    return TRUE;
+}
+
+/* Room for one more at index (0..length): the elements from there move up */
+static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
+    LONG i;
+    if (!arr || index < 0 || index > arr->length || !DashArray_reserve(arr, arr->length + 1)) return FALSE;
+    for (i = arr->length; i > index; i--) arr->data[i] = arr->data[i - 1];
+    arr->length++;
+    return TRUE;
+}
+
+static void DashArray_insert(DashArrayLong *arr, LONG index, LONG value) {
+    if (DashArray_open(arr, index)) arr->data[index] = value;
+}
+
+static void DashArray_insert_obj(DashArrayLong *arr, LONG index, void *value) {
+    if (!DashArray_open(arr, index)) return;
+    arr->capacity |= (LONG)_DASH_ARR_OBJS << 24;
+    _dash_retain(value);
+    arr->data[index] = (LONG)value;
+}
+
+static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
+    if (!DashArray_open(arr, index)) return;
+    arr->capacity |= (LONG)_DASH_ARR_STRS << 24;
+    arr->data[index] = 0;
+    _dash_str_set((STRPTR *)&arr->data[index], value);
+}
+
+#define DashArray_push(arr, v) DashArray_insert((arr), DashArray_length(arr), (v))
+#define DashArray_push_obj(arr, v) DashArray_insert_obj((arr), DashArray_length(arr), (v))
+#define DashArray_push_str(arr, v) DashArray_insert_str((arr), DashArray_length(arr), (v))
+
+/* Takes the element out (0 if the index is outside the list) */
+static LONG DashArray_take(DashArrayLong *arr, LONG index) {
+    LONG v, i;
+    if (!arr || index < 0 || index >= arr->length) return 0;
+    v = arr->data[index];
+    for (i = index; i < arr->length - 1; i++) arr->data[i] = arr->data[i + 1];
+    arr->length--;
+    return v;
+}
+
+/* pop: the last element. An object or String the list owned becomes a temporary
+   of the caller (adopted by a variable, or freed with the other temporaries). */
+static LONG DashArray_pop(DashArrayLong *arr) {
+    return DashArray_take(arr, arr ? arr->length - 1 : 0);
+}
+
+static void *DashArray_pop_obj(DashArrayLong *arr) {
+    return _dash_obj_float((void *)DashArray_take(arr, arr ? arr->length - 1 : 0));
+}
+
+static STRPTR DashArray_pop_str(DashArrayLong *arr) {
+    STRPTR v = (STRPTR)DashArray_take(arr, arr ? arr->length - 1 : 0);
+    if (v) {
+        _DashStrHdr *h = _DASH_STR_HDR(v);
+        if (!(h->size & _DASH_STR_KEEP) && !h->serial) {
+            h->serial = ++_dash_tmp_serial;
+            h->next = _dash_tmp;
+            _dash_tmp = h;
+        }
+    }
+    return v;
+}
+
+/* remove(i): the element goes (released or freed if the list owned it) */
+static void DashArray_remove(DashArrayLong *arr, LONG index) {
+    LONG v;
+    if (!arr || index < 0 || index >= arr->length) return;
+    v = DashArray_take(arr, index);
+    if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS) _dash_release((void *)v);
+    else if (_DASH_ARR_KIND(arr) == _DASH_ARR_STRS) _dash_str_free((STRPTR)v);
+}
+
+static void DashArray_clear(DashArrayLong *arr) {
+    if (!arr) return;
+    while (arr->length > 0) DashArray_remove(arr, arr->length - 1);
+}
+
+"""
+
     # Text from files and buffers (dashweb D7), only in programs that use it
     TEXT_IO_RUNTIME = """\
 /* Files and buffers as text (dashweb D7). Bytes 0 become spaces: a String ends at the
@@ -7760,6 +7860,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_strings: bool = False  # Track if string operations are used
         self.uses_text: bool = False     # s[i], s.length, str_* (TEXT_RUNTIME)
         self.uses_array_concat: bool = False   # list + list (ARRAY_CONCAT_RUNTIME)
+        self.uses_list_methods: bool = False   # l.push(x)... (LIST_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
@@ -7913,6 +8014,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.ARRAY_RUNTIME)
         if self.uses_array_concat:
             parts.append(CTemplates.ARRAY_CONCAT_RUNTIME)
+        if self.uses_list_methods:
+            parts.append(CTemplates.LIST_RUNTIME)
 
         # Add string runtime if needed
         if self.uses_strings:
@@ -8982,6 +9085,17 @@ static {ret_type} {method_name}({params_str}) {{
                 return self._dash_type_to_c(field.field_type)
             return "LONG"
         elif isinstance(node, MethodCall):
+            if self._is_list_method(node):
+                if node.method != "pop":
+                    return "LONG"
+                elem = self._array_elem_type(node.object) or ""
+                if elem == "string":
+                    return "STRPTR"
+                if elem == "array":
+                    return "DashArrayLong *"
+                if elem.startswith("struct:"):
+                    return f"_Dash_{elem[7:]} *"
+                return "LONG"
             method = self._method_of(node)
             if method:
                 c_type = self._method_c_type(method)
@@ -9923,8 +10037,38 @@ static {ret_type} {method_name}({params_str}) {{
         call_code = self._generate_method_call(node)
         self.emit(f"{indent}{call_code};\n")
 
+    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0}
+
+    def _is_list_method(self, node: MethodCall) -> bool:
+        return (node.method in self._LIST_METHODS and not self._struct_of(node.object)
+                and (isinstance(node.object, ArrayLiteral) or self._infer_c_type(node.object) == "DashArrayLong *"))
+
+    def _generate_list_method(self, node: MethodCall) -> str:
+        """l.push(x), l.pop(), l.insert(i, x), l.remove(i), l.clear() (dashweb D4b)."""
+        self.uses_arrays = self.uses_list_methods = True
+        arr = self._array_ref(node.object)
+        elem = self._array_elem_type(node.object) or ""
+        suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem == "array") else ""
+        args = [self._generate_expression(a) for a in node.arguments]
+        if node.method == "push":
+            value = args[0] if suffix != "_obj" else f"(void *)({args[0]})"
+            return f"DashArray_push{suffix}({arr}, {value})"
+        if node.method == "insert":
+            value = args[1] if suffix != "_obj" else f"(void *)({args[1]})"
+            return f"DashArray_insert{suffix}({arr}, {args[0]}, {value})"
+        if node.method == "pop":
+            if suffix == "_obj":
+                c_type = "DashArrayLong *" if elem == "array" else f"_Dash_{elem[7:]} *"
+                return f"(({c_type})DashArray_pop_obj({arr}))"
+            return f"DashArray_pop{suffix}({arr})"
+        if node.method == "remove":
+            return f"DashArray_remove({arr}, {args[0]})"
+        return f"DashArray_clear({arr})"
+
     def _generate_method_call(self, node: MethodCall) -> str:
         """Generate C code for a method call on a struct instance."""
+        if self._is_list_method(node):
+            return self._generate_list_method(node)
         # Get the object and determine its type
         obj_expr = self._generate_expression(node.object)
 

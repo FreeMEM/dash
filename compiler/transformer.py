@@ -721,11 +721,23 @@ class DashASTBuilder(Transformer):
         return call
 
     def method_call_stmt(self, items) -> MethodCall:
-        """Handle method call as statement (player.move(5, 0))."""
-        obj_name = items[0].value if isinstance(items[0], Token) else str(items[0])
-        method_name = items[1].value if isinstance(items[1], Token) else str(items[1])
-        args = items[2] if len(items) > 2 and isinstance(items[2], list) else []
-        return MethodCall(object=VarRef(name=obj_name), method=method_name, arguments=args)
+        """Handle method call as statement (player.move(5, 0), n.hijos.push(x))."""
+        names = [t.value if isinstance(t, Token) else str(t) for t in items if not isinstance(t, list)]
+        args = next((t for t in items if isinstance(t, list)), [])
+        obj = VarRef(name=names[0])
+        for member in names[1:-1]:
+            obj = (MemberAccess(object_name=obj.name, member=member) if isinstance(obj, VarRef)
+                   else PropertyAccess(object=obj, property=member))
+        return MethodCall(object=obj, method=names[-1], arguments=args)
+
+    def self_method_call_stmt(self, items) -> MethodCall:
+        """self.metodo(...) or self.lista.push(x) as a statement."""
+        names = [t.value if isinstance(t, Token) else str(t) for t in items if not isinstance(t, list)]
+        args = next((t for t in items if isinstance(t, list)), [])
+        obj = SelfRef()
+        for member in names[:-1]:
+            obj = PropertyAccess(object=obj, property=member)
+        return MethodCall(object=obj, method=names[-1], arguments=args)
 
     # === Arrays ===
 

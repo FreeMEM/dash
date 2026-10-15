@@ -740,7 +740,30 @@ todos = enemigos + [Enemigo(90, 3)]
 ```
 
 Sumar listas de tipos distintos (`[1] + ["a"]`) o una lista con otra cosa (`lista + 3`) es un error.
-Cada suma copia la lista entera: para ir anadiendo uno a uno en un bucle largo es lento.
+Cada suma copia la lista entera: para ir anadiendo uno a uno, `push`.
+
+### Listas que crecen
+
+| Metodo | Que hace |
+|---|---|
+| `l.push(x)` | Anade `x` al final |
+| `l.insert(i, x)` | Anade `x` en la posicion `i` (0 a `l.length`); los de detras se mueven |
+| `l.pop()` | Quita y devuelve el ultimo |
+| `l.remove(i)` | Quita el de la posicion `i` |
+| `l.clear()` | Deja la lista vacia |
+
+Funcionan tambien a traves de campos (`nodo.hijos.push(h)`, `self.lista.clear()`). Al llenarse,
+la lista pasa a un bloque del doble de tamano: anadir 20.000 elementos uno a uno tarda menos de
+medio segundo en un A1200. La lista es duena de sus textos y structs: `remove` y `clear` los
+sueltan, y `pop` se los entrega a quien lo recibe. Meter algo de otro tipo (`l.push(5)` en una
+`[String]`) es un error.
+
+```
+var pila: [String] = []
+pila.push("a")
+pila.push("b")
+Print pila.pop()             # b
+```
 
 ### Listas de structs y de listas
 

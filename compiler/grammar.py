@@ -91,7 +91,9 @@ dash_grammar_minimal = r"""
                 | comment_line
 
     // Method call as statement (player.move(5, 0))
-    method_call_stmt: ID "." ID "(" arg_list? ")"
+    // also through fields: n.hijos.push(x), self.lista.clear() (dashweb D4b)
+    method_call_stmt: ID ("." ID)+ "(" arg_list? ")"
+                    | "self" ("." ID)+ "(" arg_list? ")" -> self_method_call_stmt
 
     // Member assignment (player.x = 10 or self.x = 10)
     member_assign: ID ("." ID)+ "=" expression

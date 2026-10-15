@@ -1,0 +1,7 @@
+# Test: push checks the element type of a typed list
+# expect: Cannot push that into a list of Strings
+
+Main
+    var l: [String] = []
+    l.push(5)
+end

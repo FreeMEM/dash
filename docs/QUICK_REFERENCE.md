@@ -111,6 +111,7 @@ arr[1:3]                    # Slice: [2, 3]
 arr + [6, 7]                # New list with both (same element type)
 var l: [String] = []        # list types [T]: [Int] [String] [Nodo] [[Int]] (params, returns, fields)
 for x in obj.lista          # for-each over any list expression
+l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 
