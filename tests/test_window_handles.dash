@@ -9,7 +9,7 @@
 # expect-out: 2
 # expect-out: 0
 # expect-out: 3
-# expect-out: Ram Disk:
+# expect-out: Disk:
 # expect-out: ok
 # expect-out: cerrada
 
@@ -40,7 +40,7 @@ Main
     c = window_create("Otra", 5, 5, 100, 60, 2)
     Print c
     if dir_change("RAM:")
-        Print dir_current()
+        Print dir_current()[4:]     # "Ram Disk:" in 3.1, "RAM Disk:" in 3.2
     end
     if not dir_change("RAM:no_existe")
         Print "ok"

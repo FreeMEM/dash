@@ -1233,7 +1233,7 @@ REACTION_FUNCTIONS = {
         return_type="LONG",
         c_template="ra_get_value(${id})",
         needs_reaction=True,
-        description="Get gadget numeric value (checkbox, slider, integer)"
+        description="Get gadget value (checkbox 1/0, slider, integer, palette, chooser, scroller)"
     ),
     "ra_get_string": BuiltinFunc(
         name="ra_get_string",
@@ -1249,7 +1249,7 @@ REACTION_FUNCTIONS = {
         return_type="void",
         c_template="ra_set_value(${id}, ${value})",
         needs_reaction=True,
-        description="Set gadget value"
+        description="Set gadget value (same gadgets as ra_get_value)"
     ),
     "ra_refresh_layout": BuiltinFunc(
         name="ra_refresh_layout",

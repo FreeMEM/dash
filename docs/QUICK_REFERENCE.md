@@ -89,6 +89,7 @@ arr[0]                      # Access: 1
 arr[2] = 99                 # Modify
 arr.length                  # Length: 5
 arr[1:3]                    # Slice: [2, 3]
+"Hola Dash"[5:]             # Strings too: "Dash"
 ```
 
 ## Window & Events

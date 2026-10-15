@@ -14,8 +14,13 @@ S:Startup-Sequence runs each program with its output redirected to a file.
     tools/emu_run.py --autoclose 3 ventana.dash  # ends by itself after 3 s
 
 Libraries that are not in the Kickstart ROM (asl.library, diskfont.library...)
-come from $DASH_EMU_SYS: a directory with Libs/ and C/ (Assign, MakeDir) taken
-from a Workbench disk (see tools/emu_sys_from_hdf.sh).
+come from $DASH_EMU_SYS (or --system): a directory with Libs/, C/ (Assign, MakeDir)
+and Classes/ (ReAction) taken from a Workbench disk (see tools/emu_sys_from_hdf.sh).
+
+    tools/emu_run.py --kickstart kick323.rom --system ~/.cache/dash-emu/sys32 --workbench prog.dash
+
+--workbench runs C:LoadWB from those files before the programs, as on a real Amiga:
+in AmigaOS 3.2 window.class (ReAction) waits for the Workbench when it is opened.
 
 A program that never ends (an EventLoop waiting for the close gadget
 without --autoclose, a crash) stops the boot: it and the ones after it are reported as TIMEOUT.
@@ -73,9 +78,9 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: 
 
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
-                 keep: str = None, fpu: bool = False):
-    """programs: list of .dash sources or Amiga executables.
-    Returns one EmuResult per program, in order."""
+                 keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False):
+    """programs: list of .dash sources or Amiga executables. system: Workbench
+    files directory (default $DASH_EMU_SYS). Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
         raise RuntimeError("fs-uae not found")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
@@ -91,15 +96,23 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             (hd / drawer).mkdir(parents=True)
         lines = []
         names = []
-        system = os.environ.get("DASH_EMU_SYS")
+        system = system or os.environ.get("DASH_EMU_SYS")
         if system:
-            for sub in ("Libs", "C"):
+            if not Path(system).is_dir():
+                raise RuntimeError(f"Workbench files directory not found: {system}")
+            for sub in ("Libs", "C", "Classes"):
                 if (Path(system) / sub).is_dir():
                     shutil.copytree(Path(system) / sub, hd / sub, dirs_exist_ok=True)
             if (hd / "C" / "Assign").exists() and (hd / "C" / "MakeDir").exists():
                 lines += ["C:MakeDir RAM:T RAM:ENV RAM:ENV/Sys RAM:Clipboards",
                           "C:Assign ENV: RAM:ENV", "C:Assign T: RAM:T", "C:Assign CLIPS: RAM:Clipboards",
                           "C:Assign LOCALE: SYS:Locale", "C:Assign KEYMAPS: DEVS:Keymaps"]
+                if (hd / "Classes").is_dir():   # window.class, gadgets/layout.gadget...
+                    lines.append("C:Assign LIBS: SYS:Classes ADD")
+        if workbench:
+            if not (hd / "C" / "LoadWB").exists():
+                raise RuntimeError("--workbench needs C/LoadWB in the Workbench files (tools/emu_sys_from_hdf.sh)")
+            lines.append("C:LoadWB")
         for i, prog in enumerate(programs):
             prog = Path(prog)
             exe = hd / f"p{i}"
@@ -163,6 +176,8 @@ def main():
                              "(for programs that wait for the close gadget)")
     parser.add_argument("--kickstart", help="Kickstart ROM (default: $DASH_KICKSTART, else AROS)")
     parser.add_argument("--fpu", action="store_true", help="compile .dash with --fpu (use --set fpu=68882)")
+    parser.add_argument("--system", metavar="DIR", help="Workbench files (Libs/, C/, Classes/; default: $DASH_EMU_SYS)")
+    parser.add_argument("--workbench", action="store_true", help="run C:LoadWB first (AmigaOS 3.2 ReAction needs it)")
     parser.add_argument("--keep", metavar="DIR", help="copy the emulated disk (outputs, files the programs wrote) to DIR")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
@@ -172,7 +187,7 @@ def main():
                                args.autoclose,
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
-                               args.keep, args.fpu)
+                               args.keep, args.fpu, args.system, args.workbench)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

@@ -12,13 +12,19 @@ Usage:
     python3 tests/run_tests.py test_x    # Run specific test
     python3 tests/run_tests.py --verbose # Show detailed output
     python3 tests/run_tests.py --emu     # Also run tests with "# expect-out:" in FS-UAE
+    python3 tests/run_tests.py --emu --emu-a500 --emu-32   # on all three emulated machines
 
 A test can list the exact output it must print when run on the Amiga with
 "# expect-out: <line>" lines (one per printed line, in order). With --emu
 those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
 or the AROS ROM built into FS-UAE) and their output is compared.
-"# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS/Libs has it
-(tools/emu_sys_from_hdf.sh extracts Libs/ and C/ from a Workbench hard file).
+"# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS has Libs/asl.library
+(or Classes/ for a .class, .gadget or .image; tools/emu_sys_from_hdf.sh extracts them
+from a Workbench hard file).
+
+Machines (EMU_MACHINES): --emu is an A1200 with Kickstart 3.1, --emu-a500 an A500
+(68000) with 3.1 ($DASH_KICKSTART_A500), --emu-32 an A1200 with AmigaOS 3.2
+($DASH_KICKSTART_32 and $DASH_EMU_SYS_32: the files of a 3.2 Workbench).
 """
 
 import os
@@ -323,40 +329,61 @@ def expected_output(test_file: Path) -> Optional[List[str]]:
     return lines or None
 
 
-def emu_needs_met(test_file: Path) -> bool:
-    """'# emu-needs: x.library': run only if $DASH_EMU_SYS/Libs has it (Workbench
-    libraries are not in the Kickstart ROM)."""
+# Emulated machines: option, result prefix, label, Kickstart and Workbench files
+# variables (None: FS-UAE's defaults), FS-UAE options, timeout for the whole boot
+EMU_MACHINES = [
+    dict(option="emu", prefix="emu", label="FS-UAE A1200", rom_env=None, sys_env="DASH_EMU_SYS",
+         config="", timeout=180, workbench=False),
+    # 68000: catches what a 68020 forgives (libgcc calls for 32-bit mul/div/mod, odd addresses)
+    dict(option="emu_a500", prefix="emu500", label="FS-UAE A500", rom_env="DASH_KICKSTART_A500",
+         sys_env="DASH_EMU_SYS", config="amiga_model = A500\n", timeout=400, workbench=False),
+    # AmigaOS 3.2: the current system, and the only one with ReAction. Its window.class
+    # waits for the Workbench, so LoadWB runs first, as on a real Amiga
+    dict(option="emu_32", prefix="emu32", label="FS-UAE A1200 OS 3.2", rom_env="DASH_KICKSTART_32",
+         sys_env="DASH_EMU_SYS_32", config="", timeout=240, workbench=True),
+]
+
+
+def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -> bool:
+    """'# emu-needs: x.library': run only if the Workbench files have it (they are not
+    in the Kickstart ROM): Libs/x.library, or Classes/... for a class, gadget or image."""
     needs = [l.split("# emu-needs:", 1)[1].strip()
              for l in test_file.read_text().splitlines() if l.startswith("# emu-needs:")]
-    system = os.environ.get("DASH_EMU_SYS")
-    missing = [n for n in needs if not (system and (Path(system) / "Libs" / n).exists())]
+
+    def found(name):
+        if not system:
+            return False
+        if name.endswith(".library"):
+            return (Path(system) / "Libs" / name).exists()
+        return any(p.name.lower() == name.lower() for p in (Path(system) / "Classes").rglob("*"))
+
+    missing = [n for n in needs if not found(n)]
     if missing:
-        print(f"  emu/{test_file.stem}: SKIP (needs {', '.join(missing)} in $DASH_EMU_SYS/Libs)")
+        print(f"  {prefix}/{test_file.stem}: SKIP (needs {', '.join(missing)} in the Workbench files)")
     return not missing
 
 
-def run_emu_tests(tests: List[Path], compiled: set, a500: bool = False) -> List[TestResult]:
+def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES[0]) -> List[TestResult]:
     """Run the compiled tests that declare '# expect-out:' in FS-UAE, all in one boot."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
+    prefix = machine["prefix"]
+    rom = os.environ.get(machine["rom_env"]) if machine["rom_env"] else None
+    system = os.environ.get(machine["sys_env"])
+    if machine["rom_env"] and not rom:
+        return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
+                           error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     selected = [(t, expected_output(t)) for t in tests
-                if t.stem in compiled and expected_output(t) and emu_needs_met(t)]
+                if t.stem in compiled and expected_output(t) and emu_needs_met(t, system, prefix)]
     if not selected:
         return []
     start_time = time.time()
     try:
-        if a500:
-            # 68000: catches what a 68020 forgives (libgcc calls for 32-bit mul/div/mod,
-            # odd addresses). Kickstart 3.1 A500 ROM in $DASH_KICKSTART_A500
-            rom = os.environ.get("DASH_KICKSTART_A500")
-            if not rom:
-                raise RuntimeError("--emu-a500 needs $DASH_KICKSTART_A500 (Kickstart for the A500)")
-            runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected], timeout=400,
-                                kickstart=rom, extra_config="amiga_model = A500\n")
-        else:
-            runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected], timeout=180)
+        runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
+                            timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"],
+                            system=system, workbench=machine["workbench"])
     except RuntimeError as e:
-        return [TestResult(name="emu", passed=False, transpile_ok=True, compile_ok=True,
+        return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=str(e))]
     duration = (time.time() - start_time) / len(selected)
     results = []
@@ -372,7 +399,7 @@ def run_emu_tests(tests: List[Path], compiled: set, a500: bool = False) -> List[
                      f"expected {wanted[diff] if diff < len(wanted) else '<end>'!r}")
         else:
             error = None
-        results.append(TestResult(name=f"{'emu500' if a500 else 'emu'}/{test_file.stem}", passed=error is None,
+        results.append(TestResult(name=f"{prefix}/{test_file.stem}", passed=error is None,
                                   transpile_ok=True, compile_ok=True,
                                   error_message=error, duration=duration))
     return results
@@ -425,6 +452,9 @@ def main():
                         help="Also run tests with '# expect-out:' lines in FS-UAE")
     parser.add_argument("--emu-a500", action="store_true",
                         help="Also run them on an emulated A500 (68000; needs $DASH_KICKSTART_A500)")
+    parser.add_argument("--emu-32", action="store_true",
+                        help="Also run them on an A1200 with AmigaOS 3.2 (needs $DASH_KICKSTART_32 "
+                             "and $DASH_EMU_SYS_32)")
     args = parser.parse_args()
 
     test_dir = PROJECT_ROOT / "tests"
@@ -492,11 +522,11 @@ def main():
             print("OK" if result.passed else "FAIL")
 
     compiled = {r.name for r in results if r.passed and r.compile_ok}
-    for enabled, a500, label in ((args.emu, False, "FS-UAE A1200"), (args.emu_a500, True, "FS-UAE A500")):
-        if not enabled:
+    for machine in EMU_MACHINES:
+        if not getattr(args, machine["option"]):
             continue
-        print(f"Testing: emu ({label})...", flush=True)
-        for result in run_emu_tests(tests, compiled, a500):
+        print(f"Testing: emu ({machine['label']})...", flush=True)
+        for result in run_emu_tests(tests, compiled, machine):
             results.append(result)
             print(f"  {result.name}: {'OK' if result.passed else 'FAIL'}")
 

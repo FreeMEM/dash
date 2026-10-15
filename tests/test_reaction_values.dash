@@ -1,0 +1,51 @@
+# Test: ReAction window (AmigaOS 3.2): gadgets are created, the window opens and
+# the values set from the program are read back. No events: it closes by itself.
+#
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# emu-needs: label.image
+# expect-out: abierta 1
+# expect-out: casilla 1
+# expect-out: barra 40
+# expect-out: entero 7
+# expect-out: barra 75
+# expect-out: entero 12
+# expect-out: casilla 0
+# expect-out: texto hola
+# expect-out: texto adios
+# expect-out: cerrada
+
+const STR_NOMBRE = 1
+const CHK_OPCION = 2
+const SLD_VALOR = 3
+const INT_NUM = 4
+const BTN_OK = 5
+
+Main
+    ra_window_create("ReAction", 300, 160)
+    ra_add_label("Prueba de valores")
+    ra_add_string(STR_NOMBRE, "hola", 32)
+    ra_add_checkbox(CHK_OPCION, "Opcion", 1)
+    ra_add_slider(SLD_VALOR, 0, 100, 40)
+    ra_add_integer(INT_NUM, 7, 0, 99)
+    ra_add_button(BTN_OK, "OK")
+
+    Print "abierta " + ra_window_open()
+    Print "casilla " + ra_get_value(CHK_OPCION)
+    Print "barra " + ra_get_value(SLD_VALOR)
+    Print "entero " + ra_get_value(INT_NUM)
+
+    ra_set_value(SLD_VALOR, 75)
+    ra_set_value(INT_NUM, 12)
+    Print "barra " + ra_get_value(SLD_VALOR)
+    Print "entero " + ra_get_value(INT_NUM)
+    ra_set_value(CHK_OPCION, 0)
+    Print "casilla " + ra_get_value(CHK_OPCION)
+
+    Print "texto " + ra_get_string(STR_NOMBRE)
+    ra_set_string(STR_NOMBRE, "adios")
+    Print "texto " + ra_get_string(STR_NOMBRE)
+
+    ra_window_close()
+    Print "cerrada"
+end

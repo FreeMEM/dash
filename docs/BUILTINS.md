@@ -180,9 +180,9 @@ Total: 322 funciones, 322 implementadas, 0 sin implementar.
 | `ra_add_slider(id, min, max, initial)` | `LONG` | Add horizontal slider gadget |  |
 | `ra_add_integer(id, initial, min, max)` | `LONG` | Add integer input gadget |  |
 | `ra_add_label(text)` | `LONG` | Add text label |  |
-| `ra_get_value(id)` | `LONG` | Get gadget numeric value (checkbox, slider, integer) |  |
+| `ra_get_value(id)` | `LONG` | Get gadget value (checkbox 1/0, slider, integer, palette, chooser, scroller) |  |
 | `ra_get_string(id)` | `STRPTR` | Get string gadget text |  |
-| `ra_set_value(id, value)` | `void` | Set gadget value |  |
+| `ra_set_value(id, value)` | `void` | Set gadget value (same gadgets as ra_get_value) |  |
 | `ra_refresh_layout()` | `void` | Refresh window layout after adding gadgets |  |
 | `RA_EVENT_CLOSE()` | `LONG` | Close window event code (-1) |  |
 | `RA_EVENT_NONE()` | `LONG` | No event code (0) |  |

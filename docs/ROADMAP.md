@@ -765,7 +765,7 @@ tests/
 
 ### Sesión 6 (Fecha: 2026-10-14/15) — Mejoras (rama `mejoras`, detalle en `docs/MEJORAS_LOOP.md`)
 - [x] Salida común de error: si falla una apertura se cierra todo lo abierto antes de salir
-- [x] Banco de pruebas en FS-UAE sin ventana (`tools/emu_run.py`), tests con salida esperada en A1200 y A500
+- [x] Banco de pruebas en FS-UAE sin ventana (`tools/emu_run.py`), tests con salida esperada en A1200, A500 y 3.2
 - [x] `-O2` por defecto (probado en emulador), `-O0` para depurar, `--small` (`-Os`), `--stack N`, `--fpu`
 - [x] Lenguaje: hex/binario, `break`/`continue`, rangos descendentes y `step`, enums negativos, `a.b.c = x`,
       propiedades booleanas de ventana, `On Key`, `Float`
@@ -774,7 +774,9 @@ tests/
 - [x] Optimización medida: hasta x8 en bucles de arrays, x3,4 en interpolación, Float propio en asm,
       funciones `static` (-9 % de tamaño), strings cortos un 29 % más pequeños
 - [x] Panel de comparativas: https://claude.ai/artifact/9XyJ1JNSGuDo5q6NCRzM2N (`tools/bench_report.py`)
-- [x] Test suite: 101 resultados (185 con `--emu --emu-a500`); ejemplos 30/30
+- [x] Test suite: 103 resultados (233 con `--emu --emu-a500 --emu-32`); ejemplos 30/30
+- [x] Tercera máquina de pruebas: A1200 con AmigaOS 3.2 y Workbench cargado (`--emu-32`), la única que prueba
+      ReAction; encontró `ra_get_value`/`ra_set_value` mal y `s[a:b]` sobre strings, ya corregidos
 
 ---
 

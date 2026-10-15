@@ -524,6 +524,18 @@ static char DashString_char_at(STRPTR s, LONG index) {
     return s[index];
 }
 
+/* s[start:end] as a new temporary string; the bounds are clamped like array slices. */
+static STRPTR DashString_slice(STRPTR s, LONG start, LONG end) {
+    LONG len = s ? strlen(s) : 0;
+    STRPTR result;
+    if (start < 0) start = 0;
+    if (end > len) end = len;
+    if (start > end) start = end;
+    result = _dash_str_alloc(end - start, TRUE);
+    if (result) _dash_copy(result, s + start, end - start);
+    return result;
+}
+
 /* Character to string, with the same rotating buffers idea as below. */
 static STRPTR DashString_from_char(char c) {
     static char buffers[16][2];
@@ -3806,6 +3818,9 @@ static Object *_ra_layout = NULL;
 /* Gadget ID tracking */
 #define RA_MAX_GADGETS 64
 static Object *_ra_gadgets[RA_MAX_GADGETS];
+/* Kind of each gadget, so ra_get_value/ra_set_value use only its own attribute */
+enum { RA_K_OTHER, RA_K_CHECKBOX, RA_K_SLIDER, RA_K_INTEGER, RA_K_PALETTE, RA_K_CHOOSER, RA_K_SCROLLER };
+static UBYTE _ra_kinds[RA_MAX_GADGETS];
 static LONG _ra_gadget_count = 0;
 
 static BOOL _ra_open_libs(void) {
@@ -3999,7 +4014,7 @@ static LONG ra_add_checkbox(LONG id, STRPTR label, LONG checked) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, cb,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = cb;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = cb; _ra_kinds[id] = RA_K_CHECKBOX; }
         return 1;
     }
     return 0;
@@ -4023,7 +4038,7 @@ static LONG ra_add_slider(LONG id, LONG min, LONG max, LONG initial) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, sl,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = sl;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = sl; _ra_kinds[id] = RA_K_SLIDER; }
         return 1;
     }
     return 0;
@@ -4046,7 +4061,7 @@ static LONG ra_add_integer(LONG id, LONG initial, LONG min, LONG max) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, ig,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = ig;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = ig; _ra_kinds[id] = RA_K_INTEGER; }
         return 1;
     }
     return 0;
@@ -4069,15 +4084,25 @@ static LONG ra_add_label(STRPTR text) {
     return 0;
 }
 
-/* Get gadget value */
-static LONG ra_get_value(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
+/* Attribute that holds the value of a gadget kind (0: none) */
+static ULONG _ra_value_attr(LONG id) {
+    switch (_ra_kinds[id]) {
+        case RA_K_CHECKBOX: return GA_Selected;
+        case RA_K_SLIDER:   return SLIDER_Level;
+        case RA_K_INTEGER:  return INTEGER_Number;
+        case RA_K_PALETTE:  return PALETTE_Colour;
+        case RA_K_CHOOSER:  return CHOOSER_Selected;
+        case RA_K_SCROLLER: return SCROLLER_Top;
+    }
+    return 0;
+}
 
-    LONG value = 0;
-    GetAttr(GA_Selected, _ra_gadgets[id], (ULONG *)&value);  /* checkbox */
-    if (value == 0) GetAttr(SLIDER_Level, _ra_gadgets[id], (ULONG *)&value);  /* slider */
-    if (value == 0) GetAttr(INTEGER_Number, _ra_gadgets[id], (ULONG *)&value);  /* integer */
-    return value;
+/* Get gadget value (checkbox: 1/0, slider, integer, palette, chooser, scroller) */
+static LONG ra_get_value(LONG id) {
+    ULONG attr, value = 0;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !(attr = _ra_value_attr(id))) return 0;
+    GetAttr(attr, _ra_gadgets[id], &value);
+    return attr == GA_Selected ? (value != 0) : (LONG)value;
 }
 
 /* Get string gadget text */
@@ -4091,13 +4116,9 @@ static STRPTR ra_get_string(LONG id) {
 
 /* Set gadget value */
 static void ra_set_value(LONG id, LONG value) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
-
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
-        GA_Selected, value,
-        SLIDER_Level, value,
-        INTEGER_Number, value,
-    TAG_DONE);
+    ULONG attr;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window || !(attr = _ra_value_attr(id))) return;
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, attr, value, TAG_DONE);
 }
 
 /* Refresh window layout after adding gadgets */
@@ -4158,7 +4179,7 @@ static LONG ra_add_palette(LONG id, LONG depth, LONG initial_color) {
             CHILD_MinWidth, 100,
             CHILD_MinHeight, 50,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = pal;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = pal; _ra_kinds[id] = RA_K_PALETTE; }
         return 1;
     }
     return 0;
@@ -4189,7 +4210,7 @@ static LONG ra_add_chooser(LONG id) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, ch,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = ch;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = ch; _ra_kinds[id] = RA_K_CHOOSER; }
         return 1;
     }
     return 0;
@@ -4246,7 +4267,7 @@ static LONG ra_add_scroller(LONG id, LONG min, LONG max, LONG visible, LONG init
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, sc,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = sc;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
         return 1;
     }
     return 0;
@@ -4271,7 +4292,7 @@ static LONG ra_add_scroller_vert(LONG id, LONG min, LONG max, LONG visible, LONG
             LAYOUT_AddChild, sc,
             CHILD_MinWidth, 18,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = sc;
+        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
         return 1;
     }
     return 0;
@@ -6266,6 +6287,8 @@ static {ret_type} {method_name}({params_str}) {{
             return "STRPTR"
         elif isinstance(node, BoolLiteral):
             return "BOOL"
+        elif isinstance(node, ArraySlice) and self._is_string_expr(node.array):
+            return "STRPTR"
         elif isinstance(node, (ArrayLiteral, ArraySlice)):
             return "DashArrayLong *"
         elif isinstance(node, ArrayAccess):
@@ -6849,6 +6872,13 @@ static {ret_type} {method_name}({params_str}) {{
             if self._is_string_array(node.array):
                 return f"(STRPTR)DashArray_get({array_name}, {index})"
             return f"DashArray_get({array_name}, {index})"
+        elif isinstance(node, ArraySlice) and self._is_string_expr(node.array):
+            # String slicing - a new temporary string; no end: up to the NUL
+            self.uses_strings = True
+            text = self._generate_expression(node.array)
+            start = self._generate_expression(node.start) if node.start else "0"
+            end = self._generate_expression(node.end) if node.end else "0x7FFFFFFF"
+            return f"DashString_slice({text}, {start}, {end})"
         elif isinstance(node, ArraySlice):
             # Array slicing - generates a new array
             self.uses_arrays = True
@@ -7161,6 +7191,8 @@ static {ret_type} {method_name}({params_str}) {{
             return self._is_string_expr(node.left) or self._is_string_expr(node.right)
         elif isinstance(node, ArrayAccess):
             return self._is_string_array(node.array)
+        elif isinstance(node, ArraySlice):
+            return self._is_string_expr(node.array)
         elif isinstance(node, FunctionCall):
             return self._call_returns_string(node.name)
         elif isinstance(node, (MemberAccess, PropertyAccess)):
@@ -7309,7 +7341,7 @@ static {ret_type} {method_name}({params_str}) {{
         """C expression for an array operand; values not known to be arrays
         (e.g. untyped parameters, held in a LONG) are cast."""
         code = self._generate_expression(node)
-        if isinstance(node, (ArrayLiteral, ArraySlice)):
+        if isinstance(node, ArrayLiteral) or (isinstance(node, ArraySlice) and not self._is_string_expr(node)):
             return code
         if isinstance(node, VarRef) and (self.var_types.get(node.name) or "").startswith("array"):
             return code

@@ -746,3 +746,29 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - CLAUDE.md (local, no va a git): builtins 322, `tmp_marks.py`, softfloat, herramientas, memoria, pila, tests
   (101 / 185), `expect-no-c`/`expect-out`/`emu-needs`, entorno del emulador, panel y problemas conocidos.
 - Tests: 101/101 sin emulador.
+
+### 2026-10-15 — Fuera del plan: AmigaOS 3.2 como tercera máquina de pruebas
+- Pedido por el usuario. `python3 tests/run_tests.py --emu-32`: A1200 con la ROM 3.2.3 (47.115,
+  `$DASH_KICKSTART_32`) y los ficheros de `~/Amiberry/HardDrives/AmigaOS-v3.2.hdf` (`$DASH_EMU_SYS_32`,
+  `~/.cache/dash-emu/sys32`). Tabla `EMU_MACHINES` en el runner; resultados `emu32/...`.
+- `tools/emu_sys_from_hdf.sh`: lee discos con particiones (RDB: copia la primera con `dd`, offsets de `rdbtool`),
+  copia `Classes/` (ReAction), `workbench.library`, `icon.library` y `C/LoadWB`. `sys31` regenerado (ahora con
+  `Classes` y `LoadWB`; las librerías, iguales).
+- `tools/emu_run.py`: `--system DIR`, `Assign LIBS: SYS:Classes ADD` si hay `Classes/`, y `--workbench` (ejecuta
+  `C:LoadWB` antes de los programas). `# emu-needs:` acepta clases (`window.class`, `layout.gadget`...).
+- Problema encontrado: en 3.2 abrir `window.class` se quedaba esperando. Con un programa espía (lista de tareas y
+  volcado de la pantalla a PNG) se vio que (1) `workbench.library` no se carga de la ROM 3.2.3 y sale "Please
+  insert a volume containing LIBS/workbench.library", y (2) con la del disco, el proceso ayudante de
+  `window.class` espera al Workbench. Solución: la máquina 3.2 copia `workbench.library` y ejecuta `LoadWB`,
+  como un Amiga de verdad. Probado también ROM 47.111 + sistema 3.2.2.1 (en `~/Descargas/Telegram Desktop`):
+  sin `LoadWB` `window.class` no abre; con `LoadWB` y los ficheros mínimos se cuelga. No investigado más.
+- Fallos de Dash encontrados y corregidos:
+  - `ra_set_value` mandaba a la vez `GA_Selected`, `SLIDER_Level` e `INTEGER_Number`, y `ra_get_value` los leía en
+    ese orden: una barra puesta a 75 devolvía -1. Ahora cada gadget guarda su tipo (`_ra_kinds`) y se usa solo su
+    atributo (también paleta, desplegable y barra de desplazamiento). Ids negativos rechazados.
+  - `s[a:b]` sobre un string generaba `DashArray_slice` con el string como lista (C inválido en ejecución). Ahora
+    `DashString_slice`: string temporal nuevo, límites recortados como en las listas.
+- Tests nuevos: `test_reaction_values` (solo en 3.2: `emu-needs: window.class`), `test_string_slice`.
+  `test_window_handles` compara solo `Disk:` (3.1 llama al disco RAM "Ram Disk", 3.2 "RAM Disk").
+- Resultado: 103/103 sin emulador; 233/233 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.
+- No hecho: los benchmarks (`tools/bench.py`) siguen midiendo solo A500 y A1200 con 3.1.

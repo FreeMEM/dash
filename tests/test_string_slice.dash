@@ -1,0 +1,33 @@
+# Test: s[a:b] on a string gives a new string (it was compiled as an array slice)
+#
+# expect-c: DashString_slice(
+# expect-out: Dash
+# expect-out: Amiga
+# expect-out: Hola
+# expect-out: [h]
+# expect-out: []
+# expect-out: []
+# expect-out: 5
+# expect-out: Hola Amiga!
+
+func resto(s: String, desde: Int) -> String
+    return s[desde:]
+end
+
+Main
+    s = "Hola Dash Amiga"
+    Print s[5:9]
+    Print resto(s, 10)
+    t = s[:4]
+    Print t
+    Print "[" + "hola"[0:1] + "]"
+    Print "[" + s[20:] + "]"
+    Print "[" + s[8:3] + "]"
+    Print s[10:].length
+    i = 0
+    while i < 2
+        t = t + " " + s[10:]
+        i = i + 2
+    end
+    Print t + "!"
+end

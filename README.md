@@ -166,9 +166,10 @@ tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s
 # Solo transpilar a C (sin compilar)
 python3 -m compiler.main archivo.dash -o build/archivo.c
 
-# Ejecutar tests (--emu: también los que comprueban la salida en FS-UAE; --emu-a500: además en un A500)
+# Ejecutar tests (--emu: también los que comprueban la salida en FS-UAE; --emu-a500: además en un A500;
+# --emu-32: además en un A1200 con AmigaOS 3.2, el único que prueba ReAction)
 python3 tests/run_tests.py
-python3 tests/run_tests.py --emu --emu-a500
+python3 tests/run_tests.py --emu --emu-a500 --emu-32
 
 # Medir velocidad, memoria y tamaño en un A500 y un A1200 emulados, y guardar la medida
 tools/bench.py --save "descripción del cambio"
@@ -176,8 +177,10 @@ tools/bench_report.py        # datos y página del panel de comparativas (build/
 ```
 
 Variables del banco de pruebas: `DASH_KICKSTART` (ROM del A1200), `DASH_KICKSTART_A500` (ROM del A500),
-`DASH_EMU_SYS` (directorio con `Libs` y `C` de un Workbench, para los tests que lo necesitan; se puede
-sacar de un disco duro con `tools/emu_sys_from_hdf.sh`).
+`DASH_EMU_SYS` (directorio con `Libs`, `C` y `Classes` de un Workbench, para los tests que lo necesitan; se
+puede sacar de un disco duro con `tools/emu_sys_from_hdf.sh`), y para `--emu-32` `DASH_KICKSTART_32` (ROM 3.2)
+y `DASH_EMU_SYS_32` (los mismos ficheros de un Workbench 3.2). En esa máquina se carga el Workbench antes de
+los programas (`emu_run.py --workbench`): la `window.class` de 3.2 lo espera.
 
 ## Estructura del proyecto
 
