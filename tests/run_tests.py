@@ -25,6 +25,8 @@ from a Workbench hard file).
 Machines (EMU_MACHINES): --emu is an A1200 with Kickstart 3.1, --emu-a500 an A500
 (68000) with 3.1 ($DASH_KICKSTART_A500), --emu-32 an A1200 with AmigaOS 3.2
 ($DASH_KICKSTART_32 and $DASH_EMU_SYS_32: the files of a 3.2 Workbench).
+Tests with "# emu-net: PORT" run in their own boot with FS-UAE's bsdsocket.library (the PC's
+network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <line>" out).
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
 """
@@ -407,6 +409,38 @@ def emu_needs(test_file: Path) -> List[str]:
             for l in test_file.read_text().splitlines() if l.startswith("# emu-needs:")]
 
 
+def emu_net_port(test_file: Path) -> Optional[int]:
+    """'# emu-net: PORT' (dashweb D8): the test uses the network. It runs in a boot with FS-UAE's
+    bsdsocket.library (the PC's network) and, on 127.0.0.1:PORT of the PC, an echo server that
+    reads one line and answers "eco: <line>" before closing."""
+    for l in test_file.read_text().splitlines():
+        if l.startswith("# emu-net:"):
+            return int(l.split(":", 1)[1].strip())
+    return None
+
+
+class _EchoServer:
+    """The server of '# emu-net:' tests, in a thread while the emulator runs."""
+    def __init__(self, ports):
+        import socketserver
+        import threading
+
+        class Handler(socketserver.StreamRequestHandler):
+            def handle(self):
+                line = self.rfile.readline()
+                self.wfile.write(b"eco: " + line)
+
+        socketserver.ThreadingTCPServer.allow_reuse_address = True
+        self.servers = [socketserver.ThreadingTCPServer(("127.0.0.1", port), Handler) for port in ports]
+        for server in self.servers:
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def close(self):
+        for server in self.servers:
+            server.shutdown()
+            server.server_close()
+
+
 def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -> bool:
     """'# emu-needs: x.library': run only if the Workbench files have it (they are not
     in the Kickstart ROM): Libs/x.library (or MUI/Libs), or Classes/... for a class, gadget or image."""
@@ -436,8 +470,16 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
     mui = [t for t in runnable if "muimaster.library" in emu_needs(t)]
-    results = run_emu_boot([t for t in runnable if t not in mui], machine, rom,
+    net = [t for t in runnable if emu_net_port(t) is not None and t not in mui]
+    results = run_emu_boot([t for t in runnable if t not in mui and t not in net], machine, rom,
                            os.environ.get(machine["sys_env"]), memcheck)
+    if net:
+        server = _EchoServer(sorted({emu_net_port(t) for t in net}))
+        try:
+            results += run_emu_boot(net, machine, rom, os.environ.get(machine["sys_env"]), memcheck,
+                                    extra_config="bsdsocket_library = 1\n")
+        finally:
+            server.close()
     if mui and not machine["mui_sys_env"]:
         for t in mui:   # MUI 5 for AmigaOS 3 is built for the 68020
             print(f"  {prefix}/{t.stem}: SKIP (MUI needs a 68020)")
@@ -452,7 +494,7 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
 
 
 def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: Optional[str],
-                 memcheck: bool) -> List[TestResult]:
+                 memcheck: bool, extra_config: str = "") -> List[TestResult]:
     """Run these tests in one boot of the machine with these Workbench files."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
@@ -463,7 +505,7 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
     start_time = time.time()
     try:
         runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
-                            timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"],
+                            timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"] + extra_config,
                             system=system, workbench=machine["workbench"])
     except RuntimeError as e:
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,

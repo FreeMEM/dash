@@ -927,6 +927,139 @@ static LONG _dash_str_to_buffer(STRPTR s, APTR buffer, LONG offset) {
 
 """
 
+    # Network (dashweb D8): TCP over bsdsocket.library (Roadshow, AmiTCP, Miami...).
+    # Sockets are LONG in Dash (-1 = none). The library opens on first use and closes at
+    # exit, which also closes the sockets left open.
+    NET_RUNTIME = """\
+/* Dash Net Runtime */
+#include <sys/socket.h>
+#include <sys/filio.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <proto/bsdsocket.h>
+
+struct Library *SocketBase = NULL;
+static const char *_dash_net_err = "";
+
+static BOOL _dash_net_init(void) {
+    if (!SocketBase) SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
+    if (!SocketBase) _dash_net_err = "no hay bsdsocket.library (falta una pila TCP/IP)";
+    return SocketBase != NULL;
+}
+
+static void _dash_net_cleanup(void) {
+    if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
+}
+
+/* host name or dotted address to an IPv4 address (network order); FALSE if unknown */
+static BOOL _dash_net_lookup(STRPTR host, struct in_addr *addr) {
+    struct hostent *he;
+    if (!host || !_dash_net_init()) return FALSE;
+    addr->s_addr = inet_addr(host);
+    if (addr->s_addr != INADDR_NONE) return TRUE;
+    he = gethostbyname(host);
+    if (!he || he->h_length != 4) { _dash_net_err = "no se encuentra el servidor"; return FALSE; }
+    memcpy(addr, he->h_addr, 4);
+    return TRUE;
+}
+
+/* Waits until the socket can be read (or written); 1 ready, 0 time out, -1 error */
+static LONG _dash_net_select(LONG sock, BOOL write, LONG ms) {
+    fd_set set;
+    struct timeval tv;
+    LONG r;
+    if (sock < 0 || !SocketBase) return -1;
+    FD_ZERO(&set);
+    FD_SET(sock, &set);
+    tv.tv_sec = ms / 1000;
+    tv.tv_usec = (ms % 1000) * 1000;
+    r = WaitSelect(sock + 1, write ? NULL : &set, write ? &set : NULL, NULL, ms < 0 ? NULL : &tv, NULL);
+    if (r < 0) _dash_net_err = "error de red";
+    return r > 0 ? 1 : r;
+}
+
+static STRPTR _dash_net_resolve(STRPTR host) {
+    struct in_addr a;
+    if (!_dash_net_lookup(host, &a)) return NULL;
+    return _dash_str_dup((STRPTR)Inet_NtoA(a.s_addr), TRUE);
+}
+
+/* TCP connection to host:port, giving up after timeout_ms; the socket or -1 */
+static LONG _dash_net_connect(STRPTR host, LONG port, LONG timeout_ms) {
+    struct sockaddr_in sa;
+    LONG sock, on = 1, off = 0, err = 0, len = sizeof(err);
+    if (!_dash_net_lookup(host, &sa.sin_addr)) return -1;
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(port);
+    memset(sa.sin_zero, 0, sizeof(sa.sin_zero));
+    IoctlSocket(sock, FIONBIO, (char *)&on);
+    if (connect(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        if (Errno() != EINPROGRESS) err = 1;
+        else if (_dash_net_select(sock, TRUE, timeout_ms) != 1) err = 2;
+        else if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &err, &len) < 0) err = 1;
+    }
+    if (err) {
+        _dash_net_err = err == 2 ? "tiempo agotado al conectar" : "conexión rechazada";
+        CloseSocket(sock);
+        return -1;
+    }
+    IoctlSocket(sock, FIONBIO, (char *)&off);
+    return sock;
+}
+
+/* length bytes from data; all of them or -1 */
+static LONG _dash_net_send_buffer(LONG sock, APTR data, LONG length) {
+    LONG done = 0, n;
+    if (sock < 0 || !SocketBase) return -1;
+    while (done < length) {
+        n = send(sock, (UBYTE *)data + done, length - done, 0);
+        if (n <= 0) { _dash_net_err = "error al enviar"; return -1; }
+        done += n;
+    }
+    return done;
+}
+
+static LONG _dash_net_send(LONG sock, STRPTR text) {
+    return _dash_net_send_buffer(sock, text, _dash_str_len(text));
+}
+
+/* Up to max bytes into buffer, waiting at most timeout_ms (-1: no limit):
+   the count, 0 if nothing came in time, -1 when the connection is closed or failed */
+static LONG _dash_net_recv_buffer(LONG sock, APTR buffer, LONG max, LONG timeout_ms) {
+    LONG r = _dash_net_select(sock, FALSE, timeout_ms), n;
+    if (r <= 0) return r;
+    n = recv(sock, buffer, max, 0);
+    if (n <= 0) { if (n < 0) _dash_net_err = "error al recibir"; return -1; }
+    return n;
+}
+
+/* The same as text: "" if nothing came in time, nil when closed (bytes 0 become spaces) */
+static STRPTR _dash_net_recv(LONG sock, LONG max, LONG timeout_ms) {
+    STRPTR r;
+    LONG n;
+    if (max <= 0) max = 4096;
+    r = _dash_str_alloc(max, TRUE);
+    if (!r) return NULL;
+    n = _dash_net_recv_buffer(sock, r, max, timeout_ms);
+    if (n < 0) return NULL;
+    r[n] = 0;
+    _dash_str_nul_to_space(r, n);
+    _dash_str_setlen(r, n);
+    return r;
+}
+
+static void _dash_net_close(LONG sock) {
+    if (sock >= 0 && SocketBase) CloseSocket(sock);
+}
+
+static STRPTR _dash_net_error(void) {
+    return (STRPTR)_dash_net_err;
+}
+
+"""
+
     # a + b on lists (dashweb D1), only in programs that add lists
     ARRAY_CONCAT_RUNTIME = """\
 /* a + b: a new list with the elements of both. It holds what a list of the
@@ -7406,6 +7539,7 @@ _RUNTIME_FLAGS = [
     ("STRING_RUNTIME", "uses_strings"),
     ("TEXT_RUNTIME", "uses_text"),          # dashweb D2
     ("TEXT_IO_RUNTIME", "uses_text_io"),    # dashweb D7
+    ("NET_RUNTIME", "uses_net"),            # dashweb D8
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -7627,6 +7761,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_text: bool = False     # s[i], s.length, str_* (TEXT_RUNTIME)
         self.uses_array_concat: bool = False   # list + list (ARRAY_CONCAT_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
+        self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
         self.uses_refcount: bool = False  # Track if refcount runtime is needed
         self.uses_arenas: bool = False  # Track if arena runtime is needed
@@ -7784,8 +7919,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.STRING_RUNTIME)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
-        if self.uses_text_io:
+        if self.uses_text_io or self.uses_net:
             parts.append(CTemplates.TEXT_IO_RUNTIME)
+        if self.uses_net:
+            parts.append(CTemplates.NET_RUNTIME)
 
         # Add reference counting runtime if needed (before structs)
         if self.uses_refcount:
@@ -8010,6 +8147,8 @@ static LONG _dash_event_window_handle(void) {{
         if self.needs_asl and not self.needs_gadtools:
             cleanup.append("    _dash_asl_cleanup();\n"
                            "    if (AslBase) { CloseLibrary(AslBase); AslBase = NULL; }\n")
+        if self.uses_net:
+            cleanup.append("    _dash_net_cleanup();\n")
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
         if cleanup:
@@ -9603,6 +9742,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_net:
+            self.uses_text_io = True   # net_recv: bytes to text like str_from_buffer
         if self.uses_text_io:
             self.uses_text = True      # TEXT_IO_RUNTIME uses the length cache
         if self.uses_text:

@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 441 funciones, 441 implementadas, 0 sin implementar.
+Total: 450 funciones, 450 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -349,6 +349,20 @@ Total: 441 funciones, 441 implementadas, 0 sin implementar.
 | `file_write_text(filename, text)` | `BOOL` | Write the text as the whole file; true if it was all written |  |
 | `str_from_buffer(buffer, offset, length)` | `STRPTR` | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
 | `str_to_buffer(s, buffer, offset)` | `LONG` | Copy the bytes of s to buffer + offset; returns how many |  |
+
+## Red (TCP)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `net_connect(host, port, timeout_ms)` | `LONG` | TCP connection to host:port (name or address); the socket, or -1 (see net_error) |  |
+| `net_send(sock, text)` | `LONG` | Send the whole text; bytes sent or -1 |  |
+| `net_send_buffer(sock, buffer, length)` | `LONG` | Send length bytes of a buffer; bytes sent or -1 |  |
+| `net_recv(sock, max, timeout_ms)` | `STRPTR` | Up to max bytes as text: "" if nothing came within timeout_ms (-1: wait), nil once closed |  |
+| `net_recv_buffer(sock, buffer, max, timeout_ms)` | `LONG` | Up to max bytes into a buffer: the count, 0 on time out, -1 once closed |  |
+| `net_wait(sock, timeout_ms)` | `LONG` | Wait until there is something to read: 1 yes, 0 time out, -1 error |  |
+| `net_close(sock)` | `void` | Close the connection |  |
+| `net_resolve(host)` | `STRPTR` | IPv4 address of a host name ("a.b.c.d"), nil if unknown |  |
+| `net_error()` | `STRPTR` | What went wrong in the last net_ call |  |
 
 ## Audio
 

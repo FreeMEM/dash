@@ -3627,6 +3627,33 @@ TEXT_FUNCTIONS = {
 }
 
 # =============================================================================
+# Network (dashweb D8): TCP over bsdsocket.library. Sockets are LONG (-1 = none).
+# =============================================================================
+
+NET_FUNCTIONS = {
+    "net_connect": _text("net_connect", ["host", "port", "timeout_ms"], "LONG",
+                         "_dash_net_connect(${host}, ${port}, ${timeout_ms})",
+                         "TCP connection to host:port (name or address); the socket, or -1 (see net_error)"),
+    "net_send": _text("net_send", ["sock", "text"], "LONG", "_dash_net_send(${sock}, ${text})",
+                      "Send the whole text; bytes sent or -1"),
+    "net_send_buffer": _text("net_send_buffer", ["sock", "buffer", "length"], "LONG",
+                             "_dash_net_send_buffer(${sock}, ${buffer}, ${length})",
+                             "Send length bytes of a buffer; bytes sent or -1"),
+    "net_recv": _text("net_recv", ["sock", "max", "timeout_ms"], "STRPTR",
+                      "_dash_net_recv(${sock}, ${max}, ${timeout_ms})",
+                      "Up to max bytes as text: \"\" if nothing came within timeout_ms (-1: wait), nil once closed"),
+    "net_recv_buffer": _text("net_recv_buffer", ["sock", "buffer", "max", "timeout_ms"], "LONG",
+                             "_dash_net_recv_buffer(${sock}, ${buffer}, ${max}, ${timeout_ms})",
+                             "Up to max bytes into a buffer: the count, 0 on time out, -1 once closed"),
+    "net_wait": _text("net_wait", ["sock", "timeout_ms"], "LONG", "_dash_net_select(${sock}, FALSE, ${timeout_ms})",
+                      "Wait until there is something to read: 1 yes, 0 time out, -1 error"),
+    "net_close": _text("net_close", ["sock"], "void", "_dash_net_close(${sock})", "Close the connection"),
+    "net_resolve": _text("net_resolve", ["host"], "STRPTR", "_dash_net_resolve(${host})",
+                         "IPv4 address of a host name (\"a.b.c.d\"), nil if unknown"),
+    "net_error": _text("net_error", [], "STRPTR", "_dash_net_error()", "What went wrong in the last net_ call"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -3642,6 +3669,7 @@ ALL_BUILTINS = {
     **DOS_FUNCTIONS,
     **BUFFER_FUNCTIONS,
     **TEXT_FUNCTIONS,          # dashweb D2
+    **NET_FUNCTIONS,           # dashweb D8
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

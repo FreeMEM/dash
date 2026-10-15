@@ -261,6 +261,15 @@ random()                    # Random number
 random_range(min, max)      # Random in range
 ```
 
+## Network (TCP, bsdsocket.library)
+```
+s = net_connect("host", 80, 10000)   # socket or -1 (net_error() says why)
+net_send(s, "GET / HTTP/1.0\r\n\r\n")
+t = net_recv(s, 4096, 10000)         # "" = nothing yet, nil = closed
+net_wait(s, ms)  net_close(s)  net_resolve("host")
+net_send_buffer(s, buf, n)  net_recv_buffer(s, buf, max, ms)
+```
+
 ## Memory Management
 > Strings: se liberan solos (cada variable es dueña de su texto; los temporales se
 > liberan en cada vuelta de bucle/EventLoop y al salir de una función).

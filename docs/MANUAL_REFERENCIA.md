@@ -1458,6 +1458,38 @@ Print dir_current()         # nombre completo: "Work:", "Ram Disk:"...
 
 ---
 
+### Red (TCP)
+
+Conexiones TCP con `bsdsocket.library` (necesita una pila TCP/IP: Roadshow, AmiTCP, Miami...).
+Un socket es un numero (-1 = ninguno). La libreria se abre al usarla y se cierra al salir,
+con los sockets que queden abiertos.
+
+| Funcion | Que hace |
+|---|---|
+| `net_connect(host, puerto, ms)` | Conecta (nombre o direccion); el socket o -1 si falla o pasan `ms` |
+| `net_send(s, texto)`, `net_send_buffer(s, buf, n)` | Envia todo; los bytes o -1 |
+| `net_recv(s, max, ms)` | Hasta `max` bytes como texto: `""` si no llego nada en `ms` (-1: esperar), `nil` al cerrarse |
+| `net_recv_buffer(s, buf, max, ms)` | Lo mismo en un buffer: los bytes, 0 si no llego nada, -1 al cerrarse |
+| `net_wait(s, ms)` | Espera a que haya algo que leer: 1 si, 0 tiempo agotado, -1 error |
+| `net_close(s)` | Cierra |
+| `net_resolve(host)` | Direccion IPv4 (`"a.b.c.d"`), `nil` si no se encuentra |
+| `net_error()` | Que fallo en la ultima llamada |
+
+```
+s = net_connect("ejemplo.org", 80, 10000)
+if s < 0
+    Print "Error: " + net_error()
+else
+    net_send(s, "GET / HTTP/1.0\r\nHost: ejemplo.org\r\n\r\n")
+    trozo = net_recv(s, 4096, 10000)
+    while trozo != nil
+        Print trozo
+        trozo = net_recv(s, 4096, 10000)
+    end
+    net_close(s)
+end
+```
+
 ## 17. Gestion de Memoria
 
 ### Strings (automatico)
