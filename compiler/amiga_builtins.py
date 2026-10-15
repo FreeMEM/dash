@@ -3612,6 +3612,18 @@ TEXT_FUNCTIONS = {
                           "n written in that base (2-36, lowercase letters)"),
     "str_replace": _text("str_replace", ["s", "from", "to"], "STRPTR", "_dash_str_replace(${s}, ${from}, ${to})",
                          "Copy with every from replaced by to"),
+    # dashweb D7: files and buffers as text
+    "file_read_text": _text("file_read_text", ["filename"], "STRPTR", "_dash_file_read_text(${filename})",
+                            "Whole file as a String (bytes 0 become spaces); nil if it cannot be read"),
+    "file_write_text": _text("file_write_text", ["filename", "text"], "BOOL",
+                             "_dash_file_write_text(${filename}, ${text})",
+                             "Write the text as the whole file; true if it was all written"),
+    "str_from_buffer": _text("str_from_buffer", ["buffer", "offset", "length"], "STRPTR",
+                             "_dash_str_from_buffer(${buffer}, ${offset}, ${length})",
+                             "String with length bytes of a buffer from offset (bytes 0 become spaces)"),
+    "str_to_buffer": _text("str_to_buffer", ["s", "buffer", "offset"], "LONG",
+                           "_dash_str_to_buffer(${s}, ${buffer}, ${offset})",
+                           "Copy the bytes of s to buffer + offset; returns how many"),
 }
 
 # =============================================================================

@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 437 funciones, 437 implementadas, 0 sin implementar.
+Total: 441 funciones, 441 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -345,6 +345,10 @@ Total: 437 funciones, 437 implementadas, 0 sin implementar.
 | `str_to_int(s, base)` | `LONG` | Number written in s in that base (2-36); Int(s) is base 10 |  |
 | `str_from_int(n, base)` | `STRPTR` | n written in that base (2-36, lowercase letters) |  |
 | `str_replace(s, from, to)` | `STRPTR` | Copy with every from replaced by to |  |
+| `file_read_text(filename)` | `STRPTR` | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
+| `file_write_text(filename, text)` | `BOOL` | Write the text as the whole file; true if it was all written |  |
+| `str_from_buffer(buffer, offset, length)` | `STRPTR` | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |
+| `str_to_buffer(s, buffer, offset)` | `LONG` | Copy the bytes of s to buffer + offset; returns how many |  |
 
 ## Audio
 

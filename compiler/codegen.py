@@ -866,6 +866,67 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
 
 """
 
+    # Text from files and buffers (dashweb D7), only in programs that use it
+    TEXT_IO_RUNTIME = """\
+/* Files and buffers as text (dashweb D7). Bytes 0 become spaces: a String ends at the
+   first 0, and HTML, CSS and JavaScript treat a space like nothing worse. */
+static void _dash_str_nul_to_space(STRPTR s, LONG n) {
+    LONG i;
+    for (i = 0; i < n; i++) if (!s[i]) s[i] = ' ';
+}
+
+/* The whole file as a String; nil if it cannot be read */
+static STRPTR _dash_file_read_text(STRPTR name) {
+    BPTR f = Open(name, MODE_OLDFILE);
+    LONG size, got;
+    STRPTR r;
+    if (!f) return NULL;
+    Seek(f, 0, OFFSET_END);
+    size = Seek(f, 0, OFFSET_BEGINNING);
+    if (size < 0) { Close(f); return NULL; }
+    r = _dash_str_alloc(size, TRUE);
+    if (!r) { Close(f); return NULL; }
+    got = size > 0 ? Read(f, r, size) : 0;
+    Close(f);
+    if (got < 0) got = 0;
+    r[got] = 0;
+    _dash_str_nul_to_space(r, got);
+    _dash_str_setlen(r, got);
+    return r;
+}
+
+/* Writes the text (nothing added); TRUE if it all went to the file */
+static BOOL _dash_file_write_text(STRPTR name, STRPTR text) {
+    BPTR f = Open(name, MODE_NEWFILE);
+    LONG n = _dash_str_len(text), w;
+    if (!f) return FALSE;
+    w = n > 0 ? Write(f, text, n) : 0;
+    Close(f);
+    return w == n;
+}
+
+/* length bytes of a buffer from offset, as a String */
+static STRPTR _dash_str_from_buffer(APTR buffer, LONG offset, LONG length) {
+    STRPTR r;
+    if (!buffer || length < 0) length = 0;
+    r = _dash_str_alloc(length, TRUE);
+    if (!r) return NULL;
+    if (length) _dash_copy(r, (STRPTR)buffer + offset, length);
+    r[length] = 0;
+    _dash_str_nul_to_space(r, length);
+    _dash_str_setlen(r, length);
+    return r;
+}
+
+/* Copies the bytes of the text (without the final 0) to buffer + offset; returns how many */
+static LONG _dash_str_to_buffer(STRPTR s, APTR buffer, LONG offset) {
+    LONG n = _dash_str_len(s);
+    if (buffer && n) _dash_copy((STRPTR)buffer + offset, s, n);
+    return n;
+}
+
+"""
+
     # a + b on lists (dashweb D1), only in programs that add lists
     ARRAY_CONCAT_RUNTIME = """\
 /* a + b: a new list with the elements of both. It holds what a list of the
@@ -7344,6 +7405,7 @@ _RUNTIME_FLAGS = [
     ("ARRAY_RUNTIME", "uses_arrays"),
     ("STRING_RUNTIME", "uses_strings"),
     ("TEXT_RUNTIME", "uses_text"),          # dashweb D2
+    ("TEXT_IO_RUNTIME", "uses_text_io"),    # dashweb D7
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -7564,6 +7626,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_strings: bool = False  # Track if string operations are used
         self.uses_text: bool = False     # s[i], s.length, str_* (TEXT_RUNTIME)
         self.uses_array_concat: bool = False   # list + list (ARRAY_CONCAT_RUNTIME)
+        self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
         self.uses_refcount: bool = False  # Track if refcount runtime is needed
         self.uses_arenas: bool = False  # Track if arena runtime is needed
@@ -7721,6 +7784,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.STRING_RUNTIME)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
+        if self.uses_text_io:
+            parts.append(CTemplates.TEXT_IO_RUNTIME)
 
         # Add reference counting runtime if needed (before structs)
         if self.uses_refcount:
@@ -9535,6 +9600,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_text_io:
+            self.uses_text = True      # TEXT_IO_RUNTIME uses the length cache
         if self.uses_text:
             self.uses_strings = True   # TEXT_RUNTIME builds on the string runtimes
         if self.uses_music:

@@ -55,6 +55,8 @@ str_lower(s)  str_upper(s)  str_trim(s)
 Int("42")  str_to_int("ff", 16)  str_from_int(255, 16)
 str_replace(s, "a", "b")
 s = s + "x"                 # appends in place: building a text in a loop is linear
+t = file_read_text("f.html")   # whole file (nil if missing); file_write_text("f", t)
+str_from_buffer(buf, 0, n)  str_to_buffer(s, buf, 0)
 ```
 
 ## Control de Flujo

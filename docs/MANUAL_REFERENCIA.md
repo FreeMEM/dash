@@ -361,6 +361,13 @@ Devuelven textos nuevos (el original no cambia) o numeros. Las posiciones empiez
 | `Int(s)`, `str_to_int(s, base)` | Numero escrito en el texto (`Int("42")`, `str_to_int("ff", 16)`) |
 | `str_from_int(n, base)` | Numero escrito en otra base (`str_from_int(255, 16)` = `"ff"`) |
 | `str_replace(s, de, a)` | Cambia todas las apariciones de `de` por `a` |
+| `file_read_text(nombre)` | El fichero entero como texto (`nil` si no se puede leer) |
+| `file_write_text(nombre, texto)` | Escribe el texto como fichero entero (`true` si fue bien) |
+| `str_from_buffer(buffer, desde, n)` | Texto con `n` bytes de un buffer |
+| `str_to_buffer(s, buffer, desde)` | Copia los bytes del texto al buffer; devuelve cuantos |
+
+Un texto termina en el primer byte 0, asi que al leer ficheros o buffers los bytes 0 se
+convierten en espacios. Para datos binarios, usar los buffers (`buffer_get_byte`...).
 
 Recorrer un texto largo por posicion es rapido: la longitud de los textos largos se
 recuerda, asi que `while i < s.length` con `s[i]` no lo mide en cada vuelta.

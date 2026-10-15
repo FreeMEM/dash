@@ -1,0 +1,47 @@
+# Test: whole files and buffers as text (file_read_text, file_write_text,
+# str_from_buffer, str_to_buffer); bytes 0 become spaces; nil for a missing file
+# memcheck
+# expect-out: escrito
+# expect-out: 23
+# expect-out: 16
+# expect-out: fin
+# expect-out: nil
+# expect-out: 0
+# expect-out: 5
+# expect-out: A GET /
+# expect-out: 30000
+# expect-out: j
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    t = "línea uno\nlínea dos\n"
+    if file_write_text("RAM:prueba.txt", t + "fin")
+        Print "escrito"
+    end
+    leido = file_read_text("RAM:prueba.txt")
+    Print leido.length
+    Print str_find(leido, "dos")
+    Print leido[leido.length - 3:]
+    no = file_read_text("RAM:no_existe.txt")
+    if no == nil
+        Print "nil"
+    end
+    vacio = ""
+    file_write_text("RAM:vacio.txt", vacio)
+    Print file_read_text("RAM:vacio.txt").length
+    b = buffer_alloc(16)
+    n = str_to_buffer("GET /", b, 2)
+    buffer_set_byte(b, 0, 65)
+    buffer_set_byte(b, 1, 0)
+    Print n
+    Print str_from_buffer(b, 0, 7)
+    buffer_free(b)
+    grande = ""
+    for i in (1..3000)
+        grande = grande + "abcdefghij"
+    end
+    file_write_text("RAM:grande.txt", grande)
+    g = file_read_text("RAM:grande.txt")
+    Print g.length
+    Print g[29999]
+end
