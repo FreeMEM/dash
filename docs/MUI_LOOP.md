@@ -127,11 +127,21 @@ otras señales (red, temporizador). El plan va en ese orden.
 Hoy: 62 builtins `ra_` y 15 `gt_` (más 6 de menús), con **un único estado global** (una ventana, gadgets
 por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no está en la ROM).
 
-- [ ] 12. **Auditoría.** Leer el runtime de los dos (en `compiler/amiga_builtins.py`/`codegen.py`) y sus tests.
+- [x] 12. **Auditoría.** Leer el runtime de los dos (en `compiler/amiga_builtins.py`/`codegen.py`) y sus tests.
       Anotar en la bitácora: bugs (recursos sin liberar, `IDCMP` mal atendidos, valores que no se leen bien,
       textos que se liberan mientras el gadget los usa), qué falta para una aplicación normal, y qué cuesta
       de más (tamaño de runtime, trabajo por evento). Dividir las tareas 13-16 según lo que salga.
-- [ ] 13. **Bugs.** Corregir lo encontrado en la 12, cada uno con su test (en emulador cuando se pueda).
+- [ ] 13a. **Bugs de eventos GadTools/menús** (auditoría 1, 4, 5, 7, 9): la ventana no pide `IDCMP_GADGETUP`/
+      `MENUPICK` para `gt_*`/`menu_*` (nunca llegan eventos); las esperas devuelven el primer mensaje y dejan el resto en
+      la cola; `gt_event` y `menu_event` se roban mensajes; `ItemAddress` NULL; filtro de `MOUSEMOVE` de los
+      deslizadores; `On Menu` en `EventLoop`.
+- [ ] 13b. **Bugs de valores y vida de los objetos** (auditoría 3, 6, 10, 11, 13): `gt_get/set_value` solo con
+      deslizadores; gadgets que apuntan a una ventana cerrada; textos copiados para siempre (`textfield_set`,
+      `ra_set_string`, `listview_add` dos veces...); `CloseWindow` con el menú puesto, `menu_attach`/`gt_init` dos
+      veces; `gt_*` usa la ventana actual en vez de la suya.
+- [ ] 13c. **Bugs de ReAction** (auditoría 2, 8, 12, 14): `render_canvas` no compila (`static`); nodos del chooser
+      con `AllocMem` sin liberar y sin `AllocChooserNode`, ids fuera de tabla; `RA_EVENT_NONE` = 0 choca con el
+      gadget 0; iconificar sin efecto; el dibujo del canvas se llama quizá desde input.device (comprobar).
 - [ ] 14. **GadTools completo.** Gadgets que faltan: ciclo (`CYCLE_KIND`), opciones (`MX_KIND`), lista
       (`LISTVIEW_KIND`), scroller, número (`NUMBER_KIND`); `gt_set_string`, deshabilitar, refresco
       (`GT_RefreshWindow`, `GT_BeginRefresh`), posiciones según la fuente de la pantalla. Probar en A500 y A1200.
@@ -377,3 +387,50 @@ Formato:
   las llamadas a funciones del runtime (`_dash_*`), donde no hace falta y obliga a pasar por memoria.
 - Documentación: `ROADMAP.md` (sesión 7 y pendientes del lenguaje), `CLAUDE.md` local.
 - Tests: 130/130 sin emulador; 311/311 con `--emu --emu-a500 --emu-32`; 193/193 con `--emu --memcheck`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 12 (auditoría de GadTools y ReAction)
+- Hecho con un subagente que solo leyó y transpiló (sin tocar el repo). Comprobados aquí los dos más graves:
+  la ventana de `examples/test_gadtools.dash` solo pide `IDCMP_CLOSEWINDOW`, y un programa ReAction con
+  `render_canvas` da "static declaration of 'render_canvas' follows non-static declaration".
+- **Bugs** (codegen.py; numeración de la auditoría, de más grave a menos):
+  1. `gt_*`/`menu_*` no reciben eventos: `visit_WindowOpen` solo añade `IDCMP_GADGETUP`/`MENUPICK` si `needs_gadtools`
+     ya está activo, el preescaneo solo mira `button_`, `checkbox_`..., y `_dash_gt_init`/`_dash_gt_attach`/
+     `_dash_menu_attach` no llaman a `ModifyIDCMP`.
+  2. `render_canvas` declarada sin `static` en el runtime ReAction: no compila (afecta a `blixel/blixel.dash`).
+  3. `gt_get_value`/`gt_set_value` usan `GTSL_Level` para todo: casilla, paleta y entero leen 0 (el manual enseña ese uso).
+  4. `_dash_gt_wait_event` y `ra_wait_event` hacen `Wait` y devuelven el primer mensaje: los demás quedan en la cola
+     sin señal nueva.
+  5. `gt_event` y `menu_event` vacían el mismo puerto y tiran lo que no es suyo (un `MENUPICK` se pierde); en
+     `EventLoop` no hay `On Menu`.
+  6. Cerrar una ventana deja `_dash_gads[i].win` apuntando a ella: `slider_set` después puede colgar.
+  7. `_dash_menu_event` lee `item->NextSelect` con `item` NULL; solo devuelve el primero de una selección múltiple.
+  8. Chooser ReAction: nodos con `AllocMem` sin liberar, `struct Node` en vez de `AllocChooserNode`, `CHOOSER_Labels`
+     fuera del array con id >= 64, `_ra_gadgets[-1]` con id negativo.
+  9. Filtro de `MOUSEMOVE` (`GadgetType & GTYP_GADGETTYPE`) que los gadgets GadTools no cumplen: el deslizador solo
+     avisa al soltar (sin verificar en emulador).
+  10. Textos copiados hasta salir: `listview_add` copia dos veces, `listview_clear` no libera, `textfield_set`,
+      `ra_set_string`, `ra_chooser_add_item`, `window_title` no están en `_STRING_READERS`.
+  11. `CloseWindow` con el menú puesto (sin `ClearMenuStrip`); `menu_attach`/`gt_init` dos veces pierden lo anterior.
+  12. `RA_EVENT_NONE` = 0 = un gadget con id 0; el iconificar no se ejecuta nunca.
+  13. `gt_*` usa `_dash_win`, que cambian `window_create` o `ra_get_rastport`.
+  14. (Sin verificar) el gancho de dibujo del canvas ReAction ejecuta código Dash en `GM_RENDER`, que Intuition puede
+      llamar desde input.device; usa el pool sin protección.
+- **Falta:** `gt_cycle`/`gt_listview` existen en el runtime sin builtin; no hay MX, NUMBER, SCROLLER; ni cambiar textos
+  ni desactivar gadgets; sin atajos de teclado (`GT_Underscore`); posiciones fijas sin mirar la fuente; menús sin marca
+  ni desactivar; `EventLoop` sin `On Menu`, ratón, tamaño, temporizador; ventanas de `window_create` sin lector de
+  mensajes; ReAction sin listbrowser (incluida pero sin API), clicktab, radiobutton, getfile, fuelgauge, menús, teclas,
+  `WMHI_NEWSIZE`; `ra_set_*` sin efecto antes de abrir. Todo es una ventana global (`_dash_glist`, `_dash_vi`,
+  `_dash_menu`, tablas de 64; en ReAction `_ra_winobj`, `_ra_window`...).
+- **Coste:** ventana + `EventLoop` 2.500 bytes de código; con un `button_create` 5.224 (+7.884 de bss); `gt_button`
+  3.720; ReAction mínimo 3.984. La plantilla `main` de GadTools abre asl.library y crea un requester aunque no se use;
+  `needs_gadtools` arrastra gráficos y ASL. Por gadget: `GetVisualInfo`, `CreateContext`, `AddGList`, `RefreshGList`,
+  `GT_RefreshWindow`, `ModifyIDCMP`. `IDCMP_INTUITICKS` en toda ventana con gadgets (10 despertares por segundo; solo lo
+  necesitan las listas). `listview_add` quita y pone la lista y la redibuja entera en cada línea.
+- **Tres APIs para lo mismo** (más MUI): `gt_*` + `menu_*` (ids desde 0, sondeo; solo `examples/test_gadtools` y
+  `flowpaint2`, rotos por el bug 1, sin test), por número de gadget `button_`/`slider_`/`listview_`... + `On Gadget`
+  (ids desde 1, `EventLoop`; `tests/test_gadgets.dash`), `ra_*` (propias, sondeo; `test_reaction_values`,
+  `examples/test_reaction`, `flowpaint3`, `blixel`). Chocan si se mezclan en una ventana.
+- **Decisión** (el usuario pidió terminar y mejorar GadTools y ReAction, no quitar): se arreglan las tres APIs sin
+  romper programas; la recomendada para programas nuevos con GadTools será la de número de gadget + `EventLoop`
+  (se documenta así). Tarea 13 dividida en 13a, 13b y 13c.
+- Tests: sin cambios de código.
