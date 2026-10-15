@@ -28,6 +28,7 @@
 18. [Funciones del Sistema](#18-funciones-del-sistema)
 19. [Interfaz de Usuario - GadTools](#19-interfaz-de-usuario---gadtools)
 20. [Interfaz de Usuario - ReAction](#20-interfaz-de-usuario---reaction)
+20b. [Interfaz de Usuario - MUI](#20b-interfaz-de-usuario---mui)
 21. [Modulos e Imports](#21-modulos-e-imports)
 22. [Ejemplos Completos](#22-ejemplos-completos)
 23. [Referencia Rapida](#23-referencia-rapida)
@@ -2070,6 +2071,80 @@ end
 
 ---
 
+## 20b. Interfaz de Usuario - MUI
+
+MUI (MagicUserInterface) es la interfaz que usan la mayoría de programas grandes de Amiga. Dash
+usa MUI 5 (también vale 3.8). Necesita:
+
+- **En el Amiga:** MUI instalado y un **68020** o superior (MUI 5 para AmigaOS 3 es código de 68020).
+  En un 68000 `mui_app_begin` escribe "MUI: needs a 68020 or better" y devuelve 0.
+- **Para compilar:** el SDK de MUI, que no viene con la toolchain: `tools/get_mui_sdk.sh` lo descarga
+  en `~/.cache/dash-mui` (o `DASH_MUI_SDK` apunta a su carpeta `SDK/MUI`).
+
+Los programas con MUI piden 32 KB de pila (con menos, MUI se para con un aviso). Diseño completo y lo
+que viene después (listas, menús, zona de dibujo...): `docs/MUI_DISEÑO.md`.
+
+### Construir la ventana
+
+La ventana se describe de arriba abajo. Cada objeto que se crea entra en el grupo abierto;
+`mui_window_begin` abre un grupo vertical y `mui_hgroup_begin`/`mui_vgroup_begin` abren otros dentro.
+Los objetos son números (como los buffers o los ficheros): se guardan en variables y se pasan a otras funciones.
+
+```ruby
+const ID_SALUDA = 1
+
+Main
+    if mui_app_begin("Hola MUI", "HOLAMUI") == 0
+        Print "No se puede usar MUI"
+    else
+        win = mui_window_begin("Hola MUI", 1)   # 1: MUI recuerda tamaño y posición (0: no)
+            mui_text("\33cPulsa el botón")      # \33c = centrado
+            mui_hgroup_begin()
+                saluda = mui_button("_Saluda")  # _S: atajo de teclado
+            mui_group_end()
+        mui_window_end()
+        mui_on_press(saluda, ID_SALUDA)
+        mui_window_open(win)
+        while true
+            ev = mui_wait_event()
+            if ev == -1                         # ventana cerrada o Ctrl-C
+                break
+            end
+            if ev == ID_SALUDA
+                Print "Hola"
+            end
+        end
+        mui_app_end()
+    end
+end
+```
+
+### Eventos
+
+Los eventos son números que elige el programa (mayores que 0). `mui_on_press(boton, id)` hace que
+`mui_wait_event()` devuelva `id` cuando se pulsa el botón. Cerrar la primera ventana devuelve -1;
+`mui_on_close(ventana, id)` lo cambia por otro número. `mui_poll_event()` no espera (0 si no hay nada)
+y `mui_press(boton)` lanza el evento del botón como si se pulsara.
+
+### Funciones
+
+| Función | Qué hace |
+|---|---|
+| `mui_app_begin(titulo, base)` | Abre MUI y crea la aplicación (`base`: nombre ARexx). 0 si no se puede. |
+| `mui_window_begin(titulo, id)` / `mui_window_end()` | Empieza y termina una ventana. |
+| `mui_vgroup_begin()`, `mui_hgroup_begin()` / `mui_group_end()` | Grupo vertical u horizontal. |
+| `mui_text(texto)` | Texto. |
+| `mui_button(texto)` | Botón. |
+| `mui_window_open(ventana)` | Abre la ventana; falso si no pudo. |
+| `mui_window_close(ventana)` | La cierra (sigue existiendo). |
+| `mui_on_press(boton, id)`, `mui_on_close(ventana, id)` | Eventos. |
+| `mui_wait_event()`, `mui_poll_event()`, `mui_press(boton)` | Esperar, consultar o lanzar eventos. |
+| `mui_app_end()` | Libera la aplicación, sus ventanas y objetos (también se hace al salir). |
+
+Los objetos dejan de valer después de `mui_app_end()`.
+
+---
+
 ## 21. Modulos e Imports
 
 ### Importar Modulo
@@ -2429,7 +2504,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| **Total** | **322** | |
+| MUI | 16 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_wait_event` |
+| **Total** | **338** | |
 
 ### Colores Estandar Amiga
 

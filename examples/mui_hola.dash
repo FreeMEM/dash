@@ -1,0 +1,40 @@
+# Primera ventana MUI: un texto, un campo de botones y el bucle de eventos.
+# Necesita MUI 3.8 o 5 instalado y un 68020 (MUI 5 para AmigaOS 3).
+# Compilar: ./dash examples/mui_hola.dash -o bin/mui_hola (SDK: tools/get_mui_sdk.sh)
+
+const ID_SALUDA = 1
+const ID_LIMPIA = 2
+
+Main
+    if mui_app_begin("Hola MUI", "HOLAMUI") == 0
+        Print "No se puede usar MUI"
+    else
+        win = mui_window_begin("Hola MUI", 1)
+            saludo = mui_text("\33cPulsa un botón")
+            mui_hgroup_begin()
+                saluda = mui_button("_Saluda")
+                limpia = mui_button("_Limpia")
+            mui_group_end()
+        mui_window_end()
+        mui_on_press(saluda, ID_SALUDA)
+        mui_on_press(limpia, ID_LIMPIA)
+        mui_window_open(win)
+
+        veces = 0
+        while true
+            ev = mui_wait_event()
+            if ev == -1
+                break
+            end
+            if ev == ID_SALUDA
+                veces = veces + 1
+                Print "Hola número #{veces}"
+            end
+            if ev == ID_LIMPIA
+                veces = 0
+                Print "A cero"
+            end
+        end
+        mui_app_end()
+    end
+end

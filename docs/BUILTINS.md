@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 322 funciones, 322 implementadas, 0 sin implementar.
+Total: 338 funciones, 338 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -393,3 +393,24 @@ Total: 322 funciones, 322 implementadas, 0 sin implementar.
 | `rtg_open_screen(width, height, depth, title)` | `BOOL` | Open RTG screen with specified dimensions |  |
 | `rtg_blit(src, sx, sy, dx, dy, w, h)` | `void` | Blit from bitmap to screen |  |
 | `rtg_scale_blit(src, sx, sy, sw, sh, dx, dy, dw, dh)` | `void` | Scaled blit from bitmap to screen |  |
+
+## MUI
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_app_end()` | `void` | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
+| `mui_window_begin(title, id)` | `APTR` | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
+| `mui_window_end()` | `void` | End the window started with mui_window_begin |  |
+| `mui_window_open(win)` | `LONG` | Open a window; false if it could not open |  |
+| `mui_window_close(win)` | `void` | Close a window (it still exists) |  |
+| `mui_vgroup_begin()` | `APTR` | Start a vertical group inside the open group |  |
+| `mui_hgroup_begin()` | `APTR` | Start a horizontal group inside the open group |  |
+| `mui_group_end()` | `void` | End the open group |  |
+| `mui_text(text)` | `APTR` | Text object (MUI text codes allowed) |  |
+| `mui_button(label)` | `APTR` | Button (an underscore before a letter makes it the keyboard shortcut) |  |
+| `mui_on_press(obj, id)` | `void` | mui_wait_event returns id when the button is pressed |  |
+| `mui_on_close(win, id)` | `void` | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
+| `mui_press(obj)` | `void` | Send the mui_on_press event of a button as if it were pressed |  |
+| `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
+| `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |

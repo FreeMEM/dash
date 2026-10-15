@@ -116,6 +116,21 @@ Main
 end
 ```
 
+## MUI (68020+, MUI 3.8/5; SDK: tools/get_mui_sdk.sh)
+```
+app = mui_app_begin("App", "APP")       # 0 = no MUI / 68000
+win = mui_window_begin("Title", 1)      # vertical root group; 1 = remember place
+    mui_text("Hello")
+    mui_hgroup_begin()                  # mui_vgroup_begin, mui_group_end
+        ok = mui_button("_OK")
+    mui_group_end()
+mui_window_end()
+mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
+mui_window_open(win)
+ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)
+mui_app_end()                           # also at exit
+```
+
 ## Graphics Functions
 ```
 gfx_pen(color)              # Set draw color (0-31)

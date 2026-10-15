@@ -31,6 +31,7 @@ GROUPS = [
     ("AUDIO_FUNCTIONS", "Audio"),
     ("INTUITION_EXPANDED", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)"),
+    ("MUI_FUNCTIONS", "MUI"),
 ]
 
 

@@ -1,0 +1,17 @@
+# AmigaOS texts are ISO-8859-1 (Latin-1): accents in a Dash text reach the Amiga as one
+# byte each (compiler/latin1.py), not as the two bytes of UTF-8.
+# expect-c: Printf("Canci\363n del ping\374ino
+# expect-out: Canción del pingüino
+# expect-out: 5
+# expect-out: ñ
+# expect-out: Año 2026: ¿sí?
+
+Main
+    Print "Canción del pingüino"
+    s = "botón"
+    Print s.length
+    t = "España"
+    Print t[4:5]
+    n = 2026
+    Print "Año #{n}: ¿sí?"
+end

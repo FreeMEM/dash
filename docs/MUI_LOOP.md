@@ -101,7 +101,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 - [x] 2. **Diseño.** Fijar la API (sección de arriba) con el caso del navegador delante: ventana con barra de
       URL, botones atrás/adelante/recargar, zona de página con scroll, barra de estado y progreso. Escribirlo
       en `docs/MUI_DISEÑO.md` con un ejemplo en Dash de esa ventana. Decidir si la sintaxis declarativa entra.
-- [ ] 3. **Núcleo.** `mui_app_begin(title, base)`, `mui_window_begin(title)`/`mui_window_end()`, grupos
+- [x] 3. **Núcleo.** `mui_app_begin(title, base)`, `mui_window_begin(title)`/`mui_window_end()`, grupos
       vertical y horizontal, `mui_text`, `mui_button`, `mui_window_open`, `mui_wait_event`, `mui_app_end`,
       `mui_on_close`, `mui_on_press`. Inclusión condicional del runtime y de las cabeceras. Test en emulador
       (pulsación simulada con `MUIA_Pressed`/`set` o cierre por modo test). Ejemplo `examples/mui_hola.dash`.
@@ -212,3 +212,34 @@ Formato:
 - Tests: sin cambios de código (solo documentación).
 - Pendiente / riesgos: comprobar en la tarea 3 que `OM_ADDMEMBER` en grupos ya creados funciona antes de abrir la
   ventana, y que un `Pointer` de Dash se puede comparar con `nil`.
+
+### 2026-10-15 — Tarea 3 (núcleo de MUI)
+- Hecho:
+  - `CTemplates.MUI_RUNTIME` (antes de `RTG_RUNTIME`, flag `needs_mui` por `runtime_index`) y 16 builtins en
+    `MUI_FUNCTIONS`: `mui_app_begin/end`, `mui_window_begin/end/open/close`, `mui_vgroup_begin`, `mui_hgroup_begin`,
+    `mui_group_end`, `mui_text`, `mui_button`, `mui_on_press`, `mui_on_close`, `mui_press`, `mui_wait_event`, `mui_poll_event`.
+  - Objetos como números (convención de Dash para handles: el codegen castea a puntero al llamar y el retorno a LONG),
+    no `Pointer`; `docs/MUI_DISEÑO.md` corregido.
+  - Por dentro: `NO_INLINE_STDARG` + `MUI_NOSHORTCUTS` (sin macros `get`/`set`/`String`... que choquen con nombres del
+    programa); etiquetas en arrays (`_DASH_MUI_NEW`, `_DASH_MUI_DO` con `DoMethodA`); la ventana se crea en
+    `mui_window_begin` con un grupo raíz vacío y los hijos entran con `OM_ADDMEMBER` (funciona antes de abrir).
+    Títulos copiados en un pool propio. Comprueba 68020 (`AttnFlags`) antes de abrir muimaster. `_dash_mui_app_end()`
+    en la limpieza de salida. Cerrar la primera ventana = -1 (`MUIM_KillNotify` al cambiarlo con `mui_on_close`).
+  - `compiler/cflags.py`: `mui_flags()` añade `-I` del SDK (`DASH_MUI_SDK`, por defecto `~/.cache/dash-mui/x/SDK/MUI`)
+    si el C incluye `libraries/mui.h`; error claro sin SDK. Lo usan `./dash` y el runner.
+  - `examples/mui_hola.dash` (32 ejemplos), documentación en QUICK_REFERENCE, MANUAL_REFERENCIA (20b) y BUILTINS.md.
+- **Bug general encontrado y arreglado: los textos con acentos llegaban al Amiga en UTF-8** ("botón" = 6 bytes y
+  basura en pantalla). `compiler/latin1.py`: pasada final que escribe cada carácter no ASCII de un literal C como octal
+  Latin-1 (`bot\363n`; fuera de Latin-1 = `?`), en `compile` y `compile_multifile`. `tools/emu_run.py` lee la salida en
+  Latin-1. Test `tests/test_latin1.dash` (longitud 5, `ñ` por índice, interpolación) en las tres máquinas.
+  Comparado el C de todos los tests y ejemplos con el de antes: solo cambian `scope_test` y `test_latin1`, y solo en eso.
+- Probado en emulador: `test_mui_core` (ventana con grupos, `mui_press` → evento 2 y 1, `mui_poll_event` = 0) en A1200
+  3.1 y 3.2; con `--memcheck` sin restos; en A500 imprime "MUI: needs a 68020 or better" y sigue; `mui_hola` con
+  `--autoclose 3` termina con RC 0.
+- Coordinación: otra sesión (`freememlang-ff`) trabaja en dashweb y en un worktree de Dash (`~/Projects/FreeMEMLang-dashweb`,
+  rama `dashweb` sobre `mui`). Acordado: ella no toca `MUI_FUNCTIONS`/`MUI_RUNTIME`; yo no toco sus bloques (red,
+  fuentes, textos, listas). Las imágenes por datatypes fuera de MUI son suyas (su D12); mi tarea 9 se apoyará en ellas.
+  Avisarle antes de cambiar la API de `mui_canvas` o `mui_wait_event_signals`.
+- Tests: 123/123 sin emulador; 290/290 con `--emu --emu-a500 --emu-32` (antes 283); ejemplos 32/32.
+- Pendiente / riesgos: `docs/BUILTINS.md` dice `APTR` en "Devuelve" de los `mui_` (es el tipo C; en Dash son números).
+  La sección 20b del manual no tiene número propio para no renumerar el resto.

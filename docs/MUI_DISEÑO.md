@@ -2,8 +2,9 @@
 
 ## Decisiones
 
-1. **Builtins `mui_`**, sin sintaxis nueva por ahora. Los objetos MUI son valores `Pointer` que el programa
-   guarda en variables: hacen falta varias ventanas y muchos objetos (el navegador), cosa que la API de
+1. **Builtins `mui_`**, sin sintaxis nueva por ahora. Los objetos MUI son valores que el programa
+   guarda en variables (números, como los buffers y ficheros de Dash: el codegen convierte a puntero al llamar
+   al runtime; tarea 3): hacen falta varias ventanas y muchos objetos (el navegador), cosa que la API de
    ReAction (`ra_`, un estado global y gadgets por número) no permite.
 2. **El árbol se construye con una pila**, como `ra_layout_*`: `mui_vgroup_begin()` ... `mui_group_end()`.
    Cada objeto que se crea entra en el grupo abierto. Por dentro: cada grupo se crea vacío y los hijos se añaden
@@ -18,15 +19,15 @@
 
 ## API
 
-Tipos: `Pointer` = objeto MUI; `Int`; `String`. Los textos que MUI no copia (títulos de aplicación, ventana,
+Tipos: objeto MUI = número (handle, como un buffer); `Int`; `String`. Los textos que MUI no copia (títulos de aplicación, ventana,
 menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_app_end()`.
 
 ### Aplicación y ventanas
 
 | Builtin | Qué hace |
 |---|---|
-| `mui_app_begin(titulo, base) -> Pointer` | Abre muimaster (versión 19+), comprueba 68020 y crea la aplicación (`base`: nombre ARexx, en mayúsculas). |
-| `mui_window_begin(titulo, id) -> Pointer` | Empieza una ventana. `id` (1-255, 0 = ninguno) hace que MUI recuerde su tamaño y posición. Abre su grupo raíz vertical. |
+| `mui_app_begin(titulo, base)` | Abre muimaster (versión 19+), comprueba 68020 y crea la aplicación (`base`: nombre ARexx, en mayúsculas). |
+| `mui_window_begin(titulo, id)` | Empieza una ventana. `id` (1-255, 0 = ninguno) hace que MUI recuerde su tamaño y posición. Abre su grupo raíz vertical. |
 | `mui_window_end()` | Cierra el grupo raíz, crea la ventana y la añade a la aplicación. |
 | `mui_window_open(win) -> Bool` | Abre la ventana (false si no se pudo: pantalla pequeña, sin memoria). |
 | `mui_window_close(win)` | La cierra (sigue existiendo). |
@@ -49,18 +50,18 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 
 | Builtin | Clase MUI |
 |---|---|
-| `mui_text(texto) -> Pointer` | `Text` (admite los códigos de formato de MUI, `\33c` centrado...) |
-| `mui_label(texto) -> Pointer` | `Label` (alineada para formularios) |
-| `mui_button(texto) -> Pointer` | `SimpleButton` (`_` antes de una letra = atajo de teclado) |
-| `mui_string(inicial, max) -> Pointer` | `String` |
-| `mui_checkbox(marcado) -> Pointer` | `CheckMark` |
-| `mui_cycle(opciones) -> Pointer` | `Cycle` (`"Uno|Dos|Tres"`) |
-| `mui_slider(min, max, valor) -> Pointer` | `Slider` |
-| `mui_gauge(max) -> Pointer` | `Gauge` horizontal (barra de progreso) |
-| `mui_list(lineas) -> Pointer` | `Listview` + `List` de textos (el objeto devuelto es el `List`) |
-| `mui_scrollbar(vertical) -> Pointer` | `Scrollbar` (`Prop`) |
-| `mui_canvas(ancho_min, alto_min) -> Pointer` | Clase propia de dibujo (abajo) |
-| `mui_image(fichero) -> Pointer` | `Dtpic` (PNG, JPEG, GIF por datatypes) |
+| `mui_text(texto)` | `Text` (admite los códigos de formato de MUI, `\33c` centrado...) |
+| `mui_label(texto)` | `Label` (alineada para formularios) |
+| `mui_button(texto)` | `SimpleButton` (`_` antes de una letra = atajo de teclado) |
+| `mui_string(inicial, max)` | `String` |
+| `mui_checkbox(marcado)` | `CheckMark` |
+| `mui_cycle(opciones)` | `Cycle` (`"Uno|Dos|Tres"`) |
+| `mui_slider(min, max, valor)` | `Slider` |
+| `mui_gauge(max)` | `Gauge` horizontal (barra de progreso) |
+| `mui_list(lineas)` | `Listview` + `List` de textos (el objeto devuelto es el `List`) |
+| `mui_scrollbar(vertical)` | `Scrollbar` (`Prop`) |
+| `mui_canvas(ancho_min, alto_min)` | Clase propia de dibujo (abajo) |
+| `mui_image(fichero)` | `Dtpic` (PNG, JPEG, GIF por datatypes) |
 
 ### Valores
 
@@ -195,10 +196,10 @@ end
 - **Pila:** 32 KB por defecto en programas con MUI (hecho en la tarea 1).
 - **CPU:** MUI 5 para OS3 es de 68020. `mui_app_begin` lo comprueba (`SysBase->AttnFlags`) y sale con un mensaje
   en un 68000, en vez de colgarse.
-- **Memoria:** MUI es dueño de los objetos; los `Pointer` no llevan contador de referencias y dejan de valer tras
+- **Memoria:** MUI es dueño de los objetos; los handles no llevan contador de referencias y dejan de valer tras
   `mui_app_end()`. Los textos que se pasan a `mui_text`, `mui_string`, `mui_list_add`... los copia MUI, así que los
   temporales de Dash se pueden liberar al acabar la vuelta. `--memcheck` debe acabar sin nada vivo.
 - **Tests en el emulador:** sin ratón. Se prueba con `mui_set_value` (dispara `on_change`), `mui_press`,
   `mui_get_*` y `mui_window_open`; los programas acaban solos con `--autoclose` (`mui_wait_event` devuelve -1).
 - **Cadena de errores:** sin muimaster, ventana que no abre o 68000 → mensaje por la salida estándar y
-  `mui_app_begin` devuelve nil; el programa decide.
+  `mui_app_begin` devuelve 0; el programa decide.

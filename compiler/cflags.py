@@ -24,3 +24,24 @@ DEBUG = ["-O0"]
 
 def opt_flags(no_optimize: bool = False, small: bool = False):
     return list(DEBUG if no_optimize else SMALL if small else OPTIMIZE)
+
+
+# MUI: the SDK headers are not in the toolchain and may not go in git (license), so
+# tools/get_mui_sdk.sh unpacks them in ~/.cache/dash-mui; DASH_MUI_SDK = its SDK/MUI.
+MUI_MARK = "#include <libraries/mui.h>"
+
+
+def mui_sdk() -> str:
+    import os
+    return os.environ.get("DASH_MUI_SDK") or os.path.expanduser("~/.cache/dash-mui/x/SDK/MUI")
+
+
+def mui_flags(sources) -> list:
+    """-I for the MUI SDK when one of the C sources uses MUI; FileNotFoundError without it."""
+    import os
+    if not any(MUI_MARK in s for s in sources):
+        return []
+    include = os.path.join(mui_sdk(), "C", "include")
+    if not os.path.isfile(os.path.join(include, "libraries", "mui.h")):
+        raise FileNotFoundError(f"MUI SDK not found in {mui_sdk()}: run tools/get_mui_sdk.sh or set DASH_MUI_SDK")
+    return ["-I" + include]

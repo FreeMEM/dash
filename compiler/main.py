@@ -15,6 +15,7 @@ from compiler.grammar import dash_grammar_minimal
 from compiler.transformer import DashASTBuilder
 from compiler.analyzer import SemanticAnalyzer, AnalysisResult
 from compiler.codegen import CodeGenerator
+from compiler.latin1 import latin1_literals
 from compiler.ast_nodes import (
     Program, FunctionDef, WindowDef, StructDef, EnumDef, ExternFunc, NativeFunc,
     ConstDecl, GlobalVarDecl
@@ -301,7 +302,7 @@ class DashCompiler:
             print("Stage 3: Generating C code...", file=sys.stderr)
 
         generator = CodeGenerator(analysis)
-        c_code = generator.generate()
+        c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
 
         if self.verbose:
             print(f"  Generated {len(c_code)} characters of C code", file=sys.stderr)
@@ -443,7 +444,7 @@ class DashCompiler:
             print("Stage 4: Generating C files...", file=sys.stderr)
 
         generator = MultiFileGenerator(analysis, modules, main_path)
-        output_files = generator.generate()
+        output_files = {name: latin1_literals(code) for name, code in generator.generate().items()}
 
         if self.verbose:
             print(f"  Generated {len(output_files)} file(s)", file=sys.stderr)

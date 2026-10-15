@@ -153,8 +153,13 @@ def main():
     ]
     # -O2 -fomit-frame-pointer and bebbo's optimizer without one pass: compiler/cflags.py
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from compiler.cflags import opt_flags
+    from compiler.cflags import opt_flags, mui_flags
     compile_command.extend(opt_flags(args.no_optimize, args.small))
+    try:   # the MUI SDK headers, when the program uses MUI
+        compile_command.extend(mui_flags(open(f).read() for f in c_files))
+    except FileNotFoundError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
     if args.fpu:
         compile_command.extend(["-m68020", "-m68881"])
     if args.stack is not None:

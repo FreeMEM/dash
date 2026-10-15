@@ -5189,6 +5189,207 @@ static LONG ra_window_is_open(void) {
 """
 
     # RTG Runtime (CyberGraphX / Picasso96 support)
+    # MUI 5 (muimaster.library), design in docs/MUI_DISEÑO.md. Objects are handles
+    # (LONG in Dash, like buffers and files); MUI owns them until _dash_mui_app_end().
+    MUI_RUNTIME = """\
+/* MUI (muimaster.library). NO_INLINE_STDARG: the SDK's inline MUI_NewObject() takes &tags of its first
+   variable argument, and once GCC inlines it at -O2 the tags after it are garbage;
+   tag lists are built here in arrays instead. MUI_NOSHORTCUTS: no get/set/End/String...
+   macros that could clash with the program's names. */
+#define NO_INLINE_STDARG
+#define MUI_NOSHORTCUTS
+#include <libraries/mui.h>
+#include <proto/muimaster.h>
+#include <clib/alib_protos.h>
+#ifndef MAKE_ID
+#define MAKE_ID(a, b, c, d) ((ULONG)(a) << 24 | (ULONG)(b) << 16 | (ULONG)(c) << 8 | (ULONG)(d))
+#endif
+#ifndef IPTR
+#define IPTR ULONG
+#endif
+
+struct Library *MUIMasterBase = NULL;
+static Object *_dash_mui_app = NULL;
+static APTR _dash_mui_pool = NULL;          /* texts MUI does not copy (titles) */
+#define _DASH_MUI_DEPTH 32
+static Object *_dash_mui_groups[_DASH_MUI_DEPTH];   /* open groups; [0] = window root */
+static LONG _dash_mui_depth = 0;
+static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
+#define _DASH_MUI_PRESSES 64
+static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
+static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
+static LONG _dash_mui_npress = 0;
+
+#define _DASH_MUI_NEW(cls, ...) \\
+    ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
+#define _DASH_MUI_DO(obj, ...) \\
+    ({ ULONG _dash_m[] = { __VA_ARGS__ }; DoMethodA((Object *)(obj), (Msg)_dash_m); })
+
+static void _dash_mui_error(CONST_STRPTR what) {
+    Printf("MUI: %s\\n", (LONG)what);
+}
+
+static STRPTR _dash_mui_keep(STRPTR text) {
+    ULONG len = text ? strlen((char *)text) : 0;
+    STRPTR copy = _dash_mui_pool ? (STRPTR)AllocPooled(_dash_mui_pool, len + 1) : NULL;
+    if (!copy) return (STRPTR)"";
+    if (len) memcpy(copy, text, len);
+    copy[len] = 0;
+    return copy;
+}
+
+static void _dash_mui_app_end(void) {
+    if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
+    _dash_mui_app = NULL;
+    _dash_mui_first_win = NULL;
+    _dash_mui_depth = 0;
+    _dash_mui_npress = 0;
+    if (_dash_mui_pool) { DeletePool(_dash_mui_pool); _dash_mui_pool = NULL; }
+    if (MUIMasterBase) { CloseLibrary(MUIMasterBase); MUIMasterBase = NULL; }
+}
+
+static APTR _dash_mui_app_begin(STRPTR title, STRPTR base) {
+    if (_dash_mui_app) return _dash_mui_app;
+    if (!(SysBase->AttnFlags & AFF_68020)) {   /* MUI 5 for AmigaOS 3 is 68020 code */
+        _dash_mui_error("needs a 68020 or better");
+        return NULL;
+    }
+    if (!(MUIMasterBase = OpenLibrary((CONST_STRPTR)MUIMASTER_NAME, 19))) {
+        _dash_mui_error("cannot open muimaster.library (install MUI 3.8 or newer)");
+        return NULL;
+    }
+    if (!(_dash_mui_pool = CreatePool(MEMF_ANY, 1024, 512))) { _dash_mui_app_end(); return NULL; }
+    _dash_mui_app = _DASH_MUI_NEW(MUIC_Application,
+        MUIA_Application_Title, (IPTR)_dash_mui_keep(title),
+        MUIA_Application_Base, (IPTR)_dash_mui_keep(base));
+    if (!_dash_mui_app) { _dash_mui_error("cannot create the application"); _dash_mui_app_end(); }
+    return _dash_mui_app;
+}
+
+/* Put a new object in the open group (MUI disposes it with its parent) */
+static APTR _dash_mui_add(Object *obj) {
+    if (!obj) { _dash_mui_error("cannot create an object"); return NULL; }
+    if (_dash_mui_depth <= 0) {
+        _dash_mui_error("object outside a window (mui_window_begin)");
+        MUI_DisposeObject(obj);
+        return NULL;
+    }
+    _DASH_MUI_DO(_dash_mui_groups[_dash_mui_depth - 1], OM_ADDMEMBER, (IPTR)obj);
+    return obj;
+}
+
+static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
+    Object *root, *win;
+    if (!_dash_mui_app) { _dash_mui_error("mui_window_begin before mui_app_begin"); return NULL; }
+    if (_dash_mui_depth) { _dash_mui_error("mui_window_begin inside another window"); return NULL; }
+    if (!(root = _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, FALSE))) return NULL;
+    win = _DASH_MUI_NEW(MUIC_Window,
+        MUIA_Window_Title, (IPTR)_dash_mui_keep(title),
+        MUIA_Window_ID, (id > 0 && id < 256) ? MAKE_ID('D', 'A', 'S', id) : 0,
+        MUIA_Window_RootObject, (IPTR)root);
+    if (!win) { MUI_DisposeObject(root); _dash_mui_error("cannot create the window"); return NULL; }
+    _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)win);
+    if (!_dash_mui_first_win) {
+        _dash_mui_first_win = win;
+        _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
+                     (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
+    }
+    _dash_mui_groups[0] = root;
+    _dash_mui_depth = 1;
+    return win;
+}
+
+static void _dash_mui_window_end(void) {
+    if (_dash_mui_depth != 1) _dash_mui_error("mui_window_end with groups still open");
+    _dash_mui_depth = 0;
+}
+
+static LONG _dash_mui_window_open(APTR win) {
+    IPTR open = FALSE;
+    if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
+    GetAttr(MUIA_Window_Open, win, &open);
+    return open != 0;
+}
+
+static void _dash_mui_window_close(APTR win) {
+    if (win) SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+}
+
+static APTR _dash_mui_group_begin(LONG horizontal) {
+    Object *group;
+    if (_dash_mui_depth >= _DASH_MUI_DEPTH) { _dash_mui_error("too many nested groups"); return NULL; }
+    group = _dash_mui_add(_DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, horizontal ? TRUE : FALSE));
+    if (group) _dash_mui_groups[_dash_mui_depth++] = group;
+    return group;
+}
+
+static void _dash_mui_group_end(void) {
+    if (_dash_mui_depth > 1) _dash_mui_depth--;
+    else _dash_mui_error("mui_group_end without a group");
+}
+
+static APTR _dash_mui_text(STRPTR text) {
+    return _dash_mui_add(_DASH_MUI_NEW(MUIC_Text, MUIA_Text_Contents, (IPTR)text));
+}
+
+static APTR _dash_mui_button(STRPTR label) {
+    ULONG params[] = { (ULONG)label };   /* "_" before a letter: keyboard shortcut */
+    return _dash_mui_add(MUI_MakeObjectA(MUIO_Button, params));
+}
+
+static void _dash_mui_on_press(APTR obj, LONG id) {
+    if (!obj || !_dash_mui_app) return;
+    _DASH_MUI_DO(obj, MUIM_Notify, MUIA_Pressed, FALSE,
+                 (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+    if (_dash_mui_npress < _DASH_MUI_PRESSES) {
+        _dash_mui_press_obj[_dash_mui_npress] = obj;
+        _dash_mui_press_id[_dash_mui_npress++] = id;
+    }
+}
+
+/* The event of mui_on_press, as if the button were pressed (shortcuts, tests) */
+static void _dash_mui_press(APTR obj) {
+    LONG i;
+    for (i = 0; i < _dash_mui_npress; i++)
+        if (_dash_mui_press_obj[i] == obj)
+            _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, _dash_mui_press_id[i]);
+}
+
+static void _dash_mui_on_close(APTR win, LONG id) {
+    if (!win || !_dash_mui_app) return;
+    _DASH_MUI_DO(win, MUIM_KillNotify, MUIA_Window_CloseRequest);
+    _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
+                 (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+}
+
+/* Next event number; -1 = quit (first window closed, Ctrl-C, no application) */
+static LONG _dash_mui_wait_event(void) {
+    ULONG sigs = 0;
+    LONG id;
+    if (!_dash_mui_app) return -1;
+    for (;;) {
+        id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
+        if (id == MUIV_Application_ReturnID_Quit) return -1;
+        if (id) return id;
+        if (sigs) {
+            sigs = Wait(sigs | SIGBREAKF_CTRL_C);
+            if (sigs & SIGBREAKF_CTRL_C) return -1;
+        }
+    }
+}
+
+/* Like _dash_mui_wait_event without waiting: 0 when nothing happened */
+static LONG _dash_mui_poll_event(void) {
+    ULONG sigs = 0;
+    LONG id;
+    if (!_dash_mui_app) return -1;
+    id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
+    return id == MUIV_Application_ReturnID_Quit ? -1 : id;
+}
+
+"""
+
     RTG_RUNTIME = """\
 /* RTG Runtime - CyberGraphX / Picasso96 Support */
 #include <utility/tagitem.h>
@@ -5615,6 +5816,7 @@ _RUNTIME_FLAGS = [
     ("FILEIO_RUNTIME", "needs_fileio"),
     ("REACTION_RUNTIME", "needs_reaction"),
     ("RTG_RUNTIME", "needs_rtg"),
+    ("MUI_RUNTIME", "needs_mui"),
 ]
 
 # Runtime names emitted by the code generator itself, outside the templates
@@ -5820,6 +6022,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_fileio: bool = False
         self.needs_gadtools: bool = False
         self.needs_reaction: bool = False  # Track if ReAction is used
+        self.needs_mui: bool = False  # MUI builtins (mui_*)
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
@@ -6031,6 +6234,8 @@ class CodeGenerator(ASTVisitor):
         # Add RTG runtime if needed
         if self.needs_rtg:
             parts.append(CTemplates.RTG_RUNTIME)
+        if self.needs_mui:
+            parts.append(CTemplates.MUI_RUNTIME)
 
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
@@ -6116,6 +6321,8 @@ class CodeGenerator(ASTVisitor):
             cleanup.append("    _dash_sound_cleanup();\n")
         if self.needs_reaction:
             cleanup.append("    ra_window_close();\n")
+        if self.needs_mui:
+            cleanup.append("    _dash_mui_app_end();\n")
         if self._uses_key_runtime():
             cleanup.append("    _dash_key_cleanup();\n")
         if self.uses_dirs:

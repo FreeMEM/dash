@@ -2813,6 +2813,126 @@ RTG_FUNCTIONS = {
 
 
 # =============================================================================
+# MUI - MagicUserInterface 5 (68020+, muimaster.library); docs/MUI_DISEÑO.md
+# =============================================================================
+
+MUI_FUNCTIONS = {
+    "mui_app_begin": BuiltinFunc(
+        name="mui_app_begin",
+        params=["title", "base"],
+        return_type="APTR",
+        c_template="_dash_mui_app_begin(${title}, ${base})",
+        description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
+    ),
+    "mui_app_end": BuiltinFunc(
+        name="mui_app_end",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_app_end()",
+        description="Dispose the application with its windows and objects, close MUI (also done at exit)"
+    ),
+    "mui_window_begin": BuiltinFunc(
+        name="mui_window_begin",
+        params=["title", "id"],
+        return_type="APTR",
+        c_template="_dash_mui_window_begin(${title}, ${id})",
+        description="Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group"
+    ),
+    "mui_window_end": BuiltinFunc(
+        name="mui_window_end",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_window_end()",
+        description="End the window started with mui_window_begin"
+    ),
+    "mui_window_open": BuiltinFunc(
+        name="mui_window_open",
+        params=["win"],
+        return_type="LONG",
+        c_template="_dash_mui_window_open(${win})",
+        description="Open a window; false if it could not open"
+    ),
+    "mui_window_close": BuiltinFunc(
+        name="mui_window_close",
+        params=["win"],
+        return_type="void",
+        c_template="_dash_mui_window_close(${win})",
+        description="Close a window (it still exists)"
+    ),
+    "mui_vgroup_begin": BuiltinFunc(
+        name="mui_vgroup_begin",
+        params=[],
+        return_type="APTR",
+        c_template="_dash_mui_group_begin(0)",
+        description="Start a vertical group inside the open group"
+    ),
+    "mui_hgroup_begin": BuiltinFunc(
+        name="mui_hgroup_begin",
+        params=[],
+        return_type="APTR",
+        c_template="_dash_mui_group_begin(1)",
+        description="Start a horizontal group inside the open group"
+    ),
+    "mui_group_end": BuiltinFunc(
+        name="mui_group_end",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_group_end()",
+        description="End the open group"
+    ),
+    "mui_text": BuiltinFunc(
+        name="mui_text",
+        params=["text"],
+        return_type="APTR",
+        c_template="_dash_mui_text(${text})",
+        description="Text object (MUI text codes allowed)"
+    ),
+    "mui_button": BuiltinFunc(
+        name="mui_button",
+        params=["label"],
+        return_type="APTR",
+        c_template="_dash_mui_button(${label})",
+        description="Button (an underscore before a letter makes it the keyboard shortcut)"
+    ),
+    "mui_on_press": BuiltinFunc(
+        name="mui_on_press",
+        params=["obj", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_press(${obj}, ${id})",
+        description="mui_wait_event returns id when the button is pressed"
+    ),
+    "mui_on_close": BuiltinFunc(
+        name="mui_on_close",
+        params=["win", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_close(${win}, ${id})",
+        description="mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1)"
+    ),
+    "mui_press": BuiltinFunc(
+        name="mui_press",
+        params=["obj"],
+        return_type="void",
+        c_template="_dash_mui_press(${obj})",
+        description="Send the mui_on_press event of a button as if it were pressed"
+    ),
+    "mui_wait_event": BuiltinFunc(
+        name="mui_wait_event",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_mui_wait_event()",
+        description="Wait for the next event and return its number; -1 to quit"
+    ),
+    "mui_poll_event": BuiltinFunc(
+        name="mui_poll_event",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_mui_poll_event()",
+        description="Like mui_wait_event without waiting: 0 when there is no event"
+    ),
+}
+
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -2830,6 +2950,7 @@ ALL_BUILTINS = {
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,
+    **MUI_FUNCTIONS,
 }
 
 

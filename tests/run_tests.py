@@ -205,6 +205,12 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
     # '# memcheck' (or run_tests.py --memcheck): built as ./dash --memcheck
     if memcheck or wants_memcheck(test_file):
         compile_cmd.insert(1, "-DDASH_MEMCHECK")
+    from compiler.cflags import mui_flags
+    try:   # MUI SDK headers (tools/get_mui_sdk.sh), same as ./dash
+        compile_cmd[1:1] = mui_flags([c_file.read_text()])
+    except FileNotFoundError as e:
+        return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
+                          error_message=str(e), duration=time.time() - start_time)
     from compiler.softfloat import softfloat_objects, uses_float
     if uses_float(c_file.read_text()):
         compile_cmd[-3:-3] = softfloat_objects(gcc_path)  # same as ./dash

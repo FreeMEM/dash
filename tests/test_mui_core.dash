@@ -1,0 +1,45 @@
+# MUI core: application, window with groups, text and buttons, events by number.
+# In the emulator nobody clicks: mui_press sends the button's event.
+# emu-needs: muimaster.library
+# expect-c: #include <libraries/mui.h>
+# expect-c: _dash_mui_app_end();
+# expect-out: ventana abierta
+# expect-out: evento 2
+# expect-out: evento 1
+# expect-out: sin eventos
+# expect-out: fin
+
+const ID_HOLA = 1
+const ID_ADIOS = 2
+
+Main
+    app = mui_app_begin("Prueba MUI", "DASHTEST")
+    if app == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Prueba", 0)
+            mui_text("Hola desde Dash")
+            mui_hgroup_begin()
+                hola = mui_button("_Hola")
+                adios = mui_button("_Adiós")
+            mui_group_end()
+        mui_window_end()
+        mui_on_press(hola, ID_HOLA)
+        mui_on_press(adios, ID_ADIOS)
+        if mui_window_open(win)
+            Print "ventana abierta"
+        end
+        mui_press(adios)
+        ev = mui_wait_event()
+        Print "evento #{ev}"
+        mui_press(hola)
+        ev = mui_wait_event()
+        Print "evento #{ev}"
+        if mui_poll_event() == 0
+            Print "sin eventos"
+        end
+        mui_window_close(win)
+        mui_app_end()
+        Print "fin"
+    end
+end

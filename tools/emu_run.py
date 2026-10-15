@@ -161,7 +161,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         results = []
         for i, name in enumerate(names):
             out_file, rc_file = hd / f"out{i}.txt", hd / f"rc{i}.txt"
-            output = out_file.read_text(errors="replace") if out_file.exists() else None
+            output = out_file.read_text(encoding="latin-1") if out_file.exists() else None  # AmigaOS texts
             rc = None
             if rc_file.exists():
                 try:
