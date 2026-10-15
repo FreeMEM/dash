@@ -1,0 +1,58 @@
+# Fixed point (16.16) in a game loop: balls falling with gravity and bouncing.
+# Fixed keeps decimals (speeds of 0.35 pixels per frame) at integer speed on a
+# 68000: + and - are integer operations, * a few mulu.w. Float would be soft float.
+
+Window Caja
+    title "Gravedad con Fixed"
+    width 320
+    height 200
+end
+
+const SUELO = 180
+
+struct Bola
+    x: Fixed
+    y: Fixed
+    vx: Fixed
+    vy: Fixed
+    color: Int
+
+    func mover(g: Fixed)
+        self.vy = self.vy + g
+        self.x = self.x + self.vx
+        self.y = self.y + self.vy
+        if self.y > SUELO
+            self.y = SUELO
+            self.vy = -self.vy * Fixed(0.85)       # loses some speed at each bounce
+        end
+        if self.x < 8 or self.x > 300
+            self.vx = -self.vx
+        end
+    end
+
+    func dibujar()
+        gfx_pen(self.color)
+        gfx_circle_fill(Int(self.x), Int(self.y), 6)
+    end
+end
+
+Main
+    Caja.open
+    g = Fixed(0.35)
+    bolas = [Bola(20, 10, Fixed(1.5), 0, 1), Bola(60, 30, Fixed(-1.25), 0, 2),
+             Bola(110, 5, Fixed(0.75), 0, 3), Bola(160, 50, Fixed(2.2), 0, 1),
+             Bola(220, 20, Fixed(-0.6), 0, 2), Bola(280, 40, Fixed(1.1), 0, 3)]
+    corriendo = true
+    while corriendo
+        for b in bolas
+            gfx_pen(0)
+            gfx_circle_fill(Int(b.x), Int(b.y), 6)
+            b.mover(g)
+            b.dibujar()
+        end
+        wait_vblank()
+        if window_check_close()
+            corriendo = false
+        end
+    end
+end

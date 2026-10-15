@@ -45,7 +45,9 @@ end
 
 ### Lenguaje
 - Variables con inferencia de tipos (sin declaraciones)
-- Enteros (también `0xDFF000`, `$DFF000`, `0b1010`) y `Float` (coma flotante propia, rápida en 68000)
+- Enteros (también `0xDFF000`, `$DFF000`, `0b1010`), `Float` (coma flotante propia) y `Fixed` (coma fija
+  16.16: decimales a velocidad de entero en un 68000)
+- `nil` para structs, listas y textos (listas enlazadas, árboles, "sin objetivo")
 - Expresiones aritméticas, lógicas y de comparación
 - Control de flujo: `if`/`else`, `while`, `for`/`in`, `for`/`range` (también descendente y con `step`),
   `break` y `continue`

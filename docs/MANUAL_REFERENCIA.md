@@ -171,10 +171,45 @@ vacio = []
 |------|-------------|---------|
 | Int | Entero 32-bit con signo | `42`, `-100`, `0xFF`, `$DFF000`, `0b1010` |
 | Float | Decimal de 32 bits (unos 7 digitos) | `1.5`, `-0.25`, `2.0e3` |
+| Fixed | Coma fija 16.16: decimales rapidos en 68000 | `Fixed(1.5)`, `Fixed(n)` |
 | String | Cadena de texto | `"Hola"` |
 | Bool | Valor booleano | `true`, `false` |
 | Array | Coleccion de elementos | `[1, 2, 3]` |
 | Struct | Tipo compuesto definido por usuario | `Player(10, 20)` |
+
+### Fixed (coma fija)
+
+`Fixed` guarda un numero con decimales en un entero de 32 bits: 16 bits de parte entera y 16 de
+decimales. Rango de -32768 a 32767,9999, con un paso de 1/65536 (unas 4 cifras decimales). En un
+68000 sin FPU es mucho mas rapido que `Float`:
+
+| Operacion (A500, ciclos) | Fixed | Float |
+|--------------------------|-------|-------|
+| Suma, resta, comparacion | como un entero | ~750 |
+| Multiplicacion | ~390 | ~940 |
+| Por o entre un entero | como un entero | ~940 |
+| Division | ~2.200 | |
+
+```
+v = Fixed(1.5)              # un literal se calcula al compilar
+g = Fixed(0.35)
+y = Fixed(0)
+y = y + v                   # suma de enteros
+v = v * Fixed(0.85)         # Fixed * Fixed
+v = v * 2                   # por un entero: multiplicacion entera
+x = Int(y)                  # trunca hacia cero
+Print "y = #{y}"            # hasta 4 decimales: y = 1.5
+r = fx_sqrt(Fixed(2))       # 1.4142
+s = fx_sin(Fixed(30))       # 0.5 (grados); tambien fx_cos
+```
+
+- Un entero dado a un `Fixed` (variable, campo, parametro, `return`) se convierte solo:
+  `var v: Fixed = 3`, `b.x = 2`, `mitad(5)` con `func mitad(v: Fixed)`.
+- Mezclar `Fixed` y `Float` es un error: hay que convertir con `Fixed(f)` o `Float(x)`.
+- Si se pasa del rango da la vuelta, como un entero. Dividir entre 0 da el valor maximo con
+  el signo del dividendo (no cuelga el Amiga).
+- Campos, parametros y retornos pueden ser `Fixed`; las listas de `Fixed` todavia no (guarda
+  los valores en un struct). Ejemplo completo: `examples/fixed_gravedad.dash`.
 
 ### Inferencia de Tipos
 

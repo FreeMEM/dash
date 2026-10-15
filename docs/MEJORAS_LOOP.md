@@ -167,7 +167,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       claro en tiempo de ejecución (mensaje y salida limpia) o comprobarlo solo con `--memcheck`. Tests: lista
       enlazada en Dash puro (sin el `@native vacio()` de `test_refcount_chain`), árbol, "sin objetivo" en un
       struct; `--memcheck` y `tools/fuzz_refcount.py` con `nil` entre sus sentencias. Documentar.
-- [~] 31. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
+- [x] 31. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
       juegos y cálculos rápidos en 68000, donde `Float` cuesta ~100 µs por suma. Partes:
       31a (hecha) diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
       literales y conversiones (`Fixed(x)`, `Int(f)`, `Float(f)`), mezcla con Int/Float, impresión, errores
@@ -176,7 +176,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       (`mulu.w` por partes, sin libgcc) y con `muls.l`/`divs.l` en `--fpu`/68020 si conviene; impresión con
       decimales; `sqrt`/`sin`/`cos` por tabla si caben pocos bytes.
       31c (hecha) lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
-      31d pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
+      31d (hecha) pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
       benchmarks `fixed_mul`/`fixed_add` frente a `float_mul`/`float_mul_add`; documentación (QUICK_REFERENCE,
       MANUAL_REFERENCIA, README) y un ejemplo (p. ej. movimiento con velocidad y gravedad).
 
@@ -1095,4 +1095,21 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
   campos Fixed y un método, funciones con parámetros y retornos Fixed, truncado de `Int()` con negativos): igual
   en A1200 y A500. Errores: `errors/fixed_float_mix`, `errors/fixed_into_int`, `errors/fixed_array`.
 - No hecho: listas de Fixed (error claro por ahora: guardar los valores en un struct).
-- Tests: 120/120 sin emulador; 279/279 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.
+- Tests: 119/119 sin emulador; 279/279 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.
+
+### 2026-10-15 — Tarea 31d (coma fija 4/4: benchmarks, ejemplo, documentación)
+- Base: 119/119 sin emulador.
+- Benchmarks en `bench_core` (`fixed_mul_add`, `fixed_mul`, `fixed_div`), A500 / A1200 en ns por vuelta:
+  `fixed_mul` 45.607 / 12.417 frente a `float_mul` 117.298 / 28.618 (×2,6); `fixed_mul_add` 2.630 / 734 frente a
+  `float_mul_add` 104.613 / 22.129 (GCC saca la multiplicación del bucle en los dos: mide sobre todo la suma, que
+  en Fixed es la de enteros: ×40); `fixed_div` 253.479 / 63.163.
+- Ejemplo `examples/fixed_gravedad.dash`: seis pelotas con gravedad y rebote en una ventana (lista de structs con
+  campos Fixed, métodos que mueven y dibujan). Probado en FS-UAE con `--autoclose`: termina bien.
+- Fallo encontrado con el ejemplo: un método de struct que dibuja (`gfx_pen`) no compilaba: los structs y sus
+  métodos se emitían antes del runtime de ventana y gráficos (`_dash_rp` sin declarar). Ahora van detrás de los
+  runtimes, antes de las globales y los prototipos. Test `test_struct_method_gfx`.
+- Documentado: MANUAL_REFERENCIA (tipo en la tabla y apartado "Fixed (coma fija)" con costes, conversiones,
+  límites), QUICK_REFERENCE, README (también `nil`), CLAUDE.md local.
+- Tests: 120/120 sin emulador; 280/280 con `--emu --emu-a500 --emu-32`; `--emu --memcheck` 173/173; ejemplos
+  31/31. Tamaño total 255.332 → 264.704 bytes por el ejemplo nuevo (33 ejecutables en vez de 32).
+- Plan terminado: no quedan tareas `[ ]`.

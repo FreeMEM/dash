@@ -1,0 +1,26 @@
+# Test: a struct method can draw. Struct methods were emitted before the window
+# and graphics runtime, so gfx_pen inside one used _dash_rp before it existed.
+#
+# expect-c: static void Bola_dibujar(_Dash_Bola *self)
+
+Window W
+    title "Metodos"
+    width 200
+    height 100
+end
+
+struct Bola
+    x: Int
+    y: Int
+
+    func dibujar()
+        gfx_pen(2)
+        gfx_circle_fill(self.x, self.y, 5)
+    end
+end
+
+Main
+    W.open
+    b = Bola(50, 50)
+    b.dibujar()
+end

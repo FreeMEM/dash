@@ -5965,15 +5965,6 @@ class CodeGenerator(ASTVisitor):
             parts.append("\n".join(self.enum_defines))
             parts.append("\n")
 
-        # Add struct type definitions (forward typedefs first, so fields can
-        # point to the same struct or to one defined later)
-        if self.struct_typedefs:
-            parts.append("\n/* Struct Definitions */\n")
-            parts.append("".join(f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
-                                 for st in self.analysis.program.structs))
-            parts.append("\n".join(self.struct_typedefs))
-            parts.append("\n")
-
         # Add window runtime if needed (for _dash_win, _dash_rp, _dash_screen)
         # Also needed when using ReAction (for screen support)
         if self.uses_windows or self.needs_reaction or self.uses_winmgr:
@@ -6040,6 +6031,16 @@ class CodeGenerator(ASTVisitor):
         # Add RTG runtime if needed
         if self.needs_rtg:
             parts.append(CTemplates.RTG_RUNTIME)
+
+        # Add struct type definitions (forward typedefs first, so fields can
+        # point to the same struct or to one defined later). After the runtimes:
+        # methods may draw (_dash_rp) or use any builtin
+        if self.struct_typedefs:
+            parts.append("\n/* Struct Definitions */\n")
+            parts.append("".join(f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
+                                 for st in self.analysis.program.structs))
+            parts.append("\n".join(self.struct_typedefs))
+            parts.append("\n")
 
         # Add global declarations
         if self.globals:

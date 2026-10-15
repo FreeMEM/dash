@@ -775,6 +775,11 @@ tests/
       funciones `static` (-9 % de tamaño), strings cortos un 29 % más pequeños
 - [x] Panel de comparativas: https://claude.ai/artifact/9XyJ1JNSGuDo5q6NCRzM2N (`tools/bench_report.py`)
 - [x] Test suite: 103 resultados (233 con `--emu --emu-a500 --emu-32`); ejemplos 30/30
+- [x] Conteo de referencias revisado (tarea 30): `--memcheck`, auditoría, `tools/fuzz_refcount.py`, listas dueñas
+      de sus elementos, préstamos, sin recursión al liberar; structs y listas hasta −65 % al crearse; `nil`
+- [x] Coma fija `Fixed` 16.16 (tarea 31): ×2,6 en multiplicar y como un entero al sumar en un 68000
+- [x] Fallos de GCC evitados en `compiler/cflags.py` (`-fbbb` sin `e`/`r`, dirección 0 legible)
+- [x] Test suite: 120 resultados (280 con `--emu --emu-a500 --emu-32`); ejemplos 31/31
 - [x] Tercera máquina de pruebas: A1200 con AmigaOS 3.2 y Workbench cargado (`--emu-32`), la única que prueba
       ReAction; encontró `ra_get_value`/`ra_set_value` mal y `s[a:b]` sobre strings, ya corregidos
 
@@ -799,9 +804,7 @@ tests/
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
 ### Pendiente:
-- Coma fija (`Fixed`, 16.16): decimales rápidos en 68000. Tarea 31 de `docs/MEJORAS_LOOP.md`
-- Conteo de referencias: modo de depuración, auditoría, pruebas aleatorias y optimización. Tarea 30
-- `nil` para structs y listas (tarea 30g)
+- Listas de `Fixed` (hoy dan error: guardar los valores en un struct)
 
 ### Próximo proyecto (pedido el 2026-10-15, después del plan de mejoras):
 - Navegador ligero escrito en Dash con interfaz MUI: XHTML, CSS, JavaScript moderno y HTTPS. Sirve para hacer

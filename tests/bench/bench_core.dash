@@ -81,6 +81,32 @@ Main
     end
     bench_end("float_mul", m)
 
+    # the same with Fixed (16.16): f + g * 0.5 is a Fixed * Fixed, h * 1.0001 too
+    bench_start()
+    ff = Fixed(1.0)
+    fg = Fixed(0.5)
+    for i in (1..m)
+        ff = ff + fg * Fixed(0.5)
+    end
+    bench_sink(ff)
+    bench_end("fixed_mul_add", m)
+
+    bench_start()
+    fh = Fixed(1.0)
+    for i in (1..m)
+        fh = fh * Fixed(1.0001)
+    end
+    bench_sink(fh)
+    bench_end("fixed_mul", m)
+
+    bench_start()
+    fd = Fixed(1000.0)
+    for i in (1..m)
+        fd = fd / Fixed(1.0001)
+    end
+    bench_sink(fd)
+    bench_end("fixed_div", m)
+
     bench_start()
     a = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     for i in (1..n)
