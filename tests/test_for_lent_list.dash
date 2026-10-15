@@ -1,0 +1,26 @@
+# Test: a for loop over a list lent to a function (a temporary of the caller) does not free
+# it: going through it again worked on freed memory (6 expected, it gave 2).
+# memcheck
+# expect-c: _dash_hold(_arr_x);
+# expect-out: 6
+# expect-out: 3
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func cuenta(l: [String]) -> Int
+    n = 0
+    for vuelta in (1..3)
+        for x in l
+            n = n + 1
+        end
+    end
+    return n
+end
+
+Main
+    Print cuenta(["a", "b"])
+    t = 0
+    for k in [1, 2, 3]
+        t = t + 1
+    end
+    Print t
+end

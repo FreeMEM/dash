@@ -507,6 +507,19 @@ static void _dash_retain(void *ptr) {
     h->_refcount++;
 }
 
+/* A for loop holds the list it goes through without adopting it: a temporary stays a
+   temporary (its maker frees it), so a list lent to a function and gone through twice
+   is not freed by the first loop (dashweb D16) */
+static void _dash_hold(void *ptr) {
+    _Dash_RefHeader *h;
+    if (!ptr) return;
+    h = _DASH_GET_HEADER(ptr);
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_dead(h)) return;
+#endif
+    h->_refcount++;
+}
+
 static void _dash_release(void *ptr) {
     _Dash_RefHeader *h;
     if (!ptr) return;
@@ -7911,7 +7924,7 @@ $body$indent    }
     FOR_EACH_STMT = Template("""\
 $indent    { DashArrayLong *_arr_$var = $array;
 $indent    LONG _len_$var = DashArray_length(_arr_$var);
-$indent    _dash_retain(_arr_$var);
+$indent    _dash_hold(_arr_$var);
 $indent    for (LONG _idx_$var = 0; _idx_$var < _len_$var; _idx_$var++) {
 $indent        $elem_type $var = ${cast}_arr_$var->data[_idx_$var];
 $body$indent    }
