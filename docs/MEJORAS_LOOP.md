@@ -33,7 +33,9 @@ Aplicar las cinco decisiones del usuario del 2026-10-14 sobre las propuestas del
    `--save "etiqueta"` guarda la ejecución en `tests/bench/results.json`. `run_tests.py --emu-a500` ejecuta los tests de
    salida también en un A500 (68000): úsalo cuando cambie el runtime o el codegen. Para lo que necesita Workbench (asl.library...):
    `export DASH_EMU_SYS=~/.cache/dash-emu/sys31` (sacado de `~/Amiberry/HardDrives/system3.1.hdf` con
-   `tools/emu_sys_from_hdf.sh`; no va a git). Tests con `# emu-needs: x.library`.
+   `tools/emu_sys_from_hdf.sh`; no va a git). Tests con `# emu-needs: x.library`. Tercera máquina, AmigaOS 3.2
+   (ReAction): `--emu-32` con `DASH_KICKSTART_32="/home/freemem/Descargas/Telegram Desktop/Kickstart v3.2.3
+   A1200.47.115_Pack_noSCSI.rom"` y `DASH_EMU_SYS_32=~/.cache/dash-emu/sys32`.
 5. **Verificar.** Repite el paso 2. Nada que antes funcionaba puede romperse.
    Si algo se rompe y no lo arreglas en esta iteración, revierte.
 6. **Documentar.** Actualiza `docs/QUICK_REFERENCE.md`, `docs/MANUAL_REFERENCIA.md` y, si cambian
@@ -150,6 +152,27 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       30d pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
       benchmarks `fixed_mul`/`fixed_add` frente a `float_mul`/`float_mul_add`; documentación (QUICK_REFERENCE,
       MANUAL_REFERENCIA, README) y un ejemplo (p. ej. movimiento con velocidad y gravedad).
+- [ ] 31. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
+      más delicada: un fallo cuelga el Amiga (doble liberación, uso tras liberar) o pierde memoria sin avisar.
+      Partes:
+      31a modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
+      (relleno y contador imposible) y avisa de doble liberación, uso tras liberar y objetos vivos al salir.
+      Apagado no cuesta nada. Probado en el harness del PC (con AddressSanitizer) y en el emulador.
+      31b auditoría: repasar cada camino del codegen que toca objetos (asignar, parámetros, `return`, campos,
+      `self`, métodos, globales, trozos `a[1:3]`, `for x in lista`, lambdas, `break`/`continue`/`return` dentro de
+      bucles anidados y de `EventLoop`, recursión, structs dentro de structs) y apuntar en la bitácora qué hace
+      cada uno. Un test por camino con `--memcheck`: 0 vivos al salir y memoria que no crece en 10.000 vueltas.
+      31c fallos y huecos conocidos: un objeto guardado en una lista, dado a C o devuelto por una lambda escapa y
+      no se libera hasta salir (comprobar si un juego que crea enemigos en una lista en cada vuelta crece sin
+      parar; si es así, listas de objetos que sueltan sus elementos al sobrescribirlos y al destruirse); los
+      ciclos (documentar o detectar); desborde del contador.
+      31d prueba aleatoria: generador de programas Dash pequeños con asignaciones, llamadas y campos al azar,
+      ejecutados con `--memcheck` en el PC y en el emulador (A500); cada fallo encontrado pasa a ser un test.
+      31e optimizar con medidas (`tools/bench.py`, A500 y A1200): `_dash_otmp_take` recorre la lista de
+      temporales (lineal), quitar pares `retain`/`release` que se anulan (parámetros prestados, `obj_set` de un
+      temporal recién creado), camino rápido en línea; volver a mirar la cabecera de 16 bytes (27c) si sale barata.
+      Cada cambio con antes/después en la bitácora y en el panel de comparativas.
+      31f documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
 
 ## Bitácora
 
