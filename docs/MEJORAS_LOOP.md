@@ -146,7 +146,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       30a (hecha) modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
       (relleno y contador imposible) y avisa de doble liberación, uso tras liberar y objetos vivos al salir.
       Apagado no cuesta nada. Probado en el harness del PC (con AddressSanitizer) y en el emulador.
-      30b auditoría: repasar cada camino del codegen que toca objetos (asignar, parámetros, `return`, campos,
+      30b (hecha) auditoría: repasar cada camino del codegen que toca objetos (asignar, parámetros, `return`, campos,
       `self`, métodos, globales, trozos `a[1:3]`, `for x in lista`, lambdas, `break`/`continue`/`return` dentro de
       bucles anidados y de `EventLoop`, recursión, structs dentro de structs) y apuntar en la bitácora qué hace
       cada uno. Un test por camino con `--memcheck`: 0 vivos al salir y memoria que no crece en 10.000 vueltas.
@@ -833,3 +833,52 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - Tests: 104/104 sin emulador; 237/237 con `--emu --emu-a500 --emu-32`; ejemplos 30/30.
 - Documentado: MANUAL_REFERENCIA (Compilación), QUICK_REFERENCE, README, CLAUDE.md local.
 - Siguiente: 30b, pasar todos los tests con `--memcheck` y repasar cada camino del codegen.
+
+### 2026-10-15 — Tarea 30b (conteo de referencias 2/6: auditoría de caminos)
+- Base: 104/104 sin emulador, ejemplos 30/30.
+- Herramienta: `run_tests.py --memcheck` compila todos los tests como `--memcheck`; con `--emu` cada test de salida
+  falla además si hay un aviso o si al salir queda algo vivo que no escapó (el resumen se aparta de la salida
+  esperada; los programas sin runtime de memoria no lo imprimen y no se miran). `# memcheck` sigue siendo para los
+  tests que esperan el resumen.
+- Caminos repasados (C generado y prueba con `--memcheck`):
+  - Variable: la primera asignación declara `NULL` y hace `_dash_obj_set` (retiene la nueva, suelta la vieja; `a = a`
+    no hace nada). Al salir del bloque o de la función, `_dash_release`.
+  - Parámetro: prestado (sin retener). Si la función lo reasigna, se retiene al entrar y pasa a tener dueño (también
+    los String: copia al entrar). Variable de `for x in` y `self`: prestadas.
+  - `return`: retiene el valor, suelta las variables y la marca de la función, y `_dash_obj_float` lo deja como
+    temporal del que llama (cuenta 0). Desde bucles anidados igual (la marca de función lo cubre todo).
+  - Campos struct, String y (ahora) Array: `_dash_obj_set`/`_dash_str_set`; el destructor los suelta.
+  - Globales: `_dash_obj_set`; viven hasta el final.
+  - Trozos `a[1:3]`, literales y objetos nuevos: temporales; los suelta la marca de la vuelta o de la función.
+  - `break`/`continue`/`return`: sueltan las variables de los ámbitos que dejan (ya probado en 13-15).
+  - Escapan (retenidos hasta salir, a propósito): guardar un objeto en una lista, pasarlo a `@native`, a `@extern`
+    o a un builtin que no está en `_STRING_READERS`, y devolverlo desde una lambda. Es la tarea 30c.
+- Fallos encontrados y corregidos:
+  - **Lista enlazada larga colgaba el Amiga al liberarse**: cada struct soltaba el siguiente de forma recursiva;
+    con 3.000 nodos se desbordaba la pila de 16 KB (A500, también sin `--memcheck`). Ahora `_dash_obj_free` deja
+    los objetos en una lista de pendientes (enlazada por `next`, libre fuera de los temporales) y solo la llamada
+    más externa los libera, en bucle. Probado con 30.000 nodos en A500.
+  - **Tipos desconocidos se aceptaban como `Int`**: `datos: Array` en un struct compilaba como `LONG`, y cada lista
+    asignada al campo escapaba (en el test, 49.632 bytes perdidos en 1.000 vueltas). Ahora `Array` es un tipo (lista
+    de enteros con referencias: parámetros, retornos y campos, que el destructor suelta) y cualquier otro nombre
+    que no sea `Int Float String Bool Array Pointer Func Void`, un struct o un enum da error
+    (`tests/errors/unknown_type.dash`). Solo un ejemplo lo usaba mal: `test_copper2` con `-> LONG` (ahora `-> Int`,
+    mismo C).
+  - Falsas alarmas del primer pase: las variables globales seguían vivas al salir. En `--memcheck` el final de
+    `Main` también las suelta.
+- Hueco del lenguaje (para decidir): no hay valor vacío (`nil`) para un campo de tipo struct, así que una lista
+  enlazada no se puede empezar en Dash; el test usa un `@native` que devuelve `NULL`. Hace falta para listas,
+  árboles y "sin objetivo" en juegos.
+- Tests nuevos: `test_refcount_paths` (asignar, parámetros, `return` desde bucles anidados, campos struct/String/
+  Array, métodos, global, trozos, `break`/`continue`, Array en parámetros y retornos, recursión; 1.000 rondas sin
+  que baje la memoria), `test_refcount_chain` (5.000 nodos), `errors/unknown_type`.
+- Resultado con `--memcheck`: 246/246 en las tres máquinas (A1200, A500, 3.2): ningún aviso, nada vivo sin escapar.
+- Coste medido (A500, `bench_core` antes y después en la misma tanda): la primera versión de la cola (todo objeto
+  pasaba por la lista) hacía `struct_new_field` +14 %, `array_literal_new` +10 % y los strings +2-5 %. Con un
+  camino rápido y bandera, +5,6 % y +3,6 %. La versión final no tiene bandera: los destructores sueltan sus campos con
+  `_dash_release_child`, que solo encola, y `_dash_obj_free` vacía la cola en bucle. Queda en
+  `struct_new_field` 315.348 → 323.754 ns (+2,7 %), `array_literal_new` +1,7 %, el resto dentro del ruido (±2 %:
+  `string_chars_26` varía entre 137 y 154 µs sin cambios). Lo acepto: antes una lista larga colgaba el Amiga.
+- Tamaño total: 254.016 → 254.564 bytes.
+- Tests: 107/107 sin emulador; 246/246 con `--emu --emu-a500 --emu-32`, también con `--memcheck`; ejemplos 30/30.
+- Documentado: tipos válidos y `Array` en MANUAL_REFERENCIA y QUICK_REFERENCE; CLAUDE.md local.

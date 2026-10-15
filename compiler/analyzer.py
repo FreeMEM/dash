@@ -221,6 +221,8 @@ class SemanticAnalyzer(ASTVisitor):
             )
             self.define_symbol(symbol, enum)
 
+        self._check_type_names(node)
+
         # Register all constants
         for const in node.constants:
             dash_type = self._infer_type(const.value)
@@ -986,6 +988,35 @@ class SemanticAnalyzer(ASTVisitor):
 
         return search(func.body)
 
+    _TYPE_NAMES = {"Int", "Float", "String", "Bool", "Pointer", "Void", "Func", "Array"}
+
+    def _check_type_names(self, program: Program):
+        """Every type annotation names a type: an unknown name used to compile as
+        Int silently (an Array field then kept its lists until exit)."""
+        known = self._TYPE_NAMES | {s.name for s in program.structs} | {e.name for e in program.enums}
+
+        def check(type_name, where):
+            if type_name and type_name not in known:
+                self.error(f"Unknown type '{type_name}' ({where}); types are "
+                           f"{', '.join(sorted(self._TYPE_NAMES))}, or a struct or enum name", where_node)
+
+        def params(node, what):
+            for p in node.params:
+                if not isinstance(p, str):
+                    check(p.param_type, f"parameter '{p.name}' of {what}")
+
+        for where_node in program.global_vars:
+            check(where_node.var_type, f"global '{where_node.name}'")
+        for where_node in list(program.functions) + list(program.native_funcs) + list(program.extern_funcs):
+            params(where_node, f"'{where_node.name}'")
+            check(where_node.return_type, f"return of '{where_node.name}'")
+        for struct in program.structs:
+            for where_node in struct.fields:
+                check(where_node.field_type, f"field '{where_node.name}' of '{struct.name}'")
+            for where_node in struct.methods:
+                params(where_node, f"'{struct.name}.{where_node.name}'")
+                check(where_node.return_type, f"return of '{struct.name}.{where_node.name}'")
+
     def _type_annotation_to_dash_type(self, type_name: Optional[str]) -> DashType:
         """Convert a type annotation string to a DashType."""
         if not type_name:
@@ -998,6 +1029,7 @@ class SemanticAnalyzer(ASTVisitor):
             "Pointer": DashType.UNKNOWN,
             "Void": DashType.VOID,
             "Func": DashType.FUNC,
+            "Array": DashType.ARRAY_INT,
         }
         return type_map.get(type_name, DashType.UNKNOWN)
 

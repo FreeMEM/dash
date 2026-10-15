@@ -402,12 +402,22 @@ static void *_dash_rc_alloc(LONG size) {
     return _dash_rc_alloc_obj(size, NULL);
 }
 
+/* Freeing an object releases what it holds, which may free more objects: a
+   linked list of thousands of structs would nest that many calls and overflow
+   the stack. So destroy() functions release with _dash_release_child(), which
+   only queues an object whose count reaches 0 (linked through next, unused once
+   it is not a temporary), and _dash_obj_free() frees the queue in a loop. */
+static _Dash_RefHeader *_dash_free_pending = NULL;
+
 static void _dash_obj_free(_Dash_RefHeader *h) {
+    do {
 #ifdef DASH_MEMCHECK
-    _dash_mc_objs--;
+        _dash_mc_objs--;
 #endif
-    if (h->destroy) h->destroy(_DASH_FROM_HEADER(h));
-    _dash_block_put(h, sizeof(_Dash_RefHeader) + h->_size);
+        if (h->destroy) h->destroy(_DASH_FROM_HEADER(h));
+        _dash_block_put(h, sizeof(_Dash_RefHeader) + h->_size);
+        if ((h = _dash_free_pending) != NULL) _dash_free_pending = h->next;
+    } while (h);
 }
 
 /* A temporary that gets a reference leaves the temporaries list */
@@ -450,6 +460,21 @@ static void _dash_release(void *ptr) {
     if (h->_refcount <= 0) _dash_mc_error((CONST_STRPTR)"release de un objeto sin referencias");
 #endif
     if (h->_refcount > 0 && --h->_refcount == 0 && !h->serial) _dash_obj_free(h);
+}
+
+/* _dash_release for the fields of an object being freed: see _dash_obj_free */
+static void _dash_release_child(void *ptr) {
+    _Dash_RefHeader *h;
+    if (!ptr) return;
+    h = _DASH_GET_HEADER(ptr);
+#ifdef DASH_MEMCHECK
+    if (_dash_mc_dead(h)) return;
+    if (h->_refcount <= 0) _dash_mc_error((CONST_STRPTR)"release de un objeto sin referencias");
+#endif
+    if (h->_refcount > 0 && --h->_refcount == 0 && !h->serial) {
+        h->next = _dash_free_pending;
+        _dash_free_pending = h;
+    }
 }
 
 static LONG _dash_refcount(void *ptr) {
@@ -516,6 +541,7 @@ static void _dash_mem_cleanup(void) {
     }
     _dash_tmp = NULL;
     _dash_otmp = NULL;
+    _dash_free_pending = NULL;
     memset(_dash_small_free, 0, sizeof(_dash_small_free));
 }
 
@@ -5961,9 +5987,9 @@ static {ret_type} {native.name}({params_str}) {{
                 self.uses_strings = True
                 assigns.append(f"    _dash_str_set(&s->{field.name}, {field.name});")
                 frees.append(f"    _dash_str_free(s->{field.name});")
-            elif self.analysis.program.get_struct(field.field_type):
+            elif self._is_obj_c_type(c_type):   # struct or Array field
                 assigns.append(f"    _dash_obj_set((void **)&s->{field.name}, {field.name});")
-                frees.append(f"    _dash_release(s->{field.name});")
+                frees.append(f"    _dash_release_child(s->{field.name});")
             else:
                 assigns.append(f"    s->{field.name} = {field.name};")
 
@@ -6070,9 +6096,12 @@ static {ret_type} {method_name}({params_str}) {{
         # --memcheck: Main's variables and temporaries are let go at the end, so
         # the exit summary shows only what nothing could free (normally the pool
         # deletion at exit frees them)
+        ind = self.context.indent
         owned = self.context.current_owned()
+        globals_ = "".join(f"{ind}_dash_str_set(&{g}, NULL);\n" for g in sorted(self.global_strings))
+        globals_ += "".join(f"{ind}_dash_obj_set((void **)&{g}, NULL);\n" for g in sorted(self.global_objects))
         self.emit("#if defined(DASH_MEMCHECK) && defined(_DASH_MEMORY_RUNTIME)\n"
-                  + self._frees(owned) + f"{self.context.indent}_dash_tmp_release_f(0);\n#endif\n")
+                  + self._frees(owned) + globals_ + f"{ind}_dash_tmp_release_f(0);\n#endif\n")
 
     def visit_WindowOpen(self, node: WindowOpen):
         """Generate code to open a window."""
@@ -7216,8 +7245,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True
             self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {value});\n")
             return
-        if field and self.analysis.program.get_struct(field.field_type):
-            # and holds a reference to its struct fields
+        if field and self._is_obj_c_type(self._dash_type_to_c(field.field_type)):
+            # and holds a reference to its struct and Array fields
             self.emit(f"{indent}_dash_obj_set((void **)&{owner}->{node.member}, {value});\n")
             return
         value = self._escape_any(node.value, value)
@@ -7602,6 +7631,7 @@ static {return_type} {lambda_name}({param_str}) {{
         "Pointer": "APTR",
         "Void": "void",
         "Func": "APTR",
+        "Array": "DashArrayLong *",   # list of Int, reference counted
     }
 
     @property

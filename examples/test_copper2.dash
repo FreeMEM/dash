@@ -10,7 +10,7 @@ end
 # Para efectos copper necesitamos manipular la paleta con un enfoque diferente
 # Usaremos un gradiente estático en la paleta que simula el efecto
 
-@native func setup_gradient_palette(start_color, end_color) -> LONG
+@native func setup_gradient_palette(start_color, end_color) -> Int
 """
     if (!_dash_screen) return 0;
 
@@ -44,7 +44,7 @@ end
 end
 
 # Demostración simple de copper usando VBlank interrupt para cambiar colores
-@native func animate_colors() -> LONG
+@native func animate_colors() -> Int
 """
     static LONG frame = 0;
     if (!_dash_screen) return 0;

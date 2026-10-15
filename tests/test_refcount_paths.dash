@@ -1,0 +1,176 @@
+# Test: each way an array or struct moves through a program frees it when the
+# last reference goes (built with --memcheck: nothing alive at exit, no errors),
+# and 1.000 rounds of all of them do not use up memory.
+#
+# memcheck
+# expect-out: asignar 3
+# expect-out: parametros 22
+# expect-out: return 26
+# expect-out: campos 15
+# expect-out: metodos 10
+# expect-out: global 5
+# expect-out: trozos 5
+# expect-out: bucles 8
+# expect-out: listas 12
+# expect-out: recursion 20
+# expect-out: estable
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@native func mem_libre() -> Int
+"""
+    return (LONG)AvailMem(MEMF_ANY);
+"""
+end
+
+struct Punto
+    x: Int
+    y: Int
+end
+
+struct Caja
+    p: Punto
+    q: Punto
+    nombre: String
+    datos: Array
+
+    func mover(dx)
+        self.p = Punto(self.p.x + dx, self.p.y)
+        return self.p.x
+    end
+
+    func cambiar(otro: Punto)
+        self.q = otro
+    end
+
+    func copia() -> Punto
+        return self.q
+    end
+end
+
+var guardada: Caja
+
+func doble(p: Punto) -> Punto
+    p = Punto(p.x * 2, p.y * 2)
+    return p
+end
+
+func igual(p: Punto) -> Punto
+    return p
+end
+
+func nuevo(n) -> Punto
+    t = Punto(n, n)
+    return t
+end
+
+func de_caja(c: Caja) -> Punto
+    return c.p
+end
+
+func lista(n)
+    a = [n, n + 1, n + 2]
+    return a
+end
+
+func profundo(n) -> Punto
+    if n == 0
+        return Punto(0, 0)
+    end
+    p = profundo(n - 1)
+    return Punto(p.x + 1, n)
+end
+
+func mas_uno(a: Array) -> Array
+    b = [a[0] + 1, a[1] + 1]
+    a = b
+    return a
+end
+
+func buscar(n) -> Punto
+    for i in (1..10)
+        p = Punto(i, i)
+        for j in (1..10)
+            if i * j == n
+                return p
+            end
+        end
+    end
+    return Punto(0, 0)
+end
+
+func ronda(k)
+    # asignar: nueva, otra variable, la misma, sobrescribir
+    a = Punto(1, 2)
+    b = a
+    a = a
+    b = Punto(3, 4)
+    r1 = a.x + b.y - 2
+    # parametros: se reasigna dentro, se devuelve tal cual, se guarda en un campo
+    c = Caja(a, b, "caja", [1, 2])
+    d = doble(a)
+    e = igual(b)
+    c.cambiar(d)
+    r2 = d.x + e.x + c.q.y + de_caja(c).x + igual(Punto(10, 10)).x + 2
+    # return: local, nueva en la expresion, desde bucles anidados, lista
+    r3 = nuevo(5).x + buscar(12).x + lista(7)[2] + nuevo(6).y + 3 + 1
+    # campos: struct dentro de struct, campo a campo, String y Array en campos
+    c.p = c.q
+    c.q = Punto(7, 8)
+    c.datos = [5, 6, 7]
+    c.nombre = "otra " + k
+    r4 = c.p.x + c.q.x + c.datos[0] + 1
+    # metodos: self.p nuevo, devolver un campo
+    r5 = c.mover(1) + c.copia().x + 0
+    # global
+    guardada = Caja(Punto(5, 5), Punto(0, 0), "g", [0])
+    guardada.p = Punto(5, 6)
+    r6 = guardada.p.x
+    # trozos de listas
+    l = [1, 2, 3, 4, 5]
+    t = l[1:3]
+    t = l[3:]
+    r7 = t[1] + l[1:2][0] - 2
+    # bucles con break y continue y una lista por vuelta
+    r8 = 0
+    for i in (1..10)
+        v = [i, i]
+        if i == 2
+            continue
+        end
+        if i > 3
+            break
+        end
+        w = Punto(v[0], i)
+        r8 = r8 + w.x + v[1]
+    end
+    # Array en parametros, retornos y campos
+    m = mas_uno(mas_uno([1, 2]))
+    c.datos = mas_uno(m)
+    r9 = m[0] + m[1] + c.datos[1]
+    r10 = profundo(20).x
+    if k == 1
+        Print "asignar " + r1
+        Print "parametros " + r2
+        Print "return " + r3
+        Print "campos " + r4
+        Print "metodos " + r5
+        Print "global " + r6
+        Print "trozos " + r7
+        Print "bucles " + r8
+        Print "listas " + r9
+        Print "recursion " + r10
+    end
+end
+
+Main
+    ronda(1)
+    antes = mem_libre()
+    for k in (2..1000)
+        ronda(k)
+    end
+    if antes - mem_libre() < 4096
+        Print "estable"
+    else
+        Print antes - mem_libre()
+    end
+end

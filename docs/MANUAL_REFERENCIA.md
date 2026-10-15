@@ -455,7 +455,15 @@ end
 func crear_mensaje(nombre: String) -> String
     return "Bienvenido " + nombre
 end
+
+func siguientes(a: Array) -> Array     # lista de enteros
+    return [a[0] + 1, a[1] + 1]
+end
 ```
+
+Tipos que se pueden escribir: `Int`, `Float`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void` y el
+nombre de un struct o de un enum. Cualquier otro nombre es un error (antes se tomaba como `Int` sin avisar).
+Un campo `Array` de un struct se libera con el struct, igual que un campo de tipo struct.
 
 ### Llamada a Funciones
 

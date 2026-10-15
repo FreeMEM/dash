@@ -1,0 +1,31 @@
+# Test: freeing a linked list of 5.000 structs does not overflow the stack
+# (each struct released the next one recursively: 3.000 already hung an A500).
+# A struct field of struct type has no empty value in Dash yet: vacio() gives it.
+#
+# memcheck
+# expect-out: 5000
+# expect-out: 4999
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Nodo
+    valor: Int
+    siguiente: Nodo
+end
+
+@native func vacio() -> Nodo
+"""
+    return NULL;
+"""
+end
+
+Main
+    cabeza = Nodo(0, vacio())
+    for i in (1..5000)
+        cabeza = Nodo(i, cabeza)
+    end
+    Print cabeza.valor
+    Print cabeza.siguiente.valor
+    cabeza = Nodo(7, vacio())
+    Print "fin"
+end

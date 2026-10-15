@@ -62,7 +62,31 @@ def find_tests(test_dir: Path, pattern: Optional[str] = None) -> List[Path]:
     return tests
 
 
-def run_test(test_file: Path, verbose: bool = False) -> TestResult:
+def wants_memcheck(test_file: Path) -> bool:
+    """'# memcheck': the test itself is about --memcheck (its summary is expected output)."""
+    return any(l.strip() == "# memcheck" for l in test_file.read_text().splitlines())
+
+
+def check_memcheck(lines: List[str]) -> Optional[str]:
+    """--memcheck run of a test: no warnings, and nothing alive at exit but what escaped."""
+    import re
+    errors = [l for l in lines if l.startswith("memcheck: ERROR")]
+    if errors:
+        return errors[0]
+    summary = [l for l in lines if l.startswith("memcheck: vivos")]
+    if not summary:
+        return "memcheck: no exit summary"
+    m = re.match(r"memcheck: vivos (\d+) objetos y (\d+) strings \(escapados (\d+) y (\d+)\), errores (\d+)",
+                 summary[-1])
+    if not m:
+        return f"memcheck: unreadable summary {summary[-1]!r}"
+    objs, strs, obj_esc, str_esc, errs = map(int, m.groups())
+    if errs or objs > obj_esc or strs > str_esc:
+        return summary[-1]
+    return None
+
+
+def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> TestResult:
     """Run a single test."""
     name = test_file.stem
     start_time = time.time()
@@ -172,8 +196,8 @@ def run_test(test_file: Path, verbose: bool = False) -> TestResult:
         "-o", str(exe_file),
         "-lm",
     ]
-    # '# memcheck': built as ./dash --memcheck (the exit summary is part of the output)
-    if any(l.strip() == "# memcheck" for l in test_file.read_text().splitlines()):
+    # '# memcheck' (or run_tests.py --memcheck): built as ./dash --memcheck
+    if memcheck or wants_memcheck(test_file):
         compile_cmd.insert(1, "-DDASH_MEMCHECK")
     from compiler.softfloat import softfloat_objects, uses_float
     if uses_float(c_file.read_text()):
@@ -378,7 +402,8 @@ def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -
     return not missing
 
 
-def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES[0]) -> List[TestResult]:
+def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES[0],
+                  memcheck: bool = False) -> List[TestResult]:
     """Run the compiled tests that declare '# expect-out:' in FS-UAE, all in one boot."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
@@ -404,6 +429,11 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
     results = []
     for (test_file, wanted), run in zip(selected, runs):
         got = [l.rstrip() for l in (run.output or "").splitlines()]
+        mc_error = None
+        if memcheck and not wants_memcheck(test_file):
+            uses_memory = "#define _DASH_MEMORY_RUNTIME" in (PROJECT_ROOT / "build" / f"{test_file.stem}.c").read_text()
+            mc_error = check_memcheck(got) if uses_memory and not run.timed_out else None
+            got = [l for l in got if not l.startswith("memcheck:")]
         if run.timed_out:
             error = "timeout (program did not end)"
         elif run.rc != 0:
@@ -413,7 +443,7 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
             error = (f"output line {diff + 1}: got {got[diff] if diff < len(got) else '<end>'!r}, "
                      f"expected {wanted[diff] if diff < len(wanted) else '<end>'!r}")
         else:
-            error = None
+            error = mc_error
         results.append(TestResult(name=f"{prefix}/{test_file.stem}", passed=error is None,
                                   transpile_ok=True, compile_ok=True,
                                   error_message=error, duration=duration))
@@ -470,6 +500,9 @@ def main():
     parser.add_argument("--emu-32", action="store_true",
                         help="Also run them on an A1200 with AmigaOS 3.2 (needs $DASH_KICKSTART_32 "
                              "and $DASH_EMU_SYS_32)")
+    parser.add_argument("--memcheck", action="store_true",
+                        help="Build every test as ./dash --memcheck; with --emu, a test also fails on a memory "
+                             "warning or on objects/strings alive at exit that did not escape")
     args = parser.parse_args()
 
     test_dir = PROJECT_ROOT / "tests"
@@ -490,7 +523,7 @@ def main():
     results = []
     for test_file in tests:
         print(f"Testing: {test_file.stem}...", end=" ", flush=True)
-        result = run_test(test_file, verbose=args.verbose)
+        result = run_test(test_file, verbose=args.verbose, memcheck=args.memcheck)
         results.append(result)
 
         if result.passed and result.compile_skipped:
@@ -541,7 +574,7 @@ def main():
         if not getattr(args, machine["option"]):
             continue
         print(f"Testing: emu ({machine['label']})...", flush=True)
-        for result in run_emu_tests(tests, compiled, machine):
+        for result in run_emu_tests(tests, compiled, machine, args.memcheck):
             results.append(result)
             print(f"  {result.name}: {'OK' if result.passed else 'FAIL'}")
 

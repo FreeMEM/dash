@@ -1,0 +1,8 @@
+# expect: Unknown type 'Lista' (field 'datos' of 'Caja')
+struct Caja
+    datos: Lista
+end
+
+Main
+    c = Caja(0)
+end

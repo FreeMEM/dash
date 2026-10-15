@@ -62,7 +62,7 @@ break / continue            # inside while/for only
 
 ## Functions
 ```
-func add(a, b)              func typed(x: Int) -> Int
+func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum
     return a + b                return x * 2
 end                         end
 ```
