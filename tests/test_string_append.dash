@@ -1,0 +1,63 @@
+# Test: s = s + ... on a String variable that owns its text appends in place
+# (_dash_str_append: grows into a block twice as big when it does not fit).
+# Not when another part reads s, nor on a parameter (it only borrows its text).
+# memcheck
+# expect-c: _dash_str_append(&s, "c");
+# expect-out: abc1d
+# expect-out: abc1dabc1d
+# expect-out: abc1dabc1dAB!
+# expect-out: uno
+# expect-out: 2000 x
+# expect-out: 1092 300,
+# expect-out: hola mundo
+# expect-out: param+ ok
+# expect-out: global: 1,2,3,
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+var lista: String = ""
+
+func construye(n: Int) -> String
+    t = ""
+    for i in (1..n)
+        t = t + "x"
+    end
+    return t
+end
+
+func con_param(p: String) -> String
+    p = p + "+"
+    return p
+end
+
+func suma_global(n: Int)
+    lista = lista + n + ","
+end
+
+Main
+    s = "ab"
+    s = s + "c" + 1 + "d"
+    Print s
+    s = s + s
+    Print s
+    s = s + str_upper(s[:2]) + "!"
+    Print s
+    vacio = ""
+    vacio = vacio + "uno"
+    Print vacio
+    g = construye(2000)
+    Print "" + g.length + " " + g[1999]
+    h = ""
+    for i in (1..300)
+        h = h + i + ","
+    end
+    Print "" + h.length + " " + h[h.length - 4:]
+    a = "hola"
+    b = a
+    a = a + " mundo"
+    Print a
+    Print con_param("param") + " " + str_lower("OK")
+    for i in (1..3)
+        suma_global(i)
+    end
+    Print "global: " + lista
+end

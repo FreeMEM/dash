@@ -1446,6 +1446,12 @@ ni pausas:
 
 Un bucle que concatena 100.000 veces ocupa lo mismo al final que al principio.
 
+Para ir construyendo un texto, `s = s + algo` (o `s = s + a + b`) sobre una variable anade al
+final del texto que ya tiene, sin copiarlo entero: deja hueco de sobra y, cuando no cabe, lo
+pasa a un bloque del doble de tamano. Construir un texto de 20.000 caracteres de uno en uno
+tarda menos de un segundo en un A1200 (antes, minutos). No pasa si otra parte de la suma lee
+la misma variable (`s = s + s` hace una copia nueva) ni con campos de structs.
+
 ### Arrays y structs (automatico, conteo de referencias)
 
 Varias variables pueden compartir el mismo array o struct, asi que cada uno lleva un

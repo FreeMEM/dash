@@ -913,6 +913,60 @@ static void _dash_str_forget(STRPTR s) {
     for (k = 0; k < _DASH_SC_N; k++) if (_dash_sc_s[k] == s) _dash_sc_s[k] = NULL;
 }
 
+/* The text at s now has this length (it grew in place, or is new) */
+static void _dash_str_setlen(STRPTR s, LONG len) {
+    LONG k;
+    for (k = 0; k < _DASH_SC_N; k++) {
+        if (_dash_sc_s[k] == s) {
+            if (len >= _DASH_SC_MIN) _dash_sc_len[k] = len;
+            else _dash_sc_s[k] = NULL;
+            return;
+        }
+    }
+    if (len >= _DASH_SC_MIN) {
+        k = _dash_sc_next;
+        _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
+        _dash_sc_s[k] = s;
+        _dash_sc_len[k] = len;
+    }
+}
+
+/* var = var + add for a String variable that owns its text (dashweb D3): the text
+   grows in place while it fits; when not, it moves to a block twice as big. So
+   adding to a text in a loop costs the length of what is added, not of the whole. */
+static void _dash_str_append(STRPTR *var, STRPTR add) {
+    STRPTR s = *var, r;
+    LONG len, n, cap;
+    _DashStrHdr *h;
+    if (!add || !*add) return;
+    n = strlen((char *)add);
+    if (!s) {
+        r = _dash_str_alloc(n, FALSE);
+        if (r) { _dash_copy(r, add, n); _dash_str_setlen(r, n); }
+        *var = r;
+        return;
+    }
+    len = _dash_str_len(s);
+    h = _DASH_STR_HDR(s);
+    cap = (LONG)(h->size & ~_DASH_STR_KEEP) - (LONG)sizeof(_DashStrHdr) - 1;
+    if (!(h->size & _DASH_STR_KEEP) && !h->serial && len + n <= cap) {
+        _dash_copy(s + len, add, n);
+        s[len + n] = 0;
+        _dash_str_setlen(s, len + n);
+        return;
+    }
+    cap = (len + n) * 2;
+    if (cap < 24) cap = 24;
+    r = _dash_str_alloc(cap, FALSE);
+    if (!r) return;
+    _dash_copy(r, s, len);
+    _dash_copy(r + len, add, n);
+    r[len + n] = 0;
+    _dash_str_free(s);
+    _dash_str_setlen(r, len + n);
+    *var = r;
+}
+
 /* s[i]: the byte (0 outside the text) */
 static LONG _dash_str_code(STRPTR s, LONG i) {
     if (!s || i < 0 || i >= _dash_str_len(s)) return 0;
@@ -8563,6 +8617,9 @@ static {ret_type} {method_name}({params_str}) {{
         """Generate code for variable assignment (first use declares)."""
         indent = self.context.indent
 
+        if self._append_in_place(node):
+            return
+
         if (self.var_types.get(node.name) == "fixed" and self.context.is_declared(node.name)
                 and not self._is_fixed_expr(node.value)):
             # an Int (or number) given to a Fixed variable becomes a Fixed
@@ -9767,6 +9824,44 @@ static {ret_type} {method_name}({params_str}) {{
                 literal = "'\\''" if char == "'" else f"'{char}'"
                 return f"({self._generate_expression(char_side)} {node.operator} {literal})"
         return None
+
+    def _append_in_place(self, node: VarAssign) -> bool:
+        """s = s + a + b... on a String variable that owns its text: append each part in
+        place (_dash_str_append) instead of building a new text. Not when another part
+        reads s too (it would see it half changed)."""
+        name = node.name
+        if not (isinstance(node.value, BinaryOp) and node.value.operator == "+"
+                and self.var_types.get(name) == "string" and self.context.is_declared(name)
+                and (self.context.is_owned(name) or name in self.global_strings)
+                and self._is_string_expr(node.value)):
+            return False
+        nodes = self._concat_nodes(node.value)
+        if not (isinstance(nodes[0], VarRef) and nodes[0].name == name):
+            return False
+        if any(self._mentions(n, name) for n in nodes[1:]):
+            return False
+        self.uses_strings = self.uses_text = True
+        for part in nodes[1:]:
+            code = self._string_operand(part, self._is_string_expr(part))
+            self.emit(f"{self.context.indent}_dash_str_append(&{name}, {code});\n")
+        return True
+
+    def _concat_nodes(self, node: ASTNode) -> List[ASTNode]:
+        """AST operands of a chain of string concatenations, left to right."""
+        if isinstance(node, BinaryOp) and node.operator == "+" and self._is_string_expr(node):
+            return self._concat_nodes(node.left) + self._concat_nodes(node.right)
+        return [node]
+
+    def _mentions(self, node, name: str) -> bool:
+        """True if the expression reads the variable (or could, through self)."""
+        if isinstance(node, VarRef):
+            return node.name == name
+        if isinstance(node, list):
+            return any(self._mentions(n, name) for n in node)
+        if isinstance(node, ASTNode):
+            return any(self._mentions(v, name) for k, v in vars(node).items()
+                       if isinstance(v, (ASTNode, list)) or k in ("object_name", "name") and v == name)
+        return False
 
     def _concat_parts(self, node: ASTNode) -> List[str]:
         """C operands of a chain of string concatenations, left to right."""

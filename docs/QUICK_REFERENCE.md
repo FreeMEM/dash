@@ -54,6 +54,7 @@ str_starts(s, "a")  str_ends(s, "z")
 str_lower(s)  str_upper(s)  str_trim(s)
 Int("42")  str_to_int("ff", 16)  str_from_int(255, 16)
 str_replace(s, "a", "b")
+s = s + "x"                 # appends in place: building a text in a loop is linear
 ```
 
 ## Control de Flujo
