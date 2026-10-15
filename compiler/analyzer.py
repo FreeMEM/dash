@@ -687,7 +687,7 @@ class SemanticAnalyzer(ASTVisitor):
                 self.error(f"{node.name}() expects 1 argument, got {len(node.arguments)}", node)
             for arg in node.arguments:
                 self.visit(arg)
-                if self._infer_type(arg) == DashType.STRING:
+                if self._infer_type(arg) == DashType.STRING and node.name != "Int":
                     self.error(f"{node.name}() converts numbers, not strings", node)
             return
 

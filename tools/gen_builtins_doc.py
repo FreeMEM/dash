@@ -28,6 +28,7 @@ GROUPS = [
     ("SYSTEM_FUNCTIONS", "Sistema y memoria"),
     ("DOS_FUNCTIONS", "Ficheros (DOS)"),
     ("BUFFER_FUNCTIONS", "Buffers"),
+    ("TEXT_FUNCTIONS", "Texto"),          # dashweb D2
     ("AUDIO_FUNCTIONS", "Audio"),
     ("INTUITION_EXPANDED", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)"),

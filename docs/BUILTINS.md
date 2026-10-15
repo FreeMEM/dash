@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 425 funciones, 425 implementadas, 0 sin implementar.
+Total: 437 funciones, 437 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -328,6 +328,23 @@ Total: 425 funciones, 425 implementadas, 0 sin implementar.
 | `buffer_set_long(buffer, offset, value)` | `void` | Set 32-bit long at offset (big-endian) |  |
 | `buffer_copy(dest, dest_offset, src, src_offset, length)` | `void` | Copy bytes between buffers |  |
 | `buffer_fill(buffer, offset, length, value)` | `void` | Fill buffer region with byte value |  |
+
+## Texto
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `str_code(s, i)` | `LONG` | Code (0-255) of the character at position i, 0 outside the text |  |
+| `str_char(code)` | `STRPTR` | One-character String with that code |  |
+| `str_find(s, sub)` | `LONG` | Position of the first sub in s, -1 if it is not there |  |
+| `str_find_from(s, sub, start)` | `LONG` | Position of the first sub in s from position start, -1 if none |  |
+| `str_starts(s, prefix)` | `BOOL` | Does s start with prefix? |  |
+| `str_ends(s, suffix)` | `BOOL` | Does s end with suffix? |  |
+| `str_lower(s)` | `STRPTR` | Lowercase copy (Latin-1: also accented letters) |  |
+| `str_upper(s)` | `STRPTR` | Uppercase copy (Latin-1: also accented letters) |  |
+| `str_trim(s)` | `STRPTR` | Copy without spaces, tabs and line ends at both ends |  |
+| `str_to_int(s, base)` | `LONG` | Number written in s in that base (2-36); Int(s) is base 10 |  |
+| `str_from_int(n, base)` | `STRPTR` | n written in that base (2-36, lowercase letters) |  |
+| `str_replace(s, from, to)` | `STRPTR` | Copy with every from replaced by to |  |
 
 ## Audio
 

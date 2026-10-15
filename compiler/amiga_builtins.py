@@ -23,6 +23,7 @@ class BuiltinFunc:
     needs_audio: bool = False    # Needs audio setup
     needs_area: bool = False     # Needs TmpRas/AreaInfo for area fill
     needs_rtg: bool = False      # Needs CyberGraphX/Picasso96 for RTG support
+    reads_only: bool = False     # Only reads its String/object arguments during the call (no copy kept)
     description: str = ""        # Documentation
 
 
@@ -3577,6 +3578,43 @@ MUI_FUNCTIONS = {
 
 
 # =============================================================================
+# Text (dashweb D2): searching, case, numbers. The results are new Strings.
+# =============================================================================
+
+def _text(name, params, ret, template, desc):
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       reads_only=True)
+
+
+TEXT_FUNCTIONS = {
+    "str_code": _text("str_code", ["s", "i"], "LONG", "_dash_str_code(${s}, ${i})",
+                      "Code (0-255) of the character at position i, 0 outside the text"),
+    "str_char": _text("str_char", ["code"], "STRPTR", "_dash_str_char(${code})",
+                      "One-character String with that code"),
+    "str_find": _text("str_find", ["s", "sub"], "LONG", "_dash_str_find(${s}, ${sub})",
+                      "Position of the first sub in s, -1 if it is not there"),
+    "str_find_from": _text("str_find_from", ["s", "sub", "start"], "LONG",
+                           "_dash_str_find_from(${s}, ${sub}, ${start})",
+                           "Position of the first sub in s from position start, -1 if none"),
+    "str_starts": _text("str_starts", ["s", "prefix"], "BOOL", "_dash_str_starts(${s}, ${prefix})",
+                        "Does s start with prefix?"),
+    "str_ends": _text("str_ends", ["s", "suffix"], "BOOL", "_dash_str_ends(${s}, ${suffix})",
+                      "Does s end with suffix?"),
+    "str_lower": _text("str_lower", ["s"], "STRPTR", "_dash_str_lower(${s})",
+                       "Lowercase copy (Latin-1: also accented letters)"),
+    "str_upper": _text("str_upper", ["s"], "STRPTR", "_dash_str_upper(${s})",
+                       "Uppercase copy (Latin-1: also accented letters)"),
+    "str_trim": _text("str_trim", ["s"], "STRPTR", "_dash_str_trim(${s})",
+                      "Copy without spaces, tabs and line ends at both ends"),
+    "str_to_int": _text("str_to_int", ["s", "base"], "LONG", "_dash_str_to_int(${s}, ${base})",
+                        "Number written in s in that base (2-36); Int(s) is base 10"),
+    "str_from_int": _text("str_from_int", ["n", "base"], "STRPTR", "_dash_str_from_int(${n}, ${base})",
+                          "n written in that base (2-36, lowercase letters)"),
+    "str_replace": _text("str_replace", ["s", "from", "to"], "STRPTR", "_dash_str_replace(${s}, ${from}, ${to})",
+                         "Copy with every from replaced by to"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -3591,6 +3629,7 @@ ALL_BUILTINS = {
     **SYSTEM_FUNCTIONS,
     **DOS_FUNCTIONS,
     **BUFFER_FUNCTIONS,
+    **TEXT_FUNCTIONS,          # dashweb D2
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

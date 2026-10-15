@@ -10,7 +10,7 @@
 # expect-c: nombres = DashArray_own(DashArray_from_new(2, (LONG[]){(LONG)"Ana", (LONG)"Bea"}), _DASH_ARR_STRS);
 # expect-c: Printf("%s\n", (STRPTR)DashArray_get(nombres, 1));
 # expect-c: STRPTR n = (STRPTR)_arr_n->data[_idx_n];
-# expect-c: DashString_from_char(DashString_char_at(palabra, 0))
+# expect-c: DashString_from_char(((char)_dash_str_code(palabra, 0)))
 # expect-c: _dash_mem_cleanup();
 #
 # expect-out: 20

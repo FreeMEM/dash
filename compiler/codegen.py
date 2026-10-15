@@ -758,18 +758,6 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
     return _DASH_ARR_KIND(arr) ? DashArray_own(result, _DASH_ARR_KIND(arr)) : result;
 }
 
-/* a + b: a new list with the elements of both. It holds what a list of the
-   first typed operand holds (an empty literal has no type) */
-static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
-    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind;
-    DashArrayLong *result = DashArray_create(la + lb);
-    if (!result) return NULL;
-    for (i = 0; i < la; i++) result->data[i] = a->data[i];
-    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
-    kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
-    return kind ? DashArray_own(result, kind) : result;
-}
-
 """
 
     # String runtime (included when string operations are used)
@@ -874,6 +862,180 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
         if (s) while ((*p = *s++)) p++;
     }
     return result;
+}
+
+"""
+
+    # a + b on lists (dashweb D1), only in programs that add lists
+    ARRAY_CONCAT_RUNTIME = """\
+/* a + b: a new list with the elements of both. It holds what a list of the
+   first typed operand holds (an empty literal has no type) */
+static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
+    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind;
+    DashArrayLong *result = DashArray_create(la + lb);
+    if (!result) return NULL;
+    for (i = 0; i < la; i++) result->data[i] = a->data[i];
+    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
+    kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
+    return kind ? DashArray_own(result, kind) : result;
+}
+
+"""
+
+    # Text runtime (dashweb D2): s[i] and s.length without walking the text every
+    # time, and the str_* builtins. Strings have no length field, so the length of
+    # long texts (64 bytes or more) is kept in a small cache by address; freeing a
+    # string forgets it (_dash_str_drop gets a call, see _assemble_program).
+    TEXT_RUNTIME = """\
+/* Dash Text Runtime */
+#define _DASH_SC_N 4
+#define _DASH_SC_MIN 64
+static STRPTR _dash_sc_s[_DASH_SC_N];
+static LONG _dash_sc_len[_DASH_SC_N];
+static UBYTE _dash_sc_next;
+
+static LONG _dash_str_len(STRPTR s) {
+    LONG k, len;
+    if (!s) return 0;
+    for (k = 0; k < _DASH_SC_N; k++) if (_dash_sc_s[k] == s) return _dash_sc_len[k];
+    len = strlen((char *)s);
+    if (len >= _DASH_SC_MIN) {
+        k = _dash_sc_next;
+        _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
+        _dash_sc_s[k] = s;
+        _dash_sc_len[k] = len;
+    }
+    return len;
+}
+
+static void _dash_str_forget(STRPTR s) {
+    LONG k;
+    for (k = 0; k < _DASH_SC_N; k++) if (_dash_sc_s[k] == s) _dash_sc_s[k] = NULL;
+}
+
+/* s[i]: the byte (0 outside the text) */
+static LONG _dash_str_code(STRPTR s, LONG i) {
+    if (!s || i < 0 || i >= _dash_str_len(s)) return 0;
+    return ((UBYTE *)s)[i];
+}
+
+static LONG _dash_str_find_from(STRPTR s, STRPTR sub, LONG from) {
+    LONG len = _dash_str_len(s), n = _dash_str_len(sub), i;
+    if (!s || !sub || from < 0) from = 0;
+    if (!s || !sub || n > len) return -1;
+    for (i = from; i + n <= len; i++) {
+        if (s[i] == sub[0] && !strncmp((char *)s + i, (char *)sub, n)) return i;
+    }
+    return -1;
+}
+
+static LONG _dash_str_find(STRPTR s, STRPTR sub) {
+    return _dash_str_find_from(s, sub, 0);
+}
+
+static BOOL _dash_str_starts(STRPTR s, STRPTR prefix) {
+    LONG n = _dash_str_len(prefix);
+    return s && prefix && _dash_str_len(s) >= n && !strncmp((char *)s, (char *)prefix, n);
+}
+
+static BOOL _dash_str_ends(STRPTR s, STRPTR suffix) {
+    LONG len = _dash_str_len(s), n = _dash_str_len(suffix);
+    return s && suffix && len >= n && !strcmp((char *)s + len - n, (char *)suffix);
+}
+
+/* Latin-1: A-Z and 0xC0-0xDE (not 0xD7) are the capitals of a-z and 0xE0-0xFE (not 0xF7) */
+static STRPTR _dash_str_case(STRPTR s, BOOL upper) {
+    LONG len = _dash_str_len(s), i;
+    STRPTR r = _dash_str_alloc(len, TRUE);
+    if (!r) return NULL;
+    for (i = 0; i < len; i++) {
+        UBYTE c = s[i];
+        if (upper) {
+            if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7)) c -= 32;
+        } else {
+            if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c += 32;
+        }
+        r[i] = c;
+    }
+    r[len] = 0;
+    return r;
+}
+
+static STRPTR _dash_str_lower(STRPTR s) { return _dash_str_case(s, FALSE); }
+static STRPTR _dash_str_upper(STRPTR s) { return _dash_str_case(s, TRUE); }
+
+/* Without spaces, tabs and line ends at both ends */
+static STRPTR _dash_str_trim(STRPTR s) {
+    LONG a = 0, b = _dash_str_len(s);
+    STRPTR r;
+    while (a < b && (s[a] == ' ' || s[a] == '\\t' || s[a] == '\\r' || s[a] == '\\n')) a++;
+    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\\t' || s[b - 1] == '\\r' || s[b - 1] == '\\n')) b--;
+    r = _dash_str_alloc(b - a, TRUE);
+    if (r) { _dash_copy(r, s + a, b - a); r[b - a] = 0; }
+    return r;
+}
+
+/* One character with that code (0-255) */
+static STRPTR _dash_str_char(LONG code) {
+    STRPTR r = _dash_str_alloc(1, TRUE);
+    if (r) { r[0] = (UBYTE)code; r[1] = 0; }
+    return r;
+}
+
+/* Spaces, sign, then digits of the base (2-36; letters in either case) up to the first
+   that is not one. 0 if there are none. */
+static LONG _dash_str_to_int(STRPTR s, LONG base) {
+    LONG v = 0, d;
+    BOOL neg = FALSE;
+    if (!s) return 0;
+    if (base < 2 || base > 36) base = 10;
+    while (*s == ' ' || *s == '\\t') s++;
+    if (*s == '-' || *s == '+') neg = (*s++ == '-');
+    for (;; s++) {
+        UBYTE c = *s;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'z') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'Z') d = c - 'A' + 10;
+        else break;
+        if (d >= base) break;
+        v = v * base + d;
+    }
+    return neg ? -v : v;
+}
+
+/* n in base 2-36, lowercase letters; negative numbers with "-" */
+static STRPTR _dash_str_from_int(LONG n, LONG base) {
+    UBYTE buf[34];
+    LONG i = sizeof(buf);
+    ULONG u = n < 0 ? (ULONG)-n : (ULONG)n;
+    STRPTR r;
+    if (base < 2 || base > 36) base = 10;
+    buf[--i] = 0;
+    do { buf[--i] = "0123456789abcdefghijklmnopqrstuvwxyz"[u % base]; u /= base; } while (u);
+    if (n < 0) buf[--i] = '-';
+    r = _dash_str_alloc(sizeof(buf) - 1 - i, TRUE);
+    if (r) _dash_copy(r, (STRPTR)buf + i, sizeof(buf) - i);
+    return r;
+}
+
+/* Every "from" (not empty) replaced by "to" */
+static STRPTR _dash_str_replace(STRPTR s, STRPTR from, STRPTR to) {
+    LONG len = _dash_str_len(s), nf = _dash_str_len(from), nt = _dash_str_len(to), count = 0, i, j;
+    STRPTR r;
+    if (!s) return _dash_str_alloc(0, TRUE);
+    if (nf == 0) return _dash_str_dup(s, TRUE);
+    for (i = _dash_str_find_from(s, from, 0); i >= 0; i = _dash_str_find_from(s, from, i + nf)) count++;
+    r = _dash_str_alloc(len + count * (nt - nf), TRUE);
+    if (!r) return NULL;
+    for (i = 0, j = 0; i < len; ) {
+        if (s[i] == from[0] && !strncmp((char *)s + i, (char *)from, nf)) {
+            _dash_copy(r + j, to, nt); j += nt; i += nf;
+        } else {
+            r[j++] = s[i++];
+        }
+    }
+    r[j] = 0;
+    return r;
 }
 
 """
@@ -7127,6 +7289,7 @@ _RUNTIME_FLAGS = [
     ("MEMORY_RUNTIME", "uses_strings"),
     ("ARRAY_RUNTIME", "uses_arrays"),
     ("STRING_RUNTIME", "uses_strings"),
+    ("TEXT_RUNTIME", "uses_text"),          # dashweb D2
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -7345,6 +7508,8 @@ class CodeGenerator(ASTVisitor):
         self.current_function: Optional[FunctionDef] = None
         self.uses_arrays: bool = False  # Track if arrays are used
         self.uses_strings: bool = False  # Track if string operations are used
+        self.uses_text: bool = False     # s[i], s.length, str_* (TEXT_RUNTIME)
+        self.uses_array_concat: bool = False   # list + list (ARRAY_CONCAT_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
         self.uses_refcount: bool = False  # Track if refcount runtime is needed
         self.uses_arenas: bool = False  # Track if arena runtime is needed
@@ -7474,7 +7639,13 @@ class CodeGenerator(ASTVisitor):
 
         # Add memory runtime (arrays, strings and structs allocate from its pool)
         if self._uses_pool():
-            parts.append(CTemplates.MEMORY_RUNTIME)
+            memory = CTemplates.MEMORY_RUNTIME
+            if self.uses_text:
+                # a freed string leaves the length cache of TEXT_RUNTIME
+                drop = "static void _dash_str_drop(_DashStrHdr *h) {\n"
+                memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n\n" + drop +
+                                        "    _dash_str_forget((STRPTR)(h + 1));\n")
+            parts.append(memory)
         else:
             # Loops and functions mark and release temporaries: nothing to do without strings
             parts.append("#define _dash_tmp_mark() 0UL\n#define _dash_tmp_release(m) ((void)(m))\n")
@@ -7488,10 +7659,14 @@ class CodeGenerator(ASTVisitor):
         # Add array runtime if needed
         if self.uses_arrays:
             parts.append(CTemplates.ARRAY_RUNTIME)
+        if self.uses_array_concat:
+            parts.append(CTemplates.ARRAY_CONCAT_RUNTIME)
 
         # Add string runtime if needed
         if self.uses_strings:
             parts.append(CTemplates.STRING_RUNTIME)
+        if self.uses_text:
+            parts.append(CTemplates.TEXT_RUNTIME)
 
         # Add reference counting runtime if needed (before structs)
         if self.uses_refcount:
@@ -9107,7 +9282,7 @@ static {ret_type} {method_name}({params_str}) {{
                 return code
             # List + list: a new list with the elements of both
             if node.operator == "+" and self._is_array_concat(node):
-                self.uses_arrays = True
+                self.uses_arrays = self.uses_array_concat = True
                 left = self._generate_expression(node.left)
                 right = self._generate_expression(node.right)
                 return f"DashArray_concat({left}, {right})"
@@ -9144,6 +9319,13 @@ static {ret_type} {method_name}({params_str}) {{
                     return f"_dash_fx_int({arg})"
                 self.uses_float = True
                 return f"((float)({arg}) / 65536.0f)"
+            if node.name == "Int" and len(node.arguments) == 1 and self._is_string_expr(node.arguments[0]):
+                # Int("42"): decimal text to number (str_to_int)
+                self.uses_strings = self.uses_text = True
+                return f"_dash_str_to_int({self._generate_expression(node.arguments[0])}, 10)"
+            if node.name == "Int" and len(node.arguments) == 1 and self._infer_c_type(node.arguments[0]) == "char":
+                # Int(s[i]): the character code, 0-255 (Latin-1)
+                return f"((LONG)(UBYTE)({self._generate_expression(node.arguments[0])}))"
             if node.name in ("Int", "Float") and len(node.arguments) == 1:
                 arg = self._generate_expression(node.arguments[0])
                 self.uses_float = True
@@ -9169,9 +9351,10 @@ static {ret_type} {method_name}({params_str}) {{
             # Check if accessing a string or array
             if self._is_string_expr(node.array):
                 self.uses_strings = True
+                self.uses_text = True
                 str_name = self._generate_expression(node.array)
                 index = self._generate_expression(node.index)
-                return f"DashString_char_at({str_name}, {index})"
+                return f"((char)_dash_str_code({str_name}, {index}))"
             self.uses_arrays = True
             array_name = self._array_ref(node.array)
             index = self._generate_expression(node.index)
@@ -9206,7 +9389,8 @@ static {ret_type} {method_name}({params_str}) {{
                 # Check if it's a string or array
                 if self._is_string_expr(node.object):
                     self.uses_strings = True
-                    return f"DashString_length({obj})"
+                    self.uses_text = True
+                    return f"_dash_str_len({obj})"
                 self.uses_arrays = True
                 return f"DashArray_length({self._array_ref(node.object)})"
             # Check if object is self (struct member access)
@@ -9237,7 +9421,8 @@ static {ret_type} {method_name}({params_str}) {{
                 var_type = self.var_types.get(node.object_name)
                 if var_type == "string":
                     self.uses_strings = True
-                    return f"DashString_length({node.object_name})"
+                    self.uses_text = True
+                    return f"_dash_str_len({node.object_name})"
                 self.uses_arrays = True
                 return f"DashArray_length({self._array_ref(VarRef(name=node.object_name))})"
             # Struct member access - use pointer notation
@@ -9293,6 +9478,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_text:
+            self.uses_strings = True   # TEXT_RUNTIME builds on the string runtimes
         if self.uses_music:
             self.uses_sound = True   # channels are allocated through audio.device
         if self.uses_bitmaps or self.uses_copper or self.uses_sound:
@@ -9341,7 +9528,7 @@ static {ret_type} {method_name}({params_str}) {{
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
                 code = self._generate_expression(arguments[i])
-                if builtin.name not in self._STRING_READERS:
+                if builtin.name not in self._STRING_READERS and not builtin.reads_only:
                     code = self._escape_any(arguments[i], code)
                 if not self._is_plain_value(arguments[i]) and not plain_call:
                     self._arg_counter = getattr(self, "_arg_counter", 0) + 1

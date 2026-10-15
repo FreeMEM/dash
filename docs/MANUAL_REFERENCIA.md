@@ -345,6 +345,36 @@ saludo = "Hola " + nombre + "!"
 Print saludo
 ```
 
+### Funciones de texto
+
+Devuelven textos nuevos (el original no cambia) o numeros. Las posiciones empiezan en 0.
+
+| Funcion | Que hace |
+|---|---|
+| `s.length`, `s[i]` | Longitud y caracter en la posicion `i` (`""`/0 fuera del texto) |
+| `str_code(s, i)`, `Int(s[i])` | Codigo del caracter (0-255, Latin-1) |
+| `str_char(codigo)` | Texto de un caracter con ese codigo |
+| `str_find(s, sub)`, `str_find_from(s, sub, desde)` | Posicion de `sub`, o -1 |
+| `str_starts(s, prefijo)`, `str_ends(s, sufijo)` | Empieza / termina por |
+| `str_lower(s)`, `str_upper(s)` | Minusculas / mayusculas (tambien `Ñ`, `É`...) |
+| `str_trim(s)` | Sin espacios, tabuladores ni saltos de linea a los lados |
+| `Int(s)`, `str_to_int(s, base)` | Numero escrito en el texto (`Int("42")`, `str_to_int("ff", 16)`) |
+| `str_from_int(n, base)` | Numero escrito en otra base (`str_from_int(255, 16)` = `"ff"`) |
+| `str_replace(s, de, a)` | Cambia todas las apariciones de `de` por `a` |
+
+Recorrer un texto largo por posicion es rapido: la longitud de los textos largos se
+recuerda, asi que `while i < s.length` con `s[i]` no lo mide en cada vuelta.
+
+```
+linea = str_trim(linea)
+if str_starts(linea, "#")
+    continue
+end
+p = str_find(linea, "=")
+clave = str_lower(linea[:p])
+valor = Int(linea[p + 1:])
+```
+
 ### Precedencia de Operadores
 
 1. `-` (unario)

@@ -1,0 +1,74 @@
+# Test: text functions (str_*), Int("42"), Int(s[i]) and reading a long text by position.
+# The str_* builtins only read their arguments: a String parameter passed to them is
+# not copied for good (no "escapados" at exit).
+# memcheck
+# expect-out: Hola, Mundo de Ñandúes
+# expect-out: 22
+# expect-out: HOLA, MUNDO DE ÑANDÚES
+# expect-out: hola, mundo de ñandúes
+# expect-out: 6
+# expect-out: -1
+# expect-out: 10
+# expect-out: bordes
+# expect-out: 72
+# expect-out: 111
+# expect-out: AÑ
+# expect-out: -42
+# expect-out: 255
+# expect-out: 255
+# expect-out: ff
+# expect-out: -1010
+# expect-out: a::b::c
+# expect-out: 
+# expect-out: 100
+# expect-out: 0
+# expect-out: abcgg
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func baja(s: String) -> String
+    return str_lower(s)
+end
+
+Main
+    s = "  Hola, Mundo de Ñandúes  "
+    t = str_trim(s)
+    Print t
+    Print t.length
+    Print str_upper(t)
+    Print str_lower(t)
+    Print str_find(t, "Mundo")
+    Print str_find(t, "xyz")
+    Print str_find_from(t, "o", 2)
+    if str_starts(t, "Hola") and str_ends(t, "es")
+        Print "bordes"
+    end
+    Print str_code(t, 0)
+    Print Int(t[1])
+    Print str_char(65) + str_char(209)
+    Print Int("  -42abc")
+    Print str_to_int("ff", 16)
+    Print str_to_int("FF", 16)
+    Print str_from_int(255, 16)
+    Print str_from_int(-10, 2)
+    Print str_replace("a-b-c", "-", "::")
+    Print str_replace("aaa", "a", "")
+    largo = ""
+    for i in (1..100)
+        largo = largo + "x"
+    end
+    n = 0
+    i = 0
+    while i < largo.length
+        if largo[i] == "x"
+            n = n + 1
+        end
+        i = i + 1
+    end
+    Print n
+    Print Int(largo[100])
+    x = ""
+    for k in (1..50)
+        x = baja("ABC") + baja("DEFG")[3:] + str_trim(" g ")
+    end
+    Print x
+end

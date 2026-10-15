@@ -9,7 +9,7 @@
 # expect-c: for (LONG i = 1, _end_i = limite(); i <= _end_i; i++) {
 # expect-c: for (LONG k = 1; k <= 3; k++) {
 # expect-c: Printf("%ld\n", s);
-# expect-c: (DashString_char_at(nombre, 0) == 'A')
+# expect-c: (((char)_dash_str_code(nombre, 0)) == 'A')
 #
 # expect-out: A
 # expect-out: ene
