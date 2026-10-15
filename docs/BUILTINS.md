@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 360 funciones, 360 implementadas, 0 sin implementar.
+Total: 372 funciones, 372 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -434,5 +434,17 @@ Total: 360 funciones, 360 implementadas, 0 sin implementar.
 | `mui_list_get(list, pos)` | `STRPTR` | Text of the line at pos ("" outside the list) |  |
 | `mui_list_quiet(list, quiet)` | `void` | While quiet the list is not redrawn (adding many lines) |  |
 | `mui_on_double(list, id)` | `void` | mui_wait_event returns id on a double click in the list |  |
+| `mui_frame_begin(title, horizontal)` | `APTR` | Start a group with a frame and a title ("" = none) |  |
+| `mui_columns_begin(columns)` | `APTR` | Start a grid group with that many columns (forms: label, field...) |  |
+| `mui_register_begin(titles)` | `APTR` | Start tabs ("One\|Two"); each child is a page; value = page shown |  |
+| `mui_scroll_begin()` | `APTR` | Start an area with scrollbars (contents bigger than the window) |  |
+| `mui_space()` | `APTR` | Empty space that takes what is left |  |
+| `mui_balance()` | `APTR` | Bar the user drags to share the space between its neighbours |  |
+| `mui_weight(obj, weight)` | `void` | Share of the free space an object gets (100 by default) |  |
+| `mui_set_visible(obj, visible)` | `void` | Show or hide an object (the window relayouts) |  |
+| `mui_menu_begin(title)` | `APTR` | Start a menu of the window being built |  |
+| `mui_menu_item(title, key, id)` | `APTR` | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
+| `mui_menu_separator()` | `void` | Separator line in the menu |  |
+| `mui_menu_end()` | `void` | End the menu |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
 | `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |

@@ -5201,6 +5201,7 @@ static LONG ra_window_is_open(void) {
 #include <libraries/mui.h>
 #include <proto/muimaster.h>
 #include <clib/alib_protos.h>
+#include <libraries/gadtools.h>   /* NM_BARLABEL */
 #ifndef MAKE_ID
 #define MAKE_ID(a, b, c, d) ((ULONG)(a) << 24 | (ULONG)(b) << 16 | (ULONG)(c) << 8 | (ULONG)(d))
 #endif
@@ -5215,6 +5216,8 @@ static APTR _dash_mui_pool = NULL;          /* texts MUI does not copy (titles) 
 static Object *_dash_mui_groups[_DASH_MUI_DEPTH];   /* open groups; [0] = window root */
 static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
+static Object *_dash_mui_cur_win = NULL;            /* window being built */
+static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
 #define _DASH_MUI_PRESSES 64
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
@@ -5223,7 +5226,8 @@ static LONG _dash_mui_npress = 0;
 /* What each object is, kept in its MUIA_UserData: mui_get_value and friends
    read and write the attribute of that kind */
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
-       _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST };
+       _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
+       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -5243,10 +5247,14 @@ static STRPTR _dash_mui_keep(STRPTR text) {
     return copy;
 }
 
+static STRPTR *_dash_mui_entries(STRPTR options);
+
 static void _dash_mui_app_end(void) {
     if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
     _dash_mui_app = NULL;
     _dash_mui_first_win = NULL;
+    _dash_mui_cur_win = NULL;
+    _dash_mui_cur_menu = NULL;
     _dash_mui_depth = 0;
     _dash_mui_npress = 0;
     if (_dash_mui_pool) { DeletePool(_dash_mui_pool); _dash_mui_pool = NULL; }
@@ -5312,15 +5320,22 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
         _dash_mui_first_win = win;
         _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
                      (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, MUIV_Application_ReturnID_Quit);
+    } else {   /* the other windows just close */
+        _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
+                     MUIV_Notify_Self, 3, MUIM_Set, MUIA_Window_Open, FALSE);
     }
     _dash_mui_groups[0] = root;
     _dash_mui_depth = 1;
+    _dash_mui_cur_win = win;
     return win;
 }
 
 static void _dash_mui_window_end(void) {
     if (_dash_mui_depth != 1) _dash_mui_error("mui_window_end with groups still open");
+    if (_dash_mui_cur_menu) _dash_mui_error("mui_window_end with a menu still open");
     _dash_mui_depth = 0;
+    _dash_mui_cur_win = NULL;
+    _dash_mui_cur_menu = NULL;
 }
 
 static LONG _dash_mui_window_open(APTR win) {
@@ -5335,12 +5350,115 @@ static void _dash_mui_window_close(APTR win) {
     if (win) SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
 }
 
-static APTR _dash_mui_group_begin(LONG horizontal) {
-    Object *group;
-    if (_dash_mui_depth >= _DASH_MUI_DEPTH) { _dash_mui_error("too many nested groups"); return NULL; }
-    group = _dash_mui_add(_DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, horizontal ? TRUE : FALSE));
-    if (group) _dash_mui_groups[_dash_mui_depth++] = group;
+/* Open a new group: put it in the open one and make it the open one; children
+   go into "inner" (a Scrollgroup's Virtgroup), the group itself into its parent */
+static APTR _dash_mui_push(Object *group, Object *inner, LONG kind) {
+    if (_dash_mui_depth >= _DASH_MUI_DEPTH) {
+        _dash_mui_error("too many nested groups");
+        if (group) MUI_DisposeObject(group);
+        return NULL;
+    }
+    group = _dash_mui_add_kind(group, kind);
+    if (group) _dash_mui_groups[_dash_mui_depth++] = inner ? inner : group;
     return group;
+}
+
+static APTR _dash_mui_group_begin(LONG horizontal) {
+    return _dash_mui_push(_DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, horizontal ? TRUE : FALSE), NULL, 0);
+}
+
+/* Group with a frame and a title ("" = no title) */
+static APTR _dash_mui_frame_begin(STRPTR title, LONG horizontal) {
+    return _dash_mui_push(_DASH_MUI_NEW(MUIC_Group,
+        MUIA_Group_Horiz, horizontal ? TRUE : FALSE,
+        MUIA_Frame, MUIV_Frame_Group,
+        MUIA_FrameTitle, (IPTR)(title && *title ? _dash_mui_keep(title) : NULL)), NULL, 0);
+}
+
+/* Grid filled row by row (label, field, label, field...) */
+static APTR _dash_mui_columns_begin(LONG columns) {
+    return _dash_mui_push(_DASH_MUI_NEW(MUIC_Group, MUIA_Group_Columns, columns > 0 ? columns : 2), NULL, 0);
+}
+
+/* Tabs: "Uno|Dos"; each child is a page. The value is the page shown (from 0) */
+static APTR _dash_mui_register_begin(STRPTR titles) {
+    STRPTR *entries = _dash_mui_entries(titles);
+    if (!entries) return NULL;
+    return _dash_mui_push(_DASH_MUI_NEW(MUIC_Register,
+        MUIA_CycleChain, 1,
+        MUIA_Register_Titles, (IPTR)entries), NULL, _DASH_MUI_REGISTER);
+}
+
+/* Area with scrollbars: its contents may be bigger than the window */
+static APTR _dash_mui_scroll_begin(void) {
+    Object *virt = _DASH_MUI_NEW(MUIC_Virtgroup, MUIA_Group_Horiz, FALSE);
+    if (!virt) return _dash_mui_add(NULL);
+    return _dash_mui_push(_DASH_MUI_NEW(MUIC_Scrollgroup, MUIA_Scrollgroup_Contents, (IPTR)virt), virt, 0);
+}
+
+/* Empty space that takes what is left */
+static APTR _dash_mui_space(void) {
+    return _dash_mui_add(_DASH_MUI_NEW(MUIC_Rectangle, MUIA_Weight, 100));
+}
+
+/* Bar the user drags to share the space between its neighbours */
+static APTR _dash_mui_balance(void) {
+    return _dash_mui_add(_DASH_MUI_NEW(MUIC_Balance, MUIA_CycleChain, 1));
+}
+
+/* Share of the free space an object gets (100 by default) */
+static void _dash_mui_weight(APTR obj, LONG weight) {
+    if (obj) SetAttrs(obj, MUIA_HorizWeight, weight, MUIA_VertWeight, weight, TAG_DONE);
+}
+
+static void _dash_mui_set_visible(APTR obj, LONG visible) {
+    if (obj) SetAttrs(obj, MUIA_ShowMe, visible ? TRUE : FALSE, TAG_DONE);
+}
+
+/* Menus of the window being built: mui_menu_begin("Proyecto"), items, mui_menu_end() */
+static APTR _dash_mui_menu_begin(STRPTR title) {
+    IPTR strip = 0;
+    Object *menu;
+    if (!_dash_mui_cur_win) { _dash_mui_error("mui_menu_begin outside a window"); return NULL; }
+    if (_dash_mui_cur_menu) { _dash_mui_error("mui_menu_begin inside another menu"); return NULL; }
+    GetAttr(MUIA_Window_Menustrip, _dash_mui_cur_win, &strip);
+    if (!strip) {
+        if (!(strip = (IPTR)_DASH_MUI_NEW(MUIC_Menustrip, MUIA_Menustrip_Enabled, TRUE))) return NULL;
+        SetAttrs(_dash_mui_cur_win, MUIA_Window_Menustrip, strip, TAG_DONE);
+    }
+    if (!(menu = _DASH_MUI_NEW(MUIC_Menu, MUIA_Menu_Title, (IPTR)_dash_mui_keep(title)))) return NULL;
+    _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_cur_menu = menu;
+    return menu;
+}
+
+static Object *_dash_mui_menu_add(STRPTR title, STRPTR key) {
+    Object *item;
+    if (!_dash_mui_cur_menu) { _dash_mui_error("menu item outside mui_menu_begin"); return NULL; }
+    item = _DASH_MUI_NEW(MUIC_Menuitem,
+        MUIA_Menuitem_Title, (IPTR)(title == NM_BARLABEL ? title : _dash_mui_keep(title)),
+        MUIA_Menuitem_Shortcut, (IPTR)(key && *key ? _dash_mui_keep(key) : NULL),
+        MUIA_UserData, _DASH_MUI_MENUITEM);
+    if (item) _DASH_MUI_DO(_dash_mui_cur_menu, OM_ADDMEMBER, (IPTR)item);
+    return item;
+}
+
+/* key: one letter for Amiga+letter, "" for none */
+static APTR _dash_mui_menu_item(STRPTR title, STRPTR key, LONG id) {
+    Object *item = _dash_mui_menu_add(title, key);
+    if (item && _dash_mui_app)
+        _DASH_MUI_DO(item, MUIM_Notify, MUIA_Menuitem_Trigger, MUIV_EveryTime,
+                     (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+    return item;
+}
+
+static void _dash_mui_menu_separator(void) {
+    _dash_mui_menu_add((STRPTR)NM_BARLABEL, NULL);
+}
+
+static void _dash_mui_menu_end(void) {
+    if (!_dash_mui_cur_menu) _dash_mui_error("mui_menu_end without mui_menu_begin");
+    _dash_mui_cur_menu = NULL;
 }
 
 static void _dash_mui_group_end(void) {
@@ -5436,6 +5554,7 @@ static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
     case _DASH_MUI_SLIDER: return MUIA_Numeric_Value;
     case _DASH_MUI_GAUGE:  return MUIA_Gauge_Current;
     case _DASH_MUI_LIST:   *target = _dash_mui_list_of(obj); return *target ? MUIA_List_Active : 0;
+    case _DASH_MUI_REGISTER: return MUIA_Group_ActivePage;
     }
     return 0;
 }
@@ -5545,7 +5664,11 @@ static void _dash_mui_set_text(APTR obj, STRPTR text) {
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
-    if (obj) SetAttrs(obj, MUIA_Disabled, enabled ? FALSE : TRUE, TAG_DONE);
+    if (!obj) return;
+    if (_dash_mui_kind(obj) == _DASH_MUI_MENUITEM)
+        SetAttrs(obj, MUIA_Menuitem_Enabled, enabled ? TRUE : FALSE, TAG_DONE);
+    else
+        SetAttrs(obj, MUIA_Disabled, enabled ? FALSE : TRUE, TAG_DONE);
 }
 
 /* mui_wait_event returns id when the value changes (by the user or mui_set_value) */
@@ -5575,9 +5698,14 @@ static void _dash_mui_on_press(APTR obj, LONG id) {
     }
 }
 
-/* The event of mui_on_press, as if the button were pressed (shortcuts, tests) */
+/* The event of mui_on_press, as if the button were pressed (shortcuts, tests); on a
+   menu item, as if it were chosen */
 static void _dash_mui_press(APTR obj) {
     LONG i;
+    if (obj && _dash_mui_kind(obj) == _DASH_MUI_MENUITEM) {
+        SetAttrs(obj, MUIA_Menuitem_Trigger, (IPTR)obj, TAG_DONE);
+        return;
+    }
     for (i = 0; i < _dash_mui_npress; i++)
         if (_dash_mui_press_obj[i] == obj)
             _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, _dash_mui_press_id[i]);

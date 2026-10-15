@@ -2124,7 +2124,10 @@ end
 Los eventos son números que elige el programa (mayores que 0). `mui_on_press(boton, id)` hace que
 `mui_wait_event()` devuelva `id` cuando se pulsa el botón. Cerrar la primera ventana devuelve -1;
 `mui_on_close(ventana, id)` lo cambia por otro número. `mui_poll_event()` no espera (0 si no hay nada)
-y `mui_press(boton)` lanza el evento del botón como si se pulsara.
+y `mui_press(boton)` lanza el evento del botón como si se pulsara (en una opción de menú, como si se eligiera).
+
+Se pueden crear varias ventanas (cada una con su `mui_window_begin` ... `mui_window_end`). Cerrar una
+ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 
 ### Funciones
 
@@ -2133,6 +2136,16 @@ y `mui_press(boton)` lanza el evento del botón como si se pulsara.
 | `mui_app_begin(titulo, base)` | Abre MUI y crea la aplicación (`base`: nombre ARexx). 0 si no se puede. |
 | `mui_window_begin(titulo, id)` / `mui_window_end()` | Empieza y termina una ventana. |
 | `mui_vgroup_begin()`, `mui_hgroup_begin()` / `mui_group_end()` | Grupo vertical u horizontal. |
+| `mui_frame_begin(titulo, horizontal)` | Grupo con marco y título (`""` = sin título). |
+| `mui_columns_begin(n)` | Rejilla de `n` columnas, se llena por filas (etiqueta, campo, etiqueta, campo...). |
+| `mui_register_begin("Uno|Dos")` | Pestañas: cada hijo es una página. Su valor es la página visible (desde 0). |
+| `mui_scroll_begin()` | Zona con barras de desplazamiento para contenido más grande que la ventana. |
+| `mui_space()`, `mui_balance()` | Espacio que ocupa lo que sobra; barra que el usuario arrastra para repartir. |
+| `mui_weight(obj, peso)` | Parte del espacio libre que recibe (100 por defecto). |
+| `mui_set_visible(obj, si)` | Muestra u oculta (la ventana se recoloca). |
+| `mui_menu_begin(titulo)` ... `mui_menu_end()` | Menú de la ventana que se está construyendo. |
+| `mui_menu_item(texto, tecla, id)` | Opción de menú: `tecla` = letra para Amiga+tecla (`""` = ninguna); devuelve el objeto (para `mui_set_enabled`). |
+| `mui_menu_separator()` | Línea de separación. |
 | `mui_text(texto)` | Texto. |
 | `mui_label(texto)` | Etiqueta de un formulario (alineada a la derecha). |
 | `mui_button(texto)` | Botón. |
@@ -2521,8 +2534,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 38 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_wait_event` |
-| **Total** | **360** | |
+| MUI | 50 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_wait_event` |
+| **Total** | **372** | |
 
 ### Colores Estandar Amiga
 

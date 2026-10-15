@@ -120,6 +120,12 @@ end
 ```
 app = mui_app_begin("App", "APP")       # 0 = no MUI / 68000
 win = mui_window_begin("Title", 1)      # vertical root group; 1 = remember place
+    mui_menu_begin("Project")           # menus of this window
+        q = mui_menu_item("Quit", "Q", 9)   # mui_menu_separator()
+    mui_menu_end()
+    tabs = mui_register_begin("A|B")    # pages; value = page. Also mui_frame_begin("T", false),
+    ...                                 # mui_columns_begin(2), mui_scroll_begin(); mui_group_end()
+    mui_space()                         # mui_balance(), mui_weight(obj, 30), mui_set_visible(obj, 0)
     mui_text("Hello")
     mui_hgroup_begin()                  # mui_vgroup_begin, mui_group_end
         ok = mui_button("_OK")

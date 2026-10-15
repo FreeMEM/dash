@@ -3069,6 +3069,90 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_on_double(${list}, ${id})",
         description="mui_wait_event returns id on a double click in the list"
     ),
+    "mui_frame_begin": BuiltinFunc(
+        name="mui_frame_begin",
+        params=["title", "horizontal"],
+        return_type="APTR",
+        c_template="_dash_mui_frame_begin(${title}, ${horizontal})",
+        description="Start a group with a frame and a title (\"\" = none)"
+    ),
+    "mui_columns_begin": BuiltinFunc(
+        name="mui_columns_begin",
+        params=["columns"],
+        return_type="APTR",
+        c_template="_dash_mui_columns_begin(${columns})",
+        description="Start a grid group with that many columns (forms: label, field...)"
+    ),
+    "mui_register_begin": BuiltinFunc(
+        name="mui_register_begin",
+        params=["titles"],
+        return_type="APTR",
+        c_template="_dash_mui_register_begin(${titles})",
+        description="Start tabs (\"One|Two\"); each child is a page; value = page shown"
+    ),
+    "mui_scroll_begin": BuiltinFunc(
+        name="mui_scroll_begin",
+        params=[],
+        return_type="APTR",
+        c_template="_dash_mui_scroll_begin()",
+        description="Start an area with scrollbars (contents bigger than the window)"
+    ),
+    "mui_space": BuiltinFunc(
+        name="mui_space",
+        params=[],
+        return_type="APTR",
+        c_template="_dash_mui_space()",
+        description="Empty space that takes what is left"
+    ),
+    "mui_balance": BuiltinFunc(
+        name="mui_balance",
+        params=[],
+        return_type="APTR",
+        c_template="_dash_mui_balance()",
+        description="Bar the user drags to share the space between its neighbours"
+    ),
+    "mui_weight": BuiltinFunc(
+        name="mui_weight",
+        params=["obj", "weight"],
+        return_type="void",
+        c_template="_dash_mui_weight(${obj}, ${weight})",
+        description="Share of the free space an object gets (100 by default)"
+    ),
+    "mui_set_visible": BuiltinFunc(
+        name="mui_set_visible",
+        params=["obj", "visible"],
+        return_type="void",
+        c_template="_dash_mui_set_visible(${obj}, ${visible})",
+        description="Show or hide an object (the window relayouts)"
+    ),
+    "mui_menu_begin": BuiltinFunc(
+        name="mui_menu_begin",
+        params=["title"],
+        return_type="APTR",
+        c_template="_dash_mui_menu_begin(${title})",
+        description="Start a menu of the window being built"
+    ),
+    "mui_menu_item": BuiltinFunc(
+        name="mui_menu_item",
+        params=["title", "key", "id"],
+        return_type="APTR",
+        c_template="_dash_mui_menu_item(${title}, ${key}, ${id})",
+        description="Menu item: key = letter for Amiga+key (\"\" none); mui_wait_event returns id"
+    ),
+    "mui_menu_separator": BuiltinFunc(
+        name="mui_menu_separator",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_menu_separator()",
+        description="Separator line in the menu"
+    ),
+    "mui_menu_end": BuiltinFunc(
+        name="mui_menu_end",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_menu_end()",
+        description="End the menu"
+    ),
     "mui_wait_event": BuiltinFunc(
         name="mui_wait_event",
         params=[],

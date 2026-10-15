@@ -1,0 +1,82 @@
+# MUI structure: menus, tabs, framed groups, columns, scroll area, space, balance,
+# weights, hiding, and a second window.
+# emu-needs: muimaster.library
+# expect-out: ventana principal abierta
+# expect-out: pestaña 0
+# expect-out: evento 21, pestaña 1
+# expect-out: segunda ventana abierta
+# expect-out: título: Ayuda
+# expect-out: menú 20
+# expect-out: fin
+
+const ID_SALIR = 20
+const ID_PESTANA = 21
+const ID_ACERCA = 22
+
+Main
+    if mui_app_begin("Estructura", "DASHLAYOUT") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Estructura", 0)
+            mui_menu_begin("Proyecto")
+                acerca = mui_menu_item("Acerca de...", "?", ID_ACERCA)
+                mui_menu_separator()
+                salir = mui_menu_item("Salir", "Q", ID_SALIR)
+            mui_menu_end()
+            pestanas = mui_register_begin("General|Avanzado")
+                mui_columns_begin(2)
+                    mui_label("Nombre:")
+                    mui_string("", 40)
+                    mui_label("Correo:")
+                    mui_string("", 60)
+                mui_group_end()
+                mui_frame_begin("Opciones", false)
+                    mui_checkbox(true)
+                    oculto = mui_text("Se oculta")
+                mui_group_end()
+            mui_group_end()
+            mui_hgroup_begin()
+                a = mui_text("Izquierda")
+                mui_balance()
+                b = mui_text("Derecha")
+                mui_weight(b, 30)
+            mui_group_end()
+            mui_scroll_begin()
+                for i in (1..20)
+                    mui_text("Línea #{i}")
+                end
+            mui_group_end()
+            mui_hgroup_begin()
+                mui_space()
+                mui_button("Aceptar")
+            mui_group_end()
+        mui_window_end()
+
+        ayuda = mui_window_begin("Ayuda", 0)
+            mui_text("Segunda ventana")
+        mui_window_end()
+
+        mui_on_change(pestanas, ID_PESTANA)
+        mui_set_enabled(acerca, false)
+        mui_set_visible(oculto, false)
+        if mui_window_open(win)
+            Print "ventana principal abierta"
+        end
+        p = mui_get_value(pestanas)
+        Print "pestaña #{p}"
+        mui_set_value(pestanas, 1)
+        ev = mui_wait_event()
+        p = mui_get_value(pestanas)
+        Print "evento #{ev}, pestaña #{p}"
+        if mui_window_open(ayuda)
+            Print "segunda ventana abierta"
+        end
+        t = mui_get_text(ayuda)
+        Print "título: #{t}"
+        mui_press(salir)
+        ev = mui_wait_event()
+        Print "menú #{ev}"
+        mui_app_end()
+        Print "fin"
+    end
+end

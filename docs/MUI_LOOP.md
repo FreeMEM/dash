@@ -108,7 +108,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 - [x] 4. **Valores.** Campo de texto (`mui_string`), casilla, ciclo, deslizador, barra de progreso
       (`Gauge`), `mui_get_text`/`mui_set_text`, `mui_get_value`/`mui_set_value`, deshabilitar, `on_change`/`on_ack`.
 - [x] 5. **Listas.** `List` + `Listview` de textos: añadir, borrar, vaciar, activo, doble clic. Comprobar memoria.
-- [ ] 6. **Estructura.** Menús (`Menustrip`), pestañas (`Register`), `Balance`, `Scrollgroup`/`Virtgroup`,
+- [x] 6. **Estructura.** Menús (`Menustrip`), pestañas (`Register`), `Balance`, `Scrollgroup`/`Virtgroup`,
       varias ventanas, barra de estado. `--memcheck` sin restos.
 - [ ] 7. **Zona de dibujo propia.** Clase propia (`MUI_CreateCustomClass`) con `AskMinMax`, `Draw`,
       `HandleEvent` (ratón, rueda, teclado) y scroll: dibujar con los builtins `gfx_` sobre el `RastPort`
@@ -269,3 +269,21 @@ Formato:
   línea activa con evento, fuera de rango, vaciar.
 - Tests: 125/125 sin emulador; 296/296 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
 - Pendiente: medir cuánto tarda añadir cientos de líneas (historial del navegador) en la tarea 11.
+
+### 2026-10-15 — Tarea 6 (estructura)
+- Hecho: 12 builtins: `mui_frame_begin`, `mui_columns_begin`, `mui_register_begin` (pestañas; valor = página,
+  `MUIA_Group_ActivePage`), `mui_scroll_begin` (`Scrollgroup` con un `Virtgroup`: los hijos van al `Virtgroup`),
+  `mui_space`, `mui_balance`, `mui_weight` (`HorizWeight`/`VertWeight`, que sí se pueden cambiar tras crear),
+  `mui_set_visible` (`ShowMe`), `mui_menu_begin/item/separator/end`. Menús: `Menustrip` creado al primer
+  `mui_menu_begin` de la ventana y puesto con `SetAttrs(MUIA_Window_Menustrip)` (isg en MUI 5); las opciones avisan con
+  `MUIA_Menuitem_Trigger`; `mui_set_enabled` usa `MUIA_Menuitem_Enabled` en ellas; `mui_press` en una opción hace el
+  `Trigger` (como elegirla). Varias ventanas: las que no son la primera se cierran solas con su botón de cerrar
+  (notificación a sí mismas), salvo `mui_on_close`. `_dash_mui_push` reúne la apertura de grupos.
+- Probado en A1200 3.1 y 3.2 (`test_mui_layout`, también `--memcheck`): ventana con menú, pestañas con un formulario en
+  columnas y un marco, balance y pesos, zona con 20 líneas desplazable, objeto oculto, segunda ventana, evento de
+  pestaña y de menú.
+- **No verificado:** que el menú se vea. MUI 5 en OS3 dibuja sus propios menús: el `Window->MenuStrip` de Intuition
+  está vacío incluso con el menú puesto al crear la ventana y la ventana activa (comprobado con un programa en C y el
+  espía, que ahora también vuelca menús y ventana activa). Se comprueba la cadena de objetos y notificaciones, no el
+  dibujo. Hace falta una captura de pantalla (tarea 10) o probarlo a mano.
+- Tests: 126/126 sin emulador; 299/299 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
