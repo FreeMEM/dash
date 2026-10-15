@@ -37,7 +37,8 @@ otras señales (red, temporizador). El plan va en ese orden.
   `m68k-amigaos-gcc -m68020 -O2 -noixemul -I ~/.cache/dash-mui/x/SDK/MUI/C/include`. En el A1200
   emulado con ROM 3.1 y `~/.cache/dash-emu/sys31mui` (sys31 + `MUI/Libs/*` en `Libs/`) **se queda colgado
   sin escribir nada** (timeout de 120 s; la salida va con `printf`, que no se vuelca hasta salir).
-  Sospecha: MUI pide un volumen (`MUI:`, `ENV:MUI`, `Images`...) y espera en un requester. Es la tarea 1.
+  Resuelto en la tarea 1 (ver bitácora): faltaban los `assign` de MUI, la pila de 32 KB y una macro propia
+  para `MUI_NewObject`.
 
 ## Reglas de cada iteración
 
@@ -51,7 +52,8 @@ otras señales (red, temporizador). El plan va en ese orden.
    `export DASH_KICKSTART="/home/freemem/Descargas/Telegram Desktop/ks31a1200.rom"`,
    `DASH_KICKSTART_A500=~/.cache/dash-emu/kick/kick31_a500.rom`, `DASH_EMU_SYS=~/.cache/dash-emu/sys31`,
    `DASH_KICKSTART_32="/home/freemem/Descargas/Telegram Desktop/Kickstart v3.2.3 A1200.47.115_Pack_noSCSI.rom"`,
-   `DASH_EMU_SYS_32=~/.cache/dash-emu/sys32`. **Sin `DASH_KICKSTART` se usa la ROM AROS** y los
+   `DASH_EMU_SYS_32=~/.cache/dash-emu/sys32`, y para MUI `DASH_EMU_SYS_MUI=~/.cache/dash-emu/sys31mui` y
+   `DASH_EMU_SYS_32_MUI=~/.cache/dash-emu/sys32mui` (`tools/emu_sys_mui.sh`). **Sin `DASH_KICKSTART` se usa la ROM AROS** y los
    resultados no valen. Los tests con ventana terminan solos con `--autoclose`/modo test (ver ReAction).
 5. **Verificar.** Repite el paso 2 y `python3 tests/run_tests.py --emu --emu-a500 --emu-32`.
    Nada que antes funcionaba puede romperse. Si algo se rompe y no lo arreglas en esta iteración, revierte.
@@ -90,7 +92,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 
 ## Tareas
 
-- [~] 1. **Entorno.** `tools/get_mui_sdk.sh` (descarga, comprueba tamaño y extrae en `~/.cache/dash-mui`)
+- [x] 1. **Entorno.** `tools/get_mui_sdk.sh` (descarga, comprueba tamaño y extrae en `~/.cache/dash-mui`)
       y un sistema emulado con MUI (`tools/emu_sys_mui.sh` → `~/.cache/dash-emu/sys31mui`, variable
       `DASH_EMU_SYS_MUI`; ver qué más necesita: `MUI:`, `ENV:MUI`, `Images`, `Locale`). Arreglar el cuelgue
       de `hola_mui.c` (sacar la salida con `--keep` y captura de pantalla de FS-UAE si hace falta) hasta que
@@ -171,3 +173,30 @@ Formato:
 - Hecho:
 - Tests:
 - Pendiente / riesgos:
+
+### 2026-10-15 — Tarea 1 (entorno de MUI)
+- Hecho:
+  - `tools/get_mui_sdk.sh`: descarga MUI 5.0-20210831 del GitHub oficial, comprueba el SHA-256 y lo extrae en
+    `~/.cache/dash-mui/x` (`MUI/` y `SDK/MUI/`).
+  - `tools/emu_sys_mui.sh`: sistema emulado = ficheros de Workbench + `SYS:MUI` (Libs, Images, Locale) +
+    `S/Startup-Extra` con los `assign` del instalador (`MUI:`, `LIBS: MUI:Libs ADD`, `LOCALE: MUI:Locale ADD`).
+    Hechos `~/.cache/dash-emu/sys31mui` y `sys32mui`.
+  - `tools/emu_run.py`: copia todas las carpetas del sistema (no solo Libs/C/Classes) y ejecuta su `S/Startup-Extra`.
+  - Runner: los tests con `# emu-needs: muimaster.library` arrancan en una segunda máquina con MUI
+    (`DASH_EMU_SYS_MUI`, `DASH_EMU_SYS_32_MUI`); en el A500 se saltan ("MUI needs a 68020").
+  - Codegen: si el C final menciona `muimaster.library`, la pila por defecto pasa de 16 a 32 KB
+    (`--stack N` sigue mandando).
+  - `tests/test_mui_open.dash`: abre muimaster (versión 21) y comprueba la pila.
+- Encontrado (con un programa espía que vuelca los títulos de las ventanas y los textos de sus botones a un fichero):
+  1. Sin `assign MUI:` se colgaba en `OpenLibrary`.
+  2. **Pila:** por debajo de 32 KB MUI abre una petición "MUI warning" ("The stack size ... is lower than the
+     recommended minimum") y espera. Con 16 KB salta ya en `OpenLibrary`; con 24 KB al crear la aplicación.
+  3. **`MUI_NewObject` del SDK está roto con GCC 6 `-O2`:** es una función `__inline` que pasa `&tags` (la dirección
+     de su primer argumento variable); al meterla en línea, las etiquetas que siguen son basura. La ventana no se
+     abría y `get` devolvía basura. Arreglo: `#define NO_INLINE_STDARG` y una macro propia
+     `({ ULONG _t[] = { __VA_ARGS__ }; MUI_NewObjectA(cl, (struct TagItem *)_t); })`. El runtime de Dash (tarea 3)
+     tiene que hacerlo así para todas las funciones con etiquetas variables (`DoMethod` incluido).
+- Probado: `hola_mui.c` abre la ventana "Hola MUI" (184 x 47) y lee su texto en el A1200 con 3.1 y con 3.2.
+- Tests: 121/121 sin emulador (antes 120); 283/283 con `--emu --emu-a500 --emu-32` (antes 280); ejemplos 31/31.
+- Pendiente / riesgos: el espía (`scratchpad/mui/spy.c`) no está en el repo; si hace falta más veces, pasarlo a
+  `tools/` como opción de `emu_run.py`. MUI sin registrar no ha mostrado ninguna petición.

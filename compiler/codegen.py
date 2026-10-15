@@ -5557,8 +5557,8 @@ $body$indent    }
     # the reference to __stkinit) moves the program to a stack of __stack bytes
     # before main() when the current one is smaller, and back at exit.
     STACK_REQUEST = """\
-/* Stack: at least DASH_STACK bytes (./dash --stack N, 0 = as started), see
-   libnix swapstack (about 720 bytes of code) */
+/* Stack: at least DASH_STACK bytes (./dash --stack N, 0 = as started; 32 KB with
+   MUI), see libnix swapstack (about 720 bytes of code) */
 #ifndef DASH_STACK
 #define DASH_STACK 16384
 #endif
@@ -6129,7 +6129,11 @@ class CodeGenerator(ASTVisitor):
             main_code = main_code.replace("    // Cleanup\n", "    // Cleanup\n" + "".join(cleanup), 1)
         parts.append(main_code)
 
-        return "\n".join(parts)
+        program = "\n".join(parts)
+        if "muimaster.library" in program:
+            # MUI 5 asks for 32 KB of stack ("MUI warning" requester below that)
+            program = program.replace("#define DASH_STACK 16384", "#define DASH_STACK 32768  /* MUI */", 1)
+        return program
 
     def _get_main_template(self) -> Template:
         """Get the appropriate main template based on features used."""

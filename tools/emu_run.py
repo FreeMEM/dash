@@ -16,6 +16,8 @@ S:Startup-Sequence runs each program with its output redirected to a file.
 Libraries that are not in the Kickstart ROM (asl.library, diskfont.library...)
 come from $DASH_EMU_SYS (or --system): a directory with Libs/, C/ (Assign, MakeDir)
 and Classes/ (ReAction) taken from a Workbench disk (see tools/emu_sys_from_hdf.sh).
+Any other drawer in it is copied too, and the lines of its S/Startup-Extra run after
+the assigns (MUI: see tools/emu_sys_mui.sh).
 
     tools/emu_run.py --kickstart kick323.rom --system ~/.cache/dash-emu/sys32 --workbench prog.dash
 
@@ -100,15 +102,19 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         if system:
             if not Path(system).is_dir():
                 raise RuntimeError(f"Workbench files directory not found: {system}")
-            for sub in ("Libs", "C", "Classes"):
-                if (Path(system) / sub).is_dir():
-                    shutil.copytree(Path(system) / sub, hd / sub, dirs_exist_ok=True)
+            for sub in sorted(Path(system).iterdir()):   # Libs, C, Classes, MUI...
+                if sub.is_dir() and sub.name != "S":
+                    shutil.copytree(sub, hd / sub.name, dirs_exist_ok=True)
             if (hd / "C" / "Assign").exists() and (hd / "C" / "MakeDir").exists():
                 lines += ["C:MakeDir RAM:T RAM:ENV RAM:ENV/Sys RAM:Clipboards",
                           "C:Assign ENV: RAM:ENV", "C:Assign T: RAM:T", "C:Assign CLIPS: RAM:Clipboards",
                           "C:Assign LOCALE: SYS:Locale", "C:Assign KEYMAPS: DEVS:Keymaps"]
                 if (hd / "Classes").is_dir():   # window.class, gadgets/layout.gadget...
                     lines.append("C:Assign LIBS: SYS:Classes ADD")
+            # Extra boot commands of that system (MUI: its assigns, see tools/emu_sys_mui.sh)
+            extra = Path(system) / "S" / "Startup-Extra"
+            if extra.is_file():
+                lines += [l for l in extra.read_text().splitlines() if l.strip()]
         if workbench:
             if not (hd / "C" / "LoadWB").exists():
                 raise RuntimeError("--workbench needs C/LoadWB in the Workbench files (tools/emu_sys_from_hdf.sh)")

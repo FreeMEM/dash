@@ -1,0 +1,32 @@
+# MUI 5: muimaster.library opens in the emulated system with MUI (tools/emu_sys_mui.sh)
+# and a program that uses it gets 32 KB of stack (below that MUI stops on a "MUI warning").
+# emu-needs: muimaster.library
+# expect-c: #define DASH_STACK 32768  /* MUI */
+# expect-out: muimaster 21
+# expect-out: pila de 32 KB
+
+@native func mui_version() -> Int
+"""
+    struct Library *base = OpenLibrary((CONST_STRPTR)"muimaster.library", 19);
+    LONG v;
+    if (!base) return 0;
+    v = base->lib_Version;
+    CloseLibrary(base);
+    return v;
+"""
+end
+
+@native func stack_size() -> Int
+"""
+    struct Task *t = FindTask(NULL);
+    return (LONG)((UBYTE *)t->tc_SPUpper - (UBYTE *)t->tc_SPLower);
+"""
+end
+
+Main
+    v = mui_version()
+    Print "muimaster #{v}"
+    if stack_size() >= 32768
+        Print "pila de 32 KB"
+    end
+end
