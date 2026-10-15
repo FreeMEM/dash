@@ -3654,6 +3654,28 @@ NET_FUNCTIONS = {
 }
 
 # =============================================================================
+# TLS (dashweb D11): AmiSSL 5 over net_ sockets. Connections are LONG (-1 = none).
+# =============================================================================
+
+TLS_FUNCTIONS = {
+    "tls_connect": _text("tls_connect", ["sock", "host"], "LONG", "_dash_tls_connect(${sock}, ${host})",
+                         "TLS over a connected socket, verifying the certificate for host; -1 if not (net_error)"),
+    "tls_send": _text("tls_send", ["tls", "text"], "LONG", "_dash_tls_send(${tls}, ${text})",
+                      "Send the whole text; bytes sent or -1"),
+    "tls_send_buffer": _text("tls_send_buffer", ["tls", "buffer", "length"], "LONG",
+                             "_dash_tls_send_buffer(${tls}, ${buffer}, ${length})",
+                             "Send length bytes of a buffer; bytes sent or -1"),
+    "tls_recv": _text("tls_recv", ["tls", "max", "timeout_ms"], "STRPTR",
+                      "_dash_tls_recv(${tls}, ${max}, ${timeout_ms})",
+                      "Like net_recv: \"\" if nothing came in time, nil once closed"),
+    "tls_recv_buffer": _text("tls_recv_buffer", ["tls", "buffer", "max", "timeout_ms"], "LONG",
+                             "_dash_tls_recv_buffer(${tls}, ${buffer}, ${max}, ${timeout_ms})",
+                             "Like net_recv_buffer: the count, 0 on time out, -1 once closed"),
+    "tls_close": _text("tls_close", ["tls"], "void", "_dash_tls_close(${tls})",
+                       "End TLS on the connection (net_close the socket after)"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -3670,6 +3692,7 @@ ALL_BUILTINS = {
     **BUFFER_FUNCTIONS,
     **TEXT_FUNCTIONS,          # dashweb D2
     **NET_FUNCTIONS,           # dashweb D8
+    **TLS_FUNCTIONS,           # dashweb D11
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

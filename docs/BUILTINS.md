@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 450 funciones, 450 implementadas, 0 sin implementar.
+Total: 456 funciones, 456 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -363,6 +363,17 @@ Total: 450 funciones, 450 implementadas, 0 sin implementar.
 | `net_close(sock)` | `void` | Close the connection |  |
 | `net_resolve(host)` | `STRPTR` | IPv4 address of a host name ("a.b.c.d"), nil if unknown |  |
 | `net_error()` | `STRPTR` | What went wrong in the last net_ call |  |
+
+## TLS (AmiSSL)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `tls_connect(sock, host)` | `LONG` | TLS over a connected socket, verifying the certificate for host; -1 if not (net_error) |  |
+| `tls_send(tls, text)` | `LONG` | Send the whole text; bytes sent or -1 |  |
+| `tls_send_buffer(tls, buffer, length)` | `LONG` | Send length bytes of a buffer; bytes sent or -1 |  |
+| `tls_recv(tls, max, timeout_ms)` | `STRPTR` | Like net_recv: "" if nothing came in time, nil once closed |  |
+| `tls_recv_buffer(tls, buffer, max, timeout_ms)` | `LONG` | Like net_recv_buffer: the count, 0 on time out, -1 once closed |  |
+| `tls_close(tls)` | `void` | End TLS on the connection (net_close the socket after) |  |
 
 ## Audio
 

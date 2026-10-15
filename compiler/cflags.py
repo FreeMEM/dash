@@ -45,3 +45,20 @@ def mui_flags(sources) -> list:
     if not os.path.isfile(os.path.join(include, "libraries", "mui.h")):
         raise FileNotFoundError(f"MUI SDK not found in {mui_sdk()}: run tools/get_mui_sdk.sh or set DASH_MUI_SDK")
     return ["-I" + include]
+
+
+# AmiSSL (dashweb D11): its SDK headers come from tools/get_amissl.sh (~/.cache/dash-amissl);
+# DASH_AMISSL_SDK = its AmiSSL/Developer directory.
+AMISSL_MARK = "#include <amissl/amissl.h>"
+
+
+def amissl_flags(sources) -> list:
+    """-I for the AmiSSL SDK when one of the C sources uses TLS; FileNotFoundError without it."""
+    import os
+    if not any(AMISSL_MARK in s for s in sources):
+        return []
+    sdk = os.environ.get("DASH_AMISSL_SDK") or os.path.expanduser("~/.cache/dash-amissl/x/AmiSSL/Developer")
+    include = os.path.join(sdk, "include")
+    if not os.path.isfile(os.path.join(include, "amissl", "amissl.h")):
+        raise FileNotFoundError(f"AmiSSL SDK not found in {sdk}: run tools/get_amissl.sh or set DASH_AMISSL_SDK")
+    return ["-I" + include]

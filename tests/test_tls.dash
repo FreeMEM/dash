@@ -1,0 +1,35 @@
+# Test: TLS with AmiSSL over a net_ socket. The runner's echo server on 127.0.0.1:40871 speaks
+# TLS with a certificate for 127.0.0.1 signed by the test CA in the emulated AmiSSL:Certs.
+# emu-net-tls: 40871
+# emu-needs: amisslmaster.library
+# memcheck
+# expect-out: tls
+# expect-out: eco: hola dash
+# expect-out: nombre: hostname mismatch
+# expect-out: sin socket: -1
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    s = net_connect("127.0.0.1", 40871, 5000)
+    t = tls_connect(s, "127.0.0.1")
+    if t < 0
+        Print "fallo: " + net_error()
+    else
+        Print "tls"
+        tls_send(t, "hola dash\n")
+        respuesta = ""
+        trozo = tls_recv(t, 100, 5000)
+        while trozo != nil
+            respuesta = respuesta + trozo
+            trozo = tls_recv(t, 100, 5000)
+        end
+        Print str_trim(respuesta)
+        tls_close(t)
+    end
+    net_close(s)
+    s2 = net_connect("127.0.0.1", 40871, 5000)
+    t2 = tls_connect(s2, "otro.nombre")
+    Print "nombre: " + net_error()
+    net_close(s2)
+    Print "sin socket: " + tls_connect(-1, "x")
+end

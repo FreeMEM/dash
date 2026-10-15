@@ -30,6 +30,7 @@ GROUPS = [
     ("BUFFER_FUNCTIONS", "Buffers"),
     ("TEXT_FUNCTIONS", "Texto"),          # dashweb D2
     ("NET_FUNCTIONS", "Red (TCP)"),       # dashweb D8
+    ("TLS_FUNCTIONS", "TLS (AmiSSL)"),    # dashweb D11
     ("AUDIO_FUNCTIONS", "Audio"),
     ("INTUITION_EXPANDED", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)"),

@@ -26,7 +26,9 @@ Machines (EMU_MACHINES): --emu is an A1200 with Kickstart 3.1, --emu-a500 an A50
 (68000) with 3.1 ($DASH_KICKSTART_A500), --emu-32 an A1200 with AmigaOS 3.2
 ($DASH_KICKSTART_32 and $DASH_EMU_SYS_32: the files of a 3.2 Workbench).
 Tests with "# emu-net: PORT" run in their own boot with FS-UAE's bsdsocket.library (the PC's
-network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <line>" out).
+network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <line>" out);
+"# emu-net-tls: PORT" makes it a TLS server. Tests with "# emu-needs: amisslmaster.library" boot
+the system in $DASH_EMU_SYS_SSL / $DASH_EMU_SYS_32_SSL (tools/emu_sys_amissl.sh), not on the A500.
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
 """
@@ -210,6 +212,8 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
     from compiler.cflags import mui_flags
     try:   # MUI SDK headers (tools/get_mui_sdk.sh), same as ./dash
         compile_cmd[1:1] = mui_flags([c_file.read_text()])
+        from compiler.cflags import amissl_flags   # AmiSSL SDK (tools/get_amissl.sh)
+        compile_cmd[1:1] = amissl_flags([c_file.read_text()])
     except FileNotFoundError as e:
         return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
                           error_message=str(e), duration=time.time() - start_time)
@@ -414,26 +418,60 @@ def emu_net_port(test_file: Path) -> Optional[int]:
     bsdsocket.library (the PC's network) and, on 127.0.0.1:PORT of the PC, an echo server that
     reads one line and answers "eco: <line>" before closing."""
     for l in test_file.read_text().splitlines():
-        if l.startswith("# emu-net:"):
+        if l.startswith("# emu-net:") or l.startswith("# emu-net-tls:"):
             return int(l.split(":", 1)[1].strip())
     return None
 
 
+def emu_net_tls(test_file: Path) -> bool:
+    """'# emu-net-tls: PORT' (dashweb D11): the echo server speaks TLS, with a certificate for
+    127.0.0.1 and localhost signed by the test CA of tools/emu_sys_amissl.sh."""
+    return any(l.startswith("# emu-net-tls:") for l in test_file.read_text().splitlines())
+
+
 class _EchoServer:
-    """The server of '# emu-net:' tests, in a thread while the emulator runs."""
-    def __init__(self, ports):
+    """The server of '# emu-net:' tests, in a thread while the emulator runs (TLS on tls_ports)."""
+    def __init__(self, ports, tls_ports=()):
         import socketserver
         import threading
+        context = self._tls_context() if tls_ports else None
 
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
                 line = self.rfile.readline()
                 self.wfile.write(b"eco: " + line)
 
+        class TLSServer(socketserver.ThreadingTCPServer):
+            def get_request(self):
+                sock, addr = super().get_request()
+                return context.wrap_socket(sock, server_side=True), addr
+
+            def handle_error(self, request, client_address):
+                pass   # a client that refuses the certificate (a test of that) is not an error here
+
         socketserver.ThreadingTCPServer.allow_reuse_address = True
-        self.servers = [socketserver.ThreadingTCPServer(("127.0.0.1", port), Handler) for port in ports]
+        self.servers = [(TLSServer if port in tls_ports else socketserver.ThreadingTCPServer)(("127.0.0.1", port), Handler)
+                        for port in ports]
         for server in self.servers:
             threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    @staticmethod
+    def _tls_context():
+        """A certificate for 127.0.0.1/localhost signed by the test CA (openssl on the PC)."""
+        import ssl
+        import subprocess
+        import tempfile
+        ca = Path(os.path.expanduser("~/.cache/dash-amissl/testca"))
+        tmp = Path(tempfile.mkdtemp(prefix="dash_tls_"))
+        subprocess.run(["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost",
+                        "-keyout", tmp / "srv.key", "-out", tmp / "srv.csr"], check=True, capture_output=True)
+        (tmp / "ext.cnf").write_text("subjectAltName=DNS:localhost,IP:127.0.0.1\n")
+        subprocess.run(["openssl", "x509", "-req", "-in", tmp / "srv.csr", "-CA", ca / "ca.pem", "-CAkey",
+                        ca / "ca.key", "-CAcreateserial", "-CAserial", tmp / "ca.srl", "-days", "2",
+                        "-extfile", tmp / "ext.cnf", "-out", tmp / "srv.pem"], check=True, capture_output=True)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(tmp / "srv.pem", tmp / "srv.key")
+        return context
 
     def close(self):
         for server in self.servers:
@@ -450,7 +488,7 @@ def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -
         if not system:
             return False
         if name.endswith(".library"):
-            return (Path(system) / "Libs" / name).exists() or (Path(system) / "MUI" / "Libs" / name).exists()
+            return any((Path(system) / d / name).exists() for d in ("Libs", "MUI/Libs", "AmiSSL/Libs"))
         return any(p.name.lower() == name.lower() for p in (Path(system) / "Classes").rglob("*"))
 
     missing = [n for n in needs if not found(n)]
@@ -474,12 +512,31 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
     results = run_emu_boot([t for t in runnable if t not in mui and t not in net], machine, rom,
                            os.environ.get(machine["sys_env"]), memcheck)
     if net:
-        server = _EchoServer(sorted({emu_net_port(t) for t in net}))
-        try:
-            results += run_emu_boot(net, machine, rom, os.environ.get(machine["sys_env"]), memcheck,
-                                    extra_config="bsdsocket_library = 1\n")
-        finally:
-            server.close()
+        # AmiSSL (tls_*): a system with it installed, $<sys_env>_SSL (tools/emu_sys_amissl.sh); 68020+
+        ssl_tests = [t for t in net if "amisslmaster.library" in emu_needs(t)]
+        plain = [t for t in net if t not in ssl_tests]
+        ssl_system = os.environ.get(machine["sys_env"] + "_SSL")
+        if ssl_tests and "A500" in machine["config"]:
+            for t in ssl_tests:
+                print(f"  {prefix}/{t.stem}: SKIP (AmiSSL needs a 68020)")
+            ssl_tests = []
+        elif ssl_tests and not ssl_system:
+            for t in ssl_tests:
+                print(f"  {prefix}/{t.stem}: SKIP (needs ${machine['sys_env']}_SSL, see tools/emu_sys_amissl.sh)")
+            ssl_tests = []
+        servers = plain + ssl_tests
+        if servers:
+            server = _EchoServer(sorted({emu_net_port(t) for t in servers}),
+                                 {emu_net_port(t) for t in servers if emu_net_tls(t)})
+            try:
+                if plain:
+                    results += run_emu_boot(plain, machine, rom, os.environ.get(machine["sys_env"]), memcheck,
+                                            extra_config="bsdsocket_library = 1\n")
+                if ssl_tests:
+                    results += run_emu_boot(ssl_tests, machine, rom, ssl_system, memcheck,
+                                            extra_config="bsdsocket_library = 1\n")
+            finally:
+                server.close()
     if mui and not machine["mui_sys_env"]:
         for t in mui:   # MUI 5 for AmigaOS 3 is built for the 68020
             print(f"  {prefix}/{t.stem}: SKIP (MUI needs a 68020)")

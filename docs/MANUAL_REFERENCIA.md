@@ -1538,6 +1538,31 @@ else
 end
 ```
 
+### TLS (HTTPS) con AmiSSL
+
+Sobre un socket de `net_connect`, `tls_connect` negocia TLS con AmiSSL 5 y comprueba que el
+certificado del servidor es valido y es para ese nombre (contra `AmiSSL:Certs`). Necesita
+AmiSSL instalado y un 68020 o mejor; el programa pide 64 KB de pila (OpenSSL la necesita).
+Para compilar hacen falta las cabeceras del SDK: `tools/get_amissl.sh` las descarga.
+
+| Funcion | Que hace |
+|---|---|
+| `tls_connect(socket, host)` | La conexion TLS, o -1 (`net_error()` dice por que: certificado, nombre...) |
+| `tls_send(t, texto)`, `tls_send_buffer(t, buf, n)` | Como `net_send` |
+| `tls_recv(t, max, ms)`, `tls_recv_buffer(t, buf, max, ms)` | Como `net_recv` |
+| `tls_close(t)` | Termina TLS (el socket se cierra despues con `net_close`) |
+
+```
+s = net_connect("ejemplo.org", 443, 10000)
+t = tls_connect(s, "ejemplo.org")
+if t >= 0
+    tls_send(t, "GET / HTTP/1.0\r\nHost: ejemplo.org\r\n\r\n")
+    Print tls_recv(t, 4096, 10000)
+    tls_close(t)
+end
+net_close(s)
+```
+
 ## 17. Gestion de Memoria
 
 ### Strings (automatico)

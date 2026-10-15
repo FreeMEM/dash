@@ -1267,7 +1267,8 @@ static STRPTR _dash_net_resolve(STRPTR host) {
 /* TCP connection to host:port, giving up after timeout_ms; the socket or -1 */
 static LONG _dash_net_connect(STRPTR host, LONG port, LONG timeout_ms) {
     struct sockaddr_in sa;
-    LONG sock, on = 1, off = 0, err = 0, len = sizeof(err);
+    LONG sock, on = 1, off = 0, err = 0;
+    socklen_t len = sizeof(err);
     if (!_dash_net_lookup(host, &sa.sin_addr)) return -1;
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
@@ -1336,6 +1337,145 @@ static void _dash_net_close(LONG sock) {
 
 static STRPTR _dash_net_error(void) {
     return (STRPTR)_dash_net_err;
+}
+
+"""
+
+    # TLS (dashweb D11): AmiSSL 5 over the sockets of NET_RUNTIME. A connection is a
+    # LONG (slot in a small table, -1 = none). The server certificate and its name are
+    # verified against AmiSSL:Certs. AmiSSL opens on first use and closes at exit.
+    TLS_RUNTIME = """\
+/* Dash TLS Runtime */
+#include <proto/amisslmaster.h>
+#include <proto/amissl.h>
+#include <libraries/amisslmaster.h>
+#include <libraries/amissl.h>
+#include <amissl/amissl.h>
+#include <utility/tagitem.h>
+#include <errno.h>
+
+struct Library *AmiSSLMasterBase = NULL, *AmiSSLBase = NULL, *AmiSSLExtBase = NULL;
+static BOOL _dash_tls_open = FALSE;
+static SSL_CTX *_dash_tls_ctx = NULL;
+#define _DASH_TLS_MAX 16
+static SSL *_dash_tls_ssl[_DASH_TLS_MAX];
+
+static BOOL _dash_tls_init(void) {
+    UBYTE seed[64];
+    struct DateStamp ds;
+    LONG i;
+    if (_dash_tls_ctx) return TRUE;
+    if (!_dash_net_init()) return FALSE;
+    if (!AmiSSLMasterBase) AmiSSLMasterBase = OpenLibrary((CONST_STRPTR)"amisslmaster.library", AMISSLMASTER_MIN_VERSION);
+    if (!AmiSSLMasterBase) { _dash_net_err = "no hay AmiSSL (amisslmaster.library)"; return FALSE; }
+    if (!_dash_tls_open) {
+        if (OpenAmiSSLTags(AMISSL_CURRENT_VERSION, AmiSSL_UsesOpenSSLStructs, FALSE,
+                           AmiSSL_GetAmiSSLBase, (ULONG)&AmiSSLBase, AmiSSL_GetAmiSSLExtBase, (ULONG)&AmiSSLExtBase,
+                           AmiSSL_SocketBase, (ULONG)SocketBase, AmiSSL_ErrNoPtr, (ULONG)&errno, TAG_DONE) != 0) {
+            _dash_net_err = "no se puede abrir AmiSSL";
+            return FALSE;
+        }
+        _dash_tls_open = TRUE;
+    }
+    OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
+    /* some entropy for the random generator: time, task, memory, raster position */
+    DateStamp(&ds);
+    for (i = 0; i < 64; i++)
+        seed[i] = (UBYTE)(ds.ds_Tick * 31 + ds.ds_Minute + i * 7 + (LONG)FindTask(NULL) + AvailMem(MEMF_ANY)
+                          + *(volatile UBYTE *)0xDFF006);
+    RAND_seed(seed, sizeof(seed));
+    _dash_tls_ctx = SSL_CTX_new(TLS_client_method());
+    if (!_dash_tls_ctx) { _dash_net_err = "error de TLS"; return FALSE; }
+    SSL_CTX_set_default_verify_paths(_dash_tls_ctx);
+    SSL_CTX_set_verify(_dash_tls_ctx, SSL_VERIFY_PEER, NULL);
+    return TRUE;
+}
+
+static void _dash_tls_cleanup(void) {
+    LONG i;
+    for (i = 0; i < _DASH_TLS_MAX; i++) if (_dash_tls_ssl[i]) { SSL_free(_dash_tls_ssl[i]); _dash_tls_ssl[i] = NULL; }
+    if (_dash_tls_ctx) { SSL_CTX_free(_dash_tls_ctx); _dash_tls_ctx = NULL; }
+    if (_dash_tls_open) { CloseAmiSSL(); _dash_tls_open = FALSE; }
+    if (AmiSSLMasterBase) { CloseLibrary(AmiSSLMasterBase); AmiSSLMasterBase = NULL; }
+}
+
+/* TLS over a connected socket, checking the certificate and that it is for host:
+   the connection, or -1 (net_error() says why) */
+static LONG _dash_tls_connect(LONG sock, STRPTR host) {
+    LONG slot;
+    SSL *ssl;
+    if (sock < 0 || !host || !_dash_tls_init()) return -1;
+    for (slot = 0; slot < _DASH_TLS_MAX && _dash_tls_ssl[slot]; slot++) ;
+    if (slot == _DASH_TLS_MAX) { _dash_net_err = "demasiadas conexiones TLS"; return -1; }
+    ssl = SSL_new(_dash_tls_ctx);
+    if (!ssl) { _dash_net_err = "error de TLS"; return -1; }
+    SSL_set_fd(ssl, sock);
+    SSL_set_tlsext_host_name(ssl, host);
+    SSL_set1_host(ssl, (char *)host);
+    if (SSL_connect(ssl) != 1) {
+        long v = SSL_get_verify_result(ssl);
+        _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
+        SSL_free(ssl);
+        return -1;
+    }
+    _dash_tls_ssl[slot] = ssl;
+    return slot;
+}
+
+static SSL *_dash_tls_get(LONG t) {
+    return (t >= 0 && t < _DASH_TLS_MAX) ? _dash_tls_ssl[t] : NULL;
+}
+
+static LONG _dash_tls_send_buffer(LONG t, APTR data, LONG length) {
+    SSL *ssl = _dash_tls_get(t);
+    LONG done = 0, n;
+    if (!ssl) return -1;
+    while (done < length) {
+        n = SSL_write(ssl, (UBYTE *)data + done, length - done);
+        if (n <= 0) { _dash_net_err = "error al enviar"; return -1; }
+        done += n;
+    }
+    return done;
+}
+
+static LONG _dash_tls_send(LONG t, STRPTR text) {
+    return _dash_tls_send_buffer(t, text, _dash_str_len(text));
+}
+
+/* like net_recv_buffer: the count, 0 if nothing came in time, -1 once closed */
+static LONG _dash_tls_recv_buffer(LONG t, APTR buffer, LONG max, LONG timeout_ms) {
+    SSL *ssl = _dash_tls_get(t);
+    LONG n;
+    if (!ssl) return -1;
+    if (!SSL_pending(ssl)) {
+        n = _dash_net_select(SSL_get_fd(ssl), FALSE, timeout_ms);
+        if (n <= 0) return n;
+    }
+    n = SSL_read(ssl, buffer, max);
+    return n > 0 ? n : -1;
+}
+
+static STRPTR _dash_tls_recv(LONG t, LONG max, LONG timeout_ms) {
+    STRPTR r;
+    LONG n;
+    if (max <= 0) max = 4096;
+    r = _dash_str_alloc(max, TRUE);
+    if (!r) return NULL;
+    n = _dash_tls_recv_buffer(t, r, max, timeout_ms);
+    if (n < 0) return NULL;
+    r[n] = 0;
+    _dash_str_nul_to_space(r, n);
+    _dash_str_setlen(r, n);
+    return r;
+}
+
+/* Ends TLS on the connection (the socket stays open: net_close it after) */
+static void _dash_tls_close(LONG t) {
+    SSL *ssl = _dash_tls_get(t);
+    if (!ssl) return;
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+    _dash_tls_ssl[t] = NULL;
 }
 
 """
@@ -7820,6 +7960,7 @@ _RUNTIME_FLAGS = [
     ("TEXT_RUNTIME", "uses_text"),          # dashweb D2
     ("TEXT_IO_RUNTIME", "uses_text_io"),    # dashweb D7
     ("NET_RUNTIME", "uses_net"),            # dashweb D8
+    ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -8044,6 +8185,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
+        self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
         self.uses_refcount: bool = False  # Track if refcount runtime is needed
         self.uses_arenas: bool = False  # Track if arena runtime is needed
@@ -8209,6 +8351,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.TEXT_IO_RUNTIME)
         if self.uses_net:
             parts.append(CTemplates.NET_RUNTIME)
+        if self.uses_tls:
+            parts.append(CTemplates.TLS_RUNTIME)
 
         # Add reference counting runtime if needed (before structs)
         if self.uses_refcount:
@@ -8433,6 +8577,8 @@ static LONG _dash_event_window_handle(void) {{
         if self.needs_asl and not self.needs_gadtools:
             cleanup.append("    _dash_asl_cleanup();\n"
                            "    if (AslBase) { CloseLibrary(AslBase); AslBase = NULL; }\n")
+        if self.uses_tls:
+            cleanup.append("    _dash_tls_cleanup();\n")   # before the sockets library closes
         if self.uses_net:
             cleanup.append("    _dash_net_cleanup();\n")
         if self._uses_pool():
@@ -8442,6 +8588,10 @@ static LONG _dash_event_window_handle(void) {{
         parts.append(main_code)
 
         program = "\n".join(parts)
+        if self.uses_tls:
+            # OpenSSL 3 (AmiSSL) needs much more stack than Dash's 16 KB: it hangs in SSL_CTX_new
+            for default in ("#define DASH_STACK 16384", "#define DASH_STACK 32768  /* MUI */"):
+                program = program.replace(default, "#define DASH_STACK 65536  /* AmiSSL */", 1)
         if "muimaster.library" in program:
             # MUI 5 asks for 32 KB of stack ("MUI warning" requester below that)
             program = program.replace("#define DASH_STACK 16384", "#define DASH_STACK 32768  /* MUI */", 1)
@@ -10092,6 +10242,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_tls:
+            self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:
             self.uses_text_io = True   # net_recv: bytes to text like str_from_buffer
         if self.uses_text_io:

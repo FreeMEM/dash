@@ -157,6 +157,8 @@ def main():
     compile_command.extend(opt_flags(args.no_optimize, args.small))
     try:   # the MUI SDK headers, when the program uses MUI
         compile_command.extend(mui_flags(open(f).read() for f in c_files))
+        from compiler.cflags import amissl_flags   # and AmiSSL's, when it uses tls_* (dashweb D11)
+        compile_command.extend(amissl_flags(open(f).read() for f in c_files))
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
