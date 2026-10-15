@@ -143,6 +143,8 @@ mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y
 mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
 mui_window_open(win)
 ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)
+mui_timer(500, 7)                       # in 500 ms mui_wait_event returns 7 (once; 0 ms cancels)
+ev = mui_wait_event_signals(mask)       # also returns 0 on one of those signals; mui_signals()
 mui_app_end()                           # also at exit
 ```
 

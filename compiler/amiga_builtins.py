@@ -3230,6 +3230,27 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_set_range(${scrollbar}, ${total}, ${visible})",
         description="Size of the document and of the part that fits"
     ),
+    "mui_wait_event_signals": BuiltinFunc(
+        name="mui_wait_event_signals",
+        params=["mask"],
+        return_type="LONG",
+        c_template="_dash_mui_wait_event_signals(${mask})",
+        description="Like mui_wait_event, but also returns 0 when one of the signals of mask arrives (sockets...); mui_signals says which"
+    ),
+    "mui_signals": BuiltinFunc(
+        name="mui_signals",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_mui_signals()",
+        description="Signals of the mask that woke the last mui_wait_event_signals"
+    ),
+    "mui_timer": BuiltinFunc(
+        name="mui_timer",
+        params=["ms", "id"],
+        return_type="void",
+        c_template="_dash_mui_timer(${ms}, ${id})",
+        description="In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels)"
+    ),
     "mui_wait_event": BuiltinFunc(
         name="mui_wait_event",
         params=[],

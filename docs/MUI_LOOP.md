@@ -114,7 +114,7 @@ otras señales (red, temporizador). El plan va en ese orden.
       `HandleEvent` (ratón, rueda, teclado) y scroll: dibujar con los builtins `gfx_` sobre el `RastPort`
       del objeto, y avisar a Dash con un número de evento cuando haya que repintar. Es la pieza del navegador:
       medir en el A1200 cuánto tarda en repintar.
-- [ ] 8. **Señales externas.** `mui_wait_event_signals(mask)` para atender sockets y temporizador sin
+- [x] 8. **Señales externas.** `mui_wait_event_signals(mask)` para atender sockets y temporizador sin
       bloquear la interfaz. Test con `timer.device` o una señal propia.
 - [ ] 9. **Imágenes.** `Dtpic` (datatypes) para PNG/JPEG/GIF en un objeto; o dibujar un bitmap en la zona propia.
 - [ ] 10. **Ejemplo del navegador.** `examples/mui_navegador.dash`: la ventana del diseño (sin red), con
@@ -310,3 +310,18 @@ Formato:
 - Visto de paso (para la auditoría): avisos de GCC en runtimes viejos (`diminfo` sin usar en `_dash_open_screen_custom`,
   `_dash_nil_area` sin usar).
 - Tests: 127/127 sin emulador; 302/302 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
+
+### 2026-10-15 — Tarea 8 (señales externas y temporizador)
+- Hecho: `mui_wait_event_signals(mask)` (el bucle de `NewInput` espera también `mask`; vuelve con 0 y deja en
+  `mui_signals()` las que llegaron), `mui_wait_event` = la misma con máscara 0. `mui_timer(ms, id)`: temporizador de un
+  disparo con `timer.device` (`UNIT_MICROHZ`) en plantilla aparte `MUI_TIMER_RUNTIME` (flag `uses_mui_timer`); el bucle
+  de espera incluye su señal y lo consulta con un puntero a función (`_dash_mui_timer_hook`), así un programa sin
+  temporizador no lleva `timer.device`. `mui_poll_event` también lo mira. Varios ganchos de cierre
+  (`_dash_mui_on_end`, hasta 4: clase de dibujo, temporizador) en vez de uno.
+- Probado en A1200 3.1 y 3.2 (`test_mui_signals`, también `--memcheck`): temporizador de 200 ms, señal propia
+  (Ctrl-E) mientras espera eventos MUI, cancelar y que no salte, y volver a armarlo.
+- Coordinación: la sesión de dashweb usará `mui_timer` para `setTimeout`/`setInterval` de JavaScript. Me cuenta que en
+  su rama `dashweb` añade `reads_only` a `BuiltinFunc` (builtins que solo leen sus textos no los copian con
+  `_dash_str_escape`). **Pendiente para la tarea 11:** hoy los textos que se pasan a los `mui_` se escapan (se hacen
+  permanentes hasta salir); cuando `reads_only` llegue, marcar los `mui_` que no guardan el texto (MUI copia).
+- Tests: 128/128 sin emulador; 305/305 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.

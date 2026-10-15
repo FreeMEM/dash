@@ -1,0 +1,50 @@
+# MUI and other signals: a one-shot timer, the program's own signals while waiting
+# for MUI events (what sockets will use), and cancelling the timer.
+# emu-needs: muimaster.library
+# expect-out: temporizador 40
+# expect-out: señal 0, recibidas 16384
+# expect-out: cancelado: 0
+# expect-out: otra vez 41
+# expect-out: fin
+
+const ID_TIEMPO = 40
+const ID_OTRA = 41
+const CTRL_E = 16384
+
+@native func signal_self(mask: Int)
+"""
+    Signal(FindTask(NULL), (ULONG)mask);
+"""
+end
+
+Main
+    if mui_app_begin("Señales", "DASHSIG") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Señales", 0)
+            mui_text("Esperando")
+        mui_window_end()
+        mui_window_open(win)
+
+        mui_timer(200, ID_TIEMPO)
+        ev = mui_wait_event()
+        Print "temporizador #{ev}"
+
+        signal_self(CTRL_E)
+        ev = mui_wait_event_signals(CTRL_E)
+        s = mui_signals()
+        Print "señal #{ev}, recibidas #{s}"
+
+        mui_timer(100, ID_TIEMPO)
+        mui_timer(0, ID_TIEMPO)
+        time_delay(15)
+        ev = mui_poll_event()
+        Print "cancelado: #{ev}"
+
+        mui_timer(50, ID_OTRA)
+        ev = mui_wait_event()
+        Print "otra vez #{ev}"
+        mui_app_end()
+        Print "fin"
+    end
+end

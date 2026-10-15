@@ -5218,7 +5218,18 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
-static void (*_dash_mui_end_hook)(void) = NULL;     /* frees custom classes before MUI closes */
+static void (*_dash_mui_end_hooks[4])(void);       /* free classes, timer... before MUI closes */
+static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
+static LONG (*_dash_mui_timer_hook)(void) = NULL;   /* the timer's id if it went off, else 0 */
+static ULONG _dash_mui_got = 0;                     /* signals of the program's mask that arrived */
+
+static void _dash_mui_on_end(void (*hook)(void)) {
+    LONG i;
+    for (i = 0; i < 4; i++) {
+        if (_dash_mui_end_hooks[i] == hook) return;
+        if (!_dash_mui_end_hooks[i]) { _dash_mui_end_hooks[i] = hook; return; }
+    }
+}
 #define _DASH_MUI_PRESSES 64
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
@@ -5253,7 +5264,11 @@ static STRPTR *_dash_mui_entries(STRPTR options);
 static void _dash_mui_app_end(void) {
     if (_dash_mui_app) MUI_DisposeObject(_dash_mui_app);   /* windows and all their objects */
     _dash_mui_app = NULL;
-    if (_dash_mui_end_hook) { _dash_mui_end_hook(); _dash_mui_end_hook = NULL; }
+    {
+        LONG i;
+        for (i = 0; i < 4; i++)
+            if (_dash_mui_end_hooks[i]) { _dash_mui_end_hooks[i](); _dash_mui_end_hooks[i] = NULL; }
+    }
     _dash_mui_first_win = NULL;
     _dash_mui_cur_win = NULL;
     _dash_mui_cur_menu = NULL;
@@ -5721,20 +5736,32 @@ static void _dash_mui_on_close(APTR win, LONG id) {
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 
-/* Next event number; -1 = quit (first window closed, Ctrl-C, no application) */
-static LONG _dash_mui_wait_event(void) {
-    ULONG sigs = 0;
+/* Next event number; -1 = quit (first window closed, Ctrl-C, no application).
+   With a mask, also returns 0 when one of those signals arrives (mui_signals) */
+static LONG _dash_mui_wait_event_signals(ULONG mask) {
+    ULONG sigs = 0, got;
     LONG id;
     if (!_dash_mui_app) return -1;
+    _dash_mui_got = 0;
     for (;;) {
         id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
         if (id == MUIV_Application_ReturnID_Quit) return -1;
         if (id) return id;
+        if (_dash_mui_timer_hook && (id = _dash_mui_timer_hook())) return id;
         if (sigs) {
-            sigs = Wait(sigs | SIGBREAKF_CTRL_C);
-            if (sigs & SIGBREAKF_CTRL_C) return -1;
+            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+            if (got & SIGBREAKF_CTRL_C) return -1;
+            if (got & mask) {
+                _dash_mui_got = got & mask;
+                return 0;
+            }
+            sigs = got;
         }
     }
+}
+
+static LONG _dash_mui_wait_event(void) {
+    return _dash_mui_wait_event_signals(0);
 }
 
 /* Like _dash_mui_wait_event without waiting: 0 when nothing happened */
@@ -5743,7 +5770,14 @@ static LONG _dash_mui_poll_event(void) {
     LONG id;
     if (!_dash_mui_app) return -1;
     id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
-    return id == MUIV_Application_ReturnID_Quit ? -1 : id;
+    if (id == MUIV_Application_ReturnID_Quit) return -1;
+    if (!id && _dash_mui_timer_hook) id = _dash_mui_timer_hook();
+    return id;
+}
+
+/* Which signals of the mask woke mui_wait_event_signals */
+static LONG _dash_mui_signals(void) {
+    return (LONG)_dash_mui_got;
 }
 
 """
@@ -5867,7 +5901,7 @@ static APTR _dash_mui_canvas(LONG min_width, LONG min_height) {
         _dash_mui_error("cannot create the drawing area class");
         return NULL;
     }
-    _dash_mui_end_hook = _dash_canvas_cleanup;
+    _dash_mui_on_end(_dash_canvas_cleanup);
     {
         ULONG tags[] = { MUIA_CycleChain, 1, TAG_DONE };
         obj = NewObjectA(_dash_canvas_class->mcc_Class, NULL, (struct TagItem *)tags);
@@ -5925,6 +5959,72 @@ static void _dash_mui_set_range(APTR obj, LONG total, LONG visible) {
 /* From _dash_mui_app_end(), once no object of the class is left and before MUI closes */
 static void _dash_canvas_cleanup(void) {
     if (_dash_canvas_class) { MUI_DeleteCustomClass(_dash_canvas_class); _dash_canvas_class = NULL; }
+}
+
+"""
+
+    # MUI one-shot timer (timer.device)
+    MUI_TIMER_RUNTIME = """\
+/* One-shot timer for MUI programs (timer.device): mui_wait_event returns its id */
+#include <devices/timer.h>
+static struct MsgPort *_dash_mui_timer_port = NULL;
+static struct timerequest *_dash_mui_timer_req = NULL;
+static BOOL _dash_mui_timer_busy = FALSE;
+static LONG _dash_mui_timer_id = 0;
+
+static void _dash_mui_timer_stop(void) {
+    if (_dash_mui_timer_busy) {
+        AbortIO((struct IORequest *)_dash_mui_timer_req);
+        WaitIO((struct IORequest *)_dash_mui_timer_req);
+        _dash_mui_timer_busy = FALSE;
+    }
+}
+
+static void _dash_mui_timer_free(void) {
+    _dash_mui_timer_stop();
+    _dash_mui_timer_sig = 0;
+    _dash_mui_timer_hook = NULL;
+    if (_dash_mui_timer_req) {
+        CloseDevice((struct IORequest *)_dash_mui_timer_req);
+        DeleteIORequest((struct IORequest *)_dash_mui_timer_req);
+        _dash_mui_timer_req = NULL;
+    }
+    if (_dash_mui_timer_port) { DeleteMsgPort(_dash_mui_timer_port); _dash_mui_timer_port = NULL; }
+}
+
+static LONG _dash_mui_timer_check(void);
+
+/* In ms milliseconds mui_wait_event returns id, once (0 or less: cancel) */
+static void _dash_mui_timer(LONG ms, LONG id) {
+    if (!_dash_mui_timer_req) {
+        if (!(_dash_mui_timer_port = CreateMsgPort())) return;
+        _dash_mui_timer_req = (struct timerequest *)CreateIORequest(_dash_mui_timer_port, sizeof(struct timerequest));
+        if (!_dash_mui_timer_req || OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)_dash_mui_timer_req, 0)) {
+            if (_dash_mui_timer_req) { DeleteIORequest((struct IORequest *)_dash_mui_timer_req); _dash_mui_timer_req = NULL; }
+            DeleteMsgPort(_dash_mui_timer_port); _dash_mui_timer_port = NULL;
+            _dash_mui_error("cannot open timer.device");
+            return;
+        }
+    }
+    _dash_mui_timer_sig = 1UL << _dash_mui_timer_port->mp_SigBit;
+    _dash_mui_timer_hook = _dash_mui_timer_check;
+    _dash_mui_on_end(_dash_mui_timer_free);
+    _dash_mui_timer_stop();
+    if (ms <= 0) return;
+    _dash_mui_timer_id = id;
+    _dash_mui_timer_req->tr_node.io_Command = TR_ADDREQUEST;
+    _dash_mui_timer_req->tr_time.tv_secs = ms / 1000;
+    _dash_mui_timer_req->tr_time.tv_micro = (ms % 1000) * 1000;
+    SendIO((struct IORequest *)_dash_mui_timer_req);
+    _dash_mui_timer_busy = TRUE;
+}
+
+/* The timer's id if it has gone off (0 otherwise) */
+static LONG _dash_mui_timer_check(void) {
+    if (!_dash_mui_timer_busy || !CheckIO((struct IORequest *)_dash_mui_timer_req)) return 0;
+    WaitIO((struct IORequest *)_dash_mui_timer_req);
+    _dash_mui_timer_busy = FALSE;
+    return _dash_mui_timer_id;
 }
 
 """
@@ -6357,6 +6457,7 @@ _RUNTIME_FLAGS = [
     ("RTG_RUNTIME", "needs_rtg"),
     ("MUI_RUNTIME", "needs_mui"),
     ("MUI_CANVAS_RUNTIME", "uses_mui_canvas"),
+    ("MUI_TIMER_RUNTIME", "uses_mui_timer"),
 ]
 
 # Runtime names emitted by the code generator itself, outside the templates
@@ -6564,6 +6665,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_reaction: bool = False  # Track if ReAction is used
         self.needs_mui: bool = False  # MUI builtins (mui_*)
         self.uses_mui_canvas: bool = False  # MUI drawing area / scrollbar
+        self.uses_mui_timer: bool = False  # mui_timer (timer.device)
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
@@ -6779,6 +6881,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.MUI_RUNTIME)
         if self.uses_mui_canvas:
             parts.append(CTemplates.MUI_CANVAS_RUNTIME)
+        if self.uses_mui_timer:
+            parts.append(CTemplates.MUI_TIMER_RUNTIME)
 
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
@@ -8415,6 +8519,8 @@ static {ret_type} {method_name}({params_str}) {{
         # The MUI drawing area sets _dash_rp for the gfx_ builtins; it is part of MUI
         if self.uses_mui_canvas:
             self.needs_gfx = True
+            self.needs_mui = True
+        if self.uses_mui_timer:
             self.needs_mui = True
 
         # Track arena usage

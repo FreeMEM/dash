@@ -2176,6 +2176,9 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_window_close(ventana)` | La cierra (sigue existiendo). |
 | `mui_on_press(boton, id)`, `mui_on_close(ventana, id)` | Eventos. |
 | `mui_wait_event()`, `mui_poll_event()`, `mui_press(boton)` | Esperar, consultar o lanzar eventos. |
+| `mui_timer(ms, id)` | Dentro de `ms` milisegundos, `mui_wait_event` devuelve `id` (una vez; para repetir, volver a llamar; 0 = cancelar). |
+| `mui_wait_event_signals(mascara)` | Como `mui_wait_event`, pero también vuelve con 0 cuando llega una de esas señales (red...). |
+| `mui_signals()` | Qué señales de la máscara despertaron la última espera. |
 | `mui_app_end()` | Libera la aplicación, sus ventanas y objetos (también se hace al salir). |
 
 Los objetos dejan de valer después de `mui_app_end()`.
@@ -2563,8 +2566,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 61 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_wait_event` |
-| **Total** | **383** | |
+| MUI | 64 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **386** | |
 
 ### Colores Estandar Amiga
 
