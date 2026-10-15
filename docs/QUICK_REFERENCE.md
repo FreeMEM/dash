@@ -206,8 +206,9 @@ random_range(min, max)      # Random in range
 ## Memory Management
 > Strings: se liberan solos (cada variable es dueña de su texto; los temporales se
 > liberan en cada vuelta de bucle/EventLoop y al salir de una función).
-> Arrays y structs: conteo de referencias automático (se liberan cuando nadie los usa;
-> los ciclos y lo guardado dentro de arrays, al salir).
+> Arrays y structs: conteo de referencias automático (se liberan cuando nadie los usa).
+> Las listas de structs, textos o listas sueltan sus elementos; un struct en una lista de
+> enteros, lo dado a C y los ciclos, al salir. `./dash --memcheck` avisa de fallos y fugas.
 > Estas funciones son para casos avanzados.
 
 ```

@@ -160,7 +160,7 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       temporales (lineal), quitar pares `retain`/`release` que se anulan (parámetros prestados, `obj_set` de un
       temporal recién creado), camino rápido en línea; volver a mirar la cabecera de 16 bytes (27c) si sale barata.
       Cada cambio con antes/después en la bitácora y en el panel de comparativas.
-      30f documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
+      30f (hecha) documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
       30g `nil` (pedido por el usuario el 2026-10-15): valor vacío para variables, campos y parámetros de tipo
       struct o `Array` (y String si es sencillo). `x = nil`, `if x == nil`, `Nodo(1, nil)`; comparar con `nil` en
       C es `NULL`. Acceder a un campo de `nil` (`x.campo`) no debe colgar el Amiga: decidir y medir entre un error
@@ -991,3 +991,12 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
 - No hecho: cabecera de 16 bytes (27c). Con los objetos que ya no pasan por la lista de temporales, `next` y
   `serial` siguen haciendo falta para los temporales; juntarlos con `_refcount` complica justo el código que
   esta tarea ha medido. El usuario prefirió no hacerlo salvo que un programa real lo pida.
+
+### 2026-10-15 — Tarea 30f (conteo de referencias 6/6: documentación)
+- Base: 111/111 sin emulador.
+- MANUAL_REFERENCIA, 17: tabla "Cuando se libera cada cosa" (variables, campos, elementos, intermedios, retornos,
+  globales, escapes, ciclos), consejo de coste (asignar directamente crea con referencia) y apartado "Buscar fallos
+  de memoria" (`--memcheck`, cómo leer el resumen, el `0xDB`, `run_tests.py --memcheck`, `tools/fuzz_refcount.py`).
+  Lo de listas de structs, préstamos y listas enlazadas ya estaba de 30c.
+- QUICK_REFERENCE: la nota de memoria decía que lo guardado en arrays se queda hasta el final; ya no es así.
+- Solo documentación: sin cambios de código.

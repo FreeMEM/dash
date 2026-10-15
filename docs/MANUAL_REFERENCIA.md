@@ -1346,6 +1346,41 @@ end
 - `refcount(x)`, `retain(x)` y `release(x)` siguen existiendo para casos avanzados; un
   `release` de mas libera algo que una variable aun usa.
 
+### Cuando se libera cada cosa
+
+| Que | Se libera |
+|-----|-----------|
+| Variable String, array o struct de un bloque o funcion | Al reasignarla o al salir del bloque (tambien con `break`, `continue`, `return`) |
+| Campo String, struct o `Array` de un struct | Al reasignar el campo o al liberarse el struct |
+| Elemento de una lista de textos, structs o listas | Al reemplazarlo o al liberarse la lista |
+| Valor intermedio (`a + b`, `Punto(1, 2)` pasado a una funcion, `[1, 2]` sin variable) | Al final de la vuelta del bucle o del `EventLoop`, o al salir de la funcion |
+| Lo que devuelve una funcion | Pasa a ser intermedio de quien la llamo (o de la variable que lo recibe) |
+| Variable global | Al reasignarla; si no, al terminar el programa |
+| Struct en una lista de enteros o mezclada, o entregado a `@native`/`@extern`; texto entregado al sistema | Al terminar el programa |
+| Ciclos de structs | Al terminar el programa |
+
+Lo mas barato es asignar el valor nuevo directamente a una variable o campo
+(`p = Punto(x, y)`, `b = [1, 2, 3]`): se crea ya con su referencia. Un valor intermedio
+pasa por la lista de temporales.
+
+### Buscar fallos de memoria (`--memcheck`)
+
+Con `./dash --memcheck` el programa avisa en cuanto algo se libera dos veces, se usa
+liberado o se suelta sin que nadie lo tenga (`memcheck: ERROR ...`), y al salir imprime:
+
+```
+memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+```
+
+- "Vivos" que no son "escapados" al salir son fugas o ciclos: algo que nada liberara.
+- "Escapados" son los que se quedan hasta el final a proposito (ver la tabla).
+- En esta version los bloques liberados se rellenan con `0xDB`: un numero como
+  `-606348325` en la salida es un valor leido de memoria ya liberada.
+
+Para el compilador: `python3 tests/run_tests.py --emu --memcheck` pasa todos los tests asi, y
+`tools/fuzz_refcount.py` genera programas al azar con structs, listas y textos, los compara
+con un modelo y comprueba la memoria.
+
 ### Arena Allocator (Manual)
 
 Para asignaciones temporales de alto rendimiento:
