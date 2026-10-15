@@ -5220,6 +5220,11 @@ static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press()
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
 static LONG _dash_mui_npress = 0;
 
+/* What each object is, kept in its MUIA_UserData: mui_get_value and friends
+   read and write the attribute of that kind */
+enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
+       _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW };
+
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
 #define _DASH_MUI_DO(obj, ...) \\
@@ -5266,7 +5271,20 @@ static APTR _dash_mui_app_begin(STRPTR title, STRPTR base) {
     return _dash_mui_app;
 }
 
-/* Put a new object in the open group (MUI disposes it with its parent) */
+static APTR _dash_mui_add(Object *obj);
+
+static LONG _dash_mui_kind(Object *obj) {
+    IPTR kind = _DASH_MUI_OTHER;
+    if (obj) GetAttr(MUIA_UserData, obj, &kind);
+    return (LONG)kind;
+}
+
+/* Put a new object of that kind in the open group (MUI disposes it with its parent) */
+static APTR _dash_mui_add_kind(Object *obj, LONG kind) {
+    if (obj && kind) SetAttrs(obj, MUIA_UserData, kind, TAG_DONE);
+    return _dash_mui_add(obj);
+}
+
 static APTR _dash_mui_add(Object *obj) {
     if (!obj) { _dash_mui_error("cannot create an object"); return NULL; }
     if (_dash_mui_depth <= 0) {
@@ -5286,7 +5304,8 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
     win = _DASH_MUI_NEW(MUIC_Window,
         MUIA_Window_Title, (IPTR)_dash_mui_keep(title),
         MUIA_Window_ID, (id > 0 && id < 256) ? MAKE_ID('D', 'A', 'S', id) : 0,
-        MUIA_Window_RootObject, (IPTR)root);
+        MUIA_Window_RootObject, (IPTR)root,
+        MUIA_UserData, _DASH_MUI_WINDOW);
     if (!win) { MUI_DisposeObject(root); _dash_mui_error("cannot create the window"); return NULL; }
     _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)win);
     if (!_dash_mui_first_win) {
@@ -5330,12 +5349,144 @@ static void _dash_mui_group_end(void) {
 }
 
 static APTR _dash_mui_text(STRPTR text) {
-    return _dash_mui_add(_DASH_MUI_NEW(MUIC_Text, MUIA_Text_Contents, (IPTR)text));
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Text, MUIA_Text_Contents, (IPTR)text), _DASH_MUI_TEXT);
 }
 
 static APTR _dash_mui_button(STRPTR label) {
     ULONG params[] = { (ULONG)label };   /* "_" before a letter: keyboard shortcut */
-    return _dash_mui_add(MUI_MakeObjectA(MUIO_Button, params));
+    return _dash_mui_add_kind(MUI_MakeObjectA(MUIO_Button, params), _DASH_MUI_BUTTON);
+}
+
+/* Label for a form row, right-aligned like MUI's Label() */
+static APTR _dash_mui_label(STRPTR text) {
+    ULONG params[] = { (ULONG)text, 0 };
+    return _dash_mui_add_kind(MUI_MakeObjectA(MUIO_Label, params), _DASH_MUI_TEXT);
+}
+
+static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_String,
+        MUIA_Frame, MUIV_Frame_String,
+        MUIA_CycleChain, 1,
+        MUIA_String_MaxLen, (maxlen > 0 ? maxlen : 80) + 1,   /* MaxLen counts the final 0 */
+        MUIA_String_Contents, (IPTR)initial), _DASH_MUI_STRING);
+}
+
+static APTR _dash_mui_checkbox(LONG checked) {
+    ULONG params[] = { 0 };
+    Object *obj = MUI_MakeObjectA(MUIO_Checkmark, params);
+    if (obj) SetAttrs(obj, MUIA_Selected, checked ? TRUE : FALSE, MUIA_CycleChain, 1, TAG_DONE);
+    return _dash_mui_add_kind(obj, _DASH_MUI_CHECK);
+}
+
+/* "Uno|Dos|Tres" -> a NULL-ended array of copies (MUI keeps the pointers) */
+static STRPTR *_dash_mui_entries(STRPTR options) {
+    LONG n = 1, i = 0;
+    STRPTR p, copy, *entries;
+    if (!options) options = (STRPTR)"";
+    for (p = options; *p; p++) if (*p == '|') n++;
+    copy = _dash_mui_keep(options);
+    entries = _dash_mui_pool ? (STRPTR *)AllocPooled(_dash_mui_pool, (n + 1) * sizeof(STRPTR)) : NULL;
+    if (!entries) return NULL;
+    entries[i++] = copy;
+    for (p = copy; *p; p++)
+        if (*p == '|') { *p = 0; entries[i++] = p + 1; }
+    entries[i] = NULL;
+    return entries;
+}
+
+static APTR _dash_mui_cycle(STRPTR options) {
+    STRPTR *entries = _dash_mui_entries(options);
+    if (!entries) return NULL;
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Cycle,
+        MUIA_Font, MUIV_Font_Button,
+        MUIA_CycleChain, 1,
+        MUIA_Cycle_Entries, (IPTR)entries), _DASH_MUI_CYCLE);
+}
+
+static APTR _dash_mui_slider(LONG min, LONG max, LONG value) {
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Slider,
+        MUIA_CycleChain, 1,
+        MUIA_Numeric_Min, min,
+        MUIA_Numeric_Max, max,
+        MUIA_Numeric_Value, value), _DASH_MUI_SLIDER);
+}
+
+static APTR _dash_mui_gauge(LONG max) {
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Gauge,
+        MUIA_Frame, MUIV_Frame_Gauge,
+        MUIA_Gauge_Horiz, TRUE,
+        MUIA_Gauge_Max, max > 0 ? max : 100), _DASH_MUI_GAUGE);
+}
+
+/* The attribute holding an object's value (0: it has none) */
+static ULONG _dash_mui_value_attr(Object *obj) {
+    switch (_dash_mui_kind(obj)) {
+    case _DASH_MUI_CHECK:  return MUIA_Selected;
+    case _DASH_MUI_CYCLE:  return MUIA_Cycle_Active;
+    case _DASH_MUI_SLIDER: return MUIA_Numeric_Value;
+    case _DASH_MUI_GAUGE:  return MUIA_Gauge_Current;
+    }
+    return 0;
+}
+
+static LONG _dash_mui_get_value(APTR obj) {
+    IPTR value = 0;
+    ULONG attr = obj ? _dash_mui_value_attr(obj) : 0;
+    if (!attr) return 0;
+    GetAttr(attr, obj, &value);
+    return attr == MUIA_Selected ? (value != 0) : (LONG)value;
+}
+
+/* Like the user changing it: the object's notifications (mui_on_change) fire */
+static void _dash_mui_set_value(APTR obj, LONG value) {
+    ULONG attr = obj ? _dash_mui_value_attr(obj) : 0;
+    if (attr) SetAttrs(obj, attr, attr == MUIA_Selected ? (value != 0) : value, TAG_DONE);
+}
+
+/* The attribute holding an object's text (0: none) */
+static ULONG _dash_mui_text_attr(Object *obj) {
+    switch (_dash_mui_kind(obj)) {
+    case _DASH_MUI_TEXT:
+    case _DASH_MUI_BUTTON: return MUIA_Text_Contents;
+    case _DASH_MUI_STRING: return MUIA_String_Contents;
+    case _DASH_MUI_WINDOW: return MUIA_Window_Title;
+    }
+    return 0;
+}
+
+/* MUI's own text, copied by Dash when it is kept in a variable */
+static STRPTR _dash_mui_get_text(APTR obj) {
+    STRPTR text = NULL;
+    ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
+    if (attr) GetAttr(attr, obj, (IPTR *)&text);
+    return text ? text : (STRPTR)"";
+}
+
+static void _dash_mui_set_text(APTR obj, STRPTR text) {
+    ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
+    if (!attr) return;
+    if (attr == MUIA_Window_Title) text = _dash_mui_keep(text);   /* windows keep the pointer */
+    SetAttrs(obj, attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
+}
+
+static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
+    if (obj) SetAttrs(obj, MUIA_Disabled, enabled ? FALSE : TRUE, TAG_DONE);
+}
+
+/* mui_wait_event returns id when the value changes (by the user or mui_set_value) */
+static void _dash_mui_on_change(APTR obj, LONG id) {
+    ULONG attr;
+    if (!obj || !_dash_mui_app) return;
+    attr = _dash_mui_kind(obj) == _DASH_MUI_STRING ? MUIA_String_Contents : _dash_mui_value_attr(obj);
+    if (attr) _DASH_MUI_DO(obj, MUIM_Notify, attr, MUIV_EveryTime,
+                           (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+}
+
+/* Return pressed in a text field */
+static void _dash_mui_on_ack(APTR obj, LONG id) {
+    if (obj && _dash_mui_app)
+        _DASH_MUI_DO(obj, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime,
+                     (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 
 static void _dash_mui_on_press(APTR obj, LONG id) {

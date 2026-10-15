@@ -2915,6 +2915,97 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_press(${obj})",
         description="Send the mui_on_press event of a button as if it were pressed"
     ),
+    "mui_label": BuiltinFunc(
+        name="mui_label",
+        params=["text"],
+        return_type="APTR",
+        c_template="_dash_mui_label(${text})",
+        description="Label for a form row (right-aligned)"
+    ),
+    "mui_string": BuiltinFunc(
+        name="mui_string",
+        params=["initial", "maxlen"],
+        return_type="APTR",
+        c_template="_dash_mui_string(${initial}, ${maxlen})",
+        description="Text field with up to maxlen characters"
+    ),
+    "mui_checkbox": BuiltinFunc(
+        name="mui_checkbox",
+        params=["checked"],
+        return_type="APTR",
+        c_template="_dash_mui_checkbox(${checked})",
+        description="Checkbox"
+    ),
+    "mui_cycle": BuiltinFunc(
+        name="mui_cycle",
+        params=["options"],
+        return_type="APTR",
+        c_template="_dash_mui_cycle(${options})",
+        description="Cycle gadget; options separated by | (\"One|Two|Three\")"
+    ),
+    "mui_slider": BuiltinFunc(
+        name="mui_slider",
+        params=["min", "max", "value"],
+        return_type="APTR",
+        c_template="_dash_mui_slider(${min}, ${max}, ${value})",
+        description="Horizontal slider"
+    ),
+    "mui_gauge": BuiltinFunc(
+        name="mui_gauge",
+        params=["max"],
+        return_type="APTR",
+        c_template="_dash_mui_gauge(${max})",
+        description="Progress bar from 0 to max"
+    ),
+    "mui_get_value": BuiltinFunc(
+        name="mui_get_value",
+        params=["obj"],
+        return_type="LONG",
+        c_template="_dash_mui_get_value(${obj})",
+        description="Value: checkbox 1/0, cycle option, slider level, progress"
+    ),
+    "mui_set_value": BuiltinFunc(
+        name="mui_set_value",
+        params=["obj", "value"],
+        return_type="void",
+        c_template="_dash_mui_set_value(${obj}, ${value})",
+        description="Set the value (fires mui_on_change like the user would)"
+    ),
+    "mui_get_text": BuiltinFunc(
+        name="mui_get_text",
+        params=["obj"],
+        return_type="STRPTR",
+        c_template="_dash_mui_get_text(${obj})",
+        description="Text of a text field, text, button or window title"
+    ),
+    "mui_set_text": BuiltinFunc(
+        name="mui_set_text",
+        params=["obj", "text"],
+        return_type="void",
+        c_template="_dash_mui_set_text(${obj}, ${text})",
+        description="Change the text of a text field, text, button or window title"
+    ),
+    "mui_set_enabled": BuiltinFunc(
+        name="mui_set_enabled",
+        params=["obj", "enabled"],
+        return_type="void",
+        c_template="_dash_mui_set_enabled(${obj}, ${enabled})",
+        description="Enable or disable (ghost) an object"
+    ),
+    "mui_on_change": BuiltinFunc(
+        name="mui_on_change",
+        params=["obj", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_change(${obj}, ${id})",
+        description="mui_wait_event returns id when the value or text changes"
+    ),
+    "mui_on_ack": BuiltinFunc(
+        name="mui_on_ack",
+        params=["obj", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_ack(${obj}, ${id})",
+        description="mui_wait_event returns id when Return is pressed in a text field"
+    ),
     "mui_wait_event": BuiltinFunc(
         name="mui_wait_event",
         params=[],

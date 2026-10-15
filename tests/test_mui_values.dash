@@ -1,0 +1,73 @@
+# MUI values: text field, checkbox, cycle, slider, progress bar, label; get/set of values
+# and texts, enable/disable, and the change events that mui_set_value fires.
+# emu-needs: muimaster.library
+# expect-out: campo: http://aminet.net/
+# expect-out: campo nuevo: España
+# expect-out: casilla 0
+# expect-out: evento 3, casilla 1
+# expect-out: evento 4, ciclo 2
+# expect-out: deslizador 75
+# expect-out: barra 40
+# expect-out: texto: Listo
+# expect-out: título: Otra ventana
+# expect-out: sin valor 0
+# expect-out: fin
+
+const ID_CASILLA = 3
+const ID_CICLO = 4
+const ID_URL = 5
+
+Main
+    if mui_app_begin("Valores", "DASHVAL") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Valores", 0)
+            mui_hgroup_begin()
+                mui_label("URL:")
+                url = mui_string("http://aminet.net/", 200)
+            mui_group_end()
+            mui_hgroup_begin()
+                casilla = mui_checkbox(false)
+                ciclo = mui_cycle("Texto|Imágenes|Todo")
+                deslizador = mui_slider(0, 100, 10)
+            mui_group_end()
+            barra = mui_gauge(100)
+            estado = mui_text("Cargando")
+            boton = mui_button("Parar")
+        mui_window_end()
+        mui_on_change(casilla, ID_CASILLA)
+        mui_on_change(ciclo, ID_CICLO)
+        mui_on_ack(url, ID_URL)
+        mui_window_open(win)
+
+        Print "campo: " + mui_get_text(url)
+        mui_set_text(url, "España")
+        t = mui_get_text(url)
+        Print "campo nuevo: #{t}"
+        v = mui_get_value(casilla)
+        Print "casilla #{v}"
+        mui_set_value(casilla, 1)
+        ev = mui_wait_event()
+        v = mui_get_value(casilla)
+        Print "evento #{ev}, casilla #{v}"
+        mui_set_value(ciclo, 2)
+        ev = mui_wait_event()
+        v = mui_get_value(ciclo)
+        Print "evento #{ev}, ciclo #{v}"
+        mui_set_value(deslizador, 75)
+        v = mui_get_value(deslizador)
+        Print "deslizador #{v}"
+        mui_set_value(barra, 40)
+        v = mui_get_value(barra)
+        Print "barra #{v}"
+        mui_set_text(estado, "Listo")
+        Print "texto: " + mui_get_text(estado)
+        mui_set_text(win, "Otra ventana")
+        Print "título: " + mui_get_text(win)
+        mui_set_enabled(boton, false)
+        v = mui_get_value(boton)
+        Print "sin valor #{v}"
+        mui_app_end()
+        Print "fin"
+    end
+end

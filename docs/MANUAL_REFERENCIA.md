@@ -2134,7 +2134,18 @@ y `mui_press(boton)` lanza el evento del botón como si se pulsara.
 | `mui_window_begin(titulo, id)` / `mui_window_end()` | Empieza y termina una ventana. |
 | `mui_vgroup_begin()`, `mui_hgroup_begin()` / `mui_group_end()` | Grupo vertical u horizontal. |
 | `mui_text(texto)` | Texto. |
+| `mui_label(texto)` | Etiqueta de un formulario (alineada a la derecha). |
 | `mui_button(texto)` | Botón. |
+| `mui_string(inicial, max)` | Campo de texto de hasta `max` caracteres. |
+| `mui_checkbox(marcada)` | Casilla. |
+| `mui_cycle("Uno|Dos|Tres")` | Lista desplegable de opciones. |
+| `mui_slider(min, max, valor)` | Deslizador. |
+| `mui_gauge(max)` | Barra de progreso de 0 a `max`. |
+| `mui_get_value(obj)`, `mui_set_value(obj, v)` | Valor: casilla 1/0, opción del ciclo (desde 0), nivel del deslizador, progreso. Cambiarlo lanza su `mui_on_change`. |
+| `mui_get_text(obj)`, `mui_set_text(obj, texto)` | Texto de un campo, texto, botón o título de ventana. |
+| `mui_set_enabled(obj, si)` | Activa o desactiva (en gris). |
+| `mui_on_change(obj, id)` | Evento cuando cambia el valor o el texto. |
+| `mui_on_ack(campo, id)` | Evento al pulsar Intro en un campo de texto. |
 | `mui_window_open(ventana)` | Abre la ventana; falso si no pudo. |
 | `mui_window_close(ventana)` | La cierra (sigue existiendo). |
 | `mui_on_press(boton, id)`, `mui_on_close(ventana, id)` | Eventos. |
@@ -2504,8 +2515,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 16 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_wait_event` |
-| **Total** | **338** | |
+| MUI | 29 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_wait_event` |
+| **Total** | **351** | |
 
 ### Colores Estandar Amiga
 

@@ -125,6 +125,10 @@ win = mui_window_begin("Title", 1)      # vertical root group; 1 = remember plac
         ok = mui_button("_OK")
     mui_group_end()
 mui_window_end()
+url = mui_string("http://", 200)        # mui_label, mui_checkbox(0), mui_cycle("A|B"),
+bar = mui_gauge(100)                    # mui_slider(min, max, v)
+mui_set_value(bar, 40)                  # mui_get_value; mui_get_text/mui_set_text; mui_set_enabled
+mui_on_change(url, 2)                   # mui_on_ack(url, id): Return in a text field
 mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
 mui_window_open(win)
 ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)

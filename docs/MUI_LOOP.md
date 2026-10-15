@@ -105,7 +105,7 @@ otras señales (red, temporizador). El plan va en ese orden.
       vertical y horizontal, `mui_text`, `mui_button`, `mui_window_open`, `mui_wait_event`, `mui_app_end`,
       `mui_on_close`, `mui_on_press`. Inclusión condicional del runtime y de las cabeceras. Test en emulador
       (pulsación simulada con `MUIA_Pressed`/`set` o cierre por modo test). Ejemplo `examples/mui_hola.dash`.
-- [ ] 4. **Valores.** Campo de texto (`mui_string`), casilla, ciclo, deslizador, barra de progreso
+- [x] 4. **Valores.** Campo de texto (`mui_string`), casilla, ciclo, deslizador, barra de progreso
       (`Gauge`), `mui_get_text`/`mui_set_text`, `mui_get_value`/`mui_set_value`, deshabilitar, `on_change`/`on_ack`.
 - [ ] 5. **Listas.** `List` + `Listview` de textos: añadir, borrar, vaciar, activo, doble clic. Comprobar memoria.
 - [ ] 6. **Estructura.** Menús (`Menustrip`), pestañas (`Register`), `Balance`, `Scrollgroup`/`Virtgroup`,
@@ -243,3 +243,17 @@ Formato:
 - Tests: 123/123 sin emulador; 290/290 con `--emu --emu-a500 --emu-32` (antes 283); ejemplos 32/32.
 - Pendiente / riesgos: `docs/BUILTINS.md` dice `APTR` en "Devuelve" de los `mui_` (es el tipo C; en Dash son números).
   La sección 20b del manual no tiene número propio para no renumerar el resto.
+
+### 2026-10-15 — Tarea 4 (valores)
+- Hecho: 13 builtins: `mui_label`, `mui_string`, `mui_checkbox`, `mui_cycle` ("A|B|C", copias en el pool con array
+  terminado en NULL), `mui_slider`, `mui_gauge`, `mui_get_value`/`mui_set_value`, `mui_get_text`/`mui_set_text`,
+  `mui_set_enabled`, `mui_on_change`, `mui_on_ack`. Cada objeto guarda su tipo en `MUIA_UserData` (texto, botón, campo,
+  casilla, ciclo, deslizador, barra, ventana): así `get/set_value` y `get/set_text` saben qué atributo tocar sin tablas.
+  `mui_set_value` usa `SetAttrs`, que dispara las notificaciones (los tests simulan al usuario así). El título de
+  ventana se copia al pool (MUI guarda el puntero). `MUIA_CycleChain` en los objetos de entrada (Tab entre ellos).
+- Probado en A1200 3.1 y 3.2 (`test_mui_values`, también con `--memcheck`): texto con `ñ` ida y vuelta, eventos de
+  casilla y ciclo, valores de deslizador y barra, títulos.
+- Limitación de Dash vista: la interpolación `#{...}` solo admite nombres de variable, no llamadas
+  (`"#{mui_get_text(url)}"` da "Variable ... is not defined"). Apuntado para la auditoría (tarea 12).
+- Tests: 124/124 sin emulador; 293/293 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
+- Pendiente: `mui_on_ack` no se puede disparar sin teclado en el emulador (solo se comprueba que se monta).

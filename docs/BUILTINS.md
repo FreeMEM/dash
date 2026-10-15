@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 338 funciones, 338 implementadas, 0 sin implementar.
+Total: 351 funciones, 351 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -412,5 +412,18 @@ Total: 338 funciones, 338 implementadas, 0 sin implementar.
 | `mui_on_press(obj, id)` | `void` | mui_wait_event returns id when the button is pressed |  |
 | `mui_on_close(win, id)` | `void` | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
 | `mui_press(obj)` | `void` | Send the mui_on_press event of a button as if it were pressed |  |
+| `mui_label(text)` | `APTR` | Label for a form row (right-aligned) |  |
+| `mui_string(initial, maxlen)` | `APTR` | Text field with up to maxlen characters |  |
+| `mui_checkbox(checked)` | `APTR` | Checkbox |  |
+| `mui_cycle(options)` | `APTR` | Cycle gadget; options separated by \| ("One\|Two\|Three") |  |
+| `mui_slider(min, max, value)` | `APTR` | Horizontal slider |  |
+| `mui_gauge(max)` | `APTR` | Progress bar from 0 to max |  |
+| `mui_get_value(obj)` | `LONG` | Value: checkbox 1/0, cycle option, slider level, progress |  |
+| `mui_set_value(obj, value)` | `void` | Set the value (fires mui_on_change like the user would) |  |
+| `mui_get_text(obj)` | `STRPTR` | Text of a text field, text, button or window title |  |
+| `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button or window title |  |
+| `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object |  |
+| `mui_on_change(obj, id)` | `void` | mui_wait_event returns id when the value or text changes |  |
+| `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
 | `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |
