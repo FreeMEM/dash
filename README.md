@@ -222,4 +222,6 @@ docs/                 Documentación
 
 ## Licencia
 
-Este proyecto es software libre. Ver fichero LICENSE para detalles.
+MIT (ver [LICENSE](LICENSE)). Los programas compilados con Dash pueden llevar la licencia que quieras.
+El float por software (`runtime/softfloat/fp-bit.*`) viene de GCC: GPL con la excepción de runtime,
+que permite distribuir los programas con cualquier licencia.
