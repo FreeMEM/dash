@@ -3251,6 +3251,27 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_timer(${ms}, ${id})",
         description="In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels)"
     ),
+    "mui_image": BuiltinFunc(
+        name="mui_image",
+        params=["file"],
+        return_type="APTR",
+        c_template="_dash_mui_image(${file})",
+        description="Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file"
+    ),
+    "mui_width": BuiltinFunc(
+        name="mui_width",
+        params=["obj"],
+        return_type="LONG",
+        c_template="_dash_mui_size(${obj}, 0)",
+        description="Width of an object on screen in pixels (0 before its window opens)"
+    ),
+    "mui_height": BuiltinFunc(
+        name="mui_height",
+        params=["obj"],
+        return_type="LONG",
+        c_template="_dash_mui_size(${obj}, 1)",
+        description="Height of an object on screen in pixels (0 before its window opens)"
+    ),
     "mui_wait_event": BuiltinFunc(
         name="mui_wait_event",
         params=[],

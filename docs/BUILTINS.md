@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 386 funciones, 386 implementadas, 0 sin implementar.
+Total: 389 funciones, 389 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -460,5 +460,8 @@ Total: 386 funciones, 386 implementadas, 0 sin implementar.
 | `mui_wait_event_signals(mask)` | `LONG` | Like mui_wait_event, but also returns 0 when one of the signals of mask arrives (sockets...); mui_signals says which |  |
 | `mui_signals()` | `LONG` | Signals of the mask that woke the last mui_wait_event_signals |  |
 | `mui_timer(ms, id)` | `void` | In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels) |  |
+| `mui_image(file)` | `APTR` | Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file |  |
+| `mui_width(obj)` | `LONG` | Width of an object on screen in pixels (0 before its window opens) |  |
+| `mui_height(obj)` | `LONG` | Height of an object on screen in pixels (0 before its window opens) |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
 | `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |

@@ -5239,7 +5239,7 @@ static LONG _dash_mui_npress = 0;
    read and write the attribute of that kind */
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
        _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
-       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR };
+       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR, _DASH_MUI_IMAGE };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -5662,8 +5662,22 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_BUTTON: return MUIA_Text_Contents;
     case _DASH_MUI_STRING: return MUIA_String_Contents;
     case _DASH_MUI_WINDOW: return MUIA_Window_Title;
+    case _DASH_MUI_IMAGE:  return MUIA_Dtpic_Name;
     }
     return 0;
+}
+
+/* Picture file shown by datatypes.library (ILBM; PNG, JPEG, GIF with their datatypes) */
+static APTR _dash_mui_image(STRPTR file) {
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Dtpic,
+        MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file)), _DASH_MUI_IMAGE);
+}
+
+/* Size of an object on screen, in pixels (0 before its window opens) */
+static LONG _dash_mui_size(APTR obj, LONG height) {
+    IPTR size = 0;
+    if (obj) GetAttr(height ? MUIA_Height : MUIA_Width, obj, &size);
+    return (LONG)size;
 }
 
 /* MUI's own text, copied by Dash when it is kept in a variable */
@@ -5677,7 +5691,8 @@ static STRPTR _dash_mui_get_text(APTR obj) {
 static void _dash_mui_set_text(APTR obj, STRPTR text) {
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
     if (!attr) return;
-    if (attr == MUIA_Window_Title) text = _dash_mui_keep(text);   /* windows keep the pointer */
+    if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name)
+        text = _dash_mui_keep(text);   /* they keep the pointer */
     SetAttrs(obj, attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
 }
 

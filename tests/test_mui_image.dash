@@ -1,0 +1,46 @@
+# MUI pictures through datatypes (Dtpic): the test writes an 8 x 4 ILBM (the format
+# every AmigaOS 3 has) and shows it; its size on screen tells it was loaded. A missing
+# file shows nothing (MUI still gives the object some size, so it cannot be told apart).
+# emu-needs: muimaster.library
+# expect-out: fichero escrito
+# expect-out: imagen 8 x 4
+# expect-out: sin fichero, sigue
+# expect-out: fin
+
+@native func write_ilbm(path: String) -> Int
+"""
+    static const UBYTE ilbm[70] = {
+        70, 79, 82, 77, 0, 0, 0, 62, 73, 76, 66, 77, 66, 77, 72, 68, 0, 0, 0, 20, 0, 8, 0, 4,
+        0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 10, 11, 1, 64, 0, 200, 67, 77, 65, 80, 0, 0, 0, 6,
+        0, 0, 0, 255, 255, 255, 66, 79, 68, 89, 0, 0, 0, 8, 240, 0, 15, 0, 170, 0, 85, 0 };
+    BPTR f = Open(path, MODE_NEWFILE);
+    LONG n;
+    if (!f) return 0;
+    n = Write(f, (APTR)ilbm, sizeof(ilbm));
+    Close(f);
+    return n == sizeof(ilbm);
+"""
+end
+
+Main
+    if write_ilbm("T:prueba.ilbm") == 1
+        Print "fichero escrito"
+    end
+    if mui_app_begin("Imagen", "DASHIMG") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Imagen", 0)
+            mui_hgroup_begin()
+                img = mui_image("T:prueba.ilbm")
+                falta = mui_image("T:no_existe.png")
+            mui_group_end()
+        mui_window_end()
+        mui_window_open(win)
+        w = mui_width(img)
+        h = mui_height(img)
+        Print "imagen #{w} x #{h}"
+        Print "sin fichero, sigue"
+        mui_app_end()
+        Print "fin"
+    end
+end

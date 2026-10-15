@@ -111,6 +111,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                           "C:Assign LOCALE: SYS:Locale", "C:Assign KEYMAPS: DEVS:Keymaps"]
                 if (hd / "Classes").is_dir():   # window.class, gadgets/layout.gadget...
                     lines.append("C:Assign LIBS: SYS:Classes ADD")
+                if (hd / "C" / "AddDataTypes").exists() and (hd / "Devs" / "DataTypes").is_dir():
+                    lines.append("C:AddDataTypes REFRESH QUIET")   # picture formats (MUI Dtpic)
             # Extra boot commands of that system (MUI: its assigns, see tools/emu_sys_mui.sh)
             extra = Path(system) / "S" / "Startup-Extra"
             if extra.is_file():

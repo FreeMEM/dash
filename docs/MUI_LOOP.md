@@ -116,7 +116,7 @@ otras señales (red, temporizador). El plan va en ese orden.
       medir en el A1200 cuánto tarda en repintar.
 - [x] 8. **Señales externas.** `mui_wait_event_signals(mask)` para atender sockets y temporizador sin
       bloquear la interfaz. Test con `timer.device` o una señal propia.
-- [ ] 9. **Imágenes.** `Dtpic` (datatypes) para PNG/JPEG/GIF en un objeto; o dibujar un bitmap en la zona propia.
+- [x] 9. **Imágenes.** `Dtpic` (datatypes) para PNG/JPEG/GIF en un objeto; o dibujar un bitmap en la zona propia.
 - [ ] 10. **Ejemplo del navegador.** `examples/mui_navegador.dash`: la ventana del diseño (sin red), con
       historial falso y la página pintada en la zona propia. Captura de pantalla en el emulador.
 - [ ] 11. **Repaso de MUI.** Tamaño del ejecutable, memoria (`--memcheck`), tiempos de apertura en A1200,
@@ -325,3 +325,14 @@ Formato:
   `_dash_str_escape`). **Pendiente para la tarea 11:** hoy los textos que se pasan a los `mui_` se escapan (se hacen
   permanentes hasta salir); cuando `reads_only` llegue, marcar los `mui_` que no guardan el texto (MUI copia).
 - Tests: 128/128 sin emulador; 305/305 con `--emu --emu-a500 --emu-32`; ejemplos 32/32.
+
+### 2026-10-16 — Tarea 9 (imágenes)
+- Hecho: `mui_image(fichero)` (`Dtpic`, nombre copiado al pool; `mui_set_text` lo cambia), `mui_width`/`mui_height`
+  (`MUIA_Width`/`MUIA_Height`, sirven para cualquier objeto). Entorno: `tools/emu_sys_from_hdf.sh` copia ahora
+  `Devs/DataTypes` y `C/AddDataTypes`, y `tools/emu_run.py` ejecuta `AddDataTypes REFRESH QUIET` al arrancar si están.
+  Rehechos `sys31`, `sys32`, `sys31mui` y `sys32mui` (3.1 trae ILBM; 3.2 además PNG, JPEG, GIF, BMP).
+- Probado: `test_mui_image` escribe un ILBM de 8 x 4 con `@native` y lo muestra: mide 8 x 4 en A1200 3.1 y 3.2 (también
+  `--memcheck`); un fichero que no existe no cuelga. A mano en 3.2: un PNG de 6 x 3 generado igual mide 6 x 3.
+- Limitación: con un fichero que falta, MUI da al objeto un tamaño igual, así que el programa no puede saber si cargó.
+  Para el navegador las imágenes irán pintadas en la zona de dibujo (tarea D12 de la sesión de dashweb), no con `Dtpic`.
+- Tests: 129/129 sin emulador; 308/308 con `--emu --emu-a500 --emu-32` (con datatypes en los cuatro sistemas); ejemplos 32/32.

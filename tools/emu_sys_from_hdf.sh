@@ -9,7 +9,8 @@
 #
 # The hard file is only read. A file with partitions (RDB, "RDSK") is read from its
 # first partition, copied out with dd; one without them is copied whole.
-# Classes/ (ReAction: window.class, Gadgets/, Images/) is copied when the disk has it.
+# Classes/ (ReAction: window.class, Gadgets/, Images/; DataTypes/) and Devs/DataTypes are
+# copied when the disk has them.
 # workbench.library and icon.library are on the disk from 3.2 on (3.1 has them in ROM);
 # C/LoadWB is for tools/emu_run.py --workbench.
 #
@@ -39,10 +40,17 @@ for lib in asl diskfont iffparse locale mathieeesingtrans mathieeedoubbas mathie
     "$XDF" "$tmp/disk.hdf" read "Libs/$lib.library" "$2/Libs/$lib.library" >/dev/null 2>&1 \
         && echo "Libs/$lib.library"
 done
-for cmd in Assign MakeDir LoadWB; do
+for cmd in Assign MakeDir LoadWB AddDataTypes; do
     "$XDF" "$tmp/disk.hdf" read "C/$cmd" "$2/C/$cmd" >/dev/null 2>&1 && echo "C/$cmd"
 done
 if "$XDF" "$tmp/disk.hdf" list Classes >/dev/null 2>&1; then
     rm -rf "$2/Classes"
     "$XDF" "$tmp/disk.hdf" read Classes "$2/Classes" >/dev/null && echo "Classes/"
+fi
+# Datatype descriptors (picture formats for MUI's Dtpic, datatypes.library):
+# tools/emu_run.py runs C:AddDataTypes when it is there
+if "$XDF" "$tmp/disk.hdf" list Devs/DataTypes >/dev/null 2>&1; then
+    rm -rf "$2/Devs/DataTypes"
+    mkdir -p "$2/Devs"
+    "$XDF" "$tmp/disk.hdf" read Devs/DataTypes "$2/Devs/DataTypes" >/dev/null && echo "Devs/DataTypes/"
 fi
