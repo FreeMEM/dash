@@ -135,7 +135,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       `MENUPICK` para `gt_*`/`menu_*` (nunca llegan eventos); las esperas devuelven el primer mensaje y dejan el resto en
       la cola; `gt_event` y `menu_event` se roban mensajes; `ItemAddress` NULL; filtro de `MOUSEMOVE` de los
       deslizadores; `On Menu` en `EventLoop`.
-- [ ] 13b. **Bugs de valores y vida de los objetos** (auditoría 3, 6, 10, 11, 13): `gt_get/set_value` solo con
+- [x] 13b. **Bugs de valores y vida de los objetos** (auditoría 3, 6, 10, 11, 13): `gt_get/set_value` solo con
       deslizadores; gadgets que apuntan a una ventana cerrada; textos copiados para siempre (`textfield_set`,
       `ra_set_string`, `listview_add` dos veces...); `CloseWindow` con el menú puesto, `menu_attach`/`gt_init` dos
       veces; `gt_*` usa la ventana actual en vez de la suya.
@@ -458,3 +458,24 @@ Formato:
   los botones.
 - Sin probar: arrastrar un deslizador (los `MOUSEMOVE` deberían llegar ahora).
 - Tests: 131/131 sin emulador; 315/315 con `--emu --emu-a500 --emu-32`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 13b (valores y vida de los objetos de GadTools)
+- Hecho:
+  - Paso común antes de cerrar una ventana: `_dash_before_close(win)` (en `WINDOW_RUNTIME`/`GRAPHICS_RUNTIME`) llama a
+    los runtimes que se apuntan con `_dash_on_close`; está en los seis sitios que cierran ventanas propias (`Win.close`,
+    fin de `EventLoop`, limpieza final, `window_close`, `close_window`).
+  - GadTools (`gt_*` y menús) recuerda su ventana (`_dash_gt_win`, la de `gt_init`): antes usaba `_dash_win`, que cambia
+    con `window_create`. Al cerrarla: `ClearMenuStrip` y `RemoveGList` (antes `CloseWindow` con el menú puesto).
+    `gt_init` otra vez libera lo anterior; `menu_attach` otra vez cambia los menús; `gt_attach` dos veces no añade la
+    lista dos veces.
+  - `gt_get_value`/`gt_set_value` según el tipo guardado al crear cada gadget: casilla (`GTCB_Checked`), paleta
+    (`GTPA_Color`), entero (`GTIN_Number`), deslizador, ciclo y lista.
+  - Gadgets por número: al cerrar su ventana olvidan el puntero (`GT_SetGadgetAttrs` con ventana NULL no dibuja).
+  - Textos: `textfield_set`, `ra_set_string` y `listview_add` en `_STRING_READERS`; las líneas de un listview son una
+    copia propia que `listview_clear` y la limpieza final liberan (antes, dos copias permanentes por línea).
+- Probado en las tres máquinas, con `# memcheck` (`test_gt_values`): valores de casilla, paleta, entero y deslizador
+  leídos y cambiados; `gt_set_value` tras `window_create`; menús cambiados; 20 `textfield_set` y `listview_add` con
+  textos interpolados; deslizador de una ventana cerrada; al salir 0 vivos y 0 escapados.
+- Visto: `_dash_check_close` (`window_check_close`) vacía el puerto con `GetMsg` y tira todo lo que no es cerrar
+  (mismo problema que tenían `gt_event`/`menu_event`); queda para la tarea 16 (varias ventanas).
+- Tests: 132/132 sin emulador; 319/319 con `--emu --emu-a500 --emu-32`; 197/197 con `--emu --memcheck`; ejemplos 33/33. Tres `expect-c` con el `CloseWindow` exacto actualizados (`test_exit_cleanup`, `test_window_handles`, `test_windows_adv`).

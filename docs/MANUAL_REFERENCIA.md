@@ -1607,7 +1607,9 @@ if menu_ev == MENU_QUIT
 end
 ```
 
-`gt_event()` y `menu_event()` leen el mismo puerto de la ventana: lo que una lee para la otra queda
+Los `gt_*` y los menús pertenecen a la ventana en la que se llamó a `gt_init()` (aunque luego otra
+pase a ser la actual). Llamar otra vez a `gt_init()` empieza de cero, y otra vez a `menu_attach()`
+cambia los menús. `gt_event()` y `menu_event()` leen el mismo puerto de la ventana: lo que una lee para la otra queda
 guardado, así que se pueden llamar las dos en cada vuelta. `gt_event()` devuelve -1 si no hay nada y
 -2 al cerrar; `gt_wait_event()` espera. Las coordenadas de `gt_*` cuentan desde dentro de los bordes
 de la ventana.
@@ -1754,8 +1756,8 @@ end
 | `gt_slider(x,y,w,h,label,min,max,init)` | Crear slider |
 | `gt_checkbox(x,y,w,h,label,checked)` | Crear checkbox |
 | `gt_event()` | Obtener evento de gadget |
-| `gt_get_value(gadget)` | Obtener valor de gadget |
-| `gt_set_value(gadget,value)` | Establecer valor de gadget |
+| `gt_get_value(gadget)` | Valor: casilla 1/0, deslizador, color de la paleta, número de un campo entero |
+| `gt_set_value(gadget,value)` | Cambiar ese valor |
 | `menu_title(name)` | Crear titulo de menu |
 | `menu_item(name,shortcut,id)` | Crear item de menu |
 | `menu_separator()` | Crear separador |

@@ -1346,6 +1346,21 @@ $user_code
 struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
 struct Screen *_dash_screen = NULL;
+/* Runtimes that keep something of a window (menus, gadgets) let go of it here,
+   just before every CloseWindow */
+static void (*_dash_close_hooks[3])(struct Window *);
+static void _dash_on_close(void (*hook)(struct Window *)) {
+    LONG i;
+    for (i = 0; i < 3; i++) {
+        if (_dash_close_hooks[i] == hook) return;
+        if (!_dash_close_hooks[i]) { _dash_close_hooks[i] = hook; return; }
+    }
+}
+static void _dash_before_close(struct Window *win) {
+    LONG i;
+    if (!win) return;
+    for (i = 0; i < 3; i++) if (_dash_close_hooks[i]) _dash_close_hooks[i](win);
+}
 #endif
 
 """
@@ -2402,6 +2417,7 @@ static void _dash_window_close(LONG h) {
     if (!win) return;
     _dash_windows_forget(win);
     _dash_window_closed(win);   /* generated: clears win_<Name> */
+    _dash_before_close(win);
     CloseWindow(win);
 }
 
@@ -2494,6 +2510,21 @@ struct GfxBase *GfxBase = NULL;
 struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
 struct Screen *_dash_screen = NULL;
+/* Runtimes that keep something of a window (menus, gadgets) let go of it here,
+   just before every CloseWindow */
+static void (*_dash_close_hooks[3])(struct Window *);
+static void _dash_on_close(void (*hook)(struct Window *)) {
+    LONG i;
+    for (i = 0; i < 3; i++) {
+        if (_dash_close_hooks[i] == hook) return;
+        if (!_dash_close_hooks[i]) { _dash_close_hooks[i] = hook; return; }
+    }
+}
+static void _dash_before_close(struct Window *win) {
+    LONG i;
+    if (!win) return;
+    for (i = 0; i < 3; i++) if (_dash_close_hooks[i]) _dash_close_hooks[i](win);
+}
 #endif
 static BOOL _dash_own_screen = FALSE;
 
@@ -3362,30 +3393,34 @@ static struct Gadget *_dash_glist = NULL;
 static struct Gadget *_dash_gad = NULL;
 static void *_dash_vi = NULL;
 static struct Menu *_dash_menu = NULL;
+static struct Window *_dash_gt_win = NULL;   /* the window of gt_init: gt_* and menus belong to it */
 
 /* Gadget ID tracking */
 #define FLOW_MAX_GADGETS 64
 static struct Gadget *_dash_gadgets[FLOW_MAX_GADGETS];
+static UBYTE _dash_gadget_kinds[FLOW_MAX_GADGETS];     /* BUTTON_KIND, SLIDER_KIND... */
 static LONG _dash_gadget_count = 0;
 static LONG _dash_last_gadget_id = -1;
 
-static BOOL _dash_gt_init(void) {
-    if (!_dash_win) return FALSE;
-    _dash_vi = GetVisualInfo(_dash_win->WScreen, TAG_DONE);
-    if (!_dash_vi) return FALSE;
-    _dash_gad = CreateContext(&_dash_glist);
-    return (_dash_gad != NULL);
+static BOOL _dash_gt_attached = FALSE;
+
+/* Its window is closing: take the menu and the gadgets off it (they are freed later) */
+static void _dash_gt_window_gone(struct Window *win) {
+    if (win != _dash_gt_win) return;
+    if (_dash_menu) ClearMenuStrip(win);
+    if (_dash_glist && _dash_gt_attached) RemoveGList(win, _dash_glist, -1);
+    _dash_gt_attached = FALSE;
+    _dash_gt_win = NULL;
 }
 
 static void _dash_gt_cleanup(void) {
-    /* at exit the window may be closed already (_dash_win NULL): only free */
+    /* at exit the window may be closed already (_dash_gt_win NULL): only free */
+    if (_dash_gt_win) _dash_gt_window_gone(_dash_gt_win);
     if (_dash_menu) {
-        if (_dash_win) ClearMenuStrip(_dash_win);
         FreeMenus(_dash_menu);
         _dash_menu = NULL;
     }
     if (_dash_glist) {
-        if (_dash_win) RemoveGList(_dash_win, _dash_glist, -1);
         FreeGadgets(_dash_glist);
         _dash_glist = NULL;
     }
@@ -3397,6 +3432,18 @@ static void _dash_gt_cleanup(void) {
     _dash_gadget_count = 0;
 }
 
+/* gt_init again starts over (gadgets and menus of the previous one are freed) */
+static BOOL _dash_gt_init(void) {
+    if (!_dash_win) return FALSE;
+    _dash_gt_cleanup();
+    _dash_gt_win = _dash_win;
+    _dash_on_close(_dash_gt_window_gone);
+    _dash_vi = GetVisualInfo(_dash_win->WScreen, TAG_DONE);
+    if (!_dash_vi) return FALSE;
+    _dash_gad = CreateContext(&_dash_glist);
+    return (_dash_gad != NULL);
+}
+
 static LONG _dash_gt_button(LONG x, LONG y, LONG w, LONG h, STRPTR label) {
     if (!_dash_gad || _dash_gadget_count >= FLOW_MAX_GADGETS) return -1;
     struct NewGadget ng = {
@@ -3405,6 +3452,7 @@ static LONG _dash_gt_button(LONG x, LONG y, LONG w, LONG h, STRPTR label) {
     _dash_gad = CreateGadget(BUTTON_KIND, _dash_gad, &ng, TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = BUTTON_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3420,6 +3468,7 @@ static LONG _dash_gt_checkbox(LONG x, LONG y, LONG w, LONG h, STRPTR label, BOOL
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = CHECKBOX_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3436,6 +3485,7 @@ static LONG _dash_gt_string(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = STRING_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3451,6 +3501,7 @@ static LONG _dash_gt_integer(LONG x, LONG y, LONG w, LONG h, STRPTR label, LONG 
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = INTEGER_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3470,6 +3521,7 @@ static LONG _dash_gt_slider(LONG x, LONG y, LONG w, LONG h, STRPTR label, LONG m
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = SLIDER_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3487,6 +3539,7 @@ static LONG _dash_gt_palette(LONG x, LONG y, LONG w, LONG h, STRPTR label, LONG 
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = PALETTE_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3503,6 +3556,7 @@ static LONG _dash_gt_cycle(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR 
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = CYCLE_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3519,6 +3573,7 @@ static LONG _dash_gt_listview(LONG x, LONG y, LONG w, LONG h, STRPTR label, stru
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = LISTVIEW_KIND;
         return _dash_gadget_count++;
     }
     return -1;
@@ -3535,34 +3590,52 @@ static LONG _dash_gt_text(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR t
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
+        _dash_gadget_kinds[_dash_gadget_count] = TEXT_KIND;
         return _dash_gadget_count++;
     }
     return -1;
 }
 
 static void _dash_gt_attach(void) {
-    if (_dash_win && _dash_glist) {
+    struct Window *w = _dash_gt_win;
+    if (w && _dash_glist && !_dash_gt_attached) {
         /* the window may have been opened without the gadget events */
-        ModifyIDCMP(_dash_win, _dash_win->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
+        ModifyIDCMP(w, w->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
                     IDCMP_MOUSEMOVE | IDCMP_MOUSEBUTTONS | IDCMP_INTUITICKS | IDCMP_REFRESHWINDOW);
-        AddGList(_dash_win, _dash_glist, -1, -1, NULL);
-        RefreshGList(_dash_glist, _dash_win, NULL, -1);
-        GT_RefreshWindow(_dash_win, NULL);
+        AddGList(w, _dash_glist, -1, -1, NULL);
+        RefreshGList(_dash_glist, w, NULL, -1);
+        GT_RefreshWindow(w, NULL);
+        _dash_gt_attached = TRUE;
     }
 }
 
+/* The attribute holding the value of a gadget of that kind (0: none) */
+static ULONG _dash_gt_value_tag(LONG kind) {
+    switch (kind) {
+    case SLIDER_KIND:   return GTSL_Level;
+    case CHECKBOX_KIND: return GTCB_Checked;
+    case PALETTE_KIND:  return GTPA_Color;
+    case INTEGER_KIND:  return GTIN_Number;
+    case CYCLE_KIND:    return GTCY_Active;
+    case LISTVIEW_KIND: return GTLV_Selected;
+    }
+    return 0;
+}
+
 static LONG _dash_gt_get_value(LONG gad_id) {
-    if (gad_id < 0 || gad_id >= _dash_gadget_count) return 0;
-    struct Gadget *gad = _dash_gadgets[gad_id];
     LONG value = 0;
-    GT_GetGadgetAttrs(gad, _dash_win, NULL, GTSL_Level, (ULONG)&value, TAG_DONE);
-    return value;
+    ULONG tag;
+    if (gad_id < 0 || gad_id >= _dash_gadget_count) return 0;
+    if (!(tag = _dash_gt_value_tag(_dash_gadget_kinds[gad_id]))) return 0;
+    GT_GetGadgetAttrs(_dash_gadgets[gad_id], _dash_gt_win, NULL, tag, (ULONG)&value, TAG_DONE);
+    return tag == GTCB_Checked ? (value != 0) : value;
 }
 
 static void _dash_gt_set_value(LONG gad_id, LONG value) {
+    ULONG tag;
     if (gad_id < 0 || gad_id >= _dash_gadget_count) return;
-    struct Gadget *gad = _dash_gadgets[gad_id];
-    GT_SetGadgetAttrs(gad, _dash_win, NULL, GTSL_Level, value, TAG_DONE);
+    if (!(tag = _dash_gt_value_tag(_dash_gadget_kinds[gad_id]))) return;
+    GT_SetGadgetAttrs(_dash_gadgets[gad_id], _dash_gt_win, NULL, tag, value, TAG_DONE);
 }
 
 static STRPTR _dash_gt_get_string(LONG gad_id) {
@@ -3600,15 +3673,15 @@ static LONG _dash_gt_read(LONG want) {
             return id;
         }
     }
-    if (!_dash_win) return -1;
-    while ((imsg = GT_GetIMsg(_dash_win->UserPort))) {
+    if (!_dash_gt_win) return -1;
+    while ((imsg = GT_GetIMsg(_dash_gt_win->UserPort))) {
         ULONG cls = imsg->Class;
         UWORD code = imsg->Code;
         APTR iaddr = imsg->IAddress;
         LONG found = -1;
         if (cls == IDCMP_REFRESHWINDOW) {
-            GT_BeginRefresh(_dash_win);
-            GT_EndRefresh(_dash_win, TRUE);
+            GT_BeginRefresh(_dash_gt_win);
+            GT_EndRefresh(_dash_gt_win, TRUE);
         }
         GT_ReplyIMsg(imsg);
         if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN || cls == IDCMP_MOUSEMOVE) {
@@ -3645,9 +3718,10 @@ static LONG _dash_gt_event(void) {
 /* Waits only when nothing is left to read */
 static LONG _dash_gt_wait_event(void) {
     LONG id;
-    if (!_dash_win) return -2;
-    while ((id = _dash_gt_event()) == -1)
-        Wait(1L << _dash_win->UserPort->mp_SigBit);
+    while ((id = _dash_gt_event()) == -1) {
+        if (!_dash_gt_win) return -2;
+        Wait(1L << _dash_gt_win->UserPort->mp_SigBit);
+    }
     return id;
 }
 
@@ -3690,6 +3764,13 @@ static _DashGad *_dash_gad_get(LONG h) {
     return &_dash_gads[h];
 }
 
+/* Their window is closing: the gadgets stay until exit, but no longer draw into it */
+static void _dash_gads_window_gone(struct Window *win) {
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_GADS; i++)
+        if (_dash_gads[i].win == win) _dash_gads[i].win = NULL;
+}
+
 static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LONG y, LONG w, LONG h,
                           STRPTR label, ULONG place, struct TagItem *tags) {
     struct Window *win = _DASH_WIN_FROM_HANDLE(win_handle);
@@ -3726,6 +3807,7 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     }
     g->win = win;
     g->kind = kind;
+    _dash_on_close(_dash_gads_window_gone);
     for (g->last = g->glist; g->last->NextGadget; g->last = g->last->NextGadget) ;
     ModifyIDCMP(win, win->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MOUSEMOVE |
                      IDCMP_INTUITICKS | IDCMP_REFRESHWINDOW);
@@ -3879,7 +3961,7 @@ static void _dash_listview_add(LONG h, STRPTR text) {
     if (!g || g->kind != _DASH_GK_LIST) return;
     n = (struct Node *)_dash_alloc(sizeof(struct Node));
     if (!n) return;
-    n->ln_Name = (char *)_dash_str_escape(text);   /* the list keeps it */
+    n->ln_Name = (char *)_dash_str_dup(text ? text : (STRPTR)"", FALSE);   /* the list's own copy */
     GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, ~0, TAG_DONE);   /* detach while changing */
     AddTail(&g->items, n);
     GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, (ULONG)&g->items, TAG_DONE);
@@ -3890,7 +3972,10 @@ static void _dash_listview_clear(LONG h) {
     struct Node *n;
     if (!g || g->kind != _DASH_GK_LIST) return;
     GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, ~0, TAG_DONE);
-    while ((n = RemHead(&g->items))) FreePooled(_dash_pool, n, sizeof(struct Node));
+    while ((n = RemHead(&g->items))) {
+        _dash_str_free((STRPTR)n->ln_Name);
+        FreePooled(_dash_pool, n, sizeof(struct Node));
+    }
     GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Labels, (ULONG)&g->items,
                       GTLV_Selected, ~0, TAG_DONE);
     g->value = -1;
@@ -3907,6 +3992,10 @@ static void _dash_gadgets_cleanup(void) {
     for (i = 1; i <= _DASH_MAX_GADS; i++) {
         _DashGad *g = &_dash_gads[i];
         if (!g->gad) continue;
+        if (g->kind == _DASH_GK_LIST) {   /* the lines' texts */
+            struct Node *n;
+            while ((n = RemHead(&g->items))) _dash_str_free((STRPTR)n->ln_Name);
+        }
         g->last->NextGadget = NULL;   /* or FreeGadgets would follow into the next list */
         FreeGadgets(g->glist);
         FreeVisualInfo(g->vi);
@@ -3952,8 +4041,14 @@ static void _dash_menu_separator(void) {
     _dash_menu_add(NM_ITEM, NM_BARLABEL, NULL, 0);
 }
 
+/* A second menu_attach replaces the menus of the first */
 static BOOL _dash_menu_attach(void) {
-    if (!_dash_vi || !_dash_win) return FALSE;
+    if (!_dash_vi || !_dash_gt_win) return FALSE;
+    if (_dash_menu) {
+        ClearMenuStrip(_dash_gt_win);
+        FreeMenus(_dash_menu);
+        _dash_menu = NULL;
+    }
     _dash_menu = CreateMenus(_dash_menu_items, TAG_DONE);
     if (!_dash_menu) return FALSE;
     if (!LayoutMenus(_dash_menu, _dash_vi, GTMN_NewLookMenus, TRUE, TAG_DONE)) {
@@ -3961,8 +4056,8 @@ static BOOL _dash_menu_attach(void) {
         _dash_menu = NULL;
         return FALSE;
     }
-    ModifyIDCMP(_dash_win, _dash_win->IDCMPFlags | IDCMP_MENUPICK);
-    SetMenuStrip(_dash_win, _dash_menu);
+    ModifyIDCMP(_dash_gt_win, _dash_gt_win->IDCMPFlags | IDCMP_MENUPICK);
+    SetMenuStrip(_dash_gt_win, _dash_menu);
     return TRUE;
 }
 
@@ -6973,6 +7068,7 @@ class CodeGenerator(ASTVisitor):
                          "    if (!win) return;\n"
                          f"{clears}"
                          f"{forget}"
+                         "    _dash_before_close(win);\n"
                          "    CloseWindow(win);\n"
                          "}\n")
 
@@ -7013,7 +7109,7 @@ class CodeGenerator(ASTVisitor):
             for window in self.analysis.program.windows:
                 if window.name in self.context.opened_windows:
                     cleanup.append(f"    if (win_{window.name}) {{ if (_dash_win == win_{window.name}) _dash_win = NULL; "
-                                   f"CloseWindow(win_{window.name}); win_{window.name} = NULL; }}\n")
+                                   f"_dash_before_close(win_{window.name}); CloseWindow(win_{window.name}); win_{window.name} = NULL; }}\n")
         if self.uses_gadgets:
             cleanup.append("    _dash_gadgets_cleanup();\n")
         if self.uses_bitmaps:
@@ -7462,7 +7558,7 @@ static {ret_type} {method_name}({params_str}) {{
         w = node.window_name
         forget = f"_dash_windows_forget(win_{w}); " if self.uses_winmgr else \
             f"if (_dash_win == win_{w}) {{ _dash_win = NULL; _dash_rp = NULL; }} "
-        self.emit(f"{indent}if (win_{w}) {{ {forget}CloseWindow(win_{w}); win_{w} = NULL; }}\n")
+        self.emit(f"{indent}if (win_{w}) {{ {forget}_dash_before_close(win_{w}); CloseWindow(win_{w}); win_{w} = NULL; }}\n")
         if self.context.in_event_loop and self.context.current_window == w:
             self.emit(f"{indent}running = FALSE;\n")
 
@@ -7513,6 +7609,7 @@ static {ret_type} {method_name}({params_str}) {{
         # Close window safely and nullify _dash_win if it points to same window
         self.emit(f"    if (win_{window}) {{\n")
         self.emit(f"        if (_dash_win == win_{window}) _dash_win = NULL;\n")
+        self.emit(f"        _dash_before_close(win_{window});\n")
         self.emit(f"        CloseWindow(win_{window});\n")
         self.emit(f"        win_{window} = NULL;\n")
         self.emit(f"    }}\n")
@@ -8268,6 +8365,9 @@ static {ret_type} {method_name}({params_str}) {{
         "mui_app_begin", "mui_window_begin", "mui_text", "mui_label", "mui_button", "mui_string",
         "mui_cycle", "mui_register_begin", "mui_frame_begin", "mui_menu_begin", "mui_menu_item",
         "mui_set_text", "mui_list_add", "mui_list_insert", "mui_image",
+        # GadTools and ReAction string gadgets copy the text into their buffer; the
+        # listview runtime makes its own copy of each line
+        "textfield_set", "ra_set_string", "listview_add",
     }
 
     def _frees(self, owned) -> str:

@@ -4,7 +4,7 @@
 #
 # expect-c: static void _dash_windows_cleanup(void)
 # expect-c: if (w < 40) w = 40;
-# expect-c: if (win_Principal) { _dash_windows_forget(win_Principal); CloseWindow(win_Principal); win_Principal = NULL; }
+# expect-c: if (win_Principal) { _dash_windows_forget(win_Principal); _dash_before_close(win_Principal); CloseWindow(win_Principal); win_Principal = NULL; }
 # expect-out: 1
 # expect-out: 2
 # expect-out: 0

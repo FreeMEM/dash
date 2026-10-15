@@ -1,0 +1,77 @@
+# GadTools values and lifetimes: gt_get_value/gt_set_value for every kind (not only
+# sliders), gt_* keep using the window of gt_init when another window becomes the
+# current one, menu_attach twice, gadgets of a closed window, and texts given to
+# textfield_set / listview_add that are freed (no copy kept until exit).
+# memcheck
+# expect-out: casilla 0, paleta 1, entero 42, deslizador 5
+# expect-out: casilla 1, paleta 3, entero 7, deslizador 9
+# expect-out: otra ventana: deslizador 2
+# expect-out: menú cambiado
+# expect-out: campo: texto 20
+# expect-out: cerrada: 3
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Window W
+    title "Valores"
+    width 300
+    height 140
+end
+
+Main
+    W.open
+    gt_init()
+    casilla = gt_checkbox(10, 10, 26, 11, "Casilla", false)
+    paleta = gt_palette(10, 30, 120, 20, "Paleta", 2, 1)
+    entero = gt_integer(80, 60, 60, 14, "Entero", 42)
+    deslizador = gt_slider(80, 80, 100, 10, "Nivel", 0, 10, 5)
+    gt_attach()
+    menu_title("Uno")
+    menu_item("A", "A", 1)
+    menu_attach()
+
+    c = gt_get_value(casilla)
+    p = gt_get_value(paleta)
+    e = gt_get_value(entero)
+    d = gt_get_value(deslizador)
+    Print "casilla #{c}, paleta #{p}, entero #{e}, deslizador #{d}"
+    gt_set_value(casilla, 1)
+    gt_set_value(paleta, 3)
+    gt_set_value(entero, 7)
+    gt_set_value(deslizador, 9)
+    c = gt_get_value(casilla)
+    p = gt_get_value(paleta)
+    e = gt_get_value(entero)
+    d = gt_get_value(deslizador)
+    Print "casilla #{c}, paleta #{p}, entero #{e}, deslizador #{d}"
+
+    # another window becomes the current one: gt_* still work on W
+    otra = window_create("Otra", 20, 120, 220, 90, 0)
+    gt_set_value(deslizador, 2)
+    d = gt_get_value(deslizador)
+    Print "otra ventana: deslizador #{d}"
+
+    # a second set of menus replaces the first
+    menu_title("Dos")
+    menu_item("B", "B", 2)
+    menu_attach()
+    Print "menú cambiado"
+
+    # texts the gadgets copy: no permanent copies
+    campo = textfield_create(otra, 10, 10, 120, 14, 30)
+    lista = listview_create(otra, 10, 30, 120, 40)
+    for i in (1..20)
+        textfield_set(campo, "texto #{i}")
+        listview_add(lista, "línea #{i}")
+    end
+    t = textfield_get(campo)
+    Print "campo: #{t}"
+
+    # gadgets of a closed window are still safe to use
+    s = slider_create(otra, 10, 75, 100, 10, 0, 10, 1)
+    window_close(otra)
+    slider_set(s, 3)
+    v = slider_get(s)
+    Print "cerrada: #{v}"
+    Print "fin"
+end
