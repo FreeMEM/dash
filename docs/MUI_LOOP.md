@@ -90,7 +90,7 @@ otras señales (red, temporizador). El plan va en ese orden.
 
 ## Tareas
 
-- [ ] 1. **Entorno.** `tools/get_mui_sdk.sh` (descarga, comprueba tamaño y extrae en `~/.cache/dash-mui`)
+- [~] 1. **Entorno.** `tools/get_mui_sdk.sh` (descarga, comprueba tamaño y extrae en `~/.cache/dash-mui`)
       y un sistema emulado con MUI (`tools/emu_sys_mui.sh` → `~/.cache/dash-emu/sys31mui`, variable
       `DASH_EMU_SYS_MUI`; ver qué más necesita: `MUI:`, `ENV:MUI`, `Images`, `Locale`). Arreglar el cuelgue
       de `hola_mui.c` (sacar la salida con `--keep` y captura de pantalla de FS-UAE si hace falta) hasta que
@@ -145,7 +145,11 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
 ### Editor visual de MUI para VS Code (petición del usuario del 2026-10-15, "un Glade para MUI")
 
 Un complemento de VS Code donde se monta la ventana arrastrando objetos (grupos, botones, listas...) y
-que genera el código Dash. Hasta ahora solo estaba como pregunta abierta en `ROADMAP.md`.
+que genera el código Dash. Ya estaba en el plan de AmiCachy (`~/Projects/AmiCachy`: `PROJECT_CONTEXT.md`,
+`ARCHITECTURE.md` sección 5 "AmiCachyDev"): perfil `dev_station` con VS Code + Amiberry, carpeta compartida
+`DEV:` y un puente de depuración VS Code <-> Amiberry. El usuario recuerda haber hablado también del formato
+del fichero que describe la interfaz; no se encontró escrito (buscado el 2026-10-15 en shiva y pegaso:
+repos, sesiones de Claude y Antigravity).
 
 - [ ] 19. **Diseño.** Formato del fichero de interfaz: si la tarea 2 adopta la sintaxis declarativa, el editor
       lee y escribe ese mismo Dash (sin formato propio); si no, un `.dashui` (JSON) que el compilador convierte.
