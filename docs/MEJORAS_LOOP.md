@@ -140,39 +140,39 @@ que son los que crecen en un bucle (concatenar, interpolar, `Print("x" + n)`):
       `tests/bench/results.json`: ciclos por función y por programa, tamaño de ejecutables y memoria, antes y
       después, por versión (commit), para ver cómo evoluciona. Script que la regenere (`tools/bench_report.py`).
 - [x] 29. Documentación final: README, ROADMAP, QUICK_REFERENCE, MANUAL_REFERENCIA, CLAUDE.md local.
-- [ ] 30. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
-      juegos y cálculos rápidos en 68000, donde `Float` cuesta ~100 µs por suma. Partes:
-      30a diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
-      literales y conversiones (`Fixed(x)`, `Int(f)`, `Float(f)`), mezcla con Int/Float, impresión, errores
-      (desborde, división por cero); anotar la decisión en la bitácora antes de programar.
-      30b runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
-      (`mulu.w` por partes, sin libgcc) y con `muls.l`/`divs.l` en `--fpu`/68020 si conviene; impresión con
-      decimales; `sqrt`/`sin`/`cos` por tabla si caben pocos bytes.
-      30c lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
-      30d pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
-      benchmarks `fixed_mul`/`fixed_add` frente a `float_mul`/`float_mul_add`; documentación (QUICK_REFERENCE,
-      MANUAL_REFERENCIA, README) y un ejemplo (p. ej. movimiento con velocidad y gravedad).
-- [ ] 31. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
+- [ ] 30. Conteo de referencias (pedida el 2026-10-15): encontrar fallos, mejorarlo y optimizarlo. Es la parte
       más delicada: un fallo cuelga el Amiga (doble liberación, uso tras liberar) o pierde memoria sin avisar.
       Partes:
-      31a modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
+      30a modo de depuración: `--memcheck` (o `DASH_MEMCHECK`) que cuenta objetos vivos, marca los bloques liberados
       (relleno y contador imposible) y avisa de doble liberación, uso tras liberar y objetos vivos al salir.
       Apagado no cuesta nada. Probado en el harness del PC (con AddressSanitizer) y en el emulador.
-      31b auditoría: repasar cada camino del codegen que toca objetos (asignar, parámetros, `return`, campos,
+      30b auditoría: repasar cada camino del codegen que toca objetos (asignar, parámetros, `return`, campos,
       `self`, métodos, globales, trozos `a[1:3]`, `for x in lista`, lambdas, `break`/`continue`/`return` dentro de
       bucles anidados y de `EventLoop`, recursión, structs dentro de structs) y apuntar en la bitácora qué hace
       cada uno. Un test por camino con `--memcheck`: 0 vivos al salir y memoria que no crece en 10.000 vueltas.
-      31c fallos y huecos conocidos: un objeto guardado en una lista, dado a C o devuelto por una lambda escapa y
+      30c fallos y huecos conocidos: un objeto guardado en una lista, dado a C o devuelto por una lambda escapa y
       no se libera hasta salir (comprobar si un juego que crea enemigos en una lista en cada vuelta crece sin
       parar; si es así, listas de objetos que sueltan sus elementos al sobrescribirlos y al destruirse); los
       ciclos (documentar o detectar); desborde del contador.
-      31d prueba aleatoria: generador de programas Dash pequeños con asignaciones, llamadas y campos al azar,
+      30d prueba aleatoria: generador de programas Dash pequeños con asignaciones, llamadas y campos al azar,
       ejecutados con `--memcheck` en el PC y en el emulador (A500); cada fallo encontrado pasa a ser un test.
-      31e optimizar con medidas (`tools/bench.py`, A500 y A1200): `_dash_otmp_take` recorre la lista de
+      30e optimizar con medidas (`tools/bench.py`, A500 y A1200): `_dash_otmp_take` recorre la lista de
       temporales (lineal), quitar pares `retain`/`release` que se anulan (parámetros prestados, `obj_set` de un
       temporal recién creado), camino rápido en línea; volver a mirar la cabecera de 16 bytes (27c) si sale barata.
       Cada cambio con antes/después en la bitácora y en el panel de comparativas.
-      31f documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
+      30f documentación: reglas de memoria de listas y structs en MANUAL_REFERENCIA (qué se libera y cuándo).
+- [ ] 31. Coma fija (pedida el 2026-10-15): un tipo de número con decimales que por dentro es un entero, para
+      juegos y cálculos rápidos en 68000, donde `Float` cuesta ~100 µs por suma. Partes:
+      31a diseño: nombre del tipo (p. ej. `Fixed`), formato (16.16 en un `LONG`: rango ±32767, paso 1/65536),
+      literales y conversiones (`Fixed(x)`, `Int(f)`, `Float(f)`), mezcla con Int/Float, impresión, errores
+      (desborde, división por cero); anotar la decisión en la bitácora antes de programar.
+      31b runtime: suma y resta son las de enteros; multiplicación y división de 32x32 → 64 bits en 68000
+      (`mulu.w` por partes, sin libgcc) y con `muls.l`/`divs.l` en `--fpu`/68020 si conviene; impresión con
+      decimales; `sqrt`/`sin`/`cos` por tabla si caben pocos bytes.
+      31c lenguaje: tipo en analyzer y codegen, campos de struct y parámetros, arrays si es sencillo.
+      31d pruebas: tests con `# expect-out:` en A1200, A500 y 3.2, comparando con Float en casos límite;
+      benchmarks `fixed_mul`/`fixed_add` frente a `float_mul`/`float_mul_add`; documentación (QUICK_REFERENCE,
+      MANUAL_REFERENCIA, README) y un ejemplo (p. ej. movimiento con velocidad y gravedad).
 
 ## Bitácora
 

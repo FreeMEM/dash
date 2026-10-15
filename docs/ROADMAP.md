@@ -799,8 +799,8 @@ tests/
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
 ### Pendiente:
-- Coma fija (`Fixed`, 16.16): decimales rápidos en 68000. Tarea 30 de `docs/MEJORAS_LOOP.md`
-- Conteo de referencias: modo de depuración, auditoría, pruebas aleatorias y optimización. Tarea 31
+- Coma fija (`Fixed`, 16.16): decimales rápidos en 68000. Tarea 31 de `docs/MEJORAS_LOOP.md`
+- Conteo de referencias: modo de depuración, auditoría, pruebas aleatorias y optimización. Tarea 30
 
 ---
 
