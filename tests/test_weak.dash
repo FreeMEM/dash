@@ -1,0 +1,43 @@
+# Test: a weak field (a parent pointer) does not hold its object: a tree with weak parents
+# is freed whole (with a strong parent every tree would stay alive until exit).
+# memcheck
+# expect-c: s->padre = padre;
+# expect-out: html/body/p html/body/span 2
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Nodo
+    nombre: String
+    hijos: [Nodo]
+    weak padre: Nodo
+end
+
+func agrega(p: Nodo, nombre: String) -> Nodo
+    h = Nodo(nombre, [], p)
+    p.hijos.push(h)
+    return h
+end
+
+func ruta(n: Nodo) -> String
+    if n.padre == nil
+        return n.nombre
+    end
+    return ruta(n.padre) + "/" + n.nombre
+end
+
+func construye() -> String
+    var nada: Nodo = nil
+    raiz = Nodo("html", [], nada)
+    b = agrega(raiz, "body")
+    p = agrega(b, "p")
+    agrega(raiz, "head")
+    x = agrega(p, "span")
+    x.padre = b
+    return ruta(p) + " " + ruta(x) + " " + raiz.hijos.length
+end
+
+Main
+    for i in (1..100)
+        r = construye()
+    end
+    Print construye()
+end

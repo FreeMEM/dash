@@ -1623,6 +1623,24 @@ end
 - `refcount(x)`, `retain(x)` y `release(x)` siguen existiendo para casos avanzados; un
   `release` de mas libera algo que una variable aun usa.
 
+### Campos `weak` (sin ciclos)
+
+El conteo de referencias no libera los ciclos: un nodo que apunta a su padre, y el padre a sus
+hijos, se quedarian vivos hasta salir. Un campo marcado `weak` apunta sin retener:
+
+```
+struct Nodo
+    nombre: String
+    hijos: [Nodo]          # el padre retiene a sus hijos
+    weak padre: Nodo       # el hijo solo apunta a su padre
+end
+```
+
+Cuando nadie retiene la raiz, se libera el arbol entero. El objeto de un campo `weak` tiene que
+vivir mas que quien lo apunta (un padre vive mas que sus hijos). Si no, el campo apunta a algo
+liberado: con `--memcheck`, leerlo da el error `campo weak de un objeto ya liberado` (y `nil`).
+Solo vale para campos de structs, listas o diccionarios.
+
 ### Cuando se libera cada cosa
 
 | Que | Se libera |

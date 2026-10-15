@@ -194,6 +194,9 @@ class DashASTBuilder(Transformer):
 
     def struct_field(self, items) -> StructField:
         """Build a struct field node."""
+        weak = bool(items) and isinstance(items[0], Token) and items[0].type == "WEAK"
+        if weak:
+            items = items[1:]
         name = items[0].value if isinstance(items[0], Token) else str(items[0])
         field_type = items[1].value if isinstance(items[1], Token) else str(items[1])
         default_value = None
@@ -209,7 +212,8 @@ class DashASTBuilder(Transformer):
             name=name,
             field_type=field_type,
             default_value=default_value,
-            location=self._get_location(items[0])
+            location=self._get_location(items[0]),
+            weak=weak
         )
 
     def struct_method(self, items) -> StructMethod:

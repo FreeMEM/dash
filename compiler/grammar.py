@@ -27,7 +27,9 @@ dash_grammar_minimal = r"""
     // Struct definition with optional methods
     struct_def: "struct" ID struct_member* "end"
     struct_member: struct_field | struct_method | comment_line
-    struct_field: ID ":" TYPE_NAME ("=" expression)?
+    // weak: the field does not hold its object (a parent pointer), so no cycle (dashweb D6)
+    struct_field: WEAK? ID ":" TYPE_NAME ("=" expression)?
+    WEAK: "weak"
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
     // [T]: a list whose elements are T ("[String]", "[Nodo]", "[[Int]]")
     // {String: T}: a dictionary from String to T

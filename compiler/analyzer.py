@@ -1340,6 +1340,11 @@ class SemanticAnalyzer(ASTVisitor):
         for struct in program.structs:
             for where_node in struct.fields:
                 check(where_node.field_type, f"field '{where_node.name}' of '{struct.name}'")
+                t = where_node.field_type
+                if where_node.weak and not (program.get_struct(t) or list_elem_type(t) is not None
+                                            or dict_value_type(t) is not None or t == "Array"):
+                    self.error(f"weak is for fields that hold a struct, a list or a dictionary "
+                               f"('{where_node.name}' of '{struct.name}' is {t})", where_node)
             for where_node in struct.methods:
                 params(where_node, f"'{struct.name}.{where_node.name}'")
                 check(where_node.return_type, f"return of '{struct.name}.{where_node.name}'")

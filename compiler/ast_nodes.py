@@ -489,6 +489,7 @@ class StructField(ASTNode):
     field_type: str  # "Int", "String", "Bool"
     default_value: Optional[ASTNode] = None
     location: Optional[SourceLocation] = None
+    weak: bool = False  # "weak padre: Nodo": not a reference (dashweb D6)
 
 
 @dataclass

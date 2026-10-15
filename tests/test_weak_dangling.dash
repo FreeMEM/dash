@@ -1,0 +1,23 @@
+# Test: with --memcheck, reading a weak field whose object was freed is an error (and nil)
+# memcheck
+# expect-out: memcheck: ERROR campo weak de un objeto ya liberado
+# expect-out: nil
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 1
+
+struct Nodo
+    nombre: String
+    weak padre: Nodo
+end
+
+func huerfano() -> Nodo
+    var nada: Nodo = nil
+    p = Nodo("padre", nada)
+    return Nodo("hijo", p)
+end
+
+Main
+    h = huerfano()
+    if h.padre == nil
+        Print "nil"
+    end
+end

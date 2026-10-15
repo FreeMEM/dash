@@ -1046,6 +1046,25 @@ static DashDict *DashDict_from(LONG kind, LONG n, STRPTR *keys, LONG *vals) {
 
 """
 
+    # weak fields (dashweb D6): they point without holding. With --memcheck, reading one whose
+    # object was freed is an error and gives nil (freed blocks are kept aside by memcheck).
+    WEAK_RUNTIME = """\
+/* Dash Weak Runtime */
+#ifdef DASH_MEMCHECK
+static void *_dash_weak_check(void *p) {
+    if (p && (ULONG)_DASH_GET_HEADER(p)->_refcount == _DASH_MC_DEAD) {
+        _dash_mc_error((CONST_STRPTR)"campo weak de un objeto ya liberado");
+        return NULL;
+    }
+    return p;
+}
+#define _DASH_WEAK(p) _dash_weak_check((void *)(p))
+#else
+#define _DASH_WEAK(p) (p)
+#endif
+
+"""
+
     # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
     # doubles when full, so adding n elements one by one costs O(n).
     LIST_RUNTIME = """\
@@ -8183,6 +8202,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_array_concat: bool = False   # list + list (ARRAY_CONCAT_RUNTIME)
         self.uses_list_methods: bool = False   # l.push(x)... (LIST_RUNTIME)
         self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
+        self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
@@ -8341,6 +8361,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.LIST_RUNTIME)
         if self.uses_dicts:
             parts.append(CTemplates.DICT_RUNTIME)
+        if self.uses_weak:
+            parts.append(CTemplates.WEAK_RUNTIME)
 
         # Add string runtime if needed
         if self.uses_strings:
@@ -8836,6 +8858,9 @@ static {ret_type} {native.name}({params_str}) {{
                 self.uses_strings = True
                 assigns.append(f"    s->{field.name} = NULL;\n    _dash_str_set(&s->{field.name}, {field.name});")
                 frees.append(f"    _dash_str_free(s->{field.name});")
+            elif self._is_obj_c_type(c_type) and field.weak:   # weak: points, does not hold
+                self.uses_weak = True
+                assigns.append(f"    s->{field.name} = {field.name};")
             elif self._is_obj_c_type(c_type):   # struct or Array field: a new reference
                 assigns.append(f"    s->{field.name} = {field.name};\n    _dash_retain({field.name});")
                 frees.append(f"    _dash_release_child(s->{field.name});")
@@ -10156,14 +10181,14 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"DashArray_length({self._array_ref(node.object)})"
             # Check if object is self (struct member access)
             if isinstance(node.object, SelfRef):
-                return f"self->{node.property}"
+                return self._weak_read(node, f"self->{node.property}")
             # Check if object is a struct variable
             if isinstance(node.object, VarRef):
                 var_type = self.var_types.get(node.object.name)
                 if var_type and var_type.startswith("struct:"):
-                    return f"{self._nn(obj)}->{node.property}"
+                    return self._weak_read(node, f"{self._nn(obj)}->{node.property}")
             # Generic property access as pointer dereference
-            return f"{self._nn(obj)}->{node.property}"
+            return self._weak_read(node, f"{self._nn(obj)}->{node.property}")
         elif isinstance(node, MemberAccess):
             # Check if it's an enum value access (Direction.UP)
             enum = self.analysis.program.get_enum(node.object_name)
@@ -10190,7 +10215,7 @@ static {ret_type} {method_name}({params_str}) {{
                 self.uses_arrays = True
                 return f"DashArray_length({self._array_ref(VarRef(name=node.object_name))})"
             # Struct member access - use pointer notation
-            return f"{self._nn(node.object_name)}->{node.member}"
+            return self._weak_read(node, f"{self._nn(node.object_name)}->{node.member}")
         elif isinstance(node, LambdaFunc):
             # Generate an anonymous function and return its pointer
             return self._generate_lambda(node)
@@ -10407,6 +10432,11 @@ static {ret_type} {method_name}({params_str}) {{
             # the struct owns its String fields like a variable
             self.uses_strings = True
             self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {value});\n")
+            return
+        if field and field.weak:
+            # weak: the field only points (dashweb D6)
+            self.uses_weak = True
+            self.emit(f"{indent}{owner}->{node.member} = {value};\n")
             return
         if field and self._is_obj_c_type(self._dash_type_to_c(field.field_type)):
             # and holds a reference to its struct and Array fields
@@ -10723,6 +10753,14 @@ static {ret_type} {method_name}({params_str}) {{
             elem = self._dict_value_kind(node.array) or self._array_elem_type(node.array) or ""
             name = elem[7:] if elem.startswith("struct:") else None
         return prog.get_struct(name) if name else None
+
+    def _weak_read(self, node, code: str) -> str:
+        """Reading a weak field: with --memcheck, an object already freed is an error (and nil)."""
+        field = self._field_of(node)
+        if not (field and field.weak):
+            return code
+        self.uses_weak = True
+        return f"(({self._dash_type_to_c(field.field_type)})_DASH_WEAK({code}))"
 
     def _field_of(self, node) -> Optional[StructField]:
         """Struct field read by a member access (p.x, self.x, a.b.c)."""

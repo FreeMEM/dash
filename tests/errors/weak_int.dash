@@ -1,0 +1,9 @@
+# Test: weak only makes sense for fields that hold objects
+# expect: weak is for fields that hold a struct, a list or a dictionary
+
+struct Malo
+    weak n: Int
+end
+
+Main
+end
