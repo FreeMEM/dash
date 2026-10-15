@@ -8,7 +8,8 @@ Arranque:
 
 ## Objetivo
 
-Dos partes: MUI 5 (tareas 1-11) y terminar, mejorar, optimizar y corregir ReAction y GadTools (12-18).
+Tres partes: MUI 5 (tareas 1-11); terminar, mejorar, optimizar y corregir ReAction y GadTools (12-18);
+y un editor visual de MUI como complemento de VS Code (19-24).
 
 Que Dash pueda hacer programas con interfaz MUI 5, la que usará el navegador `dashweb`
 (`~/Projects/dashweb`, decisión del usuario del 2026-10-15). Hoy Dash solo tiene GadTools y ReAction.
@@ -84,7 +85,8 @@ otras señales (red, temporizador). El plan va en ese orden.
 - **Cabeceras:** `./dash` añade `-I $DASH_MUI_SDK/C/include` (por defecto `~/.cache/dash-mui/x/SDK/MUI`)
   solo si el programa usa MUI, y da un error claro si no está el SDK.
 - Alternativa a valorar en la tarea 2: sintaxis declarativa (`MuiWindow ... end`, como `Window`).
-  Solo si sale barata sobre los builtins; si no, apuntarla como pregunta abierta.
+  Solo si sale barata sobre los builtins; si no, apuntarla como pregunta abierta. Tener en cuenta que el
+  editor visual (tarea 19) podría leer y escribir esa sintaxis directamente.
 
 ## Tareas
 
@@ -139,6 +141,23 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       bloques), menos trabajo por evento, tamaño de los ejecutables de `examples/` antes y después.
 - [ ] 18. **Repaso final.** Ejemplos actualizados (`./compile_all.sh`), documentación (`CLAUDE.md` local,
       `ROADMAP.md`, manuales, `BUILTINS.md`), resumen final con lo que queda.
+
+### Editor visual de MUI para VS Code (petición del usuario del 2026-10-15, "un Glade para MUI")
+
+Un complemento de VS Code donde se monta la ventana arrastrando objetos (grupos, botones, listas...) y
+que genera el código Dash. Hasta ahora solo estaba como pregunta abierta en `ROADMAP.md`.
+
+- [ ] 19. **Diseño.** Formato del fichero de interfaz: si la tarea 2 adopta la sintaxis declarativa, el editor
+      lee y escribe ese mismo Dash (sin formato propio); si no, un `.dashui` (JSON) que el compilador convierte.
+      Dónde vive (carpeta `vscode/` en este repo o repo aparte `FreeMEM/dash-vscode`: si hay duda, `[?]`).
+      Vista previa: árbol + propiedades en un webview, dibujo aproximado en el navegador y vista real con
+      captura de pantalla del emulador (`tools/emu_run.py` + captura de FS-UAE). Escribirlo en `docs/MUI_EDITOR.md`.
+- [ ] 20. **Esqueleto.** Extensión mínima: resaltado de sintaxis de Dash, comando "Compilar" (`./dash`) y
+      "Ejecutar en emulador". Empaquetado con `vsce` instalado en un `node_modules` local (no global).
+- [ ] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
+- [ ] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
+- [ ] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
+- [ ] 24. **Ejemplo y documentación.** La ventana del navegador (tarea 10) hecha con el editor.
 
 ## Bitácora
 

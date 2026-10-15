@@ -799,8 +799,8 @@ tests/
 
 ### Preguntas abiertas:
 - ¿Soporte para OOP? (Probablemente no en v3.0)
-- ¿UI declarativa en Dash con vista previa por captura del emulador? (idea del 2026-10-14, en lugar de un
-  editor visual de MUI)
+- ¿UI declarativa en Dash con vista previa por captura del emulador? (idea del 2026-10-14). El editor visual
+  de MUI como complemento de VS Code se pidió el 2026-10-15: tareas 19-24 de `docs/MUI_LOOP.md`
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
 ### Pendiente:
