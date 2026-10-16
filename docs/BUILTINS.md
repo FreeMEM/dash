@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 477 funciones, 477 implementadas, 0 sin implementar.
+Total: 478 funciones, 478 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -573,6 +573,7 @@ Total: 477 funciones, 477 implementadas, 0 sin implementar.
 | `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |
 | `mui_canvas_wheel(canvas)` | `LONG` | +1 / -1 if the last input was the mouse wheel (up/down), else 0 |  |
 | `mui_canvas_key(canvas)` | `LONG` | Raw key code of the last input, -1 if it was not a key |  |
+| `mui_canvas_char(canvas)` | `STRPTR` | Character of the last key in the area, with shift and the keymap ("" if none; dashweb D31) |  |
 | `mui_scrollbar(vertical)` | `APTR` | Scrollbar; its value is the first line shown |  |
 | `mui_set_range(scrollbar, total, visible)` | `void` | Size of the document and of the part that fits |  |
 | `mui_wait_event_signals(mask)` | `LONG` | Like mui_wait_event, but also returns 0 when one of the signals of mask arrives (sockets...); mui_signals says which |  |

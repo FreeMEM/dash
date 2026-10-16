@@ -7800,6 +7800,8 @@ struct _DashCanvas {
     LONG input_id;                  /* 0: no input events */
     LONG mouse_x, mouse_y;          /* relative to the area */
     LONG button, wheel, key;        /* last input: 1 = left click; +1/-1; raw key code */
+    UWORD qual;                     /* the key's qualifiers (shift...) and dead-key data, for */
+    APTR prev;                      /* mui_canvas_char (dashweb D31) */
     struct MUI_EventHandlerNode handler;
     BOOL handler_added;
 };
@@ -7876,6 +7878,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
         } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
             data->button = 0; data->wheel = 0; data->key = im->Code;
+            data->qual = im->Qualifier;
+            data->prev = im->IAddress ? *(APTR *)im->IAddress : NULL;
         } else {
             return 0;
         }
@@ -7928,6 +7932,15 @@ static void _dash_mui_canvas_on_input(APTR obj, LONG id) {
 /* Draw it again now (only from the program's own task) */
 static void _dash_mui_canvas_redraw(APTR obj) {
     if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
+}
+
+/* The character of the last key, with its qualifiers and the keymap ("" if it gives none) */
+static STRPTR _dash_mui_canvas_char(APTR obj) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    UBYTE buf[8];
+    if (!data || data->key < 0) return (STRPTR)"";
+    _dash_map_key((UWORD)data->key, data->qual, data->prev, buf, sizeof(buf));
+    return _dash_str_dup((STRPTR)buf, TRUE);
 }
 
 static LONG _dash_mui_canvas_input(APTR obj, LONG what) {
@@ -8728,7 +8741,8 @@ class CodeGenerator(ASTVisitor):
         area_funcs = {"gfx_ellipse_fill", "gfx_circle_fill",
                       "gfx_poly_begin", "gfx_poly_add", "gfx_poly_end"}
 
-        key_funcs = {"key_pressed", "key_get", "key_wait", "wait_key", "key_raw", "key_text"}
+        key_funcs = {"key_pressed", "key_get", "key_wait", "wait_key", "key_raw", "key_text",
+                     "mui_canvas_char"}   # it maps keys with KEY_RUNTIME (dashweb D31)
 
         def scan(n):
             if isinstance(n, FunctionCall) and n.name in area_funcs:

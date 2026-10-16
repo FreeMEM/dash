@@ -3504,6 +3504,13 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_input(${canvas}, 4)",
         description="Raw key code of the last input, -1 if it was not a key"
     ),
+    "mui_canvas_char": BuiltinFunc(
+        name="mui_canvas_char",
+        params=["canvas"],
+        return_type="STRPTR",
+        c_template="_dash_mui_canvas_char(${canvas})",
+        description="Character of the last key in the area, with shift and the keymap (\"\" if none; dashweb D31)"
+    ),
     "mui_scrollbar": BuiltinFunc(
         name="mui_scrollbar",
         params=["vertical"],

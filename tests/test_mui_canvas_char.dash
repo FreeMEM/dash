@@ -1,0 +1,111 @@
+# mui_canvas_char (dashweb D31): the character of a key pressed over a MUI drawing area, with its
+# qualifiers and the keymap. A helper process puts the pointer on the area and types Shift+A, b
+# and Backspace through input.device: "A", "b" and code 8; mui_canvas_key gives the raw codes.
+# emu-needs: muimaster.library
+# expect-out: A 32
+# expect-out: b 53
+# expect-out: 8 65
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Window *teclas_win; static LONG teclas_x, teclas_y;"
+
+const ID_RATON = 30
+
+@native func donde(win: Int, lienzo: Int)
+"""
+    struct Window *w = NULL;
+    GetAttr(MUIA_Window_Window, (Object *)win, (ULONG *)&w);
+    teclas_win = w;
+    teclas_x = _DASH_MLEFT((Object *)lienzo) + 10;
+    teclas_y = _DASH_MTOP((Object *)lienzo) + 10;
+"""
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    static const UWORD codigos[3] = { 0x20, 0x35, 0x41 };
+    static const UWORD quals[3] = { IEQUALIFIER_LSHIFT, 0, 0 };
+    Delay(50);
+    if (teclas_win && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        LONG i;
+        ActivateWindow(teclas_win);
+        Delay(10);
+        memset(&ie, 0, sizeof(ie));
+        pp.iepp_Screen = teclas_win->WScreen;
+        pp.iepp_Position.X = teclas_win->LeftEdge + teclas_x;
+        pp.iepp_Position.Y = teclas_win->TopEdge + teclas_y;
+        ie.ie_Class = IECLASS_NEWPOINTERPOS;
+        ie.ie_SubClass = IESUBCLASS_PIXEL;
+        ie.ie_EventAddress = (APTR)&pp;
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        DoIO((struct IORequest *)io);
+        Delay(10);
+        for (i = 0; i < 3; i++) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWKEY;
+            ie.ie_Code = codigos[i];
+            ie.ie_Qualifier = quals[i];
+            DoIO((struct IORequest *)io);
+            Delay(3);
+            ie.ie_Code = codigos[i] | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+            Delay(10);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+"""
+end
+
+@native func lanzar()
+"""
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE);
+"""
+end
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+end
+
+Main
+    if mui_app_begin("Teclas", "DASHCHAR") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Teclas", 0)
+            lienzo = mui_canvas(120, 80)
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_canvas_on_input(lienzo, ID_RATON)
+        mui_window_open(win)
+        donde(win, lienzo)
+        lanzar()
+        vistas = 0
+        while vistas < 3
+            ev = mui_wait_event()
+            if ev == -1
+                break
+            end
+            if ev == ID_RATON and mui_canvas_key(lienzo) >= 0
+                c = mui_canvas_char(lienzo)
+                if c.length == 1 and str_code(c, 0) < 32
+                    Print "" + str_code(c, 0) + " " + mui_canvas_key(lienzo)
+                else
+                    Print c + " " + mui_canvas_key(lienzo)
+                end
+                vistas = vistas + 1
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end
