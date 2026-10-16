@@ -1,0 +1,12 @@
+# Test: nil returned from a function declared -> Int
+# expect: 'cuenta' returns Int: nil is only for structs, Arrays and Strings
+func cuenta(x: Int) -> Int
+    if x < 0
+        return nil
+    end
+    return x
+end
+
+Main
+    Print cuenta(1)
+end

@@ -1,0 +1,10 @@
+# Test: a value returned from a function declared -> Void
+# expect: 'avisa' returns Void: 'return' cannot give a value
+func avisa(x: Int) -> Void
+    Print "aviso"
+    return x
+end
+
+Main
+    avisa(1)
+end

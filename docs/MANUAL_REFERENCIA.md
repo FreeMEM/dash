@@ -567,6 +567,10 @@ Tipos que se pueden escribir: `Int`, `Float`, `String`, `Bool`, `Array`, `Pointe
 nombre de un struct o de un enum. Cualquier otro nombre es un error (antes se tomaba como `Int` sin avisar).
 Un campo `Array` de un struct se libera con el struct, igual que un campo de tipo struct.
 
+El `return` se comprueba contra el tipo declarado: es un error devolver un texto donde va un numero o un
+`Bool` (y al reves), un struct de otro tipo, `nil` en una funcion de `Int`, `Float`, `Fixed` o `Bool`, o un
+valor en una funcion `Void`. Un entero vale para `Bool` y para `Fixed` (se convierte).
+
 ### Llamada a Funciones
 
 ```

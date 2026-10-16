@@ -1,0 +1,59 @@
+# Returns that match their declared type still compile: comparisons and Ints for Bool, Ints for
+# Fixed (converted), nil for structs, lists and Strings, an element of an untyped list for a
+# struct, a struct method returning its own struct, Void without a value.
+# expect-out: 1 0
+# expect-out: 2.5
+# expect-out: nil
+# expect-out: 7
+# expect-out: fin
+
+struct Punto
+    x: Int
+
+    func mismo() -> Punto
+        return self
+    end
+end
+
+func positivo(x: Int) -> Bool
+    return x > 0
+end
+
+func mitad(x: Int) -> Fixed
+    if x == 0
+        return 0
+    end
+    return Fixed(x) / 2
+end
+
+func buscar(l: Array, i: Int) -> Punto
+    if i < 0
+        return nil
+    end
+    return l[i]
+end
+
+func nombre(n: Int) -> String
+    if n < 0
+        return nil
+    end
+    return "n" + n
+end
+
+func nada(x: Int) -> Void
+    if x > 0
+        return
+    end
+end
+
+Main
+    Print "#{positivo(3)} #{positivo(-3)}"
+    Print mitad(5)
+    if nombre(-1) == nil
+        Print "nil"
+    end
+    l = [Punto(7)]
+    Print buscar(l, 0).mismo().x
+    nada(1)
+    Print "fin"
+end

@@ -160,7 +160,8 @@ end
 ```
 
 Tipos de parámetro y retorno: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `[T]`, `{String: T}`,
-`Pointer`, `Func`, `Void`, un struct o un enum. Las funciones son recursivas y se pueden pasar como valor
+`Pointer`, `Func`, `Void`, un struct o un enum; el `return` se comprueba contra el tipo declarado (un texto
+no vale por un `Bool`, ni un struct por otro). Las funciones son recursivas y se pueden pasar como valor
 (`aplica(doble, 4)`). En un módulo, las que empiezan por `_` son privadas.
 
 ### 4.6 Textos

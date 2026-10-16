@@ -688,6 +688,7 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit a function definition."""
         self.current_module = getattr(node, "module", None)
         self.in_function = True
+        self._returns = (node.name, node.return_type)
         self.enter_scope(f"func_{node.name}")
 
         # Define parameters (can be string or FunctionParam)
@@ -716,11 +717,14 @@ class SemanticAnalyzer(ASTVisitor):
         self.exit_scope()
         self.in_function = False
         self.current_module = None
+        self._returns = None
 
     def visit_LambdaFunc(self, node: LambdaFunc):
         """Visit a lambda. It becomes a top-level C function, so it only sees
         its parameters and global names (no captured local variables)."""
         saved_scope, saved_in_function = self.current_scope, self.in_function
+        saved_returns = getattr(self, "_returns", None)
+        self._returns = None
         self.current_scope = Scope(name="lambda", level=1, parent=self.global_scope)
         self.in_function = True
         for param in node.params:
@@ -744,10 +748,12 @@ class SemanticAnalyzer(ASTVisitor):
             if "is not defined" in err.message:
                 err.message += " (lambdas cannot use local variables from outside)"
         self.current_scope, self.in_function = saved_scope, saved_in_function
+        self._returns = saved_returns
 
     def _visit_struct_method(self, node: StructMethod, struct_name: Optional[str] = None):
         """Visit a struct method body; 'self' is an implicit parameter."""
         self.in_function = True
+        self._returns = (f"{struct_name}.{node.name}" if struct_name else node.name, node.return_type)
         self.enter_scope(f"method_{node.name}")
         self.define_symbol(Symbol(name="self", symbol_type=SymbolType.PARAMETER, struct_name=struct_name,
                                   is_initialized=True), node)
@@ -864,6 +870,67 @@ class SemanticAnalyzer(ASTVisitor):
             self.error("'return' outside of function", node)
         if node.value:
             self.visit(node.value)
+        returns = getattr(self, "_returns", None)
+        if returns and returns[1]:
+            self._check_return(returns[0], returns[1], node)
+
+    _NUMBER_TYPES = ("Int", "Float", "Fixed", "Bool")
+
+    def _check_return(self, func: str, declared: str, node: ReturnStmt):
+        """The value of a return against the declared return type. Only what is sure: a String
+        where a number or Bool goes and back, a struct of another type, nil where it does not fit,
+        a value in a Void function. (Ints are the default of some inferences, e.g. an element of
+        an untyped list, so an Int is only wrong when it is a literal.)"""
+        value = node.value
+        where = f"'{func}' returns {declared}"
+        if declared == "Void":
+            if value is not None:
+                self.error(f"{where}: 'return' cannot give a value", node)
+            return
+        if value is None or declared in ("Pointer", "Func"):
+            return
+        if isinstance(value, NilLiteral):
+            if declared in self._NUMBER_TYPES:
+                self.error(f"{where}: nil is only for structs, Arrays and Strings", node)
+            return
+        vtype = self._infer_type(value)
+        vstruct = self._struct_name_of(value)
+        literal = value.operand if isinstance(value, UnaryOp) and value.operator == "-" else value
+        number_literal = isinstance(literal, (NumberLiteral, FloatLiteral, BoolLiteral))
+        is_list = isinstance(value, ArrayLiteral) or vtype in (DashType.ARRAY_INT, DashType.ARRAY_STRING)
+        got = None
+        if declared == "String":
+            if number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.FIXED):
+                got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
+            elif vstruct:
+                got = vstruct
+            elif is_list:
+                got = "a list"
+        elif declared in self._NUMBER_TYPES:
+            if vtype == DashType.STRING:
+                got = "String"
+            elif vstruct:
+                got = vstruct
+            elif is_list:
+                got = "a list"
+        elif self._struct_type_name(declared):
+            if vtype == DashType.STRING:
+                got = "String"
+            elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.FIXED):
+                got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
+            elif vstruct and vstruct != declared:
+                got = vstruct
+            elif is_list:
+                got = "a list"
+        elif list_elem_type(declared) is not None or declared == "Array" or dict_value_type(declared) is not None:
+            if vtype == DashType.STRING:
+                got = "String"
+            elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.FIXED):
+                got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
+            elif vstruct:
+                got = vstruct
+        if got:
+            self.error(f"{where}, not {got}", node)
 
     def visit_ArrayLiteral(self, node: ArrayLiteral):
         """Visit an array literal."""

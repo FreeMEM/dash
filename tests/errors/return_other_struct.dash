@@ -1,0 +1,18 @@
+# Test: a struct of another type returned from a method declared -> Punto
+# expect: 'Caja.esquina' returns Punto, not Caja
+struct Punto
+    x: Int
+end
+
+struct Caja
+    p: Punto
+
+    func esquina() -> Punto
+        return self
+    end
+end
+
+Main
+    c = Caja(Punto(1))
+    Print c.esquina().x
+end

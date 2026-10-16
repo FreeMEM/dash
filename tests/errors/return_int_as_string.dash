@@ -1,0 +1,12 @@
+# Test: a number literal returned from a function declared -> String
+# expect: 'nombre' returns String, not Number
+func nombre(n: Int) -> String
+    if n == 0
+        return 0
+    end
+    return "uno"
+end
+
+Main
+    Print nombre(1)
+end

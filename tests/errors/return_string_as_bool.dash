@@ -1,0 +1,12 @@
+# Test: a return gives a String in a function declared -> Bool
+# expect: 'f' returns Bool, not String
+func f(x: Int) -> Bool
+    if x > 0
+        return "si"
+    end
+    return false
+end
+
+Main
+    Print f(1)
+end
