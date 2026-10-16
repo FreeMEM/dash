@@ -1453,9 +1453,187 @@ static UBYTE _dash_rgb_pen(UBYTE r, UBYTE g, UBYTE b) {
     return _dash_rgb_pens[i];
 }
 
-/* gfx_rgb_draw_scaled: the w x h RGB24 buffer at x, y as dw x dh (nearest pixel). The source
-   column of each destination column is worked out once; each source row is scaled once and, on
-   RTG, written for all the destination rows it gives in one call (a row step of 0 repeats it). */
+/* --- RTG: the picture made in the screen's own pixel format and written in one call, so the
+   library only copies it (converting RGB24 itself costs as much again) --- */
+
+/* p96GetBitMapAttr (LVO -42): bitmap in a0, attribute in d0 (7 = its RGBFormat) */
+static ULONG _dash_p96_bm_attr(struct BitMap *bm, ULONG attr) {
+    register struct BitMap *a0 __asm("a0") = bm;
+    register ULONG d0 __asm("d0") = attr;
+    register struct Library *a6 __asm("a6") = _dash_p96;
+    __asm volatile ("jsr a6@(-42:W)" : "+r"(a0), "+r"(d0) : "r"(a6) : "d1", "a1", "cc", "memory");
+    return d0;
+}
+
+#ifndef RECTFMT_RAW
+#define RECTFMT_RAW 5UL
+#endif
+
+/* The bitmap's pixel format as a Picasso96 RGBFormat that we can write (16 and 32 bits), else 0.
+   cybergraphics' PIXFMT_* mapped to them (BGR15/BGR16 big-endian have none). */
+static const UBYTE _dash_cgx_to_p96[14] = { 0, 11, 0, 5, 13, 10, 0, 4, 12, 0, 0, 6, 9, 8 };
+static struct BitMap *_dash_nf_bm = NULL;
+static LONG _dash_nf_fmt = 0;
+static BOOL _dash_nf_p96_tried = FALSE;
+static LONG _dash_native_format(struct BitMap *bm) {
+    ULONG f;
+    if (bm == _dash_nf_bm) return _dash_nf_fmt;
+    /* Picasso96's own call when it is there: its cybergraphics emulation ignores RECTFMT_RAW */
+    if (!_dash_p96 && !_dash_nf_p96_tried) {
+        _dash_nf_p96_tried = TRUE;
+        _dash_p96 = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+    }
+    if (!_dash_p96) {
+        f = GetCyberMapAttr(bm, CYBRMATTR_PIXFMT);
+        f = f < 14 ? _dash_cgx_to_p96[f] : 0;
+    } else {
+        f = _dash_p96_bm_attr(bm, 7);
+    }
+    if (f < 4 || f > 13) f = 0;   /* 4-13: the 16 and 32 bit formats */
+    _dash_nf_bm = bm;
+    _dash_nf_fmt = f;
+    return f;
+}
+
+/* Per format: a pixel is tr[r] | tg[g] | tb[b] (the little-endian ones are stored swapped) */
+static ULONG *_dash_nf_tab = NULL;      /* 3 x 256 */
+static UWORD *_dash_nf_rg = NULL;       /* 16 bits: red << 8 | green -> its bits */
+static LONG _dash_nf_tab_fmt = 0;
+static ULONG _dash_nf_pack(LONG fmt, ULONG r, ULONG g, ULONG b) {
+    ULONG v = 0;
+    switch (fmt) {
+    case 4: case 10: v = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3); break;   /* R5G6B5 */
+    case 12: v = ((b & 0xF8) << 8) | ((g & 0xFC) << 3) | (r >> 3); break;           /* B5G6R5 */
+    case 5: case 11: v = ((r & 0xF8) << 7) | ((g & 0xF8) << 2) | (b >> 3); break;   /* R5G5B5 */
+    case 13: v = ((b & 0xF8) << 7) | ((g & 0xF8) << 2) | (r >> 3); break;           /* B5G5R5 */
+    case 6: return (r << 16) | (g << 8) | b;            /* A8R8G8B8 (alpha 0 in all three) */
+    case 7: return (b << 16) | (g << 8) | r;            /* A8B8G8R8 */
+    case 8: return (r << 24) | (g << 16) | (b << 8);    /* R8G8B8A8 */
+    case 9: return (b << 24) | (g << 16) | (r << 8);    /* B8G8R8A8 */
+    }
+    if (fmt == 4 || fmt == 5 || fmt == 12 || fmt == 13) v = ((v & 0xFF) << 8) | (v >> 8);   /* PC */
+    return v;
+}
+
+/* One buffer for the pictures, kept from one to the next (a video draws the same size each time) */
+static UBYTE *_dash_rgb_buf = NULL;
+static ULONG _dash_rgb_buf_size = 0;
+static UBYTE *_dash_rgb_need(ULONG size) {
+    if (size > _dash_rgb_buf_size) {
+        if (_dash_rgb_buf) FreeVec(_dash_rgb_buf);
+        _dash_rgb_buf = (UBYTE *)AllocVec(size, MEMF_ANY);
+        _dash_rgb_buf_size = _dash_rgb_buf ? size : 0;
+    }
+    return _dash_rgb_buf;
+}
+
+/* The visible part (cx1..cx2, cy1..cy2) of the w x h picture at x, y as dw x dh, in the screen's
+   format, in one write. FALSE: not possible here (another format, no memory). Columns and rows
+   are stepped without dividing; a destination row from the same source row is a copy of the one
+   above; at twice the width (16 bits) each source pixel is written once as a long word. */
+static BOOL _dash_rgb_draw_native(UBYTE *pix, LONG w, LONG h, LONG x, LONG y, LONG dw, LONG dh,
+                                  LONG cx1, LONG cy1, LONG cx2, LONG cy2) {
+    LONG fmt = _dash_native_format(_dash_rp->BitMap), bpp, n, rows, bpr, s0, s1, i, dy, prev = -1;
+    LONG sy, ry, q, r;
+    ULONG *line, *tr, *tg, *tb;
+    UWORD *cols;
+    UBYTE *out;
+    BOOL twice;
+    if (!fmt) return FALSE;
+    bpp = fmt <= 5 || fmt >= 10 ? 2 : 4;
+    if (!_dash_nf_tab) _dash_nf_tab = (ULONG *)AllocVec(3 * 256 * sizeof(ULONG), MEMF_ANY);
+    if (!_dash_nf_tab) return FALSE;
+    tr = _dash_nf_tab; tg = tr + 256; tb = tg + 256;
+    if (_dash_nf_tab_fmt != fmt) {
+        for (i = 0; i < 256; i++) {
+            tr[i] = _dash_nf_pack(fmt, i, 0, 0);
+            tg[i] = _dash_nf_pack(fmt, 0, i, 0);
+            tb[i] = _dash_nf_pack(fmt, 0, 0, i);
+        }
+        _dash_nf_tab_fmt = fmt;
+        if (_dash_nf_rg) { FreeVec(_dash_nf_rg); _dash_nf_rg = NULL; }
+        /* 16 bits on a 68020 or better (reads a word at any address): red and green in one look-up */
+        if (bpp == 2 && (SysBase->AttnFlags & AFF_68020) &&
+            (_dash_nf_rg = (UWORD *)AllocVec(65536 * sizeof(UWORD), MEMF_ANY)))
+            for (i = 0; i < 65536; i++) _dash_nf_rg[i] = (UWORD)(tr[i >> 8] | tg[i & 255]);
+    }
+    n = cx2 - cx1 + 1;
+    rows = cy2 - cy1 + 1;
+    bpr = ((n * bpp) + 3) & ~3;
+    s0 = (cx1 - x) * w / dw;
+    s1 = (cx2 - x) * w / dw;
+    out = _dash_rgb_need(rows * bpr + (s1 - s0 + 1) * sizeof(ULONG) + n * sizeof(UWORD));
+    if (!out) return FALSE;
+    line = (ULONG *)(out + rows * bpr);
+    cols = (UWORD *)(line + (s1 - s0 + 1));
+    twice = bpp == 2 && dw == 2 * w && !((cx1 - x) & 1);
+    /* cols[i] = (cx1 - x + i) * w / dw - s0, stepping the remainder */
+    q = 0; r = ((cx1 - x) * w) % dw;
+    for (i = 0; i < n; i++) {
+        cols[i] = q;
+        r += w;
+        while (r >= dw) { r -= dw; q++; }
+    }
+    sy = (cy1 - y) * h / dh;
+    ry = ((cy1 - y) * h) % dh;
+    for (dy = cy1; dy <= cy2; dy++) {
+        UBYTE *d = out + (dy - cy1) * bpr;
+        if (sy == prev) {
+            CopyMemQuick(d - bpr, d, bpr);   /* the same source row again */
+        } else {
+            UBYTE *p = pix + (sy * w + s0) * 3;
+            LONG k = s1 - s0 + 1;
+            prev = sy;
+            if (twice && _dash_nf_rg) {
+                ULONG *o = (ULONG *)d;
+                LONG m = n >> 1;
+                UWORD *rg = _dash_nf_rg;
+                while (m--) { ULONG v = rg[*(UWORD *)p] | tb[p[2]]; *o++ = v | (v << 16); p += 3; }
+                if (n & 1) *(UWORD *)o = (UWORD)(tr[p[0]] | tg[p[1]] | tb[p[2]]);
+            } else if (twice) {
+                ULONG *o = (ULONG *)d;
+                LONG m = n >> 1;
+                while (m--) { ULONG v = tr[p[0]] | tg[p[1]] | tb[p[2]]; *o++ = v | (v << 16); p += 3; }
+                if (n & 1) *(UWORD *)o = (UWORD)(tr[p[0]] | tg[p[1]] | tb[p[2]]);
+            } else {
+                ULONG *l = line;
+                if (_dash_nf_rg) {
+                    UWORD *rg = _dash_nf_rg;
+                    while (k--) { *l++ = rg[*(UWORD *)p] | tb[p[2]]; p += 3; }
+                } else {
+                    while (k--) { *l++ = tr[p[0]] | tg[p[1]] | tb[p[2]]; p += 3; }
+                }
+                if (bpp == 2) {
+                    UWORD *o = (UWORD *)d;
+                    if (dw == w) for (i = 0; i < n; i++) o[i] = (UWORD)line[i];
+                    else for (i = 0; i < n; i++) o[i] = (UWORD)line[cols[i]];
+                } else {
+                    ULONG *o = (ULONG *)d;
+                    for (i = 0; i < n; i++) o[i] = line[cols[i]];
+                }
+            }
+        }
+        ry += h;
+        while (ry >= dh) { ry -= dh; sy++; }
+    }
+    if (!_dash_p96) {
+        WritePixelArray(out, 0, 0, bpr, _dash_rp, cx1, cy1, n, rows, RECTFMT_RAW);
+    } else {
+        struct _DashRenderInfo ri;
+        ri.Memory = out;
+        ri.BytesPerRow = bpr;
+        ri.pad = 0;
+        ri.RGBFormat = fmt;
+        _dash_p96_write_array(&ri, 0, 0, _dash_rp, cx1, cy1, n, rows);
+    }
+    return TRUE;
+}
+
+/* gfx_rgb_draw_scaled: the w x h RGB24 buffer at x, y as dw x dh (nearest pixel). On RTG at its
+   own size, straight from the buffer in one call; scaled, made in the screen's format and written
+   in one call (_dash_rgb_draw_native); else (another format, no memory) each source row is scaled
+   once and written for all the destination rows it gives (a row step of 0 repeats it). Palette:
+   each source row's pens once, then a row of chunky pixels per destination row. */
 static void _dash_rgb_draw_scaled(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG dw, LONG dh) {
     UBYTE *pix = (UBYTE *)buffer, *row;
     LONG cx1 = x, cy1 = y, cx2 = x + dw - 1, cy2 = y + dh - 1, dy, n, i, *cols;
@@ -1469,6 +1647,7 @@ static void _dash_rgb_draw_scaled(LONG buffer, LONG w, LONG h, LONG x, LONG y, L
         _dash_rgb_rect(pix + (cy1 - y) * w * 3 + (cx1 - x) * 3, w * 3, n, cy2 - cy1 + 1, cx1, cy1);
         return;
     }
+    if (rtg && _dash_rgb_draw_native(pix, w, h, x, y, dw, dh, cx1, cy1, cx2, cy2)) return;
     row = (UBYTE *)AllocVec(n * 3 + n * sizeof(LONG), MEMF_ANY);
     if (!row) return;
     cols = (LONG *)row + ((n * 3 + 3) >> 2);
@@ -1508,6 +1687,11 @@ static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
 static void _dash_blend_cleanup(void) {
     if (_dash_p96) { CloseLibrary(_dash_p96); _dash_p96 = NULL; }
     _dash_blend_libs = 0;
+    if (_dash_rgb_buf) { FreeVec(_dash_rgb_buf); _dash_rgb_buf = NULL; _dash_rgb_buf_size = 0; }
+    if (_dash_nf_tab) { FreeVec(_dash_nf_tab); _dash_nf_tab = NULL; _dash_nf_tab_fmt = 0; }
+    if (_dash_nf_rg) { FreeVec(_dash_nf_rg); _dash_nf_rg = NULL; }
+    _dash_nf_bm = NULL;
+    _dash_nf_p96_tried = FALSE;
 }
 
 """
