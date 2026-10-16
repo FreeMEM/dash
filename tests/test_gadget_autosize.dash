@@ -1,0 +1,37 @@
+# Width or height 0 in button_create, cycle_create, textfield_create...: measured with the screen's
+# font (the one GadTools draws with): a button fits its label (without the "_"), a cycle its
+# longest option, a field ten characters; the height is the font's plus 6. gadget_width and
+# gadget_height give the size asked for or measured (also for a text field, whose GadTools gadget
+# is only the inner box). The emulated screens use topaz 9 (10 x 9), so the test compares sizes.
+# expect-out: el _ no cuenta: 1
+# expect-out: misma altura: 1
+# expect-out: altura de la fuente + 6: 1
+# expect-out: ciclo más ancho: 1
+# expect-out: campo de diez letras: 1
+# expect-out: fijo 50 x 12
+# expect-out: fin
+
+Window W
+    title "Medidas"
+    width 300
+    height 110
+end
+
+Main
+    W.open
+    b = button_create(0, 10, 10, 0, 0, "_Guardar")
+    b2 = button_create(0, 120, 10, 0, 0, "Guardar")
+    c = cycle_create(0, 10, 10 + gadget_height(b) + 4, 0, 0, "Uno|Dos|Cuatro")
+    t = textfield_create(0, 10, 60, 0, 0, 20)
+    f = button_create(0, 200, 60, 50, 12, "OK")
+    k = button_create(0, 200, 80, 0, 0, "K")
+    Print "el _ no cuenta: #{gadget_width(b) == gadget_width(b2)}"
+    Print "misma altura: #{gadget_height(b) == gadget_height(c) and gadget_height(c) == gadget_height(t)}"
+    # one letter K: its width + 16; the field: ten letters + 16 (topaz is fixed width)
+    letra = gadget_width(k) - 16
+    Print "altura de la fuente + 6: #{gadget_height(b) > 6 and gadget_height(b) < 30}"
+    Print "ciclo más ancho: #{gadget_width(c) > gadget_width(b)}"
+    Print "campo de diez letras: #{gadget_width(t) == 10 * letra + 16}"
+    Print "fijo #{gadget_width(f)} x #{gadget_height(f)}"
+    Print "fin"
+end

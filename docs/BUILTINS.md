@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 488 funciones, 488 implementadas, 0 sin implementar.
+Total: 490 funciones, 490 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -458,6 +458,8 @@ Total: 488 funciones, 488 implementadas, 0 sin implementar.
 | `screen_to_front()` | `void` | Bring custom screen to front |  |
 | `screen_to_back()` | `void` | Send custom screen to back |  |
 | `gadget_id()` | `LONG` | Handle of the last gadget used (for On Gadget in the EventLoop) |  |
+| `gadget_width(gadget)` | `LONG` | Width of a gadget in pixels (also when it was created with width 0) |  |
+| `gadget_height(gadget)` | `LONG` | Height of a gadget in pixels (also when it was created with height 0) |  |
 | `button_create(win, x, y, w, h, label)` | `LONG` | Create button gadget |  |
 | `button_enable(gad)` | `void` | Enable button |  |
 | `button_disable(gad)` | `void` | Disable button |  |

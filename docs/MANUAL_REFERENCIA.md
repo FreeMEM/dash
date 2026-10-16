@@ -2091,6 +2091,16 @@ Tambien: `button_enable/disable`, `checkbox_get/set`, `slider_get/set`, `textfie
 | `palette_create(win, x, y, w, h, prof)`, `palette_get/set` | Paleta de 2^prof colores; valor = color |
 | `number_create(win, x, y, w, h, valor)`, `number_set` | Número en un recuadro (solo se lee) |
 
+**Tamaño segun la fuente:** con ancho o alto 0, el gadget se mide con la fuente de la pantalla (la
+que usa GadTools, que puede no ser la de la ventana): un boton se ajusta a su etiqueta, un ciclo a su
+opcion mas larga y un campo a diez letras; el alto es el de la fuente mas 6. `gadget_width(g)` y
+`gadget_height(g)` dan el tamaño para colocar el siguiente:
+
+```
+b = button_create(0, 10, 10, 0, 0, "_Guardar")
+c = cycle_create(0, 10, 10 + gadget_height(b) + 4, 0, 0, "Uno|Dos|Cuatro")
+```
+
 **Atajos de teclado:** un `_` en la etiqueta de un boton o una casilla subraya la letra siguiente
 (`button_create(0, 10, 10, 80, 14, "_Guardar")`), y esa tecla, con o sin Mayusculas, lo pulsa en el
 `EventLoop` como un clic: llega a `On Gadget` con su `gadget_id()` y una casilla cambia. No llega a

@@ -2643,6 +2643,22 @@ INTUITION_EXPANDED = {
         needs_gadtools=True,
         description="Handle of the last gadget used (for On Gadget in the EventLoop)"
     ),
+    "gadget_width": BuiltinFunc(
+        name="gadget_width",
+        params=["gadget"],
+        return_type="LONG",
+        c_template="_dash_gadget_width(${gadget})",
+        needs_gadtools=True,
+        description="Width of a gadget in pixels (also when it was created with width 0)"
+    ),
+    "gadget_height": BuiltinFunc(
+        name="gadget_height",
+        params=["gadget"],
+        return_type="LONG",
+        c_template="_dash_gadget_height(${gadget})",
+        needs_gadtools=True,
+        description="Height of a gadget in pixels (also when it was created with height 0)"
+    ),
     "button_create": BuiltinFunc(
         name="button_create",
         params=["win", "x", "y", "w", "h", "label"],

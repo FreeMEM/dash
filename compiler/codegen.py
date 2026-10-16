@@ -5524,6 +5524,7 @@ typedef struct {
     STRPTR labels_text;
     LONG nlabels;
     UBYTE key;                /* the letter after "_" in the label ("_Guardar": g), 0 if none */
+    WORD w, h;                /* the size asked for or measured (a string gadget's own is its inner box) */
 } _DashGad;
 
 static _DashGad _dash_gads[_DASH_MAX_GADS + 1];
@@ -5539,6 +5540,15 @@ static void _dash_gads_window_gone(struct Window *win) {
     LONG i;
     for (i = 1; i <= _DASH_MAX_GADS; i++)
         if (_dash_gads[i].win == win) _dash_gads[i].win = NULL;
+}
+
+/* Width of a gadget label in the screen's font (the one GadTools draws with), without its "_" */
+static LONG _dash_gad_text_width(struct RastPort *rp, STRPTR s) {
+    LONG n = 0, width = 0;
+    while (s[n] && s[n] != '_') n++;
+    if (n) width = TextLength(rp, s, n);
+    if (s[n] == '_' && s[n + 1]) width += TextLength(rp, s + n + 1, strlen((char *)s + n + 1));
+    return width;
 }
 
 #ifdef _DASH_GADGET_KEYS
@@ -5559,6 +5569,27 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     struct TagItem utags[] = { { GT_Underscore, '_' }, { TAG_MORE, (ULONG)tags } };
     if (!tags) utags[1].ti_Tag = TAG_DONE;
     if (!win || !GadToolsBase) return 0;
+    if (w <= 0 || h <= 0) {
+        /* 0: measured with the screen's font: the label, the longest option of a cycle, or ten
+           characters for a field */
+        struct RastPort *srp = &win->WScreen->RastPort;
+        if (h <= 0) h = srp->TxHeight + 6;
+        if (w <= 0) {
+            LONG tw = 0;
+            struct TagItem *t;
+            if (label) tw = _dash_gad_text_width(srp, label);
+            for (t = tags; t && t->ti_Tag != TAG_DONE; t++)
+                if (t->ti_Tag == GTCY_Labels) {
+                    STRPTR *o;
+                    for (o = (STRPTR *)t->ti_Data; *o; o++) {
+                        LONG ow = _dash_gad_text_width(srp, *o);
+                        if (ow > tw) tw = ow;
+                    }
+                }
+            if (!tw) tw = 10 * srp->TxWidth;
+            w = tw + (gt_kind == CYCLE_KIND ? 34 : 16);
+        }
+    }
     while (i <= _DASH_MAX_GADS && _dash_gads[i].gad) i++;
     if (i > _DASH_MAX_GADS) return 0;
     g = &_dash_gads[i];
@@ -5587,6 +5618,8 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     }
     g->win = win;
     g->kind = kind;
+    g->w = w;
+    g->h = h;
 #ifdef _DASH_GADGET_KEYS
     if (label) {
         STRPTR u = label;
@@ -5659,6 +5692,17 @@ static LONG _dash_gadget_event(struct IntuiMessage *msg) {
 
 static LONG _dash_gadget_id(void) {
     return _dash_gadget_last;
+}
+
+/* Size of a gadget (also of one created with width or height 0) */
+static LONG _dash_gadget_width(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    return g ? g->w : 0;
+}
+
+static LONG _dash_gadget_height(LONG h) {
+    _DashGad *g = _dash_gad_get(h);
+    return g ? g->h : 0;
 }
 
 #ifdef _DASH_GADGET_KEYS

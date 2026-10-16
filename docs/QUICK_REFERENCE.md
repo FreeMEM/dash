@@ -220,6 +220,12 @@ image_draw(img, x, y)       # image_draw_part(img, sx, sy, x, y, w, h), image_sc
 gfx_clear()                 # Clear screen
 ```
 
+## Gadgets (GadTools, by number)
+```
+b = button_create(0, x, y, 0, 0, "_Save")   # w/h 0: measured with the screen font; "_": S presses it
+gadget_width(b)  gadget_height(b)           # its size, to place the next one
+```
+
 ## Input Functions
 ```
 # Keyboard
