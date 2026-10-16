@@ -70,7 +70,9 @@ end
 
 Los programas necesitan Kickstart 3.0 o superior. Al arrancar piden una pila de al menos 16 KB:
 el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 bytes por programa;
-`--stack 0` lo quita).
+`--stack 0` lo quita). Con MUI piden 32 KB y con TLS 64 KB. Un programa o un modulo que necesita
+mas lo dice con `@stack 262144` (en bytes, al nivel de las funciones): el programa toma la mayor de
+todas; `--stack` sigue mandando.
 
 `--memcheck` compila una version de prueba que vigila la memoria de listas, structs y textos. Avisa
 en cuanto algo se libera dos veces o se usa despues de liberarse (`memcheck: ERROR ...`) y, al

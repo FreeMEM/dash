@@ -8635,6 +8635,7 @@ class CodeGenerator(ASTVisitor):
         self.custom_headers: List[str] = []
         self.links: List[str] = []
         self.c_blocks: List[str] = []
+        self.stack_min = 0
 
     def generate(self) -> str:
         """Generate the complete C program."""
@@ -9061,6 +9062,12 @@ static LONG _dash_event_window_handle(void) {{
         if "muimaster.library" in program:
             # MUI 5 asks for 32 KB of stack ("MUI warning" requester below that)
             program = program.replace("#define DASH_STACK 16384", "#define DASH_STACK 32768  /* MUI */", 1)
+        if self.stack_min:
+            # @stack: more than the default chosen above (./dash --stack still decides)
+            import re
+            m = re.search(r"^#define DASH_STACK (\d+).*$", program, re.M)
+            if m and int(m.group(1)) < self.stack_min:
+                program = program[:m.start()] + f"#define DASH_STACK {self.stack_min}  /* @stack */" + program[m.end():]
         return program
 
     def _get_main_template(self) -> Template:
@@ -9096,6 +9103,7 @@ static LONG _dash_event_window_handle(void) {{
         self.custom_headers = node.headers if node.headers else []
         self.links = list(node.links)          # @link (dashweb D10)
         self.c_blocks = list(node.c_blocks)    # @c
+        self.stack_min = node.stack            # @stack (dashweb D24)
 
         # Generate constant definitions
         for const in node.constants:

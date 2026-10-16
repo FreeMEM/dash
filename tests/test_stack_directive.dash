@@ -1,0 +1,24 @@
+# Test: "@stack N" (dashweb D24): a program or a module says how much stack it needs at
+# least; the program gets the largest (here the imported module's 40000 over its own
+# 20000 and the default 16 KB). ./dash --stack N still decides.
+# expect-c: #define DASH_STACK 40000  /* @stack */
+# expect-out: pila ok
+
+import "lib/pila_grande.dash"
+
+@stack 20000
+
+@native func pila() -> Int
+"""
+    struct Task *t = FindTask(NULL);
+    return (LONG)((UBYTE *)t->tc_SPUpper - (UBYTE *)t->tc_SPLower);
+"""
+end
+
+Main
+    if pila() >= pila_modulo()
+        Print "pila ok"
+    else
+        Print "pila " + pila()
+    end
+end

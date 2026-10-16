@@ -1,0 +1,6 @@
+# Module for test_stack_directive: it needs a bigger stack than the program's default
+@stack 40000
+
+func pila_modulo() -> Int
+    return 40000
+end
