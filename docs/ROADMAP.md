@@ -793,6 +793,13 @@ tests/
 - [x] Textos en Latin-1: los acentos llegaban al Amiga en UTF-8 (`compiler/latin1.py`)
 - [x] Ejemplos `mui_hola` y `mui_navegador` (esqueleto de la ventana de dashweb); 33/33
 - [x] Test suite: 130 resultados (311 con `--emu --emu-a500 --emu-32`; 193 con `--emu --memcheck`)
+- [x] GadTools y ReAction auditados y arreglados (14 fallos: los gadgets `gt_*` y los menús no recibían eventos,
+      `blixel` no compilaba, valores leídos con el atributo equivocado, mensajes perdidos, punteros a ventanas
+      cerradas, textos copiados para siempre...). Nuevos: `On Menu`, gadgets por número de ciclo, radio, número,
+      paleta y entero; menús con marca; ReAction con listbrowser, radio, pestañas, barra, menús y selector de
+      ficheros; el `EventLoop` atiende las ventanas de `window_create` (`event_window()`)
+- [x] Tests con clics y menús reales por `input.device` (`tests/test_gt_events.dash` y siguientes)
+- [x] Test suite: 137 resultados (333 con `--emu --emu-a500 --emu-32`; 204 con `--emu --memcheck`); 425 builtins
 
 ---
 

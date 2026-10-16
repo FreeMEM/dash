@@ -154,7 +154,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       la API actual de una ventana para no romper programas. Si choca con la compatibilidad, `[?]`.
 - [x] 17. **Optimizar.** Emitir solo la parte del runtime que el programa usa (como ya pasa con otros
       bloques), menos trabajo por evento, tamaño de los ejecutables de `examples/` antes y después.
-- [ ] 18. **Repaso final.** Ejemplos actualizados (`./compile_all.sh`), documentación (`CLAUDE.md` local,
+- [x] 18. **Repaso final.** Ejemplos actualizados (`./compile_all.sh`), documentación (`CLAUDE.md` local,
       `ROADMAP.md`, manuales, `BUILTINS.md`), resumen final con lo que queda.
 
 ### Editor visual de MUI para VS Code (petición del usuario del 2026-10-15, "un Glade para MUI")
@@ -580,3 +580,16 @@ Formato:
   `RefreshGList` por gadget): es lo que permite crearlos en cualquier momento y en cualquier ventana; agruparlos cambiaría
   la API. `listview_add` redibuja la lista entera en cada línea (GadTools obliga a quitar y poner la lista).
 - Tests: 137/137 sin emulador; 333/333 con `--emu --emu-a500 --emu-32`; 204/204 con `--emu --memcheck`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 18 (repaso final de GadTools y ReAction)
+- Ejemplos: 33/33 compilan. `examples/test_gadtools.dash` (antes sin eventos por el fallo 1) se ve bien en una captura:
+  botones, deslizador, paleta y texto en su pantalla propia. En el ejemplo, la etiqueta y el número del deslizador no
+  caben a su izquierda (posiciones del propio ejemplo).
+- Documentación: `ROADMAP.md` (sesión 7), `CLAUDE.md` local, manual (secciones 19, 20 y ventanas por número),
+  `BUILTINS.md` (425 builtins).
+- **Resumen de la segunda parte (tareas 12-18):** 14 fallos arreglados (los más graves: los `gt_*` y menús no recibían
+  eventos; `blixel` no compilaba; el gancho de dibujo de ReAction nunca se enganchaba), 35 builtins nuevos, `On Menu`,
+  varias ventanas en el `EventLoop`, tests con clics y menús reales en las tres máquinas, capturas de pantalla.
+- **Pendiente:** atajos de teclado con `_` y posiciones según la fuente en GadTools; varias ventanas para `gt_*` y
+  ReAction; clics en los gadgets ReAction nuevos y en el requester de `getfile`; `window_check_close` tira los mensajes
+  que no son cerrar; `listview_add` redibuja toda la lista.
