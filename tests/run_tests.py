@@ -381,17 +381,19 @@ def expected_output(test_file: Path) -> Optional[List[str]]:
 
 
 # Emulated machines: option, result prefix, label, Kickstart and Workbench files
-# variables (None: FS-UAE's defaults), FS-UAE options, timeout for the whole boot
+# variables (None: FS-UAE's defaults), FS-UAE options, timeout for the whole boot (all
+# the tests of a machine run in one boot; --memcheck builds are slower, and other
+# sessions may be running emulators at the same time)
 EMU_MACHINES = [
     dict(option="emu", prefix="emu", label="FS-UAE A1200", rom_env=None, sys_env="DASH_EMU_SYS",
-         mui_sys_env="DASH_EMU_SYS_MUI", config="", timeout=180, workbench=False),
+         mui_sys_env="DASH_EMU_SYS_MUI", config="", timeout=360, workbench=False),
     # 68000: catches what a 68020 forgives (libgcc calls for 32-bit mul/div/mod, odd addresses)
     dict(option="emu_a500", prefix="emu500", label="FS-UAE A500", rom_env="DASH_KICKSTART_A500",
-         sys_env="DASH_EMU_SYS", mui_sys_env=None, config="amiga_model = A500\n", timeout=400, workbench=False),
+         sys_env="DASH_EMU_SYS", mui_sys_env=None, config="amiga_model = A500\n", timeout=700, workbench=False),
     # AmigaOS 3.2: the current system, and the only one with ReAction. Its window.class
     # waits for the Workbench, so LoadWB runs first, as on a real Amiga
     dict(option="emu_32", prefix="emu32", label="FS-UAE A1200 OS 3.2", rom_env="DASH_KICKSTART_32",
-         sys_env="DASH_EMU_SYS_32", mui_sys_env="DASH_EMU_SYS_32_MUI", config="", timeout=240, workbench=True),
+         sys_env="DASH_EMU_SYS_32", mui_sys_env="DASH_EMU_SYS_32_MUI", config="", timeout=480, workbench=True),
 ]
 
 

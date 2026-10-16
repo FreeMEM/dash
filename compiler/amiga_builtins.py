@@ -1007,6 +1007,38 @@ GADTOOLS_FUNCTIONS = {
         needs_gadtools=True,
         description="Wait for gadget event, returns gadget ID or -2 (close)"
     ),
+    "gt_cycle": BuiltinFunc(
+        name="gt_cycle",
+        params=["x", "y", "w", "h", "label", "options"],
+        return_type="LONG",
+        c_template="_dash_gt_cycle_str(${x}, ${y}, ${w}, ${h}, ${label}, ${options})",
+        needs_gadtools=True,
+        description="Create a cycle gadget; options separated by | (gt_get_value: option)"
+    ),
+    "gt_enable": BuiltinFunc(
+        name="gt_enable",
+        params=["gad_id"],
+        return_type="void",
+        c_template="_dash_gt_set_enabled(${gad_id}, 1)",
+        needs_gadtools=True,
+        description="Enable a gadget"
+    ),
+    "gt_disable": BuiltinFunc(
+        name="gt_disable",
+        params=["gad_id"],
+        return_type="void",
+        c_template="_dash_gt_set_enabled(${gad_id}, 0)",
+        needs_gadtools=True,
+        description="Disable (ghost) a gadget"
+    ),
+    "gt_set_text": BuiltinFunc(
+        name="gt_set_text",
+        params=["gad_id", "text"],
+        return_type="void",
+        c_template="_dash_gt_set_text(${gad_id}, ${text})",
+        needs_gadtools=True,
+        description="Change the text of a gt_text or gt_string gadget"
+    ),
 }
 
 
@@ -1070,6 +1102,30 @@ MENU_FUNCTIONS = {
         c_template="_dash_menu_id()",
         needs_gadtools=True,
         description="In an EventLoop's On Menu: id of the menu item chosen"
+    ),
+    "menu_check_item": BuiltinFunc(
+        name="menu_check_item",
+        params=["label", "shortcut", "id"],
+        return_type="void",
+        c_template="_dash_menu_check_item(${label}, ${shortcut}, ${id})",
+        needs_gadtools=True,
+        description="Add a menu item with a check mark that each choice toggles"
+    ),
+    "menu_checked": BuiltinFunc(
+        name="menu_checked",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_menu_checked(${id})",
+        needs_gadtools=True,
+        description="1 if the check mark of that menu item is on"
+    ),
+    "menu_enable": BuiltinFunc(
+        name="menu_enable",
+        params=["id", "enabled"],
+        return_type="void",
+        c_template="_dash_menu_enable(${id}, ${enabled})",
+        needs_gadtools=True,
+        description="Enable or disable (ghost) a menu item after menu_attach"
     ),
 }
 
@@ -2598,6 +2654,118 @@ INTUITION_EXPANDED = {
         c_template="_dash_listview_selected(${gad})",
         needs_gadtools=True,
         description="Get selected index (-1 if none)"
+    ),
+    "cycle_create": BuiltinFunc(
+        name="cycle_create",
+        params=["win", "x", "y", "w", "h", "options"],
+        return_type="LONG",
+        c_template="_dash_cycle_create(${win}, ${x}, ${y}, ${w}, ${h}, ${options})",
+        needs_gadtools=True,
+        description="Create cycle gadget; options separated by | (value = option, from 0)"
+    ),
+    "cycle_get": BuiltinFunc(
+        name="cycle_get",
+        params=["gad"],
+        return_type="LONG",
+        c_template="_dash_gad_value(${gad}, _DASH_GK_CYCLE)",
+        needs_gadtools=True,
+        description="Get selected option of a cycle gadget"
+    ),
+    "cycle_set": BuiltinFunc(
+        name="cycle_set",
+        params=["gad", "index"],
+        return_type="void",
+        c_template="_dash_gad_set_value(${gad}, _DASH_GK_CYCLE, ${index})",
+        needs_gadtools=True,
+        description="Select an option of a cycle gadget"
+    ),
+    "radio_create": BuiltinFunc(
+        name="radio_create",
+        params=["win", "x", "y", "options"],
+        return_type="LONG",
+        c_template="_dash_radio_create(${win}, ${x}, ${y}, ${options})",
+        needs_gadtools=True,
+        description="Create radio buttons (one per option, separated by |)"
+    ),
+    "radio_get": BuiltinFunc(
+        name="radio_get",
+        params=["gad"],
+        return_type="LONG",
+        c_template="_dash_gad_value(${gad}, _DASH_GK_RADIO)",
+        needs_gadtools=True,
+        description="Get selected radio button"
+    ),
+    "radio_set": BuiltinFunc(
+        name="radio_set",
+        params=["gad", "index"],
+        return_type="void",
+        c_template="_dash_gad_set_value(${gad}, _DASH_GK_RADIO, ${index})",
+        needs_gadtools=True,
+        description="Select a radio button"
+    ),
+    "integer_create": BuiltinFunc(
+        name="integer_create",
+        params=["win", "x", "y", "w", "h", "value"],
+        return_type="LONG",
+        c_template="_dash_integer_create(${win}, ${x}, ${y}, ${w}, ${h}, ${value})",
+        needs_gadtools=True,
+        description="Create integer input field"
+    ),
+    "integer_get": BuiltinFunc(
+        name="integer_get",
+        params=["gad"],
+        return_type="LONG",
+        c_template="_dash_gad_value(${gad}, _DASH_GK_INTEGER)",
+        needs_gadtools=True,
+        description="Get integer field value"
+    ),
+    "integer_set": BuiltinFunc(
+        name="integer_set",
+        params=["gad", "value"],
+        return_type="void",
+        c_template="_dash_gad_set_value(${gad}, _DASH_GK_INTEGER, ${value})",
+        needs_gadtools=True,
+        description="Set integer field value"
+    ),
+    "palette_create": BuiltinFunc(
+        name="palette_create",
+        params=["win", "x", "y", "w", "h", "depth"],
+        return_type="LONG",
+        c_template="_dash_palette_create(${win}, ${x}, ${y}, ${w}, ${h}, ${depth})",
+        needs_gadtools=True,
+        description="Create colour palette gadget (2^depth colours)"
+    ),
+    "palette_get": BuiltinFunc(
+        name="palette_get",
+        params=["gad"],
+        return_type="LONG",
+        c_template="_dash_gad_value(${gad}, _DASH_GK_PALETTE)",
+        needs_gadtools=True,
+        description="Get selected colour"
+    ),
+    "palette_set": BuiltinFunc(
+        name="palette_set",
+        params=["gad", "color"],
+        return_type="void",
+        c_template="_dash_gad_set_value(${gad}, _DASH_GK_PALETTE, ${color})",
+        needs_gadtools=True,
+        description="Select a colour"
+    ),
+    "number_create": BuiltinFunc(
+        name="number_create",
+        params=["win", "x", "y", "w", "h", "value"],
+        return_type="LONG",
+        c_template="_dash_number_create(${win}, ${x}, ${y}, ${w}, ${h}, ${value})",
+        needs_gadtools=True,
+        description="Create a box that shows a number"
+    ),
+    "number_set": BuiltinFunc(
+        name="number_set",
+        params=["gad", "value"],
+        return_type="void",
+        c_template="_dash_gad_set_value(${gad}, _DASH_GK_NUMBER, ${value})",
+        needs_gadtools=True,
+        description="Change the number shown"
     ),
 
     # Menus - see MENU_FUNCTIONS for simpler API

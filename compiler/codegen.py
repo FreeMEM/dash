@@ -3399,6 +3399,8 @@ static struct Window *_dash_gt_win = NULL;   /* the window of gt_init: gt_* and 
 #define FLOW_MAX_GADGETS 64
 static struct Gadget *_dash_gadgets[FLOW_MAX_GADGETS];
 static UBYTE _dash_gadget_kinds[FLOW_MAX_GADGETS];     /* BUTTON_KIND, SLIDER_KIND... */
+static STRPTR *_dash_gt_label_sets[16];                 /* gt_cycle options, freed by gt_cleanup */
+static LONG _dash_gt_nlabel_sets = 0;
 static LONG _dash_gadget_count = 0;
 static LONG _dash_last_gadget_id = -1;
 
@@ -3428,6 +3430,7 @@ static void _dash_gt_cleanup(void) {
         FreeVisualInfo(_dash_vi);
         _dash_vi = NULL;
     }
+    while (_dash_gt_nlabel_sets > 0) FreeVec(_dash_gt_label_sets[--_dash_gt_nlabel_sets]);
     _dash_gad = NULL;
     _dash_gadget_count = 0;
 }
@@ -3579,6 +3582,43 @@ static LONG _dash_gt_listview(LONG x, LONG y, LONG w, LONG h, STRPTR label, stru
     return -1;
 }
 
+/* gt_cycle: "Uno|Dos" split in a copy kept until gt_cleanup */
+#define _DASH_GT_LABEL_SETS 16
+
+static LONG _dash_gt_cycle_str(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR options) {
+    LONG n = 1, i = 0, len;
+    STRPTR p, copy, *labels;
+    if (!options) options = (STRPTR)"";
+    if (_dash_gt_nlabel_sets >= _DASH_GT_LABEL_SETS) return -1;
+    len = strlen((char *)options);
+    for (p = options; *p; p++) if (*p == '|') n++;
+    /* one block: the array of pointers, then the text */
+    labels = (STRPTR *)AllocVec((n + 1) * sizeof(STRPTR) + len + 1, MEMF_ANY);
+    if (!labels) return -1;
+    copy = (STRPTR)(labels + n + 1);
+    memcpy(copy, options, len + 1);
+    labels[i++] = copy;
+    for (p = copy; *p; p++)
+        if (*p == '|') { *p = 0; labels[i++] = p + 1; }
+    labels[n] = NULL;
+    _dash_gt_label_sets[_dash_gt_nlabel_sets++] = labels;
+    return _dash_gt_cycle(x, y, w, h, label, labels, 0);
+}
+
+static void _dash_gt_set_enabled(LONG gad_id, LONG enabled) {
+    if (gad_id < 0 || gad_id >= _dash_gadget_count) return;
+    GT_SetGadgetAttrs(_dash_gadgets[gad_id], _dash_gt_win, NULL, GA_Disabled, enabled ? FALSE : TRUE, TAG_DONE);
+}
+
+/* New text of a gt_text (copied: created with GTTX_CopyText) or gt_string gadget */
+static void _dash_gt_set_text(LONG gad_id, STRPTR text) {
+    if (gad_id < 0 || gad_id >= _dash_gadget_count) return;
+    if (_dash_gadget_kinds[gad_id] == TEXT_KIND)
+        GT_SetGadgetAttrs(_dash_gadgets[gad_id], _dash_gt_win, NULL, GTTX_Text, (ULONG)text, TAG_DONE);
+    else if (_dash_gadget_kinds[gad_id] == STRING_KIND)
+        GT_SetGadgetAttrs(_dash_gadgets[gad_id], _dash_gt_win, NULL, GTST_String, (ULONG)text, TAG_DONE);
+}
+
 static LONG _dash_gt_text(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR text) {
     if (!_dash_gad || _dash_gadget_count >= FLOW_MAX_GADGETS) return -1;
     struct NewGadget ng = {
@@ -3586,6 +3626,7 @@ static LONG _dash_gt_text(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR t
     };
     _dash_gad = CreateGadget(TEXT_KIND, _dash_gad, &ng,
         GTTX_Text, (ULONG)text,
+        GTTX_CopyText, TRUE,
         GTTX_Border, TRUE,
         TAG_DONE);
     if (_dash_gad) {
@@ -3738,12 +3779,21 @@ static LONG _dash_gt_wait_event(void) {
 #define CHECKBOXWIDTH 26
 #define CHECKBOXHEIGHT 11
 #endif
+#ifndef MXWIDTH
+#define MXWIDTH 17
+#define MXHEIGHT 9
+#endif
 #define _DASH_MAX_GADS 64
 #define _DASH_GK_BUTTON 1
 #define _DASH_GK_CHECKBOX 2
 #define _DASH_GK_SLIDER 3
 #define _DASH_GK_TEXT 4
 #define _DASH_GK_LIST 5
+#define _DASH_GK_CYCLE 6
+#define _DASH_GK_RADIO 7
+#define _DASH_GK_INTEGER 8
+#define _DASH_GK_PALETTE 9
+#define _DASH_GK_NUMBER 10
 
 typedef struct {
     struct Window *win;
@@ -3754,6 +3804,9 @@ typedef struct {
     LONG kind;
     LONG value;               /* checkbox state, slider level, listview selection */
     struct List items;        /* listview labels */
+    STRPTR *labels;           /* cycle and radio options: "A|B|C" split in a copy */
+    STRPTR labels_text;
+    LONG nlabels;
 } _DashGad;
 
 static _DashGad _dash_gads[_DASH_MAX_GADS + 1];
@@ -3849,13 +3902,18 @@ static LONG _dash_gadget_event(struct IntuiMessage *msg) {
     if (!g) return 0;
     if (g->kind == _DASH_GK_CHECKBOX) g->value = (gad->Flags & GFLG_SELECTED) ? 1 : 0;
     else if (g->kind == _DASH_GK_SLIDER) g->value = (WORD)code;
+    else if (g->kind == _DASH_GK_CYCLE || g->kind == _DASH_GK_RADIO || g->kind == _DASH_GK_PALETTE)
+        g->value = code;      /* the option or colour chosen (radio buttons answer on GADGETDOWN) */
+    else if (g->kind == _DASH_GK_INTEGER && g->gad->SpecialInfo)
+        g->value = ((struct StringInfo *)g->gad->SpecialInfo)->LongInt;
     else if (g->kind == _DASH_GK_LIST && cls == IDCMP_GADGETUP) {
         LONG row = (g->win->Flags & WFLG_GIMMEZEROZERO) ? _dash_listview_row(g, msg->MouseY) : (WORD)code;
         if (row < 0) return 0;
         g->value = row;
         GT_SetGadgetAttrs(g->gad, g->win, NULL, GTLV_Selected, row, TAG_DONE);
     }
-    if (cls == IDCMP_GADGETDOWN && g->kind != _DASH_GK_SLIDER) return 0;   /* the click ends in GADGETUP */
+    if (cls == IDCMP_GADGETDOWN && g->kind != _DASH_GK_SLIDER && g->kind != _DASH_GK_RADIO)
+        return 0;   /* the click ends in GADGETUP */
     _dash_gadget_last = (LONG)(g - _dash_gads);
     return _dash_gadget_last;
 }
@@ -3986,6 +4044,105 @@ static LONG _dash_listview_selected(LONG h) {
     return g ? g->value : -1;
 }
 
+/* "Uno|Dos|Tres" -> a NULL-ended array in a copy, kept by the gadget until exit */
+static STRPTR *_dash_gad_labels(STRPTR options, STRPTR *text, LONG *count) {
+    LONG n = 1, i = 0;
+    STRPTR p, copy, *labels;
+    copy = _dash_str_dup(options ? options : (STRPTR)"", FALSE);
+    if (!copy) return NULL;
+    for (p = copy; *p; p++) if (*p == '|') n++;
+    labels = (STRPTR *)_dash_alloc((n + 1) * sizeof(STRPTR));
+    if (!labels) { _dash_str_free(copy); return NULL; }
+    labels[i++] = copy;
+    for (p = copy; *p; p++)
+        if (*p == '|') { *p = 0; labels[i++] = p + 1; }
+    labels[n] = NULL;
+    *text = copy;
+    *count = n;
+    return labels;
+}
+
+/* A gadget with options: the labels go in the slot _dash_gad_new will take */
+static LONG _dash_gad_with_labels(LONG win, LONG kind, ULONG gt_kind, LONG x, LONG y, LONG w, LONG h,
+                                  STRPTR options, ULONG labels_tag) {
+    STRPTR text = NULL, *labels;
+    LONG count = 0, hd;
+    labels = _dash_gad_labels(options, &text, &count);
+    if (!labels) return 0;
+    {
+        struct TagItem tags[] = { { labels_tag, (ULONG)labels }, { GTMX_Spacing, 2 }, { TAG_DONE, 0 } };
+        if (gt_kind != MX_KIND) tags[1].ti_Tag = TAG_IGNORE;
+        hd = _dash_gad_new(win, kind, gt_kind, x, y, w, h, NULL, 0, tags);
+    }
+    if (!hd) {
+        FreePooled(_dash_pool, labels, (count + 1) * sizeof(STRPTR));
+        _dash_str_free(text);
+        return 0;
+    }
+    _dash_gads[hd].labels = labels;
+    _dash_gads[hd].labels_text = text;
+    _dash_gads[hd].nlabels = count;
+    _dash_gads[hd].value = 0;
+    return hd;
+}
+
+static LONG _dash_cycle_create(LONG win, LONG x, LONG y, LONG w, LONG h, STRPTR options) {
+    return _dash_gad_with_labels(win, _DASH_GK_CYCLE, CYCLE_KIND, x, y, w, h, options, GTCY_Labels);
+}
+
+/* Radio buttons (GadTools "mx"), one per option, one under the other */
+static LONG _dash_radio_create(LONG win, LONG x, LONG y, STRPTR options) {
+    return _dash_gad_with_labels(win, _DASH_GK_RADIO, MX_KIND, x, y, MXWIDTH, MXHEIGHT, options, GTMX_Labels);
+}
+
+static LONG _dash_integer_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG value) {
+    struct TagItem tags[] = { { GTIN_Number, (ULONG)value }, { GTIN_MaxChars, 10 }, { TAG_DONE, 0 } };
+    LONG hd = _dash_gad_new(win, _DASH_GK_INTEGER, INTEGER_KIND, x, y, w, h, NULL, 0, tags);
+    if (hd) _dash_gads[hd].value = value;
+    return hd;
+}
+
+static LONG _dash_palette_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG depth) {
+    struct TagItem tags[] = { { GTPA_Depth, (ULONG)(depth > 0 ? depth : 2) }, { GTPA_Color, 1 },
+                              { GTPA_IndicatorWidth, 16 }, { TAG_DONE, 0 } };
+    LONG hd = _dash_gad_new(win, _DASH_GK_PALETTE, PALETTE_KIND, x, y, w, h, NULL, 0, tags);
+    if (hd) _dash_gads[hd].value = 1;
+    return hd;
+}
+
+/* A number shown in a box (it cannot be edited) */
+static LONG _dash_number_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG value) {
+    struct TagItem tags[] = { { GTNM_Number, (ULONG)value }, { GTNM_Border, TRUE }, { TAG_DONE, 0 } };
+    LONG hd = _dash_gad_new(win, _DASH_GK_NUMBER, NUMBER_KIND, x, y, w, h, NULL, 0, tags);
+    if (hd) _dash_gads[hd].value = value;
+    return hd;
+}
+
+/* Value of a cycle, radio, integer, palette or number gadget (-1: not one of them) */
+static LONG _dash_gad_value(LONG h, LONG kind) {
+    _DashGad *g = _dash_gad_get(h);
+    if (!g || g->kind != kind) return -1;
+    if (kind == _DASH_GK_INTEGER && g->gad->SpecialInfo)
+        g->value = ((struct StringInfo *)g->gad->SpecialInfo)->LongInt;   /* typed, maybe without Return */
+    return g->value;
+}
+
+static void _dash_gad_set_value(LONG h, LONG kind, LONG value) {
+    _DashGad *g = _dash_gad_get(h);
+    ULONG tag;
+    if (!g || g->kind != kind) return;
+    switch (kind) {
+    case _DASH_GK_CYCLE:   tag = GTCY_Active; if (value < 0 || value >= g->nlabels) return; break;
+    case _DASH_GK_RADIO:   tag = GTMX_Active; if (value < 0 || value >= g->nlabels) return; break;
+    case _DASH_GK_INTEGER: tag = GTIN_Number; break;
+    case _DASH_GK_PALETTE: tag = GTPA_Color; break;
+    case _DASH_GK_NUMBER:  tag = GTNM_Number; break;
+    default: return;
+    }
+    g->value = value;
+    GT_SetGadgetAttrs(g->gad, g->win, NULL, tag, (ULONG)value, TAG_DONE);
+}
+
 /* At exit, after the windows are closed: free every gadget list */
 static void _dash_gadgets_cleanup(void) {
     LONG i;
@@ -3995,6 +4152,10 @@ static void _dash_gadgets_cleanup(void) {
         if (g->kind == _DASH_GK_LIST) {   /* the lines' texts */
             struct Node *n;
             while ((n = RemHead(&g->items))) _dash_str_free((STRPTR)n->ln_Name);
+        }
+        if (g->labels) {
+            FreePooled(_dash_pool, g->labels, (g->nlabels + 1) * sizeof(STRPTR));
+            _dash_str_free(g->labels_text);
         }
         g->last->NextGadget = NULL;   /* or FreeGadgets would follow into the next list */
         FreeGadgets(g->glist);
@@ -4016,7 +4177,7 @@ static void _dash_menu_add(UBYTE type, STRPTR label, STRPTR shortcut, LONG id) {
     if (_dash_menu_count >= FLOW_MAX_MENU_ITEMS - 1) return;
     _dash_menu_items[_dash_menu_count].nm_Type = type;
     _dash_menu_items[_dash_menu_count].nm_Label = label;
-    _dash_menu_items[_dash_menu_count].nm_CommKey = shortcut;
+    _dash_menu_items[_dash_menu_count].nm_CommKey = (shortcut && *shortcut) ? shortcut : NULL;
     _dash_menu_items[_dash_menu_count].nm_Flags = 0;
     _dash_menu_items[_dash_menu_count].nm_MutualExclude = 0;
     _dash_menu_items[_dash_menu_count].nm_UserData = (APTR)(LONG)id;
@@ -4031,6 +4192,12 @@ static void _dash_menu_title(STRPTR label) {
 
 static void _dash_menu_item(STRPTR label, STRPTR shortcut, LONG id) {
     _dash_menu_add(NM_ITEM, label, shortcut, id);
+}
+
+/* An item with a check mark that each choice turns on or off */
+static void _dash_menu_check_item(STRPTR label, STRPTR shortcut, LONG id) {
+    _dash_menu_add(NM_ITEM, label, shortcut, id);
+    if (_dash_menu_count > 0) _dash_menu_items[_dash_menu_count - 1].nm_Flags = CHECKIT | MENUTOGGLE;
 }
 
 static void _dash_menu_sub(STRPTR label, STRPTR shortcut, LONG id) {
@@ -4064,6 +4231,40 @@ static BOOL _dash_menu_attach(void) {
 /* Menu item id, -1 (none) or -2 (close); the gadget events it reads wait for gt_event */
 static LONG _dash_menu_event(void) {
     return _dash_gt_read(1);
+}
+
+/* The item (or sub-item) with that id and its menu number for OnMenu/OffMenu */
+static struct MenuItem *_dash_menu_find(LONG id, UWORD *number) {
+    struct Menu *m;
+    struct MenuItem *it, *sub;
+    UWORD mn = 0, in, sn;
+    for (m = _dash_menu; m; m = m->NextMenu, mn++) {
+        for (it = m->FirstItem, in = 0; it; it = it->NextItem, in++) {
+            if ((LONG)GTMENUITEM_USERDATA(it) == id && id) {
+                *number = FULLMENUNUM(mn, in, NOSUB);
+                return it;
+            }
+            for (sub = it->SubItem, sn = 0; sub; sub = sub->NextItem, sn++)
+                if ((LONG)GTMENUITEM_USERDATA(sub) == id && id) {
+                    *number = FULLMENUNUM(mn, in, sn);
+                    return sub;
+                }
+        }
+    }
+    return NULL;
+}
+
+static LONG _dash_menu_checked(LONG id) {
+    UWORD number;
+    struct MenuItem *it = _dash_menu_find(id, &number);
+    return it && (it->Flags & CHECKED) ? 1 : 0;
+}
+
+static void _dash_menu_enable(LONG id, LONG enabled) {
+    UWORD number;
+    if (!_dash_gt_win || !_dash_menu_find(id, &number)) return;
+    if (enabled) OnMenu(_dash_gt_win, number);
+    else OffMenu(_dash_gt_win, number);
 }
 
 /* EventLoop's On Menu: the item being handled */
@@ -6905,12 +7106,14 @@ class CodeGenerator(ASTVisitor):
             # Windows must ask Intuition for key events before they open
             if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
                 self.uses_keys = True
-            if isinstance(n, OnGadgetHandler) or (isinstance(n, FunctionCall) and n.name.split("_")[0] in
-                    ("button", "checkbox", "slider", "textfield", "listview", "gadget")):
+            if isinstance(n, OnGadgetHandler) or (isinstance(n, FunctionCall) and get_builtin(n.name) and
+                    n.name.split("_")[0] in ("button", "checkbox", "slider", "textfield", "listview", "gadget",
+                                             "cycle", "radio", "integer", "palette", "number")):
                 self.uses_gadgets = True
                 self.needs_gadtools = True
             # gt_* and menu_* gadgets and menus: the window asks for their events when it opens
-            if isinstance(n, OnMenuHandler) or (isinstance(n, FunctionCall) and n.name.split("_")[0] in ("gt", "menu")):
+            if isinstance(n, OnMenuHandler) or (isinstance(n, FunctionCall) and get_builtin(n.name) and
+                                                n.name.split("_")[0] in ("gt", "menu")):
                 self.needs_gadtools = True
             if isinstance(n, OnMenuHandler):
                 self.uses_menu_handler = True

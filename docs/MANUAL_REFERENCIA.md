@@ -1684,7 +1684,15 @@ end
 ```
 
 Tambien: `button_enable/disable`, `checkbox_get/set`, `slider_get/set`, `textfield_set`,
-`listview_clear`. Los gadgets se liberan al salir; no se usan despues de cerrar su ventana.
+`listview_clear`, y estos otros gadgets (su valor también se actualiza con `On Gadget`):
+
+| Función | Gadget |
+|---|---|
+| `cycle_create(win, x, y, w, h, "Uno|Dos")`, `cycle_get/set` | Lista desplegable; valor = opción (desde 0) |
+| `radio_create(win, x, y, "A|B|C")`, `radio_get/set` | Botones de radio, uno bajo otro |
+| `integer_create(win, x, y, w, h, valor)`, `integer_get/set` | Campo de número |
+| `palette_create(win, x, y, w, h, prof)`, `palette_get/set` | Paleta de 2^prof colores; valor = color |
+| `number_create(win, x, y, w, h, valor)`, `number_set` | Número en un recuadro (solo se lee) | Los gadgets se liberan al salir; no se usan despues de cerrar su ventana.
 GadTools no admite ventanas GimmeZeroZero (todas las de Dash lo son): la fila elegida en un
 listview la calcula Dash con la posicion del raton.
 
@@ -1759,11 +1767,17 @@ end
 | `gt_get_value(gadget)` | Valor: casilla 1/0, deslizador, color de la paleta, número de un campo entero |
 | `gt_set_value(gadget,value)` | Cambiar ese valor |
 | `menu_title(name)` | Crear titulo de menu |
-| `menu_item(name,shortcut,id)` | Crear item de menu |
+| `menu_item(name,shortcut,id)` | Crear item de menu (`shortcut` `""` = sin atajo) |
 | `menu_separator()` | Crear separador |
 | `menu_attach()` | Adjuntar menus |
 | `menu_event()` | Obtener evento de menu |
 | `menu_id()` | En `On Menu`: la opción elegida |
+| `menu_check_item(name,shortcut,id)` | Opción con marca que se activa y desactiva al elegirla |
+| `menu_checked(id)` | 1 si la marca de esa opción está puesta |
+| `menu_enable(id, si)` | Activa o desactiva (en gris) una opción, después de `menu_attach` |
+| `gt_cycle(x,y,w,h,label,"A|B")` | Lista desplegable (`gt_get_value`: opción) |
+| `gt_enable(id)`, `gt_disable(id)` | Activar o desactivar un gadget |
+| `gt_set_text(id, texto)` | Cambiar el texto de un `gt_text` o `gt_string` |
 
 ---
 
@@ -2596,16 +2610,16 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Graficos basicos | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
 | Graficos avanzados | 43 | `sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
 | Entrada | 29 | `key_*`, `mouse_*`, `joy_*` |
-| GadTools y menus | 21 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
+| GadTools y menus | 29 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
 | Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_get_path` |
 | ReAction | 64 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
 | Sistema y memoria | 25 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Ficheros (DOS) y buffers | 34 | `file_*`, `dir_*`, `buffer_*` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 30 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
+| Intuition | 44 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 67 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
-| **Total** | **389** | |
+| **Total** | **411** | |
 
 ### Colores Estandar Amiga
 

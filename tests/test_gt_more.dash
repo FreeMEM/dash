@@ -1,0 +1,195 @@
+# GadTools completed: cycle, radio buttons (mx), integer field, palette and number gadgets
+# by handle (values, On Gadget with real clicks), gt_cycle/gt_disable/gt_set_text, and
+# menus with a check mark, items without shortcut and menu_enable. A helper process
+# clicks and chooses menu items through input.device.
+#
+# expect-out: ciclo 0, radio 0, entero 42, paleta 1
+# expect-out: ciclo 2, radio 1, entero 99, paleta 3
+# expect-out: gt ciclo 1, texto cambiado
+# expect-out: ciclo pulsado: 0
+# expect-out: radio pulsado: 2
+# expect-out: marca 1
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static LONG acc_kind[4], acc_x[4], acc_y[4], n_acc; static volatile LONG acc_hechas;"
+
+Window W
+    title "Más gadgets"
+    width 320
+    height 140
+end
+
+# Helper process: kind 0 = left click at window position (x, y) (inside the borders: the
+# window is GIMMEZEROZERO); kind 1 = choose item y of menu x: pointer on the menu title,
+# right button down, then one-step mouse moves until the screen's pointer is on the item
+# (a mouse step is not always a pixel), right button up.
+@native func proceso_acciones()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    LONG i, k, steps, tx, ty;
+    Delay(100);
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < n_acc; i++) {
+            struct Screen *scr = _dash_win->WScreen;
+            struct Menu *m = _dash_menu;
+            struct MenuItem *it = NULL;
+            UWORD button = acc_kind[i] == 1 ? IECODE_RBUTTON : IECODE_LBUTTON;
+            UWORD held = acc_kind[i] == 1 ? IEQUALIFIER_RBUTTON : IEQUALIFIER_LEFTBUTTON;
+            if (acc_kind[i] == 1) {
+                for (k = 0; k < acc_x[i] && m; k++) m = m->NextMenu;
+                it = m ? m->FirstItem : NULL;
+                for (k = 0; k < acc_y[i] && it; k++) it = it->NextItem;
+                if (!it) continue;
+                pp.iepp_Position.X = m->LeftEdge + m->Width / 2;
+                pp.iepp_Position.Y = scr->BarHeight / 2;
+            } else {
+                pp.iepp_Position.X = _dash_win->LeftEdge + _dash_win->BorderLeft + acc_x[i];
+                pp.iepp_Position.Y = _dash_win->TopEdge + _dash_win->BorderTop + acc_y[i];
+            }
+            memset(&ie, 0, sizeof(ie));
+            pp.iepp_Screen = scr;
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+            DoIO((struct IORequest *)io);
+            Delay(5);
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = button;
+            ie.ie_Qualifier = held | IEQUALIFIER_RELATIVEMOUSE;
+            DoIO((struct IORequest *)io);
+            Delay(10);
+            if (it) {
+                tx = m->LeftEdge + it->LeftEdge + it->Width / 2;
+                ty = scr->BarHeight + 1 + it->TopEdge + it->Height / 2;
+                steps = 0;
+                while ((scr->MouseX != tx || scr->MouseY != ty) && steps++ < 400) {
+                    memset(&ie, 0, sizeof(ie));
+                    ie.ie_Class = IECLASS_RAWMOUSE;
+                    ie.ie_Code = IECODE_NOBUTTON;
+                    ie.ie_Qualifier = held | IEQUALIFIER_RELATIVEMOUSE;
+                    ie.ie_X = scr->MouseX < tx ? 1 : scr->MouseX > tx ? -1 : 0;
+                    ie.ie_Y = scr->MouseY < ty ? 1 : scr->MouseY > ty ? -1 : 0;
+                    DoIO((struct IORequest *)io);
+                    Delay(1);
+                }
+                Delay(10);
+            }
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = button | IECODE_UP_PREFIX;
+            ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+            DoIO((struct IORequest *)io);
+            Delay(25);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    acc_hechas = 1;
+"""
+end
+
+@native func accion(i: Int, kind: Int, x: Int, y: Int)
+"""
+    acc_kind[i] = kind; acc_x[i] = x; acc_y[i] = y;
+    if (n_acc <= i) n_acc = i + 1;
+"""
+end
+
+@native func lanzar()
+"""
+    acc_hechas = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_acciones, NP_Name, (ULONG)"dash_acciones", TAG_DONE);
+"""
+end
+
+@native func esperar()
+"""
+    while (!acc_hechas) Delay(2);
+    n_acc = 0;
+"""
+end
+
+Main
+    W.open
+    c = cycle_create(0, 10, 4, 100, 14, "Uno|Dos|Tres")
+    r = radio_create(0, 130, 4, "A|B|C")
+    e = integer_create(0, 10, 24, 60, 14, 42)
+    p = palette_create(0, 10, 44, 120, 20, 2)
+    n = number_create(0, 150, 44, 50, 14, 7)
+    gt_init()
+    gc = gt_cycle(80, 90, 90, 14, "Modo", "Rápido|Lento")
+    gtx = gt_text(80, 108, 90, 12, "Estado", "Listo")
+    gt_attach()
+    gt_disable(gc)
+    gt_enable(gc)
+    menu_title("Ver")
+    menu_check_item("Rejilla", "", 3)
+    menu_item("Salir", "Q", 4)
+    menu_attach()
+
+    v1 = cycle_get(c)
+    v2 = radio_get(r)
+    v3 = integer_get(e)
+    v4 = palette_get(p)
+    Print "ciclo #{v1}, radio #{v2}, entero #{v3}, paleta #{v4}"
+    cycle_set(c, 2)
+    radio_set(r, 1)
+    integer_set(e, 99)
+    palette_set(p, 3)
+    number_set(n, 8)
+    v1 = cycle_get(c)
+    v2 = radio_get(r)
+    v3 = integer_get(e)
+    v4 = palette_get(p)
+    Print "ciclo #{v1}, radio #{v2}, entero #{v3}, paleta #{v4}"
+    gt_set_value(gc, 1)
+    v1 = gt_get_value(gc)
+    gt_set_text(gtx, "Cargando")
+    Print "gt ciclo #{v1}, texto cambiado"
+
+    # click the cycle (from "Tres" back to "Uno"), the third radio button, the check item
+    accion(0, 0, 60, 11)
+    accion(1, 0, 138, 4 + 2 * 11 + 4)
+    accion(2, 1, 0, 0)
+    lanzar()
+    eventos = 0
+    EventLoop
+        On Gadget
+            g = gadget_id()
+            if g == c
+                v = cycle_get(c)
+                Print "ciclo pulsado: #{v}"
+            end
+            if g == r
+                v = radio_get(r)
+                Print "radio pulsado: #{v}"
+            end
+            eventos = eventos + 1
+        end
+        On Menu
+            if menu_id() == 3
+                m = menu_checked(3)
+                Print "marca #{m}"
+                menu_enable(4, false)
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    esperar()
+    Print "fin"
+end

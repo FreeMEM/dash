@@ -142,11 +142,14 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
 - [x] 13c. **Bugs de ReAction** (auditoría 2, 8, 12, 14): `render_canvas` no compila (`static`); nodos del chooser
       con `AllocMem` sin liberar y sin `AllocChooserNode`, ids fuera de tabla; `RA_EVENT_NONE` = 0 choca con el
       gadget 0; iconificar sin efecto; el dibujo del canvas se llama quizá desde input.device (comprobar).
-- [ ] 14. **GadTools completo.** Gadgets que faltan: ciclo (`CYCLE_KIND`), opciones (`MX_KIND`), lista
+- [x] 14. **GadTools completo.** Gadgets que faltan: ciclo (`CYCLE_KIND`), opciones (`MX_KIND`), lista
       (`LISTVIEW_KIND`), scroller, número (`NUMBER_KIND`); `gt_set_string`, deshabilitar, refresco
       (`GT_RefreshWindow`, `GT_BeginRefresh`), posiciones según la fuente de la pantalla. Probar en A500 y A1200.
-- [ ] 15. **ReAction completo.** Clases que faltan: `listbrowser`, `clicktab` (pestañas), `radiobutton`,
-      `getfile`, `fuelgauge`, `button` con imagen; menús en ventanas ReAction; `ra_set_*`/`ra_get_*` que falten.
+- [ ] 15a. **ReAction: gadgets que faltan.** `listbrowser` (lista de textos: añadir, vaciar, elegida), `radiobutton`,
+      `fuelgauge` (barra de progreso), `clicktab` (pestañas), con `ra_get_value`/`ra_set_value` y eventos; que los
+      `ra_set_*` funcionen antes de abrir la ventana. Nodos con `Alloc*Node` y textos propios, liberados al cerrar.
+- [ ] 15b. **ReAction: menús y fichero.** Menús en ventanas ReAction (`WINDOW_MenuStrip`, `WMHI_MENUPICK` →
+      `RA_EVENT_MENU` + `ra_menu_id()`), `getfile` (botón que abre el selector de ficheros y su ruta).
 - [ ] 16. **Varias ventanas.** GadTools y ReAction con objetos como valores (como MUI, tarea 2), manteniendo
       la API actual de una ventana para no romper programas. Si choca con la compatibilidad, `[?]`.
 - [ ] 17. **Optimizar.** Emitir solo la parte del runtime que el programa usa (como ya pasa con otros
@@ -500,3 +503,21 @@ Formato:
   `render_canvas` llamada al abrir y con `ra_refresh_canvas`, clic real en el botón de id 0 (proceso con
   `input.device`) devuelve 0, id -1 sin efecto; 0 vivos y 0 escapados al salir.
 - Tests: 133/133 sin emulador; 321/321 con `--emu --emu-a500 --emu-32`; 265/265 con `--emu --emu-32 --memcheck`; ejemplos 33/33 (`blixel` también compila).
+
+### 2026-10-16 — Tarea 14 (GadTools completo)
+- Hecho (21 builtins nuevos, 411 en total):
+  - Gadgets por número (la API recomendada): `cycle_create/get/set`, `radio_create/get/set` (MX; responde en
+    `GADGETDOWN`), `integer_create/get/set`, `palette_create/get/set`, `number_create`/`number_set`. Opciones "A|B|C"
+    partidas en una copia que guarda el gadget hasta salir. `On Gadget` actualiza su valor. El preescaneo solo cuenta
+    builtins (una función del usuario `number_x` ya no activa GadTools).
+  - API `gt_*`: `gt_cycle` (con "A|B"; el runtime ya tenía la función sin builtin), `gt_enable`/`gt_disable`,
+    `gt_set_text` (`gt_text` creado con `GTTX_CopyText`, o `gt_string`).
+  - Menús: `menu_check_item` (`CHECKIT|MENUTOGGLE`), `menu_checked`, `menu_enable` (`OnMenu`/`OffMenu` con el número
+    calculado recorriendo menús, opciones y subopciones), atajo `""` = sin atajo (antes quedaba el símbolo Amiga solo).
+  - `MXWIDTH`/`MXHEIGHT` definidos si el NDK no los trae (el de la toolchain no los tiene).
+- Probado en las tres máquinas (`test_gt_more`): valores iniciales y cambiados de los cinco gadgets nuevos, `gt_cycle`
+  y `gt_set_text`; con clics reales, el ciclo pasa de "Tres" a "Uno" y el tercer botón de radio queda elegido (`On
+  Gadget`), y la opción con marca da `menu_checked` = 1 en `On Menu`.
+- No hecho: atajos de teclado con `_` (GadTools solo subraya la letra; el programa tendría que atender las teclas) y
+  posiciones según la fuente de la pantalla. Quedan como pendientes.
+- Tests: 134/134 sin emulador; 325/325 con `--emu --emu-a500 --emu-32`; 200/200 con `--emu --memcheck`; ejemplos 33/33. `test_window_handles` agotaba el tiempo en la batería `--memcheck` (pasa solo): todos los tests de una máquina van en un arranque y ya no cabían en 180 s; límites subidos a 360 s (A1200), 700 s (A500) y 480 s (3.2).

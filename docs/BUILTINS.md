@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 390 funciones, 390 implementadas, 0 sin implementar.
+Total: 411 funciones, 411 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -142,6 +142,10 @@ Total: 390 funciones, 390 implementadas, 0 sin implementar.
 | `gt_get_string(gad_id)` | `STRPTR` | Get string value from string gadget |  |
 | `gt_event()` | `LONG` | Check for gadget event, returns gadget ID or -1 (none) or -2 (close) |  |
 | `gt_wait_event()` | `LONG` | Wait for gadget event, returns gadget ID or -2 (close) |  |
+| `gt_cycle(x, y, w, h, label, options)` | `LONG` | Create a cycle gadget; options separated by \| (gt_get_value: option) |  |
+| `gt_enable(gad_id)` | `void` | Enable a gadget |  |
+| `gt_disable(gad_id)` | `void` | Disable (ghost) a gadget |  |
+| `gt_set_text(gad_id, text)` | `void` | Change the text of a gt_text or gt_string gadget |  |
 
 ## Menús
 
@@ -154,6 +158,9 @@ Total: 390 funciones, 390 implementadas, 0 sin implementar.
 | `menu_attach()` | `BOOL` | Attach menus to window (call after defining all menus) |  |
 | `menu_event()` | `LONG` | Check for menu event, returns menu item ID or -1/-2 |  |
 | `menu_id()` | `LONG` | In an EventLoop's On Menu: id of the menu item chosen |  |
+| `menu_check_item(label, shortcut, id)` | `void` | Add a menu item with a check mark that each choice toggles |  |
+| `menu_checked(id)` | `LONG` | 1 if the check mark of that menu item is on |  |
+| `menu_enable(id, enabled)` | `void` | Enable or disable (ghost) a menu item after menu_attach |  |
 
 ## Requesters ASL
 
@@ -365,6 +372,20 @@ Total: 390 funciones, 390 implementadas, 0 sin implementar.
 | `listview_add(gad, text)` | `void` | Add item to listview |  |
 | `listview_clear(gad)` | `void` | Clear listview |  |
 | `listview_selected(gad)` | `LONG` | Get selected index (-1 if none) |  |
+| `cycle_create(win, x, y, w, h, options)` | `LONG` | Create cycle gadget; options separated by \| (value = option, from 0) |  |
+| `cycle_get(gad)` | `LONG` | Get selected option of a cycle gadget |  |
+| `cycle_set(gad, index)` | `void` | Select an option of a cycle gadget |  |
+| `radio_create(win, x, y, options)` | `LONG` | Create radio buttons (one per option, separated by \|) |  |
+| `radio_get(gad)` | `LONG` | Get selected radio button |  |
+| `radio_set(gad, index)` | `void` | Select a radio button |  |
+| `integer_create(win, x, y, w, h, value)` | `LONG` | Create integer input field |  |
+| `integer_get(gad)` | `LONG` | Get integer field value |  |
+| `integer_set(gad, value)` | `void` | Set integer field value |  |
+| `palette_create(win, x, y, w, h, depth)` | `LONG` | Create colour palette gadget (2^depth colours) |  |
+| `palette_get(gad)` | `LONG` | Get selected colour |  |
+| `palette_set(gad, color)` | `void` | Select a colour |  |
+| `number_create(win, x, y, w, h, value)` | `LONG` | Create a box that shows a number |  |
+| `number_set(gad, value)` | `void` | Change the number shown |  |
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
 | `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
 | `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
