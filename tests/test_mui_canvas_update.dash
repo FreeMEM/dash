@@ -1,0 +1,59 @@
+# mui_canvas_update calls the draw function without clearing the area: it paints only what changed
+# (mui_canvas_updating() is true there) and the rest stays. mui_canvas_redraw and the window's own
+# redraws still clear it first and paint it all.
+# emu-needs: muimaster.library
+# expect-out: al abrir: fondo 0, pintada 1
+# expect-out: update 1: antes 1, dentro 2, fuera 1, mismo color true
+# expect-out: update 2: dentro 3, fuera 1
+# expect-out: redraw: fondo 0, dentro 1
+# expect-out: fin
+
+var completas: Int = 0
+var updates: Int = 0
+var fondo: Int = -1
+var antes: Int = -1
+var dentro: Int = -1
+var fuera: Int = -1
+var rgb_fuera: Int = 0
+var rgb_lleno: Int = 0
+var pluma: Int = 2
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    if mui_canvas_updating()
+        updates = updates + 1
+        antes = gfx_pixel_read(x + 2, y + 2)
+        gfx_pen(pluma)
+        gfx_rect(x + 10, y + 10, x + 29, y + 29)
+    else
+        completas = completas + 1
+        fondo = gfx_pixel_read(x + 2, y + 2)
+        gfx_pen(1)
+        gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+        rgb_lleno = gfx_pixel_rgb(x + 2, y + 2)
+    end
+    dentro = gfx_pixel_read(x + 20, y + 20)
+    fuera = gfx_pixel_read(x + 50, y + 50)
+    rgb_fuera = gfx_pixel_rgb(x + 50, y + 50)
+end
+
+Main
+    if mui_app_begin("Update", "DASHUPDATE") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Update", 0)
+            lienzo = mui_canvas(120, 80)
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_window_open(win)
+        Print "al abrir: fondo #{fondo}, pintada #{dentro}"
+        mui_canvas_update(lienzo)
+        Print "update #{updates}: antes #{antes}, dentro #{dentro}, fuera #{fuera}, mismo color #{rgb_fuera == rgb_lleno}"
+        pluma = 3
+        mui_canvas_update(lienzo)
+        Print "update #{updates}: dentro #{dentro}, fuera #{fuera}"
+        mui_canvas_redraw(lienzo)
+        Print "redraw: fondo #{fondo}, dentro #{dentro}"
+        mui_app_end()
+        Print "fin"
+    end
+end

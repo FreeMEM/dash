@@ -3521,6 +3521,20 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_redraw(${canvas})",
         description="Draw the area again now"
     ),
+    "mui_canvas_update": BuiltinFunc(
+        name="mui_canvas_update",
+        params=["canvas"],
+        return_type="void",
+        c_template="_dash_mui_canvas_update(${canvas})",
+        description="Call the draw function now without clearing the area (it paints only what changed)"
+    ),
+    "mui_canvas_updating": BuiltinFunc(
+        name="mui_canvas_updating",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_mui_canvas_updating()",
+        description="In the draw function: true if it runs for mui_canvas_update (the rest is still there)"
+    ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
         params=["canvas"],

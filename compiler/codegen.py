@@ -8936,6 +8936,7 @@ struct _DashCanvas {
 
 static struct MUI_CustomClass *_dash_canvas_class = NULL;
 static void _dash_canvas_cleanup(void);
+static BOOL _dash_canvas_updating = FALSE;   /* the draw function runs for mui_canvas_update */
 
 static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __asm("a2"),
                                    Msg msg __asm("a1")) {
@@ -8955,15 +8956,22 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         return 0;
     }
     case MUIM_Draw: {
-        DoSuperMethodA(cl, obj, msg);
+        /* MADF_DRAWUPDATE (mui_canvas_update): only the draw function, over what is there.
+           Anything else (opening, a resize, the window uncovered) clears it first. */
+        ULONG flags = ((struct MUIP_Draw *)msg)->flags;
+        BOOL update = (flags & MADF_DRAWUPDATE) && !(flags & MADF_DRAWOBJECT);
+        if (!update) DoSuperMethodA(cl, obj, msg);
         data = INST_DATA(cl, obj);
-        if ((((struct MUIP_Draw *)msg)->flags & MADF_DRAWOBJECT) && data->draw) {
+        if ((update || (flags & MADF_DRAWOBJECT)) && data->draw) {
             struct RastPort *old = _dash_rp;
+            BOOL old_updating = _dash_canvas_updating;
             LONG x = _DASH_MLEFT(obj), y = _DASH_MTOP(obj);
             LONG w = _DASH_MWIDTH(obj), h = _DASH_MHEIGHT(obj);
             APTR clip = MUI_AddClipping(_DASH_MRI(obj), x, y, w, h);
             _dash_rp = _DASH_MRI(obj)->mri_RastPort;
+            _dash_canvas_updating = update;
             ((void (*)(LONG, LONG, LONG, LONG))data->draw)(x, y, w, h);
+            _dash_canvas_updating = old_updating;
             _dash_rp = old;
             MUI_RemoveClipping(_DASH_MRI(obj), clip);
         }
@@ -9060,6 +9068,15 @@ static void _dash_mui_canvas_on_input(APTR obj, LONG id) {
 /* Draw it again now (only from the program's own task) */
 static void _dash_mui_canvas_redraw(APTR obj) {
     if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
+}
+
+/* Call the draw function now without clearing the area: it paints only what changed */
+static void _dash_mui_canvas_update(APTR obj) {
+    if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWUPDATE);
+}
+
+static BOOL _dash_mui_canvas_updating(void) {
+    return _dash_canvas_updating;
 }
 
 /* The character of the last key, with its qualifiers and the keymap ("" if it gives none) */
