@@ -340,8 +340,15 @@ static STRPTR _dash_str_dup(STRPTR s, BOOL temp) {
 
 /* Release the temporaries newer than mark except keep, which stays a temporary
    (a function's return value survives the function's own release) */
+static BOOL _dash_otmp_newer(ULONG mark);
+
 static void _dash_tmp_release_keep(ULONG mark, STRPTR keep) {
-    BOOL kept = _dash_tmp_take(keep);
+    BOOL kept;
+    /* the usual return: keep is the only temporary made since the mark (no objects either) */
+    if (keep && _dash_tmp == _DASH_STR_HDR(keep) && _dash_tmp->serial > mark
+        && (!_dash_tmp->next || _dash_tmp->next->serial <= mark) && !_dash_otmp_newer(mark))
+        return;
+    kept = _dash_tmp_take(keep);
     _dash_tmp_release_f(mark);
     if (kept) {
         _DashStrHdr *h = _DASH_STR_HDR(keep);
@@ -421,6 +428,11 @@ typedef struct _Dash_RefHeader {
 #define _DASH_FROM_HEADER(hdr) ((void *)((UBYTE *)(hdr) + sizeof(_Dash_RefHeader)))
 
 static _Dash_RefHeader *_dash_otmp = NULL;
+
+/* Was an object temporary made since the mark? */
+static BOOL _dash_otmp_newer(ULONG mark) {
+    return _dash_otmp && _dash_otmp->serial > mark;
+}
 
 static void _dash_otmp_push(_Dash_RefHeader *h) {
     h->serial = ++_dash_tmp_serial;
@@ -11165,7 +11177,7 @@ static {ret_type} {method_name}({params_str}) {{
             key = self._generate_expression(node.index)
             value = self._generate_expression(node.value)
             if kind == "string":
-                self.emit(f"{indent}DashDict_set_str({d}, {key}, {self._lent_str(node.value, value)});\n")
+                self.emit(f"{indent}DashDict_set_str({d}, {key}, {self._str_kept(node.value, value)});\n")
             elif kind != "int":
                 self.emit(f"{indent}DashDict_set_obj({d}, {key}, (void *)({value}));\n")
             else:
@@ -11180,7 +11192,7 @@ static {ret_type} {method_name}({params_str}) {{
         elem = self._array_elem_type(node.array)
         if elem == "string":
             self.uses_strings = True
-            self.emit(f"{indent}DashArray_set_str({array_name}, {index}, {self._lent_str(node.value, value)});\n")
+            self.emit(f"{indent}DashArray_set_str({array_name}, {index}, {self._str_kept(node.value, value)});\n")
             return
         if elem and (self._is_obj_expr(node.value) or isinstance(node.value, NilLiteral)):
             # the array holds a reference to its structs or arrays
@@ -11764,11 +11776,13 @@ static {ret_type} {method_name}({params_str}) {{
             elif i < len(arguments):
                 val = self._generate_expression(arguments[i])
                 if field.field_type == "String":
-                    val = self._lent_str(arguments[i], val)
+                    val = self._str_kept(arguments[i], val)
             elif field.default_value and field.field_type == "Fixed":
                 val = self._fixed_value(field.default_value)
             elif field.default_value:
                 val = self._generate_expression(field.default_value)
+                if field.field_type == "String":
+                    val = self._str_kept(field.default_value, val)
             else:
                 c_type = type_map.get(field.field_type, "LONG")
                 val = "0" if c_type != "STRPTR" else "NULL"
@@ -11849,7 +11863,7 @@ static {ret_type} {method_name}({params_str}) {{
         if node.method in ("push", "insert") and self._is_fixed_list(node.object):
             args[-1] = self._fixed_value(node.arguments[-1])   # push(2) in a list of Fixed: 2.0
         if suffix == "_str" and node.method in ("push", "insert"):
-            args[-1] = self._lent_str(node.arguments[-1], args[-1])
+            args[-1] = self._str_kept(node.arguments[-1], args[-1])
         if node.method == "push":
             value = args[0] if suffix != "_obj" else f"(void *)({args[0]})"
             return f"DashArray_push{suffix}({arr}, {value})"
@@ -12074,6 +12088,14 @@ static {ret_type} {method_name}({params_str}) {{
         if self._str_is_temp(node):
             return code
         return f"_dash_str_ret({code})"
+
+    def _str_kept(self, node: ASTNode, code: str) -> str:
+        """A String that a field, list or dictionary is going to keep (it adopts temporaries with
+        _dash_str_set): owned text goes as a new temporary, found at once at the head of the list
+        (else the search would go through the whole list before copying it anyway)."""
+        if self._str_owned(node):
+            return f"_dash_str_dup({code}, TRUE)"
+        return self._lent_str(node, code)
 
     def _str_set_code(self, indent: str, target: str, node: ASTNode, code: str) -> str:
         """var = String: owned text is copied straight away (_dash_str_set_copy); anything else
