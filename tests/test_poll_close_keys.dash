@@ -1,0 +1,111 @@
+# window_check_close, key_pressed and key_get read the window's messages in one place (key_pressed
+# only looks, key_get takes the key): a loop
+# that asks for the close first does not lose the keys that came before it, and asking for
+# keys does not lose the close. A helper process types a, b and c through input.device and then
+# clicks the close gadget, all within one turn of the loop; the program waits for it to end.
+# expect-out: tecla a
+# expect-out: tecla b
+# expect-out: tecla c
+# expect-out: cerrada
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Task *teclas_padre;"
+
+Window W
+    title "Teclas"
+    width 200
+    height 80
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    static const UWORD codigos[3] = { 0x20, 0x35, 0x33 };   /* a, b, c */
+    struct Window *w = win_W;
+    Delay(50);
+    if (w && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        LONG i;
+        ActivateWindow(w);
+        Delay(10);
+        Forbid();   /* everything in one go: the loop finds keys and close in the same turn */
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < 3; i++) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWKEY;
+            ie.ie_Code = codigos[i];
+            DoIO((struct IORequest *)io);
+            ie.ie_Code = codigos[i] | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+        }
+        memset(&ie, 0, sizeof(ie));
+        pp.iepp_Screen = w->WScreen;
+        pp.iepp_Position.X = w->LeftEdge + 6;
+        pp.iepp_Position.Y = w->TopEdge + 5;
+        ie.ie_Class = IECLASS_NEWPOINTERPOS;
+        ie.ie_SubClass = IESUBCLASS_PIXEL;
+        ie.ie_EventAddress = (APTR)&pp;
+        DoIO((struct IORequest *)io);
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_LBUTTON;
+        ie.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+        ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        Permit();
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(teclas_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    teclas_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE) == NULL)
+        teclas_padre = NULL;
+"""
+end
+
+@native func esperar_teclas()
+"""
+    if (teclas_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+Main
+    W.open
+    lanzar()
+    cerrada = false
+    vueltas = 0
+    while not cerrada and vueltas < 500
+        time_delay(25)              # half a second: everything arrives between two turns
+        if window_check_close()
+            cerrada = true
+        end
+        while key_pressed()         # it only looks: key_get takes the key
+            k = key_get()
+            if k < 128
+                Print "tecla " + key_text(k)
+            end
+        end
+        vueltas = vueltas + 1
+    end
+    if cerrada
+        Print "cerrada"
+    end
+    esperar_teclas()
+    Print "fin"
+end

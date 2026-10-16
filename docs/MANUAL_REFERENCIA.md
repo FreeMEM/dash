@@ -1339,10 +1339,18 @@ end
 ### Teclado
 
 ```
-# Verificar si hay tecla disponible
-if key_pressed()
+# Verificar si hay tecla disponible (key_pressed solo mira; key_get la saca)
+while key_pressed()
     tecla = key_get()
     Print tecla
+end
+
+# Bucle de juego: cerrar y teclas a la vez (ninguna se come los mensajes de la otra)
+while not window_check_close()
+    if key_pressed()
+        tecla = key_get()
+    end
+    wait_vblank()
 end
 
 # Esperar tecla (bloqueante)

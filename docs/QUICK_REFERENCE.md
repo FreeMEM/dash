@@ -223,8 +223,8 @@ gfx_clear()                 # Clear screen
 ## Input Functions
 ```
 # Keyboard
-key_pressed()               # Bool: key available?
-key_get()                   # Get key code
+key_pressed()               # Bool: key waiting? (only looks; key_get takes it)
+key_get()                   # Get key code (0 if none)
 key_wait()                  # Wait for key
 
 # Mouse

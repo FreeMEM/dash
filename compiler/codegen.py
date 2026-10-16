@@ -4952,10 +4952,13 @@ static LONG _dash_map_key(UWORD code, UWORD qualifier, APTR prev, UBYTE *buf, LO
 }
 
 /* Call with a RAWKEY message before ReplyMsg (IAddress is only valid until then) */
+static void _dash_key_record_raw(UWORD code, UWORD qual, APTR prev) {
+    _dash_last_key = code;
+    _dash_map_key(code, qual, prev, _dash_last_key_text, sizeof(_dash_last_key_text));
+}
+
 static void _dash_key_record(struct IntuiMessage *msg) {
-    _dash_last_key = msg->Code;
-    _dash_map_key(msg->Code, msg->Qualifier, msg->IAddress ? *(APTR *)msg->IAddress : NULL,
-                  _dash_last_key_text, sizeof(_dash_last_key_text));
+    _dash_key_record_raw(msg->Code, msg->Qualifier, msg->IAddress ? *(APTR *)msg->IAddress : NULL);
 }
 
 static LONG _dash_key_raw(void) {
@@ -4980,43 +4983,69 @@ static void _dash_key_cleanup(void) {
     # Input runtime helpers
     INPUT_RUNTIME = """\
 /* Dash Input Runtime */
-static BOOL _dash_key_pressed(void) {
-    if (!_dash_win) return FALSE;
-    struct IntuiMessage *msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort);
-    if (msg) {
-        ULONG cls = msg->Class;  /* read before ReplyMsg: the message is not ours after it */
-        if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
+/* The window's messages for the polling builtins (window_check_close, key_pressed, key_get,
+   key_wait) are read in one place, so that one does not throw away what another waits for: a
+   close stays until window_check_close sees it, keys wait in a short queue (when it is full the
+   oldest goes). Other messages are answered and dropped, as before. */
+#define _DASH_KEYQ 16
+static struct { UWORD code, qual; APTR prev; } _dash_keyq[_DASH_KEYQ];
+static UBYTE _dash_keyq_head = 0, _dash_keyq_len = 0;
+static BOOL _dash_close_seen = FALSE;
+
+static void _dash_poll_window(void) {
+    struct IntuiMessage *msg;
+    if (!_dash_win) return;
+    while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
+        if (msg->Class == IDCMP_CLOSEWINDOW) {
+            _dash_close_seen = TRUE;
+        } else if (msg->Class == IDCMP_RAWKEY) {
+            UBYTE i;
+            if (_dash_keyq_len == _DASH_KEYQ) {
+                _dash_keyq_head = (_dash_keyq_head + 1) % _DASH_KEYQ;
+                _dash_keyq_len--;
+            }
+            i = (_dash_keyq_head + _dash_keyq_len) % _DASH_KEYQ;
+            _dash_keyq[i].code = msg->Code;
+            _dash_keyq[i].qual = msg->Qualifier;
+            _dash_keyq[i].prev = msg->IAddress ? *(APTR *)msg->IAddress : NULL;  /* dead keys */
+            _dash_keyq_len++;
+        }
         ReplyMsg((struct Message *)msg);
-        return (cls == IDCMP_RAWKEY);
     }
-    return FALSE;
+}
+
+/* The oldest waiting key (recorded for key_raw and key_text); -1 if there is none */
+static LONG _dash_keyq_pop(void) {
+    UWORD code;
+    if (!_dash_keyq_len) return -1;
+    code = _dash_keyq[_dash_keyq_head].code;
+    _dash_key_record_raw(code, _dash_keyq[_dash_keyq_head].qual, _dash_keyq[_dash_keyq_head].prev);
+    _dash_keyq_head = (_dash_keyq_head + 1) % _DASH_KEYQ;
+    _dash_keyq_len--;
+    return code;
+}
+
+/* Is a key waiting? It stays there for key_get or key_wait */
+static BOOL _dash_key_pressed(void) {
+    _dash_poll_window();
+    return _dash_keyq_len > 0;
 }
 
 static LONG _dash_key_get(void) {
-    if (!_dash_win) return 0;
-    struct IntuiMessage *msg;
-    while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
-        ULONG cls = msg->Class;
-        UWORD code = msg->Code;
-        if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
-        ReplyMsg((struct Message *)msg);
-        if (cls == IDCMP_RAWKEY) return code;
-    }
-    return 0;
+    LONG code;
+    _dash_poll_window();
+    code = _dash_keyq_pop();
+    return code < 0 ? 0 : code;
 }
 
 static LONG _dash_key_wait(void) {
+    LONG code;
     if (!_dash_win) return 0;
-    struct IntuiMessage *msg;
     while (1) {
+        _dash_poll_window();
+        while ((code = _dash_keyq_pop()) >= 0)
+            if (!(code & IECODE_UP_PREFIX)) return code;
         WaitPort(_dash_win->UserPort);
-        while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
-            ULONG cls = msg->Class;
-            UWORD code = msg->Code;
-            if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
-            ReplyMsg((struct Message *)msg);
-            if (cls == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX)) return code;
-        }
     }
 }
 
@@ -5060,16 +5089,11 @@ static BOOL _dash_joy_button(LONG port) {
 }
 
 static BOOL _dash_check_close(void) {
-    if (!_dash_win) return FALSE;
-    struct IntuiMessage *msg;
-    BOOL close_requested = FALSE;
-    while ((msg = (struct IntuiMessage *)GetMsg(_dash_win->UserPort))) {
-        if (msg->Class == IDCMP_CLOSEWINDOW) {
-            close_requested = TRUE;
-        }
-        ReplyMsg((struct Message *)msg);
-    }
-    return close_requested;
+    BOOL seen;
+    _dash_poll_window();
+    seen = _dash_close_seen;
+    _dash_close_seen = FALSE;
+    return seen;
 }
 
 """
