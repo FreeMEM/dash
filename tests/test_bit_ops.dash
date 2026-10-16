@@ -6,7 +6,7 @@
 # expect-c: #define TODOS 255
 # expect-out: 8 14 6 -13
 # expect-out: 48 -4 3
-# expect-out: 6 13 1
+# expect-out: 6 13 true
 # expect-out: 16 255 19 -1
 # expect-out: bits 1010 a
 # expect-out: color 18 52 86

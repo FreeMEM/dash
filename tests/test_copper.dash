@@ -3,7 +3,7 @@
 # graphics.library builds (GfxBase->LOFlist); after copper_free they go.
 #
 # expect-c: CMove(_dash_ucl, (APTR)(0xDFF000 + (reg & 0x1FE)), value);
-# expect-out: 1
+# expect-out: true
 # expect-out: 0
 # expect-out: 1
 # expect-out: 1

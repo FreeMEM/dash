@@ -1,7 +1,7 @@
 # str_contains(s, sub) and str_split(s, sep): the pieces between each sep as a new [String] that owns
 # them; with sep "" or not found, a list with s whole; separators next to each other give "".
 # memcheck
-# expect-out: 1 0 1
+# expect-out: true false true
 # expect-out: 3: uno|dos|tres
 # expect-out: 3: a||b
 # expect-out: 1: sin separador

@@ -5,7 +5,7 @@
 # ignore-out: perfil:
 # expect-c: char _dash_pg __attribute__((cleanup(_dash_prof_leave), unused)) = _dash_prof_enter(1);
 # expect-c: _dash_prof_start();
-# expect-out: 13670 900 1
+# expect-out: 13670 900 true
 
 func lenta(n: Int) -> Int
     s = 0

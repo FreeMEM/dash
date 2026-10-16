@@ -181,7 +181,7 @@ vacio = []
 | Float | Decimal de 32 bits (unos 7 digitos) | `1.5`, `-0.25`, `2.0e3` |
 | Fixed | Coma fija 16.16: decimales rapidos en 68000 | `Fixed(1.5)`, `Fixed(n)` |
 | String | Cadena de texto | `"Hola"` |
-| Bool | Valor booleano | `true`, `false` |
+| Bool | Valor booleano (`Print` y los textos lo escriben `true` / `false`) | `true`, `false` |
 | Array | Coleccion de elementos | `[1, 2, 3]` |
 | Struct | Tipo compuesto definido por usuario | `Player(10, 20)` |
 

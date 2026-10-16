@@ -1,13 +1,13 @@
 # Test: fonts (font_open of the ROM's topaz 8, a font that does not exist, size, height,
 # baseline, width, styles) and color_pen (the same RGB gives the same cached pen)
 # memcheck
-# expect-out: topaz: 1 8
+# expect-out: topaz: true 8
 # expect-out: alto 8 base 6 ancho 32 32
 # expect-out: negrita 2
 # expect-out: subrayada y cursiva 5
 # expect-out: normal 0
 # expect-out: no existe: 0
-# expect-out: mismo pen: 1 1
+# expect-out: mismo pen: true true
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
 
 @native func estilo_actual() -> Int

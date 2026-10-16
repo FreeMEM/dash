@@ -6,12 +6,12 @@
 # (Also: an untyped function returning a concatenation prints as a String.)
 #
 # expect-c: static BOOL _dash_bob_collision(LONG id1, LONG id2)
-# expect-out: 1
+# expect-out: true
 # expect-out: 3 2
 # expect-out: 2 2
-# expect-out: 0
-# expect-out: 1
-# expect-out: 1
+# expect-out: false
+# expect-out: true
+# expect-out: true
 # expect-out: 0 3
 # expect-out: 0
 

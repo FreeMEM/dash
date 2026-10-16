@@ -95,7 +95,7 @@ La primera asignación declara la variable; su tipo se deduce del valor.
 | `Float` | `v = 1.5` | coma flotante propia (rápida en 68000); `--fpu` usa la FPU |
 | `Fixed` | `f = Fixed(1.5)` | coma fija 16.16: decimales a velocidad de entero en un 68000 |
 | `String` | `s = "Dash"` | textos (Latin-1 en el Amiga) |
-| `Bool` | `ok = true` | `true`, `false` |
+| `Bool` | `ok = true` | `true`, `false` (así se escriben con `Print` y en los textos) |
 | listas | `l = [1, 2, 3]`, `var t: [String] = []` | ver 4.7 |
 | diccionarios | `d = {"a": 1}` | `{String: T}`, ver 4.7 |
 | structs | `p = Punto(10, 20)` | ver 4.8 |

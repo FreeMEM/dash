@@ -3,17 +3,17 @@
 # sound_stop; tone_play lasts its duration; an IFF 8SVX loads and plays.
 #
 # expect-c: static void _dash_tone_play(LONG ch, LONG freq, LONG vol, LONG duration)
-# expect-out: 1
-# expect-out: 1
-# expect-out: 0
-# expect-out: 1
-# expect-out: 1
-# expect-out: 0
-# expect-out: 1
-# expect-out: 0
-# expect-out: 1
-# expect-out: 1
-# expect-out: 0
+# expect-out: true
+# expect-out: true
+# expect-out: false
+# expect-out: true
+# expect-out: true
+# expect-out: false
+# expect-out: true
+# expect-out: false
+# expect-out: true
+# expect-out: true
+# expect-out: false
 
 Main
     Print sound_create(0, 2000, 8000)

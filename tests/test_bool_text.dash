@@ -1,0 +1,37 @@
+# A Bool is written true / false: by Print alone and as text ("b " + b, interpolation): true,
+# false, comparisons, and/or/not, Bool variables, parameters, fields, functions and builtins that
+# give one, d.has(k). Numbers stay numbers.
+# expect-out: true
+# expect-out: false
+# expect-out: true
+# expect-out: b true, no false
+# expect-out: campo true, función false, has true
+# expect-out: 3 1 0
+# expect-out: fin
+
+struct Opcion
+    activa: Bool
+end
+
+func positivo(n: Int) -> Bool
+    return n > 0
+end
+
+func texto(b: Bool) -> String
+    return "[" + b + "]"
+end
+
+Main
+    b = true
+    Print b
+    Print not b
+    Print 3 > 2 and 1 < 2
+    Print "b #{b}, no #{not b}"
+    o = Opcion(true)
+    var d: {String: Int} = {"k": 1}
+    Print "campo #{o.activa}, función #{positivo(-1)}, has #{d.has(\"k\")}"
+    Print "#{3} #{1} #{0}"
+    if texto(false) == "[false]"
+        Print "fin"
+    end
+end

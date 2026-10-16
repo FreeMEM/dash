@@ -3,17 +3,17 @@
 # ILBM, load it back, and load a ByteRun1-compressed ILBM written here.
 #
 # expect-c: static BOOL _dash_bitmap_load(LONG id, STRPTR filename)
-# expect-out: 1
+# expect-out: true
 # expect-out: 3
 # expect-out: 3
 # expect-out: 1
-# expect-out: 1
-# expect-out: 1
+# expect-out: true
+# expect-out: true
 # expect-out: 3
 # expect-out: 3
 # expect-out: 2
-# expect-out: 0
-# expect-out: comprimido 1
+# expect-out: false
+# expect-out: comprimido true
 # expect-out: 1 0 1 0
 
 Window W

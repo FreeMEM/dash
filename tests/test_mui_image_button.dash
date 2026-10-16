@@ -2,9 +2,9 @@
 # frame around a Dtpic, pressed like a button), bubble help (mui_help) and the size of a window
 # when it opens (mui_window_size, percent of the visible screen).
 # emu-needs: muimaster.library
-# expect-out: botón con marco: 1
+# expect-out: botón con marco: true
 # expect-out: evento 7
-# expect-out: ventana ancha: 1
+# expect-out: ventana ancha: true
 # expect-out: fin
 
 const ID_ICONO = 7

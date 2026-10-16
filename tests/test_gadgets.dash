@@ -10,9 +10,9 @@
 # expect-out: 5
 # expect-out: hola
 # expect-out: 7
-# expect-out: 1
+# expect-out: true
 # expect-out: boton 1
-# expect-out: casilla 0
+# expect-out: casilla false
 # expect-out: lista 0
 
 @header "#include <devices/input.h>"

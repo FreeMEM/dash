@@ -3,8 +3,8 @@
 # expect-c: _dash_str_ieq(v, "inherit") == TRUE
 # expect-out: si
 # expect-out: distinto
-# expect-out: 1 0
-# expect-out: vacío 1
+# expect-out: true false
+# expect-out: vacío true
 # expect-out: fin
 
 Main

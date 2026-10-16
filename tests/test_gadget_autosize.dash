@@ -3,11 +3,11 @@
 # longest option, a field ten characters; the height is the font's plus 6. gadget_width and
 # gadget_height give the size asked for or measured (also for a text field, whose GadTools gadget
 # is only the inner box). The emulated screens use topaz 9 (10 x 9), so the test compares sizes.
-# expect-out: el _ no cuenta: 1
-# expect-out: misma altura: 1
-# expect-out: altura de la fuente + 6: 1
-# expect-out: ciclo más ancho: 1
-# expect-out: campo de diez letras: 1
+# expect-out: el _ no cuenta: true
+# expect-out: misma altura: true
+# expect-out: altura de la fuente + 6: true
+# expect-out: ciclo más ancho: true
+# expect-out: campo de diez letras: true
 # expect-out: fijo 50 x 12
 # expect-out: fin
 

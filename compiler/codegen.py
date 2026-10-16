@@ -10306,6 +10306,8 @@ static LONG _dash_event_window_handle(void) {{
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
             self.decl_types[gvar.name] = gvar.var_type
             self._mark_fixed_list(gvar.name, list_elem_type(gvar.var_type) == "Fixed")
+        elif gvar.var_type == "Bool":
+            self.var_types[gvar.name] = "bool"
         else:
             self.var_types[gvar.name] = "number"
 
@@ -10801,6 +10803,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_float = True
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%s\\n", DashString_from_float({value}));\n')
+        elif self._is_bool_expr(node.message):
+            value = self._generate_expression(node.message)
+            self.emit(f'{indent}Printf("%s\\n", ({value}) ? "true" : "false");\n')
         elif self._is_char_expr(node.message):
             # dos Printf (RawDoFmt) reads %c as a 16-bit WORD but C passes an int:
             # %lc with an explicit LONG prints the right character
@@ -10865,6 +10870,8 @@ static {ret_type} {method_name}({params_str}) {{
             else:
                 if c_type == "float":
                     self.var_types[node.name] = "float"
+                if node.var_type == "Bool":
+                    self.var_types[node.name] = "bool"
                 if c_type == "DashFixed":
                     self.var_types[node.name] = "fixed"
                     value = self._fixed_value(init) if init is not None else "0"
@@ -10945,6 +10952,8 @@ static {ret_type} {method_name}({params_str}) {{
             # Struct pointer - track as struct:StructName
             struct_name = var_type[6:-2]  # Remove "_Dash_" prefix and " *" suffix
             self.var_types[node.name] = f"struct:{struct_name}"
+        elif self._is_bool_expr(node.value):
+            self.var_types[node.name] = "bool"
         else:
             self.var_types[node.name] = "number"
 
@@ -12657,6 +12666,8 @@ static {ret_type} {method_name}({params_str}) {{
         code = self._generate_expression(node)
         if is_string:
             return code
+        if self._is_bool_expr(node):
+            return f"(({code}) ? (STRPTR)\"true\" : (STRPTR)\"false\")"
         if self._is_char_expr(node):
             return f"DashString_from_char({code})"
         if self._is_fixed_expr(node):
@@ -12724,6 +12735,8 @@ static {ret_type} {method_name}({params_str}) {{
                 self._mark_fixed_list(p.name, list_elem_type(p.param_type) == "Fixed")
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
+            elif p.param_type == "Bool":
+                self.var_types[p.name] = "bool"
             else:
                 self.var_types[p.name] = "number"
 
@@ -12804,6 +12817,34 @@ static {ret_type} {method_name}({params_str}) {{
     def _is_string_array(self, node: ASTNode) -> bool:
         """True for a list of strings (variable, or call or field declared [String])."""
         return self._array_elem_type(node) == "string"
+
+    def _is_bool_expr(self, node: ASTNode) -> bool:
+        """True if the expression is a Bool (written as "true" / "false"): true, false, a
+        comparison, and/or/not, a Bool variable, parameter or field, a function, method or builtin
+        that returns one, d.has(k)."""
+        if isinstance(node, BoolLiteral):
+            return True
+        if isinstance(node, BinaryOp):
+            return node.operator in ("==", "!=", "<", ">", "<=", ">=", "and", "or")
+        if isinstance(node, UnaryOp):
+            return node.operator == "not"
+        if isinstance(node, VarRef):
+            return self.var_types.get(node.name) == "bool"
+        if isinstance(node, FunctionCall):
+            builtin = get_builtin(node.name)
+            if builtin:
+                return builtin.return_type == "BOOL"
+            func = self.analysis.program.get_function(node.name)
+            return bool(func and func.return_type == "Bool")
+        if isinstance(node, MethodCall):
+            if node.method == "has" and self._dict_value_kind(node.object) is not None:
+                return True
+            method = self._method_of(node)
+            return bool(method and method.return_type == "Bool")
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "Bool")
+        return False
 
     def _is_fixed_expr(self, node: ASTNode) -> bool:
         """True if the expression yields a Fixed (16.16 in a LONG)."""

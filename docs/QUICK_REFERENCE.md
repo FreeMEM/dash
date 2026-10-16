@@ -32,7 +32,7 @@ f = Fixed(1.5)              # Fixed 16.16: fast decimals on 68000 (Int(f), fx_sq
 xs = [Fixed(0.5), 2]        # list of Fixed (numbers made Fixed); declared: var xs: [Fixed] = []
 mask = 0xFF                 # hex (also $DFF000), binary 0b1010
 name = "Dash"               # String
-active = true               # Bool
+active = true               # Bool: Print and "x " + b write true / false (a comparison too)
 nums = [1,2,3]              # Array
 player = Player(10,20)      # Struct instance
 var lista: Nodo = nil       # nil: no struct/list/String (x == nil, x = nil)

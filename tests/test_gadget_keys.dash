@@ -3,9 +3,9 @@
 # gadget_id(); a checkbox changes. Shift does not matter. Other keys still reach On Key. A helper
 # process types g, Shift+A, x and A again through input.device, then clicks the close gadget.
 # expect-out: botón guardar
-# expect-out: casilla 1
+# expect-out: casilla true
 # expect-out: tecla x
-# expect-out: casilla 0
+# expect-out: casilla false
 # expect-out: fin
 # expect-c: GT_Underscore
 

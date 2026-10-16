@@ -1,7 +1,7 @@
 # Returns that match their declared type still compile: comparisons and Ints for Bool, Ints for
 # Fixed (converted), nil for structs, lists and Strings, an element of an untyped list for a
 # struct, a struct method returning its own struct, Void without a value.
-# expect-out: 1 0
+# expect-out: true false
 # expect-out: 2.5
 # expect-out: nil
 # expect-out: 7
