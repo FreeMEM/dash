@@ -774,6 +774,28 @@ class DashASTBuilder(Transformer):
                    else PropertyAccess(object=obj, property=member))
         return MethodCall(object=obj, method=names[-1], arguments=args)
 
+    def indexed_method_call_stmt(self, items) -> MethodCall:
+        """d["k"].push(x), l[0].a.mover(1): the object is read like any expression (D37)."""
+        k = next(i for i, it in enumerate(items) if isinstance(it, list) and not self._is_args(items, i))
+        names = [t.value if isinstance(t, Token) else str(t) for t in items[:k]]
+        rest = items[k + 1:]
+        args = rest[-1] if rest and isinstance(rest[-1], list) else []
+        after = [t.value if isinstance(t, Token) else str(t) for t in rest if not isinstance(t, list)]
+        obj = VarRef(name=names[0])
+        for member in names[1:]:
+            obj = (MemberAccess(object_name=obj.name, member=member) if isinstance(obj, VarRef)
+                   else PropertyAccess(object=obj, property=member))
+        for idx in items[k]:
+            obj = ArrayAccess(array=obj, index=idx)
+        for member in after[:-1]:
+            obj = PropertyAccess(object=obj, property=member)
+        return MethodCall(object=obj, method=after[-1], arguments=args)
+
+    @staticmethod
+    def _is_args(items, i) -> bool:
+        """The argument list of a call is the last item; the index chain comes before it."""
+        return i == len(items) - 1 and any(isinstance(it, list) for it in items[:i])
+
     def self_method_call_stmt(self, items) -> MethodCall:
         """self.metodo(...) or self.lista.push(x) as a statement."""
         names = [t.value if isinstance(t, Token) else str(t) for t in items if not isinstance(t, list)]

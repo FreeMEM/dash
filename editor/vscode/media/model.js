@@ -28,10 +28,12 @@
         canvas:   { group: false, label: 'Zona de dibujo',   props: [['min_width', 'int', 64], ['min_height', 'int', 32]], events: [] },
         scrollbar:{ group: false, label: 'Barra de desplazamiento', props: [['vertical', 'bool', true]], events: ['change'] },
         image:    { group: false, label: 'Imagen',           props: [['file', 'string', '']], events: [] },
+        image_button: { group: false, label: 'Botón con imagen', props: [['file', 'string', '']], events: ['event'] },
         space:    { group: false, label: 'Espacio',          props: [], events: [] },
         balance:  { group: false, label: 'Separador',        props: [], events: [] },
     };
-    const COMMON = [['name', 'ident', ''], ['weight', 'int', 100], ['disabled', 'bool', false], ['hidden', 'bool', false]];
+    const COMMON = [['name', 'ident', ''], ['weight', 'int', 100], ['disabled', 'bool', false], ['hidden', 'bool', false],
+                    ['help', 'string', '']];
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
     function newDocument() {
@@ -131,6 +133,10 @@
             if (value) node[key] = true; else delete node[key];
             return null;
         }
+        if (key === 'help') {
+            if (value) node.help = String(value); else delete node.help;
+            return null;
+        }
         const spec = (TYPES[node.type] || { props: [] }).props.find(([p]) => p === key);
         if (spec && spec[1] === 'int') {
             const n = Number(value);
@@ -210,6 +216,7 @@
                 n.weight && n.weight !== 100 ? `;flex-grow:${n.weight / 100}` : ''}"></div>`;
             case 'scrollbar': return `<div${attrs}></div>`;
             case 'image': return `<div${attrs}>${esc(n.file || 'imagen')}</div>`;
+            case 'image_button': return `<button${attrs}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
             default: return `<div${attrs}></div>`;
             }
         }

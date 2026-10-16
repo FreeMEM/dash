@@ -3,6 +3,9 @@
 # events set in the .dashui arrive in mui_wait_event.
 # emu-needs: muimaster.library
 # expect-c: _dash_mui_register_begin(
+# expect-c: _dash_mui_image_button(
+# expect-c: _dash_mui_help(
+# expect-c: _dash_mui_window_size(
 # expect-out: ventana abierta
 # expect-out: estado: Listo "ya"
 # expect-out: url: http://aminet.net/

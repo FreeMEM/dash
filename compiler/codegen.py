@@ -8046,6 +8046,36 @@ static APTR _dash_mui_image(STRPTR file) {
         MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file)), _DASH_MUI_IMAGE);
 }
 
+/* A button that shows a picture (toolbar icons, dashweb D38): MUI's image button frame and
+   background, pressed like a button (mui_on_press); mui_set_text changes the picture */
+static APTR _dash_mui_image_button(STRPTR file) {
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Dtpic,
+        MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file),
+        MUIA_Frame, MUIV_Frame_ImageButton,
+        MUIA_Background, MUII_ImageButtonBack,
+        MUIA_InputMode, MUIV_InputMode_RelVerify,
+        MUIA_CycleChain, 1), _DASH_MUI_IMAGE);
+}
+
+/* The bubble help MUI shows when the pointer rests on an object */
+static void _dash_mui_help(APTR obj, STRPTR text) {
+    if (obj) SetAttrs(obj, MUIA_ShortHelp, (IPTR)_dash_mui_keep(text), TAG_DONE);
+}
+
+/* Size of a window when it opens, in percent of the visible screen, centred (before
+   mui_window_open; MUI remembers the size the user gives it after) */
+static void _dash_mui_window_size(APTR win, LONG width, LONG height) {
+    if (!win) return;
+    if (width < 1) width = 1;
+    if (width > 100) width = 100;
+    if (height < 1) height = 1;
+    if (height > 100) height = 100;
+    SetAttrs(win, MUIA_Window_Width, MUIV_Window_Width_Visible(width),
+             MUIA_Window_Height, MUIV_Window_Height_Visible(height),
+             MUIA_Window_LeftEdge, MUIV_Window_LeftEdge_Centered,
+             MUIA_Window_TopEdge, MUIV_Window_TopEdge_Centered, TAG_DONE);
+}
+
 /* Size of an object on screen, in pixels (0 before its window opens) */
 static LONG _dash_mui_size(APTR obj, LONG height) {
     IPTR size = 0;
@@ -9086,6 +9116,9 @@ class CodeGenerator(ASTVisitor):
         self.uses_refcount: bool = False  # Track if refcount runtime is needed
         self.uses_arenas: bool = False  # Track if arena runtime is needed
         self.var_types: Dict[str, str] = {}  # Track variable types for string/struct detection
+        # the declared Dash type of list and dict variables ("{String: [Nodo]}"), for the elements
+        # of nested ones; only read while var_types agrees (D37)
+        self.decl_types: Dict[str, str] = {}
         # Track Amiga library requirements
         self.needs_gfx: bool = False
         self.needs_audio: bool = False
@@ -9710,6 +9743,7 @@ static LONG _dash_event_window_handle(void) {{
             self.var_types[gvar.name] = "float"
         elif c_type in ("DashArrayLong *", "DashDict *"):
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
+            self.decl_types[gvar.name] = gvar.var_type
         else:
             self.var_types[gvar.name] = "number"
 
@@ -10246,6 +10280,7 @@ static {ret_type} {method_name}({params_str}) {{
                 self.var_types[node.name] = (self._list_var_type(node.var_type)
                                              if c_type in ("DashArrayLong *", "DashDict *")
                                              else f"struct:{node.var_type}")
+                self.decl_types[node.name] = node.var_type
                 self.context.declare_var(node.name)
                 self.context.own(node.name, "obj")
                 self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
@@ -10923,6 +10958,7 @@ static {ret_type} {method_name}({params_str}) {{
         "mui_app_begin", "mui_window_begin", "mui_text", "mui_label", "mui_button", "mui_string",
         "mui_cycle", "mui_register_begin", "mui_frame_begin", "mui_menu_begin", "mui_menu_item",
         "mui_set_text", "mui_list_add", "mui_list_insert", "mui_image",
+        "mui_image_button", "mui_help",
         # GadTools and ReAction string gadgets copy the text into their buffer; the
         # listview runtime makes its own copy of each line
         "textfield_set", "ra_set_string", "listview_add",
@@ -11498,6 +11534,16 @@ static {ret_type} {method_name}({params_str}) {{
         self.uses_arrays = self.uses_list_methods = True
         arr = self._array_ref(node.object)
         elem = self._array_elem_type(node.object) or ""
+        if not elem and node.method in ("push", "insert") and node.arguments:
+            # a list whose element type the compiler lost (the [T] inside a dict or a list of
+            # lists, D37): what is put in says what the list holds
+            value = node.arguments[-1]
+            if self._is_string_expr(value):
+                elem = "string"
+            elif self._struct_of(value):
+                elem = "struct:" + self._struct_of(value).name
+            elif self._infer_c_type(value) == "DashArrayLong *":
+                elem = "array"
         suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem == "array") else ""
         args = [self._generate_expression(a) for a in node.arguments]
         if suffix == "_str" and node.method in ("push", "insert"):
@@ -11776,6 +11822,7 @@ static {ret_type} {method_name}({params_str}) {{
             elif (p.param_type == "Array" or list_elem_type(p.param_type) is not None
                   or dict_value_type(p.param_type) is not None):
                 self.var_types[p.name] = self._list_var_type(p.param_type)
+                self.decl_types[p.name] = p.param_type
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             else:
@@ -12067,8 +12114,29 @@ static {ret_type} {method_name}({params_str}) {{
             return self._literal_elem_type(node)
         if isinstance(node, MethodCall) and node.method == "keys" and self._dict_value_kind(node.object) is not None:
             return "string"
+        if isinstance(node, ArrayAccess):
+            vt = self._list_var_type(self._declared_type_of(node))
+            return vt[6:] if vt and vt.startswith("array:") else None
         vt = self._list_var_type(self._declared_list_type(node))
         return vt[6:] if vt and vt.startswith("array:") else None
+
+    def _declared_type_of(self, node: ASTNode) -> Optional[str]:
+        """The Dash type of a list or dict expression as declared ("[Nodo]", "{String: [Int]}"),
+        following elements: d["k"] of a {String: [Int]} is "[Int]" (D37); None if unknown."""
+        if isinstance(node, VarRef):
+            vt = self.var_types.get(node.name) or ""
+            if vt.startswith("array") or vt.startswith("dict"):
+                return self.decl_types.get(node.name)
+            return None
+        if isinstance(node, ArrayAccess):
+            outer = self._declared_type_of(node.array)
+            if outer is None:
+                return None
+            value = dict_value_type(outer)
+            return value if value is not None else list_elem_type(outer)
+        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
+            return self._declared_list_type(node) or self._declared_dict_type(node)
+        return None
 
     def _list_var_type(self, type_name: Optional[str]) -> Optional[str]:
         """var_types entry for a list type: "[String]" -> "array:string", "[Nodo]" ->

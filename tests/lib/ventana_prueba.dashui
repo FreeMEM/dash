@@ -5,6 +5,7 @@
       "name": "Prueba",
       "title": "Ventana del editor",
       "id": 0,
+      "size": [70, 60],
       "menus": [
         { "title": "Proyecto", "items": [
             { "label": "Acerca de", "key": "", "event": 21 },
@@ -18,7 +19,8 @@
           { "type": "hgroup", "children": [
               { "type": "label", "text": "URL:" },
               { "type": "string", "name": "url", "text": "http://aminet.net/", "max": 200, "ack": 11 },
-              { "type": "button", "name": "ir", "label": "_Ir", "event": 12 }
+              { "type": "button", "name": "ir", "label": "_Ir", "event": 12, "help": "Ir a la dirección" },
+              { "type": "image_button", "name": "icono", "file": "T:no_existe.iff", "event": 14 }
           ]},
           { "type": "tabs", "name": "pestanas", "titles": "Página|Fuente", "change": 13, "children": [
               { "type": "canvas", "name": "pagina", "min_width": 200, "min_height": 80 },

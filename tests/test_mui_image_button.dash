@@ -1,0 +1,51 @@
+# Toolbar pieces (dashweb D38): a button with a picture (mui_image_button: MUI's image button
+# frame around a Dtpic, pressed like a button), bubble help (mui_help) and the size of a window
+# when it opens (mui_window_size, percent of the visible screen).
+# emu-needs: muimaster.library
+# expect-out: botón con marco: 1
+# expect-out: evento 7
+# expect-out: ventana ancha: 1
+# expect-out: fin
+
+const ID_ICONO = 7
+
+@native func write_ilbm(path: String) -> Int
+"""
+    static const UBYTE ilbm[70] = {
+        70, 79, 82, 77, 0, 0, 0, 62, 73, 76, 66, 77, 66, 77, 72, 68, 0, 0, 0, 20, 0, 8, 0, 4,
+        0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 10, 11, 1, 64, 0, 200, 67, 77, 65, 80, 0, 0, 0, 6,
+        0, 0, 0, 255, 255, 255, 66, 79, 68, 89, 0, 0, 0, 8, 240, 0, 15, 0, 170, 0, 85, 0 };
+    BPTR f = Open(path, MODE_NEWFILE);
+    LONG n;
+    if (!f) return 0;
+    n = Write(f, (APTR)ilbm, sizeof(ilbm));
+    Close(f);
+    return n == sizeof(ilbm);
+"""
+end
+
+Main
+    write_ilbm("T:icono.ilbm")
+    if mui_app_begin("Iconos", "DASHICONOS") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Iconos", 0)
+            mui_hgroup_begin()
+                boton = mui_image_button("T:icono.ilbm")
+                texto = mui_text("x")
+            mui_group_end()
+        mui_window_end()
+        mui_on_press(boton, ID_ICONO)
+        mui_help(boton, "Un icono")
+        mui_window_size(win, 60, 50)
+        mui_window_open(win)
+        # el marco del botón se suma a los 8 x 4 de la imagen
+        Print "botón con marco: " + (mui_width(boton) > 8 and mui_height(boton) > 4)
+        mui_press(boton)
+        Print "evento " + mui_wait_event()
+        # sin mui_window_size la ventana mediría lo justo para el icono y una "x"
+        Print "ventana ancha: " + (mui_width(texto) > 200)
+        mui_app_end()
+        Print "fin"
+    end
+end

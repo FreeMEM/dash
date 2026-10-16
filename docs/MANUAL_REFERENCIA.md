@@ -617,6 +617,7 @@ Print s.pos.x
 
 var lista: [Punto] = [Punto(1, 2), Punto(3, 4)]
 lista[0].x = 5          # el campo de un elemento de una lista (también caja.items[i].nombre)
+lista[0].mover(1)       # y sus métodos; d["k"].push(x) en un {String: [T]}
 ```
 
 Para asignar `a.b.c` el compilador tiene que saber que `a.b` es un struct: la variable
@@ -2579,6 +2580,9 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_char(z)` | El carácter de esa tecla, con mayúsculas y el keymap (`"A"`, `"ñ"`; `""` si no da ninguno; Retroceso da el código 8). |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
 | `mui_image(fichero)` | Imagen de un fichero por datatypes: ILBM siempre; PNG, JPEG, GIF y BMP si están sus datatypes (AmigaOS 3.2 los trae). `mui_set_text` cambia el fichero. |
+| `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |
+| `mui_help(obj, texto)` | La ayuda que MUI muestra en un globo cuando el puntero se para encima. |
+| `mui_window_size(ventana, ancho, alto)` | Tamaño con que se abre la ventana, en tanto por ciento de la pantalla visible, centrada (antes de `mui_window_open`). |
 | `mui_width(obj)`, `mui_height(obj)` | Tamaño en pantalla en píxeles (0 antes de abrir la ventana). |
 | `mui_set_range(barra, total, visible)` | Tamaño del documento y de lo que cabe. |
 | `mui_text(texto)` | Texto. |
@@ -3070,8 +3074,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 44 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 67 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
-| **Total** | **425** | |
+| MUI | 70 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
+| **Total** | **428** | |
 
 ### Colores Estandar Amiga
 

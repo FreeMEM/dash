@@ -85,10 +85,12 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
 | `canvas` | `mui_canvas` | `min_width`, `min_height` |
 | `scrollbar` | `mui_scrollbar` | `vertical`, `change` |
 | `image` | `mui_image` | `file` |
+| `image_button` | `mui_image_button` | `file`, `event` |
 | `space`, `balance` | `mui_space`, `mui_balance` | — |
 
 Comunes: `name` (campo del struct; sin nombre el objeto no se guarda), `weight` (`mui_weight`), `disabled`
-(`mui_set_enabled`), `hidden` (`mui_set_visible`). `event`/`change`/`ack`/`double` = número de evento
+(`mui_set_enabled`), `hidden` (`mui_set_visible`), `help` (`mui_help`: ayuda en un globo). En la ventana, `"size": [ancho,
+alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_size`). `event`/`change`/`ack`/`double` = número de evento
 (`mui_on_press`, `mui_on_change`, `mui_on_ack`, `mui_on_double`). `"dashui": 1` es la versión del formato.
 
 ## La extensión

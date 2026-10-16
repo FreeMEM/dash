@@ -3572,6 +3572,27 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_image(${file})",
         description="Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file"
     ),
+    "mui_image_button": BuiltinFunc(
+        name="mui_image_button",
+        params=["file"],
+        return_type="APTR",
+        c_template="_dash_mui_image_button(${file})",
+        description="Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture"
+    ),
+    "mui_help": BuiltinFunc(
+        name="mui_help",
+        params=["obj", "text"],
+        return_type="void",
+        c_template="_dash_mui_help(${obj}, ${text})",
+        description="Bubble help shown when the pointer rests on the object"
+    ),
+    "mui_window_size": BuiltinFunc(
+        name="mui_window_size",
+        params=["win", "width_pct", "height_pct"],
+        return_type="void",
+        c_template="_dash_mui_window_size(${win}, ${width_pct}, ${height_pct})",
+        description="Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open)"
+    ),
     "mui_width": BuiltinFunc(
         name="mui_width",
         params=["obj"],

@@ -107,6 +107,7 @@ end
 enemy = Enemy(10, 50)
 enemy.move(5)
 boss.pos.x = 5              # nested structs (pos: Punto); l[0].x = 5 (a field of a list element)
+d["k"].push(x)              # methods of elements too: l[0].mover(1), filas[i].clear()
 # weak padre: Nodo          # field that points without holding (no cycles: parent pointers)
 ```
 
@@ -180,6 +181,8 @@ mui_canvas_on_draw(c, paint)            # func paint(x, y, w, h) draws with gfx_
 mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y/_button/_wheel/_key(c)
 mui_canvas_char(c)                      # the key as text, with shift and the keymap ("" if none)
 img = mui_image("Work:pic.png")         # datatypes; mui_width(obj), mui_height(obj) once open
+b = mui_image_button("PROGDIR:atras.iff")   # icon button: mui_on_press; mui_help(b, "Atrás") bubble help
+mui_window_size(win, 90, 80)            # % of the visible screen when it opens (before mui_window_open)
 mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
 mui_window_open(win)                    # mui_window_active(win): 1 if it is the active one
 ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)

@@ -1,0 +1,54 @@
+# Test: a method of a list or dict element as a statement (dashweb D37):
+# d["k"].push(x) with Ints, texts and structs (the list holds what goes in), l[0].mover(1),
+# caja.filas[1].clear(), filas[0].push(x); their elements read back with their type.
+# memcheck
+# expect-out: 1 2 3
+# expect-out: x 11
+# expect-out: vacía 0
+# expect-out: f 5
+# expect-out: textos a b
+# expect-out: puntos 3 4
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+
+    func mover(d: Int)
+        self.x = self.x + d
+    end
+end
+
+struct Caja
+    filas: [[Int]]
+end
+
+Main
+    var d: {String: [Int]} = {}
+    var uno: [Int] = [1]
+    d["k"] = uno
+    d["k"].push(2)
+    d["k"].push(1 + 2)
+    Print "" + d["k"][0] + " " + d["k"][1] + " " + d["k"][2]
+    var puntos: [Punto] = [Punto(10)]
+    puntos[0].mover(1)
+    Print "x " + puntos[0].x
+    var filas: [[Int]] = [[1, 2], [3]]
+    caja = Caja(filas)
+    caja.filas[1].clear()
+    Print "vacía " + caja.filas[1].length
+    filas[0].push(5)
+    Print "f " + filas[0][2]
+    var t: {String: [String]} = {}
+    var vacia: [String] = []
+    t["x"] = vacia
+    t["x"].push("a")
+    t["x"].push("b" + "")
+    Print "textos " + t["x"][0] + " " + t["x"][1]
+    var p: {String: [Punto]} = {}
+    var ninguno: [Punto] = []
+    p["x"] = ninguno
+    p["x"].push(Punto(3))
+    q = Punto(4)
+    p["x"].push(q)
+    Print "puntos " + p["x"][0].x + " " + p["x"][1].x
+end

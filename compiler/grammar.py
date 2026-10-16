@@ -98,6 +98,7 @@ dash_grammar_minimal = r"""
                 | for_range_stmt
                 | for_each_stmt
                 | method_call_stmt
+                | indexed_method_call_stmt
                 | func_call_stmt
                 | comment_line
 
@@ -105,6 +106,9 @@ dash_grammar_minimal = r"""
     // also through fields: n.hijos.push(x), self.lista.clear() (dashweb D4b)
     method_call_stmt: ID ("." ID)+ "(" arg_list? ")"
                     | "self" ("." ID)+ "(" arg_list? ")" -> self_method_call_stmt
+
+    // a method of a list or dict element: d["k"].push(x), l[0].mover(1) (dashweb D37)
+    indexed_method_call_stmt: ID ("." ID)* index_chain ("." ID)+ "(" arg_list? ")"
 
     // Member assignment (player.x = 10 or self.x = 10)
     member_assign: ID ("." ID)+ "=" expression

@@ -27,6 +27,7 @@ _LEAVES = {
     "canvas": ("mui_canvas", [("min_width", 64), ("min_height", 32)]),
     "scrollbar": ("mui_scrollbar", [("vertical", True)]),
     "image": ("mui_image", [("file", "")]),
+    "image_button": ("mui_image_button", [("file", "")]),
     "space": ("mui_space", []),
     "balance": ("mui_balance", []),
 }
@@ -109,7 +110,7 @@ class _Window:
             raise DashUIError(f"{self.where}: object without 'type': {node!r}")
         kind = node["type"]
         indent = "    " * depth
-        settings = [k for k in ("weight", "disabled", "hidden") if k in node]
+        settings = [k for k in ("weight", "disabled", "hidden", "help") if k in node]
         events = [k for k in _EVENTS if k in node]
         if kind in _GROUPS:
             builtin, props = _GROUPS[kind]
@@ -129,6 +130,8 @@ class _Window:
             self.after.append(f"    mui_set_enabled({var}, false)")
         if node.get("hidden"):
             self.after.append(f"    mui_set_visible({var}, false)")
+        if node.get("help"):
+            self.after.append(f"    mui_help({var}, {dash_string(node['help'])})")
         if kind in _GROUPS:
             for child in node.get("children", []):
                 self.node(child, depth + 1)
@@ -157,7 +160,7 @@ class _Window:
         if root:
             # the window's own group is vertical: a root vgroup goes straight into it
             if root.get("type") == "vgroup" and not root.get("name") and \
-                    not any(k in root for k in ("weight", "disabled", "hidden")):
+                    not any(k in root for k in ("weight", "disabled", "hidden", "help")):
                 for child in root.get("children", []):
                     self.node(child, 2)
             else:
@@ -165,6 +168,12 @@ class _Window:
         self.lines.append("    mui_window_end()")
         if "close" in win:
             self.after.append(f"    mui_on_close(_window, {int(win['close'])})")
+        if "size" in win:
+            # [width, height] in percent of the visible screen, when it opens (dashweb D38)
+            size = win["size"]
+            if not (isinstance(size, list) and len(size) == 2 and all(isinstance(v, int) for v in size)):
+                raise DashUIError(f"{self.where}: \"size\" is [width, height] in percent")
+            self.after.append(f"    mui_window_size(_window, {size[0]}, {size[1]})")
         fields = ["window"] + self.fields
         struct = [f"struct {name}"] + [f"    {f}: Int" for f in fields] + ["end", ""]
         func = ([f"func {name}_create() -> {name}"] + self.lines + self.after +
