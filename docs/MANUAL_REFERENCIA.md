@@ -2560,6 +2560,10 @@ func maximo(a, b)
 end
 ```
 
+Las funciones cuyo nombre empieza por `_` son privadas del modulo: solo las llama el
+propio modulo. Cada modulo tiene las suyas: dos modulos (o el programa y un modulo) pueden
+tener una `_ayuda` cada uno sin que choquen.
+
 ### Usar el Modulo
 
 ```

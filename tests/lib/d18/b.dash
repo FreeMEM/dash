@@ -1,0 +1,7 @@
+func _ayuda() -> Int
+    return 2
+end
+
+func dos() -> Int
+    return _ayuda() + 10
+end

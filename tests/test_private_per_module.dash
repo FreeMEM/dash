@@ -1,0 +1,14 @@
+# Test: two modules (and the program) may each have their own private function _ayuda:
+# private functions are renamed per module (dashweb D18)
+# expect-out: 1 12 3
+
+import "lib/d18/a.dash"
+import "lib/d18/b.dash"
+
+func _ayuda() -> Int
+    return 3
+end
+
+Main
+    Print "" + uno() + " " + dos() + " " + _ayuda()
+end

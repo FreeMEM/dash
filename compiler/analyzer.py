@@ -757,7 +757,13 @@ class SemanticAnalyzer(ASTVisitor):
         symbol = self.lookup_symbol(node.name)
         self._check_private(node.name, symbol, node)
         if not symbol:
-            self.error(f"Function '{node.name}' is not defined", node)
+            # a private function of another module (renamed per module, dashweb D18)
+            owner = next((getattr(f, "module", None) for f in (self.program.functions if self.program else [])
+                          if getattr(f, "dash_name", None) == node.name), None)
+            if owner:
+                self.error(f"'{node.name}' is private to module '{os.path.basename(owner)}'", node)
+            else:
+                self.error(f"Function '{node.name}' is not defined", node)
         elif symbol.symbol_type == SymbolType.STRUCT:
             # Struct constructor call - validate field count
             struct_node = symbol.node

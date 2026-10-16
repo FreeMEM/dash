@@ -133,7 +133,45 @@ class DashCompiler:
         except IOError as e:
             raise CompilationError(f"Error reading import {import_path}: {e}", stage="import")
 
-        return self._parse_source(source)
+        module_ast = self._parse_source(source)
+        self._rename_private(module_ast, full_path)
+        return module_ast
+
+    def _rename_private(self, module_ast, full_path: str):
+        """Private functions (_x) belong to their module: two modules may both have a _x
+        (dashweb D18). Each module's are renamed (_x -> _x_m<n>_<file>) with their calls inside
+        the module; only that module can call them, so nothing else needs the new name."""
+        from dataclasses import fields, is_dataclass
+        from compiler.ast_nodes import FunctionCall, FunctionRef
+        self._module_counter = getattr(self, "_module_counter", 0) + 1
+        tag = "m%d_%s" % (self._module_counter,
+                          "".join(c if c.isalnum() else "_" for c in os.path.splitext(os.path.basename(full_path))[0]))
+        names = {f.name: f"{f.name}_{tag}" for f in list(module_ast.functions) + list(module_ast.native_funcs)
+                 if f.name.startswith("_")}
+        if not names:
+            return
+        seen = set()
+
+        def walk(node):
+            if isinstance(node, list):
+                for item in node:
+                    walk(item)
+                return
+            if not is_dataclass(node) or id(node) in seen:
+                return
+            seen.add(id(node))
+            if isinstance(node, (FunctionCall, FunctionRef)) and node.name in names:
+                node.name = names[node.name]
+            for f in fields(node):
+                value = getattr(node, f.name, None)
+                if isinstance(value, list) or is_dataclass(value):
+                    walk(value)
+
+        walk(module_ast)
+        for f in list(module_ast.functions) + list(module_ast.native_funcs):
+            if f.name in names:
+                f.dash_name = f.name     # for the error when another module calls it
+                f.name = names[f.name]
 
     def _is_private(self, name: str) -> bool:
         """Check if a name is private (starts with underscore)."""
