@@ -1,0 +1,40 @@
+# A String that is nil stays nil when it is returned, passed to a struct or stored, also when it is
+# owned text (a local variable, a field): the copy that makes it a temporary keeps nil as nil.
+# memcheck
+# expect-out: variable nil
+# expect-out: campo nil
+# expect-out: struct nil
+# expect-out: texto hola
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Caja
+    nombre: String
+end
+
+func leer(hay: Bool) -> String
+    var r: String = nil
+    if hay
+        r = "hola"
+    end
+    return r
+end
+
+func nombre_de(c: Caja) -> String
+    return c.nombre
+end
+
+Main
+    if leer(false) == nil
+        Print "variable nil"
+    end
+    var nada: String = nil
+    c = Caja(nada)
+    if nombre_de(c) == nil
+        Print "campo nil"
+    end
+    d = Caja(c.nombre)
+    if d.nombre == nil
+        Print "struct nil"
+    end
+    Print "texto " + leer(true)
+end

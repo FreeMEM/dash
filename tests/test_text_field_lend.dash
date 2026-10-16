@@ -4,7 +4,7 @@
 # length cache.
 #
 # expect-c: #define _DASH_LEND_Fijo_texto(p) (p)
-# expect-c: #define _DASH_LEND_Cambia_texto(p) _dash_str_dup(p, TRUE)
+# expect-c: #define _DASH_LEND_Cambia_texto(p) _dash_str_tmpcopy(p)
 # expect-c: largo(f, _DASH_LEND_Fijo_texto(
 # expect-c: cambiar(c, _DASH_LEND_Cambia_texto(
 # expect-no-c: LONG len = s ? strlen(s) : 0;

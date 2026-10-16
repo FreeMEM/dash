@@ -331,6 +331,14 @@ static __inline__ void _dash_copy(STRPTR d, CONST_STRPTR s, ULONG n) {
     while (n--) *d++ = *s++;
 }
 
+static STRPTR _dash_str_dup(STRPTR s, BOOL temp);
+
+/* A copy of owned text as a temporary of the caller; nil stays nil */
+#define _dash_str_tmpcopy(p) _dash_str_tmpcopy_f(p)
+static STRPTR _dash_str_tmpcopy_f(STRPTR p) {
+    return p ? _dash_str_dup(p, TRUE) : NULL;
+}
+
 static STRPTR _dash_str_dup(STRPTR s, BOOL temp) {
     ULONG len = s ? strlen((char *)s) : 0;
     STRPTR d = _dash_str_alloc(len, temp);
@@ -9530,7 +9538,7 @@ class CodeGenerator(ASTVisitor):
             # (the callee could free it), else lent as it is (dashweb D22)
             parts.append("".join(
                 f"#define _DASH_LEND_{st}_{f}(p) "
-                + ("_dash_str_dup(p, TRUE)" if {(st, f), ("*", f)} & self.assigned_str_fields else "(p)") + "\n"
+                + ("_dash_str_tmpcopy(p)" if {(st, f), ("*", f)} & self.assigned_str_fields else "(p)") + "\n"
                 for st, f in sorted(self.lent_str_fields)))
         if self.lent_obj_fields:
             # An object field of a local or a parameter passed to a function: lent (held until the
@@ -12099,7 +12107,7 @@ static {ret_type} {method_name}({params_str}) {{
         """The String as a temporary of the caller (a return, an argument that may change under
         the callee): a copy of owned text, a temporary as it is, else _dash_str_ret looks."""
         if self._str_owned(node):
-            return f"_dash_str_dup({code}, TRUE)"
+            return f"_dash_str_tmpcopy({code})"
         if self._str_is_temp(node):
             return code
         return f"_dash_str_ret({code})"
@@ -12109,7 +12117,7 @@ static {ret_type} {method_name}({params_str}) {{
         _dash_str_set): owned text goes as a new temporary, found at once at the head of the list
         (else the search would go through the whole list before copying it anyway)."""
         if self._str_owned(node):
-            return f"_dash_str_dup({code}, TRUE)"
+            return f"_dash_str_tmpcopy({code})"
         return self._lent_str(node, code)
 
     def _str_set_code(self, indent: str, target: str, node: ASTNode, code: str) -> str:
