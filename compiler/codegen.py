@@ -2818,6 +2818,17 @@ static STRPTR _dash_str_case(STRPTR s, BOOL upper) {
 }
 
 static STRPTR _dash_str_lower(STRPTR s) { return _dash_str_case(s, FALSE); }
+
+/* str_lower(s) == low, with low already in lower case, without making the copy */
+static BOOL _dash_str_ieq(STRPTR s, STRPTR low) {
+    if (!s) s = (STRPTR)"";
+    for (;; s++, low++) {
+        UBYTE c = *s;
+        if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c += 32;
+        if (c != (UBYTE)*low) return FALSE;
+        if (!c) return TRUE;
+    }
+}
 static STRPTR _dash_str_upper(STRPTR s) { return _dash_str_case(s, TRUE); }
 
 /* Without spaces, tabs and line ends at both ends */
@@ -11895,6 +11906,15 @@ static {ret_type} {method_name}({params_str}) {{
                 char_cmp = self._char_comparison(node)
                 if char_cmp:
                     return char_cmp
+            # str_lower(x) == "texto en minúsculas": compared without making the lowered copy
+            if node.operator in ("==", "!="):
+                for low, lit in ((node.left, node.right), (node.right, node.left)):
+                    if (isinstance(low, FunctionCall) and low.name == "str_lower" and len(low.arguments) == 1
+                            and isinstance(lit, StringLiteral) and "\\" not in lit.value
+                            and lit.value[1:-1] == lit.value[1:-1].lower()):
+                        self.uses_strings = self.uses_text = True
+                        x = self._generate_expression(low.arguments[0])
+                        return f"(_dash_str_ieq({x}, {self._generate_expression(lit)}) {node.operator} TRUE)"
             # String comparison compares contents, not pointers
             if node.operator in ("==", "!=", "<", ">", "<=", ">=") and (left_str or right_str):
                 # order: byte by byte as unsigned (Latin-1), like strcmp
