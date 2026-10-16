@@ -6446,19 +6446,33 @@ struct Library *GadToolsBase = NULL;   /* menus of ReAction windows (built with 
 #define RA_MAX_MENU_ITEMS 64
 static struct NewMenu _ra_menu_items[RA_MAX_MENU_ITEMS];
 static LONG _ra_menu_count = 0;
-static struct Menu *_ra_menu = NULL;
-static APTR _ra_menu_vi = NULL;
 static BOOL _ra_opened_gadtools = FALSE;
 static LONG _ra_menu_last = 0;
 static UWORD _ra_menu_next = MENUNULL;    /* rest of a multiple selection */
+static LONG _ra_menu_next_win = 0;         /* ... in the menus of this window */
 struct Library *ScrollerBase = NULL;
 struct Library *LabelBase = NULL;
 struct Library *BevelBase = NULL;
 
-/* ReAction window object */
-static Object *_ra_winobj = NULL;
-static struct Window *_ra_window = NULL;
-static Object *_ra_layout = NULL;
+/* ReAction windows: up to RA_MAX_WINDOWS, numbered from 1. ra_* calls work on the current one (the
+   last created, or the one chosen with ra_window_use); events come from all of them
+   (ra_event_window() tells which). Each gadget remembers its window. */
+#define RA_MAX_WINDOWS 4
+typedef struct {
+    Object *winobj;
+    struct Window *window;
+    Object *layout;
+    struct Menu *menu;
+    APTR menu_vi;
+} _RaWin;
+static _RaWin _ra_wins[RA_MAX_WINDOWS + 1];
+static LONG _ra_cur = 1;
+static LONG _ra_event_win = 0;
+#define _ra_winobj (_ra_wins[_ra_cur].winobj)
+#define _ra_window (_ra_wins[_ra_cur].window)
+#define _ra_layout (_ra_wins[_ra_cur].layout)
+#define _ra_menu (_ra_wins[_ra_cur].menu)
+#define _ra_menu_vi (_ra_wins[_ra_cur].menu_vi)
 
 /* Gadget ID tracking */
 #define RA_MAX_GADGETS 64
@@ -6472,14 +6486,16 @@ static BOOL _ra_node_inited[RA_MAX_GADGETS];
 static STRPTR _ra_node_texts[RA_MAX_GADGETS];   /* copy of the options of radio buttons and tabs */
 static void _ra_nodes_free(void);
 static UBYTE _ra_kinds[RA_MAX_GADGETS];
+static UBYTE _ra_gad_win[RA_MAX_GADGETS];   /* the window of each gadget */
+#define _RA_GWIN(id) (_ra_wins[_ra_gad_win[id]].window)
 static LONG _ra_gadget_count = 0;
 
 static BOOL _ra_open_libs(void) {
-    WindowBase = OpenLibrary("window.class", 44);
-    LayoutBase = OpenLibrary("gadgets/layout.gadget", 44);
-    ButtonBase = OpenLibrary("gadgets/button.gadget", 44);
-    LabelBase = OpenLibrary("images/label.image", 44);
-    BevelBase = OpenLibrary("images/bevel.image", 44);
+    if (!WindowBase) WindowBase = OpenLibrary("window.class", 44);
+    if (!LayoutBase) LayoutBase = OpenLibrary("gadgets/layout.gadget", 44);
+    if (!ButtonBase) ButtonBase = OpenLibrary("gadgets/button.gadget", 44);
+    if (!LabelBase) LabelBase = OpenLibrary("images/label.image", 44);
+    if (!BevelBase) BevelBase = OpenLibrary("images/bevel.image", 44);
 
     if (!WindowBase || !LayoutBase || !ButtonBase || !LabelBase || !BevelBase) {
         return FALSE;
@@ -6515,8 +6531,12 @@ static BOOL _ra_open_class(struct Library **base, STRPTR name) {
 
 /* Create ReAction window with vertical layout */
 static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
+    LONG slot = 1;
     _ra_main_task = FindTask(NULL);
+    while (slot <= RA_MAX_WINDOWS && _ra_wins[slot].winobj) slot++;
+    if (slot > RA_MAX_WINDOWS) return 0;
     if (!_ra_open_libs()) return 0;
+    _ra_cur = slot;
 
     _ra_layout = (Object *)NewObject(LAYOUT_GetClass(), NULL,
         LAYOUT_Orientation, LAYOUT_ORIENT_VERT,
@@ -6541,8 +6561,17 @@ static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
         WINDOW_Layout, _ra_layout,
         TAG_DONE);
 
-    return (_ra_winobj != NULL) ? 1 : 0;
+    if (!_ra_winobj) { DisposeObject(_ra_layout); _ra_layout = NULL; return 0; }
+    return slot;
 }
+
+/* The window the next ra_* calls work on (a number from ra_window_create) */
+static void ra_window_use(LONG n) {
+    if (n >= 1 && n <= RA_MAX_WINDOWS && _ra_wins[n].winobj) _ra_cur = n;
+}
+
+/* The window of the last event (its number from ra_window_create) */
+static LONG ra_event_window(void) { return _ra_event_win; }
 
 /* Open the ReAction window */
 static void _ra_menu_add(UBYTE type, STRPTR label, STRPTR key, LONG id) {
@@ -6581,23 +6610,30 @@ static void _ra_menu_build(void) {
         if (LayoutMenusA(_ra_menu, _ra_menu_vi, tags)) SetAttrs(_ra_winobj, WINDOW_MenuStrip, (ULONG)_ra_menu, TAG_DONE);
         else { FreeMenus(_ra_menu); _ra_menu = NULL; }
     }
+    _ra_menu_count = 0;   /* the next window's menus start empty */
 }
 
-static void _ra_menu_free(void) {
+/* The current window's menus; GadTools closes with the last window (last = TRUE) */
+static void _ra_menu_free(BOOL last) {
     if (_ra_menu) { FreeMenus(_ra_menu); _ra_menu = NULL; }
     if (_ra_menu_vi) { FreeVisualInfo(_ra_menu_vi); _ra_menu_vi = NULL; }
+    if (_ra_menu_next_win == _ra_cur) _ra_menu_next = MENUNULL;
+    if (!last) return;
     if (_ra_opened_gadtools && GadToolsBase) { CloseLibrary(GadToolsBase); GadToolsBase = NULL; }
     _ra_opened_gadtools = FALSE;
     _ra_menu_count = 0;
     _ra_menu_next = MENUNULL;
 }
 
-/* The menu item id for a menu number, and the next of a multiple selection */
-static LONG _ra_menu_pick(UWORD code) {
-    struct MenuItem *item = (_ra_menu && code != MENUNULL) ? ItemAddress(_ra_menu, code) : NULL;
+/* The menu item id for a menu number of window w, and the next of a multiple selection */
+static LONG _ra_menu_pick(LONG w, UWORD code) {
+    struct Menu *menu = _ra_wins[w].menu;
+    struct MenuItem *item = (menu && code != MENUNULL) ? ItemAddress(menu, code) : NULL;
     if (!item) { _ra_menu_next = MENUNULL; return 0; }
     _ra_menu_last = (LONG)GTMENUITEM_USERDATA(item);
     _ra_menu_next = item->NextSelect;
+    _ra_menu_next_win = w;
+    _ra_event_win = w;
     return 1;
 }
 
@@ -6621,31 +6657,45 @@ static LONG ra_add_getfile(LONG id, STRPTR title) {
         TAG_DONE);
     if (!gf) return 0;
     SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL, LAYOUT_AddChild, gf, TAG_DONE);
-    _ra_gadgets[id] = gf;
+    { _ra_gadgets[id] = gf; _ra_gad_win[id] = _ra_cur; }
     _ra_kinds[id] = RA_K_GETFILE;
     return 1;
 }
 
 /* Close ReAction window */
 static void ra_window_close(void) {
+    LONG i, left = 0;
     if (_ra_winobj) {
-        DisposeObject(_ra_winobj);
+        DisposeObject(_ra_winobj);   /* with its layout and gadgets */
         _ra_winobj = NULL;
         _ra_window = NULL;
         _ra_layout = NULL;
     }
     _ra_chooser_free();
     _ra_nodes_free();
-    _ra_menu_free();
+    for (i = 0; i < RA_MAX_GADGETS; i++)
+        if (_ra_gad_win[i] == _ra_cur) { _ra_gadgets[i] = NULL; _ra_gad_win[i] = 0; }
+    for (i = 1; i <= RA_MAX_WINDOWS; i++)
+        if (_ra_wins[i].winobj) left = i;
+    _ra_menu_free(left == 0);
+    if (left) { _ra_cur = left; return; }   /* another window becomes the current one */
     _ra_close_libs();
+}
+
+/* At exit: every window */
+static void _ra_close_all(void) {
+    LONG i;
+    for (i = RA_MAX_WINDOWS; i >= 1; i--)
+        if (_ra_wins[i].winobj) { _ra_cur = i; ra_window_close(); }
+    if (WindowBase) ra_window_close();   /* libraries opened without a window left */
 }
 
 /* Get window signal mask for Wait() */
 static ULONG ra_window_sigmask(void) {
-    ULONG sigmask = 0;
-    if (_ra_winobj) {
-        GetAttr(WINDOW_SigMask, _ra_winobj, &sigmask);
-    }
+    ULONG sigmask = 0, one;
+    LONG i;
+    for (i = 1; i <= RA_MAX_WINDOWS; i++)
+        if (_ra_wins[i].winobj) { one = 0; GetAttr(WINDOW_SigMask, _ra_wins[i].winobj, &one); sigmask |= one; }
     return sigmask;
 }
 
@@ -6658,50 +6708,57 @@ static ULONG ra_window_sigmask(void) {
 static LONG ra_handle_events(void) {
     ULONG result;
     UWORD code;
+    LONG w, i;
 
-    if (!_ra_winobj) return RA_EVENT_NONE;
-    if (_ra_menu_next != MENUNULL && _ra_menu_pick(_ra_menu_next)) return RA_EVENT_MENU;
+    if (_ra_menu_next != MENUNULL && _ra_menu_pick(_ra_menu_next_win, _ra_menu_next)) return RA_EVENT_MENU;
 
-    while ((result = RA_HandleInput(_ra_winobj, &code)) != WMHI_LASTMSG) {
-        switch (result & WMHI_CLASSMASK) {
-            case WMHI_CLOSEWINDOW:
-                return RA_EVENT_CLOSE;
-            case WMHI_GADGETUP: {
-                LONG id = (LONG)(result & WMHI_GADGETMASK);
-                /* a getfile button: its requester, then the event */
-                if ((ULONG)id < RA_MAX_GADGETS && _ra_kinds[id] == RA_K_GETFILE && _ra_gadgets[id] && _ra_window)
-                    DoMethod(_ra_gadgets[id], GFILE_REQUEST, (ULONG)_ra_window);
-                return id;
+    for (w = 1; w <= RA_MAX_WINDOWS; w++) {
+        Object *wo = _ra_wins[w].winobj;
+        if (!wo) continue;
+        while ((result = RA_HandleInput(wo, &code)) != WMHI_LASTMSG) {
+            switch (result & WMHI_CLASSMASK) {
+                case WMHI_CLOSEWINDOW:
+                    _ra_event_win = w;
+                    return RA_EVENT_CLOSE;
+                case WMHI_GADGETUP: {
+                    LONG id = (LONG)(result & WMHI_GADGETMASK);
+                    _ra_event_win = w;
+                    /* a getfile button: its requester, then the event */
+                    if ((ULONG)id < RA_MAX_GADGETS && _ra_kinds[id] == RA_K_GETFILE && _ra_gadgets[id] && _ra_wins[w].window)
+                        DoMethod(_ra_gadgets[id], GFILE_REQUEST, (ULONG)_ra_wins[w].window);
+                    return id;
+                }
+                case WMHI_MENUPICK:
+                    if (_ra_menu_pick(w, (UWORD)(result & WMHI_MENUMASK))) return RA_EVENT_MENU;
+                    break;
+                case WMHI_ICONIFY:
+                    RA_Iconify(wo);
+                    _ra_wins[w].window = NULL;
+                    break;
+                case WMHI_UNICONIFY:
+                    _ra_wins[w].window = RA_OpenWindow(wo);
+                    break;
             }
-            case WMHI_MENUPICK:
-                if (_ra_menu_pick((UWORD)(result & WMHI_MENUMASK))) return RA_EVENT_MENU;
-                break;
-            case WMHI_ICONIFY:
-                RA_Iconify(_ra_winobj);
-                _ra_window = NULL;
-                break;
-            case WMHI_UNICONIFY:
-                _ra_window = RA_OpenWindow(_ra_winobj);
-                break;
         }
     }
-    if (_ra_redraw_later && _ra_canvas_obj && _ra_window) {   /* asked from another task */
+    if (_ra_redraw_later && _ra_canvas_obj) {   /* asked from another task */
         _ra_redraw_later = 0;
-        RefreshGList((struct Gadget *)_ra_canvas_obj, _ra_window, NULL, 1);
+        for (i = 0; i < RA_MAX_GADGETS; i++)
+            if (_ra_gadgets[i] == _ra_canvas_obj && _RA_GWIN(i))
+                RefreshGList((struct Gadget *)_ra_canvas_obj, _RA_GWIN(i), NULL, 1);
     }
     return RA_EVENT_NONE;
 }
 
 /* Wait for window events and return event code */
 static LONG ra_wait_event(void) {
-    ULONG sigmask = 0;
+    ULONG sigmask;
     LONG event;
-
-    if (!_ra_winobj) return RA_EVENT_NONE;
 
     /* messages left from the last call are read before sleeping */
     if ((event = ra_handle_events()) != RA_EVENT_NONE) return event;
-    GetAttr(WINDOW_SigMask, _ra_winobj, &sigmask);
+    sigmask = ra_window_sigmask();
+    if (!sigmask) return RA_EVENT_NONE;
     Wait(sigmask);
 
     return ra_handle_events();
@@ -6721,7 +6778,7 @@ static LONG ra_add_button(LONG id, STRPTR label) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, btn,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) _ra_gadgets[id] = btn;
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = btn; _ra_gad_win[id] = _ra_cur; }
         return 1;
     }
     return 0;
@@ -6743,7 +6800,7 @@ static LONG ra_add_string(LONG id, STRPTR initial, LONG maxchars) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, str,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) _ra_gadgets[id] = str;
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = str; _ra_gad_win[id] = _ra_cur; }
         return 1;
     }
     return 0;
@@ -6765,7 +6822,7 @@ static LONG ra_add_checkbox(LONG id, STRPTR label, LONG checked) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, cb,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = cb; _ra_kinds[id] = RA_K_CHECKBOX; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = cb; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_CHECKBOX; }
         return 1;
     }
     return 0;
@@ -6789,7 +6846,7 @@ static LONG ra_add_slider(LONG id, LONG min, LONG max, LONG initial) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, sl,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = sl; _ra_kinds[id] = RA_K_SLIDER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = sl; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_SLIDER; }
         return 1;
     }
     return 0;
@@ -6812,7 +6869,7 @@ static LONG ra_add_integer(LONG id, LONG initial, LONG min, LONG max) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, ig,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = ig; _ra_kinds[id] = RA_K_INTEGER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = ig; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_INTEGER; }
         return 1;
     }
     return 0;
@@ -6859,7 +6916,7 @@ static void _ra_nodes_free(void) {
     LONG i;
     struct Node *node;
     for (i = 0; i < RA_MAX_GADGETS; i++) {
-        if (!_ra_node_inited[i]) continue;
+        if (!_ra_node_inited[i] || _ra_gad_win[i] != _ra_cur) continue;
         while ((node = RemHead(&_ra_node_lists[i]))) {
             switch (_ra_kinds[i]) {
             case RA_K_LISTBROWSER: FreeListBrowserNode(node); break;
@@ -6887,7 +6944,7 @@ static struct List *_ra_node_list(LONG id) {
 static LONG _ra_add_child(LONG id, Object *obj, LONG kind) {
     if (!obj) return 0;
     SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL, LAYOUT_AddChild, obj, TAG_DONE);
-    if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = obj; _ra_kinds[id] = kind; }
+    if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = obj; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = kind; }
     return 1;
 }
 
@@ -6917,9 +6974,9 @@ static LONG ra_listbrowser_add(LONG id, STRPTR text) {
         node = AllocListBrowserNodeA(1, (struct TagItem *)tags);
     }
     if (!node) return 0;
-    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, ~0, TAG_DONE);
+    SetGadgetAttrs((struct Gadget *)lb, _RA_GWIN(id), NULL, LISTBROWSER_Labels, ~0, TAG_DONE);
     AddTail(&_ra_node_lists[id], node);
-    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, (ULONG)&_ra_node_lists[id], TAG_DONE);
+    SetGadgetAttrs((struct Gadget *)lb, _RA_GWIN(id), NULL, LISTBROWSER_Labels, (ULONG)&_ra_node_lists[id], TAG_DONE);
     return 1;
 }
 
@@ -6927,9 +6984,9 @@ static void ra_listbrowser_clear(LONG id) {
     struct Node *node;
     Object *lb;
     if ((ULONG)id >= RA_MAX_GADGETS || _ra_kinds[id] != RA_K_LISTBROWSER || !(lb = _ra_gadgets[id])) return;
-    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, ~0, TAG_DONE);
+    SetGadgetAttrs((struct Gadget *)lb, _RA_GWIN(id), NULL, LISTBROWSER_Labels, ~0, TAG_DONE);
     while ((node = RemHead(&_ra_node_lists[id]))) FreeListBrowserNode(node);
-    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, (ULONG)&_ra_node_lists[id],
+    SetGadgetAttrs((struct Gadget *)lb, _RA_GWIN(id), NULL, LISTBROWSER_Labels, (ULONG)&_ra_node_lists[id],
                    LISTBROWSER_Selected, -1, TAG_DONE);
 }
 
@@ -7033,7 +7090,7 @@ static STRPTR ra_get_string(LONG id) {
 static void ra_set_value(LONG id, LONG value) {
     ULONG attr;
     if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !(attr = _ra_value_attr(id))) return;   /* window NULL: no redraw */
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, attr, value, TAG_DONE);
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL, attr, value, TAG_DONE);
 }
 
 /* Refresh window layout after adding gadgets */
@@ -7094,7 +7151,7 @@ static LONG ra_add_palette(LONG id, LONG depth, LONG initial_color) {
             CHILD_MinWidth, 100,
             CHILD_MinHeight, 50,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = pal; _ra_kinds[id] = RA_K_PALETTE; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = pal; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_PALETTE; }
         return 1;
     }
     return 0;
@@ -7109,7 +7166,7 @@ static void _ra_chooser_free(void) {
     LONG i;
     struct Node *node;
     for (i = 0; i < RA_MAX_GADGETS; i++) {
-        if (!_ra_chooser_inited[i]) continue;
+        if (!_ra_chooser_inited[i] || _ra_gad_win[i] != _ra_cur) continue;
         while ((node = RemHead(&_ra_chooser_lists[i]))) {
             STRPTR text = NULL;
             ULONG tags[] = { CNA_Text, (ULONG)&text, TAG_DONE };
@@ -7142,7 +7199,7 @@ static LONG ra_add_chooser(LONG id) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, ch,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = ch; _ra_kinds[id] = RA_K_CHOOSER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = ch; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_CHOOSER; }
         return 1;
     }
     return 0;
@@ -7161,10 +7218,10 @@ static LONG ra_chooser_add_item(LONG id, STRPTR label) {
     }
     if (!node) { _dash_str_free(copy); return 0; }
     if (_ra_gadgets[id])
-        SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, CHOOSER_Labels, ~0, TAG_DONE);
+        SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL, CHOOSER_Labels, ~0, TAG_DONE);
     AddTail(&_ra_chooser_lists[id], node);
     if (_ra_gadgets[id])
-        SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+        SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
                        CHOOSER_Labels, (ULONG)&_ra_chooser_lists[id], TAG_DONE);
     return 1;
 }
@@ -7180,9 +7237,9 @@ static LONG ra_get_chooser_selected(LONG id) {
 
 /* Set chooser selected index */
 static void ra_set_chooser_selected(LONG id, LONG index) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         CHOOSER_Selected, index,
         TAG_DONE);
 }
@@ -7205,7 +7262,7 @@ static LONG ra_add_scroller(LONG id, LONG min, LONG max, LONG visible, LONG init
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, sc,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = sc; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_SCROLLER; }
         return 1;
     }
     return 0;
@@ -7230,7 +7287,7 @@ static LONG ra_add_scroller_vert(LONG id, LONG min, LONG max, LONG visible, LONG
             LAYOUT_AddChild, sc,
             CHILD_MinWidth, 18,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { { _ra_gadgets[id] = sc; _ra_gad_win[id] = _ra_cur; } _ra_kinds[id] = RA_K_SCROLLER; }
         return 1;
     }
     return 0;
@@ -7247,45 +7304,45 @@ static LONG ra_get_scroller(LONG id) {
 
 /* Set scroller position */
 static void ra_set_scroller(LONG id, LONG pos) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         SCROLLER_Top, pos,
         TAG_DONE);
 }
 
 /* Enable gadget */
 static void ra_enable_gadget(LONG id) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         GA_Disabled, FALSE,
         TAG_DONE);
 }
 
 /* Disable gadget */
 static void ra_disable_gadget(LONG id) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         GA_Disabled, TRUE,
         TAG_DONE);
 }
 
 /* Set string gadget text */
 static void ra_set_string(LONG id, STRPTR text) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         STRINGA_TextVal, text,
         TAG_DONE);
 }
 
 /* Set button/label text */
 static void ra_set_text(LONG id, STRPTR text) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         GA_Text, text,
         TAG_DONE);
 }
@@ -7301,9 +7358,9 @@ static LONG ra_get_palette_color(LONG id) {
 
 /* Set color in palette gadget */
 static void ra_set_palette_color(LONG id, LONG color) {
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_RA_GWIN(id)) return;
 
-    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+    SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL,
         PALETTE_Colour, color,
         TAG_DONE);
 }
@@ -7387,8 +7444,8 @@ static struct Hook _ra_space_render_hook = {
 /* Request a canvas refresh (trigger redraw) */
 static void ra_refresh_canvas(LONG id) {
     if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return;
-    if (!_ra_window) return;
-    RefreshGList((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, 1);
+    if (!_RA_GWIN(id)) return;
+    RefreshGList((struct Gadget *)_ra_gadgets[id], _RA_GWIN(id), NULL, 1);
 }
 
 /* Forward declaration for Dash's render_canvas function (user functions are static) */
@@ -7632,7 +7689,7 @@ static LONG ra_add_drawing_area(LONG id, LONG min_width, LONG min_height) {
             CHILD_WeightedWidth, 100,
             CHILD_WeightedHeight, 100,
             TAG_DONE);
-        if ((ULONG)id < RA_MAX_GADGETS) _ra_gadgets[id] = space;
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = space; _ra_gad_win[id] = _ra_cur; }
         return 1;
     }
     return 0;
@@ -9674,7 +9731,7 @@ static LONG _dash_event_window_handle(void) {{
         if self.uses_sound:
             cleanup.append("    _dash_sound_cleanup();\n")
         if self.needs_reaction:
-            cleanup.append("    ra_window_close();\n")
+            cleanup.append("    _ra_close_all();\n")
         if self.needs_mui:
             cleanup.append("    _dash_mui_app_end();\n")
         if self._uses_key_runtime():

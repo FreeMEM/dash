@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 490 funciones, 490 implementadas, 0 sin implementar.
+Total: 492 funciones, 492 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -177,9 +177,11 @@ Total: 490 funciones, 490 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `ra_window_create(title, width, height)` | `LONG` | Create ReAction window with layout |  |
+| `ra_window_create(title, width, height)` | `LONG` | Create a ReAction window with a layout; it becomes the current one. Its number (1-4), 0 on failure |  |
+| `ra_window_use(window)` | `void` | Window the next ra_* calls work on (the number ra_window_create gave; up to 4 windows) |  |
+| `ra_event_window()` | `LONG` | Window of the last event (its number from ra_window_create) |  |
 | `ra_window_open()` | `LONG` | Open the ReAction window |  |
-| `ra_window_close()` | `void` | Close ReAction window and free resources |  |
+| `ra_window_close()` | `void` | Close the current ReAction window and free its gadgets (another open one becomes current) |  |
 | `ra_window_sigmask()` | `ULONG` | Get window signal mask for Wait() |  |
 | `ra_handle_events()` | `LONG` | Handle window events (non-blocking), returns gadget ID or -1 for close |  |
 | `ra_wait_event()` | `LONG` | Wait for and handle window events, returns gadget ID or -1 for close |  |

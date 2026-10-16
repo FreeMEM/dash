@@ -1,0 +1,121 @@
+# Several ReAction windows (up to 4): ra_window_create gives each a number and makes it the current
+# one; ra_window_use chooses the one the next ra_* calls work on; ra_wait_event listens to all of
+# them and ra_event_window() tells which one an event came from. Each gadget remembers its window:
+# ra_set_value on a gadget of the other window still works. Closing one window leaves the other.
+# A helper process clicks the button of window 2, then its close gadget, then the button of window 1.
+# memcheck
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# emu-needs: checkbox.gadget
+# expect-out: ventanas 1 y 2
+# expect-out: casilla de la 1 desde la 2: 1
+# expect-out: botón 20 en la ventana 2
+# expect-out: cerrar la ventana 2
+# expect-out: botón 10 en la ventana 1
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Task *clics_padre;"
+
+@native func clic(io: Pointer, win: Pointer, x: Int, y: Int)
+"""
+    struct IOStdReq *req = (struct IOStdReq *)io;
+    struct Window *w = (struct Window *)win;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    req->io_Command = IND_WRITEEVENT;
+    req->io_Data = &ie;
+    req->io_Length = sizeof(ie);
+    memset(&ie, 0, sizeof(ie));
+    pp.iepp_Screen = w->WScreen;
+    pp.iepp_Position.X = w->LeftEdge + x;
+    pp.iepp_Position.Y = w->TopEdge + y;
+    ie.ie_Class = IECLASS_NEWPOINTERPOS;
+    ie.ie_SubClass = IESUBCLASS_PIXEL;
+    ie.ie_EventAddress = (APTR)&pp;
+    DoIO((struct IORequest *)req);
+    Delay(5);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = IECODE_LBUTTON;
+    ie.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+    DoIO((struct IORequest *)req);
+    Delay(5);
+    ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+    DoIO((struct IORequest *)req);
+    Delay(40);
+"""
+end
+
+@native func proceso_clics()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    struct Window *w1 = _ra_wins[1].window, *w2 = _ra_wins[2].window;
+    struct Gadget *b1 = (struct Gadget *)_ra_gadgets[10], *b2 = (struct Gadget *)_ra_gadgets[20];
+    Delay(50);
+    if (w1 && w2 && b1 && b2 && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        clic((APTR)io, (APTR)w2, b2->LeftEdge + b2->Width / 2, b2->TopEdge + b2->Height / 2);
+        clic((APTR)io, (APTR)w2, 6, 5);                   /* its close gadget */
+        Delay(25);
+        clic((APTR)io, (APTR)w1, b1->LeftEdge + b1->Width / 2, b1->TopEdge + b1->Height / 2);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(clics_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    clics_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_clics, NP_Name, (ULONG)"dash_clics", TAG_DONE) == NULL)
+        clics_padre = NULL;
+"""
+end
+
+@native func esperar()
+"""
+    if (clics_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+Main
+    v1 = ra_window_create("Una", 220, 120)
+    ra_add_button(10, "Uno")
+    ra_add_checkbox(11, "Activa", 0)
+    ra_window_open()
+    v2 = ra_window_create("Dos", 220, 120)
+    ra_add_button(20, "Dos")
+    ra_window_open()
+    Print "ventanas #{v1} y #{v2}"
+    ra_set_value(11, 1)                 # a gadget of window 1, while 2 is the current one
+    Print "casilla de la 1 desde la 2: #{ra_get_value(11)}"
+
+    lanzar()
+    abiertas = 2
+    while abiertas > 0
+        ev = ra_wait_event()
+        if ev == RA_EVENT_CLOSE()
+            Print "cerrar la ventana #{ra_event_window()}"
+            ra_window_use(ra_event_window())
+            ra_window_close()
+            abiertas = abiertas - 1
+        elif ev >= 0
+            Print "botón #{ev} en la ventana #{ra_event_window()}"
+            if ev == 10
+                ra_window_use(1)
+                ra_window_close()
+                abiertas = abiertas - 1
+            end
+        end
+    end
+    esperar()
+    Print "fin"
+end

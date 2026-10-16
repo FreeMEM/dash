@@ -1079,8 +1079,8 @@ EventLoop
 end
 ```
 
-Los `gt_*` y las ventanas ReAction (`ra_*`) son de una sola ventana; para programas con muchas ventanas,
-gadgets por numero o MUI.
+Los `gt_*` son de una sola ventana; para programas con muchas ventanas, gadgets por numero, ReAction
+(hasta 4 ventanas, ver `ra_window_use`) o MUI.
 
 ### Event Loop
 
@@ -2214,6 +2214,34 @@ ra_window_open()
 ra_window_close()
 ```
 
+### Varias ventanas
+
+Hasta 4. `ra_window_create` devuelve el numero de la ventana (1-4) y la deja como actual: los `ra_add_*`,
+`ra_window_open` y `ra_window_close` que siguen son para ella. `ra_window_use(n)` elige otra.
+`ra_wait_event` escucha todas y `ra_event_window()` dice de cual vino el evento. Los ids de los gadgets
+son de todo el programa (no repetirlos entre ventanas); `ra_get_value`/`ra_set_value` y los demas
+funcionan aunque su ventana no sea la actual.
+
+```
+v1 = ra_window_create("Una", 220, 120)
+ra_add_button(10, "Uno")
+ra_window_open()
+v2 = ra_window_create("Dos", 220, 120)
+ra_add_button(20, "Dos")
+ra_window_open()
+abiertas = 2
+while abiertas > 0
+    ev = ra_wait_event()
+    if ev == RA_EVENT_CLOSE()
+        ra_window_use(ra_event_window())
+        ra_window_close()           # la otra queda como actual
+        abiertas = abiertas - 1
+    elif ev >= 0
+        Print "boton #{ev} de la ventana #{ra_event_window()}"
+    end
+end
+```
+
 ### Gadgets Disponibles
 
 ```
@@ -2455,9 +2483,11 @@ end
 #### Ventana
 | Funcion | Descripcion |
 |---------|-------------|
-| `ra_window_create(title,w,h)` | Crear ventana ReAction |
+| `ra_window_create(title,w,h)` | Crear ventana ReAction (devuelve su numero, 1-4; queda como actual) |
+| `ra_window_use(n)` | Elegir la ventana actual |
+| `ra_event_window()` | Ventana del ultimo evento |
 | `ra_window_open()` | Abrir ventana |
-| `ra_window_close()` | Cerrar ventana |
+| `ra_window_close()` | Cerrar ventana (la actual) |
 | `ra_window_width()` | Obtener ancho de ventana |
 | `ra_window_height()` | Obtener alto de ventana |
 | `ra_window_is_open()` | Verificar si ventana esta abierta |

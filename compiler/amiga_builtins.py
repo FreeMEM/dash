@@ -1203,7 +1203,23 @@ REACTION_FUNCTIONS = {
         return_type="LONG",
         c_template="ra_window_create(${title}, ${width}, ${height})",
         needs_reaction=True,
-        description="Create ReAction window with layout"
+        description="Create a ReAction window with a layout; it becomes the current one. Its number (1-4), 0 on failure"
+    ),
+    "ra_window_use": BuiltinFunc(
+        name="ra_window_use",
+        params=["window"],
+        return_type="void",
+        c_template="ra_window_use(${window})",
+        needs_reaction=True,
+        description="Window the next ra_* calls work on (the number ra_window_create gave; up to 4 windows)"
+    ),
+    "ra_event_window": BuiltinFunc(
+        name="ra_event_window",
+        params=[],
+        return_type="LONG",
+        c_template="ra_event_window()",
+        needs_reaction=True,
+        description="Window of the last event (its number from ra_window_create)"
     ),
     "ra_window_open": BuiltinFunc(
         name="ra_window_open",
@@ -1219,7 +1235,7 @@ REACTION_FUNCTIONS = {
         return_type="void",
         c_template="ra_window_close()",
         needs_reaction=True,
-        description="Close ReAction window and free resources"
+        description="Close the current ReAction window and free its gadgets (another open one becomes current)"
     ),
     "ra_window_sigmask": BuiltinFunc(
         name="ra_window_sigmask",
