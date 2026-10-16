@@ -110,6 +110,7 @@ Conversiones: `Int(x)`, `Float(n)`, `Fixed(n)`, `Int("42")`.
 a + b   a - b   a * b   a / b   a % b      # aritmética (/ y % enteros con Int)
 a == b  a != b  a < b   a > b   a <= b  a >= b
 x and y   x or y   not x
+a & b   a | b   a ^ b   ~a   a << n   a >> n  # bits de enteros (precedencia de Python)
 "Hola " + nombre                            # concatenar textos
 "abc" < "abd"                               # los textos se comparan por su contenido
 ```

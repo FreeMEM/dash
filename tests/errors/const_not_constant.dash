@@ -1,0 +1,7 @@
+# Test: a const whose value is not known when compiling
+# expect: const X: the value must be a literal or an integer expression of numbers and earlier constants
+const X = 1 << y
+
+Main
+    Print X
+end

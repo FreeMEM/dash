@@ -1,0 +1,41 @@
+# Bit operators on Ints: & | ^ (xor), ~ (complement), << and >> (arithmetic, as C on a LONG),
+# with Python's precedence: shifts above & above ^ above |, all below + - and above the
+# comparisons (a & 4 == 4 is (a & 4) == 4), ~ like the unary -. Also in const, folded when
+# compiling (from numbers and earlier constants).
+# expect-c: #define MASCARA 16
+# expect-c: #define TODOS 255
+# expect-out: 8 14 6 -13
+# expect-out: 48 -4 3
+# expect-out: 6 13 1
+# expect-out: 16 255 19 -1
+# expect-out: bits 1010 a
+# expect-out: color 18 52 86
+# expect-out: fin
+
+const MASCARA = 1 << 4
+const TODOS = (1 << 8) - 1
+const AMBAS = MASCARA | 3
+const NADA = ~0
+
+func bits(n: Int, cuantos: Int) -> String
+    r = ""
+    i = cuantos - 1
+    while i >= 0
+        r = r + ((n >> i) & 1)
+        i = i - 1
+    end
+    return r
+end
+
+Main
+    a = 12
+    b = 10
+    Print "#{a & b} #{a | b} #{a ^ b} #{~a}"
+    Print "#{a << 2} #{-16 >> 2} #{a >> 2}"
+    Print "#{1 + 2 << 1} #{1 | 2 + 4 << 1} #{a & 4 == 4}"
+    Print "#{MASCARA} #{TODOS} #{AMBAS} #{NADA}"
+    Print "bits #{bits(b, 4)} #{str_from_int(b & 0xFF, 16)}"
+    rgb = 0x123456
+    Print "color #{(rgb >> 16) & 0xFF} #{(rgb >> 8) & 0xFF} #{rgb & 0xFF}"
+    Print "fin"
+end

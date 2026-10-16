@@ -96,7 +96,7 @@
       "name": "entity.name.function.call.dash"
     },
     "operator": {
-      "match": "==|!=|<=|>=|\\.\\.|[-+*/%<>=]",
+      "match": "==|!=|<=|>=|<<|>>|\\.\\.|[-+*/%<>=&|^~]",
       "name": "keyword.operator.dash"
     }
   }

@@ -130,12 +130,53 @@ class DashASTBuilder(Transformer):
     # === Constants ===
 
     def const_decl(self, items) -> ConstDecl:
-        """Build a constant declaration node."""
+        """Build a constant declaration node: a literal, or an integer expression folded now."""
         name = items[0].value if isinstance(items[0], Token) else str(items[0])
-        value = items[1]
+        value = self._const_value(items[1], name)
         const_node = ConstDecl(name=name, value=value, location=self._get_location(items[0]))
         self._constants.append(const_node)
         return const_node
+
+    _CONST_OPS = {
+        "+": lambda a, b: a + b, "-": lambda a, b: a - b, "*": lambda a, b: a * b,
+        "/": lambda a, b: int(a / b) if b else None, "%": lambda a, b: a - int(a / b) * b if b else None,
+        "&": lambda a, b: a & b, "|": lambda a, b: a | b, "^": lambda a, b: a ^ b,
+        "<<": lambda a, b: a << b if 0 <= b < 32 else None, ">>": lambda a, b: a >> b if 0 <= b < 32 else None,
+    }
+
+    def _const_value(self, node, name: str):
+        """The value of a const: a literal (also -1.5), or an integer expression of numbers and
+        constants declared before it, folded to a number (32 bits, as a LONG)."""
+        if isinstance(node, (NumberLiteral, FloatLiteral, StringLiteral, BoolLiteral)):
+            return node
+        if (isinstance(node, UnaryOp) and node.operator == "-" and isinstance(node.operand, FloatLiteral)):
+            return FloatLiteral(value=-node.operand.value)
+        value = self._fold_int(node)
+        if value is None:
+            raise ValueError(f"const {name}: the value must be a literal or an integer expression "
+                             f"of numbers and earlier constants")
+        value &= 0xFFFFFFFF
+        return NumberLiteral(value=value - 0x100000000 if value & 0x80000000 else value)
+
+    def _fold_int(self, node):
+        if isinstance(node, NumberLiteral):
+            return node.value
+        if isinstance(node, BoolLiteral):
+            return None
+        if isinstance(node, VarRef):
+            for c in self._constants:
+                if c.name == node.name and isinstance(c.value, NumberLiteral):
+                    return c.value.value
+            return None
+        if isinstance(node, UnaryOp) and node.operator in ("-", "~"):
+            v = self._fold_int(node.operand)
+            return None if v is None else (-v if node.operator == "-" else ~v)
+        if isinstance(node, BinaryOp) and node.operator in self._CONST_OPS:
+            a, b = self._fold_int(node.left), self._fold_int(node.right)
+            if a is None or b is None:
+                return None
+            return self._CONST_OPS[node.operator](a, b)
+        return None
 
     def const_int(self, items) -> NumberLiteral:
         """Build a number literal for constant."""
@@ -1010,6 +1051,26 @@ class DashASTBuilder(Transformer):
     def gt(self, items): return ">"
     def lte(self, items): return "<="
     def gte(self, items): return ">="
+
+    def bor_expr(self, items):
+        """a | b (bits)."""
+        return self._build_binary_chain_with_ops(items)
+
+    def bxor_expr(self, items):
+        """a ^ b (bits)."""
+        return self._build_binary_chain_with_ops(items)
+
+    def band_expr(self, items):
+        """a & b (bits)."""
+        return self._build_binary_chain_with_ops(items)
+
+    def shift_expr(self, items):
+        """a << b, a >> b."""
+        return self._build_binary_chain_with_ops(items)
+
+    def bnot_expr(self, items) -> UnaryOp:
+        """~a (bits)."""
+        return UnaryOp(operator="~", operand=items[0])
 
     def add_expr(self, items):
         """Build addition/subtraction expression."""

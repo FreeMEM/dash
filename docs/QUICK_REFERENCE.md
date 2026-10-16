@@ -43,6 +43,9 @@ var lista: Nodo = nil       # nil: no struct/list/String (x == nil, x = nil)
 +  -  *  /  %               # Arithmetic
 ==  !=  <  >  <=  >=        # Comparison
 and  or  not                # Logical
+&  |  ^  ~  <<  >>          # Bits on Ints (^ xor, ~ complement, >> arithmetic); as in Python:
+                            # shifts, &, ^, | between + - and the comparisons (a & 4 == 4)
+const MASK = 1 << 4         # const: also an Int expression of numbers and earlier constants
 +                           # String concatenation
 "abc" < "abd"               # Strings: == != compare text, < > <= >= the order (strcmp)
 ```

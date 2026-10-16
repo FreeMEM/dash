@@ -276,7 +276,12 @@ const SCREEN_WIDTH = 320
 const SCREEN_HEIGHT = 200
 const GAME_TITLE = "Space Invaders"
 const DEBUG_MODE = true
+const AREA = SCREEN_WIDTH * SCREEN_HEIGHT   # expresion entera: se calcula al compilar
+const BIT_FUEGO = 1 << 7
 ```
+
+El valor es un literal (numero, texto, `true`/`false`, `Float`) o una expresion entera de numeros y
+constantes declaradas antes (`+ - * / %` y los operadores de bits); se calcula al compilar, en 32 bits.
 
 ### Uso de Constantes
 
@@ -314,6 +319,32 @@ end
 resultado = (10 + 5) * 2    # 30
 resto = 17 % 5              # 2
 negativo = -valor
+```
+
+### Operadores de Bits
+
+Sobre enteros (un `Float` o un `Fixed` se convierte antes con `Int()`):
+
+| Operador | Operacion | Ejemplo |
+|----------|-----------|---------|
+| `&` | Y de bits | `color & 0xFF` |
+| `\|` | O de bits | `flags \| 4` |
+| `^` | O exclusivo | `a ^ b` |
+| `~` | Complemento (unario) | `~mascara` |
+| `<<` | Desplazar a la izquierda | `1 << 4` |
+| `>>` | Desplazar a la derecha (aritmetico: conserva el signo) | `rgb >> 16` |
+
+Precedencia como en Python: los desplazamientos van por encima de `&`, que va por encima de `^`, que
+va por encima de `|`; todos por debajo de `+ -` y por encima de las comparaciones. Asi `1 + 2 << 1`
+es 6 y `a & 4 == 4` es `(a & 4) == 4` (en C seria al reves). `~` va como el `-` unario.
+
+```
+const MASCARA = 1 << 4             # una const puede ser una expresion entera de numeros y
+const TODOS = (1 << 8) - 1         # constantes de antes: se calcula al compilar (255)
+rojo = (rgb >> 16) & 0xFF
+if flags & MASCARA != 0
+    Print "activo"
+end
 ```
 
 ### Operadores de Comparacion

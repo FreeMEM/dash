@@ -1,0 +1,6 @@
+# Test: ~ on a String
+# expect: '~' works on integers, not Strings (Int() converts a Float or a Fixed)
+Main
+    s = "a"
+    Print ~s
+end

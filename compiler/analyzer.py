@@ -1283,6 +1283,12 @@ class SemanticAnalyzer(ASTVisitor):
         left, right = self._infer_type(node.left), self._infer_type(node.right)
         if node.operator == "%" and DashType.FLOAT in (left, right):
             self.error("% needs integers; use Int() to convert a Float", node)
+        if node.operator in self._BIT_OPS:
+            for side in (left, right):
+                if side in (DashType.FLOAT, DashType.FIXED, DashType.STRING) or side in self._LIST_TYPES:
+                    self.error(f"'{node.operator}' works on integers, not {self._type_text(side)} "
+                               f"(Int() converts a Float or a Fixed)", node)
+                    break
         if DashType.FIXED in (left, right) and DashType.FLOAT in (left, right):
             self.error("Cannot mix Fixed and Float (convert with Fixed() or Float())", node)
         if node.operator == "+":
@@ -1292,9 +1298,21 @@ class SemanticAnalyzer(ASTVisitor):
             elif lk and rk and "any" not in (lk, rk) and lk != rk:
                 self.error(f"Cannot add a list of {self._kind_text(lk)} to a list of {self._kind_text(rk)}", node)
 
+    _BIT_OPS = ("&", "|", "^", "<<", ">>")
+    _LIST_TYPES = (DashType.ARRAY, DashType.ARRAY_INT, DashType.ARRAY_STRING, DashType.DICT)
+
+    @staticmethod
+    def _type_text(t: DashType) -> str:
+        return {DashType.FLOAT: "Float", DashType.FIXED: "Fixed", DashType.STRING: "Strings"}.get(t, "lists")
+
     def visit_UnaryOp(self, node: UnaryOp):
         """Visit a unary operation."""
         self.visit(node.operand)
+        if node.operator == "~":
+            t = self._infer_type(node.operand)
+            if t in (DashType.FLOAT, DashType.FIXED, DashType.STRING) or t in self._LIST_TYPES:
+                self.error(f"'~' works on integers, not {self._type_text(t)} "
+                           f"(Int() converts a Float or a Fixed)", node)
 
     def visit_Comment(self, node: Comment):
         """Visit a comment (no-op)."""
@@ -1382,6 +1400,8 @@ class SemanticAnalyzer(ASTVisitor):
             if node.operator == "+" and self._list_kind(node.left) is not None:
                 kind = self._list_kind(node)
                 return {"int": DashType.ARRAY_INT, "string": DashType.ARRAY_STRING}.get(kind, DashType.ARRAY)
+            if node.operator in ("&", "|", "^", "<<", ">>"):
+                return DashType.INT
             if node.operator in ("+", "-", "*", "/", "%"):
                 if DashType.FLOAT in (left, right):
                     return DashType.FLOAT
@@ -1392,6 +1412,8 @@ class SemanticAnalyzer(ASTVisitor):
             return DashType.UNKNOWN
         elif isinstance(node, UnaryOp) and node.operator == "-":
             return self._infer_type(node.operand)
+        elif isinstance(node, UnaryOp) and node.operator == "~":
+            return DashType.INT
         elif isinstance(node, FunctionCall) and node.name in ("Int", "Float"):
             return DashType.FLOAT if node.name == "Float" else DashType.INT
         elif isinstance(node, FunctionCall) and node.name in ("Fixed", "fx_sqrt", "fx_sin", "fx_cos"):

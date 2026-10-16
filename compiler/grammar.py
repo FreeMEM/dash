@@ -9,14 +9,8 @@ dash_grammar_minimal = r"""
     program: (import_stmt | const_decl | global_var_decl | struct_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | main_block | comment_line)*
 
     // Constant declaration
-    const_decl: "const" ID "=" const_value
-    ?const_value: INT -> const_int
-                | "-" INT -> const_neg_int
-                | FLOAT -> const_float
-                | "-" FLOAT -> const_neg_float
-                | ESCAPED_STRING -> const_string
-                | "true" -> const_true
-                | "false" -> const_false
+    // a literal or an integer expression known when compiling (const MASCARA = 1 << 4)
+    const_decl: "const" ID "=" expression
 
     // Global variable declaration
     global_var_decl: "var" ID ":" TYPE_NAME ("=" expression)?
@@ -182,8 +176,19 @@ dash_grammar_minimal = r"""
     ?not_test: "not" not_test -> not_expr
              | compare_expr
 
-    ?compare_expr: add_expr (COMP_OP add_expr)?
+    ?compare_expr: bor_expr (COMP_OP bor_expr)?
     COMP_OP: "==" | "!=" | "<=" | ">=" | "<" | ">"
+
+    // Bit operators, as in Python: | below ^ below & below the shifts, all between the
+    // comparisons and + -
+    ?bor_expr: bxor_expr (BOR bxor_expr)*
+    ?bxor_expr: band_expr (BXOR band_expr)*
+    ?band_expr: shift_expr (BAND shift_expr)*
+    ?shift_expr: add_expr (SHIFT_OP add_expr)*
+    BOR: "|"
+    BXOR: "^"
+    BAND: "&"
+    SHIFT_OP.2: "<<" | ">>"
 
     ?add_expr: mul_expr ((ADD_OP) mul_expr)*
     ADD_OP: "+" | "-"
@@ -192,6 +197,7 @@ dash_grammar_minimal = r"""
     MUL_OP: "*" | "/" | "%"
 
     ?unary_expr: "-" unary_expr -> neg_expr
+              | "~" unary_expr -> bnot_expr
               | primary
 
     ?primary: postfix_expr

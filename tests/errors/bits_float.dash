@@ -1,0 +1,6 @@
+# Test: a bit operator on a Float
+# expect: '&' works on integers, not Float (Int() converts a Float or a Fixed)
+Main
+    f = 1.5
+    Print f & 1
+end
