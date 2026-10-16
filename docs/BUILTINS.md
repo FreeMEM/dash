@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 480 funciones, 480 implementadas, 0 sin implementar.
+Total: 485 funciones, 485 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -356,6 +356,9 @@ Total: 480 funciones, 480 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `net_connect(host, port, timeout_ms)` | `LONG` | TCP connection to host:port (name or address); the socket, or -1 (see net_error) |  |
+| `net_connect_start(host, port, timeout_ms)` | `LONG` | Start a TCP connection without waiting (the name is looked up in another process); the socket, or -1 (see net_error) |  |
+| `net_connect_poll(sock)` | `LONG` | Go on with net_connect_start without waiting: 1 connected, 0 not yet, -1 failed (the socket is closed; see net_error) |  |
+| `net_connect_stage(sock)` | `LONG` | What net_connect_start is doing: 0 looking the name up, 1 connecting, 2 done |  |
 | `net_send(sock, text)` | `LONG` | Send the whole text; bytes sent or -1 |  |
 | `net_send_buffer(sock, buffer, length)` | `LONG` | Send length bytes of a buffer; bytes sent or -1 |  |
 | `net_recv(sock, max, timeout_ms)` | `STRPTR` | Up to max bytes as text: "" if nothing came within timeout_ms (-1: wait), nil once closed |  |
@@ -370,6 +373,8 @@ Total: 480 funciones, 480 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `tls_connect(sock, host)` | `LONG` | TLS over a connected socket, verifying the certificate for host; -1 if not (net_error) |  |
+| `tls_connect_start(sock, host, timeout_ms)` | `LONG` | TLS over a connected socket without waiting for the handshake; the connection or -1 (see net_error) |  |
+| `tls_connect_poll(tls)` | `LONG` | Go on with tls_connect_start: 1 done (certificate verified), 0 not yet, -1 failed (the TLS connection is freed; see net_error) |  |
 | `tls_send(tls, text)` | `LONG` | Send the whole text; bytes sent or -1 |  |
 | `tls_send_buffer(tls, buffer, length)` | `LONG` | Send length bytes of a buffer; bytes sent or -1 |  |
 | `tls_recv(tls, max, timeout_ms)` | `STRPTR` | Like net_recv: "" if nothing came in time, nil once closed |  |

@@ -3660,6 +3660,15 @@ NET_FUNCTIONS = {
     "net_connect": _text("net_connect", ["host", "port", "timeout_ms"], "LONG",
                          "_dash_net_connect(${host}, ${port}, ${timeout_ms})",
                          "TCP connection to host:port (name or address); the socket, or -1 (see net_error)"),
+    "net_connect_start": _text("net_connect_start", ["host", "port", "timeout_ms"], "LONG",
+                               "_dash_net_connect_start(${host}, ${port}, ${timeout_ms})",
+                               "Start a TCP connection without waiting (the name is looked up in another "
+                               "process); the socket, or -1 (see net_error)"),
+    "net_connect_poll": _text("net_connect_poll", ["sock"], "LONG", "_dash_net_connect_poll(${sock})",
+                              "Go on with net_connect_start without waiting: 1 connected, 0 not yet, "
+                              "-1 failed (the socket is closed; see net_error)"),
+    "net_connect_stage": _text("net_connect_stage", ["sock"], "LONG", "_dash_net_connect_stage(${sock})",
+                               "What net_connect_start is doing: 0 looking the name up, 1 connecting, 2 done"),
     "net_send": _text("net_send", ["sock", "text"], "LONG", "_dash_net_send(${sock}, ${text})",
                       "Send the whole text; bytes sent or -1"),
     "net_send_buffer": _text("net_send_buffer", ["sock", "buffer", "length"], "LONG",
@@ -3686,6 +3695,13 @@ NET_FUNCTIONS = {
 TLS_FUNCTIONS = {
     "tls_connect": _text("tls_connect", ["sock", "host"], "LONG", "_dash_tls_connect(${sock}, ${host})",
                          "TLS over a connected socket, verifying the certificate for host; -1 if not (net_error)"),
+    "tls_connect_start": _text("tls_connect_start", ["sock", "host", "timeout_ms"], "LONG",
+                               "_dash_tls_connect_start(${sock}, ${host}, ${timeout_ms})",
+                               "TLS over a connected socket without waiting for the handshake; "
+                               "the connection or -1 (see net_error)"),
+    "tls_connect_poll": _text("tls_connect_poll", ["tls"], "LONG", "_dash_tls_connect_poll(${tls})",
+                              "Go on with tls_connect_start: 1 done (certificate verified), 0 not yet, "
+                              "-1 failed (the TLS connection is freed; see net_error)"),
     "tls_send": _text("tls_send", ["tls", "text"], "LONG", "_dash_tls_send(${tls}, ${text})",
                       "Send the whole text; bytes sent or -1"),
     "tls_send_buffer": _text("tls_send_buffer", ["tls", "buffer", "length"], "LONG",

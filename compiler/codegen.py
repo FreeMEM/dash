@@ -1783,6 +1783,7 @@ static LONG _dash_str_to_buffer(STRPTR s, APTR buffer, LONG offset) {
 #include <sys/filio.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <dos/dostags.h>
 #include <proto/bsdsocket.h>
 
 struct Library *SocketBase = NULL;
@@ -1794,7 +1795,10 @@ static BOOL _dash_net_init(void) {
     return SocketBase != NULL;
 }
 
+static void _dash_net_dns_wait(void);
+
 static void _dash_net_cleanup(void) {
+    _dash_net_dns_wait();
     if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
 }
 
@@ -1898,7 +1902,225 @@ static STRPTR _dash_net_recv(LONG sock, LONG max, LONG timeout_ms) {
     return r;
 }
 
+/* Connections that open without waiting (dashweb D36): net_connect_start makes the socket and
+   looks the name up in a helper process (gethostbyname has no form that does not wait; each
+   process opens its own bsdsocket.library), net_connect_poll connects without blocking. */
+struct _DashDns {
+    volatile LONG done, ok, abandoned;
+    struct in_addr addr;
+    BYTE pri;
+    char host[1];
+};
+
+#define _DASH_NET_PENDING 16
+static struct {
+    LONG sock, stage, port, timeout, deadline;    /* stage 0: looking the name up, 1: connecting */
+    struct _DashDns *dns;
+} _dash_net_pend[_DASH_NET_PENDING];
+static UBYTE _dash_net_npend = 0;
+static struct _DashDns *volatile _dash_net_dns_next;
+static volatile LONG _dash_net_dns_live = 0;
+
+/* A small cache of names already found (a page asks the same server many times) */
+#define _DASH_NET_CACHE 8
+static STRPTR _dash_net_cache_host[_DASH_NET_CACHE];
+static struct in_addr _dash_net_cache_addr[_DASH_NET_CACHE];
+static UBYTE _dash_net_cache_next = 0;
+
+static LONG _dash_net_now(void) {
+    struct DateStamp ds;
+    DateStamp(&ds);
+    return (ds.ds_Days % 20) * 86400000 + ds.ds_Minute * 60000 + ds.ds_Tick * 20;
+}
+
+static BOOL _dash_net_cached(STRPTR host, struct in_addr *addr) {
+    LONG i;
+    for (i = 0; i < _DASH_NET_CACHE; i++)
+        if (_dash_net_cache_host[i] && !strcmp((char *)_dash_net_cache_host[i], (char *)host)) {
+            *addr = _dash_net_cache_addr[i];
+            return TRUE;
+        }
+    return FALSE;
+}
+
+static void _dash_net_remember(STRPTR host, struct in_addr addr) {
+    LONG n = strlen((char *)host) + 1;
+    STRPTR copy = (STRPTR)AllocVec(n, MEMF_ANY);
+    if (!copy) return;
+    CopyMem(host, copy, n);
+    if (_dash_net_cache_host[_dash_net_cache_next]) FreeVec(_dash_net_cache_host[_dash_net_cache_next]);
+    _dash_net_cache_host[_dash_net_cache_next] = copy;
+    _dash_net_cache_addr[_dash_net_cache_next] = addr;
+    _dash_net_cache_next = (_dash_net_cache_next + 1) % _DASH_NET_CACHE;
+}
+
+/* The helper process: starts above the program's priority, so it takes its job before the
+   program goes on, and drops to the program's priority to wait for the name server */
+static void _dash_net_dns_proc(void) {
+    struct _DashDns *d = _dash_net_dns_next;
+    struct Library *SocketBase;
+    struct hostent *he;
+    SetTaskPri(FindTask(NULL), d->pri);
+    if ((SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) {
+        he = gethostbyname((STRPTR)d->host);
+        if (he && he->h_length == 4) {
+            memcpy(&d->addr, he->h_addr, 4);
+            d->ok = 1;
+        }
+        CloseLibrary(SocketBase);
+    }
+    Forbid();                      /* the program may only end once this process has gone */
+    d->done = 1;
+    if (d->abandoned) FreeVec(d);
+    _dash_net_dns_live--;
+}
+
+static struct _DashDns *_dash_net_dns_start(STRPTR host) {
+    struct Task *me = FindTask(NULL);
+    LONG n = strlen((char *)host);
+    struct _DashDns *d = (struct _DashDns *)AllocVec(sizeof(struct _DashDns) + n, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!d) return NULL;
+    CopyMem(host, d->host, n + 1);
+    d->pri = me->tc_Node.ln_Pri;
+    _dash_net_dns_next = d;
+    _dash_net_dns_live++;
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_net_dns_proc, NP_Name, (ULONG)"dash_dns",
+                           NP_Priority, d->pri + 1, NP_StackSize, 16384, TAG_DONE)) {
+        _dash_net_dns_live--;
+        FreeVec(d);
+        return NULL;
+    }
+    return d;
+}
+
+/* The helper of a lookup nobody waits for any more frees its job itself */
+static void _dash_net_dns_drop(struct _DashDns *d) {
+    if (!d) return;
+    Forbid();
+    if (d->done) FreeVec(d);
+    else d->abandoned = 1;
+    Permit();
+}
+
+/* At exit: the helpers run code of the program, which must stay loaded until they end */
+static void _dash_net_dns_wait(void) {
+    LONG i;
+    while (_dash_net_dns_live > 0) Delay(2);
+    for (i = 0; i < _DASH_NET_CACHE; i++)
+        if (_dash_net_cache_host[i]) { FreeVec(_dash_net_cache_host[i]); _dash_net_cache_host[i] = NULL; }
+}
+
+static LONG _dash_net_pending(LONG sock) {
+    LONG i;
+    for (i = 0; i < _dash_net_npend; i++) if (_dash_net_pend[i].sock == sock) return i;
+    return -1;
+}
+
+static void _dash_net_unpend(LONG i) {
+    _dash_net_pend[i] = _dash_net_pend[--_dash_net_npend];
+}
+
+/* connect() without waiting; FALSE (and the error) if it failed at once */
+static BOOL _dash_net_connect_begin(LONG i, struct in_addr addr) {
+    struct sockaddr_in sa;
+    LONG on = 1;
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons(_dash_net_pend[i].port);
+    sa.sin_addr = addr;
+    memset(sa.sin_zero, 0, sizeof(sa.sin_zero));
+    IoctlSocket(_dash_net_pend[i].sock, FIONBIO, (char *)&on);
+    _dash_net_pend[i].stage = 1;
+    if (connect(_dash_net_pend[i].sock, (struct sockaddr *)&sa, sizeof(sa)) < 0 && Errno() != EINPROGRESS) {
+        _dash_net_err = "conexión rechazada";
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* Starts a TCP connection to host:port and returns at once: the socket, or -1. net_connect_poll
+   says when it is connected; timeout_ms for the lookup and the same again to connect */
+static LONG _dash_net_connect_start(STRPTR host, LONG port, LONG timeout_ms) {
+    struct in_addr addr;
+    LONG sock, i;
+    if (!host || !_dash_net_init()) return -1;
+    if (_dash_net_npend == _DASH_NET_PENDING) { _dash_net_err = "demasiadas conexiones a la vez"; return -1; }
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    i = _dash_net_npend++;
+    _dash_net_pend[i].sock = sock;
+    _dash_net_pend[i].port = port;
+    _dash_net_pend[i].timeout = timeout_ms;
+    _dash_net_pend[i].deadline = _dash_net_now() + timeout_ms;
+    _dash_net_pend[i].dns = NULL;
+    _dash_net_pend[i].stage = 0;
+    addr.s_addr = inet_addr(host);
+    if (addr.s_addr != INADDR_NONE || _dash_net_cached(host, &addr)) {
+        if (!_dash_net_connect_begin(i, addr)) { _dash_net_unpend(i); CloseSocket(sock); return -1; }
+        return sock;
+    }
+    if (!(_dash_net_pend[i].dns = _dash_net_dns_start(host))) {
+        _dash_net_err = "no se puede buscar el servidor";
+        _dash_net_unpend(i);
+        CloseSocket(sock);
+        return -1;
+    }
+    return sock;
+}
+
+/* 1 connected (the socket waits again as net_connect's), 0 not yet, -1 failed: the socket is
+   closed and net_error() says why */
+static LONG _dash_net_connect_poll(LONG sock) {
+    LONG i = _dash_net_pending(sock), err = 0, off = 0, r;
+    socklen_t len = sizeof(err);
+    struct _DashDns *d;
+    if (i < 0) return sock >= 0 ? 1 : -1;
+    if (_dash_net_pend[i].stage == 0) {
+        d = _dash_net_pend[i].dns;
+        if (!d->done) {
+            if (_dash_net_now() - _dash_net_pend[i].deadline < 0) return 0;
+            _dash_net_err = "tiempo agotado buscando el servidor";
+            _dash_net_dns_drop(d);
+            goto failed;
+        }
+        _dash_net_pend[i].dns = NULL;
+        if (!d->ok) { FreeVec(d); _dash_net_err = "no se encuentra el servidor"; goto failed; }
+        _dash_net_remember(d->host, d->addr);
+        _dash_net_pend[i].deadline = _dash_net_now() + _dash_net_pend[i].timeout;
+        if (!_dash_net_connect_begin(i, d->addr)) { FreeVec(d); goto failed; }
+        FreeVec(d);
+    }
+    r = _dash_net_select(sock, TRUE, 0);
+    if (r == 0) {
+        if (_dash_net_now() - _dash_net_pend[i].deadline < 0) return 0;
+        _dash_net_err = "tiempo agotado al conectar";
+        goto failed;
+    }
+    if (r < 0 || getsockopt(sock, SOL_SOCKET, SO_ERROR, &err, &len) < 0 || err) {
+        _dash_net_err = "conexión rechazada";
+        goto failed;
+    }
+    IoctlSocket(sock, FIONBIO, (char *)&off);
+    _dash_net_unpend(i);
+    return 1;
+failed:
+    _dash_net_unpend(i);
+    CloseSocket(sock);
+    return -1;
+}
+
+/* What a connection of net_connect_start is doing: 0 looking the name up, 1 connecting,
+   2 connected (or not one of those) */
+static LONG _dash_net_connect_stage(LONG sock) {
+    LONG i = _dash_net_pending(sock);
+    return i < 0 ? 2 : _dash_net_pend[i].stage;
+}
+
 static void _dash_net_close(LONG sock) {
+    LONG i = _dash_net_pending(sock);
+    if (i >= 0) {                 /* still opening: forget it */
+        _dash_net_dns_drop(_dash_net_pend[i].dns);
+        _dash_net_unpend(i);
+    }
     if (sock >= 0 && SocketBase) CloseSocket(sock);
 }
 
@@ -1926,6 +2148,8 @@ static BOOL _dash_tls_open = FALSE;
 static SSL_CTX *_dash_tls_ctx = NULL;
 #define _DASH_TLS_MAX 16
 static SSL *_dash_tls_ssl[_DASH_TLS_MAX];
+static LONG _dash_tls_deadline[_DASH_TLS_MAX];   /* handshake of tls_connect_start until then */
+static BOOL _dash_tls_shaking[_DASH_TLS_MAX];
 
 static BOOL _dash_tls_init(void) {
     UBYTE seed[64];
@@ -1993,6 +2217,55 @@ static SSL *_dash_tls_get(LONG t) {
     return (t >= 0 && t < _DASH_TLS_MAX) ? _dash_tls_ssl[t] : NULL;
 }
 
+/* The same as tls_connect without waiting for the handshake (dashweb D36): the connection or
+   -1; tls_connect_poll goes on with it while the socket does not wait */
+static LONG _dash_tls_connect_start(LONG sock, STRPTR host, LONG timeout_ms) {
+    LONG slot, on = 1;
+    SSL *ssl;
+    if (sock < 0 || !host || !_dash_tls_init()) return -1;
+    for (slot = 0; slot < _DASH_TLS_MAX && _dash_tls_ssl[slot]; slot++) ;
+    if (slot == _DASH_TLS_MAX) { _dash_net_err = "demasiadas conexiones TLS"; return -1; }
+    ssl = SSL_new(_dash_tls_ctx);
+    if (!ssl) { _dash_net_err = "error de TLS"; return -1; }
+    IoctlSocket(sock, FIONBIO, (char *)&on);
+    SSL_set_fd(ssl, sock);
+    SSL_set_tlsext_host_name(ssl, host);
+    SSL_set1_host(ssl, (char *)host);
+    SSL_set_connect_state(ssl);
+    _dash_tls_ssl[slot] = ssl;
+    _dash_tls_shaking[slot] = TRUE;
+    _dash_tls_deadline[slot] = _dash_net_now() + timeout_ms;
+    return slot;
+}
+
+/* 1 done (the socket waits again), 0 not yet, -1 failed: the TLS connection is freed (the socket
+   stays open) and net_error() says why */
+static LONG _dash_tls_connect_poll(LONG t) {
+    SSL *ssl = _dash_tls_get(t);
+    LONG r, e, off = 0;
+    long v;
+    if (!ssl) return -1;
+    if (!_dash_tls_shaking[t]) return 1;
+    r = SSL_connect(ssl);
+    if (r == 1) {
+        IoctlSocket(SSL_get_fd(ssl), FIONBIO, (char *)&off);
+        _dash_tls_shaking[t] = FALSE;
+        return 1;
+    }
+    e = SSL_get_error(ssl, r);
+    if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) {
+        if (_dash_net_now() - _dash_tls_deadline[t] < 0) return 0;
+        _dash_net_err = "tiempo agotado al negociar TLS";
+    } else {
+        v = SSL_get_verify_result(ssl);
+        _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
+    }
+    SSL_free(ssl);
+    _dash_tls_ssl[t] = NULL;
+    _dash_tls_shaking[t] = FALSE;
+    return -1;
+}
+
 static LONG _dash_tls_send_buffer(LONG t, APTR data, LONG length) {
     SSL *ssl = _dash_tls_get(t);
     LONG done = 0, n;
@@ -2040,9 +2313,10 @@ static STRPTR _dash_tls_recv(LONG t, LONG max, LONG timeout_ms) {
 static void _dash_tls_close(LONG t) {
     SSL *ssl = _dash_tls_get(t);
     if (!ssl) return;
-    SSL_shutdown(ssl);
+    if (!_dash_tls_shaking[t]) SSL_shutdown(ssl);
     SSL_free(ssl);
     _dash_tls_ssl[t] = NULL;
+    _dash_tls_shaking[t] = FALSE;
 }
 
 """

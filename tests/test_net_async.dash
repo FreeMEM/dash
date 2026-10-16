@@ -1,0 +1,63 @@
+# Test: connections that open without waiting (dashweb D36). The name is looked up in a helper
+# process, so the program goes on (net_connect_stage 0); a name found before is not looked up
+# again (stage 1 at once). The runner's echo server on 127.0.0.1:40831 answers "eco: <line>".
+# emu-net: 40831
+# memcheck
+# expect-out: buscando
+# expect-out: conectado
+# expect-out: eco: hola async
+# expect-out: conectando
+# expect-out: conectado otra vez
+# expect-out: no existe: no se encuentra el servidor
+# expect-out: rechazada: conexión rechazada
+# expect-out: cerrada sin esperar
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func abrir(s: Int) -> Int
+    r = net_connect_poll(s)
+    while r == 0
+        time_delay(1)
+        r = net_connect_poll(s)
+    end
+    return r
+end
+
+Main
+    s = net_connect_start("localhost", 40831, 5000)
+    if net_connect_stage(s) == 0
+        Print "buscando"
+    end
+    if abrir(s) == 1
+        Print "conectado"
+    end
+    net_send(s, "hola async\r\n")
+    respuesta = ""
+    trozo = net_recv(s, 64, 5000)
+    while trozo != nil
+        respuesta = respuesta + trozo
+        trozo = net_recv(s, 64, 5000)
+    end
+    Print str_trim(respuesta)
+    net_close(s)
+
+    s2 = net_connect_start("localhost", 40831, 5000)
+    if net_connect_stage(s2) == 1
+        Print "conectando"
+    end
+    if abrir(s2) == 1
+        Print "conectado otra vez"
+    end
+    net_close(s2)
+
+    s3 = net_connect_start("nadie.invalid", 80, 5000)
+    if abrir(s3) == -1
+        Print "no existe: " + net_error()
+    end
+    s4 = net_connect_start("127.0.0.1", 1, 3000)
+    if abrir(s4) == -1
+        Print "rechazada: " + net_error()
+    end
+    s5 = net_connect_start("otro.invalid", 80, 5000)
+    net_close(s5)
+    Print "cerrada sin esperar"
+end

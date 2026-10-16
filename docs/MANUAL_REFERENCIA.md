@@ -1607,6 +1607,29 @@ else
 end
 ```
 
+**Sin esperar.** `net_connect` espera a que el nombre se encuentre y a que la conexion se haga.
+Un programa con ventanas puede no esperar: `net_connect_start` busca el nombre en otro proceso
+(la pila TCP/IP no tiene una consulta DNS que no espere) y conecta sin bloquear;
+`net_connect_poll` sigue cada vez que se le llama (en cada tic de un temporizador). Los nombres
+encontrados se recuerdan (los ocho ultimos). Al salir, el programa espera a las consultas que
+sigan en marcha.
+
+| Funcion | Que hace |
+|---|---|
+| `net_connect_start(host, puerto, ms)` | Empieza y vuelve en seguida: el socket, o -1. `ms` para buscar el nombre y otra vez para conectar |
+| `net_connect_poll(s)` | 1 conectado, 0 todavia no, -1 fallo (el socket queda cerrado; `net_error()`) |
+| `net_connect_stage(s)` | 0 buscando el nombre, 1 conectando, 2 hecho |
+
+```
+s = net_connect_start("ejemplo.org", 80, 10000)
+r = net_connect_poll(s)
+while r == 0
+    ... la interfaz sigue; r = net_connect_poll(s) en el siguiente tic
+end
+```
+
+`net_close` sobre un socket que aun se esta abriendo lo deja sin terminar.
+
 ### TLS (HTTPS) con AmiSSL
 
 Sobre un socket de `net_connect`, `tls_connect` negocia TLS con AmiSSL 5 y comprueba que el
@@ -1620,6 +1643,8 @@ Para compilar hacen falta las cabeceras del SDK: `tools/get_amissl.sh` las desca
 | `tls_send(t, texto)`, `tls_send_buffer(t, buf, n)` | Como `net_send` |
 | `tls_recv(t, max, ms)`, `tls_recv_buffer(t, buf, max, ms)` | Como `net_recv` |
 | `tls_close(t)` | Termina TLS (el socket se cierra despues con `net_close`) |
+| `tls_connect_start(socket, host, ms)` | Como `tls_connect` sin esperar a la negociacion: la conexion o -1 |
+| `tls_connect_poll(t)` | 1 negociada (certificado comprobado), 0 todavia no, -1 fallo (`t` se libera; el socket sigue abierto) |
 
 ```
 s = net_connect("ejemplo.org", 443, 10000)

@@ -1,0 +1,58 @@
+# Test: TLS handshake without waiting (dashweb D36), over a connection of net_connect_start. The
+# runner's echo server on 127.0.0.1:40871 speaks TLS with a certificate for localhost and
+# 127.0.0.1 signed by the test CA in the emulated AmiSSL:Certs.
+# emu-net-tls: 40871
+# emu-needs: amisslmaster.library
+# memcheck
+# expect-out: tls
+# expect-out: eco: hola tls
+# expect-out: nombre: hostname mismatch
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func conectar(host: String) -> Int
+    s = net_connect_start(host, 40871, 5000)
+    r = net_connect_poll(s)
+    while r == 0
+        time_delay(1)
+        r = net_connect_poll(s)
+    end
+    if r < 0
+        return -1
+    end
+    return s
+end
+
+func negociar(t: Int) -> Int
+    r = tls_connect_poll(t)
+    while r == 0
+        time_delay(1)
+        r = tls_connect_poll(t)
+    end
+    return r
+end
+
+Main
+    s = conectar("localhost")
+    t = tls_connect_start(s, "localhost", 5000)
+    if negociar(t) == 1
+        Print "tls"
+        tls_send(t, "hola tls\n")
+        respuesta = ""
+        trozo = tls_recv(t, 100, 5000)
+        while trozo != nil
+            respuesta = respuesta + trozo
+            trozo = tls_recv(t, 100, 5000)
+        end
+        Print str_trim(respuesta)
+        tls_close(t)
+    else
+        Print "fallo: " + net_error()
+    end
+    net_close(s)
+    s2 = conectar("127.0.0.1")
+    t2 = tls_connect_start(s2, "otro.nombre", 5000)
+    if negociar(t2) == -1
+        Print "nombre: " + net_error()
+    end
+    net_close(s2)
+end
