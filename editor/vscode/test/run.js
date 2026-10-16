@@ -219,6 +219,34 @@ async function modelTests() {
     });
 }
 
+
+// --- "Ver en Amiga" (amigaPreview.js) ----------------------------------------------
+async function previewTests() {
+    const P = require('../amigaPreview.js');
+    await check('preview: program opens the window and waits', () => {
+        const prog = P.previewProgram('Principal');
+        assert.match(prog, /import "preview.dashui"/);
+        assert.match(prog, /v = Principal_create\(\)/);
+        assert.match(prog, /mui_window_open\(v.window\)/);
+        assert.throws(() => P.previewProgram('mal nombre'), /bad window name/);
+    });
+    await check('preview: emu_run arguments', () => {
+        const a = P.emuArgs('/d', '/t/p.dash', '/t/s.png', { kickstart: '/k.rom', system: '/sys', shotAt: 12 });
+        assert.deepStrictEqual(a, ['/d/tools/emu_run.py', '--autoclose', '22', '--timeout', '180',
+            '--screenshot', '12', '/t/s.png', '--kickstart', '/k.rom', '--system', '/sys', '/t/p.dash']);
+    });
+    // The real thing (FS-UAE, about 30 s): only with DASH_PREVIEW_EMU=1
+    if (process.env.DASH_PREVIEW_EMU) {
+        await check('preview: real window in FS-UAE gives a PNG', async () => {
+            const repo = path.resolve(__dirname, '..', '..', '..');
+            const { png } = await P.runPreview({ dashDir: repo, windowName: 'Prueba',
+                dashuiText: fs.readFileSync(path.join(repo, 'tests', 'lib', 'ventana_prueba.dashui'), 'utf8'),
+                kickstart: process.env.DASH_KICKSTART, system: process.env.DASH_EMU_SYS_MUI });
+            assert.strictEqual(png.slice(1, 4).toString(), 'PNG');
+        });
+    }
+}
+
 // --- extension.js with a fake vscode -------------------------------------------
 async function extensionTests() {
     const sent = [];
@@ -270,6 +298,12 @@ async function extensionTests() {
         const last = sent[sent.length - 1];
         assert(last.startsWith(`cd '${repo}' && mkdir -p`), last);
     });
+    await check('extension: Ver en Amiga without a Dash folder says so', async () => {
+        const said = [];
+        await ext.showOnAmiga({ fileName: '/', getText: () => '{}' }, 'Principal',
+                              { postMessage: (m) => said.push(m) });
+        assert.match(said[said.length - 1].error, /dash\.path/);
+    });
     await check('extension: no .dash file open', async () => {
         fakeVscode.window.activeTextEditor = null;
         await registered['dash.runInEmulator']();
@@ -280,6 +314,7 @@ async function extensionTests() {
 (async () => {
     await grammarTests();
     await modelTests();
+    await previewTests();
     await extensionTests();
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);

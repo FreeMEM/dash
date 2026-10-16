@@ -176,7 +176,7 @@ repos, sesiones de Claude y Antigravity).
       emulador". Empaquetado con `vsce` instalado en un `node_modules` local (no global).
 - [x] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
 - [x] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
-- [ ] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
+- [x] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
 - [ ] 24. **Ejemplo y documentación.** La ventana del navegador (tarea 10) hecha con el editor.
 
 ## Bitácora
@@ -666,3 +666,15 @@ Formato:
   servidor local que mande `Cache-Control: no-store` (en el scratchpad).
 - Corregido el `CLAUDE.md` local: `expect-c` no traduce `\n` (solo `expect-no-c`); aviso de la sesión de dashweb.
 - Tests: `npm test` 22/22 (el cambio es solo del webview).
+
+### 2026-10-16 — Tarea 23 (vista real: "Ver en Amiga")
+- Hecho: `editor/vscode/amigaPreview.js` escribe en una carpeta temporal el `.dashui` del editor (guardado o no) y un
+  programa mínimo que abre esa ventana y espera, lo ejecuta con `tools/emu_run.py --autoclose --screenshot` y devuelve la
+  captura en PNG; también se usa desde Node (`node amigaPreview.js <dash> <f.dashui> <Ventana> <out.png>`). El botón "Ver
+  en Amiga" del editor lo lanza (uno a la vez), muestra el estado y la captura debajo de la vista aproximada. Ajuste
+  `dash.emulator.muiSystem` (o `DASH_EMU_SYS_MUI`) y `dash.emulator.kickstart` (o `DASH_KICKSTART`).
+- Probado: desde Node con FS-UAE de verdad, `tests/lib/ventana_prueba.dashui` → captura de la ventana MUI real (campo,
+  botón, pestañas, texto con comillas) en 31 s; `npm test` 26/26 (con `DASH_PREVIEW_EMU=1` además la prueba en FS-UAE);
+  en Chromium el botón manda la petición y el webview muestra estado y captura (640 x 256).
+- No probado: dentro de VS Code de verdad.
+- Tests: `npm test` 26/26.

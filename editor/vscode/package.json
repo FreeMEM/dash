@@ -91,6 +91,11 @@
           "type": "number",
           "default": 0,
           "description": "Segundos tras los que el programa se cierra solo en el emulador (0: no)."
+        },
+        "dash.emulator.muiSystem": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de Workbench con MUI para \"Ver en Amiga\" (DASH_EMU_SYS_MUI; se hacen con tools/emu_sys_mui.sh)."
         }
       }
     },

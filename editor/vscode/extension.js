@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { DashUIEditorProvider } = require('./dashuiEditor');
 const DashUI = require('./media/model');
+const { runPreview } = require('./amigaPreview');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -79,6 +80,30 @@ async function run(kind) {
         vscode.workspace.getConfiguration('dash.emulator').get('autoclose'))}`);
 }
 
+/** "Ver en Amiga": the window in FS-UAE with MUI, its picture shown in the editor */
+let previewRunning = false;
+async function showOnAmiga(document, windowName, webview) {
+    const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot' }, m));
+    if (previewRunning) { say({ status: 'Ya hay una vista en marcha…' }); return; }
+    const dashDir = findDash(document.fileName);
+    if (!dashDir) { say({ error: 'No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".' }); return; }
+    const config = vscode.workspace.getConfiguration('dash.emulator');
+    previewRunning = true;
+    say({ status: `Compilando "${windowName}" y arrancando el emulador (unos 30 s)…` });
+    try {
+        const { png } = await runPreview({
+            dashDir, dashuiText: document.getText(), windowName,
+            kickstart: config.get('kickstart') || process.env.DASH_KICKSTART,
+            system: config.get('muiSystem') || process.env.DASH_EMU_SYS_MUI,
+        });
+        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el Amiga emulado` });
+    } catch (e) {
+        say({ error: 'No se pudo: ' + e.message });
+    } finally {
+        previewRunning = false;
+    }
+}
+
 /** New .dashui file with one empty window, opened in the visual editor */
 async function newWindowFile() {
     const uri = await vscode.window.showSaveDialog({ filters: { 'Ventanas MUI': ['dashui'] } });
@@ -92,11 +117,10 @@ function activate(context) {
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),
         vscode.commands.registerCommand('dash.newWindowFile', newWindowFile),
-        DashUIEditorProvider.register(context, (document, windowName) =>
-            vscode.window.showInformationMessage(`Ver en Amiga: ${windowName} (pendiente, tarea 23)`)),
+        DashUIEditorProvider.register(context, showOnAmiga),
     );
 }
 
 function deactivate() {}
 
-module.exports = { activate, deactivate, compileCommand, runCommand, findDash };
+module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga };
