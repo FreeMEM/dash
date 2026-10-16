@@ -9,9 +9,16 @@
 #     a1; the list literal [Punto(1, 1), L[2], L[0]] got L[0] as 0.
 #   - "e" alone (remove dead assignments and "redundant" loads): a sum read a stale
 #     value (139 instead of 144, seed 12).
-# The default is "abcefhilmnprsz0"; without "e" and "r" the benchmarks keep their
+#   - "s" (removes a copy between registers when the copied one looks unused): in dashweb's
+#     lib/maqueta.dash (_absoluto, inlined in _bloque_en) "if w > cw then w = cw" became
+#     "move.l d2,(-172,a5)" instead of "move.l d2,d7 / move.l d7,(-172,a5)", but d7 (w) was
+#     still read after the jge that follows (it tests the flags of that store): an absolute
+#     box with right: 0 came out 1 pixel wide (test_maqueta_cajas of dashweb, 2026-10-16;
+#     a Print after the call hid it). No small Dash case found: 240 random programs, none
+#     changed by "s".
+# The default is "abcefhilmnprsz0"; without "e", "r" and "s" the benchmarks keep their
 # speed and size.
-BBB = "-fbbb=abcfhilmnpsz0"
+BBB = "-fbbb=abcfhilmnpz0"
 # Address 0 is readable memory on an Amiga, and nil is C NULL. Without these, GCC
 # turns a read through a pointer it knows is NULL ("var n: Nodo = nil" then n.valor)
 # into a trap instruction (the program crashes instead of reading garbage), and drops
