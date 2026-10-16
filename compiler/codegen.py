@@ -10331,7 +10331,9 @@ static {ret_type} {method_name}({params_str}) {{
         args = []
         for i, arg in enumerate(node.arguments):
             code = self._generate_expression(arg)
-            if foreign is not None:
+            if foreign is not None and getattr(foreign, "borrows", False):
+                code = self._lend(arg, code)        # @native(borrow): only during the call (D26)
+            elif foreign is not None:
                 code = self._escape_any(arg, code)  # C code may keep the pointer
             elif func:
                 code = self._lend(arg, code)

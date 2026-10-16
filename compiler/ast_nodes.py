@@ -615,6 +615,7 @@ class NativeFunc(ASTNode):
     return_type: Optional[str] = None
     c_code: str = ""  # Raw C code
     location: Optional[SourceLocation] = None
+    borrows: bool = False  # @native(borrow): arguments lent for the call, not kept (dashweb D26)
 
 
 # === Program Structure ===

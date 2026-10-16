@@ -1,0 +1,37 @@
+# Test: @native(borrow) (dashweb D26). A plain @native may keep what it gets, so its String and
+# struct arguments escape (kept until the program ends). One marked (borrow) only uses them
+# during the call: they are lent like to a Dash function and freed as usual (memcheck: 0 alive).
+# memcheck
+# expect-c: static LONG largo(STRPTR s)
+# expect-out: 16 7
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Caja
+    valor: Int
+    nombre: String
+end
+
+@native(borrow) func largo(s: String) -> Int
+"""
+    return (LONG)strlen((char *)s);
+"""
+end
+
+@native(borrow) func valor(c: Caja) -> Int
+"""
+    return c->valor;
+"""
+end
+
+func probar() -> String
+    t = ""
+    for i in (1..2)
+        t = t + "texto " + i
+    end
+    c = Caja(7, t)
+    return "" + largo(t + "!!") + " " + valor(c)
+end
+
+Main
+    Print probar()
+end

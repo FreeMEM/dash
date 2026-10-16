@@ -2657,7 +2657,11 @@ que puede borrar los registros que la macro de la libreria ya habia cargado. Cal
 una variable y pasa la variable. Los builtins de Dash ya lo hacen asi.
 
 Un String que un `@native` guarda o devuelve al sistema queda fuera del control de Dash: se copia y
-se libera al salir del programa (ver [Gestion de Memoria](#17-gestion-de-memoria)).
+se libera al salir del programa (ver [Gestion de Memoria](#17-gestion-de-memoria)). Lo mismo un struct
+o una lista que recibe: se retiene hasta salir. Si el C solo usa sus argumentos durante la llamada,
+`@native(borrow) func f(s: String) ...` se los presta como a una funcion Dash y se liberan como siempre
+(si el C quiere quedarse un objeto, lo retiene el mismo con `_dash_retain` y lo suelta con
+`_dash_release`).
 
 ### C de fuera: @link, @header y @c
 

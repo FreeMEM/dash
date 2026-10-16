@@ -46,6 +46,10 @@ class _NativeCode(str):
     """C code from a native_body, kept apart from the return type string."""
 
 
+class _NativeBorrow:
+    """Marker of @native(borrow)."""
+
+
 class DashASTBuilder(Transformer):
     """
     Transforms Lark parse tree into Dash AST nodes.
@@ -308,8 +312,13 @@ class DashASTBuilder(Transformer):
 
     # === Native Functions (inline C code) ===
 
+    def native_borrow(self, items):
+        return _NativeBorrow()
+
     def native_func(self, items) -> str:
         """Build a native function with inline C code."""
+        borrows = any(isinstance(i, _NativeBorrow) for i in items)
+        items = [i for i in items if not isinstance(i, _NativeBorrow)]
         name = items[0].value if isinstance(items[0], Token) else str(items[0])
         params = []
         return_type = None
@@ -328,7 +337,8 @@ class DashASTBuilder(Transformer):
             params=params,
             return_type=return_type,
             c_code=c_code,
-            location=self._get_location(items[0])
+            location=self._get_location(items[0]),
+            borrows=borrows
         )
         self._native_funcs.append(native)
         return ""

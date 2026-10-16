@@ -88,7 +88,8 @@ end                         end
 ```
 
 C code: `@native func f(x: Int) -> Int """ return x; """ end` (a function in C), `@extern("x.library")`,
-`@header "#include <x.h>"`, `@link "lib/x.c"` (a C source, object or library linked with the program; its
+`@native(borrow) func ...` (the C only uses its arguments during the call: they are not kept until
+exit), `@header "#include <x.h>"`, `@link "lib/x.c"` (a C source, object or library linked with the program; its
 directory goes to `-I`), `@c """ ... """ end` (C at top level, after the Dash prototypes: callbacks).
 
 ## Structs with Methods

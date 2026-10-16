@@ -60,7 +60,9 @@ dash_grammar_minimal = r"""
     extern_func: "@extern" "(" ESCAPED_STRING ")" "func" ID "(" param_list? ")" return_type?
 
     // Native C code block
-    native_func: "@native" "func" ID "(" param_list? ")" return_type? native_body "end"
+    native_func: "@native" native_borrow? "func" ID "(" param_list? ")" return_type? native_body "end"
+    // @native(borrow): the C only uses its arguments during the call (dashweb D26)
+    native_borrow: "(" "borrow" ")"
     native_body: NATIVE_CODE
     NATIVE_CODE: /\"\"\"[\s\S]*?\"\"\"/
 

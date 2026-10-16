@@ -6,7 +6,9 @@
 #
 #   tools/get_amissl.sh
 #   tools/emu_sys_amissl.sh ~/.cache/dash-emu/sys31ssl
-#   export DASH_EMU_SYS_NET=~/.cache/dash-emu/sys31ssl
+#   export DASH_EMU_SYS_SSL=~/.cache/dash-emu/sys31ssl
+#   tools/emu_sys_amissl.sh ~/.cache/dash-emu/sys32ssl ~/.cache/dash-emu/sys32
+#   export DASH_EMU_SYS_32_SSL=~/.cache/dash-emu/sys32ssl      # for --emu-32
 #
 # The test CA is made once in ~/.cache/dash-amissl/testca (openssl on the PC).
 set -e
