@@ -1,0 +1,124 @@
+{
+  "name": "dash-mui-editor",
+  "displayName": "Dash (Amiga) and MUI editor",
+  "description": "Dash language support for Amiga development: syntax highlighting, compile and run in FS-UAE, and a visual editor for MUI windows (.dashui).",
+  "version": "0.1.0",
+  "publisher": "FreeMEM",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "dash",
+        "aliases": [
+          "Dash",
+          "dash"
+        ],
+        "extensions": [
+          ".dash"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "json",
+        "extensions": [
+          ".dashui"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "dash",
+        "scopeName": "source.dash",
+        "path": "./syntaxes/dash.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.c.dash": "c"
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "dash.compile",
+        "title": "Dash: Compilar",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.runInEmulator",
+        "title": "Dash: Ejecutar en emulador",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.newWindowFile",
+        "title": "Dash: Nuevo fichero de ventanas MUI (.dashui)",
+        "category": "Dash"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "dash.runInEmulator",
+          "when": "resourceLangId == dash",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Dash",
+      "properties": {
+        "dash.path": {
+          "type": "string",
+          "default": "",
+          "description": "Carpeta del compilador Dash (la que tiene el script ./dash). Vacío: se busca subiendo desde el fichero."
+        },
+        "dash.emulator.kickstart": {
+          "type": "string",
+          "default": "",
+          "description": "ROM de Kickstart para FS-UAE (DASH_KICKSTART). Vacío: la variable de entorno o la ROM AROS."
+        },
+        "dash.emulator.system": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de Workbench para el emulador (DASH_EMU_SYS; para MUI, DASH_EMU_SYS_MUI)."
+        },
+        "dash.emulator.autoclose": {
+          "type": "number",
+          "default": 0,
+          "description": "Segundos tras los que el programa se cierra solo en el emulador (0: no)."
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "dash.dashuiEditor",
+        "displayName": "Editor de ventanas MUI",
+        "selector": [
+          {
+            "filenamePattern": "*.dashui"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node test/run.js",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.2",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FreeMEM/dash.git",
+    "directory": "editor/vscode"
+  }
+}

@@ -1,0 +1,37 @@
+# A window made with the visual editor (.dashui, docs/MUI_EDITOR.md) imported as a
+# module: Prueba_create() builds it and returns a struct with its named objects;
+# events set in the .dashui arrive in mui_wait_event.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_register_begin(
+# expect-out: ventana abierta
+# expect-out: estado: Listo "ya"
+# expect-out: url: http://aminet.net/
+# expect-out: evento 12
+# expect-out: evento 13, pestaña 1
+# expect-out: fin
+
+import "lib/ventana_prueba.dashui"
+
+Main
+    if mui_app_begin("Editor", "DASHUI") == 0
+        Print "sin MUI"
+    else
+        v = Prueba_create()
+        if mui_window_open(v.window)
+            Print "ventana abierta"
+        end
+        t = mui_get_text(v.estado)
+        Print "estado: #{t}"
+        t = mui_get_text(v.url)
+        Print "url: #{t}"
+        mui_press(v.ir)
+        ev = mui_wait_event()
+        Print "evento #{ev}"
+        mui_set_value(v.pestanas, 1)
+        ev = mui_wait_event()
+        p = mui_get_value(v.pestanas)
+        Print "evento #{ev}, pestaña #{p}"
+        mui_app_end()
+        Print "fin"
+    end
+end

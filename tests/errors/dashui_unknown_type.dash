@@ -1,0 +1,6 @@
+# expect: unknown object type 'boton'
+import "../lib/ventana_mala.dashui"
+
+Main
+    v = Mala_create()
+end

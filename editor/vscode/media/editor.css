@@ -1,0 +1,56 @@
+/* .dashui editor: VS Code colours for the tool panes, an Amiga/MUI look for the preview */
+body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif); font-size: 13px;
+       color: var(--vscode-foreground, #ccc); background: var(--vscode-editor-background, #1e1e1e); }
+#layout { display: grid; grid-template-columns: 160px 1fr 260px;
+          grid-template-rows: auto minmax(100px, 32vh) 1fr auto; height: 100vh; }
+#palette { grid-column: 1; grid-row: 2 / 4; }
+#tree { grid-column: 2; grid-row: 2; border-bottom: 1px solid var(--vscode-panel-border, #444); }
+#props { grid-column: 3; grid-row: 2 / 4; }
+#windows { grid-column: 1 / 4; display: flex; gap: 4px; padding: 4px; border-bottom: 1px solid var(--vscode-panel-border, #444); }
+#windows button.active { font-weight: bold; text-decoration: underline; }
+#windows #amiga { margin-left: auto; }
+#palette, #tree, #props { overflow: auto; padding: 4px; border-right: 1px solid var(--vscode-panel-border, #444); }
+.palette-item { padding: 3px 6px; margin: 2px 0; cursor: grab; border-radius: 3px;
+                background: var(--vscode-button-secondaryBackground, #333); }
+.palette-item.group { font-style: italic; }
+.tree-row { padding: 2px 4px; cursor: pointer; white-space: nowrap; }
+.tree-row.selected { background: var(--vscode-list-activeSelectionBackground, #094771); }
+.tree-row.drop { outline: 1px dashed var(--vscode-focusBorder, #07f); }
+.prop { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
+.prop label { width: 80px; flex: none; }
+.prop input[type=text], .prop input[type=number], .prop input:not([type]) { flex: 1; min-width: 0; }
+.prop.item { padding-left: 16px; }
+.prop .key { width: 40px; flex: none; } .prop .num { width: 60px; flex: none; }
+#preview-pane { grid-column: 2; grid-row: 3; padding: 8px; background: #888; overflow: auto; }
+#problems { grid-column: 1 / 4; padding: 2px 6px; color: var(--vscode-errorForeground, #f66); min-height: 1em; }
+#error { display: none; padding: 12px; color: var(--vscode-errorForeground, #f66); }
+body.invalid #layout { display: none; } body.invalid #error { display: block; }
+#amiga-shot { image-rendering: pixelated; max-width: 100%; display: block; margin-top: 6px; }
+
+/* Preview: an approximation of MUI (grey, bevelled), not a picture of the real thing */
+.mui-window { display: inline-flex; flex-direction: column; min-width: 240px; background: #aaa; color: #000;
+              border: 2px solid #fff; border-right-color: #000; border-bottom-color: #000; font: 12px sans-serif; }
+.mui-window .titlebar { background: #6688bb; color: #fff; padding: 1px 6px; }
+.mui-window .menubar { background: #fff; padding: 1px 6px; display: flex; gap: 10px; }
+.mui-window > div:last-child, .mui-vgroup, .mui-scroll { display: flex; flex-direction: column; gap: 3px; padding: 3px; flex: 1; }
+.mui-hgroup { display: flex; flex-direction: row; gap: 3px; flex: 1; align-items: center; }
+.mui-columns { display: grid; grid-template-columns: auto 1fr; gap: 3px; flex: 1; }
+.mui-scroll { border: 1px inset #fff; overflow: hidden; max-height: 120px; }
+.mui-frame { border: 1px groove #fff; margin: 0; padding: 4px; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.mui-tabs { display: flex; flex-direction: column; flex: 1; }
+.mui-tabs .tabbar span { display: inline-block; padding: 1px 8px; border: 1px solid #fff; border-bottom: none; background: #999; }
+.mui-tabs .tabbar span.active { background: #aaa; }
+.mui-tabs .page { border: 1px solid #fff; padding: 3px; display: flex; flex-direction: column; flex: 1; }
+.mui-button { background: #aaa; border: 2px outset #ddd; padding: 1px 8px; }
+.mui-string { border: 2px inset #ddd; background: #aaa; }
+.mui-gauge { border: 2px inset #ddd; height: 12px; flex: 1; }
+.mui-gauge .fill { width: 40%; height: 100%; background: #6688bb; }
+.mui-list { border: 2px inset #ddd; background: #aaa; min-height: 40px; flex: 1; padding: 1px 3px; }
+.mui-canvas { border: 2px inset #ddd; background: #fff; flex: 1; }
+.mui-scrollbar { width: 14px; min-height: 40px; background: #999; border: 1px solid #fff; }
+.mui-image { border: 1px dashed #555; padding: 6px; }
+.mui-space { flex: 1; min-width: 8px; min-height: 8px; }
+.mui-balance { width: 4px; background: #888; align-self: stretch; }
+.mui-window .selected { outline: 2px solid #f60; outline-offset: 1px; }
+.mui-window .hidden { opacity: 0.35; }
+.mui-window .disabled { filter: grayscale(1) opacity(0.6); }

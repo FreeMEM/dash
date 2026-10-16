@@ -361,12 +361,17 @@ def run_multifile_test(test_file: Path) -> TestResult:
             from compiler.softfloat import softfloat_objects, uses_float
             softfloat = (softfloat_objects(gcc_path)
                          if any(uses_float(Path(f).read_text()) for f in c_files) else [])
+            from compiler.cflags import mui_flags
+            try:   # MUI SDK headers when a module uses MUI
+                mui = mui_flags(Path(f).read_text() for f in c_files)
+            except FileNotFoundError as e:
+                mui, error = [], str(e)
             build = subprocess.run(
-                [gcc_path, "-noixemul", "-O2", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}",
+                [gcc_path, "-noixemul", "-O2", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}", *mui,
                  "-L/opt/amiga/m68k-amigaos/lib", *c_files, *softfloat, "-o", str(out_dir / "a.out"), "-lm"],
                 capture_output=True, text=True, timeout=120
             )
-            if build.returncode != 0:
+            if build.returncode != 0 and not error:
                 error = build.stderr.strip()[:200]
     return TestResult(name=name, passed=error is None, transpile_ok=error is None,
                       compile_ok=error is None, error_message=error,

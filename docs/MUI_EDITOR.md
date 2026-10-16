@@ -12,7 +12,8 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
 2. **El compilador lo entiende directamente:** `import "ventana.dashui"` en un programa Dash. `compiler/main.py`, al
    resolver un import que acaba en `.dashui`, genera el código Dash (`compiler/dashui.py`) y lo compila como un módulo
    más. Ese código usa los builtins `mui_` (docs/MUI_DISEÑO.md); nada nuevo en el runtime.
-3. **Lo que genera:** por cada ventana, un `struct` con un campo por objeto con nombre y una función que la construye:
+3. **Lo que genera:** por cada ventana, un `struct` con un campo por objeto con nombre (más `window`) y una función
+   `<Ventana>_create()` que la construye (el nombre del struct a secas sería su constructor):
 
    ```ruby
    # ventana.dashui con una ventana "Principal" y objetos "url", "ir", "pagina"
@@ -20,7 +21,7 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
 
    Main
        mui_app_begin("Navegador", "NAVEGADOR")
-       v = Principal()              # crea la ventana y sus objetos; v.url, v.ir, v.pagina...
+       v = Principal_create()       # crea la ventana y sus objetos; v.url, v.ir, v.pagina...
        mui_on_press(v.ir, 1)
        mui_window_open(v.window)
        ...

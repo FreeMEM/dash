@@ -1,0 +1,6 @@
+{
+  "dashui": 1,
+  "windows": [
+    { "name": "Mala", "title": "Mala", "root": { "type": "vgroup", "children": [ { "type": "boton", "label": "x" } ] } }
+  ]
+}

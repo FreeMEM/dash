@@ -98,6 +98,19 @@ class DashCompiler:
         # Return first attempt for error message
         return os.path.normpath(os.path.join(self._base_dir, import_path))
 
+    @staticmethod
+    def _read_module(full_path: str) -> str:
+        """Source of an imported module; a .dashui (visual editor) becomes Dash code."""
+        with open(full_path, "r") as f:
+            source = f.read()
+        if full_path.endswith(".dashui"):
+            from compiler.dashui import generate, DashUIError
+            try:
+                source = generate(source, os.path.basename(full_path))
+            except DashUIError as e:
+                raise CompilationError(str(e), stage="import")
+        return source
+
     def _load_module(self, import_path: str) -> Program:
         """Load and parse a module file."""
         full_path = self._resolve_import_path(import_path)
@@ -114,8 +127,7 @@ class DashCompiler:
             print(f"  Loading module: {import_path}", file=sys.stderr)
 
         try:
-            with open(full_path, "r") as f:
-                source = f.read()
+            source = self._read_module(full_path)
         except FileNotFoundError:
             raise CompilationError(f"Import not found: {import_path}", stage="import")
         except IOError as e:
@@ -361,8 +373,7 @@ class DashCompiler:
                 dep_path = self._resolve_import_path(imp.path)
                 if dep_path not in modules:
                     try:
-                        with open(dep_path, "r") as f:
-                            source = f.read()
+                        source = self._read_module(dep_path)
                         dep_ast = self._parse_source(source)
                         collect_recursive(dep_ast, dep_path)
                     except FileNotFoundError:

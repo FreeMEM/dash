@@ -150,6 +150,7 @@ ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui
 mui_timer(500, 7)                       # in 500 ms mui_wait_event returns 7 (once; 0 ms cancels)
 ev = mui_wait_event_signals(mask)       # also returns 0 on one of those signals; mui_signals()
 mui_app_end()                           # also at exit
+import "win.dashui"                     # visual editor file: v = Main_create() (struct: v.window, named objects)
 ```
 
 ## Graphics Functions

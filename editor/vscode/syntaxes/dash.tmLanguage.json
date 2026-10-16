@@ -1,0 +1,103 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Dash",
+  "scopeName": "source.dash",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#native-block" },
+    { "include": "#string" },
+    { "include": "#annotation" },
+    { "include": "#declaration" },
+    { "include": "#keyword" },
+    { "include": "#type" },
+    { "include": "#constant" },
+    { "include": "#number" },
+    { "include": "#builtin" },
+    { "include": "#call" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "#(?!\\{).*$",
+      "name": "comment.line.number-sign.dash"
+    },
+    "native-block": {
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "name": "meta.embedded.block.c.dash",
+      "contentName": "source.c",
+      "patterns": [ { "include": "source.c" } ]
+    },
+    "string": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.dash",
+      "patterns": [
+        { "match": "\\\\(?:[\\\\\"nrt0]|[0-7]{1,3}|x[0-9A-Fa-f]{2})", "name": "constant.character.escape.dash" },
+        {
+          "begin": "#\\{",
+          "end": "\\}",
+          "name": "meta.interpolation.dash",
+          "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.dash" } },
+          "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.dash" } },
+          "patterns": [ { "match": "[A-Za-z_][A-Za-z0-9_.]*", "name": "variable.other.dash" } ]
+        }
+      ]
+    },
+    "annotation": {
+      "match": "@(native|extern|header)\\b",
+      "name": "storage.modifier.annotation.dash"
+    },
+    "declaration": {
+      "patterns": [
+        {
+          "match": "\\b(func)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "storage.type.function.dash" }, "2": { "name": "entity.name.function.dash" } }
+        },
+        {
+          "match": "\\b(struct|enum|Window)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "storage.type.dash" }, "2": { "name": "entity.name.type.dash" } }
+        },
+        {
+          "match": "\\b(const|var)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": { "1": { "name": "storage.modifier.dash" }, "2": { "name": "variable.other.constant.dash" } }
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        { "match": "\\b(if|elif|else|while|for|in|step|return|break|continue|end|fn)\\b", "name": "keyword.control.dash" },
+        { "match": "\\b(import|Main|EventLoop|On|Close|Key|Gadget|Menu|Stop|Print|Wait)\\b", "name": "keyword.other.dash" },
+        { "match": "\\b(and|or|not)\\b", "name": "keyword.operator.logical.dash" }
+      ]
+    },
+    "type": {
+      "match": "\\b(Int|Float|Fixed|String|Bool|Array|Pointer|Void|Func)\\b",
+      "name": "support.type.dash"
+    },
+    "constant": {
+      "match": "\\b(true|false|nil)\\b",
+      "name": "constant.language.dash"
+    },
+    "number": {
+      "patterns": [
+        { "match": "\\b0[xX][0-9A-Fa-f]+\\b", "name": "constant.numeric.hex.dash" },
+        { "match": "\\b0[bB][01]+\\b", "name": "constant.numeric.binary.dash" },
+        { "match": "\\b[0-9]+\\.[0-9]+\\b", "name": "constant.numeric.float.dash" },
+        { "match": "\\b[0-9]+\\b", "name": "constant.numeric.integer.dash" }
+      ]
+    },
+    "builtin": {
+      "match": "\\b(?:mui|ra|gt|gfx|menu|window|button|checkbox|slider|textfield|listview|cycle|radio|integer|palette|number|gadget|event|key|mouse|joy|sound|music|tone|file|dir|buffer|mem|time|random|sprite|bitmap|bob|copper|screen|rtg|fx|str|net)_[A-Za-z0-9_]+(?=\\s*\\()",
+      "name": "support.function.builtin.dash"
+    },
+    "call": {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*(?=\\s*\\()",
+      "name": "entity.name.function.call.dash"
+    },
+    "operator": {
+      "match": "==|!=|<=|>=|\\.\\.|[-+*/%<>=]",
+      "name": "keyword.operator.dash"
+    }
+  }
+}

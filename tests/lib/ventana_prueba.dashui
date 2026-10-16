@@ -1,0 +1,35 @@
+{
+  "dashui": 1,
+  "windows": [
+    {
+      "name": "Prueba",
+      "title": "Ventana del editor",
+      "id": 0,
+      "menus": [
+        { "title": "Proyecto", "items": [
+            { "label": "Acerca de", "key": "", "event": 21 },
+            { "separator": true },
+            { "label": "Salir", "key": "Q", "event": 22 }
+        ]}
+      ],
+      "root": {
+        "type": "vgroup",
+        "children": [
+          { "type": "hgroup", "children": [
+              { "type": "label", "text": "URL:" },
+              { "type": "string", "name": "url", "text": "http://aminet.net/", "max": 200, "ack": 11 },
+              { "type": "button", "name": "ir", "label": "_Ir", "event": 12 }
+          ]},
+          { "type": "tabs", "name": "pestanas", "titles": "Página|Fuente", "change": 13, "children": [
+              { "type": "canvas", "name": "pagina", "min_width": 200, "min_height": 80 },
+              { "type": "list", "name": "fuente" }
+          ]},
+          { "type": "hgroup", "children": [
+              { "type": "text", "name": "estado", "text": "Listo \"ya\"" },
+              { "type": "gauge", "name": "progreso", "max": 100, "weight": 30 }
+          ]}
+        ]
+      }
+    }
+  ]
+}

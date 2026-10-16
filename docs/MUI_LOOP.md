@@ -171,10 +171,10 @@ repos, sesiones de Claude y Antigravity).
       Dónde vive (carpeta `vscode/` en este repo o repo aparte `FreeMEM/dash-vscode`: si hay duda, `[?]`).
       Vista previa: árbol + propiedades en un webview, dibujo aproximado en el navegador y vista real con
       captura de pantalla del emulador (`tools/emu_run.py` + captura de FS-UAE). Escribirlo en `docs/MUI_EDITOR.md`.
-- [ ] 20. **Esqueleto.** `compiler/dashui.py` + `import "x.dashui"` en el compilador (tests de generación); extensión
+- [x] 20. **Esqueleto.** `compiler/dashui.py` + `import "x.dashui"` en el compilador (tests de generación); extensión
       mínima en `editor/vscode/`: resaltado de sintaxis de Dash, comandos "Compilar" (`./dash`) y "Ejecutar en
       emulador". Empaquetado con `vsce` instalado en un `node_modules` local (no global).
-- [ ] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
+- [x] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
 - [ ] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
 - [ ] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
 - [ ] 24. **Ejemplo y documentación.** La ventana del navegador (tarea 10) hecha con el editor.
@@ -605,3 +605,48 @@ Formato:
 - Entorno visto: Node 22.22.1 y npm 10.9.4 (nvm), VS Code en `/usr/bin/code`.
 - El formato que el usuario recordaba haber hablado no se encontró; este es una propuesta y se puede cambiar.
 - Tests: sin cambios de código.
+
+### 2026-10-16 — Tarea 20 (esqueleto: `.dashui` en el compilador y extensión mínima)
+- Hecho:
+  - `compiler/dashui.py`: genera el código Dash de un `.dashui` (por ventana, un `struct` con `window` y un campo por
+    objeto con nombre, y `<Ventana>_create()`; menús, grupos, pestañas, 17 tipos de objeto, eventos, `weight`,
+    `disabled`, `hidden`; textos escapados para Dash, `\33` para los códigos de MUI; error claro con tipos o nombres
+    malos y con `#{`). `compiler/main.py` lo usa al cargar un import que acaba en `.dashui` (también en `--multifile`).
+    La función se llama `<Ventana>_create` porque `<Ventana>()` sería el constructor del struct.
+  - Runner: el modo multifichero añade también el `-I` del SDK de MUI.
+  - `editor/vscode/` (JavaScript sin paso de compilación): resaltado de sintaxis de Dash (gramática TextMate, con el C de
+    los bloques `@native` resaltado como C), comandos "Dash: Compilar" y "Dash: Ejecutar en emulador" (en una terminal
+    de VS Code; carpeta de Dash buscada hacia arriba o en el ajuste `dash.path`; ROM y sistema en `dash.emulator.*`).
+    Herramientas de desarrollo en `node_modules` local (`vscode-textmate`, `vscode-oniguruma`, `@vscode/vsce`), fuera de
+    git. `npm test`: la gramática con el mismo motor que VS Code y los comandos con un `vscode` simulado (14 pruebas).
+    `npm run package` → `dash-mui-editor-0.1.0.vsix` (7 KB).
+- Probado: `test_dashui` (importa `tests/lib/ventana_prueba.dashui`: menú, grupos, pestañas con dibujo y lista, texto con
+  comillas; evento de botón y de pestaña) en A1200 3.1 y 3.2 y en `--multifile`; `errors/dashui_unknown_type`.
+- **No probado:** la extensión dentro de VS Code de verdad (no la he instalado en el VS Code del usuario; se instala con
+  `code --install-extension editor/vscode/dash-mui-editor-0.1.0.vsix`).
+- Tests: 140/140 sin emulador; 338/338 con `--emu --emu-a500 --emu-32`; ejemplos 33/33; `npm test` de la extensión 22/22.
+
+### 2026-10-16 — Tarea 21 (editor de ventanas en el webview)
+- Hecho (en `editor/vscode/`):
+  - `media/model.js`: el modelo del `.dashui`, el mismo en el webview y en Node: tipos y propiedades, añadir, mover
+    (también reordenar dentro del mismo grupo y no meter un grupo en sí mismo), borrar, cambiar propiedades con
+    validación (nombres, enteros, eventos vacíos = sin evento), comprobación de nombres repetidos y tipos desconocidos,
+    y la vista previa aproximada en HTML. Las claves que no conoce se conservan al guardar.
+  - `media/editor.js`, `editor.css`, `editor.html`: pestañas de ventanas (+ ventana), paleta (doble clic: añadir; o
+    arrastrar), árbol (clic: elegir; arrastrar: mover; Supr: borrar), propiedades del objeto o de la ventana con sus
+    menús (menús, opciones, separadores), vista previa con aspecto MUI (clic en un objeto lo elige), línea de problemas.
+    Cada cambio manda el JSON entero a VS Code.
+  - `dashuiEditor.js`: `CustomTextEditorProvider` para `*.dashui` (el texto es del documento de VS Code: deshacer,
+    guardar y "sin guardar" como siempre; si el JSON no es válido, aviso para abrirlo como texto). Comando "Dash: Nuevo
+    fichero de ventanas MUI". "Ver en Amiga" queda para la tarea 23.
+- Probado:
+  - `npm test`: 22 pruebas (gramática, modelo, comandos), entre ellas que un documento con los 20 tipos, eventos y menús
+    lo acepta `compiler/dashui.py`.
+  - El webview en Chromium con Playwright (página `test/webview.html` servida en localhost, `vscode` simulado): carga
+    un `.dashui`, elegir en el árbol, cambiar el texto de un objeto, añadir con doble clic, arrastrar de la paleta a un
+    grupo, mover en el árbol, elegir en la vista previa y borrar con Supr; cada cambio sale como JSON válido. Capturas
+    revisadas.
+  - **Fallo encontrado así:** la política de seguridad del webview bloqueaba los estilos en línea (sangría del árbol,
+    tamaños de la vista previa); `style-src` admite ahora `'unsafe-inline'` (solo estilos, no código).
+- **No probado:** dentro de VS Code de verdad (no instalada en el VS Code del usuario).
+- Tests: 140/140 sin emulador; 338/338 con `--emu --emu-a500 --emu-32`; ejemplos 33/33; `npm test` de la extensión 22/22.
