@@ -1173,6 +1173,24 @@ gfx_pen(rojo)
 disco necesitan `diskfont.library` y la fuente en `FONTS:`. Las fuentes abiertas y los lapices
 se devuelven al salir.
 
+### Imagenes (datatypes)
+
+```
+img = image_load("logo.png")           # 0 si no se puede leer
+ancho = image_width(img)               # e image_height(img)
+image_draw(img, 10, 20)                # entera en 10, 20
+image_draw_part(img, 0, 8, 10, 20, 32, 16)   # el trozo 32x16 que empieza en 0, 8
+peq = image_scale(img, 64, 48)         # una copia a otro tamano (otra imagen)
+image_free(peq)                        # las que queden se liberan al salir
+```
+
+Lee cualquier formato con datatype en el sistema: ILBM siempre; PNG, GIF, JPEG y BMP desde
+3.2 o con sus datatypes instalados. Los colores se adaptan a la pantalla de la ventana actual
+(abrir la ventana antes de cargar; sin ventana, la pantalla publica por defecto). Los pixeles
+transparentes no se pintan cuando el datatype da la mascara (GIF transparente en 3.2) o un
+canal alfa que no sea todo 0; el `png.datatype` de 3.2 no lo da, asi que un PNG con alfa sale
+con fondo.
+
 ### Pantalla
 
 ```

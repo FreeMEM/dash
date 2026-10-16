@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 468 funciones, 468 implementadas, 0 sin implementar.
+Total: 475 funciones, 475 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -388,6 +388,18 @@ Total: 468 funciones, 468 implementadas, 0 sin implementar.
 | `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
 | `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
 | `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
+
+## Imágenes (datatypes)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `image_load(file)` | `LONG` | Picture from a file by datatypes (ILBM; PNG, GIF, JPEG if the system has them), with the colors of the screen drawn on: the image, or 0 |  |
+| `image_width(image)` | `LONG` | Width of an image |  |
+| `image_height(image)` | `LONG` | Height of an image |  |
+| `image_draw(image, x, y)` | `void` | Draw an image at x, y (its transparent pixels are not drawn) |  |
+| `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
+| `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
+| `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
 
 ## Argumentos
 

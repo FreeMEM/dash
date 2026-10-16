@@ -198,6 +198,8 @@ gfx_poly_end()              # Close & fill
 gfx_text_at(x, y, "text")   # Draw text
 f = font_open("helvetica.font", 13) # font_use(f), font_style(2), font_text_width(s), font_height()
 color_pen(r, g, b)          # pen for an RGB color (0-255) on the screen drawn on
+img = image_load("a.png")   # datatypes (0: cannot read); image_width/_height(img)
+image_draw(img, x, y)       # image_draw_part(img, sx, sy, x, y, w, h), image_scale(img, w, h), image_free(img)
 gfx_clear()                 # Clear screen
 ```
 

@@ -1187,6 +1187,200 @@ static void _dash_font_cleanup(void) {
 
 """
 
+    # Pictures (dashweb D12): any format the system has a datatype for (ILBM always; PNG, GIF,
+    # JPEG... from 3.2 or with their datatypes), remapped to the screen drawn on and drawn on
+    # _dash_rp with the blitter. An image is a number (0: none), freed at exit if not before.
+    IMAGE_RUNTIME = """\
+/* Dash Image Runtime */
+#include <datatypes/datatypes.h>
+#include <datatypes/datatypesclass.h>
+#include <datatypes/pictureclass.h>
+#include <proto/datatypes.h>
+#include <graphics/scale.h>
+
+struct Library *DataTypesBase = NULL;
+#define _DASH_IMG_MAX 64
+typedef struct {
+    Object *o;               /* the datatype object (owns bm and mask); NULL for a scaled copy */
+    struct BitMap *bm;
+    PLANEPTR mask;           /* ours, in chip RAM, rows as long as bm's; transparent pixels 0 */
+    LONG w, h;
+} _DashImg;
+static _DashImg *_dash_imgs[_DASH_IMG_MAX];
+
+static _DashImg *_dash_img(LONG image) {
+    LONG i;
+    if (!image) return NULL;
+    for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i] == (_DashImg *)image) return _dash_imgs[i];
+    return NULL;
+}
+
+/* The mask of img from rows of srcmod bytes (a datatype's mask, a scaled one); only for
+   standard bitmaps, which BltMaskBitMapRastPort can use with a mask of the same row length */
+static void _dash_img_mask(_DashImg *img, UBYTE *src, LONG srcmod) {
+    LONG mod = img->bm->BytesPerRow, n = srcmod < mod ? srcmod : mod, y;
+    ULONG flags = GetBitMapAttr(img->bm, BMA_FLAGS);
+    if (!(flags & BMF_STANDARD) || (flags & BMF_INTERLEAVED)) return;
+    img->mask = (PLANEPTR)AllocVec(mod * img->h, MEMF_CHIP | MEMF_CLEAR);
+    if (img->mask && src) for (y = 0; y < img->h; y++) CopyMem(src + y * srcmod, img->mask + y * mod, n);
+}
+
+/* The alpha channel of a V43 picture (PNG...) as a mask with rows of mod bytes, read as
+   ARGB before the layout frees the source; alpha 128 or more is drawn. NULL if all the
+   pixels have the same alpha (some datatypes give 0 for all: no alpha) or the
+   picture.datatype is older than V43 (it does not know the method). */
+static UBYTE *_dash_img_alpha(Object *o, LONG w, LONG h, LONG mod) {
+    ULONG *row = (ULONG *)AllocVec(w * 4, MEMF_ANY);
+    UBYTE *mask = NULL;
+    LONG x, y;
+    BOOL clear = FALSE, opaque = FALSE;
+    if (!row) return NULL;
+    mask = (UBYTE *)AllocVec(mod * h, MEMF_CLEAR);
+    for (y = 0; mask && y < h; y++) {
+        if (!DoMethod(o, PDTM_READPIXELARRAY, (ULONG)row, PBPAFMT_ARGB, w * 4, 0, y, w, 1)) { clear = FALSE; break; }
+        for (x = 0; x < w; x++) {
+            if ((row[x] >> 24) >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
+            else clear = TRUE;
+        }
+    }
+    FreeVec(row);
+    if (mask && !(clear && opaque)) { FreeVec(mask); mask = NULL; }
+    return mask;
+}
+
+static LONG _dash_img_add(_DashImg *img) {
+    LONG i;
+    for (i = 0; i < _DASH_IMG_MAX; i++) if (!_dash_imgs[i]) { _dash_imgs[i] = img; return (LONG)img; }
+    return 0;
+}
+
+/* The picture in file, ready to draw on the screen of the current window (or the default
+   public screen before one opens): the image, or 0 if it cannot be read */
+static LONG _dash_image_load(STRPTR file) {
+    struct Screen *scr, *pub = NULL;
+    struct BitMapHeader *bmh = NULL;
+    struct BitMap *bm = NULL;
+    PLANEPTR mask = NULL;
+    UBYTE *alpha = NULL;
+    Object *o;
+    _DashImg *img;
+    if (!file) return 0;
+    if (!DataTypesBase) DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
+    if (!DataTypesBase) return 0;
+    scr = _dash_win ? _dash_win->WScreen : (pub = LockPubScreen(NULL));
+    o = NewDTObject((APTR)file, DTA_SourceType, DTST_FILE, DTA_GroupID, GID_PICTURE,
+                    PDTA_Remap, TRUE, PDTA_Screen, (ULONG)scr, PDTA_FreeSourceBitMap, TRUE,
+                    PDTA_DestMode, PMODE_V43, TAG_DONE);    /* V43: keeps the alpha channel */
+    if (o && GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_DONE) && bmh)
+        alpha = _dash_img_alpha(o, bmh->bmh_Width, bmh->bmh_Height, ((bmh->bmh_Width + 15) >> 4) << 1);
+    if (o) DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, TRUE);
+    if (pub) UnlockPubScreen(NULL, pub);
+    if (!o) return 0;
+    GetDTAttrs(o, PDTA_DestBitMap, (ULONG)&bm, TAG_DONE);
+    if (!bm) GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_DONE);
+    GetDTAttrs(o, PDTA_MaskPlane, (ULONG)&mask, TAG_DONE);      /* V43: not there on 3.1 */
+    img = bm && bmh ? (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR) : NULL;
+    if (!img) { DisposeDTObject(o); if (alpha) FreeVec(alpha); return 0; }
+    img->o = o;
+    img->bm = bm;
+    img->w = bmh->bmh_Width;
+    img->h = bmh->bmh_Height;
+    if (mask || alpha) _dash_img_mask(img, mask ? (UBYTE *)mask : alpha, ((img->w + 15) >> 4) << 1);
+    if (alpha) FreeVec(alpha);
+    if (_dash_img_add(img)) return (LONG)img;
+    DisposeDTObject(o);
+    if (img->mask) FreeVec(img->mask);
+    FreeVec(img);
+    return 0;
+}
+
+static LONG _dash_image_width(LONG image) { _DashImg *i = _dash_img(image); return i ? i->w : 0; }
+static LONG _dash_image_height(LONG image) { _DashImg *i = _dash_img(image); return i ? i->h : 0; }
+
+/* The part w x h at sx, sy of the image, at x, y (with its mask if it has one) */
+static void _dash_image_draw_part(LONG image, LONG sx, LONG sy, LONG x, LONG y, LONG w, LONG h) {
+    _DashImg *img = _dash_img(image);
+    if (!img || !_dash_rp) return;
+    if (sx < 0) { x -= sx; w += sx; sx = 0; }
+    if (sy < 0) { y -= sy; h += sy; sy = 0; }
+    if (sx + w > img->w) w = img->w - sx;
+    if (sy + h > img->h) h = img->h - sy;
+    if (w <= 0 || h <= 0) return;
+    if (img->mask)
+        BltMaskBitMapRastPort(img->bm, sx, sy, _dash_rp, x, y, w, h, (ABC | ABNC | ANBC), img->mask);
+    else
+        BltBitMapRastPort(img->bm, sx, sy, _dash_rp, x, y, w, h, 0xC0);
+}
+
+static void _dash_image_draw(LONG image, LONG x, LONG y) {
+    _DashImg *img = _dash_img(image);
+    if (img) _dash_image_draw_part(image, 0, 0, x, y, img->w, img->h);
+}
+
+/* A copy of the image at w x h (BitMapScale; its mask too): a new image, 0 if there is no memory */
+static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
+    _DashImg *src = _dash_img(image), *img;
+    struct BitScaleArgs bsa;
+    if (!src || w <= 0 || h <= 0 || w > 16383 || h > 16383) return 0;
+    img = (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR);
+    if (!img) return 0;
+    img->w = w;
+    img->h = h;
+    img->bm = AllocBitMap(w, h, GetBitMapAttr(src->bm, BMA_DEPTH), BMF_CLEAR, src->bm);
+    if (!img->bm) { FreeVec(img); return 0; }
+    memset(&bsa, 0, sizeof(bsa));
+    bsa.bsa_SrcWidth = src->w;
+    bsa.bsa_SrcHeight = src->h;
+    bsa.bsa_XSrcFactor = src->w;
+    bsa.bsa_YSrcFactor = src->h;
+    bsa.bsa_XDestFactor = w;
+    bsa.bsa_YDestFactor = h;
+    bsa.bsa_SrcBitMap = src->bm;
+    bsa.bsa_DestBitMap = img->bm;
+    BitMapScale(&bsa);
+    if (src->mask) {
+        struct BitMap from, *to = AllocBitMap(w, h, 1, BMF_CLEAR, NULL);
+        InitBitMap(&from, 1, src->w, src->h);
+        from.BytesPerRow = src->bm->BytesPerRow;
+        from.Planes[0] = src->mask;
+        if (to) {
+            bsa.bsa_SrcBitMap = &from;
+            bsa.bsa_DestBitMap = to;
+            bsa.bsa_DestWidth = bsa.bsa_DestHeight = 0;
+            BitMapScale(&bsa);
+            WaitBlit();
+            _dash_img_mask(img, (UBYTE *)to->Planes[0], to->BytesPerRow);
+            FreeBitMap(to);
+        }
+    }
+    if (_dash_img_add(img)) return (LONG)img;
+    WaitBlit();
+    FreeBitMap(img->bm);
+    if (img->mask) FreeVec(img->mask);
+    FreeVec(img);
+    return 0;
+}
+
+static void _dash_image_free(LONG image) {
+    _DashImg *img = _dash_img(image);
+    LONG i;
+    if (!img) return;
+    for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i] == img) _dash_imgs[i] = NULL;
+    WaitBlit();
+    if (img->o) DisposeDTObject(img->o);
+    else FreeBitMap(img->bm);
+    if (img->mask) FreeVec(img->mask);
+    FreeVec(img);
+}
+
+static void _dash_image_cleanup(void) {
+    LONG i;
+    for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i]) _dash_image_free((LONG)_dash_imgs[i]);
+    if (DataTypesBase) { CloseLibrary(DataTypesBase); DataTypesBase = NULL; }
+}
+
+"""
+
     # Program arguments (dashweb D19): "visor pagina.html". From the Workbench there are none.
     ARGS_RUNTIME = """\
 /* Dash Args Runtime */
@@ -8169,6 +8363,7 @@ _RUNTIME_FLAGS = [
     ("NET_RUNTIME", "uses_net"),            # dashweb D8
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
+    ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
     ("FLOAT_RUNTIME", "uses_float"),
@@ -8395,6 +8590,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
+        self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
@@ -8636,6 +8832,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.GRAPHICS_RUNTIME)
         if self.uses_fonts:
             parts.append(CTemplates.FONT_RUNTIME)
+        if self.uses_images:
+            parts.append(CTemplates.IMAGE_RUNTIME)
         if self.uses_args:
             parts.append(CTemplates.ARGS_RUNTIME)
         if self.uses_time:
@@ -8824,6 +9022,8 @@ static LONG _dash_event_window_handle(void) {{
                            "    if (AslBase) { CloseLibrary(AslBase); AslBase = NULL; }\n")
         if self.uses_time:
             cleanup.append("    _dash_time_cleanup();\n")
+        if self.uses_images:
+            cleanup.append("    _dash_image_cleanup();\n")   # gives back the pens of the remap
         if self.uses_fonts:
             cleanup.append("    _dash_font_cleanup();\n")
         if self.uses_tls:
@@ -10502,6 +10702,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_fonts:
             self.needs_gfx = True      # FONT_RUNTIME draws on _dash_rp
+        if self.uses_images:
+            self.needs_gfx = True      # IMAGE_RUNTIME draws on _dash_rp
         if self.uses_args:
             self.uses_strings = True   # arg() gives a String
         if self.uses_tls:

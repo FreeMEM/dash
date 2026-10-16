@@ -3704,6 +3704,27 @@ FONT_FUNCTIONS = {
 }
 
 # =============================================================================
+# Pictures by datatypes (dashweb D12)
+# =============================================================================
+
+IMAGE_FUNCTIONS = {
+    "image_load": _gfx("image_load", ["file"], "LONG", "_dash_image_load(${file})",
+                       "Picture from a file by datatypes (ILBM; PNG, GIF, JPEG if the system has them), "
+                       "with the colors of the screen drawn on: the image, or 0"),
+    "image_width": _gfx("image_width", ["image"], "LONG", "_dash_image_width(${image})", "Width of an image"),
+    "image_height": _gfx("image_height", ["image"], "LONG", "_dash_image_height(${image})", "Height of an image"),
+    "image_draw": _gfx("image_draw", ["image", "x", "y"], "void", "_dash_image_draw(${image}, ${x}, ${y})",
+                       "Draw an image at x, y (its transparent pixels are not drawn)"),
+    "image_draw_part": _gfx("image_draw_part", ["image", "sx", "sy", "x", "y", "w", "h"], "void",
+                            "_dash_image_draw_part(${image}, ${sx}, ${sy}, ${x}, ${y}, ${w}, ${h})",
+                            "Draw the part w x h at sx, sy of an image at x, y"),
+    "image_scale": _gfx("image_scale", ["image", "w", "h"], "LONG", "_dash_image_scale(${image}, ${w}, ${h})",
+                        "A copy of an image at w x h pixels: a new image, or 0"),
+    "image_free": _gfx("image_free", ["image"], "void", "_dash_image_free(${image})",
+                       "Free an image (the ones left are freed at exit)"),
+}
+
+# =============================================================================
 # Program arguments (dashweb D19)
 # =============================================================================
 
@@ -3735,6 +3756,7 @@ ALL_BUILTINS = {
     **NET_FUNCTIONS,           # dashweb D8
     **TLS_FUNCTIONS,           # dashweb D11
     **FONT_FUNCTIONS,          # dashweb D9
+    **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
