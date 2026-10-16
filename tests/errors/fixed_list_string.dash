@@ -1,0 +1,5 @@
+# expect: A list of Fixed values holds Fixed values (or number literals)
+Main
+    l = [Fixed(1.5), Fixed(2)]
+    l.push("tres")
+end

@@ -1,0 +1,65 @@
+# Lists of Fixed values: a literal with a Fixed element ([Fixed(1.5), 2]: numbers are made Fixed),
+# [Fixed] variables, parameters, returns and fields, l[i] read and written, push, insert, pop,
+# for-in, slices and +. They are stored like lists of Ints (a Fixed is a LONG).
+# expect-out: 1.5 2.0 -0.25
+# expect-out: suma 3.75
+# expect-out: l[1] = 2.75 tras doblar
+# expect-out: push 4.0 insert 0.5 len 5
+# expect-out: pop 4.0 queda 4
+# expect-out: trozo 2.75 -0.5
+# expect-out: unidas 5 total 5.25
+# expect-out: media 0.5
+# expect-out: vacía 0, con push 1.25
+# expect-out: campo 0.75 total 1.0
+# expect-out: fin
+
+struct Serie
+    valores: [Fixed]
+end
+
+func media(l: [Fixed]) -> Fixed
+    total = Fixed(0)
+    for v in l
+        total = total + v
+    end
+    return total / l.length
+end
+
+func mitades(n: Int) -> [Fixed]
+    r = [Fixed(0.5)]
+    for i in (2..n)
+        r.push(Fixed(0.5))
+    end
+    return r
+end
+
+Main
+    l = [Fixed(1.5), 2, Fixed(-0.25)]
+    Print "#{l[0]} #{l[1]} #{l[2]}"
+    suma = l[0] + l[1] - l[2]
+    Print "suma #{suma}"
+    l[1] = l[1] + Fixed(0.75)
+    Print "l[1] = #{l[1]} tras doblar"
+    l.push(4)
+    l.insert(0, Fixed(0.5))
+    Print "push #{l[4]} insert #{l[0]} len #{l.length}"
+    p = l.pop()
+    Print "pop #{p} queda #{l.length}"
+    t = l[2:4]
+    t[1] = Fixed(-0.5)
+    Print "trozo #{t[0]} #{t[1]}"
+    u = t + [Fixed(1)]
+    total = Fixed(0)
+    for v in u + mitades(4)
+        total = total + v
+    end
+    Print "unidas #{u.length + mitades(2).length} total #{total}"
+    Print "media #{media(mitades(3))}"
+    var w: [Fixed] = []
+    n0 = w.length
+    w.push(Fixed(1.25))
+    Print "vacía #{n0}, con push #{w[0]}"
+    s = Serie([Fixed(0.25), Fixed(0.75)])
+    Print "campo #{s.valores[1]} total #{s.valores[0] + s.valores[1]}"
+    Print "fin"
+end

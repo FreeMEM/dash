@@ -216,8 +216,11 @@ s = fx_sin(Fixed(30))       # 0.5 (grados); tambien fx_cos
 - Mezclar `Fixed` y `Float` es un error: hay que convertir con `Fixed(f)` o `Float(x)`.
 - Si se pasa del rango da la vuelta, como un entero. Dividir entre 0 da el valor maximo con
   el signo del dividendo (no cuelga el Amiga).
-- Campos, parametros y retornos pueden ser `Fixed`; las listas de `Fixed` todavia no (guarda
-  los valores en un struct). Ejemplo completo: `examples/fixed_gravedad.dash`.
+- Campos, parametros y retornos pueden ser `Fixed`. Ejemplo completo: `examples/fixed_gravedad.dash`.
+- Listas de `Fixed`: un literal con algun `Fixed` (`[Fixed(1.5), 2, Fixed(-0.25)]`: los numeros se
+  convierten), o declaradas `[Fixed]` (variables, parametros, retornos, campos). `l[i]`, `push`, `insert`,
+  `pop`, `for v in l`, trozos y `+` dan y reciben `Fixed`; `l.push(2)` guarda 2.0. Se guardan como una
+  lista de enteros (un `Fixed` es un `LONG`). Una lista de `Float` sigue sin poder hacerse.
 
 ### Inferencia de Tipos
 

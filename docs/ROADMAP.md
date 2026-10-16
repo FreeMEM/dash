@@ -825,7 +825,6 @@ tests/
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
 ### Pendiente:
-- Listas de `Fixed` (hoy dan error: guardar los valores en un struct)
 - Una lista declarada `var x: Array` pierde el tipo de sus elementos
 
 ### Próximo proyecto (pedido el 2026-10-15, después del plan de mejoras):

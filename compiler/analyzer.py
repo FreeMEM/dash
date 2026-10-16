@@ -90,6 +90,7 @@ class Symbol:
     struct_name: Optional[str] = None  # Struct type of the value, when known
     elem_struct: Optional[str] = None  # For a list of structs: their struct type
     dict_value: Optional[str] = None   # For a dictionary: the type of its values ("Int", "Nodo"...)
+    list_fixed: bool = False           # A list of Fixed values ([Fixed]): its elements are Fixed
 
 
 @dataclass
@@ -282,7 +283,8 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,  # C globals start zeroed
                 struct_name=self._struct_type_name(gvar.var_type),
                 elem_struct=self._list_elem_struct(gvar.var_type),
-                dict_value=dict_value_type(gvar.var_type)
+                dict_value=dict_value_type(gvar.var_type),
+                list_fixed=list_elem_type(gvar.var_type) == "Fixed"
             )
             self.define_symbol(symbol, gvar)
 
@@ -527,7 +529,9 @@ class SemanticAnalyzer(ASTVisitor):
             is_initialized=True,
             struct_name=self._struct_type_name(node.var_type) if node.var_type else None,
             elem_struct=self._list_elem_struct(node.var_type),
-            dict_value=dict_value_type(node.var_type)
+            dict_value=dict_value_type(node.var_type),
+            list_fixed=(list_elem_type(node.var_type) == "Fixed" if node.var_type
+                        else self._is_fixed_list(node.initial_value))
         )
         self.define_symbol(symbol, node)
 
@@ -556,7 +560,8 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,
                 struct_name=self._struct_name_of(node.value),
                 elem_struct=self._elem_struct_of(node.value),
-                dict_value=self._dict_value_of(node.value)
+                dict_value=self._dict_value_of(node.value),
+                list_fixed=self._is_fixed_list(node.value)
             )
             self.define_symbol(symbol, node)
         elif symbol.symbol_type in (SymbolType.FUNCTION, SymbolType.NATIVE_FUNC, SymbolType.EXTERN_FUNC):
@@ -660,6 +665,7 @@ class SemanticAnalyzer(ASTVisitor):
             symbol_type=SymbolType.VARIABLE,
             # ints unless a list of structs or of Strings
             dash_type=(DashType.UNKNOWN if elem else
+                       DashType.FIXED if self._is_fixed_list(node.iterable) else
                        DashType.STRING if self._list_kind(node.iterable) == "string" else DashType.INT),
             node=node,
             is_initialized=True,
@@ -700,7 +706,8 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,
                 struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None),
                 elem_struct=self._list_elem_struct(param.param_type if isinstance(param, FunctionParam) else None),
-                dict_value=dict_value_type(param.param_type if isinstance(param, FunctionParam) else None)
+                dict_value=dict_value_type(param.param_type if isinstance(param, FunctionParam) else None),
+                list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed"
             )
             self.define_symbol(symbol, node)
 
@@ -727,7 +734,9 @@ class SemanticAnalyzer(ASTVisitor):
                                       elem_struct=self._list_elem_struct(
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       dict_value=dict_value_type(
-                                          param.param_type if isinstance(param, FunctionParam) else None)),
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      list_fixed=list_elem_type(
+                                          param.param_type if isinstance(param, FunctionParam) else None) == "Fixed"),
                                node)
         before = len(self.errors)
         self._visit_new_body(node.body if isinstance(node.body, list) else [node.body])
@@ -753,7 +762,9 @@ class SemanticAnalyzer(ASTVisitor):
                                       elem_struct=self._list_elem_struct(
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       dict_value=dict_value_type(
-                                          param.param_type if isinstance(param, FunctionParam) else None)),
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      list_fixed=list_elem_type(
+                                          param.param_type if isinstance(param, FunctionParam) else None) == "Fixed"),
                                node)
         self._visit_new_body(node.body)
         self.exit_scope()
@@ -858,7 +869,36 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit an array literal."""
         for element in node.elements:
             self.visit(element)
-            self._check_not_float_element(element)
+        fixed = self._is_fixed_list(node)
+        for element in node.elements:
+            if fixed:
+                self._check_fixed_element(element)
+            else:
+                self._check_not_float_element(element)
+
+    def _check_fixed_element(self, value: ASTNode):
+        """What goes into a list of Fixed values: Fixed values or number literals (made Fixed)."""
+        lit = value.operand if isinstance(value, UnaryOp) and value.operator == "-" else value
+        if self._infer_type(value) != DashType.FIXED and not isinstance(lit, (NumberLiteral, FloatLiteral)):
+            self.error("A list of Fixed values holds Fixed values (or number literals)", value)
+
+    def _is_fixed_list(self, expr: Optional[ASTNode]) -> bool:
+        """True if the expression is a list of Fixed values: a [Fixed] variable, parameter, call or
+        field, a literal with a Fixed element (the rest Fixed or numbers), or a slice or + of one."""
+        if expr is None:
+            return False
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            return bool(symbol and symbol.list_fixed)
+        if isinstance(expr, ArrayLiteral):
+            return any(self._infer_type(e) == DashType.FIXED for e in expr.elements)
+        if isinstance(expr, ArraySlice):
+            return self._is_fixed_list(expr.array)
+        if isinstance(expr, BinaryOp) and expr.operator == "+":
+            return self._is_fixed_list(expr.left) or self._is_fixed_list(expr.right)
+        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess)):
+            return list_elem_type(self._declared_list_type(expr)) == "Fixed"
+        return False
 
     def _check_not_float_element(self, value: ASTNode):
         if self._infer_type(value) == DashType.FIXED:
@@ -889,7 +929,10 @@ class SemanticAnalyzer(ASTVisitor):
         self.visit(node.array)
         self.visit(node.index)
         self.visit(node.value)
-        self._check_not_float_element(node.value)
+        if self._is_fixed_list(node.array):
+            self._check_fixed_element(node.value)
+        else:
+            self._check_not_float_element(node.value)
         if self._dict_value_of(node.array) is not None and self._infer_type(node.index) == DashType.INT:
             self.error("Dictionary keys are Strings", node)
 
@@ -1025,7 +1068,9 @@ class SemanticAnalyzer(ASTVisitor):
 
     def _list_kind(self, expr: ASTNode) -> Optional[str]:
         """What a list expression holds: "int", "string", "struct:Name", "list", "any"
-        (empty or unknown), or None if expr is not a list."""
+        (empty or unknown), "fixed" (a list of Fixed), or None if expr is not a list."""
+        if self._is_fixed_list(expr):
+            return "fixed"
         if isinstance(expr, MethodCall) and expr.method == "keys" and self._dict_value_of(expr.object) is not None:
             return "string"
         if isinstance(expr, ArraySlice):
@@ -1099,7 +1144,8 @@ class SemanticAnalyzer(ASTVisitor):
 
     @staticmethod
     def _kind_text(kind: str) -> str:
-        return {"int": "Ints", "string": "Strings", "list": "lists"}.get(kind, kind.split(":")[-1])
+        return {"int": "Ints", "string": "Strings", "list": "lists", "fixed": "Fixed values"}.get(
+            kind, kind.split(":")[-1])
 
     def _elem_struct_of(self, expr: Optional[ASTNode]) -> Optional[str]:
         """Struct type of the elements of a list expression, when all are one struct."""
@@ -1232,6 +1278,9 @@ class SemanticAnalyzer(ASTVisitor):
         if len(node.arguments) != wanted:
             self.error(f"{node.method}() on a list takes {wanted} argument(s), got {len(node.arguments)}", node)
             return
+        if node.method in ("push", "insert") and self._is_fixed_list(node.object):
+            self._check_fixed_element(node.arguments[-1])
+            return
         if node.method in ("push", "insert") and kind not in ("any", "list"):
             value = node.arguments[-1]
             vtype = self._infer_type(value)
@@ -1298,6 +1347,8 @@ class SemanticAnalyzer(ASTVisitor):
             return DashType.ARRAY
         elif isinstance(node, DictLiteral):
             return DashType.DICT
+        elif isinstance(node, ArrayAccess) and self._is_fixed_list(node.array):
+            return DashType.FIXED
         elif isinstance(node, ArrayAccess) and self._dict_value_of(node.array) is not None:
             value = self._dict_value_of(node.array)
             return {"Int": DashType.INT, "String": DashType.STRING, "Bool": DashType.BOOL}.get(value, DashType.UNKNOWN)
@@ -1331,6 +1382,8 @@ class SemanticAnalyzer(ASTVisitor):
         elif isinstance(node, (LambdaFunc, FunctionRef)):
             return DashType.FUNC
         elif isinstance(node, MethodCall) and node.method == "pop":
+            if self._is_fixed_list(node.object):
+                return DashType.FIXED
             kind = self._list_kind(node.object)
             if kind == "string":
                 return DashType.STRING

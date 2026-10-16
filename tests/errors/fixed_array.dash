@@ -1,4 +1,6 @@
+# A list of Ints does not take a Fixed value (a list of Fixed values does: [Fixed(1), 2])
 # expect: not Fixed values
 Main
-    l = [Fixed(1), Fixed(2)]
+    l = [1, 2]
+    l[0] = Fixed(1.5)
 end

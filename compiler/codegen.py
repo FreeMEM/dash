@@ -9744,6 +9744,7 @@ static LONG _dash_event_window_handle(void) {{
         elif c_type in ("DashArrayLong *", "DashDict *"):
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
             self.decl_types[gvar.name] = gvar.var_type
+            self._mark_fixed_list(gvar.name, list_elem_type(gvar.var_type) == "Fixed")
         else:
             self.var_types[gvar.name] = "number"
 
@@ -10281,6 +10282,7 @@ static {ret_type} {method_name}({params_str}) {{
                                              if c_type in ("DashArrayLong *", "DashDict *")
                                              else f"struct:{node.var_type}")
                 self.decl_types[node.name] = node.var_type
+                self._mark_fixed_list(node.name, list_elem_type(node.var_type) == "Fixed")
                 self.context.declare_var(node.name)
                 self.context.own(node.name, "obj")
                 self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
@@ -10348,6 +10350,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_arrays = True
             elem = self._literal_elem_type(node.value)
             self.var_types[node.name] = f"array:{elem}" if elem else "array"
+            self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
             value = self._generate_array_literal(node.value)
             self._assign_object(node.name, "DashArrayLong *", value)
             return
@@ -10368,6 +10371,7 @@ static {ret_type} {method_name}({params_str}) {{
         elif var_type == "DashArrayLong *":
             # a copy or a slice of a typed array keeps its element type
             self.var_types[node.name] = self._array_var_type(node.value)
+            self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
         elif var_type == "DashDict *":
             self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
         elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
@@ -10704,6 +10708,9 @@ static {ret_type} {method_name}({params_str}) {{
         elem = self._array_elem_type(node.iterable) or ""
         if strings:
             var_type, c_type = "string", "STRPTR"
+        elif self._is_fixed_list(node.iterable):
+            var_type, c_type = "fixed", "DashFixed"
+            self.uses_fixed = True
         elif elem.startswith("struct:"):
             var_type, c_type = elem, f"_Dash_{elem[7:]} *"
         elif elem == "array":
@@ -10880,6 +10887,9 @@ static {ret_type} {method_name}({params_str}) {{
             return
         array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
+        if self._is_fixed_list(node.array):   # l[i] = 2 in a list of Fixed: 2.0
+            self.emit(f"{indent}DashArray_set({array_name}, {index}, {self._fixed_value(node.value)});\n")
+            return
         value = self._generate_expression(node.value)
         elem = self._array_elem_type(node.array)
         if elem == "string":
@@ -11548,6 +11558,8 @@ static {ret_type} {method_name}({params_str}) {{
                 elem = "array"
         suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem == "array") else ""
         args = [self._generate_expression(a) for a in node.arguments]
+        if node.method in ("push", "insert") and self._is_fixed_list(node.object):
+            args[-1] = self._fixed_value(node.arguments[-1])   # push(2) in a list of Fixed: 2.0
         if suffix == "_str" and node.method in ("push", "insert"):
             args[-1] = self._lent_str(node.arguments[-1], args[-1])
         if node.method == "push":
@@ -11825,6 +11837,7 @@ static {ret_type} {method_name}({params_str}) {{
                   or dict_value_type(p.param_type) is not None):
                 self.var_types[p.name] = self._list_var_type(p.param_type)
                 self.decl_types[p.name] = p.param_type
+                self._mark_fixed_list(p.name, list_elem_type(p.param_type) == "Fixed")
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             else:
@@ -11931,8 +11944,37 @@ static {ret_type} {method_name}({params_str}) {{
             field = self._field_of(node)
             return bool(field and field.field_type == "Fixed")
         if isinstance(node, MethodCall):
+            if node.method == "pop" and self._is_list_method(node):
+                return self._is_fixed_list(node.object)
             method = self._method_of(node)
             return bool(method and method.return_type == "Fixed")
+        if isinstance(node, ArrayAccess):
+            return self._is_fixed_list(node.array)
+        return False
+
+    def _mark_fixed_list(self, name: str, fixed: bool):
+        """Remember that a variable is a list of Fixed values. The mark lives in var_types (under
+        a key no name can have), so it follows the variable's scope like its type does."""
+        if fixed:
+            self.var_types["[Fixed]" + name] = "fixed_list"
+        else:
+            self.var_types.pop("[Fixed]" + name, None)
+
+    def _is_fixed_list(self, node: ASTNode) -> bool:
+        """True if the expression is a list of Fixed values: stored like a list of Ints (a Fixed is
+        a LONG), its elements are read, printed and computed as Fixed."""
+        if isinstance(node, VarRef):
+            return "[Fixed]" + node.name in self.var_types
+        if isinstance(node, ArrayLiteral):
+            return any(self._is_fixed_expr(e) for e in node.elements)
+        if isinstance(node, ArraySlice):
+            return self._is_fixed_list(node.array)
+        if isinstance(node, BinaryOp) and node.operator == "+":
+            return self._is_fixed_list(node.left) or self._is_fixed_list(node.right)
+        if isinstance(node, ArrayAccess):
+            return list_elem_type(self._declared_type_of(node)) == "Fixed"
+        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
+            return list_elem_type(self._declared_list_type(node)) == "Fixed"
         return False
 
     def _fixed_value(self, node: ASTNode) -> str:
@@ -12034,6 +12076,16 @@ static {ret_type} {method_name}({params_str}) {{
         size = len(node.elements)
         if size == 0:
             return "DashArray_create(0)"
+        if self._is_fixed_list(node):
+            # [Fixed(1.5), 2]: every element as a Fixed (numbers made Fixed); all constant: a table
+            codes = [self._fixed_value(e) for e in node.elements]
+            consts = [re.fullmatch(r"\(\(DashFixed\)(.+)\)", c) for c in codes]
+            if all(consts):
+                self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
+                name = f"_dash_arrlit_{self._arrlit_counter}"
+                self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(m.group(1) for m in consts)}}};\n")
+                return f"DashArray_from({size}, {name})"
+            return f"DashArray_from({size}, (LONG[]){{{', '.join(codes)}}})"
         # All constant: a static table (no stack copy; a big compound literal
         # would overflow the 4 KB stack a Kickstart 3.1 shell gives programs)
         values = [constant_int(e, self.analysis.program) for e in node.elements]
