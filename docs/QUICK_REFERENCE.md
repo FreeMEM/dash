@@ -57,6 +57,8 @@ str_starts(s, "a")  str_ends(s, "z")
 str_lower(s)  str_upper(s)  str_trim(s)
 Int("42")  str_to_int("ff", 16)  str_from_int(255, 16)
 str_replace(s, "a", "b")
+str_contains(s, "x")        # Bool
+str_split("a,b,c", ",")     # ["a", "b", "c"]: a new [String]; sep "" or not found: [s]
 "n=#{n} len #{v.length} #{f(x) + 1}"   # interpolation: any expression; quotes inside as \"
 s = s + "x"                 # appends in place: building a text in a loop is linear
 s = t.texto                 # copies the text; f(t.texto) does not if no code sets that field

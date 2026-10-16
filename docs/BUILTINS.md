@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 493 funciones, 493 implementadas, 0 sin implementar.
+Total: 495 funciones, 495 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -348,6 +348,8 @@ Total: 493 funciones, 493 implementadas, 0 sin implementar.
 | `str_to_int(s, base)` | `LONG` | Number written in s in that base (2-36); Int(s) is base 10 |  |
 | `str_from_int(n, base)` | `STRPTR` | n written in that base (2-36, lowercase letters) |  |
 | `str_replace(s, from, to)` | `STRPTR` | Copy with every from replaced by to |  |
+| `str_contains(s, sub)` | `BOOL` | Whether sub is in s ("" is in every text) |  |
+| `str_split(s, sep)` | `DashArrayLong *` | The pieces of s between each sep, as a new [String]; with sep "" or not found, [s] |  |
 | `file_read_text(filename)` | `STRPTR` | Whole file as a String (bytes 0 become spaces); nil if it cannot be read |  |
 | `file_write_text(filename, text)` | `BOOL` | Write the text as the whole file; true if it was all written |  |
 | `str_from_buffer(buffer, offset, length)` | `STRPTR` | String with length bytes of a buffer from offset (bytes 0 become spaces) |  |

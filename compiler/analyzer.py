@@ -1196,6 +1196,8 @@ class SemanticAnalyzer(ASTVisitor):
         if not self.program:
             return None
         type_name = None
+        if isinstance(expr, FunctionCall) and get_builtin(expr.name) and get_builtin(expr.name).list_of:
+            return f"[{get_builtin(expr.name).list_of}]"
         if isinstance(expr, FunctionCall):
             func = self.program.get_function(expr.name)
             type_name = func.return_type if func else None
@@ -1398,6 +1400,8 @@ class SemanticAnalyzer(ASTVisitor):
             func = self.program.get_function(node.name)
             if func.return_type in ("Int", "Float", "Fixed", "String", "Bool"):
                 return self._type_annotation_to_dash_type(func.return_type)
+        elif isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).list_of:
+            return self._type_annotation_to_dash_type(f"[{get_builtin(node.name).list_of}]")
         elif isinstance(node, BoolLiteral):
             return DashType.BOOL
         elif isinstance(node, VarRef):

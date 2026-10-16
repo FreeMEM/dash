@@ -1801,6 +1801,43 @@ static void DashArray_clear(DashArrayLong *arr) {
 """
 
     # Text from files and buffers (dashweb D7), only in programs that use it
+    # str_split: a list of Strings (needs the array and text runtimes)
+    SPLIT_RUNTIME = """\
+/* The pieces of s between each sep: a new list of Strings that owns them (s itself if sep is
+   "" or not there; "a,,b" gives "a", "" and "b") */
+static DashArrayLong *_dash_str_split(STRPTR s, STRPTR sep) {
+    LONG len, m, i, start, n = 1, k = 0;
+    DashArrayLong *arr;
+    if (!s) s = (STRPTR)"";
+    len = _dash_str_len(s);
+    m = sep ? strlen((char *)sep) : 0;
+    if (m)
+        for (i = 0; i + m <= len; )
+            if (s[i] == sep[0] && !strncmp((char *)s + i, (char *)sep, m)) { n++; i += m; } else i++;
+    arr = DashArray_create(n);
+    if (!arr) return NULL;
+    arr->capacity |= (LONG)_DASH_ARR_STRS << 24;
+    for (i = 0, start = 0; k < n - 1 && i + m <= len; ) {
+        if (s[i] == sep[0] && !strncmp((char *)s + i, (char *)sep, m)) {
+            STRPTR piece = _dash_str_alloc(i - start, FALSE);
+            if (piece) _dash_copy(piece, s + start, i - start);
+            arr->data[k++] = (LONG)piece;
+            i += m;
+            start = i;
+        } else {
+            i++;
+        }
+    }
+    {
+        STRPTR piece = _dash_str_alloc(len - start, FALSE);
+        if (piece) _dash_copy(piece, s + start, len - start);
+        arr->data[k] = (LONG)piece;
+    }
+    return arr;
+}
+
+"""
+
     TEXT_IO_RUNTIME = """\
 /* Files and buffers as text (dashweb D7). Bytes 0 become spaces: a String ends at the
    first 0, and HTML, CSS and JavaScript treat a space like nothing worse. */
@@ -2569,6 +2606,11 @@ static LONG _dash_str_find_from(STRPTR s, STRPTR sub, LONG from) {
 static LONG _dash_str_find(STRPTR s, STRPTR sub) {
     return _dash_str_find_from(s, sub, 0);
 }
+
+static BOOL _dash_str_contains(STRPTR s, STRPTR sub) {
+    return _dash_str_find_from(s, sub, 0) >= 0;
+}
+
 
 static BOOL _dash_str_starts(STRPTR s, STRPTR prefix) {
     LONG n = _dash_str_len(prefix);
@@ -9169,6 +9211,7 @@ _RUNTIME_FLAGS = [
     ("STRING_RUNTIME", "uses_strings"),
     ("TEXT_RUNTIME", "uses_text"),          # dashweb D2
     ("TEXT_IO_RUNTIME", "uses_text_io"),    # dashweb D7
+    ("SPLIT_RUNTIME", "uses_split"),
     ("NET_RUNTIME", "uses_net"),            # dashweb D8
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
@@ -9412,6 +9455,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
+        self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
         self.uses_windows: bool = False  # Track if windows are used
@@ -9627,6 +9671,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(strings)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
+        if self.uses_split:
+            parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
             parts.append(CTemplates.TEXT_IO_RUNTIME)
         if self.uses_net:
@@ -10865,6 +10911,8 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"_Dash_{struct.name} *"
             if self._call_returns_string(node.name):
                 return "STRPTR"
+            if get_builtin(node.name) and get_builtin(node.name).list_of:
+                return "DashArrayLong *"
             func = self.analysis.program.get_function(node.name)
             if func:
                 return self._function_c_type(func)
@@ -11647,6 +11695,8 @@ static {ret_type} {method_name}({params_str}) {{
         if builtin.name == "close_window":
             self.uses_close_window = True
 
+        if builtin.list_of:
+            self.uses_arrays = True    # it makes a list
         # Include every runtime that defines a name the template uses
         import re
         for name in re.findall(r"\b_dash_\w+", builtin.c_template):
@@ -11667,6 +11717,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:
             self.uses_text_io = True   # net_recv: bytes to text like str_from_buffer
+        if self.uses_split:
+            self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
         if self.uses_text_io:
             self.uses_text = True      # TEXT_IO_RUNTIME uses the length cache
         if self.uses_text:
@@ -12661,6 +12713,8 @@ static {ret_type} {method_name}({params_str}) {{
         """The [T] type a call or a struct field declares, if any."""
         prog = self.analysis.program
         type_name = None
+        if isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).list_of:
+            return f"[{get_builtin(node.name).list_of}]"
         if isinstance(node, FunctionCall):
             func = prog.get_function(node.name)
             type_name = func.return_type if func else None

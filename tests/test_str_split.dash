@@ -1,0 +1,54 @@
+# str_contains(s, sub) and str_split(s, sep): the pieces between each sep as a new [String] that owns
+# them; with sep "" or not found, a list with s whole; separators next to each other give "".
+# memcheck
+# expect-out: 1 0 1
+# expect-out: 3: uno|dos|tres
+# expect-out: 3: a||b
+# expect-out: 1: sin separador
+# expect-out: 1: todo
+# expect-out: 4: |x|y|
+# expect-out: 2: clave|valor con = dentro
+# expect-out: 12
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func mostrar(l: [String]) -> String
+    r = "" + l.length + ": "
+    i = 0
+    for p in l
+        if i > 0
+            r = r + "|"
+        end
+        r = r + p
+        i = i + 1
+    end
+    return r
+end
+
+func cuenta(texto: String) -> Int
+    total = 0
+    for linea in str_split(texto, "\n")
+        total = total + str_split(linea, " ").length
+    end
+    return total
+end
+
+Main
+    si = str_contains("hola mundo", "mun")
+    no = str_contains("hola", "x")
+    vacio = str_contains("hola", "")
+    Print "#{si} #{no} #{vacio}"
+    Print mostrar(str_split("uno, dos, tres", ", "))
+    Print mostrar(str_split("a,,b", ","))
+    Print mostrar(str_split("sin separador", ";"))
+    Print mostrar(str_split("todo", ""))
+    Print mostrar(str_split(",x,y,", ","))
+    partes = str_split("clave=valor con = dentro", "=")
+    Print mostrar([partes[0], partes[1] + "=" + partes[2]])
+    veces = 0
+    for i in (1..2)
+        veces = veces + cuenta("a b c\nd e f")
+    end
+    Print veces
+    Print "fin"
+end

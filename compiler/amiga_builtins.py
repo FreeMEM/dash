@@ -24,6 +24,7 @@ class BuiltinFunc:
     needs_area: bool = False     # Needs TmpRas/AreaInfo for area fill
     needs_rtg: bool = False      # Needs CyberGraphX/Picasso96 for RTG support
     reads_only: bool = False     # Only reads its String/object arguments during the call (no copy kept)
+    list_of: Optional[str] = None  # Returns a new list of these ("String": a [String] it owns)
     description: str = ""        # Documentation
 
 
@@ -3691,6 +3692,12 @@ TEXT_FUNCTIONS = {
                           "n written in that base (2-36, lowercase letters)"),
     "str_replace": _text("str_replace", ["s", "from", "to"], "STRPTR", "_dash_str_replace(${s}, ${from}, ${to})",
                          "Copy with every from replaced by to"),
+    "str_contains": _text("str_contains", ["s", "sub"], "BOOL", "_dash_str_contains(${s}, ${sub})",
+                          "Whether sub is in s (\"\" is in every text)"),
+    "str_split": BuiltinFunc(name="str_split", params=["s", "sep"], return_type="DashArrayLong *",
+                             c_template="_dash_str_split(${s}, ${sep})", reads_only=True, list_of="String",
+                             description="The pieces of s between each sep, as a new [String]; with sep \"\" or "
+                                         "not found, [s]"),
     # dashweb D7: files and buffers as text
     "file_read_text": _text("file_read_text", ["filename"], "STRPTR", "_dash_file_read_text(${filename})",
                             "Whole file as a String (bytes 0 become spaces); nil if it cannot be read"),

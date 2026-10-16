@@ -384,6 +384,8 @@ Devuelven textos nuevos (el original no cambia) o numeros. Las posiciones empiez
 | `Int(s)`, `str_to_int(s, base)` | Numero escrito en el texto (`Int("42")`, `str_to_int("ff", 16)`) |
 | `str_from_int(n, base)` | Numero escrito en otra base (`str_from_int(255, 16)` = `"ff"`) |
 | `str_replace(s, de, a)` | Cambia todas las apariciones de `de` por `a` |
+| `str_contains(s, sub)` | Si `sub` esta en `s` (`""` esta en todos) |
+| `str_split(s, sep)` | Los trozos entre cada `sep`, en una lista nueva `[String]`; con `sep` `""` o si no esta, `[s]`; dos `sep` seguidos dan `""` |
 | `file_read_text(nombre)` | El fichero entero como texto (`nil` si no se puede leer) |
 | `file_write_text(nombre, texto)` | Escribe el texto como fichero entero (`true` si fue bien) |
 | `str_from_buffer(buffer, desde, n)` | Texto con `n` bytes de un buffer |
