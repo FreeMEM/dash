@@ -1,0 +1,22 @@
+# Test: test mode (DASH_TEST_AUTOCLOSE, tools/emu_run.py --autoclose) looks at the clock only
+# every 1024 turns of a while (dashweb D34): with DateStamp in every turn, loops ran 10-18 times
+# slower in the emulator and every measure taken in test mode was wrong.
+# autoclose: 30
+# expect-c: _dash_ac_loop();
+# expect-c: if ((++_dash_ac_turns & 1023) == 0) _dash_ac_check();
+# expect-out: 1000000 rápido
+
+Main
+    t0 = time_ms()
+    n = 0
+    i = 0
+    while i < 1000000
+        n = n + 1
+        i = i + 1
+    end
+    if time_ms() - t0 < 20000
+        Print "" + n + " rápido"
+    else
+        Print "" + n + " lento"
+    end
+end

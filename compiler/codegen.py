@@ -2614,6 +2614,13 @@ static void _dash_ac_check(void) {
     if (now - _dash_ac_start >= $seconds * 50) _dash_exit(0);
 }
 
+/* In every turn of a while: the clock only every 1024 turns (DateStamp in every turn made the
+   loops of a test-mode program 10-18 times slower, dashweb D34) */
+static UWORD _dash_ac_turns = 0;
+static void _dash_ac_loop(void) {
+    if ((++_dash_ac_turns & 1023) == 0) _dash_ac_check();
+}
+
 static void _dash_ac_waitport(struct MsgPort *port) {
     while (port->mp_MsgList.lh_TailPred == (struct Node *)&port->mp_MsgList) {
         _dash_ac_check();
@@ -10277,7 +10284,7 @@ static {ret_type} {method_name}({params_str}) {{
         mark = self._new_tmp_mark()
         self.context.indent_level += 1
         self.context.enter_scope("loop")
-        body = f"{self.context.indent}    _dash_ac_check();\n" if self.autoclose else ""
+        body = f"{self.context.indent}    _dash_ac_loop();\n" if self.autoclose else ""
         body += self._loop_body_head(mark)
         for s in node.body:
             body += self._generate_statement(s)

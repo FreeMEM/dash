@@ -68,6 +68,14 @@ def find_tests(test_dir: Path, pattern: Optional[str] = None) -> List[Path]:
     return tests
 
 
+def autoclose_seconds(test_file: Path) -> str:
+    """'# autoclose: N': built in test mode (DASH_TEST_AUTOCLOSE, as tools/emu_run.py --autoclose)."""
+    for l in test_file.read_text().splitlines():
+        if l.strip().startswith("# autoclose:"):
+            return l.split("# autoclose:", 1)[1].strip()
+    return ""
+
+
 def wants_profile(test_file: Path) -> bool:
     """'# profile': built as ./dash --profile (dashweb D23)."""
     return any(l.strip() == "# profile" for l in test_file.read_text().splitlines())
@@ -131,7 +139,8 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
             cwd=str(PROJECT_ROOT),
             timeout=30,
             env=dict(os.environ, DASH_MEMCHECK_C="1" if mc else "0",
-                     DASH_PROFILE="1" if wants_profile(test_file) else "0")
+                     DASH_PROFILE="1" if wants_profile(test_file) else "0",
+                     DASH_TEST_AUTOCLOSE=autoclose_seconds(test_file))
         )
         transpile_ok = result.returncode == 0
 
