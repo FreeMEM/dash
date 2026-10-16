@@ -1456,6 +1456,97 @@ static void _dash_lt_cleanup(void) {
 
 """
 
+    # The profiler (./dash --profile, dashweb D23): each function puts its number on a stack while
+    # it runs (a variable with the cleanup attribute takes it off on any return); a VBlank interrupt
+    # (50 times a second in PAL) counts where the program is: the top of the stack (own time) and
+    # every function on it (total). At exit, the table, slowest first.
+    PROFILE_RUNTIME = """\
+/* Dash Profiler */
+#include <hardware/intbits.h>
+#define _DASH_PROF_N $cuantas
+static const char *const _dash_prof_names[_DASH_PROF_N] = { $names };
+static ULONG _dash_prof_calls[_DASH_PROF_N], _dash_prof_self[_DASH_PROF_N], _dash_prof_total[_DASH_PROF_N];
+static UWORD _dash_prof_seen[_DASH_PROF_N];
+static UWORD _dash_prof_gen = 0;
+#define _DASH_PROF_DEPTH 256
+static volatile WORD _dash_prof_stack[_DASH_PROF_DEPTH];
+static volatile LONG _dash_prof_depth = 0;
+static volatile ULONG _dash_prof_samples = 0;
+static struct Interrupt _dash_prof_int;
+static BOOL _dash_prof_on = FALSE;
+
+static char _dash_prof_enter(WORD id) {
+    _dash_prof_calls[id]++;
+    if (_dash_prof_depth < _DASH_PROF_DEPTH) _dash_prof_stack[_dash_prof_depth] = id;
+    _dash_prof_depth++;
+    return 0;
+}
+
+static void _dash_prof_leave(char *unused) {
+    (void)unused;
+    if (_dash_prof_depth > 0) _dash_prof_depth--;
+}
+
+/* VBlank interrupt server: where the program is now */
+static ULONG _dash_prof_tick(void) {
+    LONG d = _dash_prof_depth, i;
+    WORD id;
+    if (d > _DASH_PROF_DEPTH) d = _DASH_PROF_DEPTH;
+    _dash_prof_samples++;
+    _dash_prof_gen++;
+    _dash_prof_total[0]++;
+    if (d == 0) _dash_prof_self[0]++;
+    else _dash_prof_self[_dash_prof_stack[d - 1]]++;
+    for (i = 0; i < d; i++) {
+        id = _dash_prof_stack[i];
+        if (_dash_prof_seen[id] != _dash_prof_gen) {
+            _dash_prof_seen[id] = _dash_prof_gen;
+            _dash_prof_total[id]++;
+        }
+    }
+    return 0;
+}
+
+static void _dash_prof_start(void) {
+    _dash_prof_calls[0] = 1;
+    _dash_prof_int.is_Node.ln_Type = NT_INTERRUPT;
+    _dash_prof_int.is_Node.ln_Pri = -60;
+    _dash_prof_int.is_Node.ln_Name = (char *)"dash profiler";
+    _dash_prof_int.is_Data = NULL;
+    _dash_prof_int.is_Code = (VOID (*)())_dash_prof_tick;
+    AddIntServer(INTB_VERTB, &_dash_prof_int);
+    _dash_prof_on = TRUE;
+}
+
+/* The table: own time and total time (with what it calls) of each function, slowest first */
+static void _dash_prof_report(void) {
+    LONG i, j, best, n = _DASH_PROF_N;
+    static BOOL done[_DASH_PROF_N];
+    ULONG s;
+    if (!_dash_prof_on) return;
+    RemIntServer(INTB_VERTB, &_dash_prof_int);
+    _dash_prof_on = FALSE;
+    s = _dash_prof_samples ? _dash_prof_samples : 1;
+    Printf("perfil: %lu muestras (VBlank)\\n", _dash_prof_samples);
+    Printf("perfil:  propio   total  llamadas  funcion\\n");
+    for (i = 0; i < n; i++) {
+        best = -1;
+        for (j = 0; j < n; j++)
+            if (!done[j] && (best < 0 || _dash_prof_self[j] > _dash_prof_self[best]
+                             || (_dash_prof_self[j] == _dash_prof_self[best] && _dash_prof_total[j] > _dash_prof_total[best])))
+                best = j;
+        if (best < 0) break;
+        done[best] = TRUE;
+        if (!_dash_prof_calls[best] && !_dash_prof_total[best]) continue;
+        Printf("perfil: %3ld.%ld%% %3ld.%ld%% %9lu  %s\\n",
+               (LONG)(_dash_prof_self[best] * 100 / s), (LONG)(_dash_prof_self[best] * 1000 / s % 10),
+               (LONG)(_dash_prof_total[best] * 100 / s), (LONG)(_dash_prof_total[best] * 1000 / s % 10),
+               _dash_prof_calls[best], _dash_prof_names[best]);
+    }
+}
+
+"""
+
     # Program arguments (dashweb D19): "visor pagina.html". From the Workbench there are none.
     ARGS_RUNTIME = """\
 /* Dash Args Runtime */
@@ -8668,6 +8759,9 @@ class CodeGenerator(ASTVisitor):
         self.context = CodeGenContext()
         # Test mode for the emulator bench: end the program after N seconds
         self.autoclose = int(os.environ.get("DASH_TEST_AUTOCLOSE", "0") or 0)
+        # ./dash --profile (dashweb D23): every function counts its calls; VBlank samples where it is
+        self.profile = os.environ.get("DASH_PROFILE") == "1"
+        self.prof_names: List[str] = ["Main"]
         # ./dash --memcheck: field accesses check for nil (_DASH_NN)
         self.memcheck = os.environ.get("DASH_MEMCHECK_C") == "1"
         self.globals: List[str] = []
@@ -9163,6 +9257,13 @@ static LONG _dash_event_window_handle(void) {{
         parts.append(main_code)
 
         program = "\n".join(parts)
+        if self.profile:
+            names = ", ".join('"' + n.replace('"', "") + '"' for n in self.prof_names)
+            runtime = CTemplates.PROFILE_RUNTIME.replace("$cuantas", str(len(self.prof_names))).replace("$names", names)
+            anchor = "// Function Prototypes" if "// Function Prototypes" in program else "int main("
+            program = program.replace(anchor, runtime + "\n" + anchor, 1)
+            program = program.replace("    // User Code\n", "    _dash_prof_start();\n    // User Code\n", 1)
+            program = program.replace("    // Cleanup\n", "    // Cleanup\n    _dash_prof_report();\n", 1)
         if self.uses_time:
             # the clock starts with the program
             program = program.replace("    // User Code\n", "    _dash_time_init();\n    // User Code\n", 1)
@@ -9529,7 +9630,8 @@ static void {struct.name}_release({c_name} *obj) {{
             else:
                 self.context.declare_var(p)
 
-        body_code = self._function_prologue(method.params, method.body)
+        body_code = self._prof_guard(f"{struct.name}.{method.name}")
+        body_code += self._function_prologue(method.params, method.body)
         for stmt in method.body:
             body_code += self._generate_statement(stmt)
         body_code += self._function_epilogue()
@@ -10337,7 +10439,8 @@ static {ret_type} {method_name}({params_str}) {{
         for p_name in param_names:
             self.context.declare_var(p_name)
 
-        body = self._function_prologue(node.params, node.body)
+        body = self._prof_guard(getattr(node, "dash_name", None) or node.name)
+        body += self._function_prologue(node.params, node.body)
         for s in node.body:
             body += self._generate_statement(s)
         body += self._function_epilogue()
@@ -10583,6 +10686,15 @@ static {ret_type} {method_name}({params_str}) {{
                 if isinstance(nested, list):
                     names |= self._assigned_names(nested)
         return names
+
+    def _prof_guard(self, name: str) -> str:
+        """--profile: the function's number on the profiler's stack while it runs; the cleanup
+        attribute takes it off on every way out (return or end)."""
+        if not self.profile:
+            return ""
+        self.prof_names.append(name)
+        return (f"    char _dash_pg __attribute__((cleanup(_dash_prof_leave), unused)) = "
+                f"_dash_prof_enter({len(self.prof_names) - 1});\n")
 
     def _function_prologue(self, params, body) -> str:
         """Start of a function body: the temporaries mark, and owned copies of

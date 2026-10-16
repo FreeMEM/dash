@@ -74,6 +74,11 @@ el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 by
 mas lo dice con `@stack 262144` (en bytes, al nivel de las funciones): el programa toma la mayor de
 todas; `--stack` sigue mandando.
 
+`--profile` compila una version que, al salir, escribe una tabla con las llamadas a cada funcion y
+el tiempo que paso en ella (propio) y en lo que llama (total), de la mas lenta a la mas rapida
+(`perfil: ...`). El tiempo se mide mirando 50 veces por segundo donde esta el programa (interrupcion
+VBlank): hacen falta unos segundos de ejecucion para que sea fiable.
+
 `--memcheck` compila una version de prueba que vigila la memoria de listas, structs y textos. Avisa
 en cuanto algo se libera dos veces o se usa despues de liberarse (`memcheck: ERROR ...`) y, al
 salir, dice cuanto queda vivo:

@@ -68,6 +68,17 @@ def find_tests(test_dir: Path, pattern: Optional[str] = None) -> List[Path]:
     return tests
 
 
+def wants_profile(test_file: Path) -> bool:
+    """'# profile': built as ./dash --profile (dashweb D23)."""
+    return any(l.strip() == "# profile" for l in test_file.read_text().splitlines())
+
+
+def ignored_output(test_file: Path) -> List[str]:
+    """'# ignore-out: <prefix>': output lines starting so are not compared (they change run to run)."""
+    return [l.split("# ignore-out:", 1)[1].strip()
+            for l in test_file.read_text().splitlines() if l.strip().startswith("# ignore-out:")]
+
+
 def wants_memcheck(test_file: Path) -> bool:
     """'# memcheck': the test itself is about --memcheck (its summary is expected output)."""
     return any(l.strip() == "# memcheck" for l in test_file.read_text().splitlines())
@@ -119,7 +130,8 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
             text=True,
             cwd=str(PROJECT_ROOT),
             timeout=30,
-            env=dict(os.environ, DASH_MEMCHECK_C="1" if mc else "0")
+            env=dict(os.environ, DASH_MEMCHECK_C="1" if mc else "0",
+                     DASH_PROFILE="1" if wants_profile(test_file) else "0")
         )
         transpile_ok = result.returncode == 0
 
@@ -592,6 +604,8 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
             uses_memory = "#define _DASH_MEMORY_RUNTIME" in (PROJECT_ROOT / "build" / f"{test_file.stem}.c").read_text()
             mc_error = check_memcheck(got) if uses_memory and not run.timed_out else None
             got = [l for l in got if not l.startswith("memcheck:")]
+        for prefix_ignored in ignored_output(test_file):
+            got = [l for l in got if not l.startswith(prefix_ignored)]
         if run.timed_out:
             error = "timeout (program did not end)"
         elif run.rc != 0:

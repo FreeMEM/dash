@@ -69,12 +69,17 @@ def main():
     parser.add_argument("--fpu", action="store_true",
                         help="For Amigas with a 68881/68882 FPU: Float uses FPU instructions "
                              "(needs a 68020 or better; the program will not run without an FPU)")
+    parser.add_argument("--profile", action="store_true",
+                        help="Profile build: at exit, how many times each function was called and where the "
+                             "time went (sampled 50 times a second)")
     parser.add_argument("--memcheck", action="store_true",
                         help="Memory check build: reports objects or strings freed twice or used after "
                              "being freed, and what is still alive at exit (slower; for testing)")
     args = parser.parse_args()
     if args.memcheck:
         os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
+    if args.profile:
+        os.environ["DASH_PROFILE"] = "1"      # the transpiler instruments every function
 
     input_filename = args.input_file
     output_filename = args.output

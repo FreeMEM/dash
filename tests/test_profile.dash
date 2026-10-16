@@ -1,0 +1,33 @@
+# Test: ./dash --profile (dashweb D23). Every function puts its number on the profiler's stack
+# while it runs (also on an early return) and the table at exit says the calls and where the
+# time went; the runner ignores the table's lines (their percentages change from run to run).
+# profile
+# ignore-out: perfil:
+# expect-c: char _dash_pg __attribute__((cleanup(_dash_prof_leave), unused)) = _dash_prof_enter(1);
+# expect-c: _dash_prof_start();
+# expect-out: 13670 900 1
+
+func lenta(n: Int) -> Int
+    s = 0
+    for i in (1..n)
+        s = (s + i * 7) % 65521
+    end
+    return s
+end
+
+func rapida(x: Int) -> Int
+    if x % 2 == 0
+        return x / 2
+    end
+    return x * 3 + 1
+end
+
+Main
+    r = lenta(200000)
+    total = 0
+    for i in (1..900)
+        total = total + rapida(i) % 2
+        total = total - rapida(i) % 2 + 1
+    end
+    Print "" + r + " " + total + " " + (r > 0)
+end
