@@ -888,9 +888,11 @@ class SemanticAnalyzer(ASTVisitor):
 
         # Win.width/height/left/top/title: current size, position and title of a window
         if symbol.symbol_type == SymbolType.WINDOW:
-            if node.member not in ("width", "height", "left", "top", "title"):
+            if node.member not in ("width", "height", "left", "top", "title",
+                                   "inner_left", "inner_top", "inner_width", "inner_height"):
                 self.error(f"Window '{node.object_name}' has no readable property '{node.member}' "
-                           f"(width, height, left, top, title)", node)
+                           f"(width, height, left, top, title, inner_left, inner_top, inner_width, "
+                           f"inner_height)", node)
             return
 
         # For array.length, allow it

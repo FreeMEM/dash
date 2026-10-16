@@ -1009,6 +1009,8 @@ desconocida o con un valor del tipo equivocado (`closegadget 1`) es un error.
 
 Se pueden leer `MiVentana.width`, `.height`, `.left`, `.top` y `.title`: con la ventana
 abierta dan el valor actual (tras redimensionarla o moverla); si no, el de la definición.
+`.inner_left`, `.inner_top`, `.inner_width` e `.inner_height` dan la zona de dentro de los
+bordes (donde se dibuja): solo con la ventana abierta (cerrada valen 0).
 
 ### Abrir y Cerrar
 

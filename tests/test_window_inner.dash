@@ -1,0 +1,22 @@
+# Test: Win.inner_left/_top/_width/_height: the area inside the window borders (0 while closed)
+# expect-out: cerrada 0
+# expect-out: bordes bien
+
+Window W
+    title "Interior"
+    width 200
+    height 100
+end
+
+Main
+    Print "cerrada " + W.inner_width
+    W.open
+    l = W.inner_left
+    t = W.inner_top
+    if l > 0 and t > l and W.inner_width == 200 - l - (W.width - W.inner_width - l) and W.inner_height < 100 and W.inner_height > 50
+        Print "bordes bien"
+    else
+        Print "" + l + " " + t + " " + W.inner_width + " " + W.inner_height
+    end
+    W.close
+end
