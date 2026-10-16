@@ -4,6 +4,7 @@
 # the Workbench screen. A missing file gives 0; a wrong image draws nothing.
 # expect-c: static LONG _dash_image_load(STRPTR file)
 # expect-c: _dash_image_cleanup();
+# expect-c: #include <clib/alib_protos.h>
 # expect-out: imagen 8x4
 # expect-out: fila 0: 2 2 2 2 1 1 1 1
 # expect-out: fila 3: 1 2 1 2 1 2 1 2

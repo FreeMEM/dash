@@ -1210,6 +1210,7 @@ static void _dash_font_cleanup(void) {
 #include <datatypes/datatypesclass.h>
 #include <datatypes/pictureclass.h>
 #include <proto/datatypes.h>
+#include <clib/alib_protos.h>
 #include <graphics/scale.h>
 
 struct Library *DataTypesBase = NULL;
