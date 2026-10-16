@@ -1078,6 +1078,115 @@ static void *_dash_weak_check(void *p) {
 
 """
 
+    # Fonts and colors (dashweb D9): disk fonts with size and style on _dash_rp, and pens
+    # for RGB colors on the screen being drawn on (ObtainBestPen, cached and released at exit).
+    FONT_RUNTIME = """\
+/* Dash Font Runtime */
+#include <graphics/text.h>
+#include <graphics/clip.h>
+#include <libraries/diskfont.h>
+#include <proto/diskfont.h>
+
+struct Library *DiskfontBase = NULL;
+#define _DASH_FONTS_MAX 32
+static struct TextFont *_dash_fonts[_DASH_FONTS_MAX];
+
+/* name ("helvetica.font") at size pixels: the font, or 0 if there is no such font.
+   Disk fonts need diskfont.library; the ROM's topaz 8 works without it. */
+static LONG _dash_font_open(STRPTR name, LONG size) {
+    struct TextAttr ta;
+    struct TextFont *f = NULL;
+    LONG i;
+    if (!name) return 0;
+    ta.ta_Name = name;
+    ta.ta_YSize = size;
+    ta.ta_Style = FS_NORMAL;
+    ta.ta_Flags = 0;
+    if (!DiskfontBase) DiskfontBase = OpenLibrary((CONST_STRPTR)"diskfont.library", 36);
+    if (DiskfontBase) f = OpenDiskFont(&ta);
+    if (!f) f = OpenFont(&ta);
+    if (!f) return 0;
+    for (i = 0; i < _DASH_FONTS_MAX; i++) if (!_dash_fonts[i]) { _dash_fonts[i] = f; break; }
+    return (LONG)f;
+}
+
+static void _dash_font_close(LONG font) {
+    LONG i;
+    if (!font) return;
+    for (i = 0; i < _DASH_FONTS_MAX; i++) if (_dash_fonts[i] == (struct TextFont *)font) _dash_fonts[i] = NULL;
+    CloseFont((struct TextFont *)font);
+}
+
+static void _dash_font_use(LONG font) {
+    if (font && _dash_rp) SetFont(_dash_rp, (struct TextFont *)font);
+}
+
+/* 1 underlined, 2 bold, 4 italic (added together); done by the system if the font lacks it */
+static void _dash_font_style(LONG style) {
+    /* the mask is the three styles (AskSoftStyle's answer let the bold of topaz be lost) */
+    if (_dash_rp) SetSoftStyle(_dash_rp, (ULONG)style & 7, FSF_UNDERLINED | FSF_BOLD | FSF_ITALIC);
+}
+
+static LONG _dash_font_height(void) { return _dash_rp ? _dash_rp->TxHeight : 8; }
+static LONG _dash_font_baseline(void) { return _dash_rp ? _dash_rp->TxBaseline : 6; }
+
+/* Width of a text with the current font and style (TextExtent; the system's bold does not
+   widen the text, it thickens it) */
+static LONG _dash_font_text_width(STRPTR s) {
+    struct TextExtent te;
+    if (!_dash_rp || !s) return 0;
+    TextExtent(_dash_rp, s, strlen((char *)s), &te);
+    return te.te_Width;
+}
+
+/* The real size of a font (the nearest one the system found) */
+static LONG _dash_font_size(LONG font) { return font ? ((struct TextFont *)font)->tf_YSize : 0; }
+
+#define _DASH_PENS_MAX 128
+static struct ColorMap *_dash_pen_cm[_DASH_PENS_MAX];
+static LONG _dash_pen_rgb[_DASH_PENS_MAX], _dash_pen_num[_DASH_PENS_MAX], _dash_pens = 0;
+static struct Screen *_dash_pub_screen = NULL;
+
+/* The screen we draw on: the window of _dash_rp, else the default public screen */
+static struct Screen *_dash_pen_screen(void) {
+    if (_dash_rp && _dash_rp->Layer && _dash_rp->Layer->Window)
+        return ((struct Window *)_dash_rp->Layer->Window)->WScreen;
+    if (!_dash_pub_screen) _dash_pub_screen = LockPubScreen(NULL);
+    return _dash_pub_screen;
+}
+
+/* A pen as close as possible to r, g, b (0-255) on that screen */
+static LONG _dash_color_pen(LONG r, LONG g, LONG b) {
+    struct Screen *scr = _dash_pen_screen();
+    struct ColorMap *cm;
+    LONG rgb = ((r & 255) << 16) | ((g & 255) << 8) | (b & 255), i, pen;
+    if (!scr) return 1;
+    cm = scr->ViewPort.ColorMap;
+    for (i = 0; i < _dash_pens; i++) if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) return _dash_pen_num[i];
+    pen = ObtainBestPen(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
+                        (ULONG)(b & 255) * 0x01010101UL, OBP_Precision, PRECISION_IMAGE, TAG_DONE);
+    if (pen < 0) return 1;
+    if (_dash_pens < _DASH_PENS_MAX) {
+        _dash_pen_cm[_dash_pens] = cm;
+        _dash_pen_rgb[_dash_pens] = rgb;
+        _dash_pen_num[_dash_pens++] = pen;
+    } else {
+        ReleasePen(cm, pen);     /* not kept: this one is only good until the next ObtainBestPen */
+    }
+    return pen;
+}
+
+static void _dash_font_cleanup(void) {
+    LONG i;
+    for (i = 0; i < _dash_pens; i++) ReleasePen(_dash_pen_cm[i], _dash_pen_num[i]);
+    _dash_pens = 0;
+    for (i = 0; i < _DASH_FONTS_MAX; i++) if (_dash_fonts[i]) { CloseFont(_dash_fonts[i]); _dash_fonts[i] = NULL; }
+    if (_dash_pub_screen) { UnlockPubScreen(NULL, _dash_pub_screen); _dash_pub_screen = NULL; }
+    if (DiskfontBase) { CloseLibrary(DiskfontBase); DiskfontBase = NULL; }
+}
+
+"""
+
     # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
     # doubles when full, so adding n elements one by one costs O(n).
     LIST_RUNTIME = """\
@@ -7993,6 +8102,7 @@ _RUNTIME_FLAGS = [
     ("TEXT_IO_RUNTIME", "uses_text_io"),    # dashweb D7
     ("NET_RUNTIME", "uses_net"),            # dashweb D8
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
+    ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -8216,6 +8326,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_list_methods: bool = False   # l.push(x)... (LIST_RUNTIME)
         self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
+        self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
@@ -8430,6 +8541,8 @@ class CodeGenerator(ASTVisitor):
         # Add graphics runtime if needed
         if self.needs_gfx:
             parts.append(CTemplates.GRAPHICS_RUNTIME)
+        if self.uses_fonts:
+            parts.append(CTemplates.FONT_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -8612,6 +8725,8 @@ static LONG _dash_event_window_handle(void) {{
         if self.needs_asl and not self.needs_gadtools:
             cleanup.append("    _dash_asl_cleanup();\n"
                            "    if (AslBase) { CloseLibrary(AslBase); AslBase = NULL; }\n")
+        if self.uses_fonts:
+            cleanup.append("    _dash_font_cleanup();\n")
         if self.uses_tls:
             cleanup.append("    _dash_tls_cleanup();\n")   # before the sockets library closes
         if self.uses_net:
@@ -10280,6 +10395,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_fonts:
+            self.needs_gfx = True      # FONT_RUNTIME draws on _dash_rp
         if self.uses_tls:
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:

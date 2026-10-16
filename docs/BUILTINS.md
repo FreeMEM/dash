@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 456 funciones, 456 implementadas, 0 sin implementar.
+Total: 465 funciones, 465 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -374,6 +374,20 @@ Total: 456 funciones, 456 implementadas, 0 sin implementar.
 | `tls_recv(tls, max, timeout_ms)` | `STRPTR` | Like net_recv: "" if nothing came in time, nil once closed |  |
 | `tls_recv_buffer(tls, buffer, max, timeout_ms)` | `LONG` | Like net_recv_buffer: the count, 0 on time out, -1 once closed |  |
 | `tls_close(tls)` | `void` | End TLS on the connection (net_close the socket after) |  |
+
+## Fuentes y colores
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `font_open(name, size)` | `LONG` | Open a font ("helvetica.font", size in pixels): the font, or 0 if there is none |  |
+| `font_use(font)` | `void` | Draw text with this font |  |
+| `font_close(font)` | `void` | Close a font (the open ones close at exit) |  |
+| `font_style(style)` | `void` | Text style: 0 plain, +1 underlined, +2 bold, +4 italic |  |
+| `font_height()` | `LONG` | Height of the current font |  |
+| `font_baseline()` | `LONG` | Pixels from the top of the text to its baseline |  |
+| `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
+| `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
+| `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
 
 ## Audio
 

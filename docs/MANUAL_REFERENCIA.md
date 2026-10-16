@@ -1154,6 +1154,22 @@ gfx_text("Mas texto")           # Texto en cursor
 ancho = gfx_text_len("Hola")    # Ancho en pixeles
 ```
 
+### Fuentes y colores RGB
+
+```
+f = font_open("helvetica.font", 13)    # 0 si no existe (la topaz 8 de la ROM siempre esta)
+font_use(f)                            # el texto que se dibuje despues usa esta fuente
+font_style(2)                          # 0 normal, +1 subrayado, +2 negrita, +4 cursiva
+ancho = font_text_width("Hola")        # con la fuente y el estilo actuales
+alto = font_height()                   # y font_baseline(): de arriba a la linea base
+rojo = color_pen(255, 0, 0)            # el lapiz mas parecido en la pantalla donde se dibuja
+gfx_pen(rojo)
+```
+
+`font_size(f)` dice el tamano que dio el sistema (el mas cercano que tiene). Las fuentes de
+disco necesitan `diskfont.library` y la fuente en `FONTS:`. Las fuentes abiertas y los lapices
+se devuelven al salir.
+
 ### Pantalla
 
 ```

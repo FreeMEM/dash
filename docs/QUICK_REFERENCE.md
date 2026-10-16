@@ -195,6 +195,8 @@ gfx_poly_add(x, y)          # Add vertex
 gfx_poly_end()              # Close & fill
 
 gfx_text_at(x, y, "text")   # Draw text
+f = font_open("helvetica.font", 13) # font_use(f), font_style(2), font_text_width(s), font_height()
+color_pen(r, g, b)          # pen for an RGB color (0-255) on the screen drawn on
 gfx_clear()                 # Clear screen
 ```
 

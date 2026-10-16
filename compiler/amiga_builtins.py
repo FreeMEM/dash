@@ -3676,6 +3676,34 @@ TLS_FUNCTIONS = {
 }
 
 # =============================================================================
+# Fonts and colors (dashweb D9): disk fonts on the current RastPort, pens for RGB colors.
+# =============================================================================
+
+def _gfx(name, params, ret, template, desc):
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       needs_gfx=True, reads_only=True)
+
+
+FONT_FUNCTIONS = {
+    "font_open": _gfx("font_open", ["name", "size"], "LONG", "_dash_font_open(${name}, ${size})",
+                      "Open a font (\"helvetica.font\", size in pixels): the font, or 0 if there is none"),
+    "font_use": _gfx("font_use", ["font"], "void", "_dash_font_use(${font})", "Draw text with this font"),
+    "font_close": _gfx("font_close", ["font"], "void", "_dash_font_close(${font})",
+                       "Close a font (the open ones close at exit)"),
+    "font_style": _gfx("font_style", ["style"], "void", "_dash_font_style(${style})",
+                       "Text style: 0 plain, +1 underlined, +2 bold, +4 italic"),
+    "font_height": _gfx("font_height", [], "LONG", "_dash_font_height()", "Height of the current font"),
+    "font_baseline": _gfx("font_baseline", [], "LONG", "_dash_font_baseline()",
+                          "Pixels from the top of the text to its baseline"),
+    "font_text_width": _gfx("font_text_width", ["text"], "LONG", "_dash_font_text_width(${text})",
+                            "Width of a text in pixels with the current font and style"),
+    "font_size": _gfx("font_size", ["font"], "LONG", "_dash_font_size(${font})",
+                      "Size the system gave for this font (the nearest it has)"),
+    "color_pen": _gfx("color_pen", ["r", "g", "b"], "LONG", "_dash_color_pen(${r}, ${g}, ${b})",
+                      "Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -3693,6 +3721,7 @@ ALL_BUILTINS = {
     **TEXT_FUNCTIONS,          # dashweb D2
     **NET_FUNCTIONS,           # dashweb D8
     **TLS_FUNCTIONS,           # dashweb D11
+    **FONT_FUNCTIONS,          # dashweb D9
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,
