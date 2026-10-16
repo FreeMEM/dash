@@ -9,7 +9,7 @@
 
 @header "#include <devices/input.h>"
 @header "#include <dos/dostags.h>"
-@header "static struct Window *teclas_win; static LONG teclas_x, teclas_y;"
+@header "static struct Window *teclas_win; static LONG teclas_x, teclas_y; static struct Task *teclas_padre;"
 
 const ID_RATON = 30
 
@@ -63,12 +63,23 @@ end
     }
     if (io) DeleteIORequest((struct IORequest *)io);
     if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(teclas_padre, SIGBREAKF_CTRL_F);
 """
 end
 
 @native func lanzar()
 """
-    CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE);
+    teclas_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE) == NULL)
+        teclas_padre = NULL;
+"""
+end
+
+@native func esperar_teclas()
+"""
+    if (teclas_padre) Wait(SIGBREAKF_CTRL_F);
 """
 end
 
@@ -106,6 +117,7 @@ Main
             end
         end
         mui_app_end()
+        esperar_teclas()
         Print "fin"
     end
 end
