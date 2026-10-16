@@ -3825,6 +3825,22 @@ BLEND_FUNCTIONS = {
 }
 
 # =============================================================================
+# RGB24 pictures from a buffer (video frames)
+# =============================================================================
+
+RGB_FUNCTIONS = {
+    "gfx_rgb_draw": _gfx("gfx_rgb_draw", ["buffer", "width", "height", "x", "y"], "void",
+                         "_dash_rgb_draw(${buffer}, ${width}, ${height}, ${x}, ${y})",
+                         "Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one "
+                         "WritePixelArray; palette screens: the closest pens)"),
+    "gfx_rgb_draw_scaled": _gfx("gfx_rgb_draw_scaled", ["buffer", "width", "height", "x", "y", "dest_width",
+                                                        "dest_height"], "void",
+                                "_dash_rgb_draw_scaled(${buffer}, ${width}, ${height}, ${x}, ${y}, ${dest_width}, "
+                                "${dest_height})",
+                                "Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row)"),
+}
+
+# =============================================================================
 # Pictures by datatypes (dashweb D12)
 # =============================================================================
 
@@ -3885,6 +3901,7 @@ ALL_BUILTINS = {
     **TLS_FUNCTIONS,           # dashweb D11
     **FONT_FUNCTIONS,          # dashweb D9
     **BLEND_FUNCTIONS,
+    **RGB_FUNCTIONS,
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
     **AUDIO_FUNCTIONS,

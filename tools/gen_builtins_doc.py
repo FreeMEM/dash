@@ -33,6 +33,7 @@ GROUPS = [
     ("TLS_FUNCTIONS", "TLS (AmiSSL)"),    # dashweb D11
     ("FONT_FUNCTIONS", "Fuentes y colores"),  # dashweb D9
     ("BLEND_FUNCTIONS", "Transparencia y degradados"),
+    ("RGB_FUNCTIONS", "Imágenes RGB desde un buffer (vídeo)"),
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos"),     # dashweb D19
     ("AUDIO_FUNCTIONS", "Audio"),

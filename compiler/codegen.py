@@ -1400,6 +1400,111 @@ static void _dash_gradient_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb1, L
     SetAPen(_dash_rp, pen);
 }
 
+/* --- RGB24 pictures (gfx_rgb_draw): video frames --- */
+
+/* Picasso96's p96WritePixelArray (LVO -102): ri in a0, SrcX d0, SrcY d1, rp a1, DestX d2, DestY d3,
+   SizeX d4, SizeY d5. RenderInfo: the memory, its bytes per row, the pixel format. */
+struct _DashRenderInfo { APTR Memory; WORD BytesPerRow; WORD pad; ULONG RGBFormat; };
+#define _DASH_RGBFB_R8G8B8 2
+static void _dash_p96_write_array(struct _DashRenderInfo *ri, LONG sx, LONG sy, struct RastPort *rp,
+                                  LONG dx, LONG dy, LONG w, LONG h) {
+    register struct _DashRenderInfo *a0 __asm("a0") = ri;
+    register ULONG d0 __asm("d0") = sx;
+    register ULONG d1 __asm("d1") = sy;
+    register struct RastPort *a1 __asm("a1") = rp;
+    register ULONG d2 __asm("d2") = dx;
+    register ULONG d3 __asm("d3") = dy;
+    register ULONG d4 __asm("d4") = w;
+    register ULONG d5 __asm("d5") = h;
+    register struct Library *a6 __asm("a6") = _dash_p96;
+    __asm volatile ("jsr a6@(-102:W)" : "+r"(a0), "+r"(d0), "+r"(d1), "+r"(a1), "+r"(d2), "+r"(d3), "+r"(d4), "+r"(d5)
+                    : "r"(a6) : "cc", "memory");
+}
+
+/* w x h pixels of RGB24 rows (bytes_per_row apart) at x, y of the RastPort, already clipped */
+static void _dash_rgb_rect(UBYTE *pix, LONG bytes_per_row, LONG w, LONG h, LONG x, LONG y) {
+    if (CyberGfxBase) {
+        WritePixelArray(pix, 0, 0, bytes_per_row, _dash_rp, x, y, w, h, RECTFMT_RGB);
+    } else {
+        struct _DashRenderInfo ri;
+        ri.Memory = pix;
+        ri.BytesPerRow = bytes_per_row;
+        ri.pad = 0;
+        ri.RGBFormat = _DASH_RGBFB_R8G8B8;
+        _dash_p96_write_array(&ri, 0, 0, _dash_rp, x, y, w, h);
+    }
+}
+
+/* Palette screens: a pen for each colour with 3 bits per channel (512), found once */
+static UBYTE _dash_rgb_pens[512];
+static BOOL _dash_rgb_pens_ok = FALSE;
+static struct Screen *_dash_rgb_pens_screen = NULL;
+static UBYTE _dash_rgb_pen(UBYTE r, UBYTE g, UBYTE b) {
+    LONG i = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
+    struct Screen *scr = _dash_pen_screen();
+    if (!_dash_rgb_pens_ok || scr != _dash_rgb_pens_screen) {
+        LONG k;
+        for (k = 0; k < 512; k++) _dash_rgb_pens[k] = 0xFF;
+        _dash_rgb_pens_ok = TRUE;
+        _dash_rgb_pens_screen = scr;
+    }
+    if (_dash_rgb_pens[i] == 0xFF)
+        _dash_rgb_pens[i] = (UBYTE)_dash_color_pen(((i >> 6) << 5) | 16, (((i >> 3) & 7) << 5) | 16, ((i & 7) << 5) | 16);
+    return _dash_rgb_pens[i];
+}
+
+/* gfx_rgb_draw_scaled: the w x h RGB24 buffer at x, y as dw x dh (nearest pixel). The source
+   column of each destination column is worked out once; each source row is scaled once and, on
+   RTG, written for all the destination rows it gives in one call (a row step of 0 repeats it). */
+static void _dash_rgb_draw_scaled(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG dw, LONG dh) {
+    UBYTE *pix = (UBYTE *)buffer, *row;
+    LONG cx1 = x, cy1 = y, cx2 = x + dw - 1, cy2 = y + dh - 1, dy, n, i, *cols;
+    BOOL rtg;
+    if (!_dash_rp || !pix || w <= 0 || h <= 0 || dw <= 0 || dh <= 0) return;
+    if (!_dash_blend_clip(&cx1, &cy1, &cx2, &cy2)) return;
+    rtg = _dash_blend_truecolor(_dash_rp);
+    n = cx2 - cx1 + 1;
+    if (rtg && dw == w && dh == h) {
+        /* the visible part straight from the buffer, in one call */
+        _dash_rgb_rect(pix + (cy1 - y) * w * 3 + (cx1 - x) * 3, w * 3, n, cy2 - cy1 + 1, cx1, cy1);
+        return;
+    }
+    row = (UBYTE *)AllocVec(n * 3 + n * sizeof(LONG), MEMF_ANY);
+    if (!row) return;
+    cols = (LONG *)row + ((n * 3 + 3) >> 2);
+    for (i = 0; i < n; i++) cols[i] = ((cx1 - x + i) * w / dw) * 3;
+    for (dy = cy1; dy <= cy2; ) {
+        LONG sy = (dy - y) * h / dh, rows = 1;
+        UBYTE *src = pix + sy * w * 3;
+        while (dy + rows <= cy2 && (dy + rows - y) * h / dh == sy) rows++;   /* same source row */
+        if (rtg) {
+            if (dw == w) {
+                _dash_rgb_rect(src + (cx1 - x) * 3, 0, n, rows, cx1, dy);
+            } else {
+                UBYTE *d = row;
+                for (i = 0; i < n; i++) {
+                    UBYTE *p = src + cols[i];
+                    *d++ = p[0]; *d++ = p[1]; *d++ = p[2];
+                }
+                _dash_rgb_rect(row, 0, n, rows, cx1, dy);
+            }
+        } else {
+            LONG r;
+            for (i = 0; i < n; i++) {
+                UBYTE *p = src + cols[i];
+                row[i] = _dash_rgb_pen(p[0], p[1], p[2]);
+            }
+            for (r = 0; r < rows; r++) WriteChunkyPixels(_dash_rp, cx1, dy + r, cx2, dy + r, row, n);
+        }
+        dy += rows;
+    }
+    FreeVec(row);
+}
+
+static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
+    _dash_rgb_draw_scaled(buffer, w, h, x, y, w, h);
+}
+
 static void _dash_blend_cleanup(void) {
     if (_dash_p96) { CloseLibrary(_dash_p96); _dash_p96 = NULL; }
     _dash_blend_libs = 0;

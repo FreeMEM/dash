@@ -1,0 +1,43 @@
+# gfx_rgb_draw paints an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y and
+# gfx_rgb_draw_scaled at another size (nearest pixel). On a palette screen (here) each colour takes
+# the closest pen (3 bits per channel), so black and white come back exact; what falls outside the
+# window is left out. A 2x2 checker scaled to 4x4 doubles each pixel.
+# memcheck
+# expect-out: 0 ffffff ffffff 0
+# expect-out: escalado 0 0 ffffff ffffff / 0 0 ffffff ffffff / ffffff ffffff 0 0
+# expect-out: recortado ffffff 0
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Window W
+    title "RGB"
+    width 200
+    height 100
+end
+
+func pon(buf: Int, i: Int, rgb: Int)
+    buffer_set_byte(buf, i * 3, (rgb >> 16) & 255)
+    buffer_set_byte(buf, i * 3 + 1, (rgb >> 8) & 255)
+    buffer_set_byte(buf, i * 3 + 2, rgb & 255)
+end
+
+func hx(x: Int, y: Int) -> String
+    return str_from_int(gfx_pixel_rgb(x, y), 16)
+end
+
+Main
+    W.open
+    buf = buffer_alloc(2 * 2 * 3)
+    pon(buf, 0, 0x000000)
+    pon(buf, 1, 0xFFFFFF)
+    pon(buf, 2, 0xFFFFFF)
+    pon(buf, 3, 0x000000)
+    gfx_rgb_draw(buf, 2, 2, 10, 10)
+    Print "#{hx(10, 10)} #{hx(11, 10)} #{hx(10, 11)} #{hx(11, 11)}"
+    gfx_rgb_draw_scaled(buf, 2, 2, 20, 10, 4, 4)
+    Print "escalado #{hx(20, 10)} #{hx(21, 10)} #{hx(22, 10)} #{hx(23, 10)} / #{hx(20, 11)} #{hx(21, 11)} #{hx(22, 11)} #{hx(23, 11)} / #{hx(20, 12)} #{hx(21, 12)} #{hx(22, 12)} #{hx(23, 12)}"
+    gfx_rgb_draw(buf, 2, 2, -1, 40)
+    Print "recortado #{hx(0, 40)} #{hx(0, 41)}"
+    buffer_free(buf)
+    Print "fin"
+end

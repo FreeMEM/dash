@@ -1257,6 +1257,20 @@ un tramado ordenado de 4x4 (alfa 128 pinta la mitad de los pixeles, 0 ninguno, 2
 blitter. Lo que cae fuera de la ventana no se pinta. En un degradado cada fila (o columna) tiene su
 color y su alfa; con pocos colores en la paleta, los intermedios salen del lapiz mas cercano.
 
+### Imagenes RGB desde un buffer (video)
+
+```
+buf = buffer_alloc(640 * 360 * 3)                   # RGB24: 3 bytes por pixel, filas seguidas
+gfx_rgb_draw(buf, 640, 360, 0, 0)                   # tal cual en 0, 0
+gfx_rgb_draw_scaled(buf, 640, 360, 0, 0, 1024, 576) # escalado (pixel mas cercano)
+```
+
+En RTG va con `WritePixelArray` de `cybergraphics.library` o `p96WritePixelArray` de Picasso96: sin
+escalar, una sola llamada; escalado, cada fila de origen se escala una vez y se escribe para todas
+las filas de destino que da. En un 68040 emulado con uaegfx a 16 bits: 640x360 en unos 10 ms y a
+1024x576 en unos 43 ms. En una pantalla de paleta cada color toma el lapiz mas cercano (3 bits por
+canal) con `WriteChunkyPixels`, sin buscar velocidad. Lo que cae fuera de la ventana no se pinta.
+
 ### Imagenes (datatypes)
 
 ```
