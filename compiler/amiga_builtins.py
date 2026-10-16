@@ -1854,6 +1854,18 @@ REACTION_FUNCTIONS = {
 # =============================================================================
 
 SYSTEM_FUNCTIONS = {
+    # Debugging: in UAE (FS-UAE, WinUAE) the emulated machine stops in the emulator's debugger
+    # (uaelib function 15 at $F0FF60, see tools/emu_run.py --debug); on a real Amiga, or in
+    # UAE without its boot ROM, nothing happens: $F0FF60 is only read once uae.resource exists.
+    "debug_break": BuiltinFunc(
+        name="debug_break",
+        params=[],
+        return_type="void",
+        c_template="({ if (OpenResource((CONST_STRPTR)\"uae.resource\") && "
+                   "(*(volatile UWORD *)0xF0FF60 & 0xF000) == 0xA000 && *(volatile UWORD *)0xF0FF62 == 0x4E75) "
+                   "((ULONG (*)(ULONG))0xF0FF60)(15); })",
+        description="Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug)"
+    ),
     # Memory
     "mem_chip_free": BuiltinFunc(
         name="mem_chip_free",

@@ -1,0 +1,14 @@
+# debug_break(): in UAE the emulated machine stops in the emulator's debugger (tools/emu_run.py
+# --debug sends it commands); without debugger commands (the test runner gives FS-UAE no stdin)
+# it goes on by itself, and on a real Amiga, without uae.resource, it does nothing.
+# expect-c: OpenResource((CONST_STRPTR)"uae.resource")
+# expect-out: antes 41
+# expect-out: después 42
+
+Main
+    x = 41
+    Print "antes " + x
+    debug_break()
+    x = x + 1
+    Print "después " + x
+end

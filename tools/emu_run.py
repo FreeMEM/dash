@@ -25,6 +25,13 @@ the assigns (MUI: see tools/emu_sys_mui.sh).
 --workbench runs C:LoadWB from those files before the programs, as on a real Amiga:
 in AmigaOS 3.2 window.class (ReAction) waits for the Workbench when it is opened.
 
+--debug CMD (repeatable) talks to FS-UAE's debugger: a program that calls debug_break()
+stops the emulated machine there, each CMD is sent in turn while the debugger waits
+("r" registers, "m addr n" memory, "d addr n" disassembly, "t" one instruction, "H n"
+history...), then "g" so the program goes on. What the debugger said is printed at the end.
+
+    tools/emu_run.py --debug r --debug "m 4 2" prog.dash
+
 A program that never ends (an EventLoop waiting for the close gadget
 without --autoclose, a crash) stops the boot: it and the ones after it are reported as TIMEOUT.
 """
@@ -36,6 +43,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -49,9 +57,43 @@ hard_drive_0 = {hd}
 hard_drive_0_label = DH0
 fullscreen = 0
 floppy_drive_volume = 0
+volume = 0
+uae_sound_output = interrupts
 automatic_input_grab = 0
 uae_cpu_speed = max
 {kickstart}"""
+
+
+class EmuResults(list):
+    """The EmuResult of each program; debugger: what FS-UAE's debugger printed (--debug)."""
+    debugger = ""
+
+
+def _debugger_session(proc, commands, transcript):
+    """Read FS-UAE's console; each time its debugger waits (a '>' prompt after it was
+    activated), send the next command, or "g" once they are used up."""
+    pending = list(commands)
+    active = False
+    since = b""
+    while True:
+        try:
+            chunk = os.read(proc.stdout.fileno(), 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        transcript.append(chunk)
+        since += chunk
+        active = active or b"activate_console" in since or b"Next PC:" in since
+        if active and since.endswith(b">"):
+            command = pending.pop(0) if pending else "g"
+            try:
+                proc.stdin.write((command + "\n").encode())
+                proc.stdin.flush()
+            except OSError:
+                break
+            transcript.append(command.encode() + b"\n")
+            since = b""
 
 
 class EmuResult:
@@ -114,12 +156,15 @@ def ppm_to_png(ppm: Path, png: Path):
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
-                 screenshot: tuple = None, args: list = None, background: list = None):
+                 screenshot: tuple = None, args: list = None, background: list = None,
+                 debug: list = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot. background: (program, arguments) pairs
     started with Run before the programs, e.g. one that clicks in their windows; their
-    output goes to DH0:bg<i>.txt (keep= to read it). Returns one EmuResult per program, in order."""
+    output goes to DH0:bg<i>.txt (keep= to read it). debug: commands for FS-UAE's debugger
+    when a program calls debug_break() (see --debug). Returns one EmuResult per program, in
+    order, in an EmuResults list (.debugger: the debugger's text)."""
     if not shutil.which("fs-uae"):
         raise RuntimeError("fs-uae not found")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
@@ -191,10 +236,19 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         ks_line = f"kickstart_file = {kickstart}\n" if kickstart else ""
         config.write_text(FSUAE_CONFIG.format(hd=hd, kickstart=ks_line) + extra_config)
 
-        env = dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy")
-        proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                start_new_session=True)
+        env = dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
+        transcript = []
+        if debug is not None:   # the debugger talks on FS-UAE's stdin/stdout
+            proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env,
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    start_new_session=True)
+            reader = threading.Thread(target=_debugger_session, args=(proc, debug, transcript), daemon=True)
+            reader.start()
+        else:
+            # no stdin: a debug_break() without --debug must not wait for commands from the terminal
+            proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    start_new_session=True)
         try:
             deadline = time.time() + timeout
             while time.time() < deadline and not (hd / "done.txt").exists():
@@ -216,7 +270,13 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 ppm_to_png(hd / "shot.ppm", Path(screenshot[1]))
             else:
                 print(f"no screenshot (did a program still run after {screenshot[0]} s?)", file=sys.stderr)
-        results = []
+        results = EmuResults()
+        text = b"".join(transcript).decode("latin-1")
+        start = text.find("activate_console")
+        if start >= 0:   # from the first stop on, without the stub's note
+            text = text[text.find("\n", start) + 1:]
+            results.debugger = "\n".join(l for l in text.splitlines()
+                                         if not l.startswith(("UAE: ", " -- stub --")))
         for i, name in enumerate(names):
             out_file, rc_file = hd / f"out{i}.txt", hd / f"rc{i}.txt"
             output = out_file.read_text(encoding="latin-1") if out_file.exists() else None  # AmigaOS texts
@@ -246,6 +306,9 @@ def main():
     parser.add_argument("--screenshot", nargs=2, metavar=("SECONDS", "FILE.png"),
                         help="save the front screen SECONDS after boot (tools/amiga/shot.c); "
                              "use --autoclose so the program is still open then")
+    parser.add_argument("--debug", action="append", metavar="CMD",
+                        help="FS-UAE debugger command when a program calls debug_break() "
+                             "(repeatable; then \"g\": see the help at the top of this file)")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
     args = parser.parse_args()
@@ -254,7 +317,8 @@ def main():
                                args.autoclose,
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
-                               args.keep, args.fpu, args.system, args.workbench, args.screenshot)
+                               args.keep, args.fpu, args.system, args.workbench, args.screenshot,
+                               debug=args.debug)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
@@ -266,6 +330,9 @@ def main():
             print(r.output, end="" if r.output.endswith("\n") else "\n")
         if r.timed_out or r.rc != 0:
             failed += 1
+    if args.debug is not None:
+        print("=== debugger")
+        print(results.debugger or "(no program called debug_break)")
     return 1 if failed else 0
 
 

@@ -1801,6 +1801,26 @@ procesa()
 Print "tardo " + (time_ms() - t) + " ms"
 ```
 
+### Depurar en el emulador
+
+`debug_break()` para la máquina emulada en el depurador de UAE (FS-UAE, WinUAE). En un Amiga real
+no hace nada. Con `tools/emu_run.py --debug ORDEN` (se repite) cada orden va al depurador mientras
+espera, y después `g` para que el programa siga. Al final sale lo que contestó:
+
+```
+x = 41
+debug_break()
+x = x + 1
+```
+
+```bash
+tools/emu_run.py --debug r --debug t --debug "d" prog.dash
+```
+
+Órdenes útiles: `r` registros, `t` una instrucción, `d dir n` desensamblar, `m dir n` memoria,
+`H n` las últimas instrucciones, `f dir` punto de parada, `g` seguir. `h` da la lista entera.
+Sin `--debug` (los tests) el programa sigue solo.
+
 ### Argumentos del programa
 
 Desde el Shell, lo que va detras del nombre del programa (`visor pagina.html "otra cosa"`):

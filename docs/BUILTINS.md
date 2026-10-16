@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 479 funciones, 479 implementadas, 0 sin implementar.
+Total: 480 funciones, 480 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -259,6 +259,7 @@ Total: 479 funciones, 479 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
+| `debug_break()` | `void` | Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug) |  |
 | `mem_chip_free()` | `LONG` | Available chip RAM |  |
 | `mem_fast_free()` | `LONG` | Available fast RAM |  |
 | `mem_total()` | `LONG` | Total available memory |  |

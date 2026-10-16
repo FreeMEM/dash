@@ -396,7 +396,8 @@ end` pone C libre (por ejemplo funciones que llaman a Dash) y `@stack N` pide un
 ## 8. Herramientas
 
 - **Emulador:** `tools/emu_run.py` ejecuta programas en FS-UAE sin ventana y devuelve su salida; con
-  `--screenshot` saca una captura de la pantalla del Amiga.
+  `--screenshot` saca una captura de la pantalla del Amiga. Con `--debug` habla con el depurador del
+  emulador cuando el programa llama a `debug_break()` (registros, memoria, paso a paso).
 - **Tests:** `python3 tests/run_tests.py` (con `--emu`, `--emu-a500` y `--emu-32` los ejecuta en un A1200,
   un A500 y un A1200 con AmigaOS 3.2; `--memcheck` con la comprobación de memoria).
 - **Medidas:** `tools/bench.py` (velocidad, memoria y tamaño en A500 y A1200 emulados).

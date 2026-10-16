@@ -281,6 +281,8 @@ wait_vblank()               # Wait vertical blank
 
 random()                    # Random number
 random_range(min, max)      # Random in range
+
+debug_break()               # Stop in the UAE emulator's debugger (tools/emu_run.py --debug)
 ```
 
 ## Network (TCP, bsdsocket.library)

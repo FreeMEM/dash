@@ -282,7 +282,8 @@ export DASH_EMU_SYS=~/.cache/dash-emu/sys31 DASH_EMU_SYS_32=~/.cache/dash-emu/sy
 ```
 
 Prueba: `python3 tools/emu_run.py examples/hola.dash` y `python3 tests/run_tests.py --emu`. Con
-`--screenshot SEGUNDOS fichero.png` se guarda una captura de la pantalla del Amiga.
+`--screenshot SEGUNDOS fichero.png` se guarda una captura de la pantalla del Amiga, y con `--debug ORDEN` se
+usa el depurador del emulador desde un `debug_break()` del programa (ver el manual de referencia).
 
 ## Paso 7: MUI (opcional)
 
