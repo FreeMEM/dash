@@ -9368,9 +9368,9 @@ static {ret_type} {method_name}({params_str}) {{
                 self.context.declare_var(node.name)
                 self.context.own(node.name)
                 self.emit(f"{indent}STRPTR {node.name} = NULL;\n")
-                self.emit(f"{indent}_dash_str_set(&{node.name}, {value});\n")
+                self.emit(f"{indent}_dash_str_set(&{node.name}, {self._lent_str(node.value, value)});\n")
             elif self.context.is_owned(node.name) or node.name in self.global_strings:
-                self.emit(f"{indent}_dash_str_set(&{node.name}, {value});\n")
+                self.emit(f"{indent}_dash_str_set(&{node.name}, {self._lent_str(node.value, value)});\n")
             else:
                 self.emit(f"{indent}{node.name} = {value};\n")
             return
@@ -9840,7 +9840,7 @@ static {ret_type} {method_name}({params_str}) {{
             key = self._generate_expression(node.index)
             value = self._generate_expression(node.value)
             if kind == "string":
-                self.emit(f"{indent}DashDict_set_str({d}, {key}, {value});\n")
+                self.emit(f"{indent}DashDict_set_str({d}, {key}, {self._lent_str(node.value, value)});\n")
             elif kind != "int":
                 self.emit(f"{indent}DashDict_set_obj({d}, {key}, (void *)({value}));\n")
             else:
@@ -9852,7 +9852,7 @@ static {ret_type} {method_name}({params_str}) {{
         elem = self._array_elem_type(node.array)
         if elem == "string":
             self.uses_strings = True
-            self.emit(f"{indent}DashArray_set_str({array_name}, {index}, {value});\n")
+            self.emit(f"{indent}DashArray_set_str({array_name}, {index}, {self._lent_str(node.value, value)});\n")
             return
         if elem and (self._is_obj_expr(node.value) or isinstance(node.value, NilLiteral)):
             # the array holds a reference to its structs or arrays
@@ -10415,6 +10415,8 @@ static {ret_type} {method_name}({params_str}) {{
                 val = self._fixed_value(arguments[i])
             elif i < len(arguments):
                 val = self._generate_expression(arguments[i])
+                if field.field_type == "String":
+                    val = self._lent_str(arguments[i], val)
             elif field.default_value and field.field_type == "Fixed":
                 val = self._fixed_value(field.default_value)
             elif field.default_value:
@@ -10444,7 +10446,7 @@ static {ret_type} {method_name}({params_str}) {{
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
-            self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {value});\n")
+            self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {self._lent_str(node.value, value)});\n")
             return
         if field and field.weak:
             # weak: the field only points (dashweb D6)
@@ -10481,6 +10483,8 @@ static {ret_type} {method_name}({params_str}) {{
         elem = self._array_elem_type(node.object) or ""
         suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem == "array") else ""
         args = [self._generate_expression(a) for a in node.arguments]
+        if suffix == "_str" and node.method in ("push", "insert"):
+            args[-1] = self._lent_str(node.arguments[-1], args[-1])
         if node.method == "push":
             value = args[0] if suffix != "_obj" else f"(void *)({args[0]})"
             return f"DashArray_push{suffix}({arr}, {value})"
@@ -10621,6 +10625,17 @@ static {ret_type} {method_name}({params_str}) {{
                 literal = f"'\\{lit_side.value[2]}'"
                 return f"({self._generate_expression(char_side)} {node.operator} {literal})"
         return None
+
+    def _lent_str(self, node: ASTNode, code: str) -> str:
+        """A String kept (variable, field, list, dictionary) from a parameter or a loop variable
+        is copied: the parameter may be a temporary of the caller, which _dash_str_set would
+        adopt and the callee would free while the caller still uses it (dashweb D17)."""
+        if (isinstance(node, VarRef) and self.var_types.get(node.name) == "string"
+                and not self.context.is_owned(node.name) and node.name not in self.global_strings
+                and not self._is_string_constant(node)):
+            self.uses_strings = True
+            return f"_dash_str_dup({code}, TRUE)"
+        return code
 
     def _append_in_place(self, node: VarAssign) -> bool:
         """s = s + a + b... on a String variable that owns its text: append each part in

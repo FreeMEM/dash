@@ -1,0 +1,42 @@
+# Test: a String parameter can be a temporary of the caller (lent): keeping it in a variable,
+# field, list or dictionary copies it. It used to adopt it, free it on return and leave the
+# caller with freed text (garbage in --memcheck builds).
+# memcheck
+# expect-c: _dash_str_set(&s, _dash_str_dup(t, TRUE));
+# expect-out: abc1 4 12
+# expect-out: x1 2 6
+# expect-out: y2 2 6
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Caja
+    t: String
+end
+
+func largo(t: String) -> Int
+    s = t
+    return s.length
+end
+
+func guarda(t: String) -> Int
+    c = Caja(t)
+    var l: [String] = []
+    l.push(t)
+    var d: {String: String} = {}
+    d["k"] = t
+    c.t = t
+    return c.t.length + l[0].length + d["k"].length
+end
+
+func usa(t: String)
+    n = largo(t)
+    m = guarda(t)
+    Print t + " " + n + " " + m
+end
+
+Main
+    usa("abc" + 1)
+    nombres = ["x" + 1, "y" + 2]
+    for nm in nombres
+        usa(nm)
+    end
+end
