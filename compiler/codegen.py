@@ -1709,7 +1709,7 @@ static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
     # string forgets it (_dash_str_drop gets a call, see _assemble_program).
     TEXT_RUNTIME = """\
 /* Dash Text Runtime */
-#define _DASH_SC_N 4
+#define _DASH_SC_N 8
 #define _DASH_SC_MIN 64
 static STRPTR _dash_sc_s[_DASH_SC_N];
 static LONG _dash_sc_len[_DASH_SC_N];
@@ -8421,6 +8421,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
+        self.assigned_str_fields: Set[tuple] = set()  # (struct, field) of String fields some code sets
+        self.lent_str_fields: Set[tuple] = set()      # (struct, field) passed by _DASH_LEND_ macros
         self.uses_winmgr: bool = False  # window_create() handles
         self.uses_gadgets: bool = False  # button_create()... handles
         self.uses_bitmaps: bool = False  # bitmap_create()... ids
@@ -8497,6 +8499,13 @@ class CodeGenerator(ASTVisitor):
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
         parts = [CTemplates.PROGRAM_HEADER, CTemplates.STACK_REQUEST]
+        if self.lent_str_fields:
+            # A String field passed to a function: copied if some code sets that field
+            # (the callee could free it), else lent as it is (dashweb D22)
+            parts.append("".join(
+                f"#define _DASH_LEND_{st}_{f}(p) "
+                + ("_dash_str_ret(p)" if {(st, f), ("*", f)} & self.assigned_str_fields else "(p)") + "\n"
+                for st, f in sorted(self.lent_str_fields)))
         if self.autoclose:
             parts.append(CTemplates.AUTOCLOSE_RUNTIME.substitute(seconds=self.autoclose))
 
@@ -8533,8 +8542,16 @@ class CodeGenerator(ASTVisitor):
             if self.uses_text:
                 # a freed string leaves the length cache of TEXT_RUNTIME
                 drop = "static void _dash_str_drop(_DashStrHdr *h) {\n"
-                memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n\n" + drop +
+                memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n"
+                                        "static LONG _dash_str_len(STRPTR s);\n"
+                                        "static void _dash_str_setlen(STRPTR s, LONG len);\n\n" + drop +
                                         "    _dash_str_forget((STRPTR)(h + 1));\n")
+                # copies of long texts use and fill the length cache (dashweb D22)
+                old = ("    ULONG len = s ? strlen((char *)s) : 0;\n    STRPTR d = _dash_str_alloc(len, temp);\n"
+                       "    if (d && len) _dash_copy(d, s, len);\n")
+                assert old in memory
+                memory = memory.replace(old, "    ULONG len = _dash_str_len(s);\n    STRPTR d = _dash_str_alloc(len, temp);\n"
+                                             "    if (d && len) _dash_copy(d, s, len);\n    if (d) _dash_str_setlen(d, len);\n")
             parts.append(memory)
         else:
             # Loops and functions mark and release temporaries: nothing to do without strings
@@ -8560,7 +8577,13 @@ class CodeGenerator(ASTVisitor):
 
         # Add string runtime if needed
         if self.uses_strings:
-            parts.append(CTemplates.STRING_RUNTIME)
+            strings = CTemplates.STRING_RUNTIME
+            if self.uses_text:
+                # slices of long texts use the length cache (dashweb D22)
+                old = "static STRPTR DashString_slice(STRPTR s, LONG start, LONG end) {\n    LONG len = s ? strlen(s) : 0;\n"
+                assert old in strings
+                strings = strings.replace(old, old.replace("s ? strlen(s) : 0", "_dash_str_len(s)"))
+            parts.append(strings)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -10642,11 +10665,14 @@ static {ret_type} {method_name}({params_str}) {{
             owner = f"_DASH_NNW({owner})"   # a write through nil must not hit address 0
         struct = self._struct_of(owner_node)
         field = struct.get_field(node.member) if struct else None
+        if not struct:
+            self.assigned_str_fields.add(("*", node.member))   # unknown struct: any of them
         if field and field.field_type == "Fixed" and not self._is_fixed_expr(node.value):
             value = self._fixed_value(node.value)
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
+            self.assigned_str_fields.add((struct.name, node.member))
             self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {self._lent_str(node.value, value)});\n")
             return
         if field and field.weak:
@@ -10759,11 +10785,21 @@ static {ret_type} {method_name}({params_str}) {{
         """An argument for a Dash function or method that the callee could free while
         using it: a field, a global or a list element (the callee may replace it).
         Strings go as a temporary copy, objects with a reference held until the
-        caller's temporaries are released (_dash_obj_lend)."""
+        caller's temporaries are released (_dash_obj_lend).
+        A text field that nothing in the program assigns, of a local variable or
+        parameter, goes as it is: it lives as long as that object (dashweb D22)."""
         shared = isinstance(arg, (MemberAccess, PropertyAccess, ArrayAccess)) or (
             isinstance(arg, VarRef) and (arg.name in self.global_strings or arg.name in self.global_objects))
         if not shared:
             return code
+        if (isinstance(arg, MemberAccess) and arg.object_name not in self.global_objects
+                and arg.object_name not in self.global_strings and self._is_string_expr(arg)):
+            struct = self._struct_of(SelfRef() if arg.object_name == "self" else VarRef(name=arg.object_name))
+            if struct:
+                # whether some code sets the field is known at the end (_assemble_program)
+                self.uses_strings = True
+                self.lent_str_fields.add((struct.name, arg.member))
+                return f"_DASH_LEND_{struct.name}_{arg.member}({code})"
         if self._is_string_expr(arg):
             self.uses_strings = True
             return f"_dash_str_ret({code})"

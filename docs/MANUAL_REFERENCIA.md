@@ -1607,6 +1607,15 @@ pasa a un bloque del doble de tamano. Construir un texto de 20.000 caracteres de
 tarda menos de un segundo en un A1200 (antes, minutos). No pasa si otra parte de la suma lee
 la misma variable (`s = s + s` hace una copia nueva) ni con campos de structs.
 
+Copias de textos largos. Asignar un texto a una variable lo copia (`s = t.texto` duplica el
+texto entero). Pasar un campo String a una funcion (`f(t.texto)`) tambien lo copia, porque la
+funcion podria cambiar ese campo y liberar el texto, salvo si ningun codigo del programa asigna
+ese campo de ese struct (solo lo pone el constructor) y `t` es una variable local o un
+parametro: entonces va tal cual. Para recorrer un texto largo guardado en un struct, pasarlo
+como parametro (`func trocear(t: Lector, s: String)` llamada con `trocear(t, t.texto)`) en vez
+de copiarlo a una variable en cada llamada. La longitud de los textos de 64 caracteres o mas se
+recuerda (una cache de 8), asi que `s.length`, `s[i]` y `s[a:b]` no recorren el texto entero.
+
 ### Arrays y structs (automatico, conteo de referencias)
 
 Varias variables pueden compartir el mismo array o struct, asi que cada uno lleva un
