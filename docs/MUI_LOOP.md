@@ -148,7 +148,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
 - [x] 15a. **ReAction: gadgets que faltan.** `listbrowser` (lista de textos: añadir, vaciar, elegida), `radiobutton`,
       `fuelgauge` (barra de progreso), `clicktab` (pestañas), con `ra_get_value`/`ra_set_value` y eventos; que los
       `ra_set_*` funcionen antes de abrir la ventana. Nodos con `Alloc*Node` y textos propios, liberados al cerrar.
-- [ ] 15b. **ReAction: menús y fichero.** Menús en ventanas ReAction (`WINDOW_MenuStrip`, `WMHI_MENUPICK` →
+- [x] 15b. **ReAction: menús y fichero.** Menús en ventanas ReAction (`WINDOW_MenuStrip`, `WMHI_MENUPICK` →
       `RA_EVENT_MENU` + `ra_menu_id()`), `getfile` (botón que abre el selector de ficheros y su ruta).
 - [ ] 16. **Varias ventanas.** GadTools y ReAction con objetos como valores (como MUI, tarea 2), manteniendo
       la API actual de una ventana para no romper programas. Si choca con la compatibilidad, `[?]`.
@@ -534,3 +534,16 @@ Formato:
   elegida -1 y luego 1, vaciada; radio 2, pestaña 1, barra 40; 0 vivos y 0 escapados.
 - Sin probar: clics en estos gadgets (las posiciones de sus opciones dependen de la fuente).
 - Tests: 135/135 sin emulador; 327/327 con `--emu --emu-a500 --emu-32`; 204/204 con `--emu-32 --memcheck`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 15b (ReAction: menús y fichero)
+- Hecho (6 builtins): `ra_menu_title`, `ra_menu_item`, `ra_menu_separator` (antes de `ra_window_open`; GadTools
+  `CreateMenusA`/`LayoutMenusA` con la `VisualInfo` de la pantalla pública y `WINDOW_MenuStrip`), `RA_EVENT_MENU()`
+  (-4) y `ra_menu_id()` (`WMHI_MENUPICK`; las selecciones múltiples se entregan una por llamada), `ra_add_getfile`
+  (botón de `getfile.gadget`; al pulsarlo el runtime abre el selector con `GFILE_REQUEST` y luego devuelve el id;
+  `ra_get_string` da `GETFILE_FullFile`). `GadToolsBase` definida una sola vez aunque el programa use GadTools y
+  ReAction (`_DASH_GADTOOLSBASE`); si ReAction la abrió, la cierra. Menús, `VisualInfo` y gadtools liberados en
+  `ra_window_close`.
+- Probado en A1200 3.2 (`test_ra_menus`): un proceso elige "Salir" con el ratón (botón derecho sobre el título y bajando
+  a la opción) y llega `RA_EVENT_MENU()` con `ra_menu_id()` = 12; `ra_get_string` del selector vacío da "".
+- Sin probar: el requester de `getfile` (se queda esperando a que alguien elija; haría falta clicar en él).
+- Tests: 136/136 sin emulador; 329/329 con `--emu --emu-a500 --emu-32`; 206/206 con `--emu-32 --memcheck`; ejemplos 33/33.

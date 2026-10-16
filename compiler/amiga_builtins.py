@@ -1790,6 +1790,54 @@ REACTION_FUNCTIONS = {
         needs_reaction=True,
         description="Add a progress bar from 0 to max (value: level)"
     ),
+    "ra_menu_title": BuiltinFunc(
+        name="ra_menu_title",
+        params=["label"],
+        return_type="void",
+        c_template="ra_menu_title(${label})",
+        needs_reaction=True,
+        description="Add a menu to the ReAction window (before ra_window_open)"
+    ),
+    "ra_menu_item": BuiltinFunc(
+        name="ra_menu_item",
+        params=["label", "key", "id"],
+        return_type="void",
+        c_template="ra_menu_item(${label}, ${key}, ${id})",
+        needs_reaction=True,
+        description="Add a menu item: key = letter for Amiga+key (\"\" none); events: RA_EVENT_MENU() and ra_menu_id()"
+    ),
+    "ra_menu_separator": BuiltinFunc(
+        name="ra_menu_separator",
+        params=[],
+        return_type="void",
+        c_template="ra_menu_separator()",
+        needs_reaction=True,
+        description="Add a separator line to the menu"
+    ),
+    "ra_menu_id": BuiltinFunc(
+        name="ra_menu_id",
+        params=[],
+        return_type="LONG",
+        c_template="ra_menu_id()",
+        needs_reaction=True,
+        description="Id of the menu item of the last RA_EVENT_MENU()"
+    ),
+    "RA_EVENT_MENU": BuiltinFunc(
+        name="RA_EVENT_MENU",
+        params=[],
+        return_type="LONG",
+        c_template="RA_EVENT_MENU",
+        needs_reaction=True,
+        description="Event: a menu item was chosen (ra_menu_id)"
+    ),
+    "ra_add_getfile": BuiltinFunc(
+        name="ra_add_getfile",
+        params=["id", "title"],
+        return_type="LONG",
+        c_template="ra_add_getfile(${id}, ${title})",
+        needs_reaction=True,
+        description="Add a button that opens a file requester; ra_get_string(id) gives the file chosen"
+    ),
 }
 
 

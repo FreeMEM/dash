@@ -3388,7 +3388,10 @@ static BOOL _dash_check_close(void) {
     # GadTools runtime
     GADTOOLS_RUNTIME = """\
 /* Dash GadTools Runtime */
+#ifndef _DASH_GADTOOLSBASE
+#define _DASH_GADTOOLSBASE
 struct Library *GadToolsBase = NULL;
+#endif
 static struct Gadget *_dash_glist = NULL;
 static struct Gadget *_dash_gad = NULL;
 static void *_dash_vi = NULL;
@@ -4625,6 +4628,22 @@ struct Library *ListBrowserBase = NULL;
 struct Library *RadioButtonBase = NULL;
 struct Library *FuelGaugeBase = NULL;
 struct Library *ClickTabBase = NULL;
+struct Library *GetFileBase = NULL;
+#ifndef _DASH_GADTOOLSBASE
+#define _DASH_GADTOOLSBASE
+struct Library *GadToolsBase = NULL;   /* menus of ReAction windows (built with GadTools) */
+#endif
+#include <libraries/gadtools.h>
+#include <proto/gadtools.h>
+/* Menus of the ReAction window: ra_menu_title/ra_menu_item before ra_window_open */
+#define RA_MAX_MENU_ITEMS 64
+static struct NewMenu _ra_menu_items[RA_MAX_MENU_ITEMS];
+static LONG _ra_menu_count = 0;
+static struct Menu *_ra_menu = NULL;
+static APTR _ra_menu_vi = NULL;
+static BOOL _ra_opened_gadtools = FALSE;
+static LONG _ra_menu_last = 0;
+static UWORD _ra_menu_next = MENUNULL;    /* rest of a multiple selection */
 struct Library *ScrollerBase = NULL;
 struct Library *LabelBase = NULL;
 struct Library *BevelBase = NULL;
@@ -4639,7 +4658,7 @@ static Object *_ra_layout = NULL;
 static Object *_ra_gadgets[RA_MAX_GADGETS];
 /* Kind of each gadget, so ra_get_value/ra_set_value use only its own attribute */
 enum { RA_K_OTHER, RA_K_CHECKBOX, RA_K_SLIDER, RA_K_INTEGER, RA_K_PALETTE, RA_K_CHOOSER, RA_K_SCROLLER,
-       RA_K_LISTBROWSER, RA_K_RADIO, RA_K_FUEL, RA_K_CLICKTAB };
+       RA_K_LISTBROWSER, RA_K_RADIO, RA_K_FUEL, RA_K_CLICKTAB, RA_K_GETFILE };
 /* Node lists of listbrowsers, radio buttons and tabs, freed by ra_window_close */
 static struct List _ra_node_lists[RA_MAX_GADGETS];
 static BOOL _ra_node_inited[RA_MAX_GADGETS];
@@ -4669,6 +4688,7 @@ static void _ra_close_libs(void) {
     if (RadioButtonBase) { CloseLibrary(RadioButtonBase); RadioButtonBase = NULL; }
     if (FuelGaugeBase) { CloseLibrary(FuelGaugeBase); FuelGaugeBase = NULL; }
     if (ClickTabBase) { CloseLibrary(ClickTabBase); ClickTabBase = NULL; }
+    if (GetFileBase) { CloseLibrary(GetFileBase); GetFileBase = NULL; }
     if (ChooserBase) { CloseLibrary(ChooserBase); ChooserBase = NULL; }
     if (PaletteBase) { CloseLibrary(PaletteBase); PaletteBase = NULL; }
     if (SliderBase) { CloseLibrary(SliderBase); SliderBase = NULL; }
@@ -4718,10 +4738,85 @@ static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
 }
 
 /* Open the ReAction window */
+static void _ra_menu_add(UBYTE type, STRPTR label, STRPTR key, LONG id) {
+    struct NewMenu *nm;
+    if (_ra_menu_count >= RA_MAX_MENU_ITEMS - 1 || _ra_menu) return;   /* after open: too late */
+    nm = &_ra_menu_items[_ra_menu_count++];
+    nm->nm_Type = type;
+    nm->nm_Label = label == NM_BARLABEL ? label : _dash_str_escape(label);   /* kept by the menus */
+    nm->nm_CommKey = (key && *key) ? _dash_str_escape(key) : NULL;
+    nm->nm_Flags = 0;
+    nm->nm_MutualExclude = 0;
+    nm->nm_UserData = (APTR)id;
+    _ra_menu_items[_ra_menu_count].nm_Type = NM_END;
+}
+
+static void ra_menu_title(STRPTR label) { _ra_menu_add(NM_TITLE, label, NULL, 0); }
+static void ra_menu_item(STRPTR label, STRPTR key, LONG id) { _ra_menu_add(NM_ITEM, label, key, id); }
+static void ra_menu_separator(void) { _ra_menu_add(NM_ITEM, (STRPTR)NM_BARLABEL, NULL, 0); }
+static LONG ra_menu_id(void) { return _ra_menu_last; }
+
+/* GadTools builds the menus for the window's screen; window.class sets them */
+static void _ra_menu_build(void) {
+    struct Screen *scr;
+    if (!_ra_menu_count || _ra_menu) return;
+    if (!GadToolsBase) {
+        if (!(GadToolsBase = OpenLibrary((CONST_STRPTR)"gadtools.library", 37))) return;
+        _ra_opened_gadtools = TRUE;
+    }
+    if (!(scr = LockPubScreen(NULL))) return;
+    _ra_menu_vi = GetVisualInfoA(scr, NULL);
+    UnlockPubScreen(NULL, scr);
+    if (!_ra_menu_vi) return;
+    _ra_menu = CreateMenusA(_ra_menu_items, NULL);
+    if (_ra_menu) {
+        struct TagItem tags[] = { { GTMN_NewLookMenus, TRUE }, { TAG_DONE, 0 } };
+        if (LayoutMenusA(_ra_menu, _ra_menu_vi, tags)) SetAttrs(_ra_winobj, WINDOW_MenuStrip, (ULONG)_ra_menu, TAG_DONE);
+        else { FreeMenus(_ra_menu); _ra_menu = NULL; }
+    }
+}
+
+static void _ra_menu_free(void) {
+    if (_ra_menu) { FreeMenus(_ra_menu); _ra_menu = NULL; }
+    if (_ra_menu_vi) { FreeVisualInfo(_ra_menu_vi); _ra_menu_vi = NULL; }
+    if (_ra_opened_gadtools && GadToolsBase) { CloseLibrary(GadToolsBase); GadToolsBase = NULL; }
+    _ra_opened_gadtools = FALSE;
+    _ra_menu_count = 0;
+    _ra_menu_next = MENUNULL;
+}
+
+/* The menu item id for a menu number, and the next of a multiple selection */
+static LONG _ra_menu_pick(UWORD code) {
+    struct MenuItem *item = (_ra_menu && code != MENUNULL) ? ItemAddress(_ra_menu, code) : NULL;
+    if (!item) { _ra_menu_next = MENUNULL; return 0; }
+    _ra_menu_last = (LONG)GTMENUITEM_USERDATA(item);
+    _ra_menu_next = item->NextSelect;
+    return 1;
+}
+
 static LONG ra_window_open(void) {
     if (!_ra_winobj) return 0;
+    _ra_menu_build();
     _ra_window = RA_OpenWindow(_ra_winobj);
     return (_ra_window != NULL) ? 1 : 0;
+}
+
+/* Button that opens a file requester (title on it); ra_get_string gives the file chosen */
+static LONG ra_add_getfile(LONG id, STRPTR title) {
+    Object *gf;
+    if (!_ra_layout || (ULONG)id >= RA_MAX_GADGETS) return 0;
+    if (!_ra_open_class(&GetFileBase, "gadgets/getfile.gadget")) return 0;
+    gf = (Object *)NewObject(GETFILE_GetClass(), NULL,
+        GA_ID, id,
+        GA_RelVerify, TRUE,
+        GETFILE_TitleText, (ULONG)_dash_str_escape(title),
+        GETFILE_FullFileExpand, TRUE,
+        TAG_DONE);
+    if (!gf) return 0;
+    SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL, LAYOUT_AddChild, gf, TAG_DONE);
+    _ra_gadgets[id] = gf;
+    _ra_kinds[id] = RA_K_GETFILE;
+    return 1;
 }
 
 /* Close ReAction window */
@@ -4734,6 +4829,7 @@ static void ra_window_close(void) {
     }
     _ra_chooser_free();
     _ra_nodes_free();
+    _ra_menu_free();
     _ra_close_libs();
 }
 
@@ -4750,19 +4846,29 @@ static ULONG ra_window_sigmask(void) {
 #define RA_EVENT_NONE -3   /* not 0: a gadget may have id 0 */
 #define RA_EVENT_CLOSE -1
 #define RA_EVENT_REFRESH -2
+#define RA_EVENT_MENU -4      /* a menu item: ra_menu_id() */
 
 static LONG ra_handle_events(void) {
     ULONG result;
     UWORD code;
 
     if (!_ra_winobj) return RA_EVENT_NONE;
+    if (_ra_menu_next != MENUNULL && _ra_menu_pick(_ra_menu_next)) return RA_EVENT_MENU;
 
     while ((result = RA_HandleInput(_ra_winobj, &code)) != WMHI_LASTMSG) {
         switch (result & WMHI_CLASSMASK) {
             case WMHI_CLOSEWINDOW:
                 return RA_EVENT_CLOSE;
-            case WMHI_GADGETUP:
-                return (LONG)(result & WMHI_GADGETMASK);
+            case WMHI_GADGETUP: {
+                LONG id = (LONG)(result & WMHI_GADGETMASK);
+                /* a getfile button: its requester, then the event */
+                if ((ULONG)id < RA_MAX_GADGETS && _ra_kinds[id] == RA_K_GETFILE && _ra_gadgets[id] && _ra_window)
+                    DoMethod(_ra_gadgets[id], GFILE_REQUEST, (ULONG)_ra_window);
+                return id;
+            }
+            case WMHI_MENUPICK:
+                if (_ra_menu_pick((UWORD)(result & WMHI_MENUMASK))) return RA_EVENT_MENU;
+                break;
             case WMHI_ICONIFY:
                 RA_Iconify(_ra_winobj);
                 _ra_window = NULL;
@@ -5111,7 +5217,8 @@ static STRPTR ra_get_string(LONG id) {
     if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return "";
 
     STRPTR text = NULL;
-    GetAttr(STRINGA_TextVal, _ra_gadgets[id], (ULONG *)&text);
+    /* a getfile button: the file chosen (full path) */
+    GetAttr(_ra_kinds[id] == RA_K_GETFILE ? GETFILE_FullFile : STRINGA_TextVal, _ra_gadgets[id], (ULONG *)&text);
     return text ? text : (STRPTR)"";
 }
 
@@ -8798,6 +8905,7 @@ static {ret_type} {method_name}({params_str}) {{
         # listview runtime makes its own copy of each line
         "textfield_set", "ra_set_string", "listview_add",
         "ra_listbrowser_add", "ra_add_radio", "ra_add_clicktab",
+        "ra_menu_title", "ra_menu_item", "ra_add_getfile",   # the ReAction runtime keeps its own copy
     }
 
     def _frees(self, owned) -> str:

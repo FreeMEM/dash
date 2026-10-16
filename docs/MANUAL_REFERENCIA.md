@@ -2068,6 +2068,9 @@ end
 | `ra_add_radio(id,"A|B|C")` | Botones de radio (valor: opción) |
 | `ra_add_clicktab(id,"A|B")` | Pestañas (valor: pestaña, desde 0) |
 | `ra_add_fuelgauge(id,max)` | Barra de progreso (valor: nivel) |
+| `ra_add_getfile(id,titulo)` | Botón que abre el selector de ficheros; `ra_get_string(id)` da el fichero elegido |
+| `ra_menu_title(texto)`, `ra_menu_item(texto,tecla,id)`, `ra_menu_separator()` | Menús de la ventana (antes de `ra_window_open`) |
+| `ra_menu_id()` | La opción elegida, cuando `ra_wait_event()` devuelve `RA_EVENT_MENU()` (-4) |
 | `ra_add_chooser(id)` | Crear dropdown vacio |
 | `ra_chooser_add_item(id,label)` | Anadir item a dropdown |
 | `ra_add_scroller(id,min,max,vis,init)` | Scroller horizontal |
@@ -2618,14 +2621,14 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Entrada | 29 | `key_*`, `mouse_*`, `joy_*` |
 | GadTools y menus | 29 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
 | Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_get_path` |
-| ReAction | 71 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
+| ReAction | 77 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
 | Sistema y memoria | 25 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Ficheros (DOS) y buffers | 34 | `file_*`, `dir_*`, `buffer_*` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 44 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 67 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
-| **Total** | **418** | |
+| **Total** | **424** | |
 
 ### Colores Estandar Amiga
 

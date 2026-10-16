@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 418 funciones, 418 implementadas, 0 sin implementar.
+Total: 424 funciones, 424 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -247,6 +247,12 @@ Total: 418 funciones, 418 implementadas, 0 sin implementar.
 | `ra_add_radio(id, options)` | `LONG` | Add radio buttons, options separated by \| (value: option) |  |
 | `ra_add_clicktab(id, titles)` | `LONG` | Add tabs, titles separated by \| (value: tab, from 0) |  |
 | `ra_add_fuelgauge(id, max)` | `LONG` | Add a progress bar from 0 to max (value: level) |  |
+| `ra_menu_title(label)` | `void` | Add a menu to the ReAction window (before ra_window_open) |  |
+| `ra_menu_item(label, key, id)` | `void` | Add a menu item: key = letter for Amiga+key ("" none); events: RA_EVENT_MENU() and ra_menu_id() |  |
+| `ra_menu_separator()` | `void` | Add a separator line to the menu |  |
+| `ra_menu_id()` | `LONG` | Id of the menu item of the last RA_EVENT_MENU() |  |
+| `RA_EVENT_MENU()` | `LONG` | Event: a menu item was chosen (ra_menu_id) |  |
+| `ra_add_getfile(id, title)` | `LONG` | Add a button that opens a file requester; ra_get_string(id) gives the file chosen |  |
 
 ## Sistema y memoria
 

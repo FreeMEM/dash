@@ -1,0 +1,139 @@
+# ReAction menus and getfile: menus built with ra_menu_title/ra_menu_item before the
+# window opens, chosen by a helper process through input.device (right button on the
+# menu title, down to the item); RA_EVENT_MENU() and ra_menu_id() report it. A getfile
+# button is created (pressing it opens a requester that waits, so it is not clicked).
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# emu-needs: getfile.gadget
+# expect-out: fichero: ''
+# expect-out: menú 12
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static LONG acc_kind[4], acc_x[4], acc_y[4], n_acc; static volatile LONG acc_hechas;"
+
+# Helper process: kind 0 = left click at window position (x, y) (inside the borders: the
+# window is GIMMEZEROZERO); kind 1 = choose item y of menu x: pointer on the menu title,
+# right button down, then one-step mouse moves until the screen's pointer is on the item
+# (a mouse step is not always a pixel), right button up.
+@native func proceso_acciones()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    LONG i, k, steps, tx, ty;
+    Delay(100);
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < n_acc; i++) {
+            struct Screen *scr = _ra_window->WScreen;
+            struct Menu *m = _ra_menu;
+            struct MenuItem *it = NULL;
+            UWORD button = acc_kind[i] == 1 ? IECODE_RBUTTON : IECODE_LBUTTON;
+            UWORD held = acc_kind[i] == 1 ? IEQUALIFIER_RBUTTON : IEQUALIFIER_LEFTBUTTON;
+            if (acc_kind[i] == 1) {
+                for (k = 0; k < acc_x[i] && m; k++) m = m->NextMenu;
+                it = m ? m->FirstItem : NULL;
+                for (k = 0; k < acc_y[i] && it; k++) it = it->NextItem;
+                if (!it) continue;
+                pp.iepp_Position.X = m->LeftEdge + m->Width / 2;
+                pp.iepp_Position.Y = scr->BarHeight / 2;
+            } else {
+                pp.iepp_Position.X = _ra_window->LeftEdge + _ra_window->BorderLeft + acc_x[i];
+                pp.iepp_Position.Y = _ra_window->TopEdge + _ra_window->BorderTop + acc_y[i];
+            }
+            memset(&ie, 0, sizeof(ie));
+            pp.iepp_Screen = scr;
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+            DoIO((struct IORequest *)io);
+            Delay(5);
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = button;
+            ie.ie_Qualifier = held | IEQUALIFIER_RELATIVEMOUSE;
+            DoIO((struct IORequest *)io);
+            Delay(10);
+            if (it) {
+                tx = m->LeftEdge + it->LeftEdge + it->Width / 2;
+                ty = scr->BarHeight + 1 + it->TopEdge + it->Height / 2;
+                steps = 0;
+                while ((scr->MouseX != tx || scr->MouseY != ty) && steps++ < 400) {
+                    memset(&ie, 0, sizeof(ie));
+                    ie.ie_Class = IECLASS_RAWMOUSE;
+                    ie.ie_Code = IECODE_NOBUTTON;
+                    ie.ie_Qualifier = held | IEQUALIFIER_RELATIVEMOUSE;
+                    ie.ie_X = scr->MouseX < tx ? 1 : scr->MouseX > tx ? -1 : 0;
+                    ie.ie_Y = scr->MouseY < ty ? 1 : scr->MouseY > ty ? -1 : 0;
+                    DoIO((struct IORequest *)io);
+                    Delay(1);
+                }
+                Delay(10);
+            }
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWMOUSE;
+            ie.ie_Code = button | IECODE_UP_PREFIX;
+            ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+            DoIO((struct IORequest *)io);
+            Delay(25);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    acc_hechas = 1;
+"""
+end
+
+@native func accion(i: Int, kind: Int, x: Int, y: Int)
+"""
+    acc_kind[i] = kind; acc_x[i] = x; acc_y[i] = y;
+    if (n_acc <= i) n_acc = i + 1;
+"""
+end
+
+@native func lanzar()
+"""
+    acc_hechas = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_acciones, NP_Name, (ULONG)"dash_acciones", TAG_DONE);
+"""
+end
+
+@native func esperar()
+"""
+    while (!acc_hechas) Delay(2);
+    n_acc = 0;
+"""
+end
+
+Main
+    ra_window_create("Menús", 300, 150)
+    ra_menu_title("Proyecto")
+    ra_menu_item("Abrir", "O", 11)
+    ra_menu_separator()
+    ra_menu_item("Salir", "Q", 12)
+    ra_add_button(1, "Botón")
+    ra_add_getfile(2, "Elegir fichero")
+    ra_window_open()
+    f = ra_get_string(2)
+    Print "fichero: '#{f}'"
+
+    accion(0, 1, 0, 2)
+    lanzar()
+    ev = ra_wait_event()
+    while ev != RA_EVENT_MENU()
+        ev = ra_wait_event()
+    end
+    m = ra_menu_id()
+    Print "menú #{m}"
+    esperar()
+    ra_window_close()
+    Print "fin"
+end
