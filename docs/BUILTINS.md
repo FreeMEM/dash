@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 424 funciones, 424 implementadas, 0 sin implementar.
+Total: 425 funciones, 425 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -101,6 +101,7 @@ Total: 424 funciones, 424 implementadas, 0 sin implementar.
 | `mouse_x()` | `LONG` | Mouse X position relative to window inner area |  |
 | `mouse_y()` | `LONG` | Mouse Y position relative to window inner area |  |
 | `mouse_button(btn)` | `BOOL` | Check mouse button (0=left, 1=right) |  |
+| `event_window()` | `LONG` | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
 | `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
 | `close_window()` | `void` | Close the current window |  |
 | `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |

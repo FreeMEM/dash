@@ -7142,7 +7142,7 @@ _RUNTIME_FLAGS = [
 ]
 
 # Runtime names emitted by the code generator itself, outside the templates
-_GENERATED_NAMES = {"_dash_close_window"}
+_GENERATED_NAMES = {"_dash_close_window", "_dash_event_window_handle"}
 
 _runtime_index_cache: Optional[Dict[str, str]] = None
 
@@ -7401,7 +7401,8 @@ class CodeGenerator(ASTVisitor):
             if isinstance(n, OnMenuHandler):
                 self.uses_menu_handler = True
             # Win.close must know before the window_create() calls are generated
-            if isinstance(n, FunctionCall) and n.name.startswith("window_") and n.name != "window_check_close":
+            if isinstance(n, FunctionCall) and ((n.name.startswith("window_") and n.name != "window_check_close")
+                                                or n.name == "event_window"):
                 self.uses_winmgr = True
             # Recursively scan children
             for attr in dir(n):
@@ -7595,6 +7596,42 @@ class CodeGenerator(ASTVisitor):
                              for w in self.analysis.program.windows)
             parts.append("static void _dash_window_closed(struct Window *win) {\n"
                          f"{clears}    (void)win;\n}}\n")
+            # EventLoop: messages of the windows opened with window_create too
+            getmsg = "GT_GetIMsg" if self.uses_gadgets else "(struct IntuiMessage *)GetMsg"
+            parts.append(f"""
+/* An EventLoop also listens to the windows opened with window_create; event_window()
+   says which window the message came from (its handle, 0 = the loop's own window) */
+static struct Window *_dash_event_win = NULL;
+static struct Window *_dash_event_main = NULL;
+
+static void _dash_loop_wait(struct Window *main) {{
+    ULONG mask = main ? 1UL << main->UserPort->mp_SigBit : 0;
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++)
+        if (_dash_windows[i] && _dash_windows[i]->UserPort) mask |= 1UL << _dash_windows[i]->UserPort->mp_SigBit;
+    if (mask) Wait(mask);
+}}
+
+static struct IntuiMessage *_dash_loop_next(struct Window *main) {{
+    struct IntuiMessage *m;
+    LONG i;
+    _dash_event_main = main;
+    if (main && (m = {getmsg}(main->UserPort))) {{ _dash_event_win = main; return m; }}
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++) {{
+        struct Window *w = _dash_windows[i];
+        if (w && w != main && w->UserPort && (m = {getmsg}(w->UserPort))) {{ _dash_event_win = w; return m; }}
+    }}
+    return NULL;
+}}
+
+static LONG _dash_event_window_handle(void) {{
+    LONG i;
+    if (!_dash_event_win || _dash_event_win == _dash_event_main) return 0;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++)
+        if (_dash_windows[i] == _dash_event_win) return i;
+    return 0;
+}}
+""")
         if getattr(self, "uses_close_window", False):
             clears = "".join(f"    if (_dash_win == win_{w.name}) win_{w.name} = NULL;\n"
                              for w in self.analysis.program.windows)
@@ -8121,6 +8158,13 @@ static {ret_type} {method_name}({params_str}) {{
             getmsg, replymsg, decls = "GetMsg", "ReplyMsg", ""
         code = CTemplates.EVENT_LOOP_START.substitute(window=window, key_record=key_record,
                                                       getmsg=getmsg, replymsg=replymsg, decls=decls)
+        if self.uses_winmgr:
+            # also the windows of window_create (event_window() tells which one)
+            code = code.replace(f"        WaitPort(win_{window}->UserPort);\n",
+                                f"        _dash_loop_wait(win_{window});\n", 1)
+            code = code.replace(f"        while (win_{window} && (msg = (struct IntuiMessage *){getmsg}(win_{window}->UserPort))) {{\n",
+                                f"        while ((msg = _dash_loop_next(win_{window}))) {{\n", 1)
+            assert "_dash_loop_next" in code
         if self.uses_gadgets:
             code = code.replace("GT_ReplyIMsg((struct Message *)msg);", "GT_ReplyIMsg(msg);")
         self.emit(code)

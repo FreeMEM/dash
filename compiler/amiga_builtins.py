@@ -710,6 +710,13 @@ INPUT_FUNCTIONS = {
     ),
 
     # Window events
+    "event_window": BuiltinFunc(
+        name="event_window",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_event_window_handle()",
+        description="In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window"
+    ),
     "window_check_close": BuiltinFunc(
         name="window_check_close",
         params=[],

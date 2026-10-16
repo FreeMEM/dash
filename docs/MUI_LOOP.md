@@ -150,7 +150,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       `ra_set_*` funcionen antes de abrir la ventana. Nodos con `Alloc*Node` y textos propios, liberados al cerrar.
 - [x] 15b. **ReAction: menús y fichero.** Menús en ventanas ReAction (`WINDOW_MenuStrip`, `WMHI_MENUPICK` →
       `RA_EVENT_MENU` + `ra_menu_id()`), `getfile` (botón que abre el selector de ficheros y su ruta).
-- [ ] 16. **Varias ventanas.** GadTools y ReAction con objetos como valores (como MUI, tarea 2), manteniendo
+- [x] 16. **Varias ventanas.** GadTools y ReAction con objetos como valores (como MUI, tarea 2), manteniendo
       la API actual de una ventana para no romper programas. Si choca con la compatibilidad, `[?]`.
 - [ ] 17. **Optimizar.** Emitir solo la parte del runtime que el programa usa (como ya pasa con otros
       bloques), menos trabajo por evento, tamaño de los ejecutables de `examples/` antes y después.
@@ -547,3 +547,19 @@ Formato:
   a la opción) y llega `RA_EVENT_MENU()` con `ra_menu_id()` = 12; `ra_get_string` del selector vacío da "".
 - Sin probar: el requester de `getfile` (se queda esperando a que alguien elija; haría falta clicar en él).
 - Tests: 136/136 sin emulador; 329/329 con `--emu --emu-a500 --emu-32`; 206/206 con `--emu-32 --memcheck`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 16 (varias ventanas)
+- Decidido: la API de una ventana se mantiene. Las ventanas de `window_create` (con gadgets por número) son la forma de
+  tener varias ventanas con GadTools; `gt_*` y ReAction siguen siendo de una sola ventana (pasarlas a objetos sería
+  rehacer las dos APIs, y para aplicaciones con muchas ventanas está MUI). Documentado así en el manual.
+- Hecho: un `EventLoop` escucha también las ventanas de `window_create` (antes nadie leía sus mensajes: ni sus gadgets
+  ni su botón de cerrar hacían nada). Cuando el programa usa ventanas por número, el codegen sustituye el `WaitPort`
+  por `_dash_loop_wait` (espera las señales de todas) y la lectura por `_dash_loop_next` (la ventana del bucle primero,
+  luego las demás; con `GT_GetIMsg` si hay gadgets). Nuevo builtin `event_window()`: número de la ventana del último
+  mensaje, 0 = la del bucle. Sin ventanas por número el C sale igual que antes.
+- Probado en las tres máquinas (`test_event_window`): con clics reales, el botón de la segunda ventana llega a `On
+  Gadget` con `event_window()` = 1; su botón de cerrar llega a `On Close` con 1 (se cierra solo esa) y el de la
+  principal con 0 (fin del bucle).
+- No hecho: `window_check_close` sigue vaciando el puerto con `GetMsg` y tirando lo que no es cerrar (cambiarlo podría
+  dejar mensajes sin contestar en programas que solo preguntan por el cierre); documentado en la auditoría.
+- Tests: 137/137 sin emulador; 333/333 con `--emu --emu-a500 --emu-32`; 204/204 con `--emu --memcheck`; ejemplos 33/33.

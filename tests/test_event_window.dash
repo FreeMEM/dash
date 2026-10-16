@@ -1,0 +1,107 @@
+# An EventLoop also listens to windows opened with window_create: a click on a button
+# of the second window and its close gadget arrive in the loop, and event_window() tells
+# which window (its handle; 0 = the loop's own window). A helper process clicks through
+# input.device: the button, the close gadget of the second window, then the main one.
+# expect-out: gadget en la ventana 1
+# expect-out: cerrar ventana 1
+# expect-out: cerrar ventana 0
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static volatile LONG clics_hechos;"
+
+Window W
+    title "Principal"
+    width 200
+    height 80
+end
+
+@native func clic_en(io: Pointer, win: Pointer, x: Int, y: Int)
+"""
+    struct IOStdReq *req = (struct IOStdReq *)io;
+    struct Window *w = (struct Window *)win;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    memset(&ie, 0, sizeof(ie));
+    pp.iepp_Screen = w->WScreen;
+    pp.iepp_Position.X = w->LeftEdge + x;
+    pp.iepp_Position.Y = w->TopEdge + y;
+    ie.ie_Class = IECLASS_NEWPOINTERPOS;
+    ie.ie_SubClass = IESUBCLASS_PIXEL;
+    ie.ie_EventAddress = (APTR)&pp;
+    req->io_Command = IND_WRITEEVENT;
+    req->io_Data = &ie;
+    req->io_Length = sizeof(ie);
+    DoIO((struct IORequest *)req);
+    Delay(5);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = IECODE_LBUTTON;
+    ie.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+    DoIO((struct IORequest *)req);
+    Delay(5);
+    ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+    DoIO((struct IORequest *)req);
+    Delay(40);
+"""
+end
+
+@native func proceso_clics()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct Window *second = _dash_windows[1];
+    Delay(100);
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (second && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        /* the button (inside the borders: GIMMEZEROZERO), then the close gadgets */
+        clic_en((APTR)io, (APTR)second, second->BorderLeft + 50, second->BorderTop + 17);
+        clic_en((APTR)io, (APTR)second, 6, 5);
+        clic_en((APTR)io, (APTR)win_W, 6, 5);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    clics_hechos = 1;
+"""
+end
+
+@native func lanzar()
+"""
+    clics_hechos = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_clics, NP_Name, (ULONG)"dash_clics", TAG_DONE);
+"""
+end
+
+@native func esperar()
+"""
+    while (!clics_hechos) Delay(2);
+"""
+end
+
+Main
+    W.open
+    otra = window_create("Segunda", 260, 60, 180, 70, 0)
+    b = button_create(otra, 10, 10, 80, 14, "Pulsa")
+    lanzar()
+    EventLoop
+        On Gadget
+            w = event_window()
+            Print "gadget en la ventana #{w}"
+        end
+        On Close
+            w = event_window()
+            Print "cerrar ventana #{w}"
+            if w == otra
+                window_close(otra)
+            else
+                Stop
+            end
+        end
+    end
+    esperar()
+    Print "fin"
+end

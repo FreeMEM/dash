@@ -905,6 +905,23 @@ window_close(a)
 - La ventana creada pasa a ser la actual: los `gfx_*` dibujan en ella. El numero 0 es la ventana actual.
 - Un numero que no es una ventana abierta no hace nada. Las que sigan abiertas se cierran al salir.
 - Tamano minimo 40x20 (Intuition 3.1 se cuelga con una ventana de 0x0).
+- Un `EventLoop` atiende también estas ventanas: sus gadgets llegan a `On Gadget` y su boton de cerrar a
+  `On Close`. `event_window()` dice de cual vino el evento (su numero; 0 = la ventana del `EventLoop`):
+
+```
+EventLoop
+    On Close
+        if event_window() == a
+            window_close(a)     # solo esa ventana
+        else
+            Stop
+        end
+    end
+end
+```
+
+Los `gt_*` y las ventanas ReAction (`ra_*`) son de una sola ventana; para programas con muchas ventanas,
+gadgets por numero o MUI.
 
 ### Event Loop
 
@@ -2618,7 +2635,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 |-----------|----------|----------|
 | Graficos basicos | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
 | Graficos avanzados | 43 | `sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
-| Entrada | 29 | `key_*`, `mouse_*`, `joy_*` |
+| Entrada | 30 | `key_*`, `mouse_*`, `joy_*`, `event_window` |
 | GadTools y menus | 29 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
 | Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_get_path` |
 | ReAction | 77 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
@@ -2628,7 +2645,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 44 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 67 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
-| **Total** | **424** | |
+| **Total** | **425** | |
 
 ### Colores Estandar Amiga
 
