@@ -395,6 +395,7 @@ Total: 467 funciones, 467 implementadas, 0 sin implementar.
 |---|---|---|---|
 | `arg_count()` | `LONG` | How many arguments the program got from the Shell (0 from the Workbench) |  |
 | `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none) |  |
+| `time_ms()` | `LONG` | Milliseconds since the program started (EClock of timer.device) |  |
 
 ## Audio
 

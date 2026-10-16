@@ -261,6 +261,7 @@ mem_fast_free()             # Available fast RAM
 
 time_delay(ticks)           # Wait (50 ticks = 1 sec)
 time_delay_ms(ms)           # Wait milliseconds
+time_ms()                   # Milliseconds since the program started
 wait_vblank()               # Wait vertical blank
 
 random()                    # Random number

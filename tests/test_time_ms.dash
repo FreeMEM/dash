@@ -1,0 +1,17 @@
+# Test: time_ms() counts milliseconds since the program started (EClock)
+# expect-out: arranque bien
+# expect-out: espera bien
+
+Main
+    a = time_ms()
+    if a >= 0 and a < 2000
+        Print "arranque bien"
+    end
+    time_delay_ms(500)
+    d = time_ms() - a
+    if d >= 400 and d <= 900
+        Print "espera bien"
+    else
+        Print "espera " + d
+    end
+end

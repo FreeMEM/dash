@@ -1205,6 +1205,54 @@ static STRPTR _dash_arg(LONG i) {
 
 """
 
+    # Clock (dashweb D20): milliseconds since the program started, from the EClock of
+    # timer.device. TimerBase is a tentative definition: a module may also define it.
+    TIME_RUNTIME = """\
+/* Dash Time Runtime */
+#include <devices/timer.h>
+#include <proto/timer.h>
+struct Device *TimerBase;
+static struct timerequest *_dash_time_tr = NULL;
+static struct EClockVal _dash_time_t0;
+static ULONG _dash_time_freq = 0;
+
+static void _dash_time_init(void) {
+    struct MsgPort *port;
+    if (_dash_time_freq) return;
+    port = CreateMsgPort();
+    if (port) _dash_time_tr = (struct timerequest *)CreateIORequest(port, sizeof(struct timerequest));
+    if (_dash_time_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)_dash_time_tr, 0) == 0) {
+        if (!TimerBase) TimerBase = _dash_time_tr->tr_node.io_Device;
+        _dash_time_freq = ReadEClock(&_dash_time_t0);
+    }
+}
+
+/* Milliseconds since the first call (and so since the program started, see main) */
+static LONG _dash_time_ms(void) {
+    struct EClockVal now;
+    ULONG hi, lo;
+    _dash_time_init();
+    if (!_dash_time_freq) return 0;
+    ReadEClock(&now);
+    hi = now.ev_hi - _dash_time_t0.ev_hi;
+    lo = now.ev_lo - _dash_time_t0.ev_lo;
+    if (now.ev_lo < _dash_time_t0.ev_lo) hi--;
+    /* (hi * 2^32 + lo) * 1000 / freq without 64-bit arithmetic: freq is about 709 kHz */
+    return (LONG)(hi * (0xFFFFFFFFUL / _dash_time_freq) * 1000UL + (lo / (_dash_time_freq / 1000UL)));
+}
+
+static void _dash_time_cleanup(void) {
+    if (_dash_time_tr) {
+        struct MsgPort *port = _dash_time_tr->tr_node.io_Message.mn_ReplyPort;
+        if (_dash_time_freq) CloseDevice((struct IORequest *)_dash_time_tr);
+        DeleteIORequest((struct IORequest *)_dash_time_tr);
+        DeleteMsgPort(port);
+        _dash_time_tr = NULL;
+    }
+}
+
+"""
+
     # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
     # doubles when full, so adding n elements one by one costs O(n).
     LIST_RUNTIME = """\
@@ -8122,6 +8170,7 @@ _RUNTIME_FLAGS = [
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
+    ("TIME_RUNTIME", "uses_time"),          # dashweb D20
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -8347,6 +8396,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
+        self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
@@ -8565,6 +8615,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.FONT_RUNTIME)
         if self.uses_args:
             parts.append(CTemplates.ARGS_RUNTIME)
+        if self.uses_time:
+            parts.append(CTemplates.TIME_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -8747,6 +8799,8 @@ static LONG _dash_event_window_handle(void) {{
         if self.needs_asl and not self.needs_gadtools:
             cleanup.append("    _dash_asl_cleanup();\n"
                            "    if (AslBase) { CloseLibrary(AslBase); AslBase = NULL; }\n")
+        if self.uses_time:
+            cleanup.append("    _dash_time_cleanup();\n")
         if self.uses_fonts:
             cleanup.append("    _dash_font_cleanup();\n")
         if self.uses_tls:
@@ -8760,6 +8814,9 @@ static LONG _dash_event_window_handle(void) {{
         parts.append(main_code)
 
         program = "\n".join(parts)
+        if self.uses_time:
+            # the clock starts with the program
+            program = program.replace("    // User Code\n", "    _dash_time_init();\n    // User Code\n", 1)
         if self.uses_args:
             # main gets the arguments only in programs that read them (the rest keep their C)
             program = program.replace("int main() {", "int main(int argc, char **argv) {\n    _dash_argc = argc;\n    _dash_argv = argv;", 1)

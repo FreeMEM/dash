@@ -1729,6 +1729,16 @@ arena_free(arena)
 
 ## 18. Funciones del Sistema
 
+### Reloj
+
+`time_ms()` da los milisegundos desde que empezo el programa (el EClock de `timer.device`):
+
+```
+t = time_ms()
+procesa()
+Print "tardo " + (time_ms() - t) + " ms"
+```
+
 ### Argumentos del programa
 
 Desde el Shell, lo que va detras del nombre del programa (`visor pagina.html "otra cosa"`):

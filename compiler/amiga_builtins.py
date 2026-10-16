@@ -3711,6 +3711,9 @@ ARGS_FUNCTIONS = {
     "arg_count": _text("arg_count", [], "LONG", "_dash_arg_count()",
                        "How many arguments the program got from the Shell (0 from the Workbench)"),
     "arg": _text("arg", ["i"], "STRPTR", "_dash_arg(${i})", "Argument i, from 0 (\"\" if there is none)"),
+    # dashweb D20
+    "time_ms": _text("time_ms", [], "LONG", "_dash_time_ms()",
+                     "Milliseconds since the program started (EClock of timer.device)"),
 }
 
 # =============================================================================
