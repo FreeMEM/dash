@@ -34,13 +34,32 @@
         render();
     }
 
+    /** Path of the object with that name in a window, or null */
+    function findNamed(w, name) {
+        let found = null;
+        (function walk(n, path) {
+            if (found || !n) return;
+            if (n.name === name) { found = path; return; }
+            (n.children || []).forEach((c, i) => walk(c, path.concat([i])));
+        })(w && w.root, []);
+        return found;
+    }
+
     function load(text) {
+        // keep the selection on the same object when the text changed elsewhere
+        const old = doc && win() ? M.nodeAt(win(), selected) : null;
+        const oldName = old && old.name;
+        const oldWindow = doc && win() ? win().name : null;
         try {
             doc = M.parse(text);
             error = null;
             if (!doc.windows.length) doc.windows.push(M.newWindow('Principal'));
+            const wi = doc.windows.findIndex((w) => w.name === oldWindow);
+            if (wi >= 0) winIndex = wi;
             if (winIndex >= doc.windows.length) winIndex = 0;
-            if (!M.nodeAt(win(), selected)) selected = [];
+            const byName = oldName ? findNamed(win(), oldName) : null;
+            if (byName) selected = byName;
+            else if (!M.nodeAt(win(), selected)) selected = [];
         } catch (e) {
             error = e.message;
         }

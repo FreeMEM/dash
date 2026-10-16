@@ -175,7 +175,7 @@ repos, sesiones de Claude y Antigravity).
       mínima en `editor/vscode/`: resaltado de sintaxis de Dash, comandos "Compilar" (`./dash`) y "Ejecutar en
       emulador". Empaquetado con `vsce` instalado en un `node_modules` local (no global).
 - [x] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
-- [ ] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
+- [x] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
 - [ ] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
 - [ ] 24. **Ejemplo y documentación.** La ventana del navegador (tarea 10) hecha con el editor.
 
@@ -650,3 +650,19 @@ Formato:
     tamaños de la vista previa); `style-src` admite ahora `'unsafe-inline'` (solo estilos, no código).
 - **No probado:** dentro de VS Code de verdad (no instalada en el VS Code del usuario).
 - Tests: 140/140 sin emulador; 338/338 con `--emu --emu-a500 --emu-32`; ejemplos 33/33; `npm test` de la extensión 22/22.
+
+### 2026-10-16 — Tarea 22 (ida y vuelta)
+- No hay código generado que se desincronice (el `.dashui` es la única fuente; ver tarea 19), así que la ida y vuelta es
+  abrir un `.dashui` escrito o cambiado fuera del editor sin perder nada.
+- Probado en el webview con Playwright (Chromium, `test/webview.html`):
+  - Un fichero escrito a mano con claves que el editor no conoce (`"autor"`, `"comentario"`, `"color_futuro"`) y un
+    tipo que no existe (`"boton"`): el tipo sale en la línea de problemas y, tras cambiar el texto de un botón, el JSON
+    que se guarda conserva todas esas claves y el objeto desconocido.
+  - JSON roto llegado de fuera (por ejemplo, editándolo como texto al lado): aviso de "No es un .dashui válido" y el
+    editor se recupera solo cuando el texto vuelve a ser válido.
+  - **Arreglado:** tras un cambio hecho fuera, la selección se quedaba en la misma posición del árbol (otro objeto si
+    se había insertado algo antes). Ahora sigue al objeto por su nombre, y la pestaña a la ventana por su nombre.
+- Aprendido: el navegador de Playwright guarda en caché los `.js` incluso tras cerrarlo; para probar cambios, un
+  servidor local que mande `Cache-Control: no-store` (en el scratchpad).
+- Corregido el `CLAUDE.md` local: `expect-c` no traduce `\n` (solo `expect-no-c`); aviso de la sesión de dashweb.
+- Tests: `npm test` 22/22 (el cambio es solo del webview).
