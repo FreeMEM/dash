@@ -1171,7 +1171,9 @@ rojo = color_pen(255, 0, 0)            # el lapiz mas parecido en la pantalla do
 gfx_pen(rojo)
 ```
 
-`font_size(f)` dice el tamano que dio el sistema (el mas cercano que tiene). Las fuentes de
+`font_size(f)` dice el tamano que dio el sistema (el mas cercano que tiene). Sin ventana abierta (o con
+MUI, fuera de la zona de dibujo) `font_use`, `font_style` y las medidas trabajan sobre un RastPort propio de
+Dash: se puede maquetar un texto antes de pintarlo. Las fuentes de
 disco necesitan `diskfont.library` y la fuente en `FONTS:`. Las fuentes abiertas y los lapices
 se devuelven al salir.
 

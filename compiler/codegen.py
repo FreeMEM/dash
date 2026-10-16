@@ -1091,6 +1091,20 @@ struct Library *DiskfontBase = NULL;
 #define _DASH_FONTS_MAX 32
 static struct TextFont *_dash_fonts[_DASH_FONTS_MAX];
 
+/* Where texts are measured: _dash_rp, or without one (MUI outside its drawing, before a
+   window opens) a RastPort of our own with the same font and style (dashweb D28) */
+static struct RastPort _dash_font_mrp;
+static BOOL _dash_font_mrp_ok = FALSE;
+static struct RastPort *_dash_font_rp(void) {
+    if (_dash_rp) return _dash_rp;
+    if (!_dash_font_mrp_ok) {
+        InitRastPort(&_dash_font_mrp);
+        if (GfxBase) SetFont(&_dash_font_mrp, GfxBase->DefaultFont);
+        _dash_font_mrp_ok = TRUE;
+    }
+    return &_dash_font_mrp;
+}
+
 /* name ("helvetica.font") at size pixels: the font, or 0 if there is no such font.
    Disk fonts need diskfont.library; the ROM's topaz 8 works without it. */
 static LONG _dash_font_open(STRPTR name, LONG size) {
@@ -1118,24 +1132,24 @@ static void _dash_font_close(LONG font) {
 }
 
 static void _dash_font_use(LONG font) {
-    if (font && _dash_rp) SetFont(_dash_rp, (struct TextFont *)font);
+    if (font) SetFont(_dash_font_rp(), (struct TextFont *)font);
 }
 
 /* 1 underlined, 2 bold, 4 italic (added together); done by the system if the font lacks it */
 static void _dash_font_style(LONG style) {
     /* the mask is the three styles (AskSoftStyle's answer let the bold of topaz be lost) */
-    if (_dash_rp) SetSoftStyle(_dash_rp, (ULONG)style & 7, FSF_UNDERLINED | FSF_BOLD | FSF_ITALIC);
+    SetSoftStyle(_dash_font_rp(), (ULONG)style & 7, FSF_UNDERLINED | FSF_BOLD | FSF_ITALIC);
 }
 
-static LONG _dash_font_height(void) { return _dash_rp ? _dash_rp->TxHeight : 8; }
-static LONG _dash_font_baseline(void) { return _dash_rp ? _dash_rp->TxBaseline : 6; }
+static LONG _dash_font_height(void) { return _dash_font_rp()->TxHeight; }
+static LONG _dash_font_baseline(void) { return _dash_font_rp()->TxBaseline; }
 
 /* Width of a text with the current font and style (TextExtent; the system's bold does not
    widen the text, it thickens it) */
 static LONG _dash_font_text_width(STRPTR s) {
     struct TextExtent te;
-    if (!_dash_rp || !s) return 0;
-    TextExtent(_dash_rp, s, strlen((char *)s), &te);
+    if (!s) return 0;
+    TextExtent(_dash_font_rp(), s, strlen((char *)s), &te);
     return te.te_Width;
 }
 

@@ -1,0 +1,14 @@
+# Test: measuring text without a window (dashweb D28): with no window open (or with MUI, outside
+# a drawing area) font_use, font_style, font_text_width, font_height and font_baseline work on a
+# RastPort of Dash's own, so a page can be laid out before it is drawn.
+# expect-out: 32 8 6
+# expect-out: 40
+# expect-out: 0
+
+Main
+    f = font_open("topaz.font", 8)
+    font_use(f)
+    Print "" + font_text_width("Hola") + " " + font_height() + " " + font_baseline()
+    Print font_text_width("Dash!")
+    Print font_text_width("")
+end
