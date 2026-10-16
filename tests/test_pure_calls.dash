@@ -1,0 +1,56 @@
+# A pure function (no field, element or global assigned, no list or dictionary changed, only pure
+# calls) gets fields and list elements without a lend: nothing can free them while it runs. One
+# that is impure only through another function it calls still gets them lent: there the inner call
+# replaces the field and frees the old object, which the outer one goes on using (memcheck checks).
+# A loop over d.keys() whose body calls a pure function goes through the table.
+# memcheck
+# expect-c: x_de(_DASH_NN(c)->p)
+# expect-c: usa_y_cambia(c, ((_Dash_Punto *)_DASH_OLEND_Caja_p(
+# expect-c: _dk_k = d;
+# expect-out: 3 7
+# expect-out: cambiado 3, ahora 5
+# expect-out: suma 30
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+end
+
+struct Caja
+    p: Punto
+    nombre: String
+end
+
+func x_de(p: Punto) -> Int
+    return p.x
+end
+
+func largo(s: String) -> Int
+    return s.length
+end
+
+func cambia(c: Caja)
+    c.p = Punto(5)
+end
+
+func usa_y_cambia(c: Caja, p: Punto) -> Int
+    cambia(c)
+    return p.x
+end
+
+func doble(n: Int) -> Int
+    return n * 2
+end
+
+Main
+    c = Caja(Punto(3), "ventana")
+    Print "#{x_de(c.p)} #{largo(c.nombre)}"
+    antes = usa_y_cambia(c, c.p)
+    Print "cambiado #{antes}, ahora #{c.p.x}"
+    var d: {String: Int} = {"a": 5, "b": 10}
+    suma = 0
+    for k in d.keys()
+        suma = suma + doble(d[k])
+    end
+    Print "suma #{suma}"
+end

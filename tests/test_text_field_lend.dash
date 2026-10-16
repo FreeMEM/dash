@@ -23,7 +23,10 @@ struct Cambia
     texto: String
 end
 
+var llamadas: Int = 0
+
 func largo(f: Fijo, s: String) -> String
+    llamadas = llamadas + 1  # not pure (it sets a global): its arguments are lent
     return "" + s.length + " " + s[69:70]
 end
 

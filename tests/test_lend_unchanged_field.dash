@@ -19,7 +19,10 @@ struct Parte
     n: Int
 end
 
+var llamadas: Int = 0
+
 func cuenta(s: Simple) -> Int
+    llamadas = llamadas + 1  # not pure (it sets a global): its arguments are lent
     return s.clases.length
 end
 

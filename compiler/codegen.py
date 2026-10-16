@@ -11323,10 +11323,69 @@ static {ret_type} {method_name}({params_str}) {{
                     if n.method not in ("has", "keys"):
                         return False
                 elif not self._dict_value_kind(n.object) is not None and not self._is_list_method(n):
-                    return False     # a struct's method: self is an object
+                    method = self._method_of(n)
+                    if not (method is not None and self._is_pure(method)):
+                        return False     # a struct's method that may change things
             if isinstance(n, FunctionCall) and not get_builtin(n.name):
+                func = self.analysis.program.get_function(n.name)
+                if func is not None and self._is_pure(func):
+                    continue             # it changes nothing
                 if any(self._is_obj_expr(a) or isinstance(a, VarRef) and a.name == name for a in n.arguments):
                     return False
+        return True
+
+    # Builtins that may run Dash code (callbacks: MUI's drawing area, ReAction's canvas...)
+    _CALLBACK_PREFIXES = ("mui_", "ra_")
+    _CHANGING_METHODS = ("push", "pop", "insert", "remove", "clear")
+
+    def _is_pure(self, fdef) -> bool:
+        """A function or method that changes nothing that exists outside it: no field, element or
+        global assigned, no parameter reassigned, no list or dictionary changed (push, pop,
+        insert, remove, clear), no window, and only calls to builtins without callbacks, to
+        constructors and to pure functions and methods. Nothing can be freed while it runs, so
+        what it gets need not be lent. Worked out once for the whole program (fixed point)."""
+        if getattr(self, "_pure_ids", None) is None:
+            prog = self.analysis.program
+            defs = list(prog.functions) + [m for st in prog.structs for m in getattr(st, "methods", [])]
+            globals_ = {g.name for g in prog.global_vars}
+            methods_by_name = {}
+            for st in prog.structs:
+                for m in getattr(st, "methods", []):
+                    methods_by_name.setdefault(m.name, []).append(m)
+            pure = {id(d) for d in defs}
+            changed = True
+            while changed:
+                changed = False
+                for d in defs:
+                    if id(d) in pure and not self._body_pure(d, pure, globals_, methods_by_name):
+                        pure.discard(id(d))
+                        changed = True
+            self._pure_ids = pure
+        return id(fdef) in self._pure_ids
+
+    def _body_pure(self, d, pure, globals_, methods_by_name) -> bool:
+        prog = self.analysis.program
+        params = {p.name if isinstance(p, FunctionParam) else p for p in d.params}
+        for n in self._walk_nodes(d.body):
+            if isinstance(n, (MemberAssign, ArrayAssign, EventLoop, WindowOpen, WindowClose)):
+                return False
+            if isinstance(n, VarAssign) and (n.name in params or n.name in globals_):
+                return False
+            if isinstance(n, MethodCall):
+                if n.method in self._CHANGING_METHODS:
+                    return False
+                if n.method in methods_by_name and not all(id(m) in pure for m in methods_by_name[n.method]):
+                    return False
+            if isinstance(n, FunctionCall):
+                if get_builtin(n.name):
+                    if n.name.startswith(self._CALLBACK_PREFIXES):
+                        return False
+                elif prog.get_struct(n.name):
+                    pass                       # a constructor: a new object
+                else:
+                    f = prog.get_function(n.name)
+                    if f is None or id(f) not in pure:
+                        return False           # native, extern, a Func value, or an impure function
         return True
 
     def _walk_nodes(self, nodes):
@@ -11561,8 +11620,8 @@ static {ret_type} {method_name}({params_str}) {{
                 code = self._lend(arg, code)        # @native(borrow): only during the call (D26)
             elif foreign is not None:
                 code = self._escape_any(arg, code)  # C code may keep the pointer
-            elif func:
-                code = self._lend(arg, code)
+            elif func and not self._is_pure(func):
+                code = self._lend(arg, code)     # a pure function frees nothing: no need to lend
             param = func.params[i] if func and i < len(func.params) else None
             if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
                 code = self._fixed_value(arg)
@@ -12244,8 +12303,10 @@ static {ret_type} {method_name}({params_str}) {{
 
         if struct_name:
             # Known struct type - generate StructName_methodname(obj, args...)
-            args = [self._lend(node.object, obj_expr)]
-            args.extend(self._method_arg(owner.get_method(node.method), i, a) for i, a in enumerate(node.arguments))
+            method = owner.get_method(node.method)
+            pure = method is not None and self._is_pure(method)
+            args = [obj_expr if pure else self._lend(node.object, obj_expr)]
+            args.extend(self._method_arg(method, i, a, pure) for i, a in enumerate(node.arguments))
             args_str = ", ".join(args)
             return f"{struct_name}_{node.method}({args_str})"
         else:
@@ -12268,12 +12329,14 @@ static {ret_type} {method_name}({params_str}) {{
             args_str = ", ".join(args)
             return f"/* method call */ {node.method}({args_str})"
 
-    def _method_arg(self, method, i: int, arg: ASTNode) -> str:
-        """Argument i of a method call: lent if shared, converted for a Fixed parameter."""
+    def _method_arg(self, method, i: int, arg: ASTNode, pure: bool = False) -> str:
+        """Argument i of a method call: lent if shared (not to a pure method), converted for a
+        Fixed parameter."""
         param = method.params[i] if method and i < len(method.params) else None
         if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
             return self._fixed_value(arg)
-        return self._lend(arg, self._generate_expression(arg))
+        code = self._generate_expression(arg)
+        return code if pure else self._lend(arg, code)
 
     def _nn(self, code: str) -> str:
         """The struct pointer of a field access; with --memcheck it is checked for nil."""
