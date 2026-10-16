@@ -1946,6 +1946,7 @@ end
 `RA_EVENT_NONE()` vale -3, así que un gadget puede tener el id 0. `ra_wait_event()` devuelve antes los
 mensajes que quedaron pendientes y luego espera; puede devolver `RA_EVENT_NONE()` si lo que llegó no
 era de un gadget (por ejemplo, el ratón). Los ids van de 0 a 63; uno fuera de ese rango no se guarda.
+`ra_get_value` y `ra_set_value` sirven también antes de abrir la ventana.
 
 Para que `func render_canvas()` dibuje el área de `ra_add_drawing_area`, hay que llamar a
 `ra_init_canvas_render()` antes de crear el área y a `ra_canvas_enable()` cuando el programa esté listo.
@@ -2062,6 +2063,11 @@ end
 | Funcion | Descripcion |
 |---------|-------------|
 | `ra_add_palette(id,depth,init)` | Selector de color (depth=bits) |
+| `ra_add_listbrowser(id)` | Lista de líneas (valor: línea elegida, -1 ninguna) |
+| `ra_listbrowser_add(id,texto)`, `ra_listbrowser_clear(id)`, `ra_listbrowser_count(id)` | Añadir, vaciar, contar líneas |
+| `ra_add_radio(id,"A|B|C")` | Botones de radio (valor: opción) |
+| `ra_add_clicktab(id,"A|B")` | Pestañas (valor: pestaña, desde 0) |
+| `ra_add_fuelgauge(id,max)` | Barra de progreso (valor: nivel) |
 | `ra_add_chooser(id)` | Crear dropdown vacio |
 | `ra_chooser_add_item(id,label)` | Anadir item a dropdown |
 | `ra_add_scroller(id,min,max,vis,init)` | Scroller horizontal |
@@ -2612,14 +2618,14 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Entrada | 29 | `key_*`, `mouse_*`, `joy_*` |
 | GadTools y menus | 29 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
 | Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_get_path` |
-| ReAction | 64 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
+| ReAction | 71 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
 | Sistema y memoria | 25 | `mem_*`, `time_*`, `random_*`, `arena_*` |
 | Ficheros (DOS) y buffers | 34 | `file_*`, `dir_*`, `buffer_*` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 44 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 67 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
-| **Total** | **411** | |
+| **Total** | **418** | |
 
 ### Colores Estandar Amiga
 

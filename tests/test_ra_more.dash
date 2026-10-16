@@ -1,0 +1,56 @@
+# ReAction gadgets added in 15a: listbrowser (lines, count, selected, clear), radio
+# buttons, tabs (clicktab) and a progress bar (fuelgauge), all through ra_get_value /
+# ra_set_value, which now also work before the window opens. Nodes and texts are freed
+# when the window closes (memcheck).
+# memcheck
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# emu-needs: listbrowser.gadget
+# emu-needs: radiobutton.gadget
+# emu-needs: clicktab.gadget
+# emu-needs: fuelgauge.gadget
+# expect-out: barra antes de abrir: 25
+# expect-out: 3 líneas, elegida -1
+# expect-out: elegida 1
+# expect-out: 0 líneas
+# expect-out: radio 2
+# expect-out: pestaña 1
+# expect-out: barra 40
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    ra_window_create("Más ReAction", 320, 220)
+    ra_add_clicktab(1, "General|Red|Avanzado")
+    ra_add_listbrowser(2)
+    ra_add_radio(3, "Rápido|Normal|Lento")
+    ra_add_fuelgauge(4, 100)
+    ra_set_value(4, 25)
+    v = ra_get_value(4)
+    Print "barra antes de abrir: #{v}"
+    ra_window_open()
+
+    for i in (1..3)
+        ra_listbrowser_add(2, "Página #{i}")
+    end
+    n = ra_listbrowser_count(2)
+    v = ra_get_value(2)
+    Print "#{n} líneas, elegida #{v}"
+    ra_set_value(2, 1)
+    v = ra_get_value(2)
+    Print "elegida #{v}"
+    ra_listbrowser_clear(2)
+    n = ra_listbrowser_count(2)
+    Print "#{n} líneas"
+    ra_set_value(3, 2)
+    v = ra_get_value(3)
+    Print "radio #{v}"
+    ra_set_value(1, 1)
+    v = ra_get_value(1)
+    Print "pestaña #{v}"
+    ra_set_value(4, 40)
+    v = ra_get_value(4)
+    Print "barra #{v}"
+    ra_window_close()
+    Print "fin"
+end

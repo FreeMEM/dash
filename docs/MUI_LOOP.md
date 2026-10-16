@@ -145,7 +145,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
 - [x] 14. **GadTools completo.** Gadgets que faltan: ciclo (`CYCLE_KIND`), opciones (`MX_KIND`), lista
       (`LISTVIEW_KIND`), scroller, número (`NUMBER_KIND`); `gt_set_string`, deshabilitar, refresco
       (`GT_RefreshWindow`, `GT_BeginRefresh`), posiciones según la fuente de la pantalla. Probar en A500 y A1200.
-- [ ] 15a. **ReAction: gadgets que faltan.** `listbrowser` (lista de textos: añadir, vaciar, elegida), `radiobutton`,
+- [x] 15a. **ReAction: gadgets que faltan.** `listbrowser` (lista de textos: añadir, vaciar, elegida), `radiobutton`,
       `fuelgauge` (barra de progreso), `clicktab` (pestañas), con `ra_get_value`/`ra_set_value` y eventos; que los
       `ra_set_*` funcionen antes de abrir la ventana. Nodos con `Alloc*Node` y textos propios, liberados al cerrar.
 - [ ] 15b. **ReAction: menús y fichero.** Menús en ventanas ReAction (`WINDOW_MenuStrip`, `WMHI_MENUPICK` →
@@ -521,3 +521,16 @@ Formato:
 - No hecho: atajos de teclado con `_` (GadTools solo subraya la letra; el programa tendría que atender las teclas) y
   posiciones según la fuente de la pantalla. Quedan como pendientes.
 - Tests: 134/134 sin emulador; 325/325 con `--emu --emu-a500 --emu-32`; 200/200 con `--emu --memcheck`; ejemplos 33/33. `test_window_handles` agotaba el tiempo en la batería `--memcheck` (pasa solo): todos los tests de una máquina van en un arranque y ya no cabían en 180 s; límites subidos a 360 s (A1200), 700 s (A500) y 480 s (3.2).
+
+### 2026-10-16 — Tarea 15a (ReAction: gadgets que faltaban)
+- Hecho (7 builtins): `ra_add_listbrowser` + `ra_listbrowser_add/clear/count` (nodos con `AllocListBrowserNodeA` y
+  `LBNCA_CopyText`), `ra_add_radio` (`AllocRadioButtonNodeA`), `ra_add_clicktab` (`AllocClickTabNodeA`),
+  `ra_add_fuelgauge` (con porcentaje). Sus valores por `ra_get_value`/`ra_set_value` (`LISTBROWSER_Selected`,
+  `RADIOBUTTON_Selected`, `CLICKTAB_Current`, `FUELGAUGE_Level`). Listas de nodos por id liberadas en
+  `ra_window_close` (después de `DisposeObject`, antes de cerrar las clases), con la copia de las opciones.
+  `ra_set_value` ya no exige la ventana abierta (`SetGadgetAttrs` con ventana NULL no dibuja). Funciones con
+  etiquetas en array (versiones `...A`).
+- Probado en A1200 3.2 (`test_ra_more`, con `# memcheck`): barra puesta antes de abrir (25), lista con 3 líneas,
+  elegida -1 y luego 1, vaciada; radio 2, pestaña 1, barra 40; 0 vivos y 0 escapados.
+- Sin probar: clics en estos gadgets (las posiciones de sus opciones dependen de la fuente).
+- Tests: 135/135 sin emulador; 327/327 con `--emu --emu-a500 --emu-32`; 204/204 con `--emu-32 --memcheck`; ejemplos 33/33.

@@ -1734,6 +1734,62 @@ REACTION_FUNCTIONS = {
         needs_reaction=True,
         description="Check if window is open"
     ),
+    "ra_add_listbrowser": BuiltinFunc(
+        name="ra_add_listbrowser",
+        params=["id"],
+        return_type="LONG",
+        c_template="ra_add_listbrowser(${id})",
+        needs_reaction=True,
+        description="Add a list of text lines (value: selected line, -1 none)"
+    ),
+    "ra_listbrowser_add": BuiltinFunc(
+        name="ra_listbrowser_add",
+        params=["id", "text"],
+        return_type="LONG",
+        c_template="ra_listbrowser_add(${id}, ${text})",
+        needs_reaction=True,
+        description="Add a line at the end of a listbrowser"
+    ),
+    "ra_listbrowser_clear": BuiltinFunc(
+        name="ra_listbrowser_clear",
+        params=["id"],
+        return_type="void",
+        c_template="ra_listbrowser_clear(${id})",
+        needs_reaction=True,
+        description="Remove all lines of a listbrowser"
+    ),
+    "ra_listbrowser_count": BuiltinFunc(
+        name="ra_listbrowser_count",
+        params=["id"],
+        return_type="LONG",
+        c_template="ra_listbrowser_count(${id})",
+        needs_reaction=True,
+        description="Number of lines of a listbrowser"
+    ),
+    "ra_add_radio": BuiltinFunc(
+        name="ra_add_radio",
+        params=["id", "options"],
+        return_type="LONG",
+        c_template="ra_add_radio(${id}, ${options})",
+        needs_reaction=True,
+        description="Add radio buttons, options separated by | (value: option)"
+    ),
+    "ra_add_clicktab": BuiltinFunc(
+        name="ra_add_clicktab",
+        params=["id", "titles"],
+        return_type="LONG",
+        c_template="ra_add_clicktab(${id}, ${titles})",
+        needs_reaction=True,
+        description="Add tabs, titles separated by | (value: tab, from 0)"
+    ),
+    "ra_add_fuelgauge": BuiltinFunc(
+        name="ra_add_fuelgauge",
+        params=["id", "max"],
+        return_type="LONG",
+        c_template="ra_add_fuelgauge(${id}, ${max})",
+        needs_reaction=True,
+        description="Add a progress bar from 0 to max (value: level)"
+    ),
 }
 
 

@@ -4622,6 +4622,9 @@ static struct Task *_ra_main_task = NULL;
 static Object *_ra_canvas_obj = NULL;
 static volatile LONG _ra_redraw_later = 0;
 struct Library *ListBrowserBase = NULL;
+struct Library *RadioButtonBase = NULL;
+struct Library *FuelGaugeBase = NULL;
+struct Library *ClickTabBase = NULL;
 struct Library *ScrollerBase = NULL;
 struct Library *LabelBase = NULL;
 struct Library *BevelBase = NULL;
@@ -4635,7 +4638,13 @@ static Object *_ra_layout = NULL;
 #define RA_MAX_GADGETS 64
 static Object *_ra_gadgets[RA_MAX_GADGETS];
 /* Kind of each gadget, so ra_get_value/ra_set_value use only its own attribute */
-enum { RA_K_OTHER, RA_K_CHECKBOX, RA_K_SLIDER, RA_K_INTEGER, RA_K_PALETTE, RA_K_CHOOSER, RA_K_SCROLLER };
+enum { RA_K_OTHER, RA_K_CHECKBOX, RA_K_SLIDER, RA_K_INTEGER, RA_K_PALETTE, RA_K_CHOOSER, RA_K_SCROLLER,
+       RA_K_LISTBROWSER, RA_K_RADIO, RA_K_FUEL, RA_K_CLICKTAB };
+/* Node lists of listbrowsers, radio buttons and tabs, freed by ra_window_close */
+static struct List _ra_node_lists[RA_MAX_GADGETS];
+static BOOL _ra_node_inited[RA_MAX_GADGETS];
+static STRPTR _ra_node_texts[RA_MAX_GADGETS];   /* copy of the options of radio buttons and tabs */
+static void _ra_nodes_free(void);
 static UBYTE _ra_kinds[RA_MAX_GADGETS];
 static LONG _ra_gadget_count = 0;
 
@@ -4657,6 +4666,9 @@ static void _ra_close_libs(void) {
     if (LabelBase) { CloseLibrary(LabelBase); LabelBase = NULL; }
     if (ScrollerBase) { CloseLibrary(ScrollerBase); ScrollerBase = NULL; }
     if (ListBrowserBase) { CloseLibrary(ListBrowserBase); ListBrowserBase = NULL; }
+    if (RadioButtonBase) { CloseLibrary(RadioButtonBase); RadioButtonBase = NULL; }
+    if (FuelGaugeBase) { CloseLibrary(FuelGaugeBase); FuelGaugeBase = NULL; }
+    if (ClickTabBase) { CloseLibrary(ClickTabBase); ClickTabBase = NULL; }
     if (ChooserBase) { CloseLibrary(ChooserBase); ChooserBase = NULL; }
     if (PaletteBase) { CloseLibrary(PaletteBase); PaletteBase = NULL; }
     if (SliderBase) { CloseLibrary(SliderBase); SliderBase = NULL; }
@@ -4721,6 +4733,7 @@ static void ra_window_close(void) {
         _ra_layout = NULL;
     }
     _ra_chooser_free();
+    _ra_nodes_free();
     _ra_close_libs();
 }
 
@@ -4918,8 +4931,171 @@ static ULONG _ra_value_attr(LONG id) {
         case RA_K_PALETTE:  return PALETTE_Colour;
         case RA_K_CHOOSER:  return CHOOSER_Selected;
         case RA_K_SCROLLER: return SCROLLER_Top;
+        case RA_K_LISTBROWSER: return LISTBROWSER_Selected;
+        case RA_K_RADIO:    return RADIOBUTTON_Selected;
+        case RA_K_FUEL:     return FUELGAUGE_Level;
+        case RA_K_CLICKTAB: return CLICKTAB_Current;
     }
     return 0;
+}
+
+
+/* --- Listbrowser, radio buttons, fuel gauge and tabs --- */
+
+static void _ra_nodes_free(void) {
+    LONG i;
+    struct Node *node;
+    for (i = 0; i < RA_MAX_GADGETS; i++) {
+        if (!_ra_node_inited[i]) continue;
+        while ((node = RemHead(&_ra_node_lists[i]))) {
+            switch (_ra_kinds[i]) {
+            case RA_K_LISTBROWSER: FreeListBrowserNode(node); break;
+            case RA_K_RADIO:       FreeRadioButtonNode(node); break;
+            case RA_K_CLICKTAB:    FreeClickTabNode(node); break;
+            }
+        }
+        if (_ra_node_texts[i]) { _dash_str_free(_ra_node_texts[i]); _ra_node_texts[i] = NULL; }
+        _ra_node_inited[i] = FALSE;
+    }
+}
+
+static struct List *_ra_node_list(LONG id) {
+    if ((ULONG)id >= RA_MAX_GADGETS) return NULL;
+    if (!_ra_node_inited[id]) {
+        struct List *li = &_ra_node_lists[id];
+        li->lh_Head = (struct Node *)&li->lh_Tail;
+        li->lh_Tail = NULL;
+        li->lh_TailPred = (struct Node *)&li->lh_Head;
+        _ra_node_inited[id] = TRUE;
+    }
+    return &_ra_node_lists[id];
+}
+
+static LONG _ra_add_child(LONG id, Object *obj, LONG kind) {
+    if (!obj) return 0;
+    SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL, LAYOUT_AddChild, obj, TAG_DONE);
+    if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = obj; _ra_kinds[id] = kind; }
+    return 1;
+}
+
+/* List of text lines; its value is the selected line (-1 none) */
+static LONG ra_add_listbrowser(LONG id) {
+    struct List *li;
+    if (!_ra_layout || (ULONG)id >= RA_MAX_GADGETS) return 0;
+    if (!_ra_open_class(&ListBrowserBase, "gadgets/listbrowser.gadget")) return 0;
+    li = _ra_node_list(id);
+    _ra_kinds[id] = RA_K_LISTBROWSER;
+    return _ra_add_child(id, (Object *)NewObject(LISTBROWSER_GetClass(), NULL,
+        GA_ID, id,
+        GA_RelVerify, TRUE,
+        LISTBROWSER_Labels, (ULONG)li,
+        LISTBROWSER_ShowSelected, TRUE,
+        LISTBROWSER_Selected, -1,
+        TAG_DONE), RA_K_LISTBROWSER);
+}
+
+/* The class copies the text (LBNCA_CopyText) */
+static LONG ra_listbrowser_add(LONG id, STRPTR text) {
+    struct Node *node;
+    Object *lb;
+    if ((ULONG)id >= RA_MAX_GADGETS || _ra_kinds[id] != RA_K_LISTBROWSER || !(lb = _ra_gadgets[id])) return 0;
+    {
+        ULONG tags[] = { LBNCA_CopyText, TRUE, LBNCA_Text, (ULONG)(text ? text : (STRPTR)""), TAG_DONE };
+        node = AllocListBrowserNodeA(1, (struct TagItem *)tags);
+    }
+    if (!node) return 0;
+    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, ~0, TAG_DONE);
+    AddTail(&_ra_node_lists[id], node);
+    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, (ULONG)&_ra_node_lists[id], TAG_DONE);
+    return 1;
+}
+
+static void ra_listbrowser_clear(LONG id) {
+    struct Node *node;
+    Object *lb;
+    if ((ULONG)id >= RA_MAX_GADGETS || _ra_kinds[id] != RA_K_LISTBROWSER || !(lb = _ra_gadgets[id])) return;
+    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, ~0, TAG_DONE);
+    while ((node = RemHead(&_ra_node_lists[id]))) FreeListBrowserNode(node);
+    SetGadgetAttrs((struct Gadget *)lb, _ra_window, NULL, LISTBROWSER_Labels, (ULONG)&_ra_node_lists[id],
+                   LISTBROWSER_Selected, -1, TAG_DONE);
+}
+
+static LONG ra_listbrowser_count(LONG id) {
+    LONG n = 0;
+    struct Node *node;
+    if ((ULONG)id >= RA_MAX_GADGETS || _ra_kinds[id] != RA_K_LISTBROWSER || !_ra_node_inited[id]) return 0;
+    for (node = _ra_node_lists[id].lh_Head; node->ln_Succ; node = node->ln_Succ) n++;
+    return n;
+}
+
+/* "A|B|C": one node per option (the class copies its label: RBNA_Label in a copy we free) */
+static LONG _ra_fill_nodes(LONG id, LONG kind, STRPTR options) {
+    struct List *li = _ra_node_list(id);
+    STRPTR copy, p, start;
+    LONG n = 0;
+    if (!li) return 0;
+    _ra_kinds[id] = kind;
+    copy = _dash_str_dup(options ? options : (STRPTR)"", FALSE);
+    for (start = p = copy; ; p++) {
+        if (*p == '|' || *p == 0) {
+            UBYTE end = *p;
+            struct Node *node;
+            *p = 0;
+            if (kind == RA_K_RADIO) {
+                ULONG tags[] = { RBNA_Label, (ULONG)start, TAG_DONE };
+                node = AllocRadioButtonNodeA(1, (struct TagItem *)tags);
+            } else {
+                ULONG tags[] = { TNA_Text, (ULONG)start, TNA_Number, (ULONG)n, TAG_DONE };
+                node = AllocClickTabNodeA((struct TagItem *)tags);
+            }
+            if (node) { AddTail(li, node); n++; }
+            *p = end;
+            if (!end) break;
+            start = p + 1;
+        }
+    }
+    /* the labels point into the copy (freed with the nodes by ra_window_close) */
+    if (_ra_node_texts[id]) _dash_str_free(_ra_node_texts[id]);
+    _ra_node_texts[id] = copy;
+    return n;
+}
+
+static LONG ra_add_radio(LONG id, STRPTR options) {
+    if (!_ra_layout || (ULONG)id >= RA_MAX_GADGETS) return 0;
+    if (!_ra_open_class(&RadioButtonBase, "gadgets/radiobutton.gadget")) return 0;
+    _ra_fill_nodes(id, RA_K_RADIO, options);
+    return _ra_add_child(id, (Object *)NewObject(RADIOBUTTON_GetClass(), NULL,
+        GA_ID, id,
+        GA_RelVerify, TRUE,
+        RADIOBUTTON_Labels, (ULONG)&_ra_node_lists[id],
+        RADIOBUTTON_Selected, 0,
+        TAG_DONE), RA_K_RADIO);
+}
+
+/* Tabs: the value is the tab selected (from 0); the program shows what goes with it */
+static LONG ra_add_clicktab(LONG id, STRPTR titles) {
+    if (!_ra_layout || (ULONG)id >= RA_MAX_GADGETS) return 0;
+    if (!_ra_open_class(&ClickTabBase, "gadgets/clicktab.gadget")) return 0;
+    _ra_fill_nodes(id, RA_K_CLICKTAB, titles);
+    return _ra_add_child(id, (Object *)NewObject(CLICKTAB_GetClass(), NULL,
+        GA_ID, id,
+        GA_RelVerify, TRUE,
+        CLICKTAB_Labels, (ULONG)&_ra_node_lists[id],
+        CLICKTAB_Current, 0,
+        TAG_DONE), RA_K_CLICKTAB);
+}
+
+/* Progress bar from 0 to max (value = level) */
+static LONG ra_add_fuelgauge(LONG id, LONG max) {
+    if (!_ra_layout || (ULONG)id >= RA_MAX_GADGETS) return 0;
+    if (!_ra_open_class(&FuelGaugeBase, "gadgets/fuelgauge.gadget")) return 0;
+    return _ra_add_child(id, (Object *)NewObject(FUELGAUGE_GetClass(), NULL,
+        GA_ID, id,
+        FUELGAUGE_Min, 0,
+        FUELGAUGE_Max, max > 0 ? max : 100,
+        FUELGAUGE_Level, 0,
+        FUELGAUGE_Percent, TRUE,
+        TAG_DONE), RA_K_FUEL);
 }
 
 /* Get gadget value (checkbox: 1/0, slider, integer, palette, chooser, scroller) */
@@ -4942,7 +5118,7 @@ static STRPTR ra_get_string(LONG id) {
 /* Set gadget value */
 static void ra_set_value(LONG id, LONG value) {
     ULONG attr;
-    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window || !(attr = _ra_value_attr(id))) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !(attr = _ra_value_attr(id))) return;   /* window NULL: no redraw */
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, attr, value, TAG_DONE);
 }
 
@@ -8621,6 +8797,7 @@ static {ret_type} {method_name}({params_str}) {{
         # GadTools and ReAction string gadgets copy the text into their buffer; the
         # listview runtime makes its own copy of each line
         "textfield_set", "ra_set_string", "listview_add",
+        "ra_listbrowser_add", "ra_add_radio", "ra_add_clicktab",
     }
 
     def _frees(self, owned) -> str:

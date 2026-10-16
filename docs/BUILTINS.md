@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 411 funciones, 411 implementadas, 0 sin implementar.
+Total: 418 funciones, 418 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -240,6 +240,13 @@ Total: 411 funciones, 411 implementadas, 0 sin implementar.
 | `ra_window_width()` | `LONG` | Get window width |  |
 | `ra_window_height()` | `LONG` | Get window height |  |
 | `ra_window_is_open()` | `LONG` | Check if window is open |  |
+| `ra_add_listbrowser(id)` | `LONG` | Add a list of text lines (value: selected line, -1 none) |  |
+| `ra_listbrowser_add(id, text)` | `LONG` | Add a line at the end of a listbrowser |  |
+| `ra_listbrowser_clear(id)` | `void` | Remove all lines of a listbrowser |  |
+| `ra_listbrowser_count(id)` | `LONG` | Number of lines of a listbrowser |  |
+| `ra_add_radio(id, options)` | `LONG` | Add radio buttons, options separated by \| (value: option) |  |
+| `ra_add_clicktab(id, titles)` | `LONG` | Add tabs, titles separated by \| (value: tab, from 0) |  |
+| `ra_add_fuelgauge(id, max)` | `LONG` | Add a progress bar from 0 to max (value: level) |  |
 
 ## Sistema y memoria
 
