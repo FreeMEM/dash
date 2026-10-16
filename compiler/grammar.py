@@ -6,7 +6,7 @@ Extensible Lark grammar for the Dash programming language.
 # Grammar with variables and expressions support
 dash_grammar_minimal = r"""
     ?start: program
-    program: (import_stmt | const_decl | global_var_decl | struct_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | main_block | comment_line)*
+    program: (import_stmt | const_decl | global_var_decl | struct_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | main_block | comment_line)*
 
     // Constant declaration
     const_decl: "const" ID "=" const_value
@@ -66,6 +66,9 @@ dash_grammar_minimal = r"""
 
     // Header include directive
     header_directive: "@header" ESCAPED_STRING
+    // C from outside (dashweb D10): an object or library to link, and C code at top level
+    link_directive: "@link" ESCAPED_STRING
+    c_block: "@c" native_body "end"
 
     // Main block
     main_block: "Main" instruction* "end"

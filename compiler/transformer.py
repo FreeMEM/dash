@@ -72,6 +72,8 @@ class DashASTBuilder(Transformer):
         self._extern_funcs: List[ExternFunc] = []
         self._native_funcs: List[NativeFunc] = []
         self._headers: List[str] = []
+        self._links: List[str] = []
+        self._c_blocks: List[str] = []
 
     def _get_location(self, token_or_tree) -> Optional[SourceLocation]:
         """Extract source location from a token or tree."""
@@ -105,7 +107,9 @@ class DashASTBuilder(Transformer):
             functions=self._functions,
             extern_funcs=self._extern_funcs,
             native_funcs=self._native_funcs,
-            headers=self._headers
+            headers=self._headers,
+            links=self._links,
+            c_blocks=self._c_blocks
         )
 
     def import_stmt(self, items) -> ImportStmt:
@@ -340,8 +344,19 @@ class DashASTBuilder(Transformer):
         header = items[0].value if isinstance(items[0], Token) else str(items[0])
         # Remove quotes
         if header.startswith('"') and header.endswith('"'):
-            header = header[1:-1]
+            header = header[1:-1].replace('\\"', '"')   # @header "#include \"x.h\""
         self._headers.append(header)
+        return ""
+
+    def link_directive(self, items) -> str:
+        """@link "file.o": an object or library to link with the program (dashweb D10)."""
+        path = items[0].value if isinstance(items[0], Token) else str(items[0])
+        self._links.append(path[1:-1] if path.startswith('"') and path.endswith('"') else path)
+        return ""
+
+    def c_block(self, items) -> str:
+        """@c, the C code in triple quotes, end: C at top level, e.g. callbacks (dashweb D10)."""
+        self._c_blocks.append(str(items[0]))
         return ""
 
     def param(self, items) -> FunctionParam:

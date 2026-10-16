@@ -664,6 +664,8 @@ class Program(ASTNode):
     extern_funcs: List['ExternFunc'] = field(default_factory=list)
     native_funcs: List['NativeFunc'] = field(default_factory=list)
     headers: List[str] = field(default_factory=list)
+    links: List[str] = field(default_factory=list)      # @link: objects/libraries (paths as written)
+    c_blocks: List[str] = field(default_factory=list)   # @c: C code at top level
     extra_mains: List[MainBlock] = field(default_factory=list)  # Duplicate Main blocks (an error)
     location: Optional[SourceLocation] = None
 

@@ -2657,6 +2657,39 @@ una variable y pasa la variable. Los builtins de Dash ya lo hacen asi.
 Un String que un `@native` guarda o devuelve al sistema queda fuera del control de Dash: se copia y
 se libera al salir del programa (ver [Gestion de Memoria](#17-gestion-de-memoria)).
 
+### C de fuera: @link, @header y @c
+
+`@link` enlaza con el programa un fuente C, un objeto o una libreria (`.c`, `.o`, `.a`), con la ruta
+relativa al fichero `.dash` que lo dice. Su directorio va tambien a gcc con `-I`, para su cabecera.
+`@header` pone una linea de C al principio (`#include`, declaraciones). `@c` pone C libre despues de
+los prototipos de las funciones Dash: funciones con firma de C (callbacks) que llaman a funciones Dash
+por su nombre. Las `@native` pueden llamar a lo que defina un `@c`.
+
+```
+@link "lib/externo.c"                  # o "libqjs.a"; si no existe, error al compilar
+@header "#include <externo.h>"         # o "#include \"externo.h\""
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+@c
+"""
+static long cb_doble(long x) { return doble(x); }   /* un callback que llama a Dash */
+"""
+end
+
+@native func aplicar(x: Int) -> Int
+"""
+    return ext_aplicar(cb_doble, x);   /* funcion de externo.c */
+"""
+end
+```
+
+Desde C se llama a las funciones publicas (las privadas `_x` de un modulo cambian de nombre). Un String
+que devuelve una funcion Dash es temporal: copiarlo si el C lo guarda. `./dash` y el runner leen los
+`@link` del C generado (`/* dash-link: ruta */`).
+
 ---
 
 ## 22. Ejemplos Completos

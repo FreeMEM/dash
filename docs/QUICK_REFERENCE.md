@@ -86,6 +86,10 @@ func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool 
 end                         end
 ```
 
+C code: `@native func f(x: Int) -> Int """ return x; """ end` (a function in C), `@extern("x.library")`,
+`@header "#include <x.h>"`, `@link "lib/x.c"` (a C source, object or library linked with the program; its
+directory goes to `-I`), `@c """ ... """ end` (C at top level, after the Dash prototypes: callbacks).
+
 ## Structs with Methods
 ```
 struct Enemy

@@ -214,6 +214,10 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
         compile_cmd[1:1] = mui_flags([c_file.read_text()])
         from compiler.cflags import amissl_flags   # AmiSSL SDK (tools/get_amissl.sh)
         compile_cmd[1:1] = amissl_flags([c_file.read_text()])
+        from compiler.cflags import link_flags     # @link (dashweb D10), as ./dash
+        link_includes, link_files = link_flags([c_file.read_text()])
+        compile_cmd[1:1] = link_includes
+        compile_cmd[compile_cmd.index(str(c_file)) + 1:compile_cmd.index(str(c_file)) + 1] = link_files
     except FileNotFoundError as e:
         return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
                           error_message=str(e), duration=time.time() - start_time)
@@ -368,13 +372,16 @@ def run_multifile_test(test_file: Path) -> TestResult:
             softfloat = (softfloat_objects(gcc_path)
                          if any(uses_float(Path(f).read_text()) for f in c_files) else [])
             from compiler.cflags import mui_flags
-            try:   # MUI SDK headers when a module uses MUI
+            from compiler.cflags import link_flags
+            try:   # MUI SDK headers when a module uses MUI; @link files (dashweb D10)
                 mui = mui_flags(Path(f).read_text() for f in c_files)
+                link_includes, link_files = link_flags([Path(f).read_text() for f in c_files])
             except FileNotFoundError as e:
-                mui, error = [], str(e)
+                mui, link_includes, link_files, error = [], [], [], str(e)
             build = subprocess.run(
                 [gcc_path, "-noixemul", "-O2", "-I/opt/amiga/m68k-amigaos/ndk-include", f"-I{out_dir}", *mui,
-                 "-L/opt/amiga/m68k-amigaos/lib", *c_files, *softfloat, "-o", str(out_dir / "a.out"), "-lm"],
+                 *link_includes, "-L/opt/amiga/m68k-amigaos/lib", *c_files, *link_files, *softfloat,
+                 "-o", str(out_dir / "a.out"), "-lm"],
                 capture_output=True, text=True, timeout=120
             )
             if build.returncode != 0 and not error:

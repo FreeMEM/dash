@@ -159,6 +159,9 @@ def main():
         compile_command.extend(mui_flags(open(f).read() for f in c_files))
         from compiler.cflags import amissl_flags   # and AmiSSL's, when it uses tls_* (dashweb D11)
         compile_command.extend(amissl_flags(open(f).read() for f in c_files))
+        from compiler.cflags import link_flags     # @link objects and libraries (dashweb D10)
+        link_includes, link_files = link_flags([open(f).read() for f in c_files])
+        compile_command.extend(link_includes)
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -171,6 +174,7 @@ def main():
     # extra gcc options, for experiments (e.g. DASH_CFLAGS="-Os")
     compile_command.extend(shlex.split(os.environ.get("DASH_CFLAGS", "")))
     compile_command.extend(c_files)
+    compile_command.extend(link_files)
     # Float: GCC's own software floating point (runtime/softfloat), linked before
     # -lm so it does not go through mathieeesingbas.library
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

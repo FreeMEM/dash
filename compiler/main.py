@@ -134,8 +134,17 @@ class DashCompiler:
             raise CompilationError(f"Error reading import {import_path}: {e}", stage="import")
 
         module_ast = self._parse_source(source)
+        self._resolve_links(module_ast, os.path.dirname(full_path))
         self._rename_private(module_ast, full_path)
         return module_ast
+
+    @staticmethod
+    def _resolve_links(ast: Program, base_dir: str) -> None:
+        """@link paths are relative to the file that has them, and must exist."""
+        ast.links = [os.path.normpath(os.path.join(base_dir, os.path.expanduser(p))) for p in ast.links]
+        for path in ast.links:
+            if not os.path.isfile(path):
+                raise CompilationError(f"@link: file not found: {path}", stage="import")
 
     def _rename_private(self, module_ast, full_path: str):
         """Private functions (_x) belong to their module: two modules may both have a _x
@@ -194,6 +203,8 @@ class DashCompiler:
         merged_extern_funcs: List[ExternFunc] = []
         merged_native_funcs: List[NativeFunc] = []
         merged_headers: List[str] = []
+        merged_links: List[str] = []
+        merged_c_blocks: List[str] = []
 
         # First, load all imports
         for import_stmt in main_ast.imports:
@@ -218,6 +229,8 @@ class DashCompiler:
                 if getattr(item, "module", None) is None:
                     item.module = module_path
             merged_headers.extend(h for h in module_ast.headers if h not in merged_headers)
+            merged_links.extend(p for p in module_ast.links if p not in merged_links)
+            merged_c_blocks.extend(module_ast.c_blocks)
 
             # Add public constants (not starting with _)
             merged_constants.extend(module_ast.constants)
@@ -268,7 +281,9 @@ class DashCompiler:
             functions=all_functions,
             extern_funcs=all_extern_funcs,
             native_funcs=all_native_funcs,
-            headers=merged_headers + [h for h in main_ast.headers if h not in merged_headers]
+            headers=merged_headers + [h for h in main_ast.headers if h not in merged_headers],
+            links=merged_links + [p for p in main_ast.links if p not in merged_links],
+            c_blocks=merged_c_blocks + list(main_ast.c_blocks)
         )
 
     def compile(self, source: str, filename: str = "<input>") -> tuple[str, AnalysisResult]:
@@ -309,6 +324,7 @@ class DashCompiler:
                 f"Parser returned {type(ast).__name__} instead of Program",
                 stage="parse"
             )
+        self._resolve_links(ast, self._base_dir)
 
         if self.verbose:
             print(f"  Parsed: {len(ast.windows)} windows, {len(ast.functions)} functions, "

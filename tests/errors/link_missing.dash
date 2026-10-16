@@ -1,0 +1,6 @@
+# expect: @link: file not found
+@link "no_existe.o"
+
+Main
+    Print "nada"
+end

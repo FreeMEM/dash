@@ -1,0 +1,48 @@
+# Test: C from outside (dashweb D10). "@link" adds a C source, object or library to the
+# program (path relative to this file; its directory also goes to gcc with -I, for its
+# header); "@c" puts C at top level, after the Dash prototypes: here a callback with a C
+# signature that calls a Dash function, passed to the linked C by an @native function.
+# expect-c: /* dash-link: 
+# expect-c: // C Blocks (@c)
+# expect-c: static long _cb_doble(long x) { return doble(x); }
+# expect-out: 5
+# expect-out: 80
+# expect-out: hola desde C
+
+@link "lib/c_externo.c"
+@header "#include \"c_externo.h\""
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+@c
+"""
+/* a callback with a C signature that calls a Dash function */
+static long _cb_doble(long x) { return doble(x); }
+"""
+end
+
+@native func suma(a: Int, b: Int) -> Int
+"""
+    return ext_suma(a, b);
+"""
+end
+
+@native func aplicar(x: Int) -> Int
+"""
+    return ext_aplicar(_cb_doble, x);
+"""
+end
+
+@native func saludo() -> String
+"""
+    return (STRPTR)ext_saludo();
+"""
+end
+
+Main
+    Print suma(2, 3)
+    Print aplicar(4)
+    Print saludo()
+end

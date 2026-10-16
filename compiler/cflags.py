@@ -62,3 +62,30 @@ def amissl_flags(sources) -> list:
     if not os.path.isfile(os.path.join(include, "amissl", "amissl.h")):
         raise FileNotFoundError(f"AmiSSL SDK not found in {sdk}: run tools/get_amissl.sh or set DASH_AMISSL_SDK")
     return ["-I" + include]
+
+
+# C from outside (dashweb D10): each "@link file" of the program is written in the C as
+# "/* dash-link: /full/path */"; gcc gets the file after the C sources, and its directory
+# with -I (a library's headers usually sit next to it).
+LINK_MARK = "/* dash-link: "
+
+
+def link_flags(sources) -> tuple:
+    """(-I options, files to link) of the @link lines in the C sources; FileNotFoundError if one is missing."""
+    import os
+    files = []
+    for s in sources:
+        for line in s.splitlines():
+            if line.startswith(LINK_MARK) and line.endswith(" */"):
+                path = line[len(LINK_MARK):-3]
+                if path not in files:
+                    files.append(path)
+    for path in files:
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"@link: {path} not found")
+    includes = []
+    for path in files:
+        d = "-I" + os.path.dirname(path)
+        if d not in includes:
+            includes.append(d)
+    return includes, files

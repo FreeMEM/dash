@@ -8633,6 +8633,8 @@ class CodeGenerator(ASTVisitor):
         self.scope_struct_vars: List[List[str]] = [[]]  # Stack of scopes with struct var names
         # Custom headers from @header directives
         self.custom_headers: List[str] = []
+        self.links: List[str] = []
+        self.c_blocks: List[str] = []
 
     def generate(self) -> str:
         """Generate the complete C program."""
@@ -8695,6 +8697,9 @@ class CodeGenerator(ASTVisitor):
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
         parts = [CTemplates.PROGRAM_HEADER, CTemplates.STACK_REQUEST]
+        if self.links:
+            # read by ./dash and the test runner (compiler/cflags.py link_flags)
+            parts.append("".join(f"/* dash-link: {p} */\n" for p in self.links))
         if self.lent_str_fields:
             # A String field passed to a function: copied if some code sets that field
             # (the callee could free it), else lent as it is (dashweb D22)
@@ -8971,6 +8976,12 @@ static LONG _dash_event_window_handle(void) {{
             parts.append("\n// Function Prototypes")
             parts.append("".join(self.prototypes))
 
+        # C blocks (@c): after the prototypes, so they can call Dash functions, and before
+        # the @native functions, which can call them (dashweb D10)
+        if self.c_blocks:
+            parts.append("\n// C Blocks (@c)\n")
+            parts.append("\n".join(self.c_blocks))
+
         # Add native function definitions
         if self.native_funcs:
             parts.append("\n// Native Function Definitions")
@@ -9083,6 +9094,8 @@ static LONG _dash_event_window_handle(void) {{
         """Generate code for the program."""
         # Store custom headers from @header directives
         self.custom_headers = node.headers if node.headers else []
+        self.links = list(node.links)          # @link (dashweb D10)
+        self.c_blocks = list(node.c_blocks)    # @c
 
         # Generate constant definitions
         for const in node.constants:
