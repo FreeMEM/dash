@@ -11451,11 +11451,14 @@ static {return_type} {lambda_name}({param_str}) {{
         open (it may have been resized or moved), else the value in its definition."""
         self.uses_windows = True
         if member.startswith("inner_"):
-            # the drawing area inside the borders (dashweb D21): open window only, else 0
+            # the drawing area inside the borders (dashweb D21): open window only, else 0. Dash's
+            # windows are GimmeZeroZero: their RastPort starts inside the borders, at (0, 0)
             w = f"win_{window.name}"
-            inner = {"inner_left": f"{w}->BorderLeft", "inner_top": f"{w}->BorderTop",
-                     "inner_width": f"{w}->Width - {w}->BorderLeft - {w}->BorderRight",
-                     "inner_height": f"{w}->Height - {w}->BorderTop - {w}->BorderBottom"}[member]
+            gzz = f"({w}->Flags & WFLG_GIMMEZEROZERO)"
+            inner = {"inner_left": f"{gzz} ? 0 : {w}->BorderLeft",
+                     "inner_top": f"{gzz} ? 0 : {w}->BorderTop",
+                     "inner_width": f"{gzz} ? {w}->GZZWidth : {w}->Width - {w}->BorderLeft - {w}->BorderRight",
+                     "inner_height": f"{gzz} ? {w}->GZZHeight : {w}->Height - {w}->BorderTop - {w}->BorderBottom"}[member]
             return f"({w} ? (LONG)({inner}) : 0)"
         defaults = {"width": window.width, "height": window.height,
                     "left": self._get_window_prop(window, "left", 50),

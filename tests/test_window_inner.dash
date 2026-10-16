@@ -1,4 +1,5 @@
-# Test: Win.inner_left/_top/_width/_height: the area inside the window borders (0 while closed)
+# Test: Win.inner_left/_top/_width/_height: the area inside the window borders (0 while closed).
+# Dash's windows are GimmeZeroZero: the RastPort starts inside the borders, so left/top are 0
 # expect-out: cerrada 0
 # expect-out: bordes bien
 
@@ -13,7 +14,7 @@ Main
     W.open
     l = W.inner_left
     t = W.inner_top
-    if l > 0 and t > l and W.inner_width == 200 - l - (W.width - W.inner_width - l) and W.inner_height < 100 and W.inner_height > 50
+    if l == 0 and t == 0 and W.inner_width < 200 and W.inner_width > 180 and W.inner_height < 100 and W.inner_height > 50
         Print "bordes bien"
     else
         Print "" + l + " " + t + " " + W.inner_width + " " + W.inner_height
