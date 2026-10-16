@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 465 funciones, 465 implementadas, 0 sin implementar.
+Total: 467 funciones, 467 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -388,6 +388,13 @@ Total: 465 funciones, 465 implementadas, 0 sin implementar.
 | `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
 | `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
 | `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
+
+## Argumentos
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `arg_count()` | `LONG` | How many arguments the program got from the Shell (0 from the Workbench) |  |
+| `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none) |  |
 
 ## Audio
 

@@ -1,0 +1,16 @@
+# Test: program arguments from the Shell (arg_count, arg); main gets argc/argv only here
+# emu-args: uno "dos tres" 4
+# expect-c: int main(int argc, char **argv) {
+# expect-out: 3
+# expect-out: [uno] [dos tres] [4]
+# expect-out: []
+
+Main
+    Print arg_count()
+    t = ""
+    for i in (0..arg_count() - 1)
+        t = t + "[" + arg(i) + "] "
+    end
+    Print str_trim(t)
+    Print "[" + arg(7) + "]"
+end

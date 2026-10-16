@@ -114,7 +114,7 @@ def ppm_to_png(ppm: Path, png: Path):
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
-                 screenshot: tuple = None):
+                 screenshot: tuple = None, args: list = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot. Returns one EmuResult per program, in order."""
@@ -168,7 +168,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             else:
                 shutil.copy(prog, exe)
             names.append(prog.name)
-            lines.append(f"DH0:p{i} >DH0:out{i}.txt")
+            extra = f" {args[i]}" if args and i < len(args) and args[i] else ""   # Shell arguments
+            lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
             lines.append(f'Echo "$RC" >DH0:rc{i}.txt')
         lines.append('Echo "fin" >DH0:done.txt')
         (hd / "S" / "Startup-Sequence").write_text("\n".join(lines) + "\n")

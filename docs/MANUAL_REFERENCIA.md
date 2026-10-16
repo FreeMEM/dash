@@ -1729,6 +1729,18 @@ arena_free(arena)
 
 ## 18. Funciones del Sistema
 
+### Argumentos del programa
+
+Desde el Shell, lo que va detras del nombre del programa (`visor pagina.html "otra cosa"`):
+
+```
+for i in (0..arg_count() - 1)
+    Print arg(i)
+end
+```
+
+`arg(i)` da `""` si no hay ese argumento. Desde el Workbench no hay ninguno.
+
 ### Memoria del Sistema
 
 ```

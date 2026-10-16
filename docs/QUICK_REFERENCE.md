@@ -277,6 +277,12 @@ net_send_buffer(s, buf, n)  net_recv_buffer(s, buf, max, ms)
 t = tls_connect(s, "host")           # TLS (AmiSSL 5, 68020+): tls_send, tls_recv, tls_close
 ```
 
+## Program Arguments
+```
+arg_count()                 # arguments from the Shell (0 from the Workbench)
+arg(0)                      # the first one ("" if missing)
+```
+
 ## Memory Management
 > Strings: se liberan solos (cada variable es dueña de su texto; los temporales se
 > liberan en cada vuelta de bucle/EventLoop y al salir de una función).

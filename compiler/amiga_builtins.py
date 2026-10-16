@@ -3704,6 +3704,16 @@ FONT_FUNCTIONS = {
 }
 
 # =============================================================================
+# Program arguments (dashweb D19)
+# =============================================================================
+
+ARGS_FUNCTIONS = {
+    "arg_count": _text("arg_count", [], "LONG", "_dash_arg_count()",
+                       "How many arguments the program got from the Shell (0 from the Workbench)"),
+    "arg": _text("arg", ["i"], "STRPTR", "_dash_arg(${i})", "Argument i, from 0 (\"\" if there is none)"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -3722,6 +3732,7 @@ ALL_BUILTINS = {
     **NET_FUNCTIONS,           # dashweb D8
     **TLS_FUNCTIONS,           # dashweb D11
     **FONT_FUNCTIONS,          # dashweb D9
+    **ARGS_FUNCTIONS,          # dashweb D19
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

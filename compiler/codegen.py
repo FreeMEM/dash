@@ -1187,6 +1187,24 @@ static void _dash_font_cleanup(void) {
 
 """
 
+    # Program arguments (dashweb D19): "visor pagina.html". From the Workbench there are none.
+    ARGS_RUNTIME = """\
+/* Dash Args Runtime */
+static int _dash_argc = 0;
+static char **_dash_argv = NULL;
+
+static LONG _dash_arg_count(void) {
+    return _dash_argc > 1 ? _dash_argc - 1 : 0;
+}
+
+/* Argument i (from 0, the program name not counted); "" if there is no such one */
+static STRPTR _dash_arg(LONG i) {
+    if (i < 0 || i + 1 >= _dash_argc) return (STRPTR)"";
+    return _dash_str_dup((STRPTR)_dash_argv[i + 1], TRUE);
+}
+
+"""
+
     # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
     # doubles when full, so adding n elements one by one costs O(n).
     LIST_RUNTIME = """\
@@ -8103,6 +8121,7 @@ _RUNTIME_FLAGS = [
     ("NET_RUNTIME", "uses_net"),            # dashweb D8
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
+    ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -8327,6 +8346,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
+        self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
         self.uses_tls: bool = False      # tls_* (TLS_RUNTIME)
@@ -8543,6 +8563,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.GRAPHICS_RUNTIME)
         if self.uses_fonts:
             parts.append(CTemplates.FONT_RUNTIME)
+        if self.uses_args:
+            parts.append(CTemplates.ARGS_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -8738,6 +8760,9 @@ static LONG _dash_event_window_handle(void) {{
         parts.append(main_code)
 
         program = "\n".join(parts)
+        if self.uses_args:
+            # main gets the arguments only in programs that read them (the rest keep their C)
+            program = program.replace("int main() {", "int main(int argc, char **argv) {\n    _dash_argc = argc;\n    _dash_argv = argv;", 1)
         if self.uses_tls:
             # OpenSSL 3 (AmiSSL) needs much more stack than Dash's 16 KB: it hangs in SSL_CTX_new
             for default in ("#define DASH_STACK 16384", "#define DASH_STACK 32768  /* MUI */"):
@@ -10397,6 +10422,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_fonts:
             self.needs_gfx = True      # FONT_RUNTIME draws on _dash_rp
+        if self.uses_args:
+            self.uses_strings = True   # arg() gives a String
         if self.uses_tls:
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:

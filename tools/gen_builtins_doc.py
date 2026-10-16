@@ -32,6 +32,7 @@ GROUPS = [
     ("NET_FUNCTIONS", "Red (TCP)"),       # dashweb D8
     ("TLS_FUNCTIONS", "TLS (AmiSSL)"),    # dashweb D11
     ("FONT_FUNCTIONS", "Fuentes y colores"),  # dashweb D9
+    ("ARGS_FUNCTIONS", "Argumentos"),     # dashweb D19
     ("AUDIO_FUNCTIONS", "Audio"),
     ("INTUITION_EXPANDED", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)"),

@@ -413,6 +413,14 @@ def emu_needs(test_file: Path) -> List[str]:
             for l in test_file.read_text().splitlines() if l.startswith("# emu-needs:")]
 
 
+def emu_args(test_file: Path) -> str:
+    """'# emu-args: uno "dos tres"': what follows the program name in the Shell (dashweb D19)."""
+    for l in test_file.read_text().splitlines():
+        if l.startswith("# emu-args:"):
+            return l.split(":", 1)[1].strip()
+    return ""
+
+
 def emu_net_port(test_file: Path) -> Optional[int]:
     """'# emu-net: PORT' (dashweb D8): the test uses the network. It runs in a boot with FS-UAE's
     bsdsocket.library (the PC's network) and, on 127.0.0.1:PORT of the PC, an echo server that
@@ -562,6 +570,7 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
     start_time = time.time()
     try:
         runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
+                            args=[emu_args(t) for t, _ in selected],
                             timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"] + extra_config,
                             system=system, workbench=machine["workbench"])
     except RuntimeError as e:
