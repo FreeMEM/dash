@@ -1,0 +1,14 @@
+# Module for test_module_scope: its locals are called like a global and a function of the program
+func contar(n: Int) -> Int
+    actual = 0
+    for i in (1..n)
+        actual = actual + i
+    end
+    inicio = "módulo"
+    return actual + inicio.length
+end
+
+func texto_modulo() -> String
+    actual = "del módulo"
+    return actual
+end

@@ -16,7 +16,7 @@ from compiler.ast_nodes import (
     ArrayLiteral, ArrayAccess, ArrayAssign, ArraySlice, PropertyAccess, NilLiteral,
     StructDef, StructField, MemberAccess, MemberAssign,
     EnumDef, EnumValue, FunctionParam, ExternFunc, NativeFunc, ConstDecl,
-    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral
+    StructMethod, LambdaFunc, FunctionRef, SelfRef, constant_int, KEY_NAMES, FloatLiteral, GlobalVarDecl
 )
 from compiler.amiga_builtins import is_builtin, get_builtin
 
@@ -222,8 +222,14 @@ class SemanticAnalyzer(ASTVisitor):
             self.error(f"Symbol '{symbol.name}' is already defined in this scope", node)
 
     def lookup_symbol(self, name: str) -> Optional[Symbol]:
-        """Look up a symbol in the current scope chain."""
-        return self.current_scope.lookup(name)
+        """Look up a symbol in the current scope chain. The code of an imported module does not
+        see the main program's global variables (dashweb D14): its "x = 1" is its own local."""
+        symbol = self.current_scope.lookup(name)
+        if (symbol is not None and getattr(self, "current_module", None) is not None
+                and symbol.symbol_type == SymbolType.VARIABLE and isinstance(symbol.node, GlobalVarDecl)
+                and getattr(symbol.node, "module", None) is None):
+            return None
+        return symbol
 
     # === Visitor Methods ===
 
@@ -553,6 +559,19 @@ class SemanticAnalyzer(ASTVisitor):
                 dict_value=self._dict_value_of(node.value)
             )
             self.define_symbol(symbol, node)
+        elif symbol.symbol_type in (SymbolType.FUNCTION, SymbolType.NATIVE_FUNC, SymbolType.EXTERN_FUNC):
+            # a variable may hide a function with its name (one of the program in a module's code,
+            # say): it is a new variable of this scope (dashweb D14)
+            self.define_symbol(Symbol(
+                name=node.name,
+                symbol_type=SymbolType.VARIABLE,
+                dash_type=self._infer_type(node.value),
+                node=node,
+                is_initialized=True,
+                struct_name=self._struct_name_of(node.value),
+                elem_struct=self._elem_struct_of(node.value),
+                dict_value=self._dict_value_of(node.value)
+            ), node)
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
             self.error(f"Cannot assign to '{node.name}' - it's not a variable", node)
         else:

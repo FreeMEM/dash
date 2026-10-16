@@ -2641,6 +2641,12 @@ Las funciones cuyo nombre empieza por `_` son privadas del modulo: solo las llam
 propio modulo. Cada modulo tiene las suyas: dos modulos (o el programa y un modulo) pueden
 tener una `_ayuda` cada uno sin que choquen.
 
+Las funciones de un modulo no ven las variables globales (`var`) del programa que lo importa: si el
+modulo hace `actual = 0` y el programa tiene `var actual`, la del modulo es una variable local suya y la
+global no cambia. El programa si ve las globales de sus modulos. Una variable tambien puede llamarse como
+una funcion (por ejemplo un `inicio = 0` en un modulo cuando el programa tiene `func inicio()`): dentro de
+ese bloque el nombre es la variable.
+
 ### Usar el Modulo
 
 ```

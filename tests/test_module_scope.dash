@@ -1,0 +1,23 @@
+# Test: names of the program and of its modules (dashweb D14). The program has a global "actual"
+# and a function "inicio"; the module's functions use locals with those names: they are their own
+# (the global keeps its value), and a local may hide a function with its name.
+# expect-out: 61
+# expect-out: del módulo
+# expect-out: global intacta: 7 [programa]
+# expect-out: inicio: 3
+
+import "lib/d14/modulo.dash"
+
+var actual: Int = 7
+var nombre: String = "programa"
+
+func inicio() -> Int
+    return 3
+end
+
+Main
+    Print contar(10)
+    Print texto_modulo()
+    Print "global intacta: " + actual + " [" + nombre + "]"
+    Print "inicio: " + inicio()
+end

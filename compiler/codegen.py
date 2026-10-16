@@ -8580,6 +8580,8 @@ class CodeGenContext:
     idcmp_flags: Set[str] = field(default_factory=set)
     # Stack of scopes - each scope is a set of variable names declared in that scope
     scope_stack: List[Set[str]] = field(default_factory=lambda: [set()])
+    # globals of the main program, not seen from the functions of an imported module (dashweb D14)
+    hidden_globals: Set[str] = field(default_factory=set)
     # Parallel stacks: String variables each scope owns (freed when it ends) and
     # the kind of scope ("main", "block", "loop", "func", "handler")
     owned_stack: List[List[tuple]] = field(default_factory=lambda: [[]])
@@ -8636,8 +8638,8 @@ class CodeGenContext:
 
     def is_declared(self, name: str) -> bool:
         """Check if variable is declared in any scope."""
-        for scope in self.scope_stack:
-            if name in scope:
+        for i, scope in enumerate(self.scope_stack):
+            if name in scope and not (i == 0 and name in self.hidden_globals):
                 return True
         return False
 
@@ -10296,6 +10298,13 @@ static {ret_type} {method_name}({params_str}) {{
         # Variable types are per function: save the caller's and seed the params
         saved_var_types = self.var_types
         self.var_types = dict(saved_var_types)
+        # a module's function does not see the main program's globals: its "x = 1" is a local
+        saved_hidden = self.context.hidden_globals
+        if getattr(node, "module", None) is not None:
+            self.context.hidden_globals = {g.name for g in self.analysis.program.global_vars
+                                           if getattr(g, "module", None) is None}
+            for name in self.context.hidden_globals:
+                self.var_types.pop(name, None)
         self._seed_param_types(node.params)
 
         # Type map for annotations
@@ -10326,6 +10335,7 @@ static {ret_type} {method_name}({params_str}) {{
         body += self._function_epilogue()
 
         self.context.exit_scope()
+        self.context.hidden_globals = saved_hidden
 
         # Determine return type - use explicit if provided, otherwise infer
         if node.return_type:
