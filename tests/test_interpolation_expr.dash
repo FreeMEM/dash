@@ -1,0 +1,56 @@
+# Interpolation with any expression inside #{...}: calls, arithmetic, fields, lengths,
+# indexes, methods, nested braces. The result is always text: "#{a}#{b}" joins 1 and 2 as
+# "12" (it used to add them) and "#{n}" alone is a String. Texts without a closing brace stay as
+# they are. Quotes inside #{...} are written \" (the string literal would end there).
+# expect-out: suma 6 y doble 10
+# expect-out: 12
+# expect-out: n=7 len 3
+# expect-out: largo 3, segundo b
+# expect-out: punto (3, 4) dist2 25
+# expect-out: mayúsculas HOLA
+# expect-out: fixed 1.5 float 2.5
+# expect-out: llaves {} y #{ sin cerrar
+# expect-out: tipo String: 7!
+# expect-out: anidado 15
+# expect-out: fin
+# expect-c: STRPTR s = NULL;
+
+struct Punto
+    x: Int
+    y: Int
+
+    func dist2() -> Int
+        return self.x * self.x + self.y * self.y
+    end
+end
+
+func doble(n: Int) -> Int
+    return n * 2
+end
+
+func suma3(a: Int, b: Int, c: Int) -> Int
+    return a + b + c
+end
+
+Main
+    a = 1
+    b = 2
+    x = 5
+    Print "suma #{a + x} y doble #{doble(x)}"
+    Print "#{a}#{b}"
+    v = ["a", "b", "c"]
+    n = 7
+    Print "n=#{n} len #{v.length}"
+    Print "largo #{v.length}, segundo #{v[1]}"
+    p = Punto(3, 4)
+    Print "punto (#{p.x}, #{p.y}) dist2 #{p.dist2()}"
+    Print "mayúsculas #{str_upper(\"hola\")}"
+    f = Fixed(1.5)
+    g = 2.5
+    Print "fixed #{f} float #{g}"
+    Print "llaves {} y #{ sin cerrar"
+    s = "#{n}"
+    Print "tipo String: " + s + "!"
+    Print "anidado #{suma3(a, doble(b), x * 2)}"
+    Print "fin"
+end

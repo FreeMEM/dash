@@ -11096,6 +11096,8 @@ static {ret_type} {method_name}({params_str}) {{
             if node.operator == "+" and (left_str or right_str):
                 self.uses_strings = True
                 parts = self._concat_parts(node)
+                if len(parts) > 2 and parts[0] == '""':   # "#{a}#{b}" starts with "" (transformer)
+                    parts = parts[1:]
                 if len(parts) == 2:
                     return f"DashString_concat({parts[0]}, {parts[1]})"
                 # a + b + c...: one allocation for the whole chain, in groups of 6

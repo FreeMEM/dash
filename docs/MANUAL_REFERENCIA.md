@@ -352,6 +352,19 @@ saludo = "Hola " + nombre + "!"
 Print saludo
 ```
 
+### Interpolacion
+
+Dentro de `#{...}` va cualquier expresion: una variable, una llamada, una cuenta, un campo, un elemento...
+
+```
+Print "Hola #{nombre}, tienes #{puntos * 10} puntos"
+Print "#{p.x},#{p.y} de #{lista.length} (#{doble(n)})"
+Print "#{a}#{b}"            # siempre texto: con a = 1 y b = 2 da "12"
+Print "#{str_upper(\"ok\")}"   # las comillas de dentro van escapadas: \"
+```
+
+El resultado es siempre un texto, aunque solo haya un numero (`"#{n}"`). Un `#{` sin su `}` se queda tal cual.
+
 ### Funciones de texto
 
 Devuelven textos nuevos (el original no cambia) o numeros. Las posiciones empiezan en 0.

@@ -1078,45 +1078,46 @@ class DashASTBuilder(Transformer):
         return StringLiteral(value=value)
 
     def _parse_interpolated_string(self, value: str):
-        """Parse an interpolated string into concatenation operations."""
-        import re
-
-        # Remove surrounding quotes
-        if value.startswith('"') and value.endswith('"'):
-            content = value[1:-1]
-        else:
-            content = value
-
-        # Find all #{...} patterns
-        pattern = r'#\{([^}]+)\}'
+        """Parse "a #{expr} b" into "a " + (expr) + " b": each #{...} holds any expression
+        (a name, a call, a + 1, v.length...). The chain starts with a string, so "#{n}" and
+        "#{a}#{b}" give text, not numbers."""
+        content = value[1:-1] if value.startswith('"') and value.endswith('"') else value
         parts = []
-        last_end = 0
-
-        for match in re.finditer(pattern, content):
-            # Add text before the interpolation
-            if match.start() > last_end:
-                text = content[last_end:match.start()]
-                parts.append(StringLiteral(value=f'"{text}"'))
-
-            # Add the variable reference
-            var_name = match.group(1).strip()
-            parts.append(VarRef(name=var_name))
-
-            last_end = match.end()
-
-        # Add remaining text after last interpolation
-        if last_end < len(content):
-            text = content[last_end:]
-            parts.append(StringLiteral(value=f'"{text}"'))
-
-        # Build concatenation chain
-        if len(parts) == 1:
-            return parts[0]
-
+        text_start = 0
+        i = 0
+        while True:
+            start = content.find("#{", i)
+            if start < 0:
+                break
+            # the matching }: expressions may hold braces of their own ({...} literals)
+            depth, end = 0, start + 2
+            while end < len(content):
+                if content[end] == "{":
+                    depth += 1
+                elif content[end] == "}":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                end += 1
+            if end >= len(content):     # no closing brace: plain text
+                break
+            expr_text = content[start + 2:end].strip()
+            if not expr_text:           # "#{}": plain text
+                i = end + 1
+                continue
+            if start > text_start:
+                parts.append(StringLiteral(value=f'"{content[text_start:start]}"'))
+            parts.append(_interpolated_expression(expr_text))
+            text_start = i = end + 1
+        if not parts:
+            return StringLiteral(value=value)
+        if text_start < len(content):
+            parts.append(StringLiteral(value=f'"{content[text_start:]}"'))
+        if not isinstance(parts[0], StringLiteral):
+            parts.insert(0, StringLiteral(value='""'))
         result = parts[0]
         for part in parts[1:]:
             result = BinaryOp(left=result, operator="+", right=part)
-
         return result
 
     def number_literal(self, items) -> NumberLiteral:
@@ -1196,3 +1197,24 @@ class DashASTBuilder(Transformer):
 
 # Alias for backward compatibility
 DashCodeGenerator = DashASTBuilder
+
+
+_expression_parser = None
+
+
+def _interpolated_expression(text: str):
+    """The AST of the expression inside a #{...}: a plain name directly, anything else
+    through the grammar's expression rule (its parser is built the first time)."""
+    global _expression_parser
+    import re
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", text):
+        return VarRef(name=text)
+    if _expression_parser is None:
+        from lark import Lark
+        from compiler.grammar import dash_grammar_minimal
+        _expression_parser = Lark(dash_grammar_minimal, parser="lalr", start="expression")
+    try:
+        tree = _expression_parser.parse(text.replace('\\"', '"'))
+    except Exception as e:
+        raise ValueError(f"bad expression in #{{{text}}}: {str(e).splitlines()[0]}")
+    return DashASTBuilder().transform(tree)

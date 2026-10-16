@@ -167,7 +167,7 @@ Tipos de parámetro y retorno: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array
 
 ```ruby
 s = "Hola, " + nombre
-m = "Tienes #{puntos} puntos"       # interpolación (nombres de variable; para llamadas, guarda antes el valor)
+m = "Tienes #{puntos * 2} puntos"   # interpolación: cualquier expresión (comillas de dentro: \")
 n = s.length
 c = s[0]                            # un carácter
 trozo = s[2:5]                      # también s[:5] y s[2:]
