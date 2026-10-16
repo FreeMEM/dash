@@ -1309,6 +1309,64 @@ static LONG _dash_image_load(STRPTR file) {
     return 0;
 }
 
+/* An image from pixels in memory (a program that decodes pictures itself, dashweb D40): rows of
+   width pixels, RGB (3 bytes) or, with alpha, RGBA (4 bytes; alpha 128 or more is drawn). The
+   picture.datatype (V43: AmigaOS 3.5 and later) puts them on the screen like a file's: the
+   image, or 0 (an older picture.datatype, no memory) */
+static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha) {
+    struct Screen *scr, *pub = NULL;
+    struct BitMapHeader *bmh = NULL;
+    struct BitMap *bm = NULL;
+    UBYTE *mask = NULL, *p;
+    Object *o;
+    _DashImg *img;
+    LONG mod, x, y;
+    BOOL clear = FALSE, opaque = FALSE;
+    if (!pixels || w <= 0 || h <= 0 || w > 16383 || h > 16383) return 0;
+    if (!DataTypesBase) DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
+    if (!DataTypesBase) return 0;
+    o = NewDTObject(NULL, DTA_SourceType, DTST_RAM, DTA_GroupID, GID_PICTURE,
+                    PDTA_DestMode, PMODE_V43, TAG_DONE);
+    if (!o) return 0;
+    if (!GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, TAG_DONE) || !bmh) { DisposeDTObject(o); return 0; }
+    bmh->bmh_Width = bmh->bmh_PageWidth = w;
+    bmh->bmh_Height = bmh->bmh_PageHeight = h;
+    bmh->bmh_Depth = 24;
+    SetDTAttrs(o, NULL, NULL, DTA_NominalHoriz, w, DTA_NominalVert, h, PDTA_SourceMode, PMODE_V43, TAG_DONE);
+    if (!DoMethod(o, PDTM_WRITEPIXELARRAY, (ULONG)pixels, alpha ? PBPAFMT_RGBA : PBPAFMT_RGB,
+                  w * (alpha ? 4 : 3), 0, 0, w, h)) {
+        DisposeDTObject(o);     /* picture.datatype before V43 does not know the method */
+        return 0;
+    }
+    mod = ((w + 15) >> 4) << 1;
+    if (alpha && (mask = (UBYTE *)AllocVec(mod * h, MEMF_CLEAR))) {
+        for (y = 0, p = (UBYTE *)pixels + 3; y < h; y++)
+            for (x = 0; x < w; x++, p += 4) {
+                if (*p >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
+                else clear = TRUE;
+            }
+        if (!(clear && opaque)) { FreeVec(mask); mask = NULL; }
+    }
+    scr = _dash_win ? _dash_win->WScreen : (pub = LockPubScreen(NULL));
+    SetDTAttrs(o, NULL, NULL, PDTA_Remap, TRUE, PDTA_Screen, (ULONG)scr, PDTA_FreeSourceBitMap, TRUE, TAG_DONE);
+    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, TRUE);
+    if (pub) UnlockPubScreen(NULL, pub);
+    GetDTAttrs(o, PDTA_DestBitMap, (ULONG)&bm, TAG_DONE);
+    if (!bm) GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_DONE);
+    img = bm ? (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR) : NULL;
+    if (!img) { DisposeDTObject(o); if (mask) FreeVec(mask); return 0; }
+    img->o = o;
+    img->bm = bm;
+    img->w = w;
+    img->h = h;
+    if (mask) { _dash_img_mask(img, mask, mod); FreeVec(mask); }
+    if (_dash_img_add(img)) return (LONG)img;
+    DisposeDTObject(o);
+    if (img->mask) FreeVec(img->mask);
+    FreeVec(img);
+    return 0;
+}
+
 static LONG _dash_image_width(LONG image) { _DashImg *i = _dash_img(image); return i ? i->w : 0; }
 static LONG _dash_image_height(LONG image) { _DashImg *i = _dash_img(image); return i ? i->h : 0; }
 
@@ -1915,6 +1973,7 @@ struct _DashDns {
 #define _DASH_NET_PENDING 16
 static struct {
     LONG sock, stage, port, timeout, deadline;    /* stage 0: looking the name up, 1: connecting */
+    LONG polled;                                  /* when net_connect_poll looked last */
     struct _DashDns *dns;
 } _dash_net_pend[_DASH_NET_PENDING];
 static UBYTE _dash_net_npend = 0;
@@ -2051,6 +2110,7 @@ static LONG _dash_net_connect_start(STRPTR host, LONG port, LONG timeout_ms) {
     _dash_net_pend[i].port = port;
     _dash_net_pend[i].timeout = timeout_ms;
     _dash_net_pend[i].deadline = _dash_net_now() + timeout_ms;
+    _dash_net_pend[i].polled = _dash_net_now();
     _dash_net_pend[i].dns = NULL;
     _dash_net_pend[i].stage = 0;
     addr.s_addr = inet_addr(host);
@@ -2074,6 +2134,12 @@ static LONG _dash_net_connect_poll(LONG sock) {
     socklen_t len = sizeof(err);
     struct _DashDns *d;
     if (i < 0) return sock >= 0 ? 1 : -1;
+    /* the time the program did not look (busy elsewhere) does not count against the limit */
+    {
+        LONG now = _dash_net_now(), gap = now - _dash_net_pend[i].polled;
+        if (gap > 500) _dash_net_pend[i].deadline += gap;
+        _dash_net_pend[i].polled = now;
+    }
     if (_dash_net_pend[i].stage == 0) {
         d = _dash_net_pend[i].dns;
         if (!d->done) {
@@ -2149,6 +2215,9 @@ static SSL_CTX *_dash_tls_ctx = NULL;
 #define _DASH_TLS_MAX 16
 static SSL *_dash_tls_ssl[_DASH_TLS_MAX];
 static LONG _dash_tls_deadline[_DASH_TLS_MAX];   /* handshake of tls_connect_start until then */
+static LONG _dash_tls_timeout[_DASH_TLS_MAX];    /* counted again each time the handshake moves on */
+static LONG _dash_tls_state[_DASH_TLS_MAX];
+static LONG _dash_tls_polled[_DASH_TLS_MAX];     /* when tls_connect_poll looked last */
 static BOOL _dash_tls_shaking[_DASH_TLS_MAX];
 
 static BOOL _dash_tls_init(void) {
@@ -2234,18 +2303,28 @@ static LONG _dash_tls_connect_start(LONG sock, STRPTR host, LONG timeout_ms) {
     SSL_set_connect_state(ssl);
     _dash_tls_ssl[slot] = ssl;
     _dash_tls_shaking[slot] = TRUE;
+    _dash_tls_timeout[slot] = timeout_ms;
     _dash_tls_deadline[slot] = _dash_net_now() + timeout_ms;
+    _dash_tls_state[slot] = -1;
+    _dash_tls_polled[slot] = _dash_net_now();
     return slot;
 }
 
 /* 1 done (the socket waits again), 0 not yet, -1 failed: the TLS connection is freed (the socket
-   stays open) and net_error() says why */
+   stays open) and net_error() says why. The time limit counts from the last step of the handshake,
+   and the time the program did not poll does not count (dashweb D41): a busy program polls seldom,
+   and each round trip waits for its next poll. */
 static LONG _dash_tls_connect_poll(LONG t) {
     SSL *ssl = _dash_tls_get(t);
     LONG r, e, off = 0;
     long v;
     if (!ssl) return -1;
     if (!_dash_tls_shaking[t]) return 1;
+    {
+        LONG now = _dash_net_now(), gap = now - _dash_tls_polled[t];
+        if (gap > 500) _dash_tls_deadline[t] += gap;   /* the program was busy: that time does not count */
+        _dash_tls_polled[t] = now;
+    }
     r = SSL_connect(ssl);
     if (r == 1) {
         IoctlSocket(SSL_get_fd(ssl), FIONBIO, (char *)&off);
@@ -2254,6 +2333,11 @@ static LONG _dash_tls_connect_poll(LONG t) {
     }
     e = SSL_get_error(ssl, r);
     if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) {
+        LONG state = (LONG)SSL_get_state(ssl);
+        if (state != _dash_tls_state[t]) {
+            _dash_tls_state[t] = state;
+            _dash_tls_deadline[t] = _dash_net_now() + _dash_tls_timeout[t];
+        }
         if (_dash_net_now() - _dash_tls_deadline[t] < 0) return 0;
         _dash_net_err = "tiempo agotado al negociar TLS";
     } else {

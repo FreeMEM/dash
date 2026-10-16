@@ -1220,6 +1220,12 @@ transparentes no se pintan cuando el datatype da la mascara (GIF transparente en
 canal alfa que no sea todo 0; el `png.datatype` de 3.2 no lo da, asi que un PNG con alfa sale
 con fondo.
 
+Un programa que decodifica sus imagenes (como dashweb, con sus propios decodificadores de JPEG y
+PNG) las pasa a la pantalla con `image_from_rgb(buffer, ancho, alto, alfa)`: filas de pixeles RGB
+(3 bytes) o, con `alfa`, RGBA (4 bytes; alfa de 128 o mas se pinta). Usa el `picture.datatype`
+V43 (AmigaOS 3.5 y despues) para adaptar los colores a la pantalla, como con un fichero; en 3.1
+de serie da 0. La imagen se usa como las de `image_load`.
+
 ### Pantalla
 
 ```
@@ -1653,7 +1659,9 @@ while r == 0
 end
 ```
 
-`net_close` sobre un socket que aun se esta abriendo lo deja sin terminar.
+`net_close` sobre un socket que aun se esta abriendo lo deja sin terminar. El tiempo en que el
+programa no llama a `net_connect_poll` ni a `tls_connect_poll` (ocupado en otra cosa) no cuenta
+para el limite, y el de la negociacion TLS empieza de nuevo cada vez que esta da un paso.
 
 ### TLS (HTTPS) con AmiSSL
 

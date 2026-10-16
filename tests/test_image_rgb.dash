@@ -1,0 +1,89 @@
+# Test: image_from_rgb (dashweb D40): an image from pixels in a buffer, put on the screen by
+# picture.datatype V43 (AmigaOS 3.5+; on 3.1 it gives 0). 8 x 4 pixels, the left half white and
+# the right half black: white is pen 2 and black pen 1 on the Workbench screen. With alpha (RGBA)
+# the transparent half is not drawn. Each line says "ok" when it is right for that system.
+# expect-out: rgb: ok
+# expect-out: rgba: ok
+# expect-out: fin
+
+Window W
+    title "RGB"
+    width 200
+    height 80
+end
+
+# picture.datatype V43 o más (sabe crear imágenes desde píxeles)
+@native func picture_v43() -> Bool
+"""
+    struct Library *p = OpenLibrary((CONST_STRPTR)"datatypes/picture.datatype", 43);
+    if (p) CloseLibrary(p);
+    return p != NULL;
+"""
+end
+
+func pixeles(alfa: Bool) -> Int
+    k = 3
+    if alfa
+        k = 4
+    end
+    b = buffer_alloc(8 * 4 * k)
+    for y in (0..3)
+        for x in (0..7)
+            i = (y * 8 + x) * k
+            v = 0
+            if x < 4
+                v = 255
+            end
+            buffer_set_byte(b, i, v)
+            buffer_set_byte(b, i + 1, v)
+            buffer_set_byte(b, i + 2, v)
+            if alfa
+                a = 0
+                if x < 4
+                    a = 255
+                end
+                buffer_set_byte(b, i + 3, a)
+            end
+        end
+    end
+    return b
+end
+
+func fila(x: Int, y: Int) -> String
+    r = ""
+    for i in (0..7)
+        r = r + gfx_pixel_read(x + i, y)
+    end
+    return r
+end
+
+func probar(nombre: String, alfa: Bool, x: Int)
+    b = pixeles(alfa)
+    img = image_from_rgb(b, 8, 4, alfa)
+    buffer_free(b)
+    if img == 0
+        if picture_v43()
+            Print nombre + ": 0 con picture.datatype V43"
+        else
+            Print nombre + ": ok"
+        end
+        return
+    end
+    gfx_pen(1)
+    gfx_rect(x, 10, x + 7, 13)
+    image_draw(img, x, 10)
+    r = fila(x, 10) + "/" + fila(x, 13) + " " + image_width(img) + "x" + image_height(img)
+    if r == "22221111/22221111 8x4"
+        Print nombre + ": ok"
+    else
+        Print nombre + ": " + r
+    end
+    image_free(img)
+end
+
+Main
+    W.open
+    probar("rgb", false, 10)
+    probar("rgba", true, 40)
+    Print "fin"
+end

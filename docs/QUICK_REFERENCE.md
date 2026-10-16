@@ -217,6 +217,7 @@ f = font_open("helvetica.font", 13) # font_use(f), font_style(2), font_text_widt
 color_pen(r, g, b)          # pen for an RGB color (0-255) on the screen drawn on
 img = image_load("a.png")   # datatypes (0: cannot read); image_width/_height(img)
 image_draw(img, x, y)       # image_draw_part(img, sx, sy, x, y, w, h), image_scale(img, w, h), image_free(img)
+img = image_from_rgb(buf, w, h, alfa)   # pixels RGB (or RGBA) in a buffer; picture.datatype V43 (3.5+), else 0
 gfx_clear()                 # Clear screen
 ```
 
