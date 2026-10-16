@@ -1,0 +1,59 @@
+# for k in d.keys() goes through the dictionary's table without making the list of keys when the
+# body cannot change d (no assignment to d or d[...], no remove/clear, no call that gets an
+# object). If it can, the list is made as before. Breaks, continues and returns inside work.
+# memcheck
+# expect-c: _dk_k = d;
+# expect-c: _dk_p = padre;
+# expect-out: suma 60
+# expect-out: heredados 3
+# expect-out: primera con 2: si
+# expect-out: cambiado 4
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func hereda(clave: String) -> Bool
+    return clave != "propio"
+end
+
+func heredar(padre: {String: String}) -> {String: String}
+    var e: {String: String} = {}
+    for p in padre.keys()
+        if hereda(p)
+            e[p] = padre[p]
+        end
+    end
+    return e
+end
+
+func con_dos(d: {String: Int}) -> String
+    for k in d.keys()
+        if d[k] == 2
+            return "si"
+        end
+    end
+    return "no"
+end
+
+Main
+    var d: {String: Int} = {"a": 10, "b": 20, "c": 30}
+    suma = 0
+    for k in d.keys()
+        if k == "zz"
+            break
+        end
+        if not d.has(k)
+            continue
+        end
+        suma = suma + d[k]
+    end
+    Print "suma #{suma}"
+    var padre: {String: String} = {"color": "red", "font": "x", "propio": "no", "margin": "1"}
+    Print "heredados #{heredar(padre).length}"
+    var dos: {String: Int} = {"uno": 1, "dos": 2}
+    Print "primera con 2: #{con_dos(dos)}"
+    # the body changes d: the list is made (and the loop sees the keys from before)
+    var m: {String: Int} = {"x": 1, "y": 2}
+    for k in m.keys()
+        m[k + "2"] = 0
+    end
+    Print "cambiado #{m.length}"
+end

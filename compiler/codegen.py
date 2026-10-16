@@ -11071,6 +11071,10 @@ static {ret_type} {method_name}({params_str}) {{
                 indent=indent, var=node.variable, string=string, body=body)))
             return
 
+        if self._keys_in_place(node):
+            self._generate_keys_loop(node)
+            return
+
         self.uses_arrays = True
         array = self._array_ref(node.iterable)
         strings = self._is_string_array(node.iterable)
@@ -11101,6 +11105,71 @@ static {ret_type} {method_name}({params_str}) {{
             array=array,
             body=body
         )
+        self.emit(self._wrap_loop(indent, mark, code))
+
+    def _keys_in_place(self, node: ForEachStmt) -> bool:
+        """for k in d.keys() can go through d's table without making the list of keys when d is a
+        local variable or parameter (not a global) and nothing in the body can change d: no
+        assignment to d or d[...], no other method of d than has/keys, no call that gets an object
+        (a function could reach d through it) and no method of a struct."""
+        it = node.iterable
+        if not (isinstance(it, MethodCall) and it.method == "keys" and not it.arguments
+                and isinstance(it.object, VarRef) and self._dict_value_kind(it.object) is not None):
+            return False
+        name = it.object.name
+        if name in self.global_objects or not self.context.is_declared(name):
+            return False
+        for n in self._walk_nodes(node.body):
+            if isinstance(n, VarAssign) and n.name == name:
+                return False
+            if isinstance(n, ArrayAssign) and isinstance(n.array, VarRef) and n.array.name == name:
+                return False
+            if isinstance(n, MethodCall):
+                if isinstance(n.object, VarRef) and n.object.name == name:
+                    if n.method not in ("has", "keys"):
+                        return False
+                elif not self._dict_value_kind(n.object) is not None and not self._is_list_method(n):
+                    return False     # a struct's method: self is an object
+            if isinstance(n, FunctionCall) and not get_builtin(n.name):
+                if any(self._is_obj_expr(a) or isinstance(a, VarRef) and a.name == name for a in n.arguments):
+                    return False
+        return True
+
+    def _walk_nodes(self, nodes):
+        """Every AST node under these (statements and expressions, nested blocks too)."""
+        stack = list(nodes or [])
+        while stack:
+            n = stack.pop()
+            if not isinstance(n, ASTNode):
+                continue
+            yield n
+            for attr in vars(n).values():
+                if isinstance(attr, ASTNode):
+                    stack.append(attr)
+                elif isinstance(attr, list):
+                    stack.extend(a for a in attr if isinstance(a, ASTNode))
+
+    def _generate_keys_loop(self, node: ForEachStmt):
+        """for k in d.keys() through d's table (see _keys_in_place): the dictionary is held during
+        the loop, k borrows each key."""
+        self.uses_dicts = self.uses_strings = True
+        indent = self.context.indent
+        d = self._generate_expression(node.iterable.object)
+        var = node.variable
+        mark = self._new_tmp_mark()
+        self.context.enter_scope("block")
+        self.context.own(f"_dk_{var}", "obj")       # a return in the body releases it
+        body = self._generate_loop_body(node, "string", mark)
+        self.context.exit_scope()
+        code = (f"{indent}    {{ DashDict *_dk_{var} = {d};\n"
+                f"{indent}    LONG _di_{var};\n"
+                f"{indent}    _dash_hold(_dk_{var});\n"
+                f"{indent}    for (_di_{var} = 0; _dk_{var} && _di_{var} < _dk_{var}->cap; _di_{var}++) {{\n"
+                f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
+                f"{indent}        if (!{var}) continue;\n"
+                + body +
+                f"{indent}    }}\n"
+                f"{indent}    _dash_release(_dk_{var}); }}\n")
         self.emit(self._wrap_loop(indent, mark, code))
 
     def visit_FunctionDef(self, node: FunctionDef):
