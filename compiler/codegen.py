@@ -2453,17 +2453,24 @@ static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
 static STRPTR _dash_sc_s[_DASH_SC_N];
 static LONG _dash_sc_len[_DASH_SC_N];
 static UBYTE _dash_sc_next;
+/* The long text measured last, for str_code in line (a loop over one text asks for it again
+   and again) */
+static STRPTR _dash_sc_last = NULL;
+static LONG _dash_sc_last_len = 0;
 
 static LONG _dash_str_len(STRPTR s) {
     LONG k, len;
     if (!s) return 0;
-    for (k = 0; k < _DASH_SC_N; k++) if (_dash_sc_s[k] == s) return _dash_sc_len[k];
+    for (k = 0; k < _DASH_SC_N; k++)
+        if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
     len = strlen((char *)s);
     if (len >= _DASH_SC_MIN) {
         k = _dash_sc_next;
         _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
         _dash_sc_s[k] = s;
         _dash_sc_len[k] = len;
+        _dash_sc_last = s;
+        _dash_sc_last_len = len;
     }
     return len;
 }
@@ -2471,11 +2478,13 @@ static LONG _dash_str_len(STRPTR s) {
 static void _dash_str_forget(STRPTR s) {
     LONG k;
     for (k = 0; k < _DASH_SC_N; k++) if (_dash_sc_s[k] == s) _dash_sc_s[k] = NULL;
+    if (_dash_sc_last == s) _dash_sc_last = NULL;
 }
 
 /* The text at s now has this length (it grew in place, or is new) */
 static void _dash_str_setlen(STRPTR s, LONG len) {
     LONG k;
+    if (_dash_sc_last == s) _dash_sc_last = NULL;
     for (k = 0; k < _DASH_SC_N; k++) {
         if (_dash_sc_s[k] == s) {
             if (len >= _DASH_SC_MIN) _dash_sc_len[k] = len;
@@ -2528,9 +2537,15 @@ static void _dash_str_append(STRPTR *var, STRPTR add) {
 }
 
 /* s[i]: the byte (0 outside the text) */
-static LONG _dash_str_code(STRPTR s, LONG i) {
+static LONG _dash_str_code_f(STRPTR s, LONG i) {
     if (!s || i < 0 || i >= _dash_str_len(s)) return 0;
     return ((UBYTE *)s)[i];
+}
+
+/* In line when s is the long text measured last and i is inside it */
+static __inline__ LONG _dash_str_code(STRPTR s, LONG i) {
+    if (s == _dash_sc_last && (ULONG)i < (ULONG)_dash_sc_last_len) return ((UBYTE *)s)[i];
+    return _dash_str_code_f(s, i);
 }
 
 static LONG _dash_str_find_from(STRPTR s, STRPTR sub, LONG from) {
