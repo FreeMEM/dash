@@ -128,7 +128,7 @@ static void *_dash_mc_nn(void *p) {
    ExecBase at 4) and hang the Amiga: field writes go to this area instead.
    Reading through nil only reads low memory (garbage, no harm), so reads are
    not checked: --memcheck reports both. */
-static LONG _dash_nil_area[64];
+static LONG _dash_nil_area[64] __attribute__((unused));
 #define _DASH_NNW(p) ({ __typeof__(p) _dash_w = (p); _dash_w ? _dash_w : (__typeof__(p))_dash_nil_area; })
 #endif
 
@@ -2598,7 +2598,6 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
 static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG depth, STRPTR title) {
     /* Custom screen with specific dimensions - try to find best display mode */
     ULONG modeID = INVALID_ID;
-    struct DimensionInfo diminfo;
 
     /* Try to find a display mode matching requested dimensions */
     modeID = BestModeID(
@@ -3645,7 +3644,7 @@ static void _dash_gt_attach(void) {
     if (w && _dash_glist && !_dash_gt_attached) {
         /* the window may have been opened without the gadget events */
         ModifyIDCMP(w, w->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN |
-                    IDCMP_MOUSEMOVE | IDCMP_MOUSEBUTTONS | IDCMP_INTUITICKS | IDCMP_REFRESHWINDOW);
+                    IDCMP_MOUSEMOVE | IDCMP_MOUSEBUTTONS | IDCMP_REFRESHWINDOW);
         AddGList(w, _dash_glist, -1, -1, NULL);
         RefreshGList(_dash_glist, w, NULL, -1);
         GT_RefreshWindow(w, NULL);
@@ -3865,8 +3864,9 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     g->kind = kind;
     _dash_on_close(_dash_gads_window_gone);
     for (g->last = g->glist; g->last->NextGadget; g->last = g->last->NextGadget) ;
+    /* INTUITICKS (ten wake-ups a second) only for a listview's scroll arrows */
     ModifyIDCMP(win, win->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MOUSEMOVE |
-                     IDCMP_INTUITICKS | IDCMP_REFRESHWINDOW);
+                     IDCMP_REFRESHWINDOW | (gt_kind == LISTVIEW_KIND ? IDCMP_INTUITICKS : 0));
     AddGList(win, g->glist, -1, -1, NULL);
     RefreshGList(g->glist, win, NULL, -1);
     GT_RefreshWindow(win, NULL);
@@ -7719,7 +7719,16 @@ static LONG _dash_event_window_handle(void) {{
     def _get_main_template(self) -> Template:
         """Get the appropriate main template based on features used."""
         if self.needs_gadtools:
-            return CTemplates.PROGRAM_MAIN_GADTOOLS
+            if self.needs_asl:
+                return CTemplates.PROGRAM_MAIN_GADTOOLS
+            # no ASL builtin: no asl.library, no file requester made at start
+            text = CTemplates.PROGRAM_MAIN_GADTOOLS.template
+            for line in ("    if (AslBase) { _dash_asl_cleanup(); CloseLibrary(AslBase); AslBase = NULL; }\n",
+                         "    AslBase = OpenLibrary(\"asl.library\", 37);\n",
+                         "    // Initialize ASL if available\n    if (AslBase) _dash_asl_init();\n"):
+                assert line in text, line
+                text = text.replace(line, "", 1)
+            return Template(text)
         if self.needs_gfx:
             return CTemplates.PROGRAM_MAIN_GFX
         return CTemplates.PROGRAM_MAIN
@@ -9259,10 +9268,10 @@ static {ret_type} {method_name}({params_str}) {{
             flag = runtime_index().get(name)
             if flag:
                 setattr(self, flag, True)
-        # The GadTools main template also opens graphics.library and asl.library
+        # The GadTools main template also opens graphics.library (and asl.library when
+        # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
-            self.needs_asl = True
         if self.uses_music:
             self.uses_sound = True   # channels are allocated through audio.device
         if self.uses_bitmaps or self.uses_copper or self.uses_sound:
@@ -9302,12 +9311,18 @@ static {ret_type} {method_name}({params_str}) {{
         # the template uses it twice (Text(rp, s, strlen(s))).
         param_values = {}
         hoisted = []
+        # A plain call to a runtime function (not an NDK macro) takes its arguments on
+        # the stack, each placeholder once: nothing to protect, no temporaries
+        import re
+        plain_call = bool(re.fullmatch(r"(?:_dash|ra)_\w+\((?:\s*(?:\$\{\w+\}|[\w-]+)\s*,?)*\)",
+                                       builtin.c_template.strip())) and \
+            all(builtin.c_template.count("${%s}" % name) <= 1 for name in builtin.params)
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
                 code = self._generate_expression(arguments[i])
                 if builtin.name not in self._STRING_READERS:
                     code = self._escape_any(arguments[i], code)
-                if not self._is_plain_value(arguments[i]):
+                if not self._is_plain_value(arguments[i]) and not plain_call:
                     self._arg_counter = getattr(self, "_arg_counter", 0) + 1
                     tmp = f"_dash_a{self._arg_counter}"
                     # volatile: GCC treats libgcc calls as pure and would move

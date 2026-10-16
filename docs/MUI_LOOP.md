@@ -152,7 +152,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       `RA_EVENT_MENU` + `ra_menu_id()`), `getfile` (botón que abre el selector de ficheros y su ruta).
 - [x] 16. **Varias ventanas.** GadTools y ReAction con objetos como valores (como MUI, tarea 2), manteniendo
       la API actual de una ventana para no romper programas. Si choca con la compatibilidad, `[?]`.
-- [ ] 17. **Optimizar.** Emitir solo la parte del runtime que el programa usa (como ya pasa con otros
+- [x] 17. **Optimizar.** Emitir solo la parte del runtime que el programa usa (como ya pasa con otros
       bloques), menos trabajo por evento, tamaño de los ejecutables de `examples/` antes y después.
 - [ ] 18. **Repaso final.** Ejemplos actualizados (`./compile_all.sh`), documentación (`CLAUDE.md` local,
       `ROADMAP.md`, manuales, `BUILTINS.md`), resumen final con lo que queda.
@@ -562,4 +562,21 @@ Formato:
   principal con 0 (fin del bucle).
 - No hecho: `window_check_close` sigue vaciando el puerto con `GetMsg` y tirando lo que no es cerrar (cambiarlo podría
   dejar mensajes sin contestar en programas que solo preguntan por el cierre); documentado en la auditoría.
+- Tests: 137/137 sin emulador; 333/333 con `--emu --emu-a500 --emu-32`; 204/204 con `--emu --memcheck`; ejemplos 33/33.
+
+### 2026-10-16 — Tarea 17 (optimizar GadTools y ReAction)
+- Hecho:
+  - Los programas GadTools ya no abren `asl.library` ni crean un requester de ficheros al empezar si no usan un builtin
+    de ASL (`_get_main_template` quita esas líneas; antes `needs_gadtools` forzaba `needs_asl`).
+  - `IDCMP_INTUITICKS` (10 despertares por segundo) solo en ventanas con un listview (lo necesitan sus flechas); antes
+    en toda ventana con gadgets por número y en las de `gt_attach`.
+  - Argumentos de builtins: los temporales `volatile` (necesarios para las macros del NDK con `register asm`) ya no se
+    usan en las llamadas normales a funciones del runtime (`_dash_*`, `ra_*`, cada argumento una vez).
+  - Fuera los dos avisos de GCC de runtimes viejos (`diminfo` sin usar, `_dash_nil_area` sin usar).
+- Medido (42 programas: los 33 ejemplos y los tests de GUI, `./dash` por defecto): 390.840 → 390.064 bytes (-776,
+  -0,2 %). Los que más bajan: `test_gadgets` -244, `test_gt_events` -208, `test_gt_values` -104, `mui_navegador` -76.
+  El ahorro en tamaño es pequeño; lo que cambia es el trabajo al arrancar (sin abrir ASL) y en reposo (sin ticks).
+- No hecho: cada gadget por número tiene su `VisualInfo` y su lista (`GetVisualInfo`, `CreateContext`, `AddGList`,
+  `RefreshGList` por gadget): es lo que permite crearlos en cualquier momento y en cualquier ventana; agruparlos cambiaría
+  la API. `listview_add` redibuja la lista entera en cada línea (GadTools obliga a quitar y poner la lista).
 - Tests: 137/137 sin emulador; 333/333 con `--emu --emu-a500 --emu-32`; 204/204 con `--emu --memcheck`; ejemplos 33/33.
