@@ -166,13 +166,14 @@ que genera el código Dash. Ya estaba en el plan de AmiCachy (`~/Projects/AmiCac
 del fichero que describe la interfaz; no se encontró escrito (buscado el 2026-10-15 en shiva y pegaso:
 repos, sesiones de Claude y Antigravity).
 
-- [ ] 19. **Diseño.** Formato del fichero de interfaz: si la tarea 2 adopta la sintaxis declarativa, el editor
+- [x] 19. **Diseño.** Formato del fichero de interfaz: si la tarea 2 adopta la sintaxis declarativa, el editor
       lee y escribe ese mismo Dash (sin formato propio); si no, un `.dashui` (JSON) que el compilador convierte.
       Dónde vive (carpeta `vscode/` en este repo o repo aparte `FreeMEM/dash-vscode`: si hay duda, `[?]`).
       Vista previa: árbol + propiedades en un webview, dibujo aproximado en el navegador y vista real con
       captura de pantalla del emulador (`tools/emu_run.py` + captura de FS-UAE). Escribirlo en `docs/MUI_EDITOR.md`.
-- [ ] 20. **Esqueleto.** Extensión mínima: resaltado de sintaxis de Dash, comando "Compilar" (`./dash`) y
-      "Ejecutar en emulador". Empaquetado con `vsce` instalado en un `node_modules` local (no global).
+- [ ] 20. **Esqueleto.** `compiler/dashui.py` + `import "x.dashui"` en el compilador (tests de generación); extensión
+      mínima en `editor/vscode/`: resaltado de sintaxis de Dash, comandos "Compilar" (`./dash`) y "Ejecutar en
+      emulador". Empaquetado con `vsce` instalado en un `node_modules` local (no global).
 - [ ] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
 - [ ] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
 - [ ] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
@@ -593,3 +594,14 @@ Formato:
 - **Pendiente:** atajos de teclado con `_` y posiciones según la fuente en GadTools; varias ventanas para `gt_*` y
   ReAction; clics en los gadgets ReAction nuevos y en el requester de `getfile`; `window_check_close` tira los mensajes
   que no son cerrar; `listview_add` redibuja toda la lista.
+
+### 2026-10-16 — Tarea 19 (diseño del editor visual)
+- Hecho: `docs/MUI_EDITOR.md`. Decisiones: formato propio `.dashui` (JSON, como el `.ui` de Glade), única fuente de la
+  interfaz; el compilador lo importa directamente (`import "ventana.dashui"`), generando por ventana un `struct` con un
+  campo por objeto con nombre y una función que la construye con los `mui_`; eventos en el `.dashui` o en el programa.
+  Extensión en `editor/vscode/` de este repo (`CustomTextEditorProvider`: el JSON vive en el documento de VS Code, con
+  deshacer y guardar normales; webview con paleta, árbol, propiedades y vista aproximada). Vista real con "Ver en
+  Amiga" (compila, `emu_run.py --screenshot`, muestra la captura). Resaltado de sintaxis de `.dash`.
+- Entorno visto: Node 22.22.1 y npm 10.9.4 (nvm), VS Code en `/usr/bin/code`.
+- El formato que el usuario recordaba haber hablado no se encontró; este es una propuesta y se puede cambiar.
+- Tests: sin cambios de código.
