@@ -2479,7 +2479,7 @@ static ULONG _dash_ac_wait(ULONG mask) {
 
 static void _dash_exit_cleanup(void) {
     // Cleanup
-    if (DOSBase) { CloseLibrary((struct Library *)DOSBase); DOSBase = NULL; }
+    if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
     if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
 }
 
@@ -2511,7 +2511,7 @@ static void _dash_exit_cleanup(void) {
         _dash_close_screen();
         CloseLibrary((struct Library *)GfxBase); GfxBase = NULL;
     }
-    if (DOSBase) { CloseLibrary((struct Library *)DOSBase); DOSBase = NULL; }
+    if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
     if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
 }
 
@@ -2548,7 +2548,7 @@ static void _dash_exit_cleanup(void) {
     if (GfxBase) _dash_close_screen();
     if (GadToolsBase) { CloseLibrary(GadToolsBase); GadToolsBase = NULL; }
     if (GfxBase) { CloseLibrary((struct Library *)GfxBase); GfxBase = NULL; }
-    if (DOSBase) { CloseLibrary((struct Library *)DOSBase); DOSBase = NULL; }
+    if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
     if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
 }
 
@@ -9104,6 +9104,13 @@ static LONG _dash_event_window_handle(void) {{
         self.links = list(node.links)          # @link (dashweb D10)
         self.c_blocks = list(node.c_blocks)    # @c
         self.stack_min = node.stack            # @stack (dashweb D24)
+        # runtime functions (_dash_*) named by @native and @c code bring their runtime (D10b)
+        import re
+        for code in list(node.c_blocks) + [n.c_code for n in node.native_funcs]:
+            for name in re.findall(r"\b_dash_\w+", code or ""):
+                flag = runtime_index().get(name)
+                if flag:
+                    setattr(self, flag, True)
 
         # Generate constant definitions
         for const in node.constants:

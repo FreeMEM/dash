@@ -2,12 +2,14 @@
 # program (path relative to this file; its directory also goes to gcc with -I, for its
 # header); "@c" puts C at top level, after the Dash prototypes: here a callback with a C
 # signature that calls a Dash function, passed to the linked C by an @native function.
+# An @native that names a Dash runtime function (_dash_str_dup) brings its runtime.
 # expect-c: /* dash-link: 
 # expect-c: // C Blocks (@c)
 # expect-c: static long _cb_doble(long x) { return doble(x); }
 # expect-out: 5
 # expect-out: 80
 # expect-out: hola desde C
+# expect-out: [copia de C] 10
 
 @link "lib/c_externo.c"
 @header "#include \"c_externo.h\""
@@ -41,8 +43,17 @@ end
 """
 end
 
+# a Dash temporary text made in C (freed with the other temporaries)
+@native func copia(s: String) -> String
+"""
+    return _dash_str_dup(s, TRUE);
+"""
+end
+
 Main
     Print suma(2, 3)
     Print aplicar(4)
     Print saludo()
+    c = copia("copia de C")
+    Print "[" + c + "] " + c.length
 end

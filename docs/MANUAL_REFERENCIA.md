@@ -2689,7 +2689,9 @@ end
 ```
 
 Desde C se llama a las funciones publicas (las privadas `_x` de un modulo cambian de nombre). Un String
-que devuelve una funcion Dash es temporal: copiarlo si el C lo guarda. `./dash` y el runner leen los
+que devuelve una funcion Dash es temporal: copiarlo si el C lo guarda. El C de una `@native` o de un `@c`
+puede usar las funciones del runtime de Dash (`_dash_str_dup(s, TRUE)` da un texto temporal de Dash) y el
+programa las incluye. El C de fuera puede usar el stdio de libnix (`printf`). `./dash` y el runner leen los
 `@link` del C generado (`/* dash-link: ruta */`).
 
 ---

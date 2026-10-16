@@ -1,0 +1,28 @@
+# Test: a program whose C uses libnix's stdio (an @native with printf, or a library linked
+# with @link, like QuickJS) ends. Dash closed its dos.library at exit and left DOSBase as
+# NULL, but DOSBase is libnix's: its stdio cleanup after main used it and the program hung
+# (dashweb D25). Now Dash closes its own open and leaves the pointer.
+# expect-c: if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
+# expect-out: desde Dash
+# expect-out: desde printf
+# expect-out: fin
+
+@native func vaciar()
+"""
+    Flush(Output());
+"""
+end
+
+@native func con_printf(s: String)
+"""
+    printf("%s\n", (char *)s);
+    fflush(stdout);
+"""
+end
+
+Main
+    Print "desde Dash"
+    vaciar()
+    con_printf("desde printf")
+    Print "fin"
+end
