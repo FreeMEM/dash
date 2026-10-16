@@ -1,0 +1,39 @@
+# for x in list holds the list; an element can only be freed by taking it out of a list (pop,
+# remove, clear, l[i] = y). A loop whose body cannot (writing to a dictionary is fine, and so are
+# calls to functions that never take elements out) lends x without a reference of its own; one
+# whose body calls a function that does (here it empties the list) keeps a reference: the element
+# stays alive for the rest of that turn (memcheck checks).
+# memcheck
+# expect-no-c: _dash_retain(p);
+# expect-c: _dash_retain(q);
+# expect-out: suma 6, nombres 3
+# expect-out: q 1 sigue vivo, quedan 0
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+    nombre: String
+end
+
+func doble(n: Int) -> Int
+    return n * 2
+end
+
+func vaciar(l: [Punto])
+    l.clear()
+end
+
+Main
+    l = [Punto(1, "a"), Punto(2, "b"), Punto(3, "c")]
+    suma = 0
+    var vistos: {String: Int} = {}
+    for p in l
+        suma = suma + doble(p.x) / 2
+        vistos[p.nombre] = p.x
+    end
+    Print "suma #{suma}, nombres #{vistos.length}"
+    for q in l
+        vaciar(l)
+        Print "q #{q.x} sigue vivo, quedan #{l.length}"
+    end
+end

@@ -9321,11 +9321,12 @@ $body$indent    }
 
     # The array is read once and held while the loop runs (the body may reassign
     # the variable); arrays never change length, so no bounds check per element
+    # The length is read in every turn (as Python does): a body that takes elements out of the
+    # list must not make the loop read past its end, where they were freed
     FOR_EACH_STMT = Template("""\
 $indent    { DashArrayLong *_arr_$var = $array;
-$indent    LONG _len_$var = DashArray_length(_arr_$var);
 $indent    _dash_hold(_arr_$var);
-$indent    for (LONG _idx_$var = 0; _idx_$var < _len_$var; _idx_$var++) {
+$indent    for (LONG _idx_$var = 0; _idx_$var < DashArray_length(_arr_$var); _idx_$var++) {
 $indent        $elem_type $var = ${cast}_arr_$var->data[_idx_$var];
 $body$indent    }
 $indent    _dash_release(_arr_$var); }
@@ -11228,7 +11229,8 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.enter_scope("loop")
         self.context.declare_var(node.variable)  # Loop var is declared by for (borrowed)
         body = self._loop_body_head(mark)
-        if var_type.startswith("struct:") or var_type == "array" or var_type.startswith("dict"):
+        if ((var_type.startswith("struct:") or var_type == "array" or var_type.startswith("dict"))
+                and not self._loop_keeps_elements(node)):
             # an element of a list of objects: the body could replace it in the
             # list, so it holds a reference for the iteration
             self.context.own(node.variable, "obj")
@@ -11387,6 +11389,79 @@ static {ret_type} {method_name}({params_str}) {{
                     if f is None or id(f) not in pure:
                         return False           # native, extern, a Func value, or an impure function
         return True
+
+    _REMOVING_METHODS = ("pop", "remove", "clear")
+
+    def _loop_keeps_elements(self, node) -> bool:
+        """for x in list: the loop holds the list, so an element can only go if something takes it
+        out of a list (pop, remove, clear, l[i] = y). If the body cannot, x needs no reference of
+        its own: no such change to a list (a dictionary's are fine), x not assigned, and only calls
+        to functions and methods that never take an element out of a list (_never_removes)."""
+        if node.variable in self._assigned_names(node.body):
+            return False
+        prog = self.analysis.program
+        for n in self._walk_nodes(node.body):
+            if isinstance(n, (EventLoop, WindowOpen, WindowClose)):
+                return False
+            if isinstance(n, ArrayAssign) and self._dict_value_kind(n.array) is None:
+                return False
+            if isinstance(n, MethodCall):
+                if n.method in self._REMOVING_METHODS and self._dict_value_kind(n.object) is None:
+                    return False
+                method = self._method_of(n)
+                if method is not None and not self._never_removes(method):
+                    return False
+            if isinstance(n, FunctionCall):
+                if get_builtin(n.name):
+                    if n.name.startswith(self._CALLBACK_PREFIXES):
+                        return False
+                elif not prog.get_struct(n.name):
+                    f = prog.get_function(n.name)
+                    if f is None or not self._never_removes(f):
+                        return False
+        return True
+
+    def _never_removes(self, fdef) -> bool:
+        """A function or method that never takes an element out of a list, itself or through what it
+        calls (in its body a list and a dictionary cannot be told apart: any x[i] = y, pop, remove
+        or clear counts). Worked out once for the whole program (fixed point)."""
+        if getattr(self, "_keeps_ids", None) is None:
+            prog = self.analysis.program
+            defs = list(prog.functions) + [m for st in prog.structs for m in getattr(st, "methods", [])]
+            methods_by_name = {}
+            for st in prog.structs:
+                for m in getattr(st, "methods", []):
+                    methods_by_name.setdefault(m.name, []).append(m)
+            keeps = {id(d) for d in defs}
+
+            def ok(d):
+                for n in self._walk_nodes(d.body):
+                    if isinstance(n, (ArrayAssign, EventLoop, WindowOpen, WindowClose)):
+                        return False
+                    if isinstance(n, MethodCall):
+                        if n.method in self._REMOVING_METHODS:
+                            return False
+                        if n.method in methods_by_name and not all(id(m) in keeps for m in methods_by_name[n.method]):
+                            return False
+                    if isinstance(n, FunctionCall):
+                        if get_builtin(n.name):
+                            if n.name.startswith(self._CALLBACK_PREFIXES):
+                                return False
+                        elif not prog.get_struct(n.name):
+                            f = prog.get_function(n.name)
+                            if f is None or id(f) not in keeps:
+                                return False
+                return True
+
+            changed = True
+            while changed:
+                changed = False
+                for d in defs:
+                    if id(d) in keeps and not ok(d):
+                        keeps.discard(id(d))
+                        changed = True
+            self._keeps_ids = keeps
+        return id(fdef) in self._keeps_ids
 
     def _walk_nodes(self, nodes):
         """Every AST node under these (statements and expressions, nested blocks too)."""
