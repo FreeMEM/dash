@@ -114,10 +114,12 @@ def ppm_to_png(ppm: Path, png: Path):
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
-                 screenshot: tuple = None, args: list = None):
+                 screenshot: tuple = None, args: list = None, background: list = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
-    front screen that many seconds after boot. Returns one EmuResult per program, in order."""
+    front screen that many seconds after boot. background: (program, arguments) pairs
+    started with Run before the programs, e.g. one that clicks in their windows; their
+    output goes to DH0:bg<i>.txt (keep= to read it). Returns one EmuResult per program, in order."""
     if not shutil.which("fs-uae"):
         raise RuntimeError("fs-uae not found")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
@@ -160,6 +162,15 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             (hd / "C").mkdir(exist_ok=True)
             shutil.copy(shot_tool(), hd / "C" / "dash_shot")
             lines.append(f"Run >NIL: C:dash_shot {int(float(screenshot[0]) * 50)} DH0:shot.ppm")
+        for i, (prog, bg_args) in enumerate(background or []):
+            prog = Path(prog)
+            exe = hd / f"b{i}"
+            if prog.suffix == ".dash":
+                compile_dash(prog, exe, optimize, 0, fpu)
+            else:
+                shutil.copy(prog, exe)
+            # the redirection after the command is the program's (before it, only Run's message)
+            lines.append(f"Run >NIL: DH0:b{i} >DH0:bg{i}.txt{' ' + bg_args if bg_args else ''}")
         for i, prog in enumerate(programs):
             prog = Path(prog)
             exe = hd / f"p{i}"
