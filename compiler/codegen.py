@@ -7381,8 +7381,12 @@ static APTR _dash_mui_app_begin(STRPTR title, STRPTR base) {
 static APTR _dash_mui_add(Object *obj);
 
 static LONG _dash_mui_kind(Object *obj) {
-    IPTR kind = _DASH_MUI_OTHER;
+    IPTR kind = _DASH_MUI_OTHER, title;
     if (obj) GetAttr(MUIA_UserData, obj, &kind);
+    /* Menu items keep MUIA_UserData at 0: MUI returns the UserData of the chosen item as
+       an event (it was a false event 11 after each one) */
+    if (obj && kind == _DASH_MUI_OTHER && GetAttr(MUIA_Menuitem_Title, obj, &title))
+        kind = _DASH_MUI_MENUITEM;
     return (LONG)kind;
 }
 
@@ -7404,16 +7408,25 @@ static APTR _dash_mui_add(Object *obj) {
 }
 
 static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
-    Object *root, *win;
+    Object *root, *strip, *win;
     if (!_dash_mui_app) { _dash_mui_error("mui_window_begin before mui_app_begin"); return NULL; }
     if (_dash_mui_depth) { _dash_mui_error("mui_window_begin inside another window"); return NULL; }
     if (!(root = _DASH_MUI_NEW(MUIC_Group, MUIA_Group_Horiz, FALSE))) return NULL;
+    /* The menu strip goes in at creation, empty (mui_menu_begin fills it): one set later
+       with SetAttrs hangs MUI 5 on the first Amiga+key shortcut, and MUI 3.8 ignores it */
+    if (!(strip = _DASH_MUI_NEW(MUIC_Menustrip, MUIA_Menustrip_Enabled, TRUE))) { MUI_DisposeObject(root); return NULL; }
     win = _DASH_MUI_NEW(MUIC_Window,
         MUIA_Window_Title, (IPTR)_dash_mui_keep(title),
         MUIA_Window_ID, (id > 0 && id < 256) ? MAKE_ID('D', 'A', 'S', id) : 0,
         MUIA_Window_RootObject, (IPTR)root,
+        MUIA_Window_Menustrip, (IPTR)strip,
         MUIA_UserData, _DASH_MUI_WINDOW);
-    if (!win) { MUI_DisposeObject(root); _dash_mui_error("cannot create the window"); return NULL; }
+    if (!win) {
+        MUI_DisposeObject(root);
+        MUI_DisposeObject(strip);
+        _dash_mui_error("cannot create the window");
+        return NULL;
+    }
     _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)win);
     if (!_dash_mui_first_win) {
         _dash_mui_first_win = win;
@@ -7528,11 +7541,8 @@ static APTR _dash_mui_menu_begin(STRPTR title) {
     Object *menu;
     if (!_dash_mui_cur_win) { _dash_mui_error("mui_menu_begin outside a window"); return NULL; }
     if (_dash_mui_cur_menu) { _dash_mui_error("mui_menu_begin inside another menu"); return NULL; }
-    GetAttr(MUIA_Window_Menustrip, _dash_mui_cur_win, &strip);
-    if (!strip) {
-        if (!(strip = (IPTR)_DASH_MUI_NEW(MUIC_Menustrip, MUIA_Menustrip_Enabled, TRUE))) return NULL;
-        SetAttrs(_dash_mui_cur_win, MUIA_Window_Menustrip, strip, TAG_DONE);
-    }
+    GetAttr(MUIA_Window_Menustrip, _dash_mui_cur_win, &strip);   /* made with the window */
+    if (!strip) return NULL;
     if (!(menu = _DASH_MUI_NEW(MUIC_Menu, MUIA_Menu_Title, (IPTR)_dash_mui_keep(title)))) return NULL;
     _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
     _dash_mui_cur_menu = menu;
@@ -7544,8 +7554,7 @@ static Object *_dash_mui_menu_add(STRPTR title, STRPTR key) {
     if (!_dash_mui_cur_menu) { _dash_mui_error("menu item outside mui_menu_begin"); return NULL; }
     item = _DASH_MUI_NEW(MUIC_Menuitem,
         MUIA_Menuitem_Title, (IPTR)(title == NM_BARLABEL ? title : _dash_mui_keep(title)),
-        MUIA_Menuitem_Shortcut, (IPTR)(key && *key ? _dash_mui_keep(key) : NULL),
-        MUIA_UserData, _DASH_MUI_MENUITEM);
+        MUIA_Menuitem_Shortcut, (IPTR)(key && *key ? _dash_mui_keep(key) : NULL));
     if (item) _DASH_MUI_DO(_dash_mui_cur_menu, OM_ADDMEMBER, (IPTR)item);
     return item;
 }
