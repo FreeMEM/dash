@@ -202,9 +202,11 @@ make branch branch=amiga13.3 mod=gcc
 make all -j$(nproc)
 ```
 
-## Paso 4: Instalar elf2hunk
+## Paso 4: elf2hunk (normalmente no hace falta)
 
-Los ejecutables generados por el cross-compiler están en formato ELF, pero AmigaOS necesita el formato Hunk. La utilidad `elf2hunk` realiza esta conversión.
+El cross-compiler de bebbo (`m68k-amigaos-gcc`, el de esta guía) ya genera ejecutables en formato Hunk, el que
+usa AmigaOS, y `./dash` los deja tal cual. `elf2hunk` solo hace falta con un GCC que genere ELF; si `./dash`
+encuentra un ELF y tiene `elf2hunk`, lo convierte.
 
 ### Opción A: Desde la extensión de VS Code (más fácil)
 
@@ -253,6 +255,82 @@ which elf2hunk 2>/dev/null || ls ~/.vscode/extensions/bartmanabyss.amiga-debug-*
 echo "=== Fin de verificación ==="
 ```
 
+## Paso 6: Probar en un emulador (opcional)
+
+Dash ejecuta los programas en **FS-UAE** sin ventana y recoge su salida: `tools/emu_run.py` y los tests con
+`--emu`. Instala FS-UAE con el gestor de paquetes (`fs-uae` en Arch, Debian y Ubuntu).
+
+Con una ROM de Kickstart 3.1 (tuya, de un Amiga o de Amiga Forever) los resultados son los del Amiga real; sin
+ella se usa la ROM AROS que trae FS-UAE:
+
+```bash
+export DASH_KICKSTART=~/roms/kick31_a1200.rom          # A1200 con 3.1 (--emu)
+export DASH_KICKSTART_A500=~/roms/kick31_a500.rom      # A500 con 68000 (--emu-a500)
+export DASH_KICKSTART_32=~/roms/kick323_a1200.rom      # A1200 con AmigaOS 3.2 (--emu-32)
+```
+
+Algunos programas necesitan ficheros de un Workbench que no están en la ROM (`asl.library`, las clases de
+ReAction, los datatypes). Se sacan de un disco duro de Amiberry o WinUAE con `tools/emu_sys_from_hdf.sh`, que usa
+`xdftool` de amitools (basta un entorno virtual de Python):
+
+```bash
+python3 -m venv ~/.cache/amitools && ~/.cache/amitools/bin/pip install amitools
+export XDFTOOL=~/.cache/amitools/bin/xdftool RDBTOOL=~/.cache/amitools/bin/rdbtool
+tools/emu_sys_from_hdf.sh ~/Amiberry/HardDrives/system3.1.hdf ~/.cache/dash-emu/sys31
+tools/emu_sys_from_hdf.sh ~/Amiberry/HardDrives/AmigaOS-v3.2.hdf ~/.cache/dash-emu/sys32
+export DASH_EMU_SYS=~/.cache/dash-emu/sys31 DASH_EMU_SYS_32=~/.cache/dash-emu/sys32
+```
+
+Prueba: `python3 tools/emu_run.py examples/hola.dash` y `python3 tests/run_tests.py --emu`. Con
+`--screenshot SEGUNDOS fichero.png` se guarda una captura de la pantalla del Amiga.
+
+## Paso 7: MUI (opcional)
+
+Los programas con `mui_*` necesitan el SDK de MUI 5 para compilar (no se puede copiar al repositorio por su
+licencia):
+
+```bash
+tools/get_mui_sdk.sh                                   # en ~/.cache/dash-mui (o DASH_MUI_SDK)
+```
+
+Para probarlos en el emulador, un sistema con MUI instalado:
+
+```bash
+tools/emu_sys_mui.sh ~/.cache/dash-emu/sys31mui ~/.cache/dash-emu/sys31
+tools/emu_sys_mui.sh ~/.cache/dash-emu/sys32mui ~/.cache/dash-emu/sys32
+export DASH_EMU_SYS_MUI=~/.cache/dash-emu/sys31mui DASH_EMU_SYS_32_MUI=~/.cache/dash-emu/sys32mui
+```
+
+En el Amiga, MUI 3.8 o 5 instalado y un 68020 o superior.
+
+## Paso 8: Red y HTTPS (opcional)
+
+`net_*` usa la `bsdsocket.library` del sistema (en FS-UAE, la que emula con la red del PC). `tls_*` necesita
+AmiSSL 5:
+
+```bash
+tools/get_amissl.sh                                    # SDK y librerías en ~/.cache/dash-amissl
+tools/emu_sys_amissl.sh ~/.cache/dash-emu/sys31ssl ~/.cache/dash-emu/sys31
+tools/emu_sys_amissl.sh ~/.cache/dash-emu/sys32ssl ~/.cache/dash-emu/sys32
+export DASH_EMU_SYS_SSL=~/.cache/dash-emu/sys31ssl DASH_EMU_SYS_32_SSL=~/.cache/dash-emu/sys32ssl
+```
+
+## Paso 9: Extensión de VS Code (opcional)
+
+Resaltado de Dash, compilar y ejecutar en el emulador desde el editor, y el editor visual de ventanas MUI
+(`.dashui`):
+
+```bash
+cd editor/vscode
+npm install                                            # herramientas de desarrollo, en node_modules
+npm test
+npm run package                                        # dash-mui-editor-<versión>.vsix
+code --install-extension dash-mui-editor-*.vsix
+```
+
+En los ajustes de VS Code: `dash.path` (carpeta de Dash, si no se encuentra sola), `dash.emulator.kickstart`,
+`dash.emulator.system` y `dash.emulator.muiSystem` (los mismos ficheros que en los pasos 6 y 7).
+
 ## Solución de Problemas
 
 ### Error en GDB durante la compilación (pero GCC se instala)
@@ -289,7 +367,7 @@ fatal error: _ansi.h: No such file or directory
 
 El toolchain no se compiló correctamente o faltan las librerías de AmigaOS. Vuelve a ejecutar `make all` en el directorio del toolchain.
 
-### Error: "elf2hunk: command not found"
+### Aviso: "elf2hunk not found"
 
 Asegúrate de que `elf2hunk` está en tu PATH o usa la ruta completa.
 

@@ -49,33 +49,37 @@ end
   16.16: decimales a velocidad de entero en un 68000)
 - `nil` para structs, listas y textos (listas enlazadas, árboles, "sin objetivo")
 - Expresiones aritméticas, lógicas y de comparación
-- Control de flujo: `if`/`else`, `while`, `for`/`in`, `for`/`range` (también descendente y con `step`),
+- Control de flujo: `if`/`elif`/`else`, `while`, `for`/`in`, `for`/`range` (también descendente y con `step`),
   `break` y `continue`
-- Funciones con parámetros, retorno y recursión
-- Arrays con literales, acceso por índice, slicing y `.length`
-- Strings con interpolación, concatenación y operaciones
-- Structs con métodos
+- Funciones con parámetros, retorno y recursión; funciones como valor y lambdas
+- Listas con literales, índice, slicing, `.length` y tipo de elemento (`[String]`, `[Nodo]`...) que crecen
+  (`push`, `pop`, `insert`, `remove`); diccionarios `{String: T}`
+- Textos con interpolación, concatenación eficiente y funciones (`str_find`, `str_replace`, `str_upper`...)
+- Structs con métodos, campos `weak` para referencias hacia atrás
 - Constantes y enumeraciones
-- Imports de módulos
+- Imports de módulos, y de ventanas MUI hechas con el editor visual (`.dashui`)
 - Scope léxico
 - Memoria automática: strings, listas y structs se liberan solos (temporales por vuelta y contador
   de referencias), sin recolector ni pausas
 
 ### Amiga API
-- **Intuition** — Ventanas, screens, event loops, GadTools, ReAction
+- **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús
+- **Interfaces** — GadTools, ReAction y **MUI 5** (con zona de dibujo propia, temporizador y señales);
+  editor visual de ventanas MUI para VS Code
 - **Graphics** — Primitivas de dibujo, colores, bitmaps
 - **Sprites** — Hardware sprites y soft sprites
 - **Copper** — Listas de cobre programables
 - **Blitter** — BOBs y operaciones de blitting
 - **Audio** — Reproducción de tonos y samples
-- **IFF** — Carga de imágenes ILBM
+- **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF; fuentes de disco y colores RGB
+- **Red** — TCP con `bsdsocket.library` y HTTPS con AmiSSL
 - **DOS** — Operaciones de ficheros
 - **RTG** — Soporte para tarjetas gráficas
 - **Double Buffering** — Animación sin flicker
-- **FFI** — Llamadas directas a funciones C/AmigaOS
+- **FFI** — Llamadas directas a funciones C/AmigaOS; C propio en línea (`@native`, `@c`) o enlazado (`@link`)
 
 Los programas necesitan Kickstart 3.0 o superior (usan los pools de memoria de exec V39) y funcionan en
-un 68000.
+un 68000. MUI 5 y HTTPS piden un 68020 o superior.
 
 ## Instalación rápida
 
@@ -188,7 +192,9 @@ Variables del banco de pruebas: `DASH_KICKSTART` (ROM del A1200), `DASH_KICKSTAR
 `DASH_EMU_SYS` (directorio con `Libs`, `C` y `Classes` de un Workbench, para los tests que lo necesitan; se
 puede sacar de un disco duro con `tools/emu_sys_from_hdf.sh`), y para `--emu-32` `DASH_KICKSTART_32` (ROM 3.2)
 y `DASH_EMU_SYS_32` (los mismos ficheros de un Workbench 3.2). En esa máquina se carga el Workbench antes de
-los programas (`emu_run.py --workbench`): la `window.class` de 3.2 lo espera.
+los programas (`emu_run.py --workbench`): la `window.class` de 3.2 lo espera. Para MUI y HTTPS, los sistemas con
+MUI (`DASH_EMU_SYS_MUI`, `DASH_EMU_SYS_32_MUI`) y con AmiSSL (`DASH_EMU_SYS_SSL`, `DASH_EMU_SYS_32_SSL`). Todo
+en [docs/INSTALACION.md](docs/INSTALACION.md).
 
 ## Estructura del proyecto
 
@@ -201,9 +207,12 @@ compiler/             Transpilador (Python/Lark)
   analyzer.py         Análisis semántico
   codegen.py          Generación de código C
   amiga_builtins.py   Bindings de la API Amiga
+  dashui.py           Ventanas del editor visual (.dashui) como código Dash
 lib/amiga/            Módulos estándar de Amiga
 runtime/softfloat/    Coma flotante por software (suma y multiplicación en ensamblador 68000)
-tools/                Emulador (emu_run.py), benchmarks (bench.py, bench_report.py), gen_builtins_doc.py
+tools/                Emulador (emu_run.py, capturas con tools/amiga/shot.c), sistemas emulados (emu_sys_*.sh),
+                      SDK de MUI y AmiSSL (get_*.sh), benchmarks (bench.py), gen_builtins_doc.py
+editor/vscode/        Extensión de VS Code: resaltado, compilar, emulador, editor visual de MUI
 examples/             Programas de ejemplo
 tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC;
                       tests/bench: benchmarks)
@@ -216,7 +225,9 @@ docs/                 Documentación
 - [Manual de referencia](docs/MANUAL_REFERENCIA.md) — Referencia del programador
 - [Quick Reference](docs/QUICK_REFERENCE.md) — Cheat sheet
 - [Funciones built-in](docs/BUILTINS.md) — Lista real, generada desde el código
-- [API Amiga](docs/AMIGA_API.md) — Catálogo de diseño de la API
+- [MUI en Dash](docs/MUI_DISEÑO.md) — Diseño de la API de MUI
+- [Editor visual de MUI](docs/MUI_EDITOR.md) — Formato `.dashui` y extensión de VS Code
+- [API Amiga](docs/AMIGA_API.md) — Catálogo de diseño de la API (el original; la lista real es BUILTINS.md)
 - [Instalación](docs/INSTALACION.md) — Setup del entorno
 - [Roadmap](docs/ROADMAP.md) — Plan de desarrollo
 
