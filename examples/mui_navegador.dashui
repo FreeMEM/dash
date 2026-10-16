@@ -24,14 +24,15 @@
               { "type": "button", "name": "atras", "label": "<", "event": 1, "disabled": true },
               { "type": "button", "name": "adelante", "label": ">", "event": 2, "disabled": true },
               { "type": "button", "name": "recargar", "label": "_Recargar", "event": 3 },
+              { "type": "button", "name": "ver", "label": "_Historial", "event": 20 },
               { "type": "string", "name": "url", "text": "http://aminet.net/", "max": 1024, "ack": 4 }
             ]
           },
           {
             "type": "hgroup",
             "children": [
-              { "type": "list", "name": "historial", "double": 6, "weight": 25 },
-              { "type": "balance" },
+              { "type": "list", "name": "historial", "double": 6, "weight": 25, "hidden": true },
+              { "type": "balance", "name": "separador", "hidden": true },
               { "type": "canvas", "name": "pagina", "min_width": 320, "min_height": 160 },
               { "type": "scrollbar", "name": "barra", "vertical": true, "change": 5 }
             ]

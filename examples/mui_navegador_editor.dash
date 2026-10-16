@@ -16,6 +16,7 @@ const ID_TIEMPO = 7
 const ID_ACERCA = 8
 const ID_SALIR = 9
 const ID_PAGINA = 10
+const ID_VER_HISTORIAL = 20     # botón "Historial": despliega u oculta la lista
 
 const ALTO_LINEA = 10
 
@@ -60,6 +61,7 @@ Main
         url = v.url
         atras = v.atras
         adelante = v.adelante
+        separador = v.separador
         acerca = a.window
         mui_canvas_on_draw(pagina, pinta)
         mui_canvas_on_input(pagina, ID_PAGINA)
@@ -72,6 +74,7 @@ Main
         actual = 0          # línea del historial que se ve
         avance = 0          # progreso de la carga simulada
         acerca_abierta = false
+        historial_visible = false   # el .dashui la deja oculta ("hidden")
         while true
             ev = mui_wait_event()
             if ev == -1 or ev == ID_SALIR
@@ -119,6 +122,11 @@ Main
                 mui_set_enabled(atras, actual > 0)
                 mui_set_enabled(adelante, actual < mui_list_count(historial) - 1)
                 mui_canvas_redraw(pagina)
+            end
+            if ev == ID_VER_HISTORIAL
+                historial_visible = not historial_visible
+                mui_set_visible(historial, historial_visible)
+                mui_set_visible(separador, historial_visible)
             end
             if ev == ID_SCROLL
                 primera = mui_get_value(barra)

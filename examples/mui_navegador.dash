@@ -1,6 +1,7 @@
 # Esqueleto de la ventana del navegador dashweb con MUI (sin red): barra de direcciones,
 # atrás / adelante / recargar, historial, página pintada en una zona de dibujo con su
-# barra de desplazamiento, barra de estado y progreso animado con un temporizador.
+# barra de desplazamiento, barra de estado y progreso animado con un temporizador. El historial
+# empieza oculto: el botón "Historial" lo despliega y lo vuelve a esconder.
 # Necesita MUI 3.8 o 5 y un 68020. SDK para compilar: tools/get_mui_sdk.sh
 
 const ID_ATRAS = 1
@@ -13,6 +14,7 @@ const ID_TIEMPO = 7
 const ID_ACERCA = 8
 const ID_SALIR = 9
 const ID_PAGINA = 10
+const ID_VER_HISTORIAL = 20
 
 const ALTO_LINEA = 10
 
@@ -57,12 +59,13 @@ Main
                 atras = mui_button("<")
                 adelante = mui_button(">")
                 recargar = mui_button("_Recargar")
+                ver = mui_button("_Historial")
                 url = mui_string("http://aminet.net/", 1024)
             mui_group_end()
             mui_hgroup_begin()
                 historial = mui_list()
                 mui_weight(historial, 25)
-                mui_balance()
+                separador = mui_balance()
                 pagina = mui_canvas(320, 160)
                 barra = mui_scrollbar(true)
             mui_group_end()
@@ -81,6 +84,7 @@ Main
         mui_on_press(atras, ID_ATRAS)
         mui_on_press(adelante, ID_ADELANTE)
         mui_on_press(recargar, ID_RECARGAR)
+        mui_on_press(ver, ID_VER_HISTORIAL)
         mui_on_ack(url, ID_IR)
         mui_on_change(barra, ID_SCROLL)
         mui_on_double(historial, ID_HISTORIAL)
@@ -89,6 +93,8 @@ Main
         mui_canvas_on_input(pagina, ID_PAGINA)
         mui_set_enabled(atras, false)
         mui_set_enabled(adelante, false)
+        mui_set_visible(historial, false)
+        mui_set_visible(separador, false)
 
         carga("http://aminet.net/")
         mui_list_add(historial, "http://aminet.net/")
@@ -98,6 +104,7 @@ Main
         actual = 0          # línea del historial que se ve
         avance = 0          # progreso de la carga simulada
         acerca_abierta = false
+        historial_visible = false
         while true
             ev = mui_wait_event()
             if ev == -1 or ev == ID_SALIR
@@ -145,6 +152,11 @@ Main
                 mui_set_enabled(atras, actual > 0)
                 mui_set_enabled(adelante, actual < mui_list_count(historial) - 1)
                 mui_canvas_redraw(pagina)
+            end
+            if ev == ID_VER_HISTORIAL
+                historial_visible = not historial_visible
+                mui_set_visible(historial, historial_visible)
+                mui_set_visible(separador, historial_visible)
             end
             if ev == ID_SCROLL
                 primera = mui_get_value(barra)
