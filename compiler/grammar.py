@@ -90,6 +90,7 @@ dash_grammar_minimal = r"""
                 | array_assign
                 | self_member_assign
                 | member_assign
+                | indexed_member_assign
                 | var_assign
                 | local_var_decl
                 | if_stmt
@@ -107,6 +108,8 @@ dash_grammar_minimal = r"""
 
     // Member assignment (player.x = 10 or self.x = 10)
     member_assign: ID ("." ID)+ "=" expression
+    // a field of a list element: l[0].x = 5, a.items[i].nombre = "b" (dashweb D4c)
+    indexed_member_assign: ID ("." ID)* index_chain ("." ID)+ "=" expression
     self_member_assign: "self" ("." ID)+ "=" expression
 
     // Return statement

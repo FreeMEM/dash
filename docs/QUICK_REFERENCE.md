@@ -105,7 +105,7 @@ end
 
 enemy = Enemy(10, 50)
 enemy.move(5)
-boss.pos.x = 5              # nested structs (pos: Punto)
+boss.pos.x = 5              # nested structs (pos: Punto); l[0].x = 5 (a field of a list element)
 # weak padre: Nodo          # field that points without holding (no cycles: parent pointers)
 ```
 

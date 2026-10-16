@@ -1,0 +1,42 @@
+# Test: a field of a list element (dashweb D4c): l[0].x = 5, a texts field, an object field and a
+# longer chain (a.items[1].nombre); Strings and objects are owned as in any field assignment.
+# memcheck
+# expect-c: ->x = 5;
+# expect-out: 5 c
+# expect-out: hijo 7
+# expect-out: z [1, 2]
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Q
+    v: Int
+end
+
+struct P
+    x: Int
+    nombre: String
+    hijo: Q = nil
+end
+
+struct Caja
+    items: [P]
+end
+
+Main
+    var l: [P] = []
+    l.push(P(1, "a"))
+    l.push(P(2, "b"))
+    l[0].x = 5
+    t = "texto largo para que el nombre sea una copia"
+    l[1].nombre = t[0:1]
+    l[1].nombre = "c"
+    Print "" + l[0].x + " " + l[1].nombre
+    l[0].hijo = Q(7)
+    l[0].hijo = Q(7)
+    Print "hijo " + l[0].hijo.v
+    c = Caja(l)
+    c.items[1].nombre = "z"
+    i = 0
+    c.items[i].x = 1
+    c.items[i + 1].x = 2
+    Print l[1].nombre + " [" + l[0].x + ", " + l[1].x + "]"
+end

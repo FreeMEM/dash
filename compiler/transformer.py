@@ -905,6 +905,22 @@ class DashASTBuilder(Transformer):
         return self._member_assign_chain(VarRef(name=names[0]), names[0], names[1:], items[-1],
                                          self._get_location(items[0]))
 
+    def indexed_member_assign(self, items) -> MemberAssign:
+        """l[0].x = 5, a.b[i].c.d = 5: the owner of the last field is read like any expression (D4c)."""
+        k = next(i for i, it in enumerate(items) if isinstance(it, list))
+        names = [t.value if isinstance(t, Token) else str(t) for t in items[:k]]
+        after = [t.value if isinstance(t, Token) else str(t) for t in items[k + 1:-1]]
+        target = VarRef(name=names[0])
+        for member in names[1:]:
+            target = (MemberAccess(object_name=target.name, member=member) if isinstance(target, VarRef)
+                      else PropertyAccess(object=target, property=member))
+        for idx in items[k]:
+            target = ArrayAccess(array=target, index=idx)
+        for member in after[:-1]:
+            target = PropertyAccess(object=target, property=member)
+        return MemberAssign(object_name=names[0], member=after[-1], value=items[-1],
+                            location=self._get_location(items[0]), target=target)
+
     def self_member_assign(self, items) -> MemberAssign:
         """Build a self member assignment node (self.x = 10, self.a.b = 10)."""
         names = [i.value if isinstance(i, Token) else str(i) for i in items[:-1]]

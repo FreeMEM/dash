@@ -609,6 +609,9 @@ end
 s = Sprite(Punto(10, 20))
 s.pos.x = 15            # también self.pos.x dentro de un método
 Print s.pos.x
+
+var lista: [Punto] = [Punto(1, 2), Punto(3, 4)]
+lista[0].x = 5          # el campo de un elemento de una lista (también caja.items[i].nombre)
 ```
 
 Para asignar `a.b.c` el compilador tiene que saber que `a.b` es un struct: la variable
