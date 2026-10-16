@@ -20,44 +20,49 @@ extern struct IntuitionBase *IntuitionBase;
 extern struct GfxBase *GfxBase;
 
 /* The whole picture is read into memory first and written with one Write: the
-   emulator's host file system is slow with many small writes */
+   emulator's host file system is slow with many small writes. A standard (planar)
+   bitmap is read plane by plane: ReadPixelLine8 left a 16-pixel grey band at some
+   window positions on Kickstart 3.1. Other bitmaps (RTG) go through ReadPixel. */
 static int save(struct Screen *s, const char *name) {
-    struct RastPort rp = s->RastPort, tmp;
-    struct BitMap *tbm;
-    LONG w = s->Width, h = s->Height, x, y, n = 1L << s->RastPort.BitMap->Depth, head_len, ok = 0;
-    UBYTE *line, *image;
+    struct BitMap *bm = s->RastPort.BitMap;
+    LONG w = s->Width, h = s->Height, x, y, n, head_len, ok = 0, depth = bm->Depth;
+    BOOL planar = (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) != 0;
+    UBYTE *image;
     ULONG pal[256 * 3];
     BPTR f;
     char head[32];
-    if (n > 256) n = 256;
+    if (depth > 8) depth = 8;
+    n = 1L << depth;
     GetRGB32(s->ViewPort.ColorMap, 0, n, pal);
     sprintf(head, "P6\n%ld %ld\n255\n", (long)w, (long)h);
     head_len = strlen(head);
-    tbm = AllocBitMap((w + 15) & ~15, 1, 8, 0, NULL);
-    line = AllocVec(((w + 15) & ~15) + 16, MEMF_ANY);
     image = AllocVec(head_len + w * h * 3, MEMF_ANY);
-    if (tbm && line && image) {
+    if (!image) return 0;
+    memcpy(image, head, head_len);
+    {
         UBYTE *p = image + head_len;
-        memcpy(image, head, head_len);
-        tmp = rp;              /* ReadPixelLine8 needs a one-line temporary RastPort */
-        tmp.Layer = NULL;
-        tmp.BitMap = tbm;
         for (y = 0; y < h; y++) {
-            ReadPixelLine8(&rp, 0, y, w, line, &tmp);
             for (x = 0; x < w; x++) {
-                ULONG c = line[x] < n ? line[x] : 0;
+                ULONG c = 0;
+                if (planar) {
+                    LONG plane, offset = y * bm->BytesPerRow + (x >> 3);
+                    UBYTE mask = 0x80 >> (x & 7);
+                    for (plane = 0; plane < depth; plane++)
+                        if (bm->Planes[plane][offset] & mask) c |= 1UL << plane;
+                } else {
+                    c = ReadPixel(&s->RastPort, x, y);
+                }
+                if (c >= (ULONG)n) c = 0;
                 *p++ = pal[c * 3] >> 24;
                 *p++ = pal[c * 3 + 1] >> 24;
                 *p++ = pal[c * 3 + 2] >> 24;
             }
         }
-        if ((f = Open((STRPTR)name, MODE_NEWFILE))) {
-            ok = Write(f, image, head_len + w * h * 3) == head_len + w * h * 3;
-            Close(f);
-        }
     }
-    if (tbm) FreeBitMap(tbm);
-    FreeVec(line);
+    if ((f = Open((STRPTR)name, MODE_NEWFILE))) {
+        ok = Write(f, image, head_len + w * h * 3) == head_len + w * h * 3;
+        Close(f);
+    }
     FreeVec(image);
     return ok;
 }
