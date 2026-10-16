@@ -3806,6 +3806,25 @@ FONT_FUNCTIONS = {
 }
 
 # =============================================================================
+# Transparency: a colour mixed with what is drawn (RTG), or dithered (palette screens)
+# =============================================================================
+
+BLEND_FUNCTIONS = {
+    "gfx_blend_rect": _gfx("gfx_blend_rect", ["x1", "y1", "x2", "y2", "rgb", "alpha"], "void",
+                           "_dash_blend_rect(${x1}, ${y1}, ${x2}, ${y2}, ${rgb}, ${alpha})",
+                           "Mix the color 0xRRGGBB with what is drawn, alpha 0-255 (palette screens: a 4x4 "
+                           "dither of the closest pen)"),
+    "gfx_gradient_rect": _gfx("gfx_gradient_rect", ["x1", "y1", "x2", "y2", "rgb1", "alpha1", "rgb2", "alpha2",
+                                                    "vertical"], "void",
+                              "_dash_gradient_rect(${x1}, ${y1}, ${x2}, ${y2}, ${rgb1}, ${alpha1}, ${rgb2}, "
+                              "${alpha2}, ${vertical})",
+                              "Gradient from (rgb1, alpha1) to (rgb2, alpha2), top to bottom if vertical, else left "
+                              "to right, mixed with what is drawn"),
+    "gfx_pixel_rgb": _gfx("gfx_pixel_rgb", ["x", "y"], "LONG", "_dash_pixel_rgb(${x}, ${y})",
+                          "Color of a pixel as 0xRRGGBB (on a palette screen, its pen's color)"),
+}
+
+# =============================================================================
 # Pictures by datatypes (dashweb D12)
 # =============================================================================
 
@@ -3865,6 +3884,7 @@ ALL_BUILTINS = {
     **NET_FUNCTIONS,           # dashweb D8
     **TLS_FUNCTIONS,           # dashweb D11
     **FONT_FUNCTIONS,          # dashweb D9
+    **BLEND_FUNCTIONS,
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
     **AUDIO_FUNCTIONS,

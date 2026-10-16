@@ -1,0 +1,51 @@
+# gfx_blend_rect and gfx_gradient_rect on a palette screen (Kickstart 3.1, Workbench colors): no
+# real mixing, a 4x4 ordered dither of the pen closest to the colour, drawn with an area pattern;
+# alpha 0 paints nothing, 255 fills, 128 half of the pixels. A gradient goes from one to the other
+# row by row (vertical) or column by column. What falls outside the window is left out.
+# gfx_pixel_rgb gives the colour of a pixel (here its pen's colour).
+# expect-out: alfa 0: 0, alfa 255: 256, alfa 128: 128
+# expect-out: vertical: fila 0 0, fila 32 8, fila 63 16
+# expect-out: horizontal: columna 0 0, columna 15 16
+# expect-out: blanco ffffff
+# expect-out: recortado 64
+# expect-out: fin
+
+Window W
+    title "Mezcla"
+    width 240
+    height 120
+end
+
+func blancos(x1: Int, y1: Int, x2: Int, y2: Int, pen: Int) -> Int
+    n = 0
+    for y in (y1..y2)
+        for x in (x1..x2)
+            if gfx_pixel_read(x, y) == pen
+                n = n + 1
+            end
+        end
+    end
+    return n
+end
+
+Main
+    W.open
+    blanco = color_pen(255, 255, 255)
+    fondo = color_pen(0, 0, 0)
+    gfx_pen(fondo)
+    gfx_rect(0, 0, 200, 90)
+    gfx_blend_rect(0, 0, 15, 15, 0xFFFFFF, 0)
+    gfx_blend_rect(16, 0, 31, 15, 0xFFFFFF, 255)
+    gfx_blend_rect(32, 0, 47, 15, 0xFFFFFF, 128)
+    Print "alfa 0: #{blancos(0, 0, 15, 15, blanco)}, alfa 255: #{blancos(16, 0, 31, 15, blanco)}, alfa 128: #{blancos(32, 0, 47, 15, blanco)}"
+    gfx_gradient_rect(64, 0, 79, 63, 0xFFFFFF, 0, 0xFFFFFF, 255, true)
+    Print "vertical: fila 0 #{blancos(64, 0, 79, 0, blanco)}, fila 32 #{blancos(64, 32, 79, 32, blanco)}, fila 63 #{blancos(64, 63, 79, 63, blanco)}"
+    gfx_gradient_rect(96, 0, 111, 15, 0xFFFFFF, 0, 0xFFFFFF, 255, false)
+    Print "horizontal: columna 0 #{blancos(96, 0, 96, 15, blanco)}, columna 15 #{blancos(111, 0, 111, 15, blanco)}"
+    Print "blanco #{str_from_int(gfx_pixel_rgb(20, 5), 16)}"
+    gfx_pen(fondo)
+    gfx_rect(0, 0, 200, 90)
+    gfx_blend_rect(-8, -8, 7, 7, 0xFFFFFF, 255)
+    Print "recortado #{blancos(0, 0, 15, 15, blanco)}"
+    Print "fin"
+end

@@ -1241,6 +1241,22 @@ Dash: se puede maquetar un texto antes de pintarlo. Las fuentes de
 disco necesitan `diskfont.library` y la fuente en `FONTS:`. Las fuentes abiertas y los lapices
 se devuelven al salir.
 
+### Transparencia y degradados
+
+```
+gfx_blend_rect(0, 80, 199, 99, 0x000000, 128)        # negro a medias sobre lo que ya hay (alfa 0-255)
+gfx_gradient_rect(0, 40, 199, 99, 0x000000, 0, 0x000000, 230, true)   # oscurece hacia abajo
+gfx_gradient_rect(0, 0, 99, 9, 0xFF0000, 255, 0xFFFF00, 255, false)   # de rojo a amarillo, a lo ancho
+c = gfx_pixel_rgb(10, 10)                             # color de un pixel como 0xRRGGBB
+```
+
+En una pantalla de color real (RTG de 15, 16, 24 o 32 bits) cada pixel se mezcla de verdad con
+lo que habia (con `cybergraphics.library`, o `Picasso96API.library` si no esta). En una pantalla
+de paleta (AGA, ECS, RTG de 8 bits) no hay mezcla: el color se dibuja con el lapiz mas parecido y
+un tramado ordenado de 4x4 (alfa 128 pinta la mitad de los pixeles, 0 ninguno, 255 todos), con el
+blitter. Lo que cae fuera de la ventana no se pinta. En un degradado cada fila (o columna) tiene su
+color y su alfa; con pocos colores en la paleta, los intermedios salen del lapiz mas cercano.
+
 ### Imagenes (datatypes)
 
 ```

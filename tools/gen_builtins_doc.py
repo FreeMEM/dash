@@ -32,6 +32,7 @@ GROUPS = [
     ("NET_FUNCTIONS", "Red (TCP)"),       # dashweb D8
     ("TLS_FUNCTIONS", "TLS (AmiSSL)"),    # dashweb D11
     ("FONT_FUNCTIONS", "Fuentes y colores"),  # dashweb D9
+    ("BLEND_FUNCTIONS", "Transparencia y degradados"),
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos"),     # dashweb D19
     ("AUDIO_FUNCTIONS", "Audio"),
@@ -67,6 +68,11 @@ def render() -> str:
             rows.append(f"| `{name}({params})` | `{b.return_type}` | {desc} | {status} |")
         sections += [f"## {title}", "", "| Función | Devuelve | Descripción | Estado |",
                      "|---|---|---|---|", *rows, ""]
+    # every builtin must be in a group: a new group missing from GROUPS would be left out silently
+    listed = {name for attr, _ in GROUPS for name in getattr(builtins_module, attr)}
+    left_out = sorted(set(builtins_module.ALL_BUILTINS) - listed)
+    if left_out:
+        raise SystemExit(f"tools/gen_builtins_doc.py: builtins in no group of GROUPS: {', '.join(left_out)}")
     lines.append(f"Total: {total} funciones, {implemented} implementadas, {total - implemented} sin implementar.")
     lines.append("")
     return "\n".join(lines + sections)

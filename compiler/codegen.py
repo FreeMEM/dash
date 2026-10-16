@@ -1230,6 +1230,183 @@ static void _dash_font_cleanup(void) {
 
 """
 
+    # Transparency (dashweb, CSS gradients): a colour mixed with what the RastPort already has.
+    # High/true colour RTG screens mix each pixel (cybergraphics.library, or Picasso96API.library's
+    # p96ReadPixel/p96WritePixel); palette screens (AGA/ECS, 8-bit RTG) get an ordered 4x4 Bayer
+    # dither of the closest pen, drawn by RectFill with an area pattern (the blitter does it).
+    BLEND_RUNTIME = """\
+/* Dash Blend Runtime */
+#include <cybergraphx/cybergraphics.h>
+#include <proto/cybergraphics.h>
+#ifndef _DASH_CGXBASE
+#define _DASH_CGXBASE
+struct Library *CyberGfxBase = NULL;
+#endif
+static struct Library *_dash_p96 = NULL;
+static BYTE _dash_blend_libs = 0;     /* 0 not looked for yet, 1 looked for */
+
+/* Picasso96API.library without its headers: p96ReadPixel (LVO -120) and p96WritePixel (-114) */
+static ULONG _dash_p96_read(struct RastPort *rp, LONG x, LONG y) {
+    register ULONG d0 __asm("d0") = x;
+    register ULONG d1 __asm("d1") = y;
+    register struct RastPort *a1 __asm("a1") = rp;
+    register struct Library *a6 __asm("a6") = _dash_p96;
+    __asm volatile ("jsr a6@(-120:W)" : "+r"(d0), "+r"(d1), "+r"(a1) : "r"(a6) : "a0", "cc", "memory");
+    return d0;
+}
+
+static void _dash_p96_write(struct RastPort *rp, LONG x, LONG y, ULONG argb) {
+    register ULONG d0 __asm("d0") = x;
+    register ULONG d1 __asm("d1") = y;
+    register ULONG d2 __asm("d2") = argb;
+    register struct RastPort *a1 __asm("a1") = rp;
+    register struct Library *a6 __asm("a6") = _dash_p96;
+    __asm volatile ("jsr a6@(-114:W)" : "+r"(d0), "+r"(d1), "+r"(d2), "+r"(a1) : "r"(a6) : "a0", "cc", "memory");
+}
+
+/* 1 if rp's bitmap is high/true colour and there is a library to read and write its pixels */
+static BOOL _dash_blend_truecolor(struct RastPort *rp) {
+    struct BitMap *bm = rp ? rp->BitMap : NULL;
+    if (!bm || (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) || GetBitMapAttr(bm, BMA_DEPTH) <= 8) return FALSE;
+    if (!_dash_blend_libs) {
+        _dash_blend_libs = 1;
+        if (!CyberGfxBase) CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
+        if (!CyberGfxBase) _dash_p96 = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+    }
+    return CyberGfxBase || _dash_p96;
+}
+
+static ULONG _dash_rgb_read(struct RastPort *rp, LONG x, LONG y) {
+    return (CyberGfxBase ? ReadRGBPixel(rp, x, y) : _dash_p96_read(rp, x, y)) & 0xFFFFFF;
+}
+
+static void _dash_rgb_write(struct RastPort *rp, LONG x, LONG y, ULONG rgb) {
+    if (CyberGfxBase) WriteRGBPixel(rp, x, y, rgb);
+    else _dash_p96_write(rp, x, y, rgb);
+}
+
+/* The colour of a pixel as 0xRRGGBB: the pixel itself on RTG, its pen's colour on a palette */
+static LONG _dash_pixel_rgb(LONG x, LONG y) {
+    ULONG c[3];
+    LONG pen;
+    struct Screen *scr;
+    if (!_dash_rp) return 0;
+    if (_dash_blend_truecolor(_dash_rp)) return (LONG)_dash_rgb_read(_dash_rp, x, y);
+    pen = ReadPixel(_dash_rp, x, y);
+    scr = _dash_pen_screen();
+    if (pen < 0 || !scr) return 0;
+    GetRGB32(scr->ViewPort.ColorMap, pen, 1, c);
+    return (LONG)(((c[0] >> 24) << 16) | ((c[1] >> 24) << 8) | (c[2] >> 24));
+}
+
+/* The part of x1..x2, y1..y2 inside the drawing area (the window's inner layer, or the bitmap) */
+static BOOL _dash_blend_clip(LONG *x1, LONG *y1, LONG *x2, LONG *y2) {
+    LONG t, w, h;
+    if (*x1 > *x2) { t = *x1; *x1 = *x2; *x2 = t; }
+    if (*y1 > *y2) { t = *y1; *y1 = *y2; *y2 = t; }
+    if (_dash_rp->Layer) {
+        w = _dash_rp->Layer->bounds.MaxX - _dash_rp->Layer->bounds.MinX + 1;
+        h = _dash_rp->Layer->bounds.MaxY - _dash_rp->Layer->bounds.MinY + 1;
+    } else {
+        w = GetBitMapAttr(_dash_rp->BitMap, BMA_WIDTH);
+        h = GetBitMapAttr(_dash_rp->BitMap, BMA_HEIGHT);
+    }
+    if (*x1 < 0) *x1 = 0;
+    if (*y1 < 0) *y1 = 0;
+    if (*x2 >= w) *x2 = w - 1;
+    if (*y2 >= h) *y2 = h - 1;
+    return *x1 <= *x2 && *y1 <= *y2;
+}
+
+/* One span (a row or a column, or the whole rectangle) of one colour and alpha */
+static UWORD _dash_bayer_pat[16];
+static void _dash_blend_span(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG alpha) {
+    static const UBYTE bayer[4][4] = { { 0, 8, 2, 10 }, { 12, 4, 14, 6 }, { 3, 11, 1, 9 }, { 15, 7, 13, 5 } };
+    LONG x, y, level;
+    if (alpha <= 0) return;
+    if (alpha > 255) alpha = 255;
+    if (_dash_blend_truecolor(_dash_rp)) {
+        LONG r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255;
+        for (y = y1; y <= y2; y++)
+            for (x = x1; x <= x2; x++) {
+                ULONG old = _dash_rgb_read(_dash_rp, x, y);
+                LONG or_ = (old >> 16) & 255, og = (old >> 8) & 255, ob = old & 255;
+                _dash_rgb_write(_dash_rp, x, y,
+                                ((ULONG)(or_ + ((r - or_) * alpha) / 255) << 16) |
+                                ((ULONG)(og + ((g - og) * alpha) / 255) << 8) |
+                                (ULONG)(ob + ((b - ob) * alpha) / 255));
+            }
+        return;
+    }
+    /* palette: of each 4x4 block, (alpha + 8) / 16 pixels take the colour (0 none, 16 all) */
+    level = (alpha * 16 + 128) / 256;
+    if (level <= 0) return;
+    SetAPen(_dash_rp, _dash_color_pen((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255));
+    if (level >= 16) {
+        RectFill(_dash_rp, x1, y1, x2, y2);
+        return;
+    }
+    for (y = 0; y < 16; y++) {
+        UWORD line = 0;
+        for (x = 0; x < 16; x++) if (bayer[y & 3][x & 3] < level) line |= 0x8000 >> x;
+        _dash_bayer_pat[y] = line;
+    }
+    {
+        UWORD *old_pat = _dash_rp->AreaPtrn;
+        BYTE old_size = _dash_rp->AreaPtSz;
+        UBYTE old_mode = GetDrMd(_dash_rp);
+        SetDrMd(_dash_rp, JAM1);
+        SetAfPt(_dash_rp, _dash_bayer_pat, 4);
+        RectFill(_dash_rp, x1, y1, x2, y2);
+        SetAfPt(_dash_rp, old_pat, old_size);
+        SetDrMd(_dash_rp, old_mode);
+    }
+}
+
+/* rgb (0xRRGGBB) over what is there, alpha 0 (nothing) to 255 (the colour) */
+static void _dash_blend_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG alpha) {
+    LONG pen;
+    if (!_dash_rp || !_dash_blend_clip(&x1, &y1, &x2, &y2)) return;
+    pen = GetAPen(_dash_rp);
+    _dash_blend_span(x1, y1, x2, y2, rgb, alpha);
+    SetAPen(_dash_rp, pen);
+}
+
+/* From (rgb1, alpha1) to (rgb2, alpha2): top to bottom if vertical, else left to right; each row
+   or column mixed with what is there. Positions are taken in the whole rectangle, so a clipped
+   part keeps the colours it would have. */
+static void _dash_gradient_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb1, LONG alpha1,
+                                LONG rgb2, LONG alpha2, LONG vertical) {
+    LONG a, b, n, i, pen, cx1, cy1, cx2, cy2, t;
+    if (!_dash_rp) return;
+    if (x1 > x2) { t = x1; x1 = x2; x2 = t; }
+    if (y1 > y2) { t = y1; y1 = y2; y2 = t; }
+    cx1 = x1; cy1 = y1; cx2 = x2; cy2 = y2;
+    if (!_dash_blend_clip(&cx1, &cy1, &cx2, &cy2)) return;
+    pen = GetAPen(_dash_rp);
+    a = vertical ? y1 : x1;
+    b = vertical ? y2 : x2;
+    n = b - a;
+    for (i = vertical ? cy1 : cx1; i <= (vertical ? cy2 : cx2); i++) {
+        LONG k = n ? i - a : 0, d = n ? n : 1, c, rgb = 0, alpha;
+        for (c = 16; c >= 0; c -= 8) {
+            LONG p = (rgb1 >> c) & 255, q = (rgb2 >> c) & 255;
+            rgb |= (p + ((q - p) * k) / d) << c;
+        }
+        alpha = alpha1 + ((alpha2 - alpha1) * k) / d;
+        if (vertical) _dash_blend_span(cx1, i, cx2, i, rgb, alpha);
+        else _dash_blend_span(i, cy1, i, cy2, rgb, alpha);
+    }
+    SetAPen(_dash_rp, pen);
+}
+
+static void _dash_blend_cleanup(void) {
+    if (_dash_p96) { CloseLibrary(_dash_p96); _dash_p96 = NULL; }
+    _dash_blend_libs = 0;
+}
+
+"""
+
     # Pictures (dashweb D12): any format the system has a datatype for (ILBM always; PNG, GIF,
     # JPEG... from 3.2 or with their datatypes), remapped to the screen drawn on and drawn on
     # _dash_rp with the blitter. An image is a number (0: none), freed at exit if not before.
@@ -8810,7 +8987,10 @@ static LONG _dash_mui_timer_check(void) {
 #include <cybergraphx/cybergraphics.h>
 #include <proto/cybergraphics.h>
 
+#ifndef _DASH_CGXBASE
+#define _DASH_CGXBASE
 struct Library *CyberGfxBase = NULL;
+#endif
 
 static BOOL _dash_rtg_available(void) {
     if (!CyberGfxBase) {
@@ -9215,6 +9395,7 @@ _RUNTIME_FLAGS = [
     ("NET_RUNTIME", "uses_net"),            # dashweb D8
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
+    ("BLEND_RUNTIME", "uses_blend"),
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
@@ -9449,6 +9630,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dicts: bool = False    # {String: T} (DICT_RUNTIME)
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
+        self.uses_blend: bool = False    # gfx_blend_rect, gfx_gradient_rect, gfx_pixel_rgb (BLEND_RUNTIME)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
         self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
@@ -9724,6 +9906,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.GRAPHICS_RUNTIME)
         if self.uses_fonts:
             parts.append(CTemplates.FONT_RUNTIME)
+        if self.uses_blend:
+            parts.append(CTemplates.BLEND_RUNTIME)
         if self.uses_images:
             parts.append(CTemplates.IMAGE_RUNTIME)
         if self.uses_args:
@@ -9930,6 +10114,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_image_cleanup();\n")   # gives back the pens of the remap
         if self.uses_loop_timer:
             cleanup.append("    _dash_lt_cleanup();\n")
+        if self.uses_blend:
+            cleanup.append("    _dash_blend_cleanup();\n")
         if self.uses_fonts:
             cleanup.append("    _dash_font_cleanup();\n")
         if self.uses_tls:
@@ -11788,6 +11974,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_blend:
+            self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:
             self.needs_gfx = True      # FONT_RUNTIME draws on _dash_rp
         if self.uses_images:

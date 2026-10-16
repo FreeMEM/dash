@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 495 funciones, 495 implementadas, 0 sin implementar.
+Total: 498 funciones, 498 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -398,6 +398,14 @@ Total: 495 funciones, 495 implementadas, 0 sin implementar.
 | `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
 | `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
 | `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
+
+## Transparencia y degradados
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `gfx_blend_rect(x1, y1, x2, y2, rgb, alpha)` | `void` | Mix the color 0xRRGGBB with what is drawn, alpha 0-255 (palette screens: a 4x4 dither of the closest pen) |  |
+| `gfx_gradient_rect(x1, y1, x2, y2, rgb1, alpha1, rgb2, alpha2, vertical)` | `void` | Gradient from (rgb1, alpha1) to (rgb2, alpha2), top to bottom if vertical, else left to right, mixed with what is drawn |  |
+| `gfx_pixel_rgb(x, y)` | `LONG` | Color of a pixel as 0xRRGGBB (on a palette screen, its pen's color) |  |
 
 ## Imágenes (datatypes)
 
