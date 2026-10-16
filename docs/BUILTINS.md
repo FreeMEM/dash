@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 467 funciones, 467 implementadas, 0 sin implementar.
+Total: 468 funciones, 468 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
