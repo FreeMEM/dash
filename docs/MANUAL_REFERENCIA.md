@@ -835,8 +835,10 @@ var cabeceras: {String: String} = {}
 cabeceras["Host"] = "ejemplo.org"
 ```
 
-Los valores pueden ser `Int`, `Bool`, `String`, structs o listas, y el diccionario es
-dueno de ellos como una lista. `d.clear()` lo vacia. Tambien se escribe a traves de campos
+Los valores pueden ser `Int`, `Bool`, `String`, structs, listas u otros diccionarios
+(`{String: {String: T}}`), y el diccionario es dueno de ellos como una lista; tambien hay
+listas de diccionarios (`[{String: T}]`). `for k in d.keys()` no crea la lista de claves si el
+cuerpo no cambia ese diccionario. `d.clear()` lo vacia. Tambien se escribe a traves de campos
 (`hoja.reglas["color"] = "red"`). Buscar, anadir y quitar cuestan lo mismo con 10 claves
 que con 10.000 (tabla hash).
 

@@ -1,0 +1,92 @@
+# Dictionaries whose values are dictionaries ({String: {String: X}}) and lists of dictionaries
+# ([{String: X}]) hold their dictionaries like any other object: d[k] is read as a dictionary and
+# kept by a variable, d[k] = v and push keep a reference, pop gives it back, for-in holds each one,
+# and nested literals own what they contain. Before, a dictionary of dictionaries was taken for one
+# of Ints (no reference kept): its dictionaries were freed while still in use. Also {String: [X]}.
+# memcheck
+# expect-c: DashDict_set_obj(_hechas, clave, (void *)(g));
+# expect-out: total 1840
+# expect-out: total 2024
+# expect-out: lista 3: 1 2 3
+# expect-out: sacado 3, quedan 2
+# expect-out: anidado x=1 y=2
+# expect-out: listas 2 y 3
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Cand
+    v: String
+end
+
+var _hechas: {String: {String: Cand}} = {}
+
+func calcular(g: {String: Cand}) -> Int
+    n = 0
+    for k in g.keys()
+        n = n + g[k].v.length
+    end
+    return n
+end
+
+func uno(i: Int) -> Int
+    clave = "k" + (i % 3)
+    var g: {String: Cand} = nil
+    if i % 5 == 4
+        var propias: {String: Cand} = {}
+        g = propias
+        g["x"] = Cand("propia")
+    else
+        if _hechas.has(clave)
+            g = _hechas[clave]
+        else
+            var nuevas: {String: Cand} = {}
+            g = nuevas
+            g["a"] = Cand("valor" + i)
+            g["b"] = Cand("otro")
+            _hechas[clave] = g
+        end
+    end
+    return calcular(g)
+end
+
+func una_lista() -> [{String: Int}]
+    var l: [{String: Int}] = []
+    for i in (1..3)
+        var d: {String: Int} = {}
+        d["n"] = i
+        l.push(d)
+    end
+    return l
+end
+
+Main
+    t = 0
+    for i in (0..199)
+        t = t + uno(i)
+    end
+    Print "total " + t
+    var limpio: {String: {String: Cand}} = {}
+    _hechas = limpio
+    for i in (0..19)
+        t = t + uno(i)
+    end
+    Print "total " + t
+
+    l = una_lista()
+    texto = ""
+    for d in l
+        texto = texto + " " + d["n"]
+    end
+    Print "lista #{l.length}:#{texto}"
+    ultimo = l.pop()
+    Print "sacado #{ultimo[\"n\"]}, quedan #{l.length}"
+
+    var anidado: {String: {String: Int}} = {"p": {"x": 1, "y": 2}}
+    p = anidado["p"]
+    anidado["p"] = {"z": 0}
+    Print "anidado x=#{p[\"x\"]} y=#{p[\"y\"]}"
+
+    var listas: {String: [Int]} = {"a": [1, 2], "b": [3, 4, 5]}
+    a = listas["a"]
+    listas["a"] = [9]
+    Print "listas #{a.length} y #{listas[\"b\"].length}"
+end

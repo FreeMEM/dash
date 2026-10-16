@@ -10845,6 +10845,8 @@ static {ret_type} {method_name}({params_str}) {{
                 return "STRPTR"
             if kind == "array":
                 return "DashArrayLong *"
+            if kind == "dict":
+                return "DashDict *"
             if kind.startswith("struct:"):
                 return f"_Dash_{kind[7:]} *"
             return "LONG"
@@ -10874,6 +10876,8 @@ static {ret_type} {method_name}({params_str}) {{
                     return "STRPTR"
                 if elem == "array":
                     return "DashArrayLong *"
+                if elem == "dict":
+                    return "DashDict *"
                 if elem.startswith("struct:"):
                     return f"_Dash_{elem[7:]} *"
                 return "LONG"
@@ -11038,7 +11042,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.enter_scope("loop")
         self.context.declare_var(node.variable)  # Loop var is declared by for (borrowed)
         body = self._loop_body_head(mark)
-        if var_type.startswith("struct:") or var_type == "array":
+        if var_type.startswith("struct:") or var_type == "array" or var_type.startswith("dict"):
             # an element of a list of objects: the body could replace it in the
             # list, so it holds a reference for the iteration
             self.context.own(node.variable, "obj")
@@ -11088,6 +11092,10 @@ static {ret_type} {method_name}({params_str}) {{
             var_type, c_type = elem, f"_Dash_{elem[7:]} *"
         elif elem == "array":
             var_type, c_type = "array", "DashArrayLong *"
+        elif elem == "dict":
+            # a dictionary: its own kind of values, from the list's declared type
+            inner = list_elem_type(self._declared_type_of(node.iterable) or "")
+            var_type, c_type = (self._list_var_type(inner) if inner else None) or "dict", "DashDict *"
         else:
             var_type, c_type = "number", "LONG"
         mark = self._new_tmp_mark()
@@ -11634,6 +11642,8 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"((STRPTR){code})"
             if kind == "array":
                 return f"((DashArrayLong *){code})"
+            if kind == "dict":
+                return f"((DashDict *){code})"
             if kind.startswith("struct:"):
                 return f"((_Dash_{kind[7:]} *){code})"
             return code
@@ -11653,6 +11663,8 @@ static {ret_type} {method_name}({params_str}) {{
             elem = self._array_elem_type(node.array)
             if elem == "array":
                 return f"((DashArrayLong *)DashArray_get({array_name}, {index}))"
+            if elem == "dict":
+                return f"((DashDict *)DashArray_get({array_name}, {index}))"
             if elem and elem.startswith("struct:"):
                 return f"((_Dash_{elem[7:]} *)DashArray_get({array_name}, {index}))"
             return f"DashArray_get({array_name}, {index})"
@@ -12002,7 +12014,9 @@ static {ret_type} {method_name}({params_str}) {{
                 elem = "struct:" + self._struct_of(value).name
             elif self._infer_c_type(value) == "DashArrayLong *":
                 elem = "array"
-        suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem == "array") else ""
+            elif self._infer_c_type(value) == "DashDict *":
+                elem = "dict"
+        suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem in ("array", "dict")) else ""
         args = [self._generate_expression(a) for a in node.arguments]
         if node.method in ("push", "insert") and self._is_fixed_list(node.object):
             args[-1] = self._fixed_value(node.arguments[-1])   # push(2) in a list of Fixed: 2.0
@@ -12016,7 +12030,7 @@ static {ret_type} {method_name}({params_str}) {{
             return f"DashArray_insert{suffix}({arr}, {args[0]}, {value})"
         if node.method == "pop":
             if suffix == "_obj":
-                c_type = "DashArrayLong *" if elem == "array" else f"_Dash_{elem[7:]} *"
+                c_type = {"array": "DashArrayLong *", "dict": "DashDict *"}.get(elem) or f"_Dash_{elem[7:]} *"
                 return f"(({c_type})DashArray_pop_obj({arr}))"
             return f"DashArray_pop{suffix}({arr})"
         if node.method == "remove":
@@ -12647,6 +12661,8 @@ static {ret_type} {method_name}({params_str}) {{
                 kinds.add("string")
             elif isinstance(e, ArrayLiteral) or self._infer_c_type(e) == "DashArrayLong *":
                 kinds.add("array")
+            elif isinstance(e, DictLiteral) or self._infer_c_type(e) == "DashDict *":
+                kinds.add("dict")
             else:
                 struct = self._struct_of(e)
                 kinds.add(f"struct:{struct.name}" if struct and self._is_obj_expr(e) else None)
@@ -12733,6 +12749,8 @@ static {ret_type} {method_name}({params_str}) {{
             return "array:string"
         if list_elem_type(elem) is not None:
             return "array:array"
+        if dict_value_type(elem) is not None:
+            return "array:dict"
         if self.analysis.program.get_struct(elem):
             return f"array:struct:{elem}"
         return "array"
@@ -12749,6 +12767,8 @@ static {ret_type} {method_name}({params_str}) {{
             c_type = self._infer_c_type(first)
             if c_type.startswith("_Dash_") and c_type.endswith(" *"):
                 return f"struct:{c_type[6:-2]}"
+            if c_type == "DashDict *" or isinstance(first, DictLiteral):
+                return "dict"
             if self._is_obj_c_type(c_type) or isinstance(first, ArrayLiteral):
                 return "array"
             return "int"
