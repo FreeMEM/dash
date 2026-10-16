@@ -4897,6 +4897,78 @@ static void _dash_cleanup_area(void) {
     }
 }
 
+/* A RastPort without area fill buffers (a MUI drawing area: only Dash's own windows get them):
+   ours while a fill lasts, then its own back (a TmpRas it already has is left alone). The raster is
+   the size of the layer, kept for the next fills and freed at exit. */
+static struct AreaInfo _dash_own_ai;
+static WORD _dash_own_aibuf[500];
+static struct TmpRas _dash_own_tr;
+static PLANEPTR _dash_own_trbuf = NULL;
+static UWORD _dash_own_tr_w = 0, _dash_own_tr_h = 0;
+static struct AreaInfo *_dash_area_old_ai = NULL;
+static struct TmpRas *_dash_area_old_tr = NULL;
+static struct RastPort *_dash_area_rp = NULL;   /* the one holding ours, NULL = none */
+
+static void _dash_area_on(void) {
+    struct RastPort *rp = _dash_rp;
+    UWORD w, h;
+    if (!rp || _dash_area_rp || (rp->AreaInfo && rp->TmpRas)) return;
+    if (rp->Layer) {
+        w = rp->Layer->bounds.MaxX - rp->Layer->bounds.MinX + 1;
+        h = rp->Layer->bounds.MaxY - rp->Layer->bounds.MinY + 1;
+    } else {
+        w = GetBitMapAttr(rp->BitMap, BMA_WIDTH);
+        h = GetBitMapAttr(rp->BitMap, BMA_HEIGHT);
+    }
+    if (!rp->TmpRas && (w > _dash_own_tr_w || h > _dash_own_tr_h)) {
+        if (_dash_own_trbuf) FreeRaster(_dash_own_trbuf, _dash_own_tr_w, _dash_own_tr_h);
+        _dash_own_trbuf = AllocRaster(w, h);
+        _dash_own_tr_w = _dash_own_trbuf ? w : 0;
+        _dash_own_tr_h = _dash_own_trbuf ? h : 0;
+        if (_dash_own_trbuf) InitTmpRas(&_dash_own_tr, _dash_own_trbuf, RASSIZE(w, h));
+    }
+    _dash_area_old_ai = rp->AreaInfo;
+    _dash_area_old_tr = rp->TmpRas;
+    if (!rp->AreaInfo) { InitArea(&_dash_own_ai, _dash_own_aibuf, 100); rp->AreaInfo = &_dash_own_ai; }
+    if (!rp->TmpRas && _dash_own_trbuf) rp->TmpRas = &_dash_own_tr;
+    _dash_area_rp = rp;
+}
+
+static void _dash_area_off(void) {
+    if (!_dash_area_rp) return;
+    _dash_area_rp->AreaInfo = _dash_area_old_ai;
+    _dash_area_rp->TmpRas = _dash_area_old_tr;
+    _dash_area_rp = NULL;
+}
+
+/* Can an area fill be drawn on _dash_rp now? (without a TmpRas AreaEnd would hang) */
+#define _DASH_AREA_OK() (_dash_rp && _dash_rp->AreaInfo && _dash_rp->TmpRas)
+
+static void _dash_fill_ellipse(LONG cx, LONG cy, LONG rx, LONG ry) {
+    _dash_area_on();
+    if (_DASH_AREA_OK()) { AreaEllipse(_dash_rp, cx, cy, rx, ry); AreaEnd(_dash_rp); }
+    _dash_area_off();
+}
+
+static void _dash_poly_begin(LONG x, LONG y) {
+    _dash_area_on();
+    if (_DASH_AREA_OK()) AreaMove(_dash_rp, x, y);
+}
+
+static void _dash_poly_add(LONG x, LONG y) {
+    if (_DASH_AREA_OK()) AreaDraw(_dash_rp, x, y);
+}
+
+static void _dash_poly_end(void) {
+    if (_DASH_AREA_OK()) AreaEnd(_dash_rp);
+    _dash_area_off();
+}
+
+static void _dash_area_free_own(void) {
+    if (_dash_own_trbuf) { FreeRaster(_dash_own_trbuf, _dash_own_tr_w, _dash_own_tr_h); _dash_own_trbuf = NULL; }
+    _dash_own_tr_w = _dash_own_tr_h = 0;
+}
+
 /* Hardware Sprite Support */
 #define DASH_MAX_SPRITES 8
 static struct SimpleSprite *_dash_sprites[DASH_MAX_SPRITES] = {0};
@@ -10233,6 +10305,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_blend:
             cleanup.append("    _dash_blend_cleanup();\n")
+        if self.needs_area:
+            cleanup.append("    _dash_area_free_own();\n")   # the raster lent to RastPorts without one
         if self.uses_fonts:
             cleanup.append("    _dash_font_cleanup();\n")
         if self.uses_tls:

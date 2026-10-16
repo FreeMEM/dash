@@ -1215,6 +1215,9 @@ gfx_poly_add(50, 100)           # Tercer vertice
 gfx_poly_end()                  # Cierra y rellena
 ```
 
+Los rellenos (círculo, elipse y polígono, hasta 100 vértices) funcionan en cualquier RastPort: en una
+zona de dibujo de MUI o una ventana sin sus búferes, Dash presta los suyos mientras dura el relleno.
+
 ### Texto
 
 ```
@@ -2721,7 +2724,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_menu_item(texto, tecla, id)` | Opción de menú: `tecla` = letra para Amiga+tecla (`""` = ninguna); devuelve el objeto (para `mui_set_enabled`). |
 | `mui_menu_separator()` | Línea de separación. |
 | `mui_canvas(ancho_min, alto_min)` | Zona de dibujo propia; crece con la ventana. |
-| `mui_canvas_on_draw(zona, funcion)` | Función `f(x, y, ancho, alto)` que la pinta con los `gfx_`. MUI la llama cuando hace falta (al abrir, al cambiar de tamaño...). Solo se puede pintar dentro. |
+| `mui_canvas_on_draw(zona, funcion)` | Función `f(x, y, ancho, alto)` que la pinta con los `gfx_`. MUI la llama cuando hace falta (al abrir, al cambiar de tamaño...). Solo se puede pintar dentro. Valen también los rellenos (`gfx_circle_fill`, `gfx_poly_*`...). |
 | `mui_canvas_redraw(zona)` | La vuelve a pintar ahora. |
 | `mui_canvas_on_input(zona, id)` | Evento con un clic, la rueda o una tecla sobre la zona (antes de abrir la ventana). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | La última entrada: posición dentro de la zona, 1 si fue clic, +1/-1 la rueda, código de tecla (-1 si no fue tecla). |

@@ -1,0 +1,61 @@
+# Area fills (gfx_circle_fill, gfx_ellipse_fill, gfx_poly_*) on a MUI drawing area: its RastPort has
+# no AreaInfo/TmpRas (only Dash's own windows get them), so the fill lends its own while it lasts.
+# emu-needs: muimaster.library
+# expect-out: círculo 1 fuera 2
+# expect-out: elipse 1
+# expect-out: polígono 1 fuera 2
+# expect-out: mismo color true
+# expect-out: redibujada 1 1
+# expect-out: fin
+
+var veces: Int = 0
+var circulo: Int = 0
+var fuera: Int = 0
+var elipse: Int = 0
+var poligono: Int = 0
+var fuera_poli: Int = 0
+var rgb_dentro: Int = 0
+var rgb_pluma: Int = 0
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    veces = veces + 1
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(1)
+    gfx_circle_fill(x + 20, y + 20, 10)
+    gfx_ellipse_fill(x + 60, y + 20, 15, 6)
+    gfx_poly_begin(x + 10, y + 40)
+    gfx_poly_add(x + 50, y + 40)
+    gfx_poly_add(x + 10, y + 70)
+    gfx_poly_end()
+    circulo = gfx_pixel_read(x + 20, y + 20)
+    fuera = gfx_pixel_read(x + 35, y + 5)
+    elipse = gfx_pixel_read(x + 70, y + 20)
+    poligono = gfx_pixel_read(x + 15, y + 45)
+    fuera_poli = gfx_pixel_read(x + 45, y + 65)
+    rgb_dentro = gfx_pixel_rgb(x + 20, y + 20)
+    gfx_pixel(x + 100, y + 70)
+    rgb_pluma = gfx_pixel_rgb(x + 100, y + 70)
+end
+
+Main
+    if mui_app_begin("Rellenos", "DASHFILL") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Rellenos", 0)
+            lienzo = mui_canvas(120, 80)
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_window_open(win)
+        Print "círculo #{circulo} fuera #{fuera}"
+        Print "elipse #{elipse}"
+        Print "polígono #{poligono} fuera #{fuera_poli}"
+        Print "mismo color #{rgb_dentro == rgb_pluma}"
+        circulo = 0
+        poligono = 0
+        mui_canvas_redraw(lienzo)
+        Print "redibujada #{circulo} #{poligono}"
+        mui_app_end()
+        Print "fin"
+    end
+end
