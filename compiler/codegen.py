@@ -13200,8 +13200,8 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _is_bool_expr(self, node: ASTNode) -> bool:
         """True if the expression is a Bool (written as "true" / "false"): true, false, a
-        comparison, and/or/not, a Bool variable, parameter or field, a function, method or builtin
-        that returns one, d.has(k)."""
+        comparison, and/or/not, a Bool variable, parameter or field, a function, method, builtin,
+        @native or @extern that returns one, d.has(k)."""
         if isinstance(node, BoolLiteral):
             return True
         if isinstance(node, BinaryOp):
@@ -13214,7 +13214,7 @@ static {ret_type} {method_name}({params_str}) {{
             builtin = get_builtin(node.name)
             if builtin:
                 return builtin.return_type == "BOOL"
-            func = self.analysis.program.get_function(node.name)
+            func = self.analysis.program.get_function(node.name) or self._foreign_func(node.name)
             return bool(func and func.return_type == "Bool")
         if isinstance(node, MethodCall):
             if node.method == "has" and self._dict_value_kind(node.object) is not None:

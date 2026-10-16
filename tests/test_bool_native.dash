@@ -1,0 +1,30 @@
+# A @native function declared -> Bool is a Bool too: written true / false when joined to text,
+# in interpolation, by Print alone and through a variable it was assigned to.
+# expect-out: x=true
+# expect-out: y=false
+# expect-out: true
+# expect-out: v false
+# expect-out: n 1
+# expect-out: fin
+
+@native func par(n: Int) -> Bool
+"""
+    return (n & 1) == 0;
+"""
+end
+
+@native func uno() -> Int
+"""
+    return 1;
+"""
+end
+
+Main
+    Print "x=" + par(4)
+    Print "y=#{par(3)}"
+    Print par(10)
+    v = par(7)
+    Print "v #{v}"
+    Print "n #{uno()}"
+    Print "fin"
+end
