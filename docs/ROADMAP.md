@@ -800,6 +800,9 @@ tests/
       ficheros; el `EventLoop` atiende las ventanas de `window_create` (`event_window()`)
 - [x] Tests con clics y menús reales por `input.device` (`tests/test_gt_events.dash` y siguientes)
 - [x] Test suite: 137 resultados (333 con `--emu --emu-a500 --emu-32`; 204 con `--emu --memcheck`); 425 builtins
+- [x] Editor visual de MUI: ficheros `.dashui` (JSON) que el compilador importa (`compiler/dashui.py`) y extensión de VS
+      Code en `editor/vscode/` (resaltado, compilar, emulador, editor de ventanas con vista aproximada y captura real
+      del Amiga); ejemplo `examples/mui_navegador.dashui`
 
 ---
 
@@ -817,8 +820,8 @@ tests/
 
 ### Preguntas abiertas:
 - ¿Soporte para OOP? (Probablemente no en v3.0)
-- ¿UI declarativa en Dash con vista previa por captura del emulador? (idea del 2026-10-14). El editor visual
-  de MUI como complemento de VS Code se pidió el 2026-10-15: tareas 19-24 de `docs/MUI_LOOP.md`
+- ¿UI declarativa en Dash? Resuelto de otra forma: ficheros `.dashui` (JSON) del editor visual, importables
+  (`docs/MUI_EDITOR.md`)
 - ¿Macros/metaprogramación? (Probablemente no en v3.0)
 
 ### Pendiente:

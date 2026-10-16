@@ -1,0 +1,63 @@
+{
+  "dashui": 1,
+  "windows": [
+    {
+      "name": "Navegador",
+      "title": "dashweb",
+      "id": 1,
+      "menus": [
+        {
+          "title": "Proyecto",
+          "items": [
+            { "label": "Acerca de...", "key": "?", "event": 8 },
+            { "separator": true },
+            { "label": "Salir", "key": "Q", "event": 9 }
+          ]
+        }
+      ],
+      "root": {
+        "type": "vgroup",
+        "children": [
+          {
+            "type": "hgroup",
+            "children": [
+              { "type": "button", "name": "atras", "label": "<", "event": 1, "disabled": true },
+              { "type": "button", "name": "adelante", "label": ">", "event": 2, "disabled": true },
+              { "type": "button", "name": "recargar", "label": "_Recargar", "event": 3 },
+              { "type": "string", "name": "url", "text": "http://aminet.net/", "max": 1024, "ack": 4 }
+            ]
+          },
+          {
+            "type": "hgroup",
+            "children": [
+              { "type": "list", "name": "historial", "double": 6, "weight": 25 },
+              { "type": "balance" },
+              { "type": "canvas", "name": "pagina", "min_width": 320, "min_height": 160 },
+              { "type": "scrollbar", "name": "barra", "vertical": true, "change": 5 }
+            ]
+          },
+          {
+            "type": "hgroup",
+            "children": [
+              { "type": "text", "name": "estado", "text": "Listo" },
+              { "type": "gauge", "name": "progreso", "max": 100, "weight": 30 }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Acerca",
+      "title": "Acerca de dashweb",
+      "id": 2,
+      "close": 8,
+      "root": {
+        "type": "vgroup",
+        "children": [
+          { "type": "text", "text": "\u001bcdashweb\n\u001bcun navegador para Amiga hecho en Dash" },
+          { "type": "button", "name": "cerrar", "label": "_Cerrar", "event": 8 }
+        ]
+      }
+    }
+  ]
+}

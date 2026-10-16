@@ -113,3 +113,16 @@ Comunes: `name` (campo del struct; sin nombre el objeto no se guarda), `weight` 
   (propiedades desconocidas se guardan tal cual).
 - 23: "Ver en Amiga" con la captura.
 - 24: la ventana del navegador (`examples/mui_navegador.dash`) rehecha con un `.dashui`; documentación.
+
+## Estado (2026-10-16)
+
+Hecho (tareas 20-24): `compiler/dashui.py` e `import ".dashui"`; extensión en `editor/vscode/` con resaltado de Dash,
+comandos Compilar y Ejecutar en emulador, editor visual (paleta, árbol, propiedades, menús, vista aproximada) y "Ver en
+Amiga" (captura de la ventana en FS-UAE). Ejemplo: `examples/mui_navegador.dashui` + `examples/mui_navegador_editor.dash`.
+
+Instalar en VS Code: `cd editor/vscode && npm install && npm run package`, luego
+`code --install-extension dash-mui-editor-0.1.0.vsix`. No se ha probado dentro de VS Code de verdad: los tests corren
+la gramática, el modelo y los comandos en Node, y el webview en Chromium con un `vscode` simulado.
+
+Pendiente: deshacer dentro del propio editor ya lo da VS Code (el texto es suyo), pero no hay copiar/pegar de objetos ni
+selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.

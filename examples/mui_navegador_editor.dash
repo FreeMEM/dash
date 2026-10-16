@@ -1,0 +1,144 @@
+# La ventana del navegador de mui_navegador.dash, hecha con el editor visual: las dos
+# ventanas, sus menús, objetos y eventos están en mui_navegador.dashui (se abre con el
+# editor de VS Code de editor/vscode) y aquí solo queda la lógica.
+# Necesita MUI 3.8 o 5 y un 68020. SDK para compilar: tools/get_mui_sdk.sh
+
+import "mui_navegador.dashui"
+
+# Los números de evento puestos en el .dashui
+const ID_ATRAS = 1
+const ID_ADELANTE = 2
+const ID_RECARGAR = 3
+const ID_IR = 4
+const ID_SCROLL = 5
+const ID_HISTORIAL = 6
+const ID_TIEMPO = 7
+const ID_ACERCA = 8
+const ID_SALIR = 9
+const ID_PAGINA = 10
+
+const ALTO_LINEA = 10
+
+# La página "cargada": cuántas líneas tiene y la primera que se ve (las líneas se
+# generan al pintarlas)
+var num_lineas: Int = 0
+var primera: Int = 0
+var titulo: String = ""
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    gfx_pen(1)
+    gfx_text_at(x + 6, y + 12, titulo)
+    gfx_line(x + 6, y + 15, x + ancho - 7, y + 15)
+    caben = (alto - 24) / ALTO_LINEA
+    for i in (0..caben - 1)
+        k = primera + i + 1
+        if k <= num_lineas
+            gfx_text_at(x + 6, y + 28 + i * ALTO_LINEA, "Línea #{k} de #{titulo}")
+        end
+    end
+end
+
+func carga(url: String)
+    titulo = url
+    num_lineas = 60
+    primera = 0
+end
+
+Main
+    if mui_app_begin("dashweb", "DASHWEB") == 0
+        Print "Hace falta MUI y un 68020"
+    else
+        v = Navegador_create()
+        a = Acerca_create()
+        historial = v.historial
+        pagina = v.pagina
+        barra = v.barra
+        estado = v.estado
+        progreso = v.progreso
+        url = v.url
+        atras = v.atras
+        adelante = v.adelante
+        acerca = a.window
+        mui_canvas_on_draw(pagina, pinta)
+        mui_canvas_on_input(pagina, ID_PAGINA)
+
+        carga("http://aminet.net/")
+        mui_list_add(historial, "http://aminet.net/")
+        mui_set_range(barra, num_lineas, 12)
+        mui_window_open(v.window)
+
+        actual = 0          # línea del historial que se ve
+        avance = 0          # progreso de la carga simulada
+        acerca_abierta = false
+        while true
+            ev = mui_wait_event()
+            if ev == -1 or ev == ID_SALIR
+                break
+            end
+            if ev == ID_IR or ev == ID_RECARGAR
+                avance = 0
+                mui_set_text(estado, "Cargando " + mui_get_text(url))
+                mui_timer(100, ID_TIEMPO)
+            end
+            if ev == ID_TIEMPO
+                avance = avance + 20
+                mui_set_value(progreso, avance)
+                if avance < 100
+                    mui_timer(100, ID_TIEMPO)
+                else
+                    direccion = mui_get_text(url)
+                    carga(direccion)
+                    if mui_list_get(historial, actual) != direccion
+                        mui_list_add(historial, direccion)
+                        actual = mui_list_count(historial) - 1
+                    end
+                    mui_set_enabled(atras, actual > 0)
+                    mui_set_enabled(adelante, false)
+                    mui_set_range(barra, num_lineas, 12)
+                    mui_set_value(barra, 0)
+                    mui_set_text(estado, "Listo")
+                    mui_set_value(progreso, 0)
+                    mui_canvas_redraw(pagina)
+                end
+            end
+            if ev == ID_ATRAS or ev == ID_ADELANTE or ev == ID_HISTORIAL
+                if ev == ID_ATRAS and actual > 0
+                    actual = actual - 1
+                end
+                if ev == ID_ADELANTE and actual < mui_list_count(historial) - 1
+                    actual = actual + 1
+                end
+                if ev == ID_HISTORIAL
+                    actual = mui_get_value(historial)
+                end
+                direccion = mui_list_get(historial, actual)
+                mui_set_text(url, direccion)
+                carga(direccion)
+                mui_set_enabled(atras, actual > 0)
+                mui_set_enabled(adelante, actual < mui_list_count(historial) - 1)
+                mui_canvas_redraw(pagina)
+            end
+            if ev == ID_SCROLL
+                primera = mui_get_value(barra)
+                mui_canvas_redraw(pagina)
+            end
+            if ev == ID_PAGINA
+                rueda = mui_canvas_wheel(pagina)
+                if rueda != 0
+                    mui_set_value(barra, mui_get_value(barra) - rueda * 3)
+                end
+            end
+            if ev == ID_ACERCA
+                if acerca_abierta
+                    mui_window_close(acerca)
+                else
+                    mui_window_open(acerca)
+                end
+                acerca_abierta = not acerca_abierta
+            end
+        end
+        mui_app_end()
+    end
+end

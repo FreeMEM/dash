@@ -2294,6 +2294,8 @@ end
 ```
 
 Los eventos (`"event"`, `"change"`, `"ack"`, `"double"` con su número) se pueden poner en el `.dashui`.
+Ejemplo: `examples/mui_navegador_editor.dash` con `examples/mui_navegador.dashui` (la misma ventana que
+`mui_navegador.dash`, pero descrita en el `.dashui`). El editor visual está en `editor/vscode/` (extensión de VS Code).
 
 Ejemplo completo: `examples/mui_navegador.dash`, el esqueleto de la ventana del navegador dashweb
 (barra de direcciones, historial, página pintada con su barra, estado, progreso con `mui_timer`, menú

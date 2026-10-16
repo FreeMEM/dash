@@ -177,7 +177,7 @@ repos, sesiones de Claude y Antigravity).
 - [x] 21. **Editor.** Webview con paleta de objetos MUI, árbol, panel de propiedades y eventos; guardar y abrir.
 - [x] 22. **Ida y vuelta.** Abrir el código generado, cambiarlo a mano y volver a abrirlo en el editor sin perder nada.
 - [x] 23. **Vista real.** Botón "Ver en Amiga": compila, arranca el emulador y muestra la captura en el webview.
-- [ ] 24. **Ejemplo y documentación.** La ventana del navegador (tarea 10) hecha con el editor.
+- [x] 24. **Ejemplo y documentación.** La ventana del navegador (tarea 10) hecha con el editor.
 
 ## Bitácora
 
@@ -678,3 +678,31 @@ Formato:
   en Chromium el botón manda la petición y el webview muestra estado y captura (640 x 256).
 - No probado: dentro de VS Code de verdad.
 - Tests: `npm test` 26/26.
+
+### 2026-10-16 — Tarea 24 (ejemplo y documentación del editor)
+- Hecho: `examples/mui_navegador.dashui` (las dos ventanas de `mui_navegador.dash`: la principal con menú, botones,
+  campo, historial con balance, zona de dibujo, barra, estado y progreso, y "Acerca de"; eventos y objetos desactivados
+  en el `.dashui`) y `examples/mui_navegador_editor.dash`, la misma lógica sin código de interfaz (34 ejemplos). La
+  captura en el A1200 3.1 sale igual que la del ejemplo escrito a mano. Documentación: manual (20b), `MUI_EDITOR.md`
+  (estado e instalación), `ROADMAP.md` (sesión 7 y la pregunta de la UI declarativa, resuelta con `.dashui`),
+  `CLAUDE.md` local.
+- Tests: 140/140 sin emulador; 338/338 con `--emu --emu-a500 --emu-32`; 208/208 con `--emu --memcheck`; ejemplos 34/34; `npm test` 26/26.
+
+## Resumen final
+
+Plan terminado el 2026-10-16 (tareas 1-24).
+
+- **MUI 5 (1-11):** 67 builtins `mui_` (ventanas, grupos, pestañas, menús, campos, listas, imágenes, zona de dibujo con
+  una función Dash, temporizador, señales); entorno con el SDK fuera de git, máquinas con MUI en el banco de pruebas,
+  capturas de pantalla; ejemplo de la ventana del navegador. Arreglos generales: textos en Latin-1, MUI pide 32 KB de
+  pila, la `MUI_NewObject` del SDK falla con `-O2`.
+- **GadTools y ReAction (12-18):** auditoría, 14 fallos arreglados (los `gt_*` y los menús no recibían eventos, `blixel`
+  no compilaba, el gancho de dibujo de ReAction no se enganchaba...), 35 builtins nuevos, `On Menu`, varias ventanas
+  en el `EventLoop`, optimizaciones, tests con clics y menús reales por `input.device`.
+- **Editor visual (19-24):** formato `.dashui` importable por el compilador y extensión de VS Code (`editor/vscode/`)
+  con resaltado, comandos, editor de ventanas y vista real en el Amiga emulado.
+- **Números:** 425 builtins; 140 tests sin emulador, 338 en las tres máquinas, 208 con `--memcheck`; 34 ejemplos; `npm test` de la extensión 26/26.
+- **Pendiente:** probar la extensión dentro de VS Code de verdad e instalarla (decisión del usuario); atajos de teclado
+  y posiciones según la fuente en GadTools; varias ventanas en `gt_*`/ReAction; clics en los gadgets ReAction nuevos y
+  en el requester de `getfile`; menús de MUI 5 vistos en pantalla (solo por dentro); interpolación con llamadas y
+  listas `Array` con tipo (lenguaje); juntar las ramas `mui` y `dashweb` en `main` y subirlas (decisión del usuario).
