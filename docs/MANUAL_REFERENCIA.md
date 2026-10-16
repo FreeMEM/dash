@@ -1353,6 +1353,26 @@ end
 Si varios `On Key` encajan con la tecla, se ejecutan todos, en orden. Las teclas al
 soltarse no cuentan. Si el programa usa teclas, la ventana las pide a Intuition al abrirse.
 
+### Clics y temporizador en el EventLoop
+
+```
+paso = 100
+EventLoop
+    On Click            # boton izquierdo pulsado en la ventana
+        Print "" + click_x() + "," + click_y()   # dentro de los bordes (donde se dibuja)
+    end
+    On Timer paso       # cada 100 ms (un numero o una variable, que se lee cada vez)
+        Print "tic"
+    end
+    On Close
+        Stop
+    end
+end
+```
+
+`On Timer` usa `timer.device` mientras el bucle espera: no gasta CPU entre tics. Un solo `On Timer`
+por bucle; todavia no con las ventanas de `window_create`.
+
 ### Raton
 
 ```

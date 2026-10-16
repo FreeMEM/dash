@@ -157,12 +157,15 @@ dash_grammar_minimal = r"""
 
     // Event loop
     event_loop: "EventLoop" (event_handler | comment_line)* "end"
-    ?event_handler: on_close | on_key | on_gadget | on_menu
+    ?event_handler: on_close | on_key | on_gadget | on_menu | on_click | on_timer
 
     on_close: "On" "Close" instruction* "end"
     on_gadget: "On" "Gadget" instruction* "end"
     on_menu: "On" "Menu" instruction* "end"
     on_key: "On" "Key" (ESCAPED_STRING | INT)? instruction* "end"
+    // dashweb D27: a left click in the window (click_x(), click_y()); every N ms (a number or a variable)
+    on_click: "On" "Click" instruction* "end"
+    on_timer: "On" "Timer" (INT | ID) instruction* "end"
 
     // Expressions with precedence
     ?expression: or_expr

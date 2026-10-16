@@ -240,6 +240,22 @@ class OnGadgetHandler(ASTNode):
 
 
 @dataclass
+class OnClickHandler(ASTNode):
+    """On Click: the left mouse button went down in the window (click_x(), click_y()) (dashweb D27)."""
+    body: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class OnTimerHandler(ASTNode):
+    """On Timer N: every N milliseconds while the EventLoop waits; N is a number or a variable,
+    read again each time (dashweb D27)."""
+    interval: Union[int, str] = 0
+    body: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class OnKeyHandler(ASTNode):
     """On Key handler: any key (key None), one character ('"a"'), a key name
     ('"ESC"', see KEY_NAMES) or a raw key code (int)."""

@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 475 funciones, 475 implementadas, 0 sin implementar.
+Total: 477 funciones, 477 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -407,6 +407,8 @@ Total: 475 funciones, 475 implementadas, 0 sin implementar.
 |---|---|---|---|
 | `arg_count()` | `LONG` | How many arguments the program got from the Shell (0 from the Workbench) |  |
 | `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none) |  |
+| `click_x()` | `LONG` | X of the last On Click, in the window (inside its borders) |  |
+| `click_y()` | `LONG` | Y of the last On Click, in the window (inside its borders) |  |
 | `time_ms()` | `LONG` | Milliseconds since the program started (EClock of timer.device) |  |
 
 ## Audio

@@ -11,7 +11,7 @@ from string import Template
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -1377,6 +1377,66 @@ static void _dash_image_cleanup(void) {
     LONG i;
     for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i]) _dash_image_free((LONG)_dash_imgs[i]);
     if (DataTypesBase) { CloseLibrary(DataTypesBase); DataTypesBase = NULL; }
+}
+
+"""
+
+    # On Click and On Timer of the EventLoop (dashweb D27): where the click was, and a
+    # timer.device request every N ms whose signal the loop waits for with the window's.
+    CLICK_RUNTIME = """\
+/* Dash Click Runtime: the last On Click, inside the window's borders */
+static LONG _dash_click_x = 0;
+static LONG _dash_click_y = 0;
+
+"""
+
+    LOOP_TIMER_RUNTIME = """\
+/* Dash Loop Timer Runtime (On Timer) */
+#include <devices/timer.h>
+static struct MsgPort *_dash_lt_port = NULL;
+static struct timerequest *_dash_lt_req = NULL;
+static BOOL _dash_lt_sent = FALSE;
+
+/* Asks for a signal in ms milliseconds (if none is pending) */
+static void _dash_lt_send(LONG ms) {
+    if (!_dash_lt_port) {
+        _dash_lt_port = CreateMsgPort();
+        if (_dash_lt_port) _dash_lt_req = (struct timerequest *)CreateIORequest(_dash_lt_port, sizeof(struct timerequest));
+        if (_dash_lt_req && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)_dash_lt_req, 0) != 0) {
+            DeleteIORequest((struct IORequest *)_dash_lt_req);
+            _dash_lt_req = NULL;
+        }
+    }
+    if (!_dash_lt_req || _dash_lt_sent) return;
+    if (ms < 1) ms = 1;
+    _dash_lt_req->tr_node.io_Command = TR_ADDREQUEST;
+    _dash_lt_req->tr_time.tv_secs = ms / 1000;
+    _dash_lt_req->tr_time.tv_micro = (ms % 1000) * 1000;
+    SendIO((struct IORequest *)_dash_lt_req);
+    _dash_lt_sent = TRUE;
+}
+
+static ULONG _dash_lt_signal(void) {
+    return _dash_lt_port ? 1UL << _dash_lt_port->mp_SigBit : 0;
+}
+
+/* TRUE when the time came (the request is back and can be sent again) */
+static BOOL _dash_lt_fired(void) {
+    if (!_dash_lt_sent || !CheckIO((struct IORequest *)_dash_lt_req)) return FALSE;
+    WaitIO((struct IORequest *)_dash_lt_req);
+    _dash_lt_sent = FALSE;
+    return TRUE;
+}
+
+static void _dash_lt_cleanup(void) {
+    if (_dash_lt_req) {
+        if (_dash_lt_sent) { AbortIO((struct IORequest *)_dash_lt_req); WaitIO((struct IORequest *)_dash_lt_req); }
+        CloseDevice((struct IORequest *)_dash_lt_req);
+        DeleteIORequest((struct IORequest *)_dash_lt_req);
+        _dash_lt_req = NULL;
+    }
+    if (_dash_lt_port) { DeleteMsgPort(_dash_lt_port); _dash_lt_port = NULL; }
+    _dash_lt_sent = FALSE;
 }
 
 """
@@ -8366,6 +8426,8 @@ _RUNTIME_FLAGS = [
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
+    ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
+    ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
     ("FLOAT_RUNTIME", "uses_float"),
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
@@ -8591,6 +8653,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
+        self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
+        self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
@@ -8655,6 +8719,10 @@ class CodeGenerator(ASTVisitor):
             if isinstance(n, FunctionCall) and n.name in area_funcs:
                 self.needs_area = True
             # Windows must ask Intuition for key events before they open
+            if isinstance(n, OnClickHandler):
+                self.uses_click = True        # the window asks for mouse buttons when it opens
+            if isinstance(n, OnTimerHandler):
+                self.uses_loop_timer = True
             if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
                 self.uses_keys = True
             if isinstance(n, OnGadgetHandler) or (isinstance(n, FunctionCall) and get_builtin(n.name) and
@@ -8821,7 +8889,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.WINDOW_RUNTIME)
 
         if self.uses_winmgr:
-            idcmp = "IDCMP_CLOSEWINDOW" + (" | IDCMP_RAWKEY" if self.uses_keys else "")
+            idcmp = ("IDCMP_CLOSEWINDOW" + (" | IDCMP_RAWKEY" if self.uses_keys else "")
+                     + (" | IDCMP_MOUSEBUTTONS" if self.uses_click else ""))
             parts.append(f"#define _DASH_WIN_IDCMP ({idcmp})\n"
                          "static void _dash_window_closed(struct Window *win);\n")
             parts.append(CTemplates.WINMGR_RUNTIME)
@@ -8842,6 +8911,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.IMAGE_RUNTIME)
         if self.uses_args:
             parts.append(CTemplates.ARGS_RUNTIME)
+        if self.uses_click:
+            parts.append(CTemplates.CLICK_RUNTIME)
+        if self.uses_loop_timer:
+            parts.append(CTemplates.LOOP_TIMER_RUNTIME)
         if self.uses_time:
             parts.append(CTemplates.TIME_RUNTIME)
 
@@ -9036,6 +9109,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_time_cleanup();\n")
         if self.uses_images:
             cleanup.append("    _dash_image_cleanup();\n")   # gives back the pens of the remap
+        if self.uses_loop_timer:
+            cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_fonts:
             cleanup.append("    _dash_font_cleanup();\n")
         if self.uses_tls:
@@ -9474,6 +9549,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.idcmp_flags.add("IDCMP_REFRESHWINDOW")
         if self.uses_keys:
             self.context.idcmp_flags.add("IDCMP_RAWKEY")
+        if self.uses_click:
+            self.context.idcmp_flags.add("IDCMP_MOUSEBUTTONS")
         idcmp_str = " | ".join(sorted(self.context.idcmp_flags))
 
         # Get window properties with defaults
@@ -9525,6 +9602,11 @@ static {ret_type} {method_name}({params_str}) {{
         # Start event loop
         key_record = ("            if (msg_class == IDCMP_RAWKEY) _dash_key_record(msg);\n"
                       if self.uses_keys else "")
+        if any(isinstance(h, OnClickHandler) for h in node.handlers):
+            # where, before the message goes back: inside the borders (the window's own
+            # coordinates for drawing, also in GimmeZeroZero windows)
+            key_record += ("            if (msg_class == IDCMP_MOUSEBUTTONS) { _dash_click_x = msg->MouseX - msg->IDCMPWindow->BorderLeft; "
+                           "_dash_click_y = msg->MouseY - msg->IDCMPWindow->BorderTop; }\n")
         if self.uses_gadgets:
             # GadTools gadgets need GT_GetIMsg; the gadget event is read before the reply
             key_record += ("            _dash_gev = _dash_gadget_event(msg);\n"
@@ -9545,12 +9627,29 @@ static {ret_type} {method_name}({params_str}) {{
             assert "_dash_loop_next" in code
         if self.uses_gadgets:
             code = code.replace("GT_ReplyIMsg((struct Message *)msg);", "GT_ReplyIMsg(msg);")
+        timers = [h for h in node.handlers if isinstance(h, OnTimerHandler)]
+        if timers:
+            # On Timer: wait for the window or the timer; its body runs when the time comes
+            t = timers[0]
+            wait = f"        WaitPort(win_{window}->UserPort);\n"
+            if wait not in code:
+                self.emit("    // Error: On Timer does not work with window_create windows yet\n")
+            else:
+                self.context.enter_scope("handler")
+                body = "".join(self._generate_statement(stmt) for stmt in t.body)
+                body += self._frees(self.context.current_owned())
+                self.context.exit_scope()
+                interval = t.interval if isinstance(t.interval, int) else self._generate_expression(VarRef(name=t.interval))
+                code = code.replace(wait,
+                    f"        _dash_lt_send({interval});\n"
+                    f"        if (win_{window}) Wait((1UL << win_{window}->UserPort->mp_SigBit) | _dash_lt_signal());\n"
+                    f"        if (_dash_lt_fired()) {{\n{body}        }}\n", 1)
         self.emit(code)
 
         # Generate handlers; all On Key handlers share one "case IDCMP_RAWKEY"
         key_handlers = [h for h in node.handlers if isinstance(h, OnKeyHandler)]
         for handler in node.handlers:
-            if not isinstance(handler, OnKeyHandler):
+            if not isinstance(handler, (OnKeyHandler, OnTimerHandler)):
                 self.visit(handler)
         if key_handlers:
             self._generate_key_handlers(key_handlers)
@@ -9589,6 +9688,16 @@ static {ret_type} {method_name}({params_str}) {{
             handler_code="".join(handler_code)
         )
         self.emit(code)
+
+    def visit_OnClickHandler(self, node: OnClickHandler):
+        """On Click: the left button went down in the window (click_x(), click_y())."""
+        self.uses_click = True
+        self.emit("                case IDCMP_MOUSEBUTTONS:\n                    if (msg_code == SELECTDOWN) {\n")
+        self.context.enter_scope("handler")
+        body = "".join(self._generate_statement(stmt) for stmt in node.body)
+        body += self._frees(self.context.current_owned())
+        self.context.exit_scope()
+        self.emit(body + "                    }\n                    break;\n")
 
     def visit_OnMenuHandler(self, node: OnMenuHandler):
         """On Menu: an item of the menus made with menu_title/menu_item... was chosen; the

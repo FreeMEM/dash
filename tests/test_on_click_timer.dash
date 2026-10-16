@@ -1,0 +1,91 @@
+# Test: On Timer and On Click in the EventLoop (dashweb D27). The timer (every "paso" ms, a
+# variable read each time) counts; at the third tick a helper process clicks inside the window
+# through input.device, 30 and 20 pixels inside its borders: click_x() and click_y() say so.
+# expect-c: _dash_lt_send(paso);
+# expect-c: case IDCMP_MOUSEBUTTONS:
+# expect-out: tic 1
+# expect-out: tic 2
+# expect-out: tic 3
+# expect-out: clic en 30,20
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+
+Window W
+    title "Clic"
+    width 200
+    height 80
+end
+
+@native func proceso_clic()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    struct Window *w = win_W;
+    if (w && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        memset(&ie, 0, sizeof(ie));
+        pp.iepp_Screen = w->WScreen;
+        pp.iepp_Position.X = w->LeftEdge + w->BorderLeft + 30;
+        pp.iepp_Position.Y = w->TopEdge + w->BorderTop + 20;
+        ie.ie_Class = IECLASS_NEWPOINTERPOS;
+        ie.ie_SubClass = IESUBCLASS_PIXEL;
+        ie.ie_EventAddress = (APTR)&pp;
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_LBUTTON;
+        ie.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+        ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+"""
+end
+
+@native func lanzar()
+"""
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_clic, NP_Name, (ULONG)"dash_clic", TAG_DONE);
+"""
+end
+
+Main
+    W.open
+    paso = 100
+    tics = 0
+    EventLoop
+        On Timer paso
+            tics = tics + 1
+            if tics <= 3
+                Print "tic " + tics
+            end
+            if tics == 3
+                lanzar()
+            end
+            if tics > 100
+                Print "sin clic"
+                Stop
+            end
+        end
+        On Click
+            Print "clic en " + click_x() + "," + click_y()
+            Stop
+        end
+        On Close
+            Stop
+        end
+    end
+    Wait 1
+    Print "fin"
+end

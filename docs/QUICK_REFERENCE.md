@@ -142,6 +142,10 @@ Main
         On Menu            # menu_title/menu_item/menu_attach; menu_id() = item id
             Stop
         end
+        On Click           # left button in the window: click_x(), click_y() inside the borders
+        end
+        On Timer 100       # every 100 ms (a number or a variable)
+        end
         On Close
             Stop
         end

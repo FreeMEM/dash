@@ -7,7 +7,7 @@ from typing import List, Any, Optional
 
 from compiler.ast_nodes import (
     Program, WindowDef, WindowProperty, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, NilLiteral,
@@ -531,7 +531,7 @@ class DashASTBuilder(Transformer):
     def event_loop(self, items) -> EventLoop:
         """Build an event loop node."""
         handlers = [item for item in items if isinstance(item, (OnCloseHandler, OnKeyHandler, OnGadgetHandler,
-                                                                OnMenuHandler))]
+                                                                OnMenuHandler, OnClickHandler, OnTimerHandler))]
         return EventLoop(handlers=handlers)
 
     def event_handler(self, items):
@@ -548,6 +548,14 @@ class DashASTBuilder(Transformer):
         """Build an On Close handler node."""
         body = self._flatten_statements(items)
         return OnCloseHandler(body=body)
+
+    def on_click(self, items) -> OnClickHandler:
+        return OnClickHandler(body=self._flatten_statements(items))
+
+    def on_timer(self, items) -> OnTimerHandler:
+        token = items.pop(0)
+        interval = parse_int(token.value) if token.type == 'INT' else token.value
+        return OnTimerHandler(interval=interval, body=self._flatten_statements(items))
 
     def on_key(self, items) -> OnKeyHandler:
         """Build an On Key handler node."""
