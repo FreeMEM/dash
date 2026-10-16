@@ -7351,6 +7351,14 @@ static void _dash_mui_window_close(APTR win) {
     if (win) SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
 }
 
+/* TRUE if the window is the active one: the one the user is using (dashweb D32: several windows
+   made from the same .dashui share their event numbers) */
+static LONG _dash_mui_window_active(APTR win) {
+    IPTR active = 0;
+    if (win) GetAttr(MUIA_Window_Activate, (Object *)win, &active);
+    return active != 0;
+}
+
 /* Open a new group: put it in the open one and make it the open one; children
    go into "inner" (a Scrollgroup's Virtgroup), the group itself into its parent */
 static APTR _dash_mui_push(Object *group, Object *inner, LONG kind) {

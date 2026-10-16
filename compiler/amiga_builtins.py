@@ -3147,6 +3147,13 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_window_close(${win})",
         description="Close a window (it still exists)"
     ),
+    "mui_window_active": BuiltinFunc(
+        name="mui_window_active",
+        params=["win"],
+        return_type="LONG",
+        c_template="_dash_mui_window_active(${win})",
+        description="1 if the window is the active one (several windows from one .dashui share event numbers; dashweb D32)"
+    ),
     "mui_vgroup_begin": BuiltinFunc(
         name="mui_vgroup_begin",
         params=[],

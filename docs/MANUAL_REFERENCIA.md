@@ -2549,6 +2549,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_on_ack(campo, id)` | Evento al pulsar Intro en un campo de texto. |
 | `mui_window_open(ventana)` | Abre la ventana; falso si no pudo. |
 | `mui_window_close(ventana)` | La cierra (sigue existiendo). |
+| `mui_window_active(ventana)` | 1 si es la ventana activa: con varias ventanas del mismo `.dashui` (mismos números de evento), dice de cuál viene un evento. |
 | `mui_on_press(boton, id)`, `mui_on_close(ventana, id)` | Eventos. |
 | `mui_wait_event()`, `mui_poll_event()`, `mui_press(boton)` | Esperar, consultar o lanzar eventos. |
 | `mui_timer(ms, id)` | Dentro de `ms` milisegundos, `mui_wait_event` devuelve `id` (una vez; para repetir, volver a llamar; 0 = cancelar). |

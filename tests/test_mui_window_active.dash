@@ -1,0 +1,40 @@
+# mui_window_active (dashweb D32): which window is the active one. Two windows: the last one
+# opened is active; after activating the first one (as a click on it would), that one.
+# emu-needs: muimaster.library
+# expect-out: abiertas: 0 1
+# expect-out: tras activar la primera: 1 0
+# expect-out: fin
+
+@native func activar(win: Int)
+"""
+    SetAttrs((Object *)win, MUIA_Window_Activate, TRUE, TAG_DONE);
+"""
+end
+
+@native(borrow) func esperar(ticks: Int)
+"""
+    Delay(ticks);
+"""
+end
+
+Main
+    if mui_app_begin("Activa", "DASHACTIVA") == 0
+        Print "sin MUI"
+    else
+        w1 = mui_window_begin("Primera", 0)
+            mui_text("una")
+        mui_window_end()
+        w2 = mui_window_begin("Segunda", 0)
+            mui_text("dos")
+        mui_window_end()
+        mui_window_open(w1)
+        mui_window_open(w2)
+        esperar(25)
+        Print "abiertas: " + mui_window_active(w1) + " " + mui_window_active(w2)
+        activar(w1)
+        esperar(25)
+        Print "tras activar la primera: " + mui_window_active(w1) + " " + mui_window_active(w2)
+        mui_app_end()
+        Print "fin"
+    end
+end

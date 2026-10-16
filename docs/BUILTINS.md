@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 478 funciones, 478 implementadas, 0 sin implementar.
+Total: 479 funciones, 479 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -522,6 +522,7 @@ Total: 478 funciones, 478 implementadas, 0 sin implementar.
 | `mui_window_end()` | `void` | End the window started with mui_window_begin |  |
 | `mui_window_open(win)` | `LONG` | Open a window; false if it could not open |  |
 | `mui_window_close(win)` | `void` | Close a window (it still exists) |  |
+| `mui_window_active(win)` | `LONG` | 1 if the window is the active one (several windows from one .dashui share event numbers; dashweb D32) |  |
 | `mui_vgroup_begin()` | `APTR` | Start a vertical group inside the open group |  |
 | `mui_hgroup_begin()` | `APTR` | Start a horizontal group inside the open group |  |
 | `mui_group_end()` | `void` | End the open group |  |
