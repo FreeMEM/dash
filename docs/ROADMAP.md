@@ -804,6 +804,18 @@ tests/
       Code en `editor/vscode/` (resaltado, compilar, emulador, editor de ventanas con vista aproximada y captura real
       del Amiga); ejemplo `examples/mui_navegador.dashui`
 
+### Sesión 8 (Fecha: 2026-10-16) — Pendientes (rama `pendientes`)
+- [x] `debug_break()` y `tools/emu_run.py --debug`: el depurador de FS-UAE desde un programa (uaelib 15)
+- [x] Interpolación con cualquier expresión (`"#{a + 1}"`, `"#{v.length}"`, `"#{f(x)}"`); el resultado es siempre
+      texto (`"#{a}#{b}"` con números ya no los suma)
+- [x] Listas de `Fixed` (`[Fixed(1.5), 2]`, `var l: [Fixed]`, parámetros, retornos y campos)
+- [x] `window_check_close`, `key_pressed`, `key_get` y `key_wait` leen los mensajes en un solo sitio (ninguno tira lo
+      que espera otro); `key_pressed` solo mira
+- [x] GadTools: atajos con `_` en botones y casillas; gadgets con ancho o alto 0 medidos con la fuente de la pantalla;
+      `gadget_width`/`gadget_height`
+- [x] ReAction con varias ventanas (hasta 4): `ra_window_use`, `ra_event_window`
+- Los `gt_*` siguen siendo de una ventana: para varias, gadgets por número (que ya lo admiten)
+
 ---
 
 ## Notas y Decisiones
