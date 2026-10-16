@@ -2089,7 +2089,14 @@ Tambien: `button_enable/disable`, `checkbox_get/set`, `slider_get/set`, `textfie
 | `radio_create(win, x, y, "A|B|C")`, `radio_get/set` | Botones de radio, uno bajo otro |
 | `integer_create(win, x, y, w, h, valor)`, `integer_get/set` | Campo de número |
 | `palette_create(win, x, y, w, h, prof)`, `palette_get/set` | Paleta de 2^prof colores; valor = color |
-| `number_create(win, x, y, w, h, valor)`, `number_set` | Número en un recuadro (solo se lee) | Los gadgets se liberan al salir; no se usan despues de cerrar su ventana.
+| `number_create(win, x, y, w, h, valor)`, `number_set` | Número en un recuadro (solo se lee) |
+
+**Atajos de teclado:** un `_` en la etiqueta de un boton o una casilla subraya la letra siguiente
+(`button_create(0, 10, 10, 80, 14, "_Guardar")`), y esa tecla, con o sin Mayusculas, lo pulsa en el
+`EventLoop` como un clic: llega a `On Gadget` con su `gadget_id()` y una casilla cambia. No llega a
+`On Key`; las demas teclas si. Con Amiga, Ctrl o Alt no cuenta (son de los menus).
+
+Los gadgets se liberan al salir; no se usan despues de cerrar su ventana.
 GadTools no admite ventanas GimmeZeroZero (todas las de Dash lo son): la fila elegida en un
 listview la calcula Dash con la posicion del raton.
 

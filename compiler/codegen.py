@@ -4951,12 +4951,12 @@ static LONG _dash_map_key(UWORD code, UWORD qualifier, APTR prev, UBYTE *buf, LO
     return n;
 }
 
-/* Call with a RAWKEY message before ReplyMsg (IAddress is only valid until then) */
 static void _dash_key_record_raw(UWORD code, UWORD qual, APTR prev) {
     _dash_last_key = code;
     _dash_map_key(code, qual, prev, _dash_last_key_text, sizeof(_dash_last_key_text));
 }
 
+/* Call with a RAWKEY message before ReplyMsg (IAddress is only valid until then) */
 static void _dash_key_record(struct IntuiMessage *msg) {
     _dash_key_record_raw(msg->Code, msg->Qualifier, msg->IAddress ? *(APTR *)msg->IAddress : NULL);
 }
@@ -5523,6 +5523,7 @@ typedef struct {
     STRPTR *labels;           /* cycle and radio options: "A|B|C" split in a copy */
     STRPTR labels_text;
     LONG nlabels;
+    UBYTE key;                /* the letter after "_" in the label ("_Guardar": g), 0 if none */
 } _DashGad;
 
 static _DashGad _dash_gads[_DASH_MAX_GADS + 1];
@@ -5540,6 +5541,13 @@ static void _dash_gads_window_gone(struct Window *win) {
         if (_dash_gads[i].win == win) _dash_gads[i].win = NULL;
 }
 
+#ifdef _DASH_GADGET_KEYS
+/* Lower case of a Latin-1 letter */
+static UBYTE _dash_lower_char(UBYTE c) {
+    return ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) ? c + 32 : c;
+}
+#endif
+
 static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LONG y, LONG w, LONG h,
                           STRPTR label, ULONG place, struct TagItem *tags) {
     struct Window *win = _DASH_WIN_FROM_HANDLE(win_handle);
@@ -5547,6 +5555,9 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     struct Gadget *ctx;
     _DashGad *g;
     LONG i = 1;
+    /* "_" in a label underlines the next letter (the key that presses the gadget) */
+    struct TagItem utags[] = { { GT_Underscore, '_' }, { TAG_MORE, (ULONG)tags } };
+    if (!tags) utags[1].ti_Tag = TAG_DONE;
     if (!win || !GadToolsBase) return 0;
     while (i <= _DASH_MAX_GADS && _dash_gads[i].gad) i++;
     if (i > _DASH_MAX_GADS) return 0;
@@ -5567,7 +5578,7 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     ng.ng_Flags = place;
     ng.ng_VisualInfo = g->vi;
     ng.ng_UserData = NULL;
-    g->gad = ctx ? CreateGadgetA(gt_kind, ctx, &ng, tags) : NULL;
+    g->gad = ctx ? CreateGadgetA(gt_kind, ctx, &ng, utags) : NULL;
     if (!g->gad) {
         FreeGadgets(g->glist);
         FreeVisualInfo(g->vi);
@@ -5576,11 +5587,22 @@ static LONG _dash_gad_new(LONG win_handle, LONG kind, ULONG gt_kind, LONG x, LON
     }
     g->win = win;
     g->kind = kind;
+#ifdef _DASH_GADGET_KEYS
+    if (label) {
+        STRPTR u = label;
+        while (*u && *u != '_') u++;
+        if (*u && u[1]) g->key = _dash_lower_char(u[1]);
+    }
+#endif
     _dash_on_close(_dash_gads_window_gone);
     for (g->last = g->glist; g->last->NextGadget; g->last = g->last->NextGadget) ;
     /* INTUITICKS (ten wake-ups a second) only for a listview's scroll arrows */
     ModifyIDCMP(win, win->IDCMPFlags | IDCMP_GADGETUP | IDCMP_GADGETDOWN | IDCMP_MOUSEMOVE |
-                     IDCMP_REFRESHWINDOW | (gt_kind == LISTVIEW_KIND ? IDCMP_INTUITICKS : 0));
+                     IDCMP_REFRESHWINDOW | (gt_kind == LISTVIEW_KIND ? IDCMP_INTUITICKS : 0)
+#ifdef _DASH_GADGET_KEYS
+                     | (g->key ? IDCMP_RAWKEY : 0)
+#endif
+                     );
     AddGList(win, g->glist, -1, -1, NULL);
     RefreshGList(g->glist, win, NULL, -1);
     GT_RefreshWindow(win, NULL);
@@ -5638,6 +5660,33 @@ static LONG _dash_gadget_event(struct IntuiMessage *msg) {
 static LONG _dash_gadget_id(void) {
     return _dash_gadget_last;
 }
+
+#ifdef _DASH_GADGET_KEYS
+/* EventLoop: a key that is the underlined letter of a button or checkbox in that window presses
+   it (a checkbox changes), as a click would; returns its handle (or 0). Shift does not matter;
+   with Amiga, Ctrl or Alt it is not a gadget's key (menus, other characters). */
+static LONG _dash_gadget_key(struct IntuiMessage *msg) {
+    UBYTE buf[4];
+    LONG i;
+    if (msg->Class != IDCMP_RAWKEY || (msg->Code & IECODE_UP_PREFIX)) return 0;
+    if (msg->Qualifier & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND | IEQUALIFIER_CONTROL |
+                          IEQUALIFIER_LALT | IEQUALIFIER_RALT)) return 0;
+    if (_dash_map_key(msg->Code, msg->Qualifier & ~(IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT | IEQUALIFIER_CAPSLOCK),
+                      msg->IAddress ? *(APTR *)msg->IAddress : NULL, buf, sizeof(buf)) != 1) return 0;
+    for (i = 1; i <= _DASH_MAX_GADS; i++) {
+        _DashGad *g = &_dash_gads[i];
+        if (!g->gad || !g->key || g->win != msg->IDCMPWindow || g->key != _dash_lower_char(buf[0])
+            || (g->gad->Flags & GFLG_DISABLED)) continue;
+        if (g->kind == _DASH_GK_CHECKBOX) {
+            g->value = !g->value;
+            GT_SetGadgetAttrs(g->gad, g->win, NULL, GTCB_Checked, g->value, TAG_DONE);
+        }
+        _dash_gadget_last = i;
+        return i;
+    }
+    return 0;
+}
+#endif
 
 static LONG _dash_button_create(LONG win, LONG x, LONG y, LONG w, LONG h, STRPTR label) {
     return _dash_gad_new(win, _DASH_GK_BUTTON, BUTTON_KIND, x, y, w, h, label, PLACETEXT_IN, NULL);
@@ -9164,6 +9213,7 @@ class CodeGenerator(ASTVisitor):
         self.lent_str_fields: Set[tuple] = set()      # (struct, field) passed by _DASH_LEND_ macros
         self.uses_winmgr: bool = False  # window_create() handles
         self.uses_gadgets: bool = False  # button_create()... handles
+        self.uses_gadget_keys: bool = False  # a button or checkbox label with "_": its key presses it
         self.uses_bitmaps: bool = False  # bitmap_create()... ids
         self.uses_copper: bool = False   # copper_create()...
         self.uses_sound: bool = False    # sound_*, tone_play
@@ -9210,6 +9260,9 @@ class CodeGenerator(ASTVisitor):
                                              "cycle", "radio", "integer", "palette", "number")):
                 self.uses_gadgets = True
                 self.needs_gadtools = True
+                if isinstance(n, FunctionCall) and n.name in ("button_create", "checkbox_create") and any(
+                        isinstance(a, StringLiteral) and "_" in a.value for a in n.arguments):
+                    self.uses_gadget_keys = self.uses_keys = True
             # gt_* and menu_* gadgets and menus: the window asks for their events when it opens
             if isinstance(n, OnMenuHandler) or (isinstance(n, FunctionCall) and get_builtin(n.name) and
                                                 n.name.split("_")[0] in ("gt", "menu")):
@@ -9419,6 +9472,8 @@ class CodeGenerator(ASTVisitor):
         if self.uses_gadgets:
             win_from = ("_dash_window_get(h)" if self.uses_winmgr else "((h) == 0 ? _dash_win : NULL)")
             parts.append(f"#define _DASH_WIN_FROM_HANDLE(h) {win_from}\n")
+            if self.uses_gadget_keys:
+                parts.append("#define _DASH_GADGET_KEYS\n")
             parts.append(CTemplates.GADGET_RUNTIME)
 
         # Add ASL runtime if needed
@@ -10100,6 +10155,10 @@ static {ret_type} {method_name}({params_str}) {{
         if self.uses_gadgets:
             # GadTools gadgets need GT_GetIMsg; the gadget event is read before the reply
             key_record += ("            _dash_gev = _dash_gadget_event(msg);\n"
+                           + ("            if (!_dash_gev && msg_class == IDCMP_RAWKEY && (_dash_gev = _dash_gadget_key(msg)))\n"
+                              "                msg_class = IDCMP_GADGETUP;   /* the key of a gadget: as a click */\n"
+                              if self.uses_gadget_keys else "")
+                           +
                            "            if (msg_class == IDCMP_REFRESHWINDOW) { GT_BeginRefresh(win_%s); "
                            "GT_EndRefresh(win_%s, TRUE); }\n" % (window, window))
             getmsg, replymsg = "GT_GetIMsg", "GT_ReplyIMsg"

@@ -1,0 +1,117 @@
+# A "_" in the label of a button or checkbox (button_create, checkbox_create) underlines the next
+# letter and that key presses the gadget in the EventLoop, as a click: On Gadget with its
+# gadget_id(); a checkbox changes. Shift does not matter. Other keys still reach On Key. A helper
+# process types g, Shift+A, x and A again through input.device, then clicks the close gadget.
+# expect-out: botón guardar
+# expect-out: casilla 1
+# expect-out: tecla x
+# expect-out: casilla 0
+# expect-out: fin
+# expect-c: GT_Underscore
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Task *teclas_padre;"
+
+Window W
+    title "Atajos"
+    width 220
+    height 90
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    static const UWORD codigos[4] = { 0x24, 0x20, 0x32, 0x20 };   /* g, a, x, a */
+    static const UWORD quals[4] = { 0, IEQUALIFIER_LSHIFT, 0, 0 };
+    struct Window *w = win_W;
+    Delay(50);
+    if (w && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        LONG i;
+        ActivateWindow(w);
+        Delay(10);
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < 4; i++) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWKEY;
+            ie.ie_Code = codigos[i];
+            ie.ie_Qualifier = quals[i];
+            DoIO((struct IORequest *)io);
+            Delay(2);
+            ie.ie_Code = codigos[i] | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+            Delay(10);
+        }
+        memset(&ie, 0, sizeof(ie));
+        pp.iepp_Screen = w->WScreen;
+        pp.iepp_Position.X = w->LeftEdge + 6;
+        pp.iepp_Position.Y = w->TopEdge + 5;
+        ie.ie_Class = IECLASS_NEWPOINTERPOS;
+        ie.ie_SubClass = IESUBCLASS_PIXEL;
+        ie.ie_EventAddress = (APTR)&pp;
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_LBUTTON;
+        ie.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+        ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(teclas_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    teclas_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE) == NULL)
+        teclas_padre = NULL;
+"""
+end
+
+@native func esperar_teclas()
+"""
+    if (teclas_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+Main
+    W.open
+    guardar = button_create(0, 10, 10, 90, 14, "_Guardar")
+    activo = checkbox_create(0, 10, 32, "_Activo")
+    lanzar()
+    EventLoop
+        On Gadget
+            if gadget_id() == guardar
+                Print "botón guardar"
+            end
+            if gadget_id() == activo
+                Print "casilla " + checkbox_get(activo)
+            end
+        end
+        On Key
+            if key_raw() < 128
+                Print "tecla " + key_text(key_raw())
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    esperar_teclas()
+    Print "fin"
+end
