@@ -372,6 +372,15 @@ static void _dash_str_set(STRPTR *var, STRPTR value) {
     _dash_str_free(old);
 }
 
+/* var = value when value is known not to be a temporary (a literal, a field, a variable): a copy,
+   without looking for it in the list of temporaries */
+static void _dash_str_set_copy(STRPTR *var, STRPTR value) {
+    STRPTR old = *var;
+    if (value == old) return;
+    *var = value ? _dash_str_dup(value, FALSE) : NULL;
+    _dash_str_free(old);
+}
+
 /* The text leaves Dash's control (stored in an array, kept by the OS...):
    a temporary becomes permanent; anything else is copied into a permanent
    string, because its owner may free it. Freed only at exit, with the pool. */
@@ -9395,6 +9404,8 @@ class CodeGenerator(ASTVisitor):
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
         self.assigned_str_fields: Set[tuple] = set()  # (struct, field) of String fields some code sets
+        self.lent_obj_fields: Set[tuple] = set()      # (struct, field) of object fields passed as arguments
+        self.assigned_obj_fields: Set[tuple] = set()  # (struct, field) of object fields some code sets
         self.lent_str_fields: Set[tuple] = set()      # (struct, field) passed by _DASH_LEND_ macros
         self.uses_winmgr: bool = False  # window_create() handles
         self.uses_gadgets: bool = False  # button_create()... handles
@@ -9492,8 +9503,15 @@ class CodeGenerator(ASTVisitor):
             # (the callee could free it), else lent as it is (dashweb D22)
             parts.append("".join(
                 f"#define _DASH_LEND_{st}_{f}(p) "
-                + ("_dash_str_ret(p)" if {(st, f), ("*", f)} & self.assigned_str_fields else "(p)") + "\n"
+                + ("_dash_str_dup(p, TRUE)" if {(st, f), ("*", f)} & self.assigned_str_fields else "(p)") + "\n"
                 for st, f in sorted(self.lent_str_fields)))
+        if self.lent_obj_fields:
+            # An object field of a local or a parameter passed to a function: lent (held until the
+            # caller's temporaries go) if some code sets that field, else passed as it is
+            parts.append("".join(
+                f"#define _DASH_OLEND_{st}_{f}(p) "
+                + ("_dash_obj_lend(p)" if {(st, f), ("*", f)} & self.assigned_obj_fields else "(p)") + "\n"
+                for st, f in sorted(self.lent_obj_fields)))
         if self.autoclose:
             parts.append(CTemplates.AUTOCLOSE_RUNTIME.substitute(seconds=self.autoclose))
 
@@ -10663,9 +10681,9 @@ static {ret_type} {method_name}({params_str}) {{
                 self.context.declare_var(node.name)
                 self.context.own(node.name)
                 self.emit(f"{indent}STRPTR {node.name} = NULL;\n")
-                self.emit(f"{indent}_dash_str_set(&{node.name}, {self._lent_str(node.value, value)});\n")
+                self.emit(self._str_set_code(indent, f"&{node.name}", node.value, value))
             elif self.context.is_owned(node.name) or node.name in self.global_strings:
-                self.emit(f"{indent}_dash_str_set(&{node.name}, {self._lent_str(node.value, value)});\n")
+                self.emit(self._str_set_code(indent, f"&{node.name}", node.value, value))
             else:
                 self.emit(f"{indent}{node.name} = {value};\n")
             return
@@ -11118,7 +11136,7 @@ static {ret_type} {method_name}({params_str}) {{
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         elif self._is_string_expr(node.value):
             self.uses_strings = True
-            head = f"{indent}{{ STRPTR _dash_r = _dash_str_ret({value});\n"
+            head = f"{indent}{{ STRPTR _dash_r = {self._str_as_temp(node.value, value)};\n"
             release = f"{indent}_dash_tmp_release_keep(_dash_fm, _dash_r);\n"
         elif self._is_obj_expr(node.value) and getattr(self, "_lambda_depth", 0):
             head = f"{indent}{{ LONG _dash_r = (LONG)_dash_obj_escape({value});\n"
@@ -11773,13 +11791,14 @@ static {ret_type} {method_name}({params_str}) {{
         field = struct.get_field(node.member) if struct else None
         if not struct:
             self.assigned_str_fields.add(("*", node.member))   # unknown struct: any of them
+            self.assigned_obj_fields.add(("*", node.member))
         if field and field.field_type == "Fixed" and not self._is_fixed_expr(node.value):
             value = self._fixed_value(node.value)
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
             self.assigned_str_fields.add((struct.name, node.member))
-            self.emit(f"{indent}_dash_str_set(&{owner}->{node.member}, {self._lent_str(node.value, value)});\n")
+            self.emit(self._str_set_code(indent, f"&{owner}->{node.member}", node.value, value))
             return
         if field and field.weak:
             # weak: the field only points (dashweb D6)
@@ -11788,6 +11807,7 @@ static {ret_type} {method_name}({params_str}) {{
             return
         if field and self._is_obj_c_type(self._dash_type_to_c(field.field_type)):
             # and holds a reference to its struct and Array fields
+            self.assigned_obj_fields.add((struct.name, node.member))
             new = self._new_object(value)
             if new:
                 self.emit(f"{indent}_dash_obj_set_new((void **)&{owner}->{node.member}, {new});\n")
@@ -11920,11 +11940,35 @@ static {ret_type} {method_name}({params_str}) {{
                 return f"_DASH_LEND_{struct.name}_{arg.member}({code})"
         if self._is_string_expr(arg):
             self.uses_strings = True
-            return f"_dash_str_ret({code})"
+            return self._str_as_temp(arg, code)
         c_type = self._infer_c_type(arg)
         if self._is_obj_c_type(c_type):
+            field = self._unchanged_field_of_local(arg)
+            if field:
+                # an object field of a local variable or parameter: lent only if some code sets
+                # that field (else it lives as long as its owner, which the caller holds)
+                self.lent_obj_fields.add(field)
+                return f"(({c_type})_DASH_OLEND_{field[0]}_{field[1]}({code}))"
             return f"(({c_type})_dash_obj_lend({code}))"
         return code
+
+    def _unchanged_field_of_local(self, arg: ASTNode) -> Optional[tuple]:
+        """(struct, field) if arg reads a field (not weak) of a local variable, a parameter or self,
+        for _DASH_OLEND_: whether some code sets that field is only known at the end."""
+        if isinstance(arg, MemberAccess):
+            if arg.object_name in self.global_objects:
+                return None
+            owner, member = (SelfRef() if arg.object_name == "self" else VarRef(name=arg.object_name)), arg.member
+        elif isinstance(arg, PropertyAccess) and (isinstance(arg.object, SelfRef) or (
+                isinstance(arg.object, VarRef) and arg.object.name not in self.global_objects)):
+            owner, member = arg.object, arg.property
+        else:
+            return None
+        struct = self._struct_of(owner)
+        field = struct.get_field(member) if struct else None
+        if not field or field.weak:
+            return None
+        return (struct.name, member)
 
     def _is_string_constant(self, node: ASTNode) -> bool:
         """Check if an expression is a string constant (macro)."""
@@ -11991,6 +12035,52 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True
             return f"_dash_str_dup({code}, TRUE)"
         return code
+
+    def _str_owned(self, node: ASTNode) -> bool:
+        """True if the String expression is text that something owns, never a temporary: a literal,
+        a String variable of this function or a global, a String field, an element of a list or a
+        dictionary of Strings. (A parameter or loop variable may be a temporary of the caller.)"""
+        if isinstance(node, StringLiteral):
+            return True
+        if isinstance(node, VarRef):
+            if self._is_string_constant(node):
+                return True
+            return (self.var_types.get(node.name) == "string"
+                    and (self.context.is_owned(node.name) or node.name in self.global_strings))
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "String")
+        if isinstance(node, ArrayAccess):
+            return self._is_string_array(node.array) or self._dict_value_kind(node.array) == "string"
+        return False
+
+    def _str_is_temp(self, node: ASTNode) -> bool:
+        """True if the String expression is always a new temporary: a concatenation or
+        interpolation, or what a Dash function or method returns."""
+        if isinstance(node, BinaryOp) and node.operator == "+":
+            return True
+        if isinstance(node, FunctionCall):
+            return (not get_builtin(node.name) and self.analysis.program.get_function(node.name) is not None
+                    and self._call_returns_string(node.name))
+        if isinstance(node, MethodCall):
+            return self._method_of(node) is not None and not self._is_list_method(node)
+        return False
+
+    def _str_as_temp(self, node: ASTNode, code: str) -> str:
+        """The String as a temporary of the caller (a return, an argument that may change under
+        the callee): a copy of owned text, a temporary as it is, else _dash_str_ret looks."""
+        if self._str_owned(node):
+            return f"_dash_str_dup({code}, TRUE)"
+        if self._str_is_temp(node):
+            return code
+        return f"_dash_str_ret({code})"
+
+    def _str_set_code(self, indent: str, target: str, node: ASTNode, code: str) -> str:
+        """var = String: owned text is copied straight away (_dash_str_set_copy); anything else
+        through _dash_str_set, which adopts a temporary (see _lent_str)."""
+        if self._str_owned(node):
+            return f"{indent}_dash_str_set_copy({target}, {code});\n"
+        return f"{indent}_dash_str_set({target}, {self._lent_str(node, code)});\n"
 
     def _append_in_place(self, node: VarAssign) -> bool:
         """s = s + a + b... on a String variable that owns its text: append each part in

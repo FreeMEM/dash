@@ -1,0 +1,43 @@
+# An object field of a local variable or parameter that no code in the program sets is passed to a
+# function as it is: it lives as long as its owner, which the caller holds. If some code set it,
+# it would be lent (_dash_obj_lend: a holder object per call). Here Parte.simple is never set
+# after the constructor; Caja.p is (see test_refcount_borrow).
+# memcheck
+# expect-c: #define _DASH_OLEND_Parte_simple(p) (p)
+# expect-c: cuenta(((_Dash_Simple *)_DASH_OLEND_Parte_simple(
+# expect-out: 3 6
+# expect-out: 30000
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Simple
+    nombre: String
+    clases: [String]
+end
+
+struct Parte
+    simple: Simple
+    n: Int
+end
+
+func cuenta(s: Simple) -> Int
+    return s.clases.length
+end
+
+func suma(partes: [Parte]) -> Int
+    total = 0
+    for parte in partes
+        total = total + cuenta(parte.simple)
+    end
+    return total
+end
+
+Main
+    a = Parte(Simple("a", ["x", "y", "z"]), 1)
+    b = Parte(Simple("b", ["q", "r", "s"]), 2)
+    Print "#{cuenta(a.simple)} #{suma([a, b])}"
+    veces = 0
+    for i in (1..10000)
+        veces = veces + cuenta(a.simple)
+    end
+    Print veces
+end
