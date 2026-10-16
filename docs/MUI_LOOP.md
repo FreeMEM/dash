@@ -139,7 +139,7 @@ por número). ReAction solo se prueba en `--emu-32` (la `window.class` de 3.1 no
       deslizadores; gadgets que apuntan a una ventana cerrada; textos copiados para siempre (`textfield_set`,
       `ra_set_string`, `listview_add` dos veces...); `CloseWindow` con el menú puesto, `menu_attach`/`gt_init` dos
       veces; `gt_*` usa la ventana actual en vez de la suya.
-- [ ] 13c. **Bugs de ReAction** (auditoría 2, 8, 12, 14): `render_canvas` no compila (`static`); nodos del chooser
+- [x] 13c. **Bugs de ReAction** (auditoría 2, 8, 12, 14): `render_canvas` no compila (`static`); nodos del chooser
       con `AllocMem` sin liberar y sin `AllocChooserNode`, ids fuera de tabla; `RA_EVENT_NONE` = 0 choca con el
       gadget 0; iconificar sin efecto; el dibujo del canvas se llama quizá desde input.device (comprobar).
 - [ ] 14. **GadTools completo.** Gadgets que faltan: ciclo (`CYCLE_KIND`), opciones (`MX_KIND`), lista
@@ -479,3 +479,24 @@ Formato:
 - Visto: `_dash_check_close` (`window_check_close`) vacía el puerto con `GetMsg` y tira todo lo que no es cerrar
   (mismo problema que tenían `gt_event`/`menu_event`); queda para la tarea 16 (varias ventanas).
 - Tests: 132/132 sin emulador; 319/319 con `--emu --emu-a500 --emu-32`; 197/197 con `--emu --memcheck`; ejemplos 33/33. Tres `expect-c` con el `CloseWindow` exacto actualizados (`test_exit_cleanup`, `test_window_handles`, `test_windows_adv`).
+
+### 2026-10-16 — Tarea 13c (bugs de ReAction)
+- Hecho:
+  - `render_canvas` declarada `static` en el runtime: **`blixel/blixel.dash` no compilaba** (y cualquier programa
+    ReAction con `render_canvas`); ahora compila.
+  - El gancho de dibujo del área (`SPACE_RenderHook`) **nunca se enganchaba**: `ra_init_canvas_render`/
+    `ra_canvas_enable` no hacían nada. Se engancha si `ra_init_canvas_render()` va antes de `ra_add_drawing_area`
+    (así `blixel`, que no lo llama, no cambia), y la función recibe sus argumentos en registros (`a0`, `a2`, `a1`),
+    como llama Intuition a un gancho. Si Intuition lo llama desde otra tarea, el código Dash no corre ahí: se apunta,
+    se despierta al programa y el área se repinta desde `ra_handle_events`.
+  - `RA_EVENT_NONE` = -3 (era 0, igual que un gadget con id 0).
+  - `ra_wait_event` lee primero lo pendiente y luego espera (antes dejaba mensajes en la cola sin señal nueva); sigue
+    pudiendo devolver "nada" tras despertar, porque `blixel` y `flowpaint3` lo usan para mirar el ratón.
+  - Chooser: nodos con `AllocChooserNodeA` (antes `AllocMem` de un `struct Node` que la clase no espera, sin liberar),
+    texto propio, lista quitada y puesta en el gadget al añadir, nodos y textos liberados en `ra_window_close`.
+  - Ids negativos o >= 64 ignorados en todos los `ra_add_*` (`(ULONG)id`).
+  - Iconificar deja `_ra_window` a NULL (el código sigue sin usarse: falta `WINDOW_IconifyGadget`).
+- Probado en A1200 3.2 (`test_ra_events`, con `# memcheck`): "nada" = -3, chooser con 3 opciones y selección 2,
+  `render_canvas` llamada al abrir y con `ra_refresh_canvas`, clic real en el botón de id 0 (proceso con
+  `input.device`) devuelve 0, id -1 sin efecto; 0 vivos y 0 escapados al salir.
+- Tests: 133/133 sin emulador; 321/321 con `--emu --emu-a500 --emu-32`; 265/265 con `--emu --emu-32 --memcheck`; ejemplos 33/33 (`blixel` también compila).

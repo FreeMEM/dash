@@ -1929,6 +1929,13 @@ if event == 1  # ID del boton Aceptar
 end
 ```
 
+`RA_EVENT_NONE()` vale -3, así que un gadget puede tener el id 0. `ra_wait_event()` devuelve antes los
+mensajes que quedaron pendientes y luego espera; puede devolver `RA_EVENT_NONE()` si lo que llegó no
+era de un gadget (por ejemplo, el ratón). Los ids van de 0 a 63; uno fuera de ese rango no se guarda.
+
+Para que `func render_canvas()` dibuje el área de `ra_add_drawing_area`, hay que llamar a
+`ra_init_canvas_render()` antes de crear el área y a `ra_canvas_enable()` cuando el programa esté listo.
+
 ### Dibujo Personalizado en ReAction
 
 Para dibujar en una ventana ReAction:

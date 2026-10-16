@@ -4414,6 +4414,12 @@ struct Library *CheckBoxBase = NULL;
 struct Library *SliderBase = NULL;
 struct Library *PaletteBase = NULL;
 struct Library *ChooserBase = NULL;
+static void _ra_chooser_free(void);
+/* The canvas render hook may be called by Intuition from another task (input.device);
+   Dash code only runs in the program's task, so then the redraw is left for it */
+static struct Task *_ra_main_task = NULL;
+static Object *_ra_canvas_obj = NULL;
+static volatile LONG _ra_redraw_later = 0;
 struct Library *ListBrowserBase = NULL;
 struct Library *ScrollerBase = NULL;
 struct Library *LabelBase = NULL;
@@ -4469,6 +4475,7 @@ static BOOL _ra_open_class(struct Library **base, STRPTR name) {
 
 /* Create ReAction window with vertical layout */
 static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
+    _ra_main_task = FindTask(NULL);
     if (!_ra_open_libs()) return 0;
 
     _ra_layout = (Object *)NewObject(LAYOUT_GetClass(), NULL,
@@ -4512,6 +4519,7 @@ static void ra_window_close(void) {
         _ra_window = NULL;
         _ra_layout = NULL;
     }
+    _ra_chooser_free();
     _ra_close_libs();
 }
 
@@ -4525,7 +4533,7 @@ static ULONG ra_window_sigmask(void) {
 }
 
 /* Handle window events - returns gadget ID or special codes */
-#define RA_EVENT_NONE 0
+#define RA_EVENT_NONE -3   /* not 0: a gadget may have id 0 */
 #define RA_EVENT_CLOSE -1
 #define RA_EVENT_REFRESH -2
 
@@ -4543,11 +4551,16 @@ static LONG ra_handle_events(void) {
                 return (LONG)(result & WMHI_GADGETMASK);
             case WMHI_ICONIFY:
                 RA_Iconify(_ra_winobj);
+                _ra_window = NULL;
                 break;
             case WMHI_UNICONIFY:
                 _ra_window = RA_OpenWindow(_ra_winobj);
                 break;
         }
+    }
+    if (_ra_redraw_later && _ra_canvas_obj && _ra_window) {   /* asked from another task */
+        _ra_redraw_later = 0;
+        RefreshGList((struct Gadget *)_ra_canvas_obj, _ra_window, NULL, 1);
     }
     return RA_EVENT_NONE;
 }
@@ -4559,6 +4572,8 @@ static LONG ra_wait_event(void) {
 
     if (!_ra_winobj) return RA_EVENT_NONE;
 
+    /* messages left from the last call are read before sleeping */
+    if ((event = ra_handle_events()) != RA_EVENT_NONE) return event;
     GetAttr(WINDOW_SigMask, _ra_winobj, &sigmask);
     Wait(sigmask);
 
@@ -4579,7 +4594,7 @@ static LONG ra_add_button(LONG id, STRPTR label) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, btn,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = btn;
+        if ((ULONG)id < RA_MAX_GADGETS) _ra_gadgets[id] = btn;
         return 1;
     }
     return 0;
@@ -4601,7 +4616,7 @@ static LONG ra_add_string(LONG id, STRPTR initial, LONG maxchars) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, str,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = str;
+        if ((ULONG)id < RA_MAX_GADGETS) _ra_gadgets[id] = str;
         return 1;
     }
     return 0;
@@ -4623,7 +4638,7 @@ static LONG ra_add_checkbox(LONG id, STRPTR label, LONG checked) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, cb,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = cb; _ra_kinds[id] = RA_K_CHECKBOX; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = cb; _ra_kinds[id] = RA_K_CHECKBOX; }
         return 1;
     }
     return 0;
@@ -4647,7 +4662,7 @@ static LONG ra_add_slider(LONG id, LONG min, LONG max, LONG initial) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, sl,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = sl; _ra_kinds[id] = RA_K_SLIDER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = sl; _ra_kinds[id] = RA_K_SLIDER; }
         return 1;
     }
     return 0;
@@ -4670,7 +4685,7 @@ static LONG ra_add_integer(LONG id, LONG initial, LONG min, LONG max) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, ig,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = ig; _ra_kinds[id] = RA_K_INTEGER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = ig; _ra_kinds[id] = RA_K_INTEGER; }
         return 1;
     }
     return 0;
@@ -4716,7 +4731,7 @@ static LONG ra_get_value(LONG id) {
 
 /* Get string gadget text */
 static STRPTR ra_get_string(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return "";
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return "";
 
     STRPTR text = NULL;
     GetAttr(STRINGA_TextVal, _ra_gadgets[id], (ULONG *)&text);
@@ -4788,7 +4803,7 @@ static LONG ra_add_palette(LONG id, LONG depth, LONG initial_color) {
             CHILD_MinWidth, 100,
             CHILD_MinHeight, 50,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = pal; _ra_kinds[id] = RA_K_PALETTE; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = pal; _ra_kinds[id] = RA_K_PALETTE; }
         return 1;
     }
     return 0;
@@ -4798,12 +4813,29 @@ static LONG ra_add_palette(LONG id, LONG depth, LONG initial_color) {
 static struct List _ra_chooser_lists[RA_MAX_GADGETS];
 static BOOL _ra_chooser_inited[RA_MAX_GADGETS] = {0};
 
+/* Free the chooser nodes (after the gadgets are disposed, before chooser.gadget closes) */
+static void _ra_chooser_free(void) {
+    LONG i;
+    struct Node *node;
+    for (i = 0; i < RA_MAX_GADGETS; i++) {
+        if (!_ra_chooser_inited[i]) continue;
+        while ((node = RemHead(&_ra_chooser_lists[i]))) {
+            STRPTR text = NULL;
+            ULONG tags[] = { CNA_Text, (ULONG)&text, TAG_DONE };
+            GetChooserNodeAttrsA(node, (struct TagItem *)tags);
+            FreeChooserNode(node);
+            _dash_str_free(text);
+        }
+        _ra_chooser_inited[i] = FALSE;
+    }
+}
+
 /* Add chooser gadget (dropdown) */
 static LONG ra_add_chooser(LONG id) {
     if (!_ra_layout) return 0;
     if (!_ra_open_class(&ChooserBase, "gadgets/chooser.gadget")) return 0;
 
-    if (id < RA_MAX_GADGETS && !_ra_chooser_inited[id]) {
+    if ((ULONG)id < RA_MAX_GADGETS && !_ra_chooser_inited[id]) {
         NewList(&_ra_chooser_lists[id]);
         _ra_chooser_inited[id] = TRUE;
     }
@@ -4819,30 +4851,36 @@ static LONG ra_add_chooser(LONG id) {
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, ch,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = ch; _ra_kinds[id] = RA_K_CHOOSER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = ch; _ra_kinds[id] = RA_K_CHOOSER; }
         return 1;
     }
     return 0;
 }
 
-/* Add item to chooser */
+/* Add item to chooser: a chooser node (AllocChooserNode, as the class expects) with
+   its own copy of the text; the list is taken off the gadget while it changes */
 static LONG ra_chooser_add_item(LONG id, STRPTR label) {
-    if (id >= RA_MAX_GADGETS || !_ra_chooser_inited[id]) return 0;
-
-    struct Node *node = (struct Node *)AllocMem(sizeof(struct Node) + 64, MEMF_CLEAR);
-    if (node) {
-        STRPTR str = (STRPTR)(node + 1);
-        strncpy(str, label, 63);
-        node->ln_Name = str;
-        AddTail(&_ra_chooser_lists[id], node);
-        return 1;
+    struct Node *node;
+    STRPTR copy;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_chooser_inited[id] || !ChooserBase) return 0;
+    copy = _dash_str_dup(label ? label : (STRPTR)"", FALSE);
+    {
+        ULONG tags[] = { CNA_Text, (ULONG)copy, TAG_DONE };
+        node = AllocChooserNodeA((struct TagItem *)tags);
     }
-    return 0;
+    if (!node) { _dash_str_free(copy); return 0; }
+    if (_ra_gadgets[id])
+        SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, CHOOSER_Labels, ~0, TAG_DONE);
+    AddTail(&_ra_chooser_lists[id], node);
+    if (_ra_gadgets[id])
+        SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
+                       CHOOSER_Labels, (ULONG)&_ra_chooser_lists[id], TAG_DONE);
+    return 1;
 }
 
 /* Get chooser selected index */
 static LONG ra_get_chooser_selected(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return -1;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return -1;
 
     LONG selected = 0;
     GetAttr(CHOOSER_Selected, _ra_gadgets[id], (ULONG *)&selected);
@@ -4851,7 +4889,7 @@ static LONG ra_get_chooser_selected(LONG id) {
 
 /* Set chooser selected index */
 static void ra_set_chooser_selected(LONG id, LONG index) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         CHOOSER_Selected, index,
@@ -4876,7 +4914,7 @@ static LONG ra_add_scroller(LONG id, LONG min, LONG max, LONG visible, LONG init
         SetGadgetAttrs((struct Gadget *)_ra_layout, _ra_window, NULL,
             LAYOUT_AddChild, sc,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
         return 1;
     }
     return 0;
@@ -4901,7 +4939,7 @@ static LONG ra_add_scroller_vert(LONG id, LONG min, LONG max, LONG visible, LONG
             LAYOUT_AddChild, sc,
             CHILD_MinWidth, 18,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
+        if ((ULONG)id < RA_MAX_GADGETS) { _ra_gadgets[id] = sc; _ra_kinds[id] = RA_K_SCROLLER; }
         return 1;
     }
     return 0;
@@ -4909,7 +4947,7 @@ static LONG ra_add_scroller_vert(LONG id, LONG min, LONG max, LONG visible, LONG
 
 /* Get scroller position */
 static LONG ra_get_scroller(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
 
     LONG top = 0;
     GetAttr(SCROLLER_Top, _ra_gadgets[id], (ULONG *)&top);
@@ -4918,7 +4956,7 @@ static LONG ra_get_scroller(LONG id) {
 
 /* Set scroller position */
 static void ra_set_scroller(LONG id, LONG pos) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         SCROLLER_Top, pos,
@@ -4927,7 +4965,7 @@ static void ra_set_scroller(LONG id, LONG pos) {
 
 /* Enable gadget */
 static void ra_enable_gadget(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         GA_Disabled, FALSE,
@@ -4936,7 +4974,7 @@ static void ra_enable_gadget(LONG id) {
 
 /* Disable gadget */
 static void ra_disable_gadget(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         GA_Disabled, TRUE,
@@ -4945,7 +4983,7 @@ static void ra_disable_gadget(LONG id) {
 
 /* Set string gadget text */
 static void ra_set_string(LONG id, STRPTR text) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         STRINGA_TextVal, text,
@@ -4954,7 +4992,7 @@ static void ra_set_string(LONG id, STRPTR text) {
 
 /* Set button/label text */
 static void ra_set_text(LONG id, STRPTR text) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         GA_Text, text,
@@ -4963,7 +5001,7 @@ static void ra_set_text(LONG id, STRPTR text) {
 
 /* Get color from palette gadget */
 static LONG ra_get_palette_color(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
 
     LONG color = 0;
     GetAttr(PALETTE_Colour, _ra_gadgets[id], (ULONG *)&color);
@@ -4972,7 +5010,7 @@ static LONG ra_get_palette_color(LONG id) {
 
 /* Set color in palette gadget */
 static void ra_set_palette_color(LONG id, LONG color) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id] || !_ra_window) return;
 
     SetGadgetAttrs((struct Gadget *)_ra_gadgets[id], _ra_window, NULL,
         PALETTE_Colour, color,
@@ -5007,7 +5045,9 @@ static void ra_canvas_enable(void) {
 }
 
 /* Render hook for Space gadget - called by Intuition when gadget needs redraw */
-static ULONG _ra_space_render_hook_func(struct Hook *hook, Object *obj, struct gpRender *msg) {
+/* Hooks are called with their arguments in registers */
+static ULONG _ra_space_render_hook_func(struct Hook *hook __asm("a0"), Object *obj __asm("a2"),
+                                        struct gpRender *msg __asm("a1")) {
     struct IBox *box = NULL;
     GetAttr(SPACE_AreaBox, obj, (ULONG *)&box);
 
@@ -5030,7 +5070,15 @@ static ULONG _ra_space_render_hook_func(struct Hook *hook, Object *obj, struct g
 
             /* Only call renderer if initialization is complete */
             if (_ra_canvas_ready && _ra_canvas_renderer) {
-                _ra_canvas_renderer();
+                if (FindTask(NULL) == _ra_main_task) {
+                    _ra_canvas_renderer();
+                } else {
+                    ULONG sigmask = 0;
+                    _ra_canvas_obj = obj;
+                    _ra_redraw_later = 1;
+                    if (_ra_winobj) GetAttr(WINDOW_SigMask, _ra_winobj, &sigmask);
+                    if (_ra_main_task && sigmask) Signal(_ra_main_task, sigmask);
+                }
             }
         }
     }
@@ -5047,13 +5095,13 @@ static struct Hook _ra_space_render_hook = {
 
 /* Request a canvas refresh (trigger redraw) */
 static void ra_refresh_canvas(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return;
     if (!_ra_window) return;
     RefreshGList((struct Gadget *)_ra_gadgets[id], _ra_window, NULL, 1);
 }
 
-/* Forward declaration for Dash's render_canvas function */
-void render_canvas(void);
+/* Forward declaration for Dash's render_canvas function (user functions are static) */
+static void render_canvas(void);
 
 /* Register the canvas render callback - call this before window open */
 static void ra_init_canvas_render(void) {
@@ -5062,7 +5110,7 @@ static void ra_init_canvas_render(void) {
 
 /* Get drawing area bounds from Space gadget */
 static LONG ra_get_drawing_bounds(LONG id) {
-    if (id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
+    if ((ULONG)id >= RA_MAX_GADGETS || !_ra_gadgets[id]) return 0;
     if (!_ra_window || !_ra_layout) return 0;
 
     /* Force layout recalculation */
@@ -5283,6 +5331,8 @@ static LONG ra_add_drawing_area(LONG id, LONG min_width, LONG min_height) {
         SPACE_MinHeight, min_height,
         SPACE_BevelStyle, BVS_FIELD,
         SPACE_Transparent, TRUE,  /* No auto-clear, we draw manually */
+        /* render_canvas() draws it when ra_init_canvas_render() came first */
+        _ra_canvas_renderer ? SPACE_RenderHook : TAG_IGNORE, (ULONG)&_ra_space_render_hook,
         TAG_DONE);
 
     if (space) {
@@ -5291,7 +5341,7 @@ static LONG ra_add_drawing_area(LONG id, LONG min_width, LONG min_height) {
             CHILD_WeightedWidth, 100,
             CHILD_WeightedHeight, 100,
             TAG_DONE);
-        if (id < RA_MAX_GADGETS) _ra_gadgets[id] = space;
+        if ((ULONG)id < RA_MAX_GADGETS) _ra_gadgets[id] = space;
         return 1;
     }
     return 0;
@@ -7022,7 +7072,7 @@ class CodeGenerator(ASTVisitor):
             reaction = CTemplates.REACTION_RUNTIME
             if not self.analysis.program.get_function("render_canvas"):
                 # No Dash render_canvas(): register no canvas renderer
-                reaction = reaction.replace("void render_canvas(void);\n", "")
+                reaction = reaction.replace("static void render_canvas(void);\n", "")
                 reaction = reaction.replace("ra_set_canvas_renderer(render_canvas);",
                                             "ra_set_canvas_renderer(NULL);")
             parts.append(reaction)

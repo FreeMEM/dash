@@ -1,0 +1,118 @@
+# ReAction fixes: "no event" is not 0 any more (a gadget may have id 0), ra_wait_event
+# reads what is pending before sleeping, chooser items are real chooser nodes (freed on
+# close), negative ids are ignored, and render_canvas() draws the drawing area through
+# its render hook. A helper process clicks the button with id 0 through input.device.
+# memcheck
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# emu-needs: chooser.gadget
+# emu-needs: space.gadget
+# expect-out: nada -3
+# expect-out: chooser 2
+# expect-out: canvas dibujado
+# expect-out: canvas otra vez
+# expect-out: evento 0
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static volatile LONG clic_hecho;"
+
+var veces: Int = 0
+
+func render_canvas()
+    veces = veces + 1
+end
+
+@native func proceso_clic()
+"""
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    struct Gadget *g = (struct Gadget *)_ra_gadgets[0];
+    Delay(50);
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    if (g && _ra_window && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        memset(&ie, 0, sizeof(ie));
+        pp.iepp_Screen = _ra_window->WScreen;
+        pp.iepp_Position.X = _ra_window->LeftEdge + g->LeftEdge + g->Width / 2;
+        pp.iepp_Position.Y = _ra_window->TopEdge + g->TopEdge + g->Height / 2;
+        ie.ie_Class = IECLASS_NEWPOINTERPOS;
+        ie.ie_SubClass = IESUBCLASS_PIXEL;
+        ie.ie_EventAddress = (APTR)&pp;
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_LBUTTON;
+        ie.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        Delay(5);
+        ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+        ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+        DoIO((struct IORequest *)io);
+        Delay(10);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    clic_hecho = 1;
+"""
+end
+
+@native func lanzar_clic()
+"""
+    clic_hecho = 0;
+    CreateNewProcTags(NP_Entry, (ULONG)proceso_clic, NP_Name, (ULONG)"dash_clic", TAG_DONE);
+"""
+end
+
+@native func esperar_clic()
+"""
+    while (!clic_hecho) Delay(2);
+"""
+end
+
+Main
+    ra_window_create("Eventos", 300, 200)
+    ra_add_button(0, "Cero")
+    ra_add_button(-1, "Nunca")
+    ra_add_chooser(5)
+    ra_chooser_add_item(5, "Uno")
+    ra_chooser_add_item(5, "Dos")
+    ra_chooser_add_item(5, "Tres")
+    ra_init_canvas_render()
+    ra_add_drawing_area(7, 100, 50)
+    ra_canvas_enable()
+    ra_window_open()
+
+    ev = ra_handle_events()
+    Print "nada #{ev}"
+    ra_set_chooser_selected(5, 2)
+    c = ra_get_chooser_selected(5)
+    Print "chooser #{c}"
+    if veces > 0
+        Print "canvas dibujado"
+    end
+    antes = veces
+    ra_refresh_canvas(7)
+    if veces > antes
+        Print "canvas otra vez"
+    end
+
+    lanzar_clic()
+    ev = ra_wait_event()
+    while ev == -3
+        ev = ra_wait_event()
+    end
+    Print "evento #{ev}"
+    esperar_clic()
+    ra_window_close()
+    Print "fin"
+end
