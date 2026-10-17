@@ -13,6 +13,7 @@ S:Startup-Sequence runs each program with its output redirected to a file.
 
     tools/emu_run.py --autoclose 3 ventana.dash  # ends by itself after 3 s
     tools/emu_run.py --autoclose 20 --screenshot 15 shot.png ventana.dash   # picture of the screen
+    tools/emu_run.py --autoclose 600 --screenshot 120 a.png --screenshot 300 b.png video.dash   # several
 
 Libraries that are not in the Kickstart ROM (asl.library, diskfont.library...)
 come from $DASH_EMU_SYS (or --system): a directory with Libs/, C/ (Assign, MakeDir)
@@ -137,6 +138,17 @@ def shot_tool() -> Path:
     return exe
 
 
+def _ppm_complete(ppm: Path) -> bool:
+    """The PPM from shot.c is all there (it is written with one Write, but may be seen half-way)."""
+    try:
+        data = ppm.read_bytes()
+        parts = data.split(b"\n", 3)
+        width, height = map(int, parts[1].split())
+        return len(parts) == 4 and len(parts[3]) >= width * height * 3
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 def ppm_to_png(ppm: Path, png: Path):
     """Binary PPM (P6) from shot.c to PNG, without extra Python packages."""
     import struct
@@ -160,7 +172,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  debug: list = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
-    front screen that many seconds after boot. background: (program, arguments) pairs
+    front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
     started with Run before the programs, e.g. one that clicks in their windows; their
     output goes to DH0:bg<i>.txt (keep= to read it). debug: commands for FS-UAE's debugger
     when a program calls debug_break() (see --debug). Returns one EmuResult per program, in
@@ -203,10 +215,14 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             if not (hd / "C" / "LoadWB").exists():
                 raise RuntimeError("--workbench needs C/LoadWB in the Workbench files (tools/emu_sys_from_hdf.sh)")
             lines.append("C:LoadWB")
-        if screenshot:
+        # one (seconds, file) pair or a list of them; each one its own dash_shot waiting from here
+        shots = [] if not screenshot else [screenshot] if isinstance(screenshot[0], (int, float, str)) \
+            else list(screenshot)
+        if shots:
             (hd / "C").mkdir(exist_ok=True)
             shutil.copy(shot_tool(), hd / "C" / "dash_shot")
-            lines.append(f"Run >NIL: C:dash_shot {int(float(screenshot[0]) * 50)} DH0:shot.ppm")
+            for i, (seconds, _) in enumerate(shots):
+                lines.append(f"Run >NIL: C:dash_shot {int(float(seconds) * 50)} DH0:shot{i}.ppm")
         for i, (prog, bg_args) in enumerate(background or []):
             prog = Path(prog)
             exe = hd / f"b{i}"
@@ -255,6 +271,11 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 if proc.poll() is not None:
                     break
                 time.sleep(0.2)
+            # screenshots still to come or being written: wait for them (a picture taken after the
+            # programs ended shows the screen without them, but it is what was asked for)
+            while time.time() < deadline and proc.poll() is None and \
+                    not all(_ppm_complete(hd / f"shot{i}.ppm") for i in range(len(shots))):
+                time.sleep(0.2)
             time.sleep(0.3)  # let the last file be flushed to the host
         finally:
             try:
@@ -265,11 +286,11 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
 
         if keep:
             shutil.copytree(hd, keep, dirs_exist_ok=True)
-        if screenshot:
-            if (hd / "shot.ppm").exists():
-                ppm_to_png(hd / "shot.ppm", Path(screenshot[1]))
+        for i, (seconds, png) in enumerate(shots):
+            if (hd / f"shot{i}.ppm").exists():
+                ppm_to_png(hd / f"shot{i}.ppm", Path(png))
             else:
-                print(f"no screenshot (did a program still run after {screenshot[0]} s?)", file=sys.stderr)
+                print(f"no screenshot at {seconds} s (did a program still run then?)", file=sys.stderr)
         results = EmuResults()
         text = b"".join(transcript).decode("latin-1")
         start = text.find("activate_console")
@@ -303,9 +324,9 @@ def main():
     parser.add_argument("--system", metavar="DIR", help="Workbench files (Libs/, C/, Classes/; default: $DASH_EMU_SYS)")
     parser.add_argument("--workbench", action="store_true", help="run C:LoadWB first (AmigaOS 3.2 ReAction needs it)")
     parser.add_argument("--keep", metavar="DIR", help="copy the emulated disk (outputs, files the programs wrote) to DIR")
-    parser.add_argument("--screenshot", nargs=2, metavar=("SECONDS", "FILE.png"),
-                        help="save the front screen SECONDS after boot (tools/amiga/shot.c); "
-                             "use --autoclose so the program is still open then")
+    parser.add_argument("--screenshot", nargs=2, action="append", metavar=("SECONDS", "FILE.png"),
+                        help="save the front screen SECONDS after boot (tools/amiga/shot.c); repeatable "
+                             "for several in the same run; use --autoclose so the program is still open then")
     parser.add_argument("--debug", action="append", metavar="CMD",
                         help="FS-UAE debugger command when a program calls debug_break() "
                              "(repeatable; then \"g\": see the help at the top of this file)")

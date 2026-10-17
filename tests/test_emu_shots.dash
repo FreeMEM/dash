@@ -1,0 +1,24 @@
+# Several screenshots in one run of the emulator (tools/emu_run.py --screenshot, repeatable): the
+# window is white for 8 seconds and then black for 8 more; one shot in each half.
+# expect-out: fin
+# emu-shot: 4 100 60 ffffff
+# emu-shot: 12 100 60 000000
+
+Window W
+    title "Fotos"
+    left 0
+    top 20
+    width 200
+    height 100
+end
+
+Main
+    W.open
+    gfx_pen(2)
+    gfx_rect(0, 0, 199, 99)
+    time_delay(400)
+    gfx_pen(1)
+    gfx_rect(0, 0, 199, 99)
+    time_delay(400)
+    Print "fin"
+end

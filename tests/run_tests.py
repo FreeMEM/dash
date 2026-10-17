@@ -31,6 +31,9 @@ network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <lin
 the system in $DASH_EMU_SYS_SSL / $DASH_EMU_SYS_32_SSL (tools/emu_sys_amissl.sh), not on the A500.
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
+"# emu-shot: SECONDS X Y RRGGBB" (repeatable) runs a test in its own boot with a screenshot that many
+seconds after boot (tools/emu_run.py --screenshot, all of them in the same run): pixel X,Y of the front
+screen must have that colour. Not on the A500 (reading the screen takes seconds there).
 """
 
 import os
@@ -449,6 +452,33 @@ def emu_args(test_file: Path) -> str:
     return ""
 
 
+def emu_shots(test_file: Path) -> List[tuple]:
+    """'# emu-shot: SECONDS X Y RRGGBB' lines: (seconds, x, y, colour)."""
+    shots = []
+    for l in test_file.read_text().splitlines():
+        if l.startswith("# emu-shot:"):
+            seconds, x, y, rgb = l.split(":", 1)[1].split()
+            shots.append((float(seconds), int(x), int(y), int(rgb, 16)))
+    return shots
+
+
+def png_pixel(png: Path, x: int, y: int) -> int:
+    """0xRRGGBB of a pixel of a PNG made by tools/emu_run.py (8-bit RGB, filter 0 on every row)."""
+    import struct
+    import zlib
+    data = png.read_bytes()
+    width = struct.unpack(">I", data[16:20])[0]
+    pos, idat = 8, b""
+    while pos < len(data):
+        size = struct.unpack(">I", data[pos:pos + 4])[0]
+        if data[pos + 4:pos + 8] == b"IDAT":
+            idat += data[pos + 8:pos + 8 + size]
+        pos += 12 + size
+    rows = zlib.decompress(idat)
+    at = y * (1 + width * 3) + 1 + x * 3
+    return (rows[at] << 16) | (rows[at + 1] << 8) | rows[at + 2]
+
+
 def emu_net_port(test_file: Path) -> Optional[int]:
     """'# emu-net: PORT' (dashweb D8): the test uses the network. It runs in a boot with FS-UAE's
     bsdsocket.library (the PC's network) and, on 127.0.0.1:PORT of the PC, an echo server that
@@ -543,6 +573,8 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
+    shot_tests = [t for t in runnable if emu_shots(t)]
+    runnable = [t for t in runnable if t not in shot_tests]
     mui = [t for t in runnable if "muimaster.library" in emu_needs(t)]
     net = [t for t in runnable if emu_net_port(t) is not None and t not in mui]
     results = run_emu_boot([t for t in runnable if t not in mui and t not in net], machine, rom,
@@ -583,12 +615,22 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
                 print(f"  {prefix}/{t.stem}: SKIP (needs ${machine['mui_sys_env']}, see tools/emu_sys_mui.sh)")
         else:
             results += run_emu_boot(mui, machine, rom, mui_system, memcheck)
+    if shot_tests and "A500" in machine["config"]:
+        # on the 68000 reading the screen takes seconds (the picture changes half-way) and the boot
+        # shell's console window comes in front: not a place for timed pictures
+        for t in shot_tests:
+            print(f"  {prefix}/{t.stem}: SKIP (screenshots are not timed on the A500)")
+        shot_tests = []
+    for t in shot_tests:   # each in its own boot: the screenshots are timed from the boot
+        system = os.environ.get(machine["mui_sys_env"] if "muimaster.library" in emu_needs(t) else machine["sys_env"])
+        results += run_emu_boot([t], machine, rom, system, memcheck, shots=emu_shots(t))
     return results
 
 
 def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: Optional[str],
-                 memcheck: bool, extra_config: str = "") -> List[TestResult]:
-    """Run these tests in one boot of the machine with these Workbench files."""
+                 memcheck: bool, extra_config: str = "", shots: List[tuple] = ()) -> List[TestResult]:
+    """Run these tests in one boot of the machine with these Workbench files (shots: emu_shots of
+    the only test, checked after it)."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
     prefix = machine["prefix"]
@@ -596,11 +638,18 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
     if not selected:
         return []
     start_time = time.time()
+    shot_dir = PROJECT_ROOT / "build" / "shots"
+    shot_files = [shot_dir / f"{prefix}_{selected[0][0].stem}_{i}.png" for i in range(len(shots))]
+    if shots:
+        shot_dir.mkdir(parents=True, exist_ok=True)
+        for f in shot_files:
+            f.unlink(missing_ok=True)
     try:
         runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
                             args=[emu_args(t) for t, _ in selected],
                             timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"] + extra_config,
-                            system=system, workbench=machine["workbench"])
+                            system=system, workbench=machine["workbench"],
+                            screenshot=[(s[0], f) for s, f in zip(shots, shot_files)] or None)
     except RuntimeError as e:
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=str(e))]
@@ -625,6 +674,13 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
                      f"expected {wanted[diff] if diff < len(wanted) else '<end>'!r}")
         else:
             error = mc_error
+        for (seconds, x, y, rgb), f in zip(shots, shot_files):
+            if error:
+                break
+            if not f.exists():
+                error = f"no screenshot at {seconds} s"
+            elif png_pixel(f, x, y) != rgb:
+                error = f"screenshot at {seconds} s: pixel {x},{y} is {png_pixel(f, x, y):06x}, expected {rgb:06x}"
         results.append(TestResult(name=f"{prefix}/{test_file.stem}", passed=error is None,
                                   transpile_ok=True, compile_ok=True,
                                   error_message=error, duration=duration))
