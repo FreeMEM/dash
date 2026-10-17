@@ -36,6 +36,9 @@ seconds after boot (tools/emu_run.py --screenshot, all of them in the same run):
 screen must have that colour. Not on the A500 (reading the screen takes seconds there).
 "# fpu" builds a test as ./dash --fpu and runs it on a 68040 (with C:SetPatch and 68040.library from the
 Workbench files, tools/emu_sys_from_hdf.sh); not on the A500.
+"# rtg" runs a test only with --emu-32, in its own boot on a 68040 with a graphics card (FS-UAE's uaegfx and
+Picasso96) and the files of $DASH_EMU_SYS_32_RTG (a 3.2 Workbench on a 16-bit RTG screen: dashweb's
+tools/emu_sys_rtg.sh); skipped without it.
 """
 
 import os
@@ -90,6 +93,11 @@ def ignored_output(test_file: Path) -> List[str]:
     """'# ignore-out: <prefix>': output lines starting so are not compared (they change run to run)."""
     return [l.split("# ignore-out:", 1)[1].strip()
             for l in test_file.read_text().splitlines() if l.strip().startswith("# ignore-out:")]
+
+
+def wants_rtg(test_file: Path) -> bool:
+    """'# rtg': with --emu, run only on the 3.2 machine with a graphics card (D50)."""
+    return any(l.strip() == "# rtg" for l in test_file.read_text().splitlines())
 
 
 def wants_fpu(test_file: Path) -> bool:
@@ -583,6 +591,9 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
     shot_tests = [t for t in runnable if emu_shots(t)]
+    rtg_tests = [t for t in runnable if wants_rtg(t)]
+    runnable = [t for t in runnable if t not in rtg_tests]
+    shot_tests = [t for t in shot_tests if t not in rtg_tests]
     fpu_tests = [t for t in runnable if wants_fpu(t) and t not in shot_tests]
     runnable = [t for t in runnable if t not in shot_tests and t not in fpu_tests]
     mui = [t for t in runnable if "muimaster.library" in emu_needs(t)]
@@ -647,6 +658,19 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
             fpu_tests = []
         if fpu_tests:
             results += run_emu_boot(fpu_tests, fpu_machine, rom, system, memcheck)
+    if rtg_tests:
+        # '# rtg': a 68040 with FS-UAE's graphics card, the Workbench screen in 16 bits (Picasso96)
+        rtg_system = os.environ.get("DASH_EMU_SYS_32_RTG")
+        if machine["option"] != "emu_32":
+            for t in rtg_tests:
+                print(f"  {prefix}/{t.stem}: SKIP (RTG is tried on --emu-32)")
+        elif not rtg_system:
+            for t in rtg_tests:
+                print(f"  {prefix}/{t.stem}: SKIP (needs $DASH_EMU_SYS_32_RTG, see dashweb's tools/emu_sys_rtg.sh)")
+        else:
+            rtg_machine = dict(machine, config=machine["config"] + "cpu = 68040\nfpu = 68040\njit_compiler = 1\n"
+                               "uae_cpu_speed = max\nzorro_iii_memory = 131072\ngraphics_card = uaegfx\n")
+            results += run_emu_boot(rtg_tests, rtg_machine, rom, rtg_system, memcheck)
     for t in shot_tests:   # each in its own boot: the screenshots are timed from the boot
         system = os.environ.get(machine["mui_sys_env"] if "muimaster.library" in emu_needs(t) else machine["sys_env"])
         results += run_emu_boot([t], machine, rom, system, memcheck, shots=emu_shots(t))

@@ -1792,8 +1792,8 @@ struct Library *DataTypesBase = NULL;
 typedef struct {
     Object *o;               /* the datatype object (owns bm and mask); NULL for a scaled copy */
     struct BitMap *bm;
-    PLANEPTR mask;           /* ours, in chip RAM, rows as long as bm's; transparent pixels 0 */
-    LONG w, h;
+    PLANEPTR mask;           /* ours, in chip RAM, rows of mmod bytes; transparent pixels 0 */
+    LONG w, h, mmod;
 } _DashImg;
 static _DashImg *_dash_imgs[_DASH_IMG_MAX];
 
@@ -1804,13 +1804,17 @@ static _DashImg *_dash_img(LONG image) {
     return NULL;
 }
 
-/* The mask of img from rows of srcmod bytes (a datatype's mask, a scaled one); only for
-   standard bitmaps, which BltMaskBitMapRastPort can use with a mask of the same row length */
+/* The mask of img from rows of srcmod bytes (a datatype's mask, a scaled one). BltMaskBitMapRastPort
+   reads it with the row length of a standard bitmap; on a graphics card (RTG: no planes), with
+   that of a plane of the image's width */
 static void _dash_img_mask(_DashImg *img, UBYTE *src, LONG srcmod) {
-    LONG mod = img->bm->BytesPerRow, n = srcmod < mod ? srcmod : mod, y;
+    LONG mod, n, y;
     ULONG flags = GetBitMapAttr(img->bm, BMA_FLAGS);
-    if (!(flags & BMF_STANDARD) || (flags & BMF_INTERLEAVED)) return;
+    if (flags & BMF_INTERLEAVED) return;
+    mod = (flags & BMF_STANDARD) ? img->bm->BytesPerRow : ((img->w + 15) >> 4) << 1;
+    n = srcmod < mod ? srcmod : mod;
     img->mask = (PLANEPTR)AllocVec(mod * img->h, MEMF_CHIP | MEMF_CLEAR);
+    img->mmod = mod;
     if (img->mask && src) for (y = 0; y < img->h; y++) CopyMem(src + y * srcmod, img->mask + y * mod, n);
 }
 
@@ -1988,7 +1992,7 @@ static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
     if (src->mask) {
         struct BitMap from, *to = AllocBitMap(w, h, 1, BMF_CLEAR, NULL);
         InitBitMap(&from, 1, src->w, src->h);
-        from.BytesPerRow = src->bm->BytesPerRow;
+        from.BytesPerRow = src->mmod;
         from.Planes[0] = src->mask;
         if (to) {
             bsa.bsa_SrcBitMap = &from;

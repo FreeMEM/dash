@@ -1298,6 +1298,9 @@ PNG) las pasa a la pantalla con `image_from_rgb(buffer, ancho, alto, alfa)`: fil
 V43 (AmigaOS 3.5 y despues) para adaptar los colores a la pantalla, como con un fichero; en 3.1
 de serie da 0. La imagen se usa como las de `image_load`.
 
+La transparencia vale tambien en pantallas de tarjeta grafica (RTG, Picasso96), tambien en las
+copias de `image_scale` y en `image_draw_part`.
+
 ### Pantalla
 
 ```

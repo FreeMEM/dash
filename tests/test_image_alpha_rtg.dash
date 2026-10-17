@@ -1,0 +1,64 @@
+# Test: the transparent part of an RGBA image on a graphics card screen (RTG, dashweb D50). There the
+# image's bitmap has no planes and the mask was dropped: the transparent half came out as a black (here
+# blue) box. A 40x40 image, the left half transparent and the right half opaque blue, over a red
+# background: drawn as it is, in part (from x 15) and scaled to 20x20 with image_scale. A transparent
+# pixel must keep the background's colour and an opaque one must not.
+# rtg
+# expect-out: tal cual: ok
+# expect-out: parte: ok
+# expect-out: escalada: ok
+# expect-out: fin
+
+Window W
+    title "Alfa"
+    width 300
+    height 150
+end
+
+func ver(nombre: String, transp_x: Int, opaco_x: Int, y: Int, fondo: Int)
+    t = gfx_pixel_rgb(transp_x, y)
+    o = gfx_pixel_rgb(opaco_x, y)
+    if t == fondo and o != fondo
+        Print nombre + ": ok"
+    else
+        Print nombre + ": fondo #{fondo} transparente #{t} opaco #{o}"
+    end
+end
+
+Main
+    W.open
+    n = 160 * 60
+    rojo = buffer_alloc(n * 3)
+    for i in (0..n - 1)
+        buffer_set_byte(rojo, i * 3, 255)
+    end
+    gfx_rgb_draw(rojo, 160, 60, 20, 20)
+    buffer_free(rojo)
+    fondo = gfx_pixel_rgb(25, 25)
+    w = 40
+    v = buffer_alloc(w * w * 4)
+    for y in (0..w - 1)
+        for x in (0..w - 1)
+            o = (y * w + x) * 4
+            buffer_set_byte(v, o + 2, 255)
+            if x >= 20
+                buffer_set_byte(v, o + 3, 255)
+            end
+        end
+    end
+    img = image_from_rgb(v, w, w, true)
+    buffer_free(v)
+    if img == 0
+        Print "image_from_rgb: 0"
+    end
+    image_draw(img, 22, 22)
+    ver("tal cual", 22 + 5, 22 + 30, 40, fondo)
+    image_draw_part(img, 15, 0, 70, 22, 10, 40)
+    ver("parte", 70 + 2, 70 + 7, 40, fondo)
+    e = image_scale(img, 20, 20)
+    image_draw(e, 90, 22)
+    ver("escalada", 90 + 3, 90 + 15, 30, fondo)
+    image_free(e)
+    image_free(img)
+    Print "fin"
+end
