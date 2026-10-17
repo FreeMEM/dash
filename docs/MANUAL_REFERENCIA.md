@@ -868,7 +868,8 @@ cabeceras["Host"] = "ejemplo.org"
 
 Los valores pueden ser `Int`, `Bool`, `String`, structs, listas u otros diccionarios
 (`{String: {String: T}}`), y el diccionario es dueno de ellos como una lista; tambien hay
-listas de diccionarios (`[{String: T}]`). `for k in d.keys()` no crea la lista de claves si el
+listas de diccionarios (`[{String: T}]`). Una variable que toma uno de ellos (`x = d[k]`, `y = l[0]`)
+es un diccionario de su tipo, sin declararla con `var`. `for k in d.keys()` no crea la lista de claves si el
 cuerpo no cambia ese diccionario. `d.clear()` lo vacia. Tambien se escribe a traves de campos
 (`hoja.reglas["color"] = "red"`). Buscar, anadir y quitar cuestan lo mismo con 10 claves
 que con 10.000 (tabla hash).

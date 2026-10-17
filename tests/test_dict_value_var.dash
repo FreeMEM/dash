@@ -1,0 +1,43 @@
+# Test: a variable that takes a value of a dictionary of dictionaries (x = d[k]) or an element of a
+# list of dictionaries (y = l[0]) is a dictionary of the inner value type, as if declared with
+# var x: {String: Int} (dashweb D53: its keys were taken as Int, "Dictionary keys are Strings").
+# expect-out: usos 3: p q
+# expect-out: lista: z=7
+# expect-out: textos: hola
+# expect-out: fin
+
+func usos(d: {String: {String: Int}}) -> String
+    otro = {"a": 0}
+    n = 0
+    nombres = ""
+    for k in d.keys()
+        x = d[k]
+        for c in x.keys()
+            otro[c] = 1
+            n = n + x[c]
+        end
+    end
+    for c in otro.keys()
+        if c != "a"
+            nombres = nombres + " " + c
+        end
+    end
+    return "usos #{n}:" + nombres
+end
+
+Main
+    var d: {String: {String: Int}} = {}
+    d["uno"] = {"p": 1, "q": 2}
+    Print usos(d)
+    var l: [{String: Int}] = []
+    l.push({"z": 7})
+    y = l[0]
+    for c in y.keys()
+        Print "lista: #{c}=#{y[c]}"
+    end
+    var t: {String: {String: String}} = {}
+    t["a"] = {"s": "hola"}
+    v = t["a"]
+    Print "textos: " + v["s"]
+    Print "fin"
+end

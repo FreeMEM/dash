@@ -11824,6 +11824,8 @@ static {ret_type} {method_name}({params_str}) {{
             elem = self._array_elem_type(node.array)
             if elem == "array":
                 return "DashArrayLong *"
+            if elem == "dict":
+                return "DashDict *"
             if elem and elem.startswith("struct:"):
                 return f"_Dash_{elem[7:]} *"
             return "LONG"  # Array elements are LONG
@@ -13925,6 +13927,10 @@ static {ret_type} {method_name}({params_str}) {{
             vt = self.var_types.get(node.name)
         elif isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
             vt = self._list_var_type(self._declared_dict_type(node))
+        elif isinstance(node, ArrayAccess):
+            # d[k] of a dictionary of dictionaries, l[i] of a list of them (D53)
+            declared = self._declared_type_of(node)
+            vt = self._list_var_type(declared) if dict_value_type(declared) is not None else None
         if vt and (vt == "dict" or vt.startswith("dict:")):
             return vt[5:] or "int"
         return None

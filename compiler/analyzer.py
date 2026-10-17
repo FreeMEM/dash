@@ -1129,6 +1129,12 @@ class SemanticAnalyzer(ASTVisitor):
         if isinstance(expr, VarRef):
             symbol = self.lookup_symbol(expr.name)
             return symbol.dict_value if symbol else None
+        if isinstance(expr, ArrayAccess):
+            # a value of a dictionary of dictionaries, or an element of a list of them: d[k], l[i]
+            outer = self._dict_value_of(expr.array)
+            if outer is not None:
+                return dict_value_type(outer)
+            return dict_value_type(list_elem_type(self._declared_list_type(expr.array)))
         if isinstance(expr, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)) and self.program:
             type_name = None
             if isinstance(expr, (FunctionCall, MethodCall)):
