@@ -1,0 +1,64 @@
+# Test: gfx_blend_rect and gfx_gradient_rect on a graphics card screen (RTG, 16 bits; dashweb D51). The
+# pixels are read and written in blocks of rows (p96ReadPixelArray / p96WritePixelArray) and mixed in
+# between: one library call per pixel took 0.6 s for 400x300 on the 68040 with uaegfx, now about 20 ms.
+# Over red: blue at alpha 128 gives half of each, and so does a gradient from nothing to blue half way
+# down (or across); alpha 255 is the colour; a rectangle partly outside the window is clipped.
+# rtg
+# expect-out: mezcla: ok
+# expect-out: rápida: ok
+# expect-out: vertical: ok
+# expect-out: horizontal: ok
+# expect-out: opaco: ok
+# expect-out: recortado: ok
+# expect-out: fin
+
+Window W
+    title "Mezcla RTG"
+    width 640
+    height 400
+end
+
+func canal(c: Int, s: Int) -> Int
+    return (c >> s) & 255
+end
+
+# r, g, b del píxel dentro de [esperado - 12, esperado + 12] (16 bits: 5 o 6 bits por canal)
+func cerca(nombre: String, x: Int, y: Int, r: Int, g: Int, b: Int)
+    c = gfx_pixel_rgb(x, y)
+    if (canal(c, 16) - r).abs() <= 12 and (canal(c, 8) - g).abs() <= 12 and (canal(c, 0) - b).abs() <= 12
+        Print nombre + ": ok"
+    else
+        Print nombre + ": #{str_from_int(c, 16)} en #{x},#{y}"
+    end
+end
+
+Main
+    W.open
+    n = 400 * 300
+    rojo = buffer_alloc(n * 3)
+    for i in (0..n - 1)
+        buffer_set_byte(rojo, i * 3, 255)
+    end
+    gfx_rgb_draw(rojo, 400, 300, 10, 10)
+    t = time_ms()
+    gfx_blend_rect(10, 10, 409, 309, 0x0000FF, 128)
+    t = time_ms() - t
+    cerca("mezcla", 200, 150, 127, 0, 128)
+    if t < 200
+        Print "rápida: ok"
+    else
+        Print "rápida: #{t} ms"
+    end
+    gfx_rgb_draw(rojo, 400, 300, 10, 10)
+    gfx_gradient_rect(10, 10, 409, 309, 0x0000FF, 0, 0x0000FF, 255, true)
+    cerca("vertical", 200, 160, 127, 0, 128)
+    gfx_rgb_draw(rojo, 400, 300, 10, 10)
+    gfx_gradient_rect(10, 10, 409, 309, 0x0000FF, 0, 0x0000FF, 255, false)
+    cerca("horizontal", 210, 100, 127, 0, 128)
+    gfx_blend_rect(10, 10, 409, 309, 0x00FF00, 255)
+    cerca("opaco", 300, 200, 0, 255, 0)
+    gfx_blend_rect(-50, -50, 5, 5, 0xFFFFFF, 255)
+    cerca("recortado", 2, 2, 255, 255, 255)
+    buffer_free(rojo)
+    Print "fin"
+end

@@ -1254,7 +1254,8 @@ c = gfx_pixel_rgb(10, 10)                             # color de un pixel como 0
 ```
 
 En una pantalla de color real (RTG de 15, 16, 24 o 32 bits) cada pixel se mezcla de verdad con
-lo que habia (con `cybergraphics.library`, o `Picasso96API.library` si no esta). En una pantalla
+lo que habia: se lee y se escribe por bloques de filas (`Picasso96API.library`, o `cybergraphics.library`
+si no esta), unos 20 ms para 400x300 en un 68040; con alfa 255 no se lee nada. En una pantalla
 de paleta (AGA, ECS, RTG de 8 bits) no hay mezcla: el color se dibuja con el lapiz mas parecido y
 un tramado ordenado de 4x4 (alfa 128 pinta la mitad de los pixeles, 0 ninguno, 255 todos), con el
 blitter. Lo que cae fuera de la ventana no se pinta. En un degradado cada fila (o columna) tiene su

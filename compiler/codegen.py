@@ -1350,7 +1350,8 @@ static BOOL _dash_blend_truecolor(struct RastPort *rp) {
     if (!_dash_blend_libs) {
         _dash_blend_libs = 1;
         if (!CyberGfxBase) CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
-        if (!CyberGfxBase) _dash_p96 = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+        /* also under its cybergraphics emulation: _dash_rgb_block uses its own calls */
+        if (!_dash_p96) _dash_p96 = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
     }
     return CyberGfxBase || _dash_p96;
 }
@@ -1397,6 +1398,156 @@ static BOOL _dash_blend_clip(LONG *x1, LONG *y1, LONG *x2, LONG *y2) {
     return *x1 <= *x2 && *y1 <= *y2;
 }
 
+/* --- high/true colour: the pixels read and written in blocks of rows as RGB24, mixed in between
+   (one library call per pixel was 5 us each on a 68040 with uaegfx) --- */
+
+/* Picasso96's p96ReadPixelArray (LVO -108) and p96WritePixelArray (-102): ri in a0, its X d0 and Y d1,
+   rp a1, the RastPort's X d2 and Y d3, SizeX d4, SizeY d5. RenderInfo: the memory, its bytes per row,
+   the pixel format. */
+struct _DashRenderInfo { APTR Memory; WORD BytesPerRow; WORD pad; ULONG RGBFormat; };
+#define _DASH_RGBFB_R8G8B8 2
+static void _dash_p96_pixel_array(LONG lvo, struct _DashRenderInfo *ri, LONG sx, LONG sy, struct RastPort *rp,
+                                  LONG dx, LONG dy, LONG w, LONG h) {
+    register struct _DashRenderInfo *a0 __asm("a0") = ri;
+    register ULONG d0 __asm("d0") = sx;
+    register ULONG d1 __asm("d1") = sy;
+    register struct RastPort *a1 __asm("a1") = rp;
+    register ULONG d2 __asm("d2") = dx;
+    register ULONG d3 __asm("d3") = dy;
+    register ULONG d4 __asm("d4") = w;
+    register ULONG d5 __asm("d5") = h;
+    register struct Library *a6 __asm("a6") = _dash_p96;
+    if (lvo == -108)
+        __asm volatile ("jsr a6@(-108:W)" : "+r"(a0), "+r"(d0), "+r"(d1), "+r"(a1), "+r"(d2), "+r"(d3), "+r"(d4), "+r"(d5)
+                        : "r"(a6) : "cc", "memory");
+    else
+        __asm volatile ("jsr a6@(-102:W)" : "+r"(a0), "+r"(d0), "+r"(d1), "+r"(a1), "+r"(d2), "+r"(d3), "+r"(d4), "+r"(d5)
+                        : "r"(a6) : "cc", "memory");
+}
+#define _dash_p96_write_array(ri, sx, sy, rp, dx, dy, w, h) _dash_p96_pixel_array(-102, ri, sx, sy, rp, dx, dy, w, h)
+
+/* Read (write FALSE) or write w x h RGB24 pixels, rows bpr bytes apart, at x, y of the RastPort.
+   Picasso96's own calls when it is there (also under its cybergraphics emulation) */
+static void _dash_rgb_block(BOOL write, UBYTE *pix, LONG bpr, LONG x, LONG y, LONG w, LONG h) {
+    if (_dash_p96) {
+        struct _DashRenderInfo ri;
+        ri.Memory = pix;
+        ri.BytesPerRow = bpr;
+        ri.pad = 0;
+        ri.RGBFormat = _DASH_RGBFB_R8G8B8;
+        _dash_p96_pixel_array(write ? -102 : -108, &ri, 0, 0, _dash_rp, x, y, w, h);
+    } else if (write) {
+        WritePixelArray(pix, 0, 0, bpr, _dash_rp, x, y, w, h, RECTFMT_RGB);
+    } else {
+        ReadPixelArray(pix, 0, 0, bpr, _dash_rp, x, y, w, h, RECTFMT_RGB);
+    }
+}
+
+/* n RGB24 pixels mixed with one colour: v = old * (255 - a) + c * a, rounded / 255. Many pixels:
+   a table per channel of what each old value becomes */
+static UBYTE _dash_mix_tab[3][256];
+static void _dash_mix_pixels(UBYTE *p, LONG n, LONG rgb, LONG alpha) {
+    ULONG ka = 255 - alpha;
+    ULONG kr = ((rgb >> 16) & 255) * alpha + 128, kg = ((rgb >> 8) & 255) * alpha + 128, kb = (rgb & 255) * alpha + 128;
+    ULONG v;
+    if (n >= 256) {
+        UBYTE *tr = _dash_mix_tab[0], *tg = _dash_mix_tab[1], *tb = _dash_mix_tab[2];
+        LONG i;
+        for (i = 0; i < 256; i++) {
+            v = i * ka + kr; tr[i] = (UBYTE)((v + (v >> 8)) >> 8);
+            v = i * ka + kg; tg[i] = (UBYTE)((v + (v >> 8)) >> 8);
+            v = i * ka + kb; tb[i] = (UBYTE)((v + (v >> 8)) >> 8);
+        }
+        while (n-- > 0) { p[0] = tr[p[0]]; p[1] = tg[p[1]]; p[2] = tb[p[2]]; p += 3; }
+        return;
+    }
+    while (n-- > 0) {
+        v = p[0] * ka + kr; p[0] = (UBYTE)((v + (v >> 8)) >> 8);
+        v = p[1] * ka + kg; p[1] = (UBYTE)((v + (v >> 8)) >> 8);
+        v = p[2] * ka + kb; p[2] = (UBYTE)((v + (v >> 8)) >> 8);
+        p += 3;
+    }
+}
+
+/* The colour and alpha at step k of d of a gradient */
+static LONG _dash_grad_at(LONG rgb1, LONG rgb2, LONG k, LONG d) {
+    LONG c, rgb = 0;
+    for (c = 16; c >= 0; c -= 8) {
+        LONG p = (rgb1 >> c) & 255, q = (rgb2 >> c) & 255;
+        rgb |= (p + ((q - p) * k) / d) << c;
+    }
+    return rgb;
+}
+
+/* x1..x2, y1..y2 (clipped) on high/true colour, in blocks of rows: one colour and alpha (grad NULL),
+   or a gradient: grad[i] the colour and alpha (alpha << 24 | rgb) of row i (vertical) or column i.
+   With all alphas 255 nothing is read. FALSE if there is no memory for a block. */
+static UBYTE *_dash_blend_buf = NULL;
+static ULONG _dash_blend_buf_size = 0;
+static BOOL _dash_blend_block(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG alpha, ULONG *grad, BOOL vertical) {
+    LONG w = x2 - x1 + 1, h = y2 - y1 + 1, bpr = w * 3, rows, y, r, i;
+    BOOL opaque = TRUE;
+    UBYTE *p;
+    ULONG *cols = NULL;
+    if (grad) { for (i = 0; i < (vertical ? h : w); i++) if ((grad[i] >> 24) != 255) { opaque = FALSE; break; } }
+    else opaque = alpha >= 255;
+    rows = 49152 / bpr;
+    if (rows < 1) rows = 1;
+    if (rows > h) rows = h;
+    if ((ULONG)(rows * bpr) > _dash_blend_buf_size) {
+        if (_dash_blend_buf) FreeVec(_dash_blend_buf);
+        _dash_blend_buf = (UBYTE *)AllocVec(rows * bpr, MEMF_ANY);
+        _dash_blend_buf_size = _dash_blend_buf ? rows * bpr : 0;
+        if (!_dash_blend_buf) return FALSE;
+    }
+    if (opaque && !grad) {   /* one colour: one row made, copied down the block */
+        UBYTE cr = (rgb >> 16) & 255, cg = (rgb >> 8) & 255, cb = rgb & 255;
+        for (i = 0, p = _dash_blend_buf; i < w; i++, p += 3) { p[0] = cr; p[1] = cg; p[2] = cb; }
+        for (r = 1; r < rows; r++) CopyMem(_dash_blend_buf, _dash_blend_buf + r * bpr, bpr);
+    }
+    for (y = y1; y <= y2; y += rows) {
+        LONG n = y2 - y + 1 < rows ? y2 - y + 1 : rows;
+        if (!opaque) _dash_rgb_block(FALSE, _dash_blend_buf, bpr, x1, y, w, n);
+        if (!grad) {
+            if (!opaque) _dash_mix_pixels(_dash_blend_buf, w * n, rgb, alpha);
+        } else if (vertical) {
+            for (r = 0; r < n; r++) {
+                ULONG g = grad[y - y1 + r];
+                p = _dash_blend_buf + r * bpr;
+                if (opaque) {
+                    UBYTE cr = (g >> 16) & 255, cg = (g >> 8) & 255, cb = g & 255;
+                    for (i = 0; i < w; i++, p += 3) { p[0] = cr; p[1] = cg; p[2] = cb; }
+                } else {
+                    _dash_mix_pixels(p, w, g & 0xFFFFFF, g >> 24);
+                }
+            }
+        } else {   /* columns: grad[i] turned into the factors of its mix once (cols: 4 per column) */
+            if (!cols) {
+                cols = (ULONG *)AllocVec(w * 16, MEMF_ANY);
+                if (!cols) return FALSE;
+                for (i = 0; i < w; i++) {
+                    ULONG g = grad[i], al = g >> 24;
+                    cols[i * 4] = 255 - al;
+                    cols[i * 4 + 1] = ((g >> 16) & 255) * al + 128;
+                    cols[i * 4 + 2] = ((g >> 8) & 255) * al + 128;
+                    cols[i * 4 + 3] = (g & 255) * al + 128;
+                }
+            }
+            for (r = 0; r < n; r++) {
+                ULONG *c = cols, v;
+                for (i = 0, p = _dash_blend_buf + r * bpr; i < w; i++, p += 3, c += 4) {
+                    v = p[0] * c[0] + c[1]; p[0] = (UBYTE)((v + (v >> 8)) >> 8);
+                    v = p[1] * c[0] + c[2]; p[1] = (UBYTE)((v + (v >> 8)) >> 8);
+                    v = p[2] * c[0] + c[3]; p[2] = (UBYTE)((v + (v >> 8)) >> 8);
+                }
+            }
+        }
+        _dash_rgb_block(TRUE, _dash_blend_buf, bpr, x1, y, w, n);
+    }
+    if (cols) FreeVec(cols);
+    return TRUE;
+}
+
 /* One span (a row or a column, or the whole rectangle) of one colour and alpha */
 static UWORD _dash_bayer_pat[16];
 static void _dash_blend_span(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG alpha) {
@@ -1406,6 +1557,7 @@ static void _dash_blend_span(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG 
     if (alpha > 255) alpha = 255;
     if (_dash_blend_truecolor(_dash_rp)) {
         LONG r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255;
+        if (_dash_blend_block(x1, y1, x2, y2, rgb, alpha, NULL, FALSE)) return;
         for (y = y1; y <= y2; y++)
             for (x = x1; x <= x2; x++) {
                 ULONG old = _dash_rgb_read(_dash_rp, x, y);
@@ -1466,12 +1618,26 @@ static void _dash_gradient_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb1, L
     a = vertical ? y1 : x1;
     b = vertical ? y2 : x2;
     n = b - a;
-    for (i = vertical ? cy1 : cx1; i <= (vertical ? cy2 : cx2); i++) {
-        LONG k = n ? i - a : 0, d = n ? n : 1, c, rgb = 0, alpha;
-        for (c = 16; c >= 0; c -= 8) {
-            LONG p = (rgb1 >> c) & 255, q = (rgb2 >> c) & 255;
-            rgb |= (p + ((q - p) * k) / d) << c;
+    if (_dash_blend_truecolor(_dash_rp)) {   /* the whole block at once, the colours of each row/column first */
+        LONG first = vertical ? cy1 : cx1, count = (vertical ? cy2 : cx2) - first + 1;
+        ULONG *grad = (ULONG *)AllocVec(count * 4, MEMF_ANY);
+        BOOL done = FALSE;
+        if (grad) {
+            BOOL any = FALSE;
+            for (i = 0; i < count; i++) {
+                LONG k = n ? first + i - a : 0, d = n ? n : 1, alpha = alpha1 + ((alpha2 - alpha1) * k) / d;
+                if (alpha < 0) alpha = 0;
+                if (alpha > 255) alpha = 255;
+                if (alpha) any = TRUE;
+                grad[i] = ((ULONG)alpha << 24) | (ULONG)_dash_grad_at(rgb1, rgb2, k, d);
+            }
+            done = !any || _dash_blend_block(cx1, cy1, cx2, cy2, 0, 0, grad, vertical);
+            FreeVec(grad);
         }
+        if (done) { SetAPen(_dash_rp, pen); return; }
+    }
+    for (i = vertical ? cy1 : cx1; i <= (vertical ? cy2 : cx2); i++) {
+        LONG k = n ? i - a : 0, d = n ? n : 1, rgb = _dash_grad_at(rgb1, rgb2, k, d), alpha;
         alpha = alpha1 + ((alpha2 - alpha1) * k) / d;
         if (vertical) _dash_blend_span(cx1, i, cx2, i, rgb, alpha);
         else _dash_blend_span(i, cy1, i, cy2, rgb, alpha);
@@ -1480,25 +1646,6 @@ static void _dash_gradient_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb1, L
 }
 
 /* --- RGB24 pictures (gfx_rgb_draw): video frames --- */
-
-/* Picasso96's p96WritePixelArray (LVO -102): ri in a0, SrcX d0, SrcY d1, rp a1, DestX d2, DestY d3,
-   SizeX d4, SizeY d5. RenderInfo: the memory, its bytes per row, the pixel format. */
-struct _DashRenderInfo { APTR Memory; WORD BytesPerRow; WORD pad; ULONG RGBFormat; };
-#define _DASH_RGBFB_R8G8B8 2
-static void _dash_p96_write_array(struct _DashRenderInfo *ri, LONG sx, LONG sy, struct RastPort *rp,
-                                  LONG dx, LONG dy, LONG w, LONG h) {
-    register struct _DashRenderInfo *a0 __asm("a0") = ri;
-    register ULONG d0 __asm("d0") = sx;
-    register ULONG d1 __asm("d1") = sy;
-    register struct RastPort *a1 __asm("a1") = rp;
-    register ULONG d2 __asm("d2") = dx;
-    register ULONG d3 __asm("d3") = dy;
-    register ULONG d4 __asm("d4") = w;
-    register ULONG d5 __asm("d5") = h;
-    register struct Library *a6 __asm("a6") = _dash_p96;
-    __asm volatile ("jsr a6@(-102:W)" : "+r"(a0), "+r"(d0), "+r"(d1), "+r"(a1), "+r"(d2), "+r"(d3), "+r"(d4), "+r"(d5)
-                    : "r"(a6) : "cc", "memory");
-}
 
 /* w x h pixels of RGB24 rows (bytes_per_row apart) at x, y of the RastPort, already clipped */
 static void _dash_rgb_rect(UBYTE *pix, LONG bytes_per_row, LONG w, LONG h, LONG x, LONG y) {
@@ -1767,6 +1914,7 @@ static void _dash_blend_cleanup(void) {
     if (_dash_p96) { CloseLibrary(_dash_p96); _dash_p96 = NULL; }
     _dash_blend_libs = 0;
     if (_dash_rgb_buf) { FreeVec(_dash_rgb_buf); _dash_rgb_buf = NULL; _dash_rgb_buf_size = 0; }
+    if (_dash_blend_buf) { FreeVec(_dash_blend_buf); _dash_blend_buf = NULL; _dash_blend_buf_size = 0; }
     if (_dash_nf_tab) { FreeVec(_dash_nf_tab); _dash_nf_tab = NULL; _dash_nf_tab_fmt = 0; }
     if (_dash_nf_rg) { FreeVec(_dash_nf_rg); _dash_nf_rg = NULL; }
     _dash_nf_bm = NULL;
