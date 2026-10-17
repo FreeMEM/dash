@@ -1742,8 +1742,10 @@ para el limite, y el de la negociacion TLS empieza de nuevo cada vez que esta da
 ### TLS (HTTPS) con AmiSSL
 
 Sobre un socket de `net_connect`, `tls_connect` negocia TLS con AmiSSL 5 y comprueba que el
-certificado del servidor es valido y es para ese nombre (contra `AmiSSL:Certs`). Necesita
-AmiSSL instalado y un 68020 o mejor; el programa pide 64 KB de pila (OpenSSL la necesita).
+certificado del servidor es valido y es para ese nombre (contra `AmiSSL:Certs`; una direccion IPv4
+como `127.0.0.1` se comprueba como direccion). Necesita AmiSSL 5.1 o posterior instalado (vale cualquier
+AmiSSL 5, aunque Dash se compile con el SDK de la 5.27) y un 68020 o mejor; el programa pide 64 KB de
+pila (OpenSSL la necesita).
 Para compilar hacen falta las cabeceras del SDK: `tools/get_amissl.sh` las descarga.
 
 | Funcion | Que hace |

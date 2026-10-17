@@ -2992,13 +2992,17 @@ static BOOL _dash_tls_init(void) {
     if (!AmiSSLMasterBase) AmiSSLMasterBase = OpenLibrary((CONST_STRPTR)"amisslmaster.library", AMISSLMASTER_MIN_VERSION);
     if (!AmiSSLMasterBase) { _dash_net_err = "no hay AmiSSL (amisslmaster.library)"; return FALSE; }
     if (!_dash_tls_open) {
-        if (OpenAmiSSLTags(AMISSL_CURRENT_VERSION, AmiSSL_UsesOpenSSLStructs, FALSE,
-                           AmiSSL_GetAmiSSLBase, (ULONG)&AmiSSLBase, AmiSSL_GetAmiSSLExtBase, (ULONG)&AmiSSLExtBase,
-                           AmiSSL_SocketBase, (ULONG)SocketBase, AmiSSL_ErrNoPtr, (ULONG)&errno, TAG_DONE) != 0) {
-            _dash_net_err = "no se puede abrir AmiSSL";
+        /* the API of the SDK (AmiSSL 5.27) first, then older ones down to 5.1 (OpenSSL 3.0, all that is
+           used here): an AmiSSL serves programs built for its own API or an older one, not a newer one */
+        LONG v;
+        for (v = AMISSL_CURRENT_VERSION; v >= AMISSL_V303 && !_dash_tls_open; v--)
+            _dash_tls_open = OpenAmiSSLTags(v, AmiSSL_UsesOpenSSLStructs, FALSE,
+                                            AmiSSL_GetAmiSSLBase, (ULONG)&AmiSSLBase, AmiSSL_GetAmiSSLExtBase, (ULONG)&AmiSSLExtBase,
+                                            AmiSSL_SocketBase, (ULONG)SocketBase, AmiSSL_ErrNoPtr, (ULONG)&errno, TAG_DONE) == 0;
+        if (!_dash_tls_open) {
+            _dash_net_err = "no se puede abrir AmiSSL (hace falta AmiSSL 5.1 o posterior)";
             return FALSE;
         }
-        _dash_tls_open = TRUE;
     }
     OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
     /* some entropy for the random generator: time, task, memory, raster position */
@@ -3022,6 +3026,23 @@ static void _dash_tls_cleanup(void) {
     if (AmiSSLMasterBase) { CloseLibrary(AmiSSLMasterBase); AmiSSLMasterBase = NULL; }
 }
 
+/* The name the server's certificate must have. An IPv4 address is checked as one (in binary: AmiSSL
+   5.1 takes neither SSL_set1_host nor X509_VERIFY_PARAM_set1_ip_asc with it) and not sent as the
+   server name (SNI is for names). IPv6 addresses are left to SSL_set1_host (later AmiSSL) */
+static void _dash_tls_name(SSL *ssl, STRPTR host) {
+    STRPTR c;
+    UBYTE a[4];
+    LONG n = 0, v = -1;
+    for (c = host; ; c++) {   /* an IPv4 address: four numbers 0-255 */
+        if (*c >= '0' && *c <= '9' && v < 256) v = (v < 0 ? 0 : v * 10) + (*c - '0');
+        else if ((*c == '.' || !*c) && v >= 0 && v < 256 && n < 4) { a[n++] = (UBYTE)v; v = -1; if (!*c) break; }
+        else { n = 0; break; }
+    }
+    if (n == 4 && X509_VERIFY_PARAM_set1_ip(SSL_get0_param(ssl), a, 4)) return;
+    SSL_set_tlsext_host_name(ssl, host);
+    SSL_set1_host(ssl, (char *)host);
+}
+
 /* TLS over a connected socket, checking the certificate and that it is for host:
    the connection, or -1 (net_error() says why) */
 static LONG _dash_tls_connect(LONG sock, STRPTR host) {
@@ -3033,8 +3054,7 @@ static LONG _dash_tls_connect(LONG sock, STRPTR host) {
     ssl = SSL_new(_dash_tls_ctx);
     if (!ssl) { _dash_net_err = "error de TLS"; return -1; }
     SSL_set_fd(ssl, sock);
-    SSL_set_tlsext_host_name(ssl, host);
-    SSL_set1_host(ssl, (char *)host);
+    _dash_tls_name(ssl, host);
     if (SSL_connect(ssl) != 1) {
         long v = SSL_get_verify_result(ssl);
         _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
@@ -3061,8 +3081,7 @@ static LONG _dash_tls_connect_start(LONG sock, STRPTR host, LONG timeout_ms) {
     if (!ssl) { _dash_net_err = "error de TLS"; return -1; }
     IoctlSocket(sock, FIONBIO, (char *)&on);
     SSL_set_fd(ssl, sock);
-    SSL_set_tlsext_host_name(ssl, host);
-    SSL_set1_host(ssl, (char *)host);
+    _dash_tls_name(ssl, host);
     SSL_set_connect_state(ssl);
     _dash_tls_ssl[slot] = ssl;
     _dash_tls_shaking[slot] = TRUE;
