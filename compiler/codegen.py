@@ -11512,6 +11512,12 @@ static {ret_type} {method_name}({params_str}) {{
 
         value = self._generate_expression(node.value)
         var_type = self._infer_c_type(node.value)
+        # what a call, field or element declares (a [[String]], a {String: [Int]}...), for its
+        # elements later (D49)
+        declared = self._declared_type_of(node.value) if not isinstance(node.value, VarRef) else \
+            self.decl_types.get(node.value.name)
+        if declared:
+            self.decl_types[node.name] = declared
 
         # Track variable type for string/struct detection
         if var_type == "STRPTR" or self._is_string_expr(node.value):
@@ -11881,12 +11887,13 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_fixed = True
         elif elem.startswith("struct:"):
             var_type, c_type = elem, f"_Dash_{elem[7:]} *"
-        elif elem == "array":
-            var_type, c_type = "array", "DashArrayLong *"
-        elif elem == "dict":
-            # a dictionary: its own kind of values, from the list's declared type
+        elif elem in ("array", "dict"):
+            # a list or a dictionary: its own kind of elements, from the list's declared type (D49)
             inner = list_elem_type(self._declared_type_of(node.iterable) or "")
-            var_type, c_type = (self._list_var_type(inner) if inner else None) or "dict", "DashDict *"
+            var_type = (self._list_var_type(inner) if inner else None) or elem
+            c_type = "DashArrayLong *" if elem == "array" else "DashDict *"
+            if inner:
+                self.decl_types[node.variable] = inner
         else:
             var_type, c_type = "number", "LONG"
         mark = self._new_tmp_mark()
@@ -13644,8 +13651,8 @@ static {ret_type} {method_name}({params_str}) {{
             return self.var_types[node.name]
         if isinstance(node, ArraySlice) and isinstance(node.array, VarRef):
             return self.var_types.get(node.array.name) or "array"
-        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
-            declared = self._list_var_type(self._declared_list_type(node))
+        if isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess, ArrayAccess)):
+            declared = self._list_var_type(self._declared_type_of(node))
             if declared:
                 return declared
         if isinstance(node, BinaryOp) and node.operator == "+":
@@ -13698,7 +13705,7 @@ static {ret_type} {method_name}({params_str}) {{
                 return None
             value = dict_value_type(outer)
             return value if value is not None else list_elem_type(outer)
-        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
+        if isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)):
             return self._declared_list_type(node) or self._declared_dict_type(node)
         return None
 
@@ -13751,13 +13758,22 @@ static {ret_type} {method_name}({params_str}) {{
             return vt[5:] or "int"
         return None
 
+    def _call_return_type(self, node: ASTNode) -> Optional[str]:
+        """The return type a call declares: a function, @native, @extern or a struct's method (D49)."""
+        if isinstance(node, FunctionCall):
+            func = self.analysis.program.get_function(node.name) or self._foreign_func(node.name)
+            return func.return_type if func else None
+        if isinstance(node, MethodCall):
+            method = self._method_of(node)
+            return method.return_type if method else None
+        return None
+
     def _declared_dict_type(self, node: ASTNode) -> Optional[str]:
         """The {String: T} type a call or a struct field declares, if any."""
         prog = self.analysis.program
         type_name = None
-        if isinstance(node, FunctionCall):
-            func = prog.get_function(node.name)
-            type_name = func.return_type if func else None
+        if isinstance(node, (FunctionCall, MethodCall)):
+            type_name = self._call_return_type(node)
         elif isinstance(node, PropertyAccess):
             struct = self._struct_of(node.object)
             field = struct.get_field(node.property) if struct else None
@@ -13774,9 +13790,8 @@ static {ret_type} {method_name}({params_str}) {{
         type_name = None
         if isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).list_of:
             return f"[{get_builtin(node.name).list_of}]"
-        if isinstance(node, FunctionCall):
-            func = prog.get_function(node.name)
-            type_name = func.return_type if func else None
+        if isinstance(node, (FunctionCall, MethodCall)):
+            type_name = self._call_return_type(node)
         elif isinstance(node, PropertyAccess):
             struct = self._struct_of(node.object)
             field = struct.get_field(node.property) if struct else None

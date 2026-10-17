@@ -1,0 +1,103 @@
+# A variable given the list or dictionary a function or a method returns keeps what its elements
+# are: [String] gives Strings in a for, [P] structs, [[String]] lists of Strings, {String: X} its
+# values (D49; before, the elements came out as Int).
+# expect-out: hola
+# expect-out: 5
+# expect-out: v
+# expect-out: 2
+# expect-out: p1
+# expect-out: 1
+# expect-out: uno dos
+# expect-out: p1
+# expect-out: 7
+
+struct P
+    n: Int
+    func hijos() -> [P]
+        var r: [P] = []
+        r.push(P(self.n + 1))
+        return r
+    end
+    func nombres() -> [String]
+        var r: [String] = []
+        r.push("p#{self.n}")
+        return r
+    end
+    func mapa() -> {String: Int}
+        var d: {String: Int} = {}
+        d["a"] = self.n
+        return d
+    end
+end
+
+func palabras(v: String) -> [String]
+    var r: [String] = []
+    r.push(v)
+    return r
+end
+
+func ps() -> [P]
+    var r: [P] = []
+    r.push(P(5))
+    return r
+end
+
+func tabla() -> {String: String}
+    var d: {String: String} = {}
+    d["k"] = "v"
+    return d
+end
+
+func listas() -> [[String]]
+    var r: [[String]] = []
+    var x: [String] = ["uno", "dos"]
+    r.push(x)
+    return r
+end
+
+func f(v: String)
+    a = "x"
+    lista = palabras(v)
+    for p in lista
+        a = p
+    end
+    Print a
+end
+
+Main
+    f("hola")
+    for p in ps()
+        Print p.n
+    end
+    t = tabla()
+    a = "x"
+    for k in t.keys()
+        a = t[k]
+    end
+    Print a
+    q = P(1)
+    h = q.hijos()
+    for p in h
+        Print p.n
+    end
+    ns = q.nombres()
+    for s in ns
+        a = s
+    end
+    Print a
+    m = q.mapa()
+    Print m["a"]
+    ls = listas()
+    for l in ls
+        b = ""
+        for s in l
+            b = b + s + " "
+        end
+        Print str_trim(b)
+    end
+    primero = ns[0]
+    Print primero
+    otra = ls[0]
+    otra.push("tres")
+    Print otra.length + ls[0].length + ls.length
+end

@@ -91,6 +91,7 @@ class Symbol:
     elem_struct: Optional[str] = None  # For a list of structs: their struct type
     dict_value: Optional[str] = None   # For a dictionary: the type of its values ("Int", "Nodo"...)
     list_fixed: bool = False           # A list of Fixed values ([Fixed]): its elements are Fixed
+    list_type: Optional[str] = None    # Its declared list type ("[String]", "[[Int]]"...), when known (D49)
 
 
 @dataclass
@@ -284,7 +285,8 @@ class SemanticAnalyzer(ASTVisitor):
                 struct_name=self._struct_type_name(gvar.var_type),
                 elem_struct=self._list_elem_struct(gvar.var_type),
                 dict_value=dict_value_type(gvar.var_type),
-                list_fixed=list_elem_type(gvar.var_type) == "Fixed"
+                list_fixed=list_elem_type(gvar.var_type) == "Fixed",
+                list_type=self._list_decl(gvar.var_type)
             )
             self.define_symbol(symbol, gvar)
 
@@ -531,7 +533,9 @@ class SemanticAnalyzer(ASTVisitor):
             elem_struct=self._list_elem_struct(node.var_type),
             dict_value=dict_value_type(node.var_type),
             list_fixed=(list_elem_type(node.var_type) == "Fixed" if node.var_type
-                        else self._is_fixed_list(node.initial_value))
+                        else self._is_fixed_list(node.initial_value)),
+            list_type=(self._list_decl(node.var_type) if node.var_type
+                       else self._declared_list_type(node.initial_value))
         )
         self.define_symbol(symbol, node)
 
@@ -561,7 +565,8 @@ class SemanticAnalyzer(ASTVisitor):
                 struct_name=self._struct_name_of(node.value),
                 elem_struct=self._elem_struct_of(node.value),
                 dict_value=self._dict_value_of(node.value),
-                list_fixed=self._is_fixed_list(node.value)
+                list_fixed=self._is_fixed_list(node.value),
+                list_type=self._declared_list_type(node.value)
             )
             self.define_symbol(symbol, node)
         elif symbol.symbol_type in (SymbolType.FUNCTION, SymbolType.NATIVE_FUNC, SymbolType.EXTERN_FUNC):
@@ -575,7 +580,8 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,
                 struct_name=self._struct_name_of(node.value),
                 elem_struct=self._elem_struct_of(node.value),
-                dict_value=self._dict_value_of(node.value)
+                dict_value=self._dict_value_of(node.value),
+                list_type=self._declared_list_type(node.value)
             ), node)
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
             self.error(f"Cannot assign to '{node.name}' - it's not a variable", node)
@@ -660,16 +666,24 @@ class SemanticAnalyzer(ASTVisitor):
         self.enter_scope("for_each")
         # Define loop variable (element type)
         elem = self._elem_struct_of(node.iterable)
+        # what the list declares its elements are, when known: a list or dictionary inside (D49)
+        decl = list_elem_type(self._declared_list_type(node.iterable))
+        inner = decl if decl and (list_elem_type(decl) is not None or dict_value_type(decl) is not None) else None
         symbol = Symbol(
             name=node.variable,
             symbol_type=SymbolType.VARIABLE,
-            # ints unless a list of structs or of Strings
+            # ints unless a list of structs, of Strings, of lists or of dictionaries
             dash_type=(DashType.UNKNOWN if elem else
+                       self._type_annotation_to_dash_type(inner) if inner else
                        DashType.FIXED if self._is_fixed_list(node.iterable) else
                        DashType.STRING if self._list_kind(node.iterable) == "string" else DashType.INT),
             node=node,
             is_initialized=True,
-            struct_name=elem
+            struct_name=elem,
+            elem_struct=self._list_elem_struct(inner) if inner else None,
+            dict_value=dict_value_type(inner) if inner else None,
+            list_fixed=bool(inner) and list_elem_type(inner) == "Fixed",
+            list_type=self._list_decl(inner)
         )
         self.define_symbol(symbol, node)
 
@@ -721,7 +735,8 @@ class SemanticAnalyzer(ASTVisitor):
                 struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None),
                 elem_struct=self._list_elem_struct(param.param_type if isinstance(param, FunctionParam) else None),
                 dict_value=dict_value_type(param.param_type if isinstance(param, FunctionParam) else None),
-                list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed"
+                list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed",
+                list_type=self._list_decl(param.param_type if isinstance(param, FunctionParam) else None)
             )
             self.define_symbol(symbol, node)
 
@@ -752,8 +767,8 @@ class SemanticAnalyzer(ASTVisitor):
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       dict_value=dict_value_type(
                                           param.param_type if isinstance(param, FunctionParam) else None),
-                                      list_fixed=list_elem_type(
-                                          param.param_type if isinstance(param, FunctionParam) else None) == "Fixed"),
+                                      list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed",
+                list_type=self._list_decl(param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
         before = len(self.errors)
         self._visit_new_body(node.body if isinstance(node.body, list) else [node.body])
@@ -782,8 +797,8 @@ class SemanticAnalyzer(ASTVisitor):
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       dict_value=dict_value_type(
                                           param.param_type if isinstance(param, FunctionParam) else None),
-                                      list_fixed=list_elem_type(
-                                          param.param_type if isinstance(param, FunctionParam) else None) == "Fixed"),
+                                      list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed",
+                list_type=self._list_decl(param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
         self._visit_new_body(node.body)
         self.exit_scope()
@@ -1114,11 +1129,10 @@ class SemanticAnalyzer(ASTVisitor):
         if isinstance(expr, VarRef):
             symbol = self.lookup_symbol(expr.name)
             return symbol.dict_value if symbol else None
-        if isinstance(expr, (FunctionCall, PropertyAccess, MemberAccess)) and self.program:
+        if isinstance(expr, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)) and self.program:
             type_name = None
-            if isinstance(expr, FunctionCall):
-                func = self.program.get_function(expr.name)
-                type_name = func.return_type if func else None
+            if isinstance(expr, (FunctionCall, MethodCall)):
+                type_name = self._call_type(expr)
             else:
                 if isinstance(expr, MemberAccess):
                     owner, member = self._struct_name_of(VarRef(name=expr.object_name)), expr.member
@@ -1205,9 +1219,14 @@ class SemanticAnalyzer(ASTVisitor):
         type_name = None
         if isinstance(expr, FunctionCall) and get_builtin(expr.name) and get_builtin(expr.name).list_of:
             return f"[{get_builtin(expr.name).list_of}]"
-        if isinstance(expr, FunctionCall):
-            func = self.program.get_function(expr.name)
-            type_name = func.return_type if func else None
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            return symbol.list_type if symbol else None
+        if isinstance(expr, ArrayAccess):   # an element of a list of lists
+            inner = list_elem_type(self._declared_list_type(expr.array))
+            return inner if list_elem_type(inner) is not None else None
+        if isinstance(expr, (FunctionCall, MethodCall)):
+            type_name = self._call_type(expr)
         elif isinstance(expr, (PropertyAccess, MemberAccess)):
             if isinstance(expr, MemberAccess):
                 owner, member = self._struct_name_of(VarRef(name=expr.object_name)), expr.member
@@ -1217,6 +1236,27 @@ class SemanticAnalyzer(ASTVisitor):
             field = struct.get_field(member) if struct else None
             type_name = field.field_type if field else None
         return type_name if list_elem_type(type_name) is not None else None
+
+    @staticmethod
+    def _list_decl(type_name: Optional[str]) -> Optional[str]:
+        """type_name if it is a list type ("[T]"), else None."""
+        return type_name if type_name and list_elem_type(type_name) is not None else None
+
+    def _call_type(self, expr: ASTNode) -> Optional[str]:
+        """The return type a call declares: a function, @native, @extern or a struct's method (D49)."""
+        if not self.program:
+            return None
+        if isinstance(expr, FunctionCall):
+            func = self.program.get_function(expr.name) or next(
+                (f for f in list(self.program.native_funcs) + list(self.program.extern_funcs)
+                 if f.name == expr.name), None)
+            return func.return_type if func else None
+        if isinstance(expr, MethodCall):
+            owner = self._struct_name_of(expr.object)
+            struct = self.program.get_struct(owner) if owner else None
+            method = struct.get_method(expr.method) if struct else None
+            return method.return_type if method else None
+        return None
 
     @staticmethod
     def _kind_text(kind: str) -> str:
@@ -1427,7 +1467,8 @@ class SemanticAnalyzer(ASTVisitor):
             return DashType.FIXED
         elif isinstance(node, FunctionCall) and self.program and self.program.get_function(node.name):
             func = self.program.get_function(node.name)
-            if func.return_type in ("Int", "Float", "Fixed", "String", "Bool"):
+            if func.return_type in ("Int", "Float", "Fixed", "String", "Bool") or \
+                    list_elem_type(func.return_type) is not None or dict_value_type(func.return_type) is not None:
                 return self._type_annotation_to_dash_type(func.return_type)
         elif isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).list_of:
             return self._type_annotation_to_dash_type(f"[{get_builtin(node.name).list_of}]")
@@ -1462,6 +1503,8 @@ class SemanticAnalyzer(ASTVisitor):
                 if symbol and (symbol.elem_struct or symbol.dash_type == DashType.STRING):
                     return DashType.UNKNOWN
             elem = list_elem_type(self._declared_list_type(node.array))
+            if list_elem_type(elem) is not None:   # an element of a list of lists (D49)
+                return self._type_annotation_to_dash_type(elem)
             if elem == "String":
                 return DashType.STRING
             if elem is not None and elem != "Int":
@@ -1481,6 +1524,9 @@ class SemanticAnalyzer(ASTVisitor):
                 return self._type_annotation_to_dash_type(field.field_type)
         elif isinstance(node, (LambdaFunc, FunctionRef)):
             return DashType.FUNC
+        elif isinstance(node, (MethodCall, FunctionCall)) and (
+                list_elem_type(self._call_type(node)) is not None or dict_value_type(self._call_type(node)) is not None):
+            return self._type_annotation_to_dash_type(self._call_type(node))   # a list or dictionary (D49)
         elif isinstance(node, MethodCall) and node.method == "pop":
             if self._is_fixed_list(node.object):
                 return DashType.FIXED
