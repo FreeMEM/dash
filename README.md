@@ -48,31 +48,38 @@ end
 - Enteros (también `0xDFF000`, `$DFF000`, `0b1010`), `Float` (coma flotante propia) y `Fixed` (coma fija
   16.16: decimales a velocidad de entero en un 68000)
 - `nil` para structs, listas y textos (listas enlazadas, árboles, "sin objetivo")
-- Expresiones aritméticas, lógicas y de comparación
+- Expresiones aritméticas, lógicas, de comparación y de bits (`& | ^ ~ << >>`, también en `const`)
 - Control de flujo: `if`/`elif`/`else`, `while`, `for`/`in`, `for`/`range` (también descendente y con `step`),
   `break` y `continue`
 - Funciones con parámetros, retorno y recursión; funciones como valor y lambdas
 - Listas con literales, índice, slicing, `.length` y tipo de elemento (`[String]`, `[Nodo]`...) que crecen
-  (`push`, `pop`, `insert`, `remove`); diccionarios `{String: T}`
-- Textos con interpolación, concatenación eficiente y funciones (`str_find`, `str_replace`, `str_upper`...)
+  (`push`, `pop`, `insert`, `remove`); diccionarios `{String: T}`, también de listas y de diccionarios; las
+  funciones y métodos que devuelven listas o diccionarios conservan el tipo de sus elementos
+- Textos con interpolación de cualquier expresión (`"#{a + 1}"`, `"#{f(x)}"`), concatenación eficiente y
+  funciones (`str_find`, `str_replace`, `str_split`, `str_upper`...); un `Bool` se escribe `true`/`false`
 - Structs con métodos, campos `weak` para referencias hacia atrás
 - Constantes y enumeraciones
-- Imports de módulos, y de ventanas MUI hechas con el editor visual (`.dashui`)
+- Imports de módulos, y de ventanas MUI hechas con el editor visual (`.dashui`); lo que empieza por `_` en
+  un módulo (funciones, constantes, globales, structs, enums) es privado y no choca con otro módulo
 - Scope léxico
 - Memoria automática: strings, listas y structs se liberan solos (temporales por vuelta y contador
   de referencias), sin recolector ni pausas
 
 ### Amiga API
-- **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús
-- **Interfaces** — GadTools, ReAction y **MUI 5** (con zona de dibujo propia, temporizador y señales);
-  editor visual de ventanas MUI para VS Code
-- **Graphics** — Primitivas de dibujo, colores, bitmaps
+- **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`
+- **Interfaces** — GadTools (con atajos de teclado y gadgets medidos con la fuente), ReAction (hasta 4
+  ventanas) y **MUI 5**: zona de dibujo propia (con doble búfer, repintado parcial y rellenos), temporizador,
+  señales y ventanas a pantalla completa; editor visual de ventanas MUI para VS Code
+- **Graphics** — Primitivas de dibujo, colores, bitmaps, transparencias y degradados, búferes RGB24 en la
+  ventana (también escalados: vídeo)
 - **Sprites** — Hardware sprites y soft sprites
 - **Copper** — Listas de cobre programables
 - **Blitter** — BOBs y operaciones de blitting
 - **Audio** — Reproducción de tonos y samples
-- **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF; fuentes de disco y colores RGB
-- **Red** — TCP con `bsdsocket.library` y HTTPS con AmiSSL
+- **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF, o desde píxeles RGB/RGBA en memoria (con
+  transparencia, también en RTG); fuentes de disco y colores RGB
+- **Red** — TCP con `bsdsocket.library` y HTTPS con AmiSSL, también sin esperar (conexiones por pasos)
+- **Procesos** — `task_start`: una función `@native` en otro proceso de AmigaOS
 - **DOS** — Operaciones de ficheros
 - **RTG** — Soporte para tarjetas gráficas
 - **Double Buffering** — Animación sin flicker
@@ -80,6 +87,9 @@ end
 
 Los programas necesitan Kickstart 3.0 o superior (usan los pools de memoria de exec V39) y funcionan en
 un 68000. MUI 5 y HTTPS piden un 68020 o superior.
+
+El proyecto más grande escrito en Dash es [dashweb](https://github.com/FreeMEM/dashweb), un navegador web
+para Amiga con MUI 5: lo que le falta a dashweb se añade a Dash.
 
 ## Instalación rápida
 
@@ -165,9 +175,14 @@ cd dash
 # Comprobación de memoria: avisa de dobles liberaciones y usos tras liberar, y de lo que queda vivo al salir
 ./dash --memcheck archivo.dash -o bin/archivo
 
+# Perfil: llamadas y tiempo (propio y total) de cada función al salir
+./dash --profile archivo.dash -o bin/archivo
+
 # Ejecutar en FS-UAE sin ventana y ver la salida (Kickstart en $DASH_KICKSTART o AROS)
 tools/emu_run.py archivo.dash
 tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s
+tools/emu_run.py --autoclose 30 --screenshot 20 shot.png ventana.dash   # captura de pantalla a los 20 s
+tools/emu_run.py --debug r archivo.dash       # en cada debug_break(), los registros (depurador de FS-UAE)
 
 # Compilar todos los ejemplos
 ./compile_all.sh
@@ -193,8 +208,9 @@ Variables del banco de pruebas: `DASH_KICKSTART` (ROM del A1200), `DASH_KICKSTAR
 puede sacar de un disco duro con `tools/emu_sys_from_hdf.sh`), y para `--emu-32` `DASH_KICKSTART_32` (ROM 3.2)
 y `DASH_EMU_SYS_32` (los mismos ficheros de un Workbench 3.2). En esa máquina se carga el Workbench antes de
 los programas (`emu_run.py --workbench`): la `window.class` de 3.2 lo espera. Para MUI y HTTPS, los sistemas con
-MUI (`DASH_EMU_SYS_MUI`, `DASH_EMU_SYS_32_MUI`) y con AmiSSL (`DASH_EMU_SYS_SSL`, `DASH_EMU_SYS_32_SSL`). Todo
-en [docs/INSTALACION.md](docs/INSTALACION.md).
+MUI (`DASH_EMU_SYS_MUI`, `DASH_EMU_SYS_32_MUI`) y con AmiSSL (`DASH_EMU_SYS_SSL`, `DASH_EMU_SYS_32_SSL`). Los
+tests `# rtg` usan una máquina 68040 con tarjeta gráfica y `DASH_EMU_SYS_32_RTG` (un Workbench 3.2 con
+Picasso96). Todo en [docs/INSTALACION.md](docs/INSTALACION.md).
 
 ## Estructura del proyecto
 
