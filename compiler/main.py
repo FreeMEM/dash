@@ -154,7 +154,7 @@ class DashCompiler:
         (dashweb D18). Each module's are renamed (_x -> _x_m<n>_<file>) with their calls inside
         the module; only that module can call them, so nothing else needs the new name."""
         from dataclasses import fields, is_dataclass
-        from compiler.ast_nodes import FunctionCall, FunctionRef
+        from compiler.ast_nodes import FunctionCall, FunctionRef, VarRef
         self._module_counter = getattr(self, "_module_counter", 0) + 1
         tag = "m%d_%s" % (self._module_counter,
                           "".join(c if c.isalnum() else "_" for c in os.path.splitext(os.path.basename(full_path))[0]))
@@ -172,7 +172,8 @@ class DashCompiler:
             if not is_dataclass(node) or id(node) in seen:
                 return
             seen.add(id(node))
-            if isinstance(node, (FunctionCall, FunctionRef)) and node.name in names:
+            # calls, and the name given as a value (task_start(_f, x), mui_canvas_on_draw(c, _pinta))
+            if isinstance(node, (FunctionCall, FunctionRef, VarRef)) and node.name in names:
                 node.name = names[node.name]
             for f in fields(node):
                 value = getattr(node, f.name, None)

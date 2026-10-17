@@ -1,0 +1,13 @@
+# D47: a private @native function given to task_start from its own module (renamed by D18)
+@native func _cuadrado(n: Int) -> Int
+"""
+    return n * n;
+"""
+end
+
+func cuadrado_aparte(n: Int) -> Int
+    t = task_start_with(_cuadrado, n, 0, 0)
+    r = task_result(t)
+    task_free(t)
+    return r
+end

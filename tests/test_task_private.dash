@@ -1,0 +1,8 @@
+# A module gives one of its private @native functions to task_start: the name passed as a value is
+# renamed with the function (D18), like its calls.
+# expect-out: 49
+import "lib/d47/trabajo.dash"
+
+Main
+    Print "#{cuadrado_aparte(7)}"
+end
