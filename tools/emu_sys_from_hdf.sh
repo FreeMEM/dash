@@ -12,7 +12,10 @@
 # Classes/ (ReAction: window.class, Gadgets/, Images/; DataTypes/) and Devs/DataTypes are
 # copied when the disk has them.
 # workbench.library and icon.library are on the disk from 3.2 on (3.1 has them in ROM);
-# C/LoadWB is for tools/emu_run.py --workbench.
+# C/LoadWB is for tools/emu_run.py --workbench. C/SetPatch and Libs/68040.library (68060,
+# and on 3.2 680x0 and mmu, which its 68040.library needs): emu_run.py runs SetPatch on a
+# 68040/68060, for the FPU instructions those CPUs leave to software (--fpu programs hang
+# without them on 3.1, and do not start on 3.2).
 #
 # Uses xdftool and rdbtool from amitools (pip install amitools, a venv is enough; or
 # set XDFTOOL and RDBTOOL). The files are Workbench's: keep them out of git.
@@ -36,11 +39,11 @@ else
 fi
 mkdir -p "$2/Libs" "$2/C"
 for lib in asl diskfont iffparse locale mathieeesingtrans mathieeedoubbas mathieeedoubtrans \
-           mathtrans lowlevel commodities datatypes workbench icon; do
+           mathtrans lowlevel commodities datatypes workbench icon 68040 68060 680x0 mmu; do
     "$XDF" "$tmp/disk.hdf" read "Libs/$lib.library" "$2/Libs/$lib.library" >/dev/null 2>&1 \
         && echo "Libs/$lib.library"
 done
-for cmd in Assign MakeDir LoadWB AddDataTypes; do
+for cmd in Assign MakeDir LoadWB AddDataTypes SetPatch; do
     "$XDF" "$tmp/disk.hdf" read "C/$cmd" "$2/C/$cmd" >/dev/null 2>&1 && echo "C/$cmd"
 done
 if "$XDF" "$tmp/disk.hdf" list Classes >/dev/null 2>&1; then

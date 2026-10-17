@@ -39,6 +39,7 @@ without --autoclose, a crash) stops the boot: it and the ones after it are repor
 
 import argparse
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -211,6 +212,16 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             extra = Path(system) / "S" / "Startup-Extra"
             if extra.is_file():
                 lines += [l for l in extra.read_text().splitlines() if l.strip()]
+        # A 68040/68060 leaves some FPU instructions (fsin, fintrz...) to 68040.library, which
+        # SetPatch loads: without it a --fpu program stops at the first one
+        if re.search(r"^\s*cpu\s*=\s*680[46]0", extra_config, re.M):
+            if any("SetPatch" in l for l in lines):
+                pass   # the system's Startup-Extra runs it already
+            elif (hd / "C" / "SetPatch").exists():
+                lines.insert(0, "C:SetPatch QUIET")
+            else:
+                print("68040/68060 without C/SetPatch and Libs/68040.library in the Workbench files: "
+                      "--fpu programs may hang (tools/emu_sys_from_hdf.sh copies them)", file=sys.stderr)
         if workbench:
             if not (hd / "C" / "LoadWB").exists():
                 raise RuntimeError("--workbench needs C/LoadWB in the Workbench files (tools/emu_sys_from_hdf.sh)")

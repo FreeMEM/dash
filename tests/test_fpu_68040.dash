@@ -1,0 +1,26 @@
+# ./dash --fpu on a 68040: its FPU leaves some instructions (fintrz for Int(), the conversions of the
+# text) to 68040.library, which SetPatch loads; without it the program hangs (D46).
+# fpu
+# expect-out: b 5.375 int 5 div 7.166667
+# expect-out: raíz 1.414214 seno 0.909297
+# expect-out: fin
+
+@native func raiz(x: Float) -> Float
+"""
+    return sqrt(x);
+"""
+end
+
+@native func seno(x: Float) -> Float
+"""
+    return sin(x);
+"""
+end
+
+Main
+    a = 1.5
+    b = a * 3.25 + 0.5
+    Print "b #{b} int #{Int(b)} div #{b / 0.75}"
+    Print "raíz #{raiz(2.0)} seno #{seno(2.0)}"
+    Print "fin"
+end

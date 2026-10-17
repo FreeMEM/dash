@@ -34,6 +34,8 @@ Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 inst
 "# emu-shot: SECONDS X Y RRGGBB" (repeatable) runs a test in its own boot with a screenshot that many
 seconds after boot (tools/emu_run.py --screenshot, all of them in the same run): pixel X,Y of the front
 screen must have that colour. Not on the A500 (reading the screen takes seconds there).
+"# fpu" builds a test as ./dash --fpu and runs it on a 68040 (with C:SetPatch and 68040.library from the
+Workbench files, tools/emu_sys_from_hdf.sh); not on the A500.
 """
 
 import os
@@ -88,6 +90,11 @@ def ignored_output(test_file: Path) -> List[str]:
     """'# ignore-out: <prefix>': output lines starting so are not compared (they change run to run)."""
     return [l.split("# ignore-out:", 1)[1].strip()
             for l in test_file.read_text().splitlines() if l.strip().startswith("# ignore-out:")]
+
+
+def wants_fpu(test_file: Path) -> bool:
+    """'# fpu': built as ./dash --fpu (68020 + 68881 code) and, with --emu, run on a 68040 (D46)."""
+    return any(l.strip() == "# fpu" for l in test_file.read_text().splitlines())
 
 
 def wants_memcheck(test_file: Path) -> bool:
@@ -233,6 +240,8 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
     # '# memcheck' (or run_tests.py --memcheck): built as ./dash --memcheck
     if memcheck or wants_memcheck(test_file):
         compile_cmd.insert(1, "-DDASH_MEMCHECK")
+    if wants_fpu(test_file):   # as ./dash --fpu
+        compile_cmd[1:1] = ["-m68020", "-m68881"]
     from compiler.cflags import mui_flags
     try:   # MUI SDK headers (tools/get_mui_sdk.sh), same as ./dash
         compile_cmd[1:1] = mui_flags([c_file.read_text()])
@@ -246,7 +255,7 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
         return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
                           error_message=str(e), duration=time.time() - start_time)
     from compiler.softfloat import softfloat_objects, uses_float
-    if uses_float(c_file.read_text()):
+    if uses_float(c_file.read_text()) and not wants_fpu(test_file):
         compile_cmd[-3:-3] = softfloat_objects(gcc_path)  # same as ./dash
 
     try:
@@ -574,7 +583,8 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
     shot_tests = [t for t in runnable if emu_shots(t)]
-    runnable = [t for t in runnable if t not in shot_tests]
+    fpu_tests = [t for t in runnable if wants_fpu(t) and t not in shot_tests]
+    runnable = [t for t in runnable if t not in shot_tests and t not in fpu_tests]
     mui = [t for t in runnable if "muimaster.library" in emu_needs(t)]
     net = [t for t in runnable if emu_net_port(t) is not None and t not in mui]
     results = run_emu_boot([t for t in runnable if t not in mui and t not in net], machine, rom,
@@ -621,6 +631,22 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         for t in shot_tests:
             print(f"  {prefix}/{t.stem}: SKIP (screenshots are not timed on the A500)")
         shot_tests = []
+    if fpu_tests:
+        # '# fpu': a 68040, whose FPU leaves some instructions to 68040.library (C:SetPatch loads it,
+        # tools/emu_run.py runs it on a 68040; tools/emu_sys_from_hdf.sh copies both)
+        system = os.environ.get(machine["sys_env"])
+        fpu_machine = dict(machine, config=machine["config"] + "cpu = 68040\nfpu = 68040\n")
+        if "A500" in machine["config"]:
+            for t in fpu_tests:
+                print(f"  {prefix}/{t.stem}: SKIP (--fpu is 68020 code)")
+            fpu_tests = []
+        elif not system or not (Path(system) / "C" / "SetPatch").exists():
+            for t in fpu_tests:
+                print(f"  {prefix}/{t.stem}: SKIP (needs C/SetPatch and Libs/68040.library in "
+                      f"${machine['sys_env']}, see tools/emu_sys_from_hdf.sh)")
+            fpu_tests = []
+        if fpu_tests:
+            results += run_emu_boot(fpu_tests, fpu_machine, rom, system, memcheck)
     for t in shot_tests:   # each in its own boot: the screenshots are timed from the boot
         system = os.environ.get(machine["mui_sys_env"] if "muimaster.library" in emu_needs(t) else machine["sys_env"])
         results += run_emu_boot([t], machine, rom, system, memcheck, shots=emu_shots(t))
