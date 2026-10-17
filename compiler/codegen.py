@@ -1234,6 +1234,85 @@ static void _dash_font_cleanup(void) {
     # High/true colour RTG screens mix each pixel (cybergraphics.library, or Picasso96API.library's
     # p96ReadPixel/p96WritePixel); palette screens (AGA/ECS, 8-bit RTG) get an ordered 4x4 Bayer
     # dither of the closest pen, drawn by RectFill with an area pattern (the blitter does it).
+    TASK_RUNTIME = """\
+/* task_start (dashweb D47): a C function f(arg) -> result in another AmigaOS process, so the
+   program goes on (its MUI loop, say) while f works. Only C runs there: an @native function,
+   which may use malloc/free (libnix's take a semaphore) but not Dash's strings, lists or
+   Print. The process starts above the program's priority, takes its job and drops to the
+   priority asked for; the program waits for every one still running when it ends. */
+#include <dos/dostags.h>
+struct _DashTask {
+    LONG (*func)(LONG);
+    LONG arg, result, pri;
+    volatile LONG done;
+    struct _DashTask *next;          /* all of them, for the exit */
+};
+static struct _DashTask *_dash_tasks = NULL;
+static struct _DashTask *_dash_task_next = NULL;
+
+static void _dash_task_proc(void) {
+    struct _DashTask *t = _dash_task_next;
+    SetTaskPri(FindTask(NULL), t->pri);
+    t->result = t->func(t->arg);
+    Forbid();             /* done only once this process has left the program's code */
+    t->done = 1;
+}
+
+static LONG _dash_task_start_with(APTR func, LONG arg, LONG stack, LONG pri) {
+    struct Task *me = FindTask(NULL);
+    struct _DashTask *t;
+    if (!func) return 0;
+    if (stack < 8192) stack = 131072;
+    if (!(t = (struct _DashTask *)AllocVec(sizeof(struct _DashTask), MEMF_PUBLIC | MEMF_CLEAR))) return 0;
+    t->func = (LONG (*)(LONG))func;
+    t->arg = arg;
+    t->pri = me->tc_Node.ln_Pri + pri;
+    _dash_task_next = t;
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_task_proc, NP_Name, (ULONG)"dash_task",
+                           NP_Priority, me->tc_Node.ln_Pri + 1, NP_StackSize, stack, TAG_DONE)) {
+        FreeVec(t);
+        return 0;
+    }
+    t->next = _dash_tasks;
+    _dash_tasks = t;
+    return (LONG)t;
+}
+
+static LONG _dash_task_start(APTR func, LONG arg) {
+    return _dash_task_start_with(func, arg, 0, 0);
+}
+
+static LONG _dash_task_done(LONG h) {
+    return h && ((struct _DashTask *)h)->done;
+}
+
+static void _dash_task_wait(struct _DashTask *t) {
+    while (!t->done) Delay(1);
+}
+
+/* The result (waits for it if the function has not finished) */
+static LONG _dash_task_result(LONG h) {
+    if (!h) return 0;
+    _dash_task_wait((struct _DashTask *)h);
+    return ((struct _DashTask *)h)->result;
+}
+
+/* Forget it (waits for it if it is still running) */
+static void _dash_task_free(LONG h) {
+    struct _DashTask *t = (struct _DashTask *)h, **p;
+    if (!t) return;
+    _dash_task_wait(t);
+    for (p = &_dash_tasks; *p; p = &(*p)->next)
+        if (*p == t) { *p = t->next; break; }
+    FreeVec(t);
+}
+
+/* At exit: the processes run code of the program, which must stay loaded until they end */
+static void _dash_task_cleanup(void) {
+    while (_dash_tasks) _dash_task_free((LONG)_dash_tasks);
+}
+"""
+
     BLEND_RUNTIME = """\
 /* Dash Blend Runtime */
 #include <cybergraphx/cybergraphics.h>
@@ -9834,6 +9913,7 @@ _RUNTIME_FLAGS = [
     ("TLS_RUNTIME", "uses_tls"),            # dashweb D11
     ("FONT_RUNTIME", "uses_fonts"),         # dashweb D9
     ("BLEND_RUNTIME", "uses_blend"),
+    ("TASK_RUNTIME", "uses_tasks"),         # dashweb D47
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
@@ -10069,6 +10149,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_weak: bool = False     # weak fields (WEAK_RUNTIME)
         self.uses_fonts: bool = False    # font_*, color_pen (FONT_RUNTIME)
         self.uses_blend: bool = False    # gfx_blend_rect, gfx_gradient_rect, gfx_pixel_rgb (BLEND_RUNTIME)
+        self.uses_tasks: bool = False    # task_start... (TASK_RUNTIME, dashweb D47)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
         self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
@@ -10346,6 +10427,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.FONT_RUNTIME)
         if self.uses_blend:
             parts.append(CTemplates.BLEND_RUNTIME)
+        if self.uses_tasks:
+            parts.append(CTemplates.TASK_RUNTIME)
         if self.uses_images:
             parts.append(CTemplates.IMAGE_RUNTIME)
         if self.uses_args:
@@ -10552,6 +10635,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_image_cleanup();\n")   # gives back the pens of the remap
         if self.uses_loop_timer:
             cleanup.append("    _dash_lt_cleanup();\n")
+        if self.uses_tasks:
+            cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
         if self.uses_blend:
             cleanup.append("    _dash_blend_cleanup();\n")
         if self.needs_area:

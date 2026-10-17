@@ -2945,6 +2945,33 @@ programa las incluye. El C de fuera puede usar el stdio de libnix (`printf`). `.
 
 ---
 
+### C en otro proceso: task_start
+
+Una funcion `@native` que tarda (decodificar una imagen, por ejemplo) puede ir en otro proceso de
+AmigaOS mientras el programa sigue con lo suyo (su bucle de MUI):
+
+```ruby
+@native func decodificar(datos: Int) -> Int
+"""
+    /* C: puede usar malloc/free (los de libnix toman un semaforo) */
+    return 0;
+"""
+end
+
+t = task_start(decodificar, buffer)        # el proceso, o 0 si no pudo crearse
+if task_done(t)                            # true cuando la funcion ha vuelto (no espera)
+    r = task_result(t)                     # lo que devolvio (espera si aun no ha vuelto)
+    task_free(t)                           # olvidarla (espera si aun corre)
+end
+t2 = task_start_with(decodificar, buffer, 65536, -1)   # pila en bytes (0: 128 KB) y prioridad
+```
+
+En el otro proceso solo corre C: nada de textos, listas ni `Print` de Dash, que no estan
+preparados para dos tareas a la vez. La funcion recibe un `Int` (un numero o una direccion) y
+devuelve otro. `task_start` usa 128 KB de pila y la prioridad del programa; con prioridad `-1`
+solo avanza cuando el programa espera (por ejemplo en `mui_wait_event`), y la ventana responde
+antes. Al acabar, el programa espera a las tareas que sigan en marcha.
+
 ## 22. Ejemplos Completos
 
 ### Ejemplo 1: Hola Mundo con Ventana

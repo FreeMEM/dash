@@ -34,6 +34,7 @@ GROUPS = [
     ("FONT_FUNCTIONS", "Fuentes y colores"),  # dashweb D9
     ("BLEND_FUNCTIONS", "Transparencia y degradados"),
     ("RGB_FUNCTIONS", "Imágenes RGB desde un buffer (vídeo)"),
+    ("TASK_FUNCTIONS", "Tareas (C en otro proceso)"),  # dashweb D47
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos"),     # dashweb D19
     ("AUDIO_FUNCTIONS", "Audio"),

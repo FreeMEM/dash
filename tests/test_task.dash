@@ -1,0 +1,50 @@
+# task_start: an @native function in another process with malloc/free (libnix's take a semaphore)
+# while the program goes on, also with malloc/free; task_done does not wait, task_result gives what
+# it returned. A task still running when the program ends is waited for (D47).
+# expect-out: resultado 1344000
+# expect-out: el principal siguió: true
+# expect-out: memoria del principal: 0
+# expect-out: inválida: 0 false 0
+# expect-out: fin
+
+@native func calcular(n: Int) -> Int
+"""
+    LONG i, j, total = 0;
+    for (i = 0; i < n; i++) {
+        LONG *v = (LONG *)malloc(256 * sizeof(LONG));
+        if (!v) return -1;
+        for (j = 0; j < 256; j++) v[j] = i + j;
+        for (j = 0; j < 256; j++) total += v[j] & 7;
+        free(v);
+    }
+    return total;
+"""
+end
+
+@native func pedir_memoria(n: Int) -> Int
+"""
+    char *p = (char *)malloc(n);
+    if (!p) return 1;
+    p[0] = 1; p[n - 1] = 2;
+    free(p);
+    return 0;
+"""
+end
+
+Main
+    h = task_start(calcular, 1500)
+    vueltas = 0
+    fallos = 0
+    while not task_done(h)
+        vueltas = vueltas + 1
+        fallos = fallos + pedir_memoria(100 + (vueltas & 255) * 8)
+        time_delay(1)
+    end
+    Print "resultado #{task_result(h)}"
+    Print "el principal siguió: #{vueltas > 1}"
+    Print "memoria del principal: #{fallos}"
+    task_free(h)
+    Print "inválida: #{task_result(0)} #{task_done(0)} #{task_start(0, 1)}"
+    otra = task_start_with(calcular, 3000, 65536, -1)
+    Print "fin"
+end

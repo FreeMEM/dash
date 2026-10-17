@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 504 funciones, 504 implementadas, 0 sin implementar.
+Total: 509 funciones, 509 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -413,6 +413,16 @@ Total: 504 funciones, 504 implementadas, 0 sin implementar.
 |---|---|---|---|
 | `gfx_rgb_draw(buffer, width, height, x, y)` | `void` | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
 | `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)` | `void` | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
+
+## Tareas (C en otro proceso)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
+| `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
+| `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
+| `task_result(task)` | `LONG` | What the function returned (waits for it if it has not finished) |  |
+| `task_free(task)` | `void` | Forget the task (waits for it if it is still running); the program waits for any left at exit |  |
 
 ## Imágenes (datatypes)
 

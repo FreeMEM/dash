@@ -3869,6 +3869,35 @@ RGB_FUNCTIONS = {
 }
 
 # =============================================================================
+# C work in another process (dashweb D47)
+# =============================================================================
+
+TASK_FUNCTIONS = {
+    "task_start": BuiltinFunc(
+        name="task_start", params=["func", "arg"], return_type="LONG",
+        c_template="_dash_task_start((APTR)${func}, ${arg})",
+        description="Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, "
+                    "Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0"),
+    "task_start_with": BuiltinFunc(
+        name="task_start_with", params=["func", "arg", "stack", "priority"], return_type="LONG",
+        c_template="_dash_task_start_with((APTR)${func}, ${arg}, ${stack}, ${priority})",
+        description="task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's "
+                    "(-1: it only runs when the program waits)"),
+    "task_done": BuiltinFunc(
+        name="task_done", params=["task"], return_type="BOOL",
+        c_template="_dash_task_done(${task})",
+        description="True once the function has returned (does not wait)"),
+    "task_result": BuiltinFunc(
+        name="task_result", params=["task"], return_type="LONG",
+        c_template="_dash_task_result(${task})",
+        description="What the function returned (waits for it if it has not finished)"),
+    "task_free": BuiltinFunc(
+        name="task_free", params=["task"], return_type="void",
+        c_template="_dash_task_free(${task})",
+        description="Forget the task (waits for it if it is still running); the program waits for any left at exit"),
+}
+
+# =============================================================================
 # Pictures by datatypes (dashweb D12)
 # =============================================================================
 
@@ -3930,6 +3959,7 @@ ALL_BUILTINS = {
     **FONT_FUNCTIONS,          # dashweb D9
     **BLEND_FUNCTIONS,
     **RGB_FUNCTIONS,
+    **TASK_FUNCTIONS,          # dashweb D47
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
     **AUDIO_FUNCTIONS,
