@@ -112,6 +112,7 @@ mui_canvas_on_input(pagina, ID_RATON)  # clic, rueda y teclas dentro de la zona
 ...
 mui_canvas_redraw(pagina)              # pide repintar (desde la tarea principal, nunca desde otra)
 mui_canvas_update(pagina)              # MUI_Redraw con MADF_DRAWUPDATE: sin borrar; mui_canvas_updating() = true
+mui_canvas_buffered(pagina, true)      # D48: dibujo en un BitMap amigo con su capa; un BltBitMapRastPort al acabar
 x = mui_canvas_mouse_x(pagina)         # tras ID_RATON: posición relativa, botón, rueda (+1/-1), tecla
 ```
 

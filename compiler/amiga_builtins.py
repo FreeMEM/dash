@@ -3521,6 +3521,14 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_redraw(${canvas})",
         description="Draw the area again now"
     ),
+    "mui_canvas_buffered": BuiltinFunc(
+        name="mui_canvas_buffered",
+        params=["canvas", "on"],
+        return_type="void",
+        c_template="_dash_mui_canvas_buffered(${canvas}, ${on})",
+        description="Draw the area in a bitmap of its own and show it at once when done (no half-drawn area; "
+                    "the same coordinates; mui_canvas_update still draws on the window)"
+    ),
     "mui_canvas_update": BuiltinFunc(
         name="mui_canvas_update",
         params=["canvas"],

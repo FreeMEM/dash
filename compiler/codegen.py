@@ -9243,9 +9243,39 @@ struct _DashCanvas {
     APTR prev;                      /* mui_canvas_char (dashweb D31) */
     struct MUI_EventHandlerNode handler;
     BOOL handler_added;
+    BOOL buffered;                  /* mui_canvas_buffered: drawn in bbm, then copied at once (D48) */
+    struct BitMap *bbm;             /* as big as the window's part up to the area's bottom right */
+    struct Layer_Info *bli;
+    struct Layer *bly;              /* clips the drawing to bbm (and to the area) */
+    LONG bw, bh;
 };
 
 static struct MUI_CustomClass *_dash_canvas_class = NULL;
+
+static void _dash_canvas_unbuffer(struct _DashCanvas *data) {
+    if (data->bly) { DeleteLayer(0, data->bly); data->bly = NULL; }
+    if (data->bli) { DisposeLayerInfo(data->bli); data->bli = NULL; }
+    if (data->bbm) { WaitBlit(); FreeBitMap(data->bbm); data->bbm = NULL; }
+    data->bw = data->bh = 0;
+}
+
+/* The buffer's RastPort, w x h at least (a friend of the window's bitmap: on RTG it goes to the
+   card, in its format); NULL if there is no memory for it (the area is then drawn directly) */
+static struct RastPort *_dash_canvas_buffer(struct _DashCanvas *data, struct RastPort *wrp, LONG w, LONG h) {
+    if (data->bly && w <= data->bw && h <= data->bh && data->bly->rp->BitMap) return data->bly->rp;
+    if (data->bw > w) w = data->bw;
+    if (data->bh > h) h = data->bh;
+    _dash_canvas_unbuffer(data);
+    if (!(data->bli = NewLayerInfo()) ||
+        !(data->bbm = AllocBitMap(w, h, GetBitMapAttr(wrp->BitMap, BMA_DEPTH), BMF_MINPLANES, wrp->BitMap)) ||
+        !(data->bly = CreateUpfrontLayer(data->bli, data->bbm, 0, 0, w - 1, h - 1, LAYERSIMPLE, NULL))) {
+        _dash_canvas_unbuffer(data);
+        return NULL;
+    }
+    data->bw = w;
+    data->bh = h;
+    return data->bly->rp;
+}
 static void _dash_canvas_cleanup(void);
 static BOOL _dash_canvas_updating = FALSE;   /* the draw function runs for mui_canvas_update */
 
@@ -9271,8 +9301,39 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
            Anything else (opening, a resize, the window uncovered) clears it first. */
         ULONG flags = ((struct MUIP_Draw *)msg)->flags;
         BOOL update = (flags & MADF_DRAWUPDATE) && !(flags & MADF_DRAWOBJECT);
-        if (!update) DoSuperMethodA(cl, obj, msg);
+        struct RastPort *brp;
         data = INST_DATA(cl, obj);
+        /* Buffered (D48): background and drawing in the buffer, at the same coordinates, and
+           then one copy to the window, so a slow drawing is never seen half done. An update
+           draws on the window as before. */
+        if (!update && (flags & MADF_DRAWOBJECT) && data->buffered && data->draw &&
+            (brp = _dash_canvas_buffer(data, _DASH_MRI(obj)->mri_RastPort,
+                                       _DASH_MAD(obj)->mad_Box.Left + _DASH_MAD(obj)->mad_Box.Width,
+                                       _DASH_MAD(obj)->mad_Box.Top + _DASH_MAD(obj)->mad_Box.Height))) {
+            struct RastPort *wrp = _DASH_MRI(obj)->mri_RastPort, *old = _dash_rp;
+            BOOL old_updating = _dash_canvas_updating;
+            LONG x = _DASH_MLEFT(obj), y = _DASH_MTOP(obj);
+            LONG w = _DASH_MWIDTH(obj), h = _DASH_MHEIGHT(obj);
+            struct Rectangle r;
+            struct Region *region = NewRegion(), *old_region = NULL;
+            SetFont(brp, wrp->Font);
+            _DASH_MRI(obj)->mri_RastPort = brp;      /* MUI draws its background in the buffer */
+            DoSuperMethodA(cl, obj, msg);
+            r.MinX = x; r.MinY = y; r.MaxX = x + w - 1; r.MaxY = y + h - 1;
+            if (region && OrRectRegion(region, &r)) old_region = InstallClipRegion(data->bly, region);
+            _dash_rp = brp;
+            _dash_canvas_updating = FALSE;
+            ((void (*)(LONG, LONG, LONG, LONG))data->draw)(x, y, w, h);
+            _dash_canvas_updating = old_updating;
+            _dash_rp = old;
+            if (region) { InstallClipRegion(data->bly, old_region); DisposeRegion(region); }
+            _DASH_MRI(obj)->mri_RastPort = wrp;
+            BltBitMapRastPort(data->bbm, _DASH_MAD(obj)->mad_Box.Left, _DASH_MAD(obj)->mad_Box.Top, wrp,
+                              _DASH_MAD(obj)->mad_Box.Left, _DASH_MAD(obj)->mad_Box.Top,
+                              _DASH_MAD(obj)->mad_Box.Width, _DASH_MAD(obj)->mad_Box.Height, 0xC0);
+            return 0;
+        }
+        if (!update) DoSuperMethodA(cl, obj, msg);
         if ((update || (flags & MADF_DRAWOBJECT)) && data->draw) {
             struct RastPort *old = _dash_rp;
             BOOL old_updating = _dash_canvas_updating;
@@ -9303,6 +9364,7 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
+        _dash_canvas_unbuffer(data);   /* the next screen may be another one */
         if (data->handler_added) {
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
             data->handler_added = FALSE;
@@ -9379,6 +9441,14 @@ static void _dash_mui_canvas_on_input(APTR obj, LONG id) {
 /* Draw it again now (only from the program's own task) */
 static void _dash_mui_canvas_redraw(APTR obj) {
     if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
+}
+
+/* Draw it in a bitmap of its own and copy it to the window at once (D48), or not */
+static void _dash_mui_canvas_buffered(APTR obj, LONG on) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data) return;
+    data->buffered = on != 0;
+    if (!on) _dash_canvas_unbuffer(data);
 }
 
 /* Call the draw function now without clearing the area: it paints only what changed */

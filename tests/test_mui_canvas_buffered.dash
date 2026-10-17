@@ -1,0 +1,58 @@
+# mui_canvas_buffered: the drawing function draws in a bitmap of its own (with the same coordinates)
+# and the area is copied to the window at once; mui_canvas_update still draws on the window. The
+# screenshots check that what was drawn reached the screen (in its top part: the boot shell's
+# console window may come in front of the bottom later).
+# emu-needs: muimaster.library
+# expect-out: en el búfer: true, en 0,0
+# expect-out: update en la ventana: true
+# expect-out: fin
+# emu-shot: 6 120 70 000000
+# emu-shot: 6 300 100 ffffff
+# emu-shot: 6 405 25 000000
+
+var en_bufer: Bool = false
+var en_ventana: Bool = false
+var en_x: Int = -1
+var en_y: Int = -1
+
+@native func sin_ventana() -> Bool
+"""
+    return _dash_rp && _dash_rp->Layer && !_dash_rp->Layer->Window;
+"""
+end
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    if mui_canvas_updating()
+        en_ventana = not sin_ventana()
+        gfx_pen(1)
+        gfx_rect(x + 400, y + 20, x + 409, y + 29)
+    else
+        en_bufer = sin_ventana()
+        en_x = x
+        en_y = y
+        gfx_pen(2)
+        gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+        gfx_pen(1)
+        gfx_rect(x + 100, y + 50, x + 149, y + 99)
+    end
+end
+
+Main
+    if mui_app_begin("Búfer", "DASHBUF") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Búfer", 0)
+            lienzo = mui_canvas(50, 50)
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_canvas_buffered(lienzo, true)
+        mui_window_fullscreen(win)
+        mui_window_open(win)
+        Print "en el búfer: #{en_bufer}, en #{en_x},#{en_y}"
+        mui_canvas_update(lienzo)
+        Print "update en la ventana: #{en_ventana}"
+        time_delay(600)
+        mui_app_end()
+        Print "fin"
+    end
+end

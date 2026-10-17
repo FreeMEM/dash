@@ -2726,6 +2726,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas(ancho_min, alto_min)` | Zona de dibujo propia; crece con la ventana. |
 | `mui_canvas_on_draw(zona, funcion)` | Función `f(x, y, ancho, alto)` que la pinta con los `gfx_`. MUI la llama cuando hace falta (al abrir, al cambiar de tamaño...). Solo se puede pintar dentro. Valen también los rellenos (`gfx_circle_fill`, `gfx_poly_*`...). |
 | `mui_canvas_redraw(zona)` | La vuelve a pintar ahora. |
+| `mui_canvas_buffered(zona, true)` | La función de dibujo pinta en un mapa de bits aparte (con las mismas coordenadas) y la zona se copia a la ventana de una vez al acabar: un dibujo lento nunca se ve a medias. Gasta la memoria de la ventana hasta la esquina de la zona (en RTG, de la tarjeta). `mui_canvas_update` sigue pintando directo en la ventana. |
 | `mui_canvas_update(zona)` | Llama ahora a su función de dibujo sin borrarla antes: pinta solo lo que cambió (un vídeo, un cursor). |
 | `mui_canvas_updating()` | Dentro de la función de dibujo: `true` si viene de `mui_canvas_update` (lo demás sigue pintado). Al abrir, al cambiar de tamaño o al destaparse, MUI la borra y es `false`: hay que pintarlo todo. |
 | `mui_canvas_on_input(zona, id)` | Evento con un clic, la rueda o una tecla sobre la zona (antes de abrir la ventana). |
