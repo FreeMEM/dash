@@ -601,7 +601,7 @@ class SemanticAnalyzer(ASTVisitor):
         symbol = self.lookup_symbol(node.name)
         self._check_private(node.name, symbol, node)
         if not symbol:
-            self.error(f"Variable '{node.name}' is not defined", node)
+            self._not_defined("Variable", node.name, node)
         elif symbol.symbol_type == SymbolType.VARIABLE and not symbol.is_initialized:
             self.warning(f"Variable '{node.name}' may be used before initialization", node)
 
@@ -675,6 +675,19 @@ class SemanticAnalyzer(ASTVisitor):
 
         self._visit_loop_body(node.body)
         self.exit_scope()
+
+    def _not_defined(self, kind: str, name: str, node: ASTNode):
+        """'X is not defined', or 'is private to module' when it is another module's private
+        function, constant, global, struct or enum, renamed in that module (D18, D45)."""
+        program = self.program
+        defs = ([] if not program else list(program.functions) + list(program.native_funcs)
+                + list(program.constants) + list(program.global_vars) + list(program.structs)
+                + list(program.enums))
+        owner = next((getattr(d, "module", None) for d in defs if getattr(d, "dash_name", None) == name), None)
+        if owner:
+            self.error(f"'{name}' is private to module '{os.path.basename(owner)}'", node)
+        else:
+            self.error(f"{kind} '{name}' is not defined", node)
 
     def _check_private(self, name: str, symbol: Optional[Symbol], node: ASTNode):
         """A name starting with _ defined in a module is usable only inside that module."""
@@ -807,13 +820,7 @@ class SemanticAnalyzer(ASTVisitor):
         symbol = self.lookup_symbol(node.name)
         self._check_private(node.name, symbol, node)
         if not symbol:
-            # a private function of another module (renamed per module, dashweb D18)
-            owner = next((getattr(f, "module", None) for f in (self.program.functions if self.program else [])
-                          if getattr(f, "dash_name", None) == node.name), None)
-            if owner:
-                self.error(f"'{node.name}' is private to module '{os.path.basename(owner)}'", node)
-            else:
-                self.error(f"Function '{node.name}' is not defined", node)
+            self._not_defined("Function", node.name, node)
         elif symbol.symbol_type == SymbolType.STRUCT:
             # Struct constructor call - validate field count
             struct_node = symbol.node
@@ -1026,7 +1033,7 @@ class SemanticAnalyzer(ASTVisitor):
 
         # Check if the object variable exists
         if not symbol:
-            self.error(f"Variable '{node.object_name}' is not defined", node)
+            self._not_defined("Variable", node.object_name, node)
             return
 
         # Win.width/height/left/top/title: current size, position and title of a window
@@ -1051,7 +1058,7 @@ class SemanticAnalyzer(ASTVisitor):
         # Check if the object variable exists
         symbol = self.lookup_symbol(node.object_name)
         if not symbol:
-            self.error(f"Variable '{node.object_name}' is not defined", node)
+            self._not_defined("Variable", node.object_name, node)
             return
 
         if node.target is not None:

@@ -1,0 +1,14 @@
+# Two modules (and the program) may each have their own private constant, global, struct and enum
+# with the same name: the clashing ones are renamed per module in C (D45; functions: D18).
+# expect-out: 8 253 7
+# expect-c: #define _TOPE_m1_a 5
+# expect-c: #define _TOPE_m2_b 50
+
+import "lib/d45/a.dash"
+import "lib/d45/b.dash"
+
+const _TOPE = 7
+
+Main
+    Print "#{uno()} #{dos()} #{_TOPE}"
+end

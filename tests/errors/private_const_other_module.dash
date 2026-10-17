@@ -1,0 +1,7 @@
+# expect: '_TOPE' is private to module 'a.dash'
+import "../lib/d45/a.dash"
+import "../lib/d45/b.dash"
+
+Main
+    Print "#{_TOPE}"
+end

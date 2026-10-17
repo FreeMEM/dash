@@ -1,0 +1,20 @@
+# D45: private names of their own, the same as tests/lib/d45/b.dash's
+const _TOPE = 5
+var _cuenta: Int = 0
+var _ultima: _Caja = nil
+struct _Caja
+    v: Int
+end
+enum _Modo UNO, DOS end
+
+func _ayuda(c: _Caja) -> Int
+    return c.v + _TOPE
+end
+
+func uno() -> Int
+    _cuenta = _cuenta + 1
+    var cajas: [_Caja] = [_Caja(1)]
+    _ultima = cajas[0]
+    m = _Modo.DOS
+    return _ayuda(_ultima) + _cuenta + m
+end

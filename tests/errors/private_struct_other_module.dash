@@ -1,0 +1,7 @@
+# expect: '_Caja' is private to module 'a.dash'
+import "../lib/d45/a.dash"
+import "../lib/d45/b.dash"
+
+Main
+    c = _Caja(1)
+end

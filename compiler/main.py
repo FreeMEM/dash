@@ -136,6 +136,9 @@ class DashCompiler:
         module_ast = self._parse_source(source)
         self._resolve_links(module_ast, os.path.dirname(full_path))
         self._rename_private(module_ast, full_path)
+        # its own definitions, before its imports are merged in (see _rename_private_clashes)
+        self._module_asts = getattr(self, "_module_asts", [])
+        self._module_asts.append((module_ast, full_path, self._module_counter))
         return module_ast
 
     @staticmethod
@@ -181,6 +184,78 @@ class DashCompiler:
             if f.name in names:
                 f.dash_name = f.name     # for the error when another module calls it
                 f.name = names[f.name]
+
+    def _rename_private_clashes(self, main_ast: Program) -> None:
+        """Private constants, globals, structs and enums (_x) belong to their module too: when the
+        same name is defined in two modules (or a module and the program), each module's is renamed
+        (_x -> _x_m<n>_<file>) with everything that names it in the module (D45). Names that clash
+        with nothing keep their name, so the C is the same as before."""
+        modules = getattr(self, "_module_asts", [])
+        if not modules:
+            return
+
+        def own_names(ast):
+            return [d.name for d in list(ast.constants) + list(ast.global_vars) + list(ast.structs)
+                    + list(ast.enums) if d.name.startswith("_")]
+
+        count = {}
+        for name in set(own_names(main_ast)):
+            count[name] = count.get(name, 0) + 1
+        for ast, _, _ in modules:
+            for name in set(own_names(ast)):
+                count[name] = count.get(name, 0) + 1
+        for ast, path, number in modules:
+            clashing = [n for n in set(own_names(ast)) if count[n] > 1]
+            if clashing:
+                tag = "m%d_%s" % (number, "".join(c if c.isalnum() else "_"
+                                                  for c in os.path.splitext(os.path.basename(path))[0]))
+                self._rename_names(ast, {n: f"{n}_{tag}" for n in clashing})
+
+    @staticmethod
+    def _rename_names(ast: Program, names: Dict[str, str]) -> None:
+        """Rename these names everywhere in this module's own definitions: definitions, variables,
+        parameters, constructor calls, enum values (_Modo.X) and types ([_Caja], {String: _Caja})."""
+        import re
+        from dataclasses import fields, is_dataclass
+        from compiler.ast_nodes import (VarRef, VarDecl, VarAssign, FunctionCall, FunctionRef, MemberAccess,
+                                        MemberAssign, ForRangeStmt, ForEachStmt, ForStmt, FunctionParam,
+                                        ConstDecl, GlobalVarDecl, StructDef, EnumDef)
+        word = re.compile(r"(?<![A-Za-z0-9_])(" + "|".join(re.escape(n) for n in names) + r")(?![A-Za-z0-9_])")
+        name_fields = {VarRef: "name", VarDecl: "name", VarAssign: "name", FunctionCall: "name",
+                       FunctionRef: "name", MemberAccess: "object_name", MemberAssign: "object_name",
+                       ForRangeStmt: "variable", ForEachStmt: "variable", ForStmt: "variable",
+                       FunctionParam: "name", ConstDecl: "name", GlobalVarDecl: "name", StructDef: "name",
+                       EnumDef: "name"}
+        type_fields = ("var_type", "param_type", "return_type", "field_type")
+        seen = set()
+
+        def walk(node):
+            if isinstance(node, list):
+                for i, item in enumerate(node):
+                    if isinstance(item, str):      # untyped parameters: a plain name
+                        node[i] = names.get(item, item)
+                    else:
+                        walk(item)
+                return
+            if not is_dataclass(node) or id(node) in seen:
+                return
+            seen.add(id(node))
+            attr = name_fields.get(type(node))
+            if attr and getattr(node, attr, None) in names:
+                if isinstance(node, (ConstDecl, GlobalVarDecl, StructDef, EnumDef)):
+                    node.dash_name = getattr(node, attr)   # for the error when another module names it
+                setattr(node, attr, names[getattr(node, attr)])
+            for t in type_fields:
+                value = getattr(node, t, None)
+                if isinstance(value, str):
+                    setattr(node, t, word.sub(lambda m: names[m.group(1)], value))
+            for f in fields(node):
+                value = getattr(node, f.name, None)
+                if isinstance(value, list) or is_dataclass(value):
+                    walk(value)
+
+        walk([ast.constants, ast.global_vars, ast.structs, ast.enums, ast.functions, ast.native_funcs,
+              ast.extern_funcs, ast.windows])
 
     def _is_private(self, name: str) -> bool:
         """Check if a name is private (starts with underscore)."""
@@ -337,7 +412,9 @@ class DashCompiler:
         if ast.imports:
             if self.verbose:
                 print("Stage 1.5: Loading imports...", file=sys.stderr)
+            main_own = ast
             ast = self._merge_modules(ast)
+            self._rename_private_clashes(main_own)
             if self.verbose:
                 print(f"  After merge: {len(ast.windows)} windows, {len(ast.functions)} functions",
                       file=sys.stderr)
@@ -488,6 +565,7 @@ class DashCompiler:
         # Stage 3: Create merged AST for semantic analysis
         # We still need full analysis to resolve cross-module references
         merged_ast = self._merge_modules(main_ast)
+        self._rename_private_clashes(main_ast)
 
         if self.verbose:
             print("Stage 3: Analyzing...", file=sys.stderr)

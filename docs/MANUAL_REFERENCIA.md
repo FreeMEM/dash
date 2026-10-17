@@ -2853,6 +2853,9 @@ end
 Las funciones cuyo nombre empieza por `_` son privadas del modulo: solo las llama el
 propio modulo. Cada modulo tiene las suyas: dos modulos (o el programa y un modulo) pueden
 tener una `_ayuda` cada uno sin que choquen.
+Lo mismo vale para las constantes, variables globales, structs y enums con `_`: dos modulos
+pueden tener cada uno su `_TOPE` o su `_Caja`. Las que coinciden con las de otro modulo o con
+las del programa cambian de nombre en el C (`_TOPE_m1_a`); las demas lo conservan.
 
 Las funciones de un modulo no ven las variables globales (`var`) del programa que lo importa: si el
 modulo hace `actual = 0` y el programa tiene `var actual`, la del modulo es una variable local suya y la
