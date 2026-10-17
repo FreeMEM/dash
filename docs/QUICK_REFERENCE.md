@@ -190,6 +190,8 @@ mui_canvas_char(c)                      # the key as text, with shift and the ke
 img = mui_image("Work:pic.png")         # datatypes; mui_width(obj), mui_height(obj) once open
 b = mui_image_button("PROGDIR:atras.iff")   # icon button: mui_on_press; mui_help(b, "Atrás") bubble help
 mui_window_size(win, 90, 80)            # % of the visible screen when it opens (before mui_window_open)
+mui_window_fullscreen(win)              # whole screen, no borders or title bar (before mui_window_open)
+mui_window_own_screen(win)              # the same on a new screen like the public one (false: not opened)
 mui_on_press(ok, 1)                     # mui_on_close(win, id): default -1
 mui_window_open(win)                    # mui_window_active(win): 1 if it is the active one
 ev = mui_wait_event()                   # 1, or -1 = closed; mui_poll_event, mui_press(ok)

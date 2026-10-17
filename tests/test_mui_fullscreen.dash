@@ -1,0 +1,68 @@
+# mui_window_fullscreen: the window over the whole screen, without borders or title bar, so a
+# drawing area in it is as big as the screen and starts at 0,0. mui_window_own_screen does the same
+# on a new screen like the public one.
+# emu-needs: muimaster.library
+# expect-out: pública: lienzo como la pantalla true, en 0,0, activa 1
+# expect-out: esquinas 2 2
+# expect-out: propia true: lienzo como la pantalla true, otra pantalla true
+# expect-out: fin
+
+var esquina1: Int = -1
+var esquina2: Int = -1
+var en_x: Int = -1
+var en_y: Int = -1
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    en_x = x
+    en_y = y
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+    esquina1 = gfx_pixel_read(x, y)
+    esquina2 = gfx_pixel_read(x + ancho - 1, y + alto - 1)
+end
+
+@native func pantalla(win: Int, alto: Int) -> Int
+"""
+    struct Screen *scr = NULL;
+    GetAttr(MUIA_Window_Screen, (Object *)win, (IPTR *)&scr);
+    if (!scr) return -1;
+    return alto ? scr->Height : scr->Width;
+"""
+end
+
+@native func pantalla_de(win: Int) -> Int
+"""
+    struct Screen *scr = NULL;
+    GetAttr(MUIA_Window_Screen, (Object *)win, (IPTR *)&scr);
+    return (LONG)scr;
+"""
+end
+
+Main
+    if mui_app_begin("Completa", "DASHFULL") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Completa", 1)
+            lienzo = mui_canvas(50, 50)
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_window_fullscreen(win)
+        mui_window_open(win)
+        igual = mui_width(lienzo) == pantalla(win, 0) and mui_height(lienzo) == pantalla(win, 1)
+        Print "pública: lienzo como la pantalla #{igual}, en #{en_x},#{en_y}, activa #{mui_window_active(win)}"
+        Print "esquinas #{esquina1} #{esquina2}"
+        publica = pantalla_de(win)
+        mui_window_close(win)
+
+        win2 = mui_window_begin("Propia", 2)
+            lienzo2 = mui_canvas(50, 50)
+        mui_window_end()
+        propia = mui_window_own_screen(win2)
+        mui_window_open(win2)
+        igual2 = mui_width(lienzo2) == pantalla(win2, 0) and mui_height(lienzo2) == pantalla(win2, 1)
+        Print "propia #{propia}: lienzo como la pantalla #{igual2}, otra pantalla #{pantalla_de(win2) != publica}"
+        mui_window_close(win2)
+        mui_app_end()
+        Print "fin"
+    end
+end

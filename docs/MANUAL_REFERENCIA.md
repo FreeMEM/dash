@@ -2736,6 +2736,8 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |
 | `mui_help(obj, texto)` | La ayuda que MUI muestra en un globo cuando el puntero se para encima. |
 | `mui_window_size(ventana, ancho, alto)` | Tamaño con que se abre la ventana, en tanto por ciento de la pantalla visible, centrada (antes de `mui_window_open`). |
+| `mui_window_fullscreen(ventana)` | La ventana ocupa la pantalla entera: sin bordes, sin barra de título ni botones, en 0,0, activa al abrirse (antes de `mui_window_open`). Para vídeo o juegos. |
+| `mui_window_own_screen(ventana)` | Lo mismo en una pantalla nueva, con el modo, tamaño y colores de la pública; se cierra al acabar la aplicación. `false` si no pudo abrirla (la ventana queda a pantalla completa en la pública). |
 | `mui_width(obj)`, `mui_height(obj)` | Tamaño en pantalla en píxeles (0 antes de abrir la ventana). |
 | `mui_set_range(barra, total, visible)` | Tamaño del documento y de lo que cabe. |
 | `mui_text(texto)` | Texto. |

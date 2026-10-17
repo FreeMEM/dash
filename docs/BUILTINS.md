@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 502 funciones, 502 implementadas, 0 sin implementar.
+Total: 504 funciones, 504 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -614,6 +614,8 @@ Total: 502 funciones, 502 implementadas, 0 sin implementar.
 | `mui_image_button(file)` | `APTR` | Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture |  |
 | `mui_help(obj, text)` | `void` | Bubble help shown when the pointer rests on the object |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
+| `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
+| `mui_window_own_screen(win)` | `BOOL` | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |
 | `mui_width(obj)` | `LONG` | Width of an object on screen in pixels (0 before its window opens) |  |
 | `mui_height(obj)` | `LONG` | Height of an object on screen in pixels (0 before its window opens) |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |

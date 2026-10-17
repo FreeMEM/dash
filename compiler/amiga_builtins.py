@@ -3640,6 +3640,20 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_window_size(${win}, ${width_pct}, ${height_pct})",
         description="Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open)"
     ),
+    "mui_window_fullscreen": BuiltinFunc(
+        name="mui_window_fullscreen",
+        params=["win"],
+        return_type="void",
+        c_template="_dash_mui_window_fullscreen(${win})",
+        description="The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open)"
+    ),
+    "mui_window_own_screen": BuiltinFunc(
+        name="mui_window_own_screen",
+        params=["win"],
+        return_type="BOOL",
+        c_template="_dash_mui_window_own_screen(${win})",
+        description="Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one)"
+    ),
     "mui_width": BuiltinFunc(
         name="mui_width",
         params=["obj"],

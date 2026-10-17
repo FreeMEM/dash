@@ -8467,14 +8467,14 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
-static void (*_dash_mui_end_hooks[4])(void);       /* free classes, timer... before MUI closes */
+static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
 static LONG (*_dash_mui_timer_hook)(void) = NULL;   /* the timer's id if it went off, else 0 */
 static ULONG _dash_mui_got = 0;                     /* signals of the program's mask that arrived */
 
 static void _dash_mui_on_end(void (*hook)(void)) {
     LONG i;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 8; i++) {
         if (_dash_mui_end_hooks[i] == hook) return;
         if (!_dash_mui_end_hooks[i]) { _dash_mui_end_hooks[i] = hook; return; }
     }
@@ -8515,7 +8515,7 @@ static void _dash_mui_app_end(void) {
     _dash_mui_app = NULL;
     {
         LONG i;
-        for (i = 0; i < 4; i++)
+        for (i = 0; i < 8; i++)
             if (_dash_mui_end_hooks[i]) { _dash_mui_end_hooks[i](); _dash_mui_end_hooks[i] = NULL; }
     }
     _dash_mui_first_win = NULL;
@@ -8967,6 +8967,54 @@ static void _dash_mui_window_size(APTR win, LONG width, LONG height) {
              MUIA_Window_Height, MUIV_Window_Height_Visible(height),
              MUIA_Window_LeftEdge, MUIV_Window_LeftEdge_Centered,
              MUIA_Window_TopEdge, MUIV_Window_TopEdge_Centered, TAG_DONE);
+}
+
+/* The whole screen (before mui_window_open): no borders, title bar or gadgets, at 0,0, as big as
+   the screen, active when it opens; without an ID, so MUI does not put back a size it remembered.
+   MUI documents Borderless and the gadgets as init-only, but MUI 5 takes them before the window opens. */
+static void _dash_mui_window_fullscreen(APTR win) {
+    if (!win) return;
+    SetAttrs(win, MUIA_Window_Title, 0, MUIA_Window_ID, 0, MUIA_Window_Borderless, TRUE,
+             MUIA_Window_CloseGadget, FALSE, MUIA_Window_DepthGadget, FALSE,
+             MUIA_Window_SizeGadget, FALSE, MUIA_Window_DragBar, FALSE,
+             MUIA_Window_LeftEdge, 0, MUIA_Window_TopEdge, 0,
+             MUIA_Window_Width, MUIV_Window_Width_Screen(100),
+             MUIA_Window_Height, MUIV_Window_Height_Screen(100),
+             MUIA_Window_Activate, TRUE, TAG_DONE);
+}
+
+/* mui_window_own_screen: the window full screen on a screen of its own, in the mode, size and depth
+   of the default public screen (the Workbench's pens and font); closed after the application.
+   Without it (no memory) the window stays on the public screen. */
+#define _DASH_MUI_SCREENS 4
+static struct Screen *_dash_mui_screens[_DASH_MUI_SCREENS];
+static void _dash_mui_screens_close(void) {
+    LONG i;
+    for (i = 0; i < _DASH_MUI_SCREENS; i++)
+        if (_dash_mui_screens[i]) { CloseScreen(_dash_mui_screens[i]); _dash_mui_screens[i] = NULL; }
+}
+
+static LONG _dash_mui_window_own_screen(APTR win) {
+    struct Screen *pub, *scr = NULL;
+    LONG i;
+    if (!win) return 0;
+    for (i = 0; i < _DASH_MUI_SCREENS && _dash_mui_screens[i]; i++) ;
+    if (i == _DASH_MUI_SCREENS) { _dash_mui_error("mui_window_own_screen: too many screens"); return 0; }
+    if ((pub = LockPubScreen(NULL))) {
+        ULONG mode = GetVPModeID(&pub->ViewPort);
+        if (mode != INVALID_ID)
+            scr = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, pub->Width, SA_Height, pub->Height,
+                                 SA_Depth, GetBitMapAttr(pub->RastPort.BitMap, BMA_DEPTH),
+                                 SA_LikeWorkbench, TRUE, SA_SharePens, TRUE, SA_ShowTitle, FALSE,
+                                 SA_Quiet, TRUE, SA_Type, CUSTOMSCREEN, TAG_DONE);
+        UnlockPubScreen(NULL, pub);
+    }
+    _dash_mui_window_fullscreen(win);
+    if (!scr) return 0;
+    _dash_mui_screens[i] = scr;
+    _dash_mui_on_end(_dash_mui_screens_close);
+    SetAttrs(win, MUIA_Window_Screen, (IPTR)scr, TAG_DONE);
+    return 1;
 }
 
 /* Size of an object on screen, in pixels (0 before its window opens) */
