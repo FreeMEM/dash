@@ -1,0 +1,80 @@
+# Test: image_from_rgb on a graphics card screen (RTG, 16 bits; dashweb D54). The image is a bitmap like
+# the screen's with the pixels written as RGB24 (p96WritePixelArray), not picture.datatype: 400x300 took
+# 120 ms on the 68040 with uaegfx, now about 5. Its colours are those of the buffer, image_scale and
+# image_free work on it, and an RGBA one keeps its transparent part.
+# rtg
+# expect-out: colores: ok
+# expect-out: rápida: ok
+# expect-out: escalada: ok
+# expect-out: alfa: ok
+# expect-out: fin
+
+Window W
+    title "RGB RTG"
+    width 640
+    height 400
+end
+
+func cerca(c: Int, r: Int, g: Int, b: Int) -> Bool
+    return (((c >> 16) & 255) - r).abs() <= 8 and (((c >> 8) & 255) - g).abs() <= 8 and ((c & 255) - b).abs() <= 8
+end
+
+Main
+    W.open
+    w = 400
+    h = 300
+    v = buffer_alloc(w * h * 4)
+    c = buffer_alloc(w * h * 3)
+    for y in (0..h - 1)
+        for x in (0..w - 1)
+            o = (y * w + x) * 4
+            buffer_set_byte(v, o, x & 255)
+            buffer_set_byte(v, o + 1, y & 255)
+            buffer_set_byte(v, o + 2, 200)
+            if x >= 10
+                buffer_set_byte(v, o + 3, 255)
+            end
+            o = (y * w + x) * 3
+            buffer_set_byte(c, o, x & 255)
+            buffer_set_byte(c, o + 1, y & 255)
+            buffer_set_byte(c, o + 2, 200)
+        end
+    end
+    t = time_ms()
+    img = image_from_rgb(c, w, h, false)
+    t = time_ms() - t
+    image_draw(img, 0, 0)
+    if cerca(gfx_pixel_rgb(100, 50), 100, 50, 200) and cerca(gfx_pixel_rgb(5, 200), 5, 200, 200)
+        Print "colores: ok"
+    else
+        Print "colores: #{str_from_int(gfx_pixel_rgb(100, 50), 16)} #{str_from_int(gfx_pixel_rgb(5, 200), 16)}"
+    end
+    if t < 60
+        Print "rápida: ok"
+    else
+        Print "rápida: #{t} ms"
+    end
+    e = image_scale(img, 200, 150)
+    image_draw(e, 420, 0)
+    if image_width(e) == 200 and cerca(gfx_pixel_rgb(420 + 50, 25), 100, 50, 200)
+        Print "escalada: ok"
+    else
+        Print "escalada: #{image_width(e)} #{str_from_int(gfx_pixel_rgb(470, 25), 16)}"
+    end
+    image_free(e)
+    image_free(img)
+    gfx_pen(1)
+    gfx_rect(0, 0, 399, 299)
+    fondo = gfx_pixel_rgb(5, 5)
+    a = image_from_rgb(v, w, h, true)
+    image_draw(a, 0, 0)
+    if gfx_pixel_rgb(5, 5) == fondo and cerca(gfx_pixel_rgb(100, 50), 100, 50, 200)
+        Print "alfa: ok"
+    else
+        Print "alfa: #{str_from_int(gfx_pixel_rgb(5, 5), 16)} #{str_from_int(gfx_pixel_rgb(100, 50), 16)}"
+    end
+    image_free(a)
+    buffer_free(v)
+    buffer_free(c)
+    Print "fin"
+end

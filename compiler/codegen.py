@@ -1428,20 +1428,21 @@ static void _dash_p96_pixel_array(LONG lvo, struct _DashRenderInfo *ri, LONG sx,
 
 /* Read (write FALSE) or write w x h RGB24 pixels, rows bpr bytes apart, at x, y of the RastPort.
    Picasso96's own calls when it is there (also under its cybergraphics emulation) */
-static void _dash_rgb_block(BOOL write, UBYTE *pix, LONG bpr, LONG x, LONG y, LONG w, LONG h) {
+static void _dash_rgb_block_rp(struct RastPort *rp, BOOL write, UBYTE *pix, LONG bpr, LONG x, LONG y, LONG w, LONG h) {
     if (_dash_p96) {
         struct _DashRenderInfo ri;
         ri.Memory = pix;
         ri.BytesPerRow = bpr;
         ri.pad = 0;
         ri.RGBFormat = _DASH_RGBFB_R8G8B8;
-        _dash_p96_pixel_array(write ? -102 : -108, &ri, 0, 0, _dash_rp, x, y, w, h);
+        _dash_p96_pixel_array(write ? -102 : -108, &ri, 0, 0, rp, x, y, w, h);
     } else if (write) {
-        WritePixelArray(pix, 0, 0, bpr, _dash_rp, x, y, w, h, RECTFMT_RGB);
+        WritePixelArray(pix, 0, 0, bpr, rp, x, y, w, h, RECTFMT_RGB);
     } else {
-        ReadPixelArray(pix, 0, 0, bpr, _dash_rp, x, y, w, h, RECTFMT_RGB);
+        ReadPixelArray(pix, 0, 0, bpr, rp, x, y, w, h, RECTFMT_RGB);
     }
 }
+#define _dash_rgb_block(write, pix, bpr, x, y, w, h) _dash_rgb_block_rp(_dash_rp, write, pix, bpr, x, y, w, h)
 
 /* n RGB24 pixels mixed with one colour: v = old * (255 - a) + c * a, rounded / 255. Many pixels:
    a table per channel of what each old value becomes */
@@ -2039,16 +2040,80 @@ static LONG _dash_image_load(STRPTR file) {
    width pixels, RGB (3 bytes) or, with alpha, RGBA (4 bytes; alpha 128 or more is drawn). The
    picture.datatype (V43: AmigaOS 3.5 and later) puts them on the screen like a file's: the
    image, or 0 (an older picture.datatype, no memory) */
+/* The mask of w x h RGBA pixels (alpha 128 or more is drawn) in rows of mod bytes; NULL if all are
+   drawn or none */
+static UBYTE *_dash_rgba_mask(UBYTE *pixels, LONG w, LONG h, LONG mod) {
+    UBYTE *mask = (UBYTE *)AllocVec(mod * h, MEMF_CLEAR), *p;
+    LONG x, y;
+    BOOL clear = FALSE, opaque = FALSE;
+    if (!mask) return NULL;
+    for (y = 0, p = pixels + 3; y < h; y++)
+        for (x = 0; x < w; x++, p += 4) {
+            if (*p >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
+            else clear = TRUE;
+        }
+    if (!(clear && opaque)) { FreeVec(mask); mask = NULL; }
+    return mask;
+}
+
+/* On a high/true colour screen (RTG) the image is a bitmap like the screen's with the pixels written
+   in it as RGB24 (dashweb D54: picture.datatype took 0.4 s per image on a 68040): the image, or 0 if
+   that is not possible here (a palette screen, no memory) */
+static LONG _dash_image_from_rgb_direct(UBYTE *pixels, LONG w, LONG h, LONG alpha) {
+    struct Screen *scr, *pub = NULL;
+    struct BitMap *bm = NULL;
+    struct RastPort rp;
+    _DashImg *img;
+    UBYTE *row = NULL, *mask = NULL;
+    LONG rows, y, i, mod = ((w + 15) >> 4) << 1;
+    scr = _dash_win ? _dash_win->WScreen : (pub = LockPubScreen(NULL));
+    if (scr && _dash_blend_truecolor(&scr->RastPort))
+        bm = AllocBitMap(w, h, GetBitMapAttr(scr->RastPort.BitMap, BMA_DEPTH), BMF_MINPLANES, scr->RastPort.BitMap);
+    if (pub) UnlockPubScreen(NULL, pub);
+    if (!bm) return 0;
+    if (GetBitMapAttr(bm, BMA_FLAGS) & BMF_STANDARD) { FreeBitMap(bm); return 0; }   /* not a card's */
+    InitRastPort(&rp);
+    rp.BitMap = bm;
+    if (!alpha) {
+        _dash_rgb_block_rp(&rp, TRUE, pixels, w * 3, 0, 0, w, h);
+    } else {   /* RGBA: the RGB of blocks of rows, then the mask from the alpha */
+        rows = 49152 / (w * 3);
+        if (rows < 1) rows = 1;
+        if (rows > h) rows = h;
+        row = (UBYTE *)AllocVec(rows * w * 3, MEMF_ANY);
+        if (!row) { FreeBitMap(bm); return 0; }
+        for (y = 0; y < h; y += rows) {
+            LONG n = h - y < rows ? h - y : rows;
+            UBYTE *s = pixels + y * w * 4, *d = row;
+            for (i = w * n; i > 0; i--, s += 4, d += 3) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; }
+            _dash_rgb_block_rp(&rp, TRUE, row, w * 3, 0, y, w, n);
+        }
+        FreeVec(row);
+        mask = _dash_rgba_mask(pixels, w, h, mod);
+    }
+    img = (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR);
+    if (!img) { FreeBitMap(bm); if (mask) FreeVec(mask); return 0; }
+    img->bm = bm;
+    img->w = w;
+    img->h = h;
+    if (mask) { _dash_img_mask(img, mask, mod); FreeVec(mask); }
+    if (_dash_img_add(img)) return (LONG)img;
+    FreeBitMap(bm);
+    if (img->mask) FreeVec(img->mask);
+    FreeVec(img);
+    return 0;
+}
+
 static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha) {
     struct Screen *scr, *pub = NULL;
     struct BitMapHeader *bmh = NULL;
     struct BitMap *bm = NULL;
-    UBYTE *mask = NULL, *p;
+    UBYTE *mask = NULL;
     Object *o;
     _DashImg *img;
-    LONG mod, x, y;
-    BOOL clear = FALSE, opaque = FALSE;
+    LONG mod;
     if (!pixels || w <= 0 || h <= 0 || w > 16383 || h > 16383) return 0;
+    if ((img = (_DashImg *)_dash_image_from_rgb_direct((UBYTE *)pixels, w, h, alpha)) != NULL) return (LONG)img;
     if (!DataTypesBase) DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
     if (!DataTypesBase) return 0;
     o = NewDTObject(NULL, DTA_SourceType, DTST_RAM, DTA_GroupID, GID_PICTURE,
@@ -2065,14 +2130,7 @@ static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha) {
         return 0;
     }
     mod = ((w + 15) >> 4) << 1;
-    if (alpha && (mask = (UBYTE *)AllocVec(mod * h, MEMF_CLEAR))) {
-        for (y = 0, p = (UBYTE *)pixels + 3; y < h; y++)
-            for (x = 0; x < w; x++, p += 4) {
-                if (*p >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
-                else clear = TRUE;
-            }
-        if (!(clear && opaque)) { FreeVec(mask); mask = NULL; }
-    }
+    if (alpha) mask = _dash_rgba_mask((UBYTE *)pixels, w, h, mod);
     scr = _dash_win ? _dash_win->WScreen : (pub = LockPubScreen(NULL));
     SetDTAttrs(o, NULL, NULL, PDTA_Remap, TRUE, PDTA_Screen, (ULONG)scr, PDTA_FreeSourceBitMap, TRUE, TAG_DONE);
     DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, TRUE);
@@ -12900,6 +12958,8 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if self.uses_images:
+            self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:

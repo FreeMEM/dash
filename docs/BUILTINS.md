@@ -435,7 +435,7 @@ Total: 510 funciones, 510 implementadas, 0 sin implementar.
 | `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
 | `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
 | `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
-| `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+) |  |
+| `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
 
 ## Argumentos
 

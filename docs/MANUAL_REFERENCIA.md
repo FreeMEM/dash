@@ -1298,7 +1298,9 @@ Un programa que decodifica sus imagenes (como dashweb, con sus propios decodific
 PNG) las pasa a la pantalla con `image_from_rgb(buffer, ancho, alto, alfa)`: filas de pixeles RGB
 (3 bytes) o, con `alfa`, RGBA (4 bytes; alfa de 128 o mas se pinta). Usa el `picture.datatype`
 V43 (AmigaOS 3.5 y despues) para adaptar los colores a la pantalla, como con un fichero; en 3.1
-de serie da 0. La imagen se usa como las de `image_load`.
+de serie da 0. En una pantalla de tarjeta grafica (RTG de 15 a 32 bits, con Picasso96 o CyberGraphX)
+no usa el datatype: escribe los pixeles en un bitmap como el de la pantalla, unas 20 veces mas
+rapido (5 ms para 400x300 en un 68040). La imagen se usa como las de `image_load`.
 
 La transparencia vale tambien en pantallas de tarjeta grafica (RTG, Picasso96), tambien en las
 copias de `image_scale` y en `image_draw_part`.
