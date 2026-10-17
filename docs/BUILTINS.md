@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 510 funciones, 510 implementadas, 0 sin implementar.
+Total: 511 funciones, 511 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -384,6 +384,7 @@ Total: 510 funciones, 510 implementadas, 0 sin implementar.
 | `tls_recv(tls, max, timeout_ms)` | `STRPTR` | Like net_recv: "" if nothing came in time, nil once closed |  |
 | `tls_recv_buffer(tls, buffer, max, timeout_ms)` | `LONG` | Like net_recv_buffer: the count, 0 on time out, -1 once closed |  |
 | `tls_close(tls)` | `void` | End TLS on the connection (net_close the socket after) |  |
+| `tls_resumed(tls)` | `BOOL` | True if the connection resumed an earlier session with the same server (no key exchange) |  |
 
 ## Fuentes y colores
 

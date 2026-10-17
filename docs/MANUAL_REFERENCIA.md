@@ -1759,6 +1759,13 @@ Para compilar hacen falta las cabeceras del SDK: `tools/get_amissl.sh` las desca
 | `tls_close(t)` | Termina TLS (el socket se cierra despues con `net_close`) |
 | `tls_connect_start(socket, host, ms)` | Como `tls_connect` sin esperar a la negociacion: la conexion o -1 |
 | `tls_connect_poll(t)` | 1 negociada (certificado comprobado), 0 todavia no, -1 fallo (`t` se libera; el socket sigue abierto) |
+| `tls_resumed(t)` | `true` si la conexion reanudo una sesion anterior con el mismo servidor |
+
+Dash guarda la sesion de cada servidor (nombre y puerto; hasta 8) cuando una conexion ha leido algo
+o se cierra (TLS 1.3 la manda despues de negociar), y la siguiente conexion a ese servidor la
+reanuda: no se comprueba otra vez el certificado. Con TLS 1.3 el intercambio de claves se repite
+igualmente (en un A1200 emulado, 9 s nueva y 7,9 s reanudada); con TLS 1.2 tambien se lo salta.
+Las conexiones abiertas a la vez antes de que la primera lea algo no tienen sesion que reanudar.
 
 ```
 s = net_connect("ejemplo.org", 443, 10000)

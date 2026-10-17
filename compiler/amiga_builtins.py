@@ -3811,6 +3811,9 @@ TLS_FUNCTIONS = {
                              "Like net_recv_buffer: the count, 0 on time out, -1 once closed"),
     "tls_close": _text("tls_close", ["tls"], "void", "_dash_tls_close(${tls})",
                        "End TLS on the connection (net_close the socket after)"),
+    "tls_resumed": _text("tls_resumed", ["tls"], "BOOL", "_dash_tls_resumed(${tls})",
+                         "True if the connection resumed an earlier session with the same server "
+                         "(no key exchange)"),
 }
 
 # =============================================================================

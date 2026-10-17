@@ -3040,6 +3040,67 @@ static LONG _dash_tls_timeout[_DASH_TLS_MAX];    /* counted again each time the 
 static LONG _dash_tls_state[_DASH_TLS_MAX];
 static LONG _dash_tls_polled[_DASH_TLS_MAX];     /* when tls_connect_poll looked last */
 static BOOL _dash_tls_shaking[_DASH_TLS_MAX];
+static BYTE _dash_tls_saved[_DASH_TLS_MAX];      /* its session is in the cache (or cannot be) */
+
+/* Sessions to resume, one per server (host and port): a connection to a server already met skips
+   the key exchange (dashweb D55). TLS 1.3 sends them after the handshake, so a session is kept when
+   the connection first reads (or closes) and it can be resumed. */
+#define _DASH_TLS_SESS_MAX 8
+static SSL_SESSION *_dash_tls_sess[_DASH_TLS_SESS_MAX];
+static char _dash_tls_sess_host[_DASH_TLS_SESS_MAX][64];
+static UWORD _dash_tls_sess_port[_DASH_TLS_SESS_MAX];
+static LONG _dash_tls_sess_next = 0;
+static STRPTR _dash_tls_host[_DASH_TLS_MAX];     /* copies of the hosts of the connections */
+
+static UWORD _dash_tls_peer_port(SSL *ssl) {
+    struct sockaddr_in sa;
+    socklen_t len = sizeof(sa);
+    if (getpeername(SSL_get_fd(ssl), (struct sockaddr *)&sa, &len) != 0) return 0;
+    return (UWORD)sa.sin_port;
+}
+
+static LONG _dash_tls_sess_find(STRPTR host, UWORD port) {
+    LONG i;
+    for (i = 0; i < _DASH_TLS_SESS_MAX; i++)
+        if (_dash_tls_sess[i] && _dash_tls_sess_port[i] == port && !strcmp(_dash_tls_sess_host[i], (char *)host)) return i;
+    return -1;
+}
+
+/* Keep the session of connection t for its server, once it can be resumed */
+static void _dash_tls_sess_keep(LONG t) {
+    SSL *ssl = _dash_tls_ssl[t];
+    SSL_SESSION *sess;
+    UWORD port;
+    LONG i;
+    if (!ssl || _dash_tls_saved[t] || !_dash_tls_host[t] || strlen((char *)_dash_tls_host[t]) > 63) return;
+    sess = SSL_get1_session(ssl);
+    if (!sess) return;
+    if (!SSL_SESSION_is_resumable(sess)) { SSL_SESSION_free(sess); return; }
+    _dash_tls_saved[t] = 1;
+    port = _dash_tls_peer_port(ssl);
+    i = _dash_tls_sess_find(_dash_tls_host[t], port);
+    if (i < 0) { i = _dash_tls_sess_next; _dash_tls_sess_next = (_dash_tls_sess_next + 1) % _DASH_TLS_SESS_MAX; }
+    if (_dash_tls_sess[i]) SSL_SESSION_free(_dash_tls_sess[i]);
+    _dash_tls_sess[i] = sess;
+    strcpy(_dash_tls_sess_host[i], (char *)_dash_tls_host[t]);
+    _dash_tls_sess_port[i] = port;
+}
+
+/* A new connection t to host: the host kept, and the server's session to resume if there is one */
+static void _dash_tls_sess_use(LONG t, SSL *ssl, STRPTR host) {
+    LONG i, n = strlen((char *)host);
+    _dash_tls_saved[t] = 0;
+    _dash_tls_host[t] = (STRPTR)AllocVec(n + 1, MEMF_ANY);
+    if (_dash_tls_host[t]) CopyMem(host, _dash_tls_host[t], n + 1);
+    i = _dash_tls_sess_find(host, _dash_tls_peer_port(ssl));
+    if (i >= 0) SSL_set_session(ssl, _dash_tls_sess[i]);
+}
+
+/* Connection t is over: its session kept if it can be resumed, its host freed */
+static void _dash_tls_forget(LONG t, BOOL keep) {
+    if (keep) _dash_tls_sess_keep(t);
+    if (_dash_tls_host[t]) { FreeVec(_dash_tls_host[t]); _dash_tls_host[t] = NULL; }
+}
 
 static BOOL _dash_tls_init(void) {
     UBYTE seed[64];
@@ -3078,7 +3139,11 @@ static BOOL _dash_tls_init(void) {
 
 static void _dash_tls_cleanup(void) {
     LONG i;
-    for (i = 0; i < _DASH_TLS_MAX; i++) if (_dash_tls_ssl[i]) { SSL_free(_dash_tls_ssl[i]); _dash_tls_ssl[i] = NULL; }
+    for (i = 0; i < _DASH_TLS_MAX; i++) {
+        if (_dash_tls_ssl[i]) { SSL_free(_dash_tls_ssl[i]); _dash_tls_ssl[i] = NULL; }
+        _dash_tls_forget(i, FALSE);
+    }
+    for (i = 0; i < _DASH_TLS_SESS_MAX; i++) if (_dash_tls_sess[i]) { SSL_SESSION_free(_dash_tls_sess[i]); _dash_tls_sess[i] = NULL; }
     if (_dash_tls_ctx) { SSL_CTX_free(_dash_tls_ctx); _dash_tls_ctx = NULL; }
     if (_dash_tls_open) { CloseAmiSSL(); _dash_tls_open = FALSE; }
     if (AmiSSLMasterBase) { CloseLibrary(AmiSSLMasterBase); AmiSSLMasterBase = NULL; }
@@ -3113,13 +3178,16 @@ static LONG _dash_tls_connect(LONG sock, STRPTR host) {
     if (!ssl) { _dash_net_err = "error de TLS"; return -1; }
     SSL_set_fd(ssl, sock);
     _dash_tls_name(ssl, host);
+    _dash_tls_sess_use(slot, ssl, host);
     if (SSL_connect(ssl) != 1) {
         long v = SSL_get_verify_result(ssl);
         _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
+        _dash_tls_forget(slot, FALSE);
         SSL_free(ssl);
         return -1;
     }
     _dash_tls_ssl[slot] = ssl;
+    _dash_tls_sess_keep(slot);   /* TLS 1.2: it can be resumed already */
     return slot;
 }
 
@@ -3140,6 +3208,7 @@ static LONG _dash_tls_connect_start(LONG sock, STRPTR host, LONG timeout_ms) {
     IoctlSocket(sock, FIONBIO, (char *)&on);
     SSL_set_fd(ssl, sock);
     _dash_tls_name(ssl, host);
+    _dash_tls_sess_use(slot, ssl, host);
     SSL_set_connect_state(ssl);
     _dash_tls_ssl[slot] = ssl;
     _dash_tls_shaking[slot] = TRUE;
@@ -3169,6 +3238,7 @@ static LONG _dash_tls_connect_poll(LONG t) {
     if (r == 1) {
         IoctlSocket(SSL_get_fd(ssl), FIONBIO, (char *)&off);
         _dash_tls_shaking[t] = FALSE;
+        _dash_tls_sess_keep(t);
         return 1;
     }
     e = SSL_get_error(ssl, r);
@@ -3184,6 +3254,7 @@ static LONG _dash_tls_connect_poll(LONG t) {
         v = SSL_get_verify_result(ssl);
         _dash_net_err = v != X509_V_OK ? X509_verify_cert_error_string(v) : "fallo al negociar TLS";
     }
+    _dash_tls_forget(t, FALSE);
     SSL_free(ssl);
     _dash_tls_ssl[t] = NULL;
     _dash_tls_shaking[t] = FALSE;
@@ -3216,6 +3287,7 @@ static LONG _dash_tls_recv_buffer(LONG t, APTR buffer, LONG max, LONG timeout_ms
         if (n <= 0) return n;
     }
     n = SSL_read(ssl, buffer, max);
+    if (n > 0 && !_dash_tls_saved[t]) _dash_tls_sess_keep(t);   /* TLS 1.3: the session came with the data */
     return n > 0 ? n : -1;
 }
 
@@ -3238,9 +3310,16 @@ static void _dash_tls_close(LONG t) {
     SSL *ssl = _dash_tls_get(t);
     if (!ssl) return;
     if (!_dash_tls_shaking[t]) SSL_shutdown(ssl);
+    _dash_tls_forget(t, !_dash_tls_shaking[t]);
     SSL_free(ssl);
     _dash_tls_ssl[t] = NULL;
     _dash_tls_shaking[t] = FALSE;
+}
+
+/* TRUE if connection t resumed a session of its server (no key exchange) */
+static BOOL _dash_tls_resumed(LONG t) {
+    SSL *ssl = _dash_tls_get(t);
+    return ssl && !_dash_tls_shaking[t] && SSL_session_reused(ssl);
 }
 
 """
