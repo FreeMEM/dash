@@ -136,5 +136,12 @@ DASH_PREVIEW_EMU=1 npm test   # also "Ver en Amiga" in FS-UAE (DASH_KICKSTART, D
 npm run build      # dist/extension.js (esbuild: the extension and vscode-languageclient in one file)
 npm run test:vscode   # tests inside the installed VS Code (a window opens a few seconds; own profile and folder;
                       # the tests that type are skipped if that window does not get the desktop's focus)
-npm run package    # dash-mui-editor-<version>.vsix
+npm run package    # dash-mui-editor-<version>.vsix (the bundle minified)
+node test/screenshots.js   # images/editor.png and images/icon.png again (headless Chromium)
 ```
+
+Install the package with `code --install-extension dash-mui-editor-<version>.vsix`. To publish it (not done yet):
+the Visual Studio Marketplace needs the publisher `FreeMEM` made there and a personal access token of Azure DevOps
+(`npx vsce publish --packagePath dash-mui-editor-<version>.vsix`); Open VSX (VSCodium, and other editors) needs
+the namespace `FreeMEM` and its token (`npx ovsx publish dash-mui-editor-<version>.vsix -p <token>`). The
+version and the `CHANGELOG.md` go up first.

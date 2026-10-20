@@ -1,15 +1,19 @@
 {
   "name": "dash-mui-editor",
-  "displayName": "Dash (Amiga) and MUI editor",
-  "description": "Dash language support for Amiga development: syntax highlighting, compile and run in FS-UAE, and a visual editor for MUI windows (.dashui).",
-  "version": "0.1.0",
+  "displayName": "Dash for Amiga",
+  "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
+  "version": "0.2.0",
   "publisher": "FreeMEM",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Debuggers",
+    "Snippets",
+    "Formatters",
+    "Linters"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
@@ -68,47 +72,47 @@
     "commands": [
       {
         "command": "dash.compile",
-        "title": "Dash: Compilar",
+        "title": "Compilar",
         "category": "Dash"
       },
       {
         "command": "dash.runInEmulator",
-        "title": "Dash: Ejecutar en emulador",
+        "title": "Ejecutar en emulador",
         "category": "Dash"
       },
       {
         "command": "dash.newWindowFile",
-        "title": "Dash: Nuevo fichero de ventanas MUI (.dashui)",
+        "title": "Nuevo fichero de ventanas MUI (.dashui)",
         "category": "Dash"
       },
       {
         "command": "dash.newline",
-        "title": "Dash: Nueva línea (con end)",
+        "title": "Nueva línea (con end)",
         "category": "Dash"
       },
       {
         "command": "dash.restartLanguageServer",
-        "title": "Dash: Reiniciar el servidor de lenguaje",
+        "title": "Reiniciar el servidor de lenguaje",
         "category": "Dash"
       },
       {
         "command": "dash.runMemcheck",
-        "title": "Dash: Ejecutar con comprobación de memoria",
+        "title": "Ejecutar con comprobación de memoria",
         "category": "Dash"
       },
       {
         "command": "dash.runProfile",
-        "title": "Dash: Ejecutar con perfil",
+        "title": "Ejecutar con perfil",
         "category": "Dash"
       },
       {
         "command": "dash.chooseMachine",
-        "title": "Dash: Elegir la máquina del emulador",
+        "title": "Elegir la máquina del emulador",
         "category": "Dash"
       },
       {
         "command": "dash.debug",
-        "title": "Dash: Depurar en el Amiga",
+        "title": "Depurar en el Amiga",
         "category": "Dash",
         "icon": "$(debug-alt)"
       },
@@ -516,7 +520,7 @@
   },
   "scripts": {
     "test": "node test/run.js",
-    "package": "npm run build && vsce package --no-dependencies",
+    "package": "npm run build -- --minify && vsce package --no-dependencies",
     "test:vscode": "npm run build && sh test/integration/run.sh",
     "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --target=node18 --outfile=dist/extension.js"
   },
@@ -533,5 +537,24 @@
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
+  },
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1f2d5c",
+    "theme": "dark"
+  },
+  "keywords": [
+    "amiga",
+    "dash",
+    "mui",
+    "fs-uae",
+    "68k",
+    "retro",
+    "amigaos",
+    "workbench"
+  ],
+  "homepage": "https://github.com/FreeMEM/dash/tree/main/editor/vscode",
+  "bugs": {
+    "url": "https://github.com/FreeMEM/dash/issues"
   }
 }

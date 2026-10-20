@@ -1,6 +1,7 @@
 // The pictures of the README and the walkthrough (images/): the visual editor (its webview in a headless
-// Chromium, with the window of "Dash: Nuevo proyecto"). The Amiga's (images/amiga.png) comes from the
-// emulator: tools/emu_run.py --autoclose 8 --screenshot 6 images/amiga.png <the new project's program>.
+// Chromium, with the window of "Dash: Nuevo proyecto"), and the extension's icon (images/icon.svg as a PNG).
+// The Amiga's (images/amiga.png) comes from the emulator:
+// tools/emu_run.py --autoclose 8 --screenshot 6 images/amiga.png <the new project's program>.
 //     node test/screenshots.js
 const path = require('path');
 const fs = require('fs');
@@ -22,6 +23,14 @@ const { projectFiles } = require('../newProject.js');
         fs.mkdirSync(path.dirname(out), { recursive: true });
         fs.writeFileSync(out, Buffer.from(shot.data, 'base64'));
         console.log('saved ' + out);
+        // the extension's icon: images/icon.svg at 128 x 128, transparent around it
+        await page.send('Emulation.setDeviceMetricsOverride', { width: 128, height: 128, deviceScaleFactor: 1, mobile: false });
+        await page.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
+        await page.send('Page.navigate', { url: 'file://' + path.join(__dirname, '..', 'images', 'icon.svg') });
+        await new Promise((r) => setTimeout(r, 500));
+        const icon = await page.send('Page.captureScreenshot', { format: 'png' });
+        fs.writeFileSync(path.join(__dirname, '..', 'images', 'icon.png'), Buffer.from(icon.data, 'base64'));
+        console.log('saved images/icon.png');
     } finally {
         page.close();
     }

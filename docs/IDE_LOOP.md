@@ -143,7 +143,8 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 ### F. Pulido
 - [x] 21. **Primeros pasos.** Walkthrough de VS Code, comando "Dash: Nuevo proyecto" (plantilla con `.dash`,
       `.dashui` y launch.json), README con capturas.
-- [ ] 22. **Empaquetado.** Bundle, icono, versión 0.2.0, CHANGELOG; preparar la publicación (publicar: `[?]`).
+- [x] 22. **Empaquetado.** Bundle, icono, versión 0.2.0, CHANGELOG; preparar la publicación.
+- [?] 22b. **Publicar** en el Marketplace de VS Code y en Open VSX: lo decide el usuario (hacen falta el editor `FreeMEM` en cada sitio y sus tokens).
 - [ ] 23. **Repaso final.** Todo junto con un proyecto real (dashweb): abrir, completar, compilar, depurar.
 
 ## Bitácora
@@ -538,4 +539,18 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
     7 saltados por falta de foco.
 - Visto de paso (no arreglado, es del runtime de MUI): `GetVPModeID` y `GetBitMapAttr` sin prototipo en los
   programas MUI (aviso de gcc, también en `examples/mui_hola.dash`).
+
+### 2026-10-20 — Tarea 22 (empaquetado)
+- Versión 0.2.0, `displayName` "Dash for Amiga", descripción de todo lo que hace.
+- Categorías: lenguajes, depuradores, fragmentos, formateadores, linters.
+- Palabras clave, `homepage`, `bugs` y banner.
+- `CHANGELOG.md` con 0.1.0 y 0.2.0.
+- Icono: `images/icon.svg` (bola de Boing con una D), que `test/screenshots.js` pasa a PNG de 128 en el Chromium
+  sin ventana, con fondo transparente.
+- `npm run package` minimiza el bundle (401 KB en vez de 829); el paquete tiene 23 ficheros y 188 KB, sin tests.
+- Títulos de las órdenes sin "Dash:" delante (la categoría ya lo pone; salían "Dash: Dash: Compilar").
+- Publicar: los pasos están en el README (Marketplace con `vsce` y Open VSX con `ovsx`); no se ha publicado,
+  queda en `[?]` 22b.
+- Tests: node todo bien. VS Code con el bundle minimizado: 14 bien y 7 saltados por falta de foco.
+  Instalado el 0.2.0.
 

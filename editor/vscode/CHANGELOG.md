@@ -1,0 +1,28 @@
+# Changelog
+
+## 0.2.0 (2026-10-20)
+
+An IDE for Dash (docs/IDE_LOOP.md of the Dash repository).
+
+- **Editing**: highlighting generated from the compiler; the `end` of a block added on Enter and `else`/`end` put back at
+  their level; snippets.
+- **Language server** (`compiler/lsp.py`): errors while typing, completion with the parameters of every builtin,
+  signature help, hover, go to definition, references, outline, symbols of the workspace, rename, formatting and
+  quick fixes.
+- **Compile and run**: tasks with problem matchers (the errors at their line, also those of `--memcheck`), the profile
+  of `--profile` in a table, CodeLens over `Main` and functions, a status bar with the emulator's machine (A1200 3.1, A500,
+  A1200 3.2, 68040 with a graphics card) and Amiberry as the other emulator.
+- **Debugger** (F5): breakpoints, steps, the stack and the variables in Dash lines and values, on the emulated Amiga
+  (`m68k-amigaos-gdb` and `bgdbserver`) or a real one; Dash expressions in the console, watch, hover, conditions and
+  logpoints; the program's output in the debug console; its errors stop it like exceptions; global variables read right.
+- **Visual editor of MUI windows** (`.dashui`): keyboard in the tree, copy and paste, drag before, after or into a group,
+  undo and redo, accessibility; its problems in the Problems panel; from an event to its code in the `.dash` (or that
+  code created); **Ver en Amiga** with an emulated Amiga that stays on (about 2 s a preview).
+- **Getting started**: **Dash: Nuevo proyecto**, **Dash: Elegir la carpeta del compilador** and the walkthrough
+  "Primeros pasos con Dash".
+- Restricted Mode: highlighting and the visual editor work; compiling and the emulator need a trusted folder.
+
+## 0.1.0 (2026-10-16)
+
+- Highlighting of `.dash`, compile and run in FS-UAE, and the visual editor of MUI windows (`.dashui`) with
+  **Ver en Amiga**.
