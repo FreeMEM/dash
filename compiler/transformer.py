@@ -79,6 +79,7 @@ class DashASTBuilder(Transformer):
         self._links: List[str] = []
         self._c_blocks: List[str] = []
         self._stack = 0
+        self._workbench_output: Optional[str] = None
 
     def _get_location(self, token_or_tree) -> Optional[SourceLocation]:
         """Extract source location from a token or tree."""
@@ -115,7 +116,8 @@ class DashASTBuilder(Transformer):
             headers=self._headers,
             links=self._links,
             c_blocks=self._c_blocks,
-            stack=self._stack
+            stack=self._stack,
+            workbench_output=self._workbench_output
         )
 
     def import_stmt(self, items) -> ImportStmt:
@@ -415,6 +417,12 @@ class DashASTBuilder(Transformer):
     def stack_directive(self, items) -> str:
         """@stack N: the program needs at least N bytes of stack (dashweb D24)."""
         self._stack = max(self._stack, parse_int(items[0].value))
+        return ""
+
+    def workbench_output_directive(self, items) -> str:
+        """@workbench_output "NIL:": the file libnix opens for input and output when the program
+        starts from the Workbench, instead of its console window (dashweb D59)."""
+        self._workbench_output = items[0].value
         return ""
 
     def param(self, items) -> FunctionParam:

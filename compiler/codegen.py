@@ -10641,6 +10641,7 @@ class CodeGenerator(ASTVisitor):
         self.links: List[str] = []
         self.c_blocks: List[str] = []
         self.stack_min = 0
+        self.workbench_output = None
 
     def generate(self) -> str:
         """Generate the complete C program."""
@@ -10711,6 +10712,10 @@ class CodeGenerator(ASTVisitor):
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
         parts = [CTemplates.PROGRAM_HEADER, CTemplates.STACK_REQUEST]
+        if self.workbench_output is not None:
+            # started from the Workbench, libnix opens this for input and output (its own default
+            # is a console window, CON://///AUTO/CLOSE/WAIT, that opens when something is written)
+            parts.append(f"char const *__stdiowin = {self.workbench_output};\n\n")
         if self.links:
             # read by ./dash and the test runner (compiler/cflags.py link_flags)
             parts.append("".join(f"/* dash-link: {p} */\n" for p in self.links))
@@ -11152,6 +11157,7 @@ static LONG _dash_event_window_handle(void) {{
         self.links = list(node.links)          # @link (dashweb D10)
         self.c_blocks = list(node.c_blocks)    # @c
         self.stack_min = node.stack            # @stack (dashweb D24)
+        self.workbench_output = node.workbench_output   # @workbench_output (dashweb D59)
         # runtime functions (_dash_*) named by @native and @c code bring their runtime (D10b)
         import re
         for code in list(node.c_blocks) + [n.c_code for n in node.native_funcs]:

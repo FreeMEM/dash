@@ -282,6 +282,7 @@ class DashCompiler:
         merged_links: List[str] = []
         merged_c_blocks: List[str] = []
         merged_stack = main_ast.stack
+        merged_workbench_output = main_ast.workbench_output
 
         # First, load all imports
         for import_stmt in main_ast.imports:
@@ -309,6 +310,8 @@ class DashCompiler:
             merged_links.extend(p for p in module_ast.links if p not in merged_links)
             merged_c_blocks.extend(module_ast.c_blocks)
             merged_stack = max(merged_stack, module_ast.stack)
+            if merged_workbench_output is None:
+                merged_workbench_output = module_ast.workbench_output   # the program's own wins
 
             # Add public constants (not starting with _)
             merged_constants.extend(module_ast.constants)
@@ -362,7 +365,8 @@ class DashCompiler:
             headers=merged_headers + [h for h in main_ast.headers if h not in merged_headers],
             links=merged_links + [p for p in main_ast.links if p not in merged_links],
             c_blocks=merged_c_blocks + list(main_ast.c_blocks),
-            stack=merged_stack
+            stack=merged_stack,
+            workbench_output=merged_workbench_output
         )
 
     def compile(self, source: str, filename: str = "<input>") -> tuple[str, AnalysisResult]:
