@@ -9,6 +9,7 @@
 ./dash --profile ...                # at exit: calls and time (own, total) of each function
 ./dash --stack 32768 ...            # minimum stack (0: as the shell gives it)
                                     # @stack 262144 in a program or module: it needs at least that
+                                    # @workbench_output "NIL:": from the Workbench, no console window
 ./dash --fpu prog.dash -o prog      # 68020 + 68881/68882 FPU only
 ./dash --memcheck prog.dash -o prog # memory check: double frees, use after free, live at exit
 ```

@@ -1135,12 +1135,15 @@ static struct RastPort *_dash_font_rp(void) {
 }
 
 /* name ("helvetica.font") at size pixels: the font, or 0 if there is no such font.
-   Disk fonts need diskfont.library; the ROM's topaz 8 works without it. */
+   Disk fonts need diskfont.library; the ROM's topaz 8 works without it. A size below 2 asks
+   for 2: diskfont 47 (AmigaOS 3.2) with bullet writes some 50 bytes into memory that is not its
+   own when it opens an outline font at size 1 or 0 (CSS font-size: 0 in dashweb, D57). */
 static LONG _dash_font_open(STRPTR name, LONG size) {
     struct TextAttr ta;
     struct TextFont *f = NULL;
     LONG i;
     if (!name) return 0;
+    if (size < 2) size = 2;
     ta.ta_Name = name;
     ta.ta_YSize = size;
     ta.ta_Style = FS_NORMAL;
@@ -1321,6 +1324,56 @@ static void _dash_task_cleanup(void) {
 #define _DASH_CGXBASE
 struct Library *CyberGfxBase = NULL;
 #endif
+#ifdef _DASH_PIXGUARD
+/* DASH_CFLAGS=-D_DASH_PIXGUARD (dashweb D56): the pixel and mask buffers with guard zones before and
+   after, checked when used and freed (a message says which buffer was overrun), and filled with
+   0xDEADBEEF when freed (a stale pointer to one shows that pattern) */
+#define _DASH_PG 64
+static LONG _dash_pg_reports = 0;
+static APTR _dash_pg_alloc(ULONG size, ULONG flags) {
+    UBYTE *p = (UBYTE *)AllocVec(size + 16 + _DASH_PG, flags);
+    ULONG i;
+    if (!p) return NULL;
+    ((ULONG *)p)[0] = size;
+    ((ULONG *)p)[1] = ((ULONG *)p)[2] = ((ULONG *)p)[3] = 0x47554152;
+    for (i = 0; i < _DASH_PG; i++) p[16 + size + i] = 0xA5;
+    return p + 16;
+}
+static BOOL _dash_pg_check(APTR q, const char *where) {
+    UBYTE *p;
+    ULONG size, i;
+    char msg[160];
+    if (!q) return TRUE;
+    p = (UBYTE *)q - 16;
+    size = ((ULONG *)p)[0];
+    for (i = 0; i < _DASH_PG && p[16 + size + i] == 0xA5; i++) ;
+    if (i == _DASH_PG && ((ULONG *)p)[1] == 0x47554152 && ((ULONG *)p)[2] == 0x47554152 && ((ULONG *)p)[3] == 0x47554152)
+        return TRUE;
+    if (_dash_pg_reports++ < 20) {
+        sprintf(msg, "PIXGUARD %s: %s at %lx (%lu bytes): %08lx %08lx\\n", where,
+                i < _DASH_PG ? "after" : "before", (ULONG)q, size,
+                *(ULONG *)(p + 16 + size), ((ULONG *)p)[1]);
+        PutStr((CONST_STRPTR)msg);
+    }
+    return FALSE;
+}
+static void _dash_pg_free(APTR q, const char *where) {
+    ULONG *w, n;
+    if (!q) return;
+    _dash_pg_check(q, where);
+    n = ((ULONG *)((UBYTE *)q - 16))[0] >> 2;
+    for (w = (ULONG *)q; n--; ) *w++ = 0xDEADBEEF;
+    FreeVec((UBYTE *)q - 16);
+}
+#define _DASH_PIXALLOC(n, f) _dash_pg_alloc((n), (f))
+#define _DASH_PIXFREE(p, w) _dash_pg_free((p), (w))
+#define _DASH_PIXCHECK(p, w) _dash_pg_check((p), (w))
+#else
+#define _DASH_PIXALLOC(n, f) AllocVec((n), (f))
+#define _DASH_PIXFREE(p, w) FreeVec(p)
+#define _DASH_PIXCHECK(p, w) TRUE
+#endif
+
 static struct Library *_dash_p96 = NULL;
 static BYTE _dash_blend_libs = 0;     /* 0 not looked for yet, 1 looked for */
 
@@ -1496,8 +1549,8 @@ static BOOL _dash_blend_block(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG
     if (rows < 1) rows = 1;
     if (rows > h) rows = h;
     if ((ULONG)(rows * bpr) > _dash_blend_buf_size) {
-        if (_dash_blend_buf) FreeVec(_dash_blend_buf);
-        _dash_blend_buf = (UBYTE *)AllocVec(rows * bpr, MEMF_ANY);
+        if (_dash_blend_buf) _DASH_PIXFREE(_dash_blend_buf, "_dash_blend_buf");
+        _dash_blend_buf = (UBYTE *)_DASH_PIXALLOC(rows * bpr, MEMF_ANY);
         _dash_blend_buf_size = _dash_blend_buf ? rows * bpr : 0;
         if (!_dash_blend_buf) return FALSE;
     }
@@ -1524,7 +1577,7 @@ static BOOL _dash_blend_block(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG
             }
         } else {   /* columns: grad[i] turned into the factors of its mix once (cols: 4 per column) */
             if (!cols) {
-                cols = (ULONG *)AllocVec(w * 16, MEMF_ANY);
+                cols = (ULONG *)_DASH_PIXALLOC(w * 16, MEMF_ANY);
                 if (!cols) return FALSE;
                 for (i = 0; i < w; i++) {
                     ULONG g = grad[i], al = g >> 24;
@@ -1544,8 +1597,9 @@ static BOOL _dash_blend_block(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb, LONG
             }
         }
         _dash_rgb_block(TRUE, _dash_blend_buf, bpr, x1, y, w, n);
+        _DASH_PIXCHECK(_dash_blend_buf, "_dash_blend_buf (blend)");
     }
-    if (cols) FreeVec(cols);
+    if (cols) _DASH_PIXFREE(cols, "cols");
     return TRUE;
 }
 
@@ -1621,7 +1675,7 @@ static void _dash_gradient_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb1, L
     n = b - a;
     if (_dash_blend_truecolor(_dash_rp)) {   /* the whole block at once, the colours of each row/column first */
         LONG first = vertical ? cy1 : cx1, count = (vertical ? cy2 : cx2) - first + 1;
-        ULONG *grad = (ULONG *)AllocVec(count * 4, MEMF_ANY);
+        ULONG *grad = (ULONG *)_DASH_PIXALLOC(count * 4, MEMF_ANY);
         BOOL done = FALSE;
         if (grad) {
             BOOL any = FALSE;
@@ -1633,7 +1687,7 @@ static void _dash_gradient_rect(LONG x1, LONG y1, LONG x2, LONG y2, LONG rgb1, L
                 grad[i] = ((ULONG)alpha << 24) | (ULONG)_dash_grad_at(rgb1, rgb2, k, d);
             }
             done = !any || _dash_blend_block(cx1, cy1, cx2, cy2, 0, 0, grad, vertical);
-            FreeVec(grad);
+            _DASH_PIXFREE(grad, "grad");
         }
         if (done) { SetAPen(_dash_rp, pen); return; }
     }
@@ -1747,8 +1801,8 @@ static UBYTE *_dash_rgb_buf = NULL;
 static ULONG _dash_rgb_buf_size = 0;
 static UBYTE *_dash_rgb_need(ULONG size) {
     if (size > _dash_rgb_buf_size) {
-        if (_dash_rgb_buf) FreeVec(_dash_rgb_buf);
-        _dash_rgb_buf = (UBYTE *)AllocVec(size, MEMF_ANY);
+        if (_dash_rgb_buf) _DASH_PIXFREE(_dash_rgb_buf, "_dash_rgb_buf");
+        _dash_rgb_buf = (UBYTE *)_DASH_PIXALLOC(size, MEMF_ANY);
         _dash_rgb_buf_size = _dash_rgb_buf ? size : 0;
     }
     return _dash_rgb_buf;
@@ -1768,7 +1822,7 @@ static BOOL _dash_rgb_draw_native(UBYTE *pix, LONG w, LONG h, LONG x, LONG y, LO
     BOOL twice;
     if (!fmt) return FALSE;
     bpp = fmt <= 5 || fmt >= 10 ? 2 : 4;
-    if (!_dash_nf_tab) _dash_nf_tab = (ULONG *)AllocVec(3 * 256 * sizeof(ULONG), MEMF_ANY);
+    if (!_dash_nf_tab) _dash_nf_tab = (ULONG *)_DASH_PIXALLOC(3 * 256 * sizeof(ULONG), MEMF_ANY);
     if (!_dash_nf_tab) return FALSE;
     tr = _dash_nf_tab; tg = tr + 256; tb = tg + 256;
     if (_dash_nf_tab_fmt != fmt) {
@@ -1778,10 +1832,10 @@ static BOOL _dash_rgb_draw_native(UBYTE *pix, LONG w, LONG h, LONG x, LONG y, LO
             tb[i] = _dash_nf_pack(fmt, 0, 0, i);
         }
         _dash_nf_tab_fmt = fmt;
-        if (_dash_nf_rg) { FreeVec(_dash_nf_rg); _dash_nf_rg = NULL; }
+        if (_dash_nf_rg) { _DASH_PIXFREE(_dash_nf_rg, "_dash_nf_rg"); _dash_nf_rg = NULL; }
         /* 16 bits on a 68020 or better (reads a word at any address): red and green in one look-up */
         if (bpp == 2 && (SysBase->AttnFlags & AFF_68020) &&
-            (_dash_nf_rg = (UWORD *)AllocVec(65536 * sizeof(UWORD), MEMF_ANY)))
+            (_dash_nf_rg = (UWORD *)_DASH_PIXALLOC(65536 * sizeof(UWORD), MEMF_ANY)))
             for (i = 0; i < 65536; i++) _dash_nf_rg[i] = (UWORD)(tr[i >> 8] | tg[i & 255]);
     }
     n = cx2 - cx1 + 1;
@@ -1843,6 +1897,7 @@ static BOOL _dash_rgb_draw_native(UBYTE *pix, LONG w, LONG h, LONG x, LONG y, LO
         ry += h;
         while (ry >= dh) { ry -= dh; sy++; }
     }
+    _DASH_PIXCHECK(out, "_dash_rgb_buf (native)");
     if (!_dash_p96) {
         WritePixelArray(out, 0, 0, bpr, _dash_rp, cx1, cy1, n, rows, RECTFMT_RAW);
     } else {
@@ -1875,7 +1930,7 @@ static void _dash_rgb_draw_scaled(LONG buffer, LONG w, LONG h, LONG x, LONG y, L
         return;
     }
     if (rtg && _dash_rgb_draw_native(pix, w, h, x, y, dw, dh, cx1, cy1, cx2, cy2)) return;
-    row = (UBYTE *)AllocVec(n * 3 + n * sizeof(LONG), MEMF_ANY);
+    row = (UBYTE *)_DASH_PIXALLOC(n * 3 + n * sizeof(LONG), MEMF_ANY);
     if (!row) return;
     cols = (LONG *)row + ((n * 3 + 3) >> 2);
     for (i = 0; i < n; i++) cols[i] = ((cx1 - x + i) * w / dw) * 3;
@@ -1904,7 +1959,7 @@ static void _dash_rgb_draw_scaled(LONG buffer, LONG w, LONG h, LONG x, LONG y, L
         }
         dy += rows;
     }
-    FreeVec(row);
+    _DASH_PIXFREE(row, "row");
 }
 
 static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
@@ -1914,10 +1969,10 @@ static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
 static void _dash_blend_cleanup(void) {
     if (_dash_p96) { CloseLibrary(_dash_p96); _dash_p96 = NULL; }
     _dash_blend_libs = 0;
-    if (_dash_rgb_buf) { FreeVec(_dash_rgb_buf); _dash_rgb_buf = NULL; _dash_rgb_buf_size = 0; }
-    if (_dash_blend_buf) { FreeVec(_dash_blend_buf); _dash_blend_buf = NULL; _dash_blend_buf_size = 0; }
-    if (_dash_nf_tab) { FreeVec(_dash_nf_tab); _dash_nf_tab = NULL; _dash_nf_tab_fmt = 0; }
-    if (_dash_nf_rg) { FreeVec(_dash_nf_rg); _dash_nf_rg = NULL; }
+    if (_dash_rgb_buf) { _DASH_PIXFREE(_dash_rgb_buf, "_dash_rgb_buf"); _dash_rgb_buf = NULL; _dash_rgb_buf_size = 0; }
+    if (_dash_blend_buf) { _DASH_PIXFREE(_dash_blend_buf, "_dash_blend_buf"); _dash_blend_buf = NULL; _dash_blend_buf_size = 0; }
+    if (_dash_nf_tab) { _DASH_PIXFREE(_dash_nf_tab, "_dash_nf_tab"); _dash_nf_tab = NULL; _dash_nf_tab_fmt = 0; }
+    if (_dash_nf_rg) { _DASH_PIXFREE(_dash_nf_rg, "_dash_nf_rg"); _dash_nf_rg = NULL; }
     _dash_nf_bm = NULL;
     _dash_nf_p96_tried = FALSE;
 }
@@ -1962,7 +2017,7 @@ static void _dash_img_mask(_DashImg *img, UBYTE *src, LONG srcmod) {
     if (flags & BMF_INTERLEAVED) return;
     mod = (flags & BMF_STANDARD) ? img->bm->BytesPerRow : ((img->w + 15) >> 4) << 1;
     n = srcmod < mod ? srcmod : mod;
-    img->mask = (PLANEPTR)AllocVec(mod * img->h, MEMF_CHIP | MEMF_CLEAR);
+    img->mask = (PLANEPTR)_DASH_PIXALLOC(mod * img->h, MEMF_CHIP | MEMF_CLEAR);
     img->mmod = mod;
     if (img->mask && src) for (y = 0; y < img->h; y++) CopyMem(src + y * srcmod, img->mask + y * mod, n);
 }
@@ -1972,12 +2027,12 @@ static void _dash_img_mask(_DashImg *img, UBYTE *src, LONG srcmod) {
    pixels have the same alpha (some datatypes give 0 for all: no alpha) or the
    picture.datatype is older than V43 (it does not know the method). */
 static UBYTE *_dash_img_alpha(Object *o, LONG w, LONG h, LONG mod) {
-    ULONG *row = (ULONG *)AllocVec(w * 4, MEMF_ANY);
+    ULONG *row = (ULONG *)_DASH_PIXALLOC(w * 4, MEMF_ANY);
     UBYTE *mask = NULL;
     LONG x, y;
     BOOL clear = FALSE, opaque = FALSE;
     if (!row) return NULL;
-    mask = (UBYTE *)AllocVec(mod * h, MEMF_CLEAR);
+    mask = (UBYTE *)_DASH_PIXALLOC(mod * h, MEMF_CLEAR);
     for (y = 0; mask && y < h; y++) {
         if (!DoMethod(o, PDTM_READPIXELARRAY, (ULONG)row, PBPAFMT_ARGB, w * 4, 0, y, w, 1)) { clear = FALSE; break; }
         for (x = 0; x < w; x++) {
@@ -1985,8 +2040,8 @@ static UBYTE *_dash_img_alpha(Object *o, LONG w, LONG h, LONG mod) {
             else clear = TRUE;
         }
     }
-    FreeVec(row);
-    if (mask && !(clear && opaque)) { FreeVec(mask); mask = NULL; }
+    _DASH_PIXFREE(row, "row");
+    if (mask && !(clear && opaque)) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
     return mask;
 }
 
@@ -2022,16 +2077,16 @@ static LONG _dash_image_load(STRPTR file) {
     if (!bm) GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_DONE);
     GetDTAttrs(o, PDTA_MaskPlane, (ULONG)&mask, TAG_DONE);      /* V43: not there on 3.1 */
     img = bm && bmh ? (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR) : NULL;
-    if (!img) { DisposeDTObject(o); if (alpha) FreeVec(alpha); return 0; }
+    if (!img) { DisposeDTObject(o); if (alpha) _DASH_PIXFREE(alpha, "alpha"); return 0; }
     img->o = o;
     img->bm = bm;
     img->w = bmh->bmh_Width;
     img->h = bmh->bmh_Height;
     if (mask || alpha) _dash_img_mask(img, mask ? (UBYTE *)mask : alpha, ((img->w + 15) >> 4) << 1);
-    if (alpha) FreeVec(alpha);
+    if (alpha) _DASH_PIXFREE(alpha, "alpha");
     if (_dash_img_add(img)) return (LONG)img;
     DisposeDTObject(o);
-    if (img->mask) FreeVec(img->mask);
+    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
     FreeVec(img);
     return 0;
 }
@@ -2043,7 +2098,7 @@ static LONG _dash_image_load(STRPTR file) {
 /* The mask of w x h RGBA pixels (alpha 128 or more is drawn) in rows of mod bytes; NULL if all are
    drawn or none */
 static UBYTE *_dash_rgba_mask(UBYTE *pixels, LONG w, LONG h, LONG mod) {
-    UBYTE *mask = (UBYTE *)AllocVec(mod * h, MEMF_CLEAR), *p;
+    UBYTE *mask = (UBYTE *)_DASH_PIXALLOC(mod * h, MEMF_CLEAR), *p;
     LONG x, y;
     BOOL clear = FALSE, opaque = FALSE;
     if (!mask) return NULL;
@@ -2052,7 +2107,7 @@ static UBYTE *_dash_rgba_mask(UBYTE *pixels, LONG w, LONG h, LONG mod) {
             if (*p >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
             else clear = TRUE;
         }
-    if (!(clear && opaque)) { FreeVec(mask); mask = NULL; }
+    if (!(clear && opaque)) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
     return mask;
 }
 
@@ -2080,7 +2135,7 @@ static LONG _dash_image_from_rgb_direct(UBYTE *pixels, LONG w, LONG h, LONG alph
         rows = 49152 / (w * 3);
         if (rows < 1) rows = 1;
         if (rows > h) rows = h;
-        row = (UBYTE *)AllocVec(rows * w * 3, MEMF_ANY);
+        row = (UBYTE *)_DASH_PIXALLOC(rows * w * 3, MEMF_ANY);
         if (!row) { FreeBitMap(bm); return 0; }
         for (y = 0; y < h; y += rows) {
             LONG n = h - y < rows ? h - y : rows;
@@ -2088,18 +2143,18 @@ static LONG _dash_image_from_rgb_direct(UBYTE *pixels, LONG w, LONG h, LONG alph
             for (i = w * n; i > 0; i--, s += 4, d += 3) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; }
             _dash_rgb_block_rp(&rp, TRUE, row, w * 3, 0, y, w, n);
         }
-        FreeVec(row);
+        _DASH_PIXFREE(row, "row");
         mask = _dash_rgba_mask(pixels, w, h, mod);
     }
     img = (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR);
-    if (!img) { FreeBitMap(bm); if (mask) FreeVec(mask); return 0; }
+    if (!img) { FreeBitMap(bm); if (mask) _DASH_PIXFREE(mask, "mask"); return 0; }
     img->bm = bm;
     img->w = w;
     img->h = h;
-    if (mask) { _dash_img_mask(img, mask, mod); FreeVec(mask); }
+    if (mask) { _dash_img_mask(img, mask, mod); _DASH_PIXFREE(mask, "mask"); }
     if (_dash_img_add(img)) return (LONG)img;
     FreeBitMap(bm);
-    if (img->mask) FreeVec(img->mask);
+    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
     FreeVec(img);
     return 0;
 }
@@ -2138,15 +2193,15 @@ static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha) {
     GetDTAttrs(o, PDTA_DestBitMap, (ULONG)&bm, TAG_DONE);
     if (!bm) GetDTAttrs(o, PDTA_BitMap, (ULONG)&bm, TAG_DONE);
     img = bm ? (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR) : NULL;
-    if (!img) { DisposeDTObject(o); if (mask) FreeVec(mask); return 0; }
+    if (!img) { DisposeDTObject(o); if (mask) _DASH_PIXFREE(mask, "mask"); return 0; }
     img->o = o;
     img->bm = bm;
     img->w = w;
     img->h = h;
-    if (mask) { _dash_img_mask(img, mask, mod); FreeVec(mask); }
+    if (mask) { _dash_img_mask(img, mask, mod); _DASH_PIXFREE(mask, "mask"); }
     if (_dash_img_add(img)) return (LONG)img;
     DisposeDTObject(o);
-    if (img->mask) FreeVec(img->mask);
+    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
     FreeVec(img);
     return 0;
 }
@@ -2213,7 +2268,7 @@ static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
     if (_dash_img_add(img)) return (LONG)img;
     WaitBlit();
     FreeBitMap(img->bm);
-    if (img->mask) FreeVec(img->mask);
+    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
     FreeVec(img);
     return 0;
 }
@@ -2226,7 +2281,7 @@ static void _dash_image_free(LONG image) {
     WaitBlit();
     if (img->o) DisposeDTObject(img->o);
     else FreeBitMap(img->bm);
-    if (img->mask) FreeVec(img->mask);
+    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
     FreeVec(img);
 }
 
@@ -9608,6 +9663,9 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         /* MADF_DRAWUPDATE (mui_canvas_update): only the draw function, over what is there.
            Anything else (opening, a resize, the window uncovered) clears it first. */
         ULONG flags = ((struct MUIP_Draw *)msg)->flags;
+        /* MUI 3.8 sends 0 here (Area fills it in during the super call): the area's own flags */
+        if (!(flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE)))
+            flags |= _DASH_MAD(obj)->mad_Flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE);
         BOOL update = (flags & MADF_DRAWUPDATE) && !(flags & MADF_DRAWOBJECT);
         struct RastPort *brp;
         data = INST_DATA(cl, obj);
@@ -10583,6 +10641,7 @@ class CodeGenerator(ASTVisitor):
         self.links: List[str] = []
         self.c_blocks: List[str] = []
         self.stack_min = 0
+        self.workbench_output = None
 
     def generate(self) -> str:
         """Generate the complete C program."""
@@ -10653,6 +10712,10 @@ class CodeGenerator(ASTVisitor):
     def _assemble_program(self) -> str:
         """Assemble all parts into the final program."""
         parts = [CTemplates.PROGRAM_HEADER, CTemplates.STACK_REQUEST]
+        if self.workbench_output is not None:
+            # started from the Workbench, libnix opens this for input and output (its own default
+            # is a console window, CON://///AUTO/CLOSE/WAIT, that opens when something is written)
+            parts.append(f"char const *__stdiowin = {self.workbench_output};\n\n")
         if self.links:
             # read by ./dash and the test runner (compiler/cflags.py link_flags)
             parts.append("".join(f"/* dash-link: {p} */\n" for p in self.links))
@@ -11094,6 +11157,7 @@ static LONG _dash_event_window_handle(void) {{
         self.links = list(node.links)          # @link (dashweb D10)
         self.c_blocks = list(node.c_blocks)    # @c
         self.stack_min = node.stack            # @stack (dashweb D24)
+        self.workbench_output = node.workbench_output   # @workbench_output (dashweb D59)
         # runtime functions (_dash_*) named by @native and @c code bring their runtime (D10b)
         import re
         for code in list(node.c_blocks) + [n.c_code for n in node.native_funcs]:

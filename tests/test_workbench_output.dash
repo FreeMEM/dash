@@ -1,0 +1,13 @@
+# Test: @workbench_output "NIL:" (dashweb D59): started from the Workbench, libnix opens that instead
+# of its console window, so what the program prints goes nowhere and no window opens. From the
+# Shell nothing changes. The program's own directive wins over a module's.
+# expect-c: char const *__stdiowin = "NIL:";
+# expect-no-c: CON:0/0/400/100
+# expect-out: hola
+import "lib/salida_wb.dash"
+
+@workbench_output "NIL:"
+
+Main
+    Print saludo()
+end

@@ -1,0 +1,95 @@
+# Do outline fonts write outside their memory? (D57) Nearly all memory is taken and filled with 0xDB,
+# with holes for diskfont; then CGTriumvirate, CGTimes and LetterGothic are opened at small sizes and
+# every block is checked. diskfont 47 + bullet of AmigaOS 3.2 wrote some 50 bytes outside at size 1
+# (and 0); font_open now asks for 2 at least, so all should say "pisados 0".
+# Needs a system with the outline fonts (Fonts/*.otag, _bullet_outlines), e.g. the RTG one of dashweb:
+#   tools/emu_run.py --kickstart "$DASH_KICKSTART_32" --system ~/.cache/dash-emu/sys32rtg \
+#       --set cpu=68040 --set fpu=68040 --set zorro_iii_memory=131072 tools/amiga/vectoriales_memoria.dash
+@stack 65536
+
+@c
+"""
+struct _Blq { struct _Blq *sig; ULONG n; };
+static struct _Blq *_lista = NULL;
+static ULONG _nblq = 0, _bytes = 0;
+static int _avisos = 0;
+static void _agarrar(ULONG n) {
+    struct _Blq *b;
+    while ((b = (struct _Blq *)AllocMem(n, MEMF_ANY))) {
+        memset(b, 0xDB, n);
+        b->n = n; b->sig = _lista; _lista = b; _nblq++; _bytes += n;
+    }
+}
+static void _llenar(void) {
+    _agarrar(1024 * 1024); _agarrar(65536); _agarrar(4096); _agarrar(256); _agarrar(32);
+}
+/* suelta uno de cada k bloques de n bytes: huecos para diskfont */
+static void _huecos(ULONG n, int k) {
+    struct _Blq **p = &_lista;
+    int i = 0;
+    while (*p) {
+        struct _Blq *b = *p;
+        if (b->n == n && (i++ % k) == 0) { *p = b->sig; _nblq--; _bytes -= n; FreeMem(b, n); }
+        else p = &b->sig;
+    }
+}
+static int _revisar(const char *donde) {
+    struct _Blq *b;
+    int malos = 0;
+    for (b = _lista; b; b = b->sig) {
+        ULONG *w = (ULONG *)(b + 1), nw = (b->n - sizeof(*b)) / 4, i;
+        for (i = 0; i < nw; i++) if (w[i] != 0xDBDBDBDBUL) break;
+        if (i < nw) {
+            UBYTE *q = (UBYTE *)(b + 1);
+            ULONG k = i * 4, j, fin = (b->n - sizeof(*b)), ult = k;
+            for (j = k; j < fin; j++) if (q[j] != 0xDB) ult = j;
+            malos++;
+            if (_avisos++ < 8) {
+                printf("PISADO %s: bloque de %lu, +%lu a +%lu:", donde, b->n, k + 8, ult + 8);
+                for (j = k; j < k + 24 && j < fin; j++) printf(" %02x", q[j]);
+                printf("\n");
+            }
+            memset(q, 0xDB, fin);
+        }
+    }
+    return malos;
+}
+"""
+end
+
+@native func llenar() -> Int
+"""
+    _llenar();
+    return (LONG)_bytes;
+"""
+end
+
+@native func huecos(n: Int, k: Int)
+"""
+    _huecos((ULONG)n, (int)k);
+"""
+end
+
+@native func revisar(donde: String) -> Int
+"""
+    return _revisar((const char *)donde);
+"""
+end
+
+Main
+    vect = ["CGTriumvirate", "CGTimes", "LetterGothic"]
+    Print "llenos " + (llenar() / 1024) + " KB"
+    huecos(4096, 6)
+    huecos(65536, 8)
+    huecos(256, 6)
+    huecos(32, 6)
+    Print "limpio al empezar: " + revisar("antes")
+    for tam in [8, 6, 5, 4, 3, 2, 1, 0]
+        for v in vect
+            f = font_open(v + ".font", tam)
+            n = revisar(v + " " + tam)
+            Print v + " " + tam + ": " + (f != 0) + ", pisados " + n
+        end
+    end
+    Print "fin"
+end

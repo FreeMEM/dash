@@ -1,0 +1,10 @@
+# Test: font_open with a size below 2 asks for 2 (D57): diskfont 47 of AmigaOS 3.2 with bullet
+# writes into memory that is not its own when it opens an outline font at size 1 or 0.
+# expect-c: if (size < 2) size = 2;
+# expect-out: true true
+
+Main
+    a = font_open("topaz.font", 0)
+    b = font_open("topaz.font", 1)
+    Print "" + (a != 0) + " " + (b != 0)
+end

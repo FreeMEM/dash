@@ -393,7 +393,8 @@ end
 ```
 
 `@header "#include <x.h>"` añade cabeceras, `@link "lib/x.c"` enlaza un fichero C, objeto o librería, `@c """ ... """
-end` pone C libre (por ejemplo funciones que llaman a Dash) y `@stack N` pide una pila mínima.
+end` pone C libre (por ejemplo funciones que llaman a Dash), `@stack N` pide una pila mínima y
+`@workbench_output "NIL:"` evita la ventana de consola al arrancar desde el Workbench (lo escrito se pierde).
 
 ## 8. Herramientas
 

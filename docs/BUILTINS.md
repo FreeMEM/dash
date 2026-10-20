@@ -390,7 +390,7 @@ Total: 511 funciones, 511 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `font_open(name, size)` | `LONG` | Open a font ("helvetica.font", size in pixels): the font, or 0 if there is none |  |
+| `font_open(name, size)` | `LONG` | Open a font ("helvetica.font", size in pixels, at least 2): the font, or 0 if there is none |  |
 | `font_use(font)` | `void` | Draw text with this font |  |
 | `font_close(font)` | `void` | Close a font (the open ones close at exit) |  |
 | `font_style(style)` | `void` | Text style: 0 plain, +1 underlined, +2 bold, +4 italic |  |

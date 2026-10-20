@@ -1,0 +1,6 @@
+# For test_workbench_output: a module that also says where the Workbench output goes
+@workbench_output "CON:0/0/400/100/Módulo/AUTO/CLOSE"
+
+func saludo() -> String
+    return "hola"
+end

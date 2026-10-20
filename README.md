@@ -68,8 +68,9 @@ end
 ### Amiga API
 - **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`
 - **Interfaces** — GadTools (con atajos de teclado y gadgets medidos con la fuente), ReAction (hasta 4
-  ventanas) y **MUI 5**: zona de dibujo propia (con doble búfer, repintado parcial y rellenos), temporizador,
-  señales y ventanas a pantalla completa; editor visual de ventanas MUI para VS Code
+  ventanas) y **MUI 3.8 o 5**: zona de dibujo propia (con doble búfer, repintado parcial y rellenos),
+  temporizador, señales y ventanas a pantalla completa (con MUI 3.8 queda un marco de 4 y 3 píxeles alrededor);
+  editor visual de ventanas MUI para VS Code
 - **Graphics** — Primitivas de dibujo, colores, bitmaps, transparencias y degradados (rápidos también en
   RTG), búferes RGB24 en la ventana (también escalados: vídeo)
 - **Sprites** — Hardware sprites y soft sprites
@@ -77,7 +78,8 @@ end
 - **Blitter** — BOBs y operaciones de blitting
 - **Audio** — Reproducción de tonos y samples
 - **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF, o desde píxeles RGB/RGBA en memoria (con
-  transparencia, también en RTG y sin `picture.datatype`); fuentes de disco y colores RGB
+  transparencia, también en RTG y sin `picture.datatype`); fuentes de disco, también vectoriales (tamaño
+  mínimo 2: con 1 o 0, diskfont y bullet de AmigaOS 3.2 escriben fuera de su memoria), y colores RGB
 - **Red** — TCP con `bsdsocket.library` y HTTPS con AmiSSL (5.1 o posterior, o las anteriores), también sin
   esperar (conexiones por pasos); la sesión TLS de cada servidor se reanuda en la siguiente conexión
 - **Procesos** — `task_start`: una función `@native` en otro proceso de AmigaOS
@@ -87,11 +89,11 @@ end
 - **FFI** — Llamadas directas a funciones C/AmigaOS; C propio en línea (`@native`, `@c`) o enlazado (`@link`)
 
 Los programas necesitan Kickstart 3.0 o superior (usan los pools de memoria de exec V39) y funcionan en
-un 68000. MUI 5 y HTTPS piden un 68020 o superior.
+un 68000. MUI y HTTPS piden un 68020 o superior.
 
 El proyecto más grande escrito en Dash es [dashweb](https://github.com/FreeMEM/dashweb), un navegador web
-para Amiga con MUI 5: lo que le falta a dashweb se añade a Dash. Ya tiene una primera versión de prueba,
-[v0.1.0-alfa](https://github.com/FreeMEM/dashweb/releases/tag/v0.1.0-alfa).
+para Amiga con MUI (3.8 o 5): lo que le falta a dashweb se añade a Dash. Ya tiene una primera versión de
+prueba, [v0.1.0-alfa](https://github.com/FreeMEM/dashweb/releases/tag/v0.1.0-alfa).
 
 ## Instalación rápida
 

@@ -3827,7 +3827,7 @@ def _gfx(name, params, ret, template, desc):
 
 FONT_FUNCTIONS = {
     "font_open": _gfx("font_open", ["name", "size"], "LONG", "_dash_font_open(${name}, ${size})",
-                      "Open a font (\"helvetica.font\", size in pixels): the font, or 0 if there is none"),
+                      "Open a font (\"helvetica.font\", size in pixels, at least 2): the font, or 0 if there is none"),
     "font_use": _gfx("font_use", ["font"], "void", "_dash_font_use(${font})", "Draw text with this font"),
     "font_close": _gfx("font_close", ["font"], "void", "_dash_font_close(${font})",
                        "Close a font (the open ones close at exit)"),

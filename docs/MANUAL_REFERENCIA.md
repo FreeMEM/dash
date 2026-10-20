@@ -74,6 +74,11 @@ el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 by
 mas lo dice con `@stack 262144` (en bytes, al nivel de las funciones): el programa toma la mayor de
 todas; `--stack` sigue mandando.
 
+Arrancado desde el Workbench (su icono), un programa no tiene consola: lo primero que escribe abre una
+ventana `CON:` de libnix. `@workbench_output "NIL:"` (al nivel de las funciones) la quita: lo escrito se
+pierde. Vale cualquier fichero o ventana, por ejemplo `@workbench_output "CON:0/0/640/200/Mi programa/AUTO/CLOSE"`.
+Desde la Shell no cambia nada. Si la ponen el programa y un modulo, manda la del programa.
+
 `--profile` compila una version que, al salir, escribe una tabla con las llamadas a cada funcion y
 el tiempo que paso en ella (propio) y en lo que llama (total), de la mas lenta a la mas rapida
 (`perfil: ...`). El tiempo se mide mirando 50 veces por segundo donde esta el programa (interrupcion
@@ -1231,6 +1236,7 @@ ancho = gfx_text_len("Hola")    # Ancho en pixeles
 
 ```
 f = font_open("helvetica.font", 13)    # 0 si no existe (la topaz 8 de la ROM siempre esta)
+                                       # (un tamano menor que 2 pide 2: el 1 y el 0 hacen que diskfont de 3.2 pise memoria)
 font_use(f)                            # el texto que se dibuje despues usa esta fuente
 font_style(2)                          # 0 normal, +1 subrayado, +2 negrita, +4 cursiva
 ancho = font_text_width("Hola")        # con la fuente y el estilo actuales
