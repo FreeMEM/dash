@@ -81,7 +81,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 1. **Auditoría y estructura.** Leer la extensión y sus tests; decidir cómo crece (¿TypeScript? ¿empaquetar
       con esbuild para llevar dependencias como `vscode-languageclient`?). Anotar la decisión aquí.
       **Decisión:** ver "Estructura" abajo.
-- [ ] 2. **Gramática completa, generada.** `tools/gen_tmgrammar.py` saca de `compiler/grammar.py` y
+- [x] 2. **Gramática completa, generada.** `tools/gen_tmgrammar.py` saca de `compiler/grammar.py` y
       `compiler/amiga_builtins.py` las palabras clave, tipos, directivas `@` y los 425 builtins; interpolación
       `#{...}`, números hex/binarios, `Window`/`EventLoop`/`On`, `@native`/`@c` con C dentro. El runner comprueba
       que está al día (como `docs/BUILTINS.md`). Tests de tokens.
@@ -156,3 +156,18 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   sintaxis es una lista de tokens de Lark. Sin eso no hay errores en el editor: nueva tarea 4a antes del LSP.
 - Hallazgo menor (a mirar en 4a): `y = ` sin valor seguido de `Print noexiste(3)` en la línea siguiente da
   "Variable 'Print' is not defined": el `=` se come el salto de línea.
+
+### 2026-10-20 — Tarea 2 (gramática generada)
+- `tools/gen_tmgrammar.py` escribe `editor/vscode/syntaxes/dash.tmLanguage.json` desde `compiler/grammar.py`
+  (palabras de la gramática, cada una con su color en `KEYWORDS`: si aparece una nueva sin color, el script para),
+  `SemanticAnalyzer._TYPE_NAMES` y `get_all_builtins()` (los 425+, antes solo unos prefijos). Nuevo: directivas `@`
+  (y `@native(borrow)`), bloque `Window` con sus propiedades, `On <evento>`, `Struct(...)` como constructor, tipos
+  del programa tras `:`/`->`, `Fixed`, métodos de listas y diccionarios, `.length`, `.open`/`.close`, `self`, `weak`,
+  `..`, constantes en mayúsculas, `#{...}` con expresiones (comillas `\"` dentro; un `#{` sin cerrar queda texto).
+- El runner comprueba que está al día (`editor/tmgrammar`, como `docs/builtins`); probado que falla si no.
+- Tests de la gramática: 6 nuevos en `test/run.js`. Repaso con los 317 `.dash` del repositorio y de dashweb: ningún
+  bloque queda abierto al final (con la gramática de C de prueba; sin ella el `"""` no se reconoce, como en el test).
+- `CLAUDE.md` no está en el repositorio (es local, de `~/Projects/FreeMEMLang`): la línea de `gen_tmgrammar.py` se
+  añadirá allí al fusionar.
+- Base: run_tests todo bien (más `editor/tmgrammar`); `npm test` todo bien. Extensión instalada.
+

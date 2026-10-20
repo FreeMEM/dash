@@ -2,7 +2,11 @@
 
 Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to C for the Amiga:
 
-- Syntax highlighting of `.dash` files (with the C of `@native` blocks).
+- Syntax highlighting of `.dash` files (with the C of `@native` blocks): every keyword, directive and builtin,
+  `Window` blocks, `#{...}` with expressions. Generated from the compiler (`tools/gen_tmgrammar.py` in the Dash
+  repository; do not edit `syntaxes/dash.tmLanguage.json` by hand).
+- In a folder not trusted (Restricted Mode) only colours and the visual editor work; compiling, the emulator
+  and the language server need a trusted folder.
 - **Dash: Compilar**: compiles the open program with `./dash` (to `bin/` next to it).
 - **Dash: Ejecutar en emulador**: runs it in FS-UAE with `tools/emu_run.py` (output in the terminal).
 
@@ -26,6 +30,7 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
 ```
 npm install        # only dev tools, in node_modules/
 npm test           # grammar, model, preview and commands, without VS Code
+python3 ../../tools/gen_tmgrammar.py   # after a change to the language or its builtins
 DASH_PREVIEW_EMU=1 npm test   # also "Ver en Amiga" in FS-UAE (DASH_KICKSTART, DASH_EMU_SYS_MUI)
 npm run package    # dash-mui-editor-<version>.vsix
 ```

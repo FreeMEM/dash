@@ -117,7 +117,76 @@ async function grammarTests() {
         // the C grammar runs inside: "volatile" is a C keyword, not part of a Dash string
         assert.strictEqual(scopeOf(tokens, 'volatile'), 'keyword.c');
     });
+    // generated from the compiler (tools/gen_tmgrammar.py): every builtin, directives, blocks...
+    const t2 = tokenize(g, SAMPLE2);
+    await check('grammar: directives', () => {
+        assert.match(scopeOf(t2, '@stack'), /^keyword\.other\.directive/);
+        assert.match(scopeOf(t2, '@workbench_output'), /^keyword\.other\.directive/);
+        assert.match(scopeOf(t2, 'borrow'), /^storage\.modifier/);
+    });
+    await check('grammar: any builtin, not only some prefixes', () => {
+        assert.match(scopeOf(t2, 'net_signal'), /^support\.function\.builtin/);
+        assert.match(scopeOf(t2, 'task_signal'), /^support\.function\.builtin/);
+        assert.match(scopeOf(t2, 'mi_funcion'), /^entity\.name\.function\.call/);
+    });
+    await check('grammar: Window block and events', () => {
+        assert.match(scopeOf(t2, 'title'), /^support\.type\.property-name/);
+        assert.match(scopeOf(t2, 'Timer'), /^keyword\.other\.event/);
+        assert.match(scopeOf(t2, 'open'), /^support\.function\.window/);
+    });
+    await check('grammar: structs, types, members', () => {
+        assert.match(scopeOf(t2, 'Nodo'), /^entity\.name\.type/);         // after ":"
+        assert.match(scopeOf(t2, 'Punto'), /^entity\.name\.type\.constructor/);
+        assert.match(scopeOf(t2, 'Fixed'), /^support\.type/);
+        assert.match(scopeOf(t2, 'push'), /^support\.function\.method/);
+        assert.match(scopeOf(t2, 'length'), /^support\.variable\.property/);
+        assert.match(scopeOf(t2, 'self'), /^variable\.language\.self/);
+        assert.match(scopeOf(t2, 'weak'), /^storage\.modifier/);
+        assert.match(scopeOf(t2, '..'), /^keyword\.operator\.range/);
+    });
+    await check('grammar: interpolation with an expression', () => {
+        assert.match(scopeOf(t2, 'str_upper'), /^support\.function\.builtin/);
+    });
+    await check('grammar: quotes inside #{} are \\" and the text goes on after', () => {
+        const t3 = tokenize(g, 'Print "has #{d.has(\\"k\\")} fin"\nx = 1');
+        assert.match(scopeOf(t3, 'has'), /^support\.function\.method/);
+        assert.match(scopeOf(t3, ' fin'), /^string\.quoted/);
+        assert.match(scopeOf(t3, '1'), /^constant\.numeric/);           // the next line is code again
+    });
 }
+
+const SAMPLE2 = `@stack 262144
+@workbench_output "NIL:"
+@native(borrow) func peek2(a: Int) -> Int
+"""
+    return a;
+"""
+end
+Window Win
+    title "Hola"
+end
+struct Nodo
+    weak padre: Nodo = nil
+    func ver() -> Int
+        return self.padre.length
+    end
+end
+Main
+    m = net_signal() | task_signal()
+    p = Punto(1, 2)
+    f: Fixed = Fixed(1.5)
+    l = [1]
+    l.push(2)
+    mi_funcion(1)
+    for i in (1..10)
+    end
+    Win.open
+    Print "x #{str_upper(t) + 1}"
+    EventLoop
+        On Timer 100
+        end
+    end
+end`;
 
 
 // --- the .dashui model (media/model.js) ----------------------------------------

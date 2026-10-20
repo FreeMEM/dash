@@ -847,6 +847,18 @@ def main():
                                   duration=time.time() - start_time))
         print("OK" if check.returncode == 0 else "FAIL")
 
+    if args.pattern is None or args.pattern in "editor/tmgrammar":
+        # the colours of VS Code come from the compiler (tools/gen_tmgrammar.py)
+        print("Testing: editor/tmgrammar...", end=" ", flush=True)
+        start_time = time.time()
+        check = subprocess.run([sys.executable, str(PROJECT_ROOT / "tools" / "gen_tmgrammar.py"), "--check"],
+                               capture_output=True, text=True)
+        results.append(TestResult(name="editor/tmgrammar", passed=check.returncode == 0,
+                                  transpile_ok=True, compile_ok=True,
+                                  error_message=(check.stdout + check.stderr).strip() or None,
+                                  duration=time.time() - start_time))
+        print("OK" if check.returncode == 0 else "FAIL")
+
     if args.pattern is None or args.pattern in "runtime":
         print("Testing: runtime/host...", end=" ", flush=True)
         result = run_runtime_host_test()
