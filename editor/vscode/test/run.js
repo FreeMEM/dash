@@ -306,6 +306,13 @@ async function extensionTests() {
         assert.strictEqual(said[said.length - 1].busy, false);           // the button is free again
         assert.match(sent[sent.length - 1], /^ERR Ver en Amiga: .*dash\.path/);   // and VS Code says it too
     });
+    await check('extension: nothing is compiled in Restricted Mode', async () => {
+        fakeVscode.workspace.isTrusted = false;
+        fakeVscode.window.activeTextEditor = { document: { languageId: 'dash', isDirty: false, fileName: file } };
+        await registered['dash.compile']();
+        assert.match(sent[sent.length - 1], /^WARN Carpeta sin confianza/);
+        delete fakeVscode.workspace.isTrusted;
+    });
     await check('extension: no .dash file open', async () => {
         fakeVscode.window.activeTextEditor = null;
         await registered['dash.runInEmulator']();

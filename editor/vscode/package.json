@@ -13,6 +13,18 @@
   ],
   "main": "./extension.js",
   "activationEvents": [],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "En una carpeta sin confianza (modo restringido) hay colores y editor visual; compilar y el emulador, solo en carpetas de confianza.",
+      "restrictedConfigurations": [
+        "dash.path",
+        "dash.emulator.kickstart",
+        "dash.emulator.system",
+        "dash.emulator.muiSystem"
+      ]
+    }
+  },
   "contributes": {
     "languages": [
       {

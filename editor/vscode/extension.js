@@ -65,7 +65,13 @@ function emulatorEnv() {
     return env;
 }
 
+// In Restricted Mode (a folder not trusted) nothing is compiled or run: only colours and the editor
+const UNTRUSTED = 'Carpeta sin confianza (modo restringido): para compilar o usar el emulador, confía en ella ' +
+                  '("Manage" en la barra de arriba).';
+const trusted = () => vscode.workspace.isTrusted !== false;
+
 async function run(kind) {
+    if (!trusted()) { vscode.window.showWarningMessage(UNTRUSTED); return; }
     const file = await activeDashFile();
     if (!file) return;
     const dashDir = findDash(file);
@@ -87,6 +93,7 @@ async function showOnAmiga(document, windowName, webview) {
     const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot', busy: false }, m));
     const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
     if (previewRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
+    if (!trusted()) { fail(UNTRUSTED); return; }
     const dashDir = findDash(document.fileName);
     if (!dashDir) { fail('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
     const config = vscode.workspace.getConfiguration('dash.emulator');
