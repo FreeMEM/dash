@@ -10,10 +10,11 @@ By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
 
 ## Getting started
 
-1. You need the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain (`m68k-amigaos-gcc` in
-   `/opt/amiga`) and, for the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For MUI
+1. You need VS Code 1.86 or later, the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain
+   (`m68k-amigaos-gcc` in `/opt/amiga`, or its folder in `DASH_TOOLCHAIN`) and, for the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For MUI
    windows, the MUI SDK (`tools/get_mui_sdk.sh`) and Workbench files with MUI for the emulator
-   (`tools/emu_sys_mui.sh`, setting `dash.emulator.muiSystem`).
+   (`tools/emu_sys_mui.sh`, setting `dash.emulator.muiSystem`). When something is missing, the extension says
+   what, and how to get it.
 2. **Dash: Nuevo proyecto** makes a folder with a program, its window (`ventana.dashui`) and a `launch.json`.
    If the folder is not inside the Dash repository, **Dash: Elegir la carpeta del compilador** (setting
    `dash.path`).

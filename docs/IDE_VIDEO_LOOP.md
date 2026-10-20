@@ -92,7 +92,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 ### D. Final
 - [x] v17. **Montaje:** el vídeo entero (MP4 con subtítulos aparte y quemados), en `~/Videos` o donde diga el usuario,
       y enviado al usuario.
-- [ ] v18. **Repaso:** todo lo arreglado con sus tests, versión 0.2.1 y CHANGELOG; resumen para decidir la publicación.
+- [x] v18. **Repaso:** todo lo arreglado con sus tests, versión 0.2.1 y CHANGELOG; resumen para decidir la publicación.
 
 ## Encontrado (fallos y mejoras; cada uno pasa a tarea o se arregla en su vuelta)
 
@@ -450,4 +450,21 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   títulos y capítulos, 382 s y 60 subtítulos. Revisados con hojas de fotogramas (el texto nuevo de "Preparar",
   la consola sin ruido, F11 a `doble`). En `~/Videos`: `dash-vscode-tutorial.mp4`, `-subtitulado.mp4` (subtítulos
   en la imagen) y `.srt`. Enviado al usuario el subtitulado.
+
+### 2026-10-21 — v18 (repaso; plan terminado)
+- Versión 0.2.1 (`package.json`, CHANGELOG con fecha), README con lo que pide (VS Code 1.86, `DASH_TOOLCHAIN`, que
+  la extensión dice lo que falta). `.vsix` 0.2.1 empaquetado e instalado.
+- Batería completa del emulador (A1200, A500 y 3.2): 734/740. Fallaban `test_memcheck` y `test_weak_dangling` en
+  las tres: esperaban el error de memcheck sin su sitio, que se añadió en IDE_LOOP ("(en fichero:línea)").
+  Actualizados: 12/12. Base 309, node todo bien, integración de VS Code 21/21, `./compile_all.sh` 34/34.
+- Cada arreglo de "Encontrado" tiene test, salvo los de aspecto (iconos, colores, textos de la plantilla) y los
+  del programa de rodaje, comprobados en el vídeo.
+- Para publicar (lo decide el usuario):
+  - fusionar la rama `ide` en main y subirla: la extensión usa el compilador del repositorio de Dash (servidor de
+    lenguaje, `tools/gdb/dash.py`, `emu_run.py`, `./dash`), y sin esos cambios no funcionan sus arreglos;
+  - al fusionar, apuntar en el CLAUDE.md del proyecto (no está en git) que el runner compila con
+    `-Werror=implicit-function-declaration`;
+  - la cuenta de editor FreeMEM en el Marketplace de VS Code (token de Azure DevOps) y, si se quiere, Open VSX.
+- Queda abierto, sin estorbar a la publicación: la ayuda de los builtins en inglés (425 descripciones), MUI 3.8
+  sin probar (D63), y lo de la lista "Encontrado" que se queda así o no se pudo comprobar sin ventana.
 

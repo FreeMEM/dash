@@ -6,10 +6,10 @@
 # expect-c: _dash_tmp_release_f(0);
 # expect-out: 6
 # expect-out: 20
-# expect-out: memcheck: ERROR objeto usado tras liberarse
-# expect-out: memcheck: ERROR objeto usado tras liberarse
-# expect-out: memcheck: ERROR release de un objeto sin referencias
-# expect-out: memcheck: ERROR string liberado dos veces
+# expect-out: memcheck: ERROR objeto usado tras liberarse (en tests/test_memcheck.dash:60)
+# expect-out: memcheck: ERROR objeto usado tras liberarse (en tests/test_memcheck.dash:60)
+# expect-out: memcheck: ERROR release de un objeto sin referencias (en tests/test_memcheck.dash:60)
+# expect-out: memcheck: ERROR string liberado dos veces (en tests/test_memcheck.dash:60)
 # expect-out: fin
 # expect-out: memcheck: vivos 1 objetos y 0 strings (escapados 1 y 0), errores 4
 

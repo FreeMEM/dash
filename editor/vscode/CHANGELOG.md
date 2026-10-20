@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased (found making the video tutorial, docs/IDE_VIDEO_LOOP.md)
+## 0.2.1 (2026-10-21)
+
+Found making the video tutorial and hunting odd cases (docs/IDE_VIDEO_LOOP.md of the Dash repository).
 
 - Debugger: step into (F11) goes only into the program's functions, not into the runtime's C; a session without
   the emulator's window is no longer cut after 60 s; the stop on attaching is not shown (it said "Paused on attach"
