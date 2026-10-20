@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 519 funciones, 519 implementadas, 0 sin implementar.
+Total: 523 funciones, 523 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -423,6 +423,10 @@ Total: 519 funciones, 519 implementadas, 0 sin implementar.
 | `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
 | `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
 | `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
+| `desktop_canvas(x, y, width, height)` | `APTR` | An area of the Workbench's background (backdrop mode), behind the icons and without clicks; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be (no backdrop window, an RTG screen) |  |
+| `desktop_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the wallpaper below it |  |
+| `desktop_canvas_update(canvas)` | `void` | Draw the area again now and show what changed, without touching the icons |  |
+| `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
 | `cpu_sample()` | `LONG` | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
 | `cpu_task_name(i)` | `STRPTR` | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |

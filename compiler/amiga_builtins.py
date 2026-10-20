@@ -3901,6 +3901,26 @@ TASK_FUNCTIONS = {
         name="task_done", params=["task"], return_type="BOOL",
         c_template="_dash_task_done(${task})",
         description="True once the function has returned (does not wait)"),
+    # Trasfondo: drawing on the Workbench's background, behind its icons
+    "desktop_canvas": BuiltinFunc(
+        name="desktop_canvas", params=["x", "y", "width", "height"], return_type="APTR",
+        c_template="_dash_desk_canvas(${x}, ${y}, ${width}, ${height})",
+        description="An area of the Workbench's background (backdrop mode), behind the icons and without clicks; "
+                    "negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be "
+                    "(no backdrop window, an RTG screen)"),
+    "desktop_canvas_on_draw": BuiltinFunc(
+        name="desktop_canvas_on_draw", params=["canvas", "func"], return_type="void",
+        c_template="_dash_desk_on_draw(${canvas}, (APTR)${func})",
+        description="Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the "
+                    "wallpaper below it"),
+    "desktop_canvas_update": BuiltinFunc(
+        name="desktop_canvas_update", params=["canvas"], return_type="void",
+        c_template="_dash_desk_update(${canvas})",
+        description="Draw the area again now and show what changed, without touching the icons"),
+    "desktop_canvas_free": BuiltinFunc(
+        name="desktop_canvas_free", params=["canvas"], return_type="void",
+        c_template="_dash_desk_free(${canvas})",
+        description="The wallpaper back in the area (the program's end does it too)"),
     # Trasfondo: the CPU each task takes (exec's task switch hooks and the EClock, as PM)
     "cpu_start": BuiltinFunc(
         name="cpu_start", params=[], return_type="BOOL",
