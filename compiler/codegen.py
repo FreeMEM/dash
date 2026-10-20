@@ -10628,6 +10628,9 @@ class CodeGenerator(ASTVisitor):
         self.context = CodeGenContext()
         # Test mode for the emulator bench: end the program after N seconds
         self.autoclose = int(os.environ.get("DASH_TEST_AUTOCLOSE", "0") or 0)
+        # DASH_PRINT_FLUSH=1 while compiling: each Print goes out at once (Flush of dos.library), so
+        # tools/emu_run.py --follow and the IDE show the output while the program runs
+        self.print_flush = os.environ.get("DASH_PRINT_FLUSH", "") not in ("", "0")
         # ./dash --profile (dashweb D23): every function counts its calls; VBlank samples where it is
         self.profile = os.environ.get("DASH_PROFILE") == "1"
         self.prof_names: List[str] = ["Main"]
@@ -11811,6 +11814,11 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_PrintStmt(self, node: PrintStmt):
         """Generate code for Print statement."""
+        self._print_line(node)
+        if self.print_flush:
+            self.emit(f"{self.context.indent}Flush(Output());\n")
+
+    def _print_line(self, node: PrintStmt):
         indent = self.context.indent
         if isinstance(node.message, StringLiteral):
             # String literal is the format itself: escape % and append the newline

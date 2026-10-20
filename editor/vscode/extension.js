@@ -63,8 +63,11 @@ function runCommand(dashDir, file, autoclose) {
 function emulatorEnv() {
     const config = vscode.workspace.getConfiguration('dash.emulator');
     const env = {};
-    if (config.get('kickstart')) env.DASH_KICKSTART = config.get('kickstart');
-    if (config.get('system')) env.DASH_EMU_SYS = config.get('system');
+    // the ROM and Workbench files of each machine (tools/emu_run.py --machine reads these variables)
+    for (const [setting, variable] of [['kickstart', 'DASH_KICKSTART'], ['system', 'DASH_EMU_SYS'],
+                                        ['kickstartA500', 'DASH_KICKSTART_A500'], ['kickstart32', 'DASH_KICKSTART_32'],
+                                        ['system32', 'DASH_EMU_SYS_32'], ['systemRtg', 'DASH_EMU_SYS_32_RTG']])
+        if (config.get(setting)) env[variable] = config.get(setting);
     return env;
 }
 

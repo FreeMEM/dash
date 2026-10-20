@@ -29,6 +29,11 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
 - In a folder not trusted (Restricted Mode) only colours and the visual editor work; compiling, the emulator
   and the language server need a trusted folder.
+- **Emulator machine**: `dash.emulator.machine` (A1200 3.1, A500, A1200 3.2, 68040 with RTG) and
+  `dash.emulator.program` (FS-UAE or Amiberry), also from the status bar (**Dash: Elegir la máquina del
+  emulador**); per project in `.vscode/settings.json`. The program runs in the emulator's window
+  (`dash.emulator.window`) and its output shows in the task's panel while it runs; stopping the task stops the
+  emulator. MUI programs on the A1200 3.1 get `dash.emulator.muiSystem`.
 - **Build and run** as VS Code tasks (type `dash`: `compile`, `run`, `memcheck`, `profile`; Terminal > Run Task,
   Ctrl+Shift+B, or in `tasks.json` with `"file": "${file}"`): **Dash: Compilar** (to `bin/` next to the file),
   **Dash: Ejecutar en emulador** (FS-UAE, `tools/emu_run.py`), **con comprobación de memoria** (`--memcheck`) and
@@ -46,7 +51,8 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
 
 - `dash.path`: folder of the Dash compiler (the one with `./dash`). Empty: looked for up from the file.
 - `dash.emulator.kickstart`, `dash.emulator.system`: Kickstart ROM and Workbench files for FS-UAE
-  (the same as `DASH_KICKSTART` and `DASH_EMU_SYS`).
+  (the same as `DASH_KICKSTART` and `DASH_EMU_SYS`); `kickstartA500`, `kickstart32`, `system32`, `systemRtg`
+  for the other machines (`DASH_KICKSTART_A500`, `DASH_KICKSTART_32`, `DASH_EMU_SYS_32`, `DASH_EMU_SYS_32_RTG`).
 - `dash.emulator.autoclose`: seconds after which a windowed program closes itself in the emulator.
 - `dash.emulator.muiSystem`: Workbench files with MUI for "Ver en Amiga" (`DASH_EMU_SYS_MUI`, made with
   `tools/emu_sys_mui.sh`).

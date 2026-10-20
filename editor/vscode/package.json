@@ -22,7 +22,11 @@
         "dash.emulator.kickstart",
         "dash.emulator.system",
         "dash.emulator.muiSystem",
-        "dash.python"
+        "dash.python",
+        "dash.emulator.kickstartA500",
+        "dash.emulator.kickstart32",
+        "dash.emulator.system32",
+        "dash.emulator.systemRtg"
       ]
     }
   },
@@ -95,6 +99,11 @@
         "command": "dash.runProfile",
         "title": "Dash: Ejecutar con perfil",
         "category": "Dash"
+      },
+      {
+        "command": "dash.chooseMachine",
+        "title": "Dash: Elegir la máquina del emulador",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -154,6 +163,57 @@
           "type": "string",
           "default": "python3",
           "description": "El Python con el que corre el servidor de lenguaje (el mismo que usa ./dash; necesita lark)."
+        },
+        "dash.emulator.machine": {
+          "type": "string",
+          "default": "a1200",
+          "enum": [
+            "a1200",
+            "a500",
+            "a1200-32",
+            "rtg"
+          ],
+          "enumDescriptions": [
+            "A1200 con Kickstart 3.1 (dash.emulator.kickstart, dash.emulator.system)",
+            "A500, 68000, Kickstart 3.1 (dash.emulator.kickstartA500)",
+            "A1200 con AmigaOS 3.2 (dash.emulator.kickstart32, dash.emulator.system32)",
+            "68040 con tarjeta gráfica (Picasso96), AmigaOS 3.2 (dash.emulator.systemRtg)"
+          ],
+          "description": "Máquina en la que se ejecutan los programas (también en la barra de estado). Se puede fijar por proyecto (.vscode/settings.json)."
+        },
+        "dash.emulator.program": {
+          "type": "string",
+          "default": "fs-uae",
+          "enum": [
+            "fs-uae",
+            "amiberry"
+          ],
+          "description": "Emulador: FS-UAE o Amiberry (A1200 y A500; su bsdsocket da sucesos de sockets: net_signal)."
+        },
+        "dash.emulator.window": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ver la ventana del emulador (y oírlo). Sin ella corre oculto, como en los tests."
+        },
+        "dash.emulator.kickstartA500": {
+          "type": "string",
+          "default": "",
+          "description": "ROM de Kickstart 3.1 de A500 (DASH_KICKSTART_A500)."
+        },
+        "dash.emulator.kickstart32": {
+          "type": "string",
+          "default": "",
+          "description": "ROM de Kickstart 3.2 de A1200 (DASH_KICKSTART_32)."
+        },
+        "dash.emulator.system32": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de un Workbench 3.2 (DASH_EMU_SYS_32)."
+        },
+        "dash.emulator.systemRtg": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de un Workbench 3.2 con Picasso96 (DASH_EMU_SYS_32_RTG; tools/emu_sys_rtg.sh de dashweb)."
         }
       }
     },

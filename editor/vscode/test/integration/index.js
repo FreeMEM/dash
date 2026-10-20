@@ -223,6 +223,30 @@ async function run() {
         assert(lenses.some((l) => l.command && l.command.command === 'dash.runInEmulator'));
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('tasks: the run task runs the program in the emulator (hidden) and ends', async () => {
+        const path = require('path');
+        const os = require('os');
+        await vscode.workspace.getConfiguration('dash.emulator').update('window', false, vscode.ConfigurationTarget.Global);
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'corre.dash');
+        fs.writeFileSync(file, 'Main\n    Print "hola desde el Amiga"\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        const tasks = await vscode.tasks.fetchTasks({ type: 'dash' });
+        const runTask = tasks.find((t) => t.definition.task === 'run');
+        assert(/--follow/.test(runTask.execution.commandLine) && !/--window/.test(runTask.execution.commandLine),
+               runTask.execution.commandLine);
+        const done = new Promise((resolve) => {
+            const sub = vscode.tasks.onDidEndTaskProcess((e) => {
+                if (e.execution.task.name === runTask.name) { sub.dispose(); resolve(e.exitCode); }
+            });
+        });
+        await vscode.tasks.executeTask(runTask);
+        const code = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 240000))]);
+        assert.strictEqual(code, 0);
+        assert((await vscode.commands.getCommands(true)).includes('dash.chooseMachine'));
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

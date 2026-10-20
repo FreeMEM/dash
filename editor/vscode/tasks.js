@@ -17,12 +17,16 @@ const KINDS = {
     profile: { label: 'Ejecutar con perfil', run: true, flag: '--profile' },
 };
 
+const MACHINES = {
+    a1200: 'A1200 (3.1)', a500: 'A500 (68000, 3.1)', 'a1200-32': 'A1200 (AmigaOS 3.2)', rtg: '68040 con RTG (3.2)',
+};
+
 /**
  * The shell command of a task (run in the Dash compiler's folder).
  * @param {string} kind compile, run, memcheck or profile
  * @param {string} dashDir
  * @param {string} file the .dash
- * @param {{autoclose?: number}} [options]
+ * @param {{autoclose?: number, machine?: string, emulator?: string, window?: boolean, system?: string}} [options]
  */
 function taskCommand(kind, dashDir, file, options = {}) {
     const k = KINDS[kind];
@@ -31,11 +35,18 @@ function taskCommand(kind, dashDir, file, options = {}) {
     // a program that waits for its window to be closed ends by itself in the emulator after autoclose s
     // (test mode, DASH_TEST_AUTOCLOSE, read when it is compiled)
     const seconds = k.run && options.autoclose && options.autoclose > 0 ? Math.floor(options.autoclose) : 0;
+    // to run it: each Print goes out at once (DASH_PRINT_FLUSH), so the output shows while it runs
     const compile = `mkdir -p ${quote(path.dirname(out))} && ` + (seconds ? `DASH_TEST_AUTOCLOSE=${seconds} ` : '') +
+        (k.run ? 'DASH_PRINT_FLUSH=1 ' : '') +
         `${quote(path.join(dashDir, 'dash'))}` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
     if (!k.run) return compile;
     // the program is built here (with its option) and the emulator runs the binary as it is
-    return `${compile} && python3 ${quote(path.join(dashDir, 'tools', 'emu_run.py'))} ${quote(out)}`;
+    const emu = [' --follow'];
+    if (options.window !== false) emu.push(' --window');
+    if (options.machine && options.machine !== 'a1200') emu.push(` --machine ${quote(options.machine)}`);
+    if (options.emulator === 'amiberry') emu.push(' --emulator amiberry');
+    if (options.system) emu.push(` --system ${quote(options.system)}`);
+    return `${compile} && python3 ${quote(path.join(dashDir, 'tools', 'emu_run.py'))}${emu.join('')} ${quote(out)}`;
 }
 
 /**
@@ -64,10 +75,9 @@ function makeTask(vscode, kind, file, dashDir, env, options, definition) {
  * @param {{findDash: (f: string) => string | null, env: () => Record<string, string>, trusted: () => boolean}} helpers
  */
 function setupTasks(vscode, context, helpers) {
-    const autoclose = () => Number(vscode.workspace.getConfiguration('dash.emulator').get('autoclose')) || 0;
     const forFile = (kind, file, definition) => {
         const dashDir = helpers.findDash(file);
-        return dashDir ? makeTask(vscode, kind, file, dashDir, helpers.env(), { autoclose: autoclose() }, definition) : null;
+        return dashDir ? makeTask(vscode, kind, file, dashDir, helpers.env(), emulatorOptions(vscode, file), definition) : null;
     };
     const activeFile = () => {
         const e = vscode.window.activeTextEditor;
@@ -131,14 +141,36 @@ function setupTasks(vscode, context, helpers) {
         },
     }));
 
-    // the status bar: Run, while a .dash is in front
+    // the status bar: Run, and the machine it runs on (a click changes it), while a .dash is in front
     const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
     item.text = '$(play) Dash';
     item.tooltip = 'Ejecutar en el emulador (Dash)';
     item.command = 'dash.runInEmulator';
-    const update = () => (activeFile() ? item.show() : item.hide());
+    const machineItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 49);
+    machineItem.command = 'dash.chooseMachine';
+    const update = () => {
+        const config = vscode.workspace.getConfiguration('dash.emulator');
+        const machine = config.get('machine') || 'a1200';
+        machineItem.text = '$(device-desktop) ' + (MACHINES[machine] || machine).split(' (')[0] +
+            (config.get('program') === 'amiberry' ? ' · Amiberry' : '');
+        machineItem.tooltip = 'Máquina del emulador: ' + (MACHINES[machine] || machine) + ' (clic para cambiarla)';
+        if (activeFile()) { item.show(); machineItem.show(); } else { item.hide(); machineItem.hide(); }
+    };
     update();
-    context.subscriptions.push(item, vscode.window.onDidChangeActiveTextEditor(update));
+    context.subscriptions.push(item, machineItem, vscode.window.onDidChangeActiveTextEditor(update),
+                               vscode.workspace.onDidChangeConfiguration((e) => e.affectsConfiguration('dash.emulator') && update()));
+    context.subscriptions.push(vscode.commands.registerCommand('dash.chooseMachine', async () => {
+        const config = vscode.workspace.getConfiguration('dash.emulator');
+        const items = Object.entries(MACHINES).map(([id, label]) => ({ label, id, emulator: 'fs-uae',
+                                                                       description: 'FS-UAE' }))
+            .concat([['a1200', 'A1200 (3.1)'], ['a500', 'A500 (68000, 3.1)'], ['a1200-32', 'A1200 (AmigaOS 3.2)']]
+                .map(([id, label]) => ({ label, id, emulator: 'amiberry', description: 'Amiberry (con sucesos de sockets)' })));
+        const pick = await vscode.window.showQuickPick(items, { placeHolder: 'Máquina en la que ejecutar los programas' });
+        if (!pick) return;
+        const target = vscode.workspace.workspaceFolders ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+        await config.update('machine', pick.id, target);
+        await config.update('program', pick.emulator, target);
+    }));
 
     context.subscriptions.push(
         vscode.commands.registerCommand('dash.runMemcheck', () => runTask('memcheck')),
@@ -147,4 +179,21 @@ function setupTasks(vscode, context, helpers) {
     return runTask;
 }
 
-module.exports = { taskCommand, makeTask, setupTasks, KINDS };
+/**
+ * How the emulator runs a file: its machine, emulator, window; the Workbench files with MUI when the
+ * program uses MUI (on the A1200 with 3.1, dash.emulator.muiSystem).
+ * @param {typeof import('vscode')} vscode
+ * @param {string} file
+ */
+function emulatorOptions(vscode, file) {
+    const config = vscode.workspace.getConfiguration('dash.emulator');
+    const machine = config.get('machine') || 'a1200';
+    const options = { autoclose: Number(config.get('autoclose')) || 0, machine, emulator: config.get('program') || 'fs-uae',
+                      window: config.get('window') !== false };
+    let text = '';
+    try { text = require('fs').readFileSync(file, 'utf8'); } catch (e) { /* not saved yet */ }
+    if (machine === 'a1200' && config.get('muiSystem') && /\bmui_|\.dashui"/.test(text)) options.system = config.get('muiSystem');
+    return options;
+}
+
+module.exports = { taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions };

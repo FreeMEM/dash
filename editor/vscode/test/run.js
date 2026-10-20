@@ -476,8 +476,12 @@ async function taskTests() {
         assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
                            "mkdir -p '/p/bin' && '/d/dash' '/p/a b.dash' -o '/p/bin/a b'");
         assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
-                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 '/d/dash' --memcheck '/p/x.dash' -o '/p/bin/x' && " +
-                           "python3 '/d/tools/emu_run.py' '/p/bin/x'");
+                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' --memcheck '/p/x.dash' " +
+                           "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --window '/p/bin/x'");
+        assert.strictEqual(taskCommand('run', '/d', '/p/x.dash', { machine: 'a500', emulator: 'amiberry', window: false,
+                                                                 system: '/s y' }),
+                           "mkdir -p '/p/bin' && DASH_PRINT_FLUSH=1 '/d/dash' '/p/x.dash' -o '/p/bin/x' && " +
+                           "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
     });
     await check('tasks: the $dash problem matcher reads what the compiler prints', () => {

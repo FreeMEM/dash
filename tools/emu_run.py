@@ -23,6 +23,14 @@ the assigns (MUI: see tools/emu_sys_mui.sh).
 
     tools/emu_run.py --kickstart kick323.rom --system ~/.cache/dash-emu/sys32 --workbench prog.dash
 
+--machine a1200|a500|a1200-32|rtg takes the ROM, Workbench files and options of a machine of the
+test runner from its variables ($DASH_KICKSTART_A500, $DASH_EMU_SYS_32...); --emulator amiberry runs
+it in Amiberry (A1200, A500) instead of FS-UAE; --window shows the emulator's window (no time limit);
+--follow prints the programs' output while they run (and compiles .dash with DASH_PRINT_FLUSH=1, so
+each Print goes out at once). The VS Code extension runs programs this way.
+
+    tools/emu_run.py --machine a500 --window --follow prog.dash
+
 --workbench runs C:LoadWB from those files before the programs, as on a real Amiga:
 in AmigaOS 3.2 window.class (ReAction) waits for the Workbench when it is opened.
 
@@ -64,6 +72,27 @@ uae_sound_output = interrupts
 automatic_input_grab = 0
 uae_cpu_speed = max
 {kickstart}"""
+
+
+# --machine: the emulated machines of the test runner, each with its ROM and Workbench files from the
+# environment (the same variables as tests/run_tests.py) and its FS-UAE options
+MACHINES = {
+    "a1200": dict(rom="DASH_KICKSTART", system="DASH_EMU_SYS", config="", workbench=False, model="A1200"),
+    "a500": dict(rom="DASH_KICKSTART_A500", system="DASH_EMU_SYS", config="amiga_model = A500\n",
+                 workbench=False, model="A500"),
+    "a1200-32": dict(rom="DASH_KICKSTART_32", system="DASH_EMU_SYS_32", config="", workbench=True, model="A1200"),
+    "rtg": dict(rom="DASH_KICKSTART_32", system="DASH_EMU_SYS_32_RTG", workbench=False, model="A1200",
+                config="cpu = 68040\nfpu = 68040\njit_compiler = 1\nuae_cpu_speed = max\n"
+                       "zorro_iii_memory = 131072\ngraphics_card = uaegfx\n"),
+}
+
+
+FLUSH_PRINT = False      # set by --follow (compile_dash builds with DASH_PRINT_FLUSH)
+
+
+def _stop_on_signal(*_):
+    """Stopped from outside (a VS Code task, a terminal closed): the finally that kills the emulator runs."""
+    raise SystemExit(130)
 
 
 class EmuResults(list):
@@ -118,6 +147,8 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: 
     env = dict(os.environ)
     if autoclose:
         env["DASH_TEST_AUTOCLOSE"] = str(autoclose)
+    if FLUSH_PRINT:
+        env["DASH_PRINT_FLUSH"] = "1"          # --follow: each Print goes out at once
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0 or not exe.exists():
         raise RuntimeError(f"{src}: compile failed\n{result.stdout}{result.stderr}")
@@ -170,16 +201,22 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
-                 debug: list = None):
+                 debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
+                 model: str = "A1200"):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
     started with Run before the programs, e.g. one that clicks in their windows; their
     output goes to DH0:bg<i>.txt (keep= to read it). debug: commands for FS-UAE's debugger
     when a program calls debug_break() (see --debug). Returns one EmuResult per program, in
-    order, in an EmuResults list (.debugger: the debugger's text)."""
-    if not shutil.which("fs-uae"):
-        raise RuntimeError("fs-uae not found")
+    order, in an EmuResults list (.debugger: the debugger's text). window: the emulator's window
+    on the screen (and its sound), not hidden; follow(index, text): called with what each program
+    writes while it runs. emulator: "fs-uae" or "amiberry" (model A1200 or A500; its own options,
+    so extra_config, screenshots and debug are FS-UAE's only)."""
+    if not shutil.which(emulator):
+        raise RuntimeError(f"{emulator} not found")
+    if emulator == "amiberry" and (debug is not None or screenshot or extra_config.strip()):
+        raise RuntimeError("amiberry: --debug, --screenshot and FS-UAE options (--set, --machine rtg) need FS-UAE")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
         tmp = Path(tmp)
         hd = tmp / "hd"
@@ -261,11 +298,24 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         if kickstart and not Path(kickstart).is_file():
             raise RuntimeError(f"Kickstart ROM not found: {kickstart}")
         ks_line = f"kickstart_file = {kickstart}\n" if kickstart else ""
-        config.write_text(FSUAE_CONFIG.format(hd=hd, kickstart=ks_line) + extra_config)
+        base = FSUAE_CONFIG.format(hd=hd, kickstart=ks_line)
+        if window:   # to be seen and heard
+            base = base.replace("volume = 0\n", "").replace("floppy_drive_volume = 0\n", "floppy_drive_volume = 0\n")
+        config.write_text(base + extra_config)
 
-        env = dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
+        env = dict(os.environ) if window else \
+            dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
         transcript = []
-        if debug is not None:   # the debugger talks on FS-UAE's stdin/stdout
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, _stop_on_signal)
+        if emulator == "amiberry":
+            if not kickstart:
+                raise RuntimeError("amiberry needs a Kickstart ROM (--kickstart or the machine's variable)")
+            proc = subprocess.Popen(["amiberry", "-G", "--model", model, "-r", kickstart,
+                                     "-s", f"filesystem2=rw,DH0:DH0:{hd},10", "-s", "bsdsocket_emu=true",
+                                     "-s", "fastmem_size=8"], cwd=tmp, env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        elif debug is not None:   # the debugger talks on FS-UAE's stdin/stdout
             proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env,
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     start_new_session=True)
@@ -277,11 +327,23 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                     start_new_session=True)
         try:
-            deadline = time.time() + timeout
+            deadline = time.time() + (timeout if timeout and timeout > 0 else 10 ** 9)
+            shown = [0] * len(names)
+            def follow_outputs():
+                for i in range(len(names)):
+                    out_file = hd / f"out{i}.txt"
+                    if follow is not None and out_file.exists():
+                        data = out_file.read_bytes()
+                        if len(data) > shown[i]:
+                            follow(i, data[shown[i]:].decode("latin-1"))
+                            shown[i] = len(data)
             while time.time() < deadline and not (hd / "done.txt").exists():
                 if proc.poll() is not None:
                     break
+                follow_outputs()
                 time.sleep(0.2)
+            time.sleep(0.3)
+            follow_outputs()
             # screenshots still to come or being written: wait for them (a picture taken after the
             # programs ended shows the screen without them, but it is what was asked for)
             while time.time() < deadline and proc.poll() is None and \
@@ -343,23 +405,50 @@ def main():
                              "(repeatable; then \"g\": see the help at the top of this file)")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
+    parser.add_argument("--machine", choices=sorted(MACHINES),
+                        help="an emulated machine of the test runner: its ROM and Workbench files from "
+                             "$DASH_KICKSTART(_A500/_32) and $DASH_EMU_SYS(_32/_32_RTG), and its options")
+    parser.add_argument("--emulator", choices=["fs-uae", "amiberry"], default="fs-uae",
+                        help="amiberry: its own bsdsocket (with socket events), A1200 or A500 only")
+    parser.add_argument("--window", action="store_true",
+                        help="show the emulator's window (and play its sound); no time limit unless --timeout")
+    parser.add_argument("--follow", action="store_true", help="print what the programs write while they run")
     args = parser.parse_args()
+    machine = MACHINES.get(args.machine) if args.machine else None
+    kickstart = args.kickstart or (os.environ.get(machine["rom"]) if machine else None)
+    system = args.system or (os.environ.get(machine["system"]) if machine else None)
+    if machine and not kickstart:
+        print(f"--machine {args.machine} needs ${machine['rom']} (or --kickstart)", file=sys.stderr)
+        return 2
+    timeout = args.timeout if not args.window or "--timeout" in sys.argv else 0
+    global FLUSH_PRINT
+    FLUSH_PRINT = args.follow
+    follow = None
+    if args.follow:
+        def follow(i, text):
+            sys.stdout.write(text)
+            sys.stdout.flush()
     try:
-        results = run_programs(args.programs, args.timeout, args.opt, args.kickstart,
+        results = run_programs(args.programs, timeout, args.opt, kickstart,
                                args.autoclose,
+                               (machine["config"] if machine else "") +
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
-                               args.keep, args.fpu, args.system, args.workbench, args.screenshot,
-                               debug=args.debug)
+                               args.keep, args.fpu, system, args.workbench or bool(machine and machine["workbench"]),
+                               args.screenshot, debug=args.debug, window=args.window, follow=follow,
+                               emulator=args.emulator, model=machine["model"] if machine else "A1200")
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
     failed = 0
     for r in results:
         status = "TIMEOUT" if r.timed_out else f"RC={r.rc}"
-        print(f"=== {r.name}: {status}")
-        if r.output:
-            print(r.output, end="" if r.output.endswith("\n") else "\n")
+        if args.follow:                      # the output is already out
+            print(f"=== {r.name}: {status}")
+        else:
+            print(f"=== {r.name}: {status}")
+            if r.output:
+                print(r.output, end="" if r.output.endswith("\n") else "\n")
         if r.timed_out or r.rc != 0:
             failed += 1
     if args.debug is not None:

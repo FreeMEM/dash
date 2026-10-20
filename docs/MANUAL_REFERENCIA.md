@@ -68,6 +68,10 @@ end
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ```
 
+Con `DASH_PRINT_FLUSH=1` al compilar, cada `Print` sale en el momento (`Flush` de dos.library) aunque la
+salida vaya a un fichero: así la ven en vivo `tools/emu_run.py --follow` y la extension de VS Code. Sin ella
+el C no cambia.
+
 Los errores del compilador dicen dónde: `fichero.dash:línea:columna: Error: mensaje` (también los de un
 módulo importado, con su fichero), como gcc: los editores los enlazan con el código. Los de sintaxis se
 dicen en una frase (`sintaxis: no se esperaba ... aquí; se esperaba ...`).

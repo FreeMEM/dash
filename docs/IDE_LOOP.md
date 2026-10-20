@@ -108,7 +108,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 ### C. Compilar y ejecutar
 - [x] 9. **Tareas y errores.** TaskProvider (compilar, ejecutar, `--memcheck`, `--profile`), problem matcher del
       compilador de Dash y de gcc, barra de estado, CodeLens "Ejecutar" sobre `Main`.
-- [ ] 10. **Emulador.** Elegir máquina (A500, A1200 3.1, 3.2, RTG, Amiberry), salida del programa en un panel,
+- [x] 10. **Emulador.** Elegir máquina (A500, A1200 3.1, 3.2, RTG, Amiberry), salida del programa en un panel,
       parar, configuración por proyecto.
 - [ ] 11. **Memoria y perfil.** Avisos de `--memcheck` como diagnósticos; la tabla de `--profile` en un webview,
       con enlaces a las funciones.
@@ -299,4 +299,19 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Tests: 2 más sin VS Code (la orden de cada tarea; la expresión de `$dash` contra la salida real del compilador) y
   1 más en VS Code (la tarea `compile` del proveedor compila el programa de verdad y está la CodeLens). Base: todo
   bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 10 (emulador: máquinas, ventana, salida en vivo)
+- `tools/emu_run.py`: `--machine a1200|a500|a1200-32|rtg` (ROM, sistema y opciones de las máquinas del runner, de sus
+  variables), `--emulator amiberry` (A1200/A500; sin `--debug`, capturas ni opciones de FS-UAE), `--window` (la
+  ventana y el sonido del emulador, sin límite de tiempo) y `--follow` (la salida mientras corre: lee el
+  `out<i>.txt` del disco del host). `SIGTERM`/`SIGHUP` paran el emulador (el `finally` que lo mata se ejecuta):
+  parar una tarea de VS Code lo cierra.
+- La salida en vivo necesitaba que `Print` no se quedase en el búfer de dos.library: `DASH_PRINT_FLUSH=1` al compilar
+  añade `Flush(Output())` tras cada `Print` (sin la variable el C no cambia; la batería sigue igual).
+- Probado: un programa con 3 `Print` separados 2 s sale línea a línea en A1200, A500, A1200 3.2 y Amiberry; `SIGTERM`
+  a `emu_run` deja el emulador cerrado.
+- Extensión: ajustes `dash.emulator.machine`, `dash.emulator.program`, `dash.emulator.window` y ROM/sistema de cada
+  máquina (pasan a `emu_run` por las variables); por proyecto en `.vscode/settings.json`; selector en la barra de
+  estado; la tarea "ejecutar" compila con `DASH_PRINT_FLUSH` y corre `emu_run --follow --window`; con MUI en el A1200
+  3.1, `muiSystem`. Tests: la orden con todas las opciones; en VS Code la tarea `run` de verdad (oculta) acaba con 0.
 
