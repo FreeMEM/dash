@@ -1,0 +1,126 @@
+# Entorno de desarrollo de Dash para VS Code (para `/loop`)
+
+Arranque:
+
+```
+/loop Sigue las instrucciones de docs/IDE_LOOP.md en ~/Projects/FreeMEMLang-ide: haz UNA tarea y actualiza la bitácora. No hagas pausas entre vuelta y vuelta
+```
+
+## Objetivo
+
+Que la extensión de VS Code (`editor/vscode/`) se acerque lo más posible a un IDE profesional para Dash y
+`.dashui` (petición del usuario, 2026-10-20): colores completos, errores mientras se escribe, autocompletado,
+ir a la definición, esquema del fichero, compilar y ejecutar con un clic, y **depuración con breakpoints,
+paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real.
+
+## Datos de partida (comprobados el 2026-10-20)
+
+- **Extensión:** `editor/vscode/` (JavaScript, sin compilar; `npm test`, `npm run package` = `vsce package
+  --no-dependencies`). Trae gramática TextMate (`syntaxes/dash.tmLanguage.json`, 103 líneas, a mano),
+  compilar y ejecutar en FS-UAE por terminal, y el editor visual de `.dashui` (webview) con "Ver en Amiga".
+  Instalada en Code - OSS 1.138 (`code --install-extension <vsix> --force`; ajustes del usuario en
+  `~/.config/Code - OSS/User/settings.json`: `dash.path`, `dash.emulator.*`).
+- **Modo restringido:** desde caa3570 la extensión es `untrustedWorkspaces: limited` (colores y editor siempre;
+  compilar y emulador, solo con confianza). Sin eso, VS Code la apagaba entera y no había colores.
+- **Depuración:** ni FS-UAE 3.2.35 ni Amiberry 8.2.2 traen servidor GDB (WinUAE sí; uae-dap usa FS-UAE y WinUAE
+  parcheados). La toolchain trae `m68k-amigaos-gdb` 18 (`/opt/amiga/bin`), que habla DAP (`gdb -i=dap`), y
+  `m68k-amigaos-addr2line`/`objdump`. En el Amiga: `bgdbserver` de bebbo (Aminet `dev/debug/bgdbserver`, GPLv3,
+  servidor GDB por TCP con `bsdsocket.library`: vale en FS-UAE/Amiberry con su bsdsocket y en un Amiga real).
+  FS-UAE también tiene su depurador de consola (`tools/emu_run.py --debug`, `debug_break()`).
+- **Amiberry sin ventana:** ver la memoria `reference_amiberry_headless` (sirve para lo que FS-UAE no emula).
+
+## Reglas de cada iteración
+
+0. **Uso.** Lee `~/.claude/state/uso-7d.txt` (primer número = % de uso semanal). Con 90 o más: para el loop
+   (ScheduleWakeup stop), apunta en la bitácora dónde quedó y avisa al usuario.
+1. **Rama.** Worktree `~/Projects/FreeMEMLang-ide`, rama local `ide` (sale de caa3570: origin/main + D60 + los
+   cambios de la extensión del 2026-10-20). No hagas push, ni toques `main`, `~/Projects/FreeMEMLang` ni el
+   worktree `FreeMEMLang-dashweb` (es del loop de dashweb).
+2. **Base.** `python3 tests/run_tests.py` y `cd editor/vscode && npm test`. Anota si cambia.
+3. **Tarea.** La primera `[ ]`; márcala `[~]` mientras trabajas. Una por iteración; si es grande, divídela en la
+   lista y haz la primera parte.
+4. **Hacer.** Cada cambio con su test: `editor/vscode/test/run.js` (con el `vscode` falso) para la extensión,
+   tests de Python para el servidor de lenguaje, `tests/` del runner para lo que toque al compilador.
+   Lo visual se comprueba en un navegador (Playwright, `test/webview.html`) o con una captura (`grim`).
+5. **Verificar.** Repite el paso 2. Si tocas el compilador: `python3 tests/run_tests.py --emu` (entorno de
+   CLAUDE.md). **Antes de una batería en el emulador o una medida larga, avisa a la sesión de dashweb**
+   (ListAgents; comparten FS-UAE y puertos). Mata solo procesos tuyos, por PID.
+6. **Instalar.** Si cambió la extensión: `npm run package`, mueve el `.vsix` al scratchpad e instálalo
+   (`code --install-extension ... --force`): el usuario la usa ya.
+7. **Documentar.** `editor/vscode/README.md` y, si cambia el lenguaje o el compilador, `docs/`.
+8. **Cerrar.** Marca `[x]`, entrada en la bitácora, commit local `ide: <tarea> - <resumen>`.
+9. **Fin.** Sin tareas `[ ]`: resumen final, para el loop y avisa con PushNotification.
+
+## Límites
+
+- No instales paquetes del sistema. `npm install --save-dev` en `editor/vscode` sí (node_modules fuera de git);
+  un venv en el scratchpad, sí. El servidor de lenguaje no puede pedir nada que Dash no pida ya (Python 3 y Lark).
+- Nada con licencia que no permita redistribuir (bgdbserver es GPLv3: un script lo descarga, como el SDK de MUI).
+- Un programa compilado sin la opción de depuración tiene que salir **idéntico** (mismo C) que antes.
+- No publicar la extensión (Marketplace/Open VSX) sin permiso del usuario: déjalo `[?]`.
+- Si una tarea exige una decisión del usuario, déjala `[?]` con la pregunta y pasa a la siguiente.
+
+## Tareas
+
+### A. Lenguaje
+- [ ] 1. **Auditoría y estructura.** Leer la extensión y sus tests; decidir cómo crece (¿TypeScript? ¿empaquetar
+      con esbuild para llevar dependencias como `vscode-languageclient`?). Anotar la decisión aquí.
+- [ ] 2. **Gramática completa, generada.** `tools/gen_tmgrammar.py` saca de `compiler/grammar.py` y
+      `compiler/amiga_builtins.py` las palabras clave, tipos, directivas `@` y los 425 builtins; interpolación
+      `#{...}`, números hex/binarios, `Window`/`EventLoop`/`On`, `@native`/`@c` con C dentro. El runner comprueba
+      que está al día (como `docs/BUILTINS.md`). Tests de tokens.
+- [ ] 3. **Edición.** Snippets (func, struct, Main, EventLoop, ventana MUI...), sangría y `onEnter` con `end`,
+      plegado por bloques, iconos de `.dash`/`.dashui`, comentar con `#`.
+
+### B. Servidor de lenguaje (LSP)
+- [ ] 4. **Base y errores.** `compiler/lsp.py`: JSON-RPC por stdio sin dependencias, que reutiliza parser y
+      analizador; cliente en la extensión (lo arranca con `python3 -m compiler.lsp` desde `dash.path`).
+      Diagnósticos al escribir, con línea y columna (y los de los imports). Tests.
+- [ ] 5. **Autocompletado.** Builtins con firma y descripción, palabras clave, variables/funciones/structs/
+      campos/enums en ámbito, rutas de `import`; ayuda de firma (signature help).
+- [ ] 6. **Navegación.** Hover (tipo, firma, doc), ir a la definición (también entre módulos y hacia el `.dashui`),
+      referencias, resaltar las apariciones.
+- [ ] 7. **Símbolos.** Esquema del documento (Outline, breadcrumbs), símbolos del workspace, renombrar.
+- [ ] 8. **Formato y arreglos.** Formateador de sangría; acciones rápidas sencillas (crear la función que falta,
+      añadir el `import`); tokens semánticos si mejoran los colores.
+
+### C. Compilar y ejecutar
+- [ ] 9. **Tareas y errores.** TaskProvider (compilar, ejecutar, `--memcheck`, `--profile`), problem matcher del
+      compilador de Dash y de gcc, barra de estado, CodeLens "Ejecutar" sobre `Main`.
+- [ ] 10. **Emulador.** Elegir máquina (A500, A1200 3.1, 3.2, RTG, Amiberry), salida del programa en un panel,
+      parar, configuración por proyecto.
+- [ ] 11. **Memoria y perfil.** Avisos de `--memcheck` como diagnósticos; la tabla de `--profile` en un webview,
+      con enlaces a las funciones.
+
+### D. Depuración
+- [ ] 12. **Prueba de viabilidad.** `tools/get_bgdbserver.sh`; un programa Dash con `-g` en FS-UAE (y Amiberry) con
+      bsdsocket; `m68k-amigaos-gdb` → `target remote`; parar en una función, ver registros y variables. Comparar
+      con las alternativas (uae-dap, el depurador de consola de FS-UAE) y elegir. Si hace falta, `[?]`.
+- [ ] 13. **Dash con información de depuración.** `./dash --debug` (`-g -O0`, `#line` hacia el `.dash` en el C):
+      gdb y addr2line hablan en líneas de Dash. Tests (C esperado; addr2line sobre el binario).
+- [ ] 14. **Adaptador.** Configuración de lanzamiento `dash` (launch.json): compila con `--debug`, arranca emulador y
+      servidor, conecta gdb (DAP o MI). Breakpoints en `.dash`, continuar, paso a paso (entrar, saltar, salir), pausa.
+- [ ] 15. **Pila y variables.** Nombres de Dash (locales, globales, structs, Strings, listas, diccionarios) con
+      pretty-printers de gdb en Python; ocultar el runtime `_dash_*` de la pila.
+- [ ] 16. **Más.** Consola de depuración (evaluar), watch, breakpoints condicionales y logpoints, `Print` en la
+      consola de depuración, parar en errores del runtime (índice fuera de rango, memcheck).
+- [ ] 17. **Amiga real.** Depurar en un Amiga con bgdbserver por red (host y puerto configurables); documentarlo.
+
+### E. `.dashui`
+- [ ] 18. **Editor visual.** Deshacer/rehacer, arrastrar, copiar y pegar, teclado, accesibilidad; auditoría primero.
+- [ ] 19. **Código y ventana.** Validación con diagnósticos; de un evento del `.dashui` a su código en el `.dash` y
+      crear el que falte.
+- [ ] 20. **Vista en el Amiga.** Más rápida, repetible, en varias máquinas.
+
+### F. Pulido
+- [ ] 21. **Primeros pasos.** Walkthrough de VS Code, comando "Dash: Nuevo proyecto" (plantilla con `.dash`,
+      `.dashui` y launch.json), README con capturas.
+- [ ] 22. **Empaquetado.** Bundle, icono, versión 0.2.0, CHANGELOG; preparar la publicación (publicar: `[?]`).
+- [ ] 23. **Repaso final.** Todo junto con un proyecto real (dashweb): abrir, completar, compilar, depurar.
+
+## Bitácora
+
+### 2026-10-20 — Plan
+- Pedido por el usuario: "un entorno de desarrollo como extensión para trabajar con dash y dashui", "breakpoints,
+  debug", "lo más cercano posible a un IDE profesional", como /loop con plan y bitácora.
+- Hecho antes del loop (rama dashweb, ya en esta rama): caa3570 (modo restringido) y 81686a7 (botón "Ver en Amiga").
