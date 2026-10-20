@@ -383,6 +383,8 @@ async function previewTests() {
         const N = require('../newProject.js');
         assert.strictEqual(N.cleanName('mi programa!'), 'mi_programa');
         assert.strictEqual(N.cleanName('3d'), 'Programa_3d');
+        assert.strictEqual(N.cleanName('Mi Juego Ñandú'), 'Mi_Juego_Nandu');   // accents off, not the letter
+        assert.strictEqual(N.cleanName('Árbol'), 'Arbol');
         const { name, files } = N.projectFiles('hola', '/x/dash');
         assert.strictEqual(name, 'hola');
         assert.deepStrictEqual(Object.keys(files).sort(),

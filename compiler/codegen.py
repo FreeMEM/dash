@@ -9017,6 +9017,7 @@ static LONG ra_window_is_open(void) {
 #define MUI_NOSHORTCUTS
 #include <libraries/mui.h>
 #include <proto/muimaster.h>
+#include <proto/graphics.h>        /* GetVPModeID (mui_window_own_screen) */
 #include <clib/alib_protos.h>
 #include <libraries/gadtools.h>   /* NM_BARLABEL */
 #ifndef MAKE_ID
@@ -9729,6 +9730,8 @@ static LONG _dash_mui_signals(void) {
 #define _DASH_MTOP(obj)    (_DASH_MAD(obj)->mad_Box.Top + _DASH_MAD(obj)->mad_addtop)
 #define _DASH_MWIDTH(obj)  (_DASH_MAD(obj)->mad_Box.Width - _DASH_MAD(obj)->mad_subwidth)
 #define _DASH_MHEIGHT(obj) (_DASH_MAD(obj)->mad_Box.Height - _DASH_MAD(obj)->mad_subheight)
+
+#include <proto/layers.h>    /* the buffer's layer (mui_canvas_buffered) */
 
 struct _DashCanvas {
     APTR draw;                      /* Dash function (x, y, width, height) or NULL */

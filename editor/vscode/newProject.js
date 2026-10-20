@@ -5,9 +5,10 @@
 const path = require('path');
 const fs = require('fs');
 
-/** The name of the program as a file name and a window name: letters, digits and _ */
+/** The name of the program as a file name and a window name: letters, digits and _ (accents off: Ñandú, Nandu) */
 function cleanName(name) {
-    const n = String(name || '').trim().replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    const n = String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+        .replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
     return /^[A-Za-z]/.test(n) ? n : 'Programa' + (n ? '_' + n : '');
 }
 

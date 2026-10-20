@@ -72,7 +72,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       de Amiga).
 
 ### C. Caza de errores (casos raros)
-- [ ] v9. **Rutas raras:** espacios, acentos y ñ en carpetas y ficheros (un proyecto "Mi Juego Ñandú"): compilar,
+- [x] v9. **Rutas raras:** espacios, acentos y ñ en carpetas y ficheros (un proyecto "Mi Juego Ñandú"): compilar,
       ejecutar, depurar, Ver en Amiga, ir al evento.
 - [ ] v10. **Texto raro:** CRLF, BOM, tabuladores, ficheros vacíos o de una línea, en `.dash` y `.dashui` (servidor
       de lenguaje, formatear, `end` automático, editor visual, diagnósticos).
@@ -155,6 +155,20 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - [x] (v8) El texto de "Preparar para un Amiga real" decía "F5 con la configuración Amiga real", pero F5 arranca la
       elegida en Ejecutar y depurar (la primera es la del emulador). Ahora dice que se elija (o "Debug: Select and
       Start Debugging"). El vídeo aún enseña el texto viejo: se regraba en v17.
+
+- [x] (v9) `./dash -o carpeta/x` con una carpeta que no existe acababa en un traceback de Python (`shutil.move`).
+      Ahora la crea. Y `-q` dejaba pasar "Transpiled! …". Test (`tests/unit/test_dash_cli.py`, ruta con ñ).
+- [x] (v9) "Dash: Nuevo proyecto" con "Mi Juego Ñandú" daba `Mi_Juego_and` ("Árbol", `rbol`): borraba las
+      letras con tilde. Ahora les quita la tilde: `Mi_Juego_Nandu`, `Arbol`. Test.
+- [x] (v9) Al compilar un programa MUI, gcc avisaba de `GetVPModeID` sin declarar (runtime de MUI); el lienzo de MUI
+      llamaba a `layers.library` sin su cabecera, igual. Sin prototipo, la llamada va por el stub de libamiga en
+      el mejor caso. Puestas sus cabeceras, y el runner compila los tests con
+      `-Werror=implicit-function-declaration`: salieron esos 19 tests (y `sqrt` sin declarar en un `@native`
+      de un test). Probado en el emulador (lienzo, FPU, `.dashui`, pantalla completa).
+- [ ] (v9) Ojo para el futuro: incluir `<math.h>` en el runtime de Float rompe un programa con una función
+      `round` o `sin` propia (choca con su prototipo). No se incluye.
+- [ ] (v9) El editor visual abierto en media pantalla (junto al `.dash`) se aprieta: el árbol queda en una columna
+      de 40 píxeles y "Ver en Amiga" en dos líneas. Para v14 (`.dashui` extremos).
 
 ## Bitácora
 
@@ -275,4 +289,15 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   77 s, 10 subtítulos. Funcionó a la primera: gdb_relay en medio, globales y pasos como en el emulador.
 - Encontrado: el texto de los pasos (arreglado).
 - Tests: node todo bien.
+
+### 2026-10-20 — v9 (rutas raras)
+- Un proyecto de "Nuevo proyecto" en `…/v9 ñ XXXX/Mi Juego Ñandú/`, con `juego ñandú.dash` y `ventana ñ.dashui`
+  (y su `import`), en VS Code sin ventana (`v9probe.js` del scratchpad): el servidor de lenguaje sin errores,
+  compilar, `bin/juego ñandú`, ejecutar (con autoclose), depurar (para en el punto), Ver en Amiga e ir al evento.
+  Todo bien. Por la línea de órdenes, un `import "sub carpeta/útil ñ.dash"` también.
+- Encontrado y arreglado: `-o` a una carpeta nueva, `-q` con "Transpiled!", nombres con tilde en Nuevo proyecto,
+  llamadas sin prototipo en los runtimes de MUI (con la regla nueva del runner). El CLAUDE.md del proyecto no
+  está en git: la regla nueva del runner hay que apuntarla allí al fusionar.
+- Tests: base 296, emulador (A1200 y 3.2) de lienzo, FPU, `.dashui`, pantalla completa y autoclose bien;
+  `./compile_all.sh` 34/34; node todo bien.
 

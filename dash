@@ -48,7 +48,7 @@ def run_command(command, env=None):
 
     while True:
         output = process.stdout.readline()
-        if output:
+        if output and not (QUIET and output.startswith("Transpiled!")):
             sys.stdout.write(output)
 
         return_code = process.poll()
@@ -106,6 +106,8 @@ def main():
 
     build_dir = "build"
     os.makedirs(build_dir, exist_ok=True)
+    if os.path.dirname(output_filename):      # -o bin/x: its folder, if it is not there yet
+        os.makedirs(os.path.dirname(output_filename), exist_ok=True)
 
     # --- Toolchain Paths ---
     amiga_toolchain_bin = "/opt/amiga/bin"

@@ -240,6 +240,9 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
         gcc_path,
         "-noixemul",
         *opt_flags(),  # same as ./dash by default (compiler/cflags.py)
+        # a runtime call without its prototype (a header missing): a stack call to a register library, or
+        # libamiga's stub at best (GetVPModeID in the MUI runtime, docs/IDE_VIDEO_LOOP.md v9)
+        "-Werror=implicit-function-declaration",
         "-I/opt/amiga/m68k-amigaos/ndk-include",
         "-L/opt/amiga/m68k-amigaos/lib",
         str(c_file),

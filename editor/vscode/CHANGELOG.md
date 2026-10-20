@@ -7,6 +7,8 @@
   at the first breakpoint); no Ada/C++ exception filters, gdb start-up messages or registers.
 - Tasks: `./dash -q` and no echo of the command; no duplicate errors in Problems with the language server on.
 - The visual editor in the colours of VS Code's theme; a quote typed over a selection no longer surrounds it.
+- New project: a name with accents keeps its letters without them ("Mi Juego Ñandú": `Mi_Juego_Nandu`).
+- `./dash`: `-o` into a folder that is not there makes it.
 
 ## 0.2.0 (2026-10-20)
 
