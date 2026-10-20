@@ -258,6 +258,38 @@ async function modelTests() {
         assert.match(p, /repetido a/);
         assert.match(p, /desconocido boton/);
     });
+    await check('model: copy and paste with names made unique', () => {
+        const w = M.newWindow('W');
+        const g = M.add(w, [], 'hgroup');
+        const b = M.add(w, g, 'button');
+        M.setProp(M.nodeAt(w, b), 'name', 'boton1');
+        M.nodeAt(w, b).extra = { kept: true };
+        const c = M.copy(w, g);
+        const p = M.paste(w, [], c, 0);
+        assert.deepStrictEqual(p, [0]);
+        assert.strictEqual(M.nodeAt(w, [0, 0]).name, 'boton2');
+        assert.deepStrictEqual(M.nodeAt(w, [0, 0]).extra, { kept: true });
+        assert.strictEqual(M.nodeAt(w, [1, 0]).name, 'boton1');
+        M.paste(w, [], c);
+        assert.strictEqual(M.nodeAt(w, [2, 0]).name, 'boton3');
+        assert.deepStrictEqual(M.check({ windows: [w] }), []);
+        assert.throws(() => M.paste(w, [0, 0], c), /not a group/);
+        assert.throws(() => M.paste(w, [], { name: 'x' }), /not an object/);
+    });
+    await check('model: move up and down, drop places, tree order', () => {
+        const w = M.newWindow('W');
+        M.add(w, [], 'text'); M.add(w, [], 'button'); const g = M.add(w, [], 'vgroup'); M.add(w, g, 'checkbox');
+        assert.deepStrictEqual(M.moveBy(w, [1], -1), [0]);
+        assert.strictEqual(w.root.children[0].type, 'button');
+        assert.deepStrictEqual(M.moveBy(w, [0], -1), [0]);
+        assert.deepStrictEqual(M.moveBy(w, [2], 1), [2]);
+        assert.deepStrictEqual(M.paths(w), [[], [0], [1], [2], [2, 0]]);
+        assert.deepStrictEqual(M.dropTarget(w, [1], 'before'), { parentPath: [], index: 1 });
+        assert.deepStrictEqual(M.dropTarget(w, [1], 'after'), { parentPath: [], index: 2 });
+        assert.deepStrictEqual(M.dropTarget(w, [2], 'into'), { parentPath: [2], index: undefined });
+        assert.deepStrictEqual(M.dropTarget(w, [1], 'into'), { parentPath: [], index: 2 });
+        assert.strictEqual(M.dropTarget(w, [9], 'after'), null);
+    });
     await check('model: preview shows every object with its path', () => {
         const w = M.newWindow('W');
         w.title = 'Hola <b>';
@@ -553,6 +585,7 @@ async function debugTests() {
     await taskTests();
     await editingTests();
     await modelTests();
+    await require("./webview.js").webviewTests(check, assert);
     await previewTests();
     await extensionTests();
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');

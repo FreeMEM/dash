@@ -150,6 +150,68 @@
         return null;
     }
 
+    /** Where a drop on the object at path goes: before or after it (in its group), or into it (a group:
+        at the end). Returns {parentPath, index} or null (the root has no before or after). */
+    function dropTarget(win, path, where) {
+        const node = nodeAt(win, path);
+        if (!node) return null;
+        if (where === 'into' && TYPES[node.type] && TYPES[node.type].group) return { parentPath: path, index: undefined };
+        if (!path.length) return where === 'into' ? null : { parentPath: [], index: where === 'before' ? 0 : undefined };
+        const i = path[path.length - 1];
+        return { parentPath: path.slice(0, -1), index: where === 'before' ? i : i + 1 };
+    }
+
+    /** A copy of the object at path (deep, as JSON: everything it has, known or not). */
+    function copy(win, path) {
+        const node = nodeAt(win, path);
+        return node ? JSON.parse(JSON.stringify(node)) : null;
+    }
+
+    /** Insert a copied object into the group at parentPath (at index, or at the end). Its names (and those
+        inside it) that the window already has get a number: boton -> boton2. Returns its path. */
+    function paste(win, parentPath, node, index) {
+        const parent = nodeAt(win, parentPath);
+        if (!parent || !TYPES[parent.type] || !TYPES[parent.type].group) throw new Error('not a group');
+        if (!node || typeof node !== 'object' || !node.type) throw new Error('not an object of a .dashui');
+        const clone = JSON.parse(JSON.stringify(node));
+        const taken = new Set(names(win));
+        (function rename(n) {
+            if (n.name) {
+                const base = String(n.name).replace(/\d+$/, '') || 'objeto';
+                let name = n.name, k = 2;
+                while (taken.has(name)) name = base + k++;
+                n.name = name;
+                taken.add(name);
+            }
+            (n.children || []).forEach(rename);
+        })(clone);
+        const at = index === undefined || index > parent.children.length ? parent.children.length : index;
+        parent.children.splice(at, 0, clone);
+        return parentPath.concat([at]);
+    }
+
+    /** Move the object at path one place up (delta -1) or down (+1) among its siblings; its new path. */
+    function moveBy(win, path, delta) {
+        if (!path.length) return path;
+        const parent = nodeAt(win, path.slice(0, -1));
+        const i = path[path.length - 1], j = i + delta;
+        if (!parent || j < 0 || j >= parent.children.length) return path;
+        const [node] = parent.children.splice(i, 1);
+        parent.children.splice(j, 0, node);
+        return path.slice(0, -1).concat([j]);
+    }
+
+    /** The paths of a window's objects in the order the tree shows them (the root first). */
+    function paths(win) {
+        const out = [];
+        (function walk(n, path) {
+            if (!n) return;
+            out.push(path);
+            (n.children || []).forEach((c, i) => walk(c, path.concat([i])));
+        })(win && win.root, []);
+        return out;
+    }
+
     function names(win) {
         const out = [];
         (function walk(n) {
@@ -226,5 +288,5 @@
     }
 
     return { TYPES, COMMON, newDocument, newWindow, newNode, parse, serialize, nodeAt, add, remove, move,
-             setProp, names, check, preview };
+             dropTarget, copy, paste, moveBy, paths, setProp, names, check, preview };
 }));

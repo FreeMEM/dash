@@ -395,6 +395,33 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('visual editor: undo and redo of its changes, with the editor open', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'ventana.dashui');
+        const before = '{\n  "dashui": 1,\n  "windows": []\n}\n';
+        fs.writeFileSync(file, before);
+        const uri = vscode.Uri.file(file);
+        try {
+            await vscode.commands.executeCommand('vscode.openWith', uri, 'dash.dashuiEditor');
+            await new Promise((r) => setTimeout(r, 1500));
+            const doc = await vscode.workspace.openTextDocument(uri);
+            // what the webview sends for a change ({type:'edit'}): the whole text, applied as one edit
+            const after = '{\n  "dashui": 1,\n  "windows": [{"name": "Principal", "root": {"type": "vgroup", "children": []}}]\n}\n';
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(uri, new vscode.Range(0, 0, doc.lineCount, 0), after);
+            assert(await vscode.workspace.applyEdit(edit));
+            assert.strictEqual(doc.getText(), after);
+            await vscode.commands.executeCommand('undo');
+            assert.strictEqual(doc.getText(), before);
+            await vscode.commands.executeCommand('redo');
+            assert.strictEqual(doc.getText(), after);
+        } finally {
+            await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('debugger: attach to a bgdbserver (a real Amiga, here the emulator alone), globals right', async () => {
         const path = require('path');
         const os = require('os');

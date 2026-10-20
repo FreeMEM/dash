@@ -13,12 +13,19 @@ body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif)
 #amiga-note { align-self: center; font-size: 0.9em; color: var(--vscode-descriptionForeground, #aaa); }
 #amiga-note.error { color: var(--vscode-errorForeground, #f48771); }
 #palette, #tree, #props { overflow: auto; padding: 4px; border-right: 1px solid var(--vscode-panel-border, #444); }
-.palette-item { padding: 3px 6px; margin: 2px 0; cursor: grab; border-radius: 3px;
-                background: var(--vscode-button-secondaryBackground, #333); }
+.palette-item { display: block; width: 100%; text-align: left; padding: 3px 6px; margin: 2px 0; cursor: grab;
+                border: none; border-radius: 3px; font: inherit;
+                color: var(--vscode-button-secondaryForeground, #ccc); background: var(--vscode-button-secondaryBackground, #333); }
+.palette-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, #07f); }
 .palette-item.group { font-style: italic; }
 .tree-row { padding: 2px 4px; cursor: pointer; white-space: nowrap; }
 .tree-row.selected { background: var(--vscode-list-activeSelectionBackground, #094771); }
-.tree-row.drop { outline: 1px dashed var(--vscode-focusBorder, #07f); }
+.tree-row:focus { outline: 1px solid var(--vscode-focusBorder, #07f); outline-offset: -1px; }
+.drop-into { outline: 2px dashed var(--vscode-focusBorder, #07f); outline-offset: -2px; }
+.drop-before { box-shadow: inset 0 2px 0 var(--vscode-focusBorder, #07f); }
+.drop-after { box-shadow: inset 0 -2px 0 var(--vscode-focusBorder, #07f); }
+.mui-hgroup > .drop-before { box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #07f); }
+.mui-hgroup > .drop-after { box-shadow: inset -2px 0 0 var(--vscode-focusBorder, #07f); }
 .prop { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
 .prop label { width: 80px; flex: none; }
 .prop input[type=text], .prop input[type=number], .prop input:not([type]) { flex: 1; min-width: 0; }

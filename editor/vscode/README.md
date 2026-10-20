@@ -60,7 +60,12 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   ▶ Dash button in the status bar.
 
 - **Visual editor for MUI windows** (`.dashui` files, format in `docs/MUI_EDITOR.md` of the Dash repository):
-  palette, tree (drag to add and move, Delete to remove), properties, menus and an approximate preview.
+  palette, tree, properties, menus and an approximate preview. Drag from the palette or move objects in the
+  tree or in the preview (before, after or into a group, by where you drop); a click or Enter on a palette
+  button adds the object. Keys in the tree: arrows move the selection (left: its group, right: inside),
+  Alt+Up/Down move the object, Delete removes it, F2 goes to its name, Enter to its properties, Ctrl+D
+  duplicates; copy, cut and paste as usual (pasted names get a number if the window has them). Undo and redo as
+  in any file (Ctrl+Z, Ctrl+Y, or the ↶ ↷ buttons). The tree and the palette are labelled for screen readers.
   **Ver en Amiga** compiles a tiny program with the window, runs it in FS-UAE with MUI and shows a picture of
   the real thing (about 30 s). A Dash program uses the file with `import "ventana.dashui"`.
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.

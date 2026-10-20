@@ -135,7 +135,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 17. **Amiga real.** Depurar en un Amiga con bgdbserver por red (host y puerto configurables); documentarlo.
 
 ### E. `.dashui`
-- [ ] 18. **Editor visual.** Deshacer/rehacer, arrastrar, copiar y pegar, teclado, accesibilidad; auditoría primero.
+- [x] 18. **Editor visual.** Deshacer/rehacer, arrastrar, copiar y pegar, teclado, accesibilidad; auditoría primero.
 - [ ] 19. **Código y ventana.** Validación con diagnósticos; de un evento del `.dashui` a su código en el `.dash` y
       crear el que falte.
 - [ ] 20. **Vista en el Amiga.** Más rápida, repetible, en varias máquinas.
@@ -445,4 +445,27 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - README: sección "Debugging on a real Amiga" (pila TCP/IP, bgdbserver de Aminet, pasos, `DASH_OUT` para la salida).
 - Tests: en VS Code, "attach a un bgdbserver" con el emulador haciendo de Amiga: para en el breakpoint y `cuenta`
   vale 7 (global, por el relé). VS Code 18/18. Sin Amiga real: no probado en hardware.
+
+### 2026-10-20 — Tarea 18 (editor visual: teclado, portapapeles, arrastrar, accesibilidad)
+- Auditoría: deshacer y rehacer ya eran los del documento (CustomTextEditor), pero sin botones. No se podía
+  copiar ni pegar. El árbol no tenía teclado (solo Supr, y también con el foco en un botón) y la paleta solo
+  iba con ratón (divs). Al arrastrar no se podía soltar delante de un objeto ni en la vista. No había roles
+  ARIA, y el foco se perdía en cada repintado.
+- `media/model.js`: `copy`, `paste` (los nombres que ya hay en la ventana llevan un número: boton → boton2),
+  `moveBy` (subir y bajar entre hermanos), `dropTarget` (delante, detrás o dentro) y `paths` (orden del árbol).
+- `media/editor.js`:
+  - Árbol con `role=tree`/`treeitem`, `aria-level`/`selected`/`expanded` y tabindex móvil. Teclado: flechas,
+    Inicio/Fin, izquierda (su grupo), derecha (dentro), Alt+flechas (mover), Supr, F2 (nombre), Intro
+    (propiedades) y Ctrl+D (duplicar). El foco sigue en el árbol tras cada cambio, y tras un clic en la vista.
+  - Copiar, cortar y pegar con los sucesos del portapapeles (son los que VS Code manda al webview con sus órdenes).
+    En un campo de propiedades, el portapapeles es del campo.
+  - Paleta de botones (clic o Intro añade).
+  - Arrastrar desde la paleta, el árbol o la vista, delante, detrás o dentro según dónde se suelte, con una marca.
+  - Botones ↶ ↷ (el anfitrión ejecuta `undo`/`redo`), problemas con `aria-live` y etiquetas en los campos de
+    los menús.
+- Tests:
+  - `test/webview.js`: el webview en un Chromium sin ventana, por el protocolo de DevTools (teclas de verdad,
+    sucesos del portapapeles, arrastrar). 6 tests; se salta sin Chromium.
+  - Modelo: 2 más.
+  - En VS Code: deshacer y rehacer con el editor visual abierto. VS Code 19/19.
 

@@ -97,9 +97,11 @@ alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_
 
 - **Editor propio** (`CustomTextEditorProvider`) para `*.dashui`: el JSON queda en el documento de VS Code (deshacer,
   guardar y control de cambios normales); el webview es la vista.
-- **Webview:** paleta de objetos a la izquierda, árbol de la ventana en el centro (arrastrar para añadir y mover;
-  suprimir para borrar), propiedades del objeto elegido a la derecha, vista previa aproximada debajo. Pestañas por
-  ventana y lista de menús.
+- **Webview:** paleta de objetos a la izquierda, árbol de la ventana en el centro, propiedades del objeto elegido a
+  la derecha, vista previa aproximada debajo. Pestañas por ventana y lista de menús. Arrastrar desde la paleta, el
+  árbol o la vista: delante, detrás o dentro de un grupo, según dónde se suelte. Teclado en el árbol: flechas,
+  Alt+flechas para mover, Supr, F2 (nombre), Intro (propiedades), Ctrl+D (duplicar); copiar, cortar y pegar
+  (los nombres repetidos llevan un número); deshacer y rehacer, los del documento (y botones ↶ ↷).
 - **Comandos:** "Dash: Compilar" (`./dash` del fichero activo), "Dash: Ejecutar en emulador" (`tools/emu_run.py`),
   "Dash: Ver en Amiga" (captura de la ventana del `.dashui`). La ruta de Dash, la toolchain y las variables del
   emulador se configuran en los ajustes de la extensión (`dash.path`, `dash.emulator.*`).
