@@ -3999,8 +3999,9 @@ IMAGE_FUNCTIONS = {
                        "Free an image (the ones left are freed at exit)"),
     "image_from_rgb": _gfx("image_from_rgb", ["buffer", "width", "height", "alpha"], "LONG",
                            "_dash_image_from_rgb((APTR)${buffer}, ${width}, ${height}, ${alpha})",
-                           "An image from pixels in a buffer (RGB, or RGBA with alpha), with the colors of the "
-                           "screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens)"),
+                           "An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on "
+                           "RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 "
+                           "(needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens)"),
 }
 
 # =============================================================================
