@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const { spawn, execFile } = require('child_process');
+const { makeProxy } = require('./debugProxy');
 
 /** A TCP port free on this machine (the emulator's bsdsocket listens on the PC's sockets) */
 function freePort() {
@@ -143,8 +144,9 @@ function setupDebugger(vscode, context, helpers) {
             const dashDir = session.configuration.program ? helpers.findDash(session.configuration.program) : null;
             const script = dashDir ? path.join(dashDir, 'tools', 'gdb', 'dash.py') : null;
             if (script && fs.existsSync(script)) args.push('-x', script);
-            return new vscode.DebugAdapterExecutable(
-                vscode.workspace.getConfiguration('dash.debug').get('gdb') || '/opt/amiga/bin/m68k-amigaos-gdb', args);
+            // in between: the expressions of the user (console, watch, hover, conditions, logpoints) from Dash to C
+            return new vscode.DebugAdapterInlineImplementation(makeProxy(vscode,
+                vscode.workspace.getConfiguration('dash.debug').get('gdb') || '/opt/amiga/bin/m68k-amigaos-gdb', args));
         },
     }));
 

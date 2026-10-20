@@ -127,8 +127,11 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       servidor, conecta gdb (DAP o MI). Breakpoints en `.dash`, continuar, paso a paso (entrar, saltar, salir), pausa.
 - [x] 15. **Pila y variables.** Nombres de Dash (locales, globales, structs, Strings, listas, diccionarios) con
       pretty-printers de gdb en Python; ocultar el runtime `_dash_*` de la pila.
-- [ ] 16. **Más.** Consola de depuración (evaluar), watch, breakpoints condicionales y logpoints, `Print` en la
-      consola de depuración, parar en errores del runtime (índice fuera de rango, memcheck).
+- [x] 16a. **Expresiones de Dash.** Consola de depuración (evaluar), watch, hover, breakpoints condicionales y
+      logpoints con expresiones de Dash (`p.x`, `l[i]`, `s.length`, `and`/`or`/`not`, `nil`): un adaptador en medio
+      que las traduce a C para gdb, y `$len`/`$at` en `tools/gdb/dash.py`.
+- [ ] 16b. **Salida y errores.** `Print` en la consola de depuración (bajo bgdbserver la salida va a su consola:
+      `DASH_OUT`), y parar en los errores del runtime (índice fuera de rango, memcheck) con su mensaje.
 - [ ] 17. **Amiga real.** Depurar en un Amiga con bgdbserver por red (host y puerto configurables); documentarlo.
 
 ### E. `.dashui`
@@ -393,4 +396,18 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   una entrada de la tabla de líneas por sentencia. 34/34 ejemplos compilan con `--debug`.
 - Tests: 1 más en `tests/unit` (5); la prueba de F5 en VS Code mira además `s = "hola"`, `l` = "lista de 2" con 1 y 2,
   ninguna `_dash_*`, y que la sesión acaba. Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 16a (expresiones de Dash en el depurador)
+- `editor/vscode/debugProxy.js`: el adaptador que ve VS Code es ahora uno nuestro en línea
+  (`DebugAdapterInlineImplementation`) que lanza `gdb -i=dap` detrás y pasa los mensajes, traduciendo de Dash a C
+  `evaluate`/`setExpression` y las condiciones y logpoints de `setBreakpoints`: `p.x` → `p->x`, `l[i]` → `$at(l, i)`,
+  `s.length` → `$len(s)`, `and`/`or`/`not`, `true`/`false`/`nil`, `Color.ROJO` → `Color_ROJO`; los textos entre
+  comillas no se tocan (se apartan con marcadores y vuelven al final).
+- `tools/gdb/dash.py`: funciones de gdb `$len(x)` (lista, diccionario o texto) y `$at(x, i)` (elemento de una lista
+  con su tipo, valor de una clave de diccionario, carácter de un texto; avisa si el índice no está).
+- Aprendido: en la consola (contexto `repl`) gdb toma el texto como una orden suya: el adaptador lo manda como
+  expresión (contexto `watch`) salvo que empiece por `-exec`.
+- Tests: 13 traducciones sin VS Code; en VS Code, en el breakpoint: `l[1] + 1` = 3, `s.length` = 4, `x == 20 and y == 40`
+  = 1; breakpoint con condición `i == 3 and total > 0` en un bucle (para con i = 3) y logpoint "total vale {total}"
+  (sale "total vale 15"). Base: todo bien. Extensión instalada.
 

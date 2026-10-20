@@ -523,8 +523,33 @@ async function taskTests() {
     });
 }
 
+// --- debugProxy.js: Dash expressions for gdb ---------------------------------------------------------
+async function debugTests() {
+    const { dashToC, logMessageToC } = require('../debugProxy.js');
+    await check('debugger: Dash expressions become C for gdb', () => {
+        const cases = [
+            ['p.x + 1', 'p->x + 1'],
+            ['self.pos.x', 'self->pos->x'],
+            ['l.length', '$len(l)'],
+            ['p.items.length > 2', '$len(p->items) > 2'],
+            ['l[i + 1]', '$at(l, i + 1)'],
+            ['d["clave"]', '$at(d, "clave")'],
+            ['p.vecinos[0].x', '$at(p->vecinos, 0)->x'],
+            ['a and not b or c == nil', 'a && !b || c == 0'],
+            ['activo == true', 'activo == 1'],
+            ['c == Color.ROJO', 'c == Color_ROJO'],
+            ['x * 1.5', 'x * 1.5'],
+            ['s == "a.b and c"', 's == "a.b and c"'],
+            ['p->x', 'p->x'],
+        ];
+        for (const [dash, c] of cases) assert.strictEqual(dashToC(dash), c, dash);
+        assert.strictEqual(logMessageToC('vuelta {i}, punto {p.x}'), 'vuelta {i}, punto {p->x}');
+    });
+}
+
 (async () => {
     await grammarTests();
+    await debugTests();
     await taskTests();
     await editingTests();
     await modelTests();

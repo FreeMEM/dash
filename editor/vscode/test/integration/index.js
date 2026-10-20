@@ -288,14 +288,17 @@ async function run() {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
         const file = path.join(dir, 'depura.dash');
         fs.writeFileSync(file, 'func doble(n: Int) -> Int\n    r = n * 2\n    return r\nend\n\nMain\n    x = 20\n' +
-                               '    y = doble(x)\n    Print "resultado #{y}"\n    s = "hola"\n    l = [1, 2]\n    Print s\nend\n');
+                               '    y = doble(x)\n    Print "resultado #{y}"\n    s = "hola"\n    l = [1, 2]\n    Print s\n' +
+                               '    total = 0\n    for i in (1..5)\n        total = total + i\n    end\n    Print total\nend\n');
         const uri = vscode.Uri.file(file);
         vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(7, 0)))]);
         let stopped = null;
         const seen = [];
+        const outputs = [];
         const tracker = vscode.debug.registerDebugAdapterTrackerFactory('dash', { createDebugAdapterTracker: () => ({
             onDidSendMessage: (m) => {
                 if (m.type === 'event' && m.event !== 'output') seen.push(m.event + (m.body && m.body.reason ? ':' + m.body.reason : ''));
+                if (m.type === 'event' && m.event === 'output') outputs.push(m.body.output);
                 if (m.type === 'event' && m.event === 'stopped' && m.body.reason === 'breakpoint') stopped = m;
             },
         }) });
@@ -329,9 +332,31 @@ async function run() {
             const items = (await session.customRequest('variables', { variablesReference: byName.l.variablesReference })).variables;
             assert.deepStrictEqual(items.map((v) => v.value), ['1', '2']);
             assert(!vars2.some((v) => v.name.startsWith('_dash_')), 'temporaries shown');
+            // expressions in Dash (debugProxy.js turns them into C; $at and $len of tools/gdb/dash.py)
+            const ev = async (expression, context) => (await session.customRequest('evaluate',
+                { expression, frameId: trace2.stackFrames[0].id, context: context || 'repl' })).result;
+            assert.strictEqual(await ev('l[1] + 1'), '3');
+            assert.strictEqual(await ev('s.length', 'watch'), '4');
+            assert.strictEqual(await ev('x == 20 and y == 40', 'hover'), '1');
+            // a condition in Dash, and a logpoint
+            vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+            vscode.debug.addBreakpoints([
+                new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(14, 0)), true, 'i == 3 and total > 0'),
+                new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(16, 0)), true, undefined, undefined, 'total vale {total}'),
+            ]);
+            await new Promise((r) => setTimeout(r, 1500));          // the breakpoints reach gdb
+            stopped = null;
+            await session.customRequest('continue', { threadId: 1 });
+            for (let i = 0; i < 600 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
+            assert(stopped, 'did not stop at the conditional breakpoint; events: ' + seen.join(' '));
+            const trace3 = await session.customRequest('stackTrace', { threadId: stopped.body.threadId });
+            assert.strictEqual(trace3.stackFrames[0].line, 15);
+            assert.strictEqual((await session.customRequest('evaluate', { expression: 'i', frameId: trace3.stackFrames[0].id,
+                                                                          context: 'repl' })).result, '3');
             await session.customRequest('continue', { threadId: stopped.body.threadId });
             const done = await Promise.race([ended, new Promise((r) => setTimeout(() => r('timeout'), 60000))]);
             assert.strictEqual(done, true, 'the session did not end; events: ' + seen.join(' '));
+            assert(outputs.some((o) => /total vale 15/.test(o)), 'logpoint: ' + JSON.stringify(outputs.slice(-10)));
         } finally {
             tracker.dispose();
             vscode.debug.removeBreakpoints(vscode.debug.breakpoints);

@@ -243,5 +243,64 @@ class DashFrames:
             yield DashFrame(frame)
 
 
+def _kind_of(val):
+    base = val.type.strip_typedefs()
+    if base.code == gdb.TYPE_CODE_PTR:
+        target = base.target()
+        return target.name or target.strip_typedefs().tag or ""
+    return ""
+
+
+class LenFunction(gdb.Function):
+    """$len(x): the length of a list, dictionary or text, as x.length in Dash (the debugger's expressions)."""
+
+    def __init__(self):
+        super().__init__("len")
+
+    def invoke(self, x):
+        if _is_nil(x):
+            return 0
+        kind = _kind_of(x)
+        if kind == "DashArrayLong":
+            return int(x["length"])
+        if kind == "DashDict":
+            return int(x["count"])
+        try:
+            return len(x.cast(gdb.lookup_type("char").pointer()).string(encoding="latin-1", errors="replace"))
+        except gdb.error:
+            raise gdb.GdbError("length: not a list, dictionary or text")
+
+
+class AtFunction(gdb.Function):
+    """$at(x, i): x[i] in Dash: an element of a list (typed as Int, String or object), the value of a
+    dictionary's key (a text), or a character of a text."""
+
+    def __init__(self):
+        super().__init__("at")
+
+    def invoke(self, x, i):
+        if _is_nil(x):
+            raise gdb.GdbError("nil")
+        kind = _kind_of(x)
+        if kind == "DashArrayLong":
+            arr = x.dereference()
+            n = int(i)
+            if not 0 <= n < int(arr["length"]):
+                raise gdb.GdbError("índice %d fuera de la lista (de %d)" % (n, int(arr["length"])))
+            return _element(arr["data"][n], (int(arr["capacity"]) & 0xFFFFFFFF) >> 24)
+        if kind == "DashDict":
+            d = x.dereference()
+            want = i.string() if i.type.strip_typedefs().code in (gdb.TYPE_CODE_ARRAY, gdb.TYPE_CODE_PTR) else str(i)
+            for slot in range(int(d["cap"])):
+                key = d["keys"][slot]
+                if not _is_nil(key) and key.cast(gdb.lookup_type("char").pointer()).string(
+                        encoding="latin-1", errors="replace") == want:
+                    return _element(d["vals"][slot], int(d["kind"]))
+            raise gdb.GdbError("no está la clave %r" % want)
+        return x[int(i)]
+
+
 gdb.pretty_printers.append(lookup)
 DashFrames()
+LenFunction()
+AtFunction()

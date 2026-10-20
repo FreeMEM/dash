@@ -37,6 +37,9 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   `machine`, `emulator`, `window`; `attach` with `target` (host:port of a bgdbserver) for a real Amiga.
   Values show as Dash writes them (texts, lists, dictionaries, structs with their fields, Fixed, Bool) and the
   runtime's frames and temporaries stay out of the stack and the variables (`tools/gdb/dash.py`).
+  Expressions are Dash in the debug console, watch, hover, breakpoint conditions and logpoints (`p.x`, `l[i]`,
+  `d["k"]`, `s.length`, `and`/`or`/`not`, `nil`, `Color.ROJO`): they are turned into C for gdb. In the debug
+  console, `-exec <command>` sends a gdb command as it is.
 - **Memory and profile**: a `--memcheck` run puts each memory error on the line where it happened (problem
   matcher `$dash-memcheck`); a `--profile` run opens its table (own and total time, calls) in a panel, each
   function a link to its code.
