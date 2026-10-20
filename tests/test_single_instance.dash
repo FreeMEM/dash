@@ -1,0 +1,43 @@
+# Test: single_instance and break_check (Trasfondo): one copy of a program at a time; launching it again stops
+# the one running (it gets Ctrl-C) and the new one ends. The second copy is played here by a call that does
+# what it would do, with the port of this one put aside for a moment.
+# expect-out: la primera: true
+# expect-out: sin Ctrl-C: true
+# expect-out: la segunda: false
+# expect-out: llega Ctrl-C: true
+# expect-out: y se borra: true
+# expect-out: puerto quitado: true
+# expect-out: fin
+
+@native func segunda_copia() -> Bool
+"""
+    struct MsgPort *mine = _dash_instance_port;
+    BOOL r;
+    _dash_instance_port = NULL;                 /* as another program would be: without a port of its own */
+    r = _dash_single_instance((STRPTR)"DashPruebaInstancia");
+    _dash_instance_port = mine;
+    return r;
+"""
+end
+
+@native func quitar_y_buscar() -> Bool
+"""
+    struct MsgPort *p;
+    _dash_instance_cleanup();
+    Forbid();
+    p = FindPort((CONST_STRPTR)"DashPruebaInstancia");
+    Permit();
+    return p == NULL;
+"""
+end
+
+Main
+    primera = single_instance("DashPruebaInstancia")
+    Print "la primera: #{primera}"
+    Print "sin Ctrl-C: #{not break_check()}"
+    Print "la segunda: #{segunda_copia()}"
+    Print "llega Ctrl-C: #{break_check()}"
+    Print "y se borra: #{not break_check()}"
+    Print "puerto quitado: #{quitar_y_buscar()}"
+    Print "fin"
+end

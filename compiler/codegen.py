@@ -2530,6 +2530,51 @@ static void _dash_time_cleanup(void) {
 
 """
 
+    # One copy at a time (Trasfondo): a public port with the program's name
+    INSTANCE_RUNTIME = """\
+/* single_instance(name): the program's public port with that name, if there is none. If there is one, its
+   program is another copy: it gets Ctrl-C (break_check() or mui_wait_event see it) and this one is told
+   false, to end. The port goes at the end of the program (also with exit, atexit). */
+static struct MsgPort *_dash_instance_port = NULL;
+
+static void _dash_instance_cleanup(void) {
+    if (!_dash_instance_port) return;
+    RemPort(_dash_instance_port);
+    FreeVec(_dash_instance_port->mp_Node.ln_Name);
+    DeleteMsgPort(_dash_instance_port);
+    _dash_instance_port = NULL;
+}
+
+static BOOL _dash_single_instance(STRPTR name) {
+    static BOOL at_exit = FALSE;
+    struct MsgPort *other, *port;
+    STRPTR copy;
+    if (_dash_instance_port || !name || !*name) return TRUE;
+    if (!(copy = AllocVec(strlen((char *)name) + 1, MEMF_ANY))) return TRUE;
+    strcpy((char *)copy, (char *)name);
+    port = CreateMsgPort();
+    Forbid();
+    if ((other = FindPort(name))) {
+        if (other->mp_SigTask) Signal((struct Task *)other->mp_SigTask, SIGBREAKF_CTRL_C);
+        Permit();
+        if (port) DeleteMsgPort(port);
+        FreeVec(copy);
+        return FALSE;
+    }
+    if (port) {
+        port->mp_Node.ln_Name = (char *)copy;
+        port->mp_Node.ln_Pri = 0;
+        AddPort(port);
+        _dash_instance_port = port;
+    }
+    Permit();
+    if (!port) FreeVec(copy);
+    if (!at_exit) at_exit = atexit(_dash_instance_cleanup) == 0;
+    return TRUE;
+}
+
+"""
+
     # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
     # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
     CPU_RUNTIME = """\
@@ -11377,6 +11422,7 @@ _RUNTIME_FLAGS = [
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
     ("CPU_RUNTIME", "uses_cpu"),            # Trasfondo
+    ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -11617,6 +11663,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
+        self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -11909,6 +11956,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.TIME_RUNTIME)
         if self.uses_cpu:
             parts.append(CTemplates.CPU_RUNTIME)
+        if self.uses_instance:
+            parts.append(CTemplates.INSTANCE_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -12109,6 +12158,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_instance:
+            cleanup.append("    _dash_instance_cleanup();\n")
         if self.uses_cpu:
             cleanup.insert(0, "    _dash_cpu_stop();\n")   # the hooks out before anything else (and the EClock)
         if self.uses_desk:

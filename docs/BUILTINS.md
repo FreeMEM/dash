@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 524 funciones, 524 implementadas, 0 sin implementar.
+Total: 526 funciones, 526 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -428,6 +428,8 @@ Total: 524 funciones, 524 implementadas, 0 sin implementar.
 | `desktop_canvas_update(canvas)` | `void` | Draw the area again now and show what changed, without touching the icons |  |
 | `desktop_canvas_update_area(canvas, x, y, width, height)` | `void` | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was) |  |
 | `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
+| `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
+| `single_instance(name)` | `BOOL` | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
 | `cpu_sample()` | `LONG` | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
 | `cpu_task_name(i)` | `STRPTR` | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |

@@ -3022,6 +3022,25 @@ devuelve otro. `task_start` usa 128 KB de pila y la prioridad del programa; con 
 solo avanza cuando el programa espera (por ejemplo en `mui_wait_event`), y la ventana responde
 antes. Al acabar, el programa espera a las tareas que sigan en marcha.
 
+### Un programa sin ventana que se puede parar: break_check y single_instance
+
+```ruby
+Main
+    if not single_instance("Trasfondo")
+        Print "Ya estaba en marcha: se para"    # la otra copia recibe Ctrl-C
+    else
+        while not break_check()                 # Ctrl-C ("Break" en la Shell, o lanzarlo otra vez)
+            time_delay(50)
+        end
+    end
+end
+```
+
+`break_check()` dice si llegó Ctrl-C y lo borra. `single_instance(nombre)` deja una sola copia del programa en
+marcha: con un puerto público con ese nombre. Si ya existe, manda Ctrl-C a la copia que lo tiene y da `false`
+(esta debe acabar); si no, lo crea y da `true`. El puerto se quita al acabar el programa. Así, lanzar otra vez un
+programa sin ventana desde el Workbench lo cierra.
+
 ### CPU de cada tarea: cpu_sample
 
 ```ruby
