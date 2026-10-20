@@ -2777,6 +2777,8 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_on_input(zona, id)` | Evento con un clic, la rueda o una tecla sobre la zona (antes de abrir la ventana). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | La última entrada: posición dentro de la zona, 1 si fue clic, +1/-1 la rueda, código de tecla (-1 si no fue tecla). |
 | `mui_canvas_char(z)` | El carácter de esa tecla, con mayúsculas y el keymap (`"A"`, `"ñ"`; `""` si no da ninguno; Retroceso da el código 8). |
+| `mui_canvas_on_move(zona, id)` | Evento cuando el ratón se mueve sobre la zona, sin clic, y cuando sale de ella (antes de abrir la ventana). Los movimientos que llegan antes de que el programa recoja uno cuentan como uno; no retrasa los clics. |
+| `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Dónde está el ratón ahora, desde la esquina de la zona, y si está dentro de ella; valga o no un clic. |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
 | `mui_image(fichero)` | Imagen de un fichero por datatypes: ILBM siempre; PNG, JPEG, GIF y BMP si están sus datatypes (AmigaOS 3.2 los trae). `mui_set_text` cambia el fichero. |
 | `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |

@@ -10057,6 +10057,7 @@ static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
 static LONG (*_dash_mui_timer_hook)(void) = NULL;   /* the timer's id if it went off, else 0 */
+static LONG (*_dash_mui_move_hook)(void) = NULL;    /* a canvas the pointer moved over: its id, else 0 (D63) */
 static ULONG _dash_mui_got = 0;                     /* signals of the program's mask that arrived */
 
 static void _dash_mui_on_end(void (*hook)(void)) {
@@ -10693,6 +10694,7 @@ static LONG _dash_mui_wait_event_signals(ULONG mask) {
         id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
         if (id == MUIV_Application_ReturnID_Quit) return -1;
         if (id) return id;
+        if (_dash_mui_move_hook && (id = _dash_mui_move_hook())) return id;
         if (_dash_mui_timer_hook && (id = _dash_mui_timer_hook())) return id;
         if (sigs) {
 #ifdef _DASH_AUTOCLOSE
@@ -10725,6 +10727,7 @@ static LONG _dash_mui_poll_event(void) {
     if (!_dash_mui_app) return -1;
     id = (LONG)_DASH_MUI_DO(_dash_mui_app, MUIM_Application_NewInput, (IPTR)&sigs);
     if (id == MUIV_Application_ReturnID_Quit) return -1;
+    if (!id && _dash_mui_move_hook) id = _dash_mui_move_hook();
     if (!id && _dash_mui_timer_hook) id = _dash_mui_timer_hook();
     return id;
 }
@@ -10741,7 +10744,8 @@ static LONG _dash_mui_signals(void) {
 /* MUI drawing area: a custom class on Area. The program draws in it with the gfx_
    builtins from a Dash function f(x, y, width, height) that MUI calls on MUIM_Draw,
    with _dash_rp = the window's RastPort clipped to the area. Mouse clicks, the
-   wheel and keys over it become an event number (mui_canvas_on_input). */
+   wheel and keys over it become an event number (mui_canvas_on_input); the pointer
+   moving over it, or leaving it, another (mui_canvas_on_move, D63). */
 #define _DASH_MRI(obj)     muiRenderInfo(obj)
 #define _DASH_MAD(obj)     muiAreaData(obj)
 #define _DASH_MLEFT(obj)   (_DASH_MAD(obj)->mad_Box.Left + _DASH_MAD(obj)->mad_addleft)
@@ -10753,6 +10757,9 @@ struct _DashCanvas {
     APTR draw;                      /* Dash function (x, y, width, height) or NULL */
     WORD min_width, min_height;
     LONG input_id;                  /* 0: no input events */
+    LONG move_id;                   /* 0: no pointer moves (D63) */
+    LONG ptr_x, ptr_y;              /* where the pointer was last seen, from the area's corner */
+    BOOL ptr_in, ptr_known;         /* inside the area then; seen at all */
     LONG mouse_x, mouse_y;          /* relative to the area */
     LONG button, wheel, key;        /* last input: 1 = left click; +1/-1; raw key code */
     UWORD qual;                     /* the key's qualifiers (shift...) and dead-key data, for */
@@ -10767,6 +10774,28 @@ struct _DashCanvas {
 };
 
 static struct MUI_CustomClass *_dash_canvas_class = NULL;
+
+/* The canvases the pointer moved over (or left) since the program last asked: each id once, however many
+   moves came meanwhile; mui_wait_event takes them one by one (_dash_mui_move_hook), not through
+   MUIM_Application_ReturnID, so a click is never put off by them */
+#define _DASH_CANVAS_MOVES 8
+static LONG _dash_canvas_moves[_DASH_CANVAS_MOVES];
+static LONG _dash_canvas_nmoves = 0;
+
+static void _dash_canvas_moved(LONG id) {
+    LONG i;
+    for (i = 0; i < _dash_canvas_nmoves; i++) if (_dash_canvas_moves[i] == id) return;
+    if (_dash_canvas_nmoves < _DASH_CANVAS_MOVES) _dash_canvas_moves[_dash_canvas_nmoves++] = id;
+}
+
+static LONG _dash_canvas_next_move(void) {
+    LONG id, i;
+    if (!_dash_canvas_nmoves) return 0;
+    id = _dash_canvas_moves[0];
+    for (i = 1; i < _dash_canvas_nmoves; i++) _dash_canvas_moves[i - 1] = _dash_canvas_moves[i];
+    _dash_canvas_nmoves--;
+    return id;
+}
 
 static void _dash_canvas_unbuffer(struct _DashCanvas *data) {
     if (data->bly) { DeleteLayer(0, data->bly); data->bly = NULL; }
@@ -10871,15 +10900,23 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Setup:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->input_id) {
+        if (data->input_id || data->move_id) {
             data->handler.ehn_Object = obj;
             data->handler.ehn_Class = cl;
-            data->handler.ehn_Events = IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY;
+            /* moves: MOUSEMOVE (with the window's ReportMouse, at MUIM_Show), and the ticks (10 a second) in case
+               something turns ReportMouse off; leaving the window (inactive) is leaving the area */
+            data->handler.ehn_Events = (data->input_id ? IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY : 0) |
+                (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0);
             data->handler.ehn_Priority = 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
             data->handler_added = TRUE;
         }
+        return TRUE;
+    case MUIM_Show:
+        if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
+        data = INST_DATA(cl, obj);
+        if (data->move_id && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
@@ -10897,6 +10934,17 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         x = im->MouseX - _DASH_MLEFT(obj);
         y = im->MouseY - _DASH_MTOP(obj);
         inside = x >= 0 && y >= 0 && x < _DASH_MWIDTH(obj) && y < _DASH_MHEIGHT(obj);
+        if (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INTUITICKS || im->Class == IDCMP_INACTIVEWINDOW) {
+            if (!data->move_id) return 0;
+            if (im->Class == IDCMP_INACTIVEWINDOW) inside = FALSE;
+            /* over the area, or just out of it: an event when something changed */
+            if ((inside || data->ptr_in) &&
+                (!data->ptr_known || x != data->ptr_x || y != data->ptr_y || inside != data->ptr_in))
+                _dash_canvas_moved(data->move_id);
+            data->ptr_x = x; data->ptr_y = y; data->ptr_in = inside; data->ptr_known = TRUE;
+            return 0;                        /* not eaten: the other objects want them too */
+        }
+        if (!data->input_id) return 0;
         if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
             data->mouse_x = x; data->mouse_y = y;
             data->button = 1; data->wheel = 0; data->key = -1;
@@ -10957,6 +11005,33 @@ static void _dash_mui_canvas_on_input(APTR obj, LONG id) {
     if (data) data->input_id = id;
 }
 
+/* mui_wait_event returns id when the pointer moves over the area or leaves it (call before opening the window;
+   D63) */
+static void _dash_mui_canvas_on_move(APTR obj, LONG id) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data) return;
+    data->move_id = id;
+    _dash_mui_move_hook = _dash_canvas_next_move;
+}
+
+/* Where the pointer is now (0 x, 1 y from the area's corner; 2 TRUE if inside the area), clicked or not;
+   with the window closed, where it was last seen */
+static LONG _dash_mui_canvas_pointer(APTR obj, LONG what) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    struct MUI_RenderInfo *mri;
+    LONG x, y;
+    if (!data) return 0;
+    mri = _DASH_MRI(obj);
+    if (mri && mri->mri_Window) {
+        x = mri->mri_Window->MouseX - _DASH_MLEFT(obj);
+        y = mri->mri_Window->MouseY - _DASH_MTOP(obj);
+        if (what == 2) return x >= 0 && y >= 0 && x < _DASH_MWIDTH(obj) && y < _DASH_MHEIGHT(obj);
+        return what ? y : x;
+    }
+    if (what == 2) return data->ptr_in;
+    return what ? data->ptr_y : data->ptr_x;
+}
+
 /* Draw it again now (only from the program's own task) */
 static void _dash_mui_canvas_redraw(APTR obj) {
     if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
@@ -11015,6 +11090,8 @@ static void _dash_mui_set_range(APTR obj, LONG total, LONG visible) {
 
 /* From _dash_mui_app_end(), once no object of the class is left and before MUI closes */
 static void _dash_canvas_cleanup(void) {
+    _dash_mui_move_hook = NULL;
+    _dash_canvas_nmoves = 0;
     if (_dash_canvas_class) { MUI_DeleteCustomClass(_dash_canvas_class); _dash_canvas_class = NULL; }
 }
 
