@@ -3056,32 +3056,46 @@ Main
     c = desktop_canvas(-1, 4, 300, 90)    # arriba a la derecha (-1: pegado al borde)
     if c != 0
         desktop_canvas_on_draw(c, panel)
+        desktop_canvas_update(c)           # todo
         while true
-            desktop_canvas_update(c)       # dibuja de nuevo y pone en pantalla lo que cambio
             time_delay(50)
+            desktop_canvas_update_area(c, 0, 0, 120, 20)   # solo donde va la cifra
         end
     end
 end
 ```
 
-Una zona del fondo de pantalla del Workbench, detras de los iconos y sin recibir clics. Hace falta el
-Workbench en modo backdrop (iconos en el escritorio) y una pantalla planar (no RTG): si no, da 0. Las
-coordenadas son las del escritorio; negativas, desde el borde derecho o inferior.
+Una zona del escritorio del Workbench (debajo de la barra de la pantalla), detras de los iconos y sin recibir
+clics. Funciona con el Workbench en modo backdrop (iconos en el escritorio) o sin el (el fondo de la
+pantalla, donde no hay ventanas), y si se cambia de modo con el programa en marcha (menu Workbench >
+Backdrop); en pantallas planares y RTG (8 bits con paleta, 16, 24 y 32). Las coordenadas son las del
+escritorio; negativas, desde el borde derecho o inferior. Da 0 si no puede (sin pantalla Workbench, sin
+memoria, o en RTG de 16 bits o mas sin Picasso96 ni CyberGraphX).
 
 La funcion de dibujo pinta con `gfx_` en un mapa de bits aparte que ya tiene debajo el fondo de pantalla:
 lo que no se pinta deja ver el fondo. `desktop_canvas_update` la llama y pasa a la pantalla solo las filas
-y palabras que cambiaron, sin tocar los iconos (no parpadean). Si una ventana tapa la zona y se va, la
-zona se repinta sola con lo ultimo dibujado, y la siguiente actualizacion arregla los recuadros que el
-Workbench limpia al redibujar sus iconos.
+que cambiaron. `desktop_canvas_update_area(c, x, y, w, h)` hace lo mismo solo en esa parte: el dibujo se
+recorta a ella y solo ella se compara; lo que cambie fuera no sale hasta otra actualizacion que lo cubra.
+Si una ventana tapa la zona y se va, la zona se repinta sola con lo ultimo dibujado.
 
-Limite: un pixel de un icono del mismo color que el fondo de pantalla en ese punto, o que el Workbench
-pinta con el color que el lienzo tiene ahi, se toma por fondo y el lienzo lo pinta encima. Al liberar
-(`desktop_canvas_free`, o al acabar el programa) la zona vuelve a ser la del Workbench: se repinta una
-vez, y los iconos de debajo parpadean entonces.
+En modo backdrop los iconos no se tocan (no parpadean): un pixel es de icono si no es el fondo de
+pantalla ni lo que dejo el lienzo, o si ya lo era la vez anterior. La siguiente actualizacion arregla los
+recuadros que el Workbench limpia al redibujar sus iconos. Limite: un pixel de un icono del color del
+fondo de pantalla en ese punto, o que el Workbench pinta con el color que el lienzo tiene ahi, se toma por
+fondo y el lienzo lo pinta encima.
 
-Coste medido en FS-UAE con un panel de 300x90 a 4 colores: en un A1200, unos 37 ms si cambia casi todo
-y 22 ms si cambia un numero (la mayor parte, comparar el dibujo con el anterior); en un 68040 rapido, 8
-y 4 ms (sobre todo el blitter).
+Al liberar (`desktop_canvas_free`, o al acabar el programa) la zona vuelve a ser la del Workbench: se
+repinta una vez, y los iconos de debajo parpadean entonces.
+
+Coste medido en FS-UAE con un lienzo de 300x90 a 4 colores con iconos debajo:
+
+| Maquina | Cambia casi todo | Cambia una cifra | `update_area` de 120x20 |
+|---------|------------------|------------------|--------------------------|
+| A1200 (planar) | 37 ms | 22 ms | 13 ms |
+| 68040 con JIT, RTG 16 bits | 6 ms | 5 ms | 0,6 ms |
+
+En el A1200 lo que mas cuesta es comparar el dibujo con el anterior (memoria Chip); `update_area` se lo
+ahorra.
 
 ## 22. Ejemplos Completos
 

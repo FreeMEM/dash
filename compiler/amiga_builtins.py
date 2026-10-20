@@ -3905,9 +3905,9 @@ TASK_FUNCTIONS = {
     "desktop_canvas": BuiltinFunc(
         name="desktop_canvas", params=["x", "y", "width", "height"], return_type="APTR",
         c_template="_dash_desk_canvas(${x}, ${y}, ${width}, ${height})",
-        description="An area of the Workbench's background (backdrop mode), behind the icons and without clicks; "
-                    "negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be "
-                    "(no backdrop window, an RTG screen)"),
+        description="An area of the Workbench's desktop (below the screen's title bar), behind the icons and "
+                    "without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or "
+                    "bottom edge (-1 touches it). 0 if it cannot be"),
     "desktop_canvas_on_draw": BuiltinFunc(
         name="desktop_canvas_on_draw", params=["canvas", "func"], return_type="void",
         c_template="_dash_desk_on_draw(${canvas}, (APTR)${func})",
@@ -3917,6 +3917,11 @@ TASK_FUNCTIONS = {
         name="desktop_canvas_update", params=["canvas"], return_type="void",
         c_template="_dash_desk_update(${canvas})",
         description="Draw the area again now and show what changed, without touching the icons"),
+    "desktop_canvas_update_area": BuiltinFunc(
+        name="desktop_canvas_update_area", params=["canvas", "x", "y", "width", "height"], return_type="void",
+        c_template="_dash_desk_update_area(${canvas}, ${x}, ${y}, ${width}, ${height})",
+        description="desktop_canvas_update only in that part of the area: the drawing is clipped to it and only "
+                    "it is compared (the rest stays as it was)"),
     "desktop_canvas_free": BuiltinFunc(
         name="desktop_canvas_free", params=["canvas"], return_type="void",
         c_template="_dash_desk_free(${canvas})",

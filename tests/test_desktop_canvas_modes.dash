@@ -1,0 +1,50 @@
+# Test: desktop_canvas with the Workbench in backdrop mode and without, changing while the program runs
+# (its menu Workbench > Backdrop, chosen by a message to its window), and desktop_canvas_update_area.
+# Without backdrop the canvas is on the screen's background: where no window covers it, it is the
+# drawing. update_area shows only what changed in that part (what changed elsewhere stays as it was).
+# workbench
+# expect-out: lienzo: true
+# expect-out: con backdrop: true
+# expect-out: sin backdrop: true
+# expect-out: se ve el lienzo: true
+# expect-out: solo el área: true
+# expect-out: otra vez con backdrop: true
+# expect-out: ganchos devueltos: true
+# expect-out: fin
+
+import "lib/escritorio_modos.dash"
+
+Main
+    esperar(true)
+    c = desktop_canvas(-1, -1, 160, 40)
+    Print "lienzo: #{c != 0}"
+    if c != 0
+        empezar(c)
+        desktop_canvas_on_draw(c, pintar)
+        desktop_canvas_update(c)
+        n = vistos()
+        Print "con backdrop: #{modo() == 1 and n > 1000 and mal() < n / 10}"
+        cambiar_backdrop()
+        esperar(false)
+        encoger_workbench()
+        desktop_canvas_update(c)
+        Print "sin backdrop: #{modo() == 2}"
+        n = vistos()
+        Print "se ve el lienzo: #{n > 500 and mal() == 0}"
+        # las dos rayas se mueven; solo la del área sale
+        mover(30, 140)
+        desktop_canvas_update_area(c, 0, 0, 80, 40)
+        n = vistos()
+        # la raya del área, en su nuevo sitio (32 como la vieja de fuera, 122); la de fuera, en el viejo (142 como 12)
+        Print "solo el área: #{mal() == 0 and igual(32, 122) and igual(142, 12) and not igual(32, 12)}"
+        cambiar_backdrop()
+        esperar(true)
+        desktop_canvas_update(c)
+        desktop_canvas_update(c)
+        n = vistos()
+        Print "otra vez con backdrop: #{modo() == 1 and n > 1000 and mal() < n / 10}"
+        desktop_canvas_free(c)
+        Print "ganchos devueltos: #{ganchos_devueltos()}"
+    end
+    Print "fin"
+end

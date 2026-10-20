@@ -1,0 +1,182 @@
+# Lo de test_desktop_canvas_modes.dash y test_desktop_canvas_modes_rtg.dash (el mismo test en un Amiga con tarjeta gráfica).
+@c
+"""
+#define _T_W 160
+#define _T_H 40
+static LONG _t_r1 = 10, _t_r2 = 120;     /* the drawing's two stripes: one in the area (x < 80), one not */
+static struct Screen *_t_scr;
+static struct _DashDesk *_t_d;
+
+static struct Window *_t_wb(BOOL backdrop)   /* a window of the Workbench: its backdrop one, or the one with menus */
+{
+    struct Window *w;
+    Forbid();
+    for (w = _t_scr->FirstWindow; w; w = w->NextWindow)
+        if ((w->Flags & WFLG_WBENCHWINDOW) && (backdrop ? (w->Flags & WFLG_BACKDROP) != 0 : w->MenuStrip != NULL)) break;
+    Permit();
+    return w;
+}
+
+static ULONG _t_px(struct RastPort *rp, LONG x, LONG y)   /* a pen (8 bits or less), or an RGB colour */
+{
+    return GetBitMapAttr(_t_scr->RastPort.BitMap, BMA_DEPTH) <= 8 ? (ULONG)ReadPixel(rp, x, y) : _dash_rgb_read(rp, x, y);
+}
+
+/* how many pixels of the canvas no window covers, and how many of them are not the front bitmap's */
+static LONG _t_seen, _t_bad;
+static void _t_compare(void)
+{
+    struct RastPort r;
+    LONG x, y, sx = _dash_desk_ox + _t_d->x, sy = _dash_desk_oy + _t_d->y;
+    struct Layer *l;
+    _t_seen = _t_bad = 0;
+    InitRastPort(&r);
+    r.BitMap = _t_d->bm[_t_d->front];
+    WaitBlit();
+    LockLayerInfo(&_t_scr->LayerInfo);
+    for (y = 0; y < _t_d->h; y++)
+        for (x = 0; x < _t_d->w; x++) {
+            BOOL covered = FALSE;
+            if (_dash_desk_mode == 2)
+                for (l = _t_scr->LayerInfo.top_layer; l && !covered; l = l->back)
+                    covered = sx + x >= l->bounds.MinX && sx + x <= l->bounds.MaxX &&
+                              sy + y >= l->bounds.MinY && sy + y <= l->bounds.MaxY;
+            if (covered) continue;
+            _t_seen++;
+            if (_t_px(&_t_scr->RastPort, sx + x, sy + y) != _t_px(&r, x, y)) _t_bad++;
+        }
+    UnlockLayerInfo(&_t_scr->LayerInfo);
+}
+"""
+end
+
+@native func empezar(c: Int) -> Int
+"""
+    _t_d = (struct _DashDesk *)c;
+    _t_scr = LockPubScreen((CONST_STRPTR)"Workbench");
+    return 0;
+"""
+end
+
+# hasta 10 s a que el Workbench esté (con backdrop: su ventana de fondo; sin: ninguna de fondo y la suya)
+@native func esperar(backdrop: Bool) -> Bool
+"""
+    LONG i;
+    struct Screen *s = NULL;
+    for (i = 0; i < 500 && !s; i++) if (!(s = LockPubScreen((CONST_STRPTR)"Workbench"))) Delay(1);
+    if (!s) return FALSE;
+    for (i = 0; i < 500; i++) {
+        struct Window *w, *bd = NULL, *any = NULL;
+        Forbid();
+        for (w = s->FirstWindow; w; w = w->NextWindow)
+            if (w->Flags & WFLG_WBENCHWINDOW) { any = w; if (w->Flags & WFLG_BACKDROP) bd = w; }
+        Permit();
+        if (backdrop ? bd != NULL : (bd == NULL && any != NULL)) { UnlockPubScreen(NULL, s); Delay(100); return TRUE; }
+        Delay(1);
+    }
+    UnlockPubScreen(NULL, s);
+    return FALSE;
+"""
+end
+
+# Workbench > Backdrop: un MENUPICK a la ventana del Workbench que tiene los menús, con la marca del
+# elemento cambiada como la cambia Intuition (el mensaje no se libera: el Workbench podría contestar tarde)
+@native func cambiar_backdrop() -> Bool
+"""
+    static struct IntuiMessage im;
+    static struct MsgPort *pt = NULL;
+    struct Window *w = _t_wb(FALSE);
+    struct MenuItem *it;
+    LONG n = 0, i;
+    if (!w || (!pt && !(pt = CreateMsgPort()))) return FALSE;
+    for (it = w->MenuStrip->FirstItem; it; it = it->NextItem, n++)
+        if ((it->Flags & ITEMTEXT) && it->ItemFill) {
+            STRPTR t = ((struct IntuiText *)it->ItemFill)->IText;
+            if (t && !strncmp((char *)t, "Backdrop", 8)) break;
+        }
+    if (!it) return FALSE;
+    memset(&im, 0, sizeof im);
+    im.ExecMessage.mn_ReplyPort = pt;
+    im.ExecMessage.mn_Length = sizeof im;
+    im.Class = IDCMP_MENUPICK;
+    im.Code = FULLMENUNUM(0, n, NOSUB);
+    im.IDCMPWindow = w;
+    it->Flags ^= CHECKED;
+    PutMsg(w->UserPort, (struct Message *)&im);
+    for (i = 0; i < 250 && !GetMsg(pt); i++) Delay(1);
+    return i < 250;
+"""
+end
+
+# la ventana del Workbench (sin backdrop ocupa la pantalla) arriba a la izquierda, para que se vea el fondo
+@native func encoger_workbench() -> Bool
+"""
+    struct Window *w = _t_wb(FALSE);
+    if (!w) return FALSE;
+    ChangeWindowBox(w, 0, _t_scr->BarHeight + 1, 320, 100);
+    Delay(100);
+    return TRUE;
+"""
+end
+
+@native func modo() -> Int
+"""
+    return _dash_desk_mode;
+"""
+end
+
+@native func vistos() -> Int
+"""
+    _t_compare();
+    if (_t_bad) Printf((CONST_STRPTR)"  %ld de %ld mal\n", _t_bad, _t_seen);
+    return _t_seen;
+"""
+end
+
+@native func mal() -> Int
+"""
+    return _t_bad;
+"""
+end
+
+# en el lienzo (su mapa de bits de delante, que es lo que hay en pantalla), fila 5: los píxeles x1 y x2 iguales
+@native func igual(x1: Int, x2: Int) -> Bool
+"""
+    struct RastPort r;
+    InitRastPort(&r);
+    r.BitMap = _t_d->bm[_t_d->front];
+    WaitBlit();
+    return _t_px(&r, x1, 5) == _t_px(&r, x2, 5);
+"""
+end
+
+@native func mover(r1: Int, r2: Int) -> Int
+"""
+    _t_r1 = r1;
+    _t_r2 = r2;
+    return 0;
+"""
+end
+
+@native func raya(i: Int) -> Int
+"""
+    return i == 1 ? _t_r1 : _t_r2;
+"""
+end
+
+@native func ganchos_devueltos() -> Bool
+"""
+    struct Window *w = _t_wb(TRUE);
+    return _t_scr->LayerInfo.BlankHook != &_dash_desk_hook && (!w || w->WLayer->BackFill != &_dash_desk_hook);
+"""
+end
+
+func pintar(x, y, w, h)
+    gfx_pen(1)
+    gfx_rect(0, 0, w - 1, h - 1)
+    gfx_pen(3)
+    a = raya(1)
+    gfx_rect(a, 0, a + 5, h - 1)
+    b = raya(2)
+    gfx_rect(b, 0, b + 5, h - 1)
+end
