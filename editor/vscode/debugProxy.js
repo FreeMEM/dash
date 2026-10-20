@@ -94,6 +94,7 @@ function makeProxy(vscode, command, args) {
     });
     const trapRequest = (user) => ({ breakpoints: [...user, { name: '_dash_debug_stop' }] });
     let started = false;                     // the first stop: gdb's talk of the start no longer comes
+    let exited = false, late = false;        // the program ended; its 'terminated' put off (its last output)
     // gdb's lines about the breakpoints set before the program is loaded (they work), until the first stop
     const quiet = (text) => started ? text : text.split(/(?<=\n)/).filter((l) => !NOISE.test(l)).join('');
     // after attaching gdb leaves the program stopped at its start: it goes on by itself (after the
@@ -137,6 +138,15 @@ function makeProxy(vscode, command, args) {
         if (message.type === 'response' && message.command === 'configurationDone') {
             configured = true;
             goOn();
+        }
+        if (message.type === 'event' && message.event === 'exited') exited = true;
+        if (message.type === 'event' && message.event === 'terminated' && exited && !late) {
+            // the program ended: what it wrote last is still on its way from the emulator (tools/emu_run.py
+            // reads it every 0.2 s), and the session's end stops the emulator: a moment first (else a Print just
+            // before the end never showed)
+            late = true;
+            setTimeout(() => send(message), 1500);
+            return;
         }
         if (message.type === 'event' && message.event === 'stopped') started = true;
         if (message.type === 'event' && message.event === 'stopped' && trapId !== null &&

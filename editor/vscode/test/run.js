@@ -834,6 +834,20 @@ async function debugTests() {
         const scopes = got.find((m) => m.command === 'scopes');
         assert.deepStrictEqual(scopes.body.scopes.map((s) => s.name), ['Locals', 'Globals']);
     });
+    await check('debugger: what the program wrote just before its end comes before the session ends (v15)', async () => {
+        const listeners = [];
+        const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+        const proxy = makeProxy(vscode, process.execPath, [require('path').join(__dirname, 'fake-gdb.js')]);
+        const got = [];
+        proxy.onDidSendMessage((m) => got.push(m.event || m.command));
+        proxy.handleMessage({ seq: 1, type: 'request', command: 'next', arguments: { threadId: 1 } });
+        await new Promise((r) => setTimeout(r, 400));
+        proxy.output('adiós\n');                     // the emulator's last output, after gdb said the end
+        for (let i = 0; i < 60 && !got.includes('terminated'); i++) await new Promise((r) => setTimeout(r, 50));
+        proxy.dispose();
+        assert(got.indexOf('output') >= 0 && got.indexOf('output') < got.indexOf('terminated'), JSON.stringify(got));
+    });
     await check('debugger: without gdb it says so and ends (before: an uncaught exception)', async () => {
         const listeners = [];
         const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }

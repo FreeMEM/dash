@@ -31,6 +31,10 @@ process.stdin.on('data', (data) => {
         } else if (m.command === 'continue') {
             reply({ allThreadsContinued: true });
             event('output', { category: 'console', output: `continue ${m.arguments.threadId}\n` });
+        } else if (m.command === 'next') {           // (the test of the program's end)
+            reply({});
+            event('exited', { exitCode: 0 });
+            event('terminated', {});
         } else if (m.command === 'scopes') {
             reply({ scopes: [{ name: 'Locals', variablesReference: 1 }, { name: 'Registers', variablesReference: 2 },
                              { name: 'Globals', variablesReference: 3 }] });

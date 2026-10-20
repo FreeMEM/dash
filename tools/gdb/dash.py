@@ -13,11 +13,13 @@ and its stack without the runtime. The VS Code extension loads it in its debugge
   the C temporaries (_dash_*) leave the locals.
 """
 import re
+import struct
 
 import gdb
 from gdb.FrameDecorator import FrameDecorator
 
 MAX_CHILDREN = 200
+MAX_DICT_CHILDREN = 100      # (the debugger's panel asks for all the entries of a dictionary at once; d["k"] for the rest)
 RUNTIME = re.compile(r"^(_dash_|Dash[A-Z]|_Dash_RefHeader|__)")
 
 
@@ -28,15 +30,55 @@ def _is_nil(val):
         return False
 
 
+def _read(addr, n):
+    """n bytes of the program's memory in one go: gdb reads a text a byte at a time, and on the emulated
+    Amiga (bgdbserver over its network) each is a round trip: 9000 letters took 52 s."""
+    return bytes(gdb.selected_inferior().read_memory(addr, n))
+
+
+def _longs(addr, n):
+    """n LONGs (big-endian, signed) from addr, in one read"""
+    return struct.unpack(">%dl" % n, _read(addr, 4 * n)) if n > 0 else ()
+
+
+def _cstring(addr, limit=1 << 20):
+    """The bytes of the C text at addr (up to its 0), read in growing blocks"""
+    data, size = b"", 64
+    while len(data) < limit:
+        chunk = _read(addr + len(data), size)
+        end = chunk.find(b"\0")
+        if end >= 0:
+            return data + chunk[:end]
+        data += chunk
+        size = min(size * 4, 4096)
+    return data[:limit]
+
+
+def _dict_hash(key):
+    """_dash_dict_hash of the runtime (djb2 on the Latin-1 bytes, 32 bits)"""
+    h = 5381
+    for b in key:
+        h = (h * 33 + b) & 0xFFFFFFFF
+    return h
+
+
 def _text(ptr):
-    """A C text as Dash writes it: "..." (Latin-1, the Amiga's)."""
+    """A C text as Dash writes it: "..." (Latin-1, the Amiga's); the first 400 letters, read in two goes."""
     if _is_nil(ptr):
         return "nil"
+    addr = int(ptr) & 0xFFFFFFFF
+    data = b""
     try:
-        s = ptr.cast(gdb.lookup_type("char").pointer()).string(encoding="latin-1", errors="replace", length=-1)
+        for size in (64, 337):
+            data += _read(addr + len(data), size)
+            if b"\0" in data:
+                break
     except gdb.MemoryError:
-        return "<texto ilegible>"
-    if len(s) > 400:
+        if not data:
+            return "<texto ilegible>"
+    end = data.find(b"\0")
+    s = data[:end if end >= 0 else 400].decode("latin-1")
+    if end < 0 or end > 400:
         s = s[:400] + "…"
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
 
@@ -113,51 +155,89 @@ class StringPrinter:
         return _text(self.val)
 
 
-class ListPrinter:
+class ListPrinter(gdb.ValuePrinter):
+    """(gdb.ValuePrinter with num_children and child: the debugger's panel counts the elements without reading
+    them, and asks for them a page at a time; before, the Locals of a stop read every one of every list)"""
+
     def __init__(self, val):
         self.val = val
+        self._raw = None
 
     def to_string(self):
         if _is_nil(self.val):
             return "nil"
         return "lista de %d" % int(self.val["length"])
 
+    def num_children(self):
+        return 0 if _is_nil(self.val) else min(int(self.val["length"]), MAX_CHILDREN)
+
+    def _elements(self):
+        if self._raw is None:                          # all of them in one read, the first time
+            arr = self.val.dereference()
+            self._kind = (int(arr["capacity"]) & 0xFFFFFFFF) >> 24
+            self._type = arr["data"].type.target()
+            self._raw = _longs(int(arr["data"]) & 0xFFFFFFFF, self.num_children())
+        return self._raw
+
+    def child(self, i):
+        return "[%d]" % i, _element(gdb.Value(self._elements()[i]).cast(self._type), self._kind)
+
     def children(self):
-        if _is_nil(self.val):
-            return
-        arr = self.val.dereference()
-        kind = (int(arr["capacity"]) & 0xFFFFFFFF) >> 24
-        for i in range(min(int(arr["length"]), MAX_CHILDREN)):
-            yield "[%d]" % i, _element(arr["data"][i], kind)
+        for i in range(self.num_children()):
+            yield self.child(i)
 
     def display_hint(self):
         return "array"
 
 
-class DictPrinter:
+class DictPrinter(gdb.ValuePrinter):
     def __init__(self, val):
         self.val = val
+        self._slots = None
 
     def to_string(self):
         if _is_nil(self.val):
             return "nil"
         return "diccionario de %d" % int(self.val["count"])
 
+    def _used(self):
+        """[(key pointer, raw value)] of the slots in use, up to MAX_DICT_CHILDREN: the keys read in blocks of 64
+        slots until there are enough, and the values of those blocks (one key at a time, 500 of them took 24 s;
+        the whole arrays, 8 KB through the emulated network, 6 s)"""
+        if self._slots is None:
+            d = self.val.dereference()
+            cap = int(d["cap"])
+            keys_at, vals_at = int(d["keys"]) & 0xFFFFFFFF, int(d["vals"]) & 0xFFFFFFFF
+            self._kind = int(d["kind"])
+            self._type = d["vals"].type.target()
+            self._slots = []
+            for start in range(0, cap, 64):
+                n = min(64, cap - start)
+                keys = _longs(keys_at + 4 * start, n)
+                if not any(keys):
+                    continue
+                vals = _longs(vals_at + 4 * start, n)
+                self._slots += [(keys[i] & 0xFFFFFFFF, vals[i]) for i in range(n) if keys[i]]
+                if len(self._slots) >= MAX_DICT_CHILDREN:
+                    break
+            self._slots = self._slots[:MAX_DICT_CHILDREN]
+        return self._slots
+
+    def num_children(self):         # (from its count: the slots are read when a child is asked for)
+        return 0 if _is_nil(self.val) else 2 * min(int(self.val["count"]), MAX_DICT_CHILDREN)
+
+    def child(self, i):
+        used = self._used()
+        if i // 2 >= len(used):
+            return "…", gdb.Value(0)
+        key, val = used[i // 2]
+        if i % 2 == 0:
+            return "k%d" % (i // 2), gdb.Value(key).cast(gdb.lookup_type("STRPTR"))
+        return "v%d" % (i // 2), _element(gdb.Value(val).cast(self._type), self._kind)
+
     def children(self):
-        if _is_nil(self.val):
-            return
-        d = self.val.dereference()
-        kind = int(d["kind"])
-        shown = 0
-        for i in range(int(d["cap"])):
-            key = d["keys"][i]
-            if _is_nil(key):
-                continue
-            yield "k%d" % i, key.cast(gdb.lookup_type("STRPTR"))
-            yield "v%d" % i, _element(d["vals"][i], kind)
-            shown += 1
-            if shown >= MAX_CHILDREN:
-                return
+        for i in range(self.num_children()):
+            yield self.child(i)
 
     def display_hint(self):
         return "map"
@@ -271,7 +351,7 @@ class LenFunction(gdb.Function):
         if kind == "DashDict":
             return int(x["count"])
         try:
-            return len(x.cast(gdb.lookup_type("char").pointer()).string(encoding="latin-1", errors="replace"))
+            return len(_cstring(int(x) & 0xFFFFFFFF))         # (a byte at a time: 9000 letters, a minute)
         except gdb.error:
             raise gdb.GdbError("length: not a list, dictionary or text")
 
@@ -296,11 +376,19 @@ class AtFunction(gdb.Function):
         if kind == "DashDict":
             d = x.dereference()
             want = i.string() if i.type.strip_typedefs().code in (gdb.TYPE_CODE_ARRAY, gdb.TYPE_CODE_PTR) else str(i)
-            for slot in range(int(d["cap"])):
-                key = d["keys"][slot]
-                if not _is_nil(key) and key.cast(gdb.lookup_type("char").pointer()).string(
-                        encoding="latin-1", errors="replace") == want:
+            key = want.encode("latin-1", errors="replace")
+            cap = int(d["cap"])
+            keys = int(d["keys"]) & 0xFFFFFFFF
+            # as _dash_dict_slot does: from its hash, the next slots until an empty one (comparing them all
+            # one byte at a time took minutes with 500 keys)
+            slot = _dict_hash(key) & (cap - 1) if cap else 0
+            for _ in range(cap):
+                ptr = _longs(keys + 4 * slot, 1)[0] & 0xFFFFFFFF
+                if not ptr:
+                    break
+                if _cstring(ptr, len(key) + 1) == key:
                     return _element(d["vals"][slot], int(d["kind"]))
+                slot = (slot + 1) & (cap - 1)
             raise gdb.GdbError("no está la clave %r" % want)
         return x[int(i)]
 

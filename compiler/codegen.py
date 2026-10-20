@@ -11521,12 +11521,37 @@ static LONG _dash_event_window_handle(void) {{
 
         # Generate function with inline C body
         c_code = native.c_code.strip()
+        if self.debug_lines:
+            c_code = self._native_lines(native) or c_code
         func_code = f"""
 static {ret_type} {native.name}({params_str}) {{
 {c_code}
 }}
 """
         self.native_funcs.append(func_code)
+
+    def _native_lines(self, native: NativeFunc):
+        """./dash --debug: the C of an @native with each of its lines at its line of the .dash (a breakpoint
+        there went to some line of the C file, and a step into it showed the C file); None if its place is
+        not known. The body starts on the line of the opening \"\"\" of the function, after its header."""
+        location = native.location
+        if location is None or not location.filename or not os.path.exists(location.filename):
+            return None
+        from compiler.main import read_source
+        lines = read_source(location.filename).split("\n")
+        opening = next((i for i in range(location.line - 1, len(lines)) if '"""' in lines[i]), None)
+        if opening is None:
+            return None
+        filename = os.path.abspath(location.filename)
+        body = native.c_code.split("\n")            # its line k is the .dash's line opening + 1 + k
+        first = next((k for k, l in enumerate(body) if l.strip()), None)
+        last = max((k for k, l in enumerate(body) if l.strip()), default=None)
+        if first is None:
+            return None
+        out = []
+        for k in range(first, last + 1):
+            out.append(debuglines.mark(opening + 1 + k, filename) + body[k])
+        return "".join(line + "\n" for line in out) + debuglines.NOLINE
 
     def _generate_struct_typedef(self, struct: StructDef):
         """Generate C typedef, constructor, destructor and methods for a struct."""

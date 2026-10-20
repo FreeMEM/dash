@@ -84,7 +84,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       con el emulador en marcha (¿quedan procesos?).
 - [x] v14. **`.dashui` extremos:** 200 objetos, nombres con acentos, tipos desconocidos, JSON roto, el mismo fichero
       abierto a la vez como texto y en el editor visual.
-- [ ] v15. **Depurador al límite:** recursión profunda, una lista que se contiene, textos enormes, diccionarios grandes,
+- [x] v15. **Depurador al límite:** recursión profunda, una lista que se contiene, textos enormes, diccionarios grandes,
       punto de parada en una línea vacía o un comentario, en un módulo importado y en `@native`.
 - [ ] v16. **Servidor de lenguaje al límite:** teclear deprisa en `lib/maqueta.dash` (4.778 líneas), renombrar a un
       nombre que ya existe o a una palabra reservada, completar dentro de `#{...}`, hover en builtins de MUI.
@@ -227,6 +227,21 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       en sus primeros 30 s, reabre en el editor visual los que estén como texto sin cambios. Comprobado.
 - [ ] (v14) No comprobado sin ventana: el mismo `.dashui` como texto y en el editor visual lado a lado (el F1 se lo
       queda el editor visual en la prueba). Usa el mismo camino que deshacer/rehacer, que sí tiene test.
+
+- [x] (v15) Lento hasta no poder usarse con datos grandes. Las variables de una parada con un texto de 9.000
+      letras, un diccionario de 501 claves y una lista que se contiene tardaban 81 s, y abrir el diccionario 19 s.
+      Un `d["k250"]` en la consola tardaba minutos. Es que gdb lee los textos letra a letra, y por la red del
+      emulador cada lectura es un viaje (≈6 ms; el ancho de banda, ≈1,3 KB/s). En `tools/gdb/dash.py`:
+      - textos y elementos leídos en bloques;
+      - `gdb.ValuePrinter` con `num_children` y `child(i)`: el panel cuenta sin leer, y pide por páginas;
+      - un diccionario lee sus casillas por bloques hasta tener 100 entradas (el resto, con `d["k"]`);
+      - `$at` va a la casilla por el mismo hash que el runtime, y `$len` lee por bloques.
+      Ahora: variables 0,9 s, diccionario 5,7 s, `d["k250"]` 0,5 s, de principio a fin 50 s (antes 284 s).
+      `texto.length` de 9.000 letras: 7 s (el ancho de banda).
+- [x] (v15) Un punto de parada en un `@native` iba a una línea cualquiera del C (el cuerpo no tenía `#line`). Ahora
+      cada línea del cuerpo lleva la suya del `.dash`: para y da los pasos ahí. Test.
+- [x] (v15) Lo que el programa escribía justo antes de acabar no salía en la consola al depurar: la sesión
+      terminaba y se paraba el emulador antes de que llegara. El proxy espera 1,5 s tras el final. Test.
 
 ## Bitácora
 
@@ -402,4 +417,12 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - `v14probe.js` (scratchpad), VS Code sin ventana: al arrancar con un `.dashui`, 200 objetos (221 filas; abrir y
   añadir uno, bien), JSON roto (lo dice y no toca el fichero), tipo y nombre raros, media pantalla.
 - Tests: base 306, node todo bien, integración de VS Code 21/21.
+
+### 2026-10-21 — v15 (depurador al límite)
+- `v15it/` (scratchpad): una prueba de extensión que depura en VS Code sin ventana y mide cada petición del
+  protocolo. Recursión de 300 (302 marcos), una lista que se contiene, un texto de 9.000 letras, un diccionario de
+  501, y puntos de parada en un comentario y una línea vacía (pasan a la siguiente con código), en un módulo
+  importado (bien) y en `@native`. Lo lento, medido en gdb a mano por separado (`t.py`).
+- Encontrado y arreglado: lo lento, `@native` y la salida final. La recursión y el ciclo, bien.
+- Tests: base 307, node todo bien, integración de VS Code 21/21.
 

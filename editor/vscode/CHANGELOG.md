@@ -20,6 +20,9 @@
 - Visual editor: a `.dashui` given to VS Code when it starts opens in it (it opened as JSON text); names that are
   words of the language and event numbers that are not are refused, as the compiler does; at half the screen
   the properties go under the rest.
+- Debugger: big values are fast (texts and lists read in blocks, children counted without reading them, a
+  dictionary's first 100 entries, `d["k"]` straight to its slot); breakpoints and steps in an `@native`'s lines;
+  what the program writes just before it ends reaches the debug console.
 
 ## 0.2.0 (2026-10-20)
 

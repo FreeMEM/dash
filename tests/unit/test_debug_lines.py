@@ -4,6 +4,7 @@ m68k-amigaos-gdb speaks in Dash lines.
     python3 -m unittest tests/unit/test_debug_lines.py      (tests/run_tests.py runs it too)
 """
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -68,6 +69,20 @@ class CompileTest(unittest.TestCase):
                        capture_output=True)
         with open(out) as f:
             self.assertNotIn("#line", f.read())
+
+    def test_native_lines_are_the_dash_lines(self):
+        # (v15 of docs/IDE_VIDEO_LOOP.md: a breakpoint in an @native went to some line of the C file)
+        src = os.path.join(self.dir, "nativo.dash")
+        with open(src, "w") as f:
+            f.write('@native func doble(x: Int) -> Int\n"""\n    LONG r = x * 2;\n    return r;\n"""\nend\n\n'
+                    'Main\n    Print "#{doble(2)}"\nend\n')
+        out = os.path.join(self.dir, "nativo.c")
+        subprocess.run(["python3", "-m", "compiler.main", src, "-o", out], cwd=ROOT, check=True, capture_output=True,
+                       env=dict(os.environ, DASH_DEBUG_LINES="1"))
+        with open(out) as f:
+            c = f.read()
+        self.assertRegex(c, r'#line 3 "%s"\n\s*LONG r = x \* 2;' % re.escape(src))
+        self.assertRegex(c, r'#line 4 "%s"\n\s*return r;' % re.escape(src))
 
     @unittest.skipUnless(os.path.exists(GDB) and os.path.exists("/opt/amiga/bin/m68k-amigaos-gcc"), "no toolchain")
     def test_gdb_reads_dash_lines(self):
