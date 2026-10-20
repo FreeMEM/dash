@@ -468,8 +468,46 @@ async function editingTests() {
     }
 }
 
+// --- tasks.js: the commands of the tasks and the problem matcher ------------------------------------
+async function taskTests() {
+    const { taskCommand } = require('../tasks.js');
+    const repo = path.resolve(__dirname, '..', '..', '..');
+    await check('tasks: compile, run with --memcheck and with autoclose', () => {
+        assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
+                           "mkdir -p '/p/bin' && '/d/dash' '/p/a b.dash' -o '/p/bin/a b'");
+        assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
+                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 '/d/dash' --memcheck '/p/x.dash' -o '/p/bin/x' && " +
+                           "python3 '/d/tools/emu_run.py' '/p/bin/x'");
+        assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
+    });
+    await check('tasks: the $dash problem matcher reads what the compiler prints', () => {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+        const matcher = pkg.contributes.problemMatchers.find((m) => m.name === 'dash');
+        const re = new RegExp(matcher.pattern.regexp);
+        const { execFileSync } = require('child_process');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_pm_'));
+        const file = path.join(dir, 'mal.dash');
+        fs.writeFileSync(file, 'Main\n    Print nada\n    x = (1\nend\n');
+        let out = '';
+        try {
+            execFileSync('python3', ['-m', 'compiler.main', file, '-o', path.join(dir, 'mal.c')], { cwd: repo, stdio: 'pipe' });
+        } catch (e) {
+            out = String(e.stdout) + String(e.stderr);
+        }
+        fs.rmSync(dir, { recursive: true, force: true });
+        const hits = out.split('\n').map((l) => re.exec(l)).filter(Boolean);
+        assert(hits.length >= 1, out);
+        const [, f, line, col, severity] = hits[0];
+        assert.strictEqual(f, file);
+        assert.strictEqual(severity, 'Error');
+        assert(Number(line) > 0 && Number(col) > 0);
+    });
+}
+
 (async () => {
     await grammarTests();
+    await taskTests();
     await editingTests();
     await modelTests();
     await previewTests();

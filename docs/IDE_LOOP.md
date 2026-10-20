@@ -106,7 +106,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       añadir el `import`); tokens semánticos si mejoran los colores.
 
 ### C. Compilar y ejecutar
-- [ ] 9. **Tareas y errores.** TaskProvider (compilar, ejecutar, `--memcheck`, `--profile`), problem matcher del
+- [x] 9. **Tareas y errores.** TaskProvider (compilar, ejecutar, `--memcheck`, `--profile`), problem matcher del
       compilador de Dash y de gcc, barra de estado, CodeLens "Ejecutar" sobre `Main`.
 - [ ] 10. **Emulador.** Elegir máquina (A500, A1200 3.1, 3.2, RTG, Amiberry), salida del programa en un panel,
       parar, configuración por proyecto.
@@ -284,4 +284,19 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Tokens semánticos: no. La gramática generada (tarea 2) ya colorea builtins, tipos, constructores y miembros; lo
   que añadirían (locales frente a globales) no compensa un análisis más en cada cambio.
 - Tests: 2 más del servidor (21) y 1 más en VS Code (12). Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 9 (tareas y errores enlazados)
+- `tasks.js`: proveedor de tareas de tipo `dash` (`compile`, `run`, `memcheck`, `profile`; también desde
+  `tasks.json`, con `file` o el fichero abierto); `run`/`memcheck`/`profile` compilan con su opción y luego
+  `emu_run.py` ejecuta el binario (`--autoclose` = `DASH_TEST_AUTOCLOSE` delante de `./dash`). Problem matcher
+  `$dash` (la salida `fichero:línea:col: Error:` de la tarea 4a) y `$gcc`. Las órdenes Compilar/Ejecutar usan ahora
+  estas tareas; órdenes nuevas "Ejecutar con comprobación de memoria" y "con perfil"; CodeLens sobre `Main` y botón
+  ▶ Dash en la barra de estado.
+- Aprendido con la prueba real: VS Code no da tareas en una ventana sin carpeta abierta (`fetchTasks` vacío):
+  `test/integration/run.sh` abre una carpeta temporal. Y el comando `type` no llega al editor si la ventana no tiene
+  el foco del escritorio (el usuario estaba usando otra): las 6 pruebas que escriben se saltan entonces con
+  `SKIP` en vez de fallar (pasaron en las tareas 3-8; su código no ha cambiado).
+- Tests: 2 más sin VS Code (la orden de cada tarea; la expresión de `$dash` contra la salida real del compilador) y
+  1 más en VS Code (la tarea `compile` del proveedor compila el programa de verdad y está la CodeLens). Base: todo
+  bien. Extensión instalada.
 

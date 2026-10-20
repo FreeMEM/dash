@@ -9,6 +9,7 @@ const DashUI = require('./media/model');
 const { runPreview } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
+const { setupTasks } = require('./tasks');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -72,8 +73,11 @@ const UNTRUSTED = 'Carpeta sin confianza (modo restringido): para compilar o usa
                   '("Manage" en la barra de arriba).';
 const trusted = () => vscode.workspace.isTrusted !== false;
 
+/** Compile or run the active program: a task of type "dash" (tasks.js), so its errors go to Problems */
+let runTask = null;
 async function run(kind) {
     if (!trusted()) { vscode.window.showWarningMessage(UNTRUSTED); return; }
+    if (runTask) return runTask(kind === 'compile' ? 'compile' : 'run');
     const file = await activeDashFile();
     if (!file) return;
     const dashDir = findDash(file);
@@ -138,6 +142,8 @@ function activate(context) {
         DashUIEditorProvider.register(context, showOnAmiga),
     );
     setupLanguageServer(vscode, context, findDash);   // errors while typing (compiler/lsp.py)
+    if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
+        runTask = setupTasks(vscode, context, { findDash, env: emulatorEnv, trusted });
 }
 
 function deactivate() {

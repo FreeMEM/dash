@@ -85,6 +85,16 @@
         "command": "dash.restartLanguageServer",
         "title": "Dash: Reiniciar el servidor de lenguaje",
         "category": "Dash"
+      },
+      {
+        "command": "dash.runMemcheck",
+        "title": "Dash: Ejecutar con comprobación de memoria",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.runProfile",
+        "title": "Dash: Ejecutar con perfil",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -170,6 +180,49 @@
         "key": "enter",
         "command": "dash.newline",
         "when": "editorTextFocus && editorLangId == dash && !suggestWidgetVisible && !inSnippetMode && !editorHasMultipleSelections && !editorReadonly && !inlineSuggestionVisible"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "dash",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": [
+              "compile",
+              "run",
+              "memcheck",
+              "profile"
+            ],
+            "description": "compile, run (en el emulador), memcheck (con --memcheck) o profile (con --profile)"
+          },
+          "file": {
+            "type": "string",
+            "description": "El .dash (por defecto el abierto: ${file})"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "dash",
+        "owner": "dash",
+        "source": "dash",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d+):\\s+(Error|Warning):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
       }
     ]
   },

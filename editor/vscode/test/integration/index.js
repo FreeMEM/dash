@@ -10,6 +10,27 @@ async function check(name, fn) {
     try { await fn(); results.push('ok   ' + name); } catch (e) { results.push('FAIL ' + name + ': ' + (e && e.message)); }
 }
 
+// Typing (the "type" command) only reaches the editor when VS Code's window has the focus of the desktop:
+// when it does not get it (the user is typing in another window), the tests that type are skipped
+let canType = null;
+async function typingWorks() {
+    if (canType !== null) return canType;
+    const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: '' });
+    await vscode.window.showTextDocument(doc);
+    for (let i = 0; i < 30 && !doc.getText(); i++) {
+        await vscode.commands.executeCommand('type', { text: 'x' });
+        if (!doc.getText()) await new Promise((r) => setTimeout(r, 100));
+    }
+    canType = doc.getText() !== '';
+    await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+    return canType;
+}
+
+async function checkTyping(name, fn) {
+    if (!(await typingWorks())) { results.push('SKIP ' + name + ' (la ventana no tiene el foco del escritorio)'); return; }
+    return check(name, fn);
+}
+
 async function typeLines(editor, text) {
     for (const ch of text) {
         if (ch === '\n') await vscode.commands.executeCommand('dash.newline');
@@ -18,33 +39,39 @@ async function typeLines(editor, text) {
 }
 
 async function run() {
-    await check('Enter after "func" adds the end, cursor inside', async () => {
+    const ext = vscode.extensions.all.find((e) => e.packageJSON && e.packageJSON.name === 'dash-mui-editor');
+    try {
+        await ext.activate();
+    } catch (e) {
+        results.push('FAIL activation: ' + (e && e.stack));
+    }
+    await checkTyping('Enter after "func" adds the end, cursor inside', async () => {
         const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: '' });
         const editor = await vscode.window.showTextDocument(doc);
         await typeLines(editor, 'func suma(a, b)\nreturn a + b');
         assert.strictEqual(doc.getText(), 'func suma(a, b)\n    return a + b\nend');
     });
-    await check('Enter inside a block that has its end: no second end', async () => {
+    await checkTyping('Enter inside a block that has its end: no second end', async () => {
         const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: 'Main\n    x = 1\nend' });
         const editor = await vscode.window.showTextDocument(doc);
         editor.selection = new vscode.Selection(0, 4, 0, 4);
         await vscode.commands.executeCommand('dash.newline');
         assert.strictEqual(doc.getText(), 'Main\n    \n    x = 1\nend');
     });
-    await check('nested: if inside Main', async () => {
+    await checkTyping('nested: if inside Main', async () => {
         const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: '' });
         const editor = await vscode.window.showTextDocument(doc);
         await typeLines(editor, 'Main\nif x > 1\nPrint x');
         assert.strictEqual(doc.getText(), 'Main\n    if x > 1\n        Print x\n    end\nend');
     });
-    await check('else goes back to the level of its if', async () => {
+    await checkTyping('else goes back to the level of its if', async () => {
         const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: '' });
         const editor = await vscode.window.showTextDocument(doc);
         await typeLines(editor, 'if a\nb = 1\nelse');
         await new Promise((r) => setTimeout(r, 300));   // the outdent is an edit of its own, after the typing
         assert.strictEqual(doc.getText(), 'if a\n    b = 1\nelse\nend');
     });
-    await check('one undo takes the Enter and its end away', async () => {
+    await checkTyping('one undo takes the Enter and its end away', async () => {
         const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: 'while x' });
         const editor = await vscode.window.showTextDocument(doc);
         editor.selection = new vscode.Selection(0, 7, 0, 7);
@@ -53,7 +80,7 @@ async function run() {
         await vscode.commands.executeCommand('undo');
         assert.strictEqual(doc.getText(), 'while x');
     });
-    await check('snippets are there', async () => {
+    await checkTyping('snippets are there', async () => {
         const doc = await vscode.workspace.openTextDocument({ language: 'dash', content: '' });
         await vscode.window.showTextDocument(doc);
         await vscode.commands.executeCommand('editor.action.insertSnippet', { langId: 'dash', name: 'while' });
@@ -169,6 +196,31 @@ async function run() {
         we.set(doc.uri, edits);
         assert(await vscode.workspace.applyEdit(we));
         assert.strictEqual(doc.getText(), 'Main\n    if 1 > 0\n        Print 1\n    end\nend\n');
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    await check('tasks: the compile task of the provider makes the program', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'tarea.dash');
+        fs.writeFileSync(file, 'Main\n    Print "hola"\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        const tasks = await vscode.tasks.fetchTasks({ type: 'dash' });
+        const kinds = tasks.map((t) => t.definition.task).sort();
+        assert.deepStrictEqual(kinds, ['compile', 'memcheck', 'profile', 'run'], JSON.stringify(tasks.map((t) => [t.name, t.definition])));
+        const compile = tasks.find((t) => t.definition.task === 'compile');
+        const done = new Promise((resolve) => {
+            const sub = vscode.tasks.onDidEndTaskProcess((e) => {
+                if (e.execution.task.name === compile.name) { sub.dispose(); resolve(e.exitCode); }
+            });
+        });
+        await vscode.tasks.executeTask(compile);
+        const code = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 120000))]);
+        assert.strictEqual(code, 0);
+        assert(fs.existsSync(path.join(dir, 'bin', 'tarea')), 'no bin/tarea');
+        const lenses = await vscode.commands.executeCommand('vscode.executeCodeLensProvider', doc.uri);
+        assert(lenses.some((l) => l.command && l.command.command === 'dash.runInEmulator'));
         fs.rmSync(dir, { recursive: true, force: true });
     });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');

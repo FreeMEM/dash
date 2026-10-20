@@ -29,8 +29,12 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
 - In a folder not trusted (Restricted Mode) only colours and the visual editor work; compiling, the emulator
   and the language server need a trusted folder.
-- **Dash: Compilar**: compiles the open program with `./dash` (to `bin/` next to it).
-- **Dash: Ejecutar en emulador**: runs it in FS-UAE with `tools/emu_run.py` (output in the terminal).
+- **Build and run** as VS Code tasks (type `dash`: `compile`, `run`, `memcheck`, `profile`; Terminal > Run Task,
+  Ctrl+Shift+B, or in `tasks.json` with `"file": "${file}"`): **Dash: Compilar** (to `bin/` next to the file),
+  **Dash: Ejecutar en emulador** (FS-UAE, `tools/emu_run.py`), **con comprobación de memoria** (`--memcheck`) and
+  **con perfil** (`--profile`). Errors go through the `$dash` problem matcher (`file:line:column: Error: ...`) and
+  `$gcc`, to Problems and onto the code. A CodeLens over `Main` (▶ Ejecutar · Compilar · Memoria · Perfil) and a
+  ▶ Dash button in the status bar.
 
 - **Visual editor for MUI windows** (`.dashui` files, format in `docs/MUI_EDITOR.md` of the Dash repository):
   palette, tree (drag to add and move, Delete to remove), properties, menus and an approximate preview.
@@ -55,6 +59,7 @@ npm test           # grammar, model, preview and commands, without VS Code
 python3 ../../tools/gen_tmgrammar.py   # after a change to the language or its builtins
 DASH_PREVIEW_EMU=1 npm test   # also "Ver en Amiga" in FS-UAE (DASH_KICKSTART, DASH_EMU_SYS_MUI)
 npm run build      # dist/extension.js (esbuild: the extension and vscode-languageclient in one file)
-npm run test:vscode   # tests inside the installed VS Code (a window opens a few seconds; own profile)
+npm run test:vscode   # tests inside the installed VS Code (a window opens a few seconds; own profile and folder;
+                      # the tests that type are skipped if that window does not get the desktop's focus)
 npm run package    # dash-mui-editor-<version>.vsix
 ```

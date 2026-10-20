@@ -4,6 +4,7 @@
 here=$(cd "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
 export DASH_IT_RESULT="$tmp/result.txt"
+mkdir -p "$tmp/ws"                   # a folder open in the window: VS Code's tasks need one
 # the Electron of Code - OSS directly: the `code` launcher hands over to a running VS Code and does not wait
 run_code() {
     if [ -x /usr/lib/electron42/electron ] && [ -f /usr/lib/code/code.mjs ]; then
@@ -14,7 +15,7 @@ run_code() {
 }
 run_code --new-window --user-data-dir "$tmp/user" --extensions-dir "$tmp/ext" --disable-workspace-trust \
      --skip-welcome --skip-release-notes --disable-telemetry \
-     --extensionDevelopmentPath="$here" --extensionTestsPath="$here/test/integration/index.js" >"$tmp/log" 2>&1
+     --extensionDevelopmentPath="$here" --extensionTestsPath="$here/test/integration/index.js" "$tmp/ws" >"$tmp/log" 2>&1
 cat "$DASH_IT_RESULT" 2>/dev/null || { echo "FAIL no result"; tail -20 "$tmp/log"; }
 grep -q '^FAIL' "$DASH_IT_RESULT" 2>/dev/null && rc=1 || rc=0
 [ -f "$DASH_IT_RESULT" ] || rc=1
