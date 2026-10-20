@@ -323,7 +323,9 @@ async function extensionTests() {
     const settings = { 'dash': { path: '' }, 'dash.emulator': { kickstart: '/roms/ks.rom', system: '', autoclose: 5 } };
     const fakeVscode = {
         workspace: { getConfiguration: (section) => ({ get: (k) => (settings[section] || {})[k] }),
-                     onDidChangeTextDocument: () => ({ dispose() {} }) },
+                     onDidChangeTextDocument: () => ({ dispose() {} }),
+                     onDidOpenTextDocument: () => ({ dispose() {} }),
+                     onDidGrantWorkspaceTrust: () => ({ dispose() {} }), textDocuments: [] },
         window: {
             activeTextEditor: null,
             showWarningMessage: (m) => sent.push('WARN ' + m),
@@ -347,7 +349,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.compile', 'dash.newWindowFile', 'dash.newline', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
+            ['dash.compile', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {

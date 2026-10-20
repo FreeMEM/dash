@@ -8,6 +8,7 @@ const { DashUIEditorProvider } = require('./dashuiEditor');
 const DashUI = require('./media/model');
 const { runPreview } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
+const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -136,8 +137,11 @@ function activate(context) {
         vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
+    setupLanguageServer(vscode, context, findDash);   // errors while typing (compiler/lsp.py)
 }
 
-function deactivate() {}
+function deactivate() {
+    return stopLanguageServer();
+}
 
 module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga };

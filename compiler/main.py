@@ -46,22 +46,36 @@ class DashCompiler:
     5. Generate: Convert AST to C code
     """
 
+    _shared_parser = None      # built once per process (the language server makes a compiler per check)
+
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
-        self.parser = Lark(
-            dash_grammar_minimal,
-            parser="lalr",
-            propagate_positions=True
-        )
+        if DashCompiler._shared_parser is None:
+            DashCompiler._shared_parser = Lark(
+                dash_grammar_minimal,
+                parser="lalr",
+                propagate_positions=True
+            )
+        self.parser = DashCompiler._shared_parser
         self._loaded_modules: Set[str] = set()  # Track loaded modules to avoid duplicates
         self._base_dir: str = ""  # Base directory for resolving imports
 
     def _parse_source(self, source: str, filename: str = "") -> Program:
-        """Parse source code into an AST (its nodes know their file, line and column)."""
-        try:
-            tree = self.parser.parse(source)
-        except UnexpectedInput as e:
-            raise CompilationError(self._syntax_message(e, source, filename), stage="parse") from None
+        """Parse source code into an AST (its nodes know their file, line and column). With
+        self.tree_cache (a dict the language server keeps: file -> (text, tree)) a file whose text
+        has not changed is not parsed again: the parse is most of the time, the transform does not
+        change the tree."""
+        cache = getattr(self, "tree_cache", None)
+        cached = cache.get(filename) if cache is not None and filename else None
+        if cached is not None and cached[0] == source:
+            tree = cached[1]
+        else:
+            try:
+                tree = self.parser.parse(source)
+            except UnexpectedInput as e:
+                raise CompilationError(self._syntax_message(e, source, filename), stage="parse") from None
+            if cache is not None and filename:
+                cache[filename] = (source, tree)
         transformer = DashASTBuilder(filename)
         try:
             return transformer.transform(tree)
@@ -151,11 +165,15 @@ class DashCompiler:
         # Return first attempt for error message
         return os.path.normpath(os.path.join(self._base_dir, import_path))
 
-    @staticmethod
-    def _read_module(full_path: str) -> str:
-        """Source of an imported module; a .dashui (visual editor) becomes Dash code."""
-        with open(full_path, "r") as f:
-            source = f.read()
+    def _read_module(self, full_path: str) -> str:
+        """Source of an imported module; a .dashui (visual editor) becomes Dash code. The language
+        server puts the text of the files open in the editor in self.overlay (path -> text)."""
+        overlay = getattr(self, "overlay", None) or {}
+        if full_path in overlay:
+            source = overlay[full_path]
+        else:
+            with open(full_path, "r") as f:
+                source = f.read()
         if full_path.endswith(".dashui"):
             from compiler.dashui import generate, DashUIError
             try:
@@ -436,6 +454,41 @@ class DashCompiler:
         Raises:
             CompilationError: If compilation fails
         """
+        analysis = self.analyze(source, filename)
+
+        # Report warnings
+        for warning in analysis.warnings:
+            print(warning, file=sys.stderr)
+
+        # Report errors and fail if any
+        if analysis.has_errors:
+            for error in analysis.errors:
+                print(error, file=sys.stderr)
+            raise CompilationError(
+                f"Semantic analysis failed with {len(analysis.errors)} error(s)",
+                stage="analyze"
+            )
+
+        if self.verbose:
+            print(f"  Analysis complete: {len(analysis.symbol_table)} symbols",
+                  file=sys.stderr)
+
+        # Stage 4: Code generation
+        if self.verbose:
+            print("Stage 3: Generating C code...", file=sys.stderr)
+
+        generator = CodeGenerator(analysis)
+        c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
+
+        if self.verbose:
+            print(f"  Generated {len(c_code)} characters of C code", file=sys.stderr)
+
+        return c_code, analysis
+
+    def analyze(self, source: str, filename: str = "<input>") -> AnalysisResult:
+        """Parse, load the imports and analyze, without generating C: the errors and warnings are in
+        the result (with their places), not printed. A syntax or import error raises CompilationError.
+        The language server (compiler/lsp.py) uses this, so it never disagrees with the compiler."""
         # Set base directory for import resolution
         if filename != "<input>":
             self._base_dir = os.path.dirname(os.path.abspath(filename))
@@ -484,36 +537,7 @@ class DashCompiler:
             print("Stage 2: Analyzing...", file=sys.stderr)
 
         analyzer = SemanticAnalyzer()
-        analysis = analyzer.analyze(ast)
-
-        # Report warnings
-        for warning in analysis.warnings:
-            print(warning, file=sys.stderr)
-
-        # Report errors and fail if any
-        if analysis.has_errors:
-            for error in analysis.errors:
-                print(error, file=sys.stderr)
-            raise CompilationError(
-                f"Semantic analysis failed with {len(analysis.errors)} error(s)",
-                stage="analyze"
-            )
-
-        if self.verbose:
-            print(f"  Analysis complete: {len(analysis.symbol_table)} symbols",
-                  file=sys.stderr)
-
-        # Stage 4: Code generation
-        if self.verbose:
-            print("Stage 3: Generating C code...", file=sys.stderr)
-
-        generator = CodeGenerator(analysis)
-        c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
-
-        if self.verbose:
-            print(f"  Generated {len(c_code)} characters of C code", file=sys.stderr)
-
-        return c_code, analysis
+        return analyzer.analyze(ast)
 
     def _collect_modules(self, main_ast: Program, main_path: str) -> Dict[str, ModuleInfo]:
         """

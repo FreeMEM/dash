@@ -11,7 +11,7 @@
   "categories": [
     "Programming Languages"
   ],
-  "main": "./extension.js",
+  "main": "./dist/extension.js",
   "activationEvents": [],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -21,7 +21,8 @@
         "dash.path",
         "dash.emulator.kickstart",
         "dash.emulator.system",
-        "dash.emulator.muiSystem"
+        "dash.emulator.muiSystem",
+        "dash.python"
       ]
     }
   },
@@ -79,6 +80,11 @@
         "command": "dash.newline",
         "title": "Dash: Nueva línea (con end)",
         "category": "Dash"
+      },
+      {
+        "command": "dash.restartLanguageServer",
+        "title": "Dash: Reiniciar el servidor de lenguaje",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -128,6 +134,16 @@
           "type": "boolean",
           "default": true,
           "description": "Al pulsar Enter tras una línea que abre un bloque (func, if, while, struct, Main...) se añade su end si aún no lo tiene."
+        },
+        "dash.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Errores mientras se escribe y, más adelante, autocompletado y navegación: el servidor de lenguaje del compilador Dash (python3 -m compiler.lsp). Solo en carpetas de confianza."
+        },
+        "dash.python": {
+          "type": "string",
+          "default": "python3",
+          "description": "El Python con el que corre el servidor de lenguaje (el mismo que usa ./dash; necesita lark)."
         }
       }
     },
@@ -159,11 +175,13 @@
   },
   "scripts": {
     "test": "node test/run.js",
-    "package": "vsce package --no-dependencies",
-    "test:vscode": "sh test/integration/run.sh"
+    "package": "npm run build && vsce package --no-dependencies",
+    "test:vscode": "npm run build && sh test/integration/run.sh",
+    "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --target=node18 --outfile=dist/extension.js"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.2",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   },
@@ -171,5 +189,8 @@
     "type": "git",
     "url": "https://github.com/FreeMEM/dash.git",
     "directory": "editor/vscode"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }

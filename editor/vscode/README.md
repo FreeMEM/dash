@@ -5,6 +5,10 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
 - Syntax highlighting of `.dash` files (with the C of `@native` blocks): every keyword, directive and builtin,
   `Window` blocks, `#{...}` with expressions. Generated from the compiler (`tools/gen_tmgrammar.py` in the Dash
   repository; do not edit `syntaxes/dash.tmLanguage.json` by hand).
+- **Errors while typing**: Dash's language server (`python3 -m compiler.lsp` in the compiler's folder, the
+  same parser and analyzer as `./dash`) marks errors and warnings a moment after you stop typing, also those of
+  imported modules in their files. Only in a trusted folder; `dash.languageServer.enabled`, `dash.python`, and
+  **Dash: Reiniciar el servidor de lenguaje** (after changing `dash.path`).
 - Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
@@ -35,6 +39,7 @@ npm install        # only dev tools, in node_modules/
 npm test           # grammar, model, preview and commands, without VS Code
 python3 ../../tools/gen_tmgrammar.py   # after a change to the language or its builtins
 DASH_PREVIEW_EMU=1 npm test   # also "Ver en Amiga" in FS-UAE (DASH_KICKSTART, DASH_EMU_SYS_MUI)
+npm run build      # dist/extension.js (esbuild: the extension and vscode-languageclient in one file)
 npm run test:vscode   # tests inside the installed VS Code (a window opens a few seconds; own profile)
 npm run package    # dash-mui-editor-<version>.vsix
 ```

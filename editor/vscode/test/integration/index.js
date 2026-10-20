@@ -59,6 +59,31 @@ async function run() {
         await vscode.commands.executeCommand('editor.action.insertSnippet', { langId: 'dash', name: 'while' });
         assert.match(doc.getText(), /^while condicion\n {4}\nend$/);
     });
+    await check('language server: an error shows while typing, and goes when fixed', async () => {
+        const path = require('path');
+        const os = require('os');
+        const repo = path.resolve(__dirname, '..', '..', '..', '..');
+        await vscode.workspace.getConfiguration('dash').update('path', repo, vscode.ConfigurationTarget.Global);
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'prueba.dash');
+        fs.writeFileSync(file, 'Main\n    x = 1\n    Print x + nada\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        const editor = await vscode.window.showTextDocument(doc);
+        const until = async (cond) => {
+            for (let i = 0; i < 150; i++) {
+                if (cond(vscode.languages.getDiagnostics(doc.uri))) return vscode.languages.getDiagnostics(doc.uri);
+                await new Promise((r) => setTimeout(r, 100));
+            }
+            throw new Error('timed out; diagnostics: ' + JSON.stringify(vscode.languages.getDiagnostics(doc.uri)));
+        };
+        const [d] = await until((ds) => ds.length > 0);
+        assert.match(d.message, /nada/);
+        assert.strictEqual(d.range.start.line, 2);
+        assert.strictEqual(d.range.start.character, 14);
+        await editor.edit((e) => e.replace(new vscode.Range(2, 14, 2, 18), '2'));
+        await until((ds) => ds.length === 0);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

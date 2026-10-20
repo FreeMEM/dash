@@ -1,3 +1,8 @@
 test/**
 node_modules/**
 *.vsix
+# bundled into dist/extension.js (npm run build)
+*.js
+!media/*.js
+.gitignore
+!dist/extension.js

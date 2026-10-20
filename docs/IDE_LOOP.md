@@ -94,7 +94,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       los módulos importados); la salida de `./dash` y `compiler.main` como `fichero:línea:col: Error: mensaje` (para
       el LSP y para el problem matcher de la tarea 9); el error de sintaxis de Lark, en una frase ("se esperaba
       `end`...") en vez de la lista de tokens. Tests de error (`tests/errors/`) con la línea.
-- [ ] 4. **Base y errores.** `compiler/lsp.py`: JSON-RPC por stdio sin dependencias, que reutiliza parser y
+- [x] 4. **Base y errores.** `compiler/lsp.py`: JSON-RPC por stdio sin dependencias, que reutiliza parser y
       analizador; cliente en la extensión (lo arranca con `python3 -m compiler.lsp` desde `dash.path`).
       Diagnósticos al escribir, con línea y columna (y los de los imports). Tests.
 - [ ] 5. **Autocompletado.** Builtins con firma y descripción, palabras clave, variables/funciones/structs/
@@ -206,4 +206,24 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Sin arreglar (anotado en la tarea 1): `y = ` y en la línea siguiente `Print noexiste(3)` se lee como una sola
   expresión: la gramática ignora los saltos de línea dentro de una expresión.
 - Base: run_tests todo bien (3 tests más); `npm test` sin cambios.
+
+### 2026-10-20 — Tarea 4 (servidor de lenguaje: base y errores)
+- `DashCompiler.analyze(source, filename)`: parse, imports y análisis sin generar C; los errores y avisos quedan en
+  el resultado, sin imprimir. `compile()` lo usa (mismo comportamiento: la batería sigue igual).
+  `_read_module` mira primero `self.overlay` (el texto de los ficheros abiertos en el editor).
+- `compiler/lsp.py`: LSP por stdio sin dependencias (Content-Length + JSON), `select` para esperar; comprueba un
+  documento 0,3 s después del último cambio; publica errores y avisos (también los de los módulos importados, en su
+  fichero, y los borra cuando se arreglan); un fallo del compilador sale como "error interno", no tira el servidor.
+  `sys.stdout` va a stderr (nada que imprima el compilador entra en el protocolo).
+- Velocidad: `dashweb.dash` con todos sus módulos tardaba 2,5 s por comprobación (70 % Lark). Ahora el servidor
+  guarda el árbol de Lark de cada fichero con su texto (`tree_cache`: solo se vuelve a analizar lo que cambia; el
+  transformer no toca el árbol) y el parser de Lark se construye una vez por proceso: ~1,2 s. Un cambio comprueba
+  solo su documento; guardar, todos los abiertos.
+- Extensión: `lspClient.js` con `vscode-languageclient` 9, empaquetado con esbuild en `dist/extension.js`
+  (`npm run build`; el .vsix lleva solo `dist/` y `media/`). Arranca con el primer `.dash`, solo con confianza;
+  ajustes `dash.languageServer.enabled` y `dash.python`; orden "Dash: Reiniciar el servidor de lenguaje". Si
+  `dash.path` es un Dash sin `compiler/lsp.py` lo dice una vez y no arranca (el `dash.path` del usuario es el
+  worktree de dashweb, que aún no lo tiene).
+- Tests: `tests/lsp/test_lsp.py` (8, JSON-RPC real; el runner los cuenta uno a uno: `lsp/<test>`); en VS Code, 1
+  más (el error sale mientras se escribe en su sitio y se va al arreglarlo). npm test bien; test:vscode 7/7.
 
