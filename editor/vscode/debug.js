@@ -205,18 +205,6 @@ function setupDebugger(vscode, context, helpers) {
         },
     }));
 
-    // after attaching gdb leaves the program stopped at its start: it goes on, unless stopOnEntry
-    context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory('dash', {
-        createDebugAdapterTracker: (session) => ({
-            onDidSendMessage: (m) => {
-                if (m.type === 'event' && m.event === 'stopped' && m.body && m.body.reason === 'attach' &&
-                    !session.configuration.stopOnEntry) {
-                    session.customRequest('continue', { threadId: m.body.threadId || 1 }).then(undefined, () => {});
-                }
-            },
-        }),
-    }));
-
     context.subscriptions.push(vscode.commands.registerCommand('dash.debug', () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document.languageId !== 'dash') { vscode.window.showWarningMessage('Abre un fichero .dash'); return; }

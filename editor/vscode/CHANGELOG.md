@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased (found making the video tutorial, docs/IDE_VIDEO_LOOP.md)
+
+- Debugger: step into (F11) goes only into the program's functions, not into the runtime's C; a session without
+  the emulator's window is no longer cut after 60 s; the stop on attaching is not shown (it said "Paused on attach"
+  at the first breakpoint); no Ada/C++ exception filters, gdb start-up messages or registers.
+- Tasks: `./dash -q` and no echo of the command; no duplicate errors in Problems with the language server on.
+- The visual editor in the colours of VS Code's theme; a quote typed over a selection no longer surrounds it.
+
 ## 0.2.0 (2026-10-20)
 
 An IDE for Dash (docs/IDE_LOOP.md of the Dash repository).

@@ -56,6 +56,10 @@ function logMessageToC(message) {
     return message.replace(/\{([^{}]+)\}/g, (_, e) => '{' + dashToC(e) + '}');
 }
 
+/** What gdb says at the start, before the program is loaded, about breakpoints that then work (gdb puts a ❌️
+    before its errors) */
+const NOISE = /^[^A-Za-z]*(No source file named |No symbol table is loaded|Breakpoint \d+ \(.*\) pending\.|Function "[^"]*" not defined)/;
+
 /**
  * The debug adapter that VS Code talks to: gdb -i=dap behind, with the expressions turned into C. Also:
  * a function breakpoint of its own on _dash_debug_trap (./dash --debug: the runtime calls it on an error, an
@@ -72,8 +76,13 @@ function makeProxy(vscode, command, args) {
     let userFunctionSeq = null;              // VS Code's setFunctionBreakpoints in flight (it gets one more)
     let sawFunctionBreakpoints = false;
     let trapId = null;
-    const send = (message) => emitter.fire(Object.assign({ seq: 0 }, message));
+    // DASH_DAP_LOG=file: every message, to VS Code (<-) and to gdb (->), one a line (to see what goes wrong)
+    const log = process.env.DASH_DAP_LOG ? (dir, m) => {
+        try { require('fs').appendFileSync(process.env.DASH_DAP_LOG, `${Date.now()} ${dir} ${JSON.stringify(m)}\n`); } catch (e) { /* no log */ }
+    } : () => {};
+    const send = (message) => { log('<-', message); emitter.fire(Object.assign({ seq: 0 }, message)); };
     const write = (message) => {
+        log('->', message);
         const body = Buffer.from(JSON.stringify(message), 'utf8');
         gdb.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
         gdb.stdin.write(body);
@@ -84,6 +93,17 @@ function makeProxy(vscode, command, args) {
         write({ seq: s, type: 'request', command, arguments: args });
     });
     const trapRequest = (user) => ({ breakpoints: [...user, { name: '_dash_debug_stop' }] });
+    let started = false;                     // the first stop: gdb's talk of the start no longer comes
+    // gdb's lines about the breakpoints set before the program is loaded (they work), until the first stop
+    const quiet = (text) => started ? text : text.split(/(?<=\n)/).filter((l) => !NOISE.test(l)).join('');
+    // after attaching gdb leaves the program stopped at its start: it goes on by itself (after the
+    // breakpoints, configurationDone), unseen by VS Code, unless stopOnEntry
+    let stopOnEntry = false, configured = false, entryThread = null;
+    const goOn = () => {
+        if (entryThread === null || !configured) return;
+        ask('continue', { threadId: entryThread });
+        entryThread = null;
+    };
 
     async function fromGdb(message) {
         if (message.type === 'response' && waiting.has(message.request_seq)) {
@@ -98,6 +118,27 @@ function makeProxy(vscode, command, args) {
             trapId = trap ? trap.id : trapId;
             userFunctionSeq = null;
         }
+        if (message.type === 'response' && message.command === 'initialize' && message.body) {
+            delete message.body.exceptionBreakpointFilters;      // gdb's are of Ada and C++
+        }
+        if (message.type === 'response' && message.command === 'scopes' && message.body && message.body.scopes) {
+            message.body.scopes = message.body.scopes.filter((s) => s.name !== 'Registers');   // -exec info registers
+        }
+        if (message.type === 'event' && message.event === 'output' && message.body && message.body.output) {
+            message.body.output = quiet(message.body.output);
+            if (!message.body.output) return;
+        }
+        if (message.type === 'event' && message.event === 'stopped' && message.body &&
+            message.body.reason === 'attach' && !stopOnEntry) {
+            entryThread = message.body.threadId || 1;
+            goOn();
+            return;
+        }
+        if (message.type === 'response' && message.command === 'configurationDone') {
+            configured = true;
+            goOn();
+        }
+        if (message.type === 'event' && message.event === 'stopped') started = true;
         if (message.type === 'event' && message.event === 'stopped' && trapId !== null &&
             (message.body.hitBreakpointIds || []).includes(trapId)) {
             const answer = await ask('evaluate', { expression: '(STRPTR)_dash_debug_what', context: 'watch' });
@@ -124,8 +165,10 @@ function makeProxy(vscode, command, args) {
             fromGdb(message);
         }
     });
-    gdb.stderr.on('data', (data) => send({ type: 'event', event: 'output',
-                                          body: { category: 'console', output: data.toString('utf8') } }));
+    gdb.stderr.on('data', (data) => {
+        const text = quiet(data.toString('utf8'));
+        if (text) send({ type: 'event', event: 'output', body: { category: 'console', output: text } });
+    });
     gdb.on('exit', () => send({ type: 'event', event: 'terminated', body: {} }));
     return {
         onDidSendMessage: emitter.event,
@@ -150,6 +193,9 @@ function makeProxy(vscode, command, args) {
                     userFunctionSeq = message.seq;
                     message.arguments = trapRequest(a.breakpoints || []);
                 }
+            }
+            if (message.type === 'request' && (message.command === 'attach' || message.command === 'launch') && a) {
+                stopOnEntry = !!a.stopOnEntry;
             }
             if (message.type === 'request' && message.command === 'configurationDone' && !sawFunctionBreakpoints) {
                 sawFunctionBreakpoints = true;           // VS Code had none to set: ours alone, before going on

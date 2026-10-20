@@ -66,7 +66,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       de un evento a su código (creado).
 - [x] v6. **4. Compilar y ejecutar:** la tarea de compilar, un error en Problemas, ejecutar en el emulador (y
       elegir máquina), comprobación de memoria y perfil.
-- [ ] v7. **5. Depurar:** F5, punto de parada, variables y pila en Dash, la consola con expresiones de Dash, paso
+- [x] v7. **5. Depurar:** F5, punto de parada, variables y pila en Dash, la consola con expresiones de Dash, paso
       a paso, un punto con condición, un error del programa que para como excepción.
 - [ ] v8. **6. Un Amiga real:** Preparar para un Amiga real y la configuración de attach (con el emulador haciendo
       de Amiga).
@@ -135,6 +135,22 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       Con el servidor encendido la tarea ya no usa `$dash` (quedan `$gcc` y el de memcheck).
 - [x] (v6) `c = c + 1x` daba el error en el `end` de la línea siguiente ("no se esperaba `end` aquí"). Ahora sale
       donde está: "no se esperaba el fin de la línea después de `x`; se esperaba `(`, `.`, `=` o `[`". Test.
+
+- [x] (v7) F11 sobre `suma = suma + doble(puntos[i])` entraba en el C del runtime (`DashArray_get` de
+      `build/partida.c`) y dejaba abierta esa pestaña. Ahora `tools/gdb/dash.py` pone `skip` a lo que no es de un
+      `.dash` (el runtime, el C de los structs, las librerías): F11 entra en `doble`. Comprobado en el vídeo.
+- [x] (v7) Sin la ventana del emulador (`dash.emulator.window: false`), `emu_run.py` cortaba la sesión de depurar a
+      los 60 s ("Remote connection closed"). Con `--gdbserver` ya no hay límite salvo `--timeout`. Test unitario.
+- [x] (v7) La primera parada decía "Paused on attach": VS Code veía la parada de engancharse y luego la extensión
+      seguía a sus espaldas. Ahora el proxy se la traga y sigue tras `configurationDone` (salvo `stopOnEntry`). Test.
+- [x] (v7) Ruido de gdb: mensajes rojos al arrancar ("No source file named…", "No symbol table is loaded", puntos
+      "pending" que luego funcionan), los filtros de excepciones de Ada y C++ en Puntos de parada, y el grupo
+      Registers en las variables. Quitados en el proxy (los registros siguen con `-exec info registers`). Test.
+- [x] (v7) Rodaje: el perfil no apagaba la ventana del emulador (`dash.emulator.window` es `true` por defecto). En
+      v6 FS-UAE pudo abrir ventanas en el escritorio. Ahora el perfil la apaga. Y un subtítulo nuevo corta el
+      anterior (en v7 se pisaban dos tras un corte).
+- [ ] (v7) En la primera parada "Locals" sale plegado (en las siguientes, abierto); gdb da los mismos scopes. Parece
+      cosa de VS Code al abrir la vista de depurar en ese momento. En el vídeo se abre con un clic. Se queda así.
 
 ## Bitácora
 
@@ -227,4 +243,21 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - Encontrado y arreglado: ruido en la terminal (`./dash -q`, sin eco), errores duplicados en Problemas, y el
   sitio del error de una línea sin terminar (`compiler/main.py`, `tests/errors/syntax_unfinished_line.dash`).
 - Tests: base 292, node todo bien.
+
+### 2026-10-20 — v7 (capítulo 5: depurar)
+- `video/capitulos/05_depurar.js`: un programa que suma puntos y se sale de la lista:
+  - punto de parada con un clic en el margen y F5;
+  - variables (el texto, la lista abierta con sus elementos);
+  - la consola con `puntos[i] * 2` y `nombre.length`;
+  - F11 a `doble` con su pila, Mayúsculas+F11 y F10;
+  - punto con condición `i == 3`;
+  - sin el punto, el error "índice fuera de la lista" para como excepción.
+  76 s, 11 subtítulos.
+- Rodaje: `margen(texto)` (el margen de una línea, para los puntos de parada).
+- Encontrado y arreglado: F11 entraba en el runtime, la sesión se cortaba a los 60 s sin ventana, "Paused on
+  attach", ruido de gdb. `DASH_DAP_LOG=fichero` deja todos los mensajes entre VS Code y gdb (así salió el corte
+  de los 60 s).
+- `test/integration/run.sh`: `DASH_IT_FLAGS=--ozone-platform=headless` los pasa sin ventana en la pantalla.
+- De paso, fuera del bucle: D62 para dashweb (alfa de verdad en imágenes en RTG), PR #5 fusionado en main.
+- Tests: base 295, node todo bien, integración de VS Code 21/21 (sin ventana).
 

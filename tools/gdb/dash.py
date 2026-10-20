@@ -7,6 +7,7 @@ and its stack without the runtime. The VS Code extension loads it in its debugge
 - Structs (_Dash_X *): their fields, or nil. An object in a list is told by its header: the destroy
   function it was made with (_dash_struct_destroy_X), else the only struct of its size.
 - Fixed (DashFixed, 16.16): its decimal value. Bool (BOOL): true or false.
+- Steps (F11) go only into functions of a .dash (gdb skip), not into the runtime.
 - Frames: the runtime's (_dash_*, DashString_*...) leave the stack unless they are the innermost one (not even
   then when it stopped on an error of the program, in _dash_debug_stop: the stack starts at its Dash line), and
   the C temporaries (_dash_*) leave the locals.
@@ -308,3 +309,11 @@ gdb.pretty_printers.append(lookup)
 DashFrames()
 LenFunction()
 AtFunction()
+
+# A step into a function (F11) goes only into the program's: those of a .dash (the #line of ./dash --debug), not
+# into the runtime, the C of a struct (P_retain...) or a library; a breakpoint there still stops
+for _skip in ("skip -gfile *.c", "skip -gfile *.h", "skip -rfunction ^(_dash_|Dash[A-Z]|__)"):
+    try:
+        gdb.execute(_skip, to_string=True)
+    except gdb.error:
+        pass

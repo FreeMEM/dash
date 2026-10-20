@@ -13,7 +13,9 @@ run_code() {
         code --wait "$@"
     fi
 }
-run_code --new-window --user-data-dir "$tmp/user" --extensions-dir "$tmp/ext" --disable-workspace-trust \
+# DASH_IT_FLAGS: more options for VS Code (--ozone-platform=headless: no window on the screen; the tests that
+# type are then skipped)
+run_code ${DASH_IT_FLAGS} --new-window --user-data-dir "$tmp/user" --extensions-dir "$tmp/ext" --disable-workspace-trust \
      --skip-welcome --skip-release-notes --disable-telemetry \
      --extensionDevelopmentPath="$here" --extensionTestsPath="$here/test/integration/index.js" "$tmp/ws" >"$tmp/log" 2>&1
 cat "$DASH_IT_RESULT" 2>/dev/null || { echo "FAIL no result"; tail -20 "$tmp/log"; }

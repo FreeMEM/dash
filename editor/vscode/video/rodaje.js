@@ -42,6 +42,7 @@ const SETTINGS = {
     'window.title': '${activeEditorShort}${separator}${rootName}',   // (not "[Extension Development Host]")
     'files.simpleDialog.enable': true,         // VS Code's own file dialogs: the system's are not seen without a window
     'terminal.integrated.gpuAcceleration': 'off',   // the terminal's text in the page (waits can read it)
+    'dash.emulator.window': false,             // the emulator hidden too (nothing on the screen of whoever shoots)
 };
 
 // An arrow of 22 x 32, with a white edge (it is seen on dark and light)
@@ -167,8 +168,10 @@ class Rodaje {
 
     esperar(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-    /** A subtitle from now, for ms (the script goes on meanwhile: wait with esperar) */
+    /** A subtitle from now, for ms, or until the next one (the script goes on meanwhile: wait with esperar) */
     subtitulo(text, ms = 3000) {
+        const last = this.subs[this.subs.length - 1];
+        if (last && last.end > this.now()) last.end = this.now();     // one at a time: the new one ends the old
         this.subs.push({ start: this.now(), end: this.now() + ms, text });
     }
 
@@ -232,6 +235,14 @@ class Rodaje {
     /** A line of the editor that has this text (its end, to click there and type after it) */
     linea(text) {
         return this.page.locator('.monaco-editor .view-line', { hasText: text }).first();
+    }
+
+    /** The left margin of the line with this text (where a click puts a breakpoint) */
+    async margen(text) {
+        const line = await this.linea(text).boundingBox();
+        const margin = await this.page.locator('.monaco-editor .margin').first().boundingBox();
+        if (!line || !margin) throw new Error('no line: ' + text);
+        return { x: Math.round(margin.x + 9), y: Math.round(line.y + line.height / 2) };
     }
 
     /** A word of the editor: the token with exactly that text (the n-th) */

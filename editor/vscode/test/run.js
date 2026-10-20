@@ -756,6 +756,50 @@ async function debugTests() {
         ];
         for (const [dash, c] of cases) assert.strictEqual(dashToC(dash), c, dash);
         assert.strictEqual(logMessageToC('vuelta {i}, punto {p.x}'), 'vuelta {i}, punto {p->x}');
+    });    const { makeProxy } = require('../debugProxy.js');
+    await check('debugger: no Ada/C++ exception filters, start-up noise or registers from gdb', async () => {
+        const listeners = [];
+        const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+        const proxy = makeProxy(vscode, process.execPath, [require('path').join(__dirname, 'fake-gdb.js')]);
+        const got = [];
+        proxy.onDidSendMessage((m) => got.push(m));
+        proxy.handleMessage({ seq: 1, type: 'request', command: 'initialize', arguments: {} });
+        proxy.handleMessage({ seq: 2, type: 'request', command: 'scopes', arguments: { frameId: 1 } });
+        const later = () => got.some((m) => m.event === 'output' && /later/.test(m.body.output));
+        for (let i = 0; i < 75 && !(later() && got.some((m) => m.command === 'scopes')); i++) await new Promise((r) => setTimeout(r, 40));
+        proxy.dispose();
+        const init = got.find((m) => m.command === 'initialize');
+        assert(init && init.body.supportsConfigurationDoneRequest && !init.body.exceptionBreakpointFilters, JSON.stringify(init));
+        const texts = got.filter((m) => m.event === 'output').map((m) => m.body.output);
+        assert.deepStrictEqual(texts, ['No symbol table is loaded.  (later: shown)\n']);
+        const scopes = got.find((m) => m.command === 'scopes');
+        assert.deepStrictEqual(scopes.body.scopes.map((s) => s.name), ['Locals', 'Globals']);
+    });
+    await check('debugger: the stop of attaching is not seen; it goes on after the breakpoints, unless stopOnEntry', async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (const stopOnEntry of [false, true]) {
+            const listeners = [];
+            const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                    fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+            const proxy = makeProxy(vscode, process.execPath, [require('path').join(__dirname, 'fake-gdb.js')]);
+            const got = [];
+            proxy.onDidSendMessage((m) => got.push(m));
+            proxy.handleMessage({ seq: 1, type: 'request', command: 'attach', arguments: { program: 'p', stopOnEntry } });
+            await wait(300);
+            const continued = () => got.some((m) => m.event === 'output' && m.body.output === 'continue 7\n');
+            assert(!continued(), 'continue before configurationDone');
+            proxy.handleMessage({ seq: 2, type: 'request', command: 'configurationDone', arguments: {} });
+            for (let i = 0; i < 50 && !continued() && !got.some((m) => m.command === 'configurationDone'); i++) await wait(40);
+            await wait(300);
+            proxy.dispose();
+            const stops = got.filter((m) => m.event === 'stopped');
+            if (stopOnEntry) {
+                assert(!continued() && stops.length === 1 && stops[0].body.reason === 'attach', JSON.stringify(got));
+            } else {
+                assert(continued() && stops.length === 0, JSON.stringify(got));
+            }
+        }
     });
 }
 

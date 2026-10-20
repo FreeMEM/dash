@@ -57,6 +57,7 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   (`tools/get_bgdbserver.sh` of the Dash repository, once) and attaches `m68k-amigaos-gdb -i=dap` to it (gdb is the
   debug adapter; `dash.debug.gdb`). The emulator stops with the session. `launch.json`: `program`, `stopOnEntry`,
   `machine`, `emulator`, `window`; `attach` with `target` (host:port of a bgdbserver) for a real Amiga.
+  Step into (F11) goes only into the program's functions, not into the runtime's C.
   Values show as Dash writes them (texts, lists, dictionaries, structs with their fields, Fixed, Bool) and the
   runtime's frames and temporaries stay out of the stack and the variables (`tools/gdb/dash.py`).
   Expressions are Dash in the debug console, watch, hover, breakpoint conditions and logpoints (`p.x`, `l[i]`,

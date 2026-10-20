@@ -273,6 +273,14 @@ def _wait_listening(port, timeout=600):
         time.sleep(0.1)
 
 
+def time_limit(args, argv) -> float:
+    """The seconds a run may last (0: no limit). --timeout if it is given; else 60, but no limit with the window
+    or a debugger (--gdbserver): someone is there, and a debug session lasts what it lasts."""
+    if any(a == "--timeout" or a.startswith("--timeout=") for a in argv):
+        return args.timeout
+    return 0 if args.window or args.gdbserver else args.timeout
+
+
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
@@ -520,7 +528,7 @@ def main():
     parser.add_argument("--gdbserver", type=int, metavar="PORT",
                         help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
                              "connects with target remote :PORT (build it with ./dash --debug; tools/gdb_relay.py "
-                             "in between, so gdb finds the globals)")
+                             "in between, so gdb finds the globals); no time limit unless --timeout")
     parser.add_argument("--no-relay", action="store_true",
                         help="with --gdbserver: bgdbserver itself on PORT, as on a real Amiga (gdb then needs "
                              "tools/gdb_relay.py in between for the globals; the VS Code extension puts it)")
@@ -531,7 +539,7 @@ def main():
     if machine and not kickstart:
         print(f"--machine {args.machine} needs ${machine['rom']} (or --kickstart)", file=sys.stderr)
         return 2
-    timeout = args.timeout if not args.window or "--timeout" in sys.argv else 0
+    timeout = time_limit(args, sys.argv)
     global FLUSH_PRINT
     FLUSH_PRINT = args.follow
     follow = None
