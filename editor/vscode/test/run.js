@@ -429,6 +429,23 @@ async function previewTests() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('video: cards and chapters joined, each subtitle at its time (video/grabar.js)', () => {
+        if (require('child_process').spawnSync('ffmpeg', ['-version']).status !== 0) return;
+        const G = require('../video/grabar.js');
+        assert.strictEqual(G.dt("a: 50% d'x"), 'a\\: 50\\% d\u2019x');
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_video_'));
+        try {
+            const a = G.tarjeta(path.join(dir, 'a.mp4'), 'Uno: título', 'línea', 1);
+            const b = Object.assign(G.tarjeta(path.join(dir, 'b.mp4'), 'Dos', null, 2), { subs: [{ start: 500, end: 9000, text: 'Hola' }] });
+            const res = G.juntar([a, b], path.join(dir, 'todo'));
+            assert.deepStrictEqual(res.subs, [{ start: 1500, end: 3000, text: 'Hola' }]);   // after the first card, cut at the end
+            const probe = require('child_process').spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+                                                                         '-of', 'csv=p=0', res.sub], { encoding: 'utf8' });
+            assert(Math.abs(Number(probe.stdout) - 3) < 0.2, 'duration ' + probe.stdout);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('preview: the program that takes its own picture', () => {
         const prog = P.previewProgram('Principal', true);
         assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);

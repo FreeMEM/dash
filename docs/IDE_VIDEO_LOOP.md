@@ -55,7 +55,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       rodaje (1280x720, letra grande, sin chat ni bienvenida). Funciones: `mover(objetivo)` y `clic(...)` con el
       cursor, `escribir(texto)` a ritmo humano, `tecla(...)`, `esperar(ms)`, `subtitulo(texto, ms)`, `captura`
       continua con su hora. Salida: MP4 (ffmpeg) y SRT. Prueba: un minuto de vídeo con un subtítulo y un clic.
-- [ ] v2. **Guion como datos** (`editor/vscode/video/capitulos/*.js`) y montaje de varios capítulos en un vídeo:
+- [x] v2. **Guion como datos** (`editor/vscode/video/capitulos/*.js`) y montaje de varios capítulos en un vídeo:
       portada, títulos de capítulo y subtítulos (SRT aparte y también quemados en otra copia).
 
 ### B. Capítulos (cada uno: guion, grabar, mirar, apuntar, arreglar, regrabar)
@@ -101,7 +101,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       `.` tras un número (`1.`). Arreglado en `compiler/lsp.py` con su test.
 - [x] (v1) La acción de la pestaña de un `.dash` ponía el texto "Ejecutar en emulador" (sin icono). Ahora es ▶, y
       su desplegable trae también Depurar.
-- [ ] (v1) En el vídeo, el título de la ventana dice "[Extension Development Host]": grabar con la extensión
+- [x] (v1) En el vídeo, el título de la ventana dice "[Extension Development Host]": grabar con la extensión
       instalada desde el `.vsix` en el perfil de rodaje (v2).
 
 ## Bitácora
@@ -122,4 +122,18 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   del usuario. Al mirarla salieron los dos primeros fallos de "Encontrado", arreglados.
 - Tests: node (SRT y un vídeo de 3 s exacto con tres fotogramas), servidor de lenguaje (22: los caracteres que
   disparan el completado). Base: todo bien.
+
+### 2026-10-20 — v2 (guiones como datos y montaje)
+- `video/rodaje.js`: con `vsix`, instala la extensión en el perfil de rodaje con la línea de órdenes de VS Code
+  (`ELECTRON_RUN_AS_NODE=1 electron out/cli.js code.mjs --install-extension`). Así se graba como la tiene un
+  usuario, sin "[Extension Development Host]" en el título. `fin` deja también `out.json` (duración y subtítulos).
+  Subtítulos en tamaño 13 (libass escala a su pantalla de referencia: el 18 salía enorme).
+- `video/grabar.js`:
+  - empaqueta la extensión (`npm run package`) y graba cada capítulo de `video/capitulos/NN_*.js` (`titulo`,
+    `resumen`, `preparar`, `open`, `guion`) en una carpeta propia;
+  - hace la portada y una tarjeta de título por capítulo (ffmpeg, DejaVu, el azul del icono) y lo junta todo:
+    `tutorial.mp4`, `tutorial.srt` (cada subtítulo desplazado a su sitio) y `tutorial-sub.mp4`;
+  - opciones `--solo 3,5` y `--dev`. Si un capítulo falla, deja captura y vídeo de lo grabado hasta ahí.
+- Capítulo 1 provisional (se completa en v3). Probado: portada, título y capítulo, 14 s, subtítulos en su sitio.
+- Tests: node (tarjetas y `juntar`: duración y desplazamiento de subtítulos; escape de textos de drawtext).
 

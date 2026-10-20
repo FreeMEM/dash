@@ -48,9 +48,11 @@ const CURSOR_PATH = 'M1 1 L1 25 L7 19 L11 30 L15 28 L11 18 L20 18 Z';
 class Rodaje {
     /**
      * VS Code with the workspace folder open (and files of it in editors), the cursor and the pictures running.
-     * settings: more settings of the profile (dash.path, dash.emulator...); fps: pictures a second (about).
+     * settings: more settings of the profile (dash.path, dash.emulator...); fps: pictures a second (about);
+     * vsix: the extension installed from this package (as a user has it), else loaded from its folder (then
+     * the window's title says "[Extension Development Host]").
      */
-    static async start({ workspace, open = [], settings = {}, width = 1280, height = 720, fps = 12, env = {} }) {
+    static async start({ workspace, open = [], settings = {}, width = 1280, height = 720, fps = 12, env = {}, vsix = null }) {
         const { _electron } = require(PLAYWRIGHT);
         const r = new Rodaje();
         r.tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-rodaje-'));
@@ -59,12 +61,20 @@ class Rodaje {
         fs.mkdirSync(path.join(r.tmp, 'user', 'User'), { recursive: true });
         fs.writeFileSync(path.join(r.tmp, 'user', 'User', 'settings.json'),
                          JSON.stringify(Object.assign({}, SETTINGS, settings), null, 2));
+        if (vsix) {
+            // VS Code's command line (cli.js): the package into the shooting profile's extensions
+            const inst = spawnSync(ELECTRON, [path.join(path.dirname(CODE), 'out', 'cli.js'), CODE, '--user-data-dir',
+                                              path.join(r.tmp, 'user'), '--extensions-dir', path.join(r.tmp, 'ext'),
+                                              '--install-extension', vsix],
+                                   { env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' }), encoding: 'utf8', timeout: 120000 });
+            if (!/successfully installed/.test(inst.stdout || '')) throw new Error('cannot install ' + vsix + ': ' + (inst.stdout + inst.stderr).slice(-300));
+        }
         r.app = await _electron.launch({
             executablePath: ELECTRON,
             args: [CODE, '--ozone-platform=headless', '--user-data-dir', path.join(r.tmp, 'user'),
                    '--extensions-dir', path.join(r.tmp, 'ext'), '--disable-workspace-trust', '--skip-welcome',
                    '--skip-release-notes', '--disable-telemetry', '--new-window',
-                   `--extensionDevelopmentPath=${EXTENSION}`, workspace, ...open.map((f) => path.join(workspace, f))],
+                   ...(vsix ? [] : [`--extensionDevelopmentPath=${EXTENSION}`]), workspace, ...open.map((f) => path.join(workspace, f))],
             env: Object.assign({}, process.env, env),
             timeout: 90000,
         });
@@ -221,6 +231,10 @@ class Rodaje {
     }
 }
 
+// subtitles on the picture: white on a dark box, at the bottom
+const SUB_STYLE = 'FontName=DejaVu Sans,FontSize=13,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=4,' +
+                  'BackColour=&HA0000000,Outline=1,Shadow=0,MarginV=22';
+
 function srtTime(ms) {
     const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(Math.floor(ms % 1000)).padStart(3, '0')}`;
@@ -253,14 +267,15 @@ function montar(shots, end, subs, out, tmp) {
     ff(['-framerate', '30', '-i', path.join(seq, '%06d.png'), '-vf', 'format=yuv420p', '-c:v', 'libx264',
         '-preset', 'medium', '-crf', '20', '-movflags', '+faststart', out + '.mp4']);
     fs.writeFileSync(out + '.srt', srt(subs));
+    fs.writeFileSync(out + '.json', JSON.stringify({ duration: end, subs }, null, 1));
     if (subs.length) {
-        const style = 'FontName=DejaVu Sans,FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=4,' +
-                      'BackColour=&HA0000000,Outline=1,Shadow=0,MarginV=24';
+        const style = SUB_STYLE;
         const srtPath = (out + '.srt').replace(/\\/g, '/').replace(/:/g, '\\:').replace(/'/g, "\\'");
         ff(['-i', out + '.mp4', '-vf', `subtitles='${srtPath}':force_style='${style}'`, '-c:v', 'libx264', '-preset', 'medium',
             '-crf', '20', '-movflags', '+faststart', out + '-sub.mp4']);
     }
-    return { mp4: out + '.mp4', srt: out + '.srt', sub: subs.length ? out + '-sub.mp4' : null, frames: shots.length };
+    return { mp4: out + '.mp4', srt: out + '.srt', json: out + '.json', sub: subs.length ? out + '-sub.mp4' : null,
+             frames: shots.length, duration: end };
 }
 
-module.exports = { Rodaje, srt, srtTime, montar };
+module.exports = { Rodaje, srt, srtTime, montar, SUB_STYLE };
