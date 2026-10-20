@@ -57,14 +57,58 @@ function logMessageToC(message) {
 }
 
 /**
- * The debug adapter that VS Code talks to: gdb -i=dap behind, with the expressions turned into C.
+ * The debug adapter that VS Code talks to: gdb -i=dap behind, with the expressions turned into C. Also:
+ * a function breakpoint of its own on _dash_debug_trap (./dash --debug: the runtime calls it on an error, an
+ * index out of a list...), hidden from VS Code, whose stop becomes an "exception" with the error's text;
+ * and output(text), the program's output, to the debug console.
  * @param {typeof import('vscode')} vscode
  */
-function makeProxy(vscode, command, args, options = {}) {
+function makeProxy(vscode, command, args) {
     const emitter = new vscode.EventEmitter();
     const gdb = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
     let buffer = Buffer.alloc(0);
-    const send = (message) => emitter.fire(message);
+    let seq = 900000;                        // requests of ours (VS Code's are far below)
+    const waiting = new Map();               // seq of ours -> what to do with gdb's answer
+    let userFunctionSeq = null;              // VS Code's setFunctionBreakpoints in flight (it gets one more)
+    let sawFunctionBreakpoints = false;
+    let trapId = null;
+    const send = (message) => emitter.fire(Object.assign({ seq: 0 }, message));
+    const write = (message) => {
+        const body = Buffer.from(JSON.stringify(message), 'utf8');
+        gdb.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
+        gdb.stdin.write(body);
+    };
+    const ask = (command, args) => new Promise((resolve) => {
+        const s = ++seq;
+        waiting.set(s, resolve);
+        write({ seq: s, type: 'request', command, arguments: args });
+    });
+    const trapRequest = (user) => ({ breakpoints: [...user, { name: '_dash_debug_stop' }] });
+
+    async function fromGdb(message) {
+        if (message.type === 'response' && waiting.has(message.request_seq)) {
+            const done = waiting.get(message.request_seq);
+            waiting.delete(message.request_seq);
+            done(message);
+            return;
+        }
+        if (message.type === 'response' && message.request_seq === userFunctionSeq && message.body) {
+            const list = message.body.breakpoints || [];
+            const trap = list.pop();                 // ours: VS Code did not ask for it
+            trapId = trap ? trap.id : trapId;
+            userFunctionSeq = null;
+        }
+        if (message.type === 'event' && message.event === 'stopped' && trapId !== null &&
+            (message.body.hitBreakpointIds || []).includes(trapId)) {
+            const answer = await ask('evaluate', { expression: '(STRPTR)_dash_debug_what', context: 'watch' });
+            const text = answer.success ? String(answer.body.result).replace(/^"|"$/g, '') : 'error del programa';
+            send({ type: 'event', event: 'output', body: { category: 'stderr', output: `Error del programa: ${text}\n` } });
+            message.body = Object.assign({}, message.body, { reason: 'exception', description: text, text,
+                                                              hitBreakpointIds: undefined });
+        }
+        send(message);
+    }
+
     gdb.stdout.on('data', (data) => {
         buffer = Buffer.concat([buffer, data]);
         for (;;) {
@@ -77,17 +121,12 @@ function makeProxy(vscode, command, args, options = {}) {
             buffer = buffer.slice(head + 4 + length);
             let message;
             try { message = JSON.parse(body); } catch (e) { continue; }
-            send(options.fromGdb ? options.fromGdb(message) || message : message);
+            fromGdb(message);
         }
     });
-    gdb.stderr.on('data', (data) => send({ type: 'event', event: 'output', seq: 0,
+    gdb.stderr.on('data', (data) => send({ type: 'event', event: 'output',
                                           body: { category: 'console', output: data.toString('utf8') } }));
-    gdb.on('exit', () => send({ type: 'event', event: 'terminated', seq: 0, body: {} }));
-    const write = (message) => {
-        const body = Buffer.from(JSON.stringify(message), 'utf8');
-        gdb.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
-        gdb.stdin.write(body);
-    };
+    gdb.on('exit', () => send({ type: 'event', event: 'terminated', body: {} }));
     return {
         onDidSendMessage: emitter.event,
         handleMessage(message) {
@@ -106,11 +145,25 @@ function makeProxy(vscode, command, args, options = {}) {
                         if (b.logMessage) b.logMessage = logMessageToC(b.logMessage);
                     }
                 }
+                if (message.command === 'setFunctionBreakpoints') {
+                    sawFunctionBreakpoints = true;
+                    userFunctionSeq = message.seq;
+                    message.arguments = trapRequest(a.breakpoints || []);
+                }
             }
-            if (options.toGdb) message = options.toGdb(message) || message;
+            if (message.type === 'request' && message.command === 'configurationDone' && !sawFunctionBreakpoints) {
+                sawFunctionBreakpoints = true;           // VS Code had none to set: ours alone, before going on
+                ask('setFunctionBreakpoints', trapRequest([])).then((r) => {
+                    const list = (r.body && r.body.breakpoints) || [];
+                    if (list.length) trapId = list[list.length - 1].id;
+                });
+            }
             write(message);
         },
-        write,
+        /** the program's output (the emulator's), to the debug console */
+        output(text) {
+            send({ type: 'event', event: 'output', body: { category: 'stdout', output: text } });
+        },
         dispose() {
             try { gdb.kill(); } catch (e) { /* gone */ }
             emitter.dispose();

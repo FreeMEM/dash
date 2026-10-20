@@ -80,6 +80,7 @@ def main():
     args = parser.parse_args()
     if args.debug:
         os.environ["DASH_DEBUG_LINES"] = "1"   # the transpiler leaves #line marks (compiler/debuglines.py)
+        os.environ["DASH_PRINT_FLUSH"] = "1"   # and each Print goes out at once (the debugger shows it)
         args.no_optimize = True
     if args.memcheck:
         os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
@@ -167,6 +168,8 @@ def main():
     compile_command.extend(opt_flags(args.no_optimize, args.small))
     if args.debug:
         compile_command.append("-g")      # DWARF in the hunk file (.dwarf2), read by m68k-amigaos-gdb
+        from compiler.cflags import debug_link_flags   # and .bss in .data, for gdb (see there)
+        compile_command.extend(debug_link_flags(os.path.join(amiga_toolchain_bin, "m68k-amigaos-ld"), build_dir))
     try:   # the MUI SDK headers, when the program uses MUI
         compile_command.extend(mui_flags(open(f).read() for f in c_files))
         from compiler.cflags import amissl_flags   # and AmiSSL's, when it uses tls_* (dashweb D11)

@@ -4038,6 +4038,27 @@ static LONG _dash_arena_available(_Dash_Arena *arena) {
 
 """
 
+    # ./dash --debug: what the debugger needs from the program (editor/vscode/debug.js, docs/IDE_LOOP.md)
+    DEBUG_RUNTIME = """\
+/* ./dash --debug: the debugger stops in _dash_debug_stop when the runtime finds an error (an index out of
+   a list, a memory error with --memcheck: _dash_debug_trap(what), at the top), _dash_debug_what says which;
+   under bgdbserver the program's output goes where the DOS variable DASH_OUT says (bgdbserver gives it the
+   boot console) */
+volatile const char *_dash_debug_what = 0;
+__attribute__((noinline)) void _dash_debug_stop(void) {
+    __asm__ volatile ("" ::: "memory");
+}
+
+static void _dash_debug_output(void) {
+    char name[256];
+    BPTR f;
+    if (GetVar((STRPTR)"DASH_OUT", (STRPTR)name, sizeof(name), 0) > 0 &&
+        (f = Open((STRPTR)name, MODE_NEWFILE)) != 0)
+        SelectOutput(f);
+}
+
+"""
+
     # Test mode only (DASH_TEST_AUTOCLOSE=<seconds> while compiling, used by
     # tools/emu_run.py): the program ends by itself through _dash_exit(0), so
     # programs that wait for the close gadget can run unattended in an emulator
@@ -11040,6 +11061,8 @@ class CodeGenerator(ASTVisitor):
         if self.uses_mui_timer:
             parts.append(CTemplates.MUI_TIMER_RUNTIME)
 
+        if self.debug_lines:
+            parts.append(CTemplates.DEBUG_RUNTIME)
         if self.memcheck:
             # the place of each statement (visit): kept only where the memory checks are (DASH_MEMCHECK)
             parts.append("#ifndef _DASH_MC_WHERE\n#define _DASH_MC_WHERE(w) ((void)0)\n#endif\n")
@@ -11213,6 +11236,19 @@ static LONG _dash_event_window_handle(void) {{
             program = program.replace(anchor, runtime + "\n" + anchor, 1)
             program = program.replace("    // User Code\n", "    _dash_prof_start();\n    // User Code\n", 1)
             program = program.replace("    // Cleanup\n", "    // Cleanup\n    _dash_prof_report();\n", 1)
+        if self.debug_lines:
+            # --debug: the output where the debugger wants it, and the runtime's errors stop in the debugger
+            program = ("/* ./dash --debug: a runtime error stops the debugger (DEBUG_RUNTIME) */\n"
+                       "extern volatile const char *_dash_debug_what;\nvoid _dash_debug_stop(void);\n"
+                       "#define _dash_debug_trap(w) (_dash_debug_what = (w), _dash_debug_stop())\n" + program)
+            program = program.replace("    // User Code\n", "    _dash_debug_output();\n    // User Code\n", 1)
+            for check, what in (("if (!arr || index < 0 || index >= arr->length) return 0;", "índice fuera de la lista"),
+                                ("if (!arr || index < 0 || index >= arr->length) return;", "índice fuera de la lista")):
+                program = program.replace(check, check.replace("return", '{ _dash_debug_trap("%s"); return' % what)
+                                          .rstrip(";") + "; }")
+            program = program.replace("static void _dash_mc_error(CONST_STRPTR what) {\n",
+                                      "static void _dash_mc_error(CONST_STRPTR what) {\n"
+                                      "    _dash_debug_trap((const char *)what);\n", 1)
         if self.uses_time:
             # the clock starts with the program
             program = program.replace("    // User Code\n", "    _dash_time_init();\n    // User Code\n", 1)

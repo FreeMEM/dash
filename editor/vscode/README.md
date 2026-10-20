@@ -39,7 +39,11 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   runtime's frames and temporaries stay out of the stack and the variables (`tools/gdb/dash.py`).
   Expressions are Dash in the debug console, watch, hover, breakpoint conditions and logpoints (`p.x`, `l[i]`,
   `d["k"]`, `s.length`, `and`/`or`/`not`, `nil`, `Color.ROJO`): they are turned into C for gdb. In the debug
-  console, `-exec <command>` sends a gdb command as it is.
+  console, `-exec <command>` sends a gdb command as it is. What the program prints (`Print`) comes out in the
+  debug console as it runs, and an error of the program (an index out of a list, a memory error of
+  `--memcheck`) stops it like an exception, at its line of Dash, with the error's text. Global variables read
+  right: `tools/emu_run.py --gdbserver` puts `tools/gdb_relay.py` between gdb and bgdbserver (for a real Amiga,
+  run it yourself: `tools/gdb_relay.py --listen 2345 --to amiga:2345 prog`).
 - **Memory and profile**: a `--memcheck` run puts each memory error on the line where it happened (problem
   matcher `$dash-memcheck`); a `--profile` run opens its table (own and total time, calls) in a panel, each
   function a link to its code.

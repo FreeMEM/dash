@@ -130,7 +130,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 16a. **Expresiones de Dash.** Consola de depuración (evaluar), watch, hover, breakpoints condicionales y
       logpoints con expresiones de Dash (`p.x`, `l[i]`, `s.length`, `and`/`or`/`not`, `nil`): un adaptador en medio
       que las traduce a C para gdb, y `$len`/`$at` en `tools/gdb/dash.py`.
-- [ ] 16b. **Salida y errores.** `Print` en la consola de depuración (bajo bgdbserver la salida va a su consola:
+- [x] 16b. **Salida y errores.** `Print` en la consola de depuración (bajo bgdbserver la salida va a su consola:
       `DASH_OUT`), y parar en los errores del runtime (índice fuera de rango, memcheck) con su mensaje.
 - [ ] 17. **Amiga real.** Depurar en un Amiga con bgdbserver por red (host y puerto configurables); documentarlo.
 
@@ -410,4 +410,27 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Tests: 13 traducciones sin VS Code; en VS Code, en el breakpoint: `l[1] + 1` = 3, `s.length` = 4, `x == 20 and y == 40`
   = 1; breakpoint con condición `i == 3 and total > 0` en un bucle (para con i = 3) y logpoint "total vale {total}"
   (sale "total vale 15"). Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 16b (salida del programa y errores en el depurador)
+- Salida: bajo bgdbserver el programa escribe en la consola de este. Con `--debug` el programa abre al empezar el
+  fichero de la variable de DOS `DASH_OUT` si existe (`_dash_debug_output`), y cada `Print` sale en el momento
+  (`DASH_PRINT_FLUSH`). `tools/emu_run.py --gdbserver` pone `DASH_OUT` = `DH0:dashout.txt` y `--follow` lo va leyendo;
+  la extensión lo manda a la consola de depuración (`output` de categoría `stdout`).
+- Errores: con `--debug` el runtime llama a `_dash_debug_stop()` (índice fuera de la lista, errores de memcheck) tras
+  dejar el texto en `_dash_debug_what`. El adaptador pone un breakpoint de función ahí, oculto para VS Code. Cuando
+  para en él, lo cambia por una parada de tipo `exception` con el texto, y lo escribe en la consola.
+  `tools/gdb/dash.py` quita de la pila los marcos del runtime en ese caso: la pila empieza en la línea de Dash.
+- Aprendido: gdb leía mal las globales con bgdbserver. El DWARF guarda las direcciones del ELF intermedio
+  (`.data` detrás de `.text`, `.bss` detrás de `.data`). gdb las recoloca con los `qOffsets` de bgdbserver, pero un solo
+  desplazamiento vale para `.data` y `.bss`, y en el Amiga son dos hunks sueltos (avisa "unsupported offsets").
+  `add-symbol-file` con secciones tumba gdb 18. Arreglo:
+  - `./dash --debug` enlaza con el guion del propio ld, pero con `.bss` dentro de `.data` (`compiler/cflags.py`,
+    `debug_link_flags`). El ejecutable crece lo que ocupa el bss.
+  - `tools/gdb_relay.py` se pone entre gdb y bgdbserver y cambia `Data` por `Data - tamaño del código`.
+    `emu_run.py --gdbserver` lo pone solo: bgdbserver escucha en un puerto interno por debajo de 32768, porque
+    bgdbserver lee el puerto como número de 16 bits con signo. Para un Amiga real, a mano (tarea 17).
+- Tests: `tests/unit/test_gdb_relay.py` (5: cuentas de qOffsets, paquete partido, globales del DWARF en su sitio). En
+  VS Code: la salida de `Print` en la consola de depuración y "un error para como excepción" (`l[7]`: para en la
+  línea 4 con "índice fuera de la lista" y la pila en el `.dash`). Comprobado a mano en el emulador: `cuenta` vale 0 y
+  luego 7 tras la función. Base: 285/285, VS Code 17/17. Sin emulador nuevo en el runner.
 

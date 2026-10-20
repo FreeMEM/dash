@@ -197,6 +197,37 @@ def ppm_to_png(ppm: Path, png: Path):
                     + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
 
 
+def _free_port():
+    """A free port of the PC under 32768 (bgdbserver takes it as a signed 16-bit number)."""
+    import random
+    import socket
+    for _ in range(200):
+        port = random.randint(20000, 32000)
+        with socket.socket() as s:
+            try:
+                s.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError("no free port for bgdbserver")
+
+
+def _wait_listening(port, timeout=600):
+    """Until something listens on this port of the PC (read from /proc: a connection would take
+    bgdbserver's only one)."""
+    hexport = ":%04X" % port
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for name in ("/proc/net/tcp", "/proc/net/tcp6"):
+            try:
+                rows = Path(name).read_text().splitlines()[1:]
+            except OSError:
+                continue
+            if any(len(c) > 3 and c[1].endswith(hexport) and c[3] == "0A" for c in (r.split() for r in rows)):
+                return
+        time.sleep(0.1)
+
+
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
@@ -230,6 +261,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             (hd / drawer).mkdir(parents=True)
         lines = []
         names = []
+        inner_port = _free_port() if gdbserver else 0
         system = system or os.environ.get("DASH_EMU_SYS")
         if system:
             if not Path(system).is_dir():
@@ -292,11 +324,19 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             if gdbserver and i == 0:
                 # the first program under bgdbserver (tools/get_bgdbserver.sh): gdb connects to this port
                 # of the PC (the emulator's bsdsocket uses the PC's sockets) and runs it
-                lines.append(f"C:bgdbserver :{gdbserver} DH0:p{i}{extra} >DH0:out{i}.txt")
+                # bgdbserver gives the program the boot console: a ./dash --debug program writes where
+                # DASH_OUT says instead (the disk of the PC: --follow reads it)
+                lines.append('Echo >ENV:DASH_OUT "DH0:dashout.txt" NOLINE')
+                # bgdbserver listens on a port of its own; gdb's goes through tools/gdb_relay.py (globals)
+                lines.append(f"C:bgdbserver :{inner_port} DH0:p{i}{extra} >DH0:out{i}.txt")
             else:
                 lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
             lines.append(f'Echo "$RC" >DH0:rc{i}.txt')
         if gdbserver:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from gdb_relay import relay
+            threading.Thread(target=relay, args=(gdbserver, "127.0.0.1", inner_port, hd / "p0",
+                                                 lambda: _wait_listening(inner_port)), daemon=True).start()
             server = Path(os.environ.get("DASH_BGDBSERVER", Path.home() / ".cache/dash-debug/x/bgdbserver/bgdbserver"))
             if not server.is_file():
                 raise RuntimeError(f"bgdbserver not found: {server} (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)")
@@ -344,7 +384,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             shown = [0] * len(names)
             def follow_outputs():
                 for i in range(len(names)):
-                    out_file = hd / f"out{i}.txt"
+                    out_file = hd / ("dashout.txt" if gdbserver and i == 0 else f"out{i}.txt")
                     if follow is not None and out_file.exists():
                         data = out_file.read_bytes()
                         if len(data) > shown[i]:
@@ -428,7 +468,8 @@ def main():
     parser.add_argument("--follow", action="store_true", help="print what the programs write while they run")
     parser.add_argument("--gdbserver", type=int, metavar="PORT",
                         help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
-                             "connects with target remote :PORT (build it with ./dash --debug)")
+                             "connects with target remote :PORT (build it with ./dash --debug; tools/gdb_relay.py "
+                             "in between, so gdb finds the globals)")
     args = parser.parse_args()
     machine = MACHINES.get(args.machine) if args.machine else None
     kickstart = args.kickstart or (os.environ.get(machine["rom"]) if machine else None)

@@ -56,9 +56,19 @@ function emulatorArgs(dashDir, exe, port, options) {
 function setupDebugger(vscode, context, helpers) {
     const output = vscode.window.createOutputChannel('Dash: Amiga');
     const emulators = new Map();            // target "localhost:PORT" -> the emulator's process
+    const consoles = new Map();             // target -> {proxy, pending}: the program's output to the debug console
+    const toConsole = (target, text) => {
+        const lines = text.split(/(?<=\n)/).filter((l) => !l.startsWith('=== '));   // emu_run's summary: not the program's
+        if (!lines.length) return;
+        const c = consoles.get(target) || { proxy: null, pending: [] };
+        consoles.set(target, c);
+        if (c.proxy) c.proxy.output(lines.join(''));
+        else c.pending.push(lines.join(''));
+    };
     const stopEmulator = (target) => {
         const child = emulators.get(target);
         emulators.delete(target);
+        consoles.delete(target);
         if (child && child.exitCode === null) {
             try { process.kill(-child.pid, 'SIGTERM'); } catch (e) { /* gone */ }
         }
@@ -116,9 +126,9 @@ function setupDebugger(vscode, context, helpers) {
                 progress.report({ message: 'arrancando el emulador…' });
                 const child = spawn('python3', emulatorArgs(dashDir, exe, port, options),
                                     { cwd: dashDir, env: Object.assign({}, process.env, helpers.env()), detached: true });
-                child.stdout.on('data', (d) => output.append(d.toString('utf8')));
-                child.stderr.on('data', (d) => output.append(d.toString('utf8')));
                 const target = `localhost:${port}`;
+                child.stdout.on('data', (d) => { output.append(d.toString('utf8')); toConsole(target, d.toString('utf8')); });
+                child.stderr.on('data', (d) => output.append(d.toString('utf8')));
                 emulators.set(target, child);
                 for (let i = 0; i < 1200 && !listening(port); i++) {        // up to 2 minutes (a 68000 boots slowly)
                     if (child.exitCode !== null) break;
@@ -144,9 +154,18 @@ function setupDebugger(vscode, context, helpers) {
             const dashDir = session.configuration.program ? helpers.findDash(session.configuration.program) : null;
             const script = dashDir ? path.join(dashDir, 'tools', 'gdb', 'dash.py') : null;
             if (script && fs.existsSync(script)) args.push('-x', script);
-            // in between: the expressions of the user (console, watch, hover, conditions, logpoints) from Dash to C
-            return new vscode.DebugAdapterInlineImplementation(makeProxy(vscode,
-                vscode.workspace.getConfiguration('dash.debug').get('gdb') || '/opt/amiga/bin/m68k-amigaos-gdb', args));
+            // in between: the expressions of the user (console, watch, hover, conditions, logpoints) from Dash to C,
+            // the runtime's errors as exceptions, and the program's output in the debug console
+            const proxy = makeProxy(vscode,
+                vscode.workspace.getConfiguration('dash.debug').get('gdb') || '/opt/amiga/bin/m68k-amigaos-gdb', args);
+            const target = session.configuration.target;
+            if (target) {
+                const c = consoles.get(target) || { proxy: null, pending: [] };
+                c.proxy = proxy;
+                consoles.set(target, c);
+                setTimeout(() => { for (const t of c.pending.splice(0)) proxy.output(t); }, 0);
+            }
+            return new vscode.DebugAdapterInlineImplementation(proxy);
         },
     }));
 

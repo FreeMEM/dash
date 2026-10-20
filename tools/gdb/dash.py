@@ -7,7 +7,8 @@ and its stack without the runtime. The VS Code extension loads it in its debugge
 - Structs (_Dash_X *): their fields, or nil. An object in a list is told by its header: the destroy
   function it was made with (_dash_struct_destroy_X), else the only struct of its size.
 - Fixed (DashFixed, 16.16): its decimal value. Bool (BOOL): true or false.
-- Frames: the runtime's (_dash_*, DashString_*...) leave the stack unless they are the innermost one, and
+- Frames: the runtime's (_dash_*, DashString_*...) leave the stack unless they are the innermost one (not even
+  then when it stopped on an error of the program, in _dash_debug_stop: the stack starts at its Dash line), and
   the C temporaries (_dash_*) leave the locals.
 """
 import re
@@ -234,10 +235,13 @@ class DashFrames:
 
     def filter(self, frames):
         first = True
+        trap = False                    # stopped by an error of the program (./dash --debug): at its line of Dash
         for frame in frames:
             name = frame.function()
             name = name if isinstance(name, str) else ""
-            if not first and RUNTIME.match(name):
+            if first and name == "_dash_debug_stop":
+                trap = True
+            if (not first or trap) and RUNTIME.match(name):
                 continue
             first = False
             yield DashFrame(frame)

@@ -70,7 +70,11 @@ end
 
 `./dash --debug` compila para el depurador: `-O0 -g` (DWARF en el ejecutable) y, en el C, `#line` hacia las
 lineas del `.dash`: `m68k-amigaos-gdb` para, avanza y ensena la pila y las variables en lineas de Dash
-(con `bgdbserver` en el Amiga: ver la extension de VS Code). Sin `--debug` el C no cambia.
+(con `bgdbserver` en el Amiga: ver la extension de VS Code). Sin `--debug` el C no cambia. Con `--debug`, ademas:
+cada `Print` sale en el momento; si la variable de DOS `DASH_OUT` tiene un nombre de fichero, la salida va ahi;
+un error del programa (indice fuera de la lista, error de memoria) llama a `_dash_debug_stop`, donde el depurador
+para; y las globales a cero (`.bss`) van en el mismo bloque que las demas, para que gdb las encuentre
+(`tools/gdb_relay.py`). El ejecutable crece lo que ocupan.
 
 Con `--memcheck`, cada error de memoria dice tambien donde paso: `memcheck: ERROR campo de nil (en
 prog.dash:15)` (cada sentencia apunta su fichero y linea; solo en esas compilaciones).

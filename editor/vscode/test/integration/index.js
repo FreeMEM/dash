@@ -357,9 +357,40 @@ async function run() {
             const done = await Promise.race([ended, new Promise((r) => setTimeout(() => r('timeout'), 60000))]);
             assert.strictEqual(done, true, 'the session did not end; events: ' + seen.join(' '));
             assert(outputs.some((o) => /total vale 15/.test(o)), 'logpoint: ' + JSON.stringify(outputs.slice(-10)));
+            assert(outputs.some((o) => /resultado 40/.test(o)), 'program output: ' + JSON.stringify(outputs.slice(-10)));
         } finally {
             tracker.dispose();
             vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+            if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+    await check('debugger: a runtime error stops as an exception, on its Dash line', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'fallo.dash');
+        fs.writeFileSync(file, 'Main\n    l = [1, 2, 3]\n    Print "antes"\n    x = l[7]\n    Print "después #{x}"\nend\n');
+        let stopped = null;
+        const tracker = vscode.debug.registerDebugAdapterTrackerFactory('dash', { createDebugAdapterTracker: () => ({
+            onDidSendMessage: (m) => { if (m.type === 'event' && m.event === 'stopped' && m.body.reason === 'exception') stopped = m; },
+        }) });
+        const ended = new Promise((resolve) => {
+            const sub = vscode.debug.onDidTerminateDebugSession(() => { sub.dispose(); resolve(true); });
+        });
+        try {
+            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'launch', name: 'fallo', program: file }));
+            for (let i = 0; i < 1200 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
+            assert(stopped, 'did not stop at the error');
+            assert.match(String(stopped.body.text), /ndice fuera de la lista/, JSON.stringify(stopped.body));
+            const session = vscode.debug.activeDebugSession;
+            const trace = await session.customRequest('stackTrace', { threadId: stopped.body.threadId });
+            assert.strictEqual(trace.stackFrames[0].line, 4, JSON.stringify(trace.stackFrames.map((f) => [f.name, f.line])));
+            assert.strictEqual(trace.stackFrames[0].source.path, file);
+            await session.customRequest('continue', { threadId: stopped.body.threadId });
+            assert.strictEqual(await Promise.race([ended, new Promise((r) => setTimeout(() => r('timeout'), 60000))]), true);
+        } finally {
+            tracker.dispose();
             if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();
             fs.rmSync(dir, { recursive: true, force: true });
         }
