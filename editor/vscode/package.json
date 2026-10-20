@@ -283,6 +283,22 @@
           "severity": 4,
           "message": 5
         }
+      },
+      {
+        "name": "dash-memcheck",
+        "owner": "dash",
+        "source": "dash --memcheck",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^memcheck: ERROR (.*) \\(en (.*):(\\d+)\\)$",
+          "message": 1,
+          "file": 2,
+          "line": 3
+        },
+        "severity": "error"
       }
     ]
   },

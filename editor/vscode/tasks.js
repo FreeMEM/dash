@@ -59,14 +59,98 @@ function taskCommand(kind, dashDir, file, options = {}) {
  * @param {{autoclose?: number}} options
  * @param {any} [definition] the one of tasks.json, when it comes from there
  */
-function makeTask(vscode, kind, file, dashDir, env, options, definition) {
+function makeTask(vscode, kind, file, dashDir, env, options, definition, onOutput) {
     const def = definition || { type: 'dash', task: kind, file };
-    const execution = new vscode.ShellExecution(taskCommand(kind, dashDir, file, options), { cwd: dashDir, env });
+    const command = taskCommand(kind, dashDir, file, options);
+    // running ones go through a terminal of ours, to read what the program said (the profile's table...)
+    const execution = KINDS[kind].run && onOutput
+        ? new vscode.CustomExecution(async () => shellTerminal(vscode, command, dashDir, env, (out, code) => onOutput(kind, file, out, code)))
+        : new vscode.ShellExecution(command, { cwd: dashDir, env });
     const task = new vscode.Task(def, vscode.TaskScope.Workspace, `${KINDS[kind].label}: ${path.basename(file)}`,
-                                 'dash', execution, ['$dash', '$gcc']);
+                                 'dash', execution, ['$dash', '$dash-memcheck', '$gcc']);
     if (kind === 'compile') task.group = vscode.TaskGroup.Build;
     task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
     return task;
+}
+
+/**
+ * A pseudoterminal that runs a shell command (as ShellExecution would), shows its output and gives it
+ * all to done(output, exit code) at the end. Closing it (stopping the task) ends the command's group.
+ * @param {typeof import('vscode')} vscode
+ */
+function shellTerminal(vscode, command, cwd, env, done) {
+    const { spawn } = require('child_process');
+    const write = new vscode.EventEmitter();
+    const close = new vscode.EventEmitter();
+    let child = null;
+    let all = '';
+    const stop = () => { try { if (child && child.exitCode === null) process.kill(-child.pid, 'SIGTERM'); } catch (e) { /* gone */ } };
+    return {
+        onDidWrite: write.event,
+        onDidClose: close.event,
+        open() {
+            write.fire(`\x1b[2m$ ${command}\x1b[0m\r\n`);
+            child = spawn('/bin/sh', ['-c', command], { cwd, env: Object.assign({}, process.env, env), detached: true });
+            const out = (data) => {
+                const text = data.toString('utf8');
+                all += text;
+                write.fire(text.replace(/\r?\n/g, '\r\n'));
+            };
+            child.stdout.on('data', out);
+            child.stderr.on('data', out);
+            child.on('close', (code) => {
+                try { done(all, code); } catch (e) { write.fire(String(e) + '\r\n'); }
+                close.fire(code === null ? 1 : code);
+            });
+            child.on('error', (e) => { write.fire(String(e) + '\r\n'); close.fire(1); });
+        },
+        close: stop,
+        handleInput(data) { if (data === '\x03') stop(); },      // Ctrl+C
+    };
+}
+
+/** The table of --profile in the output: [{own, total, calls, name}] (lines "perfil: 12.3% 45.6% 789 nombre") */
+function parseProfile(output) {
+    const rows = [];
+    for (const line of output.split(/\r?\n/)) {
+        const m = /^perfil:\s+([\d.]+)%\s+([\d.]+)%\s+(\d+)\s+(\S.*)$/.exec(line);
+        if (m) rows.push({ own: Number(m[1]), total: Number(m[2]), calls: Number(m[3]), name: m[4].trim() });
+    }
+    const samples = /^perfil: (\d+) muestras/m.exec(output);
+    return { rows, samples: samples ? Number(samples[1]) : 0 };
+}
+
+/** The profile in a webview: a table sorted by own time; a click on a function goes to it */
+function showProfile(vscode, file, profile) {
+    const panel = vscode.window.createWebviewPanel('dash.profile', 'Perfil: ' + path.basename(file),
+                                                   vscode.ViewColumn.Beside, { enableScripts: true });
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const rows = profile.rows.map((r) => `<tr><td class="n">${r.own.toFixed(1)} %</td><td class="n">${r.total.toFixed(1)} %</td>` +
+        `<td class="n">${r.calls}</td><td><a href="#" data-name="${esc(r.name)}">${esc(r.name)}</a>` +
+        `<div class="bar" style="width:${Math.min(100, r.own)}%"></div></td></tr>`).join('');
+    panel.webview.html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+<style>body{font-family:var(--vscode-font-family);color:var(--vscode-foreground)}table{border-collapse:collapse;width:100%}
+td,th{padding:3px 8px;border-bottom:1px solid var(--vscode-panel-border)}th{text-align:left}.n{text-align:right;font-variant-numeric:tabular-nums}
+a{color:var(--vscode-textLink-foreground)}.bar{height:3px;background:var(--vscode-charts-orange)}</style></head><body>
+<p>${profile.samples} muestras (50 por segundo). <b>Propio</b>: tiempo en la función; <b>total</b>: con lo que llama.</p>
+<table><tr><th>Propio</th><th>Total</th><th>Llamadas</th><th>Función</th></tr>${rows}</table>
+<script>const vscode = acquireVsCodeApi();
+document.querySelectorAll('a[data-name]').forEach((a) => a.addEventListener('click', (e) => {
+  e.preventDefault(); vscode.postMessage({ goTo: a.dataset.name }); }));</script></body></html>`;
+    panel.webview.onDidReceiveMessage((m) => m.goTo && goToFunction(vscode, m.goTo));
+    return panel;
+}
+
+/** Opens the definition of a function ("f" or "Struct.metodo") through the language server's symbols */
+async function goToFunction(vscode, name) {
+    const [container, method] = name.includes('.') ? name.split('.', 2) : [null, name];
+    const found = (await vscode.commands.executeCommand('vscode.executeWorkspaceSymbolProvider', method)) || [];
+    const hit = found.find((s) => s.name === method && (!container || s.containerName === container)) ||
+                found.find((s) => s.name === method);
+    if (!hit) { vscode.window.showWarningMessage(`No encuentro ${name}`); return; }
+    const doc = await vscode.workspace.openTextDocument(hit.location.uri);
+    await vscode.window.showTextDocument(doc, { selection: hit.location.range, viewColumn: vscode.ViewColumn.One });
 }
 
 /**
@@ -75,9 +159,14 @@ function makeTask(vscode, kind, file, dashDir, env, options, definition) {
  * @param {{findDash: (f: string) => string | null, env: () => Record<string, string>, trusted: () => boolean}} helpers
  */
 function setupTasks(vscode, context, helpers) {
+    // what a run left: the profile's table in a panel
+    const afterRun = (kind, file, output) => {
+        const profile = parseProfile(output);
+        if (profile.rows.length) showProfile(vscode, file, profile);
+    };
     const forFile = (kind, file, definition) => {
         const dashDir = helpers.findDash(file);
-        return dashDir ? makeTask(vscode, kind, file, dashDir, helpers.env(), emulatorOptions(vscode, file), definition) : null;
+        return dashDir ? makeTask(vscode, kind, file, dashDir, helpers.env(), emulatorOptions(vscode, file), definition, afterRun) : null;
     };
     const activeFile = () => {
         const e = vscode.window.activeTextEditor;
@@ -196,4 +285,4 @@ function emulatorOptions(vscode, file) {
     return options;
 }
 
-module.exports = { taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions };
+module.exports = { taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal };

@@ -144,8 +144,15 @@ static APTR _dash_mc_held[_DASH_MC_HOLD];
 static ULONG _dash_mc_held_size[_DASH_MC_HOLD];
 static LONG _dash_mc_next;
 
+/* the Dash statement running: "file.dash:line" (set before each statement in --memcheck builds), so an
+   error says where it happened and the editor puts it on the code */
+static const char *_dash_mc_where = NULL;
+#define _DASH_MC_WHERE(w) (_dash_mc_where = (w))
+
 static void _dash_mc_error(CONST_STRPTR what) {
-    if (++_dash_mc_errors <= 20) Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
+    if (++_dash_mc_errors > 20) return;
+    if (_dash_mc_where) Printf((CONST_STRPTR)"memcheck: ERROR %s (en %s)\\n", what, (LONG)_dash_mc_where);
+    else Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
 }
 
 /* Poison *b and hold it; give back in *b the oldest held block to reuse (FALSE),
@@ -10623,6 +10630,18 @@ class CodeGenerator(ASTVisitor):
     Uses templates for clean, maintainable code generation.
     """
 
+    def visit(self, node):
+        """--memcheck: before each statement, the place it comes from (_dash_mc_where), so a memory
+        error says file.dash:line (VS Code's problem matcher puts it on the code)."""
+        if self.memcheck:
+            name = type(node).__name__
+            location = getattr(node, "location", None)
+            if location is not None and location.filename and name != "ImportStmt" and \
+                    (name.endswith(("Stmt", "Assign")) or name in ("FunctionCall", "MethodCall")):
+                where = f"{location.filename}:{location.line}".replace("\\", "\\\\").replace('"', '\\"')
+                self.emit(f'{self.context.indent}_DASH_MC_WHERE("{where}");\n')
+        return super().visit(node)
+
     def __init__(self, analysis: AnalysisResult):
         self.analysis = analysis
         self.context = CodeGenContext()
@@ -11006,6 +11025,9 @@ class CodeGenerator(ASTVisitor):
         if self.uses_mui_timer:
             parts.append(CTemplates.MUI_TIMER_RUNTIME)
 
+        if self.memcheck:
+            # the place of each statement (visit): kept only where the memory checks are (DASH_MEMCHECK)
+            parts.append("#ifndef _DASH_MC_WHERE\n#define _DASH_MC_WHERE(w) ((void)0)\n#endif\n")
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
         # methods may draw (_dash_rp) or use any builtin

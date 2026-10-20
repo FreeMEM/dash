@@ -29,6 +29,9 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
 - In a folder not trusted (Restricted Mode) only colours and the visual editor work; compiling, the emulator
   and the language server need a trusted folder.
+- **Memory and profile**: a `--memcheck` run puts each memory error on the line where it happened (problem
+  matcher `$dash-memcheck`); a `--profile` run opens its table (own and total time, calls) in a panel, each
+  function a link to its code.
 - **Emulator machine**: `dash.emulator.machine` (A1200 3.1, A500, A1200 3.2, 68040 with RTG) and
   `dash.emulator.program` (FS-UAE or Amiberry), also from the status bar (**Dash: Elegir la máquina del
   emulador**); per project in `.vscode/settings.json`. The program runs in the emulator's window

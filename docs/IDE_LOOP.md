@@ -110,7 +110,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       compilador de Dash y de gcc, barra de estado, CodeLens "Ejecutar" sobre `Main`.
 - [x] 10. **Emulador.** Elegir máquina (A500, A1200 3.1, 3.2, RTG, Amiberry), salida del programa en un panel,
       parar, configuración por proyecto.
-- [ ] 11. **Memoria y perfil.** Avisos de `--memcheck` como diagnósticos; la tabla de `--profile` en un webview,
+- [x] 11. **Memoria y perfil.** Avisos de `--memcheck` como diagnósticos; la tabla de `--profile` en un webview,
       con enlaces a las funciones.
 
 ### D. Depuración
@@ -314,4 +314,17 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   máquina (pasan a `emu_run` por las variables); por proyecto en `.vscode/settings.json`; selector en la barra de
   estado; la tarea "ejecutar" compila con `DASH_PRINT_FLUSH` y corre `emu_run --follow --window`; con MUI en el A1200
   3.1, `muiSystem`. Tests: la orden con todas las opciones; en VS Code la tarea `run` de verdad (oculta) acaba con 0.
+
+### 2026-10-20 — Tarea 11 (memoria y perfil en el editor)
+- Los errores de `--memcheck` no decían dónde. Ahora, solo en esas compilaciones, `CodeGenerator.visit` pone antes de
+  cada sentencia `_DASH_MC_WHERE("fichero.dash:línea")` (macro: guarda el sitio en `_dash_mc_where` si está el
+  runtime de memoria, nada si no) y `_dash_mc_error` lo dice: `memcheck: ERROR campo de nil (en x.dash:15)`. La
+  batería con `--memcheck` compila entera (275); el C normal no cambia. El runner quita de la salida el prefijo
+  absoluto del repositorio, para que un test pueda esperar `tests/x.dash:N`: test `test_memcheck_where`.
+- Extensión: problem matcher `$dash-memcheck`. Las tareas que ejecutan corren ahora en un terminal propio
+  (`CustomExecution`, `shellTerminal`: `sh -c` en su grupo de procesos; parar o Ctrl+C lo terminan) para leer la
+  salida: con `--profile`, su tabla se abre en un panel ordenado por tiempo propio, con barras, y cada función
+  enlaza a su código (símbolos del servidor de lenguaje; `Struct.metodo` por su contenedor).
+- Tests: el parser del perfil y la expresión de memcheck; en VS Code, la tarea `memcheck` deja el error en su línea y
+  la de `profile` abre su panel (14 en total). Base: todo bien. Extensión instalada.
 

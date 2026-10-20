@@ -223,6 +223,20 @@ async function run() {
         assert(lenses.some((l) => l.command && l.command.command === 'dash.runInEmulator'));
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    const runKind = async (file, kind) => {
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        const task = (await vscode.tasks.fetchTasks({ type: 'dash' })).find((t) => t.definition.task === kind);
+        const done = new Promise((resolve) => {
+            const sub = vscode.tasks.onDidEndTask((e) => {
+                if (e.execution.task.name === task.name) { sub.dispose(); resolve(true); }
+            });
+        });
+        await vscode.tasks.executeTask(task);
+        const ended = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 240000))]);
+        assert.strictEqual(ended, true, 'the task did not end');
+        return doc;
+    };
     await check('tasks: the run task runs the program in the emulator (hidden) and ends', async () => {
         const path = require('path');
         const os = require('os');
@@ -230,21 +244,41 @@ async function run() {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
         const file = path.join(dir, 'corre.dash');
         fs.writeFileSync(file, 'Main\n    Print "hola desde el Amiga"\nend\n');
-        const doc = await vscode.workspace.openTextDocument(file);
-        await vscode.window.showTextDocument(doc);
-        const tasks = await vscode.tasks.fetchTasks({ type: 'dash' });
-        const runTask = tasks.find((t) => t.definition.task === 'run');
-        assert(/--follow/.test(runTask.execution.commandLine) && !/--window/.test(runTask.execution.commandLine),
-               runTask.execution.commandLine);
-        const done = new Promise((resolve) => {
-            const sub = vscode.tasks.onDidEndTaskProcess((e) => {
-                if (e.execution.task.name === runTask.name) { sub.dispose(); resolve(e.exitCode); }
-            });
-        });
-        await vscode.tasks.executeTask(runTask);
-        const code = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 240000))]);
-        assert.strictEqual(code, 0);
+        await runKind(file, 'run');
         assert((await vscode.commands.getCommands(true)).includes('dash.chooseMachine'));
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    await check('tasks: a --memcheck error lands on its line', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'memoria.dash');
+        fs.writeFileSync(file, 'struct P\n    x: Int = 0\nend\nMain\n    var p: P = nil\n    Print p.x\nend\n');
+        const doc = await runKind(file, 'memcheck');
+        let diags = [];
+        for (let i = 0; i < 50 && !diags.length; i++) {
+            diags = vscode.languages.getDiagnostics(doc.uri).filter((d) => /campo de nil/.test(d.message));
+            if (!diags.length) await new Promise((r) => setTimeout(r, 100));
+        }
+        assert.strictEqual(diags.length, 1, JSON.stringify(vscode.languages.getDiagnostics(doc.uri)));
+        assert.strictEqual(diags[0].range.start.line, 5);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    await check('tasks: --profile opens its table', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'perfil.dash');
+        fs.writeFileSync(file, 'func vuelta(n: Int) -> Int\n    t = 0\n    for i in (1..n)\n        t = t + i % 7\n    end\n' +
+                               '    return t\nend\nMain\n    s = 0\n    for k in (1..300)\n        s = s + vuelta(2000)\n    end\n' +
+                               '    Print s\nend\n');
+        await runKind(file, 'profile');
+        let tab = null;
+        for (let i = 0; i < 50 && !tab; i++) {
+            tab = vscode.window.tabGroups.all.flatMap((g) => g.tabs).find((t) => t.label === 'Perfil: perfil.dash');
+            if (!tab) await new Promise((r) => setTimeout(r, 100));
+        }
+        assert(tab, 'no profile panel');
         fs.rmSync(dir, { recursive: true, force: true });
     });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');

@@ -484,6 +484,20 @@ async function taskTests() {
                            "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
     });
+    await check('tasks: the profile table and the memcheck matcher', () => {
+        const { parseProfile } = require('../tasks.js');
+        const p = parseProfile('hola\nperfil: 120 muestras (VBlank)\nperfil:  propio   total  llamadas  funcion\n' +
+                               'perfil:  62.5%  80.0%         3  suma\nperfil:  10.0%  12.5%        40  Punto.mover\n');
+        assert.strictEqual(p.samples, 120);
+        assert.deepStrictEqual(p.rows.map((r) => [r.own, r.total, r.calls, r.name]),
+                               [[62.5, 80, 3, 'suma'], [10, 12.5, 40, 'Punto.mover']]);
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+        const mc = pkg.contributes.problemMatchers.find((m) => m.name === 'dash-memcheck');
+        const hit = new RegExp(mc.pattern.regexp).exec('memcheck: ERROR campo de nil (en /home/x/prog.dash:15)');
+        assert.deepStrictEqual([hit[mc.pattern.message], hit[mc.pattern.file], hit[mc.pattern.line]],
+                               ['campo de nil', '/home/x/prog.dash', '15']);
+        assert.strictEqual(mc.severity, 'error');
+    });
     await check('tasks: the $dash problem matcher reads what the compiler prints', () => {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
         const matcher = pkg.contributes.problemMatchers.find((m) => m.name === 'dash');

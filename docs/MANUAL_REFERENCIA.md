@@ -68,6 +68,9 @@ end
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ```
 
+Con `--memcheck`, cada error de memoria dice tambien donde paso: `memcheck: ERROR campo de nil (en
+prog.dash:15)` (cada sentencia apunta su fichero y linea; solo en esas compilaciones).
+
 Con `DASH_PRINT_FLUSH=1` al compilar, cada `Print` sale en el momento (`Flush` de dos.library) aunque la
 salida vaya a un fichero: así la ven en vivo `tools/emu_run.py --follow` y la extension de VS Code. Sin ella
 el C no cambia.

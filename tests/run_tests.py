@@ -708,6 +708,8 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
     results = []
     for (test_file, wanted), run in zip(selected, runs):
         got = [l.rstrip() for l in (run.output or "").splitlines()]
+        # places in the output (--memcheck errors say file:line) relative to the repository, however it was run
+        got = [l.replace(str(PROJECT_ROOT.resolve()) + "/", "") for l in got]
         mc_error = None
         if memcheck and not wants_memcheck(test_file):
             uses_memory = "#define _DASH_MEMORY_RUNTIME" in (PROJECT_ROOT / "build" / f"{test_file.stem}.c").read_text()
