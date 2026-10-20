@@ -4,6 +4,7 @@
 // file:line:column: Error: message, as compiler/main.py prints them) and "$gcc" for the C, so the errors
 // land in Problems and on the code. Also the CodeLens over Main and the status bar button.
 const path = require('path');
+const { missing } = require('./missing');
 
 /** @param {string} arg */
 function quote(arg) {
@@ -190,7 +191,9 @@ async function goToFunction(vscode, name) {
  */
 function setupTasks(vscode, context, helpers) {
     // what a run left: the profile's table in a panel
-    const afterRun = (kind, file, output) => {
+    const afterRun = (kind, file, output, code) => {
+        const lack = code !== 0 && missing(output);       // a tool that is not there: what, and how to get it
+        if (lack) vscode.window.showErrorMessage(lack);
         const profile = parseProfile(output);
         if (profile.rows.length) showProfile(vscode, file, profile);
     };
@@ -247,7 +250,7 @@ function setupTasks(vscode, context, helpers) {
         if (!file) return;
         const task = forFile(kind, file);
         if (!task) {
-            vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
+            vscode.window.showErrorMessage(helpers.noDash ? helpers.noDash() : 'No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
             return;
         }
         // VS Code runs tasks only with a folder open (with a file alone it did nothing): the same command in a

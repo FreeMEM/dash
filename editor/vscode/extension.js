@@ -10,14 +10,23 @@ const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
 const { setupTasks, emulatorOptions, savedFile } = require('./tasks');
+const { missing } = require('./missing');
 const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
 const { writeProject, cleanName } = require('./newProject');
 
-/** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
+/** The dash.path setting, with ~ for the home folder */
+function dashSetting() {
+    const configured = vscode.workspace.getConfiguration('dash').get('path') || '';
+    return configured.replace(/^~(?=$|\/)/, require('os').homedir());
+}
+
+/** The Dash compiler folder: the setting (if it is one), or the first folder up from the file with ./dash and
+    compiler/. */
 function findDash(fromFile) {
-    const configured = vscode.workspace.getConfiguration('dash').get('path');
-    if (configured) return configured;
+    const configured = dashSetting();
+    if (configured) return fs.existsSync(path.join(configured, 'dash')) && fs.existsSync(path.join(configured, 'compiler'))
+        ? configured : null;      // (a wrong one ran /x/dash: "not found" from the shell, and nothing more)
     let dir = path.dirname(fromFile);
     for (let i = 0; i < 12; i++) {
         if (fs.existsSync(path.join(dir, 'dash')) && fs.existsSync(path.join(dir, 'compiler'))) return dir;
@@ -26,6 +35,14 @@ function findDash(fromFile) {
         dir = parent;
     }
     return null;
+}
+
+/** Why findDash gave nothing, and what to do */
+function noDash() {
+    const configured = dashSetting();
+    return configured
+        ? `El ajuste "dash.path" (${configured}) no es la carpeta del compilador Dash: tiene que tener ./dash y compiler/.`
+        : 'No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".';
 }
 
 function quote(arg) {
@@ -88,7 +105,7 @@ async function run(kind) {
     if (!file) return;
     const dashDir = findDash(file);
     if (!dashDir) {
-        vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
+        vscode.window.showErrorMessage(noDash());
         return;
     }
     const t = dashTerminal(emulatorEnv());
@@ -111,7 +128,7 @@ async function showOnAmiga(document, windowName, webview) {
     if (previewRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
     if (!trusted()) { fail(UNTRUSTED); return; }
     const dashDir = findDash(document.fileName);
-    if (!dashDir) { fail('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
+    if (!dashDir) { fail(noDash()); return; }
     const config = vscode.workspace.getConfiguration('dash.emulator');
     const machine = previewMachine(config.get('machine') || 'a1200');
     const status = `"${windowName}" en el ${machineNames[machine]}…`;
@@ -126,7 +143,7 @@ async function showOnAmiga(document, windowName, webview) {
             : await work();
         say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el ${machineNames[machine]}` });
     } catch (e) {
-        fail('No se pudo: ' + e.message);
+        fail(missing(e.message) || 'No se pudo: ' + e.message);
     } finally {
         previewRunning = false;
     }
@@ -227,11 +244,11 @@ function activate(context) {
         context.globalState.update('dash.openAfter', undefined);
         if (fs.existsSync(after)) vscode.window.showTextDocument(vscode.Uri.file(after)).then(undefined, () => {});
     }
-    setupLanguageServer(vscode, context, findDash);   // errors while typing (compiler/lsp.py)
+    setupLanguageServer(vscode, context, findDash, noDash);   // errors while typing (compiler/lsp.py)
     if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
-        runTask = setupTasks(vscode, context, { findDash, env: emulatorEnv, trusted });
+        runTask = setupTasks(vscode, context, { findDash, noDash, env: emulatorEnv, trusted });
     if (vscode.debug && vscode.debug.registerDebugConfigurationProvider)   // F5: debug on the Amiga (gdb + bgdbserver)
-        setupDebugger(vscode, context, { findDash, env: emulatorEnv, trusted, emulatorOptions });
+        setupDebugger(vscode, context, { findDash, noDash, env: emulatorEnv, trusted, emulatorOptions });
 }
 
 function deactivate() {

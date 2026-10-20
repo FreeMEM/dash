@@ -109,15 +109,17 @@ def main():
     if os.path.dirname(output_filename):      # -o bin/x: its folder, if it is not there yet
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
 
-    # --- Toolchain Paths ---
-    amiga_toolchain_bin = "/opt/amiga/bin"
-    amiga_ndk_include = "/opt/amiga/m68k-amigaos/ndk-include"
-    amiga_lib_path = "/opt/amiga/m68k-amigaos/lib"
+    # --- Toolchain Paths --- (DASH_TOOLCHAIN: bebbo's toolchain somewhere else than /opt/amiga)
+    toolchain = os.environ.get("DASH_TOOLCHAIN") or "/opt/amiga"
+    amiga_toolchain_bin = os.path.join(toolchain, "bin")
+    amiga_ndk_include = os.path.join(toolchain, "m68k-amigaos", "ndk-include")
+    amiga_lib_path = os.path.join(toolchain, "m68k-amigaos", "lib")
 
     # Verificar que el toolchain existe
     if not os.path.exists(f"{amiga_toolchain_bin}/m68k-amigaos-gcc"):
-        print("Error: m68k-amigaos-gcc not found in /opt/amiga/bin/", file=sys.stderr)
-        print("Please install the Amiga cross-compiler toolchain.", file=sys.stderr)
+        print(f"Error: m68k-amigaos-gcc not found in {amiga_toolchain_bin}/", file=sys.stderr)
+        print("Falta el compilador de Amiga (m68k-amigaos-gcc de bebbo, github.com/bebbo/amiga-gcc): "
+              "instálalo en /opt/amiga, o pon su carpeta en DASH_TOOLCHAIN.", file=sys.stderr)
         sys.exit(1)
 
     # --- Step 1: Transpile Dash to C ---

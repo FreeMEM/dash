@@ -15,13 +15,23 @@ let warnedOld = false;      // said once that dash.path has no compiler/lsp.py
  * @param {(fromFile: string) => string | null} findDash
  * @param {string} [fromFile] a .dash file, to look for the compiler up from it
  */
-async function startLanguageServer(vscode, findDash, fromFile) {
+let warnedNoDash = false;
+async function startLanguageServer(vscode, findDash, fromFile, noDash) {
     if (client || starting) return starting;
     const config = vscode.workspace.getConfiguration('dash');
     if (config.get('languageServer.enabled') === false || vscode.workspace.isTrusted === false) return null;
     const folder = (vscode.workspace.workspaceFolders || [])[0];
     const dashDir = (fromFile && findDash(fromFile)) || (folder && findDash(folder.uri.fsPath + '/x')) || null;
-    if (!dashDir) return null;
+    if (!dashDir) {
+        // once, with a .dash open: without it there are no errors while typing, and nothing said why
+        if (noDash && !warnedNoDash) {
+            warnedNoDash = true;
+            vscode.window.showWarningMessage(noDash(), 'Abrir el ajuste').then((choice) => {
+                if (choice) vscode.commands.executeCommand('workbench.action.openSettings', 'dash.path');
+            });
+        }
+        return null;
+    }
     if (!require('fs').existsSync(require('path').join(dashDir, 'compiler', 'lsp.py'))) {
         if (!warnedOld) {
             warnedOld = true;
@@ -56,10 +66,11 @@ async function stopLanguageServer() {
  * @param {typeof import('vscode')} vscode
  * @param {import('vscode').ExtensionContext} context
  * @param {(fromFile: string) => string | null} findDash
+ * @param {() => string} [noDash] why there is no compiler (said once)
  */
-function setupLanguageServer(vscode, context, findDash) {
+function setupLanguageServer(vscode, context, findDash, noDash) {
     const tryDoc = (doc) => {
-        if (doc && doc.languageId === 'dash') startLanguageServer(vscode, findDash, doc.uri.scheme === 'file' ? doc.uri.fsPath : undefined);
+        if (doc && doc.languageId === 'dash') startLanguageServer(vscode, findDash, doc.uri.scheme === 'file' ? doc.uri.fsPath : undefined, noDash);
     };
     (vscode.workspace.textDocuments || []).forEach(tryDoc);
     context.subscriptions.push(

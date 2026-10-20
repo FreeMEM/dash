@@ -684,6 +684,23 @@ async function editingTests() {
 
 // --- tasks.js: the commands of the tasks and the problem matcher ------------------------------------
 async function taskTests() {
+    await check('missing tools: what and how to get it, in words (v12)', () => {
+        const { missing } = require('../missing.js');
+        const cases = [
+            ['Error: m68k-amigaos-gcc not found in /opt/amiga/bin/', /compilador de Amiga/],
+            ['fs-uae not found', /emulador FS-UAE/],
+            ['amiberry not found', /emulador Amiberry/],
+            ['bgdbserver not found: /x (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)', /get_bgdbserver\.sh/],
+            ['Error: MUI SDK not found in /x: run tools/get_mui_sdk.sh', /get_mui_sdk\.sh/],
+            ['--machine a1200-32 needs $DASH_EMU_SYS_32_MUI (Workbench files with MUI) or --system', /muiSystem32/],
+            ['--machine a1200 needs $DASH_EMU_SYS_MUI (Workbench files with MUI) or --system', /"dash\.emulator\.muiSystem"/],
+            ['--machine a500 needs $DASH_KICKSTART_A500 (or --kickstart)', /kickstartA500/],
+            ['--machine a1200-32 needs $DASH_KICKSTART_32 (or --kickstart)', /kickstart32/],
+        ];
+        for (const [text, want] of cases) assert(want.test(missing(text) || ''), text + ' -> ' + missing(text));
+        assert.strictEqual(missing('=== x: RC=0\nhola'), null);
+    });
+
     const { taskCommand } = require('../tasks.js');
     const repo = path.resolve(__dirname, '..', '..', '..');
     await check('tasks: without a folder, its own terminal stays with the output until a key (v11)', async () => {
@@ -797,6 +814,17 @@ async function debugTests() {
         assert.deepStrictEqual(texts, ['No symbol table is loaded.  (later: shown)\n']);
         const scopes = got.find((m) => m.command === 'scopes');
         assert.deepStrictEqual(scopes.body.scopes.map((s) => s.name), ['Locals', 'Globals']);
+    });
+    await check('debugger: without gdb it says so and ends (before: an uncaught exception)', async () => {
+        const listeners = [];
+        const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+        const proxy = makeProxy(vscode, '/no/esta/m68k-amigaos-gdb', ['-i=dap']);
+        const got = [];
+        proxy.onDidSendMessage((m) => got.push(m));
+        for (let i = 0; i < 50 && !got.some((m) => m.event === 'terminated'); i++) await new Promise((r) => setTimeout(r, 20));
+        assert(got.some((m) => m.event === 'output' && /No encuentro gdb/.test(m.body.output)), JSON.stringify(got));
+        assert(got.some((m) => m.event === 'terminated'));
     });
     await check('debugger: the stop of attaching is not seen; it goes on after the breakpoints, unless stopOnEntry', async () => {
         const wait = (ms) => new Promise((r) => setTimeout(r, ms));

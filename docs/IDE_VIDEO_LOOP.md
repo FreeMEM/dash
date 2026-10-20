@@ -78,7 +78,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       de lenguaje, formatear, `end` automático, editor visual, diagnósticos).
 - [x] v11. **Sin guardar y sin carpeta:** ficheros sin título o sin guardar, sin carpeta abierta, varios `.dash` con
       el mismo nombre en carpetas distintas, espacio de trabajo con varias carpetas.
-- [ ] v12. **Falta algo:** sin toolchain, sin ROM, sin SDK de MUI, sin bgdbserver, `dash.path` mal: que cada cosa diga
+- [x] v12. **Falta algo:** sin toolchain, sin ROM, sin SDK de MUI, sin bgdbserver, `dash.path` mal: que cada cosa diga
       claramente qué falta y cómo se arregla.
 - [ ] v13. **A la vez:** F5 dos veces, Ver en Amiga mientras se depura, compilar mientras se ejecuta, cerrar VS Code
       con el emulador en marcha (¿quedan procesos?).
@@ -195,6 +195,18 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       fichero guardado.
 - [ ] (v11) Dos programas con el mismo nombre en carpetas distintas comparten `build/<nombre>.c` en la carpeta de
       Dash (uno detrás de otro, bien; a la vez, a probar en v13).
+
+- [x] (v12) `dash.path` apuntando a una carpeta que no es la de Dash se usaba igual: el shell decía "not found" y
+      nada más. Ahora se comprueba (con `~/` también), el aviso dice qué ajuste está mal y por qué, y al abrir un
+      `.dash` sin compilador sale una vez, con "Abrir el ajuste" (antes, sin errores al escribir y sin saber por qué).
+- [x] (v12) Sin gdb (`dash.debug.gdb` mal), F5 se quedaba esperando: el error del proceso no tenía quien lo
+      escuchara (una excepción sin capturar). Ahora dice dónde se busca y qué ajuste cambiar, y termina. Test.
+- [x] (v12) Lo que falta (compilador de Amiga, FS-UAE o Amiberry, bgdbserver, SDK de MUI o de AmiSSL, sistema con
+      MUI, ROM de una máquina) sale en un aviso en español con cómo conseguirlo (`missing.js`), en F5, Ver en
+      Amiga y Ejecutar. `./dash` sin compilador de Amiga lo dice en español, y `DASH_TOOLCHAIN` deja ponerlo en
+      otra carpeta. Test.
+- [ ] (v12) Sin FS-UAE no se pudo probar dentro de VS Code: recupera el PATH de la sesión. Probado en la línea de
+      órdenes ("fs-uae not found") y el aviso con su test.
 
 ## Bitácora
 
@@ -344,5 +356,12 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   primera. Para ver qué pasaba dentro: una prueba de extensión suelta (`v11it/`) con `--extensionTestsPath`.
 - Rodaje: `files` en `Rodaje.start` (ficheros sueltos o un `.code-workspace`).
 - Encontrado y arreglado: sin carpeta no se compilaba, el sin título, errores perdidos de las órdenes.
+- Tests: base 302, node todo bien, integración de VS Code 21/21.
+
+### 2026-10-20 — v12 (falta algo)
+- `v12probe.js` (scratchpad): un VS Code sin ventana por caso. `dash.path` mal, sin gdb, sin bgdbserver
+  (`DASH_BGDBSERVER`), sin sistema con MUI ("Ver en Amiga") y sin compilador de Amiga (`DASH_TOOLCHAIN`): cada uno
+  dice qué falta y cómo se arregla. Sin ROM no falta nada en el A1200: FS-UAE usa AROS.
+- Encontrado y arreglado: `dash.path` sin comprobar, gdb que no está, mensajes de lo que falta.
 - Tests: base 302, node todo bien, integración de VS Code 21/21.
 

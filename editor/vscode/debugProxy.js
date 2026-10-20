@@ -170,6 +170,15 @@ function makeProxy(vscode, command, args) {
         if (text) send({ type: 'event', event: 'output', body: { category: 'console', output: text } });
     });
     gdb.on('exit', () => send({ type: 'event', event: 'terminated', body: {} }));
+    gdb.on('error', (e) => {    // not there (an error event with no listener: an uncaught exception, and the session waiting)
+        const text = e.code === 'ENOENT'
+            ? `No encuentro gdb (${command}): viene con el compilador de Amiga (m68k-amigaos-gdb, en /opt/amiga/bin); ` +
+              'si está en otra parte, pon su ruta en el ajuste "dash.debug.gdb".'
+            : `gdb (${command}): ${e.message}`;
+        if (vscode.window && vscode.window.showErrorMessage) vscode.window.showErrorMessage(text);
+        send({ type: 'event', event: 'output', body: { category: 'stderr', output: text + '\n' } });
+        send({ type: 'event', event: 'terminated', body: {} });
+    });
     return {
         onDidSendMessage: emitter.event,
         handleMessage(message) {

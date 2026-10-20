@@ -14,6 +14,8 @@
   operator says so in the syntax error.
 - A `.dash` opened without a folder compiles and runs (in a terminal of its own, which keeps the output); an
   untitled one asks for its name first; its errors are underlined. Needs VS Code 1.86.
+- Something missing (the Amiga compiler, the emulator, bgdbserver, gdb, the MUI SDK, a system with MUI, a ROM) is
+  said in words, with how to get it; a wrong `dash.path` says so (and `~/` works in it).
 
 ## 0.2.0 (2026-10-20)
 

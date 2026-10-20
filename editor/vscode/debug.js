@@ -9,6 +9,7 @@ const net = require('net');
 const { spawn, execFile } = require('child_process');
 const { makeProxy } = require('./debugProxy');
 const { savedFile } = require('./tasks');
+const { missing } = require('./missing');
 
 /** A TCP port free on this machine (the emulator's bsdsocket listens on the PC's sockets) */
 function freePort() {
@@ -143,7 +144,7 @@ function setupDebugger(vscode, context, helpers) {
             const file = config.program;
             const dashDir = helpers.findDash(file);
             if (!dashDir) {
-                vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
+                vscode.window.showErrorMessage(helpers.noDash());
                 return undefined;
             }
             const doc = vscode.workspace.textDocuments.find((d) => d.fileName === file);
@@ -169,8 +170,9 @@ function setupDebugger(vscode, context, helpers) {
                 const child = spawn('python3', emulatorArgs(dashDir, exe, port, options),
                                     { cwd: dashDir, env: Object.assign({}, process.env, helpers.env()), detached: true });
                 const target = `localhost:${port}`;
-                child.stdout.on('data', (d) => { output.append(d.toString('utf8')); toConsole(target, d.toString('utf8')); });
-                child.stderr.on('data', (d) => output.append(d.toString('utf8')));
+                let said = '';             // what it says: if it does not start, what is missing
+                child.stdout.on('data', (d) => { said += d; output.append(d.toString('utf8')); toConsole(target, d.toString('utf8')); });
+                child.stderr.on('data', (d) => { said += d; output.append(d.toString('utf8')); });
                 emulators.set(target, child);
                 for (let i = 0; i < 1200 && !listening(port); i++) {        // up to 2 minutes (a 68000 boots slowly)
                     if (child.exitCode !== null) break;
@@ -179,8 +181,8 @@ function setupDebugger(vscode, context, helpers) {
                 if (!listening(port)) {
                     stopEmulator(target);
                     output.show(true);
-                    vscode.window.showErrorMessage('El emulador no arrancó bgdbserver: mira "Dash: Amiga" ' +
-                                                   '(¿falta tools/get_bgdbserver.sh, la ROM o el sistema?).');
+                    vscode.window.showErrorMessage(missing(said) || ('El emulador no arrancó bgdbserver: mira "Dash: Amiga" ' +
+                                                   '(¿falta tools/get_bgdbserver.sh, la ROM o el sistema?).'));
                     return undefined;
                 }
                 return Object.assign({}, config, { request: 'attach', program: exe, target });
@@ -228,7 +230,7 @@ function setupDebugger(vscode, context, helpers) {
         const file = await savedFile(vscode, editor.document);
         if (!file) return;
         const dashDir = helpers.findDash(file);
-        if (!dashDir) { vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
+        if (!dashDir) { vscode.window.showErrorMessage(helpers.noDash()); return; }
         const exe = debugExe(file);
         const built = await build(dashDir, file, exe);
         output.clear();
