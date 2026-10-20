@@ -7,9 +7,15 @@
     { "open": "{", "close": "}" },
     { "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
   ],
-  "surroundingPairs": [["(", ")"], ["[", "]"], ["\"", "\""]],
+  "autoCloseBefore": ";:.,=}])> \n\t",
+  "surroundingPairs": [["(", ")"], ["[", "]"], ["{", "}"], ["\"", "\""]],
+  "wordPattern": "@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?",
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*(func|if|elif|else|while|for|struct|enum|Window|Main|EventLoop|On|@native)\\b.*$",
+    "increaseIndentPattern": "^\\s*((@native(\\s*\\(\\s*borrow\\s*\\))?\\s+)?func|if|elif|else|while|for|struct|enum|Window|Main|EventLoop|On|@c)\\b(?!.*\\bend\\s*(#.*)?$).*$",
     "decreaseIndentPattern": "^\\s*(end|else|elif)\\b"
+  },
+  "folding": {
+    "offSide": false,
+    "markers": { "start": "^\\s*#\\s*region\\b", "end": "^\\s*#\\s*endregion\\b" }
   }
 }

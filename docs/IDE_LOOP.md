@@ -85,7 +85,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       `compiler/amiga_builtins.py` las palabras clave, tipos, directivas `@` y los 425 builtins; interpolación
       `#{...}`, números hex/binarios, `Window`/`EventLoop`/`On`, `@native`/`@c` con C dentro. El runner comprueba
       que está al día (como `docs/BUILTINS.md`). Tests de tokens.
-- [ ] 3. **Edición.** Snippets (func, struct, Main, EventLoop, ventana MUI...), sangría y `onEnter` con `end`,
+- [x] 3. **Edición.** Snippets (func, struct, Main, EventLoop, ventana MUI...), sangría y `onEnter` con `end`,
       plegado por bloques, iconos de `.dash`/`.dashui`, comentar con `#`.
 
 ### B. Servidor de lenguaje (LSP)
@@ -170,4 +170,23 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - `CLAUDE.md` no está en el repositorio (es local, de `~/Projects/FreeMEMLang`): la línea de `gen_tmgrammar.py` se
   añadirá allí al fusionar.
 - Base: run_tests todo bien (más `editor/tmgrammar`); `npm test` todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 3 (edición)
+- 17 snippets (`snippets/dash.json`): Main, func (con y sin tipos), struct, enum, if, ife, while, for (rango y
+  lista), import, const, @native, Window con EventLoop, EventLoop, On (elige el evento), mui y muiui (MUI con
+  `.dashui`). Un test compila cada uno con sus valores por defecto (`python3 -m compiler.main`).
+- `endwise.js`: Enter al final de una línea que abre bloque añade su `end` si no lo tiene (no en `@extern`, ni en
+  `enum E A, B end`, ni si el bloque ya cierra con `end`/`elif`/`else`); ajuste `dash.editor.autoEnd`. Y
+  `else`/`elif`/`end` vuelven al nivel de su bloque al escribirlos: VS Code lo hace solo a veces (no si hay un
+  `end` debajo, que es justo lo que deja el `end` automático).
+- Cosas de VS Code aprendidas con la prueba real: la sangría que pone su Enter se borra en cuanto llega otra
+  edición (`editor.trimAutoWhitespace`), y con un `end` debajo sangra como el `end`. Por eso el `end` y la línea
+  nueva van en una sola edición (también: un Ctrl+Z lo quita todo).
+- `language-configuration.json`: la sangría no sube tras un bloque de una línea; `@c` y `@native(borrow)` abren;
+  plegado con `# region`; `wordPattern` con `@`. Icono para `.dash` (`media/dash-file.svg`). `.dashui` sigue como
+  JSON (sin icono propio: cambiarle el lenguaje quitaría la validación JSON).
+- **Tests dentro de VS Code** (`npm run test:vscode`, `test/integration/`): el Electron de Code - OSS con un perfil
+  y carpeta de extensiones propios (no toca los del usuario; abre una ventana unos segundos). 6 pruebas: `end` al
+  pulsar Enter, sin `end` doble, anidado, `else`, deshacer, snippets. Servirá para el LSP y la depuración.
+- Base: run_tests todo bien; `npm test` 59 bien; `npm run test:vscode` 6 bien. Extensión instalada.
 

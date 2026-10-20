@@ -7,6 +7,7 @@ const fs = require('fs');
 const { DashUIEditorProvider } = require('./dashuiEditor');
 const DashUI = require('./media/model');
 const { runPreview } = require('./amigaPreview');
+const { newline, onTyped } = require('./endwise');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -131,6 +132,8 @@ function activate(context) {
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),
         vscode.commands.registerCommand('dash.newWindowFile', newWindowFile),
+        vscode.commands.registerCommand('dash.newline', () => newline(vscode)),   // Enter: the "end" by itself
+        vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
 }

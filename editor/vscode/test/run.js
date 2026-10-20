@@ -322,7 +322,8 @@ async function extensionTests() {
     const registered = {};
     const settings = { 'dash': { path: '' }, 'dash.emulator': { kickstart: '/roms/ks.rom', system: '', autoclose: 5 } };
     const fakeVscode = {
-        workspace: { getConfiguration: (section) => ({ get: (k) => (settings[section] || {})[k] }) },
+        workspace: { getConfiguration: (section) => ({ get: (k) => (settings[section] || {})[k] }),
+                     onDidChangeTextDocument: () => ({ dispose() {} }) },
         window: {
             activeTextEditor: null,
             showWarningMessage: (m) => sent.push('WARN ' + m),
@@ -346,7 +347,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.compile', 'dash.newWindowFile', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
+            ['dash.compile', 'dash.newWindowFile', 'dash.newline', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {
@@ -389,8 +390,85 @@ async function extensionTests() {
     });
 }
 
+// --- editing: endwise.js, snippets, indentation rules ---------------------------------
+async function editingTests() {
+    const { needsEnd } = require('../endwise.js');
+    const lines = (t) => t.split('\n');
+    await check('endwise: a new block gets its end', () => {
+        assert.strictEqual(needsEnd(lines('func f(a: Int) -> Int\n    '), 0), true);
+        assert.strictEqual(needsEnd(lines('Main\n    if x > 1\n        \nend'), 1), true);
+        assert.strictEqual(needsEnd(lines('@native(borrow) func f(x: Int)\n'), 0), true);
+        assert.strictEqual(needsEnd(lines('    On Timer 100\n        \n    end'), 0), false);
+    });
+    await check('endwise: no end where there is one, or none is needed', () => {
+        assert.strictEqual(needsEnd(lines('while x\n    x = 1\nend'), 0), false);
+        assert.strictEqual(needsEnd(lines('if a\n    b()\nelse\n    c()\nend'), 0), false);   // closed by else...end
+        assert.strictEqual(needsEnd(lines('enum E A, B end'), 0), false);                      // one line
+        assert.strictEqual(needsEnd(lines('@extern("x.library")\nfunc F(x: Int) -> Int\n'), 1), false);
+        assert.strictEqual(needsEnd(lines('x = 1\n'), 0), false);
+        assert.strictEqual(needsEnd(lines('else\n'), 0), false);
+    });
+    await check('outdent: else/elif/end go back to their block', () => {
+        const { outdentFor } = require('../endwise.js');
+        assert.strictEqual(outdentFor(lines('if a\n    b = 1\n    else'), 2, '    '), '');
+        assert.strictEqual(outdentFor(lines('Main\n    if a\n        b()\n        elif c > 1'), 3, '    '), '    ');
+        assert.strictEqual(outdentFor(lines('if a\n    while x\n        y()\n    end\n    else'), 4, '    '), '');
+        assert.strictEqual(outdentFor(lines('while x\n    end'), 1, '    '), null);        // empty block: same level
+        assert.strictEqual(outdentFor(lines('if a\n    b = 1\nelse'), 2, '    '), null);   // already there
+        assert.strictEqual(outdentFor(lines('if a\n    b = 1\n    endif = 2'), 2, '    '), null);
+    });
+    await check('endwise: an inner block before the outer end', () => {
+        assert.strictEqual(needsEnd(lines('Main\n    while true\n        \nend'), 1), true);
+    });
+    const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'language-configuration.json'), 'utf8'));
+    await check('indentation: opens after a block line, not after a one-line block', () => {
+        const inc = new RegExp(config.indentationRules.increaseIndentPattern);
+        for (const l of ['func f()', '    if x', 'else', '@native(borrow) func f()', '@c', 'On Close', 'Main'])
+            assert(inc.test(l), l);
+        for (const l of ['enum E A, B end', 'x = 1', 'endif = 2', '# if x'])
+            assert(!inc.test(l), l);
+    });
+    // every snippet, with its default values, must compile (python3 -m compiler.main, transpile only)
+    const snippets = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'snippets', 'dash.json'), 'utf8'));
+    const repo = path.resolve(__dirname, '..', '..', '..');
+    const os = require('os');
+    const { execFileSync } = require('child_process');
+    const expand = (body) => body.join('\n').replace(/\$\{\d+:([^}]*)\}/g, '$1').replace(/\$\{\d+\|([^,|]*)[^}]*\}/g, '$1')
+        .replace(/\$\{?\d+\}?/g, '').replace(/\t/g, '    ');
+    // the snippets that are a part of a program, inside one
+    const wrap = {
+        if: (s) => `Main\n    condicion = true\n${s}\nend`, 'if else': (s) => `Main\n    condicion = true\n${s}\nend`,
+        while: (s) => `Main\n    condicion = false\n${s}\nend`, 'for rango': (s) => `Main\n${s}\nend`,
+        'for lista': (s) => `Main\n    lista = [1]\n${s}\nend`, import: null,
+        const: (s) => `${s}\nMain\nend`, func: (s) => `${s.replace(/\n    \n/, '\n    return a\n')}\nMain\nend`,
+        'func sin tipos': (s) => `${s}\nMain\nend`, struct: (s) => `${s}\nMain\nend`, enum: (s) => `${s}\nMain\nend`,
+        '@native': (s) => `${s.replace('\n    \n', '\n    return x;\n')}\nMain\nend`,
+        EventLoop: (s) => `Window W\n    title "x"\nend\nMain\n    W.open\n${s}\nend`,
+        On: (s) => `Window W\n    title "x"\nend\nMain\n    W.open\n    EventLoop\n${s}\n    end\nend`,
+        'Programa MUI con .dashui': null,   // needs the .dashui file
+    };
+    for (const [name, snip] of Object.entries(snippets)) {
+        const w = name in wrap ? wrap[name] : (s) => s;
+        if (!w) continue;
+        await check(`snippet compiles: ${name}`, () => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_snip_'));
+            const file = path.join(dir, 'snip.dash');
+            fs.writeFileSync(file, w(expand(snip.body)) + '\n');
+            try {
+                execFileSync('python3', ['-m', 'compiler.main', file, '-o', path.join(dir, 'snip.c')],
+                             { cwd: repo, stdio: 'pipe' });
+            } catch (e) {
+                throw new Error(fs.readFileSync(file, 'utf8') + '\n' + String(e.stdout) + String(e.stderr));
+            } finally {
+                fs.rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    }
+}
+
 (async () => {
     await grammarTests();
+    await editingTests();
     await modelTests();
     await previewTests();
     await extensionTests();
