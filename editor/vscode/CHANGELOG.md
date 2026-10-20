@@ -12,6 +12,8 @@
 - Odd text: `.dash` files with a BOM or in Latin-1 (written on the Amiga) compile, and VS Code guesses their
   encoding; formatting keeps Windows line ends; a module without `Main` is not a problem; a line that ends in an
   operator says so in the syntax error.
+- A `.dash` opened without a folder compiles and runs (in a terminal of its own, which keeps the output); an
+  untitled one asks for its name first; its errors are underlined. Needs VS Code 1.86.
 
 ## 0.2.0 (2026-10-20)
 

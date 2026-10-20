@@ -224,7 +224,8 @@ class Server:
 
         by_uri = {uri: []}
         for file, line, column, severity, message in found:
-            target = path_to_uri(file)
+            # the document itself by its own uri (an untitled one has no file: "untitled:Untitled-1")
+            target = uri if file == path else path_to_uri(file)
             text = self.docs.get(target)
             if text is None:
                 try:

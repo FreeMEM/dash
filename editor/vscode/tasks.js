@@ -81,14 +81,16 @@ function makeTask(vscode, kind, file, dashDir, env, options, definition, onOutpu
 /**
  * A pseudoterminal that runs a shell command (as ShellExecution would), shows its output and gives it
  * all to done(output, exit code) at the end. Closing it (stopping the task) ends the command's group.
+ * keepOpen (a terminal of its own, not a task's): at the end it stays, with its output, until a key.
  * @param {typeof import('vscode')} vscode
  */
-function shellTerminal(vscode, command, cwd, env, done, title) {
+function shellTerminal(vscode, command, cwd, env, done, title, keepOpen) {
     const { spawn } = require('child_process');
     const write = new vscode.EventEmitter();
     const close = new vscode.EventEmitter();
     let child = null;
     let all = '';
+    let ended = false;          // keepOpen: the command ended, the terminal waits for a key
     const stop = () => { try { if (child && child.exitCode === null) process.kill(-child.pid, 'SIGTERM'); } catch (e) { /* gone */ } };
     return {
         onDidWrite: write.event,
@@ -106,13 +108,35 @@ function shellTerminal(vscode, command, cwd, env, done, title) {
             child.stderr.on('data', out);
             child.on('close', (code) => {
                 try { done(all, code); } catch (e) { write.fire(String(e) + '\r\n'); }
-                close.fire(code === null ? 1 : code);
+                if (!keepOpen) { close.fire(code === null ? 1 : code); return; }
+                ended = true;           // (else the output, with its errors, went with the terminal)
+                write.fire(`\r\n\x1b[2m${code === 0 ? 'Terminado' : 'Terminado con error ' + code}. ` +
+                           'Pulsa una tecla para cerrar.\x1b[0m\r\n');
             });
             child.on('error', (e) => { write.fire(String(e) + '\r\n'); close.fire(1); });
         },
         close: stop,
-        handleInput(data) { if (data === '\x03') stop(); },      // Ctrl+C
+        handleInput(data) {
+            if (ended) close.fire(0);
+            else if (data === '\x03') stop();                  // Ctrl+C
+        },
     };
+}
+
+/**
+ * The document saved, its file; an untitled one asks for a name first (VS Code's Save As), and its file is then
+ * the new one. null if it was not saved (the dialog cancelled).
+ * @param {typeof import('vscode')} vscode
+ * @param {import('vscode').TextDocument} doc
+ */
+async function savedFile(vscode, doc) {
+    if (!doc) return null;
+    if (doc.isUntitled) {
+        const uri = await vscode.workspace.save(doc.uri);      // its Save As: the new file's uri (or nothing)
+        return uri && uri.scheme === 'file' ? uri.fsPath : null;
+    }
+    if (doc.isDirty) await doc.save();
+    return doc.fileName;
 }
 
 /** The table of --profile in the output: [{own, total, calls, name}] (lines "perfil: 12.3% 45.6% 789 nombre") */
@@ -193,8 +217,18 @@ function setupTasks(vscode, context, helpers) {
         },
     }));
 
-    /** Runs a task on the active .dash (saved first); the commands of the palette, CodeLens and status bar. */
+    /** Runs a task on the active .dash (saved first); the commands of the palette, CodeLens and status bar.
+        (A failure says so: a command's rejected promise is not seen anywhere.) */
     async function runTask(kind, file) {
+        try {
+            return await startTask(kind, file);
+        } catch (e) {
+            vscode.window.showErrorMessage(`Dash (${kind}): ${e && e.message ? e.message : e}`);
+            return undefined;
+        }
+    }
+
+    async function startTask(kind, file) {
         if (!helpers.trusted()) {
             vscode.window.showWarningMessage('Carpeta sin confianza (modo restringido): para compilar o usar el ' +
                                              'emulador, confía en ella ("Manage" en la barra de arriba).');
@@ -209,11 +243,24 @@ function setupTasks(vscode, context, helpers) {
             file = editor.document.fileName;
         }
         const doc = vscode.workspace.textDocuments.find((d) => d.fileName === file);
-        if (doc && doc.isDirty) await doc.save();
+        if (doc) file = await savedFile(vscode, doc);
+        if (!file) return;
         const task = forFile(kind, file);
         if (!task) {
             vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
             return;
+        }
+        // VS Code runs tasks only with a folder open (with a file alone it did nothing): the same command in a
+        // terminal of ours (without the problem matchers: the language server's errors are there)
+        if (!(vscode.workspace.workspaceFolders || []).length) {
+            const dashDir = helpers.findDash(file);
+            const title = `${KINDS[kind].label}: ${path.basename(file)}`;
+            for (const t of vscode.window.terminals) if (t.name === title) t.dispose();   // the last one's, as tasks do
+            const terminal = vscode.window.createTerminal({ name: title, pty: shellTerminal(vscode,
+                taskCommand(kind, dashDir, file, emulatorOptions(vscode, file)), dashDir, helpers.env(),
+                (out, code) => afterRun(kind, file, out, code), title + '…', true) });
+            terminal.show(true);
+            return terminal;
         }
         return vscode.tasks.executeTask(task);
     }
@@ -292,4 +339,4 @@ function emulatorOptions(vscode, file) {
     return options;
 }
 
-module.exports = { taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal };
+module.exports = { taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal, savedFile };

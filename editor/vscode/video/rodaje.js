@@ -51,11 +51,12 @@ const CURSOR_PATH = 'M1 1 L1 25 L7 19 L11 30 L15 28 L11 18 L20 18 Z';
 class Rodaje {
     /**
      * VS Code with the workspace folder open (and files of it in editors), the cursor and the pictures running.
+     * files: paths opened as they are (a file without a folder, a .code-workspace);
      * settings: more settings of the profile (dash.path, dash.emulator...); fps: pictures a second (about);
      * vsix: the extension installed from this package (as a user has it), else loaded from its folder (then
      * the window's title says "[Extension Development Host]").
      */
-    static async start({ workspace, open = [], settings = {}, width = 1280, height = 720, fps = 12, env = {}, vsix = null }) {
+    static async start({ workspace, open = [], files = [], settings = {}, width = 1280, height = 720, fps = 12, env = {}, vsix = null }) {
         const { _electron } = require(PLAYWRIGHT);
         const r = new Rodaje();
         r.tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-rodaje-'));
@@ -78,7 +79,8 @@ class Rodaje {
                    '--extensions-dir', path.join(r.tmp, 'ext'), '--disable-workspace-trust', '--skip-welcome',
                    '--skip-release-notes', '--disable-telemetry', '--new-window',
                    ...(vsix ? [] : [`--extensionDevelopmentPath=${EXTENSION}`]),
-                   ...(workspace ? [workspace, ...open.map((f) => path.join(workspace, f))] : [])],   // (no folder: an empty window)
+                   ...(workspace ? [workspace, ...open.map((f) => path.join(workspace, f))] : []),   // (no folder: an empty window)
+                   ...files],                                  // paths as they are (a file with no folder, a .code-workspace)
             env: Object.assign({}, process.env, env),
             timeout: 90000,
         });

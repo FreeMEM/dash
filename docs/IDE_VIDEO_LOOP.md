@@ -76,7 +76,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       ejecutar, depurar, Ver en Amiga, ir al evento.
 - [x] v10. **Texto raro:** CRLF, BOM, tabuladores, ficheros vacíos o de una línea, en `.dash` y `.dashui` (servidor
       de lenguaje, formatear, `end` automático, editor visual, diagnósticos).
-- [ ] v11. **Sin guardar y sin carpeta:** ficheros sin título o sin guardar, sin carpeta abierta, varios `.dash` con
+- [x] v11. **Sin guardar y sin carpeta:** ficheros sin título o sin guardar, sin carpeta abierta, varios `.dash` con
       el mismo nombre en carpetas distintas, espacio de trabajo con varias carpetas.
 - [ ] v12. **Falta algo:** sin toolchain, sin ROM, sin SDK de MUI, sin bgdbserver, `dash.path` mal: que cada cosa diga
       claramente qué falta y cómo se arregla.
@@ -184,6 +184,17 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       expresión sigue en la siguiente)". Test en `tests/errors`.
 - [x] (v10) El editor visual comparaba su texto (`\n`) con el del documento (CRLF): cualquier acción, aunque no
       cambiara nada, reescribía el fichero entero. Ahora compara sin los `\r`. "Ver en Amiga" quita el BOM.
+
+- [x] (v11) Con un `.dash` abierto sin carpeta, Compilar, Ejecutar, Memoria y Perfil no hacían nada ni avisaban:
+      VS Code solo lanza tareas con una carpeta abierta. Ahora van por un terminal propio, que se queda con la
+      salida hasta pulsar una tecla (el primer arreglo se cerraba al acabar y se llevaba los errores) y sustituye
+      al anterior del mismo nombre. Un fallo dentro de la orden sale como aviso (antes, nada). Test.
+- [x] (v11) En un fichero sin título, el servidor publicaba sus errores en `file:///…/Untitled-1`: contaban en la
+      barra pero no se subrayaban. Test. Y Compilar, Ejecutar, Depurar y Preparar sobre él usaban "Untitled-1"
+      como fichero: ahora piden el nombre (Guardar como, `vscode.workspace.save`, VS Code 1.86) y siguen con el
+      fichero guardado.
+- [ ] (v11) Dos programas con el mismo nombre en carpetas distintas comparten `build/<nombre>.c` en la carpeta de
+      Dash (uno detrás de otro, bien; a la vez, a probar en v13).
 
 ## Bitácora
 
@@ -325,4 +336,13 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   CRLF, y un `.dashui` con BOM y CRLF en el editor visual (lo lee, no lo marca modificado, al guardar conserva
   BOM y CRLF). Todo bien con los arreglos.
 - Tests: base 301, LSP 26, node todo bien.
+
+### 2026-10-20 — v11 (sin guardar y sin carpeta)
+- `v11probe.js` (scratchpad), VS Code sin ventana: un `.dash` abierto sin carpeta (errores, compilar, ejecutar),
+  un fichero sin título en Dash (errores, compilar: pide el nombre, lo guarda y lo compila) y un espacio de trabajo
+  con dos carpetas con `main.dash` cada una (ejecutar las dos, F5 en una). La de varias carpetas, bien a la
+  primera. Para ver qué pasaba dentro: una prueba de extensión suelta (`v11it/`) con `--extensionTestsPath`.
+- Rodaje: `files` en `Rodaje.start` (ficheros sueltos o un `.code-workspace`).
+- Encontrado y arreglado: sin carpeta no se compilaba, el sin título, errores perdidos de las órdenes.
+- Tests: base 302, node todo bien, integración de VS Code 21/21.
 

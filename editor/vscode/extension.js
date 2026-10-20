@@ -9,7 +9,7 @@ const DashUI = require('./media/model');
 const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
-const { setupTasks, emulatorOptions } = require('./tasks');
+const { setupTasks, emulatorOptions, savedFile } = require('./tasks');
 const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
 const { writeProject, cleanName } = require('./newProject');
@@ -47,8 +47,7 @@ async function activeDashFile() {
         vscode.window.showWarningMessage('Abre un fichero .dash');
         return null;
     }
-    if (editor.document.isDirty) await editor.document.save();
-    return editor.document.fileName;
+    return savedFile(vscode, editor.document);         // (an untitled one: its name first)
 }
 
 /** Commands that the terminal will run (exported for the tests). */

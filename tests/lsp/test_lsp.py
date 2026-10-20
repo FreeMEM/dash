@@ -390,6 +390,14 @@ class LanguageServerTest(unittest.TestCase):
         [d] = self.client.diagnostics(self.open("tab.dash", "Main\n\tPrint 1 + nada\nend\n"))
         self.assertEqual(d["range"]["start"], {"line": 1, "character": 11})
 
+    def test_untitled_document(self):
+        # (v11: its errors went to file:///…/Untitled-1, a file that is not there: counted, not underlined)
+        u = "untitled:Untitled-1"
+        self.client.notify("textDocument/didOpen", {"textDocument": {
+            "uri": u, "languageId": "dash", "version": 1, "text": "Main\n    Print nada\nend\n"}})
+        [d] = self.client.diagnostics(u)
+        self.assertIn("nada", d["message"])
+
     def actions(self, u, diagnostic):
         return self.client.request("textDocument/codeAction", {"textDocument": {"uri": u}, "range": diagnostic["range"],
                                    "context": {"diagnostics": [diagnostic]}})["result"]

@@ -8,6 +8,7 @@ const fs = require('fs');
 const net = require('net');
 const { spawn, execFile } = require('child_process');
 const { makeProxy } = require('./debugProxy');
+const { savedFile } = require('./tasks');
 
 /** A TCP port free on this machine (the emulator's bsdsocket listens on the PC's sockets) */
 function freePort() {
@@ -118,11 +119,16 @@ function setupDebugger(vscode, context, helpers) {
 
     context.subscriptions.push(output, vscode.debug.registerDebugConfigurationProvider('dash', {
         provideDebugConfigurations: () => [{ type: 'dash', request: 'launch', name: 'Depurar en el Amiga', program: '${file}' }],
-        resolveDebugConfiguration: (folder, config) => {
+        resolveDebugConfiguration: async (folder, config) => {
+            const editor = vscode.window.activeTextEditor;
             if (!config.type && !config.request && !config.name) {      // F5 with no launch.json
-                const editor = vscode.window.activeTextEditor;
                 if (!editor || editor.document.languageId !== 'dash') return null;
                 Object.assign(config, { type: 'dash', request: 'launch', name: 'Depurar en el Amiga' });
+            }
+            if (config.request === 'launch' && (!config.program || config.program === '${file}') && editor &&
+                editor.document.isUntitled && editor.document.languageId === 'dash') {
+                config.program = await savedFile(vscode, editor.document);   // a name first
+                if (!config.program) return undefined;
             }
             if (config.request === 'launch' && !config.program) config.program = '${file}';
             return config;
@@ -205,11 +211,13 @@ function setupDebugger(vscode, context, helpers) {
         },
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('dash.debug', () => {
+    context.subscriptions.push(vscode.commands.registerCommand('dash.debug', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document.languageId !== 'dash') { vscode.window.showWarningMessage('Abre un fichero .dash'); return; }
-        return vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(editor.document.uri),
-            { type: 'dash', request: 'launch', name: 'Depurar en el Amiga', program: editor.document.fileName });
+        const program = await savedFile(vscode, editor.document);
+        if (!program) return;
+        return vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(vscode.Uri.file(program)),
+            { type: 'dash', request: 'launch', name: 'Depurar en el Amiga', program });
     }));
 
     // A real Amiga: the program built for the debugger, to copy there and start under bgdbserver
@@ -217,10 +225,10 @@ function setupDebugger(vscode, context, helpers) {
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document.languageId !== 'dash') { vscode.window.showWarningMessage('Abre un fichero .dash'); return; }
         if (!helpers.trusted()) { vscode.window.showWarningMessage('Carpeta sin confianza (modo restringido): para compilar, confía en ella.'); return; }
-        const file = editor.document.fileName;
+        const file = await savedFile(vscode, editor.document);
+        if (!file) return;
         const dashDir = helpers.findDash(file);
         if (!dashDir) { vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
-        if (editor.document.isDirty) await editor.document.save();
         const exe = debugExe(file);
         const built = await build(dashDir, file, exe);
         output.clear();

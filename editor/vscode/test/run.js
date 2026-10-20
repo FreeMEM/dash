@@ -686,6 +686,26 @@ async function editingTests() {
 async function taskTests() {
     const { taskCommand } = require('../tasks.js');
     const repo = path.resolve(__dirname, '..', '..', '..');
+    await check('tasks: without a folder, its own terminal stays with the output until a key (v11)', async () => {
+        const { shellTerminal } = require('../tasks.js');
+        const vscode = { EventEmitter: class { constructor() { this.fs = []; this.event = (f) => this.fs.push(f); }
+                                                fire(v) { for (const f of this.fs) f(v); } } };
+        for (const keepOpen of [false, true]) {
+            let text = '', closed = null, got = null;
+            const t = shellTerminal(vscode, 'echo hola', '/', {}, (out, code) => { got = [out, code]; }, 'Compilar: x', keepOpen);
+            t.onDidWrite((w) => { text += w; });
+            t.onDidClose((c) => { closed = c; });
+            t.open();
+            for (let i = 0; i < 50 && !got; i++) await new Promise((r) => setTimeout(r, 40));
+            await new Promise((r) => setTimeout(r, 50));
+            assert.deepStrictEqual(got, ['hola\n', 0]);
+            if (!keepOpen) { assert.strictEqual(closed, 0); continue; }
+            assert.strictEqual(closed, null, 'closed by itself');
+            assert(/hola[\s\S]*Pulsa una tecla para cerrar/.test(text), text);
+            t.handleInput('x');
+            assert.strictEqual(closed, 0);
+        }
+    });
     await check('tasks: compile, run with --memcheck and with autoclose', () => {
         assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
                            "mkdir -p '/p/bin' && '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
