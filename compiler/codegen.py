@@ -5673,6 +5673,16 @@ static struct Hook _dash_desk_hook;
 static struct Hook *_dash_desk_old = LAYERS_BACKFILL;
 static ULONG _dash_desk_rects_last = 0;         /* rectangles of the last update (tests, measures) */
 static ULONG _dash_desk_attached = 0;           /* times our hook was put on a backdrop window */
+#ifdef DASH_DESK_TIMES
+/* Measures (DASH_CFLAGS=-DDASH_DESK_TIMES, with TimerBase open): EClock ticks of each part of the
+   last update */
+ULONG _dash_desk_t[6];                          /* draw, compare, read the screen, masks, paint, all */
+static ULONG _dash_desk_tick(void) { struct EClockVal e; ReadEClock(&e); return e.ev_lo; }
+#define _DASH_DESK_T(i, t0) (_dash_desk_t[i] = _dash_desk_tick() - (t0))
+#else
+#define _dash_desk_tick() 0
+#define _DASH_DESK_T(i, t0) ((void)(t0))
+#endif
 
 static void _dash_desk_fill_old(struct RastPort *rp, struct _DashDeskFill *m) {
     if (_dash_desk_old == LAYERS_NOBACKFILL) return;
@@ -5777,19 +5787,35 @@ static BOOL _dash_desk_attach(void) {
    the layer locked) */
 static LONG _dash_desk_dirty(struct _DashDesk *d, LONG back, struct Rectangle *r) {
     struct BitMap *a = d->bm[back], *b = d->bm[d->front];
-    LONG bpr = a->BytesPerRow, words = (d->w + 15) >> 4, depth = a->Depth, y, p, c, n = 0, gap = 0;
+    LONG bpr = a->BytesPerRow, words = (d->w + 15) >> 4, longs = words >> 1, depth = a->Depth, y, p, c, n = 0, gap = 0;
     BOOL damaged = d->damage_left > 0;
+    UBYTE *pa[8], *pb[8];
+    for (p = 0; p < depth && p < 8; p++) { pa[p] = a->Planes[p]; pb[p] = b->Planes[p]; }
+    if (depth > 8) depth = 8;
     WaitBlit();                             /* the drawing may still be on its way */
     for (y = 0; y < d->h; y++) {
-        LONG first = words, last = -1;
+        LONG first = words, last = -1, o = y * bpr;
         if (damaged && y >= d->damage.MinY && y <= d->damage.MaxY) {   /* in the same bands: no overlaps */
             first = d->damage.MinX >> 4;
             last = d->damage.MaxX >> 4;
         }
-        for (p = 0; p < depth; p++) {
-            UWORD *pa = (UWORD *)(a->Planes[p] + y * bpr), *pb = (UWORD *)(b->Planes[p] + y * bpr);
-            for (c = 0; c < first; c++) if (pa[c] != pb[c]) { first = c; break; }
-            for (c = words - 1; c > last; c--) if (pa[c] != pb[c]) { last = c; break; }
+        /* one pass, two words at a time (the bitmaps are in Chip RAM: each read counts) */
+        for (c = 0; c < longs; c++) {
+            ULONG x = 0;
+            for (p = 0; p < depth; p++) x |= ((ULONG *)(pa[p] + o))[c] ^ ((ULONG *)(pb[p] + o))[c];
+            if (x) {
+                LONG w0 = (x & 0xFFFF0000UL) ? 2 * c : 2 * c + 1, w1 = (x & 0xFFFFUL) ? 2 * c + 1 : 2 * c;
+                if (w0 < first) first = w0;
+                if (w1 > last) last = w1;
+            }
+        }
+        if (words & 1) {
+            UWORD x = 0;
+            for (p = 0; p < depth; p++) x |= ((UWORD *)(pa[p] + o))[words - 1] ^ ((UWORD *)(pb[p] + o))[words - 1];
+            if (x) {
+                if (words - 1 < first) first = words - 1;
+                last = words - 1;
+            }
         }
         if (last < 0) { gap++; continue; }
         if (n > 0 && (gap < 4 || n == _DASH_DESK_RECTS)) {   /* with the band before */
@@ -5815,18 +5841,29 @@ static void _dash_desk_present(struct _DashDesk *d, LONG back) {
     struct RastPort *wrp = _dash_desk_win->RPort, rt;
     struct BitMap *s = d->tmp, *f = d->bm[d->front], *wl = d->wall;
     LONG n, i, p, y, c, depth = s->Depth, bpr = s->BytesPerRow;
+    ULONG t0, t1;
     InitRastPort(&rt);
     rt.BitMap = s;
     LockLayer(0, _dash_desk_layer);
+    t0 = _dash_desk_tick();
     n = _dash_desk_dirty(d, back, r);
+    _DASH_DESK_T(1, t0);
     _dash_desk_rects_last = n;
+#ifdef DASH_DESK_TIMES
+    _dash_desk_t[2] = _dash_desk_t[3] = _dash_desk_t[4] = 0;
+#endif
     for (i = 0; i < n; i++) {
         LONG rx = r[i].MinX, ry = r[i].MinY, rh = r[i].MaxY - ry + 1;
         LONG rw = (r[i].MaxX < d->w ? r[i].MaxX + 1 : d->w) - rx;
         /* the screen (what other windows cover stays as the front bitmap: no icon there) */
+        t1 = _dash_desk_tick();
         BltBitMap(f, rx, ry, s, rx, ry, rw, rh, 0xC0, 0xFF, NULL);
         ClipBlit(wrp, d->x + rx, d->y + ry, &rt, rx, ry, rw, rh, 0xC0);
         WaitBlit();
+#ifdef DASH_DESK_TIMES
+        _dash_desk_t[2] += _dash_desk_tick() - t1;
+        t1 = _dash_desk_tick();
+#endif
         for (y = ry; y < ry + rh; y++) {
             LONG o = y * bpr + (rx >> 3);
             UWORD *ic = (UWORD *)(d->icons->Planes[0] + o), *mk = (UWORD *)(d->mask->Planes[0] + o);
@@ -5842,7 +5879,15 @@ static void _dash_desk_present(struct _DashDesk *d, LONG back) {
                 mk[c] = ~m;
             }
         }
+#ifdef DASH_DESK_TIMES
+        _dash_desk_t[3] += _dash_desk_tick() - t1;
+        t1 = _dash_desk_tick();
+#endif
         BltMaskBitMapRastPort(d->bm[back], rx, ry, wrp, d->x + rx, d->y + ry, rw, rh, 0xE0, d->mask->Planes[0]);
+#ifdef DASH_DESK_TIMES
+        WaitBlit();
+        _dash_desk_t[4] += _dash_desk_tick() - t1;
+#endif
     }
     d->front = back;
     UnlockLayer(_dash_desk_layer);
@@ -5914,6 +5959,7 @@ static void _dash_desk_update(APTR c) {
     struct _DashDesk *d = (struct _DashDesk *)c;
     struct RastPort r, *old = _dash_rp;
     LONG back;
+    ULONG t0 = _dash_desk_tick(), t1;
     if (!d || !_dash_desk_scr) return;
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     if (!_dash_desk_attach()) { UnlockLayerInfo(&_dash_desk_scr->LayerInfo); return; }
@@ -5925,15 +5971,21 @@ static void _dash_desk_update(APTR c) {
     r.BitMap = d->bm[back];
     SetFont(&r, _dash_desk_scr->RastPort.Font);
     SetDrMd(&r, JAM1);
+    t1 = _dash_desk_tick();
     if (d->draw) {
         _dash_rp = &r;
         ((void (*)(LONG, LONG, LONG, LONG))d->draw)(0, 0, d->w, d->h);
         _dash_rp = old;
     }
+#ifdef DASH_DESK_TIMES
+    WaitBlit();
+#endif
+    _DASH_DESK_T(0, t1);
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     /* (if the Workbench changed its window meanwhile, the drawing goes on the next update) */
     if (_dash_desk_attach() && back != d->front) _dash_desk_present(d, back);   /* (if not, it is new) */
     UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
+    _DASH_DESK_T(5, t0);
 }
 
 static void _dash_desk_free(APTR c) {

@@ -3044,6 +3044,45 @@ las tareas nuevas y olvida las que acabaron. Una tarea que ya tiene esos ganchos
 toca ni se cuenta. La cuenta de una tarea incluye las interrupciones que llegan mientras tiene la CPU.
 `cpu_stop()` quita los ganchos; al acabar el programa se quitan solos (tambien con `exit`).
 
+### Dibujar en el fondo del Workbench: desktop_canvas
+
+```ruby
+func panel(x, y, w, h)
+    gfx_pen(1)
+    gfx_text_at(x + 4, y + 12, "CPU #{cpu_total() / 10} %")
+end
+
+Main
+    c = desktop_canvas(-1, 4, 300, 90)    # arriba a la derecha (-1: pegado al borde)
+    if c != 0
+        desktop_canvas_on_draw(c, panel)
+        while true
+            desktop_canvas_update(c)       # dibuja de nuevo y pone en pantalla lo que cambio
+            time_delay(50)
+        end
+    end
+end
+```
+
+Una zona del fondo de pantalla del Workbench, detras de los iconos y sin recibir clics. Hace falta el
+Workbench en modo backdrop (iconos en el escritorio) y una pantalla planar (no RTG): si no, da 0. Las
+coordenadas son las del escritorio; negativas, desde el borde derecho o inferior.
+
+La funcion de dibujo pinta con `gfx_` en un mapa de bits aparte que ya tiene debajo el fondo de pantalla:
+lo que no se pinta deja ver el fondo. `desktop_canvas_update` la llama y pasa a la pantalla solo las filas
+y palabras que cambiaron, sin tocar los iconos (no parpadean). Si una ventana tapa la zona y se va, la
+zona se repinta sola con lo ultimo dibujado, y la siguiente actualizacion arregla los recuadros que el
+Workbench limpia al redibujar sus iconos.
+
+Limite: un pixel de un icono del mismo color que el fondo de pantalla en ese punto, o que el Workbench
+pinta con el color que el lienzo tiene ahi, se toma por fondo y el lienzo lo pinta encima. Al liberar
+(`desktop_canvas_free`, o al acabar el programa) la zona vuelve a ser la del Workbench: se repinta una
+vez, y los iconos de debajo parpadean entonces.
+
+Coste medido en FS-UAE con un panel de 300x90 a 4 colores: en un A1200, unos 37 ms si cambia casi todo
+y 22 ms si cambia un numero (la mayor parte, comparar el dibujo con el anterior); en un 68040 rapido, 8
+y 4 ms (sobre todo el blitter).
+
 ## 22. Ejemplos Completos
 
 ### Ejemplo 1: Hola Mundo con Ventana
