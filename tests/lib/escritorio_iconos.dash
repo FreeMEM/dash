@@ -1,0 +1,151 @@
+# Lo de test_desktop_canvas.dash y test_desktop_canvas_rtg.dash (el mismo test en un Amiga con tarjeta gráfica).
+@c
+"""
+#define _T_W 200
+#define _T_H 60
+static ULONG _t_antes[_T_W * _T_H];      /* the screen before the canvas */
+static ULONG _t_fondo[_T_W * _T_H];      /* the wallpaper there */
+static LONG _t_raya = 20;                 /* where the drawing's stripe is */
+static struct Screen *_t_scr;             /* the runtime's, kept: after desktop_canvas_free it has none */
+static struct _DashDesk *_t_d;
+static LONG _t_x0, _t_y0;                 /* the area on the screen */
+static BOOL _t_planar;                   /* pens: planar or 8 bits */
+
+static ULONG _t_px(struct RastPort *rp, LONG x, LONG y)   /* a pen, or an RGB colour (high and true colour) */
+{
+    return _t_planar ? (ULONG)ReadPixel(rp, x, y) : _dash_rgb_read(rp, x, y);
+}
+
+static ULONG _t_pantalla(LONG x, LONG y)  /* a pixel of the area on the screen */
+{
+    return _t_px(&_t_scr->RastPort, _t_x0 + x, _t_y0 + y);
+}
+
+static LONG _t_dibujo(LONG x, LONG y)     /* the pen the drawing has there */
+{
+    return x >= _t_raya && x < _t_raya + 10 ? 3 : (y < 30 ? 2 : 1);
+}
+"""
+end
+
+@native func guardar(c: Int) -> Int
+"""
+    struct RastPort r;
+    LONG x, y, n = 0;
+    _t_d = (struct _DashDesk *)c;
+    _t_scr = LockPubScreen((CONST_STRPTR)"Workbench");     /* until the end */
+    _t_planar = GetBitMapAttr(_t_scr->RastPort.BitMap, BMA_DEPTH) <= 8;    /* pens (planar or RTG 8 bits) */
+    _t_x0 = _dash_desk_ox + 4;
+    _t_y0 = _dash_desk_oy + 4;
+    InitRastPort(&r);
+    r.BitMap = _t_d->wall;
+    WaitBlit();
+    for (y = 0; y < _T_H; y++)
+        for (x = 0; x < _T_W; x++) {
+            _t_antes[y * _T_W + x] = _t_pantalla(x, y);
+            _t_fondo[y * _T_W + x] = _t_px(&r, x, y);
+            if (_t_antes[y * _T_W + x] != _t_fondo[y * _T_W + x]) n++;
+        }
+    return n;
+"""
+end
+
+# píxeles mal: de icono que cambiaron, o del lienzo que no son su mapa de bits de delante (y en planar, el
+# dibujo que no es el esperado)
+@native func mal() -> Int
+"""
+    struct RastPort r;
+    LONG x, y, n = 0;
+    InitRastPort(&r);
+    r.BitMap = _t_d->bm[_t_d->front];
+    WaitBlit();
+    for (y = 0; y < _T_H; y++)
+        for (x = 0; x < _T_W; x++) {
+            LONG i = y * _T_W + x;
+            ULONG v = _t_pantalla(x, y), f = _t_px(&r, x, y);
+            BOOL bad = _t_antes[i] != _t_fondo[i] ? v != _t_antes[i] : v != f;
+            if (_t_planar && f != (ULONG)_t_dibujo(x, y)) bad = TRUE;
+            if (bad) {
+                if (n < 6) Printf((CONST_STRPTR)"  %ld,%ld: %lx (antes %lx, fondo %lx, lienzo %lx)\n", x, y, v,
+                                  _t_antes[i], _t_fondo[i], f);
+                n++;
+            }
+        }
+    if (n) Printf((CONST_STRPTR)"  %ld mal\n", n);
+    return n;
+"""
+end
+
+# píxeles distintos de como estaba la pantalla al empezar
+@native func distintos() -> Int
+"""
+    LONG x, y, n = 0;
+    for (y = 0; y < _T_H; y++)
+        for (x = 0; x < _T_W; x++)
+            if (_t_pantalla(x, y) != _t_antes[y * _T_W + x]) n++;
+    return n;
+"""
+end
+
+# hasta 10 s a que el Workbench abra su ventana de fondo (arranca a la vez que el test)
+@native func esperar_workbench() -> Bool
+"""
+    LONG i;
+    for (i = 0; i < 500; i++) {
+        struct Screen *s = LockPubScreen((CONST_STRPTR)"Workbench");
+        struct Window *w = NULL;
+        if (s) {
+            Forbid();
+            for (w = s->FirstWindow; w; w = w->NextWindow)
+                if ((w->Flags & WFLG_WBENCHWINDOW) && (w->Flags & WFLG_BACKDROP)) break;
+            Permit();
+            UnlockPubScreen(NULL, s);
+        }
+        if (w) { Delay(50); return TRUE; }
+        Delay(1);
+    }
+    return FALSE;
+"""
+end
+
+@native func mover_raya(x: Int) -> Int
+"""
+    _t_raya = x;
+    return 0;
+"""
+end
+
+@native func rect_ultima() -> Int
+"""
+    return (LONG)_dash_desk_rects_last;
+"""
+end
+
+# una ventana encima del lienzo, y fuera
+@native func tapar() -> Int
+"""
+    struct Window *v = OpenWindowTags(NULL, WA_PubScreenName, (ULONG)"Workbench",
+        WA_Left, _t_x0 + 16, WA_Top, _t_y0 + 6,
+        WA_Width, 120, WA_Height, 40, WA_Activate, FALSE, TAG_DONE);
+    if (!v) return 0;
+    Delay(10);
+    CloseWindow(v);
+    return 1;
+"""
+end
+
+@native func raya() -> Int
+"""
+    return _t_raya;
+"""
+end
+
+func pintar(x, y, w, h)
+    gfx_pen(2)
+    gfx_rect(0, 0, w - 1, 29)
+    gfx_pen(1)
+    gfx_rect(0, 30, w - 1, h - 1)
+    r = raya()
+    gfx_pen(3)
+    gfx_rect(r, 0, r + 9, h - 1)
+end

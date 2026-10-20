@@ -2530,6 +2530,247 @@ static void _dash_time_cleanup(void) {
 
 """
 
+    # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
+    # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
+    CPU_RUNTIME = """\
+/* exec (2.04+) calls tc_Launch when a task with TF_LAUNCH gets the CPU and tc_Switch when one with
+   TF_SWITCH leaves it, in the dispatcher (supervisor mode, no interrupts). cpu_start() puts ours on
+   every task that has none (a task with hooks of another program is left alone and not counted):
+   the launch notes the EClock, the switch adds what the task was on the CPU to its count, kept in
+   a table open by the task's address. Each cpu_sample() hooks the tasks that appeared since and
+   forgets the ones that ended. The hooks must be gone before the program unloads: cpu_stop(), and
+   the program's exit (also exit() and the libnix's end, atexit). Time with no task counted is
+   idle (or tasks of another program's hooks). */
+#include <exec/execbase.h>
+#include <dos/dosextens.h>
+#define _DASH_CPU_SLOTS 256                  /* a power of two */
+#define _DASH_CPU_GONE ((struct Task *)1)    /* a slot whose task ended (the chain goes on) */
+#define _DASH_CPU_MAX 128                    /* tasks in a sample */
+struct _DashCpuSlot {
+    struct Task *task;
+    unsigned long long time, before;         /* EClock ticks on the CPU; at the previous sample */
+    BOOL seen;
+};
+static struct _DashCpuSlot _dash_cpu_slots[_DASH_CPU_SLOTS];
+static LONG _dash_cpu_used;                  /* slots with a task or _DASH_CPU_GONE */
+static struct _DashCpuSlot *volatile _dash_cpu_in;   /* the task on the CPU, if it is counted */
+static unsigned long long _dash_cpu_since;
+static BOOL _dash_cpu_on = FALSE;
+static unsigned long long _dash_cpu_last;    /* EClock of the previous sample */
+static LONG _dash_cpu_n = 0;                 /* the last sample, most first */
+static LONG _dash_cpu_load[_DASH_CPU_MAX];
+static char _dash_cpu_name[_DASH_CPU_MAX][32];
+static LONG _dash_cpu_sum = 0;
+
+static unsigned long long _dash_cpu_now(void) {
+    struct EClockVal e;
+    ReadEClock(&e);
+    return (unsigned long long)e.ev_hi << 32 | e.ev_lo;
+}
+
+static struct _DashCpuSlot *_dash_cpu_find(struct Task *t) {
+    ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1), n;
+    for (n = 0; n < _DASH_CPU_SLOTS; n++, i = (i + 1) & (_DASH_CPU_SLOTS - 1)) {
+        if (_dash_cpu_slots[i].task == t) return &_dash_cpu_slots[i];
+        if (!_dash_cpu_slots[i].task) return NULL;
+    }
+    return NULL;
+}
+
+/* The hooks (called through the stubs below, which keep every register as exec wants) */
+__attribute__((used)) void _dash_cpu_launch_c(void) {
+    _dash_cpu_in = _dash_cpu_find(SysBase->ThisTask);
+    _dash_cpu_since = _dash_cpu_now();
+}
+
+__attribute__((used)) void _dash_cpu_switch_c(void) {
+    struct _DashCpuSlot *s = _dash_cpu_in;
+    if (s && s->task == SysBase->ThisTask) s->time += _dash_cpu_now() - _dash_cpu_since;
+    _dash_cpu_in = NULL;
+}
+
+__asm__(
+    "    .text\\n"
+    "    .even\\n"
+    "__dash_cpu_launch:\\n"
+    "    movem.l d0-d1/a0-a1/a6,-(sp)\\n"
+    "    jsr __dash_cpu_launch_c\\n"
+    "    movem.l (sp)+,d0-d1/a0-a1/a6\\n"
+    "    rts\\n"
+    "    .even\\n"
+    "__dash_cpu_switch:\\n"
+    "    movem.l d0-d1/a0-a1/a6,-(sp)\\n"
+    "    jsr __dash_cpu_switch_c\\n"
+    "    movem.l (sp)+,d0-d1/a0-a1/a6\\n"
+    "    rts\\n");
+void _dash_cpu_launch(void);
+void _dash_cpu_switch(void);
+
+/* A slot for a task not in the table (the table is never full: see _dash_cpu_compact) */
+static struct _DashCpuSlot *_dash_cpu_add(struct Task *t) {
+    ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1);
+    while (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) i = (i + 1) & (_DASH_CPU_SLOTS - 1);
+    if (!_dash_cpu_slots[i].task) _dash_cpu_used++;
+    _dash_cpu_slots[i].task = t;
+    _dash_cpu_slots[i].time = _dash_cpu_slots[i].before = 0;
+    return &_dash_cpu_slots[i];
+}
+
+/* A task of the lists: hooked if it has no hooks; seen if it is ours (in Disable) */
+static void _dash_cpu_hook(struct Task *t) {
+    struct _DashCpuSlot *s;
+    if (t->tc_Flags & (TF_SWITCH | TF_LAUNCH)) {
+        if (t->tc_Switch != (APTR)_dash_cpu_switch) return;     /* another program's */
+        s = _dash_cpu_find(t);
+        if (!s) return;
+    } else {
+        /* new; a slot of the same address is an ended task whose memory this one took */
+        if (_dash_cpu_used >= _DASH_CPU_SLOTS * 3 / 4) return;
+        s = _dash_cpu_find(t);
+        if (s) s->time = s->before = 0;
+        else s = _dash_cpu_add(t);
+        t->tc_Switch = (APTR)_dash_cpu_switch;
+        t->tc_Launch = (APTR)_dash_cpu_launch;
+        t->tc_Flags |= TF_SWITCH | TF_LAUNCH;
+    }
+    s->seen = TRUE;
+}
+
+static void _dash_cpu_unhook(struct Task *t) {
+    if ((t->tc_Flags & TF_SWITCH) && t->tc_Switch == (APTR)_dash_cpu_switch) {
+        t->tc_Flags &= ~(TF_SWITCH | TF_LAUNCH);
+        t->tc_Switch = NULL;
+        t->tc_Launch = NULL;
+    }
+}
+
+/* With the ended tasks out, the chains are rebuilt when the table fills up with them (in Disable) */
+static void _dash_cpu_compact(void) {
+    static struct _DashCpuSlot keep[_DASH_CPU_SLOTS];
+    LONG i, n = 0;
+    if (_dash_cpu_used < _DASH_CPU_SLOTS / 2) return;
+    for (i = 0; i < _DASH_CPU_SLOTS; i++)
+        if (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) keep[n++] = _dash_cpu_slots[i];
+    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
+    _dash_cpu_used = 0;
+    for (i = 0; i < n; i++) *_dash_cpu_add(keep[i].task) = keep[i];
+    _dash_cpu_in = _dash_cpu_find(SysBase->ThisTask);   /* the one on the CPU (us) moved too */
+}
+
+/* Every task of exec's lists (in Disable) */
+static void _dash_cpu_each(void (*f)(struct Task *)) {
+    struct Node *n;
+    for (n = SysBase->TaskReady.lh_Head; n->ln_Succ; n = n->ln_Succ) f((struct Task *)n);
+    for (n = SysBase->TaskWait.lh_Head; n->ln_Succ; n = n->ln_Succ) f((struct Task *)n);
+    f(SysBase->ThisTask);
+}
+
+static void _dash_cpu_stop(void) {
+    if (!_dash_cpu_on) return;
+    Disable();
+    _dash_cpu_each(_dash_cpu_unhook);
+    _dash_cpu_in = NULL;
+    _dash_cpu_on = FALSE;
+    Enable();
+}
+
+static BOOL _dash_cpu_start(void) {
+    static BOOL at_exit = FALSE;
+    if (_dash_cpu_on) return TRUE;
+    _dash_time_init();
+    if (!_dash_time_freq || SysBase->LibNode.lib_Version < 37) return FALSE;
+    if (!at_exit) at_exit = atexit(_dash_cpu_stop) == 0;
+    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
+    _dash_cpu_used = 0;
+    _dash_cpu_n = _dash_cpu_sum = 0;
+    Disable();
+    _dash_cpu_each(_dash_cpu_hook);
+    _dash_cpu_on = TRUE;
+    _dash_cpu_last = _dash_cpu_now();
+    Enable();
+    return TRUE;
+}
+
+/* The name of a task: for a Shell process, the command it runs */
+static void _dash_cpu_task_name(struct Task *t, char *d) {
+    const char *s = t->tc_Node.ln_Name ? t->tc_Node.ln_Name : "?";
+    LONG i;
+    if (t->tc_Node.ln_Type == NT_PROCESS) {
+        struct CommandLineInterface *cli = BADDR(((struct Process *)t)->pr_CLI);
+        if (cli && cli->cli_Module) {
+            UBYTE *b = BADDR(cli->cli_CommandName);
+            if (b && b[0]) {
+                LONG n = b[0] > 31 ? 31 : b[0];
+                for (i = 0; i < n; i++) d[i] = b[i + 1];
+                d[n] = 0;
+                return;
+            }
+        }
+    }
+    for (i = 0; i < 31 && s[i]; i++) d[i] = s[i];
+    d[i] = 0;
+}
+
+static LONG _dash_cpu_sample(void) {
+    static unsigned long long d[_DASH_CPU_MAX];
+    unsigned long long now, dt, sum = 0;
+    LONG i, j, n = 0;
+    if (!_dash_cpu_on) return 0;
+    Disable();
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_slots[i].seen = FALSE;
+    _dash_cpu_each(_dash_cpu_hook);
+    now = _dash_cpu_now();
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) {
+        struct _DashCpuSlot *s = &_dash_cpu_slots[i];
+        if (!s->task || s->task == _DASH_CPU_GONE) continue;
+        if (!s->seen) {                      /* ended since (what it took before going is lost) */
+            s->task = _DASH_CPU_GONE;
+            continue;
+        }
+        if (n < _DASH_CPU_MAX) {
+            d[n] = s->time - s->before;
+            _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
+            n++;
+        }
+        s->before = s->time;
+    }
+    _dash_cpu_compact();
+    Enable();
+    dt = now - _dash_cpu_last;
+    _dash_cpu_last = now;
+    if (!dt) dt = 1;
+    for (i = 0; i < n; i++) sum += d[i];
+    _dash_cpu_sum = (LONG)(sum * 1000 / dt);
+    for (i = 0; i < n; i++) _dash_cpu_load[i] = (LONG)(d[i] * 1000 / dt);
+    for (i = 1; i < n; i++)                  /* most first */
+        for (j = i; j > 0 && _dash_cpu_load[j] > _dash_cpu_load[j - 1]; j--) {
+            char t[32];
+            LONG l = _dash_cpu_load[j];
+            _dash_cpu_load[j] = _dash_cpu_load[j - 1];
+            _dash_cpu_load[j - 1] = l;
+            memcpy(t, _dash_cpu_name[j], 32);
+            memcpy(_dash_cpu_name[j], _dash_cpu_name[j - 1], 32);
+            memcpy(_dash_cpu_name[j - 1], t, 32);
+        }
+    _dash_cpu_n = n;
+    return n;
+}
+
+static STRPTR _dash_cpu_task(LONG i) {
+    if (i < 0 || i >= _dash_cpu_n) return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup((STRPTR)_dash_cpu_name[i], TRUE);
+}
+
+static LONG _dash_cpu_task_load(LONG i) {
+    return i >= 0 && i < _dash_cpu_n ? _dash_cpu_load[i] : 0;
+}
+
+static LONG _dash_cpu_total(void) {
+    return _dash_cpu_sum;
+}
+
+"""
+
     # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
     # doubles when full, so adding n elements one by one costs O(n).
     LIST_RUNTIME = """\
@@ -5372,6 +5613,684 @@ static void _dash_dir_cleanup(void) {
         UnLock(CurrentDir(_dash_orig_dir));
         _dash_dir_changed = FALSE;
     }
+}
+
+"""
+
+    # Desktop canvas (Trasfondo): a drawing on the Workbench's background, behind its icons
+    DESK_RUNTIME = """\
+/* The desktop of the Workbench screen is filled by a backfill hook: with the Workbench in backdrop
+   mode, the hook of its backdrop window's layer (icons on it); without, the hook of the screen's
+   LayerInfo (the background no layer covers; the icons are in the Workbench's window). The wallpaper
+   of WBPattern or colour 0, either way. desktop_canvas puts its own hook in its place
+   (InstallLayerHook / InstallLayerInfoHook, layers 39): the one before, and over it the canvases.
+   Each update looks at which mode the Workbench is in, and moves the hook if it changed (the menu
+   Workbench > Backdrop, or a change of its preferences).
+   The program draws a canvas with the gfx_ builtins in a bitmap of its own (desktop_canvas_on_draw,
+   called by desktop_canvas_update with _dash_rp on it), over the wallpaper below it (a copy made
+   with the hook before). Two bitmaps, friends of the screen's (planar or RTG): the front one is the
+   one on the screen and the one the hook copies (any task may call it: it only copies); the back one
+   is drawn. An update puts on the screen only the rows that changed (in bands of rows; with
+   desktop_canvas_update_area, only in that area: the drawing is clipped to it and only it is
+   compared).
+   - Without backdrop: where no layer covers it (the canvas minus the bounds of every layer).
+   - Backdrop: the icons are drawn by the Workbench over the background, so an update does not
+     repaint the area (they would flicker). With the layer locked it reads the screen there; a pixel
+     is an icon's if it is not the wallpaper and it is not what the canvas left there, or it was an
+     icon's at the update before (so an icon pixel of the canvas's colour stays); the back bitmap
+     goes everywhere else. Where the Workbench cleared the box of an icon with its wallpaper, the
+     canvas comes back at the next update. An icon pixel of the wallpaper's colour, or drawn by the
+     Workbench with the colour the canvas has there, is taken for background. Planar screens: plane
+     by plane with the blitter; RTG: pixel by pixel with the CPU (RGB24 through Picasso96 or
+     CyberGraphX in high and true colour, pens in 8 bits).
+   At the end of the program, or with desktop_canvas_free, the hook before goes back and the area is
+   repainted as the Workbench has it. */
+#include <graphics/layers.h>
+#include <utility/hooks.h>
+#include <proto/layers.h>
+#include <proto/utility.h>
+#ifndef LAYERS_BACKFILL
+#define LAYERS_BACKFILL ((struct Hook *)0)
+#define LAYERS_NOBACKFILL ((struct Hook *)1)
+#endif
+#ifndef LAYERHIDDEN
+#define LAYERHIDDEN 0x1000
+#endif
+#define _DASH_DESK_RECTS 8
+#define _DASH_DESK_BACKDROP 1               /* modes: on the backdrop window, with icons */
+#define _DASH_DESK_SCREEN 2                 /*        on the screen's background */
+struct _DashDeskFill {                      /* what layers passes to a backfill hook */
+    struct Layer *layer;                    /* NULL: the LayerInfo's (the screen's background) */
+    struct Rectangle bounds;                /* in the RastPort's bitmap */
+    LONG offx, offy;                        /* bounds' top left corner in the layer (or the screen) */
+};
+struct _DashDesk {
+    LONG x, y, w, h;                        /* in the desktop: below the screen's title bar */
+    APTR draw;                              /* Dash function f(x, y, width, height) or NULL */
+    struct BitMap *bm[2];                   /* the front one is on the screen */
+    struct Layer_Info *li[2];               /* one each: a layer over another would cover it */
+    struct Layer *ly[2];                    /* one on each bitmap, to clip the drawing (update_area) */
+    struct BitMap *wall;                    /* the wallpaper below */
+    struct BitMap *tmp, *icons, *mask;      /* planar, backdrop: the screen read; one plane: icons; where to paint */
+    LONG bpp;                               /* RTG: bytes per pixel of the copies (3: RGB24, 1: pens); 0 planar */
+    UBYTE *cb, *cf, *cw, *cs, *ci;          /* RTG: back, front, wallpaper, screen (w x h), icons (1 byte) */
+    struct RastPort line;                   /* RTG 8 bits: the temporary RastPort of Read/WritePixelLine8 */
+    volatile LONG front;                    /* -1: not on the screen yet */
+    struct Rectangle damage;                /* repainted by the hook: the Workbench draws its icons */
+    LONG damage_left;                       /* there again soon; the next updates look at it */
+    struct _DashDesk *next;
+};
+static struct _DashDesk *_dash_desks = NULL;    /* changed with the LayerInfo locked: the hook reads it */
+static struct Screen *_dash_desk_scr = NULL;    /* locked while there are canvases */
+static LONG _dash_desk_mode = 0;                /* where our hook is: 0 nowhere yet */
+static struct Window *_dash_desk_win = NULL;    /* backdrop: the window with our hook */
+static struct Layer *_dash_desk_layer = NULL;
+static LONG _dash_desk_ox = 0, _dash_desk_oy = 0;   /* the desktop's top left corner on the screen */
+static struct Hook _dash_desk_hook;
+static struct Hook *_dash_desk_old = LAYERS_BACKFILL;    /* the backdrop layer's hook before ours */
+static struct Hook *_dash_desk_iold = LAYERS_BACKFILL;   /* the LayerInfo's */
+static ULONG _dash_desk_rects_last = 0;         /* rectangles of the last update (tests, measures) */
+static ULONG _dash_desk_attached = 0;           /* times our hook was put somewhere */
+#ifdef DASH_DESK_TIMES
+/* Measures (DASH_CFLAGS=-DDASH_DESK_TIMES, with TimerBase open): EClock ticks of each part of the
+   last update */
+ULONG _dash_desk_t[6];                          /* draw, compare, read the screen, masks, paint, all */
+static ULONG _dash_desk_tick(void) { struct EClockVal e; ReadEClock(&e); return e.ev_lo; }
+#define _DASH_DESK_T(i, t0) (_dash_desk_t[i] = _dash_desk_tick() - (t0))
+#else
+#define _dash_desk_tick() 0
+#define _DASH_DESK_T(i, t0) ((void)(t0))
+#endif
+
+static void _dash_desk_fill_old(struct RastPort *rp, struct _DashDeskFill *m) {
+    struct Hook *old = m->layer ? _dash_desk_old : _dash_desk_iold;
+    if (old == LAYERS_NOBACKFILL) return;
+    if (old == LAYERS_BACKFILL) {
+        struct RastPort r = *rp;
+        r.Layer = NULL;
+        SetAPen(&r, 0);
+        SetDrMd(&r, JAM1);
+        RectFill(&r, m->bounds.MinX, m->bounds.MinY, m->bounds.MaxX, m->bounds.MaxY);
+        return;
+    }
+    CallHookPkt(old, rp, m);
+}
+
+/* Our hook (on the backdrop layer, or the LayerInfo): the one before, the canvases' front bitmaps
+   over it; what it repaints has no icons until the Workbench draws them again */
+static ULONG _dash_desk_hook_fn(struct Hook *h __asm("a0"), struct RastPort *rp __asm("a2"),
+                                struct _DashDeskFill *m __asm("a1")) {
+    struct _DashDesk *d;
+    /* the corner of bounds, and the canvases' origin, in the same coordinates: the layer's or the screen's */
+    LONG mx = m->layer ? m->offx : m->bounds.MinX, my = m->layer ? m->offy : m->bounds.MinY;
+    LONG cx = m->layer ? 0 : _dash_desk_ox, cy = m->layer ? 0 : _dash_desk_oy;
+    _dash_desk_fill_old(rp, m);
+    for (d = _dash_desks; d; d = d->next) {
+        LONG f = d->front, lx0 = mx, ly0 = my, lx1, ly1, x0, y0, x1, y1, dx = cx + d->x, dy = cy + d->y;
+        if (f < 0) continue;
+        lx1 = lx0 + (m->bounds.MaxX - m->bounds.MinX);
+        ly1 = ly0 + (m->bounds.MaxY - m->bounds.MinY);
+        x0 = lx0 > dx ? lx0 : dx;
+        y0 = ly0 > dy ? ly0 : dy;
+        x1 = lx1 < dx + d->w - 1 ? lx1 : dx + d->w - 1;
+        y1 = ly1 < dy + d->h - 1 ? ly1 : dy + d->h - 1;
+        if (x0 > x1 || y0 > y1) continue;
+        BltBitMap(d->bm[f], x0 - dx, y0 - dy, rp->BitMap, m->bounds.MinX + (x0 - lx0),
+                  m->bounds.MinY + (y0 - ly0), x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
+        x0 -= dx; y0 -= dy; x1 -= dx; y1 -= dy;
+        if (d->icons)
+            BltBitMap(d->icons, x0, y0, d->icons, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0x00, 0x01, NULL);
+        if (d->ci) {
+            LONG y;
+            for (y = y0; y <= y1; y++) memset(d->ci + y * d->w + x0, 0, x1 - x0 + 1);
+        }
+        if (!d->damage_left) {
+            d->damage.MinX = x0; d->damage.MinY = y0; d->damage.MaxX = x1; d->damage.MaxY = y1;
+        } else {
+            if (x0 < d->damage.MinX) d->damage.MinX = x0;
+            if (y0 < d->damage.MinY) d->damage.MinY = y0;
+            if (x1 > d->damage.MaxX) d->damage.MaxX = x1;
+            if (y1 > d->damage.MaxY) d->damage.MaxY = y1;
+        }
+        d->damage_left = 3;
+    }
+    return 0;
+}
+
+/* The Workbench's backdrop window, with the screen's LayerInfo locked: no window opens or closes
+   meanwhile (LockIBase here could deadlock with Intuition opening one) */
+static struct Window *_dash_desk_find(void) {
+    struct Window *w;
+    Forbid();
+    for (w = _dash_desk_scr->FirstWindow; w; w = w->NextWindow)
+        if ((w->Flags & WFLG_WBENCHWINDOW) && (w->Flags & WFLG_BACKDROP)) break;
+    Permit();
+    return w;
+}
+
+/* RTG: pixels of a RastPort to or from one of the copies (at its x, y), rows of the canvas's width */
+static void _dash_desk_pixels(struct _DashDesk *d, struct RastPort *rp, BOOL write, UBYTE *copy,
+                              LONG x, LONG y, LONG sx, LONG sy, LONG w, LONG h) {
+    UBYTE *p = copy + (y * d->w + x) * d->bpp;
+    LONG i;
+    if (d->bpp == 3) {
+        _dash_rgb_block_rp(rp, write, p, d->w * 3, sx, sy, w, h);
+        return;
+    }
+    /* (they may write up to 15 bytes past the row: the next one is done after, and the copies have room) */
+    for (i = 0; i < h; i++, p += d->w) {
+        if (write) WritePixelLine8(rp, sx, sy + i, w, p, &d->line);
+        else ReadPixelLine8(rp, sx, sy + i, w, p, &d->line);
+    }
+}
+
+static void _dash_desk_bm_pixels(struct _DashDesk *d, struct BitMap *bm, UBYTE *copy, LONG x, LONG y, LONG w, LONG h) {
+    struct RastPort r;
+    InitRastPort(&r);
+    r.BitMap = bm;
+    _dash_desk_pixels(d, &r, FALSE, copy, x, y, x, y, w, h);
+}
+
+/* A canvas as it is before its first update in the mode the hook is in: the wallpaper (made with the
+   hook before), on the screen with the icons it has; the screen's LayerInfo locked */
+static void _dash_desk_reset(struct _DashDesk *d) {
+    struct RastPort r;
+    struct _DashDeskFill m;
+    InitRastPort(&r);
+    r.BitMap = d->wall;
+    m.layer = _dash_desk_mode == _DASH_DESK_BACKDROP ? _dash_desk_layer : NULL;
+    m.bounds.MinX = 0; m.bounds.MinY = 0; m.bounds.MaxX = d->w - 1; m.bounds.MaxY = d->h - 1;
+    m.offx = (m.layer ? 0 : _dash_desk_ox) + d->x;
+    m.offy = (m.layer ? 0 : _dash_desk_oy) + d->y;
+    _dash_desk_fill_old(&r, &m);
+    BltBitMap(d->wall, 0, 0, d->bm[0], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
+    if (d->icons) BltBitMap(d->icons, 0, 0, d->icons, 0, 0, d->w, d->h, 0x00, 0x01, NULL);
+    if (d->bpp) {
+        WaitBlit();
+        _dash_desk_bm_pixels(d, d->wall, d->cw, 0, 0, d->w, d->h);
+        memcpy(d->cf, d->cw, d->w * d->h * d->bpp);
+        memset(d->ci, 0, d->w * d->h);
+    }
+    d->front = 0;
+    d->damage_left = 0;
+}
+
+/* With the screen's LayerInfo locked: our hook where the Workbench's desktop is now (the backdrop
+   window, or the screen's background), moved there if it was elsewhere or the Workbench put its own
+   back; the canvases then start again from the wallpaper and the icons on the screen */
+static void _dash_desk_attach(void) {
+    struct Window *w = _dash_desk_find();
+    struct Layer_Info *li = &_dash_desk_scr->LayerInfo;
+    struct _DashDesk *d;
+    _dash_desk_hook.h_Entry = (void *)_dash_desk_hook_fn;
+    _dash_desk_hook.h_SubEntry = NULL;
+    _dash_desk_hook.h_Data = NULL;
+    if (w) {
+        if (_dash_desk_mode == _DASH_DESK_BACKDROP && w == _dash_desk_win && w->WLayer == _dash_desk_layer &&
+            w->WLayer->BackFill == &_dash_desk_hook)
+            return;
+        if (_dash_desk_mode == _DASH_DESK_SCREEN && li->BlankHook == &_dash_desk_hook)
+            InstallLayerInfoHook(li, _dash_desk_iold);      /* the background is the window's now */
+        LockLayer(0, w->WLayer);
+        if (w->WLayer->BackFill != &_dash_desk_hook) _dash_desk_old = InstallLayerHook(w->WLayer, &_dash_desk_hook);
+        _dash_desk_mode = _DASH_DESK_BACKDROP;
+        _dash_desk_win = w;
+        _dash_desk_layer = w->WLayer;
+        _dash_desk_ox = w->LeftEdge;
+        _dash_desk_oy = w->TopEdge;
+    } else {
+        if (_dash_desk_mode == _DASH_DESK_SCREEN && li->BlankHook == &_dash_desk_hook) return;
+        /* (the backdrop window, if it was ours, is gone with its hook) */
+        if (li->BlankHook != &_dash_desk_hook) _dash_desk_iold = InstallLayerInfoHook(li, &_dash_desk_hook);
+        _dash_desk_mode = _DASH_DESK_SCREEN;
+        _dash_desk_win = NULL;
+        _dash_desk_layer = NULL;
+        _dash_desk_ox = 0;
+        _dash_desk_oy = _dash_desk_scr->BarHeight + 1;
+    }
+    _dash_desk_attached++;
+    for (d = _dash_desks; d; d = d->next) _dash_desk_reset(d);
+    if (_dash_desk_layer) UnlockLayer(_dash_desk_layer);
+}
+
+/* A band of rows (and words or pixels) that changed: with the one before if near (at most
+   _DASH_DESK_RECTS bands) */
+static void _dash_desk_band(struct Rectangle *r, LONG *n, LONG *gap, LONG y, LONG x0, LONG x1) {
+    if (*n > 0 && (*gap < 4 || *n == _DASH_DESK_RECTS)) {
+        struct Rectangle *q = &r[*n - 1];
+        if (x0 < q->MinX) q->MinX = x0;
+        if (x1 > q->MaxX) q->MaxX = x1;
+        q->MaxY = y;
+    } else {
+        r[*n].MinX = x0; r[*n].MaxX = x1; r[*n].MinY = y; r[*n].MaxY = y;
+        (*n)++;
+    }
+    *gap = 0;
+}
+
+/* The rows where the back bitmap is not the front one, in the area a (all of it: NULL), as rectangles;
+   and what the hook repainted not long ago (where the Workbench may have cleared the boxes of icons
+   since: with the layer locked). Planar: whole words wide, compared plane by plane; RTG: the back
+   bitmap read into its copy (in the area), compared with the front's. */
+static LONG _dash_desk_dirty(struct _DashDesk *d, LONG back, struct Rectangle *a, struct Rectangle *r) {
+    LONG y0 = a ? a->MinY : 0, y1 = a ? a->MaxY : d->h - 1, x0 = a ? a->MinX : 0, x1 = a ? a->MaxX : d->w - 1;
+    LONG y, c, p, n = 0, gap = 0;
+    BOOL damaged = d->damage_left > 0;
+    WaitBlit();                             /* the drawing may still be on its way */
+    if (damaged) {                          /* the damage in the same bands: no overlaps */
+        if (d->damage.MinY < y0) y0 = d->damage.MinY;
+        if (d->damage.MaxY > y1) y1 = d->damage.MaxY;
+    }
+    if (d->bpp) {
+        LONG bpp = d->bpp, rw = d->w * bpp;
+        /* outside the area the back bitmap is the front one: its copy too (the damage may reach there) */
+        if (a) memcpy(d->cb, d->cf, d->w * d->h * bpp);
+        _dash_desk_bm_pixels(d, d->bm[back], d->cb, a ? a->MinX : 0, a ? a->MinY : 0,
+                             a ? a->MaxX - a->MinX + 1 : d->w, a ? a->MaxY - a->MinY + 1 : d->h);
+        for (y = y0; y <= y1; y++) {
+            UBYTE *pb = d->cb + y * rw, *pf = d->cf + y * rw;
+            LONG first = d->w, last = -1;
+            if (a && (y < a->MinY || y > a->MaxY)) first = d->w;
+            else {
+                for (c = x0; c <= x1; c++) if (memcmp(pb + c * bpp, pf + c * bpp, bpp)) { first = c; break; }
+                for (c = x1; c > first; c--) if (memcmp(pb + c * bpp, pf + c * bpp, bpp)) break;
+                last = first < d->w ? c : -1;
+            }
+            if (damaged && y >= d->damage.MinY && y <= d->damage.MaxY) {
+                if (d->damage.MinX < first) first = d->damage.MinX;
+                if (d->damage.MaxX > last) last = d->damage.MaxX;
+            }
+            if (last < 0) { gap++; continue; }
+            _dash_desk_band(r, &n, &gap, y, first, last);
+        }
+    } else {
+        struct BitMap *ba = d->bm[back], *bb = d->bm[d->front];
+        LONG bpr = ba->BytesPerRow, depth = ba->Depth > 8 ? 8 : ba->Depth, w0 = x0 >> 4, w1 = x1 >> 4;
+        UBYTE *pa[8], *pb[8];
+        for (p = 0; p < depth; p++) { pa[p] = ba->Planes[p]; pb[p] = bb->Planes[p]; }
+        for (y = y0; y <= y1; y++) {
+            LONG first = w1 + 1, last = -1, o = y * bpr;
+            if (!a || (y >= a->MinY && y <= a->MaxY)) {
+                /* two words at a time while it can (the bitmaps are in Chip RAM: each read counts) */
+                for (c = w0; c <= w1; ) {
+                    if (c + 1 <= w1 && !((o + c * 2) & 3)) {
+                        ULONG x = 0;
+                        for (p = 0; p < depth; p++) x |= *(ULONG *)(pa[p] + o + c * 2) ^ *(ULONG *)(pb[p] + o + c * 2);
+                        if (x) {
+                            LONG a0 = (x & 0xFFFF0000UL) ? c : c + 1, a1 = (x & 0xFFFFUL) ? c + 1 : c;
+                            if (a0 < first) first = a0;
+                            if (a1 > last) last = a1;
+                        }
+                        c += 2;
+                    } else {
+                        UWORD x = 0;
+                        for (p = 0; p < depth; p++) x |= *(UWORD *)(pa[p] + o + c * 2) ^ *(UWORD *)(pb[p] + o + c * 2);
+                        if (x) {
+                            if (c < first) first = c;
+                            if (c > last) last = c;
+                        }
+                        c++;
+                    }
+                }
+            }
+            if (damaged && y >= d->damage.MinY && y <= d->damage.MaxY) {
+                if ((d->damage.MinX >> 4) < first) first = d->damage.MinX >> 4;
+                if ((d->damage.MaxX >> 4) > last) last = d->damage.MaxX >> 4;
+            }
+            if (last < 0) { gap++; continue; }
+            _dash_desk_band(r, &n, &gap, y, first * 16, last * 16 + 15 < d->w ? last * 16 + 15 : d->w - 1);
+        }
+    }
+    if (damaged) d->damage_left--;
+    return n;
+}
+
+/* Backdrop, planar: the back bitmap to the screen in the rectangles, not over the icons; the layer locked */
+static void _dash_desk_present_planar(struct _DashDesk *d, LONG back, struct Rectangle *r, LONG n) {
+    struct RastPort *wrp = _dash_desk_win->RPort, rt;
+    struct BitMap *s = d->tmp, *f = d->bm[d->front], *wl = d->wall;
+    LONG i, p, y, c, depth = s->Depth, bpr = s->BytesPerRow;
+    ULONG t1;
+    InitRastPort(&rt);
+    rt.BitMap = s;
+    for (i = 0; i < n; i++) {
+        LONG rx = r[i].MinX & ~15, ry = r[i].MinY, rh = r[i].MaxY - ry + 1, rw = r[i].MaxX - rx + 1;
+        /* the screen (what other windows cover stays as the front bitmap: no icon there) */
+        t1 = _dash_desk_tick();
+        BltBitMap(f, rx, ry, s, rx, ry, rw, rh, 0xC0, 0xFF, NULL);
+        ClipBlit(wrp, d->x + rx, d->y + ry, &rt, rx, ry, rw, rh, 0xC0);
+        WaitBlit();
+#ifdef DASH_DESK_TIMES
+        _dash_desk_t[2] += _dash_desk_tick() - t1;
+        t1 = _dash_desk_tick();
+#endif
+        for (y = ry; y < ry + rh; y++) {
+            LONG o = y * bpr + (rx >> 3);
+            UWORD *ic = (UWORD *)(d->icons->Planes[0] + o), *mk = (UWORD *)(d->mask->Planes[0] + o);
+            for (c = 0; c < (rw + 15) >> 4; c++) {
+                UWORD df = 0, dw = 0, m;
+                for (p = 0; p < depth; p++) {
+                    UWORD v = ((UWORD *)(s->Planes[p] + o))[c];
+                    df |= v ^ ((UWORD *)(f->Planes[p] + o))[c];
+                    dw |= v ^ ((UWORD *)(wl->Planes[p] + o))[c];
+                }
+                m = (ic[c] | df) & dw;      /* an icon: not the wallpaper, and new or known */
+                ic[c] = m;
+                mk[c] = ~m;
+            }
+        }
+#ifdef DASH_DESK_TIMES
+        _dash_desk_t[3] += _dash_desk_tick() - t1;
+        t1 = _dash_desk_tick();
+#endif
+        BltMaskBitMapRastPort(d->bm[back], rx, ry, wrp, d->x + rx, d->y + ry, rw, rh, 0xE0, d->mask->Planes[0]);
+#ifdef DASH_DESK_TIMES
+        WaitBlit();
+        _dash_desk_t[4] += _dash_desk_tick() - t1;
+#endif
+    }
+}
+
+/* Backdrop, RTG: the same pixel by pixel in the copies (the screen read into cs, which then takes the
+   pixels to paint and goes back); the layer locked */
+static void _dash_desk_present_chunky(struct _DashDesk *d, struct Rectangle *r, LONG n) {
+    struct RastPort *wrp = _dash_desk_win->RPort;
+    LONG i, y, c, bpp = d->bpp, rw = d->w * bpp;
+    for (i = 0; i < n; i++) {
+        LONG rx = r[i].MinX, ry = r[i].MinY, w = r[i].MaxX - rx + 1, h = r[i].MaxY - ry + 1;
+        /* what other windows cover stays as the front copy: no icon there, and written back as it was */
+        for (y = ry; y < ry + h; y++) memcpy(d->cs + y * rw + rx * bpp, d->cf + y * rw + rx * bpp, w * bpp);
+        _dash_desk_pixels(d, wrp, FALSE, d->cs, rx, ry, d->x + rx, d->y + ry, w, h);
+        for (y = ry; y < ry + h; y++) {
+            UBYTE *s = d->cs + y * rw, *f = d->cf + y * rw, *wl = d->cw + y * rw, *b = d->cb + y * rw;
+            UBYTE *ic = d->ci + y * d->w;
+            for (c = rx; c < rx + w; c++) {
+                LONG o = c * bpp;
+                BOOL icon = (ic[c] || memcmp(s + o, f + o, bpp)) && memcmp(s + o, wl + o, bpp);
+                ic[c] = icon;
+                if (!icon) memcpy(s + o, b + o, bpp);
+            }
+        }
+        _dash_desk_pixels(d, wrp, TRUE, d->cs, rx, ry, d->x + rx, d->y + ry, w, h);
+    }
+}
+
+/* Without backdrop: the back bitmap to the screen in the rectangles, where no layer covers them (the
+   LayerInfo locked: none moves) */
+static void _dash_desk_present_screen(struct _DashDesk *d, LONG back, struct Rectangle *r, LONG n) {
+    struct Region *rg = NewRegion();
+    struct Layer *l;
+    struct RegionRectangle *rr;
+    struct Rectangle q;
+    LONG i, sx = _dash_desk_ox + d->x, sy = _dash_desk_oy + d->y;
+    if (!rg) return;
+    for (i = 0; i < n; i++) {
+        q.MinX = sx + r[i].MinX; q.MinY = sy + r[i].MinY; q.MaxX = sx + r[i].MaxX; q.MaxY = sy + r[i].MaxY;
+        OrRectRegion(rg, &q);
+    }
+    for (l = _dash_desk_scr->LayerInfo.top_layer; l; l = l->back)
+        if (!(l->Flags & LAYERHIDDEN)) ClearRectRegion(rg, &l->bounds);
+    for (rr = rg->RegionRectangle; rr; rr = rr->Next) {
+        LONG x0 = rg->bounds.MinX + rr->bounds.MinX, y0 = rg->bounds.MinY + rr->bounds.MinY;
+        LONG x1 = rg->bounds.MinX + rr->bounds.MaxX, y1 = rg->bounds.MinY + rr->bounds.MaxY;
+        BltBitMap(d->bm[back], x0 - sx, y0 - sy, _dash_desk_scr->RastPort.BitMap, x0, y0,
+                  x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
+    }
+    DisposeRegion(rg);
+}
+
+/* The back bitmap to the screen in what changed (in the area a, or all), the screen's LayerInfo locked */
+static void _dash_desk_present(struct _DashDesk *d, LONG back, struct Rectangle *a) {
+    struct Rectangle r[_DASH_DESK_RECTS];
+    LONG n;
+    ULONG t0;
+    if (_dash_desk_layer) LockLayer(0, _dash_desk_layer);
+    t0 = _dash_desk_tick();
+    n = _dash_desk_dirty(d, back, a, r);
+    _DASH_DESK_T(1, t0);
+#ifdef DASH_DESK_TIMES
+    _dash_desk_t[2] = _dash_desk_t[3] = _dash_desk_t[4] = 0;
+#endif
+    _dash_desk_rects_last = n;
+    if (_dash_desk_mode == _DASH_DESK_SCREEN) _dash_desk_present_screen(d, back, r, n);
+    else if (d->bpp) _dash_desk_present_chunky(d, r, n);
+    else _dash_desk_present_planar(d, back, r, n);
+    if (d->bpp) {                           /* the back copy is the front one now */
+        UBYTE *t = d->cf;
+        if (a) {                            /* (outside the area the back copy was not read: it is the front's) */
+            LONG y, rw = d->w * d->bpp;
+            for (y = a->MinY; y <= a->MaxY; y++)
+                memcpy(t + y * rw + a->MinX * d->bpp, d->cb + y * rw + a->MinX * d->bpp, (a->MaxX - a->MinX + 1) * d->bpp);
+        } else {
+            d->cf = d->cb;
+            d->cb = t;
+        }
+    }
+    d->front = back;
+    if (_dash_desk_layer) UnlockLayer(_dash_desk_layer);
+}
+
+static void _dash_desk_free(APTR c);
+static void _dash_desk_cleanup(void);
+
+static APTR _dash_desk_canvas(LONG x, LONG y, LONG w, LONG h) {
+    static BOOL at_exit = FALSE;
+    struct _DashDesk *d;
+    struct Window *win;
+    struct BitMap *sbm;
+    LONG depth, i, dw, dh;
+    BOOL ok;
+    if (w <= 0 || h <= 0 || GfxBase->LibNode.lib_Version < 39) return NULL;
+    if (!at_exit) at_exit = atexit(_dash_desk_cleanup) == 0;
+    if (!_dash_desk_scr && !(_dash_desk_scr = LockPubScreen((CONST_STRPTR)"Workbench"))) return NULL;
+    sbm = _dash_desk_scr->RastPort.BitMap;
+    depth = GetBitMapAttr(sbm, BMA_DEPTH);
+    if (!(d = (struct _DashDesk *)AllocVec(sizeof(*d), MEMF_CLEAR))) {
+        if (!_dash_desks) { UnlockPubScreen(NULL, _dash_desk_scr); _dash_desk_scr = NULL; }
+        return NULL;
+    }
+    d->front = -1;
+    /* RTG: the copies in RGB24 (through Picasso96 or CyberGraphX) or pens (8 bits) */
+    if (!(GetBitMapAttr(sbm, BMA_FLAGS) & BMF_STANDARD))
+        d->bpp = depth > 8 ? (_dash_blend_truecolor(&_dash_desk_scr->RastPort) ? 3 : 0) : 1;
+    LockLayerInfo(&_dash_desk_scr->LayerInfo);
+    /* the desktop: the backdrop window, or the screen below its title bar */
+    win = _dash_desk_find();
+    dw = win ? win->Width : _dash_desk_scr->Width;
+    dh = win ? win->Height : _dash_desk_scr->Height - (_dash_desk_scr->BarHeight + 1);
+    /* negative: from the right or the bottom edge (-1: touching it) */
+    if (x < 0) x += dw - w + 1;
+    if (y < 0) y += dh - h + 1;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x + w > dw) w = dw - x;
+    if (y + h > dh) h = dh - y;
+    d->x = x; d->y = y; d->w = w; d->h = h;
+    /* (RTG in high or true colour needs Picasso96 or CyberGraphX to read its pixels) */
+    ok = w > 0 && h > 0 && ((GetBitMapAttr(sbm, BMA_FLAGS) & BMF_STANDARD) || d->bpp);
+    if (ok) {
+        /* RTG: friends of the screen's bitmap (in its format, on the card); planar: not interleaved,
+           the same rows as the masks */
+        struct BitMap *friend = d->bpp ? sbm : NULL;
+        /* (cleared: the bits past the width in each row's last word are compared too, and nothing writes them) */
+        for (i = 0; i < 2; i++) d->bm[i] = AllocBitMap(w, h, depth, BMF_MINPLANES | BMF_CLEAR, friend);
+        d->wall = AllocBitMap(w, h, depth, BMF_MINPLANES | BMF_CLEAR, friend);
+        ok = d->bm[0] && d->bm[1] && d->wall;
+        for (i = 0; ok && i < 2; i++)
+            ok = (d->li[i] = NewLayerInfo()) &&
+                 (d->ly[i] = CreateUpfrontLayer(d->li[i], d->bm[i], 0, 0, w - 1, h - 1, LAYERSIMPLE, NULL)) != NULL;
+    }
+    if (ok && !d->bpp) {
+        /* planar: the masks go word by word with the canvas (the same rows in all of them) */
+        d->tmp = AllocBitMap(w, h, depth, BMF_CLEAR, NULL);
+        d->icons = AllocBitMap(w, h, 1, BMF_CLEAR, NULL);
+        d->mask = AllocBitMap(w, h, 1, BMF_CLEAR, NULL);
+        ok = d->tmp && d->icons && d->mask;
+        for (i = 0; ok && i < 2; i++) ok = d->bm[i]->BytesPerRow == d->mask->BytesPerRow;
+        if (ok) ok = d->wall->BytesPerRow == d->mask->BytesPerRow && d->tmp->BytesPerRow == d->mask->BytesPerRow &&
+                     d->icons->BytesPerRow == d->mask->BytesPerRow;
+    } else if (ok) {
+        LONG size = w * h * d->bpp + 16;    /* (Read/WritePixelLine8 write up to 15 bytes past a row) */
+        ok = (d->cb = AllocVec(size, MEMF_ANY)) && (d->cf = AllocVec(size, MEMF_ANY)) &&
+             (d->cw = AllocVec(size, MEMF_ANY)) && (d->cs = AllocVec(size, MEMF_ANY)) &&
+             (d->ci = AllocVec(w * h + 16, MEMF_CLEAR));
+        if (ok && d->bpp == 1) {
+            InitRastPort(&d->line);
+            ok = (d->line.BitMap = AllocBitMap(((w + 15) & ~15), 1, 8, 0, NULL)) != NULL;
+        }
+    }
+    if (ok) {
+        _dash_desk_attach();
+        _dash_desk_reset(d);
+        if (_dash_desk_layer) LockLayer(0, _dash_desk_layer);
+        d->next = _dash_desks;
+        _dash_desks = d;
+        if (_dash_desk_layer) UnlockLayer(_dash_desk_layer);
+    }
+    UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
+    if (!ok) {
+        _dash_desk_free(d);
+        return NULL;
+    }
+    return d;
+}
+
+static void _dash_desk_on_draw(APTR c, APTR draw) {
+    if (c) ((struct _DashDesk *)c)->draw = draw;
+}
+
+/* Draw again and show what changed; a: only in this area (the rest as it is), or NULL */
+static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
+    struct RastPort *rp, *old = _dash_rp;
+    struct Region *clip = NULL, *before = NULL;
+    LONG back;
+    ULONG t0 = _dash_desk_tick(), t1, attached;
+    if (!d || !_dash_desk_scr) return;
+    LockLayerInfo(&_dash_desk_scr->LayerInfo);
+    _dash_desk_attach();
+    attached = _dash_desk_attached;
+    UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
+    /* the drawing, over the wallpaper and without locks (it may take long, or open a window) */
+    back = d->front == 0 ? 1 : 0;
+    rp = d->ly[back]->rp;
+    if (a) {
+        BltBitMap(d->bm[d->front], 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
+        BltBitMap(d->wall, a->MinX, a->MinY, d->bm[back], a->MinX, a->MinY, a->MaxX - a->MinX + 1,
+                  a->MaxY - a->MinY + 1, 0xC0, 0xFF, NULL);
+        if ((clip = NewRegion()) && OrRectRegion(clip, a)) before = InstallClipRegion(d->ly[back], clip);
+    } else {
+        BltBitMap(d->wall, 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
+    }
+    SetFont(rp, _dash_desk_scr->RastPort.Font);
+    SetDrMd(rp, JAM1);
+    t1 = _dash_desk_tick();
+    if (d->draw) {
+        _dash_rp = rp;
+        ((void (*)(LONG, LONG, LONG, LONG))d->draw)(0, 0, d->w, d->h);
+        _dash_rp = old;
+    }
+    if (clip) {
+        InstallClipRegion(d->ly[back], before);
+        DisposeRegion(clip);
+    }
+#ifdef DASH_DESK_TIMES
+    WaitBlit();
+#endif
+    _DASH_DESK_T(0, t1);
+    LockLayerInfo(&_dash_desk_scr->LayerInfo);
+    _dash_desk_attach();
+    /* (if the Workbench changed mode meanwhile, the canvas started again: the drawing goes on the next update) */
+    if (attached == _dash_desk_attached) _dash_desk_present(d, back, a);
+    UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
+    _DASH_DESK_T(5, t0);
+}
+
+static void _dash_desk_update(APTR c) {
+    _dash_desk_redo((struct _DashDesk *)c, NULL);
+}
+
+static void _dash_desk_update_area(APTR c, LONG x, LONG y, LONG w, LONG h) {
+    struct _DashDesk *d = (struct _DashDesk *)c;
+    struct Rectangle a;
+    if (!d) return;
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > d->w) w = d->w - x;
+    if (y + h > d->h) h = d->h - y;
+    if (w <= 0 || h <= 0) return;
+    a.MinX = x; a.MinY = y; a.MaxX = x + w - 1; a.MaxY = y + h - 1;
+    _dash_desk_redo(d, &a);
+}
+
+static void _dash_desk_free(APTR c) {
+    struct _DashDesk *d = (struct _DashDesk *)c, **p;
+    LONG i, sx = 0, sy = 0;
+    BOOL shown = FALSE;
+    if (!d) return;
+    if (_dash_desk_scr) {
+        struct Layer_Info *li = &_dash_desk_scr->LayerInfo;
+        LockLayerInfo(li);
+        for (p = &_dash_desks; *p; p = &(*p)->next)
+            if (*p == d) {
+                shown = d->front >= 0;
+                sx = _dash_desk_ox + d->x;
+                sy = _dash_desk_oy + d->y;
+                /* out of the hook's list, and the hook before back if it was the last one */
+                if (_dash_desk_layer) LockLayer(0, _dash_desk_layer);
+                *p = d->next;
+                if (_dash_desk_layer) UnlockLayer(_dash_desk_layer);
+                break;
+            }
+        if (!_dash_desks) {
+            struct Window *w = _dash_desk_find();
+            if (_dash_desk_mode == _DASH_DESK_BACKDROP && w && w == _dash_desk_win && w->WLayer == _dash_desk_layer &&
+                w->WLayer->BackFill == &_dash_desk_hook) {
+                LockLayer(0, w->WLayer);
+                InstallLayerHook(w->WLayer, _dash_desk_old);
+                UnlockLayer(w->WLayer);
+            }
+            if (li->BlankHook == &_dash_desk_hook) InstallLayerInfoHook(li, _dash_desk_iold);
+            _dash_desk_mode = 0;
+            _dash_desk_win = NULL;
+            _dash_desk_layer = NULL;
+        }
+        UnlockLayerInfo(li);
+        if (shown) {
+            /* the area repainted as the Workbench has it: a backdrop window that does not draw, open and
+               closed over it (the icons blink once; an update cannot tell an icon pixel the Workbench
+               drew with the canvas's colour there, and would leave it as the wallpaper) */
+            struct Window *v = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)_dash_desk_scr,
+                WA_Left, sx, WA_Top, sy, WA_Width, d->w, WA_Height, d->h,
+                WA_Borderless, TRUE, WA_Backdrop, TRUE, WA_SimpleRefresh, TRUE, WA_Activate, FALSE,
+                WA_RMBTrap, TRUE, WA_BackFill, (ULONG)LAYERS_NOBACKFILL, TAG_DONE);
+            if (v) CloseWindow(v);
+        }
+        if (!_dash_desks) {
+            UnlockPubScreen(NULL, _dash_desk_scr);
+            _dash_desk_scr = NULL;
+        }
+    }
+    WaitBlit();
+    for (i = 0; i < 2; i++) {
+        if (d->ly[i]) DeleteLayer(0, d->ly[i]);
+        if (d->li[i]) DisposeLayerInfo(d->li[i]);
+    }
+    for (i = 0; i < 2; i++) if (d->bm[i]) FreeBitMap(d->bm[i]);
+    if (d->wall) FreeBitMap(d->wall);
+    if (d->tmp) FreeBitMap(d->tmp);
+    if (d->icons) FreeBitMap(d->icons);
+    if (d->mask) FreeBitMap(d->mask);
+    if (d->line.BitMap) FreeBitMap(d->line.BitMap);
+    if (d->cb) FreeVec(d->cb);
+    if (d->cf) FreeVec(d->cf);
+    if (d->cw) FreeVec(d->cw);
+    if (d->cs) FreeVec(d->cs);
+    if (d->ci) FreeVec(d->ci);
+    FreeVec(d);
+}
+
+static void _dash_desk_cleanup(void) {
+    while (_dash_desks) _dash_desk_free(_dash_desks);
 }
 
 """
@@ -10457,6 +11376,8 @@ _RUNTIME_FLAGS = [
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
+    ("CPU_RUNTIME", "uses_cpu"),            # Trasfondo
+    ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
     ("FLOAT_RUNTIME", "uses_float"),
@@ -10695,6 +11616,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
+        self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
+        self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
@@ -10984,6 +11907,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.LOOP_TIMER_RUNTIME)
         if self.uses_time:
             parts.append(CTemplates.TIME_RUNTIME)
+        if self.uses_cpu:
+            parts.append(CTemplates.CPU_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -10998,6 +11923,8 @@ class CodeGenerator(ASTVisitor):
         # Add input runtime if needed (for key/mouse/joystick)
         if self.needs_gfx:
             parts.append(CTemplates.INPUT_RUNTIME)
+        if self.uses_desk:
+            parts.append(CTemplates.DESK_RUNTIME)
 
         # Add GadTools runtime if needed
         if self.needs_gadtools:
@@ -11182,6 +12109,10 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_cpu:
+            cleanup.insert(0, "    _dash_cpu_stop();\n")   # the hooks out before anything else (and the EClock)
+        if self.uses_desk:
+            cleanup.insert(0, "    _dash_desk_cleanup();\n")   # the hook out of the Workbench's layer
         if self.uses_blend:
             cleanup.append("    _dash_blend_cleanup();\n")
         if self.needs_area:
@@ -13216,6 +14147,12 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True      # IMAGE_RUNTIME draws on _dash_rp
         if self.uses_args:
             self.uses_strings = True   # arg() gives a String
+        if self.uses_desk:
+            self.needs_gfx = True      # DESK_RUNTIME draws with graphics.library, gfx_ on its _dash_rp
+            self.uses_blend = True     # and reads RTG pixels with BLEND_RUNTIME's _dash_rgb_block_rp
+        if self.uses_cpu:
+            self.uses_time = True      # CPU_RUNTIME reads the EClock of TIME_RUNTIME
+            self.uses_strings = True   # cpu_task_name gives a String
         if self.uses_tls:
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:
