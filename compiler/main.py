@@ -111,7 +111,19 @@ class DashCompiler:
         if isinstance(e, UnexpectedCharacters):
             char = source[e.pos_in_stream] if 0 <= e.pos_in_stream < len(source) else "?"
             return f"{where}: Error: sintaxis: carácter inesperado {char!r}"
-        if token is not None and getattr(token, "type", "") == "$END":
+        # the line before ended without finishing ("c = c + 1x": `x`, and the error came on the next line's
+        # `end`): there, after its last token, which is where the mistake is
+        history = getattr(e, "token_history", None) or []
+        prev = history[-1] if history else None
+        after = ""
+        if token is not None and prev is not None and getattr(prev, "line", None) and getattr(token, "line", None) \
+                and token.line > prev.end_line and getattr(token, "type", "") not in ("$END",):
+            where = f"{filename or '<input>'}:{prev.line}:{prev.column}"
+            token = None
+            after = f" después de `{str(prev).strip()}`"
+        if token is None and after:
+            got = "el fin de la línea"
+        elif token is not None and getattr(token, "type", "") == "$END":
             got = "el fin del fichero"
         elif token is not None and getattr(token, "type", "") == "_NEWLINE":
             got = "el fin de la línea"
@@ -126,7 +138,7 @@ class DashCompiler:
             hint = "; se esperaba " + ", ".join(expected[:-1]) + (" o " if len(expected) > 1 else "") + expected[-1]
         elif "`end`" in expected and got == "el fin del fichero":
             hint = "; ¿falta un `end`?"
-        return f"{where}: Error: sintaxis: no se esperaba {got} aquí{hint}"
+        return f"{where}: Error: sintaxis: no se esperaba {got}{after or ' aquí'}{hint}"
 
     def _resolve_import_path(self, import_path: str) -> str:
         """Resolve import path relative to base directory or project root."""

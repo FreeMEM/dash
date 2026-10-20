@@ -33,9 +33,17 @@ def find_elf2hunk():
 
     return None
 
+QUIET = False      # -q: without the commands it runs and the step headers (the IDE's tasks)
+
+
+def say(text):
+    if not QUIET:
+        print(text)
+
+
 def run_command(command, env=None):
     """Runs a command and prints its output in real-time, exiting on error."""
-    print(f"Executing: {' '.join(command)}")
+    say(f"Executing: {' '.join(command)}")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
 
     while True:
@@ -62,6 +70,8 @@ def main():
     parser.add_argument("--small", action="store_true",
                         help="Optimize for size (gcc -Os): about 7%% smaller, 10-50%% slower in loops")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="Only warnings, errors and the result (not each command and step)")
     parser.add_argument("-O", "--optimize", action="store_true",
                         help="Optimize the generated 68000 code with gcc -O2 (default)")
     parser.add_argument("-O0", "--no-optimize", dest="no_optimize", action="store_true",
@@ -78,6 +88,8 @@ def main():
                         help="Memory check build: reports objects or strings freed twice or used after "
                              "being freed, and what is still alive at exit (slower; for testing)")
     args = parser.parse_args()
+    global QUIET
+    QUIET = args.quiet
     if args.debug:
         os.environ["DASH_DEBUG_LINES"] = "1"   # the transpiler leaves #line marks (compiler/debuglines.py)
         os.environ["DASH_PRINT_FLUSH"] = "1"   # and each Print goes out at once (the debugger shows it)
@@ -107,7 +119,7 @@ def main():
         sys.exit(1)
 
     # --- Step 1: Transpile Dash to C ---
-    print("--- Transpiling Dash to C ---")
+    say("--- Transpiling Dash to C ---")
 
     if args.multifile:
         # Multi-file mode: generate multiple .c and .h files
@@ -151,7 +163,7 @@ def main():
         c_files = [c_output_file]
 
     # --- Step 2: Compile C to Amiga executable ---
-    print("\n--- Compiling C to Amiga executable ---")
+    say("\n--- Compiling C to Amiga executable ---")
     env = os.environ.copy()
     env["PATH"] = f"{amiga_toolchain_bin}:{env['PATH']}"
 
@@ -216,7 +228,7 @@ def main():
             print("Warning: elf2hunk not found. Executable remains in ELF format.", file=sys.stderr)
             shutil.move(elf_output_file, output_filename)
         else:
-            print("\n--- Converting ELF to Hunk ---")
+            say("\n--- Converting ELF to Hunk ---")
             convert_command = [elf2hunk, elf_output_file, output_filename]
             run_command(convert_command)
 

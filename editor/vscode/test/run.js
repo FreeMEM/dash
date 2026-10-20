@@ -686,13 +686,13 @@ async function taskTests() {
     const repo = path.resolve(__dirname, '..', '..', '..');
     await check('tasks: compile, run with --memcheck and with autoclose', () => {
         assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
-                           "mkdir -p '/p/bin' && '/d/dash' '/p/a b.dash' -o '/p/bin/a b'");
+                           "mkdir -p '/p/bin' && '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
         assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
-                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' --memcheck '/p/x.dash' " +
+                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
                            "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --window '/p/bin/x'");
         assert.strictEqual(taskCommand('run', '/d', '/p/x.dash', { machine: 'a500', emulator: 'amiberry', window: false,
                                                                  system: '/s y' }),
-                           "mkdir -p '/p/bin' && DASH_PRINT_FLUSH=1 '/d/dash' '/p/x.dash' -o '/p/bin/x' && " +
+                           "mkdir -p '/p/bin' && DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
                            "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
     });

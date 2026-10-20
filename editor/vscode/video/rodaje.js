@@ -41,6 +41,7 @@ const SETTINGS = {
     'git.enabled': false,
     'window.title': '${activeEditorShort}${separator}${rootName}',   // (not "[Extension Development Host]")
     'files.simpleDialog.enable': true,         // VS Code's own file dialogs: the system's are not seen without a window
+    'terminal.integrated.gpuAcceleration': 'off',   // the terminal's text in the page (waits can read it)
 };
 
 // An arrow of 22 x 32, with a white edge (it is seen on dark and light)
@@ -134,6 +135,7 @@ class Rodaje {
         let n = 0;
         while (this.capturando) {
             const t = Date.now();
+            if (this.pausa) { await new Promise((r) => setTimeout(r, 50)); continue; }
             try {
                 const file = path.join(this.frames, String(n).padStart(6, '0') + '.png');
                 await this.page.screenshot({ path: file, animations: 'allow', caret: 'initial' });
@@ -148,6 +150,20 @@ class Rodaje {
     }
 
     now() { return Date.now() - this.t0; }
+
+    /** A wait that is not seen: no pictures while work runs (an emulator booting...); the video jumps from
+        before to after, as a cut, and the times after it (subtitles) go back by what it lasted */
+    async saltar(work) {
+        const from = Date.now();
+        this.pausa = true;
+        try {
+            return await work();
+        } finally {
+            await this.esperar(200);
+            this.t0 += Date.now() - from;
+            this.pausa = false;
+        }
+    }
 
     esperar(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -204,6 +220,13 @@ class Rodaje {
         await this.page.mouse.click(at.x, at.y, { button, clickCount: double ? 2 : 1 });
         for (const m of modifiers.slice().reverse()) await this.page.keyboard.up(m);
         await this.esperar(350);
+    }
+
+    /** To line n of the editor with Ctrl+G, as a person would (also when it is not in sight) */
+    async irALinea(n) {
+        await this.tecla('Control+g', 500);
+        await this.escribir(String(n), 120);
+        await this.tecla('Enter', 500);
     }
 
     /** A line of the editor that has this text (its end, to click there and type after it) */

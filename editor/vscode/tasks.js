@@ -38,7 +38,7 @@ function taskCommand(kind, dashDir, file, options = {}) {
     // to run it: each Print goes out at once (DASH_PRINT_FLUSH), so the output shows while it runs
     const compile = `mkdir -p ${quote(path.dirname(out))} && ` + (seconds ? `DASH_TEST_AUTOCLOSE=${seconds} ` : '') +
         (k.run ? 'DASH_PRINT_FLUSH=1 ' : '') +
-        `${quote(path.join(dashDir, 'dash'))}` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
+        `${quote(path.join(dashDir, 'dash'))} -q` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
     if (!k.run) return compile;
     // the program is built here (with its option) and the emulator runs the binary as it is
     const emu = [' --follow'];
@@ -64,12 +64,17 @@ function makeTask(vscode, kind, file, dashDir, env, options, definition, onOutpu
     const command = taskCommand(kind, dashDir, file, options);
     // running ones go through a terminal of ours, to read what the program said (the profile's table...)
     const execution = KINDS[kind].run && onOutput
-        ? new vscode.CustomExecution(async () => shellTerminal(vscode, command, dashDir, env, (out, code) => onOutput(kind, file, out, code)))
+        ? new vscode.CustomExecution(async () => shellTerminal(vscode, command, dashDir, env, (out, code) => onOutput(kind, file, out, code),
+                                                             `${KINDS[kind].label}: ${path.basename(file)}…`))
         : new vscode.ShellExecution(command, { cwd: dashDir, env });
+    // with the language server on, its diagnostics are the same as $dash's: the errors came out twice in Problems
+    const lsp = !vscode.workspace || !vscode.workspace.getConfiguration ||
+        vscode.workspace.getConfiguration('dash.languageServer').get('enabled', true) !== false;
     const task = new vscode.Task(def, vscode.TaskScope.Workspace, `${KINDS[kind].label}: ${path.basename(file)}`,
-                                 'dash', execution, ['$dash', '$dash-memcheck', '$gcc']);
+                                 'dash', execution, lsp ? ['$dash-memcheck', '$gcc'] : ['$dash', '$dash-memcheck', '$gcc']);
     if (kind === 'compile') task.group = vscode.TaskGroup.Build;
-    task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
+    // (echo off: not the whole command line before the output)
+    task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true, echo: false };
     return task;
 }
 
@@ -78,7 +83,7 @@ function makeTask(vscode, kind, file, dashDir, env, options, definition, onOutpu
  * all to done(output, exit code) at the end. Closing it (stopping the task) ends the command's group.
  * @param {typeof import('vscode')} vscode
  */
-function shellTerminal(vscode, command, cwd, env, done) {
+function shellTerminal(vscode, command, cwd, env, done, title) {
     const { spawn } = require('child_process');
     const write = new vscode.EventEmitter();
     const close = new vscode.EventEmitter();
@@ -89,7 +94,8 @@ function shellTerminal(vscode, command, cwd, env, done) {
         onDidWrite: write.event,
         onDidClose: close.event,
         open() {
-            write.fire(`\x1b[2m$ ${command}\x1b[0m\r\n`);
+            // what it does, in words (the whole command line was noise: "mkdir -p ... && ... emu_run.py ...")
+            write.fire(`\x1b[2m${title || '$ ' + command}\x1b[0m\r\n`);
             child = spawn('/bin/sh', ['-c', command], { cwd, env: Object.assign({}, process.env, env), detached: true });
             const out = (data) => {
                 const text = data.toString('utf8');

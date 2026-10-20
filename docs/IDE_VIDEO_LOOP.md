@@ -64,7 +64,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       teclear y su arreglo rápido, el `end` automático, formatear y renombrar.
 - [x] v5. **3. La ventana:** el editor visual (añadir un botón, propiedades, teclado, deshacer), Ver en Amiga, y
       de un evento a su código (creado).
-- [ ] v6. **4. Compilar y ejecutar:** la tarea de compilar, un error en Problemas, ejecutar en el emulador (y
+- [x] v6. **4. Compilar y ejecutar:** la tarea de compilar, un error en Problemas, ejecutar en el emulador (y
       elegir máquina), comprobación de memoria y perfil.
 - [ ] v7. **5. Depurar:** F5, punto de parada, variables y pila en Dash, la consola con expresiones de Dash, paso
       a paso, un punto con condición, un error del programa que para como excepción.
@@ -127,6 +127,14 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       como JSON en texto, no en el editor visual (desde el explorador o Ctrl+clic, sí). Investigar si es cosa de
       VS Code (el editor propio aún no está registrado al abrir los ficheros del arranque) y si se puede reabrir
       solo sin estorbar a quien lo abrió como texto a propósito.
+
+- [x] (v6) La salida de compilar y ejecutar llevaba la orden entera ("mkdir -p … && '…/dash' … && python3 …
+      emu_run.py …") y cada orden de `./dash` y gcc: ruido. Ahora `./dash -q` (nuevo: solo avisos, errores y el
+      resultado), tareas sin eco, y las de ejecutar ponen en palabras qué hacen ("Ejecutar en el emulador: x.dash…").
+- [x] (v6) Un error salía dos veces en Problemas: del servidor de lenguaje y del comprobador `$dash` de la tarea.
+      Con el servidor encendido la tarea ya no usa `$dash` (quedan `$gcc` y el de memcheck).
+- [x] (v6) `c = c + 1x` daba el error en el `end` de la línea siguiente ("no se esperaba `end` aquí"). Ahora sale
+      donde está: "no se esperaba el fin de la línea después de `x`; se esperaba `(`, `.`, `=` o `[`". Test.
 
 ## Bitácora
 
@@ -202,4 +210,21 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - De paso, fuera del bucle: el PR #3 (Trasfondo: CPU y lienzo, 573/573 en el emulador) y el #4 (`break_check`,
   `single_instance`) fusionados en main de Dash, desde la rama `trasfondo`.
 - Tests: node todo bien.
+
+### 2026-10-20 — v6 (capítulo 4: compilar y ejecutar)
+- `video/capitulos/04_compilar_ejecutar.js`: un programa que cuenta primos:
+  - compilar con el CodeLens;
+  - un error, que va a Problemas;
+  - ejecutar en FS-UAE ("Hay 303 primos hasta 2000");
+  - cambiar a A500 en la barra de estado y otra vez;
+  - "Perfil", con su tabla (es_primo 66 %).
+  48 s de vídeo de unos 70 de rodaje.
+- Rodaje:
+  - `saltar(trabajo)`: sin capturas mientras el emulador trabaja, el vídeo salta (corte);
+  - `irALinea(n)` con Ctrl+G;
+  - terminal sin aceleración gráfica (su texto se lee en la página; antes cada espera agotaba su tiempo y
+    la toma tardaba 10 minutos).
+- Encontrado y arreglado: ruido en la terminal (`./dash -q`, sin eco), errores duplicados en Problemas, y el
+  sitio del error de una línea sin terminar (`compiler/main.py`, `tests/errors/syntax_unfinished_line.dash`).
+- Tests: base 292, node todo bien.
 

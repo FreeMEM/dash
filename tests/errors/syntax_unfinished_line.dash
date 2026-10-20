@@ -1,0 +1,7 @@
+# A statement left unfinished at the end of its line: the error at its last token, not on the next line
+# expect: syntax_unfinished_line.dash:5:14: Error: sintaxis: no se esperaba el fin de la línea después de `x`
+Main
+    c = 0
+    c = c + 1x
+    Print c
+end
