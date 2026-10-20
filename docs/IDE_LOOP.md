@@ -97,7 +97,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 4. **Base y errores.** `compiler/lsp.py`: JSON-RPC por stdio sin dependencias, que reutiliza parser y
       analizador; cliente en la extensión (lo arranca con `python3 -m compiler.lsp` desde `dash.path`).
       Diagnósticos al escribir, con línea y columna (y los de los imports). Tests.
-- [ ] 5. **Autocompletado.** Builtins con firma y descripción, palabras clave, variables/funciones/structs/
+- [x] 5. **Autocompletado.** Builtins con firma y descripción, palabras clave, variables/funciones/structs/
       campos/enums en ámbito, rutas de `import`; ayuda de firma (signature help).
 - [ ] 6. **Navegación.** Hover (tipo, firma, doc), ir a la definición (también entre módulos y hacia el `.dashui`),
       referencias, resaltar las apariciones.
@@ -226,4 +226,21 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   worktree de dashweb, que aún no lo tiene).
 - Tests: `tests/lsp/test_lsp.py` (8, JSON-RPC real; el runner los cuenta uno a uno: `lsp/<test>`); en VS Code, 1
   más (el error sale mientras se escribe en su sitio y se va al arreglarlo). npm test bien; test:vscode 7/7.
+
+### 2026-10-20 — Tarea 5 (autocompletado y ayuda de firmas)
+- `compiler/lsp_index.py`: lo que el servidor sabe de un programa (sirve también para la tarea 6). `Index` sobre el
+  árbol del último análisis que entró (mientras se escribe el texto no suele entrar): funciones (sin las privadas
+  de otros módulos), structs, enums, ventanas, constantes, globales; el bloque que tiene una línea (función,
+  método o Main: el último que empieza antes) y las variables vistas allí (parámetros, asignaciones anteriores,
+  variables de `for`, `self` en un método) con su tipo cuando se ve sin el analizador (constructor, literal,
+  llamada con tipo de vuelta); el tipo de `a.b.c` por los campos; los miembros de un tipo (struct, enum, lista,
+  diccionario, String, Window); la firma de lo que se llama.
+- Servidor: `completion` (builtins con sus parámetros como snippet y su descripción, palabras de la gramática,
+  símbolos, variables primero; tras `x.` los miembros; tras `:`/`->` los tipos; dentro de `import "` los ficheros y
+  cajones; nada dentro de un texto salvo en `#{`) y `signatureHelp` (la llamada y el argumento en el que está el
+  cursor, contando paréntesis, corchetes y textos; parámetros marcados por posición en la etiqueta).
+- Arreglado al probar en VS Code: el retraso de la comprobación contaba desde el último mensaje, y las peticiones de
+  completado mientras se escribe llegan más seguido: no se comprobaba nunca. Ahora cuenta desde el último cambio
+  de cada documento; y la primera petición de un documento sin analizar lo analiza en el momento.
+- Tests: 4 más del servidor (12 en total) y 1 más en VS Code (9). Base: todo bien. Extensión instalada.
 

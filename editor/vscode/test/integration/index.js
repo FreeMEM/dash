@@ -84,6 +84,29 @@ async function run() {
         await until((ds) => ds.length === 0);
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('language server: completion and signature help', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'completa.dash');
+        fs.writeFileSync(file, 'struct Punto\n    x: Int = 0\nend\nMain\n    p = Punto(1)\n    Print p.x\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        const editor = await vscode.window.showTextDocument(doc);
+        let items = [];
+        for (let i = 0; i < 150; i++) {          // the server has to analyze it once first
+            const list = await vscode.commands.executeCommand('vscode.executeCompletionItemProvider', doc.uri,
+                                                              new vscode.Position(5, 12));
+            items = list.items.map((it) => (typeof it.label === 'string' ? it.label : it.label.label));
+            if (items.includes('x')) break;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        assert(items.includes('x'), 'members of p: ' + items.slice(0, 20).join(','));
+        await editor.edit((e) => e.insert(new vscode.Position(5, 13), '\n    mui_text('));
+        const help = await vscode.commands.executeCommand('vscode.executeSignatureHelpProvider', doc.uri,
+                                                          new vscode.Position(6, 13));
+        assert(help && help.signatures[0].label.startsWith('mui_text(text)'), JSON.stringify(help));
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

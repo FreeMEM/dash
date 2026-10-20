@@ -9,6 +9,10 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   same parser and analyzer as `./dash`) marks errors and warnings a moment after you stop typing, also those of
   imported modules in their files. Only in a trusted folder; `dash.languageServer.enabled`, `dash.python`, and
   **Dash: Reiniciar el servidor de lenguaje** (after changing `dash.path`).
+- **Completion** (same server): every builtin with its parameters to fill in, keywords, the program's
+  functions, structs, enums, constants and the variables seen at the cursor; after `x.` the fields and
+  methods of its struct (or the values of an enum, the methods of a list...); types after `:` and `->`;
+  files after `import "`. **Signature help** while writing the arguments of a call.
 - Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.

@@ -144,6 +144,92 @@ class LanguageServerTest(unittest.TestCase):
         u = self.open("usa2.dash", 'import "m2.dash"\nMain\n    Print g2()\nend\n')
         self.assertEqual(self.client.diagnostics(u), [])
 
+    # --- completion and signature help (after the first check: it uses the program's last analysis) ---
+    PROGRAM = (
+        "struct Punto\n"            # 1
+        "    x: Int = 0\n"
+        "    nombre: String = \"\"\n"
+        "    func mover(dx: Int)\n"
+        "        self.x = self.x + dx\n"   # 5
+        "    end\n"
+        "end\n"
+        "enum Color\n"
+        "    ROJO\n"
+        "    VERDE\n"                    # 10
+        "end\n"
+        "const MAXIMO = 10\n"
+        "func suma(a: Int, b: Int) -> Int\n"
+        "    return a + b\n"
+        "end\n"                          # 15
+        "Main\n"
+        "    p = Punto(1, \"a\")\n"
+        "    lista = [1, 2]\n"
+        "    total = suma(1, 2)\n"
+        "    Print total\n"              # 20
+        "end\n")
+
+    def complete(self, u, line, character):
+        reply = self.client.request("textDocument/completion", {"textDocument": {"uri": u},
+                                                                "position": {"line": line, "character": character}})
+        return {item["label"]: item for item in reply["result"]["items"]}
+
+    def edit(self, u, text):
+        self.client.notify("textDocument/didChange", {"textDocument": {"uri": u, "version": 2},
+                                                      "contentChanges": [{"text": text}]})
+
+    def test_completion_builtins_keywords_and_symbols(self):
+        u = self.open("c1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        items = self.complete(u, 19, 4)          # start of "    Print total"
+        self.assertIn("mui_window_open", items)
+        self.assertEqual(items["mui_window_open"]["insertText"], "mui_window_open(${1:win})")
+        for name in ("while", "Main", "suma", "Punto", "Color", "MAXIMO", "p", "lista", "total"):
+            self.assertIn(name, items)
+        self.assertEqual(items["suma"]["detail"], "suma(a: Int, b: Int) -> Int")
+
+    def test_completion_members(self):
+        u = self.open("c2.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        # the user is typing "p." on line 20: the last analysis is still the one that parsed
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    p.\n"))
+        self.assertEqual(sorted(self.complete(u, 19, 6)), ["mover", "nombre", "x"])
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    Color.\n"))
+        self.assertEqual(sorted(self.complete(u, 19, 10)), ["ROJO", "VERDE"])
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    lista.\n"))
+        self.assertIn("push", self.complete(u, 19, 10))
+        self.edit(u, self.PROGRAM.replace("            self.x = self.x + dx\n", "            self.\n"))
+        self.assertIn("nombre", self.complete(u, 4, 13))
+
+    def test_completion_types_and_imports(self):
+        u = self.open("c3.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        self.edit(u, self.PROGRAM.replace("func suma(a: Int,", "func suma(a: Pu,"))
+        types = self.complete(u, 12, 14)
+        self.assertIn("Punto", types)
+        self.assertIn("String", types)
+        self.assertNotIn("while", types)
+        with open(os.path.join(self.dir.name, "otro.dash"), "w") as f:
+            f.write("func h()\nend\n")
+        self.edit(u, 'import "' + "\n" + self.PROGRAM)
+        self.assertIn("otro.dash", self.complete(u, 0, 8))
+
+    def test_signature_help(self):
+        u = self.open("s1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        self.edit(u, self.PROGRAM.replace("    total = suma(1, 2)\n", "    total = suma(1, \n"))
+        reply = self.client.request("textDocument/signatureHelp", {"textDocument": {"uri": u},
+                                                                   "position": {"line": 18, "character": 20}})
+        help_ = reply["result"]
+        self.assertEqual(help_["signatures"][0]["label"], "suma(a: Int, b: Int) -> Int")
+        self.assertEqual(help_["activeParameter"], 1)
+        self.edit(u, self.PROGRAM.replace("    Print total\n", '    mui_window_begin("x", \n'))
+        reply = self.client.request("textDocument/signatureHelp", {"textDocument": {"uri": u},
+                                                                   "position": {"line": 19, "character": 26}})
+        sig = reply["result"]["signatures"][0]
+        self.assertTrue(sig["label"].startswith("mui_window_begin(title, id)"))
+        start, end = sig["parameters"][1]["label"]
+        self.assertEqual(sig["label"][start:end], "id")
+
     def test_unknown_request_gets_an_error_not_a_crash(self):
         reply = self.client.request("textDocument/noExiste", {})
         self.assertEqual(reply["error"]["code"], -32601)
