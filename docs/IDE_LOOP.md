@@ -73,7 +73,11 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - **Tests:** la extensión, en `test/run.js` (con el `vscode` falso y vscode-textmate para la gramática); el
   servidor, en `tests/lsp/test_*.py` (unittest, mensajes JSON-RPC reales por stdio), que `tests/run_tests.py`
   ejecuta y cuenta como un resultado cada uno.
-- **Depuración:** se decide en la tarea 12.
+- **Depuración (decidida en la tarea 12):** `bgdbserver` (Aminet, GPLv3, `tools/get_bgdbserver.sh`, en
+  `~/.cache/dash-debug`) corre dentro del Amiga (FS-UAE y Amiberry con su bsdsocket, o uno real) con el programa;
+  `m68k-amigaos-gdb -i=dap` (gdb 18 con Python: DAP nativo) es el adaptador de VS Code, conectado con `attach` y
+  `target: "localhost:PUERTO"`. La extensión compila con información de depuración, arranca el emulador con
+  `bgdbserver :PUERTO programa` y le pasa a gdb la configuración. Las líneas pasan de C a Dash con `#line` (tarea 13).
 
 ## Tareas
 
@@ -114,7 +118,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       con enlaces a las funciones.
 
 ### D. Depuración
-- [ ] 12. **Prueba de viabilidad.** `tools/get_bgdbserver.sh`; un programa Dash con `-g` en FS-UAE (y Amiberry) con
+- [x] 12. **Prueba de viabilidad.** `tools/get_bgdbserver.sh`; un programa Dash con `-g` en FS-UAE (y Amiberry) con
       bsdsocket; `m68k-amigaos-gdb` → `target remote`; parar en una función, ver registros y variables. Comparar
       con las alternativas (uae-dap, el depurador de consola de FS-UAE) y elegir. Si hace falta, `[?]`.
 - [ ] 13. **Dash con información de depuración.** `./dash --debug` (`-g -O0`, `#line` hacia el `.dash` en el C):
@@ -327,4 +331,21 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   enlaza a su código (símbolos del servidor de lenguaje; `Struct.metodo` por su contenedor).
 - Tests: el parser del perfil y la expresión de memcheck; en VS Code, la tarea `memcheck` deja el error en su línea y
   la de `profile` abre su panel (14 en total). Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 12 (depuración: prueba de viabilidad)
+- `./dash -O0` con `DASH_CFLAGS=-g`: el ejecutable (hunk) lleva DWARF en `.dwarf2` (no stabs: la toolchain compila a
+  ELF y convierte); `m68k-amigaos-gdb` lo lee: funciones, líneas (del C, por ahora), parámetros y locales.
+- `bgdbserver 1.3` (Aminet `dev/debug`, binario y fuentes; `tools/get_bgdbserver.sh` lo baja y comprueba su SHA-256):
+  en FS-UAE con `bsdsocket_library = 1`, `bgdbserver DH0:p1` escucha en el puerto 2345 **del PC** (la bsdsocket de
+  FS-UAE usa los sockets del PC); `gdb` con `target remote :2345`: breakpoint en `doble`, `continue` para con `n=20`,
+  `bt` (doble ← main), `info args`, `next`, `info locals` (`r = 40`), `finish` (devuelve 40). Las direcciones se
+  recolocan solas (aviso "unsupported offsets", inofensivo). Igual en **Amiberry** 8.2.2.
+- `m68k-amigaos-gdb -i=dap` responde a `initialize` de DAP con breakpoints condicionales, logpoints, evaluar,
+  cambiar variables, memoria, desensamblado, paso por instrucción: VS Code puede hablar con él directamente.
+- Alternativas descartadas: uae-dap (FS-UAE y WinUAE parcheados; binarios ajenos, solo emulador) y el depurador de
+  consola de FS-UAE (`emu_run.py --debug`: sin símbolos ni fuentes, habría que escribir un adaptador entero). La
+  elegida vale también para un Amiga real (tarea 17).
+- Pendiente para las tareas 13-14: al acabar el programa bgdbserver dice "SIGKILL" (gdb lo da por terminado: vale);
+  la salida del programa depurado no se ve (va a la consola de bgdbserver: mirar en la 16); un puerto libre por
+  sesión (otras sesiones usan el emulador a la vez).
 
