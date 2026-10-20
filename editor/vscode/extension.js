@@ -116,7 +116,8 @@ async function showOnAmiga(document, windowName, webview) {
     const config = vscode.workspace.getConfiguration('dash.emulator');
     const machine = previewMachine(config.get('machine') || 'a1200');
     const status = `"${windowName}" en el ${machineNames[machine]}…`;
-    const work = () => preview({ dashDir, dashuiText: document.getText(), windowName, machine, env: emulatorEnv() });
+    const work = () => preview({ dashDir, dashuiText: document.getText(), windowName, machine, env: emulatorEnv(),
+                                 baseDir: path.dirname(document.fileName) });
     previewRunning = true;
     say({ status, busy: true });
     try {

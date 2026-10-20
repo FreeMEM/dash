@@ -2,7 +2,8 @@
 // Between a .dashui and the Dash code that uses it (docs/IDE_LOOP.md, task 19), without VS Code (tests):
 // - problems(text): what is wrong in a .dashui (not JSON, names, types, event numbers), with its place;
 // - handlers(dash, n): where a .dash handles event number n: its constants with that value
-//   (const ID_ATRAS = 1) and the comparisons with them or with the number (ev == ID_ATRAS);
+//   (const ID_ATRAS = 1) and the comparisons with them (ev == ID_ATRAS), or with the number itself when
+//   the other side is a variable that takes mui_wait_event() (ev == 1; not any "k == 1");
 // - addHandler(dash, n, name): the edits that add the constant and an "if ev == ..." in the loop of
 //   mui_wait_event (the program's own variable), or only the constant if there is no loop.
 const M = require('./media/model.js');
@@ -108,14 +109,19 @@ function constantsFor(dash, n) {
  */
 function handlers(dash, n) {
     const consts = constantsFor(dash, n);
-    const words = consts.map((c) => c.name).concat([String(n)]);
-    const out = [];
     const lines = dash.split('\n');
+    // the variables that take the events (ev = mui_wait_event()): a bare number counts only against them
+    const vars = [];
+    const vre = new RegExp(`^[ \\t]*(${IDENT})[ \\t]*=[ \\t]*mui_wait_event(?:_signals)?[ \\t]*\\(`, 'gm');
+    let vm;
+    while ((vm = vre.exec(dash))) if (!vars.includes(vm[1])) vars.push(vm[1]);
+    const patterns = consts.map((c) => new RegExp(`(==|!=)\\s*${c.name}\\b|\\b${c.name}\\s*(==|!=)`))
+        .concat(vars.map((v) => new RegExp(`\\b${v}\\s*(==|!=)\\s*${n}\\b|\\b${n}\\s*(==|!=)\\s*${v}\\b`)));
+    const out = [];
     lines.forEach((raw, line) => {
         const code = raw.replace(/"(?:[^"\\]|\\.)*"/g, (s) => ' '.repeat(s.length)).replace(/#.*$/, '');
         if (/^\s*const\s/.test(code)) return;
-        for (const w of words) {
-            const re = new RegExp(`(==|!=)\\s*${w}\\b|\\b${w}\\s*(==|!=)`, 'g');
+        for (const re of patterns) {
             const m = re.exec(code);
             if (m) { out.push({ line, character: m.index, text: raw.trim() }); return; }
         }

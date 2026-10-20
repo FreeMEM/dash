@@ -145,7 +145,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       `.dashui` y launch.json), README con capturas.
 - [x] 22. **Empaquetado.** Bundle, icono, versión 0.2.0, CHANGELOG; preparar la publicación.
 - [?] 22b. **Publicar** en el Marketplace de VS Code y en Open VSX: lo decide el usuario (hacen falta el editor `FreeMEM` en cada sitio y sus tokens).
-- [ ] 23. **Repaso final.** Todo junto con un proyecto real (dashweb): abrir, completar, compilar, depurar.
+- [x] 23. **Repaso final.** Todo junto con un proyecto real (dashweb): abrir, completar, compilar, depurar.
 
 ## Bitácora
 
@@ -553,4 +553,37 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   queda en `[?]` 22b.
 - Tests: node todo bien. VS Code con el bundle minimizado: 14 bien y 7 saltados por falta de foco.
   Instalado el 0.2.0.
+
+### 2026-10-20 — Tarea 23 (repaso final con dashweb)
+- Antes: `origin/main` (e038f6a, con D60 y D61) fusionado en `ide`. El `main` de dashweb los necesita. Base: todo bien.
+- dashweb (~/Projects/dashweb, bf2292b, 102 ficheros .dash; solo lectura):
+  - **Errores al teclear:** los 102 ficheros abiertos uno a uno en el servidor de lenguaje dan 0 errores falsos.
+    Abrir uno tarda 0,85 s de media; el más lento, 3,7 s (`tools/traza_maqueta.dash`). En `src/dashweb.dash`, un
+    error tecleado aparece y se va en unos 2 s (se reanaliza el programa con sus módulos).
+  - **Completar, hover, definición** (en `lib/maqueta.dash`), referencias, firma, símbolos y renombrar: menos de
+    0,05 s cada uno. Símbolos del espacio de trabajo: 1,1 s.
+  - **Formatear:** de los 102 cambia uno, `lib/colores.dash`: 21 líneas que estaban a 4 espacios dentro de un `if`
+    a 8. Con todo formateado, el C de dashweb (43.834 líneas) sale idéntico.
+  - **Compilar:** con `--fpu` sale bien, y con `--fpu --debug` en 6 s.
+  - **Depurar:** dashweb bajo bgdbserver (A1200 con MUI y 68882), con gdb y `tools/gdb/dash.py`. Para en
+    `dashweb.dash:92`, la pila sale en líneas de Dash (`dw_inicio` ← `abrir` ← `nueva_ventana` ← `main`), los
+    textos y structs como en Dash, y `$len(h)` da 479.
+  - **Su ventana** (`src/navegador.dashui`): sin problemas.
+- Arreglado en el repaso:
+  - "Ir al código del evento" daba falsos positivos con números sueltos (evento 1 → `k == 1`). Ahora un número
+    solo cuenta comparado con la variable de `mui_wait_event`; las constantes, siempre. Test nuevo.
+  - "Ver en Amiga" con un nombre de ventana que no existe decía "Semantic analysis failed". Ahora dice qué
+    ventanas hay. Los errores de compilación dan su línea y su mensaje.
+  - "Ver en Amiga" no llevaba las imágenes que nombra la ventana (`PROGDIR:iconos/...`): los botones de dashweb
+    salían vacíos. Ahora se buscan junto al `.dashui` y en la carpeta de arriba, y se copian al disco emulado.
+    Test nuevo; los iconos de dashweb ya salen.
+- Visto y no arreglado (no es del IDE; para el compilador):
+  - avisos `-Wint-conversion` al compilar dashweb (`DashArrayLong *x = (LONG)...`);
+  - `GetVPModeID` y `GetBitMapAttr` sin prototipo en los programas MUI;
+  - `info locals` de gdb en consola enseña `_dash_fm` (en VS Code no sale: el filtro va por los marcos de DAP).
+- Tests: base y node todo bien. VS Code 14 bien y 7 saltados por falta de foco.
+
+### Fin del plan (2026-10-20)
+Hechas las tareas 1 a 23. Queda `[?]` 22b, publicar la extensión, que decide el usuario. La rama `ide` no está
+subida ni fusionada en `main`.
 

@@ -150,12 +150,13 @@ class PreviewServer {
         return new Promise((resolve) => this.waiting.push(resolve));
     }
 
-    /** The picture of a program (it takes it itself), as a PNG file; one at a time */
-    show(program, png) {
+    /** The picture of a program (it takes it itself), as a PNG file; one at a time. files: a folder whose
+        files go to DH0: first (the images the window names), or nothing */
+    show(program, png, files) {
         const run = this.queue.then(async () => {
             await this.ready;
             const reply = this.answer();
-            this.proc.stdin.write(`show ${program} ${png}\n`);
+            this.proc.stdin.write(`show ${program} ${png}${files ? ' ' + files : ''}\n`);
             const line = await reply;
             if (!line.startsWith('ok ')) throw new Error(line.replace(/^error /, ''));
             return png;
@@ -214,9 +215,12 @@ function compilePreview(dashDir, dashuiText, windowName, env) {
                  { cwd: dashDir, env: Object.assign({}, process.env, env || {}), maxBuffer: 4 * 1024 * 1024 },
                  (err, stdout, stderr) => {
                      if (err || !fs.existsSync(exe + '.tmp')) {
+                         // the compiler's own message (file:line:col: Error: ...), without the path of the temporary file
                          const text = (stdout || '') + (stderr || '');
-                         const lines = text.split('\n').filter((l) => /rror/.test(l));
-                         reject(new Error(lines.slice(-2).join(' ') || (err ? err.message : 'no compila')));
+                         const own = text.split('\n').filter((l) => /:\d+:\d+: (Error|Warning):/.test(l))
+                             .map((l) => l.replace(/^.*?:(\d+):(\d+): /, 'línea $1: '));
+                         const any = text.split('\n').filter((l) => /rror/.test(l));
+                         reject(new Error((own.length ? own : any.slice(-2)).join(' · ') || (err ? err.message : 'no compila')));
                          return;
                      }
                      fs.renameSync(exe + '.tmp', exe);
@@ -227,23 +231,56 @@ function compilePreview(dashDir, dashuiText, windowName, env) {
 
 /**
  * A window of a .dashui on the Amiga that stays on: { png: Buffer, compiled: Boolean }. machine: a1200,
- * a1200-32 or rtg (else a1200); env: the ROM and Workbench variables (with MUI) for tools/emu_preview.py.
+ * a1200-32 or rtg (else a1200); env: the ROM and Workbench variables (with MUI) for tools/emu_preview.py;
+ * baseDir: the .dashui's folder (its images are looked for from there).
  */
-async function preview({ dashDir, dashuiText, windowName, machine, env }) {
+/**
+ * The files a .dashui names (images: "file"), from the folder of the .dashui or the one above it (where the
+ * program usually is: PROGDIR:), copied to a folder with the same relative paths; that folder, or null
+ */
+function windowFiles(dashuiText, baseDir) {
+    if (!baseDir) return null;
+    const names = new Set();
+    (function walk(x) {
+        if (Array.isArray(x)) x.forEach(walk);
+        else if (x && typeof x === 'object') {
+            if (typeof x.file === 'string' && x.file) names.add(x.file);
+            Object.values(x).forEach(walk);
+        }
+    })(JSON.parse(dashuiText));
+    let dir = null;
+    for (const name of names) {
+        const rel = name.replace(/^PROGDIR:/i, '');
+        if (/:/.test(rel) || path.isAbsolute(rel) || rel.split('/').includes('..')) continue;   // another volume
+        const from = [path.join(baseDir, rel), path.join(baseDir, '..', rel)].find((f) => fs.existsSync(f));
+        if (!from) continue;
+        dir = dir || fs.mkdtempSync(path.join(os.tmpdir(), 'dash-preview-files-'));
+        fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+        fs.copyFileSync(from, path.join(dir, rel));
+    }
+    return dir;
+}
+
+async function preview({ dashDir, dashuiText, windowName, machine, env, baseDir }) {
+    let names = [];
+    try { names = JSON.parse(dashuiText).windows.map((w) => w.name); } catch (e) { throw new Error('el .dashui no es JSON válido'); }
+    if (!names.includes(windowName)) throw new Error(`no hay una ventana "${windowName}" (hay: ${names.join(', ')})`);
     const exe = fs.existsSync(path.join(compileCache, crypto.createHash('sha1').update(dashuiText + '\0' + windowName)
         .digest('hex').slice(0, 16), 'vista'));
     const server = serverFor(dashDir, previewMachine(machine), env);   // it boots meanwhile
     const program = await compilePreview(dashDir, dashuiText, windowName, env);
     const png = path.join(path.dirname(program), `shot-${Date.now()}.png`);
-    await server.show(program, png);
+    const files = windowFiles(dashuiText, baseDir);
     try {
+        await server.show(program, png, files);
         return { png: fs.readFileSync(png), compiled: !exe };
     } finally {
         fs.rmSync(png, { force: true });
+        if (files) fs.rmSync(files, { recursive: true, force: true });
     }
 }
 
-module.exports = { previewProgram, emuArgs, runPreview, PreviewServer, preview, previewMachine, stopServers };
+module.exports = { previewProgram, emuArgs, runPreview, PreviewServer, preview, previewMachine, stopServers, windowFiles };
 
 if (require.main === module) {
     const [dashDir, file, windowName, out] = process.argv.slice(2);

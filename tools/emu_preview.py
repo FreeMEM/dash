@@ -9,7 +9,8 @@ leaves DH0:hecho. The picture is DH0:shot.dsh (the planes, from a planar screen:
 or DH0:shot.ppm. Out here, the commands come on stdin, one per line, and the answers go to stdout:
 
     ready                          (when the Amiga is up)
-    show <program> <picture.png>   ->  ok <picture.png>   |   error <why>
+    show <program> <picture.png> [<folder>]   ->  ok <picture.png>   |   error <why>
+                                   (the folder's files go to DH0: first: the images the window names)
     quit                           (or the end of stdin)
 
     tools/emu_preview.py --machine a1200        # MUI 3.8 or 5 on Kickstart 3.1 ($DASH_EMU_SYS_MUI)
@@ -122,13 +123,15 @@ def serve(machine, system=None, kickstart=None, window=False):
             continue
         if parts[0] == "quit":
             break
-        if parts[0] != "show" or len(parts) != 3:
+        if parts[0] != "show" or len(parts) not in (3, 4):
             say("error unknown command: " + line.strip())
             continue
         if ended.is_set():
             say("error the emulator ended")
             break
         program, png = parts[1], parts[2]
+        if len(parts) == 4 and Path(parts[3]).is_dir():
+            shutil.copytree(parts[3], hd, dirs_exist_ok=True)
         for name in ("hecho", "shot.ppm", "shot.dsh", "vista.txt"):
             (hd / name).unlink(missing_ok=True)
         shutil.copy(program, hd / "vista")

@@ -315,6 +315,9 @@ async function modelTests() {
         assert.deepStrictEqual(L.handlers(dash, 1).map((h) => [h.line, !!h.constant]), [[10, false], [2, true]]);
         assert.deepStrictEqual(L.handlers(dash, 7).map((h) => h.line), [10]);
         assert.deepStrictEqual(L.handlers(dash, 2), []);            // not inside a text
+        // a bare number only against the variable of mui_wait_event (dashweb: "elif k == 1" is not event 1)
+        assert.deepStrictEqual(L.handlers(dash.replace('Print "a == 2"', 'k = 7\n            if k == 7\n            end'), 7)
+            .map((h) => h.line), [10]);
         assert(L.importsDashui(dash, 'v.dashui') && !L.importsDashui(dash, 'w.dashui'));
         const plan = L.addHandler(dash, 2, 'boton_ok');
         assert.strictEqual(plan.name, 'ID_BOTON_OK');
@@ -407,6 +410,25 @@ async function previewTests() {
         assert.match(prog, /C:dash_shot 1 DH0:shot.dsh/);
         assert.strictEqual(P.previewMachine('a500'), 'a1200');
         assert.strictEqual(P.previewMachine('rtg'), 'rtg');
+    });
+    await check('preview: the images a window names go with it (PROGDIR: from the folder or the one above)', () => {
+        const base = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_win_'));
+        fs.mkdirSync(path.join(base, 'src')); fs.mkdirSync(path.join(base, 'iconos'));
+        fs.writeFileSync(path.join(base, 'iconos', 'a.iff'), 'A');
+        fs.writeFileSync(path.join(base, 'src', 'b.iff'), 'B');
+        const text = JSON.stringify({ dashui: 1, windows: [{ name: 'W', root: { type: 'vgroup', children: [
+            { type: 'image_button', file: 'PROGDIR:iconos/a.iff' }, { type: 'image', file: 'b.iff' },
+            { type: 'image', file: 'SYS:Prefs/x.iff' }, { type: 'image', file: 'PROGDIR:no.iff' }] } }] });
+        const dir = P.windowFiles(text, path.join(base, 'src'));
+        try {
+            assert.strictEqual(fs.readFileSync(path.join(dir, 'iconos', 'a.iff'), 'utf8'), 'A');
+            assert.strictEqual(fs.readFileSync(path.join(dir, 'b.iff'), 'utf8'), 'B');
+            assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['b.iff', 'iconos']);
+            assert.strictEqual(P.windowFiles(JSON.stringify({ dashui: 1, windows: [] }), base), null);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+            fs.rmSync(base, { recursive: true, force: true });
+        }
     });
     await check('preview: the Amiga that stays on answers in order, and its errors arrive', async () => {
         // a server that speaks tools/emu_preview.py's lines
