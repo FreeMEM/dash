@@ -9,7 +9,9 @@ moment after the last change (CHECK_DELAY), not on every key.
 
 Done so far: diagnostics (errors and warnings, also those of imported modules, in their files),
 completion (builtins with their parameters, keywords, the program's symbols, the variables seen at the
-cursor, members after "x.", types after ":", files after import ") and signature help.
+cursor, members after "x.", types after ":", files after import ") and signature help; hover, go to
+definition (also into modules and .dashui files, and from an import to its file), references and the
+highlight of a name's uses in the document.
 """
 import json
 import os
@@ -127,6 +129,10 @@ class Server:
                 "textDocumentSync": {"openClose": True, "change": 1, "save": {"includeText": False}},
                 "completionProvider": {"triggerCharacters": [".", '"', "/"]},
                 "signatureHelpProvider": {"triggerCharacters": ["(", ","], "retriggerCharacters": [","]},
+                "hoverProvider": True,
+                "definitionProvider": True,
+                "referencesProvider": True,
+                "documentHighlightProvider": True,
             },
             "serverInfo": {"name": "dash-lsp", "version": "0.1"},
         }
@@ -329,6 +335,125 @@ class Server:
             at = start + len(p)
         return {"signatures": [{"label": label, "documentation": doc, "parameters": offsets}],
                 "activeSignature": 0, "activeParameter": min(active, max(0, len(offsets) - 1))}
+
+    # --- hover, definition, references -------------------------------------------------------------
+    def text_of(self, path):
+        uri = path_to_uri(path)
+        if uri in self.docs:
+            return self.docs[uri]
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    def _at(self, params):
+        """(index, chain, name, line, start, end) of the name under the cursor, or None."""
+        uri = params["textDocument"]["uri"]
+        row, col = params["position"]["line"], params["position"]["character"]
+        lines = self.docs.get(uri, "").split("\n")
+        if row >= len(lines):
+            return None
+        found = lsp_index.word_at(lines[row], col)
+        index = self.index(uri)
+        if found is None or index is None:
+            return None
+        chain, name, start, end = found
+        return index, chain, name, row + 1, start, end
+
+    def on_textDocument_hover(self, params):
+        at = self._at(params)
+        if at is None:
+            return None
+        index, chain, name, line, start, end = at
+        what = index.resolve(chain, name, line)
+        if what is None:
+            return None
+        kind, node, detail = what
+        code, _, doc = detail.partition("\n\n")
+        value = "```dash\n" + code + "\n```" + ("\n\n" + doc if doc else "")
+        return {"contents": {"kind": "markdown", "value": value},
+                "range": {"start": {"line": line - 1, "character": start}, "end": {"line": line - 1, "character": end}}}
+
+    def _location(self, node, name, default_path):
+        """Where node (a definition) is, as an LSP Location over its name."""
+        loc = getattr(node, "location", None)
+        if loc is None:
+            return None
+        path = loc.filename or default_path
+        if path.endswith(".dashui"):
+            # code made from the JSON of the visual editor: its lines are not the file's; the window's name is
+            text = self.text_of(path)
+            window = re.sub(r"_create$", "", name)
+            m = re.search(r'"name"\s*:\s*"' + re.escape(window) + '"', text)
+            row = text.count("\n", 0, m.start()) if m else 0
+            return {"uri": path_to_uri(path), "range": {"start": {"line": row, "character": 0},
+                                                        "end": {"line": row, "character": 0}}}
+        lines = self.text_of(path).split("\n")
+        row = max(0, loc.line - 1)
+        text = lines[row] if row < len(lines) else ""
+        m = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])").search(text, max(0, loc.column - 1))
+        m = m or re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])").search(text)
+        start, end = (m.start(), m.end()) if m else (max(0, loc.column - 1), max(0, loc.column - 1))
+        return {"uri": path_to_uri(path), "range": {"start": {"line": row, "character": start},
+                                                    "end": {"line": row, "character": end}}}
+
+    def on_textDocument_definition(self, params):
+        uri = params["textDocument"]["uri"]
+        row, col = params["position"]["line"], params["position"]["character"]
+        lines = self.docs.get(uri, "").split("\n")
+        m = re.match(r'^(\s*import\s+")([^"]*)"', lines[row] if row < len(lines) else "")
+        if m and m.start(2) <= col <= m.end(2):
+            compiler = DashCompiler()
+            compiler._base_dir = os.path.dirname(uri_to_path(uri))
+            target = compiler._resolve_import_path(m.group(2))
+            if os.path.exists(target):
+                return {"uri": path_to_uri(target), "range": {"start": {"line": 0, "character": 0},
+                                                              "end": {"line": 0, "character": 0}}}
+            return None
+        at = self._at(params)
+        if at is None:
+            return None
+        index, chain, name, line, _, _ = at
+        what = index.resolve(chain, name, line)
+        if what is None or what[1] is None or what[0] in ("builtin", "list-method", "type"):
+            return None
+        return self._location(what[1], name, index.path)
+
+    def _references(self, params, only_here=False):
+        at = self._at(params)
+        if at is None:
+            return []
+        index, chain, name, line, _, _ = at
+        what = index.resolve(chain, name, line)
+        if what is None:
+            return []
+        kind, node, _ = what
+        here = index.path
+        if kind == "local":
+            first, last = index.body_range(line) or (1, None)
+            places = [(here, n, a, b) for n, a, b in lsp_index.occurrences(self.text_of(here), name, False, first, last)]
+        else:
+            member = kind in ("field", "method", "enum-value", "list-method")
+            files = [here] if only_here else sorted(index.files())
+            places = [(path, n, a, b) for path in files
+                      for n, a, b in lsp_index.occurrences(self.text_of(path), name, member)]
+            if member and node is not None:              # the definition itself has no dot before it
+                d = self._location(node, name, here)
+                if d is not None and (not only_here or d["uri"] == path_to_uri(here)):
+                    places.insert(0, (uri_to_path(d["uri"]), d["range"]["start"]["line"] + 1,
+                                      d["range"]["start"]["character"], d["range"]["end"]["character"]))
+        if only_here:
+            places = [p for p in places if p[0] == here]
+        return [{"uri": path_to_uri(path), "range": {"start": {"line": n - 1, "character": a},
+                                                     "end": {"line": n - 1, "character": b}}}
+                for path, n, a, b in places]
+
+    def on_textDocument_references(self, params):
+        return self._references(params)
+
+    def on_textDocument_documentHighlight(self, params):
+        return [{"range": r["range"], "kind": 1} for r in self._references(params, only_here=True)]
 
     @staticmethod
     def _from_message(message: str, path: str):

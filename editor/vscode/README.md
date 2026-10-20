@@ -13,6 +13,9 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   functions, structs, enums, constants and the variables seen at the cursor; after `x.` the fields and
   methods of its struct (or the values of an enum, the methods of a list...); types after `:` and `->`;
   files after `import "`. **Signature help** while writing the arguments of a call.
+- **Navigation** (same server): hover (signature, type, description), go to definition (also into imported
+  modules, into the window of a `.dashui`, and from an `import "..."` to its file), find references and the
+  highlight of a name's uses (a local only inside its function).
 - Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.

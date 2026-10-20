@@ -221,6 +221,83 @@ class Index:
             return [("open", "method", "open", "Abre la ventana"), ("close", "method", "close", "La cierra")]
         return []
 
+    # --- what a name is ---------------------------------------------------------------------------
+    def resolve(self, chain, name, line):
+        """What `name` is at this line (with `chain.` before it, a member): (kind, node, detail) with kind
+        local, function, struct, enum, window, const, global, field, method, enum-value, builtin,
+        list-method or type; or None."""
+        if chain:
+            t = self.chain_type(chain, line)
+            s = self.structs.get(t)
+            if s is not None:
+                for f in s.fields:
+                    if f.name == name:
+                        return "field", f, f"{s.name}.{f.name}: {f.field_type}"
+                for m in s.methods or []:
+                    if m.name == name:
+                        return "method", m, function_signature(m, f"{s.name}.{m.name}")
+            if t and t.startswith("enum "):
+                e = self.enums.get(t[5:])
+                for v in (e.values if e else []):
+                    if v.name == name:
+                        return "enum-value", v, f"{e.name}.{v.name}" + (f" = {v.value}" if v.value is not None else "")
+            for n, detail, doc in LIST_MEMBERS + DICT_MEMBERS + [("length", "length: Int", "Número de elementos")]:
+                if n == name:
+                    return "list-method", None, detail + ("\n\n" + doc if doc else "")
+            return None
+        scope = self.locals_at(line)
+        if name in scope:
+            node, t = scope[name]
+            if name == "self":
+                return "local", None, f"self: {t}"
+            return "local", node, f"{name}: {t}" if t else name
+        if name in self.functions:
+            f = self.functions[name]
+            return "function", f, function_signature(f, name)
+        if name in self.structs:
+            st = self.structs[name]
+            return "struct", st, "struct " + name + "\n" + "\n".join(f"    {f.name}: {f.field_type}" for f in st.fields)
+        if name in self.enums:
+            e = self.enums[name]
+            return "enum", e, "enum " + name + " " + ", ".join(v.name for v in e.values)
+        if name in self.windows:
+            return "window", self.windows[name], "Window " + name
+        if name in self.constants:
+            return "const", self.constants[name], "const " + name
+        if name in self.globals:
+            g = self.globals[name]
+            return "global", g, f"var {name}: {g.var_type}"
+        b = builtins().get(name)
+        if b is not None:
+            return "builtin", b, builtin_signature(b) + ("\n\n" + b.description if b.description else "")
+        if name in TYPE_NAMES:
+            return "type", None, name
+        return None
+
+    def files(self):
+        """The files of the program: this one and every module it brought."""
+        out = {self.path}
+        for group in (self.program.functions, self.program.native_funcs, self.program.extern_funcs,
+                      self.program.structs, self.program.enums, self.program.constants,
+                      self.program.global_vars, self.program.windows):
+            for node in group:
+                if _file(node):
+                    out.add(_file(node))
+        return out
+
+    def body_range(self, line):
+        """(first, last) lines of the function, method or Main that holds this line (last: None = end)."""
+        body, _ = self.body_at(line)
+        if body is None:
+            return None
+        starts = sorted(_line(b) for b, _ in self.bodies())
+        later = [l for l in starts if l > _line(body)]
+        top = [_line(n) for group in (self.program.functions, self.program.structs, self.program.enums,
+                                      self.program.constants, self.program.global_vars, self.program.windows)
+               for n in group if _file(n) == self.path and _line(n) > _line(body)]
+        ends = later + top
+        return _line(body), (min(ends) - 1 if ends else None)
+
     # --- calls -----------------------------------------------------------------------------------
     def signature_of(self, callee, line):
         """(label, [parameter labels], documentation) of what is called as callee ("f" or "a.metodo")."""
@@ -295,3 +372,75 @@ def call_at(text_before):
                 pass
         i -= 1
     return None
+
+
+def word_at(line_text, character):
+    """(chain, name, start, end) of the identifier under the cursor (0-based character): chain is
+    what comes before it with dots ("a.b" in "a.b.c"), "" if nothing; None if not on a name."""
+    for m in re.finditer(r"@?[A-Za-z_][A-Za-z0-9_]*", line_text):
+        if m.start() <= character <= m.end():
+            chain = ""
+            before = line_text[:m.start()]
+            c = re.search(r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.$", before)
+            if c:
+                chain = c.group(1)
+            return chain, m.group(0), m.start(), m.end()
+    return None
+
+
+def code_spans(line_text):
+    """The parts of a line that are code: not inside a text (except #{...}) nor a comment."""
+    spans, i, start, in_text, depth = [], 0, 0, False, 0
+    while i < len(line_text):
+        ch = line_text[i]
+        if not in_text:
+            if ch == "#":
+                spans.append((start, i))
+                return spans
+            if ch == '"':
+                spans.append((start, i))
+                in_text = True
+        else:
+            if ch == "\\":
+                i += 2
+                continue
+            if line_text.startswith("#{", i):
+                start, depth = i + 2, 1
+                i += 2
+                while i < len(line_text) and depth:
+                    if line_text[i] == "{":
+                        depth += 1
+                    elif line_text[i] == "}":
+                        depth -= 1
+                    i += 1
+                spans.append((start, i - 1))
+                continue
+            if ch == '"':
+                in_text = False
+                start = i + 1
+        i += 1
+    if not in_text:
+        spans.append((start, len(line_text)))
+    return spans
+
+
+def occurrences(text, name, member=False, first_line=1, last_line=None):
+    """(line, start, end) of each use of name in the code of text (1-based lines, 0-based
+    characters); member: only after a dot; else not after one. Inside the lines asked."""
+    out = []
+    pattern = re.compile(r"(?<![A-Za-z0-9_@])" + re.escape(name) + r"(?![A-Za-z0-9_])")
+    lines = text.split("\n")
+    in_native = False
+    for number, line_text in enumerate(lines, start=1):
+        if line_text.strip().startswith('"""'):
+            in_native = not in_native
+            continue
+        if in_native or number < first_line or (last_line is not None and number > last_line):
+            continue
+        for a, b in code_spans(line_text):
+            for m in pattern.finditer(line_text, a, b):
+                dotted = m.start() > 0 and line_text[m.start() - 1] == "."
+                if dotted == member:
+                    out.append((number, m.start(), m.end()))
+    return out
+

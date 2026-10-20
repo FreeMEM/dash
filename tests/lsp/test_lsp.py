@@ -230,6 +230,68 @@ class LanguageServerTest(unittest.TestCase):
         start, end = sig["parameters"][1]["label"]
         self.assertEqual(sig["label"][start:end], "id")
 
+    # --- hover, definition, references (PROGRAM's lines: 0-based in LSP) ---
+    def at(self, method, u, line, character, **extra):
+        params = {"textDocument": {"uri": u}, "position": {"line": line, "character": character}}
+        params.update(extra)
+        return self.client.request(method, params)["result"]
+
+    def test_hover(self):
+        u = self.open("h1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        h = self.at("textDocument/hover", u, 18, 13)                 # suma in "total = suma(1, 2)"
+        self.assertIn("suma(a: Int, b: Int) -> Int", h["contents"]["value"])
+        h = self.at("textDocument/hover", u, 19, 11)                 # total in "Print total"
+        self.assertIn("total: Int", h["contents"]["value"])
+        h = self.at("textDocument/hover", u, 4, 13)                  # x in "self.x"
+        self.assertIn("Punto.x: Int", h["contents"]["value"])
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    mui_text(\"a\")\n"))
+        h = self.at("textDocument/hover", u, 19, 6)
+        self.assertIn("mui_text(text)", h["contents"]["value"])
+
+    def test_definition_here_in_a_module_and_from_an_import(self):
+        u = self.open("d1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        d = self.at("textDocument/definition", u, 18, 13)            # suma -> func suma
+        self.assertEqual(d["uri"], u)
+        self.assertEqual(d["range"]["start"], {"line": 12, "character": 5})
+        d = self.at("textDocument/definition", u, 16, 9)             # Punto( -> struct Punto
+        self.assertEqual(d["range"]["start"]["line"], 0)
+        d = self.at("textDocument/definition", u, 19, 11)            # total -> its assignment
+        self.assertEqual(d["range"]["start"], {"line": 18, "character": 4})
+        module = os.path.join(self.dir.name, "mod.dash")
+        with open(module, "w") as f:
+            f.write("# un módulo\nfunc doble(n: Int) -> Int\n    return n * 2\nend\n")
+        u2 = self.open("d2.dash", 'import "mod.dash"\nMain\n    Print doble(2)\nend\n')
+        self.client.diagnostics(u2)
+        d = self.at("textDocument/definition", u2, 2, 11)
+        self.assertEqual(d["uri"], uri(module))
+        self.assertEqual(d["range"]["start"], {"line": 1, "character": 5})
+        d = self.at("textDocument/definition", u2, 0, 10)            # inside "mod.dash"
+        self.assertEqual(d["uri"], uri(module))
+
+    def test_definition_of_a_dashui_window(self):
+        import shutil
+        shutil.copy(os.path.join(ROOT, "tests", "lib", "ventana_prueba.dashui"), self.dir.name)
+        u = self.open("v.dash", 'import "ventana_prueba.dashui"\nMain\n    v = Prueba_create()\nend\n')
+        self.client.diagnostics(u)
+        d = self.at("textDocument/definition", u, 2, 10)
+        self.assertTrue(d["uri"].endswith("ventana_prueba.dashui"))
+        with open(os.path.join(self.dir.name, "ventana_prueba.dashui")) as f:
+            line = f.read().split("\n")[d["range"]["start"]["line"]]
+        self.assertRegex(line, r'"name"\s*:\s*"Prueba"')
+
+    def test_references_and_highlight(self):
+        u = self.open("r1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        refs = self.at("textDocument/references", u, 13, 11, context={"includeDeclaration": True})   # a in suma
+        self.assertEqual(sorted((r["range"]["start"]["line"], r["range"]["start"]["character"]) for r in refs),
+                         [(12, 10), (13, 11)])                        # the parameter and its use, not other a's
+        refs = self.at("textDocument/references", u, 4, 13, context={"includeDeclaration": True})    # field x
+        self.assertEqual(sorted(r["range"]["start"]["line"] for r in refs), [1, 4, 4])
+        marks = self.at("textDocument/documentHighlight", u, 18, 13)                                   # suma
+        self.assertEqual(sorted(m["range"]["start"]["line"] for m in marks), [12, 18])
+
     def test_unknown_request_gets_an_error_not_a_crash(self):
         reply = self.client.request("textDocument/noExiste", {})
         self.assertEqual(reply["error"]["code"], -32601)

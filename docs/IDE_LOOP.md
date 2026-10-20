@@ -99,7 +99,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       Diagnósticos al escribir, con línea y columna (y los de los imports). Tests.
 - [x] 5. **Autocompletado.** Builtins con firma y descripción, palabras clave, variables/funciones/structs/
       campos/enums en ámbito, rutas de `import`; ayuda de firma (signature help).
-- [ ] 6. **Navegación.** Hover (tipo, firma, doc), ir a la definición (también entre módulos y hacia el `.dashui`),
+- [x] 6. **Navegación.** Hover (tipo, firma, doc), ir a la definición (también entre módulos y hacia el `.dashui`),
       referencias, resaltar las apariciones.
 - [ ] 7. **Símbolos.** Esquema del documento (Outline, breadcrumbs), símbolos del workspace, renombrar.
 - [ ] 8. **Formato y arreglos.** Formateador de sangría; acciones rápidas sencillas (crear la función que falta,
@@ -243,4 +243,16 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   completado mientras se escribe llegan más seguido: no se comprobaba nunca. Ahora cuenta desde el último cambio
   de cada documento; y la primera petición de un documento sin analizar lo analiza en el momento.
 - Tests: 4 más del servidor (12 en total) y 1 más en VS Code (9). Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 6 (navegación)
+- `lsp_index`: `resolve(chain, name, line)` dice qué es un nombre (local, función, struct, enum, ventana,
+  constante, global, campo, método, valor de enum, método de lista, builtin, tipo); `word_at`, `code_spans` (lo
+  que es código en una línea: fuera de textos salvo `#{...}` y de comentarios) y `occurrences` (usos de un nombre,
+  con o sin punto delante, sin entrar en los bloques `"""` de C); `files()` (el fichero y sus módulos);
+  `body_range` (líneas de la función que tiene una línea, para las locales).
+- Servidor: `hover` (bloque de código con firma/tipo y la descripción de los builtins), `definition` (sobre el
+  nombre en su línea; en módulos; en un `.dashui` busca `"name": "<ventana u objeto>"`, porque sus líneas son las
+  del código generado; desde `import "x"` abre el fichero), `references` (locales solo en su función; campos,
+  métodos y valores de enum con punto, más su definición) y `documentHighlight`.
+- Tests: 4 más del servidor (16) y 1 más en VS Code (10). Base: todo bien. Extensión instalada.
 

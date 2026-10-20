@@ -107,6 +107,28 @@ async function run() {
         assert(help && help.signatures[0].label.startsWith('mui_text(text)'), JSON.stringify(help));
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('language server: hover and go to definition', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'navega.dash');
+        fs.writeFileSync(file, 'func doble(n: Int) -> Int\n    return n * 2\nend\nMain\n    Print doble(3)\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        let hovers = [];
+        for (let i = 0; i < 150 && !hovers.length; i++) {
+            hovers = await vscode.commands.executeCommand('vscode.executeHoverProvider', doc.uri, new vscode.Position(4, 12));
+            if (!hovers.length) await new Promise((r) => setTimeout(r, 100));
+        }
+        const text = hovers.map((h) => h.contents.map((c) => c.value || c).join(' ')).join(' ');
+        assert.match(text, /doble\(n: Int\) -> Int/);
+        const defs = await vscode.commands.executeCommand('vscode.executeDefinitionProvider', doc.uri, new vscode.Position(4, 12));
+        const d = defs[0];
+        const range = d.range || d.targetRange;
+        assert.strictEqual(range.start.line, 0);
+        assert.strictEqual(range.start.character, 5);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }
