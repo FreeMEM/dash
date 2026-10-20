@@ -138,7 +138,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 18. **Editor visual.** Deshacer/rehacer, arrastrar, copiar y pegar, teclado, accesibilidad; auditoría primero.
 - [x] 19. **Código y ventana.** Validación con diagnósticos; de un evento del `.dashui` a su código en el `.dash` y
       crear el que falte.
-- [ ] 20. **Vista en el Amiga.** Más rápida, repetible, en varias máquinas.
+- [x] 20. **Vista en el Amiga.** Más rápida, repetible, en varias máquinas.
 
 ### F. Pulido
 - [ ] 21. **Primeros pasos.** Walkthrough de VS Code, comando "Dash: Nuevo proyecto" (plantilla con `.dash`,
@@ -489,4 +489,30 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   - 1 en el Chromium: el botón pide la orden con el número y el nombre.
   - En VS Code: los diagnósticos llegan; `gotoEvent` crea la constante y el `if`, deja el cursor en el comentario
     nuevo y la segunda vez lo encuentra. VS Code 20/20.
+
+### 2026-10-20 — Tarea 20 (Ver en Amiga: más rápida, repetible, en varias máquinas)
+- Antes: cada vista arrancaba un emulador nuevo y capturaba a los 12 s (unos 30 s en total).
+- `tools/emu_preview.py`: un Amiga emulado que se queda encendido. Órdenes por stdin (`show <programa> <png>`,
+  `quit`) y respuestas por stdout (`ready`, `ok`, `error`).
+  - Dentro, un vigía en Dash (compilado una vez, en caché) espera `DH0:pide` y ejecuta `DH0:vista`.
+  - La vista abre la ventana, se captura sola (`C:dash_shot 1 DH0:shot.dsh`) y acaba.
+  - `emu_run.run_programs(on_disk=...)` da el directorio del disco emulado para hablar así con los programas.
+  - Los manejadores de señales solo se ponen en el hilo principal.
+- `tools/amiga/shot.c`:
+  - Copia cada fila de cada plano a memoria Fast (CopyMem) en vez de leer la Chip píxel a píxel.
+  - Con un nombre `.dsh` guarda los planos tal cual más la paleta (40 KB en vez de 480 de PPM: el disco emulado
+    escribe despacio), y `emu_run.planar_to_png` hace el PNG.
+  - El binario en caché va por hash del fuente (`shot_<hash>`): otras copias del repositorio tienen otra versión.
+- Extensión:
+  - `PreviewServer` (uno por máquina, se apaga a los 10 minutos sin uso) y `preview()`, que compila con caché
+    por el texto del `.dashui` y la ventana.
+  - La máquina es la de `dash.emulator.machine` (A500 → A1200, sin 68020 para MUI). Ajuste nuevo
+    `dash.emulator.muiSystem32`.
+- Medido, por vista: A1200 3.1 2,4 s, A1200 3.2 2,5 s, 68040 RTG 1,8 s. El arranque, 2,5, 5 y 1,7 s.
+- Tests:
+  - En node: el protocolo con un servidor falso (orden, errores, servidor caído, sin ROM).
+  - Real con `DASH_PREVIEW_EMU=1`: dos vistas de la misma ventana, la segunda sin compilar y en menos de 8 s.
+  - `tests/unit/test_emu_preview.py`: planos a PNG.
+  - Siguen pasando las capturas del runner (`test_emu_shots`, `test_mui_canvas_buffered`, en A1200 y 3.2).
+  - VS Code: 13 bien y 7 saltados, porque la ventana no tenía el foco del escritorio (los de escribir y deshacer).
 

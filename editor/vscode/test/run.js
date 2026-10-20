@@ -376,8 +376,52 @@ async function previewTests() {
         assert.deepStrictEqual(a, ['/d/tools/emu_run.py', '--autoclose', '22', '--timeout', '180',
             '--screenshot', '12', '/t/s.png', '--kickstart', '/k.rom', '--system', '/sys', '/t/p.dash']);
     });
+    await check('preview: the program that takes its own picture', () => {
+        const prog = P.previewProgram('Principal', true);
+        assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);
+        assert.match(prog, /C:dash_shot 1 DH0:shot.dsh/);
+        assert.strictEqual(P.previewMachine('a500'), 'a1200');
+        assert.strictEqual(P.previewMachine('rtg'), 'rtg');
+    });
+    await check('preview: the Amiga that stays on answers in order, and its errors arrive', async () => {
+        // a server that speaks tools/emu_preview.py's lines
+        const fake = 'const fs = require("fs"); console.log("ready"); let b = "";' +
+            'process.stdin.on("data", (d) => { b += d; let i; while ((i = b.indexOf("\\n")) >= 0) { const l = b.slice(0, i).split(" "); b = b.slice(i + 1);' +
+            ' if (l[0] === "quit") process.exit(0);' +
+            ' if (l[1] === "mal") console.log("error no compila la vista"); else { fs.writeFileSync(l[2], "png " + l[1]); console.log("ok " + l[2]); } } });';
+        const server = new P.PreviewServer([process.execPath, '-e', fake]);
+        await server.ready;
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_prev_'));
+        const [a, b, c] = await Promise.allSettled([server.show('uno', path.join(dir, 'a.png')),
+                                                     server.show('mal', path.join(dir, 'b.png')),
+                                                     server.show('dos', path.join(dir, 'c.png'))]);
+        assert.strictEqual(fs.readFileSync(a.value, 'utf8'), 'png uno');
+        assert.strictEqual(b.status, 'rejected');
+        assert.match(b.reason.message, /no compila la vista/);
+        assert.strictEqual(fs.readFileSync(c.value, 'utf8'), 'png dos');
+        server.stop();
+        await new Promise((r) => server.proc.on('exit', r));
+        await assert.rejects(server.show('tres', path.join(dir, 'd.png')), /the emulator ended/);
+        fs.rmSync(dir, { recursive: true, force: true });
+        const broken = new P.PreviewServer([process.execPath, '-e', 'console.log("error no ROM")']);
+        await assert.rejects(broken.ready, /no ROM/);
+    });
     // The real thing (FS-UAE, about 30 s): only with DASH_PREVIEW_EMU=1
     if (process.env.DASH_PREVIEW_EMU) {
+        await check('preview: the Amiga that stays on, twice the same window (the second, not compiled again)', async () => {
+            const repo = path.resolve(__dirname, '..', '..', '..');
+            const text = fs.readFileSync(path.join(repo, 'tests', 'lib', 'ventana_prueba.dashui'), 'utf8') + ' ';
+            const t0 = Date.now();
+            const first = await P.preview({ dashDir: repo, dashuiText: text, windowName: 'Prueba', machine: 'a1200' });
+            const t1 = Date.now();
+            const second = await P.preview({ dashDir: repo, dashuiText: text, windowName: 'Prueba', machine: 'a1200' });
+            const t2 = Date.now();
+            P.stopServers();
+            assert.strictEqual(first.png.slice(1, 4).toString(), 'PNG');
+            assert.strictEqual(second.png.slice(1, 4).toString(), 'PNG');
+            assert.strictEqual(second.compiled, false);
+            assert(t2 - t1 < 8000, `the second took ${t2 - t1} ms (the first ${t1 - t0})`);
+        });
         await check('preview: real window in FS-UAE gives a PNG', async () => {
             const repo = path.resolve(__dirname, '..', '..', '..');
             const { png } = await P.runPreview({ dashDir: repo, windowName: 'Prueba',

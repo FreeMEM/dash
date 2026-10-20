@@ -363,10 +363,10 @@
         box.append(el('button', { id: 'amiga', title: 'Ver en Amiga (FS-UAE)', disabled: amiga.busy,
             onclick: () => {
                 amiga.busy = true;
-                amiga.note = 'Compilando y arrancando el emulador…';
+                amiga.note = 'Compilando (y, la primera vez, arrancando el Amiga)…';
                 renderWindows();
                 vscode.postMessage({ type: 'amiga', window: win().name });
-            } }, amiga.busy ? 'Arrancando el Amiga… (30 s)' : 'Ver en Amiga'));
+            } }, amiga.busy ? 'En el Amiga…' : 'Ver en Amiga'));
         // what "Ver en Amiga" is doing, next to its button (the picture comes below the preview)
         box.append(el('span', { id: 'amiga-note', class: amiga.error ? 'error' : '' }, amiga.note));
     }

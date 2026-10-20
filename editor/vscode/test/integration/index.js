@@ -395,7 +395,7 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
-    await check('visual editor: undo and redo of its changes, with the editor open', async () => {
+    await checkTyping('visual editor: undo and redo of its changes, with the editor open', async () => {
         const path = require('path');
         const os = require('os');
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));

@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { DashUIEditorProvider } = require('./dashuiEditor');
 const DashUI = require('./media/model');
-const { runPreview } = require('./amigaPreview');
+const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
 const { setupTasks, emulatorOptions } = require('./tasks');
@@ -68,7 +68,8 @@ function emulatorEnv() {
     // the ROM and Workbench files of each machine (tools/emu_run.py --machine reads these variables)
     for (const [setting, variable] of [['kickstart', 'DASH_KICKSTART'], ['system', 'DASH_EMU_SYS'],
                                         ['kickstartA500', 'DASH_KICKSTART_A500'], ['kickstart32', 'DASH_KICKSTART_32'],
-                                        ['system32', 'DASH_EMU_SYS_32'], ['systemRtg', 'DASH_EMU_SYS_32_RTG']])
+                                        ['system32', 'DASH_EMU_SYS_32'], ['systemRtg', 'DASH_EMU_SYS_32_RTG'],
+                                        ['muiSystem', 'DASH_EMU_SYS_MUI'], ['muiSystem32', 'DASH_EMU_SYS_32_MUI']])
         if (config.get(setting)) env[variable] = config.get(setting);
     return env;
 }
@@ -97,10 +98,14 @@ async function run(kind) {
         vscode.workspace.getConfiguration('dash.emulator').get('autoclose'))}`);
 }
 
-/** "Ver en Amiga": the window in FS-UAE with MUI, its picture shown in the editor */
+/** "Ver en Amiga": the window in FS-UAE with MUI, its picture shown in the editor. The emulated Amiga stays
+    on between previews (tools/emu_preview.py, one per machine): the first one boots it; the next ones take
+    a couple of seconds, and the same window again is not compiled again. The machine: dash.emulator.machine
+    (an A500 has no 68020 for MUI: the A1200). */
 let previewRunning = false;
+const machineNames = { a1200: 'A1200 (3.1)', 'a1200-32': 'A1200 (3.2)', rtg: '68040 con tarjeta gráfica' };
 async function showOnAmiga(document, windowName, webview) {
-    // busy: the webview's button is off and says so while the emulator works (about 30 s)
+    // busy: the webview's button is off and says so while the emulator works
     const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot', busy: false }, m));
     const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
     if (previewRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
@@ -108,12 +113,9 @@ async function showOnAmiga(document, windowName, webview) {
     const dashDir = findDash(document.fileName);
     if (!dashDir) { fail('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
     const config = vscode.workspace.getConfiguration('dash.emulator');
-    const status = `Compilando "${windowName}" y arrancando el emulador (unos 30 s)…`;
-    const work = () => runPreview({
-        dashDir, dashuiText: document.getText(), windowName,
-        kickstart: config.get('kickstart') || process.env.DASH_KICKSTART,
-        system: config.get('muiSystem') || process.env.DASH_EMU_SYS_MUI,
-    });
+    const machine = previewMachine(config.get('machine') || 'a1200');
+    const status = `"${windowName}" en el ${machineNames[machine]}…`;
+    const work = () => preview({ dashDir, dashuiText: document.getText(), windowName, machine, env: emulatorEnv() });
     previewRunning = true;
     say({ status, busy: true });
     try {
@@ -121,7 +123,7 @@ async function showOnAmiga(document, windowName, webview) {
             ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
                                                  title: 'Ver en Amiga: ' + status }, work)
             : await work();
-        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el Amiga emulado` });
+        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el ${machineNames[machine]}` });
     } catch (e) {
         fail('No se pudo: ' + e.message);
     } finally {
@@ -155,6 +157,7 @@ function activate(context) {
 }
 
 function deactivate() {
+    stopServers();                        // the Amigas of "Ver en Amiga"
     return stopLanguageServer();
 }
 

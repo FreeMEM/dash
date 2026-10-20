@@ -240,6 +240,11 @@
           "type": "string",
           "default": "/opt/amiga/bin/m68k-amigaos-gdb",
           "description": "El gdb de m68k-amigaos (con Python: hace de adaptador de depuración, -i=dap)."
+        },
+        "dash.emulator.muiSystem32": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de Workbench 3.2 con MUI para \"Ver en Amiga\" en la máquina A1200 (3.2) (DASH_EMU_SYS_32_MUI; tools/emu_sys_mui.sh)."
         }
       }
     },

@@ -134,3 +134,13 @@ la gramática, el modelo y los comandos en Node, y el webview en Chromium con un
 
 Pendiente: deshacer dentro del propio editor ya lo da VS Code (el texto es suyo), pero no hay copiar/pegar de objetos ni
 selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.
+
+## Ver en Amiga (IDE, tarea 20)
+
+Un Amiga emulado que se queda encendido entre vistas: `tools/emu_preview.py --machine a1200|a1200-32|rtg`. Dentro, un
+vigía espera `DH0:pide` y ejecuta `DH0:vista`, que abre la ventana, hace su propia captura con `C:dash_shot` en cuanto
+está abierta y acaba. En pantallas planares la captura son los planos tal cual (`.dsh`, unos 40 KB en 4 colores) y el
+PC hace el PNG (`emu_run.planar_to_png`). La extensión mantiene uno por máquina y no recompila una ventana que no ha
+cambiado. Medido: arranque 2,5 s (A1200 3.1), 5 s (3.2) y 1,7 s (68040 RTG); cada vista, 2,4 s, 2,5 s y 1,8 s (antes,
+unos 30 s cada una).
+

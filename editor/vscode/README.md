@@ -72,7 +72,11 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   constant with that number, `const ID_ACEPTAR = 3`, and `if ev == ID_ACEPTAR`); if there is none, it offers to
   create it: the constant and an `if` in the loop of `mui_wait_event`.
   **Ver en Amiga** compiles a tiny program with the window, runs it in FS-UAE with MUI and shows a picture of
-  the real thing (about 30 s). A Dash program uses the file with `import "ventana.dashui"`.
+  the real thing. The emulated Amiga stays on between previews (`tools/emu_preview.py`, off after 10 minutes
+  unused): the first one boots it (a few seconds more); after that a preview takes about 2.5 s on the A1200 and
+  2 s on the 68040, and the same window again is not compiled again. On the machine of `dash.emulator.machine`
+  (A1200 3.1, A1200 3.2 or 68040 with a graphics card; the A500 has no 68020 for MUI, so the A1200), with the
+  Workbench files with MUI of `dash.emulator.muiSystem`, `muiSystem32` or `systemRtg`. A Dash program uses the file with `import "ventana.dashui"`.
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.
 
 ## Debugging on a real Amiga

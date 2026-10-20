@@ -158,9 +158,12 @@ SHOT_SOURCE = Path(__file__).resolve().parent / "amiga" / "shot.c"
 
 
 def shot_tool() -> Path:
-    """tools/amiga/shot.c built with the Amiga toolchain (cached next to the emulator files)."""
-    exe = Path(os.path.expanduser("~/.cache/dash-emu/shot"))
-    if not exe.exists() or exe.stat().st_mtime < SHOT_SOURCE.stat().st_mtime:
+    """tools/amiga/shot.c built with the Amiga toolchain (cached next to the emulator files, by the
+    source's hash: other checkouts may have another version)."""
+    import hashlib
+    key = hashlib.sha1(SHOT_SOURCE.read_bytes()).hexdigest()[:12]
+    exe = Path(os.path.expanduser(f"~/.cache/dash-emu/shot_{key}"))
+    if not exe.exists():
         exe.parent.mkdir(parents=True, exist_ok=True)
         gcc = "/opt/amiga/bin/m68k-amigaos-gcc"
         build = subprocess.run([gcc, "-O2", "-noixemul", "-o", str(exe), str(SHOT_SOURCE)],
@@ -181,20 +184,62 @@ def _ppm_complete(ppm: Path) -> bool:
         return False
 
 
-def ppm_to_png(ppm: Path, png: Path):
-    """Binary PPM (P6) from shot.c to PNG, without extra Python packages."""
+def planar_complete(dsh: Path) -> bool:
+    """The planes of tools/amiga/shot.c (FILE.dsh) are all there."""
+    try:
+        data = dsh.read_bytes()
+        head, _, _ = data.partition(b"\n")
+        _, w, h, depth, bpr = head.split()
+        return len(data) == len(head) + 1 + 3 * (1 << int(depth)) + int(h) * int(depth) * int(bpr)
+    except (OSError, ValueError):
+        return False
+
+
+def planar_to_png(dsh: Path, png: Path):
+    """The planes and palette of tools/amiga/shot.c (FILE.dsh) to PNG."""
+    data = dsh.read_bytes()
+    head, _, rest = data.partition(b"\n")
+    _, w, h, depth, bpr = (int(x) if x.isdigit() else x for x in head.split())
+    n = 1 << depth
+    pal = rest[:3 * n]
+    planes = rest[3 * n:]
+    # each pixel's colour index from its bit in each plane, a byte of 8 pixels at a time
+    spread = [bytes(((b >> (7 - i)) & 1) for i in range(8)) for b in range(256)]
+    rows = bytearray()
+    for y in range(h):
+        index = bytearray(bpr * 8)
+        base = y * depth * bpr
+        for plane in range(depth):
+            bits = planes[base + plane * bpr: base + (plane + 1) * bpr]
+            weight = 1 << plane
+            row = b"".join(spread[b] for b in bits)
+            for x, v in enumerate(row):
+                if v:
+                    index[x] += weight
+        rows.append(0)
+        for i in index[:w]:
+            rows += pal[3 * i: 3 * i + 3]
+    _write_png(png, w, h, bytes(rows))
+
+
+def _write_png(png: Path, width: int, height: int, rows: bytes):
+    """RGB rows, each with its filter byte (0) first, as a PNG, without extra Python packages."""
     import struct
     import zlib
-    data = ppm.read_bytes()
-    parts = data.split(b"\n", 3)
-    width, height = map(int, parts[1].split())
-    pixels = parts[3]
-    rows = b"".join(b"\0" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height))
 
     def chunk(kind, body):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
     png.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
                     + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
+
+
+def ppm_to_png(ppm: Path, png: Path):
+    """Binary PPM (P6) from shot.c to PNG."""
+    data = ppm.read_bytes()
+    parts = data.split(b"\n", 3)
+    width, height = map(int, parts[1].split())
+    pixels = parts[3]
+    _write_png(png, width, height, b"".join(b"\0" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height)))
 
 
 def _free_port():
@@ -233,7 +278,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
-                 model: str = "A1200", gdbserver: int = 0, relay: bool = True):
+                 model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -243,7 +288,9 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
     order, in an EmuResults list (.debugger: the debugger's text). window: the emulator's window
     on the screen (and its sound), not hidden; follow(index, text): called with what each program
     writes while it runs. emulator: "fs-uae" or "amiberry" (model A1200 or A500; its own options,
-    so extra_config, screenshots and debug are FS-UAE's only)."""
+    so extra_config, screenshots and debug are FS-UAE's only). on_disk(hd): called with the emulated
+    disk's directory (DH0: on the PC) once it is ready, before the emulator starts: to add files there and
+    talk to the programs through it while they run (tools/emu_preview.py)."""
     if not shutil.which(emulator):
         raise RuntimeError(f"{emulator} not found")
     if emulator == "amiberry" and (debug is not None or screenshot or extra_config.strip()):
@@ -347,6 +394,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 extra_config += "bsdsocket_library = 1\n"
         lines.append('Echo "fin" >DH0:done.txt')
         (hd / "S" / "Startup-Sequence").write_text("\n".join(lines) + "\n")
+        if on_disk is not None:
+            on_disk(hd)
         config = tmp / "run.fs-uae"
         kickstart = kickstart or os.environ.get("DASH_KICKSTART")
         if kickstart and not Path(kickstart).is_file():
@@ -360,8 +409,9 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         env = dict(os.environ) if window else \
             dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
         transcript = []
-        for sig in (signal.SIGTERM, signal.SIGHUP):
-            signal.signal(sig, _stop_on_signal)
+        if threading.current_thread() is threading.main_thread():   # (tools/emu_preview.py runs it in a thread)
+            for sig in (signal.SIGTERM, signal.SIGHUP):
+                signal.signal(sig, _stop_on_signal)
         if emulator == "amiberry":
             if not kickstart:
                 raise RuntimeError("amiberry needs a Kickstart ROM (--kickstart or the machine's variable)")
