@@ -26,7 +26,8 @@
         "dash.emulator.kickstartA500",
         "dash.emulator.kickstart32",
         "dash.emulator.system32",
-        "dash.emulator.systemRtg"
+        "dash.emulator.systemRtg",
+        "dash.debug.gdb"
       ]
     }
   },
@@ -104,6 +105,12 @@
         "command": "dash.chooseMachine",
         "title": "Dash: Elegir la máquina del emulador",
         "category": "Dash"
+      },
+      {
+        "command": "dash.debug",
+        "title": "Dash: Depurar en el Amiga",
+        "category": "Dash",
+        "icon": "$(debug-alt)"
       }
     ],
     "menus": {
@@ -214,6 +221,11 @@
           "type": "string",
           "default": "",
           "description": "Ficheros de un Workbench 3.2 con Picasso96 (DASH_EMU_SYS_32_RTG; tools/emu_sys_rtg.sh de dashweb)."
+        },
+        "dash.debug.gdb": {
+          "type": "string",
+          "default": "/opt/amiga/bin/m68k-amigaos-gdb",
+          "description": "El gdb de m68k-amigaos (con Python: hace de adaptador de depuración, -i=dap)."
         }
       }
     },
@@ -299,6 +311,110 @@
           "line": 3
         },
         "severity": "error"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "dash"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "dash",
+        "label": "Dash (Amiga)",
+        "languages": [
+          "dash"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "default": "${file}",
+                "description": "El .dash que se depura (se compila con ./dash --debug)."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false,
+                "description": "Parar al empezar el programa."
+              },
+              "machine": {
+                "type": "string",
+                "enum": [
+                  "a1200",
+                  "a500",
+                  "a1200-32",
+                  "rtg"
+                ],
+                "description": "Máquina (por defecto dash.emulator.machine)."
+              },
+              "emulator": {
+                "type": "string",
+                "enum": [
+                  "fs-uae",
+                  "amiberry"
+                ],
+                "description": "Emulador (por defecto dash.emulator.program)."
+              },
+              "window": {
+                "type": "boolean",
+                "default": true,
+                "description": "Ver la ventana del emulador."
+              }
+            }
+          },
+          "attach": {
+            "required": [
+              "target",
+              "program"
+            ],
+            "properties": {
+              "target": {
+                "type": "string",
+                "default": "amiga.local:2345",
+                "description": "host:puerto de un bgdbserver ya en marcha (un Amiga real, por ejemplo)."
+              },
+              "program": {
+                "type": "string",
+                "description": "El ejecutable compilado con ./dash --debug (sus símbolos)."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "dash",
+            "request": "launch",
+            "name": "Depurar en el Amiga",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Dash: depurar en el Amiga emulado",
+            "description": "Compila con --debug y lo depura en FS-UAE o Amiberry",
+            "body": {
+              "type": "dash",
+              "request": "launch",
+              "name": "Depurar en el Amiga",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "Dash: depurar en un Amiga real (bgdbserver)",
+            "description": "Se conecta a bgdbserver por la red",
+            "body": {
+              "type": "dash",
+              "request": "attach",
+              "name": "Amiga real",
+              "target": "amiga.local:2345",
+              "program": "^\"\\${workspaceFolder}/bin/programa.debug\""
+            }
+          }
+        ]
       }
     ]
   },

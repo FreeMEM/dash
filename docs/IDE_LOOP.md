@@ -123,7 +123,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       con las alternativas (uae-dap, el depurador de consola de FS-UAE) y elegir. Si hace falta, `[?]`.
 - [x] 13. **Dash con información de depuración.** `./dash --debug` (`-g -O0`, `#line` hacia el `.dash` en el C):
       gdb y addr2line hablan en líneas de Dash. Tests (C esperado; addr2line sobre el binario).
-- [ ] 14. **Adaptador.** Configuración de lanzamiento `dash` (launch.json): compila con `--debug`, arranca emulador y
+- [x] 14. **Adaptador.** Configuración de lanzamiento `dash` (launch.json): compila con `--debug`, arranca emulador y
       servidor, conecta gdb (DAP o MI). Breakpoints en `.dash`, continuar, paso a paso (entrar, saltar, salir), pausa.
 - [ ] 15. **Pila y variables.** Nombres de Dash (locales, globales, structs, Strings, listas, diccionarios) con
       pretty-printers de gdb en Python; ocultar el runtime `_dash_*` de la pila.
@@ -361,4 +361,20 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Tests: `tests/unit/test_debug_lines.py` (4: las directivas, nombres con comillas, el C con y sin la variable, gdb lee
   `prog.dash:8` y los símbolos `n` y `r`); el runner ejecuta ahora `tests/lsp` y `tests/unit`.
 - Queda para la 15: un `}` de cierre de bloque se atribuye a la última sentencia de dentro (no al `end`).
+
+### 2026-10-20 — Tarea 14 (adaptador de depuración: F5)
+- `tools/emu_run.py --gdbserver PUERTO`: el primer programa corre bajo `C:bgdbserver :PUERTO` (copiado al disco;
+  `$DASH_BGDBSERVER` o el de `tools/get_bgdbserver.sh`), con la bsdsocket de FS-UAE encendida.
+- Probado el diálogo DAP a mano contra `gdb -i=dap`: en gdb 18 la respuesta a `attach` llega **después** de
+  `configurationDone` (VS Code no la espera: bien); `attach` con `target: "localhost:P"` y `program`; el breakpoint de
+  `prueba.dash:8` sale verificado; gdb deja el programa parado al conectar (`stopped`, reason `attach`).
+- `editor/vscode/debug.js`: tipo de depuración `dash` (`launch`: `program`, `stopOnEntry`, `machine`, `emulator`,
+  `window`; `attach`: `target`, `program`, para un Amiga real). Al resolver `launch`: compila con `./dash --debug` (salida
+  al canal "Dash: Amiga"), busca un puerto libre, arranca `emu_run --follow --gdbserver P` (ventana según los ajustes) y
+  espera a que escuche leyendo `/proc/net/tcp` (conectarse se llevaría la única conexión que acepta bgdbserver);
+  entonces pasa a `attach` con `target`. El adaptador es el propio gdb (`DebugAdapterExecutable`, `dash.debug.gdb`); un
+  tracker continúa tras el `stopped` de `attach` salvo `stopOnEntry`; al acabar la sesión se para el emulador.
+  Orden "Dash: Depurar en el Amiga" y "Depurar" en la CodeLens de `Main`; breakpoints en ficheros `.dash`.
+- Prueba en VS Code (15): breakpoint en la línea 8, `startDebugging`: para allí, la pila dice línea 8 de `depura.dash`,
+  las variables tienen `x = 20`, `continue` y la sesión termina sola. Base: todo bien. Extensión instalada.
 

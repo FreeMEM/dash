@@ -9,7 +9,8 @@ const DashUI = require('./media/model');
 const { runPreview } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
-const { setupTasks } = require('./tasks');
+const { setupTasks, emulatorOptions } = require('./tasks');
+const { setupDebugger } = require('./debug');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -147,6 +148,8 @@ function activate(context) {
     setupLanguageServer(vscode, context, findDash);   // errors while typing (compiler/lsp.py)
     if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
         runTask = setupTasks(vscode, context, { findDash, env: emulatorEnv, trusted });
+    if (vscode.debug && vscode.debug.registerDebugConfigurationProvider)   // F5: debug on the Amiga (gdb + bgdbserver)
+        setupDebugger(vscode, context, { findDash, env: emulatorEnv, trusted, emulatorOptions });
 }
 
 function deactivate() {

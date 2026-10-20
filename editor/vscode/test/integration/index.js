@@ -281,6 +281,45 @@ async function run() {
         assert(tab, 'no profile panel');
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('debugger: F5 stops at a breakpoint in the .dash, with its stack in Dash lines', async () => {
+        const path = require('path');
+        const os = require('os');
+        await vscode.workspace.getConfiguration('dash.emulator').update('window', false, vscode.ConfigurationTarget.Global);
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'depura.dash');
+        fs.writeFileSync(file, 'func doble(n: Int) -> Int\n    r = n * 2\n    return r\nend\n\nMain\n    x = 20\n' +
+                               '    y = doble(x)\n    Print "resultado #{y}"\nend\n');
+        const uri = vscode.Uri.file(file);
+        vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(7, 0)))]);
+        let stopped = null;
+        const tracker = vscode.debug.registerDebugAdapterTrackerFactory('dash', { createDebugAdapterTracker: () => ({
+            onDidSendMessage: (m) => { if (m.type === 'event' && m.event === 'stopped' && m.body.reason === 'breakpoint') stopped = m; },
+        }) });
+        const ended = new Promise((resolve) => {
+            const sub = vscode.debug.onDidTerminateDebugSession(() => { sub.dispose(); resolve(true); });
+        });
+        try {
+            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'launch', name: 'prueba', program: file }));
+            for (let i = 0; i < 1200 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
+            assert(stopped, 'did not stop at the breakpoint');
+            const session = vscode.debug.activeDebugSession;
+            const trace = await session.customRequest('stackTrace', { threadId: stopped.body.threadId });
+            const top = trace.stackFrames[0];
+            assert.strictEqual(top.line, 8);
+            assert.strictEqual(top.source.path, file);
+            const scopes = await session.customRequest('scopes', { frameId: top.id });
+            const locals = await session.customRequest('variables', { variablesReference: scopes.scopes[0].variablesReference });
+            assert(locals.variables.some((v) => v.name === 'x' && v.value === '20'), JSON.stringify(locals.variables));
+            await session.customRequest('continue', { threadId: stopped.body.threadId });
+            const done = await Promise.race([ended, new Promise((r) => setTimeout(() => r('timeout'), 60000))]);
+            assert.strictEqual(done, true, 'the session did not end');
+        } finally {
+            tracker.dispose();
+            vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+            if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

@@ -29,6 +29,12 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
 - In a folder not trusted (Restricted Mode) only colours and the visual editor work; compiling, the emulator
   and the language server need a trusted folder.
+- **Debugging (F5)**: breakpoints in the `.dash`, continue, step over/into/out, pause, the call stack and the
+  variables, in Dash lines, on the emulated Amiga. F5 (or **Dash: Depurar en el Amiga**, or "Depurar" over
+  `Main`) builds the program with `./dash --debug`, starts the emulator with it under `bgdbserver`
+  (`tools/get_bgdbserver.sh` of the Dash repository, once) and attaches `m68k-amigaos-gdb -i=dap` to it (gdb is the
+  debug adapter; `dash.debug.gdb`). The emulator stops with the session. `launch.json`: `program`, `stopOnEntry`,
+  `machine`, `emulator`, `window`; `attach` with `target` (host:port of a bgdbserver) for a real Amiga.
 - **Memory and profile**: a `--memcheck` run puts each memory error on the line where it happened (problem
   matcher `$dash-memcheck`); a `--profile` run opens its table (own and total time, calls) in a panel, each
   function a link to its code.

@@ -220,6 +220,7 @@ function setupTasks(vscode, context, helpers) {
                 if (/^Main\b/.test(document.lineAt(i).text)) {
                     const range = new vscode.Range(i, 0, i, 4);
                     lenses.push(new vscode.CodeLens(range, { title: '▶ Ejecutar', command: 'dash.runInEmulator', tooltip: 'En el emulador' }));
+                    lenses.push(new vscode.CodeLens(range, { title: 'Depurar', command: 'dash.debug', tooltip: 'F5: breakpoints, pasos y variables en el Amiga' }));
                     lenses.push(new vscode.CodeLens(range, { title: 'Compilar', command: 'dash.compile' }));
                     lenses.push(new vscode.CodeLens(range, { title: 'Memoria', command: 'dash.runMemcheck', tooltip: 'Ejecutar con --memcheck' }));
                     lenses.push(new vscode.CodeLens(range, { title: 'Perfil', command: 'dash.runProfile', tooltip: 'Ejecutar con --profile' }));

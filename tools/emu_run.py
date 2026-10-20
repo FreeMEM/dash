@@ -202,7 +202,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
-                 model: str = "A1200"):
+                 model: str = "A1200", gdbserver: int = 0):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -289,8 +289,21 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 shutil.copy(prog, exe)
             names.append(prog.name)
             extra = f" {args[i]}" if args and i < len(args) and args[i] else ""   # Shell arguments
-            lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
+            if gdbserver and i == 0:
+                # the first program under bgdbserver (tools/get_bgdbserver.sh): gdb connects to this port
+                # of the PC (the emulator's bsdsocket uses the PC's sockets) and runs it
+                lines.append(f"C:bgdbserver :{gdbserver} DH0:p{i}{extra} >DH0:out{i}.txt")
+            else:
+                lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
             lines.append(f'Echo "$RC" >DH0:rc{i}.txt')
+        if gdbserver:
+            server = Path(os.environ.get("DASH_BGDBSERVER", Path.home() / ".cache/dash-debug/x/bgdbserver/bgdbserver"))
+            if not server.is_file():
+                raise RuntimeError(f"bgdbserver not found: {server} (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)")
+            (hd / "C").mkdir(exist_ok=True)
+            shutil.copy(server, hd / "C" / "bgdbserver")
+            if emulator == "fs-uae" and "bsdsocket_library" not in extra_config:
+                extra_config += "bsdsocket_library = 1\n"
         lines.append('Echo "fin" >DH0:done.txt')
         (hd / "S" / "Startup-Sequence").write_text("\n".join(lines) + "\n")
         config = tmp / "run.fs-uae"
@@ -413,6 +426,9 @@ def main():
     parser.add_argument("--window", action="store_true",
                         help="show the emulator's window (and play its sound); no time limit unless --timeout")
     parser.add_argument("--follow", action="store_true", help="print what the programs write while they run")
+    parser.add_argument("--gdbserver", type=int, metavar="PORT",
+                        help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
+                             "connects with target remote :PORT (build it with ./dash --debug)")
     args = parser.parse_args()
     machine = MACHINES.get(args.machine) if args.machine else None
     kickstart = args.kickstart or (os.environ.get(machine["rom"]) if machine else None)
@@ -436,7 +452,8 @@ def main():
                                        for kv in args.set),
                                args.keep, args.fpu, system, args.workbench or bool(machine and machine["workbench"]),
                                args.screenshot, debug=args.debug, window=args.window, follow=follow,
-                               emulator=args.emulator, model=machine["model"] if machine else "A1200")
+                               emulator=args.emulator, model=machine["model"] if machine else "A1200",
+                               gdbserver=args.gdbserver or 0)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
