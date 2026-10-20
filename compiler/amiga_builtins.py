@@ -3927,6 +3927,16 @@ TASK_FUNCTIONS = {
         c_template="_dash_desk_free(${canvas})",
         description="The wallpaper back in the area (the program's end does it too)"),
     # Trasfondo: the CPU each task takes (exec's task switch hooks and the EClock, as PM)
+    # Trasfondo: a program without a window that can be stopped
+    "break_check": BuiltinFunc(
+        name="break_check", params=[], return_type="BOOL",
+        c_template="((SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0)",
+        description="True if Ctrl-C came (\"Break\" in the Shell, or another copy: single_instance); it is cleared"),
+    "single_instance": BuiltinFunc(
+        name="single_instance", params=["name"], return_type="BOOL",
+        c_template="_dash_single_instance(${name})",
+        description="One copy at a time: false if another copy of the program (a public port with that name) "
+                    "runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends)"),
     "cpu_start": BuiltinFunc(
         name="cpu_start", params=[], return_type="BOOL",
         c_template="_dash_cpu_start()",
