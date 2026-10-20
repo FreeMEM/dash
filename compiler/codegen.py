@@ -248,6 +248,10 @@ typedef struct _DashStrHdr {
 } _DashStrHdr;
 
 #define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
+/* the high byte of size also says "a text of Dash" (texts are under 16 MB): the cache of lengths
+   only keeps those, not texts of C code that C may free and reuse without Dash knowing (D61) */
+#define _DASH_STR_TAG  0x5A000000UL
+#define _DASH_STR_SIZE(h) ((h)->size & 0x00FFFFFFUL)
 #define _DASH_STR_HDR(p) ((_DashStrHdr *)((UBYTE *)(p) - sizeof(_DashStrHdr)))
 
 static _DashStrHdr *_dash_tmp = NULL;
@@ -255,13 +259,15 @@ static ULONG _dash_tmp_serial = 0;
 
 static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     ULONG size = sizeof(_DashStrHdr) + len + 1;
-    _DashStrHdr *h = (_DashStrHdr *)_dash_block_get(size);
+    _DashStrHdr *h;
     STRPTR text;
+    if (size > 0x00FFFFFFUL) return NULL;
+    h = (_DashStrHdr *)_dash_block_get(size);
     if (!h) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_strs++;
 #endif
-    h->size = size;
+    h->size = size | _DASH_STR_TAG;
     h->next = NULL;
     h->serial = 0;
     if (temp) {
@@ -279,7 +285,7 @@ static void _dash_str_drop(_DashStrHdr *h) {
     if (h->size == _DASH_MC_DEAD) { _dash_mc_error((CONST_STRPTR)"string liberado dos veces"); return; }
     _dash_mc_strs--;
 #endif
-    _dash_block_put(h, h->size & ~_DASH_STR_KEEP);
+    _dash_block_put(h, _DASH_STR_SIZE(h));
 }
 
 /* Marks are serial numbers: removing a temporary from the list never breaks them */
@@ -3480,13 +3486,24 @@ static UBYTE _dash_sc_next;
 static STRPTR _dash_sc_last = NULL;
 static LONG _dash_sc_last_len = 0;
 
+/* A text Dash made (its header has the tag and room for len): only those go in the cache. A text
+   of C (malloc, a library) may be freed and its address reused by another one of a different
+   length, and Dash would not know (D61). Odd addresses are never Dash's (and a long read there
+   stops a 68000). */
+static BOOL _dash_str_ours(STRPTR s, LONG len) {
+    _DashStrHdr *h;
+    if ((ULONG)s & 1) return FALSE;
+    h = _DASH_STR_HDR(s);
+    return (h->size & 0x7F000000UL) == _DASH_STR_TAG && (LONG)_DASH_STR_SIZE(h) >= (LONG)sizeof(_DashStrHdr) + len + 1;
+}
+
 static LONG _dash_str_len(STRPTR s) {
     LONG k, len;
     if (!s) return 0;
     for (k = 0; k < _DASH_SC_N; k++)
         if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
     len = strlen((char *)s);
-    if (len >= _DASH_SC_MIN) {
+    if (len >= _DASH_SC_MIN && _dash_str_ours(s, len)) {
         k = _dash_sc_next;
         _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
         _dash_sc_s[k] = s;
@@ -3514,7 +3531,7 @@ static void _dash_str_setlen(STRPTR s, LONG len) {
             return;
         }
     }
-    if (len >= _DASH_SC_MIN) {
+    if (len >= _DASH_SC_MIN && _dash_str_ours(s, len)) {
         k = _dash_sc_next;
         _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
         _dash_sc_s[k] = s;
@@ -3539,7 +3556,7 @@ static void _dash_str_append(STRPTR *var, STRPTR add) {
     }
     len = _dash_str_len(s);
     h = _DASH_STR_HDR(s);
-    cap = (LONG)(h->size & ~_DASH_STR_KEEP) - (LONG)sizeof(_DashStrHdr) - 1;
+    cap = (LONG)_DASH_STR_SIZE(h) - (LONG)sizeof(_DashStrHdr) - 1;
     if (!(h->size & _DASH_STR_KEEP) && !h->serial && len + n <= cap) {
         _dash_copy(s + len, add, n);
         s[len + n] = 0;
