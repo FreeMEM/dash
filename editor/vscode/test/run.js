@@ -195,6 +195,25 @@ async function modelTests() {
     const { execFileSync } = require('child_process');
     const repo = path.resolve(__dirname, '..', '..', '..');
 
+    await check('model: names that are words of the language are refused, as the compiler does (v14)', () => {
+        const { execFileSync } = require('child_process');
+        const repo = path.resolve(__dirname, '..', '..', '..');
+        const py = JSON.parse(execFileSync('python3', ['-c', 'import json; from compiler.dashui import reserved; ' +
+                                                       'print(json.dumps(sorted(reserved())))'], { cwd: repo, encoding: 'utf8' }));
+        assert.deepStrictEqual([...M.RESERVED].sort(), py);
+        const node = { type: 'button' };
+        assert(/palabra del lenguaje/.test(M.setProp(node, 'name', 'end')));
+        assert(/sin tilde/.test(M.setProp(node, 'name', 'botón')));
+        assert.strictEqual(M.setProp(node, 'name', 'Close'), null);          // (only after On)
+        const L = require('../dashuiLinks.js');
+        const text = JSON.stringify({ dashui: 1, windows: [{ name: 'while', title: 't', id: 1, root: { type: 'vgroup',
+            children: [{ type: 'button', name: 'end', label: 'A' }] } }] });
+        const msgs = L.problems(text).map((p) => p.message).join(' | ');
+        assert(/ventana no válido: "while"/.test(msgs) && /nombre no válido: end/.test(msgs), msgs);
+        const own = M.check(M.parse(JSON.stringify({ dashui: 1, windows: [{ name: 'V', title: 't', id: 1, root: { type: 'vgroup',
+            children: [{ type: 'button', name: 'botón', label: 'A', event: 'uno' }] } }] }))).join(' | ');
+        assert(/nombre no válido botón/.test(own) && /event de botón no es un número/.test(own), own);
+    });
     await check('model: new document has one empty window', () => {
         const d = M.newDocument();
         assert.strictEqual(d.dashui, 1);

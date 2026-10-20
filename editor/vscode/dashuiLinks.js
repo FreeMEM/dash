@@ -52,7 +52,7 @@ function problems(text) {
         from = wp.offset;
         const add = (message, place, severity) => out.push({ message, start: (place || wp).start, end: (place || wp).end,
                                                           severity: severity || 'error' });
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(win.name || '')) add(`nombre de ventana no válido: "${win.name || ''}"`);
+        if (M.badName(win.name)) add(`nombre de ventana no válido: "${win.name || ''}" (${M.badName(win.name)})`);
         if (seenWindows[win.name]) add(`ventana repetida: ${win.name}`);
         seenWindows[win.name] = true;
         const names = {};
@@ -65,7 +65,8 @@ function problems(text) {
             const np = (n.name !== undefined && placeOf(text, 'name', n.name, tp ? tp.offset : cursor)) || tp;
             if (!M.TYPES[n.type]) add(`tipo desconocido: ${n.type}`, tp);
             if (n.name !== undefined) {
-                if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(n.name)) || n.name === 'window') add(`nombre no válido: ${n.name}`, np);
+                if (n.name === 'window') add('nombre no válido: window (es el de la ventana)', np);
+                else if (M.badName(n.name)) add(`nombre no válido: ${n.name} (${M.badName(n.name)})`, np);
                 else if (names[n.name]) add(`nombre repetido en ${win.name}: ${n.name}`, np);
                 names[n.name] = true;
             }

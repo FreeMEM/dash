@@ -1,7 +1,7 @@
 /* .dashui editor: VS Code colours for the tool panes, an Amiga/MUI look for the preview */
 body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif); font-size: 13px;
        color: var(--vscode-foreground, #ccc); background: var(--vscode-editor-background, #1e1e1e); }
-#layout { display: grid; grid-template-columns: 160px 1fr 260px;
+#layout { display: grid; grid-template-columns: minmax(110px, 160px) minmax(180px, 1fr) minmax(190px, 260px);
           grid-template-rows: auto minmax(100px, 32vh) 1fr auto; height: 100vh; }
 #palette { grid-column: 1; grid-row: 2 / 4; }
 #tree { grid-column: 2; grid-row: 2; border-bottom: 1px solid var(--vscode-panel-border, #444); }
@@ -76,3 +76,11 @@ body.invalid #layout { display: none; } body.invalid #error { display: block; }
 .mui-window .selected { outline: 2px solid #f60; outline-offset: 1px; }
 .mui-window .hidden { opacity: 0.35; }
 .mui-window .disabled { filter: grayscale(1) opacity(0.6); }
+
+/* narrow (the editor beside the .dash, half the screen): the tree had 40 px; the properties go under it all */
+@media (max-width: 720px) {
+    #layout { grid-template-columns: 110px 1fr; grid-template-rows: auto minmax(90px, 28vh) 1fr minmax(110px, 34vh) auto; }
+    #windows, #problems { grid-column: 1 / 3; }
+    #props { grid-column: 1 / 3; grid-row: 4; border-top: 1px solid var(--vscode-panel-border, #444); }
+    #problems { grid-row: 5; }
+}

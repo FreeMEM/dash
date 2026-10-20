@@ -1,0 +1,7 @@
+# expect: object name 'end' is a word of the language
+# (the code made from it did not parse: "no se esperaba `:` aquí", in a file the user never saw; v14)
+import "../lib/ventana_nombre_end.dashui"
+
+Main
+    v = Mala_create()
+end

@@ -15,6 +15,22 @@ const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
 const { writeProject, cleanName } = require('./newProject');
 
+/** A .dashui given to VS Code when it starts ("code carpeta ventana.dashui") opens as JSON text: its editor
+    is not there yet. Then, just after starting (not later: whoever opens one as text on purpose keeps it), the
+    ones as text without changes go to the visual editor. */
+function reopenStartupDashui() {
+    if (!vscode.window.tabGroups || process.uptime() > 30) return;
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            const input = tab.input;
+            if (!(input instanceof vscode.TabInputText) || !input.uri.path.endsWith('.dashui') || tab.isDirty) continue;
+            vscode.commands.executeCommand('vscode.openWith', input.uri, 'dash.dashuiEditor',
+                                           { viewColumn: group.viewColumn, preserveFocus: !tab.isActive })
+                .then(() => vscode.window.tabGroups.close(tab)).then(undefined, () => {});
+        }
+    }
+}
+
 /** The dash.path setting, with ~ for the home folder */
 function dashSetting() {
     const configured = vscode.workspace.getConfiguration('dash').get('path') || '';
@@ -238,6 +254,7 @@ function activate(context) {
         DashUIEditorProvider.register(context, showOnAmiga),
     );
     setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
+    reopenStartupDashui();
     // a project just made in this window: its program open, beside the walkthrough
     const after = context.globalState && context.globalState.get('dash.openAfter');
     if (after) {

@@ -35,6 +35,14 @@
     const COMMON = [['name', 'ident', ''], ['weight', 'int', 100], ['disabled', 'bool', false], ['hidden', 'bool', false],
                     ['help', 'string', '']];
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    // words of the language: not names (compiler/dashui.py reserved(), the same list; a test compares them)
+    const RESERVED = new Set(["EventLoop", "Main", "Print", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
+    /** Why a name of a window or object is not valid, or null */
+    function badName(name) {
+        if (!IDENT.test(String(name || ''))) return 'letras sin tilde, cifras y _, sin empezar por cifra';
+        if (RESERVED.has(name)) return 'es una palabra del lenguaje';
+        return null;
+    }
 
     function newDocument() {
         return { dashui: 1, windows: [newWindow('Principal')] };
@@ -118,7 +126,8 @@
     function setProp(node, key, value) {
         if (key === 'name') {
             if (value === '' || value === null || value === undefined) { delete node.name; return null; }
-            if (!IDENT.test(value) || value === 'window') return 'nombre no válido: ' + value;
+            if (value === 'window') return 'nombre no válido: window (es el de la ventana)';
+            if (badName(value)) return `nombre no válido: ${value} (${badName(value)})`;
             node.name = value;
             return null;
         }
@@ -222,18 +231,22 @@
         return out;
     }
 
-    /** Problems the compiler would refuse: names used twice or not valid, unknown types. */
+    /** Problems the compiler would refuse: names used twice or not valid, unknown types, numbers that are not. */
     function check(doc) {
         const problems = [];
         doc.windows.forEach((win, w) => {
-            if (!IDENT.test(win.name || '')) problems.push(`ventana ${w + 1}: nombre no válido`);
+            if (badName(win.name)) problems.push(`ventana ${w + 1}: nombre no válido (${badName(win.name)})`);
             const seen = {};
             (function walk(n) {
                 if (!n) return;
                 if (!TYPES[n.type]) problems.push(`${win.name}: tipo desconocido ${n.type}`);
                 if (n.name) {
-                    if (seen[n.name]) problems.push(`${win.name}: nombre repetido ${n.name}`);
+                    if (badName(n.name)) problems.push(`${win.name}: nombre no válido ${n.name} (${badName(n.name)})`);
+                    else if (seen[n.name]) problems.push(`${win.name}: nombre repetido ${n.name}`);
                     seen[n.name] = true;
+                }
+                for (const k of ['event', 'change', 'ack', 'double', 'weight']) {   // ("event": "uno")
+                    if (n[k] !== undefined && !Number.isInteger(n[k])) problems.push(`${win.name}: ${k} de ${n.name || n.type} no es un número entero`);
                 }
                 (n.children || []).forEach(walk);
             })(win.root);
@@ -287,6 +300,6 @@
             (menus ? `<div class="menubar">${menus}</div>` : '') + render(win.root, []) + '</div>';
     }
 
-    return { TYPES, COMMON, newDocument, newWindow, newNode, parse, serialize, nodeAt, add, remove, move,
+    return { TYPES, COMMON, RESERVED, badName, newDocument, newWindow, newNode, parse, serialize, nodeAt, add, remove, move,
              dropTarget, copy, paste, moveBy, paths, setProp, names, check, preview };
 }));

@@ -20,7 +20,9 @@
     "Linters"
   ],
   "main": "./dist/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "workspaceContains:**/*.dashui"
+  ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",

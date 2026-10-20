@@ -286,6 +286,11 @@
                         value: w[key] === undefined ? '' : w[key],
                         onchange: (e) => {
                             const v = e.target.value;
+                            if (key === 'name') {        // (it took "end", "Ventaña", "" or another window's name)
+                                const why = M.badName(v) ||
+                                    (doc.windows.some((o) => o !== w && o.name === v) ? 'ya hay una ventana con ese nombre' : null);
+                                if (why) { showProblems([`nombre de ventana no válido: ${v} (${why})`]); e.target.value = w.name; return; }
+                            }
                             if (kind === 'int') { if (v === '') delete w[key]; else w[key] = Number(v); }
                             else w[key] = v;
                             commit();

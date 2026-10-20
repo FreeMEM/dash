@@ -82,7 +82,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       claramente qué falta y cómo se arregla.
 - [x] v13. **A la vez:** F5 dos veces, Ver en Amiga mientras se depura, compilar mientras se ejecuta, cerrar VS Code
       con el emulador en marcha (¿quedan procesos?).
-- [ ] v14. **`.dashui` extremos:** 200 objetos, nombres con acentos, tipos desconocidos, JSON roto, el mismo fichero
+- [x] v14. **`.dashui` extremos:** 200 objetos, nombres con acentos, tipos desconocidos, JSON roto, el mismo fichero
       abierto a la vez como texto y en el editor visual.
 - [ ] v15. **Depurador al límite:** recursión profunda, una lista que se contiene, textos enormes, diccionarios grandes,
       punto de parada en una línea vacía o un comentario, en un módulo importado y en `@native`.
@@ -123,7 +123,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 
 - [x] (v5) Los campos de propiedades y los botones del editor visual salían blancos, como en un navegador, sin los
       colores del tema de VS Code. Ahora usan sus variables (`--vscode-input-*`, `--vscode-button-*`).
-- [ ] (v5) Un `.dashui` abierto desde la línea de órdenes al arrancar VS Code (`code carpeta ventana.dashui`) sale
+- [x] (v5, v14) Un `.dashui` abierto desde la línea de órdenes al arrancar VS Code (`code carpeta ventana.dashui`) sale
       como JSON en texto, no en el editor visual (desde el explorador o Ctrl+clic, sí). Investigar si es cosa de
       VS Code (el editor propio aún no está registrado al abrir los ficheros del arranque) y si se puede reabrir
       solo sin estorbar a quien lo abrió como texto a propósito.
@@ -167,7 +167,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       de un test). Probado en el emulador (lienzo, FPU, `.dashui`, pantalla completa).
 - [ ] (v9) Ojo para el futuro: incluir `<math.h>` en el runtime de Float rompe un programa con una función
       `round` o `sin` propia (choca con su prototipo). No se incluye.
-- [ ] (v9) El editor visual abierto en media pantalla (junto al `.dash`) se aprieta: el árbol queda en una columna
+- [x] (v9, v14) El editor visual abierto en media pantalla (junto al `.dash`) se aprieta: el árbol queda en una columna
       de 40 píxeles y "Ver en Amiga" en dos líneas. Para v14 (`.dashui` extremos).
 
 - [x] (v10) Un `.dash` con BOM (Bloc de notas de Windows) no compilaba: "carácter inesperado '\ufeff'". Uno en
@@ -210,6 +210,23 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       otra carpeta. Test.
 - [ ] (v12) Sin FS-UAE no se pudo probar dentro de VS Code: recupera el PATH de la sesión. Probado en la línea de
       órdenes ("fs-uae not found") y el aviso con su test.
+
+- [x] (v14) En un `.dashui`, `"event": "uno"` acababa en "Unexpected error: invalid literal for int()"; un objeto
+      o una ventana llamados `end` (o `while`, `Main`…) daban un error de sintaxis en un código que el usuario no
+      ve; dos ventanas con el mismo nombre, "Symbol already defined" en una línea de ese código. Ahora
+      `compiler/dashui.py` lo dice en su sitio (los números enteros, las palabras del lenguaje, la ventana
+      repetida, y "letras sin tilde…" para `botón`). Tres tests en `tests/errors`. "Click", "Close", "Key"… no son
+      palabras reservadas fuera de `On` y se aceptan (probado).
+- [x] (v14) El editor visual aceptaba esos nombres (`end`, y una ventana `Ventaña` o repetida) y su barra de
+      problemas solo decía lo del tipo desconocido. Ahora lo comprueba como el compilador (`media/model.js` con la
+      misma lista de palabras; un test compara las dos listas).
+- [x] (v14) Media pantalla: la rejilla del editor visual es flexible y, por debajo de 720 píxeles, las propiedades
+      van debajo (antes, el árbol en 40 píxeles). Comprobado con captura.
+- [x] (v14) El `.dashui` que se le da a VS Code al arrancar se abría como texto (también con el ajuste
+      `workbench.editorAssociations`: no basta). Ahora la extensión se activa con `workspaceContains:**/*.dashui` y,
+      en sus primeros 30 s, reabre en el editor visual los que estén como texto sin cambios. Comprobado.
+- [ ] (v14) No comprobado sin ventana: el mismo `.dashui` como texto y en el editor visual lado a lado (el F1 se lo
+      queda el editor visual en la prueba). Usa el mismo camino que deshacer/rehacer, que sí tiene test.
 
 ## Bitácora
 
@@ -377,4 +394,12 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   Todo bien.
 - De paso: un fs-uae huérfano de dashweb desde las 22:01 (una traza suya); avisada, lo cerró ella.
 - Tests: base 303.
+
+### 2026-10-20 — v14 (`.dashui` extremos)
+- Línea de órdenes: 200 objetos, nombres con tilde, tipo desconocido, JSON roto o vacío, `null`, sin ventanas,
+  nombres repetidos, evento de texto, sin `root`, versión 9, 60 grupos anidados, hijos en un botón, un nombre
+  `end`, dos ventanas iguales. Fallaban el evento de texto, `end` y las dos ventanas (ver "Encontrado").
+- `v14probe.js` (scratchpad), VS Code sin ventana: al arrancar con un `.dashui`, 200 objetos (221 filas; abrir y
+  añadir uno, bien), JSON roto (lo dice y no toca el fichero), tipo y nombre raros, media pantalla.
+- Tests: base 306, node todo bien, integración de VS Code 21/21.
 

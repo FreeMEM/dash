@@ -1,0 +1,7 @@
+# expect: 'event' must be a whole number, not 'uno'
+# (it ended in "Unexpected error: invalid literal for int()", v14 of docs/IDE_VIDEO_LOOP.md)
+import "../lib/ventana_evento_texto.dashui"
+
+Main
+    v = Mala_create()
+end

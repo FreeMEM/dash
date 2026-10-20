@@ -17,6 +17,9 @@
 - Something missing (the Amiga compiler, the emulator, bgdbserver, gdb, the MUI SDK, a system with MUI, a ROM) is
   said in words, with how to get it; a wrong `dash.path` says so (and `~/` works in it).
 - `./dash`: two programs of the same name compiled at once take turns (they shared `build/<name>.c`).
+- Visual editor: a `.dashui` given to VS Code when it starts opens in it (it opened as JSON text); names that are
+  words of the language and event numbers that are not are refused, as the compiler does; at half the screen
+  the properties go under the rest.
 
 ## 0.2.0 (2026-10-20)
 
