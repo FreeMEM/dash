@@ -7,6 +7,18 @@ body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif)
 #tree { grid-column: 2; grid-row: 2; border-bottom: 1px solid var(--vscode-panel-border, #444); }
 #props { grid-column: 3; grid-row: 2 / 4; }
 #windows { grid-column: 1 / 4; display: flex; gap: 4px; padding: 4px; border-bottom: 1px solid var(--vscode-panel-border, #444); }
+/* the editor's own buttons and fields with the colours of VS Code's theme (not the browser's white ones) */
+#layout > #windows button, #props button, #props input, #props select {
+    font: inherit; color: var(--vscode-input-foreground, #ccc); background: var(--vscode-input-background, #3c3c3c);
+    border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, #555)); border-radius: 2px; padding: 2px 6px; }
+#layout > #windows button, #props button {
+    color: var(--vscode-button-secondaryForeground, #ccc); background: var(--vscode-button-secondaryBackground, #3a3d41); cursor: pointer; }
+#layout > #windows button:hover, #props button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+#windows #amiga { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+#windows #amiga:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+#props input:focus, #props select:focus, #layout button:focus-visible { outline: 1px solid var(--vscode-focusBorder, #07f); outline-offset: -1px; }
+#props input[type=checkbox] { padding: 0; }
+#props button:disabled { opacity: 0.5; cursor: default; }
 #windows button.active { font-weight: bold; text-decoration: underline; }
 #windows #amiga { margin-left: auto; }
 #windows #amiga:disabled { opacity: 0.7; cursor: progress; }

@@ -62,7 +62,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - [x] v3. **1. Primer proyecto:** la guía de primeros pasos, Dash: Nuevo proyecto, qué hay en la carpeta.
 - [x] v4. **2. Escribir código:** colores, completar con parámetros, firmas, hover, ir a la definición, errores al
       teclear y su arreglo rápido, el `end` automático, formatear y renombrar.
-- [ ] v5. **3. La ventana:** el editor visual (añadir un botón, propiedades, teclado, deshacer), Ver en Amiga, y
+- [x] v5. **3. La ventana:** el editor visual (añadir un botón, propiedades, teclado, deshacer), Ver en Amiga, y
       de un evento a su código (creado).
 - [ ] v6. **4. Compilar y ejecutar:** la tarea de compilar, un error en Problemas, ejecutar en el emulador (y
       elegir máquina), comprobación de memoria y perfil.
@@ -121,6 +121,13 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - [ ] (v4) En el hueco de un parámetro, escribir `v.` abre la lista de campos y Tab la acepta en vez de saltar
       al hueco siguiente: así funciona VS Code (Esc y luego Tab). Se queda así.
 
+- [x] (v5) Los campos de propiedades y los botones del editor visual salían blancos, como en un navegador, sin los
+      colores del tema de VS Code. Ahora usan sus variables (`--vscode-input-*`, `--vscode-button-*`).
+- [ ] (v5) Un `.dashui` abierto desde la línea de órdenes al arrancar VS Code (`code carpeta ventana.dashui`) sale
+      como JSON en texto, no en el editor visual (desde el explorador o Ctrl+clic, sí). Investigar si es cosa de
+      VS Code (el editor propio aún no está registrado al abrir los ficheros del arranque) y si se puede reabrir
+      solo sin estorbar a quien lo abrió como texto a propósito.
+
 ## Bitácora
 
 ### 2026-10-20 — v1 (programa de rodaje)
@@ -178,5 +185,21 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - Rodaje: `clic(..., {modifiers})`, `linea(texto)` y `palabra(texto)` para apuntar al editor.
 - Encontrado: la comilla sobre un hueco (arreglado, test), la ayuda en inglés (apuntado) y Tab con la lista
   abierta (es de VS Code).
+- Tests: node todo bien.
+
+### 2026-10-20 — v5 (capítulo 3: la ventana)
+- `video/capitulos/03_la_ventana.js`:
+  - la ventana se abre desde el explorador;
+  - un botón nuevo tras el texto (paleta) y sus propiedades (nombre `otro`, texto `_Otro`, evento 3);
+  - moverlo con Alt+flechas, deshacer y rehacer;
+  - "Ver en Amiga": la ventana real en el A1200 con MUI, con el botón nuevo;
+  - la flecha del evento: aviso "hola.dash no trata el evento 3", "Crear", y queda `const ID_OTRO = 3` con su
+    `if` en el bucle.
+  67 s, 10 subtítulos.
+- Rodaje: `web(selector)` para el webview (dos iframes anidados).
+- Encontrado: colores del editor visual (arreglado) y un `.dashui` abierto al arrancar sale como texto
+  (apuntado para investigar).
+- De paso, fuera del bucle: el PR #3 (Trasfondo: CPU y lienzo, 573/573 en el emulador) y el #4 (`break_check`,
+  `single_instance`) fusionados en main de Dash, desde la rama `trasfondo`.
 - Tests: node todo bien.
 

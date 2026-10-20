@@ -216,6 +216,11 @@ class Rodaje {
         return this.page.locator('.monaco-editor .view-line span span', { hasText: new RegExp(`^${text}$`) }).nth(n);
     }
 
+    /** An element of the active webview (the visual editor): VS Code puts it in an iframe inside another */
+    web(selector) {
+        return this.page.frameLocator('iframe.webview.ready').last().frameLocator('#active-frame').locator(selector).first();
+    }
+
     /** Typing at a person's pace (delay ms a key) */
     async escribir(text, delay = 55) {
         await this.page.keyboard.type(text, { delay });
