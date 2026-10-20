@@ -3543,6 +3543,35 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_updating()",
         description="In the draw function: true if it runs for mui_canvas_update (the rest is still there)"
     ),
+    "mui_canvas_on_move": BuiltinFunc(
+        name="mui_canvas_on_move",
+        params=["canvas", "id"],
+        return_type="void",
+        c_template="_dash_mui_canvas_on_move(${canvas}, ${id})",
+        description="mui_wait_event returns id when the pointer moves over the area or leaves it, without a click "
+                    "(the moves that come meanwhile make one; call before opening the window)"
+    ),
+    "mui_canvas_pointer_x": BuiltinFunc(
+        name="mui_canvas_pointer_x",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_pointer(${canvas}, 0)",
+        description="X of the pointer now, from the area's left edge (clicked or not)"
+    ),
+    "mui_canvas_pointer_y": BuiltinFunc(
+        name="mui_canvas_pointer_y",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_pointer(${canvas}, 1)",
+        description="Y of the pointer now, from the area's top edge (clicked or not)"
+    ),
+    "mui_canvas_pointer_inside": BuiltinFunc(
+        name="mui_canvas_pointer_inside",
+        params=["canvas"],
+        return_type="BOOL",
+        c_template="_dash_mui_canvas_pointer(${canvas}, 2)",
+        description="True if the pointer is over the area now"
+    ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
         params=["canvas"],

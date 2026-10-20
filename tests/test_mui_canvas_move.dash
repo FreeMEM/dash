@@ -1,0 +1,146 @@
+# mui_canvas_on_move and mui_canvas_pointer_x/_y/_inside (dashweb D63): the pointer over a MUI drawing area
+# without a click (:hover and mousemove in dashweb). A helper process moves the pointer through input.device:
+# into the area at 10,10, to 50,30, out of the window, back at 20,20, and clicks there. Each move gives the
+# move event (the moves that come before the program takes one make one), with the pointer where it is now;
+# leaving gives one more, outside; the click still comes as the input event.
+# emu-needs: muimaster.library
+# expect-out: dentro 10 10
+# expect-out: dentro 50 30
+# expect-out: fuera
+# expect-out: dentro 20 20
+# expect-out: clic 20 20
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Window *mueve_win; static LONG mueve_x, mueve_y, mueve_paso; static struct Task *mueve_padre;"
+
+const ID_CLIC = 30
+const ID_MUEVE = 31
+
+@native func donde(win: Int, lienzo: Int)
+"""
+    struct Window *w = NULL;
+    GetAttr(MUIA_Window_Window, (Object *)win, (ULONG *)&w);
+    mueve_win = w;
+    mueve_x = _DASH_MLEFT((Object *)lienzo);
+    mueve_y = _DASH_MTOP((Object *)lienzo);
+"""
+end
+
+@native func proceso_raton()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    /* where, from the area's corner; 9999: out of the window (the screen's corner) */
+    static const WORD puntos[4][2] = { { 10, 10 }, { 50, 30 }, { 9999, 9999 }, { 20, 20 } };
+    Delay(50);
+    if (mueve_win && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        LONG i;
+        ActivateWindow(mueve_win);
+        Delay(10);
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < 4; i++) {
+            memset(&ie, 0, sizeof(ie));
+            pp.iepp_Screen = mueve_win->WScreen;
+            if (puntos[i][0] == 9999) {
+                pp.iepp_Position.X = 2;
+                pp.iepp_Position.Y = mueve_win->WScreen->Height - 2;
+            } else {
+                pp.iepp_Position.X = mueve_win->LeftEdge + mueve_x + puntos[i][0];
+                pp.iepp_Position.Y = mueve_win->TopEdge + mueve_y + puntos[i][1];
+            }
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+            mueve_paso = i + 1;
+            DoIO((struct IORequest *)io);
+            Delay(25);                  /* half a second: the program takes the move before the next */
+        }
+        memset(&ie, 0, sizeof(ie));     /* a click where it is */
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_LBUTTON;
+        DoIO((struct IORequest *)io);
+        Delay(3);
+        ie.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+        DoIO((struct IORequest *)io);
+        Delay(10);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(mueve_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    mueve_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_raton, NP_Name, (ULONG)"dash_mueve", TAG_DONE) == NULL)
+        mueve_padre = NULL;
+"""
+end
+
+# how many moves the helper has made (the pointer may be over the area when the window opens: not ours)
+@native func paso() -> Int
+"""
+    return mueve_paso;
+"""
+end
+
+@native func esperar_raton()
+"""
+    if (mueve_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+end
+
+Main
+    if mui_app_begin("Mueve", "DASHMOVE") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Mueve", 0)
+            lienzo = mui_canvas(160, 100)
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_canvas_on_input(lienzo, ID_CLIC)
+        mui_canvas_on_move(lienzo, ID_MUEVE)
+        mui_window_open(win)
+        donde(win, lienzo)
+        lanzar()
+        ultimo = ""
+        while true
+            ev = mui_wait_event()
+            if ev == -1
+                break
+            end
+            if ev == ID_MUEVE and paso() > 0
+                ahora = "fuera"
+                if mui_canvas_pointer_inside(lienzo)
+                    ahora = "dentro #{mui_canvas_pointer_x(lienzo)} #{mui_canvas_pointer_y(lienzo)}"
+                end
+                if ahora != ultimo
+                    Print ahora
+                    ultimo = ahora
+                end
+            end
+            if ev == ID_CLIC and mui_canvas_button(lienzo) == 1
+                Print "clic #{mui_canvas_mouse_x(lienzo)} #{mui_canvas_mouse_y(lienzo)}"
+                break
+            end
+        end
+        mui_app_end()
+        esperar_raton()
+        Print "fin"
+    end
+end
