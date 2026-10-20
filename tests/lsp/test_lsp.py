@@ -292,6 +292,45 @@ class LanguageServerTest(unittest.TestCase):
         marks = self.at("textDocument/documentHighlight", u, 18, 13)                                   # suma
         self.assertEqual(sorted(m["range"]["start"]["line"] for m in marks), [12, 18])
 
+    # --- symbols and rename ---
+    def test_document_symbols(self):
+        u = self.open("o1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        symbols = self.client.request("textDocument/documentSymbol", {"textDocument": {"uri": u}})["result"]
+        self.assertEqual([s["name"] for s in symbols], ["Punto", "Color", "MAXIMO", "suma", "Main"])
+        punto = symbols[0]
+        self.assertEqual([c["name"] for c in punto["children"]], ["x", "nombre", "mover"])
+        self.assertEqual((punto["range"]["start"]["line"], punto["range"]["end"]["line"]), (0, 6))
+        self.assertEqual([c["name"] for c in symbols[1]["children"]], ["ROJO", "VERDE"])
+        self.assertEqual(symbols[3]["detail"], "suma(a: Int, b: Int) -> Int")
+
+    def test_workspace_symbols(self):
+        u = self.open("w1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        found = self.client.request("workspace/symbol", {"query": "sma"})["result"]
+        self.assertIn("suma", [f["name"] for f in found])
+        self.assertTrue(all(f["location"]["uri"] == u for f in found if f["name"] == "suma"))
+
+    def rename(self, u, line, character, new):
+        return self.client.request("textDocument/rename", {"textDocument": {"uri": u},
+                                   "position": {"line": line, "character": character}, "newName": new})
+
+    def test_rename(self):
+        u = self.open("n1.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+        edits = self.rename(u, 18, 13, "sumar")["result"]["changes"][u]           # the function
+        self.assertEqual(sorted(e["range"]["start"]["line"] for e in edits), [12, 18])
+        edits = self.rename(u, 13, 11, "primero")["result"]["changes"][u]         # a parameter
+        self.assertEqual(sorted(e["range"]["start"]["line"] for e in edits), [12, 13])
+        edits = self.rename(u, 4, 13, "posx")["result"]["changes"][u]             # a field
+        self.assertEqual(sorted(e["range"]["start"]["line"] for e in edits), [1, 4, 4])
+        self.assertIn("error", self.rename(u, 19, 6, "otro"))                     # Print: a keyword
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    mui_text(\"a\")\n"))
+        reply = self.client.request("textDocument/prepareRename", {"textDocument": {"uri": u},
+                                                                   "position": {"line": 19, "character": 6}})
+        self.assertIn("del lenguaje", reply["error"]["message"])
+        self.assertIn("error", self.rename(u, 18, 13, "while"))                   # a keyword as the new name
+
     def test_unknown_request_gets_an_error_not_a_crash(self):
         reply = self.client.request("textDocument/noExiste", {})
         self.assertEqual(reply["error"]["code"], -32601)

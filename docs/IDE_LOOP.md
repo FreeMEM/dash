@@ -101,7 +101,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       campos/enums en ámbito, rutas de `import`; ayuda de firma (signature help).
 - [x] 6. **Navegación.** Hover (tipo, firma, doc), ir a la definición (también entre módulos y hacia el `.dashui`),
       referencias, resaltar las apariciones.
-- [ ] 7. **Símbolos.** Esquema del documento (Outline, breadcrumbs), símbolos del workspace, renombrar.
+- [x] 7. **Símbolos.** Esquema del documento (Outline, breadcrumbs), símbolos del workspace, renombrar.
 - [ ] 8. **Formato y arreglos.** Formateador de sangría; acciones rápidas sencillas (crear la función que falta,
       añadir el `import`); tokens semánticos si mejoran los colores.
 
@@ -255,4 +255,15 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   del código generado; desde `import "x"` abre el fichero), `references` (locales solo en su función; campos,
   métodos y valores de enum con punto, más su definición) y `documentHighlight`.
 - Tests: 4 más del servidor (16) y 1 más en VS Code (10). Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 7 (símbolos y renombrar)
+- `documentSymbol`: el esquema jerárquico de un fichero (structs con campos y métodos, enums con valores,
+  funciones, `@native`/`@extern`, Main, ventanas, constantes, globales); el final de cada bloque por la sangría
+  (su `end`). `workspace/symbol`: los ficheros de los programas abiertos y sus módulos, más los `.dash` de las
+  carpetas del workspace (hasta 500; solo se analiza el texto, con la caché de árboles), búsqueda difusa.
+- `prepareRename`/`rename`: con las referencias de la tarea 6; rechaza builtins, tipos, métodos de lista, `self`,
+  palabras de la gramática como nombre nuevo, y lo que viene de un `.dashui` (se renombra en su editor). El C de
+  los bloques `@native` no se toca (dicho en el README). Los rechazos van como errores LSP con su frase
+  (`LspError`).
+- Tests: 3 más del servidor (19) y 1 más en VS Code (11: esquema y F2). Base: todo bien. Extensión instalada.
 

@@ -129,6 +129,28 @@ async function run() {
         assert.strictEqual(range.start.character, 5);
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('language server: outline and rename', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'esquema.dash');
+        fs.writeFileSync(file, 'struct P\n    x: Int = 0\nend\nfunc doble(n: Int) -> Int\n    return n * 2\nend\nMain\n    Print doble(3)\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        let symbols = [];
+        for (let i = 0; i < 150 && !symbols.length; i++) {
+            symbols = (await vscode.commands.executeCommand('vscode.executeDocumentSymbolProvider', doc.uri)) || [];
+            if (!symbols.length) await new Promise((r) => setTimeout(r, 100));
+        }
+        assert.deepStrictEqual(symbols.map((s) => s.name), ['P', 'doble', 'Main']);
+        assert.deepStrictEqual(symbols[0].children.map((s) => s.name), ['x']);
+        const edit = await vscode.commands.executeCommand('vscode.executeDocumentRenameProvider', doc.uri,
+                                                          new vscode.Position(7, 12), 'triple');
+        assert(await vscode.workspace.applyEdit(edit));
+        assert.match(doc.getText(), /func triple\(n: Int\)/);
+        assert.match(doc.getText(), /Print triple\(3\)/);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

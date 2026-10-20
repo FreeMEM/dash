@@ -16,6 +16,10 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
 - **Navigation** (same server): hover (signature, type, description), go to definition (also into imported
   modules, into the window of a `.dashui`, and from an `import "..."` to its file), find references and the
   highlight of a name's uses (a local only inside its function).
+- **Outline and symbols**: the outline and breadcrumbs of a file (structs with their fields and methods,
+  enums with their values, functions, Main, windows, constants), symbols of the whole workspace (Ctrl+T), and
+  **rename** (F2) of functions, structs, variables, fields... in every file of the program (not builtins, nor
+  names that come from a `.dashui`: those are renamed in the visual editor; C inside `@native` is not changed).
 - Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.

@@ -11,7 +11,8 @@ Done so far: diagnostics (errors and warnings, also those of imported modules, i
 completion (builtins with their parameters, keywords, the program's symbols, the variables seen at the
 cursor, members after "x.", types after ":", files after import ") and signature help; hover, go to
 definition (also into modules and .dashui files, and from an import to its file), references and the
-highlight of a name's uses in the document.
+highlight of a name's uses in the document; document symbols (the outline), workspace symbols and
+rename.
 """
 import json
 import os
@@ -46,6 +47,7 @@ class Server:
         self.dirty = {}                 # uri -> time of its last change: checked CHECK_DELAY after it
         self.published = {}             # uri of a checked document -> uris it published diagnostics to
         self.shutting_down = False
+        self.roots = []                 # folders of the workspace (initialize), for workspace symbols
         self.tree_cache = {}            # file -> (text, Lark tree): unchanged files are not parsed again
         self.programs = {}              # uri -> program of the last analysis that parsed (completion...)
 
@@ -101,6 +103,9 @@ class Server:
                 continue
             try:
                 self.handle(message)
+            except LspError as e:                      # a refusal, said to the editor
+                if "id" in message:
+                    self.send({"id": message["id"], "error": {"code": e.code, "message": e.message}})
             except SystemExit:
                 raise
             except Exception:   # a bug here must not take the editor's server down
@@ -124,6 +129,10 @@ class Server:
 
     # --- lifecycle -----------------------------------------------------------------------------
     def on_initialize(self, params):
+        for folder in params.get("workspaceFolders") or []:
+            self.roots.append(uri_to_path(folder["uri"]))
+        if not self.roots and params.get("rootUri"):
+            self.roots.append(uri_to_path(params["rootUri"]))
         return {
             "capabilities": {
                 "textDocumentSync": {"openClose": True, "change": 1, "save": {"includeText": False}},
@@ -133,6 +142,9 @@ class Server:
                 "definitionProvider": True,
                 "referencesProvider": True,
                 "documentHighlightProvider": True,
+                "documentSymbolProvider": True,
+                "workspaceSymbolProvider": True,
+                "renameProvider": {"prepareProvider": True},
             },
             "serverInfo": {"name": "dash-lsp", "version": "0.1"},
         }
@@ -455,6 +467,151 @@ class Server:
     def on_textDocument_documentHighlight(self, params):
         return [{"range": r["range"], "kind": 1} for r in self._references(params, only_here=True)]
 
+    # --- symbols ------------------------------------------------------------------------------------
+    @staticmethod
+    def _block_end(lines, row):
+        """The line of the "end" of the block that starts at row (0-based), by indentation."""
+        indent = len(lines[row]) - len(lines[row].lstrip())
+        for i in range(row + 1, len(lines)):
+            text = lines[i].strip()
+            if not text or text.startswith("#"):
+                continue
+            if len(lines[i]) - len(lines[i].lstrip()) <= indent:
+                return i if re.match(r"end\b", text) else i - 1
+        return len(lines) - 1
+
+    def _symbol(self, lines, node, name, kind, detail="", block=True, children=None):
+        loc = getattr(node, "location", None)
+        if loc is None:
+            return None
+        row = max(0, min(loc.line - 1, len(lines) - 1))
+        text = lines[row] if lines else ""
+        m = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])").search(text)
+        start, end = (m.start(), m.end()) if m else (0, len(text))
+        last = self._block_end(lines, row) if block else row
+        symbol = {"name": name, "detail": detail, "kind": kind,
+                  "range": {"start": {"line": row, "character": 0},
+                            "end": {"line": last, "character": len(lines[last]) if last < len(lines) else 0}},
+                  "selectionRange": {"start": {"line": row, "character": start}, "end": {"line": row, "character": end}}}
+        if children:
+            symbol["children"] = [c for c in children if c]
+        return symbol
+
+    def _symbols_of(self, program, path, text):
+        """The outline of one file: what is defined at its top level, structs and enums with their parts."""
+        lines = text.split("\n")
+        mine = lambda n: lsp_index._file(n) == path
+        out = []
+        for w in program.windows:
+            if mine(w):
+                out.append(self._symbol(lines, w, w.name, 5, "Window"))
+        for c in program.constants:
+            if mine(c):
+                out.append(self._symbol(lines, c, c.name, 14, "const", block=False))
+        for g in program.global_vars:
+            if mine(g):
+                out.append(self._symbol(lines, g, g.name, 13, g.var_type or "", block=False))
+        for e in program.enums:
+            if mine(e):
+                values = [self._symbol(lines, v, v.name, 22, block=False) for v in e.values]
+                out.append(self._symbol(lines, e, e.name, 10, "enum", children=values))
+        for st in program.structs:
+            if mine(st):
+                parts = [self._symbol(lines, f, f.name, 8, f.field_type, block=False) for f in st.fields]
+                parts += [self._symbol(lines, m, m.name, 6, lsp_index.function_signature(m)) for m in st.methods or []]
+                out.append(self._symbol(lines, st, st.name, 23, "struct", children=parts))
+        for f in list(program.functions) + list(program.native_funcs) + list(program.extern_funcs):
+            if mine(f):
+                name = lsp_index.dash_name(f)
+                out.append(self._symbol(lines, f, name, 12, lsp_index.function_signature(f, name),
+                                        block=not isinstance(f, lsp_index.A.ExternFunc)))
+        if program.main is not None and lsp_index._file(program.main) in (path, ""):
+            out.append(self._symbol(lines, program.main, "Main", 12, "punto de entrada"))
+        return sorted((s for s in out if s), key=lambda s: s["range"]["start"]["line"])
+
+    def on_textDocument_documentSymbol(self, params):
+        uri = params["textDocument"]["uri"]
+        self.index(uri)                               # analyzed at least once
+        program = self.programs.get(uri)
+        if program is None:
+            return []
+        return self._symbols_of(program, uri_to_path(uri), self.docs.get(uri, ""))
+
+    def _workspace_files(self, limit=500):
+        files = set()
+        for uri, program in self.programs.items():
+            files |= lsp_index.Index(program, uri_to_path(uri)).files()
+        for root in self.roots:
+            for folder, dirs, names in os.walk(root):
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "build", "bin")]
+                files.update(os.path.join(folder, n) for n in names if n.endswith(".dash"))
+                if len(files) > limit:
+                    break
+        return sorted(files)[:limit]
+
+    def on_workspace_symbol(self, params):
+        query = (params.get("query") or "").lower()
+        found = []
+        for path in self._workspace_files():
+            text = self.text_of(path)
+            compiler = DashCompiler()
+            compiler.tree_cache = self.tree_cache
+            try:
+                program = compiler._parse_source(text, path)        # its own definitions, no imports
+            except Exception:
+                continue
+            for symbol in self._symbols_of(program, path, text):
+                for item in [symbol] + symbol.get("children", []):
+                    if query and not _fuzzy(query, item["name"].lower()):
+                        continue
+                    found.append({"name": item["name"], "kind": item["kind"],
+                                  "containerName": symbol["name"] if item is not symbol else os.path.basename(path),
+                                  "location": {"uri": path_to_uri(path), "range": item["selectionRange"]}})
+        return found[:1000]
+
+    # --- rename ----------------------------------------------------------------------------------------
+    def _renamable(self, params):
+        """(what, start, end) of a name that can be renamed, or (None, message)."""
+        at = self._at(params)
+        if at is None:
+            return None, "Aquí no hay un nombre."
+        index, chain, name, line, start, end = at
+        what = index.resolve(chain, name, line)
+        if what is None:
+            return None, f"No sé qué es '{name}'."
+        kind, node = what[0], what[1]
+        if kind in ("builtin", "type", "list-method") or name == "self":
+            return None, f"'{name}' es del lenguaje: no se puede renombrar."
+        loc = getattr(node, "location", None)
+        if loc is not None and (loc.filename or "").endswith(".dashui"):
+            return None, f"'{name}' sale de un .dashui: renómbralo en el editor de ventanas."
+        return (index, chain, name, line, start, end), None
+
+    def on_textDocument_prepareRename(self, params):
+        found, message = self._renamable(params)
+        if found is None:
+            raise LspError(-32602, message)
+        _, _, name, line, start, end = found
+        return {"range": {"start": {"line": line - 1, "character": start}, "end": {"line": line - 1, "character": end}},
+                "placeholder": name}
+
+    def on_textDocument_rename(self, params):
+        found, message = self._renamable(params)
+        if found is None:
+            raise LspError(-32602, message)
+        new = params["newName"]
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new):
+            raise LspError(-32602, f"'{new}' no es un nombre válido.")
+        if new in lsp_index.keywords() or new in lsp_index.builtins() or new in lsp_index.TYPE_NAMES:
+            raise LspError(-32602, f"'{new}' ya es del lenguaje.")
+        changes = {}
+        for ref in self._references(params):
+            changes.setdefault(ref["uri"], []).append({"range": ref["range"], "newText": new})
+        for edits in changes.values():                # one edit per place
+            unique = {(e["range"]["start"]["line"], e["range"]["start"]["character"]): e for e in edits}
+            edits[:] = list(unique.values())
+        return {"changes": changes}
+
     @staticmethod
     def _from_message(message: str, path: str):
         """'file:line:col: Error: text' (a syntax or import error) as a place and a text."""
@@ -482,6 +639,23 @@ class Server:
             "source": "dash",
             "message": message,
         }
+
+
+class LspError(Exception):
+    """An answer that is an error with a message for the user (a rename that cannot be done...)."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+def _fuzzy(query, name):
+    """The letters of query in name, in order (as VS Code's symbol search)."""
+    i = 0
+    for ch in name:
+        if i < len(query) and ch == query[i]:
+            i += 1
+    return i == len(query)
 
 
 class _NoProgram:
