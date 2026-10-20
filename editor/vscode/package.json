@@ -4,6 +4,10 @@
   "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
   "version": "0.2.0",
   "publisher": "FreeMEM",
+  "author": {
+    "name": "Francisco Antonio Tapias Bravo",
+    "url": "https://github.com/FreeMEM"
+  },
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"

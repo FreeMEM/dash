@@ -2,6 +2,8 @@
 
 Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to C for the Amiga.
 
+By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
+
 ![The visual editor of a MUI window](images/editor.png)
 
 ![The same window on the emulated Amiga](images/amiga.png)
@@ -145,3 +147,9 @@ the Visual Studio Marketplace needs the publisher `FreeMEM` made there and a per
 (`npx vsce publish --packagePath dash-mui-editor-<version>.vsix`); Open VSX (VSCodium, and other editors) needs
 the namespace `FreeMEM` and its token (`npx ovsx publish dash-mui-editor-<version>.vsix -p <token>`). The
 version and the `CHANGELOG.md` go up first.
+
+## Author
+
+Francisco Antonio Tapias Bravo ([FreeMEM](https://github.com/FreeMEM)), author of Dash and of this extension.
+MIT License (`LICENSE`).
+
