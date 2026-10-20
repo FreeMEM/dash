@@ -1,0 +1,22 @@
+# Test: struct fields named like the variables of the generated constructor (s was the new object:
+# "'s' redeclared as different kind of symbol"); now the object is _dash_o (dashweb, tutorial).
+# memcheck
+# expect-out: -1 2 3 x 18 -1
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+struct D
+    s: Int = -1
+    obj: Int = 2
+    rc: Int = 3
+    nombre: String = "x"
+    sig: D = nil
+
+    func ver() -> Int
+        return self.s + self.obj + self.rc
+    end
+end
+
+Main
+    d = D()
+    e = D(5, 6, 7, "y", d)
+    Print "#{d.s} #{d.obj} #{d.rc} #{d.nombre} #{e.ver()} #{e.sig.s}"
+end

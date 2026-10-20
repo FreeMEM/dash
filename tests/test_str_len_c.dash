@@ -1,0 +1,59 @@
+# Test: the cache of lengths of long texts (64 or more) keeps only texts Dash made (D61). A text of C
+# (malloc) measured by Dash, freed by C and its address taken by another text of another length used to
+# get the old length: "is not a valid selector" in dashweb, a querySelector of 104 characters cut short.
+# memcheck
+# expect-out: misma dirección: true
+# expect-out: 104 80 120
+# expect-out: dash: 70 71
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func medir(s: String) -> Int
+    return s.length
+end
+
+@c
+"""
+/* a text of n characters 'a'..., made by C: malloc, given to Dash, freed by C */
+static LONG _texto_c(LONG n, LONG *addr) {
+    char *p = (char *)malloc(n + 1);
+    LONG len;
+    memset(p, 'a' + (n % 20), n);
+    p[n] = 0;
+    *addr = (LONG)p;
+    len = medir((STRPTR)p);
+    len = medir((STRPTR)p);        /* twice: the second one would come from the cache */
+    free(p);
+    return len;
+}
+"""
+end
+
+@native func probar(n: Int) -> Int
+"""
+    LONG addr;
+    return _texto_c(n, &addr);
+"""
+end
+
+@native func direccion(n: Int) -> Int
+"""
+    LONG addr;
+    _texto_c(n, &addr);
+    return addr;
+"""
+end
+
+Main
+    a = direccion(104)
+    b = direccion(80)
+    Print "misma dirección: #{a == b}"
+    Print "#{probar(104)} #{probar(80)} #{probar(120)}"
+    # texts of Dash keep using the cache
+    t = ""
+    for i in (1..70)
+        t = t + "x"
+    end
+    l1 = t.length
+    t = t + "y"
+    Print "dash: #{l1} #{t.length}"
+end
