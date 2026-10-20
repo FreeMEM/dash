@@ -1,0 +1,5 @@
+# expect: syntax_message.dash:4:16: Error: sintaxis: no se esperaba `)` aquí
+Main
+    x = 1
+    y = (x + 2))
+end

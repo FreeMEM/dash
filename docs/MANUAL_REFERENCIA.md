@@ -68,6 +68,10 @@ end
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ```
 
+Los errores del compilador dicen dónde: `fichero.dash:línea:columna: Error: mensaje` (también los de un
+módulo importado, con su fichero), como gcc: los editores los enlazan con el código. Los de sintaxis se
+dicen en una frase (`sintaxis: no se esperaba ... aquí; se esperaba ...`).
+
 Los programas necesitan Kickstart 3.0 o superior. Al arrancar piden una pila de al menos 16 KB:
 el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 bytes por programa;
 `--stack 0` lo quita). Con MUI piden 32 KB y con TLS 64 KB. Un programa o un modulo que necesita

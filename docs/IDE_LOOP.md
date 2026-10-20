@@ -89,7 +89,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       plegado por bloques, iconos de `.dash`/`.dashui`, comentar con `#`.
 
 ### B. Servidor de lenguaje (LSP)
-- [ ] 4a. **Posiciones en los errores.** Hoy solo 18 tipos de nodo guardan `location` y casi ningún error dice
+- [x] 4a. **Posiciones en los errores.** Hoy solo 18 tipos de nodo guardan `location` y casi ningún error dice
       la línea (`Error: Variable 'b' is not defined`). Todos los nodos con línea, columna y fichero (también los de
       los módulos importados); la salida de `./dash` y `compiler.main` como `fichero:línea:col: Error: mensaje` (para
       el LSP y para el problem matcher de la tarea 9); el error de sintaxis de Lark, en una frase ("se esperaba
@@ -189,4 +189,21 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   y carpeta de extensiones propios (no toca los del usuario; abre una ventana unos segundos). 6 pruebas: `end` al
   pulsar Enter, sin `end` doble, anidado, `else`, deshacer, snippets. Servirá para el LSP y la depuración.
 - Base: run_tests todo bien; `npm test` 59 bien; `npm run test:vscode` 6 bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 4a (posiciones en los errores)
+- `DashASTBuilder(filename)` da a cada nodo el sitio de su regla (`tree.meta` de Lark, que ya tenía
+  `propagate_positions`) y el fichero, salvo que la regla ya pusiera uno más exacto; también a las definiciones de
+  primer nivel (sus reglas devuelven `""` y van a listas: se miran las listas antes y después). Las expresiones de
+  `#{...}` (otro parser, sin sitios) toman la línea del texto y la columna de la expresión.
+- Formato como gcc: `fichero:línea:col: Error: mensaje` (`AnalysisError.__str__`); los de sintaxis en una frase
+  (`sintaxis: no se esperaba `)` aquí; se esperaba ...`, o `¿falta un `end`?` si el fichero acaba antes) y los
+  que lanza el transformer (constante no constante, número de más de 32 bits) también con su sitio. Un error con
+  sitio va en su propia línea antes de "Compilation failed at ... stage".
+- De los 56 tests de error, 54 dicen ya su sitio. Sin él: `@link` que no existe y los errores dentro de un
+  `.dashui` (habría que llevar la línea del JSON: tarea 19). Tests nuevos: `error_position`, `error_in_module`
+  (con `tests/lib/modulo_con_error.dash`), `syntax_message`.
+- El C generado no cambia (34 ejemplos, idénticos).
+- Sin arreglar (anotado en la tarea 1): `y = ` y en la línea siguiente `Print noexiste(3)` se lee como una sola
+  expresión: la gramática ignora los saltos de línea dentro de una expresión.
+- Base: run_tests todo bien (3 tests más); `npm test` sin cambios.
 

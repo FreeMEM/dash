@@ -6,9 +6,11 @@ Pipeline: Source → Parse → AST → Analyze → Generate → C Code
 """
 import sys
 import os
+import re
 import argparse
 from dataclasses import dataclass, field
 from lark import Lark
+from lark.exceptions import UnexpectedInput, UnexpectedCharacters, VisitError
 from typing import Optional, Set, List, Dict, Tuple
 
 from compiler.grammar import dash_grammar_minimal
@@ -54,11 +56,62 @@ class DashCompiler:
         self._loaded_modules: Set[str] = set()  # Track loaded modules to avoid duplicates
         self._base_dir: str = ""  # Base directory for resolving imports
 
-    def _parse_source(self, source: str) -> Program:
-        """Parse source code into an AST."""
-        tree = self.parser.parse(source)
-        transformer = DashASTBuilder()
-        return transformer.transform(tree)
+    def _parse_source(self, source: str, filename: str = "") -> Program:
+        """Parse source code into an AST (its nodes know their file, line and column)."""
+        try:
+            tree = self.parser.parse(source)
+        except UnexpectedInput as e:
+            raise CompilationError(self._syntax_message(e, source, filename), stage="parse") from None
+        transformer = DashASTBuilder(filename)
+        try:
+            return transformer.transform(tree)
+        except VisitError as e:
+            # an error found while building the AST (a constant that is not constant, a number too big)
+            meta = getattr(e.obj, "meta", None)
+            where = (f"{filename or '<input>'}:{meta.line}:{meta.column}: "
+                     if meta is not None and not getattr(meta, "empty", True) else "")
+            raise CompilationError(f"{where}Error: {e.orig_exc}", stage="parse") from None
+
+    # what the grammar's terminals look like to a person (the rest: their pattern, or their name)
+    _TERMINAL_WORDS = {"_NEWLINE": "fin de línea", "$END": "fin del fichero", "ID": "un nombre",
+                       "INT": "un número", "NUMBER": "un número", "FLOAT": "un número",
+                       "ESCAPED_STRING": "un texto", "TYPE_NAME": "un tipo"}
+
+    def _terminal_word(self, name: str) -> str:
+        if name in self._TERMINAL_WORDS:
+            return self._TERMINAL_WORDS[name]
+        try:
+            pattern = self.parser.get_terminal(name).pattern
+            if pattern.type == "str":
+                return "`" + pattern.value + "`"
+        except Exception:
+            pass
+        return name.lower()
+
+    def _syntax_message(self, e, source: str, filename: str) -> str:
+        """A Lark error in one sentence: file:line:column: Error: what came and what was expected."""
+        line, column = getattr(e, "line", 0) or 0, getattr(e, "column", 0) or 0
+        where = f"{filename or '<input>'}:{line}:{column}"
+        token = getattr(e, "token", None)
+        if isinstance(e, UnexpectedCharacters):
+            char = source[e.pos_in_stream] if 0 <= e.pos_in_stream < len(source) else "?"
+            return f"{where}: Error: sintaxis: carácter inesperado {char!r}"
+        if token is not None and getattr(token, "type", "") == "$END":
+            got = "el fin del fichero"
+        elif token is not None and getattr(token, "type", "") == "_NEWLINE":
+            got = "el fin de la línea"
+        elif token is not None:
+            got = "`" + str(token).strip() + "`"
+        else:
+            got = "algo"
+        expected = sorted({self._terminal_word(t) for t in (getattr(e, "expected", None) or [])
+                           if not t.startswith("__")})
+        hint = ""
+        if expected and len(expected) <= 6:
+            hint = "; se esperaba " + ", ".join(expected[:-1]) + (" o " if len(expected) > 1 else "") + expected[-1]
+        elif "`end`" in expected and got == "el fin del fichero":
+            hint = "; ¿falta un `end`?"
+        return f"{where}: Error: sintaxis: no se esperaba {got} aquí{hint}"
 
     def _resolve_import_path(self, import_path: str) -> str:
         """Resolve import path relative to base directory or project root."""
@@ -133,7 +186,7 @@ class DashCompiler:
         except IOError as e:
             raise CompilationError(f"Error reading import {import_path}: {e}", stage="import")
 
-        module_ast = self._parse_source(source)
+        module_ast = self._parse_source(source, full_path)
         self._resolve_links(module_ast, os.path.dirname(full_path))
         self._rename_private(module_ast, full_path)
         # its own definitions, before its imports are merged in (see _rename_private_clashes)
@@ -398,7 +451,9 @@ class DashCompiler:
             print("Stage 1: Parsing...", file=sys.stderr)
 
         try:
-            ast = self._parse_source(source)
+            ast = self._parse_source(source, filename if filename != "<input>" else "")
+        except CompilationError:
+            raise
         except Exception as e:
             raise CompilationError(f"Parse error: {e}", stage="parse")
 
@@ -513,7 +568,7 @@ class DashCompiler:
                 if dep_path not in modules:
                     try:
                         source = self._read_module(dep_path)
-                        dep_ast = self._parse_source(source)
+                        dep_ast = self._parse_source(source, dep_path)
                         collect_recursive(dep_ast, dep_path)
                     except FileNotFoundError:
                         raise CompilationError(f"Import not found: {imp.path}", stage="import")
@@ -554,7 +609,9 @@ class DashCompiler:
             print("Stage 1: Parsing...", file=sys.stderr)
 
         try:
-            main_ast = self._parse_source(source)
+            main_ast = self._parse_source(source, filename if filename != "<input>" else "")
+        except CompilationError:
+            raise
         except Exception as e:
             raise CompilationError(f"Parse error: {e}", stage="parse")
 
@@ -709,7 +766,13 @@ def main():
             print(f"Transpiled! C code generated in '{output_path}'")
 
     except CompilationError as e:
-        print(f"Compilation failed at {e.stage} stage: {e}", file=sys.stderr)
+        message = str(e)
+        if re.match(r"^.+:\d+:\d+: (Error|Warning): ", message):
+            # a message with its place goes on a line of its own (file:line:column: as gcc)
+            print(message, file=sys.stderr)
+            print(f"Compilation failed at {e.stage} stage", file=sys.stderr)
+        else:
+            print(f"Compilation failed at {e.stage} stage: {message}", file=sys.stderr)
         sys.exit(1)
     except IOError as e:
         print(f"Error writing output: {e}", file=sys.stderr)

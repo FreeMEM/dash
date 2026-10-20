@@ -131,12 +131,19 @@ class AnalysisError:
     node: Optional[ASTNode] = None
     is_warning: bool = False
 
+    @property
+    def location(self):
+        return getattr(self.node, "location", None) if self.node is not None else None
+
     def __str__(self):
+        # file:line:column: Error: message (as gcc; editors and VS Code's problem matcher read it)
         prefix = "Warning" if self.is_warning else "Error"
-        location = ""
-        if self.node and self.node.location:
-            location = f" at {self.node.location}"
-        return f"{prefix}{location}: {self.message}"
+        location = self.location
+        if location and location.filename:
+            return f"{location}: {prefix}: {self.message}"
+        if location:
+            return f"{prefix} at {location}: {self.message}"
+        return f"{prefix}: {self.message}"
 
 
 @dataclass
