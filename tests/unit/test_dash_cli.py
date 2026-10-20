@@ -33,6 +33,31 @@ class OddPaths(unittest.TestCase):
             self.assertIn("Success!", r.stdout)
 
 
+@unittest.skipUnless(os.path.exists("/opt/amiga/bin/m68k-amigaos-gcc"), "needs the Amiga toolchain")
+class AtTheSameTime(unittest.TestCase):
+    """a/main.dash and b/main.dash compiled at once share build/main.c and .elf: three of eight failed and one
+    program got the other's code (v13). Now they take turns."""
+
+    def test_same_name_at_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            jobs = []
+            for d in "ab":
+                os.makedirs(os.path.join(tmp, d))
+                with open(os.path.join(tmp, d, "main.dash"), "w") as f:
+                    f.write(f'Main\n    Print "soy {d}"\nend\n')
+            for i in range(3):
+                for d in "ab":
+                    exe = os.path.join(tmp, d, "bin", f"main{i}")
+                    jobs.append((d, exe, subprocess.Popen(
+                        [sys.executable, os.path.join(ROOT, "dash"), "-q", os.path.join(tmp, d, "main.dash"), "-o", exe],
+                        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)))
+            for d, exe, job in jobs:
+                out = job.communicate(timeout=600)[0].decode()
+                self.assertEqual(job.returncode, 0, out)
+                with open(exe, "rb") as f:
+                    self.assertIn(f"soy {d}".encode(), f.read())
+
+
 class OddText(unittest.TestCase):
     """Sources with a BOM (Windows editors) or in Latin-1 (an editor on the Amiga): they failed with
     "carácter inesperado '\\ufeff'" or a UnicodeDecodeError (v10)."""

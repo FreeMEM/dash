@@ -16,6 +16,7 @@
   untitled one asks for its name first; its errors are underlined. Needs VS Code 1.86.
 - Something missing (the Amiga compiler, the emulator, bgdbserver, gdb, the MUI SDK, a system with MUI, a ROM) is
   said in words, with how to get it; a wrong `dash.path` says so (and `~/` works in it).
+- `./dash`: two programs of the same name compiled at once take turns (they shared `build/<name>.c`).
 
 ## 0.2.0 (2026-10-20)
 

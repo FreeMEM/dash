@@ -80,7 +80,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       el mismo nombre en carpetas distintas, espacio de trabajo con varias carpetas.
 - [x] v12. **Falta algo:** sin toolchain, sin ROM, sin SDK de MUI, sin bgdbserver, `dash.path` mal: que cada cosa diga
       claramente qué falta y cómo se arregla.
-- [ ] v13. **A la vez:** F5 dos veces, Ver en Amiga mientras se depura, compilar mientras se ejecuta, cerrar VS Code
+- [x] v13. **A la vez:** F5 dos veces, Ver en Amiga mientras se depura, compilar mientras se ejecuta, cerrar VS Code
       con el emulador en marcha (¿quedan procesos?).
 - [ ] v14. **`.dashui` extremos:** 200 objetos, nombres con acentos, tipos desconocidos, JSON roto, el mismo fichero
       abierto a la vez como texto y en el editor visual.
@@ -193,8 +193,11 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       barra pero no se subrayaban. Test. Y Compilar, Ejecutar, Depurar y Preparar sobre él usaban "Untitled-1"
       como fichero: ahora piden el nombre (Guardar como, `vscode.workspace.save`, VS Code 1.86) y siguen con el
       fichero guardado.
-- [ ] (v11) Dos programas con el mismo nombre en carpetas distintas comparten `build/<nombre>.c` en la carpeta de
-      Dash (uno detrás de otro, bien; a la vez, a probar en v13).
+- [x] (v11, v13) Dos programas con el mismo nombre (o el mismo dos veces, "Ejecutar" y "Compilar" a la vez)
+      comparten `build/<nombre>.c` y `.elf` en la carpeta de Dash: compilados a la vez, de ocho fallaban tres
+      (`build/main.elf` no estaba) y un ejecutable salía con el código del otro. Ahora `./dash` toma un cerrojo
+      por nombre (`build/<nombre>.lock`, `flock`) y se turnan. Test (`tests/unit/test_dash_cli.py`). A dashweb le
+      pasó lo mismo con dos compilaciones de dashweb.dash.
 
 - [x] (v12) `dash.path` apuntando a una carpeta que no es la de Dash se usaba igual: el shell decía "not found" y
       nada más. Ahora se comprueba (con `~/` también), el aviso dice qué ajuste está mal y por qué, y al abrir un
@@ -364,4 +367,14 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   dice qué falta y cómo se arregla. Sin ROM no falta nada en el A1200: FS-UAE usa AROS.
 - Encontrado y arreglado: `dash.path` sin comprobar, gdb que no está, mensajes de lo que falta.
 - Tests: base 302, node todo bien, integración de VS Code 21/21.
+
+### 2026-10-20 — v13 (a la vez)
+- Línea de órdenes: `a/main.dash` y `b/main.dash` compilados a la vez cuatro veces cada uno: fallaban (ver
+  "Encontrado"); con el cerrojo, los ocho bien y cada uno con su programa.
+- `v13probe.js` (scratchpad), VS Code sin ventana con el proyecto MUI (se queda esperando eventos): "Compilar"
+  mientras se ejecuta, F5 con un punto y luego otra vez (dos sesiones, las dos con su emulador), "Ver en Amiga"
+  mientras se depura, y cerrar VS Code con todo en marcha: no queda ningún proceso de los suyos (42 antes).
+  Todo bien.
+- De paso: un fs-uae huérfano de dashweb desde las 22:01 (una traza suya); avisada, lo cerró ella.
+- Tests: base 303.
 
