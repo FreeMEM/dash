@@ -298,7 +298,13 @@
         box.append(el('h3', {}, t.label || node.type));
         for (const [key, kind] of M.COMMON) box.append(field(node, key, kind));
         for (const [key, kind] of t.props) box.append(field(node, key, kind));
-        for (const key of t.events) box.append(field(node, key, 'int'));
+        for (const key of t.events) {
+            const row = field(node, key, 'int');
+            row.append(el('button', { class: 'goto', title: 'Ir a su código en el .dash (o crearlo)',
+                'aria-label': `Ir al código del evento ${key}`, disabled: !Number.isInteger(node[key]) || node[key] <= 0,
+                onclick: () => vscode.postMessage({ type: 'gotoEvent', event: node[key], name: node.name || '' }) }, '→'));
+            box.append(row);
+        }
         box.append(el('button', { id: 'delete', onclick: deleteSelected }, 'Borrar'));
     }
 
@@ -320,6 +326,10 @@
                     it.separator ? null : el('input', { class: 'num', type: 'number', value: it.event || '',
                         placeholder: 'evento', 'aria-label': 'Evento de la opción',
                         onchange: (e) => { it.event = Number(e.target.value); commit(); } }),
+                    it.separator ? null : el('button', { class: 'goto', title: 'Ir a su código en el .dash (o crearlo)',
+                        'aria-label': 'Ir al código de la opción', disabled: !(it.event > 0),
+                        onclick: () => vscode.postMessage({ type: 'gotoEvent', event: it.event,
+                                                            name: String(it.label || '').replace(/[^A-Za-z0-9_]/g, '') }) }, '→'),
                     el('button', { title: 'Quitar la opción', 'aria-label': `Quitar la opción ${it.label || ii + 1}`,
                                    onclick: () => { m.items.splice(ii, 1); commit(); } }, '×')));
             });

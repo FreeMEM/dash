@@ -422,6 +422,42 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('visual editor and code: problems of a .dashui, and from an event to its code', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const ui = path.join(dir, 'ventana.dashui');
+        const prog = path.join(dir, 'prog.dash');
+        fs.writeFileSync(ui, JSON.stringify({ dashui: 1, windows: [{ name: 'W', root: { type: 'vgroup', children: [
+            { type: 'button', name: 'aceptar', event: 3 }, { type: 'text', name: 'aceptar' }] } }] }, null, 2) + '\n');
+        fs.writeFileSync(prog, 'import "ventana.dashui"\n\nMain\n    v = W_create()\n    while true\n' +
+                               '        ev = mui_wait_event()\n        if ev == -1\n            break\n        end\n    end\nend\n');
+        try {
+            const uiDoc = await vscode.workspace.openTextDocument(ui);
+            let diags = [];
+            for (let i = 0; i < 50 && !diags.length; i++) {
+                await new Promise((r) => setTimeout(r, 100));
+                diags = vscode.languages.getDiagnostics(uiDoc.uri);
+            }
+            assert(diags.some((d) => /nombre repetido en W: aceptar/.test(d.message)), JSON.stringify(diags));
+            const made = await vscode.commands.executeCommand('dash.gotoEvent', uiDoc.uri, 3, 'aceptar', true);
+            assert(made && made.created, JSON.stringify(made));
+            const progDoc = await vscode.workspace.openTextDocument(prog);
+            assert.match(progDoc.getText(), /^const ID_ACEPTAR = 3$/m);
+            assert.match(progDoc.getText(), /^        if ev == ID_ACEPTAR$/m);
+            const editor = vscode.window.activeTextEditor;
+            assert.strictEqual(editor.document.fileName, prog);
+            assert.match(progDoc.lineAt(editor.selection.active.line).text, /# aceptar/);
+            // again: it is there now, and the editor goes to it
+            const found = await vscode.commands.executeCommand('dash.gotoEvent', uiDoc.uri, 3, 'aceptar', false);
+            assert(found && !found.created);
+            assert.match(progDoc.lineAt(found.line).text, /if ev == ID_ACEPTAR/);
+        } finally {
+            await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+            await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('debugger: attach to a bgdbserver (a real Amiga, here the emulator alone), globals right', async () => {
         const path = require('path');
         const os = require('os');

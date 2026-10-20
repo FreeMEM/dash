@@ -44,6 +44,8 @@ class DashUIEditorProvider {
                 const edit = new vscode.WorkspaceEdit();
                 edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), m.text);
                 await vscode.workspace.applyEdit(edit);
+            } else if (m.type === 'gotoEvent') {
+                await vscode.commands.executeCommand('dash.gotoEvent', document.uri, m.event, m.name);
             } else if (m.type === 'undo' || m.type === 'redo') {
                 await vscode.commands.executeCommand(m.type);   // the document's (the editor is the active one)
             } else if (m.type === 'amiga' && this.onAmiga) {

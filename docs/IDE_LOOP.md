@@ -136,7 +136,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 
 ### E. `.dashui`
 - [x] 18. **Editor visual.** Deshacer/rehacer, arrastrar, copiar y pegar, teclado, accesibilidad; auditoría primero.
-- [ ] 19. **Código y ventana.** Validación con diagnósticos; de un evento del `.dashui` a su código en el `.dash` y
+- [x] 19. **Código y ventana.** Validación con diagnósticos; de un evento del `.dashui` a su código en el `.dash` y
       crear el que falte.
 - [ ] 20. **Vista en el Amiga.** Más rápida, repetible, en varias máquinas.
 
@@ -468,4 +468,25 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
     sucesos del portapapeles, arrastrar). 6 tests; se salta sin Chromium.
   - Modelo: 2 más.
   - En VS Code: deshacer y rehacer con el editor visual abierto. VS Code 19/19.
+
+### 2026-10-20 — Tarea 19 (código y ventana)
+- `editor/vscode/dashuiLinks.js` (sin VS Code, se prueba en node):
+  - `problems`: JSON no válido (en su sitio), tipos desconocidos, nombres no válidos o repetidos, ventanas
+    repetidas y números de evento que no son enteros mayores que 0. Avisa si un número va en varios objetos
+    de una ventana y alguno no tiene nombre. Cada problema lleva su línea: el objeto se busca en el texto en el
+    orden del recorrido.
+  - `handlers`: dónde trata un `.dash` el evento n. Son sus constantes con ese valor y las comparaciones con
+    ellas o con el número, sin contar textos ni comentarios.
+  - `addHandler`: añade `const ID_<NOMBRE> = n` tras las constantes e imports, y
+    `if ev == ID_<NOMBRE>` justo después de `ev = mui_wait_event()` (con la variable y la sangría del programa).
+- `dashuiCode.js`: diagnósticos de los `.dashui` en Problemas, al abrir y al cambiar (también editando en el
+  editor visual). La orden `dash.gotoEvent(uri, n, nombre, crear)` busca los `.dash` que importan el fichero
+  (en la carpeta del espacio de trabajo, si no en la suya) y va al primer sitio que trata el evento. Si no hay
+  ninguno, pregunta y lo crea.
+- Editor visual: botón → junto a cada número de evento (también en las opciones de menú); sin número, apagado.
+- Tests:
+  - 2 en node: problemas en su línea; buscar y crear el código.
+  - 1 en el Chromium: el botón pide la orden con el número y el nombre.
+  - En VS Code: los diagnósticos llegan; `gotoEvent` crea la constante y el `if`, deja el cursor en el comentario
+    nuevo y la segunda vez lo encuentra. VS Code 20/20.
 

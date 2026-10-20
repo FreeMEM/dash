@@ -66,6 +66,11 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   Alt+Up/Down move the object, Delete removes it, F2 goes to its name, Enter to its properties, Ctrl+D
   duplicates; copy, cut and paste as usual (pasted names get a number if the window has them). Undo and redo as
   in any file (Ctrl+Z, Ctrl+Y, or the ↶ ↷ buttons). The tree and the palette are labelled for screen readers.
+  Its problems (not valid JSON, unknown types, names that are not valid or repeated, event numbers that are not
+  whole numbers above 0) are in the Problems panel at their line, while you edit it as text or in the editor.
+  The **→** next to an event number goes to the code that handles it in a `.dash` that imports the file (a
+  constant with that number, `const ID_ACEPTAR = 3`, and `if ev == ID_ACEPTAR`); if there is none, it offers to
+  create it: the constant and an `if` in the loop of `mui_wait_event`.
   **Ver en Amiga** compiles a tiny program with the window, runs it in FS-UAE with MUI and shows a picture of
   the real thing (about 30 s). A Dash program uses the file with `import "ventana.dashui"`.
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.

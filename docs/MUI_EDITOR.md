@@ -102,6 +102,10 @@ alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_
   árbol o la vista: delante, detrás o dentro de un grupo, según dónde se suelte. Teclado en el árbol: flechas,
   Alt+flechas para mover, Supr, F2 (nombre), Intro (propiedades), Ctrl+D (duplicar); copiar, cortar y pegar
   (los nombres repetidos llevan un número); deshacer y rehacer, los del documento (y botones ↶ ↷).
+- **Problemas y código:** los problemas del `.dashui` (JSON, tipos, nombres, números de evento) salen en Problemas en su
+  línea. El botón → de un evento lleva a su código en el `.dash` que importa el fichero: una constante con ese número
+  (`const ID_ACEPTAR = 3`) y `if ev == ID_ACEPTAR`; si no lo hay, lo crea (la constante y un `if` en el bucle de
+  `mui_wait_event`).
 - **Comandos:** "Dash: Compilar" (`./dash` del fichero activo), "Dash: Ejecutar en emulador" (`tools/emu_run.py`),
   "Dash: Ver en Amiga" (captura de la ventana del `.dashui`). La ruta de Dash, la toolchain y las variables del
   emulador se configuran en los ajustes de la extensión (`dash.path`, `dash.emulator.*`).

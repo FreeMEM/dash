@@ -116,6 +116,11 @@
         "command": "dash.prepareAmiga",
         "title": "Preparar para un Amiga real",
         "category": "Dash"
+      },
+      {
+        "command": "dash.gotoEvent",
+        "title": "Ir al código del evento",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -129,6 +134,10 @@
       "commandPalette": [
         {
           "command": "dash.newline",
+          "when": "false"
+        },
+        {
+          "command": "dash.gotoEvent",
           "when": "false"
         }
       ]

@@ -200,6 +200,18 @@ async function webviewTests(check, assert) {
             d = await lastEdit();
             assert.strictEqual(d.windows[0].root.children[0].type, 'checkbox');
         });
+        await check('webview: the button of an event asks VS Code for its code', async () => {
+            await page.eval('DashUIEditor.load(JSON.stringify({ dashui: 1, windows: [{ name: "W", root: { type: "vgroup", children: [' +
+                            '{ type: "button", name: "aceptar", event: 3 }, { type: "button", name: "otro" }] } }] }))');
+            await page.eval('DashUIEditor.select([0])');
+            const buttons = await page.eval('[...document.querySelectorAll("#props button.goto")].map((b) => b.disabled)');
+            assert.deepStrictEqual(buttons, [false]);
+            await page.eval('document.querySelector("#props button.goto").click()');
+            assert.deepStrictEqual(await page.eval('window.__posted[window.__posted.length - 1]'),
+                                   { type: 'gotoEvent', event: 3, name: 'aceptar' });
+            await page.eval('DashUIEditor.select([1])');            // no number yet: the button waits for one
+            assert.strictEqual(await page.eval('document.querySelector("#props button.goto").disabled'), true);
+        });
         await check('webview: F2 goes to the name, the undo button asks VS Code', async () => {
             await page.eval('DashUIEditor.select([1])');
             await page.eval('document.querySelector("#tree .tree-row.selected").focus()');

@@ -11,6 +11,7 @@ const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
 const { setupTasks, emulatorOptions } = require('./tasks');
 const { setupDebugger } = require('./debug');
+const { setupDashuiCode } = require('./dashuiCode');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -145,6 +146,7 @@ function activate(context) {
         vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
+    setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
     setupLanguageServer(vscode, context, findDash);   // errors while typing (compiler/lsp.py)
     if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
         runTask = setupTasks(vscode, context, { findDash, env: emulatorEnv, trusted });

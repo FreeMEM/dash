@@ -290,6 +290,46 @@ async function modelTests() {
         assert.deepStrictEqual(M.dropTarget(w, [1], 'into'), { parentPath: [], index: 2 });
         assert.strictEqual(M.dropTarget(w, [9], 'after'), null);
     });
+    const L = require('../dashuiLinks.js');
+    await check('dashui and code: problems with their place', () => {
+        const text = JSON.stringify({ dashui: 1, windows: [{ name: 'W', root: { type: 'vgroup', children: [
+            { type: 'button', name: 'a', event: 1 }, { type: 'botn', name: 'a' }, { type: 'checkbox', change: 0 }] } },
+            { name: 'W', root: { type: 'vgroup', children: [] } }] }, null, 2);
+        const ps = L.problems(text);
+        const msg = ps.map((p) => p.message).join(' | ');
+        assert.match(msg, /tipo desconocido: botn/);
+        assert.match(msg, /nombre repetido en W: a/);
+        assert.match(msg, /change: un número de evento/);
+        assert.match(msg, /ventana repetida: W/);
+        const rep = ps.find((p) => /repetido/.test(p.message));
+        assert.strictEqual(text.split('\n')[rep.start.line].trim(), '"name": "a"');
+        assert.strictEqual(rep.start.line, text.split('\n').findIndex((l, i) => l.includes('"name": "a"') && i > 10));
+        const bad = L.problems('{"dashui": 1,\n  "windows": [}');
+        assert.strictEqual(bad.length, 1);
+        assert.strictEqual(bad[0].start.line, 1);
+        assert.deepStrictEqual(L.problems(JSON.stringify(M.newDocument())), []);
+    });
+    await check('dashui and code: where an event is handled, and its code created', () => {
+        const dash = 'import "v.dashui"\n\nconst ID_A = 1  # el botón\n\nfunc f()\nend\n\nMain\n    while true\n' +
+                     '        ev = mui_wait_event()\n        if ev == ID_A or ev == 7\n            Print "a == 2"\n        end\n    end\nend\n';
+        assert.deepStrictEqual(L.handlers(dash, 1).map((h) => [h.line, !!h.constant]), [[10, false], [2, true]]);
+        assert.deepStrictEqual(L.handlers(dash, 7).map((h) => h.line), [10]);
+        assert.deepStrictEqual(L.handlers(dash, 2), []);            // not inside a text
+        assert(L.importsDashui(dash, 'v.dashui') && !L.importsDashui(dash, 'w.dashui'));
+        const plan = L.addHandler(dash, 2, 'boton_ok');
+        assert.strictEqual(plan.name, 'ID_BOTON_OK');
+        const out = L.applyEdits(dash, plan.edits).split('\n');
+        assert.strictEqual(out[3], 'const ID_BOTON_OK = 2');
+        assert.strictEqual(out[plan.handler.line - 1], '        if ev == ID_BOTON_OK');
+        assert.strictEqual(out[plan.handler.line], '            # boton_ok');
+        assert.deepStrictEqual(L.handlers(out.join('\n'), 2).map((h) => h.line), [plan.handler.line - 1, 3]);
+        // its constant already there: only the handler; no loop: only the constant
+        assert.strictEqual(L.addHandler(dash, 1, 'x').edits.length, 1);
+        const p2 = L.addHandler('Main\nend\n', 3);
+        assert.strictEqual(p2.name, 'EVENTO_3');
+        assert.strictEqual(p2.handler, null);
+        assert.deepStrictEqual(p2.edits, [{ line: 0, text: 'const EVENTO_3 = 3' }]);
+    });
     await check('model: preview shows every object with its path', () => {
         const w = M.newWindow('W');
         w.title = 'Hola <b>';
@@ -381,7 +421,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.compile', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
+            ['dash.compile', 'dash.gotoEvent', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {
