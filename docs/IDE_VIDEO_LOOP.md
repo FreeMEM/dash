@@ -90,7 +90,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       nombre que ya existe o a una palabra reservada, completar dentro de `#{...}`, hover en builtins de MUI.
 
 ### D. Final
-- [ ] v17. **Montaje:** el vídeo entero (MP4 con subtítulos aparte y quemados), en `~/Videos` o donde diga el usuario,
+- [x] v17. **Montaje:** el vídeo entero (MP4 con subtítulos aparte y quemados), en `~/Videos` o donde diga el usuario,
       y enviado al usuario.
 - [ ] v18. **Repaso:** todo lo arreglado con sus tests, versión 0.2.1 y CHANGELOG; resumen para decidir la publicación.
 
@@ -444,4 +444,10 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - Encontrado y arreglado: renombrar juntando nombres, F2 en la declaración de un campo, palabras de más en
   `#{...}`.
 - Tests: base 309 (LSP 27), integración de VS Code 21/21.
+
+### 2026-10-21 — v17 (montaje)
+- Los seis capítulos grabados otra vez con todo lo arreglado (`grabar.js`, extensión desde el `.vsix`): portada,
+  títulos y capítulos, 382 s y 60 subtítulos. Revisados con hojas de fotogramas (el texto nuevo de "Preparar",
+  la consola sin ruido, F11 a `doble`). En `~/Videos`: `dash-vscode-tutorial.mp4`, `-subtitulado.mp4` (subtítulos
+  en la imagen) y `.srt`. Enviado al usuario el subtitulado.
 
