@@ -395,6 +395,56 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('debugger: attach to a bgdbserver (a real Amiga, here the emulator alone), globals right', async () => {
+        const path = require('path');
+        const os = require('os');
+        const { spawn } = require('child_process');
+        const repo = path.resolve(__dirname, '..', '..', '..', '..');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'glob.dash');
+        fs.writeFileSync(file, 'var cuenta: Int = 0\n\nfunc sube()\n    cuenta = cuenta + 7\nend\n\nMain\n    sube()\n' +
+                               '    Print "cuenta #{cuenta}"\nend\n');
+        const uri = vscode.Uri.file(file);
+        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
+        await vscode.commands.executeCommand('dash.prepareAmiga');
+        const exe = path.join(dir, 'bin', 'glob.debug');
+        assert(fs.existsSync(exe), 'not built');
+        // the "Amiga": bgdbserver straight on a port, as on a real one (no relay of emu_run)
+        const port = 20000 + Math.floor(Math.random() * 10000);
+        const amiga = spawn('python3', [path.join(repo, 'tools', 'emu_run.py'), '--gdbserver', String(port), '--no-relay',
+                                        '--timeout', '300', exe], { cwd: repo, detached: true });
+        const { listening } = require(path.join(repo, 'editor', 'vscode', 'debug.js'));
+        let stopped = null;
+        const tracker = vscode.debug.registerDebugAdapterTrackerFactory('dash', { createDebugAdapterTracker: () => ({
+            onDidSendMessage: (m) => { if (m.type === 'event' && m.event === 'stopped' && m.body.reason === 'breakpoint') stopped = m; },
+        }) });
+        try {
+            for (let i = 0; i < 1200 && !listening(port); i++) await new Promise((r) => setTimeout(r, 100));
+            assert(listening(port), 'bgdbserver did not start');
+            vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(8, 0)))]);
+            const ended = new Promise((resolve) => {
+                const sub = vscode.debug.onDidTerminateDebugSession(() => { sub.dispose(); resolve(true); });
+            });
+            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'attach', name: 'Amiga real',
+                                                                   target: `localhost:${port}`, program: file }));
+            for (let i = 0; i < 600 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
+            assert(stopped, 'did not stop at the breakpoint');
+            const session = vscode.debug.activeDebugSession;
+            assert.notStrictEqual(session.configuration.target, `localhost:${port}`, 'no relay in between');
+            const trace = await session.customRequest('stackTrace', { threadId: stopped.body.threadId });
+            const value = (await session.customRequest('evaluate', { expression: 'cuenta', frameId: trace.stackFrames[0].id,
+                                                                      context: 'watch' })).result;
+            assert.strictEqual(value, '7');
+            await session.customRequest('continue', { threadId: stopped.body.threadId });
+            assert.strictEqual(await Promise.race([ended, new Promise((r) => setTimeout(() => r('timeout'), 60000))]), true);
+        } finally {
+            tracker.dispose();
+            vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
+            if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();
+            try { process.kill(-amiga.pid, 'SIGTERM'); } catch (e) { /* gone */ }
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

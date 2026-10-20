@@ -55,7 +55,7 @@ function emulatorArgs(dashDir, exe, port, options) {
  */
 function setupDebugger(vscode, context, helpers) {
     const output = vscode.window.createOutputChannel('Dash: Amiga');
-    const emulators = new Map();            // target "localhost:PORT" -> the emulator's process
+    const emulators = new Map();            // target "localhost:PORT" -> the emulator's process (or the relay's)
     const consoles = new Map();             // target -> {proxy, pending}: the program's output to the debug console
     const toConsole = (target, text) => {
         const lines = text.split(/(?<=\n)/).filter((l) => !l.startsWith('=== '));   // emu_run's summary: not the program's
@@ -81,6 +81,41 @@ function setupDebugger(vscode, context, helpers) {
                  (error, stdout, stderr) => resolve({ ok: !error, text: String(stdout) + String(stderr) }));
     });
 
+    /** The executable for the debugger of a .dash (what F5 and "Preparar para un Amiga real" build) */
+    const debugExe = (file) => path.join(path.dirname(file), 'bin', path.basename(file, '.dash') + '.debug');
+
+    /* attach: a bgdbserver already running (an Amiga of yours: bgdbserver :2345 prog.debug). gdb goes
+       through tools/gdb_relay.py, so it finds the globals (relay: false, straight to target) */
+    async function attach(config) {
+        if (!config.target || !config.program) {
+            vscode.window.showErrorMessage('Para conectar hacen falta "target" (host:puerto de bgdbserver) y "program".');
+            return undefined;
+        }
+        const exe = config.program.endsWith('.dash') ? debugExe(config.program) : config.program;
+        if (!fs.existsSync(exe)) {
+            vscode.window.showErrorMessage(`No está ${exe}: compílalo con "Dash: Preparar para un Amiga real".`);
+            return undefined;
+        }
+        const dashDir = helpers.findDash(config.program);
+        const relay = dashDir ? path.join(dashDir, 'tools', 'gdb_relay.py') : null;
+        if (config.relay === false || !relay || !fs.existsSync(relay) || !helpers.trusted())
+            return Object.assign({}, config, { program: exe });
+        const port = await freePort();
+        const child = spawn('python3', [relay, '--listen', String(port), '--to', config.target, exe],
+                            { cwd: dashDir, detached: true });
+        child.stderr.on('data', (d) => output.append(d.toString('utf8')));
+        const target = `localhost:${port}`;
+        emulators.set(target, child);
+        for (let i = 0; i < 50 && !listening(port) && child.exitCode === null; i++) await new Promise((r) => setTimeout(r, 100));
+        if (!listening(port)) {
+            stopEmulator(target);
+            output.show(true);
+            vscode.window.showErrorMessage('No arrancó tools/gdb_relay.py: mira "Dash: Amiga".');
+            return undefined;
+        }
+        return Object.assign({}, config, { program: exe, target, amiga: config.target });
+    }
+
     context.subscriptions.push(output, vscode.debug.registerDebugConfigurationProvider('dash', {
         provideDebugConfigurations: () => [{ type: 'dash', request: 'launch', name: 'Depurar en el Amiga', program: '${file}' }],
         resolveDebugConfiguration: (folder, config) => {
@@ -93,7 +128,8 @@ function setupDebugger(vscode, context, helpers) {
             return config;
         },
         resolveDebugConfigurationWithSubstitutedVariables: async (folder, config) => {
-            if (config.request !== 'launch') return config;                // attach: as it is (an Amiga of yours)
+            if (config.request === 'attach') return attach(config);
+            if (config.request !== 'launch') return config;
             if (!helpers.trusted()) {
                 vscode.window.showWarningMessage('Carpeta sin confianza (modo restringido): para depurar, confía en ella.');
                 return undefined;
@@ -106,7 +142,7 @@ function setupDebugger(vscode, context, helpers) {
             }
             const doc = vscode.workspace.textDocuments.find((d) => d.fileName === file);
             if (doc && doc.isDirty) await doc.save();
-            const exe = path.join(path.dirname(file), 'bin', path.basename(file, '.dash') + '.debug');
+            const exe = debugExe(file);
             return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Depurar en el Amiga' },
                                               async (progress) => {
                 progress.report({ message: 'compilando con --debug…' });
@@ -186,6 +222,27 @@ function setupDebugger(vscode, context, helpers) {
         if (!editor || editor.document.languageId !== 'dash') { vscode.window.showWarningMessage('Abre un fichero .dash'); return; }
         return vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(editor.document.uri),
             { type: 'dash', request: 'launch', name: 'Depurar en el Amiga', program: editor.document.fileName });
+    }));
+
+    // A real Amiga: the program built for the debugger, to copy there and start under bgdbserver
+    context.subscriptions.push(vscode.commands.registerCommand('dash.prepareAmiga', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'dash') { vscode.window.showWarningMessage('Abre un fichero .dash'); return; }
+        if (!helpers.trusted()) { vscode.window.showWarningMessage('Carpeta sin confianza (modo restringido): para compilar, confía en ella.'); return; }
+        const file = editor.document.fileName;
+        const dashDir = helpers.findDash(file);
+        if (!dashDir) { vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
+        if (editor.document.isDirty) await editor.document.save();
+        const exe = debugExe(file);
+        const built = await build(dashDir, file, exe);
+        output.clear();
+        output.append(built.text);
+        if (!built.ok) { output.show(true); vscode.window.showErrorMessage('No compila: mira "Dash: Amiga".'); return; }
+        output.append(`\nPara depurarlo en un Amiga:\n  1. Copia ${exe} y bgdbserver (tools/get_bgdbserver.sh) al Amiga.\n` +
+                      `  2. En su Shell: bgdbserver :2345 ${path.basename(exe)}\n` +
+                      `  3. F5 con la configuración "Amiga real" (target: su nombre o IP y el puerto).\n`);
+        output.show(true);
+        vscode.window.showInformationMessage(`Listo: ${path.basename(exe)}. En el Amiga: bgdbserver :2345 ${path.basename(exe)}`);
     }));
 
     context.subscriptions.push(vscode.debug.onDidTerminateDebugSession((session) => {

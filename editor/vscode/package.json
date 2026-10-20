@@ -111,6 +111,11 @@
         "title": "Dash: Depurar en el Amiga",
         "category": "Dash",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "dash.prepareAmiga",
+        "title": "Preparar para un Amiga real",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -379,7 +384,17 @@
               },
               "program": {
                 "type": "string",
-                "description": "El ejecutable compilado con ./dash --debug (sus símbolos)."
+                "description": "El ejecutable compilado con ./dash --debug (sus símbolos), o el .dash (entonces bin/<nombre>.debug, como lo deja \"Dash: Preparar para un Amiga real\")."
+              },
+              "relay": {
+                "type": "boolean",
+                "default": true,
+                "description": "gdb pasa por tools/gdb_relay.py, que corrige dónde están las variables globales (false: directo a target)."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false,
+                "description": "Parar al empezar el programa."
               }
             }
           }
@@ -405,13 +420,13 @@
           },
           {
             "label": "Dash: depurar en un Amiga real (bgdbserver)",
-            "description": "Se conecta a bgdbserver por la red",
+            "description": "Se conecta a bgdbserver por la red (antes: Dash: Preparar para un Amiga real)",
             "body": {
               "type": "dash",
               "request": "attach",
               "name": "Amiga real",
               "target": "amiga.local:2345",
-              "program": "^\"\\${workspaceFolder}/bin/programa.debug\""
+              "program": "^\"\\${workspaceFolder}/programa.dash\""
             }
           }
         ]

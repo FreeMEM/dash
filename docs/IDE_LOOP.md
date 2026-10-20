@@ -132,7 +132,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       que las traduce a C para gdb, y `$len`/`$at` en `tools/gdb/dash.py`.
 - [x] 16b. **Salida y errores.** `Print` en la consola de depuración (bajo bgdbserver la salida va a su consola:
       `DASH_OUT`), y parar en los errores del runtime (índice fuera de rango, memcheck) con su mensaje.
-- [ ] 17. **Amiga real.** Depurar en un Amiga con bgdbserver por red (host y puerto configurables); documentarlo.
+- [x] 17. **Amiga real.** Depurar en un Amiga con bgdbserver por red (host y puerto configurables); documentarlo.
 
 ### E. `.dashui`
 - [ ] 18. **Editor visual.** Deshacer/rehacer, arrastrar, copiar y pegar, teclado, accesibilidad; auditoría primero.
@@ -433,4 +433,16 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   VS Code: la salida de `Print` en la consola de depuración y "un error para como excepción" (`l[7]`: para en la
   línea 4 con "índice fuera de la lista" y la pila en el `.dash`). Comprobado a mano en el emulador: `cuenta` vale 0 y
   luego 7 tras la función. Base: 285/285, VS Code 17/17. Sin emulador nuevo en el runner.
+
+### 2026-10-20 — Tarea 17 (depurar en un Amiga real)
+- `attach` (launch.json, "Amiga real"): `target` = host:puerto de un bgdbserver en marcha y `program` = el `.dash`
+  (usa `bin/<nombre>.debug`) o el ejecutable. La extensión arranca `tools/gdb_relay.py` en un puerto libre del PC
+  hacia `target`, y gdb conecta ahí: las globales salen bien también en un Amiga real. Con `"relay": false`, directo.
+  El relé se para con la sesión.
+- Comando **Dash: Preparar para un Amiga real**: compila con `--debug` a `bin/<nombre>.debug` y dice qué copiar y
+  qué escribir en el Shell del Amiga (`bgdbserver :2345 <nombre>.debug`).
+- `tools/emu_run.py --no-relay`: bgdbserver directo en el puerto, como en un Amiga real (para probar el attach).
+- README: sección "Debugging on a real Amiga" (pila TCP/IP, bgdbserver de Aminet, pasos, `DASH_OUT` para la salida).
+- Tests: en VS Code, "attach a un bgdbserver" con el emulador haciendo de Amiga: para en el breakpoint y `cuenta`
+  vale 7 (global, por el relé). VS Code 18/18. Sin Amiga real: no probado en hardware.
 

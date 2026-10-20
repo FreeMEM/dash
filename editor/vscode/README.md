@@ -65,6 +65,23 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   the real thing (about 30 s). A Dash program uses the file with `import "ventana.dashui"`.
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.
 
+## Debugging on a real Amiga
+
+The Amiga needs a TCP/IP stack (Roadshow, AmiTCP, Miami...) and `bgdbserver` (Aminet `dev/debug/bgdbserver`;
+`tools/get_bgdbserver.sh` of the Dash repository downloads it to `~/.cache/dash-debug/x/bgdbserver/`).
+
+1. Open the `.dash` and run **Dash: Preparar para un Amiga real**: it builds `bin/<name>.debug` (`./dash --debug`).
+2. Copy that file and `bgdbserver` to the Amiga, and in its Shell: `bgdbserver :2345 <name>.debug`
+   (the port is yours; it must be below 32768). The program waits for the debugger.
+3. In VS Code, a `launch.json` configuration "Dash: depurar en un Amiga real" (snippet), with `target` set to the
+   Amiga's name or address and the port, and `program` to the `.dash`; then F5.
+
+The breakpoints, steps, stack, variables and Dash expressions work as in the emulator. The extension puts
+`tools/gdb_relay.py` between gdb and bgdbserver, so gdb finds the global variables (`"relay": false` goes
+straight to `target`). What the program prints comes out in the Amiga's Shell (or in a file, with the DOS
+variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator standing in for the Amiga
+(`tools/emu_run.py --gdbserver PORT --no-relay`), not on real hardware.
+
 ## Settings
 
 - `dash.path`: folder of the Dash compiler (the one with `./dash`). Empty: looked for up from the file.

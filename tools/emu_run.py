@@ -233,7 +233,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
-                 model: str = "A1200", gdbserver: int = 0):
+                 model: str = "A1200", gdbserver: int = 0, relay: bool = True):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -261,7 +261,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             (hd / drawer).mkdir(parents=True)
         lines = []
         names = []
-        inner_port = _free_port() if gdbserver else 0
+        inner_port = (_free_port() if relay else gdbserver) if gdbserver else 0
         system = system or os.environ.get("DASH_EMU_SYS")
         if system:
             if not Path(system).is_dir():
@@ -332,11 +332,12 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             else:
                 lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
             lines.append(f'Echo "$RC" >DH0:rc{i}.txt')
-        if gdbserver:
+        if gdbserver and relay:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
-            from gdb_relay import relay
-            threading.Thread(target=relay, args=(gdbserver, "127.0.0.1", inner_port, hd / "p0",
-                                                 lambda: _wait_listening(inner_port)), daemon=True).start()
+            from gdb_relay import relay as start_relay
+            threading.Thread(target=start_relay, args=(gdbserver, "127.0.0.1", inner_port, hd / "p0",
+                                                       lambda: _wait_listening(inner_port)), daemon=True).start()
+        if gdbserver:
             server = Path(os.environ.get("DASH_BGDBSERVER", Path.home() / ".cache/dash-debug/x/bgdbserver/bgdbserver"))
             if not server.is_file():
                 raise RuntimeError(f"bgdbserver not found: {server} (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)")
@@ -470,6 +471,9 @@ def main():
                         help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
                              "connects with target remote :PORT (build it with ./dash --debug; tools/gdb_relay.py "
                              "in between, so gdb finds the globals)")
+    parser.add_argument("--no-relay", action="store_true",
+                        help="with --gdbserver: bgdbserver itself on PORT, as on a real Amiga (gdb then needs "
+                             "tools/gdb_relay.py in between for the globals; the VS Code extension puts it)")
     args = parser.parse_args()
     machine = MACHINES.get(args.machine) if args.machine else None
     kickstart = args.kickstart or (os.environ.get(machine["rom"]) if machine else None)
@@ -494,7 +498,7 @@ def main():
                                args.keep, args.fpu, system, args.workbench or bool(machine and machine["workbench"]),
                                args.screenshot, debug=args.debug, window=args.window, follow=follow,
                                emulator=args.emulator, model=machine["model"] if machine else "A1200",
-                               gdbserver=args.gdbserver or 0)
+                               gdbserver=args.gdbserver or 0, relay=not args.no_relay)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
