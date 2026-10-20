@@ -40,6 +40,11 @@
     }
   },
   "contributes": {
+    "configurationDefaults": {
+      "[dash]": {
+        "files.autoGuessEncoding": true
+      }
+    },
     "languages": [
       {
         "id": "dash",

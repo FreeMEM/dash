@@ -33,5 +33,33 @@ class OddPaths(unittest.TestCase):
             self.assertIn("Success!", r.stdout)
 
 
+class OddText(unittest.TestCase):
+    """Sources with a BOM (Windows editors) or in Latin-1 (an editor on the Amiga): they failed with
+    "carácter inesperado '\\ufeff'" or a UnicodeDecodeError (v10)."""
+
+    def transpile(self, data, imported=None):
+        sys.path.insert(0, ROOT)
+        from compiler.main import DashCompiler, read_source
+        with tempfile.TemporaryDirectory() as tmp:
+            if imported:
+                with open(os.path.join(tmp, "modulo.dash"), "wb") as f:
+                    f.write(imported)
+            path = os.path.join(tmp, "p.dash")
+            with open(path, "wb") as f:
+                f.write(data)
+            c_code, _ = DashCompiler().compile(read_source(path), path)
+            return c_code
+
+    def test_bom(self):
+        self.assertIn("main", self.transpile(b"\xef\xbb\xbfMain\n    Print \"hola\"\nend\n"))
+        c = self.transpile(b'import "modulo.dash"\nMain\n    Print "#{doble(2)}"\nend\n',
+                           b"\xef\xbb\xbffunc doble(n: Int) -> Int\n    return n * 2\nend\n")
+        self.assertIn("doble", c)
+
+    def test_latin1(self):
+        c = self.transpile(b'Main\n    Print "Ca\xf1a"\nend\n')
+        self.assertIn("Ca\\361a", c)        # the text in Latin-1 for the Amiga, as from a UTF-8 file
+
+
 if __name__ == "__main__":
     unittest.main()

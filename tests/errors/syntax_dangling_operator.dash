@@ -1,0 +1,7 @@
+# expect: syntax_dangling_operator.dash:7:1: Error: sintaxis: no se esperaba el fin del fichero aquí (la línea 6 acaba en `+`: la expresión sigue en la siguiente)
+# A line that ends in an operator goes on in the next one (v10 of docs/IDE_VIDEO_LOOP.md): the error comes out
+# later, and only said "¿falta un `end`?"
+
+Main
+    y = 1 +
+end

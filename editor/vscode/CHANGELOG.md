@@ -9,6 +9,9 @@
 - The visual editor in the colours of VS Code's theme; a quote typed over a selection no longer surrounds it.
 - New project: a name with accents keeps its letters without them ("Mi Juego Ñandú": `Mi_Juego_Nandu`).
 - `./dash`: `-o` into a folder that is not there makes it.
+- Odd text: `.dash` files with a BOM or in Latin-1 (written on the Amiga) compile, and VS Code guesses their
+  encoding; formatting keeps Windows line ends; a module without `Main` is not a problem; a line that ends in an
+  operator says so in the syntax error.
 
 ## 0.2.0 (2026-10-20)
 

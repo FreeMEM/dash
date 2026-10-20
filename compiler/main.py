@@ -66,6 +66,8 @@ class DashCompiler:
         self.tree_cache (a dict the language server keeps: file -> (text, tree)) a file whose text
         has not changed is not parsed again: the parse is most of the time, the transform does not
         change the tree."""
+        if source.startswith("\ufeff"):          # a BOM (Windows editors): not part of the program
+            source = source[1:]
         cache = getattr(self, "tree_cache", None)
         cached = cache.get(filename) if cache is not None and filename else None
         if cached is not None and cached[0] == source:
@@ -119,6 +121,7 @@ class DashCompiler:
         if token is not None and prev is not None and getattr(prev, "line", None) and getattr(token, "line", None) \
                 and token.line > prev.end_line and getattr(token, "type", "") not in ("$END",):
             where = f"{filename or '<input>'}:{prev.line}:{prev.column}"
+            line = prev.line
             token = None
             after = f" después de `{str(prev).strip()}`"
         if token is None and after:
@@ -138,7 +141,26 @@ class DashCompiler:
             hint = "; se esperaba " + ", ".join(expected[:-1]) + (" o " if len(expected) > 1 else "") + expected[-1]
         elif "`end`" in expected and got == "el fin del fichero":
             hint = "; ¿falta un `end`?"
+        dangling = self._dangling_operator(source, line)
+        if dangling:
+            if hint == "; ¿falta un `end`?":
+                hint = ""                         # it is not that: the operator took the end as its operand
+            hint += f" (la línea {dangling[0]} acaba en `{dangling[1]}`: la expresión sigue en la siguiente)"
         return f"{where}: Error: sintaxis: no se esperaba {got}{after or ' aquí'}{hint}"
+
+    _OPERATOR_AT_END = re.compile(r"(\+|-|\*|/|%|==|!=|<=|>=|<|>|\band|\bor)\s*$")
+
+    def _dangling_operator(self, source: str, line: int):
+        """(n, operator) when the line with code before `line` ends in a binary operator ("y = x +"): the
+        expression goes on in the next line, and the error came out there; else None."""
+        lines = source.split("\n")
+        for n in range(min(line, len(lines) + 1) - 1, 0, -1):
+            code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', lines[n - 1]).split("#")[0].rstrip()
+            if not code:
+                continue
+            m = self._OPERATOR_AT_END.search(code)
+            return (n, m.group(1)) if m else None
+        return None
 
     def _resolve_import_path(self, import_path: str) -> str:
         """Resolve import path relative to base directory or project root."""
@@ -185,8 +207,7 @@ class DashCompiler:
         if full_path in overlay:
             source = overlay[full_path]
         else:
-            with open(full_path, "r") as f:
-                source = f.read()
+            source = read_source(full_path)
         if full_path.endswith(".dashui"):
             from compiler.dashui import generate, DashUIError
             try:
@@ -718,6 +739,17 @@ class CompilationError(Exception):
         self.stage = stage
 
 
+def read_source(path: str) -> str:
+    """The text of a source file (.dash, .dashui): UTF-8, without its BOM if it has one (Windows editors put
+    it); a file that is not UTF-8 is read as Latin-1, the Amiga's (written with an editor on the Amiga)."""
+    with open(path, "rb") as f:
+        data = f.read()
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
+
+
 def transpile(source: str, filename: str = "<input>",
               verbose: bool = False) -> str:
     """
@@ -758,8 +790,7 @@ def main():
 
     # Read source file
     try:
-        with open(input_filename, "r") as f:
-            source_code = f.read()
+        source_code = read_source(input_filename)
     except FileNotFoundError:
         print(f"Error: File '{input_filename}' not found", file=sys.stderr)
         sys.exit(1)

@@ -25,7 +25,8 @@ import time
 import traceback
 import urllib.parse
 
-from compiler.main import DashCompiler, CompilationError
+from compiler.main import DashCompiler, CompilationError, read_source
+from compiler.analyzer import NO_MAIN    # a module has none: not a problem in the editor
 from compiler import lsp_index
 from compiler.lsp_format import format_text
 
@@ -209,7 +210,7 @@ class Server:
             analysis = compiler.analyze(self.docs[uri], path)
             self.programs[uri] = analysis.program
             for item, severity in [(e, "Error") for e in analysis.errors] + \
-                                  [(w, "Warning") for w in analysis.warnings]:
+                                  [(w, "Warning") for w in analysis.warnings if w.message != NO_MAIN]:
                 location = item.location
                 if location is not None:
                     found.append((location.filename or path, location.line, location.column, severity, item.message))
@@ -227,8 +228,7 @@ class Server:
             text = self.docs.get(target)
             if text is None:
                 try:
-                    with open(file, encoding="utf-8", errors="replace") as f:
-                        text = f.read()
+                    text = read_source(file)
                 except OSError:
                     text = ""
             by_uri.setdefault(target, []).append(self._diagnostic(text, line, column, severity, message))
@@ -365,8 +365,7 @@ class Server:
         if uri in self.docs:
             return self.docs[uri]
         try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                return f.read()
+            return read_source(path)
         except OSError:
             return ""
 

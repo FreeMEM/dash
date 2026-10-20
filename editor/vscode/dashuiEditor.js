@@ -40,7 +40,8 @@ class DashUIEditorProvider {
         panel.onDidDispose(() => changes.dispose());
         panel.webview.onDidReceiveMessage(async (m) => {
             if (m.type === 'ready') send();
-            else if (m.type === 'edit' && m.text !== document.getText()) {
+            // (the editor's text has \n; a file with Windows line ends keeps them: VS Code puts its own)
+            else if (m.type === 'edit' && m.text !== document.getText().replace(/\r\n/g, '\n')) {
                 const edit = new vscode.WorkspaceEdit();
                 edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), m.text);
                 await vscode.workspace.applyEdit(edit);

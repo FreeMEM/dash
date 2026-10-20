@@ -263,6 +263,7 @@ function windowFiles(dashuiText, baseDir) {
 
 async function preview({ dashDir, dashuiText, windowName, machine, env, baseDir }) {
     let names = [];
+    dashuiText = dashuiText.replace(/^\uFEFF/, '');          // a BOM (Windows editors)
     try { names = JSON.parse(dashuiText).windows.map((w) => w.name); } catch (e) { throw new Error('el .dashui no es JSON válido'); }
     if (!names.includes(windowName)) throw new Error(`no hay una ventana "${windowName}" (hay: ${names.join(', ')})`);
     const exe = fs.existsSync(path.join(compileCache, crypto.createHash('sha1').update(dashuiText + '\0' + windowName)

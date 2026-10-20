@@ -49,6 +49,8 @@ def _indent(line):
 
 
 def format_text(text, step="    "):
+    if "\r\n" in text:           # a file with Windows line ends keeps them (else it always looks changed)
+        return format_text(text.replace("\r\n", "\n"), step).replace("\n", "\r\n")
     lines = text.split("\n")
     out = []
     stack = []                     # "block" (closed by end) or "tree" (closed by its _end call)

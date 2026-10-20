@@ -47,6 +47,10 @@ def type_is_known(type_name: str, known) -> bool:
     return type_name in known
 
 
+
+# A file without Main: a program that does nothing, or a module to import (the language server does not show it)
+NO_MAIN = "el programa no tiene Main: no hace nada (un módulo para importar no lo necesita)"
+
 class SymbolType(Enum):
     """Types of symbols in the symbol table."""
     WINDOW = auto()
@@ -349,7 +353,7 @@ class SemanticAnalyzer(ASTVisitor):
         if node.main:
             self.visit(node.main)
         else:
-            self.warning("Program has no Main block")
+            self.warning(NO_MAIN)
 
         # Check for unused windows
         for window in node.windows:

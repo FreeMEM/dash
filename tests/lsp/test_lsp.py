@@ -92,7 +92,7 @@ class LanguageServerTest(unittest.TestCase):
 
     def open(self, name, text):
         path = os.path.join(self.dir.name, name)
-        with open(path, "w") as f:
+        with open(path, "w", newline="") as f:          # its line ends as they are (CRLF too)
             f.write(text)
         self.client.notify("textDocument/didOpen", {"textDocument": {
             "uri": uri(path), "languageId": "dash", "version": 1, "text": text}})
@@ -368,6 +368,27 @@ class LanguageServerTest(unittest.TestCase):
         reply = self.client.request("textDocument/formatting", {"textDocument": {"uri": u},
                                     "options": {"tabSize": 4, "insertSpaces": True}})
         self.assertEqual(reply["result"], [])                     # already formatted: nothing to do
+
+    def test_formatting_keeps_windows_line_ends(self):
+        # (v10 of docs/IDE_VIDEO_LOOP.md: a CRLF file always came back changed, with \n)
+        good = "func f(a)\r\n    if a > 1\r\n        return 1\r\n    end\r\nend\r\n"
+        u = self.open("crlf1.dash", good)
+        options = {"tabSize": 4, "insertSpaces": True}
+        self.assertEqual(self.client.request("textDocument/formatting", {"textDocument": {"uri": u},
+                                                                          "options": options})["result"], [])
+        u = self.open("crlf2.dash", good.replace("        return", "return"))
+        [edit] = self.client.request("textDocument/formatting", {"textDocument": {"uri": u},
+                                                                  "options": options})["result"]
+        self.assertEqual(edit["newText"], good)
+
+    def test_odd_text(self):
+        # a module has no Main: not a problem; a CRLF line and a tab-indented one keep their columns
+        self.assertEqual(self.client.diagnostics(self.open("modulo2.dash", "func f()\nend\n")), [])
+        self.assertEqual(self.client.diagnostics(self.open("vacio.dash", "")), [])
+        [d] = self.client.diagnostics(self.open("crlf3.dash", "Main\r\n    Print 1 + nada\r\nend\r\n"))
+        self.assertEqual(d["range"]["start"], {"line": 1, "character": 14})
+        [d] = self.client.diagnostics(self.open("tab.dash", "Main\n\tPrint 1 + nada\nend\n"))
+        self.assertEqual(d["range"]["start"], {"line": 1, "character": 11})
 
     def actions(self, u, diagnostic):
         return self.client.request("textDocument/codeAction", {"textDocument": {"uri": u}, "range": diagnostic["range"],

@@ -74,7 +74,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 ### C. Caza de errores (casos raros)
 - [x] v9. **Rutas raras:** espacios, acentos y ñ en carpetas y ficheros (un proyecto "Mi Juego Ñandú"): compilar,
       ejecutar, depurar, Ver en Amiga, ir al evento.
-- [ ] v10. **Texto raro:** CRLF, BOM, tabuladores, ficheros vacíos o de una línea, en `.dash` y `.dashui` (servidor
+- [x] v10. **Texto raro:** CRLF, BOM, tabuladores, ficheros vacíos o de una línea, en `.dash` y `.dashui` (servidor
       de lenguaje, formatear, `end` automático, editor visual, diagnósticos).
 - [ ] v11. **Sin guardar y sin carpeta:** ficheros sin título o sin guardar, sin carpeta abierta, varios `.dash` con
       el mismo nombre en carpetas distintas, espacio de trabajo con varias carpetas.
@@ -169,6 +169,21 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       `round` o `sin` propia (choca con su prototipo). No se incluye.
 - [ ] (v9) El editor visual abierto en media pantalla (junto al `.dash`) se aprieta: el árbol queda en una columna
       de 40 píxeles y "Ver en Amiga" en dos líneas. Para v14 (`.dashui` extremos).
+
+- [x] (v10) Un `.dash` con BOM (Bloc de notas de Windows) no compilaba: "carácter inesperado '\ufeff'". Uno en
+      Latin-1 (un editor del Amiga) acababa en un `UnicodeDecodeError` de Python. Ahora `read_source` quita el
+      BOM y lee Latin-1 si no es UTF-8 (compilador, imports y servidor de lenguaje). Tests unitarios.
+- [x] (v10) Un `.dash` en Latin-1 se veía en VS Code con caracteres rotos: la extensión pone
+      `files.autoGuessEncoding` para `[dash]`. Comprobado en VS Code (sin el ajuste, "Ca�a").
+- [x] (v10) Formatear un fichero CRLF ya bien formateado lo daba cambiado (con `\n`): con "formatear al guardar"
+      quedaría siempre modificado. Ahora conserva CRLF. Test.
+- [x] (v10) Cualquier módulo sin `Main` abierto en VS Code salía con el aviso "Program has no Main block" en
+      Problemas. El servidor ya no lo da; en la línea de órdenes sale en español. Test.
+- [x] (v10) Una línea que acaba en `+` (o `and`, `==`…) sigue en la siguiente, y el error salía más abajo con un
+      mensaje que despistaba ("¿falta un `end`?", "no se esperaba `=`"). Ahora añade "(la línea 3 acaba en `+`: la
+      expresión sigue en la siguiente)". Test en `tests/errors`.
+- [x] (v10) El editor visual comparaba su texto (`\n`) con el del documento (CRLF): cualquier acción, aunque no
+      cambiara nada, reescribía el fichero entero. Ahora compara sin los `\r`. "Ver en Amiga" quita el BOM.
 
 ## Bitácora
 
@@ -300,4 +315,14 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   está en git: la regla nueva del runner hay que apuntarla allí al fusionar.
 - Tests: base 296, emulador (A1200 y 3.2) de lienzo, FPU, `.dashui`, pantalla completa y autoclose bien;
   `./compile_all.sh` 34/34; node todo bien.
+
+### 2026-10-20 — v10 (texto raro)
+- Por la línea de órdenes: CRLF, BOM, tabuladores, mezcla, vacío, una sola línea, sin salto final, solo un
+  comentario, Latin-1, un `.dashui` con BOM y otro en Latin-1. Fallaban el BOM y el Latin-1.
+- Servidor de lenguaje (`v10lsp.py` del scratchpad): diagnósticos, formatear, renombrar, hover, definición,
+  símbolos y completar con CRLF, tabuladores y un fichero vacío. Fallaban formatear con CRLF y el aviso sin `Main`.
+- VS Code sin ventana (`v10probe.js`): el `end` automático con tabuladores, un `.dash` en Latin-1, formatear un
+  CRLF, y un `.dashui` con BOM y CRLF en el editor visual (lo lee, no lo marca modificado, al guardar conserva
+  BOM y CRLF). Todo bien con los arreglos.
+- Tests: base 301, LSP 26, node todo bien.
 
