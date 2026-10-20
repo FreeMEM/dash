@@ -2017,6 +2017,7 @@ typedef struct {
     Object *o;               /* the datatype object (owns bm and mask); NULL for a scaled copy */
     struct BitMap *bm;
     PLANEPTR mask;           /* ours, in chip RAM, rows of mmod bytes; transparent pixels 0 */
+    UBYTE *alpha;            /* on RTG, w x h alphas when some is neither 0 nor 255 (D62); else NULL */
     LONG w, h, mmod;
 } _DashImg;
 static _DashImg *_dash_imgs[_DASH_IMG_MAX];
@@ -2063,6 +2064,16 @@ static UBYTE *_dash_img_alpha(Object *o, LONG w, LONG h, LONG mod) {
     _DASH_PIXFREE(row, "row");
     if (mask && !(clear && opaque)) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
     return mask;
+}
+
+/* Frees an image that is not (or no longer) in the list */
+static void _dash_img_dispose(_DashImg *img) {
+    WaitBlit();
+    if (img->o) DisposeDTObject(img->o);
+    else FreeBitMap(img->bm);
+    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
+    if (img->alpha) _DASH_PIXFREE(img->alpha, "img->alpha");
+    FreeVec(img);
 }
 
 static LONG _dash_img_add(_DashImg *img) {
@@ -2112,11 +2123,21 @@ static LONG _dash_image_load(STRPTR file) {
 }
 
 /* An image from pixels in memory (a program that decodes pictures itself, dashweb D40): rows of
-   width pixels, RGB (3 bytes) or, with alpha, RGBA (4 bytes; alpha 128 or more is drawn). The
+   width pixels, RGB (3 bytes) or, with alpha, RGBA (4 bytes; on RTG mixed, D62; else 128 or more drawn). The
    picture.datatype (V43: AmigaOS 3.5 and later) puts them on the screen like a file's: the
    image, or 0 (an older picture.datatype, no memory) */
 /* The mask of w x h RGBA pixels (alpha 128 or more is drawn) in rows of mod bytes; NULL if all are
    drawn or none */
+/* The alphas of w x h RGBA pixels, one byte each: NULL if all are 0 or 255 (the mask is enough) */
+static UBYTE *_dash_rgba_alpha(UBYTE *pixels, LONG w, LONG h) {
+    UBYTE *a, *p = pixels + 3, *d;
+    LONG i, n = w * h;
+    for (i = 0; i < n; i++, p += 4) if (*p != 0 && *p != 255) break;
+    if (i == n || !(a = (UBYTE *)_DASH_PIXALLOC(n, MEMF_ANY))) return NULL;
+    for (i = n, p = pixels + 3, d = a; i > 0; i--, p += 4) *d++ = *p;
+    return a;
+}
+
 static UBYTE *_dash_rgba_mask(UBYTE *pixels, LONG w, LONG h, LONG mod) {
     UBYTE *mask = (UBYTE *)_DASH_PIXALLOC(mod * h, MEMF_CLEAR), *p;
     LONG x, y;
@@ -2172,10 +2193,9 @@ static LONG _dash_image_from_rgb_direct(UBYTE *pixels, LONG w, LONG h, LONG alph
     img->w = w;
     img->h = h;
     if (mask) { _dash_img_mask(img, mask, mod); _DASH_PIXFREE(mask, "mask"); }
+    if (alpha) img->alpha = _dash_rgba_alpha(pixels, w, h);
     if (_dash_img_add(img)) return (LONG)img;
-    FreeBitMap(bm);
-    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
-    FreeVec(img);
+    _dash_img_dispose(img);
     return 0;
 }
 
@@ -2229,6 +2249,54 @@ static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha) {
 static LONG _dash_image_width(LONG image) { _DashImg *i = _dash_img(image); return i ? i->w : 0; }
 static LONG _dash_image_height(LONG image) { _DashImg *i = _dash_img(image); return i ? i->h : 0; }
 
+/* The part w x h at sx, sy of an image with alphas mixed with what is under it at x, y (on RTG, in
+   blocks of rows: the image's and the screen's read, the screen's written back): FALSE if it cannot
+   (a palette screen, no memory) */
+static BOOL _dash_image_blend(_DashImg *img, LONG sx, LONG sy, LONG x, LONG y, LONG w, LONG h) {
+    struct RastPort src;
+    LONG x2 = x + w - 1, y2 = y + h - 1, bpr, rows, r, i, n;
+    UBYTE *s, *d, *a, *buf;
+    ULONG v, k;
+    if (!_dash_blend_truecolor(_dash_rp) || (GetBitMapAttr(img->bm, BMA_FLAGS) & BMF_STANDARD)) return FALSE;
+    r = x;
+    i = y;
+    if (!_dash_blend_clip(&x, &y, &x2, &y2)) return TRUE;
+    sx += x - r;
+    sy += y - i;
+    w = x2 - x + 1;
+    h = y2 - y + 1;
+    bpr = w * 3;
+    rows = 24576 / bpr;
+    if (rows < 1) rows = 1;
+    if (rows > h) rows = h;
+    buf = (UBYTE *)_DASH_PIXALLOC(rows * bpr * 2, MEMF_ANY);   /* the image's rows, then the screen's */
+    if (!buf) return FALSE;
+    InitRastPort(&src);
+    src.BitMap = img->bm;
+    for (r = 0; r < h; r += rows) {
+        n = h - r < rows ? h - r : rows;
+        _dash_rgb_block_rp(&src, FALSE, buf, bpr, sx, sy + r, w, n);
+        _dash_rgb_block_rp(_dash_rp, FALSE, buf + rows * bpr, bpr, x, y + r, w, n);
+        for (k = 0; k < (ULONG)n; k++) {
+            s = buf + k * bpr;
+            d = buf + (rows + k) * bpr;
+            a = img->alpha + (sy + r + k) * img->w + sx;
+            for (i = w; i > 0; i--, s += 3, d += 3) {
+                ULONG al = *a++, ka;
+                if (al == 255) { d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; continue; }
+                if (!al) continue;
+                ka = 255 - al;
+                v = s[0] * al + d[0] * ka + 128; d[0] = (UBYTE)((v + (v >> 8)) >> 8);
+                v = s[1] * al + d[1] * ka + 128; d[1] = (UBYTE)((v + (v >> 8)) >> 8);
+                v = s[2] * al + d[2] * ka + 128; d[2] = (UBYTE)((v + (v >> 8)) >> 8);
+            }
+        }
+        _dash_rgb_block_rp(_dash_rp, TRUE, buf + rows * bpr, bpr, x, y + r, w, n);
+    }
+    _DASH_PIXFREE(buf, "buf");
+    return TRUE;
+}
+
 /* The part w x h at sx, sy of the image, at x, y (with its mask if it has one) */
 static void _dash_image_draw_part(LONG image, LONG sx, LONG sy, LONG x, LONG y, LONG w, LONG h) {
     _DashImg *img = _dash_img(image);
@@ -2238,6 +2306,7 @@ static void _dash_image_draw_part(LONG image, LONG sx, LONG sy, LONG x, LONG y, 
     if (sx + w > img->w) w = img->w - sx;
     if (sy + h > img->h) h = img->h - sy;
     if (w <= 0 || h <= 0) return;
+    if (img->alpha && _dash_image_blend(img, sx, sy, x, y, w, h)) return;
     if (img->mask)
         BltMaskBitMapRastPort(img->bm, sx, sy, _dash_rp, x, y, w, h, (ABC | ABNC | ANBC), img->mask);
     else
@@ -2249,10 +2318,11 @@ static void _dash_image_draw(LONG image, LONG x, LONG y) {
     if (img) _dash_image_draw_part(image, 0, 0, x, y, img->w, img->h);
 }
 
-/* A copy of the image at w x h (BitMapScale; its mask too): a new image, 0 if there is no memory */
+/* A copy of the image at w x h (BitMapScale; its mask and alphas too): a new image, 0 if there is no memory */
 static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
     _DashImg *src = _dash_img(image), *img;
     struct BitScaleArgs bsa;
+    UWORD *xs;
     if (!src || w <= 0 || h <= 0 || w > 16383 || h > 16383) return 0;
     img = (_DashImg *)AllocVec(sizeof(_DashImg), MEMF_CLEAR);
     if (!img) return 0;
@@ -2270,7 +2340,29 @@ static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
     bsa.bsa_SrcBitMap = src->bm;
     bsa.bsa_DestBitMap = img->bm;
     BitMapScale(&bsa);
-    if (src->mask) {
+    if ((src->mask || src->alpha) && !(GetBitMapAttr(img->bm, BMA_FLAGS) & BMF_STANDARD)
+        && (xs = (UWORD *)_DASH_PIXALLOC(w * 2, MEMF_ANY)) != NULL) {
+        /* on a graphics card the colour is scaled by its driver: the mask and alphas by hand, each
+           pixel from the nearest (BitMapScale of the mask's plane left rows of it empty enlarging, D62);
+           xs: the source column of each one */
+        LONG mod = ((w + 15) >> 4) << 1, x, y;
+        UBYTE *to = src->mask ? (UBYTE *)_DASH_PIXALLOC(mod * h, MEMF_CLEAR) : NULL;
+        for (x = 0; x < w; x++) xs[x] = (UWORD)(x * src->w / w);
+        if (src->alpha) img->alpha = (UBYTE *)_DASH_PIXALLOC(w * h, MEMF_ANY);
+        for (y = 0; y < h; y++) {
+            LONG sy = y * src->h / h;
+            if (to) {
+                UBYTE *s = src->mask + sy * src->mmod, *d = to + y * mod;
+                for (x = 0; x < w; x++) if (s[xs[x] >> 3] & (0x80 >> (xs[x] & 7))) d[x >> 3] |= 0x80 >> (x & 7);
+            }
+            if (img->alpha) {
+                UBYTE *s = src->alpha + sy * src->w, *d = img->alpha + y * w;
+                for (x = 0; x < w; x++) d[x] = s[xs[x]];
+            }
+        }
+        _DASH_PIXFREE(xs, "xs");
+        if (to) { _dash_img_mask(img, to, mod); _DASH_PIXFREE(to, "to"); }
+    } else if (src->mask) {
         struct BitMap from, *to = AllocBitMap(w, h, 1, BMF_CLEAR, NULL);
         InitBitMap(&from, 1, src->w, src->h);
         from.BytesPerRow = src->mmod;
@@ -2286,10 +2378,7 @@ static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
         }
     }
     if (_dash_img_add(img)) return (LONG)img;
-    WaitBlit();
-    FreeBitMap(img->bm);
-    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
-    FreeVec(img);
+    _dash_img_dispose(img);
     return 0;
 }
 
@@ -2298,11 +2387,7 @@ static void _dash_image_free(LONG image) {
     LONG i;
     if (!img) return;
     for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i] == img) _dash_imgs[i] = NULL;
-    WaitBlit();
-    if (img->o) DisposeDTObject(img->o);
-    else FreeBitMap(img->bm);
-    if (img->mask) _DASH_PIXFREE(img->mask, "img->mask");
-    FreeVec(img);
+    _dash_img_dispose(img);
 }
 
 static void _dash_image_cleanup(void) {

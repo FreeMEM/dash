@@ -1,0 +1,109 @@
+# Test: the alpha of an RGBA image mixed with what is under it on a graphics card screen (RTG, 16 bits;
+# dashweb D62). Before, a pixel was drawn whole with alpha 128 or more and not at all under 128. A blue
+# image in bands of alpha 0, 64, 128, 200 and 255 over red: each band must be the mix (red * (255 - a) +
+# blue * a) / 255, drawn as it is, in part (image_draw_part) and scaled (image_scale). Also the mask of a
+# scaled image (alphas only 0 and 255): enlarged from 1024 to 1100 rows it lost one row in ~14 (BitMapScale
+# of its plane); none must show the background.
+# rtg
+# expect-out: tal cual: ok
+# expect-out: parte: ok
+# expect-out: escalada: ok
+# expect-out: máscara ampliada: ok
+# expect-out: fin
+
+Window W
+    title "Mezcla"
+    width 640
+    height 400
+end
+
+func cerca(c: Int, r: Int, g: Int, b: Int) -> Bool
+    return (((c >> 16) & 255) - r).abs() <= 12 and (((c >> 8) & 255) - g).abs() <= 12 and ((c & 255) - b).abs() <= 12
+end
+
+# The band of alpha a at column x, row y: the mix of the red background and the blue image
+func banda(x: Int, y: Int, a: Int) -> Bool
+    return cerca(gfx_pixel_rgb(x, y), (255 * (255 - a) + 127) / 255, 0, (255 * a + 127) / 255)
+end
+
+func ver(nombre: String, x0: Int, ancho: Int, y: Int)
+    alfas = [0, 64, 128, 200, 255]
+    mal = ""
+    for i in (0..4)
+        x = x0 + i * ancho + ancho / 2
+        if not banda(x, y, alfas[i])
+            c = str_from_int(gfx_pixel_rgb(x, y), 16)
+            mal = mal + " #{alfas[i]}:#{c}"
+        end
+    end
+    if mal == ""
+        Print nombre + ": ok"
+    else
+        Print nombre + ":" + mal
+    end
+end
+
+Main
+    W.open
+    n = 600 * 360
+    rojo = buffer_alloc(n * 3)
+    for i in (0..n - 1)
+        buffer_set_byte(rojo, i * 3, 255)
+    end
+    gfx_rgb_draw(rojo, 600, 360, 10, 20)
+    alfas = [0, 64, 128, 200, 255]
+    w = 40
+    v = buffer_alloc(w * 20 * 4)
+    for y in (0..19)
+        for x in (0..w - 1)
+            o = (y * w + x) * 4
+            buffer_set_byte(v, o + 2, 255)
+            buffer_set_byte(v, o + 3, alfas[x / 8])
+        end
+    end
+    img = image_from_rgb(v, w, 20, true)
+    buffer_free(v)
+    image_draw(img, 20, 30)
+    ver("tal cual", 20, 8, 40)
+    # from column 8: the bands from alpha 64 on, at 80
+    image_draw_part(img, 8, 0, 80, 30, 32, 20)
+    ver("parte", 72, 8, 40)
+    e = image_scale(img, 80, 20)
+    image_draw(e, 140, 30)
+    ver("escalada", 140, 16, 40)
+    image_free(e)
+    image_free(img)
+
+    # 100 x 1024: the left half transparent, the right half opaque blue; enlarged to 100 x 1100 and looked at
+    # in pieces of 275 rows, each over the red background again
+    v = buffer_alloc(100 * 1024 * 4)
+    for y in (0..1023)
+        for x in (50..99)
+            o = (y * 100 + x) * 4
+            buffer_set_byte(v, o + 2, 255)
+            buffer_set_byte(v, o + 3, 255)
+        end
+    end
+    img = image_from_rgb(v, 100, 1024, true)
+    buffer_free(v)
+    e = image_scale(img, 100, 1100)
+    huecos = 0
+    for k in (0..3)
+        gfx_rgb_draw(rojo, 600, 360, 10, 20)
+        image_draw_part(e, 0, k * 275, 300, 40, 100, 275)
+        for y in (0..274)
+            if not cerca(gfx_pixel_rgb(300 + 75, 40 + y), 0, 0, 255)
+                huecos = huecos + 1
+            end
+        end
+    end
+    if huecos == 0 and cerca(gfx_pixel_rgb(300 + 25, 100), 255, 0, 0)
+        Print "máscara ampliada: ok"
+    else
+        Print "máscara ampliada: #{huecos} filas sin la imagen"
+    end
+    image_free(e)
+    image_free(img)
+    buffer_free(rojo)
+    Print "fin"
+end
