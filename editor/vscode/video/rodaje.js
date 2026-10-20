@@ -190,7 +190,7 @@ class Rodaje {
     }
 
     /** Click on the target (after going there), with a ring that grows where it clicks */
-    async clic(target, { button = 'left', double = false, ms = 700 } = {}) {
+    async clic(target, { button = 'left', double = false, ms = 700, modifiers = [] } = {}) {
         const at = await this.mover(target, ms);
         await this.page.evaluate(([x, y]) => {
             const r = document.getElementById('rodaje-anillo');
@@ -200,8 +200,20 @@ class Rodaje {
             r.animate([{ opacity: 0.9, transform: 'scale(0.5)' }, { opacity: 0, transform: 'scale(1.6)' }],
                       { duration: 500, easing: 'ease-out' });
         }, [at.x, at.y]);
+        for (const m of modifiers) await this.page.keyboard.down(m);       // Control+click...
         await this.page.mouse.click(at.x, at.y, { button, clickCount: double ? 2 : 1 });
+        for (const m of modifiers.slice().reverse()) await this.page.keyboard.up(m);
         await this.esperar(350);
+    }
+
+    /** A line of the editor that has this text (its end, to click there and type after it) */
+    linea(text) {
+        return this.page.locator('.monaco-editor .view-line', { hasText: text }).first();
+    }
+
+    /** A word of the editor: the token with exactly that text (the n-th) */
+    palabra(text, n = 0) {
+        return this.page.locator('.monaco-editor .view-line span span', { hasText: new RegExp(`^${text}$`) }).nth(n);
     }
 
     /** Typing at a person's pace (delay ms a key) */

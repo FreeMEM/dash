@@ -8,7 +8,7 @@
     { "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
   ],
   "autoCloseBefore": ";:.,=}])> \n\t",
-  "surroundingPairs": [["(", ")"], ["[", "]"], ["{", "}"], ["\"", "\""]],
+  "surroundingPairs": [["(", ")"], ["[", "]"], ["{", "}"]],
   "wordPattern": "@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?",
   "indentationRules": {
     "increaseIndentPattern": "^\\s*((@native(\\s*\\(\\s*borrow\\s*\\))?\\s+)?func|if|elif|else|while|for|struct|enum|Window|Main|EventLoop|On|@c)\\b(?!.*\\bend\\s*(#.*)?$).*$",

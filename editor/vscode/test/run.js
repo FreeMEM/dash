@@ -446,6 +446,13 @@ async function previewTests() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('language: a quote typed over a selection replaces it (the hole of a parameter)', () => {
+        // with " in surroundingPairs, mui_set_text(obj, text) with "text" selected and "Otra vez" typed gave
+        // "Otra vez"" (the quote around the selection is not overtyped at the end): tutorial, chapter 2
+        const conf = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'language-configuration.json'), 'utf8'));
+        assert(!conf.surroundingPairs.some((pair) => pair[0] === '"'));
+        assert(conf.autoClosingPairs.some((pair) => pair.open === '"'));
+    });
     await check('preview: the program that takes its own picture', () => {
         const prog = P.previewProgram('Principal', true);
         assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);

@@ -60,7 +60,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 
 ### B. Capítulos (cada uno: guion, grabar, mirar, apuntar, arreglar, regrabar)
 - [x] v3. **1. Primer proyecto:** la guía de primeros pasos, Dash: Nuevo proyecto, qué hay en la carpeta.
-- [ ] v4. **2. Escribir código:** colores, completar con parámetros, firmas, hover, ir a la definición, errores al
+- [x] v4. **2. Escribir código:** colores, completar con parámetros, firmas, hover, ir a la definición, errores al
       teclear y su arreglo rápido, el `end` automático, formatear y renombrar.
 - [ ] v5. **3. La ventana:** el editor visual (añadir un botón, propiedades, teclado, deshacer), Ver en Amiga, y
       de un evento a su código (creado).
@@ -112,6 +112,15 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - [ ] (v3) `ventana.dashui` sale en el explorador con el icono de JSON: es JSON para tener sus funciones al
       editarlo como texto; darle icono propio pide un lenguaje aparte y las perdería. Se queda así.
 
+- [x] (v4) Al escribir una comilla sobre el hueco seleccionado de un parámetro (`mui_set_text(obj, text)`), VS
+      Code la rodeaba de comillas y al cerrar el texto quedaba `"Otra vez""`. Quitada la comilla de
+      `surroundingPairs` (ahora la sustituye y se cierra bien). Test.
+- [ ] (v4) La ayuda de las órdenes (hover, completar) está en inglés, con el resto de la extensión en español:
+      viene de las descripciones de `compiler/amiga_builtins.py` (425). Traducirlas, o tener las dos, es grande:
+      se apunta para después de publicar.
+- [ ] (v4) En el hueco de un parámetro, escribir `v.` abre la lista de campos y Tab la acepta en vez de saltar
+      al hueco siguiente: así funciona VS Code (Esc y luego Tab). Se queda así.
+
 ## Bitácora
 
 ### 2026-10-20 — v1 (programa de rodaje)
@@ -154,5 +163,20 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   Revisión con una hoja de contactos de fotogramas a mitad de cada subtítulo (scratchpad `vid/hoja.py`).
 - Encontrado: el paso del compilador sin marcar, y los comentarios largos de la plantilla. Arreglados y
   regrabado. Dos cosas que se quedan como están (ver "Encontrado").
+- Tests: node todo bien.
+
+### 2026-10-20 — v4 (capítulo 2: escribir código)
+- `video/capitulos/02_escribir_codigo.js` (sobre los ficheros del proyecto nuevo):
+  - los colores;
+  - un error tecleado (`vecs`), subrayado al momento, con su arreglo rápido (Ctrl+. → "Cambiar a 'veces'");
+  - completar `mui_set_t` con sus huecos;
+  - el `end` que se pone solo tras un `if`;
+  - la ayuda al pasar el ratón;
+  - Ctrl+clic en `Hola_create`, que lleva a la ventana en el editor visual, y vuelta;
+  - F2 de `veces` a `pulsaciones`, también dentro de `#{...}`.
+  68 s, 10 subtítulos.
+- Rodaje: `clic(..., {modifiers})`, `linea(texto)` y `palabra(texto)` para apuntar al editor.
+- Encontrado: la comilla sobre un hueco (arreglado, test), la ayuda en inglés (apuntado) y Tab con la lista
+  abierta (es de VS Code).
 - Tests: node todo bien.
 
