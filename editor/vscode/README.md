@@ -20,6 +20,10 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   enums with their values, functions, Main, windows, constants), symbols of the whole workspace (Ctrl+T), and
   **rename** (F2) of functions, structs, variables, fields... in every file of the program (not builtins, nor
   names that come from a `.dashui`: those are renamed in the visual editor; C inside `@native` is not changed).
+- **Format document** (Shift+Alt+F): the indentation of every line by its blocks (also the trees of
+  `mui_*_begin` ... `_end()` when they were indented), no spaces at the end; the C of `@native` untouched.
+  **Quick fixes** (Ctrl+.) on "not defined": create the function (with as many parameters as the call),
+  import it from the file of the workspace that has it, or "Cambiar a ..." a name that looks like it.
 - Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.

@@ -82,7 +82,7 @@ class LanguageServerTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory(prefix="dash_lsp_")
         self.client = Client()
-        reply = self.client.request("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        reply = self.client.request("initialize", {"processId": None, "rootUri": uri(self.dir.name), "capabilities": {}})
         self.capabilities = reply["result"]["capabilities"]
         self.client.notify("initialized", {})
 
@@ -330,6 +330,41 @@ class LanguageServerTest(unittest.TestCase):
                                                                    "position": {"line": 19, "character": 6}})
         self.assertIn("del lenguaje", reply["error"]["message"])
         self.assertIn("error", self.rename(u, 18, 13, "while"))                   # a keyword as the new name
+
+    # --- formatting and quick fixes ---
+    def test_formatting(self):
+        messy = ("func f(a)\nif a > 1\n  return 1\n      else\nreturn 2   \n   end\nend\n"
+                 "Main\n Print f(1)\n        # comentario\nend\n")
+        u = self.open("f1.dash", messy)
+        reply = self.client.request("textDocument/formatting", {"textDocument": {"uri": u},
+                                    "options": {"tabSize": 4, "insertSpaces": True}})
+        [edit] = reply["result"]
+        self.assertEqual(edit["newText"], "func f(a)\n    if a > 1\n        return 1\n    else\n        return 2\n"
+                                          "    end\nend\nMain\n    Print f(1)\n    # comentario\nend\n")
+        self.edit(u, edit["newText"])
+        reply = self.client.request("textDocument/formatting", {"textDocument": {"uri": u},
+                                    "options": {"tabSize": 4, "insertSpaces": True}})
+        self.assertEqual(reply["result"], [])                     # already formatted: nothing to do
+
+    def actions(self, u, diagnostic):
+        return self.client.request("textDocument/codeAction", {"textDocument": {"uri": u}, "range": diagnostic["range"],
+                                   "context": {"diagnostics": [diagnostic]}})["result"]
+
+    def test_quick_fixes(self):
+        with open(os.path.join(self.dir.name, "util.dash"), "w") as f:
+            f.write("func doble(n: Int) -> Int\n    return n * 2\nend\n")
+        u = self.open("q1.dash", "Main\n    total = 1\n    Print doble(totl, 3)\nend\n")
+        diags = self.client.diagnostics(u)
+        by_name = {("doble" if "doble" in d["message"] else "totl"): d for d in diags}
+        titles = [a["title"] for a in self.actions(u, by_name["doble"])]
+        self.assertIn("Crear la función doble(a, b)", titles)
+        self.assertIn('Importar doble de "util.dash"', titles)
+        create = next(a for a in self.actions(u, by_name["doble"]) if a["title"].startswith("Crear"))
+        [edit] = create["edit"]["changes"][u]
+        self.assertEqual(edit["range"]["start"]["line"], 0)       # before Main
+        self.assertEqual(edit["newText"], "func doble(a, b)\n    \nend\n\n")
+        titles = [a["title"] for a in self.actions(u, by_name["totl"])]
+        self.assertIn("Cambiar a 'total'", titles)
 
     def test_unknown_request_gets_an_error_not_a_crash(self):
         reply = self.client.request("textDocument/noExiste", {})

@@ -151,6 +151,26 @@ async function run() {
         assert.match(doc.getText(), /Print triple\(3\)/);
         fs.rmSync(dir, { recursive: true, force: true });
     });
+    await check('language server: format document', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        const file = path.join(dir, 'formato.dash');
+        fs.writeFileSync(file, 'Main\nif 1 > 0\nPrint 1\nend\nend\n');
+        const doc = await vscode.workspace.openTextDocument(file);
+        await vscode.window.showTextDocument(doc);
+        let edits = [];
+        for (let i = 0; i < 150 && !(edits && edits.length); i++) {
+            edits = await vscode.commands.executeCommand('vscode.executeFormatDocumentProvider', doc.uri,
+                                                         { tabSize: 4, insertSpaces: true });
+            if (!(edits && edits.length)) await new Promise((r) => setTimeout(r, 100));
+        }
+        const we = new vscode.WorkspaceEdit();
+        we.set(doc.uri, edits);
+        assert(await vscode.workspace.applyEdit(we));
+        assert.strictEqual(doc.getText(), 'Main\n    if 1 > 0\n        Print 1\n    end\nend\n');
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.writeFileSync(process.env.DASH_IT_RESULT, results.join('\n') + '\n');
     await vscode.commands.executeCommand('workbench.action.closeWindow');
 }

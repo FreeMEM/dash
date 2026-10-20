@@ -12,8 +12,10 @@ completion (builtins with their parameters, keywords, the program's symbols, the
 cursor, members after "x.", types after ":", files after import ") and signature help; hover, go to
 definition (also into modules and .dashui files, and from an import to its file), references and the
 highlight of a name's uses in the document; document symbols (the outline), workspace symbols and
-rename.
+rename; formatting (indentation, compiler/lsp_format.py) and quick fixes (create a function that is
+missing, import it from the file that has it, "did you mean" for a name written wrong).
 """
+import difflib
 import json
 import os
 import re
@@ -25,6 +27,7 @@ import urllib.parse
 
 from compiler.main import DashCompiler, CompilationError
 from compiler import lsp_index
+from compiler.lsp_format import format_text
 
 CHECK_DELAY = 0.3          # seconds without changes before a document is checked
 SEVERITY = {"Error": 1, "Warning": 2}
@@ -145,6 +148,8 @@ class Server:
                 "documentSymbolProvider": True,
                 "workspaceSymbolProvider": True,
                 "renameProvider": {"prepareProvider": True},
+                "documentFormattingProvider": True,
+                "codeActionProvider": {"codeActionKinds": ["quickfix"]},
             },
             "serverInfo": {"name": "dash-lsp", "version": "0.1"},
         }
@@ -611,6 +616,95 @@ class Server:
             unique = {(e["range"]["start"]["line"], e["range"]["start"]["character"]): e for e in edits}
             edits[:] = list(unique.values())
         return {"changes": changes}
+
+    # --- formatting and quick fixes ------------------------------------------------------------------
+    def on_textDocument_formatting(self, params):
+        uri = params["textDocument"]["uri"]
+        text = self.docs.get(uri)
+        if text is None:
+            return []
+        options = params.get("options") or {}
+        step = " " * int(options.get("tabSize", 4)) if options.get("insertSpaces", True) else "\t"
+        new = format_text(text, step)
+        if new == text:
+            return []
+        lines = text.split("\n")
+        return [{"range": {"start": {"line": 0, "character": 0},
+                           "end": {"line": len(lines) - 1, "character": len(lines[-1])}}, "newText": new}]
+
+    def on_textDocument_codeAction(self, params):
+        uri = params["textDocument"]["uri"]
+        text = self.docs.get(uri, "")
+        lines = text.split("\n")
+        index = self.index(uri)
+        actions = []
+        for d in (params.get("context") or {}).get("diagnostics") or []:
+            m = re.match(r"(Function|Variable) '([A-Za-z_][A-Za-z0-9_]*)' is not defined", d.get("message", ""))
+            if not m:
+                continue
+            what, name = m.groups()
+            row = d["range"]["start"]["line"]
+            line_text = lines[row] if row < len(lines) else ""
+            if what == "Function":
+                actions.append(self._create_function(uri, lines, line_text, name, d))
+                actions += self._import_from(uri, lines, name, d)
+            known = []
+            if index is not None:
+                known = list(index.locals_at(row + 1)) + list(index.functions) + list(index.constants) \
+                    + list(index.globals) + list(index.structs) + list(index.enums)
+            if what == "Function":
+                known += list(lsp_index.builtins())
+            for close in difflib.get_close_matches(name, sorted(set(known)), n=3, cutoff=0.7):
+                actions.append({"title": f"Cambiar a '{close}'", "kind": "quickfix", "diagnostics": [d],
+                                "edit": {"changes": {uri: [{"range": d["range"], "newText": close}]}}})
+        return [a for a in actions if a]
+
+    @staticmethod
+    def _create_function(uri, lines, line_text, name, diagnostic):
+        """func name(a, b...) with as many parameters as the call has, before Main (or at the end)."""
+        m = re.search(r"(?<![A-Za-z0-9_.])" + re.escape(name) + r"\s*\(", line_text)
+        count = 0
+        if m:
+            depth, i, args = 1, m.end(), ""
+            while i < len(line_text) and depth:
+                ch = line_text[i]
+                depth += ch in "([{"
+                depth -= ch in ")]}"
+                if depth:
+                    args += ch if depth == 1 else " "
+                i += 1
+            count = 0 if not args.strip() else args.count(",") + 1
+        params = ", ".join(chr(ord("a") + i) for i in range(count))
+        where = next((i for i, l in enumerate(lines) if re.match(r"Main\b", l)), len(lines))
+        new = f"func {name}({params})\n    \nend\n\n"
+        return {"title": f"Crear la función {name}({params})", "kind": "quickfix", "diagnostics": [diagnostic],
+                "isPreferred": False,
+                "edit": {"changes": {uri: [{"range": {"start": {"line": where, "character": 0},
+                                                      "end": {"line": where, "character": 0}}, "newText": new}]}}}
+
+    def _import_from(self, uri, lines, name, diagnostic):
+        """import "file" for each file of the workspace that defines name at its top level."""
+        here = uri_to_path(uri)
+        out = []
+        for path in self._workspace_files():
+            if os.path.abspath(path) == os.path.abspath(here) or name.startswith("_"):
+                continue
+            compiler = DashCompiler()
+            compiler.tree_cache = self.tree_cache
+            try:
+                program = compiler._parse_source(self.text_of(path), path)
+            except Exception:
+                continue
+            if not any(lsp_index.dash_name(f) == name for f in list(program.functions) + list(program.native_funcs)):
+                continue
+            relative = os.path.relpath(path, os.path.dirname(here))
+            last_import = max((i for i, l in enumerate(lines) if re.match(r"\s*import\s", l)), default=-1)
+            out.append({"title": f'Importar {name} de "{relative}"', "kind": "quickfix", "diagnostics": [diagnostic],
+                        "isPreferred": True,
+                        "edit": {"changes": {uri: [{"range": {"start": {"line": last_import + 1, "character": 0},
+                                                              "end": {"line": last_import + 1, "character": 0}},
+                                                    "newText": f'import "{relative}"\n'}]}}})
+        return out
 
     @staticmethod
     def _from_message(message: str, path: str):

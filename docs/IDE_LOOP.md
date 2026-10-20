@@ -102,7 +102,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 6. **Navegación.** Hover (tipo, firma, doc), ir a la definición (también entre módulos y hacia el `.dashui`),
       referencias, resaltar las apariciones.
 - [x] 7. **Símbolos.** Esquema del documento (Outline, breadcrumbs), símbolos del workspace, renombrar.
-- [ ] 8. **Formato y arreglos.** Formateador de sangría; acciones rápidas sencillas (crear la función que falta,
+- [x] 8. **Formato y arreglos.** Formateador de sangría; acciones rápidas sencillas (crear la función que falta,
       añadir el `import`); tokens semánticos si mejoran los colores.
 
 ### C. Compilar y ejecutar
@@ -266,4 +266,22 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   los bloques `@native` no se toca (dicho en el README). Los rechazos van como errores LSP con su frase
   (`LspError`).
 - Tests: 3 más del servidor (19) y 1 más en VS Code (11: esquema y F2). Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 8 (formato y arreglos rápidos)
+- `compiler/lsp_format.py`: la sangría de cada línea por sus bloques (`end`; `elif`/`else` un paso fuera; bloques
+  de una línea `enum E A, B end`; `@extern` + `func` sin cuerpo); el C de `"""` intacto; una línea que sigue un
+  paréntesis abierto conserva la suya; los árboles de MUI/ReAction (`mui_*_begin` ... `mui_group_end()`...)
+  como bloques solo si ya iban sangrados (es costumbre, no regla). Fuera los espacios al final de las líneas de
+  código; los comentarios guardan su final (`# expect-c: /* x: ` lo necesita) y los comentarios alineados bajo el
+  comentario final de la línea de arriba se quedan donde están.
+- Prueba fuerte: formatear los 231 `.dash` del repositorio y los 31 de dashweb: el C generado es idéntico en todos,
+  formatear dos veces da lo mismo, y solo cambian 3 ficheros (sangría rara en `examples/hola.dash`,
+  `tests/test_transformer_edge.dash` y `lib/colores.dash` de dashweb).
+- Acciones rápidas sobre "Function/Variable 'x' is not defined": crear la función (tantos parámetros como la
+  llamada, antes de Main), importarla de un fichero del workspace que la tenga (con la ruta relativa, tras los
+  imports) y "Cambiar a '...'" (difflib entre lo visible y los builtins). El servidor recibe ahora las carpetas del
+  workspace en `initialize`.
+- Tokens semánticos: no. La gramática generada (tarea 2) ya colorea builtins, tipos, constructores y miembros; lo
+  que añadirían (locales frente a globales) no compensa un análisis más en cada cambio.
+- Tests: 2 más del servidor (21) y 1 más en VS Code (12). Base: todo bien. Extensión instalada.
 
