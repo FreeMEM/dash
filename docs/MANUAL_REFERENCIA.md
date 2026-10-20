@@ -68,6 +68,10 @@ end
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ```
 
+`./dash --debug` compila para el depurador: `-O0 -g` (DWARF en el ejecutable) y, en el C, `#line` hacia las
+lineas del `.dash`: `m68k-amigaos-gdb` para, avanza y ensena la pila y las variables en lineas de Dash
+(con `bgdbserver` en el Amiga: ver la extension de VS Code). Sin `--debug` el C no cambia.
+
 Con `--memcheck`, cada error de memoria dice tambien donde paso: `memcheck: ERROR campo de nil (en
 prog.dash:15)` (cada sentencia apunta su fichero y linea; solo en esas compilaciones).
 

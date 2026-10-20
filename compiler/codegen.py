@@ -5,6 +5,8 @@ Generates C code from the analyzed AST using templates.
 from compiler.tmp_marks import strip_unused_marks
 import os
 import re
+
+from compiler import debuglines
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from string import Template
@@ -10633,14 +10635,25 @@ class CodeGenerator(ASTVisitor):
     def visit(self, node):
         """--memcheck: before each statement, the place it comes from (_dash_mc_where), so a memory
         error says file.dash:line (VS Code's problem matcher puts it on the code)."""
-        if self.memcheck:
+        if self.memcheck or self.debug_lines:
             name = type(node).__name__
             location = getattr(node, "location", None)
             if location is not None and location.filename and name != "ImportStmt" and \
                     (name.endswith(("Stmt", "Assign")) or name in ("FunctionCall", "MethodCall")):
-                where = f"{location.filename}:{location.line}".replace("\\", "\\\\").replace('"', '\\"')
-                self.emit(f'{self.context.indent}_DASH_MC_WHERE("{where}");\n')
+                if self.debug_lines:     # ./dash --debug: this statement's line of Dash (compiler/debuglines.py)
+                    self.emit(debuglines.mark(location.line, os.path.abspath(location.filename)))
+                if self.memcheck:
+                    where = f"{location.filename}:{location.line}".replace("\\", "\\\\").replace('"', '\\"')
+                    self.emit(f'{self.context.indent}_DASH_MC_WHERE("{where}");\n')
         return super().visit(node)
+
+    def _debug_wrap(self, node, code):
+        """--debug: a function's C, from its header (the line of its func) to its end, in Dash's lines."""
+        location = getattr(node, "location", None)
+        if not self.debug_lines or location is None or not location.filename:
+            return code
+        return debuglines.mark(location.line, os.path.abspath(location.filename)) + code.lstrip("\n") + \
+            "\n" + debuglines.NOLINE + "\n"
 
     def __init__(self, analysis: AnalysisResult):
         self.analysis = analysis
@@ -10650,6 +10663,8 @@ class CodeGenerator(ASTVisitor):
         # DASH_PRINT_FLUSH=1 while compiling: each Print goes out at once (Flush of dos.library), so
         # tools/emu_run.py --follow and the IDE show the output while the program runs
         self.print_flush = os.environ.get("DASH_PRINT_FLUSH", "") not in ("", "0")
+        # ./dash --debug (DASH_DEBUG_LINES=1): marks for #line, so gdb speaks in .dash lines
+        self.debug_lines = os.environ.get("DASH_DEBUG_LINES", "") not in ("", "0")
         # ./dash --profile (dashweb D23): every function counts its calls; VBlank samples where it is
         self.profile = os.environ.get("DASH_PROFILE") == "1"
         self.prof_names: List[str] = ["Main"]
@@ -11133,6 +11148,8 @@ static LONG _dash_event_window_handle(void) {{
         # Generate main with appropriate library initialization
         main_template = self._get_main_template()
         user_code = "".join(self.main_code)
+        if self.debug_lines:
+            user_code += debuglines.NOLINE + "\n"      # the cleanup after Main's code is the C file's
         main_code = main_template.substitute(user_code=user_code)
         cleanup = []
         if self.uses_winmgr:
@@ -11528,7 +11545,7 @@ static void {struct.name}_release({c_name} *obj) {{
         # Generate methods as separate functions
         methods_code = ""
         for method in struct.methods:
-            methods_code += self._generate_struct_method(struct, method, type_map, c_name)
+            methods_code += self._debug_wrap(method, self._generate_struct_method(struct, method, type_map, c_name))
 
         self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code)
 
@@ -12651,7 +12668,7 @@ static {ret_type} {method_name}({params_str}) {{
             params=params,
             body=body
         )
-        self.functions.append(code)
+        self.functions.append(self._debug_wrap(node, code))
         self.current_function = None
 
     def _infer_function_return_type(self, node: FunctionDef) -> str:

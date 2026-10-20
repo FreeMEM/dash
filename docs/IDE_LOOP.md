@@ -121,7 +121,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 12. **Prueba de viabilidad.** `tools/get_bgdbserver.sh`; un programa Dash con `-g` en FS-UAE (y Amiberry) con
       bsdsocket; `m68k-amigaos-gdb` → `target remote`; parar en una función, ver registros y variables. Comparar
       con las alternativas (uae-dap, el depurador de consola de FS-UAE) y elegir. Si hace falta, `[?]`.
-- [ ] 13. **Dash con información de depuración.** `./dash --debug` (`-g -O0`, `#line` hacia el `.dash` en el C):
+- [x] 13. **Dash con información de depuración.** `./dash --debug` (`-g -O0`, `#line` hacia el `.dash` en el C):
       gdb y addr2line hablan en líneas de Dash. Tests (C esperado; addr2line sobre el binario).
 - [ ] 14. **Adaptador.** Configuración de lanzamiento `dash` (launch.json): compila con `--debug`, arranca emulador y
       servidor, conecta gdb (DAP o MI). Breakpoints en `.dash`, continuar, paso a paso (entrar, saltar, salir), pausa.
@@ -348,4 +348,17 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Pendiente para las tareas 13-14: al acabar el programa bgdbserver dice "SIGKILL" (gdb lo da por terminado: vale);
   la salida del programa depurado no se ve (va a la consola de bgdbserver: mirar en la 16); un puerto libre por
   sesión (otras sesiones usan el emulador a la vez).
+
+### 2026-10-20 — Tarea 13 (./dash --debug)
+- `./dash --debug`: `-O0 -g` y `DASH_DEBUG_LINES=1` al transpilar. El generador deja una marca
+  `/*@dash-line N "ruta absoluta"*/` antes de cada sentencia (el mismo enganche de `visit` que el sitio de memcheck)
+  y `/*@dash-noline*/` al final de cada función, método y del código de Main; `compiler/debuglines.py` las cambia por
+  `#line` al escribir el C: cada línea de C de una sentencia lleva su línea de Dash (un paso no se queda a medias de
+  una sentencia de varias líneas de C) y tras un noline vuelve la numeración real del C (runtime y `@native`).
+- En FS-UAE con bgdbserver: `break prueba.dash:8`, `continue` para en `y = doble(x)`, `step` entra en `doble` (línea
+  2), `next` (3), `bt` en líneas `.dash`, `finish` devuelve 40, `info locals` x = 20, y = 40.
+- Sin `--debug` el C no cambia (batería entera); con `--debug` compilan los 34 ejemplos (MUI incluidos).
+- Tests: `tests/unit/test_debug_lines.py` (4: las directivas, nombres con comillas, el C con y sin la variable, gdb lee
+  `prog.dash:8` y los símbolos `n` y `r`); el runner ejecuta ahora `tests/lsp` y `tests/unit`.
+- Queda para la 15: un `}` de cierre de bloque se atribuye a la última sentencia de dentro (no al `end`).
 

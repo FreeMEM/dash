@@ -66,6 +66,8 @@ def main():
                         help="Optimize the generated 68000 code with gcc -O2 (default)")
     parser.add_argument("-O0", "--no-optimize", dest="no_optimize", action="store_true",
                         help="Do not optimize (gcc -O0): easier to debug")
+    parser.add_argument("--debug", action="store_true",
+                        help="For the debugger (gdb, VS Code): gcc -O0 -g, and #line to the .dash lines")
     parser.add_argument("--fpu", action="store_true",
                         help="For Amigas with a 68881/68882 FPU: Float uses FPU instructions "
                              "(needs a 68020 or better; the program will not run without an FPU)")
@@ -76,6 +78,9 @@ def main():
                         help="Memory check build: reports objects or strings freed twice or used after "
                              "being freed, and what is still alive at exit (slower; for testing)")
     args = parser.parse_args()
+    if args.debug:
+        os.environ["DASH_DEBUG_LINES"] = "1"   # the transpiler leaves #line marks (compiler/debuglines.py)
+        args.no_optimize = True
     if args.memcheck:
         os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
     if args.profile:
@@ -160,6 +165,8 @@ def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from compiler.cflags import opt_flags, mui_flags
     compile_command.extend(opt_flags(args.no_optimize, args.small))
+    if args.debug:
+        compile_command.append("-g")      # DWARF in the hunk file (.dwarf2), read by m68k-amigaos-gdb
     try:   # the MUI SDK headers, when the program uses MUI
         compile_command.extend(mui_flags(open(f).read() for f in c_files))
         from compiler.cflags import amissl_flags   # and AmiSSL's, when it uses tls_* (dashweb D11)

@@ -850,11 +850,15 @@ def main():
                                   duration=time.time() - start_time))
         print("OK" if check.returncode == 0 else "FAIL")
 
-    # the language server (compiler/lsp.py): tests/lsp/test_*.py, one result per test
-    for lsp_file in sorted((PROJECT_ROOT / "tests" / "lsp").glob("test_*.py")):
-        if args.pattern is not None and args.pattern not in "lsp/" + lsp_file.stem and not args.pattern.startswith("lsp"):
+    # Python tests: the language server (tests/lsp) and parts of the compiler and tools (tests/unit),
+    # tests/<dir>/test_*.py, one result per test
+    py_tests = sorted((PROJECT_ROOT / "tests" / "lsp").glob("test_*.py")) + \
+        sorted((PROJECT_ROOT / "tests" / "unit").glob("test_*.py"))
+    for lsp_file in py_tests:
+        group = lsp_file.parent.name
+        if args.pattern is not None and args.pattern not in f"{group}/{lsp_file.stem}" and not args.pattern.startswith(group):
             continue
-        print(f"Testing: lsp/{lsp_file.stem}...", end=" ", flush=True)
+        print(f"Testing: {group}/{lsp_file.stem}...", end=" ", flush=True)
         start_time = time.time()
         run = subprocess.run([sys.executable, "-m", "unittest", "-v", str(lsp_file.relative_to(PROJECT_ROOT))],
                              cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=600)
@@ -864,10 +868,10 @@ def main():
             if status != "ok":
                 m = re.search(rf"^(?:FAIL|ERROR): {name} .*?(?=^(?:FAIL|ERROR):|^-{{50,}}\nRan )", run.stderr, re.M | re.S)
                 detail = (m.group(0) if m else run.stderr)[-400:]
-            results.append(TestResult(name=f"lsp/{name}", passed=status == "ok", transpile_ok=True, compile_ok=True,
+            results.append(TestResult(name=f"{group}/{name}", passed=status == "ok", transpile_ok=True, compile_ok=True,
                                       error_message=detail, duration=(time.time() - start_time) / max(1, len(cases))))
         if not cases:
-            results.append(TestResult(name=f"lsp/{lsp_file.stem}", passed=False, transpile_ok=True, compile_ok=True,
+            results.append(TestResult(name=f"{group}/{lsp_file.stem}", passed=False, transpile_ok=True, compile_ok=True,
                                       error_message=run.stderr[-400:], duration=time.time() - start_time))
         print("OK" if run.returncode == 0 and cases else "FAIL")
 

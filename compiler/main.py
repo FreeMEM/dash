@@ -18,6 +18,7 @@ from compiler.transformer import DashASTBuilder
 from compiler.analyzer import SemanticAnalyzer, AnalysisResult
 from compiler.codegen import CodeGenerator
 from compiler.latin1 import latin1_literals
+from compiler import debuglines
 from compiler.ast_nodes import (
     Program, FunctionDef, WindowDef, StructDef, EnumDef, ExternFunc, NativeFunc,
     ConstDecl, GlobalVarDecl
@@ -773,6 +774,8 @@ def main():
             # Write all generated files
             for filename, content in output_files.items():
                 filepath = os.path.join(output_dir, filename)
+                if "/*@dash-" in content:     # ./dash --debug: #line to the .dash (compiler/debuglines.py)
+                    content = debuglines.apply(content, os.path.abspath(filepath))
                 with open(filepath, "w") as f:
                     f.write(content)
                 if args.verbose:
@@ -782,6 +785,8 @@ def main():
         else:
             # Single-file mode (default)
             c_output, _ = compiler.compile(source_code, filename=input_filename)
+            if "/*@dash-" in c_output:        # ./dash --debug: #line to the .dash (compiler/debuglines.py)
+                c_output = debuglines.apply(c_output, os.path.abspath(output_path))
 
             # Write output
             with open(output_path, "w") as f:
