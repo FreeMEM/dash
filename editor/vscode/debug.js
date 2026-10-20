@@ -135,10 +135,17 @@ function setupDebugger(vscode, context, helpers) {
         },
     }));
 
-    // gdb itself is the adapter (DAP); a different gdb with dash.debug.gdb
+    // gdb itself is the adapter (DAP); a different gdb with dash.debug.gdb. With tools/gdb/dash.py of the Dash
+    // compiler: values as Dash shows them (texts, lists, dictionaries, structs) and the stack without the runtime
     context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('dash', {
-        createDebugAdapterDescriptor: () => new vscode.DebugAdapterExecutable(
-            vscode.workspace.getConfiguration('dash.debug').get('gdb') || '/opt/amiga/bin/m68k-amigaos-gdb', ['-i=dap', '-q']),
+        createDebugAdapterDescriptor: (session) => {
+            const args = ['-i=dap', '-q'];
+            const dashDir = session.configuration.program ? helpers.findDash(session.configuration.program) : null;
+            const script = dashDir ? path.join(dashDir, 'tools', 'gdb', 'dash.py') : null;
+            if (script && fs.existsSync(script)) args.push('-x', script);
+            return new vscode.DebugAdapterExecutable(
+                vscode.workspace.getConfiguration('dash.debug').get('gdb') || '/opt/amiga/bin/m68k-amigaos-gdb', args);
+        },
     }));
 
     // after attaching gdb leaves the program stopped at its start: it goes on, unless stopOnEntry

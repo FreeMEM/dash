@@ -288,12 +288,16 @@ async function run() {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
         const file = path.join(dir, 'depura.dash');
         fs.writeFileSync(file, 'func doble(n: Int) -> Int\n    r = n * 2\n    return r\nend\n\nMain\n    x = 20\n' +
-                               '    y = doble(x)\n    Print "resultado #{y}"\nend\n');
+                               '    y = doble(x)\n    Print "resultado #{y}"\n    s = "hola"\n    l = [1, 2]\n    Print s\nend\n');
         const uri = vscode.Uri.file(file);
         vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(7, 0)))]);
         let stopped = null;
+        const seen = [];
         const tracker = vscode.debug.registerDebugAdapterTrackerFactory('dash', { createDebugAdapterTracker: () => ({
-            onDidSendMessage: (m) => { if (m.type === 'event' && m.event === 'stopped' && m.body.reason === 'breakpoint') stopped = m; },
+            onDidSendMessage: (m) => {
+                if (m.type === 'event' && m.event !== 'output') seen.push(m.event + (m.body && m.body.reason ? ':' + m.body.reason : ''));
+                if (m.type === 'event' && m.event === 'stopped' && m.body.reason === 'breakpoint') stopped = m;
+            },
         }) });
         const ended = new Promise((resolve) => {
             const sub = vscode.debug.onDidTerminateDebugSession(() => { sub.dispose(); resolve(true); });
@@ -310,9 +314,24 @@ async function run() {
             const scopes = await session.customRequest('scopes', { frameId: top.id });
             const locals = await session.customRequest('variables', { variablesReference: scopes.scopes[0].variablesReference });
             assert(locals.variables.some((v) => v.name === 'x' && v.value === '20'), JSON.stringify(locals.variables));
+            // tools/gdb/dash.py: values as Dash shows them (a breakpoint further down, on "Print s")
+            vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(11, 0)))]);
+            stopped = null;
+            await session.customRequest('continue', { threadId: 1 });
+            for (let i = 0; i < 600 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
+            assert(stopped, 'did not stop at the second breakpoint');
+            const trace2 = await session.customRequest('stackTrace', { threadId: stopped.body.threadId });
+            const scopes2 = await session.customRequest('scopes', { frameId: trace2.stackFrames[0].id });
+            const vars2 = (await session.customRequest('variables', { variablesReference: scopes2.scopes[0].variablesReference })).variables;
+            const byName = Object.fromEntries(vars2.map((v) => [v.name, v]));
+            assert.strictEqual(byName.s.value, '"hola"', JSON.stringify(vars2));
+            assert.match(byName.l.value, /lista de 2/);
+            const items = (await session.customRequest('variables', { variablesReference: byName.l.variablesReference })).variables;
+            assert.deepStrictEqual(items.map((v) => v.value), ['1', '2']);
+            assert(!vars2.some((v) => v.name.startsWith('_dash_')), 'temporaries shown');
             await session.customRequest('continue', { threadId: stopped.body.threadId });
             const done = await Promise.race([ended, new Promise((r) => setTimeout(() => r('timeout'), 60000))]);
-            assert.strictEqual(done, true, 'the session did not end');
+            assert.strictEqual(done, true, 'the session did not end; events: ' + seen.join(' '));
         } finally {
             tracker.dispose();
             vscode.debug.removeBreakpoints(vscode.debug.breakpoints);

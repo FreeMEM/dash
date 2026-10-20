@@ -23,12 +23,20 @@ class ApplyTest(unittest.TestCase):
                 + debuglines.mark(8, "/p/x.dash") + "    d = 3;\n"
                 + debuglines.NOLINE + "\n" + "int e;\n")
         out = debuglines.apply(code, "/b/x.c").split("\n")
+        # one statement, one physical line (one entry in the line table: one breakpoint place, one step)
         self.assertEqual(out, ["int a;",
-                               '#line 7 "/p/x.dash"', "    b = 1;", '#line 7 "/p/x.dash"', "    c = 2;",
-                               '#line 8 "/p/x.dash"', "    d = 3;",
-                               '#line 9 "/b/x.c"', "int e;", ""])
-        # after the noline the lines are the C file's own: "int e;" is line 9 of the output
-        self.assertEqual(out.index("int e;") + 1, 9)
+                               '#line 7 "/p/x.dash"', "b = 1; c = 2;",
+                               '#line 8 "/p/x.dash"', "d = 3;",
+                               '#line 7 "/b/x.c"', "int e;", ""])
+        # after the noline the lines are the C file's own: "int e;" is line 7 of the output
+        self.assertEqual(out.index("int e;") + 1, 7)
+
+    def test_preprocessor_and_line_comments_stay_apart(self):
+        code = (debuglines.mark(3, "/p/x.dash") + "    a();\n#if X\n    b();\n#endif\n    c(); // nota\n    d();\n"
+                + debuglines.NOLINE + "\n")
+        out = debuglines.apply(code, "/b/x.c").split("\n")
+        self.assertEqual(out[:9], ['#line 3 "/p/x.dash"', "a();", "#if X", '#line 3 "/p/x.dash"', "b();", "#endif",
+                                   '#line 3 "/p/x.dash"', "    c(); // nota", '#line 3 "/p/x.dash"'])
 
     def test_quotes_in_names(self):
         out = debuglines.apply(debuglines.mark(1, '/p/a"b.dash') + "x;\n", "/b/x.c")

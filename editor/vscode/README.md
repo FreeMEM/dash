@@ -35,6 +35,8 @@ Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to
   (`tools/get_bgdbserver.sh` of the Dash repository, once) and attaches `m68k-amigaos-gdb -i=dap` to it (gdb is the
   debug adapter; `dash.debug.gdb`). The emulator stops with the session. `launch.json`: `program`, `stopOnEntry`,
   `machine`, `emulator`, `window`; `attach` with `target` (host:port of a bgdbserver) for a real Amiga.
+  Values show as Dash writes them (texts, lists, dictionaries, structs with their fields, Fixed, Bool) and the
+  runtime's frames and temporaries stay out of the stack and the variables (`tools/gdb/dash.py`).
 - **Memory and profile**: a `--memcheck` run puts each memory error on the line where it happened (problem
   matcher `$dash-memcheck`); a `--profile` run opens its table (own and total time, calls) in a panel, each
   function a link to its code.

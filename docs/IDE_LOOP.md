@@ -125,7 +125,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       gdb y addr2line hablan en líneas de Dash. Tests (C esperado; addr2line sobre el binario).
 - [x] 14. **Adaptador.** Configuración de lanzamiento `dash` (launch.json): compila con `--debug`, arranca emulador y
       servidor, conecta gdb (DAP o MI). Breakpoints en `.dash`, continuar, paso a paso (entrar, saltar, salir), pausa.
-- [ ] 15. **Pila y variables.** Nombres de Dash (locales, globales, structs, Strings, listas, diccionarios) con
+- [x] 15. **Pila y variables.** Nombres de Dash (locales, globales, structs, Strings, listas, diccionarios) con
       pretty-printers de gdb en Python; ocultar el runtime `_dash_*` de la pila.
 - [ ] 16. **Más.** Consola de depuración (evaluar), watch, breakpoints condicionales y logpoints, `Print` en la
       consola de depuración, parar en errores del runtime (índice fuera de rango, memcheck).
@@ -377,4 +377,20 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   Orden "Dash: Depurar en el Amiga" y "Depurar" en la CodeLens de `Main`; breakpoints en ficheros `.dash`.
 - Prueba en VS Code (15): breakpoint en la línea 8, `startDebugging`: para allí, la pila dice línea 8 de `depura.dash`,
   las variables tienen `x = 20`, `continue` y la sesión termina sola. Base: todo bien. Extensión instalada.
+
+### 2026-10-20 — Tarea 15 (pila y variables en Dash)
+- `tools/gdb/dash.py` (gdb con `-x`; la extensión lo carga si `dash.path` lo tiene): pretty-printers por nombre de
+  tipo del C: `STRPTR` → `"texto"`/nil; `DashArrayLong *` → "lista de N" con sus elementos (Ints, Strings u objetos
+  según el byte alto de `capacity`); `DashDict *` → mapa clave → valor; `_Dash_X *` → X con sus campos o nil;
+  `DashFixed` en decimal; `BOOL` true/false. Un objeto de una lista se reconoce por su cabecera (`destroy` =
+  `_dash_struct_destroy_X`, o el único struct de su tamaño). Un filtro de marcos quita los del runtime salvo el más
+  interno y las locales `_dash_*`.
+- En gdb (emulador): `mirar (p=Punto = {...}, l=lista de 3 = {...}, ..., f=1.5, b=true, s="hola")`; `info locals` en
+  Main: `ps = lista de 2 = {Punto = {x = 1, nombre = "a"}, ...}`, `n = nil`.
+- Arreglado por la prueba de VS Code: una sentencia de Dash que da varias líneas de C (`Print` con `Flush`) daba un
+  breakpoint con 2 sitios y el programa paraba dos veces. Ahora `debuglines.apply` escribe el C de cada sentencia
+  en una sola línea física (los saltos de línea son espacios para C; el preprocesador y los `//` quedan aparte):
+  una entrada de la tabla de líneas por sentencia. 34/34 ejemplos compilan con `--debug`.
+- Tests: 1 más en `tests/unit` (5); la prueba de F5 en VS Code mira además `s = "hola"`, `l` = "lista de 2" con 1 y 2,
+  ninguna `_dash_*`, y que la sesión acaba. Base: todo bien. Extensión instalada.
 
