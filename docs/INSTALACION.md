@@ -302,6 +302,11 @@ tools/emu_sys_mui.sh ~/.cache/dash-emu/sys32mui ~/.cache/dash-emu/sys32
 export DASH_EMU_SYS_MUI=~/.cache/dash-emu/sys31mui DASH_EMU_SYS_32_MUI=~/.cache/dash-emu/sys32mui
 ```
 
+Para probar con MUI 3.8: un sistema como esos con el MUI 3.8 de Aminet (`mui38usr.lha`) en lugar de MUI 5, por
+ejemplo `~/.cache/dash-emu/sys32rtg38` (el sistema RTG de dashweb con MUI 3.8; hecho a mano, sin script), en
+`DASH_EMU_SYS_32_MUI`. Con 3.8 todos los tests de MUI pasan salvo los de pantalla completa (el marco de 4 y 3
+píxeles) y el de la versión de muimaster.
+
 En el Amiga, MUI 3.8 o 5 instalado y un 68020 o superior.
 
 ## Paso 8: Red y HTTPS (opcional)
