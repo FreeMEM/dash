@@ -86,7 +86,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       abierto a la vez como texto y en el editor visual.
 - [x] v15. **Depurador al límite:** recursión profunda, una lista que se contiene, textos enormes, diccionarios grandes,
       punto de parada en una línea vacía o un comentario, en un módulo importado y en `@native`.
-- [ ] v16. **Servidor de lenguaje al límite:** teclear deprisa en `lib/maqueta.dash` (4.778 líneas), renombrar a un
+- [x] v16. **Servidor de lenguaje al límite:** teclear deprisa en `lib/maqueta.dash` (4.778 líneas), renombrar a un
       nombre que ya existe o a una palabra reservada, completar dentro de `#{...}`, hover en builtins de MUI.
 
 ### D. Final
@@ -242,6 +242,15 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       cada línea del cuerpo lleva la suya del `.dash`: para y da los pasos ahí. Test.
 - [x] (v15) Lo que el programa escribía justo antes de acabar no salía en la consola al depurar: la sesión
       terminaba y se paraba el emulador antes de que llegara. El proxy espera 1,5 s tras el final. Test.
+
+- [x] (v16) Renombrar a un nombre que ya existe se hacía: `uno` a `dos` dejaba dos funciones `dos`, y `x` a `y`
+      juntaba dos variables en una. Ahora se niega si el nombre nuevo ya significa algo donde se haría cada
+      cambio, o si el struct ya tiene un campo o método así. Una variable de otra función, o un campo que se
+      llama como una variable, sí se puede. Test.
+- [x] (v16) F2 sobre un campo en su declaración (`a: Int` dentro de `struct`) decía "No sé qué es 'a'": solo se
+      renombraba desde un uso (`p.a`). Ahora también desde ahí. Test.
+- [x] (v16) Completar dentro de `#{...}` de un texto ofrecía también `while`, `@native`, `Print`…: ahí solo valen
+      expresiones. Test.
 
 ## Bitácora
 
@@ -425,4 +434,14 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   importado (bien) y en `@native`. Lo lento, medido en gdb a mano por separado (`t.py`).
 - Encontrado y arreglado: lo lento, `@native` y la salida final. La recursión y el ciclo, bien.
 - Tests: base 307, node todo bien, integración de VS Code 21/21.
+
+### 2026-10-21 — v16 (servidor de lenguaje al límite)
+- `v16lsp.py` (scratchpad) contra `lib/maqueta.dash` de dashweb (4.952 líneas; solo leída): abrir, 1,9 s hasta los
+  diagnósticos; 55 cambios tecleados en 2,8 s: una sola publicación, 1,5 s después, con el error tecleado;
+  completar, al momento; hover de `mui_window_open`, `mui_canvas_on_input`, `mui_wait_event`, bien (en inglés).
+  Renombrar a `while`, `Print` o un builtin, bien negado. Completar en `#{...}` (`v16b.py`): las variables, sí;
+  tras `nombre.`, sus miembros; en un texto normal, nada.
+- Encontrado y arreglado: renombrar juntando nombres, F2 en la declaración de un campo, palabras de más en
+  `#{...}`.
+- Tests: base 309 (LSP 27), integración de VS Code 21/21.
 

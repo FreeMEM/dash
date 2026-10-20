@@ -398,6 +398,36 @@ class LanguageServerTest(unittest.TestCase):
         [d] = self.client.diagnostics(u)
         self.assertIn("nada", d["message"])
 
+    def test_rename_does_not_join_two_names(self):
+        # (v16: renaming uno to dos, or x to y, was done: two functions dos, one variable from two)
+        src = ("struct P\n    a: Int\n    b: Int\nend\n\nfunc uno() -> Int\n    return 1\nend\n\nfunc dos() -> Int\n"
+               "    w = 5\n    return 2 + w\nend\n\nMain\n    x = 1\n    y = 2\n    p = P(1, 2)\n"
+               "    Print uno() + dos() + x + y + p.a\nend\n")
+        u = self.open("r16.dash", src)
+        self.client.diagnostics(u)
+        self.assertIn("ya existe", self.rename(u, 5, 6, "dos")["error"]["message"])           # function -> function
+        self.assertIn("ya existe", self.rename(u, 15, 4, "y")["error"]["message"])            # variable -> variable
+        self.assertIn("ya existe", self.rename(u, 15, 4, "uno")["error"]["message"])          # variable -> function
+        use = src.split("\n")[18].index("p.a") + 2                                            # p.a, from its use
+        self.assertIn("campo", self.rename(u, 18, use, "b")["error"]["message"])            # field -> field
+        self.assertIn("result", self.rename(u, 15, 4, "w"))      # a local of another function: no clash
+        self.assertIn("result", self.rename(u, 18, use, "x"))    # a field named as a variable: no clash
+        self.assertIn("campo", self.rename(u, 1, 4, "b")["error"]["message"])                # from its declaration
+        edits = self.rename(u, 1, 4, "z")["result"]["changes"][u]                              # (it said "No sé qué es")
+        self.assertEqual(sorted(e["range"]["start"]["line"] for e in edits), [1, 18])
+
+    def test_completion_inside_interpolation(self):
+        u = self.open("i16.dash", 'Main\n    nombre = "x"\n    Print "hola"\nend\n')
+        self.client.diagnostics(u)
+        self.edit(u, 'Main\n    nombre = "x"\n    Print "hola #{nom\nend\n')
+        reply = self.client.request("textDocument/completion", {"textDocument": {"uri": u},
+                                    "position": {"line": 2, "character": 21}})
+        labels = [i["label"] for i in reply["result"]["items"]]
+        self.assertIn("nombre", labels)
+        self.assertIn("true", labels)
+        self.assertNotIn("while", labels)       # (v16: the statements' words came too)
+        self.assertNotIn("@native", labels)
+
     def actions(self, u, diagnostic):
         return self.client.request("textDocument/codeAction", {"textDocument": {"uri": u}, "range": diagnostic["range"],
                                    "context": {"diagnostics": [diagnostic]}})["result"]

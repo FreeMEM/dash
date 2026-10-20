@@ -286,15 +286,21 @@ class Server:
             names = lsp_index.TYPE_NAMES + (sorted(index.structs) + sorted(index.enums) if index else [])
             return {"isIncomplete": False, "items": [
                 {"label": n, "kind": 25 if n in lsp_index.TYPE_NAMES else 22} for n in names]}
-        return {"isIncomplete": False, "items": self._general_items(index, line)}
+        # inside "#{...}" of a text: an expression (not while, @native, Print...)
+        expression = current.count('"') % 2 == 1
+        return {"isIncomplete": False, "items": self._general_items(index, line, expression)}
 
     @staticmethod
     def _snippet(name, params):
         inside = ", ".join(f"${{{i + 1}:{p.split(':')[0].strip()}}}" for i, p in enumerate(params))
         return f"{name}({inside})"
 
-    def _general_items(self, index, line):
-        items = [{"label": k, "kind": 14} for k in lsp_index.keywords()]
+    # the words of the language that go in an expression
+    EXPRESSION_WORDS = {"true", "false", "nil", "not", "and", "or", "fn", "self"}
+
+    def _general_items(self, index, line, expression=False):
+        items = [{"label": k, "kind": 14} for k in lsp_index.keywords()
+                 if not expression or k in self.EXPRESSION_WORDS]
         for name, b in lsp_index.builtins().items():
             items.append({"label": name, "kind": 3, "detail": lsp_index.builtin_signature(b),
                           "documentation": b.description or "", "insertTextFormat": 2,
@@ -606,6 +612,30 @@ class Server:
         return {"range": {"start": {"line": line - 1, "character": start}, "end": {"line": line - 1, "character": end}},
                 "placeholder": name}
 
+    def _rename_clash(self, params, found, new, refs):
+        """Why renaming to `new` would join two things (a function with another, a variable with another; it
+        was done, v16 of docs/IDE_VIDEO_LOOP.md), or None. A member: if its struct has one called that; else
+        if `new` already means something where each use would change."""
+        index, chain, name, line, _, _ = found
+        what = index.resolve(chain, name, line)
+        if what and what[0] in ("field", "method"):
+            for s in index.structs.values():
+                members = list(s.fields) + list(s.methods or [])
+                if any(m is what[1] for m in members) and any(m.name == new for m in members):
+                    return f"'{new}' ya es un campo o un método de {s.name}."
+            return None
+        here = params["textDocument"]["uri"]
+        indexes = {here: index}
+        for ref in refs:
+            uri = ref["uri"]
+            if uri not in indexes:
+                indexes[uri] = self.index(uri)
+            row = ref["range"]["start"]["line"] + 1
+            if indexes[uri] is not None and indexes[uri].resolve([], new, row) is not None:
+                return (f"'{new}' ya existe donde se usa '{name}' ({os.path.basename(uri_to_path(uri))}, línea {row}): "
+                        "el cambio juntaría los dos.")
+        return None
+
     def on_textDocument_rename(self, params):
         found, message = self._renamable(params)
         if found is None:
@@ -615,8 +645,12 @@ class Server:
             raise LspError(-32602, f"'{new}' no es un nombre válido.")
         if new in lsp_index.keywords() or new in lsp_index.builtins() or new in lsp_index.TYPE_NAMES:
             raise LspError(-32602, f"'{new}' ya es del lenguaje.")
+        refs = self._references(params)
+        clash = self._rename_clash(params, found, new, refs)
+        if clash:
+            raise LspError(-32602, clash)
         changes = {}
-        for ref in self._references(params):
+        for ref in refs:
             changes.setdefault(ref["uri"], []).append({"range": ref["range"], "newText": new})
         for edits in changes.values():                # one edit per place
             unique = {(e["range"]["start"]["line"], e["range"]["start"]["character"]): e for e in edits}

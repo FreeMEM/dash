@@ -23,6 +23,8 @@
 - Debugger: big values are fast (texts and lists read in blocks, children counted without reading them, a
   dictionary's first 100 entries, `d["k"]` straight to its slot); breakpoints and steps in an `@native`'s lines;
   what the program writes just before it ends reaches the debug console.
+- Rename refuses a name that would join two things (two functions, two variables, two fields) and works from a
+  field's declaration; completion inside `#{...}` offers only what goes in an expression.
 
 ## 0.2.0 (2026-10-20)
 

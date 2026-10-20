@@ -4,6 +4,7 @@ last analysis that worked (while typing, the text often does not parse: the last
 
 Lines and columns here are 1-based, as the compiler's SourceLocation.
 """
+import os
 import re
 from dataclasses import fields, is_dataclass
 
@@ -245,6 +246,12 @@ class Index:
                 if n == name:
                     return "list-method", None, detail + ("\n\n" + doc if doc else "")
             return None
+        for st in self.structs.values():         # a field where it is declared (F2 there said "No sé qué es")
+            for f in st.fields:
+                loc = getattr(f, "location", None)
+                if f.name == name and loc is not None and loc.line == line and \
+                        os.path.abspath(loc.filename or self.path) == os.path.abspath(self.path):
+                    return "field", f, f"{st.name}.{f.name}: {f.field_type}"
         scope = self.locals_at(line)
         if name in scope:
             node, t = scope[name]
