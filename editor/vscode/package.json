@@ -485,6 +485,7 @@
               "markdown": "walkthrough/compilador.md"
             },
             "completionEvents": [
+              "onContext:dash.compilerFound",
               "onSettingChanged:dash.path",
               "onCommand:dash.choosePath"
             ]

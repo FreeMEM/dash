@@ -195,8 +195,22 @@ async function choosePath() {
 
 let extContext = null;
 
+/** The context key dash.compilerFound (the walkthrough's first step is done when the compiler is found: by the
+    setting, or in a folder of the workspace inside the Dash repository) */
+function updateCompilerContext() {
+    const configured = vscode.workspace.getConfiguration('dash').get('path');
+    const ok = configured ? fs.existsSync(path.join(configured, 'dash')) && fs.existsSync(path.join(configured, 'compiler'))
+        : (vscode.workspace.workspaceFolders || []).some((f) => !!findDash(path.join(f.uri.fsPath, 'x')));
+    if (vscode.commands.executeCommand) vscode.commands.executeCommand('setContext', 'dash.compilerFound', ok).then(undefined, () => {});
+}
+
 function activate(context) {
     extContext = context;
+    updateCompilerContext();
+    if (vscode.workspace.onDidChangeConfiguration)
+        context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('dash.path')) updateCompilerContext();
+        }));
     context.subscriptions.push(
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),

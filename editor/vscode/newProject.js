@@ -33,9 +33,9 @@ function projectFiles(name, dashPath) {
         }],
     };
     const program = [
-        `# ${n}: una ventana MUI hecha con el editor visual (ventana.dashui) y su lógica.`,
-        '# F5 lo depura en el Amiga emulado; "Dash: Ejecutar en emulador" lo ejecuta; en el editor de la',
-        '# ventana, "Ver en Amiga" la enseña y la flecha de un evento lleva a su código.',
+        `# ${n}: una ventana MUI (ventana.dashui) y lo que hacen sus botones.`,
+        '# ▶ lo ejecuta en el Amiga emulado y F5 lo depura.',
+        '# ventana.dashui se abre en el editor visual: "Ver en Amiga" la enseña.',
         '# Necesita MUI y un 68020 (A1200).',
         '',
         'import "ventana.dashui"',

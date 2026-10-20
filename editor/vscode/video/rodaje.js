@@ -40,6 +40,7 @@ const SETTINGS = {
     'editor.accessibilitySupport': 'off',
     'git.enabled': false,
     'window.title': '${activeEditorShort}${separator}${rootName}',   // (not "[Extension Development Host]")
+    'files.simpleDialog.enable': true,         // VS Code's own file dialogs: the system's are not seen without a window
 };
 
 // An arrow of 22 x 32, with a white edge (it is seen on dark and light)
@@ -74,7 +75,8 @@ class Rodaje {
             args: [CODE, '--ozone-platform=headless', '--user-data-dir', path.join(r.tmp, 'user'),
                    '--extensions-dir', path.join(r.tmp, 'ext'), '--disable-workspace-trust', '--skip-welcome',
                    '--skip-release-notes', '--disable-telemetry', '--new-window',
-                   ...(vsix ? [] : [`--extensionDevelopmentPath=${EXTENSION}`]), workspace, ...open.map((f) => path.join(workspace, f))],
+                   ...(vsix ? [] : [`--extensionDevelopmentPath=${EXTENSION}`]),
+                   ...(workspace ? [workspace, ...open.map((f) => path.join(workspace, f))] : [])],   // (no folder: an empty window)
             env: Object.assign({}, process.env, env),
             timeout: 90000,
         });
@@ -211,6 +213,14 @@ class Rodaje {
     async tecla(combo, after = 300) {
         await this.page.keyboard.press(combo);
         await this.esperar(after);
+    }
+
+    /** After the window reloads (a folder opened in it): the workbench there again, and the cursor */
+    async recargada(ms = 30000) {
+        await this.esperar(1500);
+        await this.page.waitForSelector('.monaco-workbench .explorer-folders-view, .monaco-workbench .part.editor', { timeout: ms });
+        await this.esperar(2500);                  // the extension starts again
+        await this.ponerCursor();
     }
 
     /** A command of the palette, as a person would: F1, its name, Enter */

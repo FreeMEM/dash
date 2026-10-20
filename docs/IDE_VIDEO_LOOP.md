@@ -59,7 +59,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       portada, títulos de capítulo y subtítulos (SRT aparte y también quemados en otra copia).
 
 ### B. Capítulos (cada uno: guion, grabar, mirar, apuntar, arreglar, regrabar)
-- [ ] v3. **1. Primer proyecto:** la guía de primeros pasos, Dash: Nuevo proyecto, qué hay en la carpeta.
+- [x] v3. **1. Primer proyecto:** la guía de primeros pasos, Dash: Nuevo proyecto, qué hay en la carpeta.
 - [ ] v4. **2. Escribir código:** colores, completar con parámetros, firmas, hover, ir a la definición, errores al
       teclear y su arreglo rápido, el `end` automático, formatear y renombrar.
 - [ ] v5. **3. La ventana:** el editor visual (añadir un botón, propiedades, teclado, deshacer), Ver en Amiga, y
@@ -104,6 +104,14 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - [x] (v1) En el vídeo, el título de la ventana dice "[Extension Development Host]": grabar con la extensión
       instalada desde el `.vsix` en el perfil de rodaje (v2).
 
+- [x] (v3) El paso "Dónde está el compilador" de la guía no salía hecho aunque el compilador ya se encontraba
+      (solo se marcaba al cambiar el ajuste). Ahora la clave de contexto `dash.compilerFound` lo marca.
+- [x] (v3) Los comentarios del programa de la plantilla eran tan largos que se cortaban en la pantalla: más cortos.
+- [ ] (v3) Un paso de la guía se marca hecho al pulsar su botón, aunque luego se cancele ("Nuevo proyecto"). Es
+      como funcionan las guías de VS Code (`onCommand`); se queda así.
+- [ ] (v3) `ventana.dashui` sale en el explorador con el icono de JSON: es JSON para tener sus funciones al
+      editarlo como texto; darle icono propio pide un lenguaje aparte y las perdería. Se queda así.
+
 ## Bitácora
 
 ### 2026-10-20 — v1 (programa de rodaje)
@@ -136,4 +144,15 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
   - opciones `--solo 3,5` y `--dev`. Si un capítulo falla, deja captura y vídeo de lo grabado hasta ahí.
 - Capítulo 1 provisional (se completa en v3). Probado: portada, título y capítulo, 14 s, subtítulos en su sitio.
 - Tests: node (tarjetas y `juntar`: duración y desplazamiento de subtítulos; escape de textos de drawtext).
+
+### 2026-10-20 — v3 (capítulo 1: primer proyecto)
+- `video/capitulos/01_primer_proyecto.js`: VS Code sin carpeta; la guía (Welcome: Open Walkthrough), el paso del
+  compilador ya hecho, Nuevo proyecto (nombre y carpeta en el diálogo de VS Code), la ventana se recarga con el
+  proyecto y se explica cada fichero. 65 s, 11 subtítulos.
+- Rodaje: `files.simpleDialog.enable` (los diálogos del sistema no se ven sin ventana), VS Code sin carpeta
+  (`workspace: null`), `recargada()` tras abrir una carpeta en la misma ventana. `grabar.js`: `sinCarpeta`.
+  Revisión con una hoja de contactos de fotogramas a mitad de cada subtítulo (scratchpad `vid/hoja.py`).
+- Encontrado: el paso del compilador sin marcar, y los comentarios largos de la plantilla. Arreglados y
+  regrabado. Dos cosas que se quedan como están (ver "Encontrado").
+- Tests: node todo bien.
 

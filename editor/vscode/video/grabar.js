@@ -6,7 +6,7 @@
 //     node video/grabar.js --out /tmp/t --dev                            # the extension from its folder, not packaged
 //
 // A chapter: video/capitulos/NN_nombre.js with { titulo, resumen, preparar(dir) (the files of its folder),
-// open: [files to open], settings: {}, async guion(r, dir) }. Out: <out>/NN.mp4 (and .srt, .json, -sub.mp4) per
+// open: [files to open], settings: {}, sinCarpeta (VS Code without a folder open), async guion(r, dir) }. Out: <out>/NN.mp4 (and .srt, .json, -sub.mp4) per
 // chapter, and <out>/tutorial.mp4, tutorial.srt and tutorial-sub.mp4 (the subtitles on the picture).
 const fs = require('fs');
 const os = require('os');
@@ -85,7 +85,8 @@ async function grabarCapitulo(cap, out, vsix) {
     fs.mkdirSync(folder, { recursive: true });
     if (cap.preparar) await cap.preparar(folder);
     const settings = Object.assign({ 'dash.path': DASH }, cap.settings || {});
-    const r = await Rodaje.start({ workspace: folder, open: cap.open || [], settings, vsix });
+    // sinCarpeta: VS Code empty (the chapter makes its folder in `folder`, as a person would)
+    const r = await Rodaje.start({ workspace: cap.sinCarpeta ? null : folder, open: cap.open || [], settings, vsix });
     try {
         await cap.guion(r, folder);
     } catch (e) {
