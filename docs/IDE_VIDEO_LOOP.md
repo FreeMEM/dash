@@ -51,7 +51,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 ## Tareas
 
 ### A. Rodaje
-- [ ] v1. **Programa de rodaje** (`editor/vscode/video/rodaje.js`): lanzar VS Code sin ventana con un perfil de
+- [x] v1. **Programa de rodaje** (`editor/vscode/video/rodaje.js`): lanzar VS Code sin ventana con un perfil de
       rodaje (1280x720, letra grande, sin chat ni bienvenida). Funciones: `mover(objetivo)` y `clic(...)` con el
       cursor, `escribir(texto)` a ritmo humano, `tecla(...)`, `esperar(ms)`, `subtitulo(texto, ms)`, `captura`
       continua con su hora. Salida: MP4 (ffmpeg) y SRT. Prueba: un minuto de vídeo con un subtítulo y un clic.
@@ -96,4 +96,30 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 
 ## Encontrado (fallos y mejoras; cada uno pasa a tarea o se arregla en su vuelta)
 
+- [x] (v1) Al escribir `Print "adiós"` se abría la lista de completar entera tras la comilla de cierre: `"` y `/`
+      disparan el completado (para las rutas de `import`) y fuera de un `import` el servidor daba todo. Igual con
+      `.` tras un número (`1.`). Arreglado en `compiler/lsp.py` con su test.
+- [x] (v1) La acción de la pestaña de un `.dash` ponía el texto "Ejecutar en emulador" (sin icono). Ahora es ▶, y
+      su desplegable trae también Depurar.
+- [ ] (v1) En el vídeo, el título de la ventana dice "[Extension Development Host]": grabar con la extensión
+      instalada desde el `.vsix` en el perfil de rodaje (v2).
+
 ## Bitácora
+
+### 2026-10-20 — v1 (programa de rodaje)
+- `editor/vscode/video/rodaje.js`:
+  - `Rodaje.start({workspace, open, settings})`: el Electron de Code - OSS con `--ozone-platform=headless`, por
+    Playwright. Perfil propio: letra 17, sin chat ni bienvenida ni minimapa. Ventana 1280x720.
+  - El cursor es un elemento dentro del workbench (hecho elemento a elemento: el workbench exige Trusted Types y no
+    acepta `innerHTML`), con un anillo al hacer clic.
+  - `mover` (curva suave, también el ratón de verdad), `clic`, `escribir` a ritmo humano, `tecla`, `orden`
+    (F1 y su nombre), `subtitulo` y `decir`.
+  - Las capturas van a unos 8 por segundo, con su hora.
+  - `fin(out)`: `out.mp4`, `out.srt` y `out-sub.mp4` con los subtítulos quemados (ffmpeg). Cada fotograma de
+    30 por segundo es un enlace a la captura de su momento: la duración sale exacta (con el concat de ffmpeg y
+    duraciones salía 8,2 s de 8,9).
+- Prueba de 8 s (abrir, clic en el explorador, escribir una línea, dos subtítulos): sin abrir nada en la pantalla
+  del usuario. Al mirarla salieron los dos primeros fallos de "Encontrado", arreglados.
+- Tests: node (SRT y un vídeo de 3 s exacto con tres fotogramas), servidor de lenguaje (22: los caracteres que
+  disparan el completado). Base: todo bien.
+

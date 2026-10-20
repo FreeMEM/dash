@@ -77,12 +77,14 @@
       {
         "command": "dash.compile",
         "title": "Compilar",
-        "category": "Dash"
+        "category": "Dash",
+        "icon": "$(tools)"
       },
       {
         "command": "dash.runInEmulator",
         "title": "Ejecutar en emulador",
-        "category": "Dash"
+        "category": "Dash",
+        "icon": "$(play)"
       },
       {
         "command": "dash.newWindowFile",
@@ -146,7 +148,12 @@
         {
           "command": "dash.runInEmulator",
           "when": "resourceLangId == dash",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "dash.debug",
+          "when": "resourceLangId == dash",
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [

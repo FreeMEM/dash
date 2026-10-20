@@ -213,6 +213,29 @@ class LanguageServerTest(unittest.TestCase):
         self.edit(u, 'import "' + "\n" + self.PROGRAM)
         self.assertIn("otro.dash", self.complete(u, 0, 8))
 
+    def test_trigger_characters_only_where_they_mean_something(self):
+        # VS Code asks when " / or . are typed (import paths, members); elsewhere nothing must open
+        u = self.open("c4.dash", self.PROGRAM)
+        self.client.diagnostics(u)
+
+        def typed(line, character, char):
+            reply = self.client.request("textDocument/completion", {
+                "textDocument": {"uri": u}, "position": {"line": line, "character": character},
+                "context": {"triggerKind": 2, "triggerCharacter": char}})
+            return [i["label"] for i in reply["result"]["items"]]
+        self.edit(u, self.PROGRAM.replace("    Print total\n", '    Print "adiós"\n'))
+        self.assertEqual(typed(19, 17, '"'), [])                  # the closing quote of a text
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    x = 1.\n"))
+        self.assertEqual(typed(19, 10, "."), [])                  # a number
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    x = 4 / \n"))
+        self.assertEqual(typed(19, 11, "/"), [])                  # a division
+        self.edit(u, self.PROGRAM.replace("    Print total\n", "    p.\n"))
+        self.assertEqual(sorted(typed(19, 6, ".")), ["mover", "nombre", "x"])
+        with open(os.path.join(self.dir.name, "otro2.dash"), "w") as f:
+            f.write("func h()\nend\n")
+        self.edit(u, 'import "' + "\n" + self.PROGRAM)
+        self.assertIn("otro2.dash", typed(0, 8, '"'))
+
     def test_signature_help(self):
         u = self.open("s1.dash", self.PROGRAM)
         self.client.diagnostics(u)

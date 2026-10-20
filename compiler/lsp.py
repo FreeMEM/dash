@@ -264,6 +264,12 @@ class Server:
         m = re.match(r'^\s*import\s+"([^"]*)$', current)
         if m:
             return {"isIncomplete": False, "items": self._import_items(uri, m.group(1))}
+        # typed " or / (they are there for the paths of import) or . (members) where they are none of that:
+        # nothing (else the whole list opened after the closing quote of a text, or after "1.")
+        context = params.get("context") or {}
+        typed = context.get("triggerCharacter") if context.get("triggerKind") == 2 else None
+        if typed in ('"', "/") or (typed == "." and not re.search(r"[A-Za-z_][A-Za-z0-9_]*\.$", current)):
+            return {"isIncomplete": False, "items": []}
         if current.count('"') % 2 == 1 and not re.search(r"#\{[^}]*$", current):
             return {"isIncomplete": False, "items": []}          # inside a text
         m = re.search(r"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z0-9_]*)$", current)

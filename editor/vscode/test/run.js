@@ -404,6 +404,31 @@ async function previewTests() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('video: subtitles and the video of pictures at their times (video/rodaje.js)', () => {
+        const V = require('../video/rodaje.js');
+        assert.strictEqual(V.srtTime(3723456), '01:02:03,456');
+        assert.strictEqual(V.srt([{ start: 0, end: 1500, text: 'Hola' }, { start: 2000, end: 2500, text: 'Dos' }]),
+                           '1\n00:00:00,000 --> 00:00:01,500\nHola\n\n2\n00:00:02,000 --> 00:00:02,500\nDos\n');
+        if (require('child_process').spawnSync('ffmpeg', ['-version']).status !== 0) return;
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_video_'));
+        try {
+            // three pictures of 64 x 36 (two colours), at 0, 1 and 2.5 s; the end at 3 s: a video of 3 s
+            const shots = [];
+            for (const [i, colour, t] of [[0, 'red', 0], [1, 'blue', 1000], [2, 'red', 2500]]) {
+                const file = path.join(dir, `f${i}.png`);
+                require('child_process').spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+                    `color=c=${colour}:s=64x36`, '-frames:v', '1', file]);
+                shots.push({ file, t });
+            }
+            const out = V.montar(shots, 3000, [{ start: 500, end: 2000, text: 'Hola' }], path.join(dir, 'toma'), dir);
+            const probe = require('child_process').spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+                                                                         '-of', 'csv=p=0', out.mp4], { encoding: 'utf8' });
+            assert(Math.abs(Number(probe.stdout) - 3) < 0.2, 'duration ' + probe.stdout);
+            assert(fs.existsSync(out.sub) && fs.existsSync(out.srt));
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('preview: the program that takes its own picture', () => {
         const prog = P.previewProgram('Principal', true);
         assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);
