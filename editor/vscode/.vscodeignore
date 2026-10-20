@@ -6,3 +6,4 @@ node_modules/**
 !media/*.js
 .gitignore
 !dist/extension.js
+video/**
