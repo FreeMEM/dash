@@ -4033,8 +4033,13 @@ static LONG _dash_arena_available(_Dash_Arena *arena) {
     # tools/emu_run.py): the program ends by itself through _dash_exit(0), so
     # programs that wait for the close gadget can run unattended in an emulator
     AUTOCLOSE_RUNTIME = Template("""\
-/* Test mode: end the program after $seconds seconds */
+/* Test mode: end the program after $seconds seconds. A wait that can say "closed" (MUI's
+   mui_wait_event: -1) sets _dash_ac_soft and gets the end that way, so the program leaves by its
+   own path (what comes after its loop runs, --memcheck counts at its end); 5 seconds later, or
+   anywhere else, the program ends at once. */
+#define _DASH_AUTOCLOSE 1
 static LONG _dash_ac_start = -1;
+static BOOL _dash_ac_soft = FALSE, _dash_ac_expired = FALSE;
 
 static void _dash_ac_check(void) {
     struct DateStamp ds;
@@ -4043,7 +4048,11 @@ static void _dash_ac_check(void) {
     DateStamp(&ds);
     now = ds.ds_Minute * 3000 + ds.ds_Tick;
     if (_dash_ac_start < 0) _dash_ac_start = now;
-    if (now - _dash_ac_start >= $seconds * 50) _dash_exit(0);
+    if (now - _dash_ac_start >= ($seconds + 5) * 50) _dash_exit(0);
+    if (now - _dash_ac_start >= $seconds * 50) {
+        if (!_dash_ac_soft) _dash_exit(0);
+        _dash_ac_expired = TRUE;
+    }
 }
 
 /* In every turn of a while: the clock only every 1024 turns (DateStamp in every turn made the
@@ -4064,6 +4073,7 @@ static ULONG _dash_ac_wait(ULONG mask) {
     ULONG got;
     while (!((got = SetSignal(0, 0)) & mask)) {
         _dash_ac_check();
+        if (_dash_ac_expired) return 0;
         Delay(1);
     }
     SetSignal(0, got & mask);
@@ -9619,7 +9629,15 @@ static LONG _dash_mui_wait_event_signals(ULONG mask) {
         if (id) return id;
         if (_dash_mui_timer_hook && (id = _dash_mui_timer_hook())) return id;
         if (sigs) {
+#ifdef _DASH_AUTOCLOSE
+            _dash_ac_soft = TRUE;           /* test mode: the time's end is a close (-1) */
+            if (_dash_ac_expired) return -1;
             got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+            _dash_ac_soft = FALSE;
+            if (_dash_ac_expired) return -1;
+#else
+            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+#endif
             if (got & SIGBREAKF_CTRL_C) return -1;
             if (got & mask) {
                 _dash_mui_got = got & mask;
@@ -11432,7 +11450,8 @@ static {ret_type} {native.name}({params_str}) {{
         typedef += "\n".join(fields)
         typedef += f"\n}};\n"
 
-        # Generate constructor function using refcount allocation. The struct
+        # Generate constructor function using refcount allocation (the object is _dash_o: the
+        # parameters are named like the fields, and a field may be called s). The struct
         # owns its String fields and holds a reference to its struct fields;
         # the destructor gives them back when the last reference goes.
         params = []
@@ -11444,16 +11463,16 @@ static {ret_type} {native.name}({params_str}) {{
             # the block is not cleared: owned fields start NULL before they are set
             if c_type == "STRPTR":
                 self.uses_strings = True
-                assigns.append(f"    s->{field.name} = NULL;\n    _dash_str_set(&s->{field.name}, {field.name});")
-                frees.append(f"    _dash_str_free(s->{field.name});")
+                assigns.append(f"    _dash_o->{field.name} = NULL;\n    _dash_str_set(&_dash_o->{field.name}, {field.name});")
+                frees.append(f"    _dash_str_free(_dash_o->{field.name});")
             elif self._is_obj_c_type(c_type) and field.weak:   # weak: points, does not hold
                 self.uses_weak = True
-                assigns.append(f"    s->{field.name} = {field.name};")
+                assigns.append(f"    _dash_o->{field.name} = {field.name};")
             elif self._is_obj_c_type(c_type):   # struct or Array field: a new reference
-                assigns.append(f"    s->{field.name} = {field.name};\n    _dash_retain({field.name});")
-                frees.append(f"    _dash_release_child(s->{field.name});")
+                assigns.append(f"    _dash_o->{field.name} = {field.name};\n    _dash_retain({field.name});")
+                frees.append(f"    _dash_release_child(_dash_o->{field.name});")
             else:
-                assigns.append(f"    s->{field.name} = {field.name};")
+                assigns.append(f"    _dash_o->{field.name} = {field.name};")
 
         params_str = ", ".join(params)
         assigns_str = "\n".join(assigns)
@@ -11462,7 +11481,7 @@ static {ret_type} {native.name}({params_str}) {{
         destroy = f"_dash_struct_destroy_{struct.name}" if frees else "NULL"
         destructor = f"""
 static void _dash_struct_destroy_{struct.name}(void *obj) {{
-    {c_name} *s = ({c_name} *)obj;
+    {c_name} *_dash_o = ({c_name} *)obj;
 {chr(10).join(frees)}
 }}
 """ if frees else ""
@@ -11472,17 +11491,17 @@ static void _dash_struct_destroy_{struct.name}(void *obj) {{
         # Two bodies: calling one from the other cost ~280 cycles on a 68000
         constructor = f"""{destructor}
 static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
-    {c_name} *s = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), {destroy});
-    if (!s) return NULL;
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), {destroy});
+    if (!_dash_o) return NULL;
 {assigns_str}
-    return s;
+    return _dash_o;
 }}
 
 static {c_name}* _dash_struct_create_{struct.name}({params_str}) {{
-    {c_name} *s = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), {destroy});
-    if (!s) return NULL;
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), {destroy});
+    if (!_dash_o) return NULL;
 {assigns_str}
-    return s;
+    return _dash_o;
 }}
 """
 

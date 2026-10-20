@@ -1,0 +1,30 @@
+# Test mode (--autoclose, '# autoclose:') with MUI: when the time is up mui_wait_event gives -1, as when
+# the window is closed, so what comes after the loop runs and --memcheck counts at the real end (before,
+# the program ended inside mui_wait_event: no "fin", and the window's struct of the .dashui alive).
+# emu-needs: muimaster.library
+# autoclose: 3
+# memcheck
+# expect-out: ventana abierta
+# expect-out: cerrada: -1
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+import "lib/ventana_prueba.dashui"
+
+Main
+    if mui_app_begin("Autoclose", "DASHAC") == 0
+        Print "sin MUI"
+    else
+        v = Prueba_create()
+        if mui_window_open(v.window)
+            Print "ventana abierta"
+        end
+        ev = 0
+        while ev != -1
+            ev = mui_wait_event()
+        end
+        Print "cerrada: #{ev}"
+        Print "fin"
+        mui_app_end()
+    end
+end

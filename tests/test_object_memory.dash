@@ -2,7 +2,7 @@
 # Reference counting: variables, struct fields and return values hold a
 # reference; new objects are temporaries until something adopts them.
 #
-# expect-c: s->pos = pos;
+# expect-c: _dash_o->pos = pos;
 # expect-c: _dash_obj_float(_dash_r);
 # expect-out: estable
 # expect-out: 20000

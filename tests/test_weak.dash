@@ -1,7 +1,7 @@
 # Test: a weak field (a parent pointer) does not hold its object: a tree with weak parents
 # is freed whole (with a strong parent every tree would stay alive until exit).
 # memcheck
-# expect-c: s->padre = padre;
+# expect-c: _dash_o->padre = padre;
 # expect-out: html/body/p html/body/span 2
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
 
