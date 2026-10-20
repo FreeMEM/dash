@@ -303,6 +303,8 @@ async function extensionTests() {
         await ext.showOnAmiga({ fileName: '/', getText: () => '{}' }, 'Principal',
                               { postMessage: (m) => said.push(m) });
         assert.match(said[said.length - 1].error, /dash\.path/);
+        assert.strictEqual(said[said.length - 1].busy, false);           // the button is free again
+        assert.match(sent[sent.length - 1], /^ERR Ver en Amiga: .*dash\.path/);   // and VS Code says it too
     });
     await check('extension: no .dash file open', async () => {
         fakeVscode.window.activeTextEditor = null;

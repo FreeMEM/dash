@@ -83,22 +83,29 @@ async function run(kind) {
 /** "Ver en Amiga": the window in FS-UAE with MUI, its picture shown in the editor */
 let previewRunning = false;
 async function showOnAmiga(document, windowName, webview) {
-    const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot' }, m));
-    if (previewRunning) { say({ status: 'Ya hay una vista en marcha…' }); return; }
+    // busy: the webview's button is off and says so while the emulator works (about 30 s)
+    const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot', busy: false }, m));
+    const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
+    if (previewRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
     const dashDir = findDash(document.fileName);
-    if (!dashDir) { say({ error: 'No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".' }); return; }
+    if (!dashDir) { fail('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
     const config = vscode.workspace.getConfiguration('dash.emulator');
+    const status = `Compilando "${windowName}" y arrancando el emulador (unos 30 s)…`;
+    const work = () => runPreview({
+        dashDir, dashuiText: document.getText(), windowName,
+        kickstart: config.get('kickstart') || process.env.DASH_KICKSTART,
+        system: config.get('muiSystem') || process.env.DASH_EMU_SYS_MUI,
+    });
     previewRunning = true;
-    say({ status: `Compilando "${windowName}" y arrancando el emulador (unos 30 s)…` });
+    say({ status, busy: true });
     try {
-        const { png } = await runPreview({
-            dashDir, dashuiText: document.getText(), windowName,
-            kickstart: config.get('kickstart') || process.env.DASH_KICKSTART,
-            system: config.get('muiSystem') || process.env.DASH_EMU_SYS_MUI,
-        });
+        const { png } = vscode.window.withProgress
+            ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
+                                                 title: 'Ver en Amiga: ' + status }, work)
+            : await work();
         say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el Amiga emulado` });
     } catch (e) {
-        say({ error: 'No se pudo: ' + e.message });
+        fail('No se pudo: ' + e.message);
     } finally {
         previewRunning = false;
     }
