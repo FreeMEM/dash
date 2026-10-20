@@ -60,11 +60,27 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - No publicar la extensión (Marketplace/Open VSX) sin permiso del usuario: déjalo `[?]`.
 - Si una tarea exige una decisión del usuario, déjala `[?]` con la pregunta y pasa a la siguiente.
 
+## Estructura (decidida en la tarea 1)
+
+- **Extensión en JavaScript** (CommonJS, como ahora), con `// @ts-check` y JSDoc para que VS Code compruebe tipos;
+  sin TypeScript: no hay paso de compilación para el código propio. Cuando lleguen dependencias de ejecución
+  (`vscode-languageclient` en la tarea 4), **esbuild** las empaqueta en `dist/extension.js` (`npm run build`;
+  `package` = build + `vsce package --no-dependencies`) y `main` apunta a `dist/`.
+- **Servidor de lenguaje en Python**, dentro del compilador (`compiler/lsp.py`), sin dependencias más allá de las
+  de Dash (Lark): reutiliza parser, transformer y analizador, así nunca discrepa del compilador. La extensión lo
+  arranca con `python3 -m compiler.lsp` desde `dash.path`, **solo en carpetas de confianza** (ejecuta código de esa
+  carpeta); en modo restringido quedan los colores y el editor visual.
+- **Tests:** la extensión, en `test/run.js` (con el `vscode` falso y vscode-textmate para la gramática); el
+  servidor, en `tests/lsp/test_*.py` (unittest, mensajes JSON-RPC reales por stdio), que `tests/run_tests.py`
+  ejecuta y cuenta como un resultado cada uno.
+- **Depuración:** se decide en la tarea 12.
+
 ## Tareas
 
 ### A. Lenguaje
-- [ ] 1. **Auditoría y estructura.** Leer la extensión y sus tests; decidir cómo crece (¿TypeScript? ¿empaquetar
+- [x] 1. **Auditoría y estructura.** Leer la extensión y sus tests; decidir cómo crece (¿TypeScript? ¿empaquetar
       con esbuild para llevar dependencias como `vscode-languageclient`?). Anotar la decisión aquí.
+      **Decisión:** ver "Estructura" abajo.
 - [ ] 2. **Gramática completa, generada.** `tools/gen_tmgrammar.py` saca de `compiler/grammar.py` y
       `compiler/amiga_builtins.py` las palabras clave, tipos, directivas `@` y los 425 builtins; interpolación
       `#{...}`, números hex/binarios, `Window`/`EventLoop`/`On`, `@native`/`@c` con C dentro. El runner comprueba
@@ -73,6 +89,11 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
       plegado por bloques, iconos de `.dash`/`.dashui`, comentar con `#`.
 
 ### B. Servidor de lenguaje (LSP)
+- [ ] 4a. **Posiciones en los errores.** Hoy solo 18 tipos de nodo guardan `location` y casi ningún error dice
+      la línea (`Error: Variable 'b' is not defined`). Todos los nodos con línea, columna y fichero (también los de
+      los módulos importados); la salida de `./dash` y `compiler.main` como `fichero:línea:col: Error: mensaje` (para
+      el LSP y para el problem matcher de la tarea 9); el error de sintaxis de Lark, en una frase ("se esperaba
+      `end`...") en vez de la lista de tokens. Tests de error (`tests/errors/`) con la línea.
 - [ ] 4. **Base y errores.** `compiler/lsp.py`: JSON-RPC por stdio sin dependencias, que reutiliza parser y
       analizador; cliente en la extensión (lo arranca con `python3 -m compiler.lsp` desde `dash.path`).
       Diagnósticos al escribir, con línea y columna (y los de los imports). Tests.
@@ -124,3 +145,14 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - Pedido por el usuario: "un entorno de desarrollo como extensión para trabajar con dash y dashui", "breakpoints,
   debug", "lo más cercano posible a un IDE profesional", como /loop con plan y bitácora.
 - Hecho antes del loop (rama dashweb, ya en esta rama): caa3570 (modo restringido) y 81686a7 (botón "Ver en Amiga").
+
+### 2026-10-20 — Tarea 1 (auditoría y estructura)
+- Base: `run_tests.py` todo bien; `npm test` todo bien (tras `npm ci` en el worktree nuevo).
+- La extensión: 1450 líneas (extension.js 140, amigaPreview.js 95, dashuiEditor.js 54, webview 530, tests 330,
+  gramática 103). Sin dependencias de ejecución; `vsce package --no-dependencies`. Gramática a mano y corta.
+- Decisiones en "Estructura": JS con `@ts-check`, esbuild cuando haga falta, LSP en Python dentro del compilador,
+  solo con confianza; tests de LSP en `tests/lsp` contados por el runner.
+- Hallazgo: los errores semánticos casi nunca llevan línea (solo 18 tipos de nodo guardan `location`), y el de
+  sintaxis es una lista de tokens de Lark. Sin eso no hay errores en el editor: nueva tarea 4a antes del LSP.
+- Hallazgo menor (a mirar en 4a): `y = ` sin valor seguido de `Print noexiste(3)` en la línea siguiente da
+  "Variable 'Print' is not defined": el `=` se come el salto de línea.
