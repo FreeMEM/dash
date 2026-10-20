@@ -121,6 +121,16 @@
         "command": "dash.gotoEvent",
         "title": "Ir al código del evento",
         "category": "Dash"
+      },
+      {
+        "command": "dash.newProject",
+        "title": "Nuevo proyecto",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.choosePath",
+        "title": "Elegir la carpeta del compilador",
+        "category": "Dash"
       }
     ],
     "menus": {
@@ -442,6 +452,63 @@
               "target": "amiga.local:2345",
               "program": "^\"\\${workspaceFolder}/programa.dash\""
             }
+          }
+        ]
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "dash.start",
+        "title": "Primeros pasos con Dash",
+        "description": "Programas para el Amiga en Dash: un proyecto con su ventana MUI, el emulador y el depurador.",
+        "steps": [
+          {
+            "id": "compilador",
+            "title": "Dónde está el compilador",
+            "description": "Si tus programas no están dentro del repositorio de Dash, elige su carpeta.\n[Elegir la carpeta de Dash](command:dash.choosePath)",
+            "media": {
+              "markdown": "walkthrough/compilador.md"
+            },
+            "completionEvents": [
+              "onSettingChanged:dash.path",
+              "onCommand:dash.choosePath"
+            ]
+          },
+          {
+            "id": "proyecto",
+            "title": "Un proyecto nuevo",
+            "description": "Una carpeta con un programa, su ventana y la configuración del depurador.\n[Nuevo proyecto](command:dash.newProject)",
+            "media": {
+              "markdown": "walkthrough/proyecto.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.newProject"
+            ]
+          },
+          {
+            "id": "ventana",
+            "title": "La ventana, en el editor visual",
+            "description": "Abre ventana.dashui: objetos, propiedades, Ver en Amiga y del evento a su código.\n[Nuevo fichero de ventanas](command:dash.newWindowFile)",
+            "media": {
+              "markdown": "walkthrough/ventana.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.newWindowFile",
+              "onCommand:dash.gotoEvent"
+            ]
+          },
+          {
+            "id": "ejecutar",
+            "title": "Ejecutar y depurar en el Amiga emulado",
+            "description": "Compila, ejecuta en FS-UAE y depura con F5.\n[Ejecutar en emulador](command:dash.runInEmulator)\n[Depurar](command:dash.debug)",
+            "media": {
+              "markdown": "walkthrough/ejecutar.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.runInEmulator",
+              "onCommand:dash.debug",
+              "onCommand:dash.compile"
+            ]
           }
         ]
       }

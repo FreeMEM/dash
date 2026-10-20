@@ -12,6 +12,7 @@ const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
 const { setupTasks, emulatorOptions } = require('./tasks');
 const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
+const { writeProject, cleanName } = require('./newProject');
 
 /** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
 function findDash(fromFile) {
@@ -139,16 +140,79 @@ async function newWindowFile() {
     await vscode.commands.executeCommand('vscode.openWith', uri, 'dash.dashuiEditor');
 }
 
+/**
+ * "Dash: Nuevo proyecto": a folder with a program and its window (newProject.js), opened. parent and name
+ * (tests): without questions; open false: not opened. Returns the program's path.
+ */
+async function newProject(parent, name, open) {
+    if (!name) {
+        name = await vscode.window.showInputBox({ title: 'Nuevo proyecto de Dash', prompt: 'Nombre del programa',
+                                                  value: 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
+        if (!name) return null;
+    }
+    if (!parent) {
+        const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false,
+                                                            openLabel: 'Crear el proyecto aquí', title: 'Dónde crear la carpeta del proyecto' });
+        if (!picked || !picked.length) return null;
+        parent = picked[0].fsPath;
+    }
+    const folder = path.join(parent, cleanName(name));
+    let program;
+    try {
+        // the compiler: the setting (nothing to write), or the Dash repository the folder is in
+        const configured = vscode.workspace.getConfiguration('dash').get('path');
+        program = writeProject(folder, name, configured ? null : findDash(path.join(folder, 'x')));
+    } catch (e) {
+        vscode.window.showErrorMessage('No se pudo crear el proyecto: ' + e.message);
+        return null;
+    }
+    if (open !== false) {
+        const uri = vscode.Uri.file(folder);
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length) {
+            await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+        } else {
+            await extContext.globalState.update('dash.openAfter', program);   // after the window reloads with the folder
+            await vscode.commands.executeCommand('vscode.openFolder', uri);
+        }
+    }
+    return program;
+}
+
+/** "Dash: Elegir la carpeta del compilador" (the walkthrough): the setting dash.path */
+async function choosePath() {
+    const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false,
+                                                        openLabel: 'Esta es la carpeta de Dash', title: 'La carpeta del compilador Dash (la del repositorio)' });
+    if (!picked || !picked.length) return;
+    const dir = picked[0].fsPath;
+    if (!fs.existsSync(path.join(dir, 'dash')) || !fs.existsSync(path.join(dir, 'compiler'))) {
+        vscode.window.showWarningMessage(`En ${dir} no están ./dash ni compiler/: elige la carpeta del repositorio de Dash.`);
+        return;
+    }
+    await vscode.workspace.getConfiguration('dash').update('path', dir, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage('Compilador Dash: ' + dir);
+}
+
+let extContext = null;
+
 function activate(context) {
+    extContext = context;
     context.subscriptions.push(
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),
         vscode.commands.registerCommand('dash.newWindowFile', newWindowFile),
+        vscode.commands.registerCommand('dash.newProject', newProject),
+        vscode.commands.registerCommand('dash.choosePath', choosePath),
         vscode.commands.registerCommand('dash.newline', () => newline(vscode)),   // Enter: the "end" by itself
         vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
     setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
+    // a project just made in this window: its program open, beside the walkthrough
+    const after = context.globalState && context.globalState.get('dash.openAfter');
+    if (after) {
+        context.globalState.update('dash.openAfter', undefined);
+        if (fs.existsSync(after)) vscode.window.showTextDocument(vscode.Uri.file(after)).then(undefined, () => {});
+    }
     setupLanguageServer(vscode, context, findDash);   // errors while typing (compiler/lsp.py)
     if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
         runTask = setupTasks(vscode, context, { findDash, env: emulatorEnv, trusted });
@@ -161,4 +225,4 @@ function deactivate() {
     return stopLanguageServer();
 }
 
-module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga };
+module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject };

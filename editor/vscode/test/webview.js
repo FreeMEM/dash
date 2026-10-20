@@ -225,4 +225,4 @@ async function webviewTests(check, assert) {
     }
 }
 
-module.exports = { webviewTests, findChromium };
+module.exports = { webviewTests, findChromium, openPage };

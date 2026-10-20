@@ -376,6 +376,31 @@ async function previewTests() {
         assert.deepStrictEqual(a, ['/d/tools/emu_run.py', '--autoclose', '22', '--timeout', '180',
             '--screenshot', '12', '/t/s.png', '--kickstart', '/k.rom', '--system', '/sys', '/t/p.dash']);
     });
+    await check('new project: its files, and its program compiles', async () => {
+        const N = require('../newProject.js');
+        assert.strictEqual(N.cleanName('mi programa!'), 'mi_programa');
+        assert.strictEqual(N.cleanName('3d'), 'Programa_3d');
+        const { name, files } = N.projectFiles('hola', '/x/dash');
+        assert.strictEqual(name, 'hola');
+        assert.deepStrictEqual(Object.keys(files).sort(),
+            ['.gitignore', '.vscode/launch.json', '.vscode/settings.json', 'hola.dash', 'ventana.dashui']);
+        assert.deepStrictEqual(JSON.parse(files['.vscode/settings.json']), { 'dash.path': '/x/dash' });
+        assert.deepStrictEqual(require('../dashuiLinks.js').problems(files['ventana.dashui']), []);
+        assert.strictEqual(JSON.parse(files['.vscode/launch.json']).configurations[0].program, '${workspaceFolder}/hola.dash');
+        const repo = path.resolve(__dirname, '..', '..', '..');
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_proj_'));
+        try {
+            const prog = N.writeProject(dir, 'Hola Mundo');
+            assert.throws(() => N.writeProject(dir, 'Hola Mundo'), /ya existe/);
+            if (fs.existsSync('/opt/amiga/bin/m68k-amigaos-gcc') && fs.existsSync(path.join(require('os').homedir(), '.cache', 'dash-mui', 'x'))) {
+                const out = require('child_process').spawnSync(path.join(repo, 'dash'), [prog, '-o', path.join(dir, 'prog')],
+                                                               { cwd: repo, encoding: 'utf8' });
+                assert.strictEqual(out.status, 0, out.stdout + out.stderr);
+            }
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('preview: the program that takes its own picture', () => {
         const prog = P.previewProgram('Principal', true);
         assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);
@@ -465,7 +490,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.compile', 'dash.gotoEvent', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
+            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {

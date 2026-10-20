@@ -458,6 +458,25 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('new project: the command makes the folder, and the walkthrough is there', async () => {
+        const path = require('path');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
+        try {
+            const prog = await vscode.commands.executeCommand('dash.newProject', dir, 'Mi Programa', false);
+            assert.strictEqual(prog, path.join(dir, 'Mi_Programa', 'Mi_Programa.dash'));
+            for (const f of ['Mi_Programa.dash', 'ventana.dashui', '.vscode/launch.json', '.gitignore'])
+                assert(fs.existsSync(path.join(dir, 'Mi_Programa', f)), f);
+            const launch = JSON.parse(fs.readFileSync(path.join(dir, 'Mi_Programa', '.vscode', 'launch.json'), 'utf8'));
+            assert.strictEqual(launch.configurations[0].type, 'dash');
+            const ext = vscode.extensions.all.find((e) => e.packageJSON.name === 'dash-mui-editor');
+            const steps = ext.packageJSON.contributes.walkthroughs[0].steps;
+            for (const st of steps) assert(fs.existsSync(path.join(ext.extensionPath, st.media.markdown)), st.media.markdown);
+            assert((await vscode.commands.getCommands(true)).includes('dash.choosePath'));
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('debugger: attach to a bgdbserver (a real Amiga, here the emulator alone), globals right', async () => {
         const path = require('path');
         const os = require('os');

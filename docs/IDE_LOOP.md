@@ -141,7 +141,7 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
 - [x] 20. **Vista en el Amiga.** Más rápida, repetible, en varias máquinas.
 
 ### F. Pulido
-- [ ] 21. **Primeros pasos.** Walkthrough de VS Code, comando "Dash: Nuevo proyecto" (plantilla con `.dash`,
+- [x] 21. **Primeros pasos.** Walkthrough de VS Code, comando "Dash: Nuevo proyecto" (plantilla con `.dash`,
       `.dashui` y launch.json), README con capturas.
 - [ ] 22. **Empaquetado.** Bundle, icono, versión 0.2.0, CHANGELOG; preparar la publicación (publicar: `[?]`).
 - [ ] 23. **Repaso final.** Todo junto con un proyecto real (dashweb): abrir, completar, compilar, depurar.
@@ -515,4 +515,27 @@ paso a paso, pila y variables**, en el emulador y, si se puede, en un Amiga real
   - `tests/unit/test_emu_preview.py`: planos a PNG.
   - Siguen pasando las capturas del runner (`test_emu_shots`, `test_mui_canvas_buffered`, en A1200 y 3.2).
   - VS Code: 13 bien y 7 saltados, porque la ventana no tenía el foco del escritorio (los de escribir y deshacer).
+
+### 2026-10-20 — Tarea 21 (primeros pasos)
+- **Dash: Nuevo proyecto** (`newProject.js`): pide nombre y carpeta y crea:
+  - `<nombre>.dash`: abre la ventana; Contar cambia el texto; Salir y el menú acaban;
+  - `ventana.dashui`;
+  - `.vscode/launch.json`: F5 en el emulador, y "Amiga real";
+  - `.gitignore`;
+  - `.vscode/settings.json` con `dash.path` si lo encontró por la carpeta y no hay ajuste.
+  Luego abre la carpeta: en otra ventana si ya hay una abierta; si no, en esta, con el programa abierto al recargar.
+- **Dash: Elegir la carpeta del compilador** (`dash.path`, comprobando que tenga `./dash` y `compiler/`).
+- Walkthrough "Primeros pasos con Dash" en 4 pasos, cada uno con su texto en `walkthrough/*.md` y se marca solo
+  al hacerlo: el compilador, el proyecto nuevo, la ventana (editor visual, Ver en Amiga, del evento al código),
+  y ejecutar y depurar.
+- README: capturas (`images/editor.png`, `images/amiga.png`) y "Getting started". `test/screenshots.js` rehace
+  la del editor (el webview en Chromium con la ventana del proyecto nuevo). La del Amiga es el programa del
+  proyecto nuevo en el A1200 con MUI (`emu_run --screenshot`).
+- Tests:
+  - En node: ficheros del proyecto; su ventana sin problemas; su programa compila.
+  - Comprobado a mano en el emulador: la ventana sale y el programa acaba bien.
+  - En VS Code: la orden crea la carpeta, y las páginas de la guía y `dash.choosePath` están. VS Code 14 bien y
+    7 saltados por falta de foco.
+- Visto de paso (no arreglado, es del runtime de MUI): `GetVPModeID` y `GetBitMapAttr` sin prototipo en los
+  programas MUI (aviso de gcc, también en `examples/mui_hola.dash`).
 

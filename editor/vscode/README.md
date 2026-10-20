@@ -1,6 +1,26 @@
 # Dash for VS Code
 
-Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to C for the Amiga:
+Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to C for the Amiga.
+
+![The visual editor of a MUI window](images/editor.png)
+
+![The same window on the emulated Amiga](images/amiga.png)
+
+## Getting started
+
+1. You need the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain (`m68k-amigaos-gcc` in
+   `/opt/amiga`) and, for the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For MUI
+   windows, the MUI SDK (`tools/get_mui_sdk.sh`) and Workbench files with MUI for the emulator
+   (`tools/emu_sys_mui.sh`, setting `dash.emulator.muiSystem`).
+2. **Dash: Nuevo proyecto** makes a folder with a program, its window (`ventana.dashui`) and a `launch.json`.
+   If the folder is not inside the Dash repository, **Dash: Elegir la carpeta del compilador** (setting
+   `dash.path`).
+3. Open the window with the visual editor (**Ver en Amiga** shows it on the emulated Amiga), run the program
+   (▶ in the status bar) and debug it with F5.
+
+The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open Walkthrough") goes through the same.
+
+## Features
 
 - Syntax highlighting of `.dash` files (with the C of `@native` blocks): every keyword, directive and builtin,
   `Window` blocks, `#{...}` with expressions. Generated from the compiler (`tools/gen_tmgrammar.py` in the Dash
