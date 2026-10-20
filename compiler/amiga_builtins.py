@@ -3782,6 +3782,9 @@ NET_FUNCTIONS = {
     "net_resolve": _text("net_resolve", ["host"], "STRPTR", "_dash_net_resolve(${host})",
                          "IPv4 address of a host name (\"a.b.c.d\"), nil if unknown"),
     "net_error": _text("net_error", [], "STRPTR", "_dash_net_error()", "What went wrong in the last net_ call"),
+    "net_signal": _text("net_signal", [], "LONG", "_dash_net_signal()",
+                        "Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP "
+                        "stack cannot: call it before each wait, mui_wait_event_signals(net_signal())"),
 }
 
 # =============================================================================
@@ -3898,6 +3901,11 @@ TASK_FUNCTIONS = {
         name="task_done", params=["task"], return_type="BOOL",
         c_template="_dash_task_done(${task})",
         description="True once the function has returned (does not wait)"),
+    "task_signal": BuiltinFunc(
+        name="task_signal", params=[], return_type="LONG",
+        c_template="_dash_task_signal()",
+        description="Signal mask each task sends to the program when its function returns (for "
+                    "mui_wait_event_signals), 0 if none is free"),
     "task_result": BuiltinFunc(
         name="task_result", params=["task"], return_type="LONG",
         c_template="_dash_task_result(${task})",

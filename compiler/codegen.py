@@ -1248,10 +1248,13 @@ struct _DashTask {
     LONG (*func)(LONG);
     LONG arg, result, pri;
     volatile LONG done;
+    struct Task *owner;              /* the program, signalled when f returns (task_signal) */
     struct _DashTask *next;          /* all of them, for the exit */
 };
 static struct _DashTask *_dash_tasks = NULL;
 static struct _DashTask *_dash_task_next = NULL;
+static volatile ULONG _dash_task_sigmask = 0;
+static BYTE _dash_task_sigbit = -1;
 
 static void _dash_task_proc(void) {
     struct _DashTask *t = _dash_task_next;
@@ -1259,6 +1262,15 @@ static void _dash_task_proc(void) {
     t->result = t->func(t->arg);
     Forbid();             /* done only once this process has left the program's code */
     t->done = 1;
+    if (_dash_task_sigmask) Signal(t->owner, _dash_task_sigmask);
+}
+
+/* A signal that every task_start sends to the program when its function returns (dashweb D60),
+   to wait for it instead of asking task_done from time to time; 0 if there are no signals left */
+static LONG _dash_task_signal(void) {
+    if (_dash_task_sigbit < 0 && (_dash_task_sigbit = AllocSignal(-1)) >= 0)
+        _dash_task_sigmask = 1UL << _dash_task_sigbit;
+    return (LONG)_dash_task_sigmask;
 }
 
 static LONG _dash_task_start_with(APTR func, LONG arg, LONG stack, LONG pri) {
@@ -1270,6 +1282,7 @@ static LONG _dash_task_start_with(APTR func, LONG arg, LONG stack, LONG pri) {
     t->func = (LONG (*)(LONG))func;
     t->arg = arg;
     t->pri = me->tc_Node.ln_Pri + pri;
+    t->owner = me;
     _dash_task_next = t;
     if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_task_proc, NP_Name, (ULONG)"dash_task",
                            NP_Priority, me->tc_Node.ln_Pri + 1, NP_StackSize, stack, TAG_DONE)) {
@@ -1313,6 +1326,7 @@ static void _dash_task_free(LONG h) {
 /* At exit: the processes run code of the program, which must stay loaded until they end */
 static void _dash_task_cleanup(void) {
     while (_dash_tasks) _dash_task_free((LONG)_dash_tasks);
+    if (_dash_task_sigbit >= 0) { FreeSignal(_dash_task_sigbit); _dash_task_sigbit = -1; _dash_task_sigmask = 0; }
 }
 """
 
@@ -2731,9 +2745,59 @@ static BOOL _dash_net_init(void) {
 
 static void _dash_net_dns_wait(void);
 
+/* Sockets that wake the program (dashweb D60): net_signal() asks bsdsocket.library to post a
+   signal of ours on every event of a socket (connected, data in, room to write, closed, error;
+   SBTC_SIGEVENTMASK and SO_EVENTMASK of AmiTCP 4 and Roadshow), and the name lookups post it when
+   they end. A stack without them gives 0, and the program keeps looking from time to time. */
+#ifndef SO_EVENTMASK
+#define SO_EVENTMASK 0x2001
+#endif
+#define _DASH_SBTM_SETVAL(code) (TAG_USER | ((code) << 1) | 1)
+#define _DASH_SBTC_SIGEVENTMASK 4
+#define _DASH_FD_EVENTS (0x02 | 0x08 | 0x10 | 0x20 | 0x40)   /* FD_CONNECT READ WRITE ERROR CLOSE */
+static volatile ULONG _dash_net_sigmask = 0;
+static BYTE _dash_net_sigbit = -1;
+
+static void _dash_net_watch(LONG sock) {
+    ULONG events = _DASH_FD_EVENTS;
+    if (_dash_net_sigmask && sock >= 0) setsockopt(sock, SOL_SOCKET, SO_EVENTMASK, &events, sizeof(events));
+}
+
+/* The signal mask, or 0; each call forgets the events already posted (bsdsocket keeps a queue of
+   them), so the program calls it before every wait: mui_wait_event_signals(net_signal()) */
+static LONG _dash_net_signal(void) {
+    static BOOL tried = FALSE;
+    ULONG events = _DASH_FD_EVENTS;
+    LONG s, n;
+    struct TagItem tags[2];
+    if (!tried) {
+        tried = TRUE;
+        if (!_dash_net_init()) return 0;
+        /* a stack that takes the tag but not the option (FS-UAE's: ENOPROTOOPT) would never post */
+        if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) return 0;
+        n = setsockopt(s, SOL_SOCKET, SO_EVENTMASK, &events, sizeof(events));
+        CloseSocket(s);
+        if (n < 0 || (_dash_net_sigbit = AllocSignal(-1)) < 0) return 0;
+        tags[0].ti_Tag = _DASH_SBTM_SETVAL(_DASH_SBTC_SIGEVENTMASK);
+        tags[0].ti_Data = 1UL << _dash_net_sigbit;
+        tags[1].ti_Tag = TAG_DONE;
+        if (SocketBaseTagList(tags) != 0) {
+            FreeSignal(_dash_net_sigbit);
+            _dash_net_sigbit = -1;
+            return 0;
+        }
+        _dash_net_sigmask = 1UL << _dash_net_sigbit;
+        n = getdtablesize();              /* the sockets already open */
+        for (s = 0; s < n; s++) _dash_net_watch(s);
+    }
+    if (_dash_net_sigmask) while (GetSocketEvents(&events) >= 0) ;
+    return (LONG)_dash_net_sigmask;
+}
+
 static void _dash_net_cleanup(void) {
     _dash_net_dns_wait();
     if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
+    if (_dash_net_sigbit >= 0) { FreeSignal(_dash_net_sigbit); _dash_net_sigbit = -1; _dash_net_sigmask = 0; }
 }
 
 /* host name or dotted address to an IPv4 address (network order); FALSE if unknown */
@@ -2777,6 +2841,7 @@ static LONG _dash_net_connect(STRPTR host, LONG port, LONG timeout_ms) {
     if (!_dash_net_lookup(host, &sa.sin_addr)) return -1;
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    _dash_net_watch(sock);
     sa.sin_family = AF_INET;
     sa.sin_port = htons(port);
     memset(sa.sin_zero, 0, sizeof(sa.sin_zero));
@@ -2842,6 +2907,7 @@ static STRPTR _dash_net_recv(LONG sock, LONG max, LONG timeout_ms) {
 struct _DashDns {
     volatile LONG done, ok, abandoned;
     struct in_addr addr;
+    struct Task *owner;            /* signalled (net_signal) when the lookup ends */
     BYTE pri;
     char host[1];
 };
@@ -2906,6 +2972,7 @@ static void _dash_net_dns_proc(void) {
     }
     Forbid();                      /* the program may only end once this process has gone */
     d->done = 1;
+    if (_dash_net_sigmask) Signal(d->owner, _dash_net_sigmask);
     if (d->abandoned) FreeVec(d);
     _dash_net_dns_live--;
 }
@@ -2917,6 +2984,7 @@ static struct _DashDns *_dash_net_dns_start(STRPTR host) {
     if (!d) return NULL;
     CopyMem(host, d->host, n + 1);
     d->pri = me->tc_Node.ln_Pri;
+    d->owner = me;
     _dash_net_dns_next = d;
     _dash_net_dns_live++;
     if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_net_dns_proc, NP_Name, (ULONG)"dash_dns",
@@ -2981,6 +3049,7 @@ static LONG _dash_net_connect_start(STRPTR host, LONG port, LONG timeout_ms) {
     if (_dash_net_npend == _DASH_NET_PENDING) { _dash_net_err = "demasiadas conexiones a la vez"; return -1; }
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    _dash_net_watch(sock);
     i = _dash_net_npend++;
     _dash_net_pend[i].sock = sock;
     _dash_net_pend[i].port = port;

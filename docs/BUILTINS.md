@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 511 funciones, 511 implementadas, 0 sin implementar.
+Total: 513 funciones, 513 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -371,6 +371,7 @@ Total: 511 funciones, 511 implementadas, 0 sin implementar.
 | `net_close(sock)` | `void` | Close the connection |  |
 | `net_resolve(host)` | `STRPTR` | IPv4 address of a host name ("a.b.c.d"), nil if unknown |  |
 | `net_error()` | `STRPTR` | What went wrong in the last net_ call |  |
+| `net_signal()` | `LONG` | Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP stack cannot: call it before each wait, mui_wait_event_signals(net_signal()) |  |
 
 ## TLS (AmiSSL)
 
@@ -422,6 +423,7 @@ Total: 511 funciones, 511 implementadas, 0 sin implementar.
 | `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
 | `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
 | `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
+| `task_signal()` | `LONG` | Signal mask each task sends to the program when its function returns (for mui_wait_event_signals), 0 if none is free |  |
 | `task_result(task)` | `LONG` | What the function returned (waits for it if it has not finished) |  |
 | `task_free(task)` | `void` | Forget the task (waits for it if it is still running); the program waits for any left at exit |  |
 

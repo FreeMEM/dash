@@ -1748,6 +1748,23 @@ end
 programa no llama a `net_connect_poll` ni a `tls_connect_poll` (ocupado en otra cosa) no cuenta
 para el limite, y el de la negociacion TLS empieza de nuevo cada vez que esta da un paso.
 
+**Despertar con la red.** En vez de mirar cada poco, el programa puede dormir hasta que pase algo:
+`net_signal()` da una señal que los sockets envian en cada suceso (conectado, llegan datos, se cierra,
+error) y la busqueda del nombre al acabar. Se llama antes de cada espera, porque cada llamada vacia la
+cola de sucesos de la pila TCP/IP:
+
+```
+ev = mui_wait_event_signals(net_signal())
+if ev == 0
+    ... mirar las conexiones: net_connect_poll, net_recv_buffer(s, buf, max, 0), tls_...
+end
+```
+
+Si la pila no sabe (la `bsdsocket.library` de FS-UAE no tiene `SO_EVENTMASK`), `net_signal()` da 0 y
+hay que seguir mirando con un temporizador. Los limites de tiempo de `net_connect_start` solo se
+comprueban al llamar a `net_connect_poll`: conviene un temporizador lento (un segundo) aunque haya señal.
+Probado con la `bsdsocket` de Amiberry 8.2; Roadshow y AmiTCP 4 tienen lo mismo (`SBTC_SIGEVENTMASK`).
+
 ### TLS (HTTPS) con AmiSSL
 
 Sobre un socket de `net_connect`, `tls_connect` negocia TLS con AmiSSL 5 y comprueba que el
@@ -2987,6 +3004,7 @@ if task_done(t)                            # true cuando la funcion ha vuelto (n
     task_free(t)                           # olvidarla (espera si aun corre)
 end
 t2 = task_start_with(decodificar, buffer, 65536, -1)   # pila en bytes (0: 128 KB) y prioridad
+ev = mui_wait_event_signals(task_signal())  # despierta cuando acaba una (0 si no quedan señales)
 ```
 
 En el otro proceso solo corre C: nada de textos, listas ni `Print` de Dash, que no estan

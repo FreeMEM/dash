@@ -320,6 +320,7 @@ net_send_buffer(s, buf, n)  net_recv_buffer(s, buf, max, ms)
 t = tls_connect(s, "host")           # TLS (AmiSSL 5, 68020+): tls_send, tls_recv, tls_close
 s = net_connect_start("host", 80, 10000)  # without waiting: net_connect_poll(s) 1 / 0 / -1,
 t = tls_connect_start(s, "host", 10000)   # net_connect_stage(s); tls_connect_poll(t) 1 / 0 / -1
+ev = mui_wait_event_signals(net_signal())   # wakes on socket events (0: the stack cannot, poll)
 ```
 
 ## Program Arguments
