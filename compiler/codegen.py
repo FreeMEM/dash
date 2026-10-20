@@ -248,6 +248,10 @@ typedef struct _DashStrHdr {
 } _DashStrHdr;
 
 #define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
+/* the high byte of size also says "a text of Dash" (texts are under 16 MB): the cache of lengths
+   only keeps those, not texts of C code that C may free and reuse without Dash knowing (D61) */
+#define _DASH_STR_TAG  0x5A000000UL
+#define _DASH_STR_SIZE(h) ((h)->size & 0x00FFFFFFUL)
 #define _DASH_STR_HDR(p) ((_DashStrHdr *)((UBYTE *)(p) - sizeof(_DashStrHdr)))
 
 static _DashStrHdr *_dash_tmp = NULL;
@@ -255,13 +259,15 @@ static ULONG _dash_tmp_serial = 0;
 
 static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     ULONG size = sizeof(_DashStrHdr) + len + 1;
-    _DashStrHdr *h = (_DashStrHdr *)_dash_block_get(size);
+    _DashStrHdr *h;
     STRPTR text;
+    if (size > 0x00FFFFFFUL) return NULL;
+    h = (_DashStrHdr *)_dash_block_get(size);
     if (!h) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_strs++;
 #endif
-    h->size = size;
+    h->size = size | _DASH_STR_TAG;
     h->next = NULL;
     h->serial = 0;
     if (temp) {
@@ -279,7 +285,7 @@ static void _dash_str_drop(_DashStrHdr *h) {
     if (h->size == _DASH_MC_DEAD) { _dash_mc_error((CONST_STRPTR)"string liberado dos veces"); return; }
     _dash_mc_strs--;
 #endif
-    _dash_block_put(h, h->size & ~_DASH_STR_KEEP);
+    _dash_block_put(h, _DASH_STR_SIZE(h));
 }
 
 /* Marks are serial numbers: removing a temporary from the list never breaks them */
@@ -1248,10 +1254,13 @@ struct _DashTask {
     LONG (*func)(LONG);
     LONG arg, result, pri;
     volatile LONG done;
+    struct Task *owner;              /* the program, signalled when f returns (task_signal) */
     struct _DashTask *next;          /* all of them, for the exit */
 };
 static struct _DashTask *_dash_tasks = NULL;
 static struct _DashTask *_dash_task_next = NULL;
+static volatile ULONG _dash_task_sigmask = 0;
+static BYTE _dash_task_sigbit = -1;
 
 static void _dash_task_proc(void) {
     struct _DashTask *t = _dash_task_next;
@@ -1259,6 +1268,15 @@ static void _dash_task_proc(void) {
     t->result = t->func(t->arg);
     Forbid();             /* done only once this process has left the program's code */
     t->done = 1;
+    if (_dash_task_sigmask) Signal(t->owner, _dash_task_sigmask);
+}
+
+/* A signal that every task_start sends to the program when its function returns (dashweb D60),
+   to wait for it instead of asking task_done from time to time; 0 if there are no signals left */
+static LONG _dash_task_signal(void) {
+    if (_dash_task_sigbit < 0 && (_dash_task_sigbit = AllocSignal(-1)) >= 0)
+        _dash_task_sigmask = 1UL << _dash_task_sigbit;
+    return (LONG)_dash_task_sigmask;
 }
 
 static LONG _dash_task_start_with(APTR func, LONG arg, LONG stack, LONG pri) {
@@ -1270,6 +1288,7 @@ static LONG _dash_task_start_with(APTR func, LONG arg, LONG stack, LONG pri) {
     t->func = (LONG (*)(LONG))func;
     t->arg = arg;
     t->pri = me->tc_Node.ln_Pri + pri;
+    t->owner = me;
     _dash_task_next = t;
     if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_task_proc, NP_Name, (ULONG)"dash_task",
                            NP_Priority, me->tc_Node.ln_Pri + 1, NP_StackSize, stack, TAG_DONE)) {
@@ -1313,6 +1332,7 @@ static void _dash_task_free(LONG h) {
 /* At exit: the processes run code of the program, which must stay loaded until they end */
 static void _dash_task_cleanup(void) {
     while (_dash_tasks) _dash_task_free((LONG)_dash_tasks);
+    if (_dash_task_sigbit >= 0) { FreeSignal(_dash_task_sigbit); _dash_task_sigbit = -1; _dash_task_sigmask = 0; }
 }
 """
 
@@ -2731,9 +2751,59 @@ static BOOL _dash_net_init(void) {
 
 static void _dash_net_dns_wait(void);
 
+/* Sockets that wake the program (dashweb D60): net_signal() asks bsdsocket.library to post a
+   signal of ours on every event of a socket (connected, data in, room to write, closed, error;
+   SBTC_SIGEVENTMASK and SO_EVENTMASK of AmiTCP 4 and Roadshow), and the name lookups post it when
+   they end. A stack without them gives 0, and the program keeps looking from time to time. */
+#ifndef SO_EVENTMASK
+#define SO_EVENTMASK 0x2001
+#endif
+#define _DASH_SBTM_SETVAL(code) (TAG_USER | ((code) << 1) | 1)
+#define _DASH_SBTC_SIGEVENTMASK 4
+#define _DASH_FD_EVENTS (0x02 | 0x08 | 0x10 | 0x20 | 0x40)   /* FD_CONNECT READ WRITE ERROR CLOSE */
+static volatile ULONG _dash_net_sigmask = 0;
+static BYTE _dash_net_sigbit = -1;
+
+static void _dash_net_watch(LONG sock) {
+    ULONG events = _DASH_FD_EVENTS;
+    if (_dash_net_sigmask && sock >= 0) setsockopt(sock, SOL_SOCKET, SO_EVENTMASK, &events, sizeof(events));
+}
+
+/* The signal mask, or 0; each call forgets the events already posted (bsdsocket keeps a queue of
+   them), so the program calls it before every wait: mui_wait_event_signals(net_signal()) */
+static LONG _dash_net_signal(void) {
+    static BOOL tried = FALSE;
+    ULONG events = _DASH_FD_EVENTS;
+    LONG s, n;
+    struct TagItem tags[2];
+    if (!tried) {
+        tried = TRUE;
+        if (!_dash_net_init()) return 0;
+        /* a stack that takes the tag but not the option (FS-UAE's: ENOPROTOOPT) would never post */
+        if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) return 0;
+        n = setsockopt(s, SOL_SOCKET, SO_EVENTMASK, &events, sizeof(events));
+        CloseSocket(s);
+        if (n < 0 || (_dash_net_sigbit = AllocSignal(-1)) < 0) return 0;
+        tags[0].ti_Tag = _DASH_SBTM_SETVAL(_DASH_SBTC_SIGEVENTMASK);
+        tags[0].ti_Data = 1UL << _dash_net_sigbit;
+        tags[1].ti_Tag = TAG_DONE;
+        if (SocketBaseTagList(tags) != 0) {
+            FreeSignal(_dash_net_sigbit);
+            _dash_net_sigbit = -1;
+            return 0;
+        }
+        _dash_net_sigmask = 1UL << _dash_net_sigbit;
+        n = getdtablesize();              /* the sockets already open */
+        for (s = 0; s < n; s++) _dash_net_watch(s);
+    }
+    if (_dash_net_sigmask) while (GetSocketEvents(&events) >= 0) ;
+    return (LONG)_dash_net_sigmask;
+}
+
 static void _dash_net_cleanup(void) {
     _dash_net_dns_wait();
     if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
+    if (_dash_net_sigbit >= 0) { FreeSignal(_dash_net_sigbit); _dash_net_sigbit = -1; _dash_net_sigmask = 0; }
 }
 
 /* host name or dotted address to an IPv4 address (network order); FALSE if unknown */
@@ -2777,6 +2847,7 @@ static LONG _dash_net_connect(STRPTR host, LONG port, LONG timeout_ms) {
     if (!_dash_net_lookup(host, &sa.sin_addr)) return -1;
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    _dash_net_watch(sock);
     sa.sin_family = AF_INET;
     sa.sin_port = htons(port);
     memset(sa.sin_zero, 0, sizeof(sa.sin_zero));
@@ -2842,6 +2913,7 @@ static STRPTR _dash_net_recv(LONG sock, LONG max, LONG timeout_ms) {
 struct _DashDns {
     volatile LONG done, ok, abandoned;
     struct in_addr addr;
+    struct Task *owner;            /* signalled (net_signal) when the lookup ends */
     BYTE pri;
     char host[1];
 };
@@ -2906,6 +2978,7 @@ static void _dash_net_dns_proc(void) {
     }
     Forbid();                      /* the program may only end once this process has gone */
     d->done = 1;
+    if (_dash_net_sigmask) Signal(d->owner, _dash_net_sigmask);
     if (d->abandoned) FreeVec(d);
     _dash_net_dns_live--;
 }
@@ -2917,6 +2990,7 @@ static struct _DashDns *_dash_net_dns_start(STRPTR host) {
     if (!d) return NULL;
     CopyMem(host, d->host, n + 1);
     d->pri = me->tc_Node.ln_Pri;
+    d->owner = me;
     _dash_net_dns_next = d;
     _dash_net_dns_live++;
     if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_net_dns_proc, NP_Name, (ULONG)"dash_dns",
@@ -2981,6 +3055,7 @@ static LONG _dash_net_connect_start(STRPTR host, LONG port, LONG timeout_ms) {
     if (_dash_net_npend == _DASH_NET_PENDING) { _dash_net_err = "demasiadas conexiones a la vez"; return -1; }
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    _dash_net_watch(sock);
     i = _dash_net_npend++;
     _dash_net_pend[i].sock = sock;
     _dash_net_pend[i].port = port;
@@ -3411,13 +3486,24 @@ static UBYTE _dash_sc_next;
 static STRPTR _dash_sc_last = NULL;
 static LONG _dash_sc_last_len = 0;
 
+/* A text Dash made (its header has the tag and room for len): only those go in the cache. A text
+   of C (malloc, a library) may be freed and its address reused by another one of a different
+   length, and Dash would not know (D61). Odd addresses are never Dash's (and a long read there
+   stops a 68000). */
+static BOOL _dash_str_ours(STRPTR s, LONG len) {
+    _DashStrHdr *h;
+    if ((ULONG)s & 1) return FALSE;
+    h = _DASH_STR_HDR(s);
+    return (h->size & 0x7F000000UL) == _DASH_STR_TAG && (LONG)_DASH_STR_SIZE(h) >= (LONG)sizeof(_DashStrHdr) + len + 1;
+}
+
 static LONG _dash_str_len(STRPTR s) {
     LONG k, len;
     if (!s) return 0;
     for (k = 0; k < _DASH_SC_N; k++)
         if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
     len = strlen((char *)s);
-    if (len >= _DASH_SC_MIN) {
+    if (len >= _DASH_SC_MIN && _dash_str_ours(s, len)) {
         k = _dash_sc_next;
         _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
         _dash_sc_s[k] = s;
@@ -3445,7 +3531,7 @@ static void _dash_str_setlen(STRPTR s, LONG len) {
             return;
         }
     }
-    if (len >= _DASH_SC_MIN) {
+    if (len >= _DASH_SC_MIN && _dash_str_ours(s, len)) {
         k = _dash_sc_next;
         _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
         _dash_sc_s[k] = s;
@@ -3470,7 +3556,7 @@ static void _dash_str_append(STRPTR *var, STRPTR add) {
     }
     len = _dash_str_len(s);
     h = _DASH_STR_HDR(s);
-    cap = (LONG)(h->size & ~_DASH_STR_KEEP) - (LONG)sizeof(_DashStrHdr) - 1;
+    cap = (LONG)_DASH_STR_SIZE(h) - (LONG)sizeof(_DashStrHdr) - 1;
     if (!(h->size & _DASH_STR_KEEP) && !h->serial && len + n <= cap) {
         _dash_copy(s + len, add, n);
         s[len + n] = 0;
@@ -3964,8 +4050,13 @@ static LONG _dash_arena_available(_Dash_Arena *arena) {
     # tools/emu_run.py): the program ends by itself through _dash_exit(0), so
     # programs that wait for the close gadget can run unattended in an emulator
     AUTOCLOSE_RUNTIME = Template("""\
-/* Test mode: end the program after $seconds seconds */
+/* Test mode: end the program after $seconds seconds. A wait that can say "closed" (MUI's
+   mui_wait_event: -1) sets _dash_ac_soft and gets the end that way, so the program leaves by its
+   own path (what comes after its loop runs, --memcheck counts at its end); 5 seconds later, or
+   anywhere else, the program ends at once. */
+#define _DASH_AUTOCLOSE 1
 static LONG _dash_ac_start = -1;
+static BOOL _dash_ac_soft = FALSE, _dash_ac_expired = FALSE;
 
 static void _dash_ac_check(void) {
     struct DateStamp ds;
@@ -3974,7 +4065,11 @@ static void _dash_ac_check(void) {
     DateStamp(&ds);
     now = ds.ds_Minute * 3000 + ds.ds_Tick;
     if (_dash_ac_start < 0) _dash_ac_start = now;
-    if (now - _dash_ac_start >= $seconds * 50) _dash_exit(0);
+    if (now - _dash_ac_start >= ($seconds + 5) * 50) _dash_exit(0);
+    if (now - _dash_ac_start >= $seconds * 50) {
+        if (!_dash_ac_soft) _dash_exit(0);
+        _dash_ac_expired = TRUE;
+    }
 }
 
 /* In every turn of a while: the clock only every 1024 turns (DateStamp in every turn made the
@@ -3995,6 +4090,7 @@ static ULONG _dash_ac_wait(ULONG mask) {
     ULONG got;
     while (!((got = SetSignal(0, 0)) & mask)) {
         _dash_ac_check();
+        if (_dash_ac_expired) return 0;
         Delay(1);
     }
     SetSignal(0, got & mask);
@@ -9550,7 +9646,15 @@ static LONG _dash_mui_wait_event_signals(ULONG mask) {
         if (id) return id;
         if (_dash_mui_timer_hook && (id = _dash_mui_timer_hook())) return id;
         if (sigs) {
+#ifdef _DASH_AUTOCLOSE
+            _dash_ac_soft = TRUE;           /* test mode: the time's end is a close (-1) */
+            if (_dash_ac_expired) return -1;
             got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+            _dash_ac_soft = FALSE;
+            if (_dash_ac_expired) return -1;
+#else
+            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+#endif
             if (got & SIGBREAKF_CTRL_C) return -1;
             if (got & mask) {
                 _dash_mui_got = got & mask;
@@ -11363,7 +11467,8 @@ static {ret_type} {native.name}({params_str}) {{
         typedef += "\n".join(fields)
         typedef += f"\n}};\n"
 
-        # Generate constructor function using refcount allocation. The struct
+        # Generate constructor function using refcount allocation (the object is _dash_o: the
+        # parameters are named like the fields, and a field may be called s). The struct
         # owns its String fields and holds a reference to its struct fields;
         # the destructor gives them back when the last reference goes.
         params = []
@@ -11375,16 +11480,16 @@ static {ret_type} {native.name}({params_str}) {{
             # the block is not cleared: owned fields start NULL before they are set
             if c_type == "STRPTR":
                 self.uses_strings = True
-                assigns.append(f"    s->{field.name} = NULL;\n    _dash_str_set(&s->{field.name}, {field.name});")
-                frees.append(f"    _dash_str_free(s->{field.name});")
+                assigns.append(f"    _dash_o->{field.name} = NULL;\n    _dash_str_set(&_dash_o->{field.name}, {field.name});")
+                frees.append(f"    _dash_str_free(_dash_o->{field.name});")
             elif self._is_obj_c_type(c_type) and field.weak:   # weak: points, does not hold
                 self.uses_weak = True
-                assigns.append(f"    s->{field.name} = {field.name};")
+                assigns.append(f"    _dash_o->{field.name} = {field.name};")
             elif self._is_obj_c_type(c_type):   # struct or Array field: a new reference
-                assigns.append(f"    s->{field.name} = {field.name};\n    _dash_retain({field.name});")
-                frees.append(f"    _dash_release_child(s->{field.name});")
+                assigns.append(f"    _dash_o->{field.name} = {field.name};\n    _dash_retain({field.name});")
+                frees.append(f"    _dash_release_child(_dash_o->{field.name});")
             else:
-                assigns.append(f"    s->{field.name} = {field.name};")
+                assigns.append(f"    _dash_o->{field.name} = {field.name};")
 
         params_str = ", ".join(params)
         assigns_str = "\n".join(assigns)
@@ -11393,7 +11498,7 @@ static {ret_type} {native.name}({params_str}) {{
         destroy = f"_dash_struct_destroy_{struct.name}" if frees else "NULL"
         destructor = f"""
 static void _dash_struct_destroy_{struct.name}(void *obj) {{
-    {c_name} *s = ({c_name} *)obj;
+    {c_name} *_dash_o = ({c_name} *)obj;
 {chr(10).join(frees)}
 }}
 """ if frees else ""
@@ -11403,17 +11508,17 @@ static void _dash_struct_destroy_{struct.name}(void *obj) {{
         # Two bodies: calling one from the other cost ~280 cycles on a 68000
         constructor = f"""{destructor}
 static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
-    {c_name} *s = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), {destroy});
-    if (!s) return NULL;
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), {destroy});
+    if (!_dash_o) return NULL;
 {assigns_str}
-    return s;
+    return _dash_o;
 }}
 
 static {c_name}* _dash_struct_create_{struct.name}({params_str}) {{
-    {c_name} *s = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), {destroy});
-    if (!s) return NULL;
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), {destroy});
+    if (!_dash_o) return NULL;
 {assigns_str}
-    return s;
+    return _dash_o;
 }}
 """
 

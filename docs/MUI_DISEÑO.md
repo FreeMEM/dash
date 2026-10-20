@@ -202,6 +202,7 @@ end
   `mui_app_end()`. Los textos que se pasan a `mui_text`, `mui_string`, `mui_list_add`... los copia MUI, así que los
   temporales de Dash se pueden liberar al acabar la vuelta. `--memcheck` debe acabar sin nada vivo.
 - **Tests en el emulador:** sin ratón. Se prueba con `mui_set_value` (dispara `on_change`), `mui_press`,
-  `mui_get_*` y `mui_window_open`; los programas acaban solos con `--autoclose` (`mui_wait_event` devuelve -1).
+  `mui_get_*` y `mui_window_open`; los programas acaban solos con `--autoclose`: al cumplirse el tiempo `mui_wait_event` devuelve -1, como al cerrar, y
+  el programa sale por su camino (lo de después del bucle se ejecuta); si sigue sin acabar 5 s después, se cierra en seco.
 - **Cadena de errores:** sin muimaster, ventana que no abre o 68000 → mensaje por la salida estándar y
   `mui_app_begin` devuelve 0; el programa decide.

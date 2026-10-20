@@ -1,0 +1,37 @@
+# Test: task_signal (dashweb D60): each task_start sends that signal to the program when its function
+# returns, so the program can wait for it (Wait, mui_wait_event_signals) instead of asking task_done.
+# expect-out: hay señal: true
+# expect-out: aún no: true
+# expect-out: llegó la señal: true
+# expect-out: resultado 42
+# expect-out: fin
+
+@native func dormir(ms: Int) -> Int
+"""
+    Delay(ms / 20);
+    return 42;
+"""
+end
+
+# Waits for the signals of mask (at most 5 s): true if they came
+@native func esperar_senal(mask: Int) -> Bool
+"""
+    LONG t;
+    for (t = 0; t < 250; t++) {
+        if (SetSignal(0, (ULONG)mask) & (ULONG)mask) return TRUE;
+        Delay(1);
+    }
+    return FALSE;
+"""
+end
+
+Main
+    m = task_signal()
+    Print "hay señal: #{m != 0}"
+    h = task_start(dormir, 600)
+    Print "aún no: #{not task_done(h)}"
+    Print "llegó la señal: #{esperar_senal(m) and task_done(h)}"
+    Print "resultado #{task_result(h)}"
+    task_free(h)
+    Print "fin"
+end

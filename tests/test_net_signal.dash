@@ -1,0 +1,68 @@
+# Test: net_signal (dashweb D60): the sockets post a signal on their events, so a program can wait for
+# the network instead of looking from time to time. The name lookup posts it when it ends, the
+# connection when it is made and the data when they come in; with nothing coming in, no signal. A
+# stack that cannot (FS-UAE's bsdsocket.library: no SO_EVENTMASK) gives 0 and the program looks from
+# time to time: the output is the same. With signals it was tried in Amiberry 8.2 (bsdsocket_emu).
+# The runner's echo server on 127.0.0.1:40831 answers one line with "eco: <line>".
+# emu-net: 40831
+# memcheck
+# expect-out: nombre encontrado
+# expect-out: conectado
+# expect-out: datos: eco: hola
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+# true if one of the signals of mask comes within ms milliseconds (it clears them)
+@native func llega_senal(mask: Int, ms: Int) -> Bool
+"""
+    LONG t;
+    for (t = 0; t < ms; t += 20) {
+        if (SetSignal(0, (ULONG)mask) & (ULONG)mask) return TRUE;
+        Delay(1);
+    }
+    return (SetSignal(0, (ULONG)mask) & (ULONG)mask) != 0;
+"""
+end
+
+# Waits for the network: for its signal if there is one (else "FALLO"), or 100 ms
+func esperar_red(que: String)
+    m = net_signal()
+    if m == 0
+        time_delay(5)
+    elif not llega_senal(m, 5000)
+        Print "FALLO: sin señal " + que
+    end
+end
+
+Main
+    s = net_connect_start("localhost", 40831, 5000)
+    while net_connect_stage(s) == 0
+        esperar_red("al encontrar el nombre")
+        net_connect_poll(s)
+    end
+    Print "nombre encontrado"
+    r = net_connect_poll(s)
+    while r == 0
+        esperar_red("al conectar")
+        r = net_connect_poll(s)
+    end
+    if r == 1
+        Print "conectado"
+    end
+    m = net_signal()
+    if m != 0
+        # the events of the connection (connected, room to write) may still come a little later
+        while llega_senal(net_signal(), 300)
+        end
+        if llega_senal(net_signal(), 1000)
+            Print "FALLO: señal sin datos"
+        end
+    end
+    net_send(s, "hola\r\n")
+    datos = net_recv(s, 64, 0)
+    while datos == ""
+        esperar_red("al llegar los datos")
+        datos = net_recv(s, 64, 0)
+    end
+    Print "datos: " + str_trim(datos)
+    net_close(s)
+end

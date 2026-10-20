@@ -1748,6 +1748,23 @@ end
 programa no llama a `net_connect_poll` ni a `tls_connect_poll` (ocupado en otra cosa) no cuenta
 para el limite, y el de la negociacion TLS empieza de nuevo cada vez que esta da un paso.
 
+**Despertar con la red.** En vez de mirar cada poco, el programa puede dormir hasta que pase algo:
+`net_signal()` da una señal que los sockets envian en cada suceso (conectado, llegan datos, se cierra,
+error) y la busqueda del nombre al acabar. Se llama antes de cada espera, porque cada llamada vacia la
+cola de sucesos de la pila TCP/IP:
+
+```
+ev = mui_wait_event_signals(net_signal())
+if ev == 0
+    ... mirar las conexiones: net_connect_poll, net_recv_buffer(s, buf, max, 0), tls_...
+end
+```
+
+Si la pila no sabe (la `bsdsocket.library` de FS-UAE no tiene `SO_EVENTMASK`), `net_signal()` da 0 y
+hay que seguir mirando con un temporizador. Los limites de tiempo de `net_connect_start` solo se
+comprueban al llamar a `net_connect_poll`: conviene un temporizador lento (un segundo) aunque haya señal.
+Probado con la `bsdsocket` de Amiberry 8.2; Roadshow y AmiTCP 4 tienen lo mismo (`SBTC_SIGEVENTMASK`).
+
 ### TLS (HTTPS) con AmiSSL
 
 Sobre un socket de `net_connect`, `tls_connect` negocia TLS con AmiSSL 5 y comprueba que el
@@ -2931,6 +2948,15 @@ o una lista que recibe: se retiene hasta salir. Si el C solo usa sus argumentos 
 (si el C quiere quedarse un objeto, lo retiene el mismo con `_dash_retain` y lo suelta con
 `_dash_release`).
 
+**Textos de C largos.** Dash recuerda la longitud de los textos largos (64 caracteres o mas) que hace el
+mismo, y por eso recorrerlos con `s[i]`, `str_code(s, i)` o `s.length` en un bucle es rapido. Un texto que
+viene de C (un puntero que devuelve un `@native`, o que el C de un `@c` pasa a una funcion Dash) no se
+recuerda, porque el C puede liberarlo y otro texto ocupar su direccion: cada `s.length` o `str_code` lo mide
+entero, y recorrerlo es cuadratico (un texto de 26 KB: segundos). Si un `@native` devuelve un texto largo
+que se va a recorrer, que devuelva una copia de Dash: `return _dash_str_dup(texto_de_c, TRUE);` (un temporal
+de Dash, que se libera como los demas; el C puede soltar el suyo despues). Asignarlo a una variable
+(`t = f()`) tambien lo copia.
+
 ### C de fuera: @link, @header y @c
 
 `@link` enlaza con el programa un fuente C, un objeto o una libreria (`.c`, `.o`, `.a`), con la ruta
@@ -2987,6 +3013,7 @@ if task_done(t)                            # true cuando la funcion ha vuelto (n
     task_free(t)                           # olvidarla (espera si aun corre)
 end
 t2 = task_start_with(decodificar, buffer, 65536, -1)   # pila en bytes (0: 128 KB) y prioridad
+ev = mui_wait_event_signals(task_signal())  # despierta cuando acaba una (0 si no quedan señales)
 ```
 
 En el otro proceso solo corre C: nada de textos, listas ni `Print` de Dash, que no estan

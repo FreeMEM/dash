@@ -13,6 +13,7 @@
     let winIndex = 0;        // window shown
     let selected = [];       // path of the selected object ([] = root)
     let dragging = null;     // {type} from the palette or {path} from the tree
+    const amiga = { busy: false, note: '', error: false };   // "Ver en Amiga": running, what it says
 
     const $ = (id) => document.getElementById(id);
     const el = (tag, attrs, ...kids) => {
@@ -234,8 +235,15 @@
             selected = [];
             commit();
         } }, '+'));
-        box.append(el('button', { id: 'amiga', title: 'Ver en Amiga (FS-UAE)',
-            onclick: () => vscode.postMessage({ type: 'amiga', window: win().name }) }, 'Ver en Amiga'));
+        box.append(el('button', { id: 'amiga', title: 'Ver en Amiga (FS-UAE)', disabled: amiga.busy,
+            onclick: () => {
+                amiga.busy = true;
+                amiga.note = 'Compilando y arrancando el emulador…';
+                renderWindows();
+                vscode.postMessage({ type: 'amiga', window: win().name });
+            } }, amiga.busy ? 'Arrancando el Amiga… (30 s)' : 'Ver en Amiga'));
+        // what "Ver en Amiga" is doing, next to its button (the picture comes below the preview)
+        box.append(el('span', { id: 'amiga-note', class: amiga.error ? 'error' : '' }, amiga.note));
     }
 
     function renderPreview() {
@@ -271,9 +279,14 @@
         if (m.type === 'update') load(m.text);
         if (m.type === 'screenshot') {
             const img = $('amiga-shot');
+            if (m.src) img.onload = () => img.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             img.src = m.src || '';
             img.alt = m.error || '';
             $('amiga-status').textContent = m.error || m.status || '';
+            amiga.busy = !!m.busy;
+            amiga.note = m.error || (m.src ? 'Listo: la imagen está debajo de la vista' : m.status || '');
+            amiga.error = !!m.error;
+            if (doc && !error) renderWindows();
         }
     });
     document.addEventListener('keydown', (e) => {

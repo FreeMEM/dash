@@ -9,6 +9,9 @@ body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif)
 #windows { grid-column: 1 / 4; display: flex; gap: 4px; padding: 4px; border-bottom: 1px solid var(--vscode-panel-border, #444); }
 #windows button.active { font-weight: bold; text-decoration: underline; }
 #windows #amiga { margin-left: auto; }
+#windows #amiga:disabled { opacity: 0.7; cursor: progress; }
+#amiga-note { align-self: center; font-size: 0.9em; color: var(--vscode-descriptionForeground, #aaa); }
+#amiga-note.error { color: var(--vscode-errorForeground, #f48771); }
 #palette, #tree, #props { overflow: auto; padding: 4px; border-right: 1px solid var(--vscode-panel-border, #444); }
 .palette-item { padding: 3px 6px; margin: 2px 0; cursor: grab; border-radius: 3px;
                 background: var(--vscode-button-secondaryBackground, #333); }
