@@ -3901,6 +3901,33 @@ TASK_FUNCTIONS = {
         name="task_done", params=["task"], return_type="BOOL",
         c_template="_dash_task_done(${task})",
         description="True once the function has returned (does not wait)"),
+    # Trasfondo: the CPU each task takes (exec's task switch hooks and the EClock, as PM)
+    "cpu_start": BuiltinFunc(
+        name="cpu_start", params=[], return_type="BOOL",
+        c_template="_dash_cpu_start()",
+        description="Start counting the CPU of every task (exec's switch hooks; a task with hooks of another "
+                    "program is not counted): false without EClock or before OS 2.04"),
+    "cpu_sample": BuiltinFunc(
+        name="cpu_sample", params=[], return_type="LONG",
+        c_template="_dash_cpu_sample()",
+        description="Take a sample: the number of tasks, with the CPU each took since the previous sample (or "
+                    "cpu_start), most first; also hooks the tasks started since"),
+    "cpu_task_name": BuiltinFunc(
+        name="cpu_task_name", params=["i"], return_type="STRPTR",
+        c_template="_dash_cpu_task(${i})",
+        description="Name of task i of the last sample, from 0 (of a Shell process, its command)"),
+    "cpu_task_load": BuiltinFunc(
+        name="cpu_task_load", params=["i"], return_type="LONG",
+        c_template="_dash_cpu_task_load(${i})",
+        description="CPU of task i of the last sample, per thousand"),
+    "cpu_total": BuiltinFunc(
+        name="cpu_total", params=[], return_type="LONG",
+        c_template="_dash_cpu_total()",
+        description="CPU of all the counted tasks in the last sample, per thousand (the rest is idle)"),
+    "cpu_stop": BuiltinFunc(
+        name="cpu_stop", params=[], return_type="void",
+        c_template="_dash_cpu_stop()",
+        description="Take the hooks out of the tasks (the program's end does it too)"),
     "task_signal": BuiltinFunc(
         name="task_signal", params=[], return_type="LONG",
         c_template="_dash_task_signal()",

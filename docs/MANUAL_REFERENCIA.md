@@ -3022,6 +3022,28 @@ devuelve otro. `task_start` usa 128 KB de pila y la prioridad del programa; con 
 solo avanza cuando el programa espera (por ejemplo en `mui_wait_event`), y la ventana responde
 antes. Al acabar, el programa espera a las tareas que sigan en marcha.
 
+### CPU de cada tarea: cpu_sample
+
+```ruby
+if cpu_start()                         # false sin EClock o antes de OS 2.04
+    while true
+        time_delay(50)                 # un segundo
+        n = cpu_sample()               # las tareas, de la que mas CPU tomo a la que menos
+        Print "en uso #{cpu_total() / 10} %"
+        for i in (0..n - 1)
+            Print "#{cpu_task_load(i)} por mil  #{cpu_task_name(i)}"
+        end
+    end
+end
+```
+
+Cuenta la CPU exacta de cada tarea con los ganchos de cambio de tarea de exec y el reloj EClock, como
+PM de Michael Sinz. Cada muestra da lo de cada tarea desde la anterior, en tantos por mil; lo que no
+se cuenta es tiempo libre. De un proceso de Shell, el nombre es el de su orden. Cada muestra engancha
+las tareas nuevas y olvida las que acabaron. Una tarea que ya tiene esos ganchos de otro programa no se
+toca ni se cuenta. La cuenta de una tarea incluye las interrupciones que llegan mientras tiene la CPU.
+`cpu_stop()` quita los ganchos; al acabar el programa se quitan solos (tambien con `exit`).
+
 ## 22. Ejemplos Completos
 
 ### Ejemplo 1: Hola Mundo con Ventana

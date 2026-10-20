@@ -2530,6 +2530,247 @@ static void _dash_time_cleanup(void) {
 
 """
 
+    # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
+    # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
+    CPU_RUNTIME = """\
+/* exec (2.04+) calls tc_Launch when a task with TF_LAUNCH gets the CPU and tc_Switch when one with
+   TF_SWITCH leaves it, in the dispatcher (supervisor mode, no interrupts). cpu_start() puts ours on
+   every task that has none (a task with hooks of another program is left alone and not counted):
+   the launch notes the EClock, the switch adds what the task was on the CPU to its count, kept in
+   a table open by the task's address. Each cpu_sample() hooks the tasks that appeared since and
+   forgets the ones that ended. The hooks must be gone before the program unloads: cpu_stop(), and
+   the program's exit (also exit() and the libnix's end, atexit). Time with no task counted is
+   idle (or tasks of another program's hooks). */
+#include <exec/execbase.h>
+#include <dos/dosextens.h>
+#define _DASH_CPU_SLOTS 256                  /* a power of two */
+#define _DASH_CPU_GONE ((struct Task *)1)    /* a slot whose task ended (the chain goes on) */
+#define _DASH_CPU_MAX 128                    /* tasks in a sample */
+struct _DashCpuSlot {
+    struct Task *task;
+    unsigned long long time, before;         /* EClock ticks on the CPU; at the previous sample */
+    BOOL seen;
+};
+static struct _DashCpuSlot _dash_cpu_slots[_DASH_CPU_SLOTS];
+static LONG _dash_cpu_used;                  /* slots with a task or _DASH_CPU_GONE */
+static struct _DashCpuSlot *volatile _dash_cpu_in;   /* the task on the CPU, if it is counted */
+static unsigned long long _dash_cpu_since;
+static BOOL _dash_cpu_on = FALSE;
+static unsigned long long _dash_cpu_last;    /* EClock of the previous sample */
+static LONG _dash_cpu_n = 0;                 /* the last sample, most first */
+static LONG _dash_cpu_load[_DASH_CPU_MAX];
+static char _dash_cpu_name[_DASH_CPU_MAX][32];
+static LONG _dash_cpu_sum = 0;
+
+static unsigned long long _dash_cpu_now(void) {
+    struct EClockVal e;
+    ReadEClock(&e);
+    return (unsigned long long)e.ev_hi << 32 | e.ev_lo;
+}
+
+static struct _DashCpuSlot *_dash_cpu_find(struct Task *t) {
+    ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1), n;
+    for (n = 0; n < _DASH_CPU_SLOTS; n++, i = (i + 1) & (_DASH_CPU_SLOTS - 1)) {
+        if (_dash_cpu_slots[i].task == t) return &_dash_cpu_slots[i];
+        if (!_dash_cpu_slots[i].task) return NULL;
+    }
+    return NULL;
+}
+
+/* The hooks (called through the stubs below, which keep every register as exec wants) */
+__attribute__((used)) void _dash_cpu_launch_c(void) {
+    _dash_cpu_in = _dash_cpu_find(SysBase->ThisTask);
+    _dash_cpu_since = _dash_cpu_now();
+}
+
+__attribute__((used)) void _dash_cpu_switch_c(void) {
+    struct _DashCpuSlot *s = _dash_cpu_in;
+    if (s && s->task == SysBase->ThisTask) s->time += _dash_cpu_now() - _dash_cpu_since;
+    _dash_cpu_in = NULL;
+}
+
+__asm__(
+    "    .text\\n"
+    "    .even\\n"
+    "__dash_cpu_launch:\\n"
+    "    movem.l d0-d1/a0-a1/a6,-(sp)\\n"
+    "    jsr __dash_cpu_launch_c\\n"
+    "    movem.l (sp)+,d0-d1/a0-a1/a6\\n"
+    "    rts\\n"
+    "    .even\\n"
+    "__dash_cpu_switch:\\n"
+    "    movem.l d0-d1/a0-a1/a6,-(sp)\\n"
+    "    jsr __dash_cpu_switch_c\\n"
+    "    movem.l (sp)+,d0-d1/a0-a1/a6\\n"
+    "    rts\\n");
+void _dash_cpu_launch(void);
+void _dash_cpu_switch(void);
+
+/* A slot for a task not in the table (the table is never full: see _dash_cpu_compact) */
+static struct _DashCpuSlot *_dash_cpu_add(struct Task *t) {
+    ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1);
+    while (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) i = (i + 1) & (_DASH_CPU_SLOTS - 1);
+    if (!_dash_cpu_slots[i].task) _dash_cpu_used++;
+    _dash_cpu_slots[i].task = t;
+    _dash_cpu_slots[i].time = _dash_cpu_slots[i].before = 0;
+    return &_dash_cpu_slots[i];
+}
+
+/* A task of the lists: hooked if it has no hooks; seen if it is ours (in Disable) */
+static void _dash_cpu_hook(struct Task *t) {
+    struct _DashCpuSlot *s;
+    if (t->tc_Flags & (TF_SWITCH | TF_LAUNCH)) {
+        if (t->tc_Switch != (APTR)_dash_cpu_switch) return;     /* another program's */
+        s = _dash_cpu_find(t);
+        if (!s) return;
+    } else {
+        /* new; a slot of the same address is an ended task whose memory this one took */
+        if (_dash_cpu_used >= _DASH_CPU_SLOTS * 3 / 4) return;
+        s = _dash_cpu_find(t);
+        if (s) s->time = s->before = 0;
+        else s = _dash_cpu_add(t);
+        t->tc_Switch = (APTR)_dash_cpu_switch;
+        t->tc_Launch = (APTR)_dash_cpu_launch;
+        t->tc_Flags |= TF_SWITCH | TF_LAUNCH;
+    }
+    s->seen = TRUE;
+}
+
+static void _dash_cpu_unhook(struct Task *t) {
+    if ((t->tc_Flags & TF_SWITCH) && t->tc_Switch == (APTR)_dash_cpu_switch) {
+        t->tc_Flags &= ~(TF_SWITCH | TF_LAUNCH);
+        t->tc_Switch = NULL;
+        t->tc_Launch = NULL;
+    }
+}
+
+/* With the ended tasks out, the chains are rebuilt when the table fills up with them (in Disable) */
+static void _dash_cpu_compact(void) {
+    static struct _DashCpuSlot keep[_DASH_CPU_SLOTS];
+    LONG i, n = 0;
+    if (_dash_cpu_used < _DASH_CPU_SLOTS / 2) return;
+    for (i = 0; i < _DASH_CPU_SLOTS; i++)
+        if (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) keep[n++] = _dash_cpu_slots[i];
+    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
+    _dash_cpu_used = 0;
+    for (i = 0; i < n; i++) *_dash_cpu_add(keep[i].task) = keep[i];
+    _dash_cpu_in = _dash_cpu_find(SysBase->ThisTask);   /* the one on the CPU (us) moved too */
+}
+
+/* Every task of exec's lists (in Disable) */
+static void _dash_cpu_each(void (*f)(struct Task *)) {
+    struct Node *n;
+    for (n = SysBase->TaskReady.lh_Head; n->ln_Succ; n = n->ln_Succ) f((struct Task *)n);
+    for (n = SysBase->TaskWait.lh_Head; n->ln_Succ; n = n->ln_Succ) f((struct Task *)n);
+    f(SysBase->ThisTask);
+}
+
+static void _dash_cpu_stop(void) {
+    if (!_dash_cpu_on) return;
+    Disable();
+    _dash_cpu_each(_dash_cpu_unhook);
+    _dash_cpu_in = NULL;
+    _dash_cpu_on = FALSE;
+    Enable();
+}
+
+static BOOL _dash_cpu_start(void) {
+    static BOOL at_exit = FALSE;
+    if (_dash_cpu_on) return TRUE;
+    _dash_time_init();
+    if (!_dash_time_freq || SysBase->LibNode.lib_Version < 37) return FALSE;
+    if (!at_exit) at_exit = atexit(_dash_cpu_stop) == 0;
+    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
+    _dash_cpu_used = 0;
+    _dash_cpu_n = _dash_cpu_sum = 0;
+    Disable();
+    _dash_cpu_each(_dash_cpu_hook);
+    _dash_cpu_on = TRUE;
+    _dash_cpu_last = _dash_cpu_now();
+    Enable();
+    return TRUE;
+}
+
+/* The name of a task: for a Shell process, the command it runs */
+static void _dash_cpu_task_name(struct Task *t, char *d) {
+    const char *s = t->tc_Node.ln_Name ? t->tc_Node.ln_Name : "?";
+    LONG i;
+    if (t->tc_Node.ln_Type == NT_PROCESS) {
+        struct CommandLineInterface *cli = BADDR(((struct Process *)t)->pr_CLI);
+        if (cli && cli->cli_Module) {
+            UBYTE *b = BADDR(cli->cli_CommandName);
+            if (b && b[0]) {
+                LONG n = b[0] > 31 ? 31 : b[0];
+                for (i = 0; i < n; i++) d[i] = b[i + 1];
+                d[n] = 0;
+                return;
+            }
+        }
+    }
+    for (i = 0; i < 31 && s[i]; i++) d[i] = s[i];
+    d[i] = 0;
+}
+
+static LONG _dash_cpu_sample(void) {
+    static unsigned long long d[_DASH_CPU_MAX];
+    unsigned long long now, dt, sum = 0;
+    LONG i, j, n = 0;
+    if (!_dash_cpu_on) return 0;
+    Disable();
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_slots[i].seen = FALSE;
+    _dash_cpu_each(_dash_cpu_hook);
+    now = _dash_cpu_now();
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) {
+        struct _DashCpuSlot *s = &_dash_cpu_slots[i];
+        if (!s->task || s->task == _DASH_CPU_GONE) continue;
+        if (!s->seen) {                      /* ended since (what it took before going is lost) */
+            s->task = _DASH_CPU_GONE;
+            continue;
+        }
+        if (n < _DASH_CPU_MAX) {
+            d[n] = s->time - s->before;
+            _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
+            n++;
+        }
+        s->before = s->time;
+    }
+    _dash_cpu_compact();
+    Enable();
+    dt = now - _dash_cpu_last;
+    _dash_cpu_last = now;
+    if (!dt) dt = 1;
+    for (i = 0; i < n; i++) sum += d[i];
+    _dash_cpu_sum = (LONG)(sum * 1000 / dt);
+    for (i = 0; i < n; i++) _dash_cpu_load[i] = (LONG)(d[i] * 1000 / dt);
+    for (i = 1; i < n; i++)                  /* most first */
+        for (j = i; j > 0 && _dash_cpu_load[j] > _dash_cpu_load[j - 1]; j--) {
+            char t[32];
+            LONG l = _dash_cpu_load[j];
+            _dash_cpu_load[j] = _dash_cpu_load[j - 1];
+            _dash_cpu_load[j - 1] = l;
+            memcpy(t, _dash_cpu_name[j], 32);
+            memcpy(_dash_cpu_name[j], _dash_cpu_name[j - 1], 32);
+            memcpy(_dash_cpu_name[j - 1], t, 32);
+        }
+    _dash_cpu_n = n;
+    return n;
+}
+
+static STRPTR _dash_cpu_task(LONG i) {
+    if (i < 0 || i >= _dash_cpu_n) return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup((STRPTR)_dash_cpu_name[i], TRUE);
+}
+
+static LONG _dash_cpu_task_load(LONG i) {
+    return i >= 0 && i < _dash_cpu_n ? _dash_cpu_load[i] : 0;
+}
+
+static LONG _dash_cpu_total(void) {
+    return _dash_cpu_sum;
+}
+
+"""
+
     # Lists that grow (dashweb D4b): push, pop, insert, remove, clear. The data block
     # doubles when full, so adding n elements one by one costs O(n).
     LIST_RUNTIME = """\
@@ -10457,6 +10698,7 @@ _RUNTIME_FLAGS = [
     ("IMAGE_RUNTIME", "uses_images"),       # dashweb D12
     ("ARGS_RUNTIME", "uses_args"),          # dashweb D19
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
+    ("CPU_RUNTIME", "uses_cpu"),            # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
     ("FLOAT_RUNTIME", "uses_float"),
@@ -10695,6 +10937,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
+        self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
         self.uses_net: bool = False      # net_* (NET_RUNTIME)
@@ -10984,6 +11227,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.LOOP_TIMER_RUNTIME)
         if self.uses_time:
             parts.append(CTemplates.TIME_RUNTIME)
+        if self.uses_cpu:
+            parts.append(CTemplates.CPU_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -11182,6 +11427,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_cpu:
+            cleanup.insert(0, "    _dash_cpu_stop();\n")   # the hooks out before anything else (and the EClock)
         if self.uses_blend:
             cleanup.append("    _dash_blend_cleanup();\n")
         if self.needs_area:
@@ -13216,6 +13463,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True      # IMAGE_RUNTIME draws on _dash_rp
         if self.uses_args:
             self.uses_strings = True   # arg() gives a String
+        if self.uses_cpu:
+            self.uses_time = True      # CPU_RUNTIME reads the EClock of TIME_RUNTIME
+            self.uses_strings = True   # cpu_task_name gives a String
         if self.uses_tls:
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:

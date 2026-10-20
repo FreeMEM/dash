@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 513 funciones, 513 implementadas, 0 sin implementar.
+Total: 519 funciones, 519 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -423,6 +423,12 @@ Total: 513 funciones, 513 implementadas, 0 sin implementar.
 | `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
 | `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
 | `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
+| `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
+| `cpu_sample()` | `LONG` | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
+| `cpu_task_name(i)` | `STRPTR` | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |
+| `cpu_task_load(i)` | `LONG` | CPU of task i of the last sample, per thousand |  |
+| `cpu_total()` | `LONG` | CPU of all the counted tasks in the last sample, per thousand (the rest is idle) |  |
+| `cpu_stop()` | `void` | Take the hooks out of the tasks (the program's end does it too) |  |
 | `task_signal()` | `LONG` | Signal mask each task sends to the program when its function returns (for mui_wait_event_signals), 0 if none is free |  |
 | `task_result(task)` | `LONG` | What the function returned (waits for it if it has not finished) |  |
 | `task_free(task)` | `void` | Forget the task (waits for it if it is still running); the program waits for any left at exit |  |
