@@ -2948,6 +2948,15 @@ o una lista que recibe: se retiene hasta salir. Si el C solo usa sus argumentos 
 (si el C quiere quedarse un objeto, lo retiene el mismo con `_dash_retain` y lo suelta con
 `_dash_release`).
 
+**Textos de C largos.** Dash recuerda la longitud de los textos largos (64 caracteres o mas) que hace el
+mismo, y por eso recorrerlos con `s[i]`, `str_code(s, i)` o `s.length` en un bucle es rapido. Un texto que
+viene de C (un puntero que devuelve un `@native`, o que el C de un `@c` pasa a una funcion Dash) no se
+recuerda, porque el C puede liberarlo y otro texto ocupar su direccion: cada `s.length` o `str_code` lo mide
+entero, y recorrerlo es cuadratico (un texto de 26 KB: segundos). Si un `@native` devuelve un texto largo
+que se va a recorrer, que devuelva una copia de Dash: `return _dash_str_dup(texto_de_c, TRUE);` (un temporal
+de Dash, que se libera como los demas; el C puede soltar el suyo despues). Asignarlo a una variable
+(`t = f()`) tambien lo copia.
+
 ### C de fuera: @link, @header y @c
 
 `@link` enlaza con el programa un fuente C, un objeto o una libreria (`.c`, `.o`, `.a`), con la ruta
