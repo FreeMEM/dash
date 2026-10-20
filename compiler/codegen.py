@@ -1135,15 +1135,15 @@ static struct RastPort *_dash_font_rp(void) {
 }
 
 /* name ("helvetica.font") at size pixels: the font, or 0 if there is no such font.
-   Disk fonts need diskfont.library; the ROM's topaz 8 works without it. A size below 1 asks
-   for 1: diskfont 47 (AmigaOS 3.2) with bullet writes into memory that is not its own when it
-   opens an outline font at size 0 (CSS font-size: 0 in dashweb, D57). */
+   Disk fonts need diskfont.library; the ROM's topaz 8 works without it. A size below 2 asks
+   for 2: diskfont 47 (AmigaOS 3.2) with bullet writes some 50 bytes into memory that is not its
+   own when it opens an outline font at size 1 or 0 (CSS font-size: 0 in dashweb, D57). */
 static LONG _dash_font_open(STRPTR name, LONG size) {
     struct TextAttr ta;
     struct TextFont *f = NULL;
     LONG i;
     if (!name) return 0;
-    if (size < 1) size = 1;
+    if (size < 2) size = 2;
     ta.ta_Name = name;
     ta.ta_YSize = size;
     ta.ta_Style = FS_NORMAL;

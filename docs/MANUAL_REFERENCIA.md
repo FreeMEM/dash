@@ -1231,7 +1231,7 @@ ancho = gfx_text_len("Hola")    # Ancho en pixeles
 
 ```
 f = font_open("helvetica.font", 13)    # 0 si no existe (la topaz 8 de la ROM siempre esta)
-                                       # (un tamano menor que 1 pide 1: el 0 cuelga diskfont de 3.2)
+                                       # (un tamano menor que 2 pide 2: el 1 y el 0 hacen que diskfont de 3.2 pise memoria)
 font_use(f)                            # el texto que se dibuje despues usa esta fuente
 font_style(2)                          # 0 normal, +1 subrayado, +2 negrita, +4 cursiva
 ancho = font_text_width("Hola")        # con la fuente y el estilo actuales
