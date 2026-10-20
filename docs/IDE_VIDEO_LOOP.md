@@ -68,7 +68,7 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       elegir máquina), comprobación de memoria y perfil.
 - [x] v7. **5. Depurar:** F5, punto de parada, variables y pila en Dash, la consola con expresiones de Dash, paso
       a paso, un punto con condición, un error del programa que para como excepción.
-- [ ] v8. **6. Un Amiga real:** Preparar para un Amiga real y la configuración de attach (con el emulador haciendo
+- [x] v8. **6. Un Amiga real:** Preparar para un Amiga real y la configuración de attach (con el emulador haciendo
       de Amiga).
 
 ### C. Caza de errores (casos raros)
@@ -151,6 +151,10 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
       anterior (en v7 se pisaban dos tras un corte).
 - [ ] (v7) En la primera parada "Locals" sale plegado (en las siguientes, abierto); gdb da los mismos scopes. Parece
       cosa de VS Code al abrir la vista de depurar en ese momento. En el vídeo se abre con un clic. Se queda así.
+
+- [x] (v8) El texto de "Preparar para un Amiga real" decía "F5 con la configuración Amiga real", pero F5 arranca la
+      elegida en Ejecutar y depurar (la primera es la del emulador). Ahora dice que se elija (o "Debug: Select and
+      Start Debugging"). El vídeo aún enseña el texto viejo: se regraba en v17.
 
 ## Bitácora
 
@@ -260,4 +264,15 @@ bitácora y commit `ide: v<n> - <resumen>`). Además:
 - `test/integration/run.sh`: `DASH_IT_FLAGS=--ozone-platform=headless` los pasa sin ventana en la pantalla.
 - De paso, fuera del bucle: D62 para dashweb (alfa de verdad en imágenes en RTG), PR #5 fusionado en main.
 - Tests: base 295, node todo bien, integración de VS Code 21/21 (sin ventana).
+
+### 2026-10-20 — v8 (capítulo 6: un Amiga de verdad)
+- `video/capitulos/06_amiga_real.js`, con el emulador haciendo de Amiga (`emu_run.py --gdbserver PORT --no-relay`,
+  lanzado por el guion y parado al final por su grupo de procesos):
+  - "Dash: Preparar para un Amiga real" y sus pasos en "Dash: Amiga";
+  - qué hace falta en el Amiga (pila TCP/IP, bgdbserver) y la orden de su Shell;
+  - en `launch.json`, "Amiga real" con la dirección (`localhost:PUERTO` en el vídeo);
+  - punto de parada, "Debug: Select and Start Debugging" → "Amiga real", parada con variables y otra vuelta.
+  77 s, 10 subtítulos. Funcionó a la primera: gdb_relay en medio, globales y pasos como en el emulador.
+- Encontrado: el texto de los pasos (arreglado).
+- Tests: node todo bien.
 

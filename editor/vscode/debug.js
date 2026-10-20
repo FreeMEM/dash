@@ -228,7 +228,8 @@ function setupDebugger(vscode, context, helpers) {
         if (!built.ok) { output.show(true); vscode.window.showErrorMessage('No compila: mira "Dash: Amiga".'); return; }
         output.append(`\nPara depurarlo en un Amiga:\n  1. Copia ${exe} y bgdbserver (tools/get_bgdbserver.sh) al Amiga.\n` +
                       `  2. En su Shell: bgdbserver :2345 ${path.basename(exe)}\n` +
-                      `  3. F5 con la configuración "Amiga real" (target: su nombre o IP y el puerto).\n`);
+                      `  3. En launch.json, "Amiga real": target con su nombre o IP y el puerto.\n` +
+                      `  4. Elígela en Ejecutar y depurar (o "Debug: Select and Start Debugging") y F5.\n`);
         output.show(true);
         vscode.window.showInformationMessage(`Listo: ${path.basename(exe)}. En el Amiga: bgdbserver :2345 ${path.basename(exe)}`);
     }));
