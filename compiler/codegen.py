@@ -9663,6 +9663,9 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         /* MADF_DRAWUPDATE (mui_canvas_update): only the draw function, over what is there.
            Anything else (opening, a resize, the window uncovered) clears it first. */
         ULONG flags = ((struct MUIP_Draw *)msg)->flags;
+        /* MUI 3.8 sends 0 here (Area fills it in during the super call): the area's own flags */
+        if (!(flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE)))
+            flags |= _DASH_MAD(obj)->mad_Flags & (MADF_DRAWOBJECT | MADF_DRAWUPDATE);
         BOOL update = (flags & MADF_DRAWUPDATE) && !(flags & MADF_DRAWOBJECT);
         struct RastPort *brp;
         data = INST_DATA(cl, obj);
