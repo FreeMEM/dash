@@ -41,8 +41,11 @@ python3 tools/emu_run.py bin/hola             # ejecutarlo en FS-UAE sin ventana
 ```
 
 Opciones de `./dash`: `-O0` (sin optimizar), `--small` (`-Os`), `--fpu` (68020 + 68881), `--stack N` (pila
-mínima), `--memcheck` (comprobación de memoria) y `--multifile` (un C por módulo). La instalación del entorno
-(GCC para Amiga, emulador, SDK de MUI) está en [INSTALACION.md](INSTALACION.md).
+mínima), `--memcheck` (comprobación de memoria), `--profile` (llamadas y tiempo de cada función al salir),
+`--debug` (para gdb o VS Code: `-O0 -g` y las líneas del `.dash`), `--multifile` (un C por módulo), `-q` (solo
+avisos, errores y el resultado) y `--no-hunk` (sin el paso de ELF a Hunk; el GCC de bebbo ya escribe Hunk).
+`DASH_TOOLCHAIN` indica dónde está el GCC si no es `/opt/amiga`, y `DASH_CFLAGS` añade opciones a GCC. La
+instalación del entorno (GCC para Amiga, emulador, SDK de MUI) está en [INSTALACION.md](INSTALACION.md).
 
 Un programa mínimo:
 
@@ -60,6 +63,7 @@ end
 import "lib/utilidades.dash"   # módulos
 
 const MAX = 100                # constantes
+var total: Int = 0             # variable global (con tipo): las funciones la leen y la cambian
 enum Estado
     PARADO
     ANDANDO
@@ -83,7 +87,8 @@ Main                           # punto de entrada
 end
 ```
 
-Los comentarios empiezan con `#`. No hay `;`: una instrucción por línea.
+Los comentarios empiezan con `#`. No hay `;`: una instrucción por línea. Un enum también cabe en una línea:
+`enum Color ROJO, VERDE, AZUL end` (las comas son opcionales; `= N` da el valor).
 
 ### 4.2 Variables y tipos
 
@@ -136,6 +141,8 @@ for i in (10..1)             # hacia abajo
 end
 for i in (0..100 step 5)     # de 5 en 5
 end
+for i in (100..0 step -5)    # hacia abajo con step: negativo
+end
 for nombre in nombres        # cada elemento de una lista
 end
 ```
@@ -155,6 +162,9 @@ func area(ancho: Int, alto: Int) -> Int
 end
 
 doble = fn(x) -> x * 2       # función anónima (lambda)
+triple = fn(x)               # también con varias líneas
+    return x * 3
+end
 func aplica(f: Func, v: Int) -> Int
     return f(v)
 end
@@ -163,7 +173,8 @@ end
 Tipos de parámetro y retorno: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `[T]`, `{String: T}`,
 `Pointer`, `Func`, `Void`, un struct o un enum; el `return` se comprueba contra el tipo declarado (un texto
 no vale por un `Bool`, ni un struct por otro). Las funciones son recursivas y se pueden pasar como valor
-(`aplica(doble, 4)`). En un módulo, las que empiezan por `_` son privadas.
+(`aplica(doble, 4)`). Una lambda no puede usar las variables locales de fuera (las globales sí). En un módulo,
+las que empiezan por `_` son privadas.
 
 ### 4.6 Textos
 
@@ -204,8 +215,12 @@ end
 for clave in edades.keys()
     Print clave
 end
+n = edades.get("Pepe", 0)           # el valor, o el de por defecto si no está
+edades.remove("Luis")
 ```
 
+Una clave que no está da `0` (o `nil` en textos y objetos); `d.get(k, defecto)` lo busca una sola vez (con
+objetos, el defecto solo puede ser `nil`). `l.clear()` y `d.clear()` vacían, y `d.length` cuenta las claves.
 Las listas comprueban los índices. Una lista de structs, textos o listas es dueña de sus elementos.
 
 ### 4.8 Structs y enums
@@ -224,8 +239,8 @@ e = Enemigo(10, 50)
 e.mueve(5)
 var lista: [Enemigo] = []
 lista.push(e)
-primero = lista[0]                  # (lista[0].vida = 80 todavía no se puede escribir así)
-primero.vida = 80
+lista[0].vida = 80                  # el campo de un elemento
+lista[0].mueve(1)                   # y sus métodos
 
 struct Nodo
     valor: Int
@@ -289,7 +304,9 @@ Main
 end
 ```
 
-`On Key`, `On Close`, `On Gadget` (gadgets por número) y `On Menu` (menús). También ventanas desde el código
+`On Key` (una tecla, o sin nada cualquiera), `On Close`, `On Gadget` (gadgets por número), `On Menu` (menús),
+`On Click` (botón izquierdo en la ventana: `click_x()`, `click_y()`) y `On Timer 100` (cada 100 ms; vale un
+número o una variable). También ventanas desde el código
 (`window_create`, con número; el `EventLoop` las atiende y `event_window()` dice cuál), pantallas propias
 (`screen_open`) y RTG.
 
@@ -320,18 +337,29 @@ if s >= 0
 end
 ```
 
+### 5.5 Sistema y tareas
+
+- `break_check()` dice si llegó Ctrl-C (el "Break" del Shell); `single_instance("Nombre")` deja una sola copia
+  del programa en marcha.
+- `task_start(f, arg)` ejecuta una función `@native` en otro proceso (solo C); `task_done`, `task_result` y
+  `task_free` la siguen.
+- `cpu_start()` y `cpu_sample()` miden la CPU que usa cada tarea del sistema (`cpu_task_name`, `cpu_task_load`).
+- `desktop_canvas(x, y, w, h)` dibuja en un trozo del escritorio del Workbench, detrás de los iconos, con una
+  función Dash como la zona de dibujo de MUI.
+
 ## 6. Interfaces gráficas
 
 | | GadTools | ReAction | MUI |
 |---|---|---|---|
-| Sistema | AmigaOS 2.0+ | AmigaOS 3.2 (3.5+) | MUI 3.8 o 5 instalado |
+| Sistema | AmigaOS 3.0+ | AmigaOS 3.2 (3.5+) | MUI 3.8 o 5 instalado |
 | CPU | 68000 | 68000 | 68020+ (MUI 5) |
 | Disposición | posiciones a mano | automática | automática |
 | En Dash | gadgets por número (`button_create`...) + `On Gadget`; o `gt_*` | `ra_*` | `mui_*` |
 | Para | utilidades, juegos con panel | diálogos y formularios | aplicaciones grandes |
 
 **MUI** es la más completa: ventanas que se adaptan solas, pestañas, listas, menús, imágenes y una zona de dibujo
-propia que pinta una función Dash:
+propia que pinta una función Dash (`mui_canvas`; sabe dónde está el puntero con `mui_canvas_on_move` y repinta
+solo un trozo con `mui_canvas_update_area`):
 
 ```ruby
 const ID_HOLA = 1

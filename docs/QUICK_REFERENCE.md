@@ -12,13 +12,21 @@
                                     # @workbench_output "NIL:": from the Workbench, no console window
 ./dash --fpu prog.dash -o prog      # 68020 + 68881/68882 FPU only
 ./dash --memcheck prog.dash -o prog # memory check: double frees, use after free, live at exit
+./dash --debug ...                  # for gdb / VS Code: gcc -O0 -g, C lines mapped to .dash lines
+./dash --multifile ...              # one C file per module instead of one for the whole program
+./dash -q ...                       # quiet: only warnings, errors and the result (-v: verbose)
+./dash --no-hunk ...                # skip the ELF to Hunk step (bebbo's gcc already writes Hunk)
+DASH_TOOLCHAIN=/path ./dash ...     # bebbo's toolchain somewhere else than /opt/amiga
+DASH_CFLAGS="-Os" ./dash ...        # extra gcc options
 ```
 Programs need Kickstart 3.0+.
 
 ## Program Structure
 ```
+import "lib/x.dash"         # Module (path relative to this file); "x.dashui": MUI windows
 const NAME = value          # Constants
-enum State IDLE,RUN end     # Enumerations
+var total: Int = 0          # Global variable (type required); functions can read and change it
+enum State IDLE,RUN end     # Enumerations (one line, or one value per line; = N optional)
 struct Player x:Int end     # Structures
 Window Win title "" end     # Windows
 func name() end             # Functions
@@ -82,7 +90,8 @@ elif cond                   end
     ...
 else                        for i in (10..1)       # down
                             for i in (0..n step 2)
-    ...                     for item in array
+    ...                     for i in (10..0 step -2)   # down with step: negative
+                            for item in array
 end                             ...
                             end
 
@@ -94,6 +103,11 @@ break / continue            # inside while/for only
 func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}
     return a + b                return x * 2
 end                         end
+
+doble = fn(x) -> x * 2      # lambda; also fn(x) ... return ... end
+func aplica(f: Func, v: Int) -> Int   # a function as a value: aplica(doble, 4)
+    return f(v)             # lambdas cannot use local variables from outside (globals yes)
+end
 ```
 
 C code: `@native func f(x: Int) -> Int """ return x; """ end` (a function in C), `@extern("x.library")`,
@@ -190,6 +204,9 @@ mui_canvas_on_draw(c, paint)            # func paint(x, y, w, h) draws with gfx_
 mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y/_button/_wheel/_key(c)
 mui_canvas_char(c)                      # the key as text, with shift and the keymap ("" if none)
 mui_canvas_on_move(c, 4)                # the pointer over it (no click) or leaving: mui_canvas_pointer_x/_y/_inside(c)
+mui_canvas_update(c)                    # draw again without clearing; mui_canvas_updating() true in paint
+mui_canvas_update_area(c, x, y, w, h)   # the same, only that zone (clipped)
+mui_canvas_buffered(c, true)            # draw in a bitmap of its own, shown at once when done
 img = mui_image("Work:pic.png")         # datatypes; mui_width(obj), mui_height(obj) once open
 b = mui_image_button("PROGDIR:atras.iff")   # icon button: mui_on_press; mui_help(b, "Atrás") bubble help
 mui_window_size(win, 90, 80)            # % of the visible screen when it opens (before mui_window_open)
@@ -281,15 +298,16 @@ music_stop()                # Stop playback
 
 ## File Functions
 ```
-h = file_open("f", MODE_OLDFILE)  # Open for read
-h = file_open("f", MODE_NEWFILE)  # Open for write
-file_close(h)
+h = file_open("f", 1005)    # Open for read (0 if it fails)
+h = file_open("f", 1006)    # New file, for write
+h = file_open("f", 1004)    # Read and write
+file_close(h)               # names: import "lib/amiga/dos.dash" (MODE_READ, MODE_WRITE, MODE_READWRITE)
 
 file_read_byte(h)           # Read byte
 file_write_byte(h, b)       # Write byte
 file_read_line(h, buf, max) # Read line
 file_write_line(h, "text")  # Write line
-file_eof(h)                 # End of file?
+file_eof(h)                 # End of file? (looks at the next byte, does not take it)
 
 file_exists("name")         # File exists?
 file_size("name")           # Get size
@@ -310,6 +328,30 @@ random()                    # Random number
 random_range(min, max)      # Random in range
 
 debug_break()               # Stop in the UAE emulator's debugger (tools/emu_run.py --debug)
+
+break_check()               # true if Ctrl-C came (Break in the Shell); it is cleared
+single_instance("MiProg")   # false if another copy runs (that one gets Ctrl-C)
+
+cpu_start()                 # count the CPU of every task (false: no EClock or OS < 2.04)
+n = cpu_sample()            # tasks since the last sample, most first: cpu_task_name(i), cpu_task_load(i)
+cpu_total()                 # per thousand, all tasks (the rest is idle); cpu_stop()
+```
+
+## Tasks (C in another process)
+```
+t = task_start(f, arg)      # @native func f(arg: Int) -> Int in another process (C only); 0 = failed
+task_start_with(f, arg, stack, pri)   # stack in bytes (0: 128 KB), priority relative to the program
+task_done(t)                # true once it returned (does not wait)
+task_result(t)              # what it returned (waits)
+task_free(t)                # forget it (waits); task_signal(): mask for mui_wait_event_signals
+```
+
+## Desktop Canvas (Workbench backdrop)
+```
+d = desktop_canvas(x, y, w, h)          # an area of the desktop, behind the icons (negative: from right/bottom)
+desktop_canvas_on_draw(d, paint)        # func paint(x, y, w, h) draws with gfx_
+desktop_canvas_update(d)                # draw again; desktop_canvas_update_area(d, x, y, w, h): only that part
+desktop_canvas_free(d)                  # the wallpaper back (also at exit)
 ```
 
 ## Network (TCP, bsdsocket.library)
@@ -323,6 +365,7 @@ t = tls_connect(s, "host")           # TLS (AmiSSL 5, 68020+): tls_send, tls_rec
 s = net_connect_start("host", 80, 10000)  # without waiting: net_connect_poll(s) 1 / 0 / -1,
 t = tls_connect_start(s, "host", 10000)   # net_connect_stage(s); tls_connect_poll(t) 1 / 0 / -1
 ev = mui_wait_event_signals(net_signal())   # wakes on socket events (0: the stack cannot, poll)
+tls_resumed(t)                       # true if it reused an earlier session with that server
 ```
 
 ## Program Arguments
@@ -383,7 +426,7 @@ y = y + joy_y(0) * speed
 
 ### File Read Loop
 ```
-h = file_open("data.txt", MODE_OLDFILE)
+h = file_open("data.txt", 1005)
 while not file_eof(h)
     b = file_read_byte(h)
 end

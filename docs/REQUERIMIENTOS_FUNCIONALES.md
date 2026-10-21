@@ -1,6 +1,10 @@
 # Requisitos Funcionales de Dash
 Versión: 2.0
 
+> **Aviso:** estos son los requisitos originales del proyecto, no el estado actual. Lo que Dash hace hoy está en
+> `ROADMAP.md`, `QUICK_REFERENCE.md` y `BUILTINS.md`. Lo que cambió: los programas piden AmigaOS 3.0 o superior
+> (no 2.0) y funcionan en un 68000; no hay versión PPC; el gcc de bebbo genera Hunk directamente, sin `elf2hunk`.
+
 Este documento detalla los requisitos funcionales para el lenguaje de programación Dash.
 
 ## RF1: Módulo de Sistema (Workbench/OS)

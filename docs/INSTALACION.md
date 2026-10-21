@@ -10,6 +10,17 @@ Este documento describe cómo configurar un entorno de desarrollo completo para 
 - **Disco:** Mínimo 10GB libres para el toolchain
 - **CPU:** Multi-core recomendado (la compilación usa todos los núcleos)
 
+## Requisitos del Amiga
+
+Lo que necesitan los programas hechos con Dash, en un Amiga real o emulado:
+
+- **AmigaOS 3.0 o superior** (Kickstart V39: los pools de memoria de exec).
+- **68000 o superior.** Con `./dash --fpu`, un 68020 con FPU 68881/68882.
+- **MUI** (`mui_*`): MUI 3.8 (muimaster.library V19) o MUI 5, y un 68020 o superior.
+- **Red** (`net_*`): una pila TCP/IP (`bsdsocket.library`: Roadshow, AmiTCP, Miami...).
+- **HTTPS** (`tls_*`): además, AmiSSL 5.1 o posterior, que pide un 68020 o superior.
+- **ReAction** (`ra_*`): las clases de ReAction de AmigaOS 3.2.
+
 ## Paso 1: Instalar Python y Dependencias de Dash
 
 Dash utiliza un transpilador escrito en Python. Se requiere Python 3.10 o superior.
@@ -31,8 +42,12 @@ El toolchain de compilación cruzada requiere varias herramientas de desarrollo:
 ```bash
 sudo apt update
 sudo apt install -y \
+    python3-pip \
+    python3-dev \
     make \
     wget \
+    curl \
+    openssl \
     git \
     gcc \
     g++ \
@@ -56,10 +71,15 @@ sudo apt install -y \
 sudo dnf install -y \
     make \
     wget \
+    curl \
+    openssl \
+    lhasa \
     git \
     gcc \
     gcc-c++ \
     python \
+    python3-pip \
+    python3-devel \
     perl-Pod-Simple \
     gperf \
     patch \
@@ -82,8 +102,11 @@ sudo dnf install -y \
 
 ```bash
 sudo pacman -S --needed \
+    python-pip \
     make \
     wget \
+    curl \
+    openssl \
     git \
     gcc \
     lhasa \
@@ -99,6 +122,10 @@ sudo pacman -S --needed \
     rsync \
     readline
 ```
+
+`curl` y `lhasa` los usan los scripts que bajan el SDK de MUI, AmiSSL y bgdbserver (`tools/get_*.sh`); `openssl`,
+`tools/emu_sys_amissl.sh`. Las cabeceras de Python (`python3-dev`, `python3-devel`) son para el GDB del toolchain,
+que el depurador de la extensión necesita con Python.
 
 ### macOS
 
@@ -143,7 +170,12 @@ La compilación puede tardar entre 30 minutos y 2 horas dependiendo de tu hardwa
 ```bash
 # Compilar usando todos los núcleos disponibles
 make all -j$(nproc)
+
+# Cabeceras de CyberGraphX (las funciones rtg_* las necesitan)
+make sdk=cgx
 ```
+
+`make all` instala también `m68k-amigaos-gdb`, el depurador que usa la extensión de VS Code.
 
 **Nota:** En macOS, usa el bash de Homebrew:
 
@@ -154,8 +186,14 @@ make all -j$(nproc) SHELL=$(brew --prefix)/bin/bash
 **Nota:** Si prefieres instalar en otro directorio:
 
 ```bash
-make all PREFIX=/home/tu_usuario/amiga-toolchain -j$(nproc)
+make all PREFIX=~/amiga-toolchain -j$(nproc)
+make sdk=cgx PREFIX=~/amiga-toolchain
+export DASH_TOOLCHAIN=~/amiga-toolchain     # dónde lo busca ./dash (por defecto, /opt/amiga)
 ```
+
+`DASH_TOOLCHAIN` solo lo lee `./dash`. Los tests (`tests/run_tests.py`), la captura de pantalla del emulador
+(`tools/amiga/shot.c`, que compila `tools/emu_run.py`) y `tools/get_amissl.sh` (su `lha`; o `LHA=...`) usan
+`/opt/amiga` fijo. Si el toolchain está en otro sitio, un enlace lo arregla: `sudo ln -s ~/amiga-toolchain /opt/amiga`.
 
 ### 3.5 Verificar la instalación
 
@@ -195,7 +233,7 @@ El repositorio ofrece varias versiones de GCC:
 | `amiga13.3` | 13.3.0 | Soporta parámetros en registros |
 | `amiga15.2` | 15.2.0 | Última versión disponible |
 
-Para usar una versión diferente (hazlo antes de compilar):
+Dash se prueba con `amiga6` (GCC 6.5.0b); con otra rama, sin probar. Para usar una versión diferente (hazlo antes de compilar):
 
 ```bash
 make branch branch=amiga13.3 mod=gcc
@@ -246,14 +284,21 @@ python3 --version 2>/dev/null || echo "NO INSTALADO"
 echo -n "Librería lark: "
 python3 -c "import lark; print('OK')" 2>/dev/null || echo "NO INSTALADA"
 
-echo -n "Cross-compiler: "
-/opt/amiga/bin/m68k-amigaos-gcc --version 2>/dev/null | head -1 || echo "NO INSTALADO"
+tc=${DASH_TOOLCHAIN:-/opt/amiga}
 
-echo -n "elf2hunk: "
-which elf2hunk 2>/dev/null || ls ~/.vscode/extensions/bartmanabyss.amiga-debug-*/bin/linux/elf2hunk 2>/dev/null || echo "NO ENCONTRADO"
+echo -n "Cross-compiler: "
+"$tc/bin/m68k-amigaos-gcc" --version 2>/dev/null | head -1 | grep . || echo "NO INSTALADO"
+
+echo -n "GDB (depurador de VS Code): "
+"$tc/bin/m68k-amigaos-gdb" --version 2>/dev/null | head -1 | grep . || echo "NO INSTALADO"
 
 echo "=== Fin de verificación ==="
 ```
+
+Y un programa de prueba: `./dash examples/hola.dash -o bin/hola`.
+
+`./dash` compila con `gcc -O2` (opciones en `compiler/cflags.py`). `DASH_CFLAGS` añade opciones a gcc, para
+probar: `DASH_CFLAGS="-Os" ./dash prog.dash -o bin/prog`.
 
 ## Paso 6: Probar en un emulador (opcional)
 
@@ -266,7 +311,7 @@ ella se usa la ROM AROS que trae FS-UAE:
 ```bash
 export DASH_KICKSTART=~/roms/kick31_a1200.rom          # A1200 con 3.1 (--emu)
 export DASH_KICKSTART_A500=~/roms/kick31_a500.rom      # A500 con 68000 (--emu-a500)
-export DASH_KICKSTART_32=~/roms/kick323_a1200.rom      # A1200 con AmigaOS 3.2 (--emu-32)
+export DASH_KICKSTART_32=~/roms/kick323_a1200.rom      # A1200 con AmigaOS 3.2 (--emu-32 y rtg)
 ```
 
 Algunos programas necesitan ficheros de un Workbench que no están en la ROM (`asl.library`, las clases de
@@ -281,9 +326,18 @@ tools/emu_sys_from_hdf.sh ~/Amiberry/HardDrives/AmigaOS-v3.2.hdf ~/.cache/dash-e
 export DASH_EMU_SYS=~/.cache/dash-emu/sys31 DASH_EMU_SYS_32=~/.cache/dash-emu/sys32
 ```
 
-Prueba: `python3 tools/emu_run.py examples/hola.dash` y `python3 tests/run_tests.py --emu`. Con
-`--screenshot SEGUNDOS fichero.png` se guarda una captura de la pantalla del Amiga, y con `--debug ORDEN` se
-usa el depurador del emulador desde un `debug_break()` del programa (ver el manual de referencia).
+La máquina `rtg` (un 68040 con tarjeta gráfica) usa la ROM 3.2 y `DASH_EMU_SYS_32_RTG`: un Workbench 3.2 con
+Picasso96 en una pantalla de 16 bits. Dash no trae script para hacerlo (dashweb tiene `tools/emu_sys_rtg.sh`); sin
+él, los tests `# rtg` se saltan.
+
+Prueba: `python3 tools/emu_run.py examples/hola.dash` y `python3 tests/run_tests.py --emu`. Opciones de
+`tools/emu_run.py`:
+
+- `--machine a1200|a500|a1200-32|rtg`: la máquina, con su ROM y su sistema de las variables de arriba.
+- `--emulator amiberry`: Amiberry en lugar de FS-UAE (solo A1200 y A500). Su `bsdsocket` da sucesos de sockets.
+- `--screenshot SEGUNDOS fichero.png`: una captura de la pantalla del Amiga.
+- `--debug ORDEN`: el depurador del emulador desde un `debug_break()` del programa (ver el manual de referencia).
+- `--gdbserver PUERTO`: el programa bajo `bgdbserver`, para `m68k-amigaos-gdb` (lo usa la extensión, paso 9).
 
 ## Paso 7: MUI (opcional)
 
@@ -291,8 +345,11 @@ Los programas con `mui_*` necesitan el SDK de MUI 5 para compilar (no se puede c
 licencia):
 
 ```bash
-tools/get_mui_sdk.sh                                   # en ~/.cache/dash-mui (o DASH_MUI_SDK)
+tools/get_mui_sdk.sh                                   # en ~/.cache/dash-mui/x (o en la carpeta que se le pase)
 ```
+
+El SDK queda en `~/.cache/dash-mui/x/SDK/MUI`, que es donde lo busca `./dash`. Si lo descomprimes en otra carpeta,
+pon esa ruta (la que acaba en `x/SDK/MUI`) en `DASH_MUI_SDK`.
 
 Para probarlos en el emulador, un sistema con MUI instalado:
 
@@ -307,12 +364,12 @@ ejemplo `~/.cache/dash-emu/sys32rtg38` (el sistema RTG de dashweb con MUI 3.8; h
 `DASH_EMU_SYS_32_MUI`. Con 3.8 todos los tests de MUI pasan salvo los de pantalla completa (el marco de 4 y 3
 píxeles) y el de la versión de muimaster.
 
-En el Amiga, MUI 3.8 o 5 instalado y un 68020 o superior.
+En el Amiga, MUI 3.8 (muimaster.library V19) o MUI 5 instalado y un 68020 o superior.
 
 ## Paso 8: Red y HTTPS (opcional)
 
 `net_*` usa la `bsdsocket.library` del sistema (en FS-UAE, la que emula con la red del PC). `tls_*` necesita
-AmiSSL 5:
+AmiSSL 5.1 o posterior:
 
 ```bash
 tools/get_amissl.sh                                    # SDK y librerías en ~/.cache/dash-amissl
@@ -323,32 +380,69 @@ export DASH_EMU_SYS_SSL=~/.cache/dash-emu/sys31ssl DASH_EMU_SYS_32_SSL=~/.cache/
 
 ## Paso 9: Extensión de VS Code (opcional)
 
-Resaltado de Dash, compilar y ejecutar en el emulador desde el editor, y el editor visual de ventanas MUI
-(`.dashui`):
+Resaltado de Dash, errores mientras se escribe, compilar y ejecutar en el emulador desde el editor, depurador
+(F5) y el editor visual de ventanas MUI (`.dashui`). Necesita VS Code 1.86 o posterior.
+
+1. Baja `dash-mui-editor-0.2.1.vsix` de la release
+   [vscode-0.2.1](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1).
+2. En VS Code, **Extensions: Install from VSIX...** y elige el fichero. O en la terminal:
+   `code --install-extension dash-mui-editor-0.2.1.vsix`.
+3. Si tu proyecto no está dentro de la carpeta de Dash, pon esa carpeta (la que tiene `./dash`) en el ajuste
+   `dash.path`, o usa **Dash: Elegir la carpeta del compilador**.
+
+Ajustes (`dash.*`):
+
+| Ajuste | Para qué |
+|---|---|
+| `dash.path` | Carpeta de Dash. Vacío: se busca subiendo desde el fichero. |
+| `dash.python` | El Python del servidor de lenguaje (`python3`; necesita lark). |
+| `dash.languageServer.enabled` | Errores mientras se escribe, autocompletado y navegación. |
+| `dash.editor.autoEnd` | Añade el `end` de un bloque al pulsar Intro. |
+| `dash.emulator.machine` | Máquina: `a1200`, `a500`, `a1200-32` o `rtg`. |
+| `dash.emulator.program` | Emulador: `fs-uae` o `amiberry`. |
+| `dash.emulator.window` | Ver la ventana del emulador. |
+| `dash.emulator.autoclose` | Segundos tras los que el programa se cierra solo (0: no). |
+| `dash.emulator.kickstart`, `kickstartA500`, `kickstart32` | ROM de cada máquina (`DASH_KICKSTART`, `_A500`, `_32`). |
+| `dash.emulator.system`, `system32`, `systemRtg` | Ficheros de Workbench (`DASH_EMU_SYS`, `_32`, `_32_RTG`). |
+| `dash.emulator.muiSystem`, `muiSystem32` | Workbench con MUI para "Ver en Amiga" (`DASH_EMU_SYS_MUI`, `_32_MUI`). |
+| `dash.debug.gdb` | El `m68k-amigaos-gdb` (por defecto `/opt/amiga/bin/m68k-amigaos-gdb`). |
+
+Los ficheros de ROM y Workbench son los de los pasos 6 y 7.
+
+Para el depurador (F5) hacen falta `m68k-amigaos-gdb` con Python (lo instala `make all`, paso 3) y `bgdbserver`,
+que corre dentro del Amiga:
+
+```bash
+tools/get_bgdbserver.sh            # en ~/.cache/dash-debug/x/bgdbserver/bgdbserver (o DASH_BGDBSERVER)
+```
+
+Basta bajarlo una vez: la extensión lo lleva sola al Amiga emulado. Para depurar en un Amiga de verdad, copia allí `bgdbserver` y el
+programa de **Dash: Preparar para un Amiga real**; el Amiga necesita una pila TCP/IP. Los pasos están en el
+README de la extensión (`editor/vscode/README.md`).
+
+Para hacer el paquete desde el código:
 
 ```bash
 cd editor/vscode
 npm install                                            # herramientas de desarrollo, en node_modules
 npm test
 npm run package                                        # dash-mui-editor-<versión>.vsix
-code --install-extension dash-mui-editor-*.vsix
 ```
-
-En los ajustes de VS Code: `dash.path` (carpeta de Dash, si no se encuentra sola), `dash.emulator.kickstart`,
-`dash.emulator.system` y `dash.emulator.muiSystem` (los mismos ficheros que en los pasos 6 y 7).
 
 ## Solución de Problemas
 
 ### Error en GDB durante la compilación (pero GCC se instala)
 
-Es común que la compilación de GDB (debugger) falle con errores como:
+A veces la compilación de GDB (debugger) falla con errores como:
 
 ```
 PySys_SetPath was not declared in this scope
 make binutils gdb...failed
 ```
 
-**Esto NO es crítico.** GCC (el compilador) se instala correctamente, pero las librerías de runtime (newlib, libnix) pueden no haberse instalado.
+Para compilar programas no es crítico: GCC se instala bien. Pero el depurador de la extensión de VS Code sí
+necesita `m68k-amigaos-gdb` con Python. Y las librerías de runtime (newlib, libnix) pueden no haberse instalado.
+Con el fork actual (gdb 18) en CachyOS compila bien, con Python.
 
 **Solución:** Ejecuta manualmente la instalación de las librerías:
 
@@ -375,7 +469,7 @@ El toolchain no se compiló correctamente o faltan las librerías de AmigaOS. Vu
 
 ### Aviso: "elf2hunk not found"
 
-Asegúrate de que `elf2hunk` está en tu PATH o usa la ruta completa.
+Solo sale con un GCC que genera ELF (el de bebbo de esta guía genera Hunk). Pon `elf2hunk` en el PATH (paso 4).
 
 ### La compilación del toolchain falla completamente
 
@@ -385,10 +479,12 @@ Asegúrate de que `elf2hunk` está en tu PATH o usa la ruta completa.
 
 ### Error de permisos en /opt/amiga
 
-Usa `sudo` o compila con un PREFIX diferente en tu directorio home.
+Usa `sudo` o compila con un PREFIX diferente en tu directorio home (y `DASH_TOOLCHAIN`, paso 3.4).
 
 ## Siguiente Paso
 
 Una vez instalado el entorno, consulta la documentación de Dash para empezar a programar:
 - `docs/DOCUMENTACION_LENGUAJE.md` - Documentación completa del lenguaje
-- `docs/CHULETA_LENGUAJE.md` - Referencia rápida
+- `docs/QUICK_REFERENCE.md` - Referencia rápida
+- `docs/MANUAL_REFERENCIA.md` - Manual de referencia
+- `docs/BUILTINS.md` - Lista de builtins

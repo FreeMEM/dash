@@ -1,7 +1,7 @@
 # D.A.S.H. Language - Hoja de Ruta de Desarrollo
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
-**Versión del documento:** 2.0
+**Última actualización:** 2026-10-21
 **Fecha de inicio:** 2025-01-01
 **Objetivo:** Crear un lenguaje de programación completo para Amiga
 
@@ -20,7 +20,7 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 
 ---
 
-## Estado Actual (v2.0)
+## Estado Actual (2026-10-21)
 
 ### Implementado ✅
 
@@ -31,12 +31,16 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Variables (asignación declara, estilo Python)
 - [x] Expresiones aritméticas (`+`, `-`, `*`, `/`, `%`)
 - [x] Expresiones lógicas (`and`, `or`, `not`)
-- [x] Comparaciones (`==`, `!=`, `<`, `>`, `<=`, `>=`)
-- [x] Control de flujo (`if`/`else`/`end`, `while`/`end`, `for`, `break`, `continue`)
+- [x] Comparaciones (`==`, `!=`, `<`, `>`, `<=`, `>=`) y operadores de bits (`& | ^ ~ << >>`)
+- [x] Control de flujo (`if`/`elif`/`else`/`end`, `while`/`end`, `for`, `break`, `continue`)
 - [x] Comentarios (`# ...`)
 - [x] Tipos inferidos (LONG, STRPTR, BOOL) y `Float`
 - [x] Memoria automática (temporales por vuelta, contador de referencias)
-- [x] Los 322 builtins Amiga implementados (ver `docs/BUILTINS.md`)
+- [x] Funciones, structs con métodos, enums, listas, diccionarios, `Float` y `Fixed`, lambdas e imports
+- [x] Los 531 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
+- [x] Interfaces con GadTools, ReAction y MUI (3.8 o 5); red con TCP y HTTPS (AmiSSL)
+- [x] Extensión de VS Code (`editor/vscode/`, versión 0.2.1): errores al escribir, completar, compilar,
+      emulador, depurador y editor visual de MUI
 
 ### Arquitectura del Compilador ✅
 
@@ -44,11 +48,27 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 Source (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → Amiga Executable
 ```
 
+En `compiler/`:
+
 - `grammar.py` - Gramática Lark
 - `transformer.py` - Parse tree → AST
 - `ast_nodes.py` - Definición de nodos AST
 - `analyzer.py` - Análisis semántico, tabla de símbolos
-- `codegen.py` - Generación de código C
+- `codegen.py` - Generación de código C y runtime C embebido (`CTemplates`)
+- `amiga_builtins.py` - Los builtins de Amiga (lista en `docs/BUILTINS.md`)
+- `main.py` - Orquestador del pipeline e imports
+- `dashui.py` - Ventanas MUI del editor visual (`.dashui`) como código Dash
+- `cflags.py` - Opciones de gcc, comunes a `./dash` y al runner de tests
+- `tmp_marks.py` - Repaso del C final: quita marcas de temporales que no hacen falta
+- `latin1.py` - Los textos de los literales pasan a Latin-1
+- `softfloat.py` - Float por software (con `runtime/softfloat/`)
+- `debuglines.py` - `./dash --debug`: líneas `#line` hacia el `.dash` para gdb
+- `lsp.py`, `lsp_index.py`, `lsp_format.py` - Servidor de lenguaje de la extensión de VS Code
+
+En `tools/`: el emulador (`emu_run.py`, `emu_preview.py`, `emu_sys_*.sh`), el depurador (`gdb_relay.py`,
+`gdb/dash.py`, `get_bgdbserver.sh`), SDK y librerías (`get_mui_sdk.sh`, `get_amissl.sh`), benchmarks
+(`bench.py`, `bench_report.py`), `fuzz_refcount.py`, `fastfp_check.py` y generadores (`gen_builtins_doc.py`,
+`gen_tmgrammar.py`).
 
 ---
 
@@ -166,8 +186,8 @@ LONG resultado = suma(5, 3);
 
 **Consideraciones:**
 - ¿Recursión? Sí, debería funcionar automáticamente
-- ¿Funciones como valores? No en v3.0 (futuro)
-- ¿Closures? No en v3.0 (futuro)
+- ¿Funciones como valores? Sí: tipo `Func` y lambdas (`doble = fn(x) -> x * 2`)
+- ¿Closures? No: una lambda solo ve sus parámetros y los nombres globales, no las variables locales de fuera
 
 ---
 
@@ -198,7 +218,7 @@ for num in numeros
     Print num
 end
 
-# Operaciones (fase posterior)
+# Operaciones (también insert, remove y clear)
 numeros.push(6)
 ultimo = numeros.pop()
 ```
@@ -238,8 +258,9 @@ LONG x = DashArray_get(numeros, 1);
 - [x] Tests: `test_array_basic.dash`, `test_array_ops.dash`
 
 **Consideraciones:**
-- Arrays de arrays (matrices): Fase posterior
-- Slicing (`arr[1:3]`): Fase posterior
+- Arrays de arrays (matrices): hechos (`m[i][j]`, `tests/test_matrix.dash`)
+- Slicing (`arr[1:3]`, `[:b]`, `[a:]`): hecho, también en strings
+- Con tipo de elemento: `var x: [String]`; `var x: Array` sigue siendo una lista de enteros (ver "Pendiente")
 
 ---
 
@@ -258,7 +279,7 @@ saludo = "Hola, " + nombre + "!"    # concatenación
 inicial = nombre[0]                   # "A"
 longitud = nombre.length              # 5
 
-# Interpolación (fase posterior)
+# Interpolación (también expresiones: "#{a + 1}", "#{f(x)}")
 msg = "Usuario: #{nombre}"
 ```
 
@@ -283,7 +304,8 @@ LONG longitud = DashString_length(nombre);
 - [x] Tests: `test_string_ops.dash`
 
 **Consideraciones:**
-- Memory management de strings concatenados (caller debe liberar)
+- Memoria automática: cada variable es dueña de su texto y los temporales se liberan solos (por vuelta de
+  bucle, `EventLoop` y función)
 - Strings inmutables (más seguro)
 
 ---
@@ -347,8 +369,11 @@ import "lib/math_utils.dash"
 ```
 
 **Comportamiento:**
-- `import "file.dash"` - carga el archivo y hace disponibles sus funciones públicas
-- Funciones privadas (con `_` al inicio) NO son importadas
+- `import "file.dash"` - carga el archivo y hace disponible lo público
+- Lo que empieza por `_` es privado del módulo: funciones, constantes, globales, structs y enums (D45).
+  Usarlo desde otro módulo da el error `'_x' is private to module 'm.dash'`. Dos módulos pueden tener cada uno
+  su `_x`: si chocan, el compilador los renombra
+- Solo existe la forma `import "ruta"` (no hay `import X from "y"`)
 - Imports recursivos soportados
 - Protección contra imports circulares
 
@@ -378,14 +403,14 @@ import "lib/utils.dash"
 
 Main
     result = helper(5)  # OK - función pública
-    # _internal()       # Error - función no definida
+    # _internal()       # Error: '_internal' is private to module 'utils.dash'
 end
 ```
 
 ### 2.2 Exports
 **Estado:** ⬜ No implementado (decisión: no necesario)
 
-**Nota:** Se decidió usar el enfoque estilo Python donde todo es público por defecto, excepto funciones que empiezan con `_` que son privadas. Esto simplifica el lenguaje sin necesidad de keyword `export`.
+**Nota:** Se decidió usar el enfoque estilo Python donde todo es público por defecto, excepto lo que empieza por `_`, que es privado. Esto simplifica el lenguaje sin necesidad de keyword `export`.
 
 ---
 
@@ -400,7 +425,7 @@ Combinar:
 - **FFI** (Estrategia B): Escape hatch para acceso directo cuando sea necesario
 
 ### 3.1 Módulos Built-in
-**Estado:** ✅ Completado (161 funciones)
+**Estado:** ✅ Completado (531 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
 **Prioridad:** Alta
 **Complejidad:** Alta
 
@@ -416,31 +441,38 @@ Combinar:
 - **RTG:** retargetable graphics
 - **Double Buffering:** pantalla doble buffer
 - **System:** memoria, signals, tasks
+- **Interfaces:** GadTools, ReAction y MUI (`mui_*`)
+- **Red:** TCP (`bsdsocket.library`) y TLS con AmiSSL
+- **Imágenes y fuentes:** datatypes, píxeles RGB/RGBA, transparencias, fuentes de disco
 
-**Ejemplo - amiga/graphics:**
+**Ejemplo - gráficos:**
 ```ruby
-import Graphics from "amiga/graphics"
+Window MyWindow
+    title "Gráficos"
+    width 320
+    height 200
+end
 
 Main
     MyWindow.open
 
-    # API de alto nivel
-    Graphics.pen(MyWindow, 1)        # SetAPen
-    Graphics.move(MyWindow, 10, 10)  # Move
-    Graphics.line(MyWindow, 100, 50) # Draw
-    Graphics.rect(MyWindow, 20, 20, 80, 60)  # RectFill
-    Graphics.text(MyWindow, "Hola")  # Text
+    gfx_pen(1)                      # SetAPen
+    gfx_line(10, 10, 100, 50)       # Move + Draw
+    gfx_rect(20, 20, 80, 60)        # RectFill
+    gfx_text_at(10, 120, "Hola")    # Move + Text
 
     # ...
 end
 ```
 
 **Implementación:**
-El compilador traduce `Graphics.line(win, x, y)` a:
+Cada builtin es una plantilla de C. El compilador traduce `gfx_line(x1, y1, x2, y2)` a:
 ```c
-Move(win->RPort, currentX, currentY);
-Draw(win->RPort, x, y);
+Move(_dash_rp, x1, y1); Draw(_dash_rp, x2, y2);
 ```
+
+Además, `lib/amiga/` tiene módulos escritos en Dash (audio, blitter, copper, dos, graphics, iff, intuition,
+memory, rtg, sprites...) que se importan con `import "lib/amiga/graphics.dash"`.
 
 ---
 
@@ -471,6 +503,10 @@ FFI es para librerías custom que no están en los headers estándar.
 ---
 
 ### 3.3 Especificación de Módulos Amiga
+
+> **Nota:** esta especificación es el diseño original y no se hizo así. No existe `import X from "y"` ni
+> objetos como `Graphics.line`. La API real son los builtins (`docs/BUILTINS.md`) y los módulos de `lib/amiga/`.
+> Gadgets y menús existen, con GadTools, ReAction y MUI.
 
 #### amiga/intuition
 ```ruby
@@ -577,7 +613,8 @@ func suma(a, b)
 end
 ```
 
-**Tipos soportados:** `Int`, `String`, `Bool`, `Pointer`, `Void`
+**Tipos soportados:** `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void`, el nombre de un
+struct o de un enum, listas con tipo (`[String]`, `[Nodo]`) y diccionarios (`{String: T}`). Otro nombre es un error.
 
 ### 4.2 Structs
 **Estado:** ✅ Completado
@@ -597,7 +634,7 @@ Print player.name
 
 **Implementación:**
 - Tipos con prefijo `_Dash_` para evitar colisiones con SDK Amiga
-- Constructores con `AllocMem` para heap allocation
+- Constructores que piden memoria del pool, con contador de referencias (`_dash_rc_new_obj`)
 - Acceso a miembros con notación `->` en C
 
 ### 4.3 Enums
@@ -654,9 +691,12 @@ en el C generado la parte que el programa usa:
 ### Estructura de Tests
 ```
 tests/
-├── test_*.dash          # Todos los tests en directorio raíz
-├── lib/                 # Módulos de librería para tests de import
-│   └── math_utils.dash
+├── test_*.dash          # Deben compilar y enlazar (y dar su salida en el emulador)
+├── errors/              # Deben fallar con el texto de su línea "# expect: ..."
+├── lib/                 # Módulos para los tests de import
+├── runtime/             # El runtime C ejecutado en el PC (host_harness.c)
+├── lsp/, unit/          # Tests en Python: servidor de lenguaje, CLI, depurador, emulador
+├── bench/               # Benchmarks (results.json)
 └── run_tests.py
 ```
 
@@ -816,6 +856,80 @@ tests/
 - [x] ReAction con varias ventanas (hasta 4): `ra_window_use`, `ra_event_window`
 - Los `gt_*` siguen siendo de una ventana: para varias, gadgets por número (que ya lo admiten)
 
+### Sesión 9 (Fecha: 2026-10-16/17) — Tareas de dashweb D40-D50 y rendimiento
+Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeración del plan de dashweb).
+- [x] Lenguaje: operadores de bits (`& | ^ ~ << >>`, también en `const`); diccionarios de diccionarios y listas de
+      diccionarios; `str_contains` y `str_split`; el `return` se comprueba contra el tipo declarado; un `Bool` se
+      escribe `true`/`false` (también los de `@native` y `@extern`)
+- [x] Rendimiento: menos copias y préstamos en llamadas y returns, funciones puras sin préstamo de argumentos,
+      `for k in d.keys()` sin crear la lista, `str_lower(x) == "..."` sin copia
+- [x] Arreglo: `for x in lista` mira la longitud en cada vuelta (sacar elementos dentro del bucle leía memoria
+      liberada)
+- [x] Gráficos: `image_from_rgb` (D40), transparencias y degradados `gfx_blend_rect`, `gfx_gradient_rect`,
+      `gfx_pixel_rgb` (D42), búferes RGB24 para vídeo `gfx_rgb_draw` y `gfx_rgb_draw_scaled` (D43),
+      transparencia de las imágenes en pantallas RTG (D50)
+- [x] MUI: rellenos en la zona de dibujo, `mui_canvas_update`, doble búfer `mui_canvas_buffered` (D48),
+      `mui_window_fullscreen` y `mui_window_own_screen`
+- [x] Red: plazos sin espera que no cuentan el tiempo en que el programa no mira (D41)
+- [x] Constantes, globales, structs y enums privados por módulo (D45); `task_start`: una función `@native` en otro
+      proceso (D47); listas y diccionarios devueltos por funciones conservan el tipo de sus elementos (D49)
+- [x] Herramientas: `emu_run.py` con varias capturas (D44), capturas de pantallas RTG, 68040 en el emulador para
+      `--fpu` (D46); `compiler/cflags.py` quita también la pasada `s` de `-fbbb` (código erróneo)
+
+### Sesión 10 (Fecha: 2026-10-17/18) — RTG rápido y TLS (D51-D56)
+- [x] `gfx_blend_rect` y `gfx_gradient_rect` en RTG por bloques de filas: 35 veces más rápido (D51)
+- [x] AmiSSL 5.1 o posterior: se pide la versión del SDK y, si falta, las anteriores (D52)
+- [x] `x = d[k]` de un diccionario de diccionarios es un diccionario de su tipo (D53)
+- [x] `image_from_rgb` en pantallas RTG sin `picture.datatype` (D54)
+- [x] TLS: la sesión de cada servidor se reanuda en la siguiente conexión, `tls_resumed` (D55)
+- [x] `-D_DASH_PIXGUARD`: guardas en los búferes de píxeles para cazar escrituras fuera (D56)
+- dashweb publica su primera versión de prueba, v0.1.0-alfa (2026-10-18)
+
+### Sesión 11 (Fecha: 2026-10-20) — D57-D61 y Trasfondo; fusiones por pull request
+- [x] Fuentes vectoriales: tamaño mínimo 2 (con 0 o 1, diskfont de 3.2 escribe en memoria ajena) y
+      `tools/amiga/vectoriales_memoria.dash` para comprobarlo (D57); zona de dibujo con MUI 3.8 (D58)
+- [x] `@workbench_output "NIL:"`: sin ventana de consola al arrancar desde el Workbench (D59)
+- [x] `net_signal` y `task_signal`: la red y las tareas despiertan al programa por señal (D60)
+- [x] La caché de longitudes solo guarda textos hechos por Dash, no los de C (D61)
+- [x] Arreglos del tutorial de dashweb: campos de struct llamados `s`; `--autoclose` con MUI
+- [x] Trasfondo: CPU de cada tarea (`cpu_start`, `cpu_sample`, `cpu_task_name`, `cpu_task_load`, `cpu_total`,
+      `cpu_stop`); dibujo en el fondo del Workbench, detrás de los iconos (`desktop_canvas`,
+      `desktop_canvas_on_draw`, `desktop_canvas_update`, `desktop_canvas_update_area`, `desktop_canvas_free`),
+      planar y RTG, con y sin backdrop; `break_check` (Ctrl-C sin ventana) y `single_instance` (una copia a la vez)
+- Desde aquí, cada rama entra en `main` por un pull request de GitHub (#1 a #12)
+
+### Sesión 12 (Fecha: 2026-10-20) — Extensión de VS Code (rama `ide`, detalle en `docs/IDE_LOOP.md`)
+- [x] Tareas 1 a 23: gramática de colores generada desde el compilador (`tools/gen_tmgrammar.py`); servidor de
+      lenguaje (`compiler/lsp.py`) con errores al escribir (`fichero:línea:columna`), completar, ayuda de firmas,
+      hover, ir a la definición, referencias, símbolos, renombrar, formatear y acciones rápidas
+- [x] Compilar y ejecutar: tareas, CodeLens, máquinas del emulador (A1200, A500, 3.2, RTG; FS-UAE o Amiberry),
+      salida en vivo, memcheck con `fichero:línea` y perfil en un panel
+- [x] Depurar (F5): `./dash --debug` (`-O0 -g` y `#line` hacia el `.dash`), `bgdbserver` en el Amiga y
+      `m68k-amigaos-gdb` como adaptador; valores y expresiones en forma de Dash (`tools/gdb/dash.py`); también en
+      un Amiga real por la red (`tools/gdb_relay.py`)
+- [x] Editor visual: teclado, copiar y pegar, arrastrar, deshacer; de un evento a su código; Ver en Amiga con un
+      emulador que se queda encendido (`tools/emu_preview.py`)
+- [x] Dash: Nuevo proyecto, guía de primeros pasos, modo restringido, empaquetado 0.2.0
+
+### Sesión 13 (Fecha: 2026-10-20/21) — Vídeo tutorial y caza de errores (detalle en `docs/IDE_VIDEO_LOOP.md`)
+- [x] Vídeo de 6 capítulos con subtítulos (382 s), grabado con la extensión instalada. Grabarlo sacó fallos, cada
+      uno con su test: `./dash -q` (solo avisos, errores y resultado), rutas con espacios y tildes, BOM y Latin-1
+      en las fuentes, dos `./dash` a la vez (cerrojo en `build/`), depurador mucho más rápido (81 s a 0,9 s)
+- [x] Versión 0.2.1; antes de fusionar en `main` (#11): 328 sin emulador, 778/778 en el emulador (A1200, A500 y 3.2) y 481/481 con `--memcheck`
+- [x] Release `vscode-0.2.1` en GitHub (el `.vsix` y el vídeo); el vídeo, también en YouTube:
+      https://youtu.be/_UTJ_0s3xLc
+
+### Sesión 14 (Fecha: 2026-10-20/21) — D62-D67
+- [x] Alfa de verdad en las imágenes RGBA en RTG: `image_draw`, `image_draw_part` e `image_scale` mezclan (D62)
+- [x] El ratón sobre un `mui_canvas` sin clic: `mui_canvas_on_move`, `mui_canvas_pointer_x`/`_y`/`_inside` (D63)
+- [x] Imágenes sin tope: antes, desde la 65 daba 0 (D64)
+- [x] `d.get(clave, defecto)`: el valor de un diccionario o el de por defecto, en una sola búsqueda (D65)
+- [x] Menos copias de textos: funciones que no liberan nada reciben sus argumentos sin copia (D66)
+- [x] `mui_canvas_update_area`: repintar solo una zona de un lienzo, también con búfer (D67)
+- [x] Arreglo: `file_eof` mira el siguiente byte sin comérselo; un bucle `while not file_eof(h)` con
+      `file_read_byte` perdía un byte de cada dos
+- [x] Test suite: 329 resultados sin emulador (2026-10-21); 34 ejemplos
+
 ---
 
 ## Notas y Decisiones
@@ -823,7 +937,7 @@ tests/
 ### Decisiones tomadas:
 1. **Scope:** Léxico estilo Python/Ruby
 2. **Funciones:** Sintaxis Ruby (`func ... end`)
-3. **Imports:** Estilo ES6 (`import X from "y"`)
+3. **Imports:** `import "ruta.dash"`; lo que empieza por `_` es privado del módulo
 4. **Arrays:** Sintaxis Python (`[1, 2, 3]`)
 5. **Amiga:** Estrategia híbrida (módulos built-in + FFI)
 6. **Memoria:** sin recolector; strings con dueño y temporales por vuelta, arrays y structs con contador
@@ -831,18 +945,20 @@ tests/
 7. **Compilación:** `-O2` por defecto (probado en emulador); Kickstart 3.0+, 68000
 
 ### Preguntas abiertas:
-- ¿Soporte para OOP? (Probablemente no en v3.0)
+- ¿Soporte para OOP? (Hay structs con métodos; herencia, no)
 - ¿UI declarativa en Dash? Resuelto de otra forma: ficheros `.dashui` (JSON) del editor visual, importables
   (`docs/MUI_EDITOR.md`)
-- ¿Macros/metaprogramación? (Probablemente no en v3.0)
+- ¿Macros/metaprogramación? (No por ahora)
 
 ### Pendiente:
-- Una lista declarada `var x: Array` pierde el tipo de sus elementos
+- Una lista declarada `var x: Array` pierde el tipo de sus elementos (se leen como enteros): hay que declararla
+  con su tipo, `var x: [String]`
 
-### Próximo proyecto (pedido el 2026-10-15, después del plan de mejoras):
+### Proyecto grande en Dash: dashweb (pedido el 2026-10-15)
 - Navegador ligero escrito en Dash con interfaz MUI: XHTML, CSS, JavaScript moderno y HTTPS. Sirve para hacer
-  crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y exigente. Repo `FreeMEM/dashweb`
-  (`~/Projects/dashweb`, plan en su `docs/DASHWEB_LOOP.md`); la interfaz usa los `mui_` de la sesión 7.
+  crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y exigente: lo que le falta se pide a
+  Dash como tarea `Dnn`. Se llama dashweb: https://github.com/FreeMEM/dashweb (plan en su `docs/DASHWEB_LOOP.md`).
+  Primera versión de prueba, v0.1.0-alfa, el 2026-10-18.
 
 ---
 

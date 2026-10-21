@@ -1,11 +1,14 @@
 # MUI en Dash: diseño (tarea 2 de `docs/MUI_LOOP.md`)
 
+Funciona con MUI 3.8 (muimaster.library V19) o MUI 5. La lista completa de los builtins `mui_` está en
+`docs/BUILTINS.md`.
+
 ## Decisiones
 
 1. **Builtins `mui_`**, sin sintaxis nueva por ahora. Los objetos MUI son valores que el programa
    guarda en variables (números, como los buffers y ficheros de Dash: el codegen convierte a puntero al llamar
-   al runtime; tarea 3): hacen falta varias ventanas y muchos objetos (el navegador), cosa que la API de
-   ReAction (`ra_`, un estado global y gadgets por número) no permite.
+   al runtime; tarea 3): hacen falta varias ventanas y muchos objetos (el navegador). La API de ReAction (`ra_`)
+   no da para tanto: hasta 4 ventanas y gadgets por número.
 2. **El árbol se construye con una pila**, como `ra_layout_*`: `mui_vgroup_begin()` ... `mui_group_end()`.
    Cada objeto que se crea entra en el grupo abierto. Por dentro: cada grupo se crea vacío y los hijos se añaden
    con `OM_ADDMEMBER`; `mui_window_end()` crea la ventana con su grupo raíz y la añade a la aplicación.
@@ -13,9 +16,9 @@
    devuelve `ID_ATRAS` con `MUIV_Application_ReturnID`. `mui_wait_event()` espera y lo devuelve. -1 = salir.
 4. **Zona de dibujo propia** con una clase MUI hecha en el runtime y una función Dash (`Func`) que pinta con
    los builtins `gfx_`. Es la pieza del navegador.
-5. **Sintaxis declarativa: después**, como capa encima de estos builtins y como formato del editor visual
-   (tarea 19). El usuario no recuerda el formato que se habló; la propuesta es que el editor lea y escriba un
-   bloque Dash (`MuiWindow ... end`), sin fichero aparte. Se decide en la tarea 19, con los builtins ya probados.
+5. **Formato declarativo: `.dashui`** (decidido en la tarea 19). Un fichero JSON que hace el editor visual y que
+   el programa usa con `import "ventana.dashui"`; `compiler/dashui.py` lo convierte en código Dash con estos
+   builtins. Formato y reglas en `docs/MUI_EDITOR.md`.
 
 ## API
 
@@ -31,6 +34,10 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 | `mui_window_end()` | Cierra el grupo raíz, crea la ventana y la añade a la aplicación. |
 | `mui_window_open(win) -> Bool` | Abre la ventana (false si no se pudo: pantalla pequeña, sin memoria). |
 | `mui_window_close(win)` | La cierra (sigue existiendo). |
+| `mui_window_size(win, ancho, alto)` | Tamaño al abrirse, en tanto por ciento de la pantalla visible, centrada (antes de abrirla). |
+| `mui_window_fullscreen(win)` | Ocupa toda la pantalla, sin bordes, barra de título ni gadgets (antes de abrirla). |
+| `mui_window_own_screen(win) -> Bool` | Pantalla completa en una pantalla propia, como la pública (antes de abrirla; false: en la pública). |
+| `mui_window_active(win) -> Int` | 1 si es la ventana activa (varias ventanas de un `.dashui` comparten números de evento). |
 | `mui_app_end()` | `MUI_DisposeObject` de la aplicación (y todo su árbol), cierra muimaster, libera los textos. Se llama solo al salir si el programa no lo hace. |
 
 ### Grupos y disposición
@@ -38,10 +45,11 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 | Builtin | Qué hace |
 |---|---|
 | `mui_vgroup_begin()`, `mui_hgroup_begin()` | Grupo vertical u horizontal. |
-| `mui_group_begin_frame(titulo, horizontal)` | Grupo con marco y título. |
+| `mui_frame_begin(titulo, horizontal)` | Grupo con marco y título (`""` = sin título). |
 | `mui_columns_begin(n)` | Grupo en rejilla de `n` columnas (formularios con etiqueta + campo). |
 | `mui_group_end()` | Cierra el grupo abierto. |
-| `mui_space()`, `mui_hspace()`, `mui_vspace()` | Espacio que se estira. |
+| `mui_scroll_begin()` | Zona con barras de desplazamiento (contenido más grande que la ventana). |
+| `mui_space()` | Espacio que se estira. |
 | `mui_balance()` | Separador que el usuario arrastra (`Balance`). |
 | `mui_weight(obj, peso)` | Peso al repartir el espacio (100 por defecto). |
 | `mui_register_begin(titulos)` | Pestañas (`Register`); `titulos` = textos separados por `|`. Cada hijo es una página. |
@@ -61,19 +69,22 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 | `mui_list()` | `Listview` + `List` de textos (el objeto devuelto es el `Listview`; el runtime usa su `List`) |
 | `mui_scrollbar(vertical)` | `Scrollbar` (`Prop`) |
 | `mui_canvas(ancho_min, alto_min)` | Clase propia de dibujo (abajo) |
-| `mui_image(fichero)` | `Dtpic` (PNG, JPEG, GIF por datatypes) |
+| `mui_image(fichero)` | `Dtpic` (ILBM; PNG, JPEG, GIF si están sus datatypes). `mui_set_text` cambia el fichero |
+| `mui_image_button(fichero)` | Botón con dibujo (icono de barra de herramientas): `mui_on_press` como un botón |
 
 ### Valores
 
 | Builtin | Qué hace |
 |---|---|
-| `mui_get_text(obj) -> String` | Texto de `String` o `Text` (copia nueva para Dash). |
+| `mui_get_text(obj) -> String` | Texto de `String`, `Text`, botón o título de ventana (copia nueva para Dash). |
 | `mui_set_text(obj, texto)` | Cambia el texto (`String`, `Text`, botón; ventana: título copiado). |
 | `mui_get_value(obj) -> Int` | Según la clase: marcado, nivel del deslizador, opción del ciclo, valor de la barra, línea activa de la lista (-1 = ninguna), pestaña, posición de la barra de desplazamiento. |
 | `mui_set_value(obj, v)` | Lo mismo para escribir. Dispara las notificaciones como si lo hiciera el usuario. |
 | `mui_set_enabled(obj, si)` | `MUIA_Disabled`. |
 | `mui_set_visible(obj, si)` | `MUIA_ShowMe` (la ventana se recoloca). |
 | `mui_set_range(barra, total, visible)` | Barra de desplazamiento: tamaño del documento y de lo visible. |
+| `mui_width(obj) -> Int`, `mui_height(obj) -> Int` | Tamaño en pantalla en píxeles (0 antes de abrir la ventana). |
+| `mui_help(obj, texto)` | Ayuda en un globo cuando el puntero se para encima. |
 
 ### Listas
 
@@ -94,6 +105,7 @@ Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas
 | `mui_wait_event() -> Int` | Espera y devuelve el número de un evento, o -1 para salir. |
 | `mui_poll_event() -> Int` | Igual sin esperar: 0 si no hay nada. |
 | `mui_wait_event_signals(mascara) -> Int` | Espera también otras señales (red, temporizador). Devuelve 0 cuando llega una de ellas; `mui_signals()` dice cuáles. |
+| `mui_timer(ms, id)` | Dentro de `ms` milisegundos `mui_wait_event` devuelve `id`, una vez (otra: llamarla otra vez; 0 la anula). |
 | `mui_press(obj)` | Lanza el evento de `mui_on_press` de ese objeto como si se pulsara (atajos, tests). |
 
 Los números de evento son del programa (`const ID_ATRAS = 1`), mayores que 0.
@@ -112,9 +124,22 @@ mui_canvas_on_input(pagina, ID_RATON)  # clic, rueda y teclas dentro de la zona
 ...
 mui_canvas_redraw(pagina)              # pide repintar (desde la tarea principal, nunca desde otra)
 mui_canvas_update(pagina)              # MUI_Redraw con MADF_DRAWUPDATE: sin borrar; mui_canvas_updating() = true
+mui_canvas_update_area(pagina, x, y, an, al)  # lo mismo, solo en esa zona (con buffered, solo ella va a la ventana)
 mui_canvas_buffered(pagina, true)      # D48: dibujo en un BitMap amigo con su capa; un BltBitMapRastPort al acabar
-x = mui_canvas_mouse_x(pagina)         # tras ID_RATON: posición relativa, botón, rueda (+1/-1), tecla
+mui_canvas_on_move(pagina, ID_MUEVE)   # el puntero se mueve sobre la zona o sale de ella, sin clic
 ```
+
+Tras un evento de `mui_canvas_on_input`, lo que pasó (posición relativa a la esquina de la zona):
+
+| Builtin | Qué devuelve |
+|---|---|
+| `mui_canvas_mouse_x(c)`, `mui_canvas_mouse_y(c)` | Posición del último clic o de la rueda. |
+| `mui_canvas_button(c)` | 1 si fue un clic izquierdo, si no 0. |
+| `mui_canvas_wheel(c)` | +1 / -1 si fue la rueda (arriba / abajo), si no 0. |
+| `mui_canvas_key(c)` | Código de la tecla (raw), -1 si no fue una tecla. |
+| `mui_canvas_char(c) -> String` | El carácter de esa tecla, con mayúsculas y el mapa de teclado (`""` si no hay). |
+| `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Posición del puntero ahora (con clic o sin él). |
+| `mui_canvas_pointer_inside(c) -> Bool` | Si el puntero está ahora sobre la zona. |
 
 La clase propia (`MUI_CreateCustomClass` sobre `Area`) implementa `MUIM_AskMinMax`, `MUIM_Draw`, `MUIM_Setup`/
 `MUIM_Cleanup` (manejador de eventos con `MUIM_Window_AddEventHandler`) y `MUIM_HandleEvent`. El desplazamiento lo
@@ -197,7 +222,8 @@ end
   error claro ("MUI SDK not found: run tools/get_mui_sdk.sh or set DASH_MUI_SDK").
 - **Pila:** 32 KB por defecto en programas con MUI (hecho en la tarea 1).
 - **CPU:** MUI 5 para OS3 es de 68020. `mui_app_begin` lo comprueba (`SysBase->AttnFlags`) y sale con un mensaje
-  en un 68000, en vez de colgarse.
+  en un 68000, en vez de colgarse. La comprobación vale también con MUI 3.8.
+- **Versión:** `mui_app_begin` abre muimaster.library V19 o posterior (MUI 3.8 o 5).
 - **Memoria:** MUI es dueño de los objetos; los handles no llevan contador de referencias y dejan de valer tras
   `mui_app_end()`. Los textos que se pasan a `mui_text`, `mui_string`, `mui_list_add`... los copia MUI, así que los
   temporales de Dash se pueden liberar al acabar la vuelta. `--memcheck` debe acabar sin nada vivo.
