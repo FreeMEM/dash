@@ -295,9 +295,9 @@ GRAPHICS_ADVANCED = {
         name="sprite_load",
         params=["id", "filename"],
         return_type="BOOL",
-        c_template="_dash_sprite_load(${id}, ${filename})",
+        c_template="_dash_sprite_load_file(${id}, ${filename})",
         needs_gfx=True,
-        description="Load sprite from file"
+        description="Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot"
     ),
     "sprite_create": BuiltinFunc(
         name="sprite_create",
@@ -345,7 +345,7 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_frame(${id}, ${frame})",
         needs_gfx=True,
-        description="Set sprite animation frame"
+        description="Show frame number frame (0 the first) of a sprite from sprite_load"
     ),
     "sprite_free": BuiltinFunc(
         name="sprite_free",
@@ -3974,6 +3974,17 @@ TASK_FUNCTIONS = {
         c_template="_dash_single_instance(${name})",
         description="One copy at a time: false if another copy of the program (a public port with that name) "
                     "runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends)"),
+    # dashweb D68
+    "dos_requesters": BuiltinFunc(
+        name="dos_requesters", params=["on"], return_type="void",
+        c_template="_dash_dos_requesters(${on})",
+        description="false: no \"Insert volume\" or disk error requesters for this program (the call fails instead); "
+                    "true: as before. The program's end puts them back"),
+    "base64_to_file": BuiltinFunc(
+        name="base64_to_file", params=["text", "file"], return_type="LONG",
+        c_template="_dash_base64_to_file(${text}, ${file})",
+        description="Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): "
+                    "the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written"),
     "cpu_start": BuiltinFunc(
         name="cpu_start", params=[], return_type="BOOL",
         c_template="_dash_cpu_start()",

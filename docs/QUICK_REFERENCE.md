@@ -331,6 +331,8 @@ debug_break()               # Stop in the UAE emulator's debugger (tools/emu_run
 
 break_check()               # true if Ctrl-C came (Break in the Shell); it is cleared
 single_instance("MiProg")   # false if another copy runs (that one gets Ctrl-C)
+dos_requesters(false)       # no "Insert volume"/disk error requesters: the call fails (true: back)
+base64_to_file(texto, "T:x.png")   # base64 bytes to a file: bytes written, -1 if not base64
 
 cpu_start()                 # count the CPU of every task (false: no EClock or OS < 2.04)
 n = cpu_sample()            # tasks since the last sample, most first: cpu_task_name(i), cpu_task_load(i)

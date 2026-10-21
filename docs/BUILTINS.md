@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 531 funciones, 531 implementadas, 0 sin implementar.
+Total: 533 funciones, 533 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -45,13 +45,13 @@ Total: 531 funciones, 531 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `sprite_load(id, filename)` | `BOOL` | Load sprite from file |  |
+| `sprite_load(id, filename)` | `BOOL` | Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot |  |
 | `sprite_create(id, width, height)` | `BOOL` | Create empty sprite |  |
 | `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
 | `sprite_show(id)` | `void` | Make sprite visible |  |
 | `sprite_hide(id)` | `void` | Hide sprite |  |
 | `sprite_color(id, index, r, g, b)` | `void` | Set sprite color |  |
-| `sprite_frame(id, frame)` | `void` | Set sprite animation frame |  |
+| `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load |  |
 | `sprite_free(id)` | `void` | Free sprite memory |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |
 | `sprite_set_row(id, row, plane0, plane1)` | `void` | Set sprite data row (2 bitplanes) |  |
@@ -430,6 +430,8 @@ Total: 531 funciones, 531 implementadas, 0 sin implementar.
 | `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
 | `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
 | `single_instance(name)` | `BOOL` | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
+| `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
+| `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
 | `cpu_sample()` | `LONG` | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
 | `cpu_task_name(i)` | `STRPTR` | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |

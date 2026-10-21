@@ -1,0 +1,58 @@
+# Test: base64_to_file and dos_requesters (dashweb D68). The bytes of base64 text go to a file,
+# with or without = padding, skipping spaces and line ends; a NUL byte too. Text that is not
+# base64 gives -1. With the DOS requesters off, opening a volume that is not there fails at
+# once (with them on, "Insert volume" would wait for a click).
+# expect-out: Hola 4
+# expect-out: sin relleno 4
+# expect-out: con saltos 5
+# expect-out: binario 4: 0 1 2 255
+# expect-out: malos -1 -1 -1 -1
+# expect-out: vacio 0
+# expect-out: sin volumen 0
+# expect-out: ventana -1
+# expect-out: vuelta true
+# expect-out: fin
+
+@native func ventana_dos() -> Int
+"""
+    return (LONG)((struct Process *)FindTask(NULL))->pr_WindowPtr;
+"""
+end
+
+func leer(ruta: String) -> String
+    f = file_open(ruta, 1005)
+    r = ""
+    while not file_eof(f)
+        r = r + " " + file_read_byte(f)
+    end
+    file_close(f)
+    return r
+end
+
+Main
+    ruta = "T:dash_b64.bin"
+    n = base64_to_file("SG9sYQ==", ruta)
+    Print "#{file_read_text(ruta)} #{n}"
+    n = base64_to_file("SG9sYQ", ruta)
+    Print "sin relleno #{n}"
+    n = base64_to_file("SG9s\n YSE=\r\n", ruta)
+    Print "con saltos #{n}"
+    n = base64_to_file("AAEC/w==", ruta)
+    Print "binario #{n}:#{leer(ruta)}"
+    a = base64_to_file("SG9s*", ruta)
+    b = base64_to_file("S", ruta)
+    c = base64_to_file("SG9sY===", ruta)
+    d = base64_to_file("SGk=x", ruta)
+    Print "malos #{a} #{b} #{c} #{d}"
+    n = base64_to_file("", ruta)
+    Print "vacio #{n}"
+
+    antes = ventana_dos()
+    dos_requesters(false)
+    f = file_open("NOEXISTE:x", 1005)
+    Print "sin volumen #{f}"
+    Print "ventana #{ventana_dos()}"
+    dos_requesters(true)
+    Print "vuelta #{ventana_dos() == antes}"
+    Print "fin"
+end

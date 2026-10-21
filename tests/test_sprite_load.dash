@@ -1,0 +1,56 @@
+# Test: sprite_load reads the picture (it made an empty 16 x 16 sprite) and sprite_frame
+# changes the frame (it did nothing). The test writes a 32 x 2 ILBM of 2 planes: two frames
+# of 16 x 2 side by side. The sprite data after the two control words are the planes of each
+# row: frame 0 first, then frame 1. A missing file gives false.
+# expect-c: static BOOL _dash_sprite_load_file(LONG id, STRPTR file)
+# expect-out: cargado true
+# expect-out: marco 0: 61680 65280 3855 255
+# expect-out: marco 1: 4660 22136 43690 21845
+# expect-out: marco 5: 4660 22136 43690 21845
+# expect-out: sin fichero false
+# expect-out: fin
+
+@native func palabra(id: Int, i: Int) -> Int
+"""
+    return (LONG)_dash_sprite_data[id][i];
+"""
+end
+
+func escribir_ilbm(ruta: String) -> Bool
+    bytes = [70, 79, 82, 77, 0, 0, 0, 76, 73, 76, 66, 77, 66, 77, 72, 68, 0, 0, 0, 20, 0, 32, 0, 2,
+             0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 10, 11, 1, 64, 0, 200, 67, 77, 65, 80, 0, 0, 0, 12,
+             0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0, 255, 66, 79, 68, 89, 0, 0, 0, 16, 240, 240, 18, 52,
+             255, 0, 86, 120, 15, 15, 170, 170, 0, 255, 85, 85]
+    f = file_open(ruta, 1006)
+    if f == 0
+        return false
+    end
+    for b in bytes
+        file_write_byte(f, b)
+    end
+    file_close(f)
+    return true
+end
+
+func filas(id: Int) -> String
+    return "#{palabra(id, 2)} #{palabra(id, 3)} #{palabra(id, 4)} #{palabra(id, 5)}"
+end
+
+Main
+    screen_open(2, "Sprites")
+    ruta = "T:dash_sprite.ilbm"
+    escribir_ilbm(ruta)
+    ok = sprite_load(0, ruta)
+    Print "cargado #{ok}"
+    if ok
+        Print "marco 0: #{filas(0)}"
+        sprite_frame(0, 1)
+        Print "marco 1: #{filas(0)}"
+        sprite_frame(0, 5)
+        Print "marco 5: #{filas(0)}"
+    end
+    falta = sprite_load(1, "T:no_existe.ilbm")
+    Print "sin fichero #{falta}"
+    sprite_free(0)
+    Print "fin"
+end

@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 531 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 533 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -744,7 +744,7 @@ Main
     Print aplicar(fn(x) -> x + 1, 9)     # 10
     triple = fn(x) -> x * 3
     Print triple(2)                      # 6
-    g = fn(x) -> doble(x)                # una funcion con nombre, en una variable
+    g = doble                            # una funcion con nombre, en una variable
     Print g(4)                           # 8
     cuadrado = fn(x)
         y = x * x
@@ -756,9 +756,8 @@ end
 
 Una lambda no captura variables: solo ve sus parametros, las globales, las constantes y las funciones.
 Usar una variable local de fuera es un error (`lambdas cannot use local variables from outside`); hay
-que pasarla como parametro. Para guardar en una variable una funcion con nombre, envolverla en una
-lambda como arriba: `g = doble` y `var g: Func = doble` todavia no se pueden llamar despues (`g(4)` da
-error, al compilar o en gcc).
+que pasarla como parametro. Una funcion con nombre se guarda en una variable sin parentesis: `g = doble`,
+`var g: Func = doble` o una global `var g: Func = doble`; despues `g(4)` la llama.
 
 ---
 
@@ -1563,8 +1562,8 @@ transparente. Necesitan una pantalla propia (`screen_open`) de chipset (no RTG: 
 | `sprite_pos(id, x, y)`, `sprite_show(id)`, `sprite_hide(id)` | Lo mueve, lo muestra o lo esconde |
 | `sprite_collision(id1, id2)` | Si se tocan sus rectangulos |
 | `sprite_free(id)` | Lo devuelve al sistema |
-| `sprite_load(id, fichero)` | Todavia no lee el fichero: crea un sprite vacio de 16x16 |
-| `sprite_frame(id, frame)` | Todavia no hace nada |
+| `sprite_load(id, fichero)` | Sprite desde un dibujo (ILBM...): marcos de 16 pixeles de ancho uno al lado de otro, tan altos como el dibujo; los colores 0-3 del dibujo son los del sprite (0 transparente). Muestra el primer marco. `false` si no puede |
+| `sprite_frame(id, marco)` | Muestra ese marco (0 el primero) de un sprite de `sprite_load` |
 
 ### Sprites por software
 
@@ -1732,8 +1731,7 @@ end
 ```
 
 `On Timer` usa `timer.device` mientras el bucle espera: no gasta CPU entre tics. Un solo `On Timer`
-por bucle. **Aviso:** si el programa usa `window_create`, `On Timer` todavia no funciona: compila sin
-error, pero no salta nunca.
+por bucle. Tambien funciona si el programa abre ventanas con `window_create`.
 
 ### Raton
 
@@ -3380,6 +3378,23 @@ marcha: con un puerto público con ese nombre. Si ya existe, manda Ctrl-C a la c
 (esta debe acabar); si no, lo crea y da `true`. El puerto se quita al acabar el programa. Así, lanzar otra vez un
 programa sin ventana desde el Workbench lo cierra.
 
+### Sin requesters de DOS: dos_requesters
+
+```ruby
+dos_requesters(false)            # sin "Inserte el volumen" ni errores de disco
+h = file_open("NOEXISTE:x", 1005)    # da 0 enseguida, sin esperar un clic
+dos_requesters(true)             # como estaban
+```
+
+Apagados, una llamada que pondria un requester (un volumen que no esta, un disco con errores) falla y ya. Al
+acabar el programa vuelven solos. Sirve a un programa que abre rutas que no elige el usuario, como un navegador.
+
+### Base64 a un fichero: base64_to_file
+
+`base64_to_file(texto, fichero)` escribe en el fichero los bytes del texto en base64 (por ejemplo, el de una
+direccion `data:...;base64,`). Se salta espacios y saltos de linea, y el relleno `=` puede estar o no. Da los bytes
+escritos, o -1 si el texto no es base64 (entonces no escribe nada) o el fichero no se puede escribir.
+
 ### CPU de cada tarea: cpu_sample
 
 ```ruby
@@ -3739,7 +3754,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_fullpath` |
 | ReAction | 79 | `ra_window_*`, `ra_add_*`, `ra_get_*`, `ra_canvas_*` |
 | Sistema y memoria | 26 | `mem_*`, `time_*`, `random_*`, `arena_*`, `peek_*`, `poke_*` |
-| Ficheros (DOS) | 24 | `file_*`, `dir_*`, `console_read`, `console_write` |
+| Ficheros (DOS) | 26 | `file_*`, `dir_*`, `console_read`, `console_write`, `base64_to_file`, `dos_requesters` |
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
 | Red (TCP) | 13 | `net_connect`, `net_send`, `net_recv`, `net_signal` |
@@ -3754,7 +3769,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **531** | |
+| **Total** | **533** | |
 
 ### Colores Estandar Amiga
 
