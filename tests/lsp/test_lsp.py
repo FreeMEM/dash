@@ -416,6 +416,18 @@ class LanguageServerTest(unittest.TestCase):
         edits = self.rename(u, 1, 4, "z")["result"]["changes"][u]                              # (it said "No sé qué es")
         self.assertEqual(sorted(e["range"]["start"]["line"] for e in edits), [1, 18])
 
+    def test_dictionary_get(self):
+        # d.get(clave, defecto) of D65: offered after "d." and with its help on hover
+        u = self.open("g65.dash", 'Main\n    d = {"a": "b"}\n    v = d.get("a", "")\n    Print v\nend\n')
+        self.assertEqual(self.client.diagnostics(u), [])
+        reply = self.client.request("textDocument/hover", {"textDocument": {"uri": u},
+                                    "position": {"line": 2, "character": 11}})
+        self.assertIn("get(clave, defecto)", reply["result"]["contents"]["value"])
+        self.edit(u, 'Main\n    d = {"a": "b"}\n    v = d.\nend\n')
+        reply = self.client.request("textDocument/completion", {"textDocument": {"uri": u},
+                                    "position": {"line": 2, "character": 10}})
+        self.assertIn("get", [i["label"] for i in reply["result"]["items"]])
+
     def test_completion_inside_interpolation(self):
         u = self.open("i16.dash", 'Main\n    nombre = "x"\n    Print "hola"\nend\n')
         self.client.diagnostics(u)
