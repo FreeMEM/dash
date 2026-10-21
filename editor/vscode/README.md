@@ -13,6 +13,28 @@ running, debugging, and debugging a real Amiga.
 
 [![Video tutorial](https://raw.githubusercontent.com/FreeMEM/dash/main/docs/media/vscode-tutorial.jpg)](https://github.com/FreeMEM/dash/releases/download/vscode-0.2.1/dash-vscode-tutorial-subtitulado.mp4)
 
+## Installing
+
+1. Dash and the Amiga toolchain, as in the
+   [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
+   emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
+2. This extension: `dash-mui-editor-0.2.1.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1), then in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.1.vsix`.
+
+## How it works with Dash
+
+The extension is a thin layer: the work is done by the tools of the Dash repository (the folder of
+`dash.path`), so updating Dash (`git pull`) updates what the extension knows of the language, without
+reinstalling it.
+
+| In VS Code | Done by |
+|---|---|
+| Errors while typing, completion, definition, rename, formatting | `compiler/lsp.py` |
+| Compile | `./dash` |
+| Run, memory check, profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
+| Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
+| Debugging (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py`, `bgdbserver` |
+
 ## Getting started
 
 1. You need VS Code 1.86 or later, the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain
