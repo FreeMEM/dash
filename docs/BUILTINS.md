@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 530 funciones, 530 implementadas, 0 sin implementar.
+Total: 531 funciones, 531 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -625,6 +625,7 @@ Total: 530 funciones, 530 implementadas, 0 sin implementar.
 | `mui_canvas_redraw(canvas)` | `void` | Draw the area again now |  |
 | `mui_canvas_buffered(canvas, on)` | `void` | Draw the area in a bitmap of its own and show it at once when done (no half-drawn area; the same coordinates; mui_canvas_update still draws on the window) |  |
 | `mui_canvas_update(canvas)` | `void` | Call the draw function now without clearing the area (it paints only what changed) |  |
+| `mui_canvas_update_area(canvas, x, y, w, h)` | `void` | Like mui_canvas_update, only the zone w x h at x, y of the area (from its corner): the drawing is clipped to it and, with mui_canvas_buffered, only it goes from the buffer to the window |  |
 | `mui_canvas_updating()` | `BOOL` | In the draw function: true if it runs for mui_canvas_update (the rest is still there) |  |
 | `mui_canvas_on_move(canvas, id)` | `void` | mui_wait_event returns id when the pointer moves over the area or leaves it, without a click (the moves that come meanwhile make one; call before opening the window) |  |
 | `mui_canvas_pointer_x(canvas)` | `LONG` | X of the pointer now, from the area's left edge (clicked or not) |  |
