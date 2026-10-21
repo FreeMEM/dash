@@ -1,0 +1,11 @@
+# expect: the default can only be nil
+# (a dictionary of structs: d.get(k, nil); a new object as default would be lent and never freed)
+struct P
+    x: Int
+end
+
+Main
+    d = {"a": P(1)}
+    v = d.get("b", P(2))
+    Print v.x
+end

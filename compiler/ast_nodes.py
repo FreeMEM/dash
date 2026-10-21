@@ -468,6 +468,7 @@ class ArrayAccess(ASTNode):
     array: ASTNode  # The array being accessed (usually VarRef)
     index: ASTNode  # The index expression
     location: Optional[SourceLocation] = None
+    default: Optional[ASTNode] = None  # d.get(k, default) of a dictionary (D65): the value when k is missing
 
 
 @dataclass

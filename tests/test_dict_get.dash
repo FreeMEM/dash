@@ -1,0 +1,48 @@
+# d.get(clave, defecto) (dashweb D65): the value of a key, or the default if it is missing, in one lookup (has()
+# and then d[k] took three). {String: String} and {String: Int}, a key that is there and one that is not, the
+# result kept in a variable and in a list, through a function's parameter, and a dictionary of structs with nil.
+# d[k] of a missing key is nil in a {String: String} (0 in a {String: Int}).
+# memcheck
+# expect-out: rojo nada
+# expect-out: 1 7
+# expect-out: rojo y
+# expect-out: def
+# expect-out: nil 0
+# expect-out: punto 3 nil
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+end
+
+func val(e: {String: String}, p: String, defecto: String) -> String
+    v = e.get(p, defecto)
+    if v == ""
+        return defecto
+    end
+    return v
+end
+
+Main
+    e = {"color": "rojo", "vacio": ""}
+    n = {"a": 1}
+    Print e.get("color", "") + " " + e.get("falta", "nada")
+    a = n.get("a", 7)
+    b = n.get("b", 7)
+    Print "#{a} #{b}"
+    l = [e.get("color", "x")]
+    l.push(e.get("otra", "y"))
+    Print l[0] + " " + l[1]
+    Print val(e, "vacio", "def")
+    falta = e["falta"]
+    nb = n["b"]
+    if falta == nil
+        Print "nil #{nb}"
+    end
+    pts = {"p": Punto(3)}
+    p = pts.get("p", nil)
+    q = pts.get("q", nil)
+    if q == nil
+        Print "punto #{p.x} nil"
+    end
+end
