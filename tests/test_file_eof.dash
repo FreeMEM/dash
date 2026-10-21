@@ -1,0 +1,32 @@
+# Test: file_eof looks at the next byte without consuming it. It used to call FGetC
+# and lose every other byte in a "while not file_eof" loop.
+# expect-c: UnGetC(_fh, _c)
+# expect-out: leidos 5: hola!
+# expect-out: vacio true
+# expect-out: fin
+
+Main
+    ruta = "T:dash_eof.txt"
+    f = file_open(ruta, 1006)
+    for b in [104, 111, 108, 97, 33]
+        file_write_byte(f, b)
+    end
+    file_close(f)
+
+    f = file_open(ruta, 1005)
+    n = 0
+    texto = ""
+    while not file_eof(f)
+        texto = texto + str_char(file_read_byte(f))
+        n = n + 1
+    end
+    file_close(f)
+    Print "leidos #{n}: #{texto}"
+
+    f = file_open(ruta, 1006)
+    file_close(f)
+    f = file_open(ruta, 1005)
+    Print "vacio #{file_eof(f)}"
+    file_close(f)
+    Print "fin"
+end
