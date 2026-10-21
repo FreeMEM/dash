@@ -2,6 +2,7 @@
 # with or without = padding, skipping spaces and line ends; a NUL byte too. Text that is not
 # base64 gives -1. With the DOS requesters off, opening a volume that is not there fails at
 # once (with them on, "Insert volume" would wait for a click).
+# memcheck
 # expect-out: Hola 4
 # expect-out: sin relleno 4
 # expect-out: con saltos 5
@@ -11,7 +12,9 @@
 # expect-out: sin volumen 0
 # expect-out: ventana -1
 # expect-out: vuelta true
+# expect-out: variables 4
 # expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
 
 @native func ventana_dos() -> Int
 """
@@ -54,5 +57,11 @@ Main
     Print "ventana #{ventana_dos()}"
     dos_requesters(true)
     Print "vuelta #{ventana_dos() == antes}"
+
+    # texts in variables are only read: they stay theirs and are freed (D68b)
+    t = "SG9s" + "YQ=="
+    r = "T:" + "dash_b64.txt"
+    n = base64_to_file(t, r)
+    Print "variables #{n}"
     Print "fin"
 end
