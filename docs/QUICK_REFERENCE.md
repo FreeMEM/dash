@@ -132,6 +132,7 @@ for x in obj.lista          # for-each over any list expression
 l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
 d = {"a": 1, "b": 2}        # dictionary {String: T}: d["c"] = 3, d["a"], d.has("a"),
 d.remove("a")  d.keys()  d.clear()  d.length    # missing key: 0 / nil
+d.get("c", 0)                # the value, or the default if missing (one lookup; objects: nil only)
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 

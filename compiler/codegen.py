@@ -1032,6 +1032,14 @@ static LONG DashDict_get(DashDict *d, STRPTR key) {
     return d->keys[s] ? d->vals[s] : 0;
 }
 
+/* d.get(key, dflt) (D65): the value, or dflt if the key is not there; one lookup (has, then [], took three) */
+static LONG DashDict_get_or(DashDict *d, STRPTR key, LONG dflt) {
+    LONG s;
+    if (!d || !key || !d->cap) return dflt;
+    s = _dash_dict_slot(d, key);
+    return d->keys[s] ? d->vals[s] : dflt;
+}
+
 static BOOL DashDict_has(DashDict *d, STRPTR key) {
     return d && key && d->cap && d->keys[_dash_dict_slot(d, key)] != NULL;
 }
@@ -14207,6 +14215,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             kind = self._dict_value_kind(node.array)
             code = f"DashDict_get({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
+            if getattr(node, "default", None) is not None:      # d.get(k, default) (D65)
+                code = (f"DashDict_get_or({self._generate_expression(node.array)}, "
+                        f"{self._generate_expression(node.index)}, (LONG)({self._generate_expression(node.default)}))")
             if kind == "string":
                 return f"((STRPTR){code})"
             if kind == "array":

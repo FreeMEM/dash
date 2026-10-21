@@ -859,6 +859,7 @@ Un diccionario guarda valores por clave de texto. Su tipo es `{String: T}`:
 edades = {"Ana": 30, "Bob": 25}
 edades["Eva"] = 41             # anade o cambia
 Print edades["Ana"]            # 30; una clave que no esta da 0 (nil en textos y structs)
+Print edades.get("Zoe", -1)    # -1: el valor, o el de por defecto si no esta (una sola busqueda)
 if edades.has("Bob")
     edades.remove("Bob")
 end
@@ -878,6 +879,10 @@ es un diccionario de su tipo, sin declararla con `var`. `for k in d.keys()` no c
 cuerpo no cambia ese diccionario. `d.clear()` lo vacia. Tambien se escribe a traves de campos
 (`hoja.reglas["color"] = "red"`). Buscar, anadir y quitar cuestan lo mismo con 10 claves
 que con 10.000 (tabla hash).
+
+`d.get(clave, defecto)` busca una vez: `if d.has(k)` seguido de `d[k]` busca dos. El defecto es del tipo
+de los valores (`""` en un `{String: String}`); en un diccionario de structs, listas o diccionarios solo
+puede ser `nil`. El resultado se usa como el de `d[k]`.
 
 ### nil
 

@@ -1,0 +1,7 @@
+# expect: get(): the default must be String, like the dictionary's values
+# (d.get(k, default) of dashweb D65: the default is a value of the dictionary's type)
+Main
+    e = {"a": "b"}
+    v = e.get("a", 3)
+    Print v
+end
