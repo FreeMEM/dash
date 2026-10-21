@@ -2012,21 +2012,24 @@ static void _dash_blend_cleanup(void) {
 #include <graphics/scale.h>
 
 struct Library *DataTypesBase = NULL;
-#define _DASH_IMG_MAX 64
-typedef struct {
+/* The live images: a list, as many as there is memory for (a table of 64 gave 0 from the 65th on, D64); an
+   image is its pointer, told from any other number by its magic (and being in RAM, TypeOfMem) */
+#define _DASH_IMG_MAGIC 0x44494D47UL           /* "DIMG" */
+typedef struct _DashImg {
+    ULONG magic;             /* _DASH_IMG_MAGIC while it is in the list */
+    struct _DashImg *next, *prev;
     Object *o;               /* the datatype object (owns bm and mask); NULL for a scaled copy */
     struct BitMap *bm;
     PLANEPTR mask;           /* ours, in chip RAM, rows of mmod bytes; transparent pixels 0 */
     UBYTE *alpha;            /* on RTG, w x h alphas when some is neither 0 nor 255 (D62); else NULL */
     LONG w, h, mmod;
 } _DashImg;
-static _DashImg *_dash_imgs[_DASH_IMG_MAX];
+static _DashImg *_dash_imgs = NULL;
 
 static _DashImg *_dash_img(LONG image) {
-    LONG i;
-    if (!image) return NULL;
-    for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i] == (_DashImg *)image) return _dash_imgs[i];
-    return NULL;
+    _DashImg *img = (_DashImg *)image;
+    if (!image || (image & 1) || !TypeOfMem((APTR)image)) return NULL;
+    return img->magic == _DASH_IMG_MAGIC ? img : NULL;
 }
 
 /* The mask of img from rows of srcmod bytes (a datatype's mask, a scaled one). BltMaskBitMapRastPort
@@ -2066,8 +2069,13 @@ static UBYTE *_dash_img_alpha(Object *o, LONG w, LONG h, LONG mod) {
     return mask;
 }
 
-/* Frees an image that is not (or no longer) in the list */
+/* Frees an image, taking it out of the list if it is there */
 static void _dash_img_dispose(_DashImg *img) {
+    if (img->magic == _DASH_IMG_MAGIC) {
+        if (img->prev) img->prev->next = img->next; else _dash_imgs = img->next;
+        if (img->next) img->next->prev = img->prev;
+        img->magic = 0;
+    }
     WaitBlit();
     if (img->o) DisposeDTObject(img->o);
     else FreeBitMap(img->bm);
@@ -2077,9 +2085,12 @@ static void _dash_img_dispose(_DashImg *img) {
 }
 
 static LONG _dash_img_add(_DashImg *img) {
-    LONG i;
-    for (i = 0; i < _DASH_IMG_MAX; i++) if (!_dash_imgs[i]) { _dash_imgs[i] = img; return (LONG)img; }
-    return 0;
+    img->magic = _DASH_IMG_MAGIC;
+    img->prev = NULL;
+    img->next = _dash_imgs;
+    if (_dash_imgs) _dash_imgs->prev = img;
+    _dash_imgs = img;
+    return (LONG)img;
 }
 
 /* The picture in file, ready to draw on the screen of the current window (or the default
@@ -2384,15 +2395,11 @@ static LONG _dash_image_scale(LONG image, LONG w, LONG h) {
 
 static void _dash_image_free(LONG image) {
     _DashImg *img = _dash_img(image);
-    LONG i;
-    if (!img) return;
-    for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i] == img) _dash_imgs[i] = NULL;
-    _dash_img_dispose(img);
+    if (img) _dash_img_dispose(img);
 }
 
 static void _dash_image_cleanup(void) {
-    LONG i;
-    for (i = 0; i < _DASH_IMG_MAX; i++) if (_dash_imgs[i]) _dash_image_free((LONG)_dash_imgs[i]);
+    while (_dash_imgs) _dash_img_dispose(_dash_imgs);
     if (DataTypesBase) { CloseLibrary(DataTypesBase); DataTypesBase = NULL; }
 }
 
