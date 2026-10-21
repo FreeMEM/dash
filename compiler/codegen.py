@@ -13188,8 +13188,16 @@ static {ret_type} {method_name}({params_str}) {{
 
         if self.var_types.get(node.name) == "string":
             # A String variable owns its text: _dash_str_set adopts a temporary or
-            # copies, and frees the old text. Loop variables only borrow.
+            # copies, and frees the old text. Loop variables only borrow, and so do the
+            # variables of _lent_string_locals (D66).
             self.uses_strings = True
+            if node.name in getattr(self, "_lent_strs", ()):
+                if not self.context.is_declared(node.name):
+                    self.context.declare_var(node.name)
+                    self.emit(f"{indent}STRPTR {node.name} = (STRPTR)({value});\n")
+                else:
+                    self.emit(f"{indent}{node.name} = (STRPTR)({value});\n")
+                return
             if not self.context.is_declared(node.name):
                 self.context.declare_var(node.name)
                 self.context.own(node.name)
@@ -13711,6 +13719,135 @@ static {ret_type} {method_name}({params_str}) {{
             self._keeps_ids = keeps
         return id(fdef) in self._keeps_ids
 
+    _NUMERIC_TYPES = ("Int", "Bool", "Fixed", "Float")
+
+    def _frees_nothing(self, fdef) -> bool:
+        """A function or method that frees nothing that existed before the call, itself or through what it
+        calls (D66): no element of a list or dictionary written or taken out (x[i] = y, pop, remove, clear),
+        no field assigned unless every field of that name is a number, no global or non-number parameter
+        reassigned, no window or event loop, only calls to builtins without callbacks, constructors and
+        functions and methods like it. Weaker than _is_pure (it may push, or change numbers in its objects):
+        what it gets need not be lent or copied, since nothing it does can free it. Fixed point, once."""
+        if getattr(self, "_nofree_ids", None) is None:
+            prog = self.analysis.program
+            defs = list(prog.functions) + [m for st in prog.structs for m in getattr(st, "methods", [])]
+            globals_ = {g.name for g in prog.global_vars}
+            methods_by_name = {}
+            for st in prog.structs:
+                for m in getattr(st, "methods", []):
+                    methods_by_name.setdefault(m.name, []).append(m)
+            field_types = {}
+            for st in prog.structs:
+                for f in st.fields:
+                    field_types.setdefault(f.name, set()).add(f.field_type)
+            numeric_fields = {name for name, types in field_types.items() if types <= set(self._NUMERIC_TYPES)}
+            owner = {id(m): st for st in prog.structs for m in getattr(st, "methods", [])}
+            nofree = {id(d) for d in defs}
+
+            def numeric_member(d, n, params):
+                """a.f = x changes a number: by the struct of a (a typed parameter, self, or a variable made by a
+                constructor or a function that returns a struct, in the function), else by every field of that name"""
+                if n.target is None:
+                    st = None
+                    if n.object_name == "self" and id(d) in owner:
+                        st = owner[id(d)]
+                    elif prog.get_struct(params.get(n.object_name) or ""):
+                        st = prog.get_struct(params[n.object_name])
+                    else:
+                        def struct_made(value):     # Calc(...), or a function that returns a struct
+                            if not isinstance(value, FunctionCall):
+                                return None
+                            if prog.get_struct(value.name):
+                                return value.name
+                            f = prog.get_function(value.name)
+                            return f.return_type if f is not None and prog.get_struct(f.return_type or "") else None
+                        made = {struct_made(v.value) for v in self._walk_nodes(d.body)
+                                if isinstance(v, VarAssign) and v.name == n.object_name}
+                        if len(made) == 1 and next(iter(made)):
+                            st = prog.get_struct(next(iter(made)))
+                    if st is not None:
+                        f = next((f for f in st.fields if f.name == n.member), None)
+                        return f is not None and f.field_type in self._NUMERIC_TYPES
+                return n.member in numeric_fields
+
+            def ok(d):
+                params = {p.name: p.param_type for p in d.params if isinstance(p, FunctionParam)}
+                params.update({p: None for p in d.params if not isinstance(p, FunctionParam)})
+                for n in self._walk_nodes(d.body):
+                    if isinstance(n, (ArrayAssign, EventLoop, WindowOpen, WindowClose)):
+                        return False
+                    if isinstance(n, MemberAssign) and not numeric_member(d, n, params):
+                        return False
+                    if isinstance(n, VarAssign) and (n.name in globals_ or
+                                                     (n.name in params and params[n.name] not in self._NUMERIC_TYPES)):
+                        return False
+                    if isinstance(n, MethodCall):
+                        if n.method in self._REMOVING_METHODS:
+                            return False
+                        if n.method in methods_by_name and not all(id(m) in nofree for m in methods_by_name[n.method]):
+                            return False
+                    if isinstance(n, FunctionCall):
+                        if get_builtin(n.name):
+                            if n.name.startswith(self._CALLBACK_PREFIXES):
+                                return False
+                        elif not prog.get_struct(n.name):
+                            f = prog.get_function(n.name)
+                            if f is None or id(f) not in nofree:
+                                return False
+                return True
+
+            changed = True
+            while changed:
+                changed = False
+                for d in defs:
+                    if id(d) in nofree and not ok(d):
+                        nofree.discard(id(d))
+                        changed = True
+            self._nofree_ids = nofree
+        return id(fdef) in self._nofree_ids
+
+    def _lent_string_locals(self, fdef) -> set:
+        """String variables of a function that can borrow their text instead of owning a copy (D66): every
+        assignment to them is an element of a dictionary or list of Strings that comes from a parameter
+        (d.get(k, default) with a literal or parameter as default, d[k], l[i]) or a literal, and the
+        function frees nothing (_frees_nothing): the text they point to lives through the call. A copy and
+        a free for each such variable on each call (2.2 million in dashweb's _val) go away."""
+        if not self._frees_nothing(fdef):
+            return set()
+        params = {p.name if isinstance(p, FunctionParam) else p for p in fdef.params}
+        string_params = {p.name for p in fdef.params if isinstance(p, FunctionParam) and p.param_type == "String"}
+        globals_ = {g.name for g in self.analysis.program.global_vars}
+
+        def from_param(expr):
+            while isinstance(expr, PropertyAccess):
+                expr = expr.object
+            if isinstance(expr, MemberAccess):
+                return expr.object_name in params
+            return isinstance(expr, VarRef) and expr.name in params
+
+        def lendable(v):
+            if isinstance(v, StringLiteral):
+                return True
+            if not isinstance(v, ArrayAccess) or not from_param(v.array):
+                return False
+            default = getattr(v, "default", None)
+            if default is not None and not (isinstance(default, StringLiteral) or
+                                            isinstance(default, VarRef) and default.name in string_params):
+                return False
+            return self._dict_value_kind(v.array) == "string" or (default is None and self._is_string_array(v.array))
+
+        values, others = {}, set()
+        for n in self._walk_nodes(fdef.body):
+            if isinstance(n, VarAssign):
+                values.setdefault(n.name, []).append(n.value)
+            elif isinstance(n, ForEachStmt):
+                others.add(n.variable)
+            elif hasattr(n, "name") and type(n).__name__ in ("VarDecl", "TypedVarDecl"):
+                others.add(n.name)
+        return {name for name, vs in values.items()
+                if name not in params and name not in globals_ and name not in others
+                and any(not isinstance(v, StringLiteral) for v in vs) and all(lendable(v) for v in vs)}
+
     def _walk_nodes(self, nodes):
         """Every AST node under these (statements and expressions, nested blocks too)."""
         stack = list(nodes or [])
@@ -13762,6 +13899,8 @@ static {ret_type} {method_name}({params_str}) {{
             for name in self.context.hidden_globals:
                 self.var_types.pop(name, None)
         self._seed_param_types(node.params)
+        saved_lent = getattr(self, "_lent_strs", set())
+        self._lent_strs = self._lent_string_locals(node)
 
         # Type map for annotations
         type_map = self._c_type_map
@@ -13793,6 +13932,7 @@ static {ret_type} {method_name}({params_str}) {{
 
         self.context.exit_scope()
         self.context.hidden_globals = saved_hidden
+        self._lent_strs = saved_lent
 
         # Determine return type - use explicit if provided, otherwise infer
         if node.return_type:
@@ -13943,8 +14083,8 @@ static {ret_type} {method_name}({params_str}) {{
                 code = self._lend(arg, code)        # @native(borrow): only during the call (D26)
             elif foreign is not None:
                 code = self._escape_any(arg, code)  # C code may keep the pointer
-            elif func and not self._is_pure(func):
-                code = self._lend(arg, code)     # a pure function frees nothing: no need to lend
+            elif func and not self._frees_nothing(func):
+                code = self._lend(arg, code)     # a function that frees nothing: no need to lend (D66)
             param = func.params[i] if func and i < len(func.params) else None
             if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
                 code = self._fixed_value(arg)

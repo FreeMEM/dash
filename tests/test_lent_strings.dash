@@ -1,0 +1,109 @@
+# Texts borrowed instead of copied (dashweb D66). In a function that frees nothing (_frees_nothing: it may
+# change numbers in its objects or push to lists, but writes no element, takes none out, assigns no text or
+# object field), a String variable that only takes values of a dictionary or list it got as a parameter borrows
+# them (no copy, no free), and the texts it passes to such functions go as they are. Where something can free
+# the text (a function that writes the dictionary) it is still copied: the value read before the change stays.
+# memcheck
+# expect-c: STRPTR v = (STRPTR)(((STRPTR)DashDict_get_or(e, prop, (LONG)(""))));
+# expect-c: _dash_str_set_copy(&x, ((STRPTR)DashDict_get(e, "color")));
+# expect-out: 4 4 0
+# expect-out: rojo azul
+# expect-out: rojo
+# expect-out: rojo rojo
+# expect-out: 6 x
+# expect-out: verde nuevo
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Calc
+    v: Int
+    i: Int
+end
+
+struct Hoja
+    reglas: {String: String}
+end
+
+struct Otro                       # a field "v" that is an object: Calc's "v" is told by its struct
+    v: Hoja
+end
+
+func _cuenta(c: Calc) -> Int
+    c.i = c.i + 1                 # a number of its own object: frees nothing
+    c.v = c.v + 0
+    return c.v
+end
+
+func _hecho(n: Int) -> Calc
+    return Calc(n, 0)
+end
+
+func _otra(n: Int) -> Int
+    k = _hecho(n)                 # made by a function that returns a Calc
+    k.v = k.v * 1
+    return k.v
+end
+
+# assigns an object field: it may free, so what it reads is copied
+func cambia_otro(o: Otro, e: {String: String}) -> String
+    x = e["color"]
+    o.v = Hoja({"color": "nuevo"})
+    return x
+end
+
+func largo(v: String) -> Int
+    c = Calc(v.length, 0)
+    return _cuenta(c) + _otra(0)
+end
+
+func _px(e: {String: String}, prop: String) -> Int
+    v = e.get(prop, "")
+    if v == ""
+        return 0
+    end
+    return largo(v) + largo(e["font-size"]) - 4
+end
+
+# writes the dictionary: what it reads before stays copied
+func cambia(e: {String: String}) -> String
+    v = e["color"]
+    e["color"] = "azul"
+    return v + " " + e["color"]
+end
+
+func pinta(e: {String: String}, c: String) -> String
+    e["color"] = "verde"
+    return c
+end
+
+# a borrowed variable kept in a list and returned: copies there
+func guarda(h: Hoja, l: [String]) -> String
+    v = h.reglas.get("color", "x")
+    l.push(v)
+    return v
+end
+
+func primera(l: [String]) -> Int
+    w = l[0]
+    return w.length + largo(w)
+end
+
+Main
+    e = {"width": "16px", "font-size": "4abc", "color": "rojo"}
+    a = _px(e, "width")
+    b = _px(e, "font-size")
+    c = _px(e, "nada")
+    Print "#{a} #{b} #{c}"
+    Print cambia(e)
+    e["color"] = "rojo"
+    Print pinta(e, e["color"])
+    h = Hoja({"color": "rojo"})
+    var l: [String] = []
+    g = guarda(h, l)
+    h.reglas["color"] = "otro"
+    Print g + " " + l[0]
+    l.push("x")
+    p = primera(["abc"])
+    Print "#{p} " + l[1]
+    o = Otro(h)
+    Print cambia_otro(o, e) + " " + o.v.reglas["color"]
+end
