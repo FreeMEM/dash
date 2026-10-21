@@ -1,0 +1,92 @@
+# Test: more than 64 images alive at once (dashweb D64). A table of 64 gave 0 from the 65th image on (the
+# icons of a page with a hundred SVGs did not show). 300 images of 8x8 from image_from_rgb, each of its own
+# colour, all drawn in a grid (the last one's colour where it was drawn); 50 copies with image_scale; then all
+# freed: a freed image, or any number that is not an image, is no image (width 0, drawing and freeing it do
+# nothing).
+# rtg
+# expect-out: creadas 300
+# expect-out: dibujadas: ok
+# expect-out: escaladas 50
+# expect-out: liberadas: ok
+# expect-out: un número cualquiera: ok
+# expect-out: fin
+
+Window W
+    title "Muchas"
+    width 640
+    height 400
+end
+
+func cerca(c: Int, r: Int, g: Int, b: Int) -> Bool
+    return (((c >> 16) & 255) - r).abs() <= 12 and (((c >> 8) & 255) - g).abs() <= 12 and ((c & 255) - b).abs() <= 12
+end
+
+Main
+    W.open
+    imagenes = [0]
+    imagenes.pop()
+    buf = buffer_alloc(8 * 8 * 3)
+    for i in (0..299)
+        for p in (0..63)
+            buffer_set_byte(buf, p * 3, i & 255)
+            buffer_set_byte(buf, p * 3 + 1, 255 - (i & 255))
+            buffer_set_byte(buf, p * 3 + 2, 128)
+        end
+        imagenes.push(image_from_rgb(buf, 8, 8, false))
+    end
+    buffer_free(buf)
+    vivas = 0
+    for i in (0..299)
+        if imagenes[i] != 0
+            vivas = vivas + 1
+        end
+    end
+    Print "creadas #{vivas}"
+    for i in (0..299)
+        image_draw(imagenes[i], 10 + (i % 30) * 10, 20 + (i / 30) * 10)
+    end
+    # the last one, number 299: column 29, row 9
+    if cerca(gfx_pixel_rgb(10 + 29 * 10 + 3, 20 + 9 * 10 + 3), 299 & 255, 255 - (299 & 255), 128) and cerca(gfx_pixel_rgb(10 + 3, 20 + 3), 0, 255, 128)
+        Print "dibujadas: ok"
+    else
+        Print "dibujadas: #{str_from_int(gfx_pixel_rgb(10 + 29 * 10 + 3, 20 + 9 * 10 + 3), 16)}"
+    end
+    copias = [0]
+    copias.pop()
+    for i in (0..49)
+        copias.push(image_scale(imagenes[i * 6], 16, 16))
+    end
+    escaladas = 0
+    for i in (0..49)
+        if copias[i] != 0 and image_width(copias[i]) == 16
+            escaladas = escaladas + 1
+        end
+        image_draw(copias[i], 10 + (i % 30) * 18, 230 + (i / 30) * 18)
+    end
+    Print "escaladas #{escaladas}"
+    for i in (0..49)
+        image_free(copias[i])
+    end
+    for i in (0..299)
+        image_free(imagenes[i])
+    end
+    quedan = 0
+    for i in (0..299)
+        if image_width(imagenes[i]) != 0
+            quedan = quedan + 1
+        end
+        image_free(imagenes[i])                  # twice: nothing
+    end
+    if quedan == 0
+        Print "liberadas: ok"
+    else
+        Print "liberadas: quedan #{quedan}"
+    end
+    image_draw(12345, 0, 0)
+    image_free(12345)
+    image_free(-7)
+    if image_width(12345) == 0 and image_height(3) == 0
+        Print "un número cualquiera: ok"
+    end
+    Print "fin"
+end

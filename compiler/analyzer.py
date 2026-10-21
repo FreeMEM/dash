@@ -1014,6 +1014,17 @@ class SemanticAnalyzer(ASTVisitor):
         self.visit(node.index)
         if self._dict_value_of(node.array) is not None and self._infer_type(node.index) == DashType.INT:
             self.error("Dictionary keys are Strings", node)
+        if getattr(node, "default", None) is not None:          # d.get(k, default) (D65)
+            self.visit(node.default)
+            value = self._dict_value_of(node.array)
+            got = self._infer_type(node.default)
+            want = {"Int": DashType.INT, "String": DashType.STRING, "Bool": DashType.BOOL}.get(value)
+            if want is None:
+                if not isinstance(node.default, NilLiteral):
+                    self.error(f"get() on a dictionary of {value}: the default can only be nil "
+                               f"(use has() for another one)", node.default)
+            elif got not in (want, DashType.UNKNOWN) and not (want == DashType.BOOL and got == DashType.INT):
+                self.error(f"get(): the default must be {value}, like the dictionary's values", node.default)
 
     def visit_DictLiteral(self, node: DictLiteral):
         """{"clave": valor}: String keys, values of one type."""
@@ -1400,16 +1411,33 @@ class SemanticAnalyzer(ASTVisitor):
 
     _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0}
 
+    def _dict_get(self, node) -> bool:
+        """d.get(k, default) of a dictionary (dashweb D65) becomes d[k] with a default: the node turns into an
+        ArrayAccess (its class changed in place), so all that knows d[k] (its type, its ownership, its C) knows
+        it too, and the code generator looks the key up once. True if it did."""
+        if not (isinstance(node, MethodCall) and node.method == "get" and len(node.arguments) == 2 and
+                self._dict_value_of(node.object) is not None):
+            return False
+        obj, key, default = node.object, node.arguments[0], node.arguments[1]
+        node.__class__ = ArrayAccess
+        for name in ("object", "method", "arguments"):
+            node.__dict__.pop(name, None)
+        node.array, node.index, node.default = obj, key, default
+        return True
+
     def visit_MethodCall(self, node: MethodCall):
         """Methods of lists (dashweb D4b): push, pop, insert, remove, clear. Struct methods are
         checked by the code generator as before."""
+        if self._dict_get(node):
+            self.visit(node)                     # as d[k], with its default
+            return
         if self._dict_value_of(node.object) is not None:
             self.visit(node.object)
             for arg in node.arguments:
                 self.visit(arg)
-            wanted = {"has": 1, "remove": 1, "keys": 0, "clear": 0}.get(node.method)
+            wanted = {"has": 1, "remove": 1, "keys": 0, "clear": 0, "get": 2}.get(node.method)
             if wanted is None:
-                self.error(f"Dictionaries have no method '{node.method}' (they have has, remove, keys "
+                self.error(f"Dictionaries have no method '{node.method}' (they have get, has, remove, keys "
                            f"and clear)", node)
             elif len(node.arguments) != wanted:
                 self.error(f"{node.method}() on a dictionary takes {wanted} argument(s), "
@@ -1451,6 +1479,7 @@ class SemanticAnalyzer(ASTVisitor):
 
     def _infer_type(self, node: ASTNode) -> DashType:
         """Infer the type of an expression."""
+        self._dict_get(node)                     # d.get(k, default) is d[k] (D65)
         if isinstance(node, StringLiteral):
             return DashType.STRING
         elif isinstance(node, NumberLiteral):

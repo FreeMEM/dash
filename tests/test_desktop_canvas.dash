@@ -1,0 +1,44 @@
+# Test: desktop_canvas (Trasfondo): drawing on the Workbench's background, behind its icons. The
+# canvas lies over the disk icons (top left of the 3.2 Workbench, in backdrop mode). After each
+# update every pixel of the area is the drawing's, except the icons', which do not change; a window
+# over it and away again repaints it (the hook, and the Workbench the icons, clearing their boxes
+# with its wallpaper: the next update draws the canvas there again); at the end the area is as it was.
+# workbench
+# expect-out: lienzo: true
+# expect-out: hay iconos debajo: true
+# expect-out: primera vez bien: true
+# expect-out: segunda vez bien: true
+# expect-out: solo lo que cambia: true
+# expect-out: tras tapar y destapar: true
+# expect-out: como estaba: true
+# expect-out: fin
+
+import "lib/escritorio_iconos.dash"
+
+Main
+    esperar_workbench()
+    c = desktop_canvas(4, 4, 200, 60)
+    Print "lienzo: #{c != 0}"
+    if c != 0
+        Print "hay iconos debajo: #{guardar(c) > 50}"
+        desktop_canvas_on_draw(c, pintar)
+        desktop_canvas_update(c)
+        Print "primera vez bien: #{mal() == 0}"
+        mover_raya(60)
+        desktop_canvas_update(c)
+        Print "segunda vez bien: #{mal() == 0}"
+        # (las primeras miran también lo que el gancho repintó al arrancar el Workbench)
+        for i in (1..4)
+            desktop_canvas_update(c)
+        end
+        Print "solo lo que cambia: #{rect_ultima() == 0}"
+        tapar()
+        time_delay(50)
+        desktop_canvas_update(c)
+        Print "tras tapar y destapar: #{mal() == 0}"
+        desktop_canvas_free(c)
+        time_delay(50)
+        Print "como estaba: #{distintos() == 0}"
+    end
+    Print "fin"
+end

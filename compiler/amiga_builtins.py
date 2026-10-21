@@ -3543,6 +3543,35 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_updating()",
         description="In the draw function: true if it runs for mui_canvas_update (the rest is still there)"
     ),
+    "mui_canvas_on_move": BuiltinFunc(
+        name="mui_canvas_on_move",
+        params=["canvas", "id"],
+        return_type="void",
+        c_template="_dash_mui_canvas_on_move(${canvas}, ${id})",
+        description="mui_wait_event returns id when the pointer moves over the area or leaves it, without a click "
+                    "(the moves that come meanwhile make one; call before opening the window)"
+    ),
+    "mui_canvas_pointer_x": BuiltinFunc(
+        name="mui_canvas_pointer_x",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_pointer(${canvas}, 0)",
+        description="X of the pointer now, from the area's left edge (clicked or not)"
+    ),
+    "mui_canvas_pointer_y": BuiltinFunc(
+        name="mui_canvas_pointer_y",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_pointer(${canvas}, 1)",
+        description="Y of the pointer now, from the area's top edge (clicked or not)"
+    ),
+    "mui_canvas_pointer_inside": BuiltinFunc(
+        name="mui_canvas_pointer_inside",
+        params=["canvas"],
+        return_type="BOOL",
+        c_template="_dash_mui_canvas_pointer(${canvas}, 2)",
+        description="True if the pointer is over the area now"
+    ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
         params=["canvas"],
@@ -3901,6 +3930,68 @@ TASK_FUNCTIONS = {
         name="task_done", params=["task"], return_type="BOOL",
         c_template="_dash_task_done(${task})",
         description="True once the function has returned (does not wait)"),
+    # Trasfondo: drawing on the Workbench's background, behind its icons
+    "desktop_canvas": BuiltinFunc(
+        name="desktop_canvas", params=["x", "y", "width", "height"], return_type="APTR",
+        c_template="_dash_desk_canvas(${x}, ${y}, ${width}, ${height})",
+        description="An area of the Workbench's desktop (below the screen's title bar), behind the icons and "
+                    "without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or "
+                    "bottom edge (-1 touches it). 0 if it cannot be"),
+    "desktop_canvas_on_draw": BuiltinFunc(
+        name="desktop_canvas_on_draw", params=["canvas", "func"], return_type="void",
+        c_template="_dash_desk_on_draw(${canvas}, (APTR)${func})",
+        description="Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the "
+                    "wallpaper below it"),
+    "desktop_canvas_update": BuiltinFunc(
+        name="desktop_canvas_update", params=["canvas"], return_type="void",
+        c_template="_dash_desk_update(${canvas})",
+        description="Draw the area again now and show what changed, without touching the icons"),
+    "desktop_canvas_update_area": BuiltinFunc(
+        name="desktop_canvas_update_area", params=["canvas", "x", "y", "width", "height"], return_type="void",
+        c_template="_dash_desk_update_area(${canvas}, ${x}, ${y}, ${width}, ${height})",
+        description="desktop_canvas_update only in that part of the area: the drawing is clipped to it and only "
+                    "it is compared (the rest stays as it was)"),
+    "desktop_canvas_free": BuiltinFunc(
+        name="desktop_canvas_free", params=["canvas"], return_type="void",
+        c_template="_dash_desk_free(${canvas})",
+        description="The wallpaper back in the area (the program's end does it too)"),
+    # Trasfondo: the CPU each task takes (exec's task switch hooks and the EClock, as PM)
+    # Trasfondo: a program without a window that can be stopped
+    "break_check": BuiltinFunc(
+        name="break_check", params=[], return_type="BOOL",
+        c_template="((SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) != 0)",
+        description="True if Ctrl-C came (\"Break\" in the Shell, or another copy: single_instance); it is cleared"),
+    "single_instance": BuiltinFunc(
+        name="single_instance", params=["name"], return_type="BOOL",
+        c_template="_dash_single_instance(${name})",
+        description="One copy at a time: false if another copy of the program (a public port with that name) "
+                    "runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends)"),
+    "cpu_start": BuiltinFunc(
+        name="cpu_start", params=[], return_type="BOOL",
+        c_template="_dash_cpu_start()",
+        description="Start counting the CPU of every task (exec's switch hooks; a task with hooks of another "
+                    "program is not counted): false without EClock or before OS 2.04"),
+    "cpu_sample": BuiltinFunc(
+        name="cpu_sample", params=[], return_type="LONG",
+        c_template="_dash_cpu_sample()",
+        description="Take a sample: the number of tasks, with the CPU each took since the previous sample (or "
+                    "cpu_start), most first; also hooks the tasks started since"),
+    "cpu_task_name": BuiltinFunc(
+        name="cpu_task_name", params=["i"], return_type="STRPTR",
+        c_template="_dash_cpu_task(${i})",
+        description="Name of task i of the last sample, from 0 (of a Shell process, its command)"),
+    "cpu_task_load": BuiltinFunc(
+        name="cpu_task_load", params=["i"], return_type="LONG",
+        c_template="_dash_cpu_task_load(${i})",
+        description="CPU of task i of the last sample, per thousand"),
+    "cpu_total": BuiltinFunc(
+        name="cpu_total", params=[], return_type="LONG",
+        c_template="_dash_cpu_total()",
+        description="CPU of all the counted tasks in the last sample, per thousand (the rest is idle)"),
+    "cpu_stop": BuiltinFunc(
+        name="cpu_stop", params=[], return_type="void",
+        c_template="_dash_cpu_stop()",
+        description="Take the hooks out of the tasks (the program's end does it too)"),
     "task_signal": BuiltinFunc(
         name="task_signal", params=[], return_type="LONG",
         c_template="_dash_task_signal()",
@@ -3937,8 +4028,9 @@ IMAGE_FUNCTIONS = {
                        "Free an image (the ones left are freed at exit)"),
     "image_from_rgb": _gfx("image_from_rgb", ["buffer", "width", "height", "alpha"], "LONG",
                            "_dash_image_from_rgb((APTR)${buffer}, ${width}, ${height}, ${alpha})",
-                           "An image from pixels in a buffer (RGB, or RGBA with alpha), with the colors of the "
-                           "screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens)"),
+                           "An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on "
+                           "RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 "
+                           "(needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens)"),
 }
 
 # =============================================================================

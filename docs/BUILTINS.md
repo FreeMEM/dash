@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 513 funciones, 513 implementadas, 0 sin implementar.
+Total: 530 funciones, 530 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -423,6 +423,19 @@ Total: 513 funciones, 513 implementadas, 0 sin implementar.
 | `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
 | `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
 | `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
+| `desktop_canvas(x, y, width, height)` | `APTR` | An area of the Workbench's desktop (below the screen's title bar), behind the icons and without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be |  |
+| `desktop_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the wallpaper below it |  |
+| `desktop_canvas_update(canvas)` | `void` | Draw the area again now and show what changed, without touching the icons |  |
+| `desktop_canvas_update_area(canvas, x, y, width, height)` | `void` | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was) |  |
+| `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
+| `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
+| `single_instance(name)` | `BOOL` | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
+| `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
+| `cpu_sample()` | `LONG` | Take a sample: the number of tasks, with the CPU each took since the previous sample (or cpu_start), most first; also hooks the tasks started since |  |
+| `cpu_task_name(i)` | `STRPTR` | Name of task i of the last sample, from 0 (of a Shell process, its command) |  |
+| `cpu_task_load(i)` | `LONG` | CPU of task i of the last sample, per thousand |  |
+| `cpu_total()` | `LONG` | CPU of all the counted tasks in the last sample, per thousand (the rest is idle) |  |
+| `cpu_stop()` | `void` | Take the hooks out of the tasks (the program's end does it too) |  |
 | `task_signal()` | `LONG` | Signal mask each task sends to the program when its function returns (for mui_wait_event_signals), 0 if none is free |  |
 | `task_result(task)` | `LONG` | What the function returned (waits for it if it has not finished) |  |
 | `task_free(task)` | `void` | Forget the task (waits for it if it is still running); the program waits for any left at exit |  |
@@ -438,7 +451,7 @@ Total: 513 funciones, 513 implementadas, 0 sin implementar.
 | `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
 | `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
 | `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
-| `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
+| `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
 
 ## Argumentos
 
@@ -613,6 +626,10 @@ Total: 513 funciones, 513 implementadas, 0 sin implementar.
 | `mui_canvas_buffered(canvas, on)` | `void` | Draw the area in a bitmap of its own and show it at once when done (no half-drawn area; the same coordinates; mui_canvas_update still draws on the window) |  |
 | `mui_canvas_update(canvas)` | `void` | Call the draw function now without clearing the area (it paints only what changed) |  |
 | `mui_canvas_updating()` | `BOOL` | In the draw function: true if it runs for mui_canvas_update (the rest is still there) |  |
+| `mui_canvas_on_move(canvas, id)` | `void` | mui_wait_event returns id when the pointer moves over the area or leaves it, without a click (the moves that come meanwhile make one; call before opening the window) |  |
+| `mui_canvas_pointer_x(canvas)` | `LONG` | X of the pointer now, from the area's left edge (clicked or not) |  |
+| `mui_canvas_pointer_y(canvas)` | `LONG` | Y of the pointer now, from the area's top edge (clicked or not) |  |
+| `mui_canvas_pointer_inside(canvas)` | `BOOL` | True if the pointer is over the area now |  |
 | `mui_canvas_mouse_x(canvas)` | `LONG` | X of the last click or wheel, from the area's left edge |  |
 | `mui_canvas_mouse_y(canvas)` | `LONG` | Y of the last click or wheel, from the area's top edge |  |
 | `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |

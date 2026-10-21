@@ -132,6 +132,7 @@ for x in obj.lista          # for-each over any list expression
 l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
 d = {"a": 1, "b": 2}        # dictionary {String: T}: d["c"] = 3, d["a"], d.has("a"),
 d.remove("a")  d.keys()  d.clear()  d.length    # missing key: 0 / nil
+d.get("c", 0)                # the value, or the default if missing (one lookup; objects: nil only)
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 
@@ -188,6 +189,7 @@ c = mui_canvas(320, 200)                # drawing area; sb = mui_scrollbar(true)
 mui_canvas_on_draw(c, paint)            # func paint(x, y, w, h) draws with gfx_; mui_canvas_redraw(c)
 mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y/_button/_wheel/_key(c)
 mui_canvas_char(c)                      # the key as text, with shift and the keymap ("" if none)
+mui_canvas_on_move(c, 4)                # the pointer over it (no click) or leaving: mui_canvas_pointer_x/_y/_inside(c)
 img = mui_image("Work:pic.png")         # datatypes; mui_width(obj), mui_height(obj) once open
 b = mui_image_button("PROGDIR:atras.iff")   # icon button: mui_on_press; mui_help(b, "Atrás") bubble help
 mui_window_size(win, 90, 80)            # % of the visible screen when it opens (before mui_window_open)

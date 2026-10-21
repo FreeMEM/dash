@@ -36,6 +36,7 @@ seconds after boot (tools/emu_run.py --screenshot, all of them in the same run):
 screen must have that colour. Not on the A500 (reading the screen takes seconds there).
 "# fpu" builds a test as ./dash --fpu and runs it on a 68040 (with C:SetPatch and 68040.library from the
 Workbench files, tools/emu_sys_from_hdf.sh); not on the A500.
+"# workbench" runs a test only on the machines that load the Workbench first (--emu-32).
 "# rtg" runs a test only with --emu-32, in its own boot on a 68040 with a graphics card (FS-UAE's uaegfx and
 Picasso96) and the files of $DASH_EMU_SYS_32_RTG (a 3.2 Workbench on a 16-bit RTG screen: dashweb's
 tools/emu_sys_rtg.sh); skipped without it.
@@ -94,6 +95,11 @@ def ignored_output(test_file: Path) -> List[str]:
     """'# ignore-out: <prefix>': output lines starting so are not compared (they change run to run)."""
     return [l.split("# ignore-out:", 1)[1].strip()
             for l in test_file.read_text().splitlines() if l.strip().startswith("# ignore-out:")]
+
+
+def wants_workbench(test_file: Path) -> bool:
+    """'# workbench': only on the machines that load the Workbench before the programs (--emu-32)."""
+    return any(l.strip() == "# workbench" for l in test_file.read_text().splitlines())
 
 
 def wants_rtg(test_file: Path) -> bool:
@@ -594,6 +600,10 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
+    if not machine["workbench"]:
+        for t in [t for t in runnable if wants_workbench(t)]:
+            print(f"  {prefix}/{t.stem}: SKIP (needs the Workbench: --emu-32)")
+        runnable = [t for t in runnable if not wants_workbench(t)]
     shot_tests = [t for t in runnable if emu_shots(t)]
     rtg_tests = [t for t in runnable if wants_rtg(t)]
     runnable = [t for t in runnable if t not in rtg_tests]

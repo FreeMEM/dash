@@ -878,6 +878,7 @@ Un diccionario guarda valores por clave de texto. Su tipo es `{String: T}`:
 edades = {"Ana": 30, "Bob": 25}
 edades["Eva"] = 41             # anade o cambia
 Print edades["Ana"]            # 30; una clave que no esta da 0 (nil en textos y structs)
+Print edades.get("Zoe", -1)    # -1: el valor, o el de por defecto si no esta (una sola busqueda)
 if edades.has("Bob")
     edades.remove("Bob")
 end
@@ -897,6 +898,10 @@ es un diccionario de su tipo, sin declararla con `var`. `for k in d.keys()` no c
 cuerpo no cambia ese diccionario. `d.clear()` lo vacia. Tambien se escribe a traves de campos
 (`hoja.reglas["color"] = "red"`). Buscar, anadir y quitar cuestan lo mismo con 10 claves
 que con 10.000 (tabla hash).
+
+`d.get(clave, defecto)` busca una vez: `if d.has(k)` seguido de `d[k]` busca dos. El defecto es del tipo
+de los valores (`""` en un `{String: String}`); en un diccionario de structs, listas o diccionarios solo
+puede ser `nil`. El resultado se usa como el de `d[k]`.
 
 ### nil
 
@@ -1321,11 +1326,17 @@ con fondo.
 
 Un programa que decodifica sus imagenes (como dashweb, con sus propios decodificadores de JPEG y
 PNG) las pasa a la pantalla con `image_from_rgb(buffer, ancho, alto, alfa)`: filas de pixeles RGB
-(3 bytes) o, con `alfa`, RGBA (4 bytes; alfa de 128 o mas se pinta). Usa el `picture.datatype`
+(3 bytes) o, con `alfa`, RGBA (4 bytes). Usa el `picture.datatype`
 V43 (AmigaOS 3.5 y despues) para adaptar los colores a la pantalla, como con un fichero; en 3.1
 de serie da 0. En una pantalla de tarjeta grafica (RTG de 15 a 32 bits, con Picasso96 o CyberGraphX)
 no usa el datatype: escribe los pixeles en un bitmap como el de la pantalla, unas 20 veces mas
 rapido (5 ms para 400x300 en un 68040). La imagen se usa como las de `image_load`.
+
+El alfa de `image_from_rgb`: en una pantalla de paleta (AGA, ECS) se pinta el pixel con alfa de 128 o
+mas y el resto no. En RTG de 15 a 32 bits se mezcla con lo que hay debajo (alfa 64: una cuarta parte
+de la imagen y tres de lo de debajo), tambien en `image_draw_part` y en las copias de `image_scale`.
+Es mas lento que pintar sin mezcla: lee y escribe lo de debajo. Si los alfas son solo 0 y 255, se
+pinta con la mascara, sin leer nada.
 
 La transparencia vale tambien en pantallas de tarjeta grafica (RTG, Picasso96), tambien en las
 copias de `image_scale` y en `image_draw_part`.
@@ -2790,6 +2801,8 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_on_input(zona, id)` | Evento con un clic, la rueda o una tecla sobre la zona (antes de abrir la ventana). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | La última entrada: posición dentro de la zona, 1 si fue clic, +1/-1 la rueda, código de tecla (-1 si no fue tecla). |
 | `mui_canvas_char(z)` | El carácter de esa tecla, con mayúsculas y el keymap (`"A"`, `"ñ"`; `""` si no da ninguno; Retroceso da el código 8). |
+| `mui_canvas_on_move(zona, id)` | Evento cuando el ratón se mueve sobre la zona, sin clic, y cuando sale de ella (antes de abrir la ventana). Los movimientos que llegan antes de que el programa recoja uno cuentan como uno; no retrasa los clics. |
+| `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Dónde está el ratón ahora, desde la esquina de la zona, y si está dentro de ella; valga o no un clic. |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
 | `mui_image(fichero)` | Imagen de un fichero por datatypes: ILBM siempre; PNG, JPEG, GIF y BMP si están sus datatypes (AmigaOS 3.2 los trae). `mui_set_text` cambia el fichero. |
 | `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |
@@ -3040,6 +3053,100 @@ preparados para dos tareas a la vez. La funcion recibe un `Int` (un numero o una
 devuelve otro. `task_start` usa 128 KB de pila y la prioridad del programa; con prioridad `-1`
 solo avanza cuando el programa espera (por ejemplo en `mui_wait_event`), y la ventana responde
 antes. Al acabar, el programa espera a las tareas que sigan en marcha.
+
+### Un programa sin ventana que se puede parar: break_check y single_instance
+
+```ruby
+Main
+    if not single_instance("Trasfondo")
+        Print "Ya estaba en marcha: se para"    # la otra copia recibe Ctrl-C
+    else
+        while not break_check()                 # Ctrl-C ("Break" en la Shell, o lanzarlo otra vez)
+            time_delay(50)
+        end
+    end
+end
+```
+
+`break_check()` dice si llegó Ctrl-C y lo borra. `single_instance(nombre)` deja una sola copia del programa en
+marcha: con un puerto público con ese nombre. Si ya existe, manda Ctrl-C a la copia que lo tiene y da `false`
+(esta debe acabar); si no, lo crea y da `true`. El puerto se quita al acabar el programa. Así, lanzar otra vez un
+programa sin ventana desde el Workbench lo cierra.
+
+### CPU de cada tarea: cpu_sample
+
+```ruby
+if cpu_start()                         # false sin EClock o antes de OS 2.04
+    while true
+        time_delay(50)                 # un segundo
+        n = cpu_sample()               # las tareas, de la que mas CPU tomo a la que menos
+        Print "en uso #{cpu_total() / 10} %"
+        for i in (0..n - 1)
+            Print "#{cpu_task_load(i)} por mil  #{cpu_task_name(i)}"
+        end
+    end
+end
+```
+
+Cuenta la CPU exacta de cada tarea con los ganchos de cambio de tarea de exec y el reloj EClock, como
+PM de Michael Sinz. Cada muestra da lo de cada tarea desde la anterior, en tantos por mil; lo que no
+se cuenta es tiempo libre. De un proceso de Shell, el nombre es el de su orden. Cada muestra engancha
+las tareas nuevas y olvida las que acabaron. Una tarea que ya tiene esos ganchos de otro programa no se
+toca ni se cuenta. La cuenta de una tarea incluye las interrupciones que llegan mientras tiene la CPU.
+`cpu_stop()` quita los ganchos; al acabar el programa se quitan solos (tambien con `exit`).
+
+### Dibujar en el fondo del Workbench: desktop_canvas
+
+```ruby
+func panel(x, y, w, h)
+    gfx_pen(1)
+    gfx_text_at(x + 4, y + 12, "CPU #{cpu_total() / 10} %")
+end
+
+Main
+    c = desktop_canvas(-1, 4, 300, 90)    # arriba a la derecha (-1: pegado al borde)
+    if c != 0
+        desktop_canvas_on_draw(c, panel)
+        desktop_canvas_update(c)           # todo
+        while true
+            time_delay(50)
+            desktop_canvas_update_area(c, 0, 0, 120, 20)   # solo donde va la cifra
+        end
+    end
+end
+```
+
+Una zona del escritorio del Workbench (debajo de la barra de la pantalla), detras de los iconos y sin recibir
+clics. Funciona con el Workbench en modo backdrop (iconos en el escritorio) o sin el (el fondo de la
+pantalla, donde no hay ventanas), y si se cambia de modo con el programa en marcha (menu Workbench >
+Backdrop); en pantallas planares y RTG (8 bits con paleta, 16, 24 y 32). Las coordenadas son las del
+escritorio; negativas, desde el borde derecho o inferior. Da 0 si no puede (sin pantalla Workbench, sin
+memoria, o en RTG de 16 bits o mas sin Picasso96 ni CyberGraphX).
+
+La funcion de dibujo pinta con `gfx_` en un mapa de bits aparte que ya tiene debajo el fondo de pantalla:
+lo que no se pinta deja ver el fondo. `desktop_canvas_update` la llama y pasa a la pantalla solo las filas
+que cambiaron. `desktop_canvas_update_area(c, x, y, w, h)` hace lo mismo solo en esa parte: el dibujo se
+recorta a ella y solo ella se compara; lo que cambie fuera no sale hasta otra actualizacion que lo cubra.
+Si una ventana tapa la zona y se va, la zona se repinta sola con lo ultimo dibujado.
+
+En modo backdrop los iconos no se tocan (no parpadean): un pixel es de icono si no es el fondo de
+pantalla ni lo que dejo el lienzo, o si ya lo era la vez anterior. La siguiente actualizacion arregla los
+recuadros que el Workbench limpia al redibujar sus iconos. Limite: un pixel de un icono del color del
+fondo de pantalla en ese punto, o que el Workbench pinta con el color que el lienzo tiene ahi, se toma por
+fondo y el lienzo lo pinta encima.
+
+Al liberar (`desktop_canvas_free`, o al acabar el programa) la zona vuelve a ser la del Workbench: se
+repinta una vez, y los iconos de debajo parpadean entonces.
+
+Coste medido en FS-UAE con un lienzo de 300x90 a 4 colores con iconos debajo:
+
+| Maquina | Cambia casi todo | Cambia una cifra | `update_area` de 120x20 |
+|---------|------------------|------------------|--------------------------|
+| A1200 (planar) | 37 ms | 22 ms | 13 ms |
+| 68040 con JIT, RTG 16 bits | 6 ms | 5 ms | 0,6 ms |
+
+En el A1200 lo que mas cuesta es comparar el dibujo con el anterior (memoria Chip); `update_area` se lo
+ahorra.
 
 ## 22. Ejemplos Completos
 

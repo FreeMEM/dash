@@ -1,0 +1,116 @@
+# Test: cpu_start/cpu_sample (Trasfondo): the CPU each task takes, counted with exec's switch hooks.
+# Two tasks of known load: carga_llena works all the time below the program's priority (it takes what
+# nobody else wants: the total is then nearly all of it), carga_media works 10 ms and waits a tick, and
+# measures how long it worked; what cpu_sample counted for it must be that.
+# expect-out: arranca: true
+# expect-out: total casi todo: true
+# expect-out: llena cuenta: true
+# expect-out: media como dice: true
+# expect-out: ganchos fuera: true
+# expect-out: fin
+
+@native func carga_llena(x: Int) -> Int
+"""
+    FindTask(NULL)->tc_Node.ln_Name = (char *)"carga_llena";
+    while (!_carga_parar) ;
+    return 0;
+"""
+end
+
+@native func carga_media(x: Int) -> Int
+"""
+    unsigned long long lim = (unsigned long long)_dash_time_freq / 100, a, b;
+    FindTask(NULL)->tc_Node.ln_Name = (char *)"carga_media";
+    while (!_carga_parar) {
+        a = _dash_cpu_now();
+        do b = _dash_cpu_now(); while (b - a < lim);
+        _carga_trabajo += b - a;
+        Delay(1);
+    }
+    return 0;
+"""
+end
+
+@c
+"""
+static volatile LONG _carga_parar = 0;
+static volatile unsigned long long _carga_trabajo = 0;
+"""
+end
+
+# lo que carga_media dice que trabajó desde la última llamada, en ms
+@native func media_trabajo_ms() -> Int
+"""
+    unsigned long long t;
+    Disable();
+    t = _carga_trabajo;
+    _carga_trabajo = 0;
+    Enable();
+    return (LONG)(t * 1000 / _dash_time_freq);
+"""
+end
+
+@native func parar_cargas() -> Int
+"""
+    _carga_parar = 1;
+    return 0;
+"""
+end
+
+# ninguna tarea de las listas de exec con nuestros ganchos
+@native func sin_ganchos() -> Bool
+"""
+    struct Node *n;
+    BOOL ok = TRUE;
+    Disable();
+    for (n = SysBase->TaskReady.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        if (((struct Task *)n)->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    for (n = SysBase->TaskWait.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        if (((struct Task *)n)->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    if (SysBase->ThisTask->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    Enable();
+    return ok;
+"""
+end
+
+func carga_de(nombre: String, n: Int) -> Int
+    for i in (0..n - 1)
+        if cpu_task_name(i) == nombre
+            return cpu_task_load(i)
+        end
+    end
+    return -1
+end
+
+Main
+    Print "arranca: #{cpu_start()}"
+    llena = task_start_with(carga_llena, 0, 0, -1)
+    media = task_start_with(carga_media, 0, 0, 1)
+    time_delay(25)
+    cpu_sample()
+    media_trabajo_ms()
+    t0 = time_ms()
+    time_delay(100)
+    n = cpu_sample()
+    dicho = media_trabajo_ms()
+    pasado = time_ms() - t0
+    Print "total casi todo: #{cpu_total() >= 950}"
+    lleno = carga_de("carga_llena", n)
+    Print "llena cuenta: #{lleno >= 300}"
+    contado = carga_de("carga_media", n)
+    propio = dicho * 1000 / pasado
+    # lo contado lleva además lo que hace fuera de su medida (la llamada a Delay) y las interrupciones
+    # que llegan mientras tiene la CPU: algo más que lo que dice (en un A500, unos 40 por mil)
+    d = contado - propio
+    bien = d >= -15 and d <= 60
+    Print "media como dice: #{bien}"
+    if not bien
+        Print "contado #{contado}, dice #{propio} (#{dicho} ms de #{pasado})"
+    end
+    parar_cargas()
+    task_free(llena)
+    task_free(media)
+    cpu_stop()
+    Print "ganchos fuera: #{sin_ganchos()}"
+    Print "fin"
+end
