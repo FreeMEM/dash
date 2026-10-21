@@ -1,6 +1,10 @@
 # Requisitos del Sistema para Dash
 Versión: 2.0
 
+> **Aviso:** estos son los requisitos originales del proyecto, no el estado actual. Lo que Dash hace hoy está en
+> `ROADMAP.md`, `QUICK_REFERENCE.md` y `BUILTINS.md`. Lo que cambió: los programas piden AmigaOS 3.0 o superior
+> (no 2.0) y funcionan en un 68000; no hay versión PPC; el gcc de bebbo genera Hunk directamente, sin `elf2hunk`.
+
 Este documento especifica los requisitos de software y hardware para el desarrollo con Dash y para la ejecución de los binarios generados.
 
 ## 1. Requisitos del Entorno de Desarrollo (Host)

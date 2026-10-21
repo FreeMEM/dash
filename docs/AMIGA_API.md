@@ -315,6 +315,10 @@ Catálogo de diseño de las funciones built-in para AmigaOS.
 
 ## Constantes
 
+> **Ojo:** Dash no trae estas constantes. Solo existen `MODE_READ` (1005), `MODE_WRITE` (1006) y
+> `MODE_READWRITE` (1004), con `import "lib/amiga/dos.dash"`; `MODE_APPEND` no existe. Lo demás se escribe
+> con su número (por ejemplo `file_open("f", 1005)`). En `On Key` las teclas van por nombre: `On Key "ESC"`.
+
 ```ruby
 # Modos de dibujo
 MODE_JAM1 = 0
@@ -357,3 +361,6 @@ JOY_PORT2 = 1
 | Intuition | 35 |
 | Sistema | 10 |
 | **TOTAL** | **~161 funciones** |
+
+Eso era el plan. Hoy Dash tiene **531 builtins**, todos implementados; 82 son de MUI. La lista real, con lo que
+hace cada una, está en [BUILTINS.md](BUILTINS.md).

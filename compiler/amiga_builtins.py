@@ -1364,7 +1364,7 @@ REACTION_FUNCTIONS = {
         return_type="LONG",
         c_template="RA_EVENT_NONE",
         needs_reaction=True,
-        description="No event code (0)"
+        description="No event code (-3)"
     ),
 
     # Custom drawing support
@@ -2088,7 +2088,7 @@ DOS_FUNCTIONS = {
         return_type="LONG",
         c_template="Open(${filename}, ${mode})",
         needs_dos=True,
-        description="Open file (mode: MODE_OLDFILE, MODE_NEWFILE, MODE_READWRITE)"
+        description="Open file (mode: 1005 read, 1006 new file, 1004 read and write; 0 if it fails)"
     ),
     "file_close": BuiltinFunc(
         name="file_close",
@@ -2128,9 +2128,9 @@ DOS_FUNCTIONS = {
         name="file_eof",
         params=["handle"],
         return_type="BOOL",
-        c_template="(FGetC(${handle}) == -1)",
+        c_template="({ BPTR _fh = (BPTR)(${handle}); LONG _c = FGetC(_fh); _c == -1 ? TRUE : (UnGetC(_fh, _c), FALSE); })",
         needs_dos=True,
-        description="Check end of file"
+        description="True at the end of the file (looks at the next byte without consuming it)"
     ),
 
     # Writing

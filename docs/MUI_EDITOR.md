@@ -2,7 +2,7 @@
 
 Un "Glade para MUI": se monta la ventana con el ratón (grupos, botones, campos, listas...) dentro de VS Code y el
 programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_station`: VS Code + Amiberry, carpeta
-`DEV:`; ver `~/Projects/AmiCachy/ARCHITECTURE.md`, sección 5).
+`DEV:`; ver el `ARCHITECTURE.md` de AmiCachy, sección 5).
 
 ## Decisiones
 
@@ -30,11 +30,12 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
 
    Los eventos se pueden poner en el `.dashui` (número de evento por objeto) o en el programa, como hoy.
 4. **Dónde vive:** carpeta `editor/vscode/` de este repo (extensión `dash-mui-editor`). Va con el lenguaje: si cambian
-   los `mui_`, cambia el editor en el mismo commit. Se puede sacar a un repo propio cuando se publique.
+   los `mui_`, cambia el editor en el mismo commit. Se publica en este repo, como release (`vscode-0.2.1`).
 5. **Vista previa en dos niveles:**
    - **Inmediata**, en el webview: un dibujo aproximado con HTML/CSS (cajas que se reparten como los grupos de MUI).
-   - **Real**: botón "Ver en Amiga" que compila un programa mínimo que importa el `.dashui`, lo ejecuta en FS-UAE
-     (`tools/emu_run.py --autoclose --screenshot`) y muestra la captura en el webview (unos 30 s).
+   - **Real**: botón "Ver en Amiga" del editor. Compila un programa mínimo que importa el `.dashui`, lo ejecuta en
+     un Amiga emulado que se queda encendido (`tools/emu_preview.py`) y muestra la captura en el webview (unos 2 s;
+     al principio era `tools/emu_run.py --screenshot`, unos 30 s). Detalle al final.
 
 ## El formato `.dashui`
 
@@ -93,6 +94,19 @@ Comunes: `name` (campo del struct; sin nombre el objeto no se guarda), `weight` 
 alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_size`). `event`/`change`/`ack`/`double` = número de evento
 (`mui_on_press`, `mui_on_change`, `mui_on_ack`, `mui_on_double`). `"dashui": 1` es la versión del formato.
 
+Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mismas):
+
+- **Nombres** de ventana y de objeto: letras sin acentos, cifras y `_`, sin empezar por cifra. No valen las palabras
+  del lenguaje (`end`, `if`, `func`...) ni `window` (es el campo de la ventana). Sin repetir en la misma ventana.
+- **Números enteros**: `event`, `change`, `ack`, `double`, `weight`, el `id` y el `close` de la ventana y el `event`
+  de un menú. `"event": "uno"` o `true` es un error.
+- **Textos**: no pueden llevar `#{` (en Dash sería una interpolación).
+- **Eventos en cualquier objeto**: `event`, `change`, `ack` y `double` valen en todos los tipos, también en grupos;
+  el compilador no los limita por tipo.
+- **Ventana**: `"close": N` hace que el botón de cerrar devuelva `N` (`mui_on_close`). Sin él, cerrar la primera
+  ventana es -1 (salir).
+- **Menús**: cada elemento es `label`, `key` (letra para Amiga+tecla) y `event`, o `{ "separator": true }` (una línea).
+
 ## La extensión
 
 - **Editor propio** (`CustomTextEditorProvider`) para `*.dashui`: el JSON queda en el documento de VS Code (deshacer,
@@ -106,11 +120,22 @@ alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_
   línea. El botón → de un evento lleva a su código en el `.dash` que importa el fichero: una constante con ese número
   (`const ID_ACEPTAR = 3`) y `if ev == ID_ACEPTAR`; si no lo hay, lo crea (la constante y un `if` en el bucle de
   `mui_wait_event`).
-- **Comandos:** "Dash: Compilar" (`./dash` del fichero activo), "Dash: Ejecutar en emulador" (`tools/emu_run.py`),
-  "Dash: Ver en Amiga" (captura de la ventana del `.dashui`). La ruta de Dash, la toolchain y las variables del
-  emulador se configuran en los ajustes de la extensión (`dash.path`, `dash.emulator.*`).
-- **Resaltado de sintaxis** de `.dash` (gramática TextMate), que hoy no existe.
-- Sin dependencias en tiempo de ejecución; para empaquetar, `@vscode/vsce` en un `node_modules` local (no global).
+- **Comandos** (`editor/vscode/package.json`): "Dash: Compilar", "Ejecutar en emulador", "Ejecutar con comprobación
+  de memoria", "Ejecutar con perfil", "Depurar en el Amiga", "Preparar para un Amiga real", "Elegir la máquina del
+  emulador", "Nuevo proyecto", "Nuevo fichero de ventanas MUI (.dashui)", "Ir al código del evento", "Elegir la
+  carpeta del compilador" y "Reiniciar el servidor de lenguaje". "Ver en Amiga" no es un comando: es un botón del
+  editor visual. La ruta de Dash y las variables del emulador van en los ajustes (`dash.path`, `dash.emulator.*`).
+- **Resaltado de sintaxis** de `.dash` (gramática TextMate, `syntaxes/dash.tmLanguage.json`, generada con
+  `tools/gen_tmgrammar.py`).
+- **Comportamiento del editor:**
+  - Se activa al abrir una carpeta que tiene algún `.dashui` (`workspaceContains:**/*.dashui`), además de al abrir
+    un `.dash` o un `.dashui`.
+  - Un `.dashui` que se da a VS Code al arrancar (`code carpeta ventana.dashui`) se abre en el editor visual, no
+    como texto JSON.
+  - En un panel estrecho (el editor al lado del `.dash`, media pantalla) las propiedades pasan debajo del resto.
+  - Usa los colores del tema de VS Code.
+- Una dependencia en tiempo de ejecución, `vscode-languageclient` (el cliente del servidor de lenguaje, va dentro
+  del paquete con esbuild). Para empaquetar, `@vscode/vsce` en un `node_modules` local (no global).
 
 ## Plan (tareas 20-24)
 
@@ -122,18 +147,18 @@ alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_
 - 23: "Ver en Amiga" con la captura.
 - 24: la ventana del navegador (`examples/mui_navegador.dash`) rehecha con un `.dashui`; documentación.
 
-## Estado (2026-10-16)
+## Estado
 
 Hecho (tareas 20-24): `compiler/dashui.py` e `import ".dashui"`; extensión en `editor/vscode/` con resaltado de Dash,
-comandos Compilar y Ejecutar en emulador, editor visual (paleta, árbol, propiedades, menús, vista aproximada) y "Ver en
-Amiga" (captura de la ventana en FS-UAE). Ejemplo: `examples/mui_navegador.dashui` + `examples/mui_navegador_editor.dash`.
+comandos, editor visual (paleta, árbol, propiedades, menús, vista aproximada) y "Ver en Amiga". Ejemplo:
+`examples/mui_navegador.dashui` + `examples/mui_navegador_editor.dash`. Después, el IDE (`docs/IDE_LOOP.md`):
+servidor de lenguaje, depurador, copiar y pegar en el árbol.
 
-Instalar en VS Code: `cd editor/vscode && npm install && npm run package`, luego
-`code --install-extension dash-mui-editor-0.1.0.vsix`. No se ha probado dentro de VS Code de verdad: los tests corren
-la gramática, el modelo y los comandos en Node, y el webview en Chromium con un `vscode` simulado.
+Publicada en este repo: release [vscode-0.2.1](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1) (PR #11),
+con `dash-mui-editor-0.2.1.vsix`. Se instala con "Extensions: Install from VSIX..." (VS Code 1.86 o posterior); ver
+`docs/INSTALACION.md`, paso 9.
 
-Pendiente: deshacer dentro del propio editor ya lo da VS Code (el texto es suyo), pero no hay copiar/pegar de objetos ni
-selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.
+Pendiente: no hay selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.
 
 ## Ver en Amiga (IDE, tarea 20)
 

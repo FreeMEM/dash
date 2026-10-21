@@ -196,7 +196,7 @@ Total: 531 funciones, 531 implementadas, 0 sin implementar.
 | `ra_set_value(id, value)` | `void` | Set gadget value (same gadgets as ra_get_value) |  |
 | `ra_refresh_layout()` | `void` | Refresh window layout after adding gadgets |  |
 | `RA_EVENT_CLOSE()` | `LONG` | Close window event code (-1) |  |
-| `RA_EVENT_NONE()` | `LONG` | No event code (0) |  |
+| `RA_EVENT_NONE()` | `LONG` | No event code (-3) |  |
 | `ra_get_rastport()` | `APTR` | Get RastPort for custom drawing (also sets _dash_rp) |  |
 | `ra_get_inner_left()` | `LONG` | Get inner left border of window |  |
 | `ra_get_inner_top()` | `LONG` | Get inner top border of window |  |
@@ -292,12 +292,12 @@ Total: 531 funciones, 531 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `file_open(filename, mode)` | `LONG` | Open file (mode: MODE_OLDFILE, MODE_NEWFILE, MODE_READWRITE) |  |
+| `file_open(filename, mode)` | `LONG` | Open file (mode: 1005 read, 1006 new file, 1004 read and write; 0 if it fails) |  |
 | `file_close(handle)` | `void` | Close file |  |
 | `file_read_byte(handle)` | `LONG` | Read single byte |  |
 | `file_read_line(handle, buffer, maxlen)` | `STRPTR` | Read line into buffer |  |
 | `file_read(handle, buffer, length)` | `LONG` | Read bytes into buffer |  |
-| `file_eof(handle)` | `BOOL` | Check end of file |  |
+| `file_eof(handle)` | `BOOL` | True at the end of the file (looks at the next byte without consuming it) |  |
 | `file_write_byte(handle, byte)` | `LONG` | Write single byte |  |
 | `file_write_line(handle, str)` | `LONG` | Write string followed by a newline (0 = ok, -1 = error) |  |
 | `file_write(handle, buffer, length)` | `LONG` | Write bytes from buffer |  |

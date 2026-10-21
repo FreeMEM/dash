@@ -1,8 +1,8 @@
 # D.A.S.H. Language - Manual de Referencia del Programador
 
-**Version 1.2** | **D.A.S.H.** (*Development Amiga Synthesis Hub*) — Lenguaje de alto nivel para Amiga que compila a C
+**D.A.S.H.** (*Development Amiga Synthesis Hub*) — Lenguaje de alto nivel para Amiga que compila a C
 
-*Actualizado: Enero 2026 - Incluye Screens, GadTools y ReAction*
+*Actualizado: octubre 2026*
 
 ---
 
@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 240+ funciones built-in para graficos, audio, archivos, GUI y mas
+- 531 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -66,7 +66,24 @@ end
 ./dash --stack 32768 programa.dash -o prog    # pila minima (por defecto 16 KB; 0 = la del shell)
 ./dash --fpu programa.dash -o programa        # solo 68020 con FPU 68881/68882
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
+./dash -q programa.dash -o programa           # solo avisos, errores y el resultado
+./dash -v programa.dash -o programa           # ensena cada paso del transpilador
+./dash --multifile programa.dash -o programa  # un .c por modulo (en build/<nombre>_multi/)
+./dash --no-hunk programa.dash -o programa    # deja la salida de gcc tal cual, sin pasarla a Hunk
 ```
+
+El C y los ficheros intermedios van a `build/`, en el directorio desde el que se llama a `./dash`.
+El gcc de bebbo ya genera Hunk, asi que `--no-hunk` solo cambia algo con un gcc que de ELF.
+
+Variables de entorno:
+
+| Variable | Para que |
+|---|---|
+| `DASH_TOOLCHAIN` | Carpeta del gcc de bebbo, si no esta en `/opt/amiga` |
+| `DASH_CFLAGS` | Opciones de mas para gcc (por ejemplo `DASH_CFLAGS="-fbbb=-"`) |
+| `DASH_MUI_SDK` | Carpeta `SDK/MUI` del SDK de MUI (por defecto, la de `tools/get_mui_sdk.sh`) |
+| `DASH_AMISSL_SDK` | Carpeta `AmiSSL/Developer` del SDK de AmiSSL (por defecto, la de `tools/get_amissl.sh`) |
+| `DASH_PRINT_FLUSH=1` | Cada `Print` sale en el momento (ver abajo) |
 
 `./dash --debug` compila para el depurador: `-O0 -g` (DWARF en el ejecutable) y, en el C, `#line` hacia las
 lineas del `.dash`: `m68k-amigaos-gdb` para, avanza y ensena la pila y las variables en lineas de Dash
@@ -137,6 +154,9 @@ enum GameState
     PAUSED
 end
 
+# Variables globales (opcional): con var y su tipo
+var puntos: Int = 0
+
 # Estructuras (opcional)
 struct Player
     x: Int
@@ -161,6 +181,8 @@ Main
     Print "Iniciando..."
 end
 ```
+
+Las partes pueden ir en cualquier orden, salvo que una constante solo puede usar las de antes.
 
 ### Comentarios
 
@@ -206,8 +228,12 @@ vacio = []
 | Fixed | Coma fija 16.16: decimales rapidos en 68000 | `Fixed(1.5)`, `Fixed(n)` |
 | String | Cadena de texto | `"Hola"` |
 | Bool | Valor booleano (`Print` y los textos lo escriben `true` / `false`) | `true`, `false` |
-| Array | Coleccion de elementos | `[1, 2, 3]` |
+| Array | Coleccion de elementos (sin tipo: se leen como enteros) | `[1, 2, 3]` |
+| `[T]` | Lista de `T` (`[Int]`, `[String]`, `[Enemigo]`, `[[Int]]`, `[Fixed]`) | `var l: [String] = []` |
+| `{String: T}` | Diccionario con claves de texto | `{"Ana": 30}` |
 | Struct | Tipo compuesto definido por usuario | `Player(10, 20)` |
+| Func | Una funcion o una lambda, para pasarla como valor | `fn(x) -> x * 2` |
+| Pointer | Direccion de memoria (para C y el sistema) | `buffer_alloc(64)` |
 
 ### Fixed (coma fija)
 
@@ -280,13 +306,57 @@ end
 - Un literal decimal necesita digitos a los dos lados del punto: `1.0`, no `1.` (asi `1..10` sigue siendo un rango).
 - Una variable que empezo siendo Int no puede recibir un Float (`n = 0` y luego `n = 2.5` es error):
   declarala con `n = 0.0` o convierte con `Int()`.
-- `%` solo con enteros. Los arrays guardan enteros o strings, no Float.
+- `%` solo con enteros. Las listas guardan enteros, `Bool`, textos, `Fixed`, structs, listas y
+  diccionarios, pero no `Float` (`[1.5, 2.0]` es un error): usar un struct con campos `Float` o `Fixed`.
 - `./dash --fpu` compila para 68020 + FPU 68881/68882: los Float usan instrucciones de la FPU
   (mucho mas rapido, y el ejecutable es mas pequeno). En una maquina sin FPU, libnix muestra un
   aviso del sistema y el programa termina. Como LightWave: una version para cada maquina.
 - Sin `--fpu` (un 68000 no tiene FPU) las operaciones son por software (rutinas de GCC en
   `runtime/softfloat`, unos 4 KB, solo si el programa usa Float). No dependen de
   `mathieeesingbas.library`, que con Kickstart 3.1 sin FPU se cuelga en FS-UAE.
+
+### Variables globales
+
+Una variable global se declara fuera de `Main` y de las funciones, con `var`, su nombre y su tipo.
+El tipo es obligatorio (`var x = 5` es un error de sintaxis). El valor es opcional: sin el, empieza
+en 0 (o `nil` en textos, listas, diccionarios y structs).
+
+```
+var puntos: Int = 0
+var nombres: [String] = []
+var titulo: String = "Dash"
+var total: Int                  # 0
+
+func sumar(n)
+    puntos = puntos + n         # las funciones del programa la ven y la cambian
+end
+
+Main
+    sumar(10)
+    Print puntos                # 10
+end
+```
+
+Las funciones de un modulo importado no ven las globales del programa (ver
+[Modulos e Imports](#21-modulos-e-imports)). Dentro de `Main` o de una funcion, `var nombre: Tipo = valor`
+declara una variable local con su tipo.
+
+### Ambito de las variables
+
+Una variable creada dentro de un bloque (`if`, `elif`, `else`, `while`, `for`) solo existe en ese
+bloque. Desde dentro se ven y se cambian las del bloque de fuera:
+
+```
+a = 1
+if a == 1
+    b = 2                       # b solo existe dentro del if
+    a = 3                       # cambia la a de fuera
+end
+Print a                         # 3
+Print b                         # error: Variable 'b' is not defined
+```
+
+Para usar despues un valor calculado dentro, crear la variable antes del bloque (`b = 0`).
 
 ---
 
@@ -464,13 +534,19 @@ valor = Int(linea[p + 1:])
 
 ### Precedencia de Operadores
 
-1. `-` (unario)
+De mas fuerte a mas debil:
+
+1. `-` y `~` (unarios)
 2. `*`, `/`, `%`
 3. `+`, `-`
-4. `==`, `!=`, `<`, `>`, `<=`, `>=`
-5. `not` (como en Python: `not a == b` es `not (a == b)`)
-6. `and`
-7. `or`
+4. `<<`, `>>`
+5. `&`
+6. `^`
+7. `|`
+8. `==`, `!=`, `<`, `>`, `<=`, `>=`
+9. `not` (como en Python: `not a == b` es `not (a == b)`)
+10. `and`
+11. `or`
 
 ---
 
@@ -574,15 +650,16 @@ for i in (1..10)
 end
 ```
 
-Solo valen dentro de un `while` o `for`. Dentro de un manejador `On Close`/`On Key`
-(aunque el `EventLoop` esté dentro de un bucle) son un error: para salir del
-`EventLoop` se usa `Stop`.
+Solo valen dentro de un `while` o `for`. Dentro de cualquier manejador `On ...` del `EventLoop`
+(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On Timer`), aunque el `EventLoop` esté
+dentro de un bucle, son un error: para salir del `EventLoop` se usa `Stop`.
 
 ### Comandos de Control
 
 | Comando | Efecto |
 |---------|--------|
 | `Stop` | Sale del EventLoop y termina programa |
+| `Wait n` | Espera `n` segundos (`Wait 2`; `n` puede ser una expresion) |
 | `break` | Sale del `while`/`for` más interno |
 | `continue` | Salta a la siguiente vuelta del `while`/`for` más interno |
 | `return valor` | Retorna de una funcion con valor |
@@ -620,8 +697,8 @@ func siguientes(a: Array) -> Array     # lista de enteros
 end
 ```
 
-Tipos que se pueden escribir: `Int`, `Float`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void` y el
-nombre de un struct o de un enum. Cualquier otro nombre es un error (antes se tomaba como `Int` sin avisar).
+Tipos que se pueden escribir: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void`,
+listas `[T]`, diccionarios `{String: T}` y el nombre de un struct o de un enum. Cualquier otro nombre es un error (antes se tomaba como `Int` sin avisar).
 Un campo `Array` de un struct se libera con el struct, igual que un campo de tipo struct.
 
 El `return` se comprueba contra el tipo declarado: es un error devolver un texto donde va un numero o un
@@ -647,6 +724,42 @@ func factorial(n)
 end
 ```
 
+### Funciones como valores y lambdas
+
+Una funcion se puede pasar a otra por su nombre. El parametro que la recibe se declara `Func` y se
+llama como una funcion. Una lambda es una funcion sin nombre: `fn(x) -> expresion`, o con varias
+lineas, `fn(x) ... end` con su `return`.
+
+```
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+func aplicar(f: Func, v: Int) -> Int
+    return f(v)
+end
+
+Main
+    Print aplicar(doble, 5)              # 10
+    Print aplicar(fn(x) -> x + 1, 9)     # 10
+    triple = fn(x) -> x * 3
+    Print triple(2)                      # 6
+    g = fn(x) -> doble(x)                # una funcion con nombre, en una variable
+    Print g(4)                           # 8
+    cuadrado = fn(x)
+        y = x * x
+        return y
+    end
+    Print cuadrado(3)                    # 9
+end
+```
+
+Una lambda no captura variables: solo ve sus parametros, las globales, las constantes y las funciones.
+Usar una variable local de fuera es un error (`lambdas cannot use local variables from outside`); hay
+que pasarla como parametro. Para guardar en una variable una funcion con nombre, envolverla en una
+lambda como arriba: `g = doble` y `var g: Func = doble` todavia no se pueden llamar despues (`g(4)` da
+error, al compilar o en gcc).
+
 ---
 
 ## 8. Estructuras (Structs)
@@ -665,13 +778,28 @@ end
 ### Creacion de Instancias
 
 ```
-# Constructor con todos los campos
+# Constructor: los campos en orden
 e1 = Enemigo(100, 50, 100, "Alien")
 
 # Acceso a campos
 Print e1.x
 Print e1.nombre
 e1.vida = e1.vida - 10
+```
+
+Los ultimos campos se pueden omitir si tienen valor por defecto: toman ese valor. Los demas son
+obligatorios (`Struct 'X' expects 1-2 arguments`):
+
+```
+struct Bala
+    x: Int
+    y: Int = 0
+    velocidad: Int = 4
+end
+
+b1 = Bala(10)            # y = 0, velocidad = 4
+b2 = Bala(10, 20)        # velocidad = 4
+b3 = Bala(10, 20, 8)
 ```
 
 ### Structs dentro de structs
@@ -760,6 +888,8 @@ end
 ```
 
 Sin `=`, cada valor es el anterior + 1 (el primero, 0).
+
+Tambien en una linea, separados por comas: `enum Estado IDLE, RUN, STOP end`.
 
 ### Uso
 
@@ -905,7 +1035,7 @@ puede ser `nil`. El resultado se usa como el de `d[k]`.
 
 ### nil
 
-`nil` es "ningun struct, lista o texto". Una variable que empieza vacia necesita su tipo:
+`nil` es "ningun struct, lista, diccionario o texto". Una variable que empieza vacia necesita su tipo:
 
 ```
 struct Nodo
@@ -929,8 +1059,8 @@ end
 ```
 
 - `x = nil` suelta lo que tenia `x`; `x == nil` y `x != nil` comparan el puntero (tambien en textos).
-- Solo para structs, `Array` y `String`: `n = nil` con un entero da error, y `x = nil` sin `var x: Tipo`
-  tambien.
+- Solo para structs, listas, diccionarios y `String`: `n = nil` con un entero da error, y `x = nil` sin
+  `var x: Tipo` tambien.
 - Leer un campo de `nil` da basura (normalmente 0); escribirlo no hace nada (sin la proteccion
   escribiria en la direccion 0 y colgaria el Amiga). Con `--memcheck` los dos avisan:
   `memcheck: ERROR campo de nil`.
@@ -959,9 +1089,6 @@ end
 ```
 
 `Array` sigue siendo una lista sin tipo (sus elementos se leen como enteros).
-
-Limite: no se puede asignar a un campo de un elemento (`enemigos[0].x = 5`): hay que usar
-una variable (`e = enemigos[0]` y `e.x = 5`).
 
 ---
 
@@ -1269,7 +1396,8 @@ rojo = color_pen(255, 0, 0)            # el lapiz mas parecido en la pantalla do
 gfx_pen(rojo)
 ```
 
-`font_size(f)` dice el tamano que dio el sistema (el mas cercano que tiene). Sin ventana abierta (o con
+`font_size(f)` dice el tamano que dio el sistema (el mas cercano que tiene). `font_close(f)` cierra una
+fuente antes de salir (si es la que esta en uso, antes poner otra con `font_use`). Sin ventana abierta (o con
 MUI, fuera de la zona de dibujo) `font_use`, `font_style` y las medidas trabajan sobre un RastPort propio de
 Dash: se puede maquetar un texto antes de pintarlo. Las fuentes de
 disco necesitan `diskfont.library` y la fuente en `FONTS:`. Las fuentes abiertas y los lapices
@@ -1332,14 +1460,11 @@ de serie da 0. En una pantalla de tarjeta grafica (RTG de 15 a 32 bits, con Pica
 no usa el datatype: escribe los pixeles en un bitmap como el de la pantalla, unas 20 veces mas
 rapido (5 ms para 400x300 en un 68040). La imagen se usa como las de `image_load`.
 
-El alfa de `image_from_rgb`: en una pantalla de paleta (AGA, ECS) se pinta el pixel con alfa de 128 o
+El alfa de `image_from_rgb`: en una pantalla de paleta (AGA, ECS, RTG de 8 bits) se pinta el pixel con alfa de 128 o
 mas y el resto no. En RTG de 15 a 32 bits se mezcla con lo que hay debajo (alfa 64: una cuarta parte
 de la imagen y tres de lo de debajo), tambien en `image_draw_part` y en las copias de `image_scale`.
 Es mas lento que pintar sin mezcla: lee y escribe lo de debajo. Si los alfas son solo 0 y 255, se
 pinta con la mascara, sin leer nada.
-
-La transparencia vale tambien en pantallas de tarjeta grafica (RTG, Picasso96), tambien en las
-copias de `image_scale` y en `image_draw_part`.
 
 ### Pantalla
 
@@ -1347,7 +1472,17 @@ copias de `image_scale` y en `image_draw_part`.
 gfx_clear()                     # Limpiar con color 0
 gfx_clear_color(color)          # Limpiar con color
 gfx_scroll(dx, dy, x1, y1, x2, y2)  # Scroll de region
+gfx_copy(sx, sy, ancho, alto, dx, dy)   # Copia un trozo de la ventana a otro sitio de ella
 ```
+
+### Mas funciones de dibujo
+
+| Funcion | Que hace |
+|---|---|
+| `gfx_rgb8(color, r, g, b)` | Como `gfx_rgb`, con componentes de 0 a 255 (AGA y RTG); necesita una ventana abierta |
+| `gfx_mode(modo)` | Modo de dibujo: 0 solo el lapiz (JAM1), 1 lapiz y fondo (JAM2), 2 invierte lo que hay (COMPLEMENT), 4 texto invertido (INVERSVID) |
+| `gfx_pattern(patron)` | Patron de 16 bits para las lineas: `0xFFFF` continua, `0xF0F0` discontinua |
+| `gfx_flood(x, y, modo)` | Rellena desde `x, y` con el lapiz: modo 0 hasta el color de `gfx_pen_outline`, modo 1 la zona del mismo color que ese punto |
 
 ### Bitmaps fuera de pantalla
 
@@ -1414,6 +1549,61 @@ copper_end()
 copper_install()               # en la pantalla actual (la propia o la del Workbench)
 copper_free()                  # quitarla (al salir se quita sola)
 ```
+
+### Sprites de hardware
+
+Los sprites del chip grafico (hasta 8, numeros 0..7): 16 pixeles de ancho y 3 colores mas el
+transparente. Necesitan una pantalla propia (`screen_open`) de chipset (no RTG: ahi avisa y no se ven).
+
+| Funcion | Que hace |
+|---|---|
+| `sprite_create(id, ancho, alto)` | Reserva un sprite libre del sistema (`false` si no queda). El ancho siempre es 16 |
+| `sprite_set_row(id, fila, plano0, plano1)` | Pone una fila: dos palabras de 16 bits; cada pixel toma el color `bit0 + 2*bit1` (0 = transparente) |
+| `sprite_color(id, indice, r, g, b)` | Color 0..2 del sprite (los colores 1..3), con componentes de 0 a 15 |
+| `sprite_pos(id, x, y)`, `sprite_show(id)`, `sprite_hide(id)` | Lo mueve, lo muestra o lo esconde |
+| `sprite_collision(id1, id2)` | Si se tocan sus rectangulos |
+| `sprite_free(id)` | Lo devuelve al sistema |
+| `sprite_load(id, fichero)` | Todavia no lee el fichero: crea un sprite vacio de 16x16 |
+| `sprite_frame(id, frame)` | Todavia no hace nada |
+
+### Sprites por software
+
+Hasta 16 (numeros 0..15). Se dibujan con el blitter en la ventana actual, guardando lo que tapan,
+asi que valen tambien en RTG. El color 0 es transparente.
+
+| Funcion | Que hace |
+|---|---|
+| `soft_sprite_create(id, ancho, alto, planos)` | Crea uno vacio (`false` si no se pudo); hace falta una ventana abierta |
+| `soft_sprite_pixel(id, x, y, color)`, `soft_sprite_clear(id, color)` | Pinta un pixel o todo el sprite |
+| `soft_sprite_row(id, fila, plano0, plano1)` | Una fila en el formato de los sprites de hardware (16 pixeles, 4 colores) |
+| `soft_sprite_show(id)`, `soft_sprite_hide(id)` | Lo dibuja o lo quita (devuelve el fondo) |
+| `soft_sprite_pos(id, x, y)`, `soft_sprite_x(id)`, `soft_sprite_y(id)` | Lo mueve (si se ve, se redibuja) y da su posicion |
+| `soft_sprite_free(id)` | Lo libera |
+
+### RTG (tarjetas graficas)
+
+Funciones de `cybergraphics.library` (CyberGraphX, o Picasso96 con su capa de compatibilidad).
+Dibujan en la ventana o pantalla actual con colores `0xRRGGBB`. En una pantalla de 8 bits o menos
+`rtg_write_pixel` y `rtg_fill_rect` usan un lapiz aproximado, y las de arrays no hacen nada.
+
+| Funcion | Que hace |
+|---|---|
+| `rtg_available()` | Si hay `cybergraphics.library` (V41 o mas) |
+| `rtg_is_active()` | Si la pantalla actual es de color real (mas de 8 bits) |
+| `rtg_get_depth()`, `rtg_get_width()`, `rtg_get_height()` | Bits por pixel y tamano de la pantalla actual |
+| `rtg_best_mode(ancho, alto, bits)` | El mejor modo de pantalla RTG para ese tamano |
+| `rtg_open_screen(ancho, alto, bits, titulo)` | Abre una pantalla RTG propia (con el mejor modo; `false` si no hay) |
+| `rtg_write_pixel(x, y, rgb)`, `rtg_read_pixel(x, y)` | Escribe o lee un pixel |
+| `rtg_fill_rect(x, y, ancho, alto, rgb)` | Rectangulo relleno |
+| `rtg_write_array(buffer, bpr, x, y, ancho, alto)` | Copia pixeles ARGB (4 bytes) de un buffer; `bpr` = bytes por fila |
+| `rtg_read_array(buffer, bpr, x, y, ancho, alto)` | Lo contrario: de la pantalla al buffer |
+| `rtg_rgb(r, g, b)`, `rtg_argb(a, r, g, b)` | Junta componentes de 0 a 255 en un color |
+| `rtg_rgb_r(c)`, `rtg_rgb_g(c)`, `rtg_rgb_b(c)` | Saca cada componente |
+| `rtg_alloc_bitmap(ancho, alto, bits)`, `rtg_free_bitmap(bm)` | Bitmap fuera de pantalla, del formato de la ventana |
+| `rtg_blit(bm, sx, sy, dx, dy, ancho, alto)` | Copia un trozo del bitmap a la ventana |
+| `rtg_scale_blit(bm, sx, sy, sw, sh, dx, dy, dw, dh)` | Lo mismo escalado (toma el bitmap como de 8 bits por pixel; sin RTG, copia sin escalar) |
+
+Para pintar una imagen RGB entera, `gfx_rgb_draw` (ver mas arriba) es mas sencillo y vale en cualquier pantalla.
 
 ### Ejemplo de Graficos
 
@@ -1484,6 +1674,21 @@ raw = key_raw()
 texto = key_text(raw)
 ```
 
+`key_get()` da el codigo raw de la tecla mas antigua que espera (0 si no hay ninguna), y tambien las
+teclas al soltarse: el codigo mas 128 (soltar Esc, 69, da 197). Para quedarse solo con las pulsaciones,
+`if tecla < 128`. `key_wait()` ya se salta las de soltar.
+
+Otras funciones de entrada y de pantalla:
+
+| Funcion | Que hace |
+|---|---|
+| `wait_key()` | Espera una tecla en la ventana y da su codigo raw (sin ventana, espera un segundo y da 0) |
+| `wait_click()` | Espera a que se pulse y se suelte un boton del raton (mira el hardware sin parar: gasta CPU) |
+| `check_lmb()`, `check_rmb()`, `check_mouse()` | Si esta pulsado el boton izquierdo, el derecho o cualquiera (lee el hardware) |
+| `check_esc()` | Si Esc esta pulsada (lee el teclado en el hardware) |
+| `screen_width()`, `screen_height()` | Tamano de la pantalla propia o de la de la ventana |
+| `screen_to_front()`, `screen_to_back()` | Pone la pantalla propia (`screen_open`) delante o detras de las demas |
+
 ### Teclas en el EventLoop
 
 ```
@@ -1527,7 +1732,8 @@ end
 ```
 
 `On Timer` usa `timer.device` mientras el bucle espera: no gasta CPU entre tics. Un solo `On Timer`
-por bucle; todavia no con las ventanas de `window_create`.
+por bucle. **Aviso:** si el programa usa `window_create`, `On Timer` todavia no funciona: compila sin
+error, pero no salta nunca.
 
 ### Raton
 
@@ -1654,33 +1860,39 @@ tone_play(1, 523, 48, 250)  # Do
 ### Abrir y Cerrar Archivos
 
 ```
-# Modos: MODE_OLDFILE (lectura), MODE_NEWFILE (escritura), MODE_READWRITE
-handle = file_open("datos.txt", MODE_OLDFILE)
+# Modos: 1005 = leer (el fichero tiene que existir), 1006 = fichero nuevo (borra el que hubiera),
+#        1004 = leer y escribir (lo crea si no existe)
+handle = file_open("datos.txt", 1005)
 
-if handle
+if handle != 0              # 0 si no se pudo abrir
     # Usar archivo...
     file_close(handle)
 end
 ```
 
+Los modos son los de `Open` de dos.library. `import "lib/amiga/dos.dash"` les da nombre:
+`MODE_READ` (1005), `MODE_WRITE` (1006) y `MODE_READWRITE` (1004). Los nombres del C
+(`MODE_OLDFILE`, `MODE_NEWFILE`...) no existen en Dash.
+
 ### Lectura
 
 ```
-handle = file_open("config.txt", MODE_OLDFILE)
+handle = file_open("config.txt", 1005)
 
 while not file_eof(handle)
-    byte = file_read_byte(handle)
-    # o leer linea completa:
-    # linea = file_read_line(handle, buffer, 256)
+    byte = file_read_byte(handle)    # 0-255; -1 al final
 end
 
 file_close(handle)
 ```
 
+`file_eof` mira el siguiente byte sin gastarlo, asi que el bucle lee todos los bytes. Para leer un
+fichero de texto entero es mas sencillo `file_read_text(nombre)` (ver [Funciones de texto](#funciones-de-texto)).
+
 ### Escritura
 
 ```
-handle = file_open("salida.txt", MODE_NEWFILE)
+handle = file_open("salida.txt", 1006)
 
 file_write_line(handle, "Primera linea")
 file_print(handle, "Texto sin salto")
@@ -1692,10 +1904,49 @@ file_close(handle)
 ### Posicion en Archivo
 
 ```
-file_seek(handle, 0, OFFSET_BEGINNING)  # Al inicio
-file_seek(handle, -10, OFFSET_END)      # 10 bytes antes del final
-pos = file_pos(handle)                   # Posicion actual
+file_seek(handle, 0, -1)        # al principio
+file_seek(handle, -10, 1)       # 10 bytes antes del final
+file_seek(handle, 5, 0)         # 5 bytes despues de la posicion actual
+pos = file_pos(handle)          # posicion actual
 ```
+
+El tercer parametro dice desde donde se cuenta, como en `Seek` de dos.library: -1 desde el
+principio, 0 desde la posicion actual y 1 desde el final. Devuelve la posicion de antes (-1 si falla).
+`lib/amiga/dos.dash` trae las constantes `SEEK_START`, `SEEK_CURRENT` y `SEEK_END` (-1, 0 y 1) y las funciones
+`seek_start(h, pos)`, `seek_forward(h, n)`, `seek_end(h, n)` y `seek_rewind(h)`.
+
+### Datos binarios y buffers
+
+Un buffer es un bloque de memoria (un numero, como un fichero), para datos binarios:
+
+```
+buf = buffer_alloc(1024)                    # a ceros; 0 si no hay memoria
+n = file_load("datos.bin", buf, 1024)      # bytes leidos; -1 si no existe o no cabe
+if n > 0
+    Print buffer_get_byte(buf, 0)
+    buffer_set_word(buf, 2, 0x1234)        # 16 bits, big-endian (como el 68000)
+    file_save("RAM:copia.bin", buf, n)
+end
+buffer_free(buf)
+```
+
+| Funcion | Que hace |
+|---|---|
+| `buffer_alloc(n)`, `buffer_free(b)` | Pide `n` bytes a cero y los devuelve. No se liberan solos al salir: `buffer_free` |
+| `buffer_get_byte(b, i)`, `buffer_set_byte(b, i, v)` | Un byte (0-255) en la posicion `i` |
+| `buffer_get_word(b, i)`, `buffer_set_word(b, i, v)` | 16 bits en `i` (big-endian) |
+| `buffer_get_long(b, i)`, `buffer_set_long(b, i, v)` | 32 bits en `i` (big-endian) |
+| `buffer_copy(dest, i_dest, origen, i_origen, n)` | Copia `n` bytes (destino primero) |
+| `buffer_fill(b, i, n, v)` | Pone `n` bytes a `v` desde `i` |
+| `file_read_line(h, b, max)` | Lee una linea (con su salto) en el buffer, hasta `max - 1` bytes; da el texto, o `nil` al final |
+| `file_read(h, b, n)`, `file_write(h, b, n)` | Lee o escribe hasta `n` bytes entre un fichero abierto y el buffer; da cuantos (-1 si falla) |
+| `file_load(nombre, b, max)` | Lee el fichero entero en el buffer; da los bytes, o -1 si no existe o es mayor que `max` |
+| `file_save(nombre, b, n)` | Escribe `n` bytes del buffer como fichero nuevo; da cuantos |
+| `console_read(b, max)` | Lee de la entrada del programa (la consola) hasta `max` bytes; da cuantos |
+| `console_write(texto)` | Escribe el texto en la salida, sin salto de linea |
+| `str_from_buffer(b, i, n)`, `str_to_buffer(s, b, i)` | Texto desde o hacia un buffer (ver [Funciones de texto](#funciones-de-texto)) |
+
+Ningun acceso comprueba los limites del buffer: una posicion fuera de el escribe en otra memoria.
 
 ### Sistema de Archivos
 
@@ -2040,6 +2291,17 @@ fast = mem_fast_free()      # RAM Fast disponible
 total = mem_total()         # Total disponible
 ```
 
+### Leer y escribir memoria: peek y poke
+
+```
+v = peek_byte(0xBFE001)          # tambien peek_word y peek_long
+poke_word(0xDFF180, 0x0F00)      # tambien poke_byte y poke_long
+```
+
+Leen o escriben 8, 16 o 32 bits en una direccion (un numero o un buffer). No comprueban nada: una
+direccion mala cuelga el Amiga, y en un 68000 `peek_word`, `peek_long` y sus `poke` necesitan una
+direccion par. Para los registros del chip, mejor las funciones de graficos y sonido.
+
 ### Tiempo y Espera
 
 ```
@@ -2082,8 +2344,8 @@ btn_cancel = gt_button(100, 10, 80, 20, "Cancel")
 ### Paleta de Colores
 
 ```
-# gt_palette(x, y, width, height, label, color_inicial, depth) -> gadget_id
-pal = gt_palette(10, 40, 100, 80, "Color", 1, 4)
+# gt_palette(x, y, width, height, label, depth, color_inicial) -> gadget_id
+pal = gt_palette(10, 40, 100, 80, "Color", 4, 1)    # 16 colores (4 planos), elegido el 1
 
 # Obtener color seleccionado
 color = gt_get_value(pal)
@@ -2180,12 +2442,14 @@ Si se eligen varias opciones a la vez (arrastrando con el botón derecho y pulsa
 ```
 # Selector de archivo para abrir
 if file_open_dialog("Abrir Sprite", "#?.iff")
-    # El usuario selecciono un archivo
+    ruta = file_fullpath()          # "Work:sprites/nave.iff"
+    nombre = file_get_name()        # "nave.iff"
+    carpeta = file_get_path()       # "Work:sprites"
 end
 
 # Selector de archivo para guardar
 if file_save_dialog("Guardar Como", "#?.iff")
-    # El usuario eligio donde guardar
+    destino = file_fullpath()
 end
 
 # Devuelven directamente lo elegido ("" si se cancela)
@@ -2193,6 +2457,10 @@ ruta = dialog_file("Abrir", "#?.iff", false)      # true: selector de guardar
 fuente = dialog_font("Tipo de letra")            # "topaz.font/8"
 color = dialog_color("Color de pluma", 1)        # numero de color de la pantalla
 ```
+
+`file_fullpath()`, `file_get_name()` y `file_get_path()` dan lo elegido en el ultimo
+`file_open_dialog` o `file_save_dialog` que se acepto (la carpeta y el nombre juntos, solo el nombre o
+solo la carpeta). Guardarlo en una variable, porque el siguiente dialogo lo cambia.
 
 `asl.library` esta en el disco de Workbench (`LIBS:`), no en la ROM: sin ella los dialogos
 ASL devuelven `""` (o falso). `dialog_color` no usa ASL (la 3.1 no tiene selector de color):
@@ -2278,7 +2546,7 @@ Main
     gt_init()
 
     # Crear gadgets
-    pal = gt_palette(10, 40, 70, 80, "Color", 1, 4)
+    pal = gt_palette(10, 40, 70, 80, "Color", 4, 1)
     btn_clear = gt_button(10, 130, 70, 20, "Limpiar")
     btn_save = gt_button(10, 155, 70, 20, "Guardar")
 
@@ -2323,14 +2591,20 @@ end
 | `gt_attach()` | Adjuntar gadgets a ventana |
 | `gt_cleanup()` | Limpiar recursos |
 | `gt_button(x,y,w,h,label)` | Crear boton |
-| `gt_palette(x,y,w,h,label,color,depth)` | Crear selector de paleta |
+| `gt_palette(x,y,w,h,label,depth,color)` | Crear selector de paleta (2^depth colores; `color` = el elegido al empezar) |
 | `gt_slider(x,y,w,h,label,min,max,init)` | Crear slider |
 | `gt_checkbox(x,y,w,h,label,checked)` | Crear checkbox |
-| `gt_event()` | Obtener evento de gadget |
+| `gt_string(x,y,w,h,label,inicial,max)` | Campo de texto de hasta `max` caracteres |
+| `gt_integer(x,y,w,h,label,inicial)` | Campo de numero (`gt_get_value` da el numero) |
+| `gt_text(x,y,w,h,label,texto)` | Texto fijo con marco (se cambia con `gt_set_text`) |
+| `gt_get_string(gadget)` | Texto de un `gt_string` |
+| `gt_event()` | Obtener evento de gadget (-1 nada, -2 cerrar) |
+| `gt_wait_event()` | Como `gt_event()`, pero espera a que haya uno |
 | `gt_get_value(gadget)` | Valor: casilla 1/0, deslizador, color de la paleta, número de un campo entero |
 | `gt_set_value(gadget,value)` | Cambiar ese valor |
 | `menu_title(name)` | Crear titulo de menu |
 | `menu_item(name,shortcut,id)` | Crear item de menu (`shortcut` `""` = sin atajo) |
+| `menu_sub(name,shortcut,id)` | Crear subopcion de la ultima `menu_item` |
 | `menu_separator()` | Crear separador |
 | `menu_attach()` | Adjuntar menus |
 | `menu_event()` | Obtener evento de menu |
@@ -2703,6 +2977,30 @@ end
 | `ra_wait_event()` | Esperar evento |
 | `RA_EVENT_CLOSE()` | Constante: ventana cerrada |
 | `RA_EVENT_NONE()` | Constante: sin evento |
+| `ra_handle_events()` | Como `ra_wait_event()` sin esperar: el evento, o `RA_EVENT_NONE()` si no hay |
+| `ra_window_sigmask()` | Señales de las ventanas abiertas, para esperarlas junto con otras |
+
+#### Mas gadgets y layout
+| Funcion | Descripcion |
+|---------|-------------|
+| `ra_get_scroller(id)`, `ra_set_scroller(id,pos)` | Posicion de un scroller |
+| `ra_set_palette_color(id,color)` | Elegir el color de una paleta |
+| `ra_layout_hgroup_weighted(peso)`, `ra_layout_vgroup_weighted(peso)` | Grupo horizontal o vertical con peso: la parte del espacio libre que recibe frente a sus vecinos |
+| `ra_layout_group_end_weighted()` | Cierra uno de esos grupos (con `ra_layout_group_end` el peso no cuenta) |
+| `ra_refresh_layout()` | Recalcular la ventana despues de anadir gadgets con ella abierta |
+| `ra_get_inner_left()`, `ra_get_inner_top()`, `ra_get_inner_width()`, `ra_get_inner_height()` | Zona de dentro de los bordes de la ventana |
+
+#### Zona de dibujo
+| Funcion | Descripcion |
+|---------|-------------|
+| `ra_add_drawing_area(id,ancho_min,alto_min)` | Zona para dibujar con `gfx_*`; crece con la ventana |
+| `ra_init_canvas_render()` | Antes de crear la zona: la pinta la funcion `render_canvas()` del programa |
+| `ra_canvas_enable()` | Cuando el programa esta listo: desde aqui se llama a `render_canvas()` |
+| `ra_canvas_left()`, `ra_canvas_top()`, `ra_canvas_width()`, `ra_canvas_height()` | Dentro de `render_canvas()`: donde esta la zona en la ventana |
+| `ra_refresh_canvas(id)` | Volver a pintar la zona (llama a `render_canvas()`) |
+| `ra_get_drawing_bounds(id)` | Con la ventana abierta, mide la zona (1 si pudo) para `ra_drawing_*` |
+| `ra_drawing_left()`, `ra_drawing_top()`, `ra_drawing_width()`, `ra_drawing_height()` | Lo medido por `ra_get_drawing_bounds` o `ra_calc_drawing_area` |
+| `ra_calc_drawing_area(barra_h,linea_h,izq_w,der_w)` | Calcula la zona restando de la ventana esos margenes (si no hay zona que medir) |
 
 ### GadTools vs ReAction
 
@@ -2903,6 +3201,14 @@ import "lib/matematicas.dash"
 import "utils/helpers.dash"
 ```
 
+La ruta se busca, en este orden: junto al fichero que hace el `import`; en la raiz del proyecto (la
+primera carpeta de mas arriba que tiene el script `dash` o la carpeta `compiler`); y en el directorio
+desde el que se compila. Una ruta absoluta se usa tal cual. Un modulo importado dos veces se lee una.
+
+Dash trae modulos listos en `lib/amiga/`: `audio`, `blitter`, `copper`, `dos`, `doublebuf`, `graphics`,
+`iff`, `intuition`, `memory`, `rtg` y `sprites` (`import "lib/amiga/dos.dash"`). Son funciones Dash
+sobre los builtins; cada fichero las explica en sus comentarios (en ingles).
+
 ### Crear un Modulo
 
 Archivo `lib/matematicas.dash`:
@@ -3094,7 +3400,7 @@ PM de Michael Sinz. Cada muestra da lo de cada tarea desde la anterior, en tanto
 se cuenta es tiempo libre. De un proceso de Shell, el nombre es el de su orden. Cada muestra engancha
 las tareas nuevas y olvida las que acabaron. Una tarea que ya tiene esos ganchos de otro programa no se
 toca ni se cuenta. La cuenta de una tarea incluye las interrupciones que llegan mientras tiene la CPU.
-`cpu_stop()` quita los ganchos; al acabar el programa se quitan solos (tambien con `exit`).
+`cpu_stop()` quita los ganchos; al acabar el programa se quitan solos (tambien si el C llama a `exit`).
 
 ### Dibujar en el fondo del Workbench: desktop_canvas
 
@@ -3193,8 +3499,7 @@ Main
     while count < MAX_COUNT
         gfx_clear()
         gfx_pen(1)
-        gfx_text_at(80, 50, "Contador:")
-        # Mostrar numero requiere conversion
+        gfx_text_at(20, 50, "Contador: #{count}")
 
         count = count + 1
         time_delay(25)      # Medio segundo
@@ -3256,17 +3561,13 @@ Main
 
     player = Player(160, 100, 10)
 
-    running = true
-    while running
+    while not window_check_close()      # hasta que se pulse el boton de cerrar
         gfx_clear()
 
         player.update()
         player.draw()
 
         wait_vblank()
-
-        # Verificar cierre de ventana seria aqui
-        # (simplificado para el ejemplo)
     end
 end
 ```
@@ -3329,8 +3630,8 @@ end
 ```
 Main
     # Escribir archivo
-    handle = file_open("RAM:test.txt", MODE_NEWFILE)
-    if handle
+    handle = file_open("RAM:test.txt", 1006)     # fichero nuevo
+    if handle != 0
         file_write_line(handle, "Linea 1")
         file_write_line(handle, "Linea 2")
         file_write_line(handle, "Linea 3")
@@ -3339,13 +3640,15 @@ Main
     end
 
     # Leer archivo
-    handle = file_open("RAM:test.txt", MODE_OLDFILE)
-    if handle
+    handle = file_open("RAM:test.txt", 1005)     # leer
+    if handle != 0
         Print "Contenido:"
+        bytes = 0
         while not file_eof(handle)
             byte = file_read_byte(handle)
-            # Procesar byte...
+            bytes = bytes + 1
         end
+        Print "#{bytes} bytes"
         file_close(handle)
     end
 
@@ -3401,10 +3704,12 @@ end
 | Construccion | Sintaxis |
 |--------------|----------|
 | Variable | `nombre = valor` |
+| Variable global | `var nombre: Tipo = valor` (fuera de `Main` y de las funciones) |
 | Constante | `const NOMBRE = valor` |
 | Funcion | `func nombre(params) ... end` |
 | Struct | `struct Nombre ... end` |
-| Enum | `enum Nombre ... end` |
+| Enum | `enum Nombre ... end` o `enum Nombre A, B, C end` |
+| Lambda | `fn(x) -> x * 2` o `fn(x) ... end` |
 | If | `if cond ... end` |
 | If/Else | `if cond ... else ... end` |
 | While | `while cond ... end` |
@@ -3412,6 +3717,7 @@ end
 | For Each | `for x in array ... end` (tambien los caracteres de un String) |
 | For con paso | `for i in (a..b step s) ... end`; `(10..1)` baja |
 | Salir / saltar | `break`, `continue` (dentro de `while`/`for`) |
+| Esperar | `Wait 2` (segundos) |
 | Ventana | `Window Nombre ... end` |
 | Main | `Main ... end` |
 | EventLoop | `EventLoop ... end` |
@@ -3425,19 +3731,30 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 
 | Categoria | Cantidad | Ejemplos |
 |-----------|----------|----------|
-| Graficos basicos | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle` |
-| Graficos avanzados | 43 | `sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
-| Entrada | 30 | `key_*`, `mouse_*`, `joy_*`, `event_window` |
-| GadTools y menus | 29 | `gt_button`, `gt_slider`, `gt_event`, `menu_*` |
-| Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_get_path` |
-| ReAction | 77 | `ra_window_*`, `ra_add_*`, `ra_get_*` |
-| Sistema y memoria | 25 | `mem_*`, `time_*`, `random_*`, `arena_*` |
-| Ficheros (DOS) y buffers | 34 | `file_*`, `dir_*`, `buffer_*` |
+| Graficos basicos | 29 | `gfx_pen`, `gfx_line`, `gfx_rect`, `gfx_circle`, `gfx_flood` |
+| Graficos avanzados | 43 | `sprite_*`, `soft_sprite_*`, `bitmap_*`, `bob_*`, `copper_*` |
+| Entrada y pantallas | 30 | `key_*`, `mouse_*`, `joy_*`, `screen_open`, `check_lmb`, `event_window` |
+| GadTools | 19 | `gt_button`, `gt_slider`, `gt_string`, `gt_event` |
+| Menus | 10 | `menu_title`, `menu_item`, `menu_sub`, `menu_id` |
+| Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_fullpath` |
+| ReAction | 79 | `ra_window_*`, `ra_add_*`, `ra_get_*`, `ra_canvas_*` |
+| Sistema y memoria | 26 | `mem_*`, `time_*`, `random_*`, `arena_*`, `peek_*`, `poke_*` |
+| Ficheros (DOS) | 24 | `file_*`, `dir_*`, `console_read`, `console_write` |
+| Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
+| Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
+| Red (TCP) | 13 | `net_connect`, `net_send`, `net_recv`, `net_signal` |
+| TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
+| Fuentes y colores | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
+| Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
+| Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
+| Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
+| Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
+| Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 44 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
+| Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
-| MUI | 70 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_string`, `mui_list`, `mui_menu_item`, `mui_canvas`, `mui_image`, `mui_timer`, `mui_wait_event` |
-| **Total** | **428** | |
+| MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **531** | |
 
 ### Colores Estandar Amiga
 
@@ -3490,11 +3807,17 @@ end
 ### Error: Tipo incorrecto
 ```
 # Mal
-x = "hola" + 5      # No se puede sumar string + int
+s = "hola"
+s = 5               # Cannot assign a int to 's', which holds a string
 
 # Bien
-x = "hola" + "5"    # Concatenar strings
+s = "hola"
+s = "5"             # o "#{n}" para poner un numero en el texto
+n = 5               # o una variable nueva para el numero
 ```
+
+Una variable conserva el tipo de su primera asignacion. Sumar un numero a un texto si vale:
+`"hola" + 5` da `"hola5"`.
 
 ---
 

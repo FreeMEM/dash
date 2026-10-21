@@ -53,7 +53,8 @@ end
   `break` y `continue`
 - Funciones con parámetros, retorno y recursión; funciones como valor y lambdas
 - Listas con literales, índice, slicing, `.length` y tipo de elemento (`[String]`, `[Nodo]`...) que crecen
-  (`push`, `pop`, `insert`, `remove`); diccionarios `{String: T}`, también de listas y de diccionarios; las
+  (`push`, `pop`, `insert`, `remove`); diccionarios `{String: T}`, también de listas y de diccionarios, con
+  `d.get(clave, defecto)` (una sola búsqueda); las
   funciones y métodos que devuelven listas o diccionarios conservan el tipo de sus elementos
 - Textos con interpolación de cualquier expresión (`"#{a + 1}"`, `"#{f(x)}"`), concatenación eficiente y
   funciones (`str_find`, `str_replace`, `str_split`, `str_upper`...); un `Bool` se escribe `true`/`false`
@@ -68,7 +69,8 @@ end
 ### Amiga API
 - **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`
 - **Interfaces** — GadTools (con atajos de teclado y gadgets medidos con la fuente), ReAction (hasta 4
-  ventanas) y **MUI 3.8 o 5**: zona de dibujo propia (con doble búfer, repintado parcial y rellenos),
+  ventanas) y **MUI 3.8 o 5**: zona de dibujo propia (con doble búfer, rellenos, repintado de solo una zona con
+  `mui_canvas_update_area` y el ratón sin clic con `mui_canvas_on_move` y `mui_canvas_pointer_x`/`_y`),
   temporizador, señales y ventanas a pantalla completa (con MUI 3.8 queda un marco de 4 y 3 píxeles alrededor);
   editor visual de ventanas MUI para VS Code
 - **Graphics** — Primitivas de dibujo, colores, bitmaps, transparencias y degradados (rápidos también en
@@ -78,11 +80,17 @@ end
 - **Blitter** — BOBs y operaciones de blitting
 - **Audio** — Reproducción de tonos y samples
 - **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF, o desde píxeles RGB/RGBA en memoria (con
-  transparencia, también en RTG y sin `picture.datatype`); fuentes de disco, también vectoriales (tamaño
+  transparencia, también en RTG y sin `picture.datatype`; en RTG, alfa de verdad: se mezclan con lo de debajo),
+  sin tope de imágenes a la vez (antes, 64); fuentes de disco, también vectoriales (tamaño
   mínimo 2: con 1 o 0, diskfont y bullet de AmigaOS 3.2 escriben fuera de su memoria), y colores RGB
 - **Red** — TCP con `bsdsocket.library` y HTTPS con AmiSSL (5.1 o posterior, o las anteriores), también sin
-  esperar (conexiones por pasos); la sesión TLS de cada servidor se reanuda en la siguiente conexión
-- **Procesos** — `task_start`: una función `@native` en otro proceso de AmigaOS
+  esperar (conexiones por pasos); la sesión TLS de cada servidor se reanuda en la siguiente conexión;
+  `net_signal` despierta al programa cuando la red tiene algo
+- **Procesos** — `task_start`: una función `@native` en otro proceso de AmigaOS; `task_signal` avisa al acabar
+- **Trasfondo** — `desktop_canvas*`: dibujar en el fondo del Workbench, detrás de los iconos (planar y RTG, con
+  y sin backdrop); `cpu_*`: la CPU de cada tarea; `break_check`: parar con Ctrl-C un programa sin ventana;
+  `single_instance`: una sola copia a la vez; `@workbench_output "NIL:"`: sin ventana de consola al arrancar
+  desde el icono
 - **DOS** — Operaciones de ficheros
 - **RTG** — Soporte para tarjetas gráficas
 - **Double Buffering** — Animación sin flicker
@@ -207,6 +215,12 @@ cd dash
 # Sin optimizar (más fácil de depurar)
 ./dash -O0 archivo.dash -o bin/archivo
 
+# Para el depurador (gdb, VS Code): -O0 -g y las líneas del C apuntan al .dash
+./dash --debug archivo.dash -o bin/archivo
+
+# Sin ruido: solo avisos, errores y el resultado (no cada orden y paso)
+./dash -q archivo.dash -o bin/archivo
+
 # Más pequeño (gcc -Os): ~7 % menos de tamaño, 10-50 % más lento en bucles
 ./dash --small archivo.dash -o bin/archivo
 
@@ -268,14 +282,18 @@ compiler/             Transpilador (Python/Lark)
   codegen.py          Generación de código C
   amiga_builtins.py   Bindings de la API Amiga
   dashui.py           Ventanas del editor visual (.dashui) como código Dash
+  lsp.py              Servidor de lenguaje para VS Code (con lsp_index.py y lsp_format.py)
+  debuglines.py       ./dash --debug: líneas del C hacia el .dash
 lib/amiga/            Módulos estándar de Amiga
 runtime/softfloat/    Coma flotante por software (suma y multiplicación en ensamblador 68000)
-tools/                Emulador (emu_run.py, capturas con tools/amiga/shot.c), sistemas emulados (emu_sys_*.sh),
-                      SDK de MUI y AmiSSL (get_*.sh), benchmarks (bench.py), gen_builtins_doc.py
-editor/vscode/        Extensión de VS Code: resaltado, compilar, emulador, editor visual de MUI
+tools/                Emulador (emu_run.py, emu_preview.py, capturas con tools/amiga/shot.c), sistemas emulados
+                      (emu_sys_*.sh), SDK de MUI, AmiSSL y bgdbserver (get_*.sh), depurador (gdb_relay.py,
+                      gdb/dash.py), benchmarks (bench.py), gen_builtins_doc.py, gen_tmgrammar.py
+editor/vscode/        Extensión de VS Code: colores, errores al escribir, compilar, emulador, depurador, editor
+                      visual de MUI
 examples/             Programas de ejemplo
 tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC;
-                      tests/bench: benchmarks)
+                      tests/lsp y tests/unit: tests en Python; tests/bench: benchmarks)
 docs/                 Documentación
 ```
 
