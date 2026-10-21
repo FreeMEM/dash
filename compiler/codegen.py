@@ -10786,6 +10786,8 @@ struct _DashCanvas {
     struct Layer_Info *bli;
     struct Layer *bly;              /* clips the drawing to bbm (and to the area) */
     LONG bw, bh;
+    BOOL area;                      /* mui_canvas_update_area: only this zone (ax, ay from the corner; D67) */
+    LONG ax, ay, aw, ah;
 };
 
 static struct MUI_CustomClass *_dash_canvas_class = NULL;
@@ -10869,6 +10871,52 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         /* Buffered (D48): background and drawing in the buffer, at the same coordinates, and
            then one copy to the window, so a slow drawing is never seen half done. An update
            draws on the window as before. */
+        if (update && data->area && data->draw) {
+            /* mui_canvas_update_area (D67): only that zone. Buffered: the draw function on the buffer,
+               clipped to the zone, and that rectangle copied to the window (no flicker); else on the window,
+               clipped to it. The function gets the whole area as always; the clipping keeps it in the zone. */
+            struct RastPort *wrp = _DASH_MRI(obj)->mri_RastPort, *old = _dash_rp;
+            BOOL old_updating = _dash_canvas_updating;
+            LONG x = _DASH_MLEFT(obj), y = _DASH_MTOP(obj), w = _DASH_MWIDTH(obj), h = _DASH_MHEIGHT(obj);
+            LONG zx = x + data->ax, zy = y + data->ay, zw = data->aw, zh = data->ah;
+            struct Region *region = NULL, *old_region = NULL;
+            if (zx < x) { zw -= x - zx; zx = x; }
+            if (zy < y) { zh -= y - zy; zy = y; }
+            if (zx + zw > x + w) zw = x + w - zx;
+            if (zy + zh > y + h) zh = y + h - zy;
+            if (zw <= 0 || zh <= 0) return 0;
+            _dash_canvas_updating = TRUE;
+            if (data->buffered && data->bly && data->bly->rp->BitMap &&
+                data->bw >= _DASH_MAD(obj)->mad_Box.Left + _DASH_MAD(obj)->mad_Box.Width &&
+                data->bh >= _DASH_MAD(obj)->mad_Box.Top + _DASH_MAD(obj)->mad_Box.Height &&
+                (region = NewRegion()) != NULL) {
+                struct RastPort *brp = data->bly->rp;
+                struct Rectangle r;
+                r.MinX = zx; r.MinY = zy; r.MaxX = zx + zw - 1; r.MaxY = zy + zh - 1;
+                if (OrRectRegion(region, &r)) {
+                    SetFont(brp, wrp->Font);
+                    old_region = InstallClipRegion(data->bly, region);
+                    _dash_rp = brp;
+                    ((void (*)(LONG, LONG, LONG, LONG))data->draw)(x, y, w, h);
+                    _dash_rp = old;
+                    InstallClipRegion(data->bly, old_region);
+                    BltBitMapRastPort(data->bbm, zx, zy, wrp, zx, zy, zw, zh, 0xC0);
+                    DisposeRegion(region);
+                    _dash_canvas_updating = old_updating;
+                    return 0;
+                }
+                DisposeRegion(region);
+            }
+            {
+                APTR clip = MUI_AddClipping(_DASH_MRI(obj), zx, zy, zw, zh);
+                _dash_rp = wrp;
+                ((void (*)(LONG, LONG, LONG, LONG))data->draw)(x, y, w, h);
+                _dash_rp = old;
+                MUI_RemoveClipping(_DASH_MRI(obj), clip);
+            }
+            _dash_canvas_updating = old_updating;
+            return 0;
+        }
         if (!update && (flags & MADF_DRAWOBJECT) && data->buffered && data->draw &&
             (brp = _dash_canvas_buffer(data, _DASH_MRI(obj)->mri_RastPort,
                                        _DASH_MAD(obj)->mad_Box.Left + _DASH_MAD(obj)->mad_Box.Width,
@@ -11058,6 +11106,18 @@ static void _dash_mui_canvas_buffered(APTR obj, LONG on) {
     if (!data) return;
     data->buffered = on != 0;
     if (!on) _dash_canvas_unbuffer(data);
+}
+
+/* Only a zone of the area, now (D67): x, y from its corner. With mui_canvas_buffered the draw function paints the
+   buffer, clipped to the zone, and only that rectangle goes to the window; it must paint the whole zone, since
+   the rest of the zone in the buffer is what the last full drawing left there */
+static void _dash_mui_canvas_update_area(APTR obj, LONG x, LONG y, LONG w, LONG h) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data || w <= 0 || h <= 0) return;
+    data->area = TRUE;
+    data->ax = x; data->ay = y; data->aw = w; data->ah = h;
+    MUI_Redraw(obj, MADF_DRAWUPDATE);
+    data->area = FALSE;
 }
 
 /* Call the draw function now without clearing the area: it paints only what changed */

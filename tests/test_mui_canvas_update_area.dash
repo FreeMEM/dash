@@ -1,0 +1,78 @@
+# mui_canvas_update_area (dashweb D67): only a zone of a drawing area, now. The draw function paints the whole
+# area (as it is told: x, y, width, height of all of it) and only the zone changes, read on the window. With
+# mui_canvas_buffered it paints the buffer (not the window: no flicker) and only the zone is copied; without a
+# buffer it paints the window, clipped. mui_canvas_updating() is true there.
+# emu-needs: muimaster.library
+# expect-out: con búfer: dentro 2, fuera 1, en el búfer true, updating true
+# expect-out: sin búfer: dentro 2, fuera 1, en el búfer false, updating true
+# expect-out: fuera de la zona: nada
+# expect-out: fin
+
+
+var pluma: Int = 1
+var en_bufer: Bool = false
+var actualizando: Bool = false
+var llamadas: Int = 0
+
+# the pen of a pixel of the window (not of the buffer), from the area's corner
+@native func en_ventana(lienzo: Int, dx: Int, dy: Int) -> Int
+"""
+    struct MUI_RenderInfo *mri = muiRenderInfo((Object *)lienzo);
+    if (!mri || !mri->mri_Window) return -1;
+    return ReadPixel(mri->mri_Window->RPort, _DASH_MLEFT((Object *)lienzo) + dx, _DASH_MTOP((Object *)lienzo) + dy);
+"""
+end
+
+# the draw function is painting somewhere that is not the window's RastPort
+@native func dibuja_en_bufer(lienzo: Int) -> Bool
+"""
+    struct MUI_RenderInfo *mri = muiRenderInfo((Object *)lienzo);
+    return mri && mri->mri_Window && _dash_rp != mri->mri_Window->RPort;
+"""
+end
+
+var actual: Int = 0
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    llamadas = llamadas + 1
+    if mui_canvas_updating()
+        actualizando = true
+        en_bufer = dibuja_en_bufer(actual)
+    end
+    gfx_pen(pluma)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)    # all of it: the clipping keeps it in the zone
+end
+
+func prueba(nombre: String, lienzo: Int)
+    actual = lienzo
+    en_bufer = false
+    actualizando = false
+    pluma = 2
+    mui_canvas_update_area(lienzo, 10, 10, 20, 20)
+    Print nombre + ": dentro #{en_ventana(lienzo, 15, 15)}, fuera #{en_ventana(lienzo, 50, 50)}, en el búfer #{en_bufer}, updating #{actualizando}"
+    pluma = 1
+end
+
+Main
+    if mui_app_begin("Zona", "DASHAREA") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Zona", 0)
+            con = mui_canvas(120, 80)
+            sin = mui_canvas(120, 80)
+        mui_window_end()
+        mui_canvas_on_draw(con, pinta)
+        mui_canvas_on_draw(sin, pinta)
+        mui_canvas_buffered(con, true)
+        mui_window_open(win)
+        prueba("con búfer", con)
+        prueba("sin búfer", sin)
+        antes = llamadas
+        mui_canvas_update_area(con, 500, 500, 10, 10)       # outside the area: nothing to do
+        if llamadas == antes
+            Print "fuera de la zona: nada"
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

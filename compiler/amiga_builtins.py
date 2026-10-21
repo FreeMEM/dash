@@ -3536,6 +3536,14 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_update(${canvas})",
         description="Call the draw function now without clearing the area (it paints only what changed)"
     ),
+    "mui_canvas_update_area": BuiltinFunc(
+        name="mui_canvas_update_area",
+        params=["canvas", "x", "y", "w", "h"],
+        return_type="void",
+        c_template="_dash_mui_canvas_update_area(${canvas}, ${x}, ${y}, ${w}, ${h})",
+        description="Like mui_canvas_update, only the zone w x h at x, y of the area (from its corner): the drawing "
+                    "is clipped to it and, with mui_canvas_buffered, only it goes from the buffer to the window"
+    ),
     "mui_canvas_updating": BuiltinFunc(
         name="mui_canvas_updating",
         params=[],
