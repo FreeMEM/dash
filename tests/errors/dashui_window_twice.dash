@@ -1,0 +1,7 @@
+# expect: window name 'Mala' used twice
+# (it said "Symbol 'Mala' is already defined" at a line of the code made from it; v14)
+import "../lib/ventana_dos_iguales.dashui"
+
+Main
+    v = Mala_create()
+end

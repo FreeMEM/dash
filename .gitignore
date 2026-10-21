@@ -36,3 +36,6 @@ CLAUDE.md
 # OS
 .DS_Store
 Thumbs.db
+
+# git worktrees of branches (git worktree add .worktrees/<name> <branch>)
+.worktrees/

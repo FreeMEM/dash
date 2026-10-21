@@ -1,18 +1,28 @@
 {
   "name": "dash-mui-editor",
-  "displayName": "Dash (Amiga) and MUI editor",
-  "description": "Dash language support for Amiga development: syntax highlighting, compile and run in FS-UAE, and a visual editor for MUI windows (.dashui).",
-  "version": "0.1.0",
+  "displayName": "Dash for Amiga",
+  "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
+  "version": "0.2.1",
   "publisher": "FreeMEM",
+  "author": {
+    "name": "Francisco Antonio Tapias Bravo",
+    "url": "https://github.com/FreeMEM"
+  },
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.86.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Debuggers",
+    "Snippets",
+    "Formatters",
+    "Linters"
   ],
-  "main": "./extension.js",
-  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.dashui"
+  ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
@@ -21,11 +31,22 @@
         "dash.path",
         "dash.emulator.kickstart",
         "dash.emulator.system",
-        "dash.emulator.muiSystem"
+        "dash.emulator.muiSystem",
+        "dash.python",
+        "dash.emulator.kickstartA500",
+        "dash.emulator.kickstart32",
+        "dash.emulator.system32",
+        "dash.emulator.systemRtg",
+        "dash.debug.gdb"
       ]
     }
   },
   "contributes": {
+    "configurationDefaults": {
+      "[dash]": {
+        "files.autoGuessEncoding": true
+      }
+    },
     "languages": [
       {
         "id": "dash",
@@ -36,7 +57,11 @@
         "extensions": [
           ".dash"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./media/dash-file.svg",
+          "dark": "./media/dash-file.svg"
+        }
       },
       {
         "id": "json",
@@ -58,17 +83,70 @@
     "commands": [
       {
         "command": "dash.compile",
-        "title": "Dash: Compilar",
-        "category": "Dash"
+        "title": "Compilar",
+        "category": "Dash",
+        "icon": "$(tools)"
       },
       {
         "command": "dash.runInEmulator",
-        "title": "Dash: Ejecutar en emulador",
-        "category": "Dash"
+        "title": "Ejecutar en emulador",
+        "category": "Dash",
+        "icon": "$(play)"
       },
       {
         "command": "dash.newWindowFile",
-        "title": "Dash: Nuevo fichero de ventanas MUI (.dashui)",
+        "title": "Nuevo fichero de ventanas MUI (.dashui)",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.newline",
+        "title": "Nueva línea (con end)",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.restartLanguageServer",
+        "title": "Reiniciar el servidor de lenguaje",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.runMemcheck",
+        "title": "Ejecutar con comprobación de memoria",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.runProfile",
+        "title": "Ejecutar con perfil",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.chooseMachine",
+        "title": "Elegir la máquina del emulador",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.debug",
+        "title": "Depurar en el Amiga",
+        "category": "Dash",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "dash.prepareAmiga",
+        "title": "Preparar para un Amiga real",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.gotoEvent",
+        "title": "Ir al código del evento",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.newProject",
+        "title": "Nuevo proyecto",
+        "category": "Dash"
+      },
+      {
+        "command": "dash.choosePath",
+        "title": "Elegir la carpeta del compilador",
         "category": "Dash"
       }
     ],
@@ -77,7 +155,22 @@
         {
           "command": "dash.runInEmulator",
           "when": "resourceLangId == dash",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "dash.debug",
+          "when": "resourceLangId == dash",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "dash.newline",
+          "when": "false"
+        },
+        {
+          "command": "dash.gotoEvent",
+          "when": "false"
         }
       ]
     },
@@ -108,6 +201,82 @@
           "type": "string",
           "default": "",
           "description": "Ficheros de Workbench con MUI para \"Ver en Amiga\" (DASH_EMU_SYS_MUI; se hacen con tools/emu_sys_mui.sh)."
+        },
+        "dash.editor.autoEnd": {
+          "type": "boolean",
+          "default": true,
+          "description": "Al pulsar Enter tras una línea que abre un bloque (func, if, while, struct, Main...) se añade su end si aún no lo tiene."
+        },
+        "dash.languageServer.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Errores mientras se escribe y, más adelante, autocompletado y navegación: el servidor de lenguaje del compilador Dash (python3 -m compiler.lsp). Solo en carpetas de confianza."
+        },
+        "dash.python": {
+          "type": "string",
+          "default": "python3",
+          "description": "El Python con el que corre el servidor de lenguaje (el mismo que usa ./dash; necesita lark)."
+        },
+        "dash.emulator.machine": {
+          "type": "string",
+          "default": "a1200",
+          "enum": [
+            "a1200",
+            "a500",
+            "a1200-32",
+            "rtg"
+          ],
+          "enumDescriptions": [
+            "A1200 con Kickstart 3.1 (dash.emulator.kickstart, dash.emulator.system)",
+            "A500, 68000, Kickstart 3.1 (dash.emulator.kickstartA500)",
+            "A1200 con AmigaOS 3.2 (dash.emulator.kickstart32, dash.emulator.system32)",
+            "68040 con tarjeta gráfica (Picasso96), AmigaOS 3.2 (dash.emulator.systemRtg)"
+          ],
+          "description": "Máquina en la que se ejecutan los programas (también en la barra de estado). Se puede fijar por proyecto (.vscode/settings.json)."
+        },
+        "dash.emulator.program": {
+          "type": "string",
+          "default": "fs-uae",
+          "enum": [
+            "fs-uae",
+            "amiberry"
+          ],
+          "description": "Emulador: FS-UAE o Amiberry (A1200 y A500; su bsdsocket da sucesos de sockets: net_signal)."
+        },
+        "dash.emulator.window": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ver la ventana del emulador (y oírlo). Sin ella corre oculto, como en los tests."
+        },
+        "dash.emulator.kickstartA500": {
+          "type": "string",
+          "default": "",
+          "description": "ROM de Kickstart 3.1 de A500 (DASH_KICKSTART_A500)."
+        },
+        "dash.emulator.kickstart32": {
+          "type": "string",
+          "default": "",
+          "description": "ROM de Kickstart 3.2 de A1200 (DASH_KICKSTART_32)."
+        },
+        "dash.emulator.system32": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de un Workbench 3.2 (DASH_EMU_SYS_32)."
+        },
+        "dash.emulator.systemRtg": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de un Workbench 3.2 con Picasso96 (DASH_EMU_SYS_32_RTG; tools/emu_sys_rtg.sh de dashweb)."
+        },
+        "dash.debug.gdb": {
+          "type": "string",
+          "default": "/opt/amiga/bin/m68k-amigaos-gdb",
+          "description": "El gdb de m68k-amigaos (con Python: hace de adaptador de depuración, -i=dap)."
+        },
+        "dash.emulator.muiSystem32": {
+          "type": "string",
+          "default": "",
+          "description": "Ficheros de Workbench 3.2 con MUI para \"Ver en Amiga\" en la máquina A1200 (3.2) (DASH_EMU_SYS_32_MUI; tools/emu_sys_mui.sh)."
         }
       }
     },
@@ -122,14 +291,261 @@
         ],
         "priority": "default"
       }
+    ],
+    "snippets": [
+      {
+        "language": "dash",
+        "path": "./snippets/dash.json"
+      }
+    ],
+    "keybindings": [
+      {
+        "key": "enter",
+        "command": "dash.newline",
+        "when": "editorTextFocus && editorLangId == dash && !suggestWidgetVisible && !inSnippetMode && !editorHasMultipleSelections && !editorReadonly && !inlineSuggestionVisible"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "dash",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": [
+              "compile",
+              "run",
+              "memcheck",
+              "profile"
+            ],
+            "description": "compile, run (en el emulador), memcheck (con --memcheck) o profile (con --profile)"
+          },
+          "file": {
+            "type": "string",
+            "description": "El .dash (por defecto el abierto: ${file})"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "dash",
+        "owner": "dash",
+        "source": "dash",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d+):\\s+(Error|Warning):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      },
+      {
+        "name": "dash-memcheck",
+        "owner": "dash",
+        "source": "dash --memcheck",
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^memcheck: ERROR (.*) \\(en (.*):(\\d+)\\)$",
+          "message": 1,
+          "file": 2,
+          "line": 3
+        },
+        "severity": "error"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "dash"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "dash",
+        "label": "Dash (Amiga)",
+        "languages": [
+          "dash"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "default": "${file}",
+                "description": "El .dash que se depura (se compila con ./dash --debug)."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false,
+                "description": "Parar al empezar el programa."
+              },
+              "machine": {
+                "type": "string",
+                "enum": [
+                  "a1200",
+                  "a500",
+                  "a1200-32",
+                  "rtg"
+                ],
+                "description": "Máquina (por defecto dash.emulator.machine)."
+              },
+              "emulator": {
+                "type": "string",
+                "enum": [
+                  "fs-uae",
+                  "amiberry"
+                ],
+                "description": "Emulador (por defecto dash.emulator.program)."
+              },
+              "window": {
+                "type": "boolean",
+                "default": true,
+                "description": "Ver la ventana del emulador."
+              }
+            }
+          },
+          "attach": {
+            "required": [
+              "target",
+              "program"
+            ],
+            "properties": {
+              "target": {
+                "type": "string",
+                "default": "amiga.local:2345",
+                "description": "host:puerto de un bgdbserver ya en marcha (un Amiga real, por ejemplo)."
+              },
+              "program": {
+                "type": "string",
+                "description": "El ejecutable compilado con ./dash --debug (sus símbolos), o el .dash (entonces bin/<nombre>.debug, como lo deja \"Dash: Preparar para un Amiga real\")."
+              },
+              "relay": {
+                "type": "boolean",
+                "default": true,
+                "description": "gdb pasa por tools/gdb_relay.py, que corrige dónde están las variables globales (false: directo a target)."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false,
+                "description": "Parar al empezar el programa."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "dash",
+            "request": "launch",
+            "name": "Depurar en el Amiga",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Dash: depurar en el Amiga emulado",
+            "description": "Compila con --debug y lo depura en FS-UAE o Amiberry",
+            "body": {
+              "type": "dash",
+              "request": "launch",
+              "name": "Depurar en el Amiga",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "Dash: depurar en un Amiga real (bgdbserver)",
+            "description": "Se conecta a bgdbserver por la red (antes: Dash: Preparar para un Amiga real)",
+            "body": {
+              "type": "dash",
+              "request": "attach",
+              "name": "Amiga real",
+              "target": "amiga.local:2345",
+              "program": "^\"\\${workspaceFolder}/programa.dash\""
+            }
+          }
+        ]
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "dash.start",
+        "title": "Primeros pasos con Dash",
+        "description": "Programas para el Amiga en Dash: un proyecto con su ventana MUI, el emulador y el depurador.",
+        "steps": [
+          {
+            "id": "compilador",
+            "title": "Dónde está el compilador",
+            "description": "Si tus programas no están dentro del repositorio de Dash, elige su carpeta.\n[Elegir la carpeta de Dash](command:dash.choosePath)",
+            "media": {
+              "markdown": "walkthrough/compilador.md"
+            },
+            "completionEvents": [
+              "onContext:dash.compilerFound",
+              "onSettingChanged:dash.path",
+              "onCommand:dash.choosePath"
+            ]
+          },
+          {
+            "id": "proyecto",
+            "title": "Un proyecto nuevo",
+            "description": "Una carpeta con un programa, su ventana y la configuración del depurador.\n[Nuevo proyecto](command:dash.newProject)",
+            "media": {
+              "markdown": "walkthrough/proyecto.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.newProject"
+            ]
+          },
+          {
+            "id": "ventana",
+            "title": "La ventana, en el editor visual",
+            "description": "Abre ventana.dashui: objetos, propiedades, Ver en Amiga y del evento a su código.\n[Nuevo fichero de ventanas](command:dash.newWindowFile)",
+            "media": {
+              "markdown": "walkthrough/ventana.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.newWindowFile",
+              "onCommand:dash.gotoEvent"
+            ]
+          },
+          {
+            "id": "ejecutar",
+            "title": "Ejecutar y depurar en el Amiga emulado",
+            "description": "Compila, ejecuta en FS-UAE y depura con F5.\n[Ejecutar en emulador](command:dash.runInEmulator)\n[Depurar](command:dash.debug)",
+            "media": {
+              "markdown": "walkthrough/ejecutar.md"
+            },
+            "completionEvents": [
+              "onCommand:dash.runInEmulator",
+              "onCommand:dash.debug",
+              "onCommand:dash.compile"
+            ]
+          }
+        ]
+      }
     ]
   },
   "scripts": {
     "test": "node test/run.js",
-    "package": "vsce package --no-dependencies"
+    "package": "npm run build -- --minify && vsce package --no-dependencies",
+    "test:vscode": "npm run build && sh test/integration/run.sh",
+    "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --target=node18 --outfile=dist/extension.js"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.2",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   },
@@ -137,5 +553,27 @@
     "type": "git",
     "url": "https://github.com/FreeMEM/dash.git",
     "directory": "editor/vscode"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1f2d5c",
+    "theme": "dark"
+  },
+  "keywords": [
+    "amiga",
+    "dash",
+    "mui",
+    "fs-uae",
+    "68k",
+    "retro",
+    "amigaos",
+    "workbench"
+  ],
+  "homepage": "https://github.com/FreeMEM/dash/tree/main/editor/vscode",
+  "bugs": {
+    "url": "https://github.com/FreeMEM/dash/issues"
   }
 }

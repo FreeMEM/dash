@@ -23,6 +23,14 @@ the assigns (MUI: see tools/emu_sys_mui.sh).
 
     tools/emu_run.py --kickstart kick323.rom --system ~/.cache/dash-emu/sys32 --workbench prog.dash
 
+--machine a1200|a500|a1200-32|rtg takes the ROM, Workbench files and options of a machine of the
+test runner from its variables ($DASH_KICKSTART_A500, $DASH_EMU_SYS_32...); --emulator amiberry runs
+it in Amiberry (A1200, A500) instead of FS-UAE; --window shows the emulator's window (no time limit);
+--follow prints the programs' output while they run (and compiles .dash with DASH_PRINT_FLUSH=1, so
+each Print goes out at once). The VS Code extension runs programs this way.
+
+    tools/emu_run.py --machine a500 --window --follow prog.dash
+
 --workbench runs C:LoadWB from those files before the programs, as on a real Amiga:
 in AmigaOS 3.2 window.class (ReAction) waits for the Workbench when it is opened.
 
@@ -64,6 +72,27 @@ uae_sound_output = interrupts
 automatic_input_grab = 0
 uae_cpu_speed = max
 {kickstart}"""
+
+
+# --machine: the emulated machines of the test runner, each with its ROM and Workbench files from the
+# environment (the same variables as tests/run_tests.py) and its FS-UAE options
+MACHINES = {
+    "a1200": dict(rom="DASH_KICKSTART", system="DASH_EMU_SYS", config="", workbench=False, model="A1200"),
+    "a500": dict(rom="DASH_KICKSTART_A500", system="DASH_EMU_SYS", config="amiga_model = A500\n",
+                 workbench=False, model="A500"),
+    "a1200-32": dict(rom="DASH_KICKSTART_32", system="DASH_EMU_SYS_32", config="", workbench=True, model="A1200"),
+    "rtg": dict(rom="DASH_KICKSTART_32", system="DASH_EMU_SYS_32_RTG", workbench=False, model="A1200",
+                config="cpu = 68040\nfpu = 68040\njit_compiler = 1\nuae_cpu_speed = max\n"
+                       "zorro_iii_memory = 131072\ngraphics_card = uaegfx\n"),
+}
+
+
+FLUSH_PRINT = False      # set by --follow (compile_dash builds with DASH_PRINT_FLUSH)
+
+
+def _stop_on_signal(*_):
+    """Stopped from outside (a VS Code task, a terminal closed): the finally that kills the emulator runs."""
+    raise SystemExit(130)
 
 
 class EmuResults(list):
@@ -118,6 +147,8 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: 
     env = dict(os.environ)
     if autoclose:
         env["DASH_TEST_AUTOCLOSE"] = str(autoclose)
+    if FLUSH_PRINT:
+        env["DASH_PRINT_FLUSH"] = "1"          # --follow: each Print goes out at once
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0 or not exe.exists():
         raise RuntimeError(f"{src}: compile failed\n{result.stdout}{result.stderr}")
@@ -127,9 +158,12 @@ SHOT_SOURCE = Path(__file__).resolve().parent / "amiga" / "shot.c"
 
 
 def shot_tool() -> Path:
-    """tools/amiga/shot.c built with the Amiga toolchain (cached next to the emulator files)."""
-    exe = Path(os.path.expanduser("~/.cache/dash-emu/shot"))
-    if not exe.exists() or exe.stat().st_mtime < SHOT_SOURCE.stat().st_mtime:
+    """tools/amiga/shot.c built with the Amiga toolchain (cached next to the emulator files, by the
+    source's hash: other checkouts may have another version)."""
+    import hashlib
+    key = hashlib.sha1(SHOT_SOURCE.read_bytes()).hexdigest()[:12]
+    exe = Path(os.path.expanduser(f"~/.cache/dash-emu/shot_{key}"))
+    if not exe.exists():
         exe.parent.mkdir(parents=True, exist_ok=True)
         gcc = "/opt/amiga/bin/m68k-amigaos-gcc"
         build = subprocess.run([gcc, "-O2", "-noixemul", "-o", str(exe), str(SHOT_SOURCE)],
@@ -150,15 +184,48 @@ def _ppm_complete(ppm: Path) -> bool:
         return False
 
 
-def ppm_to_png(ppm: Path, png: Path):
-    """Binary PPM (P6) from shot.c to PNG, without extra Python packages."""
+def planar_complete(dsh: Path) -> bool:
+    """The planes of tools/amiga/shot.c (FILE.dsh) are all there."""
+    try:
+        data = dsh.read_bytes()
+        head, _, _ = data.partition(b"\n")
+        _, w, h, depth, bpr = head.split()
+        return len(data) == len(head) + 1 + 3 * (1 << int(depth)) + int(h) * int(depth) * int(bpr)
+    except (OSError, ValueError):
+        return False
+
+
+def planar_to_png(dsh: Path, png: Path):
+    """The planes and palette of tools/amiga/shot.c (FILE.dsh) to PNG."""
+    data = dsh.read_bytes()
+    head, _, rest = data.partition(b"\n")
+    _, w, h, depth, bpr = (int(x) if x.isdigit() else x for x in head.split())
+    n = 1 << depth
+    pal = rest[:3 * n]
+    planes = rest[3 * n:]
+    # each pixel's colour index from its bit in each plane, a byte of 8 pixels at a time
+    spread = [bytes(((b >> (7 - i)) & 1) for i in range(8)) for b in range(256)]
+    rows = bytearray()
+    for y in range(h):
+        index = bytearray(bpr * 8)
+        base = y * depth * bpr
+        for plane in range(depth):
+            bits = planes[base + plane * bpr: base + (plane + 1) * bpr]
+            weight = 1 << plane
+            row = b"".join(spread[b] for b in bits)
+            for x, v in enumerate(row):
+                if v:
+                    index[x] += weight
+        rows.append(0)
+        for i in index[:w]:
+            rows += pal[3 * i: 3 * i + 3]
+    _write_png(png, w, h, bytes(rows))
+
+
+def _write_png(png: Path, width: int, height: int, rows: bytes):
+    """RGB rows, each with its filter byte (0) first, as a PNG, without extra Python packages."""
     import struct
     import zlib
-    data = ppm.read_bytes()
-    parts = data.split(b"\n", 3)
-    width, height = map(int, parts[1].split())
-    pixels = parts[3]
-    rows = b"".join(b"\0" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height))
 
     def chunk(kind, body):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xffffffff)
@@ -166,20 +233,76 @@ def ppm_to_png(ppm: Path, png: Path):
                     + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
 
 
+def ppm_to_png(ppm: Path, png: Path):
+    """Binary PPM (P6) from shot.c to PNG."""
+    data = ppm.read_bytes()
+    parts = data.split(b"\n", 3)
+    width, height = map(int, parts[1].split())
+    pixels = parts[3]
+    _write_png(png, width, height, b"".join(b"\0" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height)))
+
+
+def _free_port():
+    """A free port of the PC under 32768 (bgdbserver takes it as a signed 16-bit number)."""
+    import random
+    import socket
+    for _ in range(200):
+        port = random.randint(20000, 32000)
+        with socket.socket() as s:
+            try:
+                s.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise RuntimeError("no free port for bgdbserver")
+
+
+def _wait_listening(port, timeout=600):
+    """Until something listens on this port of the PC (read from /proc: a connection would take
+    bgdbserver's only one)."""
+    hexport = ":%04X" % port
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for name in ("/proc/net/tcp", "/proc/net/tcp6"):
+            try:
+                rows = Path(name).read_text().splitlines()[1:]
+            except OSError:
+                continue
+            if any(len(c) > 3 and c[1].endswith(hexport) and c[3] == "0A" for c in (r.split() for r in rows)):
+                return
+        time.sleep(0.1)
+
+
+def time_limit(args, argv) -> float:
+    """The seconds a run may last (0: no limit). --timeout if it is given; else 60, but no limit with the window
+    or a debugger (--gdbserver): someone is there, and a debug session lasts what it lasts."""
+    if any(a == "--timeout" or a.startswith("--timeout=") for a in argv):
+        return args.timeout
+    return 0 if args.window or args.gdbserver else args.timeout
+
+
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  kickstart: str = None, autoclose: int = 0, extra_config: str = "",
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
-                 debug: list = None):
+                 debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
+                 model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
     started with Run before the programs, e.g. one that clicks in their windows; their
     output goes to DH0:bg<i>.txt (keep= to read it). debug: commands for FS-UAE's debugger
     when a program calls debug_break() (see --debug). Returns one EmuResult per program, in
-    order, in an EmuResults list (.debugger: the debugger's text)."""
-    if not shutil.which("fs-uae"):
-        raise RuntimeError("fs-uae not found")
+    order, in an EmuResults list (.debugger: the debugger's text). window: the emulator's window
+    on the screen (and its sound), not hidden; follow(index, text): called with what each program
+    writes while it runs. emulator: "fs-uae" or "amiberry" (model A1200 or A500; its own options,
+    so extra_config, screenshots and debug are FS-UAE's only). on_disk(hd): called with the emulated
+    disk's directory (DH0: on the PC) once it is ready, before the emulator starts: to add files there and
+    talk to the programs through it while they run (tools/emu_preview.py)."""
+    if not shutil.which(emulator):
+        raise RuntimeError(f"{emulator} not found")
+    if emulator == "amiberry" and (debug is not None or screenshot or extra_config.strip()):
+        raise RuntimeError("amiberry: --debug, --screenshot and FS-UAE options (--set, --machine rtg) need FS-UAE")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
         tmp = Path(tmp)
         hd = tmp / "hd"
@@ -193,6 +316,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             (hd / drawer).mkdir(parents=True)
         lines = []
         names = []
+        inner_port = (_free_port() if relay else gdbserver) if gdbserver else 0
         system = system or os.environ.get("DASH_EMU_SYS")
         if system:
             if not Path(system).is_dir():
@@ -252,20 +376,58 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 shutil.copy(prog, exe)
             names.append(prog.name)
             extra = f" {args[i]}" if args and i < len(args) and args[i] else ""   # Shell arguments
-            lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
+            if gdbserver and i == 0:
+                # the first program under bgdbserver (tools/get_bgdbserver.sh): gdb connects to this port
+                # of the PC (the emulator's bsdsocket uses the PC's sockets) and runs it
+                # bgdbserver gives the program the boot console: a ./dash --debug program writes where
+                # DASH_OUT says instead (the disk of the PC: --follow reads it)
+                lines.append('Echo >ENV:DASH_OUT "DH0:dashout.txt" NOLINE')
+                # bgdbserver listens on a port of its own; gdb's goes through tools/gdb_relay.py (globals)
+                lines.append(f"C:bgdbserver :{inner_port} DH0:p{i}{extra} >DH0:out{i}.txt")
+            else:
+                lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
             lines.append(f'Echo "$RC" >DH0:rc{i}.txt')
+        if gdbserver and relay:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from gdb_relay import relay as start_relay
+            threading.Thread(target=start_relay, args=(gdbserver, "127.0.0.1", inner_port, hd / "p0",
+                                                       lambda: _wait_listening(inner_port)), daemon=True).start()
+        if gdbserver:
+            server = Path(os.environ.get("DASH_BGDBSERVER", Path.home() / ".cache/dash-debug/x/bgdbserver/bgdbserver"))
+            if not server.is_file():
+                raise RuntimeError(f"bgdbserver not found: {server} (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)")
+            (hd / "C").mkdir(exist_ok=True)
+            shutil.copy(server, hd / "C" / "bgdbserver")
+            if emulator == "fs-uae" and "bsdsocket_library" not in extra_config:
+                extra_config += "bsdsocket_library = 1\n"
         lines.append('Echo "fin" >DH0:done.txt')
         (hd / "S" / "Startup-Sequence").write_text("\n".join(lines) + "\n")
+        if on_disk is not None:
+            on_disk(hd)
         config = tmp / "run.fs-uae"
         kickstart = kickstart or os.environ.get("DASH_KICKSTART")
         if kickstart and not Path(kickstart).is_file():
             raise RuntimeError(f"Kickstart ROM not found: {kickstart}")
         ks_line = f"kickstart_file = {kickstart}\n" if kickstart else ""
-        config.write_text(FSUAE_CONFIG.format(hd=hd, kickstart=ks_line) + extra_config)
+        base = FSUAE_CONFIG.format(hd=hd, kickstart=ks_line)
+        if window:   # to be seen and heard
+            base = base.replace("volume = 0\n", "").replace("floppy_drive_volume = 0\n", "floppy_drive_volume = 0\n")
+        config.write_text(base + extra_config)
 
-        env = dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
+        env = dict(os.environ) if window else \
+            dict(os.environ, SDL_VIDEODRIVER="offscreen", SDL_AUDIODRIVER="dummy", ALSOFT_DRIVERS="null")
         transcript = []
-        if debug is not None:   # the debugger talks on FS-UAE's stdin/stdout
+        if threading.current_thread() is threading.main_thread():   # (tools/emu_preview.py runs it in a thread)
+            for sig in (signal.SIGTERM, signal.SIGHUP):
+                signal.signal(sig, _stop_on_signal)
+        if emulator == "amiberry":
+            if not kickstart:
+                raise RuntimeError("amiberry needs a Kickstart ROM (--kickstart or the machine's variable)")
+            proc = subprocess.Popen(["amiberry", "-G", "--model", model, "-r", kickstart,
+                                     "-s", f"filesystem2=rw,DH0:DH0:{hd},10", "-s", "bsdsocket_emu=true",
+                                     "-s", "fastmem_size=8"], cwd=tmp, env=env, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        elif debug is not None:   # the debugger talks on FS-UAE's stdin/stdout
             proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env,
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     start_new_session=True)
@@ -277,11 +439,23 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                     start_new_session=True)
         try:
-            deadline = time.time() + timeout
+            deadline = time.time() + (timeout if timeout and timeout > 0 else 10 ** 9)
+            shown = [0] * len(names)
+            def follow_outputs():
+                for i in range(len(names)):
+                    out_file = hd / ("dashout.txt" if gdbserver and i == 0 else f"out{i}.txt")
+                    if follow is not None and out_file.exists():
+                        data = out_file.read_bytes()
+                        if len(data) > shown[i]:
+                            follow(i, data[shown[i]:].decode("latin-1"))
+                            shown[i] = len(data)
             while time.time() < deadline and not (hd / "done.txt").exists():
                 if proc.poll() is not None:
                     break
+                follow_outputs()
                 time.sleep(0.2)
+            time.sleep(0.3)
+            follow_outputs()
             # screenshots still to come or being written: wait for them (a picture taken after the
             # programs ended shows the screen without them, but it is what was asked for)
             while time.time() < deadline and proc.poll() is None and \
@@ -343,23 +517,58 @@ def main():
                              "(repeatable; then \"g\": see the help at the top of this file)")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                         help="extra FS-UAE option, e.g. --set amiga_model=A500 (repeatable)")
+    parser.add_argument("--machine", choices=sorted(MACHINES),
+                        help="an emulated machine of the test runner: its ROM and Workbench files from "
+                             "$DASH_KICKSTART(_A500/_32) and $DASH_EMU_SYS(_32/_32_RTG), and its options")
+    parser.add_argument("--emulator", choices=["fs-uae", "amiberry"], default="fs-uae",
+                        help="amiberry: its own bsdsocket (with socket events), A1200 or A500 only")
+    parser.add_argument("--window", action="store_true",
+                        help="show the emulator's window (and play its sound); no time limit unless --timeout")
+    parser.add_argument("--follow", action="store_true", help="print what the programs write while they run")
+    parser.add_argument("--gdbserver", type=int, metavar="PORT",
+                        help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
+                             "connects with target remote :PORT (build it with ./dash --debug; tools/gdb_relay.py "
+                             "in between, so gdb finds the globals); no time limit unless --timeout")
+    parser.add_argument("--no-relay", action="store_true",
+                        help="with --gdbserver: bgdbserver itself on PORT, as on a real Amiga (gdb then needs "
+                             "tools/gdb_relay.py in between for the globals; the VS Code extension puts it)")
     args = parser.parse_args()
+    machine = MACHINES.get(args.machine) if args.machine else None
+    kickstart = args.kickstart or (os.environ.get(machine["rom"]) if machine else None)
+    system = args.system or (os.environ.get(machine["system"]) if machine else None)
+    if machine and not kickstart:
+        print(f"--machine {args.machine} needs ${machine['rom']} (or --kickstart)", file=sys.stderr)
+        return 2
+    timeout = time_limit(args, sys.argv)
+    global FLUSH_PRINT
+    FLUSH_PRINT = args.follow
+    follow = None
+    if args.follow:
+        def follow(i, text):
+            sys.stdout.write(text)
+            sys.stdout.flush()
     try:
-        results = run_programs(args.programs, args.timeout, args.opt, args.kickstart,
+        results = run_programs(args.programs, timeout, args.opt, kickstart,
                                args.autoclose,
+                               (machine["config"] if machine else "") +
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
-                               args.keep, args.fpu, args.system, args.workbench, args.screenshot,
-                               debug=args.debug)
+                               args.keep, args.fpu, system, args.workbench or bool(machine and machine["workbench"]),
+                               args.screenshot, debug=args.debug, window=args.window, follow=follow,
+                               emulator=args.emulator, model=machine["model"] if machine else "A1200",
+                               gdbserver=args.gdbserver or 0, relay=not args.no_relay)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
     failed = 0
     for r in results:
         status = "TIMEOUT" if r.timed_out else f"RC={r.rc}"
-        print(f"=== {r.name}: {status}")
-        if r.output:
-            print(r.output, end="" if r.output.endswith("\n") else "\n")
+        if args.follow:                      # the output is already out
+            print(f"=== {r.name}: {status}")
+        else:
+            print(f"=== {r.name}: {status}")
+            if r.output:
+                print(r.output, end="" if r.output.endswith("\n") else "\n")
         if r.timed_out or r.rc != 0:
             failed += 1
     if args.debug is not None:

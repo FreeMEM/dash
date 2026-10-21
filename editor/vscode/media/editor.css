@@ -1,24 +1,43 @@
 /* .dashui editor: VS Code colours for the tool panes, an Amiga/MUI look for the preview */
 body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif); font-size: 13px;
        color: var(--vscode-foreground, #ccc); background: var(--vscode-editor-background, #1e1e1e); }
-#layout { display: grid; grid-template-columns: 160px 1fr 260px;
+#layout { display: grid; grid-template-columns: minmax(110px, 160px) minmax(180px, 1fr) minmax(190px, 260px);
           grid-template-rows: auto minmax(100px, 32vh) 1fr auto; height: 100vh; }
 #palette { grid-column: 1; grid-row: 2 / 4; }
 #tree { grid-column: 2; grid-row: 2; border-bottom: 1px solid var(--vscode-panel-border, #444); }
 #props { grid-column: 3; grid-row: 2 / 4; }
 #windows { grid-column: 1 / 4; display: flex; gap: 4px; padding: 4px; border-bottom: 1px solid var(--vscode-panel-border, #444); }
+/* the editor's own buttons and fields with the colours of VS Code's theme (not the browser's white ones) */
+#layout > #windows button, #props button, #props input, #props select {
+    font: inherit; color: var(--vscode-input-foreground, #ccc); background: var(--vscode-input-background, #3c3c3c);
+    border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, #555)); border-radius: 2px; padding: 2px 6px; }
+#layout > #windows button, #props button {
+    color: var(--vscode-button-secondaryForeground, #ccc); background: var(--vscode-button-secondaryBackground, #3a3d41); cursor: pointer; }
+#layout > #windows button:hover, #props button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+#windows #amiga { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+#windows #amiga:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+#props input:focus, #props select:focus, #layout button:focus-visible { outline: 1px solid var(--vscode-focusBorder, #07f); outline-offset: -1px; }
+#props input[type=checkbox] { padding: 0; }
+#props button:disabled { opacity: 0.5; cursor: default; }
 #windows button.active { font-weight: bold; text-decoration: underline; }
 #windows #amiga { margin-left: auto; }
 #windows #amiga:disabled { opacity: 0.7; cursor: progress; }
 #amiga-note { align-self: center; font-size: 0.9em; color: var(--vscode-descriptionForeground, #aaa); }
 #amiga-note.error { color: var(--vscode-errorForeground, #f48771); }
 #palette, #tree, #props { overflow: auto; padding: 4px; border-right: 1px solid var(--vscode-panel-border, #444); }
-.palette-item { padding: 3px 6px; margin: 2px 0; cursor: grab; border-radius: 3px;
-                background: var(--vscode-button-secondaryBackground, #333); }
+.palette-item { display: block; width: 100%; text-align: left; padding: 3px 6px; margin: 2px 0; cursor: grab;
+                border: none; border-radius: 3px; font: inherit;
+                color: var(--vscode-button-secondaryForeground, #ccc); background: var(--vscode-button-secondaryBackground, #333); }
+.palette-item:focus-visible { outline: 1px solid var(--vscode-focusBorder, #07f); }
 .palette-item.group { font-style: italic; }
 .tree-row { padding: 2px 4px; cursor: pointer; white-space: nowrap; }
 .tree-row.selected { background: var(--vscode-list-activeSelectionBackground, #094771); }
-.tree-row.drop { outline: 1px dashed var(--vscode-focusBorder, #07f); }
+.tree-row:focus { outline: 1px solid var(--vscode-focusBorder, #07f); outline-offset: -1px; }
+.drop-into { outline: 2px dashed var(--vscode-focusBorder, #07f); outline-offset: -2px; }
+.drop-before { box-shadow: inset 0 2px 0 var(--vscode-focusBorder, #07f); }
+.drop-after { box-shadow: inset 0 -2px 0 var(--vscode-focusBorder, #07f); }
+.mui-hgroup > .drop-before { box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #07f); }
+.mui-hgroup > .drop-after { box-shadow: inset -2px 0 0 var(--vscode-focusBorder, #07f); }
 .prop { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
 .prop label { width: 80px; flex: none; }
 .prop input[type=text], .prop input[type=number], .prop input:not([type]) { flex: 1; min-width: 0; }
@@ -57,3 +76,11 @@ body.invalid #layout { display: none; } body.invalid #error { display: block; }
 .mui-window .selected { outline: 2px solid #f60; outline-offset: 1px; }
 .mui-window .hidden { opacity: 0.35; }
 .mui-window .disabled { filter: grayscale(1) opacity(0.6); }
+
+/* narrow (the editor beside the .dash, half the screen): the tree had 40 px; the properties go under it all */
+@media (max-width: 720px) {
+    #layout { grid-template-columns: 110px 1fr; grid-template-rows: auto minmax(90px, 28vh) 1fr minmax(110px, 34vh) auto; }
+    #windows, #problems { grid-column: 1 / 3; }
+    #props { grid-column: 1 / 3; grid-row: 4; border-top: 1px solid var(--vscode-panel-border, #444); }
+    #problems { grid-row: 5; }
+}

@@ -12,6 +12,32 @@ import re
 VERSION = 1
 
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_NAME_RULE = "letters without accents, digits and _, not starting with a digit"
+
+
+# words of "On Click", "On Key"...: names like any other where they are not after On
+_EVENT_WORDS = {"Click", "Close", "Gadget", "Key", "Menu", "On", "Timer"}
+
+
+def reserved():
+    """Words of the language (the editor's media/model.js has the same list): an object or window called "end"
+    broke the code made here"""
+    from compiler import lsp_index
+    return {w for w in lsp_index.keywords() if not w.startswith("@")} - _EVENT_WORDS
+
+
+def _check_name(name, what, where):
+    if not isinstance(name, str) or not _IDENT.match(name):
+        raise DashUIError(f"{where}: bad {what} name {name!r} ({_NAME_RULE})")
+    if name in reserved():
+        raise DashUIError(f"{where}: {what} name {name!r} is a word of the language")
+
+
+def _int(value, what, where):
+    """A whole number of the file ("event": "uno" ended in a Python error)"""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DashUIError(f"{where}: {what} must be a whole number, not {value!r}")
+    return value
 
 # type -> (builtin, positional properties with defaults) for leaf objects
 _LEAVES = {
@@ -94,8 +120,9 @@ class _Window:
     def var_for(self, node: dict, needs_var: bool) -> str:
         name = node.get("name")
         if name:
-            if not isinstance(name, str) or not _IDENT.match(name) or name == "window":
-                raise DashUIError(f"{self.where}: bad object name {name!r}")
+            if name == "window":
+                raise DashUIError(f"{self.where}: object name 'window' is the window's own")
+            _check_name(name, "object", self.where)
             if name in self.fields:
                 raise DashUIError(f"{self.where}: object name {name!r} used twice")
             self.fields.append(name)
@@ -123,9 +150,9 @@ class _Window:
         call = f"{builtin}({args})"
         self.lines.append(f"{indent}{var} = {call}" if var else f"{indent}{call}")
         for k in events:
-            self.after.append(f"    {_EVENTS[k]}({var}, {int(node[k])})")
+            self.after.append(f"    {_EVENTS[k]}({var}, {_int(node[k], repr(k), self.where)})")
         if "weight" in node:
-            self.after.append(f"    mui_weight({var}, {int(node['weight'])})")
+            self.after.append(f"    mui_weight({var}, {_int(node['weight'], 'weight', self.where)})")
         if node.get("disabled"):
             self.after.append(f"    mui_set_enabled({var}, false)")
         if node.get("hidden"):
@@ -142,10 +169,9 @@ class _Window:
     def generate(self) -> str:
         win = self.win
         name = win.get("name")
-        if not isinstance(name, str) or not _IDENT.match(name):
-            raise DashUIError(f"{self.where}: bad window name {name!r}")
+        _check_name(name, "window", self.where)
         title = win.get("title", name)
-        win_id = int(win.get("id", 0))
+        win_id = _int(win.get("id", 0), "id", self.where)
         self.lines.append(f"    _window = mui_window_begin({dash_string(title)}, {win_id})")
         for menu in win.get("menus", []):
             self.lines.append(f"        mui_menu_begin({dash_string(menu.get('title', ''))})")
@@ -154,7 +180,7 @@ class _Window:
                     self.lines.append("            mui_menu_separator()")
                 else:
                     self.lines.append(f"            mui_menu_item({dash_string(item.get('label', ''))}, "
-                                      f"{dash_string(item.get('key', ''))}, {int(item.get('event', 0))})")
+                                      f"{dash_string(item.get('key', ''))}, {_int(item.get('event', 0), 'a menu event', self.where)})")
             self.lines.append("        mui_menu_end()")
         root = win.get("root")
         if root:
@@ -167,7 +193,7 @@ class _Window:
                 self.node(root, 2)
         self.lines.append("    mui_window_end()")
         if "close" in win:
-            self.after.append(f"    mui_on_close(_window, {int(win['close'])})")
+            self.after.append(f"    mui_on_close(_window, {_int(win['close'], 'close', self.where)})")
         if "size" in win:
             # [width, height] in percent of the visible screen, when it opens (dashweb D38)
             size = win["size"]
@@ -190,6 +216,13 @@ def generate(source: str, filename: str = "<dashui>") -> str:
     if not isinstance(data, dict) or data.get("dashui") != VERSION:
         raise DashUIError(f"{filename}: not a version {VERSION} .dashui file (\"dashui\": {VERSION})")
     out = [f"# Made from {filename} (MUI windows, docs/MUI_EDITOR.md)", ""]
+    names = set()
     for i, win in enumerate(data.get("windows", [])):
-        out.append(_Window(win, f"{filename}: window {i + 1}").generate())
+        where = f"{filename}: window {i + 1}"
+        if not isinstance(win, dict):
+            raise DashUIError(f"{where}: not an object")
+        if win.get("name") in names:
+            raise DashUIError(f"{where}: window name {win.get('name')!r} used twice")
+        names.add(win.get("name"))
+        out.append(_Window(win, where).generate())
     return "\n".join(out)

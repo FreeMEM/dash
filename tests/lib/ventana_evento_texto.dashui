@@ -1,0 +1,2 @@
+{"dashui": 1, "windows": [{"name": "Mala", "title": "t", "id": 1,
+  "root": {"type": "vgroup", "children": [{"type": "button", "name": "a", "label": "A", "event": "uno"}]}}]}

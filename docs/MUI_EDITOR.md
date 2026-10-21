@@ -97,9 +97,15 @@ alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_
 
 - **Editor propio** (`CustomTextEditorProvider`) para `*.dashui`: el JSON queda en el documento de VS Code (deshacer,
   guardar y control de cambios normales); el webview es la vista.
-- **Webview:** paleta de objetos a la izquierda, árbol de la ventana en el centro (arrastrar para añadir y mover;
-  suprimir para borrar), propiedades del objeto elegido a la derecha, vista previa aproximada debajo. Pestañas por
-  ventana y lista de menús.
+- **Webview:** paleta de objetos a la izquierda, árbol de la ventana en el centro, propiedades del objeto elegido a
+  la derecha, vista previa aproximada debajo. Pestañas por ventana y lista de menús. Arrastrar desde la paleta, el
+  árbol o la vista: delante, detrás o dentro de un grupo, según dónde se suelte. Teclado en el árbol: flechas,
+  Alt+flechas para mover, Supr, F2 (nombre), Intro (propiedades), Ctrl+D (duplicar); copiar, cortar y pegar
+  (los nombres repetidos llevan un número); deshacer y rehacer, los del documento (y botones ↶ ↷).
+- **Problemas y código:** los problemas del `.dashui` (JSON, tipos, nombres, números de evento) salen en Problemas en su
+  línea. El botón → de un evento lleva a su código en el `.dash` que importa el fichero: una constante con ese número
+  (`const ID_ACEPTAR = 3`) y `if ev == ID_ACEPTAR`; si no lo hay, lo crea (la constante y un `if` en el bucle de
+  `mui_wait_event`).
 - **Comandos:** "Dash: Compilar" (`./dash` del fichero activo), "Dash: Ejecutar en emulador" (`tools/emu_run.py`),
   "Dash: Ver en Amiga" (captura de la ventana del `.dashui`). La ruta de Dash, la toolchain y las variables del
   emulador se configuran en los ajustes de la extensión (`dash.path`, `dash.emulator.*`).
@@ -128,3 +134,13 @@ la gramática, el modelo y los comandos en Node, y el webview en Chromium con un
 
 Pendiente: deshacer dentro del propio editor ya lo da VS Code (el texto es suyo), pero no hay copiar/pegar de objetos ni
 selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.
+
+## Ver en Amiga (IDE, tarea 20)
+
+Un Amiga emulado que se queda encendido entre vistas: `tools/emu_preview.py --machine a1200|a1200-32|rtg`. Dentro, un
+vigía espera `DH0:pide` y ejecuta `DH0:vista`, que abre la ventana, hace su propia captura con `C:dash_shot` en cuanto
+está abierta y acaba. En pantallas planares la captura son los planos tal cual (`.dsh`, unos 40 KB en 4 colores) y el
+PC hace el PNG (`emu_run.planar_to_png`). La extensión mantiene uno por máquina y no recompila una ventana que no ha
+cambiado. Medido: arranque 2,5 s (A1200 3.1), 5 s (3.2) y 1,7 s (68040 RTG); cada vista, 2,4 s, 2,5 s y 1,8 s (antes,
+unos 30 s cada una).
+

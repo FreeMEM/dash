@@ -1,0 +1,7 @@
+# expect: error_position.dash:6:9: Error: Function 'suma' expects 2 arguments, got 1
+func suma(a, b)
+    return a + b
+end
+Main
+    x = suma(1)
+end

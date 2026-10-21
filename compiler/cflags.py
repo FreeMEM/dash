@@ -96,3 +96,27 @@ def link_flags(sources) -> tuple:
         if d not in includes:
             includes.append(d)
     return includes, files
+
+
+# ./dash --debug: the zeroed globals (.bss) go in the hunk of .data, after its own. The DWARF keeps
+# the addresses of the ELF the linker made the hunk file from (.data after .text, .bss after .data)
+# and gdb places them with the offsets bgdbserver gives (qOffsets); gdb takes one offset for .data
+# and .bss together, and on the Amiga they are two hunks anywhere in memory: with a single hunk,
+# tools/gdb_relay.py makes the one offset right for both. The program is bigger by its .bss.
+BSS_IN_DATA = "    *(.bss)\n    *(.bss.*)\n    *(COMMON)\n"
+
+
+def debug_link_flags(ld: str, build_dir: str) -> list:
+    """-T with the toolchain's own linker script but .bss in .data (written to build_dir)."""
+    import os
+    import subprocess
+    text = subprocess.run([ld, "--verbose"], capture_output=True, text=True).stdout
+    parts = text.split("=" * 50)
+    if len(parts) < 3 or BSS_IN_DATA not in parts[1] or "    __edata = .;\n" not in parts[1]:
+        return []                                  # another linker: as it is (globals in .bss misplaced)
+    script = parts[1].strip("\n").replace(BSS_IN_DATA, "", 1)
+    script = script.replace("    __edata = .;\n", BSS_IN_DATA + "    __edata = .;\n", 1)
+    path = os.path.join(build_dir, "dash_debug.x")
+    with open(path, "w") as f:
+        f.write(script + "\n")
+    return ["-Wl,-T," + path]

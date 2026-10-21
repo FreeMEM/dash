@@ -95,6 +95,46 @@ El proyecto más grande escrito en Dash es [dashweb](https://github.com/FreeMEM/
 para Amiga con MUI (3.8 o 5): lo que le falta a dashweb se añade a Dash. Ya tiene una primera versión de
 prueba, [v0.1.0-alfa](https://github.com/FreeMEM/dashweb/releases/tag/v0.1.0-alfa).
 
+## Desarrollar en VS Code
+
+La extensión de `editor/vscode` hace de VS Code un entorno para Dash: colores, errores mientras se escribe,
+completar, ir a la definición y renombrar; compilar y ejecutar en el Amiga emulado (A1200, A500, AmigaOS 3.2 o
+con tarjeta gráfica); depurar con puntos de parada, variables y paso a paso, también en un Amiga de verdad por la
+red; y un editor visual de ventanas MUI que las enseña en el emulador. Usa el compilador de este repositorio.
+
+[![Tutorial en vídeo de Dash en VS Code](docs/media/vscode-tutorial.jpg)](https://github.com/FreeMEM/dash/releases/download/vscode-0.2.1/dash-vscode-tutorial-subtitulado.mp4)
+
+Un tutorial de 6 minutos, con subtítulos: el primer proyecto, escribir código, la ventana, compilar y ejecutar,
+depurar y depurar en un Amiga de verdad.
+
+### Instalar la extensión
+
+1. Dash y el compilador de Amiga, como en [Instalación rápida](#instalación-rápida) (para el emulador, FS-UAE y una
+   ROM de Kickstart; para ventanas MUI, `tools/get_mui_sdk.sh` y `tools/emu_sys_mui.sh`).
+2. La extensión: el fichero `dash-mui-editor-0.2.1.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1), y en VS Code (1.86 o posterior)
+   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.2.1.vsix`. También se
+   puede construir: `cd editor/vscode && npm install && npm run package`.
+3. Un proyecto: **Dash: Nuevo proyecto**. Si su carpeta no está dentro de este repositorio, **Dash: Elegir la
+   carpeta del compilador** (el ajuste `dash.path`). La guía **Primeros pasos con Dash** lleva paso a paso, y si
+   falta algo la extensión dice qué y cómo conseguirlo.
+
+### Cómo encaja con Dash
+
+La extensión es una capa fina: lo que hace lo hacen las herramientas de este repositorio, en la carpeta de
+`dash.path`.
+
+| En VS Code | Lo hace |
+|---|---|
+| Colores | `editor/vscode/syntaxes/dash.tmLanguage.json`, sacado de la gramática (`tools/gen_tmgrammar.py`) |
+| Errores al escribir, completar, ir a la definición, renombrar, formatear | `compiler/lsp.py` (el mismo compilador) |
+| Compilar | `./dash` |
+| Ejecutar, memoria y perfil | `./dash` y `tools/emu_run.py` (FS-UAE o Amiberry) |
+| Editor visual y Ver en Amiga | `.dashui` (`compiler/dashui.py`) y `tools/emu_preview.py` |
+| Depurar (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
+
+Por eso, al actualizar Dash (`git pull`), lo que la extensión sabe del lenguaje se actualiza también, sin
+reinstalarla. La extensión y el compilador van en el mismo repositorio para que no se separen.
+
 ## Instalación rápida
 
 ### Ubuntu / Debian

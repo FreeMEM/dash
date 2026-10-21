@@ -7,13 +7,13 @@
 
 @native func raiz(x: Float) -> Float
 """
-    return sqrt(x);
+    return __builtin_sqrt(x);     /* (no math.h here: gcc's own, as it took it before) */
 """
 end
 
 @native func seno(x: Float) -> Float
 """
-    return sin(x);
+    return __builtin_sin(x);
 """
 end
 

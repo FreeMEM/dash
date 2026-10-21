@@ -1,0 +1,149 @@
+{
+  "Main": {
+    "prefix": "Main",
+    "body": ["Main", "\t$0", "end"],
+    "description": "Punto de entrada del programa"
+  },
+  "func": {
+    "prefix": "func",
+    "body": ["func ${1:nombre}(${2:a}: ${3:Int}) -> ${4:Int}", "\t$0", "end"],
+    "description": "Función con tipos"
+  },
+  "func sin tipos": {
+    "prefix": "funcs",
+    "body": ["func ${1:nombre}(${2})", "\t$0", "end"],
+    "description": "Función sin tipos"
+  },
+  "struct": {
+    "prefix": "struct",
+    "body": ["struct ${1:Nombre}", "\t${2:x}: ${3:Int} = ${4:0}", "", "\tfunc ${5:metodo}()", "\t\t$0", "\tend", "end"],
+    "description": "Struct con un campo y un método"
+  },
+  "enum": {
+    "prefix": "enum",
+    "body": ["enum ${1:Estado}", "\t${2:PARADO}", "\t${3:MARCHA}", "end"],
+    "description": "Enumeración"
+  },
+  "if": {
+    "prefix": "if",
+    "body": ["if ${1:condicion}", "\t$0", "end"],
+    "description": "if"
+  },
+  "if else": {
+    "prefix": "ife",
+    "body": ["if ${1:condicion}", "\t$2", "else", "\t$0", "end"],
+    "description": "if ... else"
+  },
+  "while": {
+    "prefix": "while",
+    "body": ["while ${1:condicion}", "\t$0", "end"],
+    "description": "while"
+  },
+  "for rango": {
+    "prefix": "for",
+    "body": ["for ${1:i} in (${2:1}..${3:10})", "\t$0", "end"],
+    "description": "for sobre un rango"
+  },
+  "for lista": {
+    "prefix": "forin",
+    "body": ["for ${1:elemento} in ${2:lista}", "\t$0", "end"],
+    "description": "for sobre una lista"
+  },
+  "import": {
+    "prefix": "import",
+    "body": ["import \"${1:modulo}.dash\""],
+    "description": "Importar un módulo (o un .dashui)"
+  },
+  "const": {
+    "prefix": "const",
+    "body": ["const ${1:NOMBRE} = ${2:0}"],
+    "description": "Constante"
+  },
+  "@native": {
+    "prefix": "@native",
+    "body": ["@native func ${1:nombre}(${2:x}: ${3:Int}) -> ${4:Int}", "\"\"\"", "\t$0", "\"\"\"", "end"],
+    "description": "Función en C"
+  },
+  "Window con EventLoop": {
+    "prefix": "Window",
+    "body": [
+      "Window ${1:Ventana}",
+      "\ttitle \"${2:Mi programa}\"",
+      "\twidth ${3:320}",
+      "\theight ${4:200}",
+      "end",
+      "",
+      "Main",
+      "\t${1:Ventana}.open",
+      "\tEventLoop",
+      "\t\tOn Close",
+      "\t\t\tStop",
+      "\t\tend",
+      "\tend",
+      "end"
+    ],
+    "description": "Ventana de Intuition con su bucle de eventos"
+  },
+  "EventLoop": {
+    "prefix": "EventLoop",
+    "body": ["EventLoop", "\tOn Close", "\t\tStop", "\tend", "\t$0", "end"],
+    "description": "Bucle de eventos"
+  },
+  "On": {
+    "prefix": "On",
+    "body": ["On ${1|Close,Key,Gadget,Menu,Click,Timer|}", "\t$0", "end"],
+    "description": "Manejador de un evento"
+  },
+  "Programa MUI": {
+    "prefix": "mui",
+    "body": [
+      "const ID_${2:BOTON} = 1",
+      "",
+      "Main",
+      "\tif mui_app_begin(\"${1:Mi programa}\", \"${3:MIPROG}\") == 0",
+      "\t\tPrint \"No se puede usar MUI\"",
+      "\telse",
+      "\t\twin = mui_window_begin(\"${1:Mi programa}\", 1)",
+      "\t\t\tmui_text(\"${4:Hola}\")",
+      "\t\t\tboton = mui_button(\"${5:_Aceptar}\")",
+      "\t\tmui_window_end()",
+      "\t\tmui_on_press(boton, ID_${2:BOTON})",
+      "\t\tmui_window_open(win)",
+      "\t\twhile true",
+      "\t\t\tev = mui_wait_event()",
+      "\t\t\tif ev == -1",
+      "\t\t\t\tbreak",
+      "\t\t\tend",
+      "\t\t\tif ev == ID_${2:BOTON}",
+      "\t\t\t\t$0",
+      "\t\t\tend",
+      "\t\tend",
+      "\t\tmui_app_end()",
+      "\tend",
+      "end"
+    ],
+    "description": "Aplicación MUI con una ventana y su bucle"
+  },
+  "Programa MUI con .dashui": {
+    "prefix": "muiui",
+    "body": [
+      "import \"${1:ventana}.dashui\"",
+      "",
+      "Main",
+      "\tif mui_app_begin(\"${2:Mi programa}\", \"${3:MIPROG}\") == 0",
+      "\t\tPrint \"No se puede usar MUI\"",
+      "\telse",
+      "\t\tv = ${4:Principal}_create()",
+      "\t\tmui_window_open(v.window)",
+      "\t\tev = 0",
+      "\t\twhile ev != -1",
+      "\t\t\tev = mui_wait_event()",
+      "\t\t\t$0",
+      "\t\tend",
+      "\t\tmui_app_end()",
+      "\tend",
+      "end"
+    ],
+    "description": "Aplicación MUI con una ventana hecha en el editor visual"
+  }
+}

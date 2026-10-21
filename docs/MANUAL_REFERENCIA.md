@@ -68,6 +68,25 @@ end
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ```
 
+`./dash --debug` compila para el depurador: `-O0 -g` (DWARF en el ejecutable) y, en el C, `#line` hacia las
+lineas del `.dash`: `m68k-amigaos-gdb` para, avanza y ensena la pila y las variables en lineas de Dash
+(con `bgdbserver` en el Amiga: ver la extension de VS Code). Sin `--debug` el C no cambia. Con `--debug`, ademas:
+cada `Print` sale en el momento; si la variable de DOS `DASH_OUT` tiene un nombre de fichero, la salida va ahi;
+un error del programa (indice fuera de la lista, error de memoria) llama a `_dash_debug_stop`, donde el depurador
+para; y las globales a cero (`.bss`) van en el mismo bloque que las demas, para que gdb las encuentre
+(`tools/gdb_relay.py`). El ejecutable crece lo que ocupan.
+
+Con `--memcheck`, cada error de memoria dice tambien donde paso: `memcheck: ERROR campo de nil (en
+prog.dash:15)` (cada sentencia apunta su fichero y linea; solo en esas compilaciones).
+
+Con `DASH_PRINT_FLUSH=1` al compilar, cada `Print` sale en el momento (`Flush` de dos.library) aunque la
+salida vaya a un fichero: así la ven en vivo `tools/emu_run.py --follow` y la extension de VS Code. Sin ella
+el C no cambia.
+
+Los errores del compilador dicen dónde: `fichero.dash:línea:columna: Error: mensaje` (también los de un
+módulo importado, con su fichero), como gcc: los editores los enlazan con el código. Los de sintaxis se
+dicen en una frase (`sintaxis: no se esperaba ... aquí; se esperaba ...`).
+
 Los programas necesitan Kickstart 3.0 o superior. Al arrancar piden una pila de al menos 16 KB:
 el shell de 3.1 da 4 KB y una recursion algo honda la desbordaria (cuesta 720 bytes por programa;
 `--stack 0` lo quita). Con MUI piden 32 KB y con TLS 64 KB. Un programa o un modulo que necesita

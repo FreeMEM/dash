@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Dash file icon: the Amiga's orange and blue, a "D" and a dash -->
+  <rect x="1" y="1" width="14" height="14" rx="3" fill="#0055aa"/>
+  <path d="M4 4h3.5a4 4 0 0 1 0 8H4z" fill="none" stroke="#ff8a00" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="M9 8h3.5" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

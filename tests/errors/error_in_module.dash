@@ -1,0 +1,6 @@
+# expect: modulo_con_error.dash:3:16: Error: Variable 'nada' is not defined
+import "../lib/modulo_con_error.dash"
+
+Main
+    Print f(1)
+end

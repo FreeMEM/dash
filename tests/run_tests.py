@@ -44,6 +44,7 @@ tools/emu_sys_rtg.sh); skipped without it.
 
 import os
 import sys
+import re
 import subprocess
 import argparse
 from pathlib import Path
@@ -245,6 +246,9 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
         gcc_path,
         "-noixemul",
         *opt_flags(),  # same as ./dash by default (compiler/cflags.py)
+        # a runtime call without its prototype (a header missing): a stack call to a register library, or
+        # libamiga's stub at best (GetVPModeID in the MUI runtime, docs/IDE_VIDEO_LOOP.md v9)
+        "-Werror=implicit-function-declaration",
         "-I/opt/amiga/m68k-amigaos/ndk-include",
         "-L/opt/amiga/m68k-amigaos/lib",
         str(c_file),
@@ -717,6 +721,8 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
     results = []
     for (test_file, wanted), run in zip(selected, runs):
         got = [l.rstrip() for l in (run.output or "").splitlines()]
+        # places in the output (--memcheck errors say file:line) relative to the repository, however it was run
+        got = [l.replace(str(PROJECT_ROOT.resolve()) + "/", "") for l in got]
         mc_error = None
         if memcheck and not wants_memcheck(test_file):
             uses_memory = "#define _DASH_MEMORY_RUNTIME" in (PROJECT_ROOT / "build" / f"{test_file.stem}.c").read_text()
@@ -854,6 +860,43 @@ def main():
         results.append(TestResult(name="docs/builtins", passed=check.returncode == 0,
                                   transpile_ok=True, compile_ok=True,
                                   error_message=check.stdout.strip() or None,
+                                  duration=time.time() - start_time))
+        print("OK" if check.returncode == 0 else "FAIL")
+
+    # Python tests: the language server (tests/lsp) and parts of the compiler and tools (tests/unit),
+    # tests/<dir>/test_*.py, one result per test
+    py_tests = sorted((PROJECT_ROOT / "tests" / "lsp").glob("test_*.py")) + \
+        sorted((PROJECT_ROOT / "tests" / "unit").glob("test_*.py"))
+    for lsp_file in py_tests:
+        group = lsp_file.parent.name
+        if args.pattern is not None and args.pattern not in f"{group}/{lsp_file.stem}" and not args.pattern.startswith(group):
+            continue
+        print(f"Testing: {group}/{lsp_file.stem}...", end=" ", flush=True)
+        start_time = time.time()
+        run = subprocess.run([sys.executable, "-m", "unittest", "-v", str(lsp_file.relative_to(PROJECT_ROOT))],
+                             cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=600)
+        cases = re.findall(r"^(test_\w+) \(.*?\)(?:\n.*?)? ?\.\.\. (ok|FAIL|ERROR)$", run.stderr, re.M)
+        for name, status in cases:
+            detail = None
+            if status != "ok":
+                m = re.search(rf"^(?:FAIL|ERROR): {name} .*?(?=^(?:FAIL|ERROR):|^-{{50,}}\nRan )", run.stderr, re.M | re.S)
+                detail = (m.group(0) if m else run.stderr)[-400:]
+            results.append(TestResult(name=f"{group}/{name}", passed=status == "ok", transpile_ok=True, compile_ok=True,
+                                      error_message=detail, duration=(time.time() - start_time) / max(1, len(cases))))
+        if not cases:
+            results.append(TestResult(name=f"{group}/{lsp_file.stem}", passed=False, transpile_ok=True, compile_ok=True,
+                                      error_message=run.stderr[-400:], duration=time.time() - start_time))
+        print("OK" if run.returncode == 0 and cases else "FAIL")
+
+    if args.pattern is None or args.pattern in "editor/tmgrammar":
+        # the colours of VS Code come from the compiler (tools/gen_tmgrammar.py)
+        print("Testing: editor/tmgrammar...", end=" ", flush=True)
+        start_time = time.time()
+        check = subprocess.run([sys.executable, str(PROJECT_ROOT / "tools" / "gen_tmgrammar.py"), "--check"],
+                               capture_output=True, text=True)
+        results.append(TestResult(name="editor/tmgrammar", passed=check.returncode == 0,
+                                  transpile_ok=True, compile_ok=True,
+                                  error_message=(check.stdout + check.stderr).strip() or None,
                                   duration=time.time() - start_time))
         print("OK" if check.returncode == 0 else "FAIL")
 

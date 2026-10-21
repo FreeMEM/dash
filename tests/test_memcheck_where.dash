@@ -1,0 +1,16 @@
+# --memcheck: an error says the file and line of the Dash statement where it happened (each statement sets
+# _dash_mc_where in --memcheck builds), so the editor puts it on the code (VS Code: problem matcher $dash).
+# memcheck
+# expect-out: antes
+# expect-out: memcheck: ERROR campo de nil (en tests/test_memcheck_where.dash:15)
+# expect-out: 0
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 1
+struct P
+    x: Int = 0
+end
+
+Main
+    var p: P = nil
+    Print "antes"
+    Print p.x
+end

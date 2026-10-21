@@ -1,0 +1,239 @@
+// @ts-check
+// Between VS Code and gdb (-i=dap): the expressions the user writes are Dash (debug console, watch, hover,
+// breakpoint conditions, logpoints) and gdb parses C, so they are turned into C on the way: p.x -> p->x,
+// l[i] -> $at(l, i), s.length -> $len(s) (gdb functions of tools/gdb/dash.py), and/or/not, true/false/nil,
+// Color.ROJO -> Color_ROJO. Everything else goes through as it is.
+const { spawn } = require('child_process');
+
+const IDENT = '[A-Za-z_][A-Za-z0-9_]*';
+
+/**
+ * A Dash expression in C for gdb (texts in quotes are left alone).
+ * @param {string} expr
+ */
+function dashToC(expr) {
+    // the texts out of the way (their dots and words are not code), back after the change
+    const texts = [];
+    let code = '';
+    let i = 0;
+    while (i < expr.length) {
+        if (expr[i] === '"') {
+            let j = i + 1;
+            while (j < expr.length && expr[j] !== '"') j += expr[j] === '\\' ? 2 : 1;
+            texts.push(expr.slice(i, j + 1));
+            code += `\u0001${texts.length - 1}\u0001`;
+            i = j + 1;
+        } else {
+            code += expr[i++];
+        }
+    }
+    return codeToC(code).replace(/\u0001(\d+)\u0001/g, (_, n) => texts[Number(n)]);
+}
+
+/** @param {string} code an expression with its texts taken out */
+function codeToC(code) {
+    let c = code
+        .replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b\s*/g, '!')
+        .replace(/\btrue\b/g, '1').replace(/\bfalse\b/g, '0').replace(/\bnil\b/g, '0');
+    // an enum's value: Color.ROJO is the C constant Color_ROJO
+    c = c.replace(new RegExp(`\\b([A-Z][A-Za-z0-9_]*)\\.([A-Z][A-Z0-9_]*)\\b`, 'g'), '$1_$2');
+    // x.length (also a.b.length) is $len(x)
+    c = c.replace(new RegExp(`\\b(${IDENT}(?:\\.${IDENT})*)\\.length\\b`, 'g'),
+                  (_, chain) => `$len(${chain.replace(/\./g, '->')})`);
+    // the other dots go into a struct: p.x is p->x (structs are pointers in C); not in numbers (1.5)
+    c = c.replace(new RegExp(`(?<=[A-Za-z_0-9\\])])\\.(?=[A-Za-z_])`, 'g'), (m, offset) => {
+        const before = c.slice(0, offset);
+        return /(^|[^A-Za-z_0-9])[0-9]+$/.test(before) ? m : '->';
+    });
+    // x[i] is $at(x, i): an element of a list, a value of a dictionary, a character of a text (inner ones first)
+    const index = new RegExp(`((?:\\$at\\([^()]*\\)|${IDENT})(?:->${IDENT})*)\\[([^\\[\\]]*)\\]`);
+    for (let n = 0; n < 20 && index.test(c); n++) c = c.replace(index, (_, left, inside) => `$at(${left}, ${inside})`);
+    return c;
+}
+
+/** A logpoint's message: the {expressions} in it, in C */
+function logMessageToC(message) {
+    return message.replace(/\{([^{}]+)\}/g, (_, e) => '{' + dashToC(e) + '}');
+}
+
+/** What gdb says at the start, before the program is loaded, about breakpoints that then work (gdb puts a ❌️
+    before its errors) */
+const NOISE = /^[^A-Za-z]*(No source file named |No symbol table is loaded|Breakpoint \d+ \(.*\) pending\.|Function "[^"]*" not defined)/;
+
+/**
+ * The debug adapter that VS Code talks to: gdb -i=dap behind, with the expressions turned into C. Also:
+ * a function breakpoint of its own on _dash_debug_trap (./dash --debug: the runtime calls it on an error, an
+ * index out of a list...), hidden from VS Code, whose stop becomes an "exception" with the error's text;
+ * and output(text), the program's output, to the debug console.
+ * @param {typeof import('vscode')} vscode
+ */
+function makeProxy(vscode, command, args) {
+    const emitter = new vscode.EventEmitter();
+    const gdb = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    let buffer = Buffer.alloc(0);
+    let seq = 900000;                        // requests of ours (VS Code's are far below)
+    const waiting = new Map();               // seq of ours -> what to do with gdb's answer
+    let userFunctionSeq = null;              // VS Code's setFunctionBreakpoints in flight (it gets one more)
+    let sawFunctionBreakpoints = false;
+    let trapId = null;
+    // DASH_DAP_LOG=file: every message, to VS Code (<-) and to gdb (->), one a line (to see what goes wrong)
+    const log = process.env.DASH_DAP_LOG ? (dir, m) => {
+        try { require('fs').appendFileSync(process.env.DASH_DAP_LOG, `${Date.now()} ${dir} ${JSON.stringify(m)}\n`); } catch (e) { /* no log */ }
+    } : () => {};
+    const send = (message) => { log('<-', message); emitter.fire(Object.assign({ seq: 0 }, message)); };
+    const write = (message) => {
+        log('->', message);
+        const body = Buffer.from(JSON.stringify(message), 'utf8');
+        gdb.stdin.write(`Content-Length: ${body.length}\r\n\r\n`);
+        gdb.stdin.write(body);
+    };
+    const ask = (command, args) => new Promise((resolve) => {
+        const s = ++seq;
+        waiting.set(s, resolve);
+        write({ seq: s, type: 'request', command, arguments: args });
+    });
+    const trapRequest = (user) => ({ breakpoints: [...user, { name: '_dash_debug_stop' }] });
+    let started = false;                     // the first stop: gdb's talk of the start no longer comes
+    let exited = false, late = false;        // the program ended; its 'terminated' put off (its last output)
+    // gdb's lines about the breakpoints set before the program is loaded (they work), until the first stop
+    const quiet = (text) => started ? text : text.split(/(?<=\n)/).filter((l) => !NOISE.test(l)).join('');
+    // after attaching gdb leaves the program stopped at its start: it goes on by itself (after the
+    // breakpoints, configurationDone), unseen by VS Code, unless stopOnEntry
+    let stopOnEntry = false, configured = false, entryThread = null;
+    const goOn = () => {
+        if (entryThread === null || !configured) return;
+        ask('continue', { threadId: entryThread });
+        entryThread = null;
+    };
+
+    async function fromGdb(message) {
+        if (message.type === 'response' && waiting.has(message.request_seq)) {
+            const done = waiting.get(message.request_seq);
+            waiting.delete(message.request_seq);
+            done(message);
+            return;
+        }
+        if (message.type === 'response' && message.request_seq === userFunctionSeq && message.body) {
+            const list = message.body.breakpoints || [];
+            const trap = list.pop();                 // ours: VS Code did not ask for it
+            trapId = trap ? trap.id : trapId;
+            userFunctionSeq = null;
+        }
+        if (message.type === 'response' && message.command === 'initialize' && message.body) {
+            delete message.body.exceptionBreakpointFilters;      // gdb's are of Ada and C++
+        }
+        if (message.type === 'response' && message.command === 'scopes' && message.body && message.body.scopes) {
+            message.body.scopes = message.body.scopes.filter((s) => s.name !== 'Registers');   // -exec info registers
+        }
+        if (message.type === 'event' && message.event === 'output' && message.body && message.body.output) {
+            message.body.output = quiet(message.body.output);
+            if (!message.body.output) return;
+        }
+        if (message.type === 'event' && message.event === 'stopped' && message.body &&
+            message.body.reason === 'attach' && !stopOnEntry) {
+            entryThread = message.body.threadId || 1;
+            goOn();
+            return;
+        }
+        if (message.type === 'response' && message.command === 'configurationDone') {
+            configured = true;
+            goOn();
+        }
+        if (message.type === 'event' && message.event === 'exited') exited = true;
+        if (message.type === 'event' && message.event === 'terminated' && exited && !late) {
+            // the program ended: what it wrote last is still on its way from the emulator (tools/emu_run.py
+            // reads it every 0.2 s), and the session's end stops the emulator: a moment first (else a Print just
+            // before the end never showed)
+            late = true;
+            setTimeout(() => send(message), 1500);
+            return;
+        }
+        if (message.type === 'event' && message.event === 'stopped') started = true;
+        if (message.type === 'event' && message.event === 'stopped' && trapId !== null &&
+            (message.body.hitBreakpointIds || []).includes(trapId)) {
+            const answer = await ask('evaluate', { expression: '(STRPTR)_dash_debug_what', context: 'watch' });
+            const text = answer.success ? String(answer.body.result).replace(/^"|"$/g, '') : 'error del programa';
+            send({ type: 'event', event: 'output', body: { category: 'stderr', output: `Error del programa: ${text}\n` } });
+            message.body = Object.assign({}, message.body, { reason: 'exception', description: text, text,
+                                                              hitBreakpointIds: undefined });
+        }
+        send(message);
+    }
+
+    gdb.stdout.on('data', (data) => {
+        buffer = Buffer.concat([buffer, data]);
+        for (;;) {
+            const head = buffer.indexOf('\r\n\r\n');
+            if (head < 0) return;
+            const m = /Content-Length:\s*(\d+)/i.exec(buffer.slice(0, head).toString('ascii'));
+            const length = m ? Number(m[1]) : 0;
+            if (buffer.length < head + 4 + length) return;
+            const body = buffer.slice(head + 4, head + 4 + length).toString('utf8');
+            buffer = buffer.slice(head + 4 + length);
+            let message;
+            try { message = JSON.parse(body); } catch (e) { continue; }
+            fromGdb(message);
+        }
+    });
+    gdb.stderr.on('data', (data) => {
+        const text = quiet(data.toString('utf8'));
+        if (text) send({ type: 'event', event: 'output', body: { category: 'console', output: text } });
+    });
+    gdb.on('exit', () => send({ type: 'event', event: 'terminated', body: {} }));
+    gdb.on('error', (e) => {    // not there (an error event with no listener: an uncaught exception, and the session waiting)
+        const text = e.code === 'ENOENT'
+            ? `No encuentro gdb (${command}): viene con el compilador de Amiga (m68k-amigaos-gdb, en /opt/amiga/bin); ` +
+              'si está en otra parte, pon su ruta en el ajuste "dash.debug.gdb".'
+            : `gdb (${command}): ${e.message}`;
+        if (vscode.window && vscode.window.showErrorMessage) vscode.window.showErrorMessage(text);
+        send({ type: 'event', event: 'output', body: { category: 'stderr', output: text + '\n' } });
+        send({ type: 'event', event: 'terminated', body: {} });
+    });
+    return {
+        onDidSendMessage: emitter.event,
+        handleMessage(message) {
+            const a = message.arguments;
+            if (message.type === 'request' && a) {
+                if (message.command === 'evaluate' && a.expression && a.context === 'repl') {
+                    // the debug console: an expression of Dash; "-exec <command>" is a gdb command, as it is
+                    if (/^\s*-exec\s+/.test(a.expression)) a.expression = a.expression.replace(/^\s*-exec\s+/, '');
+                    else { a.expression = dashToC(a.expression); a.context = 'watch'; }
+                } else if ((message.command === 'evaluate' || message.command === 'setExpression') && a.expression) {
+                    a.expression = dashToC(a.expression);
+                }
+                if (message.command === 'setBreakpoints' && Array.isArray(a.breakpoints)) {
+                    for (const b of a.breakpoints) {
+                        if (b.condition) b.condition = dashToC(b.condition);
+                        if (b.logMessage) b.logMessage = logMessageToC(b.logMessage);
+                    }
+                }
+                if (message.command === 'setFunctionBreakpoints') {
+                    sawFunctionBreakpoints = true;
+                    userFunctionSeq = message.seq;
+                    message.arguments = trapRequest(a.breakpoints || []);
+                }
+            }
+            if (message.type === 'request' && (message.command === 'attach' || message.command === 'launch') && a) {
+                stopOnEntry = !!a.stopOnEntry;
+            }
+            if (message.type === 'request' && message.command === 'configurationDone' && !sawFunctionBreakpoints) {
+                sawFunctionBreakpoints = true;           // VS Code had none to set: ours alone, before going on
+                ask('setFunctionBreakpoints', trapRequest([])).then((r) => {
+                    const list = (r.body && r.body.breakpoints) || [];
+                    if (list.length) trapId = list[list.length - 1].id;
+                });
+            }
+            write(message);
+        },
+        /** the program's output (the emulator's), to the debug console */
+        output(text) {
+            send({ type: 'event', event: 'output', body: { category: 'stdout', output: text } });
+        },
+        dispose() {
+            try { gdb.kill(); } catch (e) { /* gone */ }
+            emitter.dispose();
+        },
+    };
+}
+
+module.exports = { dashToC, logMessageToC, makeProxy };

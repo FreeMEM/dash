@@ -5,6 +5,8 @@ Generates C code from the analyzed AST using templates.
 from compiler.tmp_marks import strip_unused_marks
 import os
 import re
+
+from compiler import debuglines
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from string import Template
@@ -144,8 +146,15 @@ static APTR _dash_mc_held[_DASH_MC_HOLD];
 static ULONG _dash_mc_held_size[_DASH_MC_HOLD];
 static LONG _dash_mc_next;
 
+/* the Dash statement running: "file.dash:line" (set before each statement in --memcheck builds), so an
+   error says where it happened and the editor puts it on the code */
+static const char *_dash_mc_where = NULL;
+#define _DASH_MC_WHERE(w) (_dash_mc_where = (w))
+
 static void _dash_mc_error(CONST_STRPTR what) {
-    if (++_dash_mc_errors <= 20) Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
+    if (++_dash_mc_errors > 20) return;
+    if (_dash_mc_where) Printf((CONST_STRPTR)"memcheck: ERROR %s (en %s)\\n", what, (LONG)_dash_mc_where);
+    else Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
 }
 
 /* Poison *b and hold it; give back in *b the oldest held block to reuse (FALSE),
@@ -4428,6 +4437,27 @@ static LONG _dash_arena_used(_Dash_Arena *arena) {
 
 static LONG _dash_arena_available(_Dash_Arena *arena) {
     return arena ? (arena->size - arena->offset) : 0;
+}
+
+"""
+
+    # ./dash --debug: what the debugger needs from the program (editor/vscode/debug.js, docs/IDE_LOOP.md)
+    DEBUG_RUNTIME = """\
+/* ./dash --debug: the debugger stops in _dash_debug_stop when the runtime finds an error (an index out of
+   a list, a memory error with --memcheck: _dash_debug_trap(what), at the top), _dash_debug_what says which;
+   under bgdbserver the program's output goes where the DOS variable DASH_OUT says (bgdbserver gives it the
+   boot console) */
+volatile const char *_dash_debug_what = 0;
+__attribute__((noinline)) void _dash_debug_stop(void) {
+    __asm__ volatile ("" ::: "memory");
+}
+
+static void _dash_debug_output(void) {
+    char name[256];
+    BPTR f;
+    if (GetVar((STRPTR)"DASH_OUT", (STRPTR)name, sizeof(name), 0) > 0 &&
+        (f = Open((STRPTR)name, MODE_NEWFILE)) != 0)
+        SelectOutput(f);
 }
 
 """
@@ -10051,6 +10081,7 @@ static LONG ra_window_is_open(void) {
 #define MUI_NOSHORTCUTS
 #include <libraries/mui.h>
 #include <proto/muimaster.h>
+#include <proto/graphics.h>        /* GetVPModeID (mui_window_own_screen) */
 #include <clib/alib_protos.h>
 #include <libraries/gadtools.h>   /* NM_BARLABEL */
 #ifndef MAKE_ID
@@ -10767,6 +10798,8 @@ static LONG _dash_mui_signals(void) {
 #define _DASH_MTOP(obj)    (_DASH_MAD(obj)->mad_Box.Top + _DASH_MAD(obj)->mad_addtop)
 #define _DASH_MWIDTH(obj)  (_DASH_MAD(obj)->mad_Box.Width - _DASH_MAD(obj)->mad_subwidth)
 #define _DASH_MHEIGHT(obj) (_DASH_MAD(obj)->mad_Box.Height - _DASH_MAD(obj)->mad_subheight)
+
+#include <proto/layers.h>    /* the buffer's layer (mui_canvas_buffered) */
 
 struct _DashCanvas {
     APTR draw;                      /* Dash function (x, y, width, height) or NULL */
@@ -11862,11 +11895,39 @@ class CodeGenerator(ASTVisitor):
     Uses templates for clean, maintainable code generation.
     """
 
+    def visit(self, node):
+        """--memcheck: before each statement, the place it comes from (_dash_mc_where), so a memory
+        error says file.dash:line (VS Code's problem matcher puts it on the code)."""
+        if self.memcheck or self.debug_lines:
+            name = type(node).__name__
+            location = getattr(node, "location", None)
+            if location is not None and location.filename and name != "ImportStmt" and \
+                    (name.endswith(("Stmt", "Assign")) or name in ("FunctionCall", "MethodCall")):
+                if self.debug_lines:     # ./dash --debug: this statement's line of Dash (compiler/debuglines.py)
+                    self.emit(debuglines.mark(location.line, os.path.abspath(location.filename)))
+                if self.memcheck:
+                    where = f"{location.filename}:{location.line}".replace("\\", "\\\\").replace('"', '\\"')
+                    self.emit(f'{self.context.indent}_DASH_MC_WHERE("{where}");\n')
+        return super().visit(node)
+
+    def _debug_wrap(self, node, code):
+        """--debug: a function's C, from its header (the line of its func) to its end, in Dash's lines."""
+        location = getattr(node, "location", None)
+        if not self.debug_lines or location is None or not location.filename:
+            return code
+        return debuglines.mark(location.line, os.path.abspath(location.filename)) + code.lstrip("\n") + \
+            "\n" + debuglines.NOLINE + "\n"
+
     def __init__(self, analysis: AnalysisResult):
         self.analysis = analysis
         self.context = CodeGenContext()
         # Test mode for the emulator bench: end the program after N seconds
         self.autoclose = int(os.environ.get("DASH_TEST_AUTOCLOSE", "0") or 0)
+        # DASH_PRINT_FLUSH=1 while compiling: each Print goes out at once (Flush of dos.library), so
+        # tools/emu_run.py --follow and the IDE show the output while the program runs
+        self.print_flush = os.environ.get("DASH_PRINT_FLUSH", "") not in ("", "0")
+        # ./dash --debug (DASH_DEBUG_LINES=1): marks for #line, so gdb speaks in .dash lines
+        self.debug_lines = os.environ.get("DASH_DEBUG_LINES", "") not in ("", "0")
         # ./dash --profile (dashweb D23): every function counts its calls; VBlank samples where it is
         self.profile = os.environ.get("DASH_PROFILE") == "1"
         self.prof_names: List[str] = ["Main"]
@@ -12251,6 +12312,11 @@ class CodeGenerator(ASTVisitor):
         if self.uses_mui_timer:
             parts.append(CTemplates.MUI_TIMER_RUNTIME)
 
+        if self.debug_lines:
+            parts.append(CTemplates.DEBUG_RUNTIME)
+        if self.memcheck:
+            # the place of each statement (visit): kept only where the memory checks are (DASH_MEMCHECK)
+            parts.append("#ifndef _DASH_MC_WHERE\n#define _DASH_MC_WHERE(w) ((void)0)\n#endif\n")
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
         # methods may draw (_dash_rp) or use any builtin
@@ -12356,6 +12422,8 @@ static LONG _dash_event_window_handle(void) {{
         # Generate main with appropriate library initialization
         main_template = self._get_main_template()
         user_code = "".join(self.main_code)
+        if self.debug_lines:
+            user_code += debuglines.NOLINE + "\n"      # the cleanup after Main's code is the C file's
         main_code = main_template.substitute(user_code=user_code)
         cleanup = []
         if self.uses_winmgr:
@@ -12425,6 +12493,19 @@ static LONG _dash_event_window_handle(void) {{
             program = program.replace(anchor, runtime + "\n" + anchor, 1)
             program = program.replace("    // User Code\n", "    _dash_prof_start();\n    // User Code\n", 1)
             program = program.replace("    // Cleanup\n", "    // Cleanup\n    _dash_prof_report();\n", 1)
+        if self.debug_lines:
+            # --debug: the output where the debugger wants it, and the runtime's errors stop in the debugger
+            program = ("/* ./dash --debug: a runtime error stops the debugger (DEBUG_RUNTIME) */\n"
+                       "extern volatile const char *_dash_debug_what;\nvoid _dash_debug_stop(void);\n"
+                       "#define _dash_debug_trap(w) (_dash_debug_what = (w), _dash_debug_stop())\n" + program)
+            program = program.replace("    // User Code\n", "    _dash_debug_output();\n    // User Code\n", 1)
+            for check, what in (("if (!arr || index < 0 || index >= arr->length) return 0;", "índice fuera de la lista"),
+                                ("if (!arr || index < 0 || index >= arr->length) return;", "índice fuera de la lista")):
+                program = program.replace(check, check.replace("return", '{ _dash_debug_trap("%s"); return' % what)
+                                          .rstrip(";") + "; }")
+            program = program.replace("static void _dash_mc_error(CONST_STRPTR what) {\n",
+                                      "static void _dash_mc_error(CONST_STRPTR what) {\n"
+                                      "    _dash_debug_trap((const char *)what);\n", 1)
         if self.uses_time:
             # the clock starts with the program
             program = program.replace("    // User Code\n", "    _dash_time_init();\n    // User Code\n", 1)
@@ -12659,12 +12740,37 @@ static LONG _dash_event_window_handle(void) {{
 
         # Generate function with inline C body
         c_code = native.c_code.strip()
+        if self.debug_lines:
+            c_code = self._native_lines(native) or c_code
         func_code = f"""
 static {ret_type} {native.name}({params_str}) {{
 {c_code}
 }}
 """
         self.native_funcs.append(func_code)
+
+    def _native_lines(self, native: NativeFunc):
+        """./dash --debug: the C of an @native with each of its lines at its line of the .dash (a breakpoint
+        there went to some line of the C file, and a step into it showed the C file); None if its place is
+        not known. The body starts on the line of the opening \"\"\" of the function, after its header."""
+        location = native.location
+        if location is None or not location.filename or not os.path.exists(location.filename):
+            return None
+        from compiler.main import read_source
+        lines = read_source(location.filename).split("\n")
+        opening = next((i for i in range(location.line - 1, len(lines)) if '"""' in lines[i]), None)
+        if opening is None:
+            return None
+        filename = os.path.abspath(location.filename)
+        body = native.c_code.split("\n")            # its line k is the .dash's line opening + 1 + k
+        first = next((k for k, l in enumerate(body) if l.strip()), None)
+        last = max((k for k, l in enumerate(body) if l.strip()), default=None)
+        if first is None:
+            return None
+        out = []
+        for k in range(first, last + 1):
+            out.append(debuglines.mark(opening + 1 + k, filename) + body[k])
+        return "".join(line + "\n" for line in out) + debuglines.NOLINE
 
     def _generate_struct_typedef(self, struct: StructDef):
         """Generate C typedef, constructor, destructor and methods for a struct."""
@@ -12758,7 +12864,7 @@ static void {struct.name}_release({c_name} *obj) {{
         # Generate methods as separate functions
         methods_code = ""
         for method in struct.methods:
-            methods_code += self._generate_struct_method(struct, method, type_map, c_name)
+            methods_code += self._debug_wrap(method, self._generate_struct_method(struct, method, type_map, c_name))
 
         self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code)
 
@@ -13066,6 +13172,11 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_PrintStmt(self, node: PrintStmt):
         """Generate code for Print statement."""
+        self._print_line(node)
+        if self.print_flush:
+            self.emit(f"{self.context.indent}Flush(Output());\n")
+
+    def _print_line(self, node: PrintStmt):
         indent = self.context.indent
         if isinstance(node.message, StringLiteral):
             # String literal is the format itself: escape % and append the newline
@@ -14016,7 +14127,7 @@ static {ret_type} {method_name}({params_str}) {{
             params=params,
             body=body
         )
-        self.functions.append(code)
+        self.functions.append(self._debug_wrap(node, code))
         self.current_function = None
 
     def _infer_function_return_type(self, node: FunctionDef) -> str:

@@ -1,6 +1,6 @@
 # Test: with --memcheck, reading a weak field whose object was freed is an error (and nil)
 # memcheck
-# expect-out: memcheck: ERROR campo weak de un objeto ya liberado
+# expect-out: memcheck: ERROR campo weak de un objeto ya liberado (en tests/test_weak_dangling.dash:20)
 # expect-out: nil
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 1
 

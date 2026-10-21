@@ -47,6 +47,10 @@ def type_is_known(type_name: str, known) -> bool:
     return type_name in known
 
 
+
+# A file without Main: a program that does nothing, or a module to import (the language server does not show it)
+NO_MAIN = "el programa no tiene Main: no hace nada (un módulo para importar no lo necesita)"
+
 class SymbolType(Enum):
     """Types of symbols in the symbol table."""
     WINDOW = auto()
@@ -131,12 +135,19 @@ class AnalysisError:
     node: Optional[ASTNode] = None
     is_warning: bool = False
 
+    @property
+    def location(self):
+        return getattr(self.node, "location", None) if self.node is not None else None
+
     def __str__(self):
+        # file:line:column: Error: message (as gcc; editors and VS Code's problem matcher read it)
         prefix = "Warning" if self.is_warning else "Error"
-        location = ""
-        if self.node and self.node.location:
-            location = f" at {self.node.location}"
-        return f"{prefix}{location}: {self.message}"
+        location = self.location
+        if location and location.filename:
+            return f"{location}: {prefix}: {self.message}"
+        if location:
+            return f"{prefix} at {location}: {self.message}"
+        return f"{prefix}: {self.message}"
 
 
 @dataclass
@@ -342,7 +353,7 @@ class SemanticAnalyzer(ASTVisitor):
         if node.main:
             self.visit(node.main)
         else:
-            self.warning("Program has no Main block")
+            self.warning(NO_MAIN)
 
         # Check for unused windows
         for window in node.windows:

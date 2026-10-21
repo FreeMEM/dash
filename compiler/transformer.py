@@ -6,7 +6,7 @@ from lark import Transformer, Token, Tree
 from typing import List, Any, Optional
 
 from compiler.ast_nodes import (
-    Program, WindowDef, WindowProperty, MainBlock, EventLoop,
+    ASTNode, Program, WindowDef, WindowProperty, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
@@ -64,8 +64,9 @@ class DashASTBuilder(Transformer):
         EventLoop, Comment,
     )
 
-    def __init__(self):
+    def __init__(self, filename: str = ""):
         super().__init__()
+        self._filename = filename            # for the locations: errors say file:line:column
         self._imports: List[ImportStmt] = []
         self._constants: List[ConstDecl] = []
         self._global_vars: List[GlobalVarDecl] = []
@@ -80,6 +81,31 @@ class DashASTBuilder(Transformer):
         self._c_blocks: List[str] = []
         self._stack = 0
         self._workbench_output: Optional[str] = None
+
+    # the top-level definitions are kept in these lists (their rules return "")
+    _COLLECTED = ("_imports", "_constants", "_global_vars", "_structs", "_enums", "_windows", "_functions",
+                  "_extern_funcs", "_native_funcs")
+
+    def _call_userfunc(self, tree, new_children=None):
+        """Every node gets the place of its rule in the source (Lark's propagate_positions), unless
+        the rule already gave a more exact one; and the file it comes from."""
+        before = [len(getattr(self, name)) for name in self._COLLECTED]
+        node = super()._call_userfunc(tree, new_children)
+        meta = tree.meta
+        if isinstance(node, ASTNode):
+            self._place(node, meta)
+        for name, n in zip(self._COLLECTED, before):
+            for item in getattr(self, name)[n:]:
+                self._place(item, meta)
+        return node
+
+    def _place(self, node, meta):
+        location = getattr(node, "location", None)
+        if location is None:
+            if not getattr(meta, "empty", True):
+                node.location = SourceLocation(line=meta.line, column=meta.column, filename=self._filename)
+        elif not location.filename:
+            location.filename = self._filename
 
     def _get_location(self, token_or_tree) -> Optional[SourceLocation]:
         """Extract source location from a token or tree."""
@@ -1142,11 +1168,12 @@ class DashASTBuilder(Transformer):
 
         # Check for interpolation: "Hello #{name}!"
         if '#{' in value and '}' in value:
-            return self._parse_interpolated_string(value)
+            token = items[0] if isinstance(items[0], Token) else None
+            return self._parse_interpolated_string(value, token)
 
         return StringLiteral(value=value)
 
-    def _parse_interpolated_string(self, value: str):
+    def _parse_interpolated_string(self, value: str, token=None):
         """Parse "a #{expr} b" into "a " + (expr) + " b": each #{...} holds any expression
         (a name, a call, a + 1, v.length...). The chain starts with a string, so "#{n}" and
         "#{a}#{b}" give text, not numbers."""
@@ -1176,7 +1203,12 @@ class DashASTBuilder(Transformer):
                 continue
             if start > text_start:
                 parts.append(StringLiteral(value=f'"{content[text_start:start]}"'))
-            parts.append(_interpolated_expression(expr_text))
+            expr = _interpolated_expression(expr_text)
+            if token is not None and getattr(token, "line", None):
+                # its own parser has no places: the expression's, in the line of the string
+                _locate(expr, SourceLocation(line=token.line, column=token.column + 1 + start + 2,
+                                             filename=self._filename))
+            parts.append(expr)
             text_start = i = end + 1
         if not parts:
             return StringLiteral(value=value)
@@ -1269,6 +1301,23 @@ DashCodeGenerator = DashASTBuilder
 
 
 _expression_parser = None
+
+
+def _locate(node, location):
+    """This place for the node and everything under it that has none."""
+    from dataclasses import fields, is_dataclass
+    if isinstance(node, list):
+        for item in node:
+            _locate(item, location)
+        return
+    if not is_dataclass(node) or isinstance(node, SourceLocation):
+        return
+    if hasattr(node, "location") and getattr(node, "location", None) is None:
+        node.location = location
+    for f in fields(node):
+        value = getattr(node, f.name, None)
+        if isinstance(value, list) or (is_dataclass(value) and not isinstance(value, type)):
+            _locate(value, location)
 
 
 def _interpolated_expression(text: str):

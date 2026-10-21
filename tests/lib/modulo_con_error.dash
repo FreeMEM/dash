@@ -1,0 +1,4 @@
+# For tests/errors/error_in_module.dash: an error in an imported module says that module's line
+func f(a: Int) -> Int
+    return a + nada
+end

@@ -33,14 +33,22 @@ def find_elf2hunk():
 
     return None
 
+QUIET = False      # -q: without the commands it runs and the step headers (the IDE's tasks)
+
+
+def say(text):
+    if not QUIET:
+        print(text)
+
+
 def run_command(command, env=None):
     """Runs a command and prints its output in real-time, exiting on error."""
-    print(f"Executing: {' '.join(command)}")
+    say(f"Executing: {' '.join(command)}")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
 
     while True:
         output = process.stdout.readline()
-        if output:
+        if output and not (QUIET and output.startswith("Transpiled!")):
             sys.stdout.write(output)
 
         return_code = process.poll()
@@ -62,10 +70,14 @@ def main():
     parser.add_argument("--small", action="store_true",
                         help="Optimize for size (gcc -Os): about 7%% smaller, 10-50%% slower in loops")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="Only warnings, errors and the result (not each command and step)")
     parser.add_argument("-O", "--optimize", action="store_true",
                         help="Optimize the generated 68000 code with gcc -O2 (default)")
     parser.add_argument("-O0", "--no-optimize", dest="no_optimize", action="store_true",
                         help="Do not optimize (gcc -O0): easier to debug")
+    parser.add_argument("--debug", action="store_true",
+                        help="For the debugger (gdb, VS Code): gcc -O0 -g, and #line to the .dash lines")
     parser.add_argument("--fpu", action="store_true",
                         help="For Amigas with a 68881/68882 FPU: Float uses FPU instructions "
                              "(needs a 68020 or better; the program will not run without an FPU)")
@@ -76,6 +88,12 @@ def main():
                         help="Memory check build: reports objects or strings freed twice or used after "
                              "being freed, and what is still alive at exit (slower; for testing)")
     args = parser.parse_args()
+    global QUIET
+    QUIET = args.quiet
+    if args.debug:
+        os.environ["DASH_DEBUG_LINES"] = "1"   # the transpiler leaves #line marks (compiler/debuglines.py)
+        os.environ["DASH_PRINT_FLUSH"] = "1"   # and each Print goes out at once (the debugger shows it)
+        args.no_optimize = True
     if args.memcheck:
         os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
     if args.profile:
@@ -88,20 +106,29 @@ def main():
 
     build_dir = "build"
     os.makedirs(build_dir, exist_ok=True)
+    # build/<name>.c and .elf are the same for every program of that name (a/main.dash and b/main.dash, or one
+    # compiled twice at once from VS Code): one at a time, the others wait (it gave a program the other's code)
+    import fcntl
+    build_lock = open(os.path.join(build_dir, base_name + ".lock"), "w")
+    fcntl.flock(build_lock, fcntl.LOCK_EX)
+    if os.path.dirname(output_filename):      # -o bin/x: its folder, if it is not there yet
+        os.makedirs(os.path.dirname(output_filename), exist_ok=True)
 
-    # --- Toolchain Paths ---
-    amiga_toolchain_bin = "/opt/amiga/bin"
-    amiga_ndk_include = "/opt/amiga/m68k-amigaos/ndk-include"
-    amiga_lib_path = "/opt/amiga/m68k-amigaos/lib"
+    # --- Toolchain Paths --- (DASH_TOOLCHAIN: bebbo's toolchain somewhere else than /opt/amiga)
+    toolchain = os.environ.get("DASH_TOOLCHAIN") or "/opt/amiga"
+    amiga_toolchain_bin = os.path.join(toolchain, "bin")
+    amiga_ndk_include = os.path.join(toolchain, "m68k-amigaos", "ndk-include")
+    amiga_lib_path = os.path.join(toolchain, "m68k-amigaos", "lib")
 
     # Verificar que el toolchain existe
     if not os.path.exists(f"{amiga_toolchain_bin}/m68k-amigaos-gcc"):
-        print("Error: m68k-amigaos-gcc not found in /opt/amiga/bin/", file=sys.stderr)
-        print("Please install the Amiga cross-compiler toolchain.", file=sys.stderr)
+        print(f"Error: m68k-amigaos-gcc not found in {amiga_toolchain_bin}/", file=sys.stderr)
+        print("Falta el compilador de Amiga (m68k-amigaos-gcc de bebbo, github.com/bebbo/amiga-gcc): "
+              "instálalo en /opt/amiga, o pon su carpeta en DASH_TOOLCHAIN.", file=sys.stderr)
         sys.exit(1)
 
     # --- Step 1: Transpile Dash to C ---
-    print("--- Transpiling Dash to C ---")
+    say("--- Transpiling Dash to C ---")
 
     if args.multifile:
         # Multi-file mode: generate multiple .c and .h files
@@ -145,7 +172,7 @@ def main():
         c_files = [c_output_file]
 
     # --- Step 2: Compile C to Amiga executable ---
-    print("\n--- Compiling C to Amiga executable ---")
+    say("\n--- Compiling C to Amiga executable ---")
     env = os.environ.copy()
     env["PATH"] = f"{amiga_toolchain_bin}:{env['PATH']}"
 
@@ -160,6 +187,10 @@ def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from compiler.cflags import opt_flags, mui_flags
     compile_command.extend(opt_flags(args.no_optimize, args.small))
+    if args.debug:
+        compile_command.append("-g")      # DWARF in the hunk file (.dwarf2), read by m68k-amigaos-gdb
+        from compiler.cflags import debug_link_flags   # and .bss in .data, for gdb (see there)
+        compile_command.extend(debug_link_flags(os.path.join(amiga_toolchain_bin, "m68k-amigaos-ld"), build_dir))
     try:   # the MUI SDK headers, when the program uses MUI
         compile_command.extend(mui_flags(open(f).read() for f in c_files))
         from compiler.cflags import amissl_flags   # and AmiSSL's, when it uses tls_* (dashweb D11)
@@ -206,7 +237,7 @@ def main():
             print("Warning: elf2hunk not found. Executable remains in ELF format.", file=sys.stderr)
             shutil.move(elf_output_file, output_filename)
         else:
-            print("\n--- Converting ELF to Hunk ---")
+            say("\n--- Converting ELF to Hunk ---")
             convert_command = [elf2hunk, elf_output_file, output_filename]
             run_command(convert_command)
 

@@ -35,6 +35,14 @@
     const COMMON = [['name', 'ident', ''], ['weight', 'int', 100], ['disabled', 'bool', false], ['hidden', 'bool', false],
                     ['help', 'string', '']];
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    // words of the language: not names (compiler/dashui.py reserved(), the same list; a test compares them)
+    const RESERVED = new Set(["EventLoop", "Main", "Print", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
+    /** Why a name of a window or object is not valid, or null */
+    function badName(name) {
+        if (!IDENT.test(String(name || ''))) return 'letras sin tilde, cifras y _, sin empezar por cifra';
+        if (RESERVED.has(name)) return 'es una palabra del lenguaje';
+        return null;
+    }
 
     function newDocument() {
         return { dashui: 1, windows: [newWindow('Principal')] };
@@ -118,7 +126,8 @@
     function setProp(node, key, value) {
         if (key === 'name') {
             if (value === '' || value === null || value === undefined) { delete node.name; return null; }
-            if (!IDENT.test(value) || value === 'window') return 'nombre no válido: ' + value;
+            if (value === 'window') return 'nombre no válido: window (es el de la ventana)';
+            if (badName(value)) return `nombre no válido: ${value} (${badName(value)})`;
             node.name = value;
             return null;
         }
@@ -150,6 +159,68 @@
         return null;
     }
 
+    /** Where a drop on the object at path goes: before or after it (in its group), or into it (a group:
+        at the end). Returns {parentPath, index} or null (the root has no before or after). */
+    function dropTarget(win, path, where) {
+        const node = nodeAt(win, path);
+        if (!node) return null;
+        if (where === 'into' && TYPES[node.type] && TYPES[node.type].group) return { parentPath: path, index: undefined };
+        if (!path.length) return where === 'into' ? null : { parentPath: [], index: where === 'before' ? 0 : undefined };
+        const i = path[path.length - 1];
+        return { parentPath: path.slice(0, -1), index: where === 'before' ? i : i + 1 };
+    }
+
+    /** A copy of the object at path (deep, as JSON: everything it has, known or not). */
+    function copy(win, path) {
+        const node = nodeAt(win, path);
+        return node ? JSON.parse(JSON.stringify(node)) : null;
+    }
+
+    /** Insert a copied object into the group at parentPath (at index, or at the end). Its names (and those
+        inside it) that the window already has get a number: boton -> boton2. Returns its path. */
+    function paste(win, parentPath, node, index) {
+        const parent = nodeAt(win, parentPath);
+        if (!parent || !TYPES[parent.type] || !TYPES[parent.type].group) throw new Error('not a group');
+        if (!node || typeof node !== 'object' || !node.type) throw new Error('not an object of a .dashui');
+        const clone = JSON.parse(JSON.stringify(node));
+        const taken = new Set(names(win));
+        (function rename(n) {
+            if (n.name) {
+                const base = String(n.name).replace(/\d+$/, '') || 'objeto';
+                let name = n.name, k = 2;
+                while (taken.has(name)) name = base + k++;
+                n.name = name;
+                taken.add(name);
+            }
+            (n.children || []).forEach(rename);
+        })(clone);
+        const at = index === undefined || index > parent.children.length ? parent.children.length : index;
+        parent.children.splice(at, 0, clone);
+        return parentPath.concat([at]);
+    }
+
+    /** Move the object at path one place up (delta -1) or down (+1) among its siblings; its new path. */
+    function moveBy(win, path, delta) {
+        if (!path.length) return path;
+        const parent = nodeAt(win, path.slice(0, -1));
+        const i = path[path.length - 1], j = i + delta;
+        if (!parent || j < 0 || j >= parent.children.length) return path;
+        const [node] = parent.children.splice(i, 1);
+        parent.children.splice(j, 0, node);
+        return path.slice(0, -1).concat([j]);
+    }
+
+    /** The paths of a window's objects in the order the tree shows them (the root first). */
+    function paths(win) {
+        const out = [];
+        (function walk(n, path) {
+            if (!n) return;
+            out.push(path);
+            (n.children || []).forEach((c, i) => walk(c, path.concat([i])));
+        })(win && win.root, []);
+        return out;
+    }
+
     function names(win) {
         const out = [];
         (function walk(n) {
@@ -160,18 +231,22 @@
         return out;
     }
 
-    /** Problems the compiler would refuse: names used twice or not valid, unknown types. */
+    /** Problems the compiler would refuse: names used twice or not valid, unknown types, numbers that are not. */
     function check(doc) {
         const problems = [];
         doc.windows.forEach((win, w) => {
-            if (!IDENT.test(win.name || '')) problems.push(`ventana ${w + 1}: nombre no válido`);
+            if (badName(win.name)) problems.push(`ventana ${w + 1}: nombre no válido (${badName(win.name)})`);
             const seen = {};
             (function walk(n) {
                 if (!n) return;
                 if (!TYPES[n.type]) problems.push(`${win.name}: tipo desconocido ${n.type}`);
                 if (n.name) {
-                    if (seen[n.name]) problems.push(`${win.name}: nombre repetido ${n.name}`);
+                    if (badName(n.name)) problems.push(`${win.name}: nombre no válido ${n.name} (${badName(n.name)})`);
+                    else if (seen[n.name]) problems.push(`${win.name}: nombre repetido ${n.name}`);
                     seen[n.name] = true;
+                }
+                for (const k of ['event', 'change', 'ack', 'double', 'weight']) {   // ("event": "uno")
+                    if (n[k] !== undefined && !Number.isInteger(n[k])) problems.push(`${win.name}: ${k} de ${n.name || n.type} no es un número entero`);
                 }
                 (n.children || []).forEach(walk);
             })(win.root);
@@ -225,6 +300,6 @@
             (menus ? `<div class="menubar">${menus}</div>` : '') + render(win.root, []) + '</div>';
     }
 
-    return { TYPES, COMMON, newDocument, newWindow, newNode, parse, serialize, nodeAt, add, remove, move,
-             setProp, names, check, preview };
+    return { TYPES, COMMON, RESERVED, badName, newDocument, newWindow, newNode, parse, serialize, nodeAt, add, remove, move,
+             dropTarget, copy, paste, moveBy, paths, setProp, names, check, preview };
 }));

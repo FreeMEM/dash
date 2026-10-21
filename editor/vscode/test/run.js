@@ -117,7 +117,76 @@ async function grammarTests() {
         // the C grammar runs inside: "volatile" is a C keyword, not part of a Dash string
         assert.strictEqual(scopeOf(tokens, 'volatile'), 'keyword.c');
     });
+    // generated from the compiler (tools/gen_tmgrammar.py): every builtin, directives, blocks...
+    const t2 = tokenize(g, SAMPLE2);
+    await check('grammar: directives', () => {
+        assert.match(scopeOf(t2, '@stack'), /^keyword\.other\.directive/);
+        assert.match(scopeOf(t2, '@workbench_output'), /^keyword\.other\.directive/);
+        assert.match(scopeOf(t2, 'borrow'), /^storage\.modifier/);
+    });
+    await check('grammar: any builtin, not only some prefixes', () => {
+        assert.match(scopeOf(t2, 'net_signal'), /^support\.function\.builtin/);
+        assert.match(scopeOf(t2, 'task_signal'), /^support\.function\.builtin/);
+        assert.match(scopeOf(t2, 'mi_funcion'), /^entity\.name\.function\.call/);
+    });
+    await check('grammar: Window block and events', () => {
+        assert.match(scopeOf(t2, 'title'), /^support\.type\.property-name/);
+        assert.match(scopeOf(t2, 'Timer'), /^keyword\.other\.event/);
+        assert.match(scopeOf(t2, 'open'), /^support\.function\.window/);
+    });
+    await check('grammar: structs, types, members', () => {
+        assert.match(scopeOf(t2, 'Nodo'), /^entity\.name\.type/);         // after ":"
+        assert.match(scopeOf(t2, 'Punto'), /^entity\.name\.type\.constructor/);
+        assert.match(scopeOf(t2, 'Fixed'), /^support\.type/);
+        assert.match(scopeOf(t2, 'push'), /^support\.function\.method/);
+        assert.match(scopeOf(t2, 'length'), /^support\.variable\.property/);
+        assert.match(scopeOf(t2, 'self'), /^variable\.language\.self/);
+        assert.match(scopeOf(t2, 'weak'), /^storage\.modifier/);
+        assert.match(scopeOf(t2, '..'), /^keyword\.operator\.range/);
+    });
+    await check('grammar: interpolation with an expression', () => {
+        assert.match(scopeOf(t2, 'str_upper'), /^support\.function\.builtin/);
+    });
+    await check('grammar: quotes inside #{} are \\" and the text goes on after', () => {
+        const t3 = tokenize(g, 'Print "has #{d.has(\\"k\\")} fin"\nx = 1');
+        assert.match(scopeOf(t3, 'has'), /^support\.function\.method/);
+        assert.match(scopeOf(t3, ' fin'), /^string\.quoted/);
+        assert.match(scopeOf(t3, '1'), /^constant\.numeric/);           // the next line is code again
+    });
 }
+
+const SAMPLE2 = `@stack 262144
+@workbench_output "NIL:"
+@native(borrow) func peek2(a: Int) -> Int
+"""
+    return a;
+"""
+end
+Window Win
+    title "Hola"
+end
+struct Nodo
+    weak padre: Nodo = nil
+    func ver() -> Int
+        return self.padre.length
+    end
+end
+Main
+    m = net_signal() | task_signal()
+    p = Punto(1, 2)
+    f: Fixed = Fixed(1.5)
+    l = [1]
+    l.push(2)
+    mi_funcion(1)
+    for i in (1..10)
+    end
+    Win.open
+    Print "x #{str_upper(t) + 1}"
+    EventLoop
+        On Timer 100
+        end
+    end
+end`;
 
 
 // --- the .dashui model (media/model.js) ----------------------------------------
@@ -126,6 +195,25 @@ async function modelTests() {
     const { execFileSync } = require('child_process');
     const repo = path.resolve(__dirname, '..', '..', '..');
 
+    await check('model: names that are words of the language are refused, as the compiler does (v14)', () => {
+        const { execFileSync } = require('child_process');
+        const repo = path.resolve(__dirname, '..', '..', '..');
+        const py = JSON.parse(execFileSync('python3', ['-c', 'import json; from compiler.dashui import reserved; ' +
+                                                       'print(json.dumps(sorted(reserved())))'], { cwd: repo, encoding: 'utf8' }));
+        assert.deepStrictEqual([...M.RESERVED].sort(), py);
+        const node = { type: 'button' };
+        assert(/palabra del lenguaje/.test(M.setProp(node, 'name', 'end')));
+        assert(/sin tilde/.test(M.setProp(node, 'name', 'botón')));
+        assert.strictEqual(M.setProp(node, 'name', 'Close'), null);          // (only after On)
+        const L = require('../dashuiLinks.js');
+        const text = JSON.stringify({ dashui: 1, windows: [{ name: 'while', title: 't', id: 1, root: { type: 'vgroup',
+            children: [{ type: 'button', name: 'end', label: 'A' }] } }] });
+        const msgs = L.problems(text).map((p) => p.message).join(' | ');
+        assert(/ventana no válido: "while"/.test(msgs) && /nombre no válido: end/.test(msgs), msgs);
+        const own = M.check(M.parse(JSON.stringify({ dashui: 1, windows: [{ name: 'V', title: 't', id: 1, root: { type: 'vgroup',
+            children: [{ type: 'button', name: 'botón', label: 'A', event: 'uno' }] } }] }))).join(' | ');
+        assert(/nombre no válido botón/.test(own) && /event de botón no es un número/.test(own), own);
+    });
     await check('model: new document has one empty window', () => {
         const d = M.newDocument();
         assert.strictEqual(d.dashui, 1);
@@ -189,6 +277,81 @@ async function modelTests() {
         assert.match(p, /repetido a/);
         assert.match(p, /desconocido boton/);
     });
+    await check('model: copy and paste with names made unique', () => {
+        const w = M.newWindow('W');
+        const g = M.add(w, [], 'hgroup');
+        const b = M.add(w, g, 'button');
+        M.setProp(M.nodeAt(w, b), 'name', 'boton1');
+        M.nodeAt(w, b).extra = { kept: true };
+        const c = M.copy(w, g);
+        const p = M.paste(w, [], c, 0);
+        assert.deepStrictEqual(p, [0]);
+        assert.strictEqual(M.nodeAt(w, [0, 0]).name, 'boton2');
+        assert.deepStrictEqual(M.nodeAt(w, [0, 0]).extra, { kept: true });
+        assert.strictEqual(M.nodeAt(w, [1, 0]).name, 'boton1');
+        M.paste(w, [], c);
+        assert.strictEqual(M.nodeAt(w, [2, 0]).name, 'boton3');
+        assert.deepStrictEqual(M.check({ windows: [w] }), []);
+        assert.throws(() => M.paste(w, [0, 0], c), /not a group/);
+        assert.throws(() => M.paste(w, [], { name: 'x' }), /not an object/);
+    });
+    await check('model: move up and down, drop places, tree order', () => {
+        const w = M.newWindow('W');
+        M.add(w, [], 'text'); M.add(w, [], 'button'); const g = M.add(w, [], 'vgroup'); M.add(w, g, 'checkbox');
+        assert.deepStrictEqual(M.moveBy(w, [1], -1), [0]);
+        assert.strictEqual(w.root.children[0].type, 'button');
+        assert.deepStrictEqual(M.moveBy(w, [0], -1), [0]);
+        assert.deepStrictEqual(M.moveBy(w, [2], 1), [2]);
+        assert.deepStrictEqual(M.paths(w), [[], [0], [1], [2], [2, 0]]);
+        assert.deepStrictEqual(M.dropTarget(w, [1], 'before'), { parentPath: [], index: 1 });
+        assert.deepStrictEqual(M.dropTarget(w, [1], 'after'), { parentPath: [], index: 2 });
+        assert.deepStrictEqual(M.dropTarget(w, [2], 'into'), { parentPath: [2], index: undefined });
+        assert.deepStrictEqual(M.dropTarget(w, [1], 'into'), { parentPath: [], index: 2 });
+        assert.strictEqual(M.dropTarget(w, [9], 'after'), null);
+    });
+    const L = require('../dashuiLinks.js');
+    await check('dashui and code: problems with their place', () => {
+        const text = JSON.stringify({ dashui: 1, windows: [{ name: 'W', root: { type: 'vgroup', children: [
+            { type: 'button', name: 'a', event: 1 }, { type: 'botn', name: 'a' }, { type: 'checkbox', change: 0 }] } },
+            { name: 'W', root: { type: 'vgroup', children: [] } }] }, null, 2);
+        const ps = L.problems(text);
+        const msg = ps.map((p) => p.message).join(' | ');
+        assert.match(msg, /tipo desconocido: botn/);
+        assert.match(msg, /nombre repetido en W: a/);
+        assert.match(msg, /change: un número de evento/);
+        assert.match(msg, /ventana repetida: W/);
+        const rep = ps.find((p) => /repetido/.test(p.message));
+        assert.strictEqual(text.split('\n')[rep.start.line].trim(), '"name": "a"');
+        assert.strictEqual(rep.start.line, text.split('\n').findIndex((l, i) => l.includes('"name": "a"') && i > 10));
+        const bad = L.problems('{"dashui": 1,\n  "windows": [}');
+        assert.strictEqual(bad.length, 1);
+        assert.strictEqual(bad[0].start.line, 1);
+        assert.deepStrictEqual(L.problems(JSON.stringify(M.newDocument())), []);
+    });
+    await check('dashui and code: where an event is handled, and its code created', () => {
+        const dash = 'import "v.dashui"\n\nconst ID_A = 1  # el botón\n\nfunc f()\nend\n\nMain\n    while true\n' +
+                     '        ev = mui_wait_event()\n        if ev == ID_A or ev == 7\n            Print "a == 2"\n        end\n    end\nend\n';
+        assert.deepStrictEqual(L.handlers(dash, 1).map((h) => [h.line, !!h.constant]), [[10, false], [2, true]]);
+        assert.deepStrictEqual(L.handlers(dash, 7).map((h) => h.line), [10]);
+        assert.deepStrictEqual(L.handlers(dash, 2), []);            // not inside a text
+        // a bare number only against the variable of mui_wait_event (dashweb: "elif k == 1" is not event 1)
+        assert.deepStrictEqual(L.handlers(dash.replace('Print "a == 2"', 'k = 7\n            if k == 7\n            end'), 7)
+            .map((h) => h.line), [10]);
+        assert(L.importsDashui(dash, 'v.dashui') && !L.importsDashui(dash, 'w.dashui'));
+        const plan = L.addHandler(dash, 2, 'boton_ok');
+        assert.strictEqual(plan.name, 'ID_BOTON_OK');
+        const out = L.applyEdits(dash, plan.edits).split('\n');
+        assert.strictEqual(out[3], 'const ID_BOTON_OK = 2');
+        assert.strictEqual(out[plan.handler.line - 1], '        if ev == ID_BOTON_OK');
+        assert.strictEqual(out[plan.handler.line], '            # boton_ok');
+        assert.deepStrictEqual(L.handlers(out.join('\n'), 2).map((h) => h.line), [plan.handler.line - 1, 3]);
+        // its constant already there: only the handler; no loop: only the constant
+        assert.strictEqual(L.addHandler(dash, 1, 'x').edits.length, 1);
+        const p2 = L.addHandler('Main\nend\n', 3);
+        assert.strictEqual(p2.name, 'EVENTO_3');
+        assert.strictEqual(p2.handler, null);
+        assert.deepStrictEqual(p2.edits, [{ line: 0, text: 'const EVENTO_3 = 3' }]);
+    });
     await check('model: preview shows every object with its path', () => {
         const w = M.newWindow('W');
         w.title = 'Hola <b>';
@@ -235,8 +398,147 @@ async function previewTests() {
         assert.deepStrictEqual(a, ['/d/tools/emu_run.py', '--autoclose', '22', '--timeout', '180',
             '--screenshot', '12', '/t/s.png', '--kickstart', '/k.rom', '--system', '/sys', '/t/p.dash']);
     });
+    await check('new project: its files, and its program compiles', async () => {
+        const N = require('../newProject.js');
+        assert.strictEqual(N.cleanName('mi programa!'), 'mi_programa');
+        assert.strictEqual(N.cleanName('3d'), 'Programa_3d');
+        assert.strictEqual(N.cleanName('Mi Juego Ñandú'), 'Mi_Juego_Nandu');   // accents off, not the letter
+        assert.strictEqual(N.cleanName('Árbol'), 'Arbol');
+        const { name, files } = N.projectFiles('hola', '/x/dash');
+        assert.strictEqual(name, 'hola');
+        assert.deepStrictEqual(Object.keys(files).sort(),
+            ['.gitignore', '.vscode/launch.json', '.vscode/settings.json', 'hola.dash', 'ventana.dashui']);
+        assert.deepStrictEqual(JSON.parse(files['.vscode/settings.json']), { 'dash.path': '/x/dash' });
+        assert.deepStrictEqual(require('../dashuiLinks.js').problems(files['ventana.dashui']), []);
+        assert.strictEqual(JSON.parse(files['.vscode/launch.json']).configurations[0].program, '${workspaceFolder}/hola.dash');
+        const repo = path.resolve(__dirname, '..', '..', '..');
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_proj_'));
+        try {
+            const prog = N.writeProject(dir, 'Hola Mundo');
+            assert.throws(() => N.writeProject(dir, 'Hola Mundo'), /ya existe/);
+            if (fs.existsSync('/opt/amiga/bin/m68k-amigaos-gcc') && fs.existsSync(path.join(require('os').homedir(), '.cache', 'dash-mui', 'x'))) {
+                const out = require('child_process').spawnSync(path.join(repo, 'dash'), [prog, '-o', path.join(dir, 'prog')],
+                                                               { cwd: repo, encoding: 'utf8' });
+                assert.strictEqual(out.status, 0, out.stdout + out.stderr);
+            }
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+    await check('video: subtitles and the video of pictures at their times (video/rodaje.js)', () => {
+        const V = require('../video/rodaje.js');
+        assert.strictEqual(V.srtTime(3723456), '01:02:03,456');
+        assert.strictEqual(V.srt([{ start: 0, end: 1500, text: 'Hola' }, { start: 2000, end: 2500, text: 'Dos' }]),
+                           '1\n00:00:00,000 --> 00:00:01,500\nHola\n\n2\n00:00:02,000 --> 00:00:02,500\nDos\n');
+        if (require('child_process').spawnSync('ffmpeg', ['-version']).status !== 0) return;
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_video_'));
+        try {
+            // three pictures of 64 x 36 (two colours), at 0, 1 and 2.5 s; the end at 3 s: a video of 3 s
+            const shots = [];
+            for (const [i, colour, t] of [[0, 'red', 0], [1, 'blue', 1000], [2, 'red', 2500]]) {
+                const file = path.join(dir, `f${i}.png`);
+                require('child_process').spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i',
+                    `color=c=${colour}:s=64x36`, '-frames:v', '1', file]);
+                shots.push({ file, t });
+            }
+            const out = V.montar(shots, 3000, [{ start: 500, end: 2000, text: 'Hola' }], path.join(dir, 'toma'), dir);
+            const probe = require('child_process').spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+                                                                         '-of', 'csv=p=0', out.mp4], { encoding: 'utf8' });
+            assert(Math.abs(Number(probe.stdout) - 3) < 0.2, 'duration ' + probe.stdout);
+            assert(fs.existsSync(out.sub) && fs.existsSync(out.srt));
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+    await check('video: cards and chapters joined, each subtitle at its time (video/grabar.js)', () => {
+        if (require('child_process').spawnSync('ffmpeg', ['-version']).status !== 0) return;
+        const G = require('../video/grabar.js');
+        assert.strictEqual(G.dt("a: 50% d'x"), 'a\\: 50\\% d\u2019x');
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_video_'));
+        try {
+            const a = G.tarjeta(path.join(dir, 'a.mp4'), 'Uno: título', 'línea', 1);
+            const b = Object.assign(G.tarjeta(path.join(dir, 'b.mp4'), 'Dos', null, 2), { subs: [{ start: 500, end: 9000, text: 'Hola' }] });
+            const res = G.juntar([a, b], path.join(dir, 'todo'));
+            assert.deepStrictEqual(res.subs, [{ start: 1500, end: 3000, text: 'Hola' }]);   // after the first card, cut at the end
+            const probe = require('child_process').spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration',
+                                                                         '-of', 'csv=p=0', res.sub], { encoding: 'utf8' });
+            assert(Math.abs(Number(probe.stdout) - 3) < 0.2, 'duration ' + probe.stdout);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+    await check('language: a quote typed over a selection replaces it (the hole of a parameter)', () => {
+        // with " in surroundingPairs, mui_set_text(obj, text) with "text" selected and "Otra vez" typed gave
+        // "Otra vez"" (the quote around the selection is not overtyped at the end): tutorial, chapter 2
+        const conf = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'language-configuration.json'), 'utf8'));
+        assert(!conf.surroundingPairs.some((pair) => pair[0] === '"'));
+        assert(conf.autoClosingPairs.some((pair) => pair.open === '"'));
+    });
+    await check('preview: the program that takes its own picture', () => {
+        const prog = P.previewProgram('Principal', true);
+        assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);
+        assert.match(prog, /C:dash_shot 1 DH0:shot.dsh/);
+        assert.strictEqual(P.previewMachine('a500'), 'a1200');
+        assert.strictEqual(P.previewMachine('rtg'), 'rtg');
+    });
+    await check('preview: the images a window names go with it (PROGDIR: from the folder or the one above)', () => {
+        const base = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_win_'));
+        fs.mkdirSync(path.join(base, 'src')); fs.mkdirSync(path.join(base, 'iconos'));
+        fs.writeFileSync(path.join(base, 'iconos', 'a.iff'), 'A');
+        fs.writeFileSync(path.join(base, 'src', 'b.iff'), 'B');
+        const text = JSON.stringify({ dashui: 1, windows: [{ name: 'W', root: { type: 'vgroup', children: [
+            { type: 'image_button', file: 'PROGDIR:iconos/a.iff' }, { type: 'image', file: 'b.iff' },
+            { type: 'image', file: 'SYS:Prefs/x.iff' }, { type: 'image', file: 'PROGDIR:no.iff' }] } }] });
+        const dir = P.windowFiles(text, path.join(base, 'src'));
+        try {
+            assert.strictEqual(fs.readFileSync(path.join(dir, 'iconos', 'a.iff'), 'utf8'), 'A');
+            assert.strictEqual(fs.readFileSync(path.join(dir, 'b.iff'), 'utf8'), 'B');
+            assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['b.iff', 'iconos']);
+            assert.strictEqual(P.windowFiles(JSON.stringify({ dashui: 1, windows: [] }), base), null);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+            fs.rmSync(base, { recursive: true, force: true });
+        }
+    });
+    await check('preview: the Amiga that stays on answers in order, and its errors arrive', async () => {
+        // a server that speaks tools/emu_preview.py's lines
+        const fake = 'const fs = require("fs"); console.log("ready"); let b = "";' +
+            'process.stdin.on("data", (d) => { b += d; let i; while ((i = b.indexOf("\\n")) >= 0) { const l = b.slice(0, i).split(" "); b = b.slice(i + 1);' +
+            ' if (l[0] === "quit") process.exit(0);' +
+            ' if (l[1] === "mal") console.log("error no compila la vista"); else { fs.writeFileSync(l[2], "png " + l[1]); console.log("ok " + l[2]); } } });';
+        const server = new P.PreviewServer([process.execPath, '-e', fake]);
+        await server.ready;
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_prev_'));
+        const [a, b, c] = await Promise.allSettled([server.show('uno', path.join(dir, 'a.png')),
+                                                     server.show('mal', path.join(dir, 'b.png')),
+                                                     server.show('dos', path.join(dir, 'c.png'))]);
+        assert.strictEqual(fs.readFileSync(a.value, 'utf8'), 'png uno');
+        assert.strictEqual(b.status, 'rejected');
+        assert.match(b.reason.message, /no compila la vista/);
+        assert.strictEqual(fs.readFileSync(c.value, 'utf8'), 'png dos');
+        server.stop();
+        await new Promise((r) => server.proc.on('exit', r));
+        await assert.rejects(server.show('tres', path.join(dir, 'd.png')), /the emulator ended/);
+        fs.rmSync(dir, { recursive: true, force: true });
+        const broken = new P.PreviewServer([process.execPath, '-e', 'console.log("error no ROM")']);
+        await assert.rejects(broken.ready, /no ROM/);
+    });
     // The real thing (FS-UAE, about 30 s): only with DASH_PREVIEW_EMU=1
     if (process.env.DASH_PREVIEW_EMU) {
+        await check('preview: the Amiga that stays on, twice the same window (the second, not compiled again)', async () => {
+            const repo = path.resolve(__dirname, '..', '..', '..');
+            const text = fs.readFileSync(path.join(repo, 'tests', 'lib', 'ventana_prueba.dashui'), 'utf8') + ' ';
+            const t0 = Date.now();
+            const first = await P.preview({ dashDir: repo, dashuiText: text, windowName: 'Prueba', machine: 'a1200' });
+            const t1 = Date.now();
+            const second = await P.preview({ dashDir: repo, dashuiText: text, windowName: 'Prueba', machine: 'a1200' });
+            const t2 = Date.now();
+            P.stopServers();
+            assert.strictEqual(first.png.slice(1, 4).toString(), 'PNG');
+            assert.strictEqual(second.png.slice(1, 4).toString(), 'PNG');
+            assert.strictEqual(second.compiled, false);
+            assert(t2 - t1 < 8000, `the second took ${t2 - t1} ms (the first ${t1 - t0})`);
+        });
         await check('preview: real window in FS-UAE gives a PNG', async () => {
             const repo = path.resolve(__dirname, '..', '..', '..');
             const { png } = await P.runPreview({ dashDir: repo, windowName: 'Prueba',
@@ -253,7 +555,10 @@ async function extensionTests() {
     const registered = {};
     const settings = { 'dash': { path: '' }, 'dash.emulator': { kickstart: '/roms/ks.rom', system: '', autoclose: 5 } };
     const fakeVscode = {
-        workspace: { getConfiguration: (section) => ({ get: (k) => (settings[section] || {})[k] }) },
+        workspace: { getConfiguration: (section) => ({ get: (k) => (settings[section] || {})[k] }),
+                     onDidChangeTextDocument: () => ({ dispose() {} }),
+                     onDidOpenTextDocument: () => ({ dispose() {} }),
+                     onDidGrantWorkspaceTrust: () => ({ dispose() {} }), textDocuments: [] },
         window: {
             activeTextEditor: null,
             showWarningMessage: (m) => sent.push('WARN ' + m),
@@ -277,7 +582,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.compile', 'dash.newWindowFile', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
+            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {
@@ -320,9 +625,274 @@ async function extensionTests() {
     });
 }
 
+// --- editing: endwise.js, snippets, indentation rules ---------------------------------
+async function editingTests() {
+    const { needsEnd } = require('../endwise.js');
+    const lines = (t) => t.split('\n');
+    await check('endwise: a new block gets its end', () => {
+        assert.strictEqual(needsEnd(lines('func f(a: Int) -> Int\n    '), 0), true);
+        assert.strictEqual(needsEnd(lines('Main\n    if x > 1\n        \nend'), 1), true);
+        assert.strictEqual(needsEnd(lines('@native(borrow) func f(x: Int)\n'), 0), true);
+        assert.strictEqual(needsEnd(lines('    On Timer 100\n        \n    end'), 0), false);
+    });
+    await check('endwise: no end where there is one, or none is needed', () => {
+        assert.strictEqual(needsEnd(lines('while x\n    x = 1\nend'), 0), false);
+        assert.strictEqual(needsEnd(lines('if a\n    b()\nelse\n    c()\nend'), 0), false);   // closed by else...end
+        assert.strictEqual(needsEnd(lines('enum E A, B end'), 0), false);                      // one line
+        assert.strictEqual(needsEnd(lines('@extern("x.library")\nfunc F(x: Int) -> Int\n'), 1), false);
+        assert.strictEqual(needsEnd(lines('x = 1\n'), 0), false);
+        assert.strictEqual(needsEnd(lines('else\n'), 0), false);
+    });
+    await check('outdent: else/elif/end go back to their block', () => {
+        const { outdentFor } = require('../endwise.js');
+        assert.strictEqual(outdentFor(lines('if a\n    b = 1\n    else'), 2, '    '), '');
+        assert.strictEqual(outdentFor(lines('Main\n    if a\n        b()\n        elif c > 1'), 3, '    '), '    ');
+        assert.strictEqual(outdentFor(lines('if a\n    while x\n        y()\n    end\n    else'), 4, '    '), '');
+        assert.strictEqual(outdentFor(lines('while x\n    end'), 1, '    '), null);        // empty block: same level
+        assert.strictEqual(outdentFor(lines('if a\n    b = 1\nelse'), 2, '    '), null);   // already there
+        assert.strictEqual(outdentFor(lines('if a\n    b = 1\n    endif = 2'), 2, '    '), null);
+    });
+    await check('endwise: an inner block before the outer end', () => {
+        assert.strictEqual(needsEnd(lines('Main\n    while true\n        \nend'), 1), true);
+    });
+    const config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'language-configuration.json'), 'utf8'));
+    await check('indentation: opens after a block line, not after a one-line block', () => {
+        const inc = new RegExp(config.indentationRules.increaseIndentPattern);
+        for (const l of ['func f()', '    if x', 'else', '@native(borrow) func f()', '@c', 'On Close', 'Main'])
+            assert(inc.test(l), l);
+        for (const l of ['enum E A, B end', 'x = 1', 'endif = 2', '# if x'])
+            assert(!inc.test(l), l);
+    });
+    // every snippet, with its default values, must compile (python3 -m compiler.main, transpile only)
+    const snippets = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'snippets', 'dash.json'), 'utf8'));
+    const repo = path.resolve(__dirname, '..', '..', '..');
+    const os = require('os');
+    const { execFileSync } = require('child_process');
+    const expand = (body) => body.join('\n').replace(/\$\{\d+:([^}]*)\}/g, '$1').replace(/\$\{\d+\|([^,|]*)[^}]*\}/g, '$1')
+        .replace(/\$\{?\d+\}?/g, '').replace(/\t/g, '    ');
+    // the snippets that are a part of a program, inside one
+    const wrap = {
+        if: (s) => `Main\n    condicion = true\n${s}\nend`, 'if else': (s) => `Main\n    condicion = true\n${s}\nend`,
+        while: (s) => `Main\n    condicion = false\n${s}\nend`, 'for rango': (s) => `Main\n${s}\nend`,
+        'for lista': (s) => `Main\n    lista = [1]\n${s}\nend`, import: null,
+        const: (s) => `${s}\nMain\nend`, func: (s) => `${s.replace(/\n    \n/, '\n    return a\n')}\nMain\nend`,
+        'func sin tipos': (s) => `${s}\nMain\nend`, struct: (s) => `${s}\nMain\nend`, enum: (s) => `${s}\nMain\nend`,
+        '@native': (s) => `${s.replace('\n    \n', '\n    return x;\n')}\nMain\nend`,
+        EventLoop: (s) => `Window W\n    title "x"\nend\nMain\n    W.open\n${s}\nend`,
+        On: (s) => `Window W\n    title "x"\nend\nMain\n    W.open\n    EventLoop\n${s}\n    end\nend`,
+        'Programa MUI con .dashui': null,   // needs the .dashui file
+    };
+    for (const [name, snip] of Object.entries(snippets)) {
+        const w = name in wrap ? wrap[name] : (s) => s;
+        if (!w) continue;
+        await check(`snippet compiles: ${name}`, () => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_snip_'));
+            const file = path.join(dir, 'snip.dash');
+            fs.writeFileSync(file, w(expand(snip.body)) + '\n');
+            try {
+                execFileSync('python3', ['-m', 'compiler.main', file, '-o', path.join(dir, 'snip.c')],
+                             { cwd: repo, stdio: 'pipe' });
+            } catch (e) {
+                throw new Error(fs.readFileSync(file, 'utf8') + '\n' + String(e.stdout) + String(e.stderr));
+            } finally {
+                fs.rmSync(dir, { recursive: true, force: true });
+            }
+        });
+    }
+}
+
+// --- tasks.js: the commands of the tasks and the problem matcher ------------------------------------
+async function taskTests() {
+    await check('missing tools: what and how to get it, in words (v12)', () => {
+        const { missing } = require('../missing.js');
+        const cases = [
+            ['Error: m68k-amigaos-gcc not found in /opt/amiga/bin/', /compilador de Amiga/],
+            ['fs-uae not found', /emulador FS-UAE/],
+            ['amiberry not found', /emulador Amiberry/],
+            ['bgdbserver not found: /x (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)', /get_bgdbserver\.sh/],
+            ['Error: MUI SDK not found in /x: run tools/get_mui_sdk.sh', /get_mui_sdk\.sh/],
+            ['--machine a1200-32 needs $DASH_EMU_SYS_32_MUI (Workbench files with MUI) or --system', /muiSystem32/],
+            ['--machine a1200 needs $DASH_EMU_SYS_MUI (Workbench files with MUI) or --system', /"dash\.emulator\.muiSystem"/],
+            ['--machine a500 needs $DASH_KICKSTART_A500 (or --kickstart)', /kickstartA500/],
+            ['--machine a1200-32 needs $DASH_KICKSTART_32 (or --kickstart)', /kickstart32/],
+        ];
+        for (const [text, want] of cases) assert(want.test(missing(text) || ''), text + ' -> ' + missing(text));
+        assert.strictEqual(missing('=== x: RC=0\nhola'), null);
+    });
+
+    const { taskCommand } = require('../tasks.js');
+    const repo = path.resolve(__dirname, '..', '..', '..');
+    await check('tasks: without a folder, its own terminal stays with the output until a key (v11)', async () => {
+        const { shellTerminal } = require('../tasks.js');
+        const vscode = { EventEmitter: class { constructor() { this.fs = []; this.event = (f) => this.fs.push(f); }
+                                                fire(v) { for (const f of this.fs) f(v); } } };
+        for (const keepOpen of [false, true]) {
+            let text = '', closed = null, got = null;
+            const t = shellTerminal(vscode, 'echo hola', '/', {}, (out, code) => { got = [out, code]; }, 'Compilar: x', keepOpen);
+            t.onDidWrite((w) => { text += w; });
+            t.onDidClose((c) => { closed = c; });
+            t.open();
+            for (let i = 0; i < 50 && !got; i++) await new Promise((r) => setTimeout(r, 40));
+            await new Promise((r) => setTimeout(r, 50));
+            assert.deepStrictEqual(got, ['hola\n', 0]);
+            if (!keepOpen) { assert.strictEqual(closed, 0); continue; }
+            assert.strictEqual(closed, null, 'closed by itself');
+            assert(/hola[\s\S]*Pulsa una tecla para cerrar/.test(text), text);
+            t.handleInput('x');
+            assert.strictEqual(closed, 0);
+        }
+    });
+    await check('tasks: compile, run with --memcheck and with autoclose', () => {
+        assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
+                           "mkdir -p '/p/bin' && '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
+        assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
+                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
+                           "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --window '/p/bin/x'");
+        assert.strictEqual(taskCommand('run', '/d', '/p/x.dash', { machine: 'a500', emulator: 'amiberry', window: false,
+                                                                 system: '/s y' }),
+                           "mkdir -p '/p/bin' && DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
+                           "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
+        assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
+    });
+    await check('tasks: the profile table and the memcheck matcher', () => {
+        const { parseProfile } = require('../tasks.js');
+        const p = parseProfile('hola\nperfil: 120 muestras (VBlank)\nperfil:  propio   total  llamadas  funcion\n' +
+                               'perfil:  62.5%  80.0%         3  suma\nperfil:  10.0%  12.5%        40  Punto.mover\n');
+        assert.strictEqual(p.samples, 120);
+        assert.deepStrictEqual(p.rows.map((r) => [r.own, r.total, r.calls, r.name]),
+                               [[62.5, 80, 3, 'suma'], [10, 12.5, 40, 'Punto.mover']]);
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+        const mc = pkg.contributes.problemMatchers.find((m) => m.name === 'dash-memcheck');
+        const hit = new RegExp(mc.pattern.regexp).exec('memcheck: ERROR campo de nil (en /home/x/prog.dash:15)');
+        assert.deepStrictEqual([hit[mc.pattern.message], hit[mc.pattern.file], hit[mc.pattern.line]],
+                               ['campo de nil', '/home/x/prog.dash', '15']);
+        assert.strictEqual(mc.severity, 'error');
+    });
+    await check('tasks: the $dash problem matcher reads what the compiler prints', () => {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+        const matcher = pkg.contributes.problemMatchers.find((m) => m.name === 'dash');
+        const re = new RegExp(matcher.pattern.regexp);
+        const { execFileSync } = require('child_process');
+        const os = require('os');
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_pm_'));
+        const file = path.join(dir, 'mal.dash');
+        fs.writeFileSync(file, 'Main\n    Print nada\n    x = (1\nend\n');
+        let out = '';
+        try {
+            execFileSync('python3', ['-m', 'compiler.main', file, '-o', path.join(dir, 'mal.c')], { cwd: repo, stdio: 'pipe' });
+        } catch (e) {
+            out = String(e.stdout) + String(e.stderr);
+        }
+        fs.rmSync(dir, { recursive: true, force: true });
+        const hits = out.split('\n').map((l) => re.exec(l)).filter(Boolean);
+        assert(hits.length >= 1, out);
+        const [, f, line, col, severity] = hits[0];
+        assert.strictEqual(f, file);
+        assert.strictEqual(severity, 'Error');
+        assert(Number(line) > 0 && Number(col) > 0);
+    });
+}
+
+// --- debugProxy.js: Dash expressions for gdb ---------------------------------------------------------
+async function debugTests() {
+    const { dashToC, logMessageToC } = require('../debugProxy.js');
+    await check('debugger: Dash expressions become C for gdb', () => {
+        const cases = [
+            ['p.x + 1', 'p->x + 1'],
+            ['self.pos.x', 'self->pos->x'],
+            ['l.length', '$len(l)'],
+            ['p.items.length > 2', '$len(p->items) > 2'],
+            ['l[i + 1]', '$at(l, i + 1)'],
+            ['d["clave"]', '$at(d, "clave")'],
+            ['p.vecinos[0].x', '$at(p->vecinos, 0)->x'],
+            ['a and not b or c == nil', 'a && !b || c == 0'],
+            ['activo == true', 'activo == 1'],
+            ['c == Color.ROJO', 'c == Color_ROJO'],
+            ['x * 1.5', 'x * 1.5'],
+            ['s == "a.b and c"', 's == "a.b and c"'],
+            ['p->x', 'p->x'],
+        ];
+        for (const [dash, c] of cases) assert.strictEqual(dashToC(dash), c, dash);
+        assert.strictEqual(logMessageToC('vuelta {i}, punto {p.x}'), 'vuelta {i}, punto {p->x}');
+    });    const { makeProxy } = require('../debugProxy.js');
+    await check('debugger: no Ada/C++ exception filters, start-up noise or registers from gdb', async () => {
+        const listeners = [];
+        const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+        const proxy = makeProxy(vscode, process.execPath, [require('path').join(__dirname, 'fake-gdb.js')]);
+        const got = [];
+        proxy.onDidSendMessage((m) => got.push(m));
+        proxy.handleMessage({ seq: 1, type: 'request', command: 'initialize', arguments: {} });
+        proxy.handleMessage({ seq: 2, type: 'request', command: 'scopes', arguments: { frameId: 1 } });
+        const later = () => got.some((m) => m.event === 'output' && /later/.test(m.body.output));
+        for (let i = 0; i < 75 && !(later() && got.some((m) => m.command === 'scopes')); i++) await new Promise((r) => setTimeout(r, 40));
+        proxy.dispose();
+        const init = got.find((m) => m.command === 'initialize');
+        assert(init && init.body.supportsConfigurationDoneRequest && !init.body.exceptionBreakpointFilters, JSON.stringify(init));
+        const texts = got.filter((m) => m.event === 'output').map((m) => m.body.output);
+        assert.deepStrictEqual(texts, ['No symbol table is loaded.  (later: shown)\n']);
+        const scopes = got.find((m) => m.command === 'scopes');
+        assert.deepStrictEqual(scopes.body.scopes.map((s) => s.name), ['Locals', 'Globals']);
+    });
+    await check('debugger: what the program wrote just before its end comes before the session ends (v15)', async () => {
+        const listeners = [];
+        const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+        const proxy = makeProxy(vscode, process.execPath, [require('path').join(__dirname, 'fake-gdb.js')]);
+        const got = [];
+        proxy.onDidSendMessage((m) => got.push(m.event || m.command));
+        proxy.handleMessage({ seq: 1, type: 'request', command: 'next', arguments: { threadId: 1 } });
+        await new Promise((r) => setTimeout(r, 400));
+        proxy.output('adiós\n');                     // the emulator's last output, after gdb said the end
+        for (let i = 0; i < 60 && !got.includes('terminated'); i++) await new Promise((r) => setTimeout(r, 50));
+        proxy.dispose();
+        assert(got.indexOf('output') >= 0 && got.indexOf('output') < got.indexOf('terminated'), JSON.stringify(got));
+    });
+    await check('debugger: without gdb it says so and ends (before: an uncaught exception)', async () => {
+        const listeners = [];
+        const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+        const proxy = makeProxy(vscode, '/no/esta/m68k-amigaos-gdb', ['-i=dap']);
+        const got = [];
+        proxy.onDidSendMessage((m) => got.push(m));
+        for (let i = 0; i < 50 && !got.some((m) => m.event === 'terminated'); i++) await new Promise((r) => setTimeout(r, 20));
+        assert(got.some((m) => m.event === 'output' && /No encuentro gdb/.test(m.body.output)), JSON.stringify(got));
+        assert(got.some((m) => m.event === 'terminated'));
+    });
+    await check('debugger: the stop of attaching is not seen; it goes on after the breakpoints, unless stopOnEntry', async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (const stopOnEntry of [false, true]) {
+            const listeners = [];
+            const vscode = { EventEmitter: class { constructor() { this.event = (f) => listeners.push(f); }
+                                                    fire(m) { for (const f of listeners) f(m); } dispose() {} } };
+            const proxy = makeProxy(vscode, process.execPath, [require('path').join(__dirname, 'fake-gdb.js')]);
+            const got = [];
+            proxy.onDidSendMessage((m) => got.push(m));
+            proxy.handleMessage({ seq: 1, type: 'request', command: 'attach', arguments: { program: 'p', stopOnEntry } });
+            await wait(300);
+            const continued = () => got.some((m) => m.event === 'output' && m.body.output === 'continue 7\n');
+            assert(!continued(), 'continue before configurationDone');
+            proxy.handleMessage({ seq: 2, type: 'request', command: 'configurationDone', arguments: {} });
+            for (let i = 0; i < 50 && !continued() && !got.some((m) => m.command === 'configurationDone'); i++) await wait(40);
+            await wait(300);
+            proxy.dispose();
+            const stops = got.filter((m) => m.event === 'stopped');
+            if (stopOnEntry) {
+                assert(!continued() && stops.length === 1 && stops[0].body.reason === 'attach', JSON.stringify(got));
+            } else {
+                assert(continued() && stops.length === 0, JSON.stringify(got));
+            }
+        }
+    });
+}
+
 (async () => {
     await grammarTests();
+    await debugTests();
+    await taskTests();
+    await editingTests();
     await modelTests();
+    await require("./webview.js").webviewTests(check, assert);
     await previewTests();
     await extensionTests();
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');

@@ -6,12 +6,43 @@ const path = require('path');
 const fs = require('fs');
 const { DashUIEditorProvider } = require('./dashuiEditor');
 const DashUI = require('./media/model');
-const { runPreview } = require('./amigaPreview');
+const { preview, previewMachine, stopServers } = require('./amigaPreview');
+const { newline, onTyped } = require('./endwise');
+const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
+const { setupTasks, emulatorOptions, savedFile } = require('./tasks');
+const { missing } = require('./missing');
+const { setupDebugger } = require('./debug');
+const { setupDashuiCode } = require('./dashuiCode');
+const { writeProject, cleanName } = require('./newProject');
 
-/** The Dash compiler folder: the setting, or the first folder up from the file with ./dash and compiler/. */
+/** A .dashui given to VS Code when it starts ("code carpeta ventana.dashui") opens as JSON text: its editor
+    is not there yet. Then, just after starting (not later: whoever opens one as text on purpose keeps it), the
+    ones as text without changes go to the visual editor. */
+function reopenStartupDashui() {
+    if (!vscode.window.tabGroups || process.uptime() > 30) return;
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            const input = tab.input;
+            if (!(input instanceof vscode.TabInputText) || !input.uri.path.endsWith('.dashui') || tab.isDirty) continue;
+            vscode.commands.executeCommand('vscode.openWith', input.uri, 'dash.dashuiEditor',
+                                           { viewColumn: group.viewColumn, preserveFocus: !tab.isActive })
+                .then(() => vscode.window.tabGroups.close(tab)).then(undefined, () => {});
+        }
+    }
+}
+
+/** The dash.path setting, with ~ for the home folder */
+function dashSetting() {
+    const configured = vscode.workspace.getConfiguration('dash').get('path') || '';
+    return configured.replace(/^~(?=$|\/)/, require('os').homedir());
+}
+
+/** The Dash compiler folder: the setting (if it is one), or the first folder up from the file with ./dash and
+    compiler/. */
 function findDash(fromFile) {
-    const configured = vscode.workspace.getConfiguration('dash').get('path');
-    if (configured) return configured;
+    const configured = dashSetting();
+    if (configured) return fs.existsSync(path.join(configured, 'dash')) && fs.existsSync(path.join(configured, 'compiler'))
+        ? configured : null;      // (a wrong one ran /x/dash: "not found" from the shell, and nothing more)
     let dir = path.dirname(fromFile);
     for (let i = 0; i < 12; i++) {
         if (fs.existsSync(path.join(dir, 'dash')) && fs.existsSync(path.join(dir, 'compiler'))) return dir;
@@ -20,6 +51,14 @@ function findDash(fromFile) {
         dir = parent;
     }
     return null;
+}
+
+/** Why findDash gave nothing, and what to do */
+function noDash() {
+    const configured = dashSetting();
+    return configured
+        ? `El ajuste "dash.path" (${configured}) no es la carpeta del compilador Dash: tiene que tener ./dash y compiler/.`
+        : 'No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".';
 }
 
 function quote(arg) {
@@ -41,8 +80,7 @@ async function activeDashFile() {
         vscode.window.showWarningMessage('Abre un fichero .dash');
         return null;
     }
-    if (editor.document.isDirty) await editor.document.save();
-    return editor.document.fileName;
+    return savedFile(vscode, editor.document);         // (an untitled one: its name first)
 }
 
 /** Commands that the terminal will run (exported for the tests). */
@@ -60,8 +98,12 @@ function runCommand(dashDir, file, autoclose) {
 function emulatorEnv() {
     const config = vscode.workspace.getConfiguration('dash.emulator');
     const env = {};
-    if (config.get('kickstart')) env.DASH_KICKSTART = config.get('kickstart');
-    if (config.get('system')) env.DASH_EMU_SYS = config.get('system');
+    // the ROM and Workbench files of each machine (tools/emu_run.py --machine reads these variables)
+    for (const [setting, variable] of [['kickstart', 'DASH_KICKSTART'], ['system', 'DASH_EMU_SYS'],
+                                        ['kickstartA500', 'DASH_KICKSTART_A500'], ['kickstart32', 'DASH_KICKSTART_32'],
+                                        ['system32', 'DASH_EMU_SYS_32'], ['systemRtg', 'DASH_EMU_SYS_32_RTG'],
+                                        ['muiSystem', 'DASH_EMU_SYS_MUI'], ['muiSystem32', 'DASH_EMU_SYS_32_MUI']])
+        if (config.get(setting)) env[variable] = config.get(setting);
     return env;
 }
 
@@ -70,13 +112,16 @@ const UNTRUSTED = 'Carpeta sin confianza (modo restringido): para compilar o usa
                   '("Manage" en la barra de arriba).';
 const trusted = () => vscode.workspace.isTrusted !== false;
 
+/** Compile or run the active program: a task of type "dash" (tasks.js), so its errors go to Problems */
+let runTask = null;
 async function run(kind) {
     if (!trusted()) { vscode.window.showWarningMessage(UNTRUSTED); return; }
+    if (runTask) return runTask(kind === 'compile' ? 'compile' : 'run');
     const file = await activeDashFile();
     if (!file) return;
     const dashDir = findDash(file);
     if (!dashDir) {
-        vscode.window.showErrorMessage('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".');
+        vscode.window.showErrorMessage(noDash());
         return;
     }
     const t = dashTerminal(emulatorEnv());
@@ -86,23 +131,25 @@ async function run(kind) {
         vscode.workspace.getConfiguration('dash.emulator').get('autoclose'))}`);
 }
 
-/** "Ver en Amiga": the window in FS-UAE with MUI, its picture shown in the editor */
+/** "Ver en Amiga": the window in FS-UAE with MUI, its picture shown in the editor. The emulated Amiga stays
+    on between previews (tools/emu_preview.py, one per machine): the first one boots it; the next ones take
+    a couple of seconds, and the same window again is not compiled again. The machine: dash.emulator.machine
+    (an A500 has no 68020 for MUI: the A1200). */
 let previewRunning = false;
+const machineNames = { a1200: 'A1200 (3.1)', 'a1200-32': 'A1200 (3.2)', rtg: '68040 con tarjeta gráfica' };
 async function showOnAmiga(document, windowName, webview) {
-    // busy: the webview's button is off and says so while the emulator works (about 30 s)
+    // busy: the webview's button is off and says so while the emulator works
     const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot', busy: false }, m));
     const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
     if (previewRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
     if (!trusted()) { fail(UNTRUSTED); return; }
     const dashDir = findDash(document.fileName);
-    if (!dashDir) { fail('No encuentro el compilador Dash: pon su carpeta en el ajuste "dash.path".'); return; }
+    if (!dashDir) { fail(noDash()); return; }
     const config = vscode.workspace.getConfiguration('dash.emulator');
-    const status = `Compilando "${windowName}" y arrancando el emulador (unos 30 s)…`;
-    const work = () => runPreview({
-        dashDir, dashuiText: document.getText(), windowName,
-        kickstart: config.get('kickstart') || process.env.DASH_KICKSTART,
-        system: config.get('muiSystem') || process.env.DASH_EMU_SYS_MUI,
-    });
+    const machine = previewMachine(config.get('machine') || 'a1200');
+    const status = `"${windowName}" en el ${machineNames[machine]}…`;
+    const work = () => preview({ dashDir, dashuiText: document.getText(), windowName, machine, env: emulatorEnv(),
+                                 baseDir: path.dirname(document.fileName) });
     previewRunning = true;
     say({ status, busy: true });
     try {
@@ -110,9 +157,9 @@ async function showOnAmiga(document, windowName, webview) {
             ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
                                                  title: 'Ver en Amiga: ' + status }, work)
             : await work();
-        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el Amiga emulado` });
+        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `"${windowName}" en el ${machineNames[machine]}` });
     } catch (e) {
-        fail('No se pudo: ' + e.message);
+        fail(missing(e.message) || 'No se pudo: ' + e.message);
     } finally {
         previewRunning = false;
     }
@@ -126,15 +173,104 @@ async function newWindowFile() {
     await vscode.commands.executeCommand('vscode.openWith', uri, 'dash.dashuiEditor');
 }
 
+/**
+ * "Dash: Nuevo proyecto": a folder with a program and its window (newProject.js), opened. parent and name
+ * (tests): without questions; open false: not opened. Returns the program's path.
+ */
+async function newProject(parent, name, open) {
+    if (!name) {
+        name = await vscode.window.showInputBox({ title: 'Nuevo proyecto de Dash', prompt: 'Nombre del programa',
+                                                  value: 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
+        if (!name) return null;
+    }
+    if (!parent) {
+        const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false,
+                                                            openLabel: 'Crear el proyecto aquí', title: 'Dónde crear la carpeta del proyecto' });
+        if (!picked || !picked.length) return null;
+        parent = picked[0].fsPath;
+    }
+    const folder = path.join(parent, cleanName(name));
+    let program;
+    try {
+        // the compiler: the setting (nothing to write), or the Dash repository the folder is in
+        const configured = vscode.workspace.getConfiguration('dash').get('path');
+        program = writeProject(folder, name, configured ? null : findDash(path.join(folder, 'x')));
+    } catch (e) {
+        vscode.window.showErrorMessage('No se pudo crear el proyecto: ' + e.message);
+        return null;
+    }
+    if (open !== false) {
+        const uri = vscode.Uri.file(folder);
+        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length) {
+            await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+        } else {
+            await extContext.globalState.update('dash.openAfter', program);   // after the window reloads with the folder
+            await vscode.commands.executeCommand('vscode.openFolder', uri);
+        }
+    }
+    return program;
+}
+
+/** "Dash: Elegir la carpeta del compilador" (the walkthrough): the setting dash.path */
+async function choosePath() {
+    const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false,
+                                                        openLabel: 'Esta es la carpeta de Dash', title: 'La carpeta del compilador Dash (la del repositorio)' });
+    if (!picked || !picked.length) return;
+    const dir = picked[0].fsPath;
+    if (!fs.existsSync(path.join(dir, 'dash')) || !fs.existsSync(path.join(dir, 'compiler'))) {
+        vscode.window.showWarningMessage(`En ${dir} no están ./dash ni compiler/: elige la carpeta del repositorio de Dash.`);
+        return;
+    }
+    await vscode.workspace.getConfiguration('dash').update('path', dir, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage('Compilador Dash: ' + dir);
+}
+
+let extContext = null;
+
+/** The context key dash.compilerFound (the walkthrough's first step is done when the compiler is found: by the
+    setting, or in a folder of the workspace inside the Dash repository) */
+function updateCompilerContext() {
+    const configured = vscode.workspace.getConfiguration('dash').get('path');
+    const ok = configured ? fs.existsSync(path.join(configured, 'dash')) && fs.existsSync(path.join(configured, 'compiler'))
+        : (vscode.workspace.workspaceFolders || []).some((f) => !!findDash(path.join(f.uri.fsPath, 'x')));
+    if (vscode.commands.executeCommand) vscode.commands.executeCommand('setContext', 'dash.compilerFound', ok).then(undefined, () => {});
+}
+
 function activate(context) {
+    extContext = context;
+    updateCompilerContext();
+    if (vscode.workspace.onDidChangeConfiguration)
+        context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('dash.path')) updateCompilerContext();
+        }));
     context.subscriptions.push(
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),
         vscode.commands.registerCommand('dash.newWindowFile', newWindowFile),
+        vscode.commands.registerCommand('dash.newProject', newProject),
+        vscode.commands.registerCommand('dash.choosePath', choosePath),
+        vscode.commands.registerCommand('dash.newline', () => newline(vscode)),   // Enter: the "end" by itself
+        vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
+    setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
+    reopenStartupDashui();
+    // a project just made in this window: its program open, beside the walkthrough
+    const after = context.globalState && context.globalState.get('dash.openAfter');
+    if (after) {
+        context.globalState.update('dash.openAfter', undefined);
+        if (fs.existsSync(after)) vscode.window.showTextDocument(vscode.Uri.file(after)).then(undefined, () => {});
+    }
+    setupLanguageServer(vscode, context, findDash, noDash);   // errors while typing (compiler/lsp.py)
+    if (vscode.tasks && vscode.tasks.registerTaskProvider)   // (not in the tests' fake vscode)
+        runTask = setupTasks(vscode, context, { findDash, noDash, env: emulatorEnv, trusted });
+    if (vscode.debug && vscode.debug.registerDebugConfigurationProvider)   // F5: debug on the Amiga (gdb + bgdbserver)
+        setupDebugger(vscode, context, { findDash, noDash, env: emulatorEnv, trusted, emulatorOptions });
 }
 
-function deactivate() {}
+function deactivate() {
+    stopServers();                        // the Amigas of "Ver en Amiga"
+    return stopLanguageServer();
+}
 
-module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga };
+module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject };

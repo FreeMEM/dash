@@ -6,9 +6,11 @@ Pipeline: Source → Parse → AST → Analyze → Generate → C Code
 """
 import sys
 import os
+import re
 import argparse
 from dataclasses import dataclass, field
 from lark import Lark
+from lark.exceptions import UnexpectedInput, UnexpectedCharacters, VisitError
 from typing import Optional, Set, List, Dict, Tuple
 
 from compiler.grammar import dash_grammar_minimal
@@ -16,6 +18,7 @@ from compiler.transformer import DashASTBuilder
 from compiler.analyzer import SemanticAnalyzer, AnalysisResult
 from compiler.codegen import CodeGenerator
 from compiler.latin1 import latin1_literals
+from compiler import debuglines
 from compiler.ast_nodes import (
     Program, FunctionDef, WindowDef, StructDef, EnumDef, ExternFunc, NativeFunc,
     ConstDecl, GlobalVarDecl
@@ -44,21 +47,120 @@ class DashCompiler:
     5. Generate: Convert AST to C code
     """
 
+    _shared_parser = None      # built once per process (the language server makes a compiler per check)
+
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
-        self.parser = Lark(
-            dash_grammar_minimal,
-            parser="lalr",
-            propagate_positions=True
-        )
+        if DashCompiler._shared_parser is None:
+            DashCompiler._shared_parser = Lark(
+                dash_grammar_minimal,
+                parser="lalr",
+                propagate_positions=True
+            )
+        self.parser = DashCompiler._shared_parser
         self._loaded_modules: Set[str] = set()  # Track loaded modules to avoid duplicates
         self._base_dir: str = ""  # Base directory for resolving imports
 
-    def _parse_source(self, source: str) -> Program:
-        """Parse source code into an AST."""
-        tree = self.parser.parse(source)
-        transformer = DashASTBuilder()
-        return transformer.transform(tree)
+    def _parse_source(self, source: str, filename: str = "") -> Program:
+        """Parse source code into an AST (its nodes know their file, line and column). With
+        self.tree_cache (a dict the language server keeps: file -> (text, tree)) a file whose text
+        has not changed is not parsed again: the parse is most of the time, the transform does not
+        change the tree."""
+        if source.startswith("\ufeff"):          # a BOM (Windows editors): not part of the program
+            source = source[1:]
+        cache = getattr(self, "tree_cache", None)
+        cached = cache.get(filename) if cache is not None and filename else None
+        if cached is not None and cached[0] == source:
+            tree = cached[1]
+        else:
+            try:
+                tree = self.parser.parse(source)
+            except UnexpectedInput as e:
+                raise CompilationError(self._syntax_message(e, source, filename), stage="parse") from None
+            if cache is not None and filename:
+                cache[filename] = (source, tree)
+        transformer = DashASTBuilder(filename)
+        try:
+            return transformer.transform(tree)
+        except VisitError as e:
+            # an error found while building the AST (a constant that is not constant, a number too big)
+            meta = getattr(e.obj, "meta", None)
+            where = (f"{filename or '<input>'}:{meta.line}:{meta.column}: "
+                     if meta is not None and not getattr(meta, "empty", True) else "")
+            raise CompilationError(f"{where}Error: {e.orig_exc}", stage="parse") from None
+
+    # what the grammar's terminals look like to a person (the rest: their pattern, or their name)
+    _TERMINAL_WORDS = {"_NEWLINE": "fin de línea", "$END": "fin del fichero", "ID": "un nombre",
+                       "INT": "un número", "NUMBER": "un número", "FLOAT": "un número",
+                       "ESCAPED_STRING": "un texto", "TYPE_NAME": "un tipo"}
+
+    def _terminal_word(self, name: str) -> str:
+        if name in self._TERMINAL_WORDS:
+            return self._TERMINAL_WORDS[name]
+        try:
+            pattern = self.parser.get_terminal(name).pattern
+            if pattern.type == "str":
+                return "`" + pattern.value + "`"
+        except Exception:
+            pass
+        return name.lower()
+
+    def _syntax_message(self, e, source: str, filename: str) -> str:
+        """A Lark error in one sentence: file:line:column: Error: what came and what was expected."""
+        line, column = getattr(e, "line", 0) or 0, getattr(e, "column", 0) or 0
+        where = f"{filename or '<input>'}:{line}:{column}"
+        token = getattr(e, "token", None)
+        if isinstance(e, UnexpectedCharacters):
+            char = source[e.pos_in_stream] if 0 <= e.pos_in_stream < len(source) else "?"
+            return f"{where}: Error: sintaxis: carácter inesperado {char!r}"
+        # the line before ended without finishing ("c = c + 1x": `x`, and the error came on the next line's
+        # `end`): there, after its last token, which is where the mistake is
+        history = getattr(e, "token_history", None) or []
+        prev = history[-1] if history else None
+        after = ""
+        if token is not None and prev is not None and getattr(prev, "line", None) and getattr(token, "line", None) \
+                and token.line > prev.end_line and getattr(token, "type", "") not in ("$END",):
+            where = f"{filename or '<input>'}:{prev.line}:{prev.column}"
+            line = prev.line
+            token = None
+            after = f" después de `{str(prev).strip()}`"
+        if token is None and after:
+            got = "el fin de la línea"
+        elif token is not None and getattr(token, "type", "") == "$END":
+            got = "el fin del fichero"
+        elif token is not None and getattr(token, "type", "") == "_NEWLINE":
+            got = "el fin de la línea"
+        elif token is not None:
+            got = "`" + str(token).strip() + "`"
+        else:
+            got = "algo"
+        expected = sorted({self._terminal_word(t) for t in (getattr(e, "expected", None) or [])
+                           if not t.startswith("__")})
+        hint = ""
+        if expected and len(expected) <= 6:
+            hint = "; se esperaba " + ", ".join(expected[:-1]) + (" o " if len(expected) > 1 else "") + expected[-1]
+        elif "`end`" in expected and got == "el fin del fichero":
+            hint = "; ¿falta un `end`?"
+        dangling = self._dangling_operator(source, line)
+        if dangling:
+            if hint == "; ¿falta un `end`?":
+                hint = ""                         # it is not that: the operator took the end as its operand
+            hint += f" (la línea {dangling[0]} acaba en `{dangling[1]}`: la expresión sigue en la siguiente)"
+        return f"{where}: Error: sintaxis: no se esperaba {got}{after or ' aquí'}{hint}"
+
+    _OPERATOR_AT_END = re.compile(r"(\+|-|\*|/|%|==|!=|<=|>=|<|>|\band|\bor)\s*$")
+
+    def _dangling_operator(self, source: str, line: int):
+        """(n, operator) when the line with code before `line` ends in a binary operator ("y = x +"): the
+        expression goes on in the next line, and the error came out there; else None."""
+        lines = source.split("\n")
+        for n in range(min(line, len(lines) + 1) - 1, 0, -1):
+            code = re.sub(r'"(?:[^"\\]|\\.)*"', '""', lines[n - 1]).split("#")[0].rstrip()
+            if not code:
+                continue
+            m = self._OPERATOR_AT_END.search(code)
+            return (n, m.group(1)) if m else None
+        return None
 
     def _resolve_import_path(self, import_path: str) -> str:
         """Resolve import path relative to base directory or project root."""
@@ -98,11 +200,14 @@ class DashCompiler:
         # Return first attempt for error message
         return os.path.normpath(os.path.join(self._base_dir, import_path))
 
-    @staticmethod
-    def _read_module(full_path: str) -> str:
-        """Source of an imported module; a .dashui (visual editor) becomes Dash code."""
-        with open(full_path, "r") as f:
-            source = f.read()
+    def _read_module(self, full_path: str) -> str:
+        """Source of an imported module; a .dashui (visual editor) becomes Dash code. The language
+        server puts the text of the files open in the editor in self.overlay (path -> text)."""
+        overlay = getattr(self, "overlay", None) or {}
+        if full_path in overlay:
+            source = overlay[full_path]
+        else:
+            source = read_source(full_path)
         if full_path.endswith(".dashui"):
             from compiler.dashui import generate, DashUIError
             try:
@@ -133,7 +238,7 @@ class DashCompiler:
         except IOError as e:
             raise CompilationError(f"Error reading import {import_path}: {e}", stage="import")
 
-        module_ast = self._parse_source(source)
+        module_ast = self._parse_source(source, full_path)
         self._resolve_links(module_ast, os.path.dirname(full_path))
         self._rename_private(module_ast, full_path)
         # its own definitions, before its imports are merged in (see _rename_private_clashes)
@@ -383,6 +488,41 @@ class DashCompiler:
         Raises:
             CompilationError: If compilation fails
         """
+        analysis = self.analyze(source, filename)
+
+        # Report warnings
+        for warning in analysis.warnings:
+            print(warning, file=sys.stderr)
+
+        # Report errors and fail if any
+        if analysis.has_errors:
+            for error in analysis.errors:
+                print(error, file=sys.stderr)
+            raise CompilationError(
+                f"Semantic analysis failed with {len(analysis.errors)} error(s)",
+                stage="analyze"
+            )
+
+        if self.verbose:
+            print(f"  Analysis complete: {len(analysis.symbol_table)} symbols",
+                  file=sys.stderr)
+
+        # Stage 4: Code generation
+        if self.verbose:
+            print("Stage 3: Generating C code...", file=sys.stderr)
+
+        generator = CodeGenerator(analysis)
+        c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
+
+        if self.verbose:
+            print(f"  Generated {len(c_code)} characters of C code", file=sys.stderr)
+
+        return c_code, analysis
+
+    def analyze(self, source: str, filename: str = "<input>") -> AnalysisResult:
+        """Parse, load the imports and analyze, without generating C: the errors and warnings are in
+        the result (with their places), not printed. A syntax or import error raises CompilationError.
+        The language server (compiler/lsp.py) uses this, so it never disagrees with the compiler."""
         # Set base directory for import resolution
         if filename != "<input>":
             self._base_dir = os.path.dirname(os.path.abspath(filename))
@@ -398,7 +538,9 @@ class DashCompiler:
             print("Stage 1: Parsing...", file=sys.stderr)
 
         try:
-            ast = self._parse_source(source)
+            ast = self._parse_source(source, filename if filename != "<input>" else "")
+        except CompilationError:
+            raise
         except Exception as e:
             raise CompilationError(f"Parse error: {e}", stage="parse")
 
@@ -429,36 +571,7 @@ class DashCompiler:
             print("Stage 2: Analyzing...", file=sys.stderr)
 
         analyzer = SemanticAnalyzer()
-        analysis = analyzer.analyze(ast)
-
-        # Report warnings
-        for warning in analysis.warnings:
-            print(warning, file=sys.stderr)
-
-        # Report errors and fail if any
-        if analysis.has_errors:
-            for error in analysis.errors:
-                print(error, file=sys.stderr)
-            raise CompilationError(
-                f"Semantic analysis failed with {len(analysis.errors)} error(s)",
-                stage="analyze"
-            )
-
-        if self.verbose:
-            print(f"  Analysis complete: {len(analysis.symbol_table)} symbols",
-                  file=sys.stderr)
-
-        # Stage 4: Code generation
-        if self.verbose:
-            print("Stage 3: Generating C code...", file=sys.stderr)
-
-        generator = CodeGenerator(analysis)
-        c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
-
-        if self.verbose:
-            print(f"  Generated {len(c_code)} characters of C code", file=sys.stderr)
-
-        return c_code, analysis
+        return analyzer.analyze(ast)
 
     def _collect_modules(self, main_ast: Program, main_path: str) -> Dict[str, ModuleInfo]:
         """
@@ -513,7 +626,7 @@ class DashCompiler:
                 if dep_path not in modules:
                     try:
                         source = self._read_module(dep_path)
-                        dep_ast = self._parse_source(source)
+                        dep_ast = self._parse_source(source, dep_path)
                         collect_recursive(dep_ast, dep_path)
                     except FileNotFoundError:
                         raise CompilationError(f"Import not found: {imp.path}", stage="import")
@@ -554,7 +667,9 @@ class DashCompiler:
             print("Stage 1: Parsing...", file=sys.stderr)
 
         try:
-            main_ast = self._parse_source(source)
+            main_ast = self._parse_source(source, filename if filename != "<input>" else "")
+        except CompilationError:
+            raise
         except Exception as e:
             raise CompilationError(f"Parse error: {e}", stage="parse")
 
@@ -624,6 +739,17 @@ class CompilationError(Exception):
         self.stage = stage
 
 
+def read_source(path: str) -> str:
+    """The text of a source file (.dash, .dashui): UTF-8, without its BOM if it has one (Windows editors put
+    it); a file that is not UTF-8 is read as Latin-1, the Amiga's (written with an editor on the Amiga)."""
+    with open(path, "rb") as f:
+        data = f.read()
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
+
+
 def transpile(source: str, filename: str = "<input>",
               verbose: bool = False) -> str:
     """
@@ -664,8 +790,7 @@ def main():
 
     # Read source file
     try:
-        with open(input_filename, "r") as f:
-            source_code = f.read()
+        source_code = read_source(input_filename)
     except FileNotFoundError:
         print(f"Error: File '{input_filename}' not found", file=sys.stderr)
         sys.exit(1)
@@ -692,6 +817,8 @@ def main():
             # Write all generated files
             for filename, content in output_files.items():
                 filepath = os.path.join(output_dir, filename)
+                if "/*@dash-" in content:     # ./dash --debug: #line to the .dash (compiler/debuglines.py)
+                    content = debuglines.apply(content, os.path.abspath(filepath))
                 with open(filepath, "w") as f:
                     f.write(content)
                 if args.verbose:
@@ -701,6 +828,8 @@ def main():
         else:
             # Single-file mode (default)
             c_output, _ = compiler.compile(source_code, filename=input_filename)
+            if "/*@dash-" in c_output:        # ./dash --debug: #line to the .dash (compiler/debuglines.py)
+                c_output = debuglines.apply(c_output, os.path.abspath(output_path))
 
             # Write output
             with open(output_path, "w") as f:
@@ -709,7 +838,13 @@ def main():
             print(f"Transpiled! C code generated in '{output_path}'")
 
     except CompilationError as e:
-        print(f"Compilation failed at {e.stage} stage: {e}", file=sys.stderr)
+        message = str(e)
+        if re.match(r"^.+:\d+:\d+: (Error|Warning): ", message):
+            # a message with its place goes on a line of its own (file:line:column: as gcc)
+            print(message, file=sys.stderr)
+            print(f"Compilation failed at {e.stage} stage", file=sys.stderr)
+        else:
+            print(f"Compilation failed at {e.stage} stage: {message}", file=sys.stderr)
         sys.exit(1)
     except IOError as e:
         print(f"Error writing output: {e}", file=sys.stderr)
