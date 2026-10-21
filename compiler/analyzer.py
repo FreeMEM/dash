@@ -1522,6 +1522,8 @@ class SemanticAnalyzer(ASTVisitor):
             return DashType.BOOL
         elif isinstance(node, VarRef):
             symbol = self.lookup_symbol(node.name)
+            if symbol and symbol.symbol_type == SymbolType.FUNCTION:
+                return DashType.FUNC             # g = doble: the function as a value
             if symbol:
                 return symbol.dash_type
         elif isinstance(node, ArrayLiteral):

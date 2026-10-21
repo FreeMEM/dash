@@ -2150,6 +2150,58 @@ static LONG _dash_image_load(STRPTR file) {
     return 0;
 }
 
+/* A hardware sprite from a picture file (sprite_load): frames 16 pixels wide side by side, as many
+   as fit in its width, each as high as the picture. Its pens 0-3 are the colours of the sprite (0
+   clear; a higher pen counts as its two low bits). It shows the first frame; sprite_frame changes it.
+   FALSE if the file cannot be read or no hardware sprite is free */
+static BOOL _dash_sprite_load_file(LONG id, STRPTR file) {
+    struct BitMapHeader *bmh = NULL;
+    struct BitMap *bm = NULL;
+    struct RastPort rp;
+    Object *o;
+    LONG w, h, nf, f, x, y, pen;
+    UWORD *frames, *p, p0, p1;
+    BOOL ok = FALSE;
+    if (id < 0 || id >= DASH_MAX_SPRITES || !file) return FALSE;
+    if (!DataTypesBase) DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
+    if (!DataTypesBase) return FALSE;
+    o = NewDTObject((APTR)file, DTA_SourceType, DTST_FILE, DTA_GroupID, GID_PICTURE,
+                    PDTA_Remap, FALSE, TAG_DONE);       /* the pens of the file, not the screen's */
+    if (!o) return FALSE;
+    DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, TRUE);
+    GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_BitMap, (ULONG)&bm, TAG_DONE);
+    if (bmh && bm && bmh->bmh_Height > 0) {
+        w = bmh->bmh_Width;
+        h = bmh->bmh_Height;
+        nf = w >= 16 ? w / 16 : 1;
+        frames = (UWORD *)AllocVec(nf * h * 4, MEMF_ANY | MEMF_CLEAR);
+        if (frames) {
+            InitRastPort(&rp);
+            rp.BitMap = bm;
+            for (f = 0, p = frames; f < nf; f++)
+                for (y = 0; y < h; y++) {
+                    for (x = 0, p0 = p1 = 0; x < 16; x++) {
+                        pen = f * 16 + x < w ? ReadPixel(&rp, f * 16 + x, y) : 0;
+                        if (pen & 1) p0 |= 0x8000 >> x;
+                        if (pen & 2) p1 |= 0x8000 >> x;
+                    }
+                    *p++ = p0;
+                    *p++ = p1;
+                }
+            if (_dash_sprite_create(id, 16, h)) {
+                _dash_sprite_frames[id] = frames;
+                _dash_sprite_nframes[id] = nf;
+                frames = NULL;
+                _dash_sprite_frame(id, 0);
+                ok = TRUE;
+            }
+            if (frames) FreeVec(frames);
+        }
+    }
+    DisposeDTObject(o);
+    return ok;
+}
+
 /* An image from pixels in memory (a program that decodes pictures itself, dashweb D40): rows of
    width pixels, RGB (3 bytes) or, with alpha, RGBA (4 bytes; on RTG mixed, D62; else 128 or more drawn). The
    picture.datatype (V43: AmigaOS 3.5 and later) puts them on the screen like a file's: the
@@ -6791,6 +6843,9 @@ static struct SimpleSprite *_dash_sprites[DASH_MAX_SPRITES] = {0};
 static UWORD *_dash_sprite_data[DASH_MAX_SPRITES] = {0};
 static WORD _dash_sprite_num[DASH_MAX_SPRITES] = {-1,-1,-1,-1,-1,-1,-1,-1};
 static UWORD _dash_sprite_height[DASH_MAX_SPRITES] = {0};
+/* sprite_load: every frame of the picture, two words (the two planes) a row; sprite_frame copies one */
+static UWORD *_dash_sprite_frames[DASH_MAX_SPRITES] = {0};
+static UWORD _dash_sprite_nframes[DASH_MAX_SPRITES] = {0};
 
 /* RTG Detection - check if we're on a native chipset screen */
 static BOOL _dash_is_rtg_screen(void) {
@@ -6827,6 +6882,8 @@ static BOOL _dash_sprite_create(LONG id, LONG width, LONG height) {
 
     if (id < 0 || id >= DASH_MAX_SPRITES) return FALSE;
     if (!_dash_screen) return FALSE;
+    if (_dash_sprite_frames[id]) { FreeVec(_dash_sprite_frames[id]); _dash_sprite_frames[id] = NULL; }
+    _dash_sprite_nframes[id] = 0;
 
     /* Warn if RTG detected */
     if (_dash_is_rtg_screen()) {
@@ -6880,11 +6937,6 @@ static BOOL _dash_sprite_create(LONG id, LONG width, LONG height) {
     return TRUE;
 }
 
-static BOOL _dash_sprite_load(LONG id, STRPTR filename) {
-    /* For now, just create an empty sprite - IFF loading TODO */
-    return _dash_sprite_create(id, 16, 16);
-}
-
 static void _dash_sprite_show(LONG id) {
     UWORD *data;
     struct SimpleSprite *spr;
@@ -6927,9 +6979,17 @@ static void _dash_sprite_color(LONG id, LONG index, LONG r, LONG g, LONG b) {
     }
 }
 
+/* Shows frame number frame of a sprite from sprite_load (0 the first); nothing for any other */
 static void _dash_sprite_frame(LONG id, LONG frame) {
-    /* Animation frames - would need sprite sheet support */
-    (void)id; (void)frame;
+    UWORD *src, *dst;
+    LONG n;
+    if (id < 0 || id >= DASH_MAX_SPRITES) return;
+    if (!_dash_sprite_frames[id] || !_dash_sprite_data[id]) return;
+    if (frame < 0 || frame >= _dash_sprite_nframes[id]) return;
+    n = _dash_sprite_height[id] * 2;
+    src = _dash_sprite_frames[id] + frame * n;
+    dst = _dash_sprite_data[id] + 2;          /* after the two control words */
+    while (n-- > 0) *dst++ = *src++;
 }
 
 static void _dash_sprite_free(LONG id) {
@@ -6946,6 +7006,8 @@ static void _dash_sprite_free(LONG id) {
         FreeMem(_dash_sprites[id], sizeof(struct SimpleSprite));
         _dash_sprites[id] = NULL;
     }
+    if (_dash_sprite_frames[id]) { FreeVec(_dash_sprite_frames[id]); _dash_sprite_frames[id] = NULL; }
+    _dash_sprite_nframes[id] = 0;
     _dash_sprite_height[id] = 0;
 }
 
@@ -12347,8 +12409,8 @@ class CodeGenerator(ASTVisitor):
 static struct Window *_dash_event_win = NULL;
 static struct Window *_dash_event_main = NULL;
 
-static void _dash_loop_wait(struct Window *main) {{
-    ULONG mask = main ? 1UL << main->UserPort->mp_SigBit : 0;
+static void _dash_loop_wait(struct Window *main, ULONG extra) {{
+    ULONG mask = (main ? 1UL << main->UserPort->mp_SigBit : 0) | extra;
     LONG i;
     for (i = 1; i <= _DASH_MAX_WINDOWS; i++)
         if (_dash_windows[i] && _dash_windows[i]->UserPort) mask |= 1UL << _dash_windows[i]->UserPort->mp_SigBit;
@@ -12640,6 +12702,11 @@ static LONG _dash_event_window_handle(void) {{
             if gvar.initial_value:
                 init_val = self._generate_expression(gvar.initial_value)
                 self.emit(f"    _dash_obj_set((void **)&{gvar.name}, {init_val});\n")
+        elif c_type == "APTR" and gvar.initial_value and not isinstance(gvar.initial_value, NilLiteral):
+            # a function (var f: Func = doble): its prototype comes after the globals, so the
+            # value is set when main starts
+            self.emit_global(f"APTR {gvar.name} = NULL;\n")
+            self.emit(f"    {gvar.name} = (APTR){self._generate_expression(gvar.initial_value)};\n")
         elif gvar.initial_value:
             init_val = self._generate_expression(gvar.initial_value)
             self.emit_global(f"{c_type} {gvar.name} = {init_val};\n")
@@ -12667,6 +12734,8 @@ static LONG _dash_event_window_handle(void) {{
             self._mark_fixed_list(gvar.name, list_elem_type(gvar.var_type) == "Fixed")
         elif gvar.var_type == "Bool":
             self.var_types[gvar.name] = "bool"
+        elif gvar.var_type == "Func":
+            self.var_types[gvar.name] = "func"
         else:
             self.var_types[gvar.name] = "number"
 
@@ -13039,7 +13108,7 @@ static {ret_type} {method_name}({params_str}) {{
         if self.uses_winmgr:
             # also the windows of window_create (event_window() tells which one)
             code = code.replace(f"        WaitPort(win_{window}->UserPort);\n",
-                                f"        _dash_loop_wait(win_{window});\n", 1)
+                                f"        _dash_loop_wait(win_{window}, 0);\n", 1)
             code = code.replace(f"        while (win_{window} && (msg = (struct IntuiMessage *){getmsg}(win_{window}->UserPort))) {{\n",
                                 f"        while ((msg = _dash_loop_next(win_{window}))) {{\n", 1)
             assert "_dash_loop_next" in code
@@ -13049,19 +13118,23 @@ static {ret_type} {method_name}({params_str}) {{
         if timers:
             # On Timer: wait for the window or the timer; its body runs when the time comes
             t = timers[0]
-            wait = f"        WaitPort(win_{window}->UserPort);\n"
-            if wait not in code:
-                self.emit("    // Error: On Timer does not work with window_create windows yet\n")
+            self.context.enter_scope("handler")
+            body = "".join(self._generate_statement(stmt) for stmt in t.body)
+            body += self._frees(self.context.current_owned())
+            self.context.exit_scope()
+            interval = t.interval if isinstance(t.interval, int) else self._generate_expression(VarRef(name=t.interval))
+            fired = f"        if (_dash_lt_fired()) {{\n{body}        }}\n"
+            if self.uses_winmgr:
+                # also the windows of window_create
+                code = code.replace(f"        _dash_loop_wait(win_{window}, 0);\n",
+                    f"        _dash_lt_send({interval});\n"
+                    f"        _dash_loop_wait(win_{window}, _dash_lt_signal());\n" + fired, 1)
             else:
-                self.context.enter_scope("handler")
-                body = "".join(self._generate_statement(stmt) for stmt in t.body)
-                body += self._frees(self.context.current_owned())
-                self.context.exit_scope()
-                interval = t.interval if isinstance(t.interval, int) else self._generate_expression(VarRef(name=t.interval))
-                code = code.replace(wait,
+                code = code.replace(f"        WaitPort(win_{window}->UserPort);\n",
                     f"        _dash_lt_send({interval});\n"
                     f"        if (win_{window}) Wait((1UL << win_{window}->UserPort->mp_SigBit) | _dash_lt_signal());\n"
-                    f"        if (_dash_lt_fired()) {{\n{body}        }}\n", 1)
+                    + fired, 1)
+            assert "_dash_lt_send" in code
         self.emit(code)
 
         # Generate handlers; all On Key handlers share one "case IDCMP_RAWKEY"
@@ -13262,6 +13335,8 @@ static {ret_type} {method_name}({params_str}) {{
                     self.var_types[node.name] = "float"
                 if node.var_type == "Bool":
                     self.var_types[node.name] = "bool"
+                if node.var_type == "Func":
+                    self.var_types[node.name] = "func"
                 if c_type == "DashFixed":
                     self.var_types[node.name] = "fixed"
                     value = self._fixed_value(init) if init is not None else "0"
@@ -13342,7 +13417,9 @@ static {ret_type} {method_name}({params_str}) {{
             self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
         elif var_type == "DashDict *":
             self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
-        elif var_type == "APTR" and isinstance(node.value, (LambdaFunc, FunctionRef)):
+        elif var_type == "APTR" and (isinstance(node.value, (LambdaFunc, FunctionRef))
+                                     or self.var_types.get(getattr(node.value, "name", None)) == "func"
+                                     or self._names_function(node.value)):
             self.var_types[node.name] = "func"
         elif var_type.startswith("_Dash_") and var_type.endswith(" *"):
             # Struct pointer - track as struct:StructName
@@ -13520,6 +13597,8 @@ static {ret_type} {method_name}({params_str}) {{
             elif var_type and var_type.startswith("struct:"):
                 struct_name = var_type[7:]  # Remove "struct:" prefix
                 return f"_Dash_{struct_name} *"
+            if self._names_function(node):
+                return "APTR"
             return "LONG"
         elif isinstance(node, FunctionCall):
             # Check if it's a struct constructor
@@ -14264,6 +14343,11 @@ static {ret_type} {method_name}({params_str}) {{
                 code = f"(LONG){code}"
             args.append(code)
         return ", ".join(args)
+
+    def _names_function(self, node: ASTNode) -> bool:
+        """A bare name of a user function (g = doble): its address, a Func value."""
+        return (isinstance(node, VarRef) and node.name not in self.var_types
+                and self.analysis.program.get_function(node.name) is not None)
 
     def _callee(self, node: FunctionCall) -> str:
         """Name to call; function pointers (lambdas, Func params) are cast first."""

@@ -1,0 +1,43 @@
+# Test: a function kept in a variable and called later: g = doble, var h: Func = doble and
+# a global var gf: Func = doble. The call used to reach gcc without a cast ("called object
+# is not a function"), and g = doble was refused.
+# expect-c: ((LONG (*)(LONG))g)(4)
+# expect-c: APTR gf = NULL;
+# expect-out: 8
+# expect-out: 10
+# expect-out: 12
+# expect-out: 7
+# expect-out: 14
+# expect-out: 16
+# expect-out: 18
+# expect-out: 2
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+func suma(a: Int, b: Int) -> Int
+    return a + b
+end
+
+func aplica(f: Func, v: Int) -> Int
+    return f(v)
+end
+
+var gf: Func = doble
+
+Main
+    g = doble
+    Print "#{g(4)}"
+    var h: Func = doble
+    Print "#{h(5)}"
+    Print "#{gf(6)}"
+    gf = suma
+    Print "#{gf(6, 1)}"
+    Print "#{aplica(doble, 7)}"
+    Print "#{aplica(g, 8)}"
+    k = g
+    Print "#{k(9)}"
+    l = fn(x) -> x + 1
+    Print "#{l(1)}"
+end

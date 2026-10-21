@@ -1,0 +1,36 @@
+# Test: On Timer in an EventLoop that also waits for the windows of window_create. It used to
+# leave only a comment in the C, and the timer never fired.
+# expect-c: _dash_loop_wait(win_W, _dash_lt_signal());
+# expect-no-c: On Timer does not work
+# expect-out: otra 1
+# expect-out: tic 1
+# expect-out: tic 2
+# expect-out: tic 3
+# expect-out: fin
+
+Window W
+    title "Reloj"
+    width 200
+    height 80
+end
+
+Main
+    W.open
+    otra = window_create("Otra", 220, 20, 160, 60, 0)
+    Print "otra #{otra}"
+    tics = 0
+    EventLoop
+        On Timer 100
+            tics = tics + 1
+            Print "tic #{tics}"
+            if tics == 3
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    window_close(otra)
+    Print "fin"
+end

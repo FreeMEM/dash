@@ -45,13 +45,13 @@ Total: 531 funciones, 531 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `sprite_load(id, filename)` | `BOOL` | Load sprite from file |  |
+| `sprite_load(id, filename)` | `BOOL` | Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot |  |
 | `sprite_create(id, width, height)` | `BOOL` | Create empty sprite |  |
 | `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
 | `sprite_show(id)` | `void` | Make sprite visible |  |
 | `sprite_hide(id)` | `void` | Hide sprite |  |
 | `sprite_color(id, index, r, g, b)` | `void` | Set sprite color |  |
-| `sprite_frame(id, frame)` | `void` | Set sprite animation frame |  |
+| `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load |  |
 | `sprite_free(id)` | `void` | Free sprite memory |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |
 | `sprite_set_row(id, row, plane0, plane1)` | `void` | Set sprite data row (2 bitplanes) |  |

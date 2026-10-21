@@ -744,7 +744,7 @@ Main
     Print aplicar(fn(x) -> x + 1, 9)     # 10
     triple = fn(x) -> x * 3
     Print triple(2)                      # 6
-    g = fn(x) -> doble(x)                # una funcion con nombre, en una variable
+    g = doble                            # una funcion con nombre, en una variable
     Print g(4)                           # 8
     cuadrado = fn(x)
         y = x * x
@@ -756,9 +756,8 @@ end
 
 Una lambda no captura variables: solo ve sus parametros, las globales, las constantes y las funciones.
 Usar una variable local de fuera es un error (`lambdas cannot use local variables from outside`); hay
-que pasarla como parametro. Para guardar en una variable una funcion con nombre, envolverla en una
-lambda como arriba: `g = doble` y `var g: Func = doble` todavia no se pueden llamar despues (`g(4)` da
-error, al compilar o en gcc).
+que pasarla como parametro. Una funcion con nombre se guarda en una variable sin parentesis: `g = doble`,
+`var g: Func = doble` o una global `var g: Func = doble`; despues `g(4)` la llama.
 
 ---
 
@@ -1563,8 +1562,8 @@ transparente. Necesitan una pantalla propia (`screen_open`) de chipset (no RTG: 
 | `sprite_pos(id, x, y)`, `sprite_show(id)`, `sprite_hide(id)` | Lo mueve, lo muestra o lo esconde |
 | `sprite_collision(id1, id2)` | Si se tocan sus rectangulos |
 | `sprite_free(id)` | Lo devuelve al sistema |
-| `sprite_load(id, fichero)` | Todavia no lee el fichero: crea un sprite vacio de 16x16 |
-| `sprite_frame(id, frame)` | Todavia no hace nada |
+| `sprite_load(id, fichero)` | Sprite desde un dibujo (ILBM...): marcos de 16 pixeles de ancho uno al lado de otro, tan altos como el dibujo; los colores 0-3 del dibujo son los del sprite (0 transparente). Muestra el primer marco. `false` si no puede |
+| `sprite_frame(id, marco)` | Muestra ese marco (0 el primero) de un sprite de `sprite_load` |
 
 ### Sprites por software
 
@@ -1732,8 +1731,7 @@ end
 ```
 
 `On Timer` usa `timer.device` mientras el bucle espera: no gasta CPU entre tics. Un solo `On Timer`
-por bucle. **Aviso:** si el programa usa `window_create`, `On Timer` todavia no funciona: compila sin
-error, pero no salta nunca.
+por bucle. Tambien funciona si el programa abre ventanas con `window_create`.
 
 ### Raton
 

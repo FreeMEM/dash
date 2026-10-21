@@ -295,9 +295,9 @@ GRAPHICS_ADVANCED = {
         name="sprite_load",
         params=["id", "filename"],
         return_type="BOOL",
-        c_template="_dash_sprite_load(${id}, ${filename})",
+        c_template="_dash_sprite_load_file(${id}, ${filename})",
         needs_gfx=True,
-        description="Load sprite from file"
+        description="Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot"
     ),
     "sprite_create": BuiltinFunc(
         name="sprite_create",
@@ -345,7 +345,7 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_frame(${id}, ${frame})",
         needs_gfx=True,
-        description="Set sprite animation frame"
+        description="Show frame number frame (0 the first) of a sprite from sprite_load"
     ),
     "sprite_free": BuiltinFunc(
         name="sprite_free",
