@@ -3974,6 +3974,17 @@ TASK_FUNCTIONS = {
         c_template="_dash_single_instance(${name})",
         description="One copy at a time: false if another copy of the program (a public port with that name) "
                     "runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends)"),
+    # dashweb D68
+    "dos_requesters": BuiltinFunc(
+        name="dos_requesters", params=["on"], return_type="void",
+        c_template="_dash_dos_requesters(${on})",
+        description="false: no \"Insert volume\" or disk error requesters for this program (the call fails instead); "
+                    "true: as before. The program's end puts them back"),
+    "base64_to_file": BuiltinFunc(
+        name="base64_to_file", params=["text", "file"], return_type="LONG",
+        c_template="_dash_base64_to_file(${text}, ${file})",
+        description="Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): "
+                    "the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written"),
     "cpu_start": BuiltinFunc(
         name="cpu_start", params=[], return_type="BOOL",
         c_template="_dash_cpu_start()",

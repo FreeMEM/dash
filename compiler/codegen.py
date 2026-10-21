@@ -2736,6 +2736,78 @@ static BOOL _dash_single_instance(STRPTR name) {
 
 """
 
+    # The "Insert volume" and disk error requesters of the program (dashweb D68)
+    DOSREQ_RUNTIME = """\
+/* dos_requesters(on): off, the process's pr_WindowPtr is -1 and a call that would put up a requester ("Insert
+   volume", a disk error) fails instead; on, it is as it was. The program's end puts it back (also with exit). */
+static APTR _dash_dosreq_saved = NULL;
+static BOOL _dash_dosreq_off = FALSE;
+
+static void _dash_dosreq_cleanup(void) {
+    if (!_dash_dosreq_off) return;
+    ((struct Process *)FindTask(NULL))->pr_WindowPtr = _dash_dosreq_saved;
+    _dash_dosreq_off = FALSE;
+}
+
+static void _dash_dos_requesters(BOOL on) {
+    static BOOL at_exit = FALSE;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    if (on) { _dash_dosreq_cleanup(); return; }
+    if (_dash_dosreq_off) return;
+    _dash_dosreq_saved = me->pr_WindowPtr;
+    me->pr_WindowPtr = (APTR)-1;
+    _dash_dosreq_off = TRUE;
+    if (!at_exit) at_exit = atexit(_dash_dosreq_cleanup) == 0;
+}
+
+"""
+
+    # Base64 to a binary file (dashweb D68: the data:...;base64, of pictures and fonts)
+    BASE64_RUNTIME = """\
+/* base64_to_file(text, file): the bytes of base64 text in a file. Spaces and line ends are skipped; the
+   padding = may be there or not. The bytes written, or -1 if the text is not base64 (then no file is
+   written) or the file cannot be written. */
+static LONG _dash_b64_value(UBYTE c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static LONG _dash_base64_to_file(STRPTR text, STRPTR file) {
+    UBYTE *out, *o, c;
+    STRPTR p;
+    ULONG acc = 0;
+    LONG len, n = 0, pads = 0, v, size = -1;
+    BPTR fh;
+    if (!text || !file) return -1;
+    len = strlen((char *)text);
+    if (!(out = (UBYTE *)AllocVec(len / 4 * 3 + 3, MEMF_ANY))) return -1;
+    for (p = text, o = out; (c = (UBYTE)*p); p++) {
+        if (c == ' ' || c == '\\t' || c == '\\r' || c == '\\n') continue;
+        if (c == '=') { pads++; continue; }
+        if (pads || (v = _dash_b64_value(c)) < 0) { pads = 3; break; }   /* a letter after =, or not base64 */
+        acc = (acc << 6) | v;
+        if (++n % 4 == 0) { *o++ = acc >> 16; *o++ = acc >> 8; *o++ = acc; acc = 0; }
+    }
+    /* what is left: 2 letters are 1 byte, 3 are 2; 1 is not base64. With padding, it completes the 4 */
+    if (pads <= 2 && n % 4 != 1 && (pads == 0 || (n + pads) % 4 == 0)) {
+        if (n % 4 == 2) *o++ = acc >> 4;
+        else if (n % 4 == 3) { *o++ = acc >> 10; *o++ = acc >> 2; }
+        if ((fh = Open(file, MODE_NEWFILE))) {
+            size = o - out;
+            if (size > 0 && Write(fh, out, size) != size) size = -1;
+            Close(fh);
+        }
+    }
+    FreeVec(out);
+    return size;
+}
+
+"""
+
     # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
     # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
     CPU_RUNTIME = """\
@@ -11755,6 +11827,8 @@ _RUNTIME_FLAGS = [
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
     ("CPU_RUNTIME", "uses_cpu"),            # Trasfondo
     ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
+    ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
+    ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -12024,6 +12098,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
+        self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
+        self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -12318,6 +12394,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CPU_RUNTIME)
         if self.uses_instance:
             parts.append(CTemplates.INSTANCE_RUNTIME)
+        if self.uses_dosreq:
+            parts.append(CTemplates.DOSREQ_RUNTIME)
+        if self.uses_base64:
+            parts.append(CTemplates.BASE64_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -12527,6 +12607,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
         if self.uses_instance:
             cleanup.append("    _dash_instance_cleanup();\n")
+        if self.uses_dosreq:
+            cleanup.append("    _dash_dosreq_cleanup();\n")
         if self.uses_cpu:
             cleanup.insert(0, "    _dash_cpu_stop();\n")   # the hooks out before anything else (and the EClock)
         if self.uses_desk:

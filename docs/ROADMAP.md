@@ -37,7 +37,7 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Tipos inferidos (LONG, STRPTR, BOOL) y `Float`
 - [x] Memoria automática (temporales por vuelta, contador de referencias)
 - [x] Funciones, structs con métodos, enums, listas, diccionarios, `Float` y `Fixed`, lambdas e imports
-- [x] Los 531 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
+- [x] Los 533 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
 - [x] Interfaces con GadTools, ReAction y MUI (3.8 o 5); red con TCP y HTTPS (AmiSSL)
 - [x] Extensión de VS Code (`editor/vscode/`, versión 0.2.1): errores al escribir, completar, compilar,
       emulador, depurador y editor visual de MUI
@@ -425,7 +425,7 @@ Combinar:
 - **FFI** (Estrategia B): Escape hatch para acceso directo cuando sea necesario
 
 ### 3.1 Módulos Built-in
-**Estado:** ✅ Completado (531 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
+**Estado:** ✅ Completado (533 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
 **Prioridad:** Alta
 **Complejidad:** Alta
 
@@ -929,6 +929,13 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 - [x] Arreglo: `file_eof` mira el siguiente byte sin comérselo; un bucle `while not file_eof(h)` con
       `file_read_byte` perdía un byte de cada dos
 - [x] Test suite: 329 resultados sin emulador (2026-10-21); 34 ejemplos
+
+### Sesión 15 (Fecha: 2026-10-21) — arreglos y D68
+- [x] Una función con nombre en una variable (`g = doble`, `var g: Func = doble`, también global) se llama con `g(x)`
+- [x] `sprite_load` lee el dibujo (marcos de 16 píxeles uno al lado de otro) y `sprite_frame` cambia el marco
+- [x] `On Timer` funciona también con ventanas de `window_create`
+- [x] `lib/amiga/dos.dash`: `SEEK_*` con los valores de AmigaDOS
+- [x] `dos_requesters(on)` y `base64_to_file(texto, fichero)` para dashweb (D68)
 
 ---
 

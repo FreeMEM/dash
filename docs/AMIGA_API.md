@@ -362,5 +362,5 @@ JOY_PORT2 = 1
 | Sistema | 10 |
 | **TOTAL** | **~161 funciones** |
 
-Eso era el plan. Hoy Dash tiene **531 builtins**, todos implementados; 82 son de MUI. La lista real, con lo que
+Eso era el plan. Hoy Dash tiene **533 builtins**, todos implementados; 82 son de MUI. La lista real, con lo que
 hace cada una, está en [BUILTINS.md](BUILTINS.md).
