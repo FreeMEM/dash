@@ -3983,6 +3983,7 @@ TASK_FUNCTIONS = {
     "base64_to_file": BuiltinFunc(
         name="base64_to_file", params=["text", "file"], return_type="LONG",
         c_template="_dash_base64_to_file(${text}, ${file})",
+        reads_only=True,      # only read during the call: variables keep (and free) their texts (D68b)
         description="Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): "
                     "the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written"),
     "cpu_start": BuiltinFunc(
