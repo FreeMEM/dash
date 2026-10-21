@@ -11,7 +11,7 @@ By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
 **Video tutorial** (6 minutes, subtitles in Spanish): a first project, writing code, the window, compiling and
 running, debugging, and debugging a real Amiga.
 
-[![Video tutorial](https://raw.githubusercontent.com/FreeMEM/dash/main/docs/media/vscode-tutorial.jpg)](https://github.com/FreeMEM/dash/releases/download/vscode-0.2.1/dash-vscode-tutorial-subtitulado.mp4)
+[![Video tutorial](https://raw.githubusercontent.com/FreeMEM/dash/main/docs/media/vscode-tutorial.jpg)](https://youtu.be/_UTJ_0s3xLc)
 
 ## Installing
 
