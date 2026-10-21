@@ -8,11 +8,10 @@ const MODE_READ = 1005      # MODE_OLDFILE - Open existing for reading
 const MODE_WRITE = 1006     # MODE_NEWFILE - Create/truncate for writing
 const MODE_READWRITE = 1004 # MODE_READWRITE - Open/create for read/write
 
-# Seek mode constants (AmigaDOS uses -1 for beginning, but we use 0,1,2)
-# Note: These are passed to file_seek which handles the conversion
-const SEEK_START = 0    # OFFSET_BEGINNING
-const SEEK_CURRENT = 1  # OFFSET_CURRENT
-const SEEK_END = 2      # OFFSET_END
+# Seek mode constants: the AmigaDOS values, passed to file_seek as they are
+const SEEK_START = -1   # OFFSET_BEGINNING
+const SEEK_CURRENT = 0  # OFFSET_CURRENT
+const SEEK_END = 1      # OFFSET_END
 
 # === File Handle Helpers ===
 
