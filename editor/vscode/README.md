@@ -8,6 +8,11 @@ By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
 
 ![The same window on the emulated Amiga](images/amiga.png)
 
+**Video tutorial** (6 minutes, subtitles in Spanish): a first project, writing code, the window, compiling and
+running, debugging, and debugging a real Amiga.
+
+[![Video tutorial](https://raw.githubusercontent.com/FreeMEM/dash/main/docs/media/vscode-tutorial.jpg)](https://github.com/FreeMEM/dash/releases/download/vscode-0.2.1/dash-vscode-tutorial-subtitulado.mp4)
+
 ## Getting started
 
 1. You need VS Code 1.86 or later, the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain

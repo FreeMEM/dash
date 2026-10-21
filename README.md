@@ -95,6 +95,18 @@ El proyecto más grande escrito en Dash es [dashweb](https://github.com/FreeMEM/
 para Amiga con MUI (3.8 o 5): lo que le falta a dashweb se añade a Dash. Ya tiene una primera versión de
 prueba, [v0.1.0-alfa](https://github.com/FreeMEM/dashweb/releases/tag/v0.1.0-alfa).
 
+## Desarrollar en VS Code
+
+La extensión de `editor/vscode` hace de VS Code un entorno para Dash: colores, errores mientras se escribe,
+completar, ir a la definición y renombrar; compilar y ejecutar en el Amiga emulado (A1200, A500, AmigaOS 3.2 o
+con tarjeta gráfica); depurar con puntos de parada, variables y paso a paso, también en un Amiga de verdad por la
+red; y un editor visual de ventanas MUI que las enseña en el emulador. Usa el compilador de este repositorio.
+
+[![Tutorial en vídeo de Dash en VS Code](docs/media/vscode-tutorial.jpg)](https://github.com/FreeMEM/dash/releases/download/vscode-0.2.1/dash-vscode-tutorial-subtitulado.mp4)
+
+Un tutorial de 6 minutos, con subtítulos: el primer proyecto, escribir código, la ventana, compilar y ejecutar,
+depurar y depurar en un Amiga de verdad.
+
 ## Instalación rápida
 
 ### Ubuntu / Debian
