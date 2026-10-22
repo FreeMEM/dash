@@ -377,6 +377,11 @@ s = net_connect_start("host", 80, 10000)  # without waiting: net_connect_poll(s)
 t = tls_connect_start(s, "host", 10000)   # net_connect_stage(s); tls_connect_poll(t) 1 / 0 / -1
 ev = mui_wait_event_signals(net_signal())   # wakes on socket events (0: the stack cannot, poll)
 tls_resumed(t)                       # true if it reused an earlier session with that server
+srv = net_listen(8080)               # TCP server (0: any free port, net_port(srv)); -1 if taken
+c = net_accept(srv, 1000)            # next connection or -1 (0: only look); net_peer(c) = "a.b.c.d"
+u = net_udp_open(5000)               # UDP (0: any free port); net_close(u)
+net_udp_send(u, "host", 5000, "hi")  # one datagram ("255.255.255.255": whole local network); _buffer too
+m = net_udp_recv(u, 1500, 1000)      # "" = none in time, nil = error; net_udp_from(), net_udp_from_port()
 ```
 
 ## Program Arguments
