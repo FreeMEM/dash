@@ -3413,6 +3413,421 @@ static void _dash_meter_cleanup(void) {
 
 """
 
+    # A mouse acceleration curve for each mouse (Ratonera): Poseidon's HID devices, a patch on input.device's
+    # BeginIO for the USB ones (hid.class tasks) and an input handler for the Amiga one, and the system's
+    # acceleration in Preferences
+    MOUSE_RUNTIME = """\
+/* Dash mouse runtime (Ratonera). usb_hid_read(): the interfaces hid.class handles (poseidon.library 4), each
+   with its "emitter", the number in the name of the task that sends its moves (hid.class<%08lx>, Poseidon's
+   IFA_Binding). mouse_curve(emitter, factors): a curve for the moves of that emitter: factors in hundredths,
+   entry i for a move of i units in an event, the last one from there on; the fraction left is kept for the
+   next event. The USB ones are scaled in a patch on input.device's BeginIO (IND_WRITEEVENT, IND_ADDEVENT of
+   a relative IECLASS_RAWMOUSE from a hid.class<emitter> task, on a copy of the event); everything else
+   (emitter 0: the Amiga mouse) in an input handler above Intuition. Nothing else is touched. The patch goes
+   through a stub of our own: taken away, the stub jumps to what was there; if another patch is on top, the
+   stub stays (passing everything through) and is never freed. mouse_prefs_set: the system's speed and
+   acceleration, back as they were at the end. */
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#include <exec/interrupts.h>
+#include <intuition/preferences.h>
+#ifndef IND_ADDEVENT
+#define IND_ADDEVENT (CMD_NONSTD + 15)
+#endif
+#define _DASH_MC_SLOTS 16
+#define _DASH_MC_STEPS 32
+#define _DASH_MC_MARK 0xD5          /* ie_SubClass of an event the patch has scaled (the handler clears it) */
+
+struct _DashCurve {
+    volatile ULONG emitter;          /* 0: the Amiga mouse (the input handler) */
+    volatile BOOL used;              /* a slot of a hid.class emitter stays, also without a curve */
+    volatile LONG n;                 /* factors; 0: none (moves go on as they come) */
+    volatile LONG f[_DASH_MC_STEPS]; /* hundredths */
+    LONG rx, ry;                     /* the fractions left, in hundredths */
+    LONG events;                     /* events scaled (tests) */
+    struct InputEvent copy;          /* the scaled copy the patch hands on */
+    APTR orig;                       /* the sender's event, while the copy stands in for it */
+};
+static struct _DashCurve _dash_mc[_DASH_MC_SLOTS];
+static volatile LONG _dash_mc_busy = 0;            /* tasks inside the patch */
+static struct IOStdReq *_dash_mc_io = NULL;         /* input.device, open while something is on */
+static struct MsgPort *_dash_mc_port = NULL;
+static UWORD *_dash_mc_stub = NULL;                 /* jmp <address>, in memory that is never unloaded */
+static BOOL _dash_mc_patched = FALSE;
+static LONG _dash_mc_left = 0;                      /* stubs left under another patch (tests) */
+static APTR _dash_mc_old = NULL;                    /* BeginIO before us */
+static struct Interrupt _dash_mc_int;
+static BOOL _dash_mc_handler_on = FALSE;
+static struct Preferences _dash_mc_prefs;           /* the system's, before mouse_prefs_set */
+static BOOL _dash_mc_prefs_saved = FALSE;
+
+/* The slot of an emitter, or NULL (no library call: the patch and the handler use it) */
+static struct _DashCurve *_dash_mc_find(ULONG emitter) {
+    LONG i;
+    for (i = 0; i < _DASH_MC_SLOTS; i++)
+        if (_dash_mc[i].used && _dash_mc[i].emitter == emitter) return &_dash_mc[i];
+    return NULL;
+}
+
+/* An emitter's slot, taken if it has none (NULL: all taken) */
+static struct _DashCurve *_dash_mc_slot(ULONG emitter) {
+    struct _DashCurve *c;
+    LONG i;
+    Forbid();
+    if (!(c = _dash_mc_find(emitter)))
+        for (i = 0; i < _DASH_MC_SLOTS; i++)
+            if (!_dash_mc[i].used) {
+                c = &_dash_mc[i];
+                c->n = 0;
+                c->rx = c->ry = 0;
+                c->events = 0;
+                c->emitter = emitter;
+                c->used = TRUE;
+                break;
+            }
+    Permit();
+    return c;
+}
+
+/* A move through a curve: the factor of its speed (the longer axis), and the fractions kept */
+static void _dash_mc_apply(struct _DashCurve *c, WORD *x, WORD *y) {
+    LONG dx = *x, dy = *y, ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy, n = c->n, f, t, q;
+    LONG sp = ax > ay ? ax : ay;
+    if (n <= 0) return;
+    f = c->f[sp < n ? sp : n - 1];
+    t = dx * f + c->rx;
+    q = t / 100;
+    c->rx = t - q * 100;
+    *x = (WORD)(q > 32767 ? 32767 : q < -32768 ? -32768 : q);
+    t = dy * f + c->ry;
+    q = t / 100;
+    c->ry = t - q * 100;
+    *y = (WORD)(q > 32767 ? 32767 : q < -32768 ? -32768 : q);
+    c->events++;
+}
+
+/* The emitter of the running task if it is hid.class<%08lx>, or 0 */
+static ULONG _dash_mc_sender(void) {
+    const char *s = SysBase->ThisTask->tc_Node.ln_Name;
+    static const char p[] = "hid.class<";
+    ULONG v = 0;
+    LONG i;
+    if (!s) return 0;
+    for (i = 0; p[i]; i++) if (s[i] != p[i]) return 0;
+    for (s += i, i = 0; i < 8; i++, s++) {
+        char ch = *s;
+        if (ch >= '0' && ch <= '9') v = (v << 4) | (ch - '0');
+        else if (ch >= 'a' && ch <= 'f') v = (v << 4) | (ch - 'a' + 10);
+        else if (ch >= 'A' && ch <= 'F') v = (v << 4) | (ch - 'A' + 10);
+        else return 0;
+    }
+    return *s == '>' ? v : 0;
+}
+
+/* input.device's BeginIO, through the stub: a relative mouse move from a hid.class task goes on as a copy,
+   scaled by its curve if it has one and marked (the handler leaves it alone); everything else as it came.
+   No waiting, no memory, no library calls (Forbid and Permit only, the first time an emitter is seen). */
+static void _dash_mc_patch(struct IOStdReq *io __asm("a1"), struct Device *dev __asm("a6")) {
+    struct _DashCurve *c = NULL;
+    struct InputEvent *ev;
+    ULONG who;
+    LONG i;
+    __asm volatile ("addq.l #1,%0" : "+m"(_dash_mc_busy) : : "cc");
+    if (io->io_Command == IND_WRITEEVENT || io->io_Command == IND_ADDEVENT) {
+        for (i = 0; i < _DASH_MC_SLOTS; i++)          /* (a sender that did not set io_Data again) */
+            if (io->io_Data == (APTR)&_dash_mc[i].copy) io->io_Data = _dash_mc[i].orig;
+    }
+    if ((io->io_Command == IND_WRITEEVENT || io->io_Command == IND_ADDEVENT) && (who = _dash_mc_sender()) &&
+        ((c = _dash_mc_find(who)) || (c = _dash_mc_slot(who)))) {
+        ev = (struct InputEvent *)io->io_Data;
+        if (ev && !ev->ie_NextEvent && ev->ie_Class == IECLASS_RAWMOUSE &&
+            (ev->ie_Qualifier & IEQUALIFIER_RELATIVEMOUSE)) {
+            c->copy = *ev;
+            _dash_mc_apply(c, &c->copy.ie_X, &c->copy.ie_Y);
+            c->copy.ie_SubClass = _DASH_MC_MARK;
+            c->orig = ev;
+            io->io_Data = &c->copy;
+        } else c = NULL;
+    }
+    {
+        register struct IOStdReq *a1 __asm("a1") = io;
+        register struct Device *a6 __asm("a6") = dev;
+        __asm volatile ("jsr %2@" : "+r"(a1) : "r"(a6), "a"(_dash_mc_old) : "d0", "d1", "a0", "cc", "memory");
+    }
+    if (c && (io->io_Flags & IOF_QUICK)) io->io_Data = c->orig;      /* done already: the sender's again */
+    __asm volatile ("subq.l #1,%0" : "+m"(_dash_mc_busy) : : "cc");
+}
+
+/* Above Intuition: the Amiga mouse (and any move not from a hid.class with a curve) through emitter 0's
+   curve; the patch's copies only lose their mark */
+static struct InputEvent *_dash_mc_handler(struct InputEvent *ev __asm("a0"), APTR data __asm("a1")) {
+    struct InputEvent *e;
+    struct _DashCurve *c = _dash_mc_find(0);
+    if (c && c->n <= 0) c = NULL;
+    for (e = ev; e; e = e->ie_NextEvent) {
+        if (e->ie_Class != IECLASS_RAWMOUSE) continue;
+        if (e->ie_SubClass == _DASH_MC_MARK) { e->ie_SubClass = 0; continue; }
+        if (c && (e->ie_Qualifier & IEQUALIFIER_RELATIVEMOUSE)) _dash_mc_apply(c, &e->ie_X, &e->ie_Y);
+    }
+    return ev;
+}
+
+static void _dash_mc_stub_to(APTR where) {
+    Disable();
+    *(ULONG *)(_dash_mc_stub + 1) = (ULONG)where;
+    Enable();
+    CacheClearU();
+}
+
+/* Everything off: the handler out; the patch out if BeginIO is still ours (its stub freed once nobody is
+   inside), else the stub left jumping to what was there, for good */
+static void _dash_mc_off(void) {
+    LONG i;
+    if (!_dash_mc_io) return;
+    if (_dash_mc_handler_on) {
+        _dash_mc_io->io_Command = IND_REMHANDLER;
+        _dash_mc_io->io_Data = &_dash_mc_int;
+        DoIO((struct IORequest *)_dash_mc_io);
+        _dash_mc_handler_on = FALSE;
+    }
+    if (_dash_mc_stub && _dash_mc_patched) {
+        struct Library *dev = (struct Library *)_dash_mc_io->io_Device;
+        APTR now;
+        Forbid();
+        now = SetFunction(dev, DEV_BEGINIO, (APTR)_dash_mc_old);
+        if (now != (APTR)_dash_mc_stub) SetFunction(dev, DEV_BEGINIO, now);   /* someone on top: theirs back */
+        Permit();
+        _dash_mc_stub_to(_dash_mc_old);         /* from now on the stub only passes everything through */
+        if (now != (APTR)_dash_mc_stub) {
+            _dash_mc_stub = NULL;               /* left there for good: the next one is another */
+            _dash_mc_left++;
+        }
+        _dash_mc_patched = FALSE;
+        for (i = 0; i < 250 && _dash_mc_busy; i++) Delay(1);
+    }
+    CloseDevice((struct IORequest *)_dash_mc_io);
+    DeleteIORequest((struct IORequest *)_dash_mc_io);
+    DeleteMsgPort(_dash_mc_port);
+    _dash_mc_io = NULL;
+    _dash_mc_port = NULL;
+}
+
+static void _dash_mc_cleanup(void) {
+    _dash_mc_off();
+    if (_dash_mc_stub) {                      /* ours and out of BeginIO: freed once nobody can be in it */
+        Delay(2);
+        if (!_dash_mc_busy) FreeMem(_dash_mc_stub, 8);
+        _dash_mc_stub = NULL;
+    }
+    if (_dash_mc_prefs_saved) {
+        SetPrefs(&_dash_mc_prefs, sizeof(_dash_mc_prefs), TRUE);
+        _dash_mc_prefs_saved = FALSE;
+    }
+}
+
+/* The patch and the handler on (once) */
+static BOOL _dash_mc_on(void) {
+    static BOOL at_exit = FALSE;
+    if (_dash_mc_io) return TRUE;
+    if (!at_exit) at_exit = atexit(_dash_mc_cleanup) == 0;
+    if (!(_dash_mc_port = CreateMsgPort())) return FALSE;
+    if (!(_dash_mc_io = (struct IOStdReq *)CreateIORequest(_dash_mc_port, sizeof(struct IOStdReq))) ||
+        OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)_dash_mc_io, 0)) {
+        if (_dash_mc_io) DeleteIORequest((struct IORequest *)_dash_mc_io);
+        DeleteMsgPort(_dash_mc_port);
+        _dash_mc_io = NULL;
+        _dash_mc_port = NULL;
+        return FALSE;
+    }
+    memset(&_dash_mc_int, 0, sizeof(_dash_mc_int));
+    _dash_mc_int.is_Node.ln_Type = NT_INTERRUPT;
+    _dash_mc_int.is_Node.ln_Pri = 52;                 /* above Intuition (50) and Commodities (51) */
+    _dash_mc_int.is_Node.ln_Name = (char *)"Dash mouse curves";
+    _dash_mc_int.is_Code = (void (*)())_dash_mc_handler;
+    _dash_mc_io->io_Command = IND_ADDHANDLER;
+    _dash_mc_io->io_Data = &_dash_mc_int;
+    DoIO((struct IORequest *)_dash_mc_io);
+    _dash_mc_handler_on = TRUE;
+    if (!_dash_mc_stub && (_dash_mc_stub = (UWORD *)AllocMem(8, MEMF_PUBLIC | MEMF_CLEAR)))
+        _dash_mc_stub[0] = 0x4EF9;                    /* jmp (abs).l */
+    if (_dash_mc_stub) {
+        _dash_mc_stub_to((APTR)_dash_mc_patch);
+        Forbid();
+        _dash_mc_old = SetFunction((struct Library *)_dash_mc_io->io_Device, DEV_BEGINIO, (APTR)_dash_mc_stub);
+        _dash_mc_patched = TRUE;
+        Permit();
+    }
+    return TRUE;
+}
+
+/* The curve of an emitter (0: the Amiga mouse): factors in hundredths (100 = as it comes); an empty list
+   takes it away. FALSE if there is no room (16 emitters) or input.device does not open. */
+static BOOL _dash_mouse_curve(LONG emitter, APTR list) {
+    DashArrayLong *a = (DashArrayLong *)list;
+    struct _DashCurve *c;
+    LONG i, n = a ? a->length : 0;
+    if (n > _DASH_MC_STEPS) n = _DASH_MC_STEPS;
+    if (n <= 0) {
+        if ((c = _dash_mc_find((ULONG)emitter))) c->n = 0;
+        return TRUE;
+    }
+    if (!_dash_mc_on() || !(c = _dash_mc_slot((ULONG)emitter))) return FALSE;
+    Forbid();                                         /* (a curve in use changes in one go) */
+    for (i = 0; i < n; i++) c->f[i] = a->data[i];
+    c->n = n;
+    Permit();
+    return TRUE;
+}
+
+/* Everything off now (also at the program's end): the curves stay, for a mouse_curve that puts it back */
+static void _dash_mouse_curves_off(void) { _dash_mc_off(); }
+
+/* How many stubs are left under another program's patch (each one passes everything through, for good) */
+static LONG _dash_mouse_patch_left(void) { return _dash_mc_left; }
+
+static LONG _dash_mouse_curve_events(LONG emitter) {
+    struct _DashCurve *c = _dash_mc_find((ULONG)emitter);
+    return c ? c->events : 0;
+}
+
+/* The system's mouse speed (Preferences' PointerTicks: 1 fastest) and acceleration */
+static LONG _dash_mouse_prefs_ticks(void) {
+    struct Preferences p;
+    GetPrefs(&p, sizeof(p));
+    return p.PointerTicks;
+}
+
+static BOOL _dash_mouse_prefs_accel(void) {
+    struct Preferences p;
+    GetPrefs(&p, sizeof(p));
+    return (p.EnableCLI & MOUSE_ACCEL) != 0;
+}
+
+/* Sets them; the first time, they are kept to be put back at the program's end */
+static void _dash_mouse_prefs_set(LONG ticks, BOOL accel) {
+    struct Preferences p;
+    static BOOL at_exit = FALSE;
+    if (!at_exit) at_exit = atexit(_dash_mc_cleanup) == 0;
+    GetPrefs(&p, sizeof(p));
+    if (!_dash_mc_prefs_saved) { _dash_mc_prefs = p; _dash_mc_prefs_saved = TRUE; }
+    p.PointerTicks = (UWORD)(ticks < 1 ? 1 : ticks);
+    if (accel) p.EnableCLI |= MOUSE_ACCEL;
+    else p.EnableCLI &= ~MOUSE_ACCEL;
+    SetPrefs(&p, sizeof(p), TRUE);
+}
+
+/* Poseidon (poseidon.library 4): the interfaces hid.class handles, read afresh. Its LVOs and tags (from
+   the Poseidon SDK, which is not needed to build) */
+#define _DASH_PGA_DEVICE 0x04
+#define _DASH_PGA_CONFIG 0x05
+#define _DASH_PGA_INTERFACE 0x06
+#define _DASH_DA_VendorID (TAG_USER + 42 + 0x19)
+#define _DASH_DA_ProductID (TAG_USER + 42 + 0x1a)
+#define _DASH_DA_Manufacturer (TAG_USER + 42 + 0x1b)
+#define _DASH_DA_ProductName (TAG_USER + 42 + 0x1c)
+#define _DASH_DA_ConfigList (TAG_USER + 42 + 0x20)
+#define _DASH_CA_InterfaceList (TAG_USER + 23 + 0x20)
+#define _DASH_IFA_Protocol (TAG_USER + 4711 + 0x14)
+#define _DASH_IFA_Binding (TAG_USER + 4711 + 0x17)
+#define _DASH_IFA_BindingClass (TAG_USER + 4711 + 0x19)
+#define _DASH_HID_MAX 16
+
+static struct { char name[40], maker[40]; LONG vendor, product, kind; ULONG emitter; } _dash_hid[_DASH_HID_MAX];
+static LONG _dash_hid_n = 0;
+
+static void _dash_psd_lock(struct Library *pb, LONG lvo) {
+    register struct Library *a6 __asm("a6") = pb;
+    register LONG d0 __asm("d0");
+    if (lvo == -48) __asm volatile ("jsr a6@(-48:W)" : "=r"(d0) : "r"(a6) : "d1", "a0", "a1", "cc", "memory");
+    else __asm volatile ("jsr a6@(-54:W)" : "=r"(d0) : "r"(a6) : "d1", "a0", "a1", "cc", "memory");
+}
+
+static APTR _dash_psd_next_device(struct Library *pb, APTR pd) {
+    register struct Library *a6 __asm("a6") = pb;
+    register APTR a0 __asm("a0") = pd;
+    register APTR d0 __asm("d0");
+    __asm volatile ("jsr a6@(-126:W)" : "=r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
+    return d0;
+}
+
+static LONG _dash_psd_get(struct Library *pb, LONG type, APTR obj, struct TagItem *tags) {
+    register struct Library *a6 __asm("a6") = pb;
+    register LONG d0 __asm("d0") = type;
+    register APTR a0 __asm("a0") = obj;
+    register struct TagItem *a1 __asm("a1") = tags;
+    __asm volatile ("jsr a6@(-132:W)" : "+r"(d0), "+r"(a0), "+r"(a1) : "r"(a6) : "d1", "cc", "memory");
+    return d0;
+}
+
+static LONG _dash_usb_hid_read(void) {
+    struct Library *pb = OpenLibrary((CONST_STRPTR)"poseidon.library", 4);
+    APTR pd = NULL;
+    _dash_hid_n = 0;
+    if (!pb) return -1;
+    _dash_psd_lock(pb, -48);
+    while ((pd = _dash_psd_next_device(pb, pd)) && _dash_hid_n < _DASH_HID_MAX) {
+        ULONG vendor = 0, product = 0;
+        STRPTR name = NULL, maker = NULL;
+        struct List *cfgs = NULL;
+        struct Node *cfg;
+        struct TagItem t[6];
+        t[0].ti_Tag = _DASH_DA_VendorID; t[0].ti_Data = (ULONG)&vendor;
+        t[1].ti_Tag = _DASH_DA_ProductID; t[1].ti_Data = (ULONG)&product;
+        t[2].ti_Tag = _DASH_DA_ProductName; t[2].ti_Data = (ULONG)&name;
+        t[3].ti_Tag = _DASH_DA_Manufacturer; t[3].ti_Data = (ULONG)&maker;
+        t[4].ti_Tag = _DASH_DA_ConfigList; t[4].ti_Data = (ULONG)&cfgs;
+        t[5].ti_Tag = TAG_END;
+        _dash_psd_get(pb, _DASH_PGA_DEVICE, pd, t);
+        if (!cfgs) continue;
+        for (cfg = cfgs->lh_Head; cfg->ln_Succ; cfg = cfg->ln_Succ) {
+            struct List *ifs = NULL;
+            struct Node *pif;
+            t[0].ti_Tag = _DASH_CA_InterfaceList; t[0].ti_Data = (ULONG)&ifs;
+            t[1].ti_Tag = TAG_END;
+            _dash_psd_get(pb, _DASH_PGA_CONFIG, cfg, t);
+            if (!ifs) continue;
+            for (pif = ifs->lh_Head; pif->ln_Succ && _dash_hid_n < _DASH_HID_MAX; pif = pif->ln_Succ) {
+                ULONG proto = 0;
+                APTR binding = NULL;
+                struct Library *cls = NULL;
+                LONG i = _dash_hid_n;
+                t[0].ti_Tag = _DASH_IFA_Protocol; t[0].ti_Data = (ULONG)&proto;
+                t[1].ti_Tag = _DASH_IFA_Binding; t[1].ti_Data = (ULONG)&binding;
+                t[2].ti_Tag = _DASH_IFA_BindingClass; t[2].ti_Data = (ULONG)&cls;
+                t[3].ti_Tag = TAG_END;
+                _dash_psd_get(pb, _DASH_PGA_INTERFACE, pif, t);
+                if (!binding || !cls || !cls->lib_Node.ln_Name ||
+                    strcmp(cls->lib_Node.ln_Name, "hid.class")) continue;
+                strncpy(_dash_hid[i].name, name ? (char *)name : "", sizeof(_dash_hid[i].name) - 1);
+                _dash_hid[i].name[sizeof(_dash_hid[i].name) - 1] = 0;
+                strncpy(_dash_hid[i].maker, maker ? (char *)maker : "", sizeof(_dash_hid[i].maker) - 1);
+                _dash_hid[i].maker[sizeof(_dash_hid[i].maker) - 1] = 0;
+                _dash_hid[i].vendor = vendor;
+                _dash_hid[i].product = product;
+                _dash_hid[i].kind = proto == 2 ? 1 : proto == 1 ? 2 : 0;
+                _dash_hid[i].emitter = (ULONG)binding;
+                _dash_hid_n++;
+            }
+        }
+    }
+    _dash_psd_lock(pb, -54);
+    CloseLibrary(pb);
+    return _dash_hid_n;
+}
+
+static STRPTR _dash_usb_hid_name(LONG i) {
+    return _dash_str_dup((STRPTR)(i >= 0 && i < _dash_hid_n ? _dash_hid[i].name : ""), TRUE);
+}
+static STRPTR _dash_usb_hid_maker(LONG i) {
+    return _dash_str_dup((STRPTR)(i >= 0 && i < _dash_hid_n ? _dash_hid[i].maker : ""), TRUE);
+}
+static LONG _dash_usb_hid_vendor(LONG i) { return i >= 0 && i < _dash_hid_n ? _dash_hid[i].vendor : 0; }
+static LONG _dash_usb_hid_product(LONG i) { return i >= 0 && i < _dash_hid_n ? _dash_hid[i].product : 0; }
+static LONG _dash_usb_hid_kind(LONG i) { return i >= 0 && i < _dash_hid_n ? _dash_hid[i].kind : 0; }
+static LONG _dash_usb_hid_emitter(LONG i) { return i >= 0 && i < _dash_hid_n ? (LONG)_dash_hid[i].emitter : 0; }
+
+"""
+
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
     DOSREQ_RUNTIME = """\
 /* dos_requesters(on): off, the process's pr_WindowPtr is -1 and a call that would put up a requester ("Insert
@@ -12639,6 +13054,7 @@ _RUNTIME_FLAGS = [
     ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
     ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
+    ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
@@ -12912,6 +13328,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read (METER_RUNTIME, Trasfondo)
+        self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
@@ -13212,6 +13629,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CX_RUNTIME)
         if self.uses_meter:
             parts.append(CTemplates.METER_RUNTIME)
+        if self.uses_mouse:
+            parts.append(CTemplates.MOUSE_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -13429,6 +13848,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.insert(0, "    _dash_cx_cleanup();\n")   # the broker out of Exchange first
         if self.uses_meter:
             cleanup.append("    _dash_meter_cleanup();\n")
+        if self.uses_mouse:
+            cleanup.insert(0, "    _dash_mc_cleanup();\n")   # the patch out of input.device first
         if self.uses_dosreq:
             cleanup.append("    _dash_dosreq_cleanup();\n")
         if self.uses_cpu:
@@ -15287,6 +15708,7 @@ static {ret_type} {method_name}({params_str}) {{
         "textfield_set", "ra_set_string", "listview_add",
         "ra_listbrowser_add", "ra_add_radio", "ra_add_clicktab",
         "ra_menu_title", "ra_menu_item", "ra_add_getfile",   # the ReAction runtime keeps its own copy
+        "mouse_curve",                       # copies the factors of its list
     }
 
     def _frees(self, owned) -> str:
@@ -15669,7 +16091,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
-        if self.uses_cx or self.uses_meter:
+        if self.uses_mouse:
+            self.uses_arrays = True    # mouse_curve takes a list
+        if self.uses_cx or self.uses_meter or self.uses_mouse:
             self.uses_strings = True   # tooltype, disk_name and net_if_name give a String
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME

@@ -1,0 +1,140 @@
+# usb_hid_read with a fake poseidon.library 4 (the LVOs and tags of Poseidon's SDK): a trackpad with two
+# interfaces, one of hid.class (protocol 0: other) and one of another class (left out); a mouse and a
+# keyboard on one device, each interface its own hid.class binding (its emitter); and a device with no
+# configuration. Read twice: each reading afresh.
+# expect-out: sin poseidon: -1
+# expect-out: dispositivos: 3
+# expect-out: Trackpad|Apple|1452|613|0|true
+# expect-out: Combo|Logi|1133|50000|1|true
+# expect-out: Combo|Logi|1133|50000|2|true
+# expect-out: otra vez: 3
+# expect-out: emisores: 12345678 abcd0000
+# expect-out: cerrada: true
+
+@header "static struct Library *fake_psd, fake_hid, fake_msd; static LONG fake_opens;"
+
+@c
+"""
+/* the objects: devices, configs and interfaces are list nodes followed by their attributes */
+struct FIf { struct Node n; ULONG proto; APTR binding; struct Library *cls; };
+struct FCfg { struct Node n; struct List ifs; };
+struct FDev { struct Node n; ULONG vendor, product; STRPTR name, maker; struct List cfgs; };
+static struct FDev fdev[3];
+static struct FCfg fcfg[2];
+static struct FIf fif[4];
+
+static ULONG fake_open(struct Library *lib __asm("a6"), ULONG version __asm("d0")) {
+    lib->lib_OpenCnt++;
+    fake_opens++;
+    return (ULONG)lib;
+}
+static ULONG fake_close(struct Library *lib __asm("a6")) { lib->lib_OpenCnt--; return 0; }
+static ULONG fake_null(void) { return 0; }
+static APTR fake_next(APTR pd __asm("a0")) {
+    LONG i;
+    if (!pd) return &fdev[0];
+    for (i = 0; i < 2; i++) if (pd == &fdev[i]) return &fdev[i + 1];
+    return NULL;
+}
+static LONG fake_attrs(ULONG type __asm("d0"), APTR obj __asm("a0"), struct TagItem *t __asm("a1")) {
+    for (; t->ti_Tag != TAG_END; t++) {
+        ULONG *d = (ULONG *)t->ti_Data, v = 0;
+        if (type == 4) {
+            struct FDev *f = obj;
+            switch (t->ti_Tag - (TAG_USER + 42)) {
+            case 0x19: v = f->vendor; break;
+            case 0x1a: v = f->product; break;
+            case 0x1b: v = (ULONG)f->maker; break;
+            case 0x1c: v = (ULONG)f->name; break;
+            case 0x20: v = f->cfgs.lh_Head->ln_Succ ? (ULONG)&f->cfgs : 0; break;
+            }
+        } else if (type == 5 && t->ti_Tag == TAG_USER + 23 + 0x20) v = (ULONG)&((struct FCfg *)obj)->ifs;
+        else if (type == 6) {
+            struct FIf *f = obj;
+            switch (t->ti_Tag - (TAG_USER + 4711)) {
+            case 0x14: v = f->proto; break;
+            case 0x17: v = (ULONG)f->binding; break;
+            case 0x19: v = (ULONG)f->cls; break;
+            }
+        }
+        *d = v;
+    }
+    return 0;
+}
+
+static void fake_list(struct List *l) {
+    l->lh_Head = (struct Node *)&l->lh_Tail;
+    l->lh_Tail = NULL;
+    l->lh_TailPred = (struct Node *)&l->lh_Head;
+}
+
+static void fake_if(struct FCfg *c, struct FIf *f, ULONG proto, ULONG binding, struct Library *cls) {
+    f->proto = proto;
+    f->binding = (APTR)binding;
+    f->cls = cls;
+    AddTail(&c->ifs, &f->n);
+}
+"""
+end
+
+@native func poner_poseidon() -> Bool
+"""
+    static APTR vec[24];
+    LONG i;
+    for (i = 0; i < 23; i++) vec[i] = (APTR)fake_null;
+    vec[0] = (APTR)fake_open;
+    vec[1] = (APTR)fake_close;
+    vec[(126 - 6) / 6] = (APTR)fake_next;           /* psdGetNextDevice */
+    vec[(132 - 6) / 6] = (APTR)fake_attrs;          /* psdGetAttrsA */
+    vec[23] = (APTR)-1;
+    fake_hid.lib_Node.ln_Name = (char *)"hid.class";
+    fake_msd.lib_Node.ln_Name = (char *)"massstorage.class";
+    for (i = 0; i < 3; i++) fake_list(&fdev[i].cfgs);
+    for (i = 0; i < 2; i++) fake_list(&fcfg[i].ifs);
+    fdev[0].vendor = 0x5ac; fdev[0].product = 0x265; fdev[0].name = (STRPTR)"Trackpad"; fdev[0].maker = (STRPTR)"Apple";
+    fake_if(&fcfg[0], &fif[0], 0, 0x12345678, &fake_hid);
+    fake_if(&fcfg[0], &fif[1], 0, 0x11111111, &fake_msd);
+    AddTail(&fdev[0].cfgs, &fcfg[0].n);
+    fdev[1].vendor = 0x46d; fdev[1].product = 0xc350; fdev[1].name = (STRPTR)"Combo"; fdev[1].maker = (STRPTR)"Logi";
+    fake_if(&fcfg[1], &fif[2], 2, 0x0000abcd, &fake_hid);
+    fake_if(&fcfg[1], &fif[3], 1, 0xabcd0000, &fake_hid);
+    AddTail(&fdev[1].cfgs, &fcfg[1].n);
+    fdev[2].name = (STRPTR)"Hub";
+    if (!(fake_psd = MakeLibrary((APTR)vec, NULL, NULL, sizeof(struct Library), 0))) return FALSE;
+    fake_psd->lib_Node.ln_Type = NT_LIBRARY;
+    fake_psd->lib_Node.ln_Name = (char *)"poseidon.library";
+    fake_psd->lib_Version = 4;
+    AddLibrary(fake_psd);
+    return TRUE;
+"""
+end
+
+@native func quitar_poseidon() -> Bool
+"""
+    Forbid();
+    Remove(&fake_psd->lib_Node);
+    Permit();
+    return fake_psd->lib_OpenCnt == 0 && fake_opens == 2;
+"""
+end
+
+@native func hex(v: Int) -> String
+"""
+    char b[12];
+    sprintf(b, "%lx", (ULONG)v);
+    return _dash_str_dup((STRPTR)b, TRUE);
+"""
+end
+
+Main
+    Print "sin poseidon: #{usb_hid_read()}"
+    poner_poseidon()
+    n = usb_hid_read()
+    Print "dispositivos: #{n}"
+    for i in (0..n - 1)
+        Print usb_hid_name(i) + "|" + usb_hid_maker(i) + "|#{usb_hid_vendor(i)}|#{usb_hid_product(i)}|#{usb_hid_kind(i)}|#{usb_hid_emitter(i) != 0}"
+    end
+    Print "otra vez: #{usb_hid_read()}"
+    Print "emisores: " + hex(usb_hid_emitter(0)) + " " + hex(usb_hid_emitter(2))
+    Print "cerrada: #{quitar_poseidon()}"
+end

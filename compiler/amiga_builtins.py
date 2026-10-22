@@ -4116,6 +4116,70 @@ TASK_FUNCTIONS = {
         name="wifi_noise", params=[], return_type="LONG",
         c_template="_dash_wifi_noise_level()",
         description="The noise level of the last wifi_read that gave 0, in dBm"),
+    # Ratonera: a curve for each mouse (the Amiga one, and each USB one of Poseidon's hid.class)
+    "usb_hid_read": BuiltinFunc(
+        name="usb_hid_read", params=[], return_type="LONG",
+        c_template="_dash_usb_hid_read()",
+        description="Reads the USB devices (each interface) that Poseidon's hid.class handles: how many; -1 without "
+                    "poseidon.library 4"),
+    "usb_hid_name": BuiltinFunc(
+        name="usb_hid_name", params=["i"], return_type="STRPTR",
+        c_template="_dash_usb_hid_name(${i})",
+        description="The product name of USB device i (0 to usb_hid_read() - 1) of the last usb_hid_read"),
+    "usb_hid_maker": BuiltinFunc(
+        name="usb_hid_maker", params=["i"], return_type="STRPTR",
+        c_template="_dash_usb_hid_maker(${i})",
+        description="The manufacturer of USB device i"),
+    "usb_hid_vendor": BuiltinFunc(
+        name="usb_hid_vendor", params=["i"], return_type="LONG",
+        c_template="_dash_usb_hid_vendor(${i})",
+        description="The VendorID of USB device i"),
+    "usb_hid_product": BuiltinFunc(
+        name="usb_hid_product", params=["i"], return_type="LONG",
+        c_template="_dash_usb_hid_product(${i})",
+        description="The ProductID of USB device i"),
+    "usb_hid_kind": BuiltinFunc(
+        name="usb_hid_kind", params=["i"], return_type="LONG",
+        c_template="_dash_usb_hid_kind(${i})",
+        description="What USB device i is: 1 mouse, 2 keyboard, 0 other (many trackpads)"),
+    "usb_hid_emitter": BuiltinFunc(
+        name="usb_hid_emitter", params=["i"], return_type="LONG",
+        c_template="_dash_usb_hid_emitter(${i})",
+        description="The emitter of USB device i: the number of the hid.class task that sends its moves, for "
+                    "mouse_curve"),
+    "mouse_curve": BuiltinFunc(
+        name="mouse_curve", params=["emitter", "factors"], return_type="BOOL",
+        c_template="_dash_mouse_curve(${emitter}, ${factors})",
+        description="The acceleration curve of a mouse: emitter 0 is the Amiga mouse (and every move not from a "
+                    "USB mouse), else a usb_hid_emitter. factors: a list of hundredths (100 = as it comes), entry i "
+                    "for a move of i units, the last one from there on (up to 32); [] takes it away. The fractions "
+                    "left are kept. False if input.device does not open or there are 16 emitters already"),
+    "mouse_curve_events": BuiltinFunc(
+        name="mouse_curve_events", params=["emitter"], return_type="LONG",
+        c_template="_dash_mouse_curve_events(${emitter})",
+        description="How many moves an emitter's curve has scaled"),
+    "mouse_curves_off": BuiltinFunc(
+        name="mouse_curves_off", params=[], return_type="void",
+        c_template="_dash_mouse_curves_off()",
+        description="Takes the curves out of input.device now (the program's end does it too); a mouse_curve puts "
+                    "them back. Under another program's patch, a stub that passes everything through stays"),
+    "mouse_patch_left": BuiltinFunc(
+        name="mouse_patch_left", params=[], return_type="LONG",
+        c_template="_dash_mouse_patch_left()",
+        description="How many stubs were left under another program's patch of input.device (they pass everything "
+                    "through, for good)"),
+    "mouse_prefs_ticks": BuiltinFunc(
+        name="mouse_prefs_ticks", params=[], return_type="LONG",
+        c_template="_dash_mouse_prefs_ticks()",
+        description="The system's mouse speed (Input preferences): 1 fastest, 2, 4 slowest"),
+    "mouse_prefs_accel": BuiltinFunc(
+        name="mouse_prefs_accel", params=[], return_type="BOOL",
+        c_template="_dash_mouse_prefs_accel()",
+        description="True if the system's mouse acceleration (Input preferences) is on"),
+    "mouse_prefs_set": BuiltinFunc(
+        name="mouse_prefs_set", params=["ticks", "accel"], return_type="void",
+        c_template="_dash_mouse_prefs_set(${ticks}, ${accel})",
+        description="Sets the system's mouse speed and acceleration; they go back as they were at the program's end"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",
