@@ -1,0 +1,91 @@
+# (RTG: 68040 with uaegfx, the Workbench in 16 bits) Trasfondo's hide and show (desktop_canvas_free and desktop_canvas again) and disable and enable (cpu_stop and
+# cpu_start), 30 times in the same program: no memory lost (after the first rounds, which leave the Workbench's
+# own buffers made) and no hook left on the Workbench's layers or on any task.
+# rtg
+# workbench
+# expect-out: lienzos: 30
+# expect-out: cpu: 30
+# expect-out: memoria igual: true
+# expect-out: sin ganchos: true
+
+@native func esperar_workbench() -> Bool
+"""
+    LONG i;
+    struct Screen *s = NULL;
+    for (i = 0; i < 500 && !s; i++) if (!(s = LockPubScreen((CONST_STRPTR)"Workbench"))) Delay(1);
+    if (!s) return FALSE;
+    for (i = 0; i < 500; i++) {
+        struct Window *w;
+        BOOL bd = FALSE;
+        Forbid();
+        for (w = s->FirstWindow; w; w = w->NextWindow)
+            if ((w->Flags & WFLG_WBENCHWINDOW) && (w->Flags & WFLG_BACKDROP)) bd = TRUE;
+        Permit();
+        if (bd) { UnlockPubScreen(NULL, s); Delay(100); return TRUE; }
+        Delay(1);
+    }
+    UnlockPubScreen(NULL, s);
+    return FALSE;
+"""
+end
+
+# the Workbench's screen and backdrop window without the canvas' hook; no task with the CPU's switch hook
+@native func sin_ganchos() -> Bool
+"""
+    struct Screen *s = LockPubScreen((CONST_STRPTR)"Workbench");
+    struct Window *w;
+    struct Node *n;
+    BOOL ok = TRUE;
+    if (s) {
+        if (s->LayerInfo.BlankHook == &_dash_desk_hook) ok = FALSE;
+        Forbid();
+        for (w = s->FirstWindow; w; w = w->NextWindow)
+            if (w->WLayer && w->WLayer->BackFill == &_dash_desk_hook) ok = FALSE;
+        Permit();
+        UnlockPubScreen(NULL, s);
+    }
+    Disable();
+    for (n = SysBase->TaskReady.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        if (((struct Task *)n)->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    for (n = SysBase->TaskWait.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        if (((struct Task *)n)->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    if (SysBase->ThisTask->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    Enable();
+    return ok;
+"""
+end
+
+func pintar(x: Int, y: Int, w: Int, h: Int)
+    gfx_pen(1)
+    gfx_rect(0, 0, w - 1, h - 1)
+end
+
+Main
+    esperar_workbench()
+    lienzos = 0
+    cpus = 0
+    antes = 0
+    for i in (1..30)
+        c = desktop_canvas(-1, -1, 160, 40)
+        if c != 0
+            lienzos = lienzos + 1
+            desktop_canvas_on_draw(c, pintar)
+            desktop_canvas_update(c)
+            desktop_canvas_free(c)
+        end
+        if cpu_start()
+            cpus = cpus + 1
+            time_delay(1)
+            cpu_stop()
+        end
+        if i == 5
+            antes = mem_total()
+        end
+    end
+    despues = mem_total()
+    Print "lienzos: #{lienzos}"
+    Print "cpu: #{cpus}"
+    # (25 rounds: a leak of even 200 bytes a round would be 5 KB)
+    Print "memoria igual: #{antes - despues < 2048}"
+    Print "sin ganchos: #{sin_ganchos()}"
+end

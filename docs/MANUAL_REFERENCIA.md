@@ -3378,6 +3378,54 @@ marcha: con un puerto público con ese nombre. Si ya existe, manda Ctrl-C a la c
 (esta debe acabar); si no, lo crea y da `true`. El puerto se quita al acabar el programa. Así, lanzar otra vez un
 programa sin ventana desde el Workbench lo cierra.
 
+### Una commodity: tooltype y cx_*
+
+Un programa sin ventana puede ser una commodity: sale en Exchange, que le manda órdenes (Mostrar, Ocultar,
+Desactivar, Activar, Eliminar), y puede tener una tecla rápida.
+
+```ruby
+const CX_OCULTAR = 1
+const CX_MOSTRAR = 2
+const CX_DESACTIVAR = 3
+const CX_ACTIVAR = 4
+const CX_ELIMINAR = 5
+const CX_TECLA = 6
+
+Main
+    if single_instance("Trasfondo")
+        prioridad = Int(tooltype("CX_PRIORITY", "0"))
+        cx_broker("Trasfondo", "Trasfondo 0.2", "La CPU en el fondo del Workbench", prioridad)
+        tecla = tooltype("CX_POPKEY", "")
+        if tecla != "" and not cx_hotkey(tecla)
+            Print "CX_POPKEY no vale: " + tecla
+        end
+        while true
+            orden = cx_wait(1000)           # una orden, Ctrl-C (-1) o pasa el segundo (0)
+            if orden == -1 or orden == CX_ELIMINAR
+                break
+            end
+            # CX_OCULTAR, CX_MOSTRAR, CX_TECLA... y cada segundo, pintar
+        end
+    end
+end
+```
+
+- `tooltype(nombre, defecto)`: desde la Shell, el argumento `NOMBRE=valor` (`CX_POPKEY="ctrl alt t"`; el nombre en
+  mayúsculas o minúsculas); si no está, o desde el Workbench, el tooltype del icono del programa; si tampoco, el
+  defecto.
+- `cx_broker(nombre, título, descripción, prioridad)`: la commodity en Exchange, con Mostrar y Ocultar, activada
+  (nombre hasta 23 letras; título y descripción hasta 39). `false` sin `commodities.library` o si ya hay una con ese
+  nombre. Una segunda llamada pone otra en su lugar.
+- `cx_hotkey(descripción)`: la tecla rápida (`"ctrl alt t"`); `false` si la descripción no vale. `""` la quita.
+- `cx_command()`: la siguiente orden: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 eliminar,
+  6 la tecla rápida. Desactivar y activar apagan y encienden la commodity (Exchange lo enseña, y la tecla no hace
+  nada mientras está desactivada).
+- `cx_wait(ms)`: espera sin gastar CPU a que llegue una orden (la da, como `cx_command`), Ctrl-C (-1, y lo borra,
+  como `break_check`) o pasen `ms` milisegundos (0).
+
+Al acabar el programa, la commodity y su tecla se quitan solas. Lanzar otra vez el programa lo sigue parando con
+`single_instance`, que va antes.
+
 ### Sin requesters de DOS: dos_requesters
 
 ```ruby
@@ -3763,6 +3811,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
+| Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |

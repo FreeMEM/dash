@@ -2736,6 +2736,243 @@ static BOOL _dash_single_instance(STRPTR name) {
 
 """
 
+    # Trasfondo as a commodity (Exchange): tooltypes, the broker, the hotkey, its commands and a wait for them
+    CX_RUNTIME = """\
+/* Dash commodity runtime (Trasfondo): tooltype(name, default) from the Shell's arguments (NAME=value) or the
+   program's icon; cx_broker, the program in Exchange (show and hide on); cx_hotkey; cx_command, the next
+   command from Exchange or the hotkey; cx_wait(ms), until one comes, Ctrl-C or the time. The broker and the
+   hotkey go at the end of the program (also with exit, atexit). */
+#include <libraries/commodities.h>
+#include <proto/commodities.h>
+#include <workbench/startup.h>
+#include <workbench/workbench.h>
+#include <proto/icon.h>
+#include <devices/timer.h>
+struct Library *CxBase;          /* tentative: libnix's own if it opened it */
+struct Library *IconBase;
+extern struct WBStartup *_WBenchMsg;
+static BOOL _dash_cx_lib_ours = FALSE, _dash_icon_lib_ours = FALSE;
+static struct MsgPort *_dash_cx_port = NULL;
+static CxObj *_dash_cx_broker = NULL, *_dash_cx_key = NULL;
+static struct MsgPort *_dash_cx_tport = NULL;
+static struct timerequest *_dash_cx_tr = NULL;
+#define _DASH_CX_KEY_ID 1
+
+/* The first n letters of a and b the same, upper or lower case (Latin-1 letters too) */
+static BOOL _dash_cx_same(const char *a, const char *b, LONG n) {
+    while (n-- > 0) {
+        UBYTE x = (UBYTE)*a++, y = (UBYTE)*b++;
+        if (x >= 'a' && x <= 'z') x -= 32; else if (x >= 0xE0 && x <= 0xFE && x != 0xF7) x -= 32;
+        if (y >= 'a' && y <= 'z') y -= 32; else if (y >= 0xE0 && y <= 0xFE && y != 0xF7) y -= 32;
+        if (x != y) return FALSE;
+    }
+    return TRUE;
+}
+
+/* The value of NAME=value in the Shell's argument line (quotes around the value or the whole pair), copied to
+   buf; FALSE if it is not there */
+static BOOL _dash_tooltype_shell(STRPTR name, char *buf, LONG size) {
+    char *p = (char *)GetArgStr();
+    LONG n = strlen((char *)name);
+    while (p && *p) {
+        char *start, *end;
+        BOOL quoted = FALSE;
+        while (*p == ' ' || *p == '\\t' || *p == '\\n') p++;
+        if (!*p) break;
+        if (*p == '"') { quoted = TRUE; p++; }
+        start = p;
+        while (*p && (quoted ? *p != '"' : (*p != ' ' && *p != '\\t' && *p != '\\n'))) {
+            if (*p == '"') {                         /* NAME="a b": the quotes of the value */
+                p++;
+                while (*p && *p != '"') p++;
+                if (*p) p++;
+                continue;
+            }
+            p++;
+        }
+        end = p;
+        if (*p == '"') p++;
+        if (end - start > n && _dash_cx_same(start, (char *)name, n) && start[n] == '=') {
+            char *v = start + n + 1;
+            LONG len;
+            if (*v == '"') { v++; if (end > v && end[-1] == '"') end--; }
+            len = end - v;
+            if (len >= size) len = size - 1;
+            CopyMem(v, buf, len);
+            buf[len] = 0;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* The program's icon: Workbench gives its file; from the Shell, PROGDIR: and the program's name */
+static struct DiskObject *_dash_own_icon(void) {
+    struct DiskObject *dobj = NULL;
+    if (!IconBase) { IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36); _dash_icon_lib_ours = IconBase != NULL; }
+    if (!IconBase) return NULL;
+    if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 0) {
+        BPTR old = CurrentDir(_WBenchMsg->sm_ArgList[0].wa_Lock);
+        dobj = GetDiskObject((CONST_STRPTR)_WBenchMsg->sm_ArgList[0].wa_Name);
+        CurrentDir(old);
+    } else {
+        char name[256] = "PROGDIR:";
+        if (GetProgramName((STRPTR)name + 8, sizeof(name) - 8)) {
+            memmove(name + 8, FilePart((CONST_STRPTR)name + 8), strlen((char *)FilePart((CONST_STRPTR)name + 8)) + 1);
+            dobj = GetDiskObject((CONST_STRPTR)name);
+        }
+    }
+    return dobj;
+}
+
+static STRPTR _dash_tooltype(STRPTR name, STRPTR dflt) {
+    char buf[256];
+    struct DiskObject *dobj;
+    if (!name || !*name) return _dash_str_dup(dflt ? dflt : (STRPTR)"", TRUE);
+    if (!_WBenchMsg && _dash_tooltype_shell(name, buf, sizeof(buf))) return _dash_str_dup((STRPTR)buf, TRUE);
+    if ((dobj = _dash_own_icon())) {
+        STRPTR v = (STRPTR)FindToolType((CONST_STRPTR *)dobj->do_ToolTypes, (CONST_STRPTR)name);
+        if (v) {
+            STRPTR r = _dash_str_dup(v, TRUE);
+            FreeDiskObject(dobj);
+            return r;
+        }
+        FreeDiskObject(dobj);
+    }
+    return _dash_str_dup(dflt ? dflt : (STRPTR)"", TRUE);
+}
+
+static void _dash_cx_cleanup(void) {
+    struct Message *m;
+    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; }
+    if (_dash_cx_port) {
+        while ((m = GetMsg(_dash_cx_port))) ReplyMsg(m);
+        DeleteMsgPort(_dash_cx_port);
+        _dash_cx_port = NULL;
+    }
+    if (_dash_cx_tr) {
+        CloseDevice((struct IORequest *)_dash_cx_tr);
+        DeleteIORequest((struct IORequest *)_dash_cx_tr);
+        _dash_cx_tr = NULL;
+    }
+    if (_dash_cx_tport) { DeleteMsgPort(_dash_cx_tport); _dash_cx_tport = NULL; }
+    if (_dash_cx_lib_ours && CxBase) { CloseLibrary(CxBase); CxBase = NULL; _dash_cx_lib_ours = FALSE; }
+    if (_dash_icon_lib_ours && IconBase) { CloseLibrary(IconBase); IconBase = NULL; _dash_icon_lib_ours = FALSE; }
+}
+
+static void _dash_cx_at_exit(void) {
+    static BOOL at_exit = FALSE;
+    if (!at_exit) at_exit = atexit(_dash_cx_cleanup) == 0;
+}
+
+/* The program in Exchange as a commodity with show and hide (COF_SHOW_HIDE), enabled; FALSE without
+   commodities.library or if a broker of that name is there. A second call puts a new one instead. */
+static BOOL _dash_cx_broker_new(STRPTR name, STRPTR title, STRPTR descr, LONG pri) {
+    struct NewBroker nb;
+    char n[CBD_NAMELEN], t[CBD_TITLELEN], d[CBD_DESCRLEN];
+    LONG error = 0;
+    _dash_cx_at_exit();
+    if (!CxBase) { CxBase = OpenLibrary((CONST_STRPTR)"commodities.library", 37); _dash_cx_lib_ours = CxBase != NULL; }
+    if (!CxBase || !name || !*name) return FALSE;
+    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; }
+    if (!_dash_cx_port && !(_dash_cx_port = CreateMsgPort())) return FALSE;
+    strncpy(n, (char *)name, sizeof(n) - 1); n[sizeof(n) - 1] = 0;
+    strncpy(t, title ? (char *)title : n, sizeof(t) - 1); t[sizeof(t) - 1] = 0;
+    strncpy(d, descr ? (char *)descr : "", sizeof(d) - 1); d[sizeof(d) - 1] = 0;
+    memset(&nb, 0, sizeof(nb));
+    nb.nb_Version = NB_VERSION;
+    nb.nb_Name = (STRPTR)n;
+    nb.nb_Title = (STRPTR)t;
+    nb.nb_Descr = (STRPTR)d;
+    nb.nb_Unique = NBU_UNIQUE;
+    nb.nb_Flags = COF_SHOW_HIDE;
+    nb.nb_Pri = (BYTE)(pri < -128 ? -128 : pri > 127 ? 127 : pri);
+    nb.nb_Port = _dash_cx_port;
+    if (!(_dash_cx_broker = CxBroker(&nb, &error))) return FALSE;
+    ActivateCxObj(_dash_cx_broker, TRUE);
+    return TRUE;
+}
+
+/* The hotkey from its description ("ctrl alt t"): TRUE if it is on; FALSE if the description is not valid
+   (or there is no broker). "" takes it away. */
+static BOOL _dash_cx_hotkey(STRPTR descr) {
+    IX ix;
+    CxObj *filter;
+    if (!_dash_cx_broker) return FALSE;
+    if (_dash_cx_key) { RemoveCxObj(_dash_cx_key); DeleteCxObjAll(_dash_cx_key); _dash_cx_key = NULL; }
+    if (!descr || !*descr) return TRUE;
+    memset(&ix, 0, sizeof(ix));
+    if (ParseIX((CONST_STRPTR)descr, &ix) != 0) return FALSE;
+    if (!(filter = CreateCxObj(CX_FILTER, (LONG)descr, 0))) return FALSE;
+    AttachCxObj(filter, CreateCxObj(CX_SEND, (LONG)_dash_cx_port, _DASH_CX_KEY_ID));
+    AttachCxObj(filter, CreateCxObj(CX_TRANSLATE, 0, 0));
+    if (CxObjError(filter)) { DeleteCxObjAll(filter); return FALSE; }
+    AttachCxObj(_dash_cx_broker, filter);
+    _dash_cx_key = filter;
+    return TRUE;
+}
+
+/* The next command: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill (remove), 6 the hotkey. Disable and
+   enable switch the broker itself (Exchange shows it, the hotkey does nothing while it is off). */
+static LONG _dash_cx_command(void) {
+    CxMsg *m;
+    if (!_dash_cx_port) return 0;
+    while ((m = (CxMsg *)GetMsg(_dash_cx_port))) {
+        ULONG type = CxMsgType(m), id = CxMsgID(m);
+        LONG r = 0;
+        ReplyMsg((struct Message *)m);
+        if (type == CXM_IEVENT && id == _DASH_CX_KEY_ID) r = 6;
+        else if (type == CXM_COMMAND) {
+            switch (id) {
+            case CXCMD_DISAPPEAR: r = 1; break;
+            case CXCMD_APPEAR: case CXCMD_UNIQUE: r = 2; break;
+            case CXCMD_DISABLE: if (_dash_cx_broker) ActivateCxObj(_dash_cx_broker, FALSE); r = 3; break;
+            case CXCMD_ENABLE: if (_dash_cx_broker) ActivateCxObj(_dash_cx_broker, TRUE); r = 4; break;
+            case CXCMD_KILL: r = 5; break;
+            }
+        }
+        if (r) return r;
+    }
+    return 0;
+}
+
+/* Until a command comes (it is given, as cx_command), Ctrl-C (-1, cleared, like break_check) or ms
+   milliseconds pass (0). Without a broker, the time or Ctrl-C. Nothing spent meanwhile (Wait). */
+static LONG _dash_cx_wait(LONG ms) {
+    ULONG psig, tsig, got;
+    LONG cmd;
+    if ((cmd = _dash_cx_command())) return cmd;
+    if (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) return -1;
+    if (ms <= 0) return 0;
+    _dash_cx_at_exit();
+    if (!_dash_cx_tr) {
+        if ((_dash_cx_tport = CreateMsgPort()))
+            _dash_cx_tr = (struct timerequest *)CreateIORequest(_dash_cx_tport, sizeof(struct timerequest));
+        if (_dash_cx_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)_dash_cx_tr, 0)) {
+            DeleteIORequest((struct IORequest *)_dash_cx_tr);
+            _dash_cx_tr = NULL;
+        }
+        if (!_dash_cx_tr) { Delay((ms + 19) / 20); return 0; }   /* (no timer: only the time) */
+    }
+    _dash_cx_tr->tr_node.io_Command = TR_ADDREQUEST;
+    _dash_cx_tr->tr_time.tv_secs = ms / 1000;
+    _dash_cx_tr->tr_time.tv_micro = (ms % 1000) * 1000;
+    SendIO((struct IORequest *)_dash_cx_tr);
+    psig = _dash_cx_port ? 1UL << _dash_cx_port->mp_SigBit : 0;
+    tsig = 1UL << _dash_cx_tport->mp_SigBit;
+    for (;;) {
+        got = Wait(psig | tsig | SIGBREAKF_CTRL_C);
+        if (got & SIGBREAKF_CTRL_C) { cmd = -1; break; }
+        if ((got & psig) && (cmd = _dash_cx_command())) break;
+        if (CheckIO((struct IORequest *)_dash_cx_tr)) { WaitIO((struct IORequest *)_dash_cx_tr); return 0; }
+    }
+    AbortIO((struct IORequest *)_dash_cx_tr);
+    WaitIO((struct IORequest *)_dash_cx_tr);
+    return cmd;
+}
+
+"""
+
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
     DOSREQ_RUNTIME = """\
 /* dos_requesters(on): off, the process's pr_WindowPtr is -1 and a call that would put up a requester ("Insert
@@ -11827,6 +12064,7 @@ _RUNTIME_FLAGS = [
     ("TIME_RUNTIME", "uses_time"),          # dashweb D20
     ("CPU_RUNTIME", "uses_cpu"),            # Trasfondo
     ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
+    ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
@@ -12098,6 +12336,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
         self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
+        self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
@@ -12394,6 +12633,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CPU_RUNTIME)
         if self.uses_instance:
             parts.append(CTemplates.INSTANCE_RUNTIME)
+        if self.uses_cx:
+            parts.append(CTemplates.CX_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -12607,6 +12848,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
         if self.uses_instance:
             cleanup.append("    _dash_instance_cleanup();\n")
+        if self.uses_cx:
+            cleanup.insert(0, "    _dash_cx_cleanup();\n")   # the broker out of Exchange first
         if self.uses_dosreq:
             cleanup.append("    _dash_dosreq_cleanup();\n")
         if self.uses_cpu:
@@ -14847,6 +15090,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
+        if self.uses_cx:
+            self.uses_strings = True   # tooltype gives a String
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:

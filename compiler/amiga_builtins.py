@@ -3974,6 +3974,33 @@ TASK_FUNCTIONS = {
         c_template="_dash_single_instance(${name})",
         description="One copy at a time: false if another copy of the program (a public port with that name) "
                     "runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends)"),
+    # Trasfondo as a commodity: Exchange shows it and sends it commands
+    "tooltype": BuiltinFunc(
+        name="tooltype", params=["name", "default"], return_type="STRPTR",
+        c_template="_dash_tooltype(${name}, ${default})",
+        description="A tooltype of the program: from the Shell, the argument NAME=value (NAME=\"a b\" too); else (or "
+                    "from the Workbench) the tooltype of its icon; default if it is in neither"),
+    "cx_broker": BuiltinFunc(
+        name="cx_broker", params=["name", "title", "description", "priority"], return_type="BOOL",
+        c_template="_dash_cx_broker_new(${name}, ${title}, ${description}, ${priority})",
+        description="The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title "
+                    "and description up to 39); false without commodities.library or with that name there. It goes "
+                    "at the program's end"),
+    "cx_hotkey": BuiltinFunc(
+        name="cx_hotkey", params=["description"], return_type="BOOL",
+        c_template="_dash_cx_hotkey(${description})",
+        description="The commodity's hotkey, from its description (\"ctrl alt t\"): cx_command gives 6 when it is "
+                    "pressed; false if the description is not valid (or there is no cx_broker); \"\" takes it away"),
+    "cx_command": BuiltinFunc(
+        name="cx_command", params=[], return_type="LONG",
+        c_template="_dash_cx_command()",
+        description="The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, "
+                    "5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too)"),
+    "cx_wait": BuiltinFunc(
+        name="cx_wait", params=["ms"], return_type="LONG",
+        c_template="_dash_cx_wait(${ms})",
+        description="Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) "
+                    "or ms milliseconds pass (0)"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",

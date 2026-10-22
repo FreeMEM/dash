@@ -331,6 +331,10 @@ debug_break()               # Stop in the UAE emulator's debugger (tools/emu_run
 
 break_check()               # true if Ctrl-C came (Break in the Shell); it is cleared
 single_instance("MiProg")   # false if another copy runs (that one gets Ctrl-C)
+tooltype("CX_POPKEY", "")   # NAME=value from the Shell, else the program's icon, else the default
+cx_broker("MiProg", "Título", "Descripción", 0)   # a commodity in Exchange (show/hide on)
+cx_hotkey("ctrl alt t")     # false if not valid; cx_command(): 1 hide 2 show 3 disable 4 enable 5 kill 6 key
+cx_wait(1000)               # a command, -1 Ctrl-C or 0 when the time passes (spends nothing meanwhile)
 dos_requesters(false)       # no "Insert volume"/disk error requesters: the call fails (true: back)
 base64_to_file(texto, "T:x.png")   # base64 bytes to a file: bytes written, -1 if not base64
 

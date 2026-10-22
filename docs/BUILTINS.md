@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 533 funciones, 533 implementadas, 0 sin implementar.
+Total: 538 funciones, 538 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -430,6 +430,11 @@ Total: 533 funciones, 533 implementadas, 0 sin implementar.
 | `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
 | `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
 | `single_instance(name)` | `BOOL` | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |
+| `tooltype(name, default)` | `STRPTR` | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
+| `cx_broker(name, title, description, priority)` | `BOOL` | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
+| `cx_hotkey(description)` | `BOOL` | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
+| `cx_command()` | `LONG` | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
+| `cx_wait(ms)` | `LONG` | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
