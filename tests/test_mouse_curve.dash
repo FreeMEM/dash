@@ -1,0 +1,292 @@
+# Ratonera: a curve for each mouse. Fake hid.class processes (tasks called hid.class<12345678> and
+# hid.class<0000abcd>) send mouse moves to input.device as Poseidon's hid.class does (IND_WRITEEVENT; and
+# IND_ADDEVENT with input.device 47 or later); the program sends some itself, as any other program (the
+# Amiga mouse's emitter, 0). A handler of the test, between the curves (52) and Intuition (50), adds up what
+# arrives. Each emitter gets its curve and only its curve; slow moves with a factor below 1 are not lost;
+# the curve goes by speed; wheel, buttons and absolute positions arrive untouched. On and off a hundred times
+# without losing memory; off under another patch leaves the stub there passing everything through. The
+# system's speed and acceleration go back at the end.
+# expect-out: usb sin poseidon: -1
+# expect-out: doble: 60 -40 10
+# expect-out: amiga al triple: 30, usb al doble: 60, usb sin curva: 30, marcas: 0
+# expect-out: lento a la mitad: 5
+# expect-out: por velocidad: 20 150
+# expect-out: addevent: true
+# expect-out: intactos: 3 de 3
+# expect-out: cien veces: true 0
+# expect-out: bajo otro parche: 1 60
+# expect-out: preferencias: 1 false, al acabar como antes: true
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static volatile LONG t_sx, t_sy, t_n, t_marked, t_intact; static struct Interrupt t_int; static struct IOStdReq *t_io;"
+@header "static struct Task *t_parent; static volatile LONG f_cmd, f_n, f_x, f_y, f_class, f_code, f_qual;"
+@header "static APTR t_top_old; static UWORD t_top[4];"
+
+@c
+"""
+/* between the curves (52) and Intuition: what arrives */
+static struct InputEvent *t_handler(struct InputEvent *ev __asm("a0"), APTR data __asm("a1")) {
+    struct InputEvent *e;
+    for (e = ev; e; e = e->ie_NextEvent) {
+        if (e->ie_Class == IECLASS_RAWMOUSE && (e->ie_Qualifier & IEQUALIFIER_RELATIVEMOUSE) && e->ie_Code == IECODE_NOBUTTON) {
+            t_sx += e->ie_X;
+            t_sy += e->ie_Y;
+            t_n++;
+            if (e->ie_SubClass) t_marked++;
+        } else if (e->ie_Class == IECLASS_RAWMOUSE && e->ie_Code == IECODE_LBUTTON && e->ie_X == 0 && e->ie_Y == 0) t_intact++;
+        else if (e->ie_Class == IECLASS_RAWKEY && e->ie_Code == 0x7A && e->ie_X == 7) t_intact++;
+        else if (e->ie_Class == IECLASS_NEWPOINTERPOS && e->ie_X == 100 && e->ie_Y == 50) t_intact++;
+    }
+    return ev;
+}
+
+static void t_send(struct IOStdReq *io) {
+    struct InputEvent ie;
+    LONG i;
+    for (i = 0; i < f_n; i++) {
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = (UBYTE)f_class;
+        ie.ie_Code = (UWORD)f_code;
+        ie.ie_Qualifier = (UWORD)f_qual;
+        ie.ie_X = (WORD)f_x;
+        ie.ie_Y = (WORD)f_y;
+        io->io_Command = (UWORD)f_cmd;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        DoIO((struct IORequest *)io);
+    }
+}
+
+/* a fake hid.class: sends what f_* say, and goes */
+static void t_fake(void) {
+    struct MsgPort *p = CreateMsgPort();
+    struct IOStdReq *io = p ? (struct IOStdReq *)CreateIORequest(p, sizeof(struct IOStdReq)) : NULL;
+    if (io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        t_send(io);
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (p) DeleteMsgPort(p);
+    Forbid();
+    Signal(t_parent, SIGBREAKF_CTRL_F);
+}
+"""
+end
+
+@native func poner_contador() -> Bool
+"""
+    struct MsgPort *p = CreateMsgPort();
+    if (!p || !(t_io = (struct IOStdReq *)CreateIORequest(p, sizeof(struct IOStdReq)))) return FALSE;
+    if (OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)t_io, 0)) return FALSE;
+    t_int.is_Node.ln_Type = NT_INTERRUPT;
+    t_int.is_Node.ln_Pri = 51;
+    t_int.is_Node.ln_Name = (char *)"test counter";
+    t_int.is_Code = (void (*)())t_handler;
+    t_io->io_Command = IND_ADDHANDLER;
+    t_io->io_Data = &t_int;
+    DoIO((struct IORequest *)t_io);
+    return TRUE;
+"""
+end
+
+@native func quitar_contador()
+"""
+    t_io->io_Command = IND_REMHANDLER;
+    t_io->io_Data = &t_int;
+    DoIO((struct IORequest *)t_io);
+    CloseDevice((struct IORequest *)t_io);
+"""
+end
+
+@native func cero()
+"""
+    Delay(2);
+    t_sx = t_sy = t_n = t_marked = 0;
+"""
+end
+
+@native func suma_x() -> Int
+"""
+    Delay(2);
+    return t_sx;
+"""
+end
+
+@native func suma_y() -> Int
+"""
+    return t_sy;
+"""
+end
+
+@native func eventos() -> Int
+"""
+    return t_n;
+"""
+end
+
+@native func marcas() -> Int
+"""
+    return t_marked;
+"""
+end
+
+@native func intactos() -> Int
+"""
+    Delay(2);
+    return t_intact;
+"""
+end
+
+# n moves (x, y) from a fake hid.class with that emitter (0: from this program itself), with IND_WRITEEVENT
+# (or IND_ADDEVENT if add)
+@native func mover(emisor: Int, n: Int, x: Int, y: Int, add: Bool)
+"""
+    char name[24];
+    f_cmd = add ? IND_ADDEVENT : IND_WRITEEVENT;
+    f_n = n; f_x = x; f_y = y;
+    f_class = IECLASS_RAWMOUSE; f_code = IECODE_NOBUTTON; f_qual = IEQUALIFIER_RELATIVEMOUSE;
+    if (!emisor) { t_send(t_io); return; }
+    sprintf(name, "hid.class<%08lx>", (ULONG)emisor);
+    t_parent = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)t_fake, NP_Name, (ULONG)name, TAG_DONE)) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+# from a fake hid.class: a left button press, the wheel (NewMouse's rawkey 0x7A) and an absolute position
+@native func otros(emisor: Int)
+"""
+    char name[24];
+    static const LONG cls[3] = { IECLASS_RAWMOUSE, IECLASS_RAWKEY, IECLASS_NEWPOINTERPOS };
+    static const LONG code[3] = { IECODE_LBUTTON, 0x7A, IECODE_NOBUTTON };
+    LONG i;
+    sprintf(name, "hid.class<%08lx>", (ULONG)emisor);
+    t_parent = FindTask(NULL);
+    for (i = 0; i < 3; i++) {
+        f_cmd = IND_WRITEEVENT; f_n = 1;
+        f_class = cls[i]; f_code = code[i];
+        f_qual = i == 0 ? IEQUALIFIER_RELATIVEMOUSE : 0;
+        f_x = i == 2 ? 100 : i == 1 ? 7 : 0; f_y = i == 2 ? 50 : 0;
+        SetSignal(0, SIGBREAKF_CTRL_F);
+        if (CreateNewProcTags(NP_Entry, (ULONG)t_fake, NP_Name, (ULONG)name, TAG_DONE)) Wait(SIGBREAKF_CTRL_F);
+    }
+"""
+end
+
+@native func input_47() -> Bool
+"""
+    return t_io->io_Device->dd_Library.lib_Version >= 47;
+"""
+end
+
+@native func libre() -> Int
+"""
+    return AvailMem(MEMF_ANY);
+"""
+end
+
+# another program's patch on top of BeginIO: a stub that jumps to what was there
+@native func otro_parche()
+"""
+    struct Library *dev = (struct Library *)t_io->io_Device;
+    t_top[0] = 0x4EF9;
+    Forbid();
+    t_top_old = SetFunction(dev, DEV_BEGINIO, (APTR)t_top);
+    *(ULONG *)(t_top + 1) = (ULONG)t_top_old;
+    CacheClearU();
+    Permit();
+"""
+end
+
+# that program goes (BeginIO back to what it found: our stub, which stays there)
+@native func quitar_otro()
+"""
+    Forbid();
+    SetFunction((struct Library *)t_io->io_Device, DEV_BEGINIO, t_top_old);
+    Permit();
+"""
+end
+
+# what the program's end does, and then the system's speed and acceleration
+@native func acabar(ticks: Int, accel: Bool) -> Bool
+"""
+    _dash_mc_cleanup();
+    return _dash_mouse_prefs_ticks() == ticks && _dash_mouse_prefs_accel() == accel;
+"""
+end
+
+Main
+    Print "usb sin poseidon: #{usb_hid_read()}"
+    ticks = mouse_prefs_ticks()
+    accel = mouse_prefs_accel()
+    mouse_prefs_set(1, false)
+    poner_contador()
+
+    mouse_curve(0x12345678, [200])
+    cero()
+    mover(0x12345678, 10, 3, -2, false)
+    Print "doble: #{suma_x()} #{suma_y()} #{eventos()}"
+
+    mouse_curve(0, [300])
+    cero()
+    mover(0, 10, 1, 0, false)
+    a = suma_x()
+    cero()
+    mover(0x12345678, 10, 3, 0, false)
+    u = suma_x()
+    cero()
+    mover(0xabcd, 10, 3, 0, false)
+    s = suma_x()
+    Print "amiga al triple: #{a}, usb al doble: #{u}, usb sin curva: #{s}, marcas: #{marcas()}"
+    mouse_curve(0, [])
+
+    mouse_curve(0x12345678, [50])
+    cero()
+    mover(0x12345678, 10, 1, 0, false)
+    Print "lento a la mitad: #{suma_x()}"
+
+    mouse_curve(0x12345678, [100, 100, 100, 300])
+    cero()
+    mover(0x12345678, 10, 2, 0, false)
+    lento = suma_x()
+    cero()
+    mover(0x12345678, 10, 5, 0, false)
+    Print "por velocidad: #{lento} #{suma_x()}"
+
+    ok = true
+    if input_47()
+        mouse_curve(0x12345678, [200])
+        cero()
+        mover(0x12345678, 5, 4, 0, true)
+        ok = suma_x() == 40
+    end
+    Print "addevent: #{ok}"
+
+    mouse_curve(0, [300])
+    otros(0x12345678)
+    Print "intactos: #{intactos()} de 3"
+    mouse_curve(0, [])
+
+    antes = 0
+    for i in (1..100)
+        mouse_curves_off()
+        mouse_curve(0x12345678, [200])
+        if i == 5
+            antes = libre()
+        end
+    end
+    Print "cien veces: #{antes - libre() < 1024} #{mouse_patch_left()}"
+
+    otro_parche()
+    mouse_curves_off()
+    cero()
+    mover(0x12345678, 10, 6, 0, false)
+    Print "bajo otro parche: #{mouse_patch_left()} #{suma_x()}"
+    quitar_otro()
+
+    quitar_contador()
+    t = mouse_prefs_ticks()
+    ac = mouse_prefs_accel()
+    Print "preferencias: #{t} #{ac}, al acabar como antes: #{acabar(ticks, accel)}"
+end

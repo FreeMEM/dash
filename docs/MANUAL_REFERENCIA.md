@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 567 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 581 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -3534,6 +3534,44 @@ end
 - `wifi_signal()`, `wifi_noise()`: la señal y el ruido de la última lectura buena, en dBm (-30 muy buena, -90 muy
   mala).
 
+### Una curva para cada ratón: mouse_curve y usb_hid_*
+
+Cada ratón con su aceleración: el del Amiga y cada ratón o trackpad USB (Poseidon). Un movimiento de un ratón
+USB llega a `input.device` desde la tarea de `hid.class` de ese ratón (`hid.class<emisor>`); el número de esa
+tarea es su **emisor**. El emisor 0 es el ratón Amiga (y cualquier movimiento que no venga de un ratón USB).
+
+```ruby
+mouse_prefs_set(1, false)            # el sistema: velocidad 1, sin aceleración (vuelven solas al acabar)
+mouse_curve(0, [100, 100, 150, 200]) # el ratón Amiga: igual hasta 2, después más rápido
+n = usb_hid_read()                   # -1: no hay Poseidon
+for i in (0..n - 1)
+    if usb_hid_kind(i) != 2          # no los teclados
+        Print usb_hid_name(i) + " de " + usb_hid_maker(i)
+        mouse_curve(usb_hid_emitter(i), [50, 80, 120, 200])
+    end
+end
+```
+
+- `usb_hid_read()`: lee los dispositivos USB que maneja `hid.class` (`poseidon.library` 4): cuántos hay, o -1 sin
+  Poseidon. Un ratón y un teclado en el mismo aparato salen como dos, cada uno con su emisor.
+- `usb_hid_name(i)`, `usb_hid_maker(i)`, `usb_hid_vendor(i)`, `usb_hid_product(i)`: producto, fabricante e IDs.
+- `usb_hid_kind(i)`: 1 ratón, 2 teclado, 0 otro (muchos trackpads dan 0).
+- `usb_hid_emitter(i)`: su emisor, para `mouse_curve`.
+- `mouse_curve(emisor, factores)`: la curva de ese emisor, en centésimas (100 = como llega). La entrada i vale para
+  un movimiento de i unidades (el eje más largo) y la última de ahí en adelante; hasta 32. `[]` la quita. La parte
+  fraccionaria se guarda para el siguiente movimiento: con factores menores que 100, el movimiento lento no se
+  pierde. Se puede cambiar en cualquier momento. `false` si `input.device` no abre o ya hay 16 emisores.
+- `mouse_curve_events(emisor)`: cuántos movimientos ha pasado por su curva.
+- `mouse_curves_off()`: quita las curvas de `input.device` (también al acabar el programa); otra `mouse_curve`
+  las vuelve a poner.
+- `mouse_prefs_ticks()`, `mouse_prefs_accel()`, `mouse_prefs_set(ticks, accel)`: la velocidad (1 la más rápida,
+  2, 4) y la aceleración de Preferencias de entrada. Las de antes vuelven solas al acabar el programa.
+
+Cómo funciona: los ratones USB, con un parche en `BeginIO` de `input.device` que escala una copia del evento
+(la memoria de `hid.class` no se toca); el ratón Amiga, con un input handler por encima de Intuition. Rueda,
+botones y posiciones absolutas no se tocan. Al quitarlo, si otro programa ha parcheado `BeginIO` encima, queda
+un trozo de 8 bytes que pasa todo sin tocar y no se libera nunca (`mouse_patch_left()` dice cuántos).
+
 ### Sin requesters de DOS: dos_requesters
 
 ```ruby
@@ -3920,6 +3958,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red y WiFi | 18 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
@@ -3927,7 +3966,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **567** | |
+| **Total** | **581** | |
 
 ### Colores Estandar Amiga
 

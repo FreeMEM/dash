@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 567 funciones, 567 implementadas, 0 sin implementar.
+Total: 581 funciones, 581 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -464,6 +464,20 @@ Total: 567 funciones, 567 implementadas, 0 sin implementar.
 | `net_driver_packets_out()` | `LONG` | The packets sent by the driver of the last net_driver_read that gave 0 |  |
 | `wifi_signal()` | `LONG` | The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad) |  |
 | `wifi_noise()` | `LONG` | The noise level of the last wifi_read that gave 0, in dBm |  |
+| `usb_hid_read()` | `LONG` | Reads the USB devices (each interface) that Poseidon's hid.class handles: how many; -1 without poseidon.library 4 |  |
+| `usb_hid_name(i)` | `STRPTR` | The product name of USB device i (0 to usb_hid_read() - 1) of the last usb_hid_read |  |
+| `usb_hid_maker(i)` | `STRPTR` | The manufacturer of USB device i |  |
+| `usb_hid_vendor(i)` | `LONG` | The VendorID of USB device i |  |
+| `usb_hid_product(i)` | `LONG` | The ProductID of USB device i |  |
+| `usb_hid_kind(i)` | `LONG` | What USB device i is: 1 mouse, 2 keyboard, 0 other (many trackpads) |  |
+| `usb_hid_emitter(i)` | `LONG` | The emitter of USB device i: the number of the hid.class task that sends its moves, for mouse_curve |  |
+| `mouse_curve(emitter, factors)` | `BOOL` | The acceleration curve of a mouse: emitter 0 is the Amiga mouse (and every move not from a USB mouse), else a usb_hid_emitter. factors: a list of hundredths (100 = as it comes), entry i for a move of i units, the last one from there on (up to 32); [] takes it away. The fractions left are kept. False if input.device does not open or there are 16 emitters already |  |
+| `mouse_curve_events(emitter)` | `LONG` | How many moves an emitter's curve has scaled |  |
+| `mouse_curves_off()` | `void` | Takes the curves out of input.device now (the program's end does it too); a mouse_curve puts them back. Under another program's patch, a stub that passes everything through stays |  |
+| `mouse_patch_left()` | `LONG` | How many stubs were left under another program's patch of input.device (they pass everything through, for good) |  |
+| `mouse_prefs_ticks()` | `LONG` | The system's mouse speed (Input preferences): 1 fastest, 2, 4 slowest |  |
+| `mouse_prefs_accel()` | `BOOL` | True if the system's mouse acceleration (Input preferences) is on |  |
+| `mouse_prefs_set(ticks, accel)` | `void` | Sets the system's mouse speed and acceleration; they go back as they were at the program's end |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
