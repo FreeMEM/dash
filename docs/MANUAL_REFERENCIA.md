@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 556 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 567 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -1970,9 +1970,9 @@ Print dir_current()         # nombre completo: "Work:", "Ram Disk:"...
 
 ---
 
-### Red (TCP)
+### Red (TCP y UDP)
 
-Conexiones TCP con `bsdsocket.library` (necesita una pila TCP/IP: Roadshow, AmiTCP, Miami...).
+Conexiones TCP y UDP con `bsdsocket.library` (necesita una pila TCP/IP: Roadshow, AmiTCP, Miami...).
 Un socket es un numero (-1 = ninguno). La libreria se abre al usarla y se cierra al salir,
 con los sockets que queden abiertos.
 
@@ -2038,6 +2038,51 @@ if ev == 0
     ... mirar las conexiones: net_connect_poll, net_recv_buffer(s, buf, max, 0), tls_...
 end
 ```
+
+**Servidor TCP.** `net_listen` abre un puerto y `net_accept` da cada conexión que llega, como un socket
+más (`net_send`, `net_recv`, `net_close`).
+
+| Funcion | Que hace |
+|---|---|
+| `net_listen(puerto)` | Escucha en ese puerto (0: uno libre): el socket del servidor, o -1 (`net_error()`: "ese puerto está ocupado"...) |
+| `net_accept(s, ms)` | La siguiente conexión, esperando `ms` como mucho (-1: esperar, 0: solo mirar): su socket, o -1 si no llegó ninguna |
+| `net_peer(s)` | La dirección del otro extremo (`"a.b.c.d"`), `nil` si no está conectado |
+| `net_port(s)` | El puerto propio de un socket (el que tocó con `net_listen(0)` o `net_udp_open(0)`) |
+
+```
+srv = net_listen(8080)
+while not break_check()
+    c = net_accept(srv, 1000)
+    if c >= 0
+        Print "conexión de " + net_peer(c)
+        peticion = net_recv(c, 4096, 5000)
+        net_send(c, "HTTP/1.0 200 OK\r\n\r\nHola desde el Amiga\n")
+        net_close(c)
+    end
+end
+net_close(srv)
+```
+
+**UDP.** Mensajes sueltos (datagramas), sin conexión: cada uno lleva su destino y llega entero o no llega.
+
+| Funcion | Que hace |
+|---|---|
+| `net_udp_open(puerto)` | Un socket UDP en ese puerto (0: uno libre); -1 si falla. Se cierra con `net_close` |
+| `net_udp_send(s, host, puerto, texto)`, `net_udp_send_buffer(s, host, puerto, buf, n)` | Envía un datagrama; los bytes o -1. `"255.255.255.255"`: a toda la red local |
+| `net_udp_recv(s, max, ms)` | El siguiente datagrama como texto (hasta `max` bytes; lo demás se pierde): `""` si no llegó ninguno en `ms`, `nil` si hubo error |
+| `net_udp_recv_buffer(s, buf, max, ms)` | Lo mismo en un buffer: los bytes, 0 si no llegó ninguno, -1 si hubo error |
+| `net_udp_from()`, `net_udp_from_port()` | Quién envió el último datagrama recibido: para contestarle |
+
+```
+u = net_udp_open(5000)
+m = net_udp_recv(u, 1500, 10000)
+if m != nil and m != ""
+    net_udp_send(u, net_udp_from(), net_udp_from_port(), "recibido: " + m)
+end
+net_close(u)
+```
+
+No hay sockets raw (`SOCK_RAW`): para eso, `@native` con `bsdsocket.library`.
 
 Si la pila no sabe (la `bsdsocket.library` de FS-UAE no tiene `SO_EVENTMASK`), `net_signal()` da 0 y
 hay que seguir mirando con un temporizador. Los limites de tiempo de `net_connect_start` solo se
@@ -3868,7 +3913,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Ficheros (DOS) | 26 | `file_*`, `dir_*`, `console_read`, `console_write`, `base64_to_file`, `dos_requesters` |
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
-| Red (TCP) | 13 | `net_connect`, `net_send`, `net_recv`, `net_signal` |
+| Red (TCP y UDP) | 24 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
 | Fuentes y colores | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
@@ -3882,7 +3927,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **556** | |
+| **Total** | **567** | |
 
 ### Colores Estandar Amiga
 

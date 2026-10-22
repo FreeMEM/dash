@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 556 funciones, 556 implementadas, 0 sin implementar.
+Total: 567 funciones, 567 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -371,6 +371,17 @@ Total: 556 funciones, 556 implementadas, 0 sin implementar.
 | `net_close(sock)` | `void` | Close the connection |  |
 | `net_resolve(host)` | `STRPTR` | IPv4 address of a host name ("a.b.c.d"), nil if unknown |  |
 | `net_error()` | `STRPTR` | What went wrong in the last net_ call |  |
+| `net_listen(port)` | `LONG` | A TCP server on port (0: any free one, net_port says which): the listening socket, or -1 (see net_error) |  |
+| `net_accept(sock, timeout_ms)` | `LONG` | The next connection to a net_listen server, waiting timeout_ms at most (-1: wait, 0: only look): its socket (net_send, net_recv...), or -1 if none came |  |
+| `net_peer(sock)` | `STRPTR` | The address ("a.b.c.d") of the other end of a TCP connection, nil if none |  |
+| `net_port(sock)` | `LONG` | The local port of a socket (the one net_listen(0) or net_udp_open(0) got), -1 if none |  |
+| `net_udp_open(port)` | `LONG` | A UDP socket on port (0: any free one), broadcasts allowed: the socket, or -1 (net_close closes it) |  |
+| `net_udp_send(sock, host, port, text)` | `LONG` | Send text as one datagram to host:port ("255.255.255.255": the whole local network); bytes sent or -1 |  |
+| `net_udp_send_buffer(sock, host, port, buffer, length)` | `LONG` | Send length bytes of a buffer as one datagram to host:port; bytes sent or -1 |  |
+| `net_udp_recv(sock, max, timeout_ms)` | `STRPTR` | The next datagram as text (up to max bytes): "" if none came within timeout_ms, nil on error; who sent it: net_udp_from, net_udp_from_port |  |
+| `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` | `LONG` | The next datagram into a buffer: its length, 0 if none came in time, -1 on error |  |
+| `net_udp_from()` | `STRPTR` | The address ("a.b.c.d") of who sent the last datagram received |  |
+| `net_udp_from_port()` | `LONG` | The port of who sent the last datagram received (to answer it) |  |
 | `net_signal()` | `LONG` | Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP stack cannot: call it before each wait, mui_wait_event_signals(net_signal()) |  |
 
 ## TLS (AmiSSL)

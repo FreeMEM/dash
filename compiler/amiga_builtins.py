@@ -3819,6 +3819,37 @@ NET_FUNCTIONS = {
     "net_resolve": _text("net_resolve", ["host"], "STRPTR", "_dash_net_resolve(${host})",
                          "IPv4 address of a host name (\"a.b.c.d\"), nil if unknown"),
     "net_error": _text("net_error", [], "STRPTR", "_dash_net_error()", "What went wrong in the last net_ call"),
+    "net_listen": _text("net_listen", ["port"], "LONG", "_dash_net_listen(${port})",
+                        "A TCP server on port (0: any free one, net_port says which): the listening socket, or -1 "
+                        "(see net_error)"),
+    "net_accept": _text("net_accept", ["sock", "timeout_ms"], "LONG", "_dash_net_accept(${sock}, ${timeout_ms})",
+                        "The next connection to a net_listen server, waiting timeout_ms at most (-1: wait, 0: only "
+                        "look): its socket (net_send, net_recv...), or -1 if none came"),
+    "net_peer": _text("net_peer", ["sock"], "STRPTR", "_dash_net_peer(${sock})",
+                      "The address (\"a.b.c.d\") of the other end of a TCP connection, nil if none"),
+    "net_port": _text("net_port", ["sock"], "LONG", "_dash_net_port(${sock})",
+                      "The local port of a socket (the one net_listen(0) or net_udp_open(0) got), -1 if none"),
+    "net_udp_open": _text("net_udp_open", ["port"], "LONG", "_dash_net_udp_open(${port})",
+                          "A UDP socket on port (0: any free one), broadcasts allowed: the socket, or -1 (net_close "
+                          "closes it)"),
+    "net_udp_send": _text("net_udp_send", ["sock", "host", "port", "text"], "LONG",
+                          "_dash_net_udp_send(${sock}, ${host}, ${port}, ${text})",
+                          "Send text as one datagram to host:port (\"255.255.255.255\": the whole local network); "
+                          "bytes sent or -1"),
+    "net_udp_send_buffer": _text("net_udp_send_buffer", ["sock", "host", "port", "buffer", "length"], "LONG",
+                                 "_dash_net_udp_send_buffer(${sock}, ${host}, ${port}, ${buffer}, ${length})",
+                                 "Send length bytes of a buffer as one datagram to host:port; bytes sent or -1"),
+    "net_udp_recv": _text("net_udp_recv", ["sock", "max", "timeout_ms"], "STRPTR",
+                          "_dash_net_udp_recv(${sock}, ${max}, ${timeout_ms})",
+                          "The next datagram as text (up to max bytes): \"\" if none came within timeout_ms, nil on "
+                          "error; who sent it: net_udp_from, net_udp_from_port"),
+    "net_udp_recv_buffer": _text("net_udp_recv_buffer", ["sock", "buffer", "max", "timeout_ms"], "LONG",
+                                 "_dash_net_udp_recv_buffer(${sock}, ${buffer}, ${max}, ${timeout_ms})",
+                                 "The next datagram into a buffer: its length, 0 if none came in time, -1 on error"),
+    "net_udp_from": _text("net_udp_from", [], "STRPTR", "_dash_net_udp_from()",
+                          "The address (\"a.b.c.d\") of who sent the last datagram received"),
+    "net_udp_from_port": _text("net_udp_from_port", [], "LONG", "_dash_net_udp_from_port()",
+                               "The port of who sent the last datagram received (to answer it)"),
     "net_signal": _text("net_signal", [], "LONG", "_dash_net_signal()",
                         "Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP "
                         "stack cannot: call it before each wait, mui_wait_event_signals(net_signal())"),

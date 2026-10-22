@@ -1,0 +1,60 @@
+# A TCP server and UDP (FS-UAE's bsdsocket.library: the PC's network). The program is its own server and
+# client: net_listen, net_connect to it, net_accept, both ways, and the end of the connection; a port that
+# is taken. UDP: two sockets on 127.0.0.1 send each other a datagram and the answer goes to who sent it.
+# emu-net: 40831
+# memcheck
+# expect-out: servidor: true 40841
+# expect-out: nadie: -1 nadie se conectó a tiempo
+# expect-out: aceptada: true 127.0.0.1
+# expect-out: al servidor: hola servidor
+# expect-out: al cliente: hola cliente
+# expect-out: cerrada: true
+# expect-out: ocupado: -1 ese puerto está ocupado
+# expect-out: otra vez: true
+# expect-out: udp: true true
+# expect-out: ping 127.0.0.1 true
+# expect-out: pong
+# expect-out: nada: true
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    srv = net_listen(40841)
+    Print "servidor: #{srv >= 0} #{net_port(srv)}"
+    nadie = net_accept(srv, 0)
+    Print "nadie: #{nadie} " + net_error()
+
+    cli = net_connect("127.0.0.1", 40841, 3000)
+    c = net_accept(srv, 3000)
+    quien = net_peer(c)
+    Print "aceptada: #{c >= 0} " + quien
+    net_send(cli, "hola servidor\n")
+    Print "al servidor: " + str_trim(net_recv(c, 100, 3000))
+    net_send(c, "hola cliente\n")
+    Print "al cliente: " + str_trim(net_recv(cli, 100, 3000))
+    net_close(cli)
+    fin = net_recv(c, 100, 3000)
+    Print "cerrada: #{fin == nil}"
+    net_close(c)
+
+    otro = net_listen(40841)
+    Print "ocupado: #{otro} " + net_error()
+    net_close(srv)
+    srv = net_listen(40841)
+    Print "otra vez: #{srv >= 0}"
+    net_close(srv)
+
+    u1 = net_udp_open(40851)
+    u2 = net_udp_open(0)
+    Print "udp: #{u1 >= 0} #{net_port(u2) > 0}"
+    net_udp_send(u2, "127.0.0.1", 40851, "ping")
+    m = net_udp_recv(u1, 100, 3000)
+    de = net_udp_from()
+    Print m + " " + de + " #{net_udp_from_port() == net_port(u2)}"
+    net_udp_send(u1, de, net_udp_from_port(), "pong")
+    Print net_udp_recv(u2, 100, 3000)
+    vacio = net_udp_recv(u1, 100, 200)
+    vacio_ok = vacio == ""
+    Print "nada: #{vacio_ok}"
+    net_close(u1)
+    net_close(u2)
+end

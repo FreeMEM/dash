@@ -4341,6 +4341,139 @@ static STRPTR _dash_net_error(void) {
     return (STRPTR)_dash_net_err;
 }
 
+/* A TCP server and UDP: net_listen(port) and net_accept; net_udp_open(port), net_udp_send to a host and
+   port, net_udp_recv and who sent it (net_udp_from, net_udp_from_port). The sockets are like the others:
+   net_close, net_wait and net_signal take them. */
+static char _dash_net_from[16];
+static LONG _dash_net_from_port = 0;
+
+static void _dash_net_addr(struct sockaddr_in *sa, struct in_addr addr, LONG port) {
+    memset(sa, 0, sizeof(*sa));
+    sa->sin_len = sizeof(*sa);
+    sa->sin_family = AF_INET;
+    sa->sin_port = htons(port);
+    sa->sin_addr = addr;
+}
+
+static void _dash_net_set_from(struct sockaddr_in *sa) {
+    strncpy(_dash_net_from, (char *)Inet_NtoA(sa->sin_addr.s_addr), sizeof(_dash_net_from) - 1);
+    _dash_net_from[sizeof(_dash_net_from) - 1] = 0;
+    _dash_net_from_port = ntohs(sa->sin_port);
+}
+
+/* A socket of that type bound to port on all the addresses (0: any free port); -1 */
+static LONG _dash_net_bound(LONG type, LONG port) {
+    struct sockaddr_in sa;
+    struct in_addr any;
+    LONG sock, on = 1;
+    if (!_dash_net_init()) return -1;
+    if ((sock = socket(AF_INET, type, 0)) < 0) { _dash_net_err = "no se puede abrir un socket"; return -1; }
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    if (type == SOCK_DGRAM) setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
+    any.s_addr = htonl(INADDR_ANY);
+    _dash_net_addr(&sa, any, port);
+    if (bind(sock, (struct sockaddr *)&sa, sizeof(sa)) < 0) {
+        _dash_net_err = "ese puerto está ocupado";
+        CloseSocket(sock);
+        return -1;
+    }
+    _dash_net_watch(sock);
+    return sock;
+}
+
+/* A TCP server on port: the listening socket (net_accept gives each connection), or -1 */
+static LONG _dash_net_listen(LONG port) {
+    LONG sock = _dash_net_bound(SOCK_STREAM, port);
+    if (sock >= 0 && listen(sock, 5) < 0) {
+        _dash_net_err = "no se puede escuchar en ese puerto";
+        CloseSocket(sock);
+        return -1;
+    }
+    return sock;
+}
+
+/* The next connection to a server, waiting timeout_ms at most (-1: no limit, 0: only look): its
+   socket, or -1 if none came (net_error); net_peer says who it is */
+static LONG _dash_net_accept(LONG sock, LONG timeout_ms) {
+    struct sockaddr_in sa;
+    socklen_t len = sizeof(sa);
+    LONG c, r = _dash_net_select(sock, FALSE, timeout_ms);
+    if (r <= 0) { if (r == 0) _dash_net_err = "nadie se conectó a tiempo"; return -1; }
+    if ((c = accept(sock, (struct sockaddr *)&sa, &len)) < 0) { _dash_net_err = "error al aceptar"; return -1; }
+    _dash_net_watch(c);
+    return c;
+}
+
+/* The address of the other end of a TCP connection ("a.b.c.d"), nil if not connected */
+static STRPTR _dash_net_peer(LONG sock) {
+    struct sockaddr_in sa;
+    socklen_t len = sizeof(sa);
+    if (sock < 0 || !SocketBase || getpeername(sock, (struct sockaddr *)&sa, &len) < 0) return NULL;
+    return _dash_str_dup((STRPTR)Inet_NtoA(sa.sin_addr.s_addr), TRUE);
+}
+
+/* The local port of a socket (the one a net_udp_open(0) or net_listen(0) got), or -1 */
+static LONG _dash_net_port(LONG sock) {
+    struct sockaddr_in sa;
+    socklen_t len = sizeof(sa);
+    if (sock < 0 || !SocketBase || getsockname(sock, (struct sockaddr *)&sa, &len) < 0) return -1;
+    return ntohs(sa.sin_port);
+}
+
+/* A UDP socket on port (0: any free one), broadcasts allowed; -1 */
+static LONG _dash_net_udp_open(LONG port) {
+    return _dash_net_bound(SOCK_DGRAM, port);
+}
+
+/* A datagram of length bytes to host:port ("255.255.255.255": to the whole local network); the bytes
+   sent or -1 */
+static LONG _dash_net_udp_send_buffer(LONG sock, STRPTR host, LONG port, APTR data, LONG length) {
+    struct sockaddr_in sa;
+    struct in_addr a;
+    LONG n;
+    if (sock < 0 || !SocketBase) return -1;
+    if (host && !strcmp((char *)host, "255.255.255.255")) a.s_addr = htonl(INADDR_BROADCAST);
+    else if (!_dash_net_lookup(host, &a)) return -1;
+    _dash_net_addr(&sa, a, port);
+    n = sendto(sock, data, length, 0, (struct sockaddr *)&sa, sizeof(sa));
+    if (n < 0) _dash_net_err = "error al enviar";
+    return n;
+}
+
+static LONG _dash_net_udp_send(LONG sock, STRPTR host, LONG port, STRPTR text) {
+    return _dash_net_udp_send_buffer(sock, host, port, text, _dash_str_len(text));
+}
+
+/* The next datagram (up to max bytes, the rest of it is lost), waiting timeout_ms at most: its length,
+   0 if none came, -1 on error; who sent it in net_udp_from and net_udp_from_port */
+static LONG _dash_net_udp_recv_buffer(LONG sock, APTR buffer, LONG max, LONG timeout_ms) {
+    struct sockaddr_in sa;
+    socklen_t len = sizeof(sa);
+    LONG n, r = _dash_net_select(sock, FALSE, timeout_ms);
+    if (r <= 0) return r;
+    n = recvfrom(sock, buffer, max, 0, (struct sockaddr *)&sa, &len);
+    if (n < 0) { _dash_net_err = "error al recibir"; return -1; }
+    _dash_net_set_from(&sa);
+    return n;
+}
+
+/* The same as text: "" if none came in time, nil on error (bytes 0 become spaces) */
+static STRPTR _dash_net_udp_recv(LONG sock, LONG max, LONG timeout_ms) {
+    STRPTR r;
+    LONG n;
+    if (max <= 0) max = 1500;
+    if (!(r = _dash_str_alloc(max, TRUE))) return NULL;
+    n = _dash_net_udp_recv_buffer(sock, r, max, timeout_ms);
+    if (n < 0) return NULL;
+    r[n] = 0;
+    _dash_str_nul_to_space(r, n);
+    _dash_str_setlen(r, n);
+    return r;
+}
+
+static STRPTR _dash_net_udp_from(void) { return _dash_str_dup((STRPTR)_dash_net_from, TRUE); }
+static LONG _dash_net_udp_from_port(void) { return _dash_net_from_port; }
+
 """
 
     # TLS (dashweb D11): AmiSSL 5 over the sockets of NET_RUNTIME. A connection is a
