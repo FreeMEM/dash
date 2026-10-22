@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 533 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 550 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -3426,6 +3426,48 @@ end
 Al acabar el programa, la commodity y su tecla se quitan solas. Lanzar otra vez el programa lo sigue parando con
 `single_instance`, que va antes.
 
+### Discos, red y WiFi para un medidor
+
+Cada lectura se hace de nuevo: no queda nada abierto entre una y otra, así que un volumen que se va, una red que
+se cae o una pila que se para se notan en la siguiente. Ninguna espera más de su tiempo.
+
+```ruby
+n = disks_read(500)                  # cada volumen montado, esperando 500 ms como mucho
+for i in (0..n - 1)
+    if disk_kb(i) >= 0
+        Print disk_name(i) + ": #{disk_free_kb(i)} KB libres de #{disk_kb(i)}"
+    else
+        Print disk_name(i) + ": sin respuesta"
+    end
+end
+
+m = net_ifs_read()                   # -1: no hay Roadshow
+for i in (0..m - 1)
+    Print net_if_name(i) + " #{net_if_up(i)} #{net_if_bytes_in(i)} #{net_if_bytes_out(i)}"
+end
+
+if wifi_read("wlan0", 500) == 0      # el nombre del interfaz en Roadshow
+    Print "señal: #{wifi_signal()} dBm, ruido: #{wifi_noise()} dBm"
+end
+```
+
+- `disks_read(ms)`: lee los volúmenes montados (con disco dentro) y da cuántos hay. Pregunta a todos a la vez
+  (`ACTION_DISK_INFO`) y espera `ms` milisegundos como mucho. Nunca pide un disco.
+- `disk_name(i)`, `disk_kb(i)`, `disk_free_kb(i)`: el nombre (sin los dos puntos), el tamaño y lo libre en KB, como
+  los da `Info`. -1 si ese volumen no contestó a tiempo. Un volumen que no contesta no se vuelve a preguntar hasta
+  que conteste; mientras tanto da -1 enseguida.
+- `net_ifs_read()`: lee los interfaces de red de Roadshow (también `lo0`) y da cuántos hay. -1 sin pila TCP/IP o
+  con una que no lo dice (AmiTCP, Miami, la del emulador).
+- `net_if_name(i)`, `net_if_up(i)`: el nombre y si está conectado.
+- `net_if_bytes_in(i)`, `net_if_bytes_out(i)`: los bytes recibidos y enviados. La resta de dos lecturas da los
+  bytes de entre medias, aunque pase de 2 GB. Para la velocidad: la resta entre el tiempo que pasó.
+- `wifi_read(interfaz, ms)`: pide la señal al driver SANA-II del interfaz (`S2_GETSIGNALQUALITY`, la extensión
+  inalámbrica de `prism2.device` y otros) y espera `ms` como mucho. Da 0 si la leyó, 1 si no contestó a tiempo (se
+  aborta), 2 si el driver no la da, 3 si no hay ese interfaz, 4 si el driver da error (desconectado) y -1 sin
+  Roadshow. Si un driver se queda la petición después de abortarla, no se le pregunta más hasta que la devuelva.
+- `wifi_signal()`, `wifi_noise()`: la señal y el ruido de la última lectura buena, en dBm (-30 muy buena, -90 muy
+  mala).
+
 ### Sin requesters de DOS: dos_requesters
 
 ```ruby
@@ -3812,13 +3854,14 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Discos, red y WiFi | 12 | `disks_read`, `disk_name`, `disk_kb`, `disk_free_kb`, `net_ifs_read`, `net_if_name`, `net_if_up`, `net_if_bytes_in`, `net_if_bytes_out`, `wifi_read`, `wifi_signal`, `wifi_noise` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **533** | |
+| **Total** | **550** | |
 
 ### Colores Estandar Amiga
 

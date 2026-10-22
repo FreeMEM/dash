@@ -1,0 +1,147 @@
+# wifi_read's question to the SANA-II driver (S2_GETSIGNALQUALITY), with a driver of the test's own: unit 0
+# answers -55 and -92 dBm, unit 1 does not have the command, unit 4 is offline, unit 3 never answers but
+# gives the request back on AbortIO, unit 2 never answers and keeps it even then (what hangs NewMeter).
+# Nothing waits longer than its time; a request kept by the driver is not asked again until it comes back,
+# and is freed then; the device is closed after each question. At the end, one still kept stays out there
+# with its port ignoring the reply.
+# expect-out: señal: 0 -55 -92
+# expect-out: sin la orden: 2
+# expect-out: desconectado: 4
+# expect-out: no contesta y aborta: 1 a tiempo: true guardada: false
+# expect-out: no contesta ni aborta: 1 a tiempo: true
+# expect-out: mientras la tiene: 1 abortos: 2
+# expect-out: devuelta: 0 -55
+# expect-out: abierto: 0
+# expect-out: al acabar, guardada: true
+# expect-out: fin
+
+@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts;"
+
+# a SANA-II driver of the test's own: "dashfake.device"
+@c
+"""
+static LONG fake_open(struct IORequest *io __asm("a1"), ULONG unit __asm("d0"), ULONG flags __asm("d1"),
+                      struct Device *dev __asm("a6")) {
+    dev->dd_Library.lib_OpenCnt++;
+    io->io_Device = dev;
+    io->io_Unit = (struct Unit *)unit;
+    io->io_Error = 0;
+    return 0;
+}
+static BPTR fake_close(struct IORequest *io __asm("a1"), struct Device *dev __asm("a6")) {
+    dev->dd_Library.lib_OpenCnt--;
+    io->io_Device = (struct Device *)-1;
+    return 0;
+}
+static ULONG fake_null(void) { return 0; }
+static void fake_beginio(struct IORequest *io __asm("a1"), struct Device *dev __asm("a6")) {
+    struct IOSana2Req *s2 = (struct IOSana2Req *)io;
+    ULONG unit = (ULONG)io->io_Unit;
+    io->io_Message.mn_Node.ln_Type = NT_MESSAGE;
+    io->io_Flags &= ~IOF_QUICK;
+    io->io_Error = 0;
+    if (io->io_Command != S2_GETSIGNALQUALITY || unit == 1) io->io_Error = IOERR_NOCMD;
+    else if (unit == 4) io->io_Error = 5;          /* S2ERR_OUTOFSERVICE */
+    else if (unit == 0) {
+        ((struct Sana2SignalQuality *)s2->ios2_StatData)->SignalLevel = -55;
+        ((struct Sana2SignalQuality *)s2->ios2_StatData)->NoiseLevel = -92;
+    } else { fake_kept = io; return; }            /* units 2 and 3: kept */
+    ReplyMsg(&io->io_Message);
+}
+static void fake_abortio(struct IORequest *io __asm("a1"), struct Device *dev __asm("a6")) {
+    fake_aborts++;
+    if (fake_kept == io && (ULONG)io->io_Unit == 3) {
+        fake_kept = NULL;
+        io->io_Error = IOERR_ABORTED;
+        ReplyMsg(&io->io_Message);
+    }
+}
+"""
+end
+
+@native func fake_poner() -> Bool
+"""
+    static APTR vec[7];
+    vec[0] = (APTR)fake_open; vec[1] = (APTR)fake_close; vec[2] = (APTR)fake_null; vec[3] = (APTR)fake_null;
+    vec[4] = (APTR)fake_beginio; vec[5] = (APTR)fake_abortio; vec[6] = (APTR)-1;
+    fake_dev = (struct Device *)MakeLibrary((APTR)vec, NULL, NULL, sizeof(struct Device), 0);
+    if (!fake_dev) return FALSE;
+    fake_dev->dd_Library.lib_Node.ln_Type = NT_DEVICE;
+    fake_dev->dd_Library.lib_Node.ln_Name = (char *)"dashfake.device";
+    AddDevice(fake_dev);
+    return TRUE;
+"""
+end
+
+@native func preguntar(unidad: Int, ms: Int) -> Int
+"""
+    return _dash_wifi_ask((STRPTR)"dashfake.device", unidad, ms);
+"""
+end
+
+@native func guardada() -> Bool
+"""
+    return fake_kept != NULL;
+"""
+end
+
+@native func abortos() -> Int
+"""
+    return fake_aborts;
+"""
+end
+
+@native func abierto() -> Int
+"""
+    return fake_dev->dd_Library.lib_OpenCnt;
+"""
+end
+
+# the driver gives back the request it kept
+@native func devolver()
+"""
+    struct IORequest *io = fake_kept;
+    fake_kept = NULL;
+    if (io) { io->io_Error = IOERR_ABORTED; ReplyMsg(&io->io_Message); }
+"""
+end
+
+# what the program's end does; then the driver gives the request back (to a port that ignores it) and goes
+@native func acabar() -> Bool
+"""
+    BOOL kept = fake_kept != NULL;
+    _dash_meter_cleanup();
+    devolver();
+    Forbid();
+    Remove(&fake_dev->dd_Library.lib_Node);
+    Permit();
+    return kept;
+"""
+end
+
+Main
+    fake_poner()
+    r = preguntar(0, 500)
+    Print "señal: #{r} #{wifi_signal()} #{wifi_noise()}"
+    r = preguntar(1, 500)
+    Print "sin la orden: #{r}"
+    r = preguntar(4, 500)
+    Print "desconectado: #{r}"
+    t = time_ms()
+    r = preguntar(3, 300)
+    t = time_ms() - t
+    Print "no contesta y aborta: #{r} a tiempo: #{t >= 250 and t < 700} guardada: #{guardada()}"
+    t = time_ms()
+    r = preguntar(2, 300)
+    t = time_ms() - t
+    Print "no contesta ni aborta: #{r} a tiempo: #{t >= 450 and t < 900}"
+    r = preguntar(0, 500)
+    Print "mientras la tiene: #{r} abortos: #{abortos()}"
+    devolver()
+    r = preguntar(0, 500)
+    Print "devuelta: #{r} #{wifi_signal()}"
+    Print "abierto: #{abierto()}"
+    preguntar(2, 100)
+    Print "al acabar, guardada: #{acabar()}"
+    Print "fin"
+end

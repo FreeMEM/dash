@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 538 funciones, 538 implementadas, 0 sin implementar.
+Total: 550 funciones, 550 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -435,6 +435,18 @@ Total: 538 funciones, 538 implementadas, 0 sin implementar.
 | `cx_hotkey(description)` | `BOOL` | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
 | `cx_command()` | `LONG` | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
 | `cx_wait(ms)` | `LONG` | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
+| `disks_read(ms)` | `LONG` | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
+| `disk_name(i)` | `STRPTR` | The name of volume i (0 to disks_read() - 1) of the last disks_read, without the colon |  |
+| `disk_kb(i)` | `LONG` | The size of volume i in KB (as Info shows it); -1 if it did not answer in time |  |
+| `disk_free_kb(i)` | `LONG` | The free space of volume i in KB; -1 if it did not answer in time |  |
+| `net_ifs_read()` | `LONG` | Reads the network interfaces of Roadshow (lo0 included), their state and bytes: how many; -1 without a TCP/IP stack or with one that does not tell (AmiTCP, Miami) |  |
+| `net_if_name(i)` | `STRPTR` | The name of interface i (0 to net_ifs_read() - 1) of the last net_ifs_read |  |
+| `net_if_up(i)` | `BOOL` | True if interface i is up (connected) |  |
+| `net_if_bytes_in(i)` | `LONG` | The bytes received by interface i (the low 32 bits: the difference of two readings is the bytes in between, even past 2 GB) |  |
+| `net_if_bytes_out(i)` | `LONG` | The bytes sent by interface i (the low 32 bits, like net_if_bytes_in) |  |
+| `wifi_read(interface, ms)` | `LONG` | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), -1 no Roadshow |  |
+| `wifi_signal()` | `LONG` | The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad) |  |
+| `wifi_noise()` | `LONG` | The noise level of the last wifi_read that gave 0, in dBm |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |

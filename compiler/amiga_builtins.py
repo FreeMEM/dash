@@ -4001,6 +4001,60 @@ TASK_FUNCTIONS = {
         c_template="_dash_cx_wait(${ms})",
         description="Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) "
                     "or ms milliseconds pass (0)"),
+    # Trasfondo: disks, network and WiFi for a meter; each reading afresh, none waits longer than its time
+    "disks_read": BuiltinFunc(
+        name="disks_read", params=["ms"], return_type="LONG",
+        c_template="_dash_disks_read(${ms})",
+        description="Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once "
+                    "and waiting ms milliseconds at most: how many there are. Nothing asks for a disk"),
+    "disk_name": BuiltinFunc(
+        name="disk_name", params=["i"], return_type="STRPTR",
+        c_template="_dash_disk_name(${i})",
+        description="The name of volume i (0 to disks_read() - 1) of the last disks_read, without the colon"),
+    "disk_kb": BuiltinFunc(
+        name="disk_kb", params=["i"], return_type="LONG",
+        c_template="_dash_disk_kb(${i})",
+        description="The size of volume i in KB (as Info shows it); -1 if it did not answer in time"),
+    "disk_free_kb": BuiltinFunc(
+        name="disk_free_kb", params=["i"], return_type="LONG",
+        c_template="_dash_disk_free_kb(${i})",
+        description="The free space of volume i in KB; -1 if it did not answer in time"),
+    "net_ifs_read": BuiltinFunc(
+        name="net_ifs_read", params=[], return_type="LONG",
+        c_template="_dash_net_ifs_read()",
+        description="Reads the network interfaces of Roadshow (lo0 included), their state and bytes: how many; -1 "
+                    "without a TCP/IP stack or with one that does not tell (AmiTCP, Miami)"),
+    "net_if_name": BuiltinFunc(
+        name="net_if_name", params=["i"], return_type="STRPTR",
+        c_template="_dash_net_if_name(${i})",
+        description="The name of interface i (0 to net_ifs_read() - 1) of the last net_ifs_read"),
+    "net_if_up": BuiltinFunc(
+        name="net_if_up", params=["i"], return_type="BOOL",
+        c_template="_dash_net_if_up(${i})",
+        description="True if interface i is up (connected)"),
+    "net_if_bytes_in": BuiltinFunc(
+        name="net_if_bytes_in", params=["i"], return_type="LONG",
+        c_template="_dash_net_if_bytes_in(${i})",
+        description="The bytes received by interface i (the low 32 bits: the difference of two readings is the "
+                    "bytes in between, even past 2 GB)"),
+    "net_if_bytes_out": BuiltinFunc(
+        name="net_if_bytes_out", params=["i"], return_type="LONG",
+        c_template="_dash_net_if_bytes_out(${i})",
+        description="The bytes sent by interface i (the low 32 bits, like net_if_bytes_in)"),
+    "wifi_read": BuiltinFunc(
+        name="wifi_read", params=["interface", "ms"], return_type="LONG",
+        c_template="_dash_wifi_read(${interface}, ${ms})",
+        description="Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at "
+                    "most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no "
+                    "such interface, 4 the driver gives an error (offline), -1 no Roadshow"),
+    "wifi_signal": BuiltinFunc(
+        name="wifi_signal", params=[], return_type="LONG",
+        c_template="_dash_wifi_signal()",
+        description="The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad)"),
+    "wifi_noise": BuiltinFunc(
+        name="wifi_noise", params=[], return_type="LONG",
+        c_template="_dash_wifi_noise_level()",
+        description="The noise level of the last wifi_read that gave 0, in dBm"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",
