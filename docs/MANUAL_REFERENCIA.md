@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 550 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 556 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -3449,6 +3449,18 @@ end
 if wifi_read("wlan0", 500) == 0      # el nombre del interfaz en Roadshow
     Print "señal: #{wifi_signal()} dBm, ruido: #{wifi_noise()} dBm"
 end
+
+# con cualquier pila (Roadshow, MiamiDx, AmiTCP...): preguntando al driver
+d = net_drivers_read()               # los drivers de DEVS:Networks/ en uso
+for i in (0..d - 1)
+    driver = net_driver_name(i)      # "wifipi.device"
+    if wifi_read_device(driver, 0, 500) == 0
+        Print driver + ": #{wifi_signal()} dBm"
+    end
+    if net_driver_read(driver, 0, 500) == 0
+        Print "paquetes: #{net_driver_packets_in()} #{net_driver_packets_out()}"
+    end
+end
 ```
 
 - `disks_read(ms)`: lee los volúmenes montados (con disco dentro) y da cuántos hay. Pregunta a todos a la vez
@@ -3464,7 +3476,16 @@ end
 - `wifi_read(interfaz, ms)`: pide la señal al driver SANA-II del interfaz (`S2_GETSIGNALQUALITY`, la extensión
   inalámbrica de `prism2.device` y otros) y espera `ms` como mucho. Da 0 si la leyó, 1 si no contestó a tiempo (se
   aborta), 2 si el driver no la da, 3 si no hay ese interfaz, 4 si el driver da error (desconectado) y -1 sin
-  Roadshow. Si un driver se queda la petición después de abortarla, no se le pregunta más hasta que la devuelva.
+  Roadshow, y 5 si la pila tiene el driver solo para ella. Si un driver se queda la petición después de abortarla,
+  no se le pregunta más hasta que la devuelva.
+- `net_drivers_read()`, `net_driver_name(i)`: los drivers de red (SANA-II) en uso, con cualquier pila: los de
+  `DEVS:Networks/` que alguien tiene abiertos. No hace falta `bsdsocket.library`.
+- `wifi_read_device(driver, unidad, ms)`: como `wifi_read`, pero preguntando a ese driver directamente (la unidad
+  casi siempre es 0). Solo pregunta a un driver que ya está en uso: no carga ninguno, porque eso pondría en marcha
+  su tarjeta. Con un driver que nadie usa da 3.
+- `net_driver_read(driver, unidad, ms)`, `net_driver_packets_in()`, `net_driver_packets_out()`: los paquetes
+  recibidos y enviados por el driver, con los mismos códigos. Los bytes solo los da Roadshow (`net_if_bytes_in`):
+  los drivers no suelen contarlos (`wifipi.device` no lo hace).
 - `wifi_signal()`, `wifi_noise()`: la señal y el ruido de la última lectura buena, en dBm (-30 muy buena, -90 muy
   mala).
 
@@ -3854,14 +3875,14 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
-| Discos, red y WiFi | 12 | `disks_read`, `disk_name`, `disk_kb`, `disk_free_kb`, `net_ifs_read`, `net_if_name`, `net_if_up`, `net_if_bytes_in`, `net_if_bytes_out`, `wifi_read`, `wifi_signal`, `wifi_noise` |
+| Discos, red y WiFi | 18 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **550** | |
+| **Total** | **556** | |
 
 ### Colores Estandar Amiga
 

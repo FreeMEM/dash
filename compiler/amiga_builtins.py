@@ -4046,7 +4046,37 @@ TASK_FUNCTIONS = {
         c_template="_dash_wifi_read(${interface}, ${ms})",
         description="Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at "
                     "most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no "
-                    "such interface, 4 the driver gives an error (offline), -1 no Roadshow"),
+                    "such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for "
+                    "itself, -1 no Roadshow"),
+    "wifi_read_device": BuiltinFunc(
+        name="wifi_read_device", params=["driver", "unit", "ms"], return_type="LONG",
+        c_template="_dash_wifi_read_device(${driver}, ${unit}, ${ms})",
+        description="Like wifi_read, asking a SANA-II driver that is in use (\"wifipi.device\", unit 0) directly, "
+                    "with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver "
+                    "in use, 4 offline, 5 the stack has it only for itself"),
+    "net_drivers_read": BuiltinFunc(
+        name="net_drivers_read", params=[], return_type="LONG",
+        c_template="_dash_net_drivers_read()",
+        description="Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks "
+                    "that something has open): how many"),
+    "net_driver_name": BuiltinFunc(
+        name="net_driver_name", params=["i"], return_type="STRPTR",
+        c_template="_dash_net_driver_name(${i})",
+        description="The name of driver i (0 to net_drivers_read() - 1) of the last net_drivers_read "
+                    "(\"wifipi.device\")"),
+    "net_driver_read": BuiltinFunc(
+        name="net_driver_read", params=["driver", "unit", "ms"], return_type="LONG",
+        c_template="_dash_net_driver_read(${driver}, ${unit}, ${ms})",
+        description="Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of "
+                    "wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out)"),
+    "net_driver_packets_in": BuiltinFunc(
+        name="net_driver_packets_in", params=[], return_type="LONG",
+        c_template="_dash_net_driver_packets_in()",
+        description="The packets received by the driver of the last net_driver_read that gave 0"),
+    "net_driver_packets_out": BuiltinFunc(
+        name="net_driver_packets_out", params=[], return_type="LONG",
+        c_template="_dash_net_driver_packets_out()",
+        description="The packets sent by the driver of the last net_driver_read that gave 0"),
     "wifi_signal": BuiltinFunc(
         name="wifi_signal", params=[], return_type="LONG",
         c_template="_dash_wifi_signal()",
