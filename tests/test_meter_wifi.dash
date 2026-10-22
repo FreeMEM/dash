@@ -1,27 +1,35 @@
-# wifi_read's question to the SANA-II driver (S2_GETSIGNALQUALITY), with a driver of the test's own: unit 0
-# answers -55 and -92 dBm, unit 1 does not have the command, unit 4 is offline, unit 3 never answers but
-# gives the request back on AbortIO, unit 2 never answers and keeps it even then (what hangs NewMeter).
-# Nothing waits longer than its time; a request kept by the driver is not asked again until it comes back,
-# and is freed then; the device is closed after each question. At the end, one still kept stays out there
-# with its port ignoring the reply.
+# Questions to a SANA-II driver with any TCP/IP stack, with a driver of the test's own ("dashfake.device", in
+# DEVS:Networks/): net_drivers_read finds it only while something (here, the test as its stack) has it open,
+# and nothing asks a driver that nobody uses (it would start its hardware). wifi_read_device: unit 0 answers
+# -55 and -92 dBm, unit 1 does not have the command, unit 4 is offline, unit 5 is the stack's only, unit 3
+# never answers but gives the request back on AbortIO, unit 2 never answers and keeps it even then (what
+# hangs NewMeter). Nothing waits longer than its time; a request kept by a driver is not asked again until
+# it comes back (other units are), and is freed then; the device is closed after each question.
+# net_driver_read gives its packets. At the end, a request still kept stays out there with its port
+# ignoring the reply.
+# expect-out: sin usar: 3 3 encontrado: false
+# expect-out: en uso: encontrado: true
 # expect-out: señal: 0 -55 -92
+# expect-out: paquetes: 0 1234 567
 # expect-out: sin la orden: 2
 # expect-out: desconectado: 4
+# expect-out: solo de su pila: 5
 # expect-out: no contesta y aborta: 1 a tiempo: true guardada: false
 # expect-out: no contesta ni aborta: 1 a tiempo: true
-# expect-out: mientras la tiene: 1 abortos: 2
+# expect-out: mientras la tiene: 1 al momento: true, otra unidad: 0 abortos: 2
 # expect-out: devuelta: 0 -55
-# expect-out: abierto: 0
+# expect-out: abierto: 1
 # expect-out: al acabar, guardada: true
 # expect-out: fin
 
-@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts;"
+@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts; static struct IORequest *pila;"
 
 # a SANA-II driver of the test's own: "dashfake.device"
 @c
 """
 static LONG fake_open(struct IORequest *io __asm("a1"), ULONG unit __asm("d0"), ULONG flags __asm("d1"),
                       struct Device *dev __asm("a6")) {
+    if (unit == 5) { io->io_Error = IOERR_UNITBUSY; return IOERR_UNITBUSY; }
     dev->dd_Library.lib_OpenCnt++;
     io->io_Device = dev;
     io->io_Unit = (struct Unit *)unit;
@@ -40,8 +48,11 @@ static void fake_beginio(struct IORequest *io __asm("a1"), struct Device *dev __
     io->io_Message.mn_Node.ln_Type = NT_MESSAGE;
     io->io_Flags &= ~IOF_QUICK;
     io->io_Error = 0;
-    if (io->io_Command != S2_GETSIGNALQUALITY || unit == 1) io->io_Error = IOERR_NOCMD;
-    else if (unit == 4) io->io_Error = 5;          /* S2ERR_OUTOFSERVICE */
+    if (io->io_Command == S2_GETGLOBALSTATS && unit == 0) {
+        ((struct Sana2DeviceStats *)s2->ios2_StatData)->PacketsReceived = 1234;
+        ((struct Sana2DeviceStats *)s2->ios2_StatData)->PacketsSent = 567;
+    } else if (io->io_Command != S2_GETSIGNALQUALITY || unit == 1) io->io_Error = IOERR_NOCMD;
+    else if (unit == 4) io->io_Error = 10;         /* S2ERR_OUTOFSERVICE */
     else if (unit == 0) {
         ((struct Sana2SignalQuality *)s2->ios2_StatData)->SignalLevel = -55;
         ((struct Sana2SignalQuality *)s2->ios2_StatData)->NoiseLevel = -92;
@@ -73,10 +84,38 @@ end
 """
 end
 
-@native func preguntar(unidad: Int, ms: Int) -> Int
+# it is a network driver: a file of its name in DEVS:Networks/
+@native func marcar_red() -> Bool
 """
-    return _dash_wifi_ask((STRPTR)"dashfake.device", unidad, ms);
+    BPTR l = CreateDir((CONST_STRPTR)"DEVS:Networks");
+    if (l) UnLock(l);
+    if (!(l = Open((CONST_STRPTR)"DEVS:Networks/dashfake.device", MODE_NEWFILE))) return FALSE;
+    Close(l);
+    return TRUE;
 """
+end
+
+# the test as its stack: the driver open while it runs
+@native func pila_abrir() -> Bool
+"""
+    struct MsgPort *p = CreateMsgPort();
+    if (p) pila = CreateIORequest(p, sizeof(struct IOSana2Req));
+    return pila && OpenDevice((CONST_STRPTR)"dashfake.device", 0, pila, 0) == 0;
+"""
+end
+
+func encontrado() -> Bool
+    n = net_drivers_read()
+    for i in (0..n - 1)
+        if net_driver_name(i) == "dashfake.device"
+            return true
+        end
+    end
+    return false
+end
+
+func preguntar(unidad: Int, ms: Int) -> Int
+    return wifi_read_device("dashfake.device", unidad, ms)
 end
 
 @native func guardada() -> Bool
@@ -112,6 +151,7 @@ end
     BOOL kept = fake_kept != NULL;
     _dash_meter_cleanup();
     devolver();
+    CloseDevice(pila);
     Forbid();
     Remove(&fake_dev->dd_Library.lib_Node);
     Permit();
@@ -121,12 +161,22 @@ end
 
 Main
     fake_poner()
+    marcar_red()
+    a = preguntar(0, 500)
+    b = net_driver_read("DEVS:Networks/dashfake.device", 0, 500)
+    Print "sin usar: #{a} #{b} encontrado: #{encontrado()}"
+    pila_abrir()
+    Print "en uso: encontrado: #{encontrado()}"
     r = preguntar(0, 500)
     Print "señal: #{r} #{wifi_signal()} #{wifi_noise()}"
+    r = net_driver_read("dashfake.device", 0, 500)
+    Print "paquetes: #{r} #{net_driver_packets_in()} #{net_driver_packets_out()}"
     r = preguntar(1, 500)
     Print "sin la orden: #{r}"
     r = preguntar(4, 500)
     Print "desconectado: #{r}"
+    r = preguntar(5, 500)
+    Print "solo de su pila: #{r}"
     t = time_ms()
     r = preguntar(3, 300)
     t = time_ms() - t
@@ -135,8 +185,11 @@ Main
     r = preguntar(2, 300)
     t = time_ms() - t
     Print "no contesta ni aborta: #{r} a tiempo: #{t >= 450 and t < 900}"
-    r = preguntar(0, 500)
-    Print "mientras la tiene: #{r} abortos: #{abortos()}"
+    t = time_ms()
+    r = preguntar(2, 300)
+    t = time_ms() - t
+    r0 = preguntar(0, 500)
+    Print "mientras la tiene: #{r} al momento: #{t < 100}, otra unidad: #{r0} abortos: #{abortos()}"
     devolver()
     r = preguntar(0, 500)
     Print "devuelta: #{r} #{wifi_signal()}"

@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 550 funciones, 550 implementadas, 0 sin implementar.
+Total: 556 funciones, 556 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -444,7 +444,13 @@ Total: 550 funciones, 550 implementadas, 0 sin implementar.
 | `net_if_up(i)` | `BOOL` | True if interface i is up (connected) |  |
 | `net_if_bytes_in(i)` | `LONG` | The bytes received by interface i (the low 32 bits: the difference of two readings is the bytes in between, even past 2 GB) |  |
 | `net_if_bytes_out(i)` | `LONG` | The bytes sent by interface i (the low 32 bits, like net_if_bytes_in) |  |
-| `wifi_read(interface, ms)` | `LONG` | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), -1 no Roadshow |  |
+| `wifi_read(interface, ms)` | `LONG` | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for itself, -1 no Roadshow |  |
+| `wifi_read_device(driver, unit, ms)` | `LONG` | Like wifi_read, asking a SANA-II driver that is in use ("wifipi.device", unit 0) directly, with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver in use, 4 offline, 5 the stack has it only for itself |  |
+| `net_drivers_read()` | `LONG` | Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks that something has open): how many |  |
+| `net_driver_name(i)` | `STRPTR` | The name of driver i (0 to net_drivers_read() - 1) of the last net_drivers_read ("wifipi.device") |  |
+| `net_driver_read(driver, unit, ms)` | `LONG` | Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out) |  |
+| `net_driver_packets_in()` | `LONG` | The packets received by the driver of the last net_driver_read that gave 0 |  |
+| `net_driver_packets_out()` | `LONG` | The packets sent by the driver of the last net_driver_read that gave 0 |  |
 | `wifi_signal()` | `LONG` | The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad) |  |
 | `wifi_noise()` | `LONG` | The noise level of the last wifi_read that gave 0, in dBm |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |

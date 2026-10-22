@@ -2979,8 +2979,10 @@ static LONG _dash_cx_wait(LONG ms) {
 /* Dash meter runtime (Trasfondo): disks_read(ms), the mounted volumes with their size and free space (each
    handler is asked with ACTION_DISK_INFO and the answers waited for ms at most: one that does not answer is
    left out, -1, and its packet collected when it comes); net_ifs_read(), Roadshow's interfaces with their
-   state and bytes in and out (-1 with another stack); wifi_read(interface, ms), the signal of the interface's
-   SANA-II driver (S2_GETSIGNALQUALITY, aborted after ms). Nothing is kept open between readings. */
+   state and bytes in and out (-1 with another stack); net_drivers_read(), the SANA-II drivers in use with any
+   stack, and net_driver_read(driver, unit, ms), their packets; wifi_read(interface, ms) and
+   wifi_read_device(driver, unit, ms), the WiFi signal from the driver (S2_GETSIGNALQUALITY, aborted after
+   ms). Nothing is kept open between readings. */
 #include <dos/dosextens.h>
 #include <devices/timer.h>
 #include <proto/bsdsocket.h>
@@ -3007,6 +3009,13 @@ struct IOSana2Req {
 #define S2_GETSIGNALQUALITY 0xC010      /* SANA-II wireless extension (Neil Cafferkey's drivers: prism2.device) */
 struct Sana2SignalQuality { LONG SignalLevel; LONG NoiseLevel; };    /* dBm */
 #endif
+#ifndef S2_GETGLOBALSTATS
+#define S2_GETGLOBALSTATS (CMD_NONSTD + 13)
+struct Sana2DeviceStats {
+    ULONG PacketsReceived, PacketsSent, BadData, Overruns, Unused, UnknownTypesReceived, Reconfigurations;
+    struct timeval LastStart;
+};
+#endif
 #define _DASH_DISK_MAX 64
 #define _DASH_NETIF_MAX 16
 
@@ -3024,10 +3033,22 @@ static LONG _dash_disk_nout = 0;
 static struct MsgPort *_dash_disk_port = NULL;
 static struct { char name[16]; BOOL up; ULONG in, out; } _dash_netifs[_DASH_NETIF_MAX];
 static LONG _dash_netif_n = 0;
-struct _DashWifiReq { struct IOSana2Req io; struct Sana2SignalQuality q; };
-static struct _DashWifiReq *_dash_wifi_left = NULL;           /* a request the driver did not give back */
-static struct MsgPort *_dash_wifi_lport = NULL;
+#define _DASH_NETDRV_MAX 8
+static char _dash_netdrv[_DASH_NETDRV_MAX][32];             /* the SANA-II drivers in use */
+static LONG _dash_netdrv_n = 0;
+struct _DashS2Req {
+    struct IOSana2Req io;
+    union { struct Sana2SignalQuality q; struct Sana2DeviceStats s; } d;
+};
+#define _DASH_S2_LEFT 4
+static struct {                                              /* requests a driver did not give back */
+    struct _DashS2Req *r;
+    struct MsgPort *port;
+    char dev[32];
+    LONG unit;
+} _dash_s2_left[_DASH_S2_LEFT];
 static LONG _dash_wifi_sig = 0, _dash_wifi_noise = 0;
+static ULONG _dash_s2_pin = 0, _dash_s2_pout = 0;
 static struct MsgPort *_dash_mt_tport = NULL;
 static struct timerequest *_dash_mt_tr = NULL;
 
@@ -3206,44 +3227,145 @@ static BOOL _dash_net_if_up(LONG i) { return i >= 0 && i < _dash_netif_n && _das
 static LONG _dash_net_if_bytes_in(LONG i) { return i >= 0 && i < _dash_netif_n ? (LONG)_dash_netifs[i].in : 0; }
 static LONG _dash_net_if_bytes_out(LONG i) { return i >= 0 && i < _dash_netif_n ? (LONG)_dash_netifs[i].out : 0; }
 
+/* The SANA-II drivers in use, whatever the TCP/IP stack: the devices in memory that someone has open and
+   that are in DEVS:Networks/. How many (net_driver_name) */
+static LONG _dash_net_drivers_read(void) {
+    char names[16][32], path[48];
+    struct Node *n;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    APTR win = me->pr_WindowPtr;
+    LONG k = 0, i;
+    BPTR l;
+    Forbid();
+    for (n = SysBase->DeviceList.lh_Head; n->ln_Succ && k < 16; n = n->ln_Succ)
+        if (n->ln_Name && ((struct Library *)n)->lib_OpenCnt > 0) {
+            strncpy(names[k], n->ln_Name, sizeof(names[k]) - 1);
+            names[k][sizeof(names[k]) - 1] = 0;
+            k++;
+        }
+    Permit();
+    me->pr_WindowPtr = (APTR)-1;               /* (no requester, whatever happens) */
+    _dash_netdrv_n = 0;
+    for (i = 0; i < k && _dash_netdrv_n < _DASH_NETDRV_MAX; i++) {
+        strcpy(path, "DEVS:Networks/");
+        strcat(path, names[i]);
+        if ((l = Lock((CONST_STRPTR)path, ACCESS_READ))) {
+            UnLock(l);
+            strcpy(_dash_netdrv[_dash_netdrv_n++], names[i]);
+        }
+    }
+    me->pr_WindowPtr = win;
+    return _dash_netdrv_n;
+}
+
+static STRPTR _dash_net_driver_name(LONG i) {
+    return _dash_str_dup((STRPTR)(i >= 0 && i < _dash_netdrv_n ? _dash_netdrv[i] : ""), TRUE);
+}
+
 /* SANA-II asks for these at OpenDevice; nothing is read or written with them here */
-static BOOL _dash_wifi_copy(APTR to __asm("a0"), APTR from __asm("a1"), ULONG n __asm("d0")) {
+static BOOL _dash_s2_copy(APTR to __asm("a0"), APTR from __asm("a1"), ULONG n __asm("d0")) {
     CopyMem(from, to, n);
     return TRUE;
 }
-static struct TagItem _dash_wifi_bm[] = {
-    { S2_CopyToBuff, (ULONG)_dash_wifi_copy }, { S2_CopyFromBuff, (ULONG)_dash_wifi_copy }, { TAG_END, 0 }
+static struct TagItem _dash_s2_bm[] = {
+    { S2_CopyToBuff, (ULONG)_dash_s2_copy }, { S2_CopyFromBuff, (ULONG)_dash_s2_copy }, { TAG_END, 0 }
 };
 
-static BOOL _dash_wifi_back(APTR io) { return CheckIO((struct IORequest *)io) != NULL; }
+static BOOL _dash_s2_back(APTR io) { return CheckIO((struct IORequest *)io) != NULL; }
 
-static void _dash_wifi_free(struct _DashWifiReq *r, struct MsgPort *port) {
+static void _dash_s2_free(struct _DashS2Req *r, struct MsgPort *port) {
     CloseDevice((struct IORequest *)&r->io);
     FreeMem(r, sizeof(*r));
     DeleteMsgPort(port);
 }
 
-/* The request a driver kept: freed once it gives it back; at the end, if it never did, its port is left
-   (and ignores the reply) so nothing touches the memory of the program that went */
-static void _dash_wifi_reap(BOOL ending) {
-    if (!_dash_wifi_left) return;
-    if (CheckIO((struct IORequest *)&_dash_wifi_left->io)) {
-        WaitIO((struct IORequest *)&_dash_wifi_left->io);
-        _dash_wifi_free(_dash_wifi_left, _dash_wifi_lport);
-        _dash_wifi_left = NULL;
-    } else if (ending) {
-        Forbid();
-        _dash_wifi_lport->mp_Flags = PA_IGNORE;
-        Permit();
-        _dash_wifi_left = NULL;
+/* The requests drivers kept: freed once given back; at the end, if one never was, its port is left (and
+   ignores the reply) so nothing touches the memory of the program that went */
+static void _dash_s2_reap(BOOL ending) {
+    LONG i;
+    for (i = 0; i < _DASH_S2_LEFT; i++) {
+        struct _DashS2Req *r = _dash_s2_left[i].r;
+        if (!r) continue;
+        if (CheckIO((struct IORequest *)&r->io)) {
+            WaitIO((struct IORequest *)&r->io);
+            _dash_s2_free(r, _dash_s2_left[i].port);
+            _dash_s2_left[i].r = NULL;
+        } else if (ending) {
+            Forbid();
+            _dash_s2_left[i].port->mp_Flags = PA_IGNORE;
+            Permit();
+            _dash_s2_left[i].r = NULL;
+        }
     }
 }
 
-/* The WiFi signal of a Roadshow interface (its SANA-II device and unit, asked afresh), from the driver's
-   S2_GETSIGNALQUALITY, waiting ms at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time (aborted),
-   2 the driver does not have that command, 3 no such interface or its device does not open, 4 the driver
-   says error (offline...), -1 no Roadshow */
-static LONG _dash_wifi_ask(STRPTR devname, LONG unit, LONG ms);
+/* A question (S2_GETSIGNALQUALITY or S2_GETGLOBALSTATS) to a SANA-II driver that someone already has open
+   (a driver not in memory is not loaded: that would start its hardware), waiting ms at most: 0 answered,
+   1 no answer in time (aborted; or that driver still has the last one), 2 it does not have that command,
+   3 no such driver in use (or it does not open), 4 it says error (offline...), 5 opened only for its stack */
+static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
+    struct _DashS2Req *r;
+    struct MsgPort *port;
+    struct Library *lib;
+    char name[32];
+    LONG err, i, slot = -1;
+    if (!dev || !*dev) return 3;
+    _dash_meter_at_exit();
+    _dash_s2_reap(FALSE);
+    strncpy(name, (char *)FilePart((CONST_STRPTR)dev), sizeof(name) - 1);
+    name[sizeof(name) - 1] = 0;
+    for (i = 0; i < _DASH_S2_LEFT; i++) {
+        if (!_dash_s2_left[i].r) { if (slot < 0) slot = i; }
+        else if (_dash_s2_left[i].unit == unit && !strcmp(_dash_s2_left[i].dev, name)) return 1;
+    }
+    if (slot < 0) return 1;
+    Forbid();
+    lib = (struct Library *)FindName(&SysBase->DeviceList, (CONST_STRPTR)name);
+    i = lib && lib->lib_OpenCnt > 0;
+    Permit();
+    if (!i) return 3;
+    if (!(port = CreateMsgPort())) return 3;
+    if (!(r = (struct _DashS2Req *)AllocMem(sizeof(*r), MEMF_PUBLIC | MEMF_CLEAR))) { DeleteMsgPort(port); return 3; }
+    r->io.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
+    r->io.ios2_Req.io_Message.mn_ReplyPort = port;
+    r->io.ios2_Req.io_Message.mn_Length = sizeof(struct IOSana2Req);
+    r->io.ios2_BufferManagement = _dash_s2_bm;
+    if ((err = OpenDevice((CONST_STRPTR)dev, unit, (struct IORequest *)&r->io, 0))) {
+        FreeMem(r, sizeof(*r));
+        DeleteMsgPort(port);
+        return err == IOERR_UNITBUSY ? 5 : 3;
+    }
+    r->io.ios2_Req.io_Command = cmd;
+    r->io.ios2_StatData = &r->d;
+    SendIO((struct IORequest *)&r->io);
+    if (!_dash_mt_wait(port, ms, _dash_s2_back, &r->io)) {
+        AbortIO((struct IORequest *)&r->io);
+        if (!_dash_mt_wait(port, 200, _dash_s2_back, &r->io)) {
+            _dash_s2_left[slot].r = r;           /* it can not be freed while the driver has it */
+            _dash_s2_left[slot].port = port;
+            _dash_s2_left[slot].unit = unit;
+            strcpy(_dash_s2_left[slot].dev, name);
+            return 1;
+        }
+        WaitIO((struct IORequest *)&r->io);
+        _dash_s2_free(r, port);
+        return 1;
+    }
+    WaitIO((struct IORequest *)&r->io);
+    err = r->io.ios2_Req.io_Error;
+    if (!err && cmd == S2_GETSIGNALQUALITY) { _dash_wifi_sig = r->d.q.SignalLevel; _dash_wifi_noise = r->d.q.NoiseLevel; }
+    if (!err && cmd == S2_GETGLOBALSTATS) { _dash_s2_pin = r->d.s.PacketsReceived; _dash_s2_pout = r->d.s.PacketsSent; }
+    _dash_s2_free(r, port);
+    return !err ? 0 : err == IOERR_NOCMD || err == S2ERR_NOT_SUPPORTED ? 2 : 4;
+}
+
+static LONG _dash_wifi_read_device(STRPTR dev, LONG unit, LONG ms) { return _dash_s2_ask(dev, unit, S2_GETSIGNALQUALITY, ms); }
+static LONG _dash_net_driver_read(STRPTR dev, LONG unit, LONG ms) { return _dash_s2_ask(dev, unit, S2_GETGLOBALSTATS, ms); }
+static LONG _dash_net_driver_packets_in(void) { return (LONG)_dash_s2_pin; }
+static LONG _dash_net_driver_packets_out(void) { return (LONG)_dash_s2_pout; }
+
+/* The WiFi signal of a Roadshow interface: its SANA-II driver and unit, asked afresh, and then as
+   wifi_read_device; -1 no Roadshow */
 static LONG _dash_wifi_read(STRPTR iface, LONG ms) {
     struct Library *SocketBase;
     STRPTR dev = NULL;
@@ -3261,53 +3383,13 @@ static LONG _dash_wifi_read(STRPTR iface, LONG ms) {
     }
     CloseLibrary(SocketBase);
     if (!devname[0]) return 3;
-    return _dash_wifi_ask((STRPTR)devname, unit, ms);
-}
-
-/* The question to the driver (device and unit), as wifi_read */
-static LONG _dash_wifi_ask(STRPTR devname, LONG unit, LONG ms) {
-    struct _DashWifiReq *r;
-    struct MsgPort *port;
-    LONG err;
-    _dash_meter_at_exit();
-    _dash_wifi_reap(FALSE);
-    if (_dash_wifi_left) return 1;              /* the last question has not come back yet */
-    if (!(port = CreateMsgPort())) return 3;
-    if (!(r = (struct _DashWifiReq *)AllocMem(sizeof(*r), MEMF_PUBLIC | MEMF_CLEAR))) { DeleteMsgPort(port); return 3; }
-    r->io.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
-    r->io.ios2_Req.io_Message.mn_ReplyPort = port;
-    r->io.ios2_Req.io_Message.mn_Length = sizeof(struct IOSana2Req);
-    r->io.ios2_BufferManagement = _dash_wifi_bm;
-    if (OpenDevice((CONST_STRPTR)devname, unit, (struct IORequest *)&r->io, 0)) {
-        FreeMem(r, sizeof(*r));
-        DeleteMsgPort(port);
-        return 3;
-    }
-    r->io.ios2_Req.io_Command = S2_GETSIGNALQUALITY;
-    r->io.ios2_StatData = &r->q;
-    SendIO((struct IORequest *)&r->io);
-    if (!_dash_mt_wait(port, ms, _dash_wifi_back, &r->io)) {
-        AbortIO((struct IORequest *)&r->io);
-        if (!_dash_mt_wait(port, 200, _dash_wifi_back, &r->io)) {
-            _dash_wifi_left = r;                 /* it can not be freed while the driver has it */
-            _dash_wifi_lport = port;
-            return 1;
-        }
-        WaitIO((struct IORequest *)&r->io);
-        _dash_wifi_free(r, port);
-        return 1;
-    }
-    WaitIO((struct IORequest *)&r->io);
-    err = r->io.ios2_Req.io_Error;
-    if (!err) { _dash_wifi_sig = r->q.SignalLevel; _dash_wifi_noise = r->q.NoiseLevel; }
-    _dash_wifi_free(r, port);
-    return !err ? 0 : err == IOERR_NOCMD || err == S2ERR_NOT_SUPPORTED ? 2 : 4;
+    return _dash_wifi_read_device((STRPTR)devname, unit, ms);
 }
 
 static LONG _dash_wifi_signal(void) { return _dash_wifi_sig; }
 static LONG _dash_wifi_noise_level(void) { return _dash_wifi_noise; }
 
-/* The program's end: the disk questions not answered and a WiFi request the driver kept stay out there
+/* The program's end: the disk questions not answered and the requests drivers kept stay out there
    with their ports ignoring the reply; the rest is freed */
 static void _dash_meter_cleanup(void) {
     if (_dash_disk_port) {
@@ -3320,7 +3402,7 @@ static void _dash_meter_cleanup(void) {
         _dash_disk_port = NULL;
         _dash_disk_nout = 0;
     }
-    _dash_wifi_reap(TRUE);
+    _dash_s2_reap(TRUE);
     if (_dash_mt_tr) {
         CloseDevice((struct IORequest *)_dash_mt_tr);
         DeleteIORequest((struct IORequest *)_dash_mt_tr);

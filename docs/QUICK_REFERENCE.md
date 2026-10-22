@@ -337,7 +337,9 @@ cx_hotkey("ctrl alt t")     # false if not valid; cx_command(): 1 hide 2 show 3 
 cx_wait(1000)               # a command, -1 Ctrl-C or 0 when the time passes (spends nothing meanwhile)
 n = disks_read(500)         # mounted volumes (asked at once, 500 ms at most): disk_name(i), disk_kb(i), disk_free_kb(i) (-1: no answer)
 m = net_ifs_read()          # Roadshow's interfaces (-1 without): net_if_name(i), net_if_up(i), net_if_bytes_in(i), net_if_bytes_out(i)
-wifi_read("wlan0", 500)     # 0: wifi_signal(), wifi_noise() in dBm; 1 no answer, 2 not told, 3 no interface, 4 offline, -1 no Roadshow
+wifi_read("wlan0", 500)     # 0: wifi_signal(), wifi_noise() in dBm; 1 no answer, 2 not told, 3 no interface, 4 offline, 5 busy, -1 no Roadshow
+d = net_drivers_read()      # SANA-II drivers in use, any stack: net_driver_name(i) ("wifipi.device")
+wifi_read_device("wifipi.device", 0, 500)   # as wifi_read, asking the driver; net_driver_read(driver, unit, ms): net_driver_packets_in/out()
 dos_requesters(false)       # no "Insert volume"/disk error requesters: the call fails (true: back)
 base64_to_file(texto, "T:x.png")   # base64 bytes to a file: bytes written, -1 if not base64
 
