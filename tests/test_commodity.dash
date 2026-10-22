@@ -1,0 +1,145 @@
+# Trasfondo as a commodity: tooltype from the Shell's arguments (NAME=value, the name in any case, the value in
+# quotes) with a default; cx_broker, cx_hotkey (a description that is not valid says so), cx_wait and its
+# commands. A helper process plays Exchange: it sends hide, show, disable, enable and kill to the broker by its
+# name (commodities.library's BrokerCommand, as Exchange does) and presses the hotkey through input.device, also
+# while the commodity is disabled, when it must not come.
+# emu-needs: commodities.library
+# emu-args: CX_PRIORITY=5 cx_popkey="ctrl alt t" OTRO=x
+# expect-out: tooltypes: ctrl alt t|5|def
+# expect-out: broker: true
+# expect-out: tecla: true false true
+# expect-out: espera: 0
+# expect-out: ocultar
+# expect-out: mostrar
+# expect-out: desactivar
+# expect-out: activar
+# expect-out: tecla
+# expect-out: eliminar
+# expect-out: órdenes: 0 0 0 0 0
+# expect-out: al acabar, en Exchange: -1
+# expect-out: fin
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Task *ex_padre; static LONG ex_res[5];"
+
+# BrokerCommand(name, command) of commodities.library (private, LVO -198: what Exchange calls)
+@native func _orden(i: Int, cmd: Int) -> Int
+"""
+    register LONG d0 __asm("d0") = cmd;
+    register STRPTR a0 __asm("a0") = (STRPTR)"DashCx";
+    register struct Library *a6 __asm("a6") = CxBase;
+    __asm volatile ("jsr a6@(-198:W)" : "+r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
+    ex_res[i] = d0;
+    return d0;
+"""
+end
+
+@native func proceso_exchange()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    BOOL input = io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0;
+    struct InputEvent ie;
+    static const LONG ordenes[5] = { CXCMD_DISAPPEAR, CXCMD_APPEAR, CXCMD_DISABLE, CXCMD_ENABLE, CXCMD_KILL };
+    LONG i, k;
+    Delay(50);
+    for (i = 0; i < 5; i++) {
+        if (i == 3 || i == 4) {            /* the hotkey: while disabled (before enable) and enabled (before kill) */
+            for (k = 0; input && k < 2; k++) {
+                memset(&ie, 0, sizeof(ie));
+                ie.ie_Class = IECLASS_RAWKEY;
+                ie.ie_Code = k ? (0x14 | IECODE_UP_PREFIX) : 0x14;      /* t */
+                ie.ie_Qualifier = IEQUALIFIER_CONTROL | IEQUALIFIER_LALT;
+                io->io_Command = IND_WRITEEVENT;
+                io->io_Data = &ie;
+                io->io_Length = sizeof(ie);
+                DoIO((struct IORequest *)io);
+                Delay(5);
+            }
+            Delay(25);
+        }
+        _orden(i, ordenes[i]);
+        Delay(25);
+    }
+    if (input) CloseDevice((struct IORequest *)io);
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(ex_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    ex_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_exchange, NP_Name, (ULONG)"dash_exchange", TAG_DONE) == NULL)
+        ex_padre = NULL;
+"""
+end
+
+@native func esperar_exchange()
+"""
+    if (ex_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+# what the program's end does (_dash_cx_cleanup), and then the broker by its name: none (CMDE_NOBROKER, -1)
+@native func fuera() -> Int
+"""
+    struct Library *cx;
+    LONG r = 99;
+    _dash_cx_cleanup();
+    if ((cx = OpenLibrary((CONST_STRPTR)"commodities.library", 37))) {
+        register LONG d0 __asm("d0") = CXCMD_APPEAR;
+        register STRPTR a0 __asm("a0") = (STRPTR)"DashCx";
+        register struct Library *a6 __asm("a6") = cx;
+        __asm volatile ("jsr a6@(-198:W)" : "+r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
+        r = d0;
+        CloseLibrary(cx);
+    }
+    return r;
+"""
+end
+
+@native func resultado(i: Int) -> Int
+"""
+    return ex_res[i];
+"""
+end
+
+Main
+    tecla = tooltype("CX_POPKEY", "ninguna")
+    prioridad = Int(tooltype("cx_priority", "0"))
+    Print "tooltypes: " + tecla + "|#{prioridad}|" + tooltype("NO_ESTA", "def")
+    b = cx_broker("DashCx", "Prueba de Dash", "Una commodity de prueba", prioridad)
+    Print "broker: #{b}"
+    t1 = cx_hotkey("ctrl patata")
+    t2 = cx_hotkey(tecla)
+    Print "tecla: #{t2} #{t1} #{cx_hotkey(tecla)}"
+    Print "espera: #{cx_wait(100)}"
+    lanzar()
+    nombres = ["", "ocultar", "mostrar", "desactivar", "activar", "eliminar", "tecla"]
+    vueltas = 0
+    while vueltas < 12
+        ev = cx_wait(3000)
+        vueltas = vueltas + 1
+        if ev == 0
+            Print "nada en 3 s"
+            break
+        end
+        if ev < 0
+            Print "ctrl-c"
+            break
+        end
+        Print nombres[ev]
+        if ev == 5
+            break
+        end
+    end
+    esperar_exchange()
+    Print "órdenes: #{resultado(0)} #{resultado(1)} #{resultado(2)} #{resultado(3)} #{resultado(4)}"
+    Print "al acabar, en Exchange: #{fuera()}"
+    Print "fin"
+end
