@@ -1,0 +1,35 @@
+# Trasfondo's network panel with a stack that is not Roadshow (FS-UAE's bsdsocket.library, which has no
+# interface API): net_ifs_read and wifi_read say so (-1), at once, and the program's own connection, open
+# meanwhile, goes on working.
+# emu-net: 40831
+# memcheck
+# expect-out: conectado
+# expect-out: red: -1 0 false
+# expect-out: wifi: -1
+# expect-out: eco: hola red
+# expect-out: a tiempo: true
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    s = net_connect("127.0.0.1", 40831, 5000)
+    if s >= 0
+        Print "conectado"
+    end
+    t = time_ms()
+    n = net_ifs_read()
+    nombre = net_if_name(0)
+    Print "red: #{n} #{nombre.length} #{net_if_up(0)}"
+    w = wifi_read("eth0", 2000)
+    Print "wifi: #{w}"
+    t = time_ms() - t
+    net_send(s, "hola red\r\n")
+    respuesta = ""
+    trozo = net_recv(s, 4, 5000)
+    while trozo != nil
+        respuesta = respuesta + trozo
+        trozo = net_recv(s, 4, 5000)
+    end
+    Print str_trim(respuesta)
+    net_close(s)
+    Print "a tiempo: #{t < 1000}"
+end

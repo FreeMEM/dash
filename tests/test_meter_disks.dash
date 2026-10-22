@@ -1,0 +1,179 @@
+# Trasfondo's disk panel: disks_read gives the mounted volumes with the size and free space that Info()
+# gives. A volume whose handler never answers (here, one of the test's own: its port gets the question and
+# nobody replies) is there with -1 and the reading does not wait more than its time; the question is not
+# asked again while it is unanswered, and the late answer is collected by the next reading. The network
+# without Roadshow (the emulator's bsdsocket.library, or none): -1, and wifi_read too.
+# expect-out: con el del programa: true
+# expect-out: como Info: true
+# expect-out: lento: -1 -1 a tiempo: true
+# expect-out: preguntas al lento: 1
+# expect-out: otra vez: -1 a tiempo: true preguntas: 1
+# expect-out: contestado, otra vez: -1 preguntas: 1
+# expect-out: sin el lento: true todos: true
+# expect-out: red: -1 -1 0
+# expect-out: wifi: -1
+
+@header "#include <dos/dostags.h>"
+@header "static struct MsgPort *lento_port; static struct DosList *lento_vol;"
+
+# a volume "Lento" whose handler is a port of this program that nobody serves
+@native func lento_poner() -> Bool
+"""
+    if (!(lento_port = CreateMsgPort())) return FALSE;
+    if (!(lento_vol = MakeDosEntry((CONST_STRPTR)"Lento", DLT_VOLUME))) return FALSE;
+    lento_vol->dol_Task = lento_port;
+    lento_vol->dol_misc.dol_volume.dol_DiskType = ID_DOS_DISK;
+    DateStamp(&lento_vol->dol_misc.dol_volume.dol_VolumeDate);
+    LockDosList(LDF_VOLUMES | LDF_WRITE);
+    AddDosEntry(lento_vol);
+    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    return TRUE;
+"""
+end
+
+# how many questions wait at its port
+@native func lento_preguntas() -> Int
+"""
+    struct Node *n;
+    LONG c = 0;
+    Forbid();
+    for (n = lento_port->mp_MsgList.lh_Head; n->ln_Succ; n = n->ln_Succ) c++;
+    Permit();
+    return c;
+"""
+end
+
+# the answers, late: "no disk"
+@native func lento_contestar()
+"""
+    struct Message *m;
+    while ((m = GetMsg(lento_port))) {
+        struct DosPacket *dp = (struct DosPacket *)m->mn_Node.ln_Name;
+        struct MsgPort *reply = dp->dp_Port;
+        dp->dp_Res1 = DOSFALSE;
+        dp->dp_Res2 = ERROR_NO_DISK;
+        dp->dp_Port = lento_port;
+        PutMsg(reply, m);
+    }
+"""
+end
+
+@native func lento_quitar()
+"""
+    LockDosList(LDF_VOLUMES | LDF_WRITE);
+    RemDosEntry(lento_vol);
+    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    FreeDosEntry(lento_vol);
+    Delay(5);
+    lento_contestar();
+    DeleteMsgPort(lento_port);
+"""
+end
+
+# the name of the volume the program is on (PROGDIR:)
+@native func volumen_propio() -> String
+"""
+    static char name[34];
+    char path[40];
+    STRPTR c;
+    name[0] = 0;
+    if (NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path))) {
+        if ((c = (STRPTR)strchr(path, ':'))) *c = 0;
+        strncpy(name, path, sizeof(name) - 1);
+    }
+    return (STRPTR)name;
+"""
+end
+
+# the size and free space in KB from Info() on the volume, as the Shell's Info gives them
+@native func info_kb(nombre: String, libre: Bool) -> Int
+"""
+    char path[40];
+    struct InfoData *id = AllocMem(sizeof(struct InfoData), MEMF_PUBLIC | MEMF_CLEAR);
+    BPTR l;
+    LONG r = -2;
+    ULONG b;
+    if (!id) return -3;
+    strncpy(path, (char *)nombre, 30); path[30] = 0;
+    strcat(path, ":");
+    if ((l = Lock((CONST_STRPTR)path, ACCESS_READ))) {
+        if (Info(l, id)) {
+            b = libre ? id->id_NumBlocks - id->id_NumBlocksUsed : id->id_NumBlocks;
+            r = (LONG)((b >> 10) * id->id_BytesPerBlock + (((b & 1023) * id->id_BytesPerBlock) >> 10));
+        }
+        UnLock(l);
+    }
+    FreeMem(id, sizeof(struct InfoData));
+    return r;
+"""
+end
+
+const LENTO = "Lento"
+
+func lejos(a: Int, b: Int, margen: Int) -> Bool
+    return a - b > margen or b - a > margen
+end
+
+func buscar(n: Int, nombre: String) -> Int
+    for i in (0..n - 1)
+        if disk_name(i) == nombre
+            return i
+        end
+    end
+    return -1
+end
+
+Main
+    n = disks_read(1000)
+    propio = buscar(n, volumen_propio())
+    Print "con el del programa: #{propio >= 0}"
+    iguales = n > 0
+    for i in (0..n - 1)
+        # (3.2's RAM: grows and shrinks with the free memory: it may move between the two readings)
+        margen = 0
+        if disk_name(i) == "RAM Disk" or disk_name(i) == "Ram Disk"
+            margen = 256
+        end
+        if lejos(disk_kb(i), info_kb(disk_name(i), false), margen) or lejos(disk_free_kb(i), info_kb(disk_name(i), true), margen)
+            Print disk_name(i) + ": #{disk_kb(i)} #{disk_free_kb(i)} / #{info_kb(disk_name(i), false)} #{info_kb(disk_name(i), true)}"
+            iguales = false
+        end
+    end
+    Print "como Info: #{iguales}"
+
+    lento_poner()
+    t = time_ms()
+    n = disks_read(300)
+    t = time_ms() - t
+    l = buscar(n, LENTO)
+    Print "lento: #{disk_kb(l)} #{disk_free_kb(l)} a tiempo: #{t >= 250 and t < 1000}"
+    Print "preguntas al lento: #{lento_preguntas()}"
+
+    t = time_ms()
+    n = disks_read(300)
+    t = time_ms() - t
+    l = buscar(n, LENTO)
+    Print "otra vez: #{disk_kb(l)} a tiempo: #{t < 1000} preguntas: #{lento_preguntas()}"
+
+    lento_contestar()
+    n = disks_read(300)
+    l = buscar(n, LENTO)
+    Print "contestado, otra vez: #{disk_kb(l)} preguntas: #{lento_preguntas()}"
+
+    lento_quitar()
+    t = time_ms()
+    n = disks_read(1000)
+    t = time_ms() - t
+    todos = true
+    for i in (0..n - 1)
+        if disk_kb(i) < 0
+            todos = false
+        end
+    end
+    l = buscar(n, LENTO)
+    Print "sin el lento: #{l < 0} todos: #{todos and t < 1000}"
+
+    Print "red: #{net_ifs_read()} #{net_ifs_read()} #{net_if_bytes_in(0)}"
+    w = wifi_read("wlan0", 300)
+    Print "wifi: #{w}"
+end

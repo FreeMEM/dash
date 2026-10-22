@@ -2973,6 +2973,364 @@ static LONG _dash_cx_wait(LONG ms) {
 
 """
 
+    # Disks, network interfaces and WiFi signal for a meter (Trasfondo): every reading is made afresh and
+    # nothing waits longer than its time
+    METER_RUNTIME = """\
+/* Dash meter runtime (Trasfondo): disks_read(ms), the mounted volumes with their size and free space (each
+   handler is asked with ACTION_DISK_INFO and the answers waited for ms at most: one that does not answer is
+   left out, -1, and its packet collected when it comes); net_ifs_read(), Roadshow's interfaces with their
+   state and bytes in and out (-1 with another stack); wifi_read(interface, ms), the signal of the interface's
+   SANA-II driver (S2_GETSIGNALQUALITY, aborted after ms). Nothing is kept open between readings. */
+#include <dos/dosextens.h>
+#include <devices/timer.h>
+#include <proto/bsdsocket.h>
+#include <libraries/bsdsocket.h>
+#include <exec/errors.h>
+#ifndef SANA2_MAX_ADDR_BYTES
+#define SANA2_MAX_ADDR_BYTES 16
+struct IOSana2Req {
+    struct IORequest ios2_Req;
+    ULONG ios2_WireError;
+    ULONG ios2_PacketType;
+    UBYTE ios2_SrcAddr[SANA2_MAX_ADDR_BYTES];
+    UBYTE ios2_DstAddr[SANA2_MAX_ADDR_BYTES];
+    ULONG ios2_DataLength;
+    APTR ios2_Data;
+    APTR ios2_StatData;
+    APTR ios2_BufferManagement;
+};
+#define S2_CopyToBuff (TAG_USER + 0xB0000 + 1)
+#define S2_CopyFromBuff (TAG_USER + 0xB0000 + 2)
+#define S2ERR_NOT_SUPPORTED 8
+#endif
+#ifndef S2_GETSIGNALQUALITY
+#define S2_GETSIGNALQUALITY 0xC010      /* SANA-II wireless extension (Neil Cafferkey's drivers: prism2.device) */
+struct Sana2SignalQuality { LONG SignalLevel; LONG NoiseLevel; };    /* dBm */
+#endif
+#define _DASH_DISK_MAX 64
+#define _DASH_NETIF_MAX 16
+
+struct _DashDiskPkt {
+    struct StandardPacket sp;
+    struct InfoData id;              /* (longword aligned: the packet is 68 bytes) */
+    struct MsgPort *handler;
+    BPTR vol;
+    LONG slot;                       /* the volume in this reading, -1 if it is from an earlier one */
+};
+static struct { char name[32]; LONG kb, free; } _dash_disks[_DASH_DISK_MAX];
+static LONG _dash_disk_n = 0;
+static struct _DashDiskPkt *_dash_disk_out[_DASH_DISK_MAX];     /* the packets not answered yet */
+static LONG _dash_disk_nout = 0;
+static struct MsgPort *_dash_disk_port = NULL;
+static struct { char name[16]; BOOL up; ULONG in, out; } _dash_netifs[_DASH_NETIF_MAX];
+static LONG _dash_netif_n = 0;
+struct _DashWifiReq { struct IOSana2Req io; struct Sana2SignalQuality q; };
+static struct _DashWifiReq *_dash_wifi_left = NULL;           /* a request the driver did not give back */
+static struct MsgPort *_dash_wifi_lport = NULL;
+static LONG _dash_wifi_sig = 0, _dash_wifi_noise = 0;
+static struct MsgPort *_dash_mt_tport = NULL;
+static struct timerequest *_dash_mt_tr = NULL;
+
+/* The time limit: a timer request for ms; its signal, or 0 without timer.device (then ticks are counted) */
+static ULONG _dash_mt_start(LONG ms) {
+    if (!_dash_mt_tr) {
+        if ((_dash_mt_tport = CreateMsgPort()))
+            _dash_mt_tr = (struct timerequest *)CreateIORequest(_dash_mt_tport, sizeof(struct timerequest));
+        if (_dash_mt_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_VBLANK, (struct IORequest *)_dash_mt_tr, 0)) {
+            DeleteIORequest((struct IORequest *)_dash_mt_tr);
+            _dash_mt_tr = NULL;
+        }
+        if (!_dash_mt_tr) return 0;
+    }
+    if (ms < 0) ms = 0;
+    _dash_mt_tr->tr_node.io_Command = TR_ADDREQUEST;
+    _dash_mt_tr->tr_time.tv_secs = ms / 1000;
+    _dash_mt_tr->tr_time.tv_micro = (ms % 1000) * 1000;
+    SendIO((struct IORequest *)_dash_mt_tr);
+    return 1UL << _dash_mt_tport->mp_SigBit;
+}
+
+static void _dash_mt_stop(void) {
+    if (!CheckIO((struct IORequest *)_dash_mt_tr)) AbortIO((struct IORequest *)_dash_mt_tr);
+    WaitIO((struct IORequest *)_dash_mt_tr);
+}
+
+/* Until done(arg) or ms pass: TRUE if it was done. Each signal of port wakes it to look. */
+static BOOL _dash_mt_wait(struct MsgPort *port, LONG ms, BOOL (*done)(APTR), APTR arg) {
+    ULONG tsig, psig = 1UL << port->mp_SigBit;
+    LONG ticks = (ms + 19) / 20;
+    if (done(arg)) return TRUE;
+    if (!(tsig = _dash_mt_start(ms))) {
+        while (ticks-- > 0) { Delay(1); if (done(arg)) return TRUE; }
+        return FALSE;
+    }
+    for (;;) {
+        if (done(arg)) { _dash_mt_stop(); return TRUE; }
+        if (CheckIO((struct IORequest *)_dash_mt_tr)) { WaitIO((struct IORequest *)_dash_mt_tr); return done(arg); }
+        Wait(psig | tsig);
+    }
+}
+
+/* The answers that came: the ones of this reading fill their volume; the late ones are only freed */
+static void _dash_disk_collect(void) {
+    struct Message *m;
+    LONG i;
+    while ((m = GetMsg(_dash_disk_port))) {
+        struct _DashDiskPkt *p = (struct _DashDiskPkt *)m;
+        for (i = 0; i < _dash_disk_nout; i++)
+            if (_dash_disk_out[i] == p) { _dash_disk_out[i] = _dash_disk_out[--_dash_disk_nout]; break; }
+        if (p->slot >= 0 && p->sp.sp_Pkt.dp_Res1 != DOSFALSE && p->id.id_DiskType != ID_NO_DISK_PRESENT
+            && (!p->id.id_VolumeNode || p->id.id_VolumeNode == p->vol)) {
+            ULONG blocks = p->id.id_NumBlocks, bpb = p->id.id_BytesPerBlock;
+            ULONG fr = blocks > (ULONG)p->id.id_NumBlocksUsed ? blocks - p->id.id_NumBlocksUsed : 0;
+            _dash_disks[p->slot].kb = (LONG)((blocks >> 10) * bpb + (((blocks & 1023) * bpb) >> 10));
+            _dash_disks[p->slot].free = (LONG)((fr >> 10) * bpb + (((fr & 1023) * bpb) >> 10));
+        }
+        FreeMem(p, sizeof(*p));
+    }
+}
+
+static BOOL _dash_disk_answered(APTR arg) {
+    LONG i;
+    _dash_disk_collect();
+    for (i = 0; i < _dash_disk_nout; i++) if (_dash_disk_out[i]->slot >= 0) return FALSE;
+    return TRUE;
+}
+
+static void _dash_meter_cleanup(void);
+static void _dash_meter_at_exit(void) {
+    static BOOL at_exit = FALSE;
+    if (!at_exit) at_exit = atexit(_dash_meter_cleanup) == 0;
+}
+
+/* The mounted volumes (with a disk in, their handler running): how many. Each one's size and free space,
+   asked to all at once, waiting ms at most; one that does not answer (or is still busy with the question
+   of an earlier reading) gives -1. Nothing asks for a disk. */
+static LONG _dash_disks_read(LONG ms) {
+    struct DosList *dl;
+    LONG i, j;
+    _dash_meter_at_exit();
+    if (!_dash_disk_port && !(_dash_disk_port = CreateMsgPort())) return 0;
+    _dash_disk_collect();
+    for (i = 0; i < _dash_disk_nout; i++) _dash_disk_out[i]->slot = -1;
+    _dash_disk_n = 0;
+    dl = LockDosList(LDF_VOLUMES | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_VOLUMES)) && _dash_disk_n < _DASH_DISK_MAX) {
+        UBYTE *b = (UBYTE *)BADDR(dl->dol_Name);
+        struct _DashDiskPkt *p;
+        LONG len;
+        if (!dl->dol_Task || !b) continue;
+        i = _dash_disk_n++;
+        len = b[0] < sizeof(_dash_disks[i].name) ? b[0] : sizeof(_dash_disks[i].name) - 1;
+        memcpy(_dash_disks[i].name, b + 1, len);
+        _dash_disks[i].name[len] = 0;
+        _dash_disks[i].kb = _dash_disks[i].free = -1;
+        for (j = 0; j < _dash_disk_nout; j++) if (_dash_disk_out[j]->handler == dl->dol_Task) break;
+        if (j < _dash_disk_nout || _dash_disk_nout >= _DASH_DISK_MAX) continue;    /* still busy */
+        if (!(p = (struct _DashDiskPkt *)AllocMem(sizeof(*p), MEMF_PUBLIC | MEMF_CLEAR))) continue;
+        p->sp.sp_Msg.mn_Node.ln_Name = (char *)&p->sp.sp_Pkt;
+        p->sp.sp_Msg.mn_ReplyPort = _dash_disk_port;
+        p->sp.sp_Pkt.dp_Link = &p->sp.sp_Msg;
+        p->sp.sp_Pkt.dp_Port = _dash_disk_port;
+        p->sp.sp_Pkt.dp_Type = ACTION_DISK_INFO;
+        p->sp.sp_Pkt.dp_Arg1 = MKBADDR(&p->id);
+        p->handler = dl->dol_Task;
+        p->vol = MKBADDR(dl);
+        p->slot = i;
+        _dash_disk_out[_dash_disk_nout++] = p;
+        PutMsg(dl->dol_Task, &p->sp.sp_Msg);
+    }
+    UnLockDosList(LDF_VOLUMES | LDF_READ);
+    _dash_mt_wait(_dash_disk_port, ms, _dash_disk_answered, NULL);
+    return _dash_disk_n;
+}
+
+static STRPTR _dash_disk_name(LONG i) {
+    return _dash_str_dup((STRPTR)(i >= 0 && i < _dash_disk_n ? _dash_disks[i].name : ""), TRUE);
+}
+static LONG _dash_disk_kb(LONG i) { return i >= 0 && i < _dash_disk_n ? _dash_disks[i].kb : -1; }
+static LONG _dash_disk_free_kb(LONG i) { return i >= 0 && i < _dash_disk_n ? _dash_disks[i].free : -1; }
+
+/* bsdsocket.library with Roadshow's interface API (SBTC_HAVE_INTERFACE_API), or NULL: opened for each
+   reading, so a stack that went away or came back is seen */
+static struct Library *_dash_meter_socket(void) {
+    struct Library *SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
+    LONG have = FALSE;
+    struct TagItem tags[2];
+    if (!SocketBase) return NULL;
+    tags[0].ti_Tag = SBTM_GETREF(SBTC_HAVE_INTERFACE_API);
+    tags[0].ti_Data = (ULONG)&have;
+    tags[1].ti_Tag = TAG_END;
+    if (SocketBaseTagList(tags) != 0 || !have) { CloseLibrary(SocketBase); return NULL; }
+    return SocketBase;
+}
+
+/* The network interfaces of Roadshow (lo0 too): how many, each one's state and bytes; -1 without
+   bsdsocket.library or with a stack that does not tell (AmiTCP, Miami, the emulator's) */
+static LONG _dash_net_ifs_read(void) {
+    struct Library *SocketBase = _dash_meter_socket();
+    struct List *list;
+    struct Node *n;
+    _dash_netif_n = 0;
+    if (!SocketBase) return -1;
+    if ((list = ObtainInterfaceList())) {
+        for (n = list->lh_Head; n->ln_Succ && _dash_netif_n < _DASH_NETIF_MAX; n = n->ln_Succ) {
+            LONG i = _dash_netif_n, state = SM_Down;
+            SBQUAD_T in, out;
+            struct TagItem tags[4];
+            if (!n->ln_Name) continue;
+            memset(&in, 0, sizeof(in));
+            memset(&out, 0, sizeof(out));
+            tags[0].ti_Tag = IFQ_State; tags[0].ti_Data = (ULONG)&state;
+            tags[1].ti_Tag = IFQ_GetBytesIn; tags[1].ti_Data = (ULONG)&in;
+            tags[2].ti_Tag = IFQ_GetBytesOut; tags[2].ti_Data = (ULONG)&out;
+            tags[3].ti_Tag = TAG_END;
+            if (QueryInterfaceTagList((STRPTR)n->ln_Name, tags) != 0) continue;     /* (it just went) */
+            strncpy(_dash_netifs[i].name, n->ln_Name, sizeof(_dash_netifs[i].name) - 1);
+            _dash_netifs[i].name[sizeof(_dash_netifs[i].name) - 1] = 0;
+            _dash_netifs[i].up = state == SM_Up;
+            _dash_netifs[i].in = in.sbq_Low;
+            _dash_netifs[i].out = out.sbq_Low;
+            _dash_netif_n++;
+        }
+        ReleaseInterfaceList(list);
+    }
+    CloseLibrary(SocketBase);
+    return _dash_netif_n;
+}
+
+static STRPTR _dash_net_if_name(LONG i) {
+    return _dash_str_dup((STRPTR)(i >= 0 && i < _dash_netif_n ? _dash_netifs[i].name : ""), TRUE);
+}
+static BOOL _dash_net_if_up(LONG i) { return i >= 0 && i < _dash_netif_n && _dash_netifs[i].up; }
+static LONG _dash_net_if_bytes_in(LONG i) { return i >= 0 && i < _dash_netif_n ? (LONG)_dash_netifs[i].in : 0; }
+static LONG _dash_net_if_bytes_out(LONG i) { return i >= 0 && i < _dash_netif_n ? (LONG)_dash_netifs[i].out : 0; }
+
+/* SANA-II asks for these at OpenDevice; nothing is read or written with them here */
+static BOOL _dash_wifi_copy(APTR to __asm("a0"), APTR from __asm("a1"), ULONG n __asm("d0")) {
+    CopyMem(from, to, n);
+    return TRUE;
+}
+static struct TagItem _dash_wifi_bm[] = {
+    { S2_CopyToBuff, (ULONG)_dash_wifi_copy }, { S2_CopyFromBuff, (ULONG)_dash_wifi_copy }, { TAG_END, 0 }
+};
+
+static BOOL _dash_wifi_back(APTR io) { return CheckIO((struct IORequest *)io) != NULL; }
+
+static void _dash_wifi_free(struct _DashWifiReq *r, struct MsgPort *port) {
+    CloseDevice((struct IORequest *)&r->io);
+    FreeMem(r, sizeof(*r));
+    DeleteMsgPort(port);
+}
+
+/* The request a driver kept: freed once it gives it back; at the end, if it never did, its port is left
+   (and ignores the reply) so nothing touches the memory of the program that went */
+static void _dash_wifi_reap(BOOL ending) {
+    if (!_dash_wifi_left) return;
+    if (CheckIO((struct IORequest *)&_dash_wifi_left->io)) {
+        WaitIO((struct IORequest *)&_dash_wifi_left->io);
+        _dash_wifi_free(_dash_wifi_left, _dash_wifi_lport);
+        _dash_wifi_left = NULL;
+    } else if (ending) {
+        Forbid();
+        _dash_wifi_lport->mp_Flags = PA_IGNORE;
+        Permit();
+        _dash_wifi_left = NULL;
+    }
+}
+
+/* The WiFi signal of a Roadshow interface (its SANA-II device and unit, asked afresh), from the driver's
+   S2_GETSIGNALQUALITY, waiting ms at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time (aborted),
+   2 the driver does not have that command, 3 no such interface or its device does not open, 4 the driver
+   says error (offline...), -1 no Roadshow */
+static LONG _dash_wifi_ask(STRPTR devname, LONG unit, LONG ms);
+static LONG _dash_wifi_read(STRPTR iface, LONG ms) {
+    struct Library *SocketBase;
+    STRPTR dev = NULL;
+    LONG unit = 0;
+    char devname[64];
+    struct TagItem tags[3];
+    if (!(SocketBase = _dash_meter_socket())) return -1;
+    tags[0].ti_Tag = IFQ_DeviceName; tags[0].ti_Data = (ULONG)&dev;
+    tags[1].ti_Tag = IFQ_DeviceUnit; tags[1].ti_Data = (ULONG)&unit;
+    tags[2].ti_Tag = TAG_END;
+    devname[0] = 0;
+    if (iface && *iface && QueryInterfaceTagList(iface, tags) == 0 && dev) {
+        strncpy(devname, (char *)dev, sizeof(devname) - 1);
+        devname[sizeof(devname) - 1] = 0;
+    }
+    CloseLibrary(SocketBase);
+    if (!devname[0]) return 3;
+    return _dash_wifi_ask((STRPTR)devname, unit, ms);
+}
+
+/* The question to the driver (device and unit), as wifi_read */
+static LONG _dash_wifi_ask(STRPTR devname, LONG unit, LONG ms) {
+    struct _DashWifiReq *r;
+    struct MsgPort *port;
+    LONG err;
+    _dash_meter_at_exit();
+    _dash_wifi_reap(FALSE);
+    if (_dash_wifi_left) return 1;              /* the last question has not come back yet */
+    if (!(port = CreateMsgPort())) return 3;
+    if (!(r = (struct _DashWifiReq *)AllocMem(sizeof(*r), MEMF_PUBLIC | MEMF_CLEAR))) { DeleteMsgPort(port); return 3; }
+    r->io.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
+    r->io.ios2_Req.io_Message.mn_ReplyPort = port;
+    r->io.ios2_Req.io_Message.mn_Length = sizeof(struct IOSana2Req);
+    r->io.ios2_BufferManagement = _dash_wifi_bm;
+    if (OpenDevice((CONST_STRPTR)devname, unit, (struct IORequest *)&r->io, 0)) {
+        FreeMem(r, sizeof(*r));
+        DeleteMsgPort(port);
+        return 3;
+    }
+    r->io.ios2_Req.io_Command = S2_GETSIGNALQUALITY;
+    r->io.ios2_StatData = &r->q;
+    SendIO((struct IORequest *)&r->io);
+    if (!_dash_mt_wait(port, ms, _dash_wifi_back, &r->io)) {
+        AbortIO((struct IORequest *)&r->io);
+        if (!_dash_mt_wait(port, 200, _dash_wifi_back, &r->io)) {
+            _dash_wifi_left = r;                 /* it can not be freed while the driver has it */
+            _dash_wifi_lport = port;
+            return 1;
+        }
+        WaitIO((struct IORequest *)&r->io);
+        _dash_wifi_free(r, port);
+        return 1;
+    }
+    WaitIO((struct IORequest *)&r->io);
+    err = r->io.ios2_Req.io_Error;
+    if (!err) { _dash_wifi_sig = r->q.SignalLevel; _dash_wifi_noise = r->q.NoiseLevel; }
+    _dash_wifi_free(r, port);
+    return !err ? 0 : err == IOERR_NOCMD || err == S2ERR_NOT_SUPPORTED ? 2 : 4;
+}
+
+static LONG _dash_wifi_signal(void) { return _dash_wifi_sig; }
+static LONG _dash_wifi_noise_level(void) { return _dash_wifi_noise; }
+
+/* The program's end: the disk questions not answered and a WiFi request the driver kept stay out there
+   with their ports ignoring the reply; the rest is freed */
+static void _dash_meter_cleanup(void) {
+    if (_dash_disk_port) {
+        _dash_disk_collect();
+        if (_dash_disk_nout) {
+            Forbid();
+            _dash_disk_port->mp_Flags = PA_IGNORE;
+            Permit();
+        } else DeleteMsgPort(_dash_disk_port);
+        _dash_disk_port = NULL;
+        _dash_disk_nout = 0;
+    }
+    _dash_wifi_reap(TRUE);
+    if (_dash_mt_tr) {
+        CloseDevice((struct IORequest *)_dash_mt_tr);
+        DeleteIORequest((struct IORequest *)_dash_mt_tr);
+        _dash_mt_tr = NULL;
+    }
+    if (_dash_mt_tport) { DeleteMsgPort(_dash_mt_tport); _dash_mt_tport = NULL; }
+}
+
+"""
+
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
     DOSREQ_RUNTIME = """\
 /* dos_requesters(on): off, the process's pr_WindowPtr is -1 and a call that would put up a requester ("Insert
@@ -12065,6 +12423,7 @@ _RUNTIME_FLAGS = [
     ("CPU_RUNTIME", "uses_cpu"),            # Trasfondo
     ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
     ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
+    ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
@@ -12337,6 +12696,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
+        self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read (METER_RUNTIME, Trasfondo)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
@@ -12635,6 +12995,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.INSTANCE_RUNTIME)
         if self.uses_cx:
             parts.append(CTemplates.CX_RUNTIME)
+        if self.uses_meter:
+            parts.append(CTemplates.METER_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -12850,6 +13212,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_instance_cleanup();\n")
         if self.uses_cx:
             cleanup.insert(0, "    _dash_cx_cleanup();\n")   # the broker out of Exchange first
+        if self.uses_meter:
+            cleanup.append("    _dash_meter_cleanup();\n")
         if self.uses_dosreq:
             cleanup.append("    _dash_dosreq_cleanup();\n")
         if self.uses_cpu:
@@ -15090,8 +15454,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
-        if self.uses_cx:
-            self.uses_strings = True   # tooltype gives a String
+        if self.uses_cx or self.uses_meter:
+            self.uses_strings = True   # tooltype, disk_name and net_if_name give a String
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:
