@@ -76,6 +76,33 @@ class DashUIError(Exception):
     pass
 
 
+# the text a "tr": number goes with (dashweb D71); {"field": number} gives each text its own
+_MAIN_TEXT = {"text": "text", "label": "text", "button": "label", "string": "text", "cycle": "options",
+              "frame": "title", "tabs": "titles", "window": "title", "menu": "title", "item": "label"}
+
+
+def _tr_ids(node: dict, kind: str, where: str) -> dict:
+    """{field: catalog number} of a node, a window, a menu or a menu item"""
+    tr = node.get("tr")
+    if tr is None:
+        return {}
+    if isinstance(tr, bool) or not isinstance(tr, (int, dict)):
+        raise DashUIError(f"{where}: \"tr\" must be a number or {{\"field\": number}}, not {tr!r}")
+    if isinstance(tr, int):
+        if kind not in _MAIN_TEXT:
+            raise DashUIError(f"{where}: a {kind!r} has no text for \"tr\"")
+        return {_MAIN_TEXT[kind]: tr}
+    for field, number in tr.items():
+        _int(number, f'"tr" of {field!r}', where)
+    return tr
+
+
+def _text(node: dict, field: str, default, ids: dict) -> str:
+    """A property of the file as Dash: a text with a catalog number goes through tr (dashweb D71)"""
+    value = _value(node.get(field, default))
+    return f"tr({ids[field]}, {value})" if field in ids and isinstance(node.get(field, default), str) else value
+
+
 def dash_string(text) -> str:
     """A Dash string literal (escapes that the Dash lexer and C both take)."""
     out = []
@@ -145,7 +172,8 @@ class _Window:
             builtin, props = _LEAVES[kind]
         else:
             raise DashUIError(f"{self.where}: unknown object type {kind!r}")
-        args = ", ".join(_value(node.get(p, default)) for p, default in props)
+        ids = _tr_ids(node, kind, self.where)
+        args = ", ".join(_text(node, p, default, ids) for p, default in props)
         var = self.var_for(node, bool(settings or events))
         call = f"{builtin}({args})"
         self.lines.append(f"{indent}{var} = {call}" if var else f"{indent}{call}")
@@ -158,7 +186,7 @@ class _Window:
         if node.get("hidden"):
             self.after.append(f"    mui_set_visible({var}, false)")
         if node.get("help"):
-            self.after.append(f"    mui_help({var}, {dash_string(node['help'])})")
+            self.after.append(f"    mui_help({var}, {_text(node, 'help', '', ids)})")
         if kind in _GROUPS:
             for child in node.get("children", []):
                 self.node(child, depth + 1)
@@ -170,16 +198,18 @@ class _Window:
         win = self.win
         name = win.get("name")
         _check_name(name, "window", self.where)
-        title = win.get("title", name)
         win_id = _int(win.get("id", 0), "id", self.where)
-        self.lines.append(f"    _window = mui_window_begin({dash_string(title)}, {win_id})")
+        title = _text(win, "title", name, _tr_ids(win, "window", self.where))
+        self.lines.append(f"    _window = mui_window_begin({title}, {win_id})")
         for menu in win.get("menus", []):
-            self.lines.append(f"        mui_menu_begin({dash_string(menu.get('title', ''))})")
+            title = _text(menu, "title", "", _tr_ids(menu, "menu", self.where))
+            self.lines.append(f"        mui_menu_begin({title})")
             for item in menu.get("items", []):
                 if item.get("separator"):
                     self.lines.append("            mui_menu_separator()")
                 else:
-                    self.lines.append(f"            mui_menu_item({dash_string(item.get('label', ''))}, "
+                    label = _text(item, "label", "", _tr_ids(item, "item", self.where))
+                    self.lines.append(f"            mui_menu_item({label}, "
                                       f"{dash_string(item.get('key', ''))}, {_int(item.get('event', 0), 'a menu event', self.where)})")
             self.lines.append("        mui_menu_end()")
         root = win.get("root")

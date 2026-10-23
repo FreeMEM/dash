@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 581 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 584 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -3593,6 +3593,46 @@ Cómo funciona: los ratones USB, con un parche en `BeginIO` de `input.device` qu
 botones y posiciones absolutas no se tocan. Al quitarlo, si otro programa ha parcheado `BeginIO` encima, queda
 un trozo de 8 bytes que pasa todo sin tocar y no se libera nunca (`mouse_patch_left()` dice cuántos).
 
+### Traducciones: tr y @catalog
+
+Los textos que ve el usuario pueden salir de un catálogo de `locale.library`, en su idioma. El programa lleva
+sus textos en su propio idioma, y cada uno con un número:
+
+```ruby
+@catalog "Tachyon.catalog" 1 "español"   # el catálogo, su versión (0: cualquiera) y el idioma de los textos
+
+const MSG_SALIR = 3
+
+Main
+    Print tr(1, "Hola")                   # "Hello" con el catálogo inglés; "Hola" sin catálogo
+    Print tr(MSG_SALIR, "Salir")
+end
+```
+
+- `@catalog "X.catalog" versión "idioma"` (al nivel de las funciones; el idioma es opcional, por omisión
+  `english`): el catálogo se abre con el primer `tr` (también el de una global) desde `PROGDIR:Catalogs/<idioma>/` o
+  `LOCALE:Catalogs/<idioma>/`, en los idiomas que el usuario eligió en Preferencias. Para el idioma de los textos del
+  programa no se busca catálogo. Se cierra solo al acabar. Con versión distinta de 0, solo vale un catálogo de esa
+  versión.
+- `tr(número, "texto")`: el texto de ese número en el catálogo; el del programa si no hay catálogo, no tiene ese
+  número o no hay `locale.library`. Sin `@catalog`, siempre el del programa.
+- `catalog_open("X.catalog", versión)`: abre otro catálogo en lugar del que había (`false` si no hay: `tr` da los
+  textos del programa). `catalog_language()`: el idioma del catálogo en uso, `""` sin ninguno.
+- En un `.dashui`, `"tr": N` en un objeto, ventana o menú (ver `docs/MUI_EDITOR.md`).
+
+Los catálogos se hacen con `tools/catalogo.py`, sin FlexCat:
+
+```bash
+python3 tools/catalogo.py cd tachyon.dash -o Tachyon.cd       # los textos (y los de sus .dashui e imports)
+python3 tools/catalogo.py ct Tachyon.cd --language english --name Tachyon.catalog --version 1.0 \
+        [--update english.ct] -o english.ct                    # para traducir (--update guarda lo traducido)
+python3 tools/catalogo.py catalog english.ct                   # -> Catalogs/english/Tachyon.catalog
+```
+
+En el `.ct`, debajo de cada `MSG_<número>` va la traducción (vacía: queda el texto del programa) y, como
+comentario, el original. Vale lo mismo que en un texto de Dash: `\n`, `\t`, `\"`, `\e`. El catálogo sale en
+Latin-1, como los textos del programa. La versión del `.ct` (`1.0`) debe coincidir con la de `@catalog` (`1`).
+
 ### Sin requesters de DOS: dos_requesters
 
 ```ruby
@@ -3979,6 +4019,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red y WiFi | 18 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
@@ -3987,7 +4028,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **581** | |
+| **Total** | **584** | |
 
 ### Colores Estandar Amiga
 

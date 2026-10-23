@@ -3875,6 +3875,72 @@ static LONG _dash_usb_hid_emitter(LONG i) { return i >= 0 && i < _dash_hid_n ? (
 
 """
 
+    # Translations (dashweb D71): locale.library's catalogs
+    CATALOG_RUNTIME = """\
+/* Dash catalog runtime (dashweb D71): tr(id, text) gives the text of that number in the program's
+   catalog in the user's language, or text (the program's own language) without one. @catalog "X.catalog"
+   N names it: it opens on the first tr (PROGDIR:Catalogs/<language>/ or LOCALE:Catalogs/<language>/, the
+   locale.library way) and closes at the end; catalog_open opens another one meanwhile. */
+#include <libraries/locale.h>
+#include <proto/locale.h>
+struct LocaleBase *LocaleBase;        /* tentative: libnix's own if it opened it */
+static BOOL _dash_locale_ours = FALSE, _dash_catalog_tried = FALSE;
+static struct Catalog *_dash_catalog = NULL;
+#ifndef _DASH_CATALOG_NAME
+#define _DASH_CATALOG_NAME NULL
+#define _DASH_CATALOG_VERSION 0
+#define _DASH_CATALOG_BUILTIN NULL
+#endif
+
+static void _dash_catalog_cleanup(void) {
+    if (_dash_catalog) { CloseCatalog(_dash_catalog); _dash_catalog = NULL; }
+    if (_dash_locale_ours) { CloseLibrary((struct Library *)LocaleBase); LocaleBase = NULL; _dash_locale_ours = FALSE; }
+}
+
+/* The catalog name (version 0: any) in the user's languages; builtin: the language of the program's own
+   texts ("español"), for which no catalog is looked for (NULL: "english", as locale.library says).
+   FALSE without one (the texts stay the program's own) */
+static BOOL _dash_catalog_open_v(STRPTR name, LONG version, STRPTR builtin) {
+    struct TagItem tags[3];
+    LONG n = 0;
+    static BOOL at_exit = FALSE;
+    _dash_catalog_tried = TRUE;
+    if (!at_exit) at_exit = atexit(_dash_catalog_cleanup) == 0;
+    if (_dash_catalog) { CloseCatalog(_dash_catalog); _dash_catalog = NULL; }
+    if (!name || !*name) return FALSE;
+    if (!LocaleBase) {
+        LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR)"locale.library", 38);
+        _dash_locale_ours = LocaleBase != NULL;
+    }
+    if (!LocaleBase) return FALSE;
+    if (builtin && *builtin) { tags[n].ti_Tag = OC_BuiltInLanguage; tags[n++].ti_Data = (ULONG)builtin; }
+    if (version > 0) { tags[n].ti_Tag = OC_Version; tags[n++].ti_Data = (ULONG)version; }
+    tags[n].ti_Tag = TAG_DONE;
+    _dash_catalog = OpenCatalogA(NULL, (CONST_STRPTR)name, tags);
+    return _dash_catalog != NULL;
+}
+
+static BOOL _dash_catalog_open(STRPTR name, LONG version) {
+    return _dash_catalog_open_v(name, version, (STRPTR)_DASH_CATALOG_BUILTIN);
+}
+
+/* The text of that number in the catalog, or text (also for nil) */
+static STRPTR _dash_tr(LONG id, STRPTR text) {
+    if (!_dash_catalog_tried && _DASH_CATALOG_NAME)
+        _dash_catalog_open_v((STRPTR)_DASH_CATALOG_NAME, _DASH_CATALOG_VERSION, (STRPTR)_DASH_CATALOG_BUILTIN);
+    if (!_dash_catalog) return text;
+    return (STRPTR)GetCatalogStr(_dash_catalog, id, (CONST_STRPTR)(text ? text : (STRPTR)""));
+}
+
+/* The language of the catalog in use ("english"), "" without one */
+static STRPTR _dash_catalog_language(void) {
+    if (!_dash_catalog_tried && _DASH_CATALOG_NAME)
+        _dash_catalog_open_v((STRPTR)_DASH_CATALOG_NAME, _DASH_CATALOG_VERSION, (STRPTR)_DASH_CATALOG_BUILTIN);
+    return _dash_str_dup((STRPTR)(_dash_catalog && _dash_catalog->cat_Language ? (char *)_dash_catalog->cat_Language : ""), TRUE);
+}
+
+"""
+
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
     DOSREQ_RUNTIME = """\
 /* dos_requesters(on): off, the process's pr_WindowPtr is -1 and a call that would put up a requester ("Insert
@@ -13143,6 +13209,7 @@ _RUNTIME_FLAGS = [
     ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
+    ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
@@ -13417,6 +13484,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read (METER_RUNTIME, Trasfondo)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
+        self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
+        self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
@@ -13719,6 +13788,12 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.METER_RUNTIME)
         if self.uses_mouse:
             parts.append(CTemplates.MOUSE_RUNTIME)
+        if self.uses_catalog:
+            if self.catalog:
+                name, version, builtin = self.catalog
+                parts.append(f"#define _DASH_CATALOG_NAME {name}\n#define _DASH_CATALOG_VERSION {version}\n"
+                             f"#define _DASH_CATALOG_BUILTIN {builtin or 'NULL'}\n")
+            parts.append(CTemplates.CATALOG_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -13938,6 +14013,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_meter_cleanup();\n")
         if self.uses_mouse:
             cleanup.insert(0, "    _dash_mc_cleanup();\n")   # the patch out of input.device first
+        if self.uses_catalog:
+            cleanup.append("    _dash_catalog_cleanup();\n")
         if self.uses_dosreq:
             cleanup.append("    _dash_dosreq_cleanup();\n")
         if self.uses_cpu:
@@ -14037,6 +14114,7 @@ static LONG _dash_event_window_handle(void) {{
         self.c_blocks = list(node.c_blocks)    # @c
         self.stack_min = node.stack            # @stack (dashweb D24)
         self.workbench_output = node.workbench_output   # @workbench_output (dashweb D59)
+        self.catalog = node.catalog                     # @catalog (dashweb D71)
         # runtime functions (_dash_*) named by @native and @c code bring their runtime (D10b)
         import re
         for code in list(node.c_blocks) + [n.c_code for n in node.native_funcs]:
@@ -15804,6 +15882,7 @@ static {ret_type} {method_name}({params_str}) {{
         "ra_listbrowser_add", "ra_add_radio", "ra_add_clicktab",
         "ra_menu_title", "ra_menu_item", "ra_add_getfile",   # the ReAction runtime keeps its own copy
         "mouse_curve",                       # copies the factors of its list
+        "tr", "catalog_open",                # look at their texts (tr gives back its own or the catalog's)
     }
 
     def _frees(self, owned) -> str:
@@ -16188,6 +16267,10 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
         if self.uses_mouse:
             self.uses_arrays = True    # mouse_curve takes a list
+        if self.catalog:
+            self.uses_catalog = True   # @catalog: its runtime even before any tr
+        if self.uses_catalog:
+            self.uses_strings = True   # catalog_language gives a String
         if self.uses_cx or self.uses_meter or self.uses_mouse:
             self.uses_strings = True   # tooltype, disk_name and net_if_name give a String
         if self.uses_blend:

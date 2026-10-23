@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 581 funciones, 581 implementadas, 0 sin implementar.
+Total: 584 funciones, 584 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -478,6 +478,9 @@ Total: 581 funciones, 581 implementadas, 0 sin implementar.
 | `mouse_prefs_ticks()` | `LONG` | The system's mouse speed (Input preferences): 1 fastest, 2, 4 slowest |  |
 | `mouse_prefs_accel()` | `BOOL` | True if the system's mouse acceleration (Input preferences) is on |  |
 | `mouse_prefs_set(ticks, accel)` | `void` | Sets the system's mouse speed and acceleration; they go back as they were at the program's end |  |
+| `tr(id, text)` | `STRPTR` | The text number id of the program's catalog (@catalog) in the user's language; text (the program's own) without a catalog, without that number or without locale.library |  |
+| `catalog_open(name, version)` | `BOOL` | Opens another catalog ("X.catalog", version 0: any) in the user's languages instead of the one in use; false if there is none (tr gives the program's own texts) |  |
+| `catalog_language()` | `STRPTR` | The language of the catalog in use ("english"), "" without one |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |

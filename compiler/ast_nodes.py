@@ -686,6 +686,7 @@ class Program(ASTNode):
     c_blocks: List[str] = field(default_factory=list)   # @c: C code at top level
     stack: int = 0                                       # @stack: the largest one, 0 if none
     workbench_output: Optional[str] = None               # @workbench_output: the C literal, None if none
+    catalog: Optional[tuple] = None                      # @catalog: (name literal, version, language literal)
     extra_mains: List[MainBlock] = field(default_factory=list)  # Duplicate Main blocks (an error)
     location: Optional[SourceLocation] = None
 

@@ -31,6 +31,8 @@ network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <lin
 the system in $DASH_EMU_SYS_SSL / $DASH_EMU_SYS_32_SSL (tools/emu_sys_amissl.sh), not on the A500.
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
+"# emu-catalog: lib/x.ct" (repeatable) compiles that .ct with tools/catalogo.py into DH0:Catalogs/<language>/ (the
+test's PROGDIR:) before the boot (dashweb D71).
 "# emu-shot: SECONDS X Y RRGGBB" (repeatable) runs a test in its own boot with a screenshot that many
 seconds after boot (tools/emu_run.py --screenshot, all of them in the same run): pixel X,Y of the front
 screen must have that colour. Not on the A500 (reading the screen takes seconds there).
@@ -479,6 +481,13 @@ def emu_args(test_file: Path) -> str:
     return ""
 
 
+def emu_catalogs(test_file: Path) -> List[Path]:
+    """'# emu-catalog: data/x_english.ct' (dashweb D71): .ct files compiled with tools/catalogo.py into
+    DH0:Catalogs/<language>/ (the test's PROGDIR:) before the boot"""
+    return [test_file.parent / l.split(":", 1)[1].strip()
+            for l in test_file.read_text().splitlines() if l.startswith("# emu-catalog:")]
+
+
 def emu_shots(test_file: Path) -> List[tuple]:
     """'# emu-shot: SECONDS X Y RRGGBB' lines: (seconds, x, y, colour)."""
     shots = []
@@ -708,12 +717,22 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
         shot_dir.mkdir(parents=True, exist_ok=True)
         for f in shot_files:
             f.unlink(missing_ok=True)
+    def catalogs(hd):
+        sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+        from catalogo import build_catalog
+        for t, _ in selected:
+            for ct in emu_catalogs(t):
+                name, language, data = build_catalog(ct.read_text(encoding="utf-8"))
+                out = Path(hd) / "Catalogs" / language / name
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(data)
     try:
         runs = run_programs([PROJECT_ROOT / "bin" / f"test_{t.stem}" for t, _ in selected],
                             args=[emu_args(t) for t, _ in selected],
                             timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"] + extra_config,
                             system=system, workbench=machine["workbench"],
-                            screenshot=[(s[0], f) for s, f in zip(shots, shot_files)] or None)
+                            screenshot=[(s[0], f) for s, f in zip(shots, shot_files)] or None,
+                            on_disk=catalogs)
     except RuntimeError as e:
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=str(e))]

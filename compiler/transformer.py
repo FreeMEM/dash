@@ -81,6 +81,7 @@ class DashASTBuilder(Transformer):
         self._c_blocks: List[str] = []
         self._stack = 0
         self._workbench_output: Optional[str] = None
+        self._catalog: Optional[tuple] = None
 
     # the top-level definitions are kept in these lists (their rules return "")
     _COLLECTED = ("_imports", "_constants", "_global_vars", "_structs", "_enums", "_windows", "_functions",
@@ -143,7 +144,8 @@ class DashASTBuilder(Transformer):
             links=self._links,
             c_blocks=self._c_blocks,
             stack=self._stack,
-            workbench_output=self._workbench_output
+            workbench_output=self._workbench_output,
+            catalog=self._catalog
         )
 
     def import_stmt(self, items) -> ImportStmt:
@@ -443,6 +445,12 @@ class DashASTBuilder(Transformer):
     def stack_directive(self, items) -> str:
         """@stack N: the program needs at least N bytes of stack (dashweb D24)."""
         self._stack = max(self._stack, parse_int(items[0].value))
+        return ""
+
+    def catalog_directive(self, items) -> str:
+        """@catalog "Tachyon.catalog" 1 ("español"): the program's catalog of translations, its version
+        (0: any) and the language of its own texts (default: english) (dashweb D71)."""
+        self._catalog = (items[0].value, parse_int(items[1].value), items[2].value if len(items) > 2 else None)
         return ""
 
     def workbench_output_directive(self, items) -> str:

@@ -4180,6 +4180,21 @@ TASK_FUNCTIONS = {
         name="mouse_prefs_set", params=["ticks", "accel"], return_type="void",
         c_template="_dash_mouse_prefs_set(${ticks}, ${accel})",
         description="Sets the system's mouse speed and acceleration; they go back as they were at the program's end"),
+    # dashweb D71: translations with locale.library's catalogs
+    "tr": BuiltinFunc(
+        name="tr", params=["id", "text"], return_type="STRPTR",
+        c_template="_dash_tr(${id}, ${text})",
+        description="The text number id of the program's catalog (@catalog) in the user's language; text (the "
+                    "program's own) without a catalog, without that number or without locale.library"),
+    "catalog_open": BuiltinFunc(
+        name="catalog_open", params=["name", "version"], return_type="BOOL",
+        c_template="_dash_catalog_open(${name}, ${version})",
+        description="Opens another catalog (\"X.catalog\", version 0: any) in the user's languages instead of "
+                    "the one in use; false if there is none (tr gives the program's own texts)"),
+    "catalog_language": BuiltinFunc(
+        name="catalog_language", params=[], return_type="STRPTR",
+        c_template="_dash_catalog_language()",
+        description="The language of the catalog in use (\"english\"), \"\" without one"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",
