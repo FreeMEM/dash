@@ -1269,6 +1269,7 @@ static void _dash_font_cleanup(void) {
 #include <dos/dostags.h>
 struct _DashTask {
     LONG (*func)(LONG);
+    struct Task *self;               /* its process (task_wake finds its _DashTask by it) */
     LONG arg, result, pri;
     volatile LONG done;
     struct Task *owner;              /* the program, signalled when f returns (task_signal) */
@@ -1281,11 +1282,26 @@ static BYTE _dash_task_sigbit = -1;
 
 static void _dash_task_proc(void) {
     struct _DashTask *t = _dash_task_next;
-    SetTaskPri(FindTask(NULL), t->pri);
+    t->self = FindTask(NULL);
+    SetTaskPri(t->self, t->pri);
     t->result = t->func(t->arg);
+#ifdef _DASH_NET_RUNTIME
+    _dash_net_release();  /* the network, if it was this task's: closed by its own process (D69) */
+#endif
     Forbid();             /* done only once this process has left the program's code */
     t->done = 1;
     if (_dash_task_sigmask) Signal(t->owner, _dash_task_sigmask);
+}
+
+/* From the C of a task: wakes the program with task_signal()'s signal, without ending (D69), so that
+   it looks at what the task left for it (behind a semaphore of the program's own) */
+static void _dash_task_wake(void) {
+    struct Task *me = FindTask(NULL);
+    struct _DashTask *t;
+    Forbid();
+    for (t = _dash_tasks; t && t->self != me; t = t->next) ;
+    if (t && _dash_task_sigmask) Signal(t->owner, _dash_task_sigmask);
+    Permit();
 }
 
 /* A signal that every task_start sends to the program when its function returns (dashweb D60),
@@ -1307,13 +1323,14 @@ static LONG _dash_task_start_with(APTR func, LONG arg, LONG stack, LONG pri) {
     t->pri = me->tc_Node.ln_Pri + pri;
     t->owner = me;
     _dash_task_next = t;
+    t->next = _dash_tasks;           /* (in the list before it runs: task_wake looks there) */
+    _dash_tasks = t;
     if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_task_proc, NP_Name, (ULONG)"dash_task",
                            NP_Priority, me->tc_Node.ln_Pri + 1, NP_StackSize, stack, TAG_DONE)) {
+        _dash_tasks = t->next;
         FreeVec(t);
         return 0;
     }
-    t->next = _dash_tasks;
-    _dash_tasks = t;
     return (LONG)t;
 }
 
@@ -4354,9 +4371,25 @@ static LONG _dash_str_to_buffer(STRPTR s, APTR buffer, LONG offset) {
 struct Library *SocketBase = NULL;
 static const char *_dash_net_err = "";
 
+/* The network belongs to one process at a time (D69): the program, or a task of task_start that uses it
+   first. Each AmigaOS process needs its own bsdsocket.library, and its sockets, lookups and TLS are its
+   own. The owner lets it go when its task ends (or the program does); another process gets -1. */
+#define _DASH_NET_RUNTIME 1
+static struct Task *volatile _dash_net_owner = NULL;
+static void (*_dash_net_tls_end)(void) = NULL;   /* TLS's, closed by the owner when it lets the network go */
+#define _DASH_NET_MINE() (SocketBase && SysBase->ThisTask == _dash_net_owner)
+
 static BOOL _dash_net_init(void) {
+    struct Task *me = FindTask(NULL);
+    Forbid();
+    if (!_dash_net_owner) _dash_net_owner = me;
+    Permit();
+    if (_dash_net_owner != me) { _dash_net_err = "la red es de otra tarea"; return FALSE; }
     if (!SocketBase) SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
-    if (!SocketBase) _dash_net_err = "no hay bsdsocket.library (falta una pila TCP/IP)";
+    if (!SocketBase) {
+        _dash_net_err = "no hay bsdsocket.library (falta una pila TCP/IP)";
+        _dash_net_owner = NULL;
+    }
     return SocketBase != NULL;
 }
 
@@ -4374,6 +4407,7 @@ static void _dash_net_dns_wait(void);
 #define _DASH_FD_EVENTS (0x02 | 0x08 | 0x10 | 0x20 | 0x40)   /* FD_CONNECT READ WRITE ERROR CLOSE */
 static volatile ULONG _dash_net_sigmask = 0;
 static BYTE _dash_net_sigbit = -1;
+static BOOL _dash_net_sig_tried = FALSE;          /* (by the owner: its signal, on its library) */
 
 static void _dash_net_watch(LONG sock) {
     ULONG events = _DASH_FD_EVENTS;
@@ -4383,13 +4417,12 @@ static void _dash_net_watch(LONG sock) {
 /* The signal mask, or 0; each call forgets the events already posted (bsdsocket keeps a queue of
    them), so the program calls it before every wait: mui_wait_event_signals(net_signal()) */
 static LONG _dash_net_signal(void) {
-    static BOOL tried = FALSE;
     ULONG events = _DASH_FD_EVENTS;
     LONG s, n;
     struct TagItem tags[2];
-    if (!tried) {
-        tried = TRUE;
-        if (!_dash_net_init()) return 0;
+    if (!_dash_net_init()) return 0;
+    if (!_dash_net_sig_tried) {
+        _dash_net_sig_tried = TRUE;
         /* a stack that takes the tag but not the option (FS-UAE's: ENOPROTOOPT) would never post */
         if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) return 0;
         n = setsockopt(s, SOL_SOCKET, SO_EVENTMASK, &events, sizeof(events));
@@ -4411,10 +4444,11 @@ static LONG _dash_net_signal(void) {
     return (LONG)_dash_net_sigmask;
 }
 
+static void _dash_net_release(void);
+
 static void _dash_net_cleanup(void) {
     _dash_net_dns_wait();
-    if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
-    if (_dash_net_sigbit >= 0) { FreeSignal(_dash_net_sigbit); _dash_net_sigbit = -1; _dash_net_sigmask = 0; }
+    _dash_net_release();
 }
 
 /* host name or dotted address to an IPv4 address (network order); FALSE if unknown */
@@ -4434,7 +4468,7 @@ static LONG _dash_net_select(LONG sock, BOOL write, LONG ms) {
     fd_set set;
     struct timeval tv;
     LONG r;
-    if (sock < 0 || !SocketBase) return -1;
+    if (sock < 0 || !_DASH_NET_MINE()) return -1;
     FD_ZERO(&set);
     FD_SET(sock, &set);
     tv.tv_sec = ms / 1000;
@@ -4480,7 +4514,7 @@ static LONG _dash_net_connect(STRPTR host, LONG port, LONG timeout_ms) {
 /* length bytes from data; all of them or -1 */
 static LONG _dash_net_send_buffer(LONG sock, APTR data, LONG length) {
     LONG done = 0, n;
-    if (sock < 0 || !SocketBase) return -1;
+    if (sock < 0 || !_DASH_NET_MINE()) return -1;
     while (done < length) {
         n = send(sock, (UBYTE *)data + done, length - done, 0);
         if (n <= 0) { _dash_net_err = "error al enviar"; return -1; }
@@ -4695,6 +4729,7 @@ static LONG _dash_net_connect_poll(LONG sock) {
     LONG i = _dash_net_pending(sock), err = 0, off = 0, r;
     socklen_t len = sizeof(err);
     struct _DashDns *d;
+    if (!_DASH_NET_MINE()) { _dash_net_err = "la red es de otra tarea"; return -1; }
     if (i < 0) return sock >= 0 ? 1 : -1;
     /* the time the program did not look (busy elsewhere) does not count against the limit */
     {
@@ -4743,13 +4778,31 @@ static LONG _dash_net_connect_stage(LONG sock) {
     return i < 0 ? 2 : _dash_net_pend[i].stage;
 }
 
+/* The owner lets the network go (its task ends, or the program does): its lookups waited for, its TLS
+   closed, its library closed (and its sockets with it); then another process may take it */
+static void _dash_net_release(void) {
+    if (!_dash_net_owner || SysBase->ThisTask != _dash_net_owner) return;
+    _dash_net_dns_wait();
+    if (_dash_net_tls_end) _dash_net_tls_end();
+    while (_dash_net_npend) {
+        _dash_net_dns_drop(_dash_net_pend[0].dns);
+        _dash_net_unpend(0);
+    }
+    if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
+    if (_dash_net_sigbit >= 0) { FreeSignal(_dash_net_sigbit); _dash_net_sigbit = -1; _dash_net_sigmask = 0; }
+    _dash_net_sig_tried = FALSE;
+    _dash_net_owner = NULL;
+}
+
 static void _dash_net_close(LONG sock) {
-    LONG i = _dash_net_pending(sock);
+    LONG i;
+    if (!_DASH_NET_MINE()) return;
+    i = _dash_net_pending(sock);
     if (i >= 0) {                 /* still opening: forget it */
         _dash_net_dns_drop(_dash_net_pend[i].dns);
         _dash_net_unpend(i);
     }
-    if (sock >= 0 && SocketBase) CloseSocket(sock);
+    if (sock >= 0 && _DASH_NET_MINE()) CloseSocket(sock);
 }
 
 static STRPTR _dash_net_error(void) {
@@ -4823,7 +4876,7 @@ static LONG _dash_net_accept(LONG sock, LONG timeout_ms) {
 static STRPTR _dash_net_peer(LONG sock) {
     struct sockaddr_in sa;
     socklen_t len = sizeof(sa);
-    if (sock < 0 || !SocketBase || getpeername(sock, (struct sockaddr *)&sa, &len) < 0) return NULL;
+    if (sock < 0 || !_DASH_NET_MINE() || getpeername(sock, (struct sockaddr *)&sa, &len) < 0) return NULL;
     return _dash_str_dup((STRPTR)Inet_NtoA(sa.sin_addr.s_addr), TRUE);
 }
 
@@ -4831,7 +4884,7 @@ static STRPTR _dash_net_peer(LONG sock) {
 static LONG _dash_net_port(LONG sock) {
     struct sockaddr_in sa;
     socklen_t len = sizeof(sa);
-    if (sock < 0 || !SocketBase || getsockname(sock, (struct sockaddr *)&sa, &len) < 0) return -1;
+    if (sock < 0 || !_DASH_NET_MINE() || getsockname(sock, (struct sockaddr *)&sa, &len) < 0) return -1;
     return ntohs(sa.sin_port);
 }
 
@@ -4846,7 +4899,7 @@ static LONG _dash_net_udp_send_buffer(LONG sock, STRPTR host, LONG port, APTR da
     struct sockaddr_in sa;
     struct in_addr a;
     LONG n;
-    if (sock < 0 || !SocketBase) return -1;
+    if (sock < 0 || !_DASH_NET_MINE()) return -1;
     if (host && !strcmp((char *)host, "255.255.255.255")) a.s_addr = htonl(INADDR_BROADCAST);
     else if (!_dash_net_lookup(host, &a)) return -1;
     _dash_net_addr(&sa, a, port);
@@ -4976,12 +5029,16 @@ static void _dash_tls_forget(LONG t, BOOL keep) {
     if (_dash_tls_host[t]) { FreeVec(_dash_tls_host[t]); _dash_tls_host[t] = NULL; }
 }
 
+static void _dash_tls_cleanup(void);
+static int _dash_tls_errno = 0;             /* the owner's (D69): not libnix's errno, which every process shares */
+
 static BOOL _dash_tls_init(void) {
     UBYTE seed[64];
     struct DateStamp ds;
     LONG i;
+    if (!_dash_net_init()) return FALSE;     /* (the network's owner only) */
     if (_dash_tls_ctx) return TRUE;
-    if (!_dash_net_init()) return FALSE;
+    _dash_net_tls_end = _dash_tls_cleanup;
     if (!AmiSSLMasterBase) AmiSSLMasterBase = OpenLibrary((CONST_STRPTR)"amisslmaster.library", AMISSLMASTER_MIN_VERSION);
     if (!AmiSSLMasterBase) { _dash_net_err = "no hay AmiSSL (amisslmaster.library)"; return FALSE; }
     if (!_dash_tls_open) {
@@ -4991,7 +5048,7 @@ static BOOL _dash_tls_init(void) {
         for (v = AMISSL_CURRENT_VERSION; v >= AMISSL_V303 && !_dash_tls_open; v--)
             _dash_tls_open = OpenAmiSSLTags(v, AmiSSL_UsesOpenSSLStructs, FALSE,
                                             AmiSSL_GetAmiSSLBase, (ULONG)&AmiSSLBase, AmiSSL_GetAmiSSLExtBase, (ULONG)&AmiSSLExtBase,
-                                            AmiSSL_SocketBase, (ULONG)SocketBase, AmiSSL_ErrNoPtr, (ULONG)&errno, TAG_DONE) == 0;
+                                            AmiSSL_SocketBase, (ULONG)SocketBase, AmiSSL_ErrNoPtr, (ULONG)&_dash_tls_errno, TAG_DONE) == 0;
         if (!_dash_tls_open) {
             _dash_net_err = "no se puede abrir AmiSSL (hace falta AmiSSL 5.1 o posterior)";
             return FALSE;
@@ -5013,6 +5070,7 @@ static BOOL _dash_tls_init(void) {
 
 static void _dash_tls_cleanup(void) {
     LONG i;
+    if (_dash_net_owner && SysBase->ThisTask != _dash_net_owner) return;    /* (only the owner's process) */
     for (i = 0; i < _DASH_TLS_MAX; i++) {
         if (_dash_tls_ssl[i]) { SSL_free(_dash_tls_ssl[i]); _dash_tls_ssl[i] = NULL; }
         _dash_tls_forget(i, FALSE);
@@ -5066,7 +5124,7 @@ static LONG _dash_tls_connect(LONG sock, STRPTR host) {
 }
 
 static SSL *_dash_tls_get(LONG t) {
-    return (t >= 0 && t < _DASH_TLS_MAX) ? _dash_tls_ssl[t] : NULL;
+    return (t >= 0 && t < _DASH_TLS_MAX && _DASH_NET_MINE()) ? _dash_tls_ssl[t] : NULL;
 }
 
 /* The same as tls_connect without waiting for the handshake (dashweb D36): the connection or

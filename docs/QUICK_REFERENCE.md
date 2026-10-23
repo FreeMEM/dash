@@ -358,6 +358,8 @@ task_start_with(f, arg, stack, pri)   # stack in bytes (0: 128 KB), priority rel
 task_done(t)                # true once it returned (does not wait)
 task_result(t)              # what it returned (waits)
 task_free(t)                # forget it (waits); task_signal(): mask for mui_wait_event_signals
+# in a task's C: _dash_task_wake() wakes the program (task_signal); the network belongs to one process at a time
+# (the first to use it, until its task ends): _dash_net_connect_start/poll, _send_buffer/_recv_buffer, _dash_tls_*_buffer...
 ```
 
 ## Desktop Canvas (Workbench backdrop)
