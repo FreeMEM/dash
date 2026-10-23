@@ -14733,7 +14733,7 @@ static {ret_type} {method_name}({params_str}) {{
                 self.context.own(node.name, "obj")
                 self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
                 if init is not None:
-                    value = self._generate_expression(init)
+                    value = self._obj_value(self._generate_expression(init))
                     self.emit(f"{indent}_dash_obj_set((void **)&{node.name}, {value});\n")
             elif c_type == "STRPTR":
                 self.uses_strings = True
@@ -14901,10 +14901,17 @@ static {ret_type} {method_name}({params_str}) {{
                 return value.replace("DashArray_from(", "DashArray_from_new(", 1)
         return None
 
+    @staticmethod
+    def _obj_value(value: str) -> str:
+        """An object for _dash_obj_set: a value that came as a (LONG) goes as the pointer it is (GCC 6 warns
+        of an integer passed as a pointer, -Wint-conversion)"""
+        return f"(void *)({value})" if value.startswith("(LONG)") else value
+
     def _assign_object(self, name: str, c_type: str, value: str):
         """name = value for an array or struct variable: the variable holds a
         reference (adopting a new object); loop variables only borrow."""
         indent = self.context.indent
+        value = self._obj_value(value)
         if not self.context.is_declared(name):
             self.context.declare_var(name)
             self.context.own(name, "obj")
