@@ -1,0 +1,43 @@
+# Texts compared when one is nil (dashweb D70): nil equals only nil and goes before any text, also "";
+# no read of address 0 (strcmp would: a crash on AmigaOS 4 or with MuForce). A struct field left nil is
+# the usual case.
+# expect-c: _dash_str_cmp(
+# expect-out: nil == "x": false, nil != "x": true
+# expect-out: "x" == nil: false, nil == "": false
+# expect-out: nil == nil: true, campo == nil: true
+# expect-out: nil < "a": true, "a" > nil: true, nil <= nil: true
+# expect-out: con texto: true
+
+struct Palabra
+    clave: String = nil
+end
+
+func igual(a: String, b: String) -> Bool
+    return a == b
+end
+
+Main
+    var s: String = nil
+    var t: String = nil
+    x = "x"
+    a = "a"
+    vacio = ""
+    p = Palabra()
+    r1 = s == x
+    r2 = s != x
+    Print "nil == \"x\": #{r1}, nil != \"x\": #{r2}"
+    r1 = igual(x, s)
+    r2 = s == vacio
+    Print "\"x\" == nil: #{r1}, nil == \"\": #{r2}"
+    r1 = igual(s, t)
+    r2 = igual(p.clave, s)
+    Print "nil == nil: #{r1}, campo == nil: #{r2}"
+    r1 = s < a
+    r2 = a > s
+    r3 = s <= t
+    Print "nil < \"a\": #{r1}, \"a\" > nil: #{r2}, nil <= nil: #{r3}"
+    p.clave = "hola"
+    h = "hola"
+    r1 = p.clave == h
+    Print "con texto: #{r1}"
+end
