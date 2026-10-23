@@ -1,0 +1,83 @@
+# program_relaunch from the Workbench (Trasfondo starts from WBStartup or its icon): the test opens itself as
+# the Workbench does (OpenWorkbenchObject); that copy, started from the Workbench, takes single_instance, asks
+# program_relaunch and ends; its relaunch comes from the Workbench too and finds single_instance free.
+# workbench
+# expect-out: relanzado desde el Workbench: true true
+# expect-out: fin
+
+@header "#include <workbench/startup.h>"
+@header "#include <proto/wb.h>"
+@header "extern struct WBStartup *_WBenchMsg;"
+
+@native func escribir(path: String, text: String)
+"""
+    BPTR f = Open((CONST_STRPTR)path, MODE_NEWFILE);
+    if (f) { Write(f, text, strlen((char *)text)); Close(f); }
+"""
+end
+
+@native func esperar(path: String) -> String
+"""
+    char b[64];
+    LONG i, n;
+    BPTR f;
+    b[0] = 0;
+    for (i = 0; i < 750; i++) {
+        if ((f = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
+            n = Read(f, b, sizeof(b) - 1);
+            Close(f);
+            if (n > 0) { b[n] = 0; while (n > 0 && (b[n - 1] == '\n' || b[n - 1] == ' ')) b[--n] = 0; break; }
+        }
+        Delay(2);
+    }
+    return _dash_str_dup((STRPTR)b, TRUE);
+"""
+end
+
+@native func existe(path: String) -> Bool
+"""
+    BPTR l = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (l) UnLock(l);
+    return l != 0;
+"""
+end
+
+@native func desde_workbench() -> Bool
+"""
+    return _WBenchMsg != NULL;
+"""
+end
+
+# as a double click on it
+@native func abrir_en_workbench() -> Bool
+"""
+    char path[300], name[120];
+    struct Library *WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 44);
+    BOOL r = FALSE;
+    if (!WorkbenchBase) return FALSE;
+    if (NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path)) && GetProgramName((STRPTR)name, sizeof(name))) {
+        AddPart((STRPTR)path, FilePart((CONST_STRPTR)name), sizeof(path));
+        r = OpenWorkbenchObjectA((STRPTR)path, NULL);
+    }
+    CloseLibrary(WorkbenchBase);
+    return r;
+"""
+end
+
+Main
+    if existe("RAM:wb_relanzar.flag")
+        libre = single_instance("DashRelanzarWB")
+        escribir("RAM:wb_relanzado.txt", "#{libre} #{desde_workbench()}\n")
+    elif existe("RAM:wb_padre.flag")
+        single_instance("DashRelanzarWB")
+        escribir("RAM:wb_relanzar.flag", "1")
+        program_relaunch()
+        time_delay(10)
+    else
+        escribir("RAM:wb_padre.flag", "1")
+        abrir_en_workbench()
+        r = esperar("RAM:wb_relanzado.txt")
+        Print "relanzado desde el Workbench: " + r
+        Print "fin"
+    end
+end

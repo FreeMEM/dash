@@ -4248,6 +4248,29 @@ TASK_FUNCTIONS = {
     "program_version": BuiltinFunc(
         name="program_version", params=[], return_type="STRPTR", c_template="_dash_program_version()",
         description="The program's name and version of @version (\"Trasfondo 0.7\"); \"\" without it"),
+    # Trasfondo 0.7: watching a file, running programs, relaunching itself
+    "file_notify": BuiltinFunc(
+        name="file_notify", params=["path"], return_type="LONG", c_template="_dash_file_notify(${path})",
+        description="Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched. "
+                    "cx_wait gives 7 when it changes; file_changed(n) says whether it did"),
+    "file_changed": BuiltinFunc(
+        name="file_changed", params=["n"], return_type="BOOL", c_template="_dash_file_changed(${n})",
+        description="True if the file watched with that number changed since the last file_changed"),
+    "file_notify_end": BuiltinFunc(
+        name="file_notify_end", params=["n"], return_type="void", c_template="_dash_file_notify_end(${n})",
+        description="Stop watching that file (the program's end stops them all)"),
+    "file_notify_signal": BuiltinFunc(
+        name="file_notify_signal", params=[], return_type="LONG", c_template="_dash_file_notify_signal()",
+        description="The signal of the watched files, for mui_wait_event_signals (0 before any file_notify)"),
+    "run_program": BuiltinFunc(
+        name="run_program", params=["command"], return_type="BOOL", c_template="_dash_run_program(${command})",
+        description="Start a command line (\"SYS:Prefs/Font\", \"\\\"Work:My Prog\\\" arg\") in another process "
+                    "without waiting, its input and output NIL:; false if it could not start"),
+    "program_relaunch": BuiltinFunc(
+        name="program_relaunch", params=[], return_type="void", c_template="_dash_program_relaunch()",
+        description="When the program ends, start it again (after everything of its end, single_instance's port "
+                    "too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its "
+                    "arguments. For updating itself"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",

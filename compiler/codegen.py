@@ -2962,8 +2962,13 @@ static LONG _dash_cx_command(void) {
     return 0;
 }
 
-/* Until a command comes (it is given, as cx_command), Ctrl-C (-1, cleared, like break_check) or ms
-   milliseconds pass (0). Without a broker, the time or Ctrl-C. Nothing spent meanwhile (Wait). */
+#ifndef _DASH_WAKE_EXTRA
+#define _DASH_WAKE_EXTRA
+static volatile ULONG _dash_wake_extra = 0;   /* signals other runtimes add to cx_wait (file_notify) */
+#endif
+/* Until a command comes (it is given, as cx_command), Ctrl-C (-1, cleared, like break_check), a file of
+   file_notify changes (7: file_changed says which) or ms milliseconds pass (0). Without a broker, the
+   time, the files or Ctrl-C. Nothing spent meanwhile (Wait). */
 static LONG _dash_cx_wait(LONG ms) {
     ULONG psig, tsig, got;
     LONG cmd;
@@ -2987,8 +2992,9 @@ static LONG _dash_cx_wait(LONG ms) {
     psig = _dash_cx_port ? 1UL << _dash_cx_port->mp_SigBit : 0;
     tsig = 1UL << _dash_cx_tport->mp_SigBit;
     for (;;) {
-        got = Wait(psig | tsig | SIGBREAKF_CTRL_C);
+        got = Wait(psig | tsig | SIGBREAKF_CTRL_C | _dash_wake_extra);
         if (got & SIGBREAKF_CTRL_C) { cmd = -1; break; }
+        if (got & _dash_wake_extra) { cmd = 7; break; }
         if ((got & psig) && (cmd = _dash_cx_command())) break;
         if (CheckIO((struct IORequest *)_dash_cx_tr)) { WaitIO((struct IORequest *)_dash_cx_tr); return 0; }
     }
@@ -4148,6 +4154,154 @@ static void _dash_date_cleanup(void) {
 #define _DASH_VERSION ""
 #endif
 static STRPTR _dash_program_version(void) { return (STRPTR)_DASH_VERSION; }
+
+"""
+
+    # Watching files (Trasfondo 0.7: its settings in ENV:, changed by TrasfondoPrefs, without looking every second)
+    NOTIFY_RUNTIME = """\
+/* Dash notify runtime: file_notify(path) asks the file system to say when that file changes (StartNotify,
+   a message to a port of ours); file_changed(h) says whether it did since the last time; cx_wait wakes with 7,
+   and file_notify_signal() gives the signal for other waits (mui_wait_event_signals). */
+#include <dos/notify.h>
+#ifndef _DASH_WAKE_EXTRA
+#define _DASH_WAKE_EXTRA
+static volatile ULONG _dash_wake_extra = 0;   /* signals other runtimes add to cx_wait (file_notify) */
+#endif
+#define _DASH_NOTIFY_MAX 8
+static struct NotifyRequest *_dash_notify[_DASH_NOTIFY_MAX + 1];
+static BOOL _dash_notify_hit[_DASH_NOTIFY_MAX + 1];
+static struct MsgPort *_dash_notify_port = NULL;
+
+static void _dash_notify_drain(void) {
+    struct NotifyMessage *m;
+    if (!_dash_notify_port) return;
+    while ((m = (struct NotifyMessage *)GetMsg(_dash_notify_port))) {
+        ULONG h = m->nm_NReq ? m->nm_NReq->nr_UserData : 0;
+        if (h >= 1 && h <= _DASH_NOTIFY_MAX) _dash_notify_hit[h] = TRUE;
+        ReplyMsg((struct Message *)m);
+    }
+}
+
+static void _dash_file_notify_end(LONG h) {
+    struct NotifyRequest *n;
+    if (h < 1 || h > _DASH_NOTIFY_MAX || !(n = _dash_notify[h])) return;
+    EndNotify(n);
+    FreeVec(n->nr_Name);
+    FreeVec(n);
+    _dash_notify[h] = NULL;
+    _dash_notify_hit[h] = FALSE;
+    _dash_notify_drain();
+}
+
+static void _dash_notify_cleanup(void) {
+    LONG h;
+    for (h = 1; h <= _DASH_NOTIFY_MAX; h++) _dash_file_notify_end(h);
+    if (_dash_notify_port) {
+        _dash_wake_extra &= ~(1UL << _dash_notify_port->mp_SigBit);
+        _dash_notify_drain();
+        DeleteMsgPort(_dash_notify_port);
+        _dash_notify_port = NULL;
+    }
+}
+
+/* Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched */
+static LONG _dash_file_notify(STRPTR path) {
+    static BOOL at_exit = FALSE;
+    struct NotifyRequest *n;
+    LONG h, len;
+    if (!path || !*path) return 0;
+    for (h = 1; h <= _DASH_NOTIFY_MAX && _dash_notify[h]; h++) ;
+    if (h > _DASH_NOTIFY_MAX) return 0;
+    if (!at_exit) at_exit = atexit(_dash_notify_cleanup) == 0;
+    if (!_dash_notify_port) {
+        if (!(_dash_notify_port = CreateMsgPort())) return 0;
+        _dash_wake_extra |= 1UL << _dash_notify_port->mp_SigBit;
+    }
+    if (!(n = (struct NotifyRequest *)AllocVec(sizeof(*n), MEMF_PUBLIC | MEMF_CLEAR))) return 0;
+    len = strlen((char *)path) + 1;
+    if (!(n->nr_Name = (STRPTR)AllocVec(len, MEMF_PUBLIC))) { FreeVec(n); return 0; }
+    CopyMem(path, n->nr_Name, len);
+    n->nr_Flags = NRF_SEND_MESSAGE;
+    n->nr_stuff.nr_Msg.nr_Port = _dash_notify_port;
+    n->nr_UserData = h;
+    if (!StartNotify(n)) { FreeVec(n->nr_Name); FreeVec(n); return 0; }
+    _dash_notify[h] = n;
+    _dash_notify_hit[h] = FALSE;
+    return h;
+}
+
+/* TRUE if the file changed since the last file_changed (or file_notify) */
+static BOOL _dash_file_changed(LONG h) {
+    BOOL r;
+    if (h < 1 || h > _DASH_NOTIFY_MAX) return FALSE;
+    _dash_notify_drain();
+    r = _dash_notify_hit[h];
+    _dash_notify_hit[h] = FALSE;
+    return r;
+}
+
+static LONG _dash_file_notify_signal(void) {
+    return _dash_notify_port ? (LONG)(1UL << _dash_notify_port->mp_SigBit) : 0;
+}
+
+"""
+
+    # Running programs (Trasfondo 0.7: updating itself)
+    PROC_RUNTIME = """\
+/* Dash program runtime: run_program(command) starts a command line in another process without waiting
+   (SystemTags, input and output NIL:); program_relaunch() starts the program again when it ends, after
+   everything else of the end (its single_instance port too), the way it started: from the Workbench with
+   OpenWorkbenchObject (3.5+: it reads its icon), else from a Shell with the same arguments. */
+#include <dos/dostags.h>
+#include <workbench/startup.h>
+#include <proto/wb.h>
+extern struct WBStartup *_WBenchMsg;
+static BOOL _dash_relaunch = FALSE;
+
+static BOOL _dash_run_program(STRPTR command) {
+    BPTR in, out;
+    if (!command || !*command) return FALSE;
+    in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
+    out = Open((CONST_STRPTR)"NIL:", MODE_NEWFILE);
+    if (!in || !out) { if (in) Close(in); if (out) Close(out); return FALSE; }
+    if (SystemTags(command, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 16384, TAG_DONE) == -1) {
+        Close(in);
+        Close(out);
+        return FALSE;
+    }
+    return TRUE;                     /* (the new process closes in and out) */
+}
+
+static void _dash_program_relaunch(void) { _dash_relaunch = TRUE; }
+
+/* At the very end of the program (the last thing of its cleanup) */
+static void _dash_relaunch_now(void) {
+    static char path[512], cmd[1100];
+    STRPTR args;
+    LONG n;
+    if (!_dash_relaunch) return;
+    _dash_relaunch = FALSE;
+    if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 0) {
+        struct Library *WorkbenchBase;
+        if (!NameFromLock(_WBenchMsg->sm_ArgList[0].wa_Lock, (STRPTR)path, sizeof(path))) return;
+        AddPart((STRPTR)path, _WBenchMsg->sm_ArgList[0].wa_Name, sizeof(path));
+        if ((WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 44))) {
+            BOOL ok = OpenWorkbenchObjectA((STRPTR)path, NULL);
+            CloseLibrary(WorkbenchBase);
+            if (ok) return;
+        }
+        sprintf(cmd, "\\"%s\\"", path);
+    } else {
+        if (!NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path))) return;
+        if (!GetProgramName((STRPTR)cmd, 256)) return;
+        AddPart((STRPTR)path, FilePart((CONST_STRPTR)cmd), sizeof(path));
+        args = GetArgStr();
+        sprintf(cmd, "\\"%s\\" %s", path, args ? (char *)args : "");
+        n = strlen(cmd);
+        while (n > 0 && (cmd[n - 1] == '\\n' || cmd[n - 1] == ' ')) cmd[--n] = 0;
+    }
+    _dash_run_program((STRPTR)cmd);
+}
 
 """
 
@@ -13485,6 +13639,8 @@ _RUNTIME_FLAGS = [
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
     ("VERSION_RUNTIME", "uses_version"),    # Trasfondo 0.7: @version
+    ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
+    ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
@@ -13764,6 +13920,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_date: bool = False     # clock_*, date_text (DATE_RUNTIME)
         self.uses_version: bool = False  # program_version (VERSION_RUNTIME)
         self.version = None              # @version: its C literal
+        self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
+        self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
@@ -14083,6 +14241,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.DATE_RUNTIME)
         if self.uses_version:
             parts.append(CTemplates.VERSION_RUNTIME)
+        if self.uses_notify:
+            parts.append(CTemplates.NOTIFY_RUNTIME)
+        if self.uses_proc:
+            parts.append(CTemplates.PROC_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -14324,6 +14486,10 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_tls_cleanup();\n")   # before the sockets library closes
         if self.uses_net:
             cleanup.append("    _dash_net_cleanup();\n")
+        if self.uses_notify:
+            cleanup.append("    _dash_notify_cleanup();\n")
+        if self.uses_proc:
+            cleanup.append("    _dash_relaunch_now();\n")   # after all the rest: single_instance's port too
         if self._uses_pool():
             cleanup.append("    _dash_mem_cleanup();\n")
         if cleanup:
