@@ -3404,6 +3404,27 @@ devuelve otro. `task_start` usa 128 KB de pila y la prioridad del programa; con 
 solo avanza cuando el programa espera (por ejemplo en `mui_wait_event`), y la ventana responde
 antes. Al acabar, el programa espera a las tareas que sigan en marcha.
 
+Para avisar al programa sin acabar (por ejemplo, que ha dejado datos), el C de la tarea llama a
+`_dash_task_wake()`: el programa recibe la señal de `task_signal()`. Lo que se pasen, detrás de un
+`SignalSemaphore` de exec (`InitSemaphore`, `ObtainSemaphore`, `ReleaseSemaphore`).
+
+**La red desde una tarea.** En AmigaOS cada proceso abre su propia `bsdsocket.library`, así que la red
+es de un proceso cada vez: del que la usa primero (el programa o una tarea), hasta que su tarea acaba (o el
+programa termina). Desde otro, las funciones de red dan -1 y `net_error()` dice "la red es de otra
+tarea". La tarea que es dueña tiene sus búsquedas de nombres, su caché de nombres y de sesiones TLS y su
+AmiSSL, y al acabar los cierra en su propio proceso; después, otro puede tomar la red.
+
+En el C de la tarea valen las funciones de red que no usan textos de Dash: `_dash_net_connect`,
+`_dash_net_connect_start`, `_dash_net_connect_poll`, `_dash_net_connect_stage`,
+`_dash_net_send_buffer`, `_dash_net_recv_buffer`, `_dash_net_select` (`net_wait`), `_dash_net_close`,
+`_dash_net_error`, `_dash_net_signal`, `_dash_net_listen`, `_dash_net_accept`, `_dash_net_port`,
+`_dash_net_udp_open`, `_dash_net_udp_send_buffer`, `_dash_net_udp_recv_buffer`, `_dash_tls_connect`,
+`_dash_tls_connect_start`, `_dash_tls_connect_poll`, `_dash_tls_send_buffer`, `_dash_tls_recv_buffer`,
+`_dash_tls_close` y `_dash_tls_resumed` (las de los builtins del mismo nombre). No: `net_recv`,
+`net_send`, `net_resolve`, `net_peer`, `net_udp_recv`, `net_udp_from`, `tls_recv` ni `tls_send`, que
+crean o leen textos de Dash. `_dash_net_signal()` en la tarea da una señal de la tarea, para dormir con
+`Wait` hasta que una conexión tenga algo.
+
 ### Un programa sin ventana que se puede parar: break_check y single_instance
 
 ```ruby

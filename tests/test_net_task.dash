@@ -1,0 +1,135 @@
+# The network from a task of task_start (dashweb D69): the task opens its own bsdsocket.library on its
+# first call and owns the network while it runs. It looks the name up (a helper process, which signals
+# the task), connects, sends and receives from the echo server while the program is busy with something
+# else, leaves what it got behind a semaphore and wakes the program (task_wake) before it ends. Meanwhile
+# the program gets "la red es de otra tarea"; once the task has ended, the program takes the network, and
+# then a second task is the one turned away.
+# emu-net: 40831
+# memcheck
+# expect-out: desde el programa: -1 la red es de otra tarea
+# expect-out: despertado antes de acabar: true
+# expect-out: la tarea recibió: eco: hola tarea
+# expect-out: resultado: 17
+# expect-out: el programa después: eco: hola programa
+# expect-out: otra tarea: -1
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@header "#include <exec/semaphores.h>"
+@header "static struct SignalSemaphore t_sem; static char t_buf[128]; static volatile LONG t_len = -1, t_ack, t_go;"
+
+# the task: all of it in C (the network's C functions; no Dash strings)
+@native func red_tarea(arg: Int) -> Int
+"""
+    char got[128];
+    LONG s, r, n = 0, i;
+    while (!t_go) Delay(1);                 /* (the program is looking first) */
+    s = _dash_net_connect_start((STRPTR)"localhost", 40831, 5000);
+    if (s < 0) return -1;
+    while ((r = _dash_net_connect_poll(s)) == 0) Delay(1);
+    if (r < 0) return -2;
+    if (_dash_net_send_buffer(s, (APTR)"hola tarea\r\n", 12) != 12) return -3;
+    while ((r = _dash_net_recv_buffer(s, got + n, sizeof(got) - 1 - n, 3000)) > 0) n += r;
+    got[n] = 0;
+    _dash_net_close(s);
+    ObtainSemaphore(&t_sem);
+    memcpy(t_buf, got, n + 1);
+    t_len = n;
+    ReleaseSemaphore(&t_sem);
+    _dash_task_wake();
+    for (i = 0; i < 250 && !t_ack; i++) Delay(1);   /* the program says it saw it */
+    return n;
+"""
+end
+
+@native func otra_tarea(arg: Int) -> Int
+"""
+    return _dash_net_connect_start((STRPTR)"127.0.0.1", 40831, 2000);
+"""
+end
+
+@native func preparar()
+"""
+    InitSemaphore(&t_sem);
+"""
+end
+
+@native func empezar()
+"""
+    t_go = 1;
+    Delay(5);
+"""
+end
+
+# waits for the signals of mask (at most 10 s): true if they came
+@native func esperar_senal(mask: Int) -> Bool
+"""
+    LONG t;
+    for (t = 0; t < 500; t++) {
+        if (SetSignal(0, (ULONG)mask) & (ULONG)mask) return TRUE;
+        Delay(1);
+    }
+    return FALSE;
+"""
+end
+
+@native func recibido() -> String
+"""
+    char b[128];
+    LONG n;
+    ObtainSemaphore(&t_sem);
+    n = t_len;
+    if (n >= 0) memcpy(b, t_buf, n + 1); else b[0] = 0;
+    ReleaseSemaphore(&t_sem);
+    t_ack = 1;
+    return _dash_str_dup((STRPTR)b, TRUE);
+"""
+end
+
+# busy, without touching the network: the task's connection goes on meanwhile
+@native func ocupado()
+"""
+    volatile LONG i, x = 0;
+    for (i = 0; i < 200000; i++) x += i;
+"""
+end
+
+func eco(texto: String) -> String
+    s = net_connect("127.0.0.1", 40831, 5000)
+    if s < 0
+        return "fallo: " + net_error()
+    end
+    net_send(s, texto + "\r\n")
+    r = ""
+    trozo = net_recv(s, 64, 3000)
+    while trozo != nil
+        r = r + trozo
+        trozo = net_recv(s, 64, 3000)
+    end
+    net_close(s)
+    return str_trim(r)
+end
+
+Main
+    sig = task_signal()
+    preparar()
+    t = task_start(red_tarea, 0)
+    empezar()
+    s = net_connect("127.0.0.1", 40831, 2000)
+    Print "desde el programa: #{s} " + net_error()
+    ocupado()
+    despierto = esperar_senal(sig)
+    Print "despertado antes de acabar: #{despierto and not task_done(t)}"
+    Print "la tarea recibió: " + str_trim(recibido())
+    while not task_done(t)
+        time_delay(1)
+    end
+    Print "resultado: #{task_result(t)}"
+    task_free(t)
+    Print "el programa después: " + eco("hola programa")
+    t2 = task_start(otra_tarea, 0)
+    while not task_done(t2)
+        time_delay(1)
+    end
+    Print "otra tarea: #{task_result(t2)}"
+    task_free(t2)
+end

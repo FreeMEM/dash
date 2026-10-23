@@ -1,0 +1,68 @@
+# TLS from a task of task_start (dashweb D69): the task owns the network, so AmiSSL opens in it (with its
+# own bsdsocket.library and errno). Three connections without waiting (net_connect_start, the name looked
+# up by a helper process, and tls_connect_start/poll) to the runner's TLS echo server: the first one new,
+# the next ones resume its session and reuse the name found. When the task ends it closes AmiSSL and the
+# network in its own process, and the program can take them.
+# emu-net-tls: 40871
+# emu-needs: amisslmaster.library
+# memcheck
+# expect-out: tarea: nueva eco: uno|reanudada eco: dos|reanudada eco: tres|
+# expect-out: el programa después: eco: cuatro
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@header "static char t_out[256];"
+
+@native func tls_tarea(arg: Int) -> Int
+"""
+    static const char *msg[3] = { "uno\n", "dos\n", "tres\n" };
+    char got[64];
+    LONG k, s, t, r, n;
+    t_out[0] = 0;
+    for (k = 0; k < 3; k++) {
+        s = _dash_net_connect_start((STRPTR)"localhost", 40871, 5000);
+        if (s < 0) return -1;
+        while ((r = _dash_net_connect_poll(s)) == 0) Delay(1);
+        if (r < 0) return -2;
+        t = _dash_tls_connect_start(s, (STRPTR)"localhost", 5000);
+        if (t < 0) { _dash_net_close(s); return -3; }
+        while ((r = _dash_tls_connect_poll(t)) == 0) Delay(1);
+        if (r < 0) { _dash_net_close(s); return -4; }
+        strcat(t_out, _dash_tls_resumed(t) ? "reanudada " : "nueva ");
+        _dash_tls_send_buffer(t, (APTR)msg[k], strlen(msg[k]));
+        n = _dash_tls_recv_buffer(t, got, sizeof(got) - 1, 5000);
+        got[n > 0 ? n : 0] = 0;
+        while (n > 0 && (got[n - 1] == '\n' || got[n - 1] == '\r')) got[--n] = 0;
+        strcat(t_out, got);
+        strcat(t_out, "|");
+        _dash_tls_close(t);
+        _dash_net_close(s);
+    }
+    return 0;
+"""
+end
+
+@native func salida() -> String
+"""
+    return _dash_str_dup((STRPTR)t_out, TRUE);
+"""
+end
+
+Main
+    h = task_start(tls_tarea, 0)
+    while not task_done(h)
+        time_delay(1)
+    end
+    r = task_result(h)
+    task_free(h)
+    if r != 0
+        Print "tarea: fallo #{r} " + net_error()
+    else
+        Print "tarea: " + salida()
+    end
+    s = net_connect("127.0.0.1", 40871, 5000)
+    t = tls_connect(s, "127.0.0.1")
+    tls_send(t, "cuatro\n")
+    Print "el programa después: " + str_trim(tls_recv(t, 100, 5000))
+    tls_close(t)
+    net_close(s)
+end
