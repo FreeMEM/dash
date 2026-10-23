@@ -3075,6 +3075,13 @@ static struct {                                              /* requests a drive
 } _dash_s2_left[_DASH_S2_LEFT];
 static LONG _dash_wifi_sig = 0, _dash_wifi_noise = 0;
 static ULONG _dash_s2_pin = 0, _dash_s2_pout = 0;
+#define _DASH_S2_OPEN 4
+static struct {                                              /* drivers kept open between questions */
+    struct _DashS2Req *r;
+    struct MsgPort *port;
+    char dev[32];
+    LONG unit;
+} _dash_s2_open[_DASH_S2_OPEN];
 static struct MsgPort *_dash_mt_tport = NULL;
 static struct timerequest *_dash_mt_tr = NULL;
 
@@ -3199,16 +3206,25 @@ static LONG _dash_disk_kb(LONG i) { return i >= 0 && i < _dash_disk_n ? _dash_di
 static LONG _dash_disk_free_kb(LONG i) { return i >= 0 && i < _dash_disk_n ? _dash_disks[i].free : -1; }
 
 /* bsdsocket.library with Roadshow's interface API (SBTC_HAVE_INTERFACE_API), or NULL: opened for each
-   reading, so a stack that went away or came back is seen */
+   reading (so a stack that went away or came back is seen, and Roadshow's NetShutdown is not kept waiting);
+   "not there" or "not Roadshow" is remembered for a minute (MiamiDx: not opened and asked every second) */
+static LONG _dash_meter_none = -1;          /* the minute of the last "no", -1 none */
+
 static struct Library *_dash_meter_socket(void) {
-    struct Library *SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
-    LONG have = FALSE;
+    struct Library *SocketBase;
+    struct DateStamp ds;
+    LONG have = FALSE, now;
     struct TagItem tags[2];
-    if (!SocketBase) return NULL;
+    DateStamp(&ds);
+    now = ds.ds_Days * 1440 + ds.ds_Minute;
+    if (now == _dash_meter_none) return NULL;
+    _dash_meter_none = now;
+    if (!(SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) return NULL;
     tags[0].ti_Tag = SBTM_GETREF(SBTC_HAVE_INTERFACE_API);
     tags[0].ti_Data = (ULONG)&have;
     tags[1].ti_Tag = TAG_END;
     if (SocketBaseTagList(tags) != 0 || !have) { CloseLibrary(SocketBase); return NULL; }
+    _dash_meter_none = -1;
     return SocketBase;
 }
 
@@ -3266,35 +3282,46 @@ static BOOL _dash_netdrv_same(const char *a, const char *b) {    /* (file names:
     }
     return *a == *b;
 }
+static char _dash_netdrv_files[_DASH_NETDRV_FILES][32];   /* DEVS:Networks/, read once a minute */
+static LONG _dash_netdrv_k = -1, _dash_netdrv_when = 0;
+
 static LONG _dash_net_drivers_read(void) {
-    char files[_DASH_NETDRV_FILES][32];
     struct FileInfoBlock *fib;
     struct Node *n;
     struct Process *me = (struct Process *)FindTask(NULL);
-    APTR win = me->pr_WindowPtr;
-    LONG k = 0, i;
+    struct DateStamp ds;
+    APTR win;
+    LONG k, i, now;
     BPTR l;
     _dash_netdrv_n = 0;
-    me->pr_WindowPtr = (APTR)-1;               /* (no requester, whatever happens) */
-    l = Lock((CONST_STRPTR)"DEVS:Networks", ACCESS_READ);
-    me->pr_WindowPtr = win;
-    if (!l) return 0;
-    if ((fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) {
-        if (Examine(l, fib))
-            while (k < _DASH_NETDRV_FILES && ExNext(l, fib))
-                if (fib->fib_DirEntryType < 0) {
-                    strncpy(files[k], (char *)fib->fib_FileName, sizeof(files[k]) - 1);
-                    files[k][sizeof(files[k]) - 1] = 0;
-                    k++;
-                }
-        FreeDosObject(DOS_FIB, fib);
+    DateStamp(&ds);
+    now = ds.ds_Days * 1440 + ds.ds_Minute;
+    if (_dash_netdrv_k < 0 || now != _dash_netdrv_when) {
+        _dash_netdrv_when = now;
+        _dash_netdrv_k = 0;
+        win = me->pr_WindowPtr;
+        me->pr_WindowPtr = (APTR)-1;           /* (no requester, whatever happens) */
+        l = Lock((CONST_STRPTR)"DEVS:Networks", ACCESS_READ);
+        me->pr_WindowPtr = win;
+        if (l) {
+            if ((fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) {
+                if (Examine(l, fib))
+                    while (_dash_netdrv_k < _DASH_NETDRV_FILES && ExNext(l, fib))
+                        if (fib->fib_DirEntryType < 0) {
+                            strncpy(_dash_netdrv_files[_dash_netdrv_k], (char *)fib->fib_FileName, 31);
+                            _dash_netdrv_files[_dash_netdrv_k++][31] = 0;
+                        }
+                FreeDosObject(DOS_FIB, fib);
+            }
+            UnLock(l);
+        }
     }
-    UnLock(l);
+    k = _dash_netdrv_k;
     Forbid();
     for (n = SysBase->DeviceList.lh_Head; n->ln_Succ && _dash_netdrv_n < _DASH_NETDRV_MAX; n = n->ln_Succ) {
         if (!n->ln_Name || ((struct Library *)n)->lib_OpenCnt <= 0) continue;
         for (i = 0; i < k; i++)
-            if (_dash_netdrv_same(files[i], n->ln_Name)) {
+            if (_dash_netdrv_same(_dash_netdrv_files[i], n->ln_Name)) {
                 strncpy(_dash_netdrv[_dash_netdrv_n], n->ln_Name, sizeof(_dash_netdrv[0]) - 1);
                 _dash_netdrv[_dash_netdrv_n][sizeof(_dash_netdrv[0]) - 1] = 0;
                 _dash_netdrv_n++;
@@ -3346,16 +3373,28 @@ static void _dash_s2_reap(BOOL ending) {
     }
 }
 
+/* Our opens of a driver let go (the stack closed it: nobody else uses it), so that it can go */
+static void _dash_s2_close_all(const char *name) {
+    LONG i;
+    for (i = 0; i < _DASH_S2_OPEN; i++)
+        if (_dash_s2_open[i].r && (!name || !strcmp(_dash_s2_open[i].dev, name))) {
+            _dash_s2_free(_dash_s2_open[i].r, _dash_s2_open[i].port);
+            _dash_s2_open[i].r = NULL;
+        }
+}
+
 /* A question (S2_GETSIGNALQUALITY or S2_GETGLOBALSTATS) to a SANA-II driver that someone already has open
    (a driver not in memory is not loaded: that would start its hardware), waiting ms at most: 0 answered,
    1 no answer in time (aborted; or that driver still has the last one), 2 it does not have that command,
-   3 no such driver in use (or it does not open), 4 it says error (offline...), 5 opened only for its stack */
+   3 no such driver in use (or it does not open), 4 it says error (offline...), 5 opened only for its stack.
+   The driver stays open for the next question (up to 4 drivers and units); when only we have it open, its
+   stack let it go: closed, and 3 */
 static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
-    struct _DashS2Req *r;
-    struct MsgPort *port;
+    struct _DashS2Req *r = NULL;
+    struct MsgPort *port = NULL;
     struct Library *lib;
     char name[32];
-    LONG err, i, slot = -1;
+    LONG err, i, slot = -1, open = -1, ours = 0, users;
     if (!dev || !*dev) return 3;
     _dash_meter_at_exit();
     _dash_s2_reap(FALSE);
@@ -3366,27 +3405,46 @@ static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
         else if (_dash_s2_left[i].unit == unit && !strcmp(_dash_s2_left[i].dev, name)) return 1;
     }
     if (slot < 0) return 1;
+    for (i = 0; i < _DASH_S2_OPEN; i++)
+        if (_dash_s2_open[i].r && !strcmp(_dash_s2_open[i].dev, name)) {
+            ours++;
+            if (_dash_s2_open[i].unit == unit) open = i;
+        }
     Forbid();
     lib = (struct Library *)FindName(&SysBase->DeviceList, (CONST_STRPTR)name);
-    i = lib && lib->lib_OpenCnt > 0;
+    users = lib ? lib->lib_OpenCnt : 0;
     Permit();
-    if (!i) return 3;
-    if (!(port = CreateMsgPort())) return 3;
-    if (!(r = (struct _DashS2Req *)AllocMem(sizeof(*r), MEMF_PUBLIC | MEMF_CLEAR))) { DeleteMsgPort(port); return 3; }
-    r->io.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
-    r->io.ios2_Req.io_Message.mn_ReplyPort = port;
-    r->io.ios2_Req.io_Message.mn_Length = sizeof(struct IOSana2Req);
-    r->io.ios2_BufferManagement = _dash_s2_bm;
-    if ((err = OpenDevice((CONST_STRPTR)dev, unit, (struct IORequest *)&r->io, 0))) {
-        FreeMem(r, sizeof(*r));
-        DeleteMsgPort(port);
-        return err == IOERR_UNITBUSY ? 5 : 3;
+    if (users <= ours) { _dash_s2_close_all(name); return 3; }
+    if (open >= 0) {
+        r = _dash_s2_open[open].r;
+        port = _dash_s2_open[open].port;
+    } else {
+        if (!(port = CreateMsgPort())) return 3;
+        if (!(r = (struct _DashS2Req *)AllocMem(sizeof(*r), MEMF_PUBLIC | MEMF_CLEAR))) { DeleteMsgPort(port); return 3; }
+        r->io.ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
+        r->io.ios2_Req.io_Message.mn_ReplyPort = port;
+        r->io.ios2_Req.io_Message.mn_Length = sizeof(struct IOSana2Req);
+        r->io.ios2_BufferManagement = _dash_s2_bm;
+        if ((err = OpenDevice((CONST_STRPTR)dev, unit, (struct IORequest *)&r->io, 0))) {
+            FreeMem(r, sizeof(*r));
+            DeleteMsgPort(port);
+            return err == IOERR_UNITBUSY ? 5 : 3;
+        }
+        for (i = 0; i < _DASH_S2_OPEN && _dash_s2_open[i].r; i++) ;
+        if (i < _DASH_S2_OPEN) {
+            open = i;
+            _dash_s2_open[i].r = r;
+            _dash_s2_open[i].port = port;
+            _dash_s2_open[i].unit = unit;
+            strcpy(_dash_s2_open[i].dev, name);
+        }
     }
     r->io.ios2_Req.io_Command = cmd;
     r->io.ios2_StatData = &r->d;
     SendIO((struct IORequest *)&r->io);
     if (!_dash_mt_wait(port, ms, _dash_s2_back, &r->io)) {
         AbortIO((struct IORequest *)&r->io);
+        if (open >= 0) _dash_s2_open[open].r = NULL;   /* (not kept open: it is the driver's now, or freed) */
         if (!_dash_mt_wait(port, 200, _dash_s2_back, &r->io)) {
             _dash_s2_left[slot].r = r;           /* it can not be freed while the driver has it */
             _dash_s2_left[slot].port = port;
@@ -3402,7 +3460,7 @@ static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
     err = r->io.ios2_Req.io_Error;
     if (!err && cmd == S2_GETSIGNALQUALITY) { _dash_wifi_sig = r->d.q.SignalLevel; _dash_wifi_noise = r->d.q.NoiseLevel; }
     if (!err && cmd == S2_GETGLOBALSTATS) { _dash_s2_pin = r->d.s.PacketsReceived; _dash_s2_pout = r->d.s.PacketsSent; }
-    _dash_s2_free(r, port);
+    if (open < 0) _dash_s2_free(r, port);       /* (no room to keep it open) */
     return !err ? 0 : err == IOERR_NOCMD || err == S2ERR_NOT_SUPPORTED ? 2 : 4;
 }
 
@@ -3449,6 +3507,7 @@ static void _dash_meter_cleanup(void) {
         _dash_disk_port = NULL;
         _dash_disk_nout = 0;
     }
+    _dash_s2_close_all(NULL);
     _dash_s2_reap(TRUE);
     if (_dash_mt_tr) {
         CloseDevice((struct IORequest *)_dash_mt_tr);
@@ -7538,6 +7597,7 @@ struct _DashDesk {
     struct RastPort line;                   /* RTG 8 bits: the temporary RastPort of Read/WritePixelLine8 */
     volatile LONG front;                    /* -1: not on the screen yet */
     volatile LONG wall_new;                 /* the hook took the wallpaper again: RTG, its bytes too */
+    struct Rectangle wall_rect;             /* (where) */
     struct Rectangle damage;                /* repainted by the hook: the Workbench draws its icons */
     LONG damage_left;                       /* there again soon; the next updates look at it */
     struct _DashDesk *next;
@@ -7601,6 +7661,15 @@ static ULONG _dash_desk_hook_fn(struct Hook *h __asm("a0"), struct RastPort *rp 
            (the Workbench puts its pattern after WBStartup, with the same hook) */
         BltBitMap(rp->BitMap, m->bounds.MinX + (x0 - lx0), m->bounds.MinY + (y0 - ly0), d->wall, x0 - dx, y0 - dy,
                   x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
+        if (!d->wall_new) {
+            d->wall_rect.MinX = x0 - dx; d->wall_rect.MinY = y0 - dy;
+            d->wall_rect.MaxX = x1 - dx; d->wall_rect.MaxY = y1 - dy;
+        } else {
+            if (x0 - dx < d->wall_rect.MinX) d->wall_rect.MinX = x0 - dx;
+            if (y0 - dy < d->wall_rect.MinY) d->wall_rect.MinY = y0 - dy;
+            if (x1 - dx > d->wall_rect.MaxX) d->wall_rect.MaxX = x1 - dx;
+            if (y1 - dy > d->wall_rect.MaxY) d->wall_rect.MaxY = y1 - dy;
+        }
         d->wall_new = 1;
         BltBitMap(d->bm[f], x0 - dx, y0 - dy, rp->BitMap, m->bounds.MinX + (x0 - lx0),
                   m->bounds.MinY + (y0 - ly0), x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
@@ -8045,10 +8114,11 @@ static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     _dash_desk_attach();
     attached = _dash_desk_attached;
     UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
-    if (d->wall_new && d->bpp) {      /* RTG: the bytes of the wallpaper the hook took again */
+    if (d->wall_new && d->bpp) {      /* RTG: the bytes of the wallpaper the hook took again (that area) */
+        struct Rectangle r = d->wall_rect;
         d->wall_new = 0;
         WaitBlit();
-        _dash_desk_bm_pixels(d, d->wall, d->cw, 0, 0, d->w, d->h);
+        _dash_desk_bm_pixels(d, d->wall, d->cw, r.MinX, r.MinY, r.MaxX - r.MinX + 1, r.MaxY - r.MinY + 1);
     }
     d->wall_new = 0;
     /* the drawing, over the wallpaper and without locks (it may take long, or open a window) */
