@@ -7185,7 +7185,8 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
     if (w < 40) w = 40;      /* Intuition 3.1 hangs opening a 0x0 window */
     if (h < 20) h = 20;
     win = OpenWindowTags(NULL,
-        WA_Left, x, WA_Top, y, WA_Width, w, WA_Height, h,
+        WA_Left, x, WA_Top, y,
+        (flags & 8) ? WA_InnerWidth : WA_Width, w, (flags & 8) ? WA_InnerHeight : WA_Height, h,   /* 8: inside */
         WA_Title, (ULONG)title,
         WA_CloseGadget, !(flags & 4),
         WA_DragBar, !(flags & 2),
@@ -7213,6 +7214,37 @@ static void _dash_window_close(LONG h) {
     _dash_window_closed(win);   /* generated: clears win_<Name> */
     _dash_before_close(win);
     CloseWindow(win);
+}
+
+/* The borders of the current window (0 without one): GadTools gadgets go from its outer corner */
+static LONG _dash_window_border(LONG side) {
+    if (!_dash_win) return 0;
+    return side == 0 ? _dash_win->BorderTop : side == 1 ? _dash_win->BorderBottom :
+           side == 2 ? _dash_win->BorderLeft : _dash_win->BorderRight;
+}
+
+/* The screen windows open on (the program's, or the default public one: the Workbench's) */
+static struct Screen *_dash_font_screen(BOOL lock) {
+    if (_dash_screen) return _dash_screen;
+    if (_dash_win) return _dash_win->WScreen;
+    return lock ? LockPubScreen(NULL) : NULL;
+}
+
+#include <proto/graphics.h>
+/* Its font: the one of title bars and of GadTools gadgets without a font of their own */
+static LONG _dash_screen_font_height(void) {
+    struct Screen *s = _dash_font_screen(TRUE);
+    LONG h = s && s->Font ? s->Font->ta_YSize : 8;
+    if (s && s != _dash_screen && (!_dash_win || s != _dash_win->WScreen)) UnlockPubScreen(NULL, s);
+    return h;
+}
+
+static LONG _dash_screen_font_text_width(STRPTR text) {
+    struct Screen *s = _dash_font_screen(TRUE);
+    LONG w = 0;
+    if (s && text) w = TextLength(&s->RastPort, (CONST_STRPTR)text, strlen((char *)text));
+    if (s && s != _dash_screen && (!_dash_win || s != _dash_win->WScreen)) UnlockPubScreen(NULL, s);
+    return w;
 }
 
 /* ChangeWindowBox takes absolute values (MoveWindow/SizeWindow take deltas) */

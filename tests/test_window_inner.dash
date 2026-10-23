@@ -1,23 +1,66 @@
-# Test: Win.inner_left/_top/_width/_height: the area inside the window borders (0 while closed).
-# Dash's windows are GimmeZeroZero: the RastPort starts inside the borders, so left/top are 0
-# expect-out: cerrada 0
-# expect-out: bordes bien
+# The screen's font and the window's borders, to fit a GadTools window to any font (TrasfondoPrefs):
+# screen_font_height and screen_font_text_width before opening the window (the Workbench screen's font),
+# window_create with flag 8 (w and h are the inside) and window_border_*: what Intuition says.
+# expect-out: fuente de la pantalla: true
+# expect-out: ancho de un texto: true
+# expect-out: interior: true
+# expect-out: bordes: true
+# expect-out: barra con la fuente: true
+# expect-out: sin ventana: 0
 
-Window W
-    title "Interior"
-    width 200
-    height 100
+@native func fuente_real() -> Int
+"""
+    struct Screen *s = LockPubScreen(NULL);
+    LONG h = s->Font->ta_YSize;
+    UnlockPubScreen(NULL, s);
+    return h;
+"""
+end
+
+@native func ancho_real(t: String) -> Int
+"""
+    struct Screen *s = LockPubScreen(NULL);
+    struct TextFont *f = OpenFont(s->Font);
+    struct RastPort r;
+    LONG w;
+    InitRastPort(&r);
+    SetFont(&r, f);
+    w = TextLength(&r, (CONST_STRPTR)t, strlen((char *)t));
+    CloseFont(f);
+    UnlockPubScreen(NULL, s);
+    return w;
+"""
+end
+
+@native func interior(w: Int, h: Int) -> Bool
+"""
+    return _dash_win->Width - _dash_win->BorderLeft - _dash_win->BorderRight == w &&
+           _dash_win->Height - _dash_win->BorderTop - _dash_win->BorderBottom == h;
+"""
+end
+
+@native func bordes(t: Int, b: Int, l: Int, r: Int) -> Bool
+"""
+    return t == _dash_win->BorderTop && b == _dash_win->BorderBottom && l == _dash_win->BorderLeft &&
+           r == _dash_win->BorderRight;
+"""
 end
 
 Main
-    Print "cerrada " + W.inner_width
-    W.open
-    l = W.inner_left
-    t = W.inner_top
-    if l == 0 and t == 0 and W.inner_width < 200 and W.inner_width > 180 and W.inner_height < 100 and W.inner_height > 50
-        Print "bordes bien"
-    else
-        Print "" + l + " " + t + " " + W.inner_width + " " + W.inner_height
-    end
-    W.close
+    alto = screen_font_height()
+    Print "fuente de la pantalla: #{alto == fuente_real()}"
+    texto = "Guardar"
+    ancho = screen_font_text_width(texto)
+    Print "ancho de un texto: #{ancho == ancho_real(texto) and ancho > 0}"
+    v = window_create("Prueba", 20, 20, 200, 100, 8)
+    Print "interior: #{interior(200, 100)}"
+    t = window_border_top()
+    b = window_border_bottom()
+    l = window_border_left()
+    r = window_border_right()
+    Print "bordes: #{bordes(t, b, l, r)}"
+    Print "barra con la fuente: #{t > alto}"
+    window_close(v)
+    w = window_border_top()
+    Print "sin ventana: #{w}"
 end
