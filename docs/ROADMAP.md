@@ -37,7 +37,7 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Tipos inferidos (LONG, STRPTR, BOOL) y `Float`
 - [x] Memoria automática (temporales por vuelta, contador de referencias)
 - [x] Funciones, structs con métodos, enums, listas, diccionarios, `Float` y `Fixed`, lambdas e imports
-- [x] Los 606 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
+- [x] Los 609 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
 - [x] Interfaces con GadTools, ReAction y MUI (3.8 o 5); red con TCP y HTTPS (AmiSSL)
 - [x] Extensión de VS Code (`editor/vscode/`, versión 0.2.1): errores al escribir, completar, compilar,
       emulador, depurador y editor visual de MUI
@@ -425,7 +425,7 @@ Combinar:
 - **FFI** (Estrategia B): Escape hatch para acceso directo cuando sea necesario
 
 ### 3.1 Módulos Built-in
-**Estado:** ✅ Completado (606 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
+**Estado:** ✅ Completado (609 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
 **Prioridad:** Alta
 **Complejidad:** Alta
 

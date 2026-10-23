@@ -4121,6 +4121,20 @@ TASK_FUNCTIONS = {
         c_template="_dash_net_driver_read(${driver}, ${unit}, ${ms})",
         description="Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of "
                     "wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out)"),
+    "net_driver_has_bytes": BuiltinFunc(
+        name="net_driver_has_bytes", params=[], return_type="BOOL",
+        c_template="_dash_net_driver_has_bytes()",
+        description="True if the driver of the last net_driver_read counts bytes (its IPv4, IPv6 and ARP packets): "
+                    "net_driver_bytes_in and net_driver_bytes_out"),
+    "net_driver_bytes_in": BuiltinFunc(
+        name="net_driver_bytes_in", params=[], return_type="LONG",
+        c_template="_dash_net_driver_bytes_in()",
+        description="The bytes received by the driver of the last net_driver_read (the low 32 bits), if "
+                    "net_driver_has_bytes"),
+    "net_driver_bytes_out": BuiltinFunc(
+        name="net_driver_bytes_out", params=[], return_type="LONG",
+        c_template="_dash_net_driver_bytes_out()",
+        description="The bytes sent by the driver of the last net_driver_read, if net_driver_has_bytes"),
     "net_driver_packets_in": BuiltinFunc(
         name="net_driver_packets_in", params=[], return_type="LONG",
         c_template="_dash_net_driver_packets_in()",

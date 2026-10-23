@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 606 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 609 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -3570,8 +3570,10 @@ end
   drivers y unidades), para no abrirlo y cerrarlo cada segundo; cuando solo lo tiene abierto el programa (su pila
   lo soltó), se cierra y da 3.
 - `net_driver_read(driver, unidad, ms)`, `net_driver_packets_in()`, `net_driver_packets_out()`: los paquetes
-  recibidos y enviados por el driver, con los mismos códigos. Los bytes solo los da Roadshow (`net_if_bytes_in`):
-  los drivers no suelen contarlos (`wifipi.device` no lo hace).
+  recibidos y enviados por el driver, con los mismos códigos. Si el driver cuenta bytes por tipo de paquete
+  (`S2_TRACKTYPE` y `S2_GETTYPESTATS` de IPv4, IPv6 y ARP), `net_driver_has_bytes()` es `true` y
+  `net_driver_bytes_in()` y `net_driver_bytes_out()` los dan (los 32 bits bajos, como `net_if_bytes_in`). No todos
+  los cuentan: `wifipi.device`, no. Al acabar se dejan de seguir los tipos que se empezaron a seguir.
 - `wifi_signal()`, `wifi_noise()`: la señal y el ruido de la última lectura buena, en dBm (-30 muy buena, -90 muy
   mala).
 
@@ -4089,14 +4091,14 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Fecha, hora y versión | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
-| Discos, red y WiFi | 18 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
+| Discos, red y WiFi | 21 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **606** | |
+| **Total** | **609** | |
 
 ### Colores Estandar Amiga
 
