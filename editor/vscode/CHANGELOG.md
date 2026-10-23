@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Visual editor: "al cambiar", next to "Ver en Amiga", shows the window on the Amiga again by itself a moment
+  after each change (the setting `dash.emulator.previewOnChange`). One at a time; if the emulator fails, it goes
+  off by itself instead of showing an error at every change.
+
 ## 0.2.1 (2026-10-21)
 
 Found making the video tutorial and hunting odd cases (docs/IDE_VIDEO_LOOP.md of the Dash repository).

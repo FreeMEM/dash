@@ -220,6 +220,37 @@ async function webviewTests(check, assert) {
             await page.eval('document.getElementById("undo").click()');
             assert.strictEqual(await page.eval('window.__posted[window.__posted.length - 1].type'), 'undo');
         });
+        await check('webview: "al cambiar" shows the window on the Amiga again after each change, one at a time', async () => {
+            const asked = () => page.eval('window.__posted.filter((m) => m.type === "amiga").length');
+            const wait = (ms) => page.eval(`new Promise((r) => setTimeout(r, ${ms}))`);
+            const shot = (m) => page.eval(`window.postMessage(${JSON.stringify(Object.assign({ type: 'screenshot', busy: false }, m))}, '*')`);
+            await page.eval('window.__amigaDelay = 50');
+            let n = await asked();
+            await page.eval('document.getElementById("amiga-auto").click()');      // on: at once
+            assert.deepStrictEqual(await page.eval('window.__posted.filter((m) => m.type === "amigaAuto").pop()'),
+                                   { type: 'amigaAuto', on: true });
+            assert.strictEqual(await asked(), n + 1);
+            assert.strictEqual(await page.eval('window.__posted.filter((m) => m.type === "amiga").pop().auto'), true);
+            await page.eval('document.getElementById("add-window").click()');       // a change while it runs: it waits
+            await wait(150);
+            assert.strictEqual(await asked(), n + 1);
+            assert.strictEqual(await page.eval('DashUIEditor.amiga.pending'), true);
+            await shot({ src: '', status: 'listo' });                                // done: the one waiting goes
+            await wait(150);
+            assert.strictEqual(await asked(), n + 2);
+            await shot({ status: 'listo' });
+            await page.eval('document.getElementById("add-window").click()');       // two changes: one question
+            await page.eval('document.getElementById("add-window").click()');
+            await wait(150);
+            assert.strictEqual(await asked(), n + 3);
+            await shot({ error: 'no hay emulador' });                               // fails: off, and no more
+            assert.strictEqual(await page.eval('document.getElementById("amiga-auto").checked'), false);
+            assert.deepStrictEqual(await page.eval('window.__posted.filter((m) => m.type === "amigaAuto").pop()'),
+                                   { type: 'amigaAuto', on: false });
+            await page.eval('document.getElementById("add-window").click()');
+            await wait(150);
+            assert.strictEqual(await asked(), n + 3);
+        });
     } finally {
         page.close();
     }

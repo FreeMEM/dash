@@ -36,6 +36,8 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
    - **Real**: botón "Ver en Amiga" del editor. Compila un programa mínimo que importa el `.dashui`, lo ejecuta en
      un Amiga emulado que se queda encendido (`tools/emu_preview.py`) y muestra la captura en el webview (unos 2 s;
      al principio era `tools/emu_run.py --screenshot`, unos 30 s). Detalle al final.
+     Con la casilla "al cambiar" (`dash.emulator.previewOnChange`), vuelve a pedirla solo 1,2 s después del último
+     cambio (una cada vez; las que llegan mientras tanto se juntan en una); si el emulador falla, se apaga sola.
 
 ## El formato `.dashui`
 

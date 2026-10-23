@@ -19,7 +19,10 @@
     let dragging = null;     // {type} from the palette or {path} from the tree or the preview
     let clip = null;         // the object copied last (also on the clipboard, as JSON)
     let focusTree = false;   // after the next render, the focus on the selected row of the tree
-    const amiga = { busy: false, note: '', error: false };   // "Ver en Amiga": running, what it says
+    // "Ver en Amiga": running, what it says; auto: again by itself a moment after each change (the next one
+    // waits while one runs), off by itself if it fails
+    const amiga = { busy: false, note: '', error: false, auto: false, pending: false, timer: null, lastAuto: false };
+    const amigaDelay = () => window.__amigaDelay || 1200;     // (tests make it short)
 
     const $ = (id) => document.getElementById(id);
     const el = (tag, attrs, ...kids) => {
@@ -39,6 +42,24 @@
         const text = M.serialize(doc);
         vscode.postMessage({ type: 'edit', text });
         render();
+        scheduleAmiga();
+    }
+
+    function askAmiga(auto) {
+        if (!doc || error) return;
+        if (amiga.busy) { amiga.pending = true; return; }
+        amiga.busy = true;
+        amiga.lastAuto = auto;
+        amiga.note = 'Compilando (y, la primera vez, arrancando el Amiga)…';
+        renderWindows();
+        vscode.postMessage({ type: 'amiga', window: win().name, auto });
+    }
+
+    /** With "al cambiar" on: the window on the Amiga again once the changes stop for a moment */
+    function scheduleAmiga() {
+        if (!amiga.auto) return;
+        clearTimeout(amiga.timer);
+        amiga.timer = setTimeout(() => askAmiga(true), amigaDelay());
     }
 
     /** Path of the object with that name in a window, or null */
@@ -71,6 +92,7 @@
             error = e.message;
         }
         render();
+        scheduleAmiga();
     }
 
     // --- palette --------------------------------------------------------------
@@ -354,7 +376,7 @@
         box.setAttribute('aria-label', 'Ventanas');
         doc.windows.forEach((w, i) => box.append(el('button', {
             class: i === winIndex ? 'active' : '', 'aria-pressed': i === winIndex ? 'true' : 'false',
-            onclick: () => { winIndex = i; selected = []; render(); } }, w.name)));
+            onclick: () => { winIndex = i; selected = []; render(); scheduleAmiga(); } }, w.name)));
         box.append(el('button', { id: 'add-window', title: 'Nueva ventana', 'aria-label': 'Nueva ventana', onclick: () => {
             let n = doc.windows.length + 1;
             while (doc.windows.some((w) => w.name === 'Ventana' + n)) n++;
@@ -366,12 +388,14 @@
         box.append(el('button', { id: 'undo', title: 'Deshacer (Ctrl+Z)', onclick: () => vscode.postMessage({ type: 'undo' }) }, '↶'));
         box.append(el('button', { id: 'redo', title: 'Rehacer (Ctrl+Y)', onclick: () => vscode.postMessage({ type: 'redo' }) }, '↷'));
         box.append(el('button', { id: 'amiga', title: 'Ver en Amiga (FS-UAE)', disabled: amiga.busy,
-            onclick: () => {
-                amiga.busy = true;
-                amiga.note = 'Compilando (y, la primera vez, arrancando el Amiga)…';
-                renderWindows();
-                vscode.postMessage({ type: 'amiga', window: win().name });
-            } }, amiga.busy ? 'En el Amiga…' : 'Ver en Amiga'));
+            onclick: () => askAmiga(false) }, amiga.busy ? 'En el Amiga…' : 'Ver en Amiga'));
+        box.append(el('label', { id: 'amiga-auto-label', title: 'Volver a ver la ventana en el Amiga después de cada cambio' },
+            el('input', { type: 'checkbox', id: 'amiga-auto', checked: amiga.auto, onchange: (e) => {
+                amiga.auto = e.target.checked;
+                vscode.postMessage({ type: 'amigaAuto', on: amiga.auto });
+                if (amiga.auto) askAmiga(true);
+                else clearTimeout(amiga.timer);
+            } }), ' al cambiar'));
         // what "Ver en Amiga" is doing, next to its button (the picture comes below the preview)
         box.append(el('span', { id: 'amiga-note', class: amiga.error ? 'error' : '' }, amiga.note));
     }
@@ -428,7 +452,10 @@
 
     window.addEventListener('message', (e) => {
         const m = e.data;
-        if (m.type === 'update') load(m.text);
+        if (m.type === 'update') {
+            if ('amigaAuto' in m) amiga.auto = !!m.amigaAuto;
+            load(m.text);
+        }
         if (m.type === 'screenshot') {
             const img = $('amiga-shot');
             if (m.src) img.onload = () => img.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -438,7 +465,17 @@
             amiga.busy = !!m.busy;
             amiga.note = m.error || (m.src ? 'Listo: la imagen está debajo de la vista' : m.status || '');
             amiga.error = !!m.error;
+            if (!m.busy && m.error && amiga.lastAuto && amiga.auto) {     // it does not work here: no more by itself
+                amiga.auto = false;
+                amiga.pending = false;
+                amiga.note += ' ("al cambiar" apagado)';
+                vscode.postMessage({ type: 'amigaAuto', on: false });
+            }
             if (doc && !error) renderWindows();
+            if (!m.busy && amiga.pending) {
+                amiga.pending = false;
+                scheduleAmiga();
+            }
         }
     });
     $('tree').addEventListener('keydown', (e) => { if (doc && !error) treeKey(e); });
@@ -471,7 +508,7 @@
     });
 
     renderPalette();
-    window.DashUIEditor = { load, get doc() { return doc; }, get selected() { return selected; },
+    window.DashUIEditor = { load, get doc() { return doc; }, get selected() { return selected; }, get amiga() { return amiga; },
                             select: (p) => { selected = p; render(); } };
     vscode.postMessage({ type: 'ready' });
 }());

@@ -128,6 +128,8 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   2 s on the 68040, and the same window again is not compiled again. On the machine of `dash.emulator.machine`
   (A1200 3.1, A1200 3.2 or 68040 with a graphics card; the A500 has no 68020 for MUI, so the A1200), with the
   Workbench files with MUI of `dash.emulator.muiSystem`, `muiSystem32` or `systemRtg`. A Dash program uses the file with `import "ventana.dashui"`.
+  With **al cambiar** ticked next to the button (`dash.emulator.previewOnChange`), the picture comes again by itself
+  a moment after each change; it goes off by itself if the emulator fails.
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.
 
 ## Debugging on a real Amiga
@@ -156,6 +158,7 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
 - `dash.emulator.autoclose`: seconds after which a windowed program closes itself in the emulator.
 - `dash.emulator.muiSystem`: Workbench files with MUI for "Ver en Amiga" (`DASH_EMU_SYS_MUI`, made with
   `tools/emu_sys_mui.sh`).
+- `dash.emulator.previewOnChange`: "Ver en Amiga" again after each change in the visual editor ("al cambiar").
 
 ## Development
 
