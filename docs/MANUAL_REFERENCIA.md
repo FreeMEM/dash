@@ -1260,13 +1260,13 @@ window_close(a)
 - Para que quepa con cualquier fuente: `screen_font_height()` y `screen_font_text_width(texto)` miden con la
   fuente de la pantalla (la del programa o la del Workbench), que es la de las barras de titulo y la de los
   gadgets de GadTools. Con la ventana abierta, `window_border_top()`, `window_border_bottom()`,
-  `window_border_left()` y `window_border_right()` dan sus bordes; los gadgets `gt_*` cuentan desde la esquina de
-  fuera, asi que su y lleva el borde de arriba:
+  `window_border_left()` y `window_border_right()` dan sus bordes. Los gadgets cuentan desde el interior (la
+  esquina de dentro de los bordes), asi que con el flag 8 basta medirlos:
 
 ```
 alto = screen_font_height() + 6                  # un boton con la fuente de la pantalla
 v = window_create("Prefs", 40, 30, 300, 4 * alto + 20, 8)    # el interior justo
-y = window_border_top() + 4                      # la primera fila de gadgets
+y = 4                                            # la primera fila de gadgets, ya dentro
 ```
 - La ventana creada pasa a ser la actual: los `gfx_*` dibujan en ella. El numero 0 es la ventana actual.
 - Un numero que no es una ventana abierta no hace nada. Las que sigan abiertas se cierran al salir.

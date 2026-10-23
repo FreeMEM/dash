@@ -2587,8 +2587,8 @@ INTUITION_EXPANDED = {
     ),
     "window_border_top": BuiltinFunc(
         name="window_border_top", params=[], return_type="LONG", c_template="_dash_window_border(0)",
-        description="The top border of the current window (title bar included); GadTools gadgets count from the "
-                    "outer corner, so add it to their y"),
+        description="The top border of the current window (title bar included); gadgets count from the inside, "
+                    "without it"),
     "window_border_bottom": BuiltinFunc(
         name="window_border_bottom", params=[], return_type="LONG", c_template="_dash_window_border(1)",
         description="The bottom border of the current window"),
