@@ -1,5 +1,5 @@
 # Test: <, >, <= and >= on Strings compare the text (byte by byte, like strcmp)
-# expect-c: strcmp(
+# expect-c: _dash_str_cmp(
 # expect-out: menor
 # expect-out: mayor
 # expect-out: igual

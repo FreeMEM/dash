@@ -822,6 +822,15 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
 /* Dash String Runtime */
 #include <string.h>
 
+/* Texts compared (==, <...) also when one is nil (dashweb D70): nil equals only nil and goes before any
+   text; strcmp would read address 0 (a crash where page zero is protected: AmigaOS 4, MuForce) */
+static __inline__ LONG _dash_str_cmp(STRPTR a, STRPTR b) {
+    if (a == b) return 0;
+    if (!a) return -1;
+    if (!b) return 1;
+    return strcmp((char *)a, (char *)b);
+}
+
 static STRPTR DashString_concat(STRPTR a, STRPTR b) {
     LONG len_a = a ? strlen(a) : 0;
     LONG len_b = b ? strlen(b) : 0;
@@ -15933,11 +15942,11 @@ static {ret_type} {method_name}({params_str}) {{
                         return f"(_dash_str_ieq({x}, {self._generate_expression(lit)}) {node.operator} TRUE)"
             # String comparison compares contents, not pointers
             if node.operator in ("==", "!=", "<", ">", "<=", ">=") and (left_str or right_str):
-                # order: byte by byte as unsigned (Latin-1), like strcmp
+                # order: byte by byte as unsigned (Latin-1), like strcmp; nil only equals nil (D70)
                 self.uses_strings = True
                 left = self._generate_expression(node.left)
                 right = self._generate_expression(node.right)
-                return f"(strcmp({left}, {right}) {node.operator} 0)"
+                return f"(_dash_str_cmp({left}, {right}) {node.operator} 0)"
             left = self._generate_expression(node.left)
             right = self._generate_expression(node.right)
             fast = self._fast_int_op(node)
