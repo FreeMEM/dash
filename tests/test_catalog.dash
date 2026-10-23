@@ -1,0 +1,42 @@
+# Translations with locale.library (dashweb D71): @catalog names the program's catalog, which opens on the
+# first tr (here for a global's value, before Main) from PROGDIR:Catalogs/english/ (the runner compiles
+# lib/catalogo_english.ct there with tools/catalogo.py). The emulated system's language is English, the
+# program's own texts are Spanish. A number not translated gives the program's own text; another catalog
+# that is not there, or of another version, leaves the program's texts.
+# emu-needs: locale.library
+# emu-catalog: lib/catalogo_english.ct
+# memcheck
+# expect-c: _DASH_CATALOG_NAME "PruebaDash.catalog"
+# expect-out: Hello
+# expect-out: Goodbye, señor
+# expect-out: Sin traducir
+# expect-out: Line
+# expect-out: Two
+# expect-out: idioma: english
+# expect-out: otro: false Hola
+# expect-out: otra versión: false Hola
+# expect-out: otra vez: true Hello
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@catalog "PruebaDash.catalog" 1 "español"
+
+const MSG_ADIOS = 2
+var saludo: String = tr(1, "Hola")
+
+Main
+    Print saludo
+    Print tr(MSG_ADIOS, "Adiós")
+    Print tr(3, "Sin traducir")
+    Print tr(4, "Línea\nDos")
+    l = catalog_language()
+    Print "idioma: " + l
+    a = catalog_open("NoEsta.catalog", 0)
+    t = tr(1, "Hola")
+    Print "otro: #{a} " + t
+    a = catalog_open("PruebaDash.catalog", 2)
+    t = tr(1, "Hola")
+    Print "otra versión: #{a} " + t
+    a = catalog_open("PruebaDash.catalog", 1)
+    t = tr(1, "Hola")
+    Print "otra vez: #{a} " + t
+end

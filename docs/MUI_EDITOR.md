@@ -108,6 +108,11 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
 - **Ventana**: `"close": N` hace que el botón de cerrar devuelva `N` (`mui_on_close`). Sin él, cerrar la primera
   ventana es -1 (salir).
 - **Menús**: cada elemento es `label`, `key` (letra para Amiga+tecla) y `event`, o `{ "separator": true }` (una línea).
+- **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
+  principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
+  `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca
+  `tools/catalogo.py cd` junto con los del programa (ver "Traducciones" en `docs/MANUAL_REFERENCIA.md`). El editor
+  visual los conserva, pero todavía no los enseña ni los cambia: se ponen editando el fichero como texto.
 
 ## La extensión
 

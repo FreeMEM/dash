@@ -6,7 +6,7 @@ Extensible Lark grammar for the Dash programming language.
 # Grammar with variables and expressions support
 dash_grammar_minimal = r"""
     ?start: program
-    program: (import_stmt | const_decl | global_var_decl | struct_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | main_block | comment_line)*
+    program: (import_stmt | const_decl | global_var_decl | struct_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | main_block | comment_line)*
 
     // Constant declaration
     // a literal or an integer expression known when compiling (const MASCARA = 1 << 4)
@@ -69,6 +69,7 @@ dash_grammar_minimal = r"""
     stack_directive: "@stack" INT
     // where the output goes when started from the Workbench ("NIL:": nowhere, no window) (dashweb D59)
     workbench_output_directive: "@workbench_output" ESCAPED_STRING
+    catalog_directive: "@catalog" ESCAPED_STRING INT ESCAPED_STRING?
 
     // Main block
     main_block: "Main" instruction* "end"

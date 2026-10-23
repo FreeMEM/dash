@@ -1,0 +1,16 @@
+## version $VER: PruebaDash.catalog 1.0 (23.10.2026)
+## language english
+## codeset 0
+;
+MSG_1
+Hello
+; Hola
+MSG_2
+Goodbye, señor
+; Adiós
+MSG_3
+
+; Sin traducir
+MSG_4
+Line\nTwo
+; Línea\nDos
