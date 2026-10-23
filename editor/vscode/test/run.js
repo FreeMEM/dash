@@ -570,8 +570,13 @@ async function extensionTests() {
     fakeVscode.window.registerCustomEditorProvider = (viewType) => { registered['editor:' + viewType] = true;
                                                                      return { dispose() {} }; };
     const load = Module._load;
+    let fakePreview = null;          // (Ver en Amiga's queue: the emulator's work, by hand)
     Module._load = function (request, parent, isMain) {
         if (request === 'vscode') return fakeVscode;
+        if (request === './amigaPreview') {
+            const real = load.call(this, request, parent, isMain);
+            return Object.assign({}, real, { preview: (o) => (fakePreview ? fakePreview(o) : real.preview(o)) });
+        }
         return load.call(this, request, parent, isMain);
     };
     const ext = require('../extension.js');
@@ -610,6 +615,32 @@ async function extensionTests() {
         assert.match(said[said.length - 1].error, /dash\.path/);
         assert.strictEqual(said[said.length - 1].busy, false);           // the button is free again
         assert.match(sent[sent.length - 1], /^ERR Ver en Amiga: .*dash\.path/);   // and VS Code says it too
+    });
+    await check('extension: "al cambiar" waits its turn, the newest only, and says nothing in windows', async () => {
+        const runs = [];
+        fakePreview = (o) => new Promise((resolve, reject) => runs.push({ o, resolve, reject }));
+        const doc = { fileName: file, getText: () => '{}' };
+        const views = [[], [], []].map((said) => ({ said, postMessage: (m) => said.push(m) }));
+        const before = sent.length;
+        const first = ext.showOnAmiga(doc, 'A', views[0], true);
+        await new Promise((r) => setTimeout(r, 10));
+        ext.showOnAmiga(doc, 'B', views[1], true);                // while A runs: it waits
+        assert.strictEqual(views[1].said.pop().busy, true);
+        ext.showOnAmiga(doc, 'C', views[2], true);                // a newer one: B is let go, C waits
+        assert.strictEqual(views[1].said.pop().busy, false);
+        assert.strictEqual(views[2].said.pop().status, 'En cola…');
+        assert.strictEqual(runs.length, 1);
+        runs[0].resolve({ png: Buffer.from('x') });
+        await first;
+        assert.match(views[0].said.pop().src, /^data:image\/png/);
+        await new Promise((r) => setTimeout(r, 20));
+        assert.strictEqual(runs.length, 2);
+        assert.strictEqual(runs[1].o.windowName, 'C');
+        runs[1].reject(new Error('sin emulador'));
+        await new Promise((r) => setTimeout(r, 20));
+        assert.match(views[2].said.pop().error, /sin emulador/);
+        assert.strictEqual(sent.length, before);                  // no error window for the automatic ones
+        fakePreview = null;
     });
     await check('extension: nothing is compiled in Restricted Mode', async () => {
         fakeVscode.workspace.isTrusted = false;

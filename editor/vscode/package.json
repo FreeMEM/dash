@@ -217,6 +217,11 @@
           "default": "python3",
           "description": "El Python con el que corre el servidor de lenguaje (el mismo que usa ./dash; necesita lark)."
         },
+        "dash.emulator.previewOnChange": {
+          "type": "boolean",
+          "default": false,
+          "description": "Editor de ventanas: \"Ver en Amiga\" otra vez, solo, un momento después de cada cambio (la casilla \"al cambiar\" junto al botón)."
+        },
         "dash.emulator.machine": {
           "type": "string",
           "default": "a1200",

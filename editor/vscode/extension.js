@@ -136,12 +136,21 @@ async function run(kind) {
     a couple of seconds, and the same window again is not compiled again. The machine: dash.emulator.machine
     (an A500 has no 68020 for MUI: the A1200). */
 let previewRunning = false;
+let previewNext = null;        // an automatic one ("al cambiar") that came while another ran: done after it
 const machineNames = { a1200: 'A1200 (3.1)', 'a1200-32': 'A1200 (3.2)', rtg: '68040 con tarjeta gráfica' };
-async function showOnAmiga(document, windowName, webview) {
-    // busy: the webview's button is off and says so while the emulator works
+async function showOnAmiga(document, windowName, webview, auto) {
+    // busy: the webview's button is off and says so while the emulator works. auto ("al cambiar", after
+    // each change): no notification and no error window, only what the editor shows
     const say = (m) => webview.postMessage(Object.assign({ type: 'screenshot', busy: false }, m));
-    const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
-    if (previewRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
+    const fail = (error) => { say({ error }); if (!auto) vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
+    if (previewRunning) {
+        if (auto) {
+            if (previewNext && previewNext[2] !== webview) previewNext[2].postMessage({ type: 'screenshot', busy: false });
+            previewNext = [document, windowName, webview, auto];
+            say({ status: 'En cola…', busy: true });
+        } else say({ status: 'Ya hay una vista en marcha…', busy: true });
+        return;
+    }
     if (!trusted()) { fail(UNTRUSTED); return; }
     const dashDir = findDash(document.fileName);
     if (!dashDir) { fail(noDash()); return; }
@@ -153,7 +162,7 @@ async function showOnAmiga(document, windowName, webview) {
     previewRunning = true;
     say({ status, busy: true });
     try {
-        const { png } = vscode.window.withProgress
+        const { png } = vscode.window.withProgress && !auto
             ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
                                                  title: 'Ver en Amiga: ' + status }, work)
             : await work();
@@ -162,6 +171,11 @@ async function showOnAmiga(document, windowName, webview) {
         fail(missing(e.message) || 'No se pudo: ' + e.message);
     } finally {
         previewRunning = false;
+        if (previewNext) {
+            const next = previewNext;
+            previewNext = null;
+            setTimeout(() => showOnAmiga(...next), 0);
+        }
     }
 }
 
