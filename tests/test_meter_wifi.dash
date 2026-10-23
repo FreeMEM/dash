@@ -12,6 +12,8 @@
 # expect-out: en uso: encontrado: true
 # expect-out: señal: 0 -55 -92
 # expect-out: paquetes: 0 1234 567
+# expect-out: bytes: true 1050 320
+# expect-out: sin bytes: 2 false
 # expect-out: sin la orden: 2
 # expect-out: desconectado: 4
 # expect-out: solo de su pila: 5
@@ -21,12 +23,12 @@
 # expect-out: devuelta: 0 -55
 # expect-out: abierto: 4
 # expect-out: diez preguntas, aperturas: 0
-# expect-out: la pila lo suelta: 3 abierto: 0
+# expect-out: la pila lo suelta: 3 abierto: 0 dejó de seguir: 1
 # expect-out: al acabar, guardada: true
 # expect-out: fin
 
 @header "static struct Device *otros[20]; static LONG otros_n;"
-@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts, fake_opens; static struct IORequest *pila;"
+@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts, fake_opens, fake_untracks; static struct IORequest *pila;"
 
 # a SANA-II driver of the test's own: "dashfake.device"
 @c
@@ -53,7 +55,17 @@ static void fake_beginio(struct IORequest *io __asm("a1"), struct Device *dev __
     io->io_Message.mn_Node.ln_Type = NT_MESSAGE;
     io->io_Flags &= ~IOF_QUICK;
     io->io_Error = 0;
-    if (io->io_Command == S2_GETGLOBALSTATS && unit == 0) {
+    if (io->io_Command == S2_TRACKTYPE && unit == 0) {      /* IPv4 tracked now, IPv6 not known, ARP already */
+        if (s2->ios2_PacketType == 0x86DD) io->io_Error = 8;
+        else if (s2->ios2_PacketType == 0x0806) { io->io_Error = 4; s2->ios2_WireError = 4; }
+    } else if (io->io_Command == S2_UNTRACKTYPE && unit == 0) {
+        fake_untracks++;
+    } else if (io->io_Command == S2_GETTYPESTATS && unit == 0) {
+        struct Sana2PacketTypeStats *t = (struct Sana2PacketTypeStats *)s2->ios2_StatData;
+        if (s2->ios2_PacketType == 0x0800) { t->BytesReceived = 1000; t->BytesSent = 300; }
+        else if (s2->ios2_PacketType == 0x0806) { t->BytesReceived = 50; t->BytesSent = 20; }
+        else io->io_Error = 8;
+    } else if (io->io_Command == S2_GETGLOBALSTATS && unit == 0) {
         ((struct Sana2DeviceStats *)s2->ios2_StatData)->PacketsReceived = 1234;
         ((struct Sana2DeviceStats *)s2->ios2_StatData)->PacketsSent = 567;
     } else if (io->io_Command != S2_GETSIGNALQUALITY || unit == 1) io->io_Error = IOERR_NOCMD;
@@ -176,6 +188,12 @@ end
 """
 end
 
+@native func untracks() -> Int
+"""
+    return fake_untracks;
+"""
+end
+
 @native func abierto() -> Int
 """
     return fake_dev->dd_Library.lib_OpenCnt;
@@ -219,6 +237,9 @@ Main
     Print "señal: #{r} #{wifi_signal()} #{wifi_noise()}"
     r = net_driver_read("dashfake.device", 0, 500)
     Print "paquetes: #{r} #{net_driver_packets_in()} #{net_driver_packets_out()}"
+    Print "bytes: #{net_driver_has_bytes()} #{net_driver_bytes_in()} #{net_driver_bytes_out()}"
+    r = net_driver_read("dashfake.device", 1, 500)
+    Print "sin bytes: #{r} #{net_driver_has_bytes()}"
     r = preguntar(1, 500)
     Print "sin la orden: #{r}"
     r = preguntar(4, 500)
@@ -249,7 +270,7 @@ Main
     Print "diez preguntas, aperturas: #{aperturas() - antes}"
     pila_cerrar()
     r = preguntar(0, 500)
-    Print "la pila lo suelta: #{r} abierto: #{abierto()}"
+    Print "la pila lo suelta: #{r} abierto: #{abierto()} dejó de seguir: #{untracks()}"
     pila_abrir()
     preguntar(2, 100)
     Print "al acabar, guardada: #{acabar()}"

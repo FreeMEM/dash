@@ -3048,6 +3048,15 @@ struct Sana2DeviceStats {
     struct timeval LastStart;
 };
 #endif
+#ifndef S2_GETTYPESTATS
+#define S2_TRACKTYPE (CMD_NONSTD + 9)
+#define S2_UNTRACKTYPE (CMD_NONSTD + 10)
+#define S2_GETTYPESTATS (CMD_NONSTD + 11)
+struct Sana2PacketTypeStats { ULONG PacketsSent, PacketsReceived, BytesSent, BytesReceived, PacketsDropped; };
+#endif
+#ifndef S2WERR_ALREADY_TRACKED
+#define S2WERR_ALREADY_TRACKED 4
+#endif
 #define _DASH_DISK_MAX 64
 #define _DASH_NETIF_MAX 16
 
@@ -3070,7 +3079,7 @@ static char _dash_netdrv[_DASH_NETDRV_MAX][32];             /* the SANA-II drive
 static LONG _dash_netdrv_n = 0;
 struct _DashS2Req {
     struct IOSana2Req io;
-    union { struct Sana2SignalQuality q; struct Sana2DeviceStats s; } d;
+    union { struct Sana2SignalQuality q; struct Sana2DeviceStats s; struct Sana2PacketTypeStats t; } d;
 };
 #define _DASH_S2_LEFT 4
 static struct {                                              /* requests a driver did not give back */
@@ -3081,12 +3090,18 @@ static struct {                                              /* requests a drive
 } _dash_s2_left[_DASH_S2_LEFT];
 static LONG _dash_wifi_sig = 0, _dash_wifi_noise = 0;
 static ULONG _dash_s2_pin = 0, _dash_s2_pout = 0;
+static ULONG _dash_s2_bin = 0, _dash_s2_bout = 0, _dash_s2_wire = 0;
+static BOOL _dash_s2_bytes = FALSE;
+static struct Sana2PacketTypeStats _dash_s2_ts;
 #define _DASH_S2_OPEN 4
+#define _DASH_S2_TYPES 3
+static const ULONG _dash_s2_type[_DASH_S2_TYPES] = { 0x0800, 0x86DD, 0x0806 };     /* IPv4, IPv6, ARP */
 static struct {                                              /* drivers kept open between questions */
     struct _DashS2Req *r;
     struct MsgPort *port;
     char dev[32];
     LONG unit;
+    BYTE track[_DASH_S2_TYPES];   /* bytes of each type: 0 not asked, 1 we track it, 2 tracked already, -1 no */
 } _dash_s2_open[_DASH_S2_OPEN];
 static struct MsgPort *_dash_mt_tport = NULL;
 static struct timerequest *_dash_mt_tr = NULL;
@@ -3379,12 +3394,28 @@ static void _dash_s2_reap(BOOL ending) {
     }
 }
 
-/* Our opens of a driver let go (the stack closed it: nobody else uses it), so that it can go */
+/* Our opens of a driver let go (the stack closed it: nobody else uses it), so that it can go; the packet
+   types we made it track, untracked first (a driver that keeps that question: the request stays out there) */
 static void _dash_s2_close_all(const char *name) {
-    LONG i;
+    LONG i, k;
     for (i = 0; i < _DASH_S2_OPEN; i++)
         if (_dash_s2_open[i].r && (!name || !strcmp(_dash_s2_open[i].dev, name))) {
-            _dash_s2_free(_dash_s2_open[i].r, _dash_s2_open[i].port);
+            struct _DashS2Req *r = _dash_s2_open[i].r;
+            struct MsgPort *port = _dash_s2_open[i].port;
+            BOOL back = TRUE;
+            for (k = 0; k < _DASH_S2_TYPES && back; k++)
+                if (_dash_s2_open[i].track[k] == 1) {
+                    r->io.ios2_Req.io_Command = S2_UNTRACKTYPE;
+                    r->io.ios2_PacketType = _dash_s2_type[k];
+                    SendIO((struct IORequest *)&r->io);
+                    if (!_dash_mt_wait(port, 300, _dash_s2_back, &r->io)) {
+                        AbortIO((struct IORequest *)&r->io);
+                        back = _dash_mt_wait(port, 200, _dash_s2_back, &r->io);
+                    }
+                    if (back) WaitIO((struct IORequest *)&r->io);
+                }
+            if (back) _dash_s2_free(r, port);
+            else { Forbid(); port->mp_Flags = PA_IGNORE; Permit(); }
             _dash_s2_open[i].r = NULL;
         }
 }
@@ -3395,7 +3426,7 @@ static void _dash_s2_close_all(const char *name) {
    3 no such driver in use (or it does not open), 4 it says error (offline...), 5 opened only for its stack.
    The driver stays open for the next question (up to 4 drivers and units); when only we have it open, its
    stack let it go: closed, and 3 */
-static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
+static LONG _dash_s2_ask_t(STRPTR dev, LONG unit, UWORD cmd, ULONG type, LONG ms) {
     struct _DashS2Req *r = NULL;
     struct MsgPort *port = NULL;
     struct Library *lib;
@@ -3443,9 +3474,12 @@ static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
             _dash_s2_open[i].port = port;
             _dash_s2_open[i].unit = unit;
             strcpy(_dash_s2_open[i].dev, name);
+            memset(_dash_s2_open[i].track, 0, sizeof(_dash_s2_open[i].track));
         }
     }
     r->io.ios2_Req.io_Command = cmd;
+    r->io.ios2_PacketType = type;
+    r->io.ios2_WireError = 0;
     r->io.ios2_StatData = &r->d;
     SendIO((struct IORequest *)&r->io);
     if (!_dash_mt_wait(port, ms, _dash_s2_back, &r->io)) {
@@ -3466,12 +3500,51 @@ static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) {
     err = r->io.ios2_Req.io_Error;
     if (!err && cmd == S2_GETSIGNALQUALITY) { _dash_wifi_sig = r->d.q.SignalLevel; _dash_wifi_noise = r->d.q.NoiseLevel; }
     if (!err && cmd == S2_GETGLOBALSTATS) { _dash_s2_pin = r->d.s.PacketsReceived; _dash_s2_pout = r->d.s.PacketsSent; }
+    if (!err && cmd == S2_GETTYPESTATS) _dash_s2_ts = r->d.t;
+    _dash_s2_wire = r->io.ios2_WireError;
     if (open < 0) _dash_s2_free(r, port);       /* (no room to keep it open) */
     return !err ? 0 : err == IOERR_NOCMD || err == S2ERR_NOT_SUPPORTED ? 2 : 4;
 }
 
+static LONG _dash_s2_ask(STRPTR dev, LONG unit, UWORD cmd, LONG ms) { return _dash_s2_ask_t(dev, unit, cmd, 0, ms); }
+
 static LONG _dash_wifi_read_device(STRPTR dev, LONG unit, LONG ms) { return _dash_s2_ask(dev, unit, S2_GETSIGNALQUALITY, ms); }
-static LONG _dash_net_driver_read(STRPTR dev, LONG unit, LONG ms) { return _dash_s2_ask(dev, unit, S2_GETGLOBALSTATS, ms); }
+
+/* Its packets (S2_GETGLOBALSTATS) and, if the driver counts them, its bytes: those of IPv4, IPv6 and ARP
+   (S2_TRACKTYPE once for each, unless its stack tracks it already, then S2_GETTYPESTATS each time) */
+static LONG _dash_net_driver_read(STRPTR dev, LONG unit, LONG ms) {
+    LONG r = _dash_s2_ask(dev, unit, S2_GETGLOBALSTATS, ms), i, k, t;
+    const char *name = dev ? (const char *)FilePart((CONST_STRPTR)dev) : "";
+    ULONG bin = 0, bout = 0;
+    BOOL any = FALSE;
+    _dash_s2_bytes = FALSE;
+    if (r) return r;
+    for (i = 0; i < _DASH_S2_OPEN; i++)
+        if (_dash_s2_open[i].r && _dash_s2_open[i].unit == unit && !strncmp(_dash_s2_open[i].dev, name, 31)) break;
+    if (i == _DASH_S2_OPEN) return 0;         /* (not kept open: packets only) */
+    for (k = 0; k < _DASH_S2_TYPES; k++) {
+        if (_dash_s2_open[i].track[k] == 0) {
+            t = _dash_s2_ask_t(dev, unit, S2_TRACKTYPE, _dash_s2_type[k], ms);
+            if (!_dash_s2_open[i].r) return 0;          /* (let go meanwhile) */
+            _dash_s2_open[i].track[k] = t == 0 ? 1 : t == 4 && _dash_s2_wire == S2WERR_ALREADY_TRACKED ? 2 : -1;
+        }
+        if (_dash_s2_open[i].track[k] > 0) {
+            if (_dash_s2_ask_t(dev, unit, S2_GETTYPESTATS, _dash_s2_type[k], ms) == 0) {
+                bin += _dash_s2_ts.BytesReceived;
+                bout += _dash_s2_ts.BytesSent;
+                any = TRUE;
+            } else if (_dash_s2_open[i].r) _dash_s2_open[i].track[k] = 0;   /* (no longer tracked: again next time) */
+        }
+    }
+    _dash_s2_bytes = any;
+    _dash_s2_bin = bin;
+    _dash_s2_bout = bout;
+    return 0;
+}
+
+static LONG _dash_net_driver_bytes_in(void) { return (LONG)_dash_s2_bin; }
+static LONG _dash_net_driver_bytes_out(void) { return (LONG)_dash_s2_bout; }
+static BOOL _dash_net_driver_has_bytes(void) { return _dash_s2_bytes; }
 static LONG _dash_net_driver_packets_in(void) { return (LONG)_dash_s2_pin; }
 static LONG _dash_net_driver_packets_out(void) { return (LONG)_dash_s2_pout; }
 

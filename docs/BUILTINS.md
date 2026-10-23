@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 606 funciones, 606 implementadas, 0 sin implementar.
+Total: 609 funciones, 609 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -460,6 +460,9 @@ Total: 606 funciones, 606 implementadas, 0 sin implementar.
 | `net_drivers_read()` | `LONG` | Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks that something has open): how many |  |
 | `net_driver_name(i)` | `STRPTR` | The name of driver i (0 to net_drivers_read() - 1) of the last net_drivers_read ("wifipi.device") |  |
 | `net_driver_read(driver, unit, ms)` | `LONG` | Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out) |  |
+| `net_driver_has_bytes()` | `BOOL` | True if the driver of the last net_driver_read counts bytes (its IPv4, IPv6 and ARP packets): net_driver_bytes_in and net_driver_bytes_out |  |
+| `net_driver_bytes_in()` | `LONG` | The bytes received by the driver of the last net_driver_read (the low 32 bits), if net_driver_has_bytes |  |
+| `net_driver_bytes_out()` | `LONG` | The bytes sent by the driver of the last net_driver_read, if net_driver_has_bytes |  |
 | `net_driver_packets_in()` | `LONG` | The packets received by the driver of the last net_driver_read that gave 0 |  |
 | `net_driver_packets_out()` | `LONG` | The packets sent by the driver of the last net_driver_read that gave 0 |  |
 | `wifi_signal()` | `LONG` | The signal level of the last wifi_read that gave 0, in dBm (-30 very good, -90 very bad) |  |
