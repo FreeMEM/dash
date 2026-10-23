@@ -3254,33 +3254,54 @@ static LONG _dash_net_if_bytes_in(LONG i) { return i >= 0 && i < _dash_netif_n ?
 static LONG _dash_net_if_bytes_out(LONG i) { return i >= 0 && i < _dash_netif_n ? (LONG)_dash_netifs[i].out : 0; }
 
 /* The SANA-II drivers in use, whatever the TCP/IP stack: the devices in memory that someone has open and
-   that are in DEVS:Networks/. How many (net_driver_name) */
+   that are in DEVS:Networks/ (the drawer read once, without requesters; then every device in exec's list,
+   however many there are). How many (net_driver_name) */
+#define _DASH_NETDRV_FILES 32
+static BOOL _dash_netdrv_same(const char *a, const char *b) {    /* (file names: any case) */
+    for (; *a && *b; a++, b++) {
+        char x = *a, y = *b;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return FALSE;
+    }
+    return *a == *b;
+}
 static LONG _dash_net_drivers_read(void) {
-    char names[16][32], path[48];
+    char files[_DASH_NETDRV_FILES][32];
+    struct FileInfoBlock *fib;
     struct Node *n;
     struct Process *me = (struct Process *)FindTask(NULL);
     APTR win = me->pr_WindowPtr;
     LONG k = 0, i;
     BPTR l;
-    Forbid();
-    for (n = SysBase->DeviceList.lh_Head; n->ln_Succ && k < 16; n = n->ln_Succ)
-        if (n->ln_Name && ((struct Library *)n)->lib_OpenCnt > 0) {
-            strncpy(names[k], n->ln_Name, sizeof(names[k]) - 1);
-            names[k][sizeof(names[k]) - 1] = 0;
-            k++;
-        }
-    Permit();
-    me->pr_WindowPtr = (APTR)-1;               /* (no requester, whatever happens) */
     _dash_netdrv_n = 0;
-    for (i = 0; i < k && _dash_netdrv_n < _DASH_NETDRV_MAX; i++) {
-        strcpy(path, "DEVS:Networks/");
-        strcat(path, names[i]);
-        if ((l = Lock((CONST_STRPTR)path, ACCESS_READ))) {
-            UnLock(l);
-            strcpy(_dash_netdrv[_dash_netdrv_n++], names[i]);
-        }
-    }
+    me->pr_WindowPtr = (APTR)-1;               /* (no requester, whatever happens) */
+    l = Lock((CONST_STRPTR)"DEVS:Networks", ACCESS_READ);
     me->pr_WindowPtr = win;
+    if (!l) return 0;
+    if ((fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) {
+        if (Examine(l, fib))
+            while (k < _DASH_NETDRV_FILES && ExNext(l, fib))
+                if (fib->fib_DirEntryType < 0) {
+                    strncpy(files[k], (char *)fib->fib_FileName, sizeof(files[k]) - 1);
+                    files[k][sizeof(files[k]) - 1] = 0;
+                    k++;
+                }
+        FreeDosObject(DOS_FIB, fib);
+    }
+    UnLock(l);
+    Forbid();
+    for (n = SysBase->DeviceList.lh_Head; n->ln_Succ && _dash_netdrv_n < _DASH_NETDRV_MAX; n = n->ln_Succ) {
+        if (!n->ln_Name || ((struct Library *)n)->lib_OpenCnt <= 0) continue;
+        for (i = 0; i < k; i++)
+            if (_dash_netdrv_same(files[i], n->ln_Name)) {
+                strncpy(_dash_netdrv[_dash_netdrv_n], n->ln_Name, sizeof(_dash_netdrv[0]) - 1);
+                _dash_netdrv[_dash_netdrv_n][sizeof(_dash_netdrv[0]) - 1] = 0;
+                _dash_netdrv_n++;
+                break;
+            }
+    }
+    Permit();
     return _dash_netdrv_n;
 }
 

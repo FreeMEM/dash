@@ -22,6 +22,7 @@
 # expect-out: al acabar, guardada: true
 # expect-out: fin
 
+@header "static struct Device *otros[20]; static LONG otros_n;"
 @header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts; static struct IORequest *pila;"
 
 # a SANA-II driver of the test's own: "dashfake.device"
@@ -79,7 +80,35 @@ end
     if (!fake_dev) return FALSE;
     fake_dev->dd_Library.lib_Node.ln_Type = NT_DEVICE;
     fake_dev->dd_Library.lib_Node.ln_Name = (char *)"dashfake.device";
-    AddDevice(fake_dev);
+    Forbid();
+    AddTail(&SysBase->DeviceList, &fake_dev->dd_Library.lib_Node);   /* (after the others) */
+    Permit();
+    return TRUE;
+"""
+end
+
+# 20 other devices open before it in exec's list (Ferrán's Amiga had 16 before wifipi.device: they were
+# all the search looked at)
+@native func otros_dispositivos() -> Bool
+"""
+    static APTR vec[7];
+    static char names[20][16];
+    LONG i;
+    otros_n = 0;
+    vec[0] = (APTR)fake_open; vec[1] = (APTR)fake_close; vec[2] = (APTR)fake_null; vec[3] = (APTR)fake_null;
+    vec[4] = (APTR)fake_beginio; vec[5] = (APTR)fake_abortio; vec[6] = (APTR)-1;
+    for (i = 0; i < 20; i++) {
+        struct Device *d = (struct Device *)MakeLibrary((APTR)vec, NULL, NULL, sizeof(struct Device), 0);
+        if (!d) return FALSE;
+        sprintf(names[i], "otro%ld.device", i);
+        d->dd_Library.lib_Node.ln_Type = NT_DEVICE;
+        d->dd_Library.lib_Node.ln_Name = names[i];
+        d->dd_Library.lib_OpenCnt = 1;
+        otros[otros_n++] = d;
+        Forbid();
+        AddTail(&SysBase->DeviceList, &d->dd_Library.lib_Node);
+        Permit();
+    }
     return TRUE;
 """
 end
@@ -154,12 +183,14 @@ end
     CloseDevice(pila);
     Forbid();
     Remove(&fake_dev->dd_Library.lib_Node);
+    while (otros_n > 0) Remove(&otros[--otros_n]->dd_Library.lib_Node);
     Permit();
     return kept;
 """
 end
 
 Main
+    otros_dispositivos()
     fake_poner()
     marcar_red()
     a = preguntar(0, 500)
