@@ -4216,6 +4216,38 @@ TASK_FUNCTIONS = {
         name="catalog_language", params=[], return_type="STRPTR",
         c_template="_dash_catalog_language()",
         description="The language of the catalog in use (\"english\"), \"\" without one"),
+    # Trasfondo 0.7: the clock, dates, and the program's version
+    "clock_read": BuiltinFunc(
+        name="clock_read", params=[], return_type="void", c_template="_dash_clock_read()",
+        description="Takes the date and time of the system's clock: clock_year, clock_month... give its parts"),
+    "clock_year": BuiltinFunc(
+        name="clock_year", params=[], return_type="LONG", c_template="_dash_clock_part(0)",
+        description="The year of the last clock_read (1978...)"),
+    "clock_month": BuiltinFunc(
+        name="clock_month", params=[], return_type="LONG", c_template="_dash_clock_part(1)",
+        description="The month of the last clock_read (1 to 12)"),
+    "clock_day": BuiltinFunc(
+        name="clock_day", params=[], return_type="LONG", c_template="_dash_clock_part(2)",
+        description="The day of the month of the last clock_read (1 to 31)"),
+    "clock_weekday": BuiltinFunc(
+        name="clock_weekday", params=[], return_type="LONG", c_template="_dash_clock_part(3)",
+        description="The day of the week of the last clock_read: 0 Sunday, 1 Monday ... 6 Saturday"),
+    "clock_hour": BuiltinFunc(
+        name="clock_hour", params=[], return_type="LONG", c_template="_dash_clock_part(4)",
+        description="The hour of the last clock_read (0 to 23)"),
+    "clock_minute": BuiltinFunc(
+        name="clock_minute", params=[], return_type="LONG", c_template="_dash_clock_part(5)",
+        description="The minute of the last clock_read"),
+    "clock_second": BuiltinFunc(
+        name="clock_second", params=[], return_type="LONG", c_template="_dash_clock_part(6)",
+        description="The second of the last clock_read"),
+    "date_text": BuiltinFunc(
+        name="date_text", params=["format"], return_type="STRPTR", c_template="_dash_date_text(${format})",
+        description="The date and time now as format says, with locale.library's FormatDate in the user's language "
+                    "and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library)"),
+    "program_version": BuiltinFunc(
+        name="program_version", params=[], return_type="STRPTR", c_template="_dash_program_version()",
+        description="The program's name and version of @version (\"Trasfondo 0.7\"); \"\" without it"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",

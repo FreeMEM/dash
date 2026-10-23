@@ -82,6 +82,7 @@ class DashASTBuilder(Transformer):
         self._stack = 0
         self._workbench_output: Optional[str] = None
         self._catalog: Optional[tuple] = None
+        self._version: Optional[str] = None
 
     # the top-level definitions are kept in these lists (their rules return "")
     _COLLECTED = ("_imports", "_constants", "_global_vars", "_structs", "_enums", "_windows", "_functions",
@@ -145,7 +146,8 @@ class DashASTBuilder(Transformer):
             c_blocks=self._c_blocks,
             stack=self._stack,
             workbench_output=self._workbench_output,
-            catalog=self._catalog
+            catalog=self._catalog,
+            version=self._version
         )
 
     def import_stmt(self, items) -> ImportStmt:
@@ -445,6 +447,12 @@ class DashASTBuilder(Transformer):
     def stack_directive(self, items) -> str:
         """@stack N: the program needs at least N bytes of stack (dashweb D24)."""
         self._stack = max(self._stack, parse_int(items[0].value))
+        return ""
+
+    def version_directive(self, items) -> str:
+        """@version "Trasfondo 0.7": $VER: for C:Version, with the date it is compiled on, and
+        program_version()."""
+        self._version = items[0].value
         return ""
 
     def catalog_directive(self, items) -> str:

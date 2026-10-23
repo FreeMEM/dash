@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 590 funciones, 590 implementadas, 0 sin implementar.
+Total: 600 funciones, 600 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -481,6 +481,16 @@ Total: 590 funciones, 590 implementadas, 0 sin implementar.
 | `tr(id, text)` | `STRPTR` | The text number id of the program's catalog (@catalog) in the user's language; text (the program's own) without a catalog, without that number or without locale.library |  |
 | `catalog_open(name, version)` | `BOOL` | Opens another catalog ("X.catalog", version 0: any) in the user's languages instead of the one in use; false if there is none (tr gives the program's own texts) |  |
 | `catalog_language()` | `STRPTR` | The language of the catalog in use ("english"), "" without one |  |
+| `clock_read()` | `void` | Takes the date and time of the system's clock: clock_year, clock_month... give its parts |  |
+| `clock_year()` | `LONG` | The year of the last clock_read (1978...) |  |
+| `clock_month()` | `LONG` | The month of the last clock_read (1 to 12) |  |
+| `clock_day()` | `LONG` | The day of the month of the last clock_read (1 to 31) |  |
+| `clock_weekday()` | `LONG` | The day of the week of the last clock_read: 0 Sunday, 1 Monday ... 6 Saturday |  |
+| `clock_hour()` | `LONG` | The hour of the last clock_read (0 to 23) |  |
+| `clock_minute()` | `LONG` | The minute of the last clock_read |  |
+| `clock_second()` | `LONG` | The second of the last clock_read |  |
+| `date_text(format)` | `STRPTR` | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
+| `program_version()` | `STRPTR` | The program's name and version of @version ("Trasfondo 0.7"); "" without it |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
