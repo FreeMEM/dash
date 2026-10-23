@@ -153,7 +153,9 @@ class _Window:
             if name in self.fields:
                 raise DashUIError(f"{self.where}: object name {name!r} used twice")
             self.fields.append(name)
-            return name
+            # a local of its own: the object's name alone would be a global of the program or of a module that
+            # has it (Dash functions see and change globals), which the window would overwrite (dashweb D72)
+            return f"_ui_{name}"
         if needs_var:
             self.auto += 1
             return f"_ui{self.auto}"
@@ -233,7 +235,7 @@ class _Window:
         fields = ["window"] + self.fields
         struct = [f"struct {name}"] + [f"    {f}: Int" for f in fields] + ["end", ""]
         func = ([f"func {name}_create() -> {name}"] + self.lines + self.after +
-                [f"    return {name}(_window" + "".join(f", {f}" for f in self.fields) + ")", "end", ""])
+                [f"    return {name}(_window" + "".join(f", _ui_{f}" for f in self.fields) + ")", "end", ""])
         return "\n".join(struct + func)
 
 

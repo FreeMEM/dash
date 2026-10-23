@@ -115,7 +115,7 @@ class TestCatalogo(unittest.TestCase):
         code = dashui_to_dash(json.dumps(WINDOW), "ventana.dashui")
         for line in ('mui_window_begin(tr(20, "Mi programa")', 'mui_menu_begin(tr(21, "Archivo"))',
                      'mui_menu_item(tr(22, "Salir"), "Q", 1)', 'mui_button(tr(23, "Aceptar"))',
-                     'mui_help(ok, tr(24, "Cierra"))', 'mui_text("Sin número")'):
+                     'mui_help(_ui_ok, tr(24, "Cierra"))', 'mui_text("Sin número")'):
             self.assertIn(line, code)
 
 

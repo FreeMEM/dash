@@ -1,12 +1,15 @@
 # A window made with the visual editor (.dashui, docs/MUI_EDITOR.md) imported as a
 # module: Prueba_create() builds it and returns a struct with its named objects;
-# events set in the .dashui arrive in mui_wait_event.
+# events set in the .dashui arrive in mui_wait_event. An object named like a global of the program (estado)
+# does not touch it: the window's objects are only fields of its struct (dashweb D72).
 # emu-needs: muimaster.library
+# expect-c: _ui_estado = 
 # expect-c: _dash_mui_register_begin(
 # expect-c: _dash_mui_image_button(
 # expect-c: _dash_mui_help(
 # expect-c: _dash_mui_window_size(
 # expect-out: ventana abierta
+# expect-out: la global sigue: 3
 # expect-out: estado: Listo "ya"
 # expect-out: url: http://aminet.net/
 # expect-out: evento 12
@@ -14,6 +17,8 @@
 # expect-out: fin
 
 import "lib/ventana_prueba.dashui"
+
+var estado: [Int] = [1, 2, 3]
 
 Main
     if mui_app_begin("Editor", "DASHUI") == 0
@@ -23,6 +28,7 @@ Main
         if mui_window_open(v.window)
             Print "ventana abierta"
         end
+        Print "la global sigue: #{estado.length}"
         t = mui_get_text(v.estado)
         Print "estado: #{t}"
         t = mui_get_text(v.url)

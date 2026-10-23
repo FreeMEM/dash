@@ -99,7 +99,9 @@ alto]` es su tamaño al abrirse en tanto por ciento de la pantalla (`mui_window_
 Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mismas):
 
 - **Nombres** de ventana y de objeto: letras sin acentos, cifras y `_`, sin empezar por cifra. No valen las palabras
-  del lenguaje (`end`, `if`, `func`...) ni `window` (es el campo de la ventana). Sin repetir en la misma ventana.
+  del lenguaje (`end`, `if`, `func`...) ni `window` (es el campo de la ventana). Sin repetir en la misma ventana. Un
+  objeto solo es un campo del struct de su ventana (`v.descargas`): puede llamarse como una variable global del
+  programa o de un módulo sin tocarla (dashweb D72).
 - **Números enteros**: `event`, `change`, `ack`, `double`, `weight`, el `id` y el `close` de la ventana y el `event`
   de un menú. `"event": "uno"` o `true` es un error.
 - **Textos**: no pueden llevar `#{` (en Dash sería una interpolación).
