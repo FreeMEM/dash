@@ -389,6 +389,7 @@ class DashCompiler:
         merged_stack = main_ast.stack
         merged_workbench_output = main_ast.workbench_output
         merged_catalog = main_ast.catalog
+        merged_version = main_ast.version
 
         # First, load all imports
         for import_stmt in main_ast.imports:
@@ -420,6 +421,8 @@ class DashCompiler:
                 merged_workbench_output = module_ast.workbench_output   # the program's own wins
             if merged_catalog is None:
                 merged_catalog = module_ast.catalog
+            if merged_version is None:
+                merged_version = module_ast.version
 
             # Add public constants (not starting with _)
             merged_constants.extend(module_ast.constants)
@@ -475,7 +478,8 @@ class DashCompiler:
             c_blocks=merged_c_blocks + list(main_ast.c_blocks),
             stack=merged_stack,
             workbench_output=merged_workbench_output,
-            catalog=merged_catalog
+            catalog=merged_catalog,
+            version=merged_version
         )
 
     def compile(self, source: str, filename: str = "<input>") -> tuple[str, AnalysisResult]:

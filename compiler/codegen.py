@@ -3881,10 +3881,25 @@ static LONG _dash_usb_hid_emitter(LONG i) { return i >= 0 && i < _dash_hid_n ? (
    catalog in the user's language, or text (the program's own language) without one. @catalog "X.catalog"
    N names it: it opens on the first tr (PROGDIR:Catalogs/<language>/ or LOCALE:Catalogs/<language>/, the
    locale.library way) and closes at the end; catalog_open opens another one meanwhile. */
+#ifndef _DASH_LOCALE_BASE
+#define _DASH_LOCALE_BASE
 #include <libraries/locale.h>
 #include <proto/locale.h>
 struct LocaleBase *LocaleBase;        /* tentative: libnix's own if it opened it */
-static BOOL _dash_locale_ours = FALSE, _dash_catalog_tried = FALSE;
+static BOOL _dash_locale_ours = FALSE;
+static BOOL _dash_locale_open(void) {
+    if (!LocaleBase) {
+        LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR)"locale.library", 38);
+        _dash_locale_ours = LocaleBase != NULL;
+    }
+    return LocaleBase != NULL;
+}
+/* (the last thing at the program's end: catalogs and dates close what they opened before) */
+static void _dash_locale_close(void) {
+    if (_dash_locale_ours) { CloseLibrary((struct Library *)LocaleBase); LocaleBase = NULL; _dash_locale_ours = FALSE; }
+}
+#endif
+static BOOL _dash_catalog_tried = FALSE;
 static struct Catalog *_dash_catalog = NULL;
 #ifndef _DASH_CATALOG_NAME
 #define _DASH_CATALOG_NAME NULL
@@ -3893,8 +3908,8 @@ static struct Catalog *_dash_catalog = NULL;
 #endif
 
 static void _dash_catalog_cleanup(void) {
-    if (_dash_catalog) { CloseCatalog(_dash_catalog); _dash_catalog = NULL; }
-    if (_dash_locale_ours) { CloseLibrary((struct Library *)LocaleBase); LocaleBase = NULL; _dash_locale_ours = FALSE; }
+    if (_dash_catalog && LocaleBase) CloseCatalog(_dash_catalog);
+    _dash_catalog = NULL;
 }
 
 /* The catalog name (version 0: any) in the user's languages; builtin: the language of the program's own
@@ -3908,11 +3923,7 @@ static BOOL _dash_catalog_open_v(STRPTR name, LONG version, STRPTR builtin) {
     if (!at_exit) at_exit = atexit(_dash_catalog_cleanup) == 0;
     if (_dash_catalog) { CloseCatalog(_dash_catalog); _dash_catalog = NULL; }
     if (!name || !*name) return FALSE;
-    if (!LocaleBase) {
-        LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR)"locale.library", 38);
-        _dash_locale_ours = LocaleBase != NULL;
-    }
-    if (!LocaleBase) return FALSE;
+    if (!_dash_locale_open()) return FALSE;
     if (builtin && *builtin) { tags[n].ti_Tag = OC_BuiltInLanguage; tags[n++].ti_Data = (ULONG)builtin; }
     if (version > 0) { tags[n].ti_Tag = OC_Version; tags[n++].ti_Data = (ULONG)version; }
     tags[n].ti_Tag = TAG_DONE;
@@ -3938,6 +3949,146 @@ static STRPTR _dash_catalog_language(void) {
         _dash_catalog_open_v((STRPTR)_DASH_CATALOG_NAME, _DASH_CATALOG_VERSION, (STRPTR)_DASH_CATALOG_BUILTIN);
     return _dash_str_dup((STRPTR)(_dash_catalog && _dash_catalog->cat_Language ? (char *)_dash_catalog->cat_Language : ""), TRUE);
 }
+
+"""
+
+    # The clock and dates (Trasfondo 0.7): DateStamp worked out by hand, and locale.library's FormatDate
+    DATE_RUNTIME = """\
+/* Dash date runtime: clock_read() takes the time of the system's clock, clock_year... its parts (worked out
+   from the DateStamp: no library); date_text(format) the date and time now with locale.library's FormatDate,
+   in the user's language and country (%A %d-%b-%y, %H:%M...), or in English without locale.library. */
+#ifndef _DASH_LOCALE_BASE
+#define _DASH_LOCALE_BASE
+#include <libraries/locale.h>
+#include <proto/locale.h>
+struct LocaleBase *LocaleBase;        /* tentative: libnix's own if it opened it */
+static BOOL _dash_locale_ours = FALSE;
+static BOOL _dash_locale_open(void) {
+    if (!LocaleBase) {
+        LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR)"locale.library", 38);
+        _dash_locale_ours = LocaleBase != NULL;
+    }
+    return LocaleBase != NULL;
+}
+/* (the last thing at the program's end: catalogs and dates close what they opened before) */
+static void _dash_locale_close(void) {
+    if (_dash_locale_ours) { CloseLibrary((struct Library *)LocaleBase); LocaleBase = NULL; _dash_locale_ours = FALSE; }
+}
+#endif
+static LONG _dash_clock[7] = { 1978, 1, 1, 0, 0, 0, 0 };     /* year, month, day, weekday, h, m, s */
+static struct Locale *_dash_date_locale = NULL;
+
+static void _dash_date_split(struct DateStamp *ds, LONG *c) {
+    static const UBYTE mdays[12] = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    LONG days = ds->ds_Days, y = 1978, m, len, leap;
+    c[3] = days % 7;                          /* 1.1.1978 was a Sunday: 0 Sunday ... 6 Saturday */
+    for (;;) {
+        leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+        if (days < 365 + leap) break;
+        days -= 365 + leap;
+        y++;
+    }
+    for (m = 0; m < 11; m++) {
+        len = mdays[m] + (m == 1 && leap);
+        if (days < len) break;
+        days -= len;
+    }
+    c[0] = y; c[1] = m + 1; c[2] = days + 1;
+    c[4] = ds->ds_Minute / 60; c[5] = ds->ds_Minute % 60; c[6] = ds->ds_Tick / TICKS_PER_SECOND;
+}
+
+static void _dash_clock_read(void) {
+    struct DateStamp ds;
+    DateStamp(&ds);
+    _dash_date_split(&ds, _dash_clock);
+}
+
+static LONG _dash_clock_part(LONG i) { return _dash_clock[i]; }
+
+struct _DashDateOut { char buf[256]; LONG n; };
+
+static ULONG _dash_date_put(struct Hook *h __asm("a0"), APTR loc __asm("a2"), ULONG c __asm("a1")) {
+    struct _DashDateOut *o = (struct _DashDateOut *)h->h_Data;
+    if (o->n < (LONG)sizeof(o->buf) - 1) o->buf[o->n++] = (char)c;
+    return 0;
+}
+
+static void _dash_date_num(struct _DashDateOut *o, LONG v, LONG digits, char pad) {
+    char t[8];
+    LONG i = 0;
+    do { t[i++] = '0' + v % 10; v /= 10; } while (v && i < 7);
+    while (i < digits) t[i++] = pad;
+    while (i && o->n < (LONG)sizeof(o->buf) - 1) o->buf[o->n++] = t[--i];
+}
+
+/* Without locale.library: the same codes, in English */
+static void _dash_date_plain(struct _DashDateOut *o, const char *f, LONG *c) {
+    static const char *days[7] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+    static const char *months[12] = { "January", "February", "March", "April", "May", "June", "July",
+                                      "August", "September", "October", "November", "December" };
+    const char *s;
+    for (; *f && o->n < (LONG)sizeof(o->buf) - 1; f++) {
+        if (*f != '%' || !f[1]) { o->buf[o->n++] = *f; continue; }
+        s = NULL;
+        switch (*++f) {
+        case 'A': s = days[c[3]]; break;
+        case 'a': { LONG k; for (k = 0; k < 3 && o->n < 255; k++) o->buf[o->n++] = days[c[3]][k]; } break;
+        case 'B': s = months[c[1] - 1]; break;
+        case 'b': case 'h': { LONG k; for (k = 0; k < 3 && o->n < 255; k++) o->buf[o->n++] = months[c[1] - 1][k]; } break;
+        case 'd': _dash_date_num(o, c[2], 2, '0'); break;
+        case 'e': _dash_date_num(o, c[2], 2, ' '); break;
+        case 'm': _dash_date_num(o, c[1], 2, '0'); break;
+        case 'y': _dash_date_num(o, c[0] % 100, 2, '0'); break;
+        case 'Y': _dash_date_num(o, c[0], 4, '0'); break;
+        case 'H': _dash_date_num(o, c[4], 2, '0'); break;
+        case 'I': _dash_date_num(o, c[4] % 12 ? c[4] % 12 : 12, 2, '0'); break;
+        case 'M': _dash_date_num(o, c[5], 2, '0'); break;
+        case 'S': _dash_date_num(o, c[6], 2, '0'); break;
+        case 'p': s = c[4] < 12 ? "AM" : "PM"; break;
+        case 'w': _dash_date_num(o, c[3], 1, '0'); break;
+        case '%': s = "%"; break;
+        default: o->buf[o->n++] = '%'; if (o->n < 255) o->buf[o->n++] = *f; break;
+        }
+        for (; s && *s && o->n < (LONG)sizeof(o->buf) - 1; s++) o->buf[o->n++] = *s;
+    }
+}
+
+/* The date and time now as format says (locale.library's FormatDate codes) */
+static STRPTR _dash_date_text(STRPTR format) {
+    struct _DashDateOut o;
+    struct DateStamp ds;
+    o.n = 0;
+    DateStamp(&ds);
+    if (!format) format = (STRPTR)"";
+    if (_dash_locale_open() && (_dash_date_locale || (_dash_date_locale = OpenLocale(NULL)))) {
+        struct Hook h;
+        memset(&h, 0, sizeof(h));
+        h.h_Entry = (ULONG (*)())_dash_date_put;
+        h.h_Data = &o;
+        FormatDate(_dash_date_locale, (CONST_STRPTR)format, &ds, &h);
+        if (o.n && !o.buf[o.n - 1]) o.n--;       /* (FormatDate puts the ending 0 through the hook) */
+    } else {
+        LONG c[7];
+        _dash_date_split(&ds, c);
+        _dash_date_plain(&o, (const char *)format, c);
+    }
+    o.buf[o.n] = 0;
+    return _dash_str_dup((STRPTR)o.buf, TRUE);
+}
+
+static void _dash_date_cleanup(void) {
+    if (_dash_date_locale && LocaleBase) CloseLocale(_dash_date_locale);
+    _dash_date_locale = NULL;
+}
+
+"""
+
+    # @version (Trasfondo 0.7): the program's name and version, also for C:Version
+    VERSION_RUNTIME = """\\
+#ifndef _DASH_VERSION
+#define _DASH_VERSION ""
+#endif
+static STRPTR _dash_program_version(void) { return (STRPTR)_DASH_VERSION; }
 
 """
 
@@ -13262,6 +13413,8 @@ _RUNTIME_FLAGS = [
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
+    ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
+    ("VERSION_RUNTIME", "uses_version"),    # Trasfondo 0.7: @version
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
@@ -13538,6 +13691,9 @@ class CodeGenerator(ASTVisitor):
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
+        self.uses_date: bool = False     # clock_*, date_text (DATE_RUNTIME)
+        self.uses_version: bool = False  # program_version (VERSION_RUNTIME)
+        self.version = None              # @version: its C literal
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
@@ -13666,6 +13822,13 @@ class CodeGenerator(ASTVisitor):
             # started from the Workbench, libnix opens this for input and output (its own default
             # is a console window, CON://///AUTO/CLOSE/WAIT, that opens when something is written)
             parts.append(f"char const *__stdiowin = {self.workbench_output};\n\n")
+        if self.version:
+            # @version: for C:Version ($VER: with the date it was compiled on), and program_version()
+            import datetime
+            today = datetime.date.today()
+            parts.append(f"#define _DASH_VERSION {self.version}\n"
+                         f"static const char __attribute__((used)) _dash_ver[] = \"$VER: \" {self.version} "
+                         f"\" ({today.day}.{today.month}.{today.year})\";\n\n")
         if self.links:
             # read by ./dash and the test runner (compiler/cflags.py link_flags)
             parts.append("".join(f"/* dash-link: {p} */\n" for p in self.links))
@@ -13846,6 +14009,10 @@ class CodeGenerator(ASTVisitor):
                 parts.append(f"#define _DASH_CATALOG_NAME {name}\n#define _DASH_CATALOG_VERSION {version}\n"
                              f"#define _DASH_CATALOG_BUILTIN {builtin or 'NULL'}\n")
             parts.append(CTemplates.CATALOG_RUNTIME)
+        if self.uses_date:
+            parts.append(CTemplates.DATE_RUNTIME)
+        if self.uses_version:
+            parts.append(CTemplates.VERSION_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -14067,6 +14234,10 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.insert(0, "    _dash_mc_cleanup();\n")   # the patch out of input.device first
         if self.uses_catalog:
             cleanup.append("    _dash_catalog_cleanup();\n")
+        if self.uses_date:
+            cleanup.append("    _dash_date_cleanup();\n")
+        if self.uses_catalog or self.uses_date:
+            cleanup.append("    _dash_locale_close();\n")   # last: the ones above use it
         if self.uses_dosreq:
             cleanup.append("    _dash_dosreq_cleanup();\n")
         if self.uses_cpu:
@@ -14167,6 +14338,7 @@ static LONG _dash_event_window_handle(void) {{
         self.stack_min = node.stack            # @stack (dashweb D24)
         self.workbench_output = node.workbench_output   # @workbench_output (dashweb D59)
         self.catalog = node.catalog                     # @catalog (dashweb D71)
+        self.version = node.version                     # @version
         # runtime functions (_dash_*) named by @native and @c code bring their runtime (D10b)
         import re
         for code in list(node.c_blocks) + [n.c_code for n in node.native_funcs]:
@@ -16321,8 +16493,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_arrays = True    # mouse_curve takes a list
         if self.catalog:
             self.uses_catalog = True   # @catalog: its runtime even before any tr
-        if self.uses_catalog:
-            self.uses_strings = True   # catalog_language gives a String
+        if self.uses_catalog or self.uses_date:
+            self.uses_strings = True   # catalog_language and date_text give a String
         if self.uses_cx or self.uses_meter or self.uses_mouse:
             self.uses_strings = True   # tooltype, disk_name and net_if_name give a String
         if self.uses_blend:

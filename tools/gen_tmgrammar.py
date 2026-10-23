@@ -33,7 +33,7 @@ KEYWORDS = {
     "storage.modifier": ["const", "var", "weak", "borrow"],
     "constant.language": ["true", "false", "nil"],
     "variable.language.self": ["self"],
-    "keyword.other.directive": ["@native", "@extern", "@header", "@link", "@c", "@stack", "@workbench_output", "@catalog"],
+    "keyword.other.directive": ["@native", "@extern", "@header", "@link", "@c", "@stack", "@workbench_output", "@catalog", "@version"],
 }
 LIST_METHODS = ["push", "pop", "insert", "remove", "clear", "has", "keys"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"

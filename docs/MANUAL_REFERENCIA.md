@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 590 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 600 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -114,6 +114,10 @@ Arrancado desde el Workbench (su icono), un programa no tiene consola: lo primer
 ventana `CON:` de libnix. `@workbench_output "NIL:"` (al nivel de las funciones) la quita: lo escrito se
 pierde. Vale cualquier fichero o ventana, por ejemplo `@workbench_output "CON:0/0/640/200/Mi programa/AUTO/CLOSE"`.
 Desde la Shell no cambia nada. Si la ponen el programa y un modulo, manda la del programa.
+
+`@version "Mi programa 1.2"` (al nivel de las funciones) pone en el ejecutable `$VER: Mi programa 1.2 (24.10.2026)`,
+con la fecha del dia en que se compila, para `C:Version` y el Workbench (Informacion). `program_version()` da
+`"Mi programa 1.2"` dentro del programa (`""` sin la directiva), por ejemplo para el titulo de `cx_broker`.
 
 `--profile` compila una version que, al salir, escribe una tabla con las llamadas a cada funcion y
 el tiempo que paso en ella (propio) y en lo que llama (total), de la mas lenta a la mas rapida
@@ -3605,6 +3609,23 @@ Cómo funciona: los ratones USB, con un parche en `BeginIO` de `input.device` qu
 botones y posiciones absolutas no se tocan. Al quitarlo, si otro programa ha parcheado `BeginIO` encima, queda
 un trozo de 8 bytes que pasa todo sin tocar y no se libera nunca (`mouse_patch_left()` dice cuántos).
 
+### La fecha y la hora: clock_* y date_text
+
+```ruby
+clock_read()                                   # toma la fecha y la hora del reloj del sistema
+Print "#{clock_day()}/#{clock_month()}/#{clock_year()} #{clock_hour()}:#{clock_minute()}"
+Print date_text("%A %d-%b-%Y %H:%M")           # "Saturday 24-Oct-2026 18:05", en el idioma del sistema
+```
+
+- `clock_read()`: toma la fecha y la hora; `clock_year()`, `clock_month()` (1 a 12), `clock_day()`,
+  `clock_weekday()` (0 domingo, 1 lunes ... 6 sabado), `clock_hour()`, `clock_minute()` y `clock_second()` dan
+  sus partes (las de la ultima `clock_read`, todas del mismo momento). Sin bibliotecas.
+- `date_text(formato)`: la fecha y la hora de ahora con `FormatDate` de `locale.library`, en el idioma y el pais
+  del sistema. Codigos: `%A`/`%a` dia de la semana (largo o corto), `%B`/`%b` mes, `%d` dia, `%m` mes en numero,
+  `%Y`/`%y` año, `%H` hora, `%I` hora de 12, `%p` AM/PM, `%M` minuto, `%S` segundo, `%w` dia de la semana en
+  numero, `%%`; `locale.library` tiene mas (`%x`, `%X`, `%c`: la fecha y la hora como las escribe ese pais). Sin
+  `locale.library` (un 3.0 sin ella), los de la lista, en ingles.
+
 ### Traducciones: tr y @catalog
 
 Los textos que ve el usuario pueden salir de un catálogo de `locale.library`, en su idioma. El programa lleva
@@ -4032,6 +4053,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Fecha, hora y versión | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red y WiFi | 18 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
@@ -4041,7 +4063,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **590** | |
+| **Total** | **600** | |
 
 ### Colores Estandar Amiga
 
