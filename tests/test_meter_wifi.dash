@@ -4,8 +4,9 @@
 # -55 and -92 dBm, unit 1 does not have the command, unit 4 is offline, unit 5 is the stack's only, unit 3
 # never answers but gives the request back on AbortIO, unit 2 never answers and keeps it even then (what
 # hangs NewMeter). Nothing waits longer than its time; a request kept by a driver is not asked again until
-# it comes back (other units are), and is freed then; the device is closed after each question.
-# net_driver_read gives its packets. At the end, a request still kept stays out there with its port
+# it comes back (other units are), and is freed then. The driver stays open between questions (ten of them
+# open it no more), until its stack lets it go: then it is closed and not in use (3). net_driver_read gives its
+# packets. At the end, a request still kept stays out there with its port
 # ignoring the reply.
 # expect-out: sin usar: 3 3 encontrado: false
 # expect-out: en uso: encontrado: true
@@ -18,12 +19,14 @@
 # expect-out: no contesta ni aborta: 1 a tiempo: true
 # expect-out: mientras la tiene: 1 al momento: true, otra unidad: 0 abortos: 2
 # expect-out: devuelta: 0 -55
-# expect-out: abierto: 1
+# expect-out: abierto: 4
+# expect-out: diez preguntas, aperturas: 0
+# expect-out: la pila lo suelta: 3 abierto: 0
 # expect-out: al acabar, guardada: true
 # expect-out: fin
 
 @header "static struct Device *otros[20]; static LONG otros_n;"
-@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts; static struct IORequest *pila;"
+@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts, fake_opens; static struct IORequest *pila;"
 
 # a SANA-II driver of the test's own: "dashfake.device"
 @c
@@ -32,6 +35,7 @@ static LONG fake_open(struct IORequest *io __asm("a1"), ULONG unit __asm("d0"), 
                       struct Device *dev __asm("a6")) {
     if (unit == 5) { io->io_Error = IOERR_UNITBUSY; return IOERR_UNITBUSY; }
     dev->dd_Library.lib_OpenCnt++;
+    fake_opens++;
     io->io_Device = dev;
     io->io_Unit = (struct Unit *)unit;
     io->io_Error = 0;
@@ -159,6 +163,19 @@ end
 """
 end
 
+@native func aperturas() -> Int
+"""
+    return fake_opens;
+"""
+end
+
+# the stack lets the driver go
+@native func pila_cerrar()
+"""
+    CloseDevice(pila);
+"""
+end
+
 @native func abierto() -> Int
 """
     return fake_dev->dd_Library.lib_OpenCnt;
@@ -225,6 +242,15 @@ Main
     r = preguntar(0, 500)
     Print "devuelta: #{r} #{wifi_signal()}"
     Print "abierto: #{abierto()}"
+    antes = aperturas()
+    for i in (1..10)
+        preguntar(0, 500)
+    end
+    Print "diez preguntas, aperturas: #{aperturas() - antes}"
+    pila_cerrar()
+    r = preguntar(0, 500)
+    Print "la pila lo suelta: #{r} abierto: #{abierto()}"
+    pila_abrir()
     preguntar(2, 100)
     Print "al acabar, guardada: #{acabar()}"
     Print "fin"

@@ -3551,7 +3551,8 @@ end
   los da `Info`. -1 si ese volumen no contestó a tiempo. Un volumen que no contesta no se vuelve a preguntar hasta
   que conteste; mientras tanto da -1 enseguida.
 - `net_ifs_read()`: lee los interfaces de red de Roadshow (también `lo0`) y da cuántos hay. -1 sin pila TCP/IP o
-  con una que no lo dice (AmiTCP, Miami, la del emulador).
+  con una que no lo dice (AmiTCP, Miami, la del emulador); ese -1 se recuerda un minuto (no se abre
+  `bsdsocket.library` cada segundo para nada).
 - `net_if_name(i)`, `net_if_up(i)`: el nombre y si está conectado.
 - `net_if_bytes_in(i)`, `net_if_bytes_out(i)`: los bytes recibidos y enviados. La resta de dos lecturas da los
   bytes de entre medias, aunque pase de 2 GB. Para la velocidad: la resta entre el tiempo que pasó.
@@ -3561,10 +3562,13 @@ end
   Roadshow, y 5 si la pila tiene el driver solo para ella. Si un driver se queda la petición después de abortarla,
   no se le pregunta más hasta que la devuelva.
 - `net_drivers_read()`, `net_driver_name(i)`: los drivers de red (SANA-II) en uso, con cualquier pila: los de
-  `DEVS:Networks/` que alguien tiene abiertos. No hace falta `bsdsocket.library`.
+  `DEVS:Networks/` que alguien tiene abiertos. No hace falta `bsdsocket.library`. El cajón se lee una vez por
+  minuto; la lista de dispositivos abiertos, en cada lectura.
 - `wifi_read_device(driver, unidad, ms)`: como `wifi_read`, pero preguntando a ese driver directamente (la unidad
   casi siempre es 0). Solo pregunta a un driver que ya está en uso: no carga ninguno, porque eso pondría en marcha
-  su tarjeta. Con un driver que nadie usa da 3.
+  su tarjeta. Con un driver que nadie usa da 3. Entre pregunta y pregunta el driver se queda abierto (hasta cuatro
+  drivers y unidades), para no abrirlo y cerrarlo cada segundo; cuando solo lo tiene abierto el programa (su pila
+  lo soltó), se cierra y da 3.
 - `net_driver_read(driver, unidad, ms)`, `net_driver_packets_in()`, `net_driver_packets_out()`: los paquetes
   recibidos y enviados por el driver, con los mismos códigos. Los bytes solo los da Roadshow (`net_if_bytes_in`):
   los drivers no suelen contarlos (`wifipi.device` no lo hace).
