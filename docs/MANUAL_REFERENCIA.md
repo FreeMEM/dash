@@ -3696,7 +3696,8 @@ end
 Una zona del escritorio del Workbench (debajo de la barra de la pantalla), detras de los iconos y sin recibir
 clics. Funciona con el Workbench en modo backdrop (iconos en el escritorio) o sin el (el fondo de la
 pantalla, donde no hay ventanas), y si se cambia de modo con el programa en marcha (menu Workbench >
-Backdrop); en pantallas planares y RTG (8 bits con paleta, 16, 24 y 32). Las coordenadas son las del
+Backdrop); también con otro programa como escritorio (Directory Opus 5, Scalos: su ventana de fondo, la que
+ocupa toda la pantalla y está más al frente); en pantallas planares y RTG (8 bits con paleta, 16, 24 y 32). Las coordenadas son las del
 escritorio; negativas, desde el borde derecho o inferior. Da 0 si no puede (sin pantalla Workbench, sin
 memoria, o en RTG de 16 bits o mas sin Picasso96 ni CyberGraphX).
 

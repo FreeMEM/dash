@@ -7435,13 +7435,21 @@ static ULONG _dash_desk_hook_fn(struct Hook *h __asm("a0"), struct RastPort *rp 
     return 0;
 }
 
-/* The Workbench's backdrop window, with the screen's LayerInfo locked: no window opens or closes
-   meanwhile (LockIBase here could deadlock with Intuition opening one) */
+/* The desktop's backdrop window, with the screen's LayerInfo locked (no window opens or closes meanwhile;
+   LockIBase here could deadlock with Intuition opening one): the frontmost backdrop window as wide as the
+   screen and down to its bottom, the Workbench's or the one of a program in its place (Directory Opus 5,
+   Scalos: no WFLG_WBENCHWINDOW). NULL: the Workbench is a window, the desktop is the screen's background */
 static struct Window *_dash_desk_find(void) {
-    struct Window *w;
+    struct Layer *l;
+    struct Window *w = NULL;
+    struct Screen *s = _dash_desk_scr;
     Forbid();
-    for (w = _dash_desk_scr->FirstWindow; w; w = w->NextWindow)
-        if ((w->Flags & WFLG_WBENCHWINDOW) && (w->Flags & WFLG_BACKDROP)) break;
+    for (l = s->LayerInfo.top_layer; l && !w; l = l->back) {
+        struct Window *v = (struct Window *)l->Window;
+        if (v && (v->Flags & WFLG_BACKDROP) && v->LeftEdge <= 0 && v->LeftEdge + v->Width >= s->Width &&
+            v->TopEdge + v->Height >= s->Height)
+            w = v;
+    }
     Permit();
     return w;
 }

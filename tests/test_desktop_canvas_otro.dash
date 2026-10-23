@@ -1,0 +1,80 @@
+# desktop_canvas when another program is the desktop (Directory Opus 5, Scalos): a backdrop window as wide as
+# the Workbench screen and down to its bottom, without WFLG_WBENCHWINDOW, here the test's own. The canvas goes
+# on that window (the frontmost backdrop window of that size, also in front of the Workbench's own) and is seen;
+# freed, the window's backfill is as it was and the area is its background again.
+# expect-out: fondo abierto: true
+# expect-out: lienzo: true
+# expect-out: en el fondo de otro: true
+# expect-out: se ve: true
+# expect-out: devuelto: true
+# expect-out: fin
+
+@header "static struct Window *fondo; static struct Hook *fondo_hook;"
+
+# the other program's desktop: a borderless backdrop window under the screen's title bar
+@native func abrir_fondo() -> Bool
+"""
+    struct Screen *s = LockPubScreen((CONST_STRPTR)"Workbench");
+    if (!s) return FALSE;
+    fondo = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)s, WA_Left, 0, WA_Top, s->BarHeight + 1,
+        WA_Width, s->Width, WA_Height, s->Height - s->BarHeight - 1, WA_Borderless, TRUE, WA_Backdrop, TRUE,
+        WA_SimpleRefresh, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, TAG_DONE);
+    UnlockPubScreen(NULL, s);
+    if (fondo) {
+        WindowToFront(fondo);           /* (in front of the Workbench's own, if it runs) */
+        Delay(10);
+        fondo_hook = fondo->WLayer->BackFill;
+    }
+    return fondo != NULL;
+"""
+end
+
+@native func cerrar_fondo()
+"""
+    if (fondo) CloseWindow(fondo);
+"""
+end
+
+@native func en_el_fondo() -> Bool
+"""
+    return _dash_desk_win == fondo && fondo->WLayer->BackFill == &_dash_desk_hook;
+"""
+end
+
+@native func devuelto() -> Bool
+"""
+    return fondo->WLayer->BackFill == fondo_hook;
+"""
+end
+
+# pixels of pen 1 in the canvas's area on the screen (it is at 10, 10 of the window)
+@native func vistos() -> Int
+"""
+    LONG x, y, n = 0;
+    for (y = 0; y < 30; y++)
+        for (x = 0; x < 100; x++)
+            if (ReadPixel(&fondo->WScreen->RastPort, fondo->LeftEdge + 10 + x, fondo->TopEdge + 10 + y) == 1) n++;
+    return n;
+"""
+end
+
+func pintar(x: Int, y: Int, w: Int, h: Int)
+    gfx_pen(1)
+    gfx_rect(0, 0, w - 1, h - 1)
+end
+
+Main
+    Print "fondo abierto: #{abrir_fondo()}"
+    time_delay(10)
+    c = desktop_canvas(10, 10, 100, 30)
+    Print "lienzo: #{c != 0}"
+    Print "en el fondo de otro: #{en_el_fondo()}"
+    desktop_canvas_on_draw(c, pintar)
+    desktop_canvas_update(c)
+    Print "se ve: #{vistos() == 3000}"
+    desktop_canvas_free(c)
+    time_delay(10)
+    Print "devuelto: #{devuelto() and vistos() == 0}"
+    cerrar_fondo()
+    Print "fin"
+end
