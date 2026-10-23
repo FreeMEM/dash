@@ -1,0 +1,74 @@
+# Lo de test_desktop_canvas_fondo.dash y su versión RTG: una ventana de fondo que hace de escritorio, con un
+# gancho de relleno propio cuyo color cambia sin cambiar de gancho (como el Workbench al poner su patrón).
+@c
+"""
+static struct Window *_f_win;
+static struct Hook _f_hook;
+static struct Screen *_f_scr;
+static BOOL _f_planar;
+
+static ULONG _f_fill(struct Hook *h __asm("a0"), struct RastPort *rp __asm("a2"), struct _DashDeskFill *m __asm("a1")) {
+    struct RastPort r = *rp;
+    r.Layer = NULL;
+    SetAPen(&r, (ULONG)h->h_Data);
+    SetDrMd(&r, JAM1);
+    RectFill(&r, m->bounds.MinX, m->bounds.MinY, m->bounds.MaxX, m->bounds.MaxY);
+    return 0;
+}
+
+static ULONG _f_px(LONG x, LONG y) {        /* a pixel of the screen: a pen, or an RGB colour */
+    return _f_planar ? (ULONG)ReadPixel(&_f_scr->RastPort, x, y) : _dash_rgb_read(&_f_scr->RastPort, x, y);
+}
+"""
+end
+
+# the desktop of another program, in front of the Workbench's if it runs, its fill in pen 2
+@native func abrir_fondo() -> Bool
+"""
+    _f_scr = LockPubScreen((CONST_STRPTR)"Workbench");
+    if (!_f_scr) return FALSE;
+    _f_planar = GetBitMapAttr(_f_scr->RastPort.BitMap, BMA_DEPTH) <= 8;
+    _f_hook.h_Entry = (void *)_f_fill;
+    _f_hook.h_Data = (APTR)2;
+    _f_win = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)_f_scr, WA_Left, 0, WA_Top, _f_scr->BarHeight + 1,
+        WA_Width, _f_scr->Width, WA_Height, _f_scr->Height - _f_scr->BarHeight - 1, WA_Borderless, TRUE,
+        WA_Backdrop, TRUE, WA_SimpleRefresh, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE,
+        WA_BackFill, (ULONG)&_f_hook, TAG_DONE);
+    if (!_f_win) return FALSE;
+    WindowToFront(_f_win);
+    Delay(10);
+    return TRUE;
+"""
+end
+
+# the fill paints another pen with the same hook, and the window is repainted whole
+@native func cambiar_fondo(pen: Int)
+"""
+    _f_hook.h_Data = (APTR)pen;
+    EraseRect(_f_win->RPort, 0, 0, _f_win->Width - 1, _f_win->Height - 1);
+    Delay(5);
+"""
+end
+
+# the canvas (at 10, 10 of the window, 100 x 30) is the desktop's fill where the drawing leaves it alone
+@native func fondo_debajo() -> Bool
+"""
+    LONG x0 = _f_win->LeftEdge, y0 = _f_win->TopEdge;
+    ULONG fuera = _f_px(x0 + 300, y0 + 100), dentro = _f_px(x0 + 10 + 60, y0 + 10 + 15);
+    WaitBlit();
+    if (fuera != dentro) Printf((CONST_STRPTR)"  fuera %lx, en el lienzo %lx\n", fuera, dentro);
+    return fuera == dentro;
+"""
+end
+
+@native func cerrar_fondo()
+"""
+    if (_f_win) CloseWindow(_f_win);
+    if (_f_scr) UnlockPubScreen(NULL, _f_scr);
+"""
+end
+
+func pintar(x: Int, y: Int, w: Int, h: Int)
+    gfx_pen(1)
+    gfx_rect(0, 0, 9, h - 1)
+end

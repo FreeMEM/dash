@@ -1,0 +1,29 @@
+# desktop_canvas when the desktop's fill changes with the same hook and the desktop is repainted (the
+# Workbench putting its pattern after a program of WBStartup made its canvas: Trasfondo stayed on the plain
+# colour 0 for good). The canvas takes the wallpaper again from the hook, and the next update has it under
+# the drawing.
+# (RTG: 68040 with uaegfx, 16 bits)
+# workbench
+# rtg
+# expect-out: fondo: true
+# expect-out: lienzo: true
+# expect-out: con el fondo de antes: true
+# expect-out: con el fondo nuevo: true
+# expect-out: fin
+
+import "lib/escritorio_fondo.dash"
+
+Main
+    Print "fondo: #{abrir_fondo()}"
+    c = desktop_canvas(10, 10, 100, 30)
+    Print "lienzo: #{c != 0}"
+    desktop_canvas_on_draw(c, pintar)
+    desktop_canvas_update(c)
+    Print "con el fondo de antes: #{fondo_debajo()}"
+    cambiar_fondo(3)
+    desktop_canvas_update(c)
+    Print "con el fondo nuevo: #{fondo_debajo()}"
+    desktop_canvas_free(c)
+    cerrar_fondo()
+    Print "fin"
+end
