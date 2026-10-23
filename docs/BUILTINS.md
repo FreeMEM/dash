@@ -547,7 +547,7 @@ Total: 590 funciones, 590 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `window_create(title, x, y, w, h, flags)` | `LONG` | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window |  |
-| `window_border_top()` | `LONG` | The top border of the current window (title bar included); GadTools gadgets count from the outer corner, so add it to their y |  |
+| `window_border_top()` | `LONG` | The top border of the current window (title bar included); gadgets count from the inside, without it |  |
 | `window_border_bottom()` | `LONG` | The bottom border of the current window |  |
 | `window_border_left()` | `LONG` | The left border of the current window |  |
 | `window_border_right()` | `LONG` | The right border of the current window |  |
