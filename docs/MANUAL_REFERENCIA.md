@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 584 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 590 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -1255,7 +1255,19 @@ window_to_front(a)              # tambien window_to_back, window_activate
 window_close(a)
 ```
 
-- `flags`: 1 = se puede redimensionar, 2 = sin bordes, 4 = sin boton de cerrar (se suman).
+- `flags`: 1 = se puede redimensionar, 2 = sin bordes, 4 = sin boton de cerrar, 8 = ancho y alto son el
+  interior, sin los bordes (se suman).
+- Para que quepa con cualquier fuente: `screen_font_height()` y `screen_font_text_width(texto)` miden con la
+  fuente de la pantalla (la del programa o la del Workbench), que es la de las barras de titulo y la de los
+  gadgets de GadTools. Con la ventana abierta, `window_border_top()`, `window_border_bottom()`,
+  `window_border_left()` y `window_border_right()` dan sus bordes; los gadgets `gt_*` cuentan desde la esquina de
+  fuera, asi que su y lleva el borde de arriba:
+
+```
+alto = screen_font_height() + 6                  # un boton con la fuente de la pantalla
+v = window_create("Prefs", 40, 30, 300, 4 * alto + 20, 8)    # el interior justo
+y = window_border_top() + 4                      # la primera fila de gadgets
+```
 - La ventana creada pasa a ser la actual: los `gfx_*` dibujan en ella. El numero 0 es la ventana actual.
 - Un numero que no es una ventana abierta no hace nada. Las que sigan abiertas se cierran al salir.
 - Tamano minimo 40x20 (Intuition 3.1 se cuelga con una ventana de 0x0).
@@ -4026,10 +4038,10 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 46 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
+| Intuition | 52 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **584** | |
+| **Total** | **590** | |
 
 ### Colores Estandar Amiga
 

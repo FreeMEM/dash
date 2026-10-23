@@ -256,6 +256,8 @@ gfx_clear()                 # Clear screen
 
 ## Gadgets (GadTools, by number)
 ```
+v = window_create("T", x, y, w, h, 8)   # flag 8: w and h are the inside; window_border_top/bottom/left/right()
+h = screen_font_height()    # the screen's font (title bars, gt_* gadgets); screen_font_text_width(text)
 b = button_create(0, x, y, 0, 0, "_Save")   # w/h 0: measured with the screen font; "_": S presses it
 gadget_width(b)  gadget_height(b)           # its size, to place the next one
 ```

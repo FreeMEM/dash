@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 584 funciones, 584 implementadas, 0 sin implementar.
+Total: 590 funciones, 590 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -546,7 +546,13 @@ Total: 584 funciones, 584 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `window_create(title, x, y, w, h, flags)` | `LONG` | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget. It becomes the current window |  |
+| `window_create(title, x, y, w, h, flags)` | `LONG` | Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window |  |
+| `window_border_top()` | `LONG` | The top border of the current window (title bar included); GadTools gadgets count from the outer corner, so add it to their y |  |
+| `window_border_bottom()` | `LONG` | The bottom border of the current window |  |
+| `window_border_left()` | `LONG` | The left border of the current window |  |
+| `window_border_right()` | `LONG` | The right border of the current window |  |
+| `screen_font_height()` | `LONG` | The height of the screen's font (the program's screen, or the Workbench's): the one of title bars and of GadTools gadgets |  |
+| `screen_font_text_width(text)` | `LONG` | The width of a text in the screen's font |  |
 | `window_close(handle)` | `void` | Close window (handle 0: current window) |  |
 | `window_title(handle, title)` | `void` | Set window title (handle 0: current window) |  |
 | `window_move(handle, x, y)` | `void` | Move window to x, y (absolute; handle 0: current window) |  |

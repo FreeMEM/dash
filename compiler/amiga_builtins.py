@@ -2583,8 +2583,29 @@ INTUITION_EXPANDED = {
         params=["title", "x", "y", "w", "h", "flags"],
         return_type="LONG",
         c_template="_dash_window_create(${title}, ${x}, ${y}, ${w}, ${h}, ${flags})",
-        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget. It becomes the current window"
+        description="Open a window, returns its handle 1..16 (0 = failed); flags: 1 resizable, 2 borderless, 4 no close gadget, 8 w and h are the inside (without the borders). It becomes the current window"
     ),
+    "window_border_top": BuiltinFunc(
+        name="window_border_top", params=[], return_type="LONG", c_template="_dash_window_border(0)",
+        description="The top border of the current window (title bar included); GadTools gadgets count from the "
+                    "outer corner, so add it to their y"),
+    "window_border_bottom": BuiltinFunc(
+        name="window_border_bottom", params=[], return_type="LONG", c_template="_dash_window_border(1)",
+        description="The bottom border of the current window"),
+    "window_border_left": BuiltinFunc(
+        name="window_border_left", params=[], return_type="LONG", c_template="_dash_window_border(2)",
+        description="The left border of the current window"),
+    "window_border_right": BuiltinFunc(
+        name="window_border_right", params=[], return_type="LONG", c_template="_dash_window_border(3)",
+        description="The right border of the current window"),
+    "screen_font_height": BuiltinFunc(
+        name="screen_font_height", params=[], return_type="LONG", c_template="_dash_screen_font_height()",
+        description="The height of the screen's font (the program's screen, or the Workbench's): the one of title "
+                    "bars and of GadTools gadgets"),
+    "screen_font_text_width": BuiltinFunc(
+        name="screen_font_text_width", params=["text"], return_type="LONG",
+        c_template="_dash_screen_font_text_width(${text})",
+        description="The width of a text in the screen's font"),
     "window_close": BuiltinFunc(
         name="window_close",
         params=["handle"],
