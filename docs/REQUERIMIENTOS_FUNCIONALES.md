@@ -28,7 +28,15 @@ El lenguaje debe incluir funcionalidades para multimedia y conectividad.
 
 - **RF3.1: Reproducción de Módulos:** Motor de audio capaz de reproducir archivos de tracker (formato `.mod`) de manera asíncrona, utilizando la `ptplay.library` o una rutina interna.
 - **RF3.2: Reproducción de Samples:** Soporte para cargar y reproducir sonidos (`.8svx` o `RAW`).
-- **RF3.3: Conectividad de Red:** Abstracción de la `bsdsocket.library` para permitir peticiones de red sencillas, como `Http.get`.
+- **RF3.3: Conectividad de Red:** Acceso a la red con `bsdsocket.library` (cualquier pila: Roadshow, AmiTCP, MiamiDx), sin
+  esconder el control al programa. Hoy hay: TCP como cliente (`net_connect`, también por pasos sin bloquear:
+  `net_connect_start`/`net_connect_poll`) y como servidor (`net_listen`, `net_accept`); UDP con difusión
+  (`net_udp_*`); TLS con AmiSSL que comprueba el certificado (`tls_*`, también por pasos y reanudando sesiones);
+  `net_signal` para despertar el bucle de eventos con la red; la red en una tarea aparte (`task_start`); y
+  consultas a la pila y a los drivers: interfaces de Roadshow con su estado y bytes, drivers SANA-II en uso con
+  sus paquetes, bytes y la señal WiFi. HTTP no es un builtin: cada programa lo hace sobre TCP y TLS (Tachyon,
+  `lib/http.dash`). Lo que falta: sockets raw (ICMP para un ping) y tramas en crudo del driver SANA-II (leer y
+  escribir paquetes de cualquier protocolo); hoy, con `@native`. Detalle en `docs/MANUAL_REFERENCIA.md` ("Red").
 
 ## RF4: Gestión de Seguridad y Robustez (Safety Injections)
 Para mejorar la estabilidad y evitar `Guru Meditations`, el transpilador de Dash inyectará código de seguridad de forma automática.
