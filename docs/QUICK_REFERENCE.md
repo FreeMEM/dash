@@ -344,6 +344,8 @@ m = net_ifs_read()          # Roadshow's interfaces (-1 without): net_if_name(i)
 wifi_read("wlan0", 500)     # 0: wifi_signal(), wifi_noise() in dBm; 1 no answer, 2 not told, 3 no interface, 4 offline, 5 busy, -1 no Roadshow
 d = net_drivers_read()      # SANA-II drivers in use, any stack: net_driver_name(i) ("wifipi.device")
 wifi_read_device("wifipi.device", 0, 500)   # as wifi_read, asking the driver; net_driver_read(driver, unit, ms): net_driver_packets_in/out()
+h = file_notify("ENV:X.prefs")   # watch a file: cx_wait gives 7, file_changed(h); file_notify_signal() for MUI
+run_program("SYS:Prefs/Font")    # start a command line, not waiting; program_relaunch(): start again at the end
 clock_read()                # clock_year/month/day/weekday(0 Sun)/hour/minute/second(); date_text("%A %d-%b-%Y %H:%M") (locale)
 t = tr(1, "Hola")           # the text of number 1 in the catalog (@catalog), else "Hola"; catalog_open(name, version), catalog_language()
 mouse_curve(0, [100, 150, 200])      # mouse acceleration: emitter 0 = Amiga mouse; factors in hundredths by speed

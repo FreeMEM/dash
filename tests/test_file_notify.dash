@@ -1,0 +1,33 @@
+# Watching a file (Trasfondo 0.7: its settings in ENV:, changed by TrasfondoPrefs): file_notify on a file that
+# is not there yet; writing it wakes cx_wait with 7 and file_changed says so once; another file does not;
+# after file_notify_end, no more.
+# memcheck
+# expect-out: vigilado: true false true
+# expect-out: al escribirlo: 7 true false
+# expect-out: otro fichero: 0
+# expect-out: sin vigilar: 0 false
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@native func escribir(path: String)
+"""
+    BPTR f = Open((CONST_STRPTR)path, MODE_NEWFILE);
+    if (f) { Write(f, "x\n", 2); Close(f); }
+"""
+end
+
+Main
+    h = file_notify("RAM:vigilado.txt")
+    Print "vigilado: #{h > 0} #{file_changed(h)} #{file_notify_signal() != 0}"
+    escribir("RAM:vigilado.txt")
+    w = cx_wait(3000)
+    a = file_changed(h)
+    b = file_changed(h)
+    Print "al escribirlo: #{w} #{a} #{b}"
+    escribir("RAM:otro.txt")
+    w = cx_wait(300)
+    Print "otro fichero: #{w}"
+    file_notify_end(h)
+    escribir("RAM:vigilado.txt")
+    w = cx_wait(300)
+    Print "sin vigilar: #{w} #{file_changed(h)}"
+end

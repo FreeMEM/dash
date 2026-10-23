@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 600 funciones, 600 implementadas, 0 sin implementar.
+Total: 606 funciones, 606 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -491,6 +491,12 @@ Total: 600 funciones, 600 implementadas, 0 sin implementar.
 | `clock_second()` | `LONG` | The second of the last clock_read |  |
 | `date_text(format)` | `STRPTR` | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
 | `program_version()` | `STRPTR` | The program's name and version of @version ("Trasfondo 0.7"); "" without it |  |
+| `file_notify(path)` | `LONG` | Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched. cx_wait gives 7 when it changes; file_changed(n) says whether it did |  |
+| `file_changed(n)` | `BOOL` | True if the file watched with that number changed since the last file_changed |  |
+| `file_notify_end(n)` | `void` | Stop watching that file (the program's end stops them all) |  |
+| `file_notify_signal()` | `LONG` | The signal of the watched files, for mui_wait_event_signals (0 before any file_notify) |  |
+| `run_program(command)` | `BOOL` | Start a command line ("SYS:Prefs/Font", "\"Work:My Prog\" arg") in another process without waiting, its input and output NIL:; false if it could not start |  |
+| `program_relaunch()` | `void` | When the program ends, start it again (after everything of its end, single_instance's port too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its arguments. For updating itself |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |

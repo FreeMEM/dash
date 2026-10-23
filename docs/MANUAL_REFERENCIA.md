@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
 - Sistema de ventanas y graficos simplificado
-- 600 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 606 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
@@ -3503,7 +3503,7 @@ end
   6 la tecla rápida. Desactivar y activar apagan y encienden la commodity (Exchange lo enseña, y la tecla no hace
   nada mientras está desactivada).
 - `cx_wait(ms)`: espera sin gastar CPU a que llegue una orden (la da, como `cx_command`), Ctrl-C (-1, y lo borra,
-  como `break_check`) o pasen `ms` milisegundos (0).
+  como `break_check`), cambie un fichero vigilado con `file_notify` (7) o pasen `ms` milisegundos (0).
 
 Al acabar el programa, la commodity y su tecla se quitan solas. Lanzar otra vez el programa lo sigue parando con
 `single_instance`, que va antes.
@@ -3612,6 +3612,34 @@ Cómo funciona: los ratones USB, con un parche en `BeginIO` de `input.device` qu
 (la memoria de `hid.class` no se toca); el ratón Amiga, con un input handler por encima de Intuition. Rueda,
 botones y posiciones absolutas no se tocan. Al quitarlo, si otro programa ha parcheado `BeginIO` encima, queda
 un trozo de 8 bytes que pasa todo sin tocar y no se libera nunca (`mouse_patch_left()` dice cuántos).
+
+### Vigilar un fichero: file_notify
+
+En vez de leer un fichero cada poco por si ha cambiado (los ajustes en `ENV:` que escribe un programa de
+preferencias), el sistema avisa cuando cambia:
+
+```ruby
+ajustes = file_notify("ENV:MiPrograma.prefs")      # también si aún no existe; 0 si no se puede
+while true
+    orden = cx_wait(1000)                           # 7: cambió un fichero vigilado
+    if orden == 7 and file_changed(ajustes)
+        leer_ajustes()
+    end
+end
+```
+
+- `file_notify(ruta)`: vigila ese fichero (hasta 8): da su número, o 0. `file_changed(n)`: si cambió desde la
+  última vez que se preguntó. `file_notify_end(n)`: deja de vigilarlo (al acabar el programa, todos).
+- `cx_wait` despierta con 7 cuando cambia uno; para `mui_wait_event_signals`, `file_notify_signal()`.
+
+### Lanzar programas: run_program y program_relaunch
+
+- `run_program(orden)`: lanza una línea de órdenes (`"SYS:Prefs/Font"`, con comillas si la ruta tiene espacios) en
+  otro proceso, sin esperarla, con la entrada y la salida a `NIL:`. `false` si no pudo arrancar.
+- `program_relaunch()`: al acabar el programa, lo vuelve a lanzar, después de todo lo demás del final (también el
+  puerto de `single_instance`, así que la copia nueva no encuentra a la vieja) y como arrancó: desde el Workbench
+  con `OpenWorkbenchObject` (3.5 o posterior: lee los tooltypes de su icono) o desde una Shell con los mismos
+  argumentos. Sirve para actualizarse: cambiar el ejecutable, `program_relaunch()` y acabar.
 
 ### La fecha y la hora: clock_* y date_text
 
@@ -4057,6 +4085,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Ficheros vigilados y programas | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
 | Fecha, hora y versión | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
@@ -4067,7 +4096,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **600** | |
+| **Total** | **606** | |
 
 ### Colores Estandar Amiga
 
