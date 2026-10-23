@@ -7354,6 +7354,7 @@ struct _DashDesk {
     UBYTE *cb, *cf, *cw, *cs, *ci;          /* RTG: back, front, wallpaper, screen (w x h), icons (1 byte) */
     struct RastPort line;                   /* RTG 8 bits: the temporary RastPort of Read/WritePixelLine8 */
     volatile LONG front;                    /* -1: not on the screen yet */
+    volatile LONG wall_new;                 /* the hook took the wallpaper again: RTG, its bytes too */
     struct Rectangle damage;                /* repainted by the hook: the Workbench draws its icons */
     LONG damage_left;                       /* there again soon; the next updates look at it */
     struct _DashDesk *next;
@@ -7413,6 +7414,11 @@ static ULONG _dash_desk_hook_fn(struct Hook *h __asm("a0"), struct RastPort *rp 
         x1 = lx1 < dx + d->w - 1 ? lx1 : dx + d->w - 1;
         y1 = ly1 < dy + d->h - 1 ? ly1 : dy + d->h - 1;
         if (x0 > x1 || y0 > y1) continue;
+        /* the wallpaper as the hook before has just painted it: it may not be the one of the canvas's start
+           (the Workbench puts its pattern after WBStartup, with the same hook) */
+        BltBitMap(rp->BitMap, m->bounds.MinX + (x0 - lx0), m->bounds.MinY + (y0 - ly0), d->wall, x0 - dx, y0 - dy,
+                  x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
+        d->wall_new = 1;
         BltBitMap(d->bm[f], x0 - dx, y0 - dy, rp->BitMap, m->bounds.MinX + (x0 - lx0),
                   m->bounds.MinY + (y0 - ly0), x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
         x0 -= dx; y0 -= dy; x1 -= dx; y1 -= dy;
@@ -7856,6 +7862,12 @@ static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     _dash_desk_attach();
     attached = _dash_desk_attached;
     UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
+    if (d->wall_new && d->bpp) {      /* RTG: the bytes of the wallpaper the hook took again */
+        d->wall_new = 0;
+        WaitBlit();
+        _dash_desk_bm_pixels(d, d->wall, d->cw, 0, 0, d->w, d->h);
+    }
+    d->wall_new = 0;
     /* the drawing, over the wallpaper and without locks (it may take long, or open a window) */
     back = d->front == 0 ? 1 : 0;
     rp = d->ly[back]->rp;
