@@ -8198,16 +8198,28 @@ static void _dash_desk_present_planar(struct _DashDesk *d, LONG back, struct Rec
         t1 = _dash_desk_tick();
 #endif
         for (y = ry; y < ry + rh; y++) {
-            LONG o = y * bpr + (rx >> 3);
+            LONG o = y * bpr + (rx >> 3), nw = (rw + 15) >> 4;
             UWORD *ic = (UWORD *)(d->icons->Planes[0] + o), *mk = (UWORD *)(d->mask->Planes[0] + o);
-            for (c = 0; c < (rw + 15) >> 4; c++) {
+            /* two words at a time while it can (Chip RAM: on the A1200 a long word costs one access) */
+            for (c = 0; c + 1 < nw; c += 2) {
+                ULONG df = 0, dw = 0, m;
+                for (p = 0; p < depth; p++) {
+                    ULONG v = *(ULONG *)(s->Planes[p] + o + c * 2);
+                    df |= v ^ *(ULONG *)(f->Planes[p] + o + c * 2);
+                    dw |= v ^ *(ULONG *)(wl->Planes[p] + o + c * 2);
+                }
+                m = (*(ULONG *)(ic + c) | df) & dw;      /* an icon: not the wallpaper, and new or known */
+                *(ULONG *)(ic + c) = m;
+                *(ULONG *)(mk + c) = ~m;
+            }
+            for (; c < nw; c++) {
                 UWORD df = 0, dw = 0, m;
                 for (p = 0; p < depth; p++) {
                     UWORD v = ((UWORD *)(s->Planes[p] + o))[c];
                     df |= v ^ ((UWORD *)(f->Planes[p] + o))[c];
                     dw |= v ^ ((UWORD *)(wl->Planes[p] + o))[c];
                 }
-                m = (ic[c] | df) & dw;      /* an icon: not the wallpaper, and new or known */
+                m = (ic[c] | df) & dw;
                 ic[c] = m;
                 mk[c] = ~m;
             }
