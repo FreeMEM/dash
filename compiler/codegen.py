@@ -13643,28 +13643,26 @@ static BOOL _dash_rtg_is_active(void) {
     return (depth > 8);  /* Truecolor screens have depth > 8 */
 }
 
-static LONG _dash_rtg_get_depth(void) {
-    if (!_dash_rp || !_dash_rp->BitMap) return 0;
-
-    if (_dash_rtg_available()) {
-        return GetCyberMapAttr(_dash_rp->BitMap, CYBRMATTR_DEPTH);
-    }
-
-    /* Fallback: use standard bitmap depth */
-    return GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH);
+static LONG _dash_rtg_bm_depth(struct BitMap *bm) {
+    if (_dash_rtg_available()) return GetCyberMapAttr(bm, CYBRMATTR_DEPTH);
+    return GetBitMapAttr(bm, BMA_DEPTH);   /* (without RTG libraries: the bitmap's own) */
 }
 
-static LONG _dash_rtg_get_width(void) {
-    if (_dash_screen) return _dash_screen->Width;
-    if (_dash_win) return _dash_win->WScreen->Width;
-    return 0;
+/* The screen of the program, or (no window or screen of its own: a desktop_canvas, a commodity) the default
+   public one, the Workbench's: what = 0 depth, 1 width, 2 height */
+static LONG _dash_rtg_screen_attr(LONG what) {
+    struct Screen *s = _dash_screen ? _dash_screen : _dash_win ? _dash_win->WScreen : NULL, *pub = NULL;
+    LONG r = 0;
+    if (what == 0 && _dash_rp && _dash_rp->BitMap) return _dash_rtg_bm_depth(_dash_rp->BitMap);
+    if (!s) s = pub = LockPubScreen(NULL);
+    if (s) r = what == 0 ? _dash_rtg_bm_depth(s->RastPort.BitMap) : what == 1 ? s->Width : s->Height;
+    if (pub) UnlockPubScreen(NULL, pub);
+    return r;
 }
 
-static LONG _dash_rtg_get_height(void) {
-    if (_dash_screen) return _dash_screen->Height;
-    if (_dash_win) return _dash_win->WScreen->Height;
-    return 0;
-}
+static LONG _dash_rtg_get_depth(void) { return _dash_rtg_screen_attr(0); }
+static LONG _dash_rtg_get_width(void) { return _dash_rtg_screen_attr(1); }
+static LONG _dash_rtg_get_height(void) { return _dash_rtg_screen_attr(2); }
 
 static struct BitMap *_dash_rtg_alloc_bitmap(LONG width, LONG height, LONG depth) {
     struct BitMap *bm;

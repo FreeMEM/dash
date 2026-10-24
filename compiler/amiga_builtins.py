@@ -3005,7 +3005,7 @@ RTG_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_rtg_get_depth()",
         needs_rtg=True,
-        description="Get current screen bit depth"
+        description="Get current screen bit depth (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too)"
     ),
     "rtg_get_width": BuiltinFunc(
         name="rtg_get_width",
@@ -3013,7 +3013,7 @@ RTG_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_rtg_get_width()",
         needs_rtg=True,
-        description="Get current screen width"
+        description="Get current screen width (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too)"
     ),
     "rtg_get_height": BuiltinFunc(
         name="rtg_get_height",
@@ -3021,7 +3021,7 @@ RTG_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_rtg_get_height()",
         needs_rtg=True,
-        description="Get current screen height"
+        description="Get current screen height (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too)"
     ),
 
     # Bitmap Operations
