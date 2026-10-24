@@ -8434,12 +8434,41 @@ static void _dash_desk_present_screen(struct _DashDesk *d, LONG back, struct Rec
     DisposeRegion(rg);
 }
 
-/* The back bitmap to the screen in what changed (in the area a, or all), the screen's LayerInfo locked */
-static void _dash_desk_present(struct _DashDesk *d, LONG back, struct Rectangle *a) {
+/* Rectangle r minus the area a, from one bitmap to the other (up to four strips) */
+static void _dash_desk_blt_outside(struct BitMap *src, struct BitMap *dst, struct Rectangle *r, struct Rectangle *a) {
+    struct Rectangle p[4];
+    LONG n = 0, i, y0, y1;
+    if (r->MaxX < a->MinX || r->MinX > a->MaxX || r->MaxY < a->MinY || r->MinY > a->MaxY) p[n++] = *r;
+    else {
+        y0 = r->MinY > a->MinY ? r->MinY : a->MinY;
+        y1 = r->MaxY < a->MaxY ? r->MaxY : a->MaxY;
+        if (r->MinY < a->MinY) { p[n] = *r; p[n].MaxY = a->MinY - 1; n++; }
+        if (r->MaxY > a->MaxY) { p[n] = *r; p[n].MinY = a->MaxY + 1; n++; }
+        if (r->MinX < a->MinX) { p[n].MinX = r->MinX; p[n].MaxX = a->MinX - 1; p[n].MinY = y0; p[n].MaxY = y1; n++; }
+        if (r->MaxX > a->MaxX) { p[n].MinX = a->MaxX + 1; p[n].MaxX = r->MaxX; p[n].MinY = y0; p[n].MaxY = y1; n++; }
+    }
+    for (i = 0; i < n; i++)
+        BltBitMap(src, p[i].MinX, p[i].MinY, dst, p[i].MinX, p[i].MinY, p[i].MaxX - p[i].MinX + 1,
+                  p[i].MaxY - p[i].MinY + 1, 0xC0, 0xFF, NULL);
+}
+
+/* The back bitmap to the screen in what changed (in the area a, or all), the screen's LayerInfo locked.
+   keep: the back bitmap is the front one only in that box (a small update_area: _dash_desk_redo); it goes
+   back to the front one there, and the two bitmaps do not swap */
+static void _dash_desk_present(struct _DashDesk *d, LONG back, struct Rectangle *a, struct Rectangle *keep) {
     struct Rectangle r[_DASH_DESK_RECTS];
     LONG n;
     ULONG t0;
     if (_dash_desk_layer) LockLayer(0, _dash_desk_layer);
+    /* (the desktop repainted while the program drew: what goes to the screen there is the front bitmap) */
+    if (keep && d->damage_left > 0) {
+        struct Rectangle dm = d->damage, in = *a;
+        if (!d->bpp) {                      /* planar: in whole words, as compared */
+            dm.MinX &= ~15; dm.MaxX = (dm.MaxX | 15) < d->w - 1 ? (dm.MaxX | 15) : d->w - 1;
+            in.MinX &= ~15; in.MaxX = (in.MaxX | 15) < d->w - 1 ? (in.MaxX | 15) : d->w - 1;
+        }
+        _dash_desk_blt_outside(d->bm[d->front], d->bm[back], &dm, &in);
+    }
     t0 = _dash_desk_tick();
     n = _dash_desk_dirty(d, back, a, r);
     _DASH_DESK_T(1, t0);
@@ -8461,7 +8490,9 @@ static void _dash_desk_present(struct _DashDesk *d, LONG back, struct Rectangle 
             d->cb = t;
         }
     }
-    d->front = back;
+    if (keep) BltBitMap(d->bm[back], keep->MinX, keep->MinY, d->bm[d->front], keep->MinX, keep->MinY,
+                        keep->MaxX - keep->MinX + 1, keep->MaxY - keep->MinY + 1, 0xC0, 0xFF, NULL);
+    else d->front = back;
     if (_dash_desk_layer) UnlockLayer(_dash_desk_layer);
 }
 
@@ -8633,7 +8664,7 @@ static BOOL _dash_desk_drawing(LONG x, LONG y, LONG w, LONG h) {
 static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     struct RastPort *rp, *old = _dash_rp;
     struct Region *clip = NULL, *before = NULL;
-    struct Rectangle wr, grown;
+    struct Rectangle wr, grown, box, *keep = NULL;
     struct BitMap *under;
     LONG back, wall_new;
     ULONG t0 = _dash_desk_tick(), t1, attached;
@@ -8669,7 +8700,23 @@ static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     back = d->front == 0 ? 1 : 0;
     rp = d->ly[back]->rp;
     if (a) {
-        BltBitMap(d->bm[d->front], 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
+        /* the back bitmap as the front one: only in the area and what the desktop repainted, if that is less
+           than half the canvas (it goes back after, with no swap: several small update_area are cheap) */
+        box = *a;
+        if (d->damage_left > 0) {
+            if (d->damage.MinX < box.MinX) box.MinX = d->damage.MinX;
+            if (d->damage.MinY < box.MinY) box.MinY = d->damage.MinY;
+            if (d->damage.MaxX > box.MaxX) box.MaxX = d->damage.MaxX;
+            if (d->damage.MaxY > box.MaxY) box.MaxY = d->damage.MaxY;
+        }
+        if (!d->bpp) {                /* planar: compared and shown in whole words */
+            box.MinX &= ~15;
+            box.MaxX = (box.MaxX | 15) < d->w - 1 ? (box.MaxX | 15) : d->w - 1;
+        }
+        if ((box.MaxX - box.MinX + 1) * (box.MaxY - box.MinY + 1) * 2 < d->w * d->h) keep = &box;
+        if (keep) BltBitMap(d->bm[d->front], box.MinX, box.MinY, d->bm[back], box.MinX, box.MinY,
+                            box.MaxX - box.MinX + 1, box.MaxY - box.MinY + 1, 0xC0, 0xFF, NULL);
+        else BltBitMap(d->bm[d->front], 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
         BltBitMap(under, a->MinX, a->MinY, d->bm[back], a->MinX, a->MinY, a->MaxX - a->MinX + 1,
                   a->MaxY - a->MinY + 1, 0xC0, 0xFF, NULL);
         if ((clip = NewRegion()) && OrRectRegion(clip, a)) before = InstallClipRegion(d->ly[back], clip);
@@ -8700,7 +8747,7 @@ static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     _dash_desk_attach();
     /* (if the Workbench changed mode meanwhile, the canvas started again: the drawing goes on the next update) */
-    if (attached == _dash_desk_attached) _dash_desk_present(d, back, a);
+    if (attached == _dash_desk_attached) _dash_desk_present(d, back, a, keep);
     UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
     _DASH_DESK_T(5, t0);
 }
