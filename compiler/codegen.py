@@ -1547,6 +1547,13 @@ static BOOL _dash_blend_clip(LONG *x1, LONG *y1, LONG *x2, LONG *y2) {
     if (*y1 < 0) *y1 = 0;
     if (*x2 >= w) *x2 = w - 1;
     if (*y2 >= h) *y2 = h - 1;
+    if (_dash_rp->Layer && _dash_rp->Layer->ClipRegion) {   /* an installed clip (desktop_canvas_update_area) */
+        struct Rectangle *b = &_dash_rp->Layer->ClipRegion->bounds;
+        if (*x1 < b->MinX) *x1 = b->MinX;
+        if (*y1 < b->MinY) *y1 = b->MinY;
+        if (*x2 > b->MaxX) *x2 = b->MaxX;
+        if (*y2 > b->MaxY) *y2 = b->MaxY;
+    }
     return *x1 <= *x2 && *y1 <= *y2;
 }
 
@@ -7949,6 +7956,7 @@ static void _dash_dir_cleanup(void) {
 #define LAYERHIDDEN 0x1000
 #endif
 #define _DASH_DESK_RECTS 8
+#define _DASH_DESK_VEILS 16
 #define _DASH_DESK_BACKDROP 1               /* modes: on the backdrop window, with icons */
 #define _DASH_DESK_SCREEN 2                 /*        on the screen's background */
 struct _DashDeskFill {                      /* what layers passes to a backfill hook */
@@ -7963,8 +7971,15 @@ struct _DashDesk {
     struct Layer_Info *li[2];               /* one each: a layer over another would cover it */
     struct Layer *ly[2];                    /* one on each bitmap, to clip the drawing (update_area) */
     struct BitMap *wall;                    /* the wallpaper below */
+    struct BitMap *under;                   /* desktop_canvas_veil: the wallpaper with the veil, the drawing's start */
+    LONG veil_rgb, veil_alpha;              /* over all of it (alpha 0: none) */
+    struct { struct Rectangle r; LONG rgb, alpha; } veils[_DASH_DESK_VEILS];   /* desktop_canvas_veil_rect, over it */
+    LONG nveils;
+    BOOL under_new;                         /* the veil to be mixed again over all the wallpaper */
     struct BitMap *tmp, *icons, *mask;      /* planar, backdrop: the screen read; one plane: icons; where to paint */
     LONG bpp;                               /* RTG: bytes per pixel of the copies (3: RGB24, 1: pens); 0 planar */
+    ULONG fmt;                              /* Picasso96: the copies in the screen's RGBFormat (bpp its bytes), read
+                                               and written without converting; 0: RGB24 or pens */
     UBYTE *cb, *cf, *cw, *cs, *ci;          /* RTG: back, front, wallpaper, screen (w x h), icons (1 byte) */
     struct RastPort line;                   /* RTG 8 bits: the temporary RastPort of Read/WritePixelLine8 */
     volatile LONG front;                    /* -1: not on the screen yet */
@@ -8084,11 +8099,40 @@ static struct Window *_dash_desk_find(void) {
     return w;
 }
 
+/* RTG: two pixels of the copies differ (2 and 4 bytes: aligned, the rows are whole pixels) */
+#define _DASH_DESK_NE(p, q, bpp) ((bpp) == 2 ? *(UWORD *)(p) != *(UWORD *)(q) : \
+                                  (bpp) == 4 ? *(ULONG *)(p) != *(ULONG *)(q) : \
+                                  (bpp) == 1 ? *(p) != *(q) : ((p)[0] != (q)[0] || (p)[1] != (q)[1] || (p)[2] != (q)[2]))
+
+/* RTG: the n bytes of two rows differ (libnix's memcmp goes byte by byte): long words while it can (an even
+   address is enough on a 68000), four at a time */
+static BOOL _dash_desk_row_ne(const UBYTE *p, const UBYTE *q, LONG n) {
+    if (!(((ULONG)p | (ULONG)q) & 1)) {
+        const ULONG *a = (const ULONG *)p, *b = (const ULONG *)q;
+        for (; n >= 16; n -= 16, a += 4, b += 4)
+            if (a[0] != b[0] || a[1] != b[1] || a[2] != b[2] || a[3] != b[3]) return TRUE;
+        for (; n >= 4; n -= 4) if (*a++ != *b++) return TRUE;
+        p = (const UBYTE *)a;
+        q = (const UBYTE *)b;
+    }
+    while (n-- > 0) if (*p++ != *q++) return TRUE;
+    return FALSE;
+}
+
 /* RTG: pixels of a RastPort to or from one of the copies (at its x, y), rows of the canvas's width */
 static void _dash_desk_pixels(struct _DashDesk *d, struct RastPort *rp, BOOL write, UBYTE *copy,
                               LONG x, LONG y, LONG sx, LONG sy, LONG w, LONG h) {
     UBYTE *p = copy + (y * d->w + x) * d->bpp;
     LONG i;
+    if (d->fmt) {                           /* Picasso96, in the screen's format: only copied */
+        struct _DashRenderInfo ri;
+        ri.Memory = p;
+        ri.BytesPerRow = d->w * d->bpp;
+        ri.pad = 0;
+        ri.RGBFormat = d->fmt;
+        _dash_p96_pixel_array(write ? -102 : -108, &ri, 0, 0, rp, sx, sy, w, h);
+        return;
+    }
     if (d->bpp == 3) {
         _dash_rgb_block_rp(rp, write, p, d->w * 3, sx, sy, w, h);
         return;
@@ -8129,6 +8173,7 @@ static void _dash_desk_reset(struct _DashDesk *d) {
     }
     d->front = 0;
     d->damage_left = 0;
+    d->under_new = TRUE;
 }
 
 /* With the screen's LayerInfo locked: our hook where the Workbench's desktop is now (the backdrop
@@ -8199,18 +8244,19 @@ static LONG _dash_desk_dirty(struct _DashDesk *d, LONG back, struct Rectangle *a
     }
     if (d->bpp) {
         LONG bpp = d->bpp, rw = d->w * bpp;
-        /* outside the area the back bitmap is the front one: its copy too (the damage may reach there) */
-        if (a) memcpy(d->cb, d->cf, d->w * d->h * bpp);
+        /* outside the area the back bitmap is the front one: its copy too, in the rows looked at (the damage
+           may reach past the area there) */
+        if (a) memcpy(d->cb + y0 * rw, d->cf + y0 * rw, (y1 - y0 + 1) * rw);
         _dash_desk_bm_pixels(d, d->bm[back], d->cb, a ? a->MinX : 0, a ? a->MinY : 0,
                              a ? a->MaxX - a->MinX + 1 : d->w, a ? a->MaxY - a->MinY + 1 : d->h);
         for (y = y0; y <= y1; y++) {
             UBYTE *pb = d->cb + y * rw, *pf = d->cf + y * rw;
             LONG first = d->w, last = -1;
-            if (a && (y < a->MinY || y > a->MaxY)) first = d->w;
-            else {
-                for (c = x0; c <= x1; c++) if (memcmp(pb + c * bpp, pf + c * bpp, bpp)) { first = c; break; }
-                for (c = x1; c > first; c--) if (memcmp(pb + c * bpp, pf + c * bpp, bpp)) break;
-                last = first < d->w ? c : -1;
+            /* (most rows do not change: compared whole, then pixel by pixel only where one does) */
+            if ((!a || (y >= a->MinY && y <= a->MaxY)) && _dash_desk_row_ne(pb + x0 * bpp, pf + x0 * bpp, (x1 - x0 + 1) * bpp)) {
+                for (c = x0; c <= x1; c++) if (_DASH_DESK_NE(pb + c * bpp, pf + c * bpp, bpp)) { first = c; break; }
+                for (c = x1; c > first; c--) if (_DASH_DESK_NE(pb + c * bpp, pf + c * bpp, bpp)) break;
+                last = c;
             }
             if (damaged && y >= d->damage.MinY && y <= d->damage.MaxY) {
                 if (d->damage.MinX < first) first = d->damage.MinX;
@@ -8281,16 +8327,28 @@ static void _dash_desk_present_planar(struct _DashDesk *d, LONG back, struct Rec
         t1 = _dash_desk_tick();
 #endif
         for (y = ry; y < ry + rh; y++) {
-            LONG o = y * bpr + (rx >> 3);
+            LONG o = y * bpr + (rx >> 3), nw = (rw + 15) >> 4;
             UWORD *ic = (UWORD *)(d->icons->Planes[0] + o), *mk = (UWORD *)(d->mask->Planes[0] + o);
-            for (c = 0; c < (rw + 15) >> 4; c++) {
+            /* two words at a time while it can (Chip RAM: on the A1200 a long word costs one access) */
+            for (c = 0; c + 1 < nw; c += 2) {
+                ULONG df = 0, dw = 0, m;
+                for (p = 0; p < depth; p++) {
+                    ULONG v = *(ULONG *)(s->Planes[p] + o + c * 2);
+                    df |= v ^ *(ULONG *)(f->Planes[p] + o + c * 2);
+                    dw |= v ^ *(ULONG *)(wl->Planes[p] + o + c * 2);
+                }
+                m = (*(ULONG *)(ic + c) | df) & dw;      /* an icon: not the wallpaper, and new or known */
+                *(ULONG *)(ic + c) = m;
+                *(ULONG *)(mk + c) = ~m;
+            }
+            for (; c < nw; c++) {
                 UWORD df = 0, dw = 0, m;
                 for (p = 0; p < depth; p++) {
                     UWORD v = ((UWORD *)(s->Planes[p] + o))[c];
                     df |= v ^ ((UWORD *)(f->Planes[p] + o))[c];
                     dw |= v ^ ((UWORD *)(wl->Planes[p] + o))[c];
                 }
-                m = (ic[c] | df) & dw;      /* an icon: not the wallpaper, and new or known */
+                m = (ic[c] | df) & dw;
                 ic[c] = m;
                 mk[c] = ~m;
             }
@@ -8322,9 +8380,12 @@ static void _dash_desk_present_chunky(struct _DashDesk *d, struct Rectangle *r, 
             UBYTE *ic = d->ci + y * d->w;
             for (c = rx; c < rx + w; c++) {
                 LONG o = c * bpp;
-                BOOL icon = (ic[c] || memcmp(s + o, f + o, bpp)) && memcmp(s + o, wl + o, bpp);
+                BOOL icon = (ic[c] || _DASH_DESK_NE(s + o, f + o, bpp)) && _DASH_DESK_NE(s + o, wl + o, bpp);
                 ic[c] = icon;
-                if (!icon) memcpy(s + o, b + o, bpp);
+                if (icon) continue;
+                if (bpp == 2) *(UWORD *)(s + o) = *(UWORD *)(b + o);
+                else if (bpp == 4) *(ULONG *)(s + o) = *(ULONG *)(b + o);
+                else memcpy(s + o, b + o, bpp);
             }
         }
         _dash_desk_pixels(d, wrp, TRUE, d->cs, rx, ry, d->x + rx, d->y + ry, w, h);
@@ -8409,6 +8470,11 @@ static APTR _dash_desk_canvas(LONG x, LONG y, LONG w, LONG h) {
     /* RTG: the copies in RGB24 (through Picasso96 or CyberGraphX) or pens (8 bits) */
     if (!(GetBitMapAttr(sbm, BMA_FLAGS) & BMF_STANDARD))
         d->bpp = depth > 8 ? (_dash_blend_truecolor(&_dash_desk_scr->RastPort) ? 3 : 0) : 1;
+    if (d->bpp == 3 && _dash_p96) {         /* the screen's own format: P96BMA_BYTESPERPIXEL and _RGBFORMAT */
+        LONG b = (LONG)_dash_p96_bm_attr(sbm, 5);
+        ULONG f = _dash_p96_bm_attr(sbm, 7);
+        if (b >= 2 && b <= 4 && f) { d->bpp = b; d->fmt = f; }
+    }
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     /* the desktop: the backdrop window, or the screen below its title bar */
     win = _dash_desk_find();
@@ -8475,42 +8541,135 @@ static void _dash_desk_on_draw(APTR c, APTR draw) {
     if (c) ((struct _DashDesk *)c)->draw = draw;
 }
 
+/* desktop_canvas_veil: the wallpaper mixed with the veil in that part, once (Trasfondo's panel mixed its
+   veil on every update: in RTG, half of its time) */
+static void _dash_desk_veil_part(struct _DashDesk *d, LONG x0, LONG y0, LONG x1, LONG y1) {
+    struct RastPort r, *old = _dash_rp;
+    LONG i;
+    BltBitMap(d->wall, x0, y0, d->under, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
+    WaitBlit();
+    InitRastPort(&r);
+    r.BitMap = d->under;
+    _dash_rp = &r;
+    if (d->veil_alpha > 0) _dash_blend_rect(x0, y0, x1, y1, d->veil_rgb, d->veil_alpha);
+    for (i = 0; i < d->nveils; i++) {       /* the fixed ones, where they meet that part */
+        struct Rectangle *v = &d->veils[i].r;
+        LONG a0 = v->MinX > x0 ? v->MinX : x0, b0 = v->MinY > y0 ? v->MinY : y0;
+        LONG a1 = v->MaxX < x1 ? v->MaxX : x1, b1 = v->MaxY < y1 ? v->MaxY : y1;
+        if (a0 <= a1 && b0 <= b1) _dash_blend_rect(a0, b0, a1, b1, d->veils[i].rgb, d->veils[i].alpha);
+    }
+    _dash_rp = old;
+}
+
+/* The bitmap of the veils, while there is one (none: the drawing starts from the wallpaper itself) */
+static BOOL _dash_desk_under(struct _DashDesk *d) {
+    if (d->veil_alpha <= 0 && !d->nveils) {
+        WaitBlit();
+        if (d->under) FreeBitMap(d->under);
+        d->under = NULL;
+        return FALSE;
+    }
+    if (!d->under) {
+        struct BitMap *sbm = _dash_desk_scr->RastPort.BitMap;
+        d->under = AllocBitMap(d->w, d->h, GetBitMapAttr(sbm, BMA_DEPTH), BMF_MINPLANES | BMF_CLEAR,
+                               d->bpp ? sbm : NULL);
+    }
+    d->under_new = TRUE;
+    return d->under != NULL;
+}
+
+static void _dash_desk_veil(APTR c, LONG rgb, LONG alpha) {
+    struct _DashDesk *d = (struct _DashDesk *)c;
+    if (!d) return;
+    d->veil_rgb = rgb;
+    d->veil_alpha = alpha < 0 ? 0 : alpha > 255 ? 255 : alpha;
+    d->nveils = 0;
+    _dash_desk_under(d);
+}
+
+/* One more fixed veil, over the one of all the area (desktop_canvas_veil, which takes them away); FALSE if
+   there are 16 already */
+static BOOL _dash_desk_veil_rect(APTR c, LONG x, LONG y, LONG w, LONG h, LONG rgb, LONG alpha) {
+    struct _DashDesk *d = (struct _DashDesk *)c;
+    LONG i;
+    if (!d || d->nveils == _DASH_DESK_VEILS) return FALSE;
+    if (alpha <= 0 || w <= 0 || h <= 0) return TRUE;
+    i = d->nveils++;
+    d->veils[i].r.MinX = x; d->veils[i].r.MinY = y;
+    d->veils[i].r.MaxX = x + w - 1; d->veils[i].r.MaxY = y + h - 1;
+    d->veils[i].rgb = rgb;
+    d->veils[i].alpha = alpha > 255 ? 255 : alpha;
+    return _dash_desk_under(d);
+}
+
+/* The part being drawn (desktop_canvas_drawing): all the canvas, or the area of update_area */
+static struct Rectangle _dash_desk_drawing_rect;
+static BOOL _dash_desk_drawing_on = FALSE;
+static BOOL _dash_desk_drawing(LONG x, LONG y, LONG w, LONG h) {
+    struct Rectangle *r = &_dash_desk_drawing_rect;
+    if (!_dash_desk_drawing_on) return TRUE;
+    return w > 0 && h > 0 && x <= r->MaxX && y <= r->MaxY && x + w - 1 >= r->MinX && y + h - 1 >= r->MinY;
+}
+
 /* Draw again and show what changed; a: only in this area (the rest as it is), or NULL */
 static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     struct RastPort *rp, *old = _dash_rp;
     struct Region *clip = NULL, *before = NULL;
-    LONG back;
+    struct Rectangle wr, grown;
+    struct BitMap *under;
+    LONG back, wall_new;
     ULONG t0 = _dash_desk_tick(), t1, attached;
     if (!d || !_dash_desk_scr) return;
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     _dash_desk_attach();
     attached = _dash_desk_attached;
     UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
-    if (d->wall_new && d->bpp) {      /* RTG: the bytes of the wallpaper the hook took again (that area) */
-        struct Rectangle r = d->wall_rect;
-        d->wall_new = 0;
-        WaitBlit();
-        _dash_desk_bm_pixels(d, d->wall, d->cw, r.MinX, r.MinY, r.MaxX - r.MinX + 1, r.MaxY - r.MinY + 1);
-    }
+    wall_new = d->wall_new;
+    wr = d->wall_rect;
     d->wall_new = 0;
+    if (wall_new && d->bpp) {         /* RTG: the bytes of the wallpaper the hook took again (that area) */
+        WaitBlit();
+        _dash_desk_bm_pixels(d, d->wall, d->cw, wr.MinX, wr.MinY, wr.MaxX - wr.MinX + 1, wr.MaxY - wr.MinY + 1);
+    }
+    /* where the hook took the wallpaper again, the screen has the drawing over the one before (the
+       Workbench puts its pattern after WBStartup): the area grows to draw there too (Trasfondo) */
+    if (a && wall_new) {
+        grown = *a;
+        if (wr.MinX < grown.MinX) grown.MinX = wr.MinX;
+        if (wr.MinY < grown.MinY) grown.MinY = wr.MinY;
+        if (wr.MaxX > grown.MaxX) grown.MaxX = wr.MaxX;
+        if (wr.MaxY > grown.MaxY) grown.MaxY = wr.MaxY;
+        a = &grown;
+    }
+    if (d->under) {                   /* the veil: over all the wallpaper, or where the hook took it again */
+        if (d->under_new) _dash_desk_veil_part(d, 0, 0, d->w - 1, d->h - 1);
+        else if (wall_new) _dash_desk_veil_part(d, wr.MinX, wr.MinY, wr.MaxX, wr.MaxY);
+        d->under_new = FALSE;
+    }
+    under = d->under ? d->under : d->wall;
     /* the drawing, over the wallpaper and without locks (it may take long, or open a window) */
     back = d->front == 0 ? 1 : 0;
     rp = d->ly[back]->rp;
     if (a) {
         BltBitMap(d->bm[d->front], 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
-        BltBitMap(d->wall, a->MinX, a->MinY, d->bm[back], a->MinX, a->MinY, a->MaxX - a->MinX + 1,
+        BltBitMap(under, a->MinX, a->MinY, d->bm[back], a->MinX, a->MinY, a->MaxX - a->MinX + 1,
                   a->MaxY - a->MinY + 1, 0xC0, 0xFF, NULL);
         if ((clip = NewRegion()) && OrRectRegion(clip, a)) before = InstallClipRegion(d->ly[back], clip);
     } else {
-        BltBitMap(d->wall, 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
+        BltBitMap(under, 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
     }
     SetFont(rp, _dash_desk_scr->RastPort.Font);
     SetDrMd(rp, JAM1);
     t1 = _dash_desk_tick();
     if (d->draw) {
+        if (a) _dash_desk_drawing_rect = *a;
+        else { _dash_desk_drawing_rect.MinX = 0; _dash_desk_drawing_rect.MinY = 0;
+               _dash_desk_drawing_rect.MaxX = d->w - 1; _dash_desk_drawing_rect.MaxY = d->h - 1; }
+        _dash_desk_drawing_on = TRUE;
         _dash_rp = rp;
         ((void (*)(LONG, LONG, LONG, LONG))d->draw)(0, 0, d->w, d->h);
         _dash_rp = old;
+        _dash_desk_drawing_on = FALSE;
     }
     if (clip) {
         InstallClipRegion(d->ly[back], before);
@@ -8600,6 +8759,7 @@ static void _dash_desk_free(APTR c) {
     }
     for (i = 0; i < 2; i++) if (d->bm[i]) FreeBitMap(d->bm[i]);
     if (d->wall) FreeBitMap(d->wall);
+    if (d->under) FreeBitMap(d->under);
     if (d->tmp) FreeBitMap(d->tmp);
     if (d->icons) FreeBitMap(d->icons);
     if (d->mask) FreeBitMap(d->mask);
