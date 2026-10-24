@@ -3871,6 +3871,12 @@ NET_FUNCTIONS = {
                           "The address (\"a.b.c.d\") of who sent the last datagram received"),
     "net_udp_from_port": _text("net_udp_from_port", [], "LONG", "_dash_net_udp_from_port()",
                                "The port of who sent the last datagram received (to answer it)"),
+    "net_stack_running": _text("net_stack_running", [], "BOOL", "_dash_net_stack_running()",
+                               "True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is "
+                               "opened or loaded to know it"),
+    "net_release": _text("net_release", [], "void", "_dash_net_release()",
+                         "Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and "
+                         "name lookups still open; the next net_ call opens it again (the program's end does it too)"),
     "net_signal": _text("net_signal", [], "LONG", "_dash_net_signal()",
                         "Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP "
                         "stack cannot: call it before each wait, mui_wait_event_signals(net_signal())"),

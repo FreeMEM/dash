@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 609 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 611 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -2019,6 +2019,8 @@ con los sockets que queden abiertos.
 | `net_close(s)` | Cierra |
 | `net_resolve(host)` | Direccion IPv4 (`"a.b.c.d"`), `nil` si no se encuentra |
 | `net_error()` | Que fallo en la ultima llamada |
+| `net_stack_running()` | `true` si hay una pila TCP/IP en marcha (su `bsdsocket.library` en memoria); no abre ni carga nada |
+| `net_release()` | Suelta la red ya: cierra la libreria y con ella los sockets, TLS y busquedas que queden; el siguiente `net_` la abre otra vez |
 
 ```
 s = net_connect("ejemplo.org", 80, 10000)
@@ -3573,7 +3575,9 @@ end
   que conteste; mientras tanto da -1 enseguida.
 - `net_ifs_read()`: lee los interfaces de red de Roadshow (también `lo0`) y da cuántos hay. -1 sin pila TCP/IP o
   con una que no lo dice (AmiTCP, Miami, la del emulador); ese -1 se recuerda un minuto (no se abre
-  `bsdsocket.library` cada segundo para nada).
+  `bsdsocket.library` cada segundo para nada). Solo usa una `bsdsocket.library` que ya esté en memoria: no la
+  carga de `LIBS:` (eso arrancaría una pila, o estorbaría a una que arranca: CaffeineOS la saca de memoria para
+  poner la de Miami).
 - `net_if_name(i)`, `net_if_up(i)`: el nombre y si está conectado.
 - `net_if_bytes_in(i)`, `net_if_bytes_out(i)`: los bytes recibidos y enviados. La resta de dos lecturas da los
   bytes de entre medias, aunque pase de 2 GB. Para la velocidad: la resta entre el tiempo que pasó.
@@ -4106,7 +4110,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Ficheros (DOS) | 26 | `file_*`, `dir_*`, `console_read`, `console_write`, `base64_to_file`, `dos_requesters` |
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
-| Red (TCP y UDP) | 24 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
+| Red (TCP y UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
 | Fuentes y colores | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
@@ -4124,7 +4128,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **609** | |
+| **Total** | **611** | |
 
 ### Colores Estandar Amiga
 
