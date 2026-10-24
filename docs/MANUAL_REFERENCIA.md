@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 614 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 615 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -2019,7 +2019,7 @@ con los sockets que queden abiertos.
 | `net_close(s)` | Cierra |
 | `net_resolve(host)` | Direccion IPv4 (`"a.b.c.d"`), `nil` si no se encuentra |
 | `net_error()` | Que fallo en la ultima llamada |
-| `net_stack_running()` | `true` si hay una pila TCP/IP en marcha (su `bsdsocket.library` en memoria); no abre ni carga nada |
+| `net_stack_running()` | `true` si hay una pila TCP/IP en marcha (su `bsdsocket.library` en memoria); no carga nada. La de Roadshow sigue en memoria tras `NetShutdown`: esa se abre y se cierra para saberlo |
 | `net_release()` | Suelta la red ya: cierra la libreria y con ella los sockets, TLS y busquedas que queden; el siguiente `net_` la abre otra vez |
 
 ```
@@ -2036,6 +2036,13 @@ else
     net_close(s)
 end
 ```
+
+**Si la red se apaga.** El `NetShutdown` de Roadshow (tambien el de WHDLoad al lanzar un juego) avisa a cada
+programa con la libreria abierta y espera a que la cierre. Por defecto el aviso es Ctrl-C, que acabaria el
+programa; Dash pone un aviso propio. Al llegar, el programa suelta la red como con `net_release` y sigue: en
+`cx_wait` y `mui_wait_event` en seguida, y si no, en la siguiente llamada `net_` que abra algo, que falla. Una
+espera de la red (`net_recv`, `net_wait`) acaba en seguida. Despues, las llamadas `net_` fallan (`net_error()`
+dice por que) hasta que la red vuelve. Ctrl-C sigue parando el programa como siempre.
 
 **Sin esperar.** `net_connect` espera a que el nombre se encuentre y a que la conexion se haga.
 Un programa con ventanas puede no esperar: `net_connect_start` busca el nombre en otro proceso
@@ -3601,6 +3608,9 @@ end
   los cuentan: `wifipi.device`, no. Al acabar se dejan de seguir los tipos que se empezaron a seguir.
 - `wifi_signal()`, `wifi_noise()`: la señal y el ruido de la última lectura buena, en dBm (-30 muy buena, -90 muy
   mala).
+- `pistorm_temperature()`: la temperatura de la Raspberry Pi de una PiStorm (Emu68), en décimas de grado (523 =
+  52,3 °C). La da el firmware de la Pi, a través del `mailbox.resource` de Emu68, como EmuControl. -1 sin Emu68. Un
+  Amiga sin PiStorm no tiene sensor de temperatura.
 
 De los drivers SANA-II solo se leen estos contadores y la señal: no hay funciones para enviar ni recibir tramas en
 crudo.
@@ -4136,14 +4146,14 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Fecha, hora y versión | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
-| Discos, red y WiFi | 21 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal` |
+| Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **614** | |
+| **Total** | **615** | |
 
 ### Colores Estandar Amiga
 

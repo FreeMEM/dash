@@ -3873,7 +3873,8 @@ NET_FUNCTIONS = {
                                "The port of who sent the last datagram received (to answer it)"),
     "net_stack_running": _text("net_stack_running", [], "BOOL", "_dash_net_stack_running()",
                                "True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is "
-                               "opened or loaded to know it"),
+                               "loaded to know it. Roadshow's stays in memory after NetShutdown: that one is opened "
+                               "and closed"),
     "net_release": _text("net_release", [], "void", "_dash_net_release()",
                          "Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and "
                          "name lookups still open; the next net_ call opens it again (the program's end does it too)"),
@@ -4119,6 +4120,11 @@ TASK_FUNCTIONS = {
         name="net_if_bytes_out", params=["i"], return_type="LONG",
         c_template="_dash_net_if_bytes_out(${i})",
         description="The bytes sent by interface i (the low 32 bits, like net_if_bytes_in)"),
+    "pistorm_temperature": BuiltinFunc(
+        name="pistorm_temperature", params=[], return_type="LONG",
+        c_template="_dash_pistorm_temperature()",
+        description="Temperature of the Raspberry Pi of a PiStorm (Emu68), in tenths of a degree Celsius (523: "
+                    "52.3), from its firmware through Emu68's mailbox.resource; -1 without Emu68"),
     "wifi_read": BuiltinFunc(
         name="wifi_read", params=["interface", "ms"], return_type="LONG",
         c_template="_dash_wifi_read(${interface}, ${ms})",

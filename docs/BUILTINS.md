@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 614 funciones, 614 implementadas, 0 sin implementar.
+Total: 615 funciones, 615 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -382,7 +382,7 @@ Total: 614 funciones, 614 implementadas, 0 sin implementar.
 | `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` | `LONG` | The next datagram into a buffer: its length, 0 if none came in time, -1 on error |  |
 | `net_udp_from()` | `STRPTR` | The address ("a.b.c.d") of who sent the last datagram received |  |
 | `net_udp_from_port()` | `LONG` | The port of who sent the last datagram received (to answer it) |  |
-| `net_stack_running()` | `BOOL` | True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is opened or loaded to know it |  |
+| `net_stack_running()` | `BOOL` | True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is loaded to know it. Roadshow's stays in memory after NetShutdown: that one is opened and closed |  |
 | `net_release()` | `void` | Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and name lookups still open; the next net_ call opens it again (the program's end does it too) |  |
 | `net_signal()` | `LONG` | Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP stack cannot: call it before each wait, mui_wait_event_signals(net_signal()) |  |
 
@@ -460,6 +460,7 @@ Total: 614 funciones, 614 implementadas, 0 sin implementar.
 | `net_if_up(i)` | `BOOL` | True if interface i is up (connected) |  |
 | `net_if_bytes_in(i)` | `LONG` | The bytes received by interface i (the low 32 bits: the difference of two readings is the bytes in between, even past 2 GB) |  |
 | `net_if_bytes_out(i)` | `LONG` | The bytes sent by interface i (the low 32 bits, like net_if_bytes_in) |  |
+| `pistorm_temperature()` | `LONG` | Temperature of the Raspberry Pi of a PiStorm (Emu68), in tenths of a degree Celsius (523: 52.3), from its firmware through Emu68's mailbox.resource; -1 without Emu68 |  |
 | `wifi_read(interface, ms)` | `LONG` | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for itself, -1 no Roadshow |  |
 | `wifi_read_device(driver, unit, ms)` | `LONG` | Like wifi_read, asking a SANA-II driver that is in use ("wifipi.device", unit 0) directly, with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver in use, 4 offline, 5 the stack has it only for itself |  |
 | `net_drivers_read()` | `LONG` | Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks that something has open): how many |  |
