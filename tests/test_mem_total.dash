@@ -1,0 +1,13 @@
+# mem_chip_total and mem_fast_total: the size of each RAM (free and in use), not what is free (Trasfondo's
+# memory graph). At least what is free, and the chip RAM of an Amiga is some.
+# expect-out: chip: true
+# expect-out: fast: true
+# expect-out: suma: true
+
+Main
+    c = mem_chip_total()
+    f = mem_fast_total()
+    Print "chip: #{c > 0 and c >= mem_chip_free()}"
+    Print "fast: #{f >= 0 and f >= mem_fast_free()}"
+    Print "suma: #{c + f >= mem_total()}"
+end

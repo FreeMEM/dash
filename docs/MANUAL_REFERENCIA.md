@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 615 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 617 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -2374,9 +2374,10 @@ end
 ### Memoria del Sistema
 
 ```
-chip = mem_chip_free()      # RAM Chip disponible
-fast = mem_fast_free()      # RAM Fast disponible
-total = mem_total()         # Total disponible
+chip = mem_chip_free()      # RAM Chip libre, en bytes
+fast = mem_fast_free()      # RAM Fast libre
+libre = mem_total()         # libre de las dos (no es el tamaño de la RAM)
+tam = mem_chip_total()      # tamaño de la RAM Chip (libre y en uso); mem_fast_total(), el de la Fast
 ```
 
 ### Leer y escribir memoria: peek y poke
@@ -4131,7 +4132,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Menus | 10 | `menu_title`, `menu_item`, `menu_sub`, `menu_id` |
 | Requesters ASL | 5 | `file_open_dialog`, `file_save_dialog`, `file_fullpath` |
 | ReAction | 79 | `ra_window_*`, `ra_add_*`, `ra_get_*`, `ra_canvas_*` |
-| Sistema y memoria | 26 | `mem_*`, `time_*`, `random_*`, `arena_*`, `peek_*`, `poke_*` |
+| Sistema y memoria | 28 | `mem_*`, `time_*`, `random_*`, `arena_*`, `peek_*`, `poke_*` |
 | Ficheros (DOS) | 26 | `file_*`, `dir_*`, `console_read`, `console_write`, `base64_to_file`, `dos_requesters` |
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
@@ -4153,7 +4154,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **615** | |
+| **Total** | **617** | |
 
 ### Colores Estandar Amiga
 
