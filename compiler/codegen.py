@@ -1511,6 +1511,13 @@ static BOOL _dash_blend_clip(LONG *x1, LONG *y1, LONG *x2, LONG *y2) {
     if (*y1 < 0) *y1 = 0;
     if (*x2 >= w) *x2 = w - 1;
     if (*y2 >= h) *y2 = h - 1;
+    if (_dash_rp->Layer && _dash_rp->Layer->ClipRegion) {   /* an installed clip (desktop_canvas_update_area) */
+        struct Rectangle *b = &_dash_rp->Layer->ClipRegion->bounds;
+        if (*x1 < b->MinX) *x1 = b->MinX;
+        if (*y1 < b->MinY) *y1 = b->MinY;
+        if (*x2 > b->MaxX) *x2 = b->MaxX;
+        if (*y2 > b->MaxY) *y2 = b->MaxY;
+    }
     return *x1 <= *x2 && *y1 <= *y2;
 }
 
@@ -7836,6 +7843,8 @@ struct _DashDesk {
     struct BitMap *wall;                    /* the wallpaper below */
     struct BitMap *tmp, *icons, *mask;      /* planar, backdrop: the screen read; one plane: icons; where to paint */
     LONG bpp;                               /* RTG: bytes per pixel of the copies (3: RGB24, 1: pens); 0 planar */
+    ULONG fmt;                              /* Picasso96: the copies in the screen's RGBFormat (bpp its bytes), read
+                                               and written without converting; 0: RGB24 or pens */
     UBYTE *cb, *cf, *cw, *cs, *ci;          /* RTG: back, front, wallpaper, screen (w x h), icons (1 byte) */
     struct RastPort line;                   /* RTG 8 bits: the temporary RastPort of Read/WritePixelLine8 */
     volatile LONG front;                    /* -1: not on the screen yet */
@@ -7955,11 +7964,25 @@ static struct Window *_dash_desk_find(void) {
     return w;
 }
 
+/* RTG: two pixels of the copies differ (2 and 4 bytes: aligned, the rows are whole pixels) */
+#define _DASH_DESK_NE(p, q, bpp) ((bpp) == 2 ? *(UWORD *)(p) != *(UWORD *)(q) : \
+                                  (bpp) == 4 ? *(ULONG *)(p) != *(ULONG *)(q) : \
+                                  (bpp) == 1 ? *(p) != *(q) : ((p)[0] != (q)[0] || (p)[1] != (q)[1] || (p)[2] != (q)[2]))
+
 /* RTG: pixels of a RastPort to or from one of the copies (at its x, y), rows of the canvas's width */
 static void _dash_desk_pixels(struct _DashDesk *d, struct RastPort *rp, BOOL write, UBYTE *copy,
                               LONG x, LONG y, LONG sx, LONG sy, LONG w, LONG h) {
     UBYTE *p = copy + (y * d->w + x) * d->bpp;
     LONG i;
+    if (d->fmt) {                           /* Picasso96, in the screen's format: only copied */
+        struct _DashRenderInfo ri;
+        ri.Memory = p;
+        ri.BytesPerRow = d->w * d->bpp;
+        ri.pad = 0;
+        ri.RGBFormat = d->fmt;
+        _dash_p96_pixel_array(write ? -102 : -108, &ri, 0, 0, rp, sx, sy, w, h);
+        return;
+    }
     if (d->bpp == 3) {
         _dash_rgb_block_rp(rp, write, p, d->w * 3, sx, sy, w, h);
         return;
@@ -8070,18 +8093,19 @@ static LONG _dash_desk_dirty(struct _DashDesk *d, LONG back, struct Rectangle *a
     }
     if (d->bpp) {
         LONG bpp = d->bpp, rw = d->w * bpp;
-        /* outside the area the back bitmap is the front one: its copy too (the damage may reach there) */
-        if (a) memcpy(d->cb, d->cf, d->w * d->h * bpp);
+        /* outside the area the back bitmap is the front one: its copy too, in the rows looked at (the damage
+           may reach past the area there) */
+        if (a) memcpy(d->cb + y0 * rw, d->cf + y0 * rw, (y1 - y0 + 1) * rw);
         _dash_desk_bm_pixels(d, d->bm[back], d->cb, a ? a->MinX : 0, a ? a->MinY : 0,
                              a ? a->MaxX - a->MinX + 1 : d->w, a ? a->MaxY - a->MinY + 1 : d->h);
         for (y = y0; y <= y1; y++) {
             UBYTE *pb = d->cb + y * rw, *pf = d->cf + y * rw;
             LONG first = d->w, last = -1;
-            if (a && (y < a->MinY || y > a->MaxY)) first = d->w;
-            else {
-                for (c = x0; c <= x1; c++) if (memcmp(pb + c * bpp, pf + c * bpp, bpp)) { first = c; break; }
-                for (c = x1; c > first; c--) if (memcmp(pb + c * bpp, pf + c * bpp, bpp)) break;
-                last = first < d->w ? c : -1;
+            /* (most rows do not change: one memcmp each, then pixel by pixel only where one does) */
+            if ((!a || (y >= a->MinY && y <= a->MaxY)) && memcmp(pb + x0 * bpp, pf + x0 * bpp, (x1 - x0 + 1) * bpp)) {
+                for (c = x0; c <= x1; c++) if (_DASH_DESK_NE(pb + c * bpp, pf + c * bpp, bpp)) { first = c; break; }
+                for (c = x1; c > first; c--) if (_DASH_DESK_NE(pb + c * bpp, pf + c * bpp, bpp)) break;
+                last = c;
             }
             if (damaged && y >= d->damage.MinY && y <= d->damage.MaxY) {
                 if (d->damage.MinX < first) first = d->damage.MinX;
@@ -8193,9 +8217,12 @@ static void _dash_desk_present_chunky(struct _DashDesk *d, struct Rectangle *r, 
             UBYTE *ic = d->ci + y * d->w;
             for (c = rx; c < rx + w; c++) {
                 LONG o = c * bpp;
-                BOOL icon = (ic[c] || memcmp(s + o, f + o, bpp)) && memcmp(s + o, wl + o, bpp);
+                BOOL icon = (ic[c] || _DASH_DESK_NE(s + o, f + o, bpp)) && _DASH_DESK_NE(s + o, wl + o, bpp);
                 ic[c] = icon;
-                if (!icon) memcpy(s + o, b + o, bpp);
+                if (icon) continue;
+                if (bpp == 2) *(UWORD *)(s + o) = *(UWORD *)(b + o);
+                else if (bpp == 4) *(ULONG *)(s + o) = *(ULONG *)(b + o);
+                else memcpy(s + o, b + o, bpp);
             }
         }
         _dash_desk_pixels(d, wrp, TRUE, d->cs, rx, ry, d->x + rx, d->y + ry, w, h);
@@ -8280,6 +8307,11 @@ static APTR _dash_desk_canvas(LONG x, LONG y, LONG w, LONG h) {
     /* RTG: the copies in RGB24 (through Picasso96 or CyberGraphX) or pens (8 bits) */
     if (!(GetBitMapAttr(sbm, BMA_FLAGS) & BMF_STANDARD))
         d->bpp = depth > 8 ? (_dash_blend_truecolor(&_dash_desk_scr->RastPort) ? 3 : 0) : 1;
+    if (d->bpp == 3 && _dash_p96) {         /* the screen's own format: P96BMA_BYTESPERPIXEL and _RGBFORMAT */
+        LONG b = (LONG)_dash_p96_bm_attr(sbm, 5);
+        ULONG f = _dash_p96_bm_attr(sbm, 7);
+        if (b >= 2 && b <= 4 && f) { d->bpp = b; d->fmt = f; }
+    }
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     /* the desktop: the backdrop window, or the screen below its title bar */
     win = _dash_desk_find();
