@@ -3723,6 +3723,10 @@ end
   número o no hay `locale.library`. Sin `@catalog`, siempre el del programa.
 - `catalog_open("X.catalog", versión)`: abre otro catálogo en lugar del que había (`false` si no hay: `tr` da los
   textos del programa). `catalog_language()`: el idioma del catálogo en uso, `""` sin ninguno.
+- El catálogo se lee de su fichero cada vez que se abre, no con `OpenCatalog`. `locale.library` guarda los catálogos
+  que carga y da el mismo mientras alguien lo tenga abierto: un programa que se actualiza con un catálogo nuevo
+  seguía con los textos viejos hasta reiniciar. Así, un `catalog_open` tras escribir el fichero nuevo, o el programa
+  nuevo al arrancar, ya tienen los textos nuevos.
 - En un `.dashui`, `"tr": N` en un objeto, ventana o menú (ver `docs/MUI_EDITOR.md`).
 
 Los catálogos se hacen con `tools/catalogo.py`, sin FlexCat:
