@@ -977,6 +977,14 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 
 ---
 
+### Sesión 17 (Fecha: 2026-10-24) — errores sin Guru
+- [x] Un campo o un método de `nil` para el programa con `Error: campo de nil (en prog.dash:12)` en vez de leer
+      basura o escribir en la dirección 0 (`_DASH_NN` con fichero y línea; `--memcheck` avisa y sigue)
+- [x] Las excepciones de la CPU (dirección impar, instrucción ilegal, división por cero, CHK, TRAPV...) no dan
+      Guru: `tc_TrapCode` propio de la tarea (`TRAP_RUNTIME`), mensaje con el hunk y la distancia, limpieza
+      normal y código 20; sin consola, en un requester. En 68000, 68020 y 3.2
+- [x] Tests: `# expect-rc: N`; `tools/emu_run.py` arranca con `FailAt 21`
+
 ## Notas y Decisiones
 
 ### Decisiones tomadas:

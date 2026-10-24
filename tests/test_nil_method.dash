@@ -1,0 +1,23 @@
+# Test: a method called on nil, and a field written through nil, stop the program with the line
+# (_DASH_NN): the method would run with self = nil, and the write would go to address 0.
+# expect-rc: 20
+# expect-out: escribe
+# expect-out: Error: campo de nil (en tests/test_nil_method.dash:15)
+
+struct P
+    x: Int = 0
+    func doble() -> Int
+        return self.x * 2
+    end
+end
+
+func probar(p: P)
+    p.x = 5
+end
+
+Main
+    var p: P = nil
+    Print "escribe"
+    probar(p)
+    Print p.doble()
+end

@@ -15,7 +15,8 @@ Usage:
     python3 tests/run_tests.py --emu --emu-a500 --emu-32   # on all three emulated machines
 
 A test can list the exact output it must print when run on the Amiga with
-"# expect-out: <line>" lines (one per printed line, in order). With --emu
+"# expect-out: <line>" lines (one per printed line, in order; "# expect-rc: N" the return code, 0 if not
+given). With --emu
 those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
 or the AROS ROM built into FS-UAE) and their output is compared.
 "# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS has Libs/asl.library
@@ -91,6 +92,14 @@ def autoclose_seconds(test_file: Path) -> str:
 def wants_profile(test_file: Path) -> bool:
     """'# profile': built as ./dash --profile (dashweb D23)."""
     return any(l.strip() == "# profile" for l in test_file.read_text().splitlines())
+
+
+def expected_rc(test_file: Path) -> int:
+    """'# expect-rc: N': the program's return code in the emulator (0 if not given; 20: a runtime error)."""
+    for l in test_file.read_text().splitlines():
+        if l.strip().startswith("# expect-rc:"):
+            return int(l.split("# expect-rc:", 1)[1].strip())
+    return 0
 
 
 def ignored_output(test_file: Path) -> List[str]:
@@ -751,7 +760,7 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
             got = [l for l in got if not l.startswith(prefix_ignored)]
         if run.timed_out:
             error = "timeout (program did not end)"
-        elif run.rc != 0:
+        elif run.rc != expected_rc(test_file):
             error = f"return code {run.rc}"
         elif got != wanted:
             diff = next((i for i, (a, b) in enumerate(zip(got, wanted)) if a != b), min(len(got), len(wanted)))
