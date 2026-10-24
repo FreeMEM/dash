@@ -44,7 +44,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 611 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 614 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3805,6 +3805,18 @@ repinta la zona, el lienzo toma otra vez el fondo que acaba de pintarse: si el W
 (arrancado desde WBStartup), la siguiente actualizacion ya lo tiene debajo. Tambien
 `desktop_canvas_update_area`: esa vez dibuja ademas donde el escritorio repinto, aunque quede fuera de su parte.
 
+**Velos que no cuestan cada vez.** Un panel semitransparente sobre el fondo de pantalla mezclaba su velo
+(`gfx_blend_rect` de todo el lienzo) en cada dibujo: en RTG era la mitad del tiempo de Trasfondo.
+`desktop_canvas_veil(c, rgb, alpha)` mezcla el fondo de debajo con ese color una vez, y otra vez solo donde el
+escritorio lo repinta; el dibujo empieza ya sobre el fondo con velo. `desktop_canvas_veil_rect(c, x, y, w, h,
+rgb, alpha)` anade otro velo solo en un rectangulo que siempre esta (hasta 16; `desktop_canvas_veil` los quita,
+asi que va primero). Con alpha 255 el fondo queda tapado por ese color: un fondo opaco que tampoco se pinta cada
+vez. Se ven desde la siguiente `desktop_canvas_update`.
+
+**Dibujar solo lo que se ve.** Dentro de la funcion de dibujo, `desktop_canvas_drawing(x, y, w, h)` dice si ese
+rectangulo cae en la parte que se dibuja (todo el lienzo, o el area de `desktop_canvas_update_area` con lo que el
+escritorio repinto): lo demas se puede saltar, porque no saldria.
+
 En modo backdrop los iconos no se tocan (no parpadean): un pixel es de icono si no es el fondo de
 pantalla ni lo que dejo el lienzo, o si ya lo era la vez anterior. La siguiente actualizacion arregla los
 recuadros que el Workbench limpia al redibujar sus iconos. Limite: un pixel de un icono del color del
@@ -3822,7 +3834,9 @@ Coste medido en FS-UAE con un lienzo de 300x90 a 4 colores con iconos debajo:
 | 68040 con JIT, RTG 16 bits | 6 ms | 5 ms | 0,6 ms |
 
 En el A1200 lo que mas cuesta es comparar el dibujo con el anterior (memoria Chip); `update_area` se lo
-ahorra.
+ahorra. En RTG, con Picasso96, el dibujo se lee y se compara en el formato de la pantalla, sin convertirlo, y fila
+a fila. Trasfondo midiendo cada segundo, en un 68030 sin JIT con uaegfx a 16 bits: del 99 % de CPU al 22 % con el
+velo y las areas (y del 21,5 % al 15,5 % en el A1200).
 
 ## 22. Ejemplos Completos
 
@@ -4116,7 +4130,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Fuentes y colores | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
-| Tareas, CPU y escritorio | 19 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
+| Tareas, CPU y escritorio | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
 | Ficheros vigilados y programas | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
 | Fecha, hora y versión | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
@@ -4129,7 +4143,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **611** | |
+| **Total** | **614** | |
 
 ### Colores Estandar Amiga
 
