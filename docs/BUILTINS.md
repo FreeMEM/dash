@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 615 funciones, 615 implementadas, 0 sin implementar.
+Total: 617 funciones, 617 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -264,7 +264,9 @@ Total: 615 funciones, 615 implementadas, 0 sin implementar.
 | `debug_break()` | `void` | Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug) |  |
 | `mem_chip_free()` | `LONG` | Available chip RAM |  |
 | `mem_fast_free()` | `LONG` | Available fast RAM |  |
-| `mem_total()` | `LONG` | Total available memory |  |
+| `mem_total()` | `LONG` | Free memory, chip and fast (what is available: not the size of the RAM) |  |
+| `mem_chip_total()` | `LONG` | Size of the chip RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
+| `mem_fast_total()` | `LONG` | Size of the fast RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
 | `peek_byte(addr)` | `LONG` | Read byte from memory address |  |
 | `peek_word(addr)` | `LONG` | Read word from memory address |  |
 | `peek_long(addr)` | `LONG` | Read long from memory address |  |

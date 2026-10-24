@@ -1903,7 +1903,21 @@ SYSTEM_FUNCTIONS = {
         params=[],
         return_type="LONG",
         c_template="AvailMem(MEMF_ANY)",
-        description="Total available memory"
+        description="Free memory, chip and fast (what is available: not the size of the RAM)"
+    ),
+    "mem_chip_total": BuiltinFunc(
+        name="mem_chip_total",
+        params=[],
+        return_type="LONG",
+        c_template="AvailMem(MEMF_CHIP | MEMF_TOTAL)",
+        description="Size of the chip RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL)"
+    ),
+    "mem_fast_total": BuiltinFunc(
+        name="mem_fast_total",
+        params=[],
+        return_type="LONG",
+        c_template="AvailMem(MEMF_FAST | MEMF_TOTAL)",
+        description="Size of the fast RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL)"
     ),
     "peek_byte": BuiltinFunc(
         name="peek_byte",
