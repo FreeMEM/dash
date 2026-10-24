@@ -439,7 +439,7 @@ Total: 611 funciones, 611 implementadas, 0 sin implementar.
 | `desktop_canvas(x, y, width, height)` | `APTR` | An area of the Workbench's desktop (below the screen's title bar), behind the icons and without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be |  |
 | `desktop_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the wallpaper below it |  |
 | `desktop_canvas_update(canvas)` | `void` | Draw the area again now and show what changed, without touching the icons |  |
-| `desktop_canvas_update_area(canvas, x, y, width, height)` | `void` | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was) |  |
+| `desktop_canvas_update_area(canvas, x, y, width, height)` | `void` | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was; where the desktop was repainted since, it draws too) |  |
 | `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
 | `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
 | `single_instance(name)` | `BOOL` | One copy at a time: false if another copy of the program (a public port with that name) runs, which gets Ctrl-C; true otherwise (the port is the program's until it ends) |  |

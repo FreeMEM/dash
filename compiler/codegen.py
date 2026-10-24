@@ -8350,20 +8350,31 @@ static void _dash_desk_on_draw(APTR c, APTR draw) {
 static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     struct RastPort *rp, *old = _dash_rp;
     struct Region *clip = NULL, *before = NULL;
-    LONG back;
+    struct Rectangle wr, grown;
+    LONG back, wall_new;
     ULONG t0 = _dash_desk_tick(), t1, attached;
     if (!d || !_dash_desk_scr) return;
     LockLayerInfo(&_dash_desk_scr->LayerInfo);
     _dash_desk_attach();
     attached = _dash_desk_attached;
     UnlockLayerInfo(&_dash_desk_scr->LayerInfo);
-    if (d->wall_new && d->bpp) {      /* RTG: the bytes of the wallpaper the hook took again (that area) */
-        struct Rectangle r = d->wall_rect;
-        d->wall_new = 0;
-        WaitBlit();
-        _dash_desk_bm_pixels(d, d->wall, d->cw, r.MinX, r.MinY, r.MaxX - r.MinX + 1, r.MaxY - r.MinY + 1);
-    }
+    wall_new = d->wall_new;
+    wr = d->wall_rect;
     d->wall_new = 0;
+    if (wall_new && d->bpp) {         /* RTG: the bytes of the wallpaper the hook took again (that area) */
+        WaitBlit();
+        _dash_desk_bm_pixels(d, d->wall, d->cw, wr.MinX, wr.MinY, wr.MaxX - wr.MinX + 1, wr.MaxY - wr.MinY + 1);
+    }
+    /* where the hook took the wallpaper again, the screen has the drawing over the one before (the
+       Workbench puts its pattern after WBStartup): the area grows to draw there too (Trasfondo) */
+    if (a && wall_new) {
+        grown = *a;
+        if (wr.MinX < grown.MinX) grown.MinX = wr.MinX;
+        if (wr.MinY < grown.MinY) grown.MinY = wr.MinY;
+        if (wr.MaxX > grown.MaxX) grown.MaxX = wr.MaxX;
+        if (wr.MaxY > grown.MaxY) grown.MaxY = wr.MaxY;
+        a = &grown;
+    }
     /* the drawing, over the wallpaper and without locks (it may take long, or open a window) */
     back = d->front == 0 ? 1 : 0;
     rp = d->ly[back]->rp;

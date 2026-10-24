@@ -1,0 +1,29 @@
+# desktop_canvas_update_area after the desktop was repainted with another wallpaper (Trasfondo started from
+# WBStartup: the Workbench puts its pattern later; the part of the canvas no update_area covered stayed with
+# the colour before until its own update). The next update_area draws again also where the hook took the
+# wallpaper again, not only in its area.
+# (RTG: 68040 with uaegfx, 16 bits)
+# workbench
+# rtg
+# expect-out: fondo: true
+# expect-out: lienzo: true
+# expect-out: con el fondo de antes: true
+# expect-out: con el fondo nuevo: true
+# expect-out: fin
+
+import "lib/escritorio_fondo.dash"
+
+Main
+    Print "fondo: #{abrir_fondo()}"
+    c = desktop_canvas(10, 10, 100, 30)
+    Print "lienzo: #{c != 0}"
+    desktop_canvas_on_draw(c, pintar)
+    desktop_canvas_update(c)
+    Print "con el fondo de antes: #{fondo_debajo()}"
+    cambiar_fondo(3)
+    desktop_canvas_update_area(c, 0, 0, 20, 30)
+    Print "con el fondo nuevo: #{fondo_debajo()}"
+    desktop_canvas_free(c)
+    cerrar_fondo()
+    Print "fin"
+end

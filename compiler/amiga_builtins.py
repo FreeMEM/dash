@@ -4016,7 +4016,8 @@ TASK_FUNCTIONS = {
         name="desktop_canvas_update_area", params=["canvas", "x", "y", "width", "height"], return_type="void",
         c_template="_dash_desk_update_area(${canvas}, ${x}, ${y}, ${width}, ${height})",
         description="desktop_canvas_update only in that part of the area: the drawing is clipped to it and only "
-                    "it is compared (the rest stays as it was)"),
+                    "it is compared (the rest stays as it was; where the desktop was repainted since, it draws "
+                    "too)"),
     "desktop_canvas_free": BuiltinFunc(
         name="desktop_canvas_free", params=["canvas"], return_type="void",
         c_template="_dash_desk_free(${canvas})",

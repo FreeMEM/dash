@@ -3802,7 +3802,8 @@ que cambiaron. `desktop_canvas_update_area(c, x, y, w, h)` hace lo mismo solo en
 recorta a ella y solo ella se compara; lo que cambie fuera no sale hasta otra actualizacion que lo cubra.
 Si una ventana tapa la zona y se va, la zona se repinta sola con lo ultimo dibujado. Cada vez que el escritorio
 repinta la zona, el lienzo toma otra vez el fondo que acaba de pintarse: si el Workbench pone su patron despues
-(arrancado desde WBStartup), la siguiente actualizacion ya lo tiene debajo.
+(arrancado desde WBStartup), la siguiente actualizacion ya lo tiene debajo. Tambien
+`desktop_canvas_update_area`: esa vez dibuja ademas donde el escritorio repinto, aunque quede fuera de su parte.
 
 En modo backdrop los iconos no se tocan (no parpadean): un pixel es de icono si no es el fondo de
 pantalla ni lo que dejo el lienzo, o si ya lo era la vez anterior. La siguiente actualizacion arregla los
