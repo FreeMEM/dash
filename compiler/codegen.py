@@ -3014,7 +3014,7 @@ static LONG _dash_cx_wait(LONG ms) {
    state and bytes in and out (-1 with another stack); net_drivers_read(), the SANA-II drivers in use with any
    stack, and net_driver_read(driver, unit, ms), their packets; wifi_read(interface, ms) and
    wifi_read_device(driver, unit, ms), the WiFi signal from the driver (S2_GETSIGNALQUALITY, aborted after
-   ms). Nothing is kept open between readings. */
+   ms); pistorm_temperature(), the Raspberry Pi's under Emu68. Nothing is kept open between readings. */
 #include <dos/dosextens.h>
 #include <devices/timer.h>
 #include <proto/bsdsocket.h>
@@ -3553,6 +3553,30 @@ static LONG _dash_net_driver_bytes_out(void) { return (LONG)_dash_s2_bout; }
 static BOOL _dash_net_driver_has_bytes(void) { return _dash_s2_bytes; }
 static LONG _dash_net_driver_packets_in(void) { return (LONG)_dash_s2_pin; }
 static LONG _dash_net_driver_packets_out(void) { return (LONG)_dash_s2_pout; }
+
+/* The temperature of the Raspberry Pi under Emu68 (PiStorm), in tenths of a degree Celsius (523: 52.3):
+   its firmware's (mailbox tag 0x30006, thousandths), asked through Emu68's mailbox.resource (MB_RawCommand,
+   -6: it converts the words, flushes the caches and takes the lock), as EmuControl does; -1 without Emu68 */
+static LONG _dash_pistorm_temperature(void) {
+    APTR mb = OpenResource((CONST_STRPTR)"mailbox.resource");
+    ULONG req[8];
+    if (!mb) return -1;
+    req[0] = sizeof(req);
+    req[1] = 0;                    /* a request */
+    req[2] = 0x00030006;           /* the temperature */
+    req[3] = 8;                    /* bytes of its value */
+    req[4] = 0;
+    req[5] = 0;                    /* of the SoC */
+    req[6] = 0;
+    req[7] = 0;                    /* the end */
+    {
+        register ULONG *a0 __asm("a0") = req;
+        register APTR a6 __asm("a6") = mb;
+        __asm volatile ("jsr a6@(-6:W)" : "+r"(a0) : "r"(a6) : "d0", "d1", "a1", "cc", "memory");
+    }
+    if (req[0] == 0xFFFFFFFFUL || !req[6]) return -1;
+    return (LONG)((req[6] + 50) / 100);
+}
 
 /* The WiFi signal of a Roadshow interface: its SANA-II driver and unit, asked afresh, and then as
    wifi_read_device; -1 no Roadshow */
@@ -14002,7 +14026,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_cpu: bool = False      # cpu_* (CPU_RUNTIME, Trasfondo)
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
-        self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read (METER_RUNTIME, Trasfondo)
+        self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)

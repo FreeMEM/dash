@@ -37,7 +37,7 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Tipos inferidos (LONG, STRPTR, BOOL) y `Float`
 - [x] Memoria automática (temporales por vuelta, contador de referencias)
 - [x] Funciones, structs con métodos, enums, listas, diccionarios, `Float` y `Fixed`, lambdas e imports
-- [x] Los 611 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
+- [x] Los 612 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
 - [x] Interfaces con GadTools, ReAction y MUI (3.8 o 5); red con TCP (cliente y servidor), UDP y TLS (AmiSSL 5.1+).
       No hay HTTP como builtin: cada programa lo hace sobre TCP o TLS
 - [x] Directivas `@native`, `@extern`, `@header`, `@link`, `@c`, `@stack`, `@workbench_output`, `@catalog` y `@version`
@@ -429,7 +429,7 @@ Combinar:
 - **FFI** (Estrategia B): Escape hatch para acceso directo cuando sea necesario
 
 ### 3.1 Módulos Built-in
-**Estado:** ✅ Completado (611 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
+**Estado:** ✅ Completado (612 funciones, 82 de MUI; lista en `docs/BUILTINS.md`)
 **Prioridad:** Alta
 **Complejidad:** Alta
 
@@ -972,8 +972,9 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 - [x] Extensión de VS Code: casilla "al cambiar" de Ver en Amiga (`dash.emulator.previewOnChange`), en `main` y aún
       sin publicar (#23)
 - [x] `docs/REQUERIMIENTOS_FUNCIONALES.md`: RF3.3 dice lo que hay de red y lo que falta (#36)
+- [x] `pistorm_temperature()`: la temperatura de la Raspberry Pi de una PiStorm, por el `mailbox.resource` de Emu68
 - Trasfondo publica su v0.5 (https://github.com/FreeMEM/trasfondo)
-- [x] 611 builtins (82 de MUI); unos 362 resultados sin emulador; 34 ejemplos
+- [x] 612 builtins (82 de MUI); unos 362 resultados sin emulador; 34 ejemplos
 
 ---
 

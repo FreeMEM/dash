@@ -1,0 +1,57 @@
+# pistorm_temperature: the Raspberry Pi's temperature under Emu68 (PiStorm), asked through Emu68's
+# mailbox.resource. No emulator has Emu68: without it, -1; then a mailbox.resource of the test's own,
+# which answers like the Pi's firmware (48.765 degrees: 488 tenths) and then with an error (-1).
+# expect-out: sin emu68: -1
+# expect-out: con emu68: 488
+# expect-out: con error: -1
+# expect-out: fin
+
+@c
+"""
+static struct Library *_t_mb = NULL;
+static LONG _t_mode = 0;
+
+/* MB_RawCommand: the request in a0, answered in place (big-endian words, as mailbox.resource gives them) */
+static void _t_raw(ULONG *cmd __asm("a0")) {
+    if (_t_mode) { cmd[0] = 0xFFFFFFFFUL; return; }
+    if (cmd[0] == 32 && cmd[2] == 0x00030006 && cmd[5] == 0) {
+        cmd[1] = 0x80000000UL;
+        cmd[4] = 0x80000008UL;
+        cmd[6] = 48765;
+    }
+}
+"""
+end
+
+@native func poner_mailbox(error: Bool) -> Bool
+"""
+    static APTR funcs[] = { (APTR)_t_raw, (APTR)-1 };
+    _t_mode = error;
+    if (_t_mb) return TRUE;
+    if (!(_t_mb = (struct Library *)MakeLibrary(funcs, NULL, NULL, sizeof(struct Library), 0))) return FALSE;
+    _t_mb->lib_Node.ln_Type = NT_RESOURCE;
+    _t_mb->lib_Node.ln_Name = (char *)"mailbox.resource";
+    AddResource(_t_mb);
+    return TRUE;
+"""
+end
+
+@native func quitar_mailbox()
+"""
+    if (!_t_mb) return;
+    RemResource(_t_mb);
+    FreeMem((UBYTE *)_t_mb - _t_mb->lib_NegSize, _t_mb->lib_NegSize + _t_mb->lib_PosSize);
+    _t_mb = NULL;
+"""
+end
+
+Main
+    Print "sin emu68: #{pistorm_temperature()}"
+    if poner_mailbox(false)
+        Print "con emu68: #{pistorm_temperature()}"
+        poner_mailbox(true)
+        Print "con error: #{pistorm_temperature()}"
+        quitar_mailbox()
+    end
+    Print "fin"
+end
