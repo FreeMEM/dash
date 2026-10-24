@@ -12,6 +12,7 @@
 # expect-out: sin el lento: true todos: true
 # expect-out: red: -1 -1 0
 # expect-out: wifi: -1
+# expect-out: pila: false
 
 @header "#include <dos/dostags.h>"
 @header "static struct MsgPort *lento_port; static struct DosList *lento_vol;"
@@ -176,4 +177,6 @@ Main
     Print "red: #{net_ifs_read()} #{net_ifs_read()} #{net_if_bytes_in(0)}"
     w = wifi_read("wlan0", 300)
     Print "wifi: #{w}"
+    p = net_stack_running()
+    Print "pila: #{p}"
 end

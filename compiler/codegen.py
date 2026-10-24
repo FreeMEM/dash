@@ -3240,7 +3240,13 @@ static struct Library *_dash_meter_socket(void) {
     now = ds.ds_Days * 1440 + ds.ds_Minute;
     if (now == _dash_meter_none) return NULL;
     _dash_meter_none = now;
-    if (!(SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) return NULL;
+    /* only one already in memory: loaded from LIBS: it would start a stack, or fight one that is starting
+       (CaffeineOS takes it out of memory to start Miami, which brings its own) */
+    Forbid();
+    SocketBase = FindName(&SysBase->LibList, (CONST_STRPTR)"bsdsocket.library") ?
+                 OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4) : NULL;
+    Permit();
+    if (!SocketBase) return NULL;
     tags[0].ti_Tag = SBTM_GETREF(SBTC_HAVE_INTERFACE_API);
     tags[0].ti_Data = (ULONG)&have;
     tags[1].ti_Tag = TAG_END;
@@ -5311,8 +5317,18 @@ static LONG _dash_net_connect_stage(LONG sock) {
     return i < 0 ? 2 : _dash_net_pend[i].stage;
 }
 
-/* The owner lets the network go (its task ends, or the program does): its lookups waited for, its TLS
-   closed, its library closed (and its sockets with it); then another process may take it */
+/* A TCP/IP stack is running: its bsdsocket.library is in memory (nothing is opened or loaded to know it) */
+static BOOL _dash_net_stack_running(void) {
+    BOOL r;
+    Forbid();
+    r = FindName(&SysBase->LibList, (CONST_STRPTR)"bsdsocket.library") != NULL;
+    Permit();
+    return r;
+}
+
+/* The owner lets the network go (its task ends, the program does, or net_release): its lookups waited for,
+   its TLS closed, its library closed (and its sockets with it); then another process may take it, and the
+   next net_ call opens it again */
 static void _dash_net_release(void) {
     if (!_dash_net_owner || SysBase->ThisTask != _dash_net_owner) return;
     _dash_net_dns_wait();

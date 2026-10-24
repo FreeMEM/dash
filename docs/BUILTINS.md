@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 609 funciones, 609 implementadas, 0 sin implementar.
+Total: 611 funciones, 611 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -382,6 +382,8 @@ Total: 609 funciones, 609 implementadas, 0 sin implementar.
 | `net_udp_recv_buffer(sock, buffer, max, timeout_ms)` | `LONG` | The next datagram into a buffer: its length, 0 if none came in time, -1 on error |  |
 | `net_udp_from()` | `STRPTR` | The address ("a.b.c.d") of who sent the last datagram received |  |
 | `net_udp_from_port()` | `LONG` | The port of who sent the last datagram received (to answer it) |  |
+| `net_stack_running()` | `BOOL` | True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is opened or loaded to know it |  |
+| `net_release()` | `void` | Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and name lookups still open; the next net_ call opens it again (the program's end does it too) |  |
 | `net_signal()` | `LONG` | Signal mask the sockets post on each event (connected, data, closed...), 0 if the TCP/IP stack cannot: call it before each wait, mui_wait_event_signals(net_signal()) |  |
 
 ## TLS (AmiSSL)

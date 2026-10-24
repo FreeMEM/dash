@@ -1,0 +1,41 @@
+# net_stack_running and net_release (Trasfondo: not keeping bsdsocket.library open between its update checks,
+# and not loading it when no stack runs). With FS-UAE's stack: running; a connection, then net_release closes
+# the library (and the socket with it); the next net_connect opens it again.
+# emu-net: 40831
+# memcheck
+# expect-out: pila: true
+# expect-out: eco: uno
+# expect-out: suelta: true -1
+# expect-out: eco: dos
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@native func cerrada() -> Bool
+"""
+    return SocketBase == NULL;
+"""
+end
+
+func eco(s: Int, texto: String) -> String
+    net_send(s, texto + "\r\n")
+    r = ""
+    trozo = net_recv(s, 64, 3000)
+    while trozo != nil
+        r = r + trozo
+        trozo = net_recv(s, 64, 3000)
+    end
+    return str_trim(r)
+end
+
+Main
+    p = net_stack_running()
+    Print "pila: #{p}"
+    s = net_connect("127.0.0.1", 40831, 5000)
+    Print eco(s, "uno")
+    net_release()
+    c = cerrada()
+    e = net_send(s, "x")
+    Print "suelta: #{c} #{e}"
+    s = net_connect("127.0.0.1", 40831, 5000)
+    Print eco(s, "dos")
+    net_close(s)
+end
