@@ -21,3 +21,5 @@ Main
     probar(p)
     Print p.doble()
 end
+
+# no-memcheck: con --memcheck, un campo de nil se avisa y el programa sigue (tests/test_memcheck_where.dash)

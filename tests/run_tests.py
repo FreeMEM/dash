@@ -16,7 +16,7 @@ Usage:
 
 A test can list the exact output it must print when run on the Amiga with
 "# expect-out: <line>" lines (one per printed line, in order; "# expect-rc: N" the return code, 0 if not
-given). With --emu
+given; "# no-memcheck" leaves the test out of --memcheck runs). With --emu
 those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
 or the AROS ROM built into FS-UAE) and their output is compared.
 "# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS has Libs/asl.library
@@ -126,6 +126,12 @@ def wants_fpu(test_file: Path) -> bool:
 def wants_memcheck(test_file: Path) -> bool:
     """'# memcheck': the test itself is about --memcheck (its summary is expected output)."""
     return any(l.strip() == "# memcheck" for l in test_file.read_text().splitlines())
+
+
+def skips_memcheck(test_file: Path) -> bool:
+    """'# no-memcheck': not run by run_tests.py --memcheck, whose build behaves otherwise on purpose (a field of
+    nil stops the normal build, --memcheck reports it and goes on)."""
+    return any(l.strip().startswith("# no-memcheck") for l in test_file.read_text().splitlines())
 
 
 def check_memcheck(lines: List[str]) -> Optional[str]:
@@ -618,6 +624,10 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
+    if memcheck:
+        for t in [t for t in runnable if skips_memcheck(t)]:
+            print(f"  {prefix}/{t.stem}: SKIP (its output is the normal build's: # no-memcheck)")
+        runnable = [t for t in runnable if not skips_memcheck(t)]
     if not machine["workbench"]:
         for t in [t for t in runnable if wants_workbench(t)]:
             print(f"  {prefix}/{t.stem}: SKIP (needs the Workbench: --emu-32)")
