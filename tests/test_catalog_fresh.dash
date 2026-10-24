@@ -1,0 +1,63 @@
+# A catalog replaced while the old one is open (Trasfondo updated itself: the new Trasfondo.catalog was
+# written while the old program had the old one, and the new program got the old texts): locale.library
+# keeps the catalogs it loaded and gives that one while anyone has it open. Dash reads the catalog from its
+# file, so catalog_open after the file changed gives the new texts.
+# emu-needs: locale.library
+# emu-catalog: lib/catalogo_english.ct
+# emu-catalog: lib/catalogo_nuevo_english.ct
+# memcheck
+# expect-out: antes: Hello
+# expect-out: el viejo abierto: true
+# expect-out: cambiado: true
+# expect-out: después: true Hello again New text
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@catalog "PruebaDash.catalog" 0 "español"
+
+@c
+"""
+static struct Catalog *_t_old = NULL;
+"""
+end
+
+# another program with the old catalog open through locale.library (in its cache from then on)
+@native func abrir_viejo() -> Bool
+"""
+    struct TagItem tags[2];
+    tags[0].ti_Tag = OC_BuiltInLanguage; tags[0].ti_Data = (ULONG)"español";
+    tags[1].ti_Tag = TAG_DONE;
+    _t_old = OpenCatalogA(NULL, (CONST_STRPTR)"PruebaDash.catalog", tags);
+    return _t_old != NULL;
+"""
+end
+
+@native func cerrar_viejo()
+"""
+    if (_t_old) CloseCatalog(_t_old);
+    _t_old = NULL;
+"""
+end
+
+# the update writes the new catalog over the old one
+@native func cambiar() -> Bool
+"""
+    BPTR in = Open((CONST_STRPTR)"PROGDIR:Catalogs/english/PruebaNueva.catalog", MODE_OLDFILE), out;
+    UBYTE buf[512];
+    LONG n;
+    if (!in) return FALSE;
+    if (!(out = Open((CONST_STRPTR)"PROGDIR:Catalogs/english/PruebaDash.catalog", MODE_NEWFILE))) { Close(in); return FALSE; }
+    while ((n = Read(in, buf, sizeof(buf))) > 0) Write(out, buf, n);
+    Close(in);
+    Close(out);
+    return TRUE;
+"""
+end
+
+Main
+    Print "antes: " + tr(1, "Hola")
+    Print "el viejo abierto: #{abrir_viejo()}"
+    Print "cambiado: #{cambiar()}"
+    a = catalog_open("PruebaDash.catalog", 0)
+    Print "después: #{a} " + tr(1, "Hola") + " " + tr(5, "Nuevo")
+    cerrar_viejo()
+end

@@ -4116,8 +4116,8 @@ static LONG _dash_usb_hid_emitter(LONG i) { return i >= 0 && i < _dash_hid_n ? (
     CATALOG_RUNTIME = """\
 /* Dash catalog runtime (dashweb D71): tr(id, text) gives the text of that number in the program's
    catalog in the user's language, or text (the program's own language) without one. @catalog "X.catalog"
-   N names it: it opens on the first tr (PROGDIR:Catalogs/<language>/ or LOCALE:Catalogs/<language>/, the
-   locale.library way) and closes at the end; catalog_open opens another one meanwhile. */
+   N names it: it is read on the first tr (PROGDIR:Catalogs/<language>/ or LOCALE:Catalogs/<language>/, the
+   locale.library way, from the file each time) and freed at the end; catalog_open reads another one. */
 #ifndef _DASH_LOCALE_BASE
 #define _DASH_LOCALE_BASE
 #include <libraries/locale.h>
@@ -4137,35 +4137,141 @@ static void _dash_locale_close(void) {
 }
 #endif
 static BOOL _dash_catalog_tried = FALSE;
-static struct Catalog *_dash_catalog = NULL;
 #ifndef _DASH_CATALOG_NAME
 #define _DASH_CATALOG_NAME NULL
 #define _DASH_CATALOG_VERSION 0
 #define _DASH_CATALOG_BUILTIN NULL
 #endif
 
+/* The catalog is read from its file by the program itself, not through OpenCatalog: locale.library keeps
+   the catalogs it loaded and gives the same one while any program has it open, so a program updated with
+   a new catalog (Trasfondo) got the texts of the old one until the next boot. locale.library only gives
+   the user's languages; the places are its own (PROGDIR:Catalogs/<language>/, then LOCALE:Catalogs/). */
+struct _DashCatText { ULONG id; STRPTR text; };
+static UBYTE *_dash_cat_data = NULL;            /* the file, read whole: the texts point into it */
+static struct _DashCatText *_dash_cat = NULL;   /* its texts, by number */
+static LONG _dash_cat_n = 0;
+static char _dash_cat_lang[32];
+
 static void _dash_catalog_cleanup(void) {
-    if (_dash_catalog && LocaleBase) CloseCatalog(_dash_catalog);
-    _dash_catalog = NULL;
+    if (_dash_cat) FreeVec(_dash_cat);
+    if (_dash_cat_data) FreeVec(_dash_cat_data);
+    _dash_cat = NULL;
+    _dash_cat_data = NULL;
+    _dash_cat_n = 0;
+    _dash_cat_lang[0] = 0;
+}
+
+static ULONG _dash_cat_be32(UBYTE *p) {
+    return ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) | ((ULONG)p[2] << 8) | p[3];
+}
+
+/* The version of "$VER: Name.catalog 1.0 (date)", -1 if none */
+static LONG _dash_cat_version(UBYTE *c, ULONG len) {
+    ULONG i = 0;
+    LONG v = -1;
+    while (i + 5 <= len && memcmp(c + i, "$VER:", 5)) i++;
+    if (i + 5 > len) return -1;
+    for (i += 5; i < len && c[i] == ' '; i++) ;
+    for (; i < len && c[i] && c[i] != ' '; i++) ;
+    for (; i < len && c[i] == ' '; i++) ;
+    for (; i < len && c[i] >= '0' && c[i] <= '9'; i++) v = (v < 0 ? 0 : v * 10) + (c[i] - '0');
+    return v;
+}
+
+/* A .catalog (IFF CTLG: FVER, LANG and STRS, each text with its number, its length and the bytes up to a
+   multiple of 4) read whole into the catalog in use, if its version is version (0: any) */
+static BOOL _dash_catalog_read(STRPTR path, LONG version) {
+    BPTR f = Open((CONST_STRPTR)path, MODE_OLDFILE);
+    LONG size, n = 0, i, j, ver = -1;
+    UBYTE *d, *p, *strs = NULL, *q;
+    ULONG strs_len = 0;
+    struct _DashCatText *tab;
+    char lang[32];
+    BOOL ok;
+    if (!f) return FALSE;
+    Seek(f, 0, OFFSET_END);
+    size = Seek(f, 0, OFFSET_BEGINNING);
+    if (size < 12 || size > 0x00FFFFFFL || !(d = (UBYTE *)AllocVec(size + 1, MEMF_ANY))) { Close(f); return FALSE; }
+    ok = Read(f, d, size) == size;
+    Close(f);
+    if (!ok || memcmp(d, "FORM", 4) || memcmp(d + 8, "CTLG", 4)) { FreeVec(d); return FALSE; }
+    d[size] = 0;
+    lang[0] = 0;
+    for (p = d + 12; p + 8 <= d + size; ) {
+        ULONG len = _dash_cat_be32(p + 4);
+        UBYTE *c = p + 8;
+        if (len > (ULONG)(d + size - c)) break;
+        if (!memcmp(p, "FVER", 4)) ver = _dash_cat_version(c, len);
+        else if (!memcmp(p, "LANG", 4)) {
+            for (i = 0; i < (LONG)len && i < 31 && c[i]; i++) lang[i] = c[i];
+            lang[i] = 0;
+        } else if (!memcmp(p, "STRS", 4)) { strs = c; strs_len = len; }
+        p = c + len + (len & 1);
+    }
+    if (!strs || (version > 0 && ver != version)) { FreeVec(d); return FALSE; }
+    for (q = strs; q + 8 <= strs + strs_len; q += 8 + ((_dash_cat_be32(q + 4) + 3) & ~3UL)) n++;
+    if (!(tab = (struct _DashCatText *)AllocVec((n ? n : 1) * sizeof(*tab), MEMF_ANY))) { FreeVec(d); return FALSE; }
+    for (q = strs, i = 0; q + 8 <= strs + strs_len && i < n; q += 8 + ((_dash_cat_be32(q + 4) + 3) & ~3UL)) {
+        ULONG len = _dash_cat_be32(q + 4), room = (len + 3) & ~3UL;
+        if (q + 8 + room > strs + strs_len && q + 8 + len > strs + strs_len) break;
+        /* (each text ends with a 0 in its bytes or in the padding: one that does not is left out) */
+        if (len && q[8 + len - 1] && (room == len || q[8 + len])) continue;
+        tab[i].id = _dash_cat_be32(q);
+        tab[i].text = (STRPTR)(q + 8);
+        for (j = i; j > 0 && tab[j - 1].id > tab[j].id; j--) {     /* (in order of number, usually already) */
+            struct _DashCatText s = tab[j]; tab[j] = tab[j - 1]; tab[j - 1] = s;
+        }
+        i++;
+    }
+    _dash_catalog_cleanup();
+    _dash_cat_data = d;
+    _dash_cat = tab;
+    _dash_cat_n = i;
+    strcpy(_dash_cat_lang, lang);
+    return TRUE;
+}
+
+/* The same language, without telling capitals apart (the first 128 characters) */
+static BOOL _dash_cat_same(STRPTR a, STRPTR b) {
+    for (; *a && *b; a++, b++) {
+        UBYTE x = *a, y = *b;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return FALSE;
+    }
+    return *a == *b;
 }
 
 /* The catalog name (version 0: any) in the user's languages; builtin: the language of the program's own
    texts ("español"), for which no catalog is looked for (NULL: "english", as locale.library says).
    FALSE without one (the texts stay the program's own) */
 static BOOL _dash_catalog_open_v(STRPTR name, LONG version, STRPTR builtin) {
-    struct TagItem tags[3];
-    LONG n = 0;
     static BOOL at_exit = FALSE;
+    struct Locale *loc;
+    char path[256];
+    LONG i, k;
+    BOOL found = FALSE;
     _dash_catalog_tried = TRUE;
     if (!at_exit) at_exit = atexit(_dash_catalog_cleanup) == 0;
-    if (_dash_catalog) { CloseCatalog(_dash_catalog); _dash_catalog = NULL; }
-    if (!name || !*name) return FALSE;
-    if (!_dash_locale_open()) return FALSE;
-    if (builtin && *builtin) { tags[n].ti_Tag = OC_BuiltInLanguage; tags[n++].ti_Data = (ULONG)builtin; }
-    if (version > 0) { tags[n].ti_Tag = OC_Version; tags[n++].ti_Data = (ULONG)version; }
-    tags[n].ti_Tag = TAG_DONE;
-    _dash_catalog = OpenCatalogA(NULL, (CONST_STRPTR)name, tags);
-    return _dash_catalog != NULL;
+    _dash_catalog_cleanup();
+    if (!name || !*name || strlen((char *)name) > 100) return FALSE;
+    if (!_dash_locale_open() || !(loc = OpenLocale(NULL))) return FALSE;
+    for (i = 0; i < 10 && !found && loc->loc_PrefLanguages[i]; i++) {
+        STRPTR lang = loc->loc_PrefLanguages[i];
+        if (_dash_cat_same(lang, builtin && *builtin ? builtin : (STRPTR)"english")) break;
+        if (strlen((char *)lang) > 100) continue;
+        for (k = 0; k < 2 && !found; k++) {
+            strcpy(path, k ? "LOCALE:Catalogs/" : "PROGDIR:Catalogs/");
+            strcat(path, (char *)lang);
+            strcat(path, "/");
+            strcat(path, (char *)name);
+            found = _dash_catalog_read((STRPTR)path, version);
+        }
+        if (found && !_dash_cat_lang[0]) { strncpy(_dash_cat_lang, (char *)lang, 31); _dash_cat_lang[31] = 0; }
+    }
+    CloseLocale(loc);
+    return found;
 }
 
 static BOOL _dash_catalog_open(STRPTR name, LONG version) {
@@ -4174,17 +4280,22 @@ static BOOL _dash_catalog_open(STRPTR name, LONG version) {
 
 /* The text of that number in the catalog, or text (also for nil) */
 static STRPTR _dash_tr(LONG id, STRPTR text) {
+    LONG lo = 0, hi;
     if (!_dash_catalog_tried && _DASH_CATALOG_NAME)
         _dash_catalog_open_v((STRPTR)_DASH_CATALOG_NAME, _DASH_CATALOG_VERSION, (STRPTR)_DASH_CATALOG_BUILTIN);
-    if (!_dash_catalog) return text;
-    return (STRPTR)GetCatalogStr(_dash_catalog, id, (CONST_STRPTR)(text ? text : (STRPTR)""));
+    for (hi = _dash_cat_n - 1; lo <= hi; ) {
+        LONG m = (lo + hi) / 2;
+        if (_dash_cat[m].id == (ULONG)id) return _dash_cat[m].text;
+        if (_dash_cat[m].id < (ULONG)id) lo = m + 1; else hi = m - 1;
+    }
+    return text ? text : (STRPTR)"";
 }
 
 /* The language of the catalog in use ("english"), "" without one */
 static STRPTR _dash_catalog_language(void) {
     if (!_dash_catalog_tried && _DASH_CATALOG_NAME)
         _dash_catalog_open_v((STRPTR)_DASH_CATALOG_NAME, _DASH_CATALOG_VERSION, (STRPTR)_DASH_CATALOG_BUILTIN);
-    return _dash_str_dup((STRPTR)(_dash_catalog && _dash_catalog->cat_Language ? (char *)_dash_catalog->cat_Language : ""), TRUE);
+    return _dash_str_dup((STRPTR)(_dash_cat ? _dash_cat_lang : ""), TRUE);
 }
 
 """
