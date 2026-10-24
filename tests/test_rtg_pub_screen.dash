@@ -1,0 +1,27 @@
+# rtg_get_depth, rtg_get_width and rtg_get_height without a window or screen of the program (a commodity, a
+# desktop_canvas outside its drawing): the Workbench's screen, not 0 (Trasfondo took a 16-bit RTG screen for a
+# palette one and made its panel opaque).
+# expect-out: profundidad: true
+# expect-out: ancho: true
+# expect-out: alto: true
+# expect-out: fin
+
+@native func del_workbench(what: Int) -> Int
+"""
+    struct Screen *s = LockPubScreen(NULL);
+    LONG r = 0;
+    if (s) {
+        r = what == 0 ? (LONG)GetBitMapAttr(s->RastPort.BitMap, BMA_DEPTH) : what == 1 ? s->Width : s->Height;
+        UnlockPubScreen(NULL, s);
+    }
+    return r;
+"""
+end
+
+Main
+    d = rtg_get_depth()
+    Print "profundidad: #{d > 0 and d == del_workbench(0)}"
+    Print "ancho: #{rtg_get_width() == del_workbench(1)}"
+    Print "alto: #{rtg_get_height() == del_workbench(2)}"
+    Print "fin"
+end

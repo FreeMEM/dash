@@ -630,9 +630,9 @@ Total: 615 funciones, 615 implementadas, 0 sin implementar.
 |---|---|---|---|
 | `rtg_available()` | `BOOL` | Check if CyberGraphX or Picasso96 is available |  |
 | `rtg_is_active()` | `BOOL` | Check if current screen is using RTG |  |
-| `rtg_get_depth()` | `LONG` | Get current screen bit depth |  |
-| `rtg_get_width()` | `LONG` | Get current screen width |  |
-| `rtg_get_height()` | `LONG` | Get current screen height |  |
+| `rtg_get_depth()` | `LONG` | Get current screen bit depth (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| `rtg_get_width()` | `LONG` | Get current screen width (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
+| `rtg_get_height()` | `LONG` | Get current screen height (the program's, or else the Workbench's: outside the drawing of a desktop_canvas too) |  |
 | `rtg_alloc_bitmap(width, height, depth)` | `APTR` | Allocate RTG-compatible bitmap |  |
 | `rtg_free_bitmap(bitmap)` | `void` | Free RTG bitmap |  |
 | `rtg_write_pixel(x, y, rgb)` | `void` | Write single pixel with 24-bit RGB color |  |
