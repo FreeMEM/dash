@@ -5641,6 +5641,8 @@ static LONG _dash_net_udp_from_port(void) { return _dash_net_from_port; }
 #include <amissl/amissl.h>
 #include <utility/tagitem.h>
 #include <errno.h>
+#include <devices/timer.h>
+#include <proto/timer.h>
 
 struct Library *AmiSSLMasterBase = NULL, *AmiSSLBase = NULL, *AmiSSLExtBase = NULL;
 static BOOL _dash_tls_open = FALSE;
@@ -5717,10 +5719,31 @@ static void _dash_tls_forget(LONG t, BOOL keep) {
 static void _dash_tls_cleanup(void);
 static int _dash_tls_errno = 0;             /* the owner's (D69): not libnix's errno, which every process shares */
 
-static BOOL _dash_tls_init(void) {
+/* Some entropy for the random generator, without touching the hardware (MorphOS and AmigaOS 4 have no custom
+   chips: reading the raster position at 0xDFF006 gave a warning there): the EClock, read again for each byte
+   (it moves between reads), with the time, the task and the free memory */
+static void _dash_tls_seed(void) {
     UBYTE seed[64];
     struct DateStamp ds;
-    LONG i;
+    struct timerequest tr;
+    struct EClockVal e;
+    struct Device *TimerBase = NULL;
+    LONG i, base;
+    memset(&tr, 0, sizeof(tr));
+    if (OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)&tr, 0) == 0)
+        TimerBase = tr.tr_node.io_Device;
+    DateStamp(&ds);
+    base = ds.ds_Tick * 31 + ds.ds_Minute + (LONG)FindTask(NULL) + (LONG)AvailMem(MEMF_ANY);
+    for (i = 0; i < 64; i++) {
+        e.ev_hi = e.ev_lo = 0;
+        if (TimerBase) ReadEClock(&e);
+        seed[i] = (UBYTE)(base + i * 7 + (e.ev_lo >> ((i & 3) * 8)) + e.ev_hi);
+    }
+    if (TimerBase) CloseDevice((struct IORequest *)&tr);
+    RAND_seed(seed, sizeof(seed));
+}
+
+static BOOL _dash_tls_init(void) {
     if (!_dash_net_init()) return FALSE;     /* (the network's owner only) */
     if (_dash_tls_ctx) return TRUE;
     _dash_net_tls_end = _dash_tls_cleanup;
@@ -5740,12 +5763,7 @@ static BOOL _dash_tls_init(void) {
         }
     }
     OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
-    /* some entropy for the random generator: time, task, memory, raster position */
-    DateStamp(&ds);
-    for (i = 0; i < 64; i++)
-        seed[i] = (UBYTE)(ds.ds_Tick * 31 + ds.ds_Minute + i * 7 + (LONG)FindTask(NULL) + AvailMem(MEMF_ANY)
-                          + *(volatile UBYTE *)0xDFF006);
-    RAND_seed(seed, sizeof(seed));
+    _dash_tls_seed();
     _dash_tls_ctx = SSL_CTX_new(TLS_client_method());
     if (!_dash_tls_ctx) { _dash_net_err = "error de TLS"; return FALSE; }
     SSL_CTX_set_default_verify_paths(_dash_tls_ctx);
