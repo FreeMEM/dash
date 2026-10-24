@@ -188,5 +188,17 @@ int main(void){ int fails=0;
   CHECK(_dash_mc_errors == 7);                                   /* a block returned twice */
  }
  #endif
+ { /* var = var + add past 8 MB (Tachyon, a 10.8 MB script): the doubled room would pass 16 MB, the exact
+      size fits (the 3 MB were lost); past 16 MB, var stays as it was */
+   const LONG MB = 1024 * 1024;
+   STRPTR big = NULL, six = malloc(6 * MB + 1), three = malloc(3 * MB + 1);
+   memset(six, 'a', 6 * MB); six[6 * MB] = 0;
+   memset(three, 'b', 3 * MB); three[3 * MB] = 0;
+   _dash_str_append(&big, six); _dash_str_append(&big, three);
+   CHECK(big && _dash_str_len(big) == 9 * MB && big[9 * MB - 1] == 'b' && big[6 * MB - 1] == 'a');
+   _dash_str_append(&big, six); CHECK(_dash_str_len(big) == 15 * MB);
+   _dash_str_append(&big, three); CHECK(_dash_str_len(big) == 15 * MB && big[15 * MB] == 0);
+   _dash_str_free(big); free(six); free(three);
+ }
  _dash_mem_cleanup(); CHECK(_dash_pool==NULL);
  printf("fallos: %d\n", fails); return fails; }

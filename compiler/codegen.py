@@ -302,13 +302,25 @@ typedef struct _DashStrHdr {
 static _DashStrHdr *_dash_tmp = NULL;
 static ULONG _dash_tmp_serial = 0;
 
+static BOOL _dash_str_quiet = FALSE;   /* _dash_str_append trying a bigger size first */
 static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     ULONG size = sizeof(_DashStrHdr) + len + 1;
     _DashStrHdr *h;
     STRPTR text;
-    if (size > 0x00FFFFFFUL) return NULL;
+    /* (the size is 24 bits of the header: a text is 16 MB at most) */
+    if (size > 0x00FFFFFFUL || len > 0x00FFFFFFUL) {
+#ifdef DASH_MEMCHECK
+        if (!_dash_str_quiet) _dash_mc_error((CONST_STRPTR)"un texto de más de 16 MB: queda nil");
+#endif
+        return NULL;
+    }
     h = (_DashStrHdr *)_dash_block_get(size);
-    if (!h) return NULL;
+    if (!h) {
+#ifdef DASH_MEMCHECK
+        if (!_dash_str_quiet) _dash_mc_error((CONST_STRPTR)"sin memoria para un texto: queda nil");
+#endif
+        return NULL;
+    }
 #ifdef DASH_MEMCHECK
     _dash_mc_strs++;
 #endif
@@ -6068,9 +6080,17 @@ static void _dash_str_append(STRPTR *var, STRPTR add) {
         _dash_str_setlen(s, len + n);
         return;
     }
-    cap = (len + n) * 2;
+    /* room to grow: double, or (past 8 MB, or without memory for that) just what it needs; if not even
+       that, var stays as it was (with --memcheck, an error says so) */
+    cap = len + n <= 0x007FFFF0L ? (len + n) * 2 : len + n;
     if (cap < 24) cap = 24;
-    r = _dash_str_alloc(cap, FALSE);
+    r = NULL;
+    if (cap > len + n) {
+        _dash_str_quiet = TRUE;            /* (no error yet: there is the exact size to try) */
+        r = _dash_str_alloc(cap, FALSE);
+        _dash_str_quiet = FALSE;
+    }
+    if (!r) r = _dash_str_alloc(len + n, FALSE);
     if (!r) return;
     _dash_copy(r, s, len);
     _dash_copy(r + len, add, n);

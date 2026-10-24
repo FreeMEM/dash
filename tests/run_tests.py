@@ -373,7 +373,8 @@ def run_runtime_host_test() -> Optional[TestResult]:
     start_time = time.time()
     harness = (PROJECT_ROOT / "tests" / "runtime" / "host_harness.c").read_text()
     runtime = "".join([CTemplates.MEMORY_RUNTIME, CTemplates.ARRAY_RUNTIME,
-                       CTemplates.STRING_RUNTIME, CTemplates.REFCOUNT_RUNTIME, CTemplates.FIXED_RUNTIME])
+                       CTemplates.STRING_RUNTIME, CTemplates.TEXT_RUNTIME, CTemplates.REFCOUNT_RUNTIME,
+                       CTemplates.FIXED_RUNTIME])
     build_dir = PROJECT_ROOT / "build"
     build_dir.mkdir(exist_ok=True)
     src = build_dir / "runtime_host.c"
