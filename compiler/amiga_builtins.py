@@ -3873,7 +3873,8 @@ NET_FUNCTIONS = {
                                "The port of who sent the last datagram received (to answer it)"),
     "net_stack_running": _text("net_stack_running", [], "BOOL", "_dash_net_stack_running()",
                                "True if a TCP/IP stack is running (its bsdsocket.library is in memory); nothing is "
-                               "opened or loaded to know it"),
+                               "loaded to know it. Roadshow's stays in memory after NetShutdown: that one is opened "
+                               "and closed"),
     "net_release": _text("net_release", [], "void", "_dash_net_release()",
                          "Let the network go now: bsdsocket.library is closed, with the sockets, TLS connections and "
                          "name lookups still open; the next net_ call opens it again (the program's end does it too)"),
