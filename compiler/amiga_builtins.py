@@ -4018,6 +4018,18 @@ TASK_FUNCTIONS = {
         description="desktop_canvas_update only in that part of the area: the drawing is clipped to it and only "
                     "it is compared (the rest stays as it was; where the desktop was repainted since, it draws "
                     "too)"),
+    "desktop_canvas_veil": BuiltinFunc(
+        name="desktop_canvas_veil", params=["canvas", "rgb", "alpha"], return_type="void",
+        c_template="_dash_desk_veil(${canvas}, ${rgb}, ${alpha})",
+        description="The wallpaper below the drawing mixed with rgb (0xRRGGBB) at alpha (0-255; 0: none), once "
+                    "and again only where the desktop repaints it: as a gfx_blend_rect over the whole area in "
+                    "each drawing, without its cost. Seen from the next desktop_canvas_update"),
+    "desktop_canvas_drawing": BuiltinFunc(
+        name="desktop_canvas_drawing", params=["x", "y", "width", "height"], return_type="BOOL",
+        c_template="_dash_desk_drawing(${x}, ${y}, ${width}, ${height})",
+        description="In the drawing function: true if that rectangle reaches the part being drawn (all the area, "
+                    "or the one of desktop_canvas_update_area with what the desktop repainted), to skip what "
+                    "would not show. Outside it, always true"),
     "desktop_canvas_free": BuiltinFunc(
         name="desktop_canvas_free", params=["canvas"], return_type="void",
         c_template="_dash_desk_free(${canvas})",

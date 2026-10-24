@@ -7841,6 +7841,9 @@ struct _DashDesk {
     struct Layer_Info *li[2];               /* one each: a layer over another would cover it */
     struct Layer *ly[2];                    /* one on each bitmap, to clip the drawing (update_area) */
     struct BitMap *wall;                    /* the wallpaper below */
+    struct BitMap *under;                   /* desktop_canvas_veil: the wallpaper with the veil, the drawing's start */
+    LONG veil_rgb, veil_alpha;
+    BOOL under_new;                         /* the veil to be mixed again over all the wallpaper */
     struct BitMap *tmp, *icons, *mask;      /* planar, backdrop: the screen read; one plane: icons; where to paint */
     LONG bpp;                               /* RTG: bytes per pixel of the copies (3: RGB24, 1: pens); 0 planar */
     ULONG fmt;                              /* Picasso96: the copies in the screen's RGBFormat (bpp its bytes), read
@@ -8023,6 +8026,7 @@ static void _dash_desk_reset(struct _DashDesk *d) {
     }
     d->front = 0;
     d->damage_left = 0;
+    d->under_new = TRUE;
 }
 
 /* With the screen's LayerInfo locked: our hook where the Workbench's desktop is now (the backdrop
@@ -8378,11 +8382,54 @@ static void _dash_desk_on_draw(APTR c, APTR draw) {
     if (c) ((struct _DashDesk *)c)->draw = draw;
 }
 
+/* desktop_canvas_veil: the wallpaper mixed with the veil in that part, once (Trasfondo's panel mixed its
+   veil on every update: in RTG, half of its time) */
+static void _dash_desk_veil_part(struct _DashDesk *d, LONG x0, LONG y0, LONG x1, LONG y1) {
+    struct RastPort r, *old = _dash_rp;
+    BltBitMap(d->wall, x0, y0, d->under, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0xC0, 0xFF, NULL);
+    WaitBlit();
+    InitRastPort(&r);
+    r.BitMap = d->under;
+    _dash_rp = &r;
+    _dash_blend_rect(x0, y0, x1, y1, d->veil_rgb, d->veil_alpha);
+    _dash_rp = old;
+}
+
+static void _dash_desk_veil(APTR c, LONG rgb, LONG alpha) {
+    struct _DashDesk *d = (struct _DashDesk *)c;
+    if (!d) return;
+    if (alpha <= 0) {
+        WaitBlit();
+        if (d->under) FreeBitMap(d->under);
+        d->under = NULL;
+        return;
+    }
+    if (!d->under) {
+        struct BitMap *sbm = _dash_desk_scr->RastPort.BitMap;
+        d->under = AllocBitMap(d->w, d->h, GetBitMapAttr(sbm, BMA_DEPTH), BMF_MINPLANES | BMF_CLEAR,
+                               d->bpp ? sbm : NULL);
+        if (!d->under) return;
+    }
+    d->veil_rgb = rgb;
+    d->veil_alpha = alpha > 255 ? 255 : alpha;
+    d->under_new = TRUE;
+}
+
+/* The part being drawn (desktop_canvas_drawing): all the canvas, or the area of update_area */
+static struct Rectangle _dash_desk_drawing_rect;
+static BOOL _dash_desk_drawing_on = FALSE;
+static BOOL _dash_desk_drawing(LONG x, LONG y, LONG w, LONG h) {
+    struct Rectangle *r = &_dash_desk_drawing_rect;
+    if (!_dash_desk_drawing_on) return TRUE;
+    return w > 0 && h > 0 && x <= r->MaxX && y <= r->MaxY && x + w - 1 >= r->MinX && y + h - 1 >= r->MinY;
+}
+
 /* Draw again and show what changed; a: only in this area (the rest as it is), or NULL */
 static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     struct RastPort *rp, *old = _dash_rp;
     struct Region *clip = NULL, *before = NULL;
     struct Rectangle wr, grown;
+    struct BitMap *under;
     LONG back, wall_new;
     ULONG t0 = _dash_desk_tick(), t1, attached;
     if (!d || !_dash_desk_scr) return;
@@ -8407,24 +8454,35 @@ static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
         if (wr.MaxY > grown.MaxY) grown.MaxY = wr.MaxY;
         a = &grown;
     }
+    if (d->under) {                   /* the veil: over all the wallpaper, or where the hook took it again */
+        if (d->under_new) _dash_desk_veil_part(d, 0, 0, d->w - 1, d->h - 1);
+        else if (wall_new) _dash_desk_veil_part(d, wr.MinX, wr.MinY, wr.MaxX, wr.MaxY);
+        d->under_new = FALSE;
+    }
+    under = d->under ? d->under : d->wall;
     /* the drawing, over the wallpaper and without locks (it may take long, or open a window) */
     back = d->front == 0 ? 1 : 0;
     rp = d->ly[back]->rp;
     if (a) {
         BltBitMap(d->bm[d->front], 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
-        BltBitMap(d->wall, a->MinX, a->MinY, d->bm[back], a->MinX, a->MinY, a->MaxX - a->MinX + 1,
+        BltBitMap(under, a->MinX, a->MinY, d->bm[back], a->MinX, a->MinY, a->MaxX - a->MinX + 1,
                   a->MaxY - a->MinY + 1, 0xC0, 0xFF, NULL);
         if ((clip = NewRegion()) && OrRectRegion(clip, a)) before = InstallClipRegion(d->ly[back], clip);
     } else {
-        BltBitMap(d->wall, 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
+        BltBitMap(under, 0, 0, d->bm[back], 0, 0, d->w, d->h, 0xC0, 0xFF, NULL);
     }
     SetFont(rp, _dash_desk_scr->RastPort.Font);
     SetDrMd(rp, JAM1);
     t1 = _dash_desk_tick();
     if (d->draw) {
+        if (a) _dash_desk_drawing_rect = *a;
+        else { _dash_desk_drawing_rect.MinX = 0; _dash_desk_drawing_rect.MinY = 0;
+               _dash_desk_drawing_rect.MaxX = d->w - 1; _dash_desk_drawing_rect.MaxY = d->h - 1; }
+        _dash_desk_drawing_on = TRUE;
         _dash_rp = rp;
         ((void (*)(LONG, LONG, LONG, LONG))d->draw)(0, 0, d->w, d->h);
         _dash_rp = old;
+        _dash_desk_drawing_on = FALSE;
     }
     if (clip) {
         InstallClipRegion(d->ly[back], before);
@@ -8514,6 +8572,7 @@ static void _dash_desk_free(APTR c) {
     }
     for (i = 0; i < 2; i++) if (d->bm[i]) FreeBitMap(d->bm[i]);
     if (d->wall) FreeBitMap(d->wall);
+    if (d->under) FreeBitMap(d->under);
     if (d->tmp) FreeBitMap(d->tmp);
     if (d->icons) FreeBitMap(d->icons);
     if (d->mask) FreeBitMap(d->mask);
