@@ -4023,7 +4023,14 @@ TASK_FUNCTIONS = {
         c_template="_dash_desk_veil(${canvas}, ${rgb}, ${alpha})",
         description="The wallpaper below the drawing mixed with rgb (0xRRGGBB) at alpha (0-255; 0: none), once "
                     "and again only where the desktop repaints it: as a gfx_blend_rect over the whole area in "
-                    "each drawing, without its cost. Seen from the next desktop_canvas_update"),
+                    "each drawing, without its cost. Takes away the veils of desktop_canvas_veil_rect. Seen "
+                    "from the next desktop_canvas_update"),
+    "desktop_canvas_veil_rect": BuiltinFunc(
+        name="desktop_canvas_veil_rect", params=["canvas", "x", "y", "width", "height", "rgb", "alpha"],
+        return_type="BOOL",
+        c_template="_dash_desk_veil_rect(${canvas}, ${x}, ${y}, ${width}, ${height}, ${rgb}, ${alpha})",
+        description="One more veil, only in that rectangle, mixed once over desktop_canvas_veil's (which takes "
+                    "them away: call it first): a box that is always there. Up to 16; false when full"),
     "desktop_canvas_drawing": BuiltinFunc(
         name="desktop_canvas_drawing", params=["x", "y", "width", "height"], return_type="BOOL",
         c_template="_dash_desk_drawing(${x}, ${y}, ${width}, ${height})",

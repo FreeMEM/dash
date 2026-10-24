@@ -1,6 +1,7 @@
 # desktop_canvas_veil: the wallpaper below the drawing mixed with a colour once, not on every update (Trasfondo's
 # veil was half its time in RTG); mixed again where the desktop repaints with another wallpaper, and gone with
-# alpha 0. desktop_canvas_drawing: in the drawing function, whether a part of the canvas is being drawn.
+# alpha 0; desktop_canvas_veil_rect, only in a rectangle. desktop_canvas_drawing: in the drawing function,
+# whether a part of the canvas is being drawn.
 # (RTG: 68040 with uaegfx, 16 bits)
 # workbench
 # rtg
@@ -10,6 +11,7 @@
 # expect-out: velo sobre el fondo nuevo: true
 # expect-out: update_area sin la derecha: false
 # expect-out: sin velo: true
+# expect-out: velo fijo: true false
 # expect-out: fin
 
 import "lib/escritorio_fondo.dash"
@@ -18,9 +20,9 @@ var dentro: Bool = false
 
 # the canvas (at 10, 10 of the window) is darker than the desktop's fill there: black at alpha 128 (planar:
 # some pixel of a 4x4 block of the dither is not the fill's pen)
-@native func velado() -> Bool
+@native func velado(cx: Int) -> Bool
 """
-    LONG x0 = _f_win->LeftEdge + 10 + 60, y0 = _f_win->TopEdge + 10 + 12, x, y;
+    LONG x0 = _f_win->LeftEdge + 10 + cx, y0 = _f_win->TopEdge + 10 + 12, x, y;
     ULONG fuera = _f_px(_f_win->LeftEdge + 300, _f_win->TopEdge + 100), dentro;
     WaitBlit();
     if (!_f_planar) {
@@ -44,16 +46,19 @@ Main
     desktop_canvas_on_draw(c, pintar_velo)
     desktop_canvas_veil(c, 0x000000, 128)
     desktop_canvas_update(c)
-    Print "con velo: #{velado()}"
+    Print "con velo: #{velado(60)}"
     Print "dibuja la derecha: #{dentro}"
     cambiar_fondo(3)
     desktop_canvas_update_area(c, 0, 0, 20, 30)
-    Print "velo sobre el fondo nuevo: #{velado()}"
+    Print "velo sobre el fondo nuevo: #{velado(60)}"
     desktop_canvas_update_area(c, 0, 0, 20, 30)
     Print "update_area sin la derecha: #{dentro}"
     desktop_canvas_veil(c, 0, 0)
     desktop_canvas_update(c)
     Print "sin velo: #{fondo_debajo()}"
+    desktop_canvas_veil_rect(c, 40, 0, 40, 30, 0x000000, 128)
+    desktop_canvas_update(c)
+    Print "velo fijo: #{velado(60)} #{velado(90)}"
     desktop_canvas_free(c)
     cerrar_fondo()
     Print "fin"

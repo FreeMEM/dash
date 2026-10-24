@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 613 funciones, 613 implementadas, 0 sin implementar.
+Total: 614 funciones, 614 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -440,7 +440,8 @@ Total: 613 funciones, 613 implementadas, 0 sin implementar.
 | `desktop_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (from 0, 0), over the wallpaper below it |  |
 | `desktop_canvas_update(canvas)` | `void` | Draw the area again now and show what changed, without touching the icons |  |
 | `desktop_canvas_update_area(canvas, x, y, width, height)` | `void` | desktop_canvas_update only in that part of the area: the drawing is clipped to it and only it is compared (the rest stays as it was; where the desktop was repainted since, it draws too) |  |
-| `desktop_canvas_veil(canvas, rgb, alpha)` | `void` | The wallpaper below the drawing mixed with rgb (0xRRGGBB) at alpha (0-255; 0: none), once and again only where the desktop repaints it: as a gfx_blend_rect over the whole area in each drawing, without its cost. Seen from the next desktop_canvas_update |  |
+| `desktop_canvas_veil(canvas, rgb, alpha)` | `void` | The wallpaper below the drawing mixed with rgb (0xRRGGBB) at alpha (0-255; 0: none), once and again only where the desktop repaints it: as a gfx_blend_rect over the whole area in each drawing, without its cost. Takes away the veils of desktop_canvas_veil_rect. Seen from the next desktop_canvas_update |  |
+| `desktop_canvas_veil_rect(canvas, x, y, width, height, rgb, alpha)` | `BOOL` | One more veil, only in that rectangle, mixed once over desktop_canvas_veil's (which takes them away: call it first): a box that is always there. Up to 16; false when full |  |
 | `desktop_canvas_drawing(x, y, width, height)` | `BOOL` | In the drawing function: true if that rectangle reaches the part being drawn (all the area, or the one of desktop_canvas_update_area with what the desktop repainted), to skip what would not show. Outside it, always true |  |
 | `desktop_canvas_free(canvas)` | `void` | The wallpaper back in the area (the program's end does it too) |  |
 | `break_check()` | `BOOL` | True if Ctrl-C came ("Break" in the Shell, or another copy: single_instance); it is cleared |  |
