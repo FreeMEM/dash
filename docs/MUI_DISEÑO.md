@@ -7,7 +7,7 @@ Funciona con MUI 3.8 (muimaster.library V19) o MUI 5. La lista completa de los b
 
 1. **Builtins `mui_`**, sin sintaxis nueva por ahora. Los objetos MUI son valores que el programa
    guarda en variables (números, como los buffers y ficheros de Dash: el codegen convierte a puntero al llamar
-   al runtime; tarea 3): hacen falta varias ventanas y muchos objetos (el navegador). La API de ReAction (`ra_`)
+   al runtime; tarea 3): hacen falta varias ventanas y muchos objetos (el navegador, hoy Tachyon). La API de ReAction (`ra_`)
    no da para tanto: hasta 4 ventanas y gadgets por número.
 2. **El árbol se construye con una pila**, como `ra_layout_*`: `mui_vgroup_begin()` ... `mui_group_end()`.
    Cada objeto que se crea entra en el grupo abierto. Por dentro: cada grupo se crea vacío y los hijos se añaden
@@ -104,7 +104,7 @@ Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menú de la ventana abierta (`Menustrip`) |
 | `mui_wait_event() -> Int` | Espera y devuelve el número de un evento, o -1 para salir. |
 | `mui_poll_event() -> Int` | Igual sin esperar: 0 si no hay nada. |
-| `mui_wait_event_signals(mascara) -> Int` | Espera también otras señales (red, temporizador). Devuelve 0 cuando llega una de ellas; `mui_signals()` dice cuáles. |
+| `mui_wait_event_signals(mascara) -> Int` | Espera también otras señales: `net_signal()` (red), `task_signal()` (tareas), `file_notify_signal()` (ficheros vigilados). Devuelve 0 cuando llega una de ellas; `mui_signals()` dice cuáles. |
 | `mui_timer(ms, id)` | Dentro de `ms` milisegundos `mui_wait_event` devuelve `id`, una vez (otra: llamarla otra vez; 0 la anula). |
 | `mui_press(obj)` | Lanza el evento de `mui_on_press` de ese objeto como si se pulsara (atajos, tests). |
 
@@ -227,8 +227,9 @@ end
 - **Memoria:** MUI es dueño de los objetos; los handles no llevan contador de referencias y dejan de valer tras
   `mui_app_end()`. Los textos que se pasan a `mui_text`, `mui_string`, `mui_list_add`... los copia MUI, así que los
   temporales de Dash se pueden liberar al acabar la vuelta. `--memcheck` debe acabar sin nada vivo.
-- **Tests en el emulador:** sin ratón. Se prueba con `mui_set_value` (dispara `on_change`), `mui_press`,
-  `mui_get_*` y `mui_window_open`; los programas acaban solos con `--autoclose`: al cumplirse el tiempo `mui_wait_event` devuelve -1, como al cerrar, y
-  el programa sale por su camino (lo de después del bucle se ejecuta); si sigue sin acabar 5 s después, se cierra en seco.
+- **Tests en el emulador:** casi todos sin ratón: `mui_set_value` (dispara `on_change`), `mui_press`, `mui_get_*` y
+  `mui_window_open`. Tres mueven el puntero, hacen clic o pulsan teclas de verdad por `input.device`
+  (`test_mui_canvas_move`, `test_mui_canvas_char`, `test_mui_menu_keys`). Los programas acaban solos con
+  `--autoclose`: al cumplirse el tiempo `mui_wait_event` devuelve -1, como al cerrar, y el programa sale por su camino (lo de después del bucle se ejecuta); si sigue sin acabar 5 s después, se cierra en seco.
 - **Cadena de errores:** sin muimaster, ventana que no abre o 68000 → mensaje por la salida estándar y
   `mui_app_begin` devuelve 0; el programa decide.

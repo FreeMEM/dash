@@ -14,10 +14,15 @@ pero sin punteros, sin `includes` y sin liberar memoria a mano.
 
 - **Sintaxis clara**, al estilo de Ruby y Python: bloques que acaban en `end`, tipos que se deducen.
 - **La API del Amiga a mano:** ventanas, gráficos, sprites, copper, blitter, sonido, ficheros, red, y tres
-  formas de hacer interfaces (GadTools, ReAction y MUI).
+  formas de hacer interfaces (GadTools, ReAction y MUI). Son 609 funciones ya hechas (builtins), en
+  [BUILTINS.md](BUILTINS.md).
 - **Memoria automática y ligera:** sin recolector de basura ni pausas (sección 4.10).
 - **Para un Amiga de verdad:** funciona en un A500 con 68000 y Kickstart 3.0; lo que necesita más
-  (MUI, HTTPS) lo dice.
+  (MUI 5, TLS) lo dice.
+
+Programas hechos con Dash: [Tachyon](https://github.com/FreeMEM/tachyon) (un navegador con MUI),
+[Trasfondo](https://github.com/FreeMEM/trasfondo) (un monitor del sistema en el fondo del Workbench) y Ratonera
+(curvas de aceleración del ratón, en desarrollo).
 
 Se programa en un PC (Linux o macOS) y se prueba en un emulador o en el Amiga.
 
@@ -173,8 +178,9 @@ end
 Tipos de parámetro y retorno: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `[T]`, `{String: T}`,
 `Pointer`, `Func`, `Void`, un struct o un enum; el `return` se comprueba contra el tipo declarado (un texto
 no vale por un `Bool`, ni un struct por otro). Las funciones son recursivas y se pueden pasar como valor
-(`aplica(doble, 4)`). Una lambda no puede usar las variables locales de fuera (las globales sí). En un módulo,
-las que empiezan por `_` son privadas.
+(`aplica(doble, 4)`); una función guardada en una variable (`g = doble`) se llama con `g(x)`. Una lambda no
+puede usar las variables locales de fuera (las globales sí): no hay closures. En un módulo, las que empiezan
+por `_` son privadas.
 
 ### 4.6 Textos
 
@@ -221,7 +227,8 @@ edades.remove("Luis")
 
 Una clave que no está da `0` (o `nil` en textos y objetos); `d.get(k, defecto)` lo busca una sola vez (con
 objetos, el defecto solo puede ser `nil`). `l.clear()` y `d.clear()` vacían, y `d.length` cuenta las claves.
-Las listas comprueban los índices. Una lista de structs, textos o listas es dueña de sus elementos.
+Las listas comprueban los índices: fuera de la lista, leer da `0` (o `nil`) y escribir no hace nada (con
+`--debug`, el depurador para ahí). Una lista de structs, textos o listas es dueña de sus elementos.
 
 ### 4.8 Structs y enums
 
@@ -310,6 +317,10 @@ número o una variable). También ventanas desde el código
 (`window_create`, con número; el `EventLoop` las atiende y `event_window()` dice cuál), pantallas propias
 (`screen_open`) y RTG.
 
+Los gadgets GadTools cuentan desde el interior de la ventana, sin los bordes. Para que quepan:
+`window_create` con el flag 8 toma el ancho y el alto del interior; `window_border_top/bottom/left/right` dan
+los bordes, y `screen_font_height` y `screen_font_text_width` miden con la fuente de la pantalla.
+
 ### 5.2 Gráficos, sprites y animación
 
 `gfx_*` (puntos, líneas, rectángulos, círculos, polígonos, texto), colores (`gfx_rgb`, `color_pen`), fuentes de
@@ -324,8 +335,21 @@ argumentos del Shell (`arg_count`, `arg`).
 
 ### 5.4 Red
 
-TCP por `bsdsocket.library` (`net_connect`, `net_send`, `net_recv`, `net_close`) y TLS con AmiSSL
-(`tls_connect`, 68020+):
+Por `bsdsocket.library` (Roadshow, MiamiDx, AmiTCP...):
+
+- TCP cliente (`net_connect`, `net_send`, `net_recv`, `net_close`) y servidor (`net_listen`, `net_accept`,
+  `net_peer`, `net_port`).
+- UDP (`net_udp_open`, `net_udp_send`, `net_udp_recv`, `net_udp_from`), también a toda la red local
+  (`"255.255.255.255"`).
+- TLS con AmiSSL 5.1 o posterior (`tls_connect`, 68020+); reanuda la sesión con el mismo servidor.
+- Conexión sin esperar (`net_connect_start`, `tls_connect_start`) y `net_signal()`, que despierta al programa
+  cuando llega algo.
+- La red también desde una tarea de `task_start`: solo una tarea la usa a la vez.
+- Medir la red: interfaces de Roadshow (`net_ifs_read`), drivers SANA-II con cualquier pila (`net_drivers_read`,
+  `net_driver_read`) y la señal WiFi (`wifi_read`, `wifi_read_device`).
+
+No hay HTTP como builtin: cada programa lo escribe sobre TCP o TLS. Tampoco sockets raw ni tramas SANA-II en
+crudo.
 
 ```ruby
 s = net_connect("aminet.net", 80, 10000)
@@ -345,7 +369,24 @@ end
   `task_free` la siguen.
 - `cpu_start()` y `cpu_sample()` miden la CPU que usa cada tarea del sistema (`cpu_task_name`, `cpu_task_load`).
 - `desktop_canvas(x, y, w, h)` dibuja en un trozo del escritorio del Workbench, detrás de los iconos, con una
-  función Dash como la zona de dibujo de MUI.
+  función Dash como la zona de dibujo de MUI. También con Directory Opus 5 o Scalos de escritorio.
+- Commodity: `cx_broker` pone el programa en Exchange, `cx_hotkey` le da una tecla rápida y `cx_wait` espera
+  órdenes sin gastar CPU (`cx_command`). `tooltype("NOMBRE", defecto)` lee un tooltype del icono o un
+  argumento del Shell.
+- `file_notify(ruta)` avisa cuando cambia un fichero (`file_changed`; `cx_wait` despierta con 7).
+  `run_program(orden)` lanza otro programa sin esperar y `program_relaunch()` vuelve a arrancar este al acabar.
+- Volúmenes montados y su espacio libre: `disks_read`, `disk_name`, `disk_kb`, `disk_free_kb`.
+- Ratón: `mouse_curve` pone una curva de aceleración a cada ratón (también a los USB de Poseidon, `usb_hid_*`);
+  `mouse_prefs_*` cambia la velocidad del sistema.
+
+### 5.6 Fecha, versión e idiomas
+
+- `clock_read()` lee la hora; `clock_year()`, `clock_month()`... dan cada parte, y `date_text("%d-%m-%Y")` la
+  escribe en el idioma del sistema (`FormatDate` de `locale.library`).
+- `@version "Mi programa 1.2"` pone la cadena `$VER:` que lee `C:Version`; `program_version()` la devuelve.
+- Traducciones con catálogos de `locale.library`: `@catalog "Prog.catalog" 1` y `tr(1, "Hola")` (el texto
+  del catálogo en el idioma del usuario o, si no hay, el del programa). `tools/catalogo.py` saca los textos
+  y hace el `.catalog` sin FlexCat; en un `.dashui` los textos llevan `"tr"`.
 
 ## 6. Interfaces gráficas
 
@@ -422,7 +463,9 @@ end
 
 `@header "#include <x.h>"` añade cabeceras, `@link "lib/x.c"` enlaza un fichero C, objeto o librería, `@c """ ... """
 end` pone C libre (por ejemplo funciones que llaman a Dash), `@stack N` pide una pila mínima y
-`@workbench_output "NIL:"` evita la ventana de consola al arrancar desde el Workbench (lo escrito se pierde).
+`@workbench_output "NIL:"` evita la ventana de consola al arrancar desde el Workbench (lo escrito se pierde),
+`@version "Prog 1.2"` pone la versión y `@catalog "Prog.catalog" 1` el catálogo de idioma (sección 5.6).
+`@native(borrow) func` indica que el C solo usa sus argumentos durante la llamada (se ahorra copiarlos).
 
 ## 8. Herramientas
 
@@ -432,8 +475,10 @@ end` pone C libre (por ejemplo funciones que llaman a Dash), `@stack N` pide una
 - **Tests:** `python3 tests/run_tests.py` (con `--emu`, `--emu-a500` y `--emu-32` los ejecuta en un A1200,
   un A500 y un A1200 con AmigaOS 3.2; `--memcheck` con la comprobación de memoria).
 - **Medidas:** `tools/bench.py` (velocidad, memoria y tamaño en A500 y A1200 emulados).
-- **VS Code:** resaltado de Dash, compilar y ejecutar en el emulador, y el editor visual de MUI
-  (`editor/vscode/`, ver [INSTALACION.md](INSTALACION.md)).
+- **VS Code** (`editor/vscode/`, versión 0.2.1, ver [INSTALACION.md](INSTALACION.md)): errores al escribir,
+  completar, ir a la definición, compilar y ejecutar en el emulador, depurar con F5 (también en un Amiga real
+  por la red) y el editor visual de MUI. Vídeo tutorial: https://youtu.be/_UTJ_0s3xLc
+- **Catálogos:** `tools/catalogo.py` (sección 5.6).
 
 ## 9. El C que genera
 
@@ -444,5 +489,12 @@ conservan. Ver la tabla de equivalencias en el [manual](MANUAL_REFERENCIA.md).
 ## 10. Requisitos de los programas
 
 - Kickstart 3.0 o superior (pools de memoria de exec) y un 68000; cada programa pide 16 KB de pila (32 KB si usa MUI).
-- MUI 5 y TLS (AmiSSL) necesitan un 68020 o superior; ReAction, AmigaOS 3.2 (o 3.5+).
+- MUI 5 y TLS (AmiSSL 5.1 o posterior) necesitan un 68020 o superior; ReAction, AmigaOS 3.2 (o 3.5+).
 - Los textos del programa se escriben en UTF-8 y llegan al Amiga en Latin-1.
+
+## 11. Lo que no tiene
+
+- Clases con herencia (hay structs con métodos) ni macros: son preguntas abiertas.
+- Closures: una lambda no ve las variables locales de fuera.
+- `export`: no hace falta, todo es público salvo lo que empieza por `_` (decisión tomada).
+- HTTP como builtin, sockets raw y tramas SANA-II en crudo.
