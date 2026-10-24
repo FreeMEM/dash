@@ -4100,6 +4100,11 @@ TASK_FUNCTIONS = {
         name="net_if_bytes_out", params=["i"], return_type="LONG",
         c_template="_dash_net_if_bytes_out(${i})",
         description="The bytes sent by interface i (the low 32 bits, like net_if_bytes_in)"),
+    "pistorm_temperature": BuiltinFunc(
+        name="pistorm_temperature", params=[], return_type="LONG",
+        c_template="_dash_pistorm_temperature()",
+        description="Temperature of the Raspberry Pi of a PiStorm (Emu68), in tenths of a degree Celsius (523: "
+                    "52.3), from its firmware through Emu68's mailbox.resource; -1 without Emu68"),
     "wifi_read": BuiltinFunc(
         name="wifi_read", params=["interface", "ms"], return_type="LONG",
         c_template="_dash_wifi_read(${interface}, ${ms})",

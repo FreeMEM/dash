@@ -5,7 +5,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 611 funciones, 611 implementadas, 0 sin implementar.
+Total: 612 funciones, 612 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -457,6 +457,7 @@ Total: 611 funciones, 611 implementadas, 0 sin implementar.
 | `net_if_up(i)` | `BOOL` | True if interface i is up (connected) |  |
 | `net_if_bytes_in(i)` | `LONG` | The bytes received by interface i (the low 32 bits: the difference of two readings is the bytes in between, even past 2 GB) |  |
 | `net_if_bytes_out(i)` | `LONG` | The bytes sent by interface i (the low 32 bits, like net_if_bytes_in) |  |
+| `pistorm_temperature()` | `LONG` | Temperature of the Raspberry Pi of a PiStorm (Emu68), in tenths of a degree Celsius (523: 52.3), from its firmware through Emu68's mailbox.resource; -1 without Emu68 |  |
 | `wifi_read(interface, ms)` | `LONG` | Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for itself, -1 no Roadshow |  |
 | `wifi_read_device(driver, unit, ms)` | `LONG` | Like wifi_read, asking a SANA-II driver that is in use ("wifipi.device", unit 0) directly, with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver in use, 4 offline, 5 the stack has it only for itself |  |
 | `net_drivers_read()` | `LONG` | Reads the SANA-II network drivers in use, with any TCP/IP stack (the ones of DEVS:Networks that something has open): how many |  |
