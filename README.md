@@ -67,7 +67,12 @@ end
   de referencias), sin recolector ni pausas
 
 ### Amiga API
-- **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`
+
+609 funciones built-in, todas hechas (lista generada desde el código en [docs/BUILTINS.md](docs/BUILTINS.md)).
+
+- **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`;
+  `window_create` con el tamaño interior (flag 8) y los bordes de la ventana (`window_border_top`...) y la
+  fuente de la pantalla (`screen_font_height`, `screen_font_text_width`) para colocar gadgets
 - **Interfaces** — GadTools (con atajos de teclado y gadgets medidos con la fuente), ReAction (hasta 4
   ventanas) y **MUI 3.8 o 5**: zona de dibujo propia (con doble búfer, rellenos, repintado de solo una zona con
   `mui_canvas_update_area` y el ratón sin clic con `mui_canvas_on_move` y `mui_canvas_pointer_x`/`_y`),
@@ -78,30 +83,59 @@ end
 - **Sprites** — Hardware sprites y soft sprites
 - **Copper** — Listas de cobre programables
 - **Blitter** — BOBs y operaciones de blitting
-- **Audio** — Reproducción de tonos y samples
+- **Audio** — Tonos, samples 8SVX y sonidos hechos muestra a muestra (`audio.device`), y módulos ProTracker
+  (`music_*`, reproductor propio)
 - **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF, o desde píxeles RGB/RGBA en memoria (con
   transparencia, también en RTG y sin `picture.datatype`; en RTG, alfa de verdad: se mezclan con lo de debajo),
   sin tope de imágenes a la vez (antes, 64); fuentes de disco, también vectoriales (tamaño
   mínimo 2: con 1 o 0, diskfont y bullet de AmigaOS 3.2 escriben fuera de su memoria), y colores RGB
-- **Red** — TCP con `bsdsocket.library` y HTTPS con AmiSSL (5.1 o posterior, o las anteriores), también sin
-  esperar (conexiones por pasos); la sesión TLS de cada servidor se reanuda en la siguiente conexión;
-  `net_signal` despierta al programa cuando la red tiene algo
+- **Red** — Con `bsdsocket.library` (cualquier pila: Roadshow, AmiTCP, MiamiDx): TCP como cliente y como
+  servidor (`net_listen`, `net_accept`), UDP con difusión (`net_udp_*`) y TLS con AmiSSL (5.1 o posterior, o
+  las anteriores) que comprueba el certificado; conexiones por pasos, sin esperar; la sesión TLS de cada
+  servidor se reanuda en la siguiente conexión; `net_signal` despierta al programa cuando la red tiene algo; la
+  red también desde una tarea de `task_start`. HTTP no es un builtin: cada programa lo hace sobre TCP y TLS
 - **Procesos** — `task_start`: una función `@native` en otro proceso de AmigaOS; `task_signal` avisa al acabar
-- **Trasfondo** — `desktop_canvas*`: dibujar en el fondo del Workbench, detrás de los iconos (planar y RTG, con
-  y sin backdrop); `cpu_*`: la CPU de cada tarea; `break_check`: parar con Ctrl-C un programa sin ventana;
-  `single_instance`: una sola copia a la vez; `@workbench_output "NIL:"`: sin ventana de consola al arrancar
-  desde el icono
-- **DOS** — Operaciones de ficheros
-- **RTG** — Soporte para tarjetas gráficas
+- **Escritorio y sistema** — `desktop_canvas*`: dibujar en el fondo del Workbench, detrás de los iconos (planar
+  y RTG, con y sin backdrop; también con Directory Opus 5 o Scalos de escritorio); `cpu_*`: la CPU de cada
+  tarea; `break_check`: parar con Ctrl-C un programa sin ventana; `single_instance`: una sola copia a la vez;
+  `@workbench_output "NIL:"`: sin ventana de consola al arrancar desde el icono; `tooltype`; commodities
+  (`cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`: el programa en Exchange y con tecla rápida);
+  `run_program` y `program_relaunch`; `@version` (para `C:Version`) y `program_version()`
+- **Medidores** — Discos montados con su tamaño y espacio libre (`disks_read`); interfaces de red de Roadshow con
+  su estado y bytes (`net_ifs_read`); drivers SANA-II en uso, con cualquier pila, con sus paquetes y bytes
+  (`net_drivers_read`, `net_driver_read`); señal WiFi (`wifi_read`, `wifi_read_device`); dispositivos USB de
+  Poseidon (`usb_hid_*`); curva de aceleración de cada ratón (`mouse_curve`) y las preferencias del ratón
+- **Idiomas, fecha y hora** — Catálogos de `locale.library`: `@catalog "X.catalog"`, `tr(id, texto)` (también
+  en los `.dashui`), `catalog_open`; `tools/catalogo.py` hace los `.cd`, `.ct` y `.catalog` sin FlexCat.
+  `clock_read` y `clock_year`... `clock_second`; `date_text(formato)` con `FormatDate` en el idioma del usuario
+- **DOS** — Ficheros y directorios, requesters de ASL (ficheros, color, fuente), argumentos y tooltypes,
+  vigilar ficheros (`file_notify`, `file_changed`)
+- **RTG** — Tarjetas gráficas con CyberGraphX o Picasso96 (`rtg_*`: pantallas, píxeles, bloques, escalado)
 - **Double Buffering** — Animación sin flicker
-- **FFI** — Llamadas directas a funciones C/AmigaOS; C propio en línea (`@native`, `@c`) o enlazado (`@link`)
+- **FFI** — Llamadas directas a funciones C/AmigaOS; C propio en línea (`@native`, `@c`) o enlazado (`@link`),
+  con sus cabeceras (`@header`) y funciones de C declaradas (`@extern`)
 
 Los programas necesitan Kickstart 3.0 o superior (usan los pools de memoria de exec V39) y funcionan en
-un 68000. MUI y HTTPS piden un 68020 o superior.
+un 68000. MUI (3.8 o 5) y TLS (AmiSSL 5.1 o posterior) piden un 68020 o superior. Algunas funciones piden
+más: la red, una pila TCP/IP; `net_ifs_read` y `wifi_read`, Roadshow; `usb_hid_*`, Poseidon; ReAction, las
+clases de AmigaOS 3.2.
 
-El proyecto más grande escrito en Dash es [dashweb](https://github.com/FreeMEM/dashweb), un navegador web
-para Amiga con MUI (3.8 o 5): lo que le falta a dashweb se añade a Dash. Ya tiene una primera versión de
-prueba, [v0.1.0-alfa](https://github.com/FreeMEM/dashweb/releases/tag/v0.1.0-alfa).
+### Lo que no hay
+
+- HTTP como builtin: cada programa lo hace sobre TCP y TLS.
+- Sockets raw (ICMP, para un ping) ni tramas en crudo de un driver SANA-II: hoy, con `@native`.
+- Clases (OOP) y macros: son preguntas abiertas, sin decidir.
+- Exports: descartado a propósito.
+
+## Programas hechos con Dash
+
+- [Tachyon](https://github.com/FreeMEM/tachyon) (antes dashweb): un navegador web para Amiga con MUI: XHTML,
+  CSS, JavaScript (QuickJS) y HTTPS. Es el proyecto más grande escrito en Dash, y lo que le falta se añade a
+  Dash. Tiene versiones alfa de prueba en sus [releases](https://github.com/FreeMEM/tachyon/releases).
+- [Trasfondo](https://github.com/FreeMEM/trasfondo): un monitor de recursos (fecha y hora, CPU, memoria,
+  tareas, discos, red y WiFi) pintado en el fondo del Workbench, detrás de los iconos; es una commodity.
+  Versiones en sus [releases](https://github.com/FreeMEM/trasfondo/releases).
+- Ratonera: aceleración del ratón por dispositivo (`mouse_curve`, `usb_hid_*`), en desarrollo.
 
 ## Desarrollar en VS Code
 
@@ -109,6 +143,8 @@ La extensión de `editor/vscode` hace de VS Code un entorno para Dash: colores, 
 completar, ir a la definición y renombrar; compilar y ejecutar en el Amiga emulado (A1200, A500, AmigaOS 3.2 o
 con tarjeta gráfica); depurar con puntos de parada, variables y paso a paso, también en un Amiga de verdad por la
 red; y un editor visual de ventanas MUI que las enseña en el emulador. Usa el compilador de este repositorio.
+La versión publicada es la 0.2.1; en este repositorio hay además la casilla "al cambiar" de **Ver en Amiga**
+(el ajuste `dash.emulator.previewOnChange`), que aún no está en una release.
 
 [![Tutorial en vídeo de Dash en VS Code](docs/media/vscode-tutorial.jpg)](https://youtu.be/_UTJ_0s3xLc)
 
@@ -150,7 +186,7 @@ reinstalarla. La extensión y el compilador van en el mismo repositorio para que
 ```bash
 # 1. Dependencias del sistema
 sudo apt update
-sudo apt install -y python3 python3-pip make wget git gcc g++ \
+sudo apt install -y python3 python3-pip python3-dev make wget curl openssl git gcc g++ \
     lhasa libgmp-dev libmpfr-dev libmpc-dev flex bison \
     gettext texinfo ncurses-dev autoconf rsync libreadline-dev
 
@@ -179,7 +215,7 @@ cd dash
 
 ```bash
 # 1. Dependencias del sistema
-sudo pacman -S --needed python python-pip make wget git gcc \
+sudo pacman -S --needed python python-pip make wget curl openssl git gcc \
     lhasa gmp mpfr libmpc flex bison gettext texinfo \
     ncurses autoconf rsync readline
 
@@ -288,10 +324,11 @@ lib/amiga/            Módulos estándar de Amiga
 runtime/softfloat/    Coma flotante por software (suma y multiplicación en ensamblador 68000)
 tools/                Emulador (emu_run.py, emu_preview.py, capturas con tools/amiga/shot.c), sistemas emulados
                       (emu_sys_*.sh), SDK de MUI, AmiSSL y bgdbserver (get_*.sh), depurador (gdb_relay.py,
-                      gdb/dash.py), benchmarks (bench.py), gen_builtins_doc.py, gen_tmgrammar.py
+                      gdb/dash.py), benchmarks (bench.py, bench_report.py), catálogos (catalogo.py),
+                      fuzz_refcount.py, gen_builtins_doc.py, gen_tmgrammar.py
 editor/vscode/        Extensión de VS Code: colores, errores al escribir, compilar, emulador, depurador, editor
                       visual de MUI
-examples/             Programas de ejemplo
+examples/             Programas de ejemplo (34)
 tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC;
                       tests/lsp y tests/unit: tests en Python; tests/bench: benchmarks)
 docs/                 Documentación
@@ -307,7 +344,9 @@ docs/                 Documentación
 - [Editor visual de MUI](docs/MUI_EDITOR.md) — Formato `.dashui` y extensión de VS Code
 - [API Amiga](docs/AMIGA_API.md) — Catálogo de diseño de la API (el original; la lista real es BUILTINS.md)
 - [Instalación](docs/INSTALACION.md) — Setup del entorno
-- [Roadmap](docs/ROADMAP.md) — Plan de desarrollo
+- [Requisitos funcionales](docs/REQUERIMIENTOS_FUNCIONALES.md) y [del sistema](docs/REQUERIMIENTOS_SISTEMA.md) —
+  Los requisitos originales, con lo hecho, lo descartado y lo que falta
+- [Roadmap](docs/ROADMAP.md) — Plan de desarrollo y registro de lo hecho
 
 ## Licencia
 

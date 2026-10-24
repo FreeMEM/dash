@@ -4,7 +4,14 @@
 
 - Visual editor: "al cambiar", next to "Ver en Amiga", shows the window on the Amiga again by itself a moment
   after each change (the setting `dash.emulator.previewOnChange`). One at a time; if the emulator fails, it goes
-  off by itself instead of showing an error at every change.
+  off by itself instead of showing an error at every change. Ticking it is remembered for every `.dashui`.
+- Highlighting: the directives `@catalog` and `@version`, and the builtins added to Dash since 0.2.1
+  (`dos_requesters`, `base64_to_file`, `tooltype`, `cx_*`, `disks_read`/`disk_*`, `net_ifs_read`/`net_if_*`,
+  `wifi_*`, `net_drivers_read`/`net_driver_*`, `net_listen`/`net_accept`/`net_peer`/`net_port`, `net_udp_*`,
+  `mouse_curve*`, `mouse_patch_left`, `usb_hid_*`, `mouse_prefs_*`, `tr`, `catalog_*`, `screen_font_*`,
+  `window_border_*`, `clock_*`, `date_text`, `program_version`, `file_notify*`, `file_changed`, `run_program`,
+  `program_relaunch`). Completion and hover get them from the compiler, without a new version.
+- README: the video tutorial is on YouTube.
 
 ## 0.2.1 (2026-10-21)
 

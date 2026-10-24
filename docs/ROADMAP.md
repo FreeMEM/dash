@@ -1,7 +1,7 @@
 # D.A.S.H. Language - Hoja de Ruta de Desarrollo
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
-**Última actualización:** 2026-10-21
+**Última actualización:** 2026-10-24
 **Fecha de inicio:** 2025-01-01
 **Objetivo:** Crear un lenguaje de programación completo para Amiga
 
@@ -20,7 +20,7 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 
 ---
 
-## Estado Actual (2026-10-21)
+## Estado Actual (2026-10-24)
 
 ### Implementado ✅
 
@@ -38,7 +38,11 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Memoria automática (temporales por vuelta, contador de referencias)
 - [x] Funciones, structs con métodos, enums, listas, diccionarios, `Float` y `Fixed`, lambdas e imports
 - [x] Los 609 builtins Amiga implementados, 82 de ellos de MUI (ver `docs/BUILTINS.md`)
-- [x] Interfaces con GadTools, ReAction y MUI (3.8 o 5); red con TCP y HTTPS (AmiSSL)
+- [x] Interfaces con GadTools, ReAction y MUI (3.8 o 5); red con TCP (cliente y servidor), UDP y TLS (AmiSSL 5.1+).
+      No hay HTTP como builtin: cada programa lo hace sobre TCP o TLS
+- [x] Directivas `@native`, `@extern`, `@header`, `@link`, `@c`, `@stack`, `@workbench_output`, `@catalog` y `@version`
+- [x] Commodities, catálogos de idioma (`tr`), fecha y hora, avisos de ficheros cambiados, CPU de cada tarea,
+      dibujo en el fondo del Workbench
 - [x] Extensión de VS Code (`editor/vscode/`, versión 0.2.1): errores al escribir, completar, compilar,
       emulador, depurador y editor visual de MUI
 
@@ -155,7 +159,7 @@ ver = obtener_version()
 - `return` opcional (si no hay return, retorna 0/null)
 - Parámetros son locales a la función
 - Sin sobrecarga (un nombre = una función)
-- Funciones deben definirse antes de usarse (o forward declaration)
+- Una función se puede llamar antes de su definición: el compilador escribe los prototipos
 
 **Cambios realizados:**
 - [x] `grammar.py`: Añadido `function_def`, `function_call`, `return_stmt`
@@ -226,7 +230,7 @@ ultimo = numeros.pop()
 **Reglas:**
 - Arrays son homogéneos (todos elementos mismo tipo)
 - Índices base 0
-- Bounds checking en runtime (error si fuera de rango)
+- Bounds checking en runtime: fuera de rango, leer da 0 y escribir no hace nada (con `--debug`, para el depurador)
 - `.length` retorna tamaño
 
 **Implementación en C:**
@@ -442,7 +446,10 @@ Combinar:
 - **Double Buffering:** pantalla doble buffer
 - **System:** memoria, signals, tasks
 - **Interfaces:** GadTools, ReAction y MUI (`mui_*`)
-- **Red:** TCP (`bsdsocket.library`) y TLS con AmiSSL
+- **Red:** TCP cliente y servidor, UDP (`bsdsocket.library`) y TLS con AmiSSL; contadores de los drivers
+  SANA-II y señal WiFi
+- **Sistema:** commodities (`cx_*`), tooltypes, avisos de ficheros (`file_notify`), lanzar programas, fecha y hora,
+  catálogos de idioma (`tr`), CPU de cada tarea, fondo del Workbench, curvas del ratón
 - **Imágenes y fuentes:** datatypes, píxeles RGB/RGBA, transparencias, fuentes de disco
 
 **Ejemplo - gráficos:**
@@ -937,6 +944,37 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 - [x] `lib/amiga/dos.dash`: `SEEK_*` con los valores de AmigaDOS
 - [x] `dos_requesters(on)` y `base64_to_file(texto, fichero)` para dashweb (D68)
 
+### Sesión 16 (Fecha: 2026-10-22/24) — Trasfondo, Ratonera, red y D69-D72 (PR #16 a #36)
+- [x] Commodity: `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command` y `cx_wait` (#16)
+- [x] Para un medidor: volúmenes (`disks_read`, `disk_*`), interfaces de Roadshow (`net_ifs_read`, `net_if_*`) y
+      WiFi (`wifi_read`) (#17); drivers SANA-II con cualquier pila, MiamiDx o AmiTCP también (`net_drivers_read`,
+      `net_driver_read`, `net_driver_packets_*`, `wifi_read_device`) (#18, #24); el driver queda abierto entre
+      lecturas (#33); bytes sin Roadshow si el driver los cuenta (`net_driver_bytes_*`, `net_driver_has_bytes`) (#35)
+- [x] Red: servidor TCP (`net_listen`, `net_accept`, `net_peer`, `net_port`) y UDP (`net_udp_open`, `_send`, `_recv`,
+      `_from`), con difusión (#19); la red desde una tarea de `task_start`, una sola dueña a la vez, y
+      `_dash_task_wake()` (D69, #21)
+- [x] Ratonera: `mouse_curve` (curva de aceleración por ratón: parche de `input.device` e input handler),
+      `usb_hid_*` (Poseidon) y `mouse_prefs_*` (#20)
+- [x] Comparar textos con `nil` ya no lee la dirección 0, que falla en AmigaOS 4 (D70, #22)
+- [x] Catálogos de idioma (`locale.library`): `@catalog`, `tr(id, texto)`, `catalog_open`, `catalog_language`;
+      `"tr"` en los `.dashui`; `tools/catalogo.py` hace `.cd`, `.ct` y `.catalog` sin FlexCat (D71, #26)
+- [x] Un objeto de un `.dashui` que se llama como una global ya no la pisa: es un campo del struct de la
+      ventana (D72, #27)
+- [x] `desktop_canvas` con Directory Opus 5 o Scalos de escritorio (#28) y recoge otra vez el fondo cuando el
+      escritorio se repinta (#29)
+- [x] Ventanas GadTools que caben: `window_create` con flag 8 (tamaño interior), `window_border_top/bottom/left/right`,
+      `screen_font_height`, `screen_font_text_width`; los gadgets cuentan desde el interior (#30, #31)
+- [x] `@version "Prog 1.2"` (`$VER:` para `C:Version`) y `program_version()`; `clock_read`, `clock_*` y
+      `date_text(formato)` con `FormatDate` (#32)
+- [x] `file_notify`, `file_changed`, `file_notify_end`, `file_notify_signal` (`cx_wait` despierta con 7);
+      `run_program(orden)` y `program_relaunch()` (#34)
+- [x] Arreglo: un objeto que llega como `(LONG)` se pasa como puntero a `_dash_obj_set` (#25)
+- [x] Extensión de VS Code: casilla "al cambiar" de Ver en Amiga (`dash.emulator.previewOnChange`), en `main` y aún
+      sin publicar (#23)
+- [x] `docs/REQUERIMIENTOS_FUNCIONALES.md`: RF3.3 dice lo que hay de red y lo que falta (#36)
+- Trasfondo publica su v0.5 (https://github.com/FreeMEM/trasfondo)
+- [x] 609 builtins (82 de MUI); unos 362 resultados sin emulador; 34 ejemplos
+
 ---
 
 ## Notas y Decisiones
@@ -961,11 +999,14 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 - Una lista declarada `var x: Array` pierde el tipo de sus elementos (se leen como enteros): hay que declararla
   con su tipo, `var x: [String]`
 
-### Proyecto grande en Dash: dashweb (pedido el 2026-10-15)
-- Navegador ligero escrito en Dash con interfaz MUI: XHTML, CSS, JavaScript moderno y HTTPS. Sirve para hacer
-  crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y exigente: lo que le falta se pide a
-  Dash como tarea `Dnn`. Se llama dashweb: https://github.com/FreeMEM/dashweb (plan en su `docs/DASHWEB_LOOP.md`).
-  Primera versión de prueba, v0.1.0-alfa, el 2026-10-18.
+### Programas hechos con Dash
+- **Tachyon** (antes dashweb, pedido el 2026-10-15): navegador ligero con interfaz MUI: XHTML, CSS, JavaScript
+  moderno y HTTPS. Sirve para hacer crecer Dash (lenguaje, librerías, rendimiento) con un programa grande y
+  exigente: lo que le falta se pide a Dash como tarea `Dnn`. https://github.com/FreeMEM/tachyon. Primera versión
+  de prueba, v0.1.0-alfa, el 2026-10-18.
+- **Trasfondo**: monitor del sistema (CPU, memoria, discos, red, WiFi) dibujado en el fondo del Workbench, como
+  commodity. https://github.com/FreeMEM/trasfondo, v0.5 publicada.
+- **Ratonera** (en desarrollo): una curva de aceleración para cada ratón, también los USB de Poseidon.
 
 ---
 

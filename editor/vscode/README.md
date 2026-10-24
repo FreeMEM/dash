@@ -129,7 +129,8 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   (A1200 3.1, A1200 3.2 or 68040 with a graphics card; the A500 has no 68020 for MUI, so the A1200), with the
   Workbench files with MUI of `dash.emulator.muiSystem`, `muiSystem32` or `systemRtg`. A Dash program uses the file with `import "ventana.dashui"`.
   With **al cambiar** ticked next to the button (`dash.emulator.previewOnChange`), the picture comes again by itself
-  a moment after each change; it goes off by itself if the emulator fails.
+  a moment after each change; it goes off by itself if the emulator fails. (In the repository since 0.2.1, not yet
+  in a release: build the package with `npm run package`.)
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.
 
 ## Debugging on a real Amiga
@@ -158,7 +159,15 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
 - `dash.emulator.autoclose`: seconds after which a windowed program closes itself in the emulator.
 - `dash.emulator.muiSystem`: Workbench files with MUI for "Ver en Amiga" (`DASH_EMU_SYS_MUI`, made with
   `tools/emu_sys_mui.sh`).
-- `dash.emulator.previewOnChange`: "Ver en Amiga" again after each change in the visual editor ("al cambiar").
+- `dash.emulator.muiSystem32`: Workbench 3.2 files with MUI for "Ver en Amiga" on the A1200 (3.2)
+  (`DASH_EMU_SYS_32_MUI`).
+- `dash.emulator.previewOnChange`: "Ver en Amiga" again after each change in the visual editor ("al cambiar";
+  in the repository, not yet in the 0.2.1 release).
+- `dash.emulator.machine` (`a1200`, `a500`, `a1200-32`, `rtg`), `dash.emulator.program` (`fs-uae`, `amiberry`) and
+  `dash.emulator.window` (show the emulator's window and hear it; off: hidden, as in the tests).
+- `dash.editor.autoEnd`: the `end` of a block added on Enter.
+- `dash.languageServer.enabled` and `dash.python` (the Python of the language server; it needs `lark`).
+- `dash.debug.gdb`: the `m68k-amigaos-gdb` used as debug adapter.
 
 ## Development
 

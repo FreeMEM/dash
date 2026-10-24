@@ -1,5 +1,5 @@
 # Guía de Instalación de Dash
-Versión: 2.0
+Versión: 2.1 (al día el 2026-10-24)
 
 Este documento describe cómo configurar un entorno de desarrollo completo para programar en Dash, desde cero.
 
@@ -20,6 +20,9 @@ Lo que necesitan los programas hechos con Dash, en un Amiga real o emulado:
 - **Red** (`net_*`): una pila TCP/IP (`bsdsocket.library`: Roadshow, AmiTCP, Miami...).
 - **HTTPS** (`tls_*`): además, AmiSSL 5.1 o posterior, que pide un 68020 o superior.
 - **ReAction** (`ra_*`): las clases de ReAction de AmigaOS 3.2.
+- **Interfaces de red y WiFi** (`net_ifs_read`, `wifi_read`): Roadshow. **USB** (`usb_hid_*`): Poseidon.
+
+La lista completa está en `REQUERIMIENTOS_SISTEMA.md`.
 
 ## Paso 1: Instalar Python y Dependencias de Dash
 
@@ -93,6 +96,7 @@ sudo dnf install -y \
     gettext-devel \
     texinfo \
     ncurses-devel \
+    autoconf \
     rsync \
     readline-devel \
     which
@@ -229,14 +233,18 @@ El repositorio ofrece varias versiones de GCC:
 
 | Rama | Versión GCC | Características |
 |------|-------------|-----------------|
-| `amiga6` | 6.5.0b | Por defecto, muy estable |
-| `amiga13.3` | 13.3.0 | Soporta parámetros en registros |
-| `amiga15.2` | 15.2.0 | Última versión disponible |
+| `amiga6` | 6.5.0b | Por defecto; la que usa Dash |
+| `amiga10.4` | 10.4.0 | Soporta parámetros en registros |
+| `amiga13.4` | 13.4.0 | Soporta parámetros en registros |
+| `amiga15.2` | 15.2.0 | Soporta parámetros en registros |
+| `amiga16.2` | 16.2.0 | La de desarrollo del toolchain |
+
+(Lista del README del toolchain en agosto de 2026; puede cambiar.)
 
 Dash se prueba con `amiga6` (GCC 6.5.0b); con otra rama, sin probar. Para usar una versión diferente (hazlo antes de compilar):
 
 ```bash
-make branch branch=amiga13.3 mod=gcc
+make branch branch=amiga13.4 mod=gcc
 make all -j$(nproc)
 ```
 
@@ -327,8 +335,9 @@ export DASH_EMU_SYS=~/.cache/dash-emu/sys31 DASH_EMU_SYS_32=~/.cache/dash-emu/sy
 ```
 
 La máquina `rtg` (un 68040 con tarjeta gráfica) usa la ROM 3.2 y `DASH_EMU_SYS_32_RTG`: un Workbench 3.2 con
-Picasso96 en una pantalla de 16 bits. Dash no trae script para hacerlo (dashweb tiene `tools/emu_sys_rtg.sh`); sin
-él, los tests `# rtg` se saltan.
+Picasso96 en una pantalla de 16 bits. Dash no trae script para hacerlo (Tachyon, el navegador hecho con Dash, tiene
+`tools/emu_sys_rtg.sh` en [su repositorio](https://github.com/FreeMEM/tachyon)); sin él, los tests `# rtg` se
+saltan.
 
 Prueba: `python3 tools/emu_run.py examples/hola.dash` y `python3 tests/run_tests.py --emu`. Opciones de
 `tools/emu_run.py`:
@@ -359,8 +368,11 @@ tools/emu_sys_mui.sh ~/.cache/dash-emu/sys32mui ~/.cache/dash-emu/sys32
 export DASH_EMU_SYS_MUI=~/.cache/dash-emu/sys31mui DASH_EMU_SYS_32_MUI=~/.cache/dash-emu/sys32mui
 ```
 
+`tools/emu_sys_mui.sh` toma MUI de `~/.cache/dash-mui/x/MUI` (lo deja ahí `tools/get_mui_sdk.sh`; otra carpeta:
+`DASH_MUI_DIR`).
+
 Para probar con MUI 3.8: un sistema como esos con el MUI 3.8 de Aminet (`mui38usr.lha`) en lugar de MUI 5, por
-ejemplo `~/.cache/dash-emu/sys32rtg38` (el sistema RTG de dashweb con MUI 3.8; hecho a mano, sin script), en
+ejemplo `~/.cache/dash-emu/sys32rtg38` (el sistema RTG de Tachyon con MUI 3.8; hecho a mano, sin script), en
 `DASH_EMU_SYS_32_MUI`. Con 3.8 todos los tests de MUI pasan salvo los de pantalla completa (el marco de 4 y 3
 píxeles) y el de la versión de muimaster.
 
@@ -376,6 +388,24 @@ tools/get_amissl.sh                                    # SDK y librerías en ~/.
 tools/emu_sys_amissl.sh ~/.cache/dash-emu/sys31ssl ~/.cache/dash-emu/sys31
 tools/emu_sys_amissl.sh ~/.cache/dash-emu/sys32ssl ~/.cache/dash-emu/sys32
 export DASH_EMU_SYS_SSL=~/.cache/dash-emu/sys31ssl DASH_EMU_SYS_32_SSL=~/.cache/dash-emu/sys32ssl
+```
+
+`./dash` busca las cabeceras de AmiSSL en `~/.cache/dash-amissl/x/AmiSSL/Developer` (otra carpeta: `DASH_AMISSL_SDK`).
+Los dos scripts usan `~/.cache/dash-amissl` (otra: `DASH_AMISSL_DIR`).
+
+Lo demás de la red (servidor TCP, UDP, interfaces de Roadshow, drivers SANA-II, WiFi) no necesita nada al
+compilar. En FS-UAE se prueba con su `bsdsocket`; los sucesos de sockets (`net_signal`), con Amiberry
+(`--emulator amiberry`).
+
+## Paso 8b: Catálogos de idioma (opcional)
+
+Los programas con `@catalog` y `tr(id, texto)` usan `locale.library`. Los ficheros de traducción se hacen con
+`tools/catalogo.py` (solo Python, sin FlexCat):
+
+```bash
+python3 tools/catalogo.py cd programa.dash ventana.dashui -o Programa.cd           # los textos del programa
+python3 tools/catalogo.py ct Programa.cd --language english --name Programa.catalog -o english.ct
+python3 tools/catalogo.py catalog english.ct -o Catalogs/english/Programa.catalog  # el catálogo para el Amiga
 ```
 
 ## Paso 9: Extensión de VS Code (opcional)
@@ -405,6 +435,7 @@ Ajustes (`dash.*`):
 | `dash.emulator.kickstart`, `kickstartA500`, `kickstart32` | ROM de cada máquina (`DASH_KICKSTART`, `_A500`, `_32`). |
 | `dash.emulator.system`, `system32`, `systemRtg` | Ficheros de Workbench (`DASH_EMU_SYS`, `_32`, `_32_RTG`). |
 | `dash.emulator.muiSystem`, `muiSystem32` | Workbench con MUI para "Ver en Amiga" (`DASH_EMU_SYS_MUI`, `_32_MUI`). |
+| `dash.emulator.previewOnChange` | "Ver en Amiga" otra vez, solo, tras cada cambio en el editor de ventanas. Está en el repositorio, aún no en la 0.2.1. |
 | `dash.debug.gdb` | El `m68k-amigaos-gdb` (por defecto `/opt/amiga/bin/m68k-amigaos-gdb`). |
 
 Los ficheros de ROM y Workbench son los de los pasos 6 y 7.

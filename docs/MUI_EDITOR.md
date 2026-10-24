@@ -131,9 +131,9 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   `mui_wait_event`).
 - **Comandos** (`editor/vscode/package.json`): "Dash: Compilar", "Ejecutar en emulador", "Ejecutar con comprobación
   de memoria", "Ejecutar con perfil", "Depurar en el Amiga", "Preparar para un Amiga real", "Elegir la máquina del
-  emulador", "Nuevo proyecto", "Nuevo fichero de ventanas MUI (.dashui)", "Ir al código del evento", "Elegir la
-  carpeta del compilador" y "Reiniciar el servidor de lenguaje". "Ver en Amiga" no es un comando: es un botón del
-  editor visual. La ruta de Dash y las variables del emulador van en los ajustes (`dash.path`, `dash.emulator.*`).
+  emulador", "Nuevo proyecto", "Nuevo fichero de ventanas MUI (.dashui)", "Elegir la carpeta del compilador" y
+  "Reiniciar el servidor de lenguaje". "Ir al código del evento" (el botón →) y "Nueva línea (con end)" (la tecla
+  Intro) no salen en la paleta de comandos. "Ver en Amiga" no es un comando: es un botón del editor visual. La ruta de Dash y las variables del emulador van en los ajustes (`dash.path`, `dash.emulator.*`).
 - **Resaltado de sintaxis** de `.dash` (gramática TextMate, `syntaxes/dash.tmLanguage.json`, generada con
   `tools/gen_tmgrammar.py`).
 - **Comportamiento del editor:**
@@ -165,13 +165,15 @@ servidor de lenguaje, depurador, copiar y pegar en el árbol.
 
 Publicada en este repo: release [vscode-0.2.1](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1) (PR #11),
 con `dash-mui-editor-0.2.1.vsix`. Se instala con "Extensions: Install from VSIX..." (VS Code 1.86 o posterior); ver
-`docs/INSTALACION.md`, paso 9.
+`docs/INSTALACION.md`, paso 9. Lo hecho después (la casilla "al cambiar", el resaltado de los builtins nuevos) está
+en `main` y en la sección "Unreleased" de `editor/vscode/CHANGELOG.md`, aún sin release.
 
 Pendiente: no hay selección múltiple; la vista aproximada no reparte el espacio exactamente como MUI.
 
 ## Ver en Amiga (IDE, tarea 20)
 
-Un Amiga emulado que se queda encendido entre vistas: `tools/emu_preview.py --machine a1200|a1200-32|rtg`. Dentro, un
+Un Amiga emulado que se queda encendido entre vistas (se apaga tras 10 minutos sin usarlo):
+`tools/emu_preview.py --machine a1200|a1200-32|rtg`. Con la máquina A500 la vista va al A1200 (MUI 5 pide 68020). Dentro, un
 vigía espera `DH0:pide` y ejecuta `DH0:vista`, que abre la ventana, hace su propia captura con `C:dash_shot` en cuanto
 está abierta y acaba. En pantallas planares la captura son los planos tal cual (`.dsh`, unos 40 KB en 4 colores) y el
 PC hace el PNG (`emu_run.planar_to_png`). La extensión mantiene uno por máquina y no recompila una ventana que no ha

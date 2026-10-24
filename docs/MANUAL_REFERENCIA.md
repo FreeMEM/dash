@@ -37,17 +37,34 @@
 
 ## 1. Introduccion
 
-Dash es un lenguaje de programacion de alto nivel disenado para crear aplicaciones y juegos para Amiga. El compilador traduce codigo Dash a C optimizado que puede compilarse con cualquier compilador C para Amiga.
+Dash es un lenguaje de programacion de alto nivel disenado para crear aplicaciones y juegos para Amiga. El compilador traduce codigo Dash a un solo fichero C, y el gcc de bebbo (`m68k-amigaos-gcc`) lo compila a un ejecutable de AmigaOS.
 
 ### Caracteristicas Principales
 
 - Sintaxis clara y moderna inspirada en Ruby y Python
-- Integracion nativa con AmigaOS (Intuition, Graphics, DOS)
+- Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 609 funciones built-in para graficos, audio, archivos, red, GUI (GadTools, ReAction, MUI) y mas
+- 609 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+  TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
 - Arena Allocators para rendimiento maximo
+
+### Requisitos
+
+- AmigaOS 3.0 (Kickstart 39) o posterior. Vale un 68000, salvo MUI 5 y TLS (AmiSSL), que piden un 68020.
+- TLS: AmiSSL 5.1 o posterior instalado. Red: una pila TCP/IP (Roadshow, AmiTCP, MiamiDx...).
+- ReAction: AmigaOS 3.2 (es donde se prueba).
+
+### Lo que no hay
+
+- HTTP: no hay `Http.get` ni un builtin de HTTP. Cada programa lo hace sobre `net_*` (TCP) y `tls_*`.
+- Sockets raw (`SOCK_RAW`) ni tramas en crudo de SANA-II: de los drivers solo se leen contadores y la señal WiFi.
+- Clases (OOP con herencia) y macros: preguntas abiertas, sin decidir.
+- `export` en los modulos: descartado a proposito (lo que empieza por `_` es privado; lo demas, publico).
+
+Programas reales hechos con Dash: Tachyon (navegador web, MUI), Trasfondo (monitor en el fondo del Workbench)
+y Ratonera (una curva de aceleracion para cada ratón, en desarrollo).
 
 ### Hola Mundo
 
@@ -2098,7 +2115,9 @@ end
 net_close(u)
 ```
 
-No hay sockets raw (`SOCK_RAW`): para eso, `@native` con `bsdsocket.library`.
+No hay sockets raw (`SOCK_RAW`): para eso, `@native` con `bsdsocket.library`. Tampoco hay HTTP como builtin
+(ni `Http.get`): la peticion se escribe a mano sobre TCP o TLS, como en los ejemplos. La red tambien se puede usar
+desde otro proceso: ver [La red desde una tarea](#c-en-otro-proceso-task_start).
 
 Si la pila no sabe (la `bsdsocket.library` de FS-UAE no tiene `SO_EVENTMASK`), `net_signal()` da 0 y
 hay que seguir mirando con un temporizador. Los limites de tiempo de `net_connect_start` solo se
@@ -2302,7 +2321,8 @@ arena_free(arena)
 
 ### Reloj
 
-`time_ms()` da los milisegundos desde que empezo el programa (el EClock de `timer.device`):
+`time_ms()` da los milisegundos desde que empezo el programa (el EClock de `timer.device`). La fecha y la
+hora del reloj del sistema: `clock_read` y `date_text` (ver [La fecha y la hora](#la-fecha-y-la-hora-clock_-y-date_text)).
 
 ```
 t = time_ms()
@@ -2679,7 +2699,7 @@ end
 
 ## 20. Interfaz de Usuario - ReAction
 
-ReAction es el sistema de GUI moderno de AmigaOS 3.2+ basado en BOOPSI. Usa un sistema de layout automatico que gestiona el posicionamiento de gadgets.
+ReAction es el sistema de GUI de AmigaOS 3.2 (Dash lo prueba ahi) basado en BOOPSI. Usa un sistema de layout automatico que gestiona el posicionamiento de gadgets.
 
 **Nota:** ReAction es ideal para dialogos y formularios. Para aplicaciones con dibujo personalizado extenso (como editores de pixels), usa GadTools.
 
@@ -3066,7 +3086,7 @@ end
 | Caracteristica | GadTools | ReAction |
 |----------------|----------|----------|
 | Posicionamiento | Manual (absoluto) | Automatico (layout) |
-| Compatibilidad | AmigaOS 2.0+ | AmigaOS 3.2+ |
+| Compatibilidad | AmigaOS 3.0+ (lo que pide Dash) | AmigaOS 3.2 (donde se prueba) |
 | Dibujo custom | Excelente | Limitado |
 | Redimensionar | Sin problemas | Layout recalcula |
 | Ideal para | Editores, juegos | Dialogos, formularios |
@@ -3084,8 +3104,8 @@ usa MUI 5 (también vale 3.8). Necesita:
 - **Para compilar:** el SDK de MUI, que no viene con la toolchain: `tools/get_mui_sdk.sh` lo descarga
   en `~/.cache/dash-mui` (o `DASH_MUI_SDK` apunta a su carpeta `SDK/MUI`).
 
-Los programas con MUI piden 32 KB de pila (con menos, MUI se para con un aviso). Diseño completo y lo
-que viene después (listas, menús, zona de dibujo...): `docs/MUI_DISEÑO.md`.
+Los programas con MUI piden 32 KB de pila (con menos, MUI se para con un aviso). Diseño completo (listas,
+menús, zona de dibujo...): `docs/MUI_DISEÑO.md`.
 
 ### Construir la ventana
 
@@ -3510,8 +3530,9 @@ Al acabar el programa, la commodity y su tecla se quitan solas. Lanzar otra vez 
 
 ### Discos, red y WiFi para un medidor
 
-Cada lectura se hace de nuevo: no queda nada abierto entre una y otra, así que un volumen que se va, una red que
-se cae o una pila que se para se notan en la siguiente. Ninguna espera más de su tiempo.
+Cada lectura se hace de nuevo, así que un volumen que se va, una red que se cae o una pila que se para se notan en
+la siguiente. Solo el driver al que preguntan `wifi_read_device` y `net_driver_read` se queda abierto entre una
+lectura y otra (ver abajo). Ninguna espera más de su tiempo.
 
 ```ruby
 n = disks_read(500)                  # cada volumen montado, esperando 500 ms como mucho
@@ -3558,8 +3579,8 @@ end
   bytes de entre medias, aunque pase de 2 GB. Para la velocidad: la resta entre el tiempo que pasó.
 - `wifi_read(interfaz, ms)`: pide la señal al driver SANA-II del interfaz (`S2_GETSIGNALQUALITY`, la extensión
   inalámbrica de `prism2.device` y otros) y espera `ms` como mucho. Da 0 si la leyó, 1 si no contestó a tiempo (se
-  aborta), 2 si el driver no la da, 3 si no hay ese interfaz, 4 si el driver da error (desconectado) y -1 sin
-  Roadshow, y 5 si la pila tiene el driver solo para ella. Si un driver se queda la petición después de abortarla,
+  aborta), 2 si el driver no la da, 3 si no hay ese interfaz, 4 si el driver da error (desconectado), 5 si la pila
+  tiene el driver solo para ella y -1 sin Roadshow. Si un driver se queda la petición después de abortarla,
   no se le pregunta más hasta que la devuelva.
 - `net_drivers_read()`, `net_driver_name(i)`: los drivers de red (SANA-II) en uso, con cualquier pila: los de
   `DEVS:Networks/` que alguien tiene abiertos. No hace falta `bsdsocket.library`. El cajón se lee una vez por
@@ -3576,6 +3597,9 @@ end
   los cuentan: `wifipi.device`, no. Al acabar se dejan de seguir los tipos que se empezaron a seguir.
 - `wifi_signal()`, `wifi_noise()`: la señal y el ruido de la última lectura buena, en dBm (-30 muy buena, -90 muy
   mala).
+
+De los drivers SANA-II solo se leen estos contadores y la señal: no hay funciones para enviar ni recibir tramas en
+crudo.
 
 ### Una curva para cada ratón: mouse_curve y usb_hid_*
 
@@ -3772,7 +3796,9 @@ La funcion de dibujo pinta con `gfx_` en un mapa de bits aparte que ya tiene deb
 lo que no se pinta deja ver el fondo. `desktop_canvas_update` la llama y pasa a la pantalla solo las filas
 que cambiaron. `desktop_canvas_update_area(c, x, y, w, h)` hace lo mismo solo en esa parte: el dibujo se
 recorta a ella y solo ella se compara; lo que cambie fuera no sale hasta otra actualizacion que lo cubra.
-Si una ventana tapa la zona y se va, la zona se repinta sola con lo ultimo dibujado.
+Si una ventana tapa la zona y se va, la zona se repinta sola con lo ultimo dibujado. Cada vez que el escritorio
+repinta la zona, el lienzo toma otra vez el fondo que acaba de pintarse: si el Workbench pone su patron despues
+(arrancado desde WBStartup), la siguiente actualizacion ya lo tiene debajo.
 
 En modo backdrop los iconos no se tocan (no parpadean): un pixel es de icono si no es el fondo de
 pantalla ni lo que dejo el lienzo, o si ya lo era la vez anterior. La siguiente actualizacion arregla los
@@ -4095,7 +4121,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 52 | `window_*`, `button_*`, `slider_*`, `listview_*`, `dialog_file`, `dialog_font` |
+| Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
 | **Total** | **609** | |
