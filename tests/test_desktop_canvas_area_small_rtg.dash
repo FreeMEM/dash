@@ -1,0 +1,54 @@
+# desktop_canvas_update_area of a small part (a quarter): the back bitmap takes the front one only in the area
+# and what the desktop repainted, and gives it back after, with no swap (several small update_area are cheap:
+# Trasfondo updates each group of sections). The area changes on the screen and the rest stays; a window over
+# the canvas next to the area and away again is drawn again too.
+# (RTG: 68040 with uaegfx, 16 bits)
+# workbench
+# rtg
+# expect-out: lienzo: true
+# expect-out: entero: true
+# expect-out: solo el área: true
+# expect-out: tras tapar: true
+# expect-out: fin
+
+import "lib/escritorio_modos.dash"
+
+# a narrow window over the canvas, just outside the area (x 45 to 54 of it), opened and closed: the hook repaints
+# there, and the next update_area draws there too (still less than half the canvas)
+@native func tapar() -> Bool
+"""
+    struct Window *v = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)_t_scr,
+        WA_Left, _dash_desk_ox + _t_d->x + 45, WA_Top, _dash_desk_oy + _t_d->y + 5, WA_Width, 10, WA_Height, 30,
+        WA_Borderless, TRUE, WA_Activate, FALSE, WA_RMBTrap, TRUE, TAG_DONE);
+    if (!v) return FALSE;
+    Delay(10);
+    CloseWindow(v);
+    Delay(10);
+    return TRUE;
+"""
+end
+
+Main
+    esperar(true)
+    c = desktop_canvas(-1, -1, 160, 40)
+    Print "lienzo: #{c != 0}"
+    if c != 0
+        empezar(c)
+        desktop_canvas_on_draw(c, pintar)
+        desktop_canvas_update(c)
+        n = vistos()
+        Print "entero: #{n > 1000 and mal() < n / 10}"
+        # las dos rayas se mueven; solo la del área (x < 40) sale
+        mover(30, 140)
+        desktop_canvas_update_area(c, 0, 0, 40, 40)
+        n = vistos()
+        Print "solo el área: #{mal() < n / 10 and igual(32, 122) and igual(142, 12) and not igual(32, 12)}"
+        tapar()
+        mover(20, 140)
+        desktop_canvas_update_area(c, 0, 0, 40, 40)
+        n = vistos()
+        Print "tras tapar: #{mal() < n / 10 and igual(22, 122) and igual(142, 12) and not igual(22, 32)}"
+        desktop_canvas_free(c)
+    end
+    Print "fin"
+end
