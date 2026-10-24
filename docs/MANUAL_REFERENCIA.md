@@ -2019,7 +2019,7 @@ con los sockets que queden abiertos.
 | `net_close(s)` | Cierra |
 | `net_resolve(host)` | Direccion IPv4 (`"a.b.c.d"`), `nil` si no se encuentra |
 | `net_error()` | Que fallo en la ultima llamada |
-| `net_stack_running()` | `true` si hay una pila TCP/IP en marcha (su `bsdsocket.library` en memoria); no abre ni carga nada |
+| `net_stack_running()` | `true` si hay una pila TCP/IP en marcha (su `bsdsocket.library` en memoria); no carga nada. La de Roadshow sigue en memoria tras `NetShutdown`: esa se abre y se cierra para saberlo |
 | `net_release()` | Suelta la red ya: cierra la libreria y con ella los sockets, TLS y busquedas que queden; el siguiente `net_` la abre otra vez |
 
 ```
@@ -2036,6 +2036,13 @@ else
     net_close(s)
 end
 ```
+
+**Si la red se apaga.** El `NetShutdown` de Roadshow (tambien el de WHDLoad al lanzar un juego) avisa a cada
+programa con la libreria abierta y espera a que la cierre. Por defecto el aviso es Ctrl-C, que acabaria el
+programa; Dash pone un aviso propio. Al llegar, el programa suelta la red como con `net_release` y sigue: en
+`cx_wait` y `mui_wait_event` en seguida, y si no, en la siguiente llamada `net_` que abra algo, que falla. Una
+espera de la red (`net_recv`, `net_wait`) acaba en seguida. Despues, las llamadas `net_` fallan (`net_error()`
+dice por que) hasta que la red vuelve. Ctrl-C sigue parando el programa como siempre.
 
 **Sin esperar.** `net_connect` espera a que el nombre se encuentre y a que la conexion se haga.
 Un programa con ventanas puede no esperar: `net_connect_start` busca el nombre en otro proceso

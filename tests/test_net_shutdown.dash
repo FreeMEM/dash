@@ -1,0 +1,105 @@
+# Roadshow's NetShutdown (Trasfondo with WHDLoad's ExecuteStartup): the stack posts the break mask of every
+# process with bsdsocket.library open and waits for them to close it. The program's mask is a signal of its
+# own, not Ctrl-C, so the program does not end. FS-UAE's stack does not shut down: the program posts that
+# signal itself. A wait of the stack ends on it, cx_wait lets the network go and goes on, a net_ call that
+# opens something lets it go and fails, and the next one opens the library again. Ctrl-C still ends a wait
+# for data and cx_wait.
+# emu-net: 40831
+# memcheck
+# expect-out: propia: true
+# expect-out: eco: uno
+# expect-out: recv: true la red se ha apagado false
+# expect-out: cx_wait: 0 suelta: true la red se ha apagado
+# expect-out: eco: dos
+# expect-out: conecta: -1 true la red se ha apagado
+# expect-out: eco: tres
+# expect-out: ctrl-c: true true
+# expect-out: cx_wait con ctrl-c: -1
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+@header "#include <libraries/bsdsocket.h>"
+
+# The break mask the stack posts (0 without the library)
+@native func mascara() -> Int
+"""
+    ULONG m = 0;
+    struct TagItem tags[2];
+    if (!SocketBase) return 0;
+    tags[0].ti_Tag = SBTM_GETREF(SBTC_BREAKMASK);
+    tags[0].ti_Data = (ULONG)&m;
+    tags[1].ti_Tag = TAG_DONE;
+    SocketBaseTagList(tags);
+    return (LONG)m;
+"""
+end
+
+# What Roadshow's NetShutdown does to the program
+@native func apagar()
+"""
+    ULONG m = 0;
+    struct TagItem tags[2];
+    if (!SocketBase) return;
+    tags[0].ti_Tag = SBTM_GETREF(SBTC_BREAKMASK);
+    tags[0].ti_Data = (ULONG)&m;
+    tags[1].ti_Tag = TAG_DONE;
+    SocketBaseTagList(tags);
+    Signal(FindTask(NULL), m);
+"""
+end
+
+@native func ctrl_c()
+"""
+    Signal(FindTask(NULL), SIGBREAKF_CTRL_C);
+"""
+end
+
+@native func cerrada() -> Bool
+"""
+    return SocketBase == NULL;
+"""
+end
+
+func eco(s: Int, texto: String) -> String
+    net_send(s, texto + "\r\n")
+    r = ""
+    trozo = net_recv(s, 64, 3000)
+    while trozo != nil
+        r = r + trozo
+        trozo = net_recv(s, 64, 3000)
+    end
+    return str_trim(r)
+end
+
+Main
+    s = net_connect("127.0.0.1", 40831, 5000)
+    m = mascara()
+    Print "propia: #{m != 0 and m != 4096}"
+    Print eco(s, "uno")
+
+    # in a wait of the stack: it ends at once, the network stays until a safe point
+    s = net_connect("127.0.0.1", 40831, 5000)
+    apagar()
+    t = net_recv(s, 64, 5000)
+    Print "recv: #{t == nil} #{net_error()} #{cerrada()}"
+    r = cx_wait(200)
+    Print "cx_wait: #{r} suelta: #{cerrada()} #{net_error()}"
+
+    s = net_connect("127.0.0.1", 40831, 5000)
+    Print eco(s, "dos")
+    s = net_connect("127.0.0.1", 40831, 5000)
+    apagar()
+    s2 = net_connect("127.0.0.1", 40831, 5000)
+    Print "conecta: #{s2} #{cerrada()} #{net_error()}"
+    s = net_connect("127.0.0.1", 40831, 5000)
+    Print eco(s, "tres")
+
+    s = net_connect("127.0.0.1", 40831, 5000)
+    ctrl_c()
+    t = net_recv(s, 64, 5000)
+    b = break_check()
+    Print "ctrl-c: #{t == nil} #{b}"
+    net_close(s)
+    ctrl_c()
+    Print "cx_wait con ctrl-c: #{cx_wait(200)}"
+    net_release()
+end

@@ -972,6 +972,9 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 - [x] Extensión de VS Code: casilla "al cambiar" de Ver en Amiga (`dash.emulator.previewOnChange`), en `main` y aún
       sin publicar (#23)
 - [x] `docs/REQUERIMIENTOS_FUNCIONALES.md`: RF3.3 dice lo que hay de red y lo que falta (#36)
+- [x] El `NetShutdown` de Roadshow (WHDLoad) ya no cierra el programa: su aviso es una señal propia, no Ctrl-C, y
+      la red se suelta en `cx_wait`, `mui_wait_event` o la siguiente llamada `net_`; `net_stack_running` sabe
+      que Roadshow se apagó (probado con Roadshow 1.15 en FS-UAE)
 - [x] `pistorm_temperature()`: la temperatura de la Raspberry Pi de una PiStorm, por el `mailbox.resource` de Emu68
 - Trasfondo publica su v0.5 (https://github.com/FreeMEM/trasfondo)
 - [x] 612 builtins (82 de MUI); unos 362 resultados sin emulador; 34 ejemplos

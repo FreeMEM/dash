@@ -49,6 +49,42 @@ def c_int_literal(value: int) -> str:
         return f"((LONG)0x{value:X}UL)"
     return str(value)
 
+# bsdsocket.library opened for a moment (METER_RUNTIME and NET_RUNTIME's net_stack_running): in both
+# templates, once in the program
+BRIEF_SOCKET_C = """\
+#ifndef _DASH_BRIEF_SOCKET
+#define _DASH_BRIEF_SOCKET
+/* bsdsocket.library opened for a moment (net_ifs_read, net_stack_running): a NetShutdown meanwhile would post
+   its break mask, Ctrl-C, and end the program. Roadshow gives each task one library base, so the mask may be
+   the program's own (_dash_net_init): it is changed only while it is Ctrl-C, and given back before closing.
+   Returns what to give back, 0 nothing */
+static ULONG _dash_brief_socket_quiet(struct Library *SocketBase) {
+    ULONG m = 0;
+    struct TagItem tags[2];
+    tags[0].ti_Tag = SBTM_GETREF(SBTC_BREAKMASK);
+    tags[0].ti_Data = (ULONG)&m;
+    tags[1].ti_Tag = TAG_END;
+    if (SocketBaseTagList(tags) != 0 || m != SIGBREAKF_CTRL_C) return 0;
+    tags[0].ti_Tag = SBTM_SETVAL(SBTC_BREAKMASK);
+    tags[0].ti_Data = 0;
+    SocketBaseTagList(tags);
+    return m;
+}
+
+static void _dash_brief_socket_close(struct Library *SocketBase, ULONG brk) {
+    struct TagItem tags[2];
+    if (brk) {
+        tags[0].ti_Tag = SBTM_SETVAL(SBTC_BREAKMASK);
+        tags[0].ti_Data = brk;
+        tags[1].ti_Tag = TAG_END;
+        SocketBaseTagList(tags);
+    }
+    CloseLibrary(SocketBase);
+}
+#endif
+"""
+
+
 class CTemplates:
     """Templates for generating C code."""
 
@@ -2966,11 +3002,16 @@ static LONG _dash_cx_command(void) {
 #define _DASH_WAKE_EXTRA
 static volatile ULONG _dash_wake_extra = 0;   /* signals other runtimes add to cx_wait (file_notify) */
 #endif
+#ifndef _DASH_NET_DOWN_MASK                    /* (the network's NetShutdown signal: NET_RUNTIME) */
+#define _DASH_NET_DOWN_MASK() 0UL
+#define _dash_net_down() ((void)0)
+#endif
 /* Until a command comes (it is given, as cx_command), Ctrl-C (-1, cleared, like break_check), a file of
    file_notify changes (7: file_changed says which) or ms milliseconds pass (0). Without a broker, the
-   time, the files or Ctrl-C. Nothing spent meanwhile (Wait). */
+   time, the files or Ctrl-C. Nothing spent meanwhile (Wait). A NetShutdown lets the network go (net_
+   calls fail until the stack is back) and the wait goes on. */
 static LONG _dash_cx_wait(LONG ms) {
-    ULONG psig, tsig, got;
+    ULONG psig, tsig, nsig, got;
     LONG cmd;
     if ((cmd = _dash_cx_command())) return cmd;
     if (SetSignal(0L, SIGBREAKF_CTRL_C) & SIGBREAKF_CTRL_C) return -1;
@@ -2992,7 +3033,9 @@ static LONG _dash_cx_wait(LONG ms) {
     psig = _dash_cx_port ? 1UL << _dash_cx_port->mp_SigBit : 0;
     tsig = 1UL << _dash_cx_tport->mp_SigBit;
     for (;;) {
-        got = Wait(psig | tsig | SIGBREAKF_CTRL_C | _dash_wake_extra);
+        nsig = _DASH_NET_DOWN_MASK();
+        got = Wait(psig | tsig | SIGBREAKF_CTRL_C | _dash_wake_extra | nsig);
+        if (got & nsig) _dash_net_down();      /* NetShutdown: the network goes, the program stays */
         if (got & SIGBREAKF_CTRL_C) { cmd = -1; break; }
         if (got & _dash_wake_extra) { cmd = 7; break; }
         if ((got & psig) && (cmd = _dash_cx_command())) break;
@@ -3020,6 +3063,7 @@ static LONG _dash_cx_wait(LONG ms) {
 #include <proto/bsdsocket.h>
 #include <libraries/bsdsocket.h>
 #include <exec/errors.h>
+""" + BRIEF_SOCKET_C + """\
 #ifndef SANA2_MAX_ADDR_BYTES
 #define SANA2_MAX_ADDR_BYTES 16
 struct IOSana2Req {
@@ -3230,6 +3274,11 @@ static LONG _dash_disk_free_kb(LONG i) { return i >= 0 && i < _dash_disk_n ? _da
    reading (so a stack that went away or came back is seen, and Roadshow's NetShutdown is not kept waiting);
    "not there" or "not Roadshow" is remembered for a minute (MiamiDx: not opened and asked every second) */
 static LONG _dash_meter_none = -1;          /* the minute of the last "no", -1 none */
+static ULONG _dash_meter_brk = 0;           /* its break mask, given back on closing */
+
+static void _dash_meter_close(struct Library *SocketBase) {
+    _dash_brief_socket_close(SocketBase, _dash_meter_brk);
+}
 
 static struct Library *_dash_meter_socket(void) {
     struct Library *SocketBase;
@@ -3247,10 +3296,11 @@ static struct Library *_dash_meter_socket(void) {
                  OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4) : NULL;
     Permit();
     if (!SocketBase) return NULL;
+    _dash_meter_brk = _dash_brief_socket_quiet(SocketBase);
     tags[0].ti_Tag = SBTM_GETREF(SBTC_HAVE_INTERFACE_API);
     tags[0].ti_Data = (ULONG)&have;
     tags[1].ti_Tag = TAG_END;
-    if (SocketBaseTagList(tags) != 0 || !have) { CloseLibrary(SocketBase); return NULL; }
+    if (SocketBaseTagList(tags) != 0 || !have) { _dash_meter_close(SocketBase); return NULL; }
     _dash_meter_none = -1;
     return SocketBase;
 }
@@ -3285,7 +3335,7 @@ static LONG _dash_net_ifs_read(void) {
         }
         ReleaseInterfaceList(list);
     }
-    CloseLibrary(SocketBase);
+    _dash_meter_close(SocketBase);
     return _dash_netif_n;
 }
 
@@ -3595,7 +3645,7 @@ static LONG _dash_wifi_read(STRPTR iface, LONG ms) {
         strncpy(devname, (char *)dev, sizeof(devname) - 1);
         devname[sizeof(devname) - 1] = 0;
     }
-    CloseLibrary(SocketBase);
+    _dash_meter_close(SocketBase);
     if (!devname[0]) return 3;
     return _dash_wifi_read_device((STRPTR)devname, unit, ms);
 }
@@ -4930,7 +4980,7 @@ static LONG _dash_str_to_buffer(STRPTR s, APTR buffer, LONG offset) {
 #include <netdb.h>
 #include <dos/dostags.h>
 #include <proto/bsdsocket.h>
-
+""" + BRIEF_SOCKET_C + """
 struct Library *SocketBase = NULL;
 static const char *_dash_net_err = "";
 
@@ -4942,13 +4992,48 @@ static struct Task *volatile _dash_net_owner = NULL;
 static void (*_dash_net_tls_end)(void) = NULL;   /* TLS's, closed by the owner when it lets the network go */
 #define _DASH_NET_MINE() (SocketBase && SysBase->ThisTask == _dash_net_owner)
 
+/* Roadshow's NetShutdown (also WHDLoad's ExecuteStartup) posts the break mask of every process with
+   bsdsocket.library open (SBTC_BREAKMASK, Ctrl-C by default) and waits up to 5 s for them to close it:
+   with Ctrl-C the program would end. The owner's break mask is a signal of its own instead (Trasfondo):
+   when it comes, the network is let go as net_release does, and the program goes on (its net_ calls fail
+   until the stack is back): in cx_wait and mui_wait_event at once, otherwise at the next net_ call that
+   opens something (never halfway through one: its sockets and TLS would go). A wait of the stack
+   (WaitSelect) ends on that signal at once, and on Ctrl-C too (one of its own signals). Tried with
+   Roadshow 1.15: it posts each process's own mask, Ctrl-C only to those that keep it; and all the opens
+   of a task share one library base and its mask (see _dash_brief_socket_quiet). */
+static BYTE _dash_net_downbit = -1;
+#define _DASH_NET_DOWN_MASK() (_dash_net_downbit >= 0 && SysBase->ThisTask == _dash_net_owner ? \\
+                               1UL << _dash_net_downbit : 0UL)
+static void _dash_net_release(void);
+
+static void _dash_net_down(void) {
+    _dash_net_release();
+    _dash_net_err = "la red se ha apagado";
+}
+
+/* TRUE, and the network let go, if the stack's signal came */
+static BOOL _dash_net_down_check(void) {
+    ULONG m = _DASH_NET_DOWN_MASK();
+    if (!m || !(SetSignal(0L, m) & m)) return FALSE;
+    _dash_net_down();
+    return TRUE;
+}
+
 static BOOL _dash_net_init(void) {
     struct Task *me = FindTask(NULL);
+    struct TagItem tags[2];
+    if (_dash_net_down_check()) return FALSE;   /* (this call fails; the next one opens it again) */
     Forbid();
     if (!_dash_net_owner) _dash_net_owner = me;
     Permit();
     if (_dash_net_owner != me) { _dash_net_err = "la red es de otra tarea"; return FALSE; }
-    if (!SocketBase) SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
+    if (!SocketBase && (SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))
+        && (_dash_net_downbit = AllocSignal(-1)) >= 0) {
+        tags[0].ti_Tag = SBTM_SETVAL(SBTC_BREAKMASK);
+        tags[0].ti_Data = 1UL << _dash_net_downbit;
+        tags[1].ti_Tag = TAG_DONE;
+        if (SocketBaseTagList(tags) != 0) { FreeSignal(_dash_net_downbit); _dash_net_downbit = -1; }
+    }
     if (!SocketBase) {
         _dash_net_err = "no hay bsdsocket.library (falta una pila TCP/IP)";
         _dash_net_owner = NULL;
@@ -5007,8 +5092,6 @@ static LONG _dash_net_signal(void) {
     return (LONG)_dash_net_sigmask;
 }
 
-static void _dash_net_release(void);
-
 static void _dash_net_cleanup(void) {
     _dash_net_dns_wait();
     _dash_net_release();
@@ -5030,14 +5113,28 @@ static BOOL _dash_net_lookup(STRPTR host, struct in_addr *addr) {
 static LONG _dash_net_select(LONG sock, BOOL write, LONG ms) {
     fd_set set;
     struct timeval tv;
+    ULONG brk;
     LONG r;
     if (sock < 0 || !_DASH_NET_MINE()) return -1;
     FD_ZERO(&set);
     FD_SET(sock, &set);
     tv.tv_sec = ms / 1000;
     tv.tv_usec = (ms % 1000) * 1000;
-    r = WaitSelect(sock + 1, write ? NULL : &set, write ? &set : NULL, NULL, ms < 0 ? NULL : &tv, NULL);
-    if (r < 0) _dash_net_err = "error de red";
+    /* with the break mask of NetShutdown (_dash_net_init), Ctrl-C as one of the wait's own signals; it is
+       taken from the task when it comes, and posted again for the program to see */
+    brk = _dash_net_downbit >= 0 ? SIGBREAKF_CTRL_C : 0;
+    r = WaitSelect(sock + 1, write ? NULL : &set, write ? &set : NULL, NULL, ms < 0 ? NULL : &tv, brk ? &brk : NULL);
+    if (r >= 0 && (brk & SIGBREAKF_CTRL_C)) {
+        SetSignal(SIGBREAKF_CTRL_C, SIGBREAKF_CTRL_C);
+        if (r == 0) r = -1;
+    }
+    if (r < 0) {
+        ULONG down = _DASH_NET_DOWN_MASK();
+        if (down && (Errno() == EINTR || (SetSignal(0L, 0L) & down))) {
+            SetSignal(down, down);     /* (Roadshow leaves it, FS-UAE's stack takes it): for the next safe point */
+            _dash_net_err = "la red se ha apagado";
+        } else _dash_net_err = "error de red";
+    }
     return r > 0 ? 1 : r;
 }
 
@@ -5341,13 +5438,20 @@ static LONG _dash_net_connect_stage(LONG sock) {
     return i < 0 ? 2 : _dash_net_pend[i].stage;
 }
 
-/* A TCP/IP stack is running: its bsdsocket.library is in memory (nothing is opened or loaded to know it) */
+/* A TCP/IP stack is running: its bsdsocket.library is in memory (nothing is loaded to know it). Roadshow's
+   stays there after NetShutdown, and no longer opens: that one is opened and closed (it starts nothing) */
 static BOOL _dash_net_stack_running(void) {
-    BOOL r;
+    struct Library *lib, *SocketBase = NULL;
+    BOOL roadshow;
     Forbid();
-    r = FindName(&SysBase->LibList, (CONST_STRPTR)"bsdsocket.library") != NULL;
+    lib = (struct Library *)FindName(&SysBase->LibList, (CONST_STRPTR)"bsdsocket.library");
+    roadshow = lib && lib->lib_IdString && strstr((char *)lib->lib_IdString, "Roadshow");
+    if (roadshow) SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4);
     Permit();
-    return r;
+    if (!roadshow) return lib != NULL;
+    if (!SocketBase) return FALSE;
+    _dash_brief_socket_close(SocketBase, _dash_brief_socket_quiet(SocketBase));
+    return TRUE;
 }
 
 /* The owner lets the network go (its task ends, the program does, or net_release): its lookups waited for,
@@ -5363,6 +5467,7 @@ static void _dash_net_release(void) {
     }
     if (SocketBase) { CloseLibrary(SocketBase); SocketBase = NULL; }
     if (_dash_net_sigbit >= 0) { FreeSignal(_dash_net_sigbit); _dash_net_sigbit = -1; _dash_net_sigmask = 0; }
+    if (_dash_net_downbit >= 0) { FreeSignal(_dash_net_downbit); _dash_net_downbit = -1; }
     _dash_net_sig_tried = FALSE;
     _dash_net_owner = NULL;
 }
@@ -12782,10 +12887,15 @@ static void _dash_mui_on_close(APTR win, LONG id) {
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 
+#ifndef _DASH_NET_DOWN_MASK                    /* (the network's NetShutdown signal: NET_RUNTIME) */
+#define _DASH_NET_DOWN_MASK() 0UL
+#define _dash_net_down() ((void)0)
+#endif
 /* Next event number; -1 = quit (first window closed, Ctrl-C, no application).
-   With a mask, also returns 0 when one of those signals arrives (mui_signals) */
+   With a mask, also returns 0 when one of those signals arrives (mui_signals). A NetShutdown lets the
+   network go (net_ calls fail until the stack is back) and the wait goes on */
 static LONG _dash_mui_wait_event_signals(ULONG mask) {
-    ULONG sigs = 0, got;
+    ULONG sigs = 0, nsig, got;
     LONG id;
     if (!_dash_mui_app) return -1;
     _dash_mui_got = 0;
@@ -12796,15 +12906,20 @@ static LONG _dash_mui_wait_event_signals(ULONG mask) {
         if (_dash_mui_move_hook && (id = _dash_mui_move_hook())) return id;
         if (_dash_mui_timer_hook && (id = _dash_mui_timer_hook())) return id;
         if (sigs) {
+            nsig = _DASH_NET_DOWN_MASK();
 #ifdef _DASH_AUTOCLOSE
             _dash_ac_soft = TRUE;           /* test mode: the time's end is a close (-1) */
             if (_dash_ac_expired) return -1;
-            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C | nsig);
             _dash_ac_soft = FALSE;
             if (_dash_ac_expired) return -1;
 #else
-            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C);
+            got = Wait(sigs | mask | _dash_mui_timer_sig | SIGBREAKF_CTRL_C | nsig);
 #endif
+            if (got & nsig) {
+                _dash_net_down();
+                got &= ~nsig;
+            }
             if (got & SIGBREAKF_CTRL_C) return -1;
             if (got & mask) {
                 _dash_mui_got = got & mask;
