@@ -28,8 +28,10 @@ Main
         cambiar_backdrop()
         esperar(false)
         encoger_workbench()
-        desktop_canvas_update(c)
-        Print "sin backdrop: #{modo() == 2}"
+        # (after a change of mode the canvas starts again: an update_area of a corner draws it all, the
+        # stripe outside it too)
+        desktop_canvas_update_area(c, 0, 0, 40, 40)
+        Print "sin backdrop: #{modo() == 2 and igual(12, 122)}"
         n = vistos()
         Print "se ve el lienzo: #{n > 500 and mal() == 0}"
         # las dos rayas se mueven; solo la del área sale
