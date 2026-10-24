@@ -7994,6 +7994,7 @@ struct _DashDesk {
     struct { struct Rectangle r; LONG rgb, alpha; } veils[_DASH_DESK_VEILS];   /* desktop_canvas_veil_rect, over it */
     LONG nveils;
     BOOL under_new;                         /* the veil to be mixed again over all the wallpaper */
+    BOOL all_new;                           /* started again (_dash_desk_reset): the next update draws it all */
     struct BitMap *tmp, *icons, *mask;      /* planar, backdrop: the screen read; one plane: icons; where to paint */
     LONG bpp;                               /* RTG: bytes per pixel of the copies (3: RGB24, 1: pens); 0 planar */
     ULONG fmt;                              /* Picasso96: the copies in the screen's RGBFormat (bpp its bytes), read
@@ -8192,6 +8193,7 @@ static void _dash_desk_reset(struct _DashDesk *d) {
     d->front = 0;
     d->damage_left = 0;
     d->under_new = TRUE;
+    d->all_new = TRUE;
 }
 
 /* With the screen's LayerInfo locked: our hook where the Workbench's desktop is now (the backdrop
@@ -8651,6 +8653,11 @@ static void _dash_desk_redo(struct _DashDesk *d, struct Rectangle *a) {
     }
     /* where the hook took the wallpaper again, the screen has the drawing over the one before (the
        Workbench puts its pattern after WBStartup): the area grows to draw there too (Trasfondo) */
+    /* the canvas started again (the Workbench changed mode, or reopened its window: IPrefs after the Locale
+       preferences): the screen has the wallpaper there, so update_area draws it all (Trasfondo lost all but
+       the parts it updates) */
+    if (d->all_new) a = NULL;
+    d->all_new = FALSE;
     if (a && wall_new) {
         grown = *a;
         if (wr.MinX < grown.MinX) grown.MinX = wr.MinX;
