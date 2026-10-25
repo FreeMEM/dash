@@ -14,6 +14,8 @@
   that is not a whole number.
 - Problems panel: a new menu option (event 0) is no longer an error, and an object or window called
   `constructor` is no longer reported as repeated.
+- Ver en Amiga: after updating Dash, the window is compiled again (the saved program also depends on the
+  compiler), instead of showing the one built with the old Dash.
 
 ## 0.2.2 (2026-10-25)
 

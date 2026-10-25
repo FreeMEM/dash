@@ -201,10 +201,19 @@ function stopServers() {
 
 const compileCache = path.join(os.tmpdir(), 'dash-preview-cache');
 
+/** The compiled preview of a window: by its .dashui and by the Dash that compiles it (the dates of its
+    compiler: after a git pull with a fix in the window code, the old program is not shown again) */
+function cacheKey(dashDir, dashuiText, windowName) {
+    let stamp = '';
+    for (const f of ['dashui.py', 'codegen.py', 'amiga_builtins.py']) {
+        try { stamp += fs.statSync(path.join(dashDir, 'compiler', f)).mtimeMs + '/'; } catch (e) { /* not there */ }
+    }
+    return crypto.createHash('sha1').update(dashuiText + '\0' + windowName + '\0' + stamp).digest('hex').slice(0, 16);
+}
+
 /** The preview program of a window, compiled (or from the cache); rejects with the compiler's message */
 function compilePreview(dashDir, dashuiText, windowName, env) {
-    const key = crypto.createHash('sha1').update(dashuiText + '\0' + windowName).digest('hex').slice(0, 16);
-    const dir = path.join(compileCache, key);
+    const dir = path.join(compileCache, cacheKey(dashDir, dashuiText, windowName));
     const exe = path.join(dir, 'vista');
     if (fs.existsSync(exe)) return Promise.resolve(exe);
     fs.mkdirSync(dir, { recursive: true });
@@ -266,8 +275,7 @@ async function preview({ dashDir, dashuiText, windowName, machine, env, baseDir 
     dashuiText = dashuiText.replace(/^\uFEFF/, '');          // a BOM (Windows editors)
     try { names = JSON.parse(dashuiText).windows.map((w) => w.name); } catch (e) { throw new Error('el .dashui no es JSON válido'); }
     if (!names.includes(windowName)) throw new Error(`no hay una ventana "${windowName}" (hay: ${names.join(', ')})`);
-    const exe = fs.existsSync(path.join(compileCache, crypto.createHash('sha1').update(dashuiText + '\0' + windowName)
-        .digest('hex').slice(0, 16), 'vista'));
+    const exe = fs.existsSync(path.join(compileCache, cacheKey(dashDir, dashuiText, windowName), 'vista'));
     const server = serverFor(dashDir, previewMachine(machine), env);   // it boots meanwhile
     const program = await compilePreview(dashDir, dashuiText, windowName, env);
     const png = path.join(path.dirname(program), `shot-${Date.now()}.png`);
