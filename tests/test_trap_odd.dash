@@ -1,0 +1,18 @@
+# Test: a jump to an odd address (a broken function pointer) raises an address error on every 68k;
+# TRAP_RUNTIME ends the program with a message instead of the Guru.
+# expect-rc: 20
+# expect-out: antes
+# expect-out: Error: dirección impar (excepción 3)
+# ignore-out: en 
+
+@native func saltar(a: Int)
+"""
+    ((void (*)(void))a)();
+"""
+end
+
+Main
+    Print "antes"
+    saltar(0x1235)
+    Print "no llega"
+end

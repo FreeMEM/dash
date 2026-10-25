@@ -4,8 +4,8 @@
 # replaces the field and frees the old object, which the outer one goes on using (memcheck checks).
 # A loop over d.keys() whose body calls a pure function goes through the table.
 # memcheck
-# expect-c: x_de(_DASH_NN(c)->p)
-# expect-c: usa_y_cambia(c, ((_Dash_Punto *)_DASH_OLEND_Caja_p(
+# expect-c: x_de(_DASH_NN(c, 0x2f)->p)
+# expect-c: usa_y_cambia(c, ((_Dash_Punto *)_DASH_OLEND_Caja_p(_DASH_NN(c, 0x30)->p)))
 # expect-c: _dk_k = d;
 # expect-out: 3 7
 # expect-out: cambiado 3, ahora 5

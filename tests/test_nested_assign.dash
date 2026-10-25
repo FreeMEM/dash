@@ -1,8 +1,8 @@
 # Test: nested member assignment a.b.c = x
 # Works on variables, self, struct-typed parameters and globals
 #
-# expect-c: _DASH_NNW(e->caja)->peso = 9;
-# expect-c: _DASH_NNW(self->pos)->x = (self->pos->x + dx);
+# expect-c: _DASH_NNW(_DASH_NN(e, 0x2e)->caja, 0x2e)->peso = 9;
+# expect-c: _DASH_NNW(self->pos, 0x1d)->x = (_DASH_NN(self->pos, 0x1d)->x + dx);
 # expect-out: 9
 # expect-out: 15
 # expect-out: 7

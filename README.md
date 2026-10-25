@@ -68,6 +68,26 @@ end
 - Automatic memory: strings, lists and structs free themselves (per-iteration temporaries and reference
   counting), with no garbage collector and no pauses
 
+### No Gurus from a slip
+
+AmigaOS 3 has no memory protection: in C, a null pointer or a division by zero takes the whole system down.
+A Dash program, on the other hand, stops with a message and leaves the Amiga as it was:
+
+- **`nil` fields**: reading or writing a field of a struct that is `nil`, or calling one of its methods, gives
+  `Error: campo de nil (en juego.dash:42)`. Without that check, the read would return garbage and the write would
+  go to address 0, where the processor's vectors live.
+- **Processor exceptions**: odd address, illegal instruction, division by zero, CHK, TRAPV... (what in C is a
+  Guru, usually from `@native` code or from a library that gets a bad pointer). Each program installs its own
+  handler in its task (`tc_TrapCode`) and, instead of the Guru, says which exception it was and where in the
+  executable.
+
+In both cases the program does its usual cleanup (it closes its windows, screens and libraries and frees its
+memory) and exits with return code 20; from the Workbench, the message comes up in a requester.
+It works on any Amiga, even a 68000 with no MMU, and it costs little: Tachyon (30,000 lines) grows by 0.1%.
+What it can't prevent is a write through a wild pointer in your own C code, which can break another part of
+the system without anyone noticing. Details in the [manual](docs/MANUAL_REFERENCIA.en.md) ("Runtime
+errors").
+
 ### Amiga API
 
 617 built-in functions, all implemented (list generated from the code in [docs/BUILTINS.en.md](docs/BUILTINS.en.md)).

@@ -401,7 +401,9 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             if emulator == "fs-uae" and "bsdsocket_library" not in extra_config:
                 extra_config += "bsdsocket_library = 1\n"
         lines.append('Echo "fin" >DH0:done.txt')
-        (hd / "S" / "Startup-Sequence").write_text("\n".join(lines) + "\n")
+        # FailAt 21: a program that ends with 20 (a runtime error, Dash's TRAP_RUNTIME) does not stop the
+        # script, so the next programs run and the end is signalled (its code is in rcN.txt)
+        (hd / "S" / "Startup-Sequence").write_text("\n".join(["FailAt 21"] + lines) + "\n")
         if on_disk is not None:
             on_disk(hd)
         config = tmp / "run.fs-uae"

@@ -1,0 +1,27 @@
+# Test: a field read through nil stops the program with the file and line of the statement (_DASH_NN),
+# instead of reading garbage from low memory; a method called on nil and a field written through nil
+# stop the same way (tests/test_nil_method.dash).
+# expect-rc: 20
+# expect-out: q 4 8
+# expect-out: antes
+# expect-out: Error: campo de nil (en tests/test_nil_error.dash:23)
+
+struct P
+    x: Int = 0
+    func doble() -> Int
+        return self.x * 2
+    end
+end
+
+Main
+    var p: P = nil
+    q = P(4)
+    Print "q #{q.x} #{q.doble()}"
+    Print "antes"
+    n = 0
+    n = n + 1
+    Print p.x
+    Print "no llega"
+end
+
+# no-memcheck: con --memcheck, un campo de nil se avisa y el programa sigue (tests/test_memcheck_where.dash)

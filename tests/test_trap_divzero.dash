@@ -1,0 +1,27 @@
+# Test: a division by zero in the CPU (divs in @native code) ends the program with a message instead of
+# the Guru (TRAP_RUNTIME), with a window open: the cleanup closes it.
+# expect-rc: 20
+# expect-out: antes
+# expect-out: Error: división por cero (excepción 5)
+# ignore-out: en 
+
+Window W
+    title "Cero"
+    width 200
+    height 60
+end
+
+@native func dividir(a: Int, b: Int) -> Int
+"""
+    LONG r = a;
+    __asm__ volatile ("divs.w %1,%0" : "+d"(r) : "d"((WORD)b));
+    return (WORD)r;
+"""
+end
+
+Main
+    W.open
+    Print "antes"
+    Print dividir(10, 0)
+    Print "no llega"
+end

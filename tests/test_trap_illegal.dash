@@ -1,0 +1,19 @@
+# Test: a CPU exception in the program (here an illegal instruction, as from a wild jump) does not bring
+# the Guru: the task's trap handler (TRAP_RUNTIME) says what it was and where, and the program ends with
+# its normal cleanup (return code 20). The tests after it in the same boot show that the system goes on.
+# expect-rc: 20
+# expect-out: antes
+# expect-out: Error: instrucción ilegal (excepción 4)
+# ignore-out: en 
+
+@native func ilegal()
+"""
+    __asm__ volatile ("illegal");
+"""
+end
+
+Main
+    Print "antes"
+    ilegal()
+    Print "no llega"
+end

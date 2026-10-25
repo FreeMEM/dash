@@ -68,6 +68,26 @@ end
 - Memoria automática: strings, listas y structs se liberan solos (temporales por vuelta y contador
   de referencias), sin recolector ni pausas
 
+### Sin Gurus por un descuido
+
+AmigaOS 3 no protege la memoria: en C, un puntero nulo o una división por cero se llevan el sistema entero
+por delante. Un programa de Dash, en cambio, para con un mensaje y deja el Amiga como estaba:
+
+- **Campos de `nil`**: leer o escribir un campo de un struct que es `nil`, o llamar a uno de sus métodos, da
+  `Error: campo de nil (en juego.dash:42)`. Sin esa comprobación, la lectura daría basura y la escritura iría
+  a la dirección 0, donde están los vectores del procesador.
+- **Excepciones del procesador**: dirección impar, instrucción ilegal, división por cero, CHK, TRAPV... (lo que
+  en C es un Guru, normalmente desde código `@native` o desde una librería que recibe un puntero malo). Cada
+  programa pone su propio manejador en su tarea (`tc_TrapCode`) y, en vez del Guru, dice qué excepción fue y
+  en qué punto del ejecutable.
+
+En los dos casos el programa hace la limpieza de siempre (cierra sus ventanas, pantallas y librerías y libera
+su memoria) y termina con el código de retorno 20; desde el Workbench, el mensaje sale en un requester.
+Funciona en cualquier Amiga, también en un 68000 sin MMU, y cuesta poco: Tachyon (30.000 líneas) crece un 0,1 %.
+Lo que no puede evitar es una escritura por un puntero salvaje en código C propio, que puede romper otra parte
+del sistema sin que nadie se entere. Detalles en el [manual](docs/MANUAL_REFERENCIA.md) ("Errores en tiempo
+de ejecución").
+
 ### Amiga API
 
 617 funciones built-in, todas hechas (lista generada desde el código en [docs/BUILTINS.md](docs/BUILTINS.md)).
