@@ -11,6 +11,8 @@ Each tests/bench/bench_*.dash prints "BENCH name iterations eclock_ticks freq"
 Machines (cycle-exact speed, not "max"):
   a500   68000 7 MHz, Kickstart 3.1 A500 ROM ($DASH_KICKSTART_A500)
   a1200  68020 14 MHz, Kickstart 3.1 A1200 ROM ($DASH_KICKSTART)
+  a4000  68040 with fast RAM (FS-UAE has no cycle-exact 68040: compare runs of this same machine)
+  a4000-cpu040  the same 68040, programs built with ./dash --cpu 68040
 Sizes: every bench program and every example, compiled with the default flags.
 """
 
@@ -31,14 +33,18 @@ RESULTS = ROOT / "tests" / "bench" / "results.json"
 MACHINES = {
     "a500": {"rom_env": "DASH_KICKSTART_A500", "config": "amiga_model = A500\nuae_cpu_speed = real\n"},
     "a1200": {"rom_env": "DASH_KICKSTART", "config": "uae_cpu_speed = real\n"},
+    "a4000": {"rom_env": "DASH_KICKSTART", "config": "cpu = 68040\nfpu = 68040\nuae_cpu_speed = real\n"},
+    "a4000-cpu040": {"rom_env": "DASH_KICKSTART", "cpu": "68040",
+                     "config": "cpu = 68040\nfpu = 68040\nuae_cpu_speed = real\n"},
 }
 
 
-def compile_all(paths, out_dir):
+def compile_all(paths, out_dir, cpu=None):
     exes = {}
     for src in paths:
-        exe = Path(out_dir) / src.stem
-        r = subprocess.run([sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)],
+        exe = Path(out_dir) / (src.stem + (f"_{cpu}" if cpu else ""))
+        r = subprocess.run([sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)]
+                           + (["--cpu", cpu] if cpu else []),
                            capture_output=True, text=True)
         if r.returncode == 0 and exe.exists():
             exes[src] = exe
@@ -83,7 +89,8 @@ def main():
             if not rom:
                 print(f"! {machine}: set ${m['rom_env']} to its Kickstart ROM", file=sys.stderr)
                 continue
-            results = run_programs([exes[b] for b in benches if b in exes], timeout=900, kickstart=rom,
+            built = compile_all(benches, tmp, m["cpu"]) if m.get("cpu") else exes
+            results = run_programs([built[b] for b in benches if b in built], timeout=900, kickstart=rom,
                                    extra_config=m["config"])
             run["ns"][machine], run["mem"][machine] = {}, {}
             for r in results:

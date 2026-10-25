@@ -104,7 +104,12 @@ static void _dash_exit(int code);
    GCC calls libgcc (__mulsi3, and __modsi3 = divide + multiply). When the
    values fit in 16 bits one muls.w / divu.w instruction does it. On 68020+
    the plain operators are single instructions already. */
+/* 68020 or better (./dash --cpu, --fpu). GCC defines only the macro of the CPU it tunes for:
+   -m68020 -mtune=68060 gives __mc68060__ and not __mc68020__ */
 #if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+#define _DASH_68020 1
+#endif
+#ifdef _DASH_68020
 #define _DASH_MUL(a, b) ((LONG)(a) * (LONG)(b))
 #define _DASH_DIV(a, b) ((LONG)(a) / (LONG)(b))
 #define _DASH_MOD(a, b) ((LONG)(a) % (LONG)(b))
@@ -942,7 +947,7 @@ static STRPTR DashString_from_int(LONG n) {
     next = (next + 1) & 15;
     *end = '\\0';
     do {
-#if defined(__mc68000__) && !defined(__mc68020__)
+#if defined(__mc68000__) && !defined(_DASH_68020)
         if (u < 6553600UL) {       /* quotient fits in 16 bits: one divu.w, no libgcc */
             ULONG r = u;
             __asm__ ("divu.w #100,%0" : "+d"(r) : : "cc");
@@ -6388,10 +6393,15 @@ static __inline__ ULONG _dash_mulu16(UWORD a, UWORD b) {
 }
 #endif
 
-/* a * b: the 64-bit product >> 16. On a 68000 from four 16x16 mulu.w (no libgcc) */
+/* a * b: the 64-bit product >> 16. On a 68000 from four 16x16 mulu.w (no libgcc); the 68060 has no
+   64-bit muls.l and divs.l (68060.library emulates them with a trap): it takes the 68000 way */
 static DashFixed _dash_fx_mul(DashFixed a, DashFixed b) {
-#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+#if defined(_DASH_68020) && !defined(__mc68060__)
     LONG hi, lo = a;
+    if (__builtin_constant_p(a) && __builtin_constant_p(b)) {   /* GCC computes it (not through asm) */
+        long long p = (long long)a * b;
+        return (DashFixed)(p < 0 ? -((-p) >> 16) : p >> 16);
+    }
     __asm__ ("muls.l %2,%0:%1" : "=d"(hi), "+d"(lo) : "dmi"(b) : "cc");
     /* the shift rounds a negative product down: truncate toward zero like the 68000 code */
     return (DashFixed)(((ULONG)lo >> 16) | ((ULONG)hi << 16)) + (hi < 0 && (lo & 0xFFFF));
@@ -6461,9 +6471,11 @@ static ULONG _dash_fx_udiv(ULONG ua, ULONG ub) {
 /* a / b: (a << 16) / b. Division by zero gives the largest value with a's sign */
 static DashFixed _dash_fx_div(DashFixed a, DashFixed b) {
     if (b == 0) return a < 0 ? -0x7FFFFFFF : 0x7FFFFFFF;
-#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+#if defined(_DASH_68020) && !defined(__mc68060__)
     {
         LONG hi = a >> 16, lo = a << 16;
+        if (__builtin_constant_p(a) && __builtin_constant_p(b))
+            return (DashFixed)((((long long)a) << 16) / b);
         __asm__ ("divs.l %2,%0:%1" : "+d"(hi), "+d"(lo) : "dmi"(b) : "cc");
         return lo;
     }

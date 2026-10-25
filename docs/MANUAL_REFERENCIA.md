@@ -84,6 +84,7 @@ end
 ./dash --small programa.dash -o programa      # gcc -Os: ~7 % mas pequeno, bucles mas lentos
 ./dash --stack 32768 programa.dash -o prog    # pila minima (por defecto 16 KB; 0 = la del shell)
 ./dash --fpu programa.dash -o programa        # solo 68020 con FPU 68881/68882
+./dash --cpu 68040 programa.dash -o programa  # código de 68020 afinado para el 68040 (68020/030/040/060)
 ./dash --memcheck programa.dash -o programa   # comprobacion de memoria (para pruebas)
 ./dash -q programa.dash -o programa           # solo avisos, errores y el resultado
 ./dash -v programa.dash -o programa           # ensena cada paso del transpilador
@@ -93,6 +94,12 @@ end
 
 El C y los ficheros intermedios van a `build/`, en el directorio desde el que se llama a `./dash`.
 El gcc de bebbo ya genera Hunk, asi que `--no-hunk` solo cambia algo con un gcc que de ELF.
+
+Sin `--cpu`, el programa es código de 68000 y arranca en cualquier Amiga. Con `--cpu 68020`, `68030`, `68040` o
+`68060` es código de 68020 afinado para esa CPU: no arranca en una inferior, pero en un Amiga acelerado multiplica y
+divide en una instrucción (en un 68040 emulado, `Fixed` divide unas 30 veces más rápido y multiplica 4 veces; los
+textos, un 13 %). Con `--cpu 68060` el runtime evita las instrucciones de 64 bits que el 68060 no tiene (las emula
+68060.library, muy despacio). Se combina con `--fpu`.
 
 Variables de entorno:
 

@@ -47,7 +47,7 @@ programa.dash → parser (Lark) → AST → analysis → C generator → GCC m68
 python3 tools/emu_run.py bin/hola             # run it in FS-UAE without a window and see its output
 ```
 
-`./dash` options: `-O0` (no optimization), `--small` (`-Os`), `--fpu` (68020 + 68881), `--stack N` (minimum
+`./dash` options: `-O0` (no optimization), `--small` (`-Os`), `--fpu` (68020 + 68881), `--cpu 68040` (code for that CPU or better), `--stack N` (minimum
 stack), `--memcheck` (memory checking), `--profile` (calls and time per function on exit),
 `--debug` (for gdb or VS Code: `-O0 -g` and the `.dash` line numbers), `--multifile` (one C file per module), `-q` (only
 warnings, errors and the result) and `--no-hunk` (skips the ELF-to-Hunk step; bebbo's GCC already writes Hunk).

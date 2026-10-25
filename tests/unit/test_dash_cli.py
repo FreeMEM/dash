@@ -86,5 +86,40 @@ class OddText(unittest.TestCase):
         self.assertIn("Ca\\361a", c)        # the text in Latin-1 for the Amiga, as from a UTF-8 file
 
 
+class CpuFlags(unittest.TestCase):
+    """./dash --cpu (docs/RECURSOS_LOOP.md R1): 68020 code (the toolchain's libnix is 68000 or 68020) tuned per CPU"""
+    def test_flags(self):
+        sys.path.insert(0, ROOT)
+        from compiler.cflags import cpu_flags
+        self.assertEqual(cpu_flags(), [])
+        self.assertEqual(cpu_flags("68000"), [])
+        self.assertEqual(cpu_flags(None, True), ["-m68020", "-m68881"])
+        self.assertEqual(cpu_flags("68020"), ["-m68020"])
+        self.assertEqual(cpu_flags("68060", True), ["-m68020", "-mtune=68060", "-m68881"])
+
+    @unittest.skipUnless(os.path.exists("/opt/amiga/bin/m68k-amigaos-gcc"), "needs the Amiga toolchain")
+    def test_68060_without_64_bit_multiply(self):
+        """Fixed * and / on a 68060: no muls.l/divs.l with a 64-bit pair (68060.library would trap each one)"""
+        sys.path.insert(0, ROOT)
+        from compiler.main import DashCompiler
+        c_code, _ = DashCompiler().compile("Main\n    a = Fixed(2.5)\n    b = Fixed(1.5)\n"
+                                           "    Print a * b\n    Print a / b\nend\n", "p.dash")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "p.c")
+            with open(src, "w") as f:
+                f.write(c_code)
+            asm = {}
+            for tune in ("68040", "68060"):
+                r = subprocess.run(["/opt/amiga/bin/m68k-amigaos-gcc", "-m68020", f"-mtune={tune}", "-O2",
+                                    "-I/opt/amiga/m68k-amigaos/ndk-include", "-S", src, "-o", "-"],
+                                   capture_output=True, text=True, timeout=120)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                asm[tune] = r.stdout
+        import re
+        pair = re.compile(r"\s(muls|mulu|divs|divu)\.l [^,\n]+,d[0-7]:d[0-7]")
+        self.assertTrue(pair.search(asm["68040"]))      # the 68040 does use them
+        self.assertIsNone(pair.search(asm["68060"]))
+
+
 if __name__ == "__main__":
     unittest.main()

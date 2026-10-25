@@ -45,6 +45,8 @@
     <div class="bx-seg" role="group" aria-label="Máquina">
       <button type="button" data-machine="a500">A500 · 68000 7 MHz</button>
       <button type="button" data-machine="a1200">A1200 · 68020 14 MHz</button>
+      <button type="button" data-machine="a4000">68040 · código 68000</button>
+      <button type="button" data-machine="a4000-cpu040">68040 · --cpu 68040</button>
     </div>
   </header>
 
@@ -304,7 +306,7 @@
   dash.onData(() => {
     const machine = dash.params().machine || 'a500';
     for (const b of document.querySelectorAll('.bx-seg button')) b.setAttribute('aria-pressed', String(b.dataset.machine === machine));
-    const name = machine === 'a500' ? 'A500' : 'A1200';
+    const name = { a500: 'A500', a1200: 'A1200', a4000: '68040 (código 68000)', 'a4000-cpu040': '68040 (--cpu 68040)' }[machine] || machine;
 
     const runsD = dash.data('runs'), nsD = dash.data('ns'), cmpD = dash.data('comparacion');
     const resD = dash.data('resumen'), sizeD = dash.data('tamano'), memD = dash.data('mem');

@@ -84,6 +84,7 @@ end
 ./dash --small programa.dash -o programa      # gcc -Os: ~7 % smaller, slower loops
 ./dash --stack 32768 programa.dash -o prog    # minimum stack (16 KB by default; 0 = the shell's)
 ./dash --fpu programa.dash -o programa        # 68020 with 68881/68882 FPU only
+./dash --cpu 68040 programa.dash -o programa  # 68020 code tuned for the 68040 (68020/030/040/060)
 ./dash --memcheck programa.dash -o programa   # memory checking (for testing)
 ./dash -q programa.dash -o programa           # only warnings, errors and the result
 ./dash -v programa.dash -o programa           # shows each step of the transpiler
@@ -93,6 +94,12 @@ end
 
 The C code and the intermediate files go to `build/`, in the directory `./dash` is called from.
 Bebbo's gcc already produces Hunk, so `--no-hunk` only makes a difference with a gcc that outputs ELF.
+
+Without `--cpu`, the program is 68000 code and starts on any Amiga. With `--cpu 68020`, `68030`, `68040` or `68060`
+it is 68020 code tuned for that CPU: it will not start on a lower one, but on an accelerated Amiga it multiplies and
+divides in one instruction (on an emulated 68040, `Fixed` divides about 30 times faster and multiplies 4 times;
+strings, 13 %). With `--cpu 68060` the runtime avoids the 64-bit instructions the 68060 lacks (68060.library emulates
+them, very slowly). It can be combined with `--fpu`.
 
 Environment variables:
 
