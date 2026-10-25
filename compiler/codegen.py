@@ -492,12 +492,19 @@ static STRPTR _dash_str_ret(STRPTR p) {
    temporary (count 0, in _dash_otmp) until a variable, field or return value
    adopts it; when the last reference goes, destroy() frees what the object
    owns (array data, String fields, struct fields) and then the object. */
+/* What every object of a type shares: what it gives back when freed and its size. One pointer to
+   it in the header instead of both: 16 bytes of header, so a struct of two fields fits a 24-byte
+   block, not a 32-byte one */
+typedef struct _DashType {
+    void (*destroy)(void *);
+    LONG size;                     /* bytes after the header; 0: in a LONG before the header */
+} _DashType;
+
 typedef struct _Dash_RefHeader {
     struct _Dash_RefHeader *next;  /* temporaries list */
     ULONG serial;                  /* != 0 while it is a temporary */
     LONG _refcount;
-    LONG _size;                    /* bytes after the header */
-    void (*destroy)(void *);
+    const _DashType *type;
 } _Dash_RefHeader;
 
 #define _DASH_GET_HEADER(ptr) ((_Dash_RefHeader *)((UBYTE *)(ptr) - sizeof(_Dash_RefHeader)))
@@ -518,23 +525,22 @@ static void _dash_otmp_push(_Dash_RefHeader *h) {
 
 /* The block is not cleared: the header is filled here and the constructors set
    every field (a recycled block would cost a clearing loop per object) */
-static void *_dash_rc_alloc_obj(LONG size, void (*destroy)(void *)) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + size);
+static void *_dash_rc_alloc_obj(const _DashType *type) {
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + type->size);
     if (!hdr) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_objs++;
 #endif
     hdr->_refcount = 0;
-    hdr->_size = size;
-    hdr->destroy = destroy;
+    hdr->type = type;
     _dash_otmp_push(hdr);
     return _DASH_FROM_HEADER(hdr);
 }
 
 /* A new object that a variable or field adopts at once: count 1 and not a
    temporary (no push to the temporaries list and no search to take it out) */
-static void *_dash_rc_new_obj(LONG size, void (*destroy)(void *)) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + size);
+static void *_dash_rc_new_obj(const _DashType *type) {
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + type->size);
     if (!hdr) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_objs++;
@@ -542,17 +548,25 @@ static void *_dash_rc_new_obj(LONG size, void (*destroy)(void *)) {
     hdr->next = NULL;
     hdr->serial = 0;
     hdr->_refcount = 1;
-    hdr->_size = size;
-    hdr->destroy = destroy;
+    hdr->type = type;
     return _DASH_FROM_HEADER(hdr);
 }
 
-/* cleared, for C code that builds its own objects */
+/* cleared, for C code that builds its own objects: any size, kept in a LONG before the header */
+static const _DashType _dash_any_type = { NULL, 0 };
 static void *_dash_rc_alloc(LONG size) {
-    UBYTE *p = (UBYTE *)_dash_rc_alloc_obj(size, NULL);
-    LONG i;
-    if (p) for (i = 0; i < size; i++) p[i] = 0;
-    return p;
+    LONG *b = (LONG *)_dash_block_get_clear(sizeof(LONG) + sizeof(_Dash_RefHeader) + size);
+    _Dash_RefHeader *hdr;
+    if (!b) return NULL;
+#ifdef DASH_MEMCHECK
+    _dash_mc_objs++;
+#endif
+    b[0] = size;
+    hdr = (_Dash_RefHeader *)(b + 1);
+    hdr->_refcount = 0;
+    hdr->type = &_dash_any_type;
+    _dash_otmp_push(hdr);
+    return _DASH_FROM_HEADER(hdr);
 }
 
 /* Freeing an object releases what it holds, which may free more objects: a
@@ -567,8 +581,10 @@ static void _dash_obj_free(_Dash_RefHeader *h) {
 #ifdef DASH_MEMCHECK
         _dash_mc_objs--;
 #endif
-        if (h->destroy) h->destroy(_DASH_FROM_HEADER(h));
-        _dash_block_put(h, sizeof(_Dash_RefHeader) + h->_size);
+        const _DashType *t = h->type;
+        if (t->destroy) t->destroy(_DASH_FROM_HEADER(h));
+        if (t->size) _dash_block_put(h, sizeof(_Dash_RefHeader) + t->size);
+        else _dash_block_put((LONG *)h - 1, sizeof(LONG) + sizeof(_Dash_RefHeader) + ((LONG *)h)[-1]);
         if ((h = _dash_free_pending) != NULL) _dash_free_pending = h->next;
     } while (h);
 }
@@ -699,7 +715,8 @@ static void _dash_holder_destroy(void *obj) {
 static void *_dash_obj_lend(void *ptr) {
     void **holder;
     if (!ptr) return ptr;
-    holder = (void **)_dash_rc_alloc_obj(sizeof(void *), _dash_holder_destroy);
+    static const _DashType holder_type = { _dash_holder_destroy, sizeof(void *) };
+    holder = (void **)_dash_rc_alloc_obj(&holder_type);
     if (holder) {
         *holder = ptr;
         _dash_retain(ptr);
@@ -774,9 +791,11 @@ static void DashArray_destroy(void *obj) {
     _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
 }
 
+static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
+
 /* A new array is a temporary until a variable adopts it (memory runtime) */
 static DashArrayLong* DashArray_create(LONG size) {
-    DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(sizeof(DashArrayLong), DashArray_destroy);
+    DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(&_dash_array_type);
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
@@ -799,7 +818,7 @@ static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
 /* DashArray_from for "var = [...]": the new array has one reference and is not a
    temporary (see _dash_rc_new_obj) */
 static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
-    DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(sizeof(DashArrayLong), DashArray_destroy);
+    DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(&_dash_array_type);
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
@@ -1025,7 +1044,8 @@ static void DashDict_destroy(void *obj) {
 
 /* A new empty dictionary: a temporary until a variable adopts it */
 static DashDict *DashDict_new(LONG kind) {
-    DashDict *d = (DashDict *)_dash_rc_alloc_obj(sizeof(DashDict), DashDict_destroy);
+    static const _DashType dict_type = { DashDict_destroy, sizeof(DashDict) };
+    DashDict *d = (DashDict *)_dash_rc_alloc_obj(&dict_type);
     if (!d) return NULL;
     d->keys = NULL;
     d->vals = NULL;
@@ -15453,15 +15473,17 @@ static void _dash_struct_destroy_{struct.name}(void *obj) {{
         # _create: a temporary, for anything else (arguments, lists, returns).
         # Two bodies: calling one from the other cost ~280 cycles on a 68000
         constructor = f"""{destructor}
+static const _DashType _dash_type_{struct.name} = {{ {destroy}, sizeof({c_name}) }};
+
 static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
-    {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), {destroy});
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(&_dash_type_{struct.name});
     if (!_dash_o) return NULL;
 {assigns_str}
     return _dash_o;
 }}
 
 static {c_name}* _dash_struct_create_{struct.name}({params_str}) {{
-    {c_name} *_dash_o = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), {destroy});
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_alloc_obj(&_dash_type_{struct.name});
     if (!_dash_o) return NULL;
 {assigns_str}
     return _dash_o;
