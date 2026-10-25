@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Visual editor: problems that the compiler refuses are now shown before compiling: two windows with the same
+  name, and `#{` in a text or a title (it would be read as interpolation). An object named `constructor` or
+  `toString` is no longer reported as repeated.
+- Visual editor: emptying a number field says it must be a whole number instead of leaving 0; a drawing area
+  with a weight keeps its minimum size in the preview; a drag cancelled with Esc or let go elsewhere leaves
+  nothing marked, and a file dragged in afterwards is not taken for the old object.
+
 ## 0.2.2 (2026-10-25)
 
 - Visual editor: "al cambiar", next to "Ver en Amiga", shows the window on the Amiga again by itself a moment

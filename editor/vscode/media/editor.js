@@ -479,6 +479,9 @@
         }
     });
     $('tree').addEventListener('keydown', (e) => { if (doc && !error) treeKey(e); });
+    // a drag that ends without a drop (Esc, or let go elsewhere): nothing stays being dragged or marked, so a
+    // file dragged in later is not taken for it
+    document.addEventListener('dragend', () => { dragging = null; clearDrop(); });
     const editing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     // copy, cut and paste: the clipboard events (a key in a browser, VS Code's commands in a webview)
     document.addEventListener('copy', (e) => {

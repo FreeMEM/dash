@@ -149,7 +149,7 @@
         const spec = (TYPES[node.type] || { props: [] }).props.find(([p]) => p === key);
         if (spec && spec[1] === 'int') {
             const n = Number(value);
-            if (!Number.isInteger(n)) return key + ': número entero';
+            if (String(value).trim() === '' || !Number.isInteger(n)) return key + ': número entero';   // ('' would be 0)
             node[key] = n;
         } else if (spec && spec[1] === 'bool') {
             node[key] = !!value;
@@ -234,16 +234,23 @@
     /** Problems the compiler would refuse: names used twice or not valid, unknown types, numbers that are not. */
     function check(doc) {
         const problems = [];
+        const windows = new Set();
         doc.windows.forEach((win, w) => {
             if (badName(win.name)) problems.push(`ventana ${w + 1}: nombre no válido (${badName(win.name)})`);
-            const seen = {};
+            else if (windows.has(win.name)) problems.push(`ventana ${w + 1}: nombre repetido ${win.name}`);
+            windows.add(win.name);
+            if (String(win.title || '').includes('#{')) problems.push(`${win.name}: el título no puede llevar #{ (se leería como interpolación)`);
+            const seen = new Set();   // (an object would find "constructor" or "toString" in its prototype)
             (function walk(n) {
                 if (!n) return;
                 if (!TYPES[n.type]) problems.push(`${win.name}: tipo desconocido ${n.type}`);
                 if (n.name) {
                     if (badName(n.name)) problems.push(`${win.name}: nombre no válido ${n.name} (${badName(n.name)})`);
-                    else if (seen[n.name]) problems.push(`${win.name}: nombre repetido ${n.name}`);
-                    seen[n.name] = true;
+                    else if (seen.has(n.name)) problems.push(`${win.name}: nombre repetido ${n.name}`);
+                    seen.add(n.name);
+                }
+                for (const [k, v] of Object.entries(n)) {   // the compiler refuses texts with #{ (interpolation)
+                    if (typeof v === 'string' && v.includes('#{')) problems.push(`${win.name}: ${k} de ${n.name || n.type} no puede llevar #{`);
                 }
                 for (const k of ['event', 'change', 'ack', 'double', 'weight']) {   // ("event": "uno")
                     if (n[k] !== undefined && !Number.isInteger(n[k])) problems.push(`${win.name}: ${k} de ${n.name || n.type} no es un número entero`);
@@ -264,8 +271,8 @@
         function render(n, path) {
             const cls = 'mui-' + n.type + (JSON.stringify(path) === sel ? ' selected' : '') + (n.hidden ? ' hidden' : '') +
                 (n.disabled ? ' disabled' : '');
-            const attrs = ` class="${cls}" data-path="${esc(JSON.stringify(path))}"` +
-                (n.weight && n.weight !== 100 ? ` style="flex-grow:${n.weight / 100}"` : '');
+            const attrs = ` class="${cls}" data-path="${esc(JSON.stringify(path))}"` +   // (canvas puts its own style)
+                (n.weight && n.weight !== 100 && n.type !== 'canvas' ? ` style="flex-grow:${n.weight / 100}"` : '');
             const kids = (n.children || []).map((c, i) => render(c, path.concat([i]))).join('');
             switch (n.type) {
             case 'vgroup': case 'hgroup': case 'columns': case 'scroll':
