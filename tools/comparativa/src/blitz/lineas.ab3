@@ -1,0 +1,7 @@
+DEFTYPE .l
+Screen 0,0,0,320,256,5,0,"bench",1,2
+ScreensBitMap 0,0
+For i=1 To 2000
+  Line i MOD 320,0,319-(i MOD 320),180,i MOD 32
+Next
+End

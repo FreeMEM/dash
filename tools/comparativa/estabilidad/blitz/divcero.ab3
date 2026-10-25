@@ -1,0 +1,6 @@
+DEFTYPE .l
+a=10
+b=0
+NPrint a/b
+NPrint "sigue"
+End

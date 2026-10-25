@@ -1,0 +1,12 @@
+DEFTYPE .l
+Function.l f{n.l,i.l}
+  r.l=n+i
+  If r>1000000 Then r=r-1000000
+  Function Return r
+End Function
+y=0
+For i=1 To 100000
+  y=f{y,i}
+Next
+NPrint y
+End

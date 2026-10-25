@@ -1,0 +1,26 @@
+# Runs each line of DH0:job as a shell command (no Execute: OS 3.1 and 3.2 alike), output to DH0:job.txt
+@header "#include <dos/dostags.h>"
+@native func run_job()
+"""
+    BPTR in = Open((CONST_STRPTR)"DH0:job", MODE_OLDFILE);
+    BPTR out = Open((CONST_STRPTR)"DH0:job.txt", MODE_NEWFILE);
+    UBYTE line[512];
+    if (in && out) {
+        while (FGets(in, (STRPTR)line, sizeof(line))) {
+            struct TagItem tags[] = { { SYS_Output, (ULONG)out }, { SYS_UserShell, TRUE }, { TAG_DONE, 0 } };
+            LONG n = 0;
+            while (line[n] && line[n] != 10) n++;
+            line[n] = 0;
+            if (!n) continue;
+            SystemTagList((CONST_STRPTR)line, tags);
+        }
+    }
+    if (in) Close(in);
+    if (out) Close(out);
+"""
+end
+
+Main
+    run_job()
+    Print "hecho"
+end

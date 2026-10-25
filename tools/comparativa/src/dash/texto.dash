@@ -1,0 +1,7 @@
+Main
+    s = ""
+    for i in (1..20000)
+        s = "x" + i
+    end
+    Print s
+end

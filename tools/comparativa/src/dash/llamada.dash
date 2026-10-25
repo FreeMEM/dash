@@ -1,0 +1,15 @@
+func f(n, i)
+    r = n + i
+    if r > 1000000
+        r = r - 1000000
+    end
+    return r
+end
+
+Main
+    y = 0
+    for i in (1..100000)
+        y = f(y, i)
+    end
+    Print y
+end

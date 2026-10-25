@@ -363,6 +363,7 @@ docs/                 Documentation
 
 - [Language documentation](docs/DOCUMENTACION_LENGUAJE.en.md) — Complete guide
 - [Reference manual](docs/MANUAL_REFERENCIA.en.md) — Programmer's reference
+- [Comparison with Blitz, AMOS and C](docs/COMPARATIVA.en.md) — Speed, memory and stability measured on the A500 and A1200
 - [Quick Reference](docs/QUICK_REFERENCE.en.md) — Cheat sheet
 - [Built-in functions](docs/BUILTINS.en.md) — The actual list, generated from the code
 - [MUI in Dash](docs/MUI_DISEÑO.en.md) — Design of the MUI API

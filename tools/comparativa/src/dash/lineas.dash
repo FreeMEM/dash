@@ -1,0 +1,14 @@
+Window W
+    title "bench"
+    width 320
+    height 200
+end
+
+Main
+    screen_open_custom(320, 256, 5, "bench")
+    W.open
+    for i in (1..2000)
+        gfx_pen(i % 32)
+        gfx_line(i % 320, 0, 319 - i % 320, 180)
+    end
+end

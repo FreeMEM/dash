@@ -1,0 +1,8 @@
+DEFTYPE .l
+f.f=0
+g.f=1.0001
+For i=1 To 20000
+  f=f+g*0.5
+Next
+NPrint Int(f)
+End

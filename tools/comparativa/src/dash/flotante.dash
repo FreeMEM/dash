@@ -1,0 +1,8 @@
+Main
+    f = 0.0
+    g = 1.0001
+    for i in (1..20000)
+        f = f + g * 0.5
+    end
+    Print Int(f)
+end

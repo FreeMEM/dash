@@ -1,0 +1,10 @@
+Main
+    x = 0
+    for i in (1..300000)
+        x = x + i * 3
+        if x > 1000000
+            x = x - 1000000
+        end
+    end
+    Print x
+end
