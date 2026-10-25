@@ -240,10 +240,31 @@
             else if (windows.has(win.name)) problems.push(`ventana ${w + 1}: nombre repetido ${win.name}`);
             windows.add(win.name);
             if (String(win.title || '').includes('#{')) problems.push(`${win.name}: el título no puede llevar #{ (se leería como interpolación)`);
+            for (const k of ['id', 'close']) {   // the compiler wants whole numbers here too
+                if (win[k] !== undefined && !Number.isInteger(win[k])) problems.push(`${win.name}: ${k} de la ventana no es un número entero`);
+            }
+            if (win.size !== undefined && !(Array.isArray(win.size) && win.size.length === 2 && win.size.every(Number.isFinite)))
+                problems.push(`${win.name}: size es [ancho, alto] en porcentaje`);
+            (win.menus || []).forEach((m) => (m.items || []).forEach((it) => {
+                if (!it.separator && it.event !== undefined && !Number.isInteger(it.event))
+                    problems.push(`${win.name}: el evento de la opción ${it.label || ''} del menú ${m.title || ''} no es un número entero`);
+            }));
             const seen = new Set();   // (an object would find "constructor" or "toString" in its prototype)
             (function walk(n) {
                 if (!n) return;
-                if (!TYPES[n.type]) problems.push(`${win.name}: tipo desconocido ${n.type}`);
+                if (!n.type) problems.push(`${win.name}: un objeto sin tipo`);
+                else if (!TYPES[n.type]) problems.push(`${win.name}: tipo desconocido ${n.type}`);
+                else if (!TYPES[n.type].group && Array.isArray(n.children) && n.children.length)
+                    problems.push(`${win.name}: ${n.name || n.type} no es un grupo: no puede tener objetos dentro`);
+                const what = n.name || n.type;
+                if (n.tr !== undefined && !Number.isInteger(n.tr) && !(n.tr && typeof n.tr === 'object' && !Array.isArray(n.tr) &&
+                        Object.values(n.tr).every(Number.isInteger)))
+                    problems.push(`${win.name}: tr de ${what} es un número o {"campo": número}`);
+                const known = new Set(COMMON.map(([k]) => k).concat(((TYPES[n.type] || {}).props || []).map(([k]) => k)));
+                for (const [k, v] of Object.entries(n)) {   // the compiler takes texts, numbers and true/false (unknown keys stay)
+                    if (known.has(k) && v !== null && typeof v === 'object')
+                        problems.push(`${win.name}: ${k} de ${what} no puede ser una lista ni un objeto`);
+                }
                 if (n.name) {
                     if (badName(n.name)) problems.push(`${win.name}: nombre no válido ${n.name} (${badName(n.name)})`);
                     else if (seen.has(n.name)) problems.push(`${win.name}: nombre repetido ${n.name}`);
