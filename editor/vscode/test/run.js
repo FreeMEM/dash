@@ -214,6 +214,28 @@ async function modelTests() {
             children: [{ type: 'button', name: 'botón', label: 'A', event: 'uno' }] } }] }))).join(' | ');
         assert(/nombre no válido botón/.test(own) && /event de botón no es un número/.test(own), own);
     });
+    await check('model: check() finds what the compiler refuses: window names twice, #{ in texts; no false repeats', () => {
+        const d = M.newDocument();
+        d.windows.push(M.newWindow('Principal'));
+        assert.ok(M.check(d).some((p) => p.includes('repetido Principal')));
+        const d2 = M.newDocument(), w = d2.windows[0];
+        M.add(w, [], 'button'); M.setProp(w.root.children[0], 'name', 'constructor');
+        M.add(w, [], 'label'); M.setProp(w.root.children[1], 'text', 'Hola #{x}');
+        const p = M.check(d2);
+        assert.ok(!p.some((x) => x.includes('repetido constructor')), p.join('; '));
+        assert.ok(p.some((x) => x.includes('#{')), p.join('; '));
+    });
+    await check('model: an empty number is refused (not 0); a canvas with weight keeps its minimum size', () => {
+        const n = M.newNode('slider');
+        assert.ok(M.setProp(n, 'max', ''));
+        assert.strictEqual(n.max, 100);
+        const w = M.newWindow('V');
+        M.add(w, [], 'canvas');
+        w.root.children[0].weight = 200;
+        const html = M.preview(w, null).match(/<div class="mui-canvas[^>]*>/)[0];
+        assert.strictEqual((html.match(/style=/g) || []).length, 1);
+        assert.match(html, /min-width:64px.*flex-grow:2/);
+    });
     await check('model: new document has one empty window', () => {
         const d = M.newDocument();
         assert.strictEqual(d.dashui, 1);
