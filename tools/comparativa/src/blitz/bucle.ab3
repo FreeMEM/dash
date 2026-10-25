@@ -1,0 +1,8 @@
+DEFTYPE .l
+x=0
+For i=1 To 300000
+  x=x+i*3
+  If x>1000000 Then x=x-1000000
+Next
+NPrint x
+End

@@ -1,0 +1,6 @@
+Main
+    a = 10
+    b = 0
+    Print a / b
+    Print "sigue"
+end

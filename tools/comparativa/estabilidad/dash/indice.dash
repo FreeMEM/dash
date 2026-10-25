@@ -1,0 +1,7 @@
+Main
+    a = [1, 2, 3]
+    i = 100000
+    a[i] = 5
+    Print a[i]
+    Print "sigue"
+end

@@ -1,0 +1,7 @@
+DEFTYPE .l
+Dim a.l(9)
+For i=1 To 100000
+  a(i MOD 10)=a((i+1) MOD 10)+1
+Next
+NPrint a(0)
+End

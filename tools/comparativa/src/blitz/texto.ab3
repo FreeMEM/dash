@@ -1,0 +1,6 @@
+DEFTYPE .l
+For i=1 To 20000
+  s$="x"+Str$(i)
+Next
+NPrint s$
+End

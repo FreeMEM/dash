@@ -1,0 +1,7 @@
+DEFTYPE .l
+Dim a(3)
+i=100000
+a(i)=5
+NPrint a(i)
+NPrint "sigue"
+End
