@@ -1090,9 +1090,10 @@ end
 - `x = nil` suelta lo que tenia `x`; `x == nil` y `x != nil` comparan el puntero (tambien en textos).
 - Solo para structs, listas, diccionarios y `String`: `n = nil` con un entero da error, y `x = nil` sin
   `var x: Tipo` tambien.
-- Leer un campo de `nil` da basura (normalmente 0); escribirlo no hace nada (sin la proteccion
-  escribiria en la direccion 0 y colgaria el Amiga). Con `--memcheck` los dos avisan:
-  `memcheck: ERROR campo de nil`.
+- Leer o escribir un campo de `nil`, o llamar a un metodo de `nil`, para el programa con
+  `Error: campo de nil (en prog.dash:12)` y el codigo de retorno 20 (ver "Errores en tiempo de
+  ejecucion"). Sin la comprobacion, leer daria basura de la memoria baja y escribir iria a la direccion 0
+  y colgaria el Amiga. Con `--memcheck` avisa (`memcheck: ERROR campo de nil`) y sigue.
 
 ### Tipos de lista: `[T]`
 
@@ -2367,6 +2368,34 @@ tools/emu_run.py --debug r --debug t --debug "d" prog.dash
 Órdenes útiles: `r` registros, `t` una instrucción, `d dir n` desensamblar, `m dir n` memoria,
 `H n` las últimas instrucciones, `f dir` punto de parada, `g` seguir. `h` da la lista entera.
 Sin `--debug` (los tests) el programa sigue solo.
+
+### Errores en tiempo de ejecucion
+
+Un fallo del programa no cuelga el Amiga: el programa dice que paso y donde, hace la misma limpieza que al
+acabar bien (cierra sus ventanas, pantallas y librerias y libera su memoria) y termina con el codigo de
+retorno 20. El sistema sigue funcionando.
+
+| Fallo | Mensaje |
+|---|---|
+| Un campo o un metodo de `nil` | `Error: campo de nil (en prog.dash:12)` |
+| Una excepcion del procesador | `Error: division por cero (excepcion 5)` y, debajo, `en el programa: hunk 0 + $4AC` |
+
+Las excepciones del procesador son las que en C dan el Guru: error de bus (2), direccion impar (3, un salto o
+una palabra en direccion impar en un 68000), instruccion ilegal (4), division por cero (5), CHK (6), TRAPV (7),
+instruccion privilegiada (8) y lineas A y F (10 y 11). Salen sobre todo de codigo `@native` o de una
+libreria a la que se le pasa un puntero malo; si el fallo esta dentro de una libreria, la segunda linea
+dice `fuera del programa (una libreria)`. El hunk y la distancia sirven para buscar la instruccion en el
+ejecutable (`m68k-amigaos-objdump -d`); con `--memcheck` sale ademas la linea de Dash.
+
+Como funciona: el programa pone su propio manejador en `tc_TrapCode` de su tarea al empezar (y deja el que
+habia al salir: desde el Shell, el programa corre en el proceso del Shell). Exec salta ahi con la excepcion;
+el manejador descarta el marco de la excepcion y sigue en modo usuario, con una pila propia, en una funcion
+que escribe el mensaje y llama a la limpieza. Con `./dash --debug`, el depurador para antes.
+
+Lo que no se puede evitar: AmigaOS 3 no protege la memoria. Una escritura por un puntero salvaje (en
+`@native`) puede romper otra parte del sistema sin que nadie se entere, y un fallo dentro de otra tarea
+(un proceso de `task_start`, un manejador de entrada) o con el sistema en `Forbid()`/`Disable()` puede
+dejarlo tocado. Sin consola (un programa arrancado desde el Workbench), el mensaje sale en un requester.
 
 ### Argumentos del programa
 

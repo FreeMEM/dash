@@ -4,7 +4,7 @@
 # Before, the function read freed memory (--memcheck fills it with 0xDB).
 #
 # memcheck
-# expect-c: usa_campo(c, ((_Dash_Punto *)_DASH_OLEND_Caja_p(_DASH_NN(c)->p)))
+# expect-c: usa_campo(c, ((_Dash_Punto *)_DASH_OLEND_Caja_p(_DASH_NN(c, 0x35)->p)))
 # expect-c: #define _DASH_OLEND_Caja_p(p) _dash_obj_lend(p)
 # expect-out: 1
 # expect-out: 2

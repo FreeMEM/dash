@@ -100,6 +100,42 @@ class CTemplates:
 
 static void _dash_exit(int code);
 
+/* A runtime error that stops the program: the message (and the file:line of the Dash statement, if
+   known), then the same cleanup as a normal end (windows, libraries, memory), with return code 20.
+   ./dash --debug stops in the debugger first. */
+/* The message of a runtime error (fmt with up to 4 arguments, lines separated by \\n): on the output,
+   or in a requester when there is none (a program started from the Workbench) */
+static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) __attribute__((unused));
+static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) {
+    LONG args[4];
+    args[0] = a; args[1] = b; args[2] = c; args[3] = d;
+    if (DOSBase && Output()) {
+        VPrintf((CONST_STRPTR)fmt, args);
+        PutStr((CONST_STRPTR)"\\n");
+    } else if (IntuitionBase) {
+        struct EasyStruct es;
+        es.es_StructSize = sizeof(es);
+        es.es_Flags = 0;
+        es.es_Title = (UBYTE *)"Dash";
+        es.es_TextFormat = (UBYTE *)fmt;
+        es.es_GadgetFormat = (UBYTE *)"Vale";
+        EasyRequestArgs(NULL, &es, NULL, args);
+    }
+}
+
+static void _dash_fail(const char *what, const char *where) __attribute__((noreturn, unused));
+static void _dash_fail(const char *what, const char *where) {
+#ifdef _dash_debug_trap
+    _dash_debug_trap(what);
+#endif
+    if (where) _dash_fail_say("Error: %s (en %s)", (LONG)what, (LONG)where, 0, 0);
+    else _dash_fail_say("Error: %s", (LONG)what, 0, 0, 0);
+    _dash_exit(20);
+    for (;;) ;
+}
+/* The same with w = file << 16 | line of the Dash statement (_dash_srcfiles, at the end) */
+static void _dash_fail_at(const char *what, LONG w) __attribute__((noreturn, unused));
+
 /* Integer *, / and % of two LONGs. A 68000 has no 32-bit multiply or divide:
    GCC calls libgcc (__mulsi3, and __modsi3 = divide + multiply). When the
    values fit in 16 bits one muls.w / divu.w instruction does it. On 68020+
@@ -144,6 +180,147 @@ static __inline__ LONG _dash_imod(LONG a, LONG b) {
 #endif
 """
 
+    # _dash_fail_at: a runtime error at file << 16 | line (the table of files goes in with it)
+    FAIL_AT = """\
+static const char *const _dash_srcfiles[] = { $files };
+static void _dash_fail_at(const char *what, LONG w) {
+    LONG f = w >> 16;
+    if (!w || f >= (LONG)(sizeof(_dash_srcfiles) / sizeof(_dash_srcfiles[0])) || !_dash_srcfiles[f]) _dash_fail(what, NULL);
+#ifdef _dash_debug_trap
+    _dash_debug_trap(what);
+#endif
+    _dash_fail_say("Error: %s (en %s:%ld)", (LONG)what, (LONG)_dash_srcfiles[f], w & 0xFFFF, 0);
+    _dash_exit(20);
+    for (;;) ;
+}
+"""
+
+    # CPU exceptions of the program's task (address error, illegal instruction, division by zero...):
+    # instead of the Guru, a message and the normal cleanup (the system goes on). Every program has it.
+    TRAP_RUNTIME = """\
+/* Dash Trap Runtime: the task's tc_TrapCode while the program runs. Exec jumps there in supervisor
+   mode with the exception's number on the stack, then its frame. For the errors of a program (2 bus
+   error, 3 address error, 4 illegal instruction, 5 division by zero, 6 CHK, 7 TRAPV, 8 privilege
+   violation, 10/11 line A/F) the frame is dropped and the program goes on in _dash_trap_recover, in
+   user mode on a stack of its own: it says what happened and where, and ends like Stop. Anything else
+   (traps, trace: debuggers) goes to the handler that was there. A program run from the Shell is the
+   Shell's process: the old handler is put back at exit (atexit). */
+#include <dos/dosextens.h>
+#include <exec/execbase.h>
+APTR _dash_trap_old = NULL;
+volatile ULONG _dash_trap_num = 0, _dash_trap_pc = 0, _dash_trap_addr = 0, _dash_trap_usp = 0;
+volatile UBYTE _dash_trap_busy = 0, _dash_trap_010 = 0;
+static ULONG _dash_trap_stack[2048];   /* 8 KB for the message and the cleanup */
+void _dash_trap(void);
+void _dash_trap_recover(void) __attribute__((used, noreturn));
+__asm__(
+"       .text\\n"
+"       .even\\n"
+"       .globl  __dash_trap\\n"
+"__dash_trap:\\n"
+"       cmpl    #2,sp@\\n"
+"       bcs     9f\\n"
+"       cmpl    #11,sp@\\n"
+"       bhi     9f\\n"
+"       cmpl    #9,sp@\\n"
+"       beq     9f\\n"
+"       tstb    __dash_trap_busy\\n"
+"       bne     9f\\n"
+"       moveb   #1,__dash_trap_busy\\n"
+"       movel   sp@,d0\\n"
+"       movel   d0,__dash_trap_num\\n"
+"       lea     sp@(4),a0\\n"
+"       clrl    __dash_trap_addr\\n"
+"       tstb    __dash_trap_010\\n"
+"       bne     2f\\n"
+"       cmpl    #3,d0\\n"
+"       bhi     1f\\n"
+"       movel   a0@(2),__dash_trap_addr\\n"
+"       movel   a0@(10),__dash_trap_pc\\n"
+"       lea     a0@(14),a0\\n"
+"       bra     5f\\n"
+"1:     movel   a0@(2),__dash_trap_pc\\n"
+"       lea     a0@(6),a0\\n"
+"       bra     5f\\n"
+"2:     movel   a0@(2),__dash_trap_pc\\n"
+"       moveq   #0,d1\\n"
+"       movew   a0@(6),d1\\n"
+"       lsrw    #8,d1\\n"
+"       lsrw    #4,d1\\n"
+"       lea     __dash_trap_fsize,a1\\n"
+"       moveb   a1@(0,d1:w),d1\\n"
+"       andl    #0xff,d1\\n"
+"       addl    d1,a0\\n"
+"5:     movel   a0,sp\\n"
+"       tstb    __dash_trap_010\\n"
+"       beq     6f\\n"
+"       clrw    sp@-\\n"
+"6:     pea     __dash_trap_recover\\n"
+"       clrw    sp@-\\n"
+"       movel   __dash_trap_usp,a0\\n"
+"       movel   a0,usp\\n"
+"       rte\\n"
+"9:     movel   __dash_trap_old,sp@-\\n"
+"       rts\\n"
+"       .data\\n"
+"__dash_trap_fsize:\\n"
+"       .byte   8,8,12,12,16,0,0,60,58,20,32,92,0,0,0,0\\n"
+"       .text\\n"
+);
+
+static void _dash_trap_off(void) {
+    struct Task *t = FindTask(NULL);
+    if (_dash_trap_old && t->tc_TrapCode == (APTR)_dash_trap) t->tc_TrapCode = _dash_trap_old;
+    _dash_trap_old = NULL;
+}
+
+static void _dash_trap_on(void) {
+    struct Task *t = FindTask(NULL);
+    if (_dash_trap_old) return;
+    _dash_trap_010 = (SysBase->AttnFlags & AFF_68010) != 0;
+    _dash_trap_usp = (ULONG)&_dash_trap_stack[2048 - 4];
+    _dash_trap_old = t->tc_TrapCode;
+    t->tc_TrapCode = (APTR)_dash_trap;
+    atexit(_dash_trap_off);
+}
+
+/* Where pc is in the program: its hunk (segment) and offset, from the process's segment list */
+static BOOL _dash_trap_where(ULONG pc, LONG *hunk, ULONG *offset) {
+    struct Process *pr = (struct Process *)FindTask(NULL);
+    BPTR seg = 0;
+    LONG n;
+    if (pr->pr_Task.tc_Node.ln_Type != NT_PROCESS) return FALSE;
+    if (pr->pr_CLI) seg = ((struct CommandLineInterface *)BADDR(pr->pr_CLI))->cli_Module;
+    if (!seg && pr->pr_SegList) seg = ((BPTR *)BADDR(pr->pr_SegList))[3];
+    for (n = 0; seg && n < 1000; n++, seg = *(BPTR *)BADDR(seg)) {
+        ULONG *p = (ULONG *)BADDR(seg), start = (ULONG)(p + 1), end = (ULONG)p - 4 + p[-1];
+        if (pc >= start && pc < end) { *hunk = n; *offset = pc - start; return TRUE; }
+    }
+    return FALSE;
+}
+
+void _dash_trap_recover(void) {
+    static const char *const names[] = { "", "", "error de bus", "dirección impar", "instrucción ilegal",
+        "división por cero", "CHK fuera de rango", "desbordamiento (TRAPV)", "instrucción privilegiada", "",
+        "instrucción de línea A", "instrucción de línea F" };
+    ULONG num = _dash_trap_num, pc = _dash_trap_pc, offset = 0;
+    LONG hunk = 0;
+    const char *what = num < 12 ? names[num] : "excepción";
+#ifdef _dash_debug_trap
+    _dash_debug_trap(what);
+#endif
+    if (_dash_trap_where(pc, &hunk, &offset))
+        _dash_fail_say("Error: %s (excepción %ld)\\nen el programa: hunk %ld + $%lx", (LONG)what, (LONG)num, hunk, (LONG)offset);
+    else
+        _dash_fail_say("Error: %s (excepción %ld)\\nen $%lx, fuera del programa (una librería)", (LONG)what, (LONG)num, (LONG)pc, 0);
+#if defined(DASH_MEMCHECK) && defined(_DASH_MEMORY_RUNTIME)
+    if (_dash_mc_where && DOSBase && Output()) Printf((CONST_STRPTR)"en %s\\n", (LONG)_dash_mc_where);
+#endif
+    _dash_exit(20);
+    for (;;) ;
+}
+"""
+
     # Memory runtime (included with arrays or strings): one exec pool,
     # deleted at exit, so runtime allocations never outlive the program
     MEMORY_RUNTIME = """\
@@ -163,16 +340,15 @@ static void *_dash_mc_nn(void *p) {
     for (i = 0; i < 64; i++) _dash_mc_nil_area[i] = 0;
     return _dash_mc_nil_area;
 }
-#define _DASH_NN(p) ((__typeof__(p))_dash_mc_nn((void *)(p)))
-#define _DASH_NNW(p) _DASH_NN(p)
+#define _DASH_NN(p, w) ((__typeof__(p))_dash_mc_nn((void *)(p)))
+#define _DASH_NNW(p, w) _DASH_NN(p, w)
 #else
-#define _DASH_NN(p) (p)
-/* Writing a field through nil would write at address 0 (the exception vectors,
-   ExecBase at 4) and hang the Amiga: field writes go to this area instead.
-   Reading through nil only reads low memory (garbage, no harm), so reads are
-   not checked: --memcheck reports both. */
-static LONG _dash_nil_area[64] __attribute__((unused));
-#define _DASH_NNW(p) ({ __typeof__(p) _dash_w = (p); _dash_w ? _dash_w : (__typeof__(p))_dash_nil_area; })
+/* A field read or written through nil (or a method called on nil) stops the program with
+   "Error: campo de nil (en file.dash:line)": a read would give garbage from low memory, and a write
+   would go to address 0 (the exception vectors, ExecBase at 4) and hang the Amiga. --memcheck
+   reports it and goes on instead. */
+#define _DASH_NN(p, w) ({ __typeof__(p) _dash_n = (p); if (!_dash_n) _dash_fail_at("campo de nil", (w)); _dash_n; })
+#define _DASH_NNW(p, w) _DASH_NN(p, w)
 #endif
 
 #ifdef DASH_MEMCHECK
@@ -14470,9 +14646,14 @@ class CodeGenerator(ASTVisitor):
     def visit(self, node):
         """--memcheck: before each statement, the place it comes from (_dash_mc_where), so a memory
         error says file.dash:line (VS Code's problem matcher puts it on the code)."""
+        location = getattr(node, "location", None)
+        if location is not None and location.filename:
+            # where a nil field access is reported (_DASH_NN): the statement being generated
+            if location.filename not in self.src_files:
+                self.src_files.append(location.filename)
+            self.cur_where = (self.src_files.index(location.filename) << 16) | (location.line & 0xFFFF)
         if self.memcheck or self.debug_lines:
             name = type(node).__name__
-            location = getattr(node, "location", None)
             if location is not None and location.filename and name != "ImportStmt" and \
                     (name.endswith(("Stmt", "Assign")) or name in ("FunctionCall", "MethodCall")):
                 if self.debug_lines:     # ./dash --debug: this statement's line of Dash (compiler/debuglines.py)
@@ -14505,6 +14686,8 @@ class CodeGenerator(ASTVisitor):
         self.prof_names: List[str] = ["Main"]
         # ./dash --memcheck: field accesses check for nil (_DASH_NN)
         self.memcheck = os.environ.get("DASH_MEMCHECK_C") == "1"
+        self.cur_where = 0       # file << 16 | line of the statement being generated (for _DASH_NN)
+        self.src_files: List[str] = []   # the files of cur_where (_dash_srcfiles)
         self.globals: List[str] = []
         self.prototypes: List[str] = []
         self.functions: List[str] = []
@@ -15119,6 +15302,12 @@ static LONG _dash_event_window_handle(void) {{
         parts.append(main_code)
 
         program = "\n".join(parts)
+        # the files of the lines in runtime errors (_dash_fail_at), before main
+        files = ", ".join('"' + f.replace("\\", "\\\\").replace('"', '\\"') + '"' for f in self.src_files) or "0"
+        program = program.replace("int main(", CTemplates.FAIL_AT.replace("$files", files) + "\n" +
+                                  CTemplates.TRAP_RUNTIME + "\nint main(", 1)
+        brace = program.index("{\n", program.index("\nint main(")) + 2
+        program = program[:brace] + "    _dash_trap_on();\n" + program[brace:]   # the first thing main does
         if self.profile:
             names = ", ".join('"' + n.replace('"', "") + '"' for n in self.prof_names)
             runtime = CTemplates.PROFILE_RUNTIME.replace("$cuantas", str(len(self.prof_names))).replace("$names", names)
@@ -17533,7 +17722,7 @@ static {ret_type} {method_name}({params_str}) {{
         owner_node = node.target if node.target is not None else (
             SelfRef() if node.object_name == "self" else VarRef(name=node.object_name))
         if owner != "self":
-            owner = f"_DASH_NNW({owner})"   # a write through nil must not hit address 0
+            owner = f"_DASH_NNW({owner}, {self._where()})"   # a write through nil must not hit address 0
         struct = self._struct_of(owner_node)
         field = struct.get_field(node.member) if struct else None
         if not struct:
@@ -17635,6 +17824,8 @@ static {ret_type} {method_name}({params_str}) {{
             # Known struct type - generate StructName_methodname(obj, args...)
             method = owner.get_method(node.method)
             pure = method is not None and self._is_pure(method)
+            if not isinstance(node.object, SelfRef):
+                obj_expr = self._nn(obj_expr)   # a method called on nil stops with its line
             args = [obj_expr if pure else self._lend(node.object, obj_expr)]
             args.extend(self._method_arg(method, i, a, pure) for i, a in enumerate(node.arguments))
             args_str = ", ".join(args)
@@ -17669,8 +17860,13 @@ static {ret_type} {method_name}({params_str}) {{
         return code if pure else self._lend(arg, code)
 
     def _nn(self, code: str) -> str:
-        """The struct pointer of a field access; with --memcheck it is checked for nil."""
-        return f"_DASH_NN({code})" if self.memcheck else code
+        """The struct pointer of a field access, checked for nil (_DASH_NN: an error with the line;
+        --memcheck reports it and goes on)."""
+        return f"_DASH_NN({code}, {self._where()})"
+
+    def _where(self) -> str:
+        """The statement's file << 16 | line (_dash_fail_at), 0 if unknown."""
+        return f"0x{self.cur_where:x}" if self.cur_where else "0"
 
     def _lend(self, arg: ASTNode, code: str) -> str:
         """An argument for a Dash function or method that the callee could free while
