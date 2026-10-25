@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 (2026-10-25)
 
 - Visual editor: problems that the compiler refuses are now shown before compiling: two windows with the same
   name, and `#{` in a text or a title (it would be read as interpolation). An object named `constructor` or
@@ -8,6 +8,14 @@
 - Visual editor: emptying a number field says it must be a whole number instead of leaving 0; a drawing area
   with a weight keeps its minimum size in the preview; a drag cancelled with Esc or let go elsewhere leaves
   nothing marked, and a file dragged in afterwards is not taken for the old object.
+- Visual editor and Problems panel: what the compiler refuses in a hand-edited or pasted `.dashui` is shown
+  before compiling: children inside an object that is not a group, a wrong `tr`, `size` that is not
+  [width, height], a list where a text goes, an object without a type, and a window `id`, `close` or menu event
+  that is not a whole number.
+- Problems panel: a new menu option (event 0) is no longer an error, and an object or window called
+  `constructor` is no longer reported as repeated.
+- Ver en Amiga: after updating Dash, the window is compiled again (the saved program also depends on the
+  compiler), instead of showing the one built with the old Dash.
 
 ## 0.2.2 (2026-10-25)
 

@@ -236,6 +236,42 @@ async function modelTests() {
         assert.strictEqual((html.match(/style=/g) || []).length, 1);
         assert.match(html, /min-width:64px.*flex-grow:2/);
     });
+    await check('model: check() wants whole numbers in the window id and close and in menu events, as the compiler', () => {
+        const d = M.newDocument();
+        d.windows[0].id = 1.5;
+        d.windows[0].menus = [{ title: 'M', items: [{ label: 'a', event: 2.5 }, { separator: true }] }];
+        const p = M.check(d);
+        assert.ok(p.some((x) => x.includes('id de la ventana')), p.join('; '));
+        assert.ok(p.some((x) => x.includes('evento de la opción a')), p.join('; '));
+    });
+    await check('model: check() finds the odd documents the compiler refuses (children of a button, tr, size, lists)', () => {
+        const d = M.newDocument(), w = d.windows[0];
+        w.size = [50];
+        w.root.children = [{ type: 'button', label: 'a', children: [{ type: 'text' }] }, { type: 'label', text: 'x', tr: 'uno' },
+                           { type: 'frame', title: ['a'], children: [] }, { label: 'sin tipo' }];
+        const p = M.check(d).join('; ');
+        for (const s of ['size es', 'no es un grupo', 'tr de label', 'title de frame', 'objeto sin tipo']) assert.ok(p.includes(s), s + ' in ' + p);
+        const ok = M.newDocument();
+        M.add(ok.windows[0], [], 'label');
+        ok.windows[0].root.children[0].tr = { text: 3 };
+        assert.deepStrictEqual(M.check(ok), []);
+    });
+    await check('problems: a new menu option (event 0) and an object called constructor are not errors', () => {
+        const L = require('../dashuiLinks.js');
+        const d = M.newDocument();
+        d.windows[0].menus = [{ title: 'Menú', items: [{ label: 'Opción', key: '', event: 0 }] }];
+        M.add(d.windows[0], [], 'button');
+        d.windows[0].root.children[0].name = 'constructor';
+        assert.deepStrictEqual(L.problems(M.serialize(d)).map((p) => p.message), []);
+    });
+    await check('problems: also what only the editor checked (#{ in a text, size, children of a button)', () => {
+        const L = require('../dashuiLinks.js');
+        const d = M.newDocument();
+        d.windows[0].size = [50];
+        d.windows[0].root.children = [{ type: 'label', text: 'Hola #{x}' }, { type: 'button', label: 'a', children: [{ type: 'text' }] }];
+        const p = L.problems(M.serialize(d)).map((x) => x.message).join('; ');
+        for (const k of ['#{', 'size es', 'no es un grupo']) assert.ok(p.includes(k), k + ' in ' + p);
+    });
     await check('model: new document has one empty window', () => {
         const d = M.newDocument();
         assert.strictEqual(d.dashui, 1);

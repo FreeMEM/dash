@@ -45,7 +45,7 @@ function problems(text) {
         out.push({ message: 'No es un .dashui válido: ' + e.message, start: at, end: at, severity: 'error' });
         return out;
     }
-    const seenWindows = {};
+    const seenWindows = new Set();   // (a {} would find "constructor" in its prototype)
     let from = 0;
     for (const win of doc.windows) {
         const wp = placeOf(text, 'name', win.name || '', from) || { start: zero, end: zero, offset: from };
@@ -53,10 +53,10 @@ function problems(text) {
         const add = (message, place, severity) => out.push({ message, start: (place || wp).start, end: (place || wp).end,
                                                           severity: severity || 'error' });
         if (M.badName(win.name)) add(`nombre de ventana no válido: "${win.name || ''}" (${M.badName(win.name)})`);
-        if (seenWindows[win.name]) add(`ventana repetida: ${win.name}`);
-        seenWindows[win.name] = true;
-        const names = {};
-        const events = {};
+        if (seenWindows.has(win.name)) add(`ventana repetida: ${win.name}`);
+        seenWindows.add(win.name);
+        const names = new Set();
+        const events = Object.create(null);
         let cursor = wp.offset + 1;          // the objects come in the text in the order of the walk
         (function walk(n) {
             if (!n || typeof n !== 'object') return;
@@ -67,8 +67,8 @@ function problems(text) {
             if (n.name !== undefined) {
                 if (n.name === 'window') add('nombre no válido: window (es el de la ventana)', np);
                 else if (M.badName(n.name)) add(`nombre no válido: ${n.name} (${M.badName(n.name)})`, np);
-                else if (names[n.name]) add(`nombre repetido en ${win.name}: ${n.name}`, np);
-                names[n.name] = true;
+                else if (names.has(n.name)) add(`nombre repetido en ${win.name}: ${n.name}`, np);
+                names.add(n.name);
             }
             for (const key of ['event', 'change', 'ack', 'double']) {
                 if (n[key] === undefined) continue;
@@ -80,7 +80,8 @@ function problems(text) {
         from = cursor;                       // the next window's name is after this one's objects
         for (const m of win.menus || []) for (const it of m.items || []) {
             if (it.separator || it.event === undefined) continue;
-            if (!Number.isInteger(it.event) || it.event <= 0) add(`menú "${it.label || ''}": un número de evento entero mayor que 0`);
+            // 0 is "no event yet": the editor's new options have it, and the compiler takes it
+            if (!Number.isInteger(it.event) || it.event < 0) add(`menú "${it.label || ''}": un número de evento entero, 0 o mayor`);
         }
         // the same number on two objects of a window is allowed (a button and a menu item, say), but an
         // object without a name cannot be told apart in the code
@@ -89,6 +90,12 @@ function problems(text) {
                 add(`evento ${ev} en ${who.length} objetos de ${win.name} (${who.join(', ')})`, null, 'warning');
             }
         }
+    }
+    // what only the editor's check() looks at (texts with #{, size, tr, children of a non-group, lists as values,
+    // the window's id and close), at the start of the file: the rest is above, each at its place
+    const ONLY_CHECK = ['#{', 'size es', 'no es un grupo', 'tr de ', 'no puede ser una lista', 'de la ventana no es', 'objeto sin tipo'];
+    for (const message of M.check(doc)) {
+        if (ONLY_CHECK.some((k) => message.includes(k))) out.push({ message, start: zero, end: zero, severity: 'error' });
     }
     return out;
 }

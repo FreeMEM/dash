@@ -165,7 +165,7 @@ The extension in `editor/vscode` turns VS Code into an environment for Dash: syn
 completion, go to definition and rename; compiling and running on the emulated Amiga (A1200, A500, AmigaOS 3.2 or
 with a graphics card); debugging with breakpoints, variables and stepping, also on a real Amiga over the
 network; and a visual editor for MUI windows that shows them in the emulator. It uses the compiler from this repository.
-The published version is 0.2.2.
+The published version is 0.2.3.
 
 [![Video tutorial of Dash in VS Code](docs/media/vscode-tutorial.jpg)](https://youtu.be/_UTJ_0s3xLc)
 
@@ -176,8 +176,8 @@ debugging and debugging on a real Amiga.
 
 1. Dash and the Amiga compiler, as in [Quick installation](#quick-installation) (for the emulator, FS-UAE and a
    Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. The extension: the file `dash-mui-editor-0.2.2.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.2), and in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.2.vsix`. It can also
+2. The extension: the file `dash-mui-editor-0.2.3.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.3), and in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.3.vsix`. It can also
    be built: `cd editor/vscode && npm install && npm run package`.
 3. A project: **Dash: Nuevo proyecto**. If its folder is not inside this repository, **Dash: Elegir la
    carpeta del compilador** (the `dash.path` setting). The **Primeros pasos con Dash** walkthrough guides you step by step, and if
