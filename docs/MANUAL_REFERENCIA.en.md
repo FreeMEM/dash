@@ -1090,9 +1090,10 @@ end
 - `x = nil` releases what `x` held; `x == nil` and `x != nil` compare the pointer (also for strings).
 - Only for structs, lists, dictionaries and `String`: `n = nil` with an integer is an error, and so is `x = nil` without
   `var x: Tipo`.
-- Reading a field of `nil` gives garbage (usually 0); writing it does nothing (without the protection
-  it would write to address 0 and hang the Amiga). With `--memcheck` both give a warning:
-  `memcheck: ERROR campo de nil`.
+- Reading or writing a field of `nil`, or calling a method of `nil`, stops the program with
+  `Error: campo de nil (en prog.dash:12)` and return code 20 (see "Runtime errors"). Without the check,
+  reading would return garbage from low memory and writing would go to address 0 and hang the Amiga. With
+  `--memcheck` it warns (`memcheck: ERROR campo de nil`) and carries on.
 
 ### List types: `[T]`
 
@@ -2367,6 +2368,34 @@ tools/emu_run.py --debug r --debug t --debug "d" prog.dash
 Useful commands: `r` registers, `t` one instruction, `d dir n` disassemble, `m dir n` memory,
 `H n` the last instructions, `f dir` breakpoint, `g` continue. `h` gives the full list.
 Without `--debug` (the tests) the program carries on by itself.
+
+### Runtime errors
+
+A bug in the program doesn't hang the Amiga: the program says what happened and where, does the same cleanup
+as when it ends normally (it closes its windows, screens and libraries and frees its memory) and exits with
+return code 20. The system keeps working.
+
+| Failure | Message |
+|---|---|
+| A field or a method of `nil` | `Error: campo de nil (en prog.dash:12)` |
+| A processor exception | `Error: division por cero (excepcion 5)` and, below it, `en el programa: hunk 0 + $4AC` |
+
+Processor exceptions are the ones that give a Guru in C: bus error (2), odd address (3, a jump or a word at an
+odd address on a 68000), illegal instruction (4), division by zero (5), CHK (6), TRAPV (7), privileged
+instruction (8) and lines A and F (10 and 11). They come mostly from `@native` code or from a library that is
+passed a bad pointer; if the fault is inside a library, the second line says `fuera del programa (una
+libreria)`. The hunk and the offset let you find the instruction in the executable
+(`m68k-amigaos-objdump -d`); with `--memcheck` you also get the Dash line.
+
+How it works: the program installs its own handler in its task's `tc_TrapCode` when it starts (and restores
+the previous one on exit: from the Shell, the program runs in the Shell's process). Exec jumps there with the
+exception; the handler drops the exception frame and continues in user mode, on a stack of its own, in a
+function that writes the message and calls the cleanup. With `./dash --debug`, the debugger stops first.
+
+What can't be prevented: AmigaOS 3 has no memory protection. A write through a wild pointer (in `@native`)
+can break another part of the system without anyone noticing, and a fault inside another task (a
+`task_start` process, an input handler) or with the system in `Forbid()`/`Disable()` can leave it damaged.
+With no console (a program started from the Workbench), the message comes up in a requester.
 
 ### Program arguments
 
