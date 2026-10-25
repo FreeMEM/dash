@@ -51,6 +51,16 @@ Executable size and memory used while running (the largest drop of free memory w
 | Memory while running (mean) (A1200) | 16,566 B | 30,265 B | 169,156 B | 20,932 B | 38,502 B |
 | With a screen (lines) (A1200) | 113,272 B | 118,208 B | 187,888 B | 67,952 B | 68,264 B |
 
+## Why the numbers look like this
+
+**Dash and GCC.** Dash doesn't compile better than GCC: it writes C that the same GCC compiles, and where both do the same work they tie (loop and calls). It wins where it uses its own runtime instead of the C library. To turn a number into text it gets two digits per division, instead of libnix's general-purpose sprintf, which parses the format as it goes. For the remainder (%) it uses the 68000's 16-bit division when the numbers fit, instead of libgcc's 32-bit routine. And it prints with dos.library's Printf, without C's printf buffers: that's why it uses less memory. A C programmer could do the same by hand; the test measures what you get writing the usual way in each language.
+
+**SAS/C.** A 1995 compiler that optimizes less than GCC 6. GCC puts the function inside the loop while SAS/C really calls it: calls cost more than twice as much (522 ms against 224), and the loop 20 % more. It wins floating point because with MATH=FFP it uses Motorola's fast format from the ROM (mathffp.library), less precise than the others' IEEE. Its sprintf is faster than libnix's and its executables are small.
+
+**AmiBlitz3.** It makes the smallest executables (476 bytes for an empty one), since it only links the routines you use, and it starts first. With integers it is 6 to 13 times slower than C (GCC). It was built with -r, which its help says optimizes for size, and every other option at its default: not tuned, and the code it generates not examined. Without its debugger it checks nothing: dividing by zero gives 2147483647 and an index out of range writes over other memory.
+
+**AMOS Pro.** Its compiler copies its library routines and system data into every executable (it says so while compiling). That's why an empty program takes 54 KB, needs almost a second to start while it sets up its own screen system, and uses about 165 KB. Procedures are the slowest part: 34 to 41 times slower than C. In return it checks errors like its interpreter does: on a division by zero or an index out of range, it stops with an error.
+
 ## Stability
 
 What happens on two typical bugs, on an emulated A1200 with OS 3.1. Each test in its own boot.
