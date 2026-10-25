@@ -6976,9 +6976,14 @@ static ULONG _dash_ac_wait(ULONG mask) {
     PROGRAM_MAIN = Template("""\
 
 static void _dash_exit_cleanup(void) {
+    static BOOL done = FALSE;   /* once: the bases are not cleared */
+    if (done) return;
+    done = TRUE;
     // Cleanup
     if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
-    if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
+    /* the pointer stays too: IntuitionBase is an entry of libnix's list of libraries (libstubs), whose
+       first 0 ends the list, and the libraries after it (mathieeedoubbas of fmod...) would stay open */
+    if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
 }
 
 static void _dash_exit(int code) {
@@ -7004,13 +7009,18 @@ $user_code
     PROGRAM_MAIN_GFX = Template("""\
 
 static void _dash_exit_cleanup(void) {
+    static BOOL done = FALSE;   /* once: the bases are not cleared */
+    if (done) return;
+    done = TRUE;
     // Cleanup
     if (GfxBase) {
         _dash_close_screen();
         CloseLibrary((struct Library *)GfxBase); GfxBase = NULL;
     }
     if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
-    if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
+    /* the pointer stays too: IntuitionBase is an entry of libnix's list of libraries (libstubs), whose
+       first 0 ends the list, and the libraries after it (mathieeedoubbas of fmod...) would stay open */
+    if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
 }
 
 static void _dash_exit(int code) {
@@ -7040,6 +7050,9 @@ $user_code
     PROGRAM_MAIN_GADTOOLS = Template("""\
 
 static void _dash_exit_cleanup(void) {
+    static BOOL done = FALSE;   /* once: the bases are not cleared */
+    if (done) return;
+    done = TRUE;
     // Cleanup
     if (GadToolsBase) _dash_gt_cleanup();
     if (AslBase) { _dash_asl_cleanup(); CloseLibrary(AslBase); AslBase = NULL; }
@@ -7047,7 +7060,9 @@ static void _dash_exit_cleanup(void) {
     if (GadToolsBase) { CloseLibrary(GadToolsBase); GadToolsBase = NULL; }
     if (GfxBase) { CloseLibrary((struct Library *)GfxBase); GfxBase = NULL; }
     if (DOSBase) CloseLibrary((struct Library *)DOSBase);   /* the pointer stays: libnix's stdio uses it after main */
-    if (IntuitionBase) { CloseLibrary((struct Library *)IntuitionBase); IntuitionBase = NULL; }
+    /* the pointer stays too: IntuitionBase is an entry of libnix's list of libraries (libstubs), whose
+       first 0 ends the list, and the libraries after it (mathieeedoubbas of fmod...) would stay open */
+    if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
 }
 
 static void _dash_exit(int code) {
