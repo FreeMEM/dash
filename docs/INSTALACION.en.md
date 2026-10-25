@@ -415,10 +415,10 @@ python3 tools/catalogo.py catalog english.ct -o Catalogs/english/Programa.catalo
 Dash highlighting, errors as you type, compiling and running in the emulator from the editor, debugger
 (F5) and the visual editor for MUI windows (`.dashui`). It needs VS Code 1.86 or later.
 
-1. Download `dash-mui-editor-0.2.1.vsix` from the
-   [vscode-0.2.1](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1) release.
+1. Download `dash-mui-editor-0.2.2.vsix` from the
+   [vscode-0.2.2](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.2) release.
 2. In VS Code, **Extensions: Install from VSIX...** and choose the file. Or in the terminal:
-   `code --install-extension dash-mui-editor-0.2.1.vsix`.
+   `code --install-extension dash-mui-editor-0.2.2.vsix`.
 3. If your project is not inside the Dash folder, put that folder (the one with `./dash`) in the
    `dash.path` setting, or use **Dash: Elegir la carpeta del compilador**.
 
@@ -437,7 +437,7 @@ Settings (`dash.*`):
 | `dash.emulator.kickstart`, `kickstartA500`, `kickstart32` | ROM for each machine (`DASH_KICKSTART`, `_A500`, `_32`). |
 | `dash.emulator.system`, `system32`, `systemRtg` | Workbench files (`DASH_EMU_SYS`, `_32`, `_32_RTG`). |
 | `dash.emulator.muiSystem`, `muiSystem32` | Workbench with MUI for "Ver en Amiga" (`DASH_EMU_SYS_MUI`, `_32_MUI`). |
-| `dash.emulator.previewOnChange` | "Ver en Amiga" again, automatically, after each change in the window editor. It is in the repository, not yet in 0.2.1. |
+| `dash.emulator.previewOnChange` | "Ver en Amiga" again, automatically, after each change in the window editor. It is in the repository, not yet in 0.2.2. |
 | `dash.debug.gdb` | The `m68k-amigaos-gdb` (by default `/opt/amiga/bin/m68k-amigaos-gdb`). |
 
 The ROM and Workbench files are those from steps 6 and 7.

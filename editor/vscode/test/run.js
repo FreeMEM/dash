@@ -378,7 +378,7 @@ async function modelTests() {
             { cwd: repo, input: M.serialize(d) }).toString();
         assert.match(code, /func Principal_create\(\) -> Principal/);
         assert.match(code, /o_tabs = mui_register_begin\("Uno\|Dos"\)/);
-        assert.match(code, /mui_on_press\(o_button, 5\)/);
+        assert.match(code, /mui_on_press\(_ui_o_button, 5\)/);   // D72: the .dashui objects go as _ui_<name>
     });
 }
 
