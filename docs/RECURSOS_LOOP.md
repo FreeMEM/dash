@@ -38,3 +38,17 @@ Tope: al 90 % del uso semanal (`~/.claude/state/uso-7d.txt`) se para (al empezar
 - No medido: un 68060 (FS-UAE no da tiempos reales de 040/060) ni la libnix de 68020 en un 060 (puede traer
   instrucciones de 64 bits que emula 68060.library).
 - R2 descartada: el tamaño de la cabecera de un texto no es su longitud (los textos crecen en su sitio).
+
+### 2026-10-25 — R3 (cabecera de objetos de 16 bytes)
+- `_Dash_RefHeader`: `_size` y `destroy` pasan a un descriptor `const _DashType` por tipo (structs, listas,
+  diccionarios, el soporte de préstamos). `_dash_rc_alloc` (C, tamaño cualquiera) guarda el tamaño en un LONG
+  delante de la cabecera. El tamaño, constante, sigue yendo como argumento al reservar: solo con el descriptor
+  GCC no sabía la clase de bloque y crear un struct iba un 28 % más lento en A500 (medida tirada).
+- Medida (`R3` frente a `R1`): `mem_1000_structs` 33.088 → 24.816 bytes (−25 %, igual en las cuatro máquinas).
+  Velocidad: `struct_new_field` +3,6 % en A500 (116.903 → 121.044), +12 % en A1200 (24.256 → 27.074), +3 % en
+  68040; `array_literal_new` +1,7 % en A500; lo demás igual. Tamaño total +1.360 bytes (los descriptores).
+- Probado: 383/383 sin emulador; `--emu --emu-a500 --emu-32` 928/931 y `--emu --memcheck` 541/542 (los fallos,
+  `test_on_click_timer`: falla a ratos con la máquina cargada, solo pasa con y sin el cambio); 100 programas de
+  `tools/fuzz_refcount.py` sin fallos. MUI con `--memcheck` se probó con la primera versión (la segunda pasada iba
+  sin `DASH_EMU_SYS_MUI`); el arreglo solo cambia los argumentos al reservar.
+- Gana un bloque en structs de 2, 4, 6... campos (y diccionarios); listas y structs de 1, 3, 5... campos, igual.

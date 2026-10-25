@@ -2215,7 +2215,7 @@ remembered (a cache of 8), so `s.length`, `s[i]` and `s[a:b]` do not walk the wh
 ### Arrays and structs (automatic, reference counting)
 
 Several variables can share the same array or struct, so each one carries a
-count of who is using it (a 20-byte header). It goes up when assigned to a variable,
+count of who is using it (a 16-byte header). It goes up when assigned to a variable,
 to a field or when returned, and goes down when that variable is reassigned or its block
 ends. When it reaches 0 it is freed, along with its Strings and its structs.
 
