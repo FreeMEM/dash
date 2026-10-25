@@ -47,7 +47,7 @@ programa.dash → parser (Lark) → AST → análisis → generador de C → GCC
 python3 tools/emu_run.py bin/hola             # ejecutarlo en FS-UAE sin ventana y ver su salida
 ```
 
-Opciones de `./dash`: `-O0` (sin optimizar), `--small` (`-Os`), `--fpu` (68020 + 68881), `--stack N` (pila
+Opciones de `./dash`: `-O0` (sin optimizar), `--small` (`-Os`), `--fpu` (68020 + 68881), `--cpu 68040` (código para esa CPU o mejor), `--stack N` (pila
 mínima), `--memcheck` (comprobación de memoria), `--profile` (llamadas y tiempo de cada función al salir),
 `--debug` (para gdb o VS Code: `-O0 -g` y las líneas del `.dash`), `--multifile` (un C por módulo), `-q` (solo
 avisos, errores y el resultado) y `--no-hunk` (sin el paso de ELF a Hunk; el GCC de bebbo ya escribe Hunk).

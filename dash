@@ -81,6 +81,9 @@ def main():
     parser.add_argument("--fpu", action="store_true",
                         help="For Amigas with a 68881/68882 FPU: Float uses FPU instructions "
                              "(needs a 68020 or better; the program will not run without an FPU)")
+    parser.add_argument("--cpu", choices=["68000", "68020", "68030", "68040", "68060"],
+                        help="Code for this CPU or better (default 68000, runs on every Amiga): faster on "
+                             "accelerated Amigas, but the program will not start on a lower CPU")
     parser.add_argument("--profile", action="store_true",
                         help="Profile build: at exit, how many times each function was called and where the "
                              "time went (sampled 50 times a second)")
@@ -201,8 +204,8 @@ def main():
     except FileNotFoundError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    if args.fpu:
-        compile_command.extend(["-m68020", "-m68881"])
+    from compiler.cflags import cpu_flags
+    compile_command.extend(cpu_flags(args.cpu, args.fpu))
     if args.stack is not None:
         compile_command.append(f"-DDASH_STACK={args.stack}")
     if args.memcheck:

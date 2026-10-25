@@ -17,7 +17,7 @@ Este documento describe cómo configurar un entorno de desarrollo completo para 
 Lo que necesitan los programas hechos con Dash, en un Amiga real o emulado:
 
 - **AmigaOS 3.0 o superior** (Kickstart V39: los pools de memoria de exec).
-- **68000 o superior.** Con `./dash --fpu`, un 68020 con FPU 68881/68882.
+- **68000 o superior.** Con `./dash --fpu`, un 68020 con FPU 68881/68882. Con `./dash --cpu N`, esa CPU o mejor.
 - **MUI** (`mui_*`): MUI 3.8 (muimaster.library V19) o MUI 5, y un 68020 o superior.
 - **Red** (`net_*`): una pila TCP/IP (`bsdsocket.library`: Roadshow, AmiTCP, Miami...).
 - **HTTPS** (`tls_*`): además, AmiSSL 5.1 o posterior, que pide un 68020 o superior.

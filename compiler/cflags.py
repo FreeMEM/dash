@@ -29,6 +29,25 @@ SMALL = ["-Os", "-fomit-frame-pointer", BBB] + NULL_OK
 DEBUG = ["-O0"]
 
 
+# ./dash --cpu: 68020 code tuned for each CPU. The toolchain has libnix only for the 68000 and the 68020
+# (-m68040 alone would link the 68000 one), so it is always -m68020 plus -mtune. With -mtune=68060 GCC
+# avoids the 64-bit muls.l/divs.l that the 68060 lacks (68060.library emulates them, one trap each), and
+# defines __mc68060__ instead of __mc68020__: the runtime checks every CPU macro (_DASH_68020).
+CPUS = ("68000", "68020", "68030", "68040", "68060")
+
+
+def cpu_flags(cpu: str = None, fpu: bool = False) -> list:
+    """gcc options for ./dash --cpu and --fpu (--fpu alone: 68020 + 68881, as before)."""
+    flags = []
+    if cpu and cpu != "68000":
+        flags = ["-m68020"] + ([f"-mtune={cpu}"] if cpu in ("68030", "68040", "68060") else [])
+    elif fpu:
+        flags = ["-m68020"]
+    if fpu:
+        flags.append("-m68881")
+    return flags
+
+
 def opt_flags(no_optimize: bool = False, small: bool = False):
     return list(DEBUG if no_optimize else SMALL if small else OPTIMIZE)
 

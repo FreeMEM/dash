@@ -15,6 +15,7 @@
                                     # @catalog "X.catalog" 1 "español": tr(id, "texto") from locale.library's catalog
                                     # @version "Prog 1.2": $VER: (C:Version) with today's date; program_version()
 ./dash --fpu prog.dash -o prog      # 68020 + 68881/68882 FPU only
+./dash --cpu 68040 prog.dash -o prog # 68020 code tuned for 68020/030/040/060
 ./dash --memcheck prog.dash -o prog # memory check: double frees, use after free, live at exit
 ./dash --debug ...                  # for gdb / VS Code: gcc -O0 -g, C lines mapped to .dash lines
 ./dash --multifile ...              # one C file per module instead of one for the whole program

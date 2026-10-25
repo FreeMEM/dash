@@ -268,6 +268,9 @@ cd dash
 # For Amigas with a 68881/68882 FPU (Float with FPU instructions; 68020+)
 ./dash --fpu archivo.dash -o bin/archivo
 
+# For accelerated Amigas: code for that CPU or better (68020, 68030, 68040, 68060); it will not start on a lower one
+./dash --cpu 68040 archivo.dash -o bin/archivo
+
 # Memory check: warns about double frees and use after free, and about what is still alive at exit
 ./dash --memcheck archivo.dash -o bin/archivo
 

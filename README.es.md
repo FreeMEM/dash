@@ -268,6 +268,9 @@ cd dash
 # Para Amigas con FPU 68881/68882 (Float con instrucciones de FPU; 68020+)
 ./dash --fpu archivo.dash -o bin/archivo
 
+# Para Amigas aceleradas: código para esa CPU o mejor (68020, 68030, 68040, 68060); no arranca en una inferior
+./dash --cpu 68040 archivo.dash -o bin/archivo
+
 # Comprobación de memoria: avisa de dobles liberaciones y usos tras liberar, y de lo que queda vivo al salir
 ./dash --memcheck archivo.dash -o bin/archivo
 
