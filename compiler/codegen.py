@@ -9234,6 +9234,10 @@ static LONG _dash_random(void) {
     return (_dash_random_seed >> 16) & 0x7FFF;
 }
 
+/* SA_Pens wants a pen array ended by ~0, not ~0 itself: Intuition would read at $FFFFFFFF (an
+   address error on a 68000, a Guru on the A500) */
+static UWORD _dash_default_pens[] = { (UWORD)~0 };
+
 /* Screen Support - Clone Workbench properly */
 static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
     struct Screen *wbscreen;
@@ -9249,7 +9253,7 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
             SA_Depth, depth,
             SA_Title, (ULONG)title,
             SA_ShowTitle, TRUE,
-            SA_Pens, (ULONG)~0,
+            SA_Pens, (ULONG)_dash_default_pens,
             TAG_DONE);
         if (_dash_screen) _dash_own_screen = TRUE;
         return _dash_screen;
@@ -9268,7 +9272,7 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
         SA_DisplayID, modeID,
         SA_Depth, depth,
         SA_Overscan, OSCAN_TEXT,
-        SA_Pens, drawinfo ? (ULONG)drawinfo->dri_Pens : (ULONG)~0,
+        SA_Pens, drawinfo ? (ULONG)drawinfo->dri_Pens : (ULONG)_dash_default_pens,
         SA_Title, (ULONG)title,
         SA_ShowTitle, TRUE,
         SA_AutoScroll, TRUE,
@@ -9313,7 +9317,7 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
         SA_Title, (ULONG)title,
         SA_ShowTitle, TRUE,
         SA_AutoScroll, TRUE,
-        SA_Pens, (ULONG)~0,
+        SA_Pens, (ULONG)_dash_default_pens,
         TAG_DONE);
 
     if (_dash_screen) {
