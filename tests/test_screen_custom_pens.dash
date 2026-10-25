@@ -1,0 +1,11 @@
+# screen_open_custom on a 68000: SA_Pens got ~0 instead of a pen array and Intuition read at $FFFFFFFF
+# (address error, a Guru on the A500; found by docs/COMPARATIVA.md)
+# expect-no-c: SA_Pens, (ULONG)~0
+# expect-out: abierta true
+# expect-out: cerrada
+Main
+    ok = screen_open_custom(320, 256, 5, "prueba")
+    Print "abierta #{ok}"
+    screen_close()
+    Print "cerrada"
+end
