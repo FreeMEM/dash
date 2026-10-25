@@ -52,3 +52,16 @@ Tope: al 90 % del uso semanal (`~/.claude/state/uso-7d.txt`) se para (al empezar
   `tools/fuzz_refcount.py` sin fallos. MUI con `--memcheck` se probó con la primera versión (la segunda pasada iba
   sin `DASH_EMU_SYS_MUI`); el arreglo solo cambia los argumentos al reservar.
 - Gana un bloque en structs de 2, 4, 6... campos (y diccionarios); listas y structs de 1, 3, 5... campos, igual.
+
+### 2026-10-25 — R4 (RTG en Zorro), solo análisis
+- Lo que lee la tarjeta por el bus: `desktop_canvas_*` en cada actualización lee el área del bitmap de atrás
+  (`_dash_desk_dirty`, para ver qué dibujó el programa) y, en los rectángulos que cambian, la pantalla
+  (`_dash_desk_present_chunky`, para no pisar iconos). Las mezclas con alfa (`_dash_blend_block`, velos) leen lo que
+  hay debajo; las opacas no leen. Las copias entre bitmaps de la tarjeta las hace su blitter (no pasan por el bus).
+- Coste estimado en Zorro II (unos 3 MB/s): un panel de 200 x 300 a 16 bits son unos 120 KB por actualización,
+  unos 40 ms; cada 2 s, un 2 % de CPU. En Zorro III, bastante menos. No es lo más caro y FS-UAE no deja medirlo.
+- Para quitar la primera lectura, el programa tendría que dibujar en fast RAM (bitmap sin amigo): con Picasso96 sale
+  negro (sin paleta), ya probado. Pendiente, si un usuario con Zorro II lo nota: guardar qué rectángulos dibuja el
+  programa en vez de comparar el área entera.
+
+Parado al 86 % del uso semanal: R1 (PR #52) y R3 (PR #53, sobre #52) a la espera de fusionar.
