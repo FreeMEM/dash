@@ -35,6 +35,8 @@ def sizes():
 
 
 A1200, A500, SIZE = load("res_a1200.txt"), load("res_a500.txt"), sizes()
+import json
+WHY = json.load(open(os.path.join(C, "porque.json"), encoding="utf-8"))   # why the numbers come out like this
 MACHINES = [("A1200", A1200)] + ([("A500", A500)] if A500 else [])
 
 T = {
@@ -42,6 +44,7 @@ T = {
     title="Dash, Blitz y AMOS",
     lead="Dash frente a los lenguajes «fáciles» de siempre (AmiBlitz3 y AMOS Professional) y frente a C (SAS/C y GCC), con los mismos programas medidos en el mismo Amiga emulado.",
     sum_h="En resumen",
+    why_h="Por qué salen así",
     summary=[
         "Velocidad: Dash va a la par que C con GCC en cálculo y llamadas, y es el más rápido con textos y listas. AmiBlitz3 y AMOS van de 10 a 40 veces más despacio en cálculo, llamadas y listas, y de 1,2 a 2 veces con textos. En coma flotante gana SAS/C (FFP de la ROM). En líneas gana C: Dash va un 8 % detrás en el A1200 y un 19 % en el A500 (dibuja en una ventana); AmiBlitz3 y AMOS, hasta un 66 % en el A500.",
         "Arranque y tamaño: AmiBlitz3 y SAS/C hacen los ejecutables más pequeños; Dash queda cerca (4-9 KB). AMOS mete su runtime en cada programa: 54 KB y casi un segundo para arrancar en un A1200.",
@@ -106,6 +109,7 @@ T = {
     title="Dash, Blitz and AMOS",
     lead="Dash against the classic “easy” languages (AmiBlitz3 and AMOS Professional) and against C (SAS/C and GCC), with the same programs measured on the same emulated Amiga.",
     sum_h="Summary",
+    why_h="Why the numbers look like this",
     summary=[
         "Speed: Dash is on par with C (GCC) for arithmetic and calls, and the fastest with strings and lists. AmiBlitz3 and AMOS are 10 to 40 times slower for arithmetic, calls and lists, and 1.2 to 2 times slower with strings. SAS/C wins floating point (the ROM's FFP). C wins drawing lines: Dash is 8 % behind on the A1200 and 19 % on the A500 (it draws in a window); AmiBlitz3 and AMOS up to 66 % on the A500.",
         "Startup and size: AmiBlitz3 and SAS/C make the smallest executables; Dash is close (4-9 KB). AMOS puts its runtime in every program: 54 KB and almost a second to start on an A1200.",
@@ -207,7 +211,10 @@ def markdown(lang):
     o.append(f"| {t['exe2_h']} | " + " | ".join(fmt(mean_size(l), lang) + " B" for l in LANGS) + " |")
     o.append(f"| {t['run_h']} (A1200) | " + " | ".join(fmt(mem_run(A1200, l), lang) + " B" for l in LANGS) + " |")
     o.append(f"| {t['scr_h']} (A1200) | " + " | ".join(fmt(A1200[(l, 'lineas')][1] - STACK, lang) + " B" for l in LANGS) + " |")
-    o += ["", f"## {t['est_h']}", "", t["est_note"], "", "| " + " | ".join(t["est_cols"]) + " |", "|---|---|---|"]
+    o += ["", f"## {t['why_h']}", ""]
+    for name, text in WHY[lang]:
+        o += [f"**{name}.** {text}", ""]
+    o += [f"## {t['est_h']}", "", t["est_note"], "", "| " + " | ".join(t["est_cols"]) + " |", "|---|---|---|"]
     for l in LANGS:
         o.append(f"| {NAMES[l]} | {t['est_rows'][l][0]} | {t['est_rows'][l][1]} |")
     o += ["", f"## {t['cap_h']}", "", t["cap_note"], "", "| " + " | ".join(t["cols"]) + " |", "|---" * len(t["cols"]) + "|"]
@@ -253,6 +260,7 @@ def page():
     return (tpl.replace("{{SUMMARY}}", "".join(f"<li>{e(s)}</li>" for s in t["summary"]))
             .replace("{{MACHINES}}", "".join(parts))
             .replace("{{HEAD_LANGS}}", "".join(f"<th scope=\"col\">{e(NAMES[l])}</th>" for l in LANGS))
+            .replace("{{WHY}}", "".join(f"<div><dt>{e(n)}</dt><dd>{e(x)}</dd></div>" for n, x in WHY["es"]))
             .replace("{{MEM}}", mem_html).replace("{{EST}}", est_html)
             .replace("{{CAP_HEAD}}", "".join(f'<th scope="col">{e(c)}</th>' for c in t["cols"]))
             .replace("{{CAP}}", cap_html)

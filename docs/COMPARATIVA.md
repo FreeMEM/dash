@@ -51,6 +51,16 @@ Tamaño del ejecutable y memoria que ocupa al ejecutarse (el mayor descenso de m
 | Memoria al ejecutar (media) (A1200) | 16.566 B | 30.265 B | 169.156 B | 20.932 B | 38.502 B |
 | Con pantalla (líneas) (A1200) | 113.272 B | 118.208 B | 187.888 B | 67.952 B | 68.264 B |
 
+## Por qué salen así
+
+**Dash y GCC.** Dash no compila mejor que GCC: genera C y lo compila el mismo GCC, y donde hacen lo mismo empatan (bucle y llamadas). Gana donde usa su runtime en lugar de la librería C. Para pasar un número a texto saca dos cifras por división, en vez del sprintf genérico de libnix, que va leyendo el formato. Para el resto (%) usa la división de 16 bits del 68000 cuando los números caben, en vez de la rutina de 32 bits de libgcc. Y escribe con Printf de dos.library, sin los búferes del printf de C: por eso gasta menos memoria. Un programador de C podría hacer lo mismo a mano; la prueba mide lo que sale escribiendo lo normal en cada lenguaje.
+
+**SAS/C.** Un compilador de 1995 que optimiza menos que GCC 6. GCC mete la función dentro del bucle y SAS/C la llama de verdad: las llamadas cuestan más del doble (522 ms frente a 224), y el bucle, un 20 % más. Gana en coma flotante porque con MATH=FFP usa el formato rápido de Motorola de la ROM (mathffp.library), con menos precisión que el IEEE de los demás. Su sprintf es más rápido que el de libnix y sus ejecutables son pequeños.
+
+**AmiBlitz3.** Hace los ejecutables más pequeños (476 bytes uno vacío), porque solo enlaza las rutinas que usas, y es el que antes arranca. Con enteros va de 6 a 13 veces más despacio que C (con GCC). Está compilado con -r, que según su ayuda optimiza el tamaño, y con el resto de opciones por defecto: sin afinar y sin mirar el código que genera. Sin su depurador no comprueba nada: dividir por cero da 2147483647 y un índice fuera de rango escribe en otra memoria.
+
+**AMOS Pro.** Su compilador copia en cada ejecutable las rutinas de su librería y sus datos de sistema (lo dice al compilar). Por eso un programa vacío ocupa 54 KB, tarda casi un segundo en arrancar mientras monta su propio sistema de pantallas, y usa unos 165 KB. Lo más lento son los procedimientos: de 34 a 41 veces más que C. A cambio, comprueba los errores igual que su intérprete: ante una división por cero o un índice fuera de rango, para con un error.
+
 ## Estabilidad
 
 Qué pasa ante dos fallos típicos, en un A1200 emulado con OS 3.1. Cada prueba en un arranque propio.
