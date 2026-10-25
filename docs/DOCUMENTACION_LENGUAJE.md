@@ -477,7 +477,7 @@ end` pone C libre (por ejemplo funciones que llaman a Dash), `@stack N` pide una
 - **Tests:** `python3 tests/run_tests.py` (con `--emu`, `--emu-a500` y `--emu-32` los ejecuta en un A1200,
   un A500 y un A1200 con AmigaOS 3.2; `--memcheck` con la comprobación de memoria).
 - **Medidas:** `tools/bench.py` (velocidad, memoria y tamaño en A500 y A1200 emulados).
-- **VS Code** (`editor/vscode/`, versión 0.2.1, ver [INSTALACION.md](INSTALACION.md)): errores al escribir,
+- **VS Code** (`editor/vscode/`, versión 0.2.2, ver [INSTALACION.md](INSTALACION.md)): errores al escribir,
   completar, ir a la definición, compilar y ejecutar en el emulador, depurar con F5 (también en un Amiga real
   por la red) y el editor visual de MUI. Vídeo tutorial: https://youtu.be/_UTJ_0s3xLc
 - **Catálogos:** `tools/catalogo.py` (sección 5.6).

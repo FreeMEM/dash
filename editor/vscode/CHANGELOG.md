@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-10-25)
 
 - Visual editor: "al cambiar", next to "Ver en Amiga", shows the window on the Amiga again by itself a moment
   after each change (the setting `dash.emulator.previewOnChange`). One at a time; if the emulator fails, it goes
