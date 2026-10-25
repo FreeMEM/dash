@@ -1,5 +1,7 @@
 # Editor visual de MUI para VS Code (tarea 19 de `docs/MUI_LOOP.md`)
 
+*[English](MUI_EDITOR.en.md) | Castellano*
+
 Un "Glade para MUI": se monta la ventana con el ratón (grupos, botones, campos, listas...) dentro de VS Code y el
 programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_station`: VS Code + Amiberry, carpeta
 `DEV:`; ver el `ARCHITECTURE.md` de AmiCachy, sección 5).

@@ -1,5 +1,7 @@
 # Documentación de D.A.S.H.
 
+*[English](DOCUMENTACION_LENGUAJE.en.md) | Castellano*
+
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
 Esta es la guía del lenguaje: qué es, cómo se trabaja con él y un recorrido por todo lo que tiene, con

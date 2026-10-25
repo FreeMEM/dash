@@ -1,22 +1,24 @@
 # D.A.S.H.
 
+*English | [Castellano](README.es.md)*
+
 **Development Amiga Synthesis Hub**
 
-Lenguaje de programación de alto nivel que transpila a C para **Commodore Amiga**.
+A high-level programming language that transpiles to C for the **Commodore Amiga**.
 
-Escribe código limpio, sintetiza ejecutables nativos.
+Write clean code, synthesise native executables.
 
 ```
 Source (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → Amiga Executable
 ```
 
-## Por qué Dash
+## Why Dash
 
-Programar para Amiga en C implica gestión manual de memoria, punteros, includes interminables y conocer la API de AmigaOS a fondo. Dash elimina esa fricción: sintaxis clara inspirada en Ruby/Python, tipos inferidos y acceso directo a Intuition, Graphics, Audio, Sprites, Copper y más.
+Programming the Amiga in C means manual memory management, pointers, endless includes and knowing the AmigaOS API inside out. Dash removes that friction: a clear syntax inspired by Ruby/Python, inferred types and direct access to Intuition, Graphics, Audio, Sprites, Copper and more.
 
-El resultado es un binario nativo m68k. Sin intérpretes, sin VM, sin compromiso.
+The result is a native m68k binary. No interpreters, no VM, no compromise.
 
-## Ejemplo
+## Example
 
 ```ruby
 Window MiVentana
@@ -41,171 +43,171 @@ end
 ./dash examples/hola.dash -o bin/hola
 ```
 
-## Características
+## Features
 
-### Lenguaje
-- Variables con inferencia de tipos (sin declaraciones)
-- Enteros (también `0xDFF000`, `$DFF000`, `0b1010`), `Float` (coma flotante propia) y `Fixed` (coma fija
-  16.16: decimales a velocidad de entero en un 68000)
-- `nil` para structs, listas y textos (listas enlazadas, árboles, "sin objetivo")
-- Expresiones aritméticas, lógicas, de comparación y de bits (`& | ^ ~ << >>`, también en `const`)
-- Control de flujo: `if`/`elif`/`else`, `while`, `for`/`in`, `for`/`range` (también descendente y con `step`),
-  `break` y `continue`
-- Funciones con parámetros, retorno y recursión; funciones como valor y lambdas
-- Listas con literales, índice, slicing, `.length` y tipo de elemento (`[String]`, `[Nodo]`...) que crecen
-  (`push`, `pop`, `insert`, `remove`); diccionarios `{String: T}`, también de listas y de diccionarios, con
-  `d.get(clave, defecto)` (una sola búsqueda); las
-  funciones y métodos que devuelven listas o diccionarios conservan el tipo de sus elementos
-- Textos con interpolación de cualquier expresión (`"#{a + 1}"`, `"#{f(x)}"`), concatenación eficiente y
-  funciones (`str_find`, `str_replace`, `str_split`, `str_upper`...); un `Bool` se escribe `true`/`false`
-- Structs con métodos, campos `weak` para referencias hacia atrás
-- Constantes y enumeraciones
-- Imports de módulos, y de ventanas MUI hechas con el editor visual (`.dashui`); lo que empieza por `_` en
-  un módulo (funciones, constantes, globales, structs, enums) es privado y no choca con otro módulo
-- Scope léxico
-- Memoria automática: strings, listas y structs se liberan solos (temporales por vuelta y contador
-  de referencias), sin recolector ni pausas
+### Language
+- Variables with type inference (no declarations)
+- Integers (also `0xDFF000`, `$DFF000`, `0b1010`), `Float` (its own floating point) and `Fixed` (16.16 fixed
+  point: decimals at integer speed on a 68000)
+- `nil` for structs, lists and strings (linked lists, trees, "no target")
+- Arithmetic, logical, comparison and bitwise expressions (`& | ^ ~ << >>`, also in `const`)
+- Control flow: `if`/`elif`/`else`, `while`, `for`/`in`, `for`/`range` (also descending and with `step`),
+  `break` and `continue`
+- Functions with parameters, return values and recursion; functions as values and lambdas
+- Lists with literals, indexing, slicing, `.length` and an element type (`[String]`, `[Nodo]`...) that grow
+  (`push`, `pop`, `insert`, `remove`); dictionaries `{String: T}`, also of lists and of dictionaries, with
+  `d.get(clave, defecto)` (a single lookup); the
+  functions and methods that return lists or dictionaries keep the type of their elements
+- Strings with interpolation of any expression (`"#{a + 1}"`, `"#{f(x)}"`), efficient concatenation and
+  functions (`str_find`, `str_replace`, `str_split`, `str_upper`...); a `Bool` is written as `true`/`false`
+- Structs with methods, `weak` fields for back references
+- Constants and enumerations
+- Module imports, and imports of MUI windows made with the visual editor (`.dashui`); anything starting with `_` in
+  a module (functions, constants, globals, structs, enums) is private and does not clash with another module
+- Lexical scope
+- Automatic memory: strings, lists and structs free themselves (per-iteration temporaries and reference
+  counting), with no garbage collector and no pauses
 
 ### Amiga API
 
-617 funciones built-in, todas hechas (lista generada desde el código en [docs/BUILTINS.md](docs/BUILTINS.md)).
+617 built-in functions, all implemented (list generated from the code in [docs/BUILTINS.en.md](docs/BUILTINS.en.md)).
 
-- **Intuition** — Ventanas, screens, event loops (también de varias ventanas), menús, `On Click`, `On Timer`;
-  `window_create` con el tamaño interior (flag 8) y los bordes de la ventana (`window_border_top`...) y la
-  fuente de la pantalla (`screen_font_height`, `screen_font_text_width`) para colocar gadgets
-- **Interfaces** — GadTools (con atajos de teclado y gadgets medidos con la fuente), ReAction (hasta 4
-  ventanas) y **MUI 3.8 o 5**: zona de dibujo propia (con doble búfer, rellenos, repintado de solo una zona con
-  `mui_canvas_update_area` y el ratón sin clic con `mui_canvas_on_move` y `mui_canvas_pointer_x`/`_y`),
-  temporizador, señales y ventanas a pantalla completa (con MUI 3.8 queda un marco de 4 y 3 píxeles alrededor);
-  editor visual de ventanas MUI para VS Code
-- **Graphics** — Primitivas de dibujo, colores, bitmaps, transparencias y degradados (rápidos también en
-  RTG), búferes RGB24 en la ventana (también escalados: vídeo)
-- **Sprites** — Hardware sprites y soft sprites
-- **Copper** — Listas de cobre programables
-- **Blitter** — BOBs y operaciones de blitting
-- **Audio** — Tonos, samples 8SVX y sonidos hechos muestra a muestra (`audio.device`), y módulos ProTracker
-  (`music_*`, reproductor propio)
-- **IFF y datatypes** — Imágenes ILBM, PNG, JPEG, GIF, o desde píxeles RGB/RGBA en memoria (con
-  transparencia, también en RTG y sin `picture.datatype`; en RTG, alfa de verdad: se mezclan con lo de debajo),
-  sin tope de imágenes a la vez (antes, 64); fuentes de disco, también vectoriales (tamaño
-  mínimo 2: con 1 o 0, diskfont y bullet de AmigaOS 3.2 escriben fuera de su memoria), y colores RGB
-- **Red** — Con `bsdsocket.library` (cualquier pila: Roadshow, AmiTCP, MiamiDx): TCP como cliente y como
-  servidor (`net_listen`, `net_accept`), UDP con difusión (`net_udp_*`) y TLS con AmiSSL (5.1 o posterior, o
-  las anteriores) que comprueba el certificado; conexiones por pasos, sin esperar; la sesión TLS de cada
-  servidor se reanuda en la siguiente conexión; `net_signal` despierta al programa cuando la red tiene algo; la
-  red también desde una tarea de `task_start`. HTTP no es un builtin: cada programa lo hace sobre TCP y TLS
-- **Procesos** — `task_start`: una función `@native` en otro proceso de AmigaOS; `task_signal` avisa al acabar
-- **Escritorio y sistema** — `desktop_canvas*`: dibujar en el fondo del Workbench, detrás de los iconos (planar
-  y RTG, con y sin backdrop; también con Directory Opus 5 o Scalos de escritorio); `cpu_*`: la CPU de cada
-  tarea; `break_check`: parar con Ctrl-C un programa sin ventana; `single_instance`: una sola copia a la vez;
-  `@workbench_output "NIL:"`: sin ventana de consola al arrancar desde el icono; `tooltype`; commodities
-  (`cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`: el programa en Exchange y con tecla rápida);
-  `run_program` y `program_relaunch`; `@version` (para `C:Version`) y `program_version()`
-- **Medidores** — Discos montados con su tamaño y espacio libre (`disks_read`); interfaces de red de Roadshow con
-  su estado y bytes (`net_ifs_read`); drivers SANA-II en uso, con cualquier pila, con sus paquetes y bytes
-  (`net_drivers_read`, `net_driver_read`); señal WiFi (`wifi_read`, `wifi_read_device`); dispositivos USB de
-  Poseidon (`usb_hid_*`); curva de aceleración de cada ratón (`mouse_curve`) y las preferencias del ratón
-- **Idiomas, fecha y hora** — Catálogos de `locale.library`: `@catalog "X.catalog"`, `tr(id, texto)` (también
-  en los `.dashui`), `catalog_open`; `tools/catalogo.py` hace los `.cd`, `.ct` y `.catalog` sin FlexCat.
-  `clock_read` y `clock_year`... `clock_second`; `date_text(formato)` con `FormatDate` en el idioma del usuario
-- **DOS** — Ficheros y directorios, requesters de ASL (ficheros, color, fuente), argumentos y tooltypes,
-  vigilar ficheros (`file_notify`, `file_changed`)
-- **RTG** — Tarjetas gráficas con CyberGraphX o Picasso96 (`rtg_*`: pantallas, píxeles, bloques, escalado)
-- **Double Buffering** — Animación sin flicker
-- **FFI** — Llamadas directas a funciones C/AmigaOS; C propio en línea (`@native`, `@c`) o enlazado (`@link`),
-  con sus cabeceras (`@header`) y funciones de C declaradas (`@extern`)
+- **Intuition** — Windows, screens, event loops (also across several windows), menus, `On Click`, `On Timer`;
+  `window_create` with the inner size (flag 8) and the window borders (`window_border_top`...) and the
+  screen font (`screen_font_height`, `screen_font_text_width`) for placing gadgets
+- **Interfaces** — GadTools (with keyboard shortcuts and gadgets measured with the font), ReAction (up to 4
+  windows) and **MUI 3.8 or 5**: a drawing area of its own (with double buffering, fills, repainting just one area with
+  `mui_canvas_update_area` and the mouse without clicking with `mui_canvas_on_move` and `mui_canvas_pointer_x`/`_y`),
+  timer, signals and full-screen windows (with MUI 3.8 a frame of 4 and 3 pixels remains around them);
+  visual editor for MUI windows for VS Code
+- **Graphics** — Drawing primitives, colors, bitmaps, transparency and gradients (fast on
+  RTG too), RGB24 buffers in the window (also scaled: video)
+- **Sprites** — Hardware sprites and soft sprites
+- **Copper** — Programmable copper lists
+- **Blitter** — BOBs and blitting operations
+- **Audio** — Tones, 8SVX samples and sounds built sample by sample (`audio.device`), and ProTracker modules
+  (`music_*`, its own player)
+- **IFF and datatypes** — ILBM, PNG, JPEG, GIF images, or from RGB/RGBA pixels in memory (with
+  transparency, also on RTG and without `picture.datatype`; on RTG, real alpha: they blend with what lies beneath),
+  with no limit on images at once (previously 64); disk fonts, including outline fonts (minimum
+  size 2: with 1 or 0, AmigaOS 3.2's diskfont and bullet write outside their memory), and RGB colors
+- **Network** — With `bsdsocket.library` (any stack: Roadshow, AmiTCP, MiamiDx): TCP as client and as
+  server (`net_listen`, `net_accept`), UDP with broadcast (`net_udp_*`) and TLS with AmiSSL (5.1 or later, or
+  earlier ones) that checks the certificate; step-by-step connections, without waiting; the TLS session with each
+  server is resumed on the next connection; `net_signal` wakes the program when the network has something; the
+  network also from a `task_start` task. HTTP is not a builtin: each program implements it over TCP and TLS
+- **Processes** — `task_start`: a `@native` function in another AmigaOS process; `task_signal` signals when it finishes
+- **Desktop and system** — `desktop_canvas*`: drawing on the Workbench backdrop, behind the icons (planar
+  and RTG, with and without backdrop; also with Directory Opus 5 or Scalos as the desktop); `cpu_*`: the CPU use of each
+  task; `break_check`: stopping a windowless program with Ctrl-C; `single_instance`: only one copy at a time;
+  `@workbench_output "NIL:"`: no console window when started from the icon; `tooltype`; commodities
+  (`cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`: the program in Exchange and with a hotkey);
+  `run_program` and `program_relaunch`; `@version` (for `C:Version`) and `program_version()`
+- **Monitors** — Mounted disks with their size and free space (`disks_read`); Roadshow network interfaces with
+  their state and bytes (`net_ifs_read`); SANA-II drivers in use, with any stack, with their packets and bytes
+  (`net_drivers_read`, `net_driver_read`); WiFi signal (`wifi_read`, `wifi_read_device`); Poseidon USB
+  devices (`usb_hid_*`); acceleration curve of each mouse (`mouse_curve`) and the mouse preferences
+- **Languages, date and time** — `locale.library` catalogs: `@catalog "X.catalog"`, `tr(id, texto)` (also
+  in `.dashui` files), `catalog_open`; `tools/catalogo.py` makes the `.cd`, `.ct` and `.catalog` files without FlexCat.
+  `clock_read` and `clock_year`... `clock_second`; `date_text(formato)` with `FormatDate` in the user's language
+- **DOS** — Files and directories, ASL requesters (file, color, font), arguments and tooltypes,
+  watching files (`file_notify`, `file_changed`)
+- **RTG** — Graphics cards with CyberGraphX or Picasso96 (`rtg_*`: screens, pixels, blocks, scaling)
+- **Double Buffering** — Flicker-free animation
+- **FFI** — Direct calls to C/AmigaOS functions; your own C inline (`@native`, `@c`) or linked (`@link`),
+  with its headers (`@header`) and declared C functions (`@extern`)
 
-Los programas necesitan Kickstart 3.0 o superior (usan los pools de memoria de exec V39) y funcionan en
-un 68000. MUI (3.8 o 5) y TLS (AmiSSL 5.1 o posterior) piden un 68020 o superior. Algunas funciones piden
-más: la red, una pila TCP/IP; `net_ifs_read` y `wifi_read`, Roadshow; `usb_hid_*`, Poseidon; ReAction, las
-clases de AmigaOS 3.2.
+Programs need Kickstart 3.0 or higher (they use exec V39 memory pools) and run on
+a 68000. MUI (3.8 or 5) and TLS (AmiSSL 5.1 or later) require a 68020 or higher. Some functions require
+more: networking, a TCP/IP stack; `net_ifs_read` and `wifi_read`, Roadshow; `usb_hid_*`, Poseidon; ReAction, the
+AmigaOS 3.2 classes.
 
-### Lo que no hay
+### What is not there
 
-- HTTP como builtin: cada programa lo hace sobre TCP y TLS.
-- Sockets raw (ICMP, para un ping) ni tramas en crudo de un driver SANA-II: hoy, con `@native`.
-- Clases (OOP) y macros: son preguntas abiertas, sin decidir.
-- Exports: descartado a propósito.
+- HTTP as a builtin: each program implements it over TCP and TLS.
+- Raw sockets (ICMP, for a ping) or raw frames from a SANA-II driver: for now, with `@native`.
+- Classes (OOP) and macros: these are open questions, undecided.
+- Exports: deliberately ruled out.
 
-## Programas hechos con Dash
+## Programs made with Dash
 
-- [Tachyon](https://github.com/FreeMEM/tachyon) (antes dashweb): un navegador web para Amiga con MUI: XHTML,
-  CSS, JavaScript (QuickJS) y HTTPS. Es el proyecto más grande escrito en Dash, y lo que le falta se añade a
-  Dash. Tiene versiones alfa de prueba en sus [releases](https://github.com/FreeMEM/tachyon/releases).
-- [Trasfondo](https://github.com/FreeMEM/trasfondo): un monitor de recursos (fecha y hora, CPU, memoria,
-  tareas, discos, red y WiFi) pintado en el fondo del Workbench, detrás de los iconos; es una commodity.
-  Versiones en sus [releases](https://github.com/FreeMEM/trasfondo/releases).
-- Ratonera: aceleración del ratón por dispositivo (`mouse_curve`, `usb_hid_*`), en desarrollo.
+- [Tachyon](https://github.com/FreeMEM/tachyon) (formerly dashweb): a web browser for the Amiga with MUI: XHTML,
+  CSS, JavaScript (QuickJS) and HTTPS. It is the largest project written in Dash, and whatever it lacks gets added to
+  Dash. It has alpha test versions in its [releases](https://github.com/FreeMEM/tachyon/releases).
+- [Trasfondo](https://github.com/FreeMEM/trasfondo): a resource monitor (date and time, CPU, memory,
+  tasks, disks, network and WiFi) painted on the Workbench backdrop, behind the icons; it is a commodity.
+  Versions in its [releases](https://github.com/FreeMEM/trasfondo/releases).
+- Ratonera: per-device mouse acceleration (`mouse_curve`, `usb_hid_*`), in development.
 
-## Desarrollar en VS Code
+## Developing in VS Code
 
-La extensión de `editor/vscode` hace de VS Code un entorno para Dash: colores, errores mientras se escribe,
-completar, ir a la definición y renombrar; compilar y ejecutar en el Amiga emulado (A1200, A500, AmigaOS 3.2 o
-con tarjeta gráfica); depurar con puntos de parada, variables y paso a paso, también en un Amiga de verdad por la
-red; y un editor visual de ventanas MUI que las enseña en el emulador. Usa el compilador de este repositorio.
-La versión publicada es la 0.2.1; en este repositorio hay además la casilla "al cambiar" de **Ver en Amiga**
-(el ajuste `dash.emulator.previewOnChange`), que aún no está en una release.
+The extension in `editor/vscode` turns VS Code into an environment for Dash: syntax coloring, errors as you type,
+completion, go to definition and rename; compiling and running on the emulated Amiga (A1200, A500, AmigaOS 3.2 or
+with a graphics card); debugging with breakpoints, variables and stepping, also on a real Amiga over the
+network; and a visual editor for MUI windows that shows them in the emulator. It uses the compiler from this repository.
+The published version is 0.2.1; this repository also has the "on change" checkbox of **Ver en Amiga**
+(the `dash.emulator.previewOnChange` setting), which is not in a release yet.
 
-[![Tutorial en vídeo de Dash en VS Code](docs/media/vscode-tutorial.jpg)](https://youtu.be/_UTJ_0s3xLc)
+[![Video tutorial of Dash in VS Code](docs/media/vscode-tutorial.jpg)](https://youtu.be/_UTJ_0s3xLc)
 
-Un tutorial de 6 minutos, con subtítulos: el primer proyecto, escribir código, la ventana, compilar y ejecutar,
-depurar y depurar en un Amiga de verdad.
+A 6-minute tutorial, with subtitles: the first project, writing code, the window, compiling and running,
+debugging and debugging on a real Amiga.
 
-### Instalar la extensión
+### Installing the extension
 
-1. Dash y el compilador de Amiga, como en [Instalación rápida](#instalación-rápida) (para el emulador, FS-UAE y una
-   ROM de Kickstart; para ventanas MUI, `tools/get_mui_sdk.sh` y `tools/emu_sys_mui.sh`).
-2. La extensión: el fichero `dash-mui-editor-0.2.1.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1), y en VS Code (1.86 o posterior)
-   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.2.1.vsix`. También se
-   puede construir: `cd editor/vscode && npm install && npm run package`.
-3. Un proyecto: **Dash: Nuevo proyecto**. Si su carpeta no está dentro de este repositorio, **Dash: Elegir la
-   carpeta del compilador** (el ajuste `dash.path`). La guía **Primeros pasos con Dash** lleva paso a paso, y si
-   falta algo la extensión dice qué y cómo conseguirlo.
+1. Dash and the Amiga compiler, as in [Quick installation](#quick-installation) (for the emulator, FS-UAE and a
+   Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
+2. The extension: the file `dash-mui-editor-0.2.1.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.1), and in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.1.vsix`. It can also
+   be built: `cd editor/vscode && npm install && npm run package`.
+3. A project: **Dash: Nuevo proyecto**. If its folder is not inside this repository, **Dash: Elegir la
+   carpeta del compilador** (the `dash.path` setting). The **Primeros pasos con Dash** walkthrough guides you step by step, and if
+   something is missing the extension says what and how to get it.
 
-### Cómo encaja con Dash
+### How it fits with Dash
 
-La extensión es una capa fina: lo que hace lo hacen las herramientas de este repositorio, en la carpeta de
-`dash.path`.
+The extension is a thin layer: what it does is done by the tools in this repository, in the
+`dash.path` folder.
 
-| En VS Code | Lo hace |
+| In VS Code | Done by |
 |---|---|
-| Colores | `editor/vscode/syntaxes/dash.tmLanguage.json`, sacado de la gramática (`tools/gen_tmgrammar.py`) |
-| Errores al escribir, completar, ir a la definición, renombrar, formatear | `compiler/lsp.py` (el mismo compilador) |
-| Compilar | `./dash` |
-| Ejecutar, memoria y perfil | `./dash` y `tools/emu_run.py` (FS-UAE o Amiberry) |
-| Editor visual y Ver en Amiga | `.dashui` (`compiler/dashui.py`) y `tools/emu_preview.py` |
-| Depurar (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
+| Syntax coloring | `editor/vscode/syntaxes/dash.tmLanguage.json`, generated from the grammar (`tools/gen_tmgrammar.py`) |
+| Errors as you type, completion, go to definition, rename, format | `compiler/lsp.py` (the same compiler) |
+| Compile | `./dash` |
+| Run, memory and profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
+| Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
+| Debug (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py` and `bgdbserver` |
 
-Por eso, al actualizar Dash (`git pull`), lo que la extensión sabe del lenguaje se actualiza también, sin
-reinstalarla. La extensión y el compilador van en el mismo repositorio para que no se separen.
+That is why, when you update Dash (`git pull`), what the extension knows about the language is updated too, without
+reinstalling it. The extension and the compiler live in the same repository so that they do not drift apart.
 
-## Instalación rápida
+## Quick installation
 
 ### Ubuntu / Debian
 
 ```bash
-# 1. Dependencias del sistema
+# 1. System dependencies
 sudo apt update
 sudo apt install -y python3 python3-pip python3-dev make wget curl openssl git gcc g++ \
     lhasa libgmp-dev libmpfr-dev libmpc-dev flex bison \
     gettext texinfo ncurses-dev autoconf rsync libreadline-dev
 
-# 2. Parser de Dash
+# 2. Dash parser
 pip install lark --break-system-packages
 
-# 3. Cross-compiler para Amiga (m68k-amigaos-gcc)
+# 3. Cross-compiler for the Amiga (m68k-amigaos-gcc)
 git clone https://github.com/BlitterStudio/m68k-amigaos-gcc.git ~/m68k-amigaos-gcc
 cd ~/m68k-amigaos-gcc
 make update
 sudo mkdir -p /opt/amiga && sudo chown $USER /opt/amiga
 make all -j$(nproc)
-make sdk=cgx            # cabeceras CyberGraphX (funciones rtg_*)
+make sdk=cgx            # CyberGraphX headers (rtg_* functions)
 
-# 4. Añadir al PATH
+# 4. Add to PATH
 echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
-# 5. Clonar Dash y probar
+# 5. Clone Dash and try it
 git clone https://github.com/FreeMEM/dash.git
 cd dash
 ./dash examples/hola.dash -o bin/hola
@@ -214,142 +216,142 @@ cd dash
 ### CachyOS / Arch Linux
 
 ```bash
-# 1. Dependencias del sistema
+# 1. System dependencies
 sudo pacman -S --needed python python-pip make wget curl openssl git gcc \
     lhasa gmp mpfr libmpc flex bison gettext texinfo \
     ncurses autoconf rsync readline
 
-# 2. Parser de Dash
+# 2. Dash parser
 pip install lark --break-system-packages
 
-# 3. Cross-compiler para Amiga (m68k-amigaos-gcc)
+# 3. Cross-compiler for the Amiga (m68k-amigaos-gcc)
 git clone https://github.com/BlitterStudio/m68k-amigaos-gcc.git ~/m68k-amigaos-gcc
 cd ~/m68k-amigaos-gcc
 make update
 sudo mkdir -p /opt/amiga && sudo chown $USER /opt/amiga
 make all -j$(nproc)
-make sdk=cgx            # cabeceras CyberGraphX (funciones rtg_*)
+make sdk=cgx            # CyberGraphX headers (rtg_* functions)
 
-# 4. Añadir al PATH
+# 4. Add to PATH
 echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
-# 5. Clonar Dash y probar
+# 5. Clone Dash and try it
 git clone https://github.com/FreeMEM/dash.git
 cd dash
 ./dash examples/hola.dash -o bin/hola
 ```
 
-> La compilación del cross-compiler tarda entre 30 minutos y 2 horas según tu hardware. Ver [docs/INSTALACION.md](docs/INSTALACION.md) para la guía completa, resolución de problemas y opciones avanzadas (macOS, versiones de GCC, elf2hunk).
+> Building the cross-compiler takes between 30 minutes and 2 hours depending on your hardware. See [docs/INSTALACION.en.md](docs/INSTALACION.en.md) for the full guide, troubleshooting and advanced options (macOS, GCC versions, elf2hunk).
 
-## Uso
+## Usage
 
 ```bash
-# Compilar a ejecutable Amiga (optimizado con gcc -O2)
+# Compile to an Amiga executable (optimized with gcc -O2)
 ./dash archivo.dash -o bin/archivo
 
-# Sin optimizar (más fácil de depurar)
+# Unoptimized (easier to debug)
 ./dash -O0 archivo.dash -o bin/archivo
 
-# Para el depurador (gdb, VS Code): -O0 -g y las líneas del C apuntan al .dash
+# For the debugger (gdb, VS Code): -O0 -g and the C lines point to the .dash
 ./dash --debug archivo.dash -o bin/archivo
 
-# Sin ruido: solo avisos, errores y el resultado (no cada orden y paso)
+# Quiet: only warnings, errors and the result (not every command and step)
 ./dash -q archivo.dash -o bin/archivo
 
-# Más pequeño (gcc -Os): ~7 % menos de tamaño, 10-50 % más lento en bucles
+# Smaller (gcc -Os): ~7 % smaller, 10-50 % slower in loops
 ./dash --small archivo.dash -o bin/archivo
 
-# Pila mínima del programa (por defecto 16 KB; 0 = la que dé el shell, 720 bytes menos)
+# Minimum program stack (16 KB by default; 0 = whatever the shell gives, 720 bytes less)
 ./dash --stack 32768 archivo.dash -o bin/archivo
 
-# Para Amigas con FPU 68881/68882 (Float con instrucciones de FPU; 68020+)
+# For Amigas with a 68881/68882 FPU (Float with FPU instructions; 68020+)
 ./dash --fpu archivo.dash -o bin/archivo
 
-# Comprobación de memoria: avisa de dobles liberaciones y usos tras liberar, y de lo que queda vivo al salir
+# Memory check: warns about double frees and use after free, and about what is still alive at exit
 ./dash --memcheck archivo.dash -o bin/archivo
 
-# Perfil: llamadas y tiempo (propio y total) de cada función al salir
+# Profile: calls and time (own and total) of each function at exit
 ./dash --profile archivo.dash -o bin/archivo
 
-# Ejecutar en FS-UAE sin ventana y ver la salida (Kickstart en $DASH_KICKSTART o AROS)
+# Run in FS-UAE without a window and see the output (Kickstart in $DASH_KICKSTART or AROS)
 tools/emu_run.py archivo.dash
-tools/emu_run.py --autoclose 3 ventana.dash   # termina sola a los 3 s
-tools/emu_run.py --autoclose 30 --screenshot 20 shot.png ventana.dash   # captura de pantalla a los 20 s
-tools/emu_run.py --debug r archivo.dash       # en cada debug_break(), los registros (depurador de FS-UAE)
+tools/emu_run.py --autoclose 3 ventana.dash   # closes by itself after 3 s
+tools/emu_run.py --autoclose 30 --screenshot 20 shot.png ventana.dash   # screenshot after 20 s
+tools/emu_run.py --debug r archivo.dash       # at each debug_break(), the registers (FS-UAE debugger)
 
-# Compilar todos los ejemplos
+# Compile all the examples
 ./compile_all.sh
 
-# Solo transpilar a C (sin compilar)
+# Only transpile to C (without compiling)
 python3 -m compiler.main archivo.dash -o build/archivo.c
 
-# Ejecutar tests (--emu: también los que comprueban la salida en FS-UAE; --emu-a500: además en un A500;
-# --emu-32: además en un A1200 con AmigaOS 3.2, el único que prueba ReAction)
+# Run tests (--emu: also those that check the output in FS-UAE; --emu-a500: also on an A500;
+# --emu-32: also on an A1200 with AmigaOS 3.2, the only one that tests ReAction)
 python3 tests/run_tests.py
 python3 tests/run_tests.py --emu --emu-a500 --emu-32
 
-# Medir velocidad, memoria y tamaño en un A500 y un A1200 emulados, y guardar la medida
+# Measure speed, memory and size on an emulated A500 and A1200, and save the measurement
 tools/bench.py --save "descripción del cambio"
-tools/bench_report.py        # datos y página del panel de comparativas (build/bench_report/)
+tools/bench_report.py        # data and page for the comparison dashboard (build/bench_report/)
 
-# Programas aleatorios contra el conteo de referencias: salida comparada con un modelo y --memcheck
+# Random programs against reference counting: output compared with a model and --memcheck
 tools/fuzz_refcount.py -n 100
 ```
 
-Variables del banco de pruebas: `DASH_KICKSTART` (ROM del A1200), `DASH_KICKSTART_A500` (ROM del A500),
-`DASH_EMU_SYS` (directorio con `Libs`, `C` y `Classes` de un Workbench, para los tests que lo necesitan; se
-puede sacar de un disco duro con `tools/emu_sys_from_hdf.sh`), y para `--emu-32` `DASH_KICKSTART_32` (ROM 3.2)
-y `DASH_EMU_SYS_32` (los mismos ficheros de un Workbench 3.2). En esa máquina se carga el Workbench antes de
-los programas (`emu_run.py --workbench`): la `window.class` de 3.2 lo espera. Para MUI y HTTPS, los sistemas con
-MUI (`DASH_EMU_SYS_MUI`, `DASH_EMU_SYS_32_MUI`) y con AmiSSL (`DASH_EMU_SYS_SSL`, `DASH_EMU_SYS_32_SSL`). Los
-tests `# rtg` usan una máquina 68040 con tarjeta gráfica y `DASH_EMU_SYS_32_RTG` (un Workbench 3.2 con
-Picasso96). Todo en [docs/INSTALACION.md](docs/INSTALACION.md).
+Test bench variables: `DASH_KICKSTART` (A1200 ROM), `DASH_KICKSTART_A500` (A500 ROM),
+`DASH_EMU_SYS` (directory with `Libs`, `C` and `Classes` from a Workbench, for the tests that need it; it
+can be extracted from a hard disk with `tools/emu_sys_from_hdf.sh`), and for `--emu-32` `DASH_KICKSTART_32` (3.2 ROM)
+and `DASH_EMU_SYS_32` (the same files from a Workbench 3.2). On that machine the Workbench is loaded before
+the programs (`emu_run.py --workbench`): the 3.2 `window.class` expects it. For MUI and HTTPS, the systems with
+MUI (`DASH_EMU_SYS_MUI`, `DASH_EMU_SYS_32_MUI`) and with AmiSSL (`DASH_EMU_SYS_SSL`, `DASH_EMU_SYS_32_SSL`). The
+`# rtg` tests use a 68040 machine with a graphics card and `DASH_EMU_SYS_32_RTG` (a Workbench 3.2 with
+Picasso96). All of it in [docs/INSTALACION.en.md](docs/INSTALACION.en.md).
 
-## Estructura del proyecto
+## Project structure
 
 ```
-dash                  CLI principal
-compiler/             Transpilador (Python/Lark)
-  grammar.py          Gramática del lenguaje
+dash                  Main CLI
+compiler/             Transpiler (Python/Lark)
+  grammar.py          Language grammar
   transformer.py      Parse tree → AST
-  ast_nodes.py        Nodos del AST
-  analyzer.py         Análisis semántico
-  codegen.py          Generación de código C
-  amiga_builtins.py   Bindings de la API Amiga
-  dashui.py           Ventanas del editor visual (.dashui) como código Dash
-  lsp.py              Servidor de lenguaje para VS Code (con lsp_index.py y lsp_format.py)
-  debuglines.py       ./dash --debug: líneas del C hacia el .dash
-lib/amiga/            Módulos estándar de Amiga
-runtime/softfloat/    Coma flotante por software (suma y multiplicación en ensamblador 68000)
-tools/                Emulador (emu_run.py, emu_preview.py, capturas con tools/amiga/shot.c), sistemas emulados
-                      (emu_sys_*.sh), SDK de MUI, AmiSSL y bgdbserver (get_*.sh), depurador (gdb_relay.py,
-                      gdb/dash.py), benchmarks (bench.py, bench_report.py), catálogos (catalogo.py),
+  ast_nodes.py        AST nodes
+  analyzer.py         Semantic analysis
+  codegen.py          C code generation
+  amiga_builtins.py   Amiga API bindings
+  dashui.py           Visual editor windows (.dashui) as Dash code
+  lsp.py              Language server for VS Code (with lsp_index.py and lsp_format.py)
+  debuglines.py       ./dash --debug: C lines mapped to the .dash
+lib/amiga/            Standard Amiga modules
+runtime/softfloat/    Software floating point (addition and multiplication in 68000 assembly)
+tools/                Emulator (emu_run.py, emu_preview.py, screenshots with tools/amiga/shot.c), emulated systems
+                      (emu_sys_*.sh), MUI SDK, AmiSSL and bgdbserver (get_*.sh), debugger (gdb_relay.py,
+                      gdb/dash.py), benchmarks (bench.py, bench_report.py), catalogs (catalogo.py),
                       fuzz_refcount.py, gen_builtins_doc.py, gen_tmgrammar.py
-editor/vscode/        Extensión de VS Code: colores, errores al escribir, compilar, emulador, depurador, editor
-                      visual de MUI
-examples/             Programas de ejemplo (34)
-tests/                Suite de tests (tests/errors: deben fallar; tests/runtime: runtime en el PC;
-                      tests/lsp y tests/unit: tests en Python; tests/bench: benchmarks)
-docs/                 Documentación
+editor/vscode/        VS Code extension: syntax coloring, errors as you type, compiling, emulator, debugger, MUI
+                      visual editor
+examples/             Example programs (34)
+tests/                Test suite (tests/errors: must fail; tests/runtime: runtime on the PC;
+                      tests/lsp and tests/unit: Python tests; tests/bench: benchmarks)
+docs/                 Documentation
 ```
 
-## Documentación
+## Documentation
 
-- [Documentación del lenguaje](docs/DOCUMENTACION_LENGUAJE.md) — Guía completa
-- [Manual de referencia](docs/MANUAL_REFERENCIA.md) — Referencia del programador
-- [Quick Reference](docs/QUICK_REFERENCE.md) — Cheat sheet
-- [Funciones built-in](docs/BUILTINS.md) — Lista real, generada desde el código
-- [MUI en Dash](docs/MUI_DISEÑO.md) — Diseño de la API de MUI
-- [Editor visual de MUI](docs/MUI_EDITOR.md) — Formato `.dashui` y extensión de VS Code
-- [API Amiga](docs/AMIGA_API.md) — Catálogo de diseño de la API (el original; la lista real es BUILTINS.md)
-- [Instalación](docs/INSTALACION.md) — Setup del entorno
-- [Requisitos funcionales](docs/REQUERIMIENTOS_FUNCIONALES.md) y [del sistema](docs/REQUERIMIENTOS_SISTEMA.md) —
-  Los requisitos originales, con lo hecho, lo descartado y lo que falta
-- [Roadmap](docs/ROADMAP.md) — Plan de desarrollo y registro de lo hecho
+- [Language documentation](docs/DOCUMENTACION_LENGUAJE.en.md) — Complete guide
+- [Reference manual](docs/MANUAL_REFERENCIA.en.md) — Programmer's reference
+- [Quick Reference](docs/QUICK_REFERENCE.en.md) — Cheat sheet
+- [Built-in functions](docs/BUILTINS.en.md) — The actual list, generated from the code
+- [MUI in Dash](docs/MUI_DISEÑO.en.md) — Design of the MUI API
+- [MUI visual editor](docs/MUI_EDITOR.en.md) — The `.dashui` format and the VS Code extension
+- [Amiga API](docs/AMIGA_API.en.md) — Design catalogue of the API (the original; the actual list is BUILTINS.en.md)
+- [Installation](docs/INSTALACION.en.md) — Setting up the environment
+- [Functional requirements](docs/REQUERIMIENTOS_FUNCIONALES.md) and [system requirements](docs/REQUERIMIENTOS_SISTEMA.md) —
+  The original requirements, with what was done, what was ruled out and what is missing
+- [Roadmap](docs/ROADMAP.md) — Development plan and log of what has been done
 
-## Licencia
+## Licence
 
-MIT (ver [LICENSE](LICENSE)). Los programas compilados con Dash pueden llevar la licencia que quieras.
-El float por software (`runtime/softfloat/fp-bit.*`) viene de GCC: GPL con la excepción de runtime,
-que permite distribuir los programas con cualquier licencia.
+MIT (see [LICENSE](LICENSE)). Programs compiled with Dash can carry any licence you like.
+The software float (`runtime/softfloat/fp-bit.*`) comes from GCC: GPL with the runtime exception,
+which allows the programs to be distributed under any licence.

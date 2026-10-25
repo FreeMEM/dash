@@ -1,5 +1,7 @@
 # MUI en Dash: diseño (tarea 2 de `docs/MUI_LOOP.md`)
 
+*[English](MUI_DISEÑO.en.md) | Castellano*
+
 Funciona con MUI 3.8 (muimaster.library V19) o MUI 5. La lista completa de los builtins `mui_` está en
 `docs/BUILTINS.md`.
 

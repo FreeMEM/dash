@@ -1,4 +1,6 @@
 # D.A.S.H. Language - Quick Reference Card
+
+*[English](QUICK_REFERENCE.en.md) | Castellano*
 > **D.A.S.H.** — *Development Amiga Synthesis Hub*
 
 ## Compile
