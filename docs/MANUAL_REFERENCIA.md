@@ -1,5 +1,7 @@
 # D.A.S.H. Language - Manual de Referencia del Programador
 
+*[English](MANUAL_REFERENCIA.en.md) | Castellano*
+
 **D.A.S.H.** (*Development Amiga Synthesis Hub*) — Lenguaje de alto nivel para Amiga que compila a C
 
 *Actualizado: octubre 2026*

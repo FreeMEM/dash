@@ -1,3 +1,5 @@
+*[English](BUILTINS.en.md) | Castellano*
+
 # Funciones built-in
 
 > Generado por `tools/gen_builtins_doc.py` desde `compiler/amiga_builtins.py`. No editar a mano.

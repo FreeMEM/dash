@@ -1,5 +1,7 @@
 # Dash Language - API Completa de Amiga
 
+*[English](AMIGA_API.en.md) | Castellano*
+
 Catálogo de diseño de las funciones built-in para AmigaOS.
 
 > **Ojo:** este documento es el diseño original (enero de 2026) y no dice lo que hay. La lista real, generada

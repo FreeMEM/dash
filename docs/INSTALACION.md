@@ -1,4 +1,6 @@
 # Guía de Instalación de Dash
+
+*[English](INSTALACION.en.md) | Castellano*
 Versión: 2.1 (al día el 2026-10-24)
 
 Este documento describe cómo configurar un entorno de desarrollo completo para programar en Dash, desde cero.
