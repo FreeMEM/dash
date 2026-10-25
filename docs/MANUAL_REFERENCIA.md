@@ -2215,7 +2215,7 @@ recuerda (una cache de 8), asi que `s.length`, `s[i]` y `s[a:b]` no recorren el 
 ### Arrays y structs (automatico, conteo de referencias)
 
 Varias variables pueden compartir el mismo array o struct, asi que cada uno lleva un
-contador de quien lo usa (20 bytes de cabecera). Se suma al asignarlo a una variable,
+contador de quien lo usa (16 bytes de cabecera). Se suma al asignarlo a una variable,
 a un campo o al devolverlo, y se resta cuando esa variable se reasigna o su bloque
 termina. Al llegar a 0 se libera, con sus Strings y sus structs.
 
