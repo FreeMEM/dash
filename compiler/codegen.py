@@ -525,8 +525,9 @@ static void _dash_otmp_push(_Dash_RefHeader *h) {
 
 /* The block is not cleared: the header is filled here and the constructors set
    every field (a recycled block would cost a clearing loop per object) */
-static void *_dash_rc_alloc_obj(const _DashType *type) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + type->size);
+/* size is type->size, given apart so that a constant picks the block class at compile time */
+static void *_dash_rc_alloc_obj(LONG size, const _DashType *type) {
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + size);
     if (!hdr) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_objs++;
@@ -539,8 +540,8 @@ static void *_dash_rc_alloc_obj(const _DashType *type) {
 
 /* A new object that a variable or field adopts at once: count 1 and not a
    temporary (no push to the temporaries list and no search to take it out) */
-static void *_dash_rc_new_obj(const _DashType *type) {
-    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + type->size);
+static void *_dash_rc_new_obj(LONG size, const _DashType *type) {
+    _Dash_RefHeader *hdr = (_Dash_RefHeader *)_dash_block_get(sizeof(_Dash_RefHeader) + size);
     if (!hdr) return NULL;
 #ifdef DASH_MEMCHECK
     _dash_mc_objs++;
@@ -716,7 +717,7 @@ static void *_dash_obj_lend(void *ptr) {
     void **holder;
     if (!ptr) return ptr;
     static const _DashType holder_type = { _dash_holder_destroy, sizeof(void *) };
-    holder = (void **)_dash_rc_alloc_obj(&holder_type);
+    holder = (void **)_dash_rc_alloc_obj(sizeof(void *), &holder_type);
     if (holder) {
         *holder = ptr;
         _dash_retain(ptr);
@@ -795,7 +796,7 @@ static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayL
 
 /* A new array is a temporary until a variable adopts it (memory runtime) */
 static DashArrayLong* DashArray_create(LONG size) {
-    DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(&_dash_array_type);
+    DashArrayLong *arr = (DashArrayLong *)_dash_rc_alloc_obj(sizeof(DashArrayLong), &_dash_array_type);
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
@@ -818,7 +819,7 @@ static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
 /* DashArray_from for "var = [...]": the new array has one reference and is not a
    temporary (see _dash_rc_new_obj) */
 static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
-    DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(&_dash_array_type);
+    DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(sizeof(DashArrayLong), &_dash_array_type);
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
@@ -1045,7 +1046,7 @@ static void DashDict_destroy(void *obj) {
 /* A new empty dictionary: a temporary until a variable adopts it */
 static DashDict *DashDict_new(LONG kind) {
     static const _DashType dict_type = { DashDict_destroy, sizeof(DashDict) };
-    DashDict *d = (DashDict *)_dash_rc_alloc_obj(&dict_type);
+    DashDict *d = (DashDict *)_dash_rc_alloc_obj(sizeof(DashDict), &dict_type);
     if (!d) return NULL;
     d->keys = NULL;
     d->vals = NULL;
@@ -15476,14 +15477,14 @@ static void _dash_struct_destroy_{struct.name}(void *obj) {{
 static const _DashType _dash_type_{struct.name} = {{ {destroy}, sizeof({c_name}) }};
 
 static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
-    {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(&_dash_type_{struct.name});
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), &_dash_type_{struct.name});
     if (!_dash_o) return NULL;
 {assigns_str}
     return _dash_o;
 }}
 
 static {c_name}* _dash_struct_create_{struct.name}({params_str}) {{
-    {c_name} *_dash_o = ({c_name} *)_dash_rc_alloc_obj(&_dash_type_{struct.name});
+    {c_name} *_dash_o = ({c_name} *)_dash_rc_alloc_obj(sizeof({c_name}), &_dash_type_{struct.name});
     if (!_dash_o) return NULL;
 {assigns_str}
     return _dash_o;
