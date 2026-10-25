@@ -477,7 +477,7 @@ end` inserts free-form C (for example functions that call into Dash), `@stack N`
 - **Tests:** `python3 tests/run_tests.py` (with `--emu`, `--emu-a500` and `--emu-32` it runs them on an A1200,
   an A500 and an A1200 with AmigaOS 3.2; `--memcheck` with memory checking).
 - **Benchmarks:** `tools/bench.py` (speed, memory and size on emulated A500 and A1200).
-- **VS Code** (`editor/vscode/`, version 0.2.2, see [INSTALACION.md](INSTALACION.en.md)): errors as you type,
+- **VS Code** (`editor/vscode/`, version 0.2.3, see [INSTALACION.md](INSTALACION.en.md)): errors as you type,
   completion, go to definition, compile and run in the emulator, debug with F5 (also on a real Amiga
   over the network) and the MUI visual editor. Video tutorial: https://youtu.be/_UTJ_0s3xLc
 - **Catalogs:** `tools/catalogo.py` (section 5.6).

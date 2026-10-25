@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 (2026-10-25)
 
 - Visual editor: problems that the compiler refuses are now shown before compiling: two windows with the same
   name, and `#{` in a text or a title (it would be read as interpolation). An object named `constructor` or
