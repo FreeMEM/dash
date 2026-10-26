@@ -1,0 +1,71 @@
+# Test: buffer_equals, buffer_find_byte and buffer_find_any (Lorraine D38, D39): an XML reader compares
+# and searches its file without making texts
+# expect-out: equals: true false false false true false
+# expect-out: find_byte: 1 7 7 -1 -1 13
+# expect-out: find_any: 12 6 -1 13 -1
+# expect-out: largo: 4999 -1
+# expect-out: todos: 0
+
+Main
+    buf = buffer_alloc(5000)
+    str_to_buffer("<celda valor=\"12\">texto</celda>", buf, 0)
+    # equals: the bytes are the text, and the text has n bytes
+    vacio = ""
+    a = buffer_equals(buf, 1, 5, "celda")
+    b = buffer_equals(buf, 1, 4, "celda")
+    c = buffer_equals(buf, 1, 6, "celda")
+    d = buffer_equals(buf, 0, 5, "celda")
+    e = buffer_equals(buf, 3, 0, vacio)
+    f = buffer_equals(buf, 3, 1, vacio)
+    Print "equals: #{a} #{b} #{c} #{d} #{e} #{f}"
+    # find_byte: from inclusive, to exclusive
+    lt = 60
+    Print "find_byte: #{buffer_find_byte(buf, 0, 30, 99)} #{buffer_find_byte(buf, 2, 30, 118)} #{buffer_find_byte(buf, 2, 9, 118)} #{buffer_find_byte(buf, 30, 5, lt)} #{buffer_find_byte(buf, 1, 18, lt)} #{buffer_find_byte(buf, -4, 15, 34)}"
+    comillas = "\"<"
+    nada = "#$"
+    igual = "=\""
+    espacio = " "
+    Print "find_any: #{buffer_find_any(buf, 1, 30, igual)} #{buffer_find_any(buf, 1, 30, espacio)} #{buffer_find_any(buf, 1, 30, nada)} #{buffer_find_any(buf, 13, 30, comillas)} #{buffer_find_any(buf, 0, 30, vacio)}"
+    buffer_fill(buf, 0, 5000, 97)
+    buffer_set_byte(buf, 4999, 200)
+    Print "largo: #{buffer_find_byte(buf, 0, 5000, 200)} #{buffer_find_any(buf, 0, 4999, comillas)}"
+    # every start, end and place against a loop in Dash (they read a long at a time inside)
+    malos = 0
+    for desde in (0..9)
+        for hasta in (desde..desde + 23)
+            buffer_fill(buf, 0, 64, 97)
+            for donde in (desde - 1..hasta)
+                if donde >= 0
+                    buffer_set_byte(buf, donde, 60)
+                    buffer_set_byte(buf, donde + 1, 38)
+                end
+                esperado = -1
+                otro = -1
+                i = hasta - 1
+                while i >= desde
+                    if buffer_get_byte(buf, i) == 60
+                        esperado = i
+                    end
+                    if buffer_get_byte(buf, i) == 60 or buffer_get_byte(buf, i) == 38
+                        otro = i
+                    end
+                    i = i - 1
+                end
+                if buffer_find_byte(buf, desde, hasta, 60) != esperado or buffer_find_any(buf, desde, hasta, comillas) != esperado
+                    malos = malos + 1
+                end
+                amp = "&<"
+                tres = "&<x"
+                if buffer_find_any(buf, desde, hasta, amp) != otro or buffer_find_any(buf, desde, hasta, tres) != otro
+                    malos = malos + 1
+                end
+                if donde >= 0
+                    buffer_set_byte(buf, donde, 97)
+                    buffer_set_byte(buf, donde + 1, 97)
+                end
+            end
+        end
+    end
+    Print "todos: #{malos}"
+    buffer_free(buf)
+end

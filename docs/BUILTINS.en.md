@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 627 functions, 627 implemented, 0 not implemented.
+Total: 630 functions, 630 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -564,6 +564,14 @@ Total: 627 functions, 627 implemented, 0 not implemented.
 | `utf8_length(s)` | `LONG` | How many UTF-8 characters s has (each invalid byte counts as one) |  |
 | `utf8_to_latin1(s)` | `STRPTR` | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
 | `latin1_to_utf8(s)` | `STRPTR` | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
+
+## Comparing and searching in a buffer
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `buffer_equals(buffer, offset, n, s)` | `BOOL` | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
+| `buffer_find_byte(buffer, from, to, byte)` | `LONG` | Position of the first byte equal to byte from from to to - 1, or -1 |  |
+| `buffer_find_any(buffer, from, to, bytes)` | `LONG` | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
 
 ## Audio
 

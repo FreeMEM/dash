@@ -4472,6 +4472,23 @@ UTF8_FUNCTIONS = {
 }
 
 # =============================================================================
+# Comparing and searching in a buffer without making texts (Lorraine D38, D39)
+# =============================================================================
+
+BUFSEARCH_FUNCTIONS = {
+    "buffer_equals": _text("buffer_equals", ["buffer", "offset", "n", "s"], "BOOL",
+                           "_dash_buffer_equals(${buffer}, ${offset}, ${n}, ${s})",
+                           "Whether the n bytes of a buffer at offset are the text s (and s has n bytes)"),
+    "buffer_find_byte": _text("buffer_find_byte", ["buffer", "from", "to", "byte"], "LONG",
+                              "_dash_buffer_find_byte(${buffer}, ${from}, ${to}, ${byte})",
+                              "Position of the first byte equal to byte from from to to - 1, or -1"),
+    "buffer_find_any": _text("buffer_find_any", ["buffer", "from", "to", "bytes"], "LONG",
+                             "_dash_buffer_find_any(${buffer}, ${from}, ${to}, ${bytes})",
+                             "Position of the first byte from from to to - 1 that is one of the bytes of the text "
+                             "bytes, or -1"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -4497,6 +4514,7 @@ ALL_BUILTINS = {
     **ARGS_FUNCTIONS,          # dashweb D19
     **ZLIB_FUNCTIONS,          # Lorraine D6
     **UTF8_FUNCTIONS,          # Lorraine D5
+    **BUFSEARCH_FUNCTIONS,     # Lorraine D38, D39
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

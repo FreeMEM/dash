@@ -5047,6 +5047,71 @@ static STRPTR _dash_latin1_to_utf8(STRPTR s) {
 
 """
 
+    # Lorraine D38, D39: compare and search in a buffer without making texts (an XML reader goes through
+    # its file this way)
+    BUFSEARCH_RUNTIME = """\
+/* The n bytes at buf + offset are the text s, and s has n bytes (s is not measured first) */
+static BOOL _dash_buffer_equals(APTR buf, LONG offset, LONG n, STRPTR s) {
+    UBYTE *p, *q = (UBYTE *)s;
+    if (!buf || !s || n < 0) return FALSE;
+    for (p = (UBYTE *)buf + offset; n > 0; n--, p++, q++)
+        if (*q != *p || !*q) return FALSE;
+    return *q == 0;
+}
+
+/* A byte 0 in the long x (Alan Mycroft's test): with x = word ^ the byte four times, the byte is there */
+#define _DASH_HAS0(x) (((x) - 0x01010101UL) & ~(x) & 0x80808080UL)
+
+/* Position of the first byte from..to-1 that is a or b (a == b for one), or -1. A long at a time
+   between the bytes at both ends: one read for 4 bytes */
+static LONG _dash_buffer_find2(UBYTE *buf, LONG from, LONG to, UBYTE a, UBYTE b) {
+    UBYTE *p = buf + from, *e = buf + to;
+    ULONG pa = a | (a << 8), pb = b | (b << 8), w;
+    pa |= pa << 16;
+    pb |= pb << 16;
+    for (; p < e && ((ULONG)p & 3); p++) if (*p == a || *p == b) return p - buf;
+    if (a == b) {
+        for (; p + 4 <= e; p += 4) {
+            w = *(ULONG *)p ^ pa;
+            if (_DASH_HAS0(w)) break;
+        }
+    } else {
+        for (; p + 4 <= e; p += 4) {
+            w = *(ULONG *)p;
+            if (_DASH_HAS0(w ^ pa) || _DASH_HAS0(w ^ pb)) break;
+        }
+    }
+    for (; p < e; p++) if (*p == a || *p == b) return p - buf;
+    return -1;
+}
+
+/* Position of the first byte from..to-1 that is byte, or -1 */
+static LONG _dash_buffer_find_byte(APTR buf, LONG from, LONG to, LONG byte) {
+    if (!buf) return -1;
+    if (from < 0) from = 0;
+    return _dash_buffer_find2((UBYTE *)buf, from, to, (UBYTE)byte, (UBYTE)byte);
+}
+
+/* Position of the first byte from..to-1 that is one of the bytes of the text, or -1 */
+static LONG _dash_buffer_find_any(APTR buf, LONG from, LONG to, STRPTR bytes) {
+    ULONG setl[8];
+    UBYTE *set = (UBYTE *)setl, *p, *e, *b, c;
+    LONG k;
+    if (!buf || !bytes || !bytes[0]) return -1;
+    if (from < 0) from = 0;
+    if (!bytes[1] || !bytes[2])           /* one or two bytes ("<&"): a long at a time */
+        return _dash_buffer_find2((UBYTE *)buf, from, to, bytes[0], bytes[1] ? bytes[1] : bytes[0]);
+    for (k = 0; k < 8; k++) setl[k] = 0;
+    for (b = (UBYTE *)bytes; *b; b++) set[*b >> 3] |= 1 << (*b & 7);
+    for (p = (UBYTE *)buf + from, e = (UBYTE *)buf + to; p < e; p++) {
+        c = *p;
+        if (set[c >> 3] & (1 << (c & 7))) return p - (UBYTE *)buf;
+    }
+    return -1;
+}
+
+"""
+
     # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
     # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
     CPU_RUNTIME = """\
@@ -14667,6 +14732,7 @@ _RUNTIME_FLAGS = [
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
+    ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -14957,6 +15023,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
         self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
+        self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -15193,6 +15260,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.TEXT_RUNTIME)
         if self.uses_utf8:
             parts.append(CTemplates.UTF8_RUNTIME)
+        if self.uses_bufsearch:
+            parts.append(CTemplates.BUFSEARCH_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
