@@ -39,6 +39,15 @@ def c_float_literal(value: float) -> str:
     return f"({text}f)" if value < 0 else f"{text}f"
 
 
+def c_double_literal(value: float) -> str:
+    """C text for a Float literal where a Double goes (Lorraine D1): a C double, all its digits (0.1 as a
+    float made double is 0.10000000149...)."""
+    text = repr(float(value))
+    if "inf" in text or "nan" in text:
+        raise ValueError(f"Double literal {value} is out of range")
+    return f"({text})" if value < 0 else text
+
+
 def c_int_literal(value: int) -> str:
     """C text for a Dash integer literal (a LONG). Negative values go in
     parentheses so "a - N" never becomes "a--1"; values above 0x7FFFFFFF
@@ -4867,7 +4876,7 @@ static LONG _dash_base64_to_file(STRPTR text, STRPTR file) {
 
 """
 
-    # Lorraine D6: raw deflate (what a ZIP holds) and crc32 with zlib, compiled apart (compiler/zlib.py
+    # Lorraine D6: raw deflate (what a ZIP holds) and crc32 with zlib, compiled apart (compiler/clibs.py
     # links it when the C has this template's first line)
     ZLIB_RUNTIME = """\
 /* Dash zlib Runtime */
@@ -5134,6 +5143,148 @@ static LONG _dash_buffer_find_any(APTR buf, LONG from, LONG to, STRPTR bytes) {
         if (set[c >> 3] & (1 << (c & 7))) return p - (UBYTE *)buf;
     }
     return -1;
+}
+
+"""
+
+    # Lorraine D1, D3: Double is a C double (64-bit IEEE): the FPU with --fpu, else GCC's fp-bit for double
+    # (compiler/softfloat.py). To and from text with Ryu (runtime/ryu, compiler/clibs.py links it when the C has
+    # this template's first line).
+    DOUBLE_RUNTIME = """\
+/* Dash Double Runtime */
+void dash_ryu_d2d(double d, unsigned long long *mant, LONG *exp);
+int dash_ryu_s2d(const char *s, int len, double *out);
+
+/* The shortest decimal that reads back as d: fixed while the point is within 17 digits of the first one
+   (0.1, 150.0, 1234567.5, 0.00001), else with an exponent (1.5e300, 1.0e-7) */
+static STRPTR DashString_from_double(double d) {
+    static char buffers[16][32];
+    static LONG next = 0;
+    char *s = buffers[next], *p = s, digits[20];
+    union { double d; ULONG w[2]; } bits;
+    unsigned long long m;
+    ULONG hi, lo;
+    LONG e, n = 0, point, i;
+    next = (next + 1) & 15;
+    /* sign, infinity and NaN from the bits (with an FPU a comparison with infinity may not say it) */
+    bits.d = d;
+    if ((bits.w[0] & 0x7FF00000UL) == 0x7FF00000UL) {
+        if ((bits.w[0] & 0x000FFFFFUL) || bits.w[1]) { s[0] = 'n'; s[1] = 'a'; s[2] = 'n'; s[3] = 0; return s; }
+        if (bits.w[0] & 0x80000000UL) *p++ = '-';
+        p[0] = 'i'; p[1] = 'n'; p[2] = 'f'; p[3] = 0;
+        return s;
+    }
+    if (bits.w[0] & 0x80000000UL) *p++ = '-';
+    if (!(bits.w[0] & 0x7FFFFFFFUL) && !bits.w[1]) { p[0] = '0'; p[1] = '.'; p[2] = '0'; p[3] = 0; return s; }
+    dash_ryu_d2d(d, &m, &e);
+    /* the digits of m (17 at most): two 32-bit halves, one 64-bit division */
+    hi = (ULONG)(m / 100000000ULL);
+    lo = (ULONG)(m - (unsigned long long)hi * 100000000ULL);
+    if (hi) {
+        char t[10];
+        LONG k = 0;
+        do { t[k++] = '0' + hi % 10; hi /= 10; } while (hi);
+        while (k) digits[n++] = t[--k];
+        for (i = 7; i >= 0; i--) { digits[n + i] = '0' + lo % 10; lo /= 10; }
+        n += 8;
+    } else {
+        char t[10];
+        LONG k = 0;
+        do { t[k++] = '0' + lo % 10; lo /= 10; } while (lo);
+        while (k) digits[n++] = t[--k];
+    }
+    point = n + e;                          /* digits before the decimal point */
+    if (point > 0 && point <= 17) {
+        for (i = 0; i < point; i++) *p++ = i < n ? digits[i] : '0';
+        *p++ = '.';
+        if (point >= n) *p++ = '0';
+        for (; i < n; i++) *p++ = digits[i];
+    } else if (point <= 0 && point > -5) {
+        *p++ = '0';
+        *p++ = '.';
+        for (i = point; i < 0; i++) *p++ = '0';
+        for (i = 0; i < n; i++) *p++ = digits[i];
+    } else {
+        *p++ = digits[0];
+        *p++ = '.';
+        if (n == 1) *p++ = '0';
+        for (i = 1; i < n; i++) *p++ = digits[i];
+        *p++ = 'e';
+        e = point - 1;
+        if (e < 0) { *p++ = '-'; e = -e; }
+        n = 0;
+        do { digits[n++] = '0' + e % 10; e /= 10; } while (e);
+        while (n) *p++ = digits[--n];
+    }
+    *p = 0;
+    return s;
+}
+
+/* The number at the start of the text (spaces, sign, digits with a point, an exponent), the nearest double:
+   exact up to 17 significant digits (all a Double writes); past them the rest round the 17th. 0.0 if there
+   is no number. */
+static double _dash_double_from_str(STRPTR s) {
+    char buf[32];
+    UBYTE *p = (UBYTE *)s, c;
+    LONG n = 0, e10 = 0, ex = 0, k;
+    BOOL neg = FALSE, point = FALSE, any = FALSE, eneg = FALSE, up = FALSE;
+    double r;
+    if (!p) return 0.0;
+    while (*p == ' ' || *p == '\\t') p++;
+    if (*p == '-' || *p == '+') neg = (*p++ == '-');
+    for (;; p++) {
+        c = *p;
+        if (c == '.' && !point) { point = TRUE; continue; }
+        if (c < '0' || c > '9') break;
+        any = TRUE;
+        if (n == 0 && c == '0') {               /* leading zeros: only the point's place counts */
+            if (point) e10--;
+            continue;
+        }
+        if (n < 17) {
+            buf[1 + n++] = c;
+            if (point) e10--;
+        } else {
+            if (n == 17) up = c >= '5';         /* the first digit left out rounds the 17th */
+            n = n == 17 ? 18 : n;
+            if (!point) e10++;
+        }
+    }
+    if (!any) return 0.0;
+    if ((*p == 'e' || *p == 'E') && ((p[1] >= '0' && p[1] <= '9')
+                                     || ((p[1] == '-' || p[1] == '+') && p[2] >= '0' && p[2] <= '9'))) {
+        p++;
+        if (*p == '-' || *p == '+') eneg = (*p++ == '-');
+        for (; *p >= '0' && *p <= '9'; p++) if (ex < 100000) ex = ex * 10 + (*p - '0');
+        e10 += eneg ? -ex : ex;
+    }
+    if (n > 17) {
+        n = 17;
+        if (up) {                                /* 99...9 + 1 */
+            for (k = n; k >= 1 && buf[k] == '9'; k--) buf[k] = '0';
+            if (k >= 1) buf[k]++;
+            else { buf[1] = '1'; e10++; }
+        }
+    }
+    if (n == 0) return neg ? -0.0 : 0.0;
+    if (e10 + n > 310) {                         /* infinity, from its bits (1e308 * 10 is not, with an FPU) */
+        union { unsigned long long u; double d; } inf;
+        inf.u = neg ? 0xFFF0000000000000ULL : 0x7FF0000000000000ULL;
+        return inf.d;
+    }
+    if (e10 + n < -330) return neg ? -0.0 : 0.0;
+    buf[0] = '-';
+    k = n + 1;
+    buf[k++] = 'e';
+    if (e10 < 0) { buf[k++] = '-'; e10 = -e10; }
+    {
+        char t[6];
+        LONG m = 0;
+        do { t[m++] = '0' + e10 % 10; e10 /= 10; } while (e10);
+        while (m) buf[k++] = t[--m];
+    }
+    if (neg ? dash_ryu_s2d(buf, k, &r) : dash_ryu_s2d(buf + 1, k - 1, &r)) return 0.0;
+    return r;
 }
 
 """
@@ -14763,6 +14914,7 @@ _RUNTIME_FLAGS = [
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
     ("FLOAT_RUNTIME", "uses_float"),
+    ("DOUBLE_RUNTIME", "uses_double"),      # Lorraine D1
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
     ("ARENA_RUNTIME", "uses_arenas"),
@@ -15076,6 +15228,8 @@ class CodeGenerator(ASTVisitor):
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
+        self.uses_double: bool = False  # Double values (DOUBLE_RUNTIME, Lorraine D1)
+        self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
@@ -15257,6 +15411,8 @@ class CodeGenerator(ASTVisitor):
 
         if self.uses_float:
             parts.append(CTemplates.FLOAT_RUNTIME)
+        if self.uses_double:
+            parts.append(CTemplates.DOUBLE_RUNTIME)
 
         if self.uses_fixed:
             parts.append(CTemplates.FIXED_RUNTIME)
@@ -15801,7 +15957,8 @@ static LONG _dash_event_window_handle(void) {{
             self.emit_global(f"APTR {gvar.name} = NULL;\n")
             self.emit(f"    {gvar.name} = (APTR){self._generate_expression(gvar.initial_value)};\n")
         elif gvar.initial_value:
-            init_val = self._generate_expression(gvar.initial_value)
+            init_val = (self._double_value(gvar.initial_value) if c_type == "double"
+                        else self._generate_expression(gvar.initial_value))
             self.emit_global(f"{c_type} {gvar.name} = {init_val};\n")
         else:
             # Default initialization
@@ -15821,6 +15978,8 @@ static LONG _dash_event_window_handle(void) {{
             self.var_types[gvar.name] = f"struct:{gvar.var_type}"
         elif c_type == "float":
             self.var_types[gvar.name] = "float"
+        elif c_type == "double":
+            self.var_types[gvar.name] = "double"
         elif c_type in ("DashArrayLong *", "DashDict *"):
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
             self.decl_types[gvar.name] = gvar.var_type
@@ -16357,6 +16516,10 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_fixed = True
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%s\\n", DashString_from_fixed({value}));\n')
+        elif self._is_double_expr(node.message):
+            self.uses_double = True
+            value = self._generate_expression(node.message)
+            self.emit(f'{indent}Printf("%s\\n", DashString_from_double({value}));\n')
         elif self._is_float_expr(node.message):
             self.uses_float = True
             value = self._generate_expression(node.message)
@@ -16435,6 +16598,9 @@ static {ret_type} {method_name}({params_str}) {{
                 if c_type == "DashFixed":
                     self.var_types[node.name] = "fixed"
                     value = self._fixed_value(init) if init is not None else "0"
+                elif c_type == "double":
+                    self.var_types[node.name] = "double"
+                    value = self._double_value(init) if init is not None else "0"
                 else:
                     value = self._generate_expression(init) if init is not None else "0"
                 self.context.declare_var(node.name)
@@ -16487,7 +16653,10 @@ static {ret_type} {method_name}({params_str}) {{
             self._assign_object(node.name, "DashArrayLong *", value)
             return
 
-        value = self._generate_expression(node.value)
+        if self.var_types.get(node.name) == "double" and self.context.is_declared(node.name):
+            value = self._double_value(node.value)     # d = 0.1: all the digits of a double
+        else:
+            value = self._generate_expression(node.value)
         var_type = self._infer_c_type(node.value)
         # what a call, field or element declares (a [[String]], a {String: [Int]}...), for its
         # elements later (D49)
@@ -16503,9 +16672,12 @@ static {ret_type} {method_name}({params_str}) {{
             self.var_types[node.name] = "char"
         elif var_type == "DashFixed":
             self.var_types[node.name] = "fixed"
-        elif var_type == "float":
+        elif var_type == "float" and self.var_types.get(node.name) != "double":
             self.var_types[node.name] = "float"
             self.uses_float = True
+        elif var_type == "double":
+            self.var_types[node.name] = "double"
+            self.uses_double = True
         elif var_type == "DashArrayLong *":
             # a copy or a slice of a typed array keeps its element type
             self.var_types[node.name] = self._array_var_type(node.value)
@@ -16617,6 +16789,9 @@ static {ret_type} {method_name}({params_str}) {{
         if self._is_fixed_expr(node):
             self.uses_fixed = True
             return "DashFixed"
+        if self._is_double_expr(node):
+            self.uses_double = True
+            return "double"
         if self._is_float_expr(node):
             return "float"
         if isinstance(node, StringLiteral):
@@ -17349,6 +17524,7 @@ static {ret_type} {method_name}({params_str}) {{
             return
         ret = getattr(self, "_method_ret", None) or (self.current_function.return_type if self.current_function else None)
         value = (self._fixed_value(node.value) if ret == "Fixed" and not self._is_fixed_expr(node.value)
+                 else self._double_value(node.value) if ret == "Double"
                  else self._generate_expression(node.value))
         if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
             # lambdas return LONG: the string leaves Dash's control
@@ -17440,6 +17616,8 @@ static {ret_type} {method_name}({params_str}) {{
             param = func.params[i] if func and i < len(func.params) else None
             if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
                 code = self._fixed_value(arg)
+            elif isinstance(param, FunctionParam) and param.param_type == "Double":
+                code = self._double_value(arg)
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
                 code = f"(LONG){code}"
@@ -17594,6 +17772,9 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, NumberLiteral):
             return c_int_literal(node.value)
         elif isinstance(node, FloatLiteral):
+            if self._dbl_ctx:
+                self.uses_double = True
+                return c_double_literal(node.value)
             self.uses_float = True   # links Dash's soft float (not libm's mathieeesingbas)
             return c_float_literal(node.value)
         elif isinstance(node, BoolLiteral):
@@ -17612,6 +17793,10 @@ static {ret_type} {method_name}({params_str}) {{
             left = self._generate_expression(node.left)
             right = self._generate_expression(node.right)
             return f"((void *)({left}) {node.operator} (void *)({right}))"
+        elif (isinstance(node, BinaryOp) and not self._dbl_ctx and node.operator not in ("and", "or")
+              and not (node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)))
+              and (self._is_double_expr(node.left) or self._is_double_expr(node.right))):
+            return self._double_value(node)      # d * 0.1: the literal is a double too
         elif isinstance(node, BinaryOp):
             left_str = self._is_string_expr(node.left)
             right_str = self._is_string_expr(node.right)
@@ -17686,9 +17871,17 @@ static {ret_type} {method_name}({params_str}) {{
             if node.name == "Int" and len(node.arguments) == 1 and self._infer_c_type(node.arguments[0]) == "char":
                 # Int(s[i]): the character code, 0-255 (Latin-1)
                 return f"((LONG)(UBYTE)({self._generate_expression(node.arguments[0])}))"
+            if node.name == "Double" and len(node.arguments) == 1:
+                self.uses_double = True
+                if self._is_string_expr(node.arguments[0]):
+                    return f"_dash_double_from_str({self._generate_expression(node.arguments[0])})"
+                return f"((double)({self._double_value(node.arguments[0])}))"
             if node.name in ("Int", "Float") and len(node.arguments) == 1:
                 arg = self._generate_expression(node.arguments[0])
-                self.uses_float = True
+                if self._is_double_expr(node.arguments[0]):
+                    self.uses_double = True
+                else:
+                    self.uses_float = True
                 return f"((LONG)({arg}))" if node.name == "Int" else f"((float)({arg}))"
             if node.name == "Fixed" and len(node.arguments) == 1:
                 return self._fixed_value(node.arguments[0])
@@ -17995,7 +18188,7 @@ static {ret_type} {method_name}({params_str}) {{
         """_DASH_MUL/_DIV/_MOD for *, /, % between integers, unless GCC already does
         better with a constant (powers of two: shifts; multiply by a constant)."""
         names = {"*": "_DASH_MUL", "/": "_DASH_DIV", "%": "_DASH_MOD"}
-        if node.operator not in names or self._is_float_expr(node):
+        if node.operator not in names or self._is_float_expr(node) or self._is_double_expr(node):
             return None
         if self._is_string_expr(node.left) or self._is_string_expr(node.right):
             return None
@@ -18028,12 +18221,16 @@ static {ret_type} {method_name}({params_str}) {{
         for i, field in enumerate(struct.fields):
             if i < len(arguments) and field.field_type == "Fixed":
                 val = self._fixed_value(arguments[i])
+            elif i < len(arguments) and field.field_type == "Double":
+                val = self._double_value(arguments[i])
             elif i < len(arguments):
                 val = self._generate_expression(arguments[i])
                 if field.field_type == "String":
                     val = self._str_kept(arguments[i], val)
             elif field.default_value and field.field_type == "Fixed":
                 val = self._fixed_value(field.default_value)
+            elif field.default_value and field.field_type == "Double":
+                val = self._double_value(field.default_value)
             elif field.default_value:
                 val = self._generate_expression(field.default_value)
                 if field.field_type == "String":
@@ -18063,6 +18260,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.assigned_obj_fields.add(("*", node.member))
         if field and field.field_type == "Fixed" and not self._is_fixed_expr(node.value):
             value = self._fixed_value(node.value)
+        if field and field.field_type == "Double":
+            value = self._double_value(node.value)
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
@@ -18189,6 +18388,8 @@ static {ret_type} {method_name}({params_str}) {{
         param = method.params[i] if method and i < len(method.params) else None
         if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
             return self._fixed_value(arg)
+        if isinstance(param, FunctionParam) and param.param_type == "Double":
+            return self._double_value(arg)
         code = self._generate_expression(arg)
         return code if pure else self._lend(arg, code)
 
@@ -18428,6 +18629,9 @@ static {ret_type} {method_name}({params_str}) {{
         if self._is_fixed_expr(node):
             self.uses_fixed = True
             return f"DashString_from_fixed({code})"
+        if self._is_double_expr(node):
+            self.uses_double = True
+            return f"DashString_from_double({code})"
         if self._is_float_expr(node):
             self.uses_float = True
             return f"DashString_from_float({code})"
@@ -18478,6 +18682,9 @@ static {ret_type} {method_name}({params_str}) {{
             elif p.param_type == "Float":
                 self.var_types[p.name] = "float"
                 self.uses_float = True
+            elif p.param_type == "Double":
+                self.var_types[p.name] = "double"
+                self.uses_double = True
             elif p.param_type == "Fixed":
                 self.var_types[p.name] = "fixed"
                 self.uses_fixed = True
@@ -18695,10 +18902,48 @@ static {ret_type} {method_name}({params_str}) {{
             return f"_DASH_MOD({self._fixed_value(node.left)}, {self._fixed_value(node.right)})"
         return f"({self._fixed_value(node.left)} {self._translate_operator(op)} {self._fixed_value(node.right)})"
 
+    def _double_value(self, node: ASTNode) -> str:
+        """The expression where a Double goes: its Float literals are written as C doubles."""
+        self._dbl_ctx += 1
+        try:
+            return self._generate_expression(node)
+        finally:
+            self._dbl_ctx -= 1
+
+    def _is_double_expr(self, node: ASTNode) -> bool:
+        """True if the expression yields a Double (C double, Lorraine D1)."""
+        if isinstance(node, VarRef):
+            return self.var_types.get(node.name) == "double"
+        if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/"):
+            if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
+                return False
+            return self._is_double_expr(node.left) or self._is_double_expr(node.right)
+        if isinstance(node, UnaryOp) and node.operator == "-":
+            return self._is_double_expr(node.operand)
+        if isinstance(node, FunctionCall):
+            if node.name == "Double":
+                return True
+            if node.name in ("Int", "Float") or get_builtin(node.name):
+                return False
+            func = self.analysis.program.get_function(node.name)
+            if func:
+                return self._function_c_type(func) == "double"
+            foreign = self._foreign_func(node.name)
+            return bool(foreign and foreign.return_type == "Double")
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "Double")
+        if isinstance(node, MethodCall):
+            method = self._method_of(node)
+            return bool(method and self._method_c_type(method) == "double")
+        return False
+
     def _is_float_expr(self, node: ASTNode) -> bool:
-        """True if the expression yields a Float (C float)."""
+        """True if the expression yields a Float (C float); a Float with a Double is a Double."""
         if isinstance(node, FloatLiteral):
             return True
+        if isinstance(node, BinaryOp) and self._is_double_expr(node):
+            return False
         if isinstance(node, VarRef):
             if self.var_types.get(node.name) == "float":
                 return True
@@ -19054,6 +19299,7 @@ static {return_type} {lambda_name}({param_str}) {{
     _BASE_C_TYPES = {
         "Int": "LONG",
         "Float": "float",
+        "Double": "double",
         "Fixed": "DashFixed",
         "String": "STRPTR",
         "Bool": "BOOL",
@@ -19078,6 +19324,8 @@ static {return_type} {lambda_name}({param_str}) {{
         """Convert a Dash type annotation to its C type (struct names become pointers)."""
         if dash_type == "Float":
             self.uses_float = True   # any Float links Dash's soft float
+        if dash_type == "Double":
+            self.uses_double = True
         if dash_type == "Fixed":
             self.uses_fixed = True
         if dash_type in self._BASE_C_TYPES:

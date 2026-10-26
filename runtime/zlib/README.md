@@ -9,7 +9,7 @@ generated C calls: one buffer to another in one call, raw deflate (no zlib or gz
 holds), zlib's memory from exec and back before returning. One file each, so a program that only
 inflates does not link deflate.
 
-`compiler/zlib.py` compiles them once for each set of CPU options (`--cpu`, `--fpu`) into a library in
+`compiler/clibs.py` compiles them once for each set of CPU options (`--cpu`, `--fpu`) into a library in
 `build/`, with `-DZ_PREFIX` (zlib's names start with `z_`: a program may have its own `crc32`),
 `-DNO_GZIP` and `-DZ_TESTW=0` (crc32 with one table of 1 KB, not the 20 KB of the "braided" one, which
 is for 64-bit machines). The CLI and the test runner link it when a program uses those builtins.

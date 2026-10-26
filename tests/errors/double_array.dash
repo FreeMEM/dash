@@ -1,0 +1,6 @@
+# Test: a list cannot hold Double values
+# expect: Arrays hold integers or strings, not Double values (use a struct with Double fields, or scale to integers)
+Main
+    d = Double(1.5)
+    l = [d, d]
+end

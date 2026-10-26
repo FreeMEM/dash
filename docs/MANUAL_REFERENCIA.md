@@ -255,6 +255,7 @@ vacio = []
 |------|-------------|---------|
 | Int | Entero 32-bit con signo | `42`, `-100`, `0xFF`, `$DFF000`, `0b1010` |
 | Float | Decimal de 32 bits (unos 7 digitos) | `1.5`, `-0.25`, `2.0e3` |
+| Double | Decimal de 64 bits (15 a 17 digitos) | `Double(0.1)`, `var d: Double = 2.5` |
 | Fixed | Coma fija 16.16: decimales rapidos en 68000 | `Fixed(1.5)`, `Fixed(n)` |
 | String | Cadena de texto | `"Hola"` |
 | Bool | Valor booleano (`Print` y los textos lo escriben `true` / `false`) | `true`, `false` |
@@ -301,6 +302,30 @@ s = fx_sin(Fixed(30))       # 0.5 (grados); tambien fx_cos
   convierten), o declaradas `[Fixed]` (variables, parametros, retornos, campos). `l[i]`, `push`, `insert`,
   `pop`, `for v in l`, trozos y `+` dan y reciben `Fixed`; `l.push(2)` guarda 2.0. Se guardan como una
   lista de enteros (un `Fixed` es un `LONG`). Una lista de `Float` sigue sin poder hacerse.
+
+### Double (64 bits)
+
+`Double` es un `double` de C (IEEE 754 de 64 bits): 15 a 17 digitos, para importes y celdas de una hoja
+de calculo. Con `--fpu` lo hace la FPU; sin ella, la coma flotante por software de GCC (mas lento que
+`Float`).
+
+```
+d = Double(0.1)             # un literal donde va un Double guarda todos sus digitos
+var t: Double = 0.2         # tambien en variables declaradas, campos, parametros y return
+s = d + t                   # 0.30000000000000004, como en cualquier lenguaje con double
+n = Int(d)                  # trunca hacia cero; Float(d) pierde digitos
+x = Double("2.5e-3")        # de texto: exacto hasta 17 cifras significativas; 0.0 si no hay numero
+Print "s = #{s}"            # el decimal mas corto que se lee igual (Ryu): s = 0.30000000000000004
+```
+
+- Un literal (`0.1`) donde va un `Double` (operado con un `Double`, asignado a una variable, campo o
+  parametro `Double`, en un `return` de una funcion `Double`) es un `double` de C. En otro sitio es un
+  `Float`: `d = 0.1` sin declarar es un `Float`.
+- Un `Float` o un `Int` se convierten solos a `Double`; un `Double` en un `Float` o un `Int` es un error
+  (`Float(d)`, `Int(d)`). Mezclar `Fixed` y `Double` es un error.
+- Se escribe en notacion fija mientras la coma cae a 17 cifras o menos (`150.0`, `0.00001`) y con
+  exponente fuera de eso (`1.0e17`, `1.0e-6`); `inf`, `-inf` y `nan` si toca.
+- No hay listas de `Double` (como de `Float`): un struct con campos `Double`.
 
 ### Inferencia de Tipos
 

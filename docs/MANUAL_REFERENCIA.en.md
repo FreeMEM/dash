@@ -255,6 +255,7 @@ vacio = []
 |------|-------------|---------|
 | Int | Signed 32-bit integer | `42`, `-100`, `0xFF`, `$DFF000`, `0b1010` |
 | Float | 32-bit decimal (about 7 digits) | `1.5`, `-0.25`, `2.0e3` |
+| Double | 64-bit decimal (15 to 17 digits) | `Double(0.1)`, `var d: Double = 2.5` |
 | Fixed | 16.16 fixed point: fast decimals on a 68000 | `Fixed(1.5)`, `Fixed(n)` |
 | String | Text string | `"Hola"` |
 | Bool | Boolean value (`Print` and strings write it as `true` / `false`) | `true`, `false` |
@@ -301,6 +302,29 @@ s = fx_sin(Fixed(30))       # 0.5 (degrees); also fx_cos
   converted), or declared `[Fixed]` (variables, parameters, return values, fields). `l[i]`, `push`, `insert`,
   `pop`, `for v in l`, slices and `+` return and take `Fixed`; `l.push(2)` stores 2.0. They are stored as a
   list of integers (a `Fixed` is a `LONG`). A list of `Float` still cannot be made.
+
+### Double (64 bits)
+
+`Double` is a C `double` (64-bit IEEE 754): 15 to 17 digits, for money and spreadsheet cells. With
+`--fpu` the FPU does it; without one, GCC's software floating point (slower than `Float`).
+
+```
+d = Double(0.1)             # a literal where a Double goes keeps all its digits
+var t: Double = 0.2         # also in declared variables, fields, parameters and return
+s = d + t                   # 0.30000000000000004, as in any language with doubles
+n = Int(d)                  # truncates toward zero; Float(d) loses digits
+x = Double("2.5e-3")        # from text: exact up to 17 significant digits; 0.0 if there is no number
+Print "s = #{s}"            # the shortest decimal that reads back the same (Ryu): s = 0.30000000000000004
+```
+
+- A literal (`0.1`) where a `Double` goes (in an operation with a `Double`, given to a `Double` variable,
+  field or parameter, in a `return` of a `Double` function) is a C `double`. Elsewhere it is a `Float`:
+  `d = 0.1` undeclared is a `Float`.
+- A `Float` or an `Int` become `Double` by themselves; a `Double` into a `Float` or an `Int` is an error
+  (`Float(d)`, `Int(d)`). Mixing `Fixed` and `Double` is an error.
+- It is written in fixed notation while the point falls within 17 digits (`150.0`, `0.00001`) and with an
+  exponent beyond that (`1.0e17`, `1.0e-6`); `inf`, `-inf` and `nan` when they come.
+- There are no lists of `Double` (as of `Float`): a struct with `Double` fields.
 
 ### Type Inference
 

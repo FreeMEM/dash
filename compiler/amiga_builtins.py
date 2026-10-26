@@ -4427,7 +4427,7 @@ ARGS_FUNCTIONS = {
 }
 
 # =============================================================================
-# Compression (Lorraine D6): raw deflate, as in a ZIP, with zlib (compiler/zlib.py)
+# Compression (Lorraine D6): raw deflate, as in a ZIP, with zlib (compiler/clibs.py)
 # =============================================================================
 
 def _buf(name, params, ret, template, desc):

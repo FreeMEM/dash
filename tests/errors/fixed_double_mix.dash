@@ -1,0 +1,7 @@
+# Test: Fixed and Double in one operation
+# expect: Cannot mix Fixed and Double
+Main
+    a = Fixed(1.5)
+    d = Double(2.5)
+    Print a + d
+end

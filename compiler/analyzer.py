@@ -68,6 +68,7 @@ class DashType(Enum):
     """Dash language types (for future type checking)."""
     INT = auto()
     FLOAT = auto()
+    DOUBLE = auto()  # 64-bit IEEE (Lorraine D1)
     FIXED = auto()   # 16.16 fixed point in a LONG
     STRING = auto()
     BOOL = auto()
@@ -607,6 +608,12 @@ class SemanticAnalyzer(ASTVisitor):
             elif symbol.dash_type == DashType.INT and new_type == DashType.FLOAT:
                 self.error(f"Cannot assign a float to '{node.name}', which holds an int "
                            f"(declare it with a float: {node.name} = 0.0, or use Int())", node)
+            elif symbol.dash_type == DashType.INT and new_type == DashType.DOUBLE:
+                self.error(f"Cannot assign a Double to '{node.name}', which holds an int (use Int())", node)
+            elif symbol.dash_type == DashType.FLOAT and new_type == DashType.DOUBLE:
+                self.error(f"Cannot assign a Double to '{node.name}', which holds a Float (use Float())", node)
+            elif DashType.FIXED in (symbol.dash_type, new_type) and DashType.DOUBLE in (symbol.dash_type, new_type):
+                self.error(f"Cannot mix Fixed and Double in '{node.name}' (convert with Fixed() or Double())", node)
             elif symbol.dash_type == DashType.INT and new_type == DashType.FIXED:
                 self.error(f"Cannot assign a Fixed to '{node.name}', which holds an int (use Int())", node)
             elif DashType.FIXED in (symbol.dash_type, new_type) and DashType.FLOAT in (symbol.dash_type, new_type):
@@ -817,13 +824,15 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_FunctionCall(self, node: FunctionCall):
         """Visit a function call."""
-        # Int(x) / Float(x) / Fixed(x): conversions; fx_*: Fixed functions
-        if node.name in ("Int", "Float", "Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
+        # Int(x) / Float(x) / Double(x) / Fixed(x): conversions; fx_*: Fixed functions
+        if node.name in ("Int", "Float", "Double", "Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
             if len(node.arguments) != 1:
                 self.error(f"{node.name}() expects 1 argument, got {len(node.arguments)}", node)
             for arg in node.arguments:
                 self.visit(arg)
-                if self._infer_type(arg) == DashType.STRING and node.name != "Int":
+                if node.name == "Fixed" and self._infer_type(arg) == DashType.DOUBLE:
+                    self.error("Fixed() converts Int and Float, not Double (Float() first)", node)
+                if self._infer_type(arg) == DashType.STRING and node.name not in ("Int", "Double"):
                     self.error(f"{node.name}() converts numbers, not strings", node)
             return
 
@@ -907,7 +916,7 @@ class SemanticAnalyzer(ASTVisitor):
         if returns and returns[1]:
             self._check_return(returns[0], returns[1], node)
 
-    _NUMBER_TYPES = ("Int", "Float", "Fixed", "Bool")
+    _NUMBER_TYPES = ("Int", "Float", "Double", "Fixed", "Bool")
 
     def _check_return(self, func: str, declared: str, node: ReturnStmt):
         """The value of a return against the declared return type. Only what is sure: a String
@@ -933,7 +942,7 @@ class SemanticAnalyzer(ASTVisitor):
         is_list = isinstance(value, ArrayLiteral) or vtype in (DashType.ARRAY_INT, DashType.ARRAY_STRING)
         got = None
         if declared == "String":
-            if number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.FIXED):
+            if number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED):
                 got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
             elif vstruct:
                 got = vstruct
@@ -949,7 +958,7 @@ class SemanticAnalyzer(ASTVisitor):
         elif self._struct_type_name(declared):
             if vtype == DashType.STRING:
                 got = "String"
-            elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.FIXED):
+            elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED):
                 got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
             elif vstruct and vstruct != declared:
                 got = vstruct
@@ -958,7 +967,7 @@ class SemanticAnalyzer(ASTVisitor):
         elif list_elem_type(declared) is not None or declared == "Array" or dict_value_type(declared) is not None:
             if vtype == DashType.STRING:
                 got = "String"
-            elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.FIXED):
+            elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED):
                 got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
             elif vstruct:
                 got = vstruct
@@ -1004,9 +1013,10 @@ class SemanticAnalyzer(ASTVisitor):
         if self._infer_type(value) == DashType.FIXED:
             self.error("Arrays hold integers or strings, not Fixed values "
                        "(use a struct with Fixed fields)", value)
-        if self._infer_type(value) == DashType.FLOAT:
-            self.error("Arrays hold integers or strings, not Float values "
-                       "(use a struct with Float fields, or scale to integers)", value)
+        if self._infer_type(value) in (DashType.FLOAT, DashType.DOUBLE):
+            name = "Double" if self._infer_type(value) == DashType.DOUBLE else "Float"
+            self.error(f"Arrays hold integers or strings, not {name} values "
+                       f"(use a struct with {name} fields, or scale to integers)", value)
 
     def visit_ArrayAccess(self, node: ArrayAccess):
         """Visit an array access."""
@@ -1356,16 +1366,18 @@ class SemanticAnalyzer(ASTVisitor):
         self.visit(node.left)
         self.visit(node.right)
         left, right = self._infer_type(node.left), self._infer_type(node.right)
-        if node.operator == "%" and DashType.FLOAT in (left, right):
-            self.error("% needs integers; use Int() to convert a Float", node)
+        if node.operator == "%" and (DashType.FLOAT in (left, right) or DashType.DOUBLE in (left, right)):
+            self.error("% needs integers; use Int() to convert a Float or a Double", node)
         if node.operator in self._BIT_OPS:
             for side in (left, right):
-                if side in (DashType.FLOAT, DashType.FIXED, DashType.STRING) or side in self._LIST_TYPES:
+                if side in (DashType.FLOAT, DashType.DOUBLE, DashType.FIXED, DashType.STRING) or side in self._LIST_TYPES:
                     self.error(f"'{node.operator}' works on integers, not {self._type_text(side)} "
                                f"(Int() converts a Float or a Fixed)", node)
                     break
         if DashType.FIXED in (left, right) and DashType.FLOAT in (left, right):
             self.error("Cannot mix Fixed and Float (convert with Fixed() or Float())", node)
+        if DashType.FIXED in (left, right) and DashType.DOUBLE in (left, right):
+            self.error("Cannot mix Fixed and Double (convert with Double(Float()) or Fixed(Float()))", node)
         if node.operator == "+":
             lk, rk = self._list_kind(node.left), self._list_kind(node.right)
             if (lk is None) != (rk is None):
@@ -1378,14 +1390,15 @@ class SemanticAnalyzer(ASTVisitor):
 
     @staticmethod
     def _type_text(t: DashType) -> str:
-        return {DashType.FLOAT: "Float", DashType.FIXED: "Fixed", DashType.STRING: "Strings"}.get(t, "lists")
+        return {DashType.FLOAT: "Float", DashType.DOUBLE: "Double", DashType.FIXED: "Fixed",
+                DashType.STRING: "Strings"}.get(t, "lists")
 
     def visit_UnaryOp(self, node: UnaryOp):
         """Visit a unary operation."""
         self.visit(node.operand)
         if node.operator == "~":
             t = self._infer_type(node.operand)
-            if t in (DashType.FLOAT, DashType.FIXED, DashType.STRING) or t in self._LIST_TYPES:
+            if t in (DashType.FLOAT, DashType.DOUBLE, DashType.FIXED, DashType.STRING) or t in self._LIST_TYPES:
                 self.error(f"'~' works on integers, not {self._type_text(t)} "
                            f"(Int() converts a Float or a Fixed)", node)
 
@@ -1496,6 +1509,8 @@ class SemanticAnalyzer(ASTVisitor):
             if node.operator in ("&", "|", "^", "<<", ">>"):
                 return DashType.INT
             if node.operator in ("+", "-", "*", "/", "%"):
+                if DashType.DOUBLE in (left, right):
+                    return DashType.DOUBLE
                 if DashType.FLOAT in (left, right):
                     return DashType.FLOAT
                 if DashType.FIXED in (left, right):
@@ -1507,13 +1522,13 @@ class SemanticAnalyzer(ASTVisitor):
             return self._infer_type(node.operand)
         elif isinstance(node, UnaryOp) and node.operator == "~":
             return DashType.INT
-        elif isinstance(node, FunctionCall) and node.name in ("Int", "Float"):
-            return DashType.FLOAT if node.name == "Float" else DashType.INT
+        elif isinstance(node, FunctionCall) and node.name in ("Int", "Float", "Double"):
+            return {"Float": DashType.FLOAT, "Double": DashType.DOUBLE}.get(node.name, DashType.INT)
         elif isinstance(node, FunctionCall) and node.name in ("Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
             return DashType.FIXED
         elif isinstance(node, FunctionCall) and self.program and self.program.get_function(node.name):
             func = self.program.get_function(node.name)
-            if func.return_type in ("Int", "Float", "Fixed", "String", "Bool") or \
+            if func.return_type in ("Int", "Float", "Double", "Fixed", "String", "Bool") or \
                     list_elem_type(func.return_type) is not None or dict_value_type(func.return_type) is not None:
                 return self._type_annotation_to_dash_type(func.return_type)
         elif isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).list_of:
@@ -1568,7 +1583,7 @@ class SemanticAnalyzer(ASTVisitor):
                 owner, member = self._struct_name_of(node.object), node.property
             struct = self.program.get_struct(owner) if (owner and self.program) else None
             field = struct.get_field(member) if struct else None
-            if field and field.field_type in ("Int", "Float", "Fixed", "String", "Bool"):
+            if field and field.field_type in ("Int", "Float", "Double", "Fixed", "String", "Bool"):
                 return self._type_annotation_to_dash_type(field.field_type)
         elif isinstance(node, (LambdaFunc, FunctionRef)):
             return DashType.FUNC
@@ -1602,8 +1617,8 @@ class SemanticAnalyzer(ASTVisitor):
 
         return search(func.body)
 
-    _TYPE_NAMES = {"Int", "Float", "Fixed", "String", "Bool", "Pointer", "Void", "Func", "Array"}
-    _NO_NIL = (DashType.INT, DashType.FLOAT, DashType.FIXED, DashType.BOOL)
+    _TYPE_NAMES = {"Int", "Float", "Double", "Fixed", "String", "Bool", "Pointer", "Void", "Func", "Array"}
+    _NO_NIL = (DashType.INT, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED, DashType.BOOL)
 
     def _check_type_names(self, program: Program):
         """Every type annotation names a type: an unknown name used to compile as
@@ -1649,6 +1664,7 @@ class SemanticAnalyzer(ASTVisitor):
         type_map = {
             "Int": DashType.INT,
             "Float": DashType.FLOAT,
+            "Double": DashType.DOUBLE,
             "Fixed": DashType.FIXED,
             "String": DashType.STRING,
             "Bool": DashType.BOOL,

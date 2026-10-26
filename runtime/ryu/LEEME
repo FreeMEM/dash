@@ -1,0 +1,12 @@
+Ryu (https://github.com/ulfjack/ryu, commit 4c0618b0e44f del 2026-02-09), de Ulf Adams. Licencia Apache 2.0 o
+Boost 1.0, a elegir (LICENSE-Apache2, LICENSE-Boost).
+
+- ryu/d2s.c y sus cabeceras: copia de third_party/ryu de Tachyon, con su único cambio (marcado "dashweb"):
+  quitar las cifras de ocho en ocho y con 32 bits cuando cabe; un decimal corto quitaba 14 de una en una,
+  con divisiones de 64 bits, caras en un 68k.
+- ryu/s2d.c y ryu/ryu_parse.h: del mismo commit, sin tocar. Exacto hasta 17 cifras significativas.
+- dash_ryu.c es de Dash (Lorraine D1, D3): dash_ryu_d2d (el decimal más corto de un double, como el d2d.c
+  de Tachyon) y dash_ryu_s2d. Los dos ficheros de Ryu van en él para compartir la tabla.
+
+compiler/clibs.py lo compila una vez por cada juego de opciones de CPU y ./dash y el runner lo enlazan
+cuando un programa usa Double. Ocupa unos 33 KB en el ejecutable (la tabla completa de potencias de 5).

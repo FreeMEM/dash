@@ -147,11 +147,11 @@
     "type": {
       "patterns": [
         {
-          "match": "\\b(?:Pointer|String|Array|Fixed|Float|Bool|Func|Void|Int)\\b",
+          "match": "\\b(?:Pointer|Double|String|Array|Fixed|Float|Bool|Func|Void|Int)\\b",
           "name": "support.type.dash"
         },
         {
-          "match": "(?<=:|->)\\s*\\b(?!(?:Pointer|String|Array|Fixed|Float|Bool|Func|Void|Int)\\b)([A-Z][A-Za-z0-9_]*)\\b",
+          "match": "(?<=:|->)\\s*\\b(?!(?:Pointer|Double|String|Array|Fixed|Float|Bool|Func|Void|Int)\\b)([A-Z][A-Za-z0-9_]*)\\b",
           "captures": {
             "1": {
               "name": "entity.name.type.dash"

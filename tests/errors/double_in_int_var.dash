@@ -1,0 +1,6 @@
+# Test: a Double into a variable that holds an Int
+# expect: Cannot assign a Double to 'n', which holds an int (use Int())
+Main
+    n = 1
+    n = Double(2.5)
+end
