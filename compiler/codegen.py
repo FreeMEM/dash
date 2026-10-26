@@ -527,8 +527,9 @@ static void _dash_str_drop(_DashStrHdr *h) {
 }
 
 /* Marks are serial numbers: removing a temporary from the list never breaks them */
+static ULONG _dash_tmp_marked = 0;     /* the last mark handed out (see _dash_tmp_take) */
 static ULONG _dash_tmp_mark(void) {
-    return _dash_tmp_serial;
+    return _dash_tmp_marked = _dash_tmp_serial;
 }
 
 static void _dash_otmp_release(ULONG mark);
@@ -557,6 +558,10 @@ static BOOL _dash_tmp_take(STRPTR p) {
         if (*link == h) {
             *link = h->next;
             h->next = NULL;
+            /* the newest temporary, with no mark handed out since it was made (s = str_from_buffer(...)
+               in a loop): its number is given back, so the release at the end of the iteration has
+               nothing to do and costs no call (D36) */
+            if (h->serial == _dash_tmp_serial && _dash_tmp_marked < h->serial) _dash_tmp_serial--;
             h->serial = 0;
             return TRUE;
         }
@@ -5462,13 +5467,16 @@ static BOOL _dash_file_write_text(STRPTR name, STRPTR text) {
 /* length bytes of a buffer from offset, as a String */
 static STRPTR _dash_str_from_buffer(APTR buffer, LONG offset, LONG length) {
     STRPTR r;
+    UBYTE *d, *p;
+    LONG n;
     if (!buffer || length < 0) length = 0;
     r = _dash_str_alloc(length, TRUE);
     if (!r) return NULL;
-    if (length) _dash_copy(r, (STRPTR)buffer + offset, length);
-    r[length] = 0;
-    _dash_str_nul_to_space(r, length);
-    _dash_str_setlen(r, length);
+    /* copied and bytes 0 made spaces in one pass (D36) */
+    for (d = (UBYTE *)r, p = (UBYTE *)buffer + offset, n = length; n > 0; n--)
+        if (!(*d++ = *p++)) d[-1] = ' ';
+    *d = 0;
+    if (length >= _DASH_SC_MIN) _dash_str_setlen(r, length);
     return r;
 }
 
@@ -6507,9 +6515,16 @@ static BOOL _dash_str_ours(STRPTR s, LONG len) {
     return (h->size & 0x7F000000UL) == _DASH_STR_TAG && (LONG)_DASH_STR_SIZE(h) >= (LONG)sizeof(_DashStrHdr) + len + 1;
 }
 
+/* A text of Dash in a block too small for the cache (Lorraine D36: most texts are a few bytes, and
+   walking the cache for each one cost more than the rest): it is not in the cache and cannot go in.
+   A text of C whose bytes before it happen to look like that is still measured right, without it. */
+#define _DASH_STR_SMALL(s) (!((ULONG)(s) & 1) && (_DASH_STR_HDR(s)->size & 0x7F000000UL) == _DASH_STR_TAG \
+                            && _DASH_STR_SIZE(_DASH_STR_HDR(s)) <= sizeof(_DashStrHdr) + _DASH_SC_MIN)
+
 static LONG _dash_str_len(STRPTR s) {
     LONG k, len;
     if (!s) return 0;
+    if (_DASH_STR_SMALL(s)) return strlen((char *)s);
     for (k = 0; k < _DASH_SC_N; k++)
         if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
     len = strlen((char *)s);
@@ -6533,6 +6548,7 @@ static void _dash_str_forget(STRPTR s) {
 /* The text at s now has this length (it grew in place, or is new) */
 static void _dash_str_setlen(STRPTR s, LONG len) {
     LONG k;
+    if (_DASH_STR_SMALL(s)) return;
     if (_dash_sc_last == s) _dash_sc_last = NULL;
     for (k = 0; k < _DASH_SC_N; k++) {
         if (_dash_sc_s[k] == s) {
@@ -15121,7 +15137,8 @@ class CodeGenerator(ASTVisitor):
                 memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n"
                                         "static LONG _dash_str_len(STRPTR s);\n"
                                         "static void _dash_str_setlen(STRPTR s, LONG len);\n\n" + drop +
-                                        "    _dash_str_forget((STRPTR)(h + 1));\n")
+                                        "    /* (a block of 64 bytes or less is never in the length cache: D36) */\n"
+                                        "    if (_DASH_STR_SIZE(h) > sizeof(_DashStrHdr) + 64) _dash_str_forget((STRPTR)(h + 1));\n")
                 # copies of long texts use and fill the length cache (dashweb D22)
                 old = ("    ULONG len = s ? strlen((char *)s) : 0;\n    STRPTR d = _dash_str_alloc(len, temp);\n"
                        "    if (d && len) _dash_copy(d, s, len);\n")

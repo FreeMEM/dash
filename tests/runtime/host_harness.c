@@ -200,5 +200,22 @@ int main(void){ int fails=0;
    _dash_str_append(&big, three); CHECK(_dash_str_len(big) == 15 * MB && big[15 * MB] == 0);
    _dash_str_free(big); free(six); free(three);
  }
+ { /* D36: a temporary taken right after it was made gives its number back, so the release of the
+      iteration has nothing to do; a mark handed out in between keeps it (that release must still
+      free what comes after the mark) */
+   ULONG m = _dash_tmp_mark(), m2;
+   STRPTR v = NULL, t, u;
+   _dash_str_set(&v, _dash_str_dup("uno", TRUE));
+   CHECK(_dash_tmp_serial == m && _dash_tmp_take(v) == FALSE);
+   t = _dash_str_dup("dos", TRUE);
+   m2 = _dash_tmp_mark();
+   CHECK(_dash_tmp_take(t) && _dash_tmp_serial == m2);
+   u = _dash_str_dup("tres", TRUE);
+   CHECK(_dash_tmp == _DASH_STR_HDR(u));
+   _dash_tmp_release(m2);
+   CHECK(!_dash_tmp || _dash_tmp->serial <= m2);     /* "tres" came after the mark: freed */
+   _dash_str_free(t); _dash_str_free(v);
+   _dash_tmp_release(m);
+ }
  _dash_mem_cleanup(); CHECK(_dash_pool==NULL);
  printf("fallos: %d\n", fails); return fails; }
