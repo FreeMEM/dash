@@ -13,6 +13,7 @@
 # expect-out: fuera: 0 2 0 0 1
 # expect-out: largo: 100 100 300 100
 # expect-out: comillas: "hola" - ... (TM) EUR
+# expect-out: check: -1 -1 3 1 2 3 -1
 
 func bytes(s: String) -> String
     r = ""
@@ -81,4 +82,21 @@ Main
 
     q = utf8_char(8220) + "hola" + utf8_char(8221) + " " + utf8_char(8212) + " " + utf8_char(8230) + " " + utf8_char(8482) + " " + utf8_char(8364)
     Print "comillas: #{utf8_to_latin1(q)}"
+
+    # utf8_check on a buffer (D40): the first bad byte from..to-1, or -1
+    buf = buffer_alloc(64)
+    n = str_to_buffer(q, buf, 0)
+    bien = utf8_check(buf, 0, n)
+    str_to_buffer("abc" + str_char(195) + str_char(40), buf, 0)
+    corto = utf8_check(buf, 0, 3)
+    malo = utf8_check(buf, 0, 5)
+    str_to_buffer("a" + str_char(255), buf, 0)
+    ff = utf8_check(buf, 0, 2)
+    str_to_buffer("ab" + e, buf, 0)
+    cortado = utf8_check(buf, 0, 4)
+    str_to_buffer("abc" + str_char(128), buf, 0)
+    suelto = utf8_check(buf, 0, 4)
+    entero = utf8_check(buf, 2, 3)
+    Print "check: #{bien} #{corto} #{malo} #{ff} #{cortado} #{suelto} #{entero}"
+    buffer_free(buf)
 end

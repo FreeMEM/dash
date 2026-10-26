@@ -4915,6 +4915,32 @@ static LONG _dash_utf8_decode(const UBYTE *p, LONG *n) {
     return cp;
 }
 
+/* Position of the first byte from..to-1 of a buffer that does not start a valid UTF-8 sequence (or one
+   cut by to), or -1 if they are all valid (Lorraine D40) */
+static LONG _dash_utf8_check(APTR buf, LONG from, LONG to) {
+    UBYTE *p, *e, c;
+    LONG k, j, cp, min;
+    if (!buf) return -1;
+    if (from < 0) from = 0;
+    for (p = (UBYTE *)buf + from, e = (UBYTE *)buf + to; p < e; ) {
+        c = *p;
+        if (c < 0x80) { p++; continue; }
+        if (c < 0xC2) break;
+        if (c < 0xE0) { k = 1; cp = c & 0x1F; min = 0x80; }
+        else if (c < 0xF0) { k = 2; cp = c & 0x0F; min = 0x800; }
+        else if (c < 0xF5) { k = 3; cp = c & 0x07; min = 0x10000; }
+        else break;
+        if (e - p <= k) break;
+        for (j = 1; j <= k; j++) {
+            if ((p[j] & 0xC0) != 0x80) break;
+            cp = (cp << 6) | (p[j] & 0x3F);
+        }
+        if (j <= k || cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) break;
+        p += k + 1;
+    }
+    return p < e ? p - (UBYTE *)buf : -1;
+}
+
 /* Position of the character after the one at i (the length at the end) */
 static LONG _dash_utf8_next(STRPTR s, LONG i) {
     LONG len = _dash_str_len(s), n;

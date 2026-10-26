@@ -4469,6 +4469,10 @@ UTF8_FUNCTIONS = {
                             "\u20ac to EUR, \u2026 to ...) or ?, as do invalid bytes"),
     "latin1_to_utf8": _text("latin1_to_utf8", ["s"], "STRPTR", "_dash_latin1_to_utf8(${s})",
                             "Latin-1 text in UTF-8 (bytes from 128 on take two)"),
+    # D40
+    "utf8_check": _text("utf8_check", ["buffer", "from", "to"], "LONG", "_dash_utf8_check(${buffer}, ${from}, ${to})",
+                        "Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a "
+                        "sequence cut by to), -1 if all are valid"),
 }
 
 # =============================================================================

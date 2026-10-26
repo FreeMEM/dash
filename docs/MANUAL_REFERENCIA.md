@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 630 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 631 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -4193,13 +4193,13 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compresión (zlib) | 3 | `inflate`, `deflate`, `crc32` |
-| UTF-8 | 7 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8` |
+| UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **630** | |
+| **Total** | **631** | |
 
 ### Colores Estandar Amiga
 
