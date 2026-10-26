@@ -6524,7 +6524,16 @@ static BOOL _dash_str_ours(STRPTR s, LONG len) {
 static LONG _dash_str_len(STRPTR s) {
     LONG k, len;
     if (!s) return 0;
-    if (_DASH_STR_SMALL(s)) return strlen((char *)s);
+    if (s == _dash_sc_last) return _dash_sc_last_len;
+    if (_DASH_STR_SMALL(s)) {
+        len = strlen((char *)s);
+        /* the last short text measured too, for str_code and s[i] in a loop over it (D41) */
+        if (_DASH_STR_SIZE(_DASH_STR_HDR(s)) >= sizeof(_DashStrHdr) + len + 1) {
+            _dash_sc_last = s;
+            _dash_sc_last_len = len;
+        }
+        return len;
+    }
     for (k = 0; k < _DASH_SC_N; k++)
         if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
     len = strlen((char *)s);
@@ -6548,8 +6557,8 @@ static void _dash_str_forget(STRPTR s) {
 /* The text at s now has this length (it grew in place, or is new) */
 static void _dash_str_setlen(STRPTR s, LONG len) {
     LONG k;
-    if (_DASH_STR_SMALL(s)) return;
     if (_dash_sc_last == s) _dash_sc_last = NULL;
+    if (_DASH_STR_SMALL(s)) return;
     for (k = 0; k < _DASH_SC_N; k++) {
         if (_dash_sc_s[k] == s) {
             if (len >= _DASH_SC_MIN) _dash_sc_len[k] = len;
@@ -15135,10 +15144,13 @@ class CodeGenerator(ASTVisitor):
                 # a freed string leaves the length cache of TEXT_RUNTIME
                 drop = "static void _dash_str_drop(_DashStrHdr *h) {\n"
                 memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n"
+                                        "static STRPTR _dash_sc_last;\n"
                                         "static LONG _dash_str_len(STRPTR s);\n"
                                         "static void _dash_str_setlen(STRPTR s, LONG len);\n\n" + drop +
-                                        "    /* (a block of 64 bytes or less is never in the length cache: D36) */\n"
-                                        "    if (_DASH_STR_SIZE(h) > sizeof(_DashStrHdr) + 64) _dash_str_forget((STRPTR)(h + 1));\n")
+                                        "    /* (a block of 64 bytes or less is never in the length cache, D36; it may be the\n"
+                                        "       last text measured, D41) */\n"
+                                        "    if (_DASH_STR_SIZE(h) > sizeof(_DashStrHdr) + 64) _dash_str_forget((STRPTR)(h + 1));\n"
+                                        "    else if (_dash_sc_last == (STRPTR)(h + 1)) _dash_sc_last = NULL;\n")
                 # copies of long texts use and fill the length cache (dashweb D22)
                 old = ("    ULONG len = s ? strlen((char *)s) : 0;\n    STRPTR d = _dash_str_alloc(len, temp);\n"
                        "    if (d && len) _dash_copy(d, s, len);\n")
