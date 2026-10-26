@@ -4427,6 +4427,29 @@ ARGS_FUNCTIONS = {
 }
 
 # =============================================================================
+# Compression (Lorraine D6): raw deflate, as in a ZIP, with zlib (compiler/zlib.py)
+# =============================================================================
+
+def _buf(name, params, ret, template, desc):
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       reads_only=True)
+
+
+ZLIB_FUNCTIONS = {
+    "inflate": _buf("inflate", ["src", "n", "dest", "max"], "LONG", "_dash_inflate(${src}, ${n}, ${dest}, ${max})",
+                    "Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, "
+                    "or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, "
+                    "-3 if there is no memory (zlib)"),
+    "deflate": _buf("deflate", ["src", "n", "dest", "max", "level"], "LONG",
+                    "_dash_deflate(${src}, ${n}, ${dest}, ${max}, ${level})",
+                    "Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; "
+                    "-1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; "
+                    "about 260 KB while it works, at any level)"),
+    "crc32": _buf("crc32", ["buffer", "n", "crc"], "LONG", "_dash_crc32(${buffer}, ${n}, ${crc})",
+                  "CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start)"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -4450,6 +4473,7 @@ ALL_BUILTINS = {
     **TASK_FUNCTIONS,          # dashweb D47
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
+    **ZLIB_FUNCTIONS,          # Lorraine D6
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

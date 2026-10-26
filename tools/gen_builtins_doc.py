@@ -38,6 +38,7 @@ GROUPS = [
     ("TASK_FUNCTIONS", "Tareas (C en otro proceso)", "Tasks (C in another process)"),  # dashweb D47
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)", "Images (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos", "Arguments"),     # dashweb D19
+    ("ZLIB_FUNCTIONS", "Compresión (zlib)", "Compression (zlib)"),  # Lorraine D6
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

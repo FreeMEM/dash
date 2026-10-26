@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 617 funciones, 617 implementadas, 0 sin implementar.
+Total: 620 funciones, 620 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -544,6 +544,14 @@ Total: 617 funciones, 617 implementadas, 0 sin implementar.
 | `click_x()` | `LONG` | X of the last On Click, in the window (inside its borders) |  |
 | `click_y()` | `LONG` | Y of the last On Click, in the window (inside its borders) |  |
 | `time_ms()` | `LONG` | Milliseconds since the program started (EClock of timer.device) |  |
+
+## Compresión (zlib)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `inflate(src, n, dest, max)` | `LONG` | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
+| `deflate(src, n, dest, max, level)` | `LONG` | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
+| `crc32(buffer, n, crc)` | `LONG` | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
 
 ## Audio
 

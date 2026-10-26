@@ -4862,6 +4862,28 @@ static LONG _dash_base64_to_file(STRPTR text, STRPTR file) {
 
 """
 
+    # Lorraine D6: raw deflate (what a ZIP holds) and crc32 with zlib, compiled apart (compiler/zlib.py
+    # links it when the C has this template's first line)
+    ZLIB_RUNTIME = """\
+/* Dash zlib Runtime */
+long dash_zlib_inflate(const void *src, long n, void *dst, long max);
+long dash_zlib_deflate(const void *src, long n, void *dst, long max, long level);
+unsigned long dash_zlib_crc32(const void *buf, long n, unsigned long crc);
+
+static LONG _dash_inflate(APTR src, LONG n, APTR dst, LONG max) {
+    return dash_zlib_inflate(src, n, dst, max);
+}
+
+static LONG _dash_deflate(APTR src, LONG n, APTR dst, LONG max, LONG level) {
+    return dash_zlib_deflate(src, n, dst, max, level);
+}
+
+static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
+    return (LONG)dash_zlib_crc32(buf, n, (ULONG)crc);
+}
+
+"""
+
     # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
     # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
     CPU_RUNTIME = """\
@@ -14460,6 +14482,7 @@ _RUNTIME_FLAGS = [
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
+    ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -14748,6 +14771,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
+        self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -15073,6 +15097,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
             parts.append(CTemplates.BASE64_RUNTIME)
+        if self.uses_zlib:
+            parts.append(CTemplates.ZLIB_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)

@@ -221,6 +221,11 @@ def main():
     if not args.fpu and any(uses_float(open(f).read()) for f in c_files):
         compile_command.extend(softfloat_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
                                                  build_dir))
+    # inflate, deflate, crc32 (Lorraine D6): zlib, compiled for these CPU options (compiler/zlib.py)
+    from compiler.zlib import zlib_library, uses_zlib
+    if any(uses_zlib(open(f).read()) for f in c_files):
+        compile_command.append(zlib_library(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
+                                            cpu_flags(args.cpu, args.fpu), build_dir))
     compile_command.extend([
         "-o",
         output_filename if args.no_hunk else elf_output_file,

@@ -292,6 +292,9 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
     from compiler.softfloat import softfloat_objects, uses_float
     if uses_float(c_file.read_text()) and not wants_fpu(test_file):
         compile_cmd[-3:-3] = softfloat_objects(gcc_path)  # same as ./dash
+    from compiler.zlib import zlib_library, uses_zlib
+    if uses_zlib(c_file.read_text()):   # inflate, deflate, crc32 (Lorraine D6), as ./dash
+        compile_cmd[-3:-3] = [zlib_library(gcc_path, ["-m68020", "-m68881"] if wants_fpu(test_file) else [])]
 
     try:
         result = subprocess.run(
@@ -440,6 +443,9 @@ def run_multifile_test(test_file: Path) -> TestResult:
             from compiler.softfloat import softfloat_objects, uses_float
             softfloat = (softfloat_objects(gcc_path)
                          if any(uses_float(Path(f).read_text()) for f in c_files) else [])
+            from compiler.zlib import zlib_library, uses_zlib
+            if any(uses_zlib(Path(f).read_text()) for f in c_files):
+                softfloat.append(zlib_library(gcc_path))
             from compiler.cflags import mui_flags
             from compiler.cflags import link_flags
             try:   # MUI SDK headers when a module uses MUI; @link files (dashweb D10)
