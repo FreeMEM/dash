@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 631 funciones, 631 implementadas, 0 sin implementar.
+Total: 633 funciones, 633 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -573,6 +573,13 @@ Total: 631 funciones, 631 implementadas, 0 sin implementar.
 | `buffer_equals(buffer, offset, n, s)` | `BOOL` | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
 | `buffer_find_byte(buffer, from, to, byte)` | `LONG` | Position of the first byte equal to byte from from to to - 1, or -1 |  |
 | `buffer_find_any(buffer, from, to, bytes)` | `LONG` | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
+
+## Double y texto
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `str_from_double(d, decimals)` | `STRPTR` | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
+| `str_to_double(s)` | `double` | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
 
 ## Audio
 

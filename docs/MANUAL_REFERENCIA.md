@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 631 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 633 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -316,6 +316,7 @@ s = d + t                   # 0.30000000000000004, como en cualquier lenguaje co
 n = Int(d)                  # trunca hacia cero; Float(d) pierde digitos
 x = Double("2.5e-3")        # de texto: exacto hasta 17 cifras significativas; 0.0 si no hay numero
 Print "s = #{s}"            # el decimal mas corto que se lee igual (Ryu): s = 0.30000000000000004
+p = str_from_double(2.675, 2)   # "2.68": con decimales fijos, redondeando el decimal mas corto (como una hoja)
 ```
 
 - Un literal (`0.1`) donde va un `Double` (operado con un `Double`, asignado a una variable, campo o
@@ -4220,11 +4221,12 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Compresión (zlib) | 3 | `inflate`, `deflate`, `crc32` |
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
+| Double y texto | 2 | `str_from_double`, `str_to_double` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **631** | |
+| **Total** | **633** | |
 
 ### Colores Estandar Amiga
 

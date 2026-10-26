@@ -4493,6 +4493,19 @@ BUFSEARCH_FUNCTIONS = {
 }
 
 # =============================================================================
+# Double to text and back (Lorraine D3)
+# =============================================================================
+
+DOUBLE_FUNCTIONS = {
+    "str_from_double": _text("str_from_double", ["d", "decimals"], "STRPTR", "_dash_str_from_double(${d}, ${decimals})",
+                             "A Double with that many decimals (0: none), its shortest decimal rounded half away "
+                             "from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same"),
+    "str_to_double": _text("str_to_double", ["s"], "double", "_dash_double_from_str(${s})",
+                           "The Double at the start of the text, like Double(s): exact up to 17 significant "
+                           "digits; 0.0 if there is no number"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -4519,6 +4532,7 @@ ALL_BUILTINS = {
     **ZLIB_FUNCTIONS,          # Lorraine D6
     **UTF8_FUNCTIONS,          # Lorraine D5
     **BUFSEARCH_FUNCTIONS,     # Lorraine D38, D39
+    **DOUBLE_FUNCTIONS,        # Lorraine D3
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

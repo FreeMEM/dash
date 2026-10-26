@@ -1,0 +1,30 @@
+# Test: test_double_texto.dash built with --fpu (on a 68040 in the emulator)
+# fpu
+# str_from_double and str_to_double (Lorraine D3): the shortest decimal, a fixed number of decimals
+# rounded half away from zero from the shortest decimal (as a spreadsheet shows them), and back
+# expect-out: corto: 0.1 0.30000000000000004 1.0e-7
+# expect-out: fijo: 2.68 2.67 0.13 -0.13 3 4 -4
+# expect-out: ceros: 0.00 0.00 0.01 -0.01 0.0 0
+# expect-out: acarreo: 10.00 100 1.000 -1000.0
+# expect-out: grande: 100000000000000000000.00 123456789012345680000
+# expect-out: raros: inf -inf nan 0.00000
+# expect-out: vuelta: true true 2.5 -0.0025 0.0
+# expect-out: largo: 0.333333333333333300000000000000
+
+Main
+    a = Double(0.1)
+    Print "corto: #{str_from_double(a, -1)} #{str_from_double(a + 0.2, -1)} #{str_from_double(1.0e-7, -1)}"
+    Print "fijo: #{str_from_double(2.675, 2)} #{str_from_double(2.6749, 2)} #{str_from_double(0.125, 2)} #{str_from_double(-0.125, 2)} #{str_from_double(2.5, 0)} #{str_from_double(3.5, 0)} #{str_from_double(-3.5, 0)}"
+    Print "ceros: #{str_from_double(0.001, 2)} #{str_from_double(-0.001, 2)} #{str_from_double(0.005, 2)} #{str_from_double(-0.005, 2)} #{str_from_double(Double(0), 1)} #{str_from_double(0.4, 0)}"
+    Print "acarreo: #{str_from_double(9.999, 2)} #{str_from_double(99.5, 0)} #{str_from_double(0.9999, 3)} #{str_from_double(-999.96, 1)}"
+    Print "grande: #{str_from_double(1.0e20, 2)} #{str_from_double(123456789012345678901.0, 0)}"
+    z = Double(0)
+    Print "raros: #{str_from_double(Double(1) / z, 2)} #{str_from_double(Double(-1) / z, 2)} #{str_from_double(z / z, 2)} #{str_from_double(-z, 5)}"
+    t = str_from_double(Double(1) / Double(3), -1)
+    u = "2.5"
+    v = " -2.5e-3"
+    w = "x"
+    Print "vuelta: #{str_to_double(t) == Double(1) / Double(3)} #{Double(t) == str_to_double(t)} #{str_to_double(u)} #{str_to_double(v)} #{str_to_double(w)}"
+    # more decimals than the shortest has: zeros (the shortest decimal is what the number says)
+    Print "largo: #{str_from_double(Double(1) / Double(3), 30)}"
+end

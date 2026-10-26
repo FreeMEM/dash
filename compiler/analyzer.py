@@ -1531,6 +1531,8 @@ class SemanticAnalyzer(ASTVisitor):
             if func.return_type in ("Int", "Float", "Double", "Fixed", "String", "Bool") or \
                     list_elem_type(func.return_type) is not None or dict_value_type(func.return_type) is not None:
                 return self._type_annotation_to_dash_type(func.return_type)
+        elif isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).return_type == "double":
+            return DashType.DOUBLE
         elif isinstance(node, FunctionCall) and get_builtin(node.name) and get_builtin(node.name).list_of:
             return self._type_annotation_to_dash_type(f"[{get_builtin(node.name).list_of}]")
         elif isinstance(node, BoolLiteral):

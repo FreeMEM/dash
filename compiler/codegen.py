@@ -5155,45 +5155,62 @@ static LONG _dash_buffer_find_any(APTR buf, LONG from, LONG to, STRPTR bytes) {
 void dash_ryu_d2d(double d, unsigned long long *mant, LONG *exp);
 int dash_ryu_s2d(const char *s, int len, double *out);
 
+/* The digits of the shortest decimal of d (finite, not 0; its sign ignored) in digits[] (17 at most) and
+   where its decimal point goes (digits before it, maybe 0 or less): their number */
+static LONG _dash_double_digits(double d, char *digits, LONG *point) {
+    unsigned long long m;
+    ULONG hi, lo;
+    LONG e, n = 0, i, k = 0;
+    char t[10];
+    dash_ryu_d2d(d, &m, &e);
+    /* two 32-bit halves, one 64-bit division */
+    hi = (ULONG)(m / 100000000ULL);
+    lo = (ULONG)(m - (unsigned long long)hi * 100000000ULL);
+    if (hi) {
+        do { t[k++] = '0' + hi % 10; hi /= 10; } while (hi);
+        while (k) digits[n++] = t[--k];
+        for (i = 7; i >= 0; i--) { digits[n + i] = '0' + lo % 10; lo /= 10; }
+        n += 8;
+    } else {
+        do { t[k++] = '0' + lo % 10; lo /= 10; } while (lo);
+        while (k) digits[n++] = t[--k];
+    }
+    *point = n + e;
+    return n;
+}
+
+/* inf, -inf, nan or 0 from the bits of d (with an FPU a comparison with infinity may not say it): the
+   text, or NULL for any other number; *neg its sign */
+static const char *_dash_double_special(double d, BOOL *neg) {
+    union { double d; ULONG w[2]; } bits;
+    bits.d = d;
+    *neg = (bits.w[0] & 0x80000000UL) != 0;
+    if ((bits.w[0] & 0x7FF00000UL) == 0x7FF00000UL) {
+        if ((bits.w[0] & 0x000FFFFFUL) || bits.w[1]) { *neg = FALSE; return "nan"; }
+        return "inf";
+    }
+    if (!(bits.w[0] & 0x7FFFFFFFUL) && !bits.w[1]) return "0.0";
+    return NULL;
+}
+
 /* The shortest decimal that reads back as d: fixed while the point is within 17 digits of the first one
    (0.1, 150.0, 1234567.5, 0.00001), else with an exponent (1.5e300, 1.0e-7) */
 static STRPTR DashString_from_double(double d) {
     static char buffers[16][32];
     static LONG next = 0;
     char *s = buffers[next], *p = s, digits[20];
-    union { double d; ULONG w[2]; } bits;
-    unsigned long long m;
-    ULONG hi, lo;
-    LONG e, n = 0, point, i;
+    const char *special;
+    BOOL neg;
+    LONG e, n, point, i;
     next = (next + 1) & 15;
-    /* sign, infinity and NaN from the bits (with an FPU a comparison with infinity may not say it) */
-    bits.d = d;
-    if ((bits.w[0] & 0x7FF00000UL) == 0x7FF00000UL) {
-        if ((bits.w[0] & 0x000FFFFFUL) || bits.w[1]) { s[0] = 'n'; s[1] = 'a'; s[2] = 'n'; s[3] = 0; return s; }
-        if (bits.w[0] & 0x80000000UL) *p++ = '-';
-        p[0] = 'i'; p[1] = 'n'; p[2] = 'f'; p[3] = 0;
+    special = _dash_double_special(d, &neg);
+    if (neg) *p++ = '-';
+    if (special) {
+        while (*special) *p++ = *special++;
+        *p = 0;
         return s;
     }
-    if (bits.w[0] & 0x80000000UL) *p++ = '-';
-    if (!(bits.w[0] & 0x7FFFFFFFUL) && !bits.w[1]) { p[0] = '0'; p[1] = '.'; p[2] = '0'; p[3] = 0; return s; }
-    dash_ryu_d2d(d, &m, &e);
-    /* the digits of m (17 at most): two 32-bit halves, one 64-bit division */
-    hi = (ULONG)(m / 100000000ULL);
-    lo = (ULONG)(m - (unsigned long long)hi * 100000000ULL);
-    if (hi) {
-        char t[10];
-        LONG k = 0;
-        do { t[k++] = '0' + hi % 10; hi /= 10; } while (hi);
-        while (k) digits[n++] = t[--k];
-        for (i = 7; i >= 0; i--) { digits[n + i] = '0' + lo % 10; lo /= 10; }
-        n += 8;
-    } else {
-        char t[10];
-        LONG k = 0;
-        do { t[k++] = '0' + lo % 10; lo /= 10; } while (lo);
-        while (k) digits[n++] = t[--k];
-    }
-    point = n + e;                          /* digits before the decimal point */
+    n = _dash_double_digits(d, digits, &point);
     if (point > 0 && point <= 17) {
         for (i = 0; i < point; i++) *p++ = i < n ? digits[i] : '0';
         *p++ = '.';
@@ -5218,6 +5235,55 @@ static STRPTR DashString_from_double(double d) {
     }
     *p = 0;
     return s;
+}
+
+/* str_from_double(d, decimals) (Lorraine D3): with that many decimals (0: none), the shortest decimal
+   rounded half away from zero, as a spreadsheet shows it (2.675 to 2 is 2.68); decimals < 0: the shortest,
+   as "#{d}". A new text. */
+static STRPTR _dash_str_from_double(double d, LONG decimals) {
+    char digits[20];
+    const char *special;
+    BOOL neg, zero = TRUE;
+    LONG n, point, keep, i, len;
+    STRPTR r;
+    UBYTE *o;
+    if (decimals < 0) return _dash_str_dup(DashString_from_double(d), TRUE);
+    if (decimals > 340) decimals = 340;
+    special = _dash_double_special(d, &neg);
+    if (special && special[0] != '0') return _dash_str_dup(DashString_from_double(d), TRUE);
+    if (special) {                               /* 0: 0, 0.00... */
+        n = 1; digits[0] = '0'; point = 1;
+    } else {
+        n = _dash_double_digits(d, digits, &point);
+        keep = point + decimals;                 /* digits that stay */
+        if (keep < n) {
+            BOOL up = keep >= 0 && digits[keep] >= '5';
+            if (keep <= 0) {                     /* nothing stays: 0, or 1 in the last place */
+                n = 1; digits[0] = up ? '1' : '0'; point = up ? 1 - decimals : 1;
+            } else {
+                n = keep;
+                if (up) {
+                    for (i = n - 1; i >= 0 && digits[i] == '9'; i--) digits[i] = '0';
+                    if (i >= 0) digits[i]++;
+                    else { for (i = n; i > 0; i--) digits[i] = digits[i - 1]; digits[0] = '1'; n++; point++; }
+                }
+            }
+        }
+    }
+    for (i = 0; i < n; i++) if (digits[i] != '0') zero = FALSE;
+    len = (neg && !zero ? 1 : 0) + (point > 0 ? point : 1) + (decimals ? 1 + decimals : 0);
+    r = _dash_str_alloc(len, TRUE);
+    if (!r) return NULL;
+    o = (UBYTE *)r;
+    if (neg && !zero) *o++ = '-';
+    if (point <= 0) *o++ = '0';
+    for (i = 0; i < point; i++) *o++ = i < n ? digits[i] : '0';
+    if (decimals) {
+        *o++ = '.';
+        for (i = point; i < point + decimals; i++) *o++ = (i >= 0 && i < n) ? digits[i] : '0';
+    }
+    *o = 0;
+    return r;
 }
 
 /* The number at the start of the text (spaces, sign, digits with a point, an exponent), the nearest double:
@@ -18092,6 +18158,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
+        if self.uses_double:
+            self.uses_strings = True   # str_from_double makes a text
         if self.uses_text_io:
             self.uses_text = True      # TEXT_IO_RUNTIME uses the length cache
         if self.uses_text:
@@ -18141,9 +18209,11 @@ static {ret_type} {method_name}({params_str}) {{
         plain_call = bool(re.fullmatch(r"(?:_dash|ra)_\w+\((?:\s*(?:\$\{\w+\}|[\w-]+)\s*,?)*\)",
                                        builtin.c_template.strip())) and \
             all(builtin.c_template.count("${%s}" % name) <= 1 for name in builtin.params)
+        doubles = self._double_params(builtin)
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
-                code = self._generate_expression(arguments[i])
+                code = (self._double_value(arguments[i]) if param_name in doubles     # str_from_double(0.1, 2)
+                        else self._generate_expression(arguments[i]))
                 if builtin.name not in self._STRING_READERS and not builtin.reads_only:
                     code = self._escape_any(arguments[i], code)
                 if not self._is_plain_value(arguments[i]) and not plain_call:
@@ -18902,6 +18972,17 @@ static {ret_type} {method_name}({params_str}) {{
             return f"_DASH_MOD({self._fixed_value(node.left)}, {self._fixed_value(node.right)})"
         return f"({self._fixed_value(node.left)} {self._translate_operator(op)} {self._fixed_value(node.right)})"
 
+    def _double_params(self, builtin: BuiltinFunc) -> set:
+        """Names of the parameters of a builtin whose runtime function takes a double."""
+        import re
+        call = re.fullmatch(r"((?:_dash|ra)_\w+)\((.*)\)", builtin.c_template.strip())
+        sig = runtime_signatures().get(call.group(1)) if call else None
+        if not sig:
+            return set()
+        slots = [a.strip() for a in call.group(2).split(",")] if call.group(2).strip() else []
+        return {m.group(1) for i, slot in enumerate(slots)
+                if i < len(sig[1]) and sig[1][i] == "double" and (m := re.fullmatch(r"\$\{(\w+)\}", slot))}
+
     def _double_value(self, node: ASTNode) -> str:
         """The expression where a Double goes: its Float literals are written as C doubles."""
         self._dbl_ctx += 1
@@ -18923,7 +19004,9 @@ static {ret_type} {method_name}({params_str}) {{
         if isinstance(node, FunctionCall):
             if node.name == "Double":
                 return True
-            if node.name in ("Int", "Float") or get_builtin(node.name):
+            if get_builtin(node.name):
+                return get_builtin(node.name).return_type == "double"   # str_to_double (D3)
+            if node.name in ("Int", "Float"):
                 return False
             func = self.analysis.program.get_function(node.name)
             if func:
