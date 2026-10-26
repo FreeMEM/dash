@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 620 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 627 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -4193,11 +4193,12 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
+| UTF-8 | 7 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **620** | |
+| **Total** | **627** | |
 
 ### Standard Amiga Colors
 

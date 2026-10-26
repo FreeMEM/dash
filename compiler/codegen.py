@@ -4884,6 +4884,164 @@ static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
 
 """
 
+    # Lorraine D5: texts as UTF-8. Dash's texts are bytes (Latin-1 on the Amiga); these read and write them
+    # as UTF-8, on TEXT_RUNTIME's length cache
+    UTF8_RUNTIME = """\
+/* Dash UTF-8 Runtime */
+/* The code point that starts at p and its length in bytes (*n). A byte that does not start a valid
+   sequence (a lone continuation byte, an overlong form, a surrogate, past U+10FFFF, cut short by the
+   end of the text) is a character of its own: U+FFFD, 1 byte. The 0 at the end stops a sequence. */
+static LONG _dash_utf8_decode(const UBYTE *p, LONG *n) {
+    UBYTE c = p[0];
+    LONG cp, k, j, min;
+    *n = 1;
+    if (c < 0x80) return c;
+    if (c < 0xC2) return 0xFFFD;
+    if (c < 0xE0) { k = 1; cp = c & 0x1F; min = 0x80; }
+    else if (c < 0xF0) { k = 2; cp = c & 0x0F; min = 0x800; }
+    else if (c < 0xF5) { k = 3; cp = c & 0x07; min = 0x10000; }
+    else return 0xFFFD;
+    for (j = 1; j <= k; j++) {
+        if ((p[j] & 0xC0) != 0x80) return 0xFFFD;
+        cp = (cp << 6) | (p[j] & 0x3F);
+    }
+    if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0xFFFD;
+    *n = k + 1;
+    return cp;
+}
+
+/* Position of the character after the one at i (the length at the end) */
+static LONG _dash_utf8_next(STRPTR s, LONG i) {
+    LONG len = _dash_str_len(s), n;
+    if (i < 0) return 0;
+    if (i >= len) return len;
+    _dash_utf8_decode((UBYTE *)s + i, &n);
+    return i + n;
+}
+
+/* Position of the character before i (0 at the start) */
+static LONG _dash_utf8_prev(STRPTR s, LONG i) {
+    LONG len = _dash_str_len(s), j, n;
+    if (i > len) i = len;
+    if (i <= 0) return 0;
+    for (j = i - 1; j > 0 && i - j < 4 && (((UBYTE *)s)[j] & 0xC0) == 0x80; j--) ;
+    _dash_utf8_decode((UBYTE *)s + j, &n);
+    return j + n == i ? j : i - 1;
+}
+
+/* Code point of the character at i, 0 outside the text */
+static LONG _dash_utf8_code(STRPTR s, LONG i) {
+    LONG n;
+    if (!s || i < 0 || i >= _dash_str_len(s)) return 0;
+    return _dash_utf8_decode((UBYTE *)s + i, &n);
+}
+
+/* The bytes of cp in UTF-8, 0 to 4; U+FFFD for what is not a character */
+static LONG _dash_utf8_put(UBYTE *o, LONG cp) {
+    if (cp < 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) cp = 0xFFFD;
+    if (cp == 0) return 0;
+    if (cp < 0x80) { o[0] = cp; return 1; }
+    if (cp < 0x800) { o[0] = 0xC0 | (cp >> 6); o[1] = 0x80 | (cp & 0x3F); return 2; }
+    if (cp < 0x10000) {
+        o[0] = 0xE0 | (cp >> 12); o[1] = 0x80 | ((cp >> 6) & 0x3F); o[2] = 0x80 | (cp & 0x3F);
+        return 3;
+    }
+    o[0] = 0xF0 | (cp >> 18); o[1] = 0x80 | ((cp >> 12) & 0x3F); o[2] = 0x80 | ((cp >> 6) & 0x3F);
+    o[3] = 0x80 | (cp & 0x3F);
+    return 4;
+}
+
+/* A text with the character cp in UTF-8 ("" for 0) */
+static STRPTR _dash_utf8_char(LONG cp) {
+    UBYTE b[4];
+    LONG n = _dash_utf8_put(b, cp), k;
+    STRPTR r = _dash_str_alloc(n, TRUE);
+    if (!r) return NULL;
+    for (k = 0; k < n; k++) r[k] = b[k];
+    r[n] = 0;
+    return r;
+}
+
+/* How many characters (each invalid byte is one) */
+static LONG _dash_utf8_length(STRPTR s) {
+    LONG count = 0, n;
+    UBYTE *p = (UBYTE *)s;
+    if (!p) return 0;
+    while (*p) {
+        if (*p < 0x80) n = 1;
+        else _dash_utf8_decode(p, &n);
+        p += n;
+        count++;
+    }
+    return count;
+}
+
+/* What a character outside Latin-1 becomes: something like it, or "?" */
+static const struct { UWORD cp; char to[5]; } _dash_utf8_near[] = {
+    {0x2018, "'"}, {0x2019, "'"}, {0x201A, "'"}, {0x2032, "'"}, {0x2039, "\\xAB"}, {0x203A, "\\xBB"},
+    {0x201C, "\\""}, {0x201D, "\\""}, {0x201E, "\\""}, {0x2033, "\\""},
+    {0x2013, "-"}, {0x2014, "-"}, {0x2212, "-"}, {0x2010, "-"}, {0x2011, "-"},
+    {0x2026, "..."}, {0x20AC, "EUR"}, {0x2122, "(TM)"}, {0x2022, "\\xB7"},
+    {0x2002, " "}, {0x2003, " "}, {0x2009, " "}, {0x202F, " "}, {0x205F, " "},
+    {0x200B, ""}, {0x200C, ""}, {0x200D, ""}, {0x200E, ""}, {0x200F, ""}, {0xFEFF, ""},
+    {0x0152, "OE"}, {0x0153, "oe"}, {0x0160, "S"}, {0x0161, "s"}, {0x0178, "Y"}, {0x017D, "Z"},
+    {0x017E, "z"}, {0x0192, "f"}, {0x02C6, "^"}, {0x02DC, "~"}, {0x2020, "+"}, {0x2021, "+"},
+    {0x2030, "o/oo"}, {0x2190, "<-"}, {0x2192, "->"}, {0x2264, "<="}, {0x2265, ">="}, {0x2260, "!="},
+};
+
+static const char *_dash_utf8_latin1_of(LONG cp) {
+    LONG k;
+    for (k = 0; k < (LONG)(sizeof(_dash_utf8_near) / sizeof(_dash_utf8_near[0])); k++)
+        if (_dash_utf8_near[k].cp == cp) return _dash_utf8_near[k].to;
+    return "?";
+}
+
+/* UTF-8 to Latin-1: what is not in Latin-1 becomes something like it or "?" (an invalid byte too) */
+static STRPTR _dash_utf8_to_latin1(STRPTR s) {
+    LONG len = 0, n, cp, pass;
+    UBYTE *p, *o = NULL;
+    const char *t;
+    STRPTR r = NULL;
+    if (!s) s = (STRPTR)"";
+    for (pass = 0; pass < 2; pass++) {     /* the length first, then the bytes */
+        if (pass == 1) {
+            if (!(r = _dash_str_alloc(len, TRUE))) return NULL;
+            o = (UBYTE *)r;
+        }
+        for (p = (UBYTE *)s; *p; p += n) {
+            if (*p < 0x80) { n = 1; cp = *p; }
+            else cp = _dash_utf8_decode(p, &n);
+            if (cp < 256) {
+                if (o) *o++ = cp; else len++;
+            } else {
+                for (t = _dash_utf8_latin1_of(cp); *t; t++) {
+                    if (o) *o++ = *t; else len++;
+                }
+            }
+        }
+    }
+    *o = 0;
+    return r;
+}
+
+/* Latin-1 to UTF-8: bytes from 128 on take two */
+static STRPTR _dash_latin1_to_utf8(STRPTR s) {
+    LONG len = 0;
+    UBYTE *p, *o;
+    STRPTR r;
+    if (!s) s = (STRPTR)"";
+    for (p = (UBYTE *)s; *p; p++) len += *p < 0x80 ? 1 : 2;
+    if (!(r = _dash_str_alloc(len, TRUE))) return NULL;
+    for (p = (UBYTE *)s, o = (UBYTE *)r; *p; p++) {
+        if (*p < 0x80) *o++ = *p;
+        else { *o++ = 0xC0 | (*p >> 6); *o++ = 0x80 | (*p & 0x3F); }
+    }
+    *o = 0;
+    return r;
+}
+
+"""
+
     # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
     # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
     CPU_RUNTIME = """\
@@ -14483,6 +14641,7 @@ _RUNTIME_FLAGS = [
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
+    ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -14772,6 +14931,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
+        self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -15002,6 +15162,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(strings)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
+        if self.uses_utf8:
+            parts.append(CTemplates.UTF8_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -17611,6 +17773,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text_io = True   # net_recv: bytes to text like str_from_buffer
         if self.uses_split:
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
+        if self.uses_utf8:
+            self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_text_io:
             self.uses_text = True      # TEXT_IO_RUNTIME uses the length cache
         if self.uses_text:

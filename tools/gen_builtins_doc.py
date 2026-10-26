@@ -39,6 +39,7 @@ GROUPS = [
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)", "Images (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos", "Arguments"),     # dashweb D19
     ("ZLIB_FUNCTIONS", "Compresión (zlib)", "Compression (zlib)"),  # Lorraine D6
+    ("UTF8_FUNCTIONS", "UTF-8", "UTF-8"),              # Lorraine D5
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

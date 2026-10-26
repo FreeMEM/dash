@@ -4450,6 +4450,28 @@ ZLIB_FUNCTIONS = {
 }
 
 # =============================================================================
+# UTF-8 (Lorraine D5): texts as UTF-8. A byte that does not start a valid sequence is one character, U+FFFD.
+# =============================================================================
+
+UTF8_FUNCTIONS = {
+    "utf8_next": _text("utf8_next", ["s", "i"], "LONG", "_dash_utf8_next(${s}, ${i})",
+                       "Position of the UTF-8 character after the one at byte i (the length at the end)"),
+    "utf8_prev": _text("utf8_prev", ["s", "i"], "LONG", "_dash_utf8_prev(${s}, ${i})",
+                       "Position of the UTF-8 character before byte i (0 at the start)"),
+    "utf8_code": _text("utf8_code", ["s", "i"], "LONG", "_dash_utf8_code(${s}, ${i})",
+                       "Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text)"),
+    "utf8_char": _text("utf8_char", ["code"], "STRPTR", "_dash_utf8_char(${code})",
+                       "Text with the character of that code point in UTF-8 (\"\" for 0; U+FFFD if it is not one)"),
+    "utf8_length": _text("utf8_length", ["s"], "LONG", "_dash_utf8_length(${s})",
+                         "How many UTF-8 characters s has (each invalid byte counts as one)"),
+    "utf8_to_latin1": _text("utf8_to_latin1", ["s"], "STRPTR", "_dash_utf8_to_latin1(${s})",
+                            "UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (\u201c to \", "
+                            "\u20ac to EUR, \u2026 to ...) or ?, as do invalid bytes"),
+    "latin1_to_utf8": _text("latin1_to_utf8", ["s"], "STRPTR", "_dash_latin1_to_utf8(${s})",
+                            "Latin-1 text in UTF-8 (bytes from 128 on take two)"),
+}
+
+# =============================================================================
 # All built-in functions combined
 # =============================================================================
 
@@ -4474,6 +4496,7 @@ ALL_BUILTINS = {
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
     **ZLIB_FUNCTIONS,          # Lorraine D6
+    **UTF8_FUNCTIONS,          # Lorraine D5
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

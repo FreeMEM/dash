@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 620 funciones, 620 implementadas, 0 sin implementar.
+Total: 627 funciones, 627 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -552,6 +552,18 @@ Total: 620 funciones, 620 implementadas, 0 sin implementar.
 | `inflate(src, n, dest, max)` | `LONG` | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
 | `deflate(src, n, dest, max, level)` | `LONG` | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
 | `crc32(buffer, n, crc)` | `LONG` | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
+
+## UTF-8
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `utf8_next(s, i)` | `LONG` | Position of the UTF-8 character after the one at byte i (the length at the end) |  |
+| `utf8_prev(s, i)` | `LONG` | Position of the UTF-8 character before byte i (0 at the start) |  |
+| `utf8_code(s, i)` | `LONG` | Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text) |  |
+| `utf8_char(code)` | `STRPTR` | Text with the character of that code point in UTF-8 ("" for 0; U+FFFD if it is not one) |  |
+| `utf8_length(s)` | `LONG` | How many UTF-8 characters s has (each invalid byte counts as one) |  |
+| `utf8_to_latin1(s)` | `STRPTR` | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
+| `latin1_to_utf8(s)` | `STRPTR` | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
 
 ## Audio
 
