@@ -1,0 +1,6 @@
+# Test: a String key in a {Int: T}
+# expect: This dictionary's keys are Int ({Int: T})
+Main
+    var d: {Int: String} = {}
+    d["uno"] = "x"
+end

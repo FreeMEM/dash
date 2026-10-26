@@ -26,8 +26,8 @@ dash_grammar_minimal = r"""
     WEAK: "weak"
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
     // [T]: a list whose elements are T ("[String]", "[Nodo]", "[[Int]]")
-    // {String: T}: a dictionary from String to T
-    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\]/ | /\{[ \t]*String[ \t]*:[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\}/
+    // {String: T}: a dictionary from String to T; {Int: T} from Int (Lorraine D9)
+    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\]/ | /\{[ \t]*(?:String|Int)[ \t]*:[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\}/
 
     // Enum definition
     enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
@@ -156,7 +156,7 @@ dash_grammar_minimal = r"""
                 | "self" ("." ID)+ index_chain "=" expression -> self_array_assign
     index_chain: ("[" expression "]")+
     array_literal: "[" (expression ("," expression)*)? "]"
-    // {"clave": valor, ...}: a dictionary with String keys (dashweb D5)
+    // {"clave": valor, ...}: a dictionary with String keys (dashweb D5), or Int keys {1: valor} (D9)
     dict_literal: "{" (dict_entry ("," dict_entry)*)? "}"
     dict_entry: expression ":" expression
 

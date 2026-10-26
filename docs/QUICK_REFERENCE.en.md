@@ -106,7 +106,7 @@ break / continue            # inside while/for only
 
 ## Functions
 ```
-func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}
+func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}, {Int: T}
     return a + b                return x * 2
 end                         end
 
@@ -153,6 +153,7 @@ l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
 d = {"a": 1, "b": 2}        # dictionary {String: T}: d["c"] = 3, d["a"], d.has("a"),
 d.remove("a")  d.keys()  d.clear()  d.length    # missing key: 0 / nil
 d.get("c", 0)                # the value, or the default if missing (one lookup; objects: nil only)
+e = {1: "uno", 7: "siete"}   # Int keys: {Int: T} (var e: {Int: String} = {}), same methods; keys() is [Int]
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 

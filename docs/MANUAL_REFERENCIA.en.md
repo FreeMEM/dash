@@ -262,6 +262,7 @@ vacio = []
 | Array | Collection of elements (untyped: read as integers) | `[1, 2, 3]` |
 | `[T]` | List of `T` (`[Int]`, `[String]`, `[Enemigo]`, `[[Int]]`, `[Fixed]`) | `var l: [String] = []` |
 | `{String: T}` | Dictionary with string keys | `{"Ana": 30}` |
+| `{Int: T}` | Dictionary with integer keys | `{1: "one"}` |
 | Struct | User-defined compound type | `Player(10, 20)` |
 | Func | A function or a lambda, to pass around as a value | `fn(x) -> x * 2` |
 | Pointer | Memory address (for C and the system) | `buffer_alloc(64)` |
@@ -753,7 +754,7 @@ end
 ```
 
 Types that can be written: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void`,
-lists `[T]`, dictionaries `{String: T}` and the name of a struct or an enum. Any other name is an error (it used to be taken as `Int` silently).
+lists `[T]`, dictionaries `{String: T}` or `{Int: T}` and the name of a struct or an enum. Any other name is an error (it used to be taken as `Int` silently).
 An `Array` field of a struct is freed with the struct, just like a field of struct type.
 
 The `return` is checked against the declared type: it is an error to return a string where a number or a
@@ -1073,6 +1074,15 @@ end
 
 var cabeceras: {String: String} = {}
 cabeceras["Host"] = "ejemplo.org"
+```
+
+With integer keys, `{Int: T}`: the same, and `keys()` gives a list of `Int`. A key of another type is a
+compile error.
+
+```
+styles = {0: "normal", 7: "title"}
+var cells: {Int: Cell} = {}
+cells[row * 1024 + column] = Cell(...)
 ```
 
 Values can be `Int`, `Bool`, `String`, structs, lists or other dictionaries

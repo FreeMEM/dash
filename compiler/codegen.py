@@ -22,7 +22,7 @@ from compiler.ast_nodes import (
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
-from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type
+from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type, dict_key_type
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 
 
@@ -1201,16 +1201,28 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
     DICT_RUNTIME = """\
 /* Dash Dict Runtime */
 typedef struct {
-    STRPTR *keys;      /* NULL = free slot */
+    STRPTR *keys;      /* NULL = free slot; {Int: T}: the keys themselves, used[] says which slots hold one */
     LONG *vals;
     LONG count;
     LONG cap;          /* slots: 0 or a power of two */
     LONG kind;         /* 0, _DASH_ARR_OBJS or _DASH_ARR_STRS */
+    UBYTE *used;       /* {Int: T} (Lorraine D9): one byte a slot; NULL with String keys */
+    BOOL ikeys;        /* Int keys: set by the first DashDict_*i that puts one in */
 } DashDict;
+
+#define _DASH_DICT_USED(d, i) ((d)->ikeys ? (d)->used[i] : (d)->keys[i] != NULL)
 
 static ULONG _dash_dict_hash(STRPTR k) {
     ULONG h = 5381;
     while (*k) h = (h << 5) + h + (UBYTE)*k++;
+    return h;
+}
+
+/* An Int key mixed with shifts (no multiplication on a 68000): consecutive keys stay apart */
+static ULONG _dash_dict_hashi(LONG k) {
+    ULONG h = (ULONG)k;
+    h ^= h >> 15;
+    h ^= h >> 7;
     return h;
 }
 
@@ -1227,10 +1239,14 @@ static void DashDict_destroy(void *obj) {
     LONG i;
     if (!d->cap) return;
     for (i = 0; i < d->cap; i++) {
-        if (d->keys[i]) { _dash_str_free(d->keys[i]); _dash_dict_drop(d, d->vals[i], TRUE); }
+        if (_DASH_DICT_USED(d, i)) {
+            if (!d->ikeys) _dash_str_free(d->keys[i]);
+            _dash_dict_drop(d, d->vals[i], TRUE);
+        }
     }
     _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
     _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+    if (d->used) _dash_block_put(d->used, d->cap);
 }
 
 /* A new empty dictionary: a temporary until a variable adopts it */
@@ -1243,6 +1259,8 @@ static DashDict *DashDict_new(LONG kind) {
     d->count = 0;
     d->cap = 0;
     d->kind = kind;
+    d->used = NULL;
+    d->ikeys = FALSE;
     return d;
 }
 
@@ -1253,22 +1271,38 @@ static LONG _dash_dict_slot(DashDict *d, STRPTR key) {
     return (LONG)i;
 }
 
+/* {Int: T}: the slot of key, or the free one where it would go */
+static LONG _dash_dict_sloti(DashDict *d, LONG key) {
+    ULONG mask = d->cap - 1, i = _dash_dict_hashi(key) & mask;
+    while (d->used[i] && (LONG)d->keys[i] != key) i = (i + 1) & mask;
+    return (LONG)i;
+}
+
 static BOOL _dash_dict_grow(DashDict *d) {
     LONG oldcap = d->cap, newcap = oldcap ? oldcap * 2 : 8, i, s;
     STRPTR *oldkeys = d->keys;
     LONG *oldvals = d->vals;
+    UBYTE *oldused = d->used, *used = NULL;
     STRPTR *keys = (STRPTR *)_dash_block_get_clear(sizeof(STRPTR) * newcap);
     LONG *vals = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
     if (!keys || !vals) return FALSE;
+    if (d->ikeys && !(used = (UBYTE *)_dash_block_get_clear(newcap))) return FALSE;
     d->keys = keys;
     d->vals = vals;
+    d->used = used;
     d->cap = newcap;
     for (i = 0; i < oldcap; i++) {
-        if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
+        if (d->ikeys) {
+            if (oldused[i]) {
+                s = _dash_dict_sloti(d, (LONG)oldkeys[i]);
+                keys[s] = oldkeys[i]; vals[s] = oldvals[i]; used[s] = 1;
+            }
+        } else if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
     }
     if (oldcap) {
         _dash_block_put(oldkeys, sizeof(STRPTR) * oldcap);
         _dash_block_put(oldvals, sizeof(LONG) * oldcap);
+        if (oldused) _dash_block_put(oldused, oldcap);
     }
     return TRUE;
 }
@@ -1326,6 +1360,97 @@ static BOOL DashDict_has(DashDict *d, STRPTR key) {
     return d && key && d->cap && d->keys[_dash_dict_slot(d, key)] != NULL;
 }
 
+/* {Int: T} (Lorraine D9): the same with an Int key. The first key put in an empty dictionary makes its keys Int */
+static LONG _dash_dict_puti(DashDict *d, LONG key) {
+    LONG s;
+    if (!d) return -1;
+    if (!d->ikeys) {
+        if (d->count) return -1;                 /* (the analyzer keeps String and Int keys apart) */
+        if (d->cap) {                            /* emptied String table: start again */
+            _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
+            _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+            d->keys = NULL; d->vals = NULL; d->cap = 0;
+        }
+        d->ikeys = TRUE;
+    }
+    if ((d->count + 1) * 4 > d->cap * 3 && !_dash_dict_grow(d)) return -1;
+    s = _dash_dict_sloti(d, key);
+    if (!d->used[s]) {
+        d->used[s] = 1;
+        d->keys[s] = (STRPTR)key;
+        d->vals[s] = 0;
+        d->count++;
+    }
+    return s;
+}
+
+static void DashDict_seti(DashDict *d, LONG key, LONG value) {
+    LONG s = _dash_dict_puti(d, key);
+    if (s >= 0) d->vals[s] = value;
+}
+
+static void DashDict_set_obji(DashDict *d, LONG key, void *value) {
+    LONG s = _dash_dict_puti(d, key);
+    if (s < 0) return;
+    d->kind = _DASH_ARR_OBJS;
+    _dash_obj_set((void **)&d->vals[s], value);
+}
+
+static void DashDict_set_stri(DashDict *d, LONG key, STRPTR value) {
+    LONG s = _dash_dict_puti(d, key);
+    if (s < 0) return;
+    d->kind = _DASH_ARR_STRS;
+    _dash_str_set((STRPTR *)&d->vals[s], value);
+}
+
+static LONG DashDict_get_ori(DashDict *d, LONG key, LONG dflt) {
+    LONG s;
+    if (!d || !d->ikeys || !d->cap) return dflt;
+    s = _dash_dict_sloti(d, key);
+    return d->used[s] ? d->vals[s] : dflt;
+}
+
+static LONG DashDict_geti(DashDict *d, LONG key) {
+    return DashDict_get_ori(d, key, 0);
+}
+
+static BOOL DashDict_hasi(DashDict *d, LONG key) {
+    return d && d->ikeys && d->cap && d->used[_dash_dict_sloti(d, key)];
+}
+
+static void DashDict_removei(DashDict *d, LONG key) {
+    LONG s, j, h, mask;
+    if (!d || !d->ikeys || !d->cap) return;
+    s = _dash_dict_sloti(d, key);
+    if (!d->used[s]) return;
+    _dash_dict_drop(d, d->vals[s], FALSE);
+    d->used[s] = 0;
+    d->count--;
+    mask = d->cap - 1;
+    for (j = (s + 1) & mask; d->used[j]; j = (j + 1) & mask) {
+        h = _dash_dict_hashi((LONG)d->keys[j]) & mask;
+        if ((j > s && (h <= s || h > j)) || (j < s && h <= s && h > j)) {
+            d->keys[s] = d->keys[j];
+            d->vals[s] = d->vals[j];
+            d->used[s] = 1;
+            d->used[j] = 0;
+            s = j;
+        }
+    }
+}
+
+/* {1: "a", ...} */
+static DashDict *DashDict_fromi(LONG kind, LONG n, LONG *keys, LONG *vals) {
+    DashDict *d = DashDict_new(kind);
+    LONG i;
+    for (i = 0; d && i < n; i++) {
+        if (kind == _DASH_ARR_OBJS) DashDict_set_obji(d, keys[i], (void *)vals[i]);
+        else if (kind == _DASH_ARR_STRS) DashDict_set_stri(d, keys[i], (STRPTR)vals[i]);
+        else DashDict_seti(d, keys[i], vals[i]);
+    }
+    return d;
+}
+
 /* Linear probing without tombstones: the entries after the hole move back */
 static void DashDict_remove(DashDict *d, STRPTR key) {
     LONG s, j, h, mask;
@@ -1352,7 +1477,12 @@ static void DashDict_clear(DashDict *d) {
     LONG i;
     if (!d) return;
     for (i = 0; i < d->cap; i++) {
-        if (d->keys[i]) { _dash_str_free(d->keys[i]); _dash_dict_drop(d, d->vals[i], FALSE); d->keys[i] = NULL; }
+        if (_DASH_DICT_USED(d, i)) {
+            if (!d->ikeys) _dash_str_free(d->keys[i]);
+            _dash_dict_drop(d, d->vals[i], FALSE);
+            d->keys[i] = NULL;
+            if (d->ikeys) d->used[i] = 0;
+        }
     }
     d->count = 0;
 }
@@ -1361,13 +1491,13 @@ static LONG DashDict_length(DashDict *d) {
     return d ? d->count : 0;
 }
 
-/* The keys, as a new list of Strings (in no particular order) */
+/* The keys, as a new list of Strings (in no particular order); of Ints in a {Int: T} */
 static DashArrayLong *DashDict_keys(DashDict *d) {
     LONG i, j = 0;
     DashArrayLong *arr = DashArray_create(d ? d->count : 0);
     if (!arr || !d) return arr;
-    for (i = 0; i < d->cap; i++) if (d->keys[i]) arr->data[j++] = (LONG)d->keys[i];
-    return DashArray_own(arr, _DASH_ARR_STRS);
+    for (i = 0; i < d->cap; i++) if (_DASH_DICT_USED(d, i)) arr->data[j++] = (LONG)d->keys[i];
+    return d->ikeys ? arr : DashArray_own(arr, _DASH_ARR_STRS);
 }
 
 /* {"a": 1, ...} */
@@ -15280,6 +15410,7 @@ class CodeGenerator(ASTVisitor):
         # the declared Dash type of list and dict variables ("{String: [Nodo]}"), for the elements
         # of nested ones; only read while var_types agrees (D37)
         self.decl_types: Dict[str, str] = {}
+        self.int_key_dicts: Set[str] = set()   # variables holding a {Int: T} made from a literal (Lorraine D9)
         # Track Amiga library requirements
         self.needs_gfx: bool = False
         self.needs_audio: bool = False
@@ -16280,6 +16411,7 @@ static void {struct.name}_release({c_name} *obj) {{
         old_method_ret = getattr(self, "_method_ret", None)
         self._method_ret = method.return_type
         saved_var_types = self.var_types
+        saved_int_keys = set(self.int_key_dicts)
         self.var_types = dict(saved_var_types)
         self._seed_param_types(method.params)
 
@@ -16304,6 +16436,7 @@ static void {struct.name}_release({c_name} *obj) {{
         self._current_struct = old_struct_context
         self._method_ret = old_method_ret
         self.var_types = saved_var_types
+        self.int_key_dicts = saved_int_keys
 
         # Method name: StructName_methodname
         method_name = f"{struct.name}_{method.name}"
@@ -16730,6 +16863,11 @@ static {ret_type} {method_name}({params_str}) {{
             self.decl_types.get(node.value.name)
         if declared:
             self.decl_types[node.name] = declared
+        if self._dict_value_kind(node.value) is not None:
+            if self._dict_int_keys(node.value):
+                self.int_key_dicts.add(node.name)
+            else:
+                self.int_key_dicts.discard(node.name)
 
         # Track variable type for string/struct detection. A declared Double or Float keeps its type
         # whatever number it gets (c = 2.5 in a Double is a double, not the literal's float or Int)
@@ -17468,15 +17606,19 @@ static {ret_type} {method_name}({params_str}) {{
         mark = self._new_tmp_mark()
         self.context.enter_scope("block")
         self.context.own(f"_dk_{var}", "obj")       # a return in the body releases it
-        body = self._generate_loop_body(node, "string", mark)
+        ints = self._dict_int_keys(node.iterable.object)       # {Int: T} (Lorraine D9)
+        body = self._generate_loop_body(node, "number" if ints else "string", mark)
         self.context.exit_scope()
+        head = (f"{indent}        LONG {var} = (LONG)_dk_{var}->keys[_di_{var}];\n"
+                f"{indent}        if (!_dk_{var}->used[_di_{var}]) continue;\n" if ints else
+                f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
+                f"{indent}        if (!{var}) continue;\n")
         code = (f"{indent}    {{ DashDict *_dk_{var} = {d};\n"
                 f"{indent}    LONG _di_{var};\n"
                 f"{indent}    _dash_hold(_dk_{var});\n"
-                f"{indent}    for (_di_{var} = 0; _dk_{var} && _di_{var} < _dk_{var}->cap; _di_{var}++) {{\n"
-                f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
-                f"{indent}        if (!{var}) continue;\n"
-                + body +
+                f"{indent}    for (_di_{var} = 0; _dk_{var} && _dk_{var}->ikeys == {1 if ints else 0} "
+                f"&& _di_{var} < _dk_{var}->cap; _di_{var}++) {{\n"
+                + head + body +
                 f"{indent}    }}\n"
                 f"{indent}    _dash_release(_dk_{var}); }}\n")
         self.emit(self._wrap_loop(indent, mark, code))
@@ -17486,6 +17628,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.current_function = node
         # Variable types are per function: save the caller's and seed the params
         saved_var_types = self.var_types
+        saved_int_keys = set(self.int_key_dicts)
         self.var_types = dict(saved_var_types)
         # a module's function does not see the main program's globals: its "x = 1" is a local
         saved_hidden = self.context.hidden_globals
@@ -17536,6 +17679,7 @@ static {ret_type} {method_name}({params_str}) {{
         else:
             return_type = self._infer_function_return_type(node)
         self.var_types = saved_var_types
+        self.int_key_dicts = saved_int_keys
 
         # Generate prototype
         proto = CTemplates.FUNCTION_PROTO.substitute(
@@ -17629,12 +17773,13 @@ static {ret_type} {method_name}({params_str}) {{
             d = self._generate_expression(node.array)
             key = self._generate_expression(node.index)
             value = self._generate_expression(node.value)
+            i = "i" if self._dict_int_keys(node.array) else ""       # {Int: T} (Lorraine D9)
             if kind == "string":
-                self.emit(f"{indent}DashDict_set_str({d}, {key}, {self._str_kept(node.value, value)});\n")
+                self.emit(f"{indent}DashDict_set_str{i}({d}, {key}, {self._str_kept(node.value, value)});\n")
             elif kind != "int":
-                self.emit(f"{indent}DashDict_set_obj({d}, {key}, (void *)({value}));\n")
+                self.emit(f"{indent}DashDict_set_obj{i}({d}, {key}, (void *)({value}));\n")
             else:
-                self.emit(f"{indent}DashDict_set({d}, {key}, {value});\n")
+                self.emit(f"{indent}DashDict_set{i}({d}, {key}, {value});\n")
             return
         array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
@@ -17975,9 +18120,10 @@ static {ret_type} {method_name}({params_str}) {{
             # d["clave"]: the value, or 0 / nil when the key is missing
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             kind = self._dict_value_kind(node.array)
-            code = f"DashDict_get({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
+            i = "i" if self._dict_int_keys(node.array) else ""       # {Int: T} (Lorraine D9)
+            code = f"DashDict_get{i}({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
             if getattr(node, "default", None) is not None:      # d.get(k, default) (D65)
-                code = (f"DashDict_get_or({self._generate_expression(node.array)}, "
+                code = (f"DashDict_get_or{i}({self._generate_expression(node.array)}, "
                         f"{self._generate_expression(node.index)}, (LONG)({self._generate_expression(node.default)}))")
             if kind == "string":
                 return f"((STRPTR){code})"
@@ -18417,7 +18563,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             d = self._generate_expression(node.object)
             args = "".join(", " + self._generate_expression(a) for a in node.arguments)
-            return f"DashDict_{node.method}({d}{args})"
+            i = "i" if node.method in ("has", "remove") and self._dict_int_keys(node.object) else ""
+            return f"DashDict_{node.method}{i}({d}{args})"
         # Get the object and determine its type
         obj_expr = self._generate_expression(node.object)
 
@@ -19077,6 +19224,8 @@ static {ret_type} {method_name}({params_str}) {{
         keys = ", ".join(self._generate_expression(k) for k in node.keys)
         values = ", ".join(f"(LONG)({self._generate_expression(v)})" for v in node.values)
         n = len(node.keys)
+        if self._dict_int_keys(node):            # {1: "a"} (Lorraine D9)
+            return f"DashDict_fromi({kind}, {n}, (LONG[]){{{keys}}}, (LONG[]){{{values}}})"
         return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (LONG[]){{{values}}})"
 
     def _generate_array_literal(self, node: ArrayLiteral) -> str:
@@ -19180,7 +19329,7 @@ static {ret_type} {method_name}({params_str}) {{
         if isinstance(node, ArrayLiteral):
             return self._literal_elem_type(node)
         if isinstance(node, MethodCall) and node.method == "keys" and self._dict_value_kind(node.object) is not None:
-            return "string"
+            return "int" if self._dict_int_keys(node.object) else "string"
         if isinstance(node, ArrayAccess):
             vt = self._list_var_type(self._declared_type_of(node))
             return vt[6:] if vt and vt.startswith("array:") else None
@@ -19227,6 +19376,21 @@ static {ret_type} {method_name}({params_str}) {{
         if self.analysis.program.get_struct(elem):
             return f"array:struct:{elem}"
         return "array"
+
+    def _dict_int_keys(self, node: ASTNode) -> bool:
+        """True if a dictionary expression has Int keys, a {Int: T} (Lorraine D9)."""
+        if isinstance(node, DictLiteral):
+            return bool(node.keys) and not self._is_string_expr(node.keys[0])
+        if isinstance(node, VarRef):
+            declared = self.decl_types.get(node.name)
+            if dict_value_type(declared) is not None:
+                return dict_key_type(declared) == "Int"
+            return node.name in self.int_key_dicts
+        if isinstance(node, ArrayAccess):
+            return dict_key_type(self._declared_type_of(node)) == "Int"
+        if isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)):
+            return dict_key_type(self._declared_dict_type(node)) == "Int"
+        return False
 
     def _dict_value_kind(self, node: ASTNode) -> Optional[str]:
         """What a dictionary expression's values are: "int", "string", "struct:X", "array";
@@ -19342,6 +19506,7 @@ static {ret_type} {method_name}({params_str}) {{
         else:
             # Block body
             saved_var_types = self.var_types
+            saved_int_keys = set(self.int_key_dicts)
             self.var_types = dict(saved_var_types)
             self._seed_param_types(node.params)
             self.context.enter_scope("func")
@@ -19354,6 +19519,7 @@ static {ret_type} {method_name}({params_str}) {{
             self._lambda_depth -= 1
             self.context.exit_scope()
             self.var_types = saved_var_types
+            self.int_key_dicts = saved_int_keys
             return_type = "LONG" if self._returns_value(node.body) else "void"
 
         # Generate the lambda function

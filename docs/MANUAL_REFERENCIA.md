@@ -262,6 +262,7 @@ vacio = []
 | Array | Coleccion de elementos (sin tipo: se leen como enteros) | `[1, 2, 3]` |
 | `[T]` | Lista de `T` (`[Int]`, `[String]`, `[Enemigo]`, `[[Int]]`, `[Fixed]`) | `var l: [String] = []` |
 | `{String: T}` | Diccionario con claves de texto | `{"Ana": 30}` |
+| `{Int: T}` | Diccionario con claves enteras | `{1: "uno"}` |
 | Struct | Tipo compuesto definido por usuario | `Player(10, 20)` |
 | Func | Una funcion o una lambda, para pasarla como valor | `fn(x) -> x * 2` |
 | Pointer | Direccion de memoria (para C y el sistema) | `buffer_alloc(64)` |
@@ -754,7 +755,7 @@ end
 ```
 
 Tipos que se pueden escribir: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void`,
-listas `[T]`, diccionarios `{String: T}` y el nombre de un struct o de un enum. Cualquier otro nombre es un error (antes se tomaba como `Int` sin avisar).
+listas `[T]`, diccionarios `{String: T}` o `{Int: T}` y el nombre de un struct o de un enum. Cualquier otro nombre es un error (antes se tomaba como `Int` sin avisar).
 Un campo `Array` de un struct se libera con el struct, igual que un campo de tipo struct.
 
 El `return` se comprueba contra el tipo declarado: es un error devolver un texto donde va un numero o un
@@ -1074,6 +1075,15 @@ end
 
 var cabeceras: {String: String} = {}
 cabeceras["Host"] = "ejemplo.org"
+```
+
+Con claves enteras, `{Int: T}`: lo mismo, y `keys()` da una lista de `Int`. Una clave de otro tipo es un
+error al compilar.
+
+```
+estilos = {0: "normal", 7: "titulo"}
+var celdas: {Int: Celda} = {}
+celdas[fila * 1024 + columna] = Celda(...)
 ```
 
 Los valores pueden ser `Int`, `Bool`, `String`, structs, listas u otros diccionarios

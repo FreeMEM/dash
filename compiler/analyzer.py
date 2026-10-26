@@ -35,12 +35,19 @@ def dict_value_type(type_name: Optional[str]) -> Optional[str]:
     return None
 
 
+def dict_key_type(type_name: Optional[str]) -> Optional[str]:
+    """Key type of a dictionary type annotation ("{Int:String}" -> "Int"), else None."""
+    if dict_value_type(type_name) is not None:
+        return type_name[1:-1].split(":", 1)[0].strip()
+    return None
+
+
 def type_is_known(type_name: str, known) -> bool:
     """A type name, a list of one ("[Nodo]", "[[Int]]") or a dictionary ("{String:Nodo}")."""
     value = dict_value_type(type_name)
     if value is not None:
         key = type_name[1:-1].split(":", 1)[0].strip()
-        return key == "String" and bool(value) and value not in ("Void", "Array") and type_is_known(value, known)
+        return key in ("String", "Int") and bool(value) and value not in ("Void", "Array") and type_is_known(value, known)
     elem = list_elem_type(type_name)
     if elem is not None:
         return bool(elem) and elem not in ("Void", "Array") and type_is_known(elem, known)
@@ -95,6 +102,7 @@ class Symbol:
     struct_name: Optional[str] = None  # Struct type of the value, when known
     elem_struct: Optional[str] = None  # For a list of structs: their struct type
     dict_value: Optional[str] = None   # For a dictionary: the type of its values ("Int", "Nodo"...)
+    dict_key: Optional[str] = None     # ... and of its keys: "String", or "Int" (Lorraine D9)
     list_fixed: bool = False           # A list of Fixed values ([Fixed]): its elements are Fixed
     list_type: Optional[str] = None    # Its declared list type ("[String]", "[[Int]]"...), when known (D49)
 
@@ -296,7 +304,7 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,  # C globals start zeroed
                 struct_name=self._struct_type_name(gvar.var_type),
                 elem_struct=self._list_elem_struct(gvar.var_type),
-                dict_value=dict_value_type(gvar.var_type),
+                dict_value=dict_value_type(gvar.var_type), dict_key=dict_key_type(gvar.var_type),
                 list_fixed=list_elem_type(gvar.var_type) == "Fixed",
                 list_type=self._list_decl(gvar.var_type)
             )
@@ -543,7 +551,7 @@ class SemanticAnalyzer(ASTVisitor):
             is_initialized=True,
             struct_name=self._struct_type_name(node.var_type) if node.var_type else None,
             elem_struct=self._list_elem_struct(node.var_type),
-            dict_value=dict_value_type(node.var_type),
+            dict_value=dict_value_type(node.var_type), dict_key=dict_key_type(node.var_type),
             list_fixed=(list_elem_type(node.var_type) == "Fixed" if node.var_type
                         else self._is_fixed_list(node.initial_value)),
             list_type=(self._list_decl(node.var_type) if node.var_type
@@ -576,7 +584,7 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,
                 struct_name=self._struct_name_of(node.value),
                 elem_struct=self._elem_struct_of(node.value),
-                dict_value=self._dict_value_of(node.value),
+                dict_value=self._dict_value_of(node.value), dict_key=self._dict_key_of(node.value),
                 list_fixed=self._is_fixed_list(node.value),
                 list_type=self._declared_list_type(node.value)
             )
@@ -592,7 +600,7 @@ class SemanticAnalyzer(ASTVisitor):
                 is_initialized=True,
                 struct_name=self._struct_name_of(node.value),
                 elem_struct=self._elem_struct_of(node.value),
-                dict_value=self._dict_value_of(node.value),
+                dict_value=self._dict_value_of(node.value), dict_key=self._dict_key_of(node.value),
                 list_type=self._declared_list_type(node.value)
             ), node)
         elif symbol.symbol_type not in (SymbolType.VARIABLE, SymbolType.PARAMETER):
@@ -699,7 +707,7 @@ class SemanticAnalyzer(ASTVisitor):
             is_initialized=True,
             struct_name=elem,
             elem_struct=self._list_elem_struct(inner) if inner else None,
-            dict_value=dict_value_type(inner) if inner else None,
+            dict_value=dict_value_type(inner) if inner else None, dict_key=dict_key_type(inner) if inner else None,
             list_fixed=bool(inner) and list_elem_type(inner) == "Fixed",
             list_type=self._list_decl(inner)
         )
@@ -753,6 +761,7 @@ class SemanticAnalyzer(ASTVisitor):
                 struct_name=self._struct_type_name(param.param_type if isinstance(param, FunctionParam) else None),
                 elem_struct=self._list_elem_struct(param.param_type if isinstance(param, FunctionParam) else None),
                 dict_value=dict_value_type(param.param_type if isinstance(param, FunctionParam) else None),
+                dict_key=dict_key_type(param.param_type if isinstance(param, FunctionParam) else None),
                 list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed",
                 list_type=self._list_decl(param.param_type if isinstance(param, FunctionParam) else None)
             )
@@ -785,6 +794,8 @@ class SemanticAnalyzer(ASTVisitor):
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       dict_value=dict_value_type(
                                           param.param_type if isinstance(param, FunctionParam) else None),
+                                      dict_key=dict_key_type(
+                                          param.param_type if isinstance(param, FunctionParam) else None),
                                       list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed",
                 list_type=self._list_decl(param.param_type if isinstance(param, FunctionParam) else None)),
                                node)
@@ -814,6 +825,8 @@ class SemanticAnalyzer(ASTVisitor):
                                       elem_struct=self._list_elem_struct(
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       dict_value=dict_value_type(
+                                          param.param_type if isinstance(param, FunctionParam) else None),
+                                      dict_key=dict_key_type(
                                           param.param_type if isinstance(param, FunctionParam) else None),
                                       list_fixed=list_elem_type(param.param_type if isinstance(param, FunctionParam) else None) == "Fixed",
                 list_type=self._list_decl(param.param_type if isinstance(param, FunctionParam) else None)),
@@ -1022,8 +1035,7 @@ class SemanticAnalyzer(ASTVisitor):
         """Visit an array access."""
         self.visit(node.array)
         self.visit(node.index)
-        if self._dict_value_of(node.array) is not None and self._infer_type(node.index) == DashType.INT:
-            self.error("Dictionary keys are Strings", node)
+        self._check_dict_key(node.array, node.index, node)
         if getattr(node, "default", None) is not None:          # d.get(k, default) (D65)
             self.visit(node.default)
             value = self._dict_value_of(node.array)
@@ -1036,13 +1048,28 @@ class SemanticAnalyzer(ASTVisitor):
             elif got not in (want, DashType.UNKNOWN) and not (want == DashType.BOOL and got == DashType.INT):
                 self.error(f"get(): the default must be {value}, like the dictionary's values", node.default)
 
+    def _check_dict_key(self, dict_expr: ASTNode, key: ASTNode, node: ASTNode):
+        """The key of d[k], d[k] = v, d.has(k), d.remove(k) against the dictionary's key type."""
+        if self._dict_value_of(dict_expr) is None:
+            return
+        want = self._dict_key_of(dict_expr)
+        got = self._infer_type(key)
+        if want == "Int" and got in (DashType.STRING, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED):
+            self.error("This dictionary's keys are Int ({Int: T})", node)
+        elif want != "Int" and got == DashType.INT:
+            self.error("Dictionary keys are Strings (or Int in a {Int: T})", node)
+
     def visit_DictLiteral(self, node: DictLiteral):
-        """{"clave": valor}: String keys, values of one type."""
+        """{"clave": valor} or {1: valor} (Lorraine D9): keys of one type, String or Int; values of one type."""
+        want = self._dict_key_of(node)
         for key, value in zip(node.keys, node.values):
             self.visit(key)
             self.visit(value)
-            if self._infer_type(key) not in (DashType.STRING, DashType.UNKNOWN):
-                self.error("Dictionary keys are Strings", key)
+            got = self._infer_type(key)
+            if want == "Int" and got not in (DashType.INT, DashType.UNKNOWN):
+                self.error("Dictionary keys are all Strings or all Int", key)
+            elif want != "Int" and got not in (DashType.STRING, DashType.UNKNOWN):
+                self.error("Dictionary keys are Strings (or Int in a {Int: T})", key)
             self._check_not_float_element(value)
 
     def visit_ArrayAssign(self, node: ArrayAssign):
@@ -1054,8 +1081,7 @@ class SemanticAnalyzer(ASTVisitor):
             self._check_fixed_element(node.value)
         else:
             self._check_not_float_element(node.value)
-        if self._dict_value_of(node.array) is not None and self._infer_type(node.index) == DashType.INT:
-            self.error("Dictionary keys are Strings", node)
+        self._check_dict_key(node.array, node.index, node)
 
     def visit_PropertyAccess(self, node: PropertyAccess):
         """Visit a property access."""
@@ -1182,6 +1208,34 @@ class SemanticAnalyzer(ASTVisitor):
             return dict_value_type(type_name)
         return None
 
+    def _dict_key_of(self, expr: Optional[ASTNode]) -> str:
+        """Type of the keys of a dictionary expression: "String" or "Int" (Lorraine D9)."""
+        if isinstance(expr, DictLiteral):
+            if expr.keys and self._infer_type(expr.keys[0]) == DashType.INT:
+                return "Int"
+            return "String"
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            return (symbol.dict_key if symbol else None) or "String"
+        if isinstance(expr, ArrayAccess):
+            outer = self._dict_value_of(expr.array)
+            if outer is not None:
+                return dict_key_type(outer) or "String"
+            return dict_key_type(list_elem_type(self._declared_list_type(expr.array))) or "String"
+        if isinstance(expr, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)) and self.program:
+            if isinstance(expr, (FunctionCall, MethodCall)):
+                type_name = self._call_type(expr)
+            else:
+                if isinstance(expr, MemberAccess):
+                    owner, member = self._struct_name_of(VarRef(name=expr.object_name)), expr.member
+                else:
+                    owner, member = self._struct_name_of(expr.object), expr.property
+                struct = self.program.get_struct(owner) if owner else None
+                field = struct.get_field(member) if struct else None
+                type_name = field.field_type if field else None
+            return dict_key_type(type_name) or "String"
+        return "String"
+
     def _list_elem_struct(self, type_name: Optional[str]) -> Optional[str]:
         """For a list type "[Nodo]", the struct of its elements (dashweb D4a)."""
         return self._struct_type_name(list_elem_type(type_name))
@@ -1198,7 +1252,7 @@ class SemanticAnalyzer(ASTVisitor):
         if self._is_fixed_list(expr):
             return "fixed"
         if isinstance(expr, MethodCall) and expr.method == "keys" and self._dict_value_of(expr.object) is not None:
-            return "string"
+            return "int" if self._dict_key_of(expr.object) == "Int" else "string"
         if isinstance(expr, ArraySlice):
             return self._list_kind(expr.array)
         if isinstance(expr, BinaryOp) and expr.operator == "+":
@@ -1455,6 +1509,8 @@ class SemanticAnalyzer(ASTVisitor):
             elif len(node.arguments) != wanted:
                 self.error(f"{node.method}() on a dictionary takes {wanted} argument(s), "
                            f"got {len(node.arguments)}", node)
+            elif node.method in ("has", "remove"):
+                self._check_dict_key(node.object, node.arguments[0], node)
             return
         kind = self._list_kind(node.object)
         if kind is None or self._struct_name_of(node.object):
