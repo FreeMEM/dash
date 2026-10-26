@@ -19,6 +19,7 @@
 # expect-out: fijo: 1000000000000000.0 1.0e17 123.456 0.00001 1.0e-6
 # expect-out: grande entero: 9007199254740991.0 9007199254740992.0
 # expect-out: decl: 0.0 0.1
+# expect-out: reasignar: 36585.75 2.5 100.25 0.1 7.0 0.1 2.0
 
 struct Celda
     valor: Double = 0.0
@@ -85,4 +86,20 @@ Main
     var e: Double
     var g: Double = 0.1
     Print "decl: #{e} #{g}"
+    # a declared Double keeps its type whatever literal it gets later (and all its digits)
+    var r: Double = 0.0
+    r = 36585.75
+    var r2: Double = 1.0
+    r2 = 2.5
+    var r3: Double = 1.0
+    r3 = 100.25
+    var r4: Double = 1.0
+    r4 = 0.1
+    var r5: Double = 1.0
+    r5 = 7
+    r6 = Double(1)
+    r6 = 0.1
+    fl = 1.5
+    fl = 2
+    Print "reasignar: #{r} #{r2} #{r3} #{r4} #{r5} #{r6} #{fl}"
 end

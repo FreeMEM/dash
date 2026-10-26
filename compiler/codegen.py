@@ -16731,14 +16731,17 @@ static {ret_type} {method_name}({params_str}) {{
         if declared:
             self.decl_types[node.name] = declared
 
-        # Track variable type for string/struct detection
-        if var_type == "STRPTR" or self._is_string_expr(node.value):
+        # Track variable type for string/struct detection. A declared Double or Float keeps its type
+        # whatever number it gets (c = 2.5 in a Double is a double, not the literal's float or Int)
+        if self.context.is_declared(node.name) and self.var_types.get(node.name) in ("double", "float"):
+            pass
+        elif var_type == "STRPTR" or self._is_string_expr(node.value):
             self.var_types[node.name] = "string"
         elif var_type == "char":
             self.var_types[node.name] = "char"
         elif var_type == "DashFixed":
             self.var_types[node.name] = "fixed"
-        elif var_type == "float" and self.var_types.get(node.name) != "double":
+        elif var_type == "float":
             self.var_types[node.name] = "float"
             self.uses_float = True
         elif var_type == "double":
