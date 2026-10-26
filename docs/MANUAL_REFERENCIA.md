@@ -2443,7 +2443,10 @@ for i in (0..arg_count() - 1)
 end
 ```
 
-`arg(i)` da `""` si no hay ese argumento. Desde el Workbench no hay ninguno.
+`arg(i)` da `""` si no hay ese argumento. Desde el Workbench son los iconos de proyecto con los que se
+arranco: doble clic en un documento cuya herramienta por defecto es el programa, o Mayusculas + clic en
+varios y doble clic en el ultimo. `arg(i)` da entonces la ruta completa de cada uno
+(`Work:Textos/carta.odt`; de un cajon o un disco, su propia ruta).
 
 ### Memoria del Sistema
 

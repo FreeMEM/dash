@@ -4416,8 +4416,10 @@ IMAGE_FUNCTIONS = {
 
 ARGS_FUNCTIONS = {
     "arg_count": _text("arg_count", [], "LONG", "_dash_arg_count()",
-                       "How many arguments the program got from the Shell (0 from the Workbench)"),
-    "arg": _text("arg", ["i"], "STRPTR", "_dash_arg(${i})", "Argument i, from 0 (\"\" if there is none)"),
+                       "How many arguments the program got from the Shell, or project icons from the Workbench "
+                       "(a double click on a document, shift + click on several)"),
+    "arg": _text("arg", ["i"], "STRPTR", "_dash_arg(${i})",
+                 "Argument i, from 0 (\"\" if there is none); from the Workbench, the icon's full path"),
     # dashweb D27: where the last On Click was, inside the window's borders
     "click_x": _text("click_x", [], "LONG", "_dash_click_x", "X of the last On Click, in the window (inside its borders)"),
     "click_y": _text("click_y", [], "LONG", "_dash_click_y", "Y of the last On Click, in the window (inside its borders)"),

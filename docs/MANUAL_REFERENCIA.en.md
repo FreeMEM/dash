@@ -2442,7 +2442,10 @@ for i in (0..arg_count() - 1)
 end
 ```
 
-`arg(i)` gives `""` if there is no such argument. From the Workbench there are none.
+`arg(i)` gives `""` if there is no such argument. From the Workbench they are the project icons the
+program was started with: a double click on a document whose default tool it is, or shift + click on
+several and a double click on the last one. `arg(i)` then gives the full path of each
+(`Work:Textos/carta.odt`; of a drawer or a disk, its own path).
 
 ### System Memory
 

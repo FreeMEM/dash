@@ -491,7 +491,7 @@ No HTTP builtin: a program speaks HTTP itself over `net_`/`tls_`. No raw sockets
 
 ## Program Arguments
 ```
-arg_count()                 # arguments from the Shell (0 from the Workbench)
+arg_count()                 # arguments from the Shell; from the Workbench, the project icons (arg(i): full path)
 arg(0)                      # the first one ("" if missing)
 ```
 

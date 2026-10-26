@@ -3055,15 +3055,31 @@ static void _dash_prof_report(void) {
     # Program arguments (dashweb D19): "visor pagina.html". From the Workbench there are none.
     ARGS_RUNTIME = """\
 /* Dash Args Runtime */
+#include <workbench/startup.h>
+extern struct WBStartup *_WBenchMsg;
 static int _dash_argc = 0;
 static char **_dash_argv = NULL;
 
+/* From the Shell, its arguments; from the Workbench (Lorraine D31), the project icons the program was
+   started with: a double click on a document whose default tool it is, or shift + click on several */
 static LONG _dash_arg_count(void) {
+    if (_WBenchMsg) return _WBenchMsg->sm_NumArgs > 1 ? _WBenchMsg->sm_NumArgs - 1 : 0;
     return _dash_argc > 1 ? _dash_argc - 1 : 0;
 }
 
-/* Argument i (from 0, the program name not counted); "" if there is no such one */
+/* Argument i (from 0, the program name not counted); "" if there is no such one. From the Workbench the
+   icon's full path ("Work:Textos/carta.odt"; a drawer or a disk, its own path) */
 static STRPTR _dash_arg(LONG i) {
+    if (_WBenchMsg) {
+        struct WBArg *a;
+        UBYTE path[512];
+        if (i < 0 || i + 1 >= _WBenchMsg->sm_NumArgs) return (STRPTR)"";
+        a = &_WBenchMsg->sm_ArgList[i + 1];
+        path[0] = 0;
+        if (a->wa_Lock && !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) path[0] = 0;
+        if (a->wa_Name && a->wa_Name[0]) AddPart((STRPTR)path, a->wa_Name, sizeof(path));
+        return _dash_str_dup((STRPTR)path, TRUE);
+    }
     if (i < 0 || i + 1 >= _dash_argc) return (STRPTR)"";
     return _dash_str_dup((STRPTR)_dash_argv[i + 1], TRUE);
 }

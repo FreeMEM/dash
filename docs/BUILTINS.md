@@ -539,8 +539,8 @@ Total: 633 funciones, 633 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `arg_count()` | `LONG` | How many arguments the program got from the Shell (0 from the Workbench) |  |
-| `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none) |  |
+| `arg_count()` | `LONG` | How many arguments the program got from the Shell, or project icons from the Workbench (a double click on a document, shift + click on several) |  |
+| `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none); from the Workbench, the icon's full path |  |
 | `click_x()` | `LONG` | X of the last On Click, in the window (inside its borders) |  |
 | `click_y()` | `LONG` | Y of the last On Click, in the window (inside its borders) |  |
 | `time_ms()` | `LONG` | Milliseconds since the program started (EClock of timer.device) |  |
