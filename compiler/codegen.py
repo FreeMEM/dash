@@ -959,11 +959,15 @@ typedef struct {
 /* Arrays never change length, so the top byte of capacity says what the
    elements are: Ints (0), objects the array holds a reference to (1: structs,
    arrays) or Strings it owns (2). Kinds 1 and 2 let go of their elements when
-   overwritten and when the array is freed. */
+   overwritten and when the array is freed. Doubles (3, Lorraine D2) take two LONGs each: data is
+   really a double[], and length and capacity count Doubles. */
 #define _DASH_ARR_CAP(a) ((a)->capacity & 0x00FFFFFF)
 #define _DASH_ARR_KIND(a) ((ULONG)(a)->capacity >> 24)
 #define _DASH_ARR_OBJS 1
 #define _DASH_ARR_STRS 2
+#define _DASH_ARR_DBLS 3
+/* LONGs per element: 2 for a Double */
+#define _DASH_ARR_W(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 2 : 1)
 
 /* apart, so that freeing a list of Ints stays a short leaf function */
 static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
@@ -978,8 +982,8 @@ static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr
 static void DashArray_destroy(void *obj) {
     DashArrayLong *arr = (DashArrayLong *)obj;
     if (!arr->data) return;
-    if (_DASH_ARR_KIND(arr)) DashArray_drop_elements(arr);
-    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
+    if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS || _DASH_ARR_KIND(arr) == _DASH_ARR_STRS) DashArray_drop_elements(arr);
+    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_W(arr) * _DASH_ARR_CAP(arr));
 }
 
 static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
@@ -1065,17 +1069,25 @@ static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
 }
 
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
+    LONG w, kind;
     if (!arr) return NULL;
+    w = _DASH_ARR_W(arr);
+    kind = _DASH_ARR_KIND(arr);
     if (start < 0) start = 0;
     if (end > arr->length) end = arr->length;
-    if (start >= end) return DashArray_create(0);
+    if (start >= end) end = start;
     LONG new_len = end - start;
-    DashArrayLong *result = DashArray_create(new_len);
+    DashArrayLong *result = DashArray_create(new_len * w);
     if (!result) return NULL;
-    for (LONG i = 0; i < new_len; i++) {
-        result->data[i] = arr->data[start + i];
+    for (LONG i = 0; i < new_len * w; i++) {
+        result->data[i] = arr->data[start * w + i];
     }
-    return _DASH_ARR_KIND(arr) ? DashArray_own(result, _DASH_ARR_KIND(arr)) : result;
+    if (kind == _DASH_ARR_DBLS) {
+        result->length = new_len;
+        result->capacity = new_len | ((LONG)_DASH_ARR_DBLS << 24);
+        return result;
+    }
+    return kind ? DashArray_own(result, kind) : result;
 }
 
 """
@@ -5821,16 +5833,16 @@ static LONG _dash_cpu_total(void) {
     LIST_RUNTIME = """\
 /* Dash List Runtime */
 static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
-    LONG cap = _DASH_ARR_CAP(arr), newcap, i;
+    LONG cap = _DASH_ARR_CAP(arr), w = _DASH_ARR_W(arr), newcap, i;
     LONG *data;
     if (need <= cap) return TRUE;
     newcap = cap * 2;
     if (newcap < 4) newcap = 4;
     if (newcap < need) newcap = need;
-    data = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
+    data = (LONG *)_dash_block_get(sizeof(LONG) * w * newcap);
     if (!data) return FALSE;
-    for (i = 0; i < arr->length; i++) data[i] = arr->data[i];
-    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * cap);
+    for (i = 0; i < arr->length * w; i++) data[i] = arr->data[i];
+    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * w * cap);
     arr->data = data;
     arr->capacity = (arr->capacity & 0xFF000000) | newcap;
     return TRUE;
@@ -5838,9 +5850,10 @@ static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
 
 /* Room for one more at index (0..length): the elements from there move up */
 static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
-    LONG i;
+    LONG i, w;
     if (!arr || index < 0 || index > arr->length || !DashArray_reserve(arr, arr->length + 1)) return FALSE;
-    for (i = arr->length; i > index; i--) arr->data[i] = arr->data[i - 1];
+    w = _DASH_ARR_W(arr);
+    for (i = (arr->length + 1) * w - 1; i >= (index + 1) * w; i--) arr->data[i] = arr->data[i - w];
     arr->length++;
     return TRUE;
 }
@@ -5867,13 +5880,19 @@ static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
 #define DashArray_push_obj(arr, v) DashArray_insert_obj((arr), DashArray_length(arr), (v))
 #define DashArray_push_str(arr, v) DashArray_insert_str((arr), DashArray_length(arr), (v))
 
+/* The element at index (inside the list) goes: the ones after it move down */
+static void DashArray_close(DashArrayLong *arr, LONG index) {
+    LONG w = _DASH_ARR_W(arr), i, n = (arr->length - 1) * w;
+    for (i = index * w; i < n; i++) arr->data[i] = arr->data[i + w];
+    arr->length--;
+}
+
 /* Takes the element out (0 if the index is outside the list) */
 static LONG DashArray_take(DashArrayLong *arr, LONG index) {
-    LONG v, i;
+    LONG v;
     if (!arr || index < 0 || index >= arr->length) return 0;
     v = arr->data[index];
-    for (i = index; i < arr->length - 1; i++) arr->data[i] = arr->data[i + 1];
-    arr->length--;
+    DashArray_close(arr, index);
     return v;
 }
 
@@ -5912,6 +5931,58 @@ static void DashArray_remove(DashArrayLong *arr, LONG index) {
 static void DashArray_clear(DashArrayLong *arr) {
     if (!arr) return;
     while (arr->length > 0) DashArray_remove(arr, arr->length - 1);
+}
+
+"""
+
+    # Lists of Double (Lorraine D2): kind 3 of the array runtime, two LONGs per element. An empty list made
+    # without a kind (DashArray_create(0), from [] anywhere) becomes one of Doubles with its first element.
+    DBL_LIST_RUNTIME = """\
+/* Dash Double List Runtime */
+static DashArrayLong *DashArray_create_dbl(LONG size) {
+    DashArrayLong *arr = DashArray_create(size * 2);
+    if (!arr) return NULL;
+    arr->length = size;
+    arr->capacity = size | ((LONG)_DASH_ARR_DBLS << 24);
+    return arr;
+}
+
+static DashArrayLong *DashArray_from_dbl(LONG size, const double *values) {
+    DashArrayLong *arr = DashArray_create_dbl(size);
+    LONG i;
+    if (arr) for (i = 0; i < size; i++) ((double *)arr->data)[i] = values[i];
+    return arr;
+}
+
+static double DashArray_get_dbl(DashArrayLong *arr, LONG index) {
+    if (!arr || index < 0 || index >= arr->length || _DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) return 0.0;
+    return ((double *)arr->data)[index];
+}
+
+static void DashArray_set_dbl(DashArrayLong *arr, LONG index, double value) {
+    if (!arr || index < 0 || index >= arr->length || _DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) return;
+    ((double *)arr->data)[index] = value;
+}
+
+static void DashArray_insert_dbl(DashArrayLong *arr, LONG index, double value) {
+    if (!arr) return;
+    if (_DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) {
+        if (arr->length) return;
+        if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
+        arr->data = NULL;
+        arr->capacity = (LONG)_DASH_ARR_DBLS << 24;
+    }
+    if (DashArray_open(arr, index)) ((double *)arr->data)[index] = value;
+}
+
+#define DashArray_push_dbl(arr, v) DashArray_insert_dbl((arr), DashArray_length(arr), (v))
+
+static double DashArray_pop_dbl(DashArrayLong *arr) {
+    double v;
+    if (!arr || !arr->length || _DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) return 0.0;
+    v = ((double *)arr->data)[arr->length - 1];
+    arr->length--;
+    return v;
 }
 
 """
@@ -7005,12 +7076,19 @@ static BOOL _dash_tls_resumed(LONG t) {
 /* a + b: a new list with the elements of both. It holds what a list of the
    first typed operand holds (an empty literal has no type) */
 static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
-    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind;
-    DashArrayLong *result = DashArray_create(la + lb);
-    if (!result) return NULL;
-    for (i = 0; i < la; i++) result->data[i] = a->data[i];
-    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
+    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, w;
+    DashArrayLong *result;
     kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
+    w = kind == _DASH_ARR_DBLS ? 2 : 1;
+    result = DashArray_create((la + lb) * w);
+    if (!result) return NULL;
+    for (i = 0; i < la * w; i++) result->data[i] = a->data[i];
+    for (i = 0; i < lb * w; i++) result->data[la * w + i] = b->data[i];
+    if (kind == _DASH_ARR_DBLS) {
+        result->length = la + lb;
+        result->capacity = (la + lb) | ((LONG)_DASH_ARR_DBLS << 24);
+        return result;
+    }
     return kind ? DashArray_own(result, kind) : result;
 }
 
@@ -7520,6 +7598,10 @@ static DashFixed _dash_fx_cos(DashFixed a) {
     # (libnix printf has no %f) with about 7 significant digits, like a float.
     FLOAT_RUNTIME = """\
 /* Dash Float Runtime */
+/* A list of Floats keeps each one's bits in a LONG (Lorraine D2) */
+static __inline__ LONG _dash_f2l(float f) { union { float f; LONG l; } u; u.f = f; return u.l; }
+static __inline__ float _dash_l2f(LONG l) { union { float f; LONG l; } u; u.l = l; return u.f; }
+
 static STRPTR DashString_from_float(float f) {
     static char buffers[16][24];
     static LONG next = 0;
@@ -15107,7 +15189,7 @@ $body$indent    }
 $indent    { DashArrayLong *_arr_$var = $array;
 $indent    _dash_hold(_arr_$var);
 $indent    for (LONG _idx_$var = 0; _idx_$var < DashArray_length(_arr_$var); _idx_$var++) {
-$indent        $elem_type $var = ${cast}_arr_$var->data[_idx_$var];
+$indent        $elem_type $var = $elem;
 $body$indent    }
 $indent    _dash_release(_arr_$var); }
 """)
@@ -15518,6 +15600,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_float: bool = False  # Float values: DashString_from_float
         self.uses_double: bool = False  # Double values (DOUBLE_RUNTIME, Lorraine D1)
         self.uses_math: bool = False  # sqrt, sin... of Double (MATH_RUNTIME, Lorraine D4)
+        self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -15715,6 +15798,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.ARRAY_CONCAT_RUNTIME)
         if self.uses_list_methods:
             parts.append(CTemplates.LIST_RUNTIME)
+        if self.uses_dbl_list:
+            parts.append(CTemplates.DBL_LIST_RUNTIME)
         if self.uses_dicts:
             parts.append(CTemplates.DICT_RUNTIME)
         if self.uses_weak:
@@ -16240,7 +16325,7 @@ static LONG _dash_event_window_handle(void) {{
             self.global_objects.add(gvar.name)
             self.emit_global(f"{c_type}{gvar.name} = NULL;\n")
             if gvar.initial_value:
-                init_val = self._generate_expression(gvar.initial_value)
+                init_val = self._generate_expression(self._list_hint(gvar.initial_value, gvar.var_type))
                 self.emit(f"    _dash_obj_set((void **)&{gvar.name}, {init_val});\n")
         elif c_type == "APTR" and gvar.initial_value and not isinstance(gvar.initial_value, NilLiteral):
             # a function (var f: Func = doble): its prototype comes after the globals, so the
@@ -16274,7 +16359,7 @@ static LONG _dash_event_window_handle(void) {{
         elif c_type in ("DashArrayLong *", "DashDict *"):
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
             self.decl_types[gvar.name] = gvar.var_type
-            self._mark_fixed_list(gvar.name, list_elem_type(gvar.var_type) == "Fixed")
+            self._mark_num_list(gvar.name, list_elem_type(gvar.var_type))
         elif gvar.var_type == "Bool":
             self.var_types[gvar.name] = "bool"
         elif gvar.var_type == "Func":
@@ -16866,12 +16951,12 @@ static {ret_type} {method_name}({params_str}) {{
                                              if c_type in ("DashArrayLong *", "DashDict *")
                                              else f"struct:{node.var_type}")
                 self.decl_types[node.name] = node.var_type
-                self._mark_fixed_list(node.name, list_elem_type(node.var_type) == "Fixed")
+                self._mark_num_list(node.name, list_elem_type(node.var_type))
                 self.context.declare_var(node.name)
                 self.context.own(node.name, "obj")
                 self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
                 if init is not None:
-                    value = self._obj_value(self._generate_expression(init))
+                    value = self._obj_value(self._generate_expression(self._list_hint(init, node.var_type)))
                     self.emit(f"{indent}_dash_obj_set((void **)&{node.name}, {value});\n")
             elif c_type == "STRPTR":
                 self.uses_strings = True
@@ -16939,9 +17024,11 @@ static {ret_type} {method_name}({params_str}) {{
         # Special handling for array literals
         if isinstance(node.value, ArrayLiteral):
             self.uses_arrays = True
+            if self.context.is_declared(node.name) and self._num_list(VarRef(name=node.name)) in self._NUM_LISTS:
+                node.value.num_kind = self._num_list(VarRef(name=node.name))   # l = [1, 2] in a [Double]
             elem = self._literal_elem_type(node.value)
             self.var_types[node.name] = f"array:{elem}" if elem else "array"
-            self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
+            self._mark_num_list(node.name, self._num_list(node.value))
             value = self._generate_array_literal(node.value)
             self._assign_object(node.name, "DashArrayLong *", value)
             return
@@ -16982,7 +17069,7 @@ static {ret_type} {method_name}({params_str}) {{
         elif var_type == "DashArrayLong *":
             # a copy or a slice of a typed array keeps its element type
             self.var_types[node.name] = self._array_var_type(node.value)
-            self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
+            self._mark_num_list(node.name, self._num_list(node.value))
         elif var_type == "DashDict *":
             self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
         elif var_type == "APTR" and (isinstance(node.value, (LambdaFunc, FunctionRef))
@@ -17120,6 +17207,8 @@ static {ret_type} {method_name}({params_str}) {{
             # Check if accessing a string or array
             if self._is_string_expr(node.array):
                 return "char"  # Character access
+            if self._num_elem(node):
+                return self._num_elem(node).lower()      # l[i] of a [Float] or [Double]
             elem = self._array_elem_type(node.array)
             if elem == "array":
                 return "DashArrayLong *"
@@ -17139,6 +17228,8 @@ static {ret_type} {method_name}({params_str}) {{
             if self._is_list_method(node):
                 if node.method != "pop":
                     return "LONG"
+                if self._num_elem(node):
+                    return self._num_elem(node).lower()
                 elem = self._array_elem_type(node.object) or ""
                 if elem == "string":
                     return "STRPTR"
@@ -17359,6 +17450,12 @@ static {ret_type} {method_name}({params_str}) {{
         elif self._is_fixed_list(node.iterable):
             var_type, c_type = "fixed", "DashFixed"
             self.uses_fixed = True
+        elif self._num_list(node.iterable) == "Double":
+            var_type, c_type = "double", "double"
+            self.uses_dbl_list = True
+        elif self._num_list(node.iterable) == "Float":
+            var_type, c_type = "float", "float"
+            self.uses_float = True
         elif elem.startswith("struct:"):
             var_type, c_type = elem, f"_Dash_{elem[7:]} *"
         elif elem in ("array", "dict"):
@@ -17368,6 +17465,7 @@ static {ret_type} {method_name}({params_str}) {{
             c_type = "DashArrayLong *" if elem == "array" else "DashDict *"
             if inner:
                 self.decl_types[node.variable] = inner
+            self._mark_num_list(node.variable, list_elem_type(inner) if inner else None)
         else:
             var_type, c_type = "number", "LONG"
         mark = self._new_tmp_mark()
@@ -17377,9 +17475,13 @@ static {ret_type} {method_name}({params_str}) {{
         body = self._generate_loop_body(node, var_type, mark)
         self.context.exit_scope()
 
+        v = node.variable
         code = CTemplates.FOR_EACH_STMT.substitute(
             elem_type=c_type,
-            cast="" if c_type == "LONG" else f"({c_type})",
+            elem=(f"((double *)_arr_{v}->data)[_idx_{v}]" if c_type == "double"
+                  else f"_dash_l2f(_arr_{v}->data[_idx_{v}])" if c_type == "float"
+                  else f"_arr_{v}->data[_idx_{v}]" if c_type == "LONG"
+                  else f"({c_type})_arr_{v}->data[_idx_{v}]"),
             indent=indent,
             var=node.variable,
             array=array,
@@ -17832,7 +17934,7 @@ static {ret_type} {method_name}({params_str}) {{
         ret = getattr(self, "_method_ret", None) or (self.current_function.return_type if self.current_function else None)
         value = (self._fixed_value(node.value) if ret == "Fixed" and not self._is_fixed_expr(node.value)
                  else self._double_value(node.value) if ret == "Double"
-                 else self._generate_expression(node.value))
+                 else self._generate_expression(self._list_hint(node.value, ret)))
         if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
             # lambdas return LONG: the string leaves Dash's control
             head = f"{indent}{{ LONG _dash_r = (LONG){self._escape(node.value, value)};\n"
@@ -17861,6 +17963,8 @@ static {ret_type} {method_name}({params_str}) {{
         self.uses_arrays = True
         indent = self.context.indent
         kind = self._dict_value_kind(node.array)
+        decl = self._declared_type_of(node.array) or ""
+        self._list_hint(node.value, dict_value_type(decl) if kind is not None else list_elem_type(decl))
         if kind is not None:
             # d["clave"] = valor (dashweb D5)
             self.uses_dicts = self.uses_strings = True
@@ -17879,6 +17983,14 @@ static {ret_type} {method_name}({params_str}) {{
         index = self._generate_expression(node.index)
         if self._is_fixed_list(node.array):   # l[i] = 2 in a list of Fixed: 2.0
             self.emit(f"{indent}DashArray_set({array_name}, {index}, {self._fixed_value(node.value)});\n")
+            return
+        if self._num_list(node.array) == "Double":
+            self.uses_dbl_list = True
+            self.emit(f"{indent}DashArray_set_dbl({array_name}, {index}, {self._double_value(node.value)});\n")
+            return
+        if self._num_list(node.array) == "Float":
+            self.uses_float = True
+            self.emit(f"{indent}DashArray_set({array_name}, {index}, _dash_f2l({self._generate_expression(node.value)}));\n")
             return
         value = self._generate_expression(node.value)
         elem = self._array_elem_type(node.array)
@@ -17914,6 +18026,9 @@ static {ret_type} {method_name}({params_str}) {{
         foreign = None if func else self._foreign_func(node.name)
         args = []
         for i, arg in enumerate(node.arguments):
+            param = func.params[i] if func and i < len(func.params) else None
+            if isinstance(param, FunctionParam):
+                self._list_hint(arg, param.param_type)      # f([1, 2]) to a [Double] (Lorraine D2)
             code = self._generate_expression(arg)
             if foreign is not None and getattr(foreign, "borrows", False):
                 code = self._lend(arg, code)        # @native(borrow): only during the call (D26)
@@ -18239,6 +18354,12 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_arrays = True
             array_name = self._array_ref(node.array)
             index = self._generate_expression(node.index)
+            if self._num_elem(node) == "Double":
+                self.uses_dbl_list = True
+                return f"DashArray_get_dbl({array_name}, {index})"
+            if self._num_elem(node) == "Float":
+                self.uses_float = True
+                return f"_dash_l2f(DashArray_get({array_name}, {index}))"
             if self._is_string_array(node.array):
                 return f"(STRPTR)DashArray_get({array_name}, {index})"
             elem = self._array_elem_type(node.array)
@@ -18403,6 +18524,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:
             self.uses_double = True    # sqrt, sin... take and give Doubles
+        if self.uses_dbl_list:
+            self.uses_double = self.uses_arrays = self.uses_list_methods = True   # DBL_LIST_RUNTIME uses open()
         if self.uses_double:
             self.uses_strings = True   # str_from_double makes a text
         if self.uses_text_io:
@@ -18539,7 +18662,7 @@ static {ret_type} {method_name}({params_str}) {{
             elif i < len(arguments) and field.field_type == "Double":
                 val = self._double_value(arguments[i])
             elif i < len(arguments):
-                val = self._generate_expression(arguments[i])
+                val = self._generate_expression(self._list_hint(arguments[i], field.field_type))
                 if field.field_type == "String":
                     val = self._str_kept(arguments[i], val)
             elif field.default_value and field.field_type == "Fixed":
@@ -18547,7 +18670,7 @@ static {ret_type} {method_name}({params_str}) {{
             elif field.default_value and field.field_type == "Double":
                 val = self._double_value(field.default_value)
             elif field.default_value:
-                val = self._generate_expression(field.default_value)
+                val = self._generate_expression(self._list_hint(field.default_value, field.field_type))
                 if field.field_type == "String":
                     val = self._str_kept(field.default_value, val)
             else:
@@ -18577,6 +18700,8 @@ static {ret_type} {method_name}({params_str}) {{
             value = self._fixed_value(node.value)
         if field and field.field_type == "Double":
             value = self._double_value(node.value)
+        if field and isinstance(node.value, ArrayLiteral) and list_elem_type(field.field_type) in self._NUM_LISTS:
+            value = self._generate_expression(self._list_hint(node.value, field.field_type))
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
@@ -18630,9 +18755,25 @@ static {ret_type} {method_name}({params_str}) {{
             elif self._infer_c_type(value) == "DashDict *":
                 elem = "dict"
         suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem in ("array", "dict")) else ""
-        args = [self._generate_expression(a) for a in node.arguments]
-        if node.method in ("push", "insert") and self._is_fixed_list(node.object):
+        if node.method in ("push", "insert") and node.arguments:
+            # m.push([1, 2]) in a [[Double]]: the literal is a [Double]
+            self._list_hint(node.arguments[-1], list_elem_type(self._declared_type_of(node.object) or ""))
+        num = self._num_list(node.object)
+        if num == "Double":
+            # two LONGs each (Lorraine D2)
+            self.uses_dbl_list = True
+            if node.method in ("push", "insert", "pop"):
+                suffix = "_dbl"
+        args = [self._double_value(a) if num == "Double" and node.method in ("push", "insert") and i == len(node.arguments) - 1
+                else self._generate_expression(a) for i, a in enumerate(node.arguments)]
+        if node.method in ("push", "insert") and num == "Fixed":
             args[-1] = self._fixed_value(node.arguments[-1])   # push(2) in a list of Fixed: 2.0
+        if node.method in ("push", "insert") and num == "Float":
+            self.uses_float = True
+            args[-1] = f"_dash_f2l({args[-1]})"                # a Float's bits
+        if node.method == "pop" and num == "Float":
+            self.uses_float = True
+            return f"_dash_l2f(DashArray_pop({arr}))"
         if suffix == "_str" and node.method in ("push", "insert"):
             args[-1] = self._str_kept(node.arguments[-1], args[-1])
         if node.method == "push":
@@ -18706,6 +18847,8 @@ static {ret_type} {method_name}({params_str}) {{
             return self._fixed_value(arg)
         if isinstance(param, FunctionParam) and param.param_type == "Double":
             return self._double_value(arg)
+        if isinstance(param, FunctionParam):
+            self._list_hint(arg, param.param_type)
         code = self._generate_expression(arg)
         return code if pure else self._lend(arg, code)
 
@@ -19012,7 +19155,7 @@ static {ret_type} {method_name}({params_str}) {{
                   or dict_value_type(p.param_type) is not None):
                 self.var_types[p.name] = self._list_var_type(p.param_type)
                 self.decl_types[p.name] = p.param_type
-                self._mark_fixed_list(p.name, list_elem_type(p.param_type) == "Fixed")
+                self._mark_num_list(p.name, list_elem_type(p.param_type))
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             elif p.param_type == "Bool":
@@ -19158,30 +19301,65 @@ static {ret_type} {method_name}({params_str}) {{
             return self._is_fixed_list(node.array)
         return False
 
-    def _mark_fixed_list(self, name: str, fixed: bool):
-        """Remember that a variable is a list of Fixed values. The mark lives in var_types (under
-        a key no name can have), so it follows the variable's scope like its type does."""
-        if fixed:
-            self.var_types["[Fixed]" + name] = "fixed_list"
+    _NUM_LISTS = ("Fixed", "Float", "Double")
+
+    def _mark_num_list(self, name: str, kind: Optional[str]):
+        """Remember that a variable is a list of Fixed, Float or Double values (kind, or None if not).
+        The mark lives in var_types (under a key no name can have), so it follows the variable's scope
+        like its type does."""
+        for k in self._NUM_LISTS:
+            self.var_types.pop(f"[{k}]" + name, None)
+        if kind in self._NUM_LISTS:
+            self.var_types[f"[{kind}]" + name] = "num_list"
+
+    def _num_list(self, node: ASTNode) -> Optional[str]:
+        """"Fixed", "Float" or "Double" if the expression is a list of those: Fixed and Float are kept in
+        the LONGs of a list of Ints (a Float's bits), Doubles two LONGs each (kind 3, Lorraine D2)."""
+        if isinstance(node, VarRef):
+            return next((k for k in self._NUM_LISTS if f"[{k}]" + node.name in self.var_types), None)
+        if isinstance(node, ArrayLiteral):
+            if getattr(node, "num_kind", None):
+                return node.num_kind               # var l: [Double] = [1, 2]
+            if any(self._is_fixed_expr(e) for e in node.elements):
+                return "Fixed"
+            if any(self._is_double_expr(e) for e in node.elements):
+                return "Double"
+            if any(self._is_float_expr(e) for e in node.elements):
+                return "Float"
+            return None
+        if isinstance(node, ArraySlice):
+            return self._num_list(node.array)
+        if isinstance(node, BinaryOp) and node.operator == "+":
+            return self._num_list(node.left) or self._num_list(node.right)
+        if isinstance(node, ArrayAccess):
+            kind = list_elem_type(self._declared_type_of(node))
+        elif isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)):
+            kind = list_elem_type(self._declared_list_type(node))
         else:
-            self.var_types.pop("[Fixed]" + name, None)
+            return None
+        return kind if kind in self._NUM_LISTS else None
 
     def _is_fixed_list(self, node: ASTNode) -> bool:
-        """True if the expression is a list of Fixed values: stored like a list of Ints (a Fixed is
-        a LONG), its elements are read, printed and computed as Fixed."""
-        if isinstance(node, VarRef):
-            return "[Fixed]" + node.name in self.var_types
-        if isinstance(node, ArrayLiteral):
-            return any(self._is_fixed_expr(e) for e in node.elements)
-        if isinstance(node, ArraySlice):
-            return self._is_fixed_list(node.array)
-        if isinstance(node, BinaryOp) and node.operator == "+":
-            return self._is_fixed_list(node.left) or self._is_fixed_list(node.right)
-        if isinstance(node, ArrayAccess):
-            return list_elem_type(self._declared_type_of(node)) == "Fixed"
-        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
-            return list_elem_type(self._declared_list_type(node)) == "Fixed"
-        return False
+        return self._num_list(node) == "Fixed"
+
+    def _num_elem(self, node: ASTNode) -> Optional[str]:
+        """"Float" or "Double" for l[i] or l.pop() of a list of those (Lorraine D2)."""
+        if isinstance(node, ArrayAccess) and self._dict_value_kind(node.array) is None \
+                and not self._is_string_expr(node.array):
+            kind = self._num_list(node.array)
+        elif isinstance(node, MethodCall) and node.method == "pop" and self._is_list_method(node):
+            kind = self._num_list(node.object)
+        else:
+            return None
+        return kind if kind in ("Float", "Double") else None
+
+    def _list_hint(self, node: ASTNode, declared: Optional[str]) -> ASTNode:
+        """A value for a place declared as a list (variable, parameter, field, return): a literal takes
+        the declared kind of number (var l: [Double] = [1, 2])."""
+        kind = list_elem_type(declared) if declared else None
+        if isinstance(node, ArrayLiteral) and kind in self._NUM_LISTS:
+            node.num_kind = kind
+        return node
 
     def _fixed_value(self, node: ASTNode) -> str:
         """C for a value as a Fixed: a Fixed as it is, a number literal computed now
@@ -19244,6 +19422,8 @@ static {ret_type} {method_name}({params_str}) {{
         """True if the expression yields a Double (C double, Lorraine D1)."""
         if isinstance(node, VarRef):
             return self.var_types.get(node.name) == "double"
+        if isinstance(node, (ArrayAccess, MethodCall)) and self._num_elem(node):
+            return self._num_elem(node) == "Double"
         if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/"):
             if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
                 return False
@@ -19281,6 +19461,8 @@ static {ret_type} {method_name}({params_str}) {{
                 return True
             const = self.analysis.program.get_constant(node.name)
             return bool(const and isinstance(const.value, FloatLiteral))
+        if isinstance(node, (ArrayAccess, MethodCall)) and self._num_elem(node):
+            return self._num_elem(node) == "Float"
         if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/"):
             if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
                 return False
@@ -19333,6 +19515,9 @@ static {ret_type} {method_name}({params_str}) {{
         # For now, we'll generate inline and hope the context handles it
         # Better approach would be to generate a helper call
         size = len(node.elements)
+        num = self._num_list(node)
+        if num in ("Float", "Double"):
+            return self._num_array_literal(node, num)
         if size == 0:
             return "DashArray_create(0)"
         if self._is_fixed_list(node):
@@ -19370,6 +19555,38 @@ static {ret_type} {method_name}({params_str}) {{
             kind = "_DASH_ARR_STRS" if elem == "string" else "_DASH_ARR_OBJS"
             return f"DashArray_own({literal}, {kind})"
         return literal
+
+    def _num_array_literal(self, node: ArrayLiteral, num: str) -> str:
+        """[0.5, 2] as a list of Float (each one's bits in a LONG) or of Double (Lorraine D2); all
+        numbers: a static table."""
+        import struct
+        size = len(node.elements)
+        if num == "Double":
+            self.uses_dbl_list = True
+            if size == 0:
+                return "DashArray_create_dbl(0)"
+            codes = [self._double_value(e) for e in node.elements]
+            c_type, table = "double", codes
+        else:
+            self.uses_float = True
+            if size == 0:
+                return "DashArray_create(0)"
+            codes = [f"_dash_f2l({self._generate_expression(e)})" for e in node.elements]
+            c_type, table = "LONG", None
+        values = []
+        for e in node.elements:
+            lit, sign = (e.operand, -1) if isinstance(e, UnaryOp) and e.operator == "-" else (e, 1)
+            if not isinstance(lit, (NumberLiteral, FloatLiteral)):
+                break
+            values.append(sign * float(lit.value))
+        else:
+            if num == "Float":     # the bits of each float, worked out here
+                table = [c_int_literal(struct.unpack(">l", struct.pack(">f", v))[0]) for v in values]
+            self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
+            name = f"_dash_arrlit_{self._arrlit_counter}"
+            self.emit_global(f"static const {c_type} {name}[{size}] = {{{', '.join(table)}}};\n")
+            return f"DashArray_from{'_dbl' if num == 'Double' else ''}({size}, {name})"
+        return f"DashArray_from{'_dbl' if num == 'Double' else ''}({size}, ({c_type}[]){{{', '.join(codes)}}})"
 
     def _literal_elem_type(self, node: ArrayLiteral) -> Optional[str]:
         """What all the elements of an array literal are: "string", "struct:Name",

@@ -302,7 +302,7 @@ s = fx_sin(Fixed(30))       # 0.5 (grados); tambien fx_cos
 - Listas de `Fixed`: un literal con algun `Fixed` (`[Fixed(1.5), 2, Fixed(-0.25)]`: los numeros se
   convierten), o declaradas `[Fixed]` (variables, parametros, retornos, campos). `l[i]`, `push`, `insert`,
   `pop`, `for v in l`, trozos y `+` dan y reciben `Fixed`; `l.push(2)` guarda 2.0. Se guardan como una
-  lista de enteros (un `Fixed` es un `LONG`). Una lista de `Float` sigue sin poder hacerse.
+  lista de enteros (un `Fixed` es un `LONG`). Las listas de `Float` y de `Double` van en la seccion de `Double`.
 
 ### Double (64 bits)
 
@@ -327,7 +327,12 @@ p = str_from_double(2.675, 2)   # "2.68": con decimales fijos, redondeando el de
   (`Float(d)`, `Int(d)`). Mezclar `Fixed` y `Double` es un error.
 - Se escribe en notacion fija mientras la coma cae a 17 cifras o menos (`150.0`, `0.00001`) y con
   exponente fuera de eso (`1.0e17`, `1.0e-6`); `inf`, `-inf` y `nan` si toca.
-- No hay listas de `Double` (como de `Float`): un struct con campos `Double`.
+- Listas de `Double` y de `Float`: un literal con algun `Double` es un `[Double]`, y uno con algun
+  `Float` (`[1.5, 2]`) es un `[Float]`. Tambien declaradas: `var l: [Double] = [1, 2]` (ahi los numeros
+  del literal son `Double`), parametros, retornos, campos, `[[Double]]` y `{String: [Double]}`. `l[i]`,
+  `push`, `insert`, `pop`, `remove`, `clear`, `for v in l`, trozos y `+` funcionan igual que en una
+  lista de enteros. Un `[Double]` gasta 8 bytes por elemento; un `[Float]`, 4. Un `[Float]` no vale
+  donde va un `[Double]` (se guardan distinto): es un error.
 
 Funciones matematicas (con fdlibm; un `Int` o un `Float` entra como `Double` y sale un `Double`):
 `sqrt`, `pow`, `exp`, `log`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2(y, x)`, `floor`,

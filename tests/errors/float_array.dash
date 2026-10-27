@@ -1,7 +1,6 @@
-# Test: arrays hold LONG values, a Float would be truncated
-# expect: Arrays hold integers or strings, not Float values
-
+# Test: a list of Ints cannot take a Float, it would be truncated (a [Float] can: Lorraine D2)
+# expect: This list holds integers or strings, not Float values (a list of Float: [Float])
 Main
-    a = [1.5, 2.5]
-    Print a[0]
+    l = [1, 2]
+    l[1] = 1.5
 end

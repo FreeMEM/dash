@@ -1,0 +1,7 @@
+# Test: a list of Float values and one of Double values cannot be added
+# expect: Cannot add a list of Float values to a list of Double values
+Main
+    a = [1.5]
+    b = [Double(2)]
+    c = a + b
+end

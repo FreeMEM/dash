@@ -46,6 +46,7 @@ d = Double(0.1)             # Double: 64 bits, 15-17 digits (Double(n), Double("
 h = sqrt(2.0)               # sqrt, pow, exp, log, sin, atan2, floor, round, fmod, abs, is_nan...: Double
 f = Fixed(1.5)              # Fixed 16.16: fast decimals on 68000 (Int(f), fx_sqrt, fx_sin, fx_cos)
 xs = [Fixed(0.5), 2]        # list of Fixed (numbers made Fixed); declared: var xs: [Fixed] = []
+ds = [Double(0.1), 2]       # list of Double ([Double]); [1.5, 2] is a [Float]; var ds: [Double] = [1, 2]
 mask = 0xFF                 # hex (also $DFF000), binary 0b1010
 name = "Dash"               # String
 active = true               # Bool: Print and "x " + b write true / false (a comparison too)

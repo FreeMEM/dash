@@ -302,7 +302,7 @@ s = fx_sin(Fixed(30))       # 0.5 (degrees); also fx_cos
 - Lists of `Fixed`: a literal with at least one `Fixed` (`[Fixed(1.5), 2, Fixed(-0.25)]`: the numbers are
   converted), or declared `[Fixed]` (variables, parameters, return values, fields). `l[i]`, `push`, `insert`,
   `pop`, `for v in l`, slices and `+` return and take `Fixed`; `l.push(2)` stores 2.0. They are stored as a
-  list of integers (a `Fixed` is a `LONG`). A list of `Float` still cannot be made.
+  list of integers (a `Fixed` is a `LONG`). Lists of `Float` and of `Double` are in the `Double` section.
 
 ### Double (64 bits)
 
@@ -326,7 +326,12 @@ p = str_from_double(2.675, 2)   # "2.68": fixed decimals, the shortest decimal r
   (`Float(d)`, `Int(d)`). Mixing `Fixed` and `Double` is an error.
 - It is written in fixed notation while the point falls within 17 digits (`150.0`, `0.00001`) and with an
   exponent beyond that (`1.0e17`, `1.0e-6`); `inf`, `-inf` and `nan` when they come.
-- There are no lists of `Double` (as of `Float`): a struct with `Double` fields.
+- Lists of `Double` and of `Float`: a literal with some `Double` is a `[Double]`, and one with some
+  `Float` (`[1.5, 2]`) is a `[Float]`. Also declared: `var l: [Double] = [1, 2]` (there the numbers of the
+  literal are `Double`), parameters, returns, fields, `[[Double]]` and `{String: [Double]}`. `l[i]`,
+  `push`, `insert`, `pop`, `remove`, `clear`, `for v in l`, slices and `+` work as in a list of integers.
+  A `[Double]` takes 8 bytes per element; a `[Float]`, 4. A `[Float]` does not fit where a `[Double]`
+  goes (they are stored differently): it is an error.
 
 Math functions (with fdlibm; an `Int` or a `Float` goes in as a `Double` and a `Double` comes out):
 `sqrt`, `pow`, `exp`, `log`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2(y, x)`, `floor`,

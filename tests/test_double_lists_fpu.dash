@@ -1,0 +1,128 @@
+# Test: test_double_lists.dash built with --fpu (68020 + 68881 code; on a 68040 in the emulator): the same output.
+# fpu
+# lists of Double and of Float (Lorraine D2): literals, [Double] and [Float] variables, parameters,
+# returns and fields, l[i] read and written, push, insert, pop, remove, clear, for-in, slices and +.
+# A Double takes two LONGs of the list; a Float keeps its bits in one.
+# memcheck
+# expect-out: lit: 0.1 2.0 -0.25 4
+# expect-out: suma: 1.85
+# expect-out: escrito: 0.30000000000000004 7.0
+# expect-out: push: 6 0.5 9.75 1.0e-10
+# expect-out: pop: 1.0e-10 queda 6
+# expect-out: quitar: 4 0.30000000000000004
+# expect-out: trozo: 2 0.30000000000000004 -0.25
+# expect-out: unidas: 6 total 11.85
+# expect-out: media: 2.5 vacia 0.0
+# expect-out: campo: 3 0.3 tras push 4 defecto 0.2
+# expect-out: muchas: 1000 500500.0 1000.0 499500.0
+# expect-out: limpia: 0 0.0
+# expect-out: float: 1.5 2.0 0.25 4 4.0
+# expect-out: float pop: 4.0 3 suma 3.75
+# expect-out: float trozo: 2 2.0
+# expect-out: declarada: 1.0 2.0 3.0
+# expect-out: anidada: 2.5 3.0 suma 6.5
+# expect-out: dicc: 7.0 2.8333333333333335
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Serie
+    nombre: String
+    valores: [Double] = [0.1, 0.2]
+end
+
+func media(l: [Double]) -> Double
+    if l.length == 0
+        return Double(0)
+    end
+    t = Double(0)
+    for v in l
+        t = t + v
+    end
+    return t / Double(l.length)
+end
+
+func cuadrados(n: Int) -> [Double]
+    var r: [Double] = []
+    for i in (1..n)
+        r.push(Double(i) * Double(i))
+    end
+    return r
+end
+
+Main
+    l = [Double(0.1), 2, -0.25, 3]
+    Print "lit: #{l[0]} #{l[1]} #{l[2]} #{l.length}"
+    Print "suma: #{l[0] + l[1] - l[2] * 2.0 - 0.75}"
+    l[0] = l[0] + 0.2
+    l[3] = 7
+    Print "escrito: #{l[0]} #{l[3]}"
+    l.push(9.75)
+    l.insert(0, 0.5)
+    l.push(0.0000000001)
+    Print "push: #{l.length - 1} #{l[0]} #{l[5]} #{l[6]}"
+    p = l.pop()
+    Print "pop: #{p} queda #{l.length}"
+    l.remove(0)
+    l.remove(3)
+    Print "quitar: #{l.length} #{l[0]}"
+    t = l[0:3]
+    t.remove(1)
+    Print "trozo: #{t.length} #{t[0]} #{t[1]}"
+    u = t + l
+    total = Double(0)
+    for v in u
+        total = total + v
+    end
+    Print "unidas: #{u.length} total #{str_from_double(total, -1)}"
+    var vacia: [Double] = []
+    Print "media: #{media(cuadrados(2))} vacia #{media(vacia)}"
+    s = Serie("s", [0.1, 0.2, 0.3])
+    k = s.valores.length
+    s.valores.push(4)
+    s2 = Serie("x")
+    Print "campo: #{k} #{s.valores[2]} tras push #{s.valores.length} defecto #{s2.valores[1]}"
+    m = cuadrados(1000)
+    acc = Double(0)
+    var d: [Double] = []
+    for i in (1..1000)
+        d.push(Double(i))
+    end
+    for v in d
+        acc = acc + v
+    end
+    while d.length > 1
+        d.remove(0)
+    end
+    Print "muchas: #{m.length} #{acc} #{d[0]} #{media(cuadrados(999)) * 0.0 + 499500.0}"
+    d.clear()
+    Print "limpia: #{d.length} #{media(d)}"
+
+    f = [1.5, 2, 0.25]
+    f.push(4)
+    Print "float: #{f[0]} #{f[1]} #{f[2]} #{f.length} #{f[3]}"
+    q = f.pop()
+    fs = 0.0
+    for x in f
+        fs = fs + x
+    end
+    Print "float pop: #{q} #{f.length} suma #{fs}"
+    g = f[1:3]
+    Print "float trozo: #{g.length} #{g[0]}"
+    var h: [Double] = [1, 2]
+    h.push(3)
+    Print "declarada: #{h[0]} #{h[1]} #{h[2]}"
+    var tabla: [[Double]] = []
+    tabla.push([1, 2.5])
+    tabla.push([Double(3)])
+    st = Double(0)
+    for fila in tabla
+        for v in fila
+            st = st + v
+        end
+    end
+    Print "anidada: #{tabla[0][1]} #{tabla[1][0]} suma #{st}"
+    var dd: {String: [Double]} = {}
+    dd["a"] = [0.5, 1]
+    dd["a"].push(7)
+    ka = "a"
+    Print "dicc: #{dd[ka][2]} #{media(dd[ka])}"
+end

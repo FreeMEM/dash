@@ -1,6 +1,6 @@
-# Test: a list cannot hold Double values
-# expect: Arrays hold integers or strings, not Double values (use a struct with Double fields, or scale to integers)
+# Test: a list of Ints cannot take a Double (a [Double] can: Lorraine D2)
+# expect: This list holds integers or strings, not Double values (a list of Double: [Double])
 Main
-    d = Double(1.5)
-    l = [d, d]
+    l = [1, 2]
+    l[0] = Double(1.5)
 end

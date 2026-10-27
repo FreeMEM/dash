@@ -1,0 +1,9 @@
+# Test: a list of Double values holds numbers
+# expect: A list of Double values holds numbers, not String
+func f() -> [Double]
+    return [Double(1)]
+end
+Main
+    l = f()
+    l.insert(0, "uno")
+end
