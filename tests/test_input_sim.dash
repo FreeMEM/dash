@@ -1,7 +1,8 @@
 # Test: input_* (Lorraine D46): a program types and clicks in another one, as a user would. The test starts
 # itself with "objetivo": that copy opens a MUI window with a drawing area and writes down what it gets; the
 # first one waits for its window (input_active_title), types a text, Return, Shift + right arrow, a Shift +
-# click, a click and a drag of (80, 30) (its press is a click too), Amiga + M (a menu's shortcut), then Esc, which ends the other one. A click
+# click, a click and a drag of (80, 30) (its press is a click too), Amiga + M (a menu's shortcut), then Esc,
+# which ends the other one: over the area it is a key, not the window's close. A click
 # is no drag (D12) and Shift alone is no key for the area.
 # emu-needs: muimaster.library
 # expect-out: ventana: true
@@ -13,6 +14,7 @@
 # expect-out: clic q 0
 # expect-out: arrastre 80 30
 # expect-out: menú Amiga+M
+# expect-out: Esc como tecla
 # expect-out: fin
 
 const ID_RATON = 30
@@ -56,10 +58,12 @@ func objetivo()
     while not hecho
         ev = mui_wait_event()
         if ev == -1
+            lineas = lineas + "salió con -1\n"
             hecho = true
         elif ev == 99
             lineas = lineas + "menú Amiga+M\n"
         elif ev == ID_RATON and mui_canvas_key(lienzo) == 0x45
+            lineas = lineas + "Esc como tecla\n"
             hecho = true
         elif ev == ID_RATON and mui_canvas_key(lienzo) >= 0
             c = mui_canvas_char(lienzo)

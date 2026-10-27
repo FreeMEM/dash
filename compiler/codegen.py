@@ -15263,6 +15263,8 @@ struct _DashCanvas {
     APTR prev;                      /* mui_canvas_char (dashweb D31) */
     struct MUI_EventHandlerNode handler;
     BOOL handler_added;
+    BOOL keys_set;                  /* Esc taken from the window (MUIA_Window_DisableKeys) */
+    ULONG old_keys;
     BOOL buffered;                  /* mui_canvas_buffered: drawn in bbm, then copied at once (D48) */
     struct BitMap *bbm;             /* as big as the window's part up to the area's bottom right */
     struct Layer_Info *bli;
@@ -15457,6 +15459,16 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
             data->handler_added = TRUE;
+            /* MUI's window takes Esc (close) before any handler: with keys for the area, Esc is the program's
+               (Lorraine); the close gadget still closes */
+            if (data->input_id) {
+                IPTR keys = 0;
+                GetAttr(MUIA_Window_DisableKeys, _DASH_MRI(obj)->mri_WindowObject, &keys);
+                data->old_keys = (ULONG)keys;
+                SetAttrs(_DASH_MRI(obj)->mri_WindowObject, MUIA_Window_DisableKeys,
+                         (IPTR)(keys | (1UL << MUIKEY_WINDOW_CLOSE)), TAG_DONE);
+                data->keys_set = TRUE;
+            }
         }
         return TRUE;
     case MUIM_Show:
@@ -15470,6 +15482,10 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         if (data->handler_added) {
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
             data->handler_added = FALSE;
+        }
+        if (data->keys_set) {
+            SetAttrs(_DASH_MRI(obj)->mri_WindowObject, MUIA_Window_DisableKeys, (IPTR)data->old_keys, TAG_DONE);
+            data->keys_set = FALSE;
         }
         return DoSuperMethodA(cl, obj, msg);
     case MUIM_HandleEvent: {
