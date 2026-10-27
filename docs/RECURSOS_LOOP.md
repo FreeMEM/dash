@@ -98,3 +98,26 @@ ejecutables pesaban 110 KB más (+33 %, unos 3 KB cada uno).
 - `fixed_mul_add` (2.630 → 4.350 ns) y `string_chars_26` (+5 %) en A500: mismo C que antes; varían con dónde cae
   el programa en la memoria del A500 emulado.
 
+
+## Tercera ronda (2026-10-27)
+
+Encargo: seguir con el bucle, "lo de los Zorro II y III, mejorar el diseño de lo de los textos y de lo que sea
+necesario", sin pausas entre vueltas. Rama `recursos3` (worktree `.worktrees/recursos3`); a `main` solo cuando lo
+diga el usuario. Base medida: `Base ronda 3`.
+
+### Plan
+- R8 Textos con su longitud en la cabecera. Hoy la cabecera (12 bytes: `next`, `size`, `serial`) no tiene la
+  longitud: `+`, la interpolación y `dup` llaman a `strlen` de libnix, `s.length` va por una caché de 8 textos
+  largos, y saber si un texto es temporal (`_dash_tmp_take`, `_dash_str_ret`) recorre la lista de temporales.
+  Diseño nuevo, mismos 12 bytes: `size` (con marca y bits), `len` y `self` (la dirección de la cabecera con una
+  clave). Un texto es de Dash si `self` cuadra: un texto de C (un literal, una librería) solo pasaría por uno con
+  probabilidad 2^-32, así que su `len` se cree sin medir. Los temporales salen de la cabecera a una pila aparte
+  (puntero y número de serie, el mismo contador que los objetos), y un bit de `size` dice si lo es.
+  - R8a la cabecera nueva y la pila de temporales; `_dash_str_len` y `strlen` de los runtimes por `len`.
+  - R8b `+`, interpolación y copias sin `strlen` cuando el texto es de Dash; quitar la caché de longitudes.
+  - R8c literales con su cabecera (`static const`), si compensa: así tampoco se miden los literales.
+- R7 Zorro II/III en serio (R4 era solo análisis). Contar los bytes que se leen de la tarjeta por actualización
+  (FS-UAE no da el tiempo del bus) en un caso como el de Trasfondo, y quitar lecturas:
+  - R7a las mezclas con alfa sobre el fondo recién puesto leen la copia del fondo en fast RAM, no la tarjeta.
+  - R7b comparar solo donde el programa dibujó en esta pasada y en la anterior, no el área entera.
+- R9 Lo demás que salga de las medidas: `nested_struct_new`, `string_compare`, tamaño de los ejecutables.
