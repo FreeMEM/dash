@@ -10,8 +10,13 @@ struct FiltroOds: Filtro
         return "ods"
     end
     func puntos(n: Int) -> Int
-        return n * 2
+        return _doble(n)
     end
+end
+
+# private to this module, used by a method of its struct
+func _doble(n: Int) -> Int
+    return n * 2
 end
 
 func primero(l: [Filtro]) -> String

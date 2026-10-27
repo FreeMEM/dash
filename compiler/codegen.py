@@ -16271,6 +16271,8 @@ class CodeGenerator(ASTVisitor):
         self.prototypes: List[str] = []
         self.functions: List[str] = []
         self.struct_typedefs: List[str] = []  # Track struct type definitions
+        self.struct_bodies: List[str] = []    # their fields (struct _Dash_X {...}), all before any code
+        self.struct_protos: List[str] = []    # prototypes of their constructors and methods
         self.enum_defines: List[str] = []  # Track enum definitions
         self.const_defines: List[str] = []  # Track constant definitions
         self.extern_protos: List[str] = []  # Track extern function prototypes
@@ -16727,13 +16729,15 @@ class CodeGenerator(ASTVisitor):
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
         # methods may draw (_dash_rp) or use any builtin
+        # Their constructors and methods go after the prototypes of the functions, so a method can call any
+        # function, constructor or method of the program
         if self.struct_typedefs or self.analysis.program.structs:
             parts.append("\n/* Struct Definitions */\n")
             # an interface's values are pointers to any struct that has it (Lorraine D43)
             parts.append("".join(f"typedef void _Dash_{st.name};\n" if st.is_interface else
                                  f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
                                  for st in self.analysis.program.structs))
-            parts.append("\n".join(self.struct_typedefs))
+            parts.append("".join(self.struct_bodies))
             parts.append("\n")
 
         # Add global declarations
@@ -16806,6 +16810,13 @@ static LONG _dash_event_window_handle(void) {{
         if self.prototypes:
             parts.append("\n// Function Prototypes")
             parts.append("".join(self.prototypes))
+
+        # Struct constructors and methods (see above)
+        if self.struct_typedefs:
+            parts.append("\n/* Struct Constructors and Methods */\n")
+            parts.append("".join(self.struct_protos))
+            parts.append("\n".join(self.struct_typedefs))
+            parts.append("\n")
 
         # C blocks (@c): after the prototypes, so they can call Dash functions, and before
         # the @native functions, which can call them (dashweb D10)
@@ -17338,7 +17349,22 @@ static void {struct.name}_release({c_name} *obj) {{
         for method in struct.methods:
             methods_code += self._debug_wrap(method, self._generate_struct_method(struct, method, type_map, c_name))
 
-        self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code + vtable)
+        self.struct_bodies.append(typedef)
+        self.struct_protos.append(
+            f"static {c_name}* _dash_struct_new_{struct.name}({params_str}) __attribute__((unused));\n"
+            f"static {c_name}* _dash_struct_create_{struct.name}({params_str}) __attribute__((unused));\n"
+            + "".join(self._struct_method_proto(struct, m, c_name) for m in struct.methods))
+        self.struct_typedefs.append(constructor + retain_func + release_func + methods_code + vtable)
+
+    def _struct_method_proto(self, struct: StructDef, method: StructMethod, c_name: str) -> str:
+        """static RET X_m(_Dash_X *self, ...); (as _generate_struct_method writes it)"""
+        params = [f"{c_name} *self"]
+        for p in method.params:
+            if isinstance(p, FunctionParam):
+                params.append(f"{self._dash_type_to_c(p.param_type) if p.param_type else 'LONG'} {p.name}")
+            else:
+                params.append(f"LONG {p}")
+        return f"static {self._method_c_type(method)} {struct.name}_{method.name}({', '.join(params)}) __attribute__((unused));\n"
 
     def _generate_struct_method(self, struct: StructDef, method: StructMethod,
                                 type_map: dict, c_name: str) -> str:

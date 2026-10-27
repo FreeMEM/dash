@@ -360,8 +360,11 @@ class SemanticAnalyzer(ASTVisitor):
         for struct in node.structs:
             if struct.is_interface:
                 continue                 # only declared (Lorraine D43)
+            # a method may use the private names of its struct's module
+            self.current_module = getattr(struct, "module", None)
             for method in struct.methods:
                 self._visit_struct_method(method, struct.name)
+            self.current_module = None
         self._check_interfaces(node)
 
         # Fourth pass: analyze main block
