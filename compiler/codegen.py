@@ -967,8 +967,9 @@ typedef struct {
 #define _DASH_ARR_OBJS 1
 #define _DASH_ARR_STRS 2
 #define _DASH_ARR_DBLS 3
-/* LONGs per element: 2 for a Double */
-#define _DASH_ARR_W(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 2 : 1)
+/* LONGs per element as a shift: 1 for a Double (2 LONGs), 0 else. A shift, not a multiplication: that is a
+   call to libgcc on a 68000 */
+#define _DASH_ARR_SH(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 1 : 0)
 
 /* apart, so that freeing a list of Ints stays a short leaf function */
 static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
@@ -982,9 +983,15 @@ static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr
 
 static void DashArray_destroy(void *obj) {
     DashArrayLong *arr = (DashArrayLong *)obj;
+    ULONG kind;
     if (!arr->data) return;
-    if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS || _DASH_ARR_KIND(arr) == _DASH_ARR_STRS) DashArray_drop_elements(arr);
-    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_W(arr) * _DASH_ARR_CAP(arr));
+    kind = _DASH_ARR_KIND(arr);
+    if (!kind) {                     /* Ints: the usual case, a shift and no call (a multiplication is one on a 68000) */
+        _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << 2);
+        return;
+    }
+    if (kind != _DASH_ARR_DBLS) DashArray_drop_elements(arr);
+    _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << (kind == _DASH_ARR_DBLS ? 3 : 2));
 }
 
 static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
@@ -1070,18 +1077,21 @@ static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
 }
 
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
-    LONG w, kind;
+    LONG sh, kind, n;
+    LONG *from;
     if (!arr) return NULL;
-    w = _DASH_ARR_W(arr);
+    sh = _DASH_ARR_SH(arr);
     kind = _DASH_ARR_KIND(arr);
     if (start < 0) start = 0;
     if (end > arr->length) end = arr->length;
     if (start >= end) end = start;
     LONG new_len = end - start;
-    DashArrayLong *result = DashArray_create(new_len * w);
+    DashArrayLong *result = DashArray_create(new_len << sh);
     if (!result) return NULL;
-    for (LONG i = 0; i < new_len * w; i++) {
-        result->data[i] = arr->data[start * w + i];
+    from = arr->data + (start << sh);
+    n = new_len << sh;
+    for (LONG i = 0; i < n; i++) {
+        result->data[i] = from[i];
     }
     if (kind == _DASH_ARR_DBLS) {
         result->length = new_len;
@@ -6445,16 +6455,17 @@ static LONG _dash_cpu_total(void) {
     LIST_RUNTIME = """\
 /* Dash List Runtime */
 static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
-    LONG cap = _DASH_ARR_CAP(arr), w = _DASH_ARR_W(arr), newcap, i;
+    LONG cap = _DASH_ARR_CAP(arr), sh = _DASH_ARR_SH(arr) + 2, newcap, i, n;
     LONG *data;
     if (need <= cap) return TRUE;
     newcap = cap * 2;
     if (newcap < 4) newcap = 4;
     if (newcap < need) newcap = need;
-    data = (LONG *)_dash_block_get(sizeof(LONG) * w * newcap);
+    data = (LONG *)_dash_block_get((ULONG)newcap << sh);
     if (!data) return FALSE;
-    for (i = 0; i < arr->length * w; i++) data[i] = arr->data[i];
-    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * w * cap);
+    n = arr->length << (sh - 2);
+    for (i = 0; i < n; i++) data[i] = arr->data[i];
+    if (arr->data) _dash_block_put(arr->data, (ULONG)cap << sh);
     arr->data = data;
     arr->capacity = (arr->capacity & 0xFF000000) | newcap;
     return TRUE;
@@ -6462,10 +6473,11 @@ static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
 
 /* Room for one more at index (0..length): the elements from there move up */
 static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
-    LONG i, w;
+    LONG i, sh, stop;
     if (!arr || index < 0 || index > arr->length || !DashArray_reserve(arr, arr->length + 1)) return FALSE;
-    w = _DASH_ARR_W(arr);
-    for (i = (arr->length + 1) * w - 1; i >= (index + 1) * w; i--) arr->data[i] = arr->data[i - w];
+    sh = _DASH_ARR_SH(arr);
+    stop = (index + 1) << sh;
+    for (i = ((arr->length + 1) << sh) - 1; i >= stop; i--) arr->data[i] = arr->data[i - (1 << sh)];
     arr->length++;
     return TRUE;
 }
@@ -6494,8 +6506,8 @@ static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
 
 /* The element at index (inside the list) goes: the ones after it move down */
 static void DashArray_close(DashArrayLong *arr, LONG index) {
-    LONG w = _DASH_ARR_W(arr), i, n = (arr->length - 1) * w;
-    for (i = index * w; i < n; i++) arr->data[i] = arr->data[i + w];
+    LONG sh = _DASH_ARR_SH(arr), w = 1 << sh, i, n = (arr->length - 1) << sh;
+    for (i = index << sh; i < n; i++) arr->data[i] = arr->data[i + w];
     arr->length--;
 }
 
@@ -6553,38 +6565,40 @@ static void DashArray_clear(DashArrayLong *arr) {
 /* Dash Sort Runtime */
 /* Puts src[from..mid) and src[mid..to) (sorted, w LONGs per element) in order into dst[from..to): an element
    of the second half goes first only if after(first's, second's) says so, which keeps equal ones in order */
-static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG w,
+static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG sh,
                              LONG (*after)(const LONG *, const LONG *)) {
-    LONG i = from, j = mid, k = from * w, c;
+    LONG i = from, j = mid, w = 1 << sh, c;
+    LONG *out = dst + (from << sh);
     while (i < mid || j < to) {
         const LONG *e;
-        if (j >= to || (i < mid && !after(src + i * w, src + j * w))) e = src + (i++) * w;
-        else e = src + (j++) * w;
-        for (c = 0; c < w; c++) dst[k++] = e[c];
+        if (j >= to || (i < mid && !after(src + (i << sh), src + (j << sh)))) e = src + ((i++) << sh);
+        else e = src + ((j++) << sh);
+        for (c = 0; c < w; c++) *out++ = e[c];
     }
 }
 
 /* Sorts the list in place, keeping the order of equal elements. after(a, b): nonzero if the element at b goes
    before the one at a. Runs of 8 by insertion, then merges through a buffer as long as the list (without
-   memory for it, insertion all along) */
+   memory for it, insertion all along). Element k is at data + (k << sh): shifts, no multiplications */
 static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const LONG *)) {
-    LONG n, w, i, j, c, width, run = 8;
+    LONG n, sh, w, i, j, c, width, run = 8;
     LONG *buf, *src, *dst, t[2];
     if (!arr || arr->length < 2) return;
     n = arr->length;
-    w = _DASH_ARR_W(arr);
-    buf = (LONG *)_dash_block_get(sizeof(LONG) * w * n);
+    sh = _DASH_ARR_SH(arr);
+    w = 1 << sh;
+    buf = (LONG *)_dash_block_get((ULONG)n << (sh + 2));
     if (!buf) run = n;
     for (i = 0; i < n; i += run) {
         LONG end = i + run < n ? i + run : n;
         for (j = i + 1; j < end; j++) {
             LONG k = j;
-            for (c = 0; c < w; c++) t[c] = arr->data[j * w + c];
-            while (k > i && after(arr->data + (k - 1) * w, t)) {
-                for (c = 0; c < w; c++) arr->data[k * w + c] = arr->data[(k - 1) * w + c];
+            for (c = 0; c < w; c++) t[c] = arr->data[(j << sh) + c];
+            while (k > i && after(arr->data + ((k - 1) << sh), t)) {
+                for (c = 0; c < w; c++) arr->data[(k << sh) + c] = arr->data[((k - 1) << sh) + c];
                 k--;
             }
-            for (c = 0; c < w; c++) arr->data[k * w + c] = t[c];
+            for (c = 0; c < w; c++) arr->data[(k << sh) + c] = t[c];
         }
     }
     if (!buf) return;
@@ -6593,12 +6607,12 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
     for (width = run; width < n; width *= 2) {
         for (i = 0; i < n; i += 2 * width) {
             LONG mid = i + width < n ? i + width : n, to = i + 2 * width < n ? i + 2 * width : n;
-            _dash_sort_merge(src, dst, i, mid, to, w, after);
+            _dash_sort_merge(src, dst, i, mid, to, sh, after);
         }
         { LONG *x = src; src = dst; dst = x; }
     }
-    if (src != arr->data) for (i = 0; i < n * w; i++) arr->data[i] = src[i];
-    _dash_block_put(buf, sizeof(LONG) * w * n);
+    if (src != arr->data) for (i = 0; i < (n << sh); i++) arr->data[i] = src[i];
+    _dash_block_put(buf, (ULONG)n << (sh + 2));
 }
 
 """
@@ -7912,14 +7926,18 @@ static BOOL _dash_tls_resumed(LONG t) {
 /* a + b: a new list with the elements of both. It holds what a list of the
    first typed operand holds (an empty literal has no type) */
 static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
-    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, w;
+    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, sh;
     DashArrayLong *result;
     kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
-    w = kind == _DASH_ARR_DBLS ? 2 : 1;
-    result = DashArray_create((la + lb) * w);
+    sh = kind == _DASH_ARR_DBLS ? 1 : 0;
+    result = DashArray_create((la + lb) << sh);
     if (!result) return NULL;
-    for (i = 0; i < la * w; i++) result->data[i] = a->data[i];
-    for (i = 0; i < lb * w; i++) result->data[la * w + i] = b->data[i];
+    la <<= sh;
+    lb <<= sh;
+    for (i = 0; i < la; i++) result->data[i] = a->data[i];
+    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
+    la >>= sh;
+    lb >>= sh;
     if (kind == _DASH_ARR_DBLS) {
         result->length = la + lb;
         result->capacity = (la + lb) | ((LONG)_DASH_ARR_DBLS << 24);
