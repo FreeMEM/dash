@@ -73,6 +73,8 @@ menús, ciclos, pestañas) los copia el runtime en su pool, y viven hasta `mui_a
 | `mui_canvas(ancho_min, alto_min)` | Clase propia de dibujo (abajo) |
 | `mui_image(fichero)` | `Dtpic` (ILBM; PNG, JPEG, GIF si están sus datatypes). `mui_set_text` cambia el fichero |
 | `mui_image_button(fichero)` | Botón con dibujo (icono de barra de herramientas): `mui_on_press` como un botón |
+| `mui_image_toggle(fichero, grupo, pulsado)` | Botón con dibujo que se queda pulsado; `grupo` > 0: excluyentes (Lorraine D14) |
+| `mui_combo(texto, opciones)` | Campo de texto con lista desplegable; `mui_on_ack` al confirmar o elegir (Lorraine D14) |
 
 ### Valores
 

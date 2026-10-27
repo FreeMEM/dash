@@ -1,0 +1,13 @@
+{
+  "dashui": 1,
+  "windows": [
+    { "name": "Mala", "menus": [
+        { "title": "Ver", "items": [
+            { "label": "Zoom", "submenu": [
+                { "label": "Más", "submenu": [ { "label": "200 %", "event": 2 } ] }
+            ]}
+        ]}
+      ],
+      "root": { "type": "vgroup", "children": [] } }
+  ]
+}

@@ -91,6 +91,8 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
 | `scrollbar` | `mui_scrollbar` | `vertical`, `change` |
 | `image` | `mui_image` | `file` |
 | `image_button` | `mui_image_button` | `file`, `event` |
+| `image_toggle` | `mui_image_toggle` | `file`, `group` (0 sueltos; > 0 excluyentes), `checked`, `change` |
+| `combo` | `mui_combo` | `text`, `options` ("A\|B"), `ack`, `change` |
 | `space`, `balance` | `mui_space`, `mui_balance` | — |
 
 Comunes: `name` (campo del struct; sin nombre el objeto no se guarda), `weight` (`mui_weight`), `disabled`
@@ -112,6 +114,12 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
 - **Ventana**: `"close": N` hace que el botón de cerrar devuelva `N` (`mui_on_close`). Sin él, cerrar la primera
   ventana es -1 (salir).
 - **Menús**: cada elemento es `label`, `key` (letra para Amiga+tecla) y `event`, o `{ "separator": true }` (una línea).
+  Con `"check": true` lleva marca (`mui_menu_check`): elegirlo la cambia y da su evento; `"checked": true` la pone al
+  abrir, y `mui_get_value`/`mui_set_value` la leen y la ponen. `"submenu": [ ...elementos... ]` con su `label` es un
+  submenú (`mui_submenu_begin`), de un solo nivel y sin `key` ni `event`. Un menú, un elemento o un submenú con `name`
+  es un campo de la ventana, como los objetos (`v.ver_formulas`: marcarlo, cambiarle el texto con `mui_set_text` o
+  desactivarlo con `mui_set_enabled`); `"disabled": true` lo deja desactivado. El editor visual enseña los submenús,
+  pero sus opciones, las marcas y los nombres se cambian editando el fichero como texto (Lorraine D47).
 - **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
   principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
   `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca

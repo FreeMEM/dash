@@ -14554,12 +14554,17 @@ static void _dash_mui_on_end(void (*hook)(void)) {
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
 static LONG _dash_mui_npress = 0;
+#define _DASH_MUI_RADIOS 32                 /* buttons in exclusive groups (Lorraine D14) */
+static Object *_dash_mui_radio_obj[_DASH_MUI_RADIOS];
+static LONG _dash_mui_radio_group[_DASH_MUI_RADIOS];
+static LONG _dash_mui_nradio = 0;
 
 /* What each object is, kept in its MUIA_UserData: mui_get_value and friends
    read and write the attribute of that kind */
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
        _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
-       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR, _DASH_MUI_IMAGE };
+       _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR, _DASH_MUI_IMAGE,
+       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -14594,6 +14599,7 @@ static void _dash_mui_app_end(void) {
     _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
     _dash_mui_depth = 0;
     _dash_mui_npress = 0;
+    _dash_mui_nradio = 0;
     if (_dash_mui_pool) { DeletePool(_dash_mui_pool); _dash_mui_pool = NULL; }
     if (MUIMasterBase) { CloseLibrary(MUIMasterBase); MUIMasterBase = NULL; }
 }
@@ -14921,7 +14927,14 @@ static APTR _dash_mui_gauge(LONG max) {
    are in the List inside */
 static Object *_dash_mui_list_of(Object *obj) {
     IPTR list = 0;
-    if (obj && _dash_mui_kind(obj) == _DASH_MUI_LIST) GetAttr(MUIA_Listview_List, obj, &list);
+    IPTR lv = 0;
+    LONG kind = obj ? _dash_mui_kind(obj) : 0;
+    if (kind == _DASH_MUI_COMBO) {          /* the list that drops down (Lorraine D14) */
+        GetAttr(MUIA_Popobject_Object, obj, &lv);
+        obj = (Object *)lv;
+        kind = obj ? _DASH_MUI_LIST : 0;
+    }
+    if (kind == _DASH_MUI_LIST) GetAttr(MUIA_Listview_List, obj, &list);
     return (Object *)list;
 }
 
@@ -14938,6 +14951,8 @@ static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
     case _DASH_MUI_REGISTER: return MUIA_Group_ActivePage;
     case _DASH_MUI_SCROLLBAR: return MUIA_Prop_First;
     case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Checked;   /* the check mark (Lorraine D13) */
+    case _DASH_MUI_TOGGLE:
+    case _DASH_MUI_RADIO:  return MUIA_Selected;            /* pressed or not (Lorraine D14) */
     }
     return 0;
 }
@@ -15028,7 +15043,10 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_BUTTON: return MUIA_Text_Contents;
     case _DASH_MUI_STRING: return MUIA_String_Contents;
     case _DASH_MUI_WINDOW: return MUIA_Window_Title;
-    case _DASH_MUI_IMAGE:  return MUIA_Dtpic_Name;
+    case _DASH_MUI_IMAGE:
+    case _DASH_MUI_TOGGLE:
+    case _DASH_MUI_RADIO:  return MUIA_Dtpic_Name;
+    case _DASH_MUI_COMBO:  return MUIA_String_Contents;      /* of its text field (_dash_mui_combo_str) */
     case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Title;       /* "Abrir recientes" (Lorraine D13) */
     }
     return 0;
@@ -15049,6 +15067,128 @@ static APTR _dash_mui_image_button(STRPTR file) {
         MUIA_Background, MUII_ImageButtonBack,
         MUIA_InputMode, MUIV_InputMode_RelVerify,
         MUIA_CycleChain, 1), _DASH_MUI_IMAGE);
+}
+
+/* Toolbar buttons that stay pressed (Lorraine D14): bold, italic... (group 0, each one on its own)
+   or one of a group of exclusive ones (group > 0: alignment), where pressing one lets the others go.
+   The value (mui_get_value / mui_set_value) is 1 pressed, 0 not. In a group, mui_on_change only
+   gives the event of the one that gets pressed. */
+
+static APTR _dash_mui_image_toggle(STRPTR file, LONG group, LONG selected) {
+    Object *obj = _DASH_MUI_NEW(MUIC_Dtpic,
+        MUIA_Dtpic_Name, (IPTR)_dash_mui_keep(file),
+        MUIA_Frame, MUIV_Frame_ImageButton,
+        MUIA_Background, MUII_ImageButtonBack,
+        MUIA_InputMode, group > 0 ? MUIV_InputMode_Immediate : MUIV_InputMode_Toggle,
+        MUIA_Selected, selected ? TRUE : FALSE,
+        MUIA_CycleChain, 1);
+    LONG i;
+    if (obj && group > 0) {
+        if (_dash_mui_nradio == _DASH_MUI_RADIOS) _dash_mui_error("too many buttons in groups");
+        else {
+            for (i = 0; i < _dash_mui_nradio; i++) {
+                Object *other = _dash_mui_radio_obj[i];
+                if (_dash_mui_radio_group[i] != group) continue;
+                if (selected) SetAttrs(other, MUIA_Selected, FALSE, TAG_DONE);
+                _DASH_MUI_DO(obj, MUIM_Notify, MUIA_Selected, TRUE, (IPTR)other, 3, MUIM_Set, MUIA_Selected, FALSE);
+                _DASH_MUI_DO(other, MUIM_Notify, MUIA_Selected, TRUE, (IPTR)obj, 3, MUIM_Set, MUIA_Selected, FALSE);
+            }
+            _dash_mui_radio_obj[_dash_mui_nradio] = obj;
+            _dash_mui_radio_group[_dash_mui_nradio++] = group;
+        }
+    }
+    return _dash_mui_add_kind(obj, group > 0 ? _DASH_MUI_RADIO : _DASH_MUI_TOGGLE);
+}
+
+/* A text field with a list that drops down (Lorraine D14: font, size): one writes in it or picks a
+   line (double click). mui_get_text / mui_set_text are the text; mui_list_* change the lines;
+   mui_on_ack gives its event on Return and when a line is picked. */
+static ULONG _dash_mui_combo_pick(struct Hook *h __asm("a0"), Object *lv __asm("a2"), Object *str __asm("a1")) {
+    STRPTR text = NULL;
+    IPTR list = 0;
+    GetAttr(MUIA_Listview_List, lv, &list);
+    if (list) _DASH_MUI_DO(list, MUIM_List_GetEntry, MUIV_List_GetEntry_Active, (IPTR)&text);
+    /* as if Return were pressed in the field: its mui_on_ack (the popup closes later, pushed by MUI: an event
+       of the double click itself came before the new text) */
+    if (text) SetAttrs(str, MUIA_String_Contents, (IPTR)text, MUIA_String_Acknowledge, (IPTR)text, TAG_DONE);
+    return 0;
+}
+
+/* When it opens, the line with the field's text is the active one */
+static ULONG _dash_mui_combo_open(struct Hook *h __asm("a0"), Object *lv __asm("a2"), Object *str __asm("a1")) {
+    STRPTR text = NULL, line;
+    IPTR list = 0, n = 0;
+    LONG i;
+    GetAttr(MUIA_Listview_List, lv, &list);
+    GetAttr(MUIA_String_Contents, str, (IPTR *)&text);
+    if (!list) return TRUE;
+    GetAttr(MUIA_List_Entries, (Object *)list, &n);
+    SetAttrs((Object *)list, MUIA_List_Active, MUIV_List_Active_Off, TAG_DONE);
+    for (i = 0; text && i < (LONG)n; i++) {
+        line = NULL;
+        _DASH_MUI_DO(list, MUIM_List_GetEntry, i, (IPTR)&line);
+        if (line && !strcmp((char *)line, (char *)text)) {
+            SetAttrs((Object *)list, MUIA_List_Active, i, TAG_DONE);
+            break;
+        }
+    }
+    return TRUE;
+}
+
+static struct Hook _dash_mui_combo_pick_hook = { { NULL, NULL }, (ULONG (*)())_dash_mui_combo_pick, NULL, NULL };
+static struct Hook _dash_mui_combo_open_hook = { { NULL, NULL }, (ULONG (*)())_dash_mui_combo_open, NULL, NULL };
+
+static APTR _dash_mui_combo(STRPTR text, STRPTR options) {
+    Object *list, *lv, *str, *button, *pop;
+    STRPTR *entries = _dash_mui_entries(options);
+    LONG i;
+    list = _DASH_MUI_NEW(MUIC_List,
+        MUIA_Frame, MUIV_Frame_InputList,
+        MUIA_List_ConstructHook, MUIV_List_ConstructHook_String,
+        MUIA_List_DestructHook, MUIV_List_DestructHook_String);
+    lv = list ? _DASH_MUI_NEW(MUIC_Listview, MUIA_Listview_Input, TRUE, MUIA_Listview_List, (IPTR)list) : NULL;
+    str = _DASH_MUI_NEW(MUIC_String,
+        MUIA_Frame, MUIV_Frame_String,
+        MUIA_CycleChain, 1,
+        MUIA_String_MaxLen, 81,
+        MUIA_String_Contents, (IPTR)text);
+    {
+        ULONG params[] = { MUII_PopUp };
+        button = MUI_MakeObjectA(MUIO_PopButton, params);
+    }
+    if (!lv || !str || !button) {
+        if (lv) MUI_DisposeObject(lv); else if (list) MUI_DisposeObject(list);
+        if (str) MUI_DisposeObject(str);
+        if (button) MUI_DisposeObject(button);
+        return _dash_mui_add(NULL);
+    }
+    if (button) SetAttrs(button, MUIA_CycleChain, 1, TAG_DONE);
+    for (i = 0; entries && entries[i]; i++)
+        if (*entries[i] || entries[i + 1]) _DASH_MUI_DO(list, MUIM_List_InsertSingle, (IPTR)entries[i], MUIV_List_Insert_Bottom);
+    pop = _DASH_MUI_NEW(MUIC_Popobject,
+        MUIA_Popstring_String, (IPTR)str,
+        MUIA_Popstring_Button, (IPTR)button,
+        MUIA_Popobject_Object, (IPTR)lv,
+        MUIA_Popobject_ObjStrHook, (IPTR)&_dash_mui_combo_pick_hook,
+        MUIA_Popobject_StrObjHook, (IPTR)&_dash_mui_combo_open_hook);
+    if (!pop) {
+        MUI_DisposeObject(lv);
+        MUI_DisposeObject(str);
+        MUI_DisposeObject(button);
+        return _dash_mui_add(NULL);
+    }
+    _DASH_MUI_DO(lv, MUIM_Notify, MUIA_Listview_DoubleClick, TRUE, (IPTR)pop, 2, MUIM_Popstring_Close, TRUE);
+    return _dash_mui_add_kind(pop, _DASH_MUI_COMBO);
+}
+
+/* The text field of a combo; any other object as it is */
+static Object *_dash_mui_combo_str(Object *obj) {
+    IPTR str = 0;
+    if (obj && _dash_mui_kind(obj) == _DASH_MUI_COMBO) {
+        GetAttr(MUIA_Popstring_String, obj, &str);
+        return (Object *)str;
+    }
+    return obj;
 }
 
 /* The bubble help MUI shows when the pointer rests on an object */
@@ -15129,7 +15269,7 @@ static LONG _dash_mui_size(APTR obj, LONG height) {
 static STRPTR _dash_mui_get_text(APTR obj) {
     STRPTR text = NULL;
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
-    if (attr) GetAttr(attr, obj, (IPTR *)&text);
+    if (attr) GetAttr(attr, _dash_mui_combo_str(obj), (IPTR *)&text);
     return text ? text : (STRPTR)"";
 }
 
@@ -15138,7 +15278,7 @@ static void _dash_mui_set_text(APTR obj, STRPTR text) {
     if (!attr) return;
     if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name || attr == MUIA_Menuitem_Title)
         text = _dash_mui_keep(text);   /* they keep the pointer */
-    SetAttrs(obj, attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
+    SetAttrs(_dash_mui_combo_str(obj), attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
@@ -15154,17 +15294,22 @@ static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
 static void _dash_mui_on_change(APTR obj, LONG id) {
     ULONG attr;
     Object *target = obj;
+    LONG kind;
     if (!obj || !_dash_mui_app) return;
-    attr = _dash_mui_kind(obj) == _DASH_MUI_STRING ? MUIA_String_Contents : _dash_mui_value_attr_of(obj, &target);
-    if (attr) _DASH_MUI_DO(target, MUIM_Notify, attr, MUIV_EveryTime,
+    kind = _dash_mui_kind(obj);
+    if (kind == _DASH_MUI_COMBO) target = _dash_mui_combo_str(obj);
+    attr = kind == _DASH_MUI_STRING || kind == _DASH_MUI_COMBO ? MUIA_String_Contents
+                                                                : _dash_mui_value_attr_of(obj, &target);
+    if (attr) _DASH_MUI_DO(target, MUIM_Notify, attr, kind == _DASH_MUI_RADIO ? TRUE : MUIV_EveryTime,
                            (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 
-/* Return pressed in a text field */
+/* Return pressed in a text field; in a combo, also a line picked from its list */
 static void _dash_mui_on_ack(APTR obj, LONG id) {
-    if (obj && _dash_mui_app)
-        _DASH_MUI_DO(obj, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime,
-                     (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+    if (!obj || !_dash_mui_app) return;
+    obj = _dash_mui_combo_str(obj);   /* a combo: its field, which a line picked acknowledges too */
+    _DASH_MUI_DO(obj, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime,
+                 (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
 
 static void _dash_mui_on_press(APTR obj, LONG id) {

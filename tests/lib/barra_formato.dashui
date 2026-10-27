@@ -1,0 +1,26 @@
+{
+  "dashui": 1,
+  "windows": [
+    {
+      "name": "Barra",
+      "title": "Barra de formato",
+      "id": 0,
+      "root": {
+        "type": "vgroup",
+        "children": [
+          { "type": "hgroup", "children": [
+              { "type": "combo", "name": "fuente", "text": "Topaz", "options": "Topaz|Helvetica|Times", "ack": 30 },
+              { "type": "combo", "name": "tamano", "text": "10", "options": "8|10|12|14", "ack": 31 },
+              { "type": "image_toggle", "name": "negrita", "file": "T:negrita.iff", "change": 20, "help": "Negrita" },
+              { "type": "image_toggle", "name": "cursiva", "file": "T:cursiva.iff", "checked": true, "change": 21 },
+              { "type": "space" },
+              { "type": "image_toggle", "name": "izquierda", "file": "T:izq.iff", "group": 1, "checked": true, "change": 22 },
+              { "type": "image_toggle", "name": "centro", "file": "T:cen.iff", "group": 1, "change": 23 },
+              { "type": "image_toggle", "name": "derecha", "file": "T:der.iff", "group": 1, "change": 24 }
+          ]},
+          { "type": "text", "text": "Texto de prueba" }
+        ]
+      }
+    }
+  ]
+}

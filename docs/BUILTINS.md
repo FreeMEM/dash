@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 673 funciones, 673 implementadas, 0 sin implementar.
+Total: 675 funciones, 675 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -770,7 +770,7 @@ Total: 673 funciones, 673 implementadas, 0 sin implementar.
 | `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button, menu item or window title |  |
 | `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object, a menu item or a whole menu |  |
 | `mui_on_change(obj, id)` | `void` | mui_wait_event returns id when the value or text changes |  |
-| `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field |  |
+| `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked) |  |
 | `mui_list()` | `APTR` | List of texts with scroller; its value is the selected line (-1 none) |  |
 | `mui_list_add(list, text)` | `void` | Add a line at the end |  |
 | `mui_list_insert(list, pos, text)` | `void` | Insert a line at pos (0 = first) |  |
@@ -823,6 +823,8 @@ Total: 673 funciones, 673 implementadas, 0 sin implementar.
 | `mui_timer(ms, id)` | `void` | In ms milliseconds mui_wait_event returns id, once (again: call it again; 0 cancels) |  |
 | `mui_image(file)` | `APTR` | Picture from a file through datatypes (ILBM; PNG, JPEG, GIF if their datatypes are installed); mui_set_text changes the file |  |
 | `mui_image_button(file)` | `APTR` | Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture |  |
+| `mui_image_toggle(file, group, selected)` | `APTR` | Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, mui_on_change when it changes; group > 0: pressing one lets go the others of that group (alignment), and mui_on_change only fires for the one pressed |  |
+| `mui_combo(text, options)` | `APTR` | Text field with a list that drops down (font, size; options "A\|B"): write or pick a line (double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return or when a line is picked |  |
 | `mui_help(obj, text)` | `void` | Bubble help shown when the pointer rests on the object |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |

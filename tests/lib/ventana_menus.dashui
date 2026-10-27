@@ -1,0 +1,25 @@
+{
+  "dashui": 1,
+  "windows": [
+    {
+      "name": "Menus",
+      "title": "Menús del editor",
+      "id": 0,
+      "menus": [
+        { "title": "Ver", "name": "menu_ver", "items": [
+            { "label": "Cuadrícula", "key": "G", "event": 7, "check": true, "checked": true, "name": "ver_rejilla" },
+            { "label": "Fórmulas", "event": 10, "check": true, "name": "ver_formulas" },
+            { "label": "Abrir reciente", "name": "recientes", "submenu": [
+                { "label": "Reciente 1", "key": "R", "event": 8, "name": "reciente1" },
+                { "separator": true },
+                { "label": "Limpiar", "event": 11 }
+            ]},
+            { "separator": true },
+            { "label": "Desactivado", "key": "D", "event": 9, "disabled": true },
+            { "label": "Salir", "key": "Q", "event": 1 }
+        ]}
+      ],
+      "root": { "type": "vgroup", "children": [ { "type": "text", "text": "Menús con marcas" } ] }
+    }
+  ]
+}

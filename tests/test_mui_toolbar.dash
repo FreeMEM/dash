@@ -1,0 +1,116 @@
+# A format toolbar from a .dashui (Lorraine D14): picture buttons that stay pressed (bold, italic), a group of
+# exclusive ones (alignment: pressing one lets go the others, and only the pressed one gives its event) and
+# combos (font, size) where one writes or picks a line (double click) from the list that drops down: both give
+# the field's event, with the new text. The program clicks and
+# types in its own window with input_* (Lorraine D46), one step per timer event; the pictures are ILBM files it
+# writes in T: first.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_image_toggle(
+# expect-c: _dash_mui_combo(
+# expect-out: negrita 0 cursiva 1 alineación 1 0 0
+# expect-out: fuente Topaz, 4 tamaños
+# expect-out: alineación 0 1 0
+# expect-out: evento 23 alineación 0 1 0
+# expect-out: evento 20 negrita 1
+# expect-out: evento 20 negrita 0
+# expect-out: evento 24 alineación 0 0 1
+# expect-out: evento 31 tamaño 14
+# expect-out: evento 31 tamaño 10
+# expect-out: fin
+
+import "lib/barra_formato.dashui"
+
+const PASO = 99
+
+# A 16 x 16 picture of 2 colours, uncompressed
+@native func escribe_ilbm(nombre: String, patron: Int)
+"""
+    static const UBYTE cab[] = {
+        'F','O','R','M', 0,0,0,86, 'I','L','B','M',
+        'B','M','H','D', 0,0,0,20, 0,16, 0,16, 0,0, 0,0, 1, 0, 0, 0, 0,0, 10, 11, 0,16, 0,16,
+        'C','M','A','P', 0,0,0,6, 0xAA,0xAA,0xAA, 0,0,0,
+        'B','O','D','Y', 0,0,0,32 };
+    UBYTE body[32];
+    LONG i;
+    BPTR f = Open((CONST_STRPTR)nombre, MODE_NEWFILE);
+    for (i = 0; i < 16; i++) { body[2 * i] = (UBYTE)(patron >> 8); body[2 * i + 1] = (UBYTE)(i & 1 ? patron : patron >> 4); }
+    if (f) { Write(f, (APTR)cab, sizeof(cab)); Write(f, body, 32); Close(f); }
+"""
+end
+
+@native func izq(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_LeftEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+@native func arr(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_TopEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+func centro(o: Int)
+    input_click(izq(o) + mui_width(o) / 2, arr(o) + mui_height(o) / 2, 0)
+end
+
+func alineacion(v: Barra) -> String
+    return "#{mui_get_value(v.izquierda)} #{mui_get_value(v.centro)} #{mui_get_value(v.derecha)}"
+end
+
+Main
+    escribe_ilbm("T:negrita.iff", 0x3C66)
+    escribe_ilbm("T:cursiva.iff", 0x0C30)
+    escribe_ilbm("T:izq.iff", 0xFF00)
+    escribe_ilbm("T:cen.iff", 0x3FFC)
+    escribe_ilbm("T:der.iff", 0x00FF)
+    if mui_app_begin("Barra", "DASHTOOLBAR") == 0
+        Print "sin MUI"
+    else
+        v = Barra_create()
+        mui_window_open(v.window)
+        Print "negrita #{mui_get_value(v.negrita)} cursiva #{mui_get_value(v.cursiva)} alineación #{alineacion(v)}"
+        Print "fuente #{mui_get_text(v.fuente)}, #{mui_list_count(v.tamano)} tamaños"
+        mui_set_value(v.centro, 1)
+        Print "alineación #{alineacion(v)}"
+        paso = 0
+        mui_timer(600, PASO)
+        ev = 0
+        while ev != -1 and paso < 9
+            ev = mui_wait_event()
+            if ev == PASO
+                paso = paso + 1
+                if paso == 1 or paso == 2
+                    centro(v.negrita)
+                elif paso == 3 or paso == 4
+                    centro(v.derecha)
+                elif paso == 5
+                    mui_set_text(v.tamano, "")
+                    input_click(izq(v.tamano) + 6, arr(v.tamano) + mui_height(v.tamano) / 2, 0)
+                    input_text("14")
+                    input_key(0x44, 0)
+                elif paso == 6
+                    input_click(izq(v.tamano) + mui_width(v.tamano) - 5, arr(v.tamano) + mui_height(v.tamano) / 2, 0)
+                elif paso == 7
+                    input_click(12, 24, 0)              # the list is the active window: line "10"
+                    input_click(12, 24, 0)
+                end
+                mui_timer(600, PASO)
+            elif ev >= 22 and ev <= 24
+                Print "evento #{ev} alineación #{alineacion(v)}"
+            elif ev == 20
+                Print "evento #{ev} negrita #{mui_get_value(v.negrita)}"
+            elif ev == 31
+                Print "evento #{ev} tamaño #{mui_get_text(v.tamano)}"
+            else
+                Print "evento #{ev}"
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

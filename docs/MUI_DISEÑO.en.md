@@ -73,6 +73,8 @@ menus, cycles, tabs) are copied by the runtime into its pool, and live until `mu
 | `mui_canvas(ancho_min, alto_min)` | Custom drawing class (below) |
 | `mui_image(fichero)` | `Dtpic` (ILBM; PNG, JPEG, GIF if their datatypes are installed). `mui_set_text` changes the file |
 | `mui_image_button(fichero)` | Button with an image (toolbar icon): `mui_on_press` as with a button |
+| `mui_image_toggle(fichero, grupo, pulsado)` | Image button that stays pressed; `grupo` > 0: exclusive (Lorraine D14) |
+| `mui_combo(texto, opciones)` | Text field with a drop-down list; `mui_on_ack` on Return or a pick (Lorraine D14) |
 
 ### Values
 

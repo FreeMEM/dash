@@ -29,6 +29,8 @@
         scrollbar:{ group: false, label: 'Barra de desplazamiento', props: [['vertical', 'bool', true]], events: ['change'] },
         image:    { group: false, label: 'Imagen',           props: [['file', 'string', '']], events: [] },
         image_button: { group: false, label: 'Botón con imagen', props: [['file', 'string', '']], events: ['event'] },
+        image_toggle: { group: false, label: 'Botón que se queda pulsado', props: [['file', 'string', ''], ['group', 'int', 0], ['checked', 'bool', false]], events: ['change'] },
+        combo:    { group: false, label: 'Desplegable editable', props: [['text', 'string', ''], ['options', 'string', 'Uno|Dos']], events: ['ack', 'change'] },
         space:    { group: false, label: 'Espacio',          props: [], events: [] },
         balance:  { group: false, label: 'Separador',        props: [], events: [] },
     };
@@ -36,7 +38,7 @@
                     ['help', 'string', '']];
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
     // words of the language: not names (compiler/dashui.py reserved(), the same list; a test compares them)
-    const RESERVED = new Set(["EventLoop", "Main", "Print", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
+    const RESERVED = new Set(["EventLoop", "Main", "Print", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "interface", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
     /** Why a name of a window or object is not valid, or null */
     function badName(name) {
         if (!IDENT.test(String(name || ''))) return 'letras sin tilde, cifras y _, sin empezar por cifra';
@@ -245,11 +247,29 @@
             }
             if (win.size !== undefined && !(Array.isArray(win.size) && win.size.length === 2 && win.size.every(Number.isFinite)))
                 problems.push(`${win.name}: size es [ancho, alto] en porcentaje`);
-            (win.menus || []).forEach((m) => (m.items || []).forEach((it) => {
-                if (!it.separator && it.event !== undefined && !Number.isInteger(it.event))
-                    problems.push(`${win.name}: el evento de la opción ${it.label || ''} del menú ${m.title || ''} no es un número entero`);
-            }));
             const seen = new Set();   // (an object would find "constructor" or "toString" in its prototype)
+            function named(n) {   // menus, items and objects with "name" are fields of the window (Lorraine D47)
+                if (!n.name) return;
+                if (badName(n.name)) problems.push(`${win.name}: nombre no válido ${n.name} (${badName(n.name)})`);
+                else if (seen.has(n.name)) problems.push(`${win.name}: nombre repetido ${n.name}`);
+                seen.add(n.name);
+            }
+            (win.menus || []).forEach((m) => {
+                named(m);
+                (function items(list, top) {
+                    (list || []).forEach((it) => {
+                        if (it.separator) return;
+                        named(it);
+                        if (it.submenu !== undefined) {
+                            if (!top) problems.push(`${win.name}: el submenú ${it.label || ''} está dentro de otro (solo hay un nivel)`);
+                            else items(it.submenu, false);
+                        } else if (it.event !== undefined && !Number.isInteger(it.event))
+                            problems.push(`${win.name}: el evento de la opción ${it.label || ''} del menú ${m.title || ''} no es un número entero`);
+                        if (it.checked !== undefined && !it.check)
+                            problems.push(`${win.name}: la opción ${it.label || ''} tiene checked sin "check": true`);
+                    });
+                })(m.items, true);
+            });
             (function walk(n) {
                 if (!n) return;
                 if (!n.type) problems.push(`${win.name}: un objeto sin tipo`);
@@ -265,11 +285,7 @@
                     if (known.has(k) && v !== null && typeof v === 'object')
                         problems.push(`${win.name}: ${k} de ${what} no puede ser una lista ni un objeto`);
                 }
-                if (n.name) {
-                    if (badName(n.name)) problems.push(`${win.name}: nombre no válido ${n.name} (${badName(n.name)})`);
-                    else if (seen.has(n.name)) problems.push(`${win.name}: nombre repetido ${n.name}`);
-                    seen.add(n.name);
-                }
+                named(n);
                 for (const [k, v] of Object.entries(n)) {   // the compiler refuses texts with #{ (interpolation)
                     if (typeof v === 'string' && v.includes('#{')) problems.push(`${win.name}: ${k} de ${n.name || n.type} no puede llevar #{`);
                 }
@@ -320,6 +336,8 @@
             case 'scrollbar': return `<div${attrs}></div>`;
             case 'image': return `<div${attrs}>${esc(n.file || 'imagen')}</div>`;
             case 'image_button': return `<button${attrs}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
+            case 'image_toggle': return `<button${attrs}${n.checked ? ' data-pressed="1"' : ''}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
+            case 'combo': return `<span${attrs}><input value="${esc(n.text || '')}" readonly><button>▾</button></span>`;
             default: return `<div${attrs}></div>`;
             }
         }

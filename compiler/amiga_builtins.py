@@ -3379,7 +3379,7 @@ MUI_FUNCTIONS = {
         params=["obj", "id"],
         return_type="void",
         c_template="_dash_mui_on_ack(${obj}, ${id})",
-        description="mui_wait_event returns id when Return is pressed in a text field"
+        description="mui_wait_event returns id when Return is pressed in a text field (in a mui_combo, also when a line is picked)"
     ),
     "mui_list": BuiltinFunc(
         name="mui_list",
@@ -3751,6 +3751,24 @@ MUI_FUNCTIONS = {
         return_type="APTR",
         c_template="_dash_mui_image_button(${file})",
         description="Button with a picture (a toolbar icon; ILBM, or what the datatypes read): mui_on_press like a button, mui_set_text changes the picture"
+    ),
+    "mui_image_toggle": BuiltinFunc(
+        name="mui_image_toggle",
+        params=["file", "group", "selected"],
+        return_type="APTR",
+        c_template="_dash_mui_image_toggle(${file}, ${group}, ${selected})",
+        description="Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, "
+                    "mui_on_change when it changes; group > 0: pressing one lets go the others of that group "
+                    "(alignment), and mui_on_change only fires for the one pressed"
+    ),
+    "mui_combo": BuiltinFunc(
+        name="mui_combo",
+        params=["text", "options"],
+        return_type="APTR",
+        c_template="_dash_mui_combo(${text}, ${options})",
+        description="Text field with a list that drops down (font, size; options \"A|B\"): write or pick a line "
+                    "(double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return "
+                    "or when a line is picked"
     ),
     "mui_help": BuiltinFunc(
         name="mui_help",

@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 673 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 675 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -3376,6 +3376,8 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_scrollbar(vertical)` | Scroll bar; its value is the first visible line. |
 | `mui_image(fichero)` | Image from a file via datatypes: ILBM always; PNG, JPEG, GIF and BMP if their datatypes are installed (AmigaOS 3.2 includes them). `mui_set_text` changes the file. |
 | `mui_image_button(fichero)` | Button with an image (a toolbar icon): the frame and background of MUI's image buttons; it is pressed like a button (`mui_on_press`) and `mui_set_text` changes the image. |
+| `mui_image_toggle(fichero, grupo, pulsado)` | Image button that stays pressed (bold, italic): its value is 1 pressed or 0 (`mui_get_value`/`mui_set_value`) and `mui_on_change` gives its event when it changes. With `grupo` > 0, the buttons of that group exclude each other (alignment): pressing one lets go the others, and `mui_on_change` only gives the event of the one pressed. `mui_set_text` changes the image. (Lorraine D14) |
+| `mui_combo(texto, opciones)` | Text field with a list that drops down (font, size; options `"A\|B"`): you write or pick a line with a double click. `mui_get_text`/`mui_set_text` are the text, `mui_list_insert`/`mui_list_clear`/`mui_list_count`/`mui_list_get` change the lines, and `mui_on_ack` gives its event on Return and when a line is picked, already with the new text. (Lorraine D14) |
 | `mui_help(obj, texto)` | The help that MUI shows in a bubble when the pointer rests over it. |
 | `mui_window_size(ventana, ancho, alto)` | Size the window opens with, as a percentage of the visible screen, centered (before `mui_window_open`). |
 | `mui_window_fullscreen(ventana)` | The window takes up the whole screen: no borders, no title bar or buttons, at 0,0, active on opening (before `mui_window_open`). For video or games. |
@@ -4376,8 +4378,8 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **673** | |
+| MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **675** | |
 
 ### Standard Amiga Colors
 

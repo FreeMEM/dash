@@ -1,0 +1,7 @@
+# expect: object name 'formulas' used twice
+# (a named menu item is a field of the window like the objects, Lorraine D47)
+import "../lib/ventana_menu_nombre_doble.dashui"
+
+Main
+    v = Mala_create()
+end

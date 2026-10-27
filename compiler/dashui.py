@@ -54,6 +54,8 @@ _LEAVES = {
     "scrollbar": ("mui_scrollbar", [("vertical", True)]),
     "image": ("mui_image", [("file", "")]),
     "image_button": ("mui_image_button", [("file", "")]),
+    "image_toggle": ("mui_image_toggle", [("file", ""), ("group", 0), ("checked", False)]),
+    "combo": ("mui_combo", [("text", ""), ("options", "")]),
     "space": ("mui_space", []),
     "balance": ("mui_balance", []),
 }
@@ -77,7 +79,7 @@ class DashUIError(Exception):
 
 
 # the text a "tr": number goes with (dashweb D71); {"field": number} gives each text its own
-_MAIN_TEXT = {"text": "text", "label": "text", "button": "label", "string": "text", "cycle": "options",
+_MAIN_TEXT = {"text": "text", "label": "text", "button": "label", "string": "text", "cycle": "options", "combo": "text",
               "frame": "title", "tabs": "titles", "window": "title", "menu": "title", "item": "label"}
 
 
@@ -196,6 +198,48 @@ class _Window:
         elif node.get("children"):
             raise DashUIError(f"{self.where}: a {kind!r} cannot have children")
 
+    def named(self, node: dict, indent: str, call: str):
+        """A menu, item or submenu: with "name", a field of the window (Lorraine D47); "disabled" greys it"""
+        var = self.var_for(node, bool(node.get("disabled")))
+        self.lines.append(f"{indent}{var} = {call}" if var else f"{indent}{call}")
+        if node.get("disabled"):
+            self.after.append(f"    mui_set_enabled({var}, false)")
+
+    def menu_item(self, item: dict, depth: int, top: bool):
+        """An item of a menu: a line, a submenu (one level), an item with a check mark or a plain one"""
+        indent = "    " * depth
+        if not isinstance(item, dict):
+            raise DashUIError(f"{self.where}: a menu item must be an object, not {item!r}")
+        if item.get("separator"):
+            self.lines.append(f"{indent}mui_menu_separator()")
+            return
+        label = _text(item, "label", "", _tr_ids(item, "item", self.where))
+        what = f"menu item {item.get('label', '')!r}"
+        if "checked" in item and not item.get("check"):
+            raise DashUIError(f"{self.where}: {what} has \"checked\" without \"check\": true")
+        if "submenu" in item:
+            if not top:
+                raise DashUIError(f"{self.where}: {what}: a submenu cannot have another submenu inside")
+            if not isinstance(item["submenu"], list):
+                raise DashUIError(f"{self.where}: {what}: \"submenu\" must be a list of items")
+            for k in ("key", "event", "check"):
+                if k in item:
+                    raise DashUIError(f"{self.where}: {what}: a submenu has no {k!r} (its items do)")
+            self.named(item, indent, f"mui_submenu_begin({label})")
+            for sub in item["submenu"]:
+                self.menu_item(sub, depth + 1, False)
+            self.lines.append(f"{indent}mui_submenu_end()")
+            return
+        key = dash_string(item.get("key", ""))
+        event = _int(item.get("event", 0), "a menu event", self.where)
+        if item.get("check"):
+            checked = item.get("checked", False)
+            if not isinstance(checked, bool):
+                raise DashUIError(f"{self.where}: {what}: \"checked\" must be true or false")
+            self.named(item, indent, f"mui_menu_check({label}, {key}, {event}, {_value(checked)})")
+        else:
+            self.named(item, indent, f"mui_menu_item({label}, {key}, {event})")
+
     def generate(self) -> str:
         win = self.win
         name = win.get("name")
@@ -205,14 +249,9 @@ class _Window:
         self.lines.append(f"    _window = mui_window_begin({title}, {win_id})")
         for menu in win.get("menus", []):
             title = _text(menu, "title", "", _tr_ids(menu, "menu", self.where))
-            self.lines.append(f"        mui_menu_begin({title})")
+            self.named(menu, "        ", f"mui_menu_begin({title})")
             for item in menu.get("items", []):
-                if item.get("separator"):
-                    self.lines.append("            mui_menu_separator()")
-                else:
-                    label = _text(item, "label", "", _tr_ids(item, "item", self.where))
-                    self.lines.append(f"            mui_menu_item({label}, "
-                                      f"{dash_string(item.get('key', ''))}, {_int(item.get('event', 0), 'a menu event', self.where)})")
+                self.menu_item(item, 3, True)
             self.lines.append("        mui_menu_end()")
         root = win.get("root")
         if root:

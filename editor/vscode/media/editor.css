@@ -71,6 +71,11 @@ body.invalid #layout { display: none; } body.invalid #error { display: block; }
 .mui-canvas { border: 2px inset #ddd; background: #fff; flex: 1; }
 .mui-scrollbar { width: 14px; min-height: 40px; background: #999; border: 1px solid #fff; }
 .mui-image { border: 1px dashed #555; padding: 6px; }
+.mui-image_toggle { background: #aaa; border: 2px outset #ddd; padding: 1px 4px; }
+.mui-image_toggle[data-pressed] { border-style: inset; background: #999; }
+.mui-combo { display: flex; flex: 1; }
+.mui-combo input { border: 2px inset #ddd; background: #aaa; flex: 1; min-width: 0; }
+.mui-combo button { background: #aaa; border: 2px outset #ddd; padding: 0 4px; }
 .mui-space { flex: 1; min-width: 8px; min-height: 8px; }
 .mui-balance { width: 4px; background: #888; align-self: stretch; }
 .mui-window .selected { outline: 2px solid #f60; outline-offset: 1px; }
