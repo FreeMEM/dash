@@ -162,3 +162,16 @@ diga el usuario. Base medida: `Base ronda 3`.
   backdrop: 6.400 bytes antes, 0 ahora (lo comprueba `test_desktop_canvas_modes_rtg`). Un panel de 200 x 300 como
   el de Trasfondo eran unos 120 KB por actualización completa (unos 40 ms en Zorro II).
 - Probado: los 40 tests del lienzo en A1200, A500 y 3.2 y los 6 RTG (68040 con uaegfx); 455/455 sin emulador.
+
+### R9 — Float: una sola multiplicación en 68020, 030 y 040
+- `__mulsf3` (`runtime/softfloat/fastfp.c`) hacía el producto de mantisas con cuatro `mulu.w`, lo único que tiene
+  un 68000. Los programas son código de 68000 por defecto aunque corran en un A1200: la primera llamada mira
+  `AttnFlags` de ExecBase y, con un 68020, 030 o 040, usa un `mulu.l` de 64 bits (escrito como `.word`: el fichero
+  es de 68000). En 68060 no (68060.library lo emula con una excepción): sigue el camino de 68000. La comprobación
+  va primero por el 68000: un `move.b` y un salto corto.
+- Medida (`float_mul`): A1200 28.242 → 22.752 ns (−19 %); A500 119.479 → 121.531 (+1,7 %, la comprobación).
+  `float_mul_add` no cambia: GCC saca `g * 0.5` del bucle y solo mide sumas.
+- Probado: `test_fastfp_amiga` (bit a bit contra fp-bit) en A1200, A500, 3.2 y un 68040; los 81 tests de
+  float/fixed en las tres máquinas; 455/455. Sin probar en un 68060.
+- Aparte: la batería `--emu --memcheck` da 66 fallos también en `main`: `test_on_click_timer` se cuelga y los
+  siguientes del mismo arranque agotan el tiempo. Solos pasan.
