@@ -4507,6 +4507,37 @@ DOUBLE_FUNCTIONS = {
                            "digits; 0.0 if there is no number"),
 }
 
+def _math(name, params, ret, desc):
+    args = ", ".join("${%s}" % p for p in params)
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=f"_dash_m_{name}({args})",
+                       description=desc, reads_only=True)
+
+
+# Lorraine D4: with fdlibm (runtime/fdlibm). An Int or a Float goes in as a Double.
+MATH_FUNCTIONS = {
+    "sqrt": _math("sqrt", ["x"], "double", "Square root (nan for a negative)"),
+    "pow": _math("pow", ["x", "y"], "double", "x to the power y"),
+    "exp": _math("exp", ["x"], "double", "e to the power x"),
+    "log": _math("log", ["x"], "double", "Natural logarithm (-inf for 0, nan for a negative)"),
+    "log10": _math("log10", ["x"], "double", "Base 10 logarithm"),
+    "sin": _math("sin", ["x"], "double", "Sine of x radians"),
+    "cos": _math("cos", ["x"], "double", "Cosine of x radians"),
+    "tan": _math("tan", ["x"], "double", "Tangent of x radians"),
+    "asin": _math("asin", ["x"], "double", "Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1)"),
+    "acos": _math("acos", ["x"], "double", "Arc cosine in radians, 0 to pi (nan outside -1..1)"),
+    "atan": _math("atan", ["x"], "double", "Arc tangent in radians, -pi/2 to pi/2"),
+    "atan2": _math("atan2", ["y", "x"], "double", "Angle of the point (x, y) in radians, -pi to pi"),
+    "floor": _math("floor", ["x"], "double", "The largest whole number not above x (a Double)"),
+    "ceil": _math("ceil", ["x"], "double", "The smallest whole number not below x (a Double)"),
+    "round": _math("round", ["x"], "double", "The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0)"),
+    "trunc": _math("trunc", ["x"], "double", "The whole part, toward zero (-2.7 is -2.0)"),
+    "fmod": _math("fmod", ["x", "y"], "double", "Remainder of x / y with the sign of x (nan if y is 0)"),
+    "abs": _math("abs", ["x"], "double", "Absolute value, a Double"),
+    "is_nan": _math("is_nan", ["x"], "BOOL", "True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0)"),
+    "is_inf": _math("is_inf", ["x"], "BOOL", "True if x is inf or -inf"),
+}
+
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
@@ -4535,6 +4566,7 @@ ALL_BUILTINS = {
     **UTF8_FUNCTIONS,          # Lorraine D5
     **BUFSEARCH_FUNCTIONS,     # Lorraine D38, D39
     **DOUBLE_FUNCTIONS,        # Lorraine D3
+    **MATH_FUNCTIONS,          # Lorraine D4
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

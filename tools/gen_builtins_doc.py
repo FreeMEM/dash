@@ -42,6 +42,7 @@ GROUPS = [
     ("UTF8_FUNCTIONS", "UTF-8", "UTF-8"),              # Lorraine D5
     ("BUFSEARCH_FUNCTIONS", "Comparar y buscar en un búfer", "Comparing and searching in a buffer"),  # Lorraine D38, D39
     ("DOUBLE_FUNCTIONS", "Double y texto", "Double and text"),   # Lorraine D3
+    ("MATH_FUNCTIONS", "Matemáticas de Double", "Double math"),   # Lorraine D4
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

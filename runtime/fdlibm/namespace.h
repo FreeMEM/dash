@@ -1,0 +1,30 @@
+/* Dash: fdlibm's public names get a dash_fd_ prefix, so they never meet -lm's (libnix) or a program's.
+   The __ieee754_ and __kernel_ ones keep theirs. */
+#define acos dash_fd_acos
+#define asin dash_fd_asin
+#define atan dash_fd_atan
+#define atan2 dash_fd_atan2
+#define cbrt dash_fd_cbrt
+#define ceil dash_fd_ceil
+#define copysign dash_fd_copysign
+#define cos dash_fd_cos
+#define cosh dash_fd_cosh
+#define exp dash_fd_exp
+#define expm1 dash_fd_expm1
+#define fabs dash_fd_fabs
+#define finite dash_fd_finite
+#define floor dash_fd_floor
+#define fmod dash_fd_fmod
+#define hypot dash_fd_hypot
+#define log dash_fd_log
+#define log10 dash_fd_log10
+#define log1p dash_fd_log1p
+#define pow dash_fd_pow
+#define remainder dash_fd_remainder
+#define rint dash_fd_rint
+#define scalbn dash_fd_scalbn
+#define sin dash_fd_sin
+#define sinh dash_fd_sinh
+#define sqrt dash_fd_sqrt
+#define tan dash_fd_tan
+#define tanh dash_fd_tanh

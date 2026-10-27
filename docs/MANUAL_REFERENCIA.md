@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 633 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 653 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -328,6 +328,19 @@ p = str_from_double(2.675, 2)   # "2.68": con decimales fijos, redondeando el de
 - Se escribe en notacion fija mientras la coma cae a 17 cifras o menos (`150.0`, `0.00001`) y con
   exponente fuera de eso (`1.0e17`, `1.0e-6`); `inf`, `-inf` y `nan` si toca.
 - No hay listas de `Double` (como de `Float`): un struct con campos `Double`.
+
+Funciones matematicas (con fdlibm; un `Int` o un `Float` entra como `Double` y sale un `Double`):
+`sqrt`, `pow`, `exp`, `log`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2(y, x)`, `floor`,
+`ceil`, `round` (la mitad se aleja del cero: `round(2.5)` es `3.0`), `trunc`, `fmod`, `abs`, `is_nan` e
+`is_inf`. Los angulos van en radianes. Dan los mismos digitos con y sin `--fpu` (alguna vez, el ultimo no).
+Sin FPU son lentas: en un A1200, `sin` tarda unos 7 ms y `pow` unos 20; con una 68882, 0,1 y 0,25 ms.
+
+```
+h = sqrt(3.0 * 3.0 + 4.0 * 4.0)     # 5.0
+n = Int(round(2.5))                 # 3: Int() para guardarlo en un Int
+x = fmod(-7.5, 2.0)                 # -1.5: el signo del primero
+if is_nan(sqrt(Double(-1)))         # nan no es igual ni a si mismo: is_nan
+```
 
 ### Inferencia de Tipos
 
@@ -4235,11 +4248,12 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double y texto | 2 | `str_from_double`, `str_to_double` |
+| Matemáticas de Double | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **633** | |
+| **Total** | **653** | |
 
 ### Colores Estandar Amiga
 

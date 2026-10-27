@@ -43,6 +43,7 @@ Main ... end                # Entry point
 x = 42                      # Int
 v = 1.5                     # Float (Int(v), Float(n), 7 significant digits)
 d = Double(0.1)             # Double: 64 bits, 15-17 digits (Double(n), Double("2.5"), Int(d), Float(d))
+h = sqrt(2.0)               # sqrt, pow, exp, log, sin, atan2, floor, round, fmod, abs, is_nan...: Double
 f = Fixed(1.5)              # Fixed 16.16: fast decimals on 68000 (Int(f), fx_sqrt, fx_sin, fx_cos)
 xs = [Fixed(0.5), 2]        # list of Fixed (numbers made Fixed); declared: var xs: [Fixed] = []
 mask = 0xFF                 # hex (also $DFF000), binary 0b1010

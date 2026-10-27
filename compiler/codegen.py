@@ -5501,6 +5501,80 @@ static double _dash_double_from_str(STRPTR s) {
 
 """
 
+    # Lorraine D4: sqrt, pow, sin... for Double with fdlibm (runtime/fdlibm, compiler/clibs.py links it when the C
+    # has this template's first line), compiled for the program's CPU: with --fpu its sums go through the FPU and
+    # sqrt is one fsqrt. The same digits with and without FPU, but for a last one now and then.
+    MATH_RUNTIME = """\
+/* Dash Math Runtime */
+double __ieee754_sqrt(double), __ieee754_pow(double, double), __ieee754_exp(double), __ieee754_log(double);
+double __ieee754_log10(double), __ieee754_asin(double), __ieee754_acos(double), __ieee754_atan2(double, double);
+double __ieee754_fmod(double, double);
+double dash_fd_sin(double), dash_fd_cos(double), dash_fd_tan(double), dash_fd_atan(double);
+double dash_fd_floor(double), dash_fd_ceil(double);
+
+typedef union { double d; ULONG w[2]; } _DashDoubleBits;
+
+static double _dash_m_sqrt(double x) {
+#ifdef __HAVE_68881__
+    double r;
+    __asm__ ("fsqrt%.x %1,%0" : "=f" (r) : "f" (x));
+    return r;
+#else
+    return __ieee754_sqrt(x);
+#endif
+}
+static double _dash_m_pow(double x, double y) { return __ieee754_pow(x, y); }
+static double _dash_m_exp(double x) { return __ieee754_exp(x); }
+static double _dash_m_log(double x) { return __ieee754_log(x); }
+static double _dash_m_log10(double x) { return __ieee754_log10(x); }
+static double _dash_m_sin(double x) { return dash_fd_sin(x); }
+static double _dash_m_cos(double x) { return dash_fd_cos(x); }
+static double _dash_m_tan(double x) { return dash_fd_tan(x); }
+static double _dash_m_asin(double x) { return __ieee754_asin(x); }
+static double _dash_m_acos(double x) { return __ieee754_acos(x); }
+static double _dash_m_atan(double x) { return dash_fd_atan(x); }
+static double _dash_m_atan2(double y, double x) { return __ieee754_atan2(y, x); }
+static double _dash_m_floor(double x) { return dash_fd_floor(x); }
+static double _dash_m_ceil(double x) { return dash_fd_ceil(x); }
+static double _dash_m_fmod(double x, double y) { return __ieee754_fmod(x, y); }
+
+/* toward 0: floor of a positive, ceil of a negative */
+static double _dash_m_trunc(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    return (b.w[0] & 0x80000000UL) ? dash_fd_ceil(x) : dash_fd_floor(x);
+}
+
+/* half away from zero (2.5 is 3, -2.5 is -3); x - t is exact, floor(x + 0.5) is not for 0.49999999999999994 */
+static double _dash_m_round(double x) {
+    double t = _dash_m_trunc(x);
+    if (x - t >= 0.5) t += 1.0;
+    else if (t - x >= 0.5) t -= 1.0;
+    return t;
+}
+
+static double _dash_m_abs(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    b.w[0] &= 0x7FFFFFFFUL;
+    return b.d;
+}
+
+/* from the bits: with an FPU, x != x may not say it */
+static BOOL _dash_m_is_nan(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    return (b.w[0] & 0x7FF00000UL) == 0x7FF00000UL && ((b.w[0] & 0x000FFFFFUL) || b.w[1]);
+}
+
+static BOOL _dash_m_is_inf(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    return (b.w[0] & 0x7FFFFFFFUL) == 0x7FF00000UL && !b.w[1];
+}
+
+"""
+
     # CPU per task (Trasfondo): how much of the CPU each task took between two samples, measured
     # with exec's task switch hooks and the EClock, as PM (Michael Sinz, Aminet util/moni/PM) does
     CPU_RUNTIME = """\
@@ -15127,6 +15201,7 @@ _RUNTIME_FLAGS = [
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
     ("FLOAT_RUNTIME", "uses_float"),
     ("DOUBLE_RUNTIME", "uses_double"),      # Lorraine D1
+    ("MATH_RUNTIME", "uses_math"),          # Lorraine D4
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
     ("ARENA_RUNTIME", "uses_arenas"),
@@ -15442,6 +15517,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
         self.uses_double: bool = False  # Double values (DOUBLE_RUNTIME, Lorraine D1)
+        self.uses_math: bool = False  # sqrt, sin... of Double (MATH_RUNTIME, Lorraine D4)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -15626,6 +15702,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.FLOAT_RUNTIME)
         if self.uses_double:
             parts.append(CTemplates.DOUBLE_RUNTIME)
+        if self.uses_math:
+            parts.append(CTemplates.MATH_RUNTIME)
 
         if self.uses_fixed:
             parts.append(CTemplates.FIXED_RUNTIME)
@@ -18323,6 +18401,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
+        if self.uses_math:
+            self.uses_double = True    # sqrt, sin... take and give Doubles
         if self.uses_double:
             self.uses_strings = True   # str_from_double makes a text
         if self.uses_text_io:

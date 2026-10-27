@@ -1,4 +1,4 @@
-"""C libraries of the runtime compiled apart: zlib (Lorraine D6) and Ryu (Lorraine D1, D3).
+"""C libraries of the runtime compiled apart: zlib (Lorraine D6), Ryu (Lorraine D1, D3) and fdlibm (Lorraine D4).
 
 Each lives unchanged in runtime/<name> with Dash's entry points (dash_*.c) next to it, and is compiled
 once for each set of CPU options into a library in build/. The generated C leaves a marker (the first
@@ -8,6 +8,7 @@ of each marker found. A library pulls only the objects a program calls.
     zlib: inflate, deflate, crc32 (runtime/zlib/README.md). Z_PREFIX: zlib's names start with z_, so a
           program may have its own inflate or crc32.
     ryu:  a double to its shortest decimal and back (runtime/ryu/LEEME).
+    fdlibm: sqrt, pow, sin... of a double (runtime/fdlibm/README.md).
 """
 
 import hashlib
@@ -30,6 +31,15 @@ LIBRARIES = {
         "marker": "/* Dash Double Runtime */",
         "sources": ["dash_ryu.c"],
         "defines": ["-DNDEBUG"],
+    },
+    "fdlibm": {
+        "marker": "/* Dash Math Runtime */",
+        "sources": ["e_acos.c", "e_asin.c", "e_atan2.c", "e_exp.c", "e_fmod.c", "e_log.c", "e_log10.c", "e_pow.c",
+                    "e_rem_pio2.c", "e_sqrt.c", "k_cos.c", "k_rem_pio2.c", "k_sin.c", "k_tan.c", "s_atan.c",
+                    "s_ceil.c", "s_copysign.c", "s_cos.c", "s_fabs.c", "s_floor.c", "s_scalbn.c", "s_sin.c",
+                    "s_tan.c"],
+        # it reads a double's halves through an int pointer (__HI, __LO)
+        "defines": ["-fno-strict-aliasing"],
     },
 }
 

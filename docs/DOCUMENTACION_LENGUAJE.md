@@ -16,7 +16,7 @@ pero sin punteros, sin `includes` y sin liberar memoria a mano.
 
 - **Sintaxis clara**, al estilo de Ruby y Python: bloques que acaban en `end`, tipos que se deducen.
 - **La API del Amiga a mano:** ventanas, gráficos, sprites, copper, blitter, sonido, ficheros, red, y tres
-  formas de hacer interfaces (GadTools, ReAction y MUI). Son 633 funciones ya hechas (builtins), en
+  formas de hacer interfaces (GadTools, ReAction y MUI). Son 653 funciones ya hechas (builtins), en
   [BUILTINS.md](BUILTINS.md).
 - **Memoria automática y ligera:** sin recolector de basura ni pausas (sección 4.10).
 - **Para un Amiga de verdad:** funciona en un A500 con 68000 y Kickstart 3.0; lo que necesita más

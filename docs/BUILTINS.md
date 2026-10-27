@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 633 funciones, 633 implementadas, 0 sin implementar.
+Total: 653 funciones, 653 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -580,6 +580,31 @@ Total: 633 funciones, 633 implementadas, 0 sin implementar.
 |---|---|---|---|
 | `str_from_double(d, decimals)` | `STRPTR` | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
 | `str_to_double(s)` | `double` | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
+
+## Matemáticas de Double
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `sqrt(x)` | `double` | Square root (nan for a negative) |  |
+| `pow(x, y)` | `double` | x to the power y |  |
+| `exp(x)` | `double` | e to the power x |  |
+| `log(x)` | `double` | Natural logarithm (-inf for 0, nan for a negative) |  |
+| `log10(x)` | `double` | Base 10 logarithm |  |
+| `sin(x)` | `double` | Sine of x radians |  |
+| `cos(x)` | `double` | Cosine of x radians |  |
+| `tan(x)` | `double` | Tangent of x radians |  |
+| `asin(x)` | `double` | Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1) |  |
+| `acos(x)` | `double` | Arc cosine in radians, 0 to pi (nan outside -1..1) |  |
+| `atan(x)` | `double` | Arc tangent in radians, -pi/2 to pi/2 |  |
+| `atan2(y, x)` | `double` | Angle of the point (x, y) in radians, -pi to pi |  |
+| `floor(x)` | `double` | The largest whole number not above x (a Double) |  |
+| `ceil(x)` | `double` | The smallest whole number not below x (a Double) |  |
+| `round(x)` | `double` | The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0) |  |
+| `trunc(x)` | `double` | The whole part, toward zero (-2.7 is -2.0) |  |
+| `fmod(x, y)` | `double` | Remainder of x / y with the sign of x (nan if y is 0) |  |
+| `abs(x)` | `double` | Absolute value, a Double |  |
+| `is_nan(x)` | `BOOL` | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
+| `is_inf(x)` | `BOOL` | True if x is inf or -inf |  |
 
 ## Audio
 
