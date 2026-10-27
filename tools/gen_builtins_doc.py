@@ -45,6 +45,7 @@ GROUPS = [
     ("MATH_FUNCTIONS", "Matemáticas de Double", "Double math"),   # Lorraine D4
     ("REGEX_FUNCTIONS", "Expresiones regulares y comodines", "Regular expressions and wildcards"),   # Lorraine D45
     ("SIMINPUT_FUNCTIONS", "Simular teclado y ratón", "Simulated keyboard and mouse"),   # Lorraine D46
+    ("CLIP_FUNCTIONS", "Portapapeles", "Clipboard"),   # Lorraine D18
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

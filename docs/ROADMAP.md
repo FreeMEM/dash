@@ -1006,7 +1006,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       simulada (D14, D13, D47, D11, D12, D46)
 - [x] Interfaces: `interface Orden ... end`, `struct X: Orden`; métodos por una tabla en `_DashType`, sin
       memoria por objeto (D43)
-- [x] 675 builtins (90 de MUI); 446 resultados sin emulador; 34 ejemplos
+- [x] Portapapeles: texto (IFF FTXT) con los demás programas y un bloque propio en otra unidad (D18)
+- [x] 680 builtins (90 de MUI); 447 resultados sin emulador; 34 ejemplos
 
 ## Notas y Decisiones
 

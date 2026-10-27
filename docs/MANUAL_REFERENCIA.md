@@ -3892,6 +3892,38 @@ input_key(0x44, 0)               # Intro
 input_key(0x4E, 1)               # Mayusculas + derecha
 ```
 
+### Portapapeles: clip_*
+
+Copiar y pegar con `clipboard.device` (en `DEVS:` del Workbench; sin él, escribir da `false` y leer, `""`). El texto
+va a la unidad 0 como IFF FTXT con un trozo CHRS en Latin-1, que es lo que leen los demás programas del Amiga; Dash lo
+da y lo toma en UTF-8. Lo que no cabe en Latin-1 se cambia como en `utf8_to_latin1` (`€` pasa a `EUR`).
+
+Los datos propios de un programa (las celdas de una hoja con sus fórmulas) van como un FORM con un tipo propio en otra
+unidad (1 a 255), escrito justo después del texto. El bloque guarda una huella del texto de la unidad 0: si otro
+programa copia algo después, el bloque ya no vale y se lee como si no hubiera. Así el programa pega sus celdas si lo
+último copiado es suyo, y el texto si no.
+
+| Funcion | Que hace |
+|---|---|
+| `clip_write_text(texto)` | Copia un texto UTF-8; `false` si no se puede |
+| `clip_read_text()` | El texto copiado, en UTF-8 (todos sus trozos CHRS); `""` si no hay o no es texto |
+| `clip_write_block(unidad, tipo, buf, n)` | Copia `n` bytes de un búfer como FORM de `tipo` (4 letras, `"LCLC"`) en esa unidad |
+| `clip_block_size(unidad, tipo)` | Los bytes del bloque, `-1` si no hay o ya no vale |
+| `clip_read_block(unidad, tipo, dest, max)` | Lo copia en `dest`: sus bytes, `-1` si no hay o ya no vale, `-2` si no cabe en `max` |
+
+```
+clip_write_text("10\t20\n")              # lo que pegan los demás
+clip_write_block(1, "LCLC", celdas, n)    # lo que pega Calc
+...
+n = clip_block_size(1, "LCLC")
+if n >= 0
+    buf = buffer_alloc(n)
+    clip_read_block(1, "LCLC", buf, n)
+else
+    texto = clip_read_text()
+end
+```
+
 ### La fecha y la hora: clock_* y date_text
 
 ```ruby
@@ -4367,6 +4399,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
 | Simular teclado y ratón | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
+| Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compresión (zlib) | 3 | `inflate`, `deflate`, `crc32` |
@@ -4379,7 +4412,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **675** | |
+| **Total** | **680** | |
 
 ### Colores Estandar Amiga
 

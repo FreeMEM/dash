@@ -4665,6 +4665,28 @@ SIMINPUT_FUNCTIONS = {
         description="Title of the active window (\"\" if none): to wait for the window of the program to test"),
 }
 
+# Lorraine D18: copy and paste with the other programs (text in unit 0) and with itself (a block of its own)
+CLIP_FUNCTIONS = {
+    "clip_write_text": _text("clip_write_text", ["s"], "BOOL", "_dash_clip_write_text(${s})",
+                             "Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other "
+                             "programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 "
+                             "(\u20ac to EUR); false if the clipboard cannot be written"),
+    "clip_read_text": _text("clip_read_text", [], "STRPTR", "_dash_clip_read_text()",
+                            "The text in the clipboard (unit 0) in UTF-8; \"\" if it is empty or holds no text"),
+    "clip_write_block": _buf("clip_write_block", ["unit", "type", "buffer", "n"], "BOOL",
+                             "_dash_clip_write_block(${unit}, ${type}, ${buffer}, ${n})",
+                             "Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 "
+                             "characters, \"LCLC\"), after clip_write_text: it stays tied to that text, and "
+                             "if something else is copied to unit 0 the block reads as missing"),
+    "clip_block_size": _buf("clip_block_size", ["unit", "type"], "LONG", "_dash_clip_block_size(${unit}, ${type})",
+                            "Bytes of the block of that type in a clipboard unit, -1 if there is none or "
+                            "something else was copied after it"),
+    "clip_read_block": _buf("clip_read_block", ["unit", "type", "dest", "max"], "LONG",
+                            "_dash_clip_read_block(${unit}, ${type}, ${dest}, ${max})",
+                            "Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if "
+                            "there is none or something else was copied after it, -2 if it does not fit in max"),
+}
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
@@ -4696,6 +4718,7 @@ ALL_BUILTINS = {
     **MATH_FUNCTIONS,          # Lorraine D4
     **REGEX_FUNCTIONS,         # Lorraine D45
     **SIMINPUT_FUNCTIONS,      # Lorraine D46
+    **CLIP_FUNCTIONS,          # Lorraine D18
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

@@ -3892,6 +3892,38 @@ input_key(0x44, 0)               # Return
 input_key(0x4E, 1)               # Shift + right
 ```
 
+### Clipboard: clip_*
+
+Copy and paste with `clipboard.device` (in the Workbench's `DEVS:`; without it, writing gives `false` and reading
+`""`). Text goes to unit 0 as IFF FTXT with one CHRS chunk in Latin-1, which is what the other Amiga programs read;
+Dash gives and takes it in UTF-8. What Latin-1 lacks is changed as in `utf8_to_latin1` (`€` becomes `EUR`).
+
+A program's own data (a sheet's cells with their formulas) goes as a FORM with a type of its own in another unit (1
+to 255), written right after the text. The block keeps a fingerprint of unit 0's text: if another program copies
+something later, the block no longer counts and reads as missing. So the program pastes its cells if the last copy
+was its own, and the text if not.
+
+| Function | What it does |
+|---|---|
+| `clip_write_text(text)` | Copies a UTF-8 text; `false` if it cannot |
+| `clip_read_text()` | The copied text, in UTF-8 (all its CHRS chunks); `""` if there is none or it is not text |
+| `clip_write_block(unit, type, buf, n)` | Copies `n` bytes of a buffer as a FORM of `type` (4 letters, `"LCLC"`) to that unit |
+| `clip_block_size(unit, type)` | The block's bytes, `-1` if there is none or it no longer counts |
+| `clip_read_block(unit, type, dest, max)` | Copies it to `dest`: its bytes, `-1` if there is none or it no longer counts, `-2` if it does not fit in `max` |
+
+```
+clip_write_text("10\t20\n")              # what the others paste
+clip_write_block(1, "LCLC", cells, n)     # what Calc pastes
+...
+n = clip_block_size(1, "LCLC")
+if n >= 0
+    buf = buffer_alloc(n)
+    clip_read_block(1, "LCLC", buf, n)
+else
+    text = clip_read_text()
+end
+```
+
 ### Date and time: clock_* and date_text
 
 ```ruby
@@ -4367,6 +4399,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
 | Simulated keyboard and mouse | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
+| Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
@@ -4379,7 +4412,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **675** | |
+| **Total** | **680** | |
 
 ### Standard Amiga Colors
 

@@ -6800,6 +6800,217 @@ static STRPTR _dash_input_active_title(void) {
 
 """
 
+    # Lorraine D18: copy and paste through clipboard.device, with the other programs (text) and with itself
+    CLIP_RUNTIME = """\
+/* Dash Clipboard Runtime */
+/* clip_* (Lorraine D18): a text goes to unit 0 of clipboard.device as IFF FTXT with one CHRS chunk in
+   Latin-1, which is what the other Amiga programs read; a program's own data goes as a FORM with its own type
+   in another unit, with a CLID chunk holding a fingerprint of unit 0 when it was written: if unit 0 has
+   changed since (something else copied), the block is old and reads as missing. */
+#include <devices/clipboard.h>
+
+#define _DASH_CLIP_ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (ULONG)(d))
+
+static struct IOClipReq *_dash_clip_open(LONG unit, struct MsgPort **port) {
+    struct IOClipReq *io;
+    if (unit < 0 || unit > 255 || !(*port = CreateMsgPort())) return NULL;
+    if ((io = (struct IOClipReq *)CreateIORequest(*port, sizeof(*io)))) {
+        if (OpenDevice((CONST_STRPTR)"clipboard.device", unit, (struct IORequest *)io, 0) == 0) return io;
+        DeleteIORequest((struct IORequest *)io);
+    }
+    DeleteMsgPort(*port);
+    return NULL;
+}
+
+static void _dash_clip_close(struct IOClipReq *io, struct MsgPort *port) {
+    CloseDevice((struct IORequest *)io);
+    DeleteIORequest((struct IORequest *)io);
+    DeleteMsgPort(port);
+}
+
+/* A fingerprint of what unit 0 holds now (FNV-1a of the whole clip; 0 if it is empty). Not its clip ID: a
+   unit with nobody keeping it open starts again at 1 */
+static UBYTE *_dash_clip_get(LONG unit, ULONG *len);
+static ULONG _dash_clip_text_sum(void) {
+    ULONG len, i, h = 0;
+    UBYTE *buf = _dash_clip_get(0, &len);
+    if (buf) {
+        for (h = 2166136261UL, i = 0; i < len; i++) h = (h ^ buf[i]) * 16777619UL;
+        FreeVec(buf);
+    }
+    return h;
+}
+
+/* Writes a whole clip: FORM type with a CLID chunk if clid (unit 0's fingerprint) and one chunk ck of n bytes */
+static BOOL _dash_clip_put(LONG unit, ULONG type, ULONG ck, const UBYTE *data, LONG n, BOOL clid) {
+    struct MsgPort *port;
+    struct IOClipReq *io;
+    ULONG size = 4 + (clid ? 12 : 0) + 8 + n + (n & 1), *h;
+    ULONG id = clid ? _dash_clip_text_sum() : 0;
+    UBYTE *buf, *p;
+    BOOL ok = FALSE;
+    if (n < 0 || (n && !data) || !(buf = (UBYTE *)AllocVec(8 + size, MEMF_ANY | MEMF_CLEAR))) return FALSE;
+    h = (ULONG *)buf;
+    h[0] = _DASH_CLIP_ID('F', 'O', 'R', 'M'); h[1] = size; h[2] = type;
+    p = buf + 12;
+    if (clid) {
+        ((ULONG *)p)[0] = _DASH_CLIP_ID('C', 'L', 'I', 'D'); ((ULONG *)p)[1] = 4; ((ULONG *)p)[2] = id;
+        p += 12;
+    }
+    ((ULONG *)p)[0] = ck; ((ULONG *)p)[1] = n;
+    if (n) CopyMem((APTR)data, p + 8, n);
+    if ((io = _dash_clip_open(unit, &port))) {
+        io->io_Command = CMD_WRITE;
+        io->io_Data = (STRPTR)buf;
+        io->io_Length = 8 + size;
+        io->io_Offset = 0;
+        io->io_ClipID = 0;
+        ok = DoIO((struct IORequest *)io) == 0 && io->io_Actual == 8 + size;
+        io->io_Command = CMD_UPDATE;     /* always: the unit is not free until the write ends */
+        if (DoIO((struct IORequest *)io) != 0) ok = FALSE;
+        _dash_clip_close(io, port);
+    }
+    FreeVec(buf);
+    return ok;
+}
+
+/* The whole clip of a unit (AllocVec, *len bytes), NULL if it is empty or not IFF */
+static UBYTE *_dash_clip_get(LONG unit, ULONG *len) {
+    struct MsgPort *port;
+    struct IOClipReq *io = _dash_clip_open(unit, &port);
+    ULONG head[2], rest[16];
+    UBYTE *buf = NULL;
+    if (!io) return NULL;
+    io->io_Command = CMD_READ;
+    io->io_Data = (STRPTR)head;
+    io->io_Length = 8;
+    io->io_Offset = 0;
+    io->io_ClipID = 0;
+    if (DoIO((struct IORequest *)io) == 0 && io->io_Actual == 8 && head[1] < 0x01000000UL
+        && (head[0] == _DASH_CLIP_ID('F', 'O', 'R', 'M') || head[0] == _DASH_CLIP_ID('C', 'A', 'T', ' ')
+            || head[0] == _DASH_CLIP_ID('L', 'I', 'S', 'T'))
+        && (buf = (UBYTE *)AllocVec(head[1] + 8, MEMF_ANY))) {
+        ((ULONG *)buf)[0] = head[0]; ((ULONG *)buf)[1] = head[1];
+        io->io_Data = (STRPTR)buf + 8;
+        io->io_Length = head[1];
+        if (DoIO((struct IORequest *)io) != 0 || io->io_Actual != head[1]) { FreeVec(buf); buf = NULL; }
+        else *len = head[1] + 8;
+    }
+    do {                                 /* to the end: the device takes that as the read being over */
+        io->io_Command = CMD_READ;
+        io->io_Data = (STRPTR)rest;
+        io->io_Length = sizeof(rest);
+    } while (DoIO((struct IORequest *)io) == 0 && io->io_Actual > 0);
+    _dash_clip_close(io, port);
+    return buf;
+}
+
+/* The FORM of that type in a clip (itself, or one inside a CAT or LIST): its chunks and *n their bytes */
+static UBYTE *_dash_clip_form(UBYTE *buf, ULONG len, ULONG type, ULONG *n) {
+    ULONG *h = (ULONG *)buf, i, size;
+    if (len < 12) return NULL;
+    if (h[0] == _DASH_CLIP_ID('F', 'O', 'R', 'M')) {
+        if (h[2] != type) return NULL;
+        *n = (h[1] < len - 8 ? h[1] : len - 8) - 4;
+        return buf + 12;
+    }
+    for (i = 12; i + 12 <= len; i += 8 + size + (size & 1)) {   /* CAT or LIST: the FORMs one by one */
+        UBYTE *r;
+        size = ((ULONG *)(buf + i))[1];
+        if (size > len - i - 8) break;
+        if ((r = _dash_clip_form(buf + i, size + 8, type, n))) return r;
+    }
+    return NULL;
+}
+
+/* The next chunk of a FORM from *at: its id, *data and *size (FALSE at the end) */
+static BOOL _dash_clip_chunk(UBYTE *form, ULONG n, ULONG *at, ULONG *id, UBYTE **data, ULONG *size) {
+    if (*at + 8 > n) return FALSE;
+    *id = ((ULONG *)(form + *at))[0];
+    *size = ((ULONG *)(form + *at))[1];
+    if (*size > n - *at - 8) *size = n - *at - 8;
+    *data = form + *at + 8;
+    *at += 8 + *size + (*size & 1);
+    return TRUE;
+}
+
+static BOOL _dash_clip_write_text(STRPTR s) {
+    STRPTR l = _dash_utf8_to_latin1(s);
+    return l && _dash_clip_put(0, _DASH_CLIP_ID('F', 'T', 'X', 'T'), _DASH_CLIP_ID('C', 'H', 'R', 'S'),
+                               (const UBYTE *)l, strlen((char *)l), FALSE);
+}
+
+/* The text in unit 0 (all its CHRS chunks, NUL bytes left out) in UTF-8; "" if there is none */
+static STRPTR _dash_clip_read_text(void) {
+    ULONG len, n, at = 0, id, size, total = 0;
+    UBYTE *buf = _dash_clip_get(0, &len), *form = NULL, *data, *o;
+    STRPTR l;
+    if (buf) form = _dash_clip_form(buf, len, _DASH_CLIP_ID('F', 'T', 'X', 'T'), &n);
+    if (form)
+        while (_dash_clip_chunk(form, n, &at, &id, &data, &size))
+            if (id == _DASH_CLIP_ID('C', 'H', 'R', 'S')) total += size;
+    if (!(l = _dash_str_alloc(total, TRUE))) { if (buf) FreeVec(buf); return NULL; }
+    o = (UBYTE *)l;
+    if (form)
+        for (at = 0; _dash_clip_chunk(form, n, &at, &id, &data, &size); )
+            if (id == _DASH_CLIP_ID('C', 'H', 'R', 'S'))
+                for (; size; size--, data++) if (*data) *o++ = *data;
+    *o = 0;
+    if (buf) FreeVec(buf);
+    return _dash_latin1_to_utf8(l);
+}
+
+/* A FORM type: the 4 characters of a text ("LCLC"), 0 if it does not have 4 */
+static ULONG _dash_clip_type(STRPTR t) {
+    if (!t || strlen((char *)t) != 4) return 0;
+    return _DASH_CLIP_ID(t[0], t[1], t[2], t[3]);
+}
+
+static BOOL _dash_clip_write_block(LONG unit, STRPTR type, APTR buf, LONG n) {
+    ULONG t = _dash_clip_type(type);
+    return t && _dash_clip_put(unit, t, _DASH_CLIP_ID('B', 'O', 'D', 'Y'), (const UBYTE *)buf, n, unit != 0);
+}
+
+/* The BODY of the block of that type in a unit; NULL if there is none or unit 0 changed after it */
+static UBYTE *_dash_clip_block(LONG unit, STRPTR type, UBYTE **whole, ULONG *size) {
+    ULONG len, n, at = 0, id, t = _dash_clip_type(type);
+    UBYTE *form, *data, *body = NULL;
+    BOOL fresh = unit == 0;
+    *whole = NULL;
+    if (!t || !(*whole = _dash_clip_get(unit, &len))) return NULL;
+    if ((form = _dash_clip_form(*whole, len, t, &n)))
+        while (_dash_clip_chunk(form, n, &at, &id, &data, size)) {
+            if (id == _DASH_CLIP_ID('C', 'L', 'I', 'D') && *size == 4)
+                fresh = *(ULONG *)data == _dash_clip_text_sum();
+            else if (id == _DASH_CLIP_ID('B', 'O', 'D', 'Y') && !body) {
+                body = data;
+                len = *size;
+            }
+        }
+    *size = len;
+    return fresh ? body : NULL;
+}
+
+static LONG _dash_clip_block_size(LONG unit, STRPTR type) {
+    UBYTE *whole, *body;
+    ULONG size;
+    body = _dash_clip_block(unit, type, &whole, &size);
+    if (whole) FreeVec(whole);
+    return body ? (LONG)size : -1;
+}
+
+static LONG _dash_clip_read_block(LONG unit, STRPTR type, APTR dest, LONG max) {
+    UBYTE *whole, *body;
+    ULONG size;
+    LONG r = -1;
+    if ((body = _dash_clip_block(unit, type, &whole, &size)))
+        r = (LONG)size > max || !dest ? -2 : (CopyMem(body, dest, size), (LONG)size);
+    if (whole) FreeVec(whole);
+    return r;
+}
+
+"""
+
     # Lists of Double (Lorraine D2): kind 3 of the array runtime, two LONGs per element. An empty list made
     # without a kind (DashArray_create(0), from [] anywhere) becomes one of Doubles with its first element.
     DBL_LIST_RUNTIME = """\
@@ -16392,6 +16603,7 @@ _RUNTIME_FLAGS = [
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
     ("SIMINPUT_RUNTIME", "uses_siminput"),  # Lorraine D46
+    ("CLIP_RUNTIME", "uses_clip"),          # Lorraine D18
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -16720,6 +16932,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
         self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
         self.uses_siminput: bool = False  # input_key, input_click... (SIMINPUT_RUNTIME, Lorraine D46)
+        self.uses_clip: bool = False      # clip_write_text, clip_read_block... (CLIP_RUNTIME, Lorraine D18)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -16945,6 +17158,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.REGEX_RUNTIME)
         if self.uses_siminput:
             parts.append(CTemplates.SIMINPUT_RUNTIME)
+        if self.uses_clip:
+            parts.append(CTemplates.CLIP_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -19797,6 +20012,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
         if self.uses_siminput:
             self.uses_strings = True   # input_active_title makes a text
+        if self.uses_clip:
+            self.uses_utf8 = self.uses_strings = True   # the clip's text is Latin-1, Dash's UTF-8
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:

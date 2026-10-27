@@ -1,0 +1,78 @@
+# Test: clip_* (Lorraine D18): text through clipboard.device as IFF FTXT, and a block of its own in another unit
+# emu-needs: clipboard.device
+# expect-out: escribe: true
+# expect-out: lee: true 9
+# expect-out: euro: EUR
+# expect-out: fichero: FORM FTXT CHRS 9
+# expect-out: lineas: true
+# expect-out: vacio: true 0
+# expect-out: bloque: true 10
+# expect-out: lee bloque: 10 true
+# expect-out: no cabe: -2
+# expect-out: otro tipo: -1 -1
+# expect-out: tipo malo: false -1
+# expect-out: tras otra copia: -1 -1
+# expect-out: texto sigue: true
+# expect-c: /* Dash Clipboard Runtime */
+
+const TIPO = "LCLC"
+const OTRO = "XXXX"
+const MALO = "LC"
+const OTRA = "otra cosa"
+
+func cuatro(buf: Pointer, i: Int) -> String
+    t = ""
+    for k in (0..3)
+        t = t + str_char(buffer_get_byte(buf, i + k))
+    end
+    return t
+end
+
+Main
+    # "año 10€" in UTF-8 (literals are Latin-1): the € is not in Latin-1, so the clip has "EUR"
+    t = "a" + utf8_char(241) + "o 10" + utf8_char(8364)
+    Print "escribe: #{clip_write_text(t)}"
+    r = clip_read_text()
+    esperado = "a" + utf8_char(241) + "o 10EUR"
+    Print "lee: #{r == esperado} #{utf8_length(r)}"
+    Print "euro: #{r[r.length - 3:r.length]}"
+
+    # what the other programs see: the clip file in CLIPS:
+    buf = buffer_alloc(256)
+    n = file_load("CLIPS:0", buf, 256)
+    Print "fichero: #{cuatro(buf, 0)} #{cuatro(buf, 8)} #{cuatro(buf, 12)} #{buffer_get_long(buf, 16)}"
+
+    lineas = "uno\ndos\n"
+    clip_write_text(lineas)
+    Print "lineas: #{clip_read_text() == lineas}"
+    ok = clip_write_text("")
+    Print "vacio: #{ok} #{clip_read_text().length}"
+
+    # Calc's own cells: after the text, in unit 1
+    clip_write_text("A1\tB1")
+    for k in (0..9)
+        buffer_set_byte(buf, k, k * 11)
+    end
+    ok = clip_write_block(1, "LCLC", buf, 10)
+    Print "bloque: #{ok} #{clip_block_size(1, TIPO)}"
+    dest = buffer_alloc(64)
+    m = clip_read_block(1, TIPO, dest, 64)
+    bien = true
+    for k in (0..9)
+        if buffer_get_byte(dest, k) != k * 11
+            bien = false
+        end
+    end
+    Print "lee bloque: #{m} #{bien}"
+    Print "no cabe: #{clip_read_block(1, TIPO, dest, 5)}"
+    Print "otro tipo: #{clip_block_size(1, OTRO)} #{clip_read_block(2, TIPO, dest, 64)}"
+    ok = clip_write_block(1, "LC", buf, 10)
+    Print "tipo malo: #{ok} #{clip_block_size(1, MALO)}"
+
+    # another program copies a text: the block is old
+    clip_write_text(OTRA)
+    Print "tras otra copia: #{clip_block_size(1, TIPO)} #{clip_read_block(1, TIPO, dest, 64)}"
+    Print "texto sigue: #{clip_read_text() == OTRA}"
+    buffer_free(buf)
+    buffer_free(dest)
+end

@@ -9,7 +9,7 @@
 #
 # The hard file is only read. A file with partitions (RDB, "RDSK") is read from its
 # first partition, copied out with dd; one without them is copied whole.
-# Classes/ (ReAction: window.class, Gadgets/, Images/; DataTypes/) and Devs/DataTypes are
+# Classes/ (ReAction: window.class, Gadgets/, Images/; DataTypes/), Devs/DataTypes and Devs/clipboard.device are
 # copied when the disk has them.
 # workbench.library and icon.library are on the disk from 3.2 on (3.1 has them in ROM);
 # C/LoadWB is for tools/emu_run.py --workbench. C/SetPatch and Libs/68040.library (68060,
@@ -50,6 +50,11 @@ if "$XDF" "$tmp/disk.hdf" list Classes >/dev/null 2>&1; then
     rm -rf "$2/Classes"
     "$XDF" "$tmp/disk.hdf" read Classes "$2/Classes" >/dev/null && echo "Classes/"
 fi
+# Devices that are not in the ROM (clipboard.device: clip_* of Lorraine D18)
+mkdir -p "$2/Devs"
+for dev in clipboard; do
+    "$XDF" "$tmp/disk.hdf" read "Devs/$dev.device" "$2/Devs/$dev.device" >/dev/null 2>&1 && echo "Devs/$dev.device"
+done
 # Datatype descriptors (picture formats for MUI's Dtpic, datatypes.library):
 # tools/emu_run.py runs C:AddDataTypes when it is there
 if "$XDF" "$tmp/disk.hdf" list Devs/DataTypes >/dev/null 2>&1; then
