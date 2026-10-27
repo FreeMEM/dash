@@ -107,6 +107,7 @@ Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas
 | `mui_on_close(win, id)` | botón de cerrar de la ventana. Sin llamarla, cerrar la primera ventana = -1 (salir). |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menú de la ventana abierta (`Menustrip`) |
 | `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | opción con marca (`mui_get_value`/`mui_set_value`) y submenú de un nivel |
+| `mui_context_menu_begin(titulo)` ... `mui_menu_end()`, `mui_set_context_menu(obj, menu)` | menú contextual (botón derecho sobre `obj`): sus opciones dan sus eventos; MUI no lo libera con el objeto, Dash lo hace al acabar |
 | `mui_wait_event() -> Int` | Espera y devuelve el número de un evento, o -1 para salir. |
 | `mui_poll_event() -> Int` | Igual sin esperar: 0 si no hay nada. |
 | `mui_wait_event_signals(mascara) -> Int` | Espera también otras señales: `net_signal()` (red), `task_signal()` (tareas), `file_notify_signal()` (ficheros vigilados). Devuelve 0 cuando llega una de ellas; `mui_signals()` dice cuáles. |
@@ -147,6 +148,8 @@ Tras un evento de `mui_canvas_on_input`, lo que pasó (posición relativa a la e
 | `mui_canvas_on_drag(c, id)`, `mui_canvas_drag(c)` | Arrastrar: evento al mover con el botón pulsado (1) y al soltar (2). |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Posición del puntero ahora (con clic o sin él). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Si el puntero está ahora sobre la zona. |
+| `mui_canvas_set_pointer(c, forma)` | La forma del puntero sobre la zona: 0 normal, 1 texto (I), 2 cambiar de tamaño a izquierda y derecha, 3 arriba y abajo, 4 ocupado. Cambia ya si el puntero está encima (o arrastrando la zona) y vuelve a la normal fuera de ella. 1-3 son sprites propios: Intuition 3.1 y 3.2 no los tiene. |
+| `mui_canvas_take_tab(c, si)` | Tab y Mayúsculas+Tab sobre la zona son teclas suyas (66), no el ciclo de foco de la ventana (que se quita mientras el puntero está encima, como Esc). |
 
 La clase propia (`MUI_CreateCustomClass` sobre `Area`) implementa `MUIM_AskMinMax`, `MUIM_Draw`, `MUIM_Setup`/
 `MUIM_Cleanup` (manejador de eventos con `MUIM_Window_AddEventHandler`) y `MUIM_HandleEvent`. El desplazamiento lo

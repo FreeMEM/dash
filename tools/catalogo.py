@@ -95,7 +95,8 @@ def dashui_texts(doc: dict, where: str):
 
     for win in doc.get("windows", []):
         yield from emit(win, "window")
-        for menu in win.get("menus", []):
+        # the menu bar, and the context menus (Lorraine D15)
+        for menu in win.get("menus", []) + win.get("context_menus", []):
             yield from emit(menu, "menu")
             for item in menu.get("items", []):
                 if not item.get("separator"):

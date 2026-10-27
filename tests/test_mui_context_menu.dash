@@ -1,0 +1,129 @@
+# A context menu on a MUI drawing area from a .dashui (Lorraine D15): "context_menus" of the window and
+# "context_menu" on the canvas. A helper process opens it with the right button at two places and picks an item
+# each time (MUI 5's popup menu holds the program while it is open, so the program cannot do it itself), and a
+# third time lets go without picking one. Each item gives its event, and the canvas says where the right button was.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_context_menu_begin(
+# expect-c: _dash_mui_set_context_menu(
+# expect-c: _dash_mui_canvas_take_tab(
+# expect-out: título: Pegar
+# expect-out: evento 42 en 60,30 botón 2
+# expect-out: evento 44 en 150,20 botón 2
+# expect-out: fin
+
+import "lib/hoja_contexto.dashui"
+
+const PASO = 99
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Window *menu_win; static LONG menu_x, menu_y; static struct Task *menu_padre;"
+
+# Where the canvas is on the screen, for the helper
+@native func donde(win: Int, obj: Int)
+"""
+    struct Window *w = NULL;
+    IPTR l = 0, t = 0;
+    GetAttr(MUIA_Window_Window, (Object *)win, (ULONG *)&w);
+    GetAttr(MUIA_LeftEdge, (Object *)obj, &l);
+    GetAttr(MUIA_TopEdge, (Object *)obj, &t);
+    menu_win = w;
+    if (w) { menu_x = w->LeftEdge + (LONG)l; menu_y = w->TopEdge + (LONG)t; }
+"""
+end
+
+# The helper: the right button down at a point of the canvas, to an item of the menu that opens there (its
+# lines are 27, 41, 62 and 76 pixels under the pointer with Topaz), and up
+@native func proceso_menu()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    static const WORD veces[3][4] = { { 60, 30, 20, 41 }, { 150, 20, 20, 76 }, { 30, 80, 0, 0 } };
+    Delay(50);
+    if (menu_win && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        LONG i, k;
+        ActivateWindow(menu_win);
+        Delay(10);
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < 3; i++) {
+            for (k = 0; k < 2; k++) {       /* to the point, then to the item */
+                memset(&ie, 0, sizeof(ie));
+                pp.iepp_Screen = menu_win->WScreen;
+                pp.iepp_Position.X = menu_x + veces[i][0] + (k ? veces[i][2] : 0);
+                pp.iepp_Position.Y = menu_y + veces[i][1] + (k ? veces[i][3] : 0);
+                ie.ie_Class = IECLASS_NEWPOINTERPOS;
+                ie.ie_SubClass = IESUBCLASS_PIXEL;
+                ie.ie_EventAddress = (APTR)&pp;
+                ie.ie_Qualifier = k ? IEQUALIFIER_RBUTTON : 0;
+                DoIO((struct IORequest *)io);
+                Delay(5);
+                memset(&ie, 0, sizeof(ie));
+                ie.ie_Class = IECLASS_RAWMOUSE;
+                ie.ie_Code = k ? IECODE_RBUTTON | IECODE_UP_PREFIX : IECODE_RBUTTON;
+                ie.ie_Qualifier = k ? 0 : IEQUALIFIER_RBUTTON;
+                if (k) Delay(10);
+                DoIO((struct IORequest *)io);
+                Delay(k ? 50 : 40);
+            }
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(menu_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    menu_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_menu, NP_Name, (ULONG)"dash_menu", TAG_DONE) == NULL)
+        menu_padre = NULL;
+"""
+end
+
+@native func acabado() -> Bool
+"""
+    return !menu_padre || (SetSignal(0, 0) & SIGBREAKF_CTRL_F) != 0;
+"""
+end
+
+func dibuja(x: Int, y: Int, w: Int, h: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, w, h)
+end
+
+Main
+    if mui_app_begin("Contexto", "DASHCTXMENU") == 0
+        Print "sin MUI"
+    else
+        v = Hoja_create()
+        mui_canvas_on_draw(v.hoja, dibuja)
+        Print "título: #{mui_get_text(v.pegar)}"
+        mui_window_open(v.window)
+        donde(v.window, v.hoja)
+        lanzar()
+        mui_timer(500, PASO)
+        ev = 0
+        while ev != -1
+            ev = mui_wait_event()
+            if ev == PASO
+                if acabado()
+                    ev = -1
+                else
+                    mui_timer(500, PASO)
+                end
+            else
+                Print "evento #{ev} en #{mui_canvas_mouse_x(v.hoja)},#{mui_canvas_mouse_y(v.hoja)} botón #{mui_canvas_button(v.hoja)}"
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

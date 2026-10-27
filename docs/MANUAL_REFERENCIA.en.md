@@ -3358,6 +3358,7 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_menu_separator()` | Separator line. |
 | `mui_menu_check(text, key, id, checked)` | Item with a check mark: choosing it toggles the mark and gives its `id`. `mui_get_value(item)` says whether it is checked (1/0) and `mui_set_value(item, 1)` checks it from the program. |
 | `mui_submenu_begin(title)` ... `mui_submenu_end()` | Submenu inside the menu (one level, as in Intuition). |
+| `mui_context_menu_begin(title)` ... `mui_menu_end()` | Context menu (right button), inside or outside a window: its items as in a menu. `mui_set_context_menu(obj, menu)` makes the right button over `obj` open it; each item gives its `id`. On a canvas, `mui_canvas_mouse_x`/`_y` say where it was pressed and `mui_canvas_button` is 2. |
 | `mui_set_enabled(item, false)`, `mui_set_text(item, text)` | Disables an item or a whole menu (the object of `mui_menu_begin`); changes an item's text ("Open recent"). |
 | `mui_canvas(ancho_min, alto_min)` | Custom drawing area; grows with the window. |
 | `mui_canvas_on_draw(zona, funcion)` | Function `f(x, y, ancho, alto)` that paints it with the `gfx_` functions. MUI calls it when needed (on opening, on resizing...). You can only paint inside it. Fills work too (`gfx_circle_fill`, `gfx_poly_*`...). |
@@ -3373,6 +3374,8 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_canvas_on_drag(area, id)`, `mui_canvas_drag(z)` | Event `id` while dragging (moving with the left button down after pressing it on the area) and once more when let go; `mui_canvas_drag` says which: 1 moving, 2 let go. `mui_canvas_mouse_x/_y` give the position, also out of the area. Moves are gathered: one comes each time the program asks. A click without moving is no drag (it only gives its `mui_canvas_on_input` event). Before opening the window. |
 | `mui_canvas_on_move(zona, id)` | Event when the mouse moves over the area, without a click, and when it leaves it (before opening the window). Movements that arrive before the program picks one up count as one; it does not delay clicks. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Where the mouse is now, from the corner of the area, and whether it is inside it; whether or not there was a click. |
+| `mui_canvas_set_pointer(z, shape)` | The pointer's shape over the area: 0 normal, 1 text, 2 width (left-right), 3 height (up-down), 4 busy; outside the area it goes back to normal. For the edge of a column header. |
+| `mui_canvas_take_tab(z, on)` | With the pointer over the area, Tab and Shift+Tab are keys for it (`mui_canvas_key` 66, Shift in `mui_canvas_qualifiers`; needs `mui_canvas_on_input`) and do not go to the next or previous gadget; away from it, Tab moves the focus as always. For moving between the cells of a sheet. |
 | `mui_scrollbar(vertical)` | Scroll bar; its value is the first visible line. |
 | `mui_image(fichero)` | Image from a file via datatypes: ILBM always; PNG, JPEG, GIF and BMP if their datatypes are installed (AmigaOS 3.2 includes them). `mui_set_text` changes the file. |
 | `mui_image_button(fichero)` | Button with an image (a toolbar icon): the frame and background of MUI's image buttons; it is pressed like a button (`mui_on_press`) and `mui_set_text` changes the image. |
@@ -3877,6 +3880,7 @@ that window's corner. They wait a tick (20 ms) after each event.
 | `input_key(code, qualifiers)` | Presses and lets go a raw key (`0x44` Return, `0x45` Esc, `0x41` Backspace, `0x4C`-`0x4F` up, down, right, left arrows) with 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it; Amiga is the right one, the one of menu shortcuts |
 | `input_text(text)` | Types a text with the keyboard's keymap (`"=SUM(A1:A3)"`); what the keymap cannot type is left out |
 | `input_move(x, y)` | Moves the pointer there |
+| `input_button(button, down)` | Presses (`true`) or lets go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |
 | `input_click(x, y, qualifiers)` | Left button click (Amiga + click is the system's) |
 | `input_drag(x1, y1, x2, y2)` | Presses at (x1, y1), goes to (x2, y2) with the button down and lets go |
 | `input_active_title()` | The title of the active window (`""` if none): to wait for the program's one |
@@ -3890,6 +3894,38 @@ input_move(100, 60)              # a MUI drawing area takes keys with the pointe
 input_text("1.234,5")
 input_key(0x44, 0)               # Return
 input_key(0x4E, 1)               # Shift + right
+```
+
+### Clipboard: clip_*
+
+Copy and paste with `clipboard.device` (in the Workbench's `DEVS:`; without it, writing gives `false` and reading
+`""`). Text goes to unit 0 as IFF FTXT with one CHRS chunk in Latin-1, which is what the other Amiga programs read;
+Dash gives and takes it in UTF-8. What Latin-1 lacks is changed as in `utf8_to_latin1` (`€` becomes `EUR`).
+
+A program's own data (a sheet's cells with their formulas) goes as a FORM with a type of its own in another unit (1
+to 255), written right after the text. The block keeps a fingerprint of unit 0's text: if another program copies
+something later, the block no longer counts and reads as missing. So the program pastes its cells if the last copy
+was its own, and the text if not.
+
+| Function | What it does |
+|---|---|
+| `clip_write_text(text)` | Copies a UTF-8 text; `false` if it cannot |
+| `clip_read_text()` | The copied text, in UTF-8 (all its CHRS chunks); `""` if there is none or it is not text |
+| `clip_write_block(unit, type, buf, n)` | Copies `n` bytes of a buffer as a FORM of `type` (4 letters, `"LCLC"`) to that unit |
+| `clip_block_size(unit, type)` | The block's bytes, `-1` if there is none or it no longer counts |
+| `clip_read_block(unit, type, dest, max)` | Copies it to `dest`: its bytes, `-1` if there is none or it no longer counts, `-2` if it does not fit in `max` |
+
+```
+clip_write_text("10\t20\n")              # what the others paste
+clip_write_block(1, "LCLC", cells, n)     # what Calc pastes
+...
+n = clip_block_size(1, "LCLC")
+if n >= 0
+    buf = buffer_alloc(n)
+    clip_read_block(1, "LCLC", buf, n)
+else
+    text = clip_read_text()
+end
 ```
 
 ### Date and time: clock_* and date_text
@@ -3912,6 +3948,11 @@ Print date_text("%A %d-%b-%Y %H:%M")           # "Saturday 24-Oct-2026 18:05", i
   numbers and dates. The decimal and the thousands separators (in English `"."` and `","`, also without
   `locale.library`) and the order of day, month and year in the short date: `"DMY"`, `"MDY"` or `"YMD"`. Note: the
   `españa.country` of Workbench 3.1 and 3.2 has `"'"` for the decimals and `","` for the thousands.
+- `str_compare_locale(a, b, ignore_case)`: compares two UTF-8 texts in the order of the user's language
+  (`locale.library`'s `StrnCmp`): `-1` if `a` goes first, `0` if they are equal, `1` if it goes after. Accents and case
+  only count after the letters (`"árbol"` before `"barco"`, `"apple"` before `"Banana"`), and with `ignore_case` set to
+  `true` they do not count. What Latin-1 lacks is compared as in `utf8_to_latin1` (`€` as `EUR`). For sorting rows:
+  `l.sort(f)` with an `f(a, b) -> Int` that returns it. Without `locale.library`, by the bytes.
 
 ### Translations: tr and @catalog
 
@@ -4366,7 +4407,9 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simulated keyboard and mouse | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
+| Simulated keyboard and mouse | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
+| Sorting texts by language | 1 | `str_compare_locale` |
+| Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
@@ -4378,8 +4421,8 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **675** | |
+| MUI | 94 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **686** | |
 
 ### Standard Amiga Colors
 

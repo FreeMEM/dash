@@ -120,6 +120,13 @@ Rules checked by the compiler (`compiler/dashui.py`; the editor flags the same o
   submenu with `name` is a field of the window, like the objects (`v.ver_formulas`: check it, change its text with
   `mui_set_text` or disable it with `mui_set_enabled`); `"disabled": true` leaves it disabled. The visual editor shows
   submenus, but their items, the marks and the names are changed by editing the file as text (Lorraine D47).
+- **Context menus** (Lorraine D15): `"context_menus": [ { "name": "menu_celdas", "title": "Celdas", "items": [...] } ]`
+  in the window, with the same items as a menu, and `"context_menu": "menu_celdas"` on the object that opens it with
+  the right button (`mui_set_context_menu`). The name is required and is a field of the window; several objects can
+  open the same one. On a canvas, `mui_canvas_mouse_x`/`_y` say where it was pressed. The visual editor adds them with
+  "+ menú contextual" and the object picks one in its `context_menu` property.
+- **Tab on a canvas** (Lorraine D48): `"take_tab": true` on a `canvas` makes Tab and Shift+Tab over it its keys
+  (`mui_canvas_take_tab`), not the move to the next gadget. On any other type it is an error.
 - **Translations** (dashweb D71): `"tr": N` on an object, a window, a menu or a menu item gives the main
   text (`text`, `label`, `title`, `titles`, `options`) catalog number `N`: the code requests it with
   `tr(N, "texto")`. For several strings of the same object, `"tr": { "label": 12, "help": 13 }`. They are extracted by

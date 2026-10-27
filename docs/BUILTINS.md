@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 675 funciones, 675 implementadas, 0 sin implementar.
+Total: 686 funciones, 686 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -627,8 +627,25 @@ Total: 675 funciones, 675 implementadas, 0 sin implementar.
 | `input_text(text)` | `void` | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
 | `input_move(x, y)` | `void` | Move the pointer to (x, y) from the corner of the active window |  |
 | `input_click(x, y, qualifiers)` | `void` | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
+| `input_button(button, down)` | `void` | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
 | `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
 | `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
+
+## Portapapeles
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `clip_write_text(s)` | `BOOL` | Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 (€ to EUR); false if the clipboard cannot be written |  |
+| `clip_read_text()` | `STRPTR` | The text in the clipboard (unit 0) in UTF-8; "" if it is empty or holds no text |  |
+| `clip_write_block(unit, type, buffer, n)` | `BOOL` | Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 characters, "LCLC"), after clip_write_text: it stays tied to that text, and if something else is copied to unit 0 the block reads as missing |  |
+| `clip_block_size(unit, type)` | `LONG` | Bytes of the block of that type in a clipboard unit, -1 if there is none or something else was copied after it |  |
+| `clip_read_block(unit, type, dest, max)` | `LONG` | Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if there is none or something else was copied after it, -2 if it does not fit in max |  |
+
+## Ordenar textos según el idioma
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `str_compare_locale(a, b, ignore_case)` | `LONG` | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
 
 ## Audio
 
@@ -794,6 +811,8 @@ Total: 675 funciones, 675 implementadas, 0 sin implementar.
 | `mui_submenu_begin(title)` | `APTR` | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
 | `mui_submenu_end()` | `void` | End the submenu |  |
 | `mui_menu_separator()` | `void` | Separator line in the menu |  |
+| `mui_context_menu_begin(title)` | `APTR` | Start a context menu (anywhere, not only in a window): its items as in a menu (mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object with mui_set_context_menu (Lorraine D15) |  |
+| `mui_set_context_menu(object, menu)` | `void` | The right button over the object opens that context menu (0: none); its items give their events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2 |  |
 | `mui_menu_end()` | `void` | End the menu |  |
 | `mui_canvas(min_width, min_height)` | `APTR` | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
 | `mui_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed) |  |
@@ -807,6 +826,8 @@ Total: 675 funciones, 675 implementadas, 0 sin implementar.
 | `mui_canvas_pointer_x(canvas)` | `LONG` | X of the pointer now, from the area's left edge (clicked or not) |  |
 | `mui_canvas_pointer_y(canvas)` | `LONG` | Y of the pointer now, from the area's top edge (clicked or not) |  |
 | `mui_canvas_pointer_inside(canvas)` | `BOOL` | True if the pointer is over the area now |  |
+| `mui_canvas_set_pointer(canvas, shape)` | `void` | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, 4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to normal outside it (Lorraine D16) |  |
+| `mui_canvas_take_tab(canvas, on)` | `void` | With the pointer over the area, Tab and Shift+Tab are keys for it (mui_canvas_key 66, Shift in mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous gadget; away from it they move between gadgets as always (Lorraine D48) |  |
 | `mui_canvas_mouse_x(canvas)` | `LONG` | X of the last click or wheel, from the area's left edge |  |
 | `mui_canvas_mouse_y(canvas)` | `LONG` | Y of the last click or wheel, from the area's top edge |  |
 | `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |

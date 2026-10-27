@@ -107,6 +107,7 @@ The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines
 | `mui_on_close(win, id)` | the window's close gadget. Without calling it, closing the first window = -1 (quit). |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menu of the open window (`Menustrip`) |
 | `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | item with a check mark (`mui_get_value`/`mui_set_value`) and one-level submenu |
+| `mui_context_menu_begin(titulo)` ... `mui_menu_end()`, `mui_set_context_menu(obj, menu)` | context menu (right button over `obj`): its items give their events; MUI does not free it with the object, Dash does at the end |
 | `mui_wait_event() -> Int` | Waits and returns the number of an event, or -1 to quit. |
 | `mui_poll_event() -> Int` | The same without waiting: 0 if there is nothing. |
 | `mui_wait_event_signals(mascara) -> Int` | Also waits for other signals: `net_signal()` (network), `task_signal()` (tasks), `file_notify_signal()` (watched files). Returns 0 when one of them arrives; `mui_signals()` tells which. |
@@ -147,6 +148,8 @@ After a `mui_canvas_on_input` event, what happened (position relative to the cor
 | `mui_canvas_on_drag(c, id)`, `mui_canvas_drag(c)` | Dragging: event when moving with the button down (1) and when let go (2). |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Current pointer position (with or without a click). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Whether the pointer is currently over the area. |
+| `mui_canvas_set_pointer(c, shape)` | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 up-down, 4 busy. It changes at once if the pointer is over it (or dragging the area) and goes back to normal outside it. 1-3 are sprites of their own: Intuition 3.1 and 3.2 lack them. |
+| `mui_canvas_take_tab(c, on)` | Tab and Shift+Tab over the area are its keys (66), not the window's focus cycle (which is off while the pointer is over it, as with Esc). |
 
 The custom class (`MUI_CreateCustomClass` on top of `Area`) implements `MUIM_AskMinMax`, `MUIM_Draw`, `MUIM_Setup`/
 `MUIM_Cleanup` (event handler with `MUIM_Window_AddEventHandler`) and `MUIM_HandleEvent`. Scrolling is

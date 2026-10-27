@@ -1,0 +1,7 @@
+{
+  "dashui": 1,
+  "windows": [
+    { "name": "Mala", "title": "Tab en un botón",
+      "root": { "type": "vgroup", "children": [ { "type": "button", "label": "Negrita", "take_tab": true } ] } }
+  ]
+}

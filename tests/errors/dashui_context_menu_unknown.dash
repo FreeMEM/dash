@@ -1,0 +1,7 @@
+# expect: which is not one of the window's "context_menus"
+# (an object opens a context menu of its own window, by name: Lorraine D15)
+import "../lib/ventana_contexto_falta.dashui"
+
+Main
+    v = Mala_create()
+end

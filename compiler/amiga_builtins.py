@@ -3543,6 +3543,23 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_menu_separator()",
         description="Separator line in the menu"
     ),
+    "mui_context_menu_begin": BuiltinFunc(
+        name="mui_context_menu_begin",
+        params=["title"],
+        return_type="APTR",
+        c_template="_dash_mui_context_menu_begin(${title})",
+        description="Start a context menu (anywhere, not only in a window): its items as in a menu "
+                    "(mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object "
+                    "with mui_set_context_menu (Lorraine D15)"
+    ),
+    "mui_set_context_menu": BuiltinFunc(
+        name="mui_set_context_menu",
+        params=["object", "menu"],
+        return_type="void",
+        c_template="_dash_mui_set_context_menu(${object}, ${menu})",
+        description="The right button over the object opens that context menu (0: none); its items give their "
+                    "events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2"
+    ),
     "mui_menu_end": BuiltinFunc(
         name="mui_menu_end",
         params=[],
@@ -3636,6 +3653,24 @@ MUI_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_mui_canvas_pointer(${canvas}, 2)",
         description="True if the pointer is over the area now"
+    ),
+    "mui_canvas_set_pointer": BuiltinFunc(
+        name="mui_canvas_set_pointer",
+        params=["canvas", "shape"],
+        return_type="void",
+        c_template="_dash_mui_canvas_set_pointer(${canvas}, ${shape})",
+        description="The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, "
+                    "4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to "
+                    "normal outside it (Lorraine D16)"
+    ),
+    "mui_canvas_take_tab": BuiltinFunc(
+        name="mui_canvas_take_tab",
+        params=["canvas", "on"],
+        return_type="void",
+        c_template="_dash_mui_canvas_take_tab(${canvas}, ${on})",
+        description="With the pointer over the area, Tab and Shift+Tab are keys for it (mui_canvas_key 66, Shift in "
+                    "mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous "
+                    "gadget; away from it they move between gadgets as always (Lorraine D48)"
     ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
@@ -4655,6 +4690,11 @@ SIMINPUT_FUNCTIONS = {
         c_template="_dash_input_click(${x}, ${y}, ${qualifiers})",
         description="Click with the left button at (x, y) from the corner of the active window, with qualifiers "
                     "1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's)"),
+    "input_button": BuiltinFunc(
+        name="input_button", params=["button", "down"], return_type="void",
+        c_template="_dash_input_mouse_button(${button}, ${down})",
+        description="Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, "
+                    "a context menu), 3 middle"),
     "input_drag": BuiltinFunc(
         name="input_drag", params=["x1", "y1", "x2", "y2"], return_type="void",
         c_template="_dash_input_drag(${x1}, ${y1}, ${x2}, ${y2})",
@@ -4663,6 +4703,38 @@ SIMINPUT_FUNCTIONS = {
     "input_active_title": BuiltinFunc(
         name="input_active_title", params=[], return_type="STRPTR", c_template="_dash_input_active_title()",
         description="Title of the active window (\"\" if none): to wait for the window of the program to test"),
+}
+
+# Lorraine D7: sorting texts as the user's language does
+COLLATE_FUNCTIONS = {
+    "str_compare_locale": _text("str_compare_locale", ["a", "b", "ignore_case"], "LONG",
+                                "_dash_str_compare_locale(${a}, ${b}, ${ignore_case})",
+                                "Compare two UTF-8 texts in the order of the user's language (locale.library): "
+                                "-1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only "
+                                "after the letters (\"árbol\" before \"barco\", \"apple\" before \"Banana\"), and "
+                                "not at all with ignore_case. Without locale.library, by their Latin-1 bytes"),
+}
+
+# Lorraine D18: copy and paste with the other programs (text in unit 0) and with itself (a block of its own)
+CLIP_FUNCTIONS = {
+    "clip_write_text": _text("clip_write_text", ["s"], "BOOL", "_dash_clip_write_text(${s})",
+                             "Copy a UTF-8 text to the clipboard (unit 0, IFF FTXT in Latin-1, as the other "
+                             "programs read it): what Latin-1 lacks becomes something like it, as utf8_to_latin1 "
+                             "(\u20ac to EUR); false if the clipboard cannot be written"),
+    "clip_read_text": _text("clip_read_text", [], "STRPTR", "_dash_clip_read_text()",
+                            "The text in the clipboard (unit 0) in UTF-8; \"\" if it is empty or holds no text"),
+    "clip_write_block": _buf("clip_write_block", ["unit", "type", "buffer", "n"], "BOOL",
+                             "_dash_clip_write_block(${unit}, ${type}, ${buffer}, ${n})",
+                             "Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 "
+                             "characters, \"LCLC\"), after clip_write_text: it stays tied to that text, and "
+                             "if something else is copied to unit 0 the block reads as missing"),
+    "clip_block_size": _buf("clip_block_size", ["unit", "type"], "LONG", "_dash_clip_block_size(${unit}, ${type})",
+                            "Bytes of the block of that type in a clipboard unit, -1 if there is none or "
+                            "something else was copied after it"),
+    "clip_read_block": _buf("clip_read_block", ["unit", "type", "dest", "max"], "LONG",
+                            "_dash_clip_read_block(${unit}, ${type}, ${dest}, ${max})",
+                            "Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if "
+                            "there is none or something else was copied after it, -2 if it does not fit in max"),
 }
 
 # =============================================================================
@@ -4696,6 +4768,8 @@ ALL_BUILTINS = {
     **MATH_FUNCTIONS,          # Lorraine D4
     **REGEX_FUNCTIONS,         # Lorraine D45
     **SIMINPUT_FUNCTIONS,      # Lorraine D46
+    **CLIP_FUNCTIONS,          # Lorraine D18
+    **COLLATE_FUNCTIONS,       # Lorraine D7
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

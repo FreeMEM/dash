@@ -1,0 +1,59 @@
+# Test: str_compare_locale(a, b, ignore_case) (Lorraine D7): UTF-8 texts in the order of the user's language with
+# locale.library's StrnCmp (the emulator has no locale prefs: English), to sort rows with l.sort (Lorraine D8)
+# expect-out: apple Banana: -1 (bytes 1)
+# expect-out: árbol barco: -1
+# expect-out: igual: 0 0
+# expect-out: Casa casa sin mayúsculas: 0
+# expect-out: Casa casa: distintos
+# expect-out: b a: 1
+# expect-out: euro: 0
+# expect-out: largo: -1
+# expect-out: ordenada: Ábaco Árbol barco casa Zeta zorro
+# expect-c: /* Dash date runtime
+
+func a_l1(s: String) -> String
+    return utf8_to_latin1(s)
+end
+
+func por_idioma(a: String, b: String) -> Int
+    return str_compare_locale(a, b, false)
+end
+
+Main
+    # literals are Latin-1: the accented ones in UTF-8 with latin1_to_utf8
+    arbol = latin1_to_utf8("árbol")
+    bytes = 0
+    if "apple" > "Banana"
+        bytes = 1
+    end
+    r = str_compare_locale("apple", "Banana", false)
+    Print "apple Banana: #{r} (bytes #{bytes})"
+    r = str_compare_locale(arbol, "barco", false)
+    Print "árbol barco: #{r}"
+    r = str_compare_locale(arbol, arbol, false)
+    r2 = str_compare_locale("", "", true)
+    Print "igual: #{r} #{r2}"
+    r = str_compare_locale("Casa", "casa", true)
+    Print "Casa casa sin mayúsculas: #{r}"
+    if str_compare_locale("Casa", "casa", false) != 0
+        Print "Casa casa: distintos"
+    end
+    r = str_compare_locale("b", "a", false)
+    Print "b a: #{r}"
+    r = str_compare_locale("10" + utf8_char(8364), "10EUR", false)
+    Print "euro: #{r}"
+    largo = ""
+    while largo.length < 600
+        largo = largo + "fila "
+    end
+    r = str_compare_locale(largo + "a", largo + "b", false)
+    Print "largo: #{r}"
+
+    l = [latin1_to_utf8("Árbol"), "zorro", "barco", "Zeta", latin1_to_utf8("Ábaco"), "casa"]
+    l.sort(por_idioma)
+    t = ""
+    for s in l
+        t = t + " " + a_l1(s)
+    end
+    Print "ordenada:#{t}"
+end

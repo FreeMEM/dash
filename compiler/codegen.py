@@ -94,6 +94,67 @@ static void _dash_brief_socket_close(struct Library *SocketBase, ULONG brk) {
 """
 
 
+# The canvas's own pointers (Lorraine D16): Intuition 3.1 and 3.2 have no text or resize pointers (WA_PointerType
+# is OS4's), so they are sprites made with pointerclass. ". " clear, "#" pen 2 (dark), "o" pen 3 (light).
+_POINTER_TEXT = """\
+ooo.ooo
+o##o##o
+ooo#ooo
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+ooo#ooo
+o##o##o
+ooo.ooo"""
+_POINTER_WE = """\
+......o#o......
+...o..o#o..o...
+..o#o.o#o.o#o..
+.o##ooo#ooo##o.
+o#############o
+.o##ooo#ooo##o.
+..o#o.o#o.o#o..
+...o..o#o..o...
+......o#o......"""
+# shape -> (drawing, hotspot x, hotspot y); 2 and 3 are the same arrows, turned
+_POINTER_SHAPES = {
+    1: (_POINTER_TEXT, 3, 7),
+    2: (_POINTER_WE, 7, 4),
+    3: ("\n".join("".join(row[i] for row in _POINTER_WE.split("\n")) for i in range(15)), 4, 7),
+}
+
+
+def _pointer_shapes_c() -> str:
+    """C arrays of the pointers: for each, the h words of plane 0, then the h of plane 1 (one word a row)."""
+    out = []
+    for shape, (art, _x, _y) in sorted(_POINTER_SHAPES.items()):
+        rows = art.split("\n")
+        planes = [[], []]
+        for row in rows:
+            p0 = p1 = 0
+            for c, ch in enumerate(row):
+                bit = 0x8000 >> c
+                if ch in "o":
+                    p0 |= bit
+                if ch in "#o":
+                    p1 |= bit
+            planes[0].append(p0)
+            planes[1].append(p1)
+        words = ", ".join(f"0x{w:04X}" for w in planes[0] + planes[1])
+        out.append(f"static const UWORD _dash_ptr_{shape}[] = {{ {words} }};\n")
+    out.append("static const struct { const UWORD *data; WORD h, x, y; } _dash_ptr_shapes[4] = {\n    { NULL, 0, 0, 0 },\n")
+    for shape, (art, x, y) in sorted(_POINTER_SHAPES.items()):
+        out.append(f"    {{ _dash_ptr_{shape}, {len(art.split(chr(10)))}, {x}, {y} }},\n")
+    out.append("};\n")
+    return "".join(out)
+
+
 class CTemplates:
     """Templates for generating C code."""
 
@@ -4879,6 +4940,56 @@ static void _dash_date_cleanup(void) {
 
 """
 
+    # Lorraine D7: texts compared in the user's language's order (to sort rows), after DATE_RUNTIME's locale
+    COLLATE_RUNTIME = """\
+/* A UTF-8 text in Latin-1 (locale.library's) in buf, or a temporary text if it does not fit */
+static STRPTR _dash_collate_l1(STRPTR s, char *buf, LONG size) {
+    const UBYTE *p;
+    const char *t;
+    LONG n = 0, k, cp;
+    if (!s) return (STRPTR)"";
+    for (p = (const UBYTE *)s; *p; p += k) {
+        if (*p < 0x80) { k = 1; cp = *p; }
+        else cp = _dash_utf8_decode(p, &k);
+        if (cp < 256) {
+            if (n >= size - 1) return _dash_utf8_to_latin1(s);
+            buf[n++] = (char)cp;
+        } else {
+            for (t = _dash_utf8_latin1_of(cp); *t; t++) {
+                if (n >= size - 1) return _dash_utf8_to_latin1(s);
+                buf[n++] = *t;
+            }
+        }
+    }
+    buf[n] = 0;
+    return (STRPTR)buf;
+}
+
+/* Two UTF-8 texts in the order of the user's language (Lorraine D7): -1, 0 or 1. locale.library's StrnCmp,
+   SC_COLLATE2 (accents and case count, after the letters themselves) or SC_COLLATE1 with ignore_case (they do
+   not). Without locale.library, by their Latin-1 bytes (A-Z as a-z with ignore_case). */
+static LONG _dash_str_compare_locale(STRPTR a, STRPTR b, LONG ignore_case) {
+    char ba[256], bb[256];
+    struct Locale *l = _dash_user_locale();
+    const UBYTE *x = (const UBYTE *)_dash_collate_l1(a, ba, sizeof(ba));
+    const UBYTE *y = (const UBYTE *)_dash_collate_l1(b, bb, sizeof(bb));
+    LONG r;
+    if (!x || !y) return 0;
+    if (l) r = StrnCmp(l, (CONST_STRPTR)x, (CONST_STRPTR)y, -1, ignore_case ? SC_COLLATE1 : SC_COLLATE2);
+    else {
+        UBYTE cx, cy;
+        do {
+            cx = *x++; cy = *y++;
+            if (ignore_case && cx >= 'A' && cx <= 'Z') cx += 32;
+            if (ignore_case && cy >= 'A' && cy <= 'Z') cy += 32;
+        } while (cx && cx == cy);
+        r = (LONG)cx - (LONG)cy;
+    }
+    return r < 0 ? -1 : r > 0;
+}
+
+"""
+
     # @version (Trasfondo 0.7): the program's name and version, also for C:Version
     VERSION_RUNTIME = """\\
 #ifndef _DASH_VERSION
@@ -6767,6 +6878,21 @@ static void _dash_input_move(LONG x, LONG y) {
     _dash_input_pointer(x, y, 0);
 }
 
+/* Presses (down) or lets go a mouse button where the pointer is: 1 left, 2 right, 3 middle (Lorraine D15: the
+   right one opens a context menu) */
+static void _dash_input_mouse_button(LONG button, LONG down) {
+    static const UWORD codes[3][2] = { { IECODE_LBUTTON, IEQUALIFIER_LEFTBUTTON },
+                                       { IECODE_RBUTTON, IEQUALIFIER_RBUTTON },
+                                       { IECODE_MBUTTON, IEQUALIFIER_MIDBUTTON } };
+    struct InputEvent ie;
+    if (button < 1 || button > 3) return;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = codes[button - 1][0] | (down ? 0 : IECODE_UP_PREFIX);
+    ie.ie_Qualifier = down ? codes[button - 1][1] : 0;
+    _dash_input_send(&ie);
+}
+
 static void _dash_input_click(LONG x, LONG y, LONG q) {
     UWORD qual = _dash_input_qual(q);
     _dash_input_pointer(x, y, qual);
@@ -6796,6 +6922,217 @@ static STRPTR _dash_input_active_title(void) {
     UnlockIBase(lock);
     buf[n] = 0;
     return _dash_str_dup((STRPTR)buf, TRUE);
+}
+
+"""
+
+    # Lorraine D18: copy and paste through clipboard.device, with the other programs (text) and with itself
+    CLIP_RUNTIME = """\
+/* Dash Clipboard Runtime */
+/* clip_* (Lorraine D18): a text goes to unit 0 of clipboard.device as IFF FTXT with one CHRS chunk in
+   Latin-1, which is what the other Amiga programs read; a program's own data goes as a FORM with its own type
+   in another unit, with a CLID chunk holding a fingerprint of unit 0 when it was written: if unit 0 has
+   changed since (something else copied), the block is old and reads as missing. */
+#include <devices/clipboard.h>
+
+#define _DASH_CLIP_ID(a, b, c, d) (((ULONG)(a) << 24) | ((ULONG)(b) << 16) | ((ULONG)(c) << 8) | (ULONG)(d))
+
+static struct IOClipReq *_dash_clip_open(LONG unit, struct MsgPort **port) {
+    struct IOClipReq *io;
+    if (unit < 0 || unit > 255 || !(*port = CreateMsgPort())) return NULL;
+    if ((io = (struct IOClipReq *)CreateIORequest(*port, sizeof(*io)))) {
+        if (OpenDevice((CONST_STRPTR)"clipboard.device", unit, (struct IORequest *)io, 0) == 0) return io;
+        DeleteIORequest((struct IORequest *)io);
+    }
+    DeleteMsgPort(*port);
+    return NULL;
+}
+
+static void _dash_clip_close(struct IOClipReq *io, struct MsgPort *port) {
+    CloseDevice((struct IORequest *)io);
+    DeleteIORequest((struct IORequest *)io);
+    DeleteMsgPort(port);
+}
+
+/* A fingerprint of what unit 0 holds now (FNV-1a of the whole clip; 0 if it is empty). Not its clip ID: a
+   unit with nobody keeping it open starts again at 1 */
+static UBYTE *_dash_clip_get(LONG unit, ULONG *len);
+static ULONG _dash_clip_text_sum(void) {
+    ULONG len, i, h = 0;
+    UBYTE *buf = _dash_clip_get(0, &len);
+    if (buf) {
+        for (h = 2166136261UL, i = 0; i < len; i++) h = (h ^ buf[i]) * 16777619UL;
+        FreeVec(buf);
+    }
+    return h;
+}
+
+/* Writes a whole clip: FORM type with a CLID chunk if clid (unit 0's fingerprint) and one chunk ck of n bytes */
+static BOOL _dash_clip_put(LONG unit, ULONG type, ULONG ck, const UBYTE *data, LONG n, BOOL clid) {
+    struct MsgPort *port;
+    struct IOClipReq *io;
+    ULONG size = 4 + (clid ? 12 : 0) + 8 + n + (n & 1), *h;
+    ULONG id = clid ? _dash_clip_text_sum() : 0;
+    UBYTE *buf, *p;
+    BOOL ok = FALSE;
+    if (n < 0 || (n && !data) || !(buf = (UBYTE *)AllocVec(8 + size, MEMF_ANY | MEMF_CLEAR))) return FALSE;
+    h = (ULONG *)buf;
+    h[0] = _DASH_CLIP_ID('F', 'O', 'R', 'M'); h[1] = size; h[2] = type;
+    p = buf + 12;
+    if (clid) {
+        ((ULONG *)p)[0] = _DASH_CLIP_ID('C', 'L', 'I', 'D'); ((ULONG *)p)[1] = 4; ((ULONG *)p)[2] = id;
+        p += 12;
+    }
+    ((ULONG *)p)[0] = ck; ((ULONG *)p)[1] = n;
+    if (n) CopyMem((APTR)data, p + 8, n);
+    if ((io = _dash_clip_open(unit, &port))) {
+        io->io_Command = CMD_WRITE;
+        io->io_Data = (STRPTR)buf;
+        io->io_Length = 8 + size;
+        io->io_Offset = 0;
+        io->io_ClipID = 0;
+        ok = DoIO((struct IORequest *)io) == 0 && io->io_Actual == 8 + size;
+        io->io_Command = CMD_UPDATE;     /* always: the unit is not free until the write ends */
+        if (DoIO((struct IORequest *)io) != 0) ok = FALSE;
+        _dash_clip_close(io, port);
+    }
+    FreeVec(buf);
+    return ok;
+}
+
+/* The whole clip of a unit (AllocVec, *len bytes), NULL if it is empty or not IFF */
+static UBYTE *_dash_clip_get(LONG unit, ULONG *len) {
+    struct MsgPort *port;
+    struct IOClipReq *io = _dash_clip_open(unit, &port);
+    ULONG head[2], rest[16];
+    UBYTE *buf = NULL;
+    if (!io) return NULL;
+    io->io_Command = CMD_READ;
+    io->io_Data = (STRPTR)head;
+    io->io_Length = 8;
+    io->io_Offset = 0;
+    io->io_ClipID = 0;
+    if (DoIO((struct IORequest *)io) == 0 && io->io_Actual == 8 && head[1] < 0x01000000UL
+        && (head[0] == _DASH_CLIP_ID('F', 'O', 'R', 'M') || head[0] == _DASH_CLIP_ID('C', 'A', 'T', ' ')
+            || head[0] == _DASH_CLIP_ID('L', 'I', 'S', 'T'))
+        && (buf = (UBYTE *)AllocVec(head[1] + 8, MEMF_ANY))) {
+        ((ULONG *)buf)[0] = head[0]; ((ULONG *)buf)[1] = head[1];
+        io->io_Data = (STRPTR)buf + 8;
+        io->io_Length = head[1];
+        if (DoIO((struct IORequest *)io) != 0 || io->io_Actual != head[1]) { FreeVec(buf); buf = NULL; }
+        else *len = head[1] + 8;
+    }
+    do {                                 /* to the end: the device takes that as the read being over */
+        io->io_Command = CMD_READ;
+        io->io_Data = (STRPTR)rest;
+        io->io_Length = sizeof(rest);
+    } while (DoIO((struct IORequest *)io) == 0 && io->io_Actual > 0);
+    _dash_clip_close(io, port);
+    return buf;
+}
+
+/* The FORM of that type in a clip (itself, or one inside a CAT or LIST): its chunks and *n their bytes */
+static UBYTE *_dash_clip_form(UBYTE *buf, ULONG len, ULONG type, ULONG *n) {
+    ULONG *h = (ULONG *)buf, i, size;
+    if (len < 12) return NULL;
+    if (h[0] == _DASH_CLIP_ID('F', 'O', 'R', 'M')) {
+        if (h[2] != type) return NULL;
+        *n = (h[1] < len - 8 ? h[1] : len - 8) - 4;
+        return buf + 12;
+    }
+    for (i = 12; i + 12 <= len; i += 8 + size + (size & 1)) {   /* CAT or LIST: the FORMs one by one */
+        UBYTE *r;
+        size = ((ULONG *)(buf + i))[1];
+        if (size > len - i - 8) break;
+        if ((r = _dash_clip_form(buf + i, size + 8, type, n))) return r;
+    }
+    return NULL;
+}
+
+/* The next chunk of a FORM from *at: its id, *data and *size (FALSE at the end) */
+static BOOL _dash_clip_chunk(UBYTE *form, ULONG n, ULONG *at, ULONG *id, UBYTE **data, ULONG *size) {
+    if (*at + 8 > n) return FALSE;
+    *id = ((ULONG *)(form + *at))[0];
+    *size = ((ULONG *)(form + *at))[1];
+    if (*size > n - *at - 8) *size = n - *at - 8;
+    *data = form + *at + 8;
+    *at += 8 + *size + (*size & 1);
+    return TRUE;
+}
+
+static BOOL _dash_clip_write_text(STRPTR s) {
+    STRPTR l = _dash_utf8_to_latin1(s);
+    return l && _dash_clip_put(0, _DASH_CLIP_ID('F', 'T', 'X', 'T'), _DASH_CLIP_ID('C', 'H', 'R', 'S'),
+                               (const UBYTE *)l, strlen((char *)l), FALSE);
+}
+
+/* The text in unit 0 (all its CHRS chunks, NUL bytes left out) in UTF-8; "" if there is none */
+static STRPTR _dash_clip_read_text(void) {
+    ULONG len, n, at = 0, id, size, total = 0;
+    UBYTE *buf = _dash_clip_get(0, &len), *form = NULL, *data, *o;
+    STRPTR l;
+    if (buf) form = _dash_clip_form(buf, len, _DASH_CLIP_ID('F', 'T', 'X', 'T'), &n);
+    if (form)
+        while (_dash_clip_chunk(form, n, &at, &id, &data, &size))
+            if (id == _DASH_CLIP_ID('C', 'H', 'R', 'S')) total += size;
+    if (!(l = _dash_str_alloc(total, TRUE))) { if (buf) FreeVec(buf); return NULL; }
+    o = (UBYTE *)l;
+    if (form)
+        for (at = 0; _dash_clip_chunk(form, n, &at, &id, &data, &size); )
+            if (id == _DASH_CLIP_ID('C', 'H', 'R', 'S'))
+                for (; size; size--, data++) if (*data) *o++ = *data;
+    *o = 0;
+    if (buf) FreeVec(buf);
+    return _dash_latin1_to_utf8(l);
+}
+
+/* A FORM type: the 4 characters of a text ("LCLC"), 0 if it does not have 4 */
+static ULONG _dash_clip_type(STRPTR t) {
+    if (!t || strlen((char *)t) != 4) return 0;
+    return _DASH_CLIP_ID(t[0], t[1], t[2], t[3]);
+}
+
+static BOOL _dash_clip_write_block(LONG unit, STRPTR type, APTR buf, LONG n) {
+    ULONG t = _dash_clip_type(type);
+    return t && _dash_clip_put(unit, t, _DASH_CLIP_ID('B', 'O', 'D', 'Y'), (const UBYTE *)buf, n, unit != 0);
+}
+
+/* The BODY of the block of that type in a unit; NULL if there is none or unit 0 changed after it */
+static UBYTE *_dash_clip_block(LONG unit, STRPTR type, UBYTE **whole, ULONG *size) {
+    ULONG len, n, at = 0, id, t = _dash_clip_type(type);
+    UBYTE *form, *data, *body = NULL;
+    BOOL fresh = unit == 0;
+    *whole = NULL;
+    if (!t || !(*whole = _dash_clip_get(unit, &len))) return NULL;
+    if ((form = _dash_clip_form(*whole, len, t, &n)))
+        while (_dash_clip_chunk(form, n, &at, &id, &data, size)) {
+            if (id == _DASH_CLIP_ID('C', 'L', 'I', 'D') && *size == 4)
+                fresh = *(ULONG *)data == _dash_clip_text_sum();
+            else if (id == _DASH_CLIP_ID('B', 'O', 'D', 'Y') && !body) {
+                body = data;
+                len = *size;
+            }
+        }
+    *size = len;
+    return fresh ? body : NULL;
+}
+
+static LONG _dash_clip_block_size(LONG unit, STRPTR type) {
+    UBYTE *whole, *body;
+    ULONG size;
+    body = _dash_clip_block(unit, type, &whole, &size);
+    if (whole) FreeVec(whole);
+    return body ? (LONG)size : -1;
+}
+
+static LONG _dash_clip_read_block(LONG unit, STRPTR type, APTR dest, LONG max) {
+    UBYTE *whole, *body;
+    ULONG size;
+    LONG r = -1;
+    if ((body = _dash_clip_block(unit, type, &whole, &size)))
+        r = (LONG)size > max || !dest ? -2 : (CopyMem(body, dest, size), (LONG)size);
+    if (whole) FreeVec(whole);
+    return r;
 }
 
 """
@@ -14848,6 +15185,38 @@ static void _dash_mui_menu_end(void) {
     _dash_mui_sub_parent = NULL;
 }
 
+/* Context menus (Lorraine D15): mui_context_menu_begin("Celdas"), its items as in a window's menu (mui_menu_item,
+   mui_menu_check, mui_submenu_begin...), mui_menu_end(); mui_set_context_menu(object, menu) opens it with the
+   right button over the object, and its items give their events as the window's do. A context menu belongs to
+   no object: MUI does not dispose it, _dash_mui_ctx_cleanup does once the windows are gone. */
+#define _DASH_MUI_CTXMENUS 16
+static Object *_dash_mui_ctx[_DASH_MUI_CTXMENUS];
+static LONG _dash_mui_nctx = 0;
+
+static void _dash_mui_ctx_cleanup(void) {
+    while (_dash_mui_nctx > 0) MUI_DisposeObject(_dash_mui_ctx[--_dash_mui_nctx]);
+}
+
+static APTR _dash_mui_context_menu_begin(STRPTR title) {
+    Object *strip, *menu;
+    if (_dash_mui_cur_menu) { _dash_mui_error("mui_context_menu_begin inside another menu"); return NULL; }
+    if (_dash_mui_nctx == _DASH_MUI_CTXMENUS) { _dash_mui_error("more than 16 context menus"); return NULL; }
+    if (!(menu = _DASH_MUI_NEW(MUIC_Menu, MUIA_Menu_Title, (IPTR)_dash_mui_keep(title)))) return NULL;
+    if (!(strip = _DASH_MUI_NEW(MUIC_Menustrip, MUIA_Menustrip_Enabled, TRUE))) {
+        MUI_DisposeObject(menu);
+        return NULL;
+    }
+    _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_ctx[_dash_mui_nctx++] = strip;
+    _dash_mui_on_end(_dash_mui_ctx_cleanup);
+    _dash_mui_cur_menu = menu;
+    return strip;
+}
+
+static void _dash_mui_set_context_menu(APTR obj, APTR menu) {
+    if (obj) SetAttrs(obj, MUIA_ContextMenu, (IPTR)menu, TAG_DONE);
+}
+
 static void _dash_mui_group_end(void) {
     if (_dash_mui_depth > 1) _dash_mui_depth--;
     else _dash_mui_error("mui_group_end without a group");
@@ -15423,6 +15792,7 @@ static LONG _dash_mui_signals(void) {
 #define _DASH_MHEIGHT(obj) (_DASH_MAD(obj)->mad_Box.Height - _DASH_MAD(obj)->mad_subheight)
 
 #include <proto/layers.h>    /* the buffer's layer (mui_canvas_buffered) */
+#include <intuition/pointerclass.h>
 
 struct _DashCanvas {
     APTR draw;                      /* Dash function (x, y, width, height) or NULL */
@@ -15450,7 +15820,53 @@ struct _DashCanvas {
     LONG bw, bh;
     BOOL area;                      /* mui_canvas_update_area: only this zone (ax, ay from the corner; D67) */
     LONG ax, ay, aw, ah;
+    LONG pointer;                   /* mui_canvas_set_pointer: the shape over the area (Lorraine D16) */
+    LONG shown;                     /* the shape the window has now (0: its own) */
+    BOOL take_tab;                  /* mui_canvas_take_tab: Tab is a key over the area, not the next gadget (D48) */
+    BOOL tab_off;                   /* ... and the window's Tab and Shift+Tab are off now */
 };
+
+/* Tab and Shift+Tab of the window (MUI's cycle chain) off while the pointer is over a canvas that takes them
+   (Lorraine D48): the window handles its own keys before any event handler, as with Esc */
+static void _dash_canvas_tab(Object *obj, struct _DashCanvas *data, BOOL take) {
+    struct MUI_RenderInfo *mri = _DASH_MRI(obj);
+    IPTR keys = 0;
+    const ULONG bits = (1UL << MUIKEY_GADGET_NEXT) | (1UL << MUIKEY_GADGET_PREV);
+    if (!mri || !mri->mri_WindowObject || take == data->tab_off) return;
+    GetAttr(MUIA_Window_DisableKeys, mri->mri_WindowObject, &keys);
+    SetAttrs(mri->mri_WindowObject, MUIA_Window_DisableKeys, (IPTR)(take ? keys | bits : keys & ~bits), TAG_DONE);
+    data->tab_off = take;
+}
+
+/* The pointer over the area (Lorraine D16): 1 text, 2 resize left-right, 3 up-down are sprites of their own
+   (pointerclass, made the first time), 4 the system's busy one; 0 the window's own */
+""" + _pointer_shapes_c() + """static Object *_dash_canvas_ptrs[4];
+static struct BitMap _dash_canvas_ptr_bm[4];
+
+static void _dash_canvas_show_pointer(Object *obj, struct _DashCanvas *data, LONG shape) {
+    struct Window *win = _DASH_MRI(obj) ? _DASH_MRI(obj)->mri_Window : NULL;
+    ULONG tags[3] = { TAG_DONE, 0, TAG_DONE };
+    if (!win || shape == data->shown) return;
+    if (shape >= 1 && shape <= 3) {
+        if (!_dash_canvas_ptrs[shape]) {
+            struct BitMap *bm = &_dash_canvas_ptr_bm[shape];
+            ULONG ptags[] = { POINTERA_BitMap, (ULONG)bm, POINTERA_XOffset, (ULONG)-_dash_ptr_shapes[shape].x,
+                              POINTERA_YOffset, (ULONG)-_dash_ptr_shapes[shape].y, POINTERA_WordWidth, 1,
+                              POINTERA_XResolution, POINTERXRESN_SCREENRES,
+                              POINTERA_YResolution, POINTERYRESN_SCREENRESASPECT, TAG_DONE };
+            InitBitMap(bm, 2, 16, _dash_ptr_shapes[shape].h);
+            bm->Planes[0] = (PLANEPTR)_dash_ptr_shapes[shape].data;
+            bm->Planes[1] = (PLANEPTR)(_dash_ptr_shapes[shape].data + _dash_ptr_shapes[shape].h);
+            _dash_canvas_ptrs[shape] = (Object *)NewObjectA(NULL, (CONST_STRPTR)"pointerclass", (struct TagItem *)ptags);
+        }
+        if (!_dash_canvas_ptrs[shape]) shape = 0;
+        else { tags[0] = WA_Pointer; tags[1] = (ULONG)_dash_canvas_ptrs[shape]; }
+    } else if (shape == 4) {
+        tags[0] = WA_BusyPointer; tags[1] = TRUE;
+    }
+    SetWindowPointerA(win, (struct TagItem *)tags);
+    data->shown = shape;
+}
 
 static struct MUI_CustomClass *_dash_canvas_class = NULL;
 
@@ -15625,14 +16041,16 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Setup:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->input_id || data->move_id || data->drag_id) {
+        if (data->input_id || data->move_id || data->drag_id || data->pointer || data->take_tab) {
             data->handler.ehn_Object = obj;
             data->handler.ehn_Class = cl;
             /* moves: MOUSEMOVE (with the window's ReportMouse, at MUIM_Show), and the ticks (10 a second) in case
                something turns ReportMouse off; leaving the window (inactive) is leaving the area */
             data->handler.ehn_Events = (data->input_id ? IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY : 0) |
                 (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0) |
-                (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
+                (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0) |
+                (data->pointer ? IDCMP_MOUSEMOVE : 0) |
+                (data->take_tab ? IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
             data->handler.ehn_Priority = 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
@@ -15652,11 +16070,14 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Show:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if ((data->move_id || data->drag_id) && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
+        if ((data->move_id || data->drag_id || data->pointer || data->take_tab) && _DASH_MRI(obj)->mri_Window)
+            ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
         _dash_canvas_unbuffer(data);   /* the next screen may be another one */
+        data->shown = 0;               /* the window's pointer goes with it */
+        _dash_canvas_tab(obj, data, FALSE);
         if (data->handler_added) {
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
             data->handler_added = FALSE;
@@ -15666,6 +16087,13 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->keys_set = FALSE;
         }
         return DoSuperMethodA(cl, obj, msg);
+    case MUIM_ContextMenuBuild:
+        /* the right button over the area, with a context menu (Lorraine D15): where, for mui_canvas_mouse_x/_y */
+        data = INST_DATA(cl, obj);
+        data->mouse_x = ((struct MUIP_ContextMenuBuild *)msg)->mx - _DASH_MLEFT(obj);
+        data->mouse_y = ((struct MUIP_ContextMenuBuild *)msg)->my - _DASH_MTOP(obj);
+        data->button = 2; data->wheel = 0; data->key = -1;
+        break;
     case MUIM_HandleEvent: {
         struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
         LONG x, y, inside;
@@ -15696,6 +16124,12 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
                 _dash_canvas_moved(data->drag_id);
             }
         }
+        if (data->take_tab && (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INACTIVEWINDOW))
+            _dash_canvas_tab(obj, data, inside && im->Class == IDCMP_MOUSEMOVE);
+        if (data->pointer && im->Class == IDCMP_MOUSEMOVE)
+            _dash_canvas_show_pointer(obj, data, inside || data->dragging ? data->pointer : 0);
+        else if (data->shown && im->Class == IDCMP_MOUSEBUTTONS && !data->dragging && !inside)
+            _dash_canvas_show_pointer(obj, data, 0);       /* a drag let go out of the area */
         if (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INTUITICKS || im->Class == IDCMP_INACTIVEWINDOW) {
             if (!data->move_id) return 0;
             if (im->Class == IDCMP_INACTIVEWINDOW) inside = FALSE;
@@ -15808,6 +16242,45 @@ static LONG _dash_mui_canvas_pointer(APTR obj, LONG what) {
     return what ? data->ptr_y : data->ptr_x;
 }
 
+/* The window open, the area's event handler takes these events too (and the pointer's moves come) */
+static void _dash_canvas_moves_on(Object *obj, struct _DashCanvas *data, ULONG events) {
+    struct MUI_RenderInfo *mri = _DASH_MRI(obj);
+    if ((data->handler.ehn_Events & events) == events) return;
+    if (data->handler_added) _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
+    data->handler.ehn_Object = obj;
+    data->handler.ehn_Class = _dash_canvas_class->mcc_Class;
+    data->handler.ehn_Events |= events;
+    _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
+    data->handler_added = TRUE;
+    ReportMouse(TRUE, mri->mri_Window);
+}
+
+/* The pointer's shape over the area (Lorraine D16): 0 normal, 1 text, 2 resize left-right, 3 up-down, 4 busy. It
+   changes now if the pointer is over the area (or dragging it), and back and forth as it goes in and out */
+static void _dash_mui_canvas_set_pointer(APTR obj, LONG shape) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    struct MUI_RenderInfo *mri;
+    if (!data) return;
+    data->pointer = shape >= 0 && shape <= 4 ? shape : 0;
+    mri = _DASH_MRI(obj);
+    if (!mri || !mri->mri_Window) return;            /* the window is closed: from MUIM_Setup on */
+    if (data->pointer) _dash_canvas_moves_on(obj, data, IDCMP_MOUSEMOVE);
+    _dash_canvas_show_pointer(obj, data, data->dragging || _dash_mui_canvas_pointer(obj, 2) ? data->pointer : 0);
+}
+
+/* Tab and Shift+Tab over the area are keys (mui_canvas_on_input: 66, with Shift's qualifier), not the window's
+   next and previous gadget (Lorraine D48); away from the area they move between the gadgets as always */
+static void _dash_mui_canvas_take_tab(APTR obj, LONG on) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    struct MUI_RenderInfo *mri;
+    if (!data) return;
+    data->take_tab = on != 0;
+    mri = _DASH_MRI(obj);
+    if (!mri || !mri->mri_Window) return;            /* the window is closed: from MUIM_Setup on */
+    if (on) _dash_canvas_moves_on(obj, data, IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW);
+    _dash_canvas_tab(obj, data, on && _dash_mui_canvas_pointer(obj, 2));
+}
+
 /* Draw it again now (only from the program's own task) */
 static void _dash_mui_canvas_redraw(APTR obj) {
     if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
@@ -15887,6 +16360,10 @@ static void _dash_canvas_cleanup(void) {
     _dash_mui_move_hook = NULL;
     _dash_canvas_nmoves = 0;
     if (_dash_canvas_class) { MUI_DeleteCustomClass(_dash_canvas_class); _dash_canvas_class = NULL; }
+    {
+        LONG i;
+        for (i = 1; i < 4; i++) if (_dash_canvas_ptrs[i]) { DisposeObject(_dash_canvas_ptrs[i]); _dash_canvas_ptrs[i] = NULL; }
+    }
 }
 
 """
@@ -16382,6 +16859,7 @@ _RUNTIME_FLAGS = [
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
+    ("COLLATE_RUNTIME", "uses_collate"),    # Lorraine D7
     ("VERSION_RUNTIME", "uses_version"),    # Trasfondo 0.7: @version
     ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
@@ -16392,6 +16870,7 @@ _RUNTIME_FLAGS = [
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
     ("SIMINPUT_RUNTIME", "uses_siminput"),  # Lorraine D46
+    ("CLIP_RUNTIME", "uses_clip"),          # Lorraine D18
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -16678,6 +17157,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
         self.uses_date: bool = False     # clock_*, date_text (DATE_RUNTIME)
+        self.uses_collate: bool = False  # str_compare_locale (COLLATE_RUNTIME, Lorraine D7)
         self.uses_version: bool = False  # program_version (VERSION_RUNTIME)
         self.version = None              # @version: its C literal
         self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
@@ -16720,6 +17200,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
         self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
         self.uses_siminput: bool = False  # input_key, input_click... (SIMINPUT_RUNTIME, Lorraine D46)
+        self.uses_clip: bool = False      # clip_write_text, clip_read_block... (CLIP_RUNTIME, Lorraine D18)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -16945,6 +17426,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.REGEX_RUNTIME)
         if self.uses_siminput:
             parts.append(CTemplates.SIMINPUT_RUNTIME)
+        if self.uses_clip:
+            parts.append(CTemplates.CLIP_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -17030,6 +17513,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CATALOG_RUNTIME)
         if self.uses_date:
             parts.append(CTemplates.DATE_RUNTIME)
+        if self.uses_collate:
+            parts.append(CTemplates.COLLATE_RUNTIME)
         if self.uses_version:
             parts.append(CTemplates.VERSION_RUNTIME)
         if self.uses_notify:
@@ -19797,6 +20282,10 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
         if self.uses_siminput:
             self.uses_strings = True   # input_active_title makes a text
+        if self.uses_clip:
+            self.uses_utf8 = self.uses_strings = True   # the clip's text is Latin-1, Dash's UTF-8
+        if self.uses_collate:
+            self.uses_date = self.uses_utf8 = True   # the user's locale (DATE_RUNTIME), UTF-8 to Latin-1
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:

@@ -145,6 +145,7 @@ class _Window:
         self.fields = []       # named objects, in order
         self.after = []        # events and settings, after mui_window_end
         self.auto = 0
+        self.context_menus = set()   # names of the window's context menus (Lorraine D15)
 
     def var_for(self, node: dict, needs_var: bool) -> str:
         name = node.get("name")
@@ -168,7 +169,8 @@ class _Window:
             raise DashUIError(f"{self.where}: object without 'type': {node!r}")
         kind = node["type"]
         indent = "    " * depth
-        settings = [k for k in ("weight", "disabled", "hidden", "help") if k in node]
+        settings = [k for k in ("weight", "disabled", "hidden", "help") if k in node] + \
+            (["context_menu"] if node.get("context_menu") else []) + (["take_tab"] if node.get("take_tab") else [])
         events = [k for k in _EVENTS if k in node]
         if kind in _GROUPS:
             builtin, props = _GROUPS[kind]
@@ -191,6 +193,16 @@ class _Window:
             self.after.append(f"    mui_set_visible({var}, false)")
         if node.get("help"):
             self.after.append(f"    mui_help({var}, {_text(node, 'help', '', ids)})")
+        if node.get("take_tab"):   # Tab is a key over the canvas (Lorraine D48)
+            if kind != "canvas":
+                raise DashUIError(f"{self.where}: \"take_tab\" is for a canvas, not a {kind!r}")
+            self.after.append(f"    mui_canvas_take_tab({var}, true)")
+        if node.get("context_menu"):   # ("" is none: the editor's empty field)
+            menu = node["context_menu"]
+            if menu not in self.context_menus:
+                raise DashUIError(f"{self.where}: {kind} has \"context_menu\": {menu!r}, which is not one of the "
+                                  f"window's \"context_menus\"")
+            self.after.append(f"    mui_set_context_menu({var}, _ui_{menu})")
         if kind in _GROUPS:
             for child in node.get("children", []):
                 self.node(child, depth + 1)
@@ -246,6 +258,13 @@ class _Window:
         _check_name(name, "window", self.where)
         win_id = _int(win.get("id", 0), "id", self.where)
         title = _text(win, "title", name, _tr_ids(win, "window", self.where))
+        context = win.get("context_menus", [])
+        if not isinstance(context, list):
+            raise DashUIError(f"{self.where}: \"context_menus\" must be a list of menus")
+        for menu in context:
+            if not isinstance(menu, dict) or not menu.get("name"):
+                raise DashUIError(f"{self.where}: a context menu needs a \"name\" (objects give it as \"context_menu\")")
+            self.context_menus.add(menu["name"])
         self.lines.append(f"    _window = mui_window_begin({title}, {win_id})")
         for menu in win.get("menus", []):
             title = _text(menu, "title", "", _tr_ids(menu, "menu", self.where))
@@ -263,6 +282,13 @@ class _Window:
             else:
                 self.node(root, 2)
         self.lines.append("    mui_window_end()")
+        # context menus (Lorraine D15): of no window; the objects that open them get them in self.after
+        for menu in context:
+            title = _text(menu, "title", "", _tr_ids(menu, "menu", self.where))
+            self.named(menu, "    ", f"mui_context_menu_begin({title})")
+            for item in menu.get("items", []):
+                self.menu_item(item, 2, True)
+            self.lines.append("    mui_menu_end()")
         if "close" in win:
             self.after.append(f"    mui_on_close(_window, {_int(win['close'], 'close', self.where)})")
         if "size" in win:

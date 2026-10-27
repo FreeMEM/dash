@@ -1,0 +1,7 @@
+# expect: "take_tab" is for a canvas
+# (Tab as a key is for a drawing area: Lorraine D48)
+import "../lib/ventana_tab_boton.dashui"
+
+Main
+    v = Mala_create()
+end

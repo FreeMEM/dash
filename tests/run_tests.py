@@ -20,7 +20,7 @@ given; "# no-memcheck" leaves the test out of --memcheck runs). With --emu
 those tests run in FS-UAE (tools/emu_run.py, Kickstart from $DASH_KICKSTART
 or the AROS ROM built into FS-UAE) and their output is compared.
 "# emu-needs: asl.library" runs a test only when $DASH_EMU_SYS has Libs/asl.library
-(or Classes/ for a .class, .gadget or .image; tools/emu_sys_from_hdf.sh extracts them
+(Devs/ for a .device, Classes/ for a .class, .gadget or .image; tools/emu_sys_from_hdf.sh extracts them
 from a Workbench hard file).
 
 Machines (EMU_MACHINES): --emu is an A1200 with Kickstart 3.1, --emu-a500 an A500
@@ -610,7 +610,7 @@ class _EchoServer:
 
 def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -> bool:
     """'# emu-needs: x.library': run only if the Workbench files have it (they are not
-    in the Kickstart ROM): Libs/x.library (or MUI/Libs), or Classes/... for a class, gadget or image."""
+    in the Kickstart ROM): Libs/x.library (or MUI/Libs), Devs/x.device, or Classes/... for a class, gadget or image."""
     needs = emu_needs(test_file)
 
     def found(name):
@@ -618,6 +618,8 @@ def emu_needs_met(test_file: Path, system: Optional[str], prefix: str = "emu") -
             return False
         if name.endswith(".library"):
             return any((Path(system) / d / name).exists() for d in ("Libs", "MUI/Libs", "AmiSSL/Libs"))
+        if name.endswith(".device"):
+            return (Path(system) / "Devs" / name).exists()
         return any(p.name.lower() == name.lower() for p in (Path(system) / "Classes").rglob("*"))
 
     missing = [n for n in needs if not found(n)]

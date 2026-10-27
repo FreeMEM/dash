@@ -1,0 +1,106 @@
+# The pointer's shape over a MUI drawing area (Lorraine D16): text, resize left-right and up-down are sprites of
+# their own, busy the system's; it changes at once with the pointer over the area, goes back to normal outside it
+# and comes back on entering again. The program moves the pointer with input_move (Lorraine D46) and reads the
+# first row of the pointer's sprite (plane 0, plane 1) from graphics.library.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_canvas_set_pointer(
+# expect-out: fuera: normal
+# expect-out: texto: ee00 ee00
+# expect-out: ancho: 0280 0380
+# expect-out: alto: 0800 0800
+# expect-out: fuera: normal
+# expect-out: dentro otra vez: 0800 0800
+# expect-out: ocupado: otro
+# expect-out: normal: normal
+# expect-out: fin
+
+const PASO = 99
+
+# The first row of the pointer's sprite: plane 0, plane 1 (AGA keeps 16 pixels a row for a 16-pixel pointer)
+@native func fila() -> String
+"""
+    static char buf[16];
+    struct SimpleSprite *ss = ((struct GfxBase *)GfxBase)->SimpleSprites[0];
+    UWORD *d = ss ? ss->posctldata : NULL;
+    if (!d) return (STRPTR)"-";
+    sprintf(buf, "%04x %04x", d[2], d[3]);
+    return (STRPTR)buf;
+"""
+end
+
+@native func izq(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_LeftEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+@native func arr(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_TopEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+func dibuja(x: Int, y: Int, w: Int, h: Int)
+end
+
+Main
+    if mui_app_begin("Puntero", "DASHPTR") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Puntero", 0)
+        c = mui_canvas(200, 100)
+        mui_canvas_on_draw(c, dibuja)
+        mui_window_end()
+        mui_window_open(win)
+        normal = ""
+        paso = 0
+        mui_timer(500, PASO)
+        ev = 0
+        while ev != -1 and paso < 9
+            ev = mui_wait_event()
+            if ev == PASO
+                paso = paso + 1
+                f = fila()
+                if f == normal
+                    f = "normal"
+                end
+                if paso == 1
+                    normal = fila()
+                    Print "fuera: normal"
+                    input_move(izq(c) + 50, arr(c) + 50)
+                    mui_canvas_set_pointer(c, 1)
+                elif paso == 2
+                    Print "texto: #{f}"
+                    mui_canvas_set_pointer(c, 2)
+                elif paso == 3
+                    Print "ancho: #{f}"
+                    mui_canvas_set_pointer(c, 3)
+                elif paso == 4
+                    Print "alto: #{f}"
+                    input_move(izq(c) + 50, 2)          # the title bar
+                elif paso == 5
+                    Print "fuera: #{f}"
+                    input_move(izq(c) + 60, arr(c) + 40)
+                elif paso == 6
+                    Print "dentro otra vez: #{f}"
+                    mui_canvas_set_pointer(c, 4)
+                elif paso == 7
+                    if f != "normal" and f != "0800 0800"
+                        f = "otro"
+                    end
+                    Print "ocupado: #{f}"
+                    mui_canvas_set_pointer(c, 0)
+                elif paso == 8
+                    Print "normal: #{f}"
+                end
+                mui_timer(500, PASO)
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

@@ -335,14 +335,26 @@
         box.append(el('button', { id: 'delete', onclick: deleteSelected }, 'Borrar'));
     }
 
+    // The menu bar (w.menus) and the context menus (w.context_menus, Lorraine D15: with a name, which objects
+    // give as "context_menu")
     function renderMenus(w) {
         const box = el('div', { class: 'menus' });
-        (w.menus || []).forEach((m, mi) => {
-            box.append(el('div', { class: 'prop' }, el('label', {}, 'menú'),
+        renderMenuList(box, w, 'menus');
+        renderMenuList(box, w, 'context_menus');
+        return box;
+    }
+
+    function renderMenuList(box, w, key) {
+        const context = key === 'context_menus';
+        (w[key] || []).forEach((m, mi) => {
+            box.append(el('div', { class: 'prop' }, el('label', {}, context ? 'contextual' : 'menú'),
+                context ? el('input', { class: 'key', value: m.name || '', placeholder: 'nombre',
+                                        'aria-label': `Nombre del menú contextual ${mi + 1}`,
+                                        onchange: (e) => { m.name = e.target.value; commit(); } }) : null,
                 el('input', { value: m.title || '', 'aria-label': `Título del menú ${mi + 1}`,
                               onchange: (e) => { m.title = e.target.value; commit(); } }),
                 el('button', { title: 'Quitar el menú', 'aria-label': `Quitar el menú ${m.title || mi + 1}`,
-                               onclick: () => { w.menus.splice(mi, 1); commit(); } }, '×')));
+                               onclick: () => { w[key].splice(mi, 1); commit(); } }, '×')));
             (m.items || []).forEach((it, ii) => {
                 if (it.submenu !== undefined) {   // (Lorraine D47: its items are edited as text for now)
                     box.append(el('div', { class: 'prop item' },
@@ -374,8 +386,17 @@
                 el('button', { onclick: () => { (m.items = m.items || []).push({ label: 'Opción', key: '', event: 0 }); commit(); } }, '+ opción'),
                 el('button', { onclick: () => { (m.items = m.items || []).push({ separator: true }); commit(); } }, '+ separador')));
         });
-        box.append(el('button', { id: 'add-menu', onclick: () => { (w.menus = w.menus || []).push({ title: 'Menú', items: [] }); commit(); } }, '+ menú'));
-        return box;
+        if (context)
+            box.append(el('button', { id: 'add-context-menu', title: 'Un menú del botón derecho: un objeto lo abre con "context_menu"',
+                onclick: () => {
+                    const taken = new Set((w.context_menus || []).map((m) => m.name));
+                    let i = 1;
+                    while (taken.has(`menu_contextual${i}`)) i++;
+                    (w.context_menus = w.context_menus || []).push({ name: `menu_contextual${i}`, title: 'Menú', items: [] });
+                    commit();
+                } }, '+ menú contextual'));
+        else
+            box.append(el('button', { id: 'add-menu', onclick: () => { (w.menus = w.menus || []).push({ title: 'Menú', items: [] }); commit(); } }, '+ menú'));
     }
 
     // --- windows, preview, problems ------------------------------------------------
