@@ -3672,6 +3672,14 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_input(${canvas}, 4)",
         description="Raw key code of the last input, -1 if it was not a key"
     ),
+    "mui_canvas_qualifiers": BuiltinFunc(
+        name="mui_canvas_qualifiers",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 5)",
+        description="Keys held at the last key, click or wheel: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up "
+                    "(Shift + Ctrl = 3); q & 1 tells Shift"
+    ),
     "mui_canvas_char": BuiltinFunc(
         name="mui_canvas_char",
         params=["canvas"],

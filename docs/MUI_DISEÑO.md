@@ -141,6 +141,7 @@ Tras un evento de `mui_canvas_on_input`, lo que pasó (posición relativa a la e
 | `mui_canvas_wheel(c)` | +1 / -1 si fue la rueda (arriba / abajo), si no 0. |
 | `mui_canvas_key(c)` | Código de la tecla (raw), -1 si no fue una tecla. |
 | `mui_canvas_char(c) -> String` | El carácter de esa tecla, con mayúsculas y el mapa de teclado (`""` si no hay). |
+| `mui_canvas_qualifiers(c)` | Teclas pulsadas en la última entrada (tecla, clic, rueda): 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, sumadas. |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Posición del puntero ahora (con clic o sin él). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Si el puntero está ahora sobre la zona. |
 

@@ -14520,7 +14520,7 @@ struct _DashCanvas {
     BOOL ptr_in, ptr_known;         /* inside the area then; seen at all */
     LONG mouse_x, mouse_y;          /* relative to the area */
     LONG button, wheel, key;        /* last input: 1 = left click; +1/-1; raw key code */
-    UWORD qual;                     /* the key's qualifiers (shift...) and dead-key data, for */
+    UWORD qual;                     /* the qualifiers (shift...) of the last input, and a key's dead-key data, for */
     APTR prev;                      /* mui_canvas_char (dashweb D31) */
     struct MUI_EventHandlerNode handler;
     BOOL handler_added;
@@ -14754,10 +14754,12 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
             data->mouse_x = x; data->mouse_y = y;
             data->button = 1; data->wheel = 0; data->key = -1;
+            data->qual = im->Qualifier;      /* Shift + click (Lorraine D11) */
         } else if (im->Class == IDCMP_RAWKEY && (im->Code == 0x7A || im->Code == 0x7B)) {
             if (!inside) return 0;           /* the wheel (NM_WHEEL_UP/DOWN) over the area */
             data->mouse_x = x; data->mouse_y = y;
             data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
+            data->qual = im->Qualifier;
         } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
             data->button = 0; data->wheel = 0; data->key = im->Code;
             data->qual = im->Qualifier;
@@ -14890,6 +14892,11 @@ static LONG _dash_mui_canvas_input(APTR obj, LONG what) {
     case 2: return data->button;
     case 3: return data->wheel;
     case 4: return data->key;
+    case 5:                                  /* the qualifiers (Lorraine D11): 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga */
+        return ((data->qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) ? 1 : 0)
+             | ((data->qual & IEQUALIFIER_CONTROL) ? 2 : 0)
+             | ((data->qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? 4 : 0)
+             | ((data->qual & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) ? 8 : 0);
     }
     return 0;
 }

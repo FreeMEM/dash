@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 659 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 660 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -3306,6 +3306,7 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_canvas_on_input(zona, id)` | Event on a click, the wheel or a key over the area (before opening the window). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | The last input: position inside the area, 1 if it was a click, +1/-1 the wheel, key code (-1 if it was not a key). |
 | `mui_canvas_char(z)` | The character for that key, with Shift and the keymap (`"A"`, `"ñ"`; `""` if it gives none; Backspace gives code 8). |
+| `mui_canvas_qualifiers(z)` | The keys held at the last key, click or wheel turn, added up: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` tells Shift). Amiga + click does not arrive: the system keeps it. |
 | `mui_canvas_on_move(zona, id)` | Event when the mouse moves over the area, without a click, and when it leaves it (before opening the window). Movements that arrive before the program picks one up count as one; it does not delay clicks. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Where the mouse is now, from the corner of the area, and whether it is inside it; whether or not there was a click. |
 | `mui_scrollbar(vertical)` | Scroll bar; its value is the first visible line. |
@@ -4283,8 +4284,8 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 85 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **659** | |
+| MUI | 86 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **660** | |
 
 ### Standard Amiga Colors
 

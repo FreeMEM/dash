@@ -141,6 +141,7 @@ After a `mui_canvas_on_input` event, what happened (position relative to the cor
 | `mui_canvas_wheel(c)` | +1 / -1 if it was the wheel (up / down), otherwise 0. |
 | `mui_canvas_key(c)` | Key code (raw), -1 if it was not a key. |
 | `mui_canvas_char(c) -> String` | The character for that key, with Shift and the keymap applied (`""` if there is none). |
+| `mui_canvas_qualifiers(c)` | Keys held at the last input (key, click, wheel): 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up. |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Current pointer position (with or without a click). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Whether the pointer is currently over the area. |
 
