@@ -106,8 +106,23 @@ class CTemplates:
 #include <proto/dos.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stabs.h>
 
 static void _dash_exit(int code);
+
+/* What runs when the program ends, however it ends (libnix's exit list), last in first: libnix's atexit
+   takes its nodes from malloc, whose first block is 16 KB of memory for the whole program */
+static void (*_dash_atexit_f[16])(void);
+static LONG _dash_atexit_n = 0;
+static int _dash_atexit(void (*f)(void)) {
+    if (_dash_atexit_n >= 16) return -1;
+    _dash_atexit_f[_dash_atexit_n++] = f;
+    return 0;
+}
+void _dash_atexit_run(void) {
+    while (_dash_atexit_n > 0) _dash_atexit_f[--_dash_atexit_n]();
+}
+ADD2EXIT(_dash_atexit_run, 0);
 
 /* A runtime error that stops the program: the message (and the file:line of the Dash statement, if
    known), then the same cleanup as a normal end (windows, libraries, memory), with return code 20.
@@ -290,7 +305,7 @@ static void _dash_trap_on(void) {
     _dash_trap_usp = (ULONG)&_dash_trap_stack[2048 - 4];
     _dash_trap_old = t->tc_TrapCode;
     t->tc_TrapCode = (APTR)_dash_trap;
-    atexit(_dash_trap_off);
+    _dash_atexit(_dash_trap_off);
 }
 
 /* Where pc is in the program: its hunk (segment) and offset, from the process's segment list */
@@ -3196,7 +3211,7 @@ static BOOL _dash_single_instance(STRPTR name) {
     }
     Permit();
     if (!port) FreeVec(copy);
-    if (!at_exit) at_exit = atexit(_dash_instance_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_instance_cleanup) == 0;
     return TRUE;
 }
 
@@ -3328,7 +3343,7 @@ static void _dash_cx_cleanup(void) {
 
 static void _dash_cx_at_exit(void) {
     static BOOL at_exit = FALSE;
-    if (!at_exit) at_exit = atexit(_dash_cx_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_cx_cleanup) == 0;
 }
 
 /* The program in Exchange as a commodity with show and hide (COF_SHOW_HIDE), enabled; FALSE without
@@ -3623,7 +3638,7 @@ static BOOL _dash_disk_answered(APTR arg) {
 static void _dash_meter_cleanup(void);
 static void _dash_meter_at_exit(void) {
     static BOOL at_exit = FALSE;
-    if (!at_exit) at_exit = atexit(_dash_meter_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_meter_cleanup) == 0;
 }
 
 /* The mounted volumes (with a disk in, their handler running): how many. Each one's size and free space,
@@ -4298,7 +4313,7 @@ static void _dash_mc_cleanup(void) {
 static BOOL _dash_mc_on(void) {
     static BOOL at_exit = FALSE;
     if (_dash_mc_io) return TRUE;
-    if (!at_exit) at_exit = atexit(_dash_mc_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_mc_cleanup) == 0;
     if (!(_dash_mc_port = CreateMsgPort())) return FALSE;
     if (!(_dash_mc_io = (struct IOStdReq *)CreateIORequest(_dash_mc_port, sizeof(struct IOStdReq))) ||
         OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)_dash_mc_io, 0)) {
@@ -4376,7 +4391,7 @@ static BOOL _dash_mouse_prefs_accel(void) {
 static void _dash_mouse_prefs_set(LONG ticks, BOOL accel) {
     struct Preferences p;
     static BOOL at_exit = FALSE;
-    if (!at_exit) at_exit = atexit(_dash_mc_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_mc_cleanup) == 0;
     GetPrefs(&p, sizeof(p));
     if (!_dash_mc_prefs_saved) { _dash_mc_prefs = p; _dash_mc_prefs_saved = TRUE; }
     p.PointerTicks = (UWORD)(ticks < 1 ? 1 : ticks);
@@ -4638,7 +4653,7 @@ static BOOL _dash_catalog_open_v(STRPTR name, LONG version, STRPTR builtin) {
     LONG i, k;
     BOOL found = FALSE;
     _dash_catalog_tried = TRUE;
-    if (!at_exit) at_exit = atexit(_dash_catalog_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_catalog_cleanup) == 0;
     _dash_catalog_cleanup();
     if (!name || !*name || strlen((char *)name) > 100) return FALSE;
     if (!_dash_locale_open() || !(loc = OpenLocale(NULL))) return FALSE;
@@ -4928,7 +4943,7 @@ static LONG _dash_file_notify(STRPTR path) {
     if (!path || !*path) return 0;
     for (h = 1; h <= _DASH_NOTIFY_MAX && _dash_notify[h]; h++) ;
     if (h > _DASH_NOTIFY_MAX) return 0;
-    if (!at_exit) at_exit = atexit(_dash_notify_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_notify_cleanup) == 0;
     if (!_dash_notify_port) {
         if (!(_dash_notify_port = CreateMsgPort())) return 0;
         _dash_wake_extra |= 1UL << _dash_notify_port->mp_SigBit;
@@ -5042,7 +5057,7 @@ static void _dash_dos_requesters(BOOL on) {
     _dash_dosreq_saved = me->pr_WindowPtr;
     me->pr_WindowPtr = (APTR)-1;
     _dash_dosreq_off = TRUE;
-    if (!at_exit) at_exit = atexit(_dash_dosreq_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_dosreq_cleanup) == 0;
 }
 
 """
@@ -6358,7 +6373,7 @@ static BOOL _dash_cpu_start(void) {
     if (_dash_cpu_on) return TRUE;
     _dash_time_init();
     if (!_dash_time_freq || SysBase->LibNode.lib_Version < 37) return FALSE;
-    if (!at_exit) at_exit = atexit(_dash_cpu_stop) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_cpu_stop) == 0;
     memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
     _dash_cpu_used = 0;
     _dash_cpu_n = _dash_cpu_sum = 0;
@@ -10533,7 +10548,7 @@ static APTR _dash_desk_canvas(LONG x, LONG y, LONG w, LONG h) {
     LONG depth, i, dw, dh;
     BOOL ok;
     if (w <= 0 || h <= 0 || GfxBase->LibNode.lib_Version < 39) return NULL;
-    if (!at_exit) at_exit = atexit(_dash_desk_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_desk_cleanup) == 0;
     if (!_dash_desk_scr && !(_dash_desk_scr = LockPubScreen((CONST_STRPTR)"Workbench"))) return NULL;
     sbm = _dash_desk_scr->RastPort.BitMap;
     depth = GetBitMapAttr(sbm, BMA_DEPTH);
