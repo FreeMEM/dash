@@ -3637,6 +3637,15 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_pointer(${canvas}, 2)",
         description="True if the pointer is over the area now"
     ),
+    "mui_canvas_set_pointer": BuiltinFunc(
+        name="mui_canvas_set_pointer",
+        params=["canvas", "shape"],
+        return_type="void",
+        c_template="_dash_mui_canvas_set_pointer(${canvas}, ${shape})",
+        description="The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, "
+                    "4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to "
+                    "normal outside it (Lorraine D16)"
+    ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
         params=["canvas"],

@@ -94,6 +94,67 @@ static void _dash_brief_socket_close(struct Library *SocketBase, ULONG brk) {
 """
 
 
+# The canvas's own pointers (Lorraine D16): Intuition 3.1 and 3.2 have no text or resize pointers (WA_PointerType
+# is OS4's), so they are sprites made with pointerclass. ". " clear, "#" pen 2 (dark), "o" pen 3 (light).
+_POINTER_TEXT = """\
+ooo.ooo
+o##o##o
+ooo#ooo
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+..o#o..
+ooo#ooo
+o##o##o
+ooo.ooo"""
+_POINTER_WE = """\
+......o#o......
+...o..o#o..o...
+..o#o.o#o.o#o..
+.o##ooo#ooo##o.
+o#############o
+.o##ooo#ooo##o.
+..o#o.o#o.o#o..
+...o..o#o..o...
+......o#o......"""
+# shape -> (drawing, hotspot x, hotspot y); 2 and 3 are the same arrows, turned
+_POINTER_SHAPES = {
+    1: (_POINTER_TEXT, 3, 7),
+    2: (_POINTER_WE, 7, 4),
+    3: ("\n".join("".join(row[i] for row in _POINTER_WE.split("\n")) for i in range(15)), 4, 7),
+}
+
+
+def _pointer_shapes_c() -> str:
+    """C arrays of the pointers: for each, the h words of plane 0, then the h of plane 1 (one word a row)."""
+    out = []
+    for shape, (art, _x, _y) in sorted(_POINTER_SHAPES.items()):
+        rows = art.split("\n")
+        planes = [[], []]
+        for row in rows:
+            p0 = p1 = 0
+            for c, ch in enumerate(row):
+                bit = 0x8000 >> c
+                if ch in "o":
+                    p0 |= bit
+                if ch in "#o":
+                    p1 |= bit
+            planes[0].append(p0)
+            planes[1].append(p1)
+        words = ", ".join(f"0x{w:04X}" for w in planes[0] + planes[1])
+        out.append(f"static const UWORD _dash_ptr_{shape}[] = {{ {words} }};\n")
+    out.append("static const struct { const UWORD *data; WORD h, x, y; } _dash_ptr_shapes[4] = {\n    { NULL, 0, 0, 0 },\n")
+    for shape, (art, x, y) in sorted(_POINTER_SHAPES.items()):
+        out.append(f"    {{ _dash_ptr_{shape}, {len(art.split(chr(10)))}, {x}, {y} }},\n")
+    out.append("};\n")
+    return "".join(out)
+
+
 class CTemplates:
     """Templates for generating C code."""
 
@@ -15634,6 +15695,7 @@ static LONG _dash_mui_signals(void) {
 #define _DASH_MHEIGHT(obj) (_DASH_MAD(obj)->mad_Box.Height - _DASH_MAD(obj)->mad_subheight)
 
 #include <proto/layers.h>    /* the buffer's layer (mui_canvas_buffered) */
+#include <intuition/pointerclass.h>
 
 struct _DashCanvas {
     APTR draw;                      /* Dash function (x, y, width, height) or NULL */
@@ -15661,7 +15723,39 @@ struct _DashCanvas {
     LONG bw, bh;
     BOOL area;                      /* mui_canvas_update_area: only this zone (ax, ay from the corner; D67) */
     LONG ax, ay, aw, ah;
+    LONG pointer;                   /* mui_canvas_set_pointer: the shape over the area (Lorraine D16) */
+    LONG shown;                     /* the shape the window has now (0: its own) */
 };
+
+/* The pointer over the area (Lorraine D16): 1 text, 2 resize left-right, 3 up-down are sprites of their own
+   (pointerclass, made the first time), 4 the system's busy one; 0 the window's own */
+""" + _pointer_shapes_c() + """static Object *_dash_canvas_ptrs[4];
+static struct BitMap _dash_canvas_ptr_bm[4];
+
+static void _dash_canvas_show_pointer(Object *obj, struct _DashCanvas *data, LONG shape) {
+    struct Window *win = _DASH_MRI(obj) ? _DASH_MRI(obj)->mri_Window : NULL;
+    ULONG tags[3] = { TAG_DONE, 0, TAG_DONE };
+    if (!win || shape == data->shown) return;
+    if (shape >= 1 && shape <= 3) {
+        if (!_dash_canvas_ptrs[shape]) {
+            struct BitMap *bm = &_dash_canvas_ptr_bm[shape];
+            ULONG ptags[] = { POINTERA_BitMap, (ULONG)bm, POINTERA_XOffset, (ULONG)-_dash_ptr_shapes[shape].x,
+                              POINTERA_YOffset, (ULONG)-_dash_ptr_shapes[shape].y, POINTERA_WordWidth, 1,
+                              POINTERA_XResolution, POINTERXRESN_SCREENRES,
+                              POINTERA_YResolution, POINTERYRESN_SCREENRESASPECT, TAG_DONE };
+            InitBitMap(bm, 2, 16, _dash_ptr_shapes[shape].h);
+            bm->Planes[0] = (PLANEPTR)_dash_ptr_shapes[shape].data;
+            bm->Planes[1] = (PLANEPTR)(_dash_ptr_shapes[shape].data + _dash_ptr_shapes[shape].h);
+            _dash_canvas_ptrs[shape] = (Object *)NewObjectA(NULL, (CONST_STRPTR)"pointerclass", (struct TagItem *)ptags);
+        }
+        if (!_dash_canvas_ptrs[shape]) shape = 0;
+        else { tags[0] = WA_Pointer; tags[1] = (ULONG)_dash_canvas_ptrs[shape]; }
+    } else if (shape == 4) {
+        tags[0] = WA_BusyPointer; tags[1] = TRUE;
+    }
+    SetWindowPointerA(win, (struct TagItem *)tags);
+    data->shown = shape;
+}
 
 static struct MUI_CustomClass *_dash_canvas_class = NULL;
 
@@ -15836,14 +15930,15 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Setup:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->input_id || data->move_id || data->drag_id) {
+        if (data->input_id || data->move_id || data->drag_id || data->pointer) {
             data->handler.ehn_Object = obj;
             data->handler.ehn_Class = cl;
             /* moves: MOUSEMOVE (with the window's ReportMouse, at MUIM_Show), and the ticks (10 a second) in case
                something turns ReportMouse off; leaving the window (inactive) is leaving the area */
             data->handler.ehn_Events = (data->input_id ? IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY : 0) |
                 (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0) |
-                (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
+                (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0) |
+                (data->pointer ? IDCMP_MOUSEMOVE : 0);
             data->handler.ehn_Priority = 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
@@ -15863,11 +15958,13 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Show:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if ((data->move_id || data->drag_id) && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
+        if ((data->move_id || data->drag_id || data->pointer) && _DASH_MRI(obj)->mri_Window)
+            ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
         _dash_canvas_unbuffer(data);   /* the next screen may be another one */
+        data->shown = 0;               /* the window's pointer goes with it */
         if (data->handler_added) {
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
             data->handler_added = FALSE;
@@ -15907,6 +16004,10 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
                 _dash_canvas_moved(data->drag_id);
             }
         }
+        if (data->pointer && im->Class == IDCMP_MOUSEMOVE)
+            _dash_canvas_show_pointer(obj, data, inside || data->dragging ? data->pointer : 0);
+        else if (data->shown && im->Class == IDCMP_MOUSEBUTTONS && !data->dragging && !inside)
+            _dash_canvas_show_pointer(obj, data, 0);       /* a drag let go out of the area */
         if (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INTUITICKS || im->Class == IDCMP_INACTIVEWINDOW) {
             if (!data->move_id) return 0;
             if (im->Class == IDCMP_INACTIVEWINDOW) inside = FALSE;
@@ -16019,6 +16120,27 @@ static LONG _dash_mui_canvas_pointer(APTR obj, LONG what) {
     return what ? data->ptr_y : data->ptr_x;
 }
 
+/* The pointer's shape over the area (Lorraine D16): 0 normal, 1 text, 2 resize left-right, 3 up-down, 4 busy. It
+   changes now if the pointer is over the area (or dragging it), and back and forth as it goes in and out */
+static void _dash_mui_canvas_set_pointer(APTR obj, LONG shape) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    struct MUI_RenderInfo *mri;
+    if (!data) return;
+    data->pointer = shape >= 0 && shape <= 4 ? shape : 0;
+    mri = _DASH_MRI(obj);
+    if (!mri || !mri->mri_Window) return;            /* the window is closed: from MUIM_Setup on */
+    if (data->pointer && !(data->handler.ehn_Events & IDCMP_MOUSEMOVE)) {
+        if (data->handler_added) _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
+        data->handler.ehn_Object = obj;
+        data->handler.ehn_Class = _dash_canvas_class->mcc_Class;
+        data->handler.ehn_Events |= IDCMP_MOUSEMOVE;
+        _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
+        data->handler_added = TRUE;
+        ReportMouse(TRUE, mri->mri_Window);
+    }
+    _dash_canvas_show_pointer(obj, data, data->dragging || _dash_mui_canvas_pointer(obj, 2) ? data->pointer : 0);
+}
+
 /* Draw it again now (only from the program's own task) */
 static void _dash_mui_canvas_redraw(APTR obj) {
     if (_dash_canvas_data(obj)) MUI_Redraw(obj, MADF_DRAWOBJECT);
@@ -16098,6 +16220,10 @@ static void _dash_canvas_cleanup(void) {
     _dash_mui_move_hook = NULL;
     _dash_canvas_nmoves = 0;
     if (_dash_canvas_class) { MUI_DeleteCustomClass(_dash_canvas_class); _dash_canvas_class = NULL; }
+    {
+        LONG i;
+        for (i = 1; i < 4; i++) if (_dash_canvas_ptrs[i]) { DisposeObject(_dash_canvas_ptrs[i]); _dash_canvas_ptrs[i] = NULL; }
+    }
 }
 
 """

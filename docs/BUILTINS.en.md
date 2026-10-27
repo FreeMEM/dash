@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 680 functions, 680 implemented, 0 not implemented.
+Total: 681 functions, 681 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -817,6 +817,7 @@ Total: 680 functions, 680 implemented, 0 not implemented.
 | `mui_canvas_pointer_x(canvas)` | `LONG` | X of the pointer now, from the area's left edge (clicked or not) |  |
 | `mui_canvas_pointer_y(canvas)` | `LONG` | Y of the pointer now, from the area's top edge (clicked or not) |  |
 | `mui_canvas_pointer_inside(canvas)` | `BOOL` | True if the pointer is over the area now |  |
+| `mui_canvas_set_pointer(canvas, shape)` | `void` | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 resize up-down, 4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to normal outside it (Lorraine D16) |  |
 | `mui_canvas_mouse_x(canvas)` | `LONG` | X of the last click or wheel, from the area's left edge |  |
 | `mui_canvas_mouse_y(canvas)` | `LONG` | Y of the last click or wheel, from the area's top edge |  |
 | `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |

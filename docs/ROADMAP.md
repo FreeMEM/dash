@@ -1007,7 +1007,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Interfaces: `interface Orden ... end`, `struct X: Orden`; métodos por una tabla en `_DashType`, sin
       memoria por objeto (D43)
 - [x] Portapapeles: texto (IFF FTXT) con los demás programas y un bloque propio en otra unidad (D18)
-- [x] 680 builtins (90 de MUI); 447 resultados sin emulador; 34 ejemplos
+- [x] MUI: forma del puntero sobre el lienzo (texto, ancho, alto, ocupado) con sprites propios (D16)
+- [x] 681 builtins (91 de MUI); 448 resultados sin emulador; 34 ejemplos
 
 ## Notas y Decisiones
 

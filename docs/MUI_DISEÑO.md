@@ -147,6 +147,7 @@ Tras un evento de `mui_canvas_on_input`, lo que pasó (posición relativa a la e
 | `mui_canvas_on_drag(c, id)`, `mui_canvas_drag(c)` | Arrastrar: evento al mover con el botón pulsado (1) y al soltar (2). |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Posición del puntero ahora (con clic o sin él). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Si el puntero está ahora sobre la zona. |
+| `mui_canvas_set_pointer(c, forma)` | La forma del puntero sobre la zona: 0 normal, 1 texto (I), 2 cambiar de tamaño a izquierda y derecha, 3 arriba y abajo, 4 ocupado. Cambia ya si el puntero está encima (o arrastrando la zona) y vuelve a la normal fuera de ella. 1-3 son sprites propios: Intuition 3.1 y 3.2 no los tiene. |
 
 La clase propia (`MUI_CreateCustomClass` sobre `Area`) implementa `MUIM_AskMinMax`, `MUIM_Draw`, `MUIM_Setup`/
 `MUIM_Cleanup` (manejador de eventos con `MUIM_Window_AddEventHandler`) y `MUIM_HandleEvent`. El desplazamiento lo

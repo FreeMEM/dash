@@ -3373,6 +3373,7 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_canvas_on_drag(area, id)`, `mui_canvas_drag(z)` | Event `id` while dragging (moving with the left button down after pressing it on the area) and once more when let go; `mui_canvas_drag` says which: 1 moving, 2 let go. `mui_canvas_mouse_x/_y` give the position, also out of the area. Moves are gathered: one comes each time the program asks. A click without moving is no drag (it only gives its `mui_canvas_on_input` event). Before opening the window. |
 | `mui_canvas_on_move(zona, id)` | Event when the mouse moves over the area, without a click, and when it leaves it (before opening the window). Movements that arrive before the program picks one up count as one; it does not delay clicks. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Where the mouse is now, from the corner of the area, and whether it is inside it; whether or not there was a click. |
+| `mui_canvas_set_pointer(z, shape)` | The pointer's shape over the area: 0 normal, 1 text, 2 width (left-right), 3 height (up-down), 4 busy; outside the area it goes back to normal. For the edge of a column header. |
 | `mui_scrollbar(vertical)` | Scroll bar; its value is the first visible line. |
 | `mui_image(fichero)` | Image from a file via datatypes: ILBM always; PNG, JPEG, GIF and BMP if their datatypes are installed (AmigaOS 3.2 includes them). `mui_set_text` changes the file. |
 | `mui_image_button(fichero)` | Button with an image (a toolbar icon): the frame and background of MUI's image buttons; it is pressed like a button (`mui_on_press`) and `mui_set_text` changes the image. |
@@ -4411,8 +4412,8 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **680** | |
+| MUI | 91 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **681** | |
 
 ### Standard Amiga Colors
 

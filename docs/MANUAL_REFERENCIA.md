@@ -3373,6 +3373,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_on_drag(zona, id)`, `mui_canvas_drag(z)` | Evento `id` al arrastrar (mover con el botón izquierdo pulsado después de pulsarlo en la zona) y otro al soltar; `mui_canvas_drag` dice cuál: 1 moviendo, 2 soltado. `mui_canvas_mouse_x/_y` dan la posición, también fuera de la zona. Los movimientos se juntan: llega uno por cada vez que el programa pregunta. Un clic sin mover no es arrastre (solo da su evento de `mui_canvas_on_input`). Antes de abrir la ventana. |
 | `mui_canvas_on_move(zona, id)` | Evento cuando el ratón se mueve sobre la zona, sin clic, y cuando sale de ella (antes de abrir la ventana). Los movimientos que llegan antes de que el programa recoja uno cuentan como uno; no retrasa los clics. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Dónde está el ratón ahora, desde la esquina de la zona, y si está dentro de ella; valga o no un clic. |
+| `mui_canvas_set_pointer(z, forma)` | La forma del puntero sobre la zona: 0 normal, 1 texto, 2 ancho (izquierda y derecha), 3 alto (arriba y abajo), 4 ocupado; fuera de la zona vuelve a la normal. Para el borde de una cabecera de columna. |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
 | `mui_image(fichero)` | Imagen de un fichero por datatypes: ILBM siempre; PNG, JPEG, GIF y BMP si están sus datatypes (AmigaOS 3.2 los trae). `mui_set_text` cambia el fichero. |
 | `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |
@@ -4411,8 +4412,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **680** | |
+| MUI | 91 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **681** | |
 
 ### Colores Estandar Amiga
 

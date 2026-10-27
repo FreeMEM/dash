@@ -147,6 +147,7 @@ After a `mui_canvas_on_input` event, what happened (position relative to the cor
 | `mui_canvas_on_drag(c, id)`, `mui_canvas_drag(c)` | Dragging: event when moving with the button down (1) and when let go (2). |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Current pointer position (with or without a click). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Whether the pointer is currently over the area. |
+| `mui_canvas_set_pointer(c, shape)` | The pointer's shape over the area: 0 normal, 1 text (I), 2 resize left-right, 3 up-down, 4 busy. It changes at once if the pointer is over it (or dragging the area) and goes back to normal outside it. 1-3 are sprites of their own: Intuition 3.1 and 3.2 lack them. |
 
 The custom class (`MUI_CreateCustomClass` on top of `Area`) implements `MUIM_AskMinMax`, `MUIM_Draw`, `MUIM_Setup`/
 `MUIM_Cleanup` (event handler with `MUIM_Window_AddEventHandler`) and `MUIM_HandleEvent`. Scrolling is
