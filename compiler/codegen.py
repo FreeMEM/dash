@@ -18805,6 +18805,8 @@ static {ret_type} {method_name}({params_str}) {{
             field = self._field_of(node)
             return bool(field and field.field_type == "String")
         elif isinstance(node, MethodCall):
+            if node.method == "pop" and self._is_list_method(node):
+                return self._array_elem_type(node.object) == "string"    # "(" + pila.pop() + ")"
             method = self._method_of(node)
             return bool(method and self._method_c_type(method) == "STRPTR")
         return False
@@ -19089,7 +19091,8 @@ static {ret_type} {method_name}({params_str}) {{
         if isinstance(node, VarRef) and (self.var_types.get(node.name) or "").startswith("array"):
             return code
         if self._infer_c_type(node) == "DashArrayLong *":
-            return code
+            # a builtin's list comes cast to LONG: for x in str_split(s, ",")
+            return "(DashArrayLong *)" + code[6:] if code.startswith("(LONG)") else code
         return f"((DashArrayLong *){code})"
 
     def _is_string_array(self, node: ASTNode) -> bool:
