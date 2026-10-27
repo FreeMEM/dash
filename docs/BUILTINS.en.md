@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 660 functions, 660 implemented, 0 not implemented.
+Total: 662 functions, 662 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -791,6 +791,8 @@ Total: 660 functions, 660 implemented, 0 not implemented.
 | `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |
 | `mui_canvas_wheel(canvas)` | `LONG` | +1 / -1 if the last input was the mouse wheel (up/down), else 0 |  |
 | `mui_canvas_key(canvas)` | `LONG` | Raw key code of the last input, -1 if it was not a key |  |
+| `mui_canvas_on_drag(canvas, id)` | `void` | Event id when the area is dragged (moved with the left button down after pressing it on the area) and when it is let go; mui_canvas_drag says which, mui_canvas_mouse_x/y where (maybe out of the area). Call before opening the window |  |
+| `mui_canvas_drag(canvas)` | `LONG` | The last drag event: 1 moving with the button down, 2 let go (0 before any) |  |
 | `mui_canvas_qualifiers(canvas)` | `LONG` | Keys held at the last key, click or wheel: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up (Shift + Ctrl = 3); q & 1 tells Shift |  |
 | `mui_canvas_char(canvas)` | `STRPTR` | Character of the last key in the area, with shift and the keymap ("" if none; dashweb D31) |  |
 | `mui_scrollbar(vertical)` | `APTR` | Scrollbar; its value is the first line shown |  |

@@ -3672,6 +3672,22 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_canvas_input(${canvas}, 4)",
         description="Raw key code of the last input, -1 if it was not a key"
     ),
+    "mui_canvas_on_drag": BuiltinFunc(
+        name="mui_canvas_on_drag",
+        params=["canvas", "id"],
+        return_type="void",
+        c_template="_dash_mui_canvas_on_drag(${canvas}, ${id})",
+        description="Event id when the area is dragged (moved with the left button down after pressing it on the "
+                    "area) and when it is let go; mui_canvas_drag says which, mui_canvas_mouse_x/y where (maybe out "
+                    "of the area). Call before opening the window"
+    ),
+    "mui_canvas_drag": BuiltinFunc(
+        name="mui_canvas_drag",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 6)",
+        description="The last drag event: 1 moving with the button down, 2 let go (0 before any)"
+    ),
     "mui_canvas_qualifiers": BuiltinFunc(
         name="mui_canvas_qualifiers",
         params=["canvas"],

@@ -14516,6 +14516,9 @@ struct _DashCanvas {
     WORD min_width, min_height;
     LONG input_id;                  /* 0: no input events */
     LONG move_id;                   /* 0: no pointer moves (D63) */
+    LONG drag_id;                   /* 0: no drags (Lorraine D12) */
+    BOOL dragging;                  /* the left button went down on the area and is still down */
+    LONG drag_state;                /* last drag event: 1 moving with the button down, 2 let go */
     LONG ptr_x, ptr_y;              /* where the pointer was last seen, from the area's corner */
     BOOL ptr_in, ptr_known;         /* inside the area then; seen at all */
     LONG mouse_x, mouse_y;          /* relative to the area */
@@ -14706,13 +14709,14 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Setup:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->input_id || data->move_id) {
+        if (data->input_id || data->move_id || data->drag_id) {
             data->handler.ehn_Object = obj;
             data->handler.ehn_Class = cl;
             /* moves: MOUSEMOVE (with the window's ReportMouse, at MUIM_Show), and the ticks (10 a second) in case
                something turns ReportMouse off; leaving the window (inactive) is leaving the area */
             data->handler.ehn_Events = (data->input_id ? IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY : 0) |
-                (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0);
+                (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0) |
+                (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
             data->handler.ehn_Priority = 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
@@ -14722,7 +14726,7 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Show:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->move_id && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
+        if ((data->move_id || data->drag_id) && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
@@ -14740,6 +14744,23 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         x = im->MouseX - _DASH_MLEFT(obj);
         y = im->MouseY - _DASH_MTOP(obj);
         inside = x >= 0 && y >= 0 && x < _DASH_MWIDTH(obj) && y < _DASH_MHEIGHT(obj);
+        if (data->drag_id) {
+            /* a drag (Lorraine D12): pressed on the area, an event for each move (gathered like the pointer's)
+               and one when let go (or the window goes inactive); the position may be out of the area */
+            if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
+                data->dragging = TRUE;
+            } else if (data->dragging && (im->Class == IDCMP_MOUSEMOVE ||
+                                          (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP) ||
+                                          im->Class == IDCMP_INACTIVEWINDOW)) {
+                if (im->Class != IDCMP_INACTIVEWINDOW) {
+                    data->mouse_x = x; data->mouse_y = y;
+                    data->qual = im->Qualifier;
+                }
+                data->drag_state = im->Class == IDCMP_MOUSEMOVE ? 1 : 2;
+                if (data->drag_state == 2) data->dragging = FALSE;
+                _dash_canvas_moved(data->drag_id);
+            }
+        }
         if (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INTUITICKS || im->Class == IDCMP_INACTIVEWINDOW) {
             if (!data->move_id) return 0;
             if (im->Class == IDCMP_INACTIVEWINDOW) inside = FALSE;
@@ -14822,6 +14843,16 @@ static void _dash_mui_canvas_on_move(APTR obj, LONG id) {
     _dash_mui_move_hook = _dash_canvas_next_move;
 }
 
+/* mui_wait_event returns id while the area is dragged (moved with the left button down after pressing it on
+   the area) and once more when it is let go: mui_canvas_drag says which (call before opening the window;
+   Lorraine D12) */
+static void _dash_mui_canvas_on_drag(APTR obj, LONG id) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data) return;
+    data->drag_id = id;
+    _dash_mui_move_hook = _dash_canvas_next_move;
+}
+
 /* Where the pointer is now (0 x, 1 y from the area's corner; 2 TRUE if inside the area), clicked or not;
    with the window closed, where it was last seen */
 static LONG _dash_mui_canvas_pointer(APTR obj, LONG what) {
@@ -14892,6 +14923,7 @@ static LONG _dash_mui_canvas_input(APTR obj, LONG what) {
     case 2: return data->button;
     case 3: return data->wheel;
     case 4: return data->key;
+    case 6: return data->drag_state;         /* 1 dragging, 2 let go, 0 no drag yet (Lorraine D12) */
     case 5:                                  /* the qualifiers (Lorraine D11): 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga */
         return ((data->qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) ? 1 : 0)
              | ((data->qual & IEQUALIFIER_CONTROL) ? 2 : 0)

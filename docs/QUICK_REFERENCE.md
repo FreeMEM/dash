@@ -225,6 +225,7 @@ mui_canvas_on_draw(c, paint)            # func paint(x, y, w, h) draws with gfx_
 mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y(c), mui_canvas_button/_wheel/_key(c)
 mui_canvas_char(c)                      # the key as text, with shift and the keymap ("" if none)
 mui_canvas_qualifiers(c)                # keys held at the last input: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up
+mui_canvas_on_drag(c, id)               # event while dragging and when let go: mui_canvas_drag(c) 1 moving, 2 let go
 mui_canvas_on_move(c, 4)                # the pointer over it (no click) or leaving: mui_canvas_pointer_x/_y/_inside(c)
 mui_canvas_update(c)                    # draw again without clearing; mui_canvas_updating() true in paint
 mui_canvas_update_area(c, x, y, w, h)   # the same, only that zone (clipped)

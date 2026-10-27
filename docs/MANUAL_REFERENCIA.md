@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 660 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 662 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3307,6 +3307,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | La última entrada: posición dentro de la zona, 1 si fue clic, +1/-1 la rueda, código de tecla (-1 si no fue tecla). |
 | `mui_canvas_char(z)` | El carácter de esa tecla, con mayúsculas y el keymap (`"A"`, `"ñ"`; `""` si no da ninguno; Retroceso da el código 8). |
 | `mui_canvas_qualifiers(z)` | Las teclas que estaban pulsadas en la última tecla, clic o giro de rueda, sumadas: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` dice si Shift). Amiga + clic no llega: se lo queda el sistema. |
+| `mui_canvas_on_drag(zona, id)`, `mui_canvas_drag(z)` | Evento `id` al arrastrar (mover con el botón izquierdo pulsado después de pulsarlo en la zona) y otro al soltar; `mui_canvas_drag` dice cuál: 1 moviendo, 2 soltado. `mui_canvas_mouse_x/_y` dan la posición, también fuera de la zona. Los movimientos se juntan: llega uno por cada vez que el programa pregunta. Antes de abrir la ventana. |
 | `mui_canvas_on_move(zona, id)` | Evento cuando el ratón se mueve sobre la zona, sin clic, y cuando sale de ella (antes de abrir la ventana). Los movimientos que llegan antes de que el programa recoja uno cuentan como uno; no retrasa los clics. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Dónde está el ratón ahora, desde la esquina de la zona, y si está dentro de ella; valga o no un clic. |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
@@ -4284,8 +4285,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 86 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **660** | |
+| MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **662** | |
 
 ### Colores Estandar Amiga
 

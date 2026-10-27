@@ -1,0 +1,135 @@
+# mui_canvas_on_drag and mui_canvas_drag (Lorraine D12): dragging over a MUI drawing area. A helper process
+# presses the left button at (10, 10) of the area, moves the pointer 150 pixels right and 30 down (out of the
+# area, 120 wide) through input.device and lets go: the click (mui_canvas_on_input), events while it moves
+# (gathered: how many depends on the speed) and one when let go, at (160, 40).
+# emu-needs: muimaster.library
+# expect-out: clic 10 10
+# expect-out: arrastre: true dentro y fuera: true
+# expect-out: suelta 160 40
+# expect-out: fin
+
+const ID_ARRASTRE = 31
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Window *teclas_win; static LONG teclas_x, teclas_y; static struct Task *teclas_padre;"
+
+const ID_RATON = 30
+
+@native func donde(win: Int, lienzo: Int)
+"""
+    struct Window *w = NULL;
+    GetAttr(MUIA_Window_Window, (Object *)win, (ULONG *)&w);
+    teclas_win = w;
+    teclas_x = _DASH_MLEFT((Object *)lienzo) + 10;
+    teclas_y = _DASH_MTOP((Object *)lienzo) + 10;
+"""
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    Delay(50);
+    if (teclas_win && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        struct IEPointerPixel pp;
+        LONG i;
+        ActivateWindow(teclas_win);
+        Delay(10);
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        /* to (10, 10) of the area, press, then 15 steps of 10 pixels right and 2 down, let go */
+        for (i = 0; i <= 16; i++) {
+            memset(&ie, 0, sizeof(ie));
+            pp.iepp_Screen = teclas_win->WScreen;
+            pp.iepp_Position.X = teclas_win->LeftEdge + teclas_x + (i < 16 ? i : 15) * 10;
+            pp.iepp_Position.Y = teclas_win->TopEdge + teclas_y + (i < 16 ? i : 15) * 2;
+            ie.ie_Class = IECLASS_NEWPOINTERPOS;
+            ie.ie_SubClass = IESUBCLASS_PIXEL;
+            ie.ie_EventAddress = (APTR)&pp;
+            ie.ie_Qualifier = i > 0 ? IEQUALIFIER_LEFTBUTTON : 0;
+            if (i < 16) DoIO((struct IORequest *)io);
+            Delay(i == 0 ? 10 : 3);
+            if (i == 0 || i == 16) {
+                memset(&ie, 0, sizeof(ie));
+                ie.ie_Class = IECLASS_RAWMOUSE;
+                ie.ie_Code = i == 0 ? IECODE_LBUTTON : IECODE_LBUTTON | IECODE_UP_PREFIX;
+                ie.ie_Qualifier = i == 0 ? IEQUALIFIER_LEFTBUTTON : 0;
+                DoIO((struct IORequest *)io);
+                Delay(5);
+            }
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(teclas_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    teclas_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE) == NULL)
+        teclas_padre = NULL;
+"""
+end
+
+@native func esperar_teclas()
+"""
+    if (teclas_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+end
+
+Main
+    if mui_app_begin("Arrastre", "DASHDRAG") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Arrastre", 0)
+            lienzo = mui_canvas(120, 80)
+            mui_text("Arrastra")
+        mui_window_end()
+        mui_canvas_on_draw(lienzo, pinta)
+        mui_canvas_on_input(lienzo, ID_RATON)
+        mui_canvas_on_drag(lienzo, ID_ARRASTRE)
+        mui_window_open(win)
+        donde(win, lienzo)
+        lanzar()
+        movidas = 0
+        dentro = false
+        fuera = false
+        hecho = false
+        while not hecho
+            ev = mui_wait_event()
+            if ev == -1
+                break
+            end
+            if ev == ID_RATON and mui_canvas_button(lienzo) == 1
+                Print "clic #{mui_canvas_mouse_x(lienzo)} #{mui_canvas_mouse_y(lienzo)}"
+            elif ev == ID_ARRASTRE and mui_canvas_drag(lienzo) == 1
+                movidas = movidas + 1
+                if mui_canvas_mouse_x(lienzo) < 120
+                    dentro = true
+                else
+                    fuera = true
+                end
+            elif ev == ID_ARRASTRE and mui_canvas_drag(lienzo) == 2
+                Print "arrastre: #{movidas > 0} dentro y fuera: #{dentro and fuera}"
+                Print "suelta #{mui_canvas_mouse_x(lienzo)} #{mui_canvas_mouse_y(lienzo)}"
+                hecho = true
+            end
+        end
+        mui_app_end()
+        esperar_teclas()
+        Print "fin"
+    end
+end
