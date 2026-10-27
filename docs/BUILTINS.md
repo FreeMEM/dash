@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 681 funciones, 681 implementadas, 0 sin implementar.
+Total: 684 funciones, 684 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -627,6 +627,7 @@ Total: 681 funciones, 681 implementadas, 0 sin implementar.
 | `input_text(text)` | `void` | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
 | `input_move(x, y)` | `void` | Move the pointer to (x, y) from the corner of the active window |  |
 | `input_click(x, y, qualifiers)` | `void` | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
+| `input_button(button, down)` | `void` | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
 | `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
 | `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
 
@@ -804,6 +805,8 @@ Total: 681 funciones, 681 implementadas, 0 sin implementar.
 | `mui_submenu_begin(title)` | `APTR` | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
 | `mui_submenu_end()` | `void` | End the submenu |  |
 | `mui_menu_separator()` | `void` | Separator line in the menu |  |
+| `mui_context_menu_begin(title)` | `APTR` | Start a context menu (anywhere, not only in a window): its items as in a menu (mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object with mui_set_context_menu (Lorraine D15) |  |
+| `mui_set_context_menu(object, menu)` | `void` | The right button over the object opens that context menu (0: none); its items give their events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2 |  |
 | `mui_menu_end()` | `void` | End the menu |  |
 | `mui_canvas(min_width, min_height)` | `APTR` | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
 | `mui_canvas_on_draw(canvas, func)` | `void` | Function f(x, y, width, height) that draws the area with gfx_ (MUI calls it when needed) |  |

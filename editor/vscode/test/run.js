@@ -256,6 +256,20 @@ async function modelTests() {
         const p = M.check(d).join('; ');
         for (const s of ['repetido marca', 'está dentro de otro', 'checked sin']) assert.ok(p.includes(s), s + ' in ' + p);
     });
+    await check('model: check() takes context menus by name, as the compiler (Lorraine D15)', () => {
+        const d = M.newDocument(), w = d.windows[0];
+        w.context_menus = [{ name: 'celdas', title: 'Celdas', items: [{ label: 'Copiar', event: 41 }, { separator: true }] }];
+        M.add(w, [], 'canvas');
+        w.root.children[0].context_menu = 'celdas';
+        M.add(w, [], 'label');
+        w.root.children[1].context_menu = '';
+        assert.deepStrictEqual(M.check(d), []);
+        w.root.children[1].context_menu = 'filas';
+        w.context_menus.push({ title: 'Sin nombre', items: [] });
+        w.context_menus[0].items.push({ label: 'x', event: 1.5 });
+        const p = M.check(d).join('; ');
+        for (const s of ['menú contextual filas', 'no tiene nombre', 'evento de la opción x']) assert.ok(p.includes(s), s + ' in ' + p);
+    });
     await check('model: check() finds the odd documents the compiler refuses (children of a button, tr, size, lists)', () => {
         const d = M.newDocument(), w = d.windows[0];
         w.size = [50];

@@ -1008,7 +1008,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       memoria por objeto (D43)
 - [x] Portapapeles: texto (IFF FTXT) con los demás programas y un bloque propio en otra unidad (D18)
 - [x] MUI: forma del puntero sobre el lienzo (texto, ancho, alto, ocupado) con sprites propios (D16)
-- [x] 681 builtins (91 de MUI); 448 resultados sin emulador; 34 ejemplos
+- [x] MUI: menús contextuales en código y en el `.dashui` (`context_menus`), y `input_button` para probarlos (D15)
+- [x] 684 builtins (93 de MUI); 451 resultados sin emulador; 34 ejemplos
 
 ## Notas y Decisiones
 

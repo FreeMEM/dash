@@ -120,6 +120,11 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   es un campo de la ventana, como los objetos (`v.ver_formulas`: marcarlo, cambiarle el texto con `mui_set_text` o
   desactivarlo con `mui_set_enabled`); `"disabled": true` lo deja desactivado. El editor visual enseña los submenús,
   pero sus opciones, las marcas y los nombres se cambian editando el fichero como texto (Lorraine D47).
+- **Menús contextuales** (Lorraine D15): `"context_menus": [ { "name": "menu_celdas", "title": "Celdas", "items": [...] } ]`
+  en la ventana, con los mismos elementos que un menú, y `"context_menu": "menu_celdas"` en el objeto que lo abre con el
+  botón derecho (`mui_set_context_menu`). El nombre es obligatorio y es un campo de la ventana; varios objetos pueden
+  abrir el mismo. En un lienzo, `mui_canvas_mouse_x`/`_y` dicen dónde se pulsó. El editor visual los añade con
+  «+ menú contextual» y el objeto lo elige en su propiedad `context_menu`.
 - **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
   principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
   `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca

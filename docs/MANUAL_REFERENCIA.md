@@ -3358,6 +3358,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_menu_separator()` | Línea de separación. |
 | `mui_menu_check(texto, tecla, id, marcada)` | Opción con marca (casilla): elegirla cambia la marca y da su `id`. `mui_get_value(op)` dice si está marcada (1/0) y `mui_set_value(op, 1)` la marca desde el programa. |
 | `mui_submenu_begin(titulo)` ... `mui_submenu_end()` | Submenú dentro del menú (un nivel, como Intuition). |
+| `mui_context_menu_begin(titulo)` ... `mui_menu_end()` | Menú contextual (del botón derecho), dentro o fuera de una ventana: sus opciones como las de un menú. `mui_set_context_menu(obj, menu)` hace que el botón derecho sobre `obj` lo abra; cada opción da su `id`. En un lienzo, `mui_canvas_mouse_x`/`_y` dicen dónde se pulsó y `mui_canvas_button` es 2. |
 | `mui_set_enabled(op, false)`, `mui_set_text(op, texto)` | Desactiva una opción o un menú entero (el objeto de `mui_menu_begin`); cambia el texto de una opción ("Abrir recientes"). |
 | `mui_canvas(ancho_min, alto_min)` | Zona de dibujo propia; crece con la ventana. |
 | `mui_canvas_on_draw(zona, funcion)` | Función `f(x, y, ancho, alto)` que la pinta con los `gfx_`. MUI la llama cuando hace falta (al abrir, al cambiar de tamaño...). Solo se puede pintar dentro. Valen también los rellenos (`gfx_circle_fill`, `gfx_poly_*`...). |
@@ -3878,6 +3879,7 @@ esquina de esa ventana. Entre suceso y suceso esperan un tic (20 ms).
 | `input_key(codigo, calificadores)` | Pulsa y suelta una tecla cruda (`0x44` Intro, `0x45` Esc, `0x41` Retroceso, `0x4C`-`0x4F` flechas arriba, abajo, derecha, izquierda) con 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (sumados) pulsadas alrededor; Amiga es la derecha, la de los atajos de menu |
 | `input_text(texto)` | Teclea un texto con el keymap del teclado (`"=SUM(A1:A3)"`); lo que el keymap no sabe escribir se salta |
 | `input_move(x, y)` | Lleva el puntero alli |
+| `input_button(boton, pulsado)` | Pulsa (`true`) o suelta un boton del raton donde este el puntero: 1 izquierdo, 2 derecho (menus, un menu contextual), 3 central |
 | `input_click(x, y, calificadores)` | Clic con el boton izquierdo (Amiga + clic se lo queda el sistema) |
 | `input_drag(x1, y1, x2, y2)` | Pulsa en (x1, y1), va a (x2, y2) con el boton pulsado y suelta |
 | `input_active_title()` | El titulo de la ventana activa (`""` si no hay): para esperar a la del programa |
@@ -4399,7 +4401,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simular teclado y ratón | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
+| Simular teclado y ratón | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
 | Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
@@ -4412,8 +4414,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 91 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **681** | |
+| MUI | 93 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **684** | |
 
 ### Colores Estandar Amiga
 

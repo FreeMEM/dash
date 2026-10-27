@@ -6828,6 +6828,21 @@ static void _dash_input_move(LONG x, LONG y) {
     _dash_input_pointer(x, y, 0);
 }
 
+/* Presses (down) or lets go a mouse button where the pointer is: 1 left, 2 right, 3 middle (Lorraine D15: the
+   right one opens a context menu) */
+static void _dash_input_mouse_button(LONG button, LONG down) {
+    static const UWORD codes[3][2] = { { IECODE_LBUTTON, IEQUALIFIER_LEFTBUTTON },
+                                       { IECODE_RBUTTON, IEQUALIFIER_RBUTTON },
+                                       { IECODE_MBUTTON, IEQUALIFIER_MIDBUTTON } };
+    struct InputEvent ie;
+    if (button < 1 || button > 3) return;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = codes[button - 1][0] | (down ? 0 : IECODE_UP_PREFIX);
+    ie.ie_Qualifier = down ? codes[button - 1][1] : 0;
+    _dash_input_send(&ie);
+}
+
 static void _dash_input_click(LONG x, LONG y, LONG q) {
     UWORD qual = _dash_input_qual(q);
     _dash_input_pointer(x, y, qual);
@@ -15120,6 +15135,38 @@ static void _dash_mui_menu_end(void) {
     _dash_mui_sub_parent = NULL;
 }
 
+/* Context menus (Lorraine D15): mui_context_menu_begin("Celdas"), its items as in a window's menu (mui_menu_item,
+   mui_menu_check, mui_submenu_begin...), mui_menu_end(); mui_set_context_menu(object, menu) opens it with the
+   right button over the object, and its items give their events as the window's do. A context menu belongs to
+   no object: MUI does not dispose it, _dash_mui_ctx_cleanup does once the windows are gone. */
+#define _DASH_MUI_CTXMENUS 16
+static Object *_dash_mui_ctx[_DASH_MUI_CTXMENUS];
+static LONG _dash_mui_nctx = 0;
+
+static void _dash_mui_ctx_cleanup(void) {
+    while (_dash_mui_nctx > 0) MUI_DisposeObject(_dash_mui_ctx[--_dash_mui_nctx]);
+}
+
+static APTR _dash_mui_context_menu_begin(STRPTR title) {
+    Object *strip, *menu;
+    if (_dash_mui_cur_menu) { _dash_mui_error("mui_context_menu_begin inside another menu"); return NULL; }
+    if (_dash_mui_nctx == _DASH_MUI_CTXMENUS) { _dash_mui_error("more than 16 context menus"); return NULL; }
+    if (!(menu = _DASH_MUI_NEW(MUIC_Menu, MUIA_Menu_Title, (IPTR)_dash_mui_keep(title)))) return NULL;
+    if (!(strip = _DASH_MUI_NEW(MUIC_Menustrip, MUIA_Menustrip_Enabled, TRUE))) {
+        MUI_DisposeObject(menu);
+        return NULL;
+    }
+    _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_ctx[_dash_mui_nctx++] = strip;
+    _dash_mui_on_end(_dash_mui_ctx_cleanup);
+    _dash_mui_cur_menu = menu;
+    return strip;
+}
+
+static void _dash_mui_set_context_menu(APTR obj, APTR menu) {
+    if (obj) SetAttrs(obj, MUIA_ContextMenu, (IPTR)menu, TAG_DONE);
+}
+
 static void _dash_mui_group_end(void) {
     if (_dash_mui_depth > 1) _dash_mui_depth--;
     else _dash_mui_error("mui_group_end without a group");
@@ -15974,6 +16021,13 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->keys_set = FALSE;
         }
         return DoSuperMethodA(cl, obj, msg);
+    case MUIM_ContextMenuBuild:
+        /* the right button over the area, with a context menu (Lorraine D15): where, for mui_canvas_mouse_x/_y */
+        data = INST_DATA(cl, obj);
+        data->mouse_x = ((struct MUIP_ContextMenuBuild *)msg)->mx - _DASH_MLEFT(obj);
+        data->mouse_y = ((struct MUIP_ContextMenuBuild *)msg)->my - _DASH_MTOP(obj);
+        data->button = 2; data->wheel = 0; data->key = -1;
+        break;
     case MUIM_HandleEvent: {
         struct IntuiMessage *im = ((struct MUIP_HandleEvent *)msg)->imsg;
         LONG x, y, inside;

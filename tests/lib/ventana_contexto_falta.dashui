@@ -1,0 +1,11 @@
+{
+  "dashui": 1,
+  "windows": [
+    {
+      "name": "Mala",
+      "title": "Menú contextual que no existe",
+      "context_menus": [ { "name": "menu_filas", "title": "Filas", "items": [ { "label": "Borrar", "event": 1 } ] } ],
+      "root": { "type": "vgroup", "children": [ { "type": "canvas", "context_menu": "menu_celdas" } ] }
+    }
+  ]
+}

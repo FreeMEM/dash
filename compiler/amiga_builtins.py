@@ -3543,6 +3543,23 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_menu_separator()",
         description="Separator line in the menu"
     ),
+    "mui_context_menu_begin": BuiltinFunc(
+        name="mui_context_menu_begin",
+        params=["title"],
+        return_type="APTR",
+        c_template="_dash_mui_context_menu_begin(${title})",
+        description="Start a context menu (anywhere, not only in a window): its items as in a menu "
+                    "(mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object "
+                    "with mui_set_context_menu (Lorraine D15)"
+    ),
+    "mui_set_context_menu": BuiltinFunc(
+        name="mui_set_context_menu",
+        params=["object", "menu"],
+        return_type="void",
+        c_template="_dash_mui_set_context_menu(${object}, ${menu})",
+        description="The right button over the object opens that context menu (0: none); its items give their "
+                    "events; on a canvas, mui_canvas_mouse_x/_y say where it was pressed and mui_canvas_button is 2"
+    ),
     "mui_menu_end": BuiltinFunc(
         name="mui_menu_end",
         params=[],
@@ -4664,6 +4681,11 @@ SIMINPUT_FUNCTIONS = {
         c_template="_dash_input_click(${x}, ${y}, ${qualifiers})",
         description="Click with the left button at (x, y) from the corner of the active window, with qualifiers "
                     "1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's)"),
+    "input_button": BuiltinFunc(
+        name="input_button", params=["button", "down"], return_type="void",
+        c_template="_dash_input_mouse_button(${button}, ${down})",
+        description="Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, "
+                    "a context menu), 3 middle"),
     "input_drag": BuiltinFunc(
         name="input_drag", params=["x1", "y1", "x2", "y2"], return_type="void",
         c_template="_dash_input_drag(${x1}, ${y1}, ${x2}, ${y2})",

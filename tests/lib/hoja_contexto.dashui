@@ -1,0 +1,22 @@
+{
+  "dashui": 1,
+  "windows": [
+    {
+      "name": "Hoja",
+      "title": "Hoja con menú contextual",
+      "id": 0,
+      "context_menus": [
+        { "name": "menu_celdas", "title": "Celdas", "items": [
+            { "label": "Copiar", "event": 41 },
+            { "label": "Pegar", "event": 42, "name": "pegar" },
+            { "separator": true },
+            { "label": "Insertar fila", "event": 43 },
+            { "label": "Borrar fila", "event": 44 }
+        ]}
+      ],
+      "root": { "type": "vgroup", "children": [
+        { "type": "canvas", "name": "hoja", "min_width": 240, "min_height": 120, "context_menu": "menu_celdas" }
+      ]}
+    }
+  ]
+}

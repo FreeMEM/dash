@@ -35,7 +35,7 @@
         balance:  { group: false, label: 'Separador',        props: [], events: [] },
     };
     const COMMON = [['name', 'ident', ''], ['weight', 'int', 100], ['disabled', 'bool', false], ['hidden', 'bool', false],
-                    ['help', 'string', '']];
+                    ['help', 'string', ''], ['context_menu', 'string', '']];   // (the name of a context menu, Lorraine D15)
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
     // words of the language: not names (compiler/dashui.py reserved(), the same list; a test compares them)
     const RESERVED = new Set(["EventLoop", "Main", "Print", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "interface", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
@@ -254,7 +254,12 @@
                 else if (seen.has(n.name)) problems.push(`${win.name}: nombre repetido ${n.name}`);
                 seen.add(n.name);
             }
-            (win.menus || []).forEach((m) => {
+            const contextNames = new Set();
+            (win.context_menus || []).forEach((m, i) => {   // (Lorraine D15)
+                if (!m.name) problems.push(`${win.name}: el menú contextual ${i + 1} no tiene nombre`);
+                else contextNames.add(m.name);
+            });
+            (win.menus || []).concat(win.context_menus || []).forEach((m) => {
                 named(m);
                 (function items(list, top) {
                     (list || []).forEach((it) => {
@@ -289,6 +294,8 @@
                 for (const [k, v] of Object.entries(n)) {   // the compiler refuses texts with #{ (interpolation)
                     if (typeof v === 'string' && v.includes('#{')) problems.push(`${win.name}: ${k} de ${n.name || n.type} no puede llevar #{`);
                 }
+                if (n.context_menu && !contextNames.has(n.context_menu))
+                    problems.push(`${win.name}: ${what} abre el menú contextual ${n.context_menu}, que la ventana no tiene`);
                 for (const k of ['event', 'change', 'ack', 'double', 'weight']) {   // ("event": "uno")
                     if (n[k] !== undefined && !Number.isInteger(n[k])) problems.push(`${win.name}: ${k} de ${n.name || n.type} no es un número entero`);
                 }

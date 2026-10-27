@@ -3358,6 +3358,7 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_menu_separator()` | Separator line. |
 | `mui_menu_check(text, key, id, checked)` | Item with a check mark: choosing it toggles the mark and gives its `id`. `mui_get_value(item)` says whether it is checked (1/0) and `mui_set_value(item, 1)` checks it from the program. |
 | `mui_submenu_begin(title)` ... `mui_submenu_end()` | Submenu inside the menu (one level, as in Intuition). |
+| `mui_context_menu_begin(title)` ... `mui_menu_end()` | Context menu (right button), inside or outside a window: its items as in a menu. `mui_set_context_menu(obj, menu)` makes the right button over `obj` open it; each item gives its `id`. On a canvas, `mui_canvas_mouse_x`/`_y` say where it was pressed and `mui_canvas_button` is 2. |
 | `mui_set_enabled(item, false)`, `mui_set_text(item, text)` | Disables an item or a whole menu (the object of `mui_menu_begin`); changes an item's text ("Open recent"). |
 | `mui_canvas(ancho_min, alto_min)` | Custom drawing area; grows with the window. |
 | `mui_canvas_on_draw(zona, funcion)` | Function `f(x, y, ancho, alto)` that paints it with the `gfx_` functions. MUI calls it when needed (on opening, on resizing...). You can only paint inside it. Fills work too (`gfx_circle_fill`, `gfx_poly_*`...). |
@@ -3878,6 +3879,7 @@ that window's corner. They wait a tick (20 ms) after each event.
 | `input_key(code, qualifiers)` | Presses and lets go a raw key (`0x44` Return, `0x45` Esc, `0x41` Backspace, `0x4C`-`0x4F` up, down, right, left arrows) with 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it; Amiga is the right one, the one of menu shortcuts |
 | `input_text(text)` | Types a text with the keyboard's keymap (`"=SUM(A1:A3)"`); what the keymap cannot type is left out |
 | `input_move(x, y)` | Moves the pointer there |
+| `input_button(button, down)` | Presses (`true`) or lets go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |
 | `input_click(x, y, qualifiers)` | Left button click (Amiga + click is the system's) |
 | `input_drag(x1, y1, x2, y2)` | Presses at (x1, y1), goes to (x2, y2) with the button down and lets go |
 | `input_active_title()` | The title of the active window (`""` if none): to wait for the program's one |
@@ -4399,7 +4401,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simulated keyboard and mouse | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
+| Simulated keyboard and mouse | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
 | Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
@@ -4412,8 +4414,8 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 91 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **681** | |
+| MUI | 93 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **684** | |
 
 ### Standard Amiga Colors
 

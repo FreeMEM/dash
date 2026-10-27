@@ -107,6 +107,7 @@ The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines
 | `mui_on_close(win, id)` | the window's close gadget. Without calling it, closing the first window = -1 (quit). |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menu of the open window (`Menustrip`) |
 | `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | item with a check mark (`mui_get_value`/`mui_set_value`) and one-level submenu |
+| `mui_context_menu_begin(titulo)` ... `mui_menu_end()`, `mui_set_context_menu(obj, menu)` | context menu (right button over `obj`): its items give their events; MUI does not free it with the object, Dash does at the end |
 | `mui_wait_event() -> Int` | Waits and returns the number of an event, or -1 to quit. |
 | `mui_poll_event() -> Int` | The same without waiting: 0 if there is nothing. |
 | `mui_wait_event_signals(mascara) -> Int` | Also waits for other signals: `net_signal()` (network), `task_signal()` (tasks), `file_notify_signal()` (watched files). Returns 0 when one of them arrives; `mui_signals()` tells which. |

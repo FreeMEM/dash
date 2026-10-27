@@ -217,6 +217,7 @@ win = mui_window_begin("Title", 1)      # vertical root group; 1 = remember plac
     mui_menu_begin("Project")           # menus of this window
         q = mui_menu_item("Quit", "Q", 9)   # mui_menu_separator()
         g = mui_menu_check("Grid", "G", 10, true)   # mui_get_value(g); mui_submenu_begin("Recent") ... mui_submenu_end()
+        m = mui_context_menu_begin("Cells")   # items as above, mui_menu_end(); mui_set_context_menu(canvas, m): right button
     mui_menu_end()
     tabs = mui_register_begin("A|B")    # pages; value = page. Also mui_frame_begin("T", false),
     ...                                 # mui_columns_begin(2), mui_scroll_begin(); mui_group_end()
@@ -454,7 +455,7 @@ net_driver_has_bytes()      # the driver counts bytes too: net_driver_bytes_in()
 h = file_notify("ENV:X.prefs")   # watch a file: cx_wait gives 7, file_changed(h); file_notify_signal() for MUI
 file_notify_end(h)          # stop watching it (the program's end stops them all)
 run_program("SYS:Prefs/Font")    # start a command line, not waiting; program_relaunch(): start again at the end
-input_text("=SUM(A1:A3)")        # type/click in the active window (tests): input_key(0x44, 1), input_click(x, y, q), input_drag, input_active_title()
+input_text("=SUM(A1:A3)")        # type/click in the active window (tests): input_key(0x44, 1), input_click(x, y, q), input_button(2, true), input_drag, input_active_title()
 clip_write_text(t); t = clip_read_text()   # clipboard (unit 0, FTXT); own data: clip_write_block(1, "LCLC", buf, n), clip_block_size, clip_read_block
 clock_read()                # clock_year/month/day/weekday(0 Sun)/hour/minute/second(); date_text("%A %d-%b-%Y %H:%M") (locale)
 locale_decimal_point()      # "," or "." as the user's country writes; locale_group_separator(), locale_date_order() ("DMY"...)
