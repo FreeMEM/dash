@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 667 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 673 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3369,8 +3369,8 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_on_input(zona, id)` | Evento con un clic, la rueda o una tecla sobre la zona (antes de abrir la ventana). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | La última entrada: posición dentro de la zona, 1 si fue clic, +1/-1 la rueda, código de tecla (-1 si no fue tecla). |
 | `mui_canvas_char(z)` | El carácter de esa tecla, con mayúsculas y el keymap (`"A"`, `"ñ"`; `""` si no da ninguno; Retroceso da el código 8). |
-| `mui_canvas_qualifiers(z)` | Las teclas que estaban pulsadas en la última tecla, clic o giro de rueda, sumadas: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` dice si Shift). Amiga + clic no llega: se lo queda el sistema. |
-| `mui_canvas_on_drag(zona, id)`, `mui_canvas_drag(z)` | Evento `id` al arrastrar (mover con el botón izquierdo pulsado después de pulsarlo en la zona) y otro al soltar; `mui_canvas_drag` dice cuál: 1 moviendo, 2 soltado. `mui_canvas_mouse_x/_y` dan la posición, también fuera de la zona. Los movimientos se juntan: llega uno por cada vez que el programa pregunta. Antes de abrir la ventana. |
+| `mui_canvas_qualifiers(z)` | Las teclas que estaban pulsadas en la última tecla, clic o giro de rueda, sumadas: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` dice si Shift). Amiga + clic no llega: se lo queda el sistema. Shift, Ctrl, Alt o Amiga solas no dan evento de tecla. |
+| `mui_canvas_on_drag(zona, id)`, `mui_canvas_drag(z)` | Evento `id` al arrastrar (mover con el botón izquierdo pulsado después de pulsarlo en la zona) y otro al soltar; `mui_canvas_drag` dice cuál: 1 moviendo, 2 soltado. `mui_canvas_mouse_x/_y` dan la posición, también fuera de la zona. Los movimientos se juntan: llega uno por cada vez que el programa pregunta. Un clic sin mover no es arrastre (solo da su evento de `mui_canvas_on_input`). Antes de abrir la ventana. |
 | `mui_canvas_on_move(zona, id)` | Evento cuando el ratón se mueve sobre la zona, sin clic, y cuando sale de ella (antes de abrir la ventana). Los movimientos que llegan antes de que el programa recoja uno cuentan como uno; no retrasa los clics. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Dónde está el ratón ahora, desde la esquina de la zona, y si está dentro de ella; valga o no un clic. |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
@@ -3864,6 +3864,32 @@ end
   con `OpenWorkbenchObject` (3.5 o posterior: lee los tooltypes de su icono) o desde una Shell con los mismos
   argumentos. Sirve para actualizarse: cambiar el ejecutable, `program_relaunch()` y acabar.
 
+### Simular teclado y ratón: input_*
+
+Para probar un programa desde otro en el emulador (escribir, pulsar teclas, hacer clic, arrastrar) y sacar
+capturas. Mandan sucesos por `input.device`, como un usuario, a la ventana activa; las posiciones son desde la
+esquina de esa ventana. Entre suceso y suceso esperan un tic (20 ms).
+
+| Funcion | Que hace |
+|---|---|
+| `input_key(codigo, calificadores)` | Pulsa y suelta una tecla cruda (`0x44` Intro, `0x45` Esc, `0x41` Retroceso, `0x4C`-`0x4F` flechas arriba, abajo, derecha, izquierda) con 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (sumados) pulsadas alrededor; Amiga es la derecha, la de los atajos de menu |
+| `input_text(texto)` | Teclea un texto con el keymap del teclado (`"=SUM(A1:A3)"`); lo que el keymap no sabe escribir se salta |
+| `input_move(x, y)` | Lleva el puntero alli |
+| `input_click(x, y, calificadores)` | Clic con el boton izquierdo (Amiga + clic se lo queda el sistema) |
+| `input_drag(x1, y1, x2, y2)` | Pulsa en (x1, y1), va a (x2, y2) con el boton pulsado y suelta |
+| `input_active_title()` | El titulo de la ventana activa (`""` si no hay): para esperar a la del programa |
+
+```
+run_program("Calc hoja.ods")
+while input_active_title() != "Calc - hoja.ods"
+    time_delay_ms(50)
+end
+input_move(100, 60)              # un lienzo MUI toma las teclas con el puntero encima
+input_text("1.234,5")
+input_key(0x44, 0)               # Intro
+input_key(0x4E, 1)               # Mayusculas + derecha
+```
+
 ### La fecha y la hora: clock_* y date_text
 
 ```ruby
@@ -4338,6 +4364,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
+| Simular teclado y ratón | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compresión (zlib) | 3 | `inflate`, `deflate`, `crc32` |
@@ -4350,7 +4377,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **667** | |
+| **Total** | **673** | |
 
 ### Colores Estandar Amiga
 

@@ -6603,6 +6603,174 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
 
 """
 
+    # Lorraine D46: what a user types and clicks, made by a program (to test another one in the emulator)
+    SIMINPUT_RUNTIME = """\
+/* Dash Simulated Input Runtime */
+/* input_* (Lorraine D46): key presses, pointer moves and clicks sent through input.device as if the user made
+   them, to whatever window is active: a test program starts the one to test (run_program), waits for its
+   window (input_active_title) and types and clicks in it. Positions are from the active window's corner. */
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#include <proto/keymap.h>
+#ifndef _DASH_KEYMAP_BASE
+#define _DASH_KEYMAP_BASE
+struct Library *KeymapBase = NULL;
+#endif
+static struct MsgPort *_dash_in_port = NULL;
+static struct IOStdReq *_dash_in_io = NULL;
+static BOOL _dash_in_open = FALSE, _dash_in_keymap = FALSE;
+
+static BOOL _dash_input_init(void) {
+    if (_dash_in_open) return TRUE;
+    if (!_dash_in_port && !(_dash_in_port = CreateMsgPort())) return FALSE;
+    if (!_dash_in_io && !(_dash_in_io = (struct IOStdReq *)CreateIORequest(_dash_in_port, sizeof(struct IOStdReq))))
+        return FALSE;
+    if (OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)_dash_in_io, 0) != 0) return FALSE;
+    _dash_in_open = TRUE;
+    return TRUE;
+}
+
+static void _dash_input_cleanup(void) {
+    if (_dash_in_open) CloseDevice((struct IORequest *)_dash_in_io);
+    if (_dash_in_io) DeleteIORequest((struct IORequest *)_dash_in_io);
+    if (_dash_in_port) DeleteMsgPort(_dash_in_port);
+    _dash_in_open = FALSE;
+    _dash_in_io = NULL;
+    _dash_in_port = NULL;
+    if (_dash_in_keymap && KeymapBase) { CloseLibrary(KeymapBase); KeymapBase = NULL; }
+    _dash_in_keymap = FALSE;
+}
+
+/* One event, then a tick (20 ms) for the programs to take it */
+static void _dash_input_send(struct InputEvent *ie) {
+    if (!_dash_input_init()) return;
+    _dash_in_io->io_Command = IND_WRITEEVENT;
+    _dash_in_io->io_Data = ie;
+    _dash_in_io->io_Length = sizeof(*ie);
+    DoIO((struct IORequest *)_dash_in_io);
+    Delay(1);
+}
+
+static void _dash_input_raw(UWORD code, UWORD qual) {
+    struct InputEvent ie;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWKEY;
+    ie.ie_Code = code;
+    ie.ie_Qualifier = qual;
+    _dash_input_send(&ie);
+}
+
+/* Dash's 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (the right one: the left one with a letter is the system's) */
+static const UWORD _dash_input_mods[4][2] = {
+    { 0x60, IEQUALIFIER_LSHIFT }, { 0x63, IEQUALIFIER_CONTROL }, { 0x64, IEQUALIFIER_LALT }, { 0x67, IEQUALIFIER_RCOMMAND } };
+
+static UWORD _dash_input_qual(LONG q) {
+    UWORD qual = 0;
+    LONG i;
+    for (i = 0; i < 4; i++) if (q & (1 << i)) qual |= _dash_input_mods[i][1];
+    return qual;
+}
+
+/* Presses and lets go a raw key (0x45 Esc, 0x44 Return, 0x4C-0x4F arrows...), holding those keys down
+   around it as a keyboard does */
+static void _dash_input_key(LONG code, LONG q) {
+    UWORD qual = 0;
+    LONG i;
+    for (i = 0; i < 4; i++)
+        if (q & (1 << i)) { qual |= _dash_input_mods[i][1]; _dash_input_raw(_dash_input_mods[i][0], qual); }
+    _dash_input_raw((UWORD)(code & 0x7F), qual);
+    _dash_input_raw((UWORD)(code & 0x7F) | IECODE_UP_PREFIX, qual);
+    for (i = 3; i >= 0; i--)
+        if (q & (1 << i)) { qual &= ~_dash_input_mods[i][1]; _dash_input_raw(_dash_input_mods[i][0] | IECODE_UP_PREFIX, qual); }
+}
+
+/* Types a text (Latin-1) with the keyboard's keymap: each character becomes its keys (MapANSI); one the
+   keymap cannot type is left out */
+static void _dash_input_text(STRPTR text) {
+    UBYTE keys[16];
+    LONG n, i;
+    if (!text) return;
+    if (!KeymapBase) {
+        KeymapBase = OpenLibrary((CONST_STRPTR)"keymap.library", 37);
+        _dash_in_keymap = KeymapBase != NULL;
+        if (!KeymapBase) return;
+    }
+    for (; *text; text++) {
+        n = MapANSI(text, 1, (STRPTR)keys, sizeof(keys) / 2, NULL);
+        for (i = 0; i < n; i++) {
+            _dash_input_raw(keys[i * 2], keys[i * 2 + 1]);
+            _dash_input_raw(keys[i * 2] | IECODE_UP_PREFIX, keys[i * 2 + 1]);
+        }
+    }
+}
+
+/* The pointer to (x, y) from the corner of the active window (of the screen in front without one) */
+static void _dash_input_pointer(LONG x, LONG y, UWORD qual) {
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    struct Window *w;
+    struct Screen *sc;
+    ULONG lock = LockIBase(0);
+    w = IntuitionBase->ActiveWindow;
+    sc = w ? w->WScreen : IntuitionBase->FirstScreen;
+    pp.iepp_Screen = sc;
+    pp.iepp_Position.X = (w ? w->LeftEdge : 0) + x;
+    pp.iepp_Position.Y = (w ? w->TopEdge : 0) + y;
+    UnlockIBase(lock);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_NEWPOINTERPOS;
+    ie.ie_SubClass = IESUBCLASS_PIXEL;
+    ie.ie_EventAddress = (APTR)&pp;
+    ie.ie_Qualifier = qual;
+    _dash_input_send(&ie);
+}
+
+static void _dash_input_button(BOOL down, UWORD qual) {
+    struct InputEvent ie;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = down ? IECODE_LBUTTON : IECODE_LBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = qual | (down ? IEQUALIFIER_LEFTBUTTON : 0);
+    _dash_input_send(&ie);
+}
+
+static void _dash_input_move(LONG x, LONG y) {
+    _dash_input_pointer(x, y, 0);
+}
+
+static void _dash_input_click(LONG x, LONG y, LONG q) {
+    UWORD qual = _dash_input_qual(q);
+    _dash_input_pointer(x, y, qual);
+    _dash_input_button(TRUE, qual);
+    _dash_input_button(FALSE, qual);
+}
+
+/* Presses at (x1, y1), moves to (x2, y2) in steps of 8 pixels with the button down and lets go there */
+static void _dash_input_drag(LONG x1, LONG y1, LONG x2, LONG y2) {
+    LONG dx = x2 - x1, dy = y2 - y1, n, i;
+    n = (dx < 0 ? -dx : dx) > (dy < 0 ? -dy : dy) ? (dx < 0 ? -dx : dx) : (dy < 0 ? -dy : dy);
+    n = n / 8 + 1;
+    _dash_input_pointer(x1, y1, 0);
+    _dash_input_button(TRUE, 0);
+    for (i = 1; i <= n; i++)
+        _dash_input_pointer(x1 + dx * i / n, y1 + dy * i / n, IEQUALIFIER_LEFTBUTTON);
+    _dash_input_button(FALSE, 0);
+}
+
+/* The title of the active window, "" if there is none */
+static STRPTR _dash_input_active_title(void) {
+    char buf[128];
+    ULONG lock = LockIBase(0);
+    struct Window *w = IntuitionBase->ActiveWindow;
+    LONG n = 0;
+    if (w && w->Title) for (; w->Title[n] && n < (LONG)sizeof(buf) - 1; n++) buf[n] = w->Title[n];
+    UnlockIBase(lock);
+    buf[n] = 0;
+    return _dash_str_dup((STRPTR)buf, TRUE);
+}
+
+"""
+
     # Lists of Double (Lorraine D2): kind 3 of the array runtime, two LONGs per element. An empty list made
     # without a kind (DashArray_create(0), from [] anywhere) becomes one of Doubles with its first element.
     DBL_LIST_RUNTIME = """\
@@ -11511,7 +11679,10 @@ static void _dash_cleanup_soft_sprites(void) {
 #include <proto/keymap.h>
 #include <devices/inputevent.h>
 
+#ifndef _DASH_KEYMAP_BASE
+#define _DASH_KEYMAP_BASE
 struct Library *KeymapBase = NULL;
+#endif
 static LONG _dash_last_key = 0;
 static UBYTE _dash_last_key_text[8];
 
@@ -15082,6 +15253,7 @@ struct _DashCanvas {
     LONG move_id;                   /* 0: no pointer moves (D63) */
     LONG drag_id;                   /* 0: no drags (Lorraine D12) */
     BOOL dragging;                  /* the left button went down on the area and is still down */
+    BOOL drag_moved;                /* ... and the pointer moved since (a click is no drag) */
     LONG drag_state;                /* last drag event: 1 moving with the button down, 2 let go */
     LONG ptr_x, ptr_y;              /* where the pointer was last seen, from the area's corner */
     BOOL ptr_in, ptr_known;         /* inside the area then; seen at all */
@@ -15313,9 +15485,14 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
                and one when let go (or the window goes inactive); the position may be out of the area */
             if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
                 data->dragging = TRUE;
+                data->drag_moved = FALSE;
+            } else if (data->dragging && !data->drag_moved &&
+                       ((im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP) || im->Class == IDCMP_INACTIVEWINDOW)) {
+                data->dragging = FALSE;      /* let go without moving: a click, no drag events */
             } else if (data->dragging && (im->Class == IDCMP_MOUSEMOVE ||
                                           (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP) ||
                                           im->Class == IDCMP_INACTIVEWINDOW)) {
+                data->drag_moved = TRUE;
                 if (im->Class != IDCMP_INACTIVEWINDOW) {
                     data->mouse_x = x; data->mouse_y = y;
                     data->qual = im->Qualifier;
@@ -15346,6 +15523,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
             data->qual = im->Qualifier;
         } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
+            if (im->Code >= 0x60 && im->Code <= 0x67) return 0;   /* Shift, Ctrl, Alt, Amiga alone: they come
+                                                                     with the next key (mui_canvas_qualifiers) */
             data->button = 0; data->wheel = 0; data->key = im->Code;
             data->qual = im->Qualifier;
             data->prev = im->IAddress ? *(APTR *)im->IAddress : NULL;
@@ -16018,6 +16197,7 @@ _RUNTIME_FLAGS = [
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
+    ("SIMINPUT_RUNTIME", "uses_siminput"),  # Lorraine D46
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -16345,6 +16525,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_math: bool = False  # sqrt, sin... of Double (MATH_RUNTIME, Lorraine D4)
         self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
         self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
+        self.uses_siminput: bool = False  # input_key, input_click... (SIMINPUT_RUNTIME, Lorraine D46)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -16568,6 +16749,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BUFSEARCH_RUNTIME)
         if self.uses_regex:
             parts.append(CTemplates.REGEX_RUNTIME)
+        if self.uses_siminput:
+            parts.append(CTemplates.SIMINPUT_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -16891,6 +17074,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_meter_cleanup();\n")
         if self.uses_mouse:
             cleanup.insert(0, "    _dash_mc_cleanup();\n")   # the patch out of input.device first
+        if self.uses_siminput:
+            cleanup.insert(0, "    _dash_input_cleanup();\n")
         if self.uses_catalog:
             cleanup.append("    _dash_catalog_cleanup();\n")
         if self.uses_date:
@@ -19416,6 +19601,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
         if self.uses_regex:
             self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
+        if self.uses_siminput:
+            self.uses_strings = True   # input_active_title makes a text
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:

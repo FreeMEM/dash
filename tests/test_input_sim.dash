@@ -1,0 +1,121 @@
+# Test: input_* (Lorraine D46): a program types and clicks in another one, as a user would. The test starts
+# itself with "objetivo": that copy opens a MUI window with a drawing area and writes down what it gets; the
+# first one waits for its window (input_active_title), types a text, Return, Shift + right arrow, a Shift +
+# click, a click and a drag of (80, 30) (its press is a click too), Amiga + M (a menu's shortcut), then Esc, which ends the other one. A click
+# is no drag (D12) and Shift alone is no key for the area.
+# emu-needs: muimaster.library
+# expect-out: ventana: true
+# expect-out: texto: Hola =SUM(A1:A3) 1.234,5
+# expect-out: tecla 68 q 0
+# expect-out: tecla 78 q 1
+# expect-out: clic q 1
+# expect-out: clic q 0
+# expect-out: clic q 0
+# expect-out: arrastre 80 30
+# expect-out: menú Amiga+M
+# expect-out: fin
+
+const ID_RATON = 30
+const ID_ARRASTRE = 31
+
+# this program, as a command line
+@native func yo() -> String
+"""
+    char path[300], name[120];
+    if (!NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path)) || !GetProgramName((STRPTR)name, sizeof(name)))
+        return _dash_str_dup((STRPTR)"", TRUE);
+    AddPart((STRPTR)path, FilePart((CONST_STRPTR)name), sizeof(path));
+    return _dash_str_dup((STRPTR)path, TRUE);
+"""
+end
+
+func pinta(x: Int, y: Int, ancho: Int, alto: Int)
+    gfx_pen(2)
+    gfx_rect(x, y, x + ancho - 1, y + alto - 1)
+end
+
+func objetivo()
+    if mui_app_begin("Objetivo", "DASHD46") == 0
+        return
+    end
+    win = mui_window_begin("Objetivo D46", 0)
+        mui_menu_begin("Proyecto")
+            mui_menu_item("Marca", "M", 99)
+        mui_menu_end()
+        lienzo = mui_canvas(240, 120)
+    mui_window_end()
+    mui_canvas_on_draw(lienzo, pinta)
+    mui_canvas_on_input(lienzo, ID_RATON)
+    mui_canvas_on_drag(lienzo, ID_ARRASTRE)
+    mui_window_open(win)
+    texto = ""
+    lineas = ""
+    x0 = 0
+    y0 = 0
+    hecho = false
+    while not hecho
+        ev = mui_wait_event()
+        if ev == -1
+            hecho = true
+        elif ev == 99
+            lineas = lineas + "menú Amiga+M\n"
+        elif ev == ID_RATON and mui_canvas_key(lienzo) == 0x45
+            hecho = true
+        elif ev == ID_RATON and mui_canvas_key(lienzo) >= 0
+            c = mui_canvas_char(lienzo)
+            if c.length == 1 and str_code(c, 0) >= 32
+                texto = texto + c
+            else
+                lineas = lineas + "tecla #{mui_canvas_key(lienzo)} q #{mui_canvas_qualifiers(lienzo)}\n"
+            end
+        elif ev == ID_RATON and mui_canvas_button(lienzo) == 1
+            lineas = lineas + "clic q #{mui_canvas_qualifiers(lienzo)}\n"
+            x0 = mui_canvas_mouse_x(lienzo)
+            y0 = mui_canvas_mouse_y(lienzo)
+        elif ev == ID_ARRASTRE and mui_canvas_drag(lienzo) == 2
+            lineas = lineas + "arrastre #{mui_canvas_mouse_x(lienzo) - x0} #{mui_canvas_mouse_y(lienzo) - y0}\n"
+        end
+    end
+    mui_app_end()
+    file_write_text("RAM:d46.txt", "texto: " + texto + "\n" + lineas + "fin\n")
+end
+
+Main
+    if arg(0) == "objetivo"
+        objetivo()
+    else
+        run_program("\"" + yo() + "\" objetivo")
+        vista = false
+        for i in (1..200)
+            if input_active_title() == "Objetivo D46"
+                vista = true
+                break
+            end
+            time_delay_ms(50)
+        end
+        Print "ventana: #{vista}"
+        time_delay_ms(300)
+        input_move(60, 50)               # the area takes keys with the pointer over it
+        input_text("Hola =SUM(A1:A3) 1.234,5")
+        input_key(0x44, 0)
+        input_key(0x4E, 1)
+        input_click(60, 50, 1)
+        input_click(60, 50, 0)
+        input_drag(60, 50, 140, 80)
+        input_key(0x37, 8)               # Amiga + M: the menu's shortcut
+        input_key(0x45, 0)
+        r = ""
+        for i in (1..200)
+            if file_exists("RAM:d46.txt")
+                r = file_read_text("RAM:d46.txt")
+                if str_ends(r, "fin\n")
+                    break
+                end
+            end
+            time_delay_ms(50)
+        end
+        for l in str_split(str_trim(r), "\n")
+            Print l
+        end
+    end
+end

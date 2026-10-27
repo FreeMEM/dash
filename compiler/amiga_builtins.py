@@ -4617,6 +4617,36 @@ REGEX_FUNCTIONS = {
                             "character takes it as it is (~* ~? ~~)"),
 }
 
+# Lorraine D46: to test a program in the emulator from another one
+SIMINPUT_FUNCTIONS = {
+    "input_key": BuiltinFunc(
+        name="input_key", params=["code", "qualifiers"], return_type="void",
+        c_template="_dash_input_key(${code}, ${qualifiers})",
+        description="Press and let go a raw key in the active window (0x44 Return, 0x45 Esc, 0x4C up, 0x4D down, "
+                    "0x4E right, 0x4F left, 0x41 Backspace), with qualifiers 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga "
+                    "(added up) held around it"),
+    "input_text": BuiltinFunc(
+        name="input_text", params=["text"], return_type="void", c_template="_dash_input_text(${text})",
+        description="Type a text in the active window with the keyboard's keymap (\"=SUM(A1:A3)\"); a character "
+                    "the keymap cannot type is left out"),
+    "input_move": BuiltinFunc(
+        name="input_move", params=["x", "y"], return_type="void", c_template="_dash_input_move(${x}, ${y})",
+        description="Move the pointer to (x, y) from the corner of the active window"),
+    "input_click": BuiltinFunc(
+        name="input_click", params=["x", "y", "qualifiers"], return_type="void",
+        c_template="_dash_input_click(${x}, ${y}, ${qualifiers})",
+        description="Click with the left button at (x, y) from the corner of the active window, with qualifiers "
+                    "1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's)"),
+    "input_drag": BuiltinFunc(
+        name="input_drag", params=["x1", "y1", "x2", "y2"], return_type="void",
+        c_template="_dash_input_drag(${x1}, ${y1}, ${x2}, ${y2})",
+        description="Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner "
+                    "of the active window)"),
+    "input_active_title": BuiltinFunc(
+        name="input_active_title", params=[], return_type="STRPTR", c_template="_dash_input_active_title()",
+        description="Title of the active window (\"\" if none): to wait for the window of the program to test"),
+}
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
@@ -4647,6 +4677,7 @@ ALL_BUILTINS = {
     **DOUBLE_FUNCTIONS,        # Lorraine D3
     **MATH_FUNCTIONS,          # Lorraine D4
     **REGEX_FUNCTIONS,         # Lorraine D45
+    **SIMINPUT_FUNCTIONS,      # Lorraine D46
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

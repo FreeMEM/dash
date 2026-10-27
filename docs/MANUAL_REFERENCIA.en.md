@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 667 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 673 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -3369,8 +3369,8 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_canvas_on_input(zona, id)` | Event on a click, the wheel or a key over the area (before opening the window). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | The last input: position inside the area, 1 if it was a click, +1/-1 the wheel, key code (-1 if it was not a key). |
 | `mui_canvas_char(z)` | The character for that key, with Shift and the keymap (`"A"`, `"ñ"`; `""` if it gives none; Backspace gives code 8). |
-| `mui_canvas_qualifiers(z)` | The keys held at the last key, click or wheel turn, added up: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` tells Shift). Amiga + click does not arrive: the system keeps it. |
-| `mui_canvas_on_drag(area, id)`, `mui_canvas_drag(z)` | Event `id` while dragging (moving with the left button down after pressing it on the area) and once more when let go; `mui_canvas_drag` says which: 1 moving, 2 let go. `mui_canvas_mouse_x/_y` give the position, also out of the area. Moves are gathered: one comes each time the program asks. Before opening the window. |
+| `mui_canvas_qualifiers(z)` | The keys held at the last key, click or wheel turn, added up: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` tells Shift). Amiga + click does not arrive: the system keeps it. Shift, Ctrl, Alt or Amiga alone give no key event. |
+| `mui_canvas_on_drag(area, id)`, `mui_canvas_drag(z)` | Event `id` while dragging (moving with the left button down after pressing it on the area) and once more when let go; `mui_canvas_drag` says which: 1 moving, 2 let go. `mui_canvas_mouse_x/_y` give the position, also out of the area. Moves are gathered: one comes each time the program asks. A click without moving is no drag (it only gives its `mui_canvas_on_input` event). Before opening the window. |
 | `mui_canvas_on_move(zona, id)` | Event when the mouse moves over the area, without a click, and when it leaves it (before opening the window). Movements that arrive before the program picks one up count as one; it does not delay clicks. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Where the mouse is now, from the corner of the area, and whether it is inside it; whether or not there was a click. |
 | `mui_scrollbar(vertical)` | Scroll bar; its value is the first visible line. |
@@ -3864,6 +3864,32 @@ end
   with `OpenWorkbenchObject` (3.5 or later: it reads the tooltypes of its icon) or from a Shell with the same
   arguments. Useful for updating itself: replace the executable, call `program_relaunch()` and exit.
 
+### Simulated keyboard and mouse: input_*
+
+To test a program from another one in the emulator (typing, pressing keys, clicking, dragging) and take
+screenshots. They send events through `input.device`, as a user would, to the active window; positions are from
+that window's corner. They wait a tick (20 ms) after each event.
+
+| Function | What it does |
+|---|---|
+| `input_key(code, qualifiers)` | Presses and lets go a raw key (`0x44` Return, `0x45` Esc, `0x41` Backspace, `0x4C`-`0x4F` up, down, right, left arrows) with 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it; Amiga is the right one, the one of menu shortcuts |
+| `input_text(text)` | Types a text with the keyboard's keymap (`"=SUM(A1:A3)"`); what the keymap cannot type is left out |
+| `input_move(x, y)` | Moves the pointer there |
+| `input_click(x, y, qualifiers)` | Left button click (Amiga + click is the system's) |
+| `input_drag(x1, y1, x2, y2)` | Presses at (x1, y1), goes to (x2, y2) with the button down and lets go |
+| `input_active_title()` | The title of the active window (`""` if none): to wait for the program's one |
+
+```
+run_program("Calc hoja.ods")
+while input_active_title() != "Calc - hoja.ods"
+    time_delay_ms(50)
+end
+input_move(100, 60)              # a MUI drawing area takes keys with the pointer over it
+input_text("1.234,5")
+input_key(0x44, 0)               # Return
+input_key(0x4E, 1)               # Shift + right
+```
+
 ### Date and time: clock_* and date_text
 
 ```ruby
@@ -4338,6 +4364,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
+| Simulated keyboard and mouse | 6 | `input_key`, `input_text`, `input_click`, `input_drag`, `input_active_title` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
@@ -4350,7 +4377,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **667** | |
+| **Total** | **673** | |
 
 ### Standard Amiga Colors
 
