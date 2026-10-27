@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 662 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 667 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -605,6 +605,31 @@ end
 p = str_find(linea, "=")
 clave = str_lower(linea[:p])
 valor = Int(linea[p + 1:])
+```
+
+#### Expresiones regulares y comodines
+
+Sobre textos UTF-8 (lo de fuera de ASCII, de `latin1_to_utf8`); posiciones y largos en bytes, como `utf8_next`.
+
+| Funcion | Que hace |
+|---|---|
+| `regex_match(patron, texto, sin_mayusculas)` | Si el texto entero cumple el patron |
+| `regex_find(patron, texto, desde, sin_mayusculas)` | Donde empieza lo primero que lo cumple desde el byte `desde`, o -1; `regex_length()` da su largo |
+| `regex_error()` | Por que esta mal el ultimo patron (`""` si esta bien); uno malo da `false` o -1, sin parar el programa |
+| `wildcard_match(patron, texto, sin_mayusculas)` | Comodines de Excel sobre el texto entero: `*` lo que sea, `?` un caracter, `~` delante de un caracter lo toma tal cual (`~*`, `~?`, `~~`) |
+
+Sintaxis de ICU en lo comun: `.` (no salto de linea), `*`, `+`, `?`, `{m}`, `{m,}`, `{m,n}` (y las vagas `*?`, `+?`,
+`??`), `[abc]`, `[a-z]`, `[^...]`, `^`, `$`, `\d`, `\w`, `\s` y sus contrarios en mayuscula, `\b`, `\B`, `\t`, `\n`,
+`\xhh`, `\x{h...}`, `\uhhhh`, `\.` y demas signos, `|`, grupos `( )` y `(?: )`; `(?i)` al principio ignora mayusculas.
+No hay referencias atras, miradas adelante ni cuantificadores posesivos (dan error). Las mayusculas se comparan en
+ASCII, Latin-1, Latin extendido A, griego y cirilico. Nunca se cuelga: `(a*)*b` sobre muchas `a` acaba enseguida.
+Con bucles que pueden dar vueltas vacias, como `(a|b*)*`, `regex_find` puede dar un largo distinto del de ICU.
+En un A1200, comparar un texto corto tarda unos 0,7 ms; con comodines, 0,3 ms.
+
+```
+if regex_match("D.", celda, false)        # VLOOKUP de ODF: "D." encuentra "DD"
+p = regex_find("\\d+", texto, 0, false)    # en un literal de Dash, "\\d" es \d
+n = regex_length()
 ```
 
 ### Precedencia de Operadores
@@ -4281,12 +4306,13 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double y texto | 2 | `str_from_double`, `str_to_double` |
+| Expresiones regulares y comodines | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
 | Matemáticas de Double | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **662** | |
+| **Total** | **667** | |
 
 ### Colores Estandar Amiga
 

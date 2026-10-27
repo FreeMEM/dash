@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 662 funciones, 662 implementadas, 0 sin implementar.
+Total: 667 funciones, 667 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -608,6 +608,16 @@ Total: 662 funciones, 662 implementadas, 0 sin implementar.
 | `abs(x)` | `double` | Absolute value, a Double |  |
 | `is_nan(x)` | `BOOL` | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
 | `is_inf(x)` | `BOOL` | True if x is inf or -inf |  |
+
+## Expresiones regulares y comodines
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `regex_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
+| `regex_find(pattern, text, from, ignore_case)` | `LONG` | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
+| `regex_length()` | `LONG` | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
+| `regex_error()` | `STRPTR` | Why the last pattern is wrong, "" if it is right |  |
+| `wildcard_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
 
 ## Audio
 

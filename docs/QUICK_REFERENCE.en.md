@@ -73,6 +73,7 @@ s.length  s[i]  s[2:5]      # length, character, slice
 Int(s[i])  str_code(s, i)   # character code (0-255)
 str_char(65)                # "A"
 str_find(s, "x")            # position or -1; str_find_from(s, "x", start)
+regex_match("D.", s, false)  # whole text, ICU syntax; regex_find(p, s, from, icase) -1 / regex_length(); regex_error(); wildcard_match("*.ods", s, true)
 str_starts(s, "a")  str_ends(s, "z")
 str_lower(s)  str_upper(s)  str_trim(s)
 Int("42")  str_to_int("ff", 16)  str_from_int(255, 16)

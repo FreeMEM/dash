@@ -3,7 +3,7 @@ Versión: 2.0 (estado repasado el 2026-10-24)
 
 > **Aviso:** estos son los requisitos originales del proyecto. Debajo de cada uno, **Hoy** dice cómo está:
 > hecho (y cómo), hecho de otra forma, a medias, descartado o no hay. La lista real de funciones está en
-> `BUILTINS.md` (662, generada del código); la sintaxis, en `QUICK_REFERENCE.md` y `MANUAL_REFERENCIA.md`; lo
+> `BUILTINS.md` (667, generada del código); la sintaxis, en `QUICK_REFERENCE.md` y `MANUAL_REFERENCIA.md`; lo
 > hecho y cuándo, en `ROADMAP.md` y en `git log`. Cambios de fondo: los programas piden AmigaOS 3.0 o superior
 > (no 2.0) y funcionan en un 68000; no hay versión PPC; el gcc de bebbo genera Hunk directamente, sin `elf2hunk`.
 > Las llamadas del estilo `System.algo` no existen: todo son funciones (`file_open_dialog`, `copper_create`...)

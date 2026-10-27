@@ -5353,6 +5353,569 @@ static LONG _dash_buffer_find_any(APTR buf, LONG from, LONG to, STRPTR bytes) {
 
 """
 
+    # Lorraine D45: regex_match, regex_find, wildcard_match. Needs UTF8_RUNTIME (the decoder) and the strings.
+    REGEX_RUNTIME = """\
+/* Dash Regex Runtime */
+#define _dash_re_alloc(n) _dash_block_get_clear(n)
+#define _dash_re_free(p, n) _dash_block_put((p), (n))
+/* Regular expressions and Excel wildcards over UTF-8 texts (Lorraine D45). ICU's common syntax: . * + ? {m,n}
+   (and lazy *? +? ?? {m,n}?), [...] [^...] with ranges, ^ $, \\d \\w \\s \\D \\W \\S \\b \\B, \\t \\n \\r \\f \\v \\e,
+   \\xhh \\x{h...} \\uhhhh, escaped punctuation, | and groups ( ) (?: ); (?i) at the start ignores case. The
+   pattern becomes a program for a backtracking machine that marks each (instruction, position) it has tried
+   (RE2's BitState): never more than program x text steps, so (a*)* cannot hang. Positions are bytes. */
+#define _DASH_RE_MAXPROG 1500
+#define _DASH_RE_MAXNODES 600
+#define _DASH_RE_MAXRANGES 512
+#define _DASH_RE_INF 0x7FFFFFFF
+enum { _DASH_RE_CHAR, _DASH_RE_ANY, _DASH_RE_ANYALL, _DASH_RE_CLASS, _DASH_RE_NCLASS, _DASH_RE_SPLIT, _DASH_RE_JMP,
+       _DASH_RE_SAVE, _DASH_RE_BOL, _DASH_RE_EOL, _DASH_RE_WORDB, _DASH_RE_NWORDB, _DASH_RE_MATCH };
+/* special "ranges" of a class: \\d \\w \\s and their opposites */
+#define _DASH_RE_DIGIT -1
+#define _DASH_RE_WORD -2
+#define _DASH_RE_SPACE -3
+#define _DASH_RE_NDIGIT -4
+#define _DASH_RE_NWORD -5
+#define _DASH_RE_NSPACE -6
+
+typedef struct { UBYTE op; LONG x, y; } _DashReInst;
+/* node kinds of the parsed pattern */
+enum { _DASH_RN_CHAR, _DASH_RN_ANY, _DASH_RN_CLASS, _DASH_RN_NCLASS, _DASH_RN_BOL, _DASH_RN_EOL, _DASH_RN_WORDB,
+       _DASH_RN_NWORDB, _DASH_RN_CAT, _DASH_RN_ALT, _DASH_RN_REPEAT, _DASH_RN_EMPTY };
+typedef struct { UBYTE kind, greedy; LONG a, b, min, max; } _DashReNode;   /* a, b: children / char / ranges */
+
+static struct {
+    _DashReInst prog[_DASH_RE_MAXPROG];
+    LONG n;
+    LONG ranges[_DASH_RE_MAXRANGES * 2];
+    LONG nr;
+    _DashReNode nodes[_DASH_RE_MAXNODES];
+    LONG nn;
+    BOOL icase, ok;
+    char err[80];
+    char cached[256];           /* the pattern compiled, when it fits */
+    BOOL cached_icase, cached_valid;
+    const UBYTE *p;             /* parser */
+    LONG depth;
+    LONG mstart, mend;          /* last match */
+} _dash_re;
+
+static void _dash_re_fail(const char *msg) {
+    if (_dash_re.ok) {
+        LONG i = 0;
+        while (msg[i] && i < (LONG)sizeof(_dash_re.err) - 1) { _dash_re.err[i] = msg[i]; i++; }
+        _dash_re.err[i] = 0;
+    }
+    _dash_re.ok = FALSE;
+}
+
+/* Lower case of a code point: ASCII, Latin-1, Latin Extended-A, Greek and Cyrillic */
+static LONG _dash_re_fold(LONG c) {
+    if (c < 0x80) return c >= 'A' && c <= 'Z' ? c + 32 : c;
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7) return c + 32;
+    if (c >= 0x100 && c <= 0x17F) {
+        if (c == 0x130) return 'i';
+        if (c == 0x178) return 0xFF;
+        if ((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) return (c & 1) ? c + 1 : c;
+        if (c == 0x131 || c == 0x138 || c == 0x149 || c == 0x17F) return c;
+        return (c & 1) ? c : c + 1;
+    }
+    if (c >= 0x391 && c <= 0x3A9 && c != 0x3A2) return c + 32;
+    if (c >= 0x410 && c <= 0x42F) return c + 32;
+    if (c >= 0x400 && c <= 0x40F) return c + 80;
+    return c;
+}
+
+static BOOL _dash_re_is_word(LONG c) {
+    if (c < 0x80) return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+    return (c >= 0xC0 && c <= 0x1FFF && c != 0xD7 && c != 0xF7) || (c >= 0x3040 && c <= 0xD7FF);
+}
+
+static BOOL _dash_re_is_space(LONG c) {
+    return c == ' ' || (c >= 9 && c <= 13) || c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200A) ||
+           c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x3000;
+}
+
+static BOOL _dash_re_in_ranges(LONG c, LONG first, LONG count) {
+    LONG i;
+    for (i = 0; i < count; i++) {
+        LONG a = _dash_re.ranges[(first + i) * 2], b = _dash_re.ranges[(first + i) * 2 + 1];
+        switch (a) {
+        case _DASH_RE_DIGIT: if (c >= '0' && c <= '9') return TRUE; break;
+        case _DASH_RE_WORD: if (_dash_re_is_word(c)) return TRUE; break;
+        case _DASH_RE_SPACE: if (_dash_re_is_space(c)) return TRUE; break;
+        case _DASH_RE_NDIGIT: if (!(c >= '0' && c <= '9')) return TRUE; break;
+        case _DASH_RE_NWORD: if (!_dash_re_is_word(c)) return TRUE; break;
+        case _DASH_RE_NSPACE: if (!_dash_re_is_space(c)) return TRUE; break;
+        default: if (c >= a && c <= b) return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static LONG _dash_re_node(UBYTE kind, LONG a, LONG b) {
+    _DashReNode *n;
+    if (_dash_re.nn >= _DASH_RE_MAXNODES) { _dash_re_fail("pattern too long"); return 0; }
+    n = &_dash_re.nodes[_dash_re.nn];
+    n->kind = kind; n->a = a; n->b = b; n->min = n->max = 0; n->greedy = TRUE;
+    return _dash_re.nn++;
+}
+
+static void _dash_re_range(LONG a, LONG b) {
+    if (_dash_re.nr >= _DASH_RE_MAXRANGES) { _dash_re_fail("too many character ranges"); return; }
+    _dash_re.ranges[_dash_re.nr * 2] = a;
+    _dash_re.ranges[_dash_re.nr * 2 + 1] = b;
+    _dash_re.nr++;
+    if (_dash_re.icase && a >= 0 && _dash_re.nr < _DASH_RE_MAXRANGES) {   /* [A-Z] also as [a-z] */
+        LONG fa = _dash_re_fold(a), fb = _dash_re_fold(b);
+        if ((fa != a || fb != b) && fa <= fb) {
+            _dash_re.ranges[_dash_re.nr * 2] = fa;
+            _dash_re.ranges[_dash_re.nr * 2 + 1] = fb;
+            _dash_re.nr++;
+        }
+    }
+}
+
+static LONG _dash_re_hex(LONG digits, BOOL braces) {
+    LONG v = 0, k = 0;
+    for (;;) {
+        UBYTE c = *_dash_re.p;
+        LONG d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+        if (braces && c == '}' && k) { _dash_re.p++; return v; }
+        if (d < 0) break;
+        v = v * 16 + d; k++; _dash_re.p++;
+        if (!braces && k == digits) return v;
+        if (v > 0x10FFFF) break;
+    }
+    _dash_re_fail("bad hexadecimal escape");
+    return 0;
+}
+
+/* After a backslash: a code point (>= 0), or a class (-1 \\d ... -6 \\S), or -10 \\b, -11 \\B */
+static LONG _dash_re_escape(BOOL in_class) {
+    UBYTE c = *_dash_re.p;
+    LONG n;
+    if (!c) { _dash_re_fail("\\\\ at the end of the pattern"); return 0; }
+    _dash_re.p++;
+    switch (c) {
+    case 'd': return _DASH_RE_DIGIT;
+    case 'w': return _DASH_RE_WORD;
+    case 's': return _DASH_RE_SPACE;
+    case 'D': return _DASH_RE_NDIGIT;
+    case 'W': return _DASH_RE_NWORD;
+    case 'S': return _DASH_RE_NSPACE;
+    case 'b': return in_class ? 8 : -10;
+    case 'B': if (!in_class) return -11; break;
+    case 't': return 9;
+    case 'n': return 10;
+    case 'r': return 13;
+    case 'f': return 12;
+    case 'v': return 11;
+    case 'e': return 27;
+    case 'a': return 7;
+    case 'x':
+        if (*_dash_re.p == '{') { _dash_re.p++; return _dash_re_hex(8, TRUE); }
+        return _dash_re_hex(2, FALSE);
+    case 'u': return _dash_re_hex(4, FALSE);
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+        _dash_re_fail("escape not supported");
+        return 0;
+    }
+    _dash_re.p--;                          /* \\. \\* \\( ...: the character itself */
+    {
+        LONG cp = _dash_utf8_decode(_dash_re.p, &n);
+        _dash_re.p += n;
+        return cp;
+    }
+}
+
+static LONG _dash_re_class(void) {
+    LONG first = _dash_re.nr, c, d, n;
+    BOOL neg = FALSE, start = TRUE;
+    if (*_dash_re.p == '^') { neg = TRUE; _dash_re.p++; }
+    for (;;) {
+        if (!*_dash_re.p) { _dash_re_fail("[ without ]"); return 0; }
+        if (*_dash_re.p == ']' && !start) { _dash_re.p++; break; }
+        start = FALSE;
+        if (*_dash_re.p == '[' && _dash_re.p[1] == ':') { _dash_re_fail("[: classes not supported"); return 0; }
+        if (*_dash_re.p == '\\\\') { _dash_re.p++; c = _dash_re_escape(TRUE); }
+        else { c = _dash_utf8_decode(_dash_re.p, &n); _dash_re.p += n; }
+        if (!_dash_re.ok) return 0;
+        if (c < 0) { _dash_re_range(c, c); continue; }
+        if (*_dash_re.p == '-' && _dash_re.p[1] && _dash_re.p[1] != ']') {
+            _dash_re.p++;
+            if (*_dash_re.p == '\\\\') { _dash_re.p++; d = _dash_re_escape(TRUE); }
+            else { d = _dash_utf8_decode(_dash_re.p, &n); _dash_re.p += n; }
+            if (!_dash_re.ok) return 0;
+            if (d < 0 || d < c) { _dash_re_fail("bad range in [...]"); return 0; }
+            _dash_re_range(c, d);
+        } else {
+            _dash_re_range(c, c);
+        }
+    }
+    return _dash_re_node(neg ? _DASH_RN_NCLASS : _DASH_RN_CLASS, first, _dash_re.nr - first);
+}
+
+static LONG _dash_re_alt(void);
+
+static LONG _dash_re_number(LONG *v) {
+    LONG k = 0;
+    *v = 0;
+    while (*_dash_re.p >= '0' && *_dash_re.p <= '9' && k < 6) { *v = *v * 10 + (*_dash_re.p++ - '0'); k++; }
+    return k;
+}
+
+static LONG _dash_re_atom(void) {
+    UBYTE c = *_dash_re.p;
+    LONG n, e;
+    switch (c) {
+    case '(':
+        _dash_re.p++;
+        if (++_dash_re.depth > 40) { _dash_re_fail("too many nested groups"); return 0; }
+        if (*_dash_re.p == '?') {
+            if (_dash_re.p[1] == ':') _dash_re.p += 2;
+            else { _dash_re_fail("(? not supported (only (?: and (?i) at the start)"); return 0; }
+        }
+        e = _dash_re_alt();
+        if (!_dash_re.ok) return 0;
+        if (*_dash_re.p != ')') { _dash_re_fail("( without )"); return 0; }
+        _dash_re.p++;
+        _dash_re.depth--;
+        return e;
+    case '[': _dash_re.p++; return _dash_re_class();
+    case '.': _dash_re.p++; return _dash_re_node(_DASH_RN_ANY, 0, 0);
+    case '^': _dash_re.p++; return _dash_re_node(_DASH_RN_BOL, 0, 0);
+    case '$': _dash_re.p++; return _dash_re_node(_DASH_RN_EOL, 0, 0);
+    case '\\\\':
+        _dash_re.p++;
+        e = _dash_re_escape(FALSE);
+        if (!_dash_re.ok) return 0;
+        if (e == -10) return _dash_re_node(_DASH_RN_WORDB, 0, 0);
+        if (e == -11) return _dash_re_node(_DASH_RN_NWORDB, 0, 0);
+        if (e < 0) { n = _dash_re.nr; _dash_re_range(e, e); return _dash_re_node(_DASH_RN_CLASS, n, 1); }
+        return _dash_re_node(_DASH_RN_CHAR, _dash_re.icase ? _dash_re_fold(e) : e, 0);
+    case '*': case '+': case '?':
+        _dash_re_fail("nothing to repeat");
+        return 0;
+    }
+    e = _dash_utf8_decode(_dash_re.p, &n);
+    _dash_re.p += n;
+    return _dash_re_node(_DASH_RN_CHAR, _dash_re.icase ? _dash_re_fold(e) : e, 0);
+}
+
+static LONG _dash_re_repeat(void) {
+    LONG e = _dash_re_atom(), min, max, r;
+    for (;;) {
+        UBYTE c = *_dash_re.p;
+        const UBYTE *save = _dash_re.p;
+        if (!_dash_re.ok) return 0;
+        if (c == '*') { min = 0; max = _DASH_RE_INF; _dash_re.p++; }
+        else if (c == '+') { min = 1; max = _DASH_RE_INF; _dash_re.p++; }
+        else if (c == '?') { min = 0; max = 1; _dash_re.p++; }
+        else if (c == '{') {
+            _dash_re.p++;
+            if (!_dash_re_number(&min)) { _dash_re.p = save; return e; }    /* a { that is no interval: itself */
+            max = min;
+            if (*_dash_re.p == ',') {
+                _dash_re.p++;
+                if (!_dash_re_number(&max)) max = _DASH_RE_INF;
+            }
+            if (*_dash_re.p != '}') { _dash_re.p = save; return e; }
+            _dash_re.p++;
+            if (max < min || min > 1000 || (max != _DASH_RE_INF && max > 1000)) { _dash_re_fail("bad {m,n}"); return 0; }
+        } else {
+            return e;
+        }
+        r = _dash_re_node(_DASH_RN_REPEAT, e, 0);
+        if (!_dash_re.ok) return 0;
+        _dash_re.nodes[r].min = min;
+        _dash_re.nodes[r].max = max;
+        if (*_dash_re.p == '?') { _dash_re.nodes[r].greedy = FALSE; _dash_re.p++; }
+        else if (*_dash_re.p == '+') { _dash_re_fail("possessive quantifiers not supported"); return 0; }
+        e = r;
+    }
+}
+
+static LONG _dash_re_concat(void) {
+    LONG e = -1, r;
+    while (*_dash_re.p && *_dash_re.p != '|' && *_dash_re.p != ')') {
+        r = _dash_re_repeat();
+        if (!_dash_re.ok) return 0;
+        e = e < 0 ? r : _dash_re_node(_DASH_RN_CAT, e, r);
+        if (!_dash_re.ok) return 0;
+    }
+    return e < 0 ? _dash_re_node(_DASH_RN_EMPTY, 0, 0) : e;
+}
+
+static LONG _dash_re_alt(void) {
+    LONG e = _dash_re_concat();
+    while (_dash_re.ok && *_dash_re.p == '|') {
+        _dash_re.p++;
+        e = _dash_re_node(_DASH_RN_ALT, e, _dash_re_concat());
+    }
+    return e;
+}
+
+static LONG _dash_re_emit(UBYTE op, LONG x, LONG y) {
+    if (_dash_re.n >= _DASH_RE_MAXPROG) { _dash_re_fail("pattern too long"); return 0; }
+    _dash_re.prog[_dash_re.n].op = op;
+    _dash_re.prog[_dash_re.n].x = x;
+    _dash_re.prog[_dash_re.n].y = y;
+    return _dash_re.n++;
+}
+
+static void _dash_re_gen(LONG ni) {
+    _DashReNode *nd;
+    LONG i, s, j;
+    if (!_dash_re.ok) return;
+    nd = &_dash_re.nodes[ni];
+    switch (nd->kind) {
+    case _DASH_RN_CHAR: _dash_re_emit(_DASH_RE_CHAR, nd->a, 0); break;
+    case _DASH_RN_ANY: _dash_re_emit(_DASH_RE_ANY, 0, 0); break;
+    case _DASH_RN_CLASS: _dash_re_emit(_DASH_RE_CLASS, nd->a, nd->b); break;
+    case _DASH_RN_NCLASS: _dash_re_emit(_DASH_RE_NCLASS, nd->a, nd->b); break;
+    case _DASH_RN_BOL: _dash_re_emit(_DASH_RE_BOL, 0, 0); break;
+    case _DASH_RN_EOL: _dash_re_emit(_DASH_RE_EOL, 0, 0); break;
+    case _DASH_RN_WORDB: _dash_re_emit(_DASH_RE_WORDB, 0, 0); break;
+    case _DASH_RN_NWORDB: _dash_re_emit(_DASH_RE_NWORDB, 0, 0); break;
+    case _DASH_RN_EMPTY: break;
+    case _DASH_RN_CAT: _dash_re_gen(nd->a); _dash_re_gen(nd->b); break;
+    case _DASH_RN_ALT:
+        s = _dash_re_emit(_DASH_RE_SPLIT, 0, 0);
+        _dash_re.prog[s].x = _dash_re.n;
+        _dash_re_gen(nd->a);
+        j = _dash_re_emit(_DASH_RE_JMP, 0, 0);
+        _dash_re.prog[s].y = _dash_re.n;
+        _dash_re_gen(nd->b);
+        _dash_re.prog[j].x = _dash_re.n;
+        break;
+    case _DASH_RN_REPEAT: {
+        LONG min = nd->min, max = nd->max, a = nd->a;
+        BOOL greedy = nd->greedy;
+        for (i = 0; i < min; i++) _dash_re_gen(a);
+        if (max == _DASH_RE_INF) {
+            s = _dash_re_emit(_DASH_RE_SPLIT, 0, 0);
+            _dash_re_gen(a);
+            _dash_re_emit(_DASH_RE_JMP, s, 0);
+            if (greedy) { _dash_re.prog[s].x = s + 1; _dash_re.prog[s].y = _dash_re.n; }
+            else { _dash_re.prog[s].x = _dash_re.n; _dash_re.prog[s].y = s + 1; }
+        } else {
+            /* each optional copy: split to it or to the end; the ends are patched after */
+            LONG first = _dash_re.n;
+            for (i = min; i < max && _dash_re.ok; i++) {
+                s = _dash_re_emit(_DASH_RE_SPLIT, 0, -1);
+                _dash_re.prog[s].x = s + 1;       /* (patched below for lazy ones) */
+                _dash_re_gen(a);
+            }
+            for (j = first; j < _dash_re.n && _dash_re.ok; j++) {
+                if (_dash_re.prog[j].op == _DASH_RE_SPLIT && _dash_re.prog[j].y == -1) {
+                    if (greedy) _dash_re.prog[j].y = _dash_re.n;
+                    else { _dash_re.prog[j].y = _dash_re.prog[j].x; _dash_re.prog[j].x = _dash_re.n; }
+                }
+            }
+        }
+        break;
+    }
+    }
+}
+
+/* Compiles the pattern (or keeps the last one, if it is the same). FALSE if it is wrong: regex_error says why */
+static BOOL _dash_re_compile(STRPTR pattern, LONG icase) {
+    LONG len, root;
+    if (!pattern) pattern = (STRPTR)"";
+    len = strlen((char *)pattern);
+    if (_dash_re.cached_valid && len < (LONG)sizeof(_dash_re.cached) && _dash_re.cached_icase == (icase != 0) &&
+        !strcmp(_dash_re.cached, (char *)pattern)) {
+        if (!_dash_re.ok) return FALSE;
+        return TRUE;
+    }
+    _dash_re.ok = TRUE;
+    _dash_re.err[0] = 0;
+    _dash_re.n = _dash_re.nr = _dash_re.nn = 0;
+    _dash_re.depth = 0;
+    _dash_re.icase = icase != 0;
+    _dash_re.p = (const UBYTE *)pattern;
+    if (!strncmp((char *)pattern, "(?i)", 4)) { _dash_re.icase = TRUE; _dash_re.p += 4; }
+    /* 0: split 3, 1  1: any  2: jmp 0  (a search goes through here)  3: save 0 (a whole match starts here) */
+    _dash_re_emit(_DASH_RE_SPLIT, 3, 1);
+    _dash_re_emit(_DASH_RE_ANYALL, 0, 0);
+    _dash_re_emit(_DASH_RE_JMP, 0, 0);
+    _dash_re_emit(_DASH_RE_SAVE, 0, 0);
+    root = _dash_re_alt();
+    if (_dash_re.ok && *_dash_re.p == ')') _dash_re_fail(") without (");
+    _dash_re_gen(root);
+    _dash_re_emit(_DASH_RE_MATCH, 0, 0);
+    _dash_re.cached_valid = len < (LONG)sizeof(_dash_re.cached);
+    if (_dash_re.cached_valid) {
+        memcpy(_dash_re.cached, pattern, len + 1);
+        _dash_re.cached_icase = icase != 0;
+    }
+    return _dash_re.ok;
+}
+
+static LONG _dash_re_prev_char(const UBYTE *s, LONG pos) {
+    LONG i = pos - 1, n;
+    if (pos <= 0) return -1;
+    while (i > 0 && pos - i < 4 && (s[i] & 0xC0) == 0x80) i--;
+    return _dash_utf8_decode(s + i, &n);
+}
+
+/* Runs the program from pc at pos: TRUE and the match in mstart, mend. whole: only a match that ends the text */
+static BOOL _dash_re_run(const UBYTE *s, LONG len, LONG pos, LONG pc, BOOL whole) {
+    LONG nbits = _dash_re.n * (len + 1), stack_size = 64, sp = 0, steps = 0, c, n;
+    UBYTE *seen = NULL;
+    LONG *stack;
+    BOOL found = FALSE;
+    if (nbits <= 4L * 1024 * 1024) seen = (UBYTE *)_dash_re_alloc((nbits + 7) / 8);
+    stack = (LONG *)_dash_re_alloc(stack_size * 2 * sizeof(LONG));
+    if (!stack) { if (seen) _dash_re_free(seen, (nbits + 7) / 8); return FALSE; }
+    stack[sp++] = pc; stack[sp++] = pos;
+    while (sp && !found) {
+        pos = stack[--sp];
+        pc = stack[--sp];
+        for (;;) {
+            _DashReInst *in;
+            if (seen) {
+                LONG bit = pc * (len + 1) + pos;
+                if (seen[bit >> 3] & (1 << (bit & 7))) break;
+                seen[bit >> 3] |= 1 << (bit & 7);
+            } else if (++steps > 2000000L) {
+                _dash_re_fail("too complex for this text");
+                sp = 0;
+                break;
+            }
+            in = &_dash_re.prog[pc];
+            switch (in->op) {
+            case _DASH_RE_CHAR:
+                if (pos >= len) goto fail;
+                c = _dash_utf8_decode(s + pos, &n);
+                if ((_dash_re.icase ? _dash_re_fold(c) : c) != in->x) goto fail;
+                pos += n; pc++;
+                continue;
+            case _DASH_RE_ANY:
+                if (pos >= len || s[pos] == '\\n' || s[pos] == '\\r') goto fail;
+                _dash_utf8_decode(s + pos, &n);
+                pos += n; pc++;
+                continue;
+            case _DASH_RE_ANYALL:
+                if (pos >= len) goto fail;
+                _dash_utf8_decode(s + pos, &n);
+                pos += n; pc++;
+                continue;
+            case _DASH_RE_CLASS:
+            case _DASH_RE_NCLASS: {
+                BOOL in_class;
+                if (pos >= len) goto fail;
+                c = _dash_utf8_decode(s + pos, &n);
+                in_class = _dash_re_in_ranges(c, in->x, in->y) ||
+                           (_dash_re.icase && _dash_re_in_ranges(_dash_re_fold(c), in->x, in->y));
+                if (in_class != (in->op == _DASH_RE_CLASS)) goto fail;
+                pos += n; pc++;
+                continue;
+            }
+            case _DASH_RE_SPLIT:
+                if (sp + 2 > stack_size * 2) {
+                    LONG *bigger = (LONG *)_dash_re_alloc(stack_size * 4 * sizeof(LONG));
+                    if (!bigger) { sp = 0; goto fail; }
+                    memcpy(bigger, stack, sp * sizeof(LONG));
+                    _dash_re_free(stack, stack_size * 2 * sizeof(LONG));
+                    stack = bigger;
+                    stack_size *= 2;
+                }
+                stack[sp++] = in->y; stack[sp++] = pos;
+                pc = in->x;
+                continue;
+            case _DASH_RE_JMP: pc = in->x; continue;
+            case _DASH_RE_SAVE: _dash_re.mstart = pos; pc++; continue;
+            case _DASH_RE_BOL: if (pos != 0) goto fail; pc++; continue;
+            case _DASH_RE_EOL: if (pos != len && !(pos == len - 1 && s[pos] == '\\n')) goto fail; pc++; continue;
+            case _DASH_RE_WORDB:
+            case _DASH_RE_NWORDB: {
+                BOOL a = pos > 0 && _dash_re_is_word(_dash_re_prev_char(s, pos));
+                BOOL b = pos < len && _dash_re_is_word(_dash_utf8_decode(s + pos, &n));
+                if ((a != b) != (in->op == _DASH_RE_WORDB)) goto fail;
+                pc++;
+                continue;
+            }
+            case _DASH_RE_MATCH:
+                if (whole && pos != len) goto fail;
+                _dash_re.mend = pos;
+                found = TRUE;
+                break;
+            }
+            break;
+        fail:
+            break;
+        }
+    }
+    _dash_re_free(stack, stack_size * 2 * sizeof(LONG));
+    if (seen) _dash_re_free(seen, (nbits + 7) / 8);
+    return found;
+}
+
+/* The whole text fits the pattern */
+static BOOL _dash_regex_match(STRPTR pattern, STRPTR text, LONG icase) {
+    _dash_re.mstart = _dash_re.mend = -1;
+    if (!_dash_re_compile(pattern, icase)) return FALSE;
+    if (!text) text = (STRPTR)"";
+    if (_dash_re_run((const UBYTE *)text, strlen((char *)text), 0, 3, TRUE)) return TRUE;
+    _dash_re.mstart = _dash_re.mend = -1;
+    return FALSE;
+}
+
+/* Where the first match from byte from starts, -1 if none (or a wrong pattern); regex_length its length */
+static LONG _dash_regex_find(STRPTR pattern, STRPTR text, LONG from, LONG icase) {
+    LONG len;
+    _dash_re.mstart = _dash_re.mend = -1;
+    if (!_dash_re_compile(pattern, icase)) return -1;
+    if (!text) text = (STRPTR)"";
+    len = strlen((char *)text);
+    if (from < 0) from = 0;
+    if (from > len) return -1;
+    if (_dash_re_run((const UBYTE *)text, len, from, 0, FALSE)) return _dash_re.mstart;
+    _dash_re.mstart = _dash_re.mend = -1;
+    return -1;
+}
+
+static LONG _dash_regex_length(void) {
+    return _dash_re.mstart >= 0 ? _dash_re.mend - _dash_re.mstart : 0;
+}
+
+/* Why the last pattern is wrong, "" if it is right */
+static STRPTR _dash_regex_error(void) {
+    return _dash_str_dup((STRPTR)(_dash_re.ok ? "" : _dash_re.err), TRUE);
+}
+
+/* Excel's wildcards over the whole text: * any characters, ? one, ~ before a character takes it as it is */
+static BOOL _dash_wildcard_match(STRPTR pattern, STRPTR text, LONG icase) {
+    const UBYTE *p = (const UBYTE *)(pattern ? pattern : (STRPTR)""), *t = (const UBYTE *)(text ? text : (STRPTR)"");
+    const UBYTE *star_p = NULL, *star_t = NULL;
+    LONG pc = 0, tc, pn, tn;
+    while (*t) {
+        BOOL esc = FALSE;
+        pn = 0;
+        if (*p) {
+            if (*p == '~' && p[1]) { esc = TRUE; pc = _dash_utf8_decode(p + 1, &pn); pn++; }
+            else pc = _dash_utf8_decode(p, &pn);
+        }
+        if (*p && !esc && pc == '*') { p += pn; star_p = p; star_t = t; continue; }
+        tc = _dash_utf8_decode(t, &tn);
+        if (*p && ((!esc && pc == '?') || pc == tc || (icase && _dash_re_fold(pc) == _dash_re_fold(tc)))) {
+            p += pn; t += tn;
+            continue;
+        }
+        if (!star_p) return FALSE;
+        _dash_utf8_decode(star_t, &tn);
+        star_t += tn;
+        t = star_t;
+        p = star_p;
+    }
+    while (*p == '*') p++;
+    return *p == 0;
+}
+
+"""
+
     # Lorraine D1, D3: Double is a C double (64-bit IEEE): the FPU with --fpu, else GCC's fp-bit for double
     # (compiler/softfloat.py). To and from text with Ryu (runtime/ryu, compiler/clibs.py links it when the C has
     # this template's first line).
@@ -15453,6 +16016,7 @@ _RUNTIME_FLAGS = [
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
+    ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -15746,6 +16310,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
         self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
         self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
+        self.uses_regex: bool = False  # regex_*, wildcard_match (REGEX_RUNTIME, Lorraine D45)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -15998,6 +16563,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.UTF8_RUNTIME)
         if self.uses_bufsearch:
             parts.append(CTemplates.BUFSEARCH_RUNTIME)
+        if self.uses_regex:
+            parts.append(CTemplates.REGEX_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -18793,6 +19360,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text_io = True   # net_recv: bytes to text like str_from_buffer
         if self.uses_split:
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
+        if self.uses_regex:
+            self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:

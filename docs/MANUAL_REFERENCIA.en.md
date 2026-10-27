@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 662 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 667 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -605,6 +605,31 @@ end
 p = str_find(linea, "=")
 clave = str_lower(linea[:p])
 valor = Int(linea[p + 1:])
+```
+
+#### Regular expressions and wildcards
+
+Over UTF-8 texts (anything outside ASCII, from `latin1_to_utf8`); positions and lengths in bytes, as `utf8_next`.
+
+| Function | What it does |
+|---|---|
+| `regex_match(pattern, text, ignore_case)` | Whether the whole text fits the pattern |
+| `regex_find(pattern, text, from, ignore_case)` | Where the first match from byte `from` starts, or -1; `regex_length()` gives its length |
+| `regex_error()` | Why the last pattern is wrong (`""` if it is right); a wrong one gives `false` or -1, without stopping the program |
+| `wildcard_match(pattern, text, ignore_case)` | Excel's wildcards over the whole text: `*` anything, `?` one character, `~` before a character takes it as it is (`~*`, `~?`, `~~`) |
+
+ICU's syntax in what is common: `.` (not a line break), `*`, `+`, `?`, `{m}`, `{m,}`, `{m,n}` (and the lazy `*?`, `+?`,
+`??`), `[abc]`, `[a-z]`, `[^...]`, `^`, `$`, `\d`, `\w`, `\s` and their upper case opposites, `\b`, `\B`, `\t`, `\n`,
+`\xhh`, `\x{h...}`, `\uhhhh`, `\.` and the other signs, `|`, groups `( )` and `(?: )`; `(?i)` at the start ignores case.
+There are no back references, lookarounds or possessive quantifiers (they give an error). Case is compared in ASCII,
+Latin-1, Latin Extended-A, Greek and Cyrillic. It never hangs: `(a*)*b` over many `a`s ends at once. With loops that
+may turn empty, like `(a|b*)*`, `regex_find` may give another length than ICU. On an A1200, matching a short text
+takes about 0.7 ms; with wildcards, 0.3 ms.
+
+```
+if regex_match("D.", celda, false)        # ODF's VLOOKUP: "D." finds "DD"
+p = regex_find("\\d+", texto, 0, false)    # in a Dash literal, "\\d" is \d
+n = regex_length()
 ```
 
 ### Operator Precedence
@@ -4281,12 +4306,13 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparing and searching in a buffer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double and text | 2 | `str_from_double`, `str_to_double` |
+| Regular expressions and wildcards | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
 | Double math | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **662** | |
+| **Total** | **667** | |
 
 ### Standard Amiga Colors
 

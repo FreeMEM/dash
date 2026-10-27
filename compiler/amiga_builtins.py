@@ -4597,6 +4597,26 @@ MATH_FUNCTIONS = {
 }
 
 
+# Lorraine D45: over UTF-8 texts; positions and lengths in bytes, as utf8_next
+REGEX_FUNCTIONS = {
+    "regex_match": _text("regex_match", ["pattern", "text", "ignore_case"], "BOOL",
+                         "_dash_regex_match(${pattern}, ${text}, ${ignore_case})",
+                         "True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] "
+                         "^ $ \\d \\w \\s \\b | groups); false also for a wrong pattern (regex_error says why)"),
+    "regex_find": _text("regex_find", ["pattern", "text", "from", "ignore_case"], "LONG",
+                        "_dash_regex_find(${pattern}, ${text}, ${from}, ${ignore_case})",
+                        "Byte position where the first match from byte from starts, -1 if there is none (or the "
+                        "pattern is wrong); regex_length gives its length"),
+    "regex_length": _text("regex_length", [], "LONG", "_dash_regex_length()",
+                          "Length in bytes of the last match of regex_find or regex_match (0 if none)"),
+    "regex_error": _text("regex_error", [], "STRPTR", "_dash_regex_error()",
+                         "Why the last pattern is wrong, \"\" if it is right"),
+    "wildcard_match": _text("wildcard_match", ["pattern", "text", "ignore_case"], "BOOL",
+                            "_dash_wildcard_match(${pattern}, ${text}, ${ignore_case})",
+                            "True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a "
+                            "character takes it as it is (~* ~? ~~)"),
+}
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
@@ -4626,6 +4646,7 @@ ALL_BUILTINS = {
     **BUFSEARCH_FUNCTIONS,     # Lorraine D38, D39
     **DOUBLE_FUNCTIONS,        # Lorraine D3
     **MATH_FUNCTIONS,          # Lorraine D4
+    **REGEX_FUNCTIONS,         # Lorraine D45
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,
