@@ -2,7 +2,7 @@
   "name": "dash-mui-editor",
   "displayName": "Dash for Amiga",
   "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "publisher": "FreeMEM",
   "author": {
     "name": "Francisco Antonio Tapias Bravo",
@@ -206,6 +206,11 @@
           "type": "boolean",
           "default": true,
           "description": "Al pulsar Enter tras una línea que abre un bloque (func, if, while, struct, Main...) se añade su end si aún no lo tiene."
+        },
+        "dash.updates.check": {
+          "type": "boolean",
+          "default": true,
+          "description": "Una vez al día, mirar en GitHub si hay una versión nueva de Dash y avisar (la petición va a api.github.com)."
         },
         "dash.languageServer.enabled": {
           "type": "boolean",

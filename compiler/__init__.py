@@ -3,7 +3,7 @@ Dash Language Compiler Package
 
 A transpiler that converts Dash source code to C for Amiga.
 """
-__version__ = "2.0.0"
+__version__ = "1.0.0"
 __all__ = ["DashCompiler", "transpile", "CompilationError"]
 
 def __getattr__(name):

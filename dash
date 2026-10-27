@@ -58,8 +58,18 @@ def run_command(command, env=None):
                 sys.exit(return_code)
             break
 
+def dash_version():
+    """The version of this compiler (compiler/__init__.py; read as text: ./dash runs before the package is on the path)."""
+    import re
+    init = os.path.join(os.path.dirname(os.path.realpath(__file__)), "compiler", "__init__.py")
+    with open(init, encoding="utf-8") as f:
+        m = re.search(r'__version__ = "([^"]+)"', f.read())
+    return m.group(1) if m else "?"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Dash - Amiga Programming Language Compiler")
+    parser.add_argument("--version", action="version", version=f"Dash {dash_version()}")
     parser.add_argument("input_file", help="Input Dash source file (.dash)")
     parser.add_argument("-o", "--output", required=True, help="Output Amiga executable file")
     parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")

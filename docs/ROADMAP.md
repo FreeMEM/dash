@@ -1013,6 +1013,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] MUI: Tab y Mayúsculas+Tab como teclas sobre el lienzo (`mui_canvas_take_tab`, `"take_tab"` en el `.dashui`) (D48)
 - [x] 686 builtins (94 de MUI); 454 resultados sin emulador; 34 ejemplos
 
+### Versión 1.0.0 (2026-10-27)
+- [x] Primera versión con número: `compiler/__init__.py` (antes un `2.0.0` sin publicar), `./dash --version`,
+      etiquetas `vX.Y.Z` y qué significa cada número en `docs/VERSIONES.md`
+- [x] Extensión de VS Code 0.3.0: avisa una vez al día si hay una versión de Dash más nueva (`dash.updates.check`)
+- [x] 455 resultados sin emulador
+
 ## Notas y Decisiones
 
 ### Decisiones tomadas:
