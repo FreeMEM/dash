@@ -6,7 +6,7 @@ Extensible Lark grammar for the Dash programming language.
 # Grammar with variables and expressions support
 dash_grammar_minimal = r"""
     ?start: program
-    program: (import_stmt | const_decl | global_var_decl | struct_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
+    program: (import_stmt | const_decl | global_var_decl | struct_def | interface_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
 
     // Constant declaration
     // a literal or an integer expression known when compiling (const MASCARA = 1 << 4)
@@ -19,7 +19,12 @@ dash_grammar_minimal = r"""
     import_stmt: "import" ESCAPED_STRING
 
     // Struct definition with optional methods
-    struct_def: "struct" ID struct_member* "end"
+    struct_def: "struct" ID struct_impls? struct_member* "end"
+    struct_impls: ":" ID ("," ID)*
+    // An interface (Lorraine D43): methods that structs declaring it (struct X: Orden) have, called through
+    // a table in each struct's type descriptor
+    interface_def: "interface" ID (interface_method | comment_line)* "end"
+    interface_method: "func" ID "(" param_list? ")" return_type?
     struct_member: struct_field | struct_method | comment_line
     // weak: the field does not hold its object (a parent pointer), so no cycle (dashweb D6)
     struct_field: WEAK? ID ":" TYPE_NAME ("=" expression)?

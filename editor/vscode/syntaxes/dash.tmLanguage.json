@@ -276,7 +276,7 @@
           "name": "keyword.operator.logical.dash"
         },
         {
-          "match": "\\b(?:Window|struct|enum|func|fn)\\b",
+          "match": "\\b(?:interface|Window|struct|enum|func|fn)\\b",
           "name": "storage.type.dash"
         },
         {

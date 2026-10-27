@@ -142,6 +142,17 @@ d["k"].push(x)              # methods of elements too: l[0].mover(1), filas[i].c
 # weak padre: Nodo          # field that points without holding (no cycles: parent pointers)
 ```
 
+## Interfaces
+```
+interface Orden             # methods only; no fields, no Orden()
+    func deshacer() -> String
+end
+struct Escribir: Orden      # has its methods, same parameters and return (struct C: Figura, Orden)
+    ...
+end
+var pila: [Orden] = []      # any struct that has it; o.deshacer() calls its struct's (a table per type)
+```
+
 ## Arrays
 ```
 arr = [1, 2, 3, 4, 5]

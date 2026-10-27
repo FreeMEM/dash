@@ -1,0 +1,15 @@
+# Test: an interface has methods, not fields
+# expect: 'o' is an interface (Orden): it has methods, not fields
+interface Orden
+    func hacer()
+end
+struct Escribir: Orden
+    texto: String
+    func hacer()
+        Print self.texto
+    end
+end
+Main
+    var o: Orden = Escribir("a")
+    Print o.texto
+end

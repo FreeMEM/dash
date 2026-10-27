@@ -29,7 +29,7 @@ KEYWORDS = {
     "keyword.other": ["import", "Main", "EventLoop", "On", "Print", "Wait", "Stop"],
     "keyword.other.event": ["Close", "Key", "Gadget", "Menu", "Click", "Timer"],
     "keyword.operator.logical": ["and", "or", "not"],
-    "storage.type": ["func", "fn", "struct", "enum", "Window"],
+    "storage.type": ["func", "fn", "struct", "interface", "enum", "Window"],
     "storage.modifier": ["const", "var", "weak", "borrow"],
     "constant.language": ["true", "false", "nil"],
     "variable.language.self": ["self"],

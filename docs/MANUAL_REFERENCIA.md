@@ -959,6 +959,44 @@ Main
 end
 ```
 
+### Interfaces
+
+Una `interface` dice que metodos tiene algo, sin campos ni cuerpo. Un struct que la tiene lo dice tras su nombre
+(`struct Escribir: Orden`, o varias: `struct Cuadro: Figura, Orden`) y tiene esos metodos con los mismos
+parametros y el mismo tipo de vuelta. Un valor de la interfaz (variable, parametro, campo, retorno, elemento de
+una lista) es cualquier struct que la tenga, y al llamar a un metodo se usa el de su struct:
+
+```
+interface Orden
+    func hacer() -> String
+    func deshacer() -> String
+end
+
+struct Escribir: Orden
+    texto: String
+    func hacer() -> String
+        return "escribo " + self.texto
+    end
+    func deshacer() -> String
+        return "borro " + self.texto
+    end
+end
+
+Main
+    var pila: [Orden] = []
+    pila.push(Escribir("hola"))
+    o = pila.pop()
+    Print o.deshacer()      # el deshacer de Escribir
+end
+```
+
+- No cuesta memoria por objeto: los metodos van en una tabla de la ficha de tipo que ya tiene cada struct. Llamar
+  cuesta solo dos lecturas mas que un metodo normal.
+- No se pueden crear (`Orden()` es un error), no tienen campos y solo se les llaman sus metodos.
+- Un struct que no tiene la interfaz no vale donde va ella, y un valor de la interfaz no vale donde va un struct
+  concreto: no hay forma de bajar de la interfaz al struct.
+- `nil` vale como en cualquier struct.
+
 ---
 
 ## 9. Enumeraciones

@@ -688,6 +688,7 @@ static STRPTR _dash_str_ret(STRPTR p) {
 typedef struct _DashType {
     void (*destroy)(void *);
     LONG size;                     /* bytes after the header; 0: in a LONG before the header */
+    const APTR *methods;           /* a struct's methods of its interfaces, by slot (Lorraine D43), or NULL */
 } _DashType;
 
 typedef struct _Dash_RefHeader {
@@ -16726,9 +16727,11 @@ class CodeGenerator(ASTVisitor):
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
         # methods may draw (_dash_rp) or use any builtin
-        if self.struct_typedefs:
+        if self.struct_typedefs or self.analysis.program.structs:
             parts.append("\n/* Struct Definitions */\n")
-            parts.append("".join(f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
+            # an interface's values are pointers to any struct that has it (Lorraine D43)
+            parts.append("".join(f"typedef void _Dash_{st.name};\n" if st.is_interface else
+                                 f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
                                  for st in self.analysis.program.structs))
             parts.append("\n".join(self.struct_typedefs))
             parts.append("\n")
@@ -17214,8 +17217,22 @@ static {ret_type} {native.name}({params_str}) {{
             out.append(debuglines.mark(opening + 1 + k, filename) + body[k])
         return "".join(line + "\n" for line in out) + debuglines.NOLINE
 
+    def _iface_slots(self) -> dict:
+        """(interface, method) -> its slot in the method tables of the structs (Lorraine D43): every method of
+        every interface of the program has its own, in the order they are written."""
+        if getattr(self, "_iface_slot_map", None) is None:
+            slots = {}
+            for st in self.analysis.program.structs:
+                if st.is_interface:
+                    for m in st.methods:
+                        slots[(st.name, m.name)] = len(slots)
+            self._iface_slot_map = slots
+        return self._iface_slot_map
+
     def _generate_struct_typedef(self, struct: StructDef):
         """Generate C typedef, constructor, destructor and methods for a struct."""
+        if struct.is_interface:
+            return               # a void * (see _assemble_program); its methods go through the tables
         # Mark that we're using reference counting
         self.uses_refcount = True
 
@@ -17273,8 +17290,19 @@ static void _dash_struct_destroy_{struct.name}(void *obj) {{
         # _new: with one reference, for "var = Struct(...)" (adopted at once);
         # _create: a temporary, for anything else (arguments, lists, returns).
         # Two bodies: calling one from the other cost ~280 cycles on a 68000
+        # the methods of its interfaces, by slot, after the methods themselves (Lorraine D43)
+        slots = self._iface_slots()
+        vtable, vtable_decl, methods_ptr = "", "", ""
+        if struct.interfaces and slots:
+            names = ["NULL"] * len(slots)
+            for (iface, mname), k in slots.items():
+                if iface in struct.interfaces and struct.get_method(mname):
+                    names[k] = f"(APTR){struct.name}_{mname}"
+            vtable_decl = f"static const APTR _dash_vt_{struct.name}[{len(slots)}];\n"
+            vtable = f"\nstatic const APTR _dash_vt_{struct.name}[{len(slots)}] = {{ {', '.join(names)} }};\n"
+            methods_ptr = f", _dash_vt_{struct.name}"
         constructor = f"""{destructor}
-static const _DashType _dash_type_{struct.name} = {{ {destroy}, sizeof({c_name}) }};
+{vtable_decl}static const _DashType _dash_type_{struct.name} = {{ {destroy}, sizeof({c_name}){methods_ptr} }};
 
 static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
     {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), &_dash_type_{struct.name});
@@ -17310,7 +17338,7 @@ static void {struct.name}_release({c_name} *obj) {{
         for method in struct.methods:
             methods_code += self._debug_wrap(method, self._generate_struct_method(struct, method, type_map, c_name))
 
-        self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code)
+        self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code + vtable)
 
     def _generate_struct_method(self, struct: StructDef, method: StructMethod,
                                 type_map: dict, c_name: str) -> str:
@@ -19702,6 +19730,8 @@ static {ret_type} {method_name}({params_str}) {{
         owner = self._struct_of(node.object)
         struct_name = owner.name if owner else None
 
+        if owner and owner.is_interface:
+            return self._interface_call(node, owner, obj_expr)
         if struct_name:
             # Known struct type - generate StructName_methodname(obj, args...)
             method = owner.get_method(node.method)
@@ -19731,6 +19761,20 @@ static {ret_type} {method_name}({params_str}) {{
             args.extend(self._generate_expression(a) for a in node.arguments)
             args_str = ", ".join(args)
             return f"/* method call */ {node.method}({args_str})"
+
+    def _interface_call(self, node: MethodCall, iface: StructDef, obj_expr: str) -> str:
+        """o.hacer() on an interface value (Lorraine D43): the method of o's struct, from the table its type
+        descriptor points to. The object is worked out once (o may be l.pop())."""
+        method = iface.get_method(node.method)
+        slot = self._iface_slots()[(iface.name, node.method)]
+        self._icall_counter = getattr(self, "_icall_counter", 0) + 1
+        o = f"_dash_io{self._icall_counter}"
+        params = ["void *"] + [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type
+                               else "LONG" for p in method.params]
+        args = [o] + [self._method_arg(method, i, a) for i, a in enumerate(node.arguments)]
+        ret = self._method_c_type(method)
+        return (f"({{ void *{o} = {self._nn(self._lend(node.object, obj_expr))}; "
+                f"(({ret} (*)({', '.join(params)}))_DASH_GET_HEADER({o})->type->methods[{slot}])({', '.join(args)}); }})")
 
     def _method_arg(self, method, i: int, arg: ASTNode, pure: bool = False) -> str:
         """Argument i of a method call: lent if shared (not to a pure method), converted for a
@@ -20964,7 +21008,8 @@ class MultiFileGenerator:
             lines.append("/* Structs */")
             for struct in ast.structs:
                 if not struct.name.startswith("_"):
-                    lines.append(f"typedef struct _Dash_{struct.name} _Dash_{struct.name};")
+                    lines.append(f"typedef void _Dash_{struct.name};" if struct.is_interface else
+                                 f"typedef struct _Dash_{struct.name} _Dash_{struct.name};")
             lines.append("")
 
         # Export global variable declarations (extern)

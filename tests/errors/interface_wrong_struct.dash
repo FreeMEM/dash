@@ -1,0 +1,11 @@
+# Test: a struct without the interface does not go where the interface goes
+# expect: 'o' is Orden, not Punto
+interface Orden
+    func hacer()
+end
+struct Punto
+    x: Int
+end
+Main
+    var o: Orden = Punto(1)
+end

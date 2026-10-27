@@ -1,0 +1,18 @@
+# Test: only the interface's methods can be called on its values
+# expect: Interface 'Orden' has no method 'deshacer' (it has hacer)
+interface Orden
+    func hacer()
+end
+struct Escribir: Orden
+    texto: String
+    func hacer()
+        Print self.texto
+    end
+    func deshacer()
+        Print self.texto
+    end
+end
+Main
+    var o: Orden = Escribir("a")
+    o.deshacer()
+end

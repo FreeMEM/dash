@@ -262,14 +262,31 @@ class DashASTBuilder(Transformer):
         name = items[0].value if isinstance(items[0], Token) else str(items[0])
         fields = [item for item in items[1:] if isinstance(item, StructField)]
         methods = [item for item in items[1:] if isinstance(item, StructMethod)]
+        impls = next((item[1] for item in items[1:] if isinstance(item, tuple) and item[0] == "impls"), [])
         struct = StructDef(
             name=name,
             fields=fields,
             methods=methods,
-            location=self._get_location(items[0])
+            location=self._get_location(items[0]),
+            interfaces=impls
         )
         self._structs.append(struct)
         return ""  # Return empty string to not include in program items
+
+    def struct_impls(self, items):
+        """struct X: Orden, Filtro (Lorraine D43)"""
+        return ("impls", [t.value if isinstance(t, Token) else str(t) for t in items])
+
+    def interface_def(self, items) -> str:
+        """An interface: a struct without fields whose methods are only declared (Lorraine D43)."""
+        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        methods = [item for item in items[1:] if isinstance(item, StructMethod)]
+        self._structs.append(StructDef(name=name, methods=methods, location=self._get_location(items[0]),
+                                       is_interface=True))
+        return ""
+
+    def interface_method(self, items) -> StructMethod:
+        return self.struct_method(items)
 
     def struct_member(self, items):
         """Pass through struct member (field or method)."""

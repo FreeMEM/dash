@@ -1,0 +1,18 @@
+# Test: an interface value does not go where a struct goes (there is no way down)
+# expect: 'e' of 'usar' is Escribir, not Orden (an interface value is any struct that has it)
+interface Orden
+    func hacer()
+end
+struct Escribir: Orden
+    texto: String
+    func hacer()
+        Print self.texto
+    end
+end
+func usar(e: Escribir)
+    Print e.texto
+end
+Main
+    var o: Orden = Escribir("a")
+    usar(o)
+end

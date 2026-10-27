@@ -959,6 +959,44 @@ Main
 end
 ```
 
+### Interfaces
+
+An `interface` says which methods something has, without fields or bodies. A struct that has it says so after its
+name (`struct Escribir: Orden`, or several: `struct Cuadro: Figura, Orden`) and has those methods with the same
+parameters and return type. A value of the interface (variable, parameter, field, return, list element) is any
+struct that has it, and calling a method uses its struct's:
+
+```
+interface Orden
+    func hacer() -> String
+    func deshacer() -> String
+end
+
+struct Escribir: Orden
+    texto: String
+    func hacer() -> String
+        return "escribo " + self.texto
+    end
+    func deshacer() -> String
+        return "borro " + self.texto
+    end
+end
+
+Main
+    var pila: [Orden] = []
+    pila.push(Escribir("hola"))
+    o = pila.pop()
+    Print o.deshacer()      # Escribir's deshacer
+end
+```
+
+- No memory per object: the methods go in a table of the type descriptor every struct already has. A call costs
+  only two reads more than a normal method.
+- They cannot be made (`Orden()` is an error), they have no fields and only their methods are called on them.
+- A struct without the interface does not fit where it goes, and an interface value does not fit where a concrete
+  struct goes: there is no way down from the interface to the struct.
+- `nil` works as for any struct.
+
 ---
 
 ## 9. Enumerations

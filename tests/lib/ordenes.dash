@@ -1,0 +1,20 @@
+# Module for test_interfaces_module: an interface and a struct that has it (Lorraine D43)
+interface Filtro
+    func extension() -> String
+    func puntos(n: Int) -> Int
+end
+
+struct FiltroOds: Filtro
+    nombre: String
+    func extension() -> String
+        return "ods"
+    end
+    func puntos(n: Int) -> Int
+        return n * 2
+    end
+end
+
+func primero(l: [Filtro]) -> String
+    f = l[0]
+    return f.extension()
+end

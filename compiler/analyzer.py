@@ -358,8 +358,11 @@ class SemanticAnalyzer(ASTVisitor):
         for func in node.functions:
             self.visit(func)
         for struct in node.structs:
+            if struct.is_interface:
+                continue                 # only declared (Lorraine D43)
             for method in struct.methods:
                 self._visit_struct_method(method, struct.name)
+        self._check_interfaces(node)
 
         # Fourth pass: analyze main block
         for extra in node.extra_mains:
@@ -545,6 +548,7 @@ class SemanticAnalyzer(ASTVisitor):
                 self.error(f"Unknown type '{node.var_type}' (variable '{node.name}')", node)
             if node.initial_value is not None:
                 self._check_num_list_value(node.var_type, node.initial_value, f"'{node.name}'")
+                self._check_struct_value(node.var_type, node.initial_value, f"'{node.name}'")
             dash_type = self._type_annotation_to_dash_type(node.var_type)
             if isinstance(node.initial_value, NilLiteral) and dash_type in self._NO_NIL:
                 self.error(f"'{node.name}' is {node.var_type}: nil is only for structs, Arrays and Strings", node)
@@ -814,6 +818,50 @@ class SemanticAnalyzer(ASTVisitor):
         self.current_scope, self.in_function = saved_scope, saved_in_function
         self._returns = saved_returns
 
+    def _fits_struct(self, got: str, want: str) -> bool:
+        """A struct where want goes: the same one, or one that has the interface want (Lorraine D43)."""
+        if got == want:
+            return True
+        st = self.program.get_struct(got) if self.program else None
+        return bool(st and want in st.interfaces)
+
+    def _check_struct_value(self, declared: Optional[str], value: ASTNode, where: str):
+        """A struct of another type where a struct type is declared (variable, parameter, field): wrong unless it
+        has the interface declared (Lorraine D43). An interface value where a struct goes is wrong too: there is
+        no way down from an interface. Only when the value's struct is known."""
+        if not declared or not self.program or not self.program.get_struct(declared):
+            return
+        got = self._struct_name_of(value)
+        if got and not self._fits_struct(got, declared):
+            iface = self.program.get_struct(got)
+            hint = " (an interface value is any struct that has it)" if iface and iface.is_interface else ""
+            self.error(f"{where} is {declared}, not {got}{hint}", value)
+
+    def _check_interfaces(self, node: Program):
+        """Each interface a struct says it has (struct X: Orden) is one, and the struct has its methods with the
+        same parameters and return type (Lorraine D43)."""
+        def signature(m):
+            return ([p.param_type if isinstance(p, FunctionParam) else None for p in m.params], m.return_type)
+        for st in node.structs:
+            if st.is_interface:
+                if st.fields:
+                    self.error(f"Interface '{st.name}' has fields: an interface only has methods", st)
+                continue
+            for name in st.interfaces:
+                iface = self.program.get_struct(name)
+                if iface is None or not iface.is_interface:
+                    self.error(f"'{name}' is not an interface (struct {st.name}: {name})", st)
+                    continue
+                for m in iface.methods:
+                    own = st.get_method(m.name)
+                    if own is None:
+                        self.error(f"Struct '{st.name}' has interface '{name}' but not its method '{m.name}'", st)
+                    elif signature(own) != signature(m):
+                        params, ret = signature(m)
+                        want = f"({', '.join(p or '?' for p in params)})" + (f" -> {ret}" if ret else "")
+                        self.error(f"Method '{st.name}.{m.name}' must be as in interface '{name}': {m.name}{want}",
+                                   own)
+
     def _visit_struct_method(self, node: StructMethod, struct_name: Optional[str] = None):
         """Visit a struct method body; 'self' is an implicit parameter."""
         self.in_function = True
@@ -879,7 +927,11 @@ class SemanticAnalyzer(ASTVisitor):
         elif symbol.symbol_type == SymbolType.STRUCT:
             # Struct constructor call - validate field count
             struct_node = symbol.node
-            if isinstance(struct_node, StructDef):
+            if isinstance(struct_node, StructDef) and struct_node.is_interface:
+                self.error(f"'{node.name}' is an interface: it makes no objects (a struct that has it does)", node)
+            elif isinstance(struct_node, StructDef):
+                for fdef, arg in zip(struct_node.fields, node.arguments):
+                    self._check_struct_value(fdef.field_type, arg, f"Field '{node.name}.{fdef.name}'")
                 # Count required fields (without defaults)
                 required = sum(1 for f in struct_node.fields if f.default_value is None)
                 total = len(struct_node.fields)
@@ -925,6 +977,7 @@ class SemanticAnalyzer(ASTVisitor):
                 for param, arg in zip(func_node.params, node.arguments):
                     if isinstance(param, FunctionParam):
                         self._check_num_list_value(param.param_type, arg, f"'{param.name}' of '{node.name}'")
+                        self._check_struct_value(param.param_type, arg, f"'{param.name}' of '{node.name}'")
 
         for arg in node.arguments:
             self.visit(arg)
@@ -985,7 +1038,7 @@ class SemanticAnalyzer(ASTVisitor):
                 got = "String"
             elif number_literal or vtype in (DashType.BOOL, DashType.FLOAT, DashType.DOUBLE, DashType.FIXED):
                 got = vtype.name.capitalize() if not number_literal else type(literal).__name__.replace("Literal", "")
-            elif vstruct and vstruct != declared:
+            elif vstruct and not self._fits_struct(vstruct, declared):
                 got = vstruct
             elif is_list:
                 got = "a list"
@@ -1137,6 +1190,10 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_PropertyAccess(self, node: PropertyAccess):
         """Visit a property access."""
         self.visit(node.object)
+        owner = self._struct_name_of(node.object)
+        st = self.program.get_struct(owner) if (owner and self.program) else None
+        if st and st.is_interface and node.property != "length":
+            self.error(f"An interface ({st.name}) has methods, not fields: '{node.property}'", node)
         # .length, or a field of some struct (the object's struct type is not tracked here)
         known = node.property == "length" or any(
             struct.get_field(node.property) for struct in self.structs)
@@ -1172,6 +1229,9 @@ class SemanticAnalyzer(ASTVisitor):
         # For array.length, allow it
         if node.member == "length":
             return
+        st = self.program.get_struct(symbol.struct_name) if (symbol.struct_name and self.program) else None
+        if st and st.is_interface:
+            self.error(f"'{node.object_name}' is an interface ({st.name}): it has methods, not fields", node)
 
         # For struct members, validate the member exists
         # We need to track the type of the variable to know if it's a struct
@@ -1196,8 +1256,13 @@ class SemanticAnalyzer(ASTVisitor):
         else:
             owner = symbol.struct_name
         struct = self.program.get_struct(owner) if (owner and self.program) else None
-        if struct and not struct.get_field(node.member):
+        if struct and struct.is_interface:
+            self.error(f"'{owner}' is an interface: it has methods, not fields", node)
+        elif struct and not struct.get_field(node.member):
             self.error(f"Struct '{owner}' has no field '{node.member}'", node)
+        elif struct:
+            self._check_struct_value(struct.get_field(node.member).field_type, node.value,
+                                     f"Field '{owner}.{node.member}'")
 
         # Visit the value being assigned
         self.visit(node.value)
@@ -1564,6 +1629,25 @@ class SemanticAnalyzer(ASTVisitor):
             elif node.method in ("has", "remove"):
                 self._check_dict_key(node.object, node.arguments[0], node)
             return
+        owner = self._struct_name_of(node.object)
+        iface = self.program.get_struct(owner) if (owner and self.program) else None
+        if iface is not None and iface.is_interface:
+            # o.hacer() on an interface value (Lorraine D43)
+            self.visit(node.object)
+            for arg in node.arguments:
+                self.visit(arg)
+            m = iface.get_method(node.method)
+            if m is None:
+                names = ", ".join(x.name for x in iface.methods)
+                self.error(f"Interface '{iface.name}' has no method '{node.method}' (it has {names})", node)
+            elif len(node.arguments) != len(m.params):
+                self.error(f"{iface.name}.{node.method}() takes {len(m.params)} argument(s), "
+                           f"got {len(node.arguments)}", node)
+            else:
+                for p, a in zip(m.params, node.arguments):
+                    if isinstance(p, FunctionParam):
+                        self._check_struct_value(p.param_type, a, f"'{p.name}' of '{iface.name}.{node.method}'")
+            return
         kind = self._list_kind(node.object)
         if kind is None or self._struct_name_of(node.object):
             return
@@ -1605,7 +1689,7 @@ class SemanticAnalyzer(ASTVisitor):
             wrong = ((kind == "int" and (vtype == DashType.STRING or struct))
                      or (kind == "string" and vtype == DashType.INT)
                      or (kind.startswith("struct:") and (vtype in (DashType.INT, DashType.STRING)
-                                                         or (struct and struct != kind[7:]))))
+                                                         or (struct and not self._fits_struct(struct, kind[7:])))))
             if wrong:
                 self.error(f"Cannot {node.method} that into a list of {self._kind_text(kind)}", node)
 
