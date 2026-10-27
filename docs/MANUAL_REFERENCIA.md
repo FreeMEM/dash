@@ -1043,12 +1043,26 @@ Cada suma copia la lista entera: para ir anadiendo uno a uno, `push`.
 | `l.pop()` | Quita y devuelve el ultimo |
 | `l.remove(i)` | Quita el de la posicion `i` |
 | `l.clear()` | Deja la lista vacia |
+| `l.sort(f)` | La ordena con la funcion `f(a, b)`, sin cambiar el orden de los iguales |
 
 Funcionan tambien a traves de campos (`nodo.hijos.push(h)`, `self.lista.clear()`). Al llenarse,
 la lista pasa a un bloque del doble de tamano: anadir 20.000 elementos uno a uno tarda menos de
 medio segundo en un A1200. La lista es duena de sus textos y structs: `remove` y `clear` los
 sueltan, y `pop` se los entrega a quien lo recibe. Meter algo de otro tipo (`l.push(5)` en una
 `[String]`) es un error.
+
+`l.sort(f)` ordena la lista (por mezcla, estable: los iguales quedan como estaban). `f` recibe dos elementos y
+devuelve `Bool` (`true` si `a` va antes que `b`) o `Int` (negativo si `a` va antes, 0 si son iguales, positivo
+si va despues). Puede ser una funcion del programa, una lambda o una variable `Func` (esa, que devuelva `Int`).
+Ordenar 1.000 enteros tarda unos 0,36 s en un A1200; 1.000 `Double`, unos 1,3 s sin FPU.
+
+```
+func por_nota(a: Fila, b: Fila) -> Int
+    return a.nota - b.nota
+end
+filas.sort(por_nota)
+numeros.sort(fn(a, b) -> a < b)
+```
 
 ```
 var pila: [String] = []

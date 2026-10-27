@@ -5983,6 +5983,62 @@ static void DashArray_clear(DashArrayLong *arr) {
 
 """
 
+    # l.sort(f) (Lorraine D8): a stable merge sort. The compiler writes for each call an "after" function
+    # that reads two elements and asks the program's comparison function.
+    SORT_RUNTIME = """\
+/* Dash Sort Runtime */
+/* Puts src[from..mid) and src[mid..to) (sorted, w LONGs per element) in order into dst[from..to): an element
+   of the second half goes first only if after(first's, second's) says so, which keeps equal ones in order */
+static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG w,
+                             LONG (*after)(const LONG *, const LONG *)) {
+    LONG i = from, j = mid, k = from * w, c;
+    while (i < mid || j < to) {
+        const LONG *e;
+        if (j >= to || (i < mid && !after(src + i * w, src + j * w))) e = src + (i++) * w;
+        else e = src + (j++) * w;
+        for (c = 0; c < w; c++) dst[k++] = e[c];
+    }
+}
+
+/* Sorts the list in place, keeping the order of equal elements. after(a, b): nonzero if the element at b goes
+   before the one at a. Runs of 8 by insertion, then merges through a buffer as long as the list (without
+   memory for it, insertion all along) */
+static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const LONG *)) {
+    LONG n, w, i, j, c, width, run = 8;
+    LONG *buf, *src, *dst, t[2];
+    if (!arr || arr->length < 2) return;
+    n = arr->length;
+    w = _DASH_ARR_W(arr);
+    buf = (LONG *)_dash_block_get(sizeof(LONG) * w * n);
+    if (!buf) run = n;
+    for (i = 0; i < n; i += run) {
+        LONG end = i + run < n ? i + run : n;
+        for (j = i + 1; j < end; j++) {
+            LONG k = j;
+            for (c = 0; c < w; c++) t[c] = arr->data[j * w + c];
+            while (k > i && after(arr->data + (k - 1) * w, t)) {
+                for (c = 0; c < w; c++) arr->data[k * w + c] = arr->data[(k - 1) * w + c];
+                k--;
+            }
+            for (c = 0; c < w; c++) arr->data[k * w + c] = t[c];
+        }
+    }
+    if (!buf) return;
+    src = arr->data;
+    dst = buf;
+    for (width = run; width < n; width *= 2) {
+        for (i = 0; i < n; i += 2 * width) {
+            LONG mid = i + width < n ? i + width : n, to = i + 2 * width < n ? i + 2 * width : n;
+            _dash_sort_merge(src, dst, i, mid, to, w, after);
+        }
+        { LONG *x = src; src = dst; dst = x; }
+    }
+    if (src != arr->data) for (i = 0; i < n * w; i++) arr->data[i] = src[i];
+    _dash_block_put(buf, sizeof(LONG) * w * n);
+}
+
+"""
+
     # Lists of Double (Lorraine D2): kind 3 of the array runtime, two LONGs per element. An empty list made
     # without a kind (DashArray_create(0), from [] anywhere) becomes one of Doubles with its first element.
     DBL_LIST_RUNTIME = """\
@@ -15649,6 +15705,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_double: bool = False  # Double values (DOUBLE_RUNTIME, Lorraine D1)
         self.uses_math: bool = False  # sqrt, sin... of Double (MATH_RUNTIME, Lorraine D4)
         self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
+        self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -15848,6 +15905,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.LIST_RUNTIME)
         if self.uses_dbl_list:
             parts.append(CTemplates.DBL_LIST_RUNTIME)
+        if self.uses_sort:
+            parts.append(CTemplates.SORT_RUNTIME)
         if self.uses_dicts:
             parts.append(CTemplates.DICT_RUNTIME)
         if self.uses_weak:
@@ -18779,16 +18838,18 @@ static {ret_type} {method_name}({params_str}) {{
         call_code = self._generate_method_call(node)
         self.emit(f"{indent}{call_code};\n")
 
-    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0}
+    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0, "sort": 1}
 
     def _is_list_method(self, node: MethodCall) -> bool:
         return (node.method in self._LIST_METHODS and not self._struct_of(node.object)
                 and (isinstance(node.object, ArrayLiteral) or self._infer_c_type(node.object) == "DashArrayLong *"))
 
     def _generate_list_method(self, node: MethodCall) -> str:
-        """l.push(x), l.pop(), l.insert(i, x), l.remove(i), l.clear() (dashweb D4b)."""
+        """l.push(x), l.pop(), l.insert(i, x), l.remove(i), l.clear() (dashweb D4b), l.sort(f) (Lorraine D8)."""
         self.uses_arrays = self.uses_list_methods = True
         arr = self._array_ref(node.object)
+        if node.method == "sort":
+            return self._generate_sort(node, arr)
         elem = self._array_elem_type(node.object) or ""
         if not elem and node.method in ("push", "insert") and node.arguments:
             # a list whose element type the compiler lost (the [T] inside a dict or a list of
@@ -18838,6 +18899,55 @@ static {ret_type} {method_name}({params_str}) {{
         if node.method == "remove":
             return f"DashArray_remove({arr}, {args[0]})"
         return f"DashArray_clear({arr})"
+
+    def _generate_sort(self, node: MethodCall, arr: str) -> str:
+        """l.sort(f): f(a, b) -> Bool (true if a goes before b) or -> Int (negative if a goes before b, 0 if
+        they are equal, positive if after). A function of the program, a lambda or a Func variable (that one
+        returns Int). The function is kept in a static and an "after" function written for this call reads the
+        two elements with their type and calls it (DashArray_sort, SORT_RUNTIME)."""
+        self.uses_sort = True
+        f = node.arguments[0]
+        num = self._num_list(node.object)
+        elem = self._array_elem_type(node.object) or ""
+        if num == "Double":
+            self.uses_dbl_list = True
+            c_type, read = "double", "(*(const double *){})"
+        elif num == "Float":
+            self.uses_float = True
+            c_type, read = "float", "_dash_l2f(*{})"
+        elif elem == "string":
+            c_type, read = "STRPTR", "((STRPTR)*{})"
+        elif elem.startswith("struct:"):
+            c_type, read = f"_Dash_{elem[7:]} *", f"((_Dash_{elem[7:]} *)*{{}})"
+        elif elem in ("array", "dict"):
+            c_type = "DashArrayLong *" if elem == "array" else "DashDict *"
+            read = f"(({c_type})*{{}})"
+        else:
+            c_type, read = "LONG", "(*{})"
+        name = f.name if isinstance(f, (VarRef, FunctionRef)) else None
+        func = self.analysis.program.get_function(name) if name and self.var_types.get(name) != "func" else None
+        if func:
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+                      for p in func.params][:2]
+            ret = self._function_c_type(func)
+            boolean = func.return_type == "Bool"
+        elif isinstance(f, LambdaFunc):
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+                      for p in f.params][:2]
+            ret = "LONG"
+            boolean = bool(f.is_expression and self._is_bool_expr(f.body))
+        else:
+            params, ret, boolean = [c_type, c_type], "LONG", False
+        params += [c_type] * (2 - len(params))
+        self._sort_counter = getattr(self, "_sort_counter", 0) + 1
+        n = self._sort_counter
+        call = f"(({ret} (*)({', '.join(params)}))_dash_sort_fn_{n})"
+        a, b = read.format("a"), read.format("b")
+        test = f"{call}({b}, {a}) != 0" if boolean else f"{call}({a}, {b}) > 0"
+        self.emit_global(f"static APTR _dash_sort_fn_{n};\n"
+                         f"static LONG _dash_sort_after_{n}(const LONG *a, const LONG *b) {{\n"
+                         f"    return {test};\n}}\n")
+        return f"(_dash_sort_fn_{n} = (APTR)({self._generate_expression(f)}), DashArray_sort({arr}, _dash_sort_after_{n}))"
 
     def _generate_method_call(self, node: MethodCall) -> str:
         """Generate C code for a method call on a struct instance."""
@@ -19861,10 +19971,15 @@ static {ret_type} {method_name}({params_str}) {{
         # Generate function body
         if node.is_expression:
             # Single expression body (arrow function); it returns a LONG, so a
-            # string result leaves Dash's control
+            # string result leaves Dash's control. Typed parameters are known in it (fn(a: String, b: String)
+            # -> a < b compares the texts)
+            saved_var_types = self.var_types
+            self.var_types = dict(saved_var_types)
+            self._seed_param_types(node.params)
             expr = self._generate_expression(node.body)
             if self._is_string_expr(node.body) or self._is_obj_expr(node.body):
                 expr = f"(LONG){self._escape_any(node.body, expr)}"
+            self.var_types = saved_var_types
             body = f"    return {expr};"
             return_type = "LONG"  # Assume LONG for now
         else:

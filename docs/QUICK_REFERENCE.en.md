@@ -152,6 +152,7 @@ arr + [6, 7]                # New list with both (same element type)
 var l: [String] = []        # list types [T]: [Int] [String] [Nodo] [[Int]] (params, returns, fields)
 for x in obj.lista          # for-each over any list expression
 l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
+l.sort(f)                   # stable; f(a, b) -> Bool (a before b) or Int (<0 before, 0 equal, >0 after)
 d = {"a": 1, "b": 2}        # dictionary {String: T}: d["c"] = 3, d["a"], d.has("a"),
 d.remove("a")  d.keys()  d.clear()  d.length    # missing key: 0 / nil
 d.get("c", 0)                # the value, or the default if missing (one lookup; objects: nil only)

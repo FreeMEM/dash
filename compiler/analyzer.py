@@ -1528,7 +1528,7 @@ class SemanticAnalyzer(ASTVisitor):
         """nil: C NULL."""
         pass
 
-    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0}
+    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0, "sort": 1}
 
     def _dict_get(self, node) -> bool:
         """d.get(k, default) of a dictionary (dashweb D65) becomes d[k] with a default: the node turns into an
@@ -1572,11 +1572,28 @@ class SemanticAnalyzer(ASTVisitor):
             self.visit(arg)
         wanted = self._LIST_METHODS.get(node.method)
         if wanted is None:
-            self.error(f"Lists have no method '{node.method}' (they have push, pop, insert, remove "
-                       f"and clear)", node)
+            self.error(f"Lists have no method '{node.method}' (they have push, pop, insert, remove, "
+                       f"clear and sort)", node)
             return
         if len(node.arguments) != wanted:
             self.error(f"{node.method}() on a list takes {wanted} argument(s), got {len(node.arguments)}", node)
+            return
+        if node.method == "sort":
+            # l.sort(f): f(a, b) -> Bool or Int (Lorraine D8)
+            f = node.arguments[0]
+            func = self.program.get_function(f.name) if isinstance(f, (VarRef, FunctionRef)) and self.program else None
+            symbol = self.lookup_symbol(f.name) if isinstance(f, VarRef) else None
+            if symbol and symbol.symbol_type in (SymbolType.VARIABLE, SymbolType.PARAMETER):
+                func = None
+            if func is not None and len(func.params) != 2:
+                self.error(f"sort() wants a function of two elements; '{f.name}' takes {len(func.params)}", f)
+            elif func is not None and func.return_type not in ("Bool", "Int"):
+                self.error(f"sort() wants a function that returns Bool (a before b) or Int (negative: a before b); "
+                           f"'{f.name}' returns {func.return_type or 'nothing'}", f)
+            elif func is None and not isinstance(f, LambdaFunc) and self._infer_type(f) != DashType.FUNC:
+                self.error("sort() wants a function: sort(f) with f(a, b) -> Bool or Int", f)
+            elif isinstance(f, LambdaFunc) and len(f.params) != 2:
+                self.error("sort() wants a function of two elements", f)
             return
         if node.method in ("push", "insert") and self._num_list(node.object):
             self._check_num_element(self._num_list(node.object), node.arguments[-1])

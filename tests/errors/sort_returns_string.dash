@@ -1,0 +1,9 @@
+# Test: the function of sort() returns Bool or Int
+# expect: sort() wants a function that returns Bool (a before b) or Int (negative: a before b); 'cual' returns String
+func cual(a: Int, b: Int) -> String
+    return "a"
+end
+Main
+    l = [3, 1, 2]
+    l.sort(cual)
+end

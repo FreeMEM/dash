@@ -1043,12 +1043,26 @@ Each addition copies the whole list: to add items one at a time, use `push`.
 | `l.pop()` | Removes and returns the last one |
 | `l.remove(i)` | Removes the one at position `i` |
 | `l.clear()` | Leaves the list empty |
+| `l.sort(f)` | Sorts it with the function `f(a, b)`, keeping the order of equal ones |
 
 They also work through fields (`nodo.hijos.push(h)`, `self.lista.clear()`). When it fills up,
 the list moves to a block twice the size: adding 20,000 elements one at a time takes less than
 half a second on an A1200. The list owns its strings and structs: `remove` and `clear`
 release them, and `pop` hands them over to whoever receives it. Putting in something of another type (`l.push(5)` in a
 `[String]`) is an error.
+
+`l.sort(f)` sorts the list (merge sort, stable: equal ones stay as they were). `f` gets two elements and
+returns `Bool` (`true` if `a` goes before `b`) or `Int` (negative if `a` goes before, 0 if they are equal,
+positive if after). It can be a function of the program, a lambda or a `Func` variable (that one returning
+`Int`). Sorting 1,000 integers takes about 0.36 s on an A1200; 1,000 `Double`s, about 1.3 s without an FPU.
+
+```
+func por_nota(a: Fila, b: Fila) -> Int
+    return a.nota - b.nota
+end
+filas.sort(por_nota)
+numeros.sort(fn(a, b) -> a < b)
+```
 
 ```
 var pila: [String] = []

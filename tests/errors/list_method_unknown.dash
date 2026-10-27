@@ -1,4 +1,4 @@
-# Test: lists only have push, pop, insert, remove and clear
+# Test: lists only have push, pop, insert, remove, clear and sort
 # expect: Lists have no method 'append'
 
 Main
