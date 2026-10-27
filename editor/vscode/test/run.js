@@ -1001,6 +1001,75 @@ async function debugTests() {
     });
 }
 
+// --- new versions of Dash (updates.js) ---------------------------------------------
+async function updateTests() {
+    const { checkUpdates, latestRelease, isNewer, localVersion } = require('../updates');
+    await check('updates: versions compared by number; only v1.2.3 tags, not drafts, pre-releases or vscode-x', () => {
+        assert(isNewer('1.10.0', '1.9.3') && isNewer('2.0.0', '1.99.99') && !isNewer('1.0.0', '1.0.0') && !isNewer('x', '1.0.0'));
+        const r = latestRelease([
+            { tag_name: 'vscode-0.9.0', html_url: 'e' },
+            { tag_name: 'v1.2.0', html_url: 'a' },
+            { tag_name: 'v1.3.0', html_url: 'b', prerelease: true },
+            { tag_name: 'v1.10.0', html_url: 'c' },
+            { tag_name: 'v2.0.0', html_url: 'd', draft: true },
+        ]);
+        assert.deepStrictEqual(r, { version: '1.10.0', url: 'c' });
+        assert.strictEqual(latestRelease([{ tag_name: 'vscode-0.2.4' }]), null);
+        assert.strictEqual(localVersion(path.join(__dirname, '..', '..', '..')), require('fs').readFileSync(
+            path.join(__dirname, '..', '..', '..', 'compiler', '__init__.py'), 'utf8').match(/__version__ = "([^"]+)"/)[1]);
+    });
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash-upd-'));
+    fs.mkdirSync(path.join(dir, 'compiler'));
+    fs.writeFileSync(path.join(dir, 'compiler', '__init__.py'), '__version__ = "1.0.0"\n');
+    function fake(setting = true) {
+        const store = {}, shown = [], opened = [];
+        const vscode = {
+            workspace: { getConfiguration: () => ({ get: (k, d) => (k === 'updates.check' ? setting : d) }) },
+            window: { showInformationMessage: (m, ...b) => { shown.push(m); return Promise.resolve(fake.choice); } },
+            env: { openExternal: (u) => opened.push(String(u)) },
+            Uri: { parse: (u) => u },
+        };
+        const context = { globalState: { get: (k) => store[k], update: (k, v) => { store[k] = v; return Promise.resolve(); } } };
+        return { vscode, context, store, shown, opened };
+    }
+    const releases = () => Promise.resolve([{ tag_name: 'v1.1.0', html_url: 'https://x/v1.1.0' }]);
+    await check('updates: a newer Dash is told once a day; "No avisar de esta" passes over that version', async () => {
+        let f = fake(), asked = 0;
+        const fetch = () => { asked++; return releases(); };
+        fake.choice = undefined;
+        const got = await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 });
+        assert(got && got.version === '1.1.0' && f.shown.length === 1 && /1\.1\.0.*1\.0\.0/.test(f.shown[0]), f.shown.join());
+        assert.strictEqual(await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 + 3600e3 }), null);
+        assert.strictEqual(asked, 1);                       // (no request again the same day)
+        fake.choice = 'No avisar de esta';
+        await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 + 86400e3 });
+        await new Promise((r) => setTimeout(r, 0));
+        assert.strictEqual(f.store['dash.updates.skipped'], '1.1.0');
+        assert.strictEqual(await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 + 2 * 86400e3 }), null);
+        fake.choice = 'Ver novedades';
+        f = fake();
+        await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 });
+        await new Promise((r) => setTimeout(r, 0));
+        assert.deepStrictEqual(f.opened, ['https://x/v1.1.0']);
+    });
+    await check('updates: nothing with the setting off, without a compiler, without network or when up to date', async () => {
+        let asked = 0;
+        const fetch = () => { asked++; return releases(); };
+        let f = fake(false);
+        assert.strictEqual(await checkUpdates(f.vscode, f.context, () => dir, { fetch }), null);
+        f = fake();
+        assert.strictEqual(await checkUpdates(f.vscode, f.context, () => null, { fetch }), null);
+        assert.strictEqual(asked, 0);
+        f = fake();
+        assert.strictEqual(await checkUpdates(f.vscode, f.context, () => dir, { fetch: () => Promise.reject(new Error('red')) }), null);
+        assert.strictEqual(f.store['dash.updates.last'], undefined);   // (tried again next time)
+        fs.writeFileSync(path.join(dir, 'compiler', '__init__.py'), '__version__ = "1.1.0"\n');
+        f = fake();
+        assert.strictEqual(await checkUpdates(f.vscode, f.context, () => dir, { fetch }), null);
+        assert.strictEqual(f.shown.length, 0);
+    });
+}
+
 (async () => {
     await grammarTests();
     await debugTests();
@@ -1010,6 +1079,7 @@ async function debugTests() {
     await require("./webview.js").webviewTests(check, assert);
     await previewTests();
     await extensionTests();
+    await updateTests();
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);
 })();

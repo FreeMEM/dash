@@ -8,6 +8,8 @@ A high-level programming language that transpiles to C for the **Commodore Amiga
 
 Write clean code, synthesise native executables.
 
+Current version: **1.0.0** (`./dash --version`). What each number means and what each version brings: [docs/VERSIONES.en.md](docs/VERSIONES.en.md).
+
 ```
 Source (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → Amiga Executable
 ```
@@ -90,7 +92,7 @@ errors").
 
 ### Amiga API
 
-633 built-in functions, all implemented (list generated from the code in [docs/BUILTINS.en.md](docs/BUILTINS.en.md)).
+686 built-in functions, all implemented (list generated from the code in [docs/BUILTINS.en.md](docs/BUILTINS.en.md)).
 
 - **Intuition** — Windows, screens, event loops (also across several windows), menus, `On Click`, `On Timer`;
   `window_create` with the inner size (flag 8) and the window borders (`window_border_top`...) and the
@@ -165,7 +167,7 @@ The extension in `editor/vscode` turns VS Code into an environment for Dash: syn
 completion, go to definition and rename; compiling and running on the emulated Amiga (A1200, A500, AmigaOS 3.2 or
 with a graphics card); debugging with breakpoints, variables and stepping, also on a real Amiga over the
 network; and a visual editor for MUI windows that shows them in the emulator. It uses the compiler from this repository.
-The published version is 0.2.4.
+The published version is 0.3.0, which tells you when a new version of Dash is out.
 
 [![Video tutorial of Dash in VS Code](docs/media/vscode-tutorial.jpg)](https://youtu.be/_UTJ_0s3xLc)
 
@@ -176,8 +178,8 @@ debugging and debugging on a real Amiga.
 
 1. Dash and the Amiga compiler, as in [Quick installation](#quick-installation) (for the emulator, FS-UAE and a
    Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. The extension: the file `dash-mui-editor-0.2.4.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.4), and in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.4.vsix`. It can also
+2. The extension: the file `dash-mui-editor-0.3.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.0), and in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.0.vsix`. It can also
    be built: `cd editor/vscode && npm install && npm run package`.
 3. A project: **Dash: Nuevo proyecto**. If its folder is not inside this repository, **Dash: Elegir la
    carpeta del compilador** (the `dash.path` setting). The **Primeros pasos con Dash** walkthrough guides you step by step, and if
@@ -365,6 +367,7 @@ docs/                 Documentation
 - [Comparison with Blitz, AMOS and C](docs/COMPARATIVA.en.md) — Speed, memory and stability measured on the A500 and A1200
 - [Quick Reference](docs/QUICK_REFERENCE.en.md) — Cheat sheet
 - [Built-in functions](docs/BUILTINS.en.md) — The actual list, generated from the code
+- [Versions](docs/VERSIONES.en.md) — What each number means and the notes of each version
 - [MUI in Dash](docs/MUI_DISEÑO.en.md) — Design of the MUI API
 - [MUI visual editor](docs/MUI_EDITOR.en.md) — The `.dashui` format and the VS Code extension
 - [Amiga API](docs/AMIGA_API.en.md) — Design catalogue of the API (the original; the actual list is BUILTINS.en.md)

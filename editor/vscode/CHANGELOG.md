@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 (2026-10-27)
+
+- New versions of Dash: once a day the extension looks at Dash's releases on GitHub (tags `v1.0.0`...) and, if
+  there is one newer than the compiler in use, says so, with a button to its notes and another to pass over that
+  version. Setting `dash.updates.check`; without network it tries again the next time.
+- Highlighting: the builtins added to Dash since 0.2.4 (`clip_*`, `mui_canvas_set_pointer`,
+  `mui_canvas_take_tab`, `mui_context_menu_begin`, `mui_set_context_menu`, `input_button`, `str_compare_locale`).
+- Visual editor: context menus (`context_menus` of the window, `context_menu` of an object, "+ menú contextual")
+  and `take_tab` on a drawing area (Tab and Shift+Tab go to it while the pointer is over it).
+
 ## 0.2.4 (2026-10-27)
 
 - Highlighting: the keyword `interface` and the type `Double`, and the builtins added to Dash since 0.2.3
