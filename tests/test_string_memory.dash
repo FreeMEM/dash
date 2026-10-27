@@ -3,7 +3,7 @@
 # fields and globals reassigned: free memory must not keep going down.
 # Strings that escape (stored in an array) must stay valid.
 #
-# expect-c: _dash_str_set(&s, DashString_concat("x", DashString_from_int(i)));
+# expect-c: _dash_str_set_join(&s, 2, (STRPTR[]){"x", DashString_from_int(i)});
 # expect-c: _dash_tmp_release_keep(_dash_fm, _dash_r);
 # expect-out: estable
 # expect-out: x100000-x100000

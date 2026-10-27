@@ -547,26 +547,68 @@ static __inline__ void _dash_block_put(APTR b, ULONG size) {
     FreePooled(_dash_pool, b, size);
 }
 
-/* Strings made at run time carry a header in front of the text.
-   Temporaries (results of +, interpolation, conversions) are linked in a list,
-   newest first, and released in bulk with _dash_tmp_release(). A String
-   variable owns its own copy: _dash_str_set() adopts a temporary or copies
-   the value, and frees the text it held before. */
+/* Strings made at run time carry a header in front of the text: the size of the block, the length of
+   the text and the address of the header itself mixed with a key (self), which says "a text of Dash":
+   a text of C (a literal, a library's) has other bytes there, so its length is measured with strlen
+   and Dash's is read from the header (a text of C would pass only by a 1 in 2^32 chance).
+   Temporaries (results of +, interpolation, conversions) are in a stack apart, newest on top, with
+   their creation numbers, and released in bulk with _dash_tmp_release(). A String variable owns its
+   own copy: _dash_str_set() adopts a temporary or copies the value, and frees the text it held
+   before. A text grows in place (s = s + t, _dash_str_append) or is made shorter than its block
+   (a read of a file): _dash_str_setlen() says the new length. */
 typedef struct _DashStrHdr {
-    struct _DashStrHdr *next;   /* temporaries list */
-    ULONG size;                 /* bytes allocated, header included (+ KEEP bit) */
-    ULONG serial;               /* creation number of a temporary, 0 if owned */
+    ULONG size;                 /* bytes allocated, header included (+ tag, TEMP and KEEP bits) */
+    ULONG len;                  /* length of the text */
+    ULONG self;                 /* (ULONG)header + _DASH_STR_KEY */
 } _DashStrHdr;
 
 #define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
-/* the high byte of size also says "a text of Dash" (texts are under 16 MB): the cache of lengths
-   only keeps those, not texts of C code that C may free and reuse without Dash knowing (D61) */
+#define _DASH_STR_TEMP 0x01000000UL   /* in the stack of temporaries */
 #define _DASH_STR_TAG  0x5A000000UL
+#define _DASH_STR_KEY  0xDA5C7E57UL
 #define _DASH_STR_SIZE(h) ((h)->size & 0x00FFFFFFUL)
 #define _DASH_STR_HDR(p) ((_DashStrHdr *)((UBYTE *)(p) - sizeof(_DashStrHdr)))
+/* A text made by Dash (and not freed)? Odd addresses are never Dash's (and a long read there stops a
+   68000). It reads before any text, also one of C (the test of the runtime on the PC tells its
+   AddressSanitizer with _DASH_NOASAN) */
+#ifndef _DASH_NOASAN
+#define _DASH_NOASAN
+#endif
+static __inline__ _DASH_NOASAN BOOL _dash_str_ours(CONST_STRPTR p) {
+    const _DashStrHdr *h = _DASH_STR_HDR(p);
+    if ((ULONG)p & 1) return FALSE;
+    /* (a literal's address is a constant of alignment 1 for GCC: it would read the long byte by byte) */
+    __asm__ ("" : "+r" (h));
+    return h->self == (ULONG)((ULONG)h + _DASH_STR_KEY);   /* (ULONG: 32 bits also on the PC of the tests) */
+}
+#define _DASH_STR_OURS(p) _dash_str_ours((CONST_STRPTR)(p))
 
-static _DashStrHdr *_dash_tmp = NULL;
+/* The stack of temporaries: the first 32 in place, more in a block of the pool that doubles */
+typedef struct { _DashStrHdr *h; ULONG serial; } _DashTmp;
+#define _DASH_TS_FIRST 32
+static _DashTmp _dash_ts_first[_DASH_TS_FIRST];
+static _DashTmp *_dash_ts = _dash_ts_first;
+static LONG _dash_ts_n = 0, _dash_ts_cap = _DASH_TS_FIRST;
 static ULONG _dash_tmp_serial = 0;
+
+/* (apart, not in line: in _dash_str_alloc it made every call save 8 registers) */
+static __attribute__((noinline)) BOOL _dash_ts_grow(void) {
+    LONG cap = _dash_ts_cap * 2;
+    _DashTmp *t = (_DashTmp *)_dash_alloc(cap * sizeof(_DashTmp));
+    if (!t) return FALSE;
+    memcpy(t, _dash_ts, _dash_ts_n * sizeof(_DashTmp));
+    if (_dash_ts != _dash_ts_first) _dash_block_put(_dash_ts, _dash_ts_cap * sizeof(_DashTmp));
+    _dash_ts = t;
+    _dash_ts_cap = cap;
+    return TRUE;
+}
+
+static void _dash_ts_push(_DashStrHdr *h) {
+    _DashTmp *t = &_dash_ts[_dash_ts_n++];
+    t->h = h;
+    t->serial = ++_dash_tmp_serial;
+    h->size |= _DASH_STR_TEMP;
+}
 
 static BOOL _dash_str_quiet = FALSE;   /* _dash_str_append trying a bigger size first */
 static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
@@ -580,7 +622,10 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
 #endif
         return NULL;
     }
-    h = (_DashStrHdr *)_dash_block_get(size);
+    /* a small one takes its whole block of 8, 16... bytes: room to be written again in place */
+    if (size <= _DASH_SMALL_MAX) size = (size + 7) & ~7UL;
+    if (temp && _dash_ts_n == _dash_ts_cap && !_dash_ts_grow()) h = NULL;
+    else h = (_DashStrHdr *)_dash_block_get(size);
     if (!h) {
 #ifdef DASH_MEMCHECK
         if (!_dash_str_quiet) _dash_mc_error((CONST_STRPTR)"sin memoria para un texto: queda nil");
@@ -590,14 +635,14 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
 #ifdef DASH_MEMCHECK
     _dash_mc_strs++;
 #endif
-    h->size = size | _DASH_STR_TAG;
-    h->next = NULL;
-    h->serial = 0;
+    h->len = len;
+    h->self = (ULONG)((ULONG)h + _DASH_STR_KEY);
     if (temp) {
-        h->serial = ++_dash_tmp_serial;
-        h->next = _dash_tmp;
-        _dash_tmp = h;
-    }
+        _DashTmp *t = &_dash_ts[_dash_ts_n++];
+        t->h = h;
+        t->serial = ++_dash_tmp_serial;
+        h->size = size | _DASH_STR_TAG | _DASH_STR_TEMP;
+    } else h->size = size | _DASH_STR_TAG;
     text = (STRPTR)(h + 1);
     text[len] = 0;
     return text;
@@ -608,10 +653,28 @@ static void _dash_str_drop(_DashStrHdr *h) {
     if (h->size == _DASH_MC_DEAD) { _dash_mc_error((CONST_STRPTR)"string liberado dos veces"); return; }
     _dash_mc_strs--;
 #endif
+    h->self = 0;                        /* (the block may be anything next: no longer a text) */
     _dash_block_put(h, _DASH_STR_SIZE(h));
 }
 
-/* Marks are serial numbers: removing a temporary from the list never breaks them */
+/* The length of any text: Dash's from its header, C's measured */
+static __inline__ LONG _dash_str_len(STRPTR s) {
+    if (!s) return 0;
+    if (_DASH_STR_OURS(s)) {
+#ifdef DASH_MEMCHECK
+        if (_DASH_STR_HDR(s)->len != strlen((char *)s)) _dash_mc_error((CONST_STRPTR)"longitud de un texto mal guardada");
+#endif
+        return (LONG)_DASH_STR_HDR(s)->len;
+    }
+    return strlen((char *)s);
+}
+
+/* The text of Dash at s now has this length (it grew in place, or the text is shorter than its block) */
+static __inline__ void _dash_str_setlen(STRPTR s, LONG len) {
+    _DASH_STR_HDR(s)->len = len;
+}
+
+/* Marks are serial numbers: removing a temporary from the stack never breaks them */
 static ULONG _dash_tmp_marked = 0;     /* the last mark handed out (see _dash_tmp_take) */
 static ULONG _dash_tmp_mark(void) {
     return _dash_tmp_marked = _dash_tmp_serial;
@@ -620,9 +683,9 @@ static ULONG _dash_tmp_mark(void) {
 static void _dash_otmp_release(ULONG mark);
 
 static void _dash_tmp_release_f(ULONG mark) {
-    while (_dash_tmp && _dash_tmp->serial > mark) {
-        _DashStrHdr *h = _dash_tmp;
-        _dash_tmp = h->next;
+    while (_dash_ts_n && _dash_ts[_dash_ts_n - 1].serial > mark) {
+        _DashStrHdr *h = _dash_ts[--_dash_ts_n].h;
+        h->size &= ~_DASH_STR_TEMP;
         _dash_str_drop(h);
     }
     _dash_otmp_release(mark);
@@ -632,27 +695,37 @@ static void _dash_tmp_release_f(ULONG mark) {
    iteration that made no strings or objects) costs one comparison, no call */
 #define _dash_tmp_release(m) do { if (_dash_tmp_serial > (ULONG)(m)) _dash_tmp_release_f(m); } while (0)
 
-/* Unlink p from the temporaries if it is one (the caller now owns it).
-   p may be any string: its header is only read once found in the list. */
+/* A temporary from the middle of the stack: the newer ones move down one place (in order, with their
+   numbers). Apart, not in line: in _dash_tmp_take it made every call save 7 registers */
+static __attribute__((noinline)) void _dash_tmp_take_mid(_DashStrHdr *h) {
+    LONG i = _dash_ts_n - 1;
+    while (--i >= 0 && _dash_ts[i].h != h) ;
+    if (i < 0) return;                  /* (cannot happen: TEMP is only set in the stack) */
+    _dash_ts_n--;
+    for (; i < _dash_ts_n; i++) _dash_ts[i] = _dash_ts[i + 1];
+}
+
+/* Take p out of the temporaries if it is one (the caller now owns it). p may be any string: a text
+   of C is not Dash's, and one of Dash says in its header whether it is a temporary. */
 static BOOL _dash_tmp_take(STRPTR p) {
-    _DashStrHdr **link = &_dash_tmp;
     _DashStrHdr *h;
+    LONG i = _dash_ts_n - 1;
     if (!p) return FALSE;
     h = _DASH_STR_HDR(p);
-    while (*link) {
-        if (*link == h) {
-            *link = h->next;
-            h->next = NULL;
-            /* the newest temporary, with no mark handed out since it was made (s = str_from_buffer(...)
-               in a loop): its number is given back, so the release at the end of the iteration has
-               nothing to do and costs no call (D36) */
-            if (h->serial == _dash_tmp_serial && _dash_tmp_marked < h->serial) _dash_tmp_serial--;
-            h->serial = 0;
-            return TRUE;
-        }
-        link = &(*link)->next;
+    /* the usual case, the newest temporary: found without reading before p */
+    if (i >= 0 && _dash_ts[i].h == h) {
+        h->size &= ~_DASH_STR_TEMP;
+        /* with no mark handed out since it was made (s = str_from_buffer(...) in a loop): its
+           number is given back, so the release at the end of the iteration has nothing to do and
+           costs no call (D36) */
+        if (_dash_ts[i].serial == _dash_tmp_serial && _dash_tmp_marked < _dash_tmp_serial) _dash_tmp_serial--;
+        _dash_ts_n = i;
+        return TRUE;
     }
-    return FALSE;
+    if (!_DASH_STR_OURS(p) || !(h->size & _DASH_STR_TEMP)) return FALSE;
+    h->size &= ~_DASH_STR_TEMP;
+    _dash_tmp_take_mid(h);
+    return TRUE;
 }
 
 /* Short copies byte by byte in line: libnix's memcpy is a call that first
@@ -674,7 +747,7 @@ static STRPTR _dash_str_tmpcopy_f(STRPTR p) {
 }
 
 static STRPTR _dash_str_dup(STRPTR s, BOOL temp) {
-    ULONG len = s ? strlen((char *)s) : 0;
+    ULONG len = _dash_str_len(s);
     STRPTR d = _dash_str_alloc(len, temp);
     if (d && len) _dash_copy(d, s, len);
     return d;
@@ -686,18 +759,14 @@ static BOOL _dash_otmp_newer(ULONG mark);
 
 static void _dash_tmp_release_keep(ULONG mark, STRPTR keep) {
     BOOL kept;
+    LONG n = _dash_ts_n;
     /* the usual return: keep is the only temporary made since the mark (no objects either) */
-    if (keep && _dash_tmp == _DASH_STR_HDR(keep) && _dash_tmp->serial > mark
-        && (!_dash_tmp->next || _dash_tmp->next->serial <= mark) && !_dash_otmp_newer(mark))
+    if (keep && n && _dash_ts[n - 1].serial > mark && (n == 1 || _dash_ts[n - 2].serial <= mark)
+        && _dash_ts[n - 1].h == _DASH_STR_HDR(keep) && !_dash_otmp_newer(mark))
         return;
     kept = _dash_tmp_take(keep);
     _dash_tmp_release_f(mark);
-    if (kept) {
-        _DashStrHdr *h = _DASH_STR_HDR(keep);
-        h->serial = ++_dash_tmp_serial;
-        h->next = _dash_tmp;
-        _dash_tmp = h;
-    }
+    if (kept) _dash_ts_push(_DASH_STR_HDR(keep));   /* (room: it was in the stack a moment ago) */
 }
 
 /* Owned text no longer used; escaped text stays until exit */
@@ -721,8 +790,43 @@ static void _dash_str_set(STRPTR *var, STRPTR value) {
     _dash_str_free(old);
 }
 
+/* var = a + b + ... (up to 6 parts: + and interpolation): written straight into the text the variable
+   owns when it fits there and no part is in it (s = "x" + i in a loop allocates nothing), else into a
+   new text of its own; no temporary either way */
+static void _dash_str_set_join(STRPTR *var, LONG n, STRPTR *parts) {
+    STRPTR old = *var, d;
+    LONG i, total = 0, lens[6];
+    _DashStrHdr *h;
+    for (i = 0; i < n; i++) total += lens[i] = _dash_str_len(parts[i]);
+    d = NULL;
+    if (old && _DASH_STR_OURS(old) && !((h = _DASH_STR_HDR(old))->size & (_DASH_STR_KEEP | _DASH_STR_TEMP))
+        && (ULONG)total + sizeof(_DashStrHdr) + 1 <= _DASH_STR_SIZE(h)) {
+        STRPTR end = (STRPTR)h + _DASH_STR_SIZE(h);
+        for (i = 0; i < n && !(parts[i] >= old && parts[i] < end); i++) ;
+        if (i == n) d = old;
+    }
+    if (!d && !(d = _dash_str_alloc(total, FALSE))) {
+        *var = NULL;
+        _dash_str_free(old);
+        return;
+    }
+    {
+        STRPTR p = d;
+        for (i = 0; i < n; i++) {
+            _dash_copy(p, parts[i], lens[i]);
+            p += lens[i];
+        }
+        *p = 0;
+    }
+    if (d == old) _dash_str_setlen(d, total);
+    else {
+        *var = d;
+        _dash_str_free(old);
+    }
+}
+
 /* var = value when value is known not to be a temporary (a literal, a field, a variable): a copy,
-   without looking for it in the list of temporaries */
+   without looking at whether it is a temporary */
 static void _dash_str_set_copy(STRPTR *var, STRPTR value) {
     STRPTR old = *var;
     if (value == old) return;
@@ -745,12 +849,9 @@ static STRPTR _dash_str_escape(STRPTR p) {
 
 /* A returned string becomes a temporary of the caller (copied unless it is one) */
 static STRPTR _dash_str_ret(STRPTR p) {
-    _DashStrHdr *h, *t;
     if (!p) return p;
-    h = _DASH_STR_HDR(p);
-    for (t = _dash_tmp; t; t = t->next) {
-        if (t == h) return p;
-    }
+    if ((_dash_ts_n && _dash_ts[_dash_ts_n - 1].h == _DASH_STR_HDR(p))
+        || (_DASH_STR_OURS(p) && (_DASH_STR_HDR(p)->size & _DASH_STR_TEMP))) return p;
     return _dash_str_dup(p, TRUE);
 }
 
@@ -1016,7 +1117,9 @@ static void _dash_mem_cleanup(void) {
         DeletePool(_dash_pool);
         _dash_pool = NULL;
     }
-    _dash_tmp = NULL;
+    _dash_ts = _dash_ts_first;          /* (a bigger stack was in the pool) */
+    _dash_ts_n = 0;
+    _dash_ts_cap = _DASH_TS_FIRST;
     _dash_otmp = NULL;
     _dash_free_pending = NULL;
     memset(_dash_small_free, 0, sizeof(_dash_small_free));
@@ -1194,8 +1297,8 @@ static __inline__ LONG _dash_str_cmp(STRPTR a, STRPTR b) {
 }
 
 static STRPTR DashString_concat(STRPTR a, STRPTR b) {
-    LONG len_a = a ? strlen(a) : 0;
-    LONG len_b = b ? strlen(b) : 0;
+    LONG len_a = _dash_str_len(a);
+    LONG len_b = _dash_str_len(b);
     STRPTR result = _dash_str_alloc(len_a + len_b, TRUE);  /* a temporary */
     if (!result) return NULL;
     _dash_copy(result, a, len_a);
@@ -1204,12 +1307,13 @@ static STRPTR DashString_concat(STRPTR a, STRPTR b) {
 }
 
 static LONG DashString_length(STRPTR s) {
-    return s ? strlen(s) : 0;
+    return _dash_str_len(s);
 }
 
 static char DashString_char_at(STRPTR s, LONG index) {
     LONG i;
     if (!s || index < 0) return 0;
+    if (_DASH_STR_OURS(s)) return (ULONG)index < _DASH_STR_HDR(s)->len ? s[index] : 0;
     for (i = 0; i < index; i++) {   /* stop at the end without a full strlen */
         if (!s[i]) return 0;
     }
@@ -1218,7 +1322,7 @@ static char DashString_char_at(STRPTR s, LONG index) {
 
 /* s[start:end] as a new temporary string; the bounds are clamped like array slices. */
 static STRPTR DashString_slice(STRPTR s, LONG start, LONG end) {
-    LONG len = s ? strlen(s) : 0;
+    LONG len = _dash_str_len(s);
     STRPTR result;
     if (start < 0) start = 0;
     if (end > len) end = len;
@@ -1279,15 +1383,20 @@ static STRPTR DashString_from_int(LONG n) {
 
 /* a + b + c ...: one allocation and one copy for the whole chain */
 static STRPTR DashString_join(LONG n, STRPTR *parts) {
-    LONG i, total = 0;
+    LONG i, total = 0, lens[16];
     STRPTR result, p;
-    for (i = 0; i < n; i++) if (parts[i]) total += strlen((char *)parts[i]);
+    for (i = 0; i < n; i++) {
+        LONG k = _dash_str_len(parts[i]);
+        if (i < 16) lens[i] = k;
+        total += k;
+    }
     result = _dash_str_alloc(total, TRUE);
     if (!result) return NULL;
     p = result;
     for (i = 0; i < n; i++) {
-        STRPTR s = parts[i];
-        if (s) while ((*p = *s++)) p++;
+        LONG k = i < 16 ? lens[i] : _dash_str_len(parts[i]);
+        _dash_copy(p, parts[i], k);
+        p += k;
     }
     return result;
 }
@@ -6660,11 +6769,8 @@ static STRPTR DashArray_pop_str(DashArrayLong *arr) {
     STRPTR v = (STRPTR)DashArray_take(arr, arr ? arr->length - 1 : 0);
     if (v) {
         _DashStrHdr *h = _DASH_STR_HDR(v);
-        if (!(h->size & _DASH_STR_KEEP) && !h->serial) {
-            h->serial = ++_dash_tmp_serial;
-            h->next = _dash_tmp;
-            _dash_tmp = h;
-        }
+        if (!(h->size & (_DASH_STR_KEEP | _DASH_STR_TEMP)) && (_dash_ts_n < _dash_ts_cap || _dash_ts_grow()))
+            _dash_ts_push(h);
     }
     return v;
 }
@@ -7082,6 +7188,7 @@ static STRPTR _dash_clip_read_text(void) {
             if (id == _DASH_CLIP_ID('C', 'H', 'R', 'S'))
                 for (; size; size--, data++) if (*data) *o++ = *data;
     *o = 0;
+    _dash_str_setlen(l, o - (UBYTE *)l);    /* (without the bytes 0 it skipped) */
     if (buf) FreeVec(buf);
     return _dash_latin1_to_utf8(l);
 }
@@ -7277,7 +7384,6 @@ static STRPTR _dash_str_from_buffer(APTR buffer, LONG offset, LONG length) {
     for (d = (UBYTE *)r, p = (UBYTE *)buffer + offset, n = length; n > 0; n--)
         if (!(*d++ = *p++)) d[-1] = ' ';
     *d = 0;
-    if (length >= _DASH_SC_MIN) _dash_str_setlen(r, length);
     return r;
 }
 
@@ -8306,85 +8412,7 @@ static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
     # string forgets it (_dash_str_drop gets a call, see _assemble_program).
     TEXT_RUNTIME = """\
 /* Dash Text Runtime */
-#define _DASH_SC_N 8
-#define _DASH_SC_MIN 64
-static STRPTR _dash_sc_s[_DASH_SC_N];
-static LONG _dash_sc_len[_DASH_SC_N];
-static UBYTE _dash_sc_next;
-/* The long text measured last, for str_code in line (a loop over one text asks for it again
-   and again) */
-static STRPTR _dash_sc_last = NULL;
-static LONG _dash_sc_last_len = 0;
-
-/* A text Dash made (its header has the tag and room for len): only those go in the cache. A text
-   of C (malloc, a library) may be freed and its address reused by another one of a different
-   length, and Dash would not know (D61). Odd addresses are never Dash's (and a long read there
-   stops a 68000). */
-static BOOL _dash_str_ours(STRPTR s, LONG len) {
-    _DashStrHdr *h;
-    if ((ULONG)s & 1) return FALSE;
-    h = _DASH_STR_HDR(s);
-    return (h->size & 0x7F000000UL) == _DASH_STR_TAG && (LONG)_DASH_STR_SIZE(h) >= (LONG)sizeof(_DashStrHdr) + len + 1;
-}
-
-/* A text of Dash in a block too small for the cache (Lorraine D36: most texts are a few bytes, and
-   walking the cache for each one cost more than the rest): it is not in the cache and cannot go in.
-   A text of C whose bytes before it happen to look like that is still measured right, without it. */
-#define _DASH_STR_SMALL(s) (!((ULONG)(s) & 1) && (_DASH_STR_HDR(s)->size & 0x7F000000UL) == _DASH_STR_TAG \
-                            && _DASH_STR_SIZE(_DASH_STR_HDR(s)) <= sizeof(_DashStrHdr) + _DASH_SC_MIN)
-
-static LONG _dash_str_len(STRPTR s) {
-    LONG k, len;
-    if (!s) return 0;
-    if (s == _dash_sc_last) return _dash_sc_last_len;
-    if (_DASH_STR_SMALL(s)) {
-        len = strlen((char *)s);
-        /* the last short text measured too, for str_code and s[i] in a loop over it (D41) */
-        if (_DASH_STR_SIZE(_DASH_STR_HDR(s)) >= sizeof(_DashStrHdr) + len + 1) {
-            _dash_sc_last = s;
-            _dash_sc_last_len = len;
-        }
-        return len;
-    }
-    for (k = 0; k < _DASH_SC_N; k++)
-        if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
-    len = strlen((char *)s);
-    if (len >= _DASH_SC_MIN && _dash_str_ours(s, len)) {
-        k = _dash_sc_next;
-        _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
-        _dash_sc_s[k] = s;
-        _dash_sc_len[k] = len;
-        _dash_sc_last = s;
-        _dash_sc_last_len = len;
-    }
-    return len;
-}
-
-static void _dash_str_forget(STRPTR s) {
-    LONG k;
-    for (k = 0; k < _DASH_SC_N; k++) if (_dash_sc_s[k] == s) _dash_sc_s[k] = NULL;
-    if (_dash_sc_last == s) _dash_sc_last = NULL;
-}
-
-/* The text at s now has this length (it grew in place, or is new) */
-static void _dash_str_setlen(STRPTR s, LONG len) {
-    LONG k;
-    if (_dash_sc_last == s) _dash_sc_last = NULL;
-    if (_DASH_STR_SMALL(s)) return;
-    for (k = 0; k < _DASH_SC_N; k++) {
-        if (_dash_sc_s[k] == s) {
-            if (len >= _DASH_SC_MIN) _dash_sc_len[k] = len;
-            else _dash_sc_s[k] = NULL;
-            return;
-        }
-    }
-    if (len >= _DASH_SC_MIN && _dash_str_ours(s, len)) {
-        k = _dash_sc_next;
-        _dash_sc_next = (k + 1) & (_DASH_SC_N - 1);
-        _dash_sc_s[k] = s;
-        _dash_sc_len[k] = len;
-    }
-}
+/* (the length of a text, _dash_str_len and _dash_str_setlen, is in the memory runtime) */
 
 /* var = var + add for a String variable that owns its text (dashweb D3): the text
    grows in place while it fits; when not, it moves to a block twice as big. So
@@ -8394,7 +8422,7 @@ static void _dash_str_append(STRPTR *var, STRPTR add) {
     LONG len, n, cap;
     _DashStrHdr *h;
     if (!add || !*add) return;
-    n = strlen((char *)add);
+    n = _dash_str_len(add);
     if (!s) {
         r = _dash_str_alloc(n, FALSE);
         if (r) { _dash_copy(r, add, n); _dash_str_setlen(r, n); }
@@ -8404,7 +8432,7 @@ static void _dash_str_append(STRPTR *var, STRPTR add) {
     len = _dash_str_len(s);
     h = _DASH_STR_HDR(s);
     cap = (LONG)_DASH_STR_SIZE(h) - (LONG)sizeof(_DashStrHdr) - 1;
-    if (!(h->size & _DASH_STR_KEEP) && !h->serial && len + n <= cap) {
+    if (!(h->size & (_DASH_STR_KEEP | _DASH_STR_TEMP)) && len + n <= cap) {
         _dash_copy(s + len, add, n);
         s[len + n] = 0;
         _dash_str_setlen(s, len + n);
@@ -8436,9 +8464,9 @@ static LONG _dash_str_code_f(STRPTR s, LONG i) {
     return ((UBYTE *)s)[i];
 }
 
-/* In line when s is the long text measured last and i is inside it */
+/* In line when s is a text of Dash (its length in the header) */
 static __inline__ LONG _dash_str_code(STRPTR s, LONG i) {
-    if (s == _dash_sc_last && (ULONG)i < (ULONG)_dash_sc_last_len) return ((UBYTE *)s)[i];
+    if (s && _DASH_STR_OURS(s)) return (ULONG)i < _DASH_STR_HDR(s)->len ? ((UBYTE *)s)[i] : 0;
     return _dash_str_code_f(s, i);
 }
 
@@ -8517,7 +8545,7 @@ static STRPTR _dash_str_trim(STRPTR s) {
 /* One character with that code (0-255) */
 static STRPTR _dash_str_char(LONG code) {
     STRPTR r = _dash_str_alloc(1, TRUE);
-    if (r) { r[0] = (UBYTE)code; r[1] = 0; }
+    if (r) { r[0] = (UBYTE)code; r[1] = 0; if (!r[0]) _dash_str_setlen(r, 0); }
     return r;
 }
 
@@ -17359,23 +17387,6 @@ class CodeGenerator(ASTVisitor):
         # Add memory runtime (arrays, strings and structs allocate from its pool)
         if self._uses_pool():
             memory = CTemplates.MEMORY_RUNTIME
-            if self.uses_text:
-                # a freed string leaves the length cache of TEXT_RUNTIME
-                drop = "static void _dash_str_drop(_DashStrHdr *h) {\n"
-                memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n"
-                                        "static STRPTR _dash_sc_last;\n"
-                                        "static LONG _dash_str_len(STRPTR s);\n"
-                                        "static void _dash_str_setlen(STRPTR s, LONG len);\n\n" + drop +
-                                        "    /* (a block of 64 bytes or less is never in the length cache, D36; it may be the\n"
-                                        "       last text measured, D41) */\n"
-                                        "    if (_DASH_STR_SIZE(h) > sizeof(_DashStrHdr) + 64) _dash_str_forget((STRPTR)(h + 1));\n"
-                                        "    else if (_dash_sc_last == (STRPTR)(h + 1)) _dash_sc_last = NULL;\n")
-                # copies of long texts use and fill the length cache (dashweb D22)
-                old = ("    ULONG len = s ? strlen((char *)s) : 0;\n    STRPTR d = _dash_str_alloc(len, temp);\n"
-                       "    if (d && len) _dash_copy(d, s, len);\n")
-                assert old in memory
-                memory = memory.replace(old, "    ULONG len = _dash_str_len(s);\n    STRPTR d = _dash_str_alloc(len, temp);\n"
-                                             "    if (d && len) _dash_copy(d, s, len);\n    if (d) _dash_str_setlen(d, len);\n")
             parts.append(memory)
         else:
             # Loops and functions mark and release temporaries: nothing to do without strings
@@ -17409,13 +17420,7 @@ class CodeGenerator(ASTVisitor):
 
         # Add string runtime if needed
         if self.uses_strings:
-            strings = CTemplates.STRING_RUNTIME
-            if self.uses_text:
-                # slices of long texts use the length cache (dashweb D22)
-                old = "static STRPTR DashString_slice(STRPTR s, LONG start, LONG end) {\n    LONG len = s ? strlen(s) : 0;\n"
-                assert old in strings
-                strings = strings.replace(old, old.replace("s ? strlen(s) : 0", "_dash_str_len(s)"))
-            parts.append(strings)
+            parts.append(CTemplates.STRING_RUNTIME)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
         if self.uses_utf8:
@@ -20861,11 +20866,44 @@ static {ret_type} {method_name}({params_str}) {{
         return self._lent_str(node, code)
 
     def _str_set_code(self, indent: str, target: str, node: ASTNode, code: str) -> str:
-        """var = String: owned text is copied straight away (_dash_str_set_copy); anything else
+        """var = String: owned text is copied straight away (_dash_str_set_copy); a + b and
+        interpolation are written into the variable's text (_dash_str_set_join); anything else
         through _dash_str_set, which adopts a temporary (see _lent_str)."""
         if self._str_owned(node):
             return f"{indent}_dash_str_set_copy({target}, {code});\n"
+        join = self._concat_args(code)
+        if join:
+            return f"{indent}_dash_str_set_join({target}, {join});\n"
         return f"{indent}_dash_str_set({target}, {self._lent_str(node, code)});\n"
+
+    @staticmethod
+    def _concat_args(code: str) -> Optional[str]:
+        """The arguments for _dash_str_set_join when code is one DashString_concat or DashString_join
+        (up to 6 parts) and nothing else, or None"""
+        for head in ("DashString_concat(", "DashString_join("):
+            if not (code.startswith(head) and code.endswith(")")):
+                continue
+            inner = code[len(head):-1]
+            depth, quote, esc = 0, None, False   # the call must close at the very end (not "f(a) + g(b)")
+            for ch in inner:
+                if quote:                         # (brackets inside "..." and '.' do not count)
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == quote:
+                        quote = None
+                    continue
+                if ch in "\"'":
+                    quote = ch
+                depth += ch in "([{"
+                depth -= ch in ")]}"
+                if depth < 0:
+                    return None
+            if head == "DashString_concat(":
+                return f"2, (STRPTR[]){{{inner}}}"
+            return inner if int(inner.split(",", 1)[0]) <= 6 else None
+        return None
 
     def _append_in_place(self, node: VarAssign) -> bool:
         """s = s + a + b... on a String variable that owns its text: append each part in

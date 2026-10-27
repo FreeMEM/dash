@@ -121,3 +121,29 @@ diga el usuario. Base medida: `Base ronda 3`.
   - R7a las mezclas con alfa sobre el fondo recién puesto leen la copia del fondo en fast RAM, no la tarjeta.
   - R7b comparar solo donde el programa dibujó en esta pasada y en la anterior, no el área entera.
 - R9 Lo demás que salga de las medidas: `nested_struct_new`, `string_compare`, tamaño de los ejecutables.
+
+### R8 — textos con su longitud, y `s = a + b` escrito en su sitio
+- Cabecera de texto, los mismos 12 bytes: `size` (con marca y los bits `TEMP` y `KEEP`), `len` y `self` (la
+  dirección de la cabecera más una clave). Un texto es de Dash si `self` cuadra (`_DASH_STR_OURS`): su longitud se
+  lee, no se mide; uno de C (un literal, una librería) se mide con `strlen` como antes. `_dash_str_len` está en el
+  runtime de memoria y la caché de longitudes de los textos largos (D22, D36, D41, D61) desaparece.
+- Los temporales pasan de una lista en la cabecera a una pila aparte (puntero y número de serie; las marcas siguen
+  siendo números). Sacar uno mira primero la cima (comparar punteros, sin leer antes del texto).
+- `var = a + b` y la interpolación (hasta 6 partes) van por `_dash_str_set_join`: se escriben en el texto que ya
+  tiene la variable si caben y ninguna parte está en él; si no, en uno nuevo suyo. Ni temporal ni liberación. Los
+  textos pequeños ocupan su bloque entero de 8, 16... bytes (más sitio para volver a escribirse).
+- Medida (`R8`, frente a `Base ronda 3`, A500 / A1200): `string_concat_int` −15 % / −16 %, `string_interp` −7 % /
+  −7 %; en un programa aparte, `t = s + "a"` con `s` de Dash −40 %. Peor: `string_return` +12 % / +14 %,
+  `nested_struct_new` +6 % / +8 % (un texto hecho en una función: la reserva y el apilado cuestan algo más que
+  antes y no hay `strlen` que ahorrar). `string_chars_26` −9 % en A500. Memoria igual; ejecutables +9 KB en total
+  (+2 %).
+- Probado y tirado: la longitud como llamada (no en línea): `+` e interpolación perdían lo ganado. Literales con su
+  cabecera hecha por el compilador (`static const`): el retorno, un 5 % peor y nada mejor. Los búferes de
+  `DashString_from_int` con cabecera: contar las cifras costaba más que medirlas.
+- Lo que costó encontrar: gcc lee byte a byte un `ULONG` delante de un literal (lo cree de alineación 1): un `asm`
+  vacío esconde la dirección. Y meter en línea los caminos raros (crecer la pila, sacar del medio) hacía guardar 7
+  u 8 registros en cada llamada: van aparte con `noinline`.
+- Probado: 455/455 sin emulador; 34/34 ejemplos; `--emu --emu-a500 --emu-32` con los mismos 16 fallos que `main`
+  (los 4 del escritorio en cada máquina, más `test_desktop_canvas` en 3.2, y `test_on_click_timer`).
+- Aparte (ya en `main`, no de esta ronda): los tests del escritorio fallan en la batería entera porque antes corre
+  `test_args_wb` (Lorraine D31) en el mismo arranque; solos o en grupo pasan. Sin causa encontrada aún.
