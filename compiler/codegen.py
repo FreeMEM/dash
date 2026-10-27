@@ -611,7 +611,7 @@ static void _dash_ts_push(_DashStrHdr *h) {
 }
 
 static BOOL _dash_str_quiet = FALSE;   /* _dash_str_append trying a bigger size first */
-static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
+static __inline__ __attribute__((always_inline)) STRPTR _dash_str_alloc_in(ULONG len, BOOL temp) {
     ULONG size = sizeof(_DashStrHdr) + len + 1;
     _DashStrHdr *h;
     STRPTR text;
@@ -647,6 +647,11 @@ static STRPTR _dash_str_alloc(ULONG len, BOOL temp) {
     text[len] = 0;
     return text;
 }
+
+/* A temporary and an owned text, apart: the callers say which with a constant (no argument, no test) */
+static __attribute__((noinline)) STRPTR _dash_str_alloc_tmp(ULONG len) { return _dash_str_alloc_in(len, TRUE); }
+static __attribute__((noinline)) STRPTR _dash_str_alloc_own(ULONG len) { return _dash_str_alloc_in(len, FALSE); }
+#define _dash_str_alloc(len, temp) ((temp) ? _dash_str_alloc_tmp(len) : _dash_str_alloc_own(len))
 
 static void _dash_str_drop(_DashStrHdr *h) {
 #ifdef DASH_MEMCHECK

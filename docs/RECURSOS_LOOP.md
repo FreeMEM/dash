@@ -175,3 +175,10 @@ diga el usuario. Base medida: `Base ronda 3`.
   float/fixed en las tres máquinas; 455/455. Sin probar en un 68060.
 - Aparte: la batería `--emu --memcheck` da 66 fallos también en `main`: `test_on_click_timer` se cuelga y los
   siguientes del mismo arranque agotan el tiempo. Solos pasan.
+
+### R10 — reservar un texto: temporal y propio, por separado
+- `_dash_str_alloc(len, temp)` es ahora una macro sobre `_dash_str_alloc_tmp(len)` y `_dash_str_alloc_own(len)`
+  (el cuerpo, en línea en las dos): el `temp` de los llamadores es una constante, así que no se pasa ni se mira.
+- Medida frente a R8: `string_return` −2,3 % / −2,6 % (A500 / A1200), `nested_struct_new` −1,5 % / −1,8 %; frente
+  a la base de la ronda quedan en +9 % / +11 % y +5 % / +6 %. En un programa con solo el retorno ya va igual que
+  `main`. Ejecutables +2 KB en total.
