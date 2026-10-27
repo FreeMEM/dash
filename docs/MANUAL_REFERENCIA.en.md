@@ -2310,6 +2310,11 @@ end
 - A struct that reaches a function from a field, a global or a list element
   is retained until the end of the iteration: the function can replace that field without
   the struct it is using being freed.
+- A local variable that only takes an element or a field (`ce = h.celdas[j]`, `fi = filas[i]`) neither adds
+  nor subtracts, like the one of a `for`, if the function frees no object (it takes no elements out, replaces no
+  struct or list fields or globals, and only calls functions like it), the list hangs from a parameter, a global
+  or another such variable, and the variable is only read (not returned nor kept anywhere else). A `while` with
+  indices is then as fast as a `for`.
 - Freeing a long linked list (thousands of structs each pointing to the next) uses no stack.
 - Cycles: if a struct points to another that points back to the first, they are not freed until exit.
   `--memcheck` shows them as live on exit.

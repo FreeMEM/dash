@@ -17293,6 +17293,14 @@ static {ret_type} {method_name}({params_str}) {{
         reference (adopting a new object); loop variables only borrow."""
         indent = self.context.indent
         value = self._obj_value(value)
+        if name in getattr(self, "_lent_objs", ()):
+            # borrowed from where it hangs (Lorraine D44)
+            if not self.context.is_declared(name):
+                self.context.declare_var(name)
+                self.emit(f"{indent}{c_type}{'' if c_type.endswith('*') else ' '}{name} = {value};\n")
+            else:
+                self.emit(f"{indent}{name} = {value};\n")
+            return
         if not self.context.is_declared(name):
             self.context.declare_var(name)
             self.context.own(name, "obj")
@@ -17797,8 +17805,19 @@ static {ret_type} {method_name}({params_str}) {{
         reassigned, no window or event loop, only calls to builtins without callbacks, constructors and
         functions and methods like it. Weaker than _is_pure (it may push, or change numbers in its objects):
         what it gets need not be lent or copied, since nothing it does can free it. Fixed point, once."""
-        if getattr(self, "_nofree_ids", None) is None:
+        return id(fdef) in self._nofree_set(False)
+
+    def _frees_no_objects(self, fdef) -> bool:
+        """Like _frees_nothing, but only objects count (Lorraine D44): it may also give a String or number global,
+        parameter or field a new value, which frees a text but never a struct, list or dictionary."""
+        return id(fdef) in self._nofree_set(True)
+
+    def _nofree_set(self, objects_only: bool) -> set:
+        cache = "_noobjfree_ids" if objects_only else "_nofree_ids"
+        if getattr(self, cache, None) is None:
             prog = self.analysis.program
+            harmless = tuple(self._NUMERIC_TYPES) + (("String", "Double") if objects_only else ())
+            global_types = {g.name: g.var_type for g in prog.global_vars}
             defs = list(prog.functions) + [m for st in prog.structs for m in getattr(st, "methods", [])]
             globals_ = {g.name for g in prog.global_vars}
             methods_by_name = {}
@@ -17809,7 +17828,7 @@ static {ret_type} {method_name}({params_str}) {{
             for st in prog.structs:
                 for f in st.fields:
                     field_types.setdefault(f.name, set()).add(f.field_type)
-            numeric_fields = {name for name, types in field_types.items() if types <= set(self._NUMERIC_TYPES)}
+            numeric_fields = {name for name, types in field_types.items() if types <= set(harmless)}
             owner = {id(m): st for st in prog.structs for m in getattr(st, "methods", [])}
             nofree = {id(d) for d in defs}
 
@@ -17836,7 +17855,7 @@ static {ret_type} {method_name}({params_str}) {{
                             st = prog.get_struct(next(iter(made)))
                     if st is not None:
                         f = next((f for f in st.fields if f.name == n.member), None)
-                        return f is not None and f.field_type in self._NUMERIC_TYPES
+                        return f is not None and f.field_type in harmless
                 return n.member in numeric_fields
 
             def ok(d):
@@ -17847,8 +17866,9 @@ static {ret_type} {method_name}({params_str}) {{
                         return False
                     if isinstance(n, MemberAssign) and not numeric_member(d, n, params):
                         return False
-                    if isinstance(n, VarAssign) and (n.name in globals_ or
-                                                     (n.name in params and params[n.name] not in self._NUMERIC_TYPES)):
+                    if isinstance(n, VarAssign) and (
+                            (n.name in globals_ and not (objects_only and global_types.get(n.name) in harmless)) or
+                            (n.name in params and params[n.name] not in harmless)):
                         return False
                     if isinstance(n, MethodCall):
                         if n.method in self._REMOVING_METHODS:
@@ -17856,7 +17876,9 @@ static {ret_type} {method_name}({params_str}) {{
                         if n.method in methods_by_name and not all(id(m) in nofree for m in methods_by_name[n.method]):
                             return False
                     if isinstance(n, FunctionCall):
-                        if get_builtin(n.name):
+                        if n.name in ("Int", "Float", "Double", "Fixed"):
+                            pass                    # conversions
+                        elif get_builtin(n.name):
                             if n.name.startswith(self._CALLBACK_PREFIXES):
                                 return False
                         elif not prog.get_struct(n.name):
@@ -17872,8 +17894,8 @@ static {ret_type} {method_name}({params_str}) {{
                     if id(d) in nofree and not ok(d):
                         nofree.discard(id(d))
                         changed = True
-            self._nofree_ids = nofree
-        return id(fdef) in self._nofree_ids
+            setattr(self, cache, nofree)
+        return getattr(self, cache)
 
     def _lent_string_locals(self, fdef) -> set:
         """String variables of a function that can borrow their text instead of owning a copy (D66): every
@@ -17916,6 +17938,76 @@ static {ret_type} {method_name}({params_str}) {{
         return {name for name, vs in values.items()
                 if name not in params and name not in globals_ and name not in others
                 and any(not isinstance(v, StringLiteral) for v in vs) and all(lendable(v) for v in vs)}
+
+    def _lent_object_locals(self, fdef) -> set:
+        """Struct, list and dictionary variables of a function that borrow their object instead of holding a
+        reference (Lorraine D44), like the variable of a for: every assignment to them is an element or a field
+        (l[i], d[k], a.b) that hangs from a parameter, a global, self or another such variable; the function frees
+        no objects (_frees_no_objects), so nothing can take the object out of where it hangs while it runs; and
+        the variable is only read: never returned, given to another variable, field, list or dictionary, put in
+        a literal, or passed to a constructor or a builtin. No _dash_obj_set and no release per assignment."""
+        if not self._frees_no_objects(fdef):
+            return set()
+        params = {p.name if isinstance(p, FunctionParam) else p for p in fdef.params}
+        globals_ = {g.name for g in self.analysis.program.global_vars}
+        prog = self.analysis.program
+
+        def root(expr):
+            while isinstance(expr, (ArrayAccess, PropertyAccess)):
+                if isinstance(expr, ArrayAccess) and getattr(expr, "default", None) is not None:
+                    return None             # d.get(k, default): the default may be a new object
+                expr = expr.array if isinstance(expr, ArrayAccess) else expr.object
+            if isinstance(expr, MemberAccess):
+                return expr.object_name
+            if isinstance(expr, SelfRef):
+                return "self"
+            return expr.name if isinstance(expr, VarRef) else None
+
+        values, others = {}, set()
+        for n in self._walk_nodes(fdef.body):
+            if isinstance(n, VarAssign):
+                values.setdefault(n.name, []).append(n.value)
+            elif isinstance(n, ForEachStmt):
+                others.add(n.variable)
+            elif hasattr(n, "name") and type(n).__name__ in ("VarDecl", "TypedVarDecl"):
+                others.add(n.name)
+        lent = {name for name, vs in values.items()
+                if name not in params and name not in globals_ and name not in others
+                and all(isinstance(v, (ArrayAccess, PropertyAccess, MemberAccess)) and root(v) for v in vs)}
+
+        def used(node):
+            return isinstance(node, VarRef) and node.name in lent
+
+        for n in self._walk_nodes(fdef.body):
+            escaped = []
+            if isinstance(n, ReturnStmt):
+                escaped = [n.value]
+            elif isinstance(n, (VarAssign, MemberAssign, ArrayAssign)):
+                escaped = [n.value]
+            elif isinstance(n, MethodCall) and n.method in ("push", "insert"):
+                escaped = list(n.arguments)
+            elif isinstance(n, ArrayLiteral):
+                escaped = list(n.elements)
+            elif isinstance(n, DictLiteral):
+                escaped = list(n.values)
+            elif isinstance(n, FunctionCall) and (get_builtin(n.name) or prog.get_struct(n.name)
+                                                  or not prog.get_function(n.name)):
+                escaped = list(n.arguments)
+            for e in escaped:
+                if used(e):
+                    lent.discard(e.name)
+        # what hangs from a variable that holds its own reference may go when that one changes
+        changed = True
+        while changed:
+            changed = False
+            for name in list(lent):
+                for v in values[name]:
+                    r = root(v)
+                    if r not in params and r not in globals_ and r != "self" and r not in lent:
+                        lent.discard(name)
+                        changed = True
+                        break
+        return lent
 
     def _walk_nodes(self, nodes):
         """Every AST node under these (statements and expressions, nested blocks too)."""
@@ -17975,6 +18067,8 @@ static {ret_type} {method_name}({params_str}) {{
         self._seed_param_types(node.params)
         saved_lent = getattr(self, "_lent_strs", set())
         self._lent_strs = self._lent_string_locals(node)
+        saved_lent_objs = getattr(self, "_lent_objs", set())
+        self._lent_objs = self._lent_object_locals(node)
 
         # Type map for annotations
         type_map = self._c_type_map
@@ -18007,6 +18101,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.exit_scope()
         self.context.hidden_globals = saved_hidden
         self._lent_strs = saved_lent
+        self._lent_objs = saved_lent_objs
 
         # Determine return type - use explicit if provided, otherwise infer
         if node.return_type:

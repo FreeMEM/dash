@@ -1,0 +1,110 @@
+# Test: local variables that borrow a struct or list from where it hangs (Lorraine D44): ce = h.celdas[j] in a
+# function that frees no objects, from a parameter, a global or another such variable, takes no reference
+# (no _dash_obj_set, no release each turn), like the variable of a for. Not when the function may free one
+# (remove), when the variable is returned or stored, or when it hangs from a variable that holds its own.
+# memcheck
+# expect-c: _Dash_Celda *ce = ((_Dash_Celda *)DashArray_get(
+# expect-c: _Dash_Fila *fi = ((_Dash_Fila *)DashArray_get(
+# expect-no-c: _dash_obj_set((void **)&ce,
+# expect-no-c: _dash_obj_set((void **)&fi,
+# expect-c: _dash_obj_set((void **)&c1,
+# expect-c: _dash_obj_set((void **)&c2,
+# expect-c: _dash_obj_set((void **)&c3,
+# expect-out: suma desde 3: 49
+# expect-out: global: 55 total 55.0 err ok
+# expect-out: quita: 3 queda 9
+# expect-out: devuelve: 10 guarda: 2
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Celda
+    v: Int = 0
+    nombre: String = ""
+end
+
+struct Fila
+    celdas: [Celda]
+end
+
+struct Hoja
+    filas: [Fila]
+end
+
+var libro: Hoja = nil
+var total: Double = 0.0
+var err: String = ""
+
+func valor(c: Celda) -> Int
+    return c.v
+end
+
+# from a parameter, through a borrowed one: fi, then ce
+func suma(h: Hoja, desde: Int) -> Int
+    t = 0
+    i = 0
+    while i < h.filas.length
+        fi = h.filas[i]
+        j = desde
+        while j < fi.celdas.length
+            ce = fi.celdas[j]
+            t = t + valor(ce)
+            j = j + 1
+        end
+        i = i + 1
+    end
+    return t
+end
+
+# from a global; numbers and texts given to globals free no objects
+func suma_global() -> Int
+    t = 0
+    k = 0
+    fi = libro.filas[0]
+    while k < fi.celdas.length
+        ce = fi.celdas[k]
+        t = t + ce.v
+        total = total + Double(ce.v)
+        err = "ok"
+        k = k + 1
+    end
+    return t
+end
+
+# it takes elements out: ce holds its own reference
+func quita(f: Fila) -> Int
+    c1 = f.celdas[0]
+    f.celdas.remove(0)
+    return c1.v
+end
+
+# returned or stored: it holds its own reference
+func primera(f: Fila) -> Celda
+    c2 = f.celdas[6]
+    return c2
+end
+
+func guarda(f: Fila, otra: Fila) -> Int
+    c3 = f.celdas[1]
+    otra.celdas.push(c3)
+    return otra.celdas.length
+end
+
+Main
+    var cs: [Celda] = []
+    for i in (1..10)
+        cs.push(Celda(i, "c#{i}"))
+    end
+    h = Hoja([Fila(cs)])
+    Print "suma desde 3: #{suma(h, 3)}"
+    libro = h
+    Print "global: #{suma_global()} total #{total} err #{err}"
+    var cs2: [Celda] = []
+    for i in (3..12)
+        cs2.push(Celda(i))
+    end
+    f2 = Fila(cs2)
+    q = quita(f2)
+    Print "quita: #{q} queda #{f2.celdas.length}"
+    p = primera(f2)
+    Print "devuelve: #{p.v} guarda: #{guarda(f2, Fila([Celda(0)]))}"
+    libro = nil
+end

@@ -2310,6 +2310,11 @@ end
 - Un struct que llega a una funcion desde un campo, una global o un elemento de una lista
   queda retenido hasta el final de la vuelta: la funcion puede reemplazar ese campo sin
   que el struct que esta usando se libere.
+- Una variable local que solo toma un elemento o un campo (`ce = h.celdas[j]`, `fi = filas[i]`) no suma ni
+  resta, como la de un `for`, si la funcion no libera ningun objeto (no quita elementos, no reemplaza campos ni
+  globales de structs o listas, y solo llama a funciones como ella), la lista cuelga de un parametro, una global
+  u otra variable asi, y la variable solo se lee (no se devuelve ni se guarda en otro sitio). Un `while` con
+  indices va entonces igual de rapido que un `for`.
 - Liberar una lista enlazada larga (miles de structs que apuntan al siguiente) no gasta pila.
 - Ciclos: si un struct apunta a otro que apunta al primero, no se liberan hasta salir.
   `--memcheck` los muestra como vivos al salir.
