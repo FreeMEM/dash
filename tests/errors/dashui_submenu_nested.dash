@@ -1,0 +1,7 @@
+# expect: a submenu cannot have another submenu inside
+# (Intuition menus have one level of submenus, Lorraine D47)
+import "../lib/ventana_submenu_doble.dashui"
+
+Main
+    v = Mala_create()
+end

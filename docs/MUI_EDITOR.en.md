@@ -112,6 +112,12 @@ Rules checked by the compiler (`compiler/dashui.py`; the editor flags the same o
 - **Window**: `"close": N` makes the close button return `N` (`mui_on_close`). Without it, closing the first
   window gives -1 (quit).
 - **Menus**: each item is `label`, `key` (letter for Amiga+key) and `event`, or `{ "separator": true }` (a line).
+  With `"check": true` it has a check mark (`mui_menu_check`): choosing it toggles the mark and gives its event;
+  `"checked": true` sets it at the start, and `mui_get_value`/`mui_set_value` read and set it. `"submenu": [ ...items... ]`
+  with its `label` is a submenu (`mui_submenu_begin`), one level only and with no `key` or `event`. A menu, item or
+  submenu with `name` is a field of the window, like the objects (`v.ver_formulas`: check it, change its text with
+  `mui_set_text` or disable it with `mui_set_enabled`); `"disabled": true` leaves it disabled. The visual editor shows
+  submenus, but their items, the marks and the names are changed by editing the file as text (Lorraine D47).
 - **Translations** (dashweb D71): `"tr": N` on an object, a window, a menu or a menu item gives the main
   text (`text`, `label`, `title`, `titles`, `options`) catalog number `N`: the code requests it with
   `tr(N, "texto")`. For several strings of the same object, `"tr": { "label": 12, "help": 13 }`. They are extracted by

@@ -25,7 +25,9 @@ end
 WINDOW = {"dashui": 1, "windows": [{
     "name": "Principal", "title": "Mi programa", "tr": 20,
     "menus": [{"title": "Archivo", "tr": 21, "items": [{"label": "Salir", "key": "Q", "event": 1, "tr": 22},
-                                                         {"separator": True}]}],
+                                                         {"separator": True},
+                                                         {"label": "Zoom", "tr": 25, "submenu": [
+                                                             {"label": "Doble", "event": 2, "tr": 26}]}]}],
     "root": {"type": "vgroup", "children": [
         {"type": "button", "name": "ok", "label": "Aceptar", "help": "Cierra", "tr": {"label": 23, "help": 24}},
         {"type": "text", "text": "Sin número"}]}}]}
@@ -67,7 +69,7 @@ class TestCatalogo(unittest.TestCase):
         self.assertEqual(texts[2], ("Adiós", "MSG_ADIOS"))
         self.assertEqual(texts[16][0], 'Línea\\nDos \\"comillas\\"')
         self.assertEqual({n: t for n, (t, _) in texts.items() if n >= 20},
-                         {20: "Mi programa", 21: "Archivo", 22: "Salir", 23: "Aceptar", 24: "Cierra"})
+                         {20: "Mi programa", 21: "Archivo", 22: "Salir", 23: "Aceptar", 24: "Cierra", 25: "Zoom", 26: "Doble"})
         cd = catalogo.write_cd(texts, ["prog.dash"])
         self.assertIn("; MSG_ADIOS\nMSG_2 (2//)\nAdiós\n", cd)
         self.assertEqual([(n, i) for n, i, _ in catalogo.read_cd(cd)][:3], [("MSG_1", 1), ("MSG_2", 2), ("MSG_16", 16)])
@@ -115,7 +117,8 @@ class TestCatalogo(unittest.TestCase):
         code = dashui_to_dash(json.dumps(WINDOW), "ventana.dashui")
         for line in ('mui_window_begin(tr(20, "Mi programa")', 'mui_menu_begin(tr(21, "Archivo"))',
                      'mui_menu_item(tr(22, "Salir"), "Q", 1)', 'mui_button(tr(23, "Aceptar"))',
-                     'mui_help(_ui_ok, tr(24, "Cierra"))', 'mui_text("Sin número")'):
+                     'mui_help(_ui_ok, tr(24, "Cierra"))', 'mui_submenu_begin(tr(25, "Zoom"))',
+                     'mui_menu_item(tr(26, "Doble"), "", 2)', 'mui_text("Sin número")'):
             self.assertIn(line, code)
 
 

@@ -100,6 +100,9 @@ def dashui_texts(doc: dict, where: str):
             for item in menu.get("items", []):
                 if not item.get("separator"):
                     yield from emit(item, "item")
+                    for sub in item.get("submenu", []):   # (Lorraine D47)
+                        if not sub.get("separator"):
+                            yield from emit(sub, "item")
         if win.get("root"):
             yield from walk(win["root"])
 

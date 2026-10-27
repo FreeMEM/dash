@@ -344,6 +344,16 @@
                 el('button', { title: 'Quitar el menú', 'aria-label': `Quitar el menú ${m.title || mi + 1}`,
                                onclick: () => { w.menus.splice(mi, 1); commit(); } }, '×')));
             (m.items || []).forEach((it, ii) => {
+                if (it.submenu !== undefined) {   // (Lorraine D47: its items are edited as text for now)
+                    box.append(el('div', { class: 'prop item' },
+                        el('input', { value: it.label || '', placeholder: 'texto', 'aria-label': 'Texto del submenú',
+                            onchange: (e) => { it.label = e.target.value; commit(); } }),
+                        el('span', { title: 'Sus opciones se cambian editando el fichero como texto' },
+                           `▸ submenú (${(it.submenu || []).length})`),
+                        el('button', { title: 'Quitar el submenú', 'aria-label': `Quitar el submenú ${it.label || ii + 1}`,
+                                       onclick: () => { m.items.splice(ii, 1); commit(); } }, '×')));
+                    return;
+                }
                 box.append(el('div', { class: 'prop item' },
                     it.separator ? el('span', {}, '———') :
                         el('input', { value: it.label || '', placeholder: 'texto', 'aria-label': 'Texto de la opción',

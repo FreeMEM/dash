@@ -1,0 +1,9 @@
+{
+  "dashui": 1,
+  "windows": [
+    { "name": "Mala", "menus": [
+        { "title": "Ver", "items": [ { "label": "Fórmulas", "event": 3, "check": true, "name": "formulas" } ]}
+      ],
+      "root": { "type": "vgroup", "children": [ { "type": "text", "name": "formulas", "text": "=A1" } ] } }
+  ]
+}

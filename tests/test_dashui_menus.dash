@@ -1,0 +1,116 @@
+# Menus of a .dashui with check marks, a submenu and names (Lorraine D47): each named menu, item or submenu is
+# a field of the window. A helper process types Amiga+G (a checked item: the mark goes off and its event comes),
+# Amiga+R (an item of the submenu), Amiga+D (an item with "disabled": nothing) and Amiga+Q through input.device.
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_submenu_begin(
+# expect-c: _dash_mui_menu_check(
+# expect-out: marcas: true false
+# expect-out: título: Reciente 2
+# expect-out: menú 7 marca false
+# expect-out: menú 8
+# expect-out: menú 1
+# expect-out: fin
+
+import "lib/ventana_menus.dashui"
+
+const ID_SALIR = 1
+const ID_REJILLA = 7
+
+@header "#include <devices/input.h>"
+@header "#include <dos/dostags.h>"
+@header "static struct Window *teclas_win; static struct Task *teclas_padre;"
+
+
+@native func donde(win: Int)
+"""
+    struct Window *w = NULL;
+    GetAttr(MUIA_Window_Window, (Object *)win, (ULONG *)&w);
+    teclas_win = w;
+"""
+end
+
+@native func proceso_teclas()
+"""
+    struct MsgPort *port = CreateMsgPort();
+    struct IOStdReq *io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(struct IOStdReq)) : NULL;
+    static const UWORD codigos[4] = { 0x24, 0x13, 0x22, 0x10 };   /* G, R, D, Q */
+    Delay(50);
+    if (teclas_win && io && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)io, 0) == 0) {
+        struct InputEvent ie;
+        LONG i;
+        ActivateWindow(teclas_win);
+        Delay(10);
+        io->io_Command = IND_WRITEEVENT;
+        io->io_Data = &ie;
+        io->io_Length = sizeof(ie);
+        for (i = 0; i < 4; i++) {
+            memset(&ie, 0, sizeof(ie));
+            ie.ie_Class = IECLASS_RAWKEY;
+            ie.ie_Code = 0x67;                  /* right Amiga, as a keyboard sends it */
+            ie.ie_Qualifier = IEQUALIFIER_RCOMMAND;
+            DoIO((struct IORequest *)io);
+            Delay(2);
+            ie.ie_Code = codigos[i];
+            DoIO((struct IORequest *)io);
+            Delay(2);
+            ie.ie_Code = codigos[i] | IECODE_UP_PREFIX;
+            DoIO((struct IORequest *)io);
+            Delay(2);
+            ie.ie_Code = 0x67 | IECODE_UP_PREFIX;
+            ie.ie_Qualifier = 0;
+            DoIO((struct IORequest *)io);
+            Delay(25);
+        }
+        CloseDevice((struct IORequest *)io);
+    }
+    if (io) DeleteIORequest((struct IORequest *)io);
+    if (port) DeleteMsgPort(port);
+    Forbid();                       /* the program may only end once this process has gone */
+    Signal(teclas_padre, SIGBREAKF_CTRL_F);
+"""
+end
+
+@native func lanzar()
+"""
+    teclas_padre = FindTask(NULL);
+    SetSignal(0, SIGBREAKF_CTRL_F);
+    if (CreateNewProcTags(NP_Entry, (ULONG)proceso_teclas, NP_Name, (ULONG)"dash_teclas", TAG_DONE) == NULL)
+        teclas_padre = NULL;
+"""
+end
+
+@native func esperar_teclas()
+"""
+    if (teclas_padre) Wait(SIGBREAKF_CTRL_F);
+"""
+end
+
+Main
+    if mui_app_begin("Marcas", "DASHUIMENUS") == 0
+        Print "sin MUI"
+    else
+        v = Menus_create()
+        a = mui_get_value(v.ver_rejilla) == 1
+        b = mui_get_value(v.ver_formulas) == 1
+        Print "marcas: #{a} #{b}"
+        mui_set_text(v.reciente1, "Reciente 2")
+        Print "título: Reciente 2"
+        mui_set_enabled(v.recientes, true)
+        mui_set_enabled(v.menu_ver, true)
+        mui_window_open(v.window)
+        donde(v.window)
+        lanzar()
+        ev = 0
+        while ev != ID_SALIR and ev != -1
+            ev = mui_wait_event()
+            if ev == ID_REJILLA
+                Print "menú #{ev} marca #{mui_get_value(v.ver_rejilla) == 1}"
+            else
+                Print "menú #{ev}"
+            end
+        end
+        mui_app_end()
+        esperar_teclas()
+        Print "fin"
+    end
+end

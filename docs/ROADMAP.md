@@ -1002,7 +1002,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       (`while` con índices igual de rápido que `for`) (D36, D41, D42, D44)
 - [x] Argumentos del Workbench, separadores del idioma, ordenar con una función, expresiones regulares y
       comodines (D31, D19, D8, D45)
-- [x] MUI: menús con marca y submenús, modificadoras y arrastre en el lienzo (D13, D11, D12)
+- [x] MUI: menús con marca y submenús (también en el `.dashui`), modificadoras y arrastre en el lienzo, entrada
+      simulada (D13, D47, D11, D12, D46)
 - [x] Interfaces: `interface Orden ... end`, `struct X: Orden`; métodos por una tabla en `_DashType`, sin
       memoria por objeto (D43)
 - [x] 673 builtins (88 de MUI); 438 resultados sin emulador; 34 ejemplos

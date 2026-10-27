@@ -244,6 +244,18 @@ async function modelTests() {
         assert.ok(p.some((x) => x.includes('id de la ventana')), p.join('; '));
         assert.ok(p.some((x) => x.includes('evento de la opción a')), p.join('; '));
     });
+    await check('model: check() takes menus with marks, submenus and names, as the compiler (Lorraine D47)', () => {
+        const d = M.newDocument(), w = d.windows[0];
+        w.menus = [{ title: 'Ver', name: 'ver', items: [{ label: 'a', event: 2, check: true, checked: true, name: 'marca' },
+            { label: 'Zoom', name: 'zoom', submenu: [{ label: '200', event: 3, name: 'doble' }, { separator: true }] }] }];
+        assert.deepStrictEqual(M.check(d), []);
+        M.add(w, [], 'label');
+        w.root.children[0].name = 'marca';
+        w.menus[0].items[1].submenu[0].submenu = [];
+        w.menus[0].items.push({ label: 'b', checked: false });
+        const p = M.check(d).join('; ');
+        for (const s of ['repetido marca', 'está dentro de otro', 'checked sin']) assert.ok(p.includes(s), s + ' in ' + p);
+    });
     await check('model: check() finds the odd documents the compiler refuses (children of a button, tr, size, lists)', () => {
         const d = M.newDocument(), w = d.windows[0];
         w.size = [50];
