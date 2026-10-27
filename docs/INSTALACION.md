@@ -183,10 +183,14 @@ make sdk=cgx
 
 `make all` instala también `m68k-amigaos-gdb`, el depurador que usa la extensión de VS Code.
 
-**Nota:** En macOS, usa el bash de Homebrew:
+**Nota:** En macOS hay que compilar con el gcc de Homebrew (`gcc-12`), con su `make` (`gmake`) y su bash. El clang de
+Apple no compila el GCC 6 del toolchain: falla en `ira.c` con *a space is required between consecutive right angle
+brackets*. Si ya falló así, empieza con `make clean-gcc`.
 
 ```bash
-make all -j$(nproc) SHELL=$(brew --prefix)/bin/bash
+export PATH=$(brew --prefix bison)/bin:$PATH     # el gdb necesita un bison más nuevo que el de macOS
+CC=gcc-12 CXX=g++-12 gmake all -j$(sysctl -n hw.ncpu) SHELL=$(brew --prefix)/bin/bash
+CC=gcc-12 CXX=g++-12 gmake sdk=cgx SHELL=$(brew --prefix)/bin/bash
 ```
 
 **Nota:** Si prefieres instalar en otro directorio:
