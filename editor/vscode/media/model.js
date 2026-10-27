@@ -25,7 +25,7 @@
         slider:   { group: false, label: 'Deslizador',       props: [['min', 'int', 0], ['max', 'int', 100], ['value', 'int', 0]], events: ['change'] },
         gauge:    { group: false, label: 'Barra',            props: [['max', 'int', 100]], events: [] },
         list:     { group: false, label: 'Lista',            props: [], events: ['change', 'double'] },
-        canvas:   { group: false, label: 'Zona de dibujo',   props: [['min_width', 'int', 64], ['min_height', 'int', 32]], events: [] },
+        canvas:   { group: false, label: 'Zona de dibujo',   props: [['min_width', 'int', 64], ['min_height', 'int', 32], ['take_tab', 'bool', false]], events: [] },
         scrollbar:{ group: false, label: 'Barra de desplazamiento', props: [['vertical', 'bool', true]], events: ['change'] },
         image:    { group: false, label: 'Imagen',           props: [['file', 'string', '']], events: [] },
         image_button: { group: false, label: 'Botón con imagen', props: [['file', 'string', '']], events: ['event'] },

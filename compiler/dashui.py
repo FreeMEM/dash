@@ -170,7 +170,7 @@ class _Window:
         kind = node["type"]
         indent = "    " * depth
         settings = [k for k in ("weight", "disabled", "hidden", "help") if k in node] + \
-            (["context_menu"] if node.get("context_menu") else [])
+            (["context_menu"] if node.get("context_menu") else []) + (["take_tab"] if node.get("take_tab") else [])
         events = [k for k in _EVENTS if k in node]
         if kind in _GROUPS:
             builtin, props = _GROUPS[kind]
@@ -193,6 +193,10 @@ class _Window:
             self.after.append(f"    mui_set_visible({var}, false)")
         if node.get("help"):
             self.after.append(f"    mui_help({var}, {_text(node, 'help', '', ids)})")
+        if node.get("take_tab"):   # Tab is a key over the canvas (Lorraine D48)
+            if kind != "canvas":
+                raise DashUIError(f"{self.where}: \"take_tab\" is for a canvas, not a {kind!r}")
+            self.after.append(f"    mui_canvas_take_tab({var}, true)")
         if node.get("context_menu"):   # ("" is none: the editor's empty field)
             menu = node["context_menu"]
             if menu not in self.context_menus:

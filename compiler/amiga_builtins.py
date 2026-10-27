@@ -3663,6 +3663,15 @@ MUI_FUNCTIONS = {
                     "4 busy; it changes now if the pointer is over the area (or dragging it) and goes back to "
                     "normal outside it (Lorraine D16)"
     ),
+    "mui_canvas_take_tab": BuiltinFunc(
+        name="mui_canvas_take_tab",
+        params=["canvas", "on"],
+        return_type="void",
+        c_template="_dash_mui_canvas_take_tab(${canvas}, ${on})",
+        description="With the pointer over the area, Tab and Shift+Tab are keys for it (mui_canvas_key 66, Shift in "
+                    "mui_canvas_qualifiers; needs mui_canvas_on_input) and not the window's next and previous "
+                    "gadget; away from it they move between gadgets as always (Lorraine D48)"
+    ),
     "mui_canvas_mouse_x": BuiltinFunc(
         name="mui_canvas_mouse_x",
         params=["canvas"],

@@ -15822,7 +15822,21 @@ struct _DashCanvas {
     LONG ax, ay, aw, ah;
     LONG pointer;                   /* mui_canvas_set_pointer: the shape over the area (Lorraine D16) */
     LONG shown;                     /* the shape the window has now (0: its own) */
+    BOOL take_tab;                  /* mui_canvas_take_tab: Tab is a key over the area, not the next gadget (D48) */
+    BOOL tab_off;                   /* ... and the window's Tab and Shift+Tab are off now */
 };
+
+/* Tab and Shift+Tab of the window (MUI's cycle chain) off while the pointer is over a canvas that takes them
+   (Lorraine D48): the window handles its own keys before any event handler, as with Esc */
+static void _dash_canvas_tab(Object *obj, struct _DashCanvas *data, BOOL take) {
+    struct MUI_RenderInfo *mri = _DASH_MRI(obj);
+    IPTR keys = 0;
+    const ULONG bits = (1UL << MUIKEY_GADGET_NEXT) | (1UL << MUIKEY_GADGET_PREV);
+    if (!mri || !mri->mri_WindowObject || take == data->tab_off) return;
+    GetAttr(MUIA_Window_DisableKeys, mri->mri_WindowObject, &keys);
+    SetAttrs(mri->mri_WindowObject, MUIA_Window_DisableKeys, (IPTR)(take ? keys | bits : keys & ~bits), TAG_DONE);
+    data->tab_off = take;
+}
 
 /* The pointer over the area (Lorraine D16): 1 text, 2 resize left-right, 3 up-down are sprites of their own
    (pointerclass, made the first time), 4 the system's busy one; 0 the window's own */
@@ -16027,7 +16041,7 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Setup:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->input_id || data->move_id || data->drag_id || data->pointer) {
+        if (data->input_id || data->move_id || data->drag_id || data->pointer || data->take_tab) {
             data->handler.ehn_Object = obj;
             data->handler.ehn_Class = cl;
             /* moves: MOUSEMOVE (with the window's ReportMouse, at MUIM_Show), and the ticks (10 a second) in case
@@ -16035,7 +16049,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->handler.ehn_Events = (data->input_id ? IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY : 0) |
                 (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0) |
                 (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0) |
-                (data->pointer ? IDCMP_MOUSEMOVE : 0);
+                (data->pointer ? IDCMP_MOUSEMOVE : 0) |
+                (data->take_tab ? IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
             data->handler.ehn_Priority = 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
@@ -16055,13 +16070,14 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Show:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if ((data->move_id || data->drag_id || data->pointer) && _DASH_MRI(obj)->mri_Window)
+        if ((data->move_id || data->drag_id || data->pointer || data->take_tab) && _DASH_MRI(obj)->mri_Window)
             ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
         _dash_canvas_unbuffer(data);   /* the next screen may be another one */
         data->shown = 0;               /* the window's pointer goes with it */
+        _dash_canvas_tab(obj, data, FALSE);
         if (data->handler_added) {
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
             data->handler_added = FALSE;
@@ -16108,6 +16124,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
                 _dash_canvas_moved(data->drag_id);
             }
         }
+        if (data->take_tab && (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INACTIVEWINDOW))
+            _dash_canvas_tab(obj, data, inside && im->Class == IDCMP_MOUSEMOVE);
         if (data->pointer && im->Class == IDCMP_MOUSEMOVE)
             _dash_canvas_show_pointer(obj, data, inside || data->dragging ? data->pointer : 0);
         else if (data->shown && im->Class == IDCMP_MOUSEBUTTONS && !data->dragging && !inside)
@@ -16224,6 +16242,19 @@ static LONG _dash_mui_canvas_pointer(APTR obj, LONG what) {
     return what ? data->ptr_y : data->ptr_x;
 }
 
+/* The window open, the area's event handler takes these events too (and the pointer's moves come) */
+static void _dash_canvas_moves_on(Object *obj, struct _DashCanvas *data, ULONG events) {
+    struct MUI_RenderInfo *mri = _DASH_MRI(obj);
+    if ((data->handler.ehn_Events & events) == events) return;
+    if (data->handler_added) _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
+    data->handler.ehn_Object = obj;
+    data->handler.ehn_Class = _dash_canvas_class->mcc_Class;
+    data->handler.ehn_Events |= events;
+    _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
+    data->handler_added = TRUE;
+    ReportMouse(TRUE, mri->mri_Window);
+}
+
 /* The pointer's shape over the area (Lorraine D16): 0 normal, 1 text, 2 resize left-right, 3 up-down, 4 busy. It
    changes now if the pointer is over the area (or dragging it), and back and forth as it goes in and out */
 static void _dash_mui_canvas_set_pointer(APTR obj, LONG shape) {
@@ -16233,16 +16264,21 @@ static void _dash_mui_canvas_set_pointer(APTR obj, LONG shape) {
     data->pointer = shape >= 0 && shape <= 4 ? shape : 0;
     mri = _DASH_MRI(obj);
     if (!mri || !mri->mri_Window) return;            /* the window is closed: from MUIM_Setup on */
-    if (data->pointer && !(data->handler.ehn_Events & IDCMP_MOUSEMOVE)) {
-        if (data->handler_added) _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
-        data->handler.ehn_Object = obj;
-        data->handler.ehn_Class = _dash_canvas_class->mcc_Class;
-        data->handler.ehn_Events |= IDCMP_MOUSEMOVE;
-        _DASH_MUI_DO(mri->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
-        data->handler_added = TRUE;
-        ReportMouse(TRUE, mri->mri_Window);
-    }
+    if (data->pointer) _dash_canvas_moves_on(obj, data, IDCMP_MOUSEMOVE);
     _dash_canvas_show_pointer(obj, data, data->dragging || _dash_mui_canvas_pointer(obj, 2) ? data->pointer : 0);
+}
+
+/* Tab and Shift+Tab over the area are keys (mui_canvas_on_input: 66, with Shift's qualifier), not the window's
+   next and previous gadget (Lorraine D48); away from the area they move between the gadgets as always */
+static void _dash_mui_canvas_take_tab(APTR obj, LONG on) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    struct MUI_RenderInfo *mri;
+    if (!data) return;
+    data->take_tab = on != 0;
+    mri = _DASH_MRI(obj);
+    if (!mri || !mri->mri_Window) return;            /* the window is closed: from MUIM_Setup on */
+    if (on) _dash_canvas_moves_on(obj, data, IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW);
+    _dash_canvas_tab(obj, data, on && _dash_mui_canvas_pointer(obj, 2));
 }
 
 /* Draw it again now (only from the program's own task) */

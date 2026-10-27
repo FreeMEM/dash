@@ -5,6 +5,7 @@
 # emu-needs: muimaster.library
 # expect-c: _dash_mui_context_menu_begin(
 # expect-c: _dash_mui_set_context_menu(
+# expect-c: _dash_mui_canvas_take_tab(
 # expect-out: título: Pegar
 # expect-out: evento 42 en 60,30 botón 2
 # expect-out: evento 44 en 150,20 botón 2

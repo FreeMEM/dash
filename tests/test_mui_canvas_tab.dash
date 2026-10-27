@@ -1,0 +1,93 @@
+# Tab over a MUI drawing area (Lorraine D48): with mui_canvas_take_tab, Tab and Shift+Tab with the pointer over the
+# area are keys for it (66), and the focus stays where it was; with the pointer away from it, Tab moves the focus to
+# the next gadget as always and the area gets nothing. Keys and moves with input_* (Lorraine D46).
+# emu-needs: muimaster.library
+# expect-c: _dash_mui_canvas_take_tab(
+# expect-out: tecla 66 q 0
+# expect-out: tecla 66 q 1
+# expect-out: foco: ninguno
+# expect-out: foco: se mueve
+# expect-out: fin
+
+const PASO = 99
+const TECLA = 5
+
+@native func izq(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_LeftEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+@native func arr(obj: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_TopEdge, (Object *)obj, &v);
+    return (LONG)v;
+"""
+end
+
+@native func activo(win: Int) -> Int
+"""
+    IPTR v = 0;
+    GetAttr(MUIA_Window_ActiveObject, (Object *)win, &v);
+    return (LONG)v;
+"""
+end
+
+func dibuja(x: Int, y: Int, w: Int, h: Int)
+end
+
+Main
+    if mui_app_begin("Tab", "DASHTAB") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Tab", 0)
+        mui_hgroup_begin()
+        c = mui_canvas(160, 80)
+        b = mui_button("Negrita")
+        mui_group_end()
+        mui_window_end()
+        mui_canvas_on_draw(c, dibuja)
+        mui_canvas_on_input(c, TECLA)
+        mui_canvas_take_tab(c, true)
+        mui_window_open(win)
+        paso = 0
+        mui_timer(500, PASO)
+        ev = 0
+        while ev != -1 and paso < 7
+            ev = mui_wait_event()
+            if ev == PASO
+                paso = paso + 1
+                if paso == 1
+                    input_move(izq(c) + 40, arr(c) + 40)
+                elif paso == 2
+                    input_key(0x42, 0)
+                elif paso == 3
+                    input_key(0x42, 1)
+                elif paso == 4
+                    if activo(win) == 0
+                        Print "foco: ninguno"
+                    else
+                        Print "foco: otro"
+                    end
+                    input_move(izq(b) + 5, arr(b) + 5)
+                elif paso == 5
+                    input_key(0x42, 0)
+                elif paso == 6
+                    if activo(win) == c or activo(win) == b
+                        Print "foco: se mueve"      # (to the area: it is the first of the cycle chain)
+                    else
+                        Print "foco: #{activo(win)}"
+                    end
+                end
+                mui_timer(500, PASO)
+            elif ev == TECLA
+                Print "tecla #{mui_canvas_key(c)} q #{mui_canvas_qualifiers(c)}"
+            end
+        end
+        mui_app_end()
+        Print "fin"
+    end
+end

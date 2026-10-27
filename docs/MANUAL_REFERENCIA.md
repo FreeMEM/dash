@@ -3375,6 +3375,7 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_canvas_on_move(zona, id)` | Evento cuando el ratón se mueve sobre la zona, sin clic, y cuando sale de ella (antes de abrir la ventana). Los movimientos que llegan antes de que el programa recoja uno cuentan como uno; no retrasa los clics. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Dónde está el ratón ahora, desde la esquina de la zona, y si está dentro de ella; valga o no un clic. |
 | `mui_canvas_set_pointer(z, forma)` | La forma del puntero sobre la zona: 0 normal, 1 texto, 2 ancho (izquierda y derecha), 3 alto (arriba y abajo), 4 ocupado; fuera de la zona vuelve a la normal. Para el borde de una cabecera de columna. |
+| `mui_canvas_take_tab(z, si)` | Con el puntero sobre la zona, Tab y Mayúsculas+Tab son teclas para ella (`mui_canvas_key` 66, Mayúsculas en `mui_canvas_qualifiers`; hace falta `mui_canvas_on_input`) y no pasan al gadget siguiente o anterior; fuera de ella, Tab mueve el foco como siempre. Para pasar de celda en una hoja. |
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
 | `mui_image(fichero)` | Imagen de un fichero por datatypes: ILBM siempre; PNG, JPEG, GIF y BMP si están sus datatypes (AmigaOS 3.2 los trae). `mui_set_text` cambia el fichero. |
 | `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |
@@ -4420,8 +4421,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 93 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **685** | |
+| MUI | 94 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **686** | |
 
 ### Colores Estandar Amiga
 

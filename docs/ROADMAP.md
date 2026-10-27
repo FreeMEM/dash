@@ -1010,7 +1010,8 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Comparar textos en el orden del idioma con `StrnCmp` de `locale.library` (D7)
 - [x] MUI: forma del puntero sobre el lienzo (texto, ancho, alto, ocupado) con sprites propios (D16)
 - [x] MUI: menús contextuales en código y en el `.dashui` (`context_menus`), y `input_button` para probarlos (D15)
-- [x] 685 builtins (93 de MUI); 452 resultados sin emulador; 34 ejemplos
+- [x] MUI: Tab y Mayúsculas+Tab como teclas sobre el lienzo (`mui_canvas_take_tab`, `"take_tab"` en el `.dashui`) (D48)
+- [x] 686 builtins (94 de MUI); 454 resultados sin emulador; 34 ejemplos
 
 ## Notas y Decisiones
 

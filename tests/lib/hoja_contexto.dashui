@@ -15,7 +15,7 @@
         ]}
       ],
       "root": { "type": "vgroup", "children": [
-        { "type": "canvas", "name": "hoja", "min_width": 240, "min_height": 120, "context_menu": "menu_celdas" }
+        { "type": "canvas", "name": "hoja", "min_width": 240, "min_height": 120, "context_menu": "menu_celdas", "take_tab": true }
       ]}
     }
   ]

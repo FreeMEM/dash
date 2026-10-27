@@ -125,6 +125,8 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   botón derecho (`mui_set_context_menu`). El nombre es obligatorio y es un campo de la ventana; varios objetos pueden
   abrir el mismo. En un lienzo, `mui_canvas_mouse_x`/`_y` dicen dónde se pulsó. El editor visual los añade con
   «+ menú contextual» y el objeto lo elige en su propiedad `context_menu`.
+- **Tab en un lienzo** (Lorraine D48): `"take_tab": true` en un `canvas` hace que Tab y Mayúsculas+Tab sobre él sean
+  teclas suyas (`mui_canvas_take_tab`), no el paso al gadget siguiente. En otro tipo es un error.
 - **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
   principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
   `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca
