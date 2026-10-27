@@ -22,7 +22,7 @@ from compiler.ast_nodes import (
     MemberAccess, MemberAssign, EnumDef, EnumValue, FunctionParam, DictLiteral,
     ExternFunc, NativeFunc, LambdaFunc, FunctionRef, constant_int, KEY_NAMES, FloatLiteral
 )
-from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type
+from compiler.analyzer import AnalysisResult, list_elem_type, dict_value_type, dict_key_type
 from compiler.amiga_builtins import get_builtin, is_builtin, BuiltinFunc
 
 
@@ -37,6 +37,15 @@ def c_float_literal(value: float) -> str:
     if "inf" in text or "nan" in text:
         raise ValueError(f"Float literal {value} is out of range")
     return f"({text}f)" if value < 0 else f"{text}f"
+
+
+def c_double_literal(value: float) -> str:
+    """C text for a Float literal where a Double goes (Lorraine D1): a C double, all its digits (0.1 as a
+    float made double is 0.10000000149...)."""
+    text = repr(float(value))
+    if "inf" in text or "nan" in text:
+        raise ValueError(f"Double literal {value} is out of range")
+    return f"({text})" if value < 0 else text
 
 
 def c_int_literal(value: int) -> str:
@@ -527,8 +536,9 @@ static void _dash_str_drop(_DashStrHdr *h) {
 }
 
 /* Marks are serial numbers: removing a temporary from the list never breaks them */
+static ULONG _dash_tmp_marked = 0;     /* the last mark handed out (see _dash_tmp_take) */
 static ULONG _dash_tmp_mark(void) {
-    return _dash_tmp_serial;
+    return _dash_tmp_marked = _dash_tmp_serial;
 }
 
 static void _dash_otmp_release(ULONG mark);
@@ -557,6 +567,10 @@ static BOOL _dash_tmp_take(STRPTR p) {
         if (*link == h) {
             *link = h->next;
             h->next = NULL;
+            /* the newest temporary, with no mark handed out since it was made (s = str_from_buffer(...)
+               in a loop): its number is given back, so the release at the end of the iteration has
+               nothing to do and costs no call (D36) */
+            if (h->serial == _dash_tmp_serial && _dash_tmp_marked < h->serial) _dash_tmp_serial--;
             h->serial = 0;
             return TRUE;
         }
@@ -674,6 +688,7 @@ static STRPTR _dash_str_ret(STRPTR p) {
 typedef struct _DashType {
     void (*destroy)(void *);
     LONG size;                     /* bytes after the header; 0: in a LONG before the header */
+    const APTR *methods;           /* a struct's methods of its interfaces, by slot (Lorraine D43), or NULL */
 } _DashType;
 
 typedef struct _Dash_RefHeader {
@@ -945,11 +960,15 @@ typedef struct {
 /* Arrays never change length, so the top byte of capacity says what the
    elements are: Ints (0), objects the array holds a reference to (1: structs,
    arrays) or Strings it owns (2). Kinds 1 and 2 let go of their elements when
-   overwritten and when the array is freed. */
+   overwritten and when the array is freed. Doubles (3, Lorraine D2) take two LONGs each: data is
+   really a double[], and length and capacity count Doubles. */
 #define _DASH_ARR_CAP(a) ((a)->capacity & 0x00FFFFFF)
 #define _DASH_ARR_KIND(a) ((ULONG)(a)->capacity >> 24)
 #define _DASH_ARR_OBJS 1
 #define _DASH_ARR_STRS 2
+#define _DASH_ARR_DBLS 3
+/* LONGs per element: 2 for a Double */
+#define _DASH_ARR_W(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 2 : 1)
 
 /* apart, so that freeing a list of Ints stays a short leaf function */
 static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
@@ -964,8 +983,8 @@ static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr
 static void DashArray_destroy(void *obj) {
     DashArrayLong *arr = (DashArrayLong *)obj;
     if (!arr->data) return;
-    if (_DASH_ARR_KIND(arr)) DashArray_drop_elements(arr);
-    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
+    if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS || _DASH_ARR_KIND(arr) == _DASH_ARR_STRS) DashArray_drop_elements(arr);
+    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_W(arr) * _DASH_ARR_CAP(arr));
 }
 
 static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
@@ -1051,17 +1070,25 @@ static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
 }
 
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
+    LONG w, kind;
     if (!arr) return NULL;
+    w = _DASH_ARR_W(arr);
+    kind = _DASH_ARR_KIND(arr);
     if (start < 0) start = 0;
     if (end > arr->length) end = arr->length;
-    if (start >= end) return DashArray_create(0);
+    if (start >= end) end = start;
     LONG new_len = end - start;
-    DashArrayLong *result = DashArray_create(new_len);
+    DashArrayLong *result = DashArray_create(new_len * w);
     if (!result) return NULL;
-    for (LONG i = 0; i < new_len; i++) {
-        result->data[i] = arr->data[start + i];
+    for (LONG i = 0; i < new_len * w; i++) {
+        result->data[i] = arr->data[start * w + i];
     }
-    return _DASH_ARR_KIND(arr) ? DashArray_own(result, _DASH_ARR_KIND(arr)) : result;
+    if (kind == _DASH_ARR_DBLS) {
+        result->length = new_len;
+        result->capacity = new_len | ((LONG)_DASH_ARR_DBLS << 24);
+        return result;
+    }
+    return kind ? DashArray_own(result, kind) : result;
 }
 
 """
@@ -1187,16 +1214,28 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
     DICT_RUNTIME = """\
 /* Dash Dict Runtime */
 typedef struct {
-    STRPTR *keys;      /* NULL = free slot */
+    STRPTR *keys;      /* NULL = free slot; {Int: T}: the keys themselves, used[] says which slots hold one */
     LONG *vals;
     LONG count;
     LONG cap;          /* slots: 0 or a power of two */
     LONG kind;         /* 0, _DASH_ARR_OBJS or _DASH_ARR_STRS */
+    UBYTE *used;       /* {Int: T} (Lorraine D9): one byte a slot; NULL with String keys */
+    BOOL ikeys;        /* Int keys: set by the first DashDict_*i that puts one in */
 } DashDict;
+
+#define _DASH_DICT_USED(d, i) ((d)->ikeys ? (d)->used[i] : (d)->keys[i] != NULL)
 
 static ULONG _dash_dict_hash(STRPTR k) {
     ULONG h = 5381;
     while (*k) h = (h << 5) + h + (UBYTE)*k++;
+    return h;
+}
+
+/* An Int key mixed with shifts (no multiplication on a 68000): consecutive keys stay apart */
+static ULONG _dash_dict_hashi(LONG k) {
+    ULONG h = (ULONG)k;
+    h ^= h >> 15;
+    h ^= h >> 7;
     return h;
 }
 
@@ -1213,10 +1252,14 @@ static void DashDict_destroy(void *obj) {
     LONG i;
     if (!d->cap) return;
     for (i = 0; i < d->cap; i++) {
-        if (d->keys[i]) { _dash_str_free(d->keys[i]); _dash_dict_drop(d, d->vals[i], TRUE); }
+        if (_DASH_DICT_USED(d, i)) {
+            if (!d->ikeys) _dash_str_free(d->keys[i]);
+            _dash_dict_drop(d, d->vals[i], TRUE);
+        }
     }
     _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
     _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+    if (d->used) _dash_block_put(d->used, d->cap);
 }
 
 /* A new empty dictionary: a temporary until a variable adopts it */
@@ -1229,6 +1272,8 @@ static DashDict *DashDict_new(LONG kind) {
     d->count = 0;
     d->cap = 0;
     d->kind = kind;
+    d->used = NULL;
+    d->ikeys = FALSE;
     return d;
 }
 
@@ -1239,22 +1284,38 @@ static LONG _dash_dict_slot(DashDict *d, STRPTR key) {
     return (LONG)i;
 }
 
+/* {Int: T}: the slot of key, or the free one where it would go */
+static LONG _dash_dict_sloti(DashDict *d, LONG key) {
+    ULONG mask = d->cap - 1, i = _dash_dict_hashi(key) & mask;
+    while (d->used[i] && (LONG)d->keys[i] != key) i = (i + 1) & mask;
+    return (LONG)i;
+}
+
 static BOOL _dash_dict_grow(DashDict *d) {
     LONG oldcap = d->cap, newcap = oldcap ? oldcap * 2 : 8, i, s;
     STRPTR *oldkeys = d->keys;
     LONG *oldvals = d->vals;
+    UBYTE *oldused = d->used, *used = NULL;
     STRPTR *keys = (STRPTR *)_dash_block_get_clear(sizeof(STRPTR) * newcap);
     LONG *vals = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
     if (!keys || !vals) return FALSE;
+    if (d->ikeys && !(used = (UBYTE *)_dash_block_get_clear(newcap))) return FALSE;
     d->keys = keys;
     d->vals = vals;
+    d->used = used;
     d->cap = newcap;
     for (i = 0; i < oldcap; i++) {
-        if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
+        if (d->ikeys) {
+            if (oldused[i]) {
+                s = _dash_dict_sloti(d, (LONG)oldkeys[i]);
+                keys[s] = oldkeys[i]; vals[s] = oldvals[i]; used[s] = 1;
+            }
+        } else if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
     }
     if (oldcap) {
         _dash_block_put(oldkeys, sizeof(STRPTR) * oldcap);
         _dash_block_put(oldvals, sizeof(LONG) * oldcap);
+        if (oldused) _dash_block_put(oldused, oldcap);
     }
     return TRUE;
 }
@@ -1312,6 +1373,97 @@ static BOOL DashDict_has(DashDict *d, STRPTR key) {
     return d && key && d->cap && d->keys[_dash_dict_slot(d, key)] != NULL;
 }
 
+/* {Int: T} (Lorraine D9): the same with an Int key. The first key put in an empty dictionary makes its keys Int */
+static LONG _dash_dict_puti(DashDict *d, LONG key) {
+    LONG s;
+    if (!d) return -1;
+    if (!d->ikeys) {
+        if (d->count) return -1;                 /* (the analyzer keeps String and Int keys apart) */
+        if (d->cap) {                            /* emptied String table: start again */
+            _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
+            _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+            d->keys = NULL; d->vals = NULL; d->cap = 0;
+        }
+        d->ikeys = TRUE;
+    }
+    if ((d->count + 1) * 4 > d->cap * 3 && !_dash_dict_grow(d)) return -1;
+    s = _dash_dict_sloti(d, key);
+    if (!d->used[s]) {
+        d->used[s] = 1;
+        d->keys[s] = (STRPTR)key;
+        d->vals[s] = 0;
+        d->count++;
+    }
+    return s;
+}
+
+static void DashDict_seti(DashDict *d, LONG key, LONG value) {
+    LONG s = _dash_dict_puti(d, key);
+    if (s >= 0) d->vals[s] = value;
+}
+
+static void DashDict_set_obji(DashDict *d, LONG key, void *value) {
+    LONG s = _dash_dict_puti(d, key);
+    if (s < 0) return;
+    d->kind = _DASH_ARR_OBJS;
+    _dash_obj_set((void **)&d->vals[s], value);
+}
+
+static void DashDict_set_stri(DashDict *d, LONG key, STRPTR value) {
+    LONG s = _dash_dict_puti(d, key);
+    if (s < 0) return;
+    d->kind = _DASH_ARR_STRS;
+    _dash_str_set((STRPTR *)&d->vals[s], value);
+}
+
+static LONG DashDict_get_ori(DashDict *d, LONG key, LONG dflt) {
+    LONG s;
+    if (!d || !d->ikeys || !d->cap) return dflt;
+    s = _dash_dict_sloti(d, key);
+    return d->used[s] ? d->vals[s] : dflt;
+}
+
+static LONG DashDict_geti(DashDict *d, LONG key) {
+    return DashDict_get_ori(d, key, 0);
+}
+
+static BOOL DashDict_hasi(DashDict *d, LONG key) {
+    return d && d->ikeys && d->cap && d->used[_dash_dict_sloti(d, key)];
+}
+
+static void DashDict_removei(DashDict *d, LONG key) {
+    LONG s, j, h, mask;
+    if (!d || !d->ikeys || !d->cap) return;
+    s = _dash_dict_sloti(d, key);
+    if (!d->used[s]) return;
+    _dash_dict_drop(d, d->vals[s], FALSE);
+    d->used[s] = 0;
+    d->count--;
+    mask = d->cap - 1;
+    for (j = (s + 1) & mask; d->used[j]; j = (j + 1) & mask) {
+        h = _dash_dict_hashi((LONG)d->keys[j]) & mask;
+        if ((j > s && (h <= s || h > j)) || (j < s && h <= s && h > j)) {
+            d->keys[s] = d->keys[j];
+            d->vals[s] = d->vals[j];
+            d->used[s] = 1;
+            d->used[j] = 0;
+            s = j;
+        }
+    }
+}
+
+/* {1: "a", ...} */
+static DashDict *DashDict_fromi(LONG kind, LONG n, LONG *keys, LONG *vals) {
+    DashDict *d = DashDict_new(kind);
+    LONG i;
+    for (i = 0; d && i < n; i++) {
+        if (kind == _DASH_ARR_OBJS) DashDict_set_obji(d, keys[i], (void *)vals[i]);
+        else if (kind == _DASH_ARR_STRS) DashDict_set_stri(d, keys[i], (STRPTR)vals[i]);
+        else DashDict_seti(d, keys[i], vals[i]);
+    }
+    return d;
+}
+
 /* Linear probing without tombstones: the entries after the hole move back */
 static void DashDict_remove(DashDict *d, STRPTR key) {
     LONG s, j, h, mask;
@@ -1338,7 +1490,12 @@ static void DashDict_clear(DashDict *d) {
     LONG i;
     if (!d) return;
     for (i = 0; i < d->cap; i++) {
-        if (d->keys[i]) { _dash_str_free(d->keys[i]); _dash_dict_drop(d, d->vals[i], FALSE); d->keys[i] = NULL; }
+        if (_DASH_DICT_USED(d, i)) {
+            if (!d->ikeys) _dash_str_free(d->keys[i]);
+            _dash_dict_drop(d, d->vals[i], FALSE);
+            d->keys[i] = NULL;
+            if (d->ikeys) d->used[i] = 0;
+        }
     }
     d->count = 0;
 }
@@ -1347,13 +1504,13 @@ static LONG DashDict_length(DashDict *d) {
     return d ? d->count : 0;
 }
 
-/* The keys, as a new list of Strings (in no particular order) */
+/* The keys, as a new list of Strings (in no particular order); of Ints in a {Int: T} */
 static DashArrayLong *DashDict_keys(DashDict *d) {
     LONG i, j = 0;
     DashArrayLong *arr = DashArray_create(d ? d->count : 0);
     if (!arr || !d) return arr;
-    for (i = 0; i < d->cap; i++) if (d->keys[i]) arr->data[j++] = (LONG)d->keys[i];
-    return DashArray_own(arr, _DASH_ARR_STRS);
+    for (i = 0; i < d->cap; i++) if (_DASH_DICT_USED(d, i)) arr->data[j++] = (LONG)d->keys[i];
+    return d->ikeys ? arr : DashArray_own(arr, _DASH_ARR_STRS);
 }
 
 /* {"a": 1, ...} */
@@ -2911,15 +3068,31 @@ static void _dash_prof_report(void) {
     # Program arguments (dashweb D19): "visor pagina.html". From the Workbench there are none.
     ARGS_RUNTIME = """\
 /* Dash Args Runtime */
+#include <workbench/startup.h>
+extern struct WBStartup *_WBenchMsg;
 static int _dash_argc = 0;
 static char **_dash_argv = NULL;
 
+/* From the Shell, its arguments; from the Workbench (Lorraine D31), the project icons the program was
+   started with: a double click on a document whose default tool it is, or shift + click on several */
 static LONG _dash_arg_count(void) {
+    if (_WBenchMsg) return _WBenchMsg->sm_NumArgs > 1 ? _WBenchMsg->sm_NumArgs - 1 : 0;
     return _dash_argc > 1 ? _dash_argc - 1 : 0;
 }
 
-/* Argument i (from 0, the program name not counted); "" if there is no such one */
+/* Argument i (from 0, the program name not counted); "" if there is no such one. From the Workbench the
+   icon's full path ("Work:Textos/carta.odt"; a drawer or a disk, its own path) */
 static STRPTR _dash_arg(LONG i) {
+    if (_WBenchMsg) {
+        struct WBArg *a;
+        UBYTE path[512];
+        if (i < 0 || i + 1 >= _WBenchMsg->sm_NumArgs) return (STRPTR)"";
+        a = &_WBenchMsg->sm_ArgList[i + 1];
+        path[0] = 0;
+        if (a->wa_Lock && !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) path[0] = 0;
+        if (a->wa_Name && a->wa_Name[0]) AddPart((STRPTR)path, a->wa_Name, sizeof(path));
+        return _dash_str_dup((STRPTR)path, TRUE);
+    }
     if (i < 0 || i + 1 >= _dash_argc) return (STRPTR)"";
     return _dash_str_dup((STRPTR)_dash_argv[i + 1], TRUE);
 }
@@ -4626,6 +4799,54 @@ static STRPTR _dash_date_text(STRPTR format) {
     return _dash_str_dup((STRPTR)o.buf, TRUE);
 }
 
+/* The user's language and country (Lorraine D19), opened once like date_text's; NULL without locale.library */
+static struct Locale *_dash_user_locale(void) {
+    if (!_dash_date_locale && _dash_locale_open()) _dash_date_locale = OpenLocale(NULL);
+    return _dash_date_locale;
+}
+
+/* What goes before the decimals: "," in Spanish, "." in English (and without locale.library) */
+static STRPTR _dash_locale_decimal_point(void) {
+    struct Locale *l = _dash_user_locale();
+    return _dash_str_dup((STRPTR)(l && l->loc_DecimalPoint ? (char *)l->loc_DecimalPoint : "."), TRUE);
+}
+
+/* What separates the thousands: "." in Spanish, "," in English (and without locale.library); maybe "" */
+static STRPTR _dash_locale_group_separator(void) {
+    struct Locale *l = _dash_user_locale();
+    return _dash_str_dup((STRPTR)(l && l->loc_GroupSeparator ? (char *)l->loc_GroupSeparator : ","), TRUE);
+}
+
+/* The order of day, month and year in the short date: "DMY", "MDY" or "YMD", from its FormatDate codes
+   (%d %e day, %m %b %h %B month, %y %Y year, %D = %m/%d/%y); what it lacks goes after in that order */
+static STRPTR _dash_locale_date_order(void) {
+    struct Locale *l = _dash_user_locale();
+    const char *f = l && l->loc_ShortDateFormat ? (const char *)l->loc_ShortDateFormat : "%d-%b-%y";
+    const char *all = "DMY";
+    char o[4];
+    LONG n = 0, i;
+    for (; *f && n < 3; f++) {
+        const char *add = NULL;
+        if (*f != '%' || !f[1]) continue;
+        switch (*++f) {
+        case 'd': case 'e': add = "D"; break;
+        case 'm': case 'b': case 'h': case 'B': add = "M"; break;
+        case 'y': case 'Y': add = "Y"; break;
+        case 'D': add = "MDY"; break;
+        }
+        for (; add && *add && n < 3; add++) {
+            for (i = 0; i < n && o[i] != *add; i++) ;
+            if (i == n) o[n++] = *add;
+        }
+    }
+    for (; *all && n < 3; all++) {
+        for (i = 0; i < n && o[i] != *all; i++) ;
+        if (i == n) o[n++] = *all;
+    }
+    o[n] = 0;
+    return _dash_str_dup((STRPTR)o, TRUE);
+}
+
 static void _dash_date_cleanup(void) {
     if (_dash_date_locale && LocaleBase) CloseLocale(_dash_date_locale);
     _dash_date_locale = NULL;
@@ -4858,6 +5079,1122 @@ static LONG _dash_base64_to_file(STRPTR text, STRPTR file) {
     }
     FreeVec(out);
     return size;
+}
+
+"""
+
+    # Lorraine D6: raw deflate (what a ZIP holds) and crc32 with zlib, compiled apart (compiler/clibs.py
+    # links it when the C has this template's first line)
+    ZLIB_RUNTIME = """\
+/* Dash zlib Runtime */
+long dash_zlib_inflate(const void *src, long n, void *dst, long max);
+long dash_zlib_deflate(const void *src, long n, void *dst, long max, long level);
+unsigned long dash_zlib_crc32(const void *buf, long n, unsigned long crc);
+
+static LONG _dash_inflate(APTR src, LONG n, APTR dst, LONG max) {
+    return dash_zlib_inflate(src, n, dst, max);
+}
+
+static LONG _dash_deflate(APTR src, LONG n, APTR dst, LONG max, LONG level) {
+    return dash_zlib_deflate(src, n, dst, max, level);
+}
+
+static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
+    return (LONG)dash_zlib_crc32(buf, n, (ULONG)crc);
+}
+
+"""
+
+    # Lorraine D5: texts as UTF-8. Dash's texts are bytes (Latin-1 on the Amiga); these read and write them
+    # as UTF-8, on TEXT_RUNTIME's length cache
+    UTF8_RUNTIME = """\
+/* Dash UTF-8 Runtime */
+/* The code point that starts at p and its length in bytes (*n). A byte that does not start a valid
+   sequence (a lone continuation byte, an overlong form, a surrogate, past U+10FFFF, cut short by the
+   end of the text) is a character of its own: U+FFFD, 1 byte. The 0 at the end stops a sequence. */
+static LONG _dash_utf8_decode(const UBYTE *p, LONG *n) {
+    UBYTE c = p[0];
+    LONG cp, k, j, min;
+    *n = 1;
+    if (c < 0x80) return c;
+    if (c < 0xC2) return 0xFFFD;
+    if (c < 0xE0) { k = 1; cp = c & 0x1F; min = 0x80; }
+    else if (c < 0xF0) { k = 2; cp = c & 0x0F; min = 0x800; }
+    else if (c < 0xF5) { k = 3; cp = c & 0x07; min = 0x10000; }
+    else return 0xFFFD;
+    for (j = 1; j <= k; j++) {
+        if ((p[j] & 0xC0) != 0x80) return 0xFFFD;
+        cp = (cp << 6) | (p[j] & 0x3F);
+    }
+    if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0xFFFD;
+    *n = k + 1;
+    return cp;
+}
+
+/* Position of the first byte from..to-1 of a buffer that does not start a valid UTF-8 sequence (or one
+   cut by to), or -1 if they are all valid (Lorraine D40) */
+static LONG _dash_utf8_check(APTR buf, LONG from, LONG to) {
+    UBYTE *p, *e, c;
+    LONG k, j, cp, min;
+    if (!buf) return -1;
+    if (from < 0) from = 0;
+    for (p = (UBYTE *)buf + from, e = (UBYTE *)buf + to; p < e; ) {
+        c = *p;
+        if (c < 0x80) { p++; continue; }
+        if (c < 0xC2) break;
+        if (c < 0xE0) { k = 1; cp = c & 0x1F; min = 0x80; }
+        else if (c < 0xF0) { k = 2; cp = c & 0x0F; min = 0x800; }
+        else if (c < 0xF5) { k = 3; cp = c & 0x07; min = 0x10000; }
+        else break;
+        if (e - p <= k) break;
+        for (j = 1; j <= k; j++) {
+            if ((p[j] & 0xC0) != 0x80) break;
+            cp = (cp << 6) | (p[j] & 0x3F);
+        }
+        if (j <= k || cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) break;
+        p += k + 1;
+    }
+    return p < e ? p - (UBYTE *)buf : -1;
+}
+
+/* Position of the character after the one at i (the length at the end) */
+static LONG _dash_utf8_next(STRPTR s, LONG i) {
+    LONG len = _dash_str_len(s), n;
+    if (i < 0) return 0;
+    if (i >= len) return len;
+    _dash_utf8_decode((UBYTE *)s + i, &n);
+    return i + n;
+}
+
+/* Position of the character before i (0 at the start) */
+static LONG _dash_utf8_prev(STRPTR s, LONG i) {
+    LONG len = _dash_str_len(s), j, n;
+    if (i > len) i = len;
+    if (i <= 0) return 0;
+    for (j = i - 1; j > 0 && i - j < 4 && (((UBYTE *)s)[j] & 0xC0) == 0x80; j--) ;
+    _dash_utf8_decode((UBYTE *)s + j, &n);
+    return j + n == i ? j : i - 1;
+}
+
+/* Code point of the character at i, 0 outside the text */
+static LONG _dash_utf8_code(STRPTR s, LONG i) {
+    LONG n;
+    if (!s || i < 0 || i >= _dash_str_len(s)) return 0;
+    return _dash_utf8_decode((UBYTE *)s + i, &n);
+}
+
+/* The bytes of cp in UTF-8, 0 to 4; U+FFFD for what is not a character */
+static LONG _dash_utf8_put(UBYTE *o, LONG cp) {
+    if (cp < 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) cp = 0xFFFD;
+    if (cp == 0) return 0;
+    if (cp < 0x80) { o[0] = cp; return 1; }
+    if (cp < 0x800) { o[0] = 0xC0 | (cp >> 6); o[1] = 0x80 | (cp & 0x3F); return 2; }
+    if (cp < 0x10000) {
+        o[0] = 0xE0 | (cp >> 12); o[1] = 0x80 | ((cp >> 6) & 0x3F); o[2] = 0x80 | (cp & 0x3F);
+        return 3;
+    }
+    o[0] = 0xF0 | (cp >> 18); o[1] = 0x80 | ((cp >> 12) & 0x3F); o[2] = 0x80 | ((cp >> 6) & 0x3F);
+    o[3] = 0x80 | (cp & 0x3F);
+    return 4;
+}
+
+/* A text with the character cp in UTF-8 ("" for 0) */
+static STRPTR _dash_utf8_char(LONG cp) {
+    UBYTE b[4];
+    LONG n = _dash_utf8_put(b, cp), k;
+    STRPTR r = _dash_str_alloc(n, TRUE);
+    if (!r) return NULL;
+    for (k = 0; k < n; k++) r[k] = b[k];
+    r[n] = 0;
+    return r;
+}
+
+/* How many characters (each invalid byte is one) */
+static LONG _dash_utf8_length(STRPTR s) {
+    LONG count = 0, n;
+    UBYTE *p = (UBYTE *)s;
+    if (!p) return 0;
+    while (*p) {
+        if (*p < 0x80) n = 1;
+        else _dash_utf8_decode(p, &n);
+        p += n;
+        count++;
+    }
+    return count;
+}
+
+/* What a character outside Latin-1 becomes: something like it, or "?" */
+static const struct { UWORD cp; char to[5]; } _dash_utf8_near[] = {
+    {0x2018, "'"}, {0x2019, "'"}, {0x201A, "'"}, {0x2032, "'"}, {0x2039, "\\xAB"}, {0x203A, "\\xBB"},
+    {0x201C, "\\""}, {0x201D, "\\""}, {0x201E, "\\""}, {0x2033, "\\""},
+    {0x2013, "-"}, {0x2014, "-"}, {0x2212, "-"}, {0x2010, "-"}, {0x2011, "-"},
+    {0x2026, "..."}, {0x20AC, "EUR"}, {0x2122, "(TM)"}, {0x2022, "\\xB7"},
+    {0x2002, " "}, {0x2003, " "}, {0x2009, " "}, {0x202F, " "}, {0x205F, " "},
+    {0x200B, ""}, {0x200C, ""}, {0x200D, ""}, {0x200E, ""}, {0x200F, ""}, {0xFEFF, ""},
+    {0x0152, "OE"}, {0x0153, "oe"}, {0x0160, "S"}, {0x0161, "s"}, {0x0178, "Y"}, {0x017D, "Z"},
+    {0x017E, "z"}, {0x0192, "f"}, {0x02C6, "^"}, {0x02DC, "~"}, {0x2020, "+"}, {0x2021, "+"},
+    {0x2030, "o/oo"}, {0x2190, "<-"}, {0x2192, "->"}, {0x2264, "<="}, {0x2265, ">="}, {0x2260, "!="},
+};
+
+static const char *_dash_utf8_latin1_of(LONG cp) {
+    LONG k;
+    for (k = 0; k < (LONG)(sizeof(_dash_utf8_near) / sizeof(_dash_utf8_near[0])); k++)
+        if (_dash_utf8_near[k].cp == cp) return _dash_utf8_near[k].to;
+    return "?";
+}
+
+/* UTF-8 to Latin-1: what is not in Latin-1 becomes something like it or "?" (an invalid byte too) */
+static STRPTR _dash_utf8_to_latin1(STRPTR s) {
+    LONG len = 0, n, cp, pass;
+    UBYTE *p, *o = NULL;
+    const char *t;
+    STRPTR r = NULL;
+    if (!s) s = (STRPTR)"";
+    for (pass = 0; pass < 2; pass++) {     /* the length first, then the bytes */
+        if (pass == 1) {
+            if (!(r = _dash_str_alloc(len, TRUE))) return NULL;
+            o = (UBYTE *)r;
+        }
+        for (p = (UBYTE *)s; *p; p += n) {
+            if (*p < 0x80) { n = 1; cp = *p; }
+            else cp = _dash_utf8_decode(p, &n);
+            if (cp < 256) {
+                if (o) *o++ = cp; else len++;
+            } else {
+                for (t = _dash_utf8_latin1_of(cp); *t; t++) {
+                    if (o) *o++ = *t; else len++;
+                }
+            }
+        }
+    }
+    *o = 0;
+    return r;
+}
+
+/* Latin-1 to UTF-8: bytes from 128 on take two */
+static STRPTR _dash_latin1_to_utf8(STRPTR s) {
+    LONG len = 0;
+    UBYTE *p, *o;
+    STRPTR r;
+    if (!s) s = (STRPTR)"";
+    for (p = (UBYTE *)s; *p; p++) len += *p < 0x80 ? 1 : 2;
+    if (!(r = _dash_str_alloc(len, TRUE))) return NULL;
+    for (p = (UBYTE *)s, o = (UBYTE *)r; *p; p++) {
+        if (*p < 0x80) *o++ = *p;
+        else { *o++ = 0xC0 | (*p >> 6); *o++ = 0x80 | (*p & 0x3F); }
+    }
+    *o = 0;
+    return r;
+}
+
+"""
+
+    # Lorraine D38, D39: compare and search in a buffer without making texts (an XML reader goes through
+    # its file this way)
+    BUFSEARCH_RUNTIME = """\
+/* The n bytes at buf + offset are the text s, and s has n bytes (s is not measured first) */
+static BOOL _dash_buffer_equals(APTR buf, LONG offset, LONG n, STRPTR s) {
+    UBYTE *p, *q = (UBYTE *)s;
+    if (!buf || !s || n < 0) return FALSE;
+    for (p = (UBYTE *)buf + offset; n > 0; n--, p++, q++)
+        if (*q != *p || !*q) return FALSE;
+    return *q == 0;
+}
+
+/* A byte 0 in the long x (Alan Mycroft's test): with x = word ^ the byte four times, the byte is there */
+#define _DASH_HAS0(x) (((x) - 0x01010101UL) & ~(x) & 0x80808080UL)
+
+/* Position of the first byte from..to-1 that is a or b (a == b for one), or -1. A long at a time
+   between the bytes at both ends: one read for 4 bytes */
+static LONG _dash_buffer_find2(UBYTE *buf, LONG from, LONG to, UBYTE a, UBYTE b) {
+    UBYTE *p = buf + from, *e = buf + to;
+    ULONG pa = a | (a << 8), pb = b | (b << 8), w;
+    pa |= pa << 16;
+    pb |= pb << 16;
+    for (; p < e && ((ULONG)p & 3); p++) if (*p == a || *p == b) return p - buf;
+    if (a == b) {
+        for (; p + 4 <= e; p += 4) {
+            w = *(ULONG *)p ^ pa;
+            if (_DASH_HAS0(w)) break;
+        }
+    } else {
+        for (; p + 4 <= e; p += 4) {
+            w = *(ULONG *)p;
+            if (_DASH_HAS0(w ^ pa) || _DASH_HAS0(w ^ pb)) break;
+        }
+    }
+    for (; p < e; p++) if (*p == a || *p == b) return p - buf;
+    return -1;
+}
+
+/* Position of the first byte from..to-1 that is byte, or -1 */
+static LONG _dash_buffer_find_byte(APTR buf, LONG from, LONG to, LONG byte) {
+    if (!buf) return -1;
+    if (from < 0) from = 0;
+    return _dash_buffer_find2((UBYTE *)buf, from, to, (UBYTE)byte, (UBYTE)byte);
+}
+
+/* Position of the first byte from..to-1 that is one of the bytes of the text, or -1 */
+static LONG _dash_buffer_find_any(APTR buf, LONG from, LONG to, STRPTR bytes) {
+    ULONG setl[8];
+    UBYTE *set = (UBYTE *)setl, *p, *e, *b, c;
+    LONG k;
+    if (!buf || !bytes || !bytes[0]) return -1;
+    if (from < 0) from = 0;
+    if (!bytes[1] || !bytes[2])           /* one or two bytes ("<&"): a long at a time */
+        return _dash_buffer_find2((UBYTE *)buf, from, to, bytes[0], bytes[1] ? bytes[1] : bytes[0]);
+    for (k = 0; k < 8; k++) setl[k] = 0;
+    for (b = (UBYTE *)bytes; *b; b++) set[*b >> 3] |= 1 << (*b & 7);
+    for (p = (UBYTE *)buf + from, e = (UBYTE *)buf + to; p < e; p++) {
+        c = *p;
+        if (set[c >> 3] & (1 << (c & 7))) return p - (UBYTE *)buf;
+    }
+    return -1;
+}
+
+"""
+
+    # Lorraine D45: regex_match, regex_find, wildcard_match. Needs UTF8_RUNTIME (the decoder) and the strings.
+    REGEX_RUNTIME = """\
+/* Dash Regex Runtime */
+#define _dash_re_alloc(n) _dash_block_get_clear(n)
+#define _dash_re_free(p, n) _dash_block_put((p), (n))
+/* Regular expressions and Excel wildcards over UTF-8 texts (Lorraine D45). ICU's common syntax: . * + ? {m,n}
+   (and lazy *? +? ?? {m,n}?), [...] [^...] with ranges, ^ $, \\d \\w \\s \\D \\W \\S \\b \\B, \\t \\n \\r \\f \\v \\e,
+   \\xhh \\x{h...} \\uhhhh, escaped punctuation, | and groups ( ) (?: ); (?i) at the start ignores case. The
+   pattern becomes a program for a backtracking machine that marks each (instruction, position) it has tried
+   (RE2's BitState): never more than program x text steps, so (a*)* cannot hang. Positions are bytes. */
+#define _DASH_RE_MAXPROG 1500
+#define _DASH_RE_MAXNODES 600
+#define _DASH_RE_MAXRANGES 512
+#define _DASH_RE_INF 0x7FFFFFFF
+enum { _DASH_RE_CHAR, _DASH_RE_ANY, _DASH_RE_ANYALL, _DASH_RE_CLASS, _DASH_RE_NCLASS, _DASH_RE_SPLIT, _DASH_RE_JMP,
+       _DASH_RE_SAVE, _DASH_RE_BOL, _DASH_RE_EOL, _DASH_RE_WORDB, _DASH_RE_NWORDB, _DASH_RE_MATCH };
+/* special "ranges" of a class: \\d \\w \\s and their opposites */
+#define _DASH_RE_DIGIT -1
+#define _DASH_RE_WORD -2
+#define _DASH_RE_SPACE -3
+#define _DASH_RE_NDIGIT -4
+#define _DASH_RE_NWORD -5
+#define _DASH_RE_NSPACE -6
+
+typedef struct { UBYTE op; LONG x, y; } _DashReInst;
+/* node kinds of the parsed pattern */
+enum { _DASH_RN_CHAR, _DASH_RN_ANY, _DASH_RN_CLASS, _DASH_RN_NCLASS, _DASH_RN_BOL, _DASH_RN_EOL, _DASH_RN_WORDB,
+       _DASH_RN_NWORDB, _DASH_RN_CAT, _DASH_RN_ALT, _DASH_RN_REPEAT, _DASH_RN_EMPTY };
+typedef struct { UBYTE kind, greedy; LONG a, b, min, max; } _DashReNode;   /* a, b: children / char / ranges */
+
+static struct {
+    _DashReInst prog[_DASH_RE_MAXPROG];
+    LONG n;
+    LONG ranges[_DASH_RE_MAXRANGES * 2];
+    LONG nr;
+    _DashReNode nodes[_DASH_RE_MAXNODES];
+    LONG nn;
+    BOOL icase, ok;
+    char err[80];
+    char cached[256];           /* the pattern compiled, when it fits */
+    BOOL cached_icase, cached_valid;
+    const UBYTE *p;             /* parser */
+    LONG depth;
+    LONG mstart, mend;          /* last match */
+} _dash_re;
+
+static void _dash_re_fail(const char *msg) {
+    if (_dash_re.ok) {
+        LONG i = 0;
+        while (msg[i] && i < (LONG)sizeof(_dash_re.err) - 1) { _dash_re.err[i] = msg[i]; i++; }
+        _dash_re.err[i] = 0;
+    }
+    _dash_re.ok = FALSE;
+}
+
+/* Lower case of a code point: ASCII, Latin-1, Latin Extended-A, Greek and Cyrillic */
+static LONG _dash_re_fold(LONG c) {
+    if (c < 0x80) return c >= 'A' && c <= 'Z' ? c + 32 : c;
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7) return c + 32;
+    if (c >= 0x100 && c <= 0x17F) {
+        if (c == 0x130) return 'i';
+        if (c == 0x178) return 0xFF;
+        if ((c >= 0x139 && c <= 0x148) || (c >= 0x179 && c <= 0x17E)) return (c & 1) ? c + 1 : c;
+        if (c == 0x131 || c == 0x138 || c == 0x149 || c == 0x17F) return c;
+        return (c & 1) ? c : c + 1;
+    }
+    if (c >= 0x391 && c <= 0x3A9 && c != 0x3A2) return c + 32;
+    if (c >= 0x410 && c <= 0x42F) return c + 32;
+    if (c >= 0x400 && c <= 0x40F) return c + 80;
+    return c;
+}
+
+static BOOL _dash_re_is_word(LONG c) {
+    if (c < 0x80) return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+    return (c >= 0xC0 && c <= 0x1FFF && c != 0xD7 && c != 0xF7) || (c >= 0x3040 && c <= 0xD7FF);
+}
+
+static BOOL _dash_re_is_space(LONG c) {
+    return c == ' ' || (c >= 9 && c <= 13) || c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200A) ||
+           c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x3000;
+}
+
+static BOOL _dash_re_in_ranges(LONG c, LONG first, LONG count) {
+    LONG i;
+    for (i = 0; i < count; i++) {
+        LONG a = _dash_re.ranges[(first + i) * 2], b = _dash_re.ranges[(first + i) * 2 + 1];
+        switch (a) {
+        case _DASH_RE_DIGIT: if (c >= '0' && c <= '9') return TRUE; break;
+        case _DASH_RE_WORD: if (_dash_re_is_word(c)) return TRUE; break;
+        case _DASH_RE_SPACE: if (_dash_re_is_space(c)) return TRUE; break;
+        case _DASH_RE_NDIGIT: if (!(c >= '0' && c <= '9')) return TRUE; break;
+        case _DASH_RE_NWORD: if (!_dash_re_is_word(c)) return TRUE; break;
+        case _DASH_RE_NSPACE: if (!_dash_re_is_space(c)) return TRUE; break;
+        default: if (c >= a && c <= b) return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static LONG _dash_re_node(UBYTE kind, LONG a, LONG b) {
+    _DashReNode *n;
+    if (_dash_re.nn >= _DASH_RE_MAXNODES) { _dash_re_fail("pattern too long"); return 0; }
+    n = &_dash_re.nodes[_dash_re.nn];
+    n->kind = kind; n->a = a; n->b = b; n->min = n->max = 0; n->greedy = TRUE;
+    return _dash_re.nn++;
+}
+
+static void _dash_re_range(LONG a, LONG b) {
+    if (_dash_re.nr >= _DASH_RE_MAXRANGES) { _dash_re_fail("too many character ranges"); return; }
+    _dash_re.ranges[_dash_re.nr * 2] = a;
+    _dash_re.ranges[_dash_re.nr * 2 + 1] = b;
+    _dash_re.nr++;
+    if (_dash_re.icase && a >= 0 && _dash_re.nr < _DASH_RE_MAXRANGES) {   /* [A-Z] also as [a-z] */
+        LONG fa = _dash_re_fold(a), fb = _dash_re_fold(b);
+        if ((fa != a || fb != b) && fa <= fb) {
+            _dash_re.ranges[_dash_re.nr * 2] = fa;
+            _dash_re.ranges[_dash_re.nr * 2 + 1] = fb;
+            _dash_re.nr++;
+        }
+    }
+}
+
+static LONG _dash_re_hex(LONG digits, BOOL braces) {
+    LONG v = 0, k = 0;
+    for (;;) {
+        UBYTE c = *_dash_re.p;
+        LONG d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+        if (braces && c == '}' && k) { _dash_re.p++; return v; }
+        if (d < 0) break;
+        v = v * 16 + d; k++; _dash_re.p++;
+        if (!braces && k == digits) return v;
+        if (v > 0x10FFFF) break;
+    }
+    _dash_re_fail("bad hexadecimal escape");
+    return 0;
+}
+
+/* After a backslash: a code point (>= 0), or a class (-1 \\d ... -6 \\S), or -10 \\b, -11 \\B */
+static LONG _dash_re_escape(BOOL in_class) {
+    UBYTE c = *_dash_re.p;
+    LONG n;
+    if (!c) { _dash_re_fail("\\\\ at the end of the pattern"); return 0; }
+    _dash_re.p++;
+    switch (c) {
+    case 'd': return _DASH_RE_DIGIT;
+    case 'w': return _DASH_RE_WORD;
+    case 's': return _DASH_RE_SPACE;
+    case 'D': return _DASH_RE_NDIGIT;
+    case 'W': return _DASH_RE_NWORD;
+    case 'S': return _DASH_RE_NSPACE;
+    case 'b': return in_class ? 8 : -10;
+    case 'B': if (!in_class) return -11; break;
+    case 't': return 9;
+    case 'n': return 10;
+    case 'r': return 13;
+    case 'f': return 12;
+    case 'v': return 11;
+    case 'e': return 27;
+    case 'a': return 7;
+    case 'x':
+        if (*_dash_re.p == '{') { _dash_re.p++; return _dash_re_hex(8, TRUE); }
+        return _dash_re_hex(2, FALSE);
+    case 'u': return _dash_re_hex(4, FALSE);
+    }
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+        _dash_re_fail("escape not supported");
+        return 0;
+    }
+    _dash_re.p--;                          /* \\. \\* \\( ...: the character itself */
+    {
+        LONG cp = _dash_utf8_decode(_dash_re.p, &n);
+        _dash_re.p += n;
+        return cp;
+    }
+}
+
+static LONG _dash_re_class(void) {
+    LONG first = _dash_re.nr, c, d, n;
+    BOOL neg = FALSE, start = TRUE;
+    if (*_dash_re.p == '^') { neg = TRUE; _dash_re.p++; }
+    for (;;) {
+        if (!*_dash_re.p) { _dash_re_fail("[ without ]"); return 0; }
+        if (*_dash_re.p == ']' && !start) { _dash_re.p++; break; }
+        start = FALSE;
+        if (*_dash_re.p == '[' && _dash_re.p[1] == ':') { _dash_re_fail("[: classes not supported"); return 0; }
+        if (*_dash_re.p == '\\\\') { _dash_re.p++; c = _dash_re_escape(TRUE); }
+        else { c = _dash_utf8_decode(_dash_re.p, &n); _dash_re.p += n; }
+        if (!_dash_re.ok) return 0;
+        if (c < 0) { _dash_re_range(c, c); continue; }
+        if (*_dash_re.p == '-' && _dash_re.p[1] && _dash_re.p[1] != ']') {
+            _dash_re.p++;
+            if (*_dash_re.p == '\\\\') { _dash_re.p++; d = _dash_re_escape(TRUE); }
+            else { d = _dash_utf8_decode(_dash_re.p, &n); _dash_re.p += n; }
+            if (!_dash_re.ok) return 0;
+            if (d < 0 || d < c) { _dash_re_fail("bad range in [...]"); return 0; }
+            _dash_re_range(c, d);
+        } else {
+            _dash_re_range(c, c);
+        }
+    }
+    return _dash_re_node(neg ? _DASH_RN_NCLASS : _DASH_RN_CLASS, first, _dash_re.nr - first);
+}
+
+static LONG _dash_re_alt(void);
+
+static LONG _dash_re_number(LONG *v) {
+    LONG k = 0;
+    *v = 0;
+    while (*_dash_re.p >= '0' && *_dash_re.p <= '9' && k < 6) { *v = *v * 10 + (*_dash_re.p++ - '0'); k++; }
+    return k;
+}
+
+static LONG _dash_re_atom(void) {
+    UBYTE c = *_dash_re.p;
+    LONG n, e;
+    switch (c) {
+    case '(':
+        _dash_re.p++;
+        if (++_dash_re.depth > 40) { _dash_re_fail("too many nested groups"); return 0; }
+        if (*_dash_re.p == '?') {
+            if (_dash_re.p[1] == ':') _dash_re.p += 2;
+            else { _dash_re_fail("(? not supported (only (?: and (?i) at the start)"); return 0; }
+        }
+        e = _dash_re_alt();
+        if (!_dash_re.ok) return 0;
+        if (*_dash_re.p != ')') { _dash_re_fail("( without )"); return 0; }
+        _dash_re.p++;
+        _dash_re.depth--;
+        return e;
+    case '[': _dash_re.p++; return _dash_re_class();
+    case '.': _dash_re.p++; return _dash_re_node(_DASH_RN_ANY, 0, 0);
+    case '^': _dash_re.p++; return _dash_re_node(_DASH_RN_BOL, 0, 0);
+    case '$': _dash_re.p++; return _dash_re_node(_DASH_RN_EOL, 0, 0);
+    case '\\\\':
+        _dash_re.p++;
+        e = _dash_re_escape(FALSE);
+        if (!_dash_re.ok) return 0;
+        if (e == -10) return _dash_re_node(_DASH_RN_WORDB, 0, 0);
+        if (e == -11) return _dash_re_node(_DASH_RN_NWORDB, 0, 0);
+        if (e < 0) { n = _dash_re.nr; _dash_re_range(e, e); return _dash_re_node(_DASH_RN_CLASS, n, 1); }
+        return _dash_re_node(_DASH_RN_CHAR, _dash_re.icase ? _dash_re_fold(e) : e, 0);
+    case '*': case '+': case '?':
+        _dash_re_fail("nothing to repeat");
+        return 0;
+    }
+    e = _dash_utf8_decode(_dash_re.p, &n);
+    _dash_re.p += n;
+    return _dash_re_node(_DASH_RN_CHAR, _dash_re.icase ? _dash_re_fold(e) : e, 0);
+}
+
+static LONG _dash_re_repeat(void) {
+    LONG e = _dash_re_atom(), min, max, r;
+    for (;;) {
+        UBYTE c = *_dash_re.p;
+        const UBYTE *save = _dash_re.p;
+        if (!_dash_re.ok) return 0;
+        if (c == '*') { min = 0; max = _DASH_RE_INF; _dash_re.p++; }
+        else if (c == '+') { min = 1; max = _DASH_RE_INF; _dash_re.p++; }
+        else if (c == '?') { min = 0; max = 1; _dash_re.p++; }
+        else if (c == '{') {
+            _dash_re.p++;
+            if (!_dash_re_number(&min)) { _dash_re.p = save; return e; }    /* a { that is no interval: itself */
+            max = min;
+            if (*_dash_re.p == ',') {
+                _dash_re.p++;
+                if (!_dash_re_number(&max)) max = _DASH_RE_INF;
+            }
+            if (*_dash_re.p != '}') { _dash_re.p = save; return e; }
+            _dash_re.p++;
+            if (max < min || min > 1000 || (max != _DASH_RE_INF && max > 1000)) { _dash_re_fail("bad {m,n}"); return 0; }
+        } else {
+            return e;
+        }
+        r = _dash_re_node(_DASH_RN_REPEAT, e, 0);
+        if (!_dash_re.ok) return 0;
+        _dash_re.nodes[r].min = min;
+        _dash_re.nodes[r].max = max;
+        if (*_dash_re.p == '?') { _dash_re.nodes[r].greedy = FALSE; _dash_re.p++; }
+        else if (*_dash_re.p == '+') { _dash_re_fail("possessive quantifiers not supported"); return 0; }
+        e = r;
+    }
+}
+
+static LONG _dash_re_concat(void) {
+    LONG e = -1, r;
+    while (*_dash_re.p && *_dash_re.p != '|' && *_dash_re.p != ')') {
+        r = _dash_re_repeat();
+        if (!_dash_re.ok) return 0;
+        e = e < 0 ? r : _dash_re_node(_DASH_RN_CAT, e, r);
+        if (!_dash_re.ok) return 0;
+    }
+    return e < 0 ? _dash_re_node(_DASH_RN_EMPTY, 0, 0) : e;
+}
+
+static LONG _dash_re_alt(void) {
+    LONG e = _dash_re_concat();
+    while (_dash_re.ok && *_dash_re.p == '|') {
+        _dash_re.p++;
+        e = _dash_re_node(_DASH_RN_ALT, e, _dash_re_concat());
+    }
+    return e;
+}
+
+static LONG _dash_re_emit(UBYTE op, LONG x, LONG y) {
+    if (_dash_re.n >= _DASH_RE_MAXPROG) { _dash_re_fail("pattern too long"); return 0; }
+    _dash_re.prog[_dash_re.n].op = op;
+    _dash_re.prog[_dash_re.n].x = x;
+    _dash_re.prog[_dash_re.n].y = y;
+    return _dash_re.n++;
+}
+
+static void _dash_re_gen(LONG ni) {
+    _DashReNode *nd;
+    LONG i, s, j;
+    if (!_dash_re.ok) return;
+    nd = &_dash_re.nodes[ni];
+    switch (nd->kind) {
+    case _DASH_RN_CHAR: _dash_re_emit(_DASH_RE_CHAR, nd->a, 0); break;
+    case _DASH_RN_ANY: _dash_re_emit(_DASH_RE_ANY, 0, 0); break;
+    case _DASH_RN_CLASS: _dash_re_emit(_DASH_RE_CLASS, nd->a, nd->b); break;
+    case _DASH_RN_NCLASS: _dash_re_emit(_DASH_RE_NCLASS, nd->a, nd->b); break;
+    case _DASH_RN_BOL: _dash_re_emit(_DASH_RE_BOL, 0, 0); break;
+    case _DASH_RN_EOL: _dash_re_emit(_DASH_RE_EOL, 0, 0); break;
+    case _DASH_RN_WORDB: _dash_re_emit(_DASH_RE_WORDB, 0, 0); break;
+    case _DASH_RN_NWORDB: _dash_re_emit(_DASH_RE_NWORDB, 0, 0); break;
+    case _DASH_RN_EMPTY: break;
+    case _DASH_RN_CAT: _dash_re_gen(nd->a); _dash_re_gen(nd->b); break;
+    case _DASH_RN_ALT:
+        s = _dash_re_emit(_DASH_RE_SPLIT, 0, 0);
+        _dash_re.prog[s].x = _dash_re.n;
+        _dash_re_gen(nd->a);
+        j = _dash_re_emit(_DASH_RE_JMP, 0, 0);
+        _dash_re.prog[s].y = _dash_re.n;
+        _dash_re_gen(nd->b);
+        _dash_re.prog[j].x = _dash_re.n;
+        break;
+    case _DASH_RN_REPEAT: {
+        LONG min = nd->min, max = nd->max, a = nd->a;
+        BOOL greedy = nd->greedy;
+        for (i = 0; i < min; i++) _dash_re_gen(a);
+        if (max == _DASH_RE_INF) {
+            s = _dash_re_emit(_DASH_RE_SPLIT, 0, 0);
+            _dash_re_gen(a);
+            _dash_re_emit(_DASH_RE_JMP, s, 0);
+            if (greedy) { _dash_re.prog[s].x = s + 1; _dash_re.prog[s].y = _dash_re.n; }
+            else { _dash_re.prog[s].x = _dash_re.n; _dash_re.prog[s].y = s + 1; }
+        } else {
+            /* each optional copy: split to it or to the end; the ends are patched after */
+            LONG first = _dash_re.n;
+            for (i = min; i < max && _dash_re.ok; i++) {
+                s = _dash_re_emit(_DASH_RE_SPLIT, 0, -1);
+                _dash_re.prog[s].x = s + 1;       /* (patched below for lazy ones) */
+                _dash_re_gen(a);
+            }
+            for (j = first; j < _dash_re.n && _dash_re.ok; j++) {
+                if (_dash_re.prog[j].op == _DASH_RE_SPLIT && _dash_re.prog[j].y == -1) {
+                    if (greedy) _dash_re.prog[j].y = _dash_re.n;
+                    else { _dash_re.prog[j].y = _dash_re.prog[j].x; _dash_re.prog[j].x = _dash_re.n; }
+                }
+            }
+        }
+        break;
+    }
+    }
+}
+
+/* Compiles the pattern (or keeps the last one, if it is the same). FALSE if it is wrong: regex_error says why */
+static BOOL _dash_re_compile(STRPTR pattern, LONG icase) {
+    LONG len, root;
+    if (!pattern) pattern = (STRPTR)"";
+    len = strlen((char *)pattern);
+    if (_dash_re.cached_valid && len < (LONG)sizeof(_dash_re.cached) && _dash_re.cached_icase == (icase != 0) &&
+        !strcmp(_dash_re.cached, (char *)pattern)) {
+        if (!_dash_re.ok) return FALSE;
+        return TRUE;
+    }
+    _dash_re.ok = TRUE;
+    _dash_re.err[0] = 0;
+    _dash_re.n = _dash_re.nr = _dash_re.nn = 0;
+    _dash_re.depth = 0;
+    _dash_re.icase = icase != 0;
+    _dash_re.p = (const UBYTE *)pattern;
+    if (!strncmp((char *)pattern, "(?i)", 4)) { _dash_re.icase = TRUE; _dash_re.p += 4; }
+    /* 0: split 3, 1  1: any  2: jmp 0  (a search goes through here)  3: save 0 (a whole match starts here) */
+    _dash_re_emit(_DASH_RE_SPLIT, 3, 1);
+    _dash_re_emit(_DASH_RE_ANYALL, 0, 0);
+    _dash_re_emit(_DASH_RE_JMP, 0, 0);
+    _dash_re_emit(_DASH_RE_SAVE, 0, 0);
+    root = _dash_re_alt();
+    if (_dash_re.ok && *_dash_re.p == ')') _dash_re_fail(") without (");
+    _dash_re_gen(root);
+    _dash_re_emit(_DASH_RE_MATCH, 0, 0);
+    _dash_re.cached_valid = len < (LONG)sizeof(_dash_re.cached);
+    if (_dash_re.cached_valid) {
+        memcpy(_dash_re.cached, pattern, len + 1);
+        _dash_re.cached_icase = icase != 0;
+    }
+    return _dash_re.ok;
+}
+
+static LONG _dash_re_prev_char(const UBYTE *s, LONG pos) {
+    LONG i = pos - 1, n;
+    if (pos <= 0) return -1;
+    while (i > 0 && pos - i < 4 && (s[i] & 0xC0) == 0x80) i--;
+    return _dash_utf8_decode(s + i, &n);
+}
+
+/* Runs the program from pc at pos: TRUE and the match in mstart, mend. whole: only a match that ends the text */
+static BOOL _dash_re_run(const UBYTE *s, LONG len, LONG pos, LONG pc, BOOL whole) {
+    LONG nbits = _dash_re.n * (len + 1), stack_size = 64, sp = 0, steps = 0, c, n;
+    UBYTE *seen = NULL;
+    LONG *stack;
+    BOOL found = FALSE;
+    if (nbits <= 4L * 1024 * 1024) seen = (UBYTE *)_dash_re_alloc((nbits + 7) / 8);
+    stack = (LONG *)_dash_re_alloc(stack_size * 2 * sizeof(LONG));
+    if (!stack) { if (seen) _dash_re_free(seen, (nbits + 7) / 8); return FALSE; }
+    stack[sp++] = pc; stack[sp++] = pos;
+    while (sp && !found) {
+        pos = stack[--sp];
+        pc = stack[--sp];
+        for (;;) {
+            _DashReInst *in;
+            if (seen) {
+                LONG bit = pc * (len + 1) + pos;
+                if (seen[bit >> 3] & (1 << (bit & 7))) break;
+                seen[bit >> 3] |= 1 << (bit & 7);
+            } else if (++steps > 2000000L) {
+                _dash_re_fail("too complex for this text");
+                sp = 0;
+                break;
+            }
+            in = &_dash_re.prog[pc];
+            switch (in->op) {
+            case _DASH_RE_CHAR:
+                if (pos >= len) goto fail;
+                c = _dash_utf8_decode(s + pos, &n);
+                if ((_dash_re.icase ? _dash_re_fold(c) : c) != in->x) goto fail;
+                pos += n; pc++;
+                continue;
+            case _DASH_RE_ANY:
+                if (pos >= len || s[pos] == '\\n' || s[pos] == '\\r') goto fail;
+                _dash_utf8_decode(s + pos, &n);
+                pos += n; pc++;
+                continue;
+            case _DASH_RE_ANYALL:
+                if (pos >= len) goto fail;
+                _dash_utf8_decode(s + pos, &n);
+                pos += n; pc++;
+                continue;
+            case _DASH_RE_CLASS:
+            case _DASH_RE_NCLASS: {
+                BOOL in_class;
+                if (pos >= len) goto fail;
+                c = _dash_utf8_decode(s + pos, &n);
+                in_class = _dash_re_in_ranges(c, in->x, in->y) ||
+                           (_dash_re.icase && _dash_re_in_ranges(_dash_re_fold(c), in->x, in->y));
+                if (in_class != (in->op == _DASH_RE_CLASS)) goto fail;
+                pos += n; pc++;
+                continue;
+            }
+            case _DASH_RE_SPLIT:
+                if (sp + 2 > stack_size * 2) {
+                    LONG *bigger = (LONG *)_dash_re_alloc(stack_size * 4 * sizeof(LONG));
+                    if (!bigger) { sp = 0; goto fail; }
+                    memcpy(bigger, stack, sp * sizeof(LONG));
+                    _dash_re_free(stack, stack_size * 2 * sizeof(LONG));
+                    stack = bigger;
+                    stack_size *= 2;
+                }
+                stack[sp++] = in->y; stack[sp++] = pos;
+                pc = in->x;
+                continue;
+            case _DASH_RE_JMP: pc = in->x; continue;
+            case _DASH_RE_SAVE: _dash_re.mstart = pos; pc++; continue;
+            case _DASH_RE_BOL: if (pos != 0) goto fail; pc++; continue;
+            case _DASH_RE_EOL: if (pos != len && !(pos == len - 1 && s[pos] == '\\n')) goto fail; pc++; continue;
+            case _DASH_RE_WORDB:
+            case _DASH_RE_NWORDB: {
+                BOOL a = pos > 0 && _dash_re_is_word(_dash_re_prev_char(s, pos));
+                BOOL b = pos < len && _dash_re_is_word(_dash_utf8_decode(s + pos, &n));
+                if ((a != b) != (in->op == _DASH_RE_WORDB)) goto fail;
+                pc++;
+                continue;
+            }
+            case _DASH_RE_MATCH:
+                if (whole && pos != len) goto fail;
+                _dash_re.mend = pos;
+                found = TRUE;
+                break;
+            }
+            break;
+        fail:
+            break;
+        }
+    }
+    _dash_re_free(stack, stack_size * 2 * sizeof(LONG));
+    if (seen) _dash_re_free(seen, (nbits + 7) / 8);
+    return found;
+}
+
+/* The whole text fits the pattern */
+static BOOL _dash_regex_match(STRPTR pattern, STRPTR text, LONG icase) {
+    _dash_re.mstart = _dash_re.mend = -1;
+    if (!_dash_re_compile(pattern, icase)) return FALSE;
+    if (!text) text = (STRPTR)"";
+    if (_dash_re_run((const UBYTE *)text, strlen((char *)text), 0, 3, TRUE)) return TRUE;
+    _dash_re.mstart = _dash_re.mend = -1;
+    return FALSE;
+}
+
+/* Where the first match from byte from starts, -1 if none (or a wrong pattern); regex_length its length */
+static LONG _dash_regex_find(STRPTR pattern, STRPTR text, LONG from, LONG icase) {
+    LONG len;
+    _dash_re.mstart = _dash_re.mend = -1;
+    if (!_dash_re_compile(pattern, icase)) return -1;
+    if (!text) text = (STRPTR)"";
+    len = strlen((char *)text);
+    if (from < 0) from = 0;
+    if (from > len) return -1;
+    if (_dash_re_run((const UBYTE *)text, len, from, 0, FALSE)) return _dash_re.mstart;
+    _dash_re.mstart = _dash_re.mend = -1;
+    return -1;
+}
+
+static LONG _dash_regex_length(void) {
+    return _dash_re.mstart >= 0 ? _dash_re.mend - _dash_re.mstart : 0;
+}
+
+/* Why the last pattern is wrong, "" if it is right */
+static STRPTR _dash_regex_error(void) {
+    return _dash_str_dup((STRPTR)(_dash_re.ok ? "" : _dash_re.err), TRUE);
+}
+
+/* Excel's wildcards over the whole text: * any characters, ? one, ~ before a character takes it as it is */
+static BOOL _dash_wildcard_match(STRPTR pattern, STRPTR text, LONG icase) {
+    const UBYTE *p = (const UBYTE *)(pattern ? pattern : (STRPTR)""), *t = (const UBYTE *)(text ? text : (STRPTR)"");
+    const UBYTE *star_p = NULL, *star_t = NULL;
+    LONG pc = 0, tc, pn, tn;
+    while (*t) {
+        BOOL esc = FALSE;
+        pn = 0;
+        if (*p) {
+            if (*p == '~' && p[1]) { esc = TRUE; pc = _dash_utf8_decode(p + 1, &pn); pn++; }
+            else pc = _dash_utf8_decode(p, &pn);
+        }
+        if (*p && !esc && pc == '*') { p += pn; star_p = p; star_t = t; continue; }
+        tc = _dash_utf8_decode(t, &tn);
+        if (*p && ((!esc && pc == '?') || pc == tc || (icase && _dash_re_fold(pc) == _dash_re_fold(tc)))) {
+            p += pn; t += tn;
+            continue;
+        }
+        if (!star_p) return FALSE;
+        _dash_utf8_decode(star_t, &tn);
+        star_t += tn;
+        t = star_t;
+        p = star_p;
+    }
+    while (*p == '*') p++;
+    return *p == 0;
+}
+
+"""
+
+    # Lorraine D1, D3: Double is a C double (64-bit IEEE): the FPU with --fpu, else GCC's fp-bit for double
+    # (compiler/softfloat.py). To and from text with Ryu (runtime/ryu, compiler/clibs.py links it when the C has
+    # this template's first line).
+    DOUBLE_RUNTIME = """\
+/* Dash Double Runtime */
+void dash_ryu_d2d(double d, unsigned long long *mant, LONG *exp);
+int dash_ryu_s2d(const char *s, int len, double *out);
+
+/* The digits of the shortest decimal of d (finite, not 0; its sign ignored) in digits[] (17 at most) and
+   where its decimal point goes (digits before it, maybe 0 or less): their number */
+static LONG _dash_double_digits(double d, char *digits, LONG *point) {
+    unsigned long long m;
+    ULONG hi, lo;
+    LONG e, n = 0, i, k = 0;
+    char t[10];
+    dash_ryu_d2d(d, &m, &e);
+    /* two 32-bit halves, one 64-bit division */
+    hi = (ULONG)(m / 100000000ULL);
+    lo = (ULONG)(m - (unsigned long long)hi * 100000000ULL);
+    if (hi) {
+        do { t[k++] = '0' + hi % 10; hi /= 10; } while (hi);
+        while (k) digits[n++] = t[--k];
+        for (i = 7; i >= 0; i--) { digits[n + i] = '0' + lo % 10; lo /= 10; }
+        n += 8;
+    } else {
+        do { t[k++] = '0' + lo % 10; lo /= 10; } while (lo);
+        while (k) digits[n++] = t[--k];
+    }
+    *point = n + e;
+    return n;
+}
+
+/* inf, -inf, nan or 0 from the bits of d (with an FPU a comparison with infinity may not say it): the
+   text, or NULL for any other number; *neg its sign */
+static const char *_dash_double_special(double d, BOOL *neg) {
+    union { double d; ULONG w[2]; } bits;
+    bits.d = d;
+    *neg = (bits.w[0] & 0x80000000UL) != 0;
+    if ((bits.w[0] & 0x7FF00000UL) == 0x7FF00000UL) {
+        if ((bits.w[0] & 0x000FFFFFUL) || bits.w[1]) { *neg = FALSE; return "nan"; }
+        return "inf";
+    }
+    if (!(bits.w[0] & 0x7FFFFFFFUL) && !bits.w[1]) return "0.0";
+    return NULL;
+}
+
+/* The shortest decimal that reads back as d: fixed while the point is within 17 digits of the first one
+   (0.1, 150.0, 1234567.5, 0.00001), else with an exponent (1.5e300, 1.0e-7) */
+static STRPTR DashString_from_double(double d) {
+    static char buffers[16][32];
+    static LONG next = 0;
+    char *s = buffers[next], *p = s, digits[20];
+    const char *special;
+    BOOL neg;
+    LONG e, n, point, i;
+    next = (next + 1) & 15;
+    special = _dash_double_special(d, &neg);
+    if (neg) *p++ = '-';
+    if (special) {
+        while (*special) *p++ = *special++;
+        *p = 0;
+        return s;
+    }
+    n = _dash_double_digits(d, digits, &point);
+    if (point > 0 && point <= 17) {
+        for (i = 0; i < point; i++) *p++ = i < n ? digits[i] : '0';
+        *p++ = '.';
+        if (point >= n) *p++ = '0';
+        for (; i < n; i++) *p++ = digits[i];
+    } else if (point <= 0 && point > -5) {
+        *p++ = '0';
+        *p++ = '.';
+        for (i = point; i < 0; i++) *p++ = '0';
+        for (i = 0; i < n; i++) *p++ = digits[i];
+    } else {
+        *p++ = digits[0];
+        *p++ = '.';
+        if (n == 1) *p++ = '0';
+        for (i = 1; i < n; i++) *p++ = digits[i];
+        *p++ = 'e';
+        e = point - 1;
+        if (e < 0) { *p++ = '-'; e = -e; }
+        n = 0;
+        do { digits[n++] = '0' + e % 10; e /= 10; } while (e);
+        while (n) *p++ = digits[--n];
+    }
+    *p = 0;
+    return s;
+}
+
+/* str_from_double(d, decimals) (Lorraine D3): with that many decimals (0: none), the shortest decimal
+   rounded half away from zero, as a spreadsheet shows it (2.675 to 2 is 2.68); decimals < 0: the shortest,
+   as "#{d}". A new text. */
+static STRPTR _dash_str_from_double(double d, LONG decimals) {
+    char digits[20];
+    const char *special;
+    BOOL neg, zero = TRUE;
+    LONG n, point, keep, i, len;
+    STRPTR r;
+    UBYTE *o;
+    if (decimals < 0) return _dash_str_dup(DashString_from_double(d), TRUE);
+    if (decimals > 340) decimals = 340;
+    special = _dash_double_special(d, &neg);
+    if (special && special[0] != '0') return _dash_str_dup(DashString_from_double(d), TRUE);
+    if (special) {                               /* 0: 0, 0.00... */
+        n = 1; digits[0] = '0'; point = 1;
+    } else {
+        n = _dash_double_digits(d, digits, &point);
+        keep = point + decimals;                 /* digits that stay */
+        if (keep < n) {
+            BOOL up = keep >= 0 && digits[keep] >= '5';
+            if (keep <= 0) {                     /* nothing stays: 0, or 1 in the last place */
+                n = 1; digits[0] = up ? '1' : '0'; point = up ? 1 - decimals : 1;
+            } else {
+                n = keep;
+                if (up) {
+                    for (i = n - 1; i >= 0 && digits[i] == '9'; i--) digits[i] = '0';
+                    if (i >= 0) digits[i]++;
+                    else { for (i = n; i > 0; i--) digits[i] = digits[i - 1]; digits[0] = '1'; n++; point++; }
+                }
+            }
+        }
+    }
+    for (i = 0; i < n; i++) if (digits[i] != '0') zero = FALSE;
+    len = (neg && !zero ? 1 : 0) + (point > 0 ? point : 1) + (decimals ? 1 + decimals : 0);
+    r = _dash_str_alloc(len, TRUE);
+    if (!r) return NULL;
+    o = (UBYTE *)r;
+    if (neg && !zero) *o++ = '-';
+    if (point <= 0) *o++ = '0';
+    for (i = 0; i < point; i++) *o++ = i < n ? digits[i] : '0';
+    if (decimals) {
+        *o++ = '.';
+        for (i = point; i < point + decimals; i++) *o++ = (i >= 0 && i < n) ? digits[i] : '0';
+    }
+    *o = 0;
+    return r;
+}
+
+/* The number at the start of the text (spaces, sign, digits with a point, an exponent), the nearest double:
+   exact up to 17 significant digits (all a Double writes); past them the rest round the 17th. 0.0 if there
+   is no number. */
+static double _dash_double_from_str(STRPTR s) {
+    char buf[32];
+    UBYTE *p = (UBYTE *)s, c;
+    LONG n = 0, e10 = 0, ex = 0, k;
+    BOOL neg = FALSE, point = FALSE, any = FALSE, eneg = FALSE, up = FALSE;
+    double r;
+    if (!p) return 0.0;
+    while (*p == ' ' || *p == '\\t') p++;
+    if (*p == '-' || *p == '+') neg = (*p++ == '-');
+    for (;; p++) {
+        c = *p;
+        if (c == '.' && !point) { point = TRUE; continue; }
+        if (c < '0' || c > '9') break;
+        any = TRUE;
+        if (n == 0 && c == '0') {               /* leading zeros: only the point's place counts */
+            if (point) e10--;
+            continue;
+        }
+        if (n < 17) {
+            buf[1 + n++] = c;
+            if (point) e10--;
+        } else {
+            if (n == 17) up = c >= '5';         /* the first digit left out rounds the 17th */
+            n = n == 17 ? 18 : n;
+            if (!point) e10++;
+        }
+    }
+    if (!any) return 0.0;
+    if ((*p == 'e' || *p == 'E') && ((p[1] >= '0' && p[1] <= '9')
+                                     || ((p[1] == '-' || p[1] == '+') && p[2] >= '0' && p[2] <= '9'))) {
+        p++;
+        if (*p == '-' || *p == '+') eneg = (*p++ == '-');
+        for (; *p >= '0' && *p <= '9'; p++) if (ex < 100000) ex = ex * 10 + (*p - '0');
+        e10 += eneg ? -ex : ex;
+    }
+    if (n > 17) {
+        n = 17;
+        if (up) {                                /* 99...9 + 1 */
+            for (k = n; k >= 1 && buf[k] == '9'; k--) buf[k] = '0';
+            if (k >= 1) buf[k]++;
+            else { buf[1] = '1'; e10++; }
+        }
+    }
+    if (n == 0) return neg ? -0.0 : 0.0;
+    if (e10 + n > 310) {                         /* infinity, from its bits (1e308 * 10 is not, with an FPU) */
+        union { unsigned long long u; double d; } inf;
+        inf.u = neg ? 0xFFF0000000000000ULL : 0x7FF0000000000000ULL;
+        return inf.d;
+    }
+    if (e10 + n < -330) return neg ? -0.0 : 0.0;
+    buf[0] = '-';
+    k = n + 1;
+    buf[k++] = 'e';
+    if (e10 < 0) { buf[k++] = '-'; e10 = -e10; }
+    {
+        char t[6];
+        LONG m = 0;
+        do { t[m++] = '0' + e10 % 10; e10 /= 10; } while (e10);
+        while (m) buf[k++] = t[--m];
+    }
+    if (neg ? dash_ryu_s2d(buf, k, &r) : dash_ryu_s2d(buf + 1, k - 1, &r)) return 0.0;
+    return r;
+}
+
+"""
+
+    # Lorraine D4: sqrt, pow, sin... for Double with fdlibm (runtime/fdlibm, compiler/clibs.py links it when the C
+    # has this template's first line), compiled for the program's CPU: with --fpu its sums go through the FPU and
+    # sqrt is one fsqrt. The same digits with and without FPU, but for a last one now and then.
+    MATH_RUNTIME = """\
+/* Dash Math Runtime */
+double __ieee754_sqrt(double), __ieee754_pow(double, double), __ieee754_exp(double), __ieee754_log(double);
+double __ieee754_log10(double), __ieee754_asin(double), __ieee754_acos(double), __ieee754_atan2(double, double);
+double __ieee754_fmod(double, double);
+double dash_fd_sin(double), dash_fd_cos(double), dash_fd_tan(double), dash_fd_atan(double);
+double dash_fd_floor(double), dash_fd_ceil(double);
+
+typedef union { double d; ULONG w[2]; } _DashDoubleBits;
+
+static double _dash_m_sqrt(double x) {
+#ifdef __HAVE_68881__
+    double r;
+    __asm__ ("fsqrt%.x %1,%0" : "=f" (r) : "f" (x));
+    return r;
+#else
+    return __ieee754_sqrt(x);
+#endif
+}
+static double _dash_m_pow(double x, double y) { return __ieee754_pow(x, y); }
+static double _dash_m_exp(double x) { return __ieee754_exp(x); }
+static double _dash_m_log(double x) { return __ieee754_log(x); }
+static double _dash_m_log10(double x) { return __ieee754_log10(x); }
+static double _dash_m_sin(double x) { return dash_fd_sin(x); }
+static double _dash_m_cos(double x) { return dash_fd_cos(x); }
+static double _dash_m_tan(double x) { return dash_fd_tan(x); }
+static double _dash_m_asin(double x) { return __ieee754_asin(x); }
+static double _dash_m_acos(double x) { return __ieee754_acos(x); }
+static double _dash_m_atan(double x) { return dash_fd_atan(x); }
+static double _dash_m_atan2(double y, double x) { return __ieee754_atan2(y, x); }
+static double _dash_m_floor(double x) { return dash_fd_floor(x); }
+static double _dash_m_ceil(double x) { return dash_fd_ceil(x); }
+static double _dash_m_fmod(double x, double y) { return __ieee754_fmod(x, y); }
+
+/* toward 0: floor of a positive, ceil of a negative */
+static double _dash_m_trunc(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    return (b.w[0] & 0x80000000UL) ? dash_fd_ceil(x) : dash_fd_floor(x);
+}
+
+/* half away from zero (2.5 is 3, -2.5 is -3); x - t is exact, floor(x + 0.5) is not for 0.49999999999999994 */
+static double _dash_m_round(double x) {
+    double t = _dash_m_trunc(x);
+    if (x - t >= 0.5) t += 1.0;
+    else if (t - x >= 0.5) t -= 1.0;
+    return t;
+}
+
+static double _dash_m_abs(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    b.w[0] &= 0x7FFFFFFFUL;
+    return b.d;
+}
+
+/* from the bits: with an FPU, x != x may not say it */
+static BOOL _dash_m_is_nan(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    return (b.w[0] & 0x7FF00000UL) == 0x7FF00000UL && ((b.w[0] & 0x000FFFFFUL) || b.w[1]);
+}
+
+static BOOL _dash_m_is_inf(double x) {
+    _DashDoubleBits b;
+    b.d = x;
+    return (b.w[0] & 0x7FFFFFFFUL) == 0x7FF00000UL && !b.w[1];
 }
 
 """
@@ -5108,16 +6445,16 @@ static LONG _dash_cpu_total(void) {
     LIST_RUNTIME = """\
 /* Dash List Runtime */
 static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
-    LONG cap = _DASH_ARR_CAP(arr), newcap, i;
+    LONG cap = _DASH_ARR_CAP(arr), w = _DASH_ARR_W(arr), newcap, i;
     LONG *data;
     if (need <= cap) return TRUE;
     newcap = cap * 2;
     if (newcap < 4) newcap = 4;
     if (newcap < need) newcap = need;
-    data = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
+    data = (LONG *)_dash_block_get(sizeof(LONG) * w * newcap);
     if (!data) return FALSE;
-    for (i = 0; i < arr->length; i++) data[i] = arr->data[i];
-    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * cap);
+    for (i = 0; i < arr->length * w; i++) data[i] = arr->data[i];
+    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * w * cap);
     arr->data = data;
     arr->capacity = (arr->capacity & 0xFF000000) | newcap;
     return TRUE;
@@ -5125,9 +6462,10 @@ static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
 
 /* Room for one more at index (0..length): the elements from there move up */
 static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
-    LONG i;
+    LONG i, w;
     if (!arr || index < 0 || index > arr->length || !DashArray_reserve(arr, arr->length + 1)) return FALSE;
-    for (i = arr->length; i > index; i--) arr->data[i] = arr->data[i - 1];
+    w = _DASH_ARR_W(arr);
+    for (i = (arr->length + 1) * w - 1; i >= (index + 1) * w; i--) arr->data[i] = arr->data[i - w];
     arr->length++;
     return TRUE;
 }
@@ -5154,13 +6492,19 @@ static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
 #define DashArray_push_obj(arr, v) DashArray_insert_obj((arr), DashArray_length(arr), (v))
 #define DashArray_push_str(arr, v) DashArray_insert_str((arr), DashArray_length(arr), (v))
 
+/* The element at index (inside the list) goes: the ones after it move down */
+static void DashArray_close(DashArrayLong *arr, LONG index) {
+    LONG w = _DASH_ARR_W(arr), i, n = (arr->length - 1) * w;
+    for (i = index * w; i < n; i++) arr->data[i] = arr->data[i + w];
+    arr->length--;
+}
+
 /* Takes the element out (0 if the index is outside the list) */
 static LONG DashArray_take(DashArrayLong *arr, LONG index) {
-    LONG v, i;
+    LONG v;
     if (!arr || index < 0 || index >= arr->length) return 0;
     v = arr->data[index];
-    for (i = index; i < arr->length - 1; i++) arr->data[i] = arr->data[i + 1];
-    arr->length--;
+    DashArray_close(arr, index);
     return v;
 }
 
@@ -5199,6 +6543,114 @@ static void DashArray_remove(DashArrayLong *arr, LONG index) {
 static void DashArray_clear(DashArrayLong *arr) {
     if (!arr) return;
     while (arr->length > 0) DashArray_remove(arr, arr->length - 1);
+}
+
+"""
+
+    # l.sort(f) (Lorraine D8): a stable merge sort. The compiler writes for each call an "after" function
+    # that reads two elements and asks the program's comparison function.
+    SORT_RUNTIME = """\
+/* Dash Sort Runtime */
+/* Puts src[from..mid) and src[mid..to) (sorted, w LONGs per element) in order into dst[from..to): an element
+   of the second half goes first only if after(first's, second's) says so, which keeps equal ones in order */
+static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG w,
+                             LONG (*after)(const LONG *, const LONG *)) {
+    LONG i = from, j = mid, k = from * w, c;
+    while (i < mid || j < to) {
+        const LONG *e;
+        if (j >= to || (i < mid && !after(src + i * w, src + j * w))) e = src + (i++) * w;
+        else e = src + (j++) * w;
+        for (c = 0; c < w; c++) dst[k++] = e[c];
+    }
+}
+
+/* Sorts the list in place, keeping the order of equal elements. after(a, b): nonzero if the element at b goes
+   before the one at a. Runs of 8 by insertion, then merges through a buffer as long as the list (without
+   memory for it, insertion all along) */
+static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const LONG *)) {
+    LONG n, w, i, j, c, width, run = 8;
+    LONG *buf, *src, *dst, t[2];
+    if (!arr || arr->length < 2) return;
+    n = arr->length;
+    w = _DASH_ARR_W(arr);
+    buf = (LONG *)_dash_block_get(sizeof(LONG) * w * n);
+    if (!buf) run = n;
+    for (i = 0; i < n; i += run) {
+        LONG end = i + run < n ? i + run : n;
+        for (j = i + 1; j < end; j++) {
+            LONG k = j;
+            for (c = 0; c < w; c++) t[c] = arr->data[j * w + c];
+            while (k > i && after(arr->data + (k - 1) * w, t)) {
+                for (c = 0; c < w; c++) arr->data[k * w + c] = arr->data[(k - 1) * w + c];
+                k--;
+            }
+            for (c = 0; c < w; c++) arr->data[k * w + c] = t[c];
+        }
+    }
+    if (!buf) return;
+    src = arr->data;
+    dst = buf;
+    for (width = run; width < n; width *= 2) {
+        for (i = 0; i < n; i += 2 * width) {
+            LONG mid = i + width < n ? i + width : n, to = i + 2 * width < n ? i + 2 * width : n;
+            _dash_sort_merge(src, dst, i, mid, to, w, after);
+        }
+        { LONG *x = src; src = dst; dst = x; }
+    }
+    if (src != arr->data) for (i = 0; i < n * w; i++) arr->data[i] = src[i];
+    _dash_block_put(buf, sizeof(LONG) * w * n);
+}
+
+"""
+
+    # Lists of Double (Lorraine D2): kind 3 of the array runtime, two LONGs per element. An empty list made
+    # without a kind (DashArray_create(0), from [] anywhere) becomes one of Doubles with its first element.
+    DBL_LIST_RUNTIME = """\
+/* Dash Double List Runtime */
+static DashArrayLong *DashArray_create_dbl(LONG size) {
+    DashArrayLong *arr = DashArray_create(size * 2);
+    if (!arr) return NULL;
+    arr->length = size;
+    arr->capacity = size | ((LONG)_DASH_ARR_DBLS << 24);
+    return arr;
+}
+
+static DashArrayLong *DashArray_from_dbl(LONG size, const double *values) {
+    DashArrayLong *arr = DashArray_create_dbl(size);
+    LONG i;
+    if (arr) for (i = 0; i < size; i++) ((double *)arr->data)[i] = values[i];
+    return arr;
+}
+
+static double DashArray_get_dbl(DashArrayLong *arr, LONG index) {
+    if (!arr || index < 0 || index >= arr->length || _DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) return 0.0;
+    return ((double *)arr->data)[index];
+}
+
+static void DashArray_set_dbl(DashArrayLong *arr, LONG index, double value) {
+    if (!arr || index < 0 || index >= arr->length || _DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) return;
+    ((double *)arr->data)[index] = value;
+}
+
+static void DashArray_insert_dbl(DashArrayLong *arr, LONG index, double value) {
+    if (!arr) return;
+    if (_DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) {
+        if (arr->length) return;
+        if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
+        arr->data = NULL;
+        arr->capacity = (LONG)_DASH_ARR_DBLS << 24;
+    }
+    if (DashArray_open(arr, index)) ((double *)arr->data)[index] = value;
+}
+
+#define DashArray_push_dbl(arr, v) DashArray_insert_dbl((arr), DashArray_length(arr), (v))
+
+static double DashArray_pop_dbl(DashArrayLong *arr) {
+    double v;
+    if (!arr || !arr->length || _DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) return 0.0;
+    v = ((double *)arr->data)[arr->length - 1];
+    arr->length--;
+    return v;
 }
 
 """
@@ -5282,13 +6734,16 @@ static BOOL _dash_file_write_text(STRPTR name, STRPTR text) {
 /* length bytes of a buffer from offset, as a String */
 static STRPTR _dash_str_from_buffer(APTR buffer, LONG offset, LONG length) {
     STRPTR r;
+    UBYTE *d, *p;
+    LONG n;
     if (!buffer || length < 0) length = 0;
     r = _dash_str_alloc(length, TRUE);
     if (!r) return NULL;
-    if (length) _dash_copy(r, (STRPTR)buffer + offset, length);
-    r[length] = 0;
-    _dash_str_nul_to_space(r, length);
-    _dash_str_setlen(r, length);
+    /* copied and bytes 0 made spaces in one pass (D36) */
+    for (d = (UBYTE *)r, p = (UBYTE *)buffer + offset, n = length; n > 0; n--)
+        if (!(*d++ = *p++)) d[-1] = ' ';
+    *d = 0;
+    if (length >= _DASH_SC_MIN) _dash_str_setlen(r, length);
     return r;
 }
 
@@ -6289,12 +7744,19 @@ static BOOL _dash_tls_resumed(LONG t) {
 /* a + b: a new list with the elements of both. It holds what a list of the
    first typed operand holds (an empty literal has no type) */
 static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
-    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind;
-    DashArrayLong *result = DashArray_create(la + lb);
-    if (!result) return NULL;
-    for (i = 0; i < la; i++) result->data[i] = a->data[i];
-    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
+    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, w;
+    DashArrayLong *result;
     kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
+    w = kind == _DASH_ARR_DBLS ? 2 : 1;
+    result = DashArray_create((la + lb) * w);
+    if (!result) return NULL;
+    for (i = 0; i < la * w; i++) result->data[i] = a->data[i];
+    for (i = 0; i < lb * w; i++) result->data[la * w + i] = b->data[i];
+    if (kind == _DASH_ARR_DBLS) {
+        result->length = la + lb;
+        result->capacity = (la + lb) | ((LONG)_DASH_ARR_DBLS << 24);
+        return result;
+    }
     return kind ? DashArray_own(result, kind) : result;
 }
 
@@ -6327,9 +7789,25 @@ static BOOL _dash_str_ours(STRPTR s, LONG len) {
     return (h->size & 0x7F000000UL) == _DASH_STR_TAG && (LONG)_DASH_STR_SIZE(h) >= (LONG)sizeof(_DashStrHdr) + len + 1;
 }
 
+/* A text of Dash in a block too small for the cache (Lorraine D36: most texts are a few bytes, and
+   walking the cache for each one cost more than the rest): it is not in the cache and cannot go in.
+   A text of C whose bytes before it happen to look like that is still measured right, without it. */
+#define _DASH_STR_SMALL(s) (!((ULONG)(s) & 1) && (_DASH_STR_HDR(s)->size & 0x7F000000UL) == _DASH_STR_TAG \
+                            && _DASH_STR_SIZE(_DASH_STR_HDR(s)) <= sizeof(_DashStrHdr) + _DASH_SC_MIN)
+
 static LONG _dash_str_len(STRPTR s) {
     LONG k, len;
     if (!s) return 0;
+    if (s == _dash_sc_last) return _dash_sc_last_len;
+    if (_DASH_STR_SMALL(s)) {
+        len = strlen((char *)s);
+        /* the last short text measured too, for str_code and s[i] in a loop over it (D41) */
+        if (_DASH_STR_SIZE(_DASH_STR_HDR(s)) >= sizeof(_DashStrHdr) + len + 1) {
+            _dash_sc_last = s;
+            _dash_sc_last_len = len;
+        }
+        return len;
+    }
     for (k = 0; k < _DASH_SC_N; k++)
         if (_dash_sc_s[k] == s) { _dash_sc_last = s; return _dash_sc_last_len = _dash_sc_len[k]; }
     len = strlen((char *)s);
@@ -6354,6 +7832,7 @@ static void _dash_str_forget(STRPTR s) {
 static void _dash_str_setlen(STRPTR s, LONG len) {
     LONG k;
     if (_dash_sc_last == s) _dash_sc_last = NULL;
+    if (_DASH_STR_SMALL(s)) return;
     for (k = 0; k < _DASH_SC_N; k++) {
         if (_dash_sc_s[k] == s) {
             if (len >= _DASH_SC_MIN) _dash_sc_len[k] = len;
@@ -6787,6 +8266,10 @@ static DashFixed _dash_fx_cos(DashFixed a) {
     # (libnix printf has no %f) with about 7 significant digits, like a float.
     FLOAT_RUNTIME = """\
 /* Dash Float Runtime */
+/* A list of Floats keeps each one's bits in a LONG (Lorraine D2) */
+static __inline__ LONG _dash_f2l(float f) { union { float f; LONG l; } u; u.f = f; return u.l; }
+static __inline__ float _dash_l2f(LONG l) { union { float f; LONG l; } u; u.l = l; return u.f; }
+
 static STRPTR DashString_from_float(float f) {
     static char buffers[16][24];
     static LONG next = 0;
@@ -12849,6 +14332,7 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
+static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
 static LONG (*_dash_mui_timer_hook)(void) = NULL;   /* the timer's id if it went off, else 0 */
@@ -12903,7 +14387,7 @@ static void _dash_mui_app_end(void) {
     }
     _dash_mui_first_win = NULL;
     _dash_mui_cur_win = NULL;
-    _dash_mui_cur_menu = NULL;
+    _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
     _dash_mui_depth = 0;
     _dash_mui_npress = 0;
     if (_dash_mui_pool) { DeletePool(_dash_mui_pool); _dash_mui_pool = NULL; }
@@ -12997,7 +14481,7 @@ static void _dash_mui_window_end(void) {
     if (_dash_mui_cur_menu) _dash_mui_error("mui_window_end with a menu still open");
     _dash_mui_depth = 0;
     _dash_mui_cur_win = NULL;
-    _dash_mui_cur_menu = NULL;
+    _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
 }
 
 static LONG _dash_mui_window_open(APTR win) {
@@ -13122,9 +14606,36 @@ static void _dash_mui_menu_separator(void) {
     _dash_mui_menu_add((STRPTR)NM_BARLABEL, NULL);
 }
 
+/* An item with a check mark (Lorraine D13): choosing it toggles the mark and mui_wait_event returns id;
+   mui_get_value / mui_set_value read and set the mark */
+static APTR _dash_mui_menu_check(STRPTR title, STRPTR key, LONG id, LONG checked) {
+    Object *item = (Object *)_dash_mui_menu_item(title, key, id);
+    if (item) SetAttrs(item, MUIA_Menuitem_Checkit, TRUE, MUIA_Menuitem_Toggle, TRUE,
+                       MUIA_Menuitem_Checked, checked ? TRUE : FALSE, TAG_DONE);
+    return item;
+}
+
+/* A submenu (one level, as Intuition has): its items go in until mui_submenu_end */
+static APTR _dash_mui_submenu_begin(STRPTR title) {
+    Object *item;
+    if (_dash_mui_sub_parent) { _dash_mui_error("mui_submenu_begin inside another submenu"); return NULL; }
+    if (!(item = _dash_mui_menu_add(title, NULL))) return NULL;
+    _dash_mui_sub_parent = _dash_mui_cur_menu;
+    _dash_mui_cur_menu = item;
+    return item;
+}
+
+static void _dash_mui_submenu_end(void) {
+    if (!_dash_mui_sub_parent) { _dash_mui_error("mui_submenu_end without mui_submenu_begin"); return; }
+    _dash_mui_cur_menu = _dash_mui_sub_parent;
+    _dash_mui_sub_parent = NULL;
+}
+
 static void _dash_mui_menu_end(void) {
     if (!_dash_mui_cur_menu) _dash_mui_error("mui_menu_end without mui_menu_begin");
+    if (_dash_mui_sub_parent) _dash_mui_error("mui_menu_end with a submenu still open");
     _dash_mui_cur_menu = NULL;
+    _dash_mui_sub_parent = NULL;
 }
 
 static void _dash_mui_group_end(void) {
@@ -13222,6 +14733,7 @@ static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
     case _DASH_MUI_LIST:   *target = _dash_mui_list_of(obj); return *target ? MUIA_List_Active : 0;
     case _DASH_MUI_REGISTER: return MUIA_Group_ActivePage;
     case _DASH_MUI_SCROLLBAR: return MUIA_Prop_First;
+    case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Checked;   /* the check mark (Lorraine D13) */
     }
     return 0;
 }
@@ -13237,14 +14749,15 @@ static LONG _dash_mui_get_value(APTR obj) {
     ULONG attr = obj ? _dash_mui_value_attr_of(obj, &target) : 0;
     if (!attr) return 0;
     GetAttr(attr, target, &value);
-    return attr == MUIA_Selected ? (value != 0) : (LONG)value;
+    return attr == MUIA_Selected || attr == MUIA_Menuitem_Checked ? (value != 0) : (LONG)value;
 }
 
 /* Like the user changing it: the object's notifications (mui_on_change) fire */
 static void _dash_mui_set_value(APTR obj, LONG value) {
     Object *target;
     ULONG attr = obj ? _dash_mui_value_attr_of(obj, &target) : 0;
-    if (attr) SetAttrs(target, attr, attr == MUIA_Selected ? (value != 0) : value, TAG_DONE);
+    if (attr) SetAttrs(target, attr, attr == MUIA_Selected || attr == MUIA_Menuitem_Checked ? (value != 0) : value,
+                       TAG_DONE);
 }
 
 /* List of texts; MUI keeps its own copy of each line. Lines count from 0; the
@@ -13312,6 +14825,7 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_STRING: return MUIA_String_Contents;
     case _DASH_MUI_WINDOW: return MUIA_Window_Title;
     case _DASH_MUI_IMAGE:  return MUIA_Dtpic_Name;
+    case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Title;       /* "Abrir recientes" (Lorraine D13) */
     }
     return 0;
 }
@@ -13418,15 +14932,16 @@ static STRPTR _dash_mui_get_text(APTR obj) {
 static void _dash_mui_set_text(APTR obj, STRPTR text) {
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
     if (!attr) return;
-    if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name)
+    if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name || attr == MUIA_Menuitem_Title)
         text = _dash_mui_keep(text);   /* they keep the pointer */
     SetAttrs(obj, attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
     if (!obj) return;
-    if (_dash_mui_kind(obj) == _DASH_MUI_MENUITEM)
-        SetAttrs(obj, MUIA_Menuitem_Enabled, enabled ? TRUE : FALSE, TAG_DONE);
+    if (_dash_mui_kind(obj) == _DASH_MUI_MENUITEM)      /* an item or a whole menu (Lorraine D13): each */
+        SetAttrs(obj, MUIA_Menuitem_Enabled, enabled ? TRUE : FALSE,      /* takes its own */
+                 MUIA_Menu_Enabled, enabled ? TRUE : FALSE, TAG_DONE);
     else
         SetAttrs(obj, MUIA_Disabled, enabled ? FALSE : TRUE, TAG_DONE);
 }
@@ -13565,11 +15080,14 @@ struct _DashCanvas {
     WORD min_width, min_height;
     LONG input_id;                  /* 0: no input events */
     LONG move_id;                   /* 0: no pointer moves (D63) */
+    LONG drag_id;                   /* 0: no drags (Lorraine D12) */
+    BOOL dragging;                  /* the left button went down on the area and is still down */
+    LONG drag_state;                /* last drag event: 1 moving with the button down, 2 let go */
     LONG ptr_x, ptr_y;              /* where the pointer was last seen, from the area's corner */
     BOOL ptr_in, ptr_known;         /* inside the area then; seen at all */
     LONG mouse_x, mouse_y;          /* relative to the area */
     LONG button, wheel, key;        /* last input: 1 = left click; +1/-1; raw key code */
-    UWORD qual;                     /* the key's qualifiers (shift...) and dead-key data, for */
+    UWORD qual;                     /* the qualifiers (shift...) of the last input, and a key's dead-key data, for */
     APTR prev;                      /* mui_canvas_char (dashweb D31) */
     struct MUI_EventHandlerNode handler;
     BOOL handler_added;
@@ -13755,13 +15273,14 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Setup:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->input_id || data->move_id) {
+        if (data->input_id || data->move_id || data->drag_id) {
             data->handler.ehn_Object = obj;
             data->handler.ehn_Class = cl;
             /* moves: MOUSEMOVE (with the window's ReportMouse, at MUIM_Show), and the ticks (10 a second) in case
                something turns ReportMouse off; leaving the window (inactive) is leaving the area */
             data->handler.ehn_Events = (data->input_id ? IDCMP_MOUSEBUTTONS | IDCMP_RAWKEY : 0) |
-                (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0);
+                (data->move_id ? IDCMP_MOUSEMOVE | IDCMP_INTUITICKS | IDCMP_INACTIVEWINDOW : 0) |
+                (data->drag_id ? IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_INACTIVEWINDOW : 0);
             data->handler.ehn_Priority = 0;
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
@@ -13771,7 +15290,7 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
     case MUIM_Show:
         if (!DoSuperMethodA(cl, obj, msg)) return FALSE;
         data = INST_DATA(cl, obj);
-        if (data->move_id && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
+        if ((data->move_id || data->drag_id) && _DASH_MRI(obj)->mri_Window) ReportMouse(TRUE, _DASH_MRI(obj)->mri_Window);
         return TRUE;
     case MUIM_Cleanup:
         data = INST_DATA(cl, obj);
@@ -13789,6 +15308,23 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         x = im->MouseX - _DASH_MLEFT(obj);
         y = im->MouseY - _DASH_MTOP(obj);
         inside = x >= 0 && y >= 0 && x < _DASH_MWIDTH(obj) && y < _DASH_MHEIGHT(obj);
+        if (data->drag_id) {
+            /* a drag (Lorraine D12): pressed on the area, an event for each move (gathered like the pointer's)
+               and one when let go (or the window goes inactive); the position may be out of the area */
+            if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
+                data->dragging = TRUE;
+            } else if (data->dragging && (im->Class == IDCMP_MOUSEMOVE ||
+                                          (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP) ||
+                                          im->Class == IDCMP_INACTIVEWINDOW)) {
+                if (im->Class != IDCMP_INACTIVEWINDOW) {
+                    data->mouse_x = x; data->mouse_y = y;
+                    data->qual = im->Qualifier;
+                }
+                data->drag_state = im->Class == IDCMP_MOUSEMOVE ? 1 : 2;
+                if (data->drag_state == 2) data->dragging = FALSE;
+                _dash_canvas_moved(data->drag_id);
+            }
+        }
         if (im->Class == IDCMP_MOUSEMOVE || im->Class == IDCMP_INTUITICKS || im->Class == IDCMP_INACTIVEWINDOW) {
             if (!data->move_id) return 0;
             if (im->Class == IDCMP_INACTIVEWINDOW) inside = FALSE;
@@ -13803,10 +15339,12 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
             data->mouse_x = x; data->mouse_y = y;
             data->button = 1; data->wheel = 0; data->key = -1;
+            data->qual = im->Qualifier;      /* Shift + click (Lorraine D11) */
         } else if (im->Class == IDCMP_RAWKEY && (im->Code == 0x7A || im->Code == 0x7B)) {
             if (!inside) return 0;           /* the wheel (NM_WHEEL_UP/DOWN) over the area */
             data->mouse_x = x; data->mouse_y = y;
             data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
+            data->qual = im->Qualifier;
         } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
             data->button = 0; data->wheel = 0; data->key = im->Code;
             data->qual = im->Qualifier;
@@ -13866,6 +15404,16 @@ static void _dash_mui_canvas_on_move(APTR obj, LONG id) {
     struct _DashCanvas *data = _dash_canvas_data(obj);
     if (!data) return;
     data->move_id = id;
+    _dash_mui_move_hook = _dash_canvas_next_move;
+}
+
+/* mui_wait_event returns id while the area is dragged (moved with the left button down after pressing it on
+   the area) and once more when it is let go: mui_canvas_drag says which (call before opening the window;
+   Lorraine D12) */
+static void _dash_mui_canvas_on_drag(APTR obj, LONG id) {
+    struct _DashCanvas *data = _dash_canvas_data(obj);
+    if (!data) return;
+    data->drag_id = id;
     _dash_mui_move_hook = _dash_canvas_next_move;
 }
 
@@ -13939,6 +15487,12 @@ static LONG _dash_mui_canvas_input(APTR obj, LONG what) {
     case 2: return data->button;
     case 3: return data->wheel;
     case 4: return data->key;
+    case 6: return data->drag_state;         /* 1 dragging, 2 let go, 0 no drag yet (Lorraine D12) */
+    case 5:                                  /* the qualifiers (Lorraine D11): 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga */
+        return ((data->qual & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT)) ? 1 : 0)
+             | ((data->qual & IEQUALIFIER_CONTROL) ? 2 : 0)
+             | ((data->qual & (IEQUALIFIER_LALT | IEQUALIFIER_RALT)) ? 4 : 0)
+             | ((data->qual & (IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)) ? 8 : 0);
     }
     return 0;
 }
@@ -14374,7 +15928,7 @@ $body$indent    }
 $indent    { DashArrayLong *_arr_$var = $array;
 $indent    _dash_hold(_arr_$var);
 $indent    for (LONG _idx_$var = 0; _idx_$var < DashArray_length(_arr_$var); _idx_$var++) {
-$indent        $elem_type $var = ${cast}_arr_$var->data[_idx_$var];
+$indent        $elem_type $var = $elem;
 $body$indent    }
 $indent    _dash_release(_arr_$var); }
 """)
@@ -14460,10 +16014,16 @@ _RUNTIME_FLAGS = [
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
+    ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
+    ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
+    ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
+    ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
     ("FLOAT_RUNTIME", "uses_float"),
+    ("DOUBLE_RUNTIME", "uses_double"),      # Lorraine D1
+    ("MATH_RUNTIME", "uses_math"),          # Lorraine D4
     ("FIXED_RUNTIME", "uses_fixed"),
     ("REFCOUNT_RUNTIME", "uses_refcount"),
     ("ARENA_RUNTIME", "uses_arenas"),
@@ -14748,6 +16308,10 @@ class CodeGenerator(ASTVisitor):
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
+        self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
+        self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
+        self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
+        self.uses_regex: bool = False  # regex_*, wildcard_match (REGEX_RUNTIME, Lorraine D45)
         self.uses_desk: bool = False     # desktop_canvas* (DESK_RUNTIME, Trasfondo)
         self.uses_text_io: bool = False  # file_read_text... (TEXT_IO_RUNTIME)
         self.uses_split: bool = False    # str_split (SPLIT_RUNTIME)
@@ -14760,6 +16324,7 @@ class CodeGenerator(ASTVisitor):
         # the declared Dash type of list and dict variables ("{String: [Nodo]}"), for the elements
         # of nested ones; only read while var_types agrees (D37)
         self.decl_types: Dict[str, str] = {}
+        self.int_key_dicts: Set[str] = set()   # variables holding a {Int: T} made from a literal (Lorraine D9)
         # Track Amiga library requirements
         self.needs_gfx: bool = False
         self.needs_audio: bool = False
@@ -14774,6 +16339,11 @@ class CodeGenerator(ASTVisitor):
         self.needs_area: bool = False  # Track if Area fill functions are used
         self.needs_rtg: bool = False  # Track if RTG (CyberGraphX/P96) is used
         self.uses_float: bool = False  # Float values: DashString_from_float
+        self.uses_double: bool = False  # Double values (DOUBLE_RUNTIME, Lorraine D1)
+        self.uses_math: bool = False  # sqrt, sin... of Double (MATH_RUNTIME, Lorraine D4)
+        self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
+        self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
+        self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
         self.global_objects: Set[str] = set()  # struct globals: hold a reference
@@ -14935,9 +16505,13 @@ class CodeGenerator(ASTVisitor):
                 # a freed string leaves the length cache of TEXT_RUNTIME
                 drop = "static void _dash_str_drop(_DashStrHdr *h) {\n"
                 memory = memory.replace(drop, "static void _dash_str_forget(STRPTR s);\n"
+                                        "static STRPTR _dash_sc_last;\n"
                                         "static LONG _dash_str_len(STRPTR s);\n"
                                         "static void _dash_str_setlen(STRPTR s, LONG len);\n\n" + drop +
-                                        "    _dash_str_forget((STRPTR)(h + 1));\n")
+                                        "    /* (a block of 64 bytes or less is never in the length cache, D36; it may be the\n"
+                                        "       last text measured, D41) */\n"
+                                        "    if (_DASH_STR_SIZE(h) > sizeof(_DashStrHdr) + 64) _dash_str_forget((STRPTR)(h + 1));\n"
+                                        "    else if (_dash_sc_last == (STRPTR)(h + 1)) _dash_sc_last = NULL;\n")
                 # copies of long texts use and fill the length cache (dashweb D22)
                 old = ("    ULONG len = s ? strlen((char *)s) : 0;\n    STRPTR d = _dash_str_alloc(len, temp);\n"
                        "    if (d && len) _dash_copy(d, s, len);\n")
@@ -14951,6 +16525,10 @@ class CodeGenerator(ASTVisitor):
 
         if self.uses_float:
             parts.append(CTemplates.FLOAT_RUNTIME)
+        if self.uses_double:
+            parts.append(CTemplates.DOUBLE_RUNTIME)
+        if self.uses_math:
+            parts.append(CTemplates.MATH_RUNTIME)
 
         if self.uses_fixed:
             parts.append(CTemplates.FIXED_RUNTIME)
@@ -14962,6 +16540,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.ARRAY_CONCAT_RUNTIME)
         if self.uses_list_methods:
             parts.append(CTemplates.LIST_RUNTIME)
+        if self.uses_dbl_list:
+            parts.append(CTemplates.DBL_LIST_RUNTIME)
+        if self.uses_sort:
+            parts.append(CTemplates.SORT_RUNTIME)
         if self.uses_dicts:
             parts.append(CTemplates.DICT_RUNTIME)
         if self.uses_weak:
@@ -14978,6 +16560,12 @@ class CodeGenerator(ASTVisitor):
             parts.append(strings)
         if self.uses_text:
             parts.append(CTemplates.TEXT_RUNTIME)
+        if self.uses_utf8:
+            parts.append(CTemplates.UTF8_RUNTIME)
+        if self.uses_bufsearch:
+            parts.append(CTemplates.BUFSEARCH_RUNTIME)
+        if self.uses_regex:
+            parts.append(CTemplates.REGEX_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -15073,6 +16661,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
             parts.append(CTemplates.BASE64_RUNTIME)
+        if self.uses_zlib:
+            parts.append(CTemplates.ZLIB_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -15137,9 +16727,11 @@ class CodeGenerator(ASTVisitor):
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
         # methods may draw (_dash_rp) or use any builtin
-        if self.struct_typedefs:
+        if self.struct_typedefs or self.analysis.program.structs:
             parts.append("\n/* Struct Definitions */\n")
-            parts.append("".join(f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
+            # an interface's values are pointers to any struct that has it (Lorraine D43)
+            parts.append("".join(f"typedef void _Dash_{st.name};\n" if st.is_interface else
+                                 f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
                                  for st in self.analysis.program.structs))
             parts.append("\n".join(self.struct_typedefs))
             parts.append("\n")
@@ -15481,7 +17073,7 @@ static LONG _dash_event_window_handle(void) {{
             self.global_objects.add(gvar.name)
             self.emit_global(f"{c_type}{gvar.name} = NULL;\n")
             if gvar.initial_value:
-                init_val = self._generate_expression(gvar.initial_value)
+                init_val = self._generate_expression(self._list_hint(gvar.initial_value, gvar.var_type))
                 self.emit(f"    _dash_obj_set((void **)&{gvar.name}, {init_val});\n")
         elif c_type == "APTR" and gvar.initial_value and not isinstance(gvar.initial_value, NilLiteral):
             # a function (var f: Func = doble): its prototype comes after the globals, so the
@@ -15489,7 +17081,8 @@ static LONG _dash_event_window_handle(void) {{
             self.emit_global(f"APTR {gvar.name} = NULL;\n")
             self.emit(f"    {gvar.name} = (APTR){self._generate_expression(gvar.initial_value)};\n")
         elif gvar.initial_value:
-            init_val = self._generate_expression(gvar.initial_value)
+            init_val = (self._double_value(gvar.initial_value) if c_type == "double"
+                        else self._generate_expression(gvar.initial_value))
             self.emit_global(f"{c_type} {gvar.name} = {init_val};\n")
         else:
             # Default initialization
@@ -15509,10 +17102,12 @@ static LONG _dash_event_window_handle(void) {{
             self.var_types[gvar.name] = f"struct:{gvar.var_type}"
         elif c_type == "float":
             self.var_types[gvar.name] = "float"
+        elif c_type == "double":
+            self.var_types[gvar.name] = "double"
         elif c_type in ("DashArrayLong *", "DashDict *"):
             self.var_types[gvar.name] = self._list_var_type(gvar.var_type)
             self.decl_types[gvar.name] = gvar.var_type
-            self._mark_fixed_list(gvar.name, list_elem_type(gvar.var_type) == "Fixed")
+            self._mark_num_list(gvar.name, list_elem_type(gvar.var_type))
         elif gvar.var_type == "Bool":
             self.var_types[gvar.name] = "bool"
         elif gvar.var_type == "Func":
@@ -15622,8 +17217,22 @@ static {ret_type} {native.name}({params_str}) {{
             out.append(debuglines.mark(opening + 1 + k, filename) + body[k])
         return "".join(line + "\n" for line in out) + debuglines.NOLINE
 
+    def _iface_slots(self) -> dict:
+        """(interface, method) -> its slot in the method tables of the structs (Lorraine D43): every method of
+        every interface of the program has its own, in the order they are written."""
+        if getattr(self, "_iface_slot_map", None) is None:
+            slots = {}
+            for st in self.analysis.program.structs:
+                if st.is_interface:
+                    for m in st.methods:
+                        slots[(st.name, m.name)] = len(slots)
+            self._iface_slot_map = slots
+        return self._iface_slot_map
+
     def _generate_struct_typedef(self, struct: StructDef):
         """Generate C typedef, constructor, destructor and methods for a struct."""
+        if struct.is_interface:
+            return               # a void * (see _assemble_program); its methods go through the tables
         # Mark that we're using reference counting
         self.uses_refcount = True
 
@@ -15681,8 +17290,19 @@ static void _dash_struct_destroy_{struct.name}(void *obj) {{
         # _new: with one reference, for "var = Struct(...)" (adopted at once);
         # _create: a temporary, for anything else (arguments, lists, returns).
         # Two bodies: calling one from the other cost ~280 cycles on a 68000
+        # the methods of its interfaces, by slot, after the methods themselves (Lorraine D43)
+        slots = self._iface_slots()
+        vtable, vtable_decl, methods_ptr = "", "", ""
+        if struct.interfaces and slots:
+            names = ["NULL"] * len(slots)
+            for (iface, mname), k in slots.items():
+                if iface in struct.interfaces and struct.get_method(mname):
+                    names[k] = f"(APTR){struct.name}_{mname}"
+            vtable_decl = f"static const APTR _dash_vt_{struct.name}[{len(slots)}];\n"
+            vtable = f"\nstatic const APTR _dash_vt_{struct.name}[{len(slots)}] = {{ {', '.join(names)} }};\n"
+            methods_ptr = f", _dash_vt_{struct.name}"
         constructor = f"""{destructor}
-static const _DashType _dash_type_{struct.name} = {{ {destroy}, sizeof({c_name}) }};
+{vtable_decl}static const _DashType _dash_type_{struct.name} = {{ {destroy}, sizeof({c_name}){methods_ptr} }};
 
 static {c_name}* _dash_struct_new_{struct.name}({params_str}) {{
     {c_name} *_dash_o = ({c_name} *)_dash_rc_new_obj(sizeof({c_name}), &_dash_type_{struct.name});
@@ -15718,7 +17338,7 @@ static void {struct.name}_release({c_name} *obj) {{
         for method in struct.methods:
             methods_code += self._debug_wrap(method, self._generate_struct_method(struct, method, type_map, c_name))
 
-        self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code)
+        self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code + vtable)
 
     def _generate_struct_method(self, struct: StructDef, method: StructMethod,
                                 type_map: dict, c_name: str) -> str:
@@ -15743,6 +17363,7 @@ static void {struct.name}_release({c_name} *obj) {{
         old_method_ret = getattr(self, "_method_ret", None)
         self._method_ret = method.return_type
         saved_var_types = self.var_types
+        saved_int_keys = set(self.int_key_dicts)
         self.var_types = dict(saved_var_types)
         self._seed_param_types(method.params)
 
@@ -15767,6 +17388,7 @@ static void {struct.name}_release({c_name} *obj) {{
         self._current_struct = old_struct_context
         self._method_ret = old_method_ret
         self.var_types = saved_var_types
+        self.int_key_dicts = saved_int_keys
 
         # Method name: StructName_methodname
         method_name = f"{struct.name}_{method.name}"
@@ -16045,6 +17667,10 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_fixed = True
             value = self._generate_expression(node.message)
             self.emit(f'{indent}Printf("%s\\n", DashString_from_fixed({value}));\n')
+        elif self._is_double_expr(node.message):
+            self.uses_double = True
+            value = self._generate_expression(node.message)
+            self.emit(f'{indent}Printf("%s\\n", DashString_from_double({value}));\n')
         elif self._is_float_expr(node.message):
             self.uses_float = True
             value = self._generate_expression(node.message)
@@ -16098,12 +17724,12 @@ static {ret_type} {method_name}({params_str}) {{
                                              if c_type in ("DashArrayLong *", "DashDict *")
                                              else f"struct:{node.var_type}")
                 self.decl_types[node.name] = node.var_type
-                self._mark_fixed_list(node.name, list_elem_type(node.var_type) == "Fixed")
+                self._mark_num_list(node.name, list_elem_type(node.var_type))
                 self.context.declare_var(node.name)
                 self.context.own(node.name, "obj")
                 self.emit(f"{indent}{c_type}{node.name} = NULL;\n")
                 if init is not None:
-                    value = self._obj_value(self._generate_expression(init))
+                    value = self._obj_value(self._generate_expression(self._list_hint(init, node.var_type)))
                     self.emit(f"{indent}_dash_obj_set((void **)&{node.name}, {value});\n")
             elif c_type == "STRPTR":
                 self.uses_strings = True
@@ -16123,6 +17749,9 @@ static {ret_type} {method_name}({params_str}) {{
                 if c_type == "DashFixed":
                     self.var_types[node.name] = "fixed"
                     value = self._fixed_value(init) if init is not None else "0"
+                elif c_type == "double":
+                    self.var_types[node.name] = "double"
+                    value = self._double_value(init) if init is not None else "0"
                 else:
                     value = self._generate_expression(init) if init is not None else "0"
                 self.context.declare_var(node.name)
@@ -16168,14 +17797,19 @@ static {ret_type} {method_name}({params_str}) {{
         # Special handling for array literals
         if isinstance(node.value, ArrayLiteral):
             self.uses_arrays = True
+            if self.context.is_declared(node.name) and self._num_list(VarRef(name=node.name)) in self._NUM_LISTS:
+                node.value.num_kind = self._num_list(VarRef(name=node.name))   # l = [1, 2] in a [Double]
             elem = self._literal_elem_type(node.value)
             self.var_types[node.name] = f"array:{elem}" if elem else "array"
-            self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
+            self._mark_num_list(node.name, self._num_list(node.value))
             value = self._generate_array_literal(node.value)
             self._assign_object(node.name, "DashArrayLong *", value)
             return
 
-        value = self._generate_expression(node.value)
+        if self.var_types.get(node.name) == "double" and self.context.is_declared(node.name):
+            value = self._double_value(node.value)     # d = 0.1: all the digits of a double
+        else:
+            value = self._generate_expression(node.value)
         var_type = self._infer_c_type(node.value)
         # what a call, field or element declares (a [[String]], a {String: [Int]}...), for its
         # elements later (D49)
@@ -16183,9 +17817,17 @@ static {ret_type} {method_name}({params_str}) {{
             self.decl_types.get(node.value.name)
         if declared:
             self.decl_types[node.name] = declared
+        if self._dict_value_kind(node.value) is not None:
+            if self._dict_int_keys(node.value):
+                self.int_key_dicts.add(node.name)
+            else:
+                self.int_key_dicts.discard(node.name)
 
-        # Track variable type for string/struct detection
-        if var_type == "STRPTR" or self._is_string_expr(node.value):
+        # Track variable type for string/struct detection. A declared Double or Float keeps its type
+        # whatever number it gets (c = 2.5 in a Double is a double, not the literal's float or Int)
+        if self.context.is_declared(node.name) and self.var_types.get(node.name) in ("double", "float"):
+            pass
+        elif var_type == "STRPTR" or self._is_string_expr(node.value):
             self.var_types[node.name] = "string"
         elif var_type == "char":
             self.var_types[node.name] = "char"
@@ -16194,10 +17836,13 @@ static {ret_type} {method_name}({params_str}) {{
         elif var_type == "float":
             self.var_types[node.name] = "float"
             self.uses_float = True
+        elif var_type == "double":
+            self.var_types[node.name] = "double"
+            self.uses_double = True
         elif var_type == "DashArrayLong *":
             # a copy or a slice of a typed array keeps its element type
             self.var_types[node.name] = self._array_var_type(node.value)
-            self._mark_fixed_list(node.name, self._is_fixed_list(node.value))
+            self._mark_num_list(node.name, self._num_list(node.value))
         elif var_type == "DashDict *":
             self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
         elif var_type == "APTR" and (isinstance(node.value, (LambdaFunc, FunctionRef))
@@ -16282,6 +17927,14 @@ static {ret_type} {method_name}({params_str}) {{
         reference (adopting a new object); loop variables only borrow."""
         indent = self.context.indent
         value = self._obj_value(value)
+        if name in getattr(self, "_lent_objs", ()):
+            # borrowed from where it hangs (Lorraine D44)
+            if not self.context.is_declared(name):
+                self.context.declare_var(name)
+                self.emit(f"{indent}{c_type}{'' if c_type.endswith('*') else ' '}{name} = {value};\n")
+            else:
+                self.emit(f"{indent}{name} = {value};\n")
+            return
         if not self.context.is_declared(name):
             self.context.declare_var(name)
             self.context.own(name, "obj")
@@ -16305,6 +17958,9 @@ static {ret_type} {method_name}({params_str}) {{
         if self._is_fixed_expr(node):
             self.uses_fixed = True
             return "DashFixed"
+        if self._is_double_expr(node):
+            self.uses_double = True
+            return "double"
         if self._is_float_expr(node):
             return "float"
         if isinstance(node, StringLiteral):
@@ -16332,6 +17988,8 @@ static {ret_type} {method_name}({params_str}) {{
             # Check if accessing a string or array
             if self._is_string_expr(node.array):
                 return "char"  # Character access
+            if self._num_elem(node):
+                return self._num_elem(node).lower()      # l[i] of a [Float] or [Double]
             elem = self._array_elem_type(node.array)
             if elem == "array":
                 return "DashArrayLong *"
@@ -16351,6 +18009,8 @@ static {ret_type} {method_name}({params_str}) {{
             if self._is_list_method(node):
                 if node.method != "pop":
                     return "LONG"
+                if self._num_elem(node):
+                    return self._num_elem(node).lower()
                 elem = self._array_elem_type(node.object) or ""
                 if elem == "string":
                     return "STRPTR"
@@ -16571,6 +18231,12 @@ static {ret_type} {method_name}({params_str}) {{
         elif self._is_fixed_list(node.iterable):
             var_type, c_type = "fixed", "DashFixed"
             self.uses_fixed = True
+        elif self._num_list(node.iterable) == "Double":
+            var_type, c_type = "double", "double"
+            self.uses_dbl_list = True
+        elif self._num_list(node.iterable) == "Float":
+            var_type, c_type = "float", "float"
+            self.uses_float = True
         elif elem.startswith("struct:"):
             var_type, c_type = elem, f"_Dash_{elem[7:]} *"
         elif elem in ("array", "dict"):
@@ -16580,6 +18246,7 @@ static {ret_type} {method_name}({params_str}) {{
             c_type = "DashArrayLong *" if elem == "array" else "DashDict *"
             if inner:
                 self.decl_types[node.variable] = inner
+            self._mark_num_list(node.variable, list_elem_type(inner) if inner else None)
         else:
             var_type, c_type = "number", "LONG"
         mark = self._new_tmp_mark()
@@ -16589,9 +18256,13 @@ static {ret_type} {method_name}({params_str}) {{
         body = self._generate_loop_body(node, var_type, mark)
         self.context.exit_scope()
 
+        v = node.variable
         code = CTemplates.FOR_EACH_STMT.substitute(
             elem_type=c_type,
-            cast="" if c_type == "LONG" else f"({c_type})",
+            elem=(f"((double *)_arr_{v}->data)[_idx_{v}]" if c_type == "double"
+                  else f"_dash_l2f(_arr_{v}->data[_idx_{v}])" if c_type == "float"
+                  else f"_arr_{v}->data[_idx_{v}]" if c_type == "LONG"
+                  else f"({c_type})_arr_{v}->data[_idx_{v}]"),
             indent=indent,
             var=node.variable,
             array=array,
@@ -16768,8 +18439,19 @@ static {ret_type} {method_name}({params_str}) {{
         reassigned, no window or event loop, only calls to builtins without callbacks, constructors and
         functions and methods like it. Weaker than _is_pure (it may push, or change numbers in its objects):
         what it gets need not be lent or copied, since nothing it does can free it. Fixed point, once."""
-        if getattr(self, "_nofree_ids", None) is None:
+        return id(fdef) in self._nofree_set(False)
+
+    def _frees_no_objects(self, fdef) -> bool:
+        """Like _frees_nothing, but only objects count (Lorraine D44): it may also give a String or number global,
+        parameter or field a new value, which frees a text but never a struct, list or dictionary."""
+        return id(fdef) in self._nofree_set(True)
+
+    def _nofree_set(self, objects_only: bool) -> set:
+        cache = "_noobjfree_ids" if objects_only else "_nofree_ids"
+        if getattr(self, cache, None) is None:
             prog = self.analysis.program
+            harmless = tuple(self._NUMERIC_TYPES) + (("String", "Double") if objects_only else ())
+            global_types = {g.name: g.var_type for g in prog.global_vars}
             defs = list(prog.functions) + [m for st in prog.structs for m in getattr(st, "methods", [])]
             globals_ = {g.name for g in prog.global_vars}
             methods_by_name = {}
@@ -16780,7 +18462,7 @@ static {ret_type} {method_name}({params_str}) {{
             for st in prog.structs:
                 for f in st.fields:
                     field_types.setdefault(f.name, set()).add(f.field_type)
-            numeric_fields = {name for name, types in field_types.items() if types <= set(self._NUMERIC_TYPES)}
+            numeric_fields = {name for name, types in field_types.items() if types <= set(harmless)}
             owner = {id(m): st for st in prog.structs for m in getattr(st, "methods", [])}
             nofree = {id(d) for d in defs}
 
@@ -16807,7 +18489,7 @@ static {ret_type} {method_name}({params_str}) {{
                             st = prog.get_struct(next(iter(made)))
                     if st is not None:
                         f = next((f for f in st.fields if f.name == n.member), None)
-                        return f is not None and f.field_type in self._NUMERIC_TYPES
+                        return f is not None and f.field_type in harmless
                 return n.member in numeric_fields
 
             def ok(d):
@@ -16818,8 +18500,9 @@ static {ret_type} {method_name}({params_str}) {{
                         return False
                     if isinstance(n, MemberAssign) and not numeric_member(d, n, params):
                         return False
-                    if isinstance(n, VarAssign) and (n.name in globals_ or
-                                                     (n.name in params and params[n.name] not in self._NUMERIC_TYPES)):
+                    if isinstance(n, VarAssign) and (
+                            (n.name in globals_ and not (objects_only and global_types.get(n.name) in harmless)) or
+                            (n.name in params and params[n.name] not in harmless)):
                         return False
                     if isinstance(n, MethodCall):
                         if n.method in self._REMOVING_METHODS:
@@ -16827,7 +18510,9 @@ static {ret_type} {method_name}({params_str}) {{
                         if n.method in methods_by_name and not all(id(m) in nofree for m in methods_by_name[n.method]):
                             return False
                     if isinstance(n, FunctionCall):
-                        if get_builtin(n.name):
+                        if n.name in ("Int", "Float", "Double", "Fixed"):
+                            pass                    # conversions
+                        elif get_builtin(n.name):
                             if n.name.startswith(self._CALLBACK_PREFIXES):
                                 return False
                         elif not prog.get_struct(n.name):
@@ -16843,8 +18528,8 @@ static {ret_type} {method_name}({params_str}) {{
                     if id(d) in nofree and not ok(d):
                         nofree.discard(id(d))
                         changed = True
-            self._nofree_ids = nofree
-        return id(fdef) in self._nofree_ids
+            setattr(self, cache, nofree)
+        return getattr(self, cache)
 
     def _lent_string_locals(self, fdef) -> set:
         """String variables of a function that can borrow their text instead of owning a copy (D66): every
@@ -16888,6 +18573,76 @@ static {ret_type} {method_name}({params_str}) {{
                 if name not in params and name not in globals_ and name not in others
                 and any(not isinstance(v, StringLiteral) for v in vs) and all(lendable(v) for v in vs)}
 
+    def _lent_object_locals(self, fdef) -> set:
+        """Struct, list and dictionary variables of a function that borrow their object instead of holding a
+        reference (Lorraine D44), like the variable of a for: every assignment to them is an element or a field
+        (l[i], d[k], a.b) that hangs from a parameter, a global, self or another such variable; the function frees
+        no objects (_frees_no_objects), so nothing can take the object out of where it hangs while it runs; and
+        the variable is only read: never returned, given to another variable, field, list or dictionary, put in
+        a literal, or passed to a constructor or a builtin. No _dash_obj_set and no release per assignment."""
+        if not self._frees_no_objects(fdef):
+            return set()
+        params = {p.name if isinstance(p, FunctionParam) else p for p in fdef.params}
+        globals_ = {g.name for g in self.analysis.program.global_vars}
+        prog = self.analysis.program
+
+        def root(expr):
+            while isinstance(expr, (ArrayAccess, PropertyAccess)):
+                if isinstance(expr, ArrayAccess) and getattr(expr, "default", None) is not None:
+                    return None             # d.get(k, default): the default may be a new object
+                expr = expr.array if isinstance(expr, ArrayAccess) else expr.object
+            if isinstance(expr, MemberAccess):
+                return expr.object_name
+            if isinstance(expr, SelfRef):
+                return "self"
+            return expr.name if isinstance(expr, VarRef) else None
+
+        values, others = {}, set()
+        for n in self._walk_nodes(fdef.body):
+            if isinstance(n, VarAssign):
+                values.setdefault(n.name, []).append(n.value)
+            elif isinstance(n, ForEachStmt):
+                others.add(n.variable)
+            elif hasattr(n, "name") and type(n).__name__ in ("VarDecl", "TypedVarDecl"):
+                others.add(n.name)
+        lent = {name for name, vs in values.items()
+                if name not in params and name not in globals_ and name not in others
+                and all(isinstance(v, (ArrayAccess, PropertyAccess, MemberAccess)) and root(v) for v in vs)}
+
+        def used(node):
+            return isinstance(node, VarRef) and node.name in lent
+
+        for n in self._walk_nodes(fdef.body):
+            escaped = []
+            if isinstance(n, ReturnStmt):
+                escaped = [n.value]
+            elif isinstance(n, (VarAssign, MemberAssign, ArrayAssign)):
+                escaped = [n.value]
+            elif isinstance(n, MethodCall) and n.method in ("push", "insert"):
+                escaped = list(n.arguments)
+            elif isinstance(n, ArrayLiteral):
+                escaped = list(n.elements)
+            elif isinstance(n, DictLiteral):
+                escaped = list(n.values)
+            elif isinstance(n, FunctionCall) and (get_builtin(n.name) or prog.get_struct(n.name)
+                                                  or not prog.get_function(n.name)):
+                escaped = list(n.arguments)
+            for e in escaped:
+                if used(e):
+                    lent.discard(e.name)
+        # what hangs from a variable that holds its own reference may go when that one changes
+        changed = True
+        while changed:
+            changed = False
+            for name in list(lent):
+                for v in values[name]:
+                    r = root(v)
+                    if r not in params and r not in globals_ and r != "self" and r not in lent:
+                        lent.discard(name)
+                        changed = True
+                        break
+        return lent
+
     def _walk_nodes(self, nodes):
         """Every AST node under these (statements and expressions, nested blocks too)."""
         stack = list(nodes or [])
@@ -16912,15 +18667,19 @@ static {ret_type} {method_name}({params_str}) {{
         mark = self._new_tmp_mark()
         self.context.enter_scope("block")
         self.context.own(f"_dk_{var}", "obj")       # a return in the body releases it
-        body = self._generate_loop_body(node, "string", mark)
+        ints = self._dict_int_keys(node.iterable.object)       # {Int: T} (Lorraine D9)
+        body = self._generate_loop_body(node, "number" if ints else "string", mark)
         self.context.exit_scope()
+        head = (f"{indent}        LONG {var} = (LONG)_dk_{var}->keys[_di_{var}];\n"
+                f"{indent}        if (!_dk_{var}->used[_di_{var}]) continue;\n" if ints else
+                f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
+                f"{indent}        if (!{var}) continue;\n")
         code = (f"{indent}    {{ DashDict *_dk_{var} = {d};\n"
                 f"{indent}    LONG _di_{var};\n"
                 f"{indent}    _dash_hold(_dk_{var});\n"
-                f"{indent}    for (_di_{var} = 0; _dk_{var} && _di_{var} < _dk_{var}->cap; _di_{var}++) {{\n"
-                f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
-                f"{indent}        if (!{var}) continue;\n"
-                + body +
+                f"{indent}    for (_di_{var} = 0; _dk_{var} && _dk_{var}->ikeys == {1 if ints else 0} "
+                f"&& _di_{var} < _dk_{var}->cap; _di_{var}++) {{\n"
+                + head + body +
                 f"{indent}    }}\n"
                 f"{indent}    _dash_release(_dk_{var}); }}\n")
         self.emit(self._wrap_loop(indent, mark, code))
@@ -16930,6 +18689,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.current_function = node
         # Variable types are per function: save the caller's and seed the params
         saved_var_types = self.var_types
+        saved_int_keys = set(self.int_key_dicts)
         self.var_types = dict(saved_var_types)
         # a module's function does not see the main program's globals: its "x = 1" is a local
         saved_hidden = self.context.hidden_globals
@@ -16941,6 +18701,8 @@ static {ret_type} {method_name}({params_str}) {{
         self._seed_param_types(node.params)
         saved_lent = getattr(self, "_lent_strs", set())
         self._lent_strs = self._lent_string_locals(node)
+        saved_lent_objs = getattr(self, "_lent_objs", set())
+        self._lent_objs = self._lent_object_locals(node)
 
         # Type map for annotations
         type_map = self._c_type_map
@@ -16973,6 +18735,7 @@ static {ret_type} {method_name}({params_str}) {{
         self.context.exit_scope()
         self.context.hidden_globals = saved_hidden
         self._lent_strs = saved_lent
+        self._lent_objs = saved_lent_objs
 
         # Determine return type - use explicit if provided, otherwise infer
         if node.return_type:
@@ -16980,6 +18743,7 @@ static {ret_type} {method_name}({params_str}) {{
         else:
             return_type = self._infer_function_return_type(node)
         self.var_types = saved_var_types
+        self.int_key_dicts = saved_int_keys
 
         # Generate prototype
         proto = CTemplates.FUNCTION_PROTO.substitute(
@@ -17037,7 +18801,8 @@ static {ret_type} {method_name}({params_str}) {{
             return
         ret = getattr(self, "_method_ret", None) or (self.current_function.return_type if self.current_function else None)
         value = (self._fixed_value(node.value) if ret == "Fixed" and not self._is_fixed_expr(node.value)
-                 else self._generate_expression(node.value))
+                 else self._double_value(node.value) if ret == "Double"
+                 else self._generate_expression(self._list_hint(node.value, ret)))
         if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
             # lambdas return LONG: the string leaves Dash's control
             head = f"{indent}{{ LONG _dash_r = (LONG){self._escape(node.value, value)};\n"
@@ -17066,23 +18831,34 @@ static {ret_type} {method_name}({params_str}) {{
         self.uses_arrays = True
         indent = self.context.indent
         kind = self._dict_value_kind(node.array)
+        decl = self._declared_type_of(node.array) or ""
+        self._list_hint(node.value, dict_value_type(decl) if kind is not None else list_elem_type(decl))
         if kind is not None:
             # d["clave"] = valor (dashweb D5)
             self.uses_dicts = self.uses_strings = True
             d = self._generate_expression(node.array)
             key = self._generate_expression(node.index)
             value = self._generate_expression(node.value)
+            i = "i" if self._dict_int_keys(node.array) else ""       # {Int: T} (Lorraine D9)
             if kind == "string":
-                self.emit(f"{indent}DashDict_set_str({d}, {key}, {self._str_kept(node.value, value)});\n")
+                self.emit(f"{indent}DashDict_set_str{i}({d}, {key}, {self._str_kept(node.value, value)});\n")
             elif kind != "int":
-                self.emit(f"{indent}DashDict_set_obj({d}, {key}, (void *)({value}));\n")
+                self.emit(f"{indent}DashDict_set_obj{i}({d}, {key}, (void *)({value}));\n")
             else:
-                self.emit(f"{indent}DashDict_set({d}, {key}, {value});\n")
+                self.emit(f"{indent}DashDict_set{i}({d}, {key}, {value});\n")
             return
         array_name = self._array_ref(node.array)
         index = self._generate_expression(node.index)
         if self._is_fixed_list(node.array):   # l[i] = 2 in a list of Fixed: 2.0
             self.emit(f"{indent}DashArray_set({array_name}, {index}, {self._fixed_value(node.value)});\n")
+            return
+        if self._num_list(node.array) == "Double":
+            self.uses_dbl_list = True
+            self.emit(f"{indent}DashArray_set_dbl({array_name}, {index}, {self._double_value(node.value)});\n")
+            return
+        if self._num_list(node.array) == "Float":
+            self.uses_float = True
+            self.emit(f"{indent}DashArray_set({array_name}, {index}, _dash_f2l({self._generate_expression(node.value)}));\n")
             return
         value = self._generate_expression(node.value)
         elem = self._array_elem_type(node.array)
@@ -17118,6 +18894,9 @@ static {ret_type} {method_name}({params_str}) {{
         foreign = None if func else self._foreign_func(node.name)
         args = []
         for i, arg in enumerate(node.arguments):
+            param = func.params[i] if func and i < len(func.params) else None
+            if isinstance(param, FunctionParam):
+                self._list_hint(arg, param.param_type)      # f([1, 2]) to a [Double] (Lorraine D2)
             code = self._generate_expression(arg)
             if foreign is not None and getattr(foreign, "borrows", False):
                 code = self._lend(arg, code)        # @native(borrow): only during the call (D26)
@@ -17128,6 +18907,8 @@ static {ret_type} {method_name}({params_str}) {{
             param = func.params[i] if func and i < len(func.params) else None
             if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
                 code = self._fixed_value(arg)
+            elif isinstance(param, FunctionParam) and param.param_type == "Double":
+                code = self._double_value(arg)
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
                 code = f"(LONG){code}"
@@ -17282,6 +19063,9 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, NumberLiteral):
             return c_int_literal(node.value)
         elif isinstance(node, FloatLiteral):
+            if self._dbl_ctx:
+                self.uses_double = True
+                return c_double_literal(node.value)
             self.uses_float = True   # links Dash's soft float (not libm's mathieeesingbas)
             return c_float_literal(node.value)
         elif isinstance(node, BoolLiteral):
@@ -17300,6 +19084,10 @@ static {ret_type} {method_name}({params_str}) {{
             left = self._generate_expression(node.left)
             right = self._generate_expression(node.right)
             return f"((void *)({left}) {node.operator} (void *)({right}))"
+        elif (isinstance(node, BinaryOp) and not self._dbl_ctx and node.operator not in ("and", "or")
+              and not (node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)))
+              and (self._is_double_expr(node.left) or self._is_double_expr(node.right))):
+            return self._double_value(node)      # d * 0.1: the literal is a double too
         elif isinstance(node, BinaryOp):
             left_str = self._is_string_expr(node.left)
             right_str = self._is_string_expr(node.right)
@@ -17374,9 +19162,17 @@ static {ret_type} {method_name}({params_str}) {{
             if node.name == "Int" and len(node.arguments) == 1 and self._infer_c_type(node.arguments[0]) == "char":
                 # Int(s[i]): the character code, 0-255 (Latin-1)
                 return f"((LONG)(UBYTE)({self._generate_expression(node.arguments[0])}))"
+            if node.name == "Double" and len(node.arguments) == 1:
+                self.uses_double = True
+                if self._is_string_expr(node.arguments[0]):
+                    return f"_dash_double_from_str({self._generate_expression(node.arguments[0])})"
+                return f"((double)({self._double_value(node.arguments[0])}))"
             if node.name in ("Int", "Float") and len(node.arguments) == 1:
                 arg = self._generate_expression(node.arguments[0])
-                self.uses_float = True
+                if self._is_double_expr(node.arguments[0]):
+                    self.uses_double = True
+                else:
+                    self.uses_float = True
                 return f"((LONG)({arg}))" if node.name == "Int" else f"((float)({arg}))"
             if node.name == "Fixed" and len(node.arguments) == 1:
                 return self._fixed_value(node.arguments[0])
@@ -17401,9 +19197,10 @@ static {ret_type} {method_name}({params_str}) {{
             # d["clave"]: the value, or 0 / nil when the key is missing
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             kind = self._dict_value_kind(node.array)
-            code = f"DashDict_get({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
+            i = "i" if self._dict_int_keys(node.array) else ""       # {Int: T} (Lorraine D9)
+            code = f"DashDict_get{i}({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
             if getattr(node, "default", None) is not None:      # d.get(k, default) (D65)
-                code = (f"DashDict_get_or({self._generate_expression(node.array)}, "
+                code = (f"DashDict_get_or{i}({self._generate_expression(node.array)}, "
                         f"{self._generate_expression(node.index)}, (LONG)({self._generate_expression(node.default)}))")
             if kind == "string":
                 return f"((STRPTR){code})"
@@ -17425,6 +19222,12 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_arrays = True
             array_name = self._array_ref(node.array)
             index = self._generate_expression(node.index)
+            if self._num_elem(node) == "Double":
+                self.uses_dbl_list = True
+                return f"DashArray_get_dbl({array_name}, {index})"
+            if self._num_elem(node) == "Float":
+                self.uses_float = True
+                return f"_dash_l2f(DashArray_get({array_name}, {index}))"
             if self._is_string_array(node.array):
                 return f"(STRPTR)DashArray_get({array_name}, {index})"
             elem = self._array_elem_type(node.array)
@@ -17585,6 +19388,16 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text_io = True   # net_recv: bytes to text like str_from_buffer
         if self.uses_split:
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
+        if self.uses_regex:
+            self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
+        if self.uses_utf8:
+            self.uses_text = True      # UTF8_RUNTIME uses the length cache
+        if self.uses_math:
+            self.uses_double = True    # sqrt, sin... take and give Doubles
+        if self.uses_dbl_list:
+            self.uses_double = self.uses_arrays = self.uses_list_methods = True   # DBL_LIST_RUNTIME uses open()
+        if self.uses_double:
+            self.uses_strings = True   # str_from_double makes a text
         if self.uses_text_io:
             self.uses_text = True      # TEXT_IO_RUNTIME uses the length cache
         if self.uses_text:
@@ -17634,9 +19447,11 @@ static {ret_type} {method_name}({params_str}) {{
         plain_call = bool(re.fullmatch(r"(?:_dash|ra)_\w+\((?:\s*(?:\$\{\w+\}|[\w-]+)\s*,?)*\)",
                                        builtin.c_template.strip())) and \
             all(builtin.c_template.count("${%s}" % name) <= 1 for name in builtin.params)
+        doubles = self._double_params(builtin)
         for i, param_name in enumerate(builtin.params):
             if i < len(arguments):
-                code = self._generate_expression(arguments[i])
+                code = (self._double_value(arguments[i]) if param_name in doubles     # str_from_double(0.1, 2)
+                        else self._generate_expression(arguments[i]))
                 if builtin.name not in self._STRING_READERS and not builtin.reads_only:
                     code = self._escape_any(arguments[i], code)
                 if not self._is_plain_value(arguments[i]) and not plain_call:
@@ -17681,7 +19496,7 @@ static {ret_type} {method_name}({params_str}) {{
         """_DASH_MUL/_DIV/_MOD for *, /, % between integers, unless GCC already does
         better with a constant (powers of two: shifts; multiply by a constant)."""
         names = {"*": "_DASH_MUL", "/": "_DASH_DIV", "%": "_DASH_MOD"}
-        if node.operator not in names or self._is_float_expr(node):
+        if node.operator not in names or self._is_float_expr(node) or self._is_double_expr(node):
             return None
         if self._is_string_expr(node.left) or self._is_string_expr(node.right):
             return None
@@ -17714,14 +19529,18 @@ static {ret_type} {method_name}({params_str}) {{
         for i, field in enumerate(struct.fields):
             if i < len(arguments) and field.field_type == "Fixed":
                 val = self._fixed_value(arguments[i])
+            elif i < len(arguments) and field.field_type == "Double":
+                val = self._double_value(arguments[i])
             elif i < len(arguments):
-                val = self._generate_expression(arguments[i])
+                val = self._generate_expression(self._list_hint(arguments[i], field.field_type))
                 if field.field_type == "String":
                     val = self._str_kept(arguments[i], val)
             elif field.default_value and field.field_type == "Fixed":
                 val = self._fixed_value(field.default_value)
+            elif field.default_value and field.field_type == "Double":
+                val = self._double_value(field.default_value)
             elif field.default_value:
-                val = self._generate_expression(field.default_value)
+                val = self._generate_expression(self._list_hint(field.default_value, field.field_type))
                 if field.field_type == "String":
                     val = self._str_kept(field.default_value, val)
             else:
@@ -17749,6 +19568,10 @@ static {ret_type} {method_name}({params_str}) {{
             self.assigned_obj_fields.add(("*", node.member))
         if field and field.field_type == "Fixed" and not self._is_fixed_expr(node.value):
             value = self._fixed_value(node.value)
+        if field and field.field_type == "Double":
+            value = self._double_value(node.value)
+        if field and isinstance(node.value, ArrayLiteral) and list_elem_type(field.field_type) in self._NUM_LISTS:
+            value = self._generate_expression(self._list_hint(node.value, field.field_type))
         if field and field.field_type == "String":
             # the struct owns its String fields like a variable
             self.uses_strings = True
@@ -17778,16 +19601,18 @@ static {ret_type} {method_name}({params_str}) {{
         call_code = self._generate_method_call(node)
         self.emit(f"{indent}{call_code};\n")
 
-    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0}
+    _LIST_METHODS = {"push": 1, "pop": 0, "insert": 2, "remove": 1, "clear": 0, "sort": 1}
 
     def _is_list_method(self, node: MethodCall) -> bool:
         return (node.method in self._LIST_METHODS and not self._struct_of(node.object)
                 and (isinstance(node.object, ArrayLiteral) or self._infer_c_type(node.object) == "DashArrayLong *"))
 
     def _generate_list_method(self, node: MethodCall) -> str:
-        """l.push(x), l.pop(), l.insert(i, x), l.remove(i), l.clear() (dashweb D4b)."""
+        """l.push(x), l.pop(), l.insert(i, x), l.remove(i), l.clear() (dashweb D4b), l.sort(f) (Lorraine D8)."""
         self.uses_arrays = self.uses_list_methods = True
         arr = self._array_ref(node.object)
+        if node.method == "sort":
+            return self._generate_sort(node, arr)
         elem = self._array_elem_type(node.object) or ""
         if not elem and node.method in ("push", "insert") and node.arguments:
             # a list whose element type the compiler lost (the [T] inside a dict or a list of
@@ -17802,9 +19627,25 @@ static {ret_type} {method_name}({params_str}) {{
             elif self._infer_c_type(value) == "DashDict *":
                 elem = "dict"
         suffix = "_str" if elem == "string" else "_obj" if (elem.startswith("struct:") or elem in ("array", "dict")) else ""
-        args = [self._generate_expression(a) for a in node.arguments]
-        if node.method in ("push", "insert") and self._is_fixed_list(node.object):
+        if node.method in ("push", "insert") and node.arguments:
+            # m.push([1, 2]) in a [[Double]]: the literal is a [Double]
+            self._list_hint(node.arguments[-1], list_elem_type(self._declared_type_of(node.object) or ""))
+        num = self._num_list(node.object)
+        if num == "Double":
+            # two LONGs each (Lorraine D2)
+            self.uses_dbl_list = True
+            if node.method in ("push", "insert", "pop"):
+                suffix = "_dbl"
+        args = [self._double_value(a) if num == "Double" and node.method in ("push", "insert") and i == len(node.arguments) - 1
+                else self._generate_expression(a) for i, a in enumerate(node.arguments)]
+        if node.method in ("push", "insert") and num == "Fixed":
             args[-1] = self._fixed_value(node.arguments[-1])   # push(2) in a list of Fixed: 2.0
+        if node.method in ("push", "insert") and num == "Float":
+            self.uses_float = True
+            args[-1] = f"_dash_f2l({args[-1]})"                # a Float's bits
+        if node.method == "pop" and num == "Float":
+            self.uses_float = True
+            return f"_dash_l2f(DashArray_pop({arr}))"
         if suffix == "_str" and node.method in ("push", "insert"):
             args[-1] = self._str_kept(node.arguments[-1], args[-1])
         if node.method == "push":
@@ -17822,6 +19663,55 @@ static {ret_type} {method_name}({params_str}) {{
             return f"DashArray_remove({arr}, {args[0]})"
         return f"DashArray_clear({arr})"
 
+    def _generate_sort(self, node: MethodCall, arr: str) -> str:
+        """l.sort(f): f(a, b) -> Bool (true if a goes before b) or -> Int (negative if a goes before b, 0 if
+        they are equal, positive if after). A function of the program, a lambda or a Func variable (that one
+        returns Int). The function is kept in a static and an "after" function written for this call reads the
+        two elements with their type and calls it (DashArray_sort, SORT_RUNTIME)."""
+        self.uses_sort = True
+        f = node.arguments[0]
+        num = self._num_list(node.object)
+        elem = self._array_elem_type(node.object) or ""
+        if num == "Double":
+            self.uses_dbl_list = True
+            c_type, read = "double", "(*(const double *){})"
+        elif num == "Float":
+            self.uses_float = True
+            c_type, read = "float", "_dash_l2f(*{})"
+        elif elem == "string":
+            c_type, read = "STRPTR", "((STRPTR)*{})"
+        elif elem.startswith("struct:"):
+            c_type, read = f"_Dash_{elem[7:]} *", f"((_Dash_{elem[7:]} *)*{{}})"
+        elif elem in ("array", "dict"):
+            c_type = "DashArrayLong *" if elem == "array" else "DashDict *"
+            read = f"(({c_type})*{{}})"
+        else:
+            c_type, read = "LONG", "(*{})"
+        name = f.name if isinstance(f, (VarRef, FunctionRef)) else None
+        func = self.analysis.program.get_function(name) if name and self.var_types.get(name) != "func" else None
+        if func:
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+                      for p in func.params][:2]
+            ret = self._function_c_type(func)
+            boolean = func.return_type == "Bool"
+        elif isinstance(f, LambdaFunc):
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+                      for p in f.params][:2]
+            ret = "LONG"
+            boolean = bool(f.is_expression and self._is_bool_expr(f.body))
+        else:
+            params, ret, boolean = [c_type, c_type], "LONG", False
+        params += [c_type] * (2 - len(params))
+        self._sort_counter = getattr(self, "_sort_counter", 0) + 1
+        n = self._sort_counter
+        call = f"(({ret} (*)({', '.join(params)}))_dash_sort_fn_{n})"
+        a, b = read.format("a"), read.format("b")
+        test = f"{call}({b}, {a}) != 0" if boolean else f"{call}({a}, {b}) > 0"
+        self.emit_global(f"static APTR _dash_sort_fn_{n};\n"
+                         f"static LONG _dash_sort_after_{n}(const LONG *a, const LONG *b) {{\n"
+                         f"    return {test};\n}}\n")
+        return f"(_dash_sort_fn_{n} = (APTR)({self._generate_expression(f)}), DashArray_sort({arr}, _dash_sort_after_{n}))"
+
     def _generate_method_call(self, node: MethodCall) -> str:
         """Generate C code for a method call on a struct instance."""
         if self._is_list_method(node):
@@ -17831,7 +19721,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             d = self._generate_expression(node.object)
             args = "".join(", " + self._generate_expression(a) for a in node.arguments)
-            return f"DashDict_{node.method}({d}{args})"
+            i = "i" if node.method in ("has", "remove") and self._dict_int_keys(node.object) else ""
+            return f"DashDict_{node.method}{i}({d}{args})"
         # Get the object and determine its type
         obj_expr = self._generate_expression(node.object)
 
@@ -17839,6 +19730,8 @@ static {ret_type} {method_name}({params_str}) {{
         owner = self._struct_of(node.object)
         struct_name = owner.name if owner else None
 
+        if owner and owner.is_interface:
+            return self._interface_call(node, owner, obj_expr)
         if struct_name:
             # Known struct type - generate StructName_methodname(obj, args...)
             method = owner.get_method(node.method)
@@ -17869,12 +19762,30 @@ static {ret_type} {method_name}({params_str}) {{
             args_str = ", ".join(args)
             return f"/* method call */ {node.method}({args_str})"
 
+    def _interface_call(self, node: MethodCall, iface: StructDef, obj_expr: str) -> str:
+        """o.hacer() on an interface value (Lorraine D43): the method of o's struct, from the table its type
+        descriptor points to. The object is worked out once (o may be l.pop())."""
+        method = iface.get_method(node.method)
+        slot = self._iface_slots()[(iface.name, node.method)]
+        self._icall_counter = getattr(self, "_icall_counter", 0) + 1
+        o = f"_dash_io{self._icall_counter}"
+        params = ["void *"] + [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type
+                               else "LONG" for p in method.params]
+        args = [o] + [self._method_arg(method, i, a) for i, a in enumerate(node.arguments)]
+        ret = self._method_c_type(method)
+        return (f"({{ void *{o} = {self._nn(self._lend(node.object, obj_expr))}; "
+                f"(({ret} (*)({', '.join(params)}))_DASH_GET_HEADER({o})->type->methods[{slot}])({', '.join(args)}); }})")
+
     def _method_arg(self, method, i: int, arg: ASTNode, pure: bool = False) -> str:
         """Argument i of a method call: lent if shared (not to a pure method), converted for a
         Fixed parameter."""
         param = method.params[i] if method and i < len(method.params) else None
         if isinstance(param, FunctionParam) and param.param_type == "Fixed" and not self._is_fixed_expr(arg):
             return self._fixed_value(arg)
+        if isinstance(param, FunctionParam) and param.param_type == "Double":
+            return self._double_value(arg)
+        if isinstance(param, FunctionParam):
+            self._list_hint(arg, param.param_type)
         code = self._generate_expression(arg)
         return code if pure else self._lend(arg, code)
 
@@ -17974,6 +19885,8 @@ static {ret_type} {method_name}({params_str}) {{
             field = self._field_of(node)
             return bool(field and field.field_type == "String")
         elif isinstance(node, MethodCall):
+            if node.method == "pop" and self._is_list_method(node):
+                return self._array_elem_type(node.object) == "string"    # "(" + pila.pop() + ")"
             method = self._method_of(node)
             return bool(method and self._method_c_type(method) == "STRPTR")
         return False
@@ -18114,6 +20027,9 @@ static {ret_type} {method_name}({params_str}) {{
         if self._is_fixed_expr(node):
             self.uses_fixed = True
             return f"DashString_from_fixed({code})"
+        if self._is_double_expr(node):
+            self.uses_double = True
+            return f"DashString_from_double({code})"
         if self._is_float_expr(node):
             self.uses_float = True
             return f"DashString_from_float({code})"
@@ -18164,6 +20080,9 @@ static {ret_type} {method_name}({params_str}) {{
             elif p.param_type == "Float":
                 self.var_types[p.name] = "float"
                 self.uses_float = True
+            elif p.param_type == "Double":
+                self.var_types[p.name] = "double"
+                self.uses_double = True
             elif p.param_type == "Fixed":
                 self.var_types[p.name] = "fixed"
                 self.uses_fixed = True
@@ -18173,7 +20092,7 @@ static {ret_type} {method_name}({params_str}) {{
                   or dict_value_type(p.param_type) is not None):
                 self.var_types[p.name] = self._list_var_type(p.param_type)
                 self.decl_types[p.name] = p.param_type
-                self._mark_fixed_list(p.name, list_elem_type(p.param_type) == "Fixed")
+                self._mark_num_list(p.name, list_elem_type(p.param_type))
             elif self.analysis.program.get_struct(p.param_type):
                 self.var_types[p.name] = f"struct:{p.param_type}"
             elif p.param_type == "Bool":
@@ -18252,7 +20171,8 @@ static {ret_type} {method_name}({params_str}) {{
         if isinstance(node, VarRef) and (self.var_types.get(node.name) or "").startswith("array"):
             return code
         if self._infer_c_type(node) == "DashArrayLong *":
-            return code
+            # a builtin's list comes cast to LONG: for x in str_split(s, ",")
+            return "(DashArrayLong *)" + code[6:] if code.startswith("(LONG)") else code
         return f"((DashArrayLong *){code})"
 
     def _is_string_array(self, node: ASTNode) -> bool:
@@ -18318,30 +20238,65 @@ static {ret_type} {method_name}({params_str}) {{
             return self._is_fixed_list(node.array)
         return False
 
-    def _mark_fixed_list(self, name: str, fixed: bool):
-        """Remember that a variable is a list of Fixed values. The mark lives in var_types (under
-        a key no name can have), so it follows the variable's scope like its type does."""
-        if fixed:
-            self.var_types["[Fixed]" + name] = "fixed_list"
+    _NUM_LISTS = ("Fixed", "Float", "Double")
+
+    def _mark_num_list(self, name: str, kind: Optional[str]):
+        """Remember that a variable is a list of Fixed, Float or Double values (kind, or None if not).
+        The mark lives in var_types (under a key no name can have), so it follows the variable's scope
+        like its type does."""
+        for k in self._NUM_LISTS:
+            self.var_types.pop(f"[{k}]" + name, None)
+        if kind in self._NUM_LISTS:
+            self.var_types[f"[{kind}]" + name] = "num_list"
+
+    def _num_list(self, node: ASTNode) -> Optional[str]:
+        """"Fixed", "Float" or "Double" if the expression is a list of those: Fixed and Float are kept in
+        the LONGs of a list of Ints (a Float's bits), Doubles two LONGs each (kind 3, Lorraine D2)."""
+        if isinstance(node, VarRef):
+            return next((k for k in self._NUM_LISTS if f"[{k}]" + node.name in self.var_types), None)
+        if isinstance(node, ArrayLiteral):
+            if getattr(node, "num_kind", None):
+                return node.num_kind               # var l: [Double] = [1, 2]
+            if any(self._is_fixed_expr(e) for e in node.elements):
+                return "Fixed"
+            if any(self._is_double_expr(e) for e in node.elements):
+                return "Double"
+            if any(self._is_float_expr(e) for e in node.elements):
+                return "Float"
+            return None
+        if isinstance(node, ArraySlice):
+            return self._num_list(node.array)
+        if isinstance(node, BinaryOp) and node.operator == "+":
+            return self._num_list(node.left) or self._num_list(node.right)
+        if isinstance(node, ArrayAccess):
+            kind = list_elem_type(self._declared_type_of(node))
+        elif isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)):
+            kind = list_elem_type(self._declared_list_type(node))
         else:
-            self.var_types.pop("[Fixed]" + name, None)
+            return None
+        return kind if kind in self._NUM_LISTS else None
 
     def _is_fixed_list(self, node: ASTNode) -> bool:
-        """True if the expression is a list of Fixed values: stored like a list of Ints (a Fixed is
-        a LONG), its elements are read, printed and computed as Fixed."""
-        if isinstance(node, VarRef):
-            return "[Fixed]" + node.name in self.var_types
-        if isinstance(node, ArrayLiteral):
-            return any(self._is_fixed_expr(e) for e in node.elements)
-        if isinstance(node, ArraySlice):
-            return self._is_fixed_list(node.array)
-        if isinstance(node, BinaryOp) and node.operator == "+":
-            return self._is_fixed_list(node.left) or self._is_fixed_list(node.right)
-        if isinstance(node, ArrayAccess):
-            return list_elem_type(self._declared_type_of(node)) == "Fixed"
-        if isinstance(node, (FunctionCall, PropertyAccess, MemberAccess)):
-            return list_elem_type(self._declared_list_type(node)) == "Fixed"
-        return False
+        return self._num_list(node) == "Fixed"
+
+    def _num_elem(self, node: ASTNode) -> Optional[str]:
+        """"Float" or "Double" for l[i] or l.pop() of a list of those (Lorraine D2)."""
+        if isinstance(node, ArrayAccess) and self._dict_value_kind(node.array) is None \
+                and not self._is_string_expr(node.array):
+            kind = self._num_list(node.array)
+        elif isinstance(node, MethodCall) and node.method == "pop" and self._is_list_method(node):
+            kind = self._num_list(node.object)
+        else:
+            return None
+        return kind if kind in ("Float", "Double") else None
+
+    def _list_hint(self, node: ASTNode, declared: Optional[str]) -> ASTNode:
+        """A value for a place declared as a list (variable, parameter, field, return): a literal takes
+        the declared kind of number (var l: [Double] = [1, 2])."""
+        kind = list_elem_type(declared) if declared else None
+        if isinstance(node, ArrayLiteral) and kind in self._NUM_LISTS:
+            node.num_kind = kind
+        return node
 
     def _fixed_value(self, node: ASTNode) -> str:
         """C for a value as a Fixed: a Fixed as it is, a number literal computed now
@@ -18381,15 +20336,70 @@ static {ret_type} {method_name}({params_str}) {{
             return f"_DASH_MOD({self._fixed_value(node.left)}, {self._fixed_value(node.right)})"
         return f"({self._fixed_value(node.left)} {self._translate_operator(op)} {self._fixed_value(node.right)})"
 
+    def _double_params(self, builtin: BuiltinFunc) -> set:
+        """Names of the parameters of a builtin whose runtime function takes a double."""
+        import re
+        call = re.fullmatch(r"((?:_dash|ra)_\w+)\((.*)\)", builtin.c_template.strip())
+        sig = runtime_signatures().get(call.group(1)) if call else None
+        if not sig:
+            return set()
+        slots = [a.strip() for a in call.group(2).split(",")] if call.group(2).strip() else []
+        return {m.group(1) for i, slot in enumerate(slots)
+                if i < len(sig[1]) and sig[1][i] == "double" and (m := re.fullmatch(r"\$\{(\w+)\}", slot))}
+
+    def _double_value(self, node: ASTNode) -> str:
+        """The expression where a Double goes: its Float literals are written as C doubles."""
+        self._dbl_ctx += 1
+        try:
+            return self._generate_expression(node)
+        finally:
+            self._dbl_ctx -= 1
+
+    def _is_double_expr(self, node: ASTNode) -> bool:
+        """True if the expression yields a Double (C double, Lorraine D1)."""
+        if isinstance(node, VarRef):
+            return self.var_types.get(node.name) == "double"
+        if isinstance(node, (ArrayAccess, MethodCall)) and self._num_elem(node):
+            return self._num_elem(node) == "Double"
+        if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/"):
+            if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
+                return False
+            return self._is_double_expr(node.left) or self._is_double_expr(node.right)
+        if isinstance(node, UnaryOp) and node.operator == "-":
+            return self._is_double_expr(node.operand)
+        if isinstance(node, FunctionCall):
+            if node.name == "Double":
+                return True
+            if get_builtin(node.name):
+                return get_builtin(node.name).return_type == "double"   # str_to_double (D3)
+            if node.name in ("Int", "Float"):
+                return False
+            func = self.analysis.program.get_function(node.name)
+            if func:
+                return self._function_c_type(func) == "double"
+            foreign = self._foreign_func(node.name)
+            return bool(foreign and foreign.return_type == "Double")
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            field = self._field_of(node)
+            return bool(field and field.field_type == "Double")
+        if isinstance(node, MethodCall):
+            method = self._method_of(node)
+            return bool(method and self._method_c_type(method) == "double")
+        return False
+
     def _is_float_expr(self, node: ASTNode) -> bool:
-        """True if the expression yields a Float (C float)."""
+        """True if the expression yields a Float (C float); a Float with a Double is a Double."""
         if isinstance(node, FloatLiteral):
             return True
+        if isinstance(node, BinaryOp) and self._is_double_expr(node):
+            return False
         if isinstance(node, VarRef):
             if self.var_types.get(node.name) == "float":
                 return True
             const = self.analysis.program.get_constant(node.name)
             return bool(const and isinstance(const.value, FloatLiteral))
+        if isinstance(node, (ArrayAccess, MethodCall)) and self._num_elem(node):
+            return self._num_elem(node) == "Float"
         if isinstance(node, BinaryOp) and node.operator in ("+", "-", "*", "/"):
             if node.operator == "+" and (self._is_string_expr(node.left) or self._is_string_expr(node.right)):
                 return False
@@ -18432,6 +20442,8 @@ static {ret_type} {method_name}({params_str}) {{
         keys = ", ".join(self._generate_expression(k) for k in node.keys)
         values = ", ".join(f"(LONG)({self._generate_expression(v)})" for v in node.values)
         n = len(node.keys)
+        if self._dict_int_keys(node):            # {1: "a"} (Lorraine D9)
+            return f"DashDict_fromi({kind}, {n}, (LONG[]){{{keys}}}, (LONG[]){{{values}}})"
         return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (LONG[]){{{values}}})"
 
     def _generate_array_literal(self, node: ArrayLiteral) -> str:
@@ -18440,6 +20452,9 @@ static {ret_type} {method_name}({params_str}) {{
         # For now, we'll generate inline and hope the context handles it
         # Better approach would be to generate a helper call
         size = len(node.elements)
+        num = self._num_list(node)
+        if num in ("Float", "Double"):
+            return self._num_array_literal(node, num)
         if size == 0:
             return "DashArray_create(0)"
         if self._is_fixed_list(node):
@@ -18477,6 +20492,38 @@ static {ret_type} {method_name}({params_str}) {{
             kind = "_DASH_ARR_STRS" if elem == "string" else "_DASH_ARR_OBJS"
             return f"DashArray_own({literal}, {kind})"
         return literal
+
+    def _num_array_literal(self, node: ArrayLiteral, num: str) -> str:
+        """[0.5, 2] as a list of Float (each one's bits in a LONG) or of Double (Lorraine D2); all
+        numbers: a static table."""
+        import struct
+        size = len(node.elements)
+        if num == "Double":
+            self.uses_dbl_list = True
+            if size == 0:
+                return "DashArray_create_dbl(0)"
+            codes = [self._double_value(e) for e in node.elements]
+            c_type, table = "double", codes
+        else:
+            self.uses_float = True
+            if size == 0:
+                return "DashArray_create(0)"
+            codes = [f"_dash_f2l({self._generate_expression(e)})" for e in node.elements]
+            c_type, table = "LONG", None
+        values = []
+        for e in node.elements:
+            lit, sign = (e.operand, -1) if isinstance(e, UnaryOp) and e.operator == "-" else (e, 1)
+            if not isinstance(lit, (NumberLiteral, FloatLiteral)):
+                break
+            values.append(sign * float(lit.value))
+        else:
+            if num == "Float":     # the bits of each float, worked out here
+                table = [c_int_literal(struct.unpack(">l", struct.pack(">f", v))[0]) for v in values]
+            self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
+            name = f"_dash_arrlit_{self._arrlit_counter}"
+            self.emit_global(f"static const {c_type} {name}[{size}] = {{{', '.join(table)}}};\n")
+            return f"DashArray_from{'_dbl' if num == 'Double' else ''}({size}, {name})"
+        return f"DashArray_from{'_dbl' if num == 'Double' else ''}({size}, ({c_type}[]){{{', '.join(codes)}}})"
 
     def _literal_elem_type(self, node: ArrayLiteral) -> Optional[str]:
         """What all the elements of an array literal are: "string", "struct:Name",
@@ -18535,7 +20582,7 @@ static {ret_type} {method_name}({params_str}) {{
         if isinstance(node, ArrayLiteral):
             return self._literal_elem_type(node)
         if isinstance(node, MethodCall) and node.method == "keys" and self._dict_value_kind(node.object) is not None:
-            return "string"
+            return "int" if self._dict_int_keys(node.object) else "string"
         if isinstance(node, ArrayAccess):
             vt = self._list_var_type(self._declared_type_of(node))
             return vt[6:] if vt and vt.startswith("array:") else None
@@ -18582,6 +20629,21 @@ static {ret_type} {method_name}({params_str}) {{
         if self.analysis.program.get_struct(elem):
             return f"array:struct:{elem}"
         return "array"
+
+    def _dict_int_keys(self, node: ASTNode) -> bool:
+        """True if a dictionary expression has Int keys, a {Int: T} (Lorraine D9)."""
+        if isinstance(node, DictLiteral):
+            return bool(node.keys) and not self._is_string_expr(node.keys[0])
+        if isinstance(node, VarRef):
+            declared = self.decl_types.get(node.name)
+            if dict_value_type(declared) is not None:
+                return dict_key_type(declared) == "Int"
+            return node.name in self.int_key_dicts
+        if isinstance(node, ArrayAccess):
+            return dict_key_type(self._declared_type_of(node)) == "Int"
+        if isinstance(node, (FunctionCall, MethodCall, PropertyAccess, MemberAccess)):
+            return dict_key_type(self._declared_dict_type(node)) == "Int"
+        return False
 
     def _dict_value_kind(self, node: ASTNode) -> Optional[str]:
         """What a dictionary expression's values are: "int", "string", "struct:X", "array";
@@ -18688,15 +20750,21 @@ static {ret_type} {method_name}({params_str}) {{
         # Generate function body
         if node.is_expression:
             # Single expression body (arrow function); it returns a LONG, so a
-            # string result leaves Dash's control
+            # string result leaves Dash's control. Typed parameters are known in it (fn(a: String, b: String)
+            # -> a < b compares the texts)
+            saved_var_types = self.var_types
+            self.var_types = dict(saved_var_types)
+            self._seed_param_types(node.params)
             expr = self._generate_expression(node.body)
             if self._is_string_expr(node.body) or self._is_obj_expr(node.body):
                 expr = f"(LONG){self._escape_any(node.body, expr)}"
+            self.var_types = saved_var_types
             body = f"    return {expr};"
             return_type = "LONG"  # Assume LONG for now
         else:
             # Block body
             saved_var_types = self.var_types
+            saved_int_keys = set(self.int_key_dicts)
             self.var_types = dict(saved_var_types)
             self._seed_param_types(node.params)
             self.context.enter_scope("func")
@@ -18709,6 +20777,7 @@ static {ret_type} {method_name}({params_str}) {{
             self._lambda_depth -= 1
             self.context.exit_scope()
             self.var_types = saved_var_types
+            self.int_key_dicts = saved_int_keys
             return_type = "LONG" if self._returns_value(node.body) else "void"
 
         # Generate the lambda function
@@ -18740,6 +20809,7 @@ static {return_type} {lambda_name}({param_str}) {{
     _BASE_C_TYPES = {
         "Int": "LONG",
         "Float": "float",
+        "Double": "double",
         "Fixed": "DashFixed",
         "String": "STRPTR",
         "Bool": "BOOL",
@@ -18764,6 +20834,8 @@ static {return_type} {lambda_name}({param_str}) {{
         """Convert a Dash type annotation to its C type (struct names become pointers)."""
         if dash_type == "Float":
             self.uses_float = True   # any Float links Dash's soft float
+        if dash_type == "Double":
+            self.uses_double = True
         if dash_type == "Fixed":
             self.uses_fixed = True
         if dash_type in self._BASE_C_TYPES:
@@ -18936,7 +21008,8 @@ class MultiFileGenerator:
             lines.append("/* Structs */")
             for struct in ast.structs:
                 if not struct.name.startswith("_"):
-                    lines.append(f"typedef struct _Dash_{struct.name} _Dash_{struct.name};")
+                    lines.append(f"typedef void _Dash_{struct.name};" if struct.is_interface else
+                                 f"typedef struct _Dash_{struct.name} _Dash_{struct.name};")
             lines.append("")
 
         # Export global variable declarations (extern)

@@ -1,0 +1,6 @@
+# Test: % on a Double
+# expect: % needs integers; use Int() to convert a Float or a Double
+Main
+    d = Double(7.5)
+    Print d % 2
+end

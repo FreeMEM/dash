@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 617 functions, 617 implemented, 0 not implemented.
+Total: 667 functions, 667 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -503,6 +503,9 @@ Total: 617 functions, 617 implemented, 0 not implemented.
 | `clock_minute()` | `LONG` | The minute of the last clock_read |  |
 | `clock_second()` | `LONG` | The second of the last clock_read |  |
 | `date_text(format)` | `STRPTR` | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
+| `locale_decimal_point()` | `STRPTR` | What goes before the decimals in the user's country: "," in Spain, "." in English (also without locale.library) |  |
+| `locale_group_separator()` | `STRPTR` | What separates the thousands in the user's country: "." in Spain (1.234,5), "," in English (1,234.5); maybe "" |  |
+| `locale_date_order()` | `STRPTR` | The order of day, month and year in the user's short date: "DMY", "MDY" or "YMD" |  |
 | `program_version()` | `STRPTR` | The program's name and version of @version ("Trasfondo 0.7"); "" without it |  |
 | `file_notify(path)` | `LONG` | Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched. cx_wait gives 7 when it changes; file_changed(n) says whether it did |  |
 | `file_changed(n)` | `BOOL` | True if the file watched with that number changed since the last file_changed |  |
@@ -539,11 +542,82 @@ Total: 617 functions, 617 implemented, 0 not implemented.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `arg_count()` | `LONG` | How many arguments the program got from the Shell (0 from the Workbench) |  |
-| `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none) |  |
+| `arg_count()` | `LONG` | How many arguments the program got from the Shell, or project icons from the Workbench (a double click on a document, shift + click on several) |  |
+| `arg(i)` | `STRPTR` | Argument i, from 0 ("" if there is none); from the Workbench, the icon's full path |  |
 | `click_x()` | `LONG` | X of the last On Click, in the window (inside its borders) |  |
 | `click_y()` | `LONG` | Y of the last On Click, in the window (inside its borders) |  |
 | `time_ms()` | `LONG` | Milliseconds since the program started (EClock of timer.device) |  |
+
+## Compression (zlib)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `inflate(src, n, dest, max)` | `LONG` | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
+| `deflate(src, n, dest, max, level)` | `LONG` | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
+| `crc32(buffer, n, crc)` | `LONG` | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
+
+## UTF-8
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `utf8_next(s, i)` | `LONG` | Position of the UTF-8 character after the one at byte i (the length at the end) |  |
+| `utf8_prev(s, i)` | `LONG` | Position of the UTF-8 character before byte i (0 at the start) |  |
+| `utf8_code(s, i)` | `LONG` | Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text) |  |
+| `utf8_char(code)` | `STRPTR` | Text with the character of that code point in UTF-8 ("" for 0; U+FFFD if it is not one) |  |
+| `utf8_length(s)` | `LONG` | How many UTF-8 characters s has (each invalid byte counts as one) |  |
+| `utf8_to_latin1(s)` | `STRPTR` | UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (“ to ", € to EUR, … to ...) or ?, as do invalid bytes |  |
+| `latin1_to_utf8(s)` | `STRPTR` | Latin-1 text in UTF-8 (bytes from 128 on take two) |  |
+| `utf8_check(buffer, from, to)` | `LONG` | Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a sequence cut by to), -1 if all are valid |  |
+
+## Comparing and searching in a buffer
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `buffer_equals(buffer, offset, n, s)` | `BOOL` | Whether the n bytes of a buffer at offset are the text s (and s has n bytes) |  |
+| `buffer_find_byte(buffer, from, to, byte)` | `LONG` | Position of the first byte equal to byte from from to to - 1, or -1 |  |
+| `buffer_find_any(buffer, from, to, bytes)` | `LONG` | Position of the first byte from from to to - 1 that is one of the bytes of the text bytes, or -1 |  |
+
+## Double and text
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `str_from_double(d, decimals)` | `STRPTR` | A Double with that many decimals (0: none), its shortest decimal rounded half away from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same |  |
+| `str_to_double(s)` | `double` | The Double at the start of the text, like Double(s): exact up to 17 significant digits; 0.0 if there is no number |  |
+
+## Double math
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `sqrt(x)` | `double` | Square root (nan for a negative) |  |
+| `pow(x, y)` | `double` | x to the power y |  |
+| `exp(x)` | `double` | e to the power x |  |
+| `log(x)` | `double` | Natural logarithm (-inf for 0, nan for a negative) |  |
+| `log10(x)` | `double` | Base 10 logarithm |  |
+| `sin(x)` | `double` | Sine of x radians |  |
+| `cos(x)` | `double` | Cosine of x radians |  |
+| `tan(x)` | `double` | Tangent of x radians |  |
+| `asin(x)` | `double` | Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1) |  |
+| `acos(x)` | `double` | Arc cosine in radians, 0 to pi (nan outside -1..1) |  |
+| `atan(x)` | `double` | Arc tangent in radians, -pi/2 to pi/2 |  |
+| `atan2(y, x)` | `double` | Angle of the point (x, y) in radians, -pi to pi |  |
+| `floor(x)` | `double` | The largest whole number not above x (a Double) |  |
+| `ceil(x)` | `double` | The smallest whole number not below x (a Double) |  |
+| `round(x)` | `double` | The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0) |  |
+| `trunc(x)` | `double` | The whole part, toward zero (-2.7 is -2.0) |  |
+| `fmod(x, y)` | `double` | Remainder of x / y with the sign of x (nan if y is 0) |  |
+| `abs(x)` | `double` | Absolute value, a Double |  |
+| `is_nan(x)` | `BOOL` | True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0) |  |
+| `is_inf(x)` | `BOOL` | True if x is inf or -inf |  |
+
+## Regular expressions and wildcards
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `regex_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] ^ $ \d \w \s \b \| groups); false also for a wrong pattern (regex_error says why) |  |
+| `regex_find(pattern, text, from, ignore_case)` | `LONG` | Byte position where the first match from byte from starts, -1 if there is none (or the pattern is wrong); regex_length gives its length |  |
+| `regex_length()` | `LONG` | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
+| `regex_error()` | `STRPTR` | Why the last pattern is wrong, "" if it is right |  |
+| `wildcard_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
 
 ## Audio
 
@@ -679,11 +753,11 @@ Total: 617 functions, 617 implemented, 0 not implemented.
 | `mui_cycle(options)` | `APTR` | Cycle gadget; options separated by \| ("One\|Two\|Three") |  |
 | `mui_slider(min, max, value)` | `APTR` | Horizontal slider |  |
 | `mui_gauge(max)` | `APTR` | Progress bar from 0 to max |  |
-| `mui_get_value(obj)` | `LONG` | Value: checkbox 1/0, cycle option, slider level, progress |  |
+| `mui_get_value(obj)` | `LONG` | Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0 |  |
 | `mui_set_value(obj, value)` | `void` | Set the value (fires mui_on_change like the user would) |  |
 | `mui_get_text(obj)` | `STRPTR` | Text of a text field, text, button or window title |  |
-| `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button or window title |  |
-| `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object |  |
+| `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button, menu item or window title |  |
+| `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object, a menu item or a whole menu |  |
 | `mui_on_change(obj, id)` | `void` | mui_wait_event returns id when the value or text changes |  |
 | `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field |  |
 | `mui_list()` | `APTR` | List of texts with scroller; its value is the selected line (-1 none) |  |
@@ -705,6 +779,9 @@ Total: 617 functions, 617 implemented, 0 not implemented.
 | `mui_set_visible(obj, visible)` | `void` | Show or hide an object (the window relayouts) |  |
 | `mui_menu_begin(title)` | `APTR` | Start a menu of the window being built |  |
 | `mui_menu_item(title, key, id)` | `APTR` | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
+| `mui_menu_check(title, key, id, checked)` | `APTR` | Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
+| `mui_submenu_begin(title)` | `APTR` | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
+| `mui_submenu_end()` | `void` | End the submenu |  |
 | `mui_menu_separator()` | `void` | Separator line in the menu |  |
 | `mui_menu_end()` | `void` | End the menu |  |
 | `mui_canvas(min_width, min_height)` | `APTR` | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |
@@ -724,6 +801,9 @@ Total: 617 functions, 617 implemented, 0 not implemented.
 | `mui_canvas_button(canvas)` | `LONG` | 1 if the last input was a left click, else 0 |  |
 | `mui_canvas_wheel(canvas)` | `LONG` | +1 / -1 if the last input was the mouse wheel (up/down), else 0 |  |
 | `mui_canvas_key(canvas)` | `LONG` | Raw key code of the last input, -1 if it was not a key |  |
+| `mui_canvas_on_drag(canvas, id)` | `void` | Event id when the area is dragged (moved with the left button down after pressing it on the area) and when it is let go; mui_canvas_drag says which, mui_canvas_mouse_x/y where (maybe out of the area). Call before opening the window |  |
+| `mui_canvas_drag(canvas)` | `LONG` | The last drag event: 1 moving with the button down, 2 let go (0 before any) |  |
+| `mui_canvas_qualifiers(canvas)` | `LONG` | Keys held at the last key, click or wheel: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up (Shift + Ctrl = 3); q & 1 tells Shift |  |
 | `mui_canvas_char(canvas)` | `STRPTR` | Character of the last key in the area, with shift and the keymap ("" if none; dashweb D31) |  |
 | `mui_scrollbar(vertical)` | `APTR` | Scrollbar; its value is the first line shown |  |
 | `mui_set_range(scrollbar, total, visible)` | `void` | Size of the document and of the part that fits |  |

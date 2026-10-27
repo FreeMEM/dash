@@ -1,0 +1,6 @@
+# Test: a Double into a Float variable loses digits: Float() says so
+# expect: Cannot assign a Double to 'f', which holds a Float (use Float())
+Main
+    f = 1.5
+    f = Double(2.5)
+end

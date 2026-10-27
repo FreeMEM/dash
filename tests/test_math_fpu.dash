@@ -1,0 +1,58 @@
+# Test: test_math.dash built with --fpu (68020 + 68881 code; on a 68040 in the emulator): the same output.
+# fpu
+# Math functions of Double with fdlibm (Lorraine D4). An Int or a Float goes in as a Double.
+# expect-c: /* Dash Math Runtime */
+# expect-out: raiz: 1.4142135623730951 3.0 0.0 -0.0 nan inf
+# expect-out: pot: 1024.0 0.001 1.0 1.0 nan 2.0 inf 0.0
+# expect-out: exp: 2.7182818284590455 1.0 inf 0.0
+# expect-out: log: 2.302585092994046 0.0 -inf nan 3.0 -2.0
+# expect-out: trig: 0.8414709848078965 0.5403023058681398 1.5574077246549023 0.0 1.0
+# expect-out: arco: 3.141592653589793 1.5707963267948966 0.7853981633974483 2.356194490192345 -1.5707963267948966 nan
+# expect-out: grande: 0.000000 1.000000000000
+# expect-out: suelo: -3.0 -2.0 2.0 3.0 1.0e300 -0.0
+# expect-out: redondeo: 3.0 -3.0 0.0 -1.0 1.0 2.0 -2.0 4503599627370497.0
+# expect-out: trunc: -2.0 2.0 -0.0 nan
+# expect-out: fmod: 1.5 -1.5 1.5 nan 0.0
+# expect-out: abs: 3.0 2.5 inf 0.0 0.5
+# expect-out: es: true false false true true false false
+# expect-out: suma: 3.000000 0.0
+# expect-out: tipos: 1.5 4.0 2.0 7
+
+func hipotenusa(a: Double, b: Double) -> Double
+    return sqrt(a * a + b * b)
+end
+
+Main
+    cero = Double(0)
+    menos = Double(-1)
+    inf = Double(1) / cero
+    Print "raiz: #{sqrt(2.0)} #{sqrt(9)} #{sqrt(cero)} #{sqrt(-cero)} #{sqrt(menos)} #{sqrt(inf)}"
+    Print "pot: #{pow(2, 10)} #{pow(10, -3)} #{pow(0, 0)} #{pow(inf, 0)} #{pow(-8.0, 1.0 / 3.0)} #{pow(4.0, 0.5)} #{pow(10.0, 400.0)} #{pow(10.0, -400.0)}"
+    Print "exp: #{exp(1.0)} #{exp(0)} #{exp(1000.0)} #{exp(-1000.0)}"
+    Print "log: #{log(10.0)} #{log(1)} #{log(cero)} #{log(menos)} #{log10(1000.0)} #{log10(0.01)}"
+    Print "trig: #{sin(1.0)} #{cos(1.0)} #{tan(1.0)} #{sin(cero)} #{cos(cero)}"
+    Print "arco: #{acos(-1.0)} #{asin(1.0)} #{atan(1.0)} #{atan2(1.0, -1.0)} #{atan2(-1.0, cero)} #{asin(2.0)}"
+    # 1e22: argument reduction with the whole of pi
+    Print "grande: #{str_from_double(sin(1.0e22) + 0.8522008497671888, 6)} #{str_from_double(sin(1.0e22) * sin(1.0e22) + cos(1.0e22) * cos(1.0e22), 12)}"
+    Print "suelo: #{floor(-2.5)} #{ceil(-2.5)} #{floor(2.7)} #{ceil(2.1)} #{floor(1.0e300)} #{ceil(-0.5)}"
+    var casi: Double = 0.49999999999999994
+    Print "redondeo: #{round(2.5)} #{round(-2.5)} #{round(casi)} #{round(-0.5)} #{round(0.5)} #{round(1.5)} #{round(-1.5)} #{round(4503599627370497.0)}"
+    Print "trunc: #{trunc(-2.7)} #{trunc(2.7)} #{trunc(-0.3)} #{trunc(inf - inf)}"
+    Print "fmod: #{fmod(7.5, 2.0)} #{fmod(-7.5, 2.0)} #{fmod(7.5, -2.0)} #{fmod(1.0, cero)} #{fmod(6.0, 3.0)}"
+    Print "abs: #{abs(-3)} #{abs(2.5)} #{abs(-inf)} #{abs(-cero)} #{abs(-0.5)}"
+    nan = inf - inf
+    Print "es: #{is_nan(nan)} #{is_nan(inf)} #{is_inf(nan)} #{is_inf(inf)} #{is_inf(-inf)} #{is_inf(1.0e308)} #{is_nan(0)}"
+
+    # the sum of sin^2 + cos^2 over many angles
+    s = Double(0)
+    for i in (1..3)
+        x = Double(i) * 0.7
+        s = s + sin(x) * sin(x) + cos(x) * cos(x)
+    end
+    Print "suma: #{str_from_double(s, 6)} #{fmod(Double(10), 2.5)}"
+
+    f = 2.25
+    n = 16
+    r = sqrt(f)
+    Print "tipos: #{r} #{sqrt(n)} #{hipotenusa(1.2, 1.6)} #{Int(round(6.5))}"
+end

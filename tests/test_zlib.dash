@@ -1,0 +1,109 @@
+# Test: inflate, deflate and crc32 with zlib (Lorraine D6): raw deflate, as in a ZIP
+# expect-out: crc 123456789: true
+# expect-out: conocido: 198 true true
+# expect-out: nivel 1: true
+# expect-out: nivel 6: true
+# expect-out: nivel 9: true
+# expect-out: nivel 0: true
+# expect-out: tipo de bloque malo: -1
+# expect-out: cortado: -1
+# expect-out: no cabe: -2
+# expect-out: deflate no cabe: -2
+# expect-out: basura: ok
+# expect-out: vacio: 0 2 0
+# expect-c: /* Dash zlib Runtime */
+
+# A raw deflate block made on the PC: zlib.compressobj(9, zlib.DEFLATED, -15) of LINEA * 3
+const LINEA = "Lorraine abre ficheros ODF y OOXML: son ZIP con entradas deflate. "
+
+func llenar(buf: Pointer, datos: Array) -> Int
+    i = 0
+    for b in datos
+        buffer_set_byte(buf, i, b)
+        i = i + 1
+    end
+    return i
+end
+
+func ida_y_vuelta(texto: String, nivel: Int) -> Bool
+    n = texto.length
+    a = buffer_alloc(n + 1)
+    c = buffer_alloc(n + 1000)
+    b = buffer_alloc(n + 1)
+    str_to_buffer(texto, a, 0)
+    nc = deflate(a, n, c, n + 1000, nivel)
+    nb = inflate(c, nc, b, n + 1)
+    bien = nc > 0 and nb == n and str_from_buffer(b, 0, nb) == texto
+    if nivel > 0 and nc * 2 > n
+        bien = false            # with these lines it must compress
+    end
+    buffer_free(a)
+    buffer_free(c)
+    buffer_free(b)
+    return bien
+end
+
+Main
+    buf = buffer_alloc(4096)
+    out = buffer_alloc(4096)
+
+    str_to_buffer("123456789", buf, 0)
+    Print "crc 123456789: #{crc32(buf, 9, 0) == 0xCBF43926}"
+
+    conocido = [243, 201, 47, 42, 74, 204, 204, 75, 85, 72, 76, 42, 74, 85, 72, 203, 76, 206, 72, 45, 202, 47, 86, 240, 119, 113, 83, 168, 84, 240, 247, 143, 240, 245, 177, 82, 40, 206, 207, 83, 136, 242, 12, 80, 72, 6, 210, 169, 121, 37, 69, 137, 41, 137, 197, 10, 41, 169, 105, 57, 137, 37, 169, 122, 10, 62, 131, 192, 4, 0]
+    n = llenar(buf, conocido)
+    m = inflate(buf, n, out, 4096)
+    # crc32 in two pieces, as a ZIP reader goes
+    crc = crc32(out, 100, 0)
+    crc = crc32(out + 100, m - 100, crc)
+    Print "conocido: #{m} #{str_from_buffer(out, 0, m) == LINEA + LINEA + LINEA} #{crc == 0x9B044A35}"
+
+    # some 100 KB of text, different on each line
+    texto = ""
+    i = 0
+    while texto.length < 100000
+        texto = texto + "Celda #{i}: #{i * 7919 % 1000} euros, fila #{i / 26} columna #{i % 26}\n"
+        i = i + 1
+    end
+    Print "nivel 1: #{ida_y_vuelta(texto, 1)}"
+    Print "nivel 6: #{ida_y_vuelta(texto, 6)}"
+    Print "nivel 9: #{ida_y_vuelta(texto, 9)}"
+    Print "nivel 0: #{ida_y_vuelta(texto[0:5000], 0)}"
+
+    # bad data: an error, never past max
+    buffer_set_byte(buf, 0, 255)
+    Print "tipo de bloque malo: #{inflate(buf, n, out, 4096)}"
+    llenar(buf, conocido)
+    Print "cortado: #{inflate(buf, 30, out, 4096)}"
+    buffer_set_byte(out, 50, 77)
+    m = inflate(buf, n, out, 50)
+    if buffer_get_byte(out, 50) != 77
+        m = 999                 # wrote past max
+    end
+    Print "no cabe: #{m}"
+    str_to_buffer(texto[0:3000], buf, 0)
+    Print "deflate no cabe: #{deflate(buf, 3000, out, 100, 6)}"
+    # random bytes: whatever comes out, no hang and nothing past max
+    semilla = 12345
+    malos = 0
+    for vuelta in (1..200)
+        for k in (0..255)
+            semilla = (semilla * 1103515245 + 12345) & 0x7FFFFFFF
+            buffer_set_byte(buf, k, (semilla >> 16) & 255)
+        end
+        buffer_set_byte(out, 1000, 77)
+        r = inflate(buf, 256, out, 1000)
+        if r > 1000 or buffer_get_byte(out, 1000) != 77
+            malos = malos + 1
+        end
+    end
+    if malos == 0
+        Print "basura: ok"
+    else
+        Print "basura: #{malos} mal"
+    end
+    e = deflate(buf, 0, out, 4096, 6)
+    Print "vacio: #{crc32(buf, 0, 0)} #{e} #{inflate(out, e, buf, 10)}"
+    buffer_free(buf)
+    buffer_free(out)
+end

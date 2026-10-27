@@ -1,0 +1,132 @@
+# Test: test_list_sort.dash built with --fpu (68020 + 68881 code; on a 68040 in the emulator): the same output.
+# fpu
+# l.sort(f), stable (Lorraine D8). f(a, b) -> Bool: true if a goes before b; -> Int: negative if a goes
+# before b, 0 equal, positive after. Lists of Int, String, Double, Float and structs; a lambda and a Func
+# variable; equal elements keep their order; long lists (merges) and lists of 0, 1 and 2.
+# memcheck
+# expect-out: int: 1 2 3 5 8 9
+# expect-out: desc: 9 8 5 3 2 1
+# expect-out: str: ana Berta carlos dora
+# expect-out: dbl: -2.5 0.1 0.30000000000000004 10000000000.0
+# expect-out: flt: -1.5 0.25 2.0
+# expect-out: estable: ana/1 eva/1 bea/2 dan/2 cris/3
+# expect-out: lambda: 1 2 3 5 8 9
+# expect-out: lambda str: Berta ana carlos dora
+# expect-out: func: 9 8 5 3 2 1
+# expect-out: largo: 1000 true true
+# expect-out: cortos: 0 7 1 2
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Fila
+    nombre: String
+    nota: Int
+end
+
+func menor(a: Int, b: Int) -> Bool
+    return a < b
+end
+
+func mayor_primero(a: Int, b: Int) -> Int
+    return b - a
+end
+
+func alfabetico(a: String, b: String) -> Int
+    x = str_lower(a)
+    y = str_lower(b)
+    if x < y
+        return -1
+    end
+    if x > y
+        return 1
+    end
+    return 0
+end
+
+func por_nota(a: Fila, b: Fila) -> Int
+    return a.nota - b.nota
+end
+
+func dmenor(a: Double, b: Double) -> Bool
+    return a < b
+end
+
+func fmenor(a: Float, b: Float) -> Bool
+    return a < b
+end
+
+func texto(l: [Int]) -> String
+    r = ""
+    for x in l
+        r = r + " #{x}"
+    end
+    return r
+end
+
+Main
+    l = [5, 3, 9, 1, 8, 2]
+    l.sort(menor)
+    Print "int:#{texto(l)}"
+    l.sort(mayor_primero)
+    Print "desc:#{texto(l)}"
+
+    var s: [String] = ["dora", "ana", "carlos", "Berta"]
+    s.sort(alfabetico)
+    Print "str: #{s[0]} #{s[1]} #{s[2]} #{s[3]}"
+
+    d = [Double(1.0e10), 0.30000000000000004, -2.5, 0.1]
+    d.sort(dmenor)
+    Print "dbl: #{d[0]} #{d[1]} #{d[2]} #{d[3]}"
+    f = [2.0, -1.5, 0.25]
+    f.sort(fmenor)
+    Print "flt: #{f[0]} #{f[1]} #{f[2]}"
+
+    var filas: [Fila] = []
+    filas.push(Fila("bea", 2))
+    filas.push(Fila("ana", 1))
+    filas.push(Fila("cris", 3))
+    filas.push(Fila("dan", 2))
+    filas.push(Fila("eva", 1))
+    filas.sort(por_nota)
+    r = ""
+    for x in filas
+        r = r + " #{x.nombre}/#{x.nota}"
+    end
+    Print "estable:#{r}"
+
+    m = [5, 3, 9, 1, 8, 2]
+    m.sort(fn(a, b) -> a < b)
+    Print "lambda:#{texto(m)}"
+    s.sort(fn(a: String, b: String) -> a < b)
+    Print "lambda str: #{s[0]} #{s[1]} #{s[2]} #{s[3]}"
+    var g: Func = mayor_primero
+    m.sort(g)
+    Print "func:#{texto(m)}"
+
+    # 1000 numbers with many repeated, by value; equal ones keep their first position
+    var big: [Fila] = []
+    semilla = 7
+    for i in (1..1000)
+        semilla = (semilla * 1103515245 + 12345) & 0x7FFFFFFF
+        big.push(Fila("#{i}", (semilla >> 16) % 50))
+    end
+    big.sort(por_nota)
+    ordenada = true
+    estable = true
+    for i in (1..999)
+        if big[i - 1].nota > big[i].nota
+            ordenada = false
+        end
+        if big[i - 1].nota == big[i].nota and str_to_int(big[i - 1].nombre, 10) > str_to_int(big[i].nombre, 10)
+            estable = false
+        end
+    end
+    Print "largo: #{big.length} #{ordenada} #{estable}"
+
+    vacia = []
+    vacia.sort(menor)
+    uno = [7]
+    uno.sort(menor)
+    dos = [2, 1]
+    dos.sort(menor)
+    Print "cortos: #{vacia.length} #{uno[0]} #{dos[0]} #{dos[1]}"
+end

@@ -1,0 +1,10 @@
+# Test: what goes after struct X: is an interface
+# expect: 'Punto' is not an interface (struct Escribir: Punto)
+struct Punto
+    x: Int
+end
+struct Escribir: Punto
+    texto: String
+end
+Main
+end

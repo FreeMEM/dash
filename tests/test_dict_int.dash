@@ -1,0 +1,89 @@
+# Test: dictionaries with Int keys, {Int: T} (Lorraine D9): literal, d[k], d[k] = v (also through fields),
+# get, has, remove, keys (as a loop through the table and as a list), clear, length; Int, String, struct
+# and list values; typed params, returns and fields; 0 and negative keys; many keys
+# memcheck
+# expect-out: 10 30 0 3 -1
+# expect-out: has
+# expect-out: 2 2
+# expect-out: estilo-0 estilo-7 menos
+# expect-out: nil
+# expect-out: claves 10 suma 45
+# expect-out: lista 2 6
+# expect-out: 1 2
+# expect-out: azul
+# expect-out: muchas 4003000 2000 3000 0 0
+# expect-out: vacio 0 0
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct Punto
+    x: Int
+end
+
+struct Libro
+    estilos: {Int: String}
+end
+
+func cuenta(d: {Int: Int}) -> Int
+    return d.length
+end
+
+func crea() -> {Int: Punto}
+    r = {1: Punto(1)}
+    r[2] = Punto(2)
+    return r
+end
+
+Main
+    d = {1: 1, 2: 20, 3: 30}
+    d[1] = 10
+    Print "" + d[1] + " " + d[3] + " " + d[99] + " " + d.length + " " + d.get(7, -1)
+    if d.has(2) and not d.has(4)
+        Print "has"
+    end
+    d.remove(2)
+    Print "" + d.length + " " + cuenta(d)
+    var c: {Int: String} = {}
+    c[0] = "estilo-0"
+    c[7] = "estilo-" + 7
+    c[-3] = "menos"
+    Print c[0] + " " + c[7] + " " + c[-3]
+    if c[5] == nil
+        Print "nil"
+    end
+    var n: {Int: Int} = {}
+    for i in (0..9)
+        n[i * 1024] = i
+    end
+    k = 0
+    s = 0
+    for clave in n.keys()
+        k = k + 1
+        s = s + n[clave]
+    end
+    Print "claves #{k} suma #{s}"
+    l = d.keys()
+    t = 0
+    for v in l
+        t = t + v
+    end
+    Print "lista #{l.length} #{t + 2}"
+    p = crea()
+    Print "" + p[1].x + " " + p[2].x
+    b = Libro({3: "rojo"})
+    b.estilos[4] = "azul"
+    Print b.estilos[4]
+    var g: {Int: Int} = {}
+    for i in (1..3000)
+        g[i * 7] = i
+    end
+    s = 0
+    for i in (1..3000)
+        s = s + g[i * 7]
+    end
+    for i in (1..1000)
+        g.remove(i * 7)
+    end
+    Print "muchas " + (s - 498500) + " " + g.length + " " + g[21000] + " " + g[7] + " " + g[8]
+    c.clear()
+    Print "vacio " + c.length + " " + c.keys().length
+end

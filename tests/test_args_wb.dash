@@ -1,0 +1,84 @@
+# Test: arg_count() and arg(i) from the Workbench (Lorraine D31): the project icons, with their full
+# path. The program starts itself again as the Workbench does (LoadSeg, a process without a Shell and a
+# WBStartup message with the tool and two documents and a drawer); that copy writes what it got to a file
+# expect-out: shell: 0 []
+# expect-out: workbench: 3
+# expect-out: ram disk:uno.odt
+# expect-out: ram disk:dos.ods
+# expect-out: ram disk:
+# expect-out: fuera: []
+
+@header "#include <dos/dostags.h>"
+
+@native func desde_wb() -> Bool
+"""
+    return _WBenchMsg != NULL;
+"""
+end
+
+@native func lanzar_wb() -> Int
+"""
+    UBYTE name[256], prog[320];
+    BPTR seg, ram;
+    struct MsgPort *reply;
+    struct WBStartup *wb;
+    struct WBArg *a;
+    struct Process *pr;
+    LONG i;
+    if (!GetProgramName((STRPTR)name, sizeof(name)) || !NameFromLock(GetProgramDir(), (STRPTR)prog, sizeof(prog)))
+        return -1;
+    AddPart((STRPTR)prog, FilePart((STRPTR)name), sizeof(prog));
+    if (!(seg = LoadSeg((STRPTR)prog))) return -2;
+    reply = CreateMsgPort();
+    wb = (struct WBStartup *)AllocVec(sizeof(struct WBStartup) + 4 * sizeof(struct WBArg), MEMF_PUBLIC | MEMF_CLEAR);
+    ram = Lock((CONST_STRPTR)"RAM:", SHARED_LOCK);
+    if (!reply || !wb || !ram) return -3;
+    a = (struct WBArg *)(wb + 1);
+    a[0].wa_Lock = DupLock(GetProgramDir()); a[0].wa_Name = FilePart((STRPTR)prog);
+    a[1].wa_Lock = DupLock(ram); a[1].wa_Name = (BYTE *)"uno.odt";
+    a[2].wa_Lock = DupLock(ram); a[2].wa_Name = (BYTE *)"dos.ods";
+    a[3].wa_Lock = DupLock(ram); a[3].wa_Name = (BYTE *)"";          /* a drawer: its own path */
+    wb->sm_Message.mn_Node.ln_Type = NT_MESSAGE;
+    wb->sm_Message.mn_ReplyPort = reply;
+    wb->sm_Message.mn_Length = sizeof(struct WBStartup);
+    wb->sm_Segment = seg;
+    wb->sm_NumArgs = 4;
+    wb->sm_ArgList = a;
+    pr = CreateNewProcTags(NP_Seglist, seg, NP_FreeSeglist, FALSE, NP_Name, (ULONG)"test_args_wb",
+                           NP_StackSize, 16384, TAG_DONE);
+    if (!pr) return -4;
+    wb->sm_Process = &pr->pr_MsgPort;
+    PutMsg(&pr->pr_MsgPort, (struct Message *)wb);
+    WaitPort(reply);                       /* the copy ends: libnix replies the message */
+    GetMsg(reply);
+    UnLoadSeg(seg);
+    for (i = 0; i < 4; i++) UnLock(a[i].wa_Lock);
+    UnLock(ram);
+    FreeVec(wb);
+    DeleteMsgPort(reply);
+    return 0;
+"""
+end
+
+Main
+    if desde_wb()
+        t = "" + arg_count() + "\n"
+        for i in (0..arg_count() - 1)
+            t = t + arg(i) + "\n"
+        end
+        t = t + "[" + arg(5) + "]\n"
+        file_write_text("RAM:wb_args.txt", t)
+    else
+        Print "shell: #{arg_count()} [#{arg(0)}]"
+        r = lanzar_wb()
+        if r != 0
+            Print "lanzar: #{r}"
+        end
+        l = str_split(file_read_text("RAM:wb_args.txt"), "\n")
+        Print "workbench: #{l[0]}"
+        for i in (1..l.length - 3)
+            Print str_lower(l[i])        # (OS 3.1 says "Ram Disk", 3.2 "RAM Disk")
+        end
+        Print "fuera: #{l[l.length - 2]}"
+    end
+end

@@ -1,0 +1,86 @@
+# Test: regular expressions and Excel wildcards over UTF-8 texts (Lorraine D45). Positions and lengths in
+# bytes. Literals of the source are Latin-1: latin1_to_utf8 makes UTF-8. A wrong pattern gives false / -1 and
+# regex_error says why. (a*)*b over 30 a's ends at once: each (instruction, position) is tried only once.
+# memcheck
+# expect-out: vlookup: true false true
+# expect-out: entero: true false true true
+# expect-out: buscar: 4 3 -1 0 8 2
+# expect-out: utf8: true 2 3 true
+# expect-out: mayus: true false true true
+# expect-out: clases: true true false true true
+# expect-out: cuant: true false true true false
+# expect-out: alt: true true false true true
+# expect-out: anclas: 0 -1 4 true
+# expect-out: palabra: 4 -1
+# expect-out: vago: 0 2 0 5
+# expect-out: escapes: true true true
+# expect-out: malo: false [( without )] -1 [[ without ]] [nothing to repeat] true []
+# expect-out: rapido: false true
+# expect-out: comodin: true true false true true true false
+# expect-out: comodin escape: true false true true
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func sb(b: Bool) -> String
+    return "#{b}"
+end
+
+func n(x: Int) -> String
+    return "#{x}"
+end
+
+Main
+    # ODF lookups: "D." finds "DD"
+    Print "vlookup: " + sb(regex_match("D.", "DD", false)) + " " + sb(regex_match("D.", "D", false)) + " " + sb(regex_match("D.", "dx", true))
+    Print "entero: " + sb(regex_match("a+b", "aaab", false)) + " " + sb(regex_match("a+b", "aaabc", false)) + " " + sb(regex_match("", "", false)) + " " + sb(regex_match("a|", "", false))
+
+    p1 = regex_find("b+", "aaaabbbcbb", 0, false)
+    l1 = regex_length()
+    p2 = regex_find("z", "abc", 0, false)
+    l2 = regex_length()
+    p3 = regex_find("b+", "aaaabbbcbb", 7, false)
+    Print "buscar: " + n(p1) + " " + n(l1) + " " + n(p2) + " " + n(l2) + " " + n(p3) + " " + n(regex_length())
+
+    t = latin1_to_utf8("el ñandú corre")
+    pat = latin1_to_utf8("ñ.nd.")
+    f = regex_find(pat, t, 0, false)
+    Print "utf8: " + sb(regex_match(latin1_to_utf8("ñandú"), latin1_to_utf8("ñandú"), false)) + " " + n(latin1_to_utf8("ñ").length) + " " + n(f) + " " + sb(regex_length() == 7)
+
+    Print "mayus: " + sb(regex_match(latin1_to_utf8("ÑANDÚ"), latin1_to_utf8("ñandú"), true)) + " " + sb(regex_match("ABC", "abc", false)) + " " + sb(regex_match("(?i)abc", "ABC", false)) + " " + sb(regex_match("[a-c]+", "CAB", true))
+
+    Print "clases: " + sb(regex_match("[0-9]{3}-\\d+", "123-45", false)) + " " + sb(regex_match("\\w+\\s\\w+", "hola mundo", false)) + " " + sb(regex_match("[^aeiou]+", "casa", false)) + " " + sb(regex_match("[]a]+", "]a]", false)) + " " + sb(regex_match("\\W\\S\\D", "-x.", false))
+
+    Print "cuant: " + sb(regex_match("a{2,3}", "aaa", false)) + " " + sb(regex_match("a{2,3}", "aaaa", false)) + " " + sb(regex_match("(ab){2}", "abab", false)) + " " + sb(regex_match("x?y*z+", "zz", false)) + " " + sb(regex_match("a{2}", "a", false))
+
+    k1 = regex_find("(cat|dog)s?", "my dogs", 0, false)
+    lk1 = regex_length()
+    Print "alt: " + sb(regex_match("(?:uno|dos|tres)", "dos", false)) + " " + sb(regex_match("a(b|c)*d", "abcbcd", false)) + " " + sb(regex_match("a(b|c)*d", "abxd", false)) + " " + sb(k1 == 3) + " " + sb(lk1 == 4)
+
+    Print "anclas: " + n(regex_find("^ab", "abab", 0, false)) + " " + n(regex_find("^ab", "xab", 0, false)) + " " + n(regex_find("c$", "abcabc", 0, false) - 1) + " " + sb(regex_match("^abc$", "abc", false))
+
+    Print "palabra: " + n(regex_find("\\bcat\\b", "the cat sat", 0, false)) + " " + n(regex_find("\\bcat\\b", "concat", 0, false))
+
+    v1 = regex_find("a.*?b", "aXbXb", 0, false)
+    lv1 = regex_length()
+    v2 = regex_find("a.*b", "aXbXb", 0, false)
+    Print "vago: " + n(v1) + " " + n(lv1 - 1) + " " + n(v2) + " " + n(regex_length())
+
+    Print "escapes: " + sb(regex_match("\\.\\*\\(", ".*(", false)) + " " + sb(regex_match("\\x41\\u0042", "AB", false)) + " " + sb(regex_match("a\\tb", "a	b", false))
+
+    m1 = regex_match("(ab", "ab", false)
+    e1 = regex_error()
+    m2 = regex_find("[ab", "ab", 0, false)
+    e2 = regex_error()
+    m3 = regex_match("*a", "a", false)
+    e3 = regex_error()
+    m4 = regex_match("ab", "ab", false)
+    Print "malo: " + sb(m1) + " [" + e1 + "] " + n(m2) + " [" + e2 + "] [" + e3 + "] " + sb(m4) + " [" + regex_error() + "]"
+
+    aes = ""
+    for i in (1..30)
+        aes = aes + "a"
+    end
+    Print "rapido: " + sb(regex_match("(a*)*b", aes, false)) + " " + sb(regex_match("(a|aa)*", aes, false))
+
+    Print "comodin: " + sb(wildcard_match("*.ods", "hoja.ods", false)) + " " + sb(wildcard_match("a?c", "abc", false)) + " " + sb(wildcard_match("a?c", "ac", false)) + " " + sb(wildcard_match("*", "", false)) + " " + sb(wildcard_match("A*Z", "abcz", true)) + " " + sb(wildcard_match(latin1_to_utf8("?andú"), latin1_to_utf8("ñandú"), false)) + " " + sb(wildcard_match("ab", "abc", false))
+    Print "comodin escape: " + sb(wildcard_match("50~%", "50%", false)) + " " + sb(wildcard_match("a~*", "abc", false)) + " " + sb(wildcard_match("a~*", "a*", false)) + " " + sb(wildcard_match("~~", "~", false))
+end

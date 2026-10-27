@@ -1,0 +1,8 @@
+# Test: has() with a String in a {Int: T}
+# expect: This dictionary's keys are Int ({Int: T})
+Main
+    d = {1: 10}
+    if d.has("1")
+        Print "si"
+    end
+end

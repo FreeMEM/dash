@@ -42,8 +42,11 @@ Main ... end                # Entry point
 ```
 x = 42                      # Int
 v = 1.5                     # Float (Int(v), Float(n), 7 significant digits)
+d = Double(0.1)             # Double: 64 bits, 15-17 digits (Double(n), Double("2.5"), Int(d), Float(d))
+h = sqrt(2.0)               # sqrt, pow, exp, log, sin, atan2, floor, round, fmod, abs, is_nan...: Double
 f = Fixed(1.5)              # Fixed 16.16: fast decimals on 68000 (Int(f), fx_sqrt, fx_sin, fx_cos)
 xs = [Fixed(0.5), 2]        # list of Fixed (numbers made Fixed); declared: var xs: [Fixed] = []
+ds = [Double(0.1), 2]       # list of Double ([Double]); [1.5, 2] is a [Float]; var ds: [Double] = [1, 2]
 mask = 0xFF                 # hex (also $DFF000), binary 0b1010
 name = "Dash"               # String
 active = true               # Bool: Print and "x " + b write true / false (a comparison too)
@@ -70,6 +73,7 @@ s.length  s[i]  s[2:5]      # length, character, slice
 Int(s[i])  str_code(s, i)   # character code (0-255)
 str_char(65)                # "A"
 str_find(s, "x")            # position or -1; str_find_from(s, "x", start)
+regex_match("D.", s, false)  # whole text, ICU syntax; regex_find(p, s, from, icase) -1 / regex_length(); regex_error(); wildcard_match("*.ods", s, true)
 str_starts(s, "a")  str_ends(s, "z")
 str_lower(s)  str_upper(s)  str_trim(s)
 Int("42")  str_to_int("ff", 16)  str_from_int(255, 16)
@@ -105,7 +109,7 @@ break / continue            # inside while/for only
 
 ## Functions
 ```
-func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}
+func add(a, b)              func typed(x: Int) -> Int   # Int Float String Bool Array Pointer Func Void, struct, enum, [T], {String: T}, {Int: T}
     return a + b                return x * 2
 end                         end
 
@@ -138,6 +142,17 @@ d["k"].push(x)              # methods of elements too: l[0].mover(1), filas[i].c
 # weak padre: Nodo          # field that points without holding (no cycles: parent pointers)
 ```
 
+## Interfaces
+```
+interface Orden             # methods only; no fields, no Orden()
+    func deshacer() -> String
+end
+struct Escribir: Orden      # has its methods, same parameters and return (struct C: Figura, Orden)
+    ...
+end
+var pila: [Orden] = []      # any struct that has it; o.deshacer() calls its struct's (a table per type)
+```
+
 ## Arrays
 ```
 arr = [1, 2, 3, 4, 5]
@@ -149,9 +164,11 @@ arr + [6, 7]                # New list with both (same element type)
 var l: [String] = []        # list types [T]: [Int] [String] [Nodo] [[Int]] (params, returns, fields)
 for x in obj.lista          # for-each over any list expression
 l.push(x)  l.pop()  l.insert(i, x)  l.remove(i)  l.clear()   # lists that grow
+l.sort(f)                   # stable; f(a, b) -> Bool (a before b) or Int (<0 before, 0 equal, >0 after)
 d = {"a": 1, "b": 2}        # dictionary {String: T}: d["c"] = 3, d["a"], d.has("a"),
 d.remove("a")  d.keys()  d.clear()  d.length    # missing key: 0 / nil
 d.get("c", 0)                # the value, or the default if missing (one lookup; objects: nil only)
+e = {1: "uno", 7: "siete"}   # Int keys: {Int: T} (var e: {Int: String} = {}), same methods; keys() is [Int]
 "Hola Dash"[5:]             # Strings too: "Dash"
 ```
 
@@ -199,6 +216,7 @@ app = mui_app_begin("App", "APP")       # 0 = no MUI / 68000
 win = mui_window_begin("Title", 1)      # vertical root group; 1 = remember place
     mui_menu_begin("Project")           # menus of this window
         q = mui_menu_item("Quit", "Q", 9)   # mui_menu_separator()
+        g = mui_menu_check("Grid", "G", 10, true)   # mui_get_value(g); mui_submenu_begin("Recent") ... mui_submenu_end()
     mui_menu_end()
     tabs = mui_register_begin("A|B")    # pages; value = page. Also mui_frame_begin("T", false),
     ...                                 # mui_columns_begin(2), mui_scroll_begin(); mui_group_end()
@@ -218,6 +236,8 @@ c = mui_canvas(320, 200)                # drawing area; sb = mui_scrollbar(true)
 mui_canvas_on_draw(c, paint)            # func paint(x, y, w, h) draws with gfx_; mui_canvas_redraw(c)
 mui_canvas_on_input(c, 3)               # click/wheel/key: mui_canvas_mouse_x/_y(c), mui_canvas_button/_wheel/_key(c)
 mui_canvas_char(c)                      # the key as text, with shift and the keymap ("" if none)
+mui_canvas_qualifiers(c)                # keys held at the last input: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up
+mui_canvas_on_drag(c, id)               # event while dragging and when let go: mui_canvas_drag(c) 1 moving, 2 let go
 mui_canvas_on_move(c, 4)                # the pointer over it (no click) or leaving: mui_canvas_pointer_x/_y/_inside(c)
 mui_canvas_update(c)                    # draw again without clearing; mui_canvas_updating() true in paint
 mui_canvas_update_area(c, x, y, w, h)   # the same, only that zone (clipped)
@@ -435,6 +455,7 @@ h = file_notify("ENV:X.prefs")   # watch a file: cx_wait gives 7, file_changed(h
 file_notify_end(h)          # stop watching it (the program's end stops them all)
 run_program("SYS:Prefs/Font")    # start a command line, not waiting; program_relaunch(): start again at the end
 clock_read()                # clock_year/month/day/weekday(0 Sun)/hour/minute/second(); date_text("%A %d-%b-%Y %H:%M") (locale)
+locale_decimal_point()      # "," or "." as the user's country writes; locale_group_separator(), locale_date_order() ("DMY"...)
 t = tr(1, "Hola")           # the text of number 1 in the catalog (@catalog), else "Hola"; catalog_open(name, version), catalog_language()
 mouse_curve(0, [100, 150, 200])      # mouse acceleration: emitter 0 = Amiga mouse; factors in hundredths by speed
 mouse_curves_off()          # the curves out of input.device now (also at the end); mouse_curve_events(emitter)
@@ -489,7 +510,7 @@ No HTTP builtin: a program speaks HTTP itself over `net_`/`tls_`. No raw sockets
 
 ## Program Arguments
 ```
-arg_count()                 # arguments from the Shell (0 from the Workbench)
+arg_count()                 # arguments from the Shell; from the Workbench, the project icons (arg(i): full path)
 arg(0)                      # the first one ("" if missing)
 ```
 

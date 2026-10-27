@@ -1,0 +1,13 @@
+# Test: the method of the struct is as the interface declares it
+# expect: Method 'Escribir.hacer' must be as in interface 'Orden': hacer(Int) -> Bool
+interface Orden
+    func hacer(veces: Int) -> Bool
+end
+struct Escribir: Orden
+    texto: String
+    func hacer(veces: String) -> Bool
+        return true
+    end
+end
+Main
+end

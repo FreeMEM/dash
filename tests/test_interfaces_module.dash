@@ -1,0 +1,27 @@
+# Test: an interface of an imported module (Lorraine D43), with a struct of the module and one of the program
+# that have it; also built with --multifile (the slots of the method tables are the same in every file).
+# memcheck
+# expect-out: ods 6 / csv 30 / ods
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+import "lib/ordenes.dash"
+
+struct FiltroCsv: Filtro
+    sep: String
+    func extension() -> String
+        return "csv"
+    end
+    func puntos(n: Int) -> Int
+        return n * 10
+    end
+end
+
+Main
+    var fs: [Filtro] = []
+    fs.push(FiltroOds("hoja"))
+    fs.push(FiltroCsv(";"))
+    r = ""
+    for f in fs
+        r = r + f.extension() + " #{f.puntos(3)} / "
+    end
+    Print r + primero(fs)
+end

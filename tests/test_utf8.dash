@@ -1,0 +1,102 @@
+# Test: UTF-8 builtins (Lorraine D5). Literals in the source are Latin-1: UTF-8 is made with
+# latin1_to_utf8 and utf8_char. An invalid byte is one character, U+FFFD (65533).
+# expect-out: ascii: 4 2 104 3
+# expect-out: año: 4 3 241 3 1 true
+# expect-out: euro: 3 8364 226 130 172 EUR
+# expect-out: emoji: 4 1 128512 0 4 ?
+# expect-out: latin1: 383 255 true
+# expect-out: C3 28: 2 65533 1 40 ?(
+# expect-out: FF FE: 2 65533 65533 1 2
+# expect-out: cortado: 3 65533 2 2 1
+# expect-out: largas: 2 3 3
+# expect-out: char: 0 3 65533 65533 65533
+# expect-out: fuera: 0 2 0 0 1
+# expect-out: largo: 100 100 300 100
+# expect-out: comillas: "hola" - ... (TM) EUR
+# expect-out: check: -1 -1 3 1 2 3 -1
+
+func bytes(s: String) -> String
+    r = ""
+    for i in (0..s.length - 1)
+        r = r + " #{str_code(s, i)}"
+    end
+    return r
+end
+
+Main
+    h = "hola"
+    Print "ascii: #{utf8_length(h)} #{utf8_next(h, 1)} #{utf8_code(h, 0)} #{utf8_prev(h, 4)}"
+
+    u = latin1_to_utf8("año")
+    ano = "año"
+    Print "año: #{u.length} #{utf8_length(u)} #{utf8_code(u, 1)} #{utf8_next(u, 1)} #{utf8_prev(u, 3)} #{utf8_to_latin1(u) == ano}"
+
+    e = utf8_char(8364)
+    Print "euro: #{e.length} #{utf8_code(e, 0)}#{bytes(e)} #{utf8_to_latin1(e)}"
+
+    m = utf8_char(128512)
+    Print "emoji: #{m.length} #{utf8_length(m)} #{utf8_code(m, 0)} #{utf8_prev(m, 4)} #{utf8_next(m, 0)} #{utf8_to_latin1(m)}"
+
+    # every Latin-1 character there and back
+    l = ""
+    for c in (1..255)
+        l = l + str_char(c)
+    end
+    v = latin1_to_utf8(l)
+    Print "latin1: #{v.length} #{utf8_length(v)} #{utf8_to_latin1(v) == l}"
+
+    # invalid bytes: one character each, never past the end
+    s = str_char(195) + "("
+    Print "C3 28: #{utf8_length(s)} #{utf8_code(s, 0)} #{utf8_next(s, 0)} #{utf8_code(s, 1)} #{utf8_to_latin1(s)}"
+    s = str_char(255) + str_char(254)
+    Print "FF FE: #{utf8_length(s)} #{utf8_code(s, 0)} #{utf8_code(s, 1)} #{utf8_next(s, 0)} #{utf8_next(s, 1)}"
+    s = "a" + str_char(226) + str_char(130)
+    Print "cortado: #{utf8_length(s)} #{utf8_code(s, 1)} #{utf8_next(s, 1)} #{utf8_prev(s, 3)} #{utf8_prev(s, 2)}"
+    # overlong C0 AF, surrogate ED A0 80
+    a = str_char(192) + str_char(175)
+    b = str_char(237) + str_char(160) + str_char(128)
+    Print "largas: #{utf8_length(a)} #{utf8_length(b)} #{utf8_to_latin1(b).length}"
+
+    Print "char: #{utf8_char(0).length} #{utf8_char(-5).length} #{utf8_code(utf8_char(-5), 0)} #{utf8_code(utf8_char(55296), 0)} #{utf8_code(utf8_char(1114112), 0)}"
+    ab = "ab"
+    Print "fuera: #{utf8_code(ab, 5)} #{utf8_next(ab, 7)} #{utf8_prev(ab, 0)} #{utf8_next(ab, -3)} #{utf8_prev(ab, 9)}"
+
+    # a long text (the length cache): 100 euros
+    t = ""
+    for k in (1..100)
+        t = t + e
+    end
+    n = 0
+    i = 0
+    while i < t.length
+        i = utf8_next(t, i)
+        n = n + 1
+    end
+    j = t.length
+    back = 0
+    while j > 0
+        j = utf8_prev(t, j)
+        back = back + 1
+    end
+    Print "largo: #{utf8_length(t)} #{n} #{t.length} #{back}"
+
+    q = utf8_char(8220) + "hola" + utf8_char(8221) + " " + utf8_char(8212) + " " + utf8_char(8230) + " " + utf8_char(8482) + " " + utf8_char(8364)
+    Print "comillas: #{utf8_to_latin1(q)}"
+
+    # utf8_check on a buffer (D40): the first bad byte from..to-1, or -1
+    buf = buffer_alloc(64)
+    n = str_to_buffer(q, buf, 0)
+    bien = utf8_check(buf, 0, n)
+    str_to_buffer("abc" + str_char(195) + str_char(40), buf, 0)
+    corto = utf8_check(buf, 0, 3)
+    malo = utf8_check(buf, 0, 5)
+    str_to_buffer("a" + str_char(255), buf, 0)
+    ff = utf8_check(buf, 0, 2)
+    str_to_buffer("ab" + e, buf, 0)
+    cortado = utf8_check(buf, 0, 4)
+    str_to_buffer("abc" + str_char(128), buf, 0)
+    suelto = utf8_check(buf, 0, 4)
+    entero = utf8_check(buf, 2, 3)
+    Print "check: #{bien} #{corto} #{malo} #{ff} #{cortado} #{suelto} #{entero}"
+    buffer_free(buf)
+end

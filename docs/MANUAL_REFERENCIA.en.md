@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 617 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 667 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -255,12 +255,14 @@ vacio = []
 |------|-------------|---------|
 | Int | Signed 32-bit integer | `42`, `-100`, `0xFF`, `$DFF000`, `0b1010` |
 | Float | 32-bit decimal (about 7 digits) | `1.5`, `-0.25`, `2.0e3` |
+| Double | 64-bit decimal (15 to 17 digits) | `Double(0.1)`, `var d: Double = 2.5` |
 | Fixed | 16.16 fixed point: fast decimals on a 68000 | `Fixed(1.5)`, `Fixed(n)` |
 | String | Text string | `"Hola"` |
 | Bool | Boolean value (`Print` and strings write it as `true` / `false`) | `true`, `false` |
 | Array | Collection of elements (untyped: read as integers) | `[1, 2, 3]` |
 | `[T]` | List of `T` (`[Int]`, `[String]`, `[Enemigo]`, `[[Int]]`, `[Fixed]`) | `var l: [String] = []` |
 | `{String: T}` | Dictionary with string keys | `{"Ana": 30}` |
+| `{Int: T}` | Dictionary with integer keys | `{1: "one"}` |
 | Struct | User-defined compound type | `Player(10, 20)` |
 | Func | A function or a lambda, to pass around as a value | `fn(x) -> x * 2` |
 | Pointer | Memory address (for C and the system) | `buffer_alloc(64)` |
@@ -300,7 +302,50 @@ s = fx_sin(Fixed(30))       # 0.5 (degrees); also fx_cos
 - Lists of `Fixed`: a literal with at least one `Fixed` (`[Fixed(1.5), 2, Fixed(-0.25)]`: the numbers are
   converted), or declared `[Fixed]` (variables, parameters, return values, fields). `l[i]`, `push`, `insert`,
   `pop`, `for v in l`, slices and `+` return and take `Fixed`; `l.push(2)` stores 2.0. They are stored as a
-  list of integers (a `Fixed` is a `LONG`). A list of `Float` still cannot be made.
+  list of integers (a `Fixed` is a `LONG`). Lists of `Float` and of `Double` are in the `Double` section.
+
+### Double (64 bits)
+
+`Double` is a C `double` (64-bit IEEE 754): 15 to 17 digits, for money and spreadsheet cells. With
+`--fpu` the FPU does it; without one, GCC's software floating point (slower than `Float`).
+
+```
+d = Double(0.1)             # a literal where a Double goes keeps all its digits
+var t: Double = 0.2         # also in declared variables, fields, parameters and return
+s = d + t                   # 0.30000000000000004, as in any language with doubles
+n = Int(d)                  # truncates toward zero; Float(d) loses digits
+x = Double("2.5e-3")        # from text: exact up to 17 significant digits; 0.0 if there is no number
+Print "s = #{s}"            # the shortest decimal that reads back the same (Ryu): s = 0.30000000000000004
+p = str_from_double(2.675, 2)   # "2.68": fixed decimals, the shortest decimal rounded (as a spreadsheet)
+```
+
+- A literal (`0.1`) where a `Double` goes (in an operation with a `Double`, given to a `Double` variable,
+  field or parameter, in a `return` of a `Double` function) is a C `double`. Elsewhere it is a `Float`:
+  `d = 0.1` undeclared is a `Float`.
+- A `Float` or an `Int` become `Double` by themselves; a `Double` into a `Float` or an `Int` is an error
+  (`Float(d)`, `Int(d)`). Mixing `Fixed` and `Double` is an error.
+- It is written in fixed notation while the point falls within 17 digits (`150.0`, `0.00001`) and with an
+  exponent beyond that (`1.0e17`, `1.0e-6`); `inf`, `-inf` and `nan` when they come.
+- Lists of `Double` and of `Float`: a literal with some `Double` is a `[Double]`, and one with some
+  `Float` (`[1.5, 2]`) is a `[Float]`. Also declared: `var l: [Double] = [1, 2]` (there the numbers of the
+  literal are `Double`), parameters, returns, fields, `[[Double]]` and `{String: [Double]}`. `l[i]`,
+  `push`, `insert`, `pop`, `remove`, `clear`, `for v in l`, slices and `+` work as in a list of integers.
+  A `[Double]` takes 8 bytes per element; a `[Float]`, 4. A `[Float]` does not fit where a `[Double]`
+  goes (they are stored differently): it is an error.
+
+Math functions (with fdlibm; an `Int` or a `Float` goes in as a `Double` and a `Double` comes out):
+`sqrt`, `pow`, `exp`, `log`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2(y, x)`, `floor`,
+`ceil`, `round` (halves away from zero: `round(2.5)` is `3.0`), `trunc`, `fmod`, `abs`, `is_nan` and
+`is_inf`. Angles are in radians. They give the same digits with and without `--fpu` (now and then, not the
+last one). Without an FPU they are slow: on an A1200, `sin` takes about 7 ms and `pow` about 20; with a
+68882, 0.1 and 0.25 ms.
+
+```
+h = sqrt(3.0 * 3.0 + 4.0 * 4.0)     # 5.0
+n = Int(round(2.5))                 # 3: Int() to keep it in an Int
+x = fmod(-7.5, 2.0)                 # -1.5: the sign of the first one
+if is_nan(sqrt(Double(-1)))         # nan is not even equal to itself: is_nan
+```
 
 ### Type Inference
 
@@ -562,6 +607,31 @@ clave = str_lower(linea[:p])
 valor = Int(linea[p + 1:])
 ```
 
+#### Regular expressions and wildcards
+
+Over UTF-8 texts (anything outside ASCII, from `latin1_to_utf8`); positions and lengths in bytes, as `utf8_next`.
+
+| Function | What it does |
+|---|---|
+| `regex_match(pattern, text, ignore_case)` | Whether the whole text fits the pattern |
+| `regex_find(pattern, text, from, ignore_case)` | Where the first match from byte `from` starts, or -1; `regex_length()` gives its length |
+| `regex_error()` | Why the last pattern is wrong (`""` if it is right); a wrong one gives `false` or -1, without stopping the program |
+| `wildcard_match(pattern, text, ignore_case)` | Excel's wildcards over the whole text: `*` anything, `?` one character, `~` before a character takes it as it is (`~*`, `~?`, `~~`) |
+
+ICU's syntax in what is common: `.` (not a line break), `*`, `+`, `?`, `{m}`, `{m,}`, `{m,n}` (and the lazy `*?`, `+?`,
+`??`), `[abc]`, `[a-z]`, `[^...]`, `^`, `$`, `\d`, `\w`, `\s` and their upper case opposites, `\b`, `\B`, `\t`, `\n`,
+`\xhh`, `\x{h...}`, `\uhhhh`, `\.` and the other signs, `|`, groups `( )` and `(?: )`; `(?i)` at the start ignores case.
+There are no back references, lookarounds or possessive quantifiers (they give an error). Case is compared in ASCII,
+Latin-1, Latin Extended-A, Greek and Cyrillic. It never hangs: `(a*)*b` over many `a`s ends at once. With loops that
+may turn empty, like `(a|b*)*`, `regex_find` may give another length than ICU. On an A1200, matching a short text
+takes about 0.7 ms; with wildcards, 0.3 ms.
+
+```
+if regex_match("D.", celda, false)        # ODF's VLOOKUP: "D." finds "DD"
+p = regex_find("\\d+", texto, 0, false)    # in a Dash literal, "\\d" is \d
+n = regex_length()
+```
+
 ### Operator Precedence
 
 From strongest to weakest:
@@ -728,7 +798,7 @@ end
 ```
 
 Types that can be written: `Int`, `Float`, `Fixed`, `String`, `Bool`, `Array`, `Pointer`, `Func`, `Void`,
-lists `[T]`, dictionaries `{String: T}` and the name of a struct or an enum. Any other name is an error (it used to be taken as `Int` silently).
+lists `[T]`, dictionaries `{String: T}` or `{Int: T}` and the name of a struct or an enum. Any other name is an error (it used to be taken as `Int` silently).
 An `Array` field of a struct is freed with the struct, just like a field of struct type.
 
 The `return` is checked against the declared type: it is an error to return a string where a number or a
@@ -889,6 +959,44 @@ Main
 end
 ```
 
+### Interfaces
+
+An `interface` says which methods something has, without fields or bodies. A struct that has it says so after its
+name (`struct Escribir: Orden`, or several: `struct Cuadro: Figura, Orden`) and has those methods with the same
+parameters and return type. A value of the interface (variable, parameter, field, return, list element) is any
+struct that has it, and calling a method uses its struct's:
+
+```
+interface Orden
+    func hacer() -> String
+    func deshacer() -> String
+end
+
+struct Escribir: Orden
+    texto: String
+    func hacer() -> String
+        return "escribo " + self.texto
+    end
+    func deshacer() -> String
+        return "borro " + self.texto
+    end
+end
+
+Main
+    var pila: [Orden] = []
+    pila.push(Escribir("hola"))
+    o = pila.pop()
+    Print o.deshacer()      # Escribir's deshacer
+end
+```
+
+- No memory per object: the methods go in a table of the type descriptor every struct already has. A call costs
+  only two reads more than a normal method.
+- They cannot be made (`Orden()` is an error), they have no fields and only their methods are called on them.
+- A struct without the interface does not fit where it goes, and an interface value does not fit where a concrete
+  struct goes: there is no way down from the interface to the struct.
+- `nil` works as for any struct.
+
 ---
 
 ## 9. Enumerations
@@ -998,12 +1106,26 @@ Each addition copies the whole list: to add items one at a time, use `push`.
 | `l.pop()` | Removes and returns the last one |
 | `l.remove(i)` | Removes the one at position `i` |
 | `l.clear()` | Leaves the list empty |
+| `l.sort(f)` | Sorts it with the function `f(a, b)`, keeping the order of equal ones |
 
 They also work through fields (`nodo.hijos.push(h)`, `self.lista.clear()`). When it fills up,
 the list moves to a block twice the size: adding 20,000 elements one at a time takes less than
 half a second on an A1200. The list owns its strings and structs: `remove` and `clear`
 release them, and `pop` hands them over to whoever receives it. Putting in something of another type (`l.push(5)` in a
 `[String]`) is an error.
+
+`l.sort(f)` sorts the list (merge sort, stable: equal ones stay as they were). `f` gets two elements and
+returns `Bool` (`true` if `a` goes before `b`) or `Int` (negative if `a` goes before, 0 if they are equal,
+positive if after). It can be a function of the program, a lambda or a `Func` variable (that one returning
+`Int`). Sorting 1,000 integers takes about 0.36 s on an A1200; 1,000 `Double`s, about 1.3 s without an FPU.
+
+```
+func por_nota(a: Fila, b: Fila) -> Int
+    return a.nota - b.nota
+end
+filas.sort(por_nota)
+numeros.sort(fn(a, b) -> a < b)
+```
 
 ```
 var pila: [String] = []
@@ -1048,6 +1170,15 @@ end
 
 var cabeceras: {String: String} = {}
 cabeceras["Host"] = "ejemplo.org"
+```
+
+With integer keys, `{Int: T}`: the same, and `keys()` gives a list of `Int`. A key of another type is a
+compile error.
+
+```
+styles = {0: "normal", 7: "title"}
+var cells: {Int: Cell} = {}
+cells[row * 1024 + column] = Cell(...)
 ```
 
 Values can be `Int`, `Bool`, `String`, structs, lists or other dictionaries
@@ -2242,6 +2373,11 @@ end
 - A struct that reaches a function from a field, a global or a list element
   is retained until the end of the iteration: the function can replace that field without
   the struct it is using being freed.
+- A local variable that only takes an element or a field (`ce = h.celdas[j]`, `fi = filas[i]`) neither adds
+  nor subtracts, like the one of a `for`, if the function frees no object (it takes no elements out, replaces no
+  struct or list fields or globals, and only calls functions like it), the list hangs from a parameter, a global
+  or another such variable, and the variable is only read (not returned nor kept anywhere else). A `while` with
+  indices is then as fast as a `for`.
 - Freeing a long linked list (thousands of structs each pointing to the next) uses no stack.
 - Cycles: if a struct points to another that points back to the first, they are not freed until exit.
   `--memcheck` shows them as live on exit.
@@ -2407,7 +2543,10 @@ for i in (0..arg_count() - 1)
 end
 ```
 
-`arg(i)` gives `""` if there is no such argument. From the Workbench there are none.
+`arg(i)` gives `""` if there is no such argument. From the Workbench they are the project icons the
+program was started with: a double click on a document whose default tool it is, or shift + click on
+several and a double click on the last one. `arg(i)` then gives the full path of each
+(`Work:Textos/carta.odt`; of a drawer or a disk, its own path).
 
 ### System Memory
 
@@ -3217,6 +3356,9 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_menu_begin(titulo)` ... `mui_menu_end()` | Menu of the window being built. |
 | `mui_menu_item(texto, tecla, id)` | Menu item: `tecla` = letter for Amiga+key (`""` = none); returns the object (for `mui_set_enabled`). |
 | `mui_menu_separator()` | Separator line. |
+| `mui_menu_check(text, key, id, checked)` | Item with a check mark: choosing it toggles the mark and gives its `id`. `mui_get_value(item)` says whether it is checked (1/0) and `mui_set_value(item, 1)` checks it from the program. |
+| `mui_submenu_begin(title)` ... `mui_submenu_end()` | Submenu inside the menu (one level, as in Intuition). |
+| `mui_set_enabled(item, false)`, `mui_set_text(item, text)` | Disables an item or a whole menu (the object of `mui_menu_begin`); changes an item's text ("Open recent"). |
 | `mui_canvas(ancho_min, alto_min)` | Custom drawing area; grows with the window. |
 | `mui_canvas_on_draw(zona, funcion)` | Function `f(x, y, ancho, alto)` that paints it with the `gfx_` functions. MUI calls it when needed (on opening, on resizing...). You can only paint inside it. Fills work too (`gfx_circle_fill`, `gfx_poly_*`...). |
 | `mui_canvas_redraw(zona)` | Repaints it now. |
@@ -3227,6 +3369,8 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_canvas_on_input(zona, id)` | Event on a click, the wheel or a key over the area (before opening the window). |
 | `mui_canvas_mouse_x(z)`, `mui_canvas_mouse_y(z)`, `mui_canvas_button(z)`, `mui_canvas_wheel(z)`, `mui_canvas_key(z)` | The last input: position inside the area, 1 if it was a click, +1/-1 the wheel, key code (-1 if it was not a key). |
 | `mui_canvas_char(z)` | The character for that key, with Shift and the keymap (`"A"`, `"ñ"`; `""` if it gives none; Backspace gives code 8). |
+| `mui_canvas_qualifiers(z)` | The keys held at the last key, click or wheel turn, added up: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (`q & 1` tells Shift). Amiga + click does not arrive: the system keeps it. |
+| `mui_canvas_on_drag(area, id)`, `mui_canvas_drag(z)` | Event `id` while dragging (moving with the left button down after pressing it on the area) and once more when let go; `mui_canvas_drag` says which: 1 moving, 2 let go. `mui_canvas_mouse_x/_y` give the position, also out of the area. Moves are gathered: one comes each time the program asks. Before opening the window. |
 | `mui_canvas_on_move(zona, id)` | Event when the mouse moves over the area, without a click, and when it leaves it (before opening the window). Movements that arrive before the program picks one up count as one; it does not delay clicks. |
 | `mui_canvas_pointer_x(z)`, `mui_canvas_pointer_y(z)`, `mui_canvas_pointer_inside(z)` | Where the mouse is now, from the corner of the area, and whether it is inside it; whether or not there was a click. |
 | `mui_scrollbar(vertical)` | Scroll bar; its value is the first visible line. |
@@ -3736,6 +3880,10 @@ Print date_text("%A %d-%b-%Y %H:%M")           # "Saturday 24-Oct-2026 18:05", i
   `%Y`/`%y` year, `%H` hour, `%I` 12-hour clock hour, `%p` AM/PM, `%M` minute, `%S` second, `%w` day of the week as a
   number, `%%`; `locale.library` has more (`%x`, `%X`, `%c`: the date and time as that country writes them). Without
   `locale.library` (a 3.0 without it), those in the list, in English.
+- `locale_decimal_point()`, `locale_group_separator()` and `locale_date_order()`: how the user's country writes
+  numbers and dates. The decimal and the thousands separators (in English `"."` and `","`, also without
+  `locale.library`) and the order of day, month and year in the short date: `"DMY"`, `"MDY"` or `"YMD"`. Note: the
+  `españa.country` of Workbench 3.1 and 3.2 has `"'"` for the decimals and `","` for the thousands.
 
 ### Translations: tr and @catalog
 
@@ -4186,17 +4334,23 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Tasks, CPU and desktop | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
 | Watched files and programs | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
-| Date, time and version | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
+| Date, time and version | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
 | Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
+| Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
+| UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
+| Comparing and searching in a buffer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
+| Double and text | 2 | `str_from_double`, `str_to_double` |
+| Regular expressions and wildcards | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
+| Double math | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **617** | |
+| MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **667** | |
 
 ### Standard Amiga Colors
 

@@ -38,6 +38,12 @@ GROUPS = [
     ("TASK_FUNCTIONS", "Tareas (C en otro proceso)", "Tasks (C in another process)"),  # dashweb D47
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)", "Images (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos", "Arguments"),     # dashweb D19
+    ("ZLIB_FUNCTIONS", "Compresión (zlib)", "Compression (zlib)"),  # Lorraine D6
+    ("UTF8_FUNCTIONS", "UTF-8", "UTF-8"),              # Lorraine D5
+    ("BUFSEARCH_FUNCTIONS", "Comparar y buscar en un búfer", "Comparing and searching in a buffer"),  # Lorraine D38, D39
+    ("DOUBLE_FUNCTIONS", "Double y texto", "Double and text"),   # Lorraine D3
+    ("MATH_FUNCTIONS", "Matemáticas de Double", "Double math"),   # Lorraine D4
+    ("REGEX_FUNCTIONS", "Expresiones regulares y comodines", "Regular expressions and wildcards"),   # Lorraine D45
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

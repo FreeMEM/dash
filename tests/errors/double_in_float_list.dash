@@ -1,0 +1,6 @@
+# Test: a list of Float values does not take a Double (it would lose digits)
+# expect: A list of Float values holds numbers, not Double (Float(d) to make it a Float)
+Main
+    l = [1.5, 2.5]
+    l.push(Double(0.1))
+end

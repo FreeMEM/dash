@@ -1,0 +1,105 @@
+# Test: test_double.dash built with --fpu (68020 + 68881 code; on a 68040 in the emulator): the same output.
+# fpu
+# Double, 64-bit IEEE (Lorraine D1): literals where a Double goes keep all their digits; arithmetic,
+# comparisons, conversions with Int, Float and String; fields, parameters, returns, methods and globals.
+# Text: the shortest decimal that reads back the same (Ryu)
+# expect-c: double a = ((double)(0.1));
+# expect-out: 0.30000000000000004
+# expect-out: suma: false true
+# expect-out: tercio: 0.3333333333333333
+# expect-out: grande: 123456789000000.0 2.0e300 1.0e-7
+# expect-out: celda: 5.0 0.1 10.0 2.5
+# expect-out: campo: 0.1 0.30000000000000004
+# expect-out: global: 0.1 0.30000000000000004
+# expect-out: conv: 7 -7 0.333333 0.3333333432674408 3.5 2.5
+# expect-out: texto: 3.14159265358979 -0.0025 0.0 inf 1.2345678901234568e29
+# expect-out: ida y vuelta: true true true
+# expect-out: diez: 0.9999999999999999 true true
+# expect-out: raros: nan inf -inf -0.0 5.0e-324 1.7976931348623157e308
+# expect-out: fijo: 1000000000000000.0 1.0e17 123.456 0.00001 1.0e-6
+# expect-out: grande entero: 9007199254740991.0 9007199254740992.0
+# expect-out: decl: 0.0 0.1
+# expect-out: reasignar: 36585.75 2.5 100.25 0.1 7.0 0.1 2.0
+
+struct Celda
+    valor: Double = 0.0
+    peso: Double = 0.1
+
+    func escala(k: Double) -> Double
+        return self.valor * k
+    end
+end
+
+var total: Double = 0.1
+
+func doble(x: Double) -> Double
+    return x * 2.0
+end
+
+func suma(a: Double, b: Double) -> Double
+    return a + b
+end
+
+Main
+    a = Double(0.1)
+    b = Double(0.2)
+    c = a + b
+    Print c
+    Print "suma: #{c == 0.3} #{c == Double(0.30000000000000004)}"
+    d = Double(1) / Double(3)
+    Print "tercio: #{d}"
+    Print "grande: #{Double(123456789) * Double(1000000)} #{Double(2) * 1.0e300} #{1.0e-7 * Double(1)}"
+    x = Celda(Double(5), 0.1)
+    Print "celda: #{x.valor} #{x.peso} #{doble(x.valor)} #{x.escala(0.5)}"
+    x.valor = 0.1
+    Print "campo: #{x.valor} #{x.valor + 0.2}"
+    Print "global: #{total} #{suma(total, 0.2)}"
+    f = Float(d)
+    k = 3
+    Print "conv: #{Int(Double(7.9))} #{Int(Double(-7.9))} #{f} #{Double(f)} #{Double(k) + 0.5} #{k - Double(0.5)}"
+    t1 = "3.14159265358979"
+    t2 = "  -2.5e-3x"
+    t3 = "abc"
+    t4 = "1e400"
+    t5 = "123456789012345678901234567890"
+    Print "texto: #{Double(t1)} #{Double(t2)} #{Double(t3)} #{Double(t4)} #{Double(t5)}"
+    # every value a Double writes reads back the same
+    u = "#{d}"
+    v = "#{c}"
+    w = "#{Double(2) / Double(7) * 1.0e-200}"
+    Print "ida y vuelta: #{Double(u) == d} #{Double(v) == c} #{Double(w) == Double(2) / Double(7) * 1.0e-200}"
+    i = 0
+    acc = Double(0)
+    while i < 10
+        acc = acc + 0.1
+        i = i + 1
+    end
+    Print "diez: #{acc} #{acc > 0.99} #{acc < 1.0}"
+    z = Double(0)
+    t6 = "4.9e-324"
+    t7 = "1.7976931348623157e308"
+    Print "raros: #{z / z} #{Double(1) / z} #{Double(-1) / z} #{-z} #{Double(t6)} #{Double(t7)}"
+    Print "fijo: #{Double(1.0e15)} #{Double(1.0e17)} #{Double(123.456)} #{Double(0.00001)} #{Double(0.000001)}"
+    # whole numbers up to 2^53 are exact; 2^53 + 1 is not a double
+    p53 = Double(67108864) * Double(134217728)
+    Print "grande entero: #{p53 - 1.0} #{p53 + 1.0}"
+    var e: Double
+    var g: Double = 0.1
+    Print "decl: #{e} #{g}"
+    # a declared Double keeps its type whatever literal it gets later (and all its digits)
+    var r: Double = 0.0
+    r = 36585.75
+    var r2: Double = 1.0
+    r2 = 2.5
+    var r3: Double = 1.0
+    r3 = 100.25
+    var r4: Double = 1.0
+    r4 = 0.1
+    var r5: Double = 1.0
+    r5 = 7
+    r6 = Double(1)
+    r6 = 0.1
+    fl = 1.5
+    fl = 2
+    Print "reasignar: #{r} #{r2} #{r3} #{r4} #{r5} #{r6} #{fl}"
+end

@@ -104,6 +104,7 @@ The strings are copied by MUI (`MUIV_List_ConstructHook_String`). For many lines
 | `mui_on_double(lista, id)` | double-click on a list |
 | `mui_on_close(win, id)` | the window's close gadget. Without calling it, closing the first window = -1 (quit). |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menu of the open window (`Menustrip`) |
+| `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | item with a check mark (`mui_get_value`/`mui_set_value`) and one-level submenu |
 | `mui_wait_event() -> Int` | Waits and returns the number of an event, or -1 to quit. |
 | `mui_poll_event() -> Int` | The same without waiting: 0 if there is nothing. |
 | `mui_wait_event_signals(mascara) -> Int` | Also waits for other signals: `net_signal()` (network), `task_signal()` (tasks), `file_notify_signal()` (watched files). Returns 0 when one of them arrives; `mui_signals()` tells which. |
@@ -140,6 +141,8 @@ After a `mui_canvas_on_input` event, what happened (position relative to the cor
 | `mui_canvas_wheel(c)` | +1 / -1 if it was the wheel (up / down), otherwise 0. |
 | `mui_canvas_key(c)` | Key code (raw), -1 if it was not a key. |
 | `mui_canvas_char(c) -> String` | The character for that key, with Shift and the keymap applied (`""` if there is none). |
+| `mui_canvas_qualifiers(c)` | Keys held at the last input (key, click, wheel): 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up. |
+| `mui_canvas_on_drag(c, id)`, `mui_canvas_drag(c)` | Dragging: event when moving with the button down (1) and when let go (2). |
 | `mui_canvas_pointer_x(c)`, `mui_canvas_pointer_y(c)` | Current pointer position (with or without a click). |
 | `mui_canvas_pointer_inside(c) -> Bool` | Whether the pointer is currently over the area. |
 

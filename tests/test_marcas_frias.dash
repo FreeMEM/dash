@@ -1,0 +1,53 @@
+# Test: a function that only makes texts in its error returns takes the temporaries mark there, not on
+# each call, and its loop has none (Lorraine D42); the error path still frees what it made
+# memcheck
+# expect-c: { ULONG _dash_fm = _dash_tmp_mark(); __typeof__(fallo(x, DashString_concat("cero en ",
+# expect-no-c: cierre(_Dash_X * x, APTR b) {\n    ULONG _dash_fm
+# expect-no-c: ULONG _dash_tm1 = _dash_tmp_mark();
+# expect-out: bien: 1000 0
+# expect-out: fallos: 2 cero en 2
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+struct X
+    pos: Int = 0
+    n: Int = 0
+    msg: String = ""
+end
+
+func fallo(x: X, m: String) -> Int
+    x.msg = m
+    return -1
+end
+
+func cierre(x: X, b: Pointer) -> Int
+    x.pos = x.pos + 2
+    if x.pos >= x.n
+        return fallo(x, "</" + str_from_buffer(b, 0, 3) + " sin >")
+    end
+    i = 0
+    while i < 3
+        if buffer_get_byte(b, i) == 0
+            return fallo(x, "cero en #{i}")
+        end
+        i = i + 1
+    end
+    return 1
+end
+
+Main
+    x = X(0, 100000, "")
+    b = buffer_alloc(10)
+    buffer_fill(b, 0, 10, 65)
+    k = 0
+    for v in (1..1000)
+        k = k + cierre(x, b)
+    end
+    Print "bien: #{k} #{x.msg.length}"
+    x.n = 0
+    m = cierre(x, b)
+    x.n = 100000000
+    buffer_set_byte(b, 2, 0)
+    m = m + cierre(x, b)
+    Print "fallos: #{-m} #{x.msg}"
+    buffer_free(b)
+end

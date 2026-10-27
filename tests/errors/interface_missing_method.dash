@@ -1,0 +1,14 @@
+# Test: a struct that says it has an interface has all its methods
+# expect: Struct 'Escribir' has interface 'Orden' but not its method 'deshacer'
+interface Orden
+    func hacer()
+    func deshacer()
+end
+struct Escribir: Orden
+    texto: String
+    func hacer()
+        Print self.texto
+    end
+end
+Main
+end

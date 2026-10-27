@@ -1,0 +1,150 @@
+# Test: interfaces (Lorraine D43): interface Orden ... end declares methods; struct X: Orden has them. A value
+# of an interface type (variable, parameter, field, return, list element) is any struct that has it, and its
+# methods go through the table in its type descriptor: nothing more per object. Two interfaces on one struct,
+# methods with parameters and results (Int, String, Double), nil, an undo stack and memcheck.
+# memcheck
+# expect-c: static const APTR _dash_vt_Escribir[
+# expect-out: hacer: escribo hola, borro 3
+# expect-out: deshacer: repongo 3, borro hola
+# expect-out: nombres: Escribir(hola) Borrar(3) quedan 0
+# expect-out: area: 6.0 3.140625 total 9.140625
+# expect-out: dos: Cuadro 2x3 area 6.0
+# expect-out: campo: Escribir(campo) nil true
+# expect-out: suma: 10 13
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+interface Orden
+    func hacer() -> String
+    func deshacer() -> String
+    func nombre() -> String
+end
+
+interface Figura
+    func area() -> Double
+    func crecer(n: Int) -> Int
+end
+
+struct Escribir: Orden
+    texto: String
+    func hacer() -> String
+        return "escribo " + self.texto
+    end
+    func deshacer() -> String
+        return "borro " + self.texto
+    end
+    func nombre() -> String
+        return "Escribir(" + self.texto + ")"
+    end
+end
+
+struct Borrar: Orden
+    n: Int
+    func hacer() -> String
+        return "borro #{self.n}"
+    end
+    func deshacer() -> String
+        return "repongo #{self.n}"
+    end
+    func nombre() -> String
+        return "Borrar(#{self.n})"
+    end
+end
+
+struct Cuadro: Figura, Orden
+    ancho: Int
+    alto: Int
+    func area() -> Double
+        return Double(self.ancho * self.alto)
+    end
+    func crecer(n: Int) -> Int
+        self.ancho = self.ancho + n
+        return self.ancho
+    end
+    func hacer() -> String
+        return "dibujo"
+    end
+    func deshacer() -> String
+        return "borro el dibujo"
+    end
+    func nombre() -> String
+        return "Cuadro #{self.ancho}x#{self.alto}"
+    end
+end
+
+struct Circulo: Figura
+    r: Double
+    func area() -> Double
+        return self.r * self.r * 3.140625
+    end
+    func crecer(n: Int) -> Int
+        return 0
+    end
+end
+
+struct Historial
+    ultima: Orden
+end
+
+func nueva(cual: Int) -> Orden
+    if cual == 0
+        return Escribir("campo")
+    end
+    return Borrar(cual)
+end
+
+func total(fs: [Figura]) -> Double
+    t = Double(0)
+    for f in fs
+        t = t + f.area()
+    end
+    return t
+end
+
+func hacer_todo(l: [Orden]) -> String
+    r = ""
+    for o in l
+        if r != ""
+            r = r + ", "
+        end
+        r = r + o.hacer()
+    end
+    return r
+end
+
+Main
+    var pila: [Orden] = []
+    pila.push(Escribir("hola"))
+    pila.push(Borrar(3))
+    Print "hacer: " + hacer_todo(pila)
+    nombres = ""
+    for o in pila
+        nombres = nombres + o.nombre() + " "
+    end
+    a = pila.pop()
+    b = pila.pop()
+    Print "deshacer: " + a.deshacer() + ", " + b.deshacer()
+    Print "nombres: " + nombres + "quedan #{pila.length}"
+
+    var fs: [Figura] = []
+    fs.push(Cuadro(2, 3))
+    fs.push(Circulo(1.0))
+    f0 = fs[0]
+    f1 = fs[1]
+    Print "area: #{f0.area()} #{f1.area()} total #{total(fs)}"
+
+    c = Cuadro(2, 3)
+    var o: Orden = c
+    var fig: Figura = c
+    Print "dos: " + o.nombre() + " area #{fig.area()}"
+
+    h = Historial(nueva(0))
+    n = h.ultima.nombre()
+    var vacia: Orden = nil
+    h.ultima = vacia
+    Print "campo: " + n + " nil #{h.ultima == nil}"
+
+    g = fs[0]
+    x = g.crecer(8)
+    y = fig.crecer(11)
+    Print "suma: #{x} #{y}"
+end

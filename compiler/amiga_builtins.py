@@ -3337,7 +3337,7 @@ MUI_FUNCTIONS = {
         params=["obj"],
         return_type="LONG",
         c_template="_dash_mui_get_value(${obj})",
-        description="Value: checkbox 1/0, cycle option, slider level, progress"
+        description="Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0"
     ),
     "mui_set_value": BuiltinFunc(
         name="mui_set_value",
@@ -3358,14 +3358,14 @@ MUI_FUNCTIONS = {
         params=["obj", "text"],
         return_type="void",
         c_template="_dash_mui_set_text(${obj}, ${text})",
-        description="Change the text of a text field, text, button or window title"
+        description="Change the text of a text field, text, button, menu item or window title"
     ),
     "mui_set_enabled": BuiltinFunc(
         name="mui_set_enabled",
         params=["obj", "enabled"],
         return_type="void",
         c_template="_dash_mui_set_enabled(${obj}, ${enabled})",
-        description="Enable or disable (ghost) an object"
+        description="Enable or disable (ghost) an object, a menu item or a whole menu"
     ),
     "mui_on_change": BuiltinFunc(
         name="mui_on_change",
@@ -3514,6 +3514,28 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_menu_item(${title}, ${key}, ${id})",
         description="Menu item: key = letter for Amiga+key (\"\" none); mui_wait_event returns id"
     ),
+    "mui_menu_check": BuiltinFunc(
+        name="mui_menu_check",
+        params=["title", "key", "id", "checked"],
+        return_type="APTR",
+        c_template="_dash_mui_menu_check(${title}, ${key}, ${id}, ${checked})",
+        description="Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; "
+                    "mui_get_value / mui_set_value read and set the mark"
+    ),
+    "mui_submenu_begin": BuiltinFunc(
+        name="mui_submenu_begin",
+        params=["title"],
+        return_type="APTR",
+        c_template="_dash_mui_submenu_begin(${title})",
+        description="Start a submenu in the menu being built (one level): its items go in until mui_submenu_end"
+    ),
+    "mui_submenu_end": BuiltinFunc(
+        name="mui_submenu_end",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_submenu_end()",
+        description="End the submenu"
+    ),
     "mui_menu_separator": BuiltinFunc(
         name="mui_menu_separator",
         params=[],
@@ -3649,6 +3671,30 @@ MUI_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_mui_canvas_input(${canvas}, 4)",
         description="Raw key code of the last input, -1 if it was not a key"
+    ),
+    "mui_canvas_on_drag": BuiltinFunc(
+        name="mui_canvas_on_drag",
+        params=["canvas", "id"],
+        return_type="void",
+        c_template="_dash_mui_canvas_on_drag(${canvas}, ${id})",
+        description="Event id when the area is dragged (moved with the left button down after pressing it on the "
+                    "area) and when it is let go; mui_canvas_drag says which, mui_canvas_mouse_x/y where (maybe out "
+                    "of the area). Call before opening the window"
+    ),
+    "mui_canvas_drag": BuiltinFunc(
+        name="mui_canvas_drag",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 6)",
+        description="The last drag event: 1 moving with the button down, 2 let go (0 before any)"
+    ),
+    "mui_canvas_qualifiers": BuiltinFunc(
+        name="mui_canvas_qualifiers",
+        params=["canvas"],
+        return_type="LONG",
+        c_template="_dash_mui_canvas_input(${canvas}, 5)",
+        description="Keys held at the last key, click or wheel: 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga, added up "
+                    "(Shift + Ctrl = 3); q & 1 tells Shift"
     ),
     "mui_canvas_char": BuiltinFunc(
         name="mui_canvas_char",
@@ -4305,6 +4351,19 @@ TASK_FUNCTIONS = {
         name="date_text", params=["format"], return_type="STRPTR", c_template="_dash_date_text(${format})",
         description="The date and time now as format says, with locale.library's FormatDate in the user's language "
                     "and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library)"),
+    # Lorraine D19: how numbers and dates are written in the user's language and country
+    "locale_decimal_point": BuiltinFunc(
+        name="locale_decimal_point", params=[], return_type="STRPTR", c_template="_dash_locale_decimal_point()",
+        description="What goes before the decimals in the user's country: \",\" in Spain, \".\" in English (also "
+                    "without locale.library)"),
+    "locale_group_separator": BuiltinFunc(
+        name="locale_group_separator", params=[], return_type="STRPTR",
+        c_template="_dash_locale_group_separator()",
+        description="What separates the thousands in the user's country: \".\" in Spain (1.234,5), \",\" in "
+                    "English (1,234.5); maybe \"\""),
+    "locale_date_order": BuiltinFunc(
+        name="locale_date_order", params=[], return_type="STRPTR", c_template="_dash_locale_date_order()",
+        description="The order of day, month and year in the user's short date: \"DMY\", \"MDY\" or \"YMD\""),
     "program_version": BuiltinFunc(
         name="program_version", params=[], return_type="STRPTR", c_template="_dash_program_version()",
         description="The program's name and version of @version (\"Trasfondo 0.7\"); \"\" without it"),
@@ -4416,14 +4475,146 @@ IMAGE_FUNCTIONS = {
 
 ARGS_FUNCTIONS = {
     "arg_count": _text("arg_count", [], "LONG", "_dash_arg_count()",
-                       "How many arguments the program got from the Shell (0 from the Workbench)"),
-    "arg": _text("arg", ["i"], "STRPTR", "_dash_arg(${i})", "Argument i, from 0 (\"\" if there is none)"),
+                       "How many arguments the program got from the Shell, or project icons from the Workbench "
+                       "(a double click on a document, shift + click on several)"),
+    "arg": _text("arg", ["i"], "STRPTR", "_dash_arg(${i})",
+                 "Argument i, from 0 (\"\" if there is none); from the Workbench, the icon's full path"),
     # dashweb D27: where the last On Click was, inside the window's borders
     "click_x": _text("click_x", [], "LONG", "_dash_click_x", "X of the last On Click, in the window (inside its borders)"),
     "click_y": _text("click_y", [], "LONG", "_dash_click_y", "Y of the last On Click, in the window (inside its borders)"),
     # dashweb D20
     "time_ms": _text("time_ms", [], "LONG", "_dash_time_ms()",
                      "Milliseconds since the program started (EClock of timer.device)"),
+}
+
+# =============================================================================
+# Compression (Lorraine D6): raw deflate, as in a ZIP, with zlib (compiler/clibs.py)
+# =============================================================================
+
+def _buf(name, params, ret, template, desc):
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       reads_only=True)
+
+
+ZLIB_FUNCTIONS = {
+    "inflate": _buf("inflate", ["src", "n", "dest", "max"], "LONG", "_dash_inflate(${src}, ${n}, ${dest}, ${max})",
+                    "Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, "
+                    "or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, "
+                    "-3 if there is no memory (zlib)"),
+    "deflate": _buf("deflate", ["src", "n", "dest", "max", "level"], "LONG",
+                    "_dash_deflate(${src}, ${n}, ${dest}, ${max}, ${level})",
+                    "Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; "
+                    "-1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; "
+                    "about 260 KB while it works, at any level)"),
+    "crc32": _buf("crc32", ["buffer", "n", "crc"], "LONG", "_dash_crc32(${buffer}, ${n}, ${crc})",
+                  "CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start)"),
+}
+
+# =============================================================================
+# UTF-8 (Lorraine D5): texts as UTF-8. A byte that does not start a valid sequence is one character, U+FFFD.
+# =============================================================================
+
+UTF8_FUNCTIONS = {
+    "utf8_next": _text("utf8_next", ["s", "i"], "LONG", "_dash_utf8_next(${s}, ${i})",
+                       "Position of the UTF-8 character after the one at byte i (the length at the end)"),
+    "utf8_prev": _text("utf8_prev", ["s", "i"], "LONG", "_dash_utf8_prev(${s}, ${i})",
+                       "Position of the UTF-8 character before byte i (0 at the start)"),
+    "utf8_code": _text("utf8_code", ["s", "i"], "LONG", "_dash_utf8_code(${s}, ${i})",
+                       "Code point of the UTF-8 character at byte i (65533 for an invalid byte, 0 outside the text)"),
+    "utf8_char": _text("utf8_char", ["code"], "STRPTR", "_dash_utf8_char(${code})",
+                       "Text with the character of that code point in UTF-8 (\"\" for 0; U+FFFD if it is not one)"),
+    "utf8_length": _text("utf8_length", ["s"], "LONG", "_dash_utf8_length(${s})",
+                         "How many UTF-8 characters s has (each invalid byte counts as one)"),
+    "utf8_to_latin1": _text("utf8_to_latin1", ["s"], "STRPTR", "_dash_utf8_to_latin1(${s})",
+                            "UTF-8 text in Latin-1: what Latin-1 lacks becomes something like it (\u201c to \", "
+                            "\u20ac to EUR, \u2026 to ...) or ?, as do invalid bytes"),
+    "latin1_to_utf8": _text("latin1_to_utf8", ["s"], "STRPTR", "_dash_latin1_to_utf8(${s})",
+                            "Latin-1 text in UTF-8 (bytes from 128 on take two)"),
+    # D40
+    "utf8_check": _text("utf8_check", ["buffer", "from", "to"], "LONG", "_dash_utf8_check(${buffer}, ${from}, ${to})",
+                        "Position of the first byte from to to - 1 of a buffer that is not valid UTF-8 (or starts a "
+                        "sequence cut by to), -1 if all are valid"),
+}
+
+# =============================================================================
+# Comparing and searching in a buffer without making texts (Lorraine D38, D39)
+# =============================================================================
+
+BUFSEARCH_FUNCTIONS = {
+    "buffer_equals": _text("buffer_equals", ["buffer", "offset", "n", "s"], "BOOL",
+                           "_dash_buffer_equals(${buffer}, ${offset}, ${n}, ${s})",
+                           "Whether the n bytes of a buffer at offset are the text s (and s has n bytes)"),
+    "buffer_find_byte": _text("buffer_find_byte", ["buffer", "from", "to", "byte"], "LONG",
+                              "_dash_buffer_find_byte(${buffer}, ${from}, ${to}, ${byte})",
+                              "Position of the first byte equal to byte from from to to - 1, or -1"),
+    "buffer_find_any": _text("buffer_find_any", ["buffer", "from", "to", "bytes"], "LONG",
+                             "_dash_buffer_find_any(${buffer}, ${from}, ${to}, ${bytes})",
+                             "Position of the first byte from from to to - 1 that is one of the bytes of the text "
+                             "bytes, or -1"),
+}
+
+# =============================================================================
+# Double to text and back (Lorraine D3)
+# =============================================================================
+
+DOUBLE_FUNCTIONS = {
+    "str_from_double": _text("str_from_double", ["d", "decimals"], "STRPTR", "_dash_str_from_double(${d}, ${decimals})",
+                             "A Double with that many decimals (0: none), its shortest decimal rounded half away "
+                             "from zero (2.675 with 2 is 2.68); decimals < 0: the shortest that reads back the same"),
+    "str_to_double": _text("str_to_double", ["s"], "double", "_dash_double_from_str(${s})",
+                           "The Double at the start of the text, like Double(s): exact up to 17 significant "
+                           "digits; 0.0 if there is no number"),
+}
+
+def _math(name, params, ret, desc):
+    args = ", ".join("${%s}" % p for p in params)
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=f"_dash_m_{name}({args})",
+                       description=desc, reads_only=True)
+
+
+# Lorraine D4: with fdlibm (runtime/fdlibm). An Int or a Float goes in as a Double.
+MATH_FUNCTIONS = {
+    "sqrt": _math("sqrt", ["x"], "double", "Square root (nan for a negative)"),
+    "pow": _math("pow", ["x", "y"], "double", "x to the power y"),
+    "exp": _math("exp", ["x"], "double", "e to the power x"),
+    "log": _math("log", ["x"], "double", "Natural logarithm (-inf for 0, nan for a negative)"),
+    "log10": _math("log10", ["x"], "double", "Base 10 logarithm"),
+    "sin": _math("sin", ["x"], "double", "Sine of x radians"),
+    "cos": _math("cos", ["x"], "double", "Cosine of x radians"),
+    "tan": _math("tan", ["x"], "double", "Tangent of x radians"),
+    "asin": _math("asin", ["x"], "double", "Arc sine in radians, -pi/2 to pi/2 (nan outside -1..1)"),
+    "acos": _math("acos", ["x"], "double", "Arc cosine in radians, 0 to pi (nan outside -1..1)"),
+    "atan": _math("atan", ["x"], "double", "Arc tangent in radians, -pi/2 to pi/2"),
+    "atan2": _math("atan2", ["y", "x"], "double", "Angle of the point (x, y) in radians, -pi to pi"),
+    "floor": _math("floor", ["x"], "double", "The largest whole number not above x (a Double)"),
+    "ceil": _math("ceil", ["x"], "double", "The smallest whole number not below x (a Double)"),
+    "round": _math("round", ["x"], "double", "The nearest whole number, halves away from zero (2.5 is 3.0, -2.5 is -3.0)"),
+    "trunc": _math("trunc", ["x"], "double", "The whole part, toward zero (-2.7 is -2.0)"),
+    "fmod": _math("fmod", ["x", "y"], "double", "Remainder of x / y with the sign of x (nan if y is 0)"),
+    "abs": _math("abs", ["x"], "double", "Absolute value, a Double"),
+    "is_nan": _math("is_nan", ["x"], "BOOL", "True if x is nan (not a number: sqrt(-1.0), 0.0 / 0.0)"),
+    "is_inf": _math("is_inf", ["x"], "BOOL", "True if x is inf or -inf"),
+}
+
+
+# Lorraine D45: over UTF-8 texts; positions and lengths in bytes, as utf8_next
+REGEX_FUNCTIONS = {
+    "regex_match": _text("regex_match", ["pattern", "text", "ignore_case"], "BOOL",
+                         "_dash_regex_match(${pattern}, ${text}, ${ignore_case})",
+                         "True if the whole text fits the regular expression (ICU's common syntax: . * + ? {m,n} [] [^] "
+                         "^ $ \\d \\w \\s \\b | groups); false also for a wrong pattern (regex_error says why)"),
+    "regex_find": _text("regex_find", ["pattern", "text", "from", "ignore_case"], "LONG",
+                        "_dash_regex_find(${pattern}, ${text}, ${from}, ${ignore_case})",
+                        "Byte position where the first match from byte from starts, -1 if there is none (or the "
+                        "pattern is wrong); regex_length gives its length"),
+    "regex_length": _text("regex_length", [], "LONG", "_dash_regex_length()",
+                          "Length in bytes of the last match of regex_find or regex_match (0 if none)"),
+    "regex_error": _text("regex_error", [], "STRPTR", "_dash_regex_error()",
+                         "Why the last pattern is wrong, \"\" if it is right"),
+    "wildcard_match": _text("wildcard_match", ["pattern", "text", "ignore_case"], "BOOL",
+                            "_dash_wildcard_match(${pattern}, ${text}, ${ignore_case})",
+                            "True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a "
+                            "character takes it as it is (~* ~? ~~)"),
 }
 
 # =============================================================================
@@ -4450,6 +4641,12 @@ ALL_BUILTINS = {
     **TASK_FUNCTIONS,          # dashweb D47
     **IMAGE_FUNCTIONS,         # dashweb D12
     **ARGS_FUNCTIONS,          # dashweb D19
+    **ZLIB_FUNCTIONS,          # Lorraine D6
+    **UTF8_FUNCTIONS,          # Lorraine D5
+    **BUFSEARCH_FUNCTIONS,     # Lorraine D38, D39
+    **DOUBLE_FUNCTIONS,        # Lorraine D3
+    **MATH_FUNCTIONS,          # Lorraine D4
+    **REGEX_FUNCTIONS,         # Lorraine D45
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

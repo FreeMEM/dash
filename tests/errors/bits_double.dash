@@ -1,0 +1,6 @@
+# Test: a bit operator on a Double
+# expect: '|' works on integers, not Double (Int() converts a Float or a Fixed)
+Main
+    d = Double(1.5)
+    Print d | 1
+end

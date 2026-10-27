@@ -1,0 +1,8 @@
+# Test: an interface makes no objects (Lorraine D43)
+# expect: 'Orden' is an interface: it makes no objects (a struct that has it does)
+interface Orden
+    func hacer()
+end
+Main
+    o = Orden()
+end

@@ -1,0 +1,5 @@
+# Test: a literal with Int and String keys
+# expect: Dictionary keys are all Strings or all Int
+Main
+    d = {1: "a", "dos": "b"}
+end

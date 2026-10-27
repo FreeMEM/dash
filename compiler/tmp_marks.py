@@ -135,6 +135,63 @@ def _strip_region(lines: List[str], start: int, end: int, mark: str) -> None:
             lines[k] = lines[k].replace(rel, "")
 
 
+# A return that releases the function's mark (codegen writes it in three lines)
+_RET_HEAD = re.compile(r"^\s*\{ __typeof__\(")
+_RET_RELEASE = "_dash_tmp_release(_dash_fm);"
+_RET_TAIL = "return _dash_r; }"
+# ... with a mark of its own (_cold_returns)
+_OWN_RET_HEAD = "{ ULONG _dash_fm = _dash_tmp_mark(); __typeof__("
+
+
+def _return_blocks(lines: List[str], start: int, end: int) -> List[int]:
+    """First lines of the returns between start and end."""
+    return [k for k in range(start, end - 1)
+            if _RET_HEAD.match(lines[k]) and lines[k + 1].strip() == _RET_RELEASE
+            and lines[k + 2].strip() == _RET_TAIL]
+
+
+def _without_own_returns(lines: List[str], start: int, end: int) -> str:
+    """The text of lines start..end without the returns that have a mark of their own (they release what
+    they make, and leave the function)."""
+    out, k = [], start
+    while k <= end:
+        if _OWN_RET_HEAD in lines[k]:
+            k += 3
+            continue
+        out.append(lines[k])
+        k += 1
+    return "\n".join(out)
+
+
+def _cold_returns(lines: List[str], leaves) -> None:
+    """Lorraine D42: a function whose only temporaries are made in returns (an error message: "return
+    fallo(x, "</" + nombre + " sin >")") takes its mark in those returns, not on each call; its loops
+    then lose theirs (strip_unused_marks)."""
+    for i, line in enumerate(lines):
+        if line.strip() != "ULONG _dash_fm = _dash_tmp_mark();":
+            continue
+        end = next((j for j in range(i + 1, len(lines)) if lines[j] == "}"), None)
+        if end is None:
+            continue
+        blocks = _return_blocks(lines, i + 1, end)
+        hot = [k for k in blocks if leaves(lines[k], "_dash_fm")]
+        if not hot:
+            continue
+        in_blocks = {k + d for k in blocks for d in range(3)}
+        rest = [lines[k] for k in range(i + 1, end) if k not in in_blocks]
+        # only plain releases of the mark elsewhere, and nothing else that makes temporaries
+        if any("_dash_fm" in l and l.strip() != _RET_RELEASE for l in rest):
+            continue
+        if leaves("\n".join(rest), "_dash_fm"):
+            continue
+        lines[i] = lines[i].replace("ULONG _dash_fm = _dash_tmp_mark();", "")
+        for k in range(i + 1, end):
+            if k in hot:
+                lines[k] = lines[k].replace("{ __typeof__(", _OWN_RET_HEAD, 1)
+            elif k - 1 not in hot:                   # (the release of a return's own mark stays)
+                lines[k] = lines[k].replace(_RET_RELEASE, "")
+
+
 def strip_unused_marks(c_code: str) -> str:
     if "_dash_tmp_release_f" not in c_code:      # no memory runtime: the macros are no-ops
         return c_code
@@ -143,6 +200,8 @@ def strip_unused_marks(c_code: str) -> str:
 
     def leaves(text: str, mark: str) -> bool:
         return bool(_calls(text.replace(f"_dash_tmp_release({mark})", "")) & leave)
+
+    _cold_returns(lines, leaves)
 
     # loops: from "{ ULONG _dash_tmN = _dash_tmp_mark();" to "_dash_tmp_release(_dash_tmN); }"
     loop_mark = re.compile(r"\{ ULONG (_dash_tm\d+) = _dash_tmp_mark\(\);")
@@ -155,7 +214,7 @@ def strip_unused_marks(c_code: str) -> str:
         end = next((j for j in range(i + 1, len(lines)) if close in lines[j]), None)
         if end is None:
             continue
-        region = "\n".join(lines[i + 1:end + 1])
+        region = _without_own_returns(lines, i + 1, end)
         if not leaves(region, mark):
             _strip_region(lines, i, end, mark)
 

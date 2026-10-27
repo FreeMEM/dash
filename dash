@@ -221,6 +221,16 @@ def main():
     if not args.fpu and any(uses_float(open(f).read()) for f in c_files):
         compile_command.extend(softfloat_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
                                                  build_dir))
+    from compiler.softfloat import softfloat_double_objects, uses_double   # Double (Lorraine D1)
+    if not args.fpu and any(uses_double(open(f).read()) for f in c_files):
+        for obj in softfloat_double_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"), build_dir):
+            if obj not in compile_command:
+                compile_command.append(obj)
+    # zlib and Ryu (Lorraine D6, D1), compiled for these CPU options (compiler/clibs.py)
+    from compiler.clibs import libraries_for
+    compile_command.extend(libraries_for((open(f).read() for f in c_files),
+                                         os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
+                                         cpu_flags(args.cpu, args.fpu), build_dir))
     compile_command.extend([
         "-o",
         output_filename if args.no_hunk else elf_output_file,

@@ -1,0 +1,9 @@
+# Test: the function of sort() compares two elements
+# expect: sort() wants a function of two elements; 'doble' takes 1
+func doble(a: Int) -> Int
+    return a * 2
+end
+Main
+    l = [3, 1, 2]
+    l.sort(doble)
+end

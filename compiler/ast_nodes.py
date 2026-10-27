@@ -532,6 +532,8 @@ class StructDef(ASTNode):
     fields: List['StructField'] = field(default_factory=list)
     methods: List['StructMethod'] = field(default_factory=list)
     location: Optional[SourceLocation] = None
+    interfaces: List[str] = field(default_factory=list)   # struct X: Orden, Filtro (Lorraine D43)
+    is_interface: bool = False     # an interface: no fields, its methods only declared
 
     def get_field(self, name: str) -> Optional['StructField']:
         """Get a field by name."""

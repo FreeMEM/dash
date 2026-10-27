@@ -13,6 +13,7 @@
 # expect-out: body 1
 # expect-out: 20000
 # expect-out: n500
+# expect-out: (x)-abc 0
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
 
 
@@ -68,4 +69,9 @@ Main
         nodos.remove(0)
     end
     Print nodos[0].nombre
+    # pop of a [String] inside a concatenation: a text, not a number
+    var pila: [String] = []
+    pila.push("abc")
+    pila.push("x")
+    Print "(" + pila.pop() + ")" + "-" + pila.pop() + " #{pila.length}"
 end

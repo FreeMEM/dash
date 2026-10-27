@@ -1,0 +1,42 @@
+# Test: str_code and s[i] over short texts remember the length of the last one measured (Lorraine D41);
+# it must not go stale when the text grows in place or its block is freed and used by another text
+# memcheck
+# expect-out: crece: 40 0 0
+# expect-out: bloques: 0
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func ultimo(s: String) -> Int
+    return str_code(s, s.length - 1)
+end
+
+Main
+    t = "a"
+    malos = 0
+    for k in (1..40)
+        if ultimo(t) != 96 + k or str_code(t, t.length) != 0
+            malos = malos + 1
+        end
+        t = t + str_char(97 + k)
+    end
+    Print "crece: #{t.length - 1} #{malos} #{str_code(t, 41)}"
+
+    # texts of other lengths in the same blocks: each one measured right
+    buf = buffer_alloc(100)
+    for k in (0..99)
+        buffer_set_byte(buf, k, 65 + k % 26)
+    end
+    malos = 0
+    for vuelta in (1..300)
+        n = 1 + vuelta * 7 % 40
+        s = str_from_buffer(buf, 0, n)
+        if str_code(s, n - 1) != 65 + (n - 1) % 26 or str_code(s, n) != 0
+            malos = malos + 1
+        end
+        c = s[n - 1]
+        if c != 65 + (n - 1) % 26
+            malos = malos + 1
+        end
+    end
+    Print "bloques: #{malos}"
+    buffer_free(buf)
+end
