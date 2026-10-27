@@ -1,4 +1,5 @@
 # Questions to a SANA-II driver with any TCP/IP stack, with a driver of the test's own ("dashfake.device", in
+# (fake_kept and the counters are volatile: the driver changes them inside exec's calls, which GCC cannot see)
 # DEVS:Networks/): net_drivers_read finds it only while something (here, the test as its stack) has it open,
 # and nothing asks a driver that nobody uses (it would start its hardware). wifi_read_device: unit 0 answers
 # -55 and -92 dBm, unit 1 does not have the command, unit 4 is offline, unit 5 is the stack's only, unit 3
@@ -28,7 +29,7 @@
 # expect-out: fin
 
 @header "static struct Device *otros[20]; static LONG otros_n;"
-@header "static struct Device *fake_dev; static struct IORequest *fake_kept; static LONG fake_aborts, fake_opens, fake_untracks; static struct IORequest *pila;"
+@header "static struct Device *fake_dev; static struct IORequest * volatile fake_kept; static volatile LONG fake_aborts, fake_opens, fake_untracks; static struct IORequest *pila;"
 
 # a SANA-II driver of the test's own: "dashfake.device"
 @c

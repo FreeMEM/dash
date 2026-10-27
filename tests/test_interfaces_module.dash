@@ -1,5 +1,6 @@
 # Test: an interface of an imported module (Lorraine D43), with a struct of the module and one of the program
-# that have it; also built with --multifile (the slots of the method tables are the same in every file).
+# that have it; also built with --multifile (the slots of the method tables are the same in every file). A
+# method of the module's struct calls a private function (_doble) of the module.
 # memcheck
 # expect-out: ods 6 / csv 30 / ods
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0

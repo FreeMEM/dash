@@ -106,8 +106,23 @@ class CTemplates:
 #include <proto/dos.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stabs.h>
 
 static void _dash_exit(int code);
+
+/* What runs when the program ends, however it ends (libnix's exit list), last in first: libnix's atexit
+   takes its nodes from malloc, whose first block is 16 KB of memory for the whole program */
+static void (*_dash_atexit_f[16])(void);
+static LONG _dash_atexit_n = 0;
+static int _dash_atexit(void (*f)(void)) {
+    if (_dash_atexit_n >= 16) return -1;
+    _dash_atexit_f[_dash_atexit_n++] = f;
+    return 0;
+}
+void _dash_atexit_run(void) {
+    while (_dash_atexit_n > 0) _dash_atexit_f[--_dash_atexit_n]();
+}
+ADD2EXIT(_dash_atexit_run, 0);
 
 /* A runtime error that stops the program: the message (and the file:line of the Dash statement, if
    known), then the same cleanup as a normal end (windows, libraries, memory), with return code 20.
@@ -290,7 +305,7 @@ static void _dash_trap_on(void) {
     _dash_trap_usp = (ULONG)&_dash_trap_stack[2048 - 4];
     _dash_trap_old = t->tc_TrapCode;
     t->tc_TrapCode = (APTR)_dash_trap;
-    atexit(_dash_trap_off);
+    _dash_atexit(_dash_trap_off);
 }
 
 /* Where pc is in the program: its hunk (segment) and offset, from the process's segment list */
@@ -967,8 +982,9 @@ typedef struct {
 #define _DASH_ARR_OBJS 1
 #define _DASH_ARR_STRS 2
 #define _DASH_ARR_DBLS 3
-/* LONGs per element: 2 for a Double */
-#define _DASH_ARR_W(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 2 : 1)
+/* LONGs per element as a shift: 1 for a Double (2 LONGs), 0 else. A shift, not a multiplication: that is a
+   call to libgcc on a 68000 */
+#define _DASH_ARR_SH(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 1 : 0)
 
 /* apart, so that freeing a list of Ints stays a short leaf function */
 static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
@@ -982,9 +998,15 @@ static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr
 
 static void DashArray_destroy(void *obj) {
     DashArrayLong *arr = (DashArrayLong *)obj;
+    ULONG kind;
     if (!arr->data) return;
-    if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS || _DASH_ARR_KIND(arr) == _DASH_ARR_STRS) DashArray_drop_elements(arr);
-    _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_W(arr) * _DASH_ARR_CAP(arr));
+    kind = _DASH_ARR_KIND(arr);
+    if (!kind) {                     /* Ints: the usual case, a shift and no call (a multiplication is one on a 68000) */
+        _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << 2);
+        return;
+    }
+    if (kind != _DASH_ARR_DBLS) DashArray_drop_elements(arr);
+    _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << (kind == _DASH_ARR_DBLS ? 3 : 2));
 }
 
 static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
@@ -1070,18 +1092,21 @@ static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
 }
 
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
-    LONG w, kind;
+    LONG sh, kind, n;
+    LONG *from;
     if (!arr) return NULL;
-    w = _DASH_ARR_W(arr);
+    sh = _DASH_ARR_SH(arr);
     kind = _DASH_ARR_KIND(arr);
     if (start < 0) start = 0;
     if (end > arr->length) end = arr->length;
     if (start >= end) end = start;
     LONG new_len = end - start;
-    DashArrayLong *result = DashArray_create(new_len * w);
+    DashArrayLong *result = DashArray_create(new_len << sh);
     if (!result) return NULL;
-    for (LONG i = 0; i < new_len * w; i++) {
-        result->data[i] = arr->data[start * w + i];
+    from = arr->data + (start << sh);
+    n = new_len << sh;
+    for (LONG i = 0; i < n; i++) {
+        result->data[i] = from[i];
     }
     if (kind == _DASH_ARR_DBLS) {
         result->length = new_len;
@@ -3186,7 +3211,7 @@ static BOOL _dash_single_instance(STRPTR name) {
     }
     Permit();
     if (!port) FreeVec(copy);
-    if (!at_exit) at_exit = atexit(_dash_instance_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_instance_cleanup) == 0;
     return TRUE;
 }
 
@@ -3318,7 +3343,7 @@ static void _dash_cx_cleanup(void) {
 
 static void _dash_cx_at_exit(void) {
     static BOOL at_exit = FALSE;
-    if (!at_exit) at_exit = atexit(_dash_cx_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_cx_cleanup) == 0;
 }
 
 /* The program in Exchange as a commodity with show and hide (COF_SHOW_HIDE), enabled; FALSE without
@@ -3613,7 +3638,7 @@ static BOOL _dash_disk_answered(APTR arg) {
 static void _dash_meter_cleanup(void);
 static void _dash_meter_at_exit(void) {
     static BOOL at_exit = FALSE;
-    if (!at_exit) at_exit = atexit(_dash_meter_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_meter_cleanup) == 0;
 }
 
 /* The mounted volumes (with a disk in, their handler running): how many. Each one's size and free space,
@@ -4288,7 +4313,7 @@ static void _dash_mc_cleanup(void) {
 static BOOL _dash_mc_on(void) {
     static BOOL at_exit = FALSE;
     if (_dash_mc_io) return TRUE;
-    if (!at_exit) at_exit = atexit(_dash_mc_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_mc_cleanup) == 0;
     if (!(_dash_mc_port = CreateMsgPort())) return FALSE;
     if (!(_dash_mc_io = (struct IOStdReq *)CreateIORequest(_dash_mc_port, sizeof(struct IOStdReq))) ||
         OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)_dash_mc_io, 0)) {
@@ -4366,7 +4391,7 @@ static BOOL _dash_mouse_prefs_accel(void) {
 static void _dash_mouse_prefs_set(LONG ticks, BOOL accel) {
     struct Preferences p;
     static BOOL at_exit = FALSE;
-    if (!at_exit) at_exit = atexit(_dash_mc_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_mc_cleanup) == 0;
     GetPrefs(&p, sizeof(p));
     if (!_dash_mc_prefs_saved) { _dash_mc_prefs = p; _dash_mc_prefs_saved = TRUE; }
     p.PointerTicks = (UWORD)(ticks < 1 ? 1 : ticks);
@@ -4628,7 +4653,7 @@ static BOOL _dash_catalog_open_v(STRPTR name, LONG version, STRPTR builtin) {
     LONG i, k;
     BOOL found = FALSE;
     _dash_catalog_tried = TRUE;
-    if (!at_exit) at_exit = atexit(_dash_catalog_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_catalog_cleanup) == 0;
     _dash_catalog_cleanup();
     if (!name || !*name || strlen((char *)name) > 100) return FALSE;
     if (!_dash_locale_open() || !(loc = OpenLocale(NULL))) return FALSE;
@@ -4918,7 +4943,7 @@ static LONG _dash_file_notify(STRPTR path) {
     if (!path || !*path) return 0;
     for (h = 1; h <= _DASH_NOTIFY_MAX && _dash_notify[h]; h++) ;
     if (h > _DASH_NOTIFY_MAX) return 0;
-    if (!at_exit) at_exit = atexit(_dash_notify_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_notify_cleanup) == 0;
     if (!_dash_notify_port) {
         if (!(_dash_notify_port = CreateMsgPort())) return 0;
         _dash_wake_extra |= 1UL << _dash_notify_port->mp_SigBit;
@@ -5032,7 +5057,7 @@ static void _dash_dos_requesters(BOOL on) {
     _dash_dosreq_saved = me->pr_WindowPtr;
     me->pr_WindowPtr = (APTR)-1;
     _dash_dosreq_off = TRUE;
-    if (!at_exit) at_exit = atexit(_dash_dosreq_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_dosreq_cleanup) == 0;
 }
 
 """
@@ -6348,7 +6373,7 @@ static BOOL _dash_cpu_start(void) {
     if (_dash_cpu_on) return TRUE;
     _dash_time_init();
     if (!_dash_time_freq || SysBase->LibNode.lib_Version < 37) return FALSE;
-    if (!at_exit) at_exit = atexit(_dash_cpu_stop) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_cpu_stop) == 0;
     memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
     _dash_cpu_used = 0;
     _dash_cpu_n = _dash_cpu_sum = 0;
@@ -6445,16 +6470,17 @@ static LONG _dash_cpu_total(void) {
     LIST_RUNTIME = """\
 /* Dash List Runtime */
 static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
-    LONG cap = _DASH_ARR_CAP(arr), w = _DASH_ARR_W(arr), newcap, i;
+    LONG cap = _DASH_ARR_CAP(arr), sh = _DASH_ARR_SH(arr) + 2, newcap, i, n;
     LONG *data;
     if (need <= cap) return TRUE;
     newcap = cap * 2;
     if (newcap < 4) newcap = 4;
     if (newcap < need) newcap = need;
-    data = (LONG *)_dash_block_get(sizeof(LONG) * w * newcap);
+    data = (LONG *)_dash_block_get((ULONG)newcap << sh);
     if (!data) return FALSE;
-    for (i = 0; i < arr->length * w; i++) data[i] = arr->data[i];
-    if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * w * cap);
+    n = arr->length << (sh - 2);
+    for (i = 0; i < n; i++) data[i] = arr->data[i];
+    if (arr->data) _dash_block_put(arr->data, (ULONG)cap << sh);
     arr->data = data;
     arr->capacity = (arr->capacity & 0xFF000000) | newcap;
     return TRUE;
@@ -6462,10 +6488,11 @@ static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
 
 /* Room for one more at index (0..length): the elements from there move up */
 static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
-    LONG i, w;
+    LONG i, sh, stop;
     if (!arr || index < 0 || index > arr->length || !DashArray_reserve(arr, arr->length + 1)) return FALSE;
-    w = _DASH_ARR_W(arr);
-    for (i = (arr->length + 1) * w - 1; i >= (index + 1) * w; i--) arr->data[i] = arr->data[i - w];
+    sh = _DASH_ARR_SH(arr);
+    stop = (index + 1) << sh;
+    for (i = ((arr->length + 1) << sh) - 1; i >= stop; i--) arr->data[i] = arr->data[i - (1 << sh)];
     arr->length++;
     return TRUE;
 }
@@ -6494,8 +6521,8 @@ static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
 
 /* The element at index (inside the list) goes: the ones after it move down */
 static void DashArray_close(DashArrayLong *arr, LONG index) {
-    LONG w = _DASH_ARR_W(arr), i, n = (arr->length - 1) * w;
-    for (i = index * w; i < n; i++) arr->data[i] = arr->data[i + w];
+    LONG sh = _DASH_ARR_SH(arr), w = 1 << sh, i, n = (arr->length - 1) << sh;
+    for (i = index << sh; i < n; i++) arr->data[i] = arr->data[i + w];
     arr->length--;
 }
 
@@ -6553,38 +6580,40 @@ static void DashArray_clear(DashArrayLong *arr) {
 /* Dash Sort Runtime */
 /* Puts src[from..mid) and src[mid..to) (sorted, w LONGs per element) in order into dst[from..to): an element
    of the second half goes first only if after(first's, second's) says so, which keeps equal ones in order */
-static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG w,
+static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG sh,
                              LONG (*after)(const LONG *, const LONG *)) {
-    LONG i = from, j = mid, k = from * w, c;
+    LONG i = from, j = mid, w = 1 << sh, c;
+    LONG *out = dst + (from << sh);
     while (i < mid || j < to) {
         const LONG *e;
-        if (j >= to || (i < mid && !after(src + i * w, src + j * w))) e = src + (i++) * w;
-        else e = src + (j++) * w;
-        for (c = 0; c < w; c++) dst[k++] = e[c];
+        if (j >= to || (i < mid && !after(src + (i << sh), src + (j << sh)))) e = src + ((i++) << sh);
+        else e = src + ((j++) << sh);
+        for (c = 0; c < w; c++) *out++ = e[c];
     }
 }
 
 /* Sorts the list in place, keeping the order of equal elements. after(a, b): nonzero if the element at b goes
    before the one at a. Runs of 8 by insertion, then merges through a buffer as long as the list (without
-   memory for it, insertion all along) */
+   memory for it, insertion all along). Element k is at data + (k << sh): shifts, no multiplications */
 static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const LONG *)) {
-    LONG n, w, i, j, c, width, run = 8;
+    LONG n, sh, w, i, j, c, width, run = 8;
     LONG *buf, *src, *dst, t[2];
     if (!arr || arr->length < 2) return;
     n = arr->length;
-    w = _DASH_ARR_W(arr);
-    buf = (LONG *)_dash_block_get(sizeof(LONG) * w * n);
+    sh = _DASH_ARR_SH(arr);
+    w = 1 << sh;
+    buf = (LONG *)_dash_block_get((ULONG)n << (sh + 2));
     if (!buf) run = n;
     for (i = 0; i < n; i += run) {
         LONG end = i + run < n ? i + run : n;
         for (j = i + 1; j < end; j++) {
             LONG k = j;
-            for (c = 0; c < w; c++) t[c] = arr->data[j * w + c];
-            while (k > i && after(arr->data + (k - 1) * w, t)) {
-                for (c = 0; c < w; c++) arr->data[k * w + c] = arr->data[(k - 1) * w + c];
+            for (c = 0; c < w; c++) t[c] = arr->data[(j << sh) + c];
+            while (k > i && after(arr->data + ((k - 1) << sh), t)) {
+                for (c = 0; c < w; c++) arr->data[(k << sh) + c] = arr->data[((k - 1) << sh) + c];
                 k--;
             }
-            for (c = 0; c < w; c++) arr->data[k * w + c] = t[c];
+            for (c = 0; c < w; c++) arr->data[(k << sh) + c] = t[c];
         }
     }
     if (!buf) return;
@@ -6593,12 +6622,180 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
     for (width = run; width < n; width *= 2) {
         for (i = 0; i < n; i += 2 * width) {
             LONG mid = i + width < n ? i + width : n, to = i + 2 * width < n ? i + 2 * width : n;
-            _dash_sort_merge(src, dst, i, mid, to, w, after);
+            _dash_sort_merge(src, dst, i, mid, to, sh, after);
         }
         { LONG *x = src; src = dst; dst = x; }
     }
-    if (src != arr->data) for (i = 0; i < n * w; i++) arr->data[i] = src[i];
-    _dash_block_put(buf, sizeof(LONG) * w * n);
+    if (src != arr->data) for (i = 0; i < (n << sh); i++) arr->data[i] = src[i];
+    _dash_block_put(buf, (ULONG)n << (sh + 2));
+}
+
+"""
+
+    # Lorraine D46: what a user types and clicks, made by a program (to test another one in the emulator)
+    SIMINPUT_RUNTIME = """\
+/* Dash Simulated Input Runtime */
+/* input_* (Lorraine D46): key presses, pointer moves and clicks sent through input.device as if the user made
+   them, to whatever window is active: a test program starts the one to test (run_program), waits for its
+   window (input_active_title) and types and clicks in it. Positions are from the active window's corner. */
+#include <devices/input.h>
+#include <devices/inputevent.h>
+#include <proto/keymap.h>
+#ifndef _DASH_KEYMAP_BASE
+#define _DASH_KEYMAP_BASE
+struct Library *KeymapBase = NULL;
+#endif
+static struct MsgPort *_dash_in_port = NULL;
+static struct IOStdReq *_dash_in_io = NULL;
+static BOOL _dash_in_open = FALSE, _dash_in_keymap = FALSE;
+
+static BOOL _dash_input_init(void) {
+    if (_dash_in_open) return TRUE;
+    if (!_dash_in_port && !(_dash_in_port = CreateMsgPort())) return FALSE;
+    if (!_dash_in_io && !(_dash_in_io = (struct IOStdReq *)CreateIORequest(_dash_in_port, sizeof(struct IOStdReq))))
+        return FALSE;
+    if (OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)_dash_in_io, 0) != 0) return FALSE;
+    _dash_in_open = TRUE;
+    return TRUE;
+}
+
+static void _dash_input_cleanup(void) {
+    if (_dash_in_open) CloseDevice((struct IORequest *)_dash_in_io);
+    if (_dash_in_io) DeleteIORequest((struct IORequest *)_dash_in_io);
+    if (_dash_in_port) DeleteMsgPort(_dash_in_port);
+    _dash_in_open = FALSE;
+    _dash_in_io = NULL;
+    _dash_in_port = NULL;
+    if (_dash_in_keymap && KeymapBase) { CloseLibrary(KeymapBase); KeymapBase = NULL; }
+    _dash_in_keymap = FALSE;
+}
+
+/* One event, then a tick (20 ms) for the programs to take it */
+static void _dash_input_send(struct InputEvent *ie) {
+    if (!_dash_input_init()) return;
+    _dash_in_io->io_Command = IND_WRITEEVENT;
+    _dash_in_io->io_Data = ie;
+    _dash_in_io->io_Length = sizeof(*ie);
+    DoIO((struct IORequest *)_dash_in_io);
+    Delay(1);
+}
+
+static void _dash_input_raw(UWORD code, UWORD qual) {
+    struct InputEvent ie;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWKEY;
+    ie.ie_Code = code;
+    ie.ie_Qualifier = qual;
+    _dash_input_send(&ie);
+}
+
+/* Dash's 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (the right one: the left one with a letter is the system's) */
+static const UWORD _dash_input_mods[4][2] = {
+    { 0x60, IEQUALIFIER_LSHIFT }, { 0x63, IEQUALIFIER_CONTROL }, { 0x64, IEQUALIFIER_LALT }, { 0x67, IEQUALIFIER_RCOMMAND } };
+
+static UWORD _dash_input_qual(LONG q) {
+    UWORD qual = 0;
+    LONG i;
+    for (i = 0; i < 4; i++) if (q & (1 << i)) qual |= _dash_input_mods[i][1];
+    return qual;
+}
+
+/* Presses and lets go a raw key (0x45 Esc, 0x44 Return, 0x4C-0x4F arrows...), holding those keys down
+   around it as a keyboard does */
+static void _dash_input_key(LONG code, LONG q) {
+    UWORD qual = 0;
+    LONG i;
+    for (i = 0; i < 4; i++)
+        if (q & (1 << i)) { qual |= _dash_input_mods[i][1]; _dash_input_raw(_dash_input_mods[i][0], qual); }
+    _dash_input_raw((UWORD)(code & 0x7F), qual);
+    _dash_input_raw((UWORD)(code & 0x7F) | IECODE_UP_PREFIX, qual);
+    for (i = 3; i >= 0; i--)
+        if (q & (1 << i)) { qual &= ~_dash_input_mods[i][1]; _dash_input_raw(_dash_input_mods[i][0] | IECODE_UP_PREFIX, qual); }
+}
+
+/* Types a text (Latin-1) with the keyboard's keymap: each character becomes its keys (MapANSI); one the
+   keymap cannot type is left out */
+static void _dash_input_text(STRPTR text) {
+    UBYTE keys[16];
+    LONG n, i;
+    if (!text) return;
+    if (!KeymapBase) {
+        KeymapBase = OpenLibrary((CONST_STRPTR)"keymap.library", 37);
+        _dash_in_keymap = KeymapBase != NULL;
+        if (!KeymapBase) return;
+    }
+    for (; *text; text++) {
+        n = MapANSI(text, 1, (STRPTR)keys, sizeof(keys) / 2, NULL);
+        for (i = 0; i < n; i++) {
+            _dash_input_raw(keys[i * 2], keys[i * 2 + 1]);
+            _dash_input_raw(keys[i * 2] | IECODE_UP_PREFIX, keys[i * 2 + 1]);
+        }
+    }
+}
+
+/* The pointer to (x, y) from the corner of the active window (of the screen in front without one) */
+static void _dash_input_pointer(LONG x, LONG y, UWORD qual) {
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    struct Window *w;
+    struct Screen *sc;
+    ULONG lock = LockIBase(0);
+    w = IntuitionBase->ActiveWindow;
+    sc = w ? w->WScreen : IntuitionBase->FirstScreen;
+    pp.iepp_Screen = sc;
+    pp.iepp_Position.X = (w ? w->LeftEdge : 0) + x;
+    pp.iepp_Position.Y = (w ? w->TopEdge : 0) + y;
+    UnlockIBase(lock);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_NEWPOINTERPOS;
+    ie.ie_SubClass = IESUBCLASS_PIXEL;
+    ie.ie_EventAddress = (APTR)&pp;
+    ie.ie_Qualifier = qual;
+    _dash_input_send(&ie);
+}
+
+static void _dash_input_button(BOOL down, UWORD qual) {
+    struct InputEvent ie;
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = down ? IECODE_LBUTTON : IECODE_LBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = qual | (down ? IEQUALIFIER_LEFTBUTTON : 0);
+    _dash_input_send(&ie);
+}
+
+static void _dash_input_move(LONG x, LONG y) {
+    _dash_input_pointer(x, y, 0);
+}
+
+static void _dash_input_click(LONG x, LONG y, LONG q) {
+    UWORD qual = _dash_input_qual(q);
+    _dash_input_pointer(x, y, qual);
+    _dash_input_button(TRUE, qual);
+    _dash_input_button(FALSE, qual);
+}
+
+/* Presses at (x1, y1), moves to (x2, y2) in steps of 8 pixels with the button down and lets go there */
+static void _dash_input_drag(LONG x1, LONG y1, LONG x2, LONG y2) {
+    LONG dx = x2 - x1, dy = y2 - y1, n, i;
+    n = (dx < 0 ? -dx : dx) > (dy < 0 ? -dy : dy) ? (dx < 0 ? -dx : dx) : (dy < 0 ? -dy : dy);
+    n = n / 8 + 1;
+    _dash_input_pointer(x1, y1, 0);
+    _dash_input_button(TRUE, 0);
+    for (i = 1; i <= n; i++)
+        _dash_input_pointer(x1 + dx * i / n, y1 + dy * i / n, IEQUALIFIER_LEFTBUTTON);
+    _dash_input_button(FALSE, 0);
+}
+
+/* The title of the active window, "" if there is none */
+static STRPTR _dash_input_active_title(void) {
+    char buf[128];
+    ULONG lock = LockIBase(0);
+    struct Window *w = IntuitionBase->ActiveWindow;
+    LONG n = 0;
+    if (w && w->Title) for (; w->Title[n] && n < (LONG)sizeof(buf) - 1; n++) buf[n] = w->Title[n];
+    UnlockIBase(lock);
+    buf[n] = 0;
+    return _dash_str_dup((STRPTR)buf, TRUE);
 }
 
 """
@@ -7744,14 +7941,18 @@ static BOOL _dash_tls_resumed(LONG t) {
 /* a + b: a new list with the elements of both. It holds what a list of the
    first typed operand holds (an empty literal has no type) */
 static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
-    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, w;
+    LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, sh;
     DashArrayLong *result;
     kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
-    w = kind == _DASH_ARR_DBLS ? 2 : 1;
-    result = DashArray_create((la + lb) * w);
+    sh = kind == _DASH_ARR_DBLS ? 1 : 0;
+    result = DashArray_create((la + lb) << sh);
     if (!result) return NULL;
-    for (i = 0; i < la * w; i++) result->data[i] = a->data[i];
-    for (i = 0; i < lb * w; i++) result->data[la * w + i] = b->data[i];
+    la <<= sh;
+    lb <<= sh;
+    for (i = 0; i < la; i++) result->data[i] = a->data[i];
+    for (i = 0; i < lb; i++) result->data[la + i] = b->data[i];
+    la >>= sh;
+    lb >>= sh;
     if (kind == _DASH_ARR_DBLS) {
         result->length = la + lb;
         result->capacity = (la + lb) | ((LONG)_DASH_ARR_DBLS << 24);
@@ -10347,7 +10548,7 @@ static APTR _dash_desk_canvas(LONG x, LONG y, LONG w, LONG h) {
     LONG depth, i, dw, dh;
     BOOL ok;
     if (w <= 0 || h <= 0 || GfxBase->LibNode.lib_Version < 39) return NULL;
-    if (!at_exit) at_exit = atexit(_dash_desk_cleanup) == 0;
+    if (!at_exit) at_exit = _dash_atexit(_dash_desk_cleanup) == 0;
     if (!_dash_desk_scr && !(_dash_desk_scr = LockPubScreen((CONST_STRPTR)"Workbench"))) return NULL;
     sbm = _dash_desk_scr->RastPort.BitMap;
     depth = GetBitMapAttr(sbm, BMA_DEPTH);
@@ -11511,7 +11712,10 @@ static void _dash_cleanup_soft_sprites(void) {
 #include <proto/keymap.h>
 #include <devices/inputevent.h>
 
+#ifndef _DASH_KEYMAP_BASE
+#define _DASH_KEYMAP_BASE
 struct Library *KeymapBase = NULL;
+#endif
 static LONG _dash_last_key = 0;
 static UBYTE _dash_last_key_text[8];
 
@@ -15082,6 +15286,7 @@ struct _DashCanvas {
     LONG move_id;                   /* 0: no pointer moves (D63) */
     LONG drag_id;                   /* 0: no drags (Lorraine D12) */
     BOOL dragging;                  /* the left button went down on the area and is still down */
+    BOOL drag_moved;                /* ... and the pointer moved since (a click is no drag) */
     LONG drag_state;                /* last drag event: 1 moving with the button down, 2 let go */
     LONG ptr_x, ptr_y;              /* where the pointer was last seen, from the area's corner */
     BOOL ptr_in, ptr_known;         /* inside the area then; seen at all */
@@ -15091,6 +15296,8 @@ struct _DashCanvas {
     APTR prev;                      /* mui_canvas_char (dashweb D31) */
     struct MUI_EventHandlerNode handler;
     BOOL handler_added;
+    BOOL keys_set;                  /* Esc taken from the window (MUIA_Window_DisableKeys) */
+    ULONG old_keys;
     BOOL buffered;                  /* mui_canvas_buffered: drawn in bbm, then copied at once (D48) */
     struct BitMap *bbm;             /* as big as the window's part up to the area's bottom right */
     struct Layer_Info *bli;
@@ -15285,6 +15492,16 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->handler.ehn_Flags = 0;
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_AddEventHandler, (IPTR)&data->handler);
             data->handler_added = TRUE;
+            /* MUI's window takes Esc (close) before any handler: with keys for the area, Esc is the program's
+               (Lorraine); the close gadget still closes */
+            if (data->input_id) {
+                IPTR keys = 0;
+                GetAttr(MUIA_Window_DisableKeys, _DASH_MRI(obj)->mri_WindowObject, &keys);
+                data->old_keys = (ULONG)keys;
+                SetAttrs(_DASH_MRI(obj)->mri_WindowObject, MUIA_Window_DisableKeys,
+                         (IPTR)(keys | (1UL << MUIKEY_WINDOW_CLOSE)), TAG_DONE);
+                data->keys_set = TRUE;
+            }
         }
         return TRUE;
     case MUIM_Show:
@@ -15298,6 +15515,10 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
         if (data->handler_added) {
             _DASH_MUI_DO(_DASH_MRI(obj)->mri_WindowObject, MUIM_Window_RemEventHandler, (IPTR)&data->handler);
             data->handler_added = FALSE;
+        }
+        if (data->keys_set) {
+            SetAttrs(_DASH_MRI(obj)->mri_WindowObject, MUIA_Window_DisableKeys, (IPTR)data->old_keys, TAG_DONE);
+            data->keys_set = FALSE;
         }
         return DoSuperMethodA(cl, obj, msg);
     case MUIM_HandleEvent: {
@@ -15313,9 +15534,14 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
                and one when let go (or the window goes inactive); the position may be out of the area */
             if (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTDOWN && inside) {
                 data->dragging = TRUE;
+                data->drag_moved = FALSE;
+            } else if (data->dragging && !data->drag_moved &&
+                       ((im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP) || im->Class == IDCMP_INACTIVEWINDOW)) {
+                data->dragging = FALSE;      /* let go without moving: a click, no drag events */
             } else if (data->dragging && (im->Class == IDCMP_MOUSEMOVE ||
                                           (im->Class == IDCMP_MOUSEBUTTONS && im->Code == SELECTUP) ||
                                           im->Class == IDCMP_INACTIVEWINDOW)) {
+                data->drag_moved = TRUE;
                 if (im->Class != IDCMP_INACTIVEWINDOW) {
                     data->mouse_x = x; data->mouse_y = y;
                     data->qual = im->Qualifier;
@@ -15346,6 +15572,8 @@ static ULONG _dash_canvas_dispatch(struct IClass *cl __asm("a0"), Object *obj __
             data->button = 0; data->wheel = im->Code == 0x7A ? 1 : -1; data->key = -1;
             data->qual = im->Qualifier;
         } else if (im->Class == IDCMP_RAWKEY && !(im->Code & IECODE_UP_PREFIX) && inside) {
+            if (im->Code >= 0x60 && im->Code <= 0x67) return 0;   /* Shift, Ctrl, Alt, Amiga alone: they come
+                                                                     with the next key (mui_canvas_qualifiers) */
             data->button = 0; data->wheel = 0; data->key = im->Code;
             data->qual = im->Qualifier;
             data->prev = im->IAddress ? *(APTR *)im->IAddress : NULL;
@@ -16018,6 +16246,7 @@ _RUNTIME_FLAGS = [
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
+    ("SIMINPUT_RUNTIME", "uses_siminput"),  # Lorraine D46
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -16271,6 +16500,8 @@ class CodeGenerator(ASTVisitor):
         self.prototypes: List[str] = []
         self.functions: List[str] = []
         self.struct_typedefs: List[str] = []  # Track struct type definitions
+        self.struct_bodies: List[str] = []    # their fields (struct _Dash_X {...}), all before any code
+        self.struct_protos: List[str] = []    # prototypes of their constructors and methods
         self.enum_defines: List[str] = []  # Track enum definitions
         self.const_defines: List[str] = []  # Track constant definitions
         self.extern_protos: List[str] = []  # Track extern function prototypes
@@ -16343,6 +16574,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_math: bool = False  # sqrt, sin... of Double (MATH_RUNTIME, Lorraine D4)
         self.uses_dbl_list: bool = False  # lists of Double (DBL_LIST_RUNTIME, Lorraine D2)
         self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
+        self.uses_siminput: bool = False  # input_key, input_click... (SIMINPUT_RUNTIME, Lorraine D46)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -16566,6 +16798,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BUFSEARCH_RUNTIME)
         if self.uses_regex:
             parts.append(CTemplates.REGEX_RUNTIME)
+        if self.uses_siminput:
+            parts.append(CTemplates.SIMINPUT_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -16727,13 +16961,15 @@ class CodeGenerator(ASTVisitor):
         # Add struct type definitions (forward typedefs first, so fields can
         # point to the same struct or to one defined later). After the runtimes:
         # methods may draw (_dash_rp) or use any builtin
+        # Their constructors and methods go after the prototypes of the functions, so a method can call any
+        # function, constructor or method of the program
         if self.struct_typedefs or self.analysis.program.structs:
             parts.append("\n/* Struct Definitions */\n")
             # an interface's values are pointers to any struct that has it (Lorraine D43)
             parts.append("".join(f"typedef void _Dash_{st.name};\n" if st.is_interface else
                                  f"typedef struct _Dash_{st.name} _Dash_{st.name};\n"
                                  for st in self.analysis.program.structs))
-            parts.append("\n".join(self.struct_typedefs))
+            parts.append("".join(self.struct_bodies))
             parts.append("\n")
 
         # Add global declarations
@@ -16806,6 +17042,13 @@ static LONG _dash_event_window_handle(void) {{
         if self.prototypes:
             parts.append("\n// Function Prototypes")
             parts.append("".join(self.prototypes))
+
+        # Struct constructors and methods (see above)
+        if self.struct_typedefs:
+            parts.append("\n/* Struct Constructors and Methods */\n")
+            parts.append("".join(self.struct_protos))
+            parts.append("\n".join(self.struct_typedefs))
+            parts.append("\n")
 
         # C blocks (@c): after the prototypes, so they can call Dash functions, and before
         # the @native functions, which can call them (dashweb D10)
@@ -16880,6 +17123,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_meter_cleanup();\n")
         if self.uses_mouse:
             cleanup.insert(0, "    _dash_mc_cleanup();\n")   # the patch out of input.device first
+        if self.uses_siminput:
+            cleanup.insert(0, "    _dash_input_cleanup();\n")
         if self.uses_catalog:
             cleanup.append("    _dash_catalog_cleanup();\n")
         if self.uses_date:
@@ -17338,7 +17583,22 @@ static void {struct.name}_release({c_name} *obj) {{
         for method in struct.methods:
             methods_code += self._debug_wrap(method, self._generate_struct_method(struct, method, type_map, c_name))
 
-        self.struct_typedefs.append(typedef + constructor + retain_func + release_func + methods_code + vtable)
+        self.struct_bodies.append(typedef)
+        self.struct_protos.append(
+            f"static {c_name}* _dash_struct_new_{struct.name}({params_str}) __attribute__((unused));\n"
+            f"static {c_name}* _dash_struct_create_{struct.name}({params_str}) __attribute__((unused));\n"
+            + "".join(self._struct_method_proto(struct, m, c_name) for m in struct.methods))
+        self.struct_typedefs.append(constructor + retain_func + release_func + methods_code + vtable)
+
+    def _struct_method_proto(self, struct: StructDef, method: StructMethod, c_name: str) -> str:
+        """static RET X_m(_Dash_X *self, ...); (as _generate_struct_method writes it)"""
+        params = [f"{c_name} *self"]
+        for p in method.params:
+            if isinstance(p, FunctionParam):
+                params.append(f"{self._dash_type_to_c(p.param_type) if p.param_type else 'LONG'} {p.name}")
+            else:
+                params.append(f"LONG {p}")
+        return f"static {self._method_c_type(method)} {struct.name}_{method.name}({', '.join(params)}) __attribute__((unused));\n"
 
     def _generate_struct_method(self, struct: StructDef, method: StructMethod,
                                 type_map: dict, c_name: str) -> str:
@@ -19390,6 +19650,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_text = self.uses_arrays = True   # SPLIT_RUNTIME makes a list of texts
         if self.uses_regex:
             self.uses_utf8 = self.uses_strings = True   # REGEX_RUNTIME decodes UTF-8 and makes a text
+        if self.uses_siminput:
+            self.uses_strings = True   # input_active_title makes a text
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:

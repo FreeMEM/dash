@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 667 functions, 667 implemented, 0 not implemented.
+Total: 673 functions, 673 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -618,6 +618,17 @@ Total: 667 functions, 667 implemented, 0 not implemented.
 | `regex_length()` | `LONG` | Length in bytes of the last match of regex_find or regex_match (0 if none) |  |
 | `regex_error()` | `STRPTR` | Why the last pattern is wrong, "" if it is right |  |
 | `wildcard_match(pattern, text, ignore_case)` | `BOOL` | True if the whole text fits Excel's wildcards: * any characters, ? one, ~ before a character takes it as it is (~* ~? ~~) |  |
+
+## Simulated keyboard and mouse
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `input_key(code, qualifiers)` | `void` | Press and let go a raw key in the active window (0x44 Return, 0x45 Esc, 0x4C up, 0x4D down, 0x4E right, 0x4F left, 0x41 Backspace), with qualifiers 1 Shift, 2 Ctrl, 4 Alt, 8 Amiga (added up) held around it |  |
+| `input_text(text)` | `void` | Type a text in the active window with the keyboard's keymap ("=SUM(A1:A3)"); a character the keymap cannot type is left out |  |
+| `input_move(x, y)` | `void` | Move the pointer to (x, y) from the corner of the active window |  |
+| `input_click(x, y, qualifiers)` | `void` | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
+| `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
+| `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
 
 ## Audio
 

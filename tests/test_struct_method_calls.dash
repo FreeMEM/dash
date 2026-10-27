@@ -1,0 +1,45 @@
+# Test: a struct method calls any function of the program (also one written after it), a constructor and a method
+# of a struct written later, and reads a global: the C has the prototypes of functions, constructors and methods
+# before the methods (Lorraine, D43).
+# memcheck
+# expect-out: 21 7 [3] total 10
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+var veces: Int = 3
+
+struct Primero
+    n: Int
+    func calcula() -> Int
+        return triple(self.n)
+    end
+    func con_otro() -> Int
+        s = Segundo(self.n)
+        return s.mas(veces)
+    end
+    func texto() -> String
+        return envuelve("#{veces}")
+    end
+end
+
+struct Segundo
+    m: Int
+    func mas(k: Int) -> Int
+        total = total + k + self.m
+        return self.m + k
+    end
+end
+
+var total: Int = 0
+
+func triple(x: Int) -> Int
+    return x * veces
+end
+
+func envuelve(s: String) -> String
+    return "[" + s + "]"
+end
+
+Main
+    p = Primero(7)
+    Print "#{p.calcula()} #{p.con_otro() - 3} " + p.texto() + " total #{total}"
+end

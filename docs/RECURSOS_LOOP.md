@@ -65,3 +65,36 @@ Tope: al 90 % del uso semanal (`~/.claude/state/uso-7d.txt`) se para (al empezar
   programa en vez de comparar el área entera.
 
 Parado al 86 % del uso semanal: R1 (PR #52) y R3 (PR #53, sobre #52) a la espera de fusionar.
+
+## Segunda ronda (2026-10-27)
+
+Encargo: "ráscate una ronda de optimización de recursos de dash", tras los encargos de Lorraine (PR #62). Base
+medida: `Base tras Lorraine (PR #62)`; frente a R3, `array_literal_new` iba un 28 % más lento en A500 y los 36
+ejecutables pesaban 110 KB más (+33 %, unos 3 KB cada uno).
+
+### R5 — listas sin multiplicaciones
+- Las listas de Double (Lorraine D2) hacían el tamaño de cada elemento (1 o 2 LONG) con una multiplicación, que
+  en un 68000 es una llamada a libgcc: al liberar cada lista, al añadir (`open`, `reserve`), en trozos, `+` y
+  `sort`. Ahora son desplazamientos (`_DASH_ARR_SH`) y liberar una lista de enteros tiene camino propio.
+- Medida: `array_literal_new` 316.844 → 253.764 ns en A500 (R3: 248.010), 68.415 → 57.789 en A1200.
+
+### R6 — funciones de salida sin `atexit` de libnix
+- `atexit` de libnix toma sus nodos de `malloc`, y el primer `malloc` pide un bloque de 16 KB (`__MEMORY_STEP`)
+  que el programa guarda hasta el final; además enlaza `malloc.o`. Dash lo usaba para quitar su manejador de
+  excepciones (todo programa, desde la sesión 17) y en varios runtimes. `_dash_atexit`: una tabla de 16
+  funciones que corre la lista de salida de libnix (`ADD2EXIT` de `<stabs.h>`).
+- Medida: 16 KB menos de memoria por programa en marcha; `hola` 7.888 → 6.780 bytes; los 36 ejecutables
+  440.852 → 401.108 bytes (−9 %). El resto de los ~3 KB por programa es el manejador de excepciones (unos
+  1.200 bytes de código, más 8 KB de pila suya en BSS, que no ocupan disco pero sí memoria).
+- `test_meter_wifi` fallaba con el cambio: sus variables del driver falso, sin `volatile`, las cambia el driver
+  dentro de las llamadas a exec y GCC las leía de un registro (con otra disposición del código, otra decisión).
+  Arreglado en el test.
+
+### Lo que no se tocó
+- Textos y structs: reservar y liberar un texto ya es una docena de instrucciones (31 µs en el A1200 sin fast
+  RAM: concatenar con su liberación, 88 µs; pasar un número a texto, 29 µs). Mejorar de verdad pide cambiar el
+  diseño (cabecera de texto de 12 bytes, temporales): no sin preguntar.
+- La pila de 8 KB para recuperarse de una excepción: la limpieza puede cerrar MUI, que necesita pila.
+- `fixed_mul_add` (2.630 → 4.350 ns) y `string_chars_26` (+5 %) en A500: mismo C que antes; varían con dónde cae
+  el programa en la memoria del A500 emulado.
+
