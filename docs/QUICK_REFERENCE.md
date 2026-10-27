@@ -459,6 +459,7 @@ input_text("=SUM(A1:A3)")        # type/click in the active window (tests): inpu
 clip_write_text(t); t = clip_read_text()   # clipboard (unit 0, FTXT); own data: clip_write_block(1, "LCLC", buf, n), clip_block_size, clip_read_block
 clock_read()                # clock_year/month/day/weekday(0 Sun)/hour/minute/second(); date_text("%A %d-%b-%Y %H:%M") (locale)
 locale_decimal_point()      # "," or "." as the user's country writes; locale_group_separator(), locale_date_order() ("DMY"...)
+str_compare_locale(a, b, false)   # -1/0/1 in the user's language order (accents and case after the letters); l.sort(f)
 t = tr(1, "Hola")           # the text of number 1 in the catalog (@catalog), else "Hola"; catalog_open(name, version), catalog_language()
 mouse_curve(0, [100, 150, 200])      # mouse acceleration: emitter 0 = Amiga mouse; factors in hundredths by speed
 mouse_curves_off()          # the curves out of input.device now (also at the end); mouse_curve_events(emitter)

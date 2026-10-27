@@ -3947,6 +3947,11 @@ Print date_text("%A %d-%b-%Y %H:%M")           # "Saturday 24-Oct-2026 18:05", e
   fechas el pais del usuario. El separador de los decimales y el de los miles (en ingles `"."` y `","`, tambien sin
   `locale.library`) y el orden de dia, mes y año en la fecha corta: `"DMY"`, `"MDY"` o `"YMD"`. Ojo: el
   `españa.country` de Workbench 3.1 y 3.2 trae `"'"` para los decimales y `","` para los miles.
+- `str_compare_locale(a, b, sin_mayusculas)`: compara dos textos UTF-8 en el orden del idioma del usuario
+  (`StrnCmp` de `locale.library`): `-1` si `a` va antes, `0` si son iguales, `1` si va después. Los acentos y las
+  mayúsculas solo cuentan después de las letras (`"árbol"` antes que `"barco"`, `"apple"` antes que `"Banana"`), y con
+  `sin_mayusculas` a `true` no cuentan. Lo que no cabe en Latin-1 se compara como en `utf8_to_latin1` (`€` como `EUR`).
+  Sirve para ordenar filas: `l.sort(f)` con `f(a, b) -> Int` que la devuelva. Sin `locale.library`, por los bytes.
 
 ### Traducciones: tr y @catalog
 
@@ -4402,6 +4407,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
 | Simular teclado y ratón | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
+| Ordenar textos según el idioma | 1 | `str_compare_locale` |
 | Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
@@ -4415,7 +4421,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 93 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **684** | |
+| **Total** | **685** | |
 
 ### Colores Estandar Amiga
 

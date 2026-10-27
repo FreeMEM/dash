@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 684 functions, 684 implemented, 0 not implemented.
+Total: 685 functions, 685 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -640,6 +640,12 @@ Total: 684 functions, 684 implemented, 0 not implemented.
 | `clip_write_block(unit, type, buffer, n)` | `BOOL` | Copy n bytes of a buffer to clipboard unit 1-255 as a FORM of its own type (4 characters, "LCLC"), after clip_write_text: it stays tied to that text, and if something else is copied to unit 0 the block reads as missing |  |
 | `clip_block_size(unit, type)` | `LONG` | Bytes of the block of that type in a clipboard unit, -1 if there is none or something else was copied after it |  |
 | `clip_read_block(unit, type, dest, max)` | `LONG` | Copy the block of that type in a clipboard unit to buffer dest: its bytes, -1 if there is none or something else was copied after it, -2 if it does not fit in max |  |
+
+## Sorting texts by language
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `str_compare_locale(a, b, ignore_case)` | `LONG` | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
 
 ## Audio
 

@@ -4696,6 +4696,16 @@ SIMINPUT_FUNCTIONS = {
         description="Title of the active window (\"\" if none): to wait for the window of the program to test"),
 }
 
+# Lorraine D7: sorting texts as the user's language does
+COLLATE_FUNCTIONS = {
+    "str_compare_locale": _text("str_compare_locale", ["a", "b", "ignore_case"], "LONG",
+                                "_dash_str_compare_locale(${a}, ${b}, ${ignore_case})",
+                                "Compare two UTF-8 texts in the order of the user's language (locale.library): "
+                                "-1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only "
+                                "after the letters (\"árbol\" before \"barco\", \"apple\" before \"Banana\"), and "
+                                "not at all with ignore_case. Without locale.library, by their Latin-1 bytes"),
+}
+
 # Lorraine D18: copy and paste with the other programs (text in unit 0) and with itself (a block of its own)
 CLIP_FUNCTIONS = {
     "clip_write_text": _text("clip_write_text", ["s"], "BOOL", "_dash_clip_write_text(${s})",
@@ -4750,6 +4760,7 @@ ALL_BUILTINS = {
     **REGEX_FUNCTIONS,         # Lorraine D45
     **SIMINPUT_FUNCTIONS,      # Lorraine D46
     **CLIP_FUNCTIONS,          # Lorraine D18
+    **COLLATE_FUNCTIONS,       # Lorraine D7
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

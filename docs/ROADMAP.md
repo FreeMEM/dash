@@ -1007,9 +1007,10 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Interfaces: `interface Orden ... end`, `struct X: Orden`; métodos por una tabla en `_DashType`, sin
       memoria por objeto (D43)
 - [x] Portapapeles: texto (IFF FTXT) con los demás programas y un bloque propio en otra unidad (D18)
+- [x] Comparar textos en el orden del idioma con `StrnCmp` de `locale.library` (D7)
 - [x] MUI: forma del puntero sobre el lienzo (texto, ancho, alto, ocupado) con sprites propios (D16)
 - [x] MUI: menús contextuales en código y en el `.dashui` (`context_menus`), y `input_button` para probarlos (D15)
-- [x] 684 builtins (93 de MUI); 451 resultados sin emulador; 34 ejemplos
+- [x] 685 builtins (93 de MUI); 452 resultados sin emulador; 34 ejemplos
 
 ## Notas y Decisiones
 

@@ -3947,6 +3947,11 @@ Print date_text("%A %d-%b-%Y %H:%M")           # "Saturday 24-Oct-2026 18:05", i
   numbers and dates. The decimal and the thousands separators (in English `"."` and `","`, also without
   `locale.library`) and the order of day, month and year in the short date: `"DMY"`, `"MDY"` or `"YMD"`. Note: the
   `españa.country` of Workbench 3.1 and 3.2 has `"'"` for the decimals and `","` for the thousands.
+- `str_compare_locale(a, b, ignore_case)`: compares two UTF-8 texts in the order of the user's language
+  (`locale.library`'s `StrnCmp`): `-1` if `a` goes first, `0` if they are equal, `1` if it goes after. Accents and case
+  only count after the letters (`"árbol"` before `"barco"`, `"apple"` before `"Banana"`), and with `ignore_case` set to
+  `true` they do not count. What Latin-1 lacks is compared as in `utf8_to_latin1` (`€` as `EUR`). For sorting rows:
+  `l.sort(f)` with an `f(a, b) -> Int` that returns it. Without `locale.library`, by the bytes.
 
 ### Translations: tr and @catalog
 
@@ -4402,6 +4407,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
 | Simulated keyboard and mouse | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
+| Sorting texts by language | 1 | `str_compare_locale` |
 | Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
@@ -4415,7 +4421,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 93 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **684** | |
+| **Total** | **685** | |
 
 ### Standard Amiga Colors
 

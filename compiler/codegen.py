@@ -4940,6 +4940,56 @@ static void _dash_date_cleanup(void) {
 
 """
 
+    # Lorraine D7: texts compared in the user's language's order (to sort rows), after DATE_RUNTIME's locale
+    COLLATE_RUNTIME = """\
+/* A UTF-8 text in Latin-1 (locale.library's) in buf, or a temporary text if it does not fit */
+static STRPTR _dash_collate_l1(STRPTR s, char *buf, LONG size) {
+    const UBYTE *p;
+    const char *t;
+    LONG n = 0, k, cp;
+    if (!s) return (STRPTR)"";
+    for (p = (const UBYTE *)s; *p; p += k) {
+        if (*p < 0x80) { k = 1; cp = *p; }
+        else cp = _dash_utf8_decode(p, &k);
+        if (cp < 256) {
+            if (n >= size - 1) return _dash_utf8_to_latin1(s);
+            buf[n++] = (char)cp;
+        } else {
+            for (t = _dash_utf8_latin1_of(cp); *t; t++) {
+                if (n >= size - 1) return _dash_utf8_to_latin1(s);
+                buf[n++] = *t;
+            }
+        }
+    }
+    buf[n] = 0;
+    return (STRPTR)buf;
+}
+
+/* Two UTF-8 texts in the order of the user's language (Lorraine D7): -1, 0 or 1. locale.library's StrnCmp,
+   SC_COLLATE2 (accents and case count, after the letters themselves) or SC_COLLATE1 with ignore_case (they do
+   not). Without locale.library, by their Latin-1 bytes (A-Z as a-z with ignore_case). */
+static LONG _dash_str_compare_locale(STRPTR a, STRPTR b, LONG ignore_case) {
+    char ba[256], bb[256];
+    struct Locale *l = _dash_user_locale();
+    const UBYTE *x = (const UBYTE *)_dash_collate_l1(a, ba, sizeof(ba));
+    const UBYTE *y = (const UBYTE *)_dash_collate_l1(b, bb, sizeof(bb));
+    LONG r;
+    if (!x || !y) return 0;
+    if (l) r = StrnCmp(l, (CONST_STRPTR)x, (CONST_STRPTR)y, -1, ignore_case ? SC_COLLATE1 : SC_COLLATE2);
+    else {
+        UBYTE cx, cy;
+        do {
+            cx = *x++; cy = *y++;
+            if (ignore_case && cx >= 'A' && cx <= 'Z') cx += 32;
+            if (ignore_case && cy >= 'A' && cy <= 'Z') cy += 32;
+        } while (cx && cx == cy);
+        r = (LONG)cx - (LONG)cy;
+    }
+    return r < 0 ? -1 : r > 0;
+}
+
+"""
+
     # @version (Trasfondo 0.7): the program's name and version, also for C:Version
     VERSION_RUNTIME = """\\
 #ifndef _DASH_VERSION
@@ -16773,6 +16823,7 @@ _RUNTIME_FLAGS = [
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
+    ("COLLATE_RUNTIME", "uses_collate"),    # Lorraine D7
     ("VERSION_RUNTIME", "uses_version"),    # Trasfondo 0.7: @version
     ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
@@ -17070,6 +17121,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
         self.uses_date: bool = False     # clock_*, date_text (DATE_RUNTIME)
+        self.uses_collate: bool = False  # str_compare_locale (COLLATE_RUNTIME, Lorraine D7)
         self.uses_version: bool = False  # program_version (VERSION_RUNTIME)
         self.version = None              # @version: its C literal
         self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
@@ -17425,6 +17477,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CATALOG_RUNTIME)
         if self.uses_date:
             parts.append(CTemplates.DATE_RUNTIME)
+        if self.uses_collate:
+            parts.append(CTemplates.COLLATE_RUNTIME)
         if self.uses_version:
             parts.append(CTemplates.VERSION_RUNTIME)
         if self.uses_notify:
@@ -20194,6 +20248,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # input_active_title makes a text
         if self.uses_clip:
             self.uses_utf8 = self.uses_strings = True   # the clip's text is Latin-1, Dash's UTF-8
+        if self.uses_collate:
+            self.uses_date = self.uses_utf8 = True   # the user's locale (DATE_RUNTIME), UTF-8 to Latin-1
         if self.uses_utf8:
             self.uses_text = True      # UTF8_RUNTIME uses the length cache
         if self.uses_math:
