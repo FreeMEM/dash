@@ -992,6 +992,21 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
       normal y código 20; sin consola, en un requester. En 68000, 68020 y 3.2
 - [x] Tests: `# expect-rc: N`; `tools/emu_run.py` arranca con `FailAt 21`
 
+### Sesión 18 (Fecha: 2026-10-26/27) — lo que pide Lorraine (rama `lorraine`, detalle en `git log`)
+Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le falta a Dash
+(`docs/ingenieria/13_DASH.md` de Lorraine); un commit por tarea `lorraine Dn - ...`.
+- [x] Double (IEEE 754 de 64 bits) con Ryu para el texto, listas de Double y Float, funciones matemáticas con
+      fdlibm (D1, D2, D3, D4)
+- [x] zlib (inflate, deflate, crc32), UTF-8, buscar en búferes, `{Int: T}` (D5, D6, D9, D38-D40)
+- [x] Textos cortos más baratos, `str_code` sin medir, menos marcas de temporales, locales prestadas de una lista
+      (`while` con índices igual de rápido que `for`) (D36, D41, D42, D44)
+- [x] Argumentos del Workbench, separadores del idioma, ordenar con una función, expresiones regulares y
+      comodines (D31, D19, D8, D45)
+- [x] MUI: menús con marca y submenús, modificadoras y arrastre en el lienzo (D13, D11, D12)
+- [x] Interfaces: `interface Orden ... end`, `struct X: Orden`; métodos por una tabla en `_DashType`, sin
+      memoria por objeto (D43)
+- [x] 667 builtins (88 de MUI); 438 resultados sin emulador; 34 ejemplos
+
 ## Notas y Decisiones
 
 ### Decisiones tomadas:
@@ -1005,7 +1020,7 @@ Desde aquí, lo que le falta a dashweb se pide a Dash como tarea `Dnn` (numeraci
 7. **Compilación:** `-O2` por defecto (probado en emulador); Kickstart 3.0+, 68000
 
 ### Preguntas abiertas:
-- ¿Soporte para OOP? (Hay structs con métodos; herencia, no)
+- ¿Soporte para OOP? Structs con métodos e interfaces (D43); herencia, no
 - ¿UI declarativa en Dash? Resuelto de otra forma: ficheros `.dashui` (JSON) del editor visual, importables
   (`docs/MUI_EDITOR.md`)
 - ¿Macros/metaprogramación? (No por ahora)
