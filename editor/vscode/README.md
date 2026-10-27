@@ -18,8 +18,8 @@ running, debugging, and debugging a real Amiga.
 1. Dash and the Amiga toolchain, as in the
    [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
    emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. This extension: `dash-mui-editor-0.2.3.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.3), then in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.3.vsix`.
+2. This extension: `dash-mui-editor-0.2.4.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.4), then in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.4.vsix`.
 
 ## How it works with Dash
 
@@ -129,7 +129,7 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   (A1200 3.1, A1200 3.2 or 68040 with a graphics card; the A500 has no 68020 for MUI, so the A1200), with the
   Workbench files with MUI of `dash.emulator.muiSystem`, `muiSystem32` or `systemRtg`. A Dash program uses the file with `import "ventana.dashui"`.
   With **al cambiar** ticked next to the button (`dash.emulator.previewOnChange`), the picture comes again by itself
-  a moment after each change; it goes off by itself if the emulator fails. (Since 0.2.3.)
+  a moment after each change; it goes off by itself if the emulator fails. (Since 0.2.2.)
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.
 
 ## Debugging on a real Amiga
@@ -160,7 +160,7 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
   `tools/emu_sys_mui.sh`).
 - `dash.emulator.muiSystem32`: Workbench 3.2 files with MUI for "Ver en Amiga" on the A1200 (3.2)
   (`DASH_EMU_SYS_32_MUI`).
-- `dash.emulator.previewOnChange`: "Ver en Amiga" again after each change in the visual editor ("al cambiar"; since 0.2.3).
+- `dash.emulator.previewOnChange`: "Ver en Amiga" again after each change in the visual editor ("al cambiar"; since 0.2.2).
 - `dash.emulator.machine` (`a1200`, `a500`, `a1200-32`, `rtg`), `dash.emulator.program` (`fs-uae`, `amiberry`) and
   `dash.emulator.window` (show the emulator's window and hear it; off: hidden, as in the tests).
 - `dash.editor.autoEnd`: the `end` of a block added on Enter.

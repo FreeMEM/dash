@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.4 (2026-10-27)
+
+- Highlighting: the keyword `interface` and the type `Double`, and the builtins added to Dash since 0.2.3
+  (`sqrt`, `pow`, `sin` and the other Double maths, `str_from_double`/`str_to_double`, `utf8_*`, `inflate`,
+  `deflate`, `crc32`, `buffer_*`, `regex_*`, `wildcard_match`, `locale_*`, `input_*`, `mui_menu_check`,
+  `mui_submenu_*`, `mui_canvas_qualifiers`, `mui_canvas_on_drag`, `mui_image_toggle`, `mui_combo`...).
+- Visual editor: two new objects for toolbars, `image_toggle` (a picture button that stays pressed; with a
+  `group`, the buttons of the group exclude each other) and `combo` (a text field with a list that drops down),
+  in the palette and the preview.
+- Visual editor: menus may have items with a check mark (`check`, `checked`), submenus of one level (`submenu`)
+  and names (`name`, a field of the window). The editor shows submenus; their items, the marks and the names are
+  changed by editing the file as text. It reports a submenu inside another, `checked` without `check` and a name
+  used by a menu item and an object.
+- Visual editor: `interface` is refused as a name, as the compiler does.
+
 ## 0.2.3 (2026-10-25)
 
 - Visual editor: problems that the compiler refuses are now shown before compiling: two windows with the same

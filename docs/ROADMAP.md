@@ -43,7 +43,7 @@ Dash es un lenguaje de alto nivel que transpila a C para Commodore Amiga. El obj
 - [x] Directivas `@native`, `@extern`, `@header`, `@link`, `@c`, `@stack`, `@workbench_output`, `@catalog` y `@version`
 - [x] Commodities, catálogos de idioma (`tr`), fecha y hora, avisos de ficheros cambiados, CPU de cada tarea,
       dibujo en el fondo del Workbench
-- [x] Extensión de VS Code (`editor/vscode/`, versión 0.2.3): errores al escribir, completar, compilar,
+- [x] Extensión de VS Code (`editor/vscode/`, versión 0.2.4): errores al escribir, completar, compilar,
       emulador, depurador y editor visual de MUI
 
 ### Arquitectura del Compilador ✅
