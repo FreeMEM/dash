@@ -147,3 +147,18 @@ diga el usuario. Base medida: `Base ronda 3`.
   (los 4 del escritorio en cada máquina, más `test_desktop_canvas` en 3.2, y `test_on_click_timer`).
 - Aparte (ya en `main`, no de esta ronda): los tests del escritorio fallan en la batería entera porque antes corre
   `test_args_wb` (Lorraine D31) en el mismo arranque; solos o en grupo pasan. Sin causa encontrada aún.
+
+### R7 — RTG sin backdrop: ninguna lectura de la tarjeta al actualizar
+- Lo que se lee de la tarjeta en cada actualización (R4 lo midió a ojo): el bitmap de atrás en el área, para
+  comparar (`_dash_desk_dirty`), y con backdrop además la pantalla en lo que cambió (para no pisar iconos). El velo
+  de Trasfondo no: `desktop_canvas_veil` ya lo guarda mezclado en un bitmap de la tarjeta (`under`), copiado por
+  su blitter.
+- Sin backdrop (el escritorio es el fondo de la pantalla), comparar solo servía para elegir qué copiar, y la copia
+  la hace el blitter de la tarjeta, sin pasar por el bus. Ahora el área (o todo) y lo que repintó el escritorio
+  van tal cual, sin leer nada; las copias en fast RAM no se ponen al día (un cambio de modo vuelve a empezar el
+  lienzo con `_dash_desk_reset`, que las toma de nuevo). Planar y backdrop, igual que antes: el planar lee Chip
+  RAM, y con backdrop las lecturas hacen falta para los iconos.
+- Medida: `_dash_desk_read_bytes` cuenta lo que se lee de la tarjeta. `update_area` de 80 x 40 en 16 bits sin
+  backdrop: 6.400 bytes antes, 0 ahora (lo comprueba `test_desktop_canvas_modes_rtg`). Un panel de 200 x 300 como
+  el de Trasfondo eran unos 120 KB por actualización completa (unos 40 ms en Zorro II).
+- Probado: los 40 tests del lienzo en A1200, A500 y 3.2 y los 6 RTG (68040 con uaegfx); 455/455 sin emulador.

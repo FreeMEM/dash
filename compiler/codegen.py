@@ -10543,10 +10543,12 @@ static BOOL _dash_desk_row_ne(const UBYTE *p, const UBYTE *q, LONG n) {
 }
 
 /* RTG: pixels of a RastPort to or from one of the copies (at its x, y), rows of the canvas's width */
+static ULONG _dash_desk_read_bytes = 0;         /* bytes read from the graphics card (tests, measures) */
 static void _dash_desk_pixels(struct _DashDesk *d, struct RastPort *rp, BOOL write, UBYTE *copy,
                               LONG x, LONG y, LONG sx, LONG sy, LONG w, LONG h) {
     UBYTE *p = copy + (y * d->w + x) * d->bpp;
     LONG i;
+    if (!write) _dash_desk_read_bytes += w * h * d->bpp;
     if (d->fmt) {                           /* Picasso96, in the screen's format: only copied */
         struct _DashRenderInfo ri;
         ri.Memory = p;
@@ -10876,7 +10878,24 @@ static void _dash_desk_present(struct _DashDesk *d, LONG back, struct Rectangle 
         _dash_desk_blt_outside(d->bm[d->front], d->bm[back], &dm, &in);
     }
     t0 = _dash_desk_tick();
-    n = _dash_desk_dirty(d, back, a, r);
+    if (_dash_desk_mode == _DASH_DESK_SCREEN && d->bpp) {
+        /* RTG without backdrop: the area (or all) and what the desktop repainted go to the screen as they are,
+           copied by the card's blitter; comparing first meant reading the back bitmap through the bus (Zorro
+           II: some 3 MB/s). The copies in fast RAM are not kept up to date then: changing mode starts the
+           canvas again (_dash_desk_reset), which takes them again */
+        n = 0;
+        if (a) r[n++] = *a;
+        else { r[0].MinX = 0; r[0].MinY = 0; r[0].MaxX = d->w - 1; r[0].MaxY = d->h - 1; n = 1; }
+        if (d->damage_left > 0) {
+            r[n] = d->damage;
+            if (r[n].MinX < 0) r[n].MinX = 0;
+            if (r[n].MinY < 0) r[n].MinY = 0;
+            if (r[n].MaxX > d->w - 1) r[n].MaxX = d->w - 1;
+            if (r[n].MaxY > d->h - 1) r[n].MaxY = d->h - 1;
+            if (r[n].MinX <= r[n].MaxX && r[n].MinY <= r[n].MaxY) n++;
+            d->damage_left--;
+        }
+    } else n = _dash_desk_dirty(d, back, a, r);
     _DASH_DESK_T(1, t0);
 #ifdef DASH_DESK_TIMES
     _dash_desk_t[2] = _dash_desk_t[3] = _dash_desk_t[4] = 0;
@@ -10885,7 +10904,7 @@ static void _dash_desk_present(struct _DashDesk *d, LONG back, struct Rectangle 
     if (_dash_desk_mode == _DASH_DESK_SCREEN) _dash_desk_present_screen(d, back, r, n);
     else if (d->bpp) _dash_desk_present_chunky(d, r, n);
     else _dash_desk_present_planar(d, back, r, n);
-    if (d->bpp) {                           /* the back copy is the front one now */
+    if (d->bpp && _dash_desk_mode != _DASH_DESK_SCREEN) {   /* the back copy is the front one now */
         UBYTE *t = d->cf;
         if (a) {                            /* (outside the area the back copy was not read: it is the front's) */
             LONG y, rw = d->w * d->bpp;

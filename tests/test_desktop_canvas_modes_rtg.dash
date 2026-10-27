@@ -9,11 +9,21 @@
 # expect-out: sin backdrop: true
 # expect-out: se ve el lienzo: true
 # expect-out: solo el área: true
+# expect-out: sin leer de la tarjeta: true
 # expect-out: otra vez con backdrop: true
 # expect-out: ganchos devueltos: true
 # expect-out: fin
 
 import "lib/escritorio_modos.dash"
+
+# bytes read from the graphics card since the last call (without backdrop an update reads none: R7)
+@native func leidos() -> Int
+"""
+    LONG n = (LONG)_dash_desk_read_bytes;
+    _dash_desk_read_bytes = 0;
+    return n;
+"""
+end
 
 Main
     esperar(true)
@@ -36,10 +46,16 @@ Main
         Print "se ve el lienzo: #{n > 500 and mal() == 0}"
         # las dos rayas se mueven; solo la del área sale
         mover(30, 140)
+        leidos()
         desktop_canvas_update_area(c, 0, 0, 80, 40)
+        l = leidos()
         n = vistos()
         # la raya del área, en su nuevo sitio (32 como la vieja de fuera, 122); la de fuera, en el viejo (142 como 12)
         Print "solo el área: #{mal() == 0 and igual(32, 122) and igual(142, 12) and not igual(32, 12)}"
+        Print "sin leer de la tarjeta: #{l == 0}"
+        if l != 0
+            Print "  leídos #{l}"
+        end
         cambiar_backdrop()
         esperar(true)
         desktop_canvas_update(c)
