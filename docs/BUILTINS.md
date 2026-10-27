@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 653 funciones, 653 implementadas, 0 sin implementar.
+Total: 656 funciones, 656 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -503,6 +503,9 @@ Total: 653 funciones, 653 implementadas, 0 sin implementar.
 | `clock_minute()` | `LONG` | The minute of the last clock_read |  |
 | `clock_second()` | `LONG` | The second of the last clock_read |  |
 | `date_text(format)` | `STRPTR` | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
+| `locale_decimal_point()` | `STRPTR` | What goes before the decimals in the user's country: "," in Spain, "." in English (also without locale.library) |  |
+| `locale_group_separator()` | `STRPTR` | What separates the thousands in the user's country: "." in Spain (1.234,5), "," in English (1,234.5); maybe "" |  |
+| `locale_date_order()` | `STRPTR` | The order of day, month and year in the user's short date: "DMY", "MDY" or "YMD" |  |
 | `program_version()` | `STRPTR` | The program's name and version of @version ("Trasfondo 0.7"); "" without it |  |
 | `file_notify(path)` | `LONG` | Watch a file (it may not be there yet): its number (1 to 8), 0 if it cannot be watched. cx_wait gives 7 when it changes; file_changed(n) says whether it did |  |
 | `file_changed(n)` | `BOOL` | True if the file watched with that number changed since the last file_changed |  |

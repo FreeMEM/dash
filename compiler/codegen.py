@@ -4798,6 +4798,54 @@ static STRPTR _dash_date_text(STRPTR format) {
     return _dash_str_dup((STRPTR)o.buf, TRUE);
 }
 
+/* The user's language and country (Lorraine D19), opened once like date_text's; NULL without locale.library */
+static struct Locale *_dash_user_locale(void) {
+    if (!_dash_date_locale && _dash_locale_open()) _dash_date_locale = OpenLocale(NULL);
+    return _dash_date_locale;
+}
+
+/* What goes before the decimals: "," in Spanish, "." in English (and without locale.library) */
+static STRPTR _dash_locale_decimal_point(void) {
+    struct Locale *l = _dash_user_locale();
+    return _dash_str_dup((STRPTR)(l && l->loc_DecimalPoint ? (char *)l->loc_DecimalPoint : "."), TRUE);
+}
+
+/* What separates the thousands: "." in Spanish, "," in English (and without locale.library); maybe "" */
+static STRPTR _dash_locale_group_separator(void) {
+    struct Locale *l = _dash_user_locale();
+    return _dash_str_dup((STRPTR)(l && l->loc_GroupSeparator ? (char *)l->loc_GroupSeparator : ","), TRUE);
+}
+
+/* The order of day, month and year in the short date: "DMY", "MDY" or "YMD", from its FormatDate codes
+   (%d %e day, %m %b %h %B month, %y %Y year, %D = %m/%d/%y); what it lacks goes after in that order */
+static STRPTR _dash_locale_date_order(void) {
+    struct Locale *l = _dash_user_locale();
+    const char *f = l && l->loc_ShortDateFormat ? (const char *)l->loc_ShortDateFormat : "%d-%b-%y";
+    const char *all = "DMY";
+    char o[4];
+    LONG n = 0, i;
+    for (; *f && n < 3; f++) {
+        const char *add = NULL;
+        if (*f != '%' || !f[1]) continue;
+        switch (*++f) {
+        case 'd': case 'e': add = "D"; break;
+        case 'm': case 'b': case 'h': case 'B': add = "M"; break;
+        case 'y': case 'Y': add = "Y"; break;
+        case 'D': add = "MDY"; break;
+        }
+        for (; add && *add && n < 3; add++) {
+            for (i = 0; i < n && o[i] != *add; i++) ;
+            if (i == n) o[n++] = *add;
+        }
+    }
+    for (; *all && n < 3; all++) {
+        for (i = 0; i < n && o[i] != *all; i++) ;
+        if (i == n) o[n++] = *all;
+    }
+    o[n] = 0;
+    return _dash_str_dup((STRPTR)o, TRUE);
+}
+
 static void _dash_date_cleanup(void) {
     if (_dash_date_locale && LocaleBase) CloseLocale(_dash_date_locale);
     _dash_date_locale = NULL;

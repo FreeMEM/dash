@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 653 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 656 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3793,6 +3793,10 @@ Print date_text("%A %d-%b-%Y %H:%M")           # "Saturday 24-Oct-2026 18:05", e
   `%Y`/`%y` año, `%H` hora, `%I` hora de 12, `%p` AM/PM, `%M` minuto, `%S` segundo, `%w` dia de la semana en
   numero, `%%`; `locale.library` tiene mas (`%x`, `%X`, `%c`: la fecha y la hora como las escribe ese pais). Sin
   `locale.library` (un 3.0 sin ella), los de la lista, en ingles.
+- `locale_decimal_point()`, `locale_group_separator()` y `locale_date_order()`: como escribe los numeros y las
+  fechas el pais del usuario. El separador de los decimales y el de los miles (en ingles `"."` y `","`, tambien sin
+  `locale.library`) y el orden de dia, mes y año en la fecha corta: `"DMY"`, `"MDY"` o `"YMD"`. Ojo: el
+  `españa.country` de Workbench 3.1 y 3.2 trae `"'"` para los decimales y `","` para los miles.
 
 ### Traducciones: tr y @catalog
 
@@ -4243,7 +4247,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Tareas, CPU y escritorio | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
 | Ficheros vigilados y programas | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
-| Fecha, hora y versión | 10 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `program_version` |
+| Fecha, hora y versión | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
@@ -4258,7 +4262,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **653** | |
+| **Total** | **656** | |
 
 ### Colores Estandar Amiga
 

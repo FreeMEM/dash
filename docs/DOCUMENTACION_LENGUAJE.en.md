@@ -16,7 +16,7 @@ but without pointers, without `includes` and without freeing memory by hand.
 
 - **Clean syntax**, in the style of Ruby and Python: blocks that end in `end`, types that are inferred.
 - **The Amiga API at your fingertips:** windows, graphics, sprites, copper, blitter, sound, files, networking, and three
-  ways to build user interfaces (GadTools, ReAction and MUI). There are 653 ready-made functions (builtins), listed in
+  ways to build user interfaces (GadTools, ReAction and MUI). There are 656 ready-made functions (builtins), listed in
   [BUILTINS.md](BUILTINS.en.md).
 - **Automatic, lightweight memory management:** no garbage collector and no pauses (section 4.10).
 - **For a real Amiga:** it runs on an A500 with a 68000 and Kickstart 3.0; anything that needs more

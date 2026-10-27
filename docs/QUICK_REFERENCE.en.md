@@ -439,6 +439,7 @@ h = file_notify("ENV:X.prefs")   # watch a file: cx_wait gives 7, file_changed(h
 file_notify_end(h)          # stop watching it (the program's end stops them all)
 run_program("SYS:Prefs/Font")    # start a command line, not waiting; program_relaunch(): start again at the end
 clock_read()                # clock_year/month/day/weekday(0 Sun)/hour/minute/second(); date_text("%A %d-%b-%Y %H:%M") (locale)
+locale_decimal_point()      # "," or "." as the user's country writes; locale_group_separator(), locale_date_order() ("DMY"...)
 t = tr(1, "Hola")           # the text of number 1 in the catalog (@catalog), else "Hola"; catalog_open(name, version), catalog_language()
 mouse_curve(0, [100, 150, 200])      # mouse acceleration: emitter 0 = Amiga mouse; factors in hundredths by speed
 mouse_curves_off()          # the curves out of input.device now (also at the end); mouse_curve_events(emitter)

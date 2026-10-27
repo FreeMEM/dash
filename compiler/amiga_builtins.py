@@ -4305,6 +4305,19 @@ TASK_FUNCTIONS = {
         name="date_text", params=["format"], return_type="STRPTR", c_template="_dash_date_text(${format})",
         description="The date and time now as format says, with locale.library's FormatDate in the user's language "
                     "and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library)"),
+    # Lorraine D19: how numbers and dates are written in the user's language and country
+    "locale_decimal_point": BuiltinFunc(
+        name="locale_decimal_point", params=[], return_type="STRPTR", c_template="_dash_locale_decimal_point()",
+        description="What goes before the decimals in the user's country: \",\" in Spain, \".\" in English (also "
+                    "without locale.library)"),
+    "locale_group_separator": BuiltinFunc(
+        name="locale_group_separator", params=[], return_type="STRPTR",
+        c_template="_dash_locale_group_separator()",
+        description="What separates the thousands in the user's country: \".\" in Spain (1.234,5), \",\" in "
+                    "English (1,234.5); maybe \"\""),
+    "locale_date_order": BuiltinFunc(
+        name="locale_date_order", params=[], return_type="STRPTR", c_template="_dash_locale_date_order()",
+        description="The order of day, month and year in the user's short date: \"DMY\", \"MDY\" or \"YMD\""),
     "program_version": BuiltinFunc(
         name="program_version", params=[], return_type="STRPTR", c_template="_dash_program_version()",
         description="The program's name and version of @version (\"Trasfondo 0.7\"); \"\" without it"),

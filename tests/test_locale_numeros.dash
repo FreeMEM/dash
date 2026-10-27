@@ -1,0 +1,25 @@
+# Test: how the user's country writes numbers and dates, from locale.library (Lorraine D19). The emulated
+# system has no country set: English (1,234.5 and month/day/year). With españa.country of Workbench 3.1
+# and 3.2 it gives "'", "," and DMY (checked by hand: that is what the file says).
+# emu-needs: locale.library
+# memcheck
+# expect-out: punto [.] grupo [,] fecha MDY
+# expect-out: 1,234.5
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+func con_miles(n: Int, decimales: String) -> String
+    s = "#{n}"
+    r = ""
+    sep = locale_group_separator()
+    i = s.length
+    while i > 3
+        r = sep + s[i - 3:i] + r
+        i = i - 3
+    end
+    return s[0:i] + r + locale_decimal_point() + decimales
+end
+
+Main
+    Print "punto [#{locale_decimal_point()}] grupo [#{locale_group_separator()}] fecha #{locale_date_order()}"
+    Print con_miles(1234, "5")
+end
