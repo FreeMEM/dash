@@ -54,6 +54,8 @@ _LEAVES = {
     "scrollbar": ("mui_scrollbar", [("vertical", True)]),
     "image": ("mui_image", [("file", "")]),
     "image_button": ("mui_image_button", [("file", "")]),
+    "image_toggle": ("mui_image_toggle", [("file", ""), ("group", 0), ("checked", False)]),
+    "combo": ("mui_combo", [("text", ""), ("options", "")]),
     "space": ("mui_space", []),
     "balance": ("mui_balance", []),
 }
@@ -77,7 +79,7 @@ class DashUIError(Exception):
 
 
 # the text a "tr": number goes with (dashweb D71); {"field": number} gives each text its own
-_MAIN_TEXT = {"text": "text", "label": "text", "button": "label", "string": "text", "cycle": "options",
+_MAIN_TEXT = {"text": "text", "label": "text", "button": "label", "string": "text", "cycle": "options", "combo": "text",
               "frame": "title", "tabs": "titles", "window": "title", "menu": "title", "item": "label"}
 
 

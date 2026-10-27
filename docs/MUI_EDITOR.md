@@ -91,6 +91,8 @@ programa Dash la usa. Encaja con el perfil de desarrollo de AmiCachy (`dev_stati
 | `scrollbar` | `mui_scrollbar` | `vertical`, `change` |
 | `image` | `mui_image` | `file` |
 | `image_button` | `mui_image_button` | `file`, `event` |
+| `image_toggle` | `mui_image_toggle` | `file`, `group` (0 sueltos; > 0 excluyentes), `checked`, `change` |
+| `combo` | `mui_combo` | `text`, `options` ("A\|B"), `ack`, `change` |
 | `space`, `balance` | `mui_space`, `mui_balance` | — |
 
 Comunes: `name` (campo del struct; sin nombre el objeto no se guarda), `weight` (`mui_weight`), `disabled`

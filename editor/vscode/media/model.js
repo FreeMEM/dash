@@ -29,6 +29,8 @@
         scrollbar:{ group: false, label: 'Barra de desplazamiento', props: [['vertical', 'bool', true]], events: ['change'] },
         image:    { group: false, label: 'Imagen',           props: [['file', 'string', '']], events: [] },
         image_button: { group: false, label: 'Botón con imagen', props: [['file', 'string', '']], events: ['event'] },
+        image_toggle: { group: false, label: 'Botón que se queda pulsado', props: [['file', 'string', ''], ['group', 'int', 0], ['checked', 'bool', false]], events: ['change'] },
+        combo:    { group: false, label: 'Desplegable editable', props: [['text', 'string', ''], ['options', 'string', 'Uno|Dos']], events: ['ack', 'change'] },
         space:    { group: false, label: 'Espacio',          props: [], events: [] },
         balance:  { group: false, label: 'Separador',        props: [], events: [] },
     };
@@ -334,6 +336,8 @@
             case 'scrollbar': return `<div${attrs}></div>`;
             case 'image': return `<div${attrs}>${esc(n.file || 'imagen')}</div>`;
             case 'image_button': return `<button${attrs}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
+            case 'image_toggle': return `<button${attrs}${n.checked ? ' data-pressed="1"' : ''}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
+            case 'combo': return `<span${attrs}><input value="${esc(n.text || '')}" readonly><button>▾</button></span>`;
             default: return `<div${attrs}></div>`;
             }
         }

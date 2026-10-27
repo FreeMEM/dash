@@ -91,6 +91,8 @@ drawer; see AmiCachy's `ARCHITECTURE.md`, section 5).
 | `scrollbar` | `mui_scrollbar` | `vertical`, `change` |
 | `image` | `mui_image` | `file` |
 | `image_button` | `mui_image_button` | `file`, `event` |
+| `image_toggle` | `mui_image_toggle` | `file`, `group` (0 on their own; > 0 exclusive), `checked`, `change` |
+| `combo` | `mui_combo` | `text`, `options` ("A\|B"), `ack`, `change` |
 | `space`, `balance` | `mui_space`, `mui_balance` | — |
 
 Common: `name` (struct field; without a name the object is not stored), `weight` (`mui_weight`), `disabled`

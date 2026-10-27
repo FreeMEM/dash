@@ -46,7 +46,7 @@ Dash es un lenguaje de programacion de alto nivel disenado para crear aplicacion
 - Sintaxis clara y moderna inspirada en Ruby y Python
 - Integracion nativa con AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Sistema de ventanas y graficos simplificado
-- 673 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
+- 675 funciones built-in (lista en [BUILTINS.md](BUILTINS.md)) para graficos, audio, archivos, red (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogos, fecha y hora, discos y WiFi, y mas
 - Structs con metodos (programacion orientada a objetos ligera)
 - Gestion automatica de memoria con Reference Counting
@@ -3376,6 +3376,8 @@ ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 | `mui_scrollbar(vertical)` | Barra de desplazamiento; su valor es la primera línea visible. |
 | `mui_image(fichero)` | Imagen de un fichero por datatypes: ILBM siempre; PNG, JPEG, GIF y BMP si están sus datatypes (AmigaOS 3.2 los trae). `mui_set_text` cambia el fichero. |
 | `mui_image_button(fichero)` | Botón con una imagen (un icono de una barra de herramientas): el marco y el fondo de los botones de imagen de MUI; se pulsa como un botón (`mui_on_press`) y `mui_set_text` cambia la imagen. |
+| `mui_image_toggle(fichero, grupo, pulsado)` | Botón con imagen que se queda pulsado (negrita, cursiva): su valor es 1 pulsado o 0 (`mui_get_value`/`mui_set_value`) y `mui_on_change` da su evento al cambiar. Con `grupo` > 0, los de ese grupo se excluyen (alineación): pulsar uno suelta los demás, y `mui_on_change` solo da el evento del que se pulsa. `mui_set_text` cambia la imagen. (Lorraine D14) |
+| `mui_combo(texto, opciones)` | Campo de texto con una lista que se despliega (fuente, tamaño; opciones `"A\|B"`): se escribe o se elige una línea con doble clic. `mui_get_text`/`mui_set_text` son el texto, `mui_list_insert`/`mui_list_clear`/`mui_list_count`/`mui_list_get` cambian las líneas, y `mui_on_ack` da su evento con Return y al elegir una línea, ya con el texto nuevo. (Lorraine D14) |
 | `mui_help(obj, texto)` | La ayuda que MUI muestra en un globo cuando el puntero se para encima. |
 | `mui_window_size(ventana, ancho, alto)` | Tamaño con que se abre la ventana, en tanto por ciento de la pantalla visible, centrada (antes de `mui_window_open`). |
 | `mui_window_fullscreen(ventana)` | La ventana ocupa la pantalla entera: sin bordes, sin barra de título ni botones, en 0,0, activa al abrirse (antes de `mui_window_open`). Para vídeo o juegos. |
@@ -4376,8 +4378,8 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 88 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **673** | |
+| MUI | 90 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **675** | |
 
 ### Colores Estandar Amiga
 
