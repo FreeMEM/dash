@@ -5,7 +5,7 @@
 Catálogo de diseño de las funciones built-in para AmigaOS.
 
 > **Ojo:** este documento es el diseño original (enero de 2026) y no dice lo que hay. La lista real, generada
-> desde el código, está en [BUILTINS.md](BUILTINS.md): hoy 656 builtins, todos implementados.
+> desde el código, está en [BUILTINS.md](BUILTINS.md): hoy 659 builtins, todos implementados.
 > En las tablas, **No existe** marca los nombres que no están en Dash y **Hoy** lo que acabó distinto (otro
 > nombre u otros argumentos). Muchos recursos van por número (`id`), no por un objeto devuelto. Las filas sin
 > marca existen con ese nombre y esos argumentos.
@@ -367,7 +367,7 @@ JOY_PORT2 = 1
 | Sistema | 10 |
 | **TOTAL** | **~161 funciones** |
 
-Eso era el plan. Hoy Dash tiene **656 builtins**, todos implementados; 82 son de MUI. Hay más de lo que preveía
+Eso era el plan. Hoy Dash tiene **659 builtins**, todos implementados; 85 son de MUI. Hay más de lo que preveía
 este diseño: GadTools, ReAction y MUI, red (TCP cliente y servidor, UDP, TLS con AmiSSL, drivers SANA-II),
 imágenes por datatypes, fuentes, RTG, tareas, commodities, catálogos de idioma, fecha y hora... La lista real,
 con lo que hace cada una, está en [BUILTINS.md](BUILTINS.md).

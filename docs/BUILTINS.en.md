@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 656 functions, 656 implemented, 0 not implemented.
+Total: 659 functions, 659 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -743,11 +743,11 @@ Total: 656 functions, 656 implemented, 0 not implemented.
 | `mui_cycle(options)` | `APTR` | Cycle gadget; options separated by \| ("One\|Two\|Three") |  |
 | `mui_slider(min, max, value)` | `APTR` | Horizontal slider |  |
 | `mui_gauge(max)` | `APTR` | Progress bar from 0 to max |  |
-| `mui_get_value(obj)` | `LONG` | Value: checkbox 1/0, cycle option, slider level, progress |  |
+| `mui_get_value(obj)` | `LONG` | Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0 |  |
 | `mui_set_value(obj, value)` | `void` | Set the value (fires mui_on_change like the user would) |  |
 | `mui_get_text(obj)` | `STRPTR` | Text of a text field, text, button or window title |  |
-| `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button or window title |  |
-| `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object |  |
+| `mui_set_text(obj, text)` | `void` | Change the text of a text field, text, button, menu item or window title |  |
+| `mui_set_enabled(obj, enabled)` | `void` | Enable or disable (ghost) an object, a menu item or a whole menu |  |
 | `mui_on_change(obj, id)` | `void` | mui_wait_event returns id when the value or text changes |  |
 | `mui_on_ack(obj, id)` | `void` | mui_wait_event returns id when Return is pressed in a text field |  |
 | `mui_list()` | `APTR` | List of texts with scroller; its value is the selected line (-1 none) |  |
@@ -769,6 +769,9 @@ Total: 656 functions, 656 implemented, 0 not implemented.
 | `mui_set_visible(obj, visible)` | `void` | Show or hide an object (the window relayouts) |  |
 | `mui_menu_begin(title)` | `APTR` | Start a menu of the window being built |  |
 | `mui_menu_item(title, key, id)` | `APTR` | Menu item: key = letter for Amiga+key ("" none); mui_wait_event returns id |  |
+| `mui_menu_check(title, key, id, checked)` | `APTR` | Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; mui_get_value / mui_set_value read and set the mark |  |
+| `mui_submenu_begin(title)` | `APTR` | Start a submenu in the menu being built (one level): its items go in until mui_submenu_end |  |
+| `mui_submenu_end()` | `void` | End the submenu |  |
 | `mui_menu_separator()` | `void` | Separator line in the menu |  |
 | `mui_menu_end()` | `void` | End the menu |  |
 | `mui_canvas(min_width, min_height)` | `APTR` | Drawing area (grows with the window); draw in it from mui_canvas_on_draw |  |

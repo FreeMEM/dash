@@ -104,6 +104,7 @@ Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas
 | `mui_on_double(lista, id)` | doble clic en una lista |
 | `mui_on_close(win, id)` | botón de cerrar de la ventana. Sin llamarla, cerrar la primera ventana = -1 (salir). |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menú de la ventana abierta (`Menustrip`) |
+| `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | opción con marca (`mui_get_value`/`mui_set_value`) y submenú de un nivel |
 | `mui_wait_event() -> Int` | Espera y devuelve el número de un evento, o -1 para salir. |
 | `mui_poll_event() -> Int` | Igual sin esperar: 0 si no hay nada. |
 | `mui_wait_event_signals(mascara) -> Int` | Espera también otras señales: `net_signal()` (red), `task_signal()` (tareas), `file_notify_signal()` (ficheros vigilados). Devuelve 0 cuando llega una de ellas; `mui_signals()` dice cuáles. |

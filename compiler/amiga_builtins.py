@@ -3337,7 +3337,7 @@ MUI_FUNCTIONS = {
         params=["obj"],
         return_type="LONG",
         c_template="_dash_mui_get_value(${obj})",
-        description="Value: checkbox 1/0, cycle option, slider level, progress"
+        description="Value: checkbox 1/0, cycle option, slider level, progress, menu check mark 1/0"
     ),
     "mui_set_value": BuiltinFunc(
         name="mui_set_value",
@@ -3358,14 +3358,14 @@ MUI_FUNCTIONS = {
         params=["obj", "text"],
         return_type="void",
         c_template="_dash_mui_set_text(${obj}, ${text})",
-        description="Change the text of a text field, text, button or window title"
+        description="Change the text of a text field, text, button, menu item or window title"
     ),
     "mui_set_enabled": BuiltinFunc(
         name="mui_set_enabled",
         params=["obj", "enabled"],
         return_type="void",
         c_template="_dash_mui_set_enabled(${obj}, ${enabled})",
-        description="Enable or disable (ghost) an object"
+        description="Enable or disable (ghost) an object, a menu item or a whole menu"
     ),
     "mui_on_change": BuiltinFunc(
         name="mui_on_change",
@@ -3513,6 +3513,28 @@ MUI_FUNCTIONS = {
         return_type="APTR",
         c_template="_dash_mui_menu_item(${title}, ${key}, ${id})",
         description="Menu item: key = letter for Amiga+key (\"\" none); mui_wait_event returns id"
+    ),
+    "mui_menu_check": BuiltinFunc(
+        name="mui_menu_check",
+        params=["title", "key", "id", "checked"],
+        return_type="APTR",
+        c_template="_dash_mui_menu_check(${title}, ${key}, ${id}, ${checked})",
+        description="Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; "
+                    "mui_get_value / mui_set_value read and set the mark"
+    ),
+    "mui_submenu_begin": BuiltinFunc(
+        name="mui_submenu_begin",
+        params=["title"],
+        return_type="APTR",
+        c_template="_dash_mui_submenu_begin(${title})",
+        description="Start a submenu in the menu being built (one level): its items go in until mui_submenu_end"
+    ),
+    "mui_submenu_end": BuiltinFunc(
+        name="mui_submenu_end",
+        params=[],
+        return_type="void",
+        c_template="_dash_mui_submenu_end()",
+        description="End the submenu"
     ),
     "mui_menu_separator": BuiltinFunc(
         name="mui_menu_separator",

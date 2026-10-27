@@ -46,7 +46,7 @@ Dash is a high-level programming language designed for writing applications and 
 - Clear, modern syntax inspired by Ruby and Python
 - Native integration with AmigaOS (Intuition, Graphics, DOS, Exec, Commodities, Locale...)
 - Simplified window and graphics system
-- 656 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
+- 659 built-in functions (listed in [BUILTINS.en.md](BUILTINS.en.md)) for graphics, audio, files, networking (TCP, UDP,
   TLS), GUI (GadTools, ReAction, MUI), commodities, catalogs, date and time, disks and WiFi, and more
 - Structs with methods (lightweight object-oriented programming)
 - Automatic memory management with Reference Counting
@@ -3288,6 +3288,9 @@ window that is not the first one just closes it, unless it has its own `mui_on_c
 | `mui_menu_begin(titulo)` ... `mui_menu_end()` | Menu of the window being built. |
 | `mui_menu_item(texto, tecla, id)` | Menu item: `tecla` = letter for Amiga+key (`""` = none); returns the object (for `mui_set_enabled`). |
 | `mui_menu_separator()` | Separator line. |
+| `mui_menu_check(text, key, id, checked)` | Item with a check mark: choosing it toggles the mark and gives its `id`. `mui_get_value(item)` says whether it is checked (1/0) and `mui_set_value(item, 1)` checks it from the program. |
+| `mui_submenu_begin(title)` ... `mui_submenu_end()` | Submenu inside the menu (one level, as in Intuition). |
+| `mui_set_enabled(item, false)`, `mui_set_text(item, text)` | Disables an item or a whole menu (the object of `mui_menu_begin`); changes an item's text ("Open recent"). |
 | `mui_canvas(ancho_min, alto_min)` | Custom drawing area; grows with the window. |
 | `mui_canvas_on_draw(zona, funcion)` | Function `f(x, y, ancho, alto)` that paints it with the `gfx_` functions. MUI calls it when needed (on opening, on resizing...). You can only paint inside it. Fills work too (`gfx_circle_fill`, `gfx_poly_*`...). |
 | `mui_canvas_redraw(zona)` | Repaints it now. |
@@ -4275,8 +4278,8 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
-| MUI | 82 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **656** | |
+| MUI | 85 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
+| **Total** | **659** | |
 
 ### Standard Amiga Colors
 

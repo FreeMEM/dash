@@ -13768,6 +13768,7 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
+static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
 static LONG (*_dash_mui_timer_hook)(void) = NULL;   /* the timer's id if it went off, else 0 */
@@ -13822,7 +13823,7 @@ static void _dash_mui_app_end(void) {
     }
     _dash_mui_first_win = NULL;
     _dash_mui_cur_win = NULL;
-    _dash_mui_cur_menu = NULL;
+    _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
     _dash_mui_depth = 0;
     _dash_mui_npress = 0;
     if (_dash_mui_pool) { DeletePool(_dash_mui_pool); _dash_mui_pool = NULL; }
@@ -13916,7 +13917,7 @@ static void _dash_mui_window_end(void) {
     if (_dash_mui_cur_menu) _dash_mui_error("mui_window_end with a menu still open");
     _dash_mui_depth = 0;
     _dash_mui_cur_win = NULL;
-    _dash_mui_cur_menu = NULL;
+    _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
 }
 
 static LONG _dash_mui_window_open(APTR win) {
@@ -14041,9 +14042,36 @@ static void _dash_mui_menu_separator(void) {
     _dash_mui_menu_add((STRPTR)NM_BARLABEL, NULL);
 }
 
+/* An item with a check mark (Lorraine D13): choosing it toggles the mark and mui_wait_event returns id;
+   mui_get_value / mui_set_value read and set the mark */
+static APTR _dash_mui_menu_check(STRPTR title, STRPTR key, LONG id, LONG checked) {
+    Object *item = (Object *)_dash_mui_menu_item(title, key, id);
+    if (item) SetAttrs(item, MUIA_Menuitem_Checkit, TRUE, MUIA_Menuitem_Toggle, TRUE,
+                       MUIA_Menuitem_Checked, checked ? TRUE : FALSE, TAG_DONE);
+    return item;
+}
+
+/* A submenu (one level, as Intuition has): its items go in until mui_submenu_end */
+static APTR _dash_mui_submenu_begin(STRPTR title) {
+    Object *item;
+    if (_dash_mui_sub_parent) { _dash_mui_error("mui_submenu_begin inside another submenu"); return NULL; }
+    if (!(item = _dash_mui_menu_add(title, NULL))) return NULL;
+    _dash_mui_sub_parent = _dash_mui_cur_menu;
+    _dash_mui_cur_menu = item;
+    return item;
+}
+
+static void _dash_mui_submenu_end(void) {
+    if (!_dash_mui_sub_parent) { _dash_mui_error("mui_submenu_end without mui_submenu_begin"); return; }
+    _dash_mui_cur_menu = _dash_mui_sub_parent;
+    _dash_mui_sub_parent = NULL;
+}
+
 static void _dash_mui_menu_end(void) {
     if (!_dash_mui_cur_menu) _dash_mui_error("mui_menu_end without mui_menu_begin");
+    if (_dash_mui_sub_parent) _dash_mui_error("mui_menu_end with a submenu still open");
     _dash_mui_cur_menu = NULL;
+    _dash_mui_sub_parent = NULL;
 }
 
 static void _dash_mui_group_end(void) {
@@ -14141,6 +14169,7 @@ static ULONG _dash_mui_value_attr_of(Object *obj, Object **target) {
     case _DASH_MUI_LIST:   *target = _dash_mui_list_of(obj); return *target ? MUIA_List_Active : 0;
     case _DASH_MUI_REGISTER: return MUIA_Group_ActivePage;
     case _DASH_MUI_SCROLLBAR: return MUIA_Prop_First;
+    case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Checked;   /* the check mark (Lorraine D13) */
     }
     return 0;
 }
@@ -14156,14 +14185,15 @@ static LONG _dash_mui_get_value(APTR obj) {
     ULONG attr = obj ? _dash_mui_value_attr_of(obj, &target) : 0;
     if (!attr) return 0;
     GetAttr(attr, target, &value);
-    return attr == MUIA_Selected ? (value != 0) : (LONG)value;
+    return attr == MUIA_Selected || attr == MUIA_Menuitem_Checked ? (value != 0) : (LONG)value;
 }
 
 /* Like the user changing it: the object's notifications (mui_on_change) fire */
 static void _dash_mui_set_value(APTR obj, LONG value) {
     Object *target;
     ULONG attr = obj ? _dash_mui_value_attr_of(obj, &target) : 0;
-    if (attr) SetAttrs(target, attr, attr == MUIA_Selected ? (value != 0) : value, TAG_DONE);
+    if (attr) SetAttrs(target, attr, attr == MUIA_Selected || attr == MUIA_Menuitem_Checked ? (value != 0) : value,
+                       TAG_DONE);
 }
 
 /* List of texts; MUI keeps its own copy of each line. Lines count from 0; the
@@ -14231,6 +14261,7 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_STRING: return MUIA_String_Contents;
     case _DASH_MUI_WINDOW: return MUIA_Window_Title;
     case _DASH_MUI_IMAGE:  return MUIA_Dtpic_Name;
+    case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Title;       /* "Abrir recientes" (Lorraine D13) */
     }
     return 0;
 }
@@ -14337,15 +14368,16 @@ static STRPTR _dash_mui_get_text(APTR obj) {
 static void _dash_mui_set_text(APTR obj, STRPTR text) {
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
     if (!attr) return;
-    if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name)
+    if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name || attr == MUIA_Menuitem_Title)
         text = _dash_mui_keep(text);   /* they keep the pointer */
     SetAttrs(obj, attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
     if (!obj) return;
-    if (_dash_mui_kind(obj) == _DASH_MUI_MENUITEM)
-        SetAttrs(obj, MUIA_Menuitem_Enabled, enabled ? TRUE : FALSE, TAG_DONE);
+    if (_dash_mui_kind(obj) == _DASH_MUI_MENUITEM)      /* an item or a whole menu (Lorraine D13): each */
+        SetAttrs(obj, MUIA_Menuitem_Enabled, enabled ? TRUE : FALSE,      /* takes its own */
+                 MUIA_Menu_Enabled, enabled ? TRUE : FALSE, TAG_DONE);
     else
         SetAttrs(obj, MUIA_Disabled, enabled ? FALSE : TRUE, TAG_DONE);
 }

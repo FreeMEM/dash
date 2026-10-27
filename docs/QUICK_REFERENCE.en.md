@@ -204,6 +204,7 @@ app = mui_app_begin("App", "APP")       # 0 = no MUI / 68000
 win = mui_window_begin("Title", 1)      # vertical root group; 1 = remember place
     mui_menu_begin("Project")           # menus of this window
         q = mui_menu_item("Quit", "Q", 9)   # mui_menu_separator()
+        g = mui_menu_check("Grid", "G", 10, true)   # mui_get_value(g); mui_submenu_begin("Recent") ... mui_submenu_end()
     mui_menu_end()
     tabs = mui_register_begin("A|B")    # pages; value = page. Also mui_frame_begin("T", false),
     ...                                 # mui_columns_begin(2), mui_scroll_begin(); mui_group_end()
