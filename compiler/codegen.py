@@ -287,7 +287,9 @@ static void _dash_fail_at(const char *what, LONG w) {
    mode with the exception's number on the stack, then its frame. For the errors of a program (2 bus
    error, 3 address error, 4 illegal instruction, 5 division by zero, 6 CHK, 7 TRAPV, 8 privilege
    violation, 10/11 line A/F) the frame is dropped and the program goes on in _dash_trap_recover, in
-   user mode on a stack of its own: it says what happened and where, and ends like Stop. Anything else
+   user mode on the program's own stack from where main began (what was below is abandoned; above it
+   are the frames of the startup and of the Shell, kept for the return): it says what happened and
+   where, and ends like Stop. Anything else
    (traps, trace: debuggers) goes to the handler that was there. A program run from the Shell is the
    Shell's process: the old handler is put back at exit (atexit). */
 #include <dos/dosextens.h>
@@ -295,7 +297,6 @@ static void _dash_fail_at(const char *what, LONG w) {
 APTR _dash_trap_old = NULL;
 volatile ULONG _dash_trap_num = 0, _dash_trap_pc = 0, _dash_trap_addr = 0, _dash_trap_usp = 0;
 volatile UBYTE _dash_trap_busy = 0, _dash_trap_010 = 0;
-static ULONG _dash_trap_stack[2048];   /* 8 KB for the message and the cleanup */
 void _dash_trap(void);
 void _dash_trap_recover(void) __attribute__((used, noreturn));
 __asm__(
@@ -359,11 +360,14 @@ static void _dash_trap_off(void) {
     _dash_trap_old = NULL;
 }
 
-static void _dash_trap_on(void) {
+/* (not in line: its frame is below main's, the start of the stack the recovery takes; before, 8 KB of
+   its own in BSS for every program) */
+static __attribute__((noinline)) void _dash_trap_on(void) {
     struct Task *t = FindTask(NULL);
+    ULONG here;
     if (_dash_trap_old) return;
     _dash_trap_010 = (SysBase->AttnFlags & AFF_68010) != 0;
-    _dash_trap_usp = (ULONG)&_dash_trap_stack[2048 - 4];
+    _dash_trap_usp = ((ULONG)&here - 16) & ~3UL;
     _dash_trap_old = t->tc_TrapCode;
     t->tc_TrapCode = (APTR)_dash_trap;
     _dash_atexit(_dash_trap_off);

@@ -182,3 +182,14 @@ diga el usuario. Base medida: `Base ronda 3`.
 - Medida frente a R8: `string_return` −2,3 % / −2,6 % (A500 / A1200), `nested_struct_new` −1,5 % / −1,8 %; frente
   a la base de la ronda quedan en +9 % / +11 % y +5 % / +6 %. En un programa con solo el retorno ya va igual que
   `main`. Ejecutables +2 KB en total.
+
+### R11 — sin los 8 KB de pila propia para recuperarse de una excepción
+- `_dash_trap_recover` corría en una pila suya de 8 KB en BSS (todo programa la cargaba, aunque nunca fallara;
+  R6 la dejó porque la limpieza puede cerrar MUI, que pide pila). Ahora sigue en la pila del propio programa,
+  desde donde empezó `main` (`_dash_trap_on`, no en línea, apunta la dirección): lo de debajo se abandona; lo de
+  encima son los marcos del arranque y del Shell, que se conservan para volver. No la cima de la pila: sin
+  `StackSwap` (el Shell ya daba bastante) la cima es del Shell.
+- Medida: un programa vacío ocupa al cargarse 3.668 bytes (código, datos y BSS) en vez de 11.836: −8 KB en todo
+  programa. En la comparativa, la memoria media al ejecutar era de 16,6 KB.
+- Probado: los tests de excepciones y de nil en A1200, A500 y 3.2 (también con `--memcheck`), y uno nuevo,
+  `test_trap_mui`: división por cero a 200 llamadas de profundidad con una ventana MUI abierta (A1200 y 3.2).
