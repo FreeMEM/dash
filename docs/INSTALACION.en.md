@@ -183,10 +183,14 @@ make sdk=cgx
 
 `make all` also installs `m68k-amigaos-gdb`, the debugger used by the VS Code extension.
 
-**Note:** On macOS, use Homebrew's bash:
+**Note:** On macOS, build with Homebrew's gcc (`gcc-12`), its `make` (`gmake`) and its bash. Apple's clang can't
+build the toolchain's GCC 6: it fails in `ira.c` with *a space is required between consecutive right angle
+brackets*. If it already failed that way, start with `make clean-gcc`.
 
 ```bash
-make all -j$(nproc) SHELL=$(brew --prefix)/bin/bash
+export PATH=$(brew --prefix bison)/bin:$PATH     # gdb needs a newer bison than macOS ships
+CC=gcc-12 CXX=g++-12 gmake all -j$(sysctl -n hw.ncpu) SHELL=$(brew --prefix)/bin/bash
+CC=gcc-12 CXX=g++-12 gmake sdk=cgx SHELL=$(brew --prefix)/bin/bash
 ```
 
 **Note:** If you prefer to install in another directory:
