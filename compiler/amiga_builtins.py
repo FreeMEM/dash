@@ -4443,6 +4443,49 @@ TASK_FUNCTIONS = {
         description="When the program ends, start it again (after everything of its end, single_instance's port "
                     "too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its "
                     "arguments. For updating itself"),
+    # Dash 2.0: what programs did with @native (docs/DASHC_NATIVE.md)
+    "time_unix": BuiltinFunc(
+        name="time_unix", params=[], return_type="LONG", c_template="_dash_time_unix()",
+        description="The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies)"),
+    "clock_days": BuiltinFunc(
+        name="clock_days", params=[], return_type="LONG", c_template="_dash_clock_days()",
+        description="Days since 1 January 1978 by the system's clock (DateStamp's ds_Days)"),
+    "mem_largest": BuiltinFunc(
+        name="mem_largest", params=[], return_type="LONG", c_template="(LONG)AvailMem(MEMF_ANY | MEMF_LARGEST)",
+        description="The largest free block of memory, chip or fast, in bytes"),
+    "run_command": BuiltinFunc(
+        name="run_command", params=["command"], return_type="LONG", c_template="_dash_run_command(${command})",
+        reads_only=True,
+        description="Run a command line and wait for it to end, its output the program's own: its return code, "
+                    "-1 if it could not start"),
+    "wb_open": BuiltinFunc(
+        name="wb_open", params=["path"], return_type="BOOL", c_template="_dash_wb_open(${path})",
+        reads_only=True,
+        description="Open a drawer, a program or a project as a double click on its icon does (workbench.library "
+                    "44, OS 3.5+); false if it could not"),
+    "program_path": BuiltinFunc(
+        name="program_path", params=[], return_type="STRPTR", c_template="_dash_program_path()",
+        description="The program's full path (\"Work:Tachyon/Tachyon\"), from a Shell or from the Workbench"),
+    "locale_language": BuiltinFunc(
+        name="locale_language", params=[], return_type="STRPTR", c_template="_dash_locale_language()",
+        description="The user's first preferred language in Locale prefs (\"español\"), \"\" without one"),
+    "cpu_model": BuiltinFunc(
+        name="cpu_model", params=[], return_type="LONG", c_template="_dash_cpu_model()",
+        description="The processor: 68000, 68010, 68020, 68030, 68040 or 68060"),
+    "fpu_model": BuiltinFunc(
+        name="fpu_model", params=[], return_type="LONG", c_template="_dash_fpu_model()",
+        description="The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one"),
+    "library_version": BuiltinFunc(
+        name="library_version", params=["name"], return_type="LONG", c_template="_dash_library_version(${name})",
+        reads_only=True,
+        description="The version of a library (\"muimaster.library\"), loading it if it is not in memory; -1 if "
+                    "it is not there"),
+    "task_priority": BuiltinFunc(
+        name="task_priority", params=["n"], return_type="LONG", c_template="_dash_task_priority(${n})",
+        description="Set the program's priority (-128 to 127; the Shell gives 0): the one it had"),
+    "console_flush": BuiltinFunc(
+        name="console_flush", params=[], return_type="void", c_template="_dash_console_flush()",
+        description="Write out now what Print left in the output's buffer (a progress line without its end)"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",

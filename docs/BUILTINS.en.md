@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 686 functions, 686 implemented, 0 not implemented.
+Total: 698 functions, 698 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -513,6 +513,18 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `file_notify_signal()` | `LONG` | The signal of the watched files, for mui_wait_event_signals (0 before any file_notify) |  |
 | `run_program(command)` | `BOOL` | Start a command line ("SYS:Prefs/Font", "\"Work:My Prog\" arg") in another process without waiting, its input and output NIL:; false if it could not start |  |
 | `program_relaunch()` | `void` | When the program ends, start it again (after everything of its end, single_instance's port too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its arguments. For updating itself |  |
+| `time_unix()` | `LONG` | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
+| `clock_days()` | `LONG` | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
+| `mem_largest()` | `LONG` | The largest free block of memory, chip or fast, in bytes |  |
+| `run_command(command)` | `LONG` | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
+| `wb_open(path)` | `BOOL` | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
+| `program_path()` | `STRPTR` | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |
+| `locale_language()` | `STRPTR` | The user's first preferred language in Locale prefs ("español"), "" without one |  |
+| `cpu_model()` | `LONG` | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
+| `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
+| `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
+| `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
+| `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |

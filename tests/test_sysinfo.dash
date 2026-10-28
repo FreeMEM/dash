@@ -1,0 +1,43 @@
+# Test: builtins for what programs did with @native (Dash 2.0, docs/DASHC_NATIVE.md): the clock as Unix seconds
+# and days, the largest free block, running a command and waiting, the program's path, the preferred language,
+# the CPU and FPU (the emulated A1200: 68020 without FPU), library versions, the priority and console_flush.
+# expect-out: unix y días: true true
+# expect-out: bloque: true
+# expect-out: antes de la orden
+# expect-out: dentro de la orden
+# expect-out: orden: 0 5 -1
+# expect-out: ruta: true
+# expect-out: idioma: true
+# expect-out: cpu: true 0
+# expect-out: versiones: true -1
+# expect-out: prioridad: 0 -5
+# expect-out: antes del flush
+# expect-out: después, sin búfer
+
+Main
+    u = time_unix()
+    d = clock_days()
+    # (de 2020 a 2100)
+    Print "unix y días: #{u > 1577836800 and u / 86400 - 2922 == d} #{d > 15000}"
+    Print "bloque: #{mem_largest() > 0 and mem_largest() <= mem_total()}"
+    Print "antes de la orden"
+    r0 = run_command("Echo dentro de la orden")
+    r5 = run_command("C:Assign >NIL: NOESTA: EXISTS")
+    rv = run_command("")
+    Print "orden: #{r0} #{r5} #{rv}"
+    pp = str_find(program_path(), ":")
+    Print "ruta: #{pp > 0}"
+    l = locale_language()
+    Print "idioma: #{l.length >= 0}"
+    c = cpu_model()
+    Print "cpu: #{c == 68000 or c == 68020} #{fpu_model()}"
+    ve = library_version("exec.library")
+    vn = library_version("noesta.library")
+    Print "versiones: #{ve >= 37} #{vn}"
+    a = task_priority(-5)
+    b = task_priority(a)
+    Print "prioridad: #{a} #{b}"
+    Print "antes del flush"
+    console_flush()
+    console_write("después, sin búfer\n")
+end

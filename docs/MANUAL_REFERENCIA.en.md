@@ -4403,6 +4403,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Tasks, CPU and desktop | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
 | Watched files and programs | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
+| System and program | 12 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest` |
 | Date, time and version | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
 | Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
@@ -4422,7 +4423,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
 | RTG | 21 | `rtg_*` |
 | MUI | 94 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **686** | |
+| **Total** | **698** | |
 
 ### Standard Amiga Colors
 

@@ -226,3 +226,14 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Cobertura: compilan 205 de 309 (66 %); en el A1200 (MUI y red), 132 de 132 iguales. Batería bien.
   - Un error que salía al generar código (no al leer) en un módulo llevaba el nombre del fichero principal con la
     línea del módulo: `fatal_node` pone el fichero del nodo.
+- D7 (1.ª parte): builtins nuevos para lo que los programas del usuario hacían con `@native` (conclusión 3 de
+  `docs/DASHC_NATIVE.md`), en ./dash (runtime `SYSINFO_RUNTIME`) y por tanto en la librería de dashc: `time_unix`,
+  `clock_days`, `mem_largest`, `run_command` (espera; vacía antes el búfer de `Print`), `wb_open`, `program_path`,
+  `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority` y `console_flush`. 698 builtins
+  (recuentos de la documentación en los dos idiomas al día). tests/test_sysinfo.dash: igual con gcc y con dashc
+  (10.984 bytes frente a 11.960).
+  - Tests de ./dash: 456 bien (con la gramática de VS Code regenerada); batería de dashc bien; cobertura: compilan
+    206 de 310 (66 %) y en el A1200 (MUI, red y catálogos) 133 de 133 iguales.
+  - Pendientes de la conclusión 3: `input_qualifiers`, `mui_set_active`, `mui_window_move`, `dialog_file_at`,
+    `build_date`/`build_time` (son del momento de compilar: dashc los pondría como texto), y los de pruebas
+    (`window_find`, `input_event`, `input_move_screen`, `input_menu`, `screen_pixel`, `gadget_find`, `cx_send`).

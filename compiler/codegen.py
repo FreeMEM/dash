@@ -5147,6 +5147,124 @@ static void _dash_relaunch_now(void) {
 
 """
 
+    # Dash 2.0: what programs did with @native (docs/DASHC_NATIVE.md)
+    SYSINFO_RUNTIME = """\
+/* Dash system runtime: the clock as Unix seconds and as days, running a command and waiting, opening an icon,
+   the program's path, the preferred language, the CPU and the FPU, library versions, the task's priority. */
+#include <dos/dostags.h>
+#include <workbench/startup.h>
+#include <proto/wb.h>
+#include <libraries/locale.h>
+#include <proto/locale.h>
+extern struct WBStartup *_WBenchMsg;
+
+static LONG _dash_time_unix(void) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return 252460800L + d.ds_Days * 86400L + d.ds_Minute * 60L + d.ds_Tick / 50;   /* 1978 - 1970 */
+}
+
+static LONG _dash_clock_days(void) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return d.ds_Days;
+}
+
+static void _dash_console_flush(void) {
+    if (Output()) Flush(Output());
+}
+
+static LONG _dash_run_command(STRPTR command) {
+    BPTR nil;
+    LONG rc;
+    if (!command || !*command) return -1;
+    if (!(nil = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE))) return -1;
+    _dash_console_flush();          /* what Print left in the buffer goes before the command's output */
+    /* (waiting for it, System does not close them) */
+    rc = SystemTags(command, SYS_Input, nil, SYS_Output, Output() ? Output() : nil, NP_StackSize, 16384, TAG_DONE);
+    Close(nil);
+    return rc;
+}
+
+static BOOL _dash_wb_open(STRPTR path) {
+    struct Library *WorkbenchBase;
+    BOOL r = FALSE;
+    if (!path || !*path) return FALSE;
+    if ((WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 44))) {
+        r = OpenWorkbenchObjectA(path, NULL);
+        CloseLibrary(WorkbenchBase);
+    }
+    return r;
+}
+
+static STRPTR _dash_program_path(void) {
+    char dir[300], name[108];
+    struct Process *p = (struct Process *)FindTask(NULL);
+    dir[0] = 0;
+    name[0] = 0;
+    if (!GetProgramDir() || !NameFromLock(GetProgramDir(), (STRPTR)dir, 200)) return _dash_str_dup((STRPTR)"", TRUE);
+    if (p->pr_CLI) GetProgramName((STRPTR)name, sizeof(name));
+    else if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 0) strncpy(name, (char *)_WBenchMsg->sm_ArgList[0].wa_Name, sizeof(name) - 1);
+    else if (p->pr_Task.tc_Node.ln_Name) strncpy(name, p->pr_Task.tc_Node.ln_Name, sizeof(name) - 1);
+    name[sizeof(name) - 1] = 0;
+    AddPart((STRPTR)dir, FilePart((STRPTR)name), sizeof(dir));
+    return _dash_str_dup((STRPTR)dir, TRUE);
+}
+
+static STRPTR _dash_locale_language(void) {
+    /* (a base of its own: the program may not use locale.library) */
+    struct LocaleBase *LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR)"locale.library", 38);
+    char lang[64];
+    lang[0] = 0;
+    if (LocaleBase) {
+        struct Locale *loc = OpenLocale(NULL);
+        if (loc) {
+            if (loc->loc_PrefLanguages[0]) {
+                strncpy(lang, (char *)loc->loc_PrefLanguages[0], sizeof(lang) - 1);
+                lang[sizeof(lang) - 1] = 0;
+            }
+            CloseLocale(loc);
+        }
+        CloseLibrary((struct Library *)LocaleBase);
+    }
+    return _dash_str_dup((STRPTR)lang, TRUE);
+}
+
+static LONG _dash_cpu_model(void) {
+    UWORD f = SysBase->AttnFlags;
+    if (f & (1 << 7)) return 68060;          /* AFF_68060 */
+    if (f & AFF_68040) return 68040;
+    if (f & AFF_68030) return 68030;
+    if (f & AFF_68020) return 68020;
+    if (f & AFF_68010) return 68010;
+    return 68000;
+}
+
+static LONG _dash_fpu_model(void) {
+    UWORD f = SysBase->AttnFlags;
+    if (f & AFF_FPU40) return (f & (1 << 7)) ? 68060 : 68040;
+    if (f & AFF_68882) return 68882;
+    if (f & AFF_68881) return 68881;
+    return 0;
+}
+
+static LONG _dash_library_version(STRPTR name) {
+    struct Library *l;
+    LONG v;
+    if (!name || !*name || !(l = OpenLibrary((CONST_STRPTR)name, 0))) return -1;
+    v = l->lib_Version;
+    CloseLibrary(l);
+    return v;
+}
+
+static LONG _dash_task_priority(LONG n) {
+    if (n < -128) n = -128;
+    if (n > 127) n = 127;
+    return SetTaskPri(FindTask(NULL), n);
+}
+
+"""
+
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
     DOSREQ_RUNTIME = """\
 /* dos_requesters(on): off, the process's pr_WindowPtr is -1 and a call that would put up a requester ("Insert
@@ -16863,6 +16981,7 @@ _RUNTIME_FLAGS = [
     ("VERSION_RUNTIME", "uses_version"),    # Trasfondo 0.7: @version
     ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
+    ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
@@ -17162,6 +17281,7 @@ class CodeGenerator(ASTVisitor):
         self.version = None              # @version: its C literal
         self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
+        self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
@@ -17521,6 +17641,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.NOTIFY_RUNTIME)
         if self.uses_proc:
             parts.append(CTemplates.PROC_RUNTIME)
+        if self.uses_sysinfo:
+            parts.append(CTemplates.SYSINFO_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
