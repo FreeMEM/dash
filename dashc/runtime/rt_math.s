@@ -5,6 +5,18 @@
 	.text
 	.align	2
 
+| En un 68020 o mejor (__dash_cpu020, de rt.c) los caminos lentos son una sola
+| instrucción de 32 bits. Van como .short: el ensamblador está en modo 68000.
+	.macro	MULS_L_D1_D0
+	.short	0x4C01,0x0800	| muls.l d1,d0
+	.endm
+	.macro	DIVS_L_D1_D0
+	.short	0x4C41,0x0800	| divs.l d1,d0
+	.endm
+	.macro	DIVSL_L_D1_D1_D0
+	.short	0x4C41,0x0801	| divsl.l d1,d1:d0 (resto en d1)
+	.endm
+
 | d0 = d0 * d1 (los 32 bits bajos; el signo da igual)
 	.globl	__dash_mul
 __dash_mul:
@@ -16,7 +28,11 @@ __dash_mul:
 	jne	1f
 	muls.w	d1,d0
 	rts
-1:	move.l	d2,-(sp)
+1:	tst.b	__dash_cpu020
+	jeq	2f
+	MULS_L_D1_D0
+	rts
+2:	move.l	d2,-(sp)
 	move.l	d3,-(sp)	| a*b = alo*blo + ((ahi*blo + alo*bhi) << 16)
 	move.w	d1,d2
 	mulu.w	d0,d2		| d2 = alo*blo
@@ -59,13 +75,19 @@ __dash_div:
 	swap	d0		| el cociente, sin el resto
 	rts
 8:	move.l	a0,d0
-9:	move.l	d3,-(sp)
+9:	tst.b	__dash_cpu020
+	jeq	1f
+	tst.l	d1
+	jeq	__dash_div_zero
+	DIVS_L_D1_D0
+	rts
+1:	move.l	d3,-(sp)
 	move.l	d0,d3
 	eor.l	d1,d3		| bit 31 de d3: el signo del cociente
 	tst.l	d0
-	jpl	1f
+	jpl	5f
 	neg.l	d0
-1:	tst.l	d1
+5:	tst.l	d1
 	jpl	2f
 	neg.l	d1
 2:	jbsr	__dash_udivmod
@@ -83,7 +105,14 @@ __dash_mod:
 	swap	d0		| el resto
 	rts
 8:	move.l	a0,d0
-9:	move.l	d3,-(sp)
+9:	tst.b	__dash_cpu020
+	jeq	1f
+	tst.l	d1
+	jeq	__dash_div_zero
+	DIVSL_L_D1_D1_D0
+	move.l	d1,d0
+	rts
+1:	move.l	d3,-(sp)
 	move.l	d0,d3
 	tst.l	d0
 	jpl	1f

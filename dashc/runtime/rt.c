@@ -15,10 +15,14 @@ static struct timerequest *bench_tr;
 static struct EClockVal bench_t0;
 static ULONG bench_freq;
 
+/* 68020 o mejor: rt_math.s usa divs.l y muls.l (como utility.library con gcc) */
+UBYTE _dash_cpu020;
+
 /* 0 si todo fue bien; si no, el programa sale con 20 */
 LONG _dash_init(void)
 {
     SysBase = *(struct ExecBase **)4;
+    _dash_cpu020 = (SysBase->AttnFlags & AFF_68020) != 0;
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
     return DOSBase ? 0 : 20;
 }
