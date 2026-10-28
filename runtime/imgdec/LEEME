@@ -7,6 +7,10 @@ Decodificar imágenes para `image_decode` (Dash 2.0: lo que Tachyon hacía con @
 - TJpgDec R0.03 (ChaN, 2021), http://elm-chan.org/fsw/tjpgd/ (arc/tjpgd3.zip, src/). `tjpgd.c` y `tjpgd.h` sin
   cambios; `tjpgdcnf.h` con JD_SZBUF 4096 y JD_FASTDECODE 2. Licencia: libre para cualquier uso, conservando el
   aviso de copyright (cabecera de tjpgd.c). JPEG ya reducido al decodificar (1/2, 1/4, 1/8).
+- libwebp 1.4.0 (Google), https://chromium.googlesource.com/webm/libwebp: solo el decodificador (`src/dec`,
+  `src/dsp` y `src/utils` en C, sin SSE, NEON ni MIPS; las cabeceras de `src/webp` y `src/enc` que incluye), sin
+  cambios. Licencia BSD de 3 cláusulas (`libwebp/COPYING`, con `PATENTS` y `AUTHORS`). WebP con y sin pérdida, con
+  alfa (no animado), ya reducido al decodificar. Su malloc, calloc y free van a los de `dash_imgdec.c` (de exec).
 
 Los de Dash: `stb_image_dash.c` (stb_image solo desde memoria, sin stdio, SIMD ni HDR, y su memoria de exec) y
 `dash_imgdec.c` (el fichero entero en memoria, el formato por sus primeros bytes, reducido hasta caber en

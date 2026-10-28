@@ -9,7 +9,7 @@ of each marker found. A library pulls only the objects a program calls.
           program may have its own inflate or crc32.
     ryu:  a double to its shortest decimal and back (runtime/ryu/LEEME).
     fdlibm: sqrt, pow, sin... of a double (runtime/fdlibm/README.md).
-    imgdec: image_decode, JPEG with TJpgDec and PNG, GIF, BMP with stb_image (runtime/imgdec/LEEME).
+    imgdec: image_decode, JPEG with TJpgDec, WebP with libwebp, PNG, GIF, BMP with stb_image (runtime/imgdec/LEEME).
 """
 
 import hashlib
@@ -35,8 +35,13 @@ LIBRARIES = {
     },
     "imgdec": {
         "marker": "/* Dash Image Decode Runtime */",
-        "sources": ["dash_imgdec.c", "stb_image_dash.c", "tjpgd.c"],
-        "defines": [],
+        # libwebp: only its decoder (src/dec, src/dsp, src/utils), its memory through dash_imgdec.c (exec)
+        "sources": ["dash_imgdec.c", "stb_image_dash.c", "tjpgd.c"] +
+                   sorted(str(p.relative_to(ROOT / "runtime" / "imgdec"))
+                          for d in ("dec", "dsp", "utils")
+                          for p in (ROOT / "runtime" / "imgdec" / "libwebp" / "src" / d).glob("*.c")),
+        "defines": [f"-I{ROOT / 'runtime' / 'imgdec' / 'libwebp'}", "-DNDEBUG", "-Dmalloc=dash_imgdec_malloc",
+                    "-Dcalloc=dash_imgdec_calloc", "-Dfree=dash_imgdec_free_mem"],
     },
     "fdlibm": {
         "marker": "/* Dash Math Runtime */",

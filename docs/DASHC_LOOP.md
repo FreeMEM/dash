@@ -342,3 +342,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     RAM: y decodificadas; tamaños, alfa y los colores de tres esquinas. Igual con gcc y con dashc.
   - Pendientes de Tachyon: WebP (libwebp) y SVG (nanosvg: necesita `sqrtf`, `powf`... de float sin FPU).
   - Tests de ./dash: 461 bien (test_image_decode también en el A500); batería de dashc bien; cobertura: 211 de 315 y 138 de 138.
+- D7 (9.ª parte): WebP en `image_decode`, con el decodificador de libwebp 1.4.0 (`runtime/imgdec/libwebp`: `src/dec`,
+  `src/dsp`, `src/utils`, sin cambios; BSD) ya reducido al decodificar. Su malloc, calloc y free, con
+  `-Dmalloc=dash_imgdec_malloc...` a los de exec de `dash_imgdec.c` (vale en una tarea); `-DNDEBUG` (sus `assert`
+  pedían `__assert_func` de libnix). tests/test_image_decode.dash con un WebP con pérdida (a su tamaño y a 16x8) y
+  uno sin pérdida con alfa: igual con gcc y con dashc.
+  - Los programas no cambian de tamaño, pero el dashc del Amiga vuelve a 1,4 MB (las bibliotecas de imágenes van
+    en el runtime). Siguiente para D8: comprimir cada hunk del runtime preparado por separado y descomprimir solo
+    los que van (la carga ya es perezosa).
+  - Tests de ./dash: 461 bien (test_image_decode también en el A500); batería bien; cobertura 211 de 315 y 138 de 138.

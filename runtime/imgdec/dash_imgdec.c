@@ -1,13 +1,37 @@
 /* Dash's image_decode (Dash 2.0, what Tachyon did with @native in lib/imagen_dec.dash): a file decoded to RGB
    or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (the aspect ratio kept). Baseline
-   JPEG with TJpgDec, already reduced (1/2, 1/4, 1/8) while it decodes; PNG, GIF, BMP and progressive JPEG with
-   stb_image, reduced after. All memory from exec: it may run in another process (task_start). */
+   JPEG with TJpgDec, already reduced (1/2, 1/4, 1/8) while it decodes; WebP with libwebp, also scaled while it
+   decodes; PNG, GIF, BMP and progressive JPEG with stb_image, reduced after. All memory from exec: it may run in another process (task_start). */
 #include <exec/memory.h>
 #include <dos/dos.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <string.h>
 #include "tjpgd.h"
+#include "src/webp/decode.h"
+
+/* libwebp's malloc, calloc and free (compiled with -Dmalloc=dash_imgdec_malloc...: compiler/clibs.py): from
+   exec, with the size in front, so that it may run in another process */
+void *dash_imgdec_malloc(size_t n)
+{
+    ULONG *p = (ULONG *)AllocVec(n + 4, MEMF_ANY);
+    if (!p) return NULL;
+    p[0] = (ULONG)n;
+    return p + 1;
+}
+
+void *dash_imgdec_calloc(size_t n, size_t size)
+{
+    ULONG *p = (ULONG *)AllocVec(n * size + 4, MEMF_CLEAR);
+    if (!p) return NULL;
+    p[0] = (ULONG)(n * size);
+    return p + 1;
+}
+
+void dash_imgdec_free_mem(void *p)
+{
+    if (p) FreeVec((ULONG *)p - 1);
+}
 
 typedef struct {
     long w, h, alpha;     /* alpha: 4 bytes per pixel (RGBA), else 3 (RGB) */
@@ -170,6 +194,47 @@ static DashImgDec *dash_imgdec_stb(UBYTE *data, LONG len, LONG maxw, LONG maxh)
     return img;
 }
 
+/* A WebP (lossy or lossless, with alpha; not animated), decoded already scaled to the smallest size that still
+   covers maxw x maxh (the aspect ratio kept); NULL if libwebp cannot */
+static DashImgDec *dash_imgdec_webp(UBYTE *data, LONG len, LONG maxw, LONG maxh)
+{
+    WebPDecoderConfig cfg;
+    DashImgDec *img;
+    LONG w, h, tw, th, c;
+    if (!WebPInitDecoderConfig(&cfg)) return NULL;
+    if (WebPGetFeatures(data, len, &cfg.input) != VP8_STATUS_OK || cfg.input.has_animation) return NULL;
+    w = cfg.input.width;
+    h = cfg.input.height;
+    tw = w;
+    th = h;
+    if (w > maxw && h > maxh) {
+        if (maxw * h > maxh * w) {
+            tw = maxw;
+            th = (h * maxw + w - 1) / w;
+        } else {
+            th = maxh;
+            tw = (w * maxh + h - 1) / h;
+        }
+        cfg.options.use_scaling = 1;
+        cfg.options.scaled_width = tw;
+        cfg.options.scaled_height = th;
+    }
+    c = cfg.input.has_alpha ? 4 : 3;
+    if (!(img = dash_imgdec_new(tw, th, c == 4))) return NULL;
+    cfg.output.colorspace = c == 4 ? MODE_RGBA : MODE_RGB;
+    cfg.output.is_external_memory = 1;
+    cfg.output.u.RGBA.rgba = img->px;
+    cfg.output.u.RGBA.stride = tw * c;
+    cfg.output.u.RGBA.size = tw * th * c;
+    if (WebPDecode(data, len, &cfg) != VP8_STATUS_OK) {
+        WebPFreeDecBuffer(&cfg.output);
+        dash_imgdec_free(img);
+        return NULL;
+    }
+    WebPFreeDecBuffer(&cfg.output);
+    return img;
+}
+
 /* The file decoded (NULL if it is not of these formats or cannot be read); maxw, maxh 0: its own size */
 void *dash_imgdec_decode(const char *file, long maxw, long maxh)
 {
@@ -179,6 +244,8 @@ void *dash_imgdec_decode(const char *file, long maxw, long maxh)
     if (!file || !(data = dash_imgdec_file(file, &len))) return NULL;
     if (maxw <= 0 || maxh <= 0) maxw = maxh = 0x7FFFFFF;
     if (len > 2 && data[0] == 0xFF && data[1] == 0xD8) img = dash_imgdec_jpeg(data, len, maxw, maxh);
+    else if (len > 12 && !memcmp(data, "RIFF", 4) && !memcmp(data + 8, "WEBP", 4))
+        img = dash_imgdec_webp(data, len, maxw, maxh);
     if (!img) img = dash_imgdec_stb(data, len, maxw, maxh);
     FreeVec(data);
     return img;

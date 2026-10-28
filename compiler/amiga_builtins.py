@@ -4595,7 +4595,7 @@ IMAGE_FUNCTIONS = {
                        "Free an image (the ones left are freed at exit)"),
     # Dash 2.0: decoded by the program itself (runtime/imgdec), what Tachyon did with @native
     "image_decode": _dec("image_decode", ["file", "maxw", "maxh"], "LONG", "_dash_image_decode(${file}, ${maxw}, ${maxh})",
-                         "Decode a JPEG (TJpgDec, already reduced while it decodes), PNG, GIF or BMP (stb_image) to "
+                         "Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF or BMP (stb_image) to "
                          "RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its "
                          "size): the decoded picture, or 0. Without datatypes, and it may run in a task_start"),
     "image_decoded_width": _dec("image_decoded_width", ["d"], "LONG", "_dash_image_decoded_width(${d})",
