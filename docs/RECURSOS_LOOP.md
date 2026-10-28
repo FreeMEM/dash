@@ -269,3 +269,15 @@ diga el usuario. Base medida: `Base ronda 3`.
   −0,9 % / −1,6 %, `string_concat_int` −1,7 % / −0,2 %, `gfx_text_concat` −1,8 % / −1,4 %; ejecutables −512 bytes.
   Frente a la base de la ronda: `string_return` +6,4 % / +6,9 % (antes +9 / +11), `nested_struct_new` +3,6 % / +4,5 %.
 - Probado: 456/456; los tests de textos en las tres máquinas y con `--memcheck`.
+
+### R15 — tamaño: la comparación con literal, en línea solo el primer byte
+- R13 metía en línea en cada `s == "literal"` la comparación entera (unos 30 bytes): con muchas comparaciones el
+  programa crecía (Tachyon tiene 1.888). Ahora va en línea solo el primer byte; si coincide, `strcmp` de libnix
+  (en ensamblador: más rápido que un bucle de C; una versión fuera de línea con la longitud iba un 20 % peor que él).
+  Además, `_dash_ts_grow` y `_dash_tmp_take_mid` (caminos raros) se compilan para tamaño (`optimize("Os")`).
+- Medida: ejecutables 416.968 → 412.392 bytes (frente a la base de la ronda, +2,8 % → +1,7 %). Una cadena de 7
+  comparaciones de etiquetas (programa aparte, A500 / A1200): antes de R13 161 / 40 µs, R13 66 / 17, ahora 74 / 19.
+  `string_compare` (mismo primer byte: el peor caso) queda un 8 % peor que antes de R13 (R13: −7 %).
+- Probado: 456/456; los tests de textos en A1200 y A500.
+- Probado y tirado: sacar de línea `_dash_str_len` (no cambiaba el tamaño y `string_chars_26` iba un 15 % peor) y
+  compilar para tamaño la reserva de textos (deja de meter en línea la caché de bloques).

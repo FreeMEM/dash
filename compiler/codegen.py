@@ -604,7 +604,7 @@ static LONG _dash_ts_n = 0, _dash_ts_cap = _DASH_TS_FIRST;
 static ULONG _dash_tmp_serial = 0;
 
 /* (apart, not in line: in _dash_str_alloc it made every call save 8 registers) */
-static __attribute__((noinline)) BOOL _dash_ts_grow(void) {
+static __attribute__((noinline, optimize("Os"))) BOOL _dash_ts_grow(void) {
     LONG cap = _dash_ts_cap * 2;
     _DashTmp *t = (_DashTmp *)_dash_alloc(cap * sizeof(_DashTmp));
     if (!t) return FALSE;
@@ -722,7 +722,7 @@ static void _dash_tmp_release_f(ULONG mark) {
 
 /* A temporary from the middle of the stack: the newer ones move down one place (in order, with their
    numbers). Apart, not in line: in _dash_tmp_take it made every call save 7 registers */
-static __attribute__((noinline)) void _dash_tmp_take_mid(_DashStrHdr *h) {
+static __attribute__((noinline, optimize("Os"))) void _dash_tmp_take_mid(_DashStrHdr *h) {
     LONG i = _dash_ts_n - 1;
     while (--i >= 0 && _dash_ts[i].h != h) ;
     if (i < 0) return;                  /* (cannot happen: TEMP is only set in the stack) */
@@ -1314,15 +1314,11 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
 
 /* Texts compared (==, <...) also when one is nil (dashweb D70): nil equals only nil and goes before any
    text; strcmp would read address 0 (a crash where page zero is protected: AmigaOS 4, MuForce) */
-/* s == "literal" of n bytes: nil is no text (D70); a text of Dash compares its length first */
-static __inline__ BOOL _dash_str_eq_lit(STRPTR a, CONST_STRPTR lit, ULONG n) {
-    const UBYTE *p = (const UBYTE *)a, *q = (const UBYTE *)lit;
-    if (!a || *p != *q) return FALSE;       /* (the first byte sorts out most: no header read) */
-    if (!n) return TRUE;
-    if (_DASH_STR_OURS(a) && _DASH_STR_HDR(a)->len != n) return FALSE;
-    while (*++q) if (*++p != *q) return FALSE;
-    return !p[1];
-}
+/* s == "literal" (R13): nil is no text (D70). In line only the first byte, which sorts out most comparisons
+   (tag == "div", "span"... one after another) with no call; if it is the same, libnix's strcmp (assembly:
+   faster than a loop of C, and in line every comparison made programs bigger) */
+#define _dash_str_eq_lit(a, lit, n) ({ STRPTR _dash_a = (a); \
+    _dash_a && *_dash_a == *(lit) && !strcmp((char *)_dash_a, (lit)); })
 
 static __inline__ LONG _dash_str_cmp(STRPTR a, STRPTR b) {
     if (a == b) return 0;
