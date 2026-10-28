@@ -292,3 +292,5 @@ diga el usuario. Base medida: `Base ronda 3`.
   3-9 % más rápido que `main`: lo que queda en el benchmark depende de qué mete GCC en línea en un `main` grande.
 - `float_mul` en A500 (+1,7 %, la comprobación de la CPU en cada llamada): se queda. Quitarla del todo pediría que el
   código se reescribiera a sí mismo en la primera llamada, y eso choca con herramientas que protegen la memoria.
+- Batería final tras R16: 456/456 sin emulador; 34/34 ejemplos; `--emu --emu-a500 --emu-32` (con RTG) 1.107/1.107 y
+  `--emu --memcheck` 676/676, sin ningún fallo. Medida guardada como `Tras la ronda 3 (R14-R16)`.
