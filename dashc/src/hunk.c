@@ -287,7 +287,8 @@ static int cmp_u32(const void *a, const void *b)
 /* Los textos constantes de un objeto de C (gcc de Amiga los deja en su .text, sin trocear aunque las funciones
    vayan cada una en su sección): un hunk .text sin símbolos ni reubicaciones propias se parte en un hunk por
    texto al que se llega, para que cada programa lleve solo los suyos. Cada trozo empieza tras el 0 del texto
-   anterior (una referencia al medio de un texto se queda con el texto entero). */
+   anterior (una referencia al medio de un texto se queda con el texto entero). Solo si todo parece texto: un
+   byte de control raro dice que hay tablas binarias (zlib), y el hunk se queda entero. */
 static void split_strings(int first)
 {
     int i, j, k, n0 = hunks.n;
@@ -297,6 +298,10 @@ static void split_strings(int first)
         int ns = 0, bad = 0;
         if (h->type != HUNK_CODE || !h->secname || strcmp(h->secname, ".text") || h->relocs.n || !h->data) continue;
         for (j = 0; j < syms.n && !bad; j++) bad = syms.v[j].hunk == i && !syms.v[j].abs;
+        for (j = 0; j < (int)h->size && !bad; j++) {
+            uint8_t c = h->data[j];
+            bad = c > 0 && c < 32 && c != 7 && c != 8 && c != 9 && c != 10 && c != 12 && c != 13 && c != 27;
+        }
         for (j = 0; j < refs.n && !bad; j++) bad = refs.v[j].hunk == i;
         /* dónde empiezan los textos a los que se llega */
         starts = xmalloc(sizeof(uint32_t));
@@ -313,14 +318,16 @@ static void split_strings(int first)
                     starts = xrealloc(starts, sizeof(uint32_t) * (ns + 1));
                     starts[ns++] = o;
                 }
-        if (bad || ns < 3) {
+        if (!bad) {
+            qsort(starts, ns, sizeof(uint32_t), cmp_u32);
+            for (j = k = 1; j < ns; j++)
+                if (starts[j] != starts[k - 1]) starts[k++] = starts[j];
+            ns = k;
+        }
+        if (bad || ns < 2) {                           /* (con un solo texto, nada que partir) */
             free(starts);
             continue;
         }
-        qsort(starts, ns, sizeof(uint32_t), cmp_u32);
-        for (j = k = 1; j < ns; j++)
-            if (starts[j] != starts[k - 1]) starts[k++] = starts[j];
-        ns = k;
         /* las referencias, a su trozo (el primero se queda en este hunk; los demás, hunks nuevos tras los
            que hay) */
         for (j = first; j < n0; j++)
@@ -369,7 +376,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     VEC_PUSH(hunks, own_hunk(HUNK_CODE, &obj->code));   /* HK_CODE = 0 */
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
     read_object(rt, rtlen);
-    split_strings(2);
+    if (!getenv("DASHC_SIN_TROCEAR")) split_strings(2);
 
     /* los símbolos, solo los de los hunks a los que se llega (el runtime trae funciones que usan cosas
        que ningún programa enlaza todavía) */

@@ -23,7 +23,7 @@ sys.path.insert(0, str(REPO / "tools"))
 import emu_run  # noqa: E402
 
 
-SKIP_MARKS = ("# emu-needs:", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net")
+SKIP_MARKS = ("# rtg", "# emu-needs:", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net")
 
 
 def lines_with(text, mark):

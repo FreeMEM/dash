@@ -142,3 +142,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   `malloc`/`free` (zlib) en un pool que se borra al salir. Núcleo: parámetros sin tipo deducidos de la primera
   llamada (`infer_params`), `for c in texto`, constantes de texto y Float, `var x: Tipo` sin valor (0 o nil),
   escapes de C en los textos (`\33`, `\x1b`, `\e`...). Compilan 159 de 309 (antes 111).
+- Cobertura: compila 158 de 309 (51 %); en el A1200, 91 de 91 iguales (los `# rtg` se saltan: piden tarjeta
+  gráfica, con gcc fallan igual en este A1200). Arreglado en `split_strings`: con varias referencias al mismo
+  texto, el hunk se quedaba con tamaño 0 (deflate de zlib no veía su versión y daba -1); además, un hunk con
+  bytes de control raros (tablas binarias) ya no se trocea.
