@@ -116,9 +116,12 @@ static void resolve_fixups(void)
 }
 
 /* ---- nombres: constantes, globales, variables locales y funciones ---- */
-typedef struct { char *name; int slot, type, depth; } Local;
+/* Una variable con nombre: un hueco (slot >= 0) o, en una función copiada en el
+   sitio de la llamada, un parámetro que vale una constante (slot -1 y val). frame
+   separa los nombres de cada copia de los de la función que la contiene. */
+typedef struct { char *name; int slot, type, depth, frame; long val; } Local;
 static struct { Local *v; int n, cap; } locals;
-static int depth;
+static int depth, cur_frame, frame_count;
 
 /* Cada variable local o parámetro de la función es un "hueco": en la primera pasada
    se cuentan sus usos; en la segunda, slot_reg dice en qué registro va (o -1). */
@@ -134,6 +137,7 @@ static int nframe;   /* huecos en el marco */
 
 typedef struct { int brk, cont; } Loop;
 static struct { Loop *v; int n, cap; } loops;
+static int loop_base;   /* los bucles de antes son de fuera de la función copiada */
 
 static int *func_label;   /* etiqueta de cada función */
 static int *global_type;
@@ -147,6 +151,14 @@ static int frameless, sp_depth, param_base;
 typedef struct { int kind, off, reg, type; long val; } Var;
 
 static int fold(Node *n, long *v);
+
+static Local *find_local(const char *name)
+{
+    int i;
+    for (i = locals.n - 1; i >= 0; i--)
+        if (locals.v[i].frame == cur_frame && !strcmp(locals.v[i].name, name)) return &locals.v[i];
+    return NULL;
+}
 
 static void use_slot(int slot)
 {
@@ -179,12 +191,18 @@ static Var slot_var(int slot, int type)
 static Var lookup(const char *name)
 {
     Var r = {V_NONE, 0, 0, TY_INT, 0};
+    Local *lc = find_local(name);
     int i;
-    for (i = locals.n - 1; i >= 0; i--)
-        if (!strcmp(locals.v[i].name, name)) {
-            use_slot(locals.v[i].slot);
-            return slot_var(locals.v[i].slot, locals.v[i].type);
-        }
+    if (lc && lc->slot < 0) {
+        r.kind = V_CONST;
+        r.val = lc->val;
+        r.type = lc->type;
+        return r;
+    }
+    if (lc) {
+        use_slot(lc->slot);
+        return slot_var(lc->slot, lc->type);
+    }
     for (i = 0; i < prog->globals.n; i++)
         if (!strcmp(prog->globals.v[i].name, name)) {
             r.kind = V_GLOBAL;
@@ -228,6 +246,8 @@ static Var declare(const char *name, int type)
     lc.slot = new_slot(0);
     lc.type = type;
     lc.depth = depth;
+    lc.frame = cur_frame;
+    lc.val = 0;
     VEC_PUSH(locals, lc);
     use_slot(lc.slot);
     return slot_var(lc.slot, type);
@@ -303,9 +323,13 @@ static int fold(Node *n, long *v)
         *v = n->val;
         return 1;
     case E_VAR: {
+        Local *lc = find_local(n->name);
         int i;
-        for (i = locals.n - 1; i >= 0; i--)
-            if (!strcmp(locals.v[i].name, n->name)) return 0;
+        if (lc) {
+            if (lc->slot >= 0) return 0;
+            *v = lc->val;
+            return 1;
+        }
         for (i = 0; i < prog->globals.n; i++)
             if (!strcmp(prog->globals.v[i].name, n->name)) return 0;
         for (i = 0; i < prog->consts.n; i++)
@@ -322,6 +346,7 @@ static int fold(Node *n, long *v)
         return 1;
     case E_BIN:
         if (!fold(n->a, &a) || !fold(n->b, &b)) return 0;
+        if ((n->op == P_SLASH || n->op == P_PERCENT) && b == 0) return 0;   /* error al ejecutar */
         *v = arith(n->op, (int32_t)a, (int32_t)b, n);
         return 1;
     }
@@ -492,6 +517,7 @@ static int simple(Node *n, Var *v)
 
 static int gen_expr(Node *n);
 static void gen_branch(Node *n, int label, int when_true);
+static void gen_block(NodeList *b);
 
 static void need_value(Node *n, int ty)
 {
@@ -820,6 +846,77 @@ static int gen_builtin(Node *n)
     return builtins[b].ret;
 }
 
+/* ---- funciones copiadas en el sitio de la llamada ----
+   Como gcc con las funciones static: se copia una función pequeña, o la que solo
+   se llama desde un sitio, si no es recursiva. Cada argumento se calcula una vez,
+   en un hueco nuevo; una constante o una variable que la función no cambia se usa
+   tal cual. */
+#define INLINE_SIZE 25   /* nodos del árbol */
+#define INLINE_DEPTH 4
+
+static int *call_sites, *body_size, *needed;
+static unsigned char **param_set;   /* la función asigna a ese parámetro */
+static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están generando o copiando */
+
+static int can_inline(int idx)
+{
+    int i;
+    if (inl_stack.n >= INLINE_DEPTH) return 0;
+    for (i = 0; i < inl_stack.n; i++)
+        if (inl_stack.v[i] == idx) return 0;
+    return body_size[idx] <= INLINE_SIZE || call_sites[idx] == 1;
+}
+
+static int gen_inline(Node *n, Func *f, int idx)
+{
+    int i, saved_frame = cur_frame, saved_ret = ret_label, saved_base = loop_base, frame = ++frame_count;
+    Local *binds = xmalloc(sizeof(Local) * (n->args.n + 1));
+
+    enter_scope();
+    for (i = n->args.n - 1; i >= 0; i--) {
+        Node *a = n->args.v[i];
+        Local *b = &binds[i], *src;
+        long k;
+        b->name = f->params.v[i].name;
+        b->type = f->params.v[i].type;
+        b->depth = depth;
+        b->frame = frame;
+        b->slot = -1;
+        b->val = 0;
+        if (!param_set[idx][i] && fold(a, &k)) {
+            b->val = k;
+            continue;
+        }
+        if (!param_set[idx][i] && a->kind == E_VAR && (src = find_local(a->name)) != NULL) {
+            b->slot = src->slot;
+            b->val = src->val;
+            if (src->slot >= 0) use_slot(src->slot);
+            continue;
+        }
+        value(a);
+        b->slot = new_slot(0);
+        use_slot(b->slot);
+        {
+            Var t = slot_var(b->slot, b->type);
+            store_d0(&t);
+        }
+    }
+    cur_frame = frame;
+    for (i = 0; i < n->args.n; i++) VEC_PUSH(locals, binds[i]);
+    free(binds);
+    ret_label = new_label();
+    loop_base = loops.n;
+    VEC_PUSH(inl_stack, idx);
+    gen_block(&f->body);
+    inl_stack.n--;
+    def_label(ret_label);
+    ret_label = saved_ret;
+    loop_base = saved_base;
+    cur_frame = saved_frame;
+    leave_scope();
+    return f->ret;
+}
+
 static int gen_call(Node *n)
 {
     int i, idx;
@@ -827,9 +924,11 @@ static int gen_call(Node *n)
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
+    if (can_inline(idx)) return gen_inline(n, f, idx);
     for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
     jsr_label(func_label[idx]);
     pop_args(n->args.n);
+    if (!needed[idx]) needed[idx] = 1;               /* 2: ya generada */
     return f->ret;
 }
 
@@ -1014,10 +1113,10 @@ static void gen_for(Node *n)
 /* qué es un nombre, sin contarlo como uso */
 static int lookup_kind(const char *name)
 {
-    int i;
-    for (i = locals.n - 1; i >= 0; i--)
-        if (!strcmp(locals.v[i].name, name)) return slot_reg.v[locals.v[i].slot] >= 0 ? V_REG : V_LOCAL;
-    return V_GLOBAL;
+    Local *lc = find_local(name);
+    if (!lc) return V_GLOBAL;
+    if (lc->slot < 0) return V_CONST;
+    return slot_reg.v[lc->slot] >= 0 ? V_REG : V_LOCAL;
 }
 
 /* v = v op e: la operación directamente sobre la variable */
@@ -1148,7 +1247,7 @@ static void gen_stmt(Node *n)
         return;
     case S_BREAK:
     case S_CONTINUE:
-        if (!loops.n) fatal_at(n->line, n->col, "%s fuera de un bucle", n->kind == S_BREAK ? "break" : "continue");
+        if (loops.n <= loop_base) fatal_at(n->line, n->col, "%s fuera de un bucle", n->kind == S_BREAK ? "break" : "continue");
         branch(CC_T, n->kind == S_BREAK ? loops.v[loops.n - 1].brk : loops.v[loops.n - 1].cont);
         return;
     case S_RETURN:
@@ -1180,6 +1279,9 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     slot_end.n = 0;
     event = 0;
     slot_off.n = 0;
+    cur_frame = 0;
+    loops.n = 0;
+    loop_base = 0;
     ret_label = new_label();
 
     for (i = 0; i < slot_reg.n; i++)
@@ -1208,6 +1310,8 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             lc.slot = new_slot(8 + 4 * i);
             lc.type = f->params.v[i].type;
             lc.depth = 0;
+            lc.frame = 0;
+            lc.val = 0;
             VEC_PUSH(locals, lc);
             if (slot_reg.v[lc.slot] >= 0) {
                 if (frameless) {
@@ -1232,11 +1336,34 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     w(0x4E75);                                         /* rts */
 }
 
+/* lo generado hasta un punto, para deshacer lo que venga después */
+typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n; long sink; } Mark;
+
+static Mark mark(void)
+{
+    Mark m;
+    m.code_n = obj->code.n;
+    m.data_n = obj->data.n;
+    m.relocs_n = obj->relocs.n;
+    m.fixups_n = fixups.n;
+    m.labels_n = labels.n;
+    m.sink = sink_off;
+    return m;
+}
+
+static void undo(Mark *m)
+{
+    obj->code.n = m->code_n;
+    obj->data.n = m->data_n;
+    obj->relocs.n = m->relocs_n;
+    fixups.n = m->fixups_n;
+    labels.n = m->labels_n;
+    sink_off = m->sink;
+}
+
 static void gen_function(int label, Func *f, NodeList *body)
 {
-    size_t code_n = obj->code.n, data_n = obj->data.n;
-    int relocs_n = obj->relocs.n, fixups_n = fixups.n, labels_n = labels.n;
-    long sink = sink_off;
+    Mark m = mark();
     int i, r;
 
     /* primera pasada: todo en el marco, contando usos */
@@ -1245,12 +1372,7 @@ static void gen_function(int label, Func *f, NodeList *body)
     gen_function_pass(label, f, body);
 
     /* se deshace y se eligen los huecos más usados para d2-d7 */
-    obj->code.n = code_n;
-    obj->data.n = data_n;
-    obj->relocs.n = relocs_n;
-    fixups.n = fixups_n;
-    labels.n = labels_n;
-    sink_off = sink;
+    undo(&m);
     /* de más a menos usado: al primer registro libre durante toda su vida, desde que
        se asigna hasta su último uso (dos variables que no viven a la vez lo comparten) */
     for (i = 0; i < slot_reg.n; i++) slot_reg.v[i] = -1;
@@ -1280,11 +1402,68 @@ static void gen_function(int label, Func *f, NodeList *body)
     gen_function_pass(label, f, body);
 }
 
+/* tamaño del árbol, y de paso cuántas veces se llama a cada función */
+static int tree_size(Node *n);
+
+static int list_size(NodeList *l)
+{
+    int i, s = 0;
+    for (i = 0; i < l->n; i++) s += tree_size(l->v[i]);
+    return s;
+}
+
+static int tree_size(Node *n)
+{
+    int idx;
+    if (!n) return 0;
+    if (n->kind == E_CALL && find_func(n->name, &idx)) call_sites[idx]++;
+    return 1 + tree_size(n->a) + tree_size(n->b) + tree_size(n->c) +
+           list_size(&n->args) + list_size(&n->body) + list_size(&n->els);
+}
+
+/* ¿se asigna a name en el árbol? */
+static int assigns(Node *n, const char *name);
+
+static int list_assigns(NodeList *l, const char *name)
+{
+    int i;
+    for (i = 0; i < l->n; i++)
+        if (assigns(l->v[i], name)) return 1;
+    return 0;
+}
+
+static int assigns(Node *n, const char *name)
+{
+    if (!n) return 0;
+    if ((n->kind == S_ASSIGN || n->kind == S_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
+    return list_assigns(&n->body, name) || list_assigns(&n->els, name);
+}
+
+static void gen_one(int idx, int label, Func *f, NodeList *body)
+{
+    VEC_PUSH(inl_stack, idx);
+    gen_function(label, f, body);
+    inl_stack.n--;
+}
+
 void gen_program(Program *p, Obj *o)
 {
-    int i, main_label, fail;
+    int i, main_label, fail, again;
     prog = p;
     obj = o;
+
+    call_sites = xmalloc(sizeof(int) * (p->funcs.n + 1));
+    body_size = xmalloc(sizeof(int) * (p->funcs.n + 1));
+    needed = xmalloc(sizeof(int) * (p->funcs.n + 1));
+    param_set = xmalloc(sizeof(*param_set) * (p->funcs.n + 1));
+    list_size(&p->main);
+    for (i = 0; i < p->funcs.n; i++) {
+        Func *f = &p->funcs.v[i];
+        int j;
+        body_size[i] = list_size(&f->body);
+        param_set[i] = xmalloc(f->params.n + 1);
+        for (j = 0; j < f->params.n; j++) param_set[i][j] = (unsigned char)list_assigns(&f->body, f->params.v[j].name);
+    }
 
     func_label = xmalloc(sizeof(int) * (p->funcs.n + 1));
     for (i = 0; i < p->funcs.n; i++) {
@@ -1320,7 +1499,28 @@ void gen_program(Program *p, Obj *o)
     w(0x4CDF); w(0x7CFC);                              /* movem.l (sp)+,d2-d7/a2-a6 */
     w(0x4E75);                                         /* rts */
 
-    gen_function(main_label, NULL, &p->main);
-    for (i = 0; i < p->funcs.n; i++) gen_function(func_label[i], &p->funcs.v[i], &p->funcs.v[i].body);
+    /* Main y las funciones a las que se llama de verdad (no copiadas) */
+    gen_one(-1, main_label, NULL, &p->main);
+    do {
+        again = 0;
+        for (i = 0; i < p->funcs.n; i++)
+            if (needed[i] == 1) {
+                needed[i] = 2;
+                gen_one(i, func_label[i], &p->funcs.v[i], &p->funcs.v[i].body);
+                again = 1;
+            }
+    } while (again);
+    /* las demás no van en el ejecutable, pero se generan y se tiran para dar sus errores */
+    for (i = 0; i < p->funcs.n; i++)
+        if (!needed[i]) {
+            Mark m = mark();
+            int *saved = xmalloc(sizeof(int) * (p->funcs.n + 1));
+            memcpy(saved, needed, sizeof(int) * p->funcs.n);
+            gen_one(i, func_label[i], &p->funcs.v[i], &p->funcs.v[i].body);
+            undo(&m);
+            labels.v[func_label[i]] = -1;
+            memcpy(needed, saved, sizeof(int) * p->funcs.n);
+            free(saved);
+        }
     resolve_fixups();
 }

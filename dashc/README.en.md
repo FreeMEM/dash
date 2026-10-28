@@ -35,10 +35,11 @@ Everything else is missing: strings in variables, arrays, structs, Float, builti
 
 ## What was checked
 
-- The five tests give the same output as the Python Dash on A1200 and A500 with the 3.1 ROM.
-- `build/dashc.amiga` compiles the five inside an emulated A500; the executables are byte-identical
+- The six tests give the same output as the Python Dash on A1200 and A500 with the 3.1 ROM.
+- `build/dashc.amiga` compiles the six inside an emulated A500; the executables are byte-identical
   to the PC ones and run.
 - The executables take 1.5 to 3 KB (6 to 9 KB with gcc).
-- Speed (`bench/bench_enteros.dash`, times the time of gcc `-O2`): 1.1 to 1.8 on A500 and 1.1 to 2.4
-  on A1200; recursion (fib) is faster than with gcc (0.6 and 0.8). Calls to a small function, 3 times:
-  gcc puts it inside the loop and dashc does not yet.
+- Speed (`bench/bench_enteros.dash`, times the time of gcc `-O2`): 1.1 to 1.7 on A500 and 1.1 to 2.4
+  on A1200; recursion (fib) is faster than with gcc (0.6 and 0.8).
+- Like gcc with `static` functions, a small function or one called from a single place is copied where
+  it is called (not if it is recursive); functions never really called are left out of the executable.

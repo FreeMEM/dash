@@ -35,10 +35,11 @@ Falta todo lo demás: textos en variables, arrays, structs, Float, builtins, ven
 
 ## Lo comprobado
 
-- Los cinco tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
-- `build/dashc.amiga` compila los cinco dentro de un A500 emulado; los ejecutables salen idénticos
+- Los seis tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
+- `build/dashc.amiga` compila los seis dentro de un A500 emulado; los ejecutables salen idénticos
   byte a byte a los del PC y funcionan.
 - Los ejecutables ocupan entre 1,5 y 3 KB (con gcc, entre 6 y 9 KB).
-- Velocidad (`bench/bench_enteros.dash`, veces el tiempo de gcc `-O2`): de 1,1 a 1,8 en A500 y de
-  1,1 a 2,4 en A1200; la recursión (fib) va más rápida que con gcc (0,6 y 0,8). Las llamadas a una
-  función pequeña, 3 veces: gcc la mete dentro del bucle y dashc aún no.
+- Velocidad (`bench/bench_enteros.dash`, veces el tiempo de gcc `-O2`): de 1,1 a 1,7 en A500 y de
+  1,1 a 2,4 en A1200; la recursión (fib) va más rápida que con gcc (0,6 y 0,8).
+- Como gcc con las funciones `static`, una función pequeña o llamada desde un solo sitio se copia
+  donde se llama (no si es recursiva); las que nunca se llaman de verdad no van en el ejecutable.
