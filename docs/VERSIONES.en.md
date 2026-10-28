@@ -32,6 +32,24 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 1.0.1 (2026-10-28)
+
+Faster programs that use less memory. Nothing in the language changes: what compiled with 1.0.0 compiles the same.
+Details and measurements in [RECURSOS_LOOP.md](RECURSOS_LOOP.md) ("Tercera ronda", in Spanish).
+
+- **Strings:** each string keeps its length and `s = a + b` is written in place in `s` when it fits. Joining a
+  string and a number is 17 % faster; interpolation, 8 %.
+- **Dictionaries:** literal keys carry their hash computed at compile time. Looking up with a literal key is
+  34-41 % faster.
+- **Comparing with a literal:** `s == "hello"` checks the first character before calling `strcmp`. A chain of
+  comparisons is 54 % faster.
+- **Float:** on a 68020, 030 or 040, multiplication uses the processor's 32-bit instruction: 20 % faster. On the
+  68000, 2 % slower (the cost of checking the processor).
+- **Memory:** each program uses 8 KB less (the stack for processor exceptions is no longer separate).
+- **RTG:** the desktop canvas without a backdrop no longer reads from the graphics card when it updates.
+- **Cost:** executables are 1.8 % larger; returning a string and creating a struct with a string, 2-3 % slower.
+- Not tested on a 68060 or on real hardware.
+
 ### 1.0.0 (2026-10-27)
 
 The first version with a number. It gathers everything done so far (full log in [ROADMAP.md](ROADMAP.md)):
