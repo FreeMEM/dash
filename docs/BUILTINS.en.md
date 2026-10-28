@@ -550,7 +550,7 @@ Total: 712 functions, 712 implemented, 0 not implemented.
 | `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
 | `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
 | `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
-| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF or BMP (stb_image) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
 | `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
 | `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
 | `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |

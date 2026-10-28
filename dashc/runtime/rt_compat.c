@@ -452,3 +452,117 @@ double fmod(double x, double y) { return __ieee754_fmod(x, y); }
 double acos(double x) { return __ieee754_acos(x); }
 double asin(double x) { return __ieee754_asin(x); }
 double atan2(double y, double x) { return __ieee754_atan2(y, x); }
+
+/* ---- números de un texto, ordenar y sscanf (nanosvg) ---- */
+
+long long strtoll(const char *s, char **end, int base)
+{
+    const char *p = s;
+    unsigned long long v = 0;
+    int neg = 0, any = 0;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f' || *p == '\v') p++;
+    if (*p == '-' || *p == '+') neg = *p++ == '-';
+    if ((base == 0 || base == 16) && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        p += 2;
+        base = 16;
+    } else if (base == 0) {
+        base = *p == '0' ? 8 : 10;
+    }
+    for (;; p++, any = 1) {
+        int d = *p >= '0' && *p <= '9' ? *p - '0' : *p >= 'a' && *p <= 'z' ? *p - 'a' + 10 :
+                *p >= 'A' && *p <= 'Z' ? *p - 'A' + 10 : 99;
+        if (d >= base) break;
+        v = v * base + d;
+    }
+    if (end) *end = (char *)(any ? p : s);
+    return neg ? -(long long)v : (long long)v;
+}
+
+long strtol(const char *s, char **end, int base)
+{
+    return (long)strtoll(s, end, base);
+}
+
+unsigned long strtoul(const char *s, char **end, int base)
+{
+    return (unsigned long)strtoll(s, end, base);
+}
+
+void qsort(void *base, size_t n, size_t size, int (*cmp)(const void *, const void *))
+{
+    /* (Shell: sin recursión ni memoria aparte; los saltos de Ciura) */
+    static const size_t gaps[] = {701, 301, 132, 57, 23, 10, 4, 1};
+    unsigned char *a = (unsigned char *)base, tmp[64];
+    size_t g, i, j, k;
+    if (size > sizeof tmp) {
+        /* elementos grandes: inserción con intercambios de byte en byte */
+        for (i = 1; i < n; i++)
+            for (j = i; j > 0 && cmp(a + (j - 1) * size, a + j * size) > 0; j--)
+                for (k = 0; k < size; k++) {
+                    unsigned char c = a[(j - 1) * size + k];
+                    a[(j - 1) * size + k] = a[j * size + k];
+                    a[j * size + k] = c;
+                }
+        return;
+    }
+    for (g = 0; g < sizeof gaps / sizeof gaps[0]; g++) {
+        size_t gap = gaps[g];
+        while (gap * 3 < n && g == 0 && gap < n / 3) gap = gap * 9 / 4;   /* (más saltos para listas largas) */
+        for (i = gap; i < n; i++) {
+            memcpy(tmp, a + i * size, size);
+            for (j = i; j >= gap && cmp(a + (j - gap) * size, tmp) > 0; j -= gap)
+                memcpy(a + j * size, a + (j - gap) * size, size);
+            memcpy(a + j * size, tmp, size);
+        }
+    }
+}
+
+/* sscanf con lo que usa nanosvg: espacios, texto literal y %d %u %x con anchura */
+int sscanf(const char *s, const char *f, ...)
+{
+    va_list ap;
+    int n = 0;
+    va_start(ap, f);
+    for (; *f; f++) {
+        if (*f == ' ') {
+            while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r') s++;
+            continue;
+        }
+        if (*f != '%') {
+            if (*s != *f) break;
+            s++;
+            continue;
+        }
+        f++;
+        if (*f == '%') {
+            if (*s++ != '%') break;
+            continue;
+        }
+        {
+            int width = 0, base, neg = 0, got = 0;
+            long v = 0;
+            while (*f >= '0' && *f <= '9') width = width * 10 + *f++ - '0';
+            while (*f == 'l' || *f == 'h') f++;
+            base = *f == 'x' || *f == 'X' ? 16 : 10;
+            if (*f != 'd' && *f != 'i' && *f != 'u' && *f != 'x' && *f != 'X') break;
+            if (base == 10) while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r') s++;
+            if (base == 10 && (*s == '-' || *s == '+')) {
+                neg = *s++ == '-';
+                if (width) width--;
+            }
+            for (;;) {
+                int d = *s >= '0' && *s <= '9' ? *s - '0' : *s >= 'a' && *s <= 'f' ? *s - 'a' + 10 :
+                        *s >= 'A' && *s <= 'F' ? *s - 'A' + 10 : 99;
+                if (d >= base || (width && got >= width)) break;
+                v = v * base + d;
+                s++;
+                got++;
+            }
+            if (!got) break;
+            *va_arg(ap, int *) = (int)(neg ? -v : v);
+            n++;
+        }
+    }
+    va_end(ap);
+    return n;
+}

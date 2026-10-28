@@ -361,3 +361,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Lo que queda grande son las tablas (3.200 hunks a 28 bytes, 10.500 reubicaciones a 8): se podrían guardar en
     menos bytes. Y comprimir juntos los datos de varios hunks daría más (todo junto, 250 KB en vez de 360 KB).
   - Batería bien; cobertura 211 de 315 y 138 de 138.
+- D7 (10.ª parte): SVG en `image_decode` con nanosvg (la copia de Tachyon, con su cambio de `pathLength`; zlib),
+  dibujado en RGBA a la escala que cubre maxw x maxh (o a su tamaño). Sus cuentas van a `dash_imgdec_mathf.c`
+  (sobre el fdlibm de Dash: las de libnix van a la ROM, que sin FPU da una excepción de línea F) y su memoria a exec
+  (`-Drealloc` también). ./dash enlaza con `image_decode` el fdlibm (`compiler/clibs.py`: un marcador puede ser
+  varios) y el float por software (`compiler/softfloat.py`); el runtime de dashc lleva `strtol`, `strtoll`,
+  `strtoul`, `qsort` (Shell) y un `sscanf` con lo que usa nanosvg (`%d %u %x` con anchura y texto literal).
+  tests/test_image_decode.dash con un SVG (`#ff0000`, `#00f`, `rgb(0, 255, 0)`) a su tamaño y a 32x16: igual con
+  gcc y con dashc.
+  - Tests de ./dash: 461 bien (test_image_decode también en el A500); batería bien; cobertura 211 de 315 y 138 de 138.

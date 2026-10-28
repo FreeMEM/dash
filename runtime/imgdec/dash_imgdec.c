@@ -1,7 +1,8 @@
 /* Dash's image_decode (Dash 2.0, what Tachyon did with @native in lib/imagen_dec.dash): a file decoded to RGB
    or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (the aspect ratio kept). Baseline
    JPEG with TJpgDec, already reduced (1/2, 1/4, 1/8) while it decodes; WebP with libwebp, also scaled while it
-   decodes; PNG, GIF, BMP and progressive JPEG with stb_image, reduced after. All memory from exec: it may run in another process (task_start). */
+   decodes; SVG drawn by nanosvg; PNG, GIF, BMP and progressive JPEG with stb_image, reduced after. All memory
+   from exec: it may run in another process (task_start). */
 #include <exec/memory.h>
 #include <dos/dos.h>
 #include <proto/exec.h>
@@ -9,6 +10,10 @@
 #include <string.h>
 #include "tjpgd.h"
 #include "src/webp/decode.h"
+
+/* nanosvg's declarations (its code is in nanosvg_dash.c) */
+#include "nanosvg.h"
+#include "nanosvgrast.h"
 
 /* libwebp's malloc, calloc and free (compiled with -Dmalloc=dash_imgdec_malloc...: compiler/clibs.py): from
    exec, with the size in front, so that it may run in another process */
@@ -31,6 +36,22 @@ void *dash_imgdec_calloc(size_t n, size_t size)
 void dash_imgdec_free_mem(void *p)
 {
     if (p) FreeVec((ULONG *)p - 1);
+}
+
+void *dash_imgdec_realloc(void *p, size_t n)
+{
+    void *q;
+    size_t old;
+    if (!p) return dash_imgdec_malloc(n);
+    if (!n) {
+        dash_imgdec_free_mem(p);
+        return NULL;
+    }
+    old = ((ULONG *)p)[-1];
+    if (!(q = dash_imgdec_malloc(n))) return NULL;
+    CopyMem(p, q, old < n ? old : n);
+    dash_imgdec_free_mem(p);
+    return q;
 }
 
 typedef struct {
@@ -235,6 +256,60 @@ static DashImgDec *dash_imgdec_webp(UBYTE *data, LONG len, LONG maxw, LONG maxh)
     return img;
 }
 
+/* Does it look like SVG text? (an XML declaration or comments, then an <svg ...> element) */
+static int dash_imgdec_is_svg(UBYTE *data, LONG len)
+{
+    LONG i = 0, n = len < 4096 ? len : 4096;
+    if (n >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) i = 3;
+    while (i < n && (data[i] == ' ' || data[i] == '\t' || data[i] == '\r' || data[i] == '\n')) i++;
+    if (i >= n || data[i] != '<') return 0;
+    for (; i + 4 < n; i++)
+        if (data[i] == '<' && data[i + 1] == 's' && data[i + 2] == 'v' && data[i + 3] == 'g' &&
+            (data[i + 4] == ' ' || data[i + 4] == '>' || data[i + 4] == '\n' || data[i + 4] == '\r' ||
+             data[i + 4] == '\t'))
+            return 1;
+    return 0;
+}
+
+/* An SVG drawn by nanosvg (RGBA): at its own size (width/height or viewBox), or, with maxw x maxh, at the smallest
+   scale that covers it (it is drawn, not reduced: it may grow); NULL if it cannot be parsed */
+static DashImgDec *dash_imgdec_svg(UBYTE *data, LONG len, LONG maxw, LONG maxh)
+{
+    char *text = (char *)AllocVec(len + 1, MEMF_ANY);
+    NSVGimage *svg;
+    NSVGrasterizer *r;
+    DashImgDec *img;
+    float scale = 1.0f, ex, ey;
+    LONG w, h;
+    if (!text) return NULL;
+    CopyMem(data, text, len);
+    text[len] = 0;
+    svg = nsvgParse(text, "px", 96.0f);
+    FreeVec(text);
+    if (!svg) return NULL;
+    if (svg->width < 1.0f || svg->height < 1.0f) {
+        nsvgDelete(svg);
+        return NULL;
+    }
+    if (maxw > 0 && maxh > 0 && maxw < 0x7FFFFFF) {
+        ex = (float)maxw / svg->width;
+        ey = (float)maxh / svg->height;
+        scale = ex > ey ? ex : ey;
+    }
+    w = (LONG)(svg->width * scale + 0.5f);
+    h = (LONG)(svg->height * scale + 0.5f);
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (w > 4096 || h > 4096 || !(r = nsvgCreateRasterizer())) {
+        nsvgDelete(svg);
+        return NULL;
+    }
+    if ((img = dash_imgdec_new(w, h, 1))) nsvgRasterize(r, svg, 0, 0, scale, img->px, w, h, w * 4);
+    nsvgDeleteRasterizer(r);
+    nsvgDelete(svg);
+    return img;
+}
+
 /* The file decoded (NULL if it is not of these formats or cannot be read); maxw, maxh 0: its own size */
 void *dash_imgdec_decode(const char *file, long maxw, long maxh)
 {
@@ -246,6 +321,8 @@ void *dash_imgdec_decode(const char *file, long maxw, long maxh)
     if (len > 2 && data[0] == 0xFF && data[1] == 0xD8) img = dash_imgdec_jpeg(data, len, maxw, maxh);
     else if (len > 12 && !memcmp(data, "RIFF", 4) && !memcmp(data + 8, "WEBP", 4))
         img = dash_imgdec_webp(data, len, maxw, maxh);
+    else if (dash_imgdec_is_svg(data, len))
+        img = dash_imgdec_svg(data, len, maxw, maxh);
     if (!img) img = dash_imgdec_stb(data, len, maxw, maxh);
     FreeVec(data);
     return img;

@@ -1,5 +1,5 @@
 # Test: image_decode (Dash 2.0, what Tachyon did with @native): small pictures made on the PC with PIL (16 x 8:
-# the left half red, the right half blue, the last row green; the JPEGs and a WebP at 64 x 32), written to RAM: and decoded
+# the left half red, the right half blue, the last row green; the JPEGs and a WebP at 64 x 32; an SVG, drawn), written to RAM: and decoded
 # by the program itself, without datatypes. The JPEGs are reduced while they decode (TJpgDec: 1/2, 1/4), a
 # progressive JPEG goes through stb_image, and the sizes and corner colours are checked (JPEG: near enough).
 # expect-out: png: 16x8 false rojo azul verde
@@ -13,6 +13,8 @@
 # expect-out: webp: 64x32 false rojo azul verde
 # expect-out: webp a 16x8: 16x8 false rojo azul verde
 # expect-out: webp sin pérdida con alfa: 16x8 true rojo azul verde
+# expect-out: svg: 16x8 true rojo azul verde
+# expect-out: svg a 32x16: 32x16 true rojo azul verde
 # expect-out: no es imagen: 0
 # expect-out: no está: 0
 
@@ -90,6 +92,12 @@ Main
     probar("webp", "RAM:t.webp", 0, 0)
     probar("webp a 16x8", "RAM:t.webp", 16, 8)
     probar("webp sin pérdida con alfa", "RAM:ta.webp", 0, 0)
+    svg = "<?xml version='1.0'?>\n<svg xmlns='http://www.w3.org/2000/svg' width='16' height='8'>" +
+          "<rect x='0' y='0' width='8' height='8' fill='#ff0000'/><rect x='8' y='0' width='8' height='8' fill='#00f'/>" +
+          "<rect x='0' y='7' width='16' height='1' fill='rgb(0, 255, 0)'/></svg>\n"
+    file_write_text("RAM:t.svg", svg)
+    probar("svg", "RAM:t.svg", 0, 0)
+    probar("svg a 32x16", "RAM:t.svg", 30, 16)
     file_write_text("RAM:t.txt", "hola")
     probar("no es imagen", "RAM:t.txt", 0, 0)
     probar("no está", "RAM:noesta.png", 0, 0)
