@@ -226,3 +226,12 @@ diga el usuario. Base medida: `Base ronda 3`.
   115 programas vacíos, o con una de las dos mitades de los tests anteriores; falla con cualquiera de los dos
   cuartos de la primera mitad más la segunda. La misma copia, justo detrás del fallo, pasa: es algo pasajero que
   depende de cuántos tests reales corrieron antes, no de uno. Sin causa encontrada.
+
+### R13 — `s == "literal"` sin strcmp
+- `==` y `!=` con un literal van por `_dash_str_eq_lit(s, "lit", sizeof("lit") - 1)`, en línea: el primer byte
+  primero (descarta casi todo sin leer la cabecera: `tag == "div"`, `"span"`... uno tras otro), luego la longitud
+  si es un texto de Dash, y los bytes que quedan. nil sigue sin ser igual a ningún texto (D70). En Tachyon hay
+  1.888 comparaciones así.
+- Medida (`string_compare`, textos de la misma longitud y mismo primer byte: el peor caso): −7 % en A500 y A1200.
+  La primera versión (longitud primero y un bucle con contador) iba un 3-6 % peor que `strcmp`.
+- Probado: los tests de textos en las tres máquinas y con `--memcheck`; 456/456.

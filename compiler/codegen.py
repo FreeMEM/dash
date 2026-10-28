@@ -1310,6 +1310,16 @@ static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) 
 
 /* Texts compared (==, <...) also when one is nil (dashweb D70): nil equals only nil and goes before any
    text; strcmp would read address 0 (a crash where page zero is protected: AmigaOS 4, MuForce) */
+/* s == "literal" of n bytes: nil is no text (D70); a text of Dash compares its length first */
+static __inline__ BOOL _dash_str_eq_lit(STRPTR a, CONST_STRPTR lit, ULONG n) {
+    const UBYTE *p = (const UBYTE *)a, *q = (const UBYTE *)lit;
+    if (!a || *p != *q) return FALSE;       /* (the first byte sorts out most: no header read) */
+    if (!n) return TRUE;
+    if (_DASH_STR_OURS(a) && _DASH_STR_HDR(a)->len != n) return FALSE;
+    while (*++q) if (*++p != *q) return FALSE;
+    return !p[1];
+}
+
 static __inline__ LONG _dash_str_cmp(STRPTR a, STRPTR b) {
     if (a == b) return 0;
     if (!a) return -1;
@@ -20101,6 +20111,16 @@ static {ret_type} {method_name}({params_str}) {{
                         self.uses_strings = self.uses_text = True
                         x = self._generate_expression(low.arguments[0])
                         return f"(_dash_str_ieq({x}, {self._generate_expression(lit)}) {node.operator} TRUE)"
+            # s == "literal" (R13): the length first (from the header of a text of Dash: most of these
+            # comparisons, tag == "div" one after another, fail there) and then the bytes, in line; no strcmp
+            if node.operator in ("==", "!="):
+                for var, lit in ((node.left, node.right), (node.right, node.left)):
+                    if isinstance(lit, StringLiteral) and not isinstance(var, StringLiteral) and self._is_string_expr(var):
+                        self.uses_strings = True
+                        x = self._generate_expression(var)
+                        c = self._generate_expression(lit)
+                        if c.startswith('"') and c.endswith('"'):
+                            return f"(_dash_str_eq_lit({x}, {c}, sizeof({c}) - 1) {node.operator} TRUE)"
             # String comparison compares contents, not pointers
             if node.operator in ("==", "!=", "<", ">", "<=", ">=") and (left_str or right_str):
                 # order: byte by byte as unsigned (Latin-1), like strcmp; nil only equals nil (D70)
