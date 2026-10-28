@@ -290,6 +290,7 @@ static int uses_keys, uses_click;   /* IDCMP de las ventanas */
 /* GadTools, como ./dash: gadgets (GT_GetIMsg y On Gadget), gadgets o menús (sus IDCMP) y teclas de gadgets */
 static int uses_gadgets, needs_gt, gadget_keys;
 static int needs_area;   /* gfx_circle_fill...: la ventana prepara el relleno de áreas al abrirse */
+static int uses_mui, uses_tls;   /* la pila: 32 KB con MUI, 64 KB con AmiSSL (como ./dash) */
 
 static int find_struct(const char *name)
 {
@@ -1715,6 +1716,22 @@ static int gen_list_method(Node *n)
         }
         return TY_VOID;
     }
+    if (!strcmp(n->name, "sort")) {
+        /* l.sort(f): f(a, b) -> Bool (a va antes que b) o -> Int (negativo si a va antes), como ./dash */
+        Node *f = n->args.n == 1 ? n->args.v[0] : NULL;
+        int fi, boolean = 0;
+        Func *fn;
+        if (!f) fatal_at(n->line, n->col, "sort pide 1 argumento (la función que compara)");
+        if (f->kind == E_FUNCREF && (fn = find_func(f->name, &fi)) != NULL)
+            boolean = fn->boolret || (fn->declared && fn->ret == TY_BOOL);
+        load_imm(0, boolean);
+        push_d0();
+        a[0] = n->a;
+        a[1] = f;
+        args_to_stack(a, 2, NULL);
+        rt_call("_dl_arr_sort", 3, 0);
+        return TY_VOID;
+    }
     if (!strcmp(n->name, "pop")) {
         et = t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
         kind = elem_kind(et);
@@ -2700,6 +2717,17 @@ static int count_refs(Node *n, const char *name)
     return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->c, name);
 }
 
+/* ¿llama e a name (una variable Func)? el nombre de una llamada no es un nodo que se pueda sustituir */
+static int calls_name(Node *n, const char *name)
+{
+    int i;
+    if (!n) return 0;
+    if (n->kind == E_CALL && !strcmp(n->name, name)) return 1;
+    for (i = 0; i < n->args.n; i++)
+        if (calls_name(n->args.v[i], name)) return 1;
+    return calls_name(n->a, name) || calls_name(n->b, name) || calls_name(n->c, name);
+}
+
 static int param_index(Func *f, const char *name)
 {
     int i;
@@ -2753,6 +2781,8 @@ static Node *try_subst(Node *call, int *idx)
     if (call->kind != E_CALL || !(f = find_func(call->name, idx)) || call->args.n != f->params.n) return NULL;
     if (f->body.n != 1 || f->body.v[0]->kind != S_RETURN || !(e = f->body.v[0]->a)) return NULL;
     if (!can_inline(*idx) || !subst_ok(e, f)) return NULL;
+    for (i = 0; i < f->params.n; i++)
+        if (calls_name(e, f->params.v[i].name)) return NULL;   /* f(v) con f un parámetro Func */
     for (i = 0; i < call->args.n; i++) {
         Node *a = call->args.v[i];
         if (fold(a, &k) || a->kind == E_VAR) continue;
@@ -2869,6 +2899,18 @@ static int gen_call(Node *n)
     int i, idx;
     Func *f = find_func(n->name, &idx);
     if (!f && (idx = find_struct(n->name)) >= 0) return gen_new(n, idx, 0);
+    if (!f && lookup(n->name).kind != V_NONE) {
+        /* g(4) con g una variable Func: la función a la que apunta, como una de C (Int) */
+        Var v;
+        for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
+        v = lookup(n->name);
+        load_var(0, &v);
+        w(0x2040);                                     /* movea.l d0,a0 */
+        w(0x4E90);                                     /* jsr (a0) */
+        pop_args(n->args.n);
+        d0_loaded = (uint32_t)-1;
+        return TY_INT;
+    }
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
@@ -2987,9 +3029,32 @@ static int gen_expr(Node *n)
         return TY_VOID;
     case E_VAR:
         v = lookup(n->name);
-        if (v.kind == V_NONE) fatal_at(n->line, n->col, "la variable %s no existe", n->name);
+        if (v.kind == V_NONE) {
+            fatal_at(n->line, n->col, "la variable %s no existe", n->name);
+        }
         load_var(0, &v);
         return v.type;
+    case E_FUNCREF: {
+            int idx;
+            Func *fn = find_func(n->name, &idx);
+            if (fn && !fn->native) {
+                /* una función como valor (mui_canvas_on_draw(lienzo, pinta)...): su dirección; la llaman
+                   como a una de C, que es como van las de dashc */
+                Fixup f;
+                w(0x203C);                             /* move.l #función,d0 */
+                f.at = (uint32_t)obj->code.n;
+                f.label = func_label[idx];
+                f.abs = 1;
+                f.size = 2;
+                VEC_PUSH(fixups, f);
+                add_reloc(f.at, HK_CODE, NULL);
+                l(0);
+                if (!needed[idx]) needed[idx] = 1;
+                return TY_INT;
+            }
+            fatal_at(n->line, n->col, "%s: una función de @native no puede ir como valor", n->name);
+            return TY_VOID;
+        }
     case E_CALL:
         return gen_call(n);
     case E_NEG:
@@ -4777,6 +4842,8 @@ static void find_uses_expr(Node *n)
         for (i = 0; gad[i]; i++)
             if (!strncmp(n->name, gad[i], strlen(gad[i]))) uses_gadgets = needs_gt = 1;
         if (!strncmp(n->name, "gt_", 3) || !strncmp(n->name, "menu_", 5)) needs_gt = 1;
+        if (!strncmp(n->name, "mui_", 4)) uses_mui = 1;
+        if (!strncmp(n->name, "tls_", 4) || !strncmp(n->name, "https_", 6)) uses_tls = 1;
         if (!strcmp(n->name, "gfx_ellipse_fill") || !strcmp(n->name, "gfx_circle_fill") ||
             !strncmp(n->name, "gfx_poly_", 9))
             needs_area = 1;
@@ -4877,6 +4944,10 @@ static void subst_consts(Node **pe)
     if (e->kind == E_VAR) {
         for (i = 0; i < prog->globals.n; i++)
             if (!strcmp(prog->globals.v[i].name, e->name)) return;
+        if (find_func(e->name, NULL)) {
+            e->kind = E_FUNCREF;                       /* una función como valor */
+            return;
+        }
         for (i = 0; i < prog->consts.n; i++)
             if (!strcmp(prog->consts.v[i].name, e->name)) {
                 Node *v = prog->consts.v[i].value;
@@ -5037,6 +5108,13 @@ void gen_program(Program *p, Obj *o)
     main_label = new_label();
     /* (a0 y d0 traen la línea de órdenes: no se tocan) */
     files_label = new_label();
+    {
+        /* la pila que pide (16 KB, como ./dash; 32 KB con MUI, 64 KB con AmiSSL; más con @stack): _dash_start
+           cambia a una así si la del shell es menor */
+        long stack = uses_tls ? 65536 : uses_mui ? 32768 : 16384;
+        if (p->stack_min > stack) stack = p->stack_min;
+        w(0x2F3C); l((uint32_t)stack);                 /* move.l #pila,-(sp) */
+    }
     {
         int k;
         for (k = 0; k < 2; k++) {

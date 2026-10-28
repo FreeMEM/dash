@@ -6,7 +6,8 @@ de los que compila y declaran "# expect-out:", mira en el A1200 emulado si dan e
     python3 tests/cobertura.py            # compilar y ejecutar
     python3 tests/cobertura.py --sin-emu  # solo compilar
 
-Usa las ROMs de $DASH_KICKSTART y $DASH_EMU_SYS (ver AGENTS.md)."""
+Usa las ROMs de $DASH_KICKSTART y $DASH_EMU_SYS (ver AGENTS.md); con $DASH_EMU_SYS_MUI, también los que piden
+MUI ("# emu-needs: muimaster.library"), en otro arranque."""
 import argparse
 import collections
 import os
@@ -23,7 +24,7 @@ sys.path.insert(0, str(REPO / "tools"))
 import emu_run  # noqa: E402
 
 
-SKIP_MARKS = ("# rtg", "# emu-needs:", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net")
+SKIP_MARKS = ("# rtg", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net")
 
 
 def lines_with(text, mark):
@@ -51,6 +52,10 @@ def main():
             ok.append(f)
             text = f.read_text(encoding="utf-8", errors="replace")
             # (los que piden algo del runner que dashc aún no tiene: cerrarse solos, pantallas, red...)
+            needs = lines_with(text, "# emu-needs:")
+            # (de lo que piden, solo MUI: van aparte, con $DASH_EMU_SYS_MUI)
+            if needs and (needs != ["muimaster.library"] or not os.environ.get("DASH_EMU_SYS_MUI")):
+                continue
             if lines_with(text, "# expect-out:") and not any(lines_with(text, m) for m in SKIP_MARKS):
                 runnable.append((f, exe, text))
         else:
@@ -69,9 +74,16 @@ def main():
     if not rom:
         print("falta $DASH_KICKSTART: no se ejecuta")
         return 1
-    res = emu_run.run_programs([str(e) for _, e, _ in runnable], timeout=900, kickstart=rom,
-                               system=os.environ.get("DASH_EMU_SYS"),
-                               args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in runnable])
+    # dos arranques: los de MUI con su sistema
+    groups = [[x for x in runnable if not lines_with(x[2], "# emu-needs:")],
+              [x for x in runnable if lines_with(x[2], "# emu-needs:")]]
+    runnable, res = [], []
+    for g, system in zip(groups, (os.environ.get("DASH_EMU_SYS"), os.environ.get("DASH_EMU_SYS_MUI"))):
+        if not g:
+            continue
+        runnable += g
+        res += emu_run.run_programs([str(e) for _, e, _ in g], timeout=900, kickstart=rom, system=system,
+                                    args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in g])
     good = 0
     bad = []
     for (f, _, text), r in zip(runnable, res):

@@ -40,7 +40,10 @@ def main():
     build.mkdir(exist_ok=True)
     src = build / "dashlib_rt.c"
     run([sys.executable, str(HERE / "gen_lib.py"), str(src)])
-    inc = [f"-I{HERE}", f"-I{AMISSL}/include"]
+    # (el SDK de MUI, tools/get_mui_sdk.sh: sus cabeceras no van en git)
+    sys.path.insert(0, str(REPO))
+    from compiler.cflags import mui_sdk
+    inc = [f"-I{HERE}", f"-I{AMISSL}/include", f"-I{os.path.join(mui_sdk(), 'C', 'include')}"]
     run([GCC, *FLAGS, *inc, "-c", str(src), "-o", str(build / "dashlib.o")])
     run([GCC, *FLAGS, *inc, "-DDASH_MEMCHECK", "-c", str(src), "-o", str(build / "dashlib_mc.o")])
     common = []

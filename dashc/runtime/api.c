@@ -46,6 +46,28 @@ static void dl_asl_fin(void)
     }
 }
 
+/* La pila de Main (_dash_start, rt_math.s): una nueva de size bytes si la que dio el shell o el Workbench es
+   menor (como swapstack de libnix); 0 si basta la que hay o no hay memoria */
+static struct StackSwapStruct dl_sss;
+static ULONG dl_stack_size;
+struct StackSwapStruct *_dash_stack_get(ULONG size)
+{
+    struct Task *me = FindTask(NULL);
+    APTR mem;
+    if ((ULONG)me->tc_SPUpper - (ULONG)me->tc_SPLower >= size) return NULL;
+    if (!(mem = AllocMem(size, MEMF_ANY))) return NULL;
+    dl_sss.stk_Lower = mem;
+    dl_sss.stk_Upper = (ULONG)mem + size;
+    dl_sss.stk_Pointer = (APTR)dl_sss.stk_Upper;
+    dl_stack_size = size;
+    return &dl_sss;
+}
+
+void _dash_stack_free(void)
+{
+    FreeMem(dl_sss.stk_Lower, dl_stack_size);
+}
+
 /* malloc y free para el C de dentro (zlib...): de un pool de exec que se borra al acabar, como el malloc
    de libnix */
 static APTR dl_malloc_pool;
@@ -661,3 +683,19 @@ STRPTR dl_d_from_str(STRPTR s) { return dl_dbox(_dash_double_from_str(s)); }
 LONG dl_d_to_int(STRPTR a) { return (LONG)dl_dget(a); }
 LONG dl_d_to_float(STRPTR a) { union { float f; LONG l; } u; u.f = (float)dl_dget(a); return u.l; }
 STRPTR dl_d_str(STRPTR a) { return DashString_from_double(dl_dget(a)); }
+
+/* l.sort(f): f(a, b) de dashc (como una de C, con los elementos como LONG: un número, los bits de un Float, un
+   texto, una caja de Double, un objeto); boolean: f dice si a va antes que b; si no, da un Int (> 0: después) */
+static LONG (*dl_sort_fn)(LONG, LONG);
+static LONG dl_sort_bool;
+static LONG dl_sort_after(const LONG *a, const LONG *b)
+{
+    return dl_sort_bool ? dl_sort_fn(*b, *a) != 0 : dl_sort_fn(*a, *b) > 0;
+}
+
+void dl_arr_sort(DashArrayLong *arr, APTR fn, LONG boolean)
+{
+    dl_sort_fn = (LONG (*)(LONG, LONG))fn;
+    dl_sort_bool = boolean;
+    DashArray_sort(arr, dl_sort_after);
+}

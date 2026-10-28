@@ -158,3 +158,17 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   test_math, iguales que con gcc (y sin nada vivo con `--memcheck`). Test `dobles`. Es más lento que en
   registros: las cajas son para tener el lenguaje completo; si Lorraine lo pide, D8 puede pasar a d0/d1.
 - Cobertura con Double: compila 167 de 309 (54 %); en el A1200, 100 de 100 iguales. Batería de dashc bien.
+- D6 (4.ª parte) y D3: MUI y funciones como valor.
+  - MUI 5: los builtins `mui_*` en el runtime (con el SDK de MUI al construirlo, tools/get_mui_sdk.sh; sus
+    cabeceras no van en git) y `DoSuperMethod(A)` de amiga.lib en rt_libs.s.
+  - La pila de verdad (antes en D8): el código de entrada pasa la que quiere (16 KB, 32 KB con MUI, 64 KB con
+    AmiSSL, más con `@stack`, como ./dash) y `_dash_start` cambia a una nueva con `StackSwap` si la del shell
+    es menor; `_dash_quit` vuelve a la de antes desde donde sea. Sin esto MUI avisaba de 4 KB y se paraba.
+  - Funciones como valor: el nombre de una función sin llamarla es su dirección (`E_FUNCREF`, al resolver el
+    programa), el tipo `Func`, la llamada a través de una variable (`g(4)`: `jsr (a0)`, como una de C), lambdas
+    `fn(a, b) -> expresión` (funciones `__fn_N`), `lista.sort(f)` (`DashArray_sort`, con f de Bool o de Int,
+    como ./dash) y `mui_canvas_on_draw(lienzo, pinta)`. Una función de una línea que llama a un parámetro no
+    se sustituye (el nombre de la llamada no es un nodo). test_func_values, test_functions_adv y test_list_sort,
+    iguales.
+  - La cobertura arranca aparte los que piden MUI (`$DASH_EMU_SYS_MUI`).
+- Cobertura con MUI: compila 182 de 309 (58 %); en el A1200 (y los de MUI en su arranque), 112 de 112 iguales.

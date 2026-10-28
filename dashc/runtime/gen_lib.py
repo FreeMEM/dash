@@ -129,7 +129,7 @@ NATIVE = re.compile(r'^@native func (\w+)\((.*?)\)\s*(?:->\s*(\w+))?\s*\n"""\n(.
 
 
 # Los builtins que van en la librería: aún sin ventanas ni gráficos (D6) ni Double (D4)
-GUI = ("mui_", "ra_", "usb_", "wifi_")
+GUI = ("ra_", "usb_", "wifi_")
 LIB_FLAGS = ("needs_reaction",)
 
 

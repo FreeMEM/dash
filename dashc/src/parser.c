@@ -91,8 +91,8 @@ static int parse_type(void)
     if (!strcmp(t->text, "Pointer")) return TY_INT;          /* una dirección: un número de 32 bits */
     if (!strcmp(t->text, "Float")) return TY_FLOAT;
     if (!strcmp(t->text, "Double")) return TY_DOUBLE;
-    if (!strcmp(t->text, "Fixed") ||
-        !strcmp(t->text, "Func") || !strcmp(t->text, "Void"))
+    if (!strcmp(t->text, "Func")) return TY_INT;          /* una función como valor: su dirección */
+    if (!strcmp(t->text, "Fixed") || !strcmp(t->text, "Void"))
         fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
     for (i = 0; i < type_names.n; i++)
         if (!strcmp(type_names.v[i], t->text)) return TY_NAMED + i;
@@ -102,6 +102,7 @@ static int parse_type(void)
 
 /* ---- expresiones, de menos a más precedencia ---- */
 static Node *expr(void);
+static Node *lambda(Token *t);
 
 static Node *interp(Token *t);
 
@@ -157,6 +158,7 @@ static Node *atom(void)
         }
         return n;
     case T_ID:
+        if (!strcmp(t->text, "fn") && peek()->kind == P_LP) return lambda(t);
         if (accept(P_LP)) {
             n = node(E_CALL, t);
             n->name = t->text;
@@ -173,6 +175,45 @@ static Node *atom(void)
     }
     fatal_at(t->line, t->col, "se esperaba una expresión y hay \"%s\"", tok_name(t->kind));
     return NULL;
+}
+
+/* fn(a, b) -> expresión: una función sin nombre (__fn_N) con "return expresión"; el valor es su dirección.
+   Va a la lista del programa al acabar lo de arriba que se está leyendo (la función de dentro sigue en uso). */
+static struct { Func *v; int n, cap; } lambdas;
+static int nlambdas;
+
+static Node *lambda(Token *t)
+{
+    Func f = {0};
+    Node *n, *r;
+    char name[32];
+    expect(P_LP);
+    if (!accept(P_RP)) {
+        do {
+            Param pa;
+            pa.name = expect(T_ID)->text;
+            pa.untyped = !accept(P_COLON);
+            pa.type = pa.untyped ? TY_INT : parse_type();
+            VEC_PUSH(f.params, pa);
+        } while (accept(P_COMMA));
+        expect(P_RP);
+    }
+    expect(P_ARROW);
+    snprintf(name, sizeof name, "__fn_%d", nlambdas++);
+    f.name = xstrndup(name, strlen(name));
+    f.line = t->line;
+    f.col = t->col;
+    f.file = t->file;
+    f.has_value = 1;
+    r = node(S_RETURN, t);
+    r->a = expr();
+    f.boolret = r->a->kind == E_CMP || r->a->kind == E_AND || r->a->kind == E_OR || r->a->kind == E_NOT ||
+                r->a->kind == E_BOOL;
+    VEC_PUSH(f.body, r);
+    VEC_PUSH(lambdas, f);
+    n = node(E_VAR, t);
+    n->name = f.name;
+    return n;
 }
 
 /* a[i], a[i:j], a.campo, a.metodo(...) */
@@ -600,6 +641,7 @@ static void import_file(Program *p, Token *at, const char *path)
     src_name = full;
     tk = lex(text);
     parse_into(p);
+    while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
     tk = saved_tk;
     src_name = saved_name;
     lex_file = saved_file;
@@ -610,6 +652,7 @@ Program *parse(Token *toks)
     Program *p = xmalloc(sizeof(Program));
     tk = toks;
     parse_into(p);
+    while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
     if (!p->has_main) fatal("falta el bloque Main");
     return p;
 }
@@ -617,7 +660,10 @@ Program *parse(Token *toks)
 static void parse_into(Program *p)
 {
     while (peek()->kind != T_EOF) {
-        Token *t = next();
+        Token *t;
+        /* las lambdas de lo anterior, ya como funciones */
+        while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
+        t = next();
         if (t->kind == T_ID && !strcmp(t->text, "import") && peek()->kind == T_STR) {
             import_file(p, t, next()->text);
             continue;
@@ -667,7 +713,8 @@ static void parse_into(Program *p)
             continue;
         }
         if (t->kind == T_ID && !strcmp(t->text, "@stack")) {
-            expect(T_INT);   /* dashc (prueba): la pila de siempre */
+            long n = expect(T_INT)->val;
+            if (n > p->stack_min) p->stack_min = n;
             continue;
         }
         if (t->kind == T_ID && !strcmp(t->text, "@version")) {

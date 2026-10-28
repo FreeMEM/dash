@@ -83,6 +83,7 @@ enum {
     E_INTERP,   /* "...#{x}...": args son los trozos (E_STR y expresiones) */
     E_DICT,     /* {k: v, ...}: args son clave, valor, clave, valor... */
     E_FLOAT,    /* val: los bits del float */
+    E_FUNCREF,  /* name: una función como valor (Func), su dirección */
     E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
@@ -147,6 +148,7 @@ typedef struct {
     int declared;    /* con "-> Tipo" */
     int has_value;   /* tiene algún "return valor" */
     int native;      /* @native: su C va en la librería de dashc (solo los de lib/amiga) */
+    int boolret;     /* una lambda "fn(a, b) -> a < b": da un Bool (sort: si a va antes que b) */
     NodeList body;
 } Func;
 
@@ -200,6 +202,7 @@ typedef struct {
     NodeList main;
     int has_main;
     char *version;   /* @version: lo que va tras "$VER: " */
+    long stack_min;  /* @stack N: al menos esa pila */
 } Program;
 
 Program *parse(Token *toks);

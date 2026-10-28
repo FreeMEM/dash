@@ -59,6 +59,10 @@ func flotante(f: Float) -> Float
     return -g / 3.0
 end
 
+func antes(a: Int, b: Int) -> Bool
+    return a < b
+end
+
 func doble(d: Double) -> Double
     e = d * Double(2) + Double(0.5)
     Print e
@@ -80,6 +84,7 @@ Main
     a[0] = 5
     b = a[1:2]
     a = a + [7]
+    a.sort(antes)
     for x in a
         Print x
     end

@@ -221,11 +221,13 @@ __dash_udivmod:
 	rts
 
 | ---- arranque y salida (sin libnix) ----
-| El código de dashc entra con main y los nombres de sus ficheros (para los errores, terminados en 0:
-| van a _dash_srcfiles, 63 como mucho) en la pila, y en a0 y d0 la línea de órdenes que da AmigaDOS.
+| El código de dashc entra con main, los nombres de sus ficheros (para los errores, terminados en 0: van a
+| _dash_srcfiles, 63 como mucho) y la pila que quiere en la pila, y en a0 y d0 la línea de órdenes que da
+| AmigaDOS. Si la pila del shell es menor, Main va en una nueva (StackSwap de exec, como swapstack de libnix);
+| _dash_quit vuelve a la de antes desde donde sea.
 	.globl	__dash_start
 __dash_start:
-	movem.l	d2-d7/a2-a6,-(sp)	| 44 bytes; detrás, main y los ficheros
+	movem.l	d2-d7/a2-a6,-(sp)	| 44 bytes; detrás, main, los ficheros y la pila
 	move.l	sp,dash_entry_sp
 	move.l	48(sp),a1
 	lea	__dash_srcfiles,a2
@@ -238,21 +240,37 @@ __dash_start:
 	addq.l	#8,sp
 	tst.l	d0
 	jne	1f
-	move.l	44(sp),a0
+	move.l	52(sp),-(sp)
+	jsr	__dash_stack_get	| la StackSwapStruct de una pila nueva, o 0
+	addq.l	#4,sp
+	move.l	d0,dash_sss
+	jeq	2f
+	move.l	d0,a0
+	move.l	4.w,a6
+	jsr	-732(a6)		| StackSwap: ya en la nueva
+2:	move.l	dash_entry_sp,a0
+	move.l	44(a0),a0
 	jsr	(a0)
 	moveq	#0,d0
 1:	move.l	d0,-(sp)
 	jsr	__dash_quit
 
-| _dash_quit(código): la limpieza de siempre y vuelta al que lanzó el programa, desde donde sea
+| _dash_quit(código): la limpieza de siempre, la pila de antes y vuelta al que lanzó el programa, desde donde sea
 	.globl	__dash_quit
 __dash_quit:
 	move.l	4(sp),d2
 	jsr	__dash_finish
-	move.l	d2,d0
+	move.l	dash_sss,d0
+	jeq	1f
+	clr.l	dash_sss
+	move.l	d0,a0
+	move.l	4.w,a6
+	jsr	-732(a6)		| StackSwap: otra vez en la del shell
+	jsr	__dash_stack_free
+1:	move.l	d2,d0
 	move.l	dash_entry_sp,sp
 	movem.l	(sp)+,d2-d7/a2-a6
-	addq.l	#8,sp			| main y los ficheros
+	lea	12(sp),sp		| main, los ficheros y la pila
 	rts
 
 | ---- las rutinas de libgcc que usa el C del runtime: van a las de arriba ----
@@ -291,5 +309,7 @@ ___umodsi3:
 	.bss
 	.even
 dash_entry_sp:
+	.skip	4
+dash_sss:				| la StackSwapStruct de la pila nueva mientras se usa
 	.skip	4
 	.text

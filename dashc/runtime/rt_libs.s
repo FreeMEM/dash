@@ -67,3 +67,27 @@ _BeginIO:
 	jsr	-30(a6)
 	move.l	(sp)+,a6
 	rts
+
+| DoSuperMethod(cl, obj, id, ...) y DoSuperMethodA(cl, obj, msg) de amiga.lib: el despachador de la clase madre
+| (cl_Super, a 24) con a0 = esa clase, a2 = objeto y a1 = mensaje (0 si falta la clase o el objeto)
+	.section .text.dl_dosuper,"ax"
+	.globl	_DoSuperMethod
+	.globl	_DoSuperMethodA
+_DoSuperMethod:
+	lea	12(sp),a1
+	jra	1f
+_DoSuperMethodA:
+	move.l	12(sp),a1
+1:	movem.l	a2-a3,-(sp)
+	moveq	#0,d0
+	move.l	12(sp),a0		| cl
+	move.l	16(sp),a2		| obj
+	move.l	a2,d1
+	jeq	2f
+	move.l	a0,d1
+	jeq	2f
+	move.l	24(a0),a0		| cl_Super
+	move.l	8(a0),a3		| h_Entry
+	jsr	(a3)
+2:	movem.l	(sp)+,a2-a3
+	rts
