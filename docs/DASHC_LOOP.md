@@ -208,3 +208,21 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Regresión arreglada: un local de un módulo con el nombre de una función del programa (`inicio`) se tomaba
     por la función como valor; ahora una variable o un parámetro de ese cuerpo tapa a la función.
   - Cobertura: compilan 200 de 309 (64 %); en el A1200 (y MUI), 123 de 123 iguales. Batería bien.
+- D3 (5.ª parte): lo que faltaba del lenguaje sin C.
+  - Nombres privados por módulo: al leer un módulo, lo que declara con `_` delante (func, const, var, struct,
+    enum, interface) se lee como `_x__mN` (N, su número de fichero), también en los `#{}`; tras un `.` no (campos).
+    test_private_per_module y test_private_names_per_module, iguales. Los errores lo enseñan sin el sufijo.
+  - `@catalog "X.catalog" versión ["idioma"]`: el programa pone el nombre, la versión y el idioma en variables del
+    runtime al arrancar (`set_rt_var`), antes de los globales (que pueden llamar a `tr`). test_catalog, igual.
+  - Desde el Workbench, dashc no abría consola (la salida iba a un Output() nulo). Ahora abre la de libnix
+    (`CON://///AUTO/CLOSE/WAIT`) o la de `@workbench_output` (gana la del programa a la de un módulo), y la
+    cierra al final. Probado con un lanzador como el del Workbench (de ./dash): a un fichero y a `NIL:`, igual
+    que gcc. La consola por defecto no se prueba (espera a que la cierren). Cuesta 304 bytes a cada programa.
+  - `wifi_*` y `usb_*` ya van en la librería (no hacía falta quitarlos). test_meter_net, igual.
+  - La cobertura ya ejecuta los tests con `# emu-needs:` que el sistema tiene, los de `# emu-catalog:` (con su
+    catálogo en el disco) y los de `# emu-net:` (arranque aparte con la bsdsocket de FS-UAE y el eco del runner).
+  - Lo que queda sin compilar es todo C (`@header`, `@c`, `@native`, `@link`): `task_start` con funciones
+    `@native` y `@native(borrow)` también lo son.
+  - Cobertura: compilan 205 de 309 (66 %); en el A1200 (MUI y red), 132 de 132 iguales. Batería bien.
+  - Visto de paso, sin arreglar: un error que sale al generar código (no al leer) en un módulo lleva el nombre
+    del fichero principal, con la línea del módulo.

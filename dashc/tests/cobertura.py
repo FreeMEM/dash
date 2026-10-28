@@ -24,11 +24,31 @@ sys.path.insert(0, str(REPO / "tools"))
 import emu_run  # noqa: E402
 
 
-SKIP_MARKS = ("# rtg", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net")
+SKIP_MARKS = ("# rtg", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net-tls")
 
 
 def lines_with(text, mark):
     return [l.split(mark, 1)[1].strip() for l in text.splitlines() if l.strip().startswith(mark)]
+
+
+def has_lib(name):
+    """'# emu-needs: x.library': MUI con su sistema aparte; lo demás, si lo tiene $DASH_EMU_SYS"""
+    if name == "muimaster.library":
+        return bool(os.environ.get("DASH_EMU_SYS_MUI"))
+    sys_dir = os.environ.get("DASH_EMU_SYS")
+    return bool(sys_dir) and (Path(sys_dir) / "Libs" / name).exists()
+
+
+def catalogs(hd, group):
+    """'# emu-catalog: lib/x.ct': compilado con tools/catalogo.py en DH0:Catalogs/<idioma>/, como el runner"""
+    sys.path.insert(0, str(REPO / "tools"))
+    from catalogo import build_catalog
+    for f, _, text in group:
+        for ct in lines_with(text, "# emu-catalog:"):
+            name, language, data = build_catalog((f.parent / ct).read_text(encoding="utf-8"))
+            out = Path(hd) / "Catalogs" / language / name
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(data)
 
 
 def main():
@@ -53,8 +73,8 @@ def main():
             text = f.read_text(encoding="utf-8", errors="replace")
             # (los que piden algo del runner que dashc aún no tiene: cerrarse solos, pantallas, red...)
             needs = lines_with(text, "# emu-needs:")
-            # (de lo que piden, solo MUI: van aparte, con $DASH_EMU_SYS_MUI)
-            if needs and (needs != ["muimaster.library"] or not os.environ.get("DASH_EMU_SYS_MUI")):
+            # (lo que tiene el sistema emulado; MUI va aparte, con $DASH_EMU_SYS_MUI)
+            if not all(has_lib(n) for n in needs):
                 continue
             if lines_with(text, "# expect-out:") and not any(lines_with(text, m) for m in SKIP_MARKS):
                 runnable.append((f, exe, text))
@@ -75,15 +95,35 @@ def main():
         print("falta $DASH_KICKSTART: no se ejecuta")
         return 1
     # dos arranques: los de MUI con su sistema
-    groups = [[x for x in runnable if not lines_with(x[2], "# emu-needs:")],
-              [x for x in runnable if lines_with(x[2], "# emu-needs:")]]
+    # tres arranques: los de MUI con su sistema y los de red ('# emu-net: PUERTO') con la bsdsocket.library de
+    # FS-UAE y el servidor de eco del runner
+    def mui(x):
+        return "muimaster.library" in lines_with(x[2], "# emu-needs:")
+
+    def net(x):
+        return bool(lines_with(x[2], "# emu-net:"))
+
+    groups = [([x for x in runnable if not mui(x) and not net(x)], os.environ.get("DASH_EMU_SYS"), ""),
+              ([x for x in runnable if mui(x)], os.environ.get("DASH_EMU_SYS_MUI"), ""),
+              ([x for x in runnable if net(x) and not mui(x)], os.environ.get("DASH_EMU_SYS"),
+               "bsdsocket_library = 1\n")]
     runnable, res = [], []
-    for g, system in zip(groups, (os.environ.get("DASH_EMU_SYS"), os.environ.get("DASH_EMU_SYS_MUI"))):
+    for g, system, config in groups:
         if not g:
             continue
         runnable += g
-        res += emu_run.run_programs([str(e) for _, e, _ in g], timeout=900, kickstart=rom, system=system,
-                                    args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in g])
+        server = None
+        if config:
+            sys.path.insert(0, str(REPO / "tests"))
+            from run_tests import _EchoServer
+            server = _EchoServer(sorted({int(lines_with(t, "# emu-net:")[0]) for _, _, t in g}))
+        try:
+            res += emu_run.run_programs([str(e) for _, e, _ in g], timeout=900, kickstart=rom, system=system,
+                                        args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in g],
+                                        on_disk=lambda hd, g=g: catalogs(hd, g), extra_config=config)
+        finally:
+            if server:
+                server.close()
     good = 0
     bad = []
     for (f, _, text), r in zip(runnable, res):

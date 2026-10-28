@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -168,6 +169,30 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
     return (char *)b.p;
 }
 
+/* los nombres privados (`_x`) de un módulo: se leen con su sufijo (`_x__m2`), para que dos módulos y el
+   programa puedan tener cada uno el suyo (como ./dash) */
+const char **lex_priv;
+int lex_npriv;
+static void rename_private(Token *t)
+{
+    int i, j;
+    char buf[32];
+    if (!lex_npriv) return;
+    snprintf(buf, sizeof buf, "__m%d", lex_file);
+    for (i = 0; t[i].kind != T_EOF; i++) {
+        if (t[i].kind != T_ID || t[i].text[0] != '_' || (i && t[i - 1].kind == P_DOT)) continue;
+        for (j = 0; j < lex_npriv; j++)
+            if (!strcmp(lex_priv[j], t[i].text)) {
+                char *n = xmalloc(strlen(t[i].text) + strlen(buf) + 1);
+                strcpy(n, t[i].text);
+                strcat(n, buf);
+                t[i].text = n;
+                t[i].len = (int)strlen(n);
+                break;
+            }
+    }
+}
+
 Token *lex(const char *src)
 {
     TokVec toks = {0};
@@ -295,5 +320,6 @@ Token *lex(const char *src)
         }
         VEC_PUSH(toks, t);
     }
+    rename_private(toks.v);
     return toks.v;
 }

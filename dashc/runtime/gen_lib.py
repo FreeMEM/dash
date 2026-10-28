@@ -62,6 +62,13 @@ def main():
     old = "static const char *_dash_mc_where = NULL;"
     assert old in text, "gen_lib: no encuentro _dash_mc_where"
     text = text.replace(old, "const char *_dash_mc_where = NULL;")
+    # @catalog: el nombre, la versión y el idioma propio los pone el programa al arrancar
+    old = ("#ifndef _DASH_CATALOG_NAME\n#define _DASH_CATALOG_NAME NULL\n#define _DASH_CATALOG_VERSION 0\n"
+           "#define _DASH_CATALOG_BUILTIN NULL\n#endif\n")
+    assert old in text, "gen_lib: no encuentro _DASH_CATALOG_NAME"
+    text = text.replace(old, "char *_dash_catalog_name;\nLONG _dash_catalog_version;\nchar *_dash_catalog_builtin;\n"
+                        "#define _DASH_CATALOG_NAME _dash_catalog_name\n#define _DASH_CATALOG_VERSION _dash_catalog_version\n"
+                        "#define _DASH_CATALOG_BUILTIN _dash_catalog_builtin\n")
     # las ventanas del programa (win_CocinaWin): las cierra _dash_finish de api.c
     text = "\n".join(ln for ln in text.split("\n") if "win_CocinaWin" not in ln)
     # La limpieza de cada runtime (red, catálogos, tareas...) por un puntero débil: hunk.c no lo cuenta como
@@ -129,7 +136,7 @@ NATIVE = re.compile(r'^@native func (\w+)\((.*?)\)\s*(?:->\s*(\w+))?\s*\n"""\n(.
 
 
 # Los builtins que van en la librería: aún sin ventanas ni gráficos (D6) ni Double (D4)
-GUI = ("usb_", "wifi_")
+GUI = ()
 LIB_FLAGS = ()
 
 

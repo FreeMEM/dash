@@ -650,9 +650,29 @@ static void import_file(Program *p, Token *at, const char *path)
     VEC_PUSH(src_files, full);
     lex_file = src_files.n - 1;
     src_name = full;
-    tk = lex(text);
-    parse_into(p);
-    while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
+    {
+        /* sus nombres privados: lo que declara con `_` delante (func, const, var, struct, enum...) */
+        const char **saved_priv = lex_priv;
+        int saved_npriv = lex_npriv, n = 0;
+        lex_npriv = 0;
+        tk = lex(text);
+        lex_priv = NULL;
+        for (i = 1; tk[i - 1].kind != T_EOF && tk[i].kind != T_EOF; i++) {
+            Token *d = &tk[i - 1];
+            if (tk[i].kind == T_ID && tk[i].text[0] == '_' &&
+                (d->kind == K_FUNC || d->kind == K_CONST || d->kind == K_VAR || d->kind == K_STRUCT ||
+                 (d->kind == T_ID && (!strcmp(d->text, "enum") || !strcmp(d->text, "interface"))))) {
+                lex_priv = xrealloc(lex_priv, (n + 1) * sizeof *lex_priv);
+                lex_priv[n++] = tk[i].text;
+            }
+        }
+        lex_npriv = n;
+        if (n) tk = lex(text);
+        parse_into(p);
+        while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
+        lex_priv = saved_priv;
+        lex_npriv = saved_npriv;
+    }
     tk = saved_tk;
     src_name = saved_name;
     lex_file = saved_file;
@@ -732,8 +752,21 @@ static void parse_into(Program *p)
             p->version = expect(T_STR)->text;
             continue;
         }
-        if (t->kind == T_ID && (!strcmp(t->text, "@catalog") || !strcmp(t->text, "@workbench_output") ||
-                                !strcmp(t->text, "@extern")))
+        if (t->kind == T_ID && !strcmp(t->text, "@catalog")) {
+            /* @catalog "X.catalog" versión ["idioma de sus textos"]: el que abre el primer tr */
+            p->catalog = expect(T_STR)->text;
+            p->catalog_version = expect(T_INT)->val;
+            if (peek()->kind == T_STR) p->catalog_lang = next()->text;
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "@workbench_output")) {
+            /* el del programa gana al de un módulo */
+            Token *v = expect(T_STR);
+            if (t->file == 0 || !p->wb_output_main) p->wb_output = v->text;
+            if (t->file == 0) p->wb_output_main = 1;
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "@extern"))
             fatal_at(t->line, t->col, "dashc (prueba): %s aún no está", t->text);
         if (t->kind == T_ID && t->text[0] == '@')
             fatal_at(t->line, t->col, "%s lleva C, y Dash 2.0 no admite C en los programas", t->text);

@@ -69,6 +69,8 @@ typedef struct {
 } Token;
 
 Token *lex(const char *src);
+extern const char **lex_priv;  /* los nombres privados del módulo que se lee (rename_private) */
+extern int lex_npriv;
 const char *tok_name(int kind);
 
 /* ---- árbol (parser.c) ---- */
@@ -213,6 +215,10 @@ typedef struct {
     NodeList main;
     int has_main;
     char *version;   /* @version: lo que va tras "$VER: " */
+    char *catalog, *catalog_lang;   /* @catalog "X.catalog" versión "idioma propio" */
+    long catalog_version;
+    char *wb_output;  /* @workbench_output "NIL:": desde el Workbench, en vez de la consola */
+    int wb_output_main;
     long stack_min;  /* @stack N: al menos esa pila */
     int nslots;      /* los métodos de interfaz del programa (tamaño de la tabla de métodos de un struct) */
 } Program;

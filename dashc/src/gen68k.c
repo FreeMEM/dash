@@ -751,6 +751,19 @@ static uint32_t add_string(const char *s, int len)
     return off;
 }
 
+/* move.l #texto (o #n),var: una variable del runtime, al arrancar */
+static void set_rt_var(const char *sym, const char *str, long n)
+{
+    w(0x23FC);
+    if (str) {
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l(add_string(str, (int)strlen(str)));
+    } else
+        l((uint32_t)n);
+    add_reloc((uint32_t)obj->code.n, -1, sym);
+    l(0);
+}
+
 static void push_d0(void)
 {
     w(0x2F00);                                         /* move.l d0,-(sp) */
@@ -5421,6 +5434,14 @@ void gen_program(Program *p, Obj *o)
     main_label = new_label();
     /* (a0 y d0 traen la línea de órdenes: no se tocan) */
     files_label = new_label();
+    /* @catalog (su nombre, versión e idioma propio) y @workbench_output, en las variables del runtime (antes
+       de los globales, que pueden llamar a tr) */
+    if (p->catalog) {
+        set_rt_var("__dash_catalog_name", p->catalog, 0);
+        set_rt_var("__dash_catalog_version", NULL, p->catalog_version);
+        if (p->catalog_lang) set_rt_var("__dash_catalog_builtin", p->catalog_lang, 0);
+    }
+    if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
     {
         /* la pila que pide (16 KB, como ./dash; 32 KB con MUI, 64 KB con AmiSSL; más con @stack): _dash_start
            cambia a una así si la del shell es menor */

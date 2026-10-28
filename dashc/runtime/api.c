@@ -140,6 +140,11 @@ static void dash_split_args(const char *cmd, LONG len)
     _dash_argv = dash_args_buf;
 }
 
+/* desde el Workbench, lo que se abre para la entrada y la salida (__stdiowin de libnix; el programa pone el
+   de @workbench_output al arrancar) */
+const char *_dash_stdiowin = "CON://///AUTO/CLOSE/WAIT";
+static BPTR dash_wb_con, dash_wb_in, dash_wb_out;
+
 /* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
 LONG _dash_init(const char *cmd, LONG len)
 {
@@ -164,6 +169,15 @@ LONG _dash_init(const char *cmd, LONG len)
     if (!IntuitionBase || !DOSBase) {
         _dash_exit_cleanup();
         return 10;
+    }
+    if (_WBenchMsg && _dash_stdiowin) {
+        /* desde el Workbench, la entrada y la salida (como libnix: su ventana de consola o @workbench_output) */
+        if (!(dash_wb_con = Open((CONST_STRPTR)_dash_stdiowin, MODE_OLDFILE))) {
+            _dash_exit_cleanup();
+            return 20;
+        }
+        dash_wb_in = SelectInput(dash_wb_con);
+        dash_wb_out = SelectOutput(dash_wb_con);
     }
     if (_WBenchMsg && _WBenchMsg->sm_ArgList) dash_old_dir = CurrentDir(_WBenchMsg->sm_ArgList[0].wa_Lock);
     /* time_ms cuenta desde el arranque, como en ./dash (solo si el programa usa el runtime de tiempo) */
@@ -193,6 +207,12 @@ void _dash_finish(void)
     if (_dash_weak_lib_utility) _dash_weak_lib_utility(0);
     if (_dash_weak_dl_malloc_fin) _dash_weak_dl_malloc_fin();
     if (dash_cmdline) FreeVec(dash_cmdline);
+    if (dash_wb_con) {
+        SelectInput(dash_wb_in);
+        SelectOutput(dash_wb_out);
+        Close(dash_wb_con);
+        dash_wb_con = 0;
+    }
     if (_WBenchMsg) {
         if (dash_old_dir) CurrentDir(dash_old_dir);
         /* el mensaje se devuelve en Forbid: el Workbench descarga el programa al recibirlo */

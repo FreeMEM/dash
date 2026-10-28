@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,9 +103,17 @@ void fatal_at(int line, int col, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
+    char msg[1024], *m;
     fprintf(stderr, "%s:%d:%d: Error: ", src_name, line, col);
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    /* (sin el sufijo de los nombres privados de un módulo: `_x__m2` es `_x`, rename_private) */
+    for (m = msg; *m; m++) {
+        char *e = m + 3;
+        if (strncmp(m, "__m", 3) || !isdigit((unsigned char)*e)) continue;
+        while (isdigit((unsigned char)*e)) e++;
+        if (!isalnum((unsigned char)*e) && *e != '_') memmove(m, e, strlen(e) + 1);
+    }
+    fprintf(stderr, "%s\n", msg);
     va_end(ap);
     exit(1);
 }
