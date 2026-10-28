@@ -1,0 +1,16 @@
+# Los @native de lib/amiga: su C va en la librería de dashc (los de un programa no se admiten)
+import "lib/amiga/memory.dash"
+
+Main
+    # (./dash no compila memory.dash si el programa no usa listas: free_array las necesita)
+    l = [1, 2]
+    Print l.length
+    p = mem_alloc(1000, 65536)
+    Print p != 0
+    Print mem_free_total() > 0
+    Print mem_available(0) >= mem_free_chip()
+    mem_free(p, 1000)
+    q = mem_alloc(64, 0)
+    Print q != nil
+    mem_free(q, 64)
+end

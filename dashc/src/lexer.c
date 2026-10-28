@@ -173,6 +173,26 @@ Token *lex(const char *src)
                 t.text = xstrndup(b, s - b);
                 t.len = (int)(s - b);
             }
+        } else if (s[0] == '"' && s[1] == '"' && s[2] == '"') {
+            /* """...""": el C de un @native, tal cual y con sus líneas */
+            const char *b = s + 3, *e = strstr(b, "\"\"\"");
+            if (!e) fatal_at(t.line, t.col, "falta el \"\"\" que cierra");
+            t.kind = T_STR;
+            t.text = xstrndup(b, e - b);
+            t.len = (int)(e - b);
+            for (s = b; s < e; s++)
+                if (*s == '\n') {
+                    line++;
+                    line_start = s + 1;
+                }
+            s = e + 3;
+        } else if (*s == '@' && (isalpha((unsigned char)s[1]))) {
+            /* @native, @header...: un nombre con su @ */
+            const char *b = s++;
+            while (isalnum((unsigned char)*s) || *s == '_') s++;
+            t.kind = T_ID;
+            t.text = xstrndup(b, s - b);
+            t.len = (int)(s - b);
         } else if (*s == '"') {
             t.kind = T_STR;
             t.text = lex_string(&s, t.line, t.col, &t.len, &t);

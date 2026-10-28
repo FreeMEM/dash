@@ -42,6 +42,9 @@ static uint8_t *read_file(const char *path, size_t *len)
     return b.p;
 }
 
+const uint8_t *rt_blob;
+size_t rt_blob_len;
+
 static void usage(void)
 {
     fprintf(stderr,
@@ -80,6 +83,8 @@ int main(int argc, char **argv)
     src = read_file(in, &len);
     if (rt_path) rt = read_file(rt_path, &rtlen);
 
+    rt_blob = rt;
+    rt_blob_len = rtlen;
     prog = parse(lex((const char *)src));
     gen_program(prog, &obj);
     link_exe(&obj, rt, rtlen, out);

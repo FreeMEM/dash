@@ -56,7 +56,8 @@ static int parse_type(void)
     if (!strcmp(t->text, "Bool")) return TY_BOOL;
     if (!strcmp(t->text, "String")) return TY_STR;
     if (!strcmp(t->text, "Array")) return TY_ARR + TY_VOID;   /* lo que guarda, por su uso */
-    if (!strcmp(t->text, "Float") || !strcmp(t->text, "Fixed") || !strcmp(t->text, "Pointer") ||
+    if (!strcmp(t->text, "Pointer")) return TY_INT;          /* una dirección: un número de 32 bits */
+    if (!strcmp(t->text, "Float") || !strcmp(t->text, "Fixed") ||
         !strcmp(t->text, "Func") || !strcmp(t->text, "Void"))
         fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
     for (i = 0; i < type_names.n; i++)
@@ -439,6 +440,14 @@ static void parse_func(Program *p, Struct *st)
         f.ret = parse_type();
         f.declared = 1;
     }
+    if (peek()->kind == T_STR && peek()[1].kind == K_END) {
+        /* el C de un @native: no hay cuerpo de Dash */
+        next();
+        next();
+        f.declared = 1;
+        VEC_PUSH(p->funcs, f);
+        return;
+    }
     VEC_PUSH(p->funcs, f);
     cur_func = &p->funcs.v[p->funcs.n - 1];
     block(&cur_func->body, K_END, K_END, K_END);
@@ -547,6 +556,20 @@ static void parse_into(Program *p)
             VEC_PUSH(p->enums, e);
             continue;
         }
+        if (t->kind == T_ID && !strcmp(t->text, "@native")) {
+            /* @native func f(...) -> T """C""" end: solo vale si su C va en la librería (lib/amiga) */
+            Func *f;
+            parse_func(p, NULL);
+            f = &p->funcs.v[p->funcs.n - 1];
+            f->native = 1;
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "@stack")) {
+            expect(T_INT);   /* dashc (prueba): la pila de siempre */
+            continue;
+        }
+        if (t->kind == T_ID && t->text[0] == '@')
+            fatal_at(t->line, t->col, "%s lleva C, y Dash 2.0 no admite C en los programas", t->text);
         if (t->kind == K_FUNC) {
             tk--;
             parse_func(p, NULL);

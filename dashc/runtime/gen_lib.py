@@ -59,7 +59,38 @@ def main():
     assert a >= 0
     text = text[:a]
     out.write_text("/* Generado por runtime/gen_lib.py a partir del C de ./dash: no editar */\n" + text +
-                   '\n#include "api.c"\n', encoding="latin-1")
+                   '\n#include "api.c"\n' + natives(), encoding="latin-1")
+
+
+# usan el runtime de ventanas (_dash_win), que aún no va en la librería (D6 de docs/DASHC_LOOP.md)
+PENDING = {"intuition.dash"}
+C_TYPES = {"Int": "LONG", "Pointer": "APTR", "String": "STRPTR", "Bool": "BOOL", "Array": "DashArrayLong *"}
+NATIVE = re.compile(r'^@native func (\w+)\((.*?)\)\s*(?:->\s*(\w+))?\s*\n"""\n(.*?)\n"""\s*\nend', re.S | re.M)
+
+
+def natives():
+    """Los @native de lib/amiga (los de los programas no se admiten en dashc): cada uno como en ./dash,
+    static, y un envoltorio dn_nombre con todo en LONG, que es lo que llama dashc."""
+    out = ["\n/* ---- @native de lib/amiga ---- */\n#include \"natives.h\"\n"]
+    seen = set()
+    for mod in sorted((REPO / "lib" / "amiga").glob("*.dash")):
+        if mod.name in PENDING:
+            continue
+        for name, params, ret, body in NATIVE.findall(mod.read_text(encoding="utf-8")):
+            if name in seen:
+                continue
+            seen.add(name)
+            ps = []
+            for p in [p.strip() for p in params.split(",") if p.strip()]:
+                pn, _, pt = p.partition(":")
+                ps.append((pn.strip(), C_TYPES[pt.strip()] if pt.strip() else "LONG"))
+            rt = C_TYPES[ret] if ret else "void"
+            decl = ", ".join(f"{t} {n}" for n, t in ps) or "void"
+            out.append(f"/* {mod.name} */\nstatic {rt} __dn_{name}({decl}) {{\n{body}\n}}\n")
+            args = ", ".join(f"LONG {n}" for n, _ in ps) or "void"
+            call = f"__dn_{name}(" + ", ".join(f"({t}){n}" for n, t in ps) + ")"
+            out.append(f"LONG dn_{name}({args}) {{ " + (f"return (LONG){call}; }}\n" if ret else f"{call}; return 0; }}\n"))
+    return "\n".join(out)
 
 
 if __name__ == "__main__":

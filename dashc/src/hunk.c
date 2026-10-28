@@ -157,6 +157,25 @@ static void read_object(const uint8_t *p, size_t len)
     }
 }
 
+/* ¿define el runtime este símbolo? (lee sus nombres una vez y lo deja todo como estaba) */
+int runtime_has(const char *sym)
+{
+    static struct { char **v; int n, cap; } names;
+    static int loaded;
+    int i;
+    if (!loaded) {
+        loaded = 1;
+        read_object(rt_blob, rt_blob_len);
+        for (i = 0; i < syms.n; i++) VEC_PUSH(names, (char *)syms.v[i].name);
+        hunks.n = 0;
+        syms.n = 0;
+        refs.n = 0;
+    }
+    for (i = 0; i < names.n; i++)
+        if (!strcmp(names.v[i], sym)) return 1;
+    return 0;
+}
+
 /* apunta en el long de (hunk, off) la dirección del símbolo */
 static void bind(int hunk, uint32_t off, const char *name)
 {

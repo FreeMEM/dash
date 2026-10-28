@@ -2161,7 +2161,7 @@ static struct { int *v; int n, cap; } sub_stack;  /* funciones de una línea pue
 static int can_inline(int idx)
 {
     int i;
-    if (inl_stack.n + sub_stack.n >= INLINE_DEPTH) return 0;
+    if (inl_stack.n + sub_stack.n >= INLINE_DEPTH || prog->funcs.v[idx].native) return 0;
     for (i = 0; i < inl_stack.n; i++)
         if (inl_stack.v[i] == idx) return 0;
     for (i = 0; i < sub_stack.n; i++)
@@ -2347,6 +2347,17 @@ static int gen_call(Node *n)
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
+    if (f->native) {
+        /* el envoltorio dn_nombre de la librería (runtime/gen_lib.py) */
+        char *sym = xmalloc(strlen(f->name) + 5);
+        strcpy(sym, "_dn_");
+        strcat(sym, f->name);
+        if (!runtime_has(sym))
+            fatal_at(f->line, f->col, "@native %s: Dash 2.0 no admite C en los programas (solo el de lib/amiga)", f->name);
+        for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
+        rt_call(sym, n->args.n, 0);
+        return f->ret == TY_VOID ? TY_VOID : f->ret;
+    }
     if (can_inline(idx)) {
         Node *e = try_subst(n, &idx);
         if (e) {
@@ -4015,7 +4026,7 @@ void gen_program(Program *p, Obj *o)
     } while (again);
     /* las demás no van en el ejecutable, pero se generan y se tiran para dar sus errores */
     for (i = 0; i < p->funcs.n; i++)
-        if (!needed[i]) {
+        if (!needed[i] && !p->funcs.v[i].native) {
             Mark m = mark();
             int *saved = xmalloc(sizeof(int) * (p->funcs.n + 1));
             memcpy(saved, needed, sizeof(int) * p->funcs.n);

@@ -4,10 +4,12 @@
    pila, resultado en d0. */
 #include <devices/timer.h>
 #include <proto/timer.h>
+#include <proto/graphics.h>
 
 struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
 struct IntuitionBase *IntuitionBase;
+struct GfxBase *GfxBase;   /* los @native de lib/amiga (en ./dash la abre libnix) */
 struct Device *TimerBase;
 static struct timerequest *bench_tr;
 static struct EClockVal bench_t0;
@@ -24,6 +26,7 @@ LONG _dash_init(void)
     _dash_trap_on();
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
+    GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 37);
     if (!IntuitionBase || !DOSBase) {
         _dash_exit_cleanup();
         return 10;
@@ -43,6 +46,7 @@ void _dash_finish(void)
     }
     _dash_exit_cleanup();
     _dash_atexit_run();
+    if (GfxBase) CloseLibrary((struct Library *)GfxBase);
 }
 
 void _dash_print_str(STRPTR s)

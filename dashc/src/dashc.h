@@ -126,6 +126,7 @@ typedef struct {
     int ret;         /* tipo que devuelve (sin "-> Tipo", lo deduce gen68k.c) */
     int declared;    /* con "-> Tipo" */
     int has_value;   /* tiene algún "return valor" */
+    int native;      /* @native: su C va en la librería de dashc (solo los de lib/amiga) */
     NodeList body;
 } Func;
 
@@ -172,6 +173,9 @@ typedef struct {
 
 Program *parse(Token *toks);
 char *read_text(const char *path);   /* main.c: el fichero entero, o NULL */
+int runtime_has(const char *sym);    /* hunk.c: ¿define el runtime este símbolo? */
+extern const uint8_t *rt_blob;       /* main.c: el runtime que se va a enlazar */
+extern size_t rt_blob_len;
 
 /* ---- código 68000 (gen68k.c) ---- */
 enum { HK_CODE = 0, HK_DATA = 1 };
