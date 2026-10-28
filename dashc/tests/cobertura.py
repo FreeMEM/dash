@@ -41,7 +41,8 @@ def main():
     for f in files:
         exe = tmp / f"{f.parent.name}_{f.stem}"
         # como tests/run_tests.py: desde la raíz, con la ruta relativa (sale en los errores)
-        r = subprocess.run([str(DASHC), str(f.relative_to(REPO)), "-o", str(exe)], capture_output=True,
+        mc = ["--memcheck"] if "\n# memcheck" in "\n" + f.read_text(encoding="utf-8", errors="replace") else []
+        r = subprocess.run([str(DASHC), str(f.relative_to(REPO)), "-o", str(exe)] + mc, capture_output=True,
                            text=True, cwd=REPO, errors="replace")
         if r.returncode == 0:
             ok.append(f)

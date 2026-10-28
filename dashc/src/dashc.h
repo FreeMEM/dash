@@ -177,6 +177,7 @@ typedef struct {
 } Obj;
 
 void gen_program(Program *prog, Obj *obj);
+extern int memcheck;   /* --memcheck: como ./dash --memcheck */
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);

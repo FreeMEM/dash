@@ -12,8 +12,8 @@ unsigned long __stack = 65536;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */
-extern const unsigned char dashrt_o[];
-extern const unsigned int dashrt_o_len;
+extern const unsigned char dashrt_o[], dashrt_mc_o[];
+extern const unsigned int dashrt_o_len, dashrt_mc_o_len;
 
 static uint8_t *read_file(const char *path, size_t *len)
 {
@@ -32,7 +32,7 @@ static uint8_t *read_file(const char *path, size_t *len)
 static void usage(void)
 {
     fprintf(stderr,
-            "uso: dashc programa.dash -o ejecutable [--runtime objeto.o]\n"
+            "uso: dashc programa.dash -o ejecutable [--memcheck] [--runtime objeto.o]\n"
             "Prueba de concepto: compila Dash a un ejecutable de Amiga sin compilador de C.\n");
     exit(1);
 }
@@ -50,12 +50,17 @@ int main(int argc, char **argv)
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
+        else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
         else if (argv[i][0] == '-') usage();
         else if (!in) in = argv[i];
         else usage();
     }
     if (!in || !out) usage();
 
+    if (memcheck) {
+        rt = dashrt_mc_o;
+        rtlen = dashrt_mc_o_len;
+    }
     src_name = in;
     src = read_file(in, &len);
     if (rt_path) rt = read_file(rt_path, &rtlen);

@@ -174,3 +174,9 @@ void dl_arr_push_str(DashArrayLong *a, STRPTR v) { DashArray_push_str(a, v); }
 
 /* ---- errores ---- */
 void dl_fail_at(const char *what, LONG w) { _dash_fail_at(what, w); }
+
+#ifdef DASH_MEMCHECK
+/* --memcheck: un campo de nil avisa y sigue (con una zona a cero); al acabar Main, fuera los temporales */
+void *dl_mc_nn(void *p) { return _dash_mc_nn(p); }
+void dl_tmp_release_all(void) { _dash_tmp_release_f(0); }
+#endif

@@ -50,6 +50,10 @@ def main():
     text, n = re.subn(r"static const char \*const _dash_srcfiles\[\] = \{[^\n]*\};",
                       "const char *_dash_srcfiles[1];", text)
     assert n == 1, "gen_lib: no encuentro _dash_srcfiles"
+    # --memcheck: dashc pone el sitio de cada instrucción en _dash_mc_where (tiene que verse fuera)
+    old = "static const char *_dash_mc_where = NULL;"
+    assert old in text, "gen_lib: no encuentro _dash_mc_where"
+    text = text.replace(old, "const char *_dash_mc_where = NULL;")
     # sin main
     a = text.find("int main() {")
     assert a >= 0

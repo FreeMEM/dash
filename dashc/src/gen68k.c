@@ -22,6 +22,7 @@ enum { CC_T = 0, CC_F, CC_HI, CC_LS, CC_CC, CC_CS, CC_NE, CC_EQ, CC_VC, CC_VS,
 
 static Program *prog;
 static Obj *obj;
+int memcheck;
 
 /* ---- etiquetas y saltos ---- */
 static struct { long *v; int n, cap; } labels;  /* posición en el código, -1 sin poner */
@@ -1176,6 +1177,12 @@ static void gen_list(Node *n, int fresh)
 /* d0 no puede ser nil: si lo es, "Error: campo de nil (en fuente:línea)" y se acaba */
 static void nil_check(void)
 {
+    if (memcheck) {
+        /* --memcheck: avisa y sigue con una zona a cero, como ./dash --memcheck */
+        push_d0();
+        rt_call("_dl_mc_nn", 1, 0);
+        return;
+    }
     tst_d0();
     w(0x6610);                                         /* bne.s +16 */
     w(0x4878); w(cur_line & 0x7FFF);                   /* pea línea.w (fichero 0) */
@@ -1283,6 +1290,49 @@ static int gen_new(Node *n, int si, int fresh)
     pop_args(nf);
     free(vals);
     return TY_STRUCT + si;
+}
+
+/* ---- préstamos: un argumento que la función llamada podría liberar mientras lo usa ----
+   (un campo, una global o un elemento de lista: la función puede cambiarlo). Un texto va como
+   copia temporal y un objeto con una referencia hasta que se sueltan los temporales de quien
+   llama (_dash_obj_lend). Un campo que nada en el programa cambia va tal cual (dashweb D22). */
+static struct { char **v; int n, cap; } set_fields;   /* campos a los que algo asigna */
+static int lookup_global(const char *name);
+
+static void find_set_fields(NodeList *l)
+{
+    int i, j;
+    for (i = 0; i < l->n; i++) {
+        Node *n = l->v[i];
+        if (n->kind == S_STORE && n->b->kind == E_FIELD) {
+            for (j = 0; j < set_fields.n && strcmp(set_fields.v[j], n->b->name); j++)
+                ;
+            if (j == set_fields.n) VEC_PUSH(set_fields, n->b->name);
+        }
+        find_set_fields(&n->body);
+        find_set_fields(&n->els);
+    }
+}
+
+static int field_is_set(const char *name)
+{
+    int j;
+    for (j = 0; j < set_fields.n; j++)
+        if (!strcmp(set_fields.v[j], name)) return 1;
+    return 0;
+}
+
+/* d0 tiene el valor del argumento a: si hace falta, prestado */
+static void lend(Node *a)
+{
+    int t = expr_type(a), shared;
+    if (t != TY_STR && !IS_OBJ(t)) return;
+    shared = a->kind == E_FIELD || a->kind == E_INDEX ||
+             (a->kind == E_VAR && !find_local(a->name) && lookup_global(a->name));
+    if (!shared) return;
+    if (a->kind == E_FIELD && IS_STRUCT(expr_type(a->a)) && !field_is_set(a->name)) return;
+    push_d0();
+    rt_call(t == TY_STR ? "_dl_str_tmpcopy" : "_dl_obj_lend", 1, 1);
 }
 
 /* p.metodo(args): la función "Struct.metodo" con p (comprobado) delante */
@@ -2214,8 +2264,11 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         }
         {
             Var t, sv;
-            int simple_arg = a->kind == E_VAR && simple(a, &sv) && sv.kind != V_CONST;
-            if (!simple_arg) value(a);
+            int simple_arg = a->kind == E_VAR && simple(a, &sv) && sv.kind != V_CONST && find_local(a->name);
+            if (!simple_arg) {
+                value(a);
+                lend(a);
+            }
             b->slot = new_slot(0);
             use_slot(b->slot);
             t = slot_var(b->slot, b->type);
@@ -2282,7 +2335,16 @@ static int gen_call(Node *n)
         }
         return gen_inline(n, f, idx, -1, 0);
     }
-    for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
+    for (i = n->args.n - 1; i >= 0; i--) {
+        Node *a = n->args.v[i], *in = a->kind == E_NN ? a->a : a;   /* (self de un método: comprobado) */
+        if (in->kind == E_FIELD || in->kind == E_INDEX || (in->kind == E_VAR && !find_local(in->name))) {
+            value(a);
+            lend(in);
+            push_d0();
+        } else {
+            push_value(a);
+        }
+    }
     jsr_label(func_label[idx]);
     pop_args(n->args.n);
     if (!needed[idx]) needed[idx] = 1;               /* 2: ya generada */
@@ -3265,6 +3327,16 @@ static void gen_stmt(Node *n)
     int ty, forced = forced_type;
     forced_type = -1;
     cur_line = n->line;
+    if (memcheck) {
+        /* el sitio de la instrucción, para los avisos (_DASH_MC_WHERE de ./dash) */
+        char where[600];
+        snprintf(where, sizeof where, "%s:%d", src_name, n->line);
+        w(0x23FC);                                     /* move.l #"fuente:línea",_dash_mc_where */
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l(add_string(where, (int)strlen(where)));
+        add_reloc((uint32_t)obj->code.n, -1, "__dash_mc_where");
+        l(0);
+    }
     switch (n->kind) {
     case S_PRINT:
         if (n->a->kind == E_STR) {
@@ -3576,6 +3648,24 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     ret_sp = sp_depth;
     gen_block(body);
     if (f) free_owned(0, 1);                           /* cayendo por el final */
+    if (!f && memcheck) {
+        /* --memcheck: al acabar Main se suelta todo, para que el resumen cuente solo lo perdido */
+        free_owned(0, 1);
+        for (i = 0; i < prog->globals.n; i++)
+            if (global_type[i] == TY_STR || IS_OBJ(global_type[i])) {
+                Var g;
+                g.kind = V_GLOBAL;
+                g.off = i * 4;
+                g.type = global_type[i];
+                op_ea(0x2F00, &g);                     /* move.l g,-(sp) */
+                sp_depth += 4;
+                rt_call(global_type[i] == TY_STR ? "_dl_str_free" : "_dl_release", 1, 0);
+                w(0x42B9);                             /* clr.l g */
+                add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+                l((uint32_t)g.off);
+            }
+        jsr_sym("_dl_tmp_release_all");
+    }
     if (f && IS_OBJ(cur_ret)) w(0x7000);               /* moveq #0,d0: sin return, nil */
     def_label(ret_label);
     if (f) {
@@ -3848,6 +3938,10 @@ void gen_program(Program *p, Obj *o)
         }
         buf_long(&o->data, (uint32_t)v);
     }
+    /* los campos a los que algo asigna (préstamos) */
+    find_set_fields(&p->main);
+    for (i = 0; i < p->funcs.n; i++) find_set_fields(&p->funcs.v[i].body);
+
     /* lo que devuelve cada función */
     fret_state = xmalloc(sizeof(int) * (p->funcs.n + 1));
     memset(fret_state, 0, sizeof(int) * (p->funcs.n + 1));
