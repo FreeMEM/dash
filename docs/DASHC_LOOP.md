@@ -105,3 +105,9 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   (eori del bit 31), `Int()`/`Float()` (también `Int("12")`), mezcla con Int (convertido al compilar si es fijo),
   `Print` e interpolación (`DashString_from_float`), parámetros y valores devueltos Float. Test `flotantes`.
   Falta: listas y campos Float con valores Int, Double, Fixed.
+- Cobertura completa (antes de Float): compila 72 de 309; en el A1200, 54 de 61 iguales. Arreglados los 7 que
+  fallaban: el temporizador (`_dash_finish` cerraba el de bench mirando `TimerBase`, que también pone el runtime de
+  tiempo: un puntero nulo colgaba el Amiga y a los siguientes; `time_ms` cuenta desde el arranque con un puntero débil
+  a `_dash_time_init`), textos adoptados que no eran temporales (constructor y `c.t = t` copian si no es un temporal
+  nuevo), el elemento de `for x in lista` retenido durante la vuelta (el cuerpo puede vaciar la lista), las globales
+  del programa no se ven desde sus módulos (dashweb D14) y `+` de listas (`DashArray_concat`).

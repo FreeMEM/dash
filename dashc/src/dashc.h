@@ -142,7 +142,7 @@ typedef struct {
 
 typedef struct {
     char *name;
-    int line, col, type;
+    int line, col, type, file;   /* file: las del programa (0) no se ven desde sus módulos */
     Node *init;
 } Global;
 

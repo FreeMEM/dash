@@ -38,7 +38,7 @@ def main():
     args = ap.parse_args()
 
     files = sorted((REPO / "tests").glob("test_*.dash")) + sorted((REPO / "examples").glob("*.dash"))
-    files = [f for f in files if args.filtro in f.name]
+    files = [f for f in files if any(x in f.name for x in args.filtro.split(","))]
     tmp = Path(tempfile.mkdtemp(prefix="dashc-cobertura-"))
     ok, errors, runnable = [], collections.Counter(), []
     for f in files:

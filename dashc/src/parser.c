@@ -626,6 +626,7 @@ static void parse_into(Program *p)
             g.name = name->text;
             g.line = name->line;
             g.col = name->col;
+            g.file = name->file;
             expect(P_COLON);
             g.type = parse_type();
             expect(P_ASSIGN);

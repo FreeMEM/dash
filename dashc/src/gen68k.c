@@ -314,6 +314,14 @@ static int flags_for(Var *v, int cc)
 static int fold(Node *n, long *v);
 static int fold_literal;   /* fold sin las variables que valen una constante */
 
+/* Una global del programa principal no se ve desde sus módulos: allí ese nombre es una variable
+   suya (como en ./dash, dashweb D14). Las de los módulos se ven desde todos. */
+static int cur_file_g;
+static int global_visible(int i)
+{
+    return prog->globals.v[i].file != 0 || cur_file_g == 0;
+}
+
 static Local *find_local(const char *name)
 {
     int i;
@@ -366,7 +374,7 @@ static Var lookup(const char *name)
         return slot_var(lc->slot, lc->type);
     }
     for (i = 0; i < prog->globals.n; i++)
-        if (!strcmp(prog->globals.v[i].name, name)) {
+        if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) {
             r.kind = V_GLOBAL;
             r.off = i * 4;
             r.type = global_type[i];
@@ -535,7 +543,7 @@ static int fold(Node *n, long *v)
             return 1;
         }
         for (i = 0; i < prog->globals.n; i++)
-            if (!strcmp(prog->globals.v[i].name, n->name)) return 0;
+            if (global_visible(i) && !strcmp(prog->globals.v[i].name, n->name)) return 0;
         for (i = 0; i < prog->consts.n; i++)
             if (!strcmp(prog->consts.v[i].name, n->name)) return fold(prog->consts.v[i].value, v);
         return 0;
@@ -834,7 +842,7 @@ static int var_type(const char *name)
         if (lc) return lc->type;
     }
     for (i = 0; i < prog->globals.n; i++)
-        if (!strcmp(prog->globals.v[i].name, name)) return global_type[i];
+        if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) return global_type[i];
     for (i = 0; i < prog->consts.n; i++)
         if (!strcmp(prog->consts.v[i].name, name)) {
             Node *v = prog->consts.v[i].value;
@@ -880,6 +888,8 @@ static int expr_type(Node *n)
         ta = expr_type(n->a);
         tb = expr_type(n->b);
         if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
+        if (n->op == P_PLUS && (IS_ARR(ta) || IS_ARR(tb)))   /* a + b de listas: lo que guarda la primera con tipo */
+            return IS_ARR(ta) && ta != TY_ARR + TY_VOID ? ta : IS_ARR(tb) ? tb : ta;
         if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
             (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
         return TY_INT;
@@ -1003,11 +1013,13 @@ static void walk_types(NodeList *l, int *ret)
 static int func_ret(int idx)
 {
     Func *f = &prog->funcs.v[idx];
-    int saved_on = tenv_on, saved_base = tenv_base, saved_n = tenv.n, i, r = TY_VOID;
+    int saved_on = tenv_on, saved_base = tenv_base, saved_n = tenv.n, i, r = TY_VOID, saved_file;
     /* (-> Array sin más: lo que guarda, del cuerpo) */
     if ((f->declared && f->ret != TY_ARR + TY_VOID) || fret_state[idx] == 2) return f->ret;
     if (fret_state[idx] == 1) return f->has_value ? TY_INT : TY_VOID;
     fret_state[idx] = 1;
+    saved_file = cur_file_g;
+    cur_file_g = f->file;                              /* (las globales que ve, las de su fichero) */
     tenv_on = 1;
     tenv_base = tenv.n;
     for (i = 0; i < f->params.n; i++) {
@@ -1020,6 +1032,7 @@ static int func_ret(int idx)
     tenv.n = saved_n;
     tenv_on = saved_on;
     tenv_base = saved_base;
+    cur_file_g = saved_file;
     if (r == TY_BOOL || r == TY_CHAR || r == TY_NIL || (r == TY_VOID && f->has_value)) r = TY_INT;
     if (f->declared && !IS_ARR(r)) r = f->ret;
     f->ret = r;
@@ -1318,7 +1331,7 @@ static int gen_field_store(Node *target, Node *v)
     if (ft == TY_STR || IS_OBJ(ft)) {
         w(0x4868); w(off);                             /* pea off(a0) */
         sp_depth += 4;
-        rt_call(ft == TY_STR ? "_dl_str_set" : "_dl_obj_set", 2, 0);
+        rt_call(ft != TY_STR ? "_dl_obj_set" : is_tmp_expr(v) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
     } else {
         w(0x215F); w(off);                             /* move.l (sp)+,off(a0) */
         sp_depth -= 4;
@@ -1364,7 +1377,8 @@ static int gen_new(Node *n, int si, int fresh)
             sp_depth += 4;
             w(0x486A); w(off);                         /* pea off(a2) */
             sp_depth += 4;
-            rt_call("_dl_str_set", 2, 0);
+            /* un texto que no es un temporal nuevo (una variable, un parámetro) se copia */
+            rt_call(is_tmp_expr(vals[i]) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
         } else {
             w(0x256F); w(4 * i); w(off);               /* move.l v(sp),off(a2) */
             if (IS_OBJ(ft)) {
@@ -2769,6 +2783,15 @@ static int gen_expr(Node *n)
             gen_concat(n);
             return TY_STR;
         }
+        if (n->op == P_PLUS && IS_ARR(expr_type(n))) {
+            /* a + b de listas: una nueva con las dos (DashArray_concat) */
+            Node *a[2];
+            a[0] = n->a;
+            a[1] = n->b;
+            args_to_stack(a, 2, NULL);
+            rt_call("_dl_arr_concat", 2, 1);
+            return expr_type(n);
+        }
         if (expr_type(n) == TY_FLOAT) {
             /* a op b con algún Float: __addsf3, __subsf3, __mulsf3, __divsf3 */
             Node *a[2];
@@ -3347,7 +3370,7 @@ static int lookup_global(const char *name)
 {
     int i;
     for (i = 0; i < prog->globals.n; i++)
-        if (!strcmp(prog->globals.v[i].name, name)) return 1;
+        if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) return 1;
     for (i = 0; i < prog->consts.n; i++)
         if (!strcmp(prog->consts.v[i].name, name)) return 1;
     return 0;
@@ -3646,7 +3669,13 @@ static void gen_foreach(Node *n)
     load_var(0, &vi);
     w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2): bytes */
     w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+    if (IS_OBJ(et)) {
+        /* un objeto, con una referencia durante la vuelta: el cuerpo podría sacarlo de la lista */
+        push_d0();
+        rt_call("_dl_retain_r", 1, 0);
+    }
     vx = declare(n->name, et);
+    if (IS_OBJ(et)) locals.v[locals.n - 1].owned = 2;
     store_d0(&vx);
     gen_block(&n->body);
     loops.n--;
@@ -3684,6 +3713,7 @@ static void gen_stmt(Node *n)
     forced_type = -1;
     cur_line = n->line;
     cur_file = n->file;
+    cur_file_g = n->file;
     src_name = src_files.v[n->file];                   /* para los errores al compilar */
     if (memcheck) {
         /* el sitio de la instrucción, para los avisos (_DASH_MC_WHERE de ./dash) */
@@ -3947,6 +3977,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     locals.n = 0;
     depth = 0;
     nframe = 0;
+    cur_file_g = f ? f->file : 0;
     loop_weight = 1;
     slot_uses.n = 0;
     slot_start.n = 0;

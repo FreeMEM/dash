@@ -43,6 +43,7 @@ Main
     a.push(3)
     a[0] = 5
     b = a[1:2]
+    a = a + [7]
     for x in a
         Print x
     end

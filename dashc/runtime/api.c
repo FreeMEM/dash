@@ -14,10 +14,11 @@ struct WBStartup *_WBenchMsg;   /* desde el Workbench, su mensaje (como libnix) 
 static char *dash_cmdline;      /* desde el Shell, la línea de órdenes partida (argv) */
 static BPTR dash_old_dir;
 static char *dash_args_buf[64];
-struct Device *TimerBase;
 static struct timerequest *bench_tr;
 static struct EClockVal bench_t0;
 static ULONG bench_freq;
+
+void (*_dash_weak_dash_time_init)(void) = _dash_time_init;
 
 /* 68020 o mejor: rt_math.s usa divs.l y muls.l (como utility.library con gcc) */
 UBYTE _dash_cpu020;
@@ -84,18 +85,20 @@ LONG _dash_init(const char *cmd, LONG len)
         return 10;
     }
     if (_WBenchMsg && _WBenchMsg->sm_ArgList) dash_old_dir = CurrentDir(_WBenchMsg->sm_ArgList[0].wa_Lock);
+    /* time_ms cuenta desde el arranque, como en ./dash (solo si el programa usa el runtime de tiempo) */
+    if (_dash_weak_dash_time_init) _dash_weak_dash_time_init();
     return 0;
 }
 
 /* Desde _dash_quit, al acabar de cualquier forma: como el final de main y la lista de salida de libnix */
 void _dash_finish(void)
 {
-    if (TimerBase) {
+    if (bench_tr) {
         struct MsgPort *port = bench_tr->tr_node.io_Message.mn_ReplyPort;
         CloseDevice((struct IORequest *)bench_tr);
         DeleteIORequest((struct IORequest *)bench_tr);
         DeleteMsgPort(port);
-        TimerBase = NULL;
+        bench_tr = NULL;
     }
     _dash_exit_cleanup();
     _dash_atexit_run();
@@ -146,14 +149,15 @@ void _dash_div_zero(void)
    escriben "BENCH nombre vueltas ticks_del_EClock frecuencia" */
 void _bench_start(void)
 {
-    if (!TimerBase) {
+    if (!bench_tr) {
         struct MsgPort *port = CreateMsgPort();
         if (!port) return;
         bench_tr = (struct timerequest *)CreateIORequest(port, sizeof(struct timerequest));
         if (bench_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)bench_tr, 0) == 0) {
-            TimerBase = bench_tr->tr_node.io_Device;
+            if (!TimerBase) TimerBase = bench_tr->tr_node.io_Device;
         } else {
             if (bench_tr) DeleteIORequest((struct IORequest *)bench_tr);
+            bench_tr = NULL;
             DeleteMsgPort(port);
             return;
         }
@@ -165,7 +169,7 @@ void _bench_end(const char *name, LONG iterations)
 {
     struct EClockVal t1;
     ULONG args[4];
-    if (!TimerBase) return;
+    if (!bench_tr) return;
     ReadEClock(&t1);
     args[0] = (ULONG)name;
     args[1] = (ULONG)iterations;
@@ -262,6 +266,7 @@ void dl_arr_set(DashArrayLong *a, LONG i, LONG v) { DashArray_set(a, i, v); }
 void dl_arr_set_obj(DashArrayLong *a, LONG i, void *v) { DashArray_set_obj(a, i, v); }
 void dl_arr_set_str(DashArrayLong *a, LONG i, STRPTR v) { DashArray_set_str(a, i, v); }
 LONG dl_arr_length(DashArrayLong *a) { return DashArray_length(a); }
+DashArrayLong *dl_arr_concat(DashArrayLong *a, DashArrayLong *b) { return DashArray_concat(a, b); }
 DashArrayLong *dl_arr_slice(DashArrayLong *a, LONG s, LONG e) { return DashArray_slice(a, s, e); }
 void dl_arr_push(DashArrayLong *a, LONG v) { DashArray_push(a, v); }
 void dl_arr_push_obj(DashArrayLong *a, void *v) { DashArray_push_obj(a, v); }
