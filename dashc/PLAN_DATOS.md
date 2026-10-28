@@ -35,3 +35,10 @@ de Amiga dando ejecutables idénticos.
   pasan de ~2 a ~11 KB: falta enlazar solo lo usado). Fase 2 hecha: textos (tests cadenas y memoria iguales a
   ./dash en A1200 y A500). Marcas de temporales en la pila (no en huecos, para que las dos pasadas cuadren);
   la primera pasada apunta qué marcas hacen falta. Las funciones copiadas no llevan marca propia.
+- 2026-10-28: fases 3, 4 y 5 hechas: listas (tipos `[T]`; `Array` sin más deduce lo que guarda) y structs
+  (descriptor `_DashType` y destroy en el código; constructor en línea; nil con el mismo error que ./dash).
+  12 tests iguales a ./dash en A1200 y A500; dashc nativo en A500 da ejecutables idénticos (con el mismo
+  nombre de fuente). Donde ./dash pierde el tipo de los elementos (`-> Array` de textos, `[]` con textos
+  luego) imprime direcciones y dashc los textos: los tests usan `[String]`.
+  Pendiente: enlazar solo lo usado del runtime (12-16 KB por ejecutable), préstamos (`_dash_obj_lend`),
+  diccionarios, métodos de texto, sort, enums, import.
