@@ -203,3 +203,9 @@ diga el usuario. Base medida: `Base ronda 3`.
   una consola de libnix a pantalla completa que espera a que la cierren.
 - Arreglo, en el test: `NP_Input`/`NP_Output` a 0 sin cerrarlos, como el Workbench, y `@workbench_output "NIL:"`.
   Seguidos con `--memcheck`, `test_args_wb`, `test_on_click_timer` y `test_desktop_canvas_fondo` pasan.
+- Batería entera tras el arreglo: `--emu --emu-a500 --emu-32` 1.100/1.103 (solo `test_on_click_timer`);
+  `--emu --memcheck` 671/674. De esos, dos eran de esta ronda y están arreglados: `test_zlib` con `--memcheck`
+  iba cuadrático (la comprobación de la longitud medía con `strlen` el texto entero en cada `s.length`, y el
+  test hace crecer uno hasta 100 KB): ahora mide entero solo si es corto, y en los largos mira el byte final.
+  `test_trap_mui` dejaba vivo con `--memcheck` el texto de una interpolación de antes del fallo (lo que la
+  excepción abandona no se libera): el test ya no lo hace.

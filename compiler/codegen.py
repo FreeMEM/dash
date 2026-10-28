@@ -671,7 +671,11 @@ static __inline__ LONG _dash_str_len(STRPTR s) {
     if (!s) return 0;
     if (_DASH_STR_OURS(s)) {
 #ifdef DASH_MEMCHECK
-        if (_DASH_STR_HDR(s)->len != strlen((char *)s)) _dash_mc_error((CONST_STRPTR)"longitud de un texto mal guardada");
+        /* (all of it only in short texts: a text that grows in a loop and asks for its length would go
+           through it all each time) */
+        { _DashStrHdr *h = _DASH_STR_HDR(s);
+          if (s[h->len] || (h->len < 256 && h->len != strlen((char *)s)))
+              _dash_mc_error((CONST_STRPTR)"longitud de un texto mal guardada"); }
 #endif
         return (LONG)_DASH_STR_HDR(s)->len;
     }

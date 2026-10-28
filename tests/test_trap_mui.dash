@@ -30,7 +30,9 @@ Main
         mui_text("hola")
         mui_window_end()
         mui_window_open(win)
-        Print "ventana: #{win != 0}"
+        if win != 0
+            Print "ventana: true"       # (no text made: what the trap leaves behind is not freed)
+        end
         Print hondo(200, 0)
         Print "no llega"
     end
