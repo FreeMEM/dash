@@ -732,7 +732,16 @@ static __attribute__((noinline, optimize("Os"))) void _dash_tmp_take_mid(_DashSt
 
 /* Take p out of the temporaries if it is one (the caller now owns it). p may be any string: a text
    of C is not Dash's, and one of Dash says in its header whether it is a temporary. */
-static BOOL _dash_tmp_take(STRPTR p) {
+static __attribute__((noinline)) BOOL _dash_tmp_take_slow(STRPTR p) {
+    _DashStrHdr *h = _DASH_STR_HDR(p);
+    if (!_DASH_STR_OURS(p) || !(h->size & _DASH_STR_TEMP)) return FALSE;
+    h->size &= ~_DASH_STR_TEMP;
+    _dash_tmp_take_mid(h);
+    return TRUE;
+}
+
+/* (in line: the usual case, the newest temporary, is a pointer comparison; the rest apart) */
+static __inline__ BOOL _dash_tmp_take(STRPTR p) {
     _DashStrHdr *h;
     LONG i = _dash_ts_n - 1;
     if (!p) return FALSE;
@@ -747,10 +756,7 @@ static BOOL _dash_tmp_take(STRPTR p) {
         _dash_ts_n = i;
         return TRUE;
     }
-    if (!_DASH_STR_OURS(p) || !(h->size & _DASH_STR_TEMP)) return FALSE;
-    h->size &= ~_DASH_STR_TEMP;
-    _dash_tmp_take_mid(h);
-    return TRUE;
+    return _dash_tmp_take_slow(p);
 }
 
 /* Short copies byte by byte in line: libnix's memcpy is a call that first

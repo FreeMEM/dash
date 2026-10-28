@@ -281,3 +281,14 @@ diga el usuario. Base medida: `Base ronda 3`.
 - Probado: 456/456; los tests de textos en A1200 y A500.
 - Probado y tirado: sacar de línea `_dash_str_len` (no cambiaba el tamaño y `string_chars_26` iba un 15 % peor) y
   compilar para tamaño la reserva de textos (deja de meter en línea la caché de bloques).
+
+### R16 — sacar un temporal: la cima en línea, el resto aparte
+- `_dash_tmp_take` era una llamada desde `_dash_str_set`; ahora la comprobación de la cima (comparar punteros, el
+  caso normal) va en línea y lo demás en `_dash_tmp_take_slow`. Contando llamadas se vio que en el benchmark no se
+  pisa ningún camino lento: lo que quedaba era coste de instrucciones y de llamadas.
+- Medida frente a la base de la ronda (A500 / A1200): `string_return` +2,1 % / +3,4 % (al cerrar la ronda +9 / +11),
+  `nested_struct_new` +1,9 % / +2,6 % (antes +5 / +6), `string_compare` +1,9 % / +1,5 % (R15); ejecutables +1,8 %.
+  En programas pequeños (la función que devuelve un texto sola, o con otra que también concatena) retornar ya va un
+  3-9 % más rápido que `main`: lo que queda en el benchmark depende de qué mete GCC en línea en un `main` grande.
+- `float_mul` en A500 (+1,7 %, la comprobación de la CPU en cada llamada): se queda. Quitarla del todo pediría que el
+  código se reescribiera a sí mismo en la primera llamada, y eso choca con herramientas que protegen la memoria.
