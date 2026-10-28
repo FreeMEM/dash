@@ -5375,6 +5375,25 @@ static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
 
 """
 
+    # Dash 2.0: image_decode, compiled apart (compiler/clibs.py, runtime/imgdec)
+    IMGDEC_RUNTIME = """\
+/* Dash Image Decode Runtime */
+void *dash_imgdec_decode(const char *file, long maxw, long maxh);
+long dash_imgdec_width(void *d);
+long dash_imgdec_height(void *d);
+long dash_imgdec_alpha(void *d);
+void *dash_imgdec_pixels(void *d);
+void dash_imgdec_free(void *d);
+
+static LONG _dash_image_decode(STRPTR file, LONG maxw, LONG maxh) { return (LONG)dash_imgdec_decode((const char *)file, maxw, maxh); }
+static LONG _dash_image_decoded_width(LONG d) { return dash_imgdec_width((void *)d); }
+static LONG _dash_image_decoded_height(LONG d) { return dash_imgdec_height((void *)d); }
+static BOOL _dash_image_decoded_alpha(LONG d) { return dash_imgdec_alpha((void *)d) != 0; }
+static APTR _dash_image_decoded_pixels(LONG d) { return dash_imgdec_pixels((void *)d); }
+static void _dash_image_decoded_free(LONG d) { dash_imgdec_free((void *)d); }
+
+"""
+
     # Lorraine D5: texts as UTF-8. Dash's texts are bytes (Latin-1 on the Amiga); these read and write them
     # as UTF-8, on TEXT_RUNTIME's length cache
     UTF8_RUNTIME = """\
@@ -17032,6 +17051,7 @@ _RUNTIME_FLAGS = [
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
+    ("IMGDEC_RUNTIME", "uses_imgdec"),      # Dash 2.0: image_decode
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
@@ -17332,6 +17352,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
+        self.uses_imgdec: bool = False   # image_decode (IMGDEC_RUNTIME, Dash 2.0)
         self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
         self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
         self.uses_regex: bool = False  # regex_*, wildcard_match (REGEX_RUNTIME, Lorraine D45)
@@ -17696,6 +17717,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.BASE64_RUNTIME)
         if self.uses_zlib:
             parts.append(CTemplates.ZLIB_RUNTIME)
+        if self.uses_imgdec:
+            parts.append(CTemplates.IMGDEC_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)

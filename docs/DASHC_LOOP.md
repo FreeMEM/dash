@@ -330,3 +330,15 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     una lista (basura: leía los bytes del texto). Ahora `strlen`. dashc ya lo hacía bien.
     tests/test_const_string_length.dash.
   - Tests de ./dash: 460 bien; batería de dashc bien; cobertura: compilan 210 de 314 y en el A1200 137 de 137.
+- D7 (8.ª parte): `image_decode(fichero, maxw, maxh)` y sus partes (`image_decoded_width/height/alpha/pixels/free`,
+  `image_from_decoded`; 712 builtins): JPEG con TJpgDec (reducido al decodificar: 1/2, 1/4, 1/8) y PNG, GIF, BMP y
+  JPEG progresivo con stb_image (reducidos después), sin datatypes. En `runtime/imgdec` (biblioteca aparte de
+  compiler/clibs.py, como zlib; LEEME con el origen y las licencias). Toda la memoria es de exec: vale dentro de
+  `task_start` (lo que hacía Tachyon para no parar la ventana).
+  - El GIF se colgaba: `stbi__gif_load` pone en la pila unos 35 KB (su tabla LZW) y un programa de Dash tiene 16
+    KB. Cambio en stb_image (el único): ese estado, de la memoria. `STBI_NO_THREAD_LOCALS`: su mensaje de error sin
+    emutls de libgcc (dashc no la tiene).
+  - tests/test_image_decode.dash: imágenes de 16 x 8 y 64 x 32 hechas con PIL en el PC, como listas de bytes, a
+    RAM: y decodificadas; tamaños, alfa y los colores de tres esquinas. Igual con gcc y con dashc.
+  - Pendientes de Tachyon: WebP (libwebp) y SVG (nanosvg: necesita `sqrtf`, `powf`... de float sin FPU).
+  - Tests de ./dash: 461 bien (test_image_decode también en el A500); batería de dashc bien; cobertura: 211 de 315 y 138 de 138.

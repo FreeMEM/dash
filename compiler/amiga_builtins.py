@@ -4572,6 +4572,12 @@ TASK_FUNCTIONS = {
 # Pictures by datatypes (dashweb D12)
 # =============================================================================
 
+def _dec(name, params, ret, template, desc):
+    """image_decode and its parts (Dash 2.0): no graphics, only memory and files"""
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       reads_only=True)
+
+
 IMAGE_FUNCTIONS = {
     "image_load": _gfx("image_load", ["file"], "LONG", "_dash_image_load(${file})",
                        "Picture from a file by datatypes (ILBM; PNG, GIF, JPEG if the system has them), "
@@ -4587,6 +4593,26 @@ IMAGE_FUNCTIONS = {
                         "A copy of an image at w x h pixels: a new image, or 0"),
     "image_free": _gfx("image_free", ["image"], "void", "_dash_image_free(${image})",
                        "Free an image (the ones left are freed at exit)"),
+    # Dash 2.0: decoded by the program itself (runtime/imgdec), what Tachyon did with @native
+    "image_decode": _dec("image_decode", ["file", "maxw", "maxh"], "LONG", "_dash_image_decode(${file}, ${maxw}, ${maxh})",
+                         "Decode a JPEG (TJpgDec, already reduced while it decodes), PNG, GIF or BMP (stb_image) to "
+                         "RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its "
+                         "size): the decoded picture, or 0. Without datatypes, and it may run in a task_start"),
+    "image_decoded_width": _dec("image_decoded_width", ["d"], "LONG", "_dash_image_decoded_width(${d})",
+                                "Width of a decoded picture"),
+    "image_decoded_height": _dec("image_decoded_height", ["d"], "LONG", "_dash_image_decoded_height(${d})",
+                                 "Height of a decoded picture"),
+    "image_decoded_alpha": _dec("image_decoded_alpha", ["d"], "BOOL", "_dash_image_decoded_alpha(${d})",
+                                "True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB)"),
+    "image_decoded_pixels": _dec("image_decoded_pixels", ["d"], "APTR", "_dash_image_decoded_pixels(${d})",
+                                 "The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or "
+                                 "image_from_rgb"),
+    "image_decoded_free": _dec("image_decoded_free", ["d"], "void", "_dash_image_decoded_free(${d})",
+                               "Free a decoded picture"),
+    "image_from_decoded": _gfx("image_from_decoded", ["d"], "LONG",
+                               "_dash_image_from_rgb(_dash_image_decoded_pixels(${d}), _dash_image_decoded_width(${d}), "
+                               "_dash_image_decoded_height(${d}), _dash_image_decoded_alpha(${d}))",
+                               "An image (as image_from_rgb) from a decoded picture, which is still to be freed"),
     "image_from_rgb": _gfx("image_from_rgb", ["buffer", "width", "height", "alpha"], "LONG",
                            "_dash_image_from_rgb((APTR)${buffer}, ${width}, ${height}, ${alpha})",
                            "An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on "

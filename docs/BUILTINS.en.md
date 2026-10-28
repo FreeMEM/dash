@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 705 functions, 705 implemented, 0 not implemented.
+Total: 712 functions, 712 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -550,6 +550,13 @@ Total: 705 functions, 705 implemented, 0 not implemented.
 | `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
 | `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
 | `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
+| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec, already reduced while it decodes), PNG, GIF or BMP (stb_image) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
+| `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
+| `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
+| `image_decoded_pixels(d)` | `APTR` | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
+| `image_decoded_free(d)` | `void` | Free a decoded picture |  |
+| `image_from_decoded(d)` | `LONG` | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
 | `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
 
 ## Arguments

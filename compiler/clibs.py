@@ -9,6 +9,7 @@ of each marker found. A library pulls only the objects a program calls.
           program may have its own inflate or crc32.
     ryu:  a double to its shortest decimal and back (runtime/ryu/LEEME).
     fdlibm: sqrt, pow, sin... of a double (runtime/fdlibm/README.md).
+    imgdec: image_decode, JPEG with TJpgDec and PNG, GIF, BMP with stb_image (runtime/imgdec/LEEME).
 """
 
 import hashlib
@@ -31,6 +32,11 @@ LIBRARIES = {
         "marker": "/* Dash Double Runtime */",
         "sources": ["dash_ryu.c"],
         "defines": ["-DNDEBUG"],
+    },
+    "imgdec": {
+        "marker": "/* Dash Image Decode Runtime */",
+        "sources": ["dash_imgdec.c", "stb_image_dash.c", "tjpgd.c"],
+        "defines": [],
     },
     "fdlibm": {
         "marker": "/* Dash Math Runtime */",

@@ -457,12 +457,26 @@ const BuiltinInfo builtin_info[] = {
     {"gt_text", 6, 1, 1, 0},
     {"gt_wait_event", 0, 1, 1, 0},
     {"gt_wait_event", 0, 1, 1, 0},
+    {"image_decode", 3, 1, 0, 0},
+    {"image_decode", 3, 1, 0, 0},
+    {"image_decoded_alpha", 1, 2, 0, 0},
+    {"image_decoded_alpha", 1, 2, 0, 0},
+    {"image_decoded_free", 1, 0, 0, 0},
+    {"image_decoded_free", 1, 0, 0, 0},
+    {"image_decoded_height", 1, 1, 0, 0},
+    {"image_decoded_height", 1, 1, 0, 0},
+    {"image_decoded_pixels", 1, 1, 0, 0},
+    {"image_decoded_pixels", 1, 1, 0, 0},
+    {"image_decoded_width", 1, 1, 0, 0},
+    {"image_decoded_width", 1, 1, 0, 0},
     {"image_draw", 3, 0, 0, 0},
     {"image_draw", 3, 0, 0, 0},
     {"image_draw_part", 7, 0, 0, 0},
     {"image_draw_part", 7, 0, 0, 0},
     {"image_free", 1, 0, 0, 0},
     {"image_free", 1, 0, 0, 0},
+    {"image_from_decoded", 1, 1, 0, 0},
+    {"image_from_decoded", 1, 1, 0, 0},
     {"image_from_rgb", 4, 1, 0, 0},
     {"image_from_rgb", 4, 1, 0, 0},
     {"image_height", 1, 1, 0, 0},
@@ -1412,7 +1426,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1410;
+const int builtin_count = 1424;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

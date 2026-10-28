@@ -4412,6 +4412,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Sorting texts by language | 1 | `str_compare_locale` |
 | Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
+| Pictures decoded by the program | 7 | `image_decode`, `image_decoded_width`, `image_decoded_height`, `image_decoded_alpha`, `image_decoded_pixels`, `image_from_decoded`, `image_decoded_free` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
 | Compression (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
@@ -4423,7 +4424,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 53 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
 | MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **705** | |
+| **Total** | **712** | |
 
 ### Standard Amiga Colors
 
