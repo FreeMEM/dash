@@ -246,3 +246,14 @@ diga el usuario. Base medida: `Base ronda 3`.
   `--emu --memcheck` 675/676: solo `test_on_click_timer` (pendiente, también en `main`).
 - Queda: con backdrop (RTG) las lecturas de la tarjeta siguen (las pide la detección de iconos); el bucle por píxel
   de `_dash_desk_present_chunky` se podría acelerar por filas, sin forma de medirlo en FS-UAE.
+
+## Después de la tercera ronda (2026-10-28): `test_on_click_timer` y lo que la ronda empeoró
+
+### `test_on_click_timer` en la batería entera: arreglado (era `test_mouse_curve`)
+- Con un programa que lista pantallas y ventanas en el sitio del test: la pantalla del Workbench estaba en y=25
+  (y en 107 tras el clic) y la ventana del test nunca se activaba. Un programa que dice la posición de la pantalla
+  tras cada test la señala: `test_mouse_curve` (Ratonera). Su falso hid.class manda una pulsación del botón
+  izquierdo sin soltarla; con el botón abajo, la posición absoluta que manda después arrastraba la pantalla por su
+  barra. Se quedaba baja para el resto del arranque, y el clic de `test_on_click_timer` caía en la barra.
+  Dependía de dónde estaba el puntero al pulsar: por eso fallaba solo con muchos tests delante.
+- Arreglo, en el test: la suelta justo después de la pulsación (el manejador sigue contando 3 de 3).
