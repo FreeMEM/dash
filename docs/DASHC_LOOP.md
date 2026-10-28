@@ -267,3 +267,21 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     QuickJS: una libc de compatibilidad para lo de `@link` (enlazada solo si hace falta) o que el módulo las lleve.
     Que el C llame a funciones Dash (las retrollamadas) está por ver: dashc guarda solo los registros que usa.
   - Batería de dashc bien (con externo.dash); cobertura: compilan 208 de 312 y en el A1200 135 de 135 iguales.
+- D7 (4.ª parte): QuickJS enlaza y corre con dashc. `runtime/rt_compat.c` (en la librería, una sección por
+  función: solo entra lo que se llama) pone lo de libc y libm que pide el C de `@link`: `vsnprintf`/`snprintf`
+  (enteros de 32 y 64 bits, anchura y precisión con `*`, `%s %c %p %x`; la coma flotante sale como `?`),
+  `realloc`, `calloc`, `abort`, `strchr`, `strrchr`, stdio a `Output()` con su búfer (`fprintf`, `printf`,
+  `fwrite`, `fputc`, `fputs`, `puts`, `__sF`), `gettimeofday`, `gmtime`, `localtime` (sin zona), `mktime`, y
+  `trunc round lrint fmax fmin log2 asinh acosh atanh` sobre el fdlibm del runtime. De libgcc, los desplazamientos,
+  comparaciones y conversiones de 64 bits y `ctz`, `popcount`, `bswap`, `ffs`. Los programas de siempre no cambian
+  de tamaño.
+  - Prueba (fuera del repo): QuickJS de Tachyon compilado para 68000 sin FPU (la `libqjs.a` de Tachyon es de
+    68020+68881), un `motor.c` de 50 líneas y un programa Dash con `@link`/`@extern`: en el A1200, `1 + 2 * 3`,
+    `sort`/`join`, `0.1 + 0.2`, `Math.sqrt/log2/round/trunc`, `JSON.stringify`, `Date.toISOString`, recursión,
+    expresiones regulares y una excepción, todo bien. 876 KB (por eso D10).
+  - También los nombres de libm (`sin`, `log`, `pow`, `sqrt`...: la `math.h` de libnix cambia `log2` por `log`), como
+    envoltorios del fdlibm del runtime. dashc/tests/externo.dash compara `snprintf`, `realloc`, `gmtime`, `round`,
+    `trunc`, `lrint` y `log2` con los de libnix: iguales en A1200 y A500 (el `log2(64)` de libnix da 5,999...: el
+    test redondea). Batería y cobertura bien (208 de 312; 135 de 135); los tamaños de siempre, iguales.
+  - A Tachyon, para su `js.dash`, le falta lo de su `@c` (`_js_aserto`, las clases `__dashweb_*`...), que llama a
+    funciones Dash y a la API interna del runtime: eso, a su módulo de C (y las retrollamadas a Dash, por ver).

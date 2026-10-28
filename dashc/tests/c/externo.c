@@ -17,3 +17,48 @@ long ext_es_par(long n) { return (n & 1) ? 0 : 4; }   /* (un BOOL de C distinto 
 void ext_contar(void) { cuenta++; contador += 10; }
 
 long ext_cuenta(void) { return cuenta * 1000 + contador; }
+
+/* lo de libc y libm de rt_compat.c (con gcc, el de libnix) */
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h>
+
+static char buf[160];
+
+const char *ext_formato(long n)
+{
+    long long g = (long long)n * 1000000007LL;
+    snprintf(buf, sizeof buf, "[%05ld|%-4s|%x|%lld|%.3s|%*d|%c|%+d|%u]", n, "ab", (unsigned)n, g, "abcdef", 4, 7, 'z',
+             (int)n, (unsigned)n);
+    return buf;
+}
+
+long ext_crece(long n)
+{
+    long i, s = 0;
+    long *v = NULL;
+    for (i = 1; i <= n; i++) {
+        v = (long *)realloc(v, i * sizeof(long));
+        v[i - 1] = i;
+    }
+    for (i = 0; i < n; i++) s += v[i];
+    free(v);
+    return s;
+}
+
+const char *ext_fecha(long t)
+{
+    time_t tt = (time_t)t;
+    struct tm *tm = gmtime(&tt);
+    snprintf(buf, sizeof buf, "%04d-%02d-%02d %02d:%02d:%02d %d %d", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+             tm->tm_hour, tm->tm_min, tm->tm_sec, tm->tm_wday, tm->tm_yday);
+    return buf;
+}
+
+long ext_mates(long x)
+{
+    /* (en enteros: lo que se compara son los resultados) */
+    /* (log2 redondeado: el de libnix da 5,999... para 64) */
+    return (long)(log2((double)x) * 1000 + 0.5) + (long)round(x / 4.0) * 10 + (long)trunc(-x / 3.0) + lrint(2.5);
+}

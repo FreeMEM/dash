@@ -1,4 +1,4 @@
-# @link y @extern: funciones de C de un objeto ya compilado (tests/c/externo.o), con enteros, textos y Bool
+# @link y @extern: funciones de C de un objeto ya compilado (tests/c/externo.o), con enteros, textos y Bool, y lo de libc (rt_compat.c) frente al de libnix
 @link "c/externo.o"
 
 @extern("externo") func ext_suma(a: Int, b: Int) -> Int
@@ -7,6 +7,10 @@
 @extern("externo") func ext_es_par(n: Int) -> Bool
 @extern("externo") func ext_contar()
 @extern("externo") func ext_cuenta() -> Int
+@extern("externo") func ext_formato(n: Int) -> String
+@extern("externo") func ext_crece(n: Int) -> Int
+@extern("externo") func ext_fecha(t: Int) -> String
+@extern("externo") func ext_mates(x: Int) -> Int
 
 Main
     Print ext_suma(2, 40)
@@ -22,4 +26,11 @@ Main
         ext_contar()
     end
     Print ext_cuenta()
+    Print ext_formato(-42)
+    Print ext_formato(305419896)
+    Print ext_crece(100)
+    Print ext_fecha(0)
+    Print ext_fecha(951782400)
+    Print ext_fecha(1793220724)
+    Print ext_mates(64)
 end

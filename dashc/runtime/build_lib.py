@@ -26,7 +26,11 @@ AMISSL = os.environ.get("DASH_AMISSL_SDK") or os.path.expanduser("~/.cache/dash-
 FLAGS = ["-O2", "-m68000", "-noixemul", "-fomit-frame-pointer", "-fno-common", "-ffunction-sections",
          "-fdata-sections"]
 LIBGCC = ["_udivdi3.o", "_umoddi3.o", "_divdi3.o", "_moddi3.o", "_muldi3.o", "_udivmoddi4.o", "_clz.o",
-          "_fixunssfsi.o", "_clzsi2.o", "_clzdi2.o", "xfpgnulib__extendsfdf2.o"]
+          "_fixunssfsi.o", "_clzsi2.o", "_clzdi2.o", "xfpgnulib__extendsfdf2.o",
+          # (para el C de @link: desplazamientos y conversiones de 64 bits)
+          "_ashldi3.o", "_lshrdi3.o", "_ashrdi3.o", "_cmpdi2.o", "_ucmpdi2.o", "_negdi2.o", "_fixdfdi.o",
+          "_fixunsdfdi.o", "_floatdidf.o", "_floatundidf.o", "_fixunsdfsi.o", "_ctzsi2.o", "_ctzdi2.o",
+          "_popcountsi2.o", "_popcountdi2.o", "_popcount_tab.o", "_bswapsi2.o", "_bswapdi2.o", "_ffssi2.o", "_ffsdi2.o"]
 
 
 def run(cmd):
@@ -50,6 +54,9 @@ def main():
     run([GCC, *FLAGS, "-fno-builtin", "-fno-tree-loop-distribute-patterns", "-c", str(HERE / "rt_libc.c"),
          "-o", str(build / "rt_libc.o")])
     common.append(build / "rt_libc.o")
+    # lo de libc y libm que pide el C de @link (QuickJS...)
+    run([GCC, *FLAGS, "-fno-builtin", "-c", str(HERE / "rt_compat.c"), "-o", str(build / "rt_compat.o")])
+    common.append(build / "rt_compat.o")
     run([GCC, "-m68000", "-c", str(HERE / "rt_math.s"), "-o", str(build / "rt_math.o")])
     common.append(build / "rt_math.o")
     run([GCC, "-m68000", "-c", str(HERE / "rt_libs.s"), "-o", str(build / "rt_libs.o")])
