@@ -49,6 +49,8 @@ def main():
     common.append(build / "rt_libc.o")
     run([GCC, "-m68000", "-c", str(HERE / "rt_math.s"), "-o", str(build / "rt_math.o")])
     common.append(build / "rt_math.o")
+    run([GCC, "-m68000", "-c", str(HERE / "rt_libs.s"), "-o", str(build / "rt_libs.o")])
+    common.append(build / "rt_libs.o")
     # las librerías de C de ./dash, con sus opciones
     sys.path.insert(0, str(REPO))
     from compiler.clibs import LIBRARIES

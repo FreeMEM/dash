@@ -287,6 +287,9 @@ static long *win_off;         /* y dónde está su variable en los datos */
 typedef struct { int done, depth, sp; } EvLoop;
 static struct { EvLoop *v; int n, cap; } evloops;
 static int uses_keys, uses_click;   /* IDCMP de las ventanas */
+/* GadTools, como ./dash: gadgets (GT_GetIMsg y On Gadget), gadgets o menús (sus IDCMP) y teclas de gadgets */
+static int uses_gadgets, needs_gt, gadget_keys;
+static int needs_area;   /* gfx_circle_fill...: la ventana prepara el relleno de áreas al abrirse */
 
 static int find_struct(const char *name)
 {
@@ -937,6 +940,7 @@ static int expr_type(Node *n)
             snprintf(name, sizeof name, "%s.%s", prog->structs.v[ta - TY_STRUCT].name, n->name);
             if (find_func(name, &idx)) return func_ret(idx);
         }
+        if (ta == TY_INT && !strcmp(n->name, "abs")) return TY_INT;
         return TY_VOID;
     }
     return TY_INT;
@@ -960,6 +964,29 @@ static int elem_kind(int t)
    como en ./dash. */
 static int *fret_state;   /* 0 sin calcular, 1 calculando (recursión), 2 hecho */
 
+static int infer_on;   /* infer_params: walk_types mira también las llamadas */
+
+/* Una llamada a una función con parámetros sin tipo: cada uno toma el tipo de lo que se le pasa, si no es un
+   número (Int es lo que ya tiene). Como ./dash, manda la primera llamada. */
+static void infer_calls(Node *e)
+{
+    int i, idx;
+    Func *f;
+    if (!e) return;
+    infer_calls(e->a);
+    infer_calls(e->b);
+    infer_calls(e->c);
+    for (i = 0; i < e->args.n; i++) infer_calls(e->args.v[i]);
+    if (e->kind != E_CALL || !(f = find_func(e->name, &idx)) || e->args.n != f->params.n) return;
+    for (i = 0; i < f->params.n; i++)
+        if (f->params.v[i].untyped) {
+            int t = expr_type(e->args.v[i]);
+            if (t == TY_INT || t == TY_VOID || t == TY_NIL) continue;
+            f->params.v[i].type = t == TY_BOOL || t == TY_CHAR ? TY_INT : t;
+            f->params.v[i].untyped = 0;
+        }
+}
+
 static void walk_types(NodeList *l, int *ret)
 {
     int i;
@@ -967,6 +994,11 @@ static void walk_types(NodeList *l, int *ret)
         Node *st = l->v[i];
         TBind b;
         b.name = st->name;
+        if (infer_on) {
+            infer_calls(st->a);
+            infer_calls(st->b);
+            infer_calls(st->c);
+        }
         switch (st->kind) {
         case S_ASSIGN:
             if (var_type(st->name) == TY_VOID) {
@@ -984,7 +1016,7 @@ static void walk_types(NodeList *l, int *ret)
             break;
         case S_FOREACH:
             b.type = expr_type(st->a);
-            b.type = IS_ARR(b.type) ? b.type - TY_ARR : TY_INT;
+            b.type = IS_ARR(b.type) ? b.type - TY_ARR : b.type == TY_STR ? TY_CHAR : TY_INT;
             VEC_PUSH(tenv, b);
             break;
         case S_RETURN:
@@ -1045,6 +1077,47 @@ static int func_ret(int idx)
     f->ret = r;
     fret_state[idx] = 2;
     return r;
+}
+
+/* Los parámetros sin tipo, de las llamadas: Main y luego cada función con sus parámetros (dos vueltas: un
+   parámetro que se acaba de saber puede pasar a otra función). Lo que devuelven las funciones se calcula
+   después otra vez, ya con los tipos. */
+static void infer_params(Program *p)
+{
+    int pass, i, j, r, *rets = xmalloc(sizeof(int) * (p->funcs.n + 1));
+    for (i = 0; i < p->funcs.n; i++) rets[i] = p->funcs.v[i].ret;
+    infer_on = 1;
+    for (pass = 0; pass < 2; pass++) {
+        int saved_base = tenv_base;
+        tenv_on = 1;
+        tenv_base = tenv.n;
+        r = TY_VOID;
+        walk_types(&p->main, &r);
+        tenv.n = tenv_base;
+        for (i = 0; i < p->funcs.n; i++) {
+            Func *f = &p->funcs.v[i];
+            if (f->native) continue;
+            cur_file_g = f->file;
+            for (j = 0; j < f->params.n; j++) {
+                TBind b;
+                b.name = f->params.v[j].name;
+                b.type = f->params.v[j].type;
+                VEC_PUSH(tenv, b);
+            }
+            r = TY_VOID;
+            walk_types(&f->body, &r);
+            tenv.n = tenv_base;
+        }
+        tenv_base = saved_base;
+        tenv_on = 0;
+    }
+    infer_on = 0;
+    cur_file_g = 0;
+    for (i = 0; i < p->funcs.n; i++) {
+        p->funcs.v[i].ret = rets[i];
+        fret_state[i] = 0;
+    }
+    free(rets);
 }
 
 /* lo que deja un temporal nuevo (no lo que ya es de alguien: un literal, una variable) */
@@ -2747,6 +2820,14 @@ static int gen_expr(Node *n)
         if (IS_ARR(expr_type(n->a))) return gen_list_method(n);
         if (IS_STRUCT(expr_type(n->a))) return gen_method(n, expr_type(n->a));
         if (IS_DICT(expr_type(n->a))) return gen_dict_method(n);
+        if (expr_type(n->a) == TY_INT && !strcmp(n->name, "abs") && !n->args.n) {
+            /* x.abs(): el abs() de C, como ./dash */
+            need_value(n->a, gen_expr(n->a));
+            tst_d0();
+            w(0x6A02);                                 /* bpl.s +2 */
+            w(0x4480);                                 /* neg.l d0 */
+            return TY_INT;
+        }
         fatal_at(n->line, n->col, "dashc (prueba): .%s() aún no está", n->name);
         return TY_VOID;
     case E_VAR:
@@ -3634,6 +3715,85 @@ static void gen_obj_assign(Node *n, int tt)
 
 /* for x in lista: la lista sujeta (_dash_hold) mientras dura el bucle; x es el elemento
    (prestado: no es suyo) */
+/* for c in texto: cada carácter (Char) hasta el 0, como ./dash; el texto de una variable se lee en cada vuelta
+   y, si el cuerpo la cambia, cuenta el largo del principio. Otro texto, una copia suya. */
+static void gen_foreach_str(Node *n)
+{
+    int top = new_label(), cont = new_label(), done = new_label(), src_slot = -1, idx_slot, len_slot = -1;
+    int assigned = n->a->kind == E_VAR && list_assigns(&n->body, n->a->name);
+    MarkScope ms;
+    Loop lp;
+    Var vs, vi, vl, vx;
+    ms = mark_begin();
+    enter_scope();
+    if (n->a->kind == E_VAR) {
+        vs = lookup(n->a->name);
+    } else {
+        value(n->a);
+        push_d0();
+        rt_call("_dl_str_dup", 1, 0);
+        vs = declare_slot("", TY_STR, &src_slot);
+        locals.v[locals.n - 1].owned = 1;              /* al acabar, _dl_str_free */
+        store_d0(&vs);
+    }
+    vi = declare_slot("", TY_INT, &idx_slot);
+    set_imm(&vi, 0);
+    if (assigned) {
+        load_var(0, &vs);
+        push_d0();
+        rt_call("_dl_str_len", 1, 0);
+        vl = declare_slot("", TY_INT, &len_slot);
+        store_d0(&vl);
+    }
+    enter_loop();
+    if (src_slot >= 0) use_slot(src_slot);
+    use_slot(idx_slot);
+    if (len_slot >= 0) use_slot(len_slot);
+    def_label(top);
+    mark_release(&ms);
+    lp.brk = done;
+    lp.cont = cont;
+    enter_scope();
+    lp.depth = depth;
+    lp.sp = sp_depth;
+    VEC_PUSH(loops, lp);
+    use_slot(idx_slot);
+    vi = slot_var(idx_slot, TY_INT);
+    if (assigned) {
+        use_slot(len_slot);
+        vl = slot_var(len_slot, TY_INT);
+        load_var(1, &vl);
+        load_var(0, &vi);
+        w(0xB081);                                     /* cmp.l d1,d0 */
+        branch(CC_GE, done);
+    }
+    if (src_slot >= 0) {
+        use_slot(src_slot);
+        vs = slot_var(src_slot, TY_STR);
+    }
+    load_var(0, &vs);
+    tst_d0();
+    branch(CC_EQ, done);                               /* nil: ninguno */
+    w(0x2040);                                         /* movea.l d0,a0 */
+    load_var(0, &vi);
+    w(0x1030); w(0x0800);                              /* move.b (0,a0,d0.l),d0 */
+    w(0x4880); w(0x48C0);                              /* ext.w d0; ext.l d0 (un char de C) */
+    if (!assigned) branch(CC_EQ, done);                /* el 0 del final */
+    vx = declare(n->name, TY_CHAR);
+    store_d0(&vx);
+    gen_block(&n->body);
+    loops.n--;
+    leave_scope();
+    def_label(cont);
+    use_slot(idx_slot);
+    add_imm_ea(1, &vi);
+    branch(CC_T, top);
+    def_label(done);
+    leave_loop();
+    leave_scope();                                     /* la copia del texto */
+    mark_end(&ms);
+}
+
 static void gen_foreach(Node *n)
 {
     int t = expr_type(n->a), et, top = new_label(), test = new_label(), cont = new_label(), done = new_label();
@@ -3641,6 +3801,10 @@ static void gen_foreach(Node *n)
     MarkScope ms;
     Loop lp;
     Var va, vi, vx;
+    if (t == TY_STR) {
+        gen_foreach_str(n);
+        return;
+    }
     if (!IS_ARR(t)) fatal_at(n->line, n->col, "for ... in pide una lista");
     et = t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
     ms = mark_begin();
@@ -3734,7 +3898,7 @@ static void gen_window_op(Node *n)
     if (wi < 0) fatal_at(n->line, n->col, "la ventana %s no existe", n->name);
     if (n->val) {
         Fixup f;
-        Var v;
+        pea_window(wi);                                /* dl_window_open(descriptor, &variable) */
         w(0x4879);                                     /* pea descriptor */
         f.at = (uint32_t)obj->code.n;
         f.label = win_desc_label[wi];
@@ -3744,10 +3908,11 @@ static void gen_window_op(Node *n)
         add_reloc(f.at, HK_CODE, NULL);
         l(0);
         sp_depth += 4;
-        rt_call("_dl_window_open", 1, 0);
-        v.kind = V_GLOBAL;
-        v.off = (int)win_off[wi];
-        store_d0(&v);
+        rt_call("_dl_window_open", 2, 0);
+        if (needs_area) {
+            /* _dash_init_area(_dash_rp, ancho, alto), como ./dash */
+            jsr_sym("_dl_init_area");
+        }
     } else {
         pea_window(wi);
         rt_call("_dl_window_close", 1, 0);
@@ -3766,6 +3931,12 @@ static void gen_evloop(Node *n)
     if (wi < 0) fatal_at(n->line, n->col, "EventLoop sin ventana abierta antes");
     for (i = 0; i < n->body.n; i++)
         if (n->body.v[i]->val == ON_TIMER) timer = i;
+    if (uses_gadgets) {
+        /* los mensajes con GT_GetIMsg, y el del gadget apuntado (gadget_id) */
+        load_imm(0, gadget_keys);
+        push_d0();
+        rt_call("_dl_event_gt_on", 1, 0);
+    }
     ms = mark_begin();
     enter_loop();
     def_label(top);
@@ -3795,8 +3966,6 @@ static void gen_evloop(Node *n)
         Node *h = n->body.v[i];
         static const long cls[] = {0x200 /* CLOSEWINDOW */, 0x400 /* RAWKEY */, 0x8 /* MOUSEBUTTONS */, -1, 0x40, 0x100};
         int next = new_label(), skip = new_label();
-        if (h->val == ON_GADGET || h->val == ON_MENU)
-            fatal_at(h->line, h->col, "dashc (prueba): On Gadget y On Menu aún no están");
         /* la clase está en d0 hasta aquí: cada On la compara y, si no es la suya, salta al siguiente */
         if (cls[h->val] >= -128 && cls[h->val] <= 127) {
             w(0x7200 | (cls[h->val] & 0xFF));          /* moveq #clase,d1 */
@@ -3844,14 +4013,25 @@ static void gen_evloop(Node *n)
         {
             /* el cuerpo: un bloque; un break o continue suelto acaba este mensaje (como en el switch
                de ./dash); Stop sale del EventLoop */
+            int mtop = new_label();
+            if (h->val == ON_MENU) {
+                /* una vez por cada opción elegida (menu_id dice cuál) */
+                jsr_sym("_dl_menu_begin");
+                def_label(mtop);
+                jsr_sym("_dl_menu_next");
+                tst_d0();
+                branch(CC_EQ, skip);
+            }
             enter_scope();
-            lp.brk = lp.cont = skip;
+            lp.brk = skip;
+            lp.cont = h->val == ON_MENU ? mtop : skip;
             lp.depth = depth;
             lp.sp = sp_depth;
             VEC_PUSH(loops, lp);
             gen_block(&h->body);
             loops.n--;
             leave_scope();
+            if (h->val == ON_MENU) branch(CC_T, mtop);
         }
         def_label(skip);
         pop_d0();                                      /* la clase otra vez */
@@ -4403,6 +4583,21 @@ static void find_uses_expr(Node *n)
     int i;
     if (!n) return;
     if (n->kind == E_CALL && !strncmp(n->name, "key_", 4)) uses_keys = 1;
+    if (n->kind == E_CALL && !find_func(n->name, NULL)) {
+        static const char *gad[] = {"button_", "checkbox_", "slider_", "textfield_", "listview_", "gadget_",
+                                    "cycle_", "radio_", "integer_", "palette_", "number_", NULL};
+        for (i = 0; gad[i]; i++)
+            if (!strncmp(n->name, gad[i], strlen(gad[i]))) uses_gadgets = needs_gt = 1;
+        if (!strncmp(n->name, "gt_", 3) || !strncmp(n->name, "menu_", 5)) needs_gt = 1;
+        if (!strcmp(n->name, "gfx_ellipse_fill") || !strcmp(n->name, "gfx_circle_fill") ||
+            !strncmp(n->name, "gfx_poly_", 9))
+            needs_area = 1;
+        /* button_create(..., "_Vale"): la tecla del gadget */
+        if ((!strcmp(n->name, "button_create") || !strcmp(n->name, "checkbox_create")))
+            for (i = 0; i < n->args.n; i++)
+                if (n->args.v[i]->kind == E_STR && memchr(n->args.v[i]->str, '_', n->args.v[i]->len))
+                    gadget_keys = uses_keys = 1;
+    }
     find_uses_expr(n->a);
     find_uses_expr(n->b);
     find_uses_expr(n->c);
@@ -4416,6 +4611,8 @@ static void find_uses(NodeList *l)
         Node *n = l->v[i];
         if (n->kind == S_ON && n->val == ON_KEY) uses_keys = 1;
         if (n->kind == S_ON && n->val == ON_CLICK) uses_click = 1;
+        if (n->kind == S_ON && n->val == ON_GADGET) uses_gadgets = needs_gt = 1;
+        if (n->kind == S_ON && n->val == ON_MENU) needs_gt = 1;
         find_uses_expr(n->a);
         find_uses_expr(n->b);
         find_uses(&n->body);
@@ -4459,7 +4656,8 @@ static void gen_window_descs(void)
         l((uint32_t)width);
         l((uint32_t)height);
         l((uint32_t)flags);
-        l(0x200 | (uses_keys ? 0x400 : 0) | (uses_click ? 0x8 : 0));   /* CLOSEWINDOW, RAWKEY, MOUSEBUTTONS */
+        l(0x200 | (uses_keys ? 0x400 : 0) | (uses_click ? 0x8 : 0) |   /* CLOSEWINDOW, RAWKEY, MOUSEBUTTONS */
+          (needs_gt ? 0x174 : 0));   /* GADGETUP, GADGETDOWN, MOUSEMOVE, MENUPICK, REFRESHWINDOW */
     }
 }
 
@@ -4481,11 +4679,42 @@ static int resolve_type(int t, int line, int col)
     return t + d * TY_ARR;
 }
 
+/* Una constante que no es un número fijo (un texto, un Float): su valor en cada sitio donde se usa */
+static void subst_consts(Node **pe)
+{
+    Node *e = *pe;
+    int i;
+    long k;
+    if (!e) return;
+    if (e->kind == E_VAR) {
+        for (i = 0; i < prog->globals.n; i++)
+            if (!strcmp(prog->globals.v[i].name, e->name)) return;
+        for (i = 0; i < prog->consts.n; i++)
+            if (!strcmp(prog->consts.v[i].name, e->name)) {
+                Node *v = prog->consts.v[i].value;
+                if (v->kind == E_FLOAT || !fold(v, &k)) {
+                    subst_consts(&prog->consts.v[i].value);
+                    *pe = prog->consts.v[i].value;
+                }
+                return;
+            }
+        return;
+    }
+    subst_consts(&e->a);
+    subst_consts(&e->b);
+    subst_consts(&e->c);
+    for (i = 0; i < e->args.n; i++) subst_consts(&e->args.v[i]);
+}
+
 static void resolve_list(NodeList *l)
 {
     int i;
     for (i = 0; i < l->n; i++) {
         Node *n = l->v[i];
+        subst_consts(&n->a);
+        subst_consts(&n->b);
+        subst_consts(&n->c);
+        for (int j = 0; j < n->args.n; j++) subst_consts(&n->args.v[j]);
         if (n->kind == S_VAR) n->type = resolve_type(n->type, n->line, n->col);
         resolve_list(&n->body);
         resolve_list(&n->els);
@@ -4572,8 +4801,10 @@ void gen_program(Program *p, Obj *o)
             st->fields.v[j].type = resolve_type(st->fields.v[j].type, st->fields.v[j].line, st->fields.v[j].col);
         desc_label[i] = new_label();
     }
-    for (i = 0; i < p->globals.n; i++)
+    for (i = 0; i < p->globals.n; i++) {
         p->globals.v[i].type = resolve_type(p->globals.v[i].type, p->globals.v[i].line, p->globals.v[i].col);
+        subst_consts(&p->globals.v[i].init);
+    }
     for (i = 0; i < p->funcs.n; i++) {
         Func *f = &p->funcs.v[i];
         int j;
@@ -4611,6 +4842,7 @@ void gen_program(Program *p, Obj *o)
     /* lo que devuelve cada función */
     fret_state = xmalloc(sizeof(int) * (p->funcs.n + 1));
     memset(fret_state, 0, sizeof(int) * (p->funcs.n + 1));
+    infer_params(p);
     for (i = 0; i < p->funcs.n; i++) func_ret(i);
 
     /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */

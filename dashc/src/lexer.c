@@ -98,7 +98,37 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
             case 'r': buf_byte(&b, '\r'); break;
             case '\\': buf_byte(&b, '\\'); break;
             case '"': buf_byte(&b, '"'); break;
-            default: fatal_at(line, col, "escape \\%c no admitido", *s);
+            case '\'': buf_byte(&b, '\''); break;
+            case 'a': buf_byte(&b, 7); break;
+            case 'b': buf_byte(&b, 8); break;
+            case 'e': buf_byte(&b, 27); break;
+            case 'f': buf_byte(&b, 12); break;
+            case 'v': buf_byte(&b, 11); break;
+            case 'x': {
+                /* \x1b: hexadecimal, como en C (el texto va tal cual al C de ./dash) */
+                int v = 0, k = 0;
+                while (k < 2 && isxdigit((unsigned char)s[1])) {
+                    s++;
+                    v = v * 16 + (isdigit((unsigned char)*s) ? *s - '0' : (tolower((unsigned char)*s) - 'a' + 10));
+                    k++;
+                }
+                if (!k) fatal_at(line, col, "\\x sin cifras");
+                buf_byte(&b, v);
+                break;
+            }
+            default:
+                if (*s >= '0' && *s <= '7') {
+                    /* \33, \0: octal, hasta tres cifras */
+                    int v = *s - '0', k = 1;
+                    while (k < 3 && s[1] >= '0' && s[1] <= '7') {
+                        s++;
+                        v = v * 8 + (*s - '0');
+                        k++;
+                    }
+                    buf_byte(&b, v & 255);
+                    break;
+                }
+                fatal_at(line, col, "escape \\%c no admitido", *s);
             }
             s++;
             continue;

@@ -117,3 +117,28 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   reparto por clase en 68000. Las ventanas abiertas se cierran al salir (puntero débil). Builtins `gfx_*` y los de
   `needs_gfx` (sin pantallas, bitmaps ni fuentes). Test `ventana` (se para sola con On Timer). Cobertura: 64 de 64
   en el A1200 antes de esto. Falta: On Gadget, On Menu, GadTools, MUI, ReAction, pantallas, `.dashui`.
+- Cobertura con ventanas: compila 111 de 309 (35 %); en el A1200, 67 de 67 iguales. Lo que más falla: `@header`
+  y `@c` (47, C), `mui_app_begin` (15), `screen_open` (8), tipos aún no admitidos (7), `.dashui` (6),
+  `image_from_rgb` (5).
+- D6 (2.ª parte): GadTools. Builtins de gadgets (`button_create`...), `gt_*`, `menu_*`, pantallas, bitmaps,
+  imágenes, fuentes, sprites, bobs y copper en el runtime. `On Gadget` (la espera con GT_GetIMsg y el gadget del
+  mensaje apuntado, `dl_event_gt_on`; las teclas de los gadgets "_Vale") y `On Menu` (una vez por opción elegida,
+  `dl_menu_next`); los IDCMP de gadgets y menús al abrir la ventana. `x.abs()` de Int. De libnix y amiga.lib,
+  en `runtime/rt_libs.s`: `LayersBase`, `UtilityBase` (cada base con su apertura, por puntero débil) y
+  `DoMethod`; gadtools.library se abre igual (`dl_gt_open`). Test `gadgets` (input_click y Amiga + Q).
+- D2, tamaño (con lo de arriba, que lo hacía crecer):
+  - Fallo arreglado: las limpiezas de los runtimes (`_dash_lt_cleanup` del temporizador, fuentes, imágenes, red,
+    gadgets...) no entraban nunca: solo las apuntaba un puntero débil. Ahora hunk.c mete la de un puntero débil
+    si toca datos que el programa usa y que no son del arranque (ni `_dash_win`/`_dash_rp`), hasta que no entre
+    ninguna más.
+  - Los textos constantes del runtime (2,5 KB en un `.text` sin trocear) se parten en un hunk por texto
+    (`split_strings`): cada programa lleva solo los suyos.
+  - Las llamadas débiles de `_dash_exit_cleanup`, en una tabla con un bucle (de 576 bytes a unos 250).
+  - aritmetica: 7.076 → 4.808 bytes (gcc 7.464); ventana 10.756 → 8.912; listas 16.516 → 15.040.
+- D6 (3.ª parte) y D3: ventanas por número (`window_create`, `close_window`, `event_window`: el EventLoop
+  escucha también esas ventanas, por puntero débil; `dl_window_open` recibe la variable de la ventana para
+  dejarla a nil al cerrarla de otra forma), ASL (`file_open_dialog`...), audio (`sound_*`, `music_*`, con
+  `BeginIO` de amiga.lib), relleno de áreas (`gfx_circle_fill`...: `dl_init_area` al abrir) y RTG.
+  `malloc`/`free` (zlib) en un pool que se borra al salir. Núcleo: parámetros sin tipo deducidos de la primera
+  llamada (`infer_params`), `for c in texto`, constantes de texto y Float, `var x: Tipo` sin valor (0 o nil),
+  escapes de C en los textos (`\33`, `\x1b`, `\e`...). Compilan 159 de 309 (antes 111).

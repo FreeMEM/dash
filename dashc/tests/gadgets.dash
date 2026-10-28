@@ -1,0 +1,47 @@
+# GadTools: gadgets por número con On Gadget y menús con On Menu. input_* clica el botón y la casilla
+# y elige "Salir" con Amiga + Q, como un usuario.
+
+Window W
+    title "Gadgets"
+    width 300
+    height 120
+end
+
+Main
+    W.open
+    b = button_create(0, 10, 10, 80, 14, "OK")
+    c = checkbox_create(0, 10, 30, "Activo")
+    gt_init()
+    menu_title("Proyecto")
+    menu_item("Abrir", "A", 1)
+    menu_item("Salir", "Q", 2)
+    menu_attach()
+    Print b
+    Print c
+    input_click(54, 28, 0)
+    input_click(28, 47, 0)
+    input_key(16, 8)
+    n = 0
+    EventLoop
+        On Gadget
+            g = gadget_id()
+            n = n + 1
+            if g == b
+                Print "botón #{n}"
+            end
+            if g == c
+                Print "casilla " + checkbox_get(c)
+            end
+        end
+        On Menu
+            Print "menú #{menu_id()}"
+            if menu_id() == 2
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    Print "fin"
+end

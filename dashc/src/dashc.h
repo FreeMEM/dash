@@ -131,6 +131,7 @@ struct Node {
 typedef struct {
     char *name;
     int type;
+    int untyped;     /* sin ": Tipo": el de lo que se le pasa en la primera llamada (Int si es un número) */
 } Param;
 
 typedef struct {

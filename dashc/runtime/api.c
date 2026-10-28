@@ -19,6 +19,62 @@ static struct EClockVal bench_t0;
 static ULONG bench_freq;
 
 void (*_dash_weak_dash_time_init)(void) = _dash_time_init;
+/* GadTools, como ./dash la abre al empezar y la cierra al acabar: solo si el programa la usa (lo que
+   toca GadToolsBase entra con ella, ver hunk.c) */
+static void dl_gt_open(void)
+{
+    if (!(GadToolsBase = OpenLibrary((CONST_STRPTR)"gadtools.library", 37))) _dash_quit(10);
+}
+void (*_dash_weak_dl_gt_open)(void) = dl_gt_open;
+
+static void dl_gt_fin(void)
+{
+    if (GadToolsBase) {
+        _dash_gt_cleanup();
+        CloseLibrary(GadToolsBase);
+        GadToolsBase = NULL;
+    }
+}
+
+/* ASL, que el runtime abre al usarla */
+static void dl_asl_fin(void)
+{
+    if (AslBase) {
+        _dash_asl_cleanup();
+        CloseLibrary(AslBase);
+        AslBase = NULL;
+    }
+}
+
+/* malloc y free para el C de dentro (zlib...): de un pool de exec que se borra al acabar, como el malloc
+   de libnix */
+static APTR dl_malloc_pool;
+void *malloc(size_t n)
+{
+    ULONG *p;
+    if (!dl_malloc_pool && !(dl_malloc_pool = CreatePool(MEMF_ANY, 16384, 4096))) return NULL;
+    if (!(p = AllocPooled(dl_malloc_pool, n + 4))) return NULL;
+    *p = n + 4;
+    return p + 1;
+}
+
+void free(void *x)
+{
+    if (x) {
+        ULONG *p = (ULONG *)x - 1;
+        FreePooled(dl_malloc_pool, p, *p);
+    }
+}
+
+static void dl_malloc_fin(void)
+{
+    if (dl_malloc_pool) DeletePool(dl_malloc_pool);
+    dl_malloc_pool = NULL;
+}
+void (*_dash_weak_dl_malloc_fin)(void) = dl_malloc_fin;
+
+/* las librerías que libnix abre sola, solo si el programa las usa (runtime/rt_libs.s) */
+extern void (*_dash_weak_lib_layers)(LONG), (*_dash_weak_lib_utility)(LONG);
 
 /* 68020 o mejor: rt_math.s usa divs.l y muls.l (como utility.library con gcc) */
 UBYTE _dash_cpu020;
@@ -80,6 +136,9 @@ LONG _dash_init(const char *cmd, LONG len)
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 37);
+    if (_dash_weak_lib_layers) _dash_weak_lib_layers(1);
+    if (_dash_weak_dl_gt_open) _dash_weak_dl_gt_open();
+    if (_dash_weak_lib_utility) _dash_weak_lib_utility(1);
     if (!IntuitionBase || !DOSBase) {
         _dash_exit_cleanup();
         return 10;
@@ -108,6 +167,9 @@ void _dash_finish(void)
     _dash_exit_cleanup();
     _dash_atexit_run();
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
+    if (_dash_weak_lib_layers) _dash_weak_lib_layers(0);
+    if (_dash_weak_lib_utility) _dash_weak_lib_utility(0);
+    if (_dash_weak_dl_malloc_fin) _dash_weak_dl_malloc_fin();
     if (dash_cmdline) FreeVec(dash_cmdline);
     if (_WBenchMsg) {
         if (dash_old_dir) CurrentDir(dash_old_dir);
@@ -191,7 +253,11 @@ struct DashWinDesc { STRPTR title; LONG left, top, width, height, flags, idcmp; 
 /* las abiertas, para cerrarlas al salir de cualquier forma (./dash las cierra en _dash_exit_cleanup) */
 static struct Window *dl_open_wins[16];
 
-LONG dl_window_open(const struct DashWinDesc *d)
+/* las variables de las ventanas abiertas (al cerrarlas de otra forma, close_window, quedan a nil) */
+static struct Window **dl_win_vars[16];
+
+/* Abre la ventana y la deja en su variable (pvar) */
+LONG dl_window_open(const struct DashWinDesc *d, struct Window **pvar)
 {
     int i;
     struct Window *w = OpenWindowTags(NULL,
@@ -216,25 +282,63 @@ LONG dl_window_open(const struct DashWinDesc *d)
     for (i = 0; i < 16; i++)
         if (!dl_open_wins[i]) {
             dl_open_wins[i] = w;
+            dl_win_vars[i] = pvar;
             break;
         }
+    *pvar = w;
     return (LONG)w;
 }
 
-void dl_window_close(struct Window **pw);
-static void dl_close_window_p(struct Window **pw) { dl_window_close(pw); }
+/* gfx_circle_fill y compañía: el relleno de áreas de la ventana recién abierta, del tamaño de la ventana */
+void dl_init_area(void)
+{
+    _dash_init_area(_dash_rp, _dash_win->Width, _dash_win->Height);
+}
+
+/* Las ventanas de window_create (_dash_windows): solo si el programa las usa (punteros débiles; lo que toca
+   _dash_windows entra con ellas, ver hunk.c) */
+static void dl_forget(struct Window *w)
+{
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++)
+        if (_dash_windows[i] == w) _dash_windows[i] = NULL;
+}
+void (*_dash_weak_dl_forget)(struct Window *) = dl_forget;
+
+/* una ventana se cierra: fuera de la lista, su variable a nil */
+static void _dash_window_closed(struct Window *w)
+{
+    int i;
+    for (i = 0; i < 16; i++)
+        if (dl_open_wins[i] == w) {
+            dl_open_wins[i] = NULL;
+            if (dl_win_vars[i]) *dl_win_vars[i] = NULL;
+        }
+    if (_dash_weak_dl_forget) _dash_weak_dl_forget(w);
+    if (_dash_win == w) {
+        _dash_win = NULL;
+        _dash_rp = NULL;
+    }
+}
 
 void dl_window_close(struct Window **pw)
 {
     struct Window *w = *pw;
-    int i;
     if (!w) return;
-    for (i = 0; i < 16; i++)
-        if (dl_open_wins[i] == w) dl_open_wins[i] = NULL;
-    if (_dash_win == w) _dash_win = NULL;
+    _dash_window_closed(w);
     _dash_before_close(w);
     CloseWindow(w);
     *pw = NULL;
+}
+
+/* close_window(): la ventana actual */
+static void _dash_close_window(void)
+{
+    struct Window *w = _dash_win;
+    if (!w) return;
+    _dash_window_closed(w);
+    _dash_before_close(w);
+    CloseWindow(w);
 }
 
 static UWORD dl_ev_code;
@@ -246,16 +350,64 @@ static void dl_close_windows(void)
     for (i = 0; i < 16; i++)
         if (dl_open_wins[i]) {
             struct Window *w = dl_open_wins[i];
-            dl_close_window_p(&w);
+            dl_window_close(&w);
         }
 }
 LONG dl_key_char(LONG c) { return _dash_last_key_text[0] == (UBYTE)c && _dash_last_key_text[1] == 0; }
+
+/* De dónde vino el último mensaje (event_window(): el número de una ventana de window_create, 0 la del
+   EventLoop) */
+static struct Window *dl_ev_win, *dl_ev_main;
+static LONG _dash_event_window_handle(void)
+{
+    LONG i;
+    if (!dl_ev_win || dl_ev_win == dl_ev_main) return 0;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++)
+        if (_dash_windows[i] == dl_ev_win) return i;
+    return 0;
+}
+
+/* El EventLoop escucha también las ventanas de window_create, como ./dash (_dash_loop_next): con pm, el mensaje
+   de una de ellas (1 si hay); sin él, la máscara de sus señales. Solo si el programa usa window_create. */
+static ULONG dl_others(struct Window *main, struct IntuiMessage **pm, struct IntuiMessage *(*gm)(struct MsgPort *))
+{
+    ULONG mask = 0;
+    LONG i;
+    for (i = 1; i <= _DASH_MAX_WINDOWS; i++) {
+        struct Window *w = _dash_windows[i];
+        if (!w || w == main || !w->UserPort) continue;
+        if (!pm) mask |= 1UL << w->UserPort->mp_SigBit;
+        else if ((*pm = gm(w->UserPort)) != NULL) return 1;
+    }
+    return mask;
+}
+ULONG (*_dash_weak_dl_others)(struct Window *, struct IntuiMessage **, struct IntuiMessage *(*)(struct MsgPort *)) =
+    dl_others;
+
+static struct IntuiMessage *dl_get_plain(struct MsgPort *p) { return (struct IntuiMessage *)GetMsg(p); }
+
+static struct IntuiMessage *dl_fetch(struct Window *main, struct IntuiMessage *(*gm)(struct MsgPort *))
+{
+    struct IntuiMessage *m = gm(main->UserPort);
+    dl_ev_main = main;
+    if (!m && _dash_weak_dl_others) _dash_weak_dl_others(main, &m, gm);
+    if (m) dl_ev_win = m->IDCMPWindow;
+    return m;
+}
+
+/* las señales que despiertan al EventLoop */
+static ULONG dl_wait_mask(struct Window *w)
+{
+    ULONG m = 1UL << w->UserPort->mp_SigBit;
+    if (_dash_weak_dl_others) m |= _dash_weak_dl_others(w, NULL, NULL);
+    return m;
+}
 
 /* El siguiente mensaje de la ventana: su clase (0 si la ventana ya no está). Antes de devolverlo
    apunta la tecla (_dash_key_record) o el clic, como el EventLoop de ./dash. */
 static LONG dl_event_take(struct Window *w)
 {
-    struct IntuiMessage *msg = (struct IntuiMessage *)GetMsg(w->UserPort);
+    struct IntuiMessage *msg = dl_fetch(w, dl_get_plain);
     ULONG cls;
     if (!msg) return 0;
     cls = msg->Class;
@@ -268,14 +420,72 @@ static LONG dl_event_take(struct Window *w)
     ReplyMsg((struct Message *)msg);
     return (LONG)cls;
 }
+static LONG (*dl_take)(struct Window *) = dl_event_take;
+
+/* Con gadgets de GadTools (On Gadget, button_create...): GT_GetIMsg, y el gadget del mensaje apuntado antes
+   de devolverlo (gadget_id); la clase de un mensaje de gadget pasa a GADGETUP (On Gadget) y la de otro
+   GADGETDOWN o MOUSEMOVE a MOUSEMOVE (ningún On). keys: las teclas de los gadgets ("_Vale") como un clic. */
+static LONG dl_gt_keys;
+static struct IntuiMessage *dl_get_gt(struct MsgPort *p) { return GT_GetIMsg(p); }
+
+static LONG dl_event_take_gt(struct Window *w)
+{
+    struct IntuiMessage *msg = dl_fetch(w, dl_get_gt);
+    ULONG cls;
+    LONG gev;
+    if (!msg) return 0;
+    cls = msg->Class;
+    dl_ev_code = msg->Code;
+    if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
+    if (cls == IDCMP_MOUSEBUTTONS) {
+        _dash_click_x = msg->MouseX - msg->IDCMPWindow->BorderLeft;
+        _dash_click_y = msg->MouseY - msg->IDCMPWindow->BorderTop;
+    }
+    gev = _dash_gadget_event(msg);
+    if (!gev && dl_gt_keys && cls == IDCMP_RAWKEY && (gev = _dash_gadget_key(msg))) cls = IDCMP_GADGETUP;
+    if (cls == IDCMP_REFRESHWINDOW) {
+        GT_BeginRefresh(msg->IDCMPWindow);
+        GT_EndRefresh(msg->IDCMPWindow, TRUE);
+    }
+    GT_ReplyIMsg(msg);
+    if (cls == IDCMP_GADGETUP || cls == IDCMP_GADGETDOWN || cls == IDCMP_MOUSEMOVE)
+        cls = gev ? IDCMP_GADGETUP : IDCMP_MOUSEMOVE;
+    return (LONG)cls;
+}
+
+void dl_event_gt_on(LONG keys)
+{
+    dl_take = dl_event_take_gt;
+    dl_gt_keys = keys;
+}
+
+/* On Menu: su cuerpo, una vez por cada opción de una selección múltiple (dl_menu_next da 0 al acabar) */
+static UWORD dl_mc;
+static LONG dl_mguard;
+void dl_menu_begin(void)
+{
+    dl_mc = dl_ev_code;
+    dl_mguard = 64;
+}
+
+LONG dl_menu_next(void)
+{
+    struct MenuItem *mi;
+    if (dl_mc == MENUNULL || !_dash_menu || !dl_mguard--) return 0;
+    mi = ItemAddress(_dash_menu, dl_mc);
+    if (!mi) return 0;
+    _dash_menu_last = (LONG)GTMENUITEM_USERDATA(mi);
+    dl_mc = mi->NextSelect;
+    return 1;
+}
 
 LONG dl_event_next(struct Window **pw)
 {
     for (;;) {
         LONG cls;
         if (!*pw) return 0;
-        if ((cls = dl_event_take(*pw)) != 0) return cls;
-        WaitPort((*pw)->UserPort);
+        if ((cls = dl_take(*pw)) != 0) return cls;
+        Wait(dl_wait_mask(*pw));
     }
 }
 
@@ -285,9 +495,9 @@ LONG dl_event_next_timer(struct Window **pw, LONG ms)
     for (;;) {
         LONG cls;
         if (!*pw) return 0;
-        if ((cls = dl_event_take(*pw)) != 0) return cls;
+        if ((cls = dl_take(*pw)) != 0) return cls;
         _dash_lt_send(ms);
-        Wait((1UL << (*pw)->UserPort->mp_SigBit) | _dash_lt_signal());
+        Wait(dl_wait_mask(*pw) | _dash_lt_signal());
         if (_dash_lt_fired()) return -1;
     }
 }

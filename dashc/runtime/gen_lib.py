@@ -69,15 +69,35 @@ def main():
     m = re.search(r"static void _dash_exit_cleanup\(void\) \{\n(.*?)\n\}\n", text, re.S)
     assert m, "gen_lib: no encuentro _dash_exit_cleanup"
     body, weak = m.group(1), []
-    def weaken(mm):
-        name = mm.group(2)
-        if name == "_dash_mem_cleanup":
-            return mm.group(0)
-        if name not in weak:
-            weak.append(name)
-        return f"{mm.group(1)}if (_dash_weak{name}) _dash_weak{name}();"
-    body = re.sub(r"^(\s*)(_dash_\w+)\(\);", weaken, body, flags=re.M)
-    decls = "".join(f"static void {n}(void);\nvoid (*_dash_weak{n})(void) = {n};\n" for n in weak)
+    # GadTools y la pantalla: también por puntero débil (dl_gt_fin de api.c cierra además la librería)
+    for a, b in (("    if (GadToolsBase) _dash_gt_cleanup();\n", "    dl_gt_fin();\n"),
+                 ("    if (GfxBase) _dash_close_screen();\n", "    _dash_close_screen();\n"),
+                 ("    if (GadToolsBase) { CloseLibrary(GadToolsBase); GadToolsBase = NULL; }\n", "")):
+        assert a in body + "\n", a
+        body = (body + "\n").replace(a, b)[:-1]
+    # ASL (si el runtime de diálogos va dentro), igual
+    body = body.replace("    if (AslBase) { _dash_asl_cleanup(); CloseLibrary(AslBase); AslBase = NULL; }",
+                        "    dl_asl_fin();")
+    # Las llamadas seguidas, en una tabla de punteros débiles que recorre un bucle (cada "if (p) p();" son
+    # 12 bytes en cada programa; un puntero, 4)
+    lines_, decls, group = [], [], []
+    def flush():
+        if not group:
+            return
+        t = f"_dash_weak_cleanups{len(decls)}"
+        decls.append("".join(f"static void {n}(void);\n" for n in group) +
+                     f"void (*{t}[{len(group)}])(void) = {{{', '.join(group)}}};\n")
+        lines_.append(f"    {{ int i; for (i = 0; i < {len(group)}; i++) if ({t}[i]) {t}[i](); }}")
+        group.clear()
+    for ln in body.split("\n"):
+        mm = re.match(r"^\s*((?:_dash|dl)_\w+)\(\);$", ln)
+        if mm and mm.group(1) != "_dash_mem_cleanup":
+            group.append(mm.group(1))
+        else:
+            flush()
+            lines_.append(ln)
+    flush()
+    body, decls = "\n".join(lines_), "".join(decls)
     text = text[:m.start()] + decls + "static void _dash_exit_cleanup(void) {\n" + body + "\n}\n" + text[m.end():]
     # El ensamblador suelto de cada runtime (excepciones, medida de CPU...) a su propia sección, como las
     # funciones: si no, todo junto va en el mismo hunk y entra entero en cada programa
@@ -96,7 +116,9 @@ def main():
     assert m, "gen_lib: no encuentro main"
     a = m.start()
     text = text[:a]
-    out.write_text("/* Generado por runtime/gen_lib.py a partir del C de ./dash: no editar */\n" + text +
+    # las teclas de los gadgets ("_Vale"): dl_event_gt_on(1) las mira
+    out.write_text("/* Generado por runtime/gen_lib.py a partir del C de ./dash: no editar */\n"
+                   "#define _DASH_GADGET_KEYS\n" + text +
                    '\n#include "api.c"\n' + natives() + builtin_wrappers(), encoding="latin-1")
 
 
@@ -107,10 +129,8 @@ NATIVE = re.compile(r'^@native func (\w+)\((.*?)\)\s*(?:->\s*(\w+))?\s*\n"""\n(.
 
 
 # Los builtins que van en la librería: aún sin ventanas ni gráficos (D6) ni Double (D4)
-GUI = ("mui_", "ra_", "gt_", "window_", "menu_", "screen_", "rtg_", "sprite_", "bob_", "bitmap_",
-       "copper_", "image_", "font_", "desktop_", "listview_", "check_", "soft_", "mouse_", "joy_", "key_",
-       "sound_", "music_", "usb_", "wifi_")
-LIB_FLAGS = ("needs_gadtools", "needs_reaction", "needs_rtg", "needs_audio", "needs_area", "needs_asl")
+GUI = ("mui_", "ra_", "usb_", "wifi_")
+LIB_FLAGS = ("needs_reaction",)
 
 
 def builtins():
@@ -121,7 +141,7 @@ def builtins():
         if isinstance(v, dict):
             for n, b in v.items():
                 if (isinstance(b, ab.BuiltinFunc) and not any(getattr(b, f) for f in LIB_FLAGS) and
-                        not n.startswith(GUI) and "window" not in n and "_dash_win" not in b.c_template and
+                        not n.startswith(GUI) and
                         b.return_type != "double" and "double" not in b.c_template):
                     out[n] = b
     return out
@@ -146,7 +166,8 @@ def builtin_wrappers():
 
 
 # no compilan como envoltorio (se miran uno a uno)
-SKIP = set()
+# (de Double: D4)
+SKIP = {"is_inf", "is_nan"}
 
 
 def natives():

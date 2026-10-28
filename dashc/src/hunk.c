@@ -19,6 +19,8 @@ typedef struct {
     uint32_t memflags;   /* bits 30-31: memoria chip o fast */
     uint32_t size;       /* en bytes, múltiplo de 4 */
     uint8_t *data;       /* NULL en BSS */
+    const char *secname; /* su sección (HUNK_NAME), para DASHC_MAPA */
+    int align2;          /* un texto constante suelto: basta con alinearlo a 2 (split_strings) */
     struct { HReloc *v; int n, cap; } relocs;
 } Hunk;
 
@@ -63,6 +65,7 @@ static Sym *find_sym(const char *name)
 static void read_object(const uint8_t *p, size_t len)
 {
     int base = 0, cur = -1;
+    char *pending_name = NULL;
     rp = p;
     rend = p + len;
     while (rp < rend) {
@@ -76,6 +79,7 @@ static void read_object(const uint8_t *p, size_t len)
             break;
         case HUNK_NAME:
             n = rd();
+            pending_name = xstrndup((const char *)rp, n * 4);
             rp += n * 4;
             break;
         case HUNK_CODE:
@@ -86,6 +90,8 @@ static void read_object(const uint8_t *p, size_t len)
             h.type = (int)type;
             h.memflags = raw & 0xC0000000;
             h.size = n * 4;
+            h.secname = pending_name;
+            pending_name = NULL;
             if (type != HUNK_BSS) {
                 h.data = xmalloc(h.size);
                 if (rp + h.size > rend) fatal("runtime: objeto Hunk cortado");
@@ -209,6 +215,145 @@ static Hunk own_hunk(int type, Buf *b)
     return h;
 }
 
+/* Desde los hunks de la pila, marca en keep los que alcanzan sus reubicaciones (atando antes los
+   símbolos de cada uno); lo que apunta un hunk débil no cuenta */
+static void reach(int *keep, int *stack, int sp, const int *weak)
+{
+    int j;
+    while (sp) {
+        int cur = stack[--sp];
+        Hunk *h = &hunks.v[cur];
+        for (j = 0; j < refs.n; j++)
+            if (refs.v[j].hunk == cur) {
+                bind(cur, refs.v[j].off, refs.v[j].name);
+                refs.v[j].hunk = -1;               /* ya está */
+            }
+        if (weak[cur]) continue;
+        for (j = 0; j < h->relocs.n; j++)
+            if (!keep[h->relocs.v[j].target]) {
+                keep[h->relocs.v[j].target] = 1;
+                stack[sp++] = h->relocs.v[j].target;
+            }
+    }
+}
+
+/* la ventana y el RastPort de dibujo actuales: los usan casi todos los runtimes de ventanas y gráficos
+   (que sus limpiezas los toquen no dice que el programa use esos runtimes) */
+static int shared_data(int d)
+{
+    int k;
+    for (k = 0; k < syms.n; k++)
+        if (syms.v[k].hunk == d && (!strcmp(syms.v[k].name, "__dash_win") || !strcmp(syms.v[k].name, "__dash_rp")))
+            return 1;
+    return 0;
+}
+
+/* ¿usa el hunk t datos o BSS que van en el programa y no son del arranque? (sus reubicaciones y sus
+   símbolos aún sin atar) */
+static int touches_own_data(int t, const int *keep, const int *core)
+{
+    int j, d;
+    Hunk *h = &hunks.v[t];
+    for (j = 0; j < h->relocs.n + refs.n; j++) {
+        if (j < h->relocs.n) {
+            d = h->relocs.v[j].target;
+        } else {
+            Sym *s;
+            if (refs.v[j - h->relocs.n].hunk != t) continue;
+            s = find_sym(refs.v[j - h->relocs.n].name);
+            if (!s || s->abs) continue;
+            d = s->hunk;
+        }
+        if (keep[d] && !core[d] && hunks.v[d].type != HUNK_CODE && !shared_data(d)) {
+            if (getenv("DASHC_MAPA")) {
+                const char *a = hunks.v[t].secname, *b = hunks.v[d].secname;
+                int k;
+                for (k = 0; k < syms.n; k++)
+                    if (syms.v[k].hunk == d) b = syms.v[k].name;
+                fprintf(stderr, "limpieza %s por %s\n", a ? a : "?", b ? b : "?");
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int cmp_u32(const void *a, const void *b)
+{
+    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+    return x < y ? -1 : x > y;
+}
+
+/* Los textos constantes de un objeto de C (gcc de Amiga los deja en su .text, sin trocear aunque las funciones
+   vayan cada una en su sección): un hunk .text sin símbolos ni reubicaciones propias se parte en un hunk por
+   texto al que se llega, para que cada programa lleve solo los suyos. Cada trozo empieza tras el 0 del texto
+   anterior (una referencia al medio de un texto se queda con el texto entero). */
+static void split_strings(int first)
+{
+    int i, j, k, n0 = hunks.n;
+    for (i = first; i < n0; i++) {
+        Hunk *h = &hunks.v[i];
+        uint32_t *starts = NULL;
+        int ns = 0, bad = 0;
+        if (h->type != HUNK_CODE || !h->secname || strcmp(h->secname, ".text") || h->relocs.n || !h->data) continue;
+        for (j = 0; j < syms.n && !bad; j++) bad = syms.v[j].hunk == i && !syms.v[j].abs;
+        for (j = 0; j < refs.n && !bad; j++) bad = refs.v[j].hunk == i;
+        /* dónde empiezan los textos a los que se llega */
+        starts = xmalloc(sizeof(uint32_t));
+        starts[ns++] = 0;
+        for (j = first; j < n0 && !bad; j++)
+            for (k = 0; k < hunks.v[j].relocs.n && !bad; k++)
+                if (hunks.v[j].relocs.v[k].target == i) {
+                    uint32_t o = get_long(hunks.v[j].data + hunks.v[j].relocs.v[k].off);
+                    if (o >= h->size) {
+                        bad = 1;
+                        break;
+                    }
+                    while (o > 0 && h->data[o - 1] != 0) o--;
+                    starts = xrealloc(starts, sizeof(uint32_t) * (ns + 1));
+                    starts[ns++] = o;
+                }
+        if (bad || ns < 3) {
+            free(starts);
+            continue;
+        }
+        qsort(starts, ns, sizeof(uint32_t), cmp_u32);
+        for (j = k = 1; j < ns; j++)
+            if (starts[j] != starts[k - 1]) starts[k++] = starts[j];
+        ns = k;
+        /* las referencias, a su trozo (el primero se queda en este hunk; los demás, hunks nuevos tras los
+           que hay) */
+        for (j = first; j < n0; j++)
+            for (k = 0; k < hunks.v[j].relocs.n; k++)
+                if (hunks.v[j].relocs.v[k].target == i) {
+                    uint8_t *p = hunks.v[j].data + hunks.v[j].relocs.v[k].off;
+                    uint32_t o = get_long(p);
+                    int a = 0, b = ns - 1;
+                    while (a < b) {                    /* el último inicio <= o */
+                        int m = (a + b + 1) / 2;
+                        if (starts[m] <= o) a = m;
+                        else b = m - 1;
+                    }
+                    put_long(p, o - starts[a]);
+                    if (a) hunks.v[j].relocs.v[k].target = hunks.n + a - 1;
+                }
+        for (j = 1; j < ns; j++) {
+            Hunk piece = {0};
+            uint32_t end = j + 1 < ns ? starts[j + 1] : hunks.v[i].size;
+            piece.type = HUNK_CODE;
+            piece.size = end - starts[j];
+            piece.data = xmalloc(piece.size);
+            memcpy(piece.data, hunks.v[i].data + starts[j], piece.size);
+            piece.secname = ".text (un texto)";
+            piece.align2 = 1;
+            VEC_PUSH(hunks, piece);
+        }
+        hunks.v[i].size = starts[1];
+        hunks.v[i].align2 = 1;
+        free(starts);
+    }
+}
+
 /* Solo va lo que se usa: desde el código y los datos del programa, los hunks del runtime a los que
    llega alguna reubicación (el runtime va compilado con -ffunction-sections: un hunk por función).
    Los que van se juntan en un hunk de código, uno de datos y uno de BSS. */
@@ -216,7 +361,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
 {
     FILE *f;
     int i, j, k, nout;
-    int *keep, *outh, *stack, *weak, sp = 0;
+    int *keep, *outh, *stack, *weak, *core, more, sp = 0;
     uint32_t *base, outsize[3] = {0, 0, 0};
     static const int outtype[3] = {HUNK_CODE, HUNK_DATA, HUNK_BSS};
     struct { HReloc *v; int n, cap; } outrel[3] = {{0}};
@@ -224,6 +369,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     VEC_PUSH(hunks, own_hunk(HUNK_CODE, &obj->code));   /* HK_CODE = 0 */
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
     read_object(rt, rtlen);
+    split_strings(2);
 
     /* los símbolos, solo los de los hunks a los que se llega (el runtime trae funciones que usan cosas
        que ningún programa enlaza todavía) */
@@ -252,20 +398,37 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     keep[0] = keep[1] = 1;
     stack[sp++] = 0;
     stack[sp++] = 1;
-    while (sp) {
-        int cur = stack[--sp];
-        Hunk *h = &hunks.v[cur];
-        for (j = 0; j < refs.n; j++)
-            if (refs.v[j].hunk == cur) {
-                bind(cur, refs.v[j].off, refs.v[j].name);
-                refs.v[j].hunk = -1;               /* ya está */
+    reach(keep, stack, sp, weak);
+
+    /* La función de un puntero débil (la limpieza de un runtime) va si toca datos que el programa usa y
+       que no son de todos (los del arranque: las bases de las librerías, _dash_win...): la de los
+       temporizadores si hay temporizadores, la de los gadgets si hay gadgets. Hasta que no entre ninguna
+       más (una que entra puede usar datos de otra). */
+    core = xmalloc(sizeof(int) * hunks.n);
+    memset(core, 0, sizeof(int) * hunks.n);
+    {
+        Sym *st = find_sym("__dash_start");
+        if (st && !st->abs) {
+            core[st->hunk] = 1;
+            stack[0] = st->hunk;
+            reach(core, stack, 1, weak);
+        }
+    }
+    for (more = !getenv("DASHC_SIN_LIMPIEZAS"); more; ) {
+        more = 0;
+        for (i = 0; i < hunks.n; i++) {
+            Hunk *h = &hunks.v[i];
+            if (!keep[i] || !weak[i]) continue;
+            for (j = 0; j < h->relocs.n; j++) {
+                int t = h->relocs.v[j].target;
+                if (!keep[t] && touches_own_data(t, keep, core)) {
+                    keep[t] = 1;
+                    stack[0] = t;
+                    reach(keep, stack, 1, weak);
+                    more = 1;
+                }
             }
-        if (weak[cur]) continue;
-        for (j = 0; j < h->relocs.n; j++)
-            if (!keep[h->relocs.v[j].target]) {
-                keep[h->relocs.v[j].target] = 1;
-                stack[sp++] = h->relocs.v[j].target;
-            }
+        }
     }
 
     /* un puntero débil a algo que no va: 0, sin reubicación */
@@ -288,8 +451,9 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         if (h->memflags) fatal("runtime: un hunk con memoria chip o fast aún no se admite");
         outh[i] = h->type == HUNK_CODE ? 0 : h->type == HUNK_DATA ? 1 : 2;
         base[i] = outsize[outh[i]];
-        outsize[outh[i]] += (h->size + 3) & ~3u;
+        outsize[outh[i]] += h->align2 ? (h->size + 1) & ~1u : (h->size + 3) & ~3u;
     }
+    for (k = 0; k < 3; k++) outsize[k] = (outsize[k] + 3) & ~3u;
     /* las reubicaciones, a su sitio en los hunks juntados */
     for (i = 0; i < hunks.n; i++) {
         Hunk *h = &hunks.v[i];
@@ -308,7 +472,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     if (getenv("DASHC_MAPA"))
         for (i = 2; i < hunks.n; i++)
             if (keep[i]) {
-                const char *name = "?";
+                const char *name = hunks.v[i].secname ? hunks.v[i].secname : "?";
                 for (j = 0; j < syms.n; j++)
                     if (syms.v[j].hunk == i) name = syms.v[j].name;
                 fprintf(stderr, "%6u %c %s\n", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], name);
@@ -326,13 +490,19 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         static const uint8_t zero[4];
         wl(f, (uint32_t)outtype[k]);
         wl(f, outsize[k] / 4);
-        if (k < 2)
+        if (k < 2) {
+            uint32_t done = 0;
             for (i = 0; i < hunks.n; i++) {
                 Hunk *h = &hunks.v[i];
+                uint32_t padded;
                 if (!keep[i] || outh[i] != k) continue;
+                padded = h->align2 ? (h->size + 1) & ~1u : (h->size + 3) & ~3u;
                 fwrite(h->data, 1, h->size, f);
-                fwrite(zero, 1, ((h->size + 3) & ~3u) - h->size, f);
+                fwrite(zero, 1, padded - h->size, f);
+                done += padded;
             }
+            fwrite(zero, 1, outsize[k] - done, f);
+        }
         if (outrel[k].n) {
             /* agrupadas por el hunk al que apuntan */
             wl(f, HUNK_RELOC32);

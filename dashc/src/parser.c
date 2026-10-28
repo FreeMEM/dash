@@ -38,6 +38,15 @@ static Node *node(int kind, Token *at)
     return n;
 }
 
+/* var x: Tipo sin valor: 0 un número, nil lo demás (como ./dash) */
+static Node *zero_value(Token *at, int type)
+{
+    Node *n = node(E_INT, at);
+    if (type != TY_INT && type != TY_BOOL && type != TY_CHAR && type != TY_FLOAT) n->kind = E_NIL;
+    else if (type == TY_BOOL) n->kind = E_BOOL;
+    return n;
+}
+
 struct TypeNames type_names;
 struct DictTypes dict_types;
 
@@ -385,8 +394,7 @@ static Node *stmt(void)
         n->name = expect(T_ID)->text;
         expect(P_COLON);
         n->type = parse_type();
-        expect(P_ASSIGN);
-        n->a = expr();
+        n->a = accept(P_ASSIGN) ? expr() : zero_value(t, n->type);
         return n;
     case T_ID: {
         Node *target;
@@ -491,6 +499,7 @@ static void parse_func(Program *p, Struct *st)
         strcat(f.name, ".");
         strcat(f.name, name->text);
         self.name = "self";
+        self.untyped = 0;
         self.type = -1;
         for (i = 0; i < type_names.n; i++)
             if (!strcmp(type_names.v[i], st->name)) self.type = TY_NAMED + i;
@@ -505,7 +514,8 @@ static void parse_func(Program *p, Struct *st)
         do {
             Param pa;
             pa.name = expect(T_ID)->text;
-            pa.type = accept(P_COLON) ? parse_type() : TY_INT;
+            pa.untyped = !accept(P_COLON);
+            pa.type = pa.untyped ? TY_INT : parse_type();
             VEC_PUSH(f.params, pa);
         } while (accept(P_COMMA));
         expect(P_RP);
@@ -679,8 +689,7 @@ static void parse_into(Program *p)
             g.file = name->file;
             expect(P_COLON);
             g.type = parse_type();
-            expect(P_ASSIGN);
-            g.init = expr();
+            g.init = accept(P_ASSIGN) ? expr() : zero_value(name, g.type);
             VEC_PUSH(p->globals, g);
         } else if (t->kind == K_CONST) {
             Const c = {0};
