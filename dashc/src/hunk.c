@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "dashc.h"
+#include "zlib.h"
 
 enum {
     HUNK_UNIT = 0x3E7, HUNK_NAME = 0x3E8, HUNK_CODE = 0x3E9, HUNK_DATA = 0x3EA,
@@ -23,6 +24,8 @@ typedef struct {
     int align2;          /* un texto constante suelto: basta con alinearlo a 2 (split_strings) */
     int shared;          /* data apunta al runtime preparado (de solo lectura): se copia antes de cambiarla */
     const uint8_t *lazy; /* sus reubicaciones en el runtime preparado, aún sin leer (relocs_ready) */
+    const uint8_t *zdata; /* sus datos comprimidos (DRT2), aún sin descomprimir (own_data) */
+    uint32_t zlen;
     int lazy_n, lazy_base;
     struct { HReloc *v; int n, cap; } relocs;
 } Hunk;
@@ -37,6 +40,7 @@ static struct { Ref *v; int n, cap; } refs;
 
 static const uint8_t *rp, *rend;
 #define DRT_MAGIC 0x44525431u     /* "DRT1": el runtime preparado (prepare_runtime) */
+#define DRT2_MAGIC 0x44525432u    /* "DRT2": lo mismo con los datos de cada hunk comprimidos (runtime/rt_blob.py) */
 static void load_prepared(const uint8_t *p, size_t len);
 static const char *obj_name = "runtime";     /* el objeto que se lee, para los errores */
 
@@ -237,7 +241,8 @@ int runtime_has(const char *sym)
     int i;
     if (!loaded) {
         loaded = 1;
-        if (rt_blob_len >= 4 && get_long(rt_blob) == DRT_MAGIC) load_prepared(rt_blob, rt_blob_len);
+        if (rt_blob_len >= 4 && (get_long(rt_blob) == DRT_MAGIC || get_long(rt_blob) == DRT2_MAGIC))
+            load_prepared(rt_blob, rt_blob_len);
         else read_object(rt_blob, rt_blob_len);
         for (i = 0; i < syms.n; i++) VEC_PUSH(names, (char *)syms.v[i].name);
         hunks.n = 0;
@@ -458,10 +463,17 @@ static void split_strings(int first)
 
 static uint32_t strtab_add(Buf *st, const char *s)
 {
+    static struct { const char **v; int n, cap; } seen;
+    static struct { uint32_t *v; int n, cap; } at;
     uint32_t off;
+    int i;
     if (!s) return ~0u;
+    for (i = 0; i < seen.n; i++)
+        if (!strcmp(seen.v[i], s)) return at.v[i];      /* (los repetidos, una vez) */
     off = (uint32_t)st->n;
     buf_bytes(st, s, strlen(s) + 1);
+    VEC_PUSH(seen, s);
+    VEC_PUSH(at, off);
     return off;
 }
 
@@ -482,7 +494,12 @@ void prepare_runtime(const uint8_t *rt, size_t len, const char *out)
         buf_long(&hb, (uint32_t)h->type);
         buf_long(&hb, h->size);
         buf_long(&hb, (uint32_t)h->align2 | h->memflags);
-        buf_long(&hb, strtab_add(&st, h->secname));
+        {
+            /* (el nombre de sección solo sirve para DASHC_MAPA: si un símbolo nombra el hunk, sobra) */
+            int named = 0;
+            for (j = 0; j < syms.n && !named; j++) named = syms.v[j].hunk == i && !syms.v[j].abs;
+            buf_long(&hb, named ? ~0u : strtab_add(&st, h->secname));
+        }
         if (h->data) {
             buf_long(&hb, (uint32_t)db.n);
             buf_bytes(&db, h->data, h->size);
@@ -532,7 +549,7 @@ void prepare_runtime(const uint8_t *rt, size_t len, const char *out)
 static void load_prepared(const uint8_t *p, size_t len)
 {
     uint32_t nh, ns, nr, nrel, stl, i;
-    const uint8_t *hp, *rp0, *sp0, *fp, *strs, *data;
+    const uint8_t *hp, *rp0, *sp0, *fp, *strs, *data, *zl;
     int base = hunks.n;
     if (len < 28) fatal("runtime preparado cortado");
     nh = get_long(p + 4);
@@ -544,7 +561,8 @@ static void load_prepared(const uint8_t *p, size_t len)
     rp0 = hp + nh * 28;
     sp0 = rp0 + nrel * 8;
     fp = sp0 + ns * 12;
-    strs = fp + nr * 12;
+    zl = get_long(p) == DRT2_MAGIC ? fp + nr * 12 : NULL;    /* DRT2: el tamaño comprimido de cada hunk */
+    strs = fp + nr * 12 + (zl ? nh * 4 : 0);
     data = strs + stl;
     if (data + get_long(p + 24) > p + len) fatal("runtime preparado cortado");
     /* (sitio para todos de una vez: sin copiar las listas cada vez que crecen) */
@@ -565,7 +583,10 @@ static void load_prepared(const uint8_t *p, size_t len)
         h.align2 = flags & 1;
         h.memflags = flags & 0xC0000000u;
         h.secname = name == ~0u ? NULL : (const char *)strs + name;
-        if (d != ~0u) {
+        if (d != ~0u && zl && get_long(zl + i * 4)) {
+            h.zdata = data + d;
+            h.zlen = get_long(zl + i * 4);
+        } else if (d != ~0u) {
             h.data = (uint8_t *)(data + d);
             h.shared = 1;
         }
@@ -609,6 +630,21 @@ static void relocs_ready(int i)
 static uint8_t *own_data(int i)
 {
     Hunk *h = &hunks.v[i];
+    if (h->zdata) {
+        /* DRT2: sus datos, descomprimidos ahora (deflate crudo) */
+        z_stream z;
+        memset(&z, 0, sizeof z);
+        h->data = xmalloc(h->size);
+        z.next_in = (Bytef *)h->zdata;
+        z.avail_in = h->zlen;
+        z.next_out = h->data;
+        z.avail_out = h->size;
+        if (inflateInit2(&z, -MAX_WBITS) != Z_OK || inflate(&z, Z_FINISH) != Z_STREAM_END || z.total_out != h->size)
+            fatal("el runtime de dentro está estropeado");
+        inflateEnd(&z);
+        h->zdata = NULL;
+        h->shared = 0;
+    }
     if (h->shared) {
         uint8_t *d = xmalloc(h->size);
         memcpy(d, h->data, h->size);
@@ -632,7 +668,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
 
     VEC_PUSH(hunks, own_hunk(HUNK_CODE, &obj->code));   /* HK_CODE = 0 */
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
-    if (rtlen >= 4 && get_long(rt) == DRT_MAGIC) {
+    if (rtlen >= 4 && (get_long(rt) == DRT_MAGIC || get_long(rt) == DRT2_MAGIC)) {
         load_prepared(rt, rtlen);
     } else {
         read_object(rt, rtlen);
@@ -790,6 +826,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
                 uint32_t padded;
                 if (!keep[i] || outh[i] != k) continue;
                 padded = h->align2 ? (h->size + 1) & ~1u : (h->size + 3) & ~3u;
+                if (h->zdata) own_data(i);
                 fwrite(h->data, 1, h->size, f);
                 fwrite(zero, 1, padded - h->size, f);
                 done += padded;

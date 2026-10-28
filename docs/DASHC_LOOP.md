@@ -351,3 +351,13 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     en el runtime). Siguiente para D8: comprimir cada hunk del runtime preparado por separado y descomprimir solo
     los que van (la carga ya es perezosa).
   - Tests de ./dash: 461 bien (test_image_decode también en el A500); batería bien; cobertura 211 de 315 y 138 de 138.
+- D8 (2.ª parte): el runtime normal dentro de dashc va en "DRT2" (runtime/rt_blob.py): los datos de cada hunk
+  comprimidos aparte (deflate crudo, si así ocupan menos) y hunk.c los descomprime solo para los hunks que van
+  (`own_data`). Los nombres de sección ya no van si un símbolo nombra el hunk, y los nombres repetidos, una vez.
+  Runtime preparado: de 792 KB a 600 KB; el dashc del Amiga, de 1,4 MB (con las bibliotecas de imágenes) a 1,2 MB.
+  Descomprimir cuesta unos 80 ms en el A1200 y 300 ms en el A500: un "hola", 0,89 s y 2,8 s (la carga ha crecido
+  también por los 3.200 hunks que traen ahora las imágenes; antes, 2.200). Los ejecutables, idénticos (todos los
+  de dashc/tests, `--memcheck`, QuickJS y test_image_decode, con el runtime sin preparar).
+  - Lo que queda grande son las tablas (3.200 hunks a 28 bytes, 10.500 reubicaciones a 8): se podrían guardar en
+    menos bytes. Y comprimir juntos los datos de varios hunks daría más (todo junto, 250 KB en vez de 360 KB).
+  - Batería bien; cobertura 211 de 315 y 138 de 138.
