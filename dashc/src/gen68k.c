@@ -8,6 +8,7 @@
    (lo de dentro de un bucle cuenta más) y la segunda pone las más usadas en d2-d7,
    que la función guarda al entrar y recupera al salir. */
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,6 +108,18 @@ static void flags_set(int reg, int full)
     flags_full = full;
 }
 static void l(uint32_t v) { buf_long(&obj->code, v); }
+
+/* un error en un nodo: con el fichero del nodo (un módulo), no el de la última instrucción generada */
+static void fatal_node(Node *n, const char *fmt, ...)
+{
+    char msg[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    src_name = src_files.v[n->file];
+    fatal_at(n->line, n->col, "%s", msg);
+}
 
 static void add_reloc(uint32_t off, int hunk, const char *sym)
 {
@@ -815,7 +828,7 @@ static int simple(Node *n, Var *v)
     }
     if (n->kind == E_VAR) {
         *v = lookup(n->name);
-        if (v->kind == V_NONE) fatal_at(n->line, n->col, "la variable %s no existe", n->name);
+        if (v->kind == V_NONE) fatal_node(n, "la variable %s no existe", n->name);
         return 1;
     }
     return 0;
@@ -827,7 +840,7 @@ static void gen_block(NodeList *b);
 
 static void need_value(Node *n, int ty)
 {
-    if (ty == TY_VOID) fatal_at(n->line, n->col, "%s no devuelve ningún valor", n->name ? n->name : "la expresión");
+    if (ty == TY_VOID) fatal_node(n, "%s no devuelve ningún valor", n->name ? n->name : "la expresión");
 }
 
 static void value(Node *n) { need_value(n, gen_expr(n)); }
@@ -1449,7 +1462,7 @@ static int gen_field(Node *n)
         rt_call(t == TY_STR ? "_dl_str_len" : IS_DICT(t) ? "_dl_dict_length" : "_dl_arr_length", 1, 0);
         return TY_INT;
     }
-    fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
+    fatal_node(n, "dashc (prueba): .%s aún no está", n->name);
     return TY_VOID;
 }
 
@@ -1611,7 +1624,7 @@ static int gen_field_store(Node *target, Node *v)
     else value(v);
     push_d0();
     if (!struct_ptr(target->a, target->name, &off, &ft))
-        fatal_at(target->line, target->col, "%s no es un campo", target->name);
+        fatal_node(target, "%s no es un campo", target->name);
     if ((IS_STRLIKE(ft) || IS_OBJ(ft)) && !field_weak(target)) {
         w(0x4868); w(off);                             /* pea off(a0) */
         sp_depth += 4;
@@ -1631,7 +1644,7 @@ static int gen_new(Node *n, int si, int fresh)
     Struct *st = &prog->structs.v[si];
     int nf = st->fields.n, i;
     Node **vals = xmalloc(sizeof(Node *) * (nf + 1)), zero;
-    if (n->args.n > nf) fatal_at(n->line, n->col, "%s tiene %d campos y se le dan %d", st->name, nf, n->args.n);
+    if (n->args.n > nf) fatal_node(n, "%s tiene %d campos y se le dan %d", st->name, nf, n->args.n);
     memset(&zero, 0, sizeof zero);
     zero.kind = E_INT;
     char *conv = xmalloc(nf + 1);
@@ -1746,9 +1759,9 @@ static int gen_iface_call(Node *n, int t)
 {
     IfaceMethod *m = iface_method(t, n->name);
     int i;
-    if (!m) fatal_at(n->line, n->col, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
+    if (!m) fatal_node(n, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
     if (n->args.n != m->nparams)
-        fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, m->nparams, n->args.n);
+        fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, m->nparams, n->args.n);
     for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
     value(n->a);
     nil_check();
@@ -1771,7 +1784,7 @@ static int gen_method(Node *n, int t)
     int idx = 0, r;
     if (prog->structs.v[t - TY_STRUCT].iface) return gen_iface_call(n, t);
     snprintf(name, sizeof name, "%s.%s", prog->structs.v[t - TY_STRUCT].name, n->name);
-    if (!find_func(name, &idx)) fatal_at(n->line, n->col, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
+    if (!find_func(name, &idx)) fatal_node(n, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
     memset(&call, 0, sizeof call);
     memset(&nn, 0, sizeof nn);
     call.kind = E_CALL;
@@ -1837,7 +1850,7 @@ static int gen_list_method(Node *n)
     Node *a[3];
     if (!strcmp(n->name, "push") || !strcmp(n->name, "insert")) {
         int na = !strcmp(n->name, "push") ? 1 : 2;
-        if (n->args.n != na) fatal_at(n->line, n->col, "%s pide %d argumentos", n->name, na);
+        if (n->args.n != na) fatal_node(n, "%s pide %d argumentos", n->name, na);
         et = learn_elem(n->a, n->args.v[na - 1]);
         kind = elem_kind(et);
         a[0] = n->a;
@@ -1874,7 +1887,7 @@ static int gen_list_method(Node *n)
         Node *f = n->args.n == 1 ? n->args.v[0] : NULL;
         int fi, boolean = 0;
         Func *fn;
-        if (!f) fatal_at(n->line, n->col, "sort pide 1 argumento (la función que compara)");
+        if (!f) fatal_node(n, "sort pide 1 argumento (la función que compara)");
         if (f->kind == E_FUNCREF && (fn = find_func(f->name, &fi)) != NULL)
             boolean = fn->boolret || (fn->declared && fn->ret == TY_BOOL);
         load_imm(0, boolean);
@@ -1894,7 +1907,7 @@ static int gen_list_method(Node *n)
     }
     if (!strcmp(n->name, "remove")) {
         a[0] = n->a;
-        if (n->args.n != 1) fatal_at(n->line, n->col, "remove pide 1 argumento");
+        if (n->args.n != 1) fatal_node(n, "remove pide 1 argumento");
         a[1] = n->args.v[0];
         args_to_stack(a, 2, NULL);
         rt_call("_dl_arr_remove", 2, 0);
@@ -1905,7 +1918,7 @@ static int gen_list_method(Node *n)
         rt_call("_dl_arr_clear", 1, 0);
         return TY_VOID;
     }
-    fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
+    fatal_node(n, "dashc (prueba): .%s aún no está", n->name);
     return TY_VOID;
 }
 
@@ -2037,7 +2050,7 @@ static int gen_dict_method(Node *n)
         rt_call("_dl_dict_clear", 1, 0);
         return TY_VOID;
     }
-    fatal_at(n->line, n->col, "un diccionario no tiene .%s con %d argumentos", n->name, na);
+    fatal_node(n, "un diccionario no tiene .%s con %d argumentos", n->name, na);
     return TY_VOID;
 }
 
@@ -2731,14 +2744,14 @@ static int gen_dash_builtin(Node *n)
     char *sym;
     for (b = 0; b < builtin_count; b++)
         if (!strcmp(builtin_info[b].name, n->name)) break;
-    if (b == builtin_count) fatal_at(n->line, n->col, "la función %s no existe", n->name);
+    if (b == builtin_count) fatal_node(n, "la función %s no existe", n->name);
     sym = xmalloc(strlen(n->name) + 5);
     strcpy(sym, "_db_");
     strcat(sym, n->name);
     if (!runtime_has(sym))
-        fatal_at(n->line, n->col, "dashc (prueba): el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
+        fatal_node(n, "dashc (prueba): el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
     np = builtin_info[b].nparams;
-    if (n->args.n > np) fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, np, n->args.n);
+    if (n->args.n > np) fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, np, n->args.n);
     if (np) {
         w(0x4FEF); w(-4 * np);                         /* lea -4n(sp),sp */
         sp_depth += 4 * np;
@@ -2781,7 +2794,7 @@ static int gen_builtin(Node *n)
         /* guarda el valor donde no se pueda quitar: un move.l, como el volatile de bench_lib.dash */
         Var v;
         Var src;
-        if (n->args.n != 1) fatal_at(n->line, n->col, "bench_sink pide 1 argumento");
+        if (n->args.n != 1) fatal_node(n, "bench_sink pide 1 argumento");
         if (sink_off < 0) {
             sink_off = (long)obj->data.n;
             buf_long(&obj->data, 0);
@@ -2848,11 +2861,11 @@ static int gen_builtin(Node *n)
     }
     if (!builtins[b].name) return gen_dash_builtin(n);
     if (n->args.n != (int)strlen(builtins[b].args))
-        fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, (int)strlen(builtins[b].args), n->args.n);
+        fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, (int)strlen(builtins[b].args), n->args.n);
     for (i = n->args.n - 1; i >= 0; i--) {
         Node *a = n->args.v[i];
         if (builtins[b].args[i] == 'S') {
-            if (a->kind != E_STR) fatal_at(a->line, a->col, "dashc (prueba): aquí va un texto literal");
+            if (a->kind != E_STR) fatal_node(a, "dashc (prueba): aquí va un texto literal");
             pea_string(a->str, a->len);
         } else {
             push_value(a);
@@ -3111,7 +3124,7 @@ static int gen_call(Node *n)
     }
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
-        fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
+        fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
     if (f->native) {
         /* el envoltorio dn_nombre de la librería (runtime/gen_lib.py) */
         char *sym = xmalloc(strlen(f->name) + 5);
@@ -3189,12 +3202,12 @@ static int gen_expr(Node *n)
         if (expr_type(n->a) == TY_STR) return gen_str_index(n);
         if (IS_ARR(expr_type(n->a))) return gen_arr_index(n);
         if (IS_DICT(expr_type(n->a))) return gen_dict_get(n);
-        fatal_at(n->line, n->col, "aquí no se puede usar [ ]");
+        fatal_node(n, "aquí no se puede usar [ ]");
         return TY_VOID;
     case E_SLICE:
         if (expr_type(n->a) == TY_STR) return gen_str_slice(n);
         if (IS_ARR(expr_type(n->a))) return gen_arr_slice(n);
-        fatal_at(n->line, n->col, "aquí no se puede usar [ : ]");
+        fatal_node(n, "aquí no se puede usar [ : ]");
         return TY_VOID;
     case E_FIELD: {
         int t, wm = window_member(n);
@@ -3249,12 +3262,12 @@ static int gen_expr(Node *n)
             w(0x4480);                                 /* neg.l d0 */
             return TY_INT;
         }
-        fatal_at(n->line, n->col, "dashc (prueba): .%s() aún no está", n->name);
+        fatal_node(n, "dashc (prueba): .%s() aún no está", n->name);
         return TY_VOID;
     case E_VAR:
         v = lookup(n->name);
         if (v.kind == V_NONE) {
-            fatal_at(n->line, n->col, "la variable %s no existe", n->name);
+            fatal_node(n, "la variable %s no existe", n->name);
         }
         load_var(0, &v);
         return v.type;
@@ -3276,7 +3289,7 @@ static int gen_expr(Node *n)
                 if (!needed[idx]) needed[idx] = 1;
                 return TY_INT;
             }
-            fatal_at(n->line, n->col, "%s: una función de @native no puede ir como valor", n->name);
+            fatal_node(n, "%s: una función de @native no puede ir como valor", n->name);
             return TY_VOID;
         }
     case E_CALL:
@@ -3392,11 +3405,11 @@ static int gen_expr(Node *n)
         }
         if (expr_type(n->a) == TY_FLOAT || expr_type(n->b) == TY_FLOAT ||
             expr_type(n->a) == TY_DOUBLE || expr_type(n->b) == TY_DOUBLE)
-            fatal_at(n->line, n->col, "este operador no es para Float ni Double");
+            fatal_node(n, "este operador no es para Float ni Double");
         gen_binary(n);
         return TY_INT;
     }
-    fatal_at(n->line, n->col, "expresión no admitida");
+    fatal_node(n, "expresión no admitida");
     return TY_VOID;
 }
 
@@ -3575,7 +3588,7 @@ static void gen_for(Node *n)
     fold_literal = 0;
     fold(n->a, &from);
     fold(n->b, &to);
-    if (step_known && step == 0) fatal_at(n->line, n->col, "el paso del for no puede ser 0");
+    if (step_known && step == 0) fatal_node(n, "el paso del for no puede ser 0");
 
     counted = step_known && !list_assigns(&n->body, n->name);
     if (counted && from_known && end_known) {
@@ -4106,7 +4119,7 @@ static void gen_str_assign(Node *n, int ty)
     Local *lc = find_local(n->name);
     int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name));
     Var v;
-    if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
+    if (lc && lc->slot < 0) fatal_node(n, "%s es una constante", n->name);
     if (ty == TY_STR && !fresh && e->kind == E_BIN && e->op == P_PLUS && e->a->kind == E_VAR && !strcmp(e->a->name, n->name) &&
         !refs(e->b, n->name)) {
         str_value(e->b);
@@ -4188,7 +4201,7 @@ static void gen_obj_assign(Node *n, int tt)
     Local *lc = find_local(n->name);
     int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name)), lit = is_new_obj(e);
     Var v;
-    if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
+    if (lc && lc->slot < 0) fatal_node(n, "%s es una constante", n->name);
     list_hint(e, tt);
     if (e->kind == E_LIST) gen_list(e, 1);
     else if (lit) gen_new(e, find_struct(e->name), 1);
@@ -4308,7 +4321,7 @@ static void gen_foreach(Node *n)
         gen_foreach_str(n);
         return;
     }
-    if (!IS_ARR(t)) fatal_at(n->line, n->col, "for ... in pide una lista");
+    if (!IS_ARR(t)) fatal_node(n, "for ... in pide una lista");
     et = t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
     ms = mark_begin();
     enter_scope();
@@ -4398,7 +4411,7 @@ static void pea_window(int wi)
 static void gen_window_op(Node *n)
 {
     int wi = find_window(n->name);
-    if (wi < 0) fatal_at(n->line, n->col, "la ventana %s no existe", n->name);
+    if (wi < 0) fatal_node(n, "la ventana %s no existe", n->name);
     if (n->val) {
         Fixup f;
         pea_window(wi);                                /* dl_window_open(descriptor, &variable) */
@@ -4431,7 +4444,7 @@ static void gen_evloop(Node *n)
     int top = new_label(), done = new_label(), i, wi = cur_window, timer = -1;
     MarkScope ms;
     Loop lp;
-    if (wi < 0) fatal_at(n->line, n->col, "EventLoop sin ventana abierta antes");
+    if (wi < 0) fatal_node(n, "EventLoop sin ventana abierta antes");
     for (i = 0; i < n->body.n; i++)
         if (n->body.v[i]->val == ON_TIMER) timer = i;
     if (uses_gadgets) {
@@ -4628,7 +4641,7 @@ static void gen_stmt(Node *n)
                 if (tt == TY_FIXED) fix_value(n->a);
                 else float_value(n->a);
                 v = fresh ? declare(n->name, tt) : lookup(n->name);
-                if (v.kind == V_CONST) fatal_at(n->line, n->col, "%s es una constante", n->name);
+                if (v.kind == V_CONST) fatal_node(n, "%s es una constante", n->name);
                 store_d0(&v);
                 return;
             }
@@ -4653,7 +4666,7 @@ static void gen_stmt(Node *n)
         if (n->kind == S_ASSIGN && fold(n->a, &k)) {
             v = lookup(n->name);
             if (v.kind == V_NONE) v = declare(n->name, forced >= 0 ? forced : fold_type(n->a));
-            if (v.kind == V_CONST) fatal_at(n->line, n->col, "%s es una constante", n->name);
+            if (v.kind == V_CONST) fatal_node(n, "%s es una constante", n->name);
             if (v.kind == V_REG) {
                 load_imm(v.reg, k);                    /* moveq #k,dN */
             } else {
@@ -4670,7 +4683,7 @@ static void gen_stmt(Node *n)
             /* la primera asignación declara (en el bloque actual) */
             v = declare(n->name, n->kind == S_VAR ? n->type : ty);
         } else if (v.kind == V_CONST) {
-            fatal_at(n->line, n->col, "%s es una constante", n->name);
+            fatal_node(n, "%s es una constante", n->name);
         }
         store_d0(&v);
         return;
@@ -4742,7 +4755,7 @@ static void gen_stmt(Node *n)
         gen_evloop(n);
         return;
     case S_STOP:
-        if (!evloops.n) fatal_at(n->line, n->col, "Stop fuera de un EventLoop");
+        if (!evloops.n) fatal_node(n, "Stop fuera de un EventLoop");
         {
             /* como un break del EventLoop: lo de los bucles de dentro se suelta */
             EvLoop *ev = &evloops.v[evloops.n - 1];
@@ -4761,11 +4774,11 @@ static void gen_stmt(Node *n)
             gen_dict_set(n->b, n->a);
             return;
         }
-        fatal_at(n->line, n->col, "dashc (prueba): esta asignación aún no está");
+        fatal_node(n, "dashc (prueba): esta asignación aún no está");
         return;
     case S_BREAK:
     case S_CONTINUE:
-        if (loops.n <= loop_base) fatal_at(n->line, n->col, "%s fuera de un bucle", n->kind == S_BREAK ? "break" : "continue");
+        if (loops.n <= loop_base) fatal_node(n, "%s fuera de un bucle", n->kind == S_BREAK ? "break" : "continue");
         {
             Loop *lp = &loops.v[loops.n - 1];
             free_owned(lp->depth, 0);
@@ -4840,7 +4853,7 @@ static void gen_stmt(Node *n)
         return;
     }
     }
-    fatal_at(n->line, n->col, "instrucción no admitida");
+    fatal_node(n, "instrucción no admitida");
 }
 
 static void gen_block(NodeList *b)

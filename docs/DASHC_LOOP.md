@@ -224,5 +224,5 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Lo que queda sin compilar es todo C (`@header`, `@c`, `@native`, `@link`): `task_start` con funciones
     `@native` y `@native(borrow)` también lo son.
   - Cobertura: compilan 205 de 309 (66 %); en el A1200 (MUI y red), 132 de 132 iguales. Batería bien.
-  - Visto de paso, sin arreglar: un error que sale al generar código (no al leer) en un módulo lleva el nombre
-    del fichero principal, con la línea del módulo.
+  - Un error que salía al generar código (no al leer) en un módulo llevaba el nombre del fichero principal con la
+    línea del módulo: `fatal_node` pone el fichero del nodo.
