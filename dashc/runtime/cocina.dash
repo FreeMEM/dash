@@ -8,6 +8,21 @@ func f(a: String, l: Array) -> String
     return a + "#{l.length}"
 end
 
+func dicc(d: {String: Int}, e: {Int: String}) -> [String]
+    d["a"] = 1
+    e[2] = "b"
+    Print d["a"] + d.get("z", 3) + d.length
+    if e.has(2) and d.has("a")
+        d.remove("a")
+        e.remove(2)
+    end
+    f = {"x": "y"}
+    g = {1: K(1, "q", nil)}
+    Print f["x"] + g[1].s + e.get(9, "w")
+    d.clear()
+    return d.keys()
+end
+
 Main
     s = "abc"
     t = s + "d"

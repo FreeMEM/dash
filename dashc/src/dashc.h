@@ -51,7 +51,7 @@ enum {
     /* signos */
     P_LP, P_RP, P_COMMA, P_COLON, P_ASSIGN, P_EQ, P_NE, P_LT, P_LE, P_GT, P_GE,
     P_PLUS, P_MINUS, P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE,
-    P_SHL, P_SHR, P_ARROW, P_DOTDOT, P_LB, P_RB, P_DOT,
+    P_SHL, P_SHR, P_ARROW, P_DOTDOT, P_LB, P_RB, P_DOT, P_LBRACE, P_RBRACE,
     /* un texto con #{...}: trozos de texto y de código alternos */
     T_ISTR
 };
@@ -79,6 +79,7 @@ enum {
     E_MCALL,    /* a.name(args) */
     E_LIST,     /* [args] */
     E_INTERP,   /* "...#{x}...": args son los trozos (E_STR y expresiones) */
+    E_DICT,     /* {k: v, ...}: args son clave, valor, clave, valor... */
     E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
@@ -90,11 +91,17 @@ enum {
    (type_names[n]), que gen68k.c cambia por su struct. */
 enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL };
 #define TY_STRUCT 16
+#define TY_DICT 0x4000   /* + n: dict_types.v[n] */
 #define TY_NAMED 0x8000
 #define TY_ARR 0x10000
-#define IS_STRUCT(t) ((t) >= TY_STRUCT && (t) < TY_NAMED)
+#define IS_STRUCT(t) ((t) >= TY_STRUCT && (t) < TY_DICT)
+#define IS_DICT(t) ((t) >= TY_DICT && (t) < TY_NAMED)
 #define IS_ARR(t) ((t) >= TY_ARR)
-#define IS_OBJ(t) (IS_STRUCT(t) || IS_ARR(t))
+#define IS_OBJ(t) (IS_STRUCT(t) || IS_DICT(t) || IS_ARR(t))
+/* los diccionarios {K: V}: la clave (TY_STR o TY_INT) y el valor de cada uno */
+typedef struct { int key, val; } DictType;
+extern struct DictTypes { DictType *v; int n, cap; } dict_types;
+int dict_type(int key, int val);
 extern struct TypeNames { char **v; int n, cap; } type_names;
 
 typedef struct Node Node;
@@ -169,6 +176,7 @@ typedef struct {
     struct { Const *v; int n, cap; } consts;
     NodeList main;
     int has_main;
+    char *version;   /* @version: lo que va tras "$VER: " */
 } Program;
 
 Program *parse(Token *toks);

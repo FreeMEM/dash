@@ -11,7 +11,7 @@ static const char *kw_names[] = {
 
 static const char *punct_names[] = {
     "(", ")", ",", ":", "=", "==", "!=", "<", "<=", ">", ">=",
-    "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>", "->", "..", "[", "]", ".",
+    "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>", "->", "..", "[", "]", ".", "{", "}",
     "un texto"
 };
 
@@ -45,6 +45,10 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
             int depth = 1;
             /* hasta la } que cierra (puede haber textos y llaves dentro) */
             while (*e && *e != '\n') {
+                if (*e == '\\' && e[1]) {
+                    e += 2;                            /* \" dentro de #{...}: unas comillas */
+                    continue;
+                }
                 if (*e == '"') {
                     e++;
                     while (*e && *e != '"' && *e != '\n') e += *e == '\\' && e[1] ? 2 : 1;
@@ -61,7 +65,16 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
             buf_byte(&b, 0);
             t->piece[t->npieces] = (char *)b.p;
             t->plen[t->npieces] = (int)b.n - 1;
-            t->piece[t->npieces + 1] = xstrndup(s + 2, e - (s + 2));
+            {
+                /* el código, con \" y \\ ya como " y \ */
+                char *code = xstrndup(s + 2, e - (s + 2)), *r = code, *w2 = code;
+                while (*r) {
+                    if (*r == '\\' && (r[1] == '"' || r[1] == '\\')) r++;
+                    *w2++ = *r++;
+                }
+                *w2 = 0;
+                t->piece[t->npieces + 1] = code;
+            }
             t->plen[t->npieces + 1] = 0;
             t->npieces += 2;
             memset(&b, 0, sizeof b);
@@ -202,10 +215,11 @@ Token *lex(const char *src)
                 {"==", P_EQ}, {"!=", P_NE}, {"<=", P_LE}, {">=", P_GE}, {"<<", P_SHL},
                 {">>", P_SHR}, {"->", P_ARROW}, {"..", P_DOTDOT}, {NULL, 0}
             };
-            static const char one[] = "(),:=<>+-*/%&|^~[].";
+            static const char one[] = "(),:=<>+-*/%&|^~[].{}";
             static const int one_k[] = {
                 P_LP, P_RP, P_COMMA, P_COLON, P_ASSIGN, P_LT, P_GT, P_PLUS, P_MINUS,
-                P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE, P_LB, P_RB, P_DOT
+                P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE, P_LB, P_RB, P_DOT,
+                P_LBRACE, P_RBRACE
             };
             int i;
             const char *p;

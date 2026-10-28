@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "dashc.h"
 
@@ -842,6 +843,8 @@ static int var_type(const char *name)
     return TY_VOID;
 }
 
+static int dict_val(int t);
+
 static int expr_type(Node *n)
 {
     int ta, tb, idx;
@@ -876,6 +879,7 @@ static int expr_type(Node *n)
         ta = expr_type(n->a);
         if (ta == TY_STR) return TY_CHAR;
         if (IS_ARR(ta)) return ta == TY_ARR + TY_VOID ? TY_INT : ta - TY_ARR;
+        if (IS_DICT(ta)) return dict_val(ta);
         return TY_INT;
     case E_SLICE:
         return expr_type(n->a);
@@ -887,6 +891,10 @@ static int expr_type(Node *n)
             return f >= 0 ? st->fields.v[f].type : TY_VOID;
         }
         return TY_INT;
+    case E_DICT:
+        if (!n->args.n) return dict_type(TY_STR, TY_VOID);   /* {}: lo que se meta dirá qué guarda */
+        ta = expr_type(n->args.v[1]);
+        return dict_type(expr_type(n->args.v[0]) == TY_INT ? TY_INT : TY_STR, ta == TY_NIL ? TY_INT : ta);
     case E_LIST:
         if (!n->args.n) return TY_ARR + TY_VOID;       /* []: lo que se meta dirá qué guarda */
         ta = expr_type(n->args.v[0]);
@@ -894,6 +902,11 @@ static int expr_type(Node *n)
     case E_MCALL:
         ta = expr_type(n->a);
         if (IS_ARR(ta) && !strcmp(n->name, "pop")) return ta == TY_ARR + TY_VOID ? TY_INT : ta - TY_ARR;
+        if (IS_DICT(ta)) {
+            if (!strcmp(n->name, "get")) return dict_val(ta);
+            if (!strcmp(n->name, "has")) return TY_BOOL;
+            if (!strcmp(n->name, "keys")) return TY_ARR + dict_types.v[ta - TY_DICT].key;
+        }
         if (IS_STRUCT(ta)) {
             char name[256];
             snprintf(name, sizeof name, "%s.%s", prog->structs.v[ta - TY_STRUCT].name, n->name);
@@ -902,6 +915,13 @@ static int expr_type(Node *n)
         return TY_VOID;
     }
     return TY_INT;
+}
+
+/* el valor de un diccionario (uno que aún no sabe qué guarda, Int) */
+static int dict_val(int t)
+{
+    int v = dict_types.v[t - TY_DICT].val;
+    return v == TY_VOID ? TY_INT : v;
 }
 
 /* qué guarda una lista de elementos de tipo t: 0 números, 1 objetos, 2 textos (DashArray_own) */
@@ -1003,7 +1023,7 @@ static int func_ret(int idx)
 static int is_tmp_expr(Node *e)
 {
     return e->kind == E_BIN || e->kind == E_INTERP || e->kind == E_SLICE || e->kind == E_CALL ||
-           e->kind == E_MCALL || e->kind == E_LIST;
+           e->kind == E_MCALL || e->kind == E_LIST || e->kind == E_DICT;
 }
 
 /* un struct nuevo (Punto(...)) o una lista literal: nace con una referencia si se asigna */
@@ -1124,9 +1144,9 @@ static int gen_str_slice(Node *n)
 static int gen_field(Node *n)
 {
     int t = expr_type(n->a);
-    if (!strcmp(n->name, "length") && (t == TY_STR || IS_ARR(t))) {
+    if (!strcmp(n->name, "length") && (t == TY_STR || IS_ARR(t) || IS_DICT(t))) {
         args_to_stack(&n->a, 1, NULL);
-        rt_call(t == TY_STR ? "_dl_str_len" : "_dl_arr_length", 1, 0);
+        rt_call(t == TY_STR ? "_dl_str_len" : IS_DICT(t) ? "_dl_dict_length" : "_dl_arr_length", 1, 0);
         return TY_INT;
     }
     fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
@@ -1481,6 +1501,137 @@ static int gen_list_method(Node *n)
         return TY_VOID;
     }
     fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
+    return TY_VOID;
+}
+
+/* ---- diccionarios ---- */
+static int expr_type(Node *n);
+
+/* {k: v, ...}: DashDict_from(kind, n, claves, valores) (o fromi con claves Int); {} es DashDict_new(0) */
+static int gen_dict(Node *n)
+{
+    int t = expr_type(n), np = n->args.n / 2, i, kind, ikeys;
+    Node **keys, **vals;
+    if (!np) {
+        w(0x7000);                                     /* moveq #0,d0 */
+        push_d0();
+        rt_call("_dl_dict_new", 1, 1);
+        return t;
+    }
+    kind = elem_kind(dict_val(t));
+    ikeys = dict_types.v[t - TY_DICT].key == TY_INT;
+    keys = xmalloc(sizeof(Node *) * np);
+    vals = xmalloc(sizeof(Node *) * np);
+    for (i = 0; i < np; i++) {
+        keys[i] = n->args.v[2 * i];
+        vals[i] = n->args.v[2 * i + 1];
+    }
+    /* los valores y luego las claves, cada lista en su array de la pila */
+    args_to_stack(vals, np, NULL);
+    if (np == 1) {
+        /* (con uno solo, args_to_stack lo mete con push: igual vale como array) */
+    }
+    args_to_stack(keys, np, NULL);
+    w(0x486F); w(4 * np);                              /* pea valores(sp) */
+    sp_depth += 4;
+    w(0x486F); w(4);                                   /* pea claves(sp): justo encima */
+    sp_depth += 4;
+    w(0x4878); w(np);                                  /* pea n.w */
+    sp_depth += 4;
+    w(0x4878); w(kind);                                /* pea kind.w */
+    sp_depth += 4;
+    rt_call(ikeys ? "_dl_dict_fromi" : "_dl_dict_from", 4, 1);
+    pop_args(2 * np);
+    free(keys);
+    free(vals);
+    return t;
+}
+
+static int dict_ikeys(int t) { return dict_types.v[t - TY_DICT].key == TY_INT; }
+
+/* d[k] */
+static int gen_dict_get(Node *n)
+{
+    Node *a[2];
+    int t = expr_type(n->a);
+    a[0] = n->a;
+    a[1] = n->b;
+    args_to_stack(a, 2, NULL);
+    rt_call(dict_ikeys(t) ? "_dl_dict_geti" : "_dl_dict_get", 2, 0);
+    return dict_val(t);
+}
+
+/* Un diccionario que aún no sabe qué guarda ({}) lo aprende con lo primero que se le mete */
+static int learn_val(Node *d, Node *k, Node *v)
+{
+    int t = expr_type(d), vt = expr_type(v);
+    if (dict_types.v[t - TY_DICT].val == TY_VOID && d->kind == E_VAR) {
+        Local *lc = find_local(d->name);
+        if (lc && vt != TY_NIL && vt != TY_VOID)
+            lc->type = dict_type(expr_type(k) == TY_INT ? TY_INT : TY_STR, vt);
+        return vt;
+    }
+    return dict_val(t);
+}
+
+/* d[k] = v: un texto va como temporal (_str_kept de ./dash), un objeto gana una referencia */
+static void gen_dict_set(Node *target, Node *v)
+{
+    int t = expr_type(target->a), vt = learn_val(target->a, target->b, v), kind = elem_kind(vt), i, ik;
+    static const char *const sym[2][3] = {{"_dl_dict_set", "_dl_dict_set_obj", "_dl_dict_set_str"},
+                                          {"_dl_dict_seti", "_dl_dict_set_obji", "_dl_dict_set_stri"}};
+    Node *a[3];
+    t = expr_type(target->a);
+    ik = dict_ikeys(t);
+    a[0] = target->a;
+    a[1] = target->b;
+    a[2] = v;
+    w(0x4FEF); w(-12);                                 /* lea -12(sp),sp */
+    sp_depth += 12;
+    for (i = 0; i < 3; i++) {
+        value(a[i]);
+        if (i == 2 && kind == 2) str_kept(v);
+        if (i) { w(0x2F40); w(4 * i); }
+        else w(0x2E80);
+    }
+    rt_call(sym[ik][kind], 3, 0);
+}
+
+/* d.has(k), d.remove(k), d.get(k, defecto), d.keys(), d.clear() */
+static int gen_dict_method(Node *n)
+{
+    int t = expr_type(n->a), ik = dict_ikeys(t);
+    Node *a[3];
+    int na = n->args.n;
+    a[0] = n->a;
+    if (na >= 1) a[1] = n->args.v[0];
+    if (na >= 2) a[2] = n->args.v[1];
+    if (!strcmp(n->name, "has") && na == 1) {
+        args_to_stack(a, 2, NULL);
+        rt_call(ik ? "_dl_dict_hasi" : "_dl_dict_has", 2, 0);
+        return TY_BOOL;
+    }
+    if (!strcmp(n->name, "remove") && na == 1) {
+        args_to_stack(a, 2, NULL);
+        rt_call(ik ? "_dl_dict_removei" : "_dl_dict_remove", 2, 0);
+        return TY_VOID;
+    }
+    if (!strcmp(n->name, "get") && na == 2) {
+        args_to_stack(a, 3, NULL);
+        rt_call(ik ? "_dl_dict_get_ori" : "_dl_dict_get_or", 3, 0);
+        return dict_val(t);
+    }
+    if (!strcmp(n->name, "keys") && na == 0) {
+        args_to_stack(a, 1, NULL);
+        rt_call("_dl_dict_keys", 1, 1);
+        return TY_ARR + dict_types.v[t - TY_DICT].key;
+    }
+    if (!strcmp(n->name, "clear") && na == 0) {
+        args_to_stack(a, 1, NULL);
+        rt_call("_dl_dict_clear", 1, 0);
+        return TY_VOID;
+    }
+    fatal_at(n->line, n->col, "un diccionario no tiene .%s con %d argumentos", n->name, na);
     return TY_VOID;
 }
 
@@ -2461,6 +2612,7 @@ static int gen_expr(Node *n)
     case E_INDEX:
         if (expr_type(n->a) == TY_STR) return gen_str_index(n);
         if (IS_ARR(expr_type(n->a))) return gen_arr_index(n);
+        if (IS_DICT(expr_type(n->a))) return gen_dict_get(n);
         fatal_at(n->line, n->col, "aquí no se puede usar [ ]");
         return TY_VOID;
     case E_SLICE:
@@ -2484,9 +2636,12 @@ static int gen_expr(Node *n)
     case E_LIST:
         gen_list(n, 0);
         return expr_type(n);
+    case E_DICT:
+        return gen_dict(n);
     case E_MCALL:
         if (IS_ARR(expr_type(n->a))) return gen_list_method(n);
         if (IS_STRUCT(expr_type(n->a))) return gen_method(n, expr_type(n->a));
+        if (IS_DICT(expr_type(n->a))) return gen_dict_method(n);
         fatal_at(n->line, n->col, "dashc (prueba): .%s() aún no está", n->name);
         return TY_VOID;
     case E_VAR:
@@ -3282,14 +3437,30 @@ static void gen_global_inits(void)
     for (i = 0; i < prog->globals.n; i++) {
         Global *g = &prog->globals.v[i];
         Var v;
-        if (global_type[i] != TY_STR || g->init->kind == E_NIL) continue;
-        str_value(g->init);
-        push_d0();
-        w(0x4878); w(0);                               /* pea 0.w */
-        sp_depth += 4;
-        rt_call(is_tmp_expr(g->init) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
+        long k;
         v.kind = V_GLOBAL;
         v.off = i * 4;
+        v.type = global_type[i];
+        if (g->init->kind == E_NIL) continue;
+        if (global_type[i] == TY_STR) {
+            str_value(g->init);
+            push_d0();
+            w(0x4878); w(0);                           /* pea 0.w */
+            sp_depth += 4;
+            rt_call(is_tmp_expr(g->init) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
+        } else if (IS_OBJ(global_type[i])) {
+            if (g->init->kind == E_LIST && g->init->args.n) gen_list(g->init, 1);
+            else if (is_new_obj(g->init)) gen_new(g->init, find_struct(g->init->name), 1);
+            else value(g->init);
+            if (!is_new_obj(g->init)) {
+                push_d0();
+                rt_call("_dl_retain_r", 1, 0);         /* la global se queda con una referencia */
+            }
+        } else if (!fold(g->init, &k)) {
+            value(g->init);
+        } else {
+            continue;                                  /* (ya en los datos) */
+        }
         store_d0(&v);
     }
 }
@@ -3574,6 +3745,10 @@ static void gen_stmt(Node *n)
             return;
         }
         if (n->b->kind == E_FIELD && gen_field_store(n->b, n->a)) return;
+        if (n->b->kind == E_INDEX && IS_DICT(expr_type(n->b->a))) {
+            gen_dict_set(n->b, n->a);
+            return;
+        }
         fatal_at(n->line, n->col, "dashc (prueba): esta asignación aún no está");
         return;
     case S_BREAK:
@@ -3989,7 +4164,8 @@ void gen_program(Program *p, Obj *o)
         func_label[i] = new_label();
     }
 
-    /* los nombres de tipos, a sus structs */
+    /* los nombres de tipos, a sus structs (también lo que guarda cada diccionario) */
+    for (i = 0; i < dict_types.n; i++) dict_types.v[i].val = resolve_type(dict_types.v[i].val, 0, 0);
     desc_label = xmalloc(sizeof(int) * (p->structs.n + 1));
     for (i = 0; i < p->structs.n; i++) {
         int j;
@@ -4017,12 +4193,8 @@ void gen_program(Program *p, Obj *o)
         long v = 0;
         Global *g = &p->globals.v[i];
         global_type[i] = g->type;
-        if (g->type == TY_STR) {
-            if (g->init->kind != E_STR && g->init->kind != E_NIL && g->init->kind != E_INTERP)
-                fatal_at(g->line, g->col, "dashc (prueba): el valor inicial de %s tiene que ser un texto fijo", g->name);
-        } else if (!fold(g->init, &v)) {
-            fatal_at(g->line, g->col, "dashc (prueba): el valor inicial de %s tiene que ser un número fijo", g->name);
-        }
+        /* un número fijo va en los datos; lo demás, al empezar Main (gen_global_inits) */
+        if (g->type != TY_STR && !IS_OBJ(g->type)) fold(g->init, &v);
         buf_long(&o->data, (uint32_t)v);
     }
     /* los campos a los que algo asigna (préstamos) */
@@ -4087,6 +4259,14 @@ void gen_program(Program *p, Obj *o)
             free(saved);
         }
     gen_struct_types();
+    if (p->version) {
+        /* @version: "$VER: versión (d.m.aaaa)", como ./dash (lo lee la orden Version) */
+        char ver[512];
+        time_t now = time(NULL);
+        struct tm *tm = localtime(&now);
+        snprintf(ver, sizeof ver, "$VER: %s (%d.%d.%d)", p->version, tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900);
+        add_string(ver, (int)strlen(ver));
+    }
     /* los nombres de los ficheros (_dash_srcfiles de ./dash), terminados en 0 */
     def_label(files_label);
     for (i = 0; i < src_files.n && i < 63; i++) {

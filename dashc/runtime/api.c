@@ -161,6 +161,28 @@ void *dl_retain_r(void *p) { _dash_retain(p); return p; }
 void *dl_obj_assign(void *var, void *v) { _dash_obj_set(&var, v); return var; }
 void *dl_obj_assign_new(void *var, void *v) { _dash_obj_set_new(&var, v); return var; }
 
+/* ---- diccionarios: clave texto (dl_dict_*) o número (dl_dict_*i) ---- */
+DashDict *dl_dict_new(LONG kind) { return DashDict_new(kind); }
+DashDict *dl_dict_from(LONG kind, LONG n, STRPTR *k, LONG *v) { return DashDict_from(kind, n, k, v); }
+DashDict *dl_dict_fromi(LONG kind, LONG n, LONG *k, LONG *v) { return DashDict_fromi(kind, n, k, v); }
+LONG dl_dict_get(DashDict *d, STRPTR k) { return DashDict_get(d, k); }
+LONG dl_dict_geti(DashDict *d, LONG k) { return DashDict_geti(d, k); }
+LONG dl_dict_get_or(DashDict *d, STRPTR k, LONG v) { return DashDict_get_or(d, k, v); }
+LONG dl_dict_get_ori(DashDict *d, LONG k, LONG v) { return DashDict_get_ori(d, k, v); }
+void dl_dict_set(DashDict *d, STRPTR k, LONG v) { DashDict_set(d, k, v); }
+void dl_dict_seti(DashDict *d, LONG k, LONG v) { DashDict_seti(d, k, v); }
+void dl_dict_set_obj(DashDict *d, STRPTR k, void *v) { DashDict_set_obj(d, k, v); }
+void dl_dict_set_obji(DashDict *d, LONG k, void *v) { DashDict_set_obji(d, k, v); }
+void dl_dict_set_str(DashDict *d, STRPTR k, STRPTR v) { DashDict_set_str(d, k, v); }
+void dl_dict_set_stri(DashDict *d, LONG k, STRPTR v) { DashDict_set_stri(d, k, v); }
+LONG dl_dict_has(DashDict *d, STRPTR k) { return DashDict_has(d, k) ? 1 : 0; }
+LONG dl_dict_hasi(DashDict *d, LONG k) { return DashDict_hasi(d, k) ? 1 : 0; }
+void dl_dict_remove(DashDict *d, STRPTR k) { DashDict_remove(d, k); }
+void dl_dict_removei(DashDict *d, LONG k) { DashDict_removei(d, k); }
+void dl_dict_clear(DashDict *d) { DashDict_clear(d); }
+LONG dl_dict_length(DashDict *d) { return DashDict_length(d); }
+DashArrayLong *dl_dict_keys(DashDict *d) { return DashDict_keys(d); }
+
 /* ---- listas ---- */
 DashArrayLong *dl_arr_create(LONG n) { return DashArray_create(n); }
 void dl_arr_insert(DashArrayLong *a, LONG i, LONG v) { DashArray_insert(a, i, v); }

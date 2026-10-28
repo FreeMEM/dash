@@ -39,12 +39,35 @@ static Node *node(int kind, Token *at)
 }
 
 struct TypeNames type_names;
+struct DictTypes dict_types;
+
+int dict_type(int key, int val)
+{
+    DictType d;
+    int i;
+    for (i = 0; i < dict_types.n; i++)
+        if (dict_types.v[i].key == key && dict_types.v[i].val == val) return TY_DICT + i;
+    d.key = key;
+    d.val = val;
+    VEC_PUSH(dict_types, d);
+    return TY_DICT + dict_types.n - 1;
+}
 
 /* Int, Bool, String, Array o el nombre de un struct (que puede venir después: TY_NAMED) */
 static int parse_type(void)
 {
     Token *t;
     int i;
+    if (accept(P_LBRACE)) {
+        /* {String: T} o {Int: T} */
+        Token *at = peek();
+        int key = parse_type(), val;
+        if (key != TY_STR && key != TY_INT) fatal_at(at->line, at->col, "la clave de un diccionario es String o Int");
+        expect(P_COLON);
+        val = parse_type();
+        expect(P_RBRACE);
+        return dict_type(key, val);
+    }
     if (accept(P_LB)) {
         /* [T]: lista de T */
         i = parse_type();
@@ -104,6 +127,18 @@ static Node *atom(void)
     case P_LB:
         n = node(E_LIST, t);
         args_until(&n->args, P_RB);
+        return n;
+    case P_LBRACE:
+        /* {clave: valor, ...} */
+        n = node(E_DICT, t);
+        if (!accept(P_RBRACE)) {
+            do {
+                VEC_PUSH(n->args, expr());
+                expect(P_COLON);
+                VEC_PUSH(n->args, expr());
+            } while (accept(P_COMMA));
+            expect(P_RBRACE);
+        }
         return n;
     case T_ID:
         if (accept(P_LP)) {
@@ -568,6 +603,13 @@ static void parse_into(Program *p)
             expect(T_INT);   /* dashc (prueba): la pila de siempre */
             continue;
         }
+        if (t->kind == T_ID && !strcmp(t->text, "@version")) {
+            p->version = expect(T_STR)->text;
+            continue;
+        }
+        if (t->kind == T_ID && (!strcmp(t->text, "@catalog") || !strcmp(t->text, "@workbench_output") ||
+                                !strcmp(t->text, "@extern")))
+            fatal_at(t->line, t->col, "dashc (prueba): %s aún no está", t->text);
         if (t->kind == T_ID && t->text[0] == '@')
             fatal_at(t->line, t->col, "%s lleva C, y Dash 2.0 no admite C en los programas", t->text);
         if (t->kind == K_FUNC) {
