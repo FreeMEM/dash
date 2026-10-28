@@ -2971,6 +2971,15 @@ INTUITION_EXPANDED = {
         needs_asl=True,
         description="File requester: full path of the chosen file, \"\" if cancelled (save_mode true: save requester)"
     ),
+    "dialog_file_at": BuiltinFunc(
+        name="dialog_file_at",
+        params=["title", "pattern", "save_mode", "drawer", "file"],
+        return_type="STRPTR",
+        c_template="_dash_dialog_file_at(${title}, ${pattern}, ${save_mode}, ${drawer}, ${file})",
+        needs_asl=True,
+        reads_only=True,
+        description="dialog_file opening in that drawer with that file name (\"\": as dialog_file does)"
+    ),
     "dialog_color": BuiltinFunc(
         name="dialog_color",
         params=["title", "initial"],
@@ -3812,6 +3821,20 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_help(${obj}, ${text})",
         description="Bubble help shown when the pointer rests on the object"
     ),
+    "mui_window_move": BuiltinFunc(
+        name="mui_window_move",
+        params=["win", "dx", "dy"],
+        return_type="void",
+        c_template="_dash_mui_window_move(${win}, ${dx}, ${dy})",
+        description="Move an open window by dx, dy pixels (windows of one .dashui open in the same place)"
+    ),
+    "mui_set_active": BuiltinFunc(
+        name="mui_set_active",
+        params=["win", "obj"],
+        return_type="void",
+        c_template="_dash_mui_set_active(${win}, ${obj})",
+        description="Make obj the window's active object: the cursor goes to that string gadget (Amiga-L)"
+    ),
     "mui_window_size": BuiltinFunc(
         name="mui_window_size",
         params=["win", "width_pct", "height_pct"],
@@ -4483,6 +4506,12 @@ TASK_FUNCTIONS = {
     "task_priority": BuiltinFunc(
         name="task_priority", params=["n"], return_type="LONG", c_template="_dash_task_priority(${n})",
         description="Set the program's priority (-128 to 127; the Shell gives 0): the one it had"),
+    "build_date": BuiltinFunc(
+        name="build_date", params=[], return_type="STRPTR", c_template="_dash_build_date()",
+        description="The date the program was compiled, \"2026-10-28\""),
+    "build_time": BuiltinFunc(
+        name="build_time", params=[], return_type="STRPTR", c_template="(STRPTR)__TIME__",
+        description="The time the program was compiled, \"20:45:10\""),
     "console_flush": BuiltinFunc(
         name="console_flush", params=[], return_type="void", c_template="_dash_console_flush()",
         description="Write out now what Print left in the output's buffer (a progress line without its end)"),
@@ -4743,6 +4772,10 @@ SIMINPUT_FUNCTIONS = {
         c_template="_dash_input_drag(${x1}, ${y1}, ${x2}, ${y2})",
         description="Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner "
                     "of the active window)"),
+    "input_qualifiers": BuiltinFunc(
+        name="input_qualifiers", params=[], return_type="LONG", c_template="_dash_input_qualifiers()",
+        description="The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; "
+                    "64, 128 Amiga; 0 if input.device cannot be opened"),
     "input_active_title": BuiltinFunc(
         name="input_active_title", params=[], return_type="STRPTR", c_template="_dash_input_active_title()",
         description="Title of the active window (\"\" if none): to wait for the window of the program to test"),

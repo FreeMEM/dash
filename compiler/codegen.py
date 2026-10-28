@@ -5170,6 +5170,17 @@ static LONG _dash_clock_days(void) {
     return d.ds_Days;
 }
 
+static STRPTR _dash_build_date(void) {
+    static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    static char d[11];
+    const char *s = __DATE__;          /* "Oct 28 2026" */
+    int i, m = 1;
+    for (i = 0; i < 12; i++)
+        if (!strncmp(months + 3 * i, s, 3)) m = i + 1;
+    sprintf(d, "%.4s-%02d-%c%c", s + 7, m, s[4] == ' ' ? '0' : s[4], s[5]);
+    return (STRPTR)d;
+}
+
 static void _dash_console_flush(void) {
     if (Output()) Flush(Output());
 }
@@ -6870,6 +6881,7 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
 #include <devices/input.h>
 #include <devices/inputevent.h>
 #include <proto/keymap.h>
+#include <proto/input.h>
 #ifndef _DASH_KEYMAP_BASE
 #define _DASH_KEYMAP_BASE
 struct Library *KeymapBase = NULL;
@@ -6897,6 +6909,14 @@ static void _dash_input_cleanup(void) {
     _dash_in_port = NULL;
     if (_dash_in_keymap && KeymapBase) { CloseLibrary(KeymapBase); KeymapBase = NULL; }
     _dash_in_keymap = FALSE;
+}
+
+/* The keys held down now (PeekQualifier) */
+static LONG _dash_input_qualifiers(void) {
+    struct Device *InputBase;
+    if (!_dash_input_init()) return 0;
+    InputBase = _dash_in_io->io_Device;
+    return PeekQualifier() & 0xFF;
 }
 
 /* One event, then a tick (20 ms) for the programs to take it */
@@ -13355,10 +13375,12 @@ static void _dash_asl_cleanup(void) {
     }
 }
 
-static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
+static BOOL _dash_file_request_at(STRPTR title, STRPTR pattern, BOOL save, STRPTR drawer, STRPTR file) {
     if (!_dash_asl_init()) return FALSE;
     BOOL result = AslRequestTags(_dash_freq,
         ASLFR_TitleText, (ULONG)title,
+        drawer && *drawer ? ASLFR_InitialDrawer : TAG_IGNORE, (ULONG)drawer,
+        file && *file ? ASLFR_InitialFile : TAG_IGNORE, (ULONG)file,
         ASLFR_InitialPattern, (ULONG)pattern,
         ASLFR_DoPatterns, TRUE,
         ASLFR_DoSaveMode, save,
@@ -13370,6 +13392,10 @@ static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
         strcpy(_dash_asl_file, _dash_freq->fr_File);
     }
     return result;
+}
+
+static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
+    return _dash_file_request_at(title, pattern, save, NULL, NULL);
 }
 
 static STRPTR _dash_get_path(void) { return _dash_asl_path; }
@@ -13393,6 +13419,12 @@ static STRPTR _dash_file_fullpath(void) {
 /* dialog_file: full path of the chosen file, "" if cancelled (a temporary string) */
 static STRPTR _dash_dialog_file(STRPTR title, STRPTR pattern, LONG save_mode) {
     if (!_dash_file_request(title, (pattern && pattern[0]) ? pattern : (STRPTR)"#?", save_mode != 0))
+        return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup(_dash_file_fullpath(), TRUE);
+}
+
+static STRPTR _dash_dialog_file_at(STRPTR title, STRPTR pattern, LONG save_mode, STRPTR drawer, STRPTR file) {
+    if (!_dash_file_request_at(title, (pattern && pattern[0]) ? pattern : (STRPTR)"#?", save_mode != 0, drawer, file))
         return _dash_str_dup((STRPTR)"", TRUE);
     return _dash_str_dup(_dash_file_fullpath(), TRUE);
 }
@@ -15163,6 +15195,16 @@ static void _dash_mui_window_close(APTR win) {
 
 /* TRUE if the window is the active one: the one the user is using (dashweb D32: several windows
    made from the same .dashui share their event numbers) */
+static void _dash_mui_window_move(APTR win, LONG dx, LONG dy) {
+    struct Window *w = NULL;
+    if (win) GetAttr(MUIA_Window_Window, (Object *)win, (IPTR *)&w);
+    if (w) MoveWindow(w, dx, dy);
+}
+
+static void _dash_mui_set_active(APTR win, APTR obj) {
+    if (win && obj) SetAttrs((Object *)win, MUIA_Window_ActiveObject, (IPTR)obj, TAG_DONE);
+}
+
 static LONG _dash_mui_window_active(APTR win) {
     IPTR active = 0;
     if (win) GetAttr(MUIA_Window_Activate, (Object *)win, &active);

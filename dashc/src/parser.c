@@ -3,6 +3,7 @@
    globales con var, const, funciones, if/elif/else, while, for con rango y sobre listas. */
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "dashc.h"
 
@@ -162,6 +163,20 @@ static Node *atom(void)
         return n;
     case T_ID:
         if (!strcmp(t->text, "fn") && peek()->kind == P_LP) return lambda(t);
+        if ((!strcmp(t->text, "build_date") || !strcmp(t->text, "build_time")) && peek()->kind == P_LP &&
+            tk[1].kind == P_RP) {
+            /* el momento de compilar: un texto ya hecho ("2026-10-28", "20:45:10") */
+            time_t now = time(NULL);
+            struct tm *tm = localtime(&now);
+            char buf[16];
+            next();
+            next();
+            strftime(buf, sizeof buf, t->text[6] == 'd' ? "%Y-%m-%d" : "%H:%M:%S", tm);
+            n = node(E_STR, t);
+            n->str = xstrndup(buf, strlen(buf));
+            n->len = (int)strlen(buf);
+            return n;
+        }
         if (accept(P_LP)) {
             n = node(E_CALL, t);
             n->name = t->text;

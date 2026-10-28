@@ -1,6 +1,6 @@
 # Test: builtins for what programs did with @native (Dash 2.0, docs/DASHC_NATIVE.md): the clock as Unix seconds
 # and days, the largest free block, running a command and waiting, the program's path, the preferred language,
-# the CPU and FPU (the emulated A1200: 68020 without FPU), library versions, the priority and console_flush.
+# the CPU and FPU (the emulated A1200: 68020 without FPU), library versions, the priority, the date it was compiled, the keys held and console_flush.
 # expect-out: unix y días: true true
 # expect-out: bloque: true
 # expect-out: antes de la orden
@@ -11,6 +11,8 @@
 # expect-out: cpu: true 0
 # expect-out: versiones: true -1
 # expect-out: prioridad: 0 -5
+# expect-out: compilado: 10 -- 8 ::
+# expect-out: teclas: 0
 # expect-out: antes del flush
 # expect-out: después, sin búfer
 
@@ -37,6 +39,10 @@ Main
     a = task_priority(-5)
     b = task_priority(a)
     Print "prioridad: #{a} #{b}"
+    bd = build_date()
+    bt = build_time()
+    Print "compilado: #{bd.length} #{bd[4:5]}#{bd[7:8]} #{bt.length} #{bt[2:3]}#{bt[5:6]}"
+    Print "teclas: #{input_qualifiers() & 0xF8}"
     Print "antes del flush"
     console_flush()
     console_write("después, sin búfer\n")

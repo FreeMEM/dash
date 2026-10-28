@@ -1,0 +1,20 @@
+# dialog_file_at (Dash 2.0: Tachyon's downloads did it with @native): the file requester opens in that drawer
+# with that name. The test starts a copy of itself (run_program, program_path) that waits for the requester
+# and presses Return (input_key), so the answer is the drawer and the name it was given.
+# emu-needs: asl.library
+# expect-out: RAM:nota.txt
+
+Main
+    if arg_count() > 0
+        n = 0
+        while input_active_title() != "Guardar en" and n < 250
+            time_delay_ms(40)
+            n = n + 1
+        end
+        time_delay_ms(500)          # (the requester activates its File gadget after its window)
+        input_key(0x44, 0)
+    else
+        run_program("\"" + program_path() + "\" teclear")
+        Print dialog_file_at("Guardar en", "", true, "RAM:", "nota.txt")
+    end
+end

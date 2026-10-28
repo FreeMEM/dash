@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 698 functions, 698 implemented, 0 not implemented.
+Total: 704 functions, 704 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -524,6 +524,8 @@ Total: 698 functions, 698 implemented, 0 not implemented.
 | `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
 | `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
 | `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
+| `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
+| `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
 | `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
@@ -641,6 +643,7 @@ Total: 698 functions, 698 implemented, 0 not implemented.
 | `input_click(x, y, qualifiers)` | `void` | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
 | `input_button(button, down)` | `void` | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
 | `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
+| `input_qualifiers()` | `LONG` | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
 | `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
 
 ## Clipboard
@@ -739,6 +742,7 @@ Total: 698 functions, 698 implemented, 0 not implemented.
 | `number_create(win, x, y, w, h, value)` | `LONG` | Create a box that shows a number |  |
 | `number_set(gad, value)` | `void` | Change the number shown |  |
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
+| `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
 | `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
 | `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
 
@@ -859,6 +863,8 @@ Total: 698 functions, 698 implemented, 0 not implemented.
 | `mui_image_toggle(file, group, selected)` | `APTR` | Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, mui_on_change when it changes; group > 0: pressing one lets go the others of that group (alignment), and mui_on_change only fires for the one pressed |  |
 | `mui_combo(text, options)` | `APTR` | Text field with a list that drops down (font, size; options "A\|B"): write or pick a line (double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return or when a line is picked |  |
 | `mui_help(obj, text)` | `void` | Bubble help shown when the pointer rests on the object |  |
+| `mui_window_move(win, dx, dy)` | `void` | Move an open window by dx, dy pixels (windows of one .dashui open in the same place) |  |
+| `mui_set_active(win, obj)` | `void` | Make obj the window's active object: the cursor goes to that string gadget (Amiga-L) |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
 | `mui_window_own_screen(win)` | `BOOL` | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |

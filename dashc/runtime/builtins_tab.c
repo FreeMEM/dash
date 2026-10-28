@@ -95,6 +95,10 @@ const BuiltinInfo builtin_info[] = {
     {"buffer_set_long", 3, 0, 1, 0},
     {"buffer_set_word", 3, 0, 1, 0},
     {"buffer_set_word", 3, 0, 1, 0},
+    {"build_date", 0, 3, 1, 0},
+    {"build_date", 0, 3, 1, 0},
+    {"build_time", 0, 3, 1, 0},
+    {"build_time", 0, 3, 1, 0},
     {"button_create", 6, 1, 1, 0},
     {"button_create", 6, 1, 1, 0},
     {"button_disable", 1, 0, 1, 0},
@@ -235,6 +239,8 @@ const BuiltinInfo builtin_info[] = {
     {"dialog_color", 2, 1, 1, 0},
     {"dialog_file", 3, 3, 1, 0},
     {"dialog_file", 3, 3, 1, 0},
+    {"dialog_file_at", 5, 3, 0, 0},
+    {"dialog_file_at", 5, 3, 0, 0},
     {"dialog_font", 1, 3, 1, 0},
     {"dialog_font", 1, 3, 1, 0},
     {"dir_change", 1, 2, 1, 0},
@@ -481,6 +487,8 @@ const BuiltinInfo builtin_info[] = {
     {"input_key", 2, 0, 1, 0},
     {"input_move", 2, 0, 1, 0},
     {"input_move", 2, 0, 1, 0},
+    {"input_qualifiers", 0, 1, 1, 0},
+    {"input_qualifiers", 0, 1, 1, 0},
     {"input_text", 1, 0, 1, 0},
     {"input_text", 1, 0, 1, 0},
     {"integer_create", 6, 1, 1, 0},
@@ -729,6 +737,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_scroll_begin", 0, 1, 1, 0},
     {"mui_scrollbar", 1, 1, 1, 0},
     {"mui_scrollbar", 1, 1, 1, 0},
+    {"mui_set_active", 2, 0, 1, 0},
+    {"mui_set_active", 2, 0, 1, 0},
     {"mui_set_context_menu", 2, 0, 1, 0},
     {"mui_set_context_menu", 2, 0, 1, 0},
     {"mui_set_enabled", 2, 0, 1, 0},
@@ -777,6 +787,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_window_end", 0, 0, 1, 0},
     {"mui_window_fullscreen", 1, 0, 1, 0},
     {"mui_window_fullscreen", 1, 0, 1, 0},
+    {"mui_window_move", 3, 0, 1, 0},
+    {"mui_window_move", 3, 0, 1, 0},
     {"mui_window_open", 1, 1, 1, 0},
     {"mui_window_open", 1, 1, 1, 0},
     {"mui_window_own_screen", 1, 2, 1, 0},
@@ -1398,7 +1410,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1396;
+const int builtin_count = 1408;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

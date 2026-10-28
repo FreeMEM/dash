@@ -237,3 +237,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Pendientes de la conclusión 3: `input_qualifiers`, `mui_set_active`, `mui_window_move`, `dialog_file_at`,
     `build_date`/`build_time` (son del momento de compilar: dashc los pondría como texto), y los de pruebas
     (`window_find`, `input_event`, `input_move_screen`, `input_menu`, `screen_pixel`, `gadget_find`, `cx_send`).
+- D7 (2.ª parte): `input_qualifiers`, `mui_window_move`, `mui_set_active`, `dialog_file_at`, `build_date` y
+  `build_time` (704 builtins, 96 de MUI). En dashc, `build_date()`/`build_time()` son un texto hecho al compilar
+  (parser.c); en ./dash, `__DATE__` en ISO y `__TIME__`. Tests: test_mui_move_active, test_dialog_file_at (sin C:
+  se relanza con `run_program(program_path())` y la copia pulsa Return con `input_key` medio segundo después de
+  ver el diálogo: antes, el campo aún no está activo) y test_sysinfo ampliado; iguales con gcc y con dashc.
+  - Quedan de la conclusión 3 los de pruebas: `window_find`, `input_event`, `input_move_screen`, `input_menu`,
+    `screen_pixel`, `gadget_find`, `cx_send`.
+  - Tests de ./dash: 458 bien; batería de dashc bien; cobertura: compilan 208 de 312 (66 %) y en el A1200 135 de
+    135 iguales.

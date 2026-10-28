@@ -4403,12 +4403,12 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Tareas, CPU y escritorio | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
 | Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
 | Ficheros vigilados y programas | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
-| Sistema y programa | 12 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest` |
+| Sistema y programa | 14 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest`, `build_date`, `build_time` |
 | Fecha, hora y versión | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simular teclado y ratón | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
+| Simular teclado y ratón | 8 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title`, `input_qualifiers` |
 | Ordenar textos según el idioma | 1 | `str_compare_locale` |
 | Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
@@ -4420,10 +4420,10 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Expresiones regulares y comodines | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
 | Matemáticas de Double | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
+| Intuition | 53 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
-| MUI | 94 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **698** | |
+| MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
+| **Total** | **704** | |
 
 ### Colores Estandar Amiga
 
