@@ -49,6 +49,44 @@ func baja(a, b)
     return c
 end
 
+func primo(n)
+    if n < 2
+        return false
+    end
+    d = 2
+    while d * d <= n
+        if n % d == 0
+            return false
+        end
+        d = d + 1
+    end
+    return true
+end
+
+func cifras(v)
+    c = 0
+    while v != 0
+        c = c + (v & 1)
+        v = v >> 1
+    end
+    return c
+end
+
+func mitades(x)
+    r = 0
+    for i in (1..3)
+        x = x / 4
+        r = r * 10 + x % 10
+    end
+    return r
+end
+
+func tres(x)
+    a = x + 1
+    b = a * 2
+    return b - x
+end
+
 Main
     # i sin usar en el cuerpo: solo el contador
     c = 0
@@ -156,4 +194,34 @@ Main
     Print m / 65535
     Print m % 65534
     Print sombra(100)
+    # división por una variable dentro de un bucle: rápida y lenta
+    for d in (-3..3)
+        if d != 0
+            Print 100 / d
+            Print -100 % d
+        end
+    end
+    for d in (32766..32769)
+        Print 70000000 / d
+        Print 70000000 % d
+        Print -70000 / d
+    end
+    # funciones que devuelven sí o no dentro de un if
+    p = 0
+    for i in (1..60)
+        if primo(i)
+            p = p + i
+        end
+        if not primo(i)
+            p = p - 1
+        end
+    end
+    Print p
+    Print cifras(255) + cifras(1023)
+    Print mitades(1000)
+    Print mitades(-1000)
+    # restas y productos con los dos lados calculados
+    Print tres(5) - tres(9)
+    Print tres(5) * tres(-9)
+    Print (tres(3) & 6) + (tres(4) | 1)
 end
