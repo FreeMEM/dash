@@ -710,3 +710,35 @@ LONG dl_fx_cos(LONG a) { return _dash_fx_cos(a); }
 STRPTR dl_fx_str(LONG a) { return DashString_from_fixed(a); }
 LONG dl_fx_from_float(LONG bits) { union { float f; LONG l; } u; u.l = bits; return (LONG)(u.f * 65536.0f); }
 LONG dl_fx_to_float(LONG a) { union { float f; LONG l; } u; u.f = (float)a / 65536.0f; return u.l; }
+
+/* Win.width, height, left, top, title (0-4) de la ventana abierta, o los de su definición; inner_left, inner_top,
+   inner_width, inner_height (5-8): lo de dentro de los bordes, 0 sin abrir (como ./dash) */
+LONG dl_win_member(struct Window *w, const struct DashWinDesc *d, LONG m)
+{
+    if (!w) {
+        switch (m) {
+        case 0: return d->width;
+        case 1: return d->height;
+        case 2: return d->left;
+        case 3: return d->top;
+        case 4: return (LONG)d->title;
+        default: return 0;
+        }
+    }
+    switch (m) {
+    case 0: return w->Width;
+    case 1: return w->Height;
+    case 2: return w->LeftEdge;
+    case 3: return w->TopEdge;
+    case 4: return (LONG)w->Title;
+    case 5: return (w->Flags & WFLG_GIMMEZEROZERO) ? 0 : w->BorderLeft;
+    case 6: return (w->Flags & WFLG_GIMMEZEROZERO) ? 0 : w->BorderTop;
+    case 7: return (w->Flags & WFLG_GIMMEZEROZERO) ? w->GZZWidth : w->Width - w->BorderLeft - w->BorderRight;
+    default: return (w->Flags & WFLG_GIMMEZEROZERO) ? w->GZZHeight : w->Height - w->BorderTop - w->BorderBottom;
+    }
+}
+
+#ifdef DASH_MEMCHECK
+/* --memcheck: leer un campo weak cuyo objeto ya se liberó es un error (y nil) */
+APTR dl_weak_check(APTR p) { return _dash_weak_check(p); }
+#endif

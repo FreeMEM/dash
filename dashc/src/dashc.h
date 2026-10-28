@@ -168,13 +168,24 @@ typedef struct {
     char *name;
     int line, col, type;
     Node *init;      /* valor por defecto, o NULL */
+    int weak;        /* weak padre: Nodo: apunta sin sostener (sin referencia) */
 } Field;
 
-/* Los métodos van en funcs como "Struct.metodo", con self de primer parámetro */
+/* Un método de una interfaz: su posición en la tabla de métodos de los structs (slot, única en el programa) */
+typedef struct {
+    char *name;
+    int ret, nparams, slot;
+} IfaceMethod;
+
+/* Los métodos van en funcs como "Struct.metodo", con self de primer parámetro. Una interfaz es un Struct sin
+   campos con iface y sus métodos; un struct dice las que cumple en ifaces. */
 typedef struct {
     char *name;
     int line, col;
     struct { Field *v; int n, cap; } fields;
+    int iface;
+    struct { IfaceMethod *v; int n, cap; } methods;   /* (de una interfaz) */
+    struct { char **v; int n, cap; } ifaces;          /* (de un struct: los nombres de sus interfaces) */
 } Struct;
 
 typedef struct {
@@ -203,6 +214,7 @@ typedef struct {
     int has_main;
     char *version;   /* @version: lo que va tras "$VER: " */
     long stack_min;  /* @stack N: al menos esa pila */
+    int nslots;      /* los métodos de interfaz del programa (tamaño de la tabla de métodos de un struct) */
 } Program;
 
 Program *parse(Token *toks);

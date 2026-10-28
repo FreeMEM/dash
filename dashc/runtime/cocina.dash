@@ -2,6 +2,7 @@ struct K
     n: Int = 0
     s: String = ""
     o: K = nil
+    weak w: K = nil
 end
 
 func f(a: String, l: Array) -> String

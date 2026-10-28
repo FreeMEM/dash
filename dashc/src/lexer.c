@@ -69,7 +69,12 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
                 }
                 if (*e) e++;
             }
-            if (*e != '}') fatal_at(line, col, "#{ sin cerrar");
+            if (*e != '}') {
+                /* "#{" sin cerrar: texto, como en ./dash */
+                buf_byte(&b, '#');
+                s++;
+                continue;
+            }
             t->piece = xrealloc(t->piece, sizeof(char *) * (t->npieces + 2));
             t->plen = xrealloc(t->plen, sizeof(int) * (t->npieces + 2));
             buf_byte(&b, 0);

@@ -93,7 +93,8 @@ static int parse_type(void)
     if (!strcmp(t->text, "Double")) return TY_DOUBLE;
     if (!strcmp(t->text, "Func")) return TY_INT;          /* una función como valor: su dirección */
     if (!strcmp(t->text, "Fixed")) return TY_FIXED;      /* coma fija 16.16 en un LONG */
-    if (!strcmp(t->text, "Void"))
+    if (!strcmp(t->text, "Void")) return TY_VOID;          /* -> Void: no devuelve nada */
+    if (0)
         fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
     for (i = 0; i < type_names.n; i++)
         if (!strcmp(type_names.v[i], t->text)) return TY_NAMED + i;
@@ -104,6 +105,7 @@ static int parse_type(void)
 /* ---- expresiones, de menos a más precedencia ---- */
 static Node *expr(void);
 static Node *lambda(Token *t);
+static void block(NodeList *out, int stop1, int stop2, int stop3);
 
 static Node *interp(Token *t);
 
@@ -199,18 +201,26 @@ static Node *lambda(Token *t)
         } while (accept(P_COMMA));
         expect(P_RP);
     }
-    expect(P_ARROW);
     snprintf(name, sizeof name, "__fn_%d", nlambdas++);
     f.name = xstrndup(name, strlen(name));
     f.line = t->line;
     f.col = t->col;
     f.file = t->file;
-    f.has_value = 1;
-    r = node(S_RETURN, t);
-    r->a = expr();
-    f.boolret = r->a->kind == E_CMP || r->a->kind == E_AND || r->a->kind == E_OR || r->a->kind == E_NOT ||
-                r->a->kind == E_BOOL;
-    VEC_PUSH(f.body, r);
+    if (accept(P_ARROW)) {
+        f.has_value = 1;
+        r = node(S_RETURN, t);
+        r->a = expr();
+        f.boolret = r->a->kind == E_CMP || r->a->kind == E_AND || r->a->kind == E_OR || r->a->kind == E_NOT ||
+                    r->a->kind == E_BOOL;
+        VEC_PUSH(f.body, r);
+    } else {
+        /* fn(x) en su línea, el cuerpo debajo y end */
+        Func *saved = cur_func;
+        cur_func = &f;
+        block(&f.body, K_END, K_END, K_END);
+        cur_func = saved;
+        expect(K_END);
+    }
     VEC_PUSH(lambdas, f);
     n = node(E_VAR, t);
     n->name = f.name;
@@ -750,12 +760,40 @@ static void parse_into(Program *p)
             expect(P_ASSIGN);
             c.value = expr();
             VEC_PUSH(p->consts, c);
+        } else if (t->kind == T_ID && !strcmp(t->text, "interface") && peek()->kind == T_ID) {
+            /* interface Nombre / func metodo(params) -> Tipo / ... / end */
+            Struct st = {0};
+            Token *name = expect(T_ID);
+            st.name = name->text;
+            st.line = name->line;
+            st.col = name->col;
+            st.iface = 1;
+            while (!accept(K_END)) {
+                IfaceMethod m = {0};
+                expect(K_FUNC);
+                m.name = expect(T_ID)->text;
+                expect(P_LP);
+                if (!accept(P_RP)) {
+                    do {
+                        expect(T_ID);
+                        if (accept(P_COLON)) parse_type();
+                        m.nparams++;
+                    } while (accept(P_COMMA));
+                    expect(P_RP);
+                }
+                m.ret = accept(P_ARROW) ? parse_type() : TY_VOID;
+                m.slot = p->nslots++;
+                VEC_PUSH(st.methods, m);
+            }
+            VEC_PUSH(p->structs, st);
         } else if (t->kind == K_STRUCT) {
             Struct st = {0};
             Token *name = expect(T_ID);
             st.name = name->text;
             st.line = name->line;
             st.col = name->col;
+            if (accept(P_COLON))                       /* struct Cuadro: Figura, Orden */
+                do VEC_PUSH(st.ifaces, expect(T_ID)->text); while (accept(P_COMMA));
             while (!accept(K_END)) {
                 Token *f = next();
                 if (f->kind == K_FUNC) {
@@ -764,6 +802,10 @@ static void parse_into(Program *p)
                     parse_func(p, &st);
                 } else if (f->kind == T_ID) {
                     Field fd = {0};
+                    if (!strcmp(f->text, "weak") && peek()->kind == T_ID) {
+                        fd.weak = 1;
+                        f = next();
+                    }
                     fd.name = f->text;
                     fd.line = f->line;
                     fd.col = f->col;

@@ -538,6 +538,25 @@ static int32_t arith(int op, int32_t a, int32_t b, Node *at)
 }
 
 static int expr_type(Node *n);
+static Local *find_local(const char *name);
+static int lookup_global(const char *name);
+
+static int find_window(const char *name);
+
+/* Win.width, height, left, top, title, inner_left, inner_top, inner_width, inner_height: su número (0-8), o -1 */
+static int window_member(Node *n)
+{
+    static const char *const m[] = {"width", "height", "left", "top", "title", "inner_left", "inner_top",
+                                    "inner_width", "inner_height", NULL};
+    int i;
+    if (n->kind != E_FIELD || n->a->kind != E_VAR || find_local(n->a->name) || lookup_global(n->a->name)) return -1;
+    for (i = 0; i < prog->windows.n; i++)
+        if (!strcmp(prog->windows.v[i].name, n->a->name)) break;
+    if (i == prog->windows.n) return -1;
+    for (i = 0; m[i]; i++)
+        if (!strcmp(m[i], n->name)) return i;
+    return -1;
+}
 
 static int fold(Node *n, long *v)
 {
@@ -930,6 +949,7 @@ static int expr_type(Node *n)
     case E_SLICE:
         return expr_type(n->a);
     case E_FIELD:
+        if (window_member(n) >= 0) return window_member(n) == 4 ? TY_STR : TY_INT;
         ta = expr_type(n->a);
         if (IS_STRUCT(ta)) {
             Struct *st = &prog->structs.v[ta - TY_STRUCT];
@@ -953,6 +973,14 @@ static int expr_type(Node *n)
             if (!strcmp(n->name, "get")) return dict_val(ta);
             if (!strcmp(n->name, "has")) return TY_BOOL;
             if (!strcmp(n->name, "keys")) return TY_ARR + dict_types.v[ta - TY_DICT].key;
+        }
+        if (IS_STRUCT(ta) && prog->structs.v[ta - TY_STRUCT].iface) {
+            IfaceMethod *m;
+            int i;
+            Struct *st = &prog->structs.v[ta - TY_STRUCT];
+            for (i = 0, m = NULL; i < st->methods.n; i++)
+                if (!strcmp(st->methods.v[i].name, n->name)) m = &st->methods.v[i];
+            return m ? m->ret : TY_VOID;
         }
         if (IS_STRUCT(ta)) {
             char name[256];
@@ -1534,12 +1562,26 @@ static Struct *struct_ptr(Node *n, const char *field, int *off, int *ftype)
     return st;
 }
 
+/* ¿es weak el campo de n (p.campo)? */
+static int field_weak(Node *n)
+{
+    int t = expr_type(n->a), f;
+    if (!IS_STRUCT(t)) return 0;
+    f = field_index(&prog->structs.v[t - TY_STRUCT], n->name);
+    return f >= 0 && prog->structs.v[t - TY_STRUCT].fields.v[f].weak;
+}
+
 static int gen_struct_field(Node *n)
 {
     int off, ft;
     if (!struct_ptr(n->a, n->name, &off, &ft)) return -1;
     w(0x2028); w(off);                                 /* move.l off(a0),d0 */
     d0_loaded = (uint32_t)obj->code.n;
+    if (memcheck && field_weak(n)) {
+        /* --memcheck: un weak a un objeto ya liberado es un error (y nil), como _DASH_WEAK de ./dash */
+        push_d0();
+        rt_call("_dl_weak_check", 1, 0);
+    }
     return ft;
 }
 
@@ -1557,7 +1599,7 @@ static int gen_field_store(Node *target, Node *v)
     push_d0();
     if (!struct_ptr(target->a, target->name, &off, &ft))
         fatal_at(target->line, target->col, "%s no es un campo", target->name);
-    if (IS_STRLIKE(ft) || IS_OBJ(ft)) {
+    if ((IS_STRLIKE(ft) || IS_OBJ(ft)) && !field_weak(target)) {
         w(0x4868); w(off);                             /* pea off(a0) */
         sp_depth += 4;
         rt_call(!IS_STRLIKE(ft) ? "_dl_obj_set" : is_tmp_expr(v) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
@@ -1617,7 +1659,7 @@ static int gen_new(Node *n, int si, int fresh)
             rt_call(is_tmp_expr(vals[i]) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
         } else {
             w(0x256F); w(4 * i); w(off);               /* move.l v(sp),off(a2) */
-            if (IS_OBJ(ft)) {
+            if (IS_OBJ(ft) && !st->fields.v[i].weak) {
                 w(0x2F2A); w(off);                     /* move.l off(a2),-(sp) */
                 sp_depth += 4;
                 rt_call("_dl_retain", 1, 0);
@@ -1674,11 +1716,47 @@ static void lend(Node *a)
 }
 
 /* p.metodo(args): la función "Struct.metodo" con p (comprobado) delante */
+/* el método name de la interfaz t (un Struct con iface), o NULL */
+static IfaceMethod *iface_method(int t, const char *name)
+{
+    Struct *st;
+    int i;
+    if (!IS_STRUCT(t) || !(st = &prog->structs.v[t - TY_STRUCT])->iface) return NULL;
+    for (i = 0; i < st->methods.n; i++)
+        if (!strcmp(st->methods.v[i].name, name)) return &st->methods.v[i];
+    return NULL;
+}
+
+/* o.metodo(args) con o de una interfaz: el de su struct, por la tabla de métodos de su _DashType (la cabecera del
+   objeto, a -4; la tabla, a 8 del tipo), como ./dash */
+static int gen_iface_call(Node *n, int t)
+{
+    IfaceMethod *m = iface_method(t, n->name);
+    int i;
+    if (!m) fatal_at(n->line, n->col, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
+    if (n->args.n != m->nparams)
+        fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, m->nparams, n->args.n);
+    for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
+    value(n->a);
+    nil_check();
+    push_d0();                                         /* self */
+    w(0x2040);                                         /* movea.l d0,a0 */
+    w(0x2068); w(-4);                                  /* movea.l -4(a0),a0: su tipo */
+    w(0x2068); w(8);                                   /* movea.l 8(a0),a0: su tabla de métodos */
+    w(0x2068); w(4 * m->slot);                         /* movea.l slot(a0),a0 */
+    w(0x4E90);                                         /* jsr (a0) */
+    pop_args(n->args.n + 1);
+    d0_loaded = (uint32_t)-1;
+    if (IS_STRLIKE(m->ret) || IS_OBJ(m->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
+    return m->ret;
+}
+
 static int gen_method(Node *n, int t)
 {
     char name[256];
     Node call, nn;
     int idx = 0, r;
+    if (prog->structs.v[t - TY_STRUCT].iface) return gen_iface_call(n, t);
     snprintf(name, sizeof name, "%s.%s", prog->structs.v[t - TY_STRUCT].name, n->name);
     if (!find_func(name, &idx)) fatal_at(n->line, n->col, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
     memset(&call, 0, sizeof call);
@@ -3106,7 +3184,30 @@ static int gen_expr(Node *n)
         fatal_at(n->line, n->col, "aquí no se puede usar [ : ]");
         return TY_VOID;
     case E_FIELD: {
-        int t = gen_struct_field(n);
+        int t, wm = window_member(n);
+        if (wm >= 0) {
+            /* Win.width...: de la ventana abierta (puede haber cambiado) o de su definición, como ./dash */
+            int wi = find_window(n->a->name);
+            Fixup f;
+            load_imm(0, wm);
+            push_d0();
+            w(0x4879);                                 /* pea descriptor */
+            f.at = (uint32_t)obj->code.n;
+            f.label = win_desc_label[wi];
+            f.abs = 1;
+            f.size = 2;
+            VEC_PUSH(fixups, f);
+            add_reloc(f.at, HK_CODE, NULL);
+            l(0);
+            sp_depth += 4;
+            w(0x2F39);                                 /* move.l ventana,-(sp) */
+            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+            l((uint32_t)win_off[wi]);
+            sp_depth += 4;
+            rt_call("_dl_win_member", 3, 0);
+            return wm == 4 ? TY_STR : TY_INT;
+        }
+        t = gen_struct_field(n);
         if (t >= 0) return t;
         return gen_field(n);
     }
@@ -5090,6 +5191,19 @@ static int resolve_type(int t, int line, int col)
     return t + d * TY_ARR;
 }
 
+/* el cuerpo que se resuelve (Main o una función, con sus parámetros): sus variables tapan a las funciones */
+static NodeList *resolving_body;
+static Func *resolving_func;
+static int list_assigns(NodeList *l, const char *name);
+
+static int is_local_name(const char *name)
+{
+    int i;
+    for (i = 0; resolving_func && i < resolving_func->params.n; i++)
+        if (!strcmp(resolving_func->params.v[i].name, name)) return 1;
+    return resolving_body && list_assigns(resolving_body, name);
+}
+
 /* Una constante que no es un número fijo (un texto, un Float): su valor en cada sitio donde se usa */
 static void subst_consts(Node **pe)
 {
@@ -5100,7 +5214,7 @@ static void subst_consts(Node **pe)
     if (e->kind == E_VAR) {
         for (i = 0; i < prog->globals.n; i++)
             if (!strcmp(prog->globals.v[i].name, e->name)) return;
-        if (find_func(e->name, NULL)) {
+        if (find_func(e->name, NULL) && !is_local_name(e->name)) {
             e->kind = E_FUNCREF;                       /* una función como valor */
             return;
         }
@@ -5145,14 +5259,15 @@ static void gen_struct_types(void)
         Struct *st = &prog->structs.v[si];
         int destroy = -1;
         for (i = 0; i < st->fields.n; i++)
-            if (IS_STRLIKE(st->fields.v[i].type) || IS_OBJ(st->fields.v[i].type)) destroy = new_label();
+            if ((IS_STRLIKE(st->fields.v[i].type) || IS_OBJ(st->fields.v[i].type)) && !st->fields.v[i].weak)
+                destroy = new_label();
         if (destroy >= 0) {
             def_label(destroy);
             w(0x2F0A);                                 /* move.l a2,-(sp) */
             w(0x246F); w(8);                           /* movea.l 8(sp),a2 */
             for (i = 0; i < st->fields.n; i++) {
                 int ft = st->fields.v[i].type;
-                if (!IS_STRLIKE(ft) && !IS_OBJ(ft)) continue;
+                if ((!IS_STRLIKE(ft) && !IS_OBJ(ft)) || st->fields.v[i].weak) continue;
                 w(0x2F2A); w(4 * i);                   /* move.l campo(a2),-(sp) */
                 jsr_sym(IS_STRLIKE(ft) ? "_dl_str_free" : "_dl_release_child");
                 w(0x588F);                             /* addq.l #4,sp */
@@ -5172,7 +5287,44 @@ static void gen_struct_types(void)
         }
         l(0);
         l((uint32_t)(4 * st->fields.n));
-        l(0);
+        if (st->ifaces.n) {
+            /* la tabla de métodos de sus interfaces: justo detrás */
+            Fixup f;
+            int tab = new_label(), j, k;
+            f.at = (uint32_t)obj->code.n;
+            f.label = tab;
+            f.abs = 1;
+            f.size = 2;
+            VEC_PUSH(fixups, f);
+            add_reloc(f.at, HK_CODE, NULL);
+            l(0);
+            def_label(tab);
+            for (k = 0; k < prog->nslots; k++) {
+                /* el método de este slot: de una de sus interfaces, con su "Struct.metodo" */
+                const char *mname = NULL;
+                int fi = -1;
+                for (j = 0; j < st->ifaces.n && !mname; j++) {
+                    int ii = find_struct(st->ifaces.v[j]), q;
+                    if (ii < 0 || !prog->structs.v[ii].iface)
+                        fatal_at(st->line, st->col, "%s no es una interfaz", st->ifaces.v[j]);
+                    for (q = 0; q < prog->structs.v[ii].methods.n; q++)
+                        if (prog->structs.v[ii].methods.v[q].slot == k) mname = prog->structs.v[ii].methods.v[q].name;
+                }
+                if (mname) {
+                    char full[256];
+                    snprintf(full, sizeof full, "%s.%s", st->name, mname);
+                    if (!find_func(full, &fi))
+                        fatal_at(st->line, st->col, "%s no tiene el método %s de su interfaz", st->name, mname);
+                    f.at = (uint32_t)obj->code.n;
+                    f.label = func_label[fi];
+                    VEC_PUSH(fixups, f);
+                    add_reloc(f.at, HK_CODE, NULL);
+                }
+                l(0);
+            }
+        } else {
+            l(0);
+        }
     }
 }
 
@@ -5225,9 +5377,14 @@ void gen_program(Program *p, Obj *o)
         int j;
         for (j = 0; j < f->params.n; j++) f->params.v[j].type = resolve_type(f->params.v[j].type, f->line, f->col);
         f->ret = resolve_type(f->ret, f->line, f->col);
+        resolving_func = f;
+        resolving_body = &f->body;
         resolve_list(&f->body);
     }
+    resolving_func = NULL;
+    resolving_body = &p->main;
     resolve_list(&p->main);
+    resolving_body = NULL;
 
     /* globales: sus valores iniciales van en el hunk de datos (los textos, al empezar Main) */
     global_type = xmalloc(sizeof(int) * (p->globals.n + 1));
@@ -5289,6 +5446,19 @@ void gen_program(Program *p, Obj *o)
     add_reloc((uint32_t)obj->code.n, -1, "__dash_start");
     l(0);
 
+    /* los métodos de las interfaces van en las tablas de métodos: se generan aunque nadie los llame directo */
+    for (i = 0; i < p->structs.n; i++) {
+        int j, fi;
+        Struct *st = &p->structs.v[i];
+        for (j = 0; j < p->funcs.n; j++) {
+            size_t len = strlen(st->name);
+            if (st->ifaces.n && !strncmp(p->funcs.v[j].name, st->name, len) && p->funcs.v[j].name[len] == '.' &&
+                !needed[j]) {
+                fi = j;
+                needed[fi] = 1;
+            }
+        }
+    }
     /* Main y las funciones a las que se llama de verdad (no copiadas) */
     gen_one(-1, main_label, NULL, &p->main);
     do {

@@ -196,3 +196,15 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     (excepción en una librería de base 0 en el A500 y la cobertura tumbada). Ahora cualquier llamada suelta de la
     limpieza va por puntero débil.
 - Cobertura: compila 192 de 309 (62 %); en el A1200 (y MUI), 115 de 115 iguales. Batería bien.
+- D3 (4.ª parte): interfaces, `weak`, `-> Void`, `Win.width` y compañía, lambdas de bloque, `#{` sin cerrar.
+  - Interfaces como ./dash: cada método de interfaz tiene un slot del programa; el `_DashType` de un struct que las
+    cumple (`struct Cuadro: Figura, Orden`) lleva detrás su tabla de métodos, y `o.metodo()` salta por ella
+    (cabecera del objeto a -4, tabla a 8 del tipo); los métodos de la tabla se generan siempre. test_interfaces y
+    test_interfaces_module, iguales (con `--memcheck`).
+  - `weak padre: Nodo`: se guarda sin referencia y el destroy del struct no lo suelta; con `--memcheck`, leer uno
+    de un objeto ya liberado es un error (`_dash_weak_check`). test_weak y test_weak_dangling, iguales.
+  - `Win.width`, `height`, `left`, `top`, `title` e `inner_*`: de la ventana abierta o de su definición
+    (`dl_win_member`). `-> Void`. `fn(x)` con el cuerpo debajo y `end`. Un `#{` sin cerrar es texto.
+  - Regresión arreglada: un local de un módulo con el nombre de una función del programa (`inicio`) se tomaba
+    por la función como valor; ahora una variable o un parámetro de ese cuerpo tapa a la función.
+  - Cobertura: compilan 200 de 309 (64 %); en el A1200 (y MUI), 123 de 123 iguales. Batería bien.
