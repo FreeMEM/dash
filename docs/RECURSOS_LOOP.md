@@ -203,3 +203,16 @@ diga el usuario. Base medida: `Base ronda 3`.
   una consola de libnix a pantalla completa que espera a que la cierren.
 - Arreglo, en el test: `NP_Input`/`NP_Output` a 0 sin cerrarlos, como el Workbench, y `@workbench_output "NIL:"`.
   Seguidos con `--memcheck`, `test_args_wb`, `test_on_click_timer` y `test_desktop_canvas_fondo` pasan.
+
+### R12 — diccionarios: hash de las claves literales hecho al compilar, longitudes antes que bytes
+- `d["color"]`, `d.get("color", x)`, `d.has("color")`, `d.remove("color")` y `d["color"] = v`: la clave literal
+  (ASCII sin escapes) va como `_DASH_KEY("color", 0x...)`, un texto de Dash hecho por el compilador con su hash
+  (el mismo djb2 del runtime) en el LONG de delante de la cabecera y el bit `_DASH_STR_HASHED`. En Tachyon hay
+  265 accesos con clave literal y 268 `has`.
+- `_dash_dict_slot`: hash y longitud de la clave con una sola mirada a la cabecera; cada hueco compara primero la
+  longitud (las claves son textos del diccionario: la tienen en la cabecera) y luego los bytes, en línea (con
+  `memcmp` de libnix, una llamada, iba más lento que antes).
+- Medida (programa aparte, 12 claves de CSS de 5 a 19 letras, A500 / A1200): leer con clave variable −6 % / −3 %,
+  escribir −4 % / −2 %, leer con clave literal −41 % / −34 %.
+- Probado: `test_dict_key_hash` (clave literal y calculada en los dos sentidos, `has`, `remove`, una con acento que
+  no lleva hash, dos de la misma longitud) en A1200 y A500; los tests de diccionarios con `--memcheck`; 456/456.

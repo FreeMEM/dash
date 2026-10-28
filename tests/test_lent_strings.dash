@@ -5,7 +5,7 @@
 # the text (a function that writes the dictionary) it is still copied: the value read before the change stays.
 # memcheck
 # expect-c: STRPTR v = (STRPTR)(((STRPTR)DashDict_get_or(e, prop, (LONG)(""))));
-# expect-c: _dash_str_set_copy(&x, ((STRPTR)DashDict_get(e, "color")));
+# expect-c: _dash_str_set_copy(&x, ((STRPTR)DashDict_get(e, _DASH_KEY("color", 0x0F3D3244UL))));
 # expect-out: 4 4 0
 # expect-out: rojo azul
 # expect-out: rojo
