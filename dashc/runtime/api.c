@@ -144,7 +144,21 @@ void *dl_obj_float(void *p) { return _dash_obj_float(p); }
 void *dl_obj_lend(void *p) { return _dash_obj_lend(p); }
 void *dl_obj_escape(void *p) { return _dash_obj_escape(p); }
 
+void *dl_retain_r(void *p) { _dash_retain(p); return p; }
+/* var = valor para una lista o un struct, devolviendo lo que queda en var */
+void *dl_obj_assign(void *var, void *v) { _dash_obj_set(&var, v); return var; }
+void *dl_obj_assign_new(void *var, void *v) { _dash_obj_set_new(&var, v); return var; }
+
 /* ---- listas ---- */
+DashArrayLong *dl_arr_create(LONG n) { return DashArray_create(n); }
+void dl_arr_insert(DashArrayLong *a, LONG i, LONG v) { DashArray_insert(a, i, v); }
+void dl_arr_insert_obj(DashArrayLong *a, LONG i, void *v) { DashArray_insert_obj(a, i, v); }
+void dl_arr_insert_str(DashArrayLong *a, LONG i, STRPTR v) { DashArray_insert_str(a, i, v); }
+LONG dl_arr_pop(DashArrayLong *a) { return DashArray_pop(a); }
+void *dl_arr_pop_obj(DashArrayLong *a) { return DashArray_pop_obj(a); }
+STRPTR dl_arr_pop_str(DashArrayLong *a) { return DashArray_pop_str(a); }
+void dl_arr_remove(DashArrayLong *a, LONG i) { DashArray_remove(a, i); }
+void dl_arr_clear(DashArrayLong *a) { DashArray_clear(a); }
 DashArrayLong *dl_arr_from(LONG n, const LONG *v) { return DashArray_from(n, v); }
 DashArrayLong *dl_arr_from_new(LONG n, const LONG *v) { return DashArray_from_new(n, v); }
 DashArrayLong *dl_arr_own(DashArrayLong *a, LONG kind) { return DashArray_own(a, kind); }

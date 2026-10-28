@@ -41,12 +41,19 @@ struct TypeNames type_names;
 /* Int, Bool, String, Array o el nombre de un struct (que puede venir después: TY_NAMED) */
 static int parse_type(void)
 {
-    Token *t = expect(T_ID);
+    Token *t;
     int i;
+    if (accept(P_LB)) {
+        /* [T]: lista de T */
+        i = parse_type();
+        expect(P_RB);
+        return (i == TY_ARR + TY_VOID ? TY_ARR + TY_INT : i) + TY_ARR;
+    }
+    t = expect(T_ID);
     if (!strcmp(t->text, "Int")) return TY_INT;
     if (!strcmp(t->text, "Bool")) return TY_BOOL;
     if (!strcmp(t->text, "String")) return TY_STR;
-    if (!strcmp(t->text, "Array")) return TY_ARR + TY_INT;
+    if (!strcmp(t->text, "Array")) return TY_ARR + TY_VOID;   /* lo que guarda, por su uso */
     if (!strcmp(t->text, "Float") || !strcmp(t->text, "Fixed") || !strcmp(t->text, "Pointer") ||
         !strcmp(t->text, "Func") || !strcmp(t->text, "Void"))
         fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);

@@ -833,15 +833,29 @@ static int expr_type(Node *n)
     case E_INDEX:
         ta = expr_type(n->a);
         if (ta == TY_STR) return TY_CHAR;
-        if (IS_ARR(ta)) return ta - TY_ARR;
+        if (IS_ARR(ta)) return ta == TY_ARR + TY_VOID ? TY_INT : ta - TY_ARR;
         return TY_INT;
     case E_SLICE:
         return expr_type(n->a);
     case E_FIELD:
         if (!strcmp(n->name, "length")) return TY_INT;
         return TY_INT;
+    case E_LIST:
+        if (!n->args.n) return TY_ARR + TY_VOID;       /* []: lo que se meta dirá qué guarda */
+        ta = expr_type(n->args.v[0]);
+        return TY_ARR + (ta == TY_NIL ? TY_INT : ta);
+    case E_MCALL:
+        ta = expr_type(n->a);
+        if (IS_ARR(ta) && !strcmp(n->name, "pop")) return ta == TY_ARR + TY_VOID ? TY_INT : ta - TY_ARR;
+        return TY_VOID;
     }
     return TY_INT;
+}
+
+/* qué guarda una lista de elementos de tipo t: 0 números, 1 objetos, 2 textos (DashArray_own) */
+static int elem_kind(int t)
+{
+    return t == TY_STR ? 2 : IS_OBJ(t) ? 1 : 0;
 }
 
 /* lo que devuelve una función sin "-> Tipo": el tipo del primer return con valor, con las
@@ -879,6 +893,27 @@ static void walk_types(NodeList *l, int *ret)
         case S_RETURN:
             if (st->a && (*ret == TY_VOID || *ret == TY_NIL)) *ret = expr_type(st->a);
             break;
+        case S_EXPR:
+        case S_STORE: {
+            /* r = [] y luego r.push(x) o r[i] = x: la lista guarda lo de x */
+            Node *list = NULL, *v = NULL;
+            int j;
+            if (st->kind == S_EXPR && st->a->kind == E_MCALL && st->a->args.n &&
+                (!strcmp(st->a->name, "push") || !strcmp(st->a->name, "insert"))) {
+                list = st->a->a;
+                v = st->a->args.v[st->a->args.n - 1];
+            } else if (st->kind == S_STORE && st->b->kind == E_INDEX) {
+                list = st->b->a;
+                v = st->a;
+            }
+            if (list && list->kind == E_VAR)
+                for (j = tenv.n - 1; j >= tenv_base; j--)
+                    if (!strcmp(tenv.v[j].name, list->name)) {
+                        if (tenv.v[j].type == TY_ARR + TY_VOID) tenv.v[j].type = TY_ARR + expr_type(v);
+                        break;
+                    }
+            break;
+        }
         }
         walk_types(&st->body, ret);
         walk_types(&st->els, ret);
@@ -889,7 +924,8 @@ static int func_ret(int idx)
 {
     Func *f = &prog->funcs.v[idx];
     int saved_on = tenv_on, saved_base = tenv_base, saved_n = tenv.n, i, r = TY_VOID;
-    if (f->declared || fret_state[idx] == 2) return f->ret;
+    /* (-> Array sin más: lo que guarda, del cuerpo) */
+    if ((f->declared && f->ret != TY_ARR + TY_VOID) || fret_state[idx] == 2) return f->ret;
     if (fret_state[idx] == 1) return f->has_value ? TY_INT : TY_VOID;
     fret_state[idx] = 1;
     tenv_on = 1;
@@ -905,6 +941,7 @@ static int func_ret(int idx)
     tenv_on = saved_on;
     tenv_base = saved_base;
     if (r == TY_BOOL || r == TY_CHAR || r == TY_NIL || (r == TY_VOID && f->has_value)) r = TY_INT;
+    if (f->declared && !IS_ARR(r)) r = f->ret;
     f->ret = r;
     fret_state[idx] = 2;
     return r;
@@ -914,7 +951,7 @@ static int func_ret(int idx)
 static int is_tmp_expr(Node *e)
 {
     return e->kind == E_BIN || e->kind == E_INTERP || e->kind == E_SLICE || e->kind == E_CALL ||
-           e->kind == E_MCALL;
+           e->kind == E_MCALL || e->kind == E_LIST;
 }
 
 /* d0 (de tipo ty) como texto: un número o un carácter pasan a un texto temporal */
@@ -1028,13 +1065,188 @@ static int gen_str_slice(Node *n)
 static int gen_field(Node *n)
 {
     int t = expr_type(n->a);
-    if (!strcmp(n->name, "length") && t == TY_STR) {
+    if (!strcmp(n->name, "length") && (t == TY_STR || IS_ARR(t))) {
         args_to_stack(&n->a, 1, NULL);
-        rt_call("_dl_str_len", 1, 0);
+        rt_call(t == TY_STR ? "_dl_str_len" : "_dl_arr_length", 1, 0);
         return TY_INT;
     }
     fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
     return TY_VOID;
+}
+
+/* ---- listas ---- */
+
+/* el texto de d0 como temporal, si no lo es ya (un texto que guarda una lista es suyo) */
+static void str_kept(Node *e)
+{
+    if (is_tmp_expr(e) || e->kind == E_NIL) return;
+    push_d0();
+    rt_call("_dl_str_tmpcopy", 1, 1);
+}
+
+/* [a, b, c]: fresh, con una referencia para una variable (DashArray_from_new); si no, un
+   temporal (DashArray_from). Los textos y objetos pasan a ser de la lista (DashArray_own). */
+static void gen_list(Node *n, int fresh)
+{
+    int np = n->args.n, i, kind, all_const = 1;
+    long k;
+    if (!np) {
+        w(0x7000);                                     /* moveq #0,d0 */
+        push_d0();
+        rt_call("_dl_arr_create", 1, 1);
+        return;
+    }
+    kind = elem_kind(expr_type(n->args.v[0]));
+    for (i = 0; i < np; i++)
+        if (!fold(n->args.v[i], &k)) all_const = 0;
+    if (all_const && !kind) {
+        /* los números, en los datos */
+        uint32_t off;
+        if (obj->data.n & 3) buf_word(&obj->data, 0);
+        off = (uint32_t)obj->data.n;
+        for (i = 0; i < np; i++) {
+            fold(n->args.v[i], &k);
+            buf_long(&obj->data, (uint32_t)k);
+        }
+        w(0x4879);                                     /* pea datos */
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l(off);
+        sp_depth += 4;
+        w(0x4878); w(np);                              /* pea n.w */
+        sp_depth += 4;
+        rt_call(fresh ? "_dl_arr_from_new" : "_dl_arr_from", 2, !fresh);
+    } else {
+        args_to_stack(n->args.v, np, NULL);
+        w(0x4857);                                     /* pea (sp) */
+        sp_depth += 4;
+        w(0x4878); w(np);                              /* pea n.w */
+        sp_depth += 4;
+        rt_call(fresh ? "_dl_arr_from_new" : "_dl_arr_from", 2, !fresh);
+        pop_args(np);
+    }
+    if (kind) {
+        w(0x4878); w(kind);                            /* pea kind.w */
+        sp_depth += 4;
+        push_d0();
+        rt_call("_dl_arr_own", 2, 0);
+    }
+}
+
+/* a[i] de una lista */
+static int gen_arr_index(Node *n)
+{
+    Node *a[2];
+    int t = expr_type(n->a);
+    a[0] = n->a;
+    a[1] = n->b;
+    args_to_stack(a, 2, NULL);
+    rt_call("_dl_arr_get", 2, 0);
+    return t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
+}
+
+static int gen_arr_slice(Node *n)
+{
+    Node *a[3], from, to;
+    memset(&from, 0, sizeof from);
+    memset(&to, 0, sizeof to);
+    from.kind = to.kind = E_INT;
+    to.val = 0x7FFFFFFF;
+    a[0] = n->a;
+    a[1] = n->b ? n->b : &from;
+    a[2] = n->c ? n->c : &to;
+    args_to_stack(a, 3, NULL);
+    rt_call("_dl_arr_slice", 3, 1);
+    return expr_type(n->a);
+}
+
+/* Una lista que aún no sabe qué guarda ([]) lo aprende con lo primero que se le mete */
+static int learn_elem(Node *list, Node *v)
+{
+    int t = expr_type(list), et = expr_type(v);
+    if (t == TY_ARR + TY_VOID && list->kind == E_VAR) {
+        Local *lc = find_local(list->name);
+        if (lc && et != TY_NIL && et != TY_VOID) lc->type = TY_ARR + et;
+        return et;
+    }
+    return t - TY_ARR;
+}
+
+/* lista.metodo(args): push, insert, pop, remove, clear */
+static int gen_list_method(Node *n)
+{
+    int t = expr_type(n->a), et, kind;
+    Node *a[3];
+    if (!strcmp(n->name, "push") || !strcmp(n->name, "insert")) {
+        int na = !strcmp(n->name, "push") ? 1 : 2;
+        if (n->args.n != na) fatal_at(n->line, n->col, "%s pide %d argumentos", n->name, na);
+        et = learn_elem(n->a, n->args.v[na - 1]);
+        kind = elem_kind(et);
+        a[0] = n->a;
+        a[1] = n->args.v[0];
+        if (na == 2) a[2] = n->args.v[1];
+        if (kind == 2) {
+            /* el último, como temporal */
+            int i;
+            w(0x4FEF); w(-4 * (na + 1));               /* lea -4n(sp),sp */
+            sp_depth += 4 * (na + 1);
+            for (i = 0; i <= na; i++) {
+                value(a[i]);
+                if (i == na) str_kept(a[i]);
+                if (i) { w(0x2F40); w(4 * i); }
+                else w(0x2E80);
+            }
+        } else {
+            args_to_stack(a, na + 1, NULL);
+        }
+        {
+            /* (el nombre se guarda en la reubicación: tiene que ser fijo) */
+            static const char *const push_sym[] = {"_dl_arr_push", "_dl_arr_push_obj", "_dl_arr_push_str"};
+            static const char *const insert_sym[] = {"_dl_arr_insert", "_dl_arr_insert_obj", "_dl_arr_insert_str"};
+            rt_call((na == 1 ? push_sym : insert_sym)[kind], na + 1, 0);
+        }
+        return TY_VOID;
+    }
+    if (!strcmp(n->name, "pop")) {
+        et = t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
+        kind = elem_kind(et);
+        args_to_stack(&n->a, 1, NULL);
+        rt_call(kind == 2 ? "_dl_arr_pop_str" : kind == 1 ? "_dl_arr_pop_obj" : "_dl_arr_pop", 1, kind != 0);
+        return et;
+    }
+    if (!strcmp(n->name, "remove")) {
+        a[0] = n->a;
+        if (n->args.n != 1) fatal_at(n->line, n->col, "remove pide 1 argumento");
+        a[1] = n->args.v[0];
+        args_to_stack(a, 2, NULL);
+        rt_call("_dl_arr_remove", 2, 0);
+        return TY_VOID;
+    }
+    if (!strcmp(n->name, "clear")) {
+        args_to_stack(&n->a, 1, NULL);
+        rt_call("_dl_arr_clear", 1, 0);
+        return TY_VOID;
+    }
+    fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
+    return TY_VOID;
+}
+
+/* a[i] = v */
+static void gen_arr_store(Node *target, Node *v)
+{
+    int et = learn_elem(target->a, v), kind = elem_kind(et), i;
+    Node *a[3];
+    a[0] = target->a;
+    a[1] = target->b;
+    a[2] = v;
+    w(0x4FEF); w(-12);                                 /* lea -12(sp),sp */
+    sp_depth += 12;
+    for (i = 0; i < 3; i++) {
+        value(a[i]);
+        if (i == 2 && kind == 2) str_kept(v);
+        if (i) { w(0x2F40); w(4 * i); }
+        else w(0x2E80);
+    }
+    rt_call(kind == 2 ? "_dl_arr_set_str" : kind == 1 ? "_dl_arr_set_obj" : "_dl_arr_set", 3, 0);
 }
 
 /* Libera los textos de las variables de la función o copia actual con profundidad
@@ -1050,7 +1262,7 @@ static void free_owned(int from_depth, int all_frame)
         v = slot_var(lc->slot, lc->type);
         op_ea(0x2F00, &v);                             /* move.l v,-(sp) */
         sp_depth += 4;
-        rt_call("_dl_str_free", 1, 0);
+        rt_call(lc->owned == 2 ? "_dl_release" : "_dl_str_free", 1, 0);
     }
 }
 
@@ -1836,13 +2048,13 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
                 if (simple_arg) load_var(0, &sv);
                 store_d0(&t);
             }
-            if (b->type == TY_STR && param_set[idx][i]) {
-                /* un parámetro de texto que la función cambia: una copia suya */
+            if ((b->type == TY_STR || IS_OBJ(b->type)) && param_set[idx][i]) {
+                /* un parámetro de texto que la función cambia: una copia suya (un objeto: una referencia) */
                 op_ea(0x2F00, &t);                     /* move.l p,-(sp) */
                 sp_depth += 4;
-                rt_call("_dl_str_dup", 1, 0);
+                rt_call(b->type == TY_STR ? "_dl_str_dup" : "_dl_retain_r", 1, 0);
                 store_d0(&t);
-                b->owned = 1;
+                b->owned = b->type == TY_STR ? 1 : 2;
             }
         }
     }
@@ -1922,14 +2134,23 @@ static int gen_expr(Node *n)
         return TY_STR;
     case E_INDEX:
         if (expr_type(n->a) == TY_STR) return gen_str_index(n);
-        fatal_at(n->line, n->col, "dashc (prueba): las listas aún no están");
+        if (IS_ARR(expr_type(n->a))) return gen_arr_index(n);
+        fatal_at(n->line, n->col, "aquí no se puede usar [ ]");
         return TY_VOID;
     case E_SLICE:
         if (expr_type(n->a) == TY_STR) return gen_str_slice(n);
-        fatal_at(n->line, n->col, "dashc (prueba): las listas aún no están");
+        if (IS_ARR(expr_type(n->a))) return gen_arr_slice(n);
+        fatal_at(n->line, n->col, "aquí no se puede usar [ : ]");
         return TY_VOID;
     case E_FIELD:
         return gen_field(n);
+    case E_LIST:
+        gen_list(n, 0);
+        return expr_type(n);
+    case E_MCALL:
+        if (IS_ARR(expr_type(n->a))) return gen_list_method(n);
+        fatal_at(n->line, n->col, "dashc (prueba): .%s() aún no está", n->name);
+        return TY_VOID;
     case E_VAR:
         v = lookup(n->name);
         if (v.kind == V_NONE) fatal_at(n->line, n->col, "la variable %s no existe", n->name);
@@ -2725,6 +2946,112 @@ static void gen_global_inits(void)
     }
 }
 
+/* v = valor para una lista o un struct: cuenta de referencias (_dash_obj_set). Una lista
+   literal nace con su referencia (DashArray_from_new) y la variable se la queda. */
+static void gen_obj_assign(Node *n, int tt)
+{
+    Node *e = n->a;
+    Local *lc = find_local(n->name);
+    int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name)), lit = e->kind == E_LIST && e->args.n;
+    Var v;
+    if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
+    if (lit) gen_list(e, 1);
+    else value(e);
+    if (fresh && (lit || e->kind == E_NIL)) {
+        v = declare(n->name, tt);
+        locals.v[locals.n - 1].owned = 2;
+        store_d0(&v);
+        return;
+    }
+    push_d0();
+    if (fresh) {
+        w(0x4878); w(0);                               /* pea 0.w */
+        sp_depth += 4;
+    } else {
+        v = lookup(n->name);
+        op_ea(0x2F00, &v);                             /* move.l v,-(sp) */
+        sp_depth += 4;
+    }
+    rt_call(lit ? "_dl_obj_assign_new" : "_dl_obj_assign", 2, 0);
+    if (fresh) {
+        v = declare(n->name, tt);
+        locals.v[locals.n - 1].owned = 2;
+    }
+    store_d0(&v);
+}
+
+/* for x in lista: la lista sujeta (_dash_hold) mientras dura el bucle; x es el elemento
+   (prestado: no es suyo) */
+static void gen_foreach(Node *n)
+{
+    int t = expr_type(n->a), et, top = new_label(), test = new_label(), cont = new_label(), done = new_label();
+    int arr_slot, idx_slot;
+    MarkScope ms;
+    Loop lp;
+    Var va, vi, vx;
+    if (!IS_ARR(t)) fatal_at(n->line, n->col, "for ... in pide una lista");
+    et = t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
+    ms = mark_begin();
+    enter_scope();
+    value(n->a);
+    va = declare_slot("", t, &arr_slot);
+    locals.v[locals.n - 1].owned = 2;                  /* al acabar, _dash_release */
+    store_d0(&va);
+    push_d0();
+    rt_call("_dl_hold", 1, 0);
+    vi = declare_slot("", TY_INT, &idx_slot);
+    set_imm(&vi, 0);
+    enter_loop();
+    use_slot(arr_slot);
+    use_slot(idx_slot);
+    branch(CC_T, test);
+    def_label(top);
+    mark_release(&ms);
+    lp.brk = done;
+    lp.cont = cont;
+    enter_scope();
+    lp.depth = depth;
+    lp.sp = sp_depth;
+    VEC_PUSH(loops, lp);
+    /* x = data[i] */
+    use_slot(arr_slot);
+    va = slot_var(arr_slot, t);
+    if (va.kind == V_REG) w(0x2040 | va.reg);          /* movea.l dN,a0 */
+    else op_ea(0x2040, &va);                           /* movea.l lista,a0 */
+    w(0x2050);                                         /* movea.l (a0),a0: los datos */
+    use_slot(idx_slot);
+    vi = slot_var(idx_slot, TY_INT);
+    load_var(0, &vi);
+    w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2): bytes */
+    w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+    vx = declare(n->name, et);
+    store_d0(&vx);
+    gen_block(&n->body);
+    loops.n--;
+    leave_scope();
+    def_label(cont);
+    use_slot(idx_slot);
+    add_imm_ea(1, &vi);
+    def_label(test);
+    /* ¿i < length? (una lista nil no tiene elementos) */
+    use_slot(arr_slot);
+    load_var(0, &va);
+    branch(CC_EQ, done);
+    w(0x2040);                                         /* movea.l d0,a0 */
+    use_slot(idx_slot);
+    if (vi.kind == V_REG) {
+        w(0xB0A8 | vi.reg << 9); w(4);                 /* cmp.l 4(a0),dI */
+    } else {
+        load_var(1, &vi);
+        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
+    }
+    branch(CC_LT, top);
+    def_label(done);
+    leave_loop();
+    leave_scope();                                     /* _dash_release de la lista */
+    mark_end(&ms);
+}
+
 static int forced_type = -1;   /* el tipo de una función de una línea puesta como expresión */
 
 static void gen_stmt(Node *n)
@@ -2771,6 +3098,10 @@ static void gen_stmt(Node *n)
             if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
             if (tt == TY_STR) {
                 gen_str_assign(n);
+                return;
+            }
+            if (IS_OBJ(tt)) {
+                gen_obj_assign(n, tt);
                 return;
             }
         }
@@ -2872,6 +3203,16 @@ static void gen_stmt(Node *n)
     case S_FOR:
         gen_for(n);
         return;
+    case S_FOREACH:
+        gen_foreach(n);
+        return;
+    case S_STORE:
+        if (n->b->kind == E_INDEX && IS_ARR(expr_type(n->b->a))) {
+            gen_arr_store(n->b, n->a);
+            return;
+        }
+        fatal_at(n->line, n->col, "dashc (prueba): esta asignación aún no está");
+        return;
     case S_BREAK:
     case S_CONTINUE:
         if (loops.n <= loop_base) fatal_at(n->line, n->col, "%s fuera de un bucle", n->kind == S_BREAK ? "break" : "continue");
@@ -2906,10 +3247,20 @@ static void gen_stmt(Node *n)
                     rt_call("_dl_str_ret", 1, 1);
                 }
             }
+            if (IS_OBJ(cur_ret)) {
+                /* una referencia mientras se liberan las variables; luego flota (_dash_obj_float):
+                   en una función, después de soltar sus temporales (en ret_label) */
+                push_d0();
+                rt_call("_dl_retain_r", 1, 0);
+            }
             if (owned) {
                 push_d0();
                 free_owned(0, 1);
                 pop_d0();
+            }
+            if (IS_OBJ(cur_ret) && cur_frame) {
+                push_d0();
+                rt_call("_dl_obj_float", 1, 1);
             }
         } else if (owned) {
             free_owned(0, 1);
@@ -3002,13 +3353,15 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         /* un parámetro de texto que el cuerpo cambia: una copia suya, como en ./dash */
         int idx = (int)(f - prog->funcs.v);
         for (i = 0; i < f->params.n; i++)
-            if (f->params.v[i].type == TY_STR && param_set[idx][i]) {
+            if ((f->params.v[i].type == TY_STR || IS_OBJ(f->params.v[i].type)) && param_set[idx][i]) {
+                /* (una lista o un struct: una referencia suya) */
+                int str = f->params.v[i].type == TY_STR;
                 Var v = lookup(f->params.v[i].name);
                 op_ea(0x2F00, &v);                     /* move.l p,-(sp) */
                 sp_depth += 4;
-                rt_call("_dl_str_dup", 1, 0);
+                rt_call(str ? "_dl_str_dup" : "_dl_retain_r", 1, 0);
                 store_d0(&v);
-                locals.v[i].owned = 1;
+                locals.v[i].owned = str ? 1 : 2;
             }
         fm = mark_begin();
     } else {
@@ -3017,6 +3370,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     ret_sp = sp_depth;
     gen_block(body);
     if (f) free_owned(0, 1);                           /* cayendo por el final */
+    if (f && IS_OBJ(cur_ret)) w(0x7000);               /* moveq #0,d0: sin return, nil */
     def_label(ret_label);
     if (f) {
         if (pass == 1) mark_need.v[fm.idx] = made_tmp;
@@ -3027,6 +3381,10 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             sp_depth += 4;
             rt_call(cur_ret == TY_STR ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
             pop_args(1);
+        }
+        if (IS_OBJ(cur_ret)) {
+            push_d0();
+            rt_call("_dl_obj_float", 1, 0);
         }
     }
     if (sp_depth) fatal("la pila no cuadra (fallo de dashc)");
