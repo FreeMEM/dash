@@ -214,6 +214,7 @@ Token *lex(const char *src)
                 s = end;
                 t.kind = T_FLOAT;
                 t.val = float_bits(d);
+                t.dval = d;
             } else {
                 t.kind = T_INT;
                 t.val = (long)(int32_t)(uint32_t)v;

@@ -146,3 +146,15 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   gráfica, con gcc fallan igual en este A1200). Arreglado en `split_strings`: con varias referencias al mismo
   texto, el hunk se quedaba con tamaño 0 (deflate de zlib no veía su versión y daba -1); además, un hunk con
   bytes de control raros (tablas binarias) ya no se trocea.
+- D4 (2.ª parte): Double. En dashc es una caja: un texto de 16 cifras hexadecimales con sus 8 bytes, para que su
+  variable, campo, global o elemento sea dueño de él con lo que ya hay para los textos (copias, temporales,
+  marcas, liberación, `--memcheck`). Las cuentas, en api.c (`dl_d_op`, `dl_d_cmp` con nan, `dl_d_neg`,
+  conversiones, `dl_d_str` con Ryu), con el float doble de gcc por software (fp-bit en doble, como ./dash; de
+  libgcc `__extendsfdf2` y `__clzdi2`). Un literal o un número fijo es una caja constante hecha al compilar
+  con todas sus cifras (el lexer guarda el double del literal). Builtins de math (fdlibm) y `str_from_double`
+  con cajas (`dparams` en la tabla de builtins). Listas: un elemento se convierte al tipo de la lista (también
+  Int a `[Float]`, pendiente de D4) y una lista literal toma el tipo de su destino (`[Double]` de un campo, de
+  un `var`, de un diccionario o de una lista de listas). test_double, test_double_lists, test_double_texto y
+  test_math, iguales que con gcc (y sin nada vivo con `--memcheck`). Test `dobles`. Es más lento que en
+  registros: las cajas son para tener el lenguaje completo; si Lorraine lo pide, D8 puede pasar a d0/d1.
+- Cobertura con Double: compila 167 de 309 (54 %); en el A1200, 100 de 100 iguales. Batería de dashc bien.

@@ -26,7 +26,7 @@ AMISSL = os.environ.get("DASH_AMISSL_SDK") or os.path.expanduser("~/.cache/dash-
 FLAGS = ["-O2", "-m68000", "-noixemul", "-fomit-frame-pointer", "-fno-common", "-ffunction-sections",
          "-fdata-sections"]
 LIBGCC = ["_udivdi3.o", "_umoddi3.o", "_divdi3.o", "_moddi3.o", "_muldi3.o", "_udivmoddi4.o", "_clz.o",
-          "_fixunssfsi.o", "_clzsi2.o"]
+          "_fixunssfsi.o", "_clzsi2.o", "_clzdi2.o", "xfpgnulib__extendsfdf2.o"]
 
 
 def run(cmd):
@@ -55,8 +55,6 @@ def main():
     sys.path.insert(0, str(REPO))
     from compiler.clibs import LIBRARIES
     for name, spec in LIBRARIES.items():
-        if name != "zlib":
-            continue   # (ryu y fdlibm, con Double: D4)
         for s in spec["sources"]:
             obj = build / f"{name}_{Path(s).stem}.o"
             run([GCC, *FLAGS, *spec["defines"], f"-I{REPO / 'runtime' / name}", "-c",
@@ -75,6 +73,9 @@ def main():
     common.append(build / "softfloat.o")
     run([GCC, *FLAGS, "-c", str(FASTFP), "-o", str(build / "fastfp.o")])
     common.append(build / "fastfp.o")
+    # y en doble precisión (Double), como softfloat_double_objects
+    run([GCC, *FLAGS, f"-I{SRC_DIR / 'stub'}", f"-I{SRC_DIR}", "-c", str(FPBIT), "-o", str(build / "softfloat_df.o")])
+    common.append(build / "softfloat_df.o")
     # de libgcc, la aritmética de 64 bits
     libgcc = subprocess.run([GCC, "-m68000", "-print-libgcc-file-name"], capture_output=True,
                             text=True).stdout.strip()

@@ -142,7 +142,7 @@ def builtins():
             for n, b in v.items():
                 if (isinstance(b, ab.BuiltinFunc) and not any(getattr(b, f) for f in LIB_FLAGS) and
                         not n.startswith(GUI) and
-                        b.return_type != "double" and "double" not in b.c_template):
+                        True):
                     out[n] = b
     return out
 
@@ -157,8 +157,12 @@ def builtin_wrappers():
             continue
         # (los parámetros como _a0, _a1...: alguno se llama como una palabra de C, default)
         params = ", ".join(f"LONG _a{i}" for i in range(len(b.params))) or "void"
-        code = Template(b.c_template).substitute({p: f"_a{i}" for i, p in enumerate(b.params)})
-        if b.return_type == "void":
+        dp = double_params(n, b)
+        code = Template(b.c_template).substitute({p: f"dl_dget((STRPTR)_a{i})" if i in dp else f"_a{i}"
+                                                  for i, p in enumerate(b.params)})
+        if b.return_type == "double":
+            out.append(f"LONG db_{n}({params}) {{ return (LONG)dl_dbox({code}); }}\n")
+        elif b.return_type == "void":
             out.append(f"LONG db_{n}({params}) {{ {code}; return 0; }}\n")
         else:
             out.append(f"LONG db_{n}({params}) {{ return (LONG)({code}); }}\n")
@@ -166,8 +170,14 @@ def builtin_wrappers():
 
 
 # no compilan como envoltorio (se miran uno a uno)
-# (de Double: D4)
-SKIP = {"is_inf", "is_nan"}
+SKIP = set()
+
+
+def double_params(n, b):
+    """Los parámetros Double de un builtin (en dashc, cajas: dl_dget de api.c)"""
+    if b.c_template.startswith("_dash_m_"):
+        return set(range(len(b.params)))
+    return {0} if n == "str_from_double" else set()
 
 
 def natives():

@@ -59,6 +59,13 @@ func flotante(f: Float) -> Float
     return -g / 3.0
 end
 
+func doble(d: Double) -> Double
+    e = d * Double(2) + Double(0.5)
+    Print e
+    Print "d=#{d} #{Int(d)} #{Float(d)}"
+    return e
+end
+
 Main
     s = "abc"
     t = s + "d"

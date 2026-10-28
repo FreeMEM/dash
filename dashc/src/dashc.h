@@ -60,6 +60,7 @@ enum {
 typedef struct {
     int kind, line, col, file;
     long val;      /* T_INT */
+    double dval;   /* T_FLOAT: el valor entero (un Double lo quiere con todas sus cifras) */
     char *text;    /* T_ID; T_STR ya en Latin-1 y sin escapes */
     int len;
     /* T_ISTR: piece[0] texto, piece[1] código, piece[2] texto...; plen: largo de cada texto */
@@ -95,7 +96,10 @@ enum {
 /* Tipos: los básicos; un struct es TY_STRUCT + su número; una lista suma TY_ARR por cada nivel
    (Array sin más es TY_ARR + TY_VOID: lo que guarda se deduce, o Int). TY_NAMED + n: un nombre de tipo aún sin resolver
    (type_names[n]), que gen68k.c cambia por su struct. */
-enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL, TY_FLOAT };
+enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL, TY_FLOAT, TY_DOUBLE };
+/* un Double es, en dashc, una caja: un texto con sus 8 bytes en hexadecimal (runtime/api.c, dl_d_*); su
+   variable, campo o elemento es dueño de ella como de un texto */
+#define IS_STRLIKE(t) ((t) == TY_STR || (t) == TY_DOUBLE)
 long float_bits(double d);   /* lexer.c: los bits del float de 32 bits más cercano */
 #define TY_STRUCT 16
 #define TY_DICT 0x4000   /* + n: dict_types.v[n] */
@@ -118,10 +122,11 @@ struct Node {
     int kind, line, col, file;
     int op;          /* E_BIN, E_CMP: el token del operador */
     long val;        /* E_INT, E_BOOL */
+    double dval;     /* E_FLOAT */
     char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
     char *str;       /* E_STR */
     int len;
-    int type;        /* S_VAR: tipo declarado */
+    int type;        /* S_VAR: tipo declarado; E_LIST: lo que guarda, si lo dice su destino ([Double]) */
     Node *a, *b, *c; /* operandos; S_IF: a = condición; S_FOR: desde, hasta, paso */
     NodeList args;   /* E_CALL */
     NodeList body;   /* S_IF (rama sí), S_WHILE, S_FOR */
@@ -222,7 +227,8 @@ extern int memcheck;   /* --memcheck: como ./dash --memcheck */
 
 /* builtins (build/builtins_tab.c): ret 0 nada, 1 Int, 2 Bool, 3 String, 4 [String]; keeps: guarda lo
    que recibe (un texto o un objeto pasa escapado) */
-typedef struct { const char *name; unsigned char nparams, ret, keeps; } BuiltinInfo;
+/* ret: 0 nada, 1 Int, 2 Bool, 3 String, 4 [String], 5 Double; dparams: los parámetros Double (bits) */
+typedef struct { const char *name; unsigned char nparams, ret, keeps, dparams; } BuiltinInfo;
 extern const BuiltinInfo builtin_info[];
 extern const int builtin_count;
 typedef struct { const char *name; int code; } KeyName;

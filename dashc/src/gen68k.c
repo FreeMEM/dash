@@ -868,7 +868,8 @@ static int expr_type(Node *n)
     int ta, tb, idx;
     switch (n->kind) {
     case E_NEG:
-        return expr_type(n->a) == TY_FLOAT ? TY_FLOAT : TY_INT;
+        ta = expr_type(n->a);
+        return ta == TY_FLOAT || ta == TY_DOUBLE ? ta : TY_INT;
     case E_INT: case E_BNOT:
         return TY_INT;
     case E_BOOL: case E_CMP: case E_NOT: case E_AND: case E_OR:
@@ -884,11 +885,12 @@ static int expr_type(Node *n)
     case E_CALL:
         if (find_func(n->name, &idx)) return func_ret(idx);
         if (!strcmp(n->name, "Float")) return TY_FLOAT;
+        if (!strcmp(n->name, "Double")) return TY_DOUBLE;
         if (!strcmp(n->name, "Int")) return TY_INT;
         if ((idx = find_struct(n->name)) >= 0) return TY_STRUCT + idx;
         for (idx = 0; idx < builtin_count; idx++)
             if (!strcmp(builtin_info[idx].name, n->name)) {
-                static const int ret[] = {TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_ARR + TY_STR};
+                static const int ret[] = {TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_ARR + TY_STR, TY_DOUBLE};
                 return ret[builtin_info[idx].ret];
             }
         return TY_VOID;
@@ -900,6 +902,8 @@ static int expr_type(Node *n)
         if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
         if (n->op == P_PLUS && (IS_ARR(ta) || IS_ARR(tb)))   /* a + b de listas: lo que guarda la primera con tipo */
             return IS_ARR(ta) && ta != TY_ARR + TY_VOID ? ta : IS_ARR(tb) ? tb : ta;
+        if ((ta == TY_DOUBLE || tb == TY_DOUBLE) &&
+            (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_DOUBLE;
         if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
             (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
         return TY_INT;
@@ -924,6 +928,7 @@ static int expr_type(Node *n)
         ta = expr_type(n->args.v[1]);
         return dict_type(expr_type(n->args.v[0]) == TY_INT ? TY_INT : TY_STR, ta == TY_NIL ? TY_INT : ta);
     case E_LIST:
+        if (n->type) return TY_ARR + n->type;          /* (el de su destino: un campo [Double]...) */
         if (!n->args.n) return TY_ARR + TY_VOID;       /* []: lo que se meta dirá qué guarda */
         ta = expr_type(n->args.v[0]);
         return TY_ARR + (ta == TY_NIL ? TY_INT : ta);
@@ -956,7 +961,7 @@ static int dict_val(int t)
 /* qué guarda una lista de elementos de tipo t: 0 números, 1 objetos, 2 textos (DashArray_own) */
 static int elem_kind(int t)
 {
-    return t == TY_STR ? 2 : IS_OBJ(t) ? 1 : 0;
+    return IS_STRLIKE(t) ? 2 : IS_OBJ(t) ? 1 : 0;
 }
 
 /* lo que devuelve una función sin "-> Tipo": el tipo del primer return con valor, con las
@@ -1120,9 +1125,20 @@ static void infer_params(Program *p)
     free(rets);
 }
 
+/* ¿da dbl_value(n) una caja constante (un literal o un número fijo, ya convertido al compilar)? */
+static int dbl_const(Node *n)
+{
+    long k;
+    if (n->kind == E_FLOAT || (n->kind == E_NEG && n->a->kind == E_FLOAT)) return 1;
+    if (n->kind == E_CALL && !strcmp(n->name, "Double") && n->args.n == 1 && !find_func(n->name, NULL))
+        return expr_type(n->args.v[0]) != TY_STR && dbl_const(n->args.v[0]);
+    return expr_type(n) != TY_DOUBLE && fold(n, &k);
+}
+
 /* lo que deja un temporal nuevo (no lo que ya es de alguien: un literal, una variable) */
 static int is_tmp_expr(Node *e)
 {
+    if (expr_type(e) == TY_DOUBLE && dbl_const(e)) return 0;
     return e->kind == E_BIN || e->kind == E_INTERP || e->kind == E_SLICE || e->kind == E_CALL ||
            e->kind == E_MCALL || e->kind == E_LIST || e->kind == E_DICT;
 }
@@ -1149,6 +1165,10 @@ static void to_str(int ty)
     case TY_FLOAT:
         push_d0();
         rt_call("_dl_str_from_float", 1, 1);
+        break;
+    case TY_DOUBLE:
+        push_d0();
+        rt_call("_dl_d_str", 1, 1);
         break;
     case TY_BOOL:
         tst_d0();
@@ -1196,8 +1216,48 @@ static void float_value(Node *n)
     coerce(t, TY_FLOAT);
 }
 
+/* ---- Double: una caja (un texto con sus 8 bytes en hexadecimal, runtime/api.c) ---- */
+static void load_dbl_lit(double d)
+{
+    uint64_t b;
+    char hex[17];
+    memcpy(&b, &d, 8);                                 /* (los bits, en el orden de esta máquina) */
+    snprintf(hex, sizeof hex, "%08lX%08lX", (unsigned long)(b >> 32), (unsigned long)(b & 0xFFFFFFFFu));
+    load_str_lit(hex, 16);
+}
+
+/* d0, de tipo t, como Double (una caja temporal) */
+static void to_dbl(int t)
+{
+    if (t == TY_DOUBLE) return;
+    push_d0();
+    rt_call(t == TY_FLOAT ? "_dl_d_from_float" : "_dl_d_from_int", 1, 1);
+}
+
+/* el valor de n como Double; un literal o un número fijo, con todas sus cifras, al compilar */
+static void dbl_value(Node *n)
+{
+    long k;
+    int t;
+    if (n->kind == E_FLOAT) {
+        load_dbl_lit(n->dval);
+        return;
+    }
+    if (n->kind == E_NEG && n->a->kind == E_FLOAT) {
+        load_dbl_lit(-n->a->dval);
+        return;
+    }
+    if (expr_type(n) != TY_DOUBLE && fold(n, &k)) {
+        load_dbl_lit((double)(int32_t)k);
+        return;
+    }
+    t = gen_expr(n);
+    need_value(n, t);
+    to_dbl(t);
+}
+
 /* Los argumentos de una llamada al runtime, calculados en orden y dejados en la pila
-   como los pone C (el primero arriba). str[i]: el argumento i pasa a texto. Sitio para
+   como los pone C (el primero arriba). str[i]: el argumento i pasa a texto (1), Float (2) o Double (3). Sitio para
    todos primero y luego cada uno a su hueco: así se calculan de izquierda a derecha. */
 static void float_value(Node *n);
 
@@ -1206,6 +1266,7 @@ static void args_to_stack(Node **a, int n, const char *str)
     int i;
     if (n == 1) {
         if (str && str[0] == 2) float_value(a[0]);
+        else if (str && str[0] == 3) dbl_value(a[0]);
         else if (str && str[0]) str_value(a[0]);
         else value(a[0]);
         push_d0();
@@ -1215,6 +1276,7 @@ static void args_to_stack(Node **a, int n, const char *str)
     sp_depth += 4 * n;
     for (i = 0; i < n; i++) {
         if (str && str[i] == 2) float_value(a[i]);
+        else if (str && str[i] == 3) dbl_value(a[i]);
         else if (str && str[i]) str_value(a[i]);
         else value(a[i]);
         if (i) { w(0x2F40); w(4 * i); }                /* move.l d0,4i(sp) */
@@ -1293,6 +1355,23 @@ static int gen_field(Node *n)
 /* ---- listas ---- */
 
 /* el texto de d0 como temporal, si no lo es ya (un texto que guarda una lista es suyo) */
+/* un elemento para una lista de et: un Int a una lista de Float o de Double, convertido */
+static void list_hint(Node *e, int t);
+
+static void elem_value(Node *v, int et)
+{
+    list_hint(v, et);                                  /* ([[Double]]: la de dentro también) */
+    if (et == TY_DOUBLE) dbl_value(v);
+    else if (et == TY_FLOAT) float_value(v);
+    else value(v);
+}
+
+/* una lista literal que va a un destino de tipo t ([Double]...): guarda eso, no lo de su primer elemento */
+static void list_hint(Node *e, int t)
+{
+    if (e && e->kind == E_LIST && IS_ARR(t) && t != TY_ARR + TY_VOID && !e->type) e->type = t - TY_ARR;
+}
+
 static void str_kept(Node *e)
 {
     if (is_tmp_expr(e) || e->kind == E_NIL) return;
@@ -1304,7 +1383,7 @@ static void str_kept(Node *e)
    temporal (DashArray_from). Los textos y objetos pasan a ser de la lista (DashArray_own). */
 static void gen_list(Node *n, int fresh)
 {
-    int np = n->args.n, i, kind, all_const = 1;
+    int np = n->args.n, i, kind, all_const = 1, et;
     long k;
     if (!np) {
         w(0x7000);                                     /* moveq #0,d0 */
@@ -1312,10 +1391,11 @@ static void gen_list(Node *n, int fresh)
         rt_call("_dl_arr_create", 1, 1);
         return;
     }
-    kind = elem_kind(expr_type(n->args.v[0]));
+    et = expr_type(n) - TY_ARR;
+    kind = elem_kind(et);
     for (i = 0; i < np; i++)
         if (!fold(n->args.v[i], &k)) all_const = 0;
-    if (all_const && !kind) {
+    if (all_const && !kind && et != TY_FLOAT) {
         /* los números, en los datos */
         uint32_t off;
         if (obj->data.n & 3) buf_word(&obj->data, 0);
@@ -1332,7 +1412,10 @@ static void gen_list(Node *n, int fresh)
         sp_depth += 4;
         rt_call(fresh ? "_dl_arr_from_new" : "_dl_arr_from", 2, !fresh);
     } else {
-        args_to_stack(n->args.v, np, NULL);
+        char *conv = xmalloc(np + 1);
+        memset(conv, et == TY_DOUBLE ? 3 : et == TY_FLOAT ? 2 : 0, np);
+        args_to_stack(n->args.v, np, conv);
+        free(conv);
         w(0x4857);                                     /* pea (sp) */
         sp_depth += 4;
         w(0x4878); w(np);                              /* pea n.w */
@@ -1404,14 +1487,18 @@ static int gen_field_store(Node *target, Node *v)
 {
     int off, ft;
     if (!IS_STRUCT(expr_type(target->a))) return 0;
-    value(v);
+    ft = expr_type(target);
+    list_hint(v, ft);
+    if (ft == TY_DOUBLE) dbl_value(v);                 /* (un Int o un Float, convertido) */
+    else if (ft == TY_FLOAT) float_value(v);
+    else value(v);
     push_d0();
     if (!struct_ptr(target->a, target->name, &off, &ft))
         fatal_at(target->line, target->col, "%s no es un campo", target->name);
-    if (ft == TY_STR || IS_OBJ(ft)) {
+    if (IS_STRLIKE(ft) || IS_OBJ(ft)) {
         w(0x4868); w(off);                             /* pea off(a0) */
         sp_depth += 4;
-        rt_call(ft != TY_STR ? "_dl_obj_set" : is_tmp_expr(v) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
+        rt_call(!IS_STRLIKE(ft) ? "_dl_obj_set" : is_tmp_expr(v) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
     } else {
         w(0x215F); w(off);                             /* move.l (sp)+,off(a0) */
         sp_depth -= 4;
@@ -1430,9 +1517,15 @@ static int gen_new(Node *n, int si, int fresh)
     if (n->args.n > nf) fatal_at(n->line, n->col, "%s tiene %d campos y se le dan %d", st->name, nf, n->args.n);
     memset(&zero, 0, sizeof zero);
     zero.kind = E_INT;
-    for (i = 0; i < nf; i++)
+    char *conv = xmalloc(nf + 1);
+    for (i = 0; i < nf; i++) {
         vals[i] = i < n->args.n ? n->args.v[i] : st->fields.v[i].init ? st->fields.v[i].init : &zero;
-    if (nf) args_to_stack(vals, nf, NULL);
+        /* un Int a un campo Float o Double: convertido */
+        conv[i] = st->fields.v[i].type == TY_FLOAT ? 2 : st->fields.v[i].type == TY_DOUBLE ? 3 : 0;
+        list_hint(vals[i], st->fields.v[i].type);
+    }
+    if (nf) args_to_stack(vals, nf, conv);
+    free(conv);
     {
         Fixup f;
         w(0x4879);                                     /* pea descriptor */
@@ -1451,7 +1544,7 @@ static int gen_new(Node *n, int si, int fresh)
     w(0x2440);                                         /* movea.l d0,a2 (C no toca a2) */
     for (i = 0; i < nf; i++) {
         int ft = st->fields.v[i].type, off = 4 * i;
-        if (ft == TY_STR) {
+        if (IS_STRLIKE(ft)) {
             w(0x42AA); w(off);                         /* clr.l off(a2) */
             w(0x2F2F); w(4 * i);                       /* move.l v(sp),-(sp) */
             sp_depth += 4;
@@ -1508,13 +1601,13 @@ static int field_is_set(const char *name)
 static void lend(Node *a)
 {
     int t = expr_type(a), shared;
-    if (t != TY_STR && !IS_OBJ(t)) return;
+    if (!IS_STRLIKE(t) && !IS_OBJ(t)) return;
     shared = a->kind == E_FIELD || a->kind == E_INDEX ||
              (a->kind == E_VAR && !find_local(a->name) && lookup_global(a->name));
     if (!shared) return;
     if (a->kind == E_FIELD && IS_STRUCT(expr_type(a->a)) && !field_is_set(a->name)) return;
     push_d0();
-    rt_call(t == TY_STR ? "_dl_str_tmpcopy" : "_dl_obj_lend", 1, 1);
+    rt_call(IS_STRLIKE(t) ? "_dl_str_tmpcopy" : "_dl_obj_lend", 1, 1);
 }
 
 /* p.metodo(args): la función "Struct.metodo" con p (comprobado) delante */
@@ -1602,13 +1695,17 @@ static int gen_list_method(Node *n)
             w(0x4FEF); w(-4 * (na + 1));               /* lea -4n(sp),sp */
             sp_depth += 4 * (na + 1);
             for (i = 0; i <= na; i++) {
-                value(a[i]);
+                if (i == na) elem_value(a[i], et);
+                else value(a[i]);
                 if (i == na) str_kept(a[i]);
                 if (i) { w(0x2F40); w(4 * i); }
                 else w(0x2E80);
             }
         } else {
-            args_to_stack(a, na + 1, NULL);
+            char conv[3] = {0, 0, 0};
+            conv[na] = et == TY_FLOAT ? 2 : 0;
+            list_hint(a[na], et);
+            args_to_stack(a, na + 1, conv);
         }
         {
             /* (el nombre se guarda en la reubicación: tiene que ser fijo) */
@@ -1727,7 +1824,8 @@ static void gen_dict_set(Node *target, Node *v)
     w(0x4FEF); w(-12);                                 /* lea -12(sp),sp */
     sp_depth += 12;
     for (i = 0; i < 3; i++) {
-        value(a[i]);
+        if (i == 2) elem_value(a[i], vt);
+        else value(a[i]);
         if (i == 2 && kind == 2) str_kept(v);
         if (i) { w(0x2F40); w(4 * i); }
         else w(0x2E80);
@@ -1784,7 +1882,8 @@ static void gen_arr_store(Node *target, Node *v)
     w(0x4FEF); w(-12);                                 /* lea -12(sp),sp */
     sp_depth += 12;
     for (i = 0; i < 3; i++) {
-        value(a[i]);
+        if (i == 2) elem_value(a[i], et);
+        else value(a[i]);
         if (i == 2 && kind == 2) str_kept(v);
         if (i) { w(0x2F40); w(4 * i); }
         else w(0x2E80);
@@ -2306,6 +2405,34 @@ static int gen_compare(Node *n)
         }
         return cc;
     }
+    /* Double: dl_d_cmp da -1, 0, 1 o 2 (nan: solo != es cierto, como en C) */
+    if (ta == TY_DOUBLE || tb == TY_DOUBLE) {
+        Node *a[2];
+        static const char conv[2] = {3, 3};
+        a[0] = n->a;
+        a[1] = n->b;
+        args_to_stack(a, 2, conv);
+        rt_call("_dl_d_cmp", 2, 0);
+        if (n->op == P_EQ || n->op == P_NE) {
+            tst_d0();
+            return cc;
+        }
+        /* <, <=, >, >=: 2 tiene que dar falso */
+        w(0x0C80); l(2);                               /* cmpi.l #2,d0 */
+        {
+            int no = new_label(), done = new_label();
+            branch(CC_EQ, no);
+            w(0x4A80);                                 /* tst.l d0 */
+            branch(CC_T, done);
+            def_label(no);
+            /* d0 = 2: comparado con 0 da "mayor", así que < y <= quedan falsos; > y >= se fuerzan con -1
+               (menor) */
+            if (n->op == P_GT || n->op == P_GE) w(0x70FF);   /* moveq #-1,d0 */
+            w(0x4A80);                                 /* tst.l d0 */
+            def_label(done);
+        }
+        return cc;
+    }
     /* Float: __cmpsf2 da -1, 0 o 1 */
     if (ta == TY_FLOAT || tb == TY_FLOAT) {
         Node *a[2];
@@ -2430,8 +2557,14 @@ static int gen_dash_builtin(Node *n)
         for (i = 0; i < np; i++) {
             if (i < n->args.n) {
                 Node *a = n->args.v[i];
-                int t = gen_expr(a);
-                need_value(a, t);
+                int t;
+                if (builtin_info[b].dparams >> i & 1) {
+                    dbl_value(a);                      /* un parámetro Double: una caja */
+                    t = TY_DOUBLE;
+                } else {
+                    t = gen_expr(a);
+                    need_value(a, t);
+                }
                 if (builtin_info[b].keeps && ((t == TY_STR && a->kind != E_STR) || IS_OBJ(t))) {
                     push_d0();
                     rt_call(t == TY_STR ? "_dl_str_escape" : "_dl_obj_escape", 1, 0);
@@ -2448,6 +2581,7 @@ static int gen_dash_builtin(Node *n)
     case 1: rt_call(sym, np, 0); return TY_INT;
     case 2: rt_call(sym, np, 0); return TY_BOOL;
     case 3: rt_call(sym, np, 1); return TY_STR;
+    case 5: rt_call(sym, np, 1); return TY_DOUBLE;
     default: rt_call(sym, np, 1); return TY_ARR + TY_STR;
     }
 }
@@ -2478,6 +2612,22 @@ static int gen_builtin(Node *n)
     }
     for (b = 0; builtins[b].name; b++)
         if (!strcmp(builtins[b].name, n->name)) break;
+    if (!builtins[b].name && !strcmp(n->name, "Double") && n->args.n == 1) {
+        /* Double(x): de un texto, como str_to_double; lo demás, convertido */
+        if (expr_type(n->args.v[0]) == TY_STR) {
+            args_to_stack(n->args.v, 1, NULL);
+            rt_call("_dl_d_from_str", 1, 1);
+        } else {
+            dbl_value(n->args.v[0]);
+        }
+        return TY_DOUBLE;
+    }
+    if (!builtins[b].name && (!strcmp(n->name, "Int") || !strcmp(n->name, "Float")) && n->args.n == 1 &&
+        expr_type(n->args.v[0]) == TY_DOUBLE) {
+        args_to_stack(n->args.v, 1, NULL);
+        rt_call(n->name[0] == 'I' ? "_dl_d_to_int" : "_dl_d_to_float", 1, 0);
+        return n->name[0] == 'I' ? TY_INT : TY_FLOAT;
+    }
     if (!builtins[b].name && (!strcmp(n->name, "Int") || !strcmp(n->name, "Float")) && n->args.n == 1) {
         int t = expr_type(n->args.v[0]), to = n->name[0] == 'I' ? TY_INT : TY_FLOAT;
         if (t == TY_STR && to == TY_INT) {
@@ -2637,12 +2787,12 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         b->ranged = 0;
         b->entry = 0;
         b->owned = 0;
-        if (!param_set[idx][i] && fold(a, &k)) {
+        if (!param_set[idx][i] && b->type != TY_DOUBLE && fold(a, &k)) {
             b->val = b->type == TY_FLOAT ? float_bits((double)(int32_t)k) : k;
             continue;
         }
         if (!param_set[idx][i] && a->kind == E_VAR && (src = find_local(a->name)) != NULL &&
-            (b->type != TY_FLOAT || src->type == TY_FLOAT)) {
+            (b->type != TY_FLOAT || src->type == TY_FLOAT) && (b->type != TY_DOUBLE || src->type == TY_DOUBLE)) {
             b->slot = src->slot;
             b->val = src->val;
             b->ranged = src->ranged;
@@ -2656,9 +2806,11 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         {
             Var t, sv;
             int simple_arg = a->kind == E_VAR && simple(a, &sv) && sv.kind != V_CONST && find_local(a->name) &&
-                             (b->type != TY_FLOAT || expr_type(a) == TY_FLOAT);
+                             (b->type != TY_FLOAT || expr_type(a) == TY_FLOAT) &&
+                             (b->type != TY_DOUBLE || expr_type(a) == TY_DOUBLE);
             if (!simple_arg) {
                 if (b->type == TY_FLOAT) float_value(a);
+                else if (b->type == TY_DOUBLE && expr_type(a) != TY_DOUBLE) dbl_value(a);
                 else {
                     value(a);
                     lend(a);
@@ -2676,13 +2828,13 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
                 if (simple_arg) load_var(0, &sv);
                 store_d0(&t);
             }
-            if ((b->type == TY_STR || IS_OBJ(b->type)) && param_set[idx][i]) {
+            if ((IS_STRLIKE(b->type) || IS_OBJ(b->type)) && param_set[idx][i]) {
                 /* un parámetro de texto que la función cambia: una copia suya (un objeto: una referencia) */
                 op_ea(0x2F00, &t);                     /* move.l p,-(sp) */
                 sp_depth += 4;
-                rt_call(b->type == TY_STR ? "_dl_str_dup" : "_dl_retain_r", 1, 0);
+                rt_call(IS_STRLIKE(b->type) ? "_dl_str_dup" : "_dl_retain_r", 1, 0);
                 store_d0(&t);
-                b->owned = b->type == TY_STR ? 1 : 2;
+                b->owned = IS_STRLIKE(b->type) ? 1 : 2;
             }
         }
     }
@@ -2746,6 +2898,9 @@ static int gen_call(Node *n)
         if (f->params.v[i].type == TY_FLOAT && expr_type(a) != TY_FLOAT) {
             float_value(a);                            /* un Int a un parámetro Float */
             push_d0();
+        } else if (f->params.v[i].type == TY_DOUBLE && expr_type(a) != TY_DOUBLE) {
+            dbl_value(a);                              /* un Int o un Float a un parámetro Double */
+            push_d0();
         } else if (in->kind == E_FIELD || in->kind == E_INDEX || (in->kind == E_VAR && !find_local(in->name))) {
             value(a);
             lend(in);
@@ -2757,7 +2912,7 @@ static int gen_call(Node *n)
     jsr_label(func_label[idx]);
     pop_args(n->args.n);
     if (!needed[idx]) needed[idx] = 1;               /* 2: ya generada */
-    if (f->ret == TY_STR || IS_OBJ(f->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
+    if (IS_STRLIKE(f->ret) || IS_OBJ(f->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
     return f->ret;
 }
 
@@ -2838,6 +2993,11 @@ static int gen_expr(Node *n)
     case E_CALL:
         return gen_call(n);
     case E_NEG:
+        if (expr_type(n->a) == TY_DOUBLE) {
+            args_to_stack(&n->a, 1, NULL);
+            rt_call("_dl_d_neg", 1, 1);
+            return TY_DOUBLE;
+        }
         if (expr_type(n->a) == TY_FLOAT) {
             value(n->a);
             w(0x0A80); l(0x80000000);                  /* eori.l #$80000000,d0: el signo */
@@ -2880,6 +3040,18 @@ static int gen_expr(Node *n)
             rt_call("_dl_arr_concat", 2, 1);
             return expr_type(n);
         }
+        if (expr_type(n) == TY_DOUBLE) {
+            /* a op b con algún Double: dl_d_op(a, b, op), una caja nueva */
+            Node *a[2];
+            static const char conv[2] = {3, 3};
+            load_imm(0, n->op == P_PLUS ? 0 : n->op == P_MINUS ? 1 : n->op == P_STAR ? 2 : 3);
+            push_d0();
+            a[0] = n->a;
+            a[1] = n->b;
+            args_to_stack(a, 2, conv);
+            rt_call("_dl_d_op", 3, 1);
+            return TY_DOUBLE;
+        }
         if (expr_type(n) == TY_FLOAT) {
             /* a op b con algún Float: __addsf3, __subsf3, __mulsf3, __divsf3 */
             Node *a[2];
@@ -2891,8 +3063,9 @@ static int gen_expr(Node *n)
                     n->op == P_STAR ? "___mulsf3" : "___divsf3", 2, 0);
             return TY_FLOAT;
         }
-        if (expr_type(n->a) == TY_FLOAT || expr_type(n->b) == TY_FLOAT)
-            fatal_at(n->line, n->col, "este operador no es para Float");
+        if (expr_type(n->a) == TY_FLOAT || expr_type(n->b) == TY_FLOAT ||
+            expr_type(n->a) == TY_DOUBLE || expr_type(n->b) == TY_DOUBLE)
+            fatal_at(n->line, n->col, "este operador no es para Float ni Double");
         gen_binary(n);
         return TY_INT;
     }
@@ -3600,14 +3773,14 @@ static int gen_counted_while(Node *n)
 
 /* s = valor para una variable de texto: la variable es dueña de su texto; s = s + x añade
    en su sitio (_dash_str_append); una variable nueva empieza sin texto */
-static void gen_str_assign(Node *n)
+static void gen_str_assign(Node *n, int ty)
 {
     Node *e = n->a;
     Local *lc = find_local(n->name);
     int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name));
     Var v;
     if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
-    if (!fresh && e->kind == E_BIN && e->op == P_PLUS && e->a->kind == E_VAR && !strcmp(e->a->name, n->name) &&
+    if (ty == TY_STR && !fresh && e->kind == E_BIN && e->op == P_PLUS && e->a->kind == E_VAR && !strcmp(e->a->name, n->name) &&
         !refs(e->b, n->name)) {
         str_value(e->b);
         push_d0();
@@ -3619,12 +3792,13 @@ static void gen_str_assign(Node *n)
         return;
     }
     if (fresh && e->kind == E_NIL) {
-        v = declare(n->name, TY_STR);
+        v = declare(n->name, ty);
         locals.v[locals.n - 1].owned = 1;
         set_imm(&v, 0);
         return;
     }
     if (e->kind == E_NIL) load_imm(0, 0);
+    else if (ty == TY_DOUBLE) dbl_value(e);            /* (una caja; un número, convertido) */
     else str_value(e);
     push_d0();
     if (fresh) {
@@ -3637,7 +3811,7 @@ static void gen_str_assign(Node *n)
     }
     rt_call(is_tmp_expr(e) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
     if (fresh) {
-        v = declare(n->name, TY_STR);
+        v = declare(n->name, ty);
         locals.v[locals.n - 1].owned = 1;
     }
     store_d0(&v);
@@ -3655,8 +3829,9 @@ static void gen_global_inits(void)
         v.off = i * 4;
         v.type = global_type[i];
         if (g->init->kind == E_NIL) continue;
-        if (global_type[i] == TY_STR) {
-            str_value(g->init);
+        if (IS_STRLIKE(global_type[i])) {
+            if (global_type[i] == TY_DOUBLE) dbl_value(g->init);
+            else str_value(g->init);
             push_d0();
             w(0x4878); w(0);                           /* pea 0.w */
             sp_depth += 4;
@@ -3687,6 +3862,7 @@ static void gen_obj_assign(Node *n, int tt)
     int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name)), lit = is_new_obj(e);
     Var v;
     if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
+    list_hint(e, tt);
     if (e->kind == E_LIST) gen_list(e, 1);
     else if (lit) gen_new(e, find_struct(e->name), 1);
     else value(e);
@@ -4078,7 +4254,7 @@ static void gen_stmt(Node *n)
             ty = gen_expr(n->a);
             need_value(n->a, ty);
             push_d0();
-            if (ty == TY_FLOAT) {
+            if (ty == TY_FLOAT || ty == TY_DOUBLE) {
                 to_str(ty);                            /* un Float, como texto (DashString_from_float) */
                 w(0x2E80);                             /* move.l d0,(sp) */
                 ty = TY_STR;
@@ -4110,8 +4286,8 @@ static void gen_stmt(Node *n)
         {
             int tt = n->kind == S_VAR ? n->type : var_type(n->name);
             if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
-            if (tt == TY_STR) {
-                gen_str_assign(n);
+            if (IS_STRLIKE(tt)) {
+                gen_str_assign(n, tt);
                 return;
             }
             if (IS_OBJ(tt)) {
@@ -4282,6 +4458,18 @@ static void gen_stmt(Node *n)
             } else {
                 gen_branch(n->a, ret_branch, ret_when);
             }
+        } else if (n->a && cur_ret == TY_DOUBLE) {
+            /* un Double: su caja (un número, convertido); la de otro, como temporal de quien llama */
+            dbl_value(n->a);
+            if (!is_tmp_expr(n->a)) {
+                push_d0();
+                rt_call("_dl_str_ret", 1, 1);
+            }
+            if (owned) {
+                push_d0();
+                free_owned(0, 1);
+                pop_d0();
+            }
         } else if (n->a) {
             ty = gen_expr(n->a);
             need_value(n->a, ty);
@@ -4401,9 +4589,9 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         /* un parámetro de texto que el cuerpo cambia: una copia suya, como en ./dash */
         int idx = (int)(f - prog->funcs.v);
         for (i = 0; i < f->params.n; i++)
-            if ((f->params.v[i].type == TY_STR || IS_OBJ(f->params.v[i].type)) && param_set[idx][i]) {
+            if ((IS_STRLIKE(f->params.v[i].type) || IS_OBJ(f->params.v[i].type)) && param_set[idx][i]) {
                 /* (una lista o un struct: una referencia suya) */
-                int str = f->params.v[i].type == TY_STR;
+                int str = IS_STRLIKE(f->params.v[i].type);
                 Var v = lookup(f->params.v[i].name);
                 op_ea(0x2F00, &v);                     /* move.l p,-(sp) */
                 sp_depth += 4;
@@ -4422,14 +4610,14 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         /* --memcheck: al acabar Main se suelta todo, para que el resumen cuente solo lo perdido */
         free_owned(0, 1);
         for (i = 0; i < prog->globals.n; i++)
-            if (global_type[i] == TY_STR || IS_OBJ(global_type[i])) {
+            if (IS_STRLIKE(global_type[i]) || IS_OBJ(global_type[i])) {
                 Var g;
                 g.kind = V_GLOBAL;
                 g.off = i * 4;
                 g.type = global_type[i];
                 op_ea(0x2F00, &g);                     /* move.l g,-(sp) */
                 sp_depth += 4;
-                rt_call(global_type[i] == TY_STR ? "_dl_str_free" : "_dl_release", 1, 0);
+                rt_call(IS_STRLIKE(global_type[i]) ? "_dl_str_free" : "_dl_release", 1, 0);
                 w(0x42B9);                             /* clr.l g */
                 add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
                 l((uint32_t)g.off);
@@ -4445,7 +4633,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             push_d0();
             w(0x2F2F); w(4);                           /* move.l 4(sp),-(sp): la marca */
             sp_depth += 4;
-            rt_call(cur_ret == TY_STR ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
+            rt_call(IS_STRLIKE(cur_ret) ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
             pop_args(1);
         }
         if (IS_OBJ(cur_ret)) {
@@ -4730,16 +4918,16 @@ static void gen_struct_types(void)
         Struct *st = &prog->structs.v[si];
         int destroy = -1;
         for (i = 0; i < st->fields.n; i++)
-            if (st->fields.v[i].type == TY_STR || IS_OBJ(st->fields.v[i].type)) destroy = new_label();
+            if (IS_STRLIKE(st->fields.v[i].type) || IS_OBJ(st->fields.v[i].type)) destroy = new_label();
         if (destroy >= 0) {
             def_label(destroy);
             w(0x2F0A);                                 /* move.l a2,-(sp) */
             w(0x246F); w(8);                           /* movea.l 8(sp),a2 */
             for (i = 0; i < st->fields.n; i++) {
                 int ft = st->fields.v[i].type;
-                if (ft != TY_STR && !IS_OBJ(ft)) continue;
+                if (!IS_STRLIKE(ft) && !IS_OBJ(ft)) continue;
                 w(0x2F2A); w(4 * i);                   /* move.l campo(a2),-(sp) */
-                jsr_sym(ft == TY_STR ? "_dl_str_free" : "_dl_release_child");
+                jsr_sym(IS_STRLIKE(ft) ? "_dl_str_free" : "_dl_release_child");
                 w(0x588F);                             /* addq.l #4,sp */
             }
             w(0x245F);                                 /* movea.l (sp)+,a2 */
@@ -4821,7 +5009,7 @@ void gen_program(Program *p, Obj *o)
         Global *g = &p->globals.v[i];
         global_type[i] = g->type;
         /* un número fijo va en los datos; lo demás, al empezar Main (gen_global_inits) */
-        if (g->type != TY_STR && !IS_OBJ(g->type)) fold(g->init, &v);
+        if (!IS_STRLIKE(g->type) && !IS_OBJ(g->type)) fold(g->init, &v);
         buf_long(&o->data, (uint32_t)v);
     }
     /* los campos a los que algo asigna (préstamos) */

@@ -604,3 +604,60 @@ void dl_fail_at(const char *what, LONG w) { _dash_fail_at(what, w); }
 void *dl_mc_nn(void *p) { return _dash_mc_nn(p); }
 void dl_tmp_release_all(void) { _dash_tmp_release_f(0); }
 #endif
+
+/* ---- Double (dashc): un texto de 16 cifras hexadecimales con sus 8 bytes, para que la variable, el campo
+   o el elemento que lo guarda sea dueño de él como de un texto (copias, temporales, liberación). Las
+   cuentas, con el float doble de gcc por software, como ./dash. Una caja nil vale 0.0. ---- */
+static double dl_dget(STRPTR s)
+{
+    union { double d; ULONG w[2]; } u;
+    int i;
+    u.w[0] = u.w[1] = 0;
+    if (s)
+        for (i = 0; i < 16 && s[i]; i++) {
+            UBYTE c = s[i];
+            u.w[i >> 3] = u.w[i >> 3] << 4 | (c <= '9' ? c - '0' : c - 'A' + 10);
+        }
+    return u.d;
+}
+
+static STRPTR dl_dbox(double d)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    union { double d; ULONG w[2]; } u;
+    STRPTR s = _dash_str_alloc(16, TRUE);
+    int i;
+    if (!s) return NULL;
+    u.d = d;
+    for (i = 0; i < 16; i++) s[i] = hex[(u.w[i >> 3] >> (28 - 4 * (i & 7))) & 15];
+    s[16] = 0;
+    return s;
+}
+
+/* a op b: 0 +, 1 -, 2 *, 3 / */
+STRPTR dl_d_op(STRPTR a, STRPTR b, LONG op)
+{
+    double x = dl_dget(a), y = dl_dget(b);
+    switch (op) {
+    case 0: return dl_dbox(x + y);
+    case 1: return dl_dbox(x - y);
+    case 2: return dl_dbox(x * y);
+    default: return dl_dbox(x / y);
+    }
+}
+
+STRPTR dl_d_neg(STRPTR a) { return dl_dbox(-dl_dget(a)); }
+
+/* -1, 0 o 1; 2 si alguno es nan (entonces solo != es cierto) */
+LONG dl_d_cmp(STRPTR a, STRPTR b)
+{
+    double x = dl_dget(a), y = dl_dget(b);
+    return x < y ? -1 : x > y ? 1 : x == y ? 0 : 2;
+}
+
+STRPTR dl_d_from_int(LONG k) { return dl_dbox((double)k); }
+STRPTR dl_d_from_float(LONG bits) { union { float f; LONG l; } u; u.l = bits; return dl_dbox((double)u.f); }
+STRPTR dl_d_from_str(STRPTR s) { return dl_dbox(_dash_double_from_str(s)); }
+LONG dl_d_to_int(STRPTR a) { return (LONG)dl_dget(a); }
+LONG dl_d_to_float(STRPTR a) { union { float f; LONG l; } u; u.f = (float)dl_dget(a); return u.l; }
+STRPTR dl_d_str(STRPTR a) { return DashString_from_double(dl_dget(a)); }
