@@ -149,7 +149,7 @@ typedef struct {
     int ret;         /* tipo que devuelve (sin "-> Tipo", lo deduce gen68k.c) */
     int declared;    /* con "-> Tipo" */
     int has_value;   /* tiene algún "return valor" */
-    int native;      /* @native: su C va en la librería de dashc (solo los de lib/amiga) */
+    int native;      /* 1, @native: su C va en la librería de dashc (solo los de lib/amiga); 2, @extern: de @link */
     int boolret;     /* una lambda "fn(a, b) -> a < b": da un Bool (sort: si a va antes que b) */
     NodeList body;
 } Func;
@@ -258,5 +258,6 @@ extern const KeyName key_names[];
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);
+void link_add(const char *path);     /* @link: un objeto o una biblioteca más que enlazar */
 
 #endif

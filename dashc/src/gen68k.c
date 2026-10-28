@@ -3125,6 +3125,26 @@ static int gen_call(Node *n)
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
+    if (f->native == 2) {
+        /* @extern: la función de C de lo de @link, como una del runtime (los argumentos en la pila, de
+           derecha a izquierda; lo devuelto en d0); un texto que devuelve se copia a un temporal de Dash */
+        char *sym = xmalloc(strlen(f->name) + 2);
+        sym[0] = '_';
+        strcpy(sym + 1, f->name);
+        for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
+        rt_call(sym, n->args.n, 0);
+        if (f->ret == TY_STR) {
+            push_d0();
+            rt_call("_dl_str_tmpcopy", 1, 1);
+        } else if (f->ret == TY_BOOL) {
+            w(0x4A80);                                 /* tst.l d0 (un BOOL de C puede ser cualquier no 0) */
+            w(0x56C0);                                 /* sne d0 */
+            w(0x4400);                                 /* neg.b d0 */
+            w(0x0280); l(1);                           /* andi.l #1,d0 */
+        }
+        d0_loaded = (uint32_t)-1;
+        return f->ret;
+    }
     if (f->native) {
         /* el envoltorio dn_nombre de la librería (runtime/gen_lib.py) */
         char *sym = xmalloc(strlen(f->name) + 5);

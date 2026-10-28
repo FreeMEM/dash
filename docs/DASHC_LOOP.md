@@ -34,6 +34,14 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   del usuario NO se admite en Dash 2.0. Lo que hacen los `@native` de tachyon (137), trasfondo (33) y Lorraine (1)
   se cubre con builtins o con el lenguaje: clasificación en `docs/DASHC_NATIVE.md`.
 - D8 Optimizaciones nuevas que salgan al medir programas reales (no solo enteros).
+- D10 QuickJS y Hubbub como librerías compartidas (en `LIBS:`, con nombre propio), pedido por el
+  usuario (2026-10-28): con `@link`, cada programa lleva su copia (QuickJS, unos 800 KB); una `.library` se carga
+  una vez y la usan todos los programas, y se actualiza sin recompilarlos. Hace falta: la librería con su tabla de
+  funciones (libinit de bebbo), dentro lo de libc que necesitan (`realloc`, `snprintf`...), que la abran varios
+  programas a la vez (estado por apertura) y que dashc llame a funciones de librería (registros y base) con
+  `@extern("dashjs.library")`. Antes, Tachyon compilando con `@link` (D7).
+  Nombres propios (`dashjs.library`, `dashhtml5.library`), no `quickjs`/`hubbub`: que otro port (NetSurf...) no
+  pise la versión de Dash ni Dash la suya; el programa pide una versión mínima al abrirla.
 - D9 Cierre: `./dash` llama a dashc (o dashc pasa a ser `dash`), documentación en dos idiomas, versión 2.0.
 
 ## Bitácora
@@ -246,3 +254,16 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     `screen_pixel`, `gadget_find`, `cx_send`.
   - Tests de ./dash: 458 bien; batería de dashc bien; cobertura: compilan 208 de 312 (66 %) y en el A1200 135 de
     135 iguales.
+- D7 (3.ª parte): `@link "x.o"` o `"libx.a"` (relativo al fichero) y `@extern("...") func f(a: Int, s: String) ->
+  Int|Bool|String`. hunk.c lee los objetos Hunk de gcc y las bibliotecas ar (salta las tablas `/`, `//` y
+  `__.SYMDEF`), con los símbolos comunes (variables sin `-fno-common`: un BSS para cada uno) y enlaza solo lo que se
+  alcanza (un objeto sin `-ffunction-sections` entra entero). La llamada es la de C (pila de derecha a izquierda,
+  d0); un `String` devuelto se copia a un temporal (`dl_str_tmpcopy`) y un `Bool` se normaliza a 0/1. Lo que no
+  define nadie sale junto en un error. dashc/tests/externo.dash con `tests/c/externo.o` (su .c al lado; el .o va
+  en git): igual que gcc en A1200 y A500, y 8.404 bytes frente a 9.488.
+  - Enlazar la `libqjs.a` de Tachyon dice lo que falta: `_js_aserto` (del `@c` de Tachyon) y de libc/libm/libgcc
+    `trunc acosh asinh atanh log2 abort __floatdidf __fixdfdi vsnprintf strrchr lrint realloc fprintf round fwrite
+    fputc snprintf fmax fmin strchr gmtime mktime localtime gettimeofday __lshrdi3 __ashldi3`. Siguiente paso para
+    QuickJS: una libc de compatibilidad para lo de `@link` (enlazada solo si hace falta) o que el módulo las lleve.
+    Que el C llame a funciones Dash (las retrollamadas) está por ver: dashc guarda solo los registros que usa.
+  - Batería de dashc bien (con externo.dash); cobertura: compilan 208 de 312 y en el A1200 135 de 135 iguales.

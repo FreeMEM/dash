@@ -1,0 +1,25 @@
+# @link y @extern: funciones de C de un objeto ya compilado (tests/c/externo.o), con enteros, textos y Bool
+@link "c/externo.o"
+
+@extern("externo") func ext_suma(a: Int, b: Int) -> Int
+@extern("externo") func ext_largo(s: String) -> Int
+@extern("externo") func ext_saludo() -> String
+@extern("externo") func ext_es_par(n: Int) -> Bool
+@extern("externo") func ext_contar()
+@extern("externo") func ext_cuenta() -> Int
+
+Main
+    Print ext_suma(2, 40)
+    t = "Amiga"
+    Print ext_largo(t + " 1200")
+    s = ext_saludo()
+    Print s + " (" + s.length + ")"
+    Print "#{ext_es_par(4)} #{ext_es_par(7)}"
+    if ext_es_par(10)
+        Print "par"
+    end
+    for i in (1..3)
+        ext_contar()
+    end
+    Print ext_cuenta()
+end

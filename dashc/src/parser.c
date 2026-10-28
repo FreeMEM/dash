@@ -781,7 +781,53 @@ static void parse_into(Program *p)
             if (t->file == 0) p->wb_output_main = 1;
             continue;
         }
-        if (t->kind == T_ID && !strcmp(t->text, "@extern"))
+        if (t->kind == T_ID && !strcmp(t->text, "@link")) {
+            /* @link "x.o" o "libx.a": relativo al fichero que lo dice */
+            Token *v = expect(T_STR);
+            const char *from = src_files.v[t->file], *slash = strrchr(from, '/');
+            char *path = xmalloc(strlen(from) + strlen(v->text) + 2);
+            if (v->text[0] == '/' || !slash) strcpy(path, v->text);
+            else sprintf(path, "%.*s/%s", (int)(slash - from), from, v->text);
+            link_add(path);
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "@extern")) {
+            /* @extern("lo que sea") func f(a: Int, s: String) -> Int: una función de C de lo de @link */
+            Func f = {0};
+            Token *name;
+            if (accept(P_LP)) {
+                expect(T_STR);
+                expect(P_RP);
+            }
+            expect(K_FUNC);
+            name = expect(T_ID);
+            f.name = name->text;
+            f.line = name->line;
+            f.col = name->col;
+            f.file = name->file;
+            expect(P_LP);
+            if (!accept(P_RP)) {
+                do {
+                    Param pa;
+                    pa.name = expect(T_ID)->text;
+                    pa.untyped = !accept(P_COLON);
+                    pa.type = pa.untyped ? TY_INT : parse_type();
+                    if (pa.type != TY_INT && pa.type != TY_BOOL && pa.type != TY_STR)
+                        fatal_at(name->line, name->col, "@extern %s: sus parámetros son Int, Bool o String", f.name);
+                    VEC_PUSH(f.params, pa);
+                } while (accept(P_COMMA));
+                expect(P_RP);
+            }
+            f.ret = TY_VOID;
+            if (accept(P_ARROW)) f.ret = parse_type();
+            if (f.ret != TY_VOID && f.ret != TY_INT && f.ret != TY_BOOL && f.ret != TY_STR)
+                fatal_at(name->line, name->col, "@extern %s: devuelve Int, Bool, String o nada", f.name);
+            f.declared = 1;
+            f.native = 2;
+            VEC_PUSH(p->funcs, f);
+            continue;
+        }
+        if (0)
             fatal_at(t->line, t->col, "dashc (prueba): %s aún no está", t->text);
         if (t->kind == T_ID && t->text[0] == '@')
             fatal_at(t->line, t->col, "%s lleva C, y Dash 2.0 no admite C en los programas", t->text);

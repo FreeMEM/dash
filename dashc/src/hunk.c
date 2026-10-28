@@ -33,11 +33,21 @@ typedef struct { int hunk; uint32_t off; char *name; } Ref;
 static struct { Ref *v; int n, cap; } refs;
 
 static const uint8_t *rp, *rend;
+static const char *obj_name = "runtime";     /* el objeto que se lee, para los errores */
+
+/* los símbolos comunes (variables de C sin -fno-common): un BSS para cada uno que nadie define */
+typedef struct { char *name; uint32_t size; } Common;
+static struct { Common *v; int n, cap; } commons;
+
+/* lo de @link: objetos Hunk y bibliotecas (.a) de gcc */
+static struct { const char **v; int n, cap; } link_files;
+void link_add(const char *path) { VEC_PUSH(link_files, path); }
+static struct { const char **v; int n, cap; } missing;   /* lo que nadie define (bind) */
 
 static uint32_t rd(void)
 {
     uint32_t v;
-    if (rp + 4 > rend) fatal("runtime: objeto Hunk cortado");
+    if (rp + 4 > rend) fatal("%s: objeto Hunk cortado", obj_name);
     v = get_long(rp);
     rp += 4;
     return v;
@@ -94,7 +104,7 @@ static void read_object(const uint8_t *p, size_t len)
             pending_name = NULL;
             if (type != HUNK_BSS) {
                 h.data = xmalloc(h.size);
-                if (rp + h.size > rend) fatal("runtime: objeto Hunk cortado");
+                if (rp + h.size > rend) fatal("%s: objeto Hunk cortado", obj_name);
                 memcpy(h.data, rp, h.size);
                 rp += h.size;
             }
@@ -136,10 +146,21 @@ static void read_object(const uint8_t *p, size_t len)
                         r.name = name;
                         VEC_PUSH(refs, r);
                     }
-                } else if (kind == 0x82) {
-                    fatal("runtime: símbolo común %s (compílalo con -fno-common)", name);
+                } else if (kind == 0x82) {                                   /* EXT_COMMON: tamaño y refs */
+                    Common c;
+                    c.name = name;
+                    c.size = rd();
+                    VEC_PUSH(commons, c);
+                    count = rd();
+                    for (i = 0; i < count; i++) {
+                        Ref r;
+                        r.hunk = cur;
+                        r.off = rd();
+                        r.name = name;
+                        VEC_PUSH(refs, r);
+                    }
                 } else {
-                    fatal("runtime: referencia de tipo 0x%x a %s aún no admitida", (unsigned)kind, name);
+                    fatal("%s: referencia de tipo 0x%x a %s aún no admitida", obj_name, (unsigned)kind, name);
                 }
             }
             break;
@@ -158,9 +179,49 @@ static void read_object(const uint8_t *p, size_t len)
             cur = -1;
             break;
         default:
-            fatal("runtime: bloque Hunk 0x%x aún no admitido", (unsigned)type);
+            fatal("%s: bloque Hunk 0x%x aún no admitido", obj_name, (unsigned)type);
         }
     }
+}
+
+/* un fichero de @link: un objeto Hunk o una biblioteca de ellos (ar, como las de gcc) */
+static void read_linked(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    uint8_t *p;
+    long len;
+    if (!f) fatal("@link: no puedo leer %s", path);
+    fseek(f, 0, SEEK_END);
+    len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    p = xmalloc((size_t)len + 1);
+    if (fread(p, 1, (size_t)len, f) != (size_t)len) fatal("@link: no puedo leer %s", path);
+    fclose(f);
+    obj_name = path;
+    if (len >= 8 && !memcmp(p, "!<arch>\n", 8)) {
+        long off = 8;
+        while (off + 60 <= len) {
+            char size_txt[11];
+            long size;
+            const uint8_t *hdr = p + off;
+            memcpy(size_txt, hdr + 48, 10);
+            size_txt[10] = 0;
+            size = atol(size_txt);
+            off += 60;
+            if (size < 0 || off + size > len) fatal("@link: %s está cortada", path);
+            /* (la tabla de símbolos "/" o "__.SYMDEF" y la de nombres largos "//" no son objetos) */
+            if (hdr[0] != '/' && memcmp(hdr, "__.SYMDEF", 9)) {
+                if (size < 4 || get_long(p + off) != HUNK_UNIT)
+                    fatal("@link: %s tiene un objeto que no es Hunk (¿compilado con el gcc de Amiga?)", path);
+                read_object(p + off, (size_t)size);
+            }
+            off += size + (size & 1);
+        }
+    } else {
+        if (len < 4 || get_long(p) != HUNK_UNIT) fatal("@link: %s no es un objeto Hunk (¿compilado con el gcc de Amiga?)", path);
+        read_object(p, (size_t)len);
+    }
+    obj_name = "runtime";
 }
 
 /* ¿define el runtime este símbolo? (lee sus nombres una vez y lo deja todo como estaba) */
@@ -187,7 +248,15 @@ static void bind(int hunk, uint32_t off, const char *name)
 {
     Sym *s = find_sym(name);
     uint8_t *p = hunks.v[hunk].data + off;
-    if (!s) fatal("el runtime no tiene %s", name);
+    if (!s) {
+        int i;
+        if (!link_files.n) fatal("el runtime no tiene %s", name);
+        /* (se apuntan todos los que faltan y se dicen juntos al final) */
+        for (i = 0; i < missing.n; i++)
+            if (!strcmp(missing.v[i], name)) return;
+        VEC_PUSH(missing, name);
+        return;
+    }
     put_long(p, get_long(p) + s->val);
     if (!s->abs) {
         HReloc r;
@@ -377,6 +446,17 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
     read_object(rt, rtlen);
     if (!getenv("DASHC_SIN_TROCEAR")) split_strings(2);
+    for (i = 0; i < link_files.n; i++) read_linked(link_files.v[i]);
+    /* un común que nadie define: un BSS suyo */
+    for (i = 0; i < commons.n; i++)
+        if (!find_sym(commons.v[i].name)) {
+            Hunk h = {0};
+            h.type = HUNK_BSS;
+            h.size = (commons.v[i].size + 3) & ~3u;
+            h.secname = commons.v[i].name;
+            VEC_PUSH(hunks, h);
+            add_sym(commons.v[i].name, hunks.n - 1, 0, 0);
+        }
 
     /* los símbolos, solo los de los hunks a los que se llega (el runtime trae funciones que usan cosas
        que ningún programa enlaza todavía) */
@@ -438,6 +518,13 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         }
     }
 
+    if (missing.n) {
+        fprintf(stderr, "dashc: Error: nadie define (ni el runtime ni lo de @link):");
+        for (i = 0; i < missing.n; i++) fprintf(stderr, " %s", missing.v[i][0] == '_' ? missing.v[i] + 1 : missing.v[i]);
+        fprintf(stderr, "\n");
+        exit(1);
+    }
+
     /* un puntero débil a algo que no va: 0, sin reubicación */
     for (i = 0; i < hunks.n; i++)
         if (keep[i] && weak[i]) {
@@ -455,7 +542,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     for (i = 0; i < hunks.n; i++) {
         Hunk *h = &hunks.v[i];
         if (!keep[i]) continue;
-        if (h->memflags) fatal("runtime: un hunk con memoria chip o fast aún no se admite");
+        if (h->memflags) fatal("%s: un hunk con memoria chip o fast aún no se admite", h->secname ? h->secname : "?");
         outh[i] = h->type == HUNK_CODE ? 0 : h->type == HUNK_DATA ? 1 : 2;
         base[i] = outsize[outh[i]];
         outsize[outh[i]] += h->align2 ? (h->size + 1) & ~1u : (h->size + 3) & ~3u;
