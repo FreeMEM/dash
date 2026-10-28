@@ -193,3 +193,13 @@ diga el usuario. Base medida: `Base ronda 3`.
   programa. En la comparativa, la memoria media al ejecutar era de 16,6 KB.
 - Probado: los tests de excepciones y de nil en A1200, A500 y 3.2 (también con `--memcheck`), y uno nuevo,
   `test_trap_mui`: división por cero a 200 llamadas de profundidad con una ventana MUI abierta (A1200 y 3.2).
+
+### Los fallos del escritorio y de `test_on_click_timer` en la batería entera (de `main`, no de la ronda)
+- Causa: `test_args_wb` (Lorraine D31) lanza su copia como el Workbench, pero con la entrada y salida por defecto
+  de `CreateNewProc` (NIL:, que DOS abre y cierra): al salir, con la consola de libnix, "fichero cerrado dos
+  veces" (alerta 8700000E), un requester "Software Failure" que se quedaba sobre la pantalla. Los tests del
+  escritorio leen esa zona y `test_on_click_timer` clicaba en él (con `--memcheck` se colgaba y los siguientes
+  del arranque agotaban el tiempo: 66 fallos). Con `--memcheck`, además, el resumen de memoria de la copia abría
+  una consola de libnix a pantalla completa que espera a que la cierren.
+- Arreglo, en el test: `NP_Input`/`NP_Output` a 0 sin cerrarlos, como el Workbench, y `@workbench_output "NIL:"`.
+  Seguidos con `--memcheck`, `test_args_wb`, `test_on_click_timer` y `test_desktop_canvas_fondo` pasan.
