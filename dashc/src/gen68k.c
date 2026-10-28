@@ -849,18 +849,24 @@ static int expr_type(Node *n)
 {
     int ta, tb, idx;
     switch (n->kind) {
-    case E_INT: case E_NEG: case E_BNOT:
+    case E_NEG:
+        return expr_type(n->a) == TY_FLOAT ? TY_FLOAT : TY_INT;
+    case E_INT: case E_BNOT:
         return TY_INT;
     case E_BOOL: case E_CMP: case E_NOT: case E_AND: case E_OR:
         return TY_BOOL;
     case E_STR: case E_INTERP:
         return TY_STR;
+    case E_FLOAT:
+        return TY_FLOAT;
     case E_NIL:
         return TY_NIL;
     case E_VAR:
         return var_type(n->name);
     case E_CALL:
         if (find_func(n->name, &idx)) return func_ret(idx);
+        if (!strcmp(n->name, "Float")) return TY_FLOAT;
+        if (!strcmp(n->name, "Int")) return TY_INT;
         if ((idx = find_struct(n->name)) >= 0) return TY_STRUCT + idx;
         for (idx = 0; idx < builtin_count; idx++)
             if (!strcmp(builtin_info[idx].name, n->name)) {
@@ -874,6 +880,8 @@ static int expr_type(Node *n)
         ta = expr_type(n->a);
         tb = expr_type(n->b);
         if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
+        if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
+            (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
         return TY_INT;
     case E_INDEX:
         ta = expr_type(n->a);
@@ -1045,6 +1053,10 @@ static void to_str(int ty)
         push_d0();
         rt_call("_dl_str_from_char", 1, 1);
         break;
+    case TY_FLOAT:
+        push_d0();
+        rt_call("_dl_str_from_float", 1, 1);
+        break;
     case TY_BOOL:
         tst_d0();
         w(0x6708);                                     /* beq.s +8 */
@@ -1063,14 +1075,45 @@ static void str_value(Node *n)
     to_str(ty);
 }
 
+/* ---- Float: el de gcc por software (fp-bit y fastfp, como ./dash); sus bits en un LONG ---- */
+
+/* d0, de tipo from, pasado a to: Int a Float (__floatsisf) o Float a Int (__fixsfsi, como C) */
+static void coerce(int from, int to)
+{
+    if (to == TY_FLOAT && (from == TY_INT || from == TY_CHAR || from == TY_BOOL)) {
+        push_d0();
+        rt_call("___floatsisf", 1, 0);
+    } else if ((to == TY_INT || to == TY_CHAR) && from == TY_FLOAT) {
+        push_d0();
+        rt_call("___fixsfsi", 1, 0);
+    }
+}
+
+/* el valor de n como Float (un número fijo, ya convertido al compilar) */
+static void float_value(Node *n)
+{
+    long k;
+    int t;
+    if (fold(n, &k)) {
+        load_imm(0, float_bits((double)(int32_t)k));
+        return;
+    }
+    t = gen_expr(n);
+    need_value(n, t);
+    coerce(t, TY_FLOAT);
+}
+
 /* Los argumentos de una llamada al runtime, calculados en orden y dejados en la pila
    como los pone C (el primero arriba). str[i]: el argumento i pasa a texto. Sitio para
    todos primero y luego cada uno a su hueco: así se calculan de izquierda a derecha. */
+static void float_value(Node *n);
+
 static void args_to_stack(Node **a, int n, const char *str)
 {
     int i;
     if (n == 1) {
-        if (str && str[0]) str_value(a[0]);
+        if (str && str[0] == 2) float_value(a[0]);
+        else if (str && str[0]) str_value(a[0]);
         else value(a[0]);
         push_d0();
         return;
@@ -1078,7 +1121,8 @@ static void args_to_stack(Node **a, int n, const char *str)
     w(0x4FEF); w(-4 * n);                              /* lea -4n(sp),sp */
     sp_depth += 4 * n;
     for (i = 0; i < n; i++) {
-        if (str && str[i]) str_value(a[i]);
+        if (str && str[i] == 2) float_value(a[i]);
+        else if (str && str[i]) str_value(a[i]);
         else value(a[i]);
         if (i) { w(0x2F40); w(4 * i); }                /* move.l d0,4i(sp) */
         else w(0x2E80);                                /* move.l d0,(sp) */
@@ -2168,6 +2212,17 @@ static int gen_compare(Node *n)
         }
         return cc;
     }
+    /* Float: __cmpsf2 da -1, 0 o 1 */
+    if (ta == TY_FLOAT || tb == TY_FLOAT) {
+        Node *a[2];
+        static const char conv[2] = {2, 2};
+        a[0] = n->a;
+        a[1] = n->b;
+        args_to_stack(a, 2, conv);
+        rt_call("___cmpsf2", 2, 0);
+        tst_d0();
+        return cc;
+    }
     /* textos: el signo de strcmp (nil va antes que cualquier texto) */
     if (ta == TY_STR && tb == TY_STR) {
         Node *a[2];
@@ -2329,6 +2384,24 @@ static int gen_builtin(Node *n)
     }
     for (b = 0; builtins[b].name; b++)
         if (!strcmp(builtins[b].name, n->name)) break;
+    if (!builtins[b].name && (!strcmp(n->name, "Int") || !strcmp(n->name, "Float")) && n->args.n == 1) {
+        int t = expr_type(n->args.v[0]), to = n->name[0] == 'I' ? TY_INT : TY_FLOAT;
+        if (t == TY_STR && to == TY_INT) {
+            /* Int("12"): str_to_int en base 10 */
+            Node *a[2], ten;
+            memset(&ten, 0, sizeof ten);
+            ten.kind = E_INT;
+            ten.val = 10;
+            a[0] = n->args.v[0];
+            a[1] = &ten;
+            args_to_stack(a, 2, NULL);
+            rt_call("_db_str_to_int", 2, 0);
+            return TY_INT;
+        }
+        value(n->args.v[0]);
+        coerce(t, to);
+        return to;
+    }
     if (!builtins[b].name) return gen_dash_builtin(n);
     if (n->args.n != (int)strlen(builtins[b].args))
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, (int)strlen(builtins[b].args), n->args.n);
@@ -2471,10 +2544,11 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         b->entry = 0;
         b->owned = 0;
         if (!param_set[idx][i] && fold(a, &k)) {
-            b->val = k;
+            b->val = b->type == TY_FLOAT ? float_bits((double)(int32_t)k) : k;
             continue;
         }
-        if (!param_set[idx][i] && a->kind == E_VAR && (src = find_local(a->name)) != NULL) {
+        if (!param_set[idx][i] && a->kind == E_VAR && (src = find_local(a->name)) != NULL &&
+            (b->type != TY_FLOAT || src->type == TY_FLOAT)) {
             b->slot = src->slot;
             b->val = src->val;
             b->ranged = src->ranged;
@@ -2487,10 +2561,14 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         }
         {
             Var t, sv;
-            int simple_arg = a->kind == E_VAR && simple(a, &sv) && sv.kind != V_CONST && find_local(a->name);
+            int simple_arg = a->kind == E_VAR && simple(a, &sv) && sv.kind != V_CONST && find_local(a->name) &&
+                             (b->type != TY_FLOAT || expr_type(a) == TY_FLOAT);
             if (!simple_arg) {
-                value(a);
-                lend(a);
+                if (b->type == TY_FLOAT) float_value(a);
+                else {
+                    value(a);
+                    lend(a);
+                }
             }
             b->slot = new_slot(0);
             use_slot(b->slot);
@@ -2571,7 +2649,10 @@ static int gen_call(Node *n)
     }
     for (i = n->args.n - 1; i >= 0; i--) {
         Node *a = n->args.v[i], *in = a->kind == E_NN ? a->a : a;   /* (self de un método: comprobado) */
-        if (in->kind == E_FIELD || in->kind == E_INDEX || (in->kind == E_VAR && !find_local(in->name))) {
+        if (f->params.v[i].type == TY_FLOAT && expr_type(a) != TY_FLOAT) {
+            float_value(a);                            /* un Int a un parámetro Float */
+            push_d0();
+        } else if (in->kind == E_FIELD || in->kind == E_INDEX || (in->kind == E_VAR && !find_local(in->name))) {
             value(a);
             lend(in);
             push_d0();
@@ -2606,6 +2687,9 @@ static int gen_expr(Node *n)
     case E_NIL:
         load_imm(0, 0);
         return TY_NIL;
+    case E_FLOAT:
+        load_imm(0, n->val);
+        return TY_FLOAT;
     case E_INTERP:
         gen_interp(n);
         return TY_STR;
@@ -2652,6 +2736,11 @@ static int gen_expr(Node *n)
     case E_CALL:
         return gen_call(n);
     case E_NEG:
+        if (expr_type(n->a) == TY_FLOAT) {
+            value(n->a);
+            w(0x0A80); l(0x80000000);                  /* eori.l #$80000000,d0: el signo */
+            return TY_FLOAT;
+        }
         value(n->a);
         w(0x4480);                                     /* neg.l d0 */
         return TY_INT;
@@ -2680,6 +2769,19 @@ static int gen_expr(Node *n)
             gen_concat(n);
             return TY_STR;
         }
+        if (expr_type(n) == TY_FLOAT) {
+            /* a op b con algún Float: __addsf3, __subsf3, __mulsf3, __divsf3 */
+            Node *a[2];
+            static const char conv[2] = {2, 2};
+            a[0] = n->a;
+            a[1] = n->b;
+            args_to_stack(a, 2, conv);
+            rt_call(n->op == P_PLUS ? "___addsf3" : n->op == P_MINUS ? "___subsf3" :
+                    n->op == P_STAR ? "___mulsf3" : "___divsf3", 2, 0);
+            return TY_FLOAT;
+        }
+        if (expr_type(n->a) == TY_FLOAT || expr_type(n->b) == TY_FLOAT)
+            fatal_at(n->line, n->col, "este operador no es para Float");
         gen_binary(n);
         return TY_INT;
     }
@@ -3602,6 +3704,11 @@ static void gen_stmt(Node *n)
             ty = gen_expr(n->a);
             need_value(n->a, ty);
             push_d0();
+            if (ty == TY_FLOAT) {
+                to_str(ty);                            /* un Float, como texto (DashString_from_float) */
+                w(0x2E80);                             /* move.l d0,(sp) */
+                ty = TY_STR;
+            }
             jsr_sym(ty == TY_BOOL ? "__dash_print_bool" : ty == TY_STR || ty == TY_NIL ? "__dash_print_str" :
                     ty == TY_CHAR ? "__dash_print_char" : "__dash_print_int");
         }
@@ -3635,6 +3742,16 @@ static void gen_stmt(Node *n)
             }
             if (IS_OBJ(tt)) {
                 gen_obj_assign(n, tt);
+                return;
+            }
+            if (tt == TY_FLOAT) {
+                /* un Float: el valor convertido, sin las cuentas de enteros en su sitio */
+                Local *lc = find_local(n->name);
+                int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name));
+                float_value(n->a);
+                v = fresh ? declare(n->name, TY_FLOAT) : lookup(n->name);
+                if (v.kind == V_CONST) fatal_at(n->line, n->col, "%s es una constante", n->name);
+                store_d0(&v);
                 return;
             }
         }
@@ -3777,6 +3894,7 @@ static void gen_stmt(Node *n)
         } else if (n->a) {
             ty = gen_expr(n->a);
             need_value(n->a, ty);
+            coerce(ty, cur_ret);
             if (cur_ret == TY_STR) {
                 to_str(ty);
                 /* un texto que ya es de alguien sale como temporal de quien llama */

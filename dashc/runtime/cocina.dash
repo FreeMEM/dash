@@ -23,6 +23,13 @@ func dicc(d: {String: Int}, e: {Int: String}) -> [String]
     return d.keys()
 end
 
+func flotante(f: Float) -> Float
+    g = f * 2.5 + 1
+    Print g
+    Print "f=#{f}"
+    return -g / 3.0
+end
+
 Main
     s = "abc"
     t = s + "d"

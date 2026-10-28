@@ -53,7 +53,8 @@ enum {
     P_PLUS, P_MINUS, P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE,
     P_SHL, P_SHR, P_ARROW, P_DOTDOT, P_LB, P_RB, P_DOT, P_LBRACE, P_RBRACE,
     /* un texto con #{...}: trozos de texto y de código alternos */
-    T_ISTR
+    T_ISTR,
+    T_FLOAT   /* val: los bits del float (IEEE de 32 bits) */
 };
 
 typedef struct {
@@ -80,6 +81,7 @@ enum {
     E_LIST,     /* [args] */
     E_INTERP,   /* "...#{x}...": args son los trozos (E_STR y expresiones) */
     E_DICT,     /* {k: v, ...}: args son clave, valor, clave, valor... */
+    E_FLOAT,    /* val: los bits del float */
     E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
@@ -89,7 +91,8 @@ enum {
 /* Tipos: los básicos; un struct es TY_STRUCT + su número; una lista suma TY_ARR por cada nivel
    (Array sin más es TY_ARR + TY_VOID: lo que guarda se deduce, o Int). TY_NAMED + n: un nombre de tipo aún sin resolver
    (type_names[n]), que gen68k.c cambia por su struct. */
-enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL };
+enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL, TY_FLOAT };
+long float_bits(double d);   /* lexer.c: los bits del float de 32 bits más cercano */
 #define TY_STRUCT 16
 #define TY_DICT 0x4000   /* + n: dict_types.v[n] */
 #define TY_NAMED 0x8000

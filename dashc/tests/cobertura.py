@@ -23,6 +23,9 @@ sys.path.insert(0, str(REPO / "tools"))
 import emu_run  # noqa: E402
 
 
+SKIP_MARKS = ("# emu-needs:", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net")
+
+
 def lines_with(text, mark):
     return [l.split(mark, 1)[1].strip() for l in text.splitlines() if l.strip().startswith(mark)]
 
@@ -47,7 +50,8 @@ def main():
         if r.returncode == 0:
             ok.append(f)
             text = f.read_text(encoding="utf-8", errors="replace")
-            if lines_with(text, "# expect-out:") and not lines_with(text, "# emu-needs:"):
+            # (los que piden algo del runner que dashc aún no tiene: cerrarse solos, pantallas, red...)
+            if lines_with(text, "# expect-out:") and not any(lines_with(text, m) for m in SKIP_MARKS):
                 runnable.append((f, exe, text))
         else:
             msg = (r.stderr.strip().splitlines() or ["?"])[-1]

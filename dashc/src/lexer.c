@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "dashc.h"
@@ -12,7 +13,7 @@ static const char *kw_names[] = {
 static const char *punct_names[] = {
     "(", ")", ",", ":", "=", "==", "!=", "<", "<=", ">", ">=",
     "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>", "->", "..", "[", "]", ".", "{", "}",
-    "un texto"
+    "un texto", "un número con decimales"
 };
 
 const char *tok_name(int kind)
@@ -28,6 +29,13 @@ const char *tok_name(int kind)
 }
 
 typedef struct { Token *v; int n, cap; } TokVec;
+
+long float_bits(double d)
+{
+    union { float f; uint32_t u; } x;
+    x.f = (float)d;
+    return (long)(int32_t)x.u;
+}
 
 /* Los textos van en Latin-1, como en el Amiga: de UTF-8 se pasan los caracteres
    de U+0080 a U+00FF; los demás quedan como "?". Un #{...} corta el texto: t recibe
@@ -152,6 +160,7 @@ Token *lex(const char *src)
         }
 
         if (isdigit((unsigned char)*s) || (*s == '$' && isxdigit((unsigned char)s[1]))) {
+            const char *b = s;
             unsigned long v = 0;
             int base = 10;
             if (*s == '$') { base = 16; s++; }
@@ -168,10 +177,17 @@ Token *lex(const char *src)
                 v = v * base + d;
                 s++;
             }
-            if (*s == '.' && isdigit((unsigned char)s[1]))
-                fatal_at(t.line, t.col, "dashc (prueba): Float aún no está");
-            t.kind = T_INT;
-            t.val = (long)(int32_t)(uint32_t)v;
+            if (base == 10 && *s == '.' && isdigit((unsigned char)s[1])) {
+                /* 1.5, 2.0e3: un Float */
+                char *end;
+                double d = strtod(b, &end);
+                s = end;
+                t.kind = T_FLOAT;
+                t.val = float_bits(d);
+            } else {
+                t.kind = T_INT;
+                t.val = (long)(int32_t)(uint32_t)v;
+            }
         } else if (isalpha((unsigned char)*s) || *s == '_') {
             const char *b = s;
             int i;

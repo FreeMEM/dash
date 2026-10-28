@@ -201,6 +201,8 @@ LONG dl_str_code(STRPTR s, LONG i) { return _dash_str_code(s, i); }
 STRPTR dl_str_slice(STRPTR s, LONG a, LONG b) { return DashString_slice(s, a, b); }
 LONG dl_str_cmp(STRPTR a, STRPTR b) { return _dash_str_cmp(a, b); }
 
+STRPTR dl_str_from_float(LONG bits) { return DashString_from_float(_dash_l2f(bits)); }
+
 /* ---- objetos con contador ---- */
 void *dl_rc_new_obj(LONG size, const _DashType *t) { return _dash_rc_new_obj(size, t); }
 void *dl_rc_alloc_obj(LONG size, const _DashType *t) { return _dash_rc_alloc_obj(size, t); }

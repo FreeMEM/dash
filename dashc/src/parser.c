@@ -80,7 +80,8 @@ static int parse_type(void)
     if (!strcmp(t->text, "String")) return TY_STR;
     if (!strcmp(t->text, "Array")) return TY_ARR + TY_VOID;   /* lo que guarda, por su uso */
     if (!strcmp(t->text, "Pointer")) return TY_INT;          /* una dirección: un número de 32 bits */
-    if (!strcmp(t->text, "Float") || !strcmp(t->text, "Fixed") ||
+    if (!strcmp(t->text, "Float")) return TY_FLOAT;
+    if (!strcmp(t->text, "Fixed") ||
         !strcmp(t->text, "Func") || !strcmp(t->text, "Void"))
         fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
     for (i = 0; i < type_names.n; i++)
@@ -117,6 +118,10 @@ static Node *atom(void)
         return n;
     case T_ISTR:
         return interp(t);
+    case T_FLOAT:
+        n = node(E_FLOAT, t);
+        n->val = t->val;
+        return n;
     case K_TRUE:
     case K_FALSE:
         n = node(E_BOOL, t);
