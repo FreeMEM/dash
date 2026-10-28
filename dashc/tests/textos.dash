@@ -1,0 +1,9 @@
+# textos literales: escapes y Latin-1
+Main
+    Print "Hola, Amiga"
+    Print "año, canción, pingüino: ÁÉÍÓÚ ñ"
+    Print "tab\taquí"
+    Print "comillas \"dentro\" y barra \\"
+    Print "dos\nlíneas"
+    Print ""
+end

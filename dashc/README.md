@@ -1,0 +1,42 @@
+# dashc: prueba de concepto de Dash autosuficiente
+
+[English](README.en.md)
+
+`dashc` compila un `.dash` a un ejecutable de Amiga sin compilador de C: genera código 68000, lo
+enlaza con el runtime (ya compilado y metido dentro de `dashc`) y escribe el fichero Hunk. Está escrito
+en C y el mismo código se compila para el PC y para el Amiga.
+
+```bash
+make                     # dashc para este ordenador
+./dashc prog.dash -o prog
+make amiga               # build/dashc.amiga: dashc que corre en el Amiga (68000, OS 2.0+)
+make test                # tests/*.dash con dashc y con ./dash: misma salida en A1200 y A500 (FS-UAE)
+make runtime             # rehace runtime/dashrt.o con el gcc de bebbo (va en git: no hace falta para lo demás)
+```
+
+## Qué entiende
+
+Enteros (decimal, `0x`, `$`, `0b`), `Bool`, `const`, globales con `var x: Int = valor fijo`,
+variables locales, funciones con parámetros y `return`, `if`/`elif`/`else`, `while`, `for` con rango
+(`step`, hacia atrás), `break`, `continue`, `and`/`or`/`not` con cortocircuito, todos los operadores de
+enteros y `Print` de un entero, un Bool o un texto literal (en Latin-1).
+
+Falta todo lo demás: textos en variables, arrays, structs, Float, builtins, ventanas, `@native`...
+
+## Cómo está hecho
+
+| Fichero | Qué hace |
+|---------|----------|
+| `src/lexer.c`, `src/parser.c` | Del texto al árbol, con la gramática de `compiler/grammar.py` |
+| `src/gen68k.c` | Código 68000: el valor en d0, marco con a5, llamadas como las de C |
+| `src/hunk.c` | Lee el objeto Hunk del runtime, junta los hunks y escribe el ejecutable |
+| `runtime/rt.c`, `runtime/rt_math.s` | Arranque, `Print`, multiplicar y dividir de 32 bits en un 68000 |
+
+## Lo comprobado
+
+- Los cuatro tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
+- `build/dashc.amiga` compila los cuatro dentro de un A500 emulado; los ejecutables salen idénticos
+  byte a byte a los del PC y funcionan.
+- Los ejecutables ocupan entre 1 y 2 KB (con gcc, entre 6 y 7,5 KB).
+
+Sin medir: la velocidad del código frente a gcc `-O2`.
