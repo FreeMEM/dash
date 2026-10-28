@@ -222,3 +222,7 @@ diga el usuario. Base medida: `Base ronda 3`.
   escribir −4 % / −2 %, leer con clave literal −41 % / −34 %.
 - Probado: `test_dict_key_hash` (clave literal y calculada en los dos sentidos, `has`, `remove`, una con acento que
   no lleva hash, dos de la misma longitud) en A1200 y A500; los tests de diccionarios con `--memcheck`; 456/456.
+- Pendiente (también en `main`): `test_on_click_timer` falla en la batería entera ("sin clic") y pasa solo, tras
+  115 programas vacíos, o con una de las dos mitades de los tests anteriores; falla con cualquiera de los dos
+  cuartos de la primera mitad más la segunda. La misma copia, justo detrás del fallo, pasa: es algo pasajero que
+  depende de cuántos tests reales corrieron antes, no de uno. Sin causa encontrada.
