@@ -181,3 +181,18 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   runtime (fp-bit en doble y simple, fastfp), como ./dash. Y el strtod de libnix fallaba en la última cifra de
   `1.0e300`: los literales pasan por el s2d de Ryu (exacto, en los dos dashc). Con dobles, flotantes, dicc,
   aritmetica, ventana y gadgets, ejecutables idénticos a los del PC.
+- D6 (6.ª parte): ReAction. Los builtins `ra_*` en el runtime y `NewList` de amiga.lib en rt_libs.s.
+  test_reaction_values y test_ra_more (con `--memcheck`), iguales en el A1200 con 3.2 (`--machine a1200-32
+  --workbench`; la cobertura no lo arranca, los demás de ReAction llevan C).
+- D4 (3.ª parte): Fixed, coma fija 16.16 en un LONG como ./dash: un literal, al compilar (`Fixed(1.5)` = 98304);
+  un Int, `swap`/`clr.w` (<< 16); un Float, × 65536. `+ - %` y comparaciones con los dos lados Fixed (el Int se
+  convierte), `*` y `/` por un Int como enteros, Fixed × Fixed y Fixed / Fixed por el runtime (`_dash_fx_mul`,
+  `_dash_fx_div`), `fx_sqrt`, `fx_sin`, `fx_cos`, `Int()`, `Float()`, texto, campos, parámetros, return y listas.
+  Arreglos de paso: la sustitución de una función de una línea no convierte (no se hace si un parámetro o lo que
+  devuelve es Float, Double o Fixed y el argumento no), y `fold` no junta cuentas de Fixed que no son de
+  enteros. test_fixed y test_fixed_lists, iguales.
+  - Fallo visto al meter ReAction: `_ra_close_all()` de `_dash_exit_cleanup` se llamaba directo (el filtro de
+    limpiezas débiles solo cogía `_dash_` y `dl_`), así que cada programa saltaba a ReAction sin abrirla
+    (excepción en una librería de base 0 en el A500 y la cobertura tumbada). Ahora cualquier llamada suelta de la
+    limpieza va por puntero débil.
+- Cobertura: compila 192 de 309 (62 %); en el A1200 (y MUI), 115 de 115 iguales. Batería bien.

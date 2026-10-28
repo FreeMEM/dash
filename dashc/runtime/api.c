@@ -699,3 +699,14 @@ void dl_arr_sort(DashArrayLong *arr, APTR fn, LONG boolean)
     dl_sort_bool = boolean;
     DashArray_sort(arr, dl_sort_after);
 }
+
+/* ---- Fixed: coma fija 16.16 en un LONG, con las funciones de ./dash ---- */
+LONG dl_fx_mul(LONG a, LONG b) { return _dash_fx_mul(a, b); }
+LONG dl_fx_div(LONG a, LONG b) { return _dash_fx_div(a, b); }
+LONG dl_fx_int(LONG a) { return _dash_fx_int(a); }
+LONG dl_fx_sqrt(LONG a) { return _dash_fx_sqrt(a); }
+LONG dl_fx_sin(LONG a) { return _dash_fx_sin(a); }
+LONG dl_fx_cos(LONG a) { return _dash_fx_cos(a); }
+STRPTR dl_fx_str(LONG a) { return DashString_from_fixed(a); }
+LONG dl_fx_from_float(LONG bits) { union { float f; LONG l; } u; u.l = bits; return (LONG)(u.f * 65536.0f); }
+LONG dl_fx_to_float(LONG a) { union { float f; LONG l; } u; u.f = (float)a / 65536.0f; return u.l; }

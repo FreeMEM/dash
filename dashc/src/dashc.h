@@ -97,7 +97,7 @@ enum {
 /* Tipos: los básicos; un struct es TY_STRUCT + su número; una lista suma TY_ARR por cada nivel
    (Array sin más es TY_ARR + TY_VOID: lo que guarda se deduce, o Int). TY_NAMED + n: un nombre de tipo aún sin resolver
    (type_names[n]), que gen68k.c cambia por su struct. */
-enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL, TY_FLOAT, TY_DOUBLE };
+enum { TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_CHAR, TY_NIL, TY_FLOAT, TY_DOUBLE, TY_FIXED };
 /* un Double es, en dashc, una caja: un texto con sus 8 bytes en hexadecimal (runtime/api.c, dl_d_*); su
    variable, campo o elemento es dueño de ella como de un texto */
 #define IS_STRLIKE(t) ((t) == TY_STR || (t) == TY_DOUBLE)

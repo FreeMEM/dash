@@ -91,3 +91,14 @@ _DoSuperMethodA:
 	jsr	(a3)
 2:	movem.l	(sp)+,a2-a3
 	rts
+
+| NewList(list) de amiga.lib: lista vacía (lh_Head al lh_Tail, que vale 0, y lh_TailPred a la propia lista)
+	.section .text.dl_newlist,"ax"
+	.globl	_NewList
+_NewList:
+	move.l	4(sp),a0
+	move.l	a0,8(a0)		| lh_TailPred
+	addq.l	#4,a0
+	clr.l	(a0)			| lh_Tail
+	move.l	a0,-(a0)		| lh_Head
+	rts

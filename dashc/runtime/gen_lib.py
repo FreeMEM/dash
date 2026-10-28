@@ -90,7 +90,7 @@ def main():
         lines_.append(f"    {{ int i; for (i = 0; i < {len(group)}; i++) if ({t}[i]) {t}[i](); }}")
         group.clear()
     for ln in body.split("\n"):
-        mm = re.match(r"^\s*((?:_dash|dl)_\w+)\(\);$", ln)
+        mm = re.match(r"^\s*(\w+)\(\);$", ln)   # (_dash_, dl_, _ra_...)
         if mm and mm.group(1) != "_dash_mem_cleanup":
             group.append(mm.group(1))
         else:
@@ -129,8 +129,8 @@ NATIVE = re.compile(r'^@native func (\w+)\((.*?)\)\s*(?:->\s*(\w+))?\s*\n"""\n(.
 
 
 # Los builtins que van en la librería: aún sin ventanas ni gráficos (D6) ni Double (D4)
-GUI = ("ra_", "usb_", "wifi_")
-LIB_FLAGS = ("needs_reaction",)
+GUI = ("usb_", "wifi_")
+LIB_FLAGS = ()
 
 
 def builtins():

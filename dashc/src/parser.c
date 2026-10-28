@@ -42,7 +42,7 @@ static Node *node(int kind, Token *at)
 static Node *zero_value(Token *at, int type)
 {
     Node *n = node(E_INT, at);
-    if (type != TY_INT && type != TY_BOOL && type != TY_CHAR && type != TY_FLOAT) n->kind = E_NIL;
+    if (type != TY_INT && type != TY_BOOL && type != TY_CHAR && type != TY_FLOAT && type != TY_FIXED) n->kind = E_NIL;
     else if (type == TY_BOOL) n->kind = E_BOOL;
     return n;
 }
@@ -92,7 +92,8 @@ static int parse_type(void)
     if (!strcmp(t->text, "Float")) return TY_FLOAT;
     if (!strcmp(t->text, "Double")) return TY_DOUBLE;
     if (!strcmp(t->text, "Func")) return TY_INT;          /* una función como valor: su dirección */
-    if (!strcmp(t->text, "Fixed") || !strcmp(t->text, "Void"))
+    if (!strcmp(t->text, "Fixed")) return TY_FIXED;      /* coma fija 16.16 en un LONG */
+    if (!strcmp(t->text, "Void"))
         fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
     for (i = 0; i < type_names.n; i++)
         if (!strcmp(type_names.v[i], t->text)) return TY_NAMED + i;

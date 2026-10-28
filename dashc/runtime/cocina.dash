@@ -59,6 +59,13 @@ func flotante(f: Float) -> Float
     return -g / 3.0
 end
 
+func fijo(f: Fixed) -> Fixed
+    g = f * Fixed(1.5) / f + 2
+    Print g
+    Print "#{Int(g)} #{fx_sqrt(g)} #{fx_sin(g)} #{fx_cos(g)} #{g > 1} #{Float(g)}"
+    return g * 2
+end
+
 func antes(a: Int, b: Int) -> Bool
     return a < b
 end

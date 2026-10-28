@@ -537,9 +537,17 @@ static int32_t arith(int op, int32_t a, int32_t b, Node *at)
     return 0;
 }
 
+static int expr_type(Node *n);
+
 static int fold(Node *n, long *v)
 {
     long a, b;
+    if (n->kind == E_BIN && expr_type(n) == TY_FIXED) {
+        /* Fixed: solo lo que es una cuenta de enteros (Fixed + Fixed, Fixed * Int, Fixed / Int); Fixed * Fixed y
+           un Int con un Fixed van por el runtime o se convierten */
+        int fa = expr_type(n->a) == TY_FIXED, fb = expr_type(n->b) == TY_FIXED;
+        if (n->op == P_STAR ? fa && fb : n->op == P_SLASH ? !(fa && !fb) : !(fa && fb)) return 0;
+    }
     switch (n->kind) {
     case E_INT:
     case E_BOOL:
@@ -759,6 +767,7 @@ static int fold_type(Node *n)
 {
     if (n->kind == E_BOOL) return TY_BOOL;
     if (n->kind == E_VAR) return lookup(n->name).type;   /* una constante: no cuenta como uso */
+    if ((n->kind == E_BIN || n->kind == E_NEG) && expr_type(n) == TY_FIXED) return TY_FIXED;
     return TY_INT;
 }
 
@@ -870,7 +879,7 @@ static int expr_type(Node *n)
     switch (n->kind) {
     case E_NEG:
         ta = expr_type(n->a);
-        return ta == TY_FLOAT || ta == TY_DOUBLE ? ta : TY_INT;
+        return ta == TY_FLOAT || ta == TY_DOUBLE || ta == TY_FIXED ? ta : TY_INT;
     case E_INT: case E_BNOT:
         return TY_INT;
     case E_BOOL: case E_CMP: case E_NOT: case E_AND: case E_OR:
@@ -887,6 +896,8 @@ static int expr_type(Node *n)
         if (find_func(n->name, &idx)) return func_ret(idx);
         if (!strcmp(n->name, "Float")) return TY_FLOAT;
         if (!strcmp(n->name, "Double")) return TY_DOUBLE;
+        if (!strcmp(n->name, "Fixed") || !strcmp(n->name, "fx_sqrt") || !strcmp(n->name, "fx_sin") ||
+            !strcmp(n->name, "fx_cos")) return TY_FIXED;
         if (!strcmp(n->name, "Int")) return TY_INT;
         if ((idx = find_struct(n->name)) >= 0) return TY_STRUCT + idx;
         for (idx = 0; idx < builtin_count; idx++)
@@ -907,6 +918,8 @@ static int expr_type(Node *n)
             (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_DOUBLE;
         if ((ta == TY_FLOAT || tb == TY_FLOAT) &&
             (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH)) return TY_FLOAT;
+        if ((ta == TY_FIXED || tb == TY_FIXED) && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR ||
+                                                   n->op == P_SLASH || n->op == P_PERCENT)) return TY_FIXED;
         return TY_INT;
     case E_INDEX:
         ta = expr_type(n->a);
@@ -1171,6 +1184,10 @@ static void to_str(int ty)
         push_d0();
         rt_call("_dl_d_str", 1, 1);
         break;
+    case TY_FIXED:
+        push_d0();
+        rt_call("_dl_fx_str", 1, 1);
+        break;
     case TY_BOOL:
         tst_d0();
         w(0x6708);                                     /* beq.s +8 */
@@ -1194,13 +1211,53 @@ static void str_value(Node *n)
 /* d0, de tipo from, pasado a to: Int a Float (__floatsisf) o Float a Int (__fixsfsi, como C) */
 static void coerce(int from, int to)
 {
-    if (to == TY_FLOAT && (from == TY_INT || from == TY_CHAR || from == TY_BOOL)) {
+    if (from == TY_FIXED && to == TY_FLOAT) {
+        push_d0();
+        rt_call("_dl_fx_to_float", 1, 0);
+    } else if (from == TY_FIXED && (to == TY_INT || to == TY_CHAR)) {
+        push_d0();
+        rt_call("_dl_fx_int", 1, 0);
+    } else if (to == TY_FLOAT && (from == TY_INT || from == TY_CHAR || from == TY_BOOL)) {
         push_d0();
         rt_call("___floatsisf", 1, 0);
     } else if ((to == TY_INT || to == TY_CHAR) && from == TY_FLOAT) {
         push_d0();
         rt_call("___fixsfsi", 1, 0);
     }
+}
+
+/* el valor de n como Fixed: un literal, al compilar (Fixed(1.5) es 98304, como ./dash); un Int, << 16; un Float,
+   * 65536 */
+static void fix_value(Node *n)
+{
+    long k;
+    int t;
+    Node *lit = n->kind == E_NEG ? n->a : n;
+    if ((lit->kind == E_FLOAT || lit->kind == E_INT) && expr_type(n) != TY_FIXED) {
+        double v = lit->kind == E_FLOAT ? lit->dval : (double)(int32_t)lit->val;
+        double r = v * 65536.0;
+        long q = (long)(r < 0 ? r - 0.5 : r + 0.5);       /* (round de Python, salvo los .5 exactos) */
+        if (n->kind == E_NEG) q = -q;
+        if (q > 0x7FFFFFFFL) q = 0x7FFFFFFFL;
+        if (q < -0x7FFFFFFFL - 1) q = -0x7FFFFFFFL - 1;
+        load_imm(0, q);
+        return;
+    }
+    if (expr_type(n) != TY_FIXED && expr_type(n) != TY_FLOAT && fold(n, &k)) {
+        load_imm(0, (long)(int32_t)((uint32_t)k << 16));
+        return;
+    }
+    t = gen_expr(n);
+    need_value(n, t);
+    if (t == TY_FIXED) return;
+    if (t == TY_FLOAT) {
+        push_d0();
+        rt_call("_dl_fx_from_float", 1, 0);
+        return;
+    }
+    w(0x4840);                                         /* swap d0 */
+    w(0x4240);                                         /* clr.w d0: << 16 */
+    d0_loaded = (uint32_t)-1;
 }
 
 /* el valor de n como Float (un número fijo, ya convertido al compilar) */
@@ -1268,6 +1325,7 @@ static void args_to_stack(Node **a, int n, const char *str)
     if (n == 1) {
         if (str && str[0] == 2) float_value(a[0]);
         else if (str && str[0] == 3) dbl_value(a[0]);
+        else if (str && str[0] == 4) fix_value(a[0]);
         else if (str && str[0]) str_value(a[0]);
         else value(a[0]);
         push_d0();
@@ -1278,6 +1336,7 @@ static void args_to_stack(Node **a, int n, const char *str)
     for (i = 0; i < n; i++) {
         if (str && str[i] == 2) float_value(a[i]);
         else if (str && str[i] == 3) dbl_value(a[i]);
+        else if (str && str[i] == 4) fix_value(a[i]);
         else if (str && str[i]) str_value(a[i]);
         else value(a[i]);
         if (i) { w(0x2F40); w(4 * i); }                /* move.l d0,4i(sp) */
@@ -1364,6 +1423,7 @@ static void elem_value(Node *v, int et)
     list_hint(v, et);                                  /* ([[Double]]: la de dentro también) */
     if (et == TY_DOUBLE) dbl_value(v);
     else if (et == TY_FLOAT) float_value(v);
+    else if (et == TY_FIXED) fix_value(v);
     else value(v);
 }
 
@@ -1396,7 +1456,7 @@ static void gen_list(Node *n, int fresh)
     kind = elem_kind(et);
     for (i = 0; i < np; i++)
         if (!fold(n->args.v[i], &k)) all_const = 0;
-    if (all_const && !kind && et != TY_FLOAT) {
+    if (all_const && !kind && et != TY_FLOAT && et != TY_FIXED) {
         /* los números, en los datos */
         uint32_t off;
         if (obj->data.n & 3) buf_word(&obj->data, 0);
@@ -1414,7 +1474,7 @@ static void gen_list(Node *n, int fresh)
         rt_call(fresh ? "_dl_arr_from_new" : "_dl_arr_from", 2, !fresh);
     } else {
         char *conv = xmalloc(np + 1);
-        memset(conv, et == TY_DOUBLE ? 3 : et == TY_FLOAT ? 2 : 0, np);
+        memset(conv, et == TY_DOUBLE ? 3 : et == TY_FLOAT ? 2 : et == TY_FIXED ? 4 : 0, np);
         args_to_stack(n->args.v, np, conv);
         free(conv);
         w(0x4857);                                     /* pea (sp) */
@@ -1492,6 +1552,7 @@ static int gen_field_store(Node *target, Node *v)
     list_hint(v, ft);
     if (ft == TY_DOUBLE) dbl_value(v);                 /* (un Int o un Float, convertido) */
     else if (ft == TY_FLOAT) float_value(v);
+    else if (ft == TY_FIXED) fix_value(v);
     else value(v);
     push_d0();
     if (!struct_ptr(target->a, target->name, &off, &ft))
@@ -1522,7 +1583,8 @@ static int gen_new(Node *n, int si, int fresh)
     for (i = 0; i < nf; i++) {
         vals[i] = i < n->args.n ? n->args.v[i] : st->fields.v[i].init ? st->fields.v[i].init : &zero;
         /* un Int a un campo Float o Double: convertido */
-        conv[i] = st->fields.v[i].type == TY_FLOAT ? 2 : st->fields.v[i].type == TY_DOUBLE ? 3 : 0;
+        conv[i] = st->fields.v[i].type == TY_FLOAT ? 2 : st->fields.v[i].type == TY_DOUBLE ? 3 :
+                  st->fields.v[i].type == TY_FIXED ? 4 : 0;
         list_hint(vals[i], st->fields.v[i].type);
     }
     if (nf) args_to_stack(vals, nf, conv);
@@ -1704,7 +1766,7 @@ static int gen_list_method(Node *n)
             }
         } else {
             char conv[3] = {0, 0, 0};
-            conv[na] = et == TY_FLOAT ? 2 : 0;
+            conv[na] = et == TY_FLOAT ? 2 : et == TY_FIXED ? 4 : 0;
             list_hint(a[na], et);
             args_to_stack(a, na + 1, conv);
         }
@@ -2422,6 +2484,24 @@ static int gen_compare(Node *n)
         }
         return cc;
     }
+    /* Fixed con un Int: el Int, Fixed(lado); dos Fixed se comparan como enteros */
+    if ((ta == TY_FIXED) != (tb == TY_FIXED) && ta != TY_FLOAT && tb != TY_FLOAT && ta != TY_DOUBLE &&
+        tb != TY_DOUBLE) {
+        Node c = *n, wrap;
+        int r;
+        memset(&wrap, 0, sizeof wrap);
+        wrap.kind = E_CALL;
+        wrap.name = "Fixed";
+        wrap.line = n->line;
+        wrap.col = n->col;
+        wrap.file = n->file;
+        VEC_PUSH(wrap.args, ta == TY_FIXED ? n->b : n->a);
+        if (ta == TY_FIXED) c.b = &wrap;
+        else c.a = &wrap;
+        r = gen_compare(&c);
+        free(wrap.args.v);
+        return r;
+    }
     /* Double: dl_d_cmp da -1, 0, 1 o 2 (nan: solo != es cierto, como en C) */
     if (ta == TY_DOUBLE || tb == TY_DOUBLE) {
         Node *a[2];
@@ -2629,6 +2709,18 @@ static int gen_builtin(Node *n)
     }
     for (b = 0; builtins[b].name; b++)
         if (!strcmp(builtins[b].name, n->name)) break;
+    if (!builtins[b].name && !strcmp(n->name, "Fixed") && n->args.n == 1) {
+        fix_value(n->args.v[0]);
+        return TY_FIXED;
+    }
+    if (!builtins[b].name && n->args.n == 1 &&
+        (!strcmp(n->name, "fx_sqrt") || !strcmp(n->name, "fx_sin") || !strcmp(n->name, "fx_cos"))) {
+        static const char conv[1] = {4};
+        args_to_stack(n->args.v, 1, conv);
+        rt_call(!strcmp(n->name, "fx_sqrt") ? "_dl_fx_sqrt" : !strcmp(n->name, "fx_sin") ? "_dl_fx_sin" : "_dl_fx_cos",
+                1, 0);
+        return TY_FIXED;
+    }
     if (!builtins[b].name && !strcmp(n->name, "Double") && n->args.n == 1) {
         /* Double(x): de un texto, como str_to_double; lo demás, convertido */
         if (expr_type(n->args.v[0]) == TY_STR) {
@@ -2717,6 +2809,12 @@ static int count_refs(Node *n, const char *name)
     return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->c, name);
 }
 
+/* Float, Double y Fixed: un Int que va a ellos se convierte */
+static int num_kind(int t)
+{
+    return t == TY_FLOAT || t == TY_DOUBLE || t == TY_FIXED;
+}
+
 /* ¿llama e a name (una variable Func)? el nombre de una llamada no es un nodo que se pueda sustituir */
 static int calls_name(Node *n, const char *name)
 {
@@ -2783,6 +2881,10 @@ static Node *try_subst(Node *call, int *idx)
     if (!can_inline(*idx) || !subst_ok(e, f)) return NULL;
     for (i = 0; i < f->params.n; i++)
         if (calls_name(e, f->params.v[i].name)) return NULL;   /* f(v) con f un parámetro Func */
+    /* un número que pasaría a Float, Double o Fixed (en el parámetro o en lo que devuelve): sin sustituir */
+    if (num_kind(f->ret) && expr_type(e) != f->ret) return NULL;
+    for (i = 0; i < call->args.n; i++)
+        if (num_kind(f->params.v[i].type) && expr_type(call->args.v[i]) != f->params.v[i].type) return NULL;
     for (i = 0; i < call->args.n; i++) {
         Node *a = call->args.v[i];
         if (fold(a, &k) || a->kind == E_VAR) continue;
@@ -2817,12 +2919,15 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         b->ranged = 0;
         b->entry = 0;
         b->owned = 0;
-        if (!param_set[idx][i] && b->type != TY_DOUBLE && fold(a, &k)) {
+        if (!param_set[idx][i] && b->type != TY_DOUBLE && (b->type != TY_FIXED || expr_type(a) != TY_FLOAT) &&
+            fold(a, &k)) {
+            if (b->type == TY_FIXED && expr_type(a) != TY_FIXED) k = (long)(int32_t)((uint32_t)k << 16);
             b->val = b->type == TY_FLOAT ? float_bits((double)(int32_t)k) : k;
             continue;
         }
         if (!param_set[idx][i] && a->kind == E_VAR && (src = find_local(a->name)) != NULL &&
-            (b->type != TY_FLOAT || src->type == TY_FLOAT) && (b->type != TY_DOUBLE || src->type == TY_DOUBLE)) {
+            (b->type != TY_FLOAT || src->type == TY_FLOAT) && (b->type != TY_DOUBLE || src->type == TY_DOUBLE) &&
+            (b->type != TY_FIXED || src->type == TY_FIXED)) {
             b->slot = src->slot;
             b->val = src->val;
             b->ranged = src->ranged;
@@ -2837,9 +2942,11 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
             Var t, sv;
             int simple_arg = a->kind == E_VAR && simple(a, &sv) && sv.kind != V_CONST && find_local(a->name) &&
                              (b->type != TY_FLOAT || expr_type(a) == TY_FLOAT) &&
-                             (b->type != TY_DOUBLE || expr_type(a) == TY_DOUBLE);
+                             (b->type != TY_DOUBLE || expr_type(a) == TY_DOUBLE) &&
+                             (b->type != TY_FIXED || expr_type(a) == TY_FIXED);
             if (!simple_arg) {
                 if (b->type == TY_FLOAT) float_value(a);
+                else if (b->type == TY_FIXED) fix_value(a);
                 else if (b->type == TY_DOUBLE && expr_type(a) != TY_DOUBLE) dbl_value(a);
                 else {
                     value(a);
@@ -2942,6 +3049,9 @@ static int gen_call(Node *n)
             push_d0();
         } else if (f->params.v[i].type == TY_DOUBLE && expr_type(a) != TY_DOUBLE) {
             dbl_value(a);                              /* un Int o un Float a un parámetro Double */
+            push_d0();
+        } else if (f->params.v[i].type == TY_FIXED && expr_type(a) != TY_FIXED) {
+            fix_value(a);                              /* un Int o un literal a un parámetro Fixed */
             push_d0();
         } else if (in->kind == E_FIELD || in->kind == E_INDEX || (in->kind == E_VAR && !find_local(in->name))) {
             value(a);
@@ -3070,7 +3180,7 @@ static int gen_expr(Node *n)
         }
         value(n->a);
         w(0x4480);                                     /* neg.l d0 */
-        return TY_INT;
+        return expr_type(n->a) == TY_FIXED ? TY_FIXED : TY_INT;
     case E_BNOT:
         value(n->a);
         w(0x4680);                                     /* not.l d0 */
@@ -3127,6 +3237,44 @@ static int gen_expr(Node *n)
             rt_call(n->op == P_PLUS ? "___addsf3" : n->op == P_MINUS ? "___subsf3" :
                     n->op == P_STAR ? "___mulsf3" : "___divsf3", 2, 0);
             return TY_FLOAT;
+        }
+        if (expr_type(n) == TY_FIXED) {
+            /* Fixed, como ./dash: Fixed * Fixed y Fixed / Fixed, el runtime (64 bits); * y / por un Int, la
+               cuenta de enteros; + - y %, los dos como Fixed */
+            int fa = expr_type(n->a) == TY_FIXED, fb = expr_type(n->b) == TY_FIXED;
+            if ((n->op == P_STAR && fa && fb) || (n->op == P_SLASH && !(fa && !fb))) {
+                Node *a[2];
+                static const char conv[2] = {4, 4};
+                a[0] = n->a;
+                a[1] = n->b;
+                args_to_stack(a, 2, conv);
+                rt_call(n->op == P_STAR ? "_dl_fx_mul" : "_dl_fx_div", 2, 0);
+                return TY_FIXED;
+            }
+            if (n->op == P_STAR || n->op == P_SLASH) {
+                gen_binary(n);                         /* (Fixed * Int, Int * Fixed, Fixed / Int) */
+                return TY_FIXED;
+            }
+            if (fa && fb) {
+                gen_binary(n);
+                return TY_FIXED;
+            }
+            {
+                /* + - % con un Int: ese lado, Fixed(lado) */
+                Node c = *n, wrap;
+                memset(&wrap, 0, sizeof wrap);
+                wrap.kind = E_CALL;
+                wrap.name = "Fixed";
+                wrap.line = n->line;
+                wrap.col = n->col;
+                wrap.file = n->file;
+                VEC_PUSH(wrap.args, fa ? n->b : n->a);
+                if (fa) c.b = &wrap;
+                else c.a = &wrap;
+                gen_binary(&c);
+                free(wrap.args.v);
+                return TY_FIXED;
+            }
         }
         if (expr_type(n->a) == TY_FLOAT || expr_type(n->b) == TY_FLOAT ||
             expr_type(n->a) == TY_DOUBLE || expr_type(n->b) == TY_DOUBLE)
@@ -4319,7 +4467,7 @@ static void gen_stmt(Node *n)
             ty = gen_expr(n->a);
             need_value(n->a, ty);
             push_d0();
-            if (ty == TY_FLOAT || ty == TY_DOUBLE) {
+            if (ty == TY_FLOAT || ty == TY_DOUBLE || ty == TY_FIXED) {
                 to_str(ty);                            /* un Float, como texto (DashString_from_float) */
                 w(0x2E80);                             /* move.l d0,(sp) */
                 ty = TY_STR;
@@ -4359,12 +4507,13 @@ static void gen_stmt(Node *n)
                 gen_obj_assign(n, tt);
                 return;
             }
-            if (tt == TY_FLOAT) {
-                /* un Float: el valor convertido, sin las cuentas de enteros en su sitio */
+            if (tt == TY_FLOAT || tt == TY_FIXED) {
+                /* un Float o un Fixed: el valor convertido, sin las cuentas de enteros en su sitio */
                 Local *lc = find_local(n->name);
                 int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name));
-                float_value(n->a);
-                v = fresh ? declare(n->name, TY_FLOAT) : lookup(n->name);
+                if (tt == TY_FIXED) fix_value(n->a);
+                else float_value(n->a);
+                v = fresh ? declare(n->name, tt) : lookup(n->name);
                 if (v.kind == V_CONST) fatal_at(n->line, n->col, "%s es una constante", n->name);
                 store_d0(&v);
                 return;
@@ -4522,6 +4671,13 @@ static void gen_stmt(Node *n)
                 branch(ret_when ? CC_NE : CC_EQ, ret_branch);
             } else {
                 gen_branch(n->a, ret_branch, ret_when);
+            }
+        } else if (n->a && cur_ret == TY_FIXED) {
+            fix_value(n->a);                           /* return 1 en una -> Fixed: 1.0 */
+            if (owned) {
+                push_d0();
+                free_owned(0, 1);
+                pop_d0();
             }
         } else if (n->a && cur_ret == TY_DOUBLE) {
             /* un Double: su caja (un número, convertido); la de otro, como temporal de quien llama */
