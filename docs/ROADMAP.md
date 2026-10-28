@@ -1019,7 +1019,7 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] Extensión de VS Code 0.3.0: avisa una vez al día si hay una versión de Dash más nueva (`dash.updates.check`)
 - [x] 455 resultados sin emulador
 
-### Recursos, ronda 3 (2026-10-27/28, rama `recursos3`)
+### Recursos, ronda 3 (2026-10-27/28, versión 1.0.1)
 - [x] Textos con su longitud en la cabecera y `s = a + b` escrito en su sitio; temporales en una pila (R8, R10)
 - [x] RTG sin backdrop: el lienzo del escritorio no lee de la tarjeta al actualizar (R7)
 - [x] Float con `mulu.l` en 68020-68040 (R9); sin los 8 KB de pila para excepciones (R11)

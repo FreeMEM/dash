@@ -33,6 +33,25 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 1.0.1 (2026-10-28)
+
+Programas más rápidos y con menos memoria. No cambia nada del lenguaje: lo que compilaba con la 1.0.0 compila igual.
+Detalle y medidas en [RECURSOS_LOOP.md](RECURSOS_LOOP.md) ("Tercera ronda").
+
+- **Textos:** cada texto guarda su longitud y `s = a + b` se escribe en el sitio de `s` si cabe. Unir texto y número
+  va un 17 % más rápido; la interpolación, un 8 %.
+- **Diccionarios:** las claves literales llevan su hash calculado al compilar. Buscar con una clave literal va un
+  34-41 % más rápido.
+- **Comparar con un literal:** `s == "hola"` mira el primer carácter antes de llamar a `strcmp`. Una cadena de
+  comparaciones va un 54 % más rápida.
+- **Float:** en un 68020, 030 o 040 la multiplicación usa la instrucción de 32 bits del procesador: un 20 % más
+  rápida. En el 68000, un 2 % más lenta (lo que cuesta mirar el procesador).
+- **Memoria:** cada programa usa 8 KB menos (la pila para las excepciones del procesador ya no es aparte).
+- **RTG:** el lienzo del escritorio sin fondo no lee de la tarjeta gráfica al actualizarse.
+- **Coste:** los ejecutables son un 1,8 % más grandes; retornar un texto y crear un struct con texto, un 2-3 % más
+  lentos.
+- Sin probar en un 68060 ni en una máquina real.
+
 ### 1.0.0 (2026-10-27)
 
 La primera versión con número. Recoge todo lo hecho hasta ahora (registro completo en [ROADMAP.md](ROADMAP.md)):
