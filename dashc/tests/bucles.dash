@@ -1,0 +1,159 @@
+# Bucles con contador (dbra), i * k llevado sumando, variables que valen una
+# constante, constantes en registro y funciones de una línea puestas como expresión
+var g: Int = 10
+const K = 7
+
+func doble(x)
+    return x * 2
+end
+
+func mas_g(x)
+    return x + g
+end
+
+func es_par(n)
+    return n % 2 == 0
+end
+
+# el parámetro g tapa a la global: mas_g no se puede poner como expresión aquí
+func sombra(g)
+    return mas_g(1) + g
+end
+
+func sube_g()
+    g = g + 1
+    return g
+end
+
+func suma_mults(desde, hasta)
+    s = 0
+    for i in (desde..hasta)
+        s = s + i * 3 + i * -5 + i * 70001
+    end
+    return s
+end
+
+func vueltas(a, b)
+    c = 0
+    for i in (a..b)
+        c = c + 1
+    end
+    return c
+end
+
+func baja(a, b)
+    c = 0
+    for i in (a..b step -1)
+        c = c + i
+    end
+    return c
+end
+
+Main
+    # i sin usar en el cuerpo: solo el contador
+    c = 0
+    for i in (1..10)
+        c = c + 2
+    end
+    Print c
+    # i * k con paso, hacia atrás y con k negativo
+    s = 0
+    for i in (3..30 step 4)
+        s = s + i * 6
+    end
+    Print s
+    s = 0
+    for i in (20..1)
+        s = s - i * 9
+    end
+    Print s
+    for i in (1..3)
+        Print i * -7
+        Print doble(i * 11)
+    end
+    # break y continue con contador
+    s = 0
+    for i in (1..100)
+        if i % 3 == 0
+            continue
+        end
+        if i * 5 > 200
+            break
+        end
+        s = s + i * 5
+    end
+    Print s
+    # vueltas al ejecutar: ninguna, una, muchas (más de 65536)
+    Print vueltas(5, 4)
+    Print vueltas(5, 5)
+    Print vueltas(-3, 3)
+    Print vueltas(1, 70000)
+    Print vueltas(-2147483647, -2147418112)
+    Print baja(10, 1)
+    Print baja(1, 10)
+    Print suma_mults(1, 100)
+    Print suma_mults(-50, 50)
+    Print suma_mults(30000, 30010)
+    # variables que solo se asignan una vez
+    limite = 70000
+    verdad = true
+    Print verdad
+    Print limite
+    t = 0
+    while t < limite
+        t = t + 9999
+    end
+    Print t
+    x = 5
+    for j in (x..1)
+        Print j
+    end
+    # funciones de una línea
+    y = 1
+    y = doble(y)
+    y = doble(y)
+    Print y
+    y = mas_g(y)
+    Print y
+    g = 3
+    Print mas_g(4)
+    if es_par(y)
+        Print "par"
+    else
+        Print "impar"
+    end
+    Print es_par(K)
+    Print sube_g() + sube_g()
+    Print g
+    # sumas término a término sobre la variable
+    z = 100
+    z = z + y - g + K * 2 - doble(3)
+    Print z
+    z = z - z
+    Print z
+    # cuadrados y divisiones cerca del límite de 16 bits
+    for v in (181..182)
+        Print v * v
+    end
+    q = 46340
+    Print q * q
+    q = -40000
+    Print q * q
+    for v in (458750..458753)
+        Print v / 7
+        Print v % 7
+    end
+    for v in (-9..-7)
+        Print v / 7
+        Print v % 7
+        Print v % 2 == 0
+    end
+    Print 2147483647 / 13
+    w = 2147483647
+    Print w / 13
+    Print w % 65535
+    m = 65535 * 32767
+    Print m / 65535
+    Print m % 65534
+    Print sombra(100)
+end

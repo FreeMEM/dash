@@ -134,6 +134,13 @@ static struct { LoopLife *v; int n, cap; } lives;
 static struct { int *v; int n, cap; } slot_reg, slot_off;
 static long loop_weight = 1;
 static int nframe;   /* huecos en el marco */
+static int pass;     /* 1: contando usos; 2: con los registros ya repartidos */
+
+/* Expresiones que se leen de un hueco en vez de calcularse: i * k en un for (el hueco
+   suma paso * k en cada vuelta) y las constantes grandes de la condición de un bucle
+   (need_reg: solo si el hueco tiene registro; si no, se usa la constante). */
+typedef struct { Node *n; int slot, need_reg; } Repl;
+static struct { Repl *v; int n, cap; } repls;
 
 typedef struct { int brk, cont; } Loop;
 static struct { Loop *v; int n, cap; } loops;
@@ -151,6 +158,7 @@ static int frameless, sp_depth, param_base;
 typedef struct { int kind, off, reg, type; long val; } Var;
 
 static int fold(Node *n, long *v);
+static int fold_literal;   /* fold sin las variables que valen una constante */
 
 static Local *find_local(const char *name)
 {
@@ -221,8 +229,9 @@ static Var lookup(const char *name)
     return r;
 }
 
-/* un hueco nuevo; en la segunda pasada los huecos salen en el mismo orden */
-static int new_slot(int param_off)
+/* Un hueco nuevo; en la segunda pasada los huecos salen en el mismo orden. Uno
+   opcional (opt) solo se usa si le toca registro: nunca ocupa sitio en el marco. */
+static int new_slot_opt(int param_off, int opt)
 {
     int slot = slot_uses.n;
     VEC_PUSH(slot_uses, 0);
@@ -231,12 +240,46 @@ static int new_slot(int param_off)
     if (slot >= slot_reg.n) VEC_PUSH(slot_reg, -1);
     if (param_off) {
         VEC_PUSH(slot_off, param_off);
-    } else if (slot_reg.v[slot] >= 0) {
+    } else if (slot_reg.v[slot] >= 0 || opt) {
         VEC_PUSH(slot_off, 0);
     } else {
         VEC_PUSH(slot_off, -4 * ++nframe);
     }
     return slot;
+}
+
+static int new_slot(int param_off) { return new_slot_opt(param_off, 0); }
+
+/* n se lee de un hueco (ver Repl) */
+static int repl_var(Node *n, Var *v)
+{
+    int i;
+    for (i = repls.n - 1; i >= 0; i--)
+        if (repls.v[i].n == n) {
+            Repl *r = &repls.v[i];
+            if (r->need_reg && pass == 2 && slot_reg.v[r->slot] < 0) return 0;
+            use_slot(r->slot);
+            *v = slot_var(r->slot, TY_INT);
+            return 1;
+        }
+    return 0;
+}
+
+static int is_repl(Node *n)
+{
+    int i;
+    for (i = 0; i < repls.n; i++)
+        if (repls.v[i].n == n) return 1;
+    return 0;
+}
+
+static void add_repl(Node *n, int slot, int need_reg)
+{
+    Repl r;
+    r.n = n;
+    r.slot = slot;
+    r.need_reg = need_reg;
+    VEC_PUSH(repls, r);
 }
 
 static Var declare(const char *name, int type)
@@ -326,7 +369,7 @@ static int fold(Node *n, long *v)
         Local *lc = find_local(n->name);
         int i;
         if (lc) {
-            if (lc->slot >= 0) return 0;
+            if (lc->slot >= 0 || fold_literal) return 0;
             *v = lc->val;
             return 1;
         }
@@ -498,13 +541,22 @@ static void pop_args(int n)
 }
 
 /* un operando que se usa sin calcular nada: una constante o una variable */
+/* el tipo de una expresión que se sabe al compilar */
+static int fold_type(Node *n)
+{
+    if (n->kind == E_BOOL) return TY_BOOL;
+    if (n->kind == E_VAR) return lookup(n->name).type;   /* una constante: no cuenta como uso */
+    return TY_INT;
+}
+
 static int simple(Node *n, Var *v)
 {
     long k;
+    if (repl_var(n, v)) return 1;
     if (fold(n, &k)) {
         v->kind = V_CONST;
         v->val = k;
-        v->type = n->kind == E_BOOL ? TY_BOOL : TY_INT;
+        v->type = fold_type(n);
         return 1;
     }
     if (n->kind == E_VAR) {
@@ -637,6 +689,43 @@ static void divmod_pow2(int op, long k, int s)
     }
 }
 
+/* d0 = d0 / k o d0 % k, con 1 < k <= 65535: un divu.w si el dividendo es >= 0 y el
+   cociente cabe en 16 bits (como el camino rápido del runtime, sin la llamada).
+   El camino rápido es el del salto: un salto tomado cuesta menos que uno no tomado
+   y un bra. */
+static void divmod_const(int op, long k)
+{
+    int load = k <= 127 ? 2 : 6;                       /* moveq o move.l #k,d1 */
+    w(0xB0BC); l(((uint32_t)k << 16) - 1);             /* cmp.l #(k << 16) - 1,d0 */
+    w(0x6300 | (load + 8));                            /* bls.s rápido (sin signo: un negativo es enorme) */
+    load_imm(1, k);
+    jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
+    w(op == P_SLASH ? 0x600A : 0x6008);                /* bra.s fin */
+    w(0x80FC); w((int)k);                              /* rápido: divu.w #k,d0, resto:cociente */
+    if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }   /* swap; clr.w; swap: el cociente */
+    else { w(0x4240); w(0x4840); }                     /* clr.w; swap: el resto */
+}
+
+/* d0 = d0 * d1: muls.w si los dos caben en 16 bits con signo; si no, el runtime */
+static void mul_d1(void)
+{
+    w(0x3040); w(0xB088); w(0x6606);                   /* movea.w d0,a0; cmp.l a0,d0; bne.s lento */
+    w(0x3041); w(0xB288); w(0x6708);                   /* movea.w d1,a0; cmp.l a0,d1; beq.s rápido */
+    jsr_sym("__dash_mul");                             /* lento */
+    w(0x6002);                                         /* bra.s fin */
+    w(0xC1C1);                                         /* rápido: muls.w d1,d0 */
+}
+
+/* d0 = d0 * d0 */
+static void square_d0(void)
+{
+    w(0x3040); w(0xB088); w(0x670A);                   /* movea.w d0,a0; cmp.l a0,d0; beq.s rápido */
+    w(0x2200);                                         /* move.l d0,d1 */
+    jsr_sym("__dash_mul");
+    w(0x6002);                                         /* bra.s fin */
+    w(0xC1C0);                                         /* rápido: muls.w d0,d0 */
+}
+
 /* d0 = d0 op v */
 static void bin_ea(int op, Var *v)
 {
@@ -665,6 +754,10 @@ static void bin_ea(int op, Var *v)
                 divmod_pow2(op, k, s);
                 return;
             }
+            if (k > 1 && k <= 65535) {
+                divmod_const(op, k);
+                return;
+            }
             break;
         case P_SHL:
         case P_SHR:
@@ -689,7 +782,7 @@ static void bin_ea(int op, Var *v)
     case P_CARET: w(0xB380); break;                    /* eor.l d1,d0 */
     case P_SHL: w(0xE3A0); break;                      /* asl.l d1,d0 */
     case P_SHR: w(0xE2A0); break;                      /* asr.l d1,d0 */
-    case P_STAR: jsr_sym("__dash_mul"); break;         /* d0 * d1 en el runtime */
+    case P_STAR: mul_d1(); break;
     case P_SLASH: jsr_sym("__dash_div"); break;
     case P_PERCENT: jsr_sym("__dash_mod"); break;
     }
@@ -704,7 +797,16 @@ static void gen_binary(Node *n)
 {
     Var v;
     long k;
-    if (commutative(n->op) && fold(n->a, &k) && !fold(n->b, &k)) {
+    if (n->op == P_STAR && n->a->kind == E_VAR && n->b->kind == E_VAR && !strcmp(n->a->name, n->b->name) &&
+        !fold(n->a, &k)) {
+        value(n->a);                                   /* x * x */
+        lookup(n->a->name);                            /* cuenta el segundo uso */
+        square_d0();
+    } else if ((n->op == P_AMP || n->op == P_BAR) && fold(n->b, &k) && k >= -128 && k <= 127 &&
+               n->a->kind == E_VAR && simple(n->a, &v) && v.kind != V_CONST) {
+        load_imm(0, k);                                /* x & 1: moveq #1,d0; and.l x,d0 */
+        op_ea(n->op == P_AMP ? 0xC080 : 0x8080, &v);
+    } else if (commutative(n->op) && fold(n->a, &k) && !fold(n->b, &k)) {
         simple(n->a, &v);                              /* 3 * x es x * 3 */
         value(n->b);
         bin_ea(n->op, &v);
@@ -760,8 +862,22 @@ static int gen_compare(Node *n)
     /* x % 2^s == 0: basta con mirar los bits bajos, sea cual sea el signo */
     if ((cc == CC_EQ || cc == CC_NE) && fold(n->b, &k) && k == 0 && n->a->kind == E_BIN &&
         n->a->op == P_PERCENT && fold(n->a->b, &k) && pow2(k)) {
-        value(n->a->a);
-        w(0x0280); l((k < 0 ? 0u - (uint32_t)k : (uint32_t)k) - 1);   /* andi.l #mask,d0 */
+        uint32_t mask = (k < 0 ? 0u - (uint32_t)k : (uint32_t)k) - 1;
+        if (n->a->a->kind == E_VAR && simple(n->a->a, &va) && va.kind != V_CONST) {
+            if (mask == 1 && va.kind == V_REG) {
+                w(0x0800 | va.reg); w(0);              /* btst #0,dN */
+                return cc;
+            }
+            if (mask <= 127) {
+                load_imm(0, (long)mask);
+                op_ea(0xC080, &va);                    /* moveq #mask,d0; and.l x,d0 */
+                return cc;
+            }
+            load_var(0, &va);
+        } else {
+            value(n->a->a);
+        }
+        w(0x0280); l(mask);                            /* andi.l #mask,d0 */
         return cc;
     }
     if (simple(n->b, &vb)) {
@@ -858,13 +974,90 @@ static int *call_sites, *body_size, *needed;
 static unsigned char **param_set;   /* la función asigna a ese parámetro */
 static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están generando o copiando */
 
+static struct { int *v; int n, cap; } sub_stack;  /* funciones de una línea puestas como expresión */
+
 static int can_inline(int idx)
 {
     int i;
-    if (inl_stack.n >= INLINE_DEPTH) return 0;
+    if (inl_stack.n + sub_stack.n >= INLINE_DEPTH) return 0;
     for (i = 0; i < inl_stack.n; i++)
         if (inl_stack.v[i] == idx) return 0;
+    for (i = 0; i < sub_stack.n; i++)
+        if (sub_stack.v[i] == idx) return 0;
     return body_size[idx] <= INLINE_SIZE || call_sites[idx] == 1;
+}
+
+/* Una función que solo es "return e" se pone como la expresión e con los argumentos en
+   lugar de los parámetros: y = suma1(y) es y = y + 1. Vale si cada argumento es fijo,
+   una variable, o se usa una vez y no llama a nada; y si los demás nombres de e (globales
+   o constantes) no los tapa una variable del sitio de la llamada. */
+static int count_refs(Node *n, const char *name)
+{
+    int i, c;
+    if (!n) return 0;
+    c = n->kind == E_VAR && !strcmp(n->name, name);
+    for (i = 0; i < n->args.n; i++) c += count_refs(n->args.v[i], name);
+    return c + count_refs(n->a, name) + count_refs(n->b, name) + count_refs(n->c, name);
+}
+
+static int param_index(Func *f, const char *name)
+{
+    int i;
+    for (i = 0; i < f->params.n; i++)
+        if (!strcmp(f->params.v[i].name, name)) return i;
+    return -1;
+}
+
+static int subst_ok(Node *e, Func *f)
+{
+    int i;
+    if (!e) return 1;
+    if (e->kind == E_VAR && param_index(f, e->name) < 0 && find_local(e->name)) return 0;
+    for (i = 0; i < e->args.n; i++)
+        if (!subst_ok(e->args.v[i], f)) return 0;
+    return subst_ok(e->a, f) && subst_ok(e->b, f) && subst_ok(e->c, f);
+}
+
+static Node *subst(Node *e, Func *f, NodeList *args)
+{
+    Node *c;
+    int i;
+    if (!e) return NULL;
+    if (e->kind == E_VAR) {
+        i = param_index(f, e->name);
+        return i >= 0 ? args->v[i] : e;
+    }
+    c = xmalloc(sizeof *c);
+    *c = *e;
+    c->a = subst(e->a, f, args);
+    c->b = subst(e->b, f, args);
+    c->c = subst(e->c, f, args);
+    if (e->args.n) {
+        c->args.v = xmalloc(sizeof(Node *) * e->args.n);
+        c->args.cap = e->args.n;
+        for (i = 0; i < e->args.n; i++) c->args.v[i] = subst(e->args.v[i], f, args);
+    }
+    return c;
+}
+
+static int has_call(Node *n);
+
+static Node *try_subst(Node *call, int *idx)
+{
+    Func *f;
+    Node *e;
+    int i;
+    long k;
+    if (call->kind != E_CALL || !(f = find_func(call->name, idx)) || call->args.n != f->params.n) return NULL;
+    if (f->body.n != 1 || f->body.v[0]->kind != S_RETURN || !(e = f->body.v[0]->a)) return NULL;
+    if (!can_inline(*idx) || !subst_ok(e, f)) return NULL;
+    for (i = 0; i < call->args.n; i++) {
+        Node *a = call->args.v[i];
+        if (fold(a, &k) || a->kind == E_VAR) continue;
+        if (count_refs(e, f->params.v[i].name) == 1 && !has_call(a)) continue;
+        return NULL;
+    }
+    return subst(e, f, &call->args);
 }
 
 static int gen_inline(Node *n, Func *f, int idx)
@@ -924,7 +1117,16 @@ static int gen_call(Node *n)
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
-    if (can_inline(idx)) return gen_inline(n, f, idx);
+    if (can_inline(idx)) {
+        Node *e = try_subst(n, &idx);
+        if (e) {
+            VEC_PUSH(sub_stack, idx);
+            need_value(n, gen_expr(e));
+            sub_stack.n--;
+            return f->ret;                             /* el tipo de la función, no el de e */
+        }
+        return gen_inline(n, f, idx);
+    }
     for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
     jsr_label(func_label[idx]);
     pop_args(n->args.n);
@@ -937,9 +1139,13 @@ static int gen_expr(Node *n)
     long k;
     Var v;
 
+    if (repl_var(n, &v)) {
+        load_var(0, &v);
+        return TY_INT;
+    }
     if (n->kind != E_CMP && n->kind != E_AND && n->kind != E_OR && n->kind != E_NOT && fold(n, &k)) {
         load_imm(0, k);
-        return n->kind == E_BOOL ? TY_BOOL : TY_INT;
+        return fold_type(n);
     }
     switch (n->kind) {
     case E_STR:
@@ -1019,6 +1225,17 @@ static void gen_branch(Node *n, int label, int when_true)
         branch(when_true ? cc : cc ^ 1, label);        /* cc ^ 1: la condición contraria */
         return;
     }
+    case E_CALL: {
+        int idx;
+        Node *e = try_subst(n, &idx);
+        if (e) {
+            VEC_PUSH(sub_stack, idx);
+            gen_branch(e, label, when_true);
+            sub_stack.n--;
+            return;
+        }
+        break;
+    }
     }
     if (fold(n, &k)) {
         if ((k != 0) == when_true) branch(CC_T, label);
@@ -1035,51 +1252,209 @@ static void gen_branch(Node *n, int label, int when_true)
 /* ---- instrucciones ---- */
 static void gen_block(NodeList *b);
 
+static int list_assigns(NodeList *l, const char *name);
+static int refs(Node *n, const char *name);
+static int list_refs(NodeList *l, const char *name);
+
+/* dbra dN,etiqueta */
+static void dbra(int reg, int label)
+{
+    Fixup f;
+    w(0x51C8 | reg);
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 0;
+    VEC_PUSH(fixups, f);
+    w(0);
+}
+
+/* v = k */
+static void set_imm(Var *v, long k)
+{
+    if (v->kind == V_REG) load_imm(v->reg, k);
+    else {
+        load_imm(0, k);
+        store_d0(v);
+    }
+}
+
+static Var declare_slot(const char *name, int type, int *slot)
+{
+    Var v = declare(name, type);
+    *slot = locals.v[locals.n - 1].slot;
+    return v;
+}
+
+/* i * k en el cuerpo de un for, con k fijo y caro de multiplicar */
+typedef struct { Node *n; long k; } Mult;
+#define MAX_MULTS 16
+#define MAX_SR 3
+
+/* las variables de n no cambian en el cuerpo */
+static int stable(Node *n, NodeList *body)
+{
+    if (!n) return 1;
+    if (n->kind == E_VAR && list_assigns(body, n->name)) return 0;
+    return stable(n->a, body) && stable(n->b, body);
+}
+
+static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *nm)
+{
+    Node *o = NULL;
+    long k;
+    int i;
+    if (!n || *nm >= MAX_MULTS) return;
+    if (n->kind == E_BIN && n->op == P_STAR) {
+        if (n->a->kind == E_VAR && !strcmp(n->a->name, name)) o = n->b;
+        else if (n->b->kind == E_VAR && !strcmp(n->b->name, name)) o = n->a;
+        if (o && fold(o, &k) && stable(o, body) && popcount(k < 0 ? 0u - (uint32_t)k : (uint32_t)k) >= 2) {
+            m[*nm].n = n;
+            m[*nm].k = k;
+            (*nm)++;
+            return;
+        }
+    }
+    find_mults(n->a, name, body, m, nm);
+    find_mults(n->b, name, body, m, nm);
+    find_mults(n->c, name, body, m, nm);
+    for (i = 0; i < n->args.n; i++) find_mults(n->args.v[i], name, body, m, nm);
+    for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], name, body, m, nm);
+    for (i = 0; i < n->els.n; i++) find_mults(n->els.v[i], name, body, m, nm);
+}
+
+/* Un for con el número de vueltas conocido al empezar (el cuerpo no cambia i) lleva
+   un contador aparte que acaba con dbra, y el índice solo existe si el cuerpo lo lee.
+   i * k se lleva sumando paso * k en un hueco. Si no, se compara i con el final. */
 static void gen_for(Node *n)
 {
-    long from, to, step = 1;
-    int down = 0, top = new_label(), cont = new_label(), done = new_label(), test;
-    int step_known = 1, end_known;
-    Var vi, vend, vstep;
+    long from = 0, to = 0, step = 1, count = -1;
+    int down = 0, top = new_label(), cont = new_label(), done = new_label(), test = -1;
+    int step_known = 1, from_known, end_known, counted, use_i;
+    int i_slot = -1, end_slot = -1, step_slot = -1, cnt_slot = -1, repl_base = repls.n;
+    int nm = 0, nsr = 0, i, j;
+    Mult m[MAX_MULTS];
+    long sr_k[MAX_SR];
+    int sr_slot[MAX_SR];
+    Var vi, vend, vstep, vc, sr_v[MAX_SR];
     Loop lp;
 
     if (n->c && !fold(n->c, &step)) step_known = 0;
     if (step_known && step < 0) down = 1;
-    /* sin paso, (5..1) cuenta hacia atrás si los dos extremos son fijos */
+    from_known = fold(n->a, &from);
+    end_known = fold(n->b, &to);
+    /* sin paso, (5..1) cuenta hacia atrás si los dos extremos son literales o
+       constantes (no variables, aunque se sepa su valor) */
+    fold_literal = 1;
     if (!n->c && fold(n->a, &from) && fold(n->b, &to) && from > to) {
         down = 1;
         step = -1;
     }
+    fold_literal = 0;
+    fold(n->a, &from);
+    fold(n->b, &to);
     if (step_known && step == 0) fatal_at(n->line, n->col, "el paso del for no puede ser 0");
 
-    enter_scope();
-    value(n->a);
-    vi = declare(n->name, TY_INT);
-    store_d0(&vi);
-    end_known = fold(n->b, &to);
-    if (end_known) {
-        vend.kind = V_CONST;
-        vend.val = to;
-    } else {
-        value(n->b);
-        vend = declare("", TY_INT);                    /* "": no se puede nombrar */
-        store_d0(&vend);
+    counted = step_known && !list_assigns(&n->body, n->name);
+    if (counted && from_known && end_known) {
+        long long c = 0;
+        if (down ? from >= to : from <= to)
+            c = down ? ((long long)from - to) / -step + 1 : ((long long)to - from) / step + 1;
+        if (c < 1 || c > 0xFFFFFFFFLL) counted = 0;     /* ninguna vuelta: como siempre */
+        else count = (long)c;
+    } else if (counted && step != 1 && step != -1) {
+        counted = 0;
     }
-    if (!step_known) {
-        value(n->c);
-        vstep = declare("", TY_INT);
-        store_d0(&vstep);
+
+    enter_scope();
+    if (step_known) {
+        for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], n->name, &n->body, m, &nm);
+        for (i = 0; i < nm; i++) {
+            for (j = 0; j < nsr && sr_k[j] != m[i].k; j++)
+                ;
+            if (j == nsr) {
+                if (nsr == MAX_SR) continue;
+                sr_k[nsr++] = m[i].k;
+            }
+            add_repl(m[i].n, -1, 0);                   /* el hueco, más abajo */
+        }
+    }
+    use_i = !counted || !from_known || refs(n->b, n->name) || (n->c && refs(n->c, n->name)) ||
+            list_refs(&n->body, n->name);
+
+    if (use_i) {
+        if (!from_known) value(n->a);
+        vi = declare_slot(n->name, TY_INT, &i_slot);
+        if (from_known) set_imm(&vi, from);
+        else store_d0(&vi);
+    }
+    for (j = 0; j < nsr; j++) {
+        sr_v[j] = declare_slot("", TY_INT, &sr_slot[j]);   /* "": no se puede nombrar */
+        if (from_known) {
+            set_imm(&sr_v[j], (long)(int32_t)((uint32_t)from * (uint32_t)sr_k[j]));
+        } else {
+            load_var(0, &vi);
+            mul_const(sr_k[j]);
+            store_d0(&sr_v[j]);
+        }
+    }
+    for (i = repl_base; i < repls.n; i++) {
+        Mult *mm = NULL;
+        for (j = 0; j < nm; j++)
+            if (m[j].n == repls.v[i].n) mm = &m[j];
+        for (j = 0; j < nsr; j++)
+            if (sr_k[j] == mm->k) repls.v[i].slot = sr_slot[j];
+    }
+    for (i = repl_base; i < repls.n; i++)
+        if (repls.v[i].slot < 0) repls.v[i--] = repls.v[--repls.n];   /* sin hueco (más de MAX_SR) */
+
+    if (counted) {
+        if (count >= 0) {
+            vc = declare_slot("", TY_INT, &cnt_slot);
+            set_imm(&vc, count - 1);
+        } else {
+            /* vueltas - 1 = fin - inicio (o al revés); ninguna si es negativo */
+            value(n->b);
+            if (from_known) {
+                if (from >= 1 && from <= 8) w(0x5180 | (from & 7) << 9);   /* subq.l #inicio,d0 */
+                else if (from) { w(0x0480); l((uint32_t)from); }          /* subi.l #inicio,d0 */
+                else tst_d0();
+            } else {
+                op_ea(0x9080, &vi);                    /* sub.l i,d0 */
+            }
+            branch(down ? CC_GT : CC_LT, done);
+            if (down) w(0x4480);                       /* neg.l d0 */
+            vc = declare_slot("", TY_INT, &cnt_slot);
+            store_d0(&vc);
+        }
+    } else {
+        if (end_known) {
+            vend.kind = V_CONST;
+            vend.val = to;
+        } else {
+            value(n->b);
+            vend = declare_slot("", TY_INT, &end_slot);
+            store_d0(&vend);
+        }
+        if (!step_known) {
+            value(n->c);
+            vstep = declare_slot("", TY_INT, &step_slot);
+            store_d0(&vstep);
+        }
     }
 
     enter_loop();
-    /* las veces que se usan en cada vuelta: comparar e incrementar */
-    use_slot(locals.v[locals.n - 1 - !end_known - !step_known].slot);
-    if (!end_known) use_slot(locals.v[locals.n - 1 - !step_known].slot);
-    if (!step_known) use_slot(locals.v[locals.n - 1].slot);
+    /* las veces que se usan en cada vuelta: comparar, contar e incrementar */
+    if (i_slot >= 0) use_slot(i_slot);
+    if (end_slot >= 0) use_slot(end_slot);
+    if (step_slot >= 0) use_slot(step_slot);
+    if (cnt_slot >= 0) use_slot(cnt_slot);
+    for (j = 0; j < nsr; j++) use_slot(sr_slot[j]);
 
-    /* la comparación va al final: una vuelta es cuerpo, incremento y un salto */
-    test = new_label();
-    branch(CC_T, test);
+    /* sin contador, la comparación va al final: una vuelta es cuerpo, incremento y un salto */
+    if (!counted) {
+        test = new_label();
+        branch(CC_T, test);
+    }
     def_label(top);
     lp.brk = done;
     lp.cont = cont;
@@ -1088,24 +1463,42 @@ static void gen_for(Node *n)
     loops.n--;
 
     def_label(cont);
-    if (!step_known) {
-        if (vi.kind == V_REG) op_ea(0xD080 | vi.reg << 9, &vstep);  /* add.l paso,di */
-        else {
-            load_var(0, &vstep);
-            op_ea(0xD180, &vi);                        /* add.l d0,i */
+    if (use_i) {
+        if (!step_known) {
+            if (vi.kind == V_REG) op_ea(0xD080 | vi.reg << 9, &vstep);  /* add.l paso,di */
+            else {
+                load_var(0, &vstep);
+                op_ea(0xD180, &vi);                    /* add.l d0,i */
+            }
+        } else {
+            add_imm_ea(step, &vi);
+        }
+    }
+    for (j = 0; j < nsr; j++) add_imm_ea((long)(int32_t)((uint32_t)step * (uint32_t)sr_k[j]), &sr_v[j]);
+    if (counted) {
+        if (vc.kind == V_REG) {
+            dbra(vc.reg, top);
+            if (count < 0 || count > 65536) {
+                /* más de 65536 vueltas: la parte alta del contador */
+                w(0x0480 | vc.reg); l(0x10000);        /* subi.l #$10000,dN */
+                branch(CC_CC, top);
+            }
+        } else {
+            op_ea(0x5380, &vc);                        /* subq.l #1,contador */
+            branch(CC_CC, top);
         }
     } else {
-        add_imm_ea(step, &vi);
+        def_label(test);
+        if (vend.kind == V_CONST) op_imm_ea(0x0C80, vend.val, &vi);     /* cmpi.l #fin,i */
+        else if (vi.kind == V_REG) op_ea(0xB080 | vi.reg << 9, &vend);  /* cmp.l fin,di */
+        else {
+            load_var(0, &vi);
+            op_ea(0xB080, &vend);                      /* cmp.l fin,d0 */
+        }
+        branch(down ? CC_GE : CC_LE, top);
     }
-    def_label(test);
-    if (vend.kind == V_CONST) op_imm_ea(0x0C80, vend.val, &vi);     /* cmpi.l #fin,i */
-    else if (vi.kind == V_REG) op_ea(0xB080 | vi.reg << 9, &vend);  /* cmp.l fin,di */
-    else {
-        load_var(0, &vi);
-        op_ea(0xB080, &vend);                          /* cmp.l fin,d0 */
-    }
-    branch(down ? CC_GE : CC_LE, top);
     def_label(done);
+    repls.n = repl_base;
     leave_loop();
     leave_scope();
 }
@@ -1119,31 +1512,110 @@ static int lookup_kind(const char *name)
     return slot_reg.v[lc->slot] >= 0 ? V_REG : V_LOCAL;
 }
 
-/* v = v op e: la operación directamente sobre la variable */
+/* ¿lee n la variable name? (lo que se lee de un hueco no cuenta) */
+static int refs(Node *n, const char *name);
+
+static int list_refs(NodeList *l, const char *name)
+{
+    int i;
+    for (i = 0; i < l->n; i++)
+        if (refs(l->v[i], name)) return 1;
+    return 0;
+}
+
+static int refs(Node *n, const char *name)
+{
+    if (!n || is_repl(n)) return 0;
+    if ((n->kind == E_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) return 1;
+    return refs(n->a, name) || refs(n->b, name) || refs(n->c, name) || list_refs(&n->args, name) ||
+           list_refs(&n->body, name) || list_refs(&n->els, name);
+}
+
+static int has_call(Node *n)
+{
+    int i;
+    if (!n) return 0;
+    if (n->kind == E_CALL) return 1;
+    for (i = 0; i < n->args.n; i++)
+        if (has_call(n->args.v[i])) return 1;
+    return has_call(n->a) || has_call(n->b) || has_call(n->c);
+}
+
+/* e como suma de términos con signo; self: si sale la variable name sumando (una vez) */
+#define MAX_TERMS 16
+static int collect_terms(Node *e, const char *name, Node **t, int *neg, int *nt, int sign, int *self)
+{
+    if (e->kind == E_BIN && (e->op == P_PLUS || e->op == P_MINUS))
+        return collect_terms(e->a, name, t, neg, nt, sign, self) &&
+               collect_terms(e->b, name, t, neg, nt, e->op == P_MINUS ? -sign : sign, self);
+    if (e->kind == E_VAR && !strcmp(e->name, name) && sign > 0 && !*self) {
+        *self = 1;
+        return 1;
+    }
+    if (*nt >= MAX_TERMS) return 0;
+    t[*nt] = e;
+    neg[*nt] = sign < 0;
+    (*nt)++;
+    return 1;
+}
+
+/* v = v op t, con op = add, sub, and u or (índice en las tablas) */
+static void op_into(int op, Var *v, Node *t)
+{
+    static const int to_reg[] = {0xD080, 0x9080, 0xC080, 0x8080};   /* op.l ea,dN */
+    static const int to_mem[] = {0xD180, 0x9180, 0xC180, 0x8180};   /* op.l dN,ea */
+    Var s;
+    if (t && simple(t, &s) && s.kind != V_CONST) {
+        if (v->kind == V_REG) { op_ea(to_reg[op] | v->reg << 9, &s); return; }
+        if (s.kind == V_REG) { op_ea(to_mem[op] | s.reg << 9, v); return; }
+        load_var(0, &s);
+    } else if (t) {
+        value(t);
+    }
+    if (v->kind == V_REG) w(to_reg[op] | v->reg << 9);
+    else op_ea(to_mem[op], v);
+}
+
+/* v = v op e: la operación directamente sobre la variable. Una suma de varios
+   términos (v = v + a - b...) se hace término a término. */
 static int gen_update(Node *n)
 {
     Node *e = n->a, *other;
     Var v;
     long k;
-    int op;
+    int op, kind = lookup_kind(n->name);
     if (e->kind != E_BIN) return 0;
     op = e->op;
+    if (op == P_PLUS || op == P_MINUS) {
+        Node *t[MAX_TERMS];
+        int neg[MAX_TERMS], nt = 0, self = 0, i;
+        if (!collect_terms(e, n->name, t, neg, &nt, 1, &self) || !self) return 0;
+        for (i = 0; i < nt; i++)
+            if (refs(t[i], n->name) || (kind != V_REG && kind != V_LOCAL && has_call(t[i]))) return 0;
+        v = lookup(n->name);
+        if (v.kind == V_NONE || v.kind == V_CONST) return 0;
+        for (i = 0; i < nt; i++) {
+            if (i) v = lookup(n->name);                /* cuenta cada uso */
+            if (fold(t[i], &k)) add_imm_ea(neg[i] ? (long)(0u - (uint32_t)k) : k, &v);
+            else op_into(neg[i], &v, t[i]);
+        }
+        return 1;
+    }
     if (e->a->kind == E_VAR && !strcmp(e->a->name, n->name)) other = e->b;
     else if (commutative(op) && e->b->kind == E_VAR && !strcmp(e->b->name, n->name)) other = e->a;
     else return 0;
     if (op == P_CARET || op == P_SHL || op == P_SHR) {
         /* solo con una constante; los desplazamientos, solo en un registro */
         if (!fold(other, &k)) return 0;
-        if (op != P_CARET && (lookup_kind(n->name) != V_REG || k < 1 || k > 8)) return 0;
-    } else if (op != P_PLUS && op != P_MINUS && op != P_AMP && op != P_BAR) {
+        if (op != P_CARET && (kind != V_REG || k < 1 || k > 8)) return 0;
+    } else if (op != P_AMP && op != P_BAR) {
         return 0;
     }
+    if (refs(other, n->name)) return 0;
     v = lookup(n->name);
     if (v.kind == V_NONE || v.kind == V_CONST) return 0;
     if (fold(other, &k)) {
         switch (op) {
-        case P_PLUS: add_imm_ea(k, &v); return 1;
-        case P_MINUS: add_imm_ea(-k, &v); return 1;
         case P_AMP: op_imm_ea(0x0280, k, &v); return 1;            /* andi.l #k,v */
         case P_BAR: op_imm_ea(0x0080, k, &v); return 1;            /* ori.l #k,v */
         case P_CARET: op_imm_ea(0x0A80, k, &v); return 1;          /* eori.l #k,v */
@@ -1151,22 +1623,71 @@ static int gen_update(Node *n)
         case P_SHR: w(0xE080 | (k & 7) << 9 | v.reg); return 1;    /* asr.l #k,dN */
         }
     }
-    value(other);
-    if (v.kind == V_REG) {
-        static const int to_reg[] = {0xD080, 0x9080, 0xC080, 0x8080};   /* add/sub/and/or.l d0,dN */
-        w(to_reg[op == P_PLUS ? 0 : op == P_MINUS ? 1 : op == P_AMP ? 2 : 3] | v.reg << 9);
-    } else {
-        static const int to_mem[] = {0xD180, 0x9180, 0xC180, 0x8180};   /* add/sub/and/or.l d0,v */
-        op_ea(to_mem[op == P_PLUS ? 0 : op == P_MINUS ? 1 : op == P_AMP ? 2 : 3], &v);
-    }
+    op_into(op == P_AMP ? 2 : 3, &v, other);
     return 1;
 }
+
+/* Las constantes grandes (sin moveq) que se comparan en la condición de un bucle van
+   en un registro antes de empezar, si queda alguno: cmp.l dN,dM en vez de cmpi.l. */
+static void hoist_consts(Node *c)
+{
+    long k;
+    Node *side;
+    if (c->kind == E_NOT) hoist_consts(c->a);
+    if (c->kind == E_AND || c->kind == E_OR) {
+        hoist_consts(c->a);
+        hoist_consts(c->b);
+    }
+    if (c->kind != E_CMP) return;
+    if (fold(c->b, &k) && !fold(c->a, &k)) side = c->b;
+    else if (fold(c->a, &k) && !fold(c->b, &k)) side = c->a;
+    else return;
+    fold(side, &k);
+    if (k >= -128 && k <= 127) return;
+    {
+        int slot = new_slot_opt(0, 1);
+        if (pass == 2 && slot_reg.v[slot] >= 0) load_imm(slot_reg.v[slot], k);
+        add_repl(side, slot, 1);
+    }
+}
+
+/* veces que se asigna a name en el cuerpo (un for también asigna) */
+static int count_assigns(NodeList *l, const char *name)
+{
+    int i, c = 0;
+    for (i = 0; i < l->n; i++) {
+        Node *n = l->v[i];
+        if ((n->kind == S_ASSIGN || n->kind == S_VAR || n->kind == S_FOR) && !strcmp(n->name, name)) c++;
+        c += count_assigns(&n->body, name) + count_assigns(&n->els, name);
+    }
+    return c;
+}
+
+/* el cuerpo de la función que se está generando o copiando */
+static NodeList *cur_body(void)
+{
+    int idx = inl_stack.v[inl_stack.n - 1];
+    return idx < 0 ? &prog->main : &prog->funcs.v[idx].body;
+}
+
+static int lookup_global(const char *name)
+{
+    int i;
+    for (i = 0; i < prog->globals.n; i++)
+        if (!strcmp(prog->globals.v[i].name, name)) return 1;
+    for (i = 0; i < prog->consts.n; i++)
+        if (!strcmp(prog->consts.v[i].name, name)) return 1;
+    return 0;
+}
+
+static int forced_type = -1;   /* el tipo de una función de una línea puesta como expresión */
 
 static void gen_stmt(Node *n)
 {
     Var v;
     long k;
-    int ty;
+    int ty, forced = forced_type;
+    forced_type = -1;
     switch (n->kind) {
     case S_PRINT:
         if (n->a->kind == E_STR) {
@@ -1182,10 +1703,36 @@ static void gen_stmt(Node *n)
         return;
     case S_ASSIGN:
     case S_VAR:
+        if (n->kind == S_ASSIGN && n->a->kind == E_CALL) {
+            int idx;
+            Node *e = try_subst(n->a, &idx), tmp;
+            if (e) {
+                tmp = *n;
+                tmp.a = e;
+                VEC_PUSH(sub_stack, idx);
+                forced_type = prog->funcs.v[idx].ret;
+                gen_stmt(&tmp);
+                sub_stack.n--;
+                return;
+            }
+        }
         if (n->kind == S_ASSIGN && gen_update(n)) return;
+        if (fold(n->a, &k) && lookup_kind(n->name) == V_GLOBAL && !lookup_global(n->name) &&
+            count_assigns(cur_body(), n->name) == 1) {
+            /* una variable que solo se asigna una vez, con un valor fijo, es una constante */
+            Local lc;
+            lc.name = n->name;
+            lc.slot = -1;
+            lc.type = n->kind == S_VAR ? n->type : forced >= 0 ? forced : fold_type(n->a);
+            lc.depth = depth;
+            lc.frame = cur_frame;
+            lc.val = k;
+            VEC_PUSH(locals, lc);
+            return;
+        }
         if (n->kind == S_ASSIGN && fold(n->a, &k)) {
             v = lookup(n->name);
-            if (v.kind == V_NONE) v = declare(n->name, n->a->kind == E_BOOL ? TY_BOOL : TY_INT);
+            if (v.kind == V_NONE) v = declare(n->name, forced >= 0 ? forced : fold_type(n->a));
             if (v.kind == V_CONST) fatal_at(n->line, n->col, "%s es una constante", n->name);
             if (v.kind == V_REG) {
                 load_imm(v.reg, k);                    /* moveq #k,dN */
@@ -1197,6 +1744,7 @@ static void gen_stmt(Node *n)
         }
         ty = gen_expr(n->a);
         need_value(n->a, ty);
+        if (forced >= 0) ty = forced;
         v = lookup(n->name);
         if (n->kind == S_VAR || v.kind == V_NONE) {
             /* la primera asignación declara (en el bloque actual) */
@@ -1225,7 +1773,8 @@ static void gen_stmt(Node *n)
     }
     case S_WHILE: {
         Loop lp;
-        int top = new_label(), test = new_label(), done = new_label();
+        int top = new_label(), test = new_label(), done = new_label(), base = repls.n;
+        hoist_consts(n->a);
         enter_loop();
         branch(CC_T, test);                            /* la condición va al final */
         def_label(top);
@@ -1239,6 +1788,7 @@ static void gen_stmt(Node *n)
         def_label(test);
         gen_branch(n->a, top, 1);
         def_label(done);
+        repls.n = base;
         leave_loop();
         return;
     }
@@ -1369,6 +1919,7 @@ static void gen_function(int label, Func *f, NodeList *body)
     /* primera pasada: todo en el marco, contando usos */
     slot_reg.n = 0;
     frameless = 0;
+    pass = 1;
     gen_function_pass(label, f, body);
 
     /* se deshace y se eligen los huecos más usados para d2-d7 */
@@ -1399,6 +1950,7 @@ static void gen_function(int label, Func *f, NodeList *body)
         if (slot_reg.v[i] < 0) slot_reg.v[i] = -1;
         if (slot_reg.v[i] < 0 && slot_off.v[i] < 0) frameless = 0;
     }
+    pass = 2;
     gen_function_pass(label, f, body);
 }
 
