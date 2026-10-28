@@ -1,0 +1,133 @@
+# Velocidad del código de dashc frente al de gcc -O2 (./dash), con enteros.
+# Los tres primeros son los de tests/bench/bench_core.dash tal cual.
+# bench_run.py añade el import de bench_lib.dash para compilarlo con ./dash.
+
+func suma1(n)
+    return n + 1
+end
+
+func fib(n)
+    if n < 2
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+end
+
+func pasos_collatz(n)
+    pasos = 0
+    while n != 1
+        if n % 2 == 0
+            n = n / 2
+        else
+            n = 3 * n + 1
+        end
+        pasos = pasos + 1
+    end
+    return pasos
+end
+
+func es_primo(n)
+    if n < 2
+        return false
+    end
+    d = 2
+    while d * d <= n
+        if n % d == 0
+            return false
+        end
+        d = d + 1
+    end
+    return true
+end
+
+func bits(v)
+    c = 0
+    while v != 0
+        c = c + (v & 1)
+        v = v >> 1
+    end
+    return c
+end
+
+Main
+    n = 20000
+
+    bench_start()
+    x = 0
+    for i in (1..n)
+        x = x + i * 3
+        bench_sink(x)
+    end
+    bench_end("int_loop", n)
+
+    bench_start()
+    k = 0
+    while k < n
+        k = k + 1
+        bench_sink(k)
+    end
+    bench_end("while_loop", n)
+
+    bench_start()
+    y = 0
+    for i in (1..n)
+        y = suma1(y)
+        bench_sink(y)
+    end
+    bench_end("func_call", n)
+
+    # recursión: fib(18) son 8361 llamadas
+    bench_start()
+    r = fib(18)
+    bench_end("fib", 8361)
+    Print r
+
+    # multiplicar y dividir de 32 bits
+    bench_start()
+    z = 0
+    for i in (1..n)
+        z = z + (i * 70001) / 13 + i % 7
+        bench_sink(z)
+    end
+    bench_end("mul_div", n)
+    Print z
+
+    bench_start()
+    t = 0
+    for i in (1..1000)
+        t = t + pasos_collatz(i)
+    end
+    bench_end("collatz", 1000)
+    Print t
+
+    bench_start()
+    p = 0
+    for i in (1..3000)
+        if es_primo(i)
+            p = p + 1
+        end
+    end
+    bench_end("primos", 3000)
+    Print p
+
+    bench_start()
+    b = 0
+    for i in (1..n)
+        b = b + bits(i)
+    end
+    bench_end("bits", n)
+    Print b
+
+    # bucles anidados con comparaciones y lógica
+    bench_start()
+    q = 0
+    for i in (1..100)
+        for j in (1..100)
+            if (i < j and j % 3 == 0) or i == j
+                q = q + 1
+            end
+        end
+    end
+    bench_end("anidados", 10000)
+    Print q
+end

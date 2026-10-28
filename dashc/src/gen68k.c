@@ -344,11 +344,67 @@ static void gen_compare(Node *n)
     w(0xB081);                                         /* cmp.l d1,d0 */
 }
 
+static uint32_t add_string(const char *s, int len)
+{
+    uint32_t off = (uint32_t)obj->data.n;
+    buf_bytes(&obj->data, s, len);
+    buf_byte(&obj->data, 0);
+    if (obj->data.n & 1) buf_byte(&obj->data, 0);
+    return off;
+}
+
+/* funciones del runtime: argumentos Int, o S para un texto literal */
+static const struct { const char *name, *sym, *args; int ret; } builtins[] = {
+    {"bench_start", "__bench_start", "", TY_VOID},
+    {"bench_end", "__bench_end", "SI", TY_VOID},
+    {NULL, NULL, NULL, 0}
+};
+static long sink_off = -1;
+
+static int gen_builtin(Node *n)
+{
+    int i, b;
+    if (!strcmp(n->name, "bench_sink")) {
+        /* guarda el valor donde no se pueda quitar: un move.l, como el volatile de bench_lib.dash */
+        Var v;
+        if (n->args.n != 1) fatal_at(n->line, n->col, "bench_sink pide 1 argumento");
+        need_value(n->args.v[0], gen_expr(n->args.v[0]));
+        if (sink_off < 0) {
+            sink_off = (long)obj->data.n;
+            buf_long(&obj->data, 0);
+        }
+        v.kind = V_GLOBAL;
+        v.off = (int)sink_off;
+        store_d0(&v);
+        return TY_VOID;
+    }
+    for (b = 0; builtins[b].name; b++)
+        if (!strcmp(builtins[b].name, n->name)) break;
+    if (!builtins[b].name) fatal_at(n->line, n->col, "la función %s no existe", n->name);
+    if (n->args.n != (int)strlen(builtins[b].args))
+        fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, (int)strlen(builtins[b].args), n->args.n);
+    for (i = n->args.n - 1; i >= 0; i--) {
+        Node *a = n->args.v[i];
+        if (builtins[b].args[i] == 'S') {
+            if (a->kind != E_STR) fatal_at(a->line, a->col, "dashc (prueba): aquí va un texto literal");
+            w(0x4879);                                 /* pea texto */
+            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+            l(add_string(a->str, a->len));
+        } else {
+            need_value(a, gen_expr(a));
+            push_d0();
+        }
+    }
+    jsr_sym(builtins[b].sym);
+    pop_args(n->args.n);
+    return builtins[b].ret;
+}
+
 static int gen_call(Node *n)
 {
     int i, idx;
     Func *f = find_func(n->name, &idx);
-    if (!f) fatal_at(n->line, n->col, "la función %s no existe", n->name);
+    if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
     for (i = n->args.n - 1; i >= 0; i--) {
@@ -484,14 +540,6 @@ static void gen_branch(Node *n, int label, int when_true)
 /* ---- instrucciones ---- */
 static void gen_block(NodeList *b);
 
-static uint32_t add_string(const char *s, int len)
-{
-    uint32_t off = (uint32_t)obj->data.n;
-    buf_bytes(&obj->data, s, len);
-    buf_byte(&obj->data, 0);
-    if (obj->data.n & 1) buf_byte(&obj->data, 0);
-    return off;
-}
 
 static void gen_for(Node *n)
 {
