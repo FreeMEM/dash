@@ -1337,3 +1337,29 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1},
 };
 const int builtin_count = 1334;
+/* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
+const KeyName key_names[] = {
+    {"BACKSPACE", 65},
+    {"DEL", 70},
+    {"DOWN", 77},
+    {"ENTER", 67},
+    {"ESC", 69},
+    {"F1", 80},
+    {"F10", 89},
+    {"F2", 81},
+    {"F3", 82},
+    {"F4", 83},
+    {"F5", 84},
+    {"F6", 85},
+    {"F7", 86},
+    {"F8", 87},
+    {"F9", 88},
+    {"HELP", 95},
+    {"LEFT", 79},
+    {"RETURN", 68},
+    {"RIGHT", 78},
+    {"SPACE", 64},
+    {"TAB", 66},
+    {"UP", 76},
+    {0, 0}
+};

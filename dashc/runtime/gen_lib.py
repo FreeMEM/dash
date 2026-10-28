@@ -62,6 +62,8 @@ def main():
     old = "static const char *_dash_mc_where = NULL;"
     assert old in text, "gen_lib: no encuentro _dash_mc_where"
     text = text.replace(old, "const char *_dash_mc_where = NULL;")
+    # las ventanas del programa (win_CocinaWin): las cierra _dash_finish de api.c
+    text = "\n".join(ln for ln in text.split("\n") if "win_CocinaWin" not in ln)
     # La limpieza de cada runtime (red, catálogos, tareas...) por un puntero débil: hunk.c no lo cuenta como
     # uso, y si el programa no usa ese runtime, el puntero queda a 0 y no se llama
     m = re.search(r"static void _dash_exit_cleanup\(void\) \{\n(.*?)\n\}\n", text, re.S)
@@ -105,10 +107,10 @@ NATIVE = re.compile(r'^@native func (\w+)\((.*?)\)\s*(?:->\s*(\w+))?\s*\n"""\n(.
 
 
 # Los builtins que van en la librería: aún sin ventanas ni gráficos (D6) ni Double (D4)
-GUI = ("mui_", "ra_", "gt_", "window_", "menu_", "screen_", "gfx_", "rtg_", "sprite_", "bob_", "bitmap_",
+GUI = ("mui_", "ra_", "gt_", "window_", "menu_", "screen_", "rtg_", "sprite_", "bob_", "bitmap_",
        "copper_", "image_", "font_", "desktop_", "listview_", "check_", "soft_", "mouse_", "joy_", "key_",
        "sound_", "music_", "usb_", "wifi_")
-LIB_FLAGS = ("needs_gfx", "needs_gadtools", "needs_reaction", "needs_rtg", "needs_audio", "needs_area", "needs_asl")
+LIB_FLAGS = ("needs_gadtools", "needs_reaction", "needs_rtg", "needs_audio", "needs_area", "needs_asl")
 
 
 def builtins():

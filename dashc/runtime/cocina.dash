@@ -23,6 +23,35 @@ func dicc(d: {String: Int}, e: {Int: String}) -> [String]
     return d.keys()
 end
 
+Window CocinaWin
+    title "cocina"
+    width 200
+    height 100
+end
+
+func ventana()
+    CocinaWin.open
+    gfx_pen(1)
+    EventLoop
+        On Close
+            Stop
+        end
+        On Key "a"
+            Print key_raw()
+        end
+        On Key
+            Print "tecla"
+        end
+        On Click
+            Print click_x()
+        end
+        On Timer 100
+            Print "tic"
+        end
+    end
+    CocinaWin.close
+end
+
 func flotante(f: Float) -> Float
     g = f * 2.5 + 1
     Print g

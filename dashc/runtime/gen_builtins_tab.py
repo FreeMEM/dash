@@ -26,10 +26,14 @@ def main():
                 continue
             keeps = n not in CodeGenerator._STRING_READERS and not b.reads_only
             rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}}},\n')
+    from compiler.ast_nodes import KEY_NAMES
+    keys = "".join(f'    {{"{k}", {v}}},\n' for k, v in sorted(KEY_NAMES.items()))
     out = Path(sys.argv[1])
     out.write_text("/* Generado por runtime/gen_builtins_tab.py: no editar */\n#include \"../src/dashc.h\"\n"
                    "const BuiltinInfo builtin_info[] = {\n" + "".join(sorted(rows)) + "};\n"
-                   f"const int builtin_count = {len(rows)};\n")
+                   f"const int builtin_count = {len(rows)};\n"
+                   "/* On Key \"NOMBRE\": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */\n"
+                   "const KeyName key_names[] = {\n" + keys + "    {0, 0}\n};\n")
 
 
 if __name__ == "__main__":

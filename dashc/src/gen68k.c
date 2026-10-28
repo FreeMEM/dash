@@ -7,6 +7,7 @@
    Cada función se genera dos veces: la primera cuenta cuánto se usa cada variable
    (lo de dentro de un bucle cuenta más) y la segunda pone las más usadas en d2-d7,
    que la función guarda al entrar y recupera al salir. */
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -280,6 +281,12 @@ static int cur_ret;   /* lo que devuelve la función (o la copia) que se genera 
 static int cur_line;  /* la línea de la instrucción que se genera (errores: campo de nil) */
 static int cur_file;  /* y su fichero (src_files) */
 static int *desc_label;   /* de cada struct: su _DashType (en el código) */
+static int *win_desc_label;   /* de cada Window: su DashWinDesc (en el código) */
+static long *win_off;         /* y dónde está su variable en los datos */
+/* EventLoop abiertos: su salida y, dentro de sus On, la profundidad y la pila (Stop) */
+typedef struct { int done, depth, sp; } EvLoop;
+static struct { EvLoop *v; int n, cap; } evloops;
+static int uses_keys, uses_click;   /* IDCMP de las ventanas */
 
 static int find_struct(const char *name)
 {
@@ -3703,6 +3710,163 @@ static void gen_foreach(Node *n)
     mark_end(&ms);
 }
 
+/* ---- ventanas ---- */
+static int find_window(const char *name)
+{
+    int i;
+    for (i = 0; i < prog->windows.n; i++)
+        if (!strcmp(prog->windows.v[i].name, name)) return i;
+    return -1;
+}
+
+/* pea de la variable de la ventana (un puntero a ella, para dl_window_close y dl_event_next) */
+static void pea_window(int wi)
+{
+    w(0x4879);                                         /* pea variable */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l((uint32_t)win_off[wi]);
+    sp_depth += 4;
+}
+
+static void gen_window_op(Node *n)
+{
+    int wi = find_window(n->name);
+    if (wi < 0) fatal_at(n->line, n->col, "la ventana %s no existe", n->name);
+    if (n->val) {
+        Fixup f;
+        Var v;
+        w(0x4879);                                     /* pea descriptor */
+        f.at = (uint32_t)obj->code.n;
+        f.label = win_desc_label[wi];
+        f.abs = 1;
+        f.size = 2;
+        VEC_PUSH(fixups, f);
+        add_reloc(f.at, HK_CODE, NULL);
+        l(0);
+        sp_depth += 4;
+        rt_call("_dl_window_open", 1, 0);
+        v.kind = V_GLOBAL;
+        v.off = (int)win_off[wi];
+        store_d0(&v);
+    } else {
+        pea_window(wi);
+        rt_call("_dl_window_close", 1, 0);
+    }
+}
+
+/* la ventana del EventLoop: la última abierta antes en el código (como ./dash, context.current_window) */
+static int cur_window = -1;
+
+/* EventLoop: cada mensaje (dl_event_next) con su marca de temporales; según su clase, los On */
+static void gen_evloop(Node *n)
+{
+    int top = new_label(), done = new_label(), i, wi = cur_window, timer = -1;
+    MarkScope ms;
+    Loop lp;
+    if (wi < 0) fatal_at(n->line, n->col, "EventLoop sin ventana abierta antes");
+    for (i = 0; i < n->body.n; i++)
+        if (n->body.v[i]->val == ON_TIMER) timer = i;
+    ms = mark_begin();
+    enter_loop();
+    def_label(top);
+    mark_release(&ms);
+    if (timer >= 0) {
+        Node *a[1];
+        a[0] = n->body.v[timer]->a;
+        args_to_stack(a, 1, NULL);
+        w(0x2F00);                                     /* (move.l d0,-(sp): el intervalo, ya en la pila) */
+        obj->code.n -= 2;
+        pea_window(wi);
+        rt_call("_dl_event_next_timer", 2, 0);
+    } else {
+        pea_window(wi);
+        rt_call("_dl_event_next", 1, 0);
+    }
+    tst_d0();
+    branch(CC_EQ, done);                               /* la ventana se cerró */
+    {
+        EvLoop ev;
+        ev.done = done;
+        ev.depth = depth + 1;                          /* la de los cuerpos de los On */
+        ev.sp = sp_depth;                              /* sin la clase */
+        VEC_PUSH(evloops, ev);
+    }
+    for (i = 0; i < n->body.n; i++) {
+        Node *h = n->body.v[i];
+        static const long cls[] = {0x200 /* CLOSEWINDOW */, 0x400 /* RAWKEY */, 0x8 /* MOUSEBUTTONS */, -1, 0x40, 0x100};
+        int next = new_label(), skip = new_label();
+        if (h->val == ON_GADGET || h->val == ON_MENU)
+            fatal_at(h->line, h->col, "dashc (prueba): On Gadget y On Menu aún no están");
+        /* la clase está en d0 hasta aquí: cada On la compara y, si no es la suya, salta al siguiente */
+        if (cls[h->val] >= -128 && cls[h->val] <= 127) {
+            w(0x7200 | (cls[h->val] & 0xFF));          /* moveq #clase,d1 */
+            w(0xB081);                                 /* cmp.l d1,d0 */
+        } else {
+            w(0xB0BC); l((uint32_t)cls[h->val]);       /* cmp.l #clase,d0 */
+        }
+        branch(CC_NE, next);
+        w(0x2F00);                                     /* move.l d0,-(sp): la clase, para el On siguiente */
+        sp_depth += 4;
+        if (h->val == ON_KEY) {
+            /* las teclas al soltarse no cuentan; On Key "a" mira el texto de la tecla, On Key 69 su código */
+            jsr_sym("_dl_event_code");
+            w(0x0800); w(7);                           /* btst #7,d0: IECODE_UP_PREFIX */
+            branch(CC_NE, skip);
+            if (h->a) {
+                long code = -1;
+                if (h->a->kind == E_INT) code = h->a->val;
+                else if (h->a->len == 1) {
+                    load_imm(0, (unsigned char)h->a->str[0]);
+                    push_d0();
+                    rt_call("_dl_key_char", 1, 0);
+                    tst_d0();
+                    branch(CC_EQ, skip);
+                } else {
+                    int k;
+                    for (k = 0; key_names[k].name; k++) {
+                        const char *a = key_names[k].name, *b = h->a->str;
+                        while (*a && toupper((unsigned char)*a) == toupper((unsigned char)*b)) a++, b++;
+                        if (!*a && !*b) code = key_names[k].code;
+                    }
+                    if (code < 0) fatal_at(h->a->line, h->a->col, "la tecla %s no existe", h->a->str);
+                }
+                if (code >= 0) {
+                    jsr_sym("_dl_event_code");
+                    w(0xB0BC); l((uint32_t)code);      /* cmp.l #código,d0 */
+                    branch(CC_NE, skip);
+                }
+            }
+        } else if (h->val == ON_CLICK) {
+            jsr_sym("_dl_event_code");
+            w(0xB0BC); l(0x68);                        /* cmp.l #SELECTDOWN,d0 */
+            branch(CC_NE, skip);
+        }
+        {
+            /* el cuerpo: un bloque; un break o continue suelto acaba este mensaje (como en el switch
+               de ./dash); Stop sale del EventLoop */
+            enter_scope();
+            lp.brk = lp.cont = skip;
+            lp.depth = depth;
+            lp.sp = sp_depth;
+            VEC_PUSH(loops, lp);
+            gen_block(&h->body);
+            loops.n--;
+            leave_scope();
+        }
+        def_label(skip);
+        pop_d0();                                      /* la clase otra vez */
+        def_label(next);
+    }
+    branch(CC_T, top);
+    evloops.n--;
+    def_label(done);
+    leave_loop();
+    mark_end(&ms);
+    /* al acabar, la ventana se cierra */
+    pea_window(wi);
+    rt_call("_dl_window_close", 1, 0);
+}
+
 static int forced_type = -1;   /* el tipo de una función de una línea puesta como expresión */
 
 static void gen_stmt(Node *n)
@@ -3885,6 +4049,23 @@ static void gen_stmt(Node *n)
         return;
     case S_FOREACH:
         gen_foreach(n);
+        return;
+    case S_WINDOW:
+        gen_window_op(n);
+        if (n->val) cur_window = find_window(n->name);
+        return;
+    case S_EVLOOP:
+        gen_evloop(n);
+        return;
+    case S_STOP:
+        if (!evloops.n) fatal_at(n->line, n->col, "Stop fuera de un EventLoop");
+        {
+            /* como un break del EventLoop: lo de los bucles de dentro se suelta */
+            EvLoop *ev = &evloops.v[evloops.n - 1];
+            free_owned(ev->depth, 0);
+            if (sp_depth != ev->sp) { w(0x4FEF); w(sp_depth - ev->sp); }
+            branch(CC_T, ev->done);
+        }
         return;
     case S_STORE:
         if (n->b->kind == E_INDEX && IS_ARR(expr_type(n->b->a))) {
@@ -4216,6 +4397,72 @@ static void gen_one(int idx, int label, Func *f, NodeList *body)
     inl_stack.n--;
 }
 
+/* ¿usa el programa teclas o clics? (las ventanas piden esos mensajes: IDCMP) */
+static void find_uses_expr(Node *n)
+{
+    int i;
+    if (!n) return;
+    if (n->kind == E_CALL && !strncmp(n->name, "key_", 4)) uses_keys = 1;
+    find_uses_expr(n->a);
+    find_uses_expr(n->b);
+    find_uses_expr(n->c);
+    for (i = 0; i < n->args.n; i++) find_uses_expr(n->args.v[i]);
+}
+
+static void find_uses(NodeList *l)
+{
+    int i;
+    for (i = 0; i < l->n; i++) {
+        Node *n = l->v[i];
+        if (n->kind == S_ON && n->val == ON_KEY) uses_keys = 1;
+        if (n->kind == S_ON && n->val == ON_CLICK) uses_click = 1;
+        find_uses_expr(n->a);
+        find_uses_expr(n->b);
+        find_uses(&n->body);
+        find_uses(&n->els);
+    }
+}
+
+/* De cada ventana, su DashWinDesc (runtime/api.c), con las propiedades y los valores por defecto de ./dash */
+static void gen_window_descs(void)
+{
+    int i, j;
+    for (i = 0; i < prog->windows.n; i++) {
+        WindowDef *wd = &prog->windows.v[i];
+        long left = 50, top = 50, width = 0, height = 0, flags = 1 | 2 | 4 | 32, k;
+        const char *title = "";
+        static const char *const fl[] = {"closegadget", "dragbar", "depthgadget", "sizegadget", "borderless", "activate"};
+        for (j = 0; j < wd->props.n; j++) {
+            Node *v = wd->props.v[j];
+            int f;
+            if (!strcmp(v->name, "title")) {
+                if (v->kind != E_STR) fatal_at(v->line, v->col, "title es un texto");
+                title = v->str;
+                continue;
+            }
+            if (!fold(v, &k)) fatal_at(v->line, v->col, "%s tiene que ser un valor fijo", v->name);
+            if (!strcmp(v->name, "left")) left = k;
+            else if (!strcmp(v->name, "top")) top = k;
+            else if (!strcmp(v->name, "width")) width = k;
+            else if (!strcmp(v->name, "height")) height = k;
+            else {
+                for (f = 0; f < 6 && strcmp(fl[f], v->name); f++)
+                    ;
+                if (f < 6) flags = k ? flags | 1L << f : flags & ~(1L << f);
+            }
+        }
+        def_label(win_desc_label[i]);
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l(add_string(title, (int)strlen(title)));
+        l((uint32_t)left);
+        l((uint32_t)top);
+        l((uint32_t)width);
+        l((uint32_t)height);
+        l((uint32_t)flags);
+        l(0x200 | (uses_keys ? 0x400 : 0) | (uses_click ? 0x8 : 0));   /* CLOSEWINDOW, RAWKEY, MOUSEBUTTONS */
+    }
+}
+
 /* TY_NAMED (un nombre de tipo que el analizador aún no conocía) -> su struct */
 static int resolve_type(int t, int line, int col)
 {
@@ -4350,6 +4597,17 @@ void gen_program(Program *p, Obj *o)
     find_set_fields(&p->main);
     for (i = 0; i < p->funcs.n; i++) find_set_fields(&p->funcs.v[i].body);
 
+    /* las ventanas: su variable, tras las globales */
+    win_off = xmalloc(sizeof(long) * (p->windows.n + 1));
+    win_desc_label = xmalloc(sizeof(int) * (p->windows.n + 1));
+    for (i = 0; i < p->windows.n; i++) {
+        win_off[i] = (long)o->data.n;
+        buf_long(&o->data, 0);
+        win_desc_label[i] = new_label();
+    }
+    find_uses(&p->main);
+    for (i = 0; i < p->funcs.n; i++) find_uses(&p->funcs.v[i].body);
+
     /* lo que devuelve cada función */
     fret_state = xmalloc(sizeof(int) * (p->funcs.n + 1));
     memset(fret_state, 0, sizeof(int) * (p->funcs.n + 1));
@@ -4401,6 +4659,7 @@ void gen_program(Program *p, Obj *o)
             free(saved);
         }
     gen_struct_types();
+    gen_window_descs();
     if (p->version) {
         /* @version: "$VER: versión (d.m.aaaa)", como ./dash (lo lee la orden Version) */
         char ver[512];

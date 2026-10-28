@@ -1,0 +1,30 @@
+# Window, .open, gfx_*, EventLoop con On Timer que se para solo, .close
+Window Prueba
+    title "dashc"
+    width 300
+    height 120
+end
+
+Main
+    Prueba.open
+    gfx_pen(1)
+    gfx_line(0, 0, 100, 50)
+    gfx_box(10, 10, 60, 40)
+    n = 0
+    EventLoop
+        On Timer 100
+            n = n + 1
+            Print "tic #{n}"
+            if n == 3
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    Print "fin"
+    Prueba.open
+    Prueba.close
+    Print "otra vez"
+end

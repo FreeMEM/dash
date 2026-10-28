@@ -390,6 +390,32 @@ static Node *stmt(void)
         return n;
     case T_ID: {
         Node *target;
+        if (!strcmp(t->text, "Stop") && peek()->line != t->line)
+            return node(S_STOP, t);
+        if (!strcmp(t->text, "EventLoop")) {
+            /* EventLoop / On Close|Key ["x"|n]|Click|Timer n|Gadget|Menu ... end / end */
+            n = node(S_EVLOOP, t);
+            while (!accept(K_END)) {
+                Token *on = expect(T_ID), *kind;
+                Node *h;
+                static const char *const names[] = {"Close", "Key", "Click", "Timer", "Gadget", "Menu", NULL};
+                int i;
+                if (strcmp(on->text, "On")) fatal_at(on->line, on->col, "en un EventLoop va On ...");
+                kind = expect(T_ID);
+                h = node(S_ON, on);
+                for (i = 0; names[i] && strcmp(names[i], kind->text); i++)
+                    ;
+                if (!names[i]) fatal_at(kind->line, kind->col, "On %s no existe", kind->text);
+                h->val = i;
+                if (i == ON_KEY && peek()->line == kind->line && (peek()->kind == T_STR || peek()->kind == T_INT))
+                    h->a = atom();
+                if (i == ON_TIMER) h->a = atom();
+                block(&h->body, K_END, K_END, K_END);
+                expect(K_END);
+                VEC_PUSH(n->body, h);
+            }
+            return n;
+        }
         if (!strcmp(t->text, "Wait") && peek()->line == t->line && peek()->kind != P_ASSIGN && peek()->kind != P_LP &&
             peek()->kind != P_DOT && peek()->kind != P_LB) {
             /* Wait segundos: la función Wait del runtime */
@@ -418,6 +444,14 @@ static Node *stmt(void)
         if (target->kind == E_CALL || target->kind == E_MCALL) {
             n = node(S_EXPR, t);
             n->a = target;
+            return n;
+        }
+        if (target->kind == E_FIELD && target->a->kind == E_VAR &&
+            (!strcmp(target->name, "open") || !strcmp(target->name, "close"))) {
+            /* Ventana.open, Ventana.close */
+            n = node(S_WINDOW, t);
+            n->name = target->a->name;
+            n->val = !strcmp(target->name, "open");
             return n;
         }
         break;
@@ -574,6 +608,22 @@ static void parse_into(Program *p)
         Token *t = next();
         if (t->kind == T_ID && !strcmp(t->text, "import") && peek()->kind == T_STR) {
             import_file(p, t, next()->text);
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "Window") && peek()->kind == T_ID) {
+            /* Window Nombre / propiedad valor ... / end */
+            WindowDef wd = {0};
+            Token *name = next();
+            wd.name = name->text;
+            wd.line = name->line;
+            wd.col = name->col;
+            while (!accept(K_END)) {
+                Token *pn = expect(T_ID);
+                Node *v = expr();
+                v->name = pn->text;
+                VEC_PUSH(wd.props, v);
+            }
+            VEC_PUSH(p->windows, wd);
             continue;
         }
         if (t->kind == T_ID && !strcmp(t->text, "enum") && peek()->kind == T_ID) {

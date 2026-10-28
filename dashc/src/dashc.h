@@ -85,7 +85,11 @@ enum {
     E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
-    S_FOREACH   /* for name in a */
+    S_FOREACH,  /* for name in a */
+    S_WINDOW,   /* Ventana.open (val 1) o .close (val 0): name es la ventana */
+    S_EVLOOP,   /* EventLoop: body son los S_ON */
+    S_ON,       /* On ...: val el evento (ON_*); a, la tecla o el intervalo; body */
+    S_STOP      /* Stop: acaba el EventLoop */
 };
 
 /* Tipos: los básicos; un struct es TY_STRUCT + su número; una lista suma TY_ARR por cada nivel
@@ -171,7 +175,17 @@ typedef struct {
     struct { long *v; int n, cap; } vals;
 } Enum;
 
+enum { ON_CLOSE, ON_KEY, ON_CLICK, ON_TIMER, ON_GADGET, ON_MENU };
+
+/* Window Nombre ... end: sus propiedades (title, width...), cada una con su valor */
 typedef struct {
+    char *name;
+    int line, col;
+    NodeList props;   /* E_* con name = la propiedad */
+} WindowDef;
+
+typedef struct {
+    struct { WindowDef *v; int n, cap; } windows;
     struct { Enum *v; int n, cap; } enums;
     struct { Struct *v; int n, cap; } structs;
     struct { Func *v; int n, cap; } funcs;
@@ -210,6 +224,8 @@ extern int memcheck;   /* --memcheck: como ./dash --memcheck */
 typedef struct { const char *name; unsigned char nparams, ret, keeps; } BuiltinInfo;
 extern const BuiltinInfo builtin_info[];
 extern const int builtin_count;
+typedef struct { const char *name; int code; } KeyName;
+extern const KeyName key_names[];
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);

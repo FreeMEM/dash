@@ -111,3 +111,9 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   a `_dash_time_init`), textos adoptados que no eran temporales (constructor y `c.t = t` copian si no es un temporal
   nuevo), el elemento de `for x in lista` retenido durante la vuelta (el cuerpo puede vaciar la lista), las globales
   del programa no se ven desde sus módulos (dashweb D14) y `+` de listas (`DashArray_concat`).
+- D6 (1.ª parte): `Window` (propiedades y valores por defecto de ./dash; un DashWinDesc en el código y una variable
+  en los datos), `.open`/`.close`, `EventLoop` con `On Close`, `On Key` ("a", 69 o un nombre de KEY_NAMES), `On
+  Click`, `On Timer` y `Stop`; la espera, apuntar la tecla o el clic y ReplyMsg en C (`dl_event_next`, api.c) y el
+  reparto por clase en 68000. Las ventanas abiertas se cierran al salir (puntero débil). Builtins `gfx_*` y los de
+  `needs_gfx` (sin pantallas, bitmaps ni fuentes). Test `ventana` (se para sola con On Timer). Cobertura: 64 de 64
+  en el A1200 antes de esto. Falta: On Gadget, On Menu, GadTools, MUI, ReAction, pantallas, `.dashui`.

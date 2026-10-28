@@ -90,6 +90,10 @@ LONG _dash_init(const char *cmd, LONG len)
     return 0;
 }
 
+static void dl_close_windows(void);
+void (*_dash_weak_dl_close_windows)(void) = dl_close_windows;
+#define dl_weak_close_windows _dash_weak_dl_close_windows
+
 /* Desde _dash_quit, al acabar de cualquier forma: como el final de main y la lista de salida de libnix */
 void _dash_finish(void)
 {
@@ -100,6 +104,7 @@ void _dash_finish(void)
         DeleteMsgPort(port);
         bench_tr = NULL;
     }
+    if (dl_weak_close_windows) dl_weak_close_windows();
     _dash_exit_cleanup();
     _dash_atexit_run();
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
@@ -176,6 +181,115 @@ void _bench_end(const char *name, LONG iterations)
     args[2] = t1.ev_lo - bench_t0.ev_lo;
     args[3] = bench_freq;
     VPrintf((CONST_STRPTR)"BENCH %s %ld %lu %lu\n", (APTR)args);
+}
+
+/* ---- ventanas (Window) y su EventLoop, como el C de ./dash (WINDOW_OPEN, EVENT_LOOP_START) ----
+   dashc pone en el código lo de cada ventana; flags: 1 cierre, 2 barra, 4 profundidad, 8 tamaño,
+   16 sin bordes, 32 activa */
+struct DashWinDesc { STRPTR title; LONG left, top, width, height, flags, idcmp; };
+
+/* las abiertas, para cerrarlas al salir de cualquier forma (./dash las cierra en _dash_exit_cleanup) */
+static struct Window *dl_open_wins[16];
+
+LONG dl_window_open(const struct DashWinDesc *d)
+{
+    int i;
+    struct Window *w = OpenWindowTags(NULL,
+        WA_Left, d->left, WA_Top, d->top,
+        WA_Width, d->width, WA_Height, d->height,
+        WA_Title, (ULONG)d->title,
+        WA_CloseGadget, (d->flags & 1) != 0,
+        WA_DragBar, (d->flags & 2) != 0,
+        WA_DepthGadget, (d->flags & 4) != 0,
+        WA_SizeGadget, (d->flags & 8) != 0,
+        WA_Borderless, (d->flags & 16) != 0,
+        WA_Activate, (d->flags & 32) != 0,
+        WA_MinWidth, 40, WA_MinHeight, 20,
+        WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
+        WA_GimmeZeroZero, TRUE,
+        WA_IDCMP, d->idcmp,
+        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        TAG_DONE);
+    if (!w) _dash_exit(20);
+    _dash_win = w;
+    _dash_rp = w->RPort;
+    for (i = 0; i < 16; i++)
+        if (!dl_open_wins[i]) {
+            dl_open_wins[i] = w;
+            break;
+        }
+    return (LONG)w;
+}
+
+void dl_window_close(struct Window **pw);
+static void dl_close_window_p(struct Window **pw) { dl_window_close(pw); }
+
+void dl_window_close(struct Window **pw)
+{
+    struct Window *w = *pw;
+    int i;
+    if (!w) return;
+    for (i = 0; i < 16; i++)
+        if (dl_open_wins[i] == w) dl_open_wins[i] = NULL;
+    if (_dash_win == w) _dash_win = NULL;
+    _dash_before_close(w);
+    CloseWindow(w);
+    *pw = NULL;
+}
+
+static UWORD dl_ev_code;
+LONG dl_event_code(void) { return dl_ev_code; }
+
+static void dl_close_windows(void)
+{
+    int i;
+    for (i = 0; i < 16; i++)
+        if (dl_open_wins[i]) {
+            struct Window *w = dl_open_wins[i];
+            dl_close_window_p(&w);
+        }
+}
+LONG dl_key_char(LONG c) { return _dash_last_key_text[0] == (UBYTE)c && _dash_last_key_text[1] == 0; }
+
+/* El siguiente mensaje de la ventana: su clase (0 si la ventana ya no está). Antes de devolverlo
+   apunta la tecla (_dash_key_record) o el clic, como el EventLoop de ./dash. */
+static LONG dl_event_take(struct Window *w)
+{
+    struct IntuiMessage *msg = (struct IntuiMessage *)GetMsg(w->UserPort);
+    ULONG cls;
+    if (!msg) return 0;
+    cls = msg->Class;
+    dl_ev_code = msg->Code;
+    if (cls == IDCMP_RAWKEY) _dash_key_record(msg);
+    if (cls == IDCMP_MOUSEBUTTONS) {
+        _dash_click_x = msg->MouseX - msg->IDCMPWindow->BorderLeft;
+        _dash_click_y = msg->MouseY - msg->IDCMPWindow->BorderTop;
+    }
+    ReplyMsg((struct Message *)msg);
+    return (LONG)cls;
+}
+
+LONG dl_event_next(struct Window **pw)
+{
+    for (;;) {
+        LONG cls;
+        if (!*pw) return 0;
+        if ((cls = dl_event_take(*pw)) != 0) return cls;
+        WaitPort((*pw)->UserPort);
+    }
+}
+
+/* Con On Timer: -1 cuando pasa el tiempo (_dash_lt_* de ./dash) */
+LONG dl_event_next_timer(struct Window **pw, LONG ms)
+{
+    for (;;) {
+        LONG cls;
+        if (!*pw) return 0;
+        if ((cls = dl_event_take(*pw)) != 0) return cls;
+        _dash_lt_send(ms);
+        Wait((1UL << (*pw)->UserPort->mp_SigBit) | _dash_lt_signal());
+        if (_dash_lt_fired()) return -1;
+    }
 }
 
 /* ---- textos ---- */
