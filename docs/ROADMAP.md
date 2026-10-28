@@ -1013,12 +1013,20 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] MUI: Tab y Mayúsculas+Tab como teclas sobre el lienzo (`mui_canvas_take_tab`, `"take_tab"` en el `.dashui`) (D48)
 - [x] 686 builtins (94 de MUI); 454 resultados sin emulador; 34 ejemplos
 
+### Versión 1.0.0 (2026-10-27)
+- [x] Primera versión con número: `compiler/__init__.py` (antes un `2.0.0` sin publicar), `./dash --version`,
+      etiquetas `vX.Y.Z` y qué significa cada número en `docs/VERSIONES.md`
+- [x] Extensión de VS Code 0.3.0: avisa una vez al día si hay una versión de Dash más nueva (`dash.updates.check`)
+- [x] 455 resultados sin emulador
+
 ### Recursos, ronda 3 (2026-10-27/28, rama `recursos3`)
 - [x] Textos con su longitud en la cabecera y `s = a + b` escrito en su sitio; temporales en una pila (R8, R10)
 - [x] RTG sin backdrop: el lienzo del escritorio no lee de la tarjeta al actualizar (R7)
 - [x] Float con `mulu.l` en 68020-68040 (R9); sin los 8 KB de pila para excepciones (R11)
-- [x] Diccionarios con el hash de las claves literales al compilar (R12); `s == "literal"` sin strcmp (R13)
-- [x] `test_args_wb` arreglado (tapaba la pantalla de los tests siguientes); detalle en `docs/RECURSOS_LOOP.md`
+- [x] Diccionarios con el hash de las claves literales al compilar (R12); `s == "literal"` mira el primer byte antes de strcmp (R13)
+- [x] `test_args_wb` y `test_mouse_curve` arreglados (tapaban o arrastraban la pantalla de los tests siguientes);
+      retornar textos y crear structs casi como antes (R14-R16)
+- [x] Baterías sin fallos: 457 sin emulador (con 1.0.0), 1107 con `--emu --emu-a500 --emu-32`, 676 con `--memcheck`; detalle en `docs/RECURSOS_LOOP.md`
 
 ## Notas y Decisiones
 

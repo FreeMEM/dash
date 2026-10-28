@@ -18,8 +18,8 @@ running, debugging, and debugging a real Amiga.
 1. Dash and the Amiga toolchain, as in the
    [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
    emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. This extension: `dash-mui-editor-0.2.4.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.2.4), then in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.2.4.vsix`.
+2. This extension: `dash-mui-editor-0.3.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.0), then in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.0.vsix`.
 
 ## How it works with Dash
 
@@ -77,6 +77,9 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
 - Editing: snippets (`Main`, `func`, `struct`, `if`, `for`, `Window`, `mui`, `muiui`...), the `end` of a block
   added by itself when Enter opens one (setting `dash.editor.autoEnd`), `else`/`elif`/`end` back to their level,
   indentation, folding (also `# region` / `# endregion`), `#` comments, and an icon for `.dash` files.
+- **New versions of Dash**: once a day it looks at Dash's releases on GitHub and, if there is one newer than the
+  compiler in use (`./dash --version`), says so, with a button to its notes. Setting `dash.updates.check` (the
+  request goes to `api.github.com`).
 - In a folder not trusted (Restricted Mode) only colours and the visual editor work; compiling, the emulator
   and the language server need a trusted folder.
 - **Debugging (F5)**: breakpoints in the `.dash`, continue, step over/into/out, pause, the call stack and the

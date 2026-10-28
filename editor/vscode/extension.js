@@ -14,6 +14,7 @@ const { missing } = require('./missing');
 const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
 const { writeProject, cleanName } = require('./newProject');
+const { checkUpdates } = require('./updates');
 
 /** A .dashui given to VS Code when it starts ("code carpeta ventana.dashui") opens as JSON text: its editor
     is not there yet. Then, just after starting (not later: whoever opens one as text on purpose keeps it), the
@@ -280,6 +281,17 @@ function activate(context) {
         runTask = setupTasks(vscode, context, { findDash, noDash, env: emulatorEnv, trusted });
     if (vscode.debug && vscode.debug.registerDebugConfigurationProvider)   // F5: debug on the Amiga (gdb + bgdbserver)
         setupDebugger(vscode, context, { findDash, noDash, env: emulatorEnv, trusted, emulatorOptions });
+    if (vscode.env && vscode.env.openExternal)       // a newer Dash on GitHub (once a day)
+        checkUpdates(vscode, context, compilerInUse).catch(() => {});
+}
+
+/** The compiler folder for the open file or the first folder of the workspace (or the setting), or null */
+function compilerInUse() {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.uri.scheme === 'file') return findDash(editor.document.fileName);
+    const folder = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0];
+    if (folder) return findDash(path.join(folder.uri.fsPath, 'x'));
+    return dashSetting() ? findDash(path.join(dashSetting(), 'x')) : null;
 }
 
 function deactivate() {

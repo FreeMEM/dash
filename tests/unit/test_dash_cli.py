@@ -123,3 +123,14 @@ class CpuFlags(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Version(unittest.TestCase):
+    def test_version_is_the_package_one(self):
+        """./dash --version says the version of compiler/__init__.py (the one releases and the VS Code notice use)"""
+        from compiler import __version__
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "dash"), "--version"],
+                           cwd=ROOT, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), f"Dash {__version__}")
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
