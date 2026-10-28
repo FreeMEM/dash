@@ -257,3 +257,15 @@ diga el usuario. Base medida: `Base ronda 3`.
   barra. Se quedaba baja para el resto del arranque, y el clic de `test_on_click_timer` caía en la barra.
   Dependía de dónde estaba el puntero al pulsar: por eso fallaba solo con muchos tests delante.
 - Arreglo, en el test: la suelta justo después de la pulsación (el manejador sigue contando 3 de 3).
+
+### R14 — `+` e interpolación con la longitud de cada parte dicha por el compilador
+- Cada parte de `+` (`DashString_concat_h`, `DashString_join_h`, `_dash_str_set_join`) lleva una pista
+  (`_DASH_HLEN`): un literal, su longitud (`sizeof("x") - 1`: la cuenta el compilador de C, tras pasar los
+  acentos a Latin-1); un número o carácter hecho texto (`DashString_from_int`, `from_char`, un Bool), -2: texto de
+  C que nunca es nil, medido con `strlen` sin mirar la cabecera; lo demás, -1 (`_dash_str_len`). Así un texto de
+  C ya no paga la comprobación de la cabecera para acabar en `strlen`, que era lo que hacía antes de R8. Sin pista
+  los literales con `\0` o `\x` dentro (`sizeof` contaría más allá de un byte 0).
+- Medida frente al cierre de la ronda (A500 / A1200): `string_return` −2,6 % / −3,8 %, `nested_struct_new`
+  −0,9 % / −1,6 %, `string_concat_int` −1,7 % / −0,2 %, `gfx_text_concat` −1,8 % / −1,4 %; ejecutables −512 bytes.
+  Frente a la base de la ronda: `string_return` +6,4 % / +6,9 % (antes +9 / +11), `nested_struct_new` +3,6 % / +4,5 %.
+- Probado: 456/456; los tests de textos en las tres máquinas y con `--memcheck`.

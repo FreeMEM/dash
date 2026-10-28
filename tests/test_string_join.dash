@@ -3,7 +3,7 @@
 # twelve numbers in one interpolation must not reuse a conversion buffer
 # before it is copied.
 #
-# expect-c: DashString_join(6, (STRPTR[]){
+# expect-c: DashString_join_h(6, (STRPTR[]){
 # expect-out: 1-2-3-4-5-6-7-8-9-10-11-12
 # expect-out: x=7 y=-3 c=A f=1.5 fin
 # expect-out: abc

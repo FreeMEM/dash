@@ -690,6 +690,10 @@ static __inline__ LONG _dash_str_len(STRPTR s) {
     return strlen((char *)s);
 }
 
+/* The length of a part of + or interpolation, with the compiler's hint: >= 0 the length of a literal, -2 a
+   text of C (a number turned into text: measured without looking at a header), -1 not known */
+#define _DASH_HLEN(p, h) ((h) >= 0 ? (LONG)(h) : (h) == -2 ? (LONG)strlen((char *)(p)) : _dash_str_len(p))
+
 /* The text of Dash at s now has this length (it grew in place, or the text is shorter than its block) */
 static __inline__ void _dash_str_setlen(STRPTR s, LONG len) {
     _DASH_STR_HDR(s)->len = len;
@@ -814,11 +818,11 @@ static void _dash_str_set(STRPTR *var, STRPTR value) {
 /* var = a + b + ... (up to 6 parts: + and interpolation): written straight into the text the variable
    owns when it fits there and no part is in it (s = "x" + i in a loop allocates nothing), else into a
    new text of its own; no temporary either way */
-static void _dash_str_set_join(STRPTR *var, LONG n, STRPTR *parts) {
+static void _dash_str_set_join(STRPTR *var, LONG n, STRPTR *parts, const LONG *hints) {
     STRPTR old = *var, d;
     LONG i, total = 0, lens[6];
     _DashStrHdr *h;
-    for (i = 0; i < n; i++) total += lens[i] = _dash_str_len(parts[i]);
+    for (i = 0; i < n; i++) total += lens[i] = _DASH_HLEN(parts[i], hints[i]);
     d = NULL;
     if (old && _DASH_STR_OURS(old) && !((h = _DASH_STR_HDR(old))->size & (_DASH_STR_KEEP | _DASH_STR_TEMP))
         && (ULONG)total + sizeof(_DashStrHdr) + 1 <= _DASH_STR_SIZE(h)) {
@@ -1327,15 +1331,17 @@ static __inline__ LONG _dash_str_cmp(STRPTR a, STRPTR b) {
     return strcmp((char *)a, (char *)b);
 }
 
-static STRPTR DashString_concat(STRPTR a, STRPTR b) {
-    LONG len_a = _dash_str_len(a);
-    LONG len_b = _dash_str_len(b);
+/* a + b, with the compiler's hints of their lengths (_DASH_HLEN) */
+static STRPTR DashString_concat_h(STRPTR a, LONG ha, STRPTR b, LONG hb) {
+    LONG len_a = _DASH_HLEN(a, ha);
+    LONG len_b = _DASH_HLEN(b, hb);
     STRPTR result = _dash_str_alloc(len_a + len_b, TRUE);  /* a temporary */
     if (!result) return NULL;
     _dash_copy(result, a, len_a);
     _dash_copy(result + len_a, b, len_b);
     return result;
 }
+#define DashString_concat(a, b) DashString_concat_h((a), -1, (b), -1)
 
 static LONG DashString_length(STRPTR s) {
     return _dash_str_len(s);
@@ -1413,11 +1419,11 @@ static STRPTR DashString_from_int(LONG n) {
 }
 
 /* a + b + c ...: one allocation and one copy for the whole chain */
-static STRPTR DashString_join(LONG n, STRPTR *parts) {
+static STRPTR DashString_join_h(LONG n, STRPTR *parts, const LONG *hints) {
     LONG i, total = 0, lens[16];
     STRPTR result, p;
     for (i = 0; i < n; i++) {
-        LONG k = _dash_str_len(parts[i]);
+        LONG k = hints ? _DASH_HLEN(parts[i], hints[i]) : _dash_str_len(parts[i]);
         if (i < 16) lens[i] = k;
         total += k;
     }
@@ -1431,6 +1437,7 @@ static STRPTR DashString_join(LONG n, STRPTR *parts) {
     }
     return result;
 }
+#define DashString_join(n, parts) DashString_join_h((n), (parts), NULL)
 
 """
 
@@ -20078,18 +20085,19 @@ static {ret_type} {method_name}({params_str}) {{
             # String concatenation: numbers on either side are converted
             if node.operator == "+" and (left_str or right_str):
                 self.uses_strings = True
-                parts = self._concat_parts(node)
-                if len(parts) > 2 and parts[0] == '""':   # "#{a}#{b}" starts with "" (transformer)
+                parts = [(c, self._concat_hint(c)) for c in self._concat_parts(node)]
+                if len(parts) > 2 and parts[0][0] == '""':   # "#{a}#{b}" starts with "" (transformer)
                     parts = parts[1:]
                 if len(parts) == 2:
-                    return f"DashString_concat({parts[0]}, {parts[1]})"
+                    return f"DashString_concat_h({parts[0][0]}, {parts[0][1]}, {parts[1][0]}, {parts[1][1]})"
                 # a + b + c...: one allocation for the whole chain, in groups of 6
                 # (numbers are converted into 16 rotating buffers)
                 code = None
                 while parts:
-                    group = ([code] if code else []) + parts[:6 - (1 if code else 0)]
+                    group = ([(code, "-1")] if code else []) + parts[:6 - (1 if code else 0)]
                     parts = parts[6 - (1 if code else 0):]
-                    code = f"DashString_join({len(group)}, (STRPTR[]){{{', '.join(group)}}})"
+                    code = (f"DashString_join_h({len(group)}, (STRPTR[]){{{', '.join(c for c, _ in group)}}}, "
+                            f"(const LONG[]){{{', '.join(h for _, h in group)}}})")
                 return code
             # List + list: a new list with the elements of both
             if node.operator == "+" and self._is_array_concat(node):
@@ -20977,10 +20985,38 @@ static {ret_type} {method_name}({params_str}) {{
         return f"{indent}_dash_str_set({target}, {self._lent_str(node, code)});\n"
 
     @staticmethod
+    def _split_args(inner: str) -> List[str]:
+        """The arguments of a C call, split at its top-level commas"""
+        args, depth, quote, esc, cur = [], 0, None, False, ""
+        for ch in inner:
+            if quote:
+                cur += ch
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == quote:
+                    quote = None
+                continue
+            if ch in "\"'":
+                quote = ch
+            elif ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                args.append(cur.strip())
+                cur = ""
+                continue
+            cur += ch
+        args.append(cur.strip())
+        return args
+
+    @staticmethod
     def _concat_args(code: str) -> Optional[str]:
         """The arguments for _dash_str_set_join when code is one DashString_concat or DashString_join
         (up to 6 parts) and nothing else, or None"""
-        for head in ("DashString_concat(", "DashString_join("):
+        for head in ("DashString_concat_h(", "DashString_join_h("):
             if not (code.startswith(head) and code.endswith(")")):
                 continue
             inner = code[len(head):-1]
@@ -21000,8 +21036,9 @@ static {ret_type} {method_name}({params_str}) {{
                 depth -= ch in ")]}"
                 if depth < 0:
                     return None
-            if head == "DashString_concat(":
-                return f"2, (STRPTR[]){{{inner}}}"
+            if head == "DashString_concat_h(":
+                a, ha, b, hb = CodeGenerator._split_args(inner)
+                return f"2, (STRPTR[]){{{a}, {b}}}, (const LONG[]){{{ha}, {hb}}}"
             return inner if int(inner.split(",", 1)[0]) <= 6 else None
         return None
 
@@ -21042,6 +21079,17 @@ static {ret_type} {method_name}({params_str}) {{
             return any(self._mentions(v, name) for k, v in vars(node).items()
                        if isinstance(v, (ASTNode, list)) or k in ("object_name", "name") and v == name)
         return False
+
+    @staticmethod
+    def _concat_hint(code: str) -> str:
+        """The length hint of a part of + (_DASH_HLEN): a literal's length, -2 for a number turned into text
+        (a text of C, never nil), -1 else"""
+        # (not with \0 or \x written inside: sizeof would count past a byte 0 that strlen stops at)
+        if re.fullmatch(r'"(?:[^"\\]|\\.)*"', code) and not re.search(r'\\(?:0|x)', code):
+            return f"sizeof({code}) - 1"
+        if code.startswith(("DashString_from_int(", "DashString_from_char(")) or code.endswith('? (STRPTR)"true" : (STRPTR)"false")'):
+            return "-2"
+        return "-1"
 
     def _concat_parts(self, node: ASTNode) -> List[str]:
         """C operands of a chain of string concatenations, left to right."""
