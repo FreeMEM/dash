@@ -1,0 +1,148 @@
+/* Lo que dashc añade al runtime de ./dash (gen_lib.py lo incluye al final de dashlib_rt.c): las bases
+   de las librerías, el arranque y la salida sin libnix, Print, bench_* y, con nombre dl_*, lo que el
+   código de dashc llama (en C son static, macros o en línea). Todo se llama como en C: argumentos en la
+   pila, resultado en d0. */
+#include <devices/timer.h>
+#include <proto/timer.h>
+
+struct ExecBase *SysBase;
+struct DosLibrary *DOSBase;
+struct IntuitionBase *IntuitionBase;
+struct Device *TimerBase;
+static struct timerequest *bench_tr;
+static struct EClockVal bench_t0;
+static ULONG bench_freq;
+
+/* 68020 o mejor: rt_math.s usa divs.l y muls.l (como utility.library con gcc) */
+UBYTE _dash_cpu020;
+
+/* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
+LONG _dash_init(void)
+{
+    SysBase = *(struct ExecBase **)4;
+    _dash_cpu020 = (SysBase->AttnFlags & AFF_68020) != 0;
+    _dash_trap_on();
+    IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
+    DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);
+    if (!IntuitionBase || !DOSBase) {
+        _dash_exit_cleanup();
+        return 10;
+    }
+    return 0;
+}
+
+/* Desde _dash_quit, al acabar de cualquier forma: como el final de main y la lista de salida de libnix */
+void _dash_finish(void)
+{
+    if (TimerBase) {
+        struct MsgPort *port = bench_tr->tr_node.io_Message.mn_ReplyPort;
+        CloseDevice((struct IORequest *)bench_tr);
+        DeleteIORequest((struct IORequest *)bench_tr);
+        DeleteMsgPort(port);
+        TimerBase = NULL;
+    }
+    _dash_exit_cleanup();
+    _dash_atexit_run();
+}
+
+void _dash_print_str(STRPTR s)
+{
+    VPrintf((CONST_STRPTR)"%s\n", (APTR)&s);
+}
+
+void _dash_print_int(LONG v)
+{
+    VPrintf((CONST_STRPTR)"%ld\n", (APTR)&v);
+}
+
+void _dash_print_bool(LONG v)
+{
+    PutStr((CONST_STRPTR)(v ? "true\n" : "false\n"));
+}
+
+/* rt_math.s salta aquí con un divisor 0 */
+void _dash_div_zero(void)
+{
+    _dash_fail("divisi\363n por cero", NULL);
+}
+
+/* Medir, como tests/bench/bench_lib.dash: bench_start() y bench_end("nombre", vueltas)
+   escriben "BENCH nombre vueltas ticks_del_EClock frecuencia" */
+void _bench_start(void)
+{
+    if (!TimerBase) {
+        struct MsgPort *port = CreateMsgPort();
+        if (!port) return;
+        bench_tr = (struct timerequest *)CreateIORequest(port, sizeof(struct timerequest));
+        if (bench_tr && OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)bench_tr, 0) == 0) {
+            TimerBase = bench_tr->tr_node.io_Device;
+        } else {
+            if (bench_tr) DeleteIORequest((struct IORequest *)bench_tr);
+            DeleteMsgPort(port);
+            return;
+        }
+    }
+    bench_freq = ReadEClock(&bench_t0);
+}
+
+void _bench_end(const char *name, LONG iterations)
+{
+    struct EClockVal t1;
+    ULONG args[4];
+    if (!TimerBase) return;
+    ReadEClock(&t1);
+    args[0] = (ULONG)name;
+    args[1] = (ULONG)iterations;
+    args[2] = t1.ev_lo - bench_t0.ev_lo;
+    args[3] = bench_freq;
+    VPrintf((CONST_STRPTR)"BENCH %s %ld %lu %lu\n", (APTR)args);
+}
+
+/* ---- textos ---- */
+ULONG dl_tmp_mark(void) { return _dash_tmp_mark(); }
+void dl_tmp_release(ULONG m) { _dash_tmp_release(m); }
+void dl_tmp_release_keep(ULONG m, STRPTR keep) { _dash_tmp_release_keep(m, keep); }
+void dl_str_set(STRPTR *var, STRPTR v) { _dash_str_set(var, v); }
+void dl_str_set_copy(STRPTR *var, STRPTR v) { _dash_str_set_copy(var, v); }
+void dl_str_free(STRPTR p) { _dash_str_free(p); }
+STRPTR dl_str_ret(STRPTR p) { return _dash_str_ret(p); }
+STRPTR dl_str_tmpcopy(STRPTR p) { return _dash_str_tmpcopy(p); }
+void dl_str_append(STRPTR *var, STRPTR add) { _dash_str_append(var, add); }
+STRPTR dl_str_concat(STRPTR a, STRPTR b) { return DashString_concat(a, b); }
+STRPTR dl_str_join(LONG n, STRPTR *parts) { return DashString_join(n, parts); }
+STRPTR dl_str_from_int(LONG n) { return DashString_from_int(n); }
+STRPTR dl_str_from_char(LONG c) { return DashString_from_char((char)c); }
+LONG dl_str_len(STRPTR s) { return _dash_str_len(s); }
+LONG dl_str_code(STRPTR s, LONG i) { return _dash_str_code(s, i); }
+STRPTR dl_str_slice(STRPTR s, LONG a, LONG b) { return DashString_slice(s, a, b); }
+LONG dl_str_cmp(STRPTR a, STRPTR b) { return _dash_str_cmp(a, b); }
+
+/* ---- objetos con contador ---- */
+void *dl_rc_new_obj(LONG size, const _DashType *t) { return _dash_rc_new_obj(size, t); }
+void *dl_rc_alloc_obj(LONG size, const _DashType *t) { return _dash_rc_alloc_obj(size, t); }
+void dl_retain(void *p) { _dash_retain(p); }
+void dl_release(void *p) { _dash_release(p); }
+void dl_release_child(void *p) { _dash_release_child(p); }
+void dl_hold(void *p) { _dash_hold(p); }
+void dl_obj_set(void **var, void *v) { _dash_obj_set(var, v); }
+void dl_obj_set_new(void **var, void *v) { _dash_obj_set_new(var, v); }
+void *dl_obj_float(void *p) { return _dash_obj_float(p); }
+void *dl_obj_lend(void *p) { return _dash_obj_lend(p); }
+void *dl_obj_escape(void *p) { return _dash_obj_escape(p); }
+
+/* ---- listas ---- */
+DashArrayLong *dl_arr_from(LONG n, const LONG *v) { return DashArray_from(n, v); }
+DashArrayLong *dl_arr_from_new(LONG n, const LONG *v) { return DashArray_from_new(n, v); }
+DashArrayLong *dl_arr_own(DashArrayLong *a, LONG kind) { return DashArray_own(a, kind); }
+LONG dl_arr_get(DashArrayLong *a, LONG i) { return DashArray_get(a, i); }
+void dl_arr_set(DashArrayLong *a, LONG i, LONG v) { DashArray_set(a, i, v); }
+void dl_arr_set_obj(DashArrayLong *a, LONG i, void *v) { DashArray_set_obj(a, i, v); }
+void dl_arr_set_str(DashArrayLong *a, LONG i, STRPTR v) { DashArray_set_str(a, i, v); }
+LONG dl_arr_length(DashArrayLong *a) { return DashArray_length(a); }
+DashArrayLong *dl_arr_slice(DashArrayLong *a, LONG s, LONG e) { return DashArray_slice(a, s, e); }
+void dl_arr_push(DashArrayLong *a, LONG v) { DashArray_push(a, v); }
+void dl_arr_push_obj(DashArrayLong *a, void *v) { DashArray_push_obj(a, v); }
+void dl_arr_push_str(DashArrayLong *a, STRPTR v) { DashArray_push_str(a, v); }
+
+/* ---- errores ---- */
+void dl_fail_at(const char *what, LONG w) { _dash_fail_at(what, w); }

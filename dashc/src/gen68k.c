@@ -2557,7 +2557,7 @@ static void gen_one(int idx, int label, Func *f, NodeList *body)
 
 void gen_program(Program *p, Obj *o)
 {
-    int i, main_label, fail, again;
+    int i, main_label, again;
     prog = p;
     obj = o;
 
@@ -2594,19 +2594,25 @@ void gen_program(Program *p, Obj *o)
         buf_long(&o->data, (uint32_t)v);
     }
 
-    /* arranque: guarda registros, abre lo necesario, ejecuta Main y sale */
+    /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */
     main_label = new_label();
-    fail = new_label();
-    w(0x48E7); w(0x3F3E);                              /* movem.l d2-d7/a2-a6,-(sp) */
-    jsr_sym("__dash_init");
-    w(0x4A80);                                         /* tst.l d0 */
-    branch(CC_NE, fail);
-    jsr_label(main_label);
-    jsr_sym("__dash_exit");
-    w(0x7000);                                         /* moveq #0,d0 */
-    def_label(fail);
-    w(0x4CDF); w(0x7CFC);                              /* movem.l (sp)+,d2-d7/a2-a6 */
-    w(0x4E75);                                         /* rts */
+    {
+        Fixup f;
+        w(0x41F9);                                     /* lea main,a0 */
+        f.at = (uint32_t)obj->code.n;
+        f.label = main_label;
+        f.abs = 1;
+        f.size = 2;
+        VEC_PUSH(fixups, f);
+        add_reloc(f.at, HK_CODE, NULL);
+        l(0);
+    }
+    w(0x43F9);                                         /* lea nombre_del_fuente,a1 */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(add_string(src_name, (int)strlen(src_name)));
+    w(0x4EF9);                                         /* jmp _dash_start */
+    add_reloc((uint32_t)obj->code.n, -1, "__dash_start");
+    l(0);
 
     /* Main y las funciones a las que se llama de verdad (no copiadas) */
     gen_one(-1, main_label, NULL, &p->main);

@@ -219,3 +219,69 @@ __dash_udivmod:
 	move.l	(sp)+,d3
 	move.l	(sp)+,d2
 	rts
+
+| ---- arranque y salida (sin libnix) ----
+| El código de dashc entra con a0 = main y a1 = el nombre del fuente (para los errores).
+	.globl	__dash_start
+__dash_start:
+	movem.l	d2-d7/a2-a6,-(sp)
+	move.l	sp,dash_entry_sp
+	move.l	a1,__dash_srcfiles
+	move.l	a0,-(sp)
+	jsr	__dash_init
+	move.l	(sp)+,a0
+	tst.l	d0
+	jne	1f
+	jsr	(a0)
+	moveq	#0,d0
+1:	move.l	d0,-(sp)
+	jsr	__dash_quit
+
+| _dash_quit(código): la limpieza de siempre y vuelta al que lanzó el programa, desde donde sea
+	.globl	__dash_quit
+__dash_quit:
+	move.l	4(sp),d2
+	jsr	__dash_finish
+	move.l	d2,d0
+	move.l	dash_entry_sp,sp
+	movem.l	(sp)+,d2-d7/a2-a6
+	rts
+
+| ---- las rutinas de libgcc que usa el C del runtime: van a las de arriba ----
+	.globl	___mulsi3
+___mulsi3:
+	move.l	4(sp),d0
+	move.l	8(sp),d1
+	jra	__dash_mul
+
+	.globl	___divsi3
+___divsi3:
+	move.l	4(sp),d0
+	move.l	8(sp),d1
+	jra	__dash_div
+
+	.globl	___modsi3
+___modsi3:
+	move.l	4(sp),d0
+	move.l	8(sp),d1
+	jra	__dash_mod
+
+	.globl	___udivsi3
+___udivsi3:
+	move.l	4(sp),d0
+	move.l	8(sp),d1
+	jra	__dash_udivmod
+
+	.globl	___umodsi3
+___umodsi3:
+	move.l	4(sp),d0
+	move.l	8(sp),d1
+	jbsr	__dash_udivmod
+	move.l	d1,d0
+	rts
+
+	.bss
+	.even
+dash_entry_sp:
+	.skip	4
+	.text

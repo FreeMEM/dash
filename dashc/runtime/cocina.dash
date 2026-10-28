@@ -1,0 +1,35 @@
+struct K
+    n: Int = 0
+    s: String = ""
+    o: K = nil
+end
+
+func f(a: String, l: Array) -> String
+    return a + "#{l.length}"
+end
+
+Main
+    s = "abc"
+    t = s + "d"
+    Print t[1:2]
+    Print t[0]
+    Print t.length
+    if s == t
+        Print "="
+    end
+    a = [1, 2]
+    a.push(3)
+    a[0] = 5
+    b = a[1:2]
+    for x in a
+        Print x
+    end
+    c = ["x", "y"]
+    c.push(t)
+    Print c[0]
+    k = K(1, "q", nil)
+    d = [k]
+    d.push(K(2, "r", k))
+    Print f(s, a)
+    Print d[1].o.s
+end
