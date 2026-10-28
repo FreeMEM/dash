@@ -2711,14 +2711,24 @@ static void gen_for(Node *n)
             branch(CC_CC, top);
         }
     } else {
+        int pass_n, neg = new_label();
         def_label(test);
-        if (vend.kind == V_CONST) op_imm_ea(0x0C80, vend.val, &vi);     /* cmpi.l #fin,i */
-        else if (vi.kind == V_REG) op_ea(0xB080 | vi.reg << 9, &vend);  /* cmp.l fin,di */
-        else {
-            load_var(0, &vi);
-            op_ea(0xB080, &vend);                      /* cmp.l fin,d0 */
+        if (!step_known) {
+            /* el paso se sabe al ejecutar: su signo dice el sentido, como en ./dash */
+            op_ea(0x4A80, &vstep);                     /* tst.l paso */
+            branch(CC_MI, neg);
         }
-        branch(down ? CC_GE : CC_LE, top);
+        for (pass_n = 0; pass_n < (step_known ? 1 : 2); pass_n++) {
+            if (pass_n) def_label(neg);
+            if (vend.kind == V_CONST) op_imm_ea(0x0C80, vend.val, &vi);     /* cmpi.l #fin,i */
+            else if (vi.kind == V_REG) op_ea(0xB080 | vi.reg << 9, &vend);  /* cmp.l fin,di */
+            else {
+                load_var(0, &vi);
+                op_ea(0xB080, &vend);                  /* cmp.l fin,d0 */
+            }
+            branch(pass_n || down ? CC_GE : CC_LE, top);
+            if (!step_known && !pass_n) branch(CC_T, done);
+        }
     }
     def_label(done);
     repls.n = repl_base;

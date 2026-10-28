@@ -31,15 +31,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sin-emu", action="store_true")
     ap.add_argument("--errores", type=int, default=25, help="cuántos errores distintos enseñar")
+    ap.add_argument("filtro", nargs="?", default="", help="solo los ficheros con esto en el nombre")
     args = ap.parse_args()
 
     files = sorted((REPO / "tests").glob("test_*.dash")) + sorted((REPO / "examples").glob("*.dash"))
+    files = [f for f in files if args.filtro in f.name]
     tmp = Path(tempfile.mkdtemp(prefix="dashc-cobertura-"))
     ok, errors, runnable = [], collections.Counter(), []
     for f in files:
         exe = tmp / f"{f.parent.name}_{f.stem}"
-        r = subprocess.run([str(DASHC), f.name, "-o", str(exe)], capture_output=True, text=True,
-                           cwd=f.parent, errors="replace")
+        # como tests/run_tests.py: desde la raíz, con la ruta relativa (sale en los errores)
+        r = subprocess.run([str(DASHC), str(f.relative_to(REPO)), "-o", str(exe)], capture_output=True,
+                           text=True, cwd=REPO, errors="replace")
         if r.returncode == 0:
             ok.append(f)
             text = f.read_text(encoding="utf-8", errors="replace")
@@ -75,7 +78,14 @@ def main():
         if got == want and r.rc == rc:
             good += 1
         else:
-            bad.append(f"{f.parent.name}/{f.name}")
+            diff = f"rc {r.rc} (espera {rc})"
+            for i in range(max(len(got), len(want))):
+                g = got[i] if i < len(got) else "<nada>"
+                w = want[i] if i < len(want) else "<nada>"
+                if g != w:
+                    diff = f"línea {i + 1}: {g!r}, espera {w!r}"
+                    break
+            bad.append(f"{f.parent.name}/{f.name}: {diff}")
     print(f"\nen el A1200, con la salida esperada: {good} de {len(runnable)}")
     for b in bad:
         print(f"  distinto: {b}")
