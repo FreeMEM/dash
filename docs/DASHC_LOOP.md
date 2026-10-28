@@ -39,9 +39,13 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   una vez y la usan todos los programas, y se actualiza sin recompilarlos. Hace falta: la librería con su tabla de
   funciones (libinit de bebbo), dentro lo de libc que necesitan (`realloc`, `snprintf`...), que la abran varios
   programas a la vez (estado por apertura) y que dashc llame a funciones de librería (registros y base) con
-  `@extern("dashjs.library")`. Antes, Tachyon compilando con `@link` (D7).
-  Nombres propios (`dashjs.library`, `dashhtml5.library`), no `quickjs`/`hubbub`: que otro port (NetSurf...) no
-  pise la versión de Dash ni Dash la suya; el programa pide una versión mínima al abrirla.
+  `@extern("tachyonjs.library")`. Antes, Tachyon compilando con `@link` (D7).
+  Nombres propios, no `quickjs`/`hubbub`: que otro port (NetSurf...) no pise la versión de Tachyon ni Tachyon la
+  suya; el programa pide una versión mínima al abrirla.
+  Decidido por el usuario (2026-10-28): van con Tachyon, que las necesita, y su instalador las pone en `LIBS:`
+  (solo si la suya es más nueva). Hacerlas es trabajo de Tachyon; lo de Dash es que dashc llame a funciones de
+  una `.library` (`@extern("x.library")`: por registros, con su base). Nombres decididos por el usuario
+  (2026-10-28): `tachyonjs.library` y `tachyonhtml5.library` (no `dash...`).
 - D9 Cierre: `./dash` llama a dashc (o dashc pasa a ser `dash`), documentación en dos idiomas, versión 2.0.
 
 ## Bitácora
@@ -318,3 +322,11 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     comparados con el runtime sin preparar, `--runtime runtime/dashrt.o`); el dashc del Amiga hace los mismos que
     el del PC (dobles, structs, aritmetica, gadgets).
   - Batería bien (44 de 44) y cobertura igual (208 de 312; 135 de 135).
+- D7 (7.ª parte): `inflate_auto(src, n, dest, max)` (705 builtins): gzip (su cabecera, también con FEXTRA, FNAME,
+  FCOMMENT y FHCRC; el final no se mira), zlib (con su adler32) o deflate crudo, por sus primeros bytes: lo que
+  hacía el `_http_inflar` de Tachyon con stb_image. En `runtime/zlib/dash_inflate.c`. tests/test_inflate_auto.dash
+  (las cabeceras hechas a mano en Dash), igual con gcc y con dashc.
+  - Encontrado al escribirlo, un fallo de ./dash: `CONSTANTE.length` de una constante de texto daba el largo de
+    una lista (basura: leía los bytes del texto). Ahora `strlen`. dashc ya lo hacía bien.
+    tests/test_const_string_length.dash.
+  - Tests de ./dash: 460 bien; batería de dashc bien; cobertura: compilan 210 de 314 y en el A1200 137 de 137.

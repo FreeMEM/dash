@@ -4626,6 +4626,10 @@ ZLIB_FUNCTIONS = {
                     "Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, "
                     "or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, "
                     "-3 if there is no memory (zlib)"),
+    "inflate_auto": _buf("inflate_auto", ["src", "n", "dest", "max"], "LONG",
+                         "_dash_inflate_auto(${src}, ${n}, ${dest}, ${max})",
+                         "inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with "
+                         "Content-Encoding gzip or deflate): the bytes written, or as inflate"),
     "deflate": _buf("deflate", ["src", "n", "dest", "max", "level"], "LONG",
                     "_dash_deflate(${src}, ${n}, ${dest}, ${max}, ${level})",
                     "Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; "

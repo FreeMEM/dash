@@ -1,0 +1,10 @@
+# Test: .length of a String constant (a C literal in ./dash: it gave the length of an array, garbage)
+# expect-out: 11 11 11
+
+const TEXTO = "hola, Amiga"
+
+Main
+    n = TEXTO.length
+    t = TEXTO
+    Print "#{n} #{TEXTO.length} #{t.length}"
+end

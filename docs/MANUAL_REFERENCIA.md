@@ -4413,7 +4413,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
-| Compresión (zlib) | 3 | `inflate`, `deflate`, `crc32` |
+| Compresión (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double y texto | 2 | `str_from_double`, `str_to_double` |
@@ -4423,7 +4423,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 53 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
 | MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **704** | |
+| **Total** | **705** | |
 
 ### Colores Estandar Amiga
 

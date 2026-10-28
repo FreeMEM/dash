@@ -5360,6 +5360,11 @@ static LONG _dash_inflate(APTR src, LONG n, APTR dst, LONG max) {
     return dash_zlib_inflate(src, n, dst, max);
 }
 
+long dash_zlib_inflate_auto(const void *src, long n, void *dst, long max);
+static LONG _dash_inflate_auto(APTR src, LONG n, APTR dst, LONG max) {
+    return dash_zlib_inflate_auto(src, n, dst, max);
+}
+
 static LONG _dash_deflate(APTR src, LONG n, APTR dst, LONG max, LONG level) {
     return dash_zlib_deflate(src, n, dst, max, level);
 }
@@ -20352,6 +20357,10 @@ static {ret_type} {method_name}({params_str}) {{
                     self.uses_strings = True
                     self.uses_text = True
                     return f"_dash_str_len({node.object_name})"
+                # a String constant is a C literal (#define): its length, not an array's
+                const = self.analysis.program.get_constant(node.object_name)
+                if const and isinstance(const.value, StringLiteral) and node.object_name not in self.var_types:
+                    return f"((LONG)strlen({node.object_name}))"
                 if var_type and (var_type == "dict" or var_type.startswith("dict:")):
                     self.uses_dicts = True
                     return f"DashDict_length({node.object_name})"

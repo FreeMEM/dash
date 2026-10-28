@@ -1,0 +1,83 @@
+# Test: inflate_auto (Dash 2.0, what Tachyon's HTTP did with @native): gzip (with FNAME and FEXTRA), zlib (with its
+# adler32) and raw deflate, told by their first bytes; a bad zlib checksum and data cut short give -1.
+# expect-out: crudo: 52 true
+# expect-out: gzip: 52 true
+# expect-out: gzip con nombre y extra: 52 true
+# expect-out: zlib: 52 true
+# expect-out: zlib con suma mala: -1
+# expect-out: cortado: -1
+# expect-out: no cabe: -2
+
+const TEXTO = "hola hola hola, Amiga: gzip, zlib y deflate crudo..."
+
+# los bytes de un búfer (desde) en otro, desde la posición donde
+func copiar(a: Pointer, n: Int, b: Pointer, donde: Int)
+    for i in (0..n - 1)
+        buffer_set_byte(b, donde + i, buffer_get_byte(a, i))
+    end
+end
+
+func probar(nombre: String, b: Pointer, n: Int)
+    sal = buffer_alloc(200)
+    r = inflate_auto(b, n, sal, 200)
+    ok = r == TEXTO.length and str_from_buffer(sal, 0, r) == TEXTO
+    Print "#{nombre}: #{r} #{ok}"
+    buffer_free(sal)
+end
+
+Main
+    n = TEXTO.length
+    src = buffer_alloc(n + 1)
+    str_to_buffer(TEXTO, src, 0)
+    raw = buffer_alloc(200)
+    m = deflate(src, n, raw, 200, 9)
+    probar("crudo", raw, m)
+
+    # gzip: 1f 8b 08, banderas, 6 bytes, el deflate y el crc32 y el tamaño (que no se miran)
+    g = buffer_alloc(300)
+    buffer_set_byte(g, 0, 0x1f)
+    buffer_set_byte(g, 1, 0x8b)
+    buffer_set_byte(g, 2, 8)
+    copiar(raw, m, g, 10)
+    buffer_set_long(g, 10 + m, crc32(src, n, 0))
+    buffer_set_long(g, 14 + m, n)
+    probar("gzip", g, m + 18)
+    # con FEXTRA (4: 2 bytes de largo y eso) y FNAME (8: un nombre terminado en 0)
+    buffer_set_byte(g, 3, 4 + 8)
+    buffer_set_byte(g, 10, 3)
+    buffer_set_byte(g, 11, 0)
+    buffer_set_byte(g, 12, 7)
+    buffer_set_byte(g, 13, 7)
+    buffer_set_byte(g, 14, 7)
+    str_to_buffer("hola.txt", g, 15)
+    buffer_set_byte(g, 23, 0)
+    copiar(raw, m, g, 24)
+    probar("gzip con nombre y extra", g, m + 32)
+
+    # zlib: 78 da, el deflate y el adler32 (big-endian)
+    z = buffer_alloc(300)
+    buffer_set_byte(z, 0, 0x78)
+    buffer_set_byte(z, 1, 0xda)
+    copiar(raw, m, z, 2)
+    a = 1
+    b = 0
+    for i in (0..n - 1)
+        a = (a + buffer_get_byte(src, i)) % 65521
+        b = (b + a) % 65521
+    end
+    buffer_set_byte(z, 2 + m, b >> 8)
+    buffer_set_byte(z, 3 + m, b & 255)
+    buffer_set_byte(z, 4 + m, a >> 8)
+    buffer_set_byte(z, 5 + m, a & 255)
+    probar("zlib", z, m + 6)
+    buffer_set_byte(z, 5 + m, (a + 1) & 255)
+    sal = buffer_alloc(200)
+    Print "zlib con suma mala: #{inflate_auto(z, m + 6, sal, 200)}"
+    Print "cortado: #{inflate_auto(g, 30, sal, 200)}"
+    Print "no cabe: #{inflate_auto(raw, m, sal, 10)}"
+    buffer_free(sal)
+    buffer_free(z)
+    buffer_free(g)
+    buffer_free(raw)
+    buffer_free(src)
+end

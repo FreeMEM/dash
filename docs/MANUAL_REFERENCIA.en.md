@@ -4413,7 +4413,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
-| Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
+| Compression (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparing and searching in a buffer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double and text | 2 | `str_from_double`, `str_to_double` |
@@ -4423,7 +4423,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 53 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
 | MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **704** | |
+| **Total** | **705** | |
 
 ### Standard Amiga Colors
 

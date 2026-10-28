@@ -475,6 +475,8 @@ const BuiltinInfo builtin_info[] = {
     {"image_width", 1, 1, 0, 0},
     {"inflate", 4, 1, 0, 0},
     {"inflate", 4, 1, 0, 0},
+    {"inflate_auto", 4, 1, 0, 0},
+    {"inflate_auto", 4, 1, 0, 0},
     {"input_active_title", 0, 3, 1, 0},
     {"input_active_title", 0, 3, 1, 0},
     {"input_button", 2, 0, 1, 0},
@@ -1410,7 +1412,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1408;
+const int builtin_count = 1410;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},
