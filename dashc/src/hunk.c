@@ -1,6 +1,7 @@
-/* Enlazador: junta el código y los datos del programa con los hunks del runtime
-   (un objeto Hunk de gcc, ya enlazado con ld -r) y escribe el ejecutable. */
+/* Enlazador: junta el código y los datos del programa con los hunks del runtime que usa
+   (un objeto Hunk de gcc, ya enlazado con ld -r, con un hunk por función) y escribe el ejecutable. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "dashc.h"
@@ -189,10 +190,17 @@ static Hunk own_hunk(int type, Buf *b)
     return h;
 }
 
+/* Solo va lo que se usa: desde el código y los datos del programa, los hunks del runtime a los que
+   llega alguna reubicación (el runtime va compilado con -ffunction-sections: un hunk por función).
+   Los que van se juntan en un hunk de código, uno de datos y uno de BSS. */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
 {
     FILE *f;
-    int i, j;
+    int i, j, k, nout;
+    int *keep, *outh, *stack, sp = 0;
+    uint32_t *base, outsize[3] = {0, 0, 0};
+    static const int outtype[3] = {HUNK_CODE, HUNK_DATA, HUNK_BSS};
+    struct { HReloc *v; int n, cap; } outrel[3] = {{0}};
 
     VEC_PUSH(hunks, own_hunk(HUNK_CODE, &obj->code));   /* HK_CODE = 0 */
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
@@ -211,30 +219,87 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         }
     }
 
+    /* lo que se alcanza desde el programa */
+    keep = xmalloc(sizeof(int) * hunks.n);
+    stack = xmalloc(sizeof(int) * hunks.n);
+    memset(keep, 0, sizeof(int) * hunks.n);
+    keep[0] = keep[1] = 1;
+    stack[sp++] = 0;
+    stack[sp++] = 1;
+    while (sp) {
+        Hunk *h = &hunks.v[stack[--sp]];
+        for (j = 0; j < h->relocs.n; j++)
+            if (!keep[h->relocs.v[j].target]) {
+                keep[h->relocs.v[j].target] = 1;
+                stack[sp++] = h->relocs.v[j].target;
+            }
+    }
+
+    /* dónde va cada uno en el hunk de su tipo (0 código, 1 datos, 2 BSS) */
+    base = xmalloc(sizeof(uint32_t) * hunks.n);
+    outh = xmalloc(sizeof(int) * hunks.n);
+    for (i = 0; i < hunks.n; i++) {
+        Hunk *h = &hunks.v[i];
+        if (!keep[i]) continue;
+        if (h->memflags) fatal("runtime: un hunk con memoria chip o fast aún no se admite");
+        outh[i] = h->type == HUNK_CODE ? 0 : h->type == HUNK_DATA ? 1 : 2;
+        base[i] = outsize[outh[i]];
+        outsize[outh[i]] += (h->size + 3) & ~3u;
+    }
+    /* las reubicaciones, a su sitio en los hunks juntados */
+    for (i = 0; i < hunks.n; i++) {
+        Hunk *h = &hunks.v[i];
+        if (!keep[i]) continue;
+        for (j = 0; j < h->relocs.n; j++) {
+            HReloc r;
+            int t = h->relocs.v[j].target;
+            uint8_t *p = h->data + h->relocs.v[j].off;
+            put_long(p, get_long(p) + base[t]);
+            r.off = base[i] + h->relocs.v[j].off;
+            r.target = outh[t];
+            VEC_PUSH(outrel[outh[i]], r);
+        }
+    }
+    nout = outsize[2] ? 3 : 2;
+    if (getenv("DASHC_MAPA"))
+        for (i = 2; i < hunks.n; i++)
+            if (keep[i]) {
+                const char *name = "?";
+                for (j = 0; j < syms.n; j++)
+                    if (syms.v[j].hunk == i) name = syms.v[j].name;
+                fprintf(stderr, "%6u %c %s\n", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], name);
+            }
+
     f = fopen(out, "wb");
     if (!f) fatal("no se puede escribir %s", out);
     wl(f, HUNK_HEADER);
     wl(f, 0);                            /* sin librerías residentes */
-    wl(f, (uint32_t)hunks.n);
+    wl(f, (uint32_t)nout);
     wl(f, 0);
-    wl(f, (uint32_t)hunks.n - 1);
-    for (i = 0; i < hunks.n; i++) wl(f, hunks.v[i].size / 4 | hunks.v[i].memflags);
-    for (i = 0; i < hunks.n; i++) {
-        Hunk *h = &hunks.v[i];
-        wl(f, (uint32_t)h->type);
-        wl(f, h->size / 4);
-        if (h->data) fwrite(h->data, 1, h->size, f);
-        if (h->relocs.n) {
+    wl(f, (uint32_t)nout - 1);
+    for (k = 0; k < nout; k++) wl(f, outsize[k] / 4);
+    for (k = 0; k < nout; k++) {
+        static const uint8_t zero[4];
+        wl(f, (uint32_t)outtype[k]);
+        wl(f, outsize[k] / 4);
+        if (k < 2)
+            for (i = 0; i < hunks.n; i++) {
+                Hunk *h = &hunks.v[i];
+                if (!keep[i] || outh[i] != k) continue;
+                fwrite(h->data, 1, h->size, f);
+                fwrite(zero, 1, ((h->size + 3) & ~3u) - h->size, f);
+            }
+        if (outrel[k].n) {
             /* agrupadas por el hunk al que apuntan */
             wl(f, HUNK_RELOC32);
-            for (j = 0; j < hunks.n; j++) {
-                int k, count = 0;
-                for (k = 0; k < h->relocs.n; k++) count += h->relocs.v[k].target == j;
+            for (j = 0; j < nout; j++) {
+                int count = 0, m;
+                for (m = 0; m < outrel[k].n; m++) count += outrel[k].v[m].target == j;
                 if (!count) continue;
                 wl(f, (uint32_t)count);
                 wl(f, (uint32_t)j);
-                for (k = 0; k < h->relocs.n; k++)
-                    if (h->relocs.v[k].target == j) wl(f, h->relocs.v[k].off);
+                for (m = 0; m < outrel[k].n; m++)
+                    if (outrel[k].v[m].target == j) wl(f, outrel[k].v[m].off);
             }
             wl(f, 0);
         }

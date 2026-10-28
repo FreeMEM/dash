@@ -25,11 +25,12 @@ build/rt_blob.c: runtime/dashrt.o
 runtime:
 	@mkdir -p build
 	python3 runtime/gen_lib.py build/dashlib_rt.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-common -Iruntime -c build/dashlib_rt.c -o build/dashlib.o
-	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-builtin -fno-tree-loop-distribute-patterns \
+	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-common -ffunction-sections -fdata-sections -Iruntime -c build/dashlib_rt.c -o build/dashlib.o
+	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-builtin -fno-tree-loop-distribute-patterns -ffunction-sections \
 	  -c runtime/rt_libc.c -o build/rt_libc.o
 	$(AMIGA)gcc -m68000 -c runtime/rt_math.s -o build/rt_math.o
-	$(AMIGA)ld -r build/dashlib.o build/rt_libc.o build/rt_math.o -o runtime/dashrt.o
+	# sin ld -r, que juntaría las secciones: los objetos uno tras otro (hunk.c lee las unidades)
+	cat build/dashlib.o build/rt_libc.o build/rt_math.o > runtime/dashrt.o
 
 test: dashc
 	python3 tests/run.py
