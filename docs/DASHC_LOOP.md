@@ -303,3 +303,18 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Para Tachyon (decodificar imágenes, red de fondo) harán falta búferes compartidos: los `buffer_*` son
     builtins de enteros y valen ya dentro de una tarea.
   - Batería bien (44 de 44) y cobertura igual (208 de 312; 135 de 135).
+- D8 (1.ª parte): el dashc del Amiga, más rápido y más pequeño.
+  - Medido dentro del emulador con `dashc --tiempos` (lo que lleva cada fase): compilar un "hola" costaba 5,8 s
+    en el A1200 y 19,5 s en el A500, casi todo en preparar el runtime en cada compilación (leer sus 2.200 hunks,
+    2,4 s; trocear sus textos, 2,2 s; una búsqueda de `_dash_win` por todos los símbolos en cada limpieza, 0,5 s).
+  - Ahora el runtime va preparado (`dashc --preparar`, al construir dashc; formato "DRT1" en hunk.c): leído, con
+    los textos troceados y los nombres atados. Al compilar se carga sin copiar nada, las reubicaciones de un hunk
+    se leen solo si se mira, los datos se copian solo los de los hunks que van, y lo de `_dash_win`/`_dash_rp` se
+    busca una vez. Un "hola": 0,66 s en el A1200 y 2,2 s en el A500 (aritmetica: 0,87 s y 3,0 s).
+  - Comprimir los dos runtimes con zlib dejaba el dashc del Amiga en 668 KB pero añadía 4,5 s (A1200) y 12,7 s
+    (A500) por descomprimir: solo va comprimido el de `--memcheck` (se descomprime solo entonces). El dashc del
+    Amiga: 1,0 MB (era 1,4 MB con rt_compat).
+  - Los ejecutables, idénticos a los de antes (todos los de dashc/tests, `--memcheck`, `externo` y QuickJS,
+    comparados con el runtime sin preparar, `--runtime runtime/dashrt.o`); el dashc del Amiga hace los mismos que
+    el del PC (dobles, structs, aritmetica, gadgets).
+  - Batería bien (44 de 44) y cobertura igual (208 de 312; 135 de 135).

@@ -39,6 +39,8 @@ extern const char *src_name;   /* el fichero de los errores de ahora (fatal_at) 
 extern struct SrcFiles { const char **v; int n, cap; } src_files;
 extern int lex_file;            /* el número del fichero que se está leyendo (Token.file) */
 void fatal(const char *fmt, ...);
+void tiempo(const char *fase);   /* --tiempos: lo que lleva cada fase (para medir en el Amiga) */
+extern int tiempos;
 void fatal_at(int line, int col, const char *fmt, ...);
 
 /* ---- léxico (lexer.c) ---- */
@@ -258,6 +260,7 @@ extern const KeyName key_names[];
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);
-void link_add(const char *path);     /* @link: un objeto o una biblioteca más que enlazar */
+void link_add(const char *path);
+void prepare_runtime(const uint8_t *rt, size_t len, const char *out);   /* dashc --preparar: hunk.c */     /* @link: un objeto o una biblioteca más que enlazar */
 
 #endif

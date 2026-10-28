@@ -21,6 +21,9 @@ typedef struct {
     uint8_t *data;       /* NULL en BSS */
     const char *secname; /* su sección (HUNK_NAME), para DASHC_MAPA */
     int align2;          /* un texto constante suelto: basta con alinearlo a 2 (split_strings) */
+    int shared;          /* data apunta al runtime preparado (de solo lectura): se copia antes de cambiarla */
+    const uint8_t *lazy; /* sus reubicaciones en el runtime preparado, aún sin leer (relocs_ready) */
+    int lazy_n, lazy_base;
     struct { HReloc *v; int n, cap; } relocs;
 } Hunk;
 
@@ -33,6 +36,8 @@ typedef struct { int hunk; uint32_t off; char *name; } Ref;
 static struct { Ref *v; int n, cap; } refs;
 
 static const uint8_t *rp, *rend;
+#define DRT_MAGIC 0x44525431u     /* "DRT1": el runtime preparado (prepare_runtime) */
+static void load_prepared(const uint8_t *p, size_t len);
 static const char *obj_name = "runtime";     /* el objeto que se lee, para los errores */
 
 /* los símbolos comunes (variables de C sin -fno-common): un BSS para cada uno que nadie define */
@@ -232,7 +237,8 @@ int runtime_has(const char *sym)
     int i;
     if (!loaded) {
         loaded = 1;
-        read_object(rt_blob, rt_blob_len);
+        if (rt_blob_len >= 4 && get_long(rt_blob) == DRT_MAGIC) load_prepared(rt_blob, rt_blob_len);
+        else read_object(rt_blob, rt_blob_len);
         for (i = 0; i < syms.n; i++) VEC_PUSH(names, (char *)syms.v[i].name);
         hunks.n = 0;
         syms.n = 0;
@@ -244,10 +250,13 @@ int runtime_has(const char *sym)
 }
 
 /* apunta en el long de (hunk, off) la dirección del símbolo */
+static uint8_t *own_data(int i);
+static void relocs_ready(int i);
+
 static void bind(int hunk, uint32_t off, const char *name)
 {
     Sym *s = find_sym(name);
-    uint8_t *p = hunks.v[hunk].data + off;
+    uint8_t *p;
     if (!s) {
         int i;
         if (!link_files.n) fatal("el runtime no tiene %s", name);
@@ -257,6 +266,7 @@ static void bind(int hunk, uint32_t off, const char *name)
         VEC_PUSH(missing, name);
         return;
     }
+    p = own_data(hunk) + off;
     put_long(p, get_long(p) + s->val);
     if (!s->abs) {
         HReloc r;
@@ -291,7 +301,9 @@ static void reach(int *keep, int *stack, int sp, const int *weak)
     int j;
     while (sp) {
         int cur = stack[--sp];
-        Hunk *h = &hunks.v[cur];
+        Hunk *h;
+        relocs_ready(cur);
+        h = &hunks.v[cur];
         for (j = 0; j < refs.n; j++)
             if (refs.v[j].hunk == cur) {
                 bind(cur, refs.v[j].off, refs.v[j].name);
@@ -308,13 +320,15 @@ static void reach(int *keep, int *stack, int sp, const int *weak)
 
 /* la ventana y el RastPort de dibujo actuales: los usan casi todos los runtimes de ventanas y gráficos
    (que sus limpiezas los toquen no dice que el programa use esos runtimes) */
+static int win_hunk = -2, rp_hunk = -2;
 static int shared_data(int d)
 {
-    int k;
-    for (k = 0; k < syms.n; k++)
-        if (syms.v[k].hunk == d && (!strcmp(syms.v[k].name, "__dash_win") || !strcmp(syms.v[k].name, "__dash_rp")))
-            return 1;
-    return 0;
+    if (win_hunk == -2) {
+        Sym *w = find_sym("__dash_win"), *r = find_sym("__dash_rp");
+        win_hunk = w && !w->abs ? w->hunk : -1;
+        rp_hunk = r && !r->abs ? r->hunk : -1;
+    }
+    return d == win_hunk || d == rp_hunk;
 }
 
 /* ¿usa el hunk t datos o BSS que van en el programa y no son del arranque? (sus reubicaciones y sus
@@ -322,7 +336,9 @@ static int shared_data(int d)
 static int touches_own_data(int t, const int *keep, const int *core)
 {
     int j, d;
-    Hunk *h = &hunks.v[t];
+    Hunk *h;
+    relocs_ready(t);
+    h = &hunks.v[t];
     for (j = 0; j < h->relocs.n + refs.n; j++) {
         if (j < h->relocs.n) {
             d = h->relocs.v[j].target;
@@ -430,6 +446,178 @@ static void split_strings(int first)
     }
 }
 
+/* ---- el runtime preparado (dashc --preparar, al construir dashc) ----
+   Leer el objeto Hunk del runtime (2.200 hunks), trocear sus textos y atar sus nombres costaba 5 s en cada
+   compilación en un A1200: se hace una vez y se guarda así (en longs, big-endian):
+     "DRT1", nhunks, nsyms, nrefs, nrelocs, tamaño de los nombres, tamaño de los datos
+     por hunk: tipo, tamaño, align2, nombre de sección (o ~0), sitio de sus datos (o ~0 en BSS), 1.ª reubicación, cuántas
+     reubicaciones: sitio, hunk
+     símbolos: nombre, hunk (o ~0 si es absoluto), valor
+     referencias sin atar (a lo que el runtime no tiene: las ata lo de @link, o es un error si se llega): hunk, sitio, nombre
+     los nombres (terminados en 0) y los datos */
+
+static uint32_t strtab_add(Buf *st, const char *s)
+{
+    uint32_t off;
+    if (!s) return ~0u;
+    off = (uint32_t)st->n;
+    buf_bytes(st, s, strlen(s) + 1);
+    return off;
+}
+
+void prepare_runtime(const uint8_t *rt, size_t len, const char *out)
+{
+    Buf hb = {0}, rb = {0}, sb = {0}, fb = {0}, st = {0}, db = {0}, head = {0};
+    int i, j, nrel = 0, nref = 0;
+    FILE *f;
+    read_object(rt, len);
+    split_strings(0);
+    for (j = 0; j < refs.n; j++)
+        if (find_sym(refs.v[j].name)) {
+            bind(refs.v[j].hunk, refs.v[j].off, refs.v[j].name);
+            refs.v[j].hunk = -1;
+        }
+    for (i = 0; i < hunks.n; i++) {
+        Hunk *h = &hunks.v[i];
+        buf_long(&hb, (uint32_t)h->type);
+        buf_long(&hb, h->size);
+        buf_long(&hb, (uint32_t)h->align2 | h->memflags);
+        buf_long(&hb, strtab_add(&st, h->secname));
+        if (h->data) {
+            buf_long(&hb, (uint32_t)db.n);
+            buf_bytes(&db, h->data, h->size);
+        } else {
+            buf_long(&hb, ~0u);
+        }
+        buf_long(&hb, (uint32_t)nrel);
+        buf_long(&hb, (uint32_t)h->relocs.n);
+        for (j = 0; j < h->relocs.n; j++) {
+            buf_long(&rb, h->relocs.v[j].off);
+            buf_long(&rb, (uint32_t)h->relocs.v[j].target);
+        }
+        nrel += h->relocs.n;
+    }
+    for (i = 0; i < syms.n; i++) {
+        buf_long(&sb, strtab_add(&st, syms.v[i].name));
+        buf_long(&sb, syms.v[i].abs ? ~0u : (uint32_t)syms.v[i].hunk);
+        buf_long(&sb, syms.v[i].val);
+    }
+    for (j = 0; j < refs.n; j++)
+        if (refs.v[j].hunk >= 0) {
+            buf_long(&fb, (uint32_t)refs.v[j].hunk);
+            buf_long(&fb, refs.v[j].off);
+            buf_long(&fb, strtab_add(&st, refs.v[j].name));
+            nref++;
+        }
+    while (st.n & 3) buf_byte(&st, 0);
+    buf_long(&head, DRT_MAGIC);
+    buf_long(&head, (uint32_t)hunks.n);
+    buf_long(&head, (uint32_t)syms.n);
+    buf_long(&head, (uint32_t)nref);
+    buf_long(&head, (uint32_t)nrel);
+    buf_long(&head, (uint32_t)st.n);
+    buf_long(&head, (uint32_t)db.n);
+    if (!(f = fopen(out, "wb"))) fatal("no se puede escribir %s", out);
+    fwrite(head.p, 1, head.n, f);
+    fwrite(hb.p, 1, hb.n, f);
+    fwrite(rb.p, 1, rb.n, f);
+    fwrite(sb.p, 1, sb.n, f);
+    if (fb.n) fwrite(fb.p, 1, fb.n, f);
+    fwrite(st.p, 1, st.n, f);
+    fwrite(db.p, 1, db.n, f);
+    if (fclose(f)) fatal("no se puede escribir %s", out);
+}
+
+/* carga el runtime preparado tras los hunks que ya hay; los datos se quedan en el blob hasta que se cambian */
+static void load_prepared(const uint8_t *p, size_t len)
+{
+    uint32_t nh, ns, nr, nrel, stl, i;
+    const uint8_t *hp, *rp0, *sp0, *fp, *strs, *data;
+    int base = hunks.n;
+    if (len < 28) fatal("runtime preparado cortado");
+    nh = get_long(p + 4);
+    ns = get_long(p + 8);
+    nr = get_long(p + 12);
+    nrel = get_long(p + 16);
+    stl = get_long(p + 20);
+    hp = p + 28;
+    rp0 = hp + nh * 28;
+    sp0 = rp0 + nrel * 8;
+    fp = sp0 + ns * 12;
+    strs = fp + nr * 12;
+    data = strs + stl;
+    if (data + get_long(p + 24) > p + len) fatal("runtime preparado cortado");
+    /* (sitio para todos de una vez: sin copiar las listas cada vez que crecen) */
+    if (hunks.cap < hunks.n + (int)nh) {
+        hunks.cap = hunks.n + (int)nh + 8;
+        hunks.v = xrealloc(hunks.v, sizeof(Hunk) * hunks.cap);
+    }
+    if (syms.cap < syms.n + (int)ns) {
+        syms.cap = syms.n + (int)ns + 64;
+        syms.v = xrealloc(syms.v, sizeof(Sym) * syms.cap);
+    }
+    for (i = 0; i < nh; i++, hp += 28) {
+        Hunk h = {0};
+        uint32_t flags = get_long(hp + 8), name = get_long(hp + 12), d = get_long(hp + 16);
+        uint32_t r0 = get_long(hp + 20), rn = get_long(hp + 24);
+        h.type = (int)get_long(hp);
+        h.size = get_long(hp + 4);
+        h.align2 = flags & 1;
+        h.memflags = flags & 0xC0000000u;
+        h.secname = name == ~0u ? NULL : (const char *)strs + name;
+        if (d != ~0u) {
+            h.data = (uint8_t *)(data + d);
+            h.shared = 1;
+        }
+        if (rn) {
+            /* (se leen solo las de los hunks que se miran: casi todos se quedan fuera) */
+            h.lazy = rp0 + r0 * 8;
+            h.lazy_n = (int)rn;
+            h.lazy_base = base;
+        }
+        VEC_PUSH(hunks, h);
+    }
+    for (i = 0; i < ns; i++, sp0 += 12) {
+        uint32_t hk = get_long(sp0 + 4);
+        add_sym((const char *)strs + get_long(sp0), hk == ~0u ? -1 : base + (int)hk, get_long(sp0 + 8), hk == ~0u);
+    }
+    for (i = 0; i < nr; i++, fp += 12) {
+        Ref r;
+        r.hunk = base + (int)get_long(fp);
+        r.off = get_long(fp + 4);
+        r.name = (char *)strs + get_long(fp + 8);
+        VEC_PUSH(refs, r);
+    }
+}
+
+/* las reubicaciones del hunk i, leídas del runtime preparado si aún no lo estaban */
+static void relocs_ready(int i)
+{
+    Hunk *h = &hunks.v[i];
+    int j;
+    if (!h->lazy) return;
+    h->relocs.v = xmalloc(sizeof(HReloc) * h->lazy_n);
+    h->relocs.n = h->relocs.cap = h->lazy_n;
+    for (j = 0; j < h->lazy_n; j++) {
+        h->relocs.v[j].off = get_long(h->lazy + j * 8);
+        h->relocs.v[j].target = h->lazy_base + (int)get_long(h->lazy + j * 8 + 4);
+    }
+    h->lazy = NULL;
+}
+
+/* los datos del hunk i, propios (copiados del runtime preparado si hacía falta) para cambiarlos */
+static uint8_t *own_data(int i)
+{
+    Hunk *h = &hunks.v[i];
+    if (h->shared) {
+        uint8_t *d = xmalloc(h->size);
+        memcpy(d, h->data, h->size);
+        h->data = d;
+        h->shared = 0;
+    }
+    return h->data;
+}
+
 /* Solo va lo que se usa: desde el código y los datos del programa, los hunks del runtime a los que
    llega alguna reubicación (el runtime va compilado con -ffunction-sections: un hunk por función).
    Los que van se juntan en un hunk de código, uno de datos y uno de BSS. */
@@ -444,8 +632,13 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
 
     VEC_PUSH(hunks, own_hunk(HUNK_CODE, &obj->code));   /* HK_CODE = 0 */
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
-    read_object(rt, rtlen);
-    if (!getenv("DASHC_SIN_TROCEAR")) split_strings(2);
+    if (rtlen >= 4 && get_long(rt) == DRT_MAGIC) {
+        load_prepared(rt, rtlen);
+    } else {
+        read_object(rt, rtlen);
+        if (!getenv("DASHC_SIN_TROCEAR")) split_strings(2);
+    }
+    tiempo("runtime");
     for (i = 0; i < link_files.n; i++) read_linked(link_files.v[i]);
     /* un común que nadie define: un BSS suyo */
     for (i = 0; i < commons.n; i++)
@@ -486,6 +679,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     stack[sp++] = 0;
     stack[sp++] = 1;
     reach(keep, stack, sp, weak);
+    tiempo("alcanzar");
 
     /* La función de un puntero débil (la limpieza de un runtime) va si toca datos que el programa usa y
        que no son de todos (los del arranque: las bases de las librerías, _dash_win...): la de los
@@ -528,14 +722,17 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     /* un puntero débil a algo que no va: 0, sin reubicación */
     for (i = 0; i < hunks.n; i++)
         if (keep[i] && weak[i]) {
-            Hunk *h = &hunks.v[i];
+            Hunk *h;
+            relocs_ready(i);
+            h = &hunks.v[i];
             for (j = 0; j < h->relocs.n; j++)
                 if (!keep[h->relocs.v[j].target]) {
-                    put_long(h->data + h->relocs.v[j].off, 0);
+                    put_long(own_data(i) + h->relocs.v[j].off, 0);
                     h->relocs.v[j--] = h->relocs.v[--h->relocs.n];
                 }
         }
 
+    tiempo("limpiezas");
     /* dónde va cada uno en el hunk de su tipo (0 código, 1 datos, 2 BSS) */
     base = xmalloc(sizeof(uint32_t) * hunks.n);
     outh = xmalloc(sizeof(int) * hunks.n);
@@ -550,12 +747,14 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     for (k = 0; k < 3; k++) outsize[k] = (outsize[k] + 3) & ~3u;
     /* las reubicaciones, a su sitio en los hunks juntados */
     for (i = 0; i < hunks.n; i++) {
-        Hunk *h = &hunks.v[i];
+        Hunk *h;
         if (!keep[i]) continue;
+        relocs_ready(i);
+        h = &hunks.v[i];
         for (j = 0; j < h->relocs.n; j++) {
             HReloc r;
             int t = h->relocs.v[j].target;
-            uint8_t *p = h->data + h->relocs.v[j].off;
+            uint8_t *p = own_data(i) + h->relocs.v[j].off;
             put_long(p, get_long(p) + base[t]);
             r.off = base[i] + h->relocs.v[j].off;
             r.target = outh[t];

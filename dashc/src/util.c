@@ -4,7 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <time.h>
 #include "dashc.h"
+
+int tiempos;   /* --tiempos */
+
+void tiempo(const char *fase)
+{
+    static clock_t last;
+    clock_t now;
+    if (!tiempos) return;
+    if (!last) last = clock();
+    now = clock();
+    printf("%-12s %6ld ms\n", fase, (long)((now - last) * 1000 / CLOCKS_PER_SEC));
+    last = now;
+}
 
 const char *src_name = "?";
 struct SrcFiles src_files;
