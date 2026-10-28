@@ -6,14 +6,17 @@
 CC ?= cc
 CFLAGS ?= -O2 -Wall -Wextra -std=c99
 AMIGA = /opt/amiga/bin/m68k-amigaos-
-SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c
+# los literales Double, con el s2d de Ryu (exacto; el strtod de libnix falla en la última cifra)
+RYU = -I../runtime/ryu ../runtime/ryu/dash_ryu.c
+SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c src/dashui.c
 
 dashc: $(SRC) src/dashc.h build/rt_blob.c build/builtins_tab.c
-	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c
+	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c $(RYU)
 
 amiga: build/dashc.amiga
 build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob.c build/builtins_tab.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c
+	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c $(RYU) \
+		build/softfloat_df.o build/softfloat.o build/fastfp.o -lm   # (el float por software, como ./dash: el de la ROM se cuelga en FS-UAE)
 
 # lo que pide y devuelve cada builtin (la tabla va en git: no hace falta Python para construir dashc)
 build/builtins_tab.c: runtime/builtins_tab.c

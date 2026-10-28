@@ -4,6 +4,8 @@
 
 #include "dashc.h"
 
+int dash_ryu_s2d(const char *s, int len, double *out);   /* runtime/ryu/dash_ryu.c */
+
 static const char *kw_names[] = {
     "func", "end", "if", "elif", "else", "while", "for", "in", "step", "return",
     "break", "continue", "var", "const", "Main", "Print", "and", "or", "not",
@@ -210,7 +212,10 @@ Token *lex(const char *src)
             if (base == 10 && *s == '.' && isdigit((unsigned char)s[1])) {
                 /* 1.5, 2.0e3: un Float */
                 char *end;
-                double d = strtod(b, &end);
+                double d = strtod(b, &end), exact;
+                /* (el double más cercano, con Ryu: el strtod de libnix, en el Amiga, falla a veces en la
+                   última cifra; con más de 17 cifras, el de strtod) */
+                if (!dash_ryu_s2d(b, (int)(end - b), &exact)) d = exact;
                 s = end;
                 t.kind = T_FLOAT;
                 t.val = float_bits(d);

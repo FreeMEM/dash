@@ -172,3 +172,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     iguales.
   - La cobertura arranca aparte los que piden MUI (`$DASH_EMU_SYS_MUI`).
 - Cobertura con MUI: compila 182 de 309 (58 %); en el A1200 (y los de MUI en su arranque), 112 de 112 iguales.
+- D6 (5.ª parte): `import "x.dashui"`. `dashc/src/dashui.c` (un lector de JSON y el generador de
+  compiler/dashui.py pasado a C) da el código Dash de las ventanas, que se compila como un módulo más. Con los 13
+  `.dashui` del repositorio, el mismo código que el de Python (`dashc --dashui fichero` lo saca). El dashc de
+  Amiga enlaza con `-lm` (strtod y los double de los literales: faltaba desde Float).
+- dashc dentro del Amiga (A1200 emulado), otra vez: se colgaba compilando Double (los double de libnix van a
+  mathieeedoubbas de la ROM, que en FS-UAE se cuelga como la de simple): ahora enlaza el float por software del
+  runtime (fp-bit en doble y simple, fastfp), como ./dash. Y el strtod de libnix fallaba en la última cifra de
+  `1.0e300`: los literales pasan por el s2d de Ryu (exacto, en los dos dashc). Con dobles, flotantes, dicc,
+  aritmetica, ventana y gadgets, ejecutables idénticos a los del PC.

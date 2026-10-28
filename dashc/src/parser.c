@@ -632,10 +632,10 @@ static void import_file(Program *p, Token *at, const char *path)
     }
     if (!full && (text = read_text(path)) != NULL) full = normalize(path);
     if (!full) fatal_at(at->line, at->col, "no encuentro %s para importarlo", path);
-    if (strlen(path) > 7 && !strcmp(path + strlen(path) - 7, ".dashui"))
-        fatal_at(at->line, at->col, "dashc (prueba): import de .dashui aún no está");
     for (i = 0; i < src_files.n; i++)
         if (!strcmp(src_files.v[i], full)) return;     /* ya importado */
+    /* un .dashui (ventanas del editor de MUI): su código Dash, como un módulo más */
+    if (strlen(path) > 7 && !strcmp(path + strlen(path) - 7, ".dashui")) text = dashui_generate(text, full);
     VEC_PUSH(src_files, full);
     lex_file = src_files.n - 1;
     src_name = full;

@@ -206,6 +206,7 @@ typedef struct {
 } Program;
 
 Program *parse(Token *toks);
+char *dashui_generate(const char *json, const char *filename);   /* dashui.c: un .dashui como Dash */
 char *read_text(const char *path);   /* main.c: el fichero entero, o NULL */
 int runtime_has(const char *sym);    /* hunk.c: ¿define el runtime este símbolo? */
 extern const uint8_t *rt_blob;       /* main.c: el runtime que se va a enlazar */

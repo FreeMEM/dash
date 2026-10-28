@@ -67,6 +67,13 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
+        else if (!strcmp(argv[i], "--dashui") && i + 1 < argc) {
+            /* el código Dash de un .dashui (para ver lo que compila un import) */
+            char *t = read_text(argv[++i]);
+            if (!t) fatal("no se puede leer %s", argv[i]);
+            fputs(dashui_generate(t, argv[i]), stdout);
+            return 0;
+        }
         else if (argv[i][0] == '-') usage();
         else if (!in) in = argv[i];
         else usage();
