@@ -8,19 +8,16 @@
 | d0 = d0 * d1 (los 32 bits bajos; el signo da igual)
 	.globl	__dash_mul
 __dash_mul:
-	move.l	d2,-(sp)
-	move.w	d0,d2		| ¿caben los dos en 16 bits con signo? muls.w
-	ext.l	d2
-	cmp.l	d0,d2
+	move.w	d0,a0		| ¿caben los dos en 16 bits con signo? muls.w
+	cmp.l	a0,d0		| (move.w a un registro de dirección extiende el signo)
 	jne	1f
-	move.w	d1,d2
-	ext.l	d2
-	cmp.l	d1,d2
+	move.w	d1,a0
+	cmp.l	a0,d1
 	jne	1f
 	muls.w	d1,d0
-	move.l	(sp)+,d2
 	rts
-1:	move.l	d3,-(sp)	| a*b = alo*blo + ((ahi*blo + alo*bhi) << 16)
+1:	move.l	d2,-(sp)
+	move.l	d3,-(sp)	| a*b = alo*blo + ((ahi*blo + alo*bhi) << 16)
 	move.w	d1,d2
 	mulu.w	d0,d2		| d2 = alo*blo
 	move.l	d1,d3
@@ -36,10 +33,33 @@ __dash_mul:
 	move.l	(sp)+,d2
 	rts
 
+| Camino rápido de / y %: dividendo >= 0, divisor de 1 a 65535 y cociente de 16
+| bits: un solo divu.w, que deja resto:cociente en d0. Si no, salta a 9f.
+	.macro	DIVU_RAPIDO
+	tst.l	d0
+	jmi	9f
+	cmp.l	#0xFFFF,d1
+	jhi	9f		| también un divisor negativo (sin signo es enorme)
+	tst.w	d1
+	jeq	9f		| divisor 0: el camino lento da el error
+	move.l	d0,a0
+	swap	d0
+	cmp.w	d1,d0
+	jcc	8f		| parte alta del dividendo >= divisor: no cabe
+	move.l	a0,d0
+	divu.w	d1,d0
+	.endm
+
 | d0 = d0 / d1, redondeando hacia cero (como en C)
 	.globl	__dash_div
 __dash_div:
-	move.l	d3,-(sp)
+	DIVU_RAPIDO
+	swap	d0
+	clr.w	d0
+	swap	d0		| el cociente, sin el resto
+	rts
+8:	move.l	a0,d0
+9:	move.l	d3,-(sp)
 	move.l	d0,d3
 	eor.l	d1,d3		| bit 31 de d3: el signo del cociente
 	tst.l	d0
@@ -58,7 +78,12 @@ __dash_div:
 | d0 = d0 % d1, con el signo del dividendo (como en C)
 	.globl	__dash_mod
 __dash_mod:
-	move.l	d3,-(sp)
+	DIVU_RAPIDO
+	clr.w	d0
+	swap	d0		| el resto
+	rts
+8:	move.l	a0,d0
+9:	move.l	d3,-(sp)
 	move.l	d0,d3
 	tst.l	d0
 	jpl	1f

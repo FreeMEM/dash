@@ -11,6 +11,7 @@ make                     # dashc para este ordenador
 ./dashc prog.dash -o prog
 make amiga               # build/dashc.amiga: dashc que corre en el Amiga (68000, OS 2.0+)
 make test                # tests/*.dash con dashc y con ./dash: misma salida en A1200 y A500 (FS-UAE)
+python3 bench/bench_run.py   # velocidad frente a ./dash (gcc -O2) en A500 y A1200 a velocidad real
 make runtime             # rehace runtime/dashrt.o con el gcc de bebbo (va en git: no hace falta para lo demás)
 ```
 
@@ -28,15 +29,16 @@ Falta todo lo demás: textos en variables, arrays, structs, Float, builtins, ven
 | Fichero | Qué hace |
 |---------|----------|
 | `src/lexer.c`, `src/parser.c` | Del texto al árbol, con la gramática de `compiler/grammar.py` |
-| `src/gen68k.c` | Código 68000: el valor en d0, marco con a5, llamadas como las de C |
+| `src/gen68k.c` | Código 68000: el valor en d0, llamadas como las de C; cada función se genera dos veces para poner en d2-d7 las variables más usadas |
 | `src/hunk.c` | Lee el objeto Hunk del runtime, junta los hunks y escribe el ejecutable |
 | `runtime/rt.c`, `runtime/rt_math.s` | Arranque, `Print`, multiplicar y dividir de 32 bits en un 68000 |
 
 ## Lo comprobado
 
-- Los cuatro tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
-- `build/dashc.amiga` compila los cuatro dentro de un A500 emulado; los ejecutables salen idénticos
+- Los cinco tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
+- `build/dashc.amiga` compila los cinco dentro de un A500 emulado; los ejecutables salen idénticos
   byte a byte a los del PC y funcionan.
-- Los ejecutables ocupan entre 1 y 2 KB (con gcc, entre 6 y 7,5 KB).
-
-Sin medir: la velocidad del código frente a gcc `-O2`.
+- Los ejecutables ocupan entre 1,5 y 3 KB (con gcc, entre 6 y 9 KB).
+- Velocidad (`bench/bench_enteros.dash`, veces el tiempo de gcc `-O2`): de 1,1 a 1,8 en A500 y de
+  1,1 a 2,4 en A1200; la recursión (fib) va más rápida que con gcc (0,6 y 0,8). Las llamadas a una
+  función pequeña, 3 veces: gcc la mete dentro del bucle y dashc aún no.

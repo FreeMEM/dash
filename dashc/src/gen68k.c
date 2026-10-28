@@ -2,7 +2,12 @@
    no es simple se guarda en la pila mientras se calcula el otro. Las funciones usan
    un marco con a5 (link/unlk): los parámetros en 8(a5), 12(a5)... y las variables
    en -4(a5), -8(a5)... Se llaman como en C (argumentos en la pila, de derecha a
-   izquierda, resultado en d0), así que el runtime de gcc se llama igual. */
+   izquierda, resultado en d0), así que el runtime de gcc se llama igual.
+
+   Cada función se genera dos veces: la primera cuenta cuánto se usa cada variable
+   (lo de dentro de un bucle cuenta más) y la segunda pone las más usadas en d2-d7,
+   que la función guarda al entrar y recupera al salir. */
+#include <stdlib.h>
 #include <string.h>
 
 #include "dashc.h"
@@ -10,6 +15,9 @@
 /* códigos de condición del 68000 */
 enum { CC_T = 0, CC_F, CC_HI, CC_LS, CC_CC, CC_CS, CC_NE, CC_EQ, CC_VC, CC_VS,
        CC_PL, CC_MI, CC_GE, CC_LT, CC_GT, CC_LE };
+
+#define MAX_REGS 6   /* d2-d7 */
+#define MIN_USES 3   /* menos usos no pagan guardar y recuperar el registro */
 
 static Program *prog;
 static Obj *obj;
@@ -25,7 +33,24 @@ static int new_label(void)
     return labels.n - 1;
 }
 
-static void def_label(int l) { labels.v[l] = (long)obj->code.n; }
+static uint32_t last_branch = (uint32_t)-1;   /* dónde empieza el último Bcc.w */
+static uint32_t d0_loaded = (uint32_t)-1;     /* dónde acaba el último move/moveq a d0 */
+
+static void def_label(int l)
+{
+    /* un salto a la instrucción de justo después sobra */
+    if (last_branch + 4 == obj->code.n && fixups.n && fixups.v[fixups.n - 1].label == l &&
+        fixups.v[fixups.n - 1].at == last_branch + 2 && !fixups.v[fixups.n - 1].abs) {
+        int i;
+        obj->code.n -= 4;
+        fixups.n--;
+        for (i = 0; i < labels.n; i++)
+            if (labels.v[i] == (long)obj->code.n + 4) labels.v[i] = (long)obj->code.n;
+        last_branch = (uint32_t)-1;
+    }
+    labels.v[l] = (long)obj->code.n;
+    d0_loaded = (uint32_t)-1;                          /* se puede llegar de otro sitio */
+}
 
 static void w(int v) { buf_word(&obj->code, v); }
 static void l(uint32_t v) { buf_long(&obj->code, v); }
@@ -43,6 +68,7 @@ static void add_reloc(uint32_t off, int hunk, const char *sym)
 static void branch(int cc, int label)
 {
     Fixup f;
+    last_branch = (uint32_t)obj->code.n;
     w(0x6000 | cc << 8);
     f.at = (uint32_t)obj->code.n;
     f.label = label;
@@ -90,33 +116,74 @@ static void resolve_fixups(void)
 }
 
 /* ---- nombres: constantes, globales, variables locales y funciones ---- */
-typedef struct { char *name; int off, type, depth; } Local;
+typedef struct { char *name; int slot, type, depth; } Local;
 static struct { Local *v; int n, cap; } locals;
-static int depth, nslots;
+static int depth;
+
+/* Cada variable local o parámetro de la función es un "hueco": en la primera pasada
+   se cuentan sus usos; en la segunda, slot_reg dice en qué registro va (o -1). */
+static struct { long *v; int n, cap; } slot_uses, slot_start, slot_end;
+static long event;   /* posición en el código de cada uso (primera pasada) */
+/* Bucles abiertos: una variable de antes del bucle que se usa dentro tiene que
+   seguir viva hasta el final del bucle (la vuelta siguiente la vuelve a leer). */
+typedef struct { long start; struct { int *v; int n, cap; } slots; } LoopLife;
+static struct { LoopLife *v; int n, cap; } lives;
+static struct { int *v; int n, cap; } slot_reg, slot_off;
+static long loop_weight = 1;
+static int nframe;   /* huecos en el marco */
 
 typedef struct { int brk, cont; } Loop;
 static struct { Loop *v; int n, cap; } loops;
 
 static int *func_label;   /* etiqueta de cada función */
 static int *global_type;
-static Func *cur;
 static int ret_label;
 
-enum { V_NONE, V_LOCAL, V_GLOBAL, V_CONST };
-typedef struct { int kind, off, type; long val; } Var;
+enum { V_NONE, V_LOCAL, V_REG, V_GLOBAL, V_CONST, V_STACK };
+
+/* Una función sin variables en el marco no hace link: lee sus parámetros con sp,
+   sabiendo cuánto ha metido en la pila (sp_depth) en cada punto del código. */
+static int frameless, sp_depth, param_base;
+typedef struct { int kind, off, reg, type; long val; } Var;
 
 static int fold(Node *n, long *v);
 
+static void use_slot(int slot)
+{
+    int i;
+    slot_uses.v[slot] += loop_weight;
+    slot_end.v[slot] = ++event;
+    for (i = 0; i < lives.n; i++)
+        if (lives.v[i].start > slot_start.v[slot]) {
+            VEC_PUSH(lives.v[i].slots, slot);          /* el bucle más externo de los de después */
+            break;
+        }
+}
+
+static Var slot_var(int slot, int type)
+{
+    Var r = {V_LOCAL, 0, 0, TY_INT, 0};
+    r.type = type;
+    if (slot_reg.v[slot] >= 0) {
+        r.kind = V_REG;
+        r.reg = slot_reg.v[slot];
+    } else if (frameless) {
+        r.kind = V_STACK;                              /* solo los parámetros llegan aquí */
+        r.off = slot_off.v[slot];
+    } else {
+        r.off = slot_off.v[slot];
+    }
+    return r;
+}
+
 static Var lookup(const char *name)
 {
-    Var r = {V_NONE, 0, TY_INT, 0};
+    Var r = {V_NONE, 0, 0, TY_INT, 0};
     int i;
     for (i = locals.n - 1; i >= 0; i--)
         if (!strcmp(locals.v[i].name, name)) {
-            r.kind = V_LOCAL;
-            r.off = locals.v[i].off;
-            r.type = locals.v[i].type;
-            return r;
+            use_slot(locals.v[i].slot);
+            return slot_var(locals.v[i].slot, locals.v[i].type);
         }
     for (i = 0; i < prog->globals.n; i++)
         if (!strcmp(prog->globals.v[i].name, name)) {
@@ -136,15 +203,34 @@ static Var lookup(const char *name)
     return r;
 }
 
-static int declare(const char *name, int type)
+/* un hueco nuevo; en la segunda pasada los huecos salen en el mismo orden */
+static int new_slot(int param_off)
+{
+    int slot = slot_uses.n;
+    VEC_PUSH(slot_uses, 0);
+    VEC_PUSH(slot_start, ++event);
+    VEC_PUSH(slot_end, event);
+    if (slot >= slot_reg.n) VEC_PUSH(slot_reg, -1);
+    if (param_off) {
+        VEC_PUSH(slot_off, param_off);
+    } else if (slot_reg.v[slot] >= 0) {
+        VEC_PUSH(slot_off, 0);
+    } else {
+        VEC_PUSH(slot_off, -4 * ++nframe);
+    }
+    return slot;
+}
+
+static Var declare(const char *name, int type)
 {
     Local lc;
     lc.name = (char *)name;
-    lc.off = -4 * ++nslots;
+    lc.slot = new_slot(0);
     lc.type = type;
     lc.depth = depth;
     VEC_PUSH(locals, lc);
-    return lc.off;
+    use_slot(lc.slot);
+    return slot_var(lc.slot, type);
 }
 
 static void enter_scope(void) { depth++; }
@@ -153,6 +239,27 @@ static void leave_scope(void)
 {
     depth--;
     while (locals.n && locals.v[locals.n - 1].depth > depth) locals.n--;
+}
+
+static void enter_loop(void)
+{
+    LoopLife lf;
+    if (loop_weight < (1L << 20)) loop_weight *= 8;
+    lf.start = ++event;
+    lf.slots.v = NULL;
+    lf.slots.n = lf.slots.cap = 0;
+    VEC_PUSH(lives, lf);
+}
+
+static void leave_loop(void)
+{
+    LoopLife *lf = &lives.v[--lives.n];
+    long end = ++event;
+    int i;
+    if (loop_weight > 1) loop_weight /= 8;
+    for (i = 0; i < lf->slots.n; i++)
+        if (slot_end.v[lf->slots.v[i]] < end) slot_end.v[lf->slots.v[i]] = end;
+    free(lf->slots.v);
 }
 
 static Func *find_func(const char *name, int *idx)
@@ -221,7 +328,69 @@ static int fold(Node *n, long *v)
     return 0;
 }
 
-/* ---- carga y guardado ---- */
+/* k = ±2^s con s >= 1: devuelve s; si no, 0 */
+static int pow2(long k)
+{
+    uint32_t m = k < 0 ? 0u - (uint32_t)k : (uint32_t)k;
+    int s = 0;
+    if (m < 2 || (m & (m - 1))) return 0;
+    while (m > 1) { m >>= 1; s++; }
+    return s;
+}
+
+/* ---- direcciones efectivas: una variable como operando de una instrucción ---- */
+static int ea_bits(Var *v)
+{
+    switch (v->kind) {
+    case V_REG: return v->reg;      /* dN */
+    case V_LOCAL: return 0x2D;      /* d16(a5) */
+    case V_STACK: return 0x2F;      /* d16(sp) */
+    case V_GLOBAL: return 0x39;     /* abs.l */
+    default: return 0x3C;           /* #inmediato */
+    }
+}
+
+static void ea_ext(Var *v)
+{
+    switch (v->kind) {
+    case V_LOCAL:
+        w(v->off);
+        break;
+    case V_STACK:
+        w(sp_depth + param_base + v->off - 8);
+        break;
+    case V_GLOBAL:
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l((uint32_t)v->off);
+        break;
+    case V_CONST:
+        l((uint32_t)v->val);
+        break;
+    }
+}
+
+/* una instrucción con la variable como operando (opcode sin los 6 bits de la dirección) */
+static void op_ea(int opcode, Var *v)
+{
+    w(opcode | ea_bits(v));
+    ea_ext(v);
+}
+
+/* una instrucción con un inmediato de 32 bits y la variable como destino (addi, cmpi...) */
+static void op_imm_ea(int opcode, long k, Var *v)
+{
+    w(opcode | ea_bits(v));
+    l((uint32_t)k);
+    ea_ext(v);
+}
+
+/* tst.l d0, salvo si lo último fue cargar d0 con move/moveq (ya pone N y Z, y V = C = 0) */
+
+static void tst_d0(void)
+{
+    if (d0_loaded != obj->code.n) w(0x4A80);           /* tst.l d0 */
+}
+
 static void load_imm(int reg, long v)
 {
     int32_t x = (int32_t)v;
@@ -231,25 +400,23 @@ static void load_imm(int reg, long v)
         w(0x203C | reg << 9);                          /* move.l #x,dN */
         l((uint32_t)x);
     }
+    if (reg == 0) d0_loaded = (uint32_t)obj->code.n;
 }
 
 static void load_var(int reg, Var *v)
 {
-    if (v->kind == V_LOCAL) {
-        w(0x202D | reg << 9);                          /* move.l off(a5),dN */
-        w(v->off);
-    } else if (v->kind == V_GLOBAL) {
-        w(0x2039 | reg << 9);                          /* move.l global,dN */
-        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-        l((uint32_t)v->off);
-    } else {
-        load_imm(reg, v->val);
+    if (v->kind == V_CONST) load_imm(reg, v->val);
+    else if (!(v->kind == V_REG && v->reg == reg)) {
+        op_ea(0x2000 | reg << 9, v);                   /* move.l v,dN */
+        if (reg == 0) d0_loaded = (uint32_t)obj->code.n;
     }
 }
 
 static void store_d0(Var *v)
 {
-    if (v->kind == V_LOCAL) {
+    if (v->kind == V_REG) {
+        w(0x2000 | v->reg << 9);                       /* move.l d0,dN */
+    } else if (v->kind == V_LOCAL) {
         w(0x2B40);                                     /* move.l d0,off(a5) */
         w(v->off);
     } else {
@@ -259,22 +426,60 @@ static void store_d0(Var *v)
     }
 }
 
-static void push_d0(void) { w(0x2F00); }               /* move.l d0,-(sp) */
+/* suma k a la variable, sin pasar por d0 */
+static void add_imm_ea(long k, Var *v)
+{
+    if (k >= 1 && k <= 8) op_ea(0x5080 | (k & 7) << 9, v);          /* addq.l #k,v */
+    else if (k <= -1 && k >= -8) op_ea(0x5180 | (-k & 7) << 9, v);  /* subq.l #k,v */
+    else if (k) op_imm_ea(0x0680, k, v);                            /* addi.l #k,v */
+}
+
+static uint32_t add_string(const char *s, int len)
+{
+    uint32_t off = (uint32_t)obj->data.n;
+    buf_bytes(&obj->data, s, len);
+    buf_byte(&obj->data, 0);
+    if (obj->data.n & 1) buf_byte(&obj->data, 0);
+    return off;
+}
+
+static void push_d0(void)
+{
+    w(0x2F00);                                         /* move.l d0,-(sp) */
+    sp_depth += 4;
+}
+
+static void pop_d0(void)
+{
+    w(0x201F);                                         /* move.l (sp)+,d0 */
+    sp_depth -= 4;
+}
+
+static void pea_string(const char *str, int len)
+{
+    w(0x4879);                                         /* pea texto */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(add_string(str, len));
+    sp_depth += 4;
+}
 
 static void pop_args(int n)
 {
     int bytes = n * 4;
+    sp_depth -= bytes;
     if (!bytes) return;
     if (bytes <= 8) w(0x508F | (bytes & 7) << 9);      /* addq.l #n,sp */
     else { w(0x4FEF); w(bytes); }                      /* lea n(sp),sp */
 }
 
-/* un operando que se carga en un registro sin tocar otros */
-static int simple(Node *n, Var *v, long *k)
+/* un operando que se usa sin calcular nada: una constante o una variable */
+static int simple(Node *n, Var *v)
 {
-    if (fold(n, k)) {
+    long k;
+    if (fold(n, &k)) {
         v->kind = V_CONST;
-        v->val = *k;
+        v->val = k;
+        v->type = n->kind == E_BOOL ? TY_BOOL : TY_INT;
         return 1;
     }
     if (n->kind == E_VAR) {
@@ -294,20 +499,203 @@ static void need_value(Node *n, int ty)
     if (ty == TY_STR) fatal_at(n->line, n->col, "dashc (prueba): los textos solo pueden ir en Print");
 }
 
-/* deja a en d0 y b en d1 */
-static void gen_pair(Node *a, Node *b)
+static void value(Node *n) { need_value(n, gen_expr(n)); }
+
+/* mete en la pila el valor de n (un argumento) */
+static void push_value(Node *n)
+{
+    Var v;
+    if (n->kind != E_STR && simple(n, &v)) {
+        if (v.kind == V_CONST && v.val >= -32768 && v.val <= 32767) {
+            w(0x4878);                                 /* pea k.w */
+            w((int)v.val);
+        } else {
+            op_ea(0x2F00, &v);                         /* move.l v,-(sp) */
+        }
+        sp_depth += 4;
+        return;
+    }
+    value(n);
+    push_d0();
+}
+
+/* ---- operaciones con una constante ---- */
+static void shift_d0(int left, int s)
+{
+    if (s <= 0) return;
+    if (left && s == 1) w(0xD080);                     /* add.l d0,d0 */
+    else if (s <= 8) w((left ? 0xE180 : 0xE080) | (s & 7) << 9);   /* asl/asr.l #s,d0 */
+    else {
+        load_imm(1, s);
+        w(left ? 0xE3A0 : 0xE2A0);                     /* asl/asr.l d1,d0 */
+    }
+}
+
+static int popcount(uint32_t m)
+{
+    int c = 0;
+    for (; m; m &= m - 1) c++;
+    return c;
+}
+
+/* d0 = d0 * k */
+static void mul_const(long k)
+{
+    uint32_t m = k < 0 ? 0u - (uint32_t)k : (uint32_t)k;
+    int neg = k < 0, s = 0;
+    if (k == 0) { w(0x7000); return; }                 /* moveq #0,d0 */
+    if (popcount(m) == 1) {
+        while ((1u << s) != m) s++;
+        shift_d0(1, s);
+    } else if (popcount(m) == 2) {
+        /* x * (2^a + 2^b) = ((x << (a-b)) + x) << b */
+        int b = 0, a;
+        while (!(m & (1u << b))) b++;
+        a = b + 1;
+        while (!(m & (1u << a))) a++;
+        w(0x2200);                                     /* move.l d0,d1 */
+        shift_d0(1, a - b);
+        w(0xD081);                                     /* add.l d1,d0 */
+        shift_d0(1, b);
+    } else if (m <= 0xFFFF) {
+        /* x * m = lo*m + ((hi*m) << 16): dos mulu.w */
+        w(0x2200);                                     /* move.l d0,d1 */
+        w(0x4841);                                     /* swap d1 */
+        w(0xC2FC); w((int)m);                          /* mulu.w #m,d1 */
+        w(0x4841);                                     /* swap d1 */
+        w(0x4241);                                     /* clr.w d1 */
+        w(0xC0FC); w((int)m);                          /* mulu.w #m,d0 */
+        w(0xD081);                                     /* add.l d1,d0 */
+    } else {
+        /* x * m = lo*mlo + ((hi*mlo + lo*mhi) << 16): tres mulu.w */
+        int mlo = (int)(m & 0xFFFF), mhi = (int)(m >> 16);
+        w(0x2200);                                     /* move.l d0,d1 */
+        w(0x4841);                                     /* swap d1 */
+        w(0xC2FC); w(mlo);                             /* mulu.w #mlo,d1 */
+        w(0x2040);                                     /* movea.l d0,a0 */
+        w(0xC0FC); w(mhi);                             /* mulu.w #mhi,d0 */
+        w(0xD240);                                     /* add.w d0,d1 */
+        w(0x4841);                                     /* swap d1 */
+        w(0x4241);                                     /* clr.w d1 */
+        w(0x2008);                                     /* move.l a0,d0 */
+        w(0xC0FC); w(mlo);                             /* mulu.w #mlo,d0 */
+        w(0xD081);                                     /* add.l d1,d0 */
+    }
+    if (neg) w(0x4480);                                /* neg.l d0 */
+}
+
+/* d0 = d0 / k o d0 % k, con k = ±2^s, redondeando hacia cero como en C */
+static void divmod_pow2(int op, long k, int s)
+{
+    uint32_t mask = (1u << s) - 1;
+    if (op == P_SLASH) {
+        tst_d0();
+        if (mask <= 8) {
+            w(0x6A02);                                 /* bpl.s +2 */
+            w(0x5080 | (mask & 7) << 9);               /* addq.l #mask,d0 */
+        } else {
+            w(0x6A06);                                 /* bpl.s +6 */
+            w(0xD0BC); l(mask);                        /* add.l #mask,d0 */
+        }
+        shift_d0(0, s);
+        if (k < 0) w(0x4480);                          /* neg.l d0 */
+    } else {
+        /* el resto lleva el signo del dividendo: -(-x & mask) si x < 0 */
+        tst_d0();
+        w(0x6B08);                                     /* bmi.s +8 */
+        w(0x0280); l(mask);                            /* andi.l #mask,d0 */
+        w(0x600A);                                     /* bra.s +10 */
+        w(0x4480);                                     /* neg.l d0 */
+        w(0x0280); l(mask);                            /* andi.l #mask,d0 */
+        w(0x4480);                                     /* neg.l d0 */
+    }
+}
+
+/* d0 = d0 op v */
+static void bin_ea(int op, Var *v)
+{
+    long k = v->val;
+    int s;
+    if (v->kind == V_CONST) {
+        switch (op) {
+        case P_PLUS:
+        case P_MINUS:
+            if (op == P_MINUS) k = -k;
+            if (k >= 1 && k <= 8) w(0x5080 | (k & 7) << 9);          /* addq.l #k,d0 */
+            else if (k <= -1 && k >= -8) w(0x5180 | (-k & 7) << 9);  /* subq.l #k,d0 */
+            else if (k) { w(0xD0BC); l((uint32_t)k); }                /* add.l #k,d0 */
+            return;
+        case P_STAR:
+            mul_const(k);
+            return;
+        case P_SLASH:
+        case P_PERCENT:
+            if (k == 1 || k == -1) {
+                if (op == P_PERCENT) w(0x7000);        /* moveq #0,d0 */
+                else if (k == -1) w(0x4480);           /* neg.l d0 */
+                return;
+            }
+            if ((s = pow2(k)) != 0) {
+                divmod_pow2(op, k, s);
+                return;
+            }
+            break;
+        case P_SHL:
+        case P_SHR:
+            if (k >= 0 && k <= 31) {
+                shift_d0(op == P_SHL, (int)k);
+                return;
+            }
+            break;
+        }
+    }
+    switch (op) {
+    case P_PLUS: op_ea(0xD080, v); return;             /* add.l v,d0 */
+    case P_MINUS: op_ea(0x9080, v); return;            /* sub.l v,d0 */
+    case P_AMP: op_ea(0xC080, v); return;              /* and.l v,d0 */
+    case P_BAR: op_ea(0x8080, v); return;              /* or.l v,d0 */
+    case P_CARET:
+        if (v->kind == V_REG) { w(0xB180 | v->reg << 9); return; }  /* eor.l dN,d0 */
+        break;
+    }
+    load_var(1, v);
+    switch (op) {
+    case P_CARET: w(0xB380); break;                    /* eor.l d1,d0 */
+    case P_SHL: w(0xE3A0); break;                      /* asl.l d1,d0 */
+    case P_SHR: w(0xE2A0); break;                      /* asr.l d1,d0 */
+    case P_STAR: jsr_sym("__dash_mul"); break;         /* d0 * d1 en el runtime */
+    case P_SLASH: jsr_sym("__dash_div"); break;
+    case P_PERCENT: jsr_sym("__dash_mod"); break;
+    }
+}
+
+static int commutative(int op)
+{
+    return op == P_PLUS || op == P_STAR || op == P_AMP || op == P_BAR || op == P_CARET;
+}
+
+static void gen_binary(Node *n)
 {
     Var v;
     long k;
-    if (simple(b, &v, &k)) {
-        need_value(a, gen_expr(a));
-        load_var(1, &v);
+    if (commutative(n->op) && fold(n->a, &k) && !fold(n->b, &k)) {
+        simple(n->a, &v);                              /* 3 * x es x * 3 */
+        value(n->b);
+        bin_ea(n->op, &v);
+    } else if (simple(n->b, &v)) {
+        value(n->a);
+        bin_ea(n->op, &v);
+    } else if (commutative(n->op) && simple(n->a, &v)) {
+        value(n->b);
+        bin_ea(n->op, &v);
     } else {
-        need_value(a, gen_expr(a));
+        Var d1 = {V_REG, 0, 1, TY_INT, 0};
+        value(n->a);
         push_d0();
-        need_value(b, gen_expr(b));
+        value(n->b);
         w(0x2200);                                     /* move.l d0,d1 */
-        w(0x201F);                                     /* move.l (sp)+,d0 */
+        pop_d0();
+        bin_ea(n->op, &d1);
     }
 }
 
@@ -323,35 +711,63 @@ static int cmp_cc(int op)
     }
 }
 
-/* compara a con b: deja los códigos de condición de a - b */
-static void gen_compare(Node *n)
+/* la condición con los operandos al revés: a < b es b > a */
+static int swap_cc(int cc)
 {
-    Var v;
-    long k;
-    if (fold(n->b, &k)) {
-        need_value(n->a, gen_expr(n->a));
-        if (k == 0) w(0x4A80);                         /* tst.l d0 */
-        else { w(0xB0BC); l((uint32_t)k); }            /* cmp.l #k,d0 */
-        return;
+    switch (cc) {
+    case CC_LT: return CC_GT;
+    case CC_GT: return CC_LT;
+    case CC_LE: return CC_GE;
+    case CC_GE: return CC_LE;
     }
-    if (n->b->kind == E_VAR && simple(n->b, &v, &k) && v.kind == V_LOCAL) {
-        need_value(n->a, gen_expr(n->a));
-        w(0xB0AD);                                     /* cmp.l off(a5),d0 */
-        w(v.off);
-        return;
-    }
-    gen_pair(n->a, n->b);
-    w(0xB081);                                         /* cmp.l d1,d0 */
+    return cc;
 }
 
-static uint32_t add_string(const char *s, int len)
+/* Compara a con b y deja los códigos de condición. Devuelve el código de
+   condición que hay que mirar para la comparación de n. */
+static int gen_compare(Node *n)
 {
-    uint32_t off = (uint32_t)obj->data.n;
-    buf_bytes(&obj->data, s, len);
-    buf_byte(&obj->data, 0);
-    if (obj->data.n & 1) buf_byte(&obj->data, 0);
-    return off;
+    Var va, vb;
+    long k;
+    int cc = cmp_cc(n->op);
+
+    /* x % 2^s == 0: basta con mirar los bits bajos, sea cual sea el signo */
+    if ((cc == CC_EQ || cc == CC_NE) && fold(n->b, &k) && k == 0 && n->a->kind == E_BIN &&
+        n->a->op == P_PERCENT && fold(n->a->b, &k) && pow2(k)) {
+        value(n->a->a);
+        w(0x0280); l((k < 0 ? 0u - (uint32_t)k : (uint32_t)k) - 1);   /* andi.l #mask,d0 */
+        return cc;
+    }
+    if (simple(n->b, &vb)) {
+        if (vb.kind == V_CONST && n->a->kind == E_VAR && simple(n->a, &va) && va.kind != V_CONST) {
+            if (vb.val == 0) op_ea(0x4A80, &va);       /* tst.l a */
+            else op_imm_ea(0x0C80, vb.val, &va);       /* cmpi.l #k,a */
+            return cc;
+        }
+        if (vb.kind != V_CONST && n->a->kind == E_VAR && simple(n->a, &va) && va.kind == V_REG) {
+            op_ea(0xB080 | va.reg << 9, &vb);          /* cmp.l b,dA */
+            return cc;
+        }
+        value(n->a);
+        if (vb.kind == V_CONST && vb.val == 0) tst_d0();
+        else op_ea(0xB080, &vb);                       /* cmp.l b,d0 */
+        return cc;
+    }
+    if (simple(n->a, &va)) {
+        /* b - a: la condición al revés */
+        value(n->b);
+        op_ea(0xB080, &va);                            /* cmp.l a,d0 */
+        return swap_cc(cc);
+    }
+    value(n->a);
+    push_d0();
+    value(n->b);
+    w(0x2200);                                         /* move.l d0,d1 */
+    pop_d0();
+    w(0xB081);                                         /* cmp.l d1,d0 */
+    return cc;
 }
+
 
 /* funciones del runtime: argumentos Int, o S para un texto literal */
 static const struct { const char *name, *sym, *args; int ret; } builtins[] = {
@@ -367,12 +783,19 @@ static int gen_builtin(Node *n)
     if (!strcmp(n->name, "bench_sink")) {
         /* guarda el valor donde no se pueda quitar: un move.l, como el volatile de bench_lib.dash */
         Var v;
+        Var src;
         if (n->args.n != 1) fatal_at(n->line, n->col, "bench_sink pide 1 argumento");
-        need_value(n->args.v[0], gen_expr(n->args.v[0]));
         if (sink_off < 0) {
             sink_off = (long)obj->data.n;
             buf_long(&obj->data, 0);
         }
+        if (n->args.v[0]->kind == E_VAR && simple(n->args.v[0], &src) && src.kind != V_CONST) {
+            op_ea(0x23C0, &src);                       /* move.l v,sumidero */
+            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+            l((uint32_t)sink_off);
+            return TY_VOID;
+        }
+        value(n->args.v[0]);
         v.kind = V_GLOBAL;
         v.off = (int)sink_off;
         store_d0(&v);
@@ -387,12 +810,9 @@ static int gen_builtin(Node *n)
         Node *a = n->args.v[i];
         if (builtins[b].args[i] == 'S') {
             if (a->kind != E_STR) fatal_at(a->line, a->col, "dashc (prueba): aquí va un texto literal");
-            w(0x4879);                                 /* pea texto */
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l(add_string(a->str, a->len));
+            pea_string(a->str, a->len);
         } else {
-            need_value(a, gen_expr(a));
-            push_d0();
+            push_value(a);
         }
     }
     jsr_sym(builtins[b].sym);
@@ -407,10 +827,7 @@ static int gen_call(Node *n)
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
-    for (i = n->args.n - 1; i >= 0; i--) {
-        need_value(n->args.v[i], gen_expr(n->args.v[i]));
-        push_d0();
-    }
+    for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
     jsr_label(func_label[idx]);
     pop_args(n->args.n);
     return f->ret;
@@ -420,7 +837,6 @@ static int gen_expr(Node *n)
 {
     long k;
     Var v;
-    int ty;
 
     if (n->kind != E_CMP && n->kind != E_AND && n->kind != E_OR && n->kind != E_NOT && fold(n, &k)) {
         load_imm(0, k);
@@ -437,16 +853,15 @@ static int gen_expr(Node *n)
     case E_CALL:
         return gen_call(n);
     case E_NEG:
-        need_value(n->a, gen_expr(n->a));
+        value(n->a);
         w(0x4480);                                     /* neg.l d0 */
         return TY_INT;
     case E_BNOT:
-        need_value(n->a, gen_expr(n->a));
+        value(n->a);
         w(0x4680);                                     /* not.l d0 */
         return TY_INT;
     case E_CMP:
-        gen_compare(n);
-        w(0x50C0 | cmp_cc(n->op) << 8);                /* scc d0 */
+        w(0x50C0 | gen_compare(n) << 8);               /* scc d0 */
         w(0x0280); l(1);                               /* andi.l #1,d0 */
         return TY_BOOL;
     case E_NOT:
@@ -462,31 +877,9 @@ static int gen_expr(Node *n)
         return TY_BOOL;
     }
     case E_BIN:
-        /* suma y resta de una constante pequeña: addq/subq */
-        if ((n->op == P_PLUS || n->op == P_MINUS) && fold(n->b, &k)) {
-            need_value(n->a, gen_expr(n->a));
-            if (n->op == P_MINUS) k = -k;
-            if (k >= 1 && k <= 8) w(0x5080 | (k & 7) << 9);          /* addq.l #k,d0 */
-            else if (k <= -1 && k >= -8) w(0x5180 | (-k & 7) << 9);  /* subq.l #k,d0 */
-            else if (k) { w(0xD0BC); l((uint32_t)k); }                /* add.l #k,d0 */
-            return TY_INT;
-        }
-        gen_pair(n->a, n->b);
-        switch (n->op) {
-        case P_PLUS: w(0xD081); break;                 /* add.l d1,d0 */
-        case P_MINUS: w(0x9081); break;                /* sub.l d1,d0 */
-        case P_AMP: w(0xC081); break;                  /* and.l d1,d0 */
-        case P_BAR: w(0x8081); break;                  /* or.l d1,d0 */
-        case P_CARET: w(0xB380); break;                /* eor.l d1,d0 */
-        case P_SHL: w(0xE3A0); break;                  /* asl.l d1,d0 */
-        case P_SHR: w(0xE2A0); break;                  /* asr.l d1,d0 */
-        case P_STAR: jsr_sym("__dash_mul"); break;     /* d0 * d1 en el runtime */
-        case P_SLASH: jsr_sym("__dash_div"); break;
-        case P_PERCENT: jsr_sym("__dash_mod"); break;
-        }
+        gen_binary(n);
         return TY_INT;
     }
-    (void)ty;
     fatal_at(n->line, n->col, "expresión no admitida");
     return TY_VOID;
 }
@@ -495,6 +888,7 @@ static int gen_expr(Node *n)
 static void gen_branch(Node *n, int label, int when_true)
 {
     long k;
+    Var v;
     switch (n->kind) {
     case E_NOT:
         gen_branch(n->a, label, !when_true);
@@ -522,8 +916,7 @@ static void gen_branch(Node *n, int label, int when_true)
         }
         return;
     case E_CMP: {
-        int cc = cmp_cc(n->op);
-        gen_compare(n);
+        int cc = gen_compare(n);
         branch(when_true ? cc : cc ^ 1, label);        /* cc ^ 1: la condición contraria */
         return;
     }
@@ -532,21 +925,23 @@ static void gen_branch(Node *n, int label, int when_true)
         if ((k != 0) == when_true) branch(CC_T, label);
         return;
     }
-    need_value(n, gen_expr(n));
-    w(0x4A80);                                         /* tst.l d0 */
+    if (n->kind == E_VAR && simple(n, &v)) op_ea(0x4A80, &v);   /* tst.l v */
+    else {
+        value(n);
+        tst_d0();
+    }
     branch(when_true ? CC_NE : CC_EQ, label);
 }
 
 /* ---- instrucciones ---- */
 static void gen_block(NodeList *b);
 
-
 static void gen_for(Node *n)
 {
     long from, to, step = 1;
-    int down = 0, top = new_label(), cont = new_label(), done = new_label();
-    int ivar, end_slot, step_slot = 0, step_known = 1;
-    Var vi;
+    int down = 0, top = new_label(), cont = new_label(), done = new_label(), test;
+    int step_known = 1, end_known;
+    Var vi, vend, vstep;
     Loop lp;
 
     if (n->c && !fold(n->c, &step)) step_known = 0;
@@ -559,23 +954,34 @@ static void gen_for(Node *n)
     if (step_known && step == 0) fatal_at(n->line, n->col, "el paso del for no puede ser 0");
 
     enter_scope();
-    need_value(n->a, gen_expr(n->a));
-    ivar = declare(n->name, TY_INT);
-    w(0x2B40); w(ivar);                                /* move.l d0,i */
-    need_value(n->b, gen_expr(n->b));
-    end_slot = declare("", TY_INT);                    /* "": no se puede nombrar */
-    w(0x2B40); w(end_slot);
+    value(n->a);
+    vi = declare(n->name, TY_INT);
+    store_d0(&vi);
+    end_known = fold(n->b, &to);
+    if (end_known) {
+        vend.kind = V_CONST;
+        vend.val = to;
+    } else {
+        value(n->b);
+        vend = declare("", TY_INT);                    /* "": no se puede nombrar */
+        store_d0(&vend);
+    }
     if (!step_known) {
-        need_value(n->c, gen_expr(n->c));
-        step_slot = declare("", TY_INT);
-        w(0x2B40); w(step_slot);
+        value(n->c);
+        vstep = declare("", TY_INT);
+        store_d0(&vstep);
     }
 
-    def_label(top);
-    w(0x202D); w(ivar);                                /* move.l i,d0 */
-    w(0xB0AD); w(end_slot);                            /* cmp.l fin,d0 */
-    branch(down ? CC_LT : CC_GT, done);
+    enter_loop();
+    /* las veces que se usan en cada vuelta: comparar e incrementar */
+    use_slot(locals.v[locals.n - 1 - !end_known - !step_known].slot);
+    if (!end_known) use_slot(locals.v[locals.n - 1 - !step_known].slot);
+    if (!step_known) use_slot(locals.v[locals.n - 1].slot);
 
+    /* la comparación va al final: una vuelta es cuerpo, incremento y un salto */
+    test = new_label();
+    branch(CC_T, test);
+    def_label(top);
     lp.brk = done;
     lp.cont = cont;
     VEC_PUSH(loops, lp);
@@ -584,32 +990,88 @@ static void gen_for(Node *n)
 
     def_label(cont);
     if (!step_known) {
-        w(0x202D); w(step_slot);                       /* move.l paso,d0 */
-        w(0xD1AD); w(ivar);                            /* add.l d0,i */
-    } else if (step >= 1 && step <= 8) {
-        w(0x50AD | (step & 7) << 9); w(ivar);          /* addq.l #paso,i */
-    } else if (step <= -1 && step >= -8) {
-        w(0x51AD | (-step & 7) << 9); w(ivar);         /* subq.l #paso,i */
+        if (vi.kind == V_REG) op_ea(0xD080 | vi.reg << 9, &vstep);  /* add.l paso,di */
+        else {
+            load_var(0, &vstep);
+            op_ea(0xD180, &vi);                        /* add.l d0,i */
+        }
     } else {
-        w(0x06AD); l((uint32_t)step); w(ivar);         /* addi.l #paso,i */
+        add_imm_ea(step, &vi);
     }
-    branch(CC_T, top);
+    def_label(test);
+    if (vend.kind == V_CONST) op_imm_ea(0x0C80, vend.val, &vi);     /* cmpi.l #fin,i */
+    else if (vi.kind == V_REG) op_ea(0xB080 | vi.reg << 9, &vend);  /* cmp.l fin,di */
+    else {
+        load_var(0, &vi);
+        op_ea(0xB080, &vend);                          /* cmp.l fin,d0 */
+    }
+    branch(down ? CC_GE : CC_LE, top);
     def_label(done);
+    leave_loop();
     leave_scope();
-    vi.kind = V_NONE;
-    (void)vi;
+}
+
+/* qué es un nombre, sin contarlo como uso */
+static int lookup_kind(const char *name)
+{
+    int i;
+    for (i = locals.n - 1; i >= 0; i--)
+        if (!strcmp(locals.v[i].name, name)) return slot_reg.v[locals.v[i].slot] >= 0 ? V_REG : V_LOCAL;
+    return V_GLOBAL;
+}
+
+/* v = v op e: la operación directamente sobre la variable */
+static int gen_update(Node *n)
+{
+    Node *e = n->a, *other;
+    Var v;
+    long k;
+    int op;
+    if (e->kind != E_BIN) return 0;
+    op = e->op;
+    if (e->a->kind == E_VAR && !strcmp(e->a->name, n->name)) other = e->b;
+    else if (commutative(op) && e->b->kind == E_VAR && !strcmp(e->b->name, n->name)) other = e->a;
+    else return 0;
+    if (op == P_CARET || op == P_SHL || op == P_SHR) {
+        /* solo con una constante; los desplazamientos, solo en un registro */
+        if (!fold(other, &k)) return 0;
+        if (op != P_CARET && (lookup_kind(n->name) != V_REG || k < 1 || k > 8)) return 0;
+    } else if (op != P_PLUS && op != P_MINUS && op != P_AMP && op != P_BAR) {
+        return 0;
+    }
+    v = lookup(n->name);
+    if (v.kind == V_NONE || v.kind == V_CONST) return 0;
+    if (fold(other, &k)) {
+        switch (op) {
+        case P_PLUS: add_imm_ea(k, &v); return 1;
+        case P_MINUS: add_imm_ea(-k, &v); return 1;
+        case P_AMP: op_imm_ea(0x0280, k, &v); return 1;            /* andi.l #k,v */
+        case P_BAR: op_imm_ea(0x0080, k, &v); return 1;            /* ori.l #k,v */
+        case P_CARET: op_imm_ea(0x0A80, k, &v); return 1;          /* eori.l #k,v */
+        case P_SHL: w(0xE180 | (k & 7) << 9 | v.reg); return 1;    /* asl.l #k,dN */
+        case P_SHR: w(0xE080 | (k & 7) << 9 | v.reg); return 1;    /* asr.l #k,dN */
+        }
+    }
+    value(other);
+    if (v.kind == V_REG) {
+        static const int to_reg[] = {0xD080, 0x9080, 0xC080, 0x8080};   /* add/sub/and/or.l d0,dN */
+        w(to_reg[op == P_PLUS ? 0 : op == P_MINUS ? 1 : op == P_AMP ? 2 : 3] | v.reg << 9);
+    } else {
+        static const int to_mem[] = {0xD180, 0x9180, 0xC180, 0x8180};   /* add/sub/and/or.l d0,v */
+        op_ea(to_mem[op == P_PLUS ? 0 : op == P_MINUS ? 1 : op == P_AMP ? 2 : 3], &v);
+    }
+    return 1;
 }
 
 static void gen_stmt(Node *n)
 {
     Var v;
+    long k;
     int ty;
     switch (n->kind) {
     case S_PRINT:
         if (n->a->kind == E_STR) {
-            w(0x4879);                                 /* pea texto */
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l(add_string(n->a->str, n->a->len));
+            pea_string(n->a->str, n->a->len);
             jsr_sym("__dash_print_str");
         } else {
             ty = gen_expr(n->a);
@@ -621,13 +1083,25 @@ static void gen_stmt(Node *n)
         return;
     case S_ASSIGN:
     case S_VAR:
+        if (n->kind == S_ASSIGN && gen_update(n)) return;
+        if (n->kind == S_ASSIGN && fold(n->a, &k)) {
+            v = lookup(n->name);
+            if (v.kind == V_NONE) v = declare(n->name, n->a->kind == E_BOOL ? TY_BOOL : TY_INT);
+            if (v.kind == V_CONST) fatal_at(n->line, n->col, "%s es una constante", n->name);
+            if (v.kind == V_REG) {
+                load_imm(v.reg, k);                    /* moveq #k,dN */
+            } else {
+                load_imm(0, k);
+                store_d0(&v);
+            }
+            return;
+        }
         ty = gen_expr(n->a);
         need_value(n->a, ty);
         v = lookup(n->name);
         if (n->kind == S_VAR || v.kind == V_NONE) {
             /* la primera asignación declara (en el bloque actual) */
-            v.kind = V_LOCAL;
-            v.off = declare(n->name, n->kind == S_VAR ? n->type : ty);
+            v = declare(n->name, n->kind == S_VAR ? n->type : ty);
         } else if (v.kind == V_CONST) {
             fatal_at(n->line, n->col, "%s es una constante", n->name);
         }
@@ -652,18 +1126,21 @@ static void gen_stmt(Node *n)
     }
     case S_WHILE: {
         Loop lp;
-        int top = new_label(), done = new_label();
+        int top = new_label(), test = new_label(), done = new_label();
+        enter_loop();
+        branch(CC_T, test);                            /* la condición va al final */
         def_label(top);
-        gen_branch(n->a, done, 0);
         lp.brk = done;
-        lp.cont = top;
+        lp.cont = test;
         VEC_PUSH(loops, lp);
         enter_scope();
         gen_block(&n->body);
         leave_scope();
         loops.n--;
-        branch(CC_T, top);
+        def_label(test);
+        gen_branch(n->a, top, 1);
         def_label(done);
+        leave_loop();
         return;
     }
     case S_FOR:
@@ -675,7 +1152,7 @@ static void gen_stmt(Node *n)
         branch(CC_T, n->kind == S_BREAK ? loops.v[loops.n - 1].brk : loops.v[loops.n - 1].cont);
         return;
     case S_RETURN:
-        if (n->a) need_value(n->a, gen_expr(n->a));
+        if (n->a) value(n->a);
         branch(CC_T, ret_label);
         return;
     }
@@ -688,35 +1165,119 @@ static void gen_block(NodeList *b)
     for (i = 0; i < b->n; i++) gen_stmt(b->v[i]);
 }
 
-/* una función: link a5,#-marco ... unlk a5; rts */
-static void gen_function(int label, Func *f, NodeList *body)
+/* una pasada sobre la función: link a5,#-marco; guarda registros ... recupera; unlk a5; rts */
+static void gen_function_pass(int label, Func *f, NodeList *body)
 {
-    uint32_t frame_at;
-    int i;
-    cur = f;
+    uint32_t frame_at = 0;
+    int i, nregs = 0, mask_push = 0, mask_pop = 0, last = 0;
+
     locals.n = 0;
     depth = 0;
-    nslots = 0;
+    nframe = 0;
+    loop_weight = 1;
+    slot_uses.n = 0;
+    slot_start.n = 0;
+    slot_end.n = 0;
+    event = 0;
+    slot_off.n = 0;
     ret_label = new_label();
+
+    for (i = 0; i < slot_reg.n; i++)
+        if (slot_reg.v[i] >= 0) {
+            nregs++;
+            last = slot_reg.v[i];
+            mask_push |= 0x8000 >> slot_reg.v[i];      /* movem -(sp): d0 es el bit 15 */
+            mask_pop |= 1 << slot_reg.v[i];            /* movem (sp)+: d0 es el bit 0 */
+        }
+
+    sp_depth = 0;
+    param_base = 4 + 4 * nregs;                        /* dirección de vuelta y registros guardados */
     def_label(label);
-    w(0x4E55);                                         /* link a5,#-marco */
-    frame_at = (uint32_t)obj->code.n;
-    w(0);
+    if (!frameless) {
+        w(0x4E55);                                     /* link a5,#-marco */
+        frame_at = (uint32_t)obj->code.n;
+        w(0);
+    }
+    if (nregs == 1) w(0x2F00 | last);                  /* move.l dN,-(sp) */
+    else if (nregs) { w(0x48E7); w(mask_push); }       /* movem.l regs,-(sp) */
+
     if (f)
         for (i = 0; i < f->params.n; i++) {
             Local lc;
             lc.name = f->params.v[i].name;
-            lc.off = 8 + 4 * i;
+            lc.slot = new_slot(8 + 4 * i);
             lc.type = f->params.v[i].type;
             lc.depth = 0;
             VEC_PUSH(locals, lc);
+            if (slot_reg.v[lc.slot] >= 0) {
+                if (frameless) {
+                    w(0x202F | slot_reg.v[lc.slot] << 9);   /* move.l d16(sp),dN */
+                    w(param_base + 4 * i);
+                } else {
+                    w(0x202D | slot_reg.v[lc.slot] << 9);   /* move.l 8+4i(a5),dN */
+                    w(8 + 4 * i);
+                }
+            }
         }
     gen_block(body);
     def_label(ret_label);
-    w(0x4E5D);                                         /* unlk a5 */
+    if (sp_depth) fatal("la pila no cuadra (fallo de dashc)");
+    if (nregs == 1) w(0x201F | last << 9);             /* move.l (sp)+,dN */
+    else if (nregs) { w(0x4CDF); w(mask_pop); }        /* movem.l (sp)+,regs */
+    if (!frameless) {
+        w(0x4E5D);                                     /* unlk a5 */
+        if (nframe * 4 > 32767) fatal("demasiadas variables en una función");
+        put_word(obj->code.p + frame_at, -4 * nframe);
+    }
     w(0x4E75);                                         /* rts */
-    if (nslots * 4 > 32767) fatal("demasiadas variables en una función");
-    put_word(obj->code.p + frame_at, -4 * nslots);
+}
+
+static void gen_function(int label, Func *f, NodeList *body)
+{
+    size_t code_n = obj->code.n, data_n = obj->data.n;
+    int relocs_n = obj->relocs.n, fixups_n = fixups.n, labels_n = labels.n;
+    long sink = sink_off;
+    int i, r;
+
+    /* primera pasada: todo en el marco, contando usos */
+    slot_reg.n = 0;
+    frameless = 0;
+    gen_function_pass(label, f, body);
+
+    /* se deshace y se eligen los huecos más usados para d2-d7 */
+    obj->code.n = code_n;
+    obj->data.n = data_n;
+    obj->relocs.n = relocs_n;
+    fixups.n = fixups_n;
+    labels.n = labels_n;
+    sink_off = sink;
+    /* de más a menos usado: al primer registro libre durante toda su vida, desde que
+       se asigna hasta su último uso (dos variables que no viven a la vez lo comparten) */
+    for (i = 0; i < slot_reg.n; i++) slot_reg.v[i] = -1;
+    for (;;) {
+        int best = -1, j;
+        for (i = 0; i < slot_uses.n; i++)
+            if (slot_reg.v[i] == -1 && slot_uses.v[i] >= MIN_USES && (best < 0 || slot_uses.v[i] > slot_uses.v[best]))
+                best = i;
+        if (best < 0) break;
+        slot_reg.v[best] = -2;                         /* visto: si no hay registro, al marco */
+        for (r = 2; r < 2 + MAX_REGS; r++) {
+            for (j = 0; j < slot_uses.n; j++)
+                if (slot_reg.v[j] == r && slot_start.v[j] < slot_end.v[best] && slot_start.v[best] < slot_end.v[j])
+                    break;
+            if (j == slot_uses.n) {
+                slot_reg.v[best] = r;
+                break;
+            }
+        }
+    }
+    /* sin marco si todas las variables (no los parámetros) van en registros */
+    frameless = 1;
+    for (i = 0; i < slot_reg.n; i++) {
+        if (slot_reg.v[i] < 0) slot_reg.v[i] = -1;
+        if (slot_reg.v[i] < 0 && slot_off.v[i] < 0) frameless = 0;
+    }
+    gen_function_pass(label, f, body);
 }
 
 void gen_program(Program *p, Obj *o)
