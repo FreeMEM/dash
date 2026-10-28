@@ -7,6 +7,7 @@
    Cada función se genera dos veces: la primera cuenta cuánto se usa cada variable
    (lo de dentro de un bucle cuenta más) y la segunda pone las más usadas en d2-d7,
    que la función guarda al entrar y recupera al salir. */
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -274,6 +275,24 @@ static int *global_type;
 static int ret_label;
 static int ret_sp;    /* sp_depth en ret_label */
 static int cur_ret;   /* lo que devuelve la función (o la copia) que se genera */
+static int cur_line;  /* la línea de la instrucción que se genera (errores: campo de nil) */
+static int *desc_label;   /* de cada struct: su _DashType (en el código) */
+
+static int find_struct(const char *name)
+{
+    int i;
+    for (i = 0; i < prog->structs.n; i++)
+        if (!strcmp(prog->structs.v[i].name, name)) return i;
+    return -1;
+}
+
+static int field_index(Struct *st, const char *name)
+{
+    int i;
+    for (i = 0; i < st->fields.n; i++)
+        if (!strcmp(st->fields.v[i].name, name)) return i;
+    return -1;
+}
 
 enum { V_NONE, V_LOCAL, V_REG, V_GLOBAL, V_CONST, V_STACK };
 
@@ -824,7 +843,10 @@ static int expr_type(Node *n)
         return var_type(n->name);
     case E_CALL:
         if (find_func(n->name, &idx)) return func_ret(idx);
+        if ((idx = find_struct(n->name)) >= 0) return TY_STRUCT + idx;
         return TY_VOID;
+    case E_NN:
+        return expr_type(n->a);
     case E_BIN:
         ta = expr_type(n->a);
         tb = expr_type(n->b);
@@ -838,7 +860,12 @@ static int expr_type(Node *n)
     case E_SLICE:
         return expr_type(n->a);
     case E_FIELD:
-        if (!strcmp(n->name, "length")) return TY_INT;
+        ta = expr_type(n->a);
+        if (IS_STRUCT(ta)) {
+            Struct *st = &prog->structs.v[ta - TY_STRUCT];
+            int f = field_index(st, n->name);
+            return f >= 0 ? st->fields.v[f].type : TY_VOID;
+        }
         return TY_INT;
     case E_LIST:
         if (!n->args.n) return TY_ARR + TY_VOID;       /* []: lo que se meta dirá qué guarda */
@@ -847,6 +874,11 @@ static int expr_type(Node *n)
     case E_MCALL:
         ta = expr_type(n->a);
         if (IS_ARR(ta) && !strcmp(n->name, "pop")) return ta == TY_ARR + TY_VOID ? TY_INT : ta - TY_ARR;
+        if (IS_STRUCT(ta)) {
+            char name[256];
+            snprintf(name, sizeof name, "%s.%s", prog->structs.v[ta - TY_STRUCT].name, n->name);
+            if (find_func(name, &idx)) return func_ret(idx);
+        }
         return TY_VOID;
     }
     return TY_INT;
@@ -952,6 +984,13 @@ static int is_tmp_expr(Node *e)
 {
     return e->kind == E_BIN || e->kind == E_INTERP || e->kind == E_SLICE || e->kind == E_CALL ||
            e->kind == E_MCALL || e->kind == E_LIST;
+}
+
+/* un struct nuevo (Punto(...)) o una lista literal: nace con una referencia si se asigna */
+static int is_new_obj(Node *e)
+{
+    return (e->kind == E_LIST && e->args.n) || (e->kind == E_CALL && !find_func(e->name, NULL) &&
+                                                 find_struct(e->name) >= 0);
 }
 
 /* d0 (de tipo ty) como texto: un número o un carácter pasan a un texto temporal */
@@ -1130,6 +1169,147 @@ static void gen_list(Node *n, int fresh)
         push_d0();
         rt_call("_dl_arr_own", 2, 0);
     }
+}
+
+/* ---- structs ---- */
+
+/* d0 no puede ser nil: si lo es, "Error: campo de nil (en fuente:línea)" y se acaba */
+static void nil_check(void)
+{
+    tst_d0();
+    w(0x6610);                                         /* bne.s +16 */
+    w(0x4878); w(cur_line & 0x7FFF);                   /* pea línea.w (fichero 0) */
+    w(0x4879);                                         /* pea "campo de nil" */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(add_string("campo de nil", 12));
+    jsr_sym("_dl_fail_at");                            /* no vuelve */
+}
+
+/* el struct de n en d0 y a0, comprobado (self no: ya se comprobó al llamar al método) */
+static Struct *struct_ptr(Node *n, const char *field, int *off, int *ftype)
+{
+    int t = expr_type(n), f;
+    Struct *st;
+    if (!IS_STRUCT(t)) return NULL;
+    st = &prog->structs.v[t - TY_STRUCT];
+    f = field_index(st, field);
+    if (f < 0) return NULL;
+    value(n);
+    if (!(n->kind == E_VAR && !strcmp(n->name, "self"))) nil_check();
+    w(0x2040);                                         /* movea.l d0,a0 */
+    *off = 4 * f;
+    *ftype = st->fields.v[f].type;
+    return st;
+}
+
+static int gen_struct_field(Node *n)
+{
+    int off, ft;
+    if (!struct_ptr(n->a, n->name, &off, &ft)) return -1;
+    w(0x2028); w(off);                                 /* move.l off(a0),d0 */
+    d0_loaded = (uint32_t)obj->code.n;
+    return ft;
+}
+
+/* p.campo = v: un número va tal cual; un texto, _dash_str_set; un objeto, _dash_obj_set */
+static int gen_field_store(Node *target, Node *v)
+{
+    int off, ft;
+    if (!IS_STRUCT(expr_type(target->a))) return 0;
+    value(v);
+    push_d0();
+    if (!struct_ptr(target->a, target->name, &off, &ft))
+        fatal_at(target->line, target->col, "%s no es un campo", target->name);
+    if (ft == TY_STR || IS_OBJ(ft)) {
+        w(0x4868); w(off);                             /* pea off(a0) */
+        sp_depth += 4;
+        rt_call(ft == TY_STR ? "_dl_str_set" : "_dl_obj_set", 2, 0);
+    } else {
+        w(0x215F); w(off);                             /* move.l (sp)+,off(a0) */
+        sp_depth -= 4;
+    }
+    return 1;
+}
+
+/* Punto(a, b): los que faltan, con su valor por defecto. fresh: con una referencia para una
+   variable (_dash_rc_new_obj); si no, un temporal (_dash_rc_alloc_obj). Los textos se copian
+   (_dash_str_set) y los objetos ganan una referencia, como en el constructor de ./dash. */
+static int gen_new(Node *n, int si, int fresh)
+{
+    Struct *st = &prog->structs.v[si];
+    int nf = st->fields.n, i;
+    Node **vals = xmalloc(sizeof(Node *) * (nf + 1)), zero;
+    if (n->args.n > nf) fatal_at(n->line, n->col, "%s tiene %d campos y se le dan %d", st->name, nf, n->args.n);
+    memset(&zero, 0, sizeof zero);
+    zero.kind = E_INT;
+    for (i = 0; i < nf; i++)
+        vals[i] = i < n->args.n ? n->args.v[i] : st->fields.v[i].init ? st->fields.v[i].init : &zero;
+    if (nf) args_to_stack(vals, nf, NULL);
+    {
+        Fixup f;
+        w(0x4879);                                     /* pea descriptor */
+        f.at = (uint32_t)obj->code.n;
+        f.label = desc_label[si];
+        f.abs = 1;
+        f.size = 2;
+        VEC_PUSH(fixups, f);
+        add_reloc(f.at, HK_CODE, NULL);
+        l(0);
+        sp_depth += 4;
+    }
+    w(0x4878); w(4 * nf);                              /* pea tamaño.w */
+    sp_depth += 4;
+    rt_call(fresh ? "_dl_rc_new_obj" : "_dl_rc_alloc_obj", 2, !fresh);
+    w(0x2440);                                         /* movea.l d0,a2 (C no toca a2) */
+    for (i = 0; i < nf; i++) {
+        int ft = st->fields.v[i].type, off = 4 * i;
+        if (ft == TY_STR) {
+            w(0x42AA); w(off);                         /* clr.l off(a2) */
+            w(0x2F2F); w(4 * i);                       /* move.l v(sp),-(sp) */
+            sp_depth += 4;
+            w(0x486A); w(off);                         /* pea off(a2) */
+            sp_depth += 4;
+            rt_call("_dl_str_set", 2, 0);
+        } else {
+            w(0x256F); w(4 * i); w(off);               /* move.l v(sp),off(a2) */
+            if (IS_OBJ(ft)) {
+                w(0x2F2A); w(off);                     /* move.l off(a2),-(sp) */
+                sp_depth += 4;
+                rt_call("_dl_retain", 1, 0);
+            }
+        }
+    }
+    w(0x200A);                                         /* move.l a2,d0 */
+    pop_args(nf);
+    free(vals);
+    return TY_STRUCT + si;
+}
+
+/* p.metodo(args): la función "Struct.metodo" con p (comprobado) delante */
+static int gen_method(Node *n, int t)
+{
+    char name[256];
+    Node call, nn;
+    int idx = 0, r;
+    snprintf(name, sizeof name, "%s.%s", prog->structs.v[t - TY_STRUCT].name, n->name);
+    if (!find_func(name, &idx)) fatal_at(n->line, n->col, "%s no tiene el método %s", prog->structs.v[t - TY_STRUCT].name, n->name);
+    memset(&call, 0, sizeof call);
+    memset(&nn, 0, sizeof nn);
+    call.kind = E_CALL;
+    call.line = n->line;
+    call.col = n->col;
+    call.name = prog->funcs.v[idx].name;
+    nn.kind = E_NN;
+    nn.line = n->line;
+    nn.a = n->a;
+    VEC_PUSH(call.args, &nn);
+    {
+        int i;
+        for (i = 0; i < n->args.n; i++) VEC_PUSH(call.args, n->args.v[i]);
+    }
+    r = gen_expr(&call);
+    free(call.args.v);
+    return r;
 }
 
 /* a[i] de una lista */
@@ -2088,6 +2268,7 @@ static int gen_call(Node *n)
 {
     int i, idx;
     Func *f = find_func(n->name, &idx);
+    if (!f && (idx = find_struct(n->name)) >= 0) return gen_new(n, idx, 0);
     if (!f) return gen_builtin(n);
     if (n->args.n != f->params.n)
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, f->params.n, n->args.n);
@@ -2142,13 +2323,25 @@ static int gen_expr(Node *n)
         if (IS_ARR(expr_type(n->a))) return gen_arr_slice(n);
         fatal_at(n->line, n->col, "aquí no se puede usar [ : ]");
         return TY_VOID;
-    case E_FIELD:
+    case E_FIELD: {
+        int t = gen_struct_field(n);
+        if (t >= 0) return t;
         return gen_field(n);
+    }
+    case E_NN: {
+        int t = gen_expr(n->a);
+        int saved = cur_line;
+        cur_line = n->line;
+        nil_check();
+        cur_line = saved;
+        return t;
+    }
     case E_LIST:
         gen_list(n, 0);
         return expr_type(n);
     case E_MCALL:
         if (IS_ARR(expr_type(n->a))) return gen_list_method(n);
+        if (IS_STRUCT(expr_type(n->a))) return gen_method(n, expr_type(n->a));
         fatal_at(n->line, n->col, "dashc (prueba): .%s() aún no está", n->name);
         return TY_VOID;
     case E_VAR:
@@ -2952,10 +3145,11 @@ static void gen_obj_assign(Node *n, int tt)
 {
     Node *e = n->a;
     Local *lc = find_local(n->name);
-    int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name)), lit = e->kind == E_LIST && e->args.n;
+    int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name)), lit = is_new_obj(e);
     Var v;
     if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
-    if (lit) gen_list(e, 1);
+    if (e->kind == E_LIST) gen_list(e, 1);
+    else if (lit) gen_new(e, find_struct(e->name), 1);
     else value(e);
     if (fresh && (lit || e->kind == E_NIL)) {
         v = declare(n->name, tt);
@@ -3060,6 +3254,7 @@ static void gen_stmt(Node *n)
     long k;
     int ty, forced = forced_type;
     forced_type = -1;
+    cur_line = n->line;
     switch (n->kind) {
     case S_PRINT:
         if (n->a->kind == E_STR) {
@@ -3211,6 +3406,7 @@ static void gen_stmt(Node *n)
             gen_arr_store(n->b, n->a);
             return;
         }
+        if (n->b->kind == E_FIELD && gen_field_store(n->b, n->a)) return;
         fatal_at(n->line, n->col, "dashc (prueba): esta asignación aún no está");
         return;
     case S_BREAK:
@@ -3511,6 +3707,73 @@ static void gen_one(int idx, int label, Func *f, NodeList *body)
     inl_stack.n--;
 }
 
+/* TY_NAMED (un nombre de tipo que el analizador aún no conocía) -> su struct */
+static int resolve_type(int t, int line, int col)
+{
+    int d = 0;
+    while (t >= TY_ARR) {
+        t -= TY_ARR;
+        d++;
+    }
+    if (t >= TY_NAMED) {
+        int si = find_struct(type_names.v[t - TY_NAMED]);
+        if (si < 0) fatal_at(line, col, "el tipo %s no existe", type_names.v[t - TY_NAMED]);
+        t = TY_STRUCT + si;
+    }
+    return t + d * TY_ARR;
+}
+
+static void resolve_list(NodeList *l)
+{
+    int i;
+    for (i = 0; i < l->n; i++) {
+        Node *n = l->v[i];
+        if (n->kind == S_VAR) n->type = resolve_type(n->type, n->line, n->col);
+        resolve_list(&n->body);
+        resolve_list(&n->els);
+    }
+}
+
+/* De cada struct, su _DashType { destroy, tamaño, métodos } y su destroy: libera los textos y
+   suelta los objetos de sus campos (_dash_release_child, como el de ./dash). Van en el código. */
+static void gen_struct_types(void)
+{
+    int si, i;
+    for (si = 0; si < prog->structs.n; si++) {
+        Struct *st = &prog->structs.v[si];
+        int destroy = -1;
+        for (i = 0; i < st->fields.n; i++)
+            if (st->fields.v[i].type == TY_STR || IS_OBJ(st->fields.v[i].type)) destroy = new_label();
+        if (destroy >= 0) {
+            def_label(destroy);
+            w(0x2F0A);                                 /* move.l a2,-(sp) */
+            w(0x246F); w(8);                           /* movea.l 8(sp),a2 */
+            for (i = 0; i < st->fields.n; i++) {
+                int ft = st->fields.v[i].type;
+                if (ft != TY_STR && !IS_OBJ(ft)) continue;
+                w(0x2F2A); w(4 * i);                   /* move.l campo(a2),-(sp) */
+                jsr_sym(ft == TY_STR ? "_dl_str_free" : "_dl_release_child");
+                w(0x588F);                             /* addq.l #4,sp */
+            }
+            w(0x245F);                                 /* movea.l (sp)+,a2 */
+            w(0x4E75);                                 /* rts */
+        }
+        def_label(desc_label[si]);
+        if (destroy >= 0) {
+            Fixup f;
+            f.at = (uint32_t)obj->code.n;
+            f.label = destroy;
+            f.abs = 1;
+            f.size = 2;
+            VEC_PUSH(fixups, f);
+            add_reloc(f.at, HK_CODE, NULL);
+        }
+        l(0);
+        l((uint32_t)(4 * st->fields.n));
+        l(0);
+    }
+}
+
 void gen_program(Program *p, Obj *o)
 {
     int i, main_label, again;
@@ -3538,6 +3801,28 @@ void gen_program(Program *p, Obj *o)
                 fatal_at(p->funcs.v[i].line, p->funcs.v[i].col, "la función %s ya existe", p->funcs.v[i].name);
         func_label[i] = new_label();
     }
+
+    /* los nombres de tipos, a sus structs */
+    desc_label = xmalloc(sizeof(int) * (p->structs.n + 1));
+    for (i = 0; i < p->structs.n; i++) {
+        int j;
+        Struct *st = &p->structs.v[i];
+        for (j = 0; j < i; j++)
+            if (!strcmp(p->structs.v[j].name, st->name)) fatal_at(st->line, st->col, "el struct %s ya existe", st->name);
+        for (j = 0; j < st->fields.n; j++)
+            st->fields.v[j].type = resolve_type(st->fields.v[j].type, st->fields.v[j].line, st->fields.v[j].col);
+        desc_label[i] = new_label();
+    }
+    for (i = 0; i < p->globals.n; i++)
+        p->globals.v[i].type = resolve_type(p->globals.v[i].type, p->globals.v[i].line, p->globals.v[i].col);
+    for (i = 0; i < p->funcs.n; i++) {
+        Func *f = &p->funcs.v[i];
+        int j;
+        for (j = 0; j < f->params.n; j++) f->params.v[j].type = resolve_type(f->params.v[j].type, f->line, f->col);
+        f->ret = resolve_type(f->ret, f->line, f->col);
+        resolve_list(&f->body);
+    }
+    resolve_list(&p->main);
 
     /* globales: sus valores iniciales van en el hunk de datos (los textos, al empezar Main) */
     global_type = xmalloc(sizeof(int) * (p->globals.n + 1));
@@ -3601,5 +3886,6 @@ void gen_program(Program *p, Obj *o)
             memcpy(needed, saved, sizeof(int) * p->funcs.n);
             free(saved);
         }
+    gen_struct_types();
     resolve_fixups();
 }

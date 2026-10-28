@@ -76,6 +76,7 @@ enum {
     E_MCALL,    /* a.name(args) */
     E_LIST,     /* [args] */
     E_INTERP,   /* "...#{x}...": args son los trozos (E_STR y expresiones) */
+    E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
     S_FOREACH   /* for name in a */
