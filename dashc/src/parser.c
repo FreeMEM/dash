@@ -1,6 +1,7 @@
 /* Parser de descenso recursivo. Sigue la gramática de compiler/grammar.py en el
    subconjunto de dashc: enteros, Bool, textos, listas, structs con métodos, variables,
    globales con var, const, funciones, if/elif/else, while, for con rango y sobre listas. */
+#include <stdio.h>
 #include <string.h>
 
 #include "dashc.h"
@@ -33,6 +34,7 @@ static Node *node(int kind, Token *at)
     n->kind = kind;
     n->line = at->line;
     n->col = at->col;
+    n->file = at->file;
     return n;
 }
 
@@ -347,6 +349,15 @@ static Node *stmt(void)
         return n;
     case T_ID: {
         Node *target;
+        if (!strcmp(t->text, "Wait") && peek()->line == t->line && peek()->kind != P_ASSIGN && peek()->kind != P_LP &&
+            peek()->kind != P_DOT && peek()->kind != P_LB) {
+            /* Wait segundos: la función Wait del runtime */
+            n = node(S_EXPR, t);
+            n->a = node(E_CALL, t);
+            n->a->name = "Wait";
+            VEC_PUSH(n->a->args, expr());
+            return n;
+        }
         tk--;
         target = primary();
         if (accept(P_ASSIGN)) {
@@ -395,6 +406,7 @@ static void parse_func(Program *p, Struct *st)
     f.name = name->text;
     f.line = name->line;
     f.col = name->col;
+    f.file = name->file;
     if (st) {
         Param self;
         int i;
@@ -434,12 +446,107 @@ static void parse_func(Program *p, Struct *st)
     expect(K_END);
 }
 
+/* "a/b/../c" -> "a/c", sin "./" */
+static char *normalize(const char *path)
+{
+    char *out = xmalloc(strlen(path) + 1), *seg[256];
+    char *copy = xstrndup(path, strlen(path)), *tok;
+    int n = 0, i, abs = path[0] == '/';
+    for (tok = strtok(copy, "/"); tok; tok = strtok(NULL, "/")) {
+        if (!strcmp(tok, ".")) continue;
+        if (!strcmp(tok, "..") && n > 0 && strcmp(seg[n - 1], "..")) n--;
+        else if (n < 256) seg[n++] = tok;
+    }
+    out[0] = 0;
+    if (abs) strcat(out, "/");
+    for (i = 0; i < n; i++) {
+        if (i) strcat(out, "/");
+        strcat(out, seg[i]);
+    }
+    return out;
+}
+
+/* import "x.dash": como ./dash, relativo al fichero que importa y si no, a sus carpetas de más arriba
+   (la raíz de Dash, con lib/amiga) y a la carpeta actual */
+static void parse_into(Program *p);
+
+static void import_file(Program *p, Token *at, const char *path)
+{
+    const char *from = src_files.v[at->file];
+    char dir[1024], *full = NULL, *text;
+    int i, up;
+    Token *saved_tk = tk;
+    const char *saved_name = src_name;
+    int saved_file = lex_file;
+    const char *slash = strrchr(from, '/');
+    snprintf(dir, sizeof dir, "%.*s", slash ? (int)(slash - from) : 0, from);
+    for (up = 0; up < 10 && !full; up++) {
+        char cand[2048], *norm;
+        snprintf(cand, sizeof cand, "%s%s%s", dir, dir[0] ? "/" : "", path);
+        norm = normalize(cand);
+        if ((text = read_text(norm)) != NULL) full = norm;
+        if (!dir[0] || !strcmp(dir, "/")) break;
+        if (!full) {
+            /* la carpeta de arriba */
+            char *s = strrchr(dir, '/');
+            if (s) *s = 0;
+            else if (strcmp(dir, "..") && strncmp(dir, "../", 3)) dir[0] = 0;
+            else strncat(dir, "/..", sizeof dir - strlen(dir) - 1);
+        }
+    }
+    if (!full && (text = read_text(path)) != NULL) full = normalize(path);
+    if (!full) fatal_at(at->line, at->col, "no encuentro %s para importarlo", path);
+    if (strlen(path) > 7 && !strcmp(path + strlen(path) - 7, ".dashui"))
+        fatal_at(at->line, at->col, "dashc (prueba): import de .dashui aún no está");
+    for (i = 0; i < src_files.n; i++)
+        if (!strcmp(src_files.v[i], full)) return;     /* ya importado */
+    VEC_PUSH(src_files, full);
+    lex_file = src_files.n - 1;
+    src_name = full;
+    tk = lex(text);
+    parse_into(p);
+    tk = saved_tk;
+    src_name = saved_name;
+    lex_file = saved_file;
+}
+
 Program *parse(Token *toks)
 {
     Program *p = xmalloc(sizeof(Program));
     tk = toks;
+    parse_into(p);
+    if (!p->has_main) fatal("falta el bloque Main");
+    return p;
+}
+
+static void parse_into(Program *p)
+{
     while (peek()->kind != T_EOF) {
         Token *t = next();
+        if (t->kind == T_ID && !strcmp(t->text, "import") && peek()->kind == T_STR) {
+            import_file(p, t, next()->text);
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "enum") && peek()->kind == T_ID) {
+            /* enum Nombre A, B = 5, C ... end: cada uno vale el anterior + 1 (el primero, 0) */
+            Enum e = {0};
+            long v = 0;
+            e.name = next()->text;
+            while (!accept(K_END)) {
+                Token *m = expect(T_ID);
+                if (accept(P_ASSIGN)) {
+                    int neg = accept(P_MINUS);
+                    v = expect(T_INT)->val;
+                    if (neg) v = -v;
+                }
+                VEC_PUSH(e.names, m->text);
+                VEC_PUSH(e.vals, v);
+                v++;
+                accept(P_COMMA);
+            }
+            VEC_PUSH(p->enums, e);
+            continue;
+        }
         if (t->kind == K_FUNC) {
             tk--;
             parse_func(p, NULL);
@@ -498,6 +605,4 @@ Program *parse(Token *toks)
             fatal_at(t->line, t->col, "no se esperaba \"%s\" aquí", tok_name(t->kind));
         }
     }
-    if (!p->has_main) fatal("falta el bloque Main");
-    return p;
 }

@@ -29,9 +29,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
 - D5 Builtins de Amiga (609 en `compiler/amiga_builtins.py`): sus runtimes en C van a la librería de dashc, como
   el resto (`gen_lib.py`), y dashc los llama.
 - D6 Ventanas y eventos: `Window`, `EventLoop`, GadTools, MUI, ReAction, `.dashui`.
-- D7 `@native`: es C. `lib/amiga` lo usa 93 veces; los tests, 92. Propuesta: el `@native` de `lib/amiga` se
-  compila al construir dashc (ahí sí hay gcc) y va en su librería; el de un programa del usuario necesita un
-  compilador de C instalado (opcional) o no se admite. A decidir con el usuario.
+- D7 `@native`: es C. `lib/amiga` lo usa 93 veces; los tests, 92. Decidido por el usuario (2026-10-28): el
+  `@native` de `lib/amiga` se compila al construir dashc (ahí sí hay gcc) y va en su librería; el de un programa
+  del usuario NO se admite en Dash 2.0. Lo que hacen los `@native` de tachyon (137), trasfondo (33) y Lorraine (1)
+  se cubre con builtins o con el lenguaje: clasificación en `docs/DASHC_NATIVE.md`.
 - D8 Optimizaciones nuevas que salgan al medir programas reales (no solo enteros).
 - D9 Cierre: `./dash` llama a dashc (o dashc pasa a ser `dash`), documentación en dos idiomas, versión 2.0.
 
@@ -55,3 +56,11 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   campos, globales y elementos, como copia; objetos con `_dash_obj_lend`; un campo que nada cambia, tal cual). La
   cobertura compila como el runner (ruta relativa, `--memcheck` con `# memcheck`): 23 de 23 iguales en el A1200
   (antes 4). Siguen compilando 24 de 309.
+- D3 (2.ª parte): `import` (relativo al fichero que importa, a sus carpetas de más arriba y a la carpeta actual; cada
+  fichero una vez; los errores, al compilar y al ejecutar, con su fichero: `_dash_srcfiles` de 64, la tabla la pone
+  dashc). `enum` (cada miembro, el anterior + 1; un tipo enum es Int) y `Wait`. Una función de una línea con un
+  campo ya no se pone como expresión (el nil diría la línea de quien llama). Test `importa`. Cobertura sin emulador:
+  25 de 309; al entrar los módulos, el `@` sube a 113.
+- D7: clasificados los `@native` del usuario (171 bloques): `docs/DASHC_NATIVE.md`. Lo que bloquea es Tachyon
+  (QuickJS, vídeo, HTML5, imágenes, fuentes, red de fondo: 97 bloques); propuesta, módulos nativos precompilados con
+  firmas `@extern`. Para el resto, ~25 builtins pequeños y `task_start` con funciones Dash.

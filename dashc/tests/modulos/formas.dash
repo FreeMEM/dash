@@ -1,0 +1,17 @@
+# Módulo de prueba para importa.dash (importa a su vez otro)
+import "colores.dash"
+
+const LADOS = 4
+
+struct Cuadro
+    lado: Int = 1
+    color: String = "gris"
+
+    func area() -> Int
+        return self.lado * self.lado
+    end
+end
+
+func describe(c: Cuadro) -> String
+    return "#{c.color} de #{c.lado}: #{c.area()} " + nombre_color(2)
+end

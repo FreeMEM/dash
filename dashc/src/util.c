@@ -6,6 +6,8 @@
 #include "dashc.h"
 
 const char *src_name = "?";
+struct SrcFiles src_files;
+int lex_file;
 
 void *xmalloc(size_t n)
 {

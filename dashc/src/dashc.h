@@ -34,7 +34,10 @@ char *xstrndup(const char *s, size_t n);
         (vec).v[(vec).n++] = (x); \
     } while (0)
 
-extern const char *src_name;
+extern const char *src_name;   /* el fichero de los errores de ahora (fatal_at) */
+/* los ficheros del programa: el principal y los importados (en los errores al ejecutar, por número) */
+extern struct SrcFiles { const char **v; int n, cap; } src_files;
+extern int lex_file;            /* el número del fichero que se está leyendo (Token.file) */
 void fatal(const char *fmt, ...);
 void fatal_at(int line, int col, const char *fmt, ...);
 
@@ -54,7 +57,7 @@ enum {
 };
 
 typedef struct {
-    int kind, line, col;
+    int kind, line, col, file;
     long val;      /* T_INT */
     char *text;    /* T_ID; T_STR ya en Latin-1 y sin escapes */
     int len;
@@ -98,7 +101,7 @@ typedef struct Node Node;
 typedef struct { Node **v; int n, cap; } NodeList;
 
 struct Node {
-    int kind, line, col;
+    int kind, line, col, file;
     int op;          /* E_BIN, E_CMP: el token del operador */
     long val;        /* E_INT, E_BOOL */
     char *name;      /* E_VAR, E_CALL, S_ASSIGN, S_VAR, S_FOR */
@@ -118,7 +121,7 @@ typedef struct {
 
 typedef struct {
     char *name;
-    int line, col;
+    int line, col, file;
     struct { Param *v; int n, cap; } params;
     int ret;         /* tipo que devuelve (sin "-> Tipo", lo deduce gen68k.c) */
     int declared;    /* con "-> Tipo" */
@@ -152,6 +155,13 @@ typedef struct {
 } Struct;
 
 typedef struct {
+    char *name;
+    struct { char **v; int n, cap; } names;
+    struct { long *v; int n, cap; } vals;
+} Enum;
+
+typedef struct {
+    struct { Enum *v; int n, cap; } enums;
     struct { Struct *v; int n, cap; } structs;
     struct { Func *v; int n, cap; } funcs;
     struct { Global *v; int n, cap; } globals;
@@ -161,6 +171,7 @@ typedef struct {
 } Program;
 
 Program *parse(Token *toks);
+char *read_text(const char *path);   /* main.c: el fichero entero, o NULL */
 
 /* ---- código 68000 (gen68k.c) ---- */
 enum { HK_CODE = 0, HK_DATA = 1 };

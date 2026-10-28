@@ -50,6 +50,12 @@ void _dash_print_str(STRPTR s)
     VPrintf((CONST_STRPTR)"%s\n", (APTR)&s);
 }
 
+/* Wait segundos */
+void _dash_wait(LONG s)
+{
+    Delay(s * 50);
+}
+
 void _dash_print_int(LONG v)
 {
     VPrintf((CONST_STRPTR)"%ld\n", (APTR)&v);

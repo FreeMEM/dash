@@ -221,12 +221,16 @@ __dash_udivmod:
 	rts
 
 | ---- arranque y salida (sin libnix) ----
-| El código de dashc entra con a0 = main y a1 = el nombre del fuente (para los errores).
+| El código de dashc entra con a0 = main y a1 = los nombres de sus ficheros (para los errores),
+| terminados en 0: van a _dash_srcfiles (63 como mucho).
 	.globl	__dash_start
 __dash_start:
 	movem.l	d2-d7/a2-a6,-(sp)
 	move.l	sp,dash_entry_sp
-	move.l	a1,__dash_srcfiles
+	lea	__dash_srcfiles,a2
+	moveq	#62,d0
+1:	move.l	(a1)+,(a2)+
+	dbeq	d0,1b
 	move.l	a0,-(sp)
 	jsr	__dash_init
 	move.l	(sp)+,a0

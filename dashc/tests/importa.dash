@@ -1,0 +1,13 @@
+# import: módulos con structs, constantes y funciones; un módulo que importa otro; un error de nil
+# en una función de otro fichero dice ese fichero
+import "modulos/formas.dash"
+import "modulos/colores.dash"
+
+Main
+    c = Cuadro(3, "verde")
+    Print describe(c)
+    Print LADOS * c.area()
+    Print nombre_color(1)
+    var nada: Cuadro = nil
+    Print peta(nada)
+end

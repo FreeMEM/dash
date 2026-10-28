@@ -277,6 +277,7 @@ static int ret_label;
 static int ret_sp;    /* sp_depth en ret_label */
 static int cur_ret;   /* lo que devuelve la función (o la copia) que se genera */
 static int cur_line;  /* la línea de la instrucción que se genera (errores: campo de nil) */
+static int cur_file;  /* y su fichero (src_files) */
 static int *desc_label;   /* de cada struct: su _DashType (en el código) */
 
 static int find_struct(const char *name)
@@ -538,6 +539,19 @@ static int fold(Node *n, long *v)
             if (!strcmp(prog->consts.v[i].name, n->name)) return fold(prog->consts.v[i].value, v);
         return 0;
     }
+    case E_FIELD:
+        /* Enum.MIEMBRO */
+        if (n->a->kind == E_VAR && !find_local(n->a->name)) {
+            int i, j;
+            for (i = 0; i < prog->enums.n; i++)
+                if (!strcmp(prog->enums.v[i].name, n->a->name))
+                    for (j = 0; j < prog->enums.v[i].names.n; j++)
+                        if (!strcmp(prog->enums.v[i].names.v[j], n->name)) {
+                            *v = prog->enums.v[i].vals.v[j];
+                            return 1;
+                        }
+        }
+        return 0;
     case E_NEG:
         if (!fold(n->a, &a)) return 0;
         *v = (int32_t)(0u - (uint32_t)a);
@@ -1184,8 +1198,13 @@ static void nil_check(void)
         return;
     }
     tst_d0();
-    w(0x6610);                                         /* bne.s +16 */
-    w(0x4878); w(cur_line & 0x7FFF);                   /* pea línea.w (fichero 0) */
+    if (cur_file) {
+        w(0x6612);                                     /* bne.s +18 */
+        w(0x4879); l((uint32_t)cur_file << 16 | (cur_line & 0xFFFF));   /* pea fichero << 16 | línea */
+    } else {
+        w(0x6610);                                     /* bne.s +16 */
+        w(0x4878); w(cur_line & 0x7FFF);               /* pea línea.w (fichero 0) */
+    }
     w(0x4879);                                         /* pea "campo de nil" */
     add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
     l(add_string("campo de nil", 12));
@@ -2077,6 +2096,7 @@ static int gen_compare(Node *n)
 /* funciones del runtime: argumentos Int, o S para un texto literal */
 static const struct { const char *name, *sym, *args; int ret; } builtins[] = {
     {"bench_start", "__bench_start", "", TY_VOID},
+    {"Wait", "__dash_wait", "I", TY_VOID},
     {"bench_end", "__bench_end", "SI", TY_VOID},
     {NULL, NULL, NULL, 0}
 };
@@ -2174,6 +2194,8 @@ static int subst_ok(Node *e, Func *f)
 {
     int i;
     if (!e) return 1;
+    /* un campo puede dar "campo de nil", que dice la línea de la función: así no se pone */
+    if (e->kind == E_FIELD || e->kind == E_MCALL) return 0;
     if (e->kind == E_VAR && param_index(f, e->name) < 0 && find_local(e->name)) return 0;
     for (i = 0; i < e->args.n; i++)
         if (!subst_ok(e->args.v[i], f)) return 0;
@@ -3327,10 +3349,12 @@ static void gen_stmt(Node *n)
     int ty, forced = forced_type;
     forced_type = -1;
     cur_line = n->line;
+    cur_file = n->file;
+    src_name = src_files.v[n->file];                   /* para los errores al compilar */
     if (memcheck) {
         /* el sitio de la instrucción, para los avisos (_DASH_MC_WHERE de ./dash) */
         char where[600];
-        snprintf(where, sizeof where, "%s:%d", src_name, n->line);
+        snprintf(where, sizeof where, "%s:%d", src_files.v[n->file], n->line);
         w(0x23FC);                                     /* move.l #"fuente:línea",_dash_mc_where */
         add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
         l(add_string(where, (int)strlen(where)));
@@ -3816,7 +3840,9 @@ static int resolve_type(int t, int line, int col)
         d++;
     }
     if (t >= TY_NAMED) {
-        int si = find_struct(type_names.v[t - TY_NAMED]);
+        int si = find_struct(type_names.v[t - TY_NAMED]), i;
+        for (i = 0; si < 0 && i < prog->enums.n; i++)
+            if (!strcmp(prog->enums.v[i].name, type_names.v[t - TY_NAMED])) return TY_INT + d * TY_ARR;   /* un enum es Int */
         if (si < 0) fatal_at(line, col, "el tipo %s no existe", type_names.v[t - TY_NAMED]);
         t = TY_STRUCT + si;
     }
@@ -3876,7 +3902,7 @@ static void gen_struct_types(void)
 
 void gen_program(Program *p, Obj *o)
 {
-    int i, main_label, again;
+    int i, main_label, again, files_label;
     prog = p;
     obj = o;
 
@@ -3960,9 +3986,18 @@ void gen_program(Program *p, Obj *o)
         add_reloc(f.at, HK_CODE, NULL);
         l(0);
     }
-    w(0x43F9);                                         /* lea nombre_del_fuente,a1 */
-    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-    l(add_string(src_name, (int)strlen(src_name)));
+    files_label = new_label();
+    {
+        Fixup f;
+        w(0x43F9);                                     /* lea ficheros,a1: sus nombres, para los errores */
+        f.at = (uint32_t)obj->code.n;
+        f.label = files_label;
+        f.abs = 1;
+        f.size = 2;
+        VEC_PUSH(fixups, f);
+        add_reloc(f.at, HK_CODE, NULL);
+        l(0);
+    }
     w(0x4EF9);                                         /* jmp _dash_start */
     add_reloc((uint32_t)obj->code.n, -1, "__dash_start");
     l(0);
@@ -3991,5 +4026,12 @@ void gen_program(Program *p, Obj *o)
             free(saved);
         }
     gen_struct_types();
+    /* los nombres de los ficheros (_dash_srcfiles de ./dash), terminados en 0 */
+    def_label(files_label);
+    for (i = 0; i < src_files.n && i < 63; i++) {
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
+    }
+    l(0);
     resolve_fixups();
 }

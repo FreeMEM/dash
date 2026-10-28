@@ -130,6 +130,7 @@ Token *lex(const char *src)
             s++;
         }
         t.line = line;
+        t.file = lex_file;
         t.col = (int)(s - line_start) + 1;
         if (!*s) {
             t.kind = T_EOF;

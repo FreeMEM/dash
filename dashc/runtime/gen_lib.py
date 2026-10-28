@@ -48,7 +48,7 @@ def main():
                         "static void _dash_exit(int code);\nvoid _dash_quit(int code) __attribute__((noreturn));\n", 1)
     # el nombre del fuente lo pone dashc al arrancar
     text, n = re.subn(r"static const char \*const _dash_srcfiles\[\] = \{[^\n]*\};",
-                      "const char *_dash_srcfiles[1];", text)
+                      "const char *_dash_srcfiles[64];", text)
     assert n == 1, "gen_lib: no encuentro _dash_srcfiles"
     # --memcheck: dashc pone el sitio de cada instrucción en _dash_mc_where (tiene que verse fuera)
     old = "static const char *_dash_mc_where = NULL;"

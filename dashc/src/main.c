@@ -15,6 +15,19 @@ unsigned long __stack = 65536;
 extern const unsigned char dashrt_o[], dashrt_mc_o[];
 extern const unsigned int dashrt_o_len, dashrt_mc_o_len;
 
+char *read_text(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    Buf b = {0};
+    char tmp[4096];
+    size_t n;
+    if (!f) return NULL;
+    while ((n = fread(tmp, 1, sizeof tmp, f)) > 0) buf_bytes(&b, tmp, n);
+    fclose(f);
+    buf_byte(&b, 0);
+    return (char *)b.p;
+}
+
 static uint8_t *read_file(const char *path, size_t *len)
 {
     FILE *f = fopen(path, "rb");
@@ -62,6 +75,8 @@ int main(int argc, char **argv)
         rtlen = dashrt_mc_o_len;
     }
     src_name = in;
+    VEC_PUSH(src_files, in);
+    lex_file = 0;
     src = read_file(in, &len);
     if (rt_path) rt = read_file(rt_path, &rtlen);
 
