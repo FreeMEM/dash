@@ -35,11 +35,16 @@ Falta todo lo demás: textos en variables, arrays, structs, Float, builtins, ven
 
 ## Lo comprobado
 
-- Los seis tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
-- `build/dashc.amiga` compila los seis dentro de un A500 emulado; los ejecutables salen idénticos
-  byte a byte a los del PC y funcionan.
-- Los ejecutables ocupan entre 1,5 y 3 KB (con gcc, entre 6 y 9 KB).
-- Velocidad (`bench/bench_enteros.dash`, veces el tiempo de gcc `-O2`): de 1,1 a 1,7 en A500 y de
-  1,1 a 2,4 en A1200; la recursión (fib) va más rápida que con gcc (0,6 y 0,8).
-- Como gcc con las funciones `static`, una función pequeña o llamada desde un solo sitio se copia
-  donde se llama (no si es recursiva); las que nunca se llaman de verdad no van en el ejecutable.
+- Los siete tests dan la misma salida que el Dash de Python en A1200 y A500 con la ROM 3.1.
+- `build/dashc.amiga` compila los siete dentro de un A500 y de un A1200 emulados; los ejecutables
+  salen idénticos byte a byte a los del PC y funcionan.
+- Los ejecutables ocupan entre 1,7 y 4,7 KB (con gcc, entre 6 y 9,5 KB).
+- Velocidad (`bench/bench_enteros.dash`, veces el tiempo de gcc `-O2`; menos de 1 es más rápido):
+  de media 0,93 en A500 y 1,00 en A1200. Lo más lento, 1,14 (contar bits en A1200); lo más rápido,
+  la recursión (fib, 0,55 y 0,75).
+- Optimizaciones, como las de gcc: variables en d2-d7; una función pequeña o llamada desde un solo
+  sitio se copia donde se llama (no si es recursiva), y la de una línea, como expresión; un `for` o
+  un `while` que solo suma 1 cuenta con `dbra`; `i * k` en un bucle se lleva sumando; una variable
+  asignada una sola vez con un valor fijo es una constante; el índice de un `for` tiene rango
+  conocido y con él la división y el producto de 16 bits van sin comprobaciones; multiplicar y
+  dividir prueban en línea el caso de 16 bits; en 68020 o mejor, el runtime usa `divs.l` y `muls.l`.
