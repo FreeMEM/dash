@@ -221,21 +221,24 @@ __dash_udivmod:
 	rts
 
 | ---- arranque y salida (sin libnix) ----
-| El código de dashc entra con a0 = main y a1 = los nombres de sus ficheros (para los errores),
-| terminados en 0: van a _dash_srcfiles (63 como mucho).
+| El código de dashc entra con main y los nombres de sus ficheros (para los errores, terminados en 0:
+| van a _dash_srcfiles, 63 como mucho) en la pila, y en a0 y d0 la línea de órdenes que da AmigaDOS.
 	.globl	__dash_start
 __dash_start:
-	movem.l	d2-d7/a2-a6,-(sp)
+	movem.l	d2-d7/a2-a6,-(sp)	| 44 bytes; detrás, main y los ficheros
 	move.l	sp,dash_entry_sp
+	move.l	48(sp),a1
 	lea	__dash_srcfiles,a2
-	moveq	#62,d0
+	moveq	#62,d1
 1:	move.l	(a1)+,(a2)+
-	dbeq	d0,1b
+	dbeq	d1,1b
+	move.l	d0,-(sp)
 	move.l	a0,-(sp)
-	jsr	__dash_init
-	move.l	(sp)+,a0
+	jsr	__dash_init		| _dash_init(línea, largo)
+	addq.l	#8,sp
 	tst.l	d0
 	jne	1f
+	move.l	44(sp),a0
 	jsr	(a0)
 	moveq	#0,d0
 1:	move.l	d0,-(sp)
@@ -249,6 +252,7 @@ __dash_quit:
 	move.l	d2,d0
 	move.l	dash_entry_sp,sp
 	movem.l	(sp)+,d2-d7/a2-a6
+	addq.l	#8,sp			| main y los ficheros
 	rts
 
 | ---- las rutinas de libgcc que usa el C del runtime: van a las de arriba ----

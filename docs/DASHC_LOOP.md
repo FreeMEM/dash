@@ -95,3 +95,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   `\"` dentro de `#{...}`. Globales de cualquier tipo con cualquier valor inicial (al empezar Main). Test `dicc`.
   La cobertura completa anterior se torció: tras `test_args` (argumentos de la línea de órdenes, que el arranque
   de dashc aún no lee) los demás programas no sacaron nada; se repite.
+- Arranque como libnix: la línea de órdenes (a0/d0 de AmigaDOS) partida en argc/argv con sus comillas (`arg`,
+  `arg_count`); desde el Workbench, su mensaje (`_WBenchMsg`), la carpeta del programa como actual y el mensaje
+  devuelto en Forbid al acabar. El código de entrada ya no pisa a0/d0 (main y los ficheros van en la pila).
+  Test `argumentos`; la cobertura pasa `# emu-args:`.

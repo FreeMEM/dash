@@ -10,7 +10,10 @@ struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;   /* los @native de lib/amiga (en ./dash la abre libnix) */
-struct WBStartup *_WBenchMsg;   /* el mensaje del Workbench (libnix); dashc aún arranca solo desde el Shell */
+struct WBStartup *_WBenchMsg;   /* desde el Workbench, su mensaje (como libnix) */
+static char *dash_cmdline;      /* desde el Shell, la línea de órdenes partida (argv) */
+static BPTR dash_old_dir;
+static char *dash_args_buf[64];
 struct Device *TimerBase;
 static struct timerequest *bench_tr;
 static struct EClockVal bench_t0;
@@ -19,10 +22,58 @@ static ULONG bench_freq;
 /* 68020 o mejor: rt_math.s usa divs.l y muls.l (como utility.library con gcc) */
 UBYTE _dash_cpu020;
 
-/* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
-LONG _dash_init(void)
+/* Los argumentos del Shell, como los parte libnix: separados por espacios, "entre comillas" con
+   *" y *N dentro; argv[0], el nombre del programa */
+static void dash_split_args(const char *cmd, LONG len)
 {
+    char *p, *o;
+    int n = 0;
+    dash_cmdline = AllocVec(len + 1, MEMF_ANY);
+    if (!dash_cmdline) return;
+    p = o = dash_cmdline;
+    CopyMem((APTR)cmd, p, len);
+    p[len] = 0;
+    dash_args_buf[n++] = "";
+    while (*p && n < 63) {
+        while (*p == ' ' || *p == '\t' || *p == '\n') p++;
+        if (!*p) break;
+        dash_args_buf[n++] = o;
+        if (*p == '"') {
+            p++;
+            while (*p && *p != '"') {
+                if (*p == '*' && p[1]) {
+                    p++;
+                    *o++ = (*p == 'N' || *p == 'n') ? '\n' : (*p == 'E' || *p == 'e') ? 27 : *p;
+                    p++;
+                } else {
+                    *o++ = *p++;
+                }
+            }
+            if (*p) p++;
+        } else {
+            while (*p && *p != ' ' && *p != '\t' && *p != '\n') *o++ = *p++;
+        }
+        if (*p) p++;
+        *o++ = 0;
+    }
+    dash_args_buf[n] = NULL;
+    _dash_argc = n;
+    _dash_argv = dash_args_buf;
+}
+
+/* Desde _dash_start (rt_math.s): 0 si todo fue bien; si no, el código de salida */
+LONG _dash_init(const char *cmd, LONG len)
+{
+    struct Process *pr;
     SysBase = *(struct ExecBase **)4;
+    pr = (struct Process *)FindTask(NULL);
+    if (!pr->pr_CLI) {
+        /* desde el Workbench: su mensaje, y la carpeta del programa como actual (libnix) */
+        WaitPort(&pr->pr_MsgPort);
+        _WBenchMsg = (struct WBStartup *)GetMsg(&pr->pr_MsgPort);
+    } else {
+        dash_split_args(cmd, len);
+    }
     _dash_cpu020 = (SysBase->AttnFlags & AFF_68020) != 0;
     _dash_trap_on();
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
@@ -32,6 +83,7 @@ LONG _dash_init(void)
         _dash_exit_cleanup();
         return 10;
     }
+    if (_WBenchMsg && _WBenchMsg->sm_ArgList) dash_old_dir = CurrentDir(_WBenchMsg->sm_ArgList[0].wa_Lock);
     return 0;
 }
 
@@ -48,6 +100,13 @@ void _dash_finish(void)
     _dash_exit_cleanup();
     _dash_atexit_run();
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
+    if (dash_cmdline) FreeVec(dash_cmdline);
+    if (_WBenchMsg) {
+        if (dash_old_dir) CurrentDir(dash_old_dir);
+        /* el mensaje se devuelve en Forbid: el Workbench descarga el programa al recibirlo */
+        Forbid();
+        ReplyMsg((struct Message *)_WBenchMsg);
+    }
 }
 
 void _dash_print_str(STRPTR s)

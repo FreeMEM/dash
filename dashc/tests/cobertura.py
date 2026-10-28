@@ -66,7 +66,8 @@ def main():
         print("falta $DASH_KICKSTART: no se ejecuta")
         return 1
     res = emu_run.run_programs([str(e) for _, e, _ in runnable], timeout=900, kickstart=rom,
-                               system=os.environ.get("DASH_EMU_SYS"))
+                               system=os.environ.get("DASH_EMU_SYS"),
+                               args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in runnable])
     good = 0
     bad = []
     for (f, _, text), r in zip(runnable, res):

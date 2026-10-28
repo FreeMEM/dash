@@ -4208,28 +4208,21 @@ void gen_program(Program *p, Obj *o)
 
     /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */
     main_label = new_label();
-    {
-        Fixup f;
-        w(0x41F9);                                     /* lea main,a0 */
-        f.at = (uint32_t)obj->code.n;
-        f.label = main_label;
-        f.abs = 1;
-        f.size = 2;
-        VEC_PUSH(fixups, f);
-        add_reloc(f.at, HK_CODE, NULL);
-        l(0);
-    }
+    /* (a0 y d0 traen la línea de órdenes: no se tocan) */
     files_label = new_label();
     {
-        Fixup f;
-        w(0x43F9);                                     /* lea ficheros,a1: sus nombres, para los errores */
-        f.at = (uint32_t)obj->code.n;
-        f.label = files_label;
-        f.abs = 1;
-        f.size = 2;
-        VEC_PUSH(fixups, f);
-        add_reloc(f.at, HK_CODE, NULL);
-        l(0);
+        int k;
+        for (k = 0; k < 2; k++) {
+            Fixup f;
+            w(0x4879);                                 /* pea ficheros (sus nombres, para los errores); pea main */
+            f.at = (uint32_t)obj->code.n;
+            f.label = k ? main_label : files_label;
+            f.abs = 1;
+            f.size = 2;
+            VEC_PUSH(fixups, f);
+            add_reloc(f.at, HK_CODE, NULL);
+            l(0);
+        }
     }
     w(0x4EF9);                                         /* jmp _dash_start */
     add_reloc((uint32_t)obj->code.n, -1, "__dash_start");
