@@ -8,7 +8,7 @@
 # expect-c: largo(f, _DASH_LEND_Fijo_texto(
 # expect-c: cambiar(c, _DASH_LEND_Cambia_texto(
 # expect-no-c: LONG len = s ? strlen(s) : 0;
-# expect-c: if (d) _dash_str_setlen(d, len);
+# expect-c: ULONG len = _dash_str_len(s);
 # memcheck
 # expect-out: 70 o
 # expect-out: [uno] dos

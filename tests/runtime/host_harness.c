@@ -26,6 +26,8 @@ static int Printf(CONST_STRPTR f, ...){ char fmt[256]; int j=0; va_list ap;
  for(int i=0; f[i] && j<250; i++){ if(f[i]=='%' && f[i+1]=='l' && f[i+2]=='d'){ fmt[j++]='%'; fmt[j++]='d'; i+=2; } else fmt[j++]=f[i]; }
  fmt[j]=0; va_start(ap,f); int n=vprintf(fmt,ap); va_end(ap); return n; }
 
+/* the runtime reads the bytes before any text to see if it is Dash's (harmless on the Amiga) */
+#define _DASH_NOASAN __attribute__((no_sanitize_address))
 /*RUNTIME*/
 
 /* blocks parked in the small-string free lists count as freed */
@@ -58,7 +60,7 @@ int main(void){ int fails=0;
  {
   long base = LIVE; ULONG m0 = _dash_tmp_mark(), m = m0; STRPTR v = NULL, w = NULL, t;
   t = DashString_concat("ab", "cd"); CHECK(LIVE == base + 1);
-  _dash_tmp_release(m); CHECK(LIVE == base); CHECK(_dash_tmp == NULL || _dash_tmp->serial <= m);
+  _dash_tmp_release(m); CHECK(LIVE == base); CHECK(_dash_ts_n == 0 || _dash_ts[_dash_ts_n - 1].serial <= m);
   /* a loop that concatenates keeps one live block per variable */
   m = _dash_tmp_mark();
   for (int i = 0; i < 1000; i++) {
@@ -211,9 +213,9 @@ int main(void){ int fails=0;
    m2 = _dash_tmp_mark();
    CHECK(_dash_tmp_take(t) && _dash_tmp_serial == m2);
    u = _dash_str_dup("tres", TRUE);
-   CHECK(_dash_tmp == _DASH_STR_HDR(u));
+   CHECK(_dash_ts_n > 0 && _dash_ts[_dash_ts_n - 1].h == _DASH_STR_HDR(u));
    _dash_tmp_release(m2);
-   CHECK(!_dash_tmp || _dash_tmp->serial <= m2);     /* "tres" came after the mark: freed */
+   CHECK(_dash_ts_n == 0 || _dash_ts[_dash_ts_n - 1].serial <= m2);     /* "tres" came after the mark: freed */
    _dash_str_free(t); _dash_str_free(v);
    _dash_tmp_release(m);
  }

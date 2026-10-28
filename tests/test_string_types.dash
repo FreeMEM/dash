@@ -6,10 +6,10 @@
 # expect-c: STRPTR nombre_fijo(void)
 # expect-c: void eco(LONG s) {
 # expect-c: Printf("%ld\n", s);
-# expect-c: _dash_str_cmp(nombre_fijo(), "Ana") == 0
-# expect-c: _dash_str_cmp(msg, "otro") != 0
-# expect-c: _dash_str_set(&total, DashString_concat("Total: ", DashString_from_int(n)));
-# expect-c: _dash_str_set(&cuenta, DashString_concat(DashString_from_int(n), " items"));
+# expect-c: _dash_str_eq_lit(nombre_fijo(), "Ana", sizeof("Ana") - 1) == TRUE
+# expect-c: _dash_str_eq_lit(msg, "otro", sizeof("otro") - 1) != TRUE
+# expect-c: _dash_str_set_join(&total, 2, (STRPTR[]){"Total: ", DashString_from_int(n)}, (const LONG[]){sizeof("Total: ") - 1, -2});
+# expect-c: _dash_str_set_join(&cuenta, 2, (STRPTR[]){DashString_from_int(n), " items"}, (const LONG[]){-2, sizeof(" items") - 1});
 # expect-c: LONG x = (!(a == b));
 # expect-c: Printf("100%% hecho\n");
 #
