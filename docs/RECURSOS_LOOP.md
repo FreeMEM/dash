@@ -235,3 +235,14 @@ diga el usuario. Base medida: `Base ronda 3`.
 - Medida (`string_compare`, textos de la misma longitud y mismo primer byte: el peor caso): −7 % en A500 y A1200.
   La primera versión (longitud primero y un bucle con contador) iba un 3-6 % peor que `strcmp`.
 - Probado: los tests de textos en las tres máquinas y con `--memcheck`; 456/456.
+
+### Cierre de la tercera ronda
+- Medida final (`Ronda 3 final (R7-R13)` frente a `Base ronda 3`, A500 / A1200): `string_concat_int` −16 % / −17 %,
+  `string_interp` −7 % / −7 %, `string_compare` −6 % / −10 %, `string_chars_26` −6 % / −3 %, `float_mul` +3 % / −20 %;
+  peor `string_return` +9 % / +11 % y `nested_struct_new` +5 % / +6 %. Diccionarios con clave literal −41 % / −34 %
+  (programa aparte). Memoria: −8 KB por programa (R11). Zorro: sin backdrop, ninguna lectura de la tarjeta al
+  actualizar el lienzo (R7). Ejecutables +11 KB en total (+2,8 %).
+- Batería final: 456/456 sin emulador; 34/34 ejemplos; `--emu --emu-a500 --emu-32` (con RTG) 1.104/1.107 y
+  `--emu --memcheck` 675/676: solo `test_on_click_timer` (pendiente, también en `main`).
+- Queda: con backdrop (RTG) las lecturas de la tarjeta siguen (las pide la detección de iconos); el bucle por píxel
+  de `_dash_desk_present_chunky` se podría acelerar por filas, sin forma de medirlo en FS-UAE.

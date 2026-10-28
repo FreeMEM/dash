@@ -1013,6 +1013,13 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] MUI: Tab y Mayúsculas+Tab como teclas sobre el lienzo (`mui_canvas_take_tab`, `"take_tab"` en el `.dashui`) (D48)
 - [x] 686 builtins (94 de MUI); 454 resultados sin emulador; 34 ejemplos
 
+### Recursos, ronda 3 (2026-10-27/28, rama `recursos3`)
+- [x] Textos con su longitud en la cabecera y `s = a + b` escrito en su sitio; temporales en una pila (R8, R10)
+- [x] RTG sin backdrop: el lienzo del escritorio no lee de la tarjeta al actualizar (R7)
+- [x] Float con `mulu.l` en 68020-68040 (R9); sin los 8 KB de pila para excepciones (R11)
+- [x] Diccionarios con el hash de las claves literales al compilar (R12); `s == "literal"` sin strcmp (R13)
+- [x] `test_args_wb` arreglado (tapaba la pantalla de los tests siguientes); detalle en `docs/RECURSOS_LOOP.md`
+
 ## Notas y Decisiones
 
 ### Decisiones tomadas:
