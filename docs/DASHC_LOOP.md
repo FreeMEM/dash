@@ -285,3 +285,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     test redondea). Batería y cobertura bien (208 de 312; 135 de 135); los tamaños de siempre, iguales.
   - A Tachyon, para su `js.dash`, le falta lo de su `@c` (`_js_aserto`, las clases `__dashweb_*`...), que llama a
     funciones Dash y a la API interna del runtime: eso, a su módulo de C (y las retrollamadas a Dash, por ver).
+- D7 (5.ª parte): retrollamadas de C a Dash. Una función de Dash pasada como `Func` a un `@extern` sigue el convenio
+  de C (argumentos en la pila, `link a5`, guarda los d2-d7 que usa), pero crear un struct dejaba a2 cambiado: ahora
+  lo guarda y lo restaura (2 instrucciones por struct creado). dashc/tests/externo.dash: `ext_aplicar(doble, 21)` y
+  `ext_sumar_con(guardar)`, que llama 6 veces a una función de Dash que crea structs con textos mientras gcc tiene
+  un puntero en a2 (antes daba basura). Iguales que gcc en A1200 y A500. Un texto que devuelve la función de Dash
+  es un temporal: el C lo copia si lo guarda.
+  - Batería bien (42 de 42) y cobertura igual (208 de 312; 135 de 135).

@@ -62,3 +62,16 @@ long ext_mates(long x)
     /* (log2 redondeado: el de libnix da 5,999... para 64) */
     return (long)(log2((double)x) * 1000 + 0.5) + (long)round(x / 4.0) * 10 + (long)trunc(-x / 3.0) + lrint(2.5);
 }
+
+/* retrollamadas: C llama a una función de Dash (Func) y espera que respete sus registros (d2-d7, a2-a6) */
+long ext_aplicar(long (*f)(long), long x) { return f(x) * 10; }
+
+static long tabla[6] = {1, 2, 3, 4, 5, 6};
+
+long ext_sumar_con(long (*f)(long))
+{
+    long i, s = 0;
+    const long *p = tabla;          /* (en un registro mientras se llama a f) */
+    for (i = 0; i < 6; i++) s += f(p[i]) + p[i];
+    return s;
+}

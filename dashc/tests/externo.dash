@@ -11,6 +11,26 @@
 @extern("externo") func ext_crece(n: Int) -> Int
 @extern("externo") func ext_fecha(t: Int) -> String
 @extern("externo") func ext_mates(x: Int) -> Int
+@extern("externo") func ext_aplicar(f: Func, x: Int) -> Int
+@extern("externo") func ext_sumar_con(f: Func) -> Int
+
+struct Caja
+    v: Int
+    nombre: String
+end
+
+var cajas: [Caja] = []
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+# (crea un struct con un texto: usa registros y llama al runtime)
+func guardar(x: Int) -> Int
+    c = Caja(x * x, "caja " + x)
+    cajas.push(c)
+    return c.v
+end
 
 Main
     Print ext_suma(2, 40)
@@ -33,4 +53,7 @@ Main
     Print ext_fecha(951782400)
     Print ext_fecha(1793220724)
     Print ext_mates(64)
+    Print ext_aplicar(doble, 21)
+    Print ext_sumar_con(guardar)
+    Print "#{cajas.length} #{cajas[5].nombre} #{cajas[5].v}"
 end

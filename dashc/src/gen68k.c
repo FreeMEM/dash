@@ -1672,19 +1672,22 @@ static int gen_new(Node *n, int si, int fresh)
     w(0x4878); w(4 * nf);                              /* pea tamaño.w */
     sp_depth += 4;
     rt_call(fresh ? "_dl_rc_new_obj" : "_dl_rc_alloc_obj", 2, !fresh);
+    /* a2 se guarda: una función de Dash a la que llama C (una retrollamada) tiene que dejarlo como estaba */
+    w(0x2F0A);                                         /* move.l a2,-(sp) */
+    sp_depth += 4;
     w(0x2440);                                         /* movea.l d0,a2 (C no toca a2) */
     for (i = 0; i < nf; i++) {
         int ft = st->fields.v[i].type, off = 4 * i;
         if (IS_STRLIKE(ft)) {
             w(0x42AA); w(off);                         /* clr.l off(a2) */
-            w(0x2F2F); w(4 * i);                       /* move.l v(sp),-(sp) */
+            w(0x2F2F); w(4 * i + 4);                   /* move.l v(sp),-(sp) */
             sp_depth += 4;
             w(0x486A); w(off);                         /* pea off(a2) */
             sp_depth += 4;
             /* un texto que no es un temporal nuevo (una variable, un parámetro) se copia */
             rt_call(is_tmp_expr(vals[i]) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
         } else {
-            w(0x256F); w(4 * i); w(off);               /* move.l v(sp),off(a2) */
+            w(0x256F); w(4 * i + 4); w(off);           /* move.l v(sp),off(a2) */
             if (IS_OBJ(ft) && !st->fields.v[i].weak) {
                 w(0x2F2A); w(off);                     /* move.l off(a2),-(sp) */
                 sp_depth += 4;
@@ -1693,6 +1696,8 @@ static int gen_new(Node *n, int si, int fresh)
         }
     }
     w(0x200A);                                         /* move.l a2,d0 */
+    w(0x245F);                                         /* movea.l (sp)+,a2 */
+    sp_depth -= 4;
     pop_args(nf);
     free(vals);
     return TY_STRUCT + si;
