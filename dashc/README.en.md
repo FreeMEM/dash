@@ -40,11 +40,13 @@ Everything else is missing: strings in variables, arrays, structs, Float, builti
   byte-identical to the PC ones and run.
 - The executables take 1.7 to 4.7 KB (6 to 9.5 KB with gcc).
 - Speed (`bench/bench_enteros.dash`, times the time of gcc `-O2`; below 1 is faster): on average
-  0.93 on A500 and 1.00 on A1200. The slowest, 1.14 (counting bits on A1200); the fastest,
-  recursion (fib, 0.55 and 0.75).
+  0.92 on A500 and 0.97 on A1200 (the emulator varies 3 % between runs). The slowest, 1.05
+  (nested loops: gcc deduces that if i < j, i == j is false); the fastest, recursion (fib, 0.55
+  and 0.70).
 - Optimizations, like gcc's: variables in d2-d7; a small function or one called from a single place
   is copied where it is called (not if it is recursive), and a one-line one as an expression; a `for`
   or a `while` that only adds 1 counts with `dbra`; `i * k` in a loop is kept as a running sum; a
   variable assigned once with a fixed value is a constant; a `for` index has a known range, and with
   it 16-bit division and product need no checks; multiply and divide try the 16-bit case inline; on
-  a 68020 or better the runtime uses `divs.l` and `muls.l`.
+  a 68020 or better the runtime uses `divs.l` and `muls.l`; branches that reach with 8 bits use
+  their short form.

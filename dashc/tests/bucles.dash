@@ -250,6 +250,15 @@ Main
     end
     Print p
     Print cifras(255) + cifras(1023)
+    # el rango del argumento dice si hace falta mirar la condición al entrar al while
+    p = 0
+    for i in (0..5)
+        p = p + cifras(i) * 10
+    end
+    for i in (1..5)
+        p = p + cifras(i)
+    end
+    Print p
     Print mitades(1000)
     Print mitades(-1000)
     # restas y productos con los dos lados calculados

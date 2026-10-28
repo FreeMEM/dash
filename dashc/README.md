@@ -40,11 +40,13 @@ Falta todo lo demás: textos en variables, arrays, structs, Float, builtins, ven
   salen idénticos byte a byte a los del PC y funcionan.
 - Los ejecutables ocupan entre 1,7 y 4,7 KB (con gcc, entre 6 y 9,5 KB).
 - Velocidad (`bench/bench_enteros.dash`, veces el tiempo de gcc `-O2`; menos de 1 es más rápido):
-  de media 0,93 en A500 y 1,00 en A1200. Lo más lento, 1,14 (contar bits en A1200); lo más rápido,
-  la recursión (fib, 0,55 y 0,75).
+  de media 0,92 en A500 y 0,97 en A1200 (el emulador varía un 3 % entre medidas). Lo más lento,
+  1,05 (bucles anidados: gcc deduce que si i < j, i == j es falso); lo más rápido, la recursión
+  (fib, 0,55 y 0,70).
 - Optimizaciones, como las de gcc: variables en d2-d7; una función pequeña o llamada desde un solo
   sitio se copia donde se llama (no si es recursiva), y la de una línea, como expresión; un `for` o
   un `while` que solo suma 1 cuenta con `dbra`; `i * k` en un bucle se lleva sumando; una variable
   asignada una sola vez con un valor fijo es una constante; el índice de un `for` tiene rango
   conocido y con él la división y el producto de 16 bits van sin comprobaciones; multiplicar y
-  dividir prueban en línea el caso de 16 bits; en 68020 o mejor, el runtime usa `divs.l` y `muls.l`.
+  dividir prueban en línea el caso de 16 bits; en 68020 o mejor, el runtime usa `divs.l` y `muls.l`;
+  los saltos que llegan con 8 bits van en su forma corta.

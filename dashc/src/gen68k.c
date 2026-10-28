@@ -24,7 +24,9 @@ static Obj *obj;
 
 /* ---- etiquetas y saltos ---- */
 static struct { long *v; int n, cap; } labels;  /* posición en el código, -1 sin poner */
-typedef struct { uint32_t at; int label; int abs; } Fixup;
+/* at: dónde va el desplazamiento (o la dirección, si abs); size: 2 = Bcc.w, 1 = Bcc.s
+   (at ya es la instrucción siguiente), 0 = quitado */
+typedef struct { uint32_t at; int label; int abs; int size; } Fixup;
 static struct { Fixup *v; int n, cap; } fixups;
 
 static int new_label(void)
@@ -121,6 +123,7 @@ static void branch(int cc, int label)
     f.at = (uint32_t)obj->code.n;
     f.label = label;
     f.abs = 0;
+    f.size = 2;
     VEC_PUSH(fixups, f);
     w(0);
     if (cc == CC_T) dead_at = (uint32_t)obj->code.n;
@@ -134,6 +137,7 @@ static void jsr_label(int label)
     f.at = (uint32_t)obj->code.n;
     f.label = label;
     f.abs = 1;
+    f.size = 2;
     VEC_PUSH(fixups, f);
     add_reloc(f.at, HK_CODE, NULL);
     l(0);
@@ -147,15 +151,73 @@ static void jsr_sym(const char *sym)
     l(0);
 }
 
+/* quita n bytes del código en pos y mueve lo que haya detrás */
+static void cut_code(uint32_t pos, int n)
+{
+    int i;
+    memmove(obj->code.p + pos, obj->code.p + pos + n, obj->code.n - pos - n);
+    obj->code.n -= n;
+    for (i = 0; i < labels.n; i++)
+        if (labels.v[i] > (long)pos) labels.v[i] -= n;
+    for (i = 0; i < fixups.n; i++)
+        if (fixups.v[i].at > pos) fixups.v[i].at -= n;
+    for (i = 0; i < obj->relocs.n; i++)
+        if (obj->relocs.v[i].off > pos) obj->relocs.v[i].off -= n;
+}
+
+/* Como el ensamblador: un Bcc.w que llega con 8 bits pasa a Bcc.s (2 bytes menos, y
+   sin tomar el salto cuesta 8 ciclos en vez de 12). Encoger solo acerca los destinos,
+   así que se repite hasta que no cambia nada. Un salto que acaba yendo a la instrucción
+   siguiente se quita (en Bcc.s un desplazamiento 0 significaría Bcc.w). */
+static void relax_branches(void)
+{
+    int changed = 1, i;
+    while (changed) {
+        changed = 0;
+        for (i = 0; i < fixups.n; i++) {
+            Fixup *f = &fixups.v[i];
+            uint8_t *p;
+            long target, d;
+            if (f->abs || !f->size) continue;
+            p = obj->code.p + f->at - 2;
+            if ((p[0] & 0xF0) != 0x60 || p[0] == 0x61) continue;   /* Bcc y bra; no dbra */
+            target = labels.v[f->label];
+            if (target < 0) continue;
+            d = target - (long)f->at;
+            if (f->size == 2) {
+                if (target > (long)f->at) d -= 2;      /* sin la extensión, el destino se acerca */
+                if (d < -128 || d > 127) continue;
+                if (d == 0) {
+                    f->size = 0;
+                    cut_code(f->at - 2, 4);
+                } else {
+                    p[1] = (uint8_t)(d & 0xFF);
+                    f->size = 1;
+                    cut_code(f->at, 2);
+                }
+                changed = 1;
+            } else if (d == 0) {
+                f->size = 0;
+                cut_code(f->at - 2, 2);
+                changed = 1;
+            }
+        }
+    }
+}
+
 static void resolve_fixups(void)
 {
     int i;
+    relax_branches();
     for (i = 0; i < fixups.n; i++) {
         Fixup *f = &fixups.v[i];
         long target = labels.v[f->label];
+        if (!f->size) continue;
         if (target < 0) fatal("etiqueta sin poner (fallo de dashc)");
         if (f->abs) {
             put_long(obj->code.p + f->at, (uint32_t)target);
+        } else if (f->size == 1) {
+            obj->code.p[f->at - 1] = (uint8_t)((target - (long)f->at) & 0xFF);
         } else {
             long d = target - (long)f->at;
             if (d < -32768 || d > 32767) fatal("salto de más de 32 KB (aún no admitido)");
@@ -168,7 +230,16 @@ static void resolve_fixups(void)
 /* Una variable con nombre: un hueco (slot >= 0) o, en una función copiada en el
    sitio de la llamada, un parámetro que vale una constante (slot -1 y val). frame
    separa los nombres de cada copia de los de la función que la contiene. */
-typedef struct { char *name; int slot, type, depth, frame; long val; int ranged; long lo, hi; } Local;
+/* ranged: lo <= valor <= hi siempre. entry: lo mismo, pero solo hasta que se le asigne
+   algo, y dentro de los mismos bucles (entry_loops) que cuando se creó */
+typedef struct {
+    char *name;
+    int slot, type, depth, frame;
+    long val;
+    int ranged;
+    long lo, hi;
+    int entry, entry_loops;
+} Local;
 static struct { Local *v; int n, cap; } locals;
 static int depth, cur_frame, frame_count;
 
@@ -349,6 +420,7 @@ static Var declare(const char *name, int type)
     lc.frame = cur_frame;
     lc.val = 0;
     lc.ranged = 0;
+    lc.entry = 0;
     VEC_PUSH(locals, lc);
     use_slot(lc.slot);
     return slot_var(lc.slot, type);
@@ -778,13 +850,15 @@ static void divmod_const(int op, long k)
 {
     int load = k <= 127 ? 2 : 6;                       /* moveq o move.l #k,d1 */
     w(0xB0BC); l(((uint32_t)k << 16) - 1);             /* cmp.l #(k << 16) - 1,d0 */
-    w(0x6300 | (load + 8));                            /* bls.s rápido (sin signo: un negativo es enorme) */
+    w(0x6300 | (load + 10));                           /* bls.s rápido (sin signo: un negativo es enorme) */
     load_imm(1, k);
     jsr_sym(op == P_SLASH ? "__dash_divk" : "__dash_modk");   /* sin volver a probar el divu.w */
+    w(0x4A80);                                         /* tst.l d0, como deja el swap del otro camino */
     w(op == P_SLASH ? 0x600A : 0x6008);                /* bra.s fin */
     w(0x80FC); w((int)k);                              /* rápido: divu.w #k,d0, resto:cociente */
     if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }   /* swap; clr.w; swap: el cociente */
     else { w(0x4240); w(0x4840); }                     /* clr.w; swap: el resto */
+    d0_loaded = (uint32_t)obj->code.n;                 /* los códigos dicen cómo es d0 */
 }
 
 /* d0 = d0 / d1 o d0 % d1: divu.w si 1 <= d1 <= 32767 y la parte alta de d0 es menor
@@ -801,29 +875,35 @@ static void divmod_d1(int op)
     w(0x4840); w(0x80C1);                              /* swap d0; divu.w d1,d0 */
     if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }   /* swap; clr.w; swap: el cociente */
     else { w(0x4240); w(0x4840); }                     /* clr.w; swap: el resto */
-    w(0x6008);                                         /* bra.s fin */
+    w(0x600A);                                         /* bra.s fin */
     w(0x4840);                                         /* lento_swap: swap d0 */
     jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");   /* lento */
+    w(0x4A80);                                         /* tst.l d0 */
+    d0_loaded = (uint32_t)obj->code.n;
 }
 
 /* d0 = d0 * d1: muls.w si los dos caben en 16 bits con signo; si no, el runtime */
 static void mul_d1(void)
 {
     w(0x3040); w(0xB088); w(0x6606);                   /* movea.w d0,a0; cmp.l a0,d0; bne.s lento */
-    w(0x3041); w(0xB288); w(0x6708);                   /* movea.w d1,a0; cmp.l a0,d1; beq.s rápido */
+    w(0x3041); w(0xB288); w(0x670A);                   /* movea.w d1,a0; cmp.l a0,d1; beq.s rápido */
     jsr_sym("__dash_mul");                             /* lento */
+    w(0x4A80);                                         /* tst.l d0 */
     w(0x6002);                                         /* bra.s fin */
     w(0xC1C1);                                         /* rápido: muls.w d1,d0 */
+    d0_loaded = (uint32_t)obj->code.n;
 }
 
 /* d0 = d0 * d0 */
 static void square_d0(void)
 {
-    w(0x3040); w(0xB088); w(0x670A);                   /* movea.w d0,a0; cmp.l a0,d0; beq.s rápido */
+    w(0x3040); w(0xB088); w(0x670C);                   /* movea.w d0,a0; cmp.l a0,d0; beq.s rápido */
     w(0x2200);                                         /* move.l d0,d1 */
     jsr_sym("__dash_mul");
+    w(0x4A80);                                         /* tst.l d0 */
     w(0x6002);                                         /* bra.s fin */
     w(0xC1C0);                                         /* rápido: muls.w d0,d0 */
+    d0_loaded = (uint32_t)obj->code.n;
 }
 
 /* d0 = d0 op v */
@@ -969,10 +1049,11 @@ static int gen_ranged(Node *n)
     }
     if ((op == P_SLASH || op == P_PERCENT) && alo >= 0 && ahi <= 0xFFFF && !fold(n->b, &k) && loop_weight > 1) {
         /* dividendo de 16 bits: el cociente cabe; solo hace falta 1 <= divisor <= 65535 */
-        int x = op == P_SLASH ? 6 : 4;
+        int x = op == P_SLASH ? 6 : 4, r = 1;
         value(n->a);
         if (simple(n->b, &v)) {
-            load_var(1, &v);
+            if (v.kind == V_REG) r = v.reg;            /* el divisor ya está en un registro */
+            else load_var(1, &v);
         } else {
             push_d0();
             value(n->b);
@@ -981,25 +1062,28 @@ static int gen_ranged(Node *n)
         }
         if (!var_range(n->b, &blo, &bhi)) blo = -1, bhi = INT32_MAX;
         if (blo >= 1 && bhi <= 0xFFFF) {
-            w(0x80C1);                                 /* divu.w d1,d0 */
+            w(0x80C0 | r);                             /* divu.w dr,d0 */
             if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }
             else { w(0x4240); w(0x4840); }
             d0_loaded = (uint32_t)obj->code.n;
             return 1;
         }
-        w(0xB2BC); l(0xFFFF);                          /* cmp.l #$FFFF,d1 */
+        w(0xB0BC | r << 9); l(0xFFFF);                 /* cmp.l #$FFFF,dr */
         if (blo >= 1) {
             w(0x6200 | (4 + x));                       /* bhi.s lento; el divisor no es 0 */
         } else {
             w(0x6200 | (8 + x));                       /* bhi.s lento (también los negativos) */
-            w(0x4A41);                                 /* tst.w d1 */
+            w(0x4A40 | r);                             /* tst.w dr */
             w(0x6700 | (4 + x));                       /* beq.s lento */
         }
-        w(0x80C1);                                     /* divu.w d1,d0 */
+        w(0x80C0 | r);                                 /* divu.w dr,d0 */
         if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }
         else { w(0x4240); w(0x4840); }
-        w(0x6006);                                     /* bra.s fin */
+        w(r == 1 ? 0x6008 : 0x600A);                   /* bra.s fin */
+        if (r != 1) w(0x2200 | r);                     /* lento: move.l dr,d1 */
         jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
+        w(0x4A80);                                     /* tst.l d0: así los dos caminos dejan los códigos */
+        d0_loaded = (uint32_t)obj->code.n;
         return 1;
     }
     if (op == P_STAR && alo >= -32768 && ahi <= 32767 && var_range(n->b, &blo, &bhi) &&
@@ -1325,6 +1409,7 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         b->slot = -1;
         b->val = 0;
         b->ranged = 0;
+        b->entry = 0;
         if (!param_set[idx][i] && fold(a, &k)) {
             b->val = k;
             continue;
@@ -1335,6 +1420,8 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
             b->ranged = src->ranged;
             b->lo = src->lo;
             b->hi = src->hi;
+            b->entry = src->entry;
+            b->entry_loops = src->entry_loops;
             if (src->slot >= 0) use_slot(src->slot);
             continue;
         }
@@ -1345,6 +1432,10 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
             b->slot = new_slot(0);
             use_slot(b->slot);
             t = slot_var(b->slot, b->type);
+            if (var_range(a, &b->lo, &b->hi)) {
+                b->entry = 1;                          /* la copia empieza con el rango del argumento */
+                b->entry_loops = loops.n;
+            }
             if (simple_arg && t.kind == V_REG) load_var(t.reg, &sv);   /* move.l x,dN */
             else {
                 if (simple_arg) load_var(0, &sv);
@@ -1536,6 +1627,7 @@ static void dbra(int reg, int label)
     f.at = (uint32_t)obj->code.n;
     f.label = label;
     f.abs = 0;
+    f.size = 2;
     VEC_PUSH(fixups, f);
     w(0);
 }
@@ -1996,6 +2088,36 @@ static int lookup_global(const char *name)
     return 0;
 }
 
+/* ¿se sabe que la condición c se cumple al llegar al bucle? (v op k, con el rango de v) */
+static int true_at_entry(Node *c)
+{
+    Node *vn;
+    Local *lc;
+    long k, lo, hi;
+    int op;
+    if (c->kind != E_CMP) return 0;
+    op = c->op;
+    if (fold(c->b, &k) && c->a->kind == E_VAR) vn = c->a;
+    else if (fold(c->a, &k) && c->b->kind == E_VAR) {
+        vn = c->b;
+        op = op == P_LT ? P_GT : op == P_GT ? P_LT : op == P_LE ? P_GE : op == P_GE ? P_LE : op;
+    } else return 0;
+    if (!var_range(vn, &lo, &hi)) {
+        if (!(lc = find_local(vn->name)) || lc->slot < 0 || !lc->entry || lc->entry_loops != loops.n) return 0;
+        lo = lc->lo;
+        hi = lc->hi;
+    }
+    switch (op) {
+    case P_NE: return lo > k || hi < k;
+    case P_EQ: return lo == k && hi == k;
+    case P_LT: return hi < k;
+    case P_LE: return hi <= k;
+    case P_GT: return lo > k;
+    case P_GE: return lo >= k;
+    }
+    return 0;
+}
+
 static int has_continue(NodeList *l)
 {
     int i;
@@ -2117,6 +2239,10 @@ static void gen_stmt(Node *n)
         return;
     case S_ASSIGN:
     case S_VAR:
+        {
+            Local *lc = find_local(n->name);
+            if (lc) lc->entry = 0;                     /* el rango de entrada ya no vale */
+        }
         if (n->kind == S_ASSIGN && n->a->kind == E_CALL) {
             int idx;
             Node *e = try_subst(n->a, &idx), tmp;
@@ -2142,6 +2268,7 @@ static void gen_stmt(Node *n)
             lc.frame = cur_frame;
             lc.val = k;
             lc.ranged = 0;
+            lc.entry = 0;
             VEC_PUSH(locals, lc);
             return;
         }
@@ -2201,7 +2328,7 @@ static void gen_stmt(Node *n)
            al final): así al final solo se llega desde el cuerpo y su última instrucción
            puede servir de comparación. */
         if (has_call(n->a)) branch(CC_T, test);
-        else gen_branch(n->a, done, 0);
+        else if (!true_at_entry(n->a)) gen_branch(n->a, done, 0);   /* si se sabe que se cumple, nada */
         def_label(top);
         lp.brk = done;
         lp.cont = test;
@@ -2291,6 +2418,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             lc.frame = 0;
             lc.val = 0;
             lc.ranged = 0;
+            lc.entry = 0;
             VEC_PUSH(locals, lc);
             if (slot_reg.v[lc.slot] >= 0) {
                 if (frameless) {
