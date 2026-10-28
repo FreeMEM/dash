@@ -216,7 +216,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
 {
     FILE *f;
     int i, j, k, nout;
-    int *keep, *outh, *stack, sp = 0;
+    int *keep, *outh, *stack, *weak, sp = 0;
     uint32_t *base, outsize[3] = {0, 0, 0};
     static const int outtype[3] = {HUNK_CODE, HUNK_DATA, HUNK_BSS};
     struct { HReloc *v; int n, cap; } outrel[3] = {{0}};
@@ -225,7 +225,8 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     VEC_PUSH(hunks, own_hunk(HUNK_DATA, &obj->data));   /* HK_DATA = 1 */
     read_object(rt, rtlen);
 
-    for (i = 0; i < refs.n; i++) bind(refs.v[i].hunk, refs.v[i].off, refs.v[i].name);
+    /* los símbolos, solo los de los hunks a los que se llega (el runtime trae funciones que usan cosas
+       que ningún programa enlaza todavía) */
     for (i = 0; i < obj->relocs.n; i++) {
         Reloc *r = &obj->relocs.v[i];
         if (r->sym) {
@@ -242,17 +243,41 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     keep = xmalloc(sizeof(int) * hunks.n);
     stack = xmalloc(sizeof(int) * hunks.n);
     memset(keep, 0, sizeof(int) * hunks.n);
+    /* hunks débiles: los de un símbolo _dash_weak_* (un puntero a una función de limpieza); lo que
+       apuntan no cuenta como usado */
+    weak = xmalloc(sizeof(int) * hunks.n);
+    memset(weak, 0, sizeof(int) * hunks.n);
+    for (i = 0; i < syms.n; i++)
+        if (syms.v[i].hunk >= 0 && !strncmp(syms.v[i].name, "__dash_weak_", 12)) weak[syms.v[i].hunk] = 1;
     keep[0] = keep[1] = 1;
     stack[sp++] = 0;
     stack[sp++] = 1;
     while (sp) {
-        Hunk *h = &hunks.v[stack[--sp]];
+        int cur = stack[--sp];
+        Hunk *h = &hunks.v[cur];
+        for (j = 0; j < refs.n; j++)
+            if (refs.v[j].hunk == cur) {
+                bind(cur, refs.v[j].off, refs.v[j].name);
+                refs.v[j].hunk = -1;               /* ya está */
+            }
+        if (weak[cur]) continue;
         for (j = 0; j < h->relocs.n; j++)
             if (!keep[h->relocs.v[j].target]) {
                 keep[h->relocs.v[j].target] = 1;
                 stack[sp++] = h->relocs.v[j].target;
             }
     }
+
+    /* un puntero débil a algo que no va: 0, sin reubicación */
+    for (i = 0; i < hunks.n; i++)
+        if (keep[i] && weak[i]) {
+            Hunk *h = &hunks.v[i];
+            for (j = 0; j < h->relocs.n; j++)
+                if (!keep[h->relocs.v[j].target]) {
+                    put_long(h->data + h->relocs.v[j].off, 0);
+                    h->relocs.v[j--] = h->relocs.v[--h->relocs.n];
+                }
+        }
 
     /* dónde va cada uno en el hunk de su tipo (0 código, 1 datos, 2 BSS) */
     base = xmalloc(sizeof(uint32_t) * hunks.n);

@@ -10,6 +10,7 @@ struct ExecBase *SysBase;
 struct DosLibrary *DOSBase;
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;   /* los @native de lib/amiga (en ./dash la abre libnix) */
+struct WBStartup *_WBenchMsg;   /* el mensaje del Workbench (libnix); dashc aún arranca solo desde el Shell */
 struct Device *TimerBase;
 static struct timerequest *bench_tr;
 static struct EClockVal bench_t0;
@@ -153,6 +154,7 @@ void dl_obj_set_new(void **var, void *v) { _dash_obj_set_new(var, v); }
 void *dl_obj_float(void *p) { return _dash_obj_float(p); }
 void *dl_obj_lend(void *p) { return _dash_obj_lend(p); }
 void *dl_obj_escape(void *p) { return _dash_obj_escape(p); }
+STRPTR dl_str_escape(STRPTR p) { return _dash_str_escape(p); }
 
 void *dl_retain_r(void *p) { _dash_retain(p); return p; }
 /* var = valor para una lista o un struct, devolviendo lo que queda en var */

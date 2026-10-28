@@ -859,6 +859,11 @@ static int expr_type(Node *n)
     case E_CALL:
         if (find_func(n->name, &idx)) return func_ret(idx);
         if ((idx = find_struct(n->name)) >= 0) return TY_STRUCT + idx;
+        for (idx = 0; idx < builtin_count; idx++)
+            if (!strcmp(builtin_info[idx].name, n->name)) {
+                static const int ret[] = {TY_VOID, TY_INT, TY_BOOL, TY_STR, TY_ARR + TY_STR};
+                return ret[builtin_info[idx].ret];
+            }
         return TY_VOID;
     case E_NN:
         return expr_type(n->a);
@@ -2102,6 +2107,51 @@ static const struct { const char *name, *sym, *args; int ret; } builtins[] = {
 };
 static long sink_off = -1;
 
+/* Un builtin de ./dash (compiler/amiga_builtins.py): su envoltorio db_nombre de la librería, con los
+   argumentos que falten a 0. Si guarda lo que recibe, un texto o un objeto pasa escapado (se queda hasta
+   el final), como en ./dash. */
+static int gen_dash_builtin(Node *n)
+{
+    int b, i, np;
+    char *sym;
+    for (b = 0; b < builtin_count; b++)
+        if (!strcmp(builtin_info[b].name, n->name)) break;
+    if (b == builtin_count) fatal_at(n->line, n->col, "la función %s no existe", n->name);
+    sym = xmalloc(strlen(n->name) + 5);
+    strcpy(sym, "_db_");
+    strcat(sym, n->name);
+    if (!runtime_has(sym))
+        fatal_at(n->line, n->col, "dashc (prueba): el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
+    np = builtin_info[b].nparams;
+    if (n->args.n > np) fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, np, n->args.n);
+    if (np) {
+        w(0x4FEF); w(-4 * np);                         /* lea -4n(sp),sp */
+        sp_depth += 4 * np;
+        for (i = 0; i < np; i++) {
+            if (i < n->args.n) {
+                Node *a = n->args.v[i];
+                int t = gen_expr(a);
+                need_value(a, t);
+                if (builtin_info[b].keeps && ((t == TY_STR && a->kind != E_STR) || IS_OBJ(t))) {
+                    push_d0();
+                    rt_call(t == TY_STR ? "_dl_str_escape" : "_dl_obj_escape", 1, 0);
+                }
+            } else {
+                w(0x7000);                             /* moveq #0,d0: el que falta */
+            }
+            if (i) { w(0x2F40); w(4 * i); }            /* move.l d0,4i(sp) */
+            else w(0x2E80);                            /* move.l d0,(sp) */
+        }
+    }
+    switch (builtin_info[b].ret) {
+    case 0: rt_call(sym, np, 0); return TY_VOID;
+    case 1: rt_call(sym, np, 0); return TY_INT;
+    case 2: rt_call(sym, np, 0); return TY_BOOL;
+    case 3: rt_call(sym, np, 1); return TY_STR;
+    default: rt_call(sym, np, 1); return TY_ARR + TY_STR;
+    }
+}
+
 static int gen_builtin(Node *n)
 {
     int i, b;
@@ -2128,7 +2178,7 @@ static int gen_builtin(Node *n)
     }
     for (b = 0; builtins[b].name; b++)
         if (!strcmp(builtins[b].name, n->name)) break;
-    if (!builtins[b].name) fatal_at(n->line, n->col, "la función %s no existe", n->name);
+    if (!builtins[b].name) return gen_dash_builtin(n);
     if (n->args.n != (int)strlen(builtins[b].args))
         fatal_at(n->line, n->col, "%s pide %d argumentos y se le dan %d", n->name, (int)strlen(builtins[b].args), n->args.n);
     for (i = n->args.n - 1; i >= 0; i--) {

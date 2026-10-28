@@ -8,12 +8,17 @@ CFLAGS ?= -O2 -Wall -Wextra -std=c99
 AMIGA = /opt/amiga/bin/m68k-amigaos-
 SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c
 
-dashc: $(SRC) src/dashc.h build/rt_blob.c
-	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c
+dashc: $(SRC) src/dashc.h build/rt_blob.c build/builtins_tab.c
+	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c
 
 amiga: build/dashc.amiga
-build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob.c
+build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob.c build/builtins_tab.c
+	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c
+
+# lo que pide y devuelve cada builtin (la tabla va en git: no hace falta Python para construir dashc)
+build/builtins_tab.c: runtime/builtins_tab.c
+	@mkdir -p build
+	cp runtime/builtins_tab.c $@
 
 # los dos runtimes (normal y --memcheck), como arrays de C dentro de dashc
 build/rt_blob.c: runtime/dashrt.o runtime/dashrt_mc.o
@@ -23,19 +28,10 @@ build/rt_blob.c: runtime/dashrt.o runtime/dashrt_mc.o
 	 for n, d in (("dashrt_o", open(sys.argv[1],"rb").read()), ("dashrt_mc_o", open(sys.argv[2],"rb").read()))]' \
 	runtime/dashrt.o runtime/dashrt_mc.o > $@
 
-# el runtime de ./dash sacado por gen_lib.py, más api.c (incluido en él), libc mínima y rutinas en asm
+# el runtime de ./dash (gen_lib.py), compilado y con lo que necesita: runtime/build_lib.py
 runtime:
-	@mkdir -p build
-	python3 runtime/gen_lib.py build/dashlib_rt.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-common -ffunction-sections -fdata-sections -Iruntime -c build/dashlib_rt.c -o build/dashlib.o
-	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-common -ffunction-sections -fdata-sections -Iruntime \
-	  -DDASH_MEMCHECK -c build/dashlib_rt.c -o build/dashlib_mc.o
-	$(AMIGA)gcc -O2 -m68000 -noixemul -fomit-frame-pointer -fno-builtin -fno-tree-loop-distribute-patterns -ffunction-sections \
-	  -c runtime/rt_libc.c -o build/rt_libc.o
-	$(AMIGA)gcc -m68000 -c runtime/rt_math.s -o build/rt_math.o
-	# sin ld -r, que juntaría las secciones: los objetos uno tras otro (hunk.c lee las unidades)
-	cat build/dashlib.o build/rt_libc.o build/rt_math.o > runtime/dashrt.o
-	cat build/dashlib_mc.o build/rt_libc.o build/rt_math.o > runtime/dashrt_mc.o
+	python3 runtime/build_lib.py
+	python3 runtime/gen_builtins_tab.py runtime/builtins_tab.c
 
 test: dashc
 	python3 tests/run.py
