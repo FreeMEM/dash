@@ -184,6 +184,7 @@ static struct { int *v; int n, cap; } slot_reg, slot_off;
 static long loop_weight = 1;
 static int nframe;   /* huecos en el marco */
 static int pass;     /* 1: contando usos; 2: con los registros ya repartidos */
+static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están generando o copiando */
 
 /* Expresiones que se leen de un hueco en vez de calcularse: i * k en un for (el hueco
    suma paso * k en cada vuelta) y las constantes grandes de la condición de un bucle
@@ -539,6 +540,22 @@ static void load_var(int reg, Var *v)
     }
 }
 
+/* Si lo último fue move.l dX,d0 (con X de 2 a 7) y no se llega ahí desde otro sitio,
+   lo quita y devuelve X: quien iba a usar d0 puede usar dX. Si no, -1. */
+static int take_move_to_d0(void)
+{
+    uint8_t *p = obj->code.p + obj->code.n - 2;
+    int x, i;
+    if (d0_loaded != obj->code.n || obj->code.n < 2 || p[0] != 0x20 || (p[1] & 0xF8) != 0) return -1;
+    x = p[1] & 7;
+    if (x < 2) return -1;
+    for (i = 0; i < labels.n; i++)                     /* una etiqueta de justo detrás */
+        if (labels.v[i] == (long)obj->code.n) labels.v[i] -= 2;
+    obj->code.n -= 2;
+    d0_loaded = (uint32_t)-1;
+    return x;
+}
+
 static void store_d0(Var *v)
 {
     if (v->kind == V_REG) {
@@ -879,17 +896,53 @@ static int commutative(int op)
     return op == P_PLUS || op == P_STAR || op == P_AMP || op == P_BAR || op == P_CARET;
 }
 
+static NodeList *cur_body(void);
+static long step_of(Node *s, const char *v);
+
+/* Una variable que solo se asigna con valores fijos o sumándole algo positivo nunca
+   baja del menor de esos valores (como gcc, se da por hecho que no se desborda) */
+static int monotone(NodeList *l, const char *name, long *lo)
+{
+    int i;
+    long k;
+    for (i = 0; i < l->n; i++) {
+        Node *s = l->v[i];
+        if ((s->kind == S_ASSIGN || s->kind == S_VAR || s->kind == S_FOR) && !strcmp(s->name, name)) {
+            if (s->kind == S_FOR) return 0;
+            if (fold(s->a, &k)) {
+                if (k < *lo) *lo = k;
+            } else if (step_of(s, name) <= 0) {
+                return 0;
+            }
+        }
+        if (!monotone(&s->body, name, lo) || !monotone(&s->els, name, lo)) return 0;
+    }
+    return 1;
+}
+
 /* entre qué valores está n, si se sabe */
 static int var_range(Node *n, long *lo, long *hi)
 {
     Local *lc;
+    int idx, i;
     if (fold(n, lo)) {
         *hi = *lo;
         return 1;
     }
-    if (n->kind != E_VAR || !(lc = find_local(n->name)) || lc->slot < 0 || !lc->ranged) return 0;
-    *lo = lc->lo;
-    *hi = lc->hi;
+    if (n->kind != E_VAR || !(lc = find_local(n->name)) || lc->slot < 0) return 0;
+    if (lc->ranged) {
+        *lo = lc->lo;
+        *hi = lc->hi;
+        return 1;
+    }
+    /* un parámetro empieza con un valor que no se sabe */
+    idx = inl_stack.v[inl_stack.n - 1];
+    if (idx >= 0)
+        for (i = 0; i < prog->funcs.v[idx].params.n; i++)
+            if (!strcmp(prog->funcs.v[idx].params.v[i].name, n->name)) return 0;
+    *lo = INT32_MAX;
+    if (!monotone(cur_body(), n->name, lo) || *lo == INT32_MAX) return 0;
+    *hi = INT32_MAX;
     return 1;
 }
 
@@ -912,6 +965,41 @@ static int gen_ranged(Node *n)
             else { w(0x4240); w(0x4840); }             /* clr.w; swap */
         }
         d0_loaded = (uint32_t)obj->code.n;             /* los códigos dicen cómo es d0 */
+        return 1;
+    }
+    if ((op == P_SLASH || op == P_PERCENT) && alo >= 0 && ahi <= 0xFFFF && !fold(n->b, &k) && loop_weight > 1) {
+        /* dividendo de 16 bits: el cociente cabe; solo hace falta 1 <= divisor <= 65535 */
+        int x = op == P_SLASH ? 6 : 4;
+        value(n->a);
+        if (simple(n->b, &v)) {
+            load_var(1, &v);
+        } else {
+            push_d0();
+            value(n->b);
+            w(0x2200);                                 /* move.l d0,d1 */
+            pop_d0();
+        }
+        if (!var_range(n->b, &blo, &bhi)) blo = -1, bhi = INT32_MAX;
+        if (blo >= 1 && bhi <= 0xFFFF) {
+            w(0x80C1);                                 /* divu.w d1,d0 */
+            if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }
+            else { w(0x4240); w(0x4840); }
+            d0_loaded = (uint32_t)obj->code.n;
+            return 1;
+        }
+        w(0xB2BC); l(0xFFFF);                          /* cmp.l #$FFFF,d1 */
+        if (blo >= 1) {
+            w(0x6200 | (4 + x));                       /* bhi.s lento; el divisor no es 0 */
+        } else {
+            w(0x6200 | (8 + x));                       /* bhi.s lento (también los negativos) */
+            w(0x4A41);                                 /* tst.w d1 */
+            w(0x6700 | (4 + x));                       /* beq.s lento */
+        }
+        w(0x80C1);                                     /* divu.w d1,d0 */
+        if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }
+        else { w(0x4240); w(0x4840); }
+        w(0x6006);                                     /* bra.s fin */
+        jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
         return 1;
     }
     if (op == P_STAR && alo >= -32768 && ahi <= 32767 && var_range(n->b, &blo, &bhi) &&
@@ -1127,7 +1215,6 @@ static int gen_builtin(Node *n)
 
 static int *call_sites, *body_size, *needed;
 static unsigned char **param_set;   /* la función asigna a ese parámetro */
-static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están generando o copiando */
 
 static struct { int *v; int n, cap; } sub_stack;  /* funciones de una línea puestas como expresión */
 
@@ -1275,7 +1362,7 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
     VEC_PUSH(inl_stack, idx);
     gen_block(&f->body);
     inl_stack.n--;
-    def_label(ret_label);
+    def_label_fwd(ret_label);                          /* si solo se llega cayendo, d0 sigue valiendo */
     ret_label = saved_ret;
     ret_branch = saved_branch;
     ret_when = saved_when;
@@ -1766,7 +1853,17 @@ static void op_into(int op, Var *v, Node *t)
         if (s.kind == V_REG) { op_ea(to_mem[op] | s.reg << 9, v); return; }
         load_var(0, &s);
     } else if (t) {
+        int x;
         value(t);
+        if ((x = take_move_to_d0()) >= 0) {             /* el valor está en dX: sin pasar por d0 */
+            if (v->kind == V_REG) {
+                w(to_reg[op] | v->reg << 9 | x);
+                flags_set(v->reg, op >= 2);
+            } else {
+                op_ea(to_mem[op] | x << 9, v);
+            }
+            return;
+        }
     }
     if (v->kind == V_REG) {
         w(to_reg[op] | v->reg << 9);
