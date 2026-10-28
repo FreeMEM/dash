@@ -31,3 +31,7 @@ de Amiga dando ejecutables idénticos.
 ## Bitácora
 
 - 2026-10-28: plan.
+- 2026-10-28: fase 1 hecha (runtime de ./dash como librería, arranque `_dash_start` sin libnix; los ejecutables
+  pasan de ~2 a ~11 KB: falta enlazar solo lo usado). Fase 2 hecha: textos (tests cadenas y memoria iguales a
+  ./dash en A1200 y A500). Marcas de temporales en la pila (no en huecos, para que las dos pasadas cuadren);
+  la primera pasada apunta qué marcas hacen falta. Las funciones copiadas no llevan marca propia.

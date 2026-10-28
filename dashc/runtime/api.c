@@ -55,6 +55,12 @@ void _dash_print_int(LONG v)
     VPrintf((CONST_STRPTR)"%ld\n", (APTR)&v);
 }
 
+void _dash_print_char(LONG c)
+{
+    LONG v = (UBYTE)c;
+    VPrintf((CONST_STRPTR)"%lc\n", (APTR)&v);
+}
+
 void _dash_print_bool(LONG v)
 {
     PutStr((CONST_STRPTR)(v ? "true\n" : "false\n"));
@@ -101,7 +107,15 @@ void _bench_end(const char *name, LONG iterations)
 /* ---- textos ---- */
 ULONG dl_tmp_mark(void) { return _dash_tmp_mark(); }
 void dl_tmp_release(ULONG m) { _dash_tmp_release(m); }
-void dl_tmp_release_keep(ULONG m, STRPTR keep) { _dash_tmp_release_keep(m, keep); }
+/* al salir de una función: fuera sus temporales menos el texto que devuelve, que sigue en d0 */
+STRPTR dl_tmp_release_keep(ULONG m, STRPTR keep) { _dash_tmp_release_keep(m, keep); return keep; }
+LONG dl_tmp_release_ret(ULONG m, LONG v) { _dash_tmp_release(m); return v; }
+/* var = valor devolviendo el texto nuevo de var (dashc no siempre tiene la dirección de var:
+   puede ir en un registro) */
+STRPTR dl_str_assign(STRPTR var, STRPTR v) { _dash_str_set(&var, v); return var; }
+STRPTR dl_str_assign_copy(STRPTR var, STRPTR v) { _dash_str_set_copy(&var, v); return var; }
+STRPTR dl_str_append_r(STRPTR var, STRPTR add) { _dash_str_append(&var, add); return var; }
+STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
 void dl_str_set(STRPTR *var, STRPTR v) { _dash_str_set(var, v); }
 void dl_str_set_copy(STRPTR *var, STRPTR v) { _dash_str_set_copy(var, v); }
 void dl_str_free(STRPTR p) { _dash_str_free(p); }

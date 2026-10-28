@@ -1,0 +1,110 @@
+# Textos: variables dueñas de su texto, +, interpolación, trozos, comparaciones, temporales
+func pon(a: String, n) -> String
+    b = a + "!"
+    if n > 2
+        return b
+    end
+    c = "x"
+    c = c + b
+    return c
+end
+
+func usa(a: String)
+    Print a
+    a = "otro"
+    Print a
+end
+
+func larga(s: String) -> Int
+    return s.length
+end
+
+var g: String = "glob"
+
+func id(a: String) -> String
+    return a
+end
+
+func cuenta(s: String) -> Int
+    n = 0
+    i = 0
+    while i < s.length
+        if s[i] == "a"
+            n = n + 1
+        end
+        i = i + 1
+    end
+    return n
+end
+
+func prueba2()
+    c = g[0]
+    Print c
+    d = c + 1
+    Print d
+    g = g + "!"
+    Print g
+    Print id("x" + g)
+    Print cuenta("banana")
+    k = 0
+    while k < 5
+        k = k + 1
+        t = "v#{k}"
+        if k == 2
+            continue
+        end
+        if k == 4
+            break
+        end
+        Print t
+    end
+    var e: String = nil
+    if e == nil
+        Print "nil"
+    end
+    Print e
+    Print "a" < "b"
+    Print g.length + 1
+end
+
+func prueba3()
+    s = "abcdef"
+    Print s[2:]
+    Print s[:3]
+    b = true
+    c = s[1]
+    Print "b=#{b} c=#{c} n=#{-5} s=#{s}"
+    Print s + 5
+    Print 7 + s
+    Print s + c
+end
+Main
+    prueba2()
+    prueba3()
+    s = "hola"
+    s = s + " mundo"
+    t = s
+    t = "nuevo"
+    Print s
+    Print t
+    Print pon(s, 3)
+    usa(t)
+    Print larga("abc" + s)
+    u = pon("q", 1) + pon("r", 5)
+    Print u
+    for i in (1..3)
+        v = "#{i}:" + s
+        s = v
+        Print v
+    end
+    w = s
+    if w == "z"
+        Print "no"
+    end
+    Print s[2]
+    Print s[1:4]
+    x = ""
+    x = x + "a"
+    x = x + t
+    Print x
+end

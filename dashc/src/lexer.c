@@ -6,12 +6,13 @@
 static const char *kw_names[] = {
     "func", "end", "if", "elif", "else", "while", "for", "in", "step", "return",
     "break", "continue", "var", "const", "Main", "Print", "and", "or", "not",
-    "true", "false", NULL
+    "true", "false", "nil", "struct", NULL
 };
 
 static const char *punct_names[] = {
     "(", ")", ",", ":", "=", "==", "!=", "<", "<=", ">", ">=",
-    "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>", "->", ".."
+    "+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>", "->", "..", "[", "]", ".",
+    "un texto"
 };
 
 const char *tok_name(int kind)
@@ -22,15 +23,16 @@ const char *tok_name(int kind)
     case T_STR: return "un texto";
     case T_ID: return "un nombre";
     }
-    if (kind >= K_FUNC && kind <= K_FALSE) return kw_names[kind - K_FUNC];
+    if (kind >= K_FUNC && kind <= K_STRUCT) return kw_names[kind - K_FUNC];
     return punct_names[kind - P_LP];
 }
 
 typedef struct { Token *v; int n, cap; } TokVec;
 
 /* Los textos van en Latin-1, como en el Amiga: de UTF-8 se pasan los caracteres
-   de U+0080 a U+00FF; los demás quedan como "?". */
-static char *lex_string(const char **ps, int line, int col, int *len)
+   de U+0080 a U+00FF; los demás quedan como "?". Un #{...} corta el texto: t recibe
+   los trozos (texto, código, texto...) y el token pasa a T_ISTR. */
+static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
 {
     const char *s = *ps + 1;
     Buf b = {0};
@@ -38,8 +40,35 @@ static char *lex_string(const char **ps, int line, int col, int *len)
         unsigned char c = (unsigned char)*s;
         if (!c || c == '\n') fatal_at(line, col, "texto sin cerrar");
         if (c == '"') break;
-        if (c == '#' && s[1] == '{')
-            fatal_at(line, col, "dashc (prueba): la interpolación #{...} aún no está");
+        if (c == '#' && s[1] == '{') {
+            const char *e = s + 2;
+            int depth = 1;
+            /* hasta la } que cierra (puede haber textos y llaves dentro) */
+            while (*e && *e != '\n') {
+                if (*e == '"') {
+                    e++;
+                    while (*e && *e != '"' && *e != '\n') e += *e == '\\' && e[1] ? 2 : 1;
+                } else if (*e == '{') {
+                    depth++;
+                } else if (*e == '}' && --depth == 0) {
+                    break;
+                }
+                if (*e) e++;
+            }
+            if (*e != '}') fatal_at(line, col, "#{ sin cerrar");
+            t->piece = xrealloc(t->piece, sizeof(char *) * (t->npieces + 2));
+            t->plen = xrealloc(t->plen, sizeof(int) * (t->npieces + 2));
+            buf_byte(&b, 0);
+            t->piece[t->npieces] = (char *)b.p;
+            t->plen[t->npieces] = (int)b.n - 1;
+            t->piece[t->npieces + 1] = xstrndup(s + 2, e - (s + 2));
+            t->plen[t->npieces + 1] = 0;
+            t->npieces += 2;
+            memset(&b, 0, sizeof b);
+            t->kind = T_ISTR;
+            s = e + 1;
+            continue;
+        }
         if (c == '\\') {
             s++;
             switch (*s) {
@@ -70,6 +99,14 @@ static char *lex_string(const char **ps, int line, int col, int *len)
     *ps = s + 1;
     *len = (int)b.n;
     buf_byte(&b, 0);
+    if (t->kind == T_ISTR) {
+        /* el último trozo de texto */
+        t->piece = xrealloc(t->piece, sizeof(char *) * (t->npieces + 1));
+        t->plen = xrealloc(t->plen, sizeof(int) * (t->npieces + 1));
+        t->piece[t->npieces] = (char *)b.p;
+        t->plen[t->npieces] = *len;
+        t->npieces++;
+    }
     return (char *)b.p;
 }
 
@@ -137,17 +174,17 @@ Token *lex(const char *src)
             }
         } else if (*s == '"') {
             t.kind = T_STR;
-            t.text = lex_string(&s, t.line, t.col, &t.len);
+            t.text = lex_string(&s, t.line, t.col, &t.len, &t);
         } else {
             /* los signos de dos caracteres primero */
             static const struct { const char *p; int k; } two[] = {
                 {"==", P_EQ}, {"!=", P_NE}, {"<=", P_LE}, {">=", P_GE}, {"<<", P_SHL},
                 {">>", P_SHR}, {"->", P_ARROW}, {"..", P_DOTDOT}, {NULL, 0}
             };
-            static const char one[] = "(),:=<>+-*/%&|^~";
+            static const char one[] = "(),:=<>+-*/%&|^~[].";
             static const int one_k[] = {
                 P_LP, P_RP, P_COMMA, P_COLON, P_ASSIGN, P_LT, P_GT, P_PLUS, P_MINUS,
-                P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE
+                P_STAR, P_SLASH, P_PERCENT, P_AMP, P_BAR, P_CARET, P_TILDE, P_LB, P_RB, P_DOT
             };
             int i;
             const char *p;

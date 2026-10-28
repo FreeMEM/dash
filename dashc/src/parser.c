@@ -1,6 +1,6 @@
 /* Parser de descenso recursivo. Sigue la gramática de compiler/grammar.py en el
-   subconjunto de la prueba: enteros, Bool, textos literales en Print, variables,
-   globales con var, const, funciones, if/elif/else, while, for con rango. */
+   subconjunto de dashc: enteros, Bool, textos, listas, structs con métodos, variables,
+   globales con var, const, funciones, if/elif/else, while, for con rango y sobre listas. */
 #include <string.h>
 
 #include "dashc.h"
@@ -36,19 +36,39 @@ static Node *node(int kind, Token *at)
     return n;
 }
 
+struct TypeNames type_names;
+
+/* Int, Bool, String, Array o el nombre de un struct (que puede venir después: TY_NAMED) */
 static int parse_type(void)
 {
     Token *t = expect(T_ID);
+    int i;
     if (!strcmp(t->text, "Int")) return TY_INT;
     if (!strcmp(t->text, "Bool")) return TY_BOOL;
-    fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está (solo Int y Bool)", t->text);
-    return TY_VOID;
+    if (!strcmp(t->text, "String")) return TY_STR;
+    if (!strcmp(t->text, "Array")) return TY_ARR + TY_INT;
+    if (!strcmp(t->text, "Float") || !strcmp(t->text, "Fixed") || !strcmp(t->text, "Pointer") ||
+        !strcmp(t->text, "Func") || !strcmp(t->text, "Void"))
+        fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
+    for (i = 0; i < type_names.n; i++)
+        if (!strcmp(type_names.v[i], t->text)) return TY_NAMED + i;
+    VEC_PUSH(type_names, t->text);
+    return TY_NAMED + type_names.n - 1;
 }
 
 /* ---- expresiones, de menos a más precedencia ---- */
 static Node *expr(void);
 
-static Node *primary(void)
+static Node *interp(Token *t);
+
+static void args_until(NodeList *out, int close)
+{
+    if (accept(close)) return;
+    do VEC_PUSH(*out, expr()); while (accept(P_COMMA));
+    expect(close);
+}
+
+static Node *atom(void)
 {
     Token *t = next();
     Node *n;
@@ -62,19 +82,24 @@ static Node *primary(void)
         n->str = t->text;
         n->len = t->len;
         return n;
+    case T_ISTR:
+        return interp(t);
     case K_TRUE:
     case K_FALSE:
         n = node(E_BOOL, t);
         n->val = t->kind == K_TRUE;
         return n;
+    case K_NIL:
+        return node(E_NIL, t);
+    case P_LB:
+        n = node(E_LIST, t);
+        args_until(&n->args, P_RB);
+        return n;
     case T_ID:
         if (accept(P_LP)) {
             n = node(E_CALL, t);
             n->name = t->text;
-            if (!accept(P_RP)) {
-                do VEC_PUSH(n->args, expr()); while (accept(P_COMMA));
-                expect(P_RP);
-            }
+            args_until(&n->args, P_RP);
             return n;
         }
         n = node(E_VAR, t);
@@ -87,6 +112,68 @@ static Node *primary(void)
     }
     fatal_at(t->line, t->col, "se esperaba una expresión y hay \"%s\"", tok_name(t->kind));
     return NULL;
+}
+
+/* a[i], a[i:j], a.campo, a.metodo(...) */
+static Node *primary(void)
+{
+    Node *n = atom();
+    for (;;) {
+        Token *t = peek();
+        if (accept(P_LB)) {
+            Node *m;
+            Node *i = peek()->kind == P_COLON ? NULL : expr();
+            if (accept(P_COLON)) {
+                m = node(E_SLICE, t);
+                m->b = i;
+                m->c = peek()->kind == P_RB ? NULL : expr();
+            } else {
+                m = node(E_INDEX, t);
+                m->b = i;
+            }
+            expect(P_RB);
+            m->a = n;
+            n = m;
+        } else if (accept(P_DOT)) {
+            Token *name = expect(T_ID);
+            Node *m = node(accept(P_LP) ? E_MCALL : E_FIELD, name);
+            m->name = name->text;
+            m->a = n;
+            if (m->kind == E_MCALL) args_until(&m->args, P_RP);
+            n = m;
+        } else {
+            return n;
+        }
+    }
+}
+
+/* "a#{x}b": los trozos de código se analizan aparte, como expresiones */
+static Node *interp(Token *t)
+{
+    Node *n = node(E_INTERP, t);
+    int i;
+    for (i = 0; i < t->npieces; i++) {
+        if (i % 2 == 0) {
+            if (t->plen[i]) {
+                Node *s = node(E_STR, t);
+                s->str = t->piece[i];
+                s->len = t->plen[i];
+                VEC_PUSH(n->args, s);
+            }
+        } else {
+            Token *saved = tk, *sub = lex(t->piece[i]), *p;
+            for (p = sub; ; p++) {
+                p->line += t->line - 1;
+                if (p->line == t->line) p->col += t->col;
+                if (p->kind == T_EOF) break;
+            }
+            tk = sub;
+            VEC_PUSH(n->args, expr());
+            if (peek()->kind != T_EOF) fatal_at(peek()->line, peek()->col, "sobra algo dentro de #{...}");
+            tk = saved;
+        }
+    }
+    return n;
 }
 
 static Node *unary(void)
@@ -210,7 +297,14 @@ static Node *stmt(void)
         n = node(S_FOR, t);
         n->name = expect(T_ID)->text;
         expect(K_IN);
-        expect(P_LP);
+        if (!accept(P_LP)) {
+            /* for x in lista */
+            n->kind = S_FOREACH;
+            n->a = expr();
+            block(&n->body, K_END, K_END, K_END);
+            expect(K_END);
+            return n;
+        }
         n->a = expr();
         expect(P_DOTDOT);
         n->b = expr();
@@ -225,7 +319,7 @@ static Node *stmt(void)
         if (peek()->line == t->line && peek()->kind != K_END) {
             n->a = expr();
             if (!cur_func) fatal_at(t->line, t->col, "return con valor fuera de una función");
-            if (cur_func->ret == TY_VOID) cur_func->ret = TY_INT;
+            cur_func->has_value = 1;
         }
         return n;
     case K_BREAK:
@@ -244,20 +338,31 @@ static Node *stmt(void)
         expect(P_ASSIGN);
         n->a = expr();
         return n;
-    case T_ID:
+    case T_ID: {
+        Node *target;
+        tk--;
+        target = primary();
         if (accept(P_ASSIGN)) {
-            n = node(S_ASSIGN, t);
-            n->name = t->text;
+            if (target->kind == E_VAR) {
+                n = node(S_ASSIGN, t);
+                n->name = t->text;
+            } else if (target->kind == E_INDEX || target->kind == E_FIELD) {
+                n = node(S_STORE, t);
+                n->b = target;
+            } else {
+                fatal_at(t->line, t->col, "no se puede asignar a esto");
+                return NULL;
+            }
             n->a = expr();
             return n;
         }
-        if (peek()->kind == P_LP) {
-            tk--;
+        if (target->kind == E_CALL || target->kind == E_MCALL) {
             n = node(S_EXPR, t);
-            n->a = primary();
+            n->a = target;
             return n;
         }
         break;
+    }
     }
     fatal_at(t->line, t->col, "no se esperaba \"%s\" aquí", tok_name(t->kind));
     return NULL;
@@ -273,6 +378,55 @@ static void block(NodeList *out, int stop1, int stop2, int stop3)
     }
 }
 
+/* func nombre(params) -> Tipo ... end; en un struct st, el método lleva self delante */
+static void parse_func(Program *p, Struct *st)
+{
+    Func f = {0};
+    Token *name;
+    expect(K_FUNC);
+    name = expect(T_ID);
+    f.name = name->text;
+    f.line = name->line;
+    f.col = name->col;
+    if (st) {
+        Param self;
+        int i;
+        size_t len = strlen(st->name) + strlen(name->text) + 2;
+        f.name = xmalloc(len);
+        strcpy(f.name, st->name);
+        strcat(f.name, ".");
+        strcat(f.name, name->text);
+        self.name = "self";
+        self.type = -1;
+        for (i = 0; i < type_names.n; i++)
+            if (!strcmp(type_names.v[i], st->name)) self.type = TY_NAMED + i;
+        if (self.type < 0) {
+            VEC_PUSH(type_names, st->name);
+            self.type = TY_NAMED + type_names.n - 1;
+        }
+        VEC_PUSH(f.params, self);
+    }
+    expect(P_LP);
+    if (!accept(P_RP)) {
+        do {
+            Param pa;
+            pa.name = expect(T_ID)->text;
+            pa.type = accept(P_COLON) ? parse_type() : TY_INT;
+            VEC_PUSH(f.params, pa);
+        } while (accept(P_COMMA));
+        expect(P_RP);
+    }
+    if (accept(P_ARROW)) {
+        f.ret = parse_type();
+        f.declared = 1;
+    }
+    VEC_PUSH(p->funcs, f);
+    cur_func = &p->funcs.v[p->funcs.n - 1];
+    block(&cur_func->body, K_END, K_END, K_END);
+    cur_func = NULL;
+    expect(K_END);
+}
+
 Program *parse(Token *toks)
 {
     Program *p = xmalloc(sizeof(Program));
@@ -280,27 +434,8 @@ Program *parse(Token *toks)
     while (peek()->kind != T_EOF) {
         Token *t = next();
         if (t->kind == K_FUNC) {
-            Func f = {0};
-            Token *name = expect(T_ID);
-            f.name = name->text;
-            f.line = name->line;
-            f.col = name->col;
-            expect(P_LP);
-            if (!accept(P_RP)) {
-                do {
-                    Param pa;
-                    pa.name = expect(T_ID)->text;
-                    pa.type = accept(P_COLON) ? parse_type() : TY_INT;
-                    VEC_PUSH(f.params, pa);
-                } while (accept(P_COMMA));
-                expect(P_RP);
-            }
-            if (accept(P_ARROW)) f.ret = parse_type();
-            VEC_PUSH(p->funcs, f);
-            cur_func = &p->funcs.v[p->funcs.n - 1];
-            block(&cur_func->body, K_END, K_END, K_END);
-            cur_func = NULL;
-            expect(K_END);
+            tk--;
+            parse_func(p, NULL);
         } else if (t->kind == K_VAR) {
             Global g = {0};
             Token *name = expect(T_ID);
@@ -321,6 +456,32 @@ Program *parse(Token *toks)
             expect(P_ASSIGN);
             c.value = expr();
             VEC_PUSH(p->consts, c);
+        } else if (t->kind == K_STRUCT) {
+            Struct st = {0};
+            Token *name = expect(T_ID);
+            st.name = name->text;
+            st.line = name->line;
+            st.col = name->col;
+            while (!accept(K_END)) {
+                Token *f = next();
+                if (f->kind == K_FUNC) {
+                    /* un método: la función "Struct.nombre" con self delante */
+                    tk--;
+                    parse_func(p, &st);
+                } else if (f->kind == T_ID) {
+                    Field fd = {0};
+                    fd.name = f->text;
+                    fd.line = f->line;
+                    fd.col = f->col;
+                    expect(P_COLON);
+                    fd.type = parse_type();
+                    if (accept(P_ASSIGN)) fd.init = expr();
+                    VEC_PUSH(st.fields, fd);
+                } else {
+                    fatal_at(f->line, f->col, "no se esperaba \"%s\" en un struct", tok_name(f->kind));
+                }
+            }
+            VEC_PUSH(p->structs, st);
         } else if (t->kind == K_MAIN) {
             if (p->has_main) fatal_at(t->line, t->col, "hay dos Main");
             p->has_main = 1;

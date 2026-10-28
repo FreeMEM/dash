@@ -239,6 +239,7 @@ typedef struct {
     int ranged;
     long lo, hi;
     int entry, entry_loops;
+    int owned;   /* un texto que es suyo: se libera al salir de su bloque */
 } Local;
 static struct { Local *v; int n, cap; } locals;
 static int depth, cur_frame, frame_count;
@@ -263,13 +264,16 @@ static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están ge
 typedef struct { Node *n; int slot, need_reg; } Repl;
 static struct { Repl *v; int n, cap; } repls;
 
-typedef struct { int brk, cont; } Loop;
+/* depth: la de las variables del cuerpo; sp: sp_depth dentro del cuerpo */
+typedef struct { int brk, cont, depth, sp; } Loop;
 static struct { Loop *v; int n, cap; } loops;
 static int loop_base;   /* los bucles de antes son de fuera de la función copiada */
 
 static int *func_label;   /* etiqueta de cada función */
 static int *global_type;
 static int ret_label;
+static int ret_sp;    /* sp_depth en ret_label */
+static int cur_ret;   /* lo que devuelve la función (o la copia) que se genera */
 
 enum { V_NONE, V_LOCAL, V_REG, V_GLOBAL, V_CONST, V_STACK };
 
@@ -421,6 +425,7 @@ static Var declare(const char *name, int type)
     lc.val = 0;
     lc.ranged = 0;
     lc.entry = 0;
+    lc.owned = 0;
     VEC_PUSH(locals, lc);
     use_slot(lc.slot);
     return slot_var(lc.slot, type);
@@ -428,8 +433,12 @@ static Var declare(const char *name, int type)
 
 static void enter_scope(void) { depth++; }
 
+static void free_owned(int from_depth, int all_frame);
+
+/* al salir de un bloque cayendo por el final, se liberan sus textos */
 static void leave_scope(void)
 {
+    free_owned(depth, 0);
     depth--;
     while (locals.n && locals.v[locals.n - 1].depth > depth) locals.n--;
 }
@@ -724,7 +733,6 @@ static void gen_block(NodeList *b);
 static void need_value(Node *n, int ty)
 {
     if (ty == TY_VOID) fatal_at(n->line, n->col, "%s no devuelve ningún valor", n->name ? n->name : "la expresión");
-    if (ty == TY_STR) fatal_at(n->line, n->col, "dashc (prueba): los textos solo pueden ir en Print");
 }
 
 static void value(Node *n) { need_value(n, gen_expr(n)); }
@@ -733,7 +741,11 @@ static void value(Node *n) { need_value(n, gen_expr(n)); }
 static void push_value(Node *n)
 {
     Var v;
-    if (n->kind != E_STR && simple(n, &v)) {
+    if (n->kind == E_STR) {
+        pea_string(n->str, n->len);
+        return;
+    }
+    if (simple(n, &v)) {
         if (v.kind == V_CONST && v.val >= -32768 && v.val <= 32767) {
             w(0x4878);                                 /* pea k.w */
             w((int)v.val);
@@ -745,6 +757,355 @@ static void push_value(Node *n)
     }
     value(n);
     push_d0();
+}
+
+/* ---- textos: llamadas al runtime de ./dash (dl_* en runtime/api.c) ----
+   Como en el C de ./dash: una variable de texto es dueña de su texto (lo libera al salir
+   de su bloque, en break, continue y return); lo que sale de +, de una interpolación o de
+   una función es un temporal, que se libera en bloque al empezar cada vuelta de un bucle
+   y al salir de una función (marcas). */
+static int made_tmp;   /* desde la última marca, algo ha dejado temporales */
+
+/* jsr sym con nargs argumentos ya en la pila; tmp: el resultado es un temporal nuevo */
+static void rt_call(const char *sym, int nargs, int tmp)
+{
+    jsr_sym(sym);
+    pop_args(nargs);
+    if (tmp) made_tmp = 1;
+}
+
+static void load_str_lit(const char *str, int len)
+{
+    w(0x203C);                                         /* move.l #texto,d0 */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(add_string(str, len));
+    d0_loaded = (uint32_t)obj->code.n;
+}
+
+/* ---- tipos sin generar código: los de las variables, y lo que devuelve una función ---- */
+typedef struct { const char *name; int type; } TBind;
+static struct { TBind *v; int n, cap; } tenv;   /* variables al deducir lo que devuelve una función */
+static int tenv_on, tenv_base;
+static int func_ret(int idx);
+
+static int var_type(const char *name)
+{
+    int i;
+    if (tenv_on) {
+        for (i = tenv.n - 1; i >= tenv_base; i--)
+            if (!strcmp(tenv.v[i].name, name)) return tenv.v[i].type;
+    } else {
+        Local *lc = find_local(name);
+        if (lc) return lc->type;
+    }
+    for (i = 0; i < prog->globals.n; i++)
+        if (!strcmp(prog->globals.v[i].name, name)) return global_type[i];
+    for (i = 0; i < prog->consts.n; i++)
+        if (!strcmp(prog->consts.v[i].name, name)) {
+            Node *v = prog->consts.v[i].value;
+            return v->kind == E_BOOL ? TY_BOOL : v->kind == E_STR ? TY_STR : TY_INT;
+        }
+    return TY_VOID;
+}
+
+static int expr_type(Node *n)
+{
+    int ta, tb, idx;
+    switch (n->kind) {
+    case E_INT: case E_NEG: case E_BNOT:
+        return TY_INT;
+    case E_BOOL: case E_CMP: case E_NOT: case E_AND: case E_OR:
+        return TY_BOOL;
+    case E_STR: case E_INTERP:
+        return TY_STR;
+    case E_NIL:
+        return TY_NIL;
+    case E_VAR:
+        return var_type(n->name);
+    case E_CALL:
+        if (find_func(n->name, &idx)) return func_ret(idx);
+        return TY_VOID;
+    case E_BIN:
+        ta = expr_type(n->a);
+        tb = expr_type(n->b);
+        if (n->op == P_PLUS && (ta == TY_STR || tb == TY_STR)) return TY_STR;
+        return TY_INT;
+    case E_INDEX:
+        ta = expr_type(n->a);
+        if (ta == TY_STR) return TY_CHAR;
+        if (IS_ARR(ta)) return ta - TY_ARR;
+        return TY_INT;
+    case E_SLICE:
+        return expr_type(n->a);
+    case E_FIELD:
+        if (!strcmp(n->name, "length")) return TY_INT;
+        return TY_INT;
+    }
+    return TY_INT;
+}
+
+/* lo que devuelve una función sin "-> Tipo": el tipo del primer return con valor, con las
+   variables de su cuerpo deducidas por su primera asignación. Bool y un carácter salen Int,
+   como en ./dash. */
+static int *fret_state;   /* 0 sin calcular, 1 calculando (recursión), 2 hecho */
+
+static void walk_types(NodeList *l, int *ret)
+{
+    int i;
+    for (i = 0; i < l->n; i++) {
+        Node *st = l->v[i];
+        TBind b;
+        b.name = st->name;
+        switch (st->kind) {
+        case S_ASSIGN:
+            if (var_type(st->name) == TY_VOID) {
+                b.type = expr_type(st->a);
+                VEC_PUSH(tenv, b);
+            }
+            break;
+        case S_VAR:
+            b.type = st->type;
+            VEC_PUSH(tenv, b);
+            break;
+        case S_FOR:
+            b.type = TY_INT;
+            VEC_PUSH(tenv, b);
+            break;
+        case S_FOREACH:
+            b.type = expr_type(st->a);
+            b.type = IS_ARR(b.type) ? b.type - TY_ARR : TY_INT;
+            VEC_PUSH(tenv, b);
+            break;
+        case S_RETURN:
+            if (st->a && (*ret == TY_VOID || *ret == TY_NIL)) *ret = expr_type(st->a);
+            break;
+        }
+        walk_types(&st->body, ret);
+        walk_types(&st->els, ret);
+    }
+}
+
+static int func_ret(int idx)
+{
+    Func *f = &prog->funcs.v[idx];
+    int saved_on = tenv_on, saved_base = tenv_base, saved_n = tenv.n, i, r = TY_VOID;
+    if (f->declared || fret_state[idx] == 2) return f->ret;
+    if (fret_state[idx] == 1) return f->has_value ? TY_INT : TY_VOID;
+    fret_state[idx] = 1;
+    tenv_on = 1;
+    tenv_base = tenv.n;
+    for (i = 0; i < f->params.n; i++) {
+        TBind b;
+        b.name = f->params.v[i].name;
+        b.type = f->params.v[i].type;
+        VEC_PUSH(tenv, b);
+    }
+    walk_types(&f->body, &r);
+    tenv.n = saved_n;
+    tenv_on = saved_on;
+    tenv_base = saved_base;
+    if (r == TY_BOOL || r == TY_CHAR || r == TY_NIL || (r == TY_VOID && f->has_value)) r = TY_INT;
+    f->ret = r;
+    fret_state[idx] = 2;
+    return r;
+}
+
+/* lo que deja un temporal nuevo (no lo que ya es de alguien: un literal, una variable) */
+static int is_tmp_expr(Node *e)
+{
+    return e->kind == E_BIN || e->kind == E_INTERP || e->kind == E_SLICE || e->kind == E_CALL ||
+           e->kind == E_MCALL;
+}
+
+/* d0 (de tipo ty) como texto: un número o un carácter pasan a un texto temporal */
+static void to_str(int ty)
+{
+    switch (ty) {
+    case TY_INT:
+        push_d0();
+        rt_call("_dl_str_from_int", 1, 1);
+        break;
+    case TY_CHAR:
+        push_d0();
+        rt_call("_dl_str_from_char", 1, 1);
+        break;
+    case TY_BOOL:
+        tst_d0();
+        w(0x6708);                                     /* beq.s +8 */
+        load_str_lit("true", 4);
+        w(0x6006);                                     /* bra.s +6 */
+        load_str_lit("false", 5);
+        d0_loaded = (uint32_t)-1;
+        break;
+    }
+}
+
+static void str_value(Node *n)
+{
+    int ty = gen_expr(n);
+    need_value(n, ty);
+    to_str(ty);
+}
+
+/* Los argumentos de una llamada al runtime, calculados en orden y dejados en la pila
+   como los pone C (el primero arriba). str[i]: el argumento i pasa a texto. Sitio para
+   todos primero y luego cada uno a su hueco: así se calculan de izquierda a derecha. */
+static void args_to_stack(Node **a, int n, const char *str)
+{
+    int i;
+    if (n == 1) {
+        if (str && str[0]) str_value(a[0]);
+        else value(a[0]);
+        push_d0();
+        return;
+    }
+    w(0x4FEF); w(-4 * n);                              /* lea -4n(sp),sp */
+    sp_depth += 4 * n;
+    for (i = 0; i < n; i++) {
+        if (str && str[i]) str_value(a[i]);
+        else value(a[i]);
+        if (i) { w(0x2F40); w(4 * i); }                /* move.l d0,4i(sp) */
+        else w(0x2E80);                                /* move.l d0,(sp) */
+    }
+}
+
+/* "a#{x}b": DashString_join(n, trozos), con los trozos en un array en la pila */
+static void gen_interp(Node *n)
+{
+    int np = n->args.n, i;
+    char *str = xmalloc(np + 1);
+    for (i = 0; i < np; i++) str[i] = 1;
+    args_to_stack(n->args.v, np, str);
+    free(str);
+    w(0x4857);                                         /* pea (sp): la dirección de los trozos */
+    sp_depth += 4;
+    w(0x4878); w(np);                                  /* pea n.w */
+    sp_depth += 4;
+    rt_call("_dl_str_join", 2, 1);
+    pop_args(np);
+}
+
+/* a + b con algún texto: DashString_concat, con un número pasado a texto */
+static void gen_concat(Node *n)
+{
+    Node *a[2];
+    static const char str[2] = {1, 1};
+    a[0] = n->a;
+    a[1] = n->b;
+    args_to_stack(a, 2, str);
+    rt_call("_dl_str_concat", 2, 1);
+}
+
+/* s[i]: el byte, con signo (char en el C de ./dash) */
+static int gen_str_index(Node *n)
+{
+    Node *a[2];
+    a[0] = n->a;
+    a[1] = n->b;
+    args_to_stack(a, 2, NULL);
+    rt_call("_dl_str_code", 2, 0);
+    w(0x4880); w(0x48C0);                              /* ext.w d0; ext.l d0 */
+    return TY_CHAR;
+}
+
+/* s[a:b]: sin a, 0; sin b, hasta el final */
+static int gen_str_slice(Node *n)
+{
+    Node *a[3], from, to;
+    memset(&from, 0, sizeof from);
+    memset(&to, 0, sizeof to);
+    from.kind = to.kind = E_INT;
+    from.val = 0;
+    to.val = 0x7FFFFFFF;
+    a[0] = n->a;
+    a[1] = n->b ? n->b : &from;
+    a[2] = n->c ? n->c : &to;
+    args_to_stack(a, 3, NULL);
+    rt_call("_dl_str_slice", 3, 1);
+    return TY_STR;
+}
+
+static int gen_field(Node *n)
+{
+    int t = expr_type(n->a);
+    if (!strcmp(n->name, "length") && t == TY_STR) {
+        args_to_stack(&n->a, 1, NULL);
+        rt_call("_dl_str_len", 1, 0);
+        return TY_INT;
+    }
+    fatal_at(n->line, n->col, "dashc (prueba): .%s aún no está", n->name);
+    return TY_VOID;
+}
+
+/* Libera los textos de las variables de la función o copia actual con profundidad
+   >= from_depth (all_frame: todas las de la función o copia) */
+static void free_owned(int from_depth, int all_frame)
+{
+    int i;
+    for (i = locals.n - 1; i >= 0; i--) {
+        Local *lc = &locals.v[i];
+        Var v;
+        if (!lc->owned || lc->frame != cur_frame || (!all_frame && lc->depth < from_depth)) continue;
+        use_slot(lc->slot);
+        v = slot_var(lc->slot, lc->type);
+        op_ea(0x2F00, &v);                             /* move.l v,-(sp) */
+        sp_depth += 4;
+        rt_call("_dl_str_free", 1, 0);
+    }
+}
+
+static int has_owned(int from_depth, int all_frame)
+{
+    int i;
+    for (i = 0; i < locals.n; i++)
+        if (locals.v[i].owned && locals.v[i].frame == cur_frame && (all_frame || locals.v[i].depth >= from_depth))
+            return 1;
+    return 0;
+}
+
+/* ---- marcas de temporales: en la pila mientras dura el bucle o la función ----
+   En la primera pasada se ponen todas y se apunta si hacía falta cada una (si algo dejó
+   temporales); en la segunda solo van las que hacían falta. */
+typedef struct { int idx, on, saved, sp; } MarkScope;
+static struct { int *v; int n, cap; } mark_need;
+static int mark_seq;
+
+static MarkScope mark_begin(void)
+{
+    MarkScope m;
+    m.idx = mark_seq++;
+    if (pass == 1) {
+        if (m.idx >= mark_need.n) VEC_PUSH(mark_need, 0);
+        mark_need.v[m.idx] = 0;
+    }
+    m.on = pass == 1 || (m.idx < mark_need.n && mark_need.v[m.idx]);
+    m.saved = made_tmp;
+    made_tmp = 0;
+    if (m.on) {
+        jsr_sym("_dl_tmp_mark");
+        push_d0();
+    }
+    m.sp = sp_depth;
+    return m;
+}
+
+/* al empezar cada vuelta: fuera los temporales de la anterior */
+static void mark_release(MarkScope *m)
+{
+    if (!m->on) return;
+    w(0x2F2F); w(sp_depth - m->sp);                    /* move.l marca(sp),-(sp) */
+    sp_depth += 4;
+    rt_call("_dl_tmp_release", 1, 0);
+}
+
+/* al acabar: fuera los temporales y la marca */
+static void mark_end(MarkScope *m)
+{
+    if (pass == 1) mark_need.v[m->idx] = made_tmp;
+    made_tmp = m->saved;
+    if (!m->on) return;
+    mark_release(m);
+    pop_args(1);
 }
 
 /* ---- operaciones con una constante ---- */
@@ -1178,7 +1539,40 @@ static int gen_compare(Node *n)
 {
     Var va, vb;
     long k;
-    int cc = cmp_cc(n->op);
+    int cc = cmp_cc(n->op), ta = expr_type(n->a), tb = expr_type(n->b);
+
+    /* x == nil: el puntero */
+    if (ta == TY_NIL || tb == TY_NIL) {
+        if (ta == TY_NIL && tb == TY_NIL) {
+            load_imm(0, 0);
+        } else {
+            value(ta == TY_NIL ? n->b : n->a);
+            tst_d0();
+        }
+        return cc;
+    }
+    /* textos: el signo de strcmp (nil va antes que cualquier texto) */
+    if (ta == TY_STR && tb == TY_STR) {
+        Node *a[2];
+        a[0] = n->a;
+        a[1] = n->b;
+        args_to_stack(a, 2, NULL);
+        rt_call("_dl_str_cmp", 2, 0);
+        tst_d0();
+        return cc;
+    }
+    /* un carácter con un texto de uno: el código del carácter, con signo como char */
+    if ((ta == TY_CHAR && n->b->kind == E_STR && n->b->len == 1) ||
+        (tb == TY_CHAR && n->a->kind == E_STR && n->a->len == 1)) {
+        Node c = *n, lit;
+        Node *s = ta == TY_CHAR ? n->b : n->a;
+        memset(&lit, 0, sizeof lit);
+        lit.kind = E_INT;
+        lit.val = (signed char)s->str[0];
+        if (ta == TY_CHAR) c.b = &lit;
+        else c.a = &lit;
+        return gen_compare(&c);
+    }
 
     /* x % 2^s == 0: basta con mirar los bits bajos, sea cual sea el signo */
     if ((cc == CC_EQ || cc == CC_NE) && fold(n->b, &k) && k == 0 && n->a->kind == E_BIN &&
@@ -1394,7 +1788,7 @@ static int ret_branch = -1, ret_when;
 static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
 {
     int i, saved_frame = cur_frame, saved_ret = ret_label, saved_base = loop_base, frame = ++frame_count;
-    int saved_branch = ret_branch, saved_when = ret_when;
+    int saved_branch = ret_branch, saved_when = ret_when, saved_cur_ret = cur_ret, saved_ret_sp = ret_sp;
     Local *binds = xmalloc(sizeof(Local) * (n->args.n + 1));
 
     enter_scope();
@@ -1410,6 +1804,7 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
         b->val = 0;
         b->ranged = 0;
         b->entry = 0;
+        b->owned = 0;
         if (!param_set[idx][i] && fold(a, &k)) {
             b->val = k;
             continue;
@@ -1441,6 +1836,14 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
                 if (simple_arg) load_var(0, &sv);
                 store_d0(&t);
             }
+            if (b->type == TY_STR && param_set[idx][i]) {
+                /* un parámetro de texto que la función cambia: una copia suya */
+                op_ea(0x2F00, &t);                     /* move.l p,-(sp) */
+                sp_depth += 4;
+                rt_call("_dl_str_dup", 1, 0);
+                store_d0(&t);
+                b->owned = 1;
+            }
         }
     }
     cur_frame = frame;
@@ -1449,17 +1852,23 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
     ret_label = new_label();
     ret_branch = branch_to;
     ret_when = when_true;
+    cur_ret = f->ret;
+    ret_sp = sp_depth;
     loop_base = loops.n;
     VEC_PUSH(inl_stack, idx);
     gen_block(&f->body);
     inl_stack.n--;
+    free_owned(0, 1);                                  /* cayendo por el final */
     def_label_fwd(ret_label);                          /* si solo se llega cayendo, d0 sigue valiendo */
     ret_label = saved_ret;
     ret_branch = saved_branch;
     ret_when = saved_when;
+    cur_ret = saved_cur_ret;
+    ret_sp = saved_ret_sp;
     loop_base = saved_base;
     cur_frame = saved_frame;
-    leave_scope();
+    depth--;                                           /* sin leave_scope: sus textos ya se liberaron */
+    while (locals.n && locals.v[locals.n - 1].depth > depth) locals.n--;
     return f->ret;
 }
 
@@ -1484,6 +1893,7 @@ static int gen_call(Node *n)
     jsr_label(func_label[idx]);
     pop_args(n->args.n);
     if (!needed[idx]) needed[idx] = 1;               /* 2: ya generada */
+    if (f->ret == TY_STR || IS_OBJ(f->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
     return f->ret;
 }
 
@@ -1502,7 +1912,24 @@ static int gen_expr(Node *n)
     }
     switch (n->kind) {
     case E_STR:
+        load_str_lit(n->str, n->len);
         return TY_STR;
+    case E_NIL:
+        load_imm(0, 0);
+        return TY_NIL;
+    case E_INTERP:
+        gen_interp(n);
+        return TY_STR;
+    case E_INDEX:
+        if (expr_type(n->a) == TY_STR) return gen_str_index(n);
+        fatal_at(n->line, n->col, "dashc (prueba): las listas aún no están");
+        return TY_VOID;
+    case E_SLICE:
+        if (expr_type(n->a) == TY_STR) return gen_str_slice(n);
+        fatal_at(n->line, n->col, "dashc (prueba): las listas aún no están");
+        return TY_VOID;
+    case E_FIELD:
+        return gen_field(n);
     case E_VAR:
         v = lookup(n->name);
         if (v.kind == V_NONE) fatal_at(n->line, n->col, "la variable %s no existe", n->name);
@@ -1535,6 +1962,10 @@ static int gen_expr(Node *n)
         return TY_BOOL;
     }
     case E_BIN:
+        if (n->op == P_PLUS && (expr_type(n->a) == TY_STR || expr_type(n->b) == TY_STR)) {
+            gen_concat(n);
+            return TY_STR;
+        }
         gen_binary(n);
         return TY_INT;
     }
@@ -1701,6 +2132,7 @@ static void gen_for(Node *n)
     int sr_slot[MAX_SR];
     Var vi, vend, vstep, vc, sr_v[MAX_SR];
     Loop lp;
+    MarkScope ms;
 
     if (n->c && !fold(n->c, &step)) step_known = 0;
     if (step_known && step < 0) down = 1;
@@ -1729,6 +2161,7 @@ static void gen_for(Node *n)
         counted = 0;
     }
 
+    ms = mark_begin();
     enter_scope();
     if (step_known) {
         for (i = 0; i < n->body.n; i++) find_mults(n->body.v[i], n->name, &n->body, m, &nm);
@@ -1827,11 +2260,16 @@ static void gen_for(Node *n)
         branch(CC_T, test);
     }
     def_label(top);
+    mark_release(&ms);
     lp.brk = done;
     lp.cont = cont;
+    enter_scope();
+    lp.depth = depth;
+    lp.sp = sp_depth;
     VEC_PUSH(loops, lp);
     gen_block(&n->body);
     loops.n--;
+    leave_scope();
 
     def_label(cont);
     if (use_i) {
@@ -1872,6 +2310,7 @@ static void gen_for(Node *n)
     repls.n = repl_base;
     leave_loop();
     leave_scope();
+    mark_end(&ms);
 }
 
 /* qué es un nombre, sin contarlo como uso */
@@ -2152,6 +2591,7 @@ static int gen_counted_while(Node *n)
     int op, up, i, inc = 0, slot, top, done;
     Var vv, vc;
     Loop lp;
+    MarkScope ms;
     if (c->kind != E_CMP) return 0;
     op = c->op;
     /* v es el lado que cambia en el cuerpo */
@@ -2182,6 +2622,7 @@ static int gen_counted_while(Node *n)
     if (pass == 2 && slot_reg.v[slot] < 0) return 0;
     top = new_label();
     done = new_label();
+    ms = mark_begin();
     /* vueltas - 1: fin - v (- 1 con <) o v - fin (- 1 con >); ninguna si no llega */
     value(end);
     simple(vn, &vv);
@@ -2198,10 +2639,13 @@ static int gen_counted_while(Node *n)
     enter_loop();
     use_slot(slot);
     def_label(top);
+    mark_release(&ms);
     lp.brk = done;
     lp.cont = -1;                                      /* no hay continue */
-    VEC_PUSH(loops, lp);
     enter_scope();
+    lp.depth = depth;
+    lp.sp = sp_depth;
+    VEC_PUSH(loops, lp);
     gen_block(&n->body);
     leave_scope();
     loops.n--;
@@ -2213,7 +2657,72 @@ static int gen_counted_while(Node *n)
     }
     def_label(done);
     leave_loop();
+    mark_end(&ms);
     return 1;
+}
+
+/* s = valor para una variable de texto: la variable es dueña de su texto; s = s + x añade
+   en su sitio (_dash_str_append); una variable nueva empieza sin texto */
+static void gen_str_assign(Node *n)
+{
+    Node *e = n->a;
+    Local *lc = find_local(n->name);
+    int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name));
+    Var v;
+    if (lc && lc->slot < 0) fatal_at(n->line, n->col, "%s es una constante", n->name);
+    if (!fresh && e->kind == E_BIN && e->op == P_PLUS && e->a->kind == E_VAR && !strcmp(e->a->name, n->name) &&
+        !refs(e->b, n->name)) {
+        str_value(e->b);
+        push_d0();
+        v = lookup(n->name);
+        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
+        sp_depth += 4;
+        rt_call("_dl_str_append_r", 2, 0);
+        store_d0(&v);
+        return;
+    }
+    if (fresh && e->kind == E_NIL) {
+        v = declare(n->name, TY_STR);
+        locals.v[locals.n - 1].owned = 1;
+        set_imm(&v, 0);
+        return;
+    }
+    if (e->kind == E_NIL) load_imm(0, 0);
+    else str_value(e);
+    push_d0();
+    if (fresh) {
+        w(0x4878); w(0);                               /* pea 0.w: sin texto antes */
+        sp_depth += 4;
+    } else {
+        v = lookup(n->name);
+        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
+        sp_depth += 4;
+    }
+    rt_call(is_tmp_expr(e) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
+    if (fresh) {
+        v = declare(n->name, TY_STR);
+        locals.v[locals.n - 1].owned = 1;
+    }
+    store_d0(&v);
+}
+
+/* Al empezar Main, las globales de texto toman su valor (una copia suya, como en ./dash) */
+static void gen_global_inits(void)
+{
+    int i;
+    for (i = 0; i < prog->globals.n; i++) {
+        Global *g = &prog->globals.v[i];
+        Var v;
+        if (global_type[i] != TY_STR || g->init->kind == E_NIL) continue;
+        str_value(g->init);
+        push_d0();
+        w(0x4878); w(0);                               /* pea 0.w */
+        sp_depth += 4;
+        rt_call(is_tmp_expr(g->init) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
+        v.kind = V_GLOBAL;
+        v.off = i * 4;
+        store_d0(&v);
+    }
 }
 
 static int forced_type = -1;   /* el tipo de una función de una línea puesta como expresión */
@@ -2233,7 +2742,8 @@ static void gen_stmt(Node *n)
             ty = gen_expr(n->a);
             need_value(n->a, ty);
             push_d0();
-            jsr_sym(ty == TY_BOOL ? "__dash_print_bool" : "__dash_print_int");
+            jsr_sym(ty == TY_BOOL ? "__dash_print_bool" : ty == TY_STR || ty == TY_NIL ? "__dash_print_str" :
+                    ty == TY_CHAR ? "__dash_print_char" : "__dash_print_int");
         }
         pop_args(1);
         return;
@@ -2256,6 +2766,14 @@ static void gen_stmt(Node *n)
                 return;
             }
         }
+        {
+            int tt = n->kind == S_VAR ? n->type : var_type(n->name);
+            if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
+            if (tt == TY_STR) {
+                gen_str_assign(n);
+                return;
+            }
+        }
         if (n->kind == S_ASSIGN && gen_update(n)) return;
         if (fold(n->a, &k) && lookup_kind(n->name) == V_GLOBAL && !lookup_global(n->name) &&
             count_assigns(cur_body(), n->name) == 1) {
@@ -2269,6 +2787,7 @@ static void gen_stmt(Node *n)
             lc.val = k;
             lc.ranged = 0;
             lc.entry = 0;
+            lc.owned = 0;
             VEC_PUSH(locals, lc);
             return;
         }
@@ -2315,6 +2834,7 @@ static void gen_stmt(Node *n)
     }
     case S_WHILE: {
         Loop lp;
+        MarkScope ms;
         int top, test, done, base = repls.n, slots = slot_uses.n;
         if (gen_counted_while(n)) return;
         top = new_label();
@@ -2323,6 +2843,7 @@ static void gen_stmt(Node *n)
         /* si gen_counted_while no ha podido en la segunda pasada, no se suben constantes:
            los huecos tienen que salir en el mismo orden que en la primera */
         if (slot_uses.n == slots) hoist_consts(n->a);
+        ms = mark_begin();
         enter_loop();
         /* La condición va al final. Si es barata, también al entrar (en vez de saltar
            al final): así al final solo se llega desde el cuerpo y su última instrucción
@@ -2330,10 +2851,13 @@ static void gen_stmt(Node *n)
         if (has_call(n->a)) branch(CC_T, test);
         else if (!true_at_entry(n->a)) gen_branch(n->a, done, 0);   /* si se sabe que se cumple, nada */
         def_label(top);
+        mark_release(&ms);
         lp.brk = done;
         lp.cont = test;
-        VEC_PUSH(loops, lp);
         enter_scope();
+        lp.depth = depth;
+        lp.sp = sp_depth;
+        VEC_PUSH(loops, lp);
         gen_block(&n->body);
         leave_scope();
         loops.n--;
@@ -2342,6 +2866,7 @@ static void gen_stmt(Node *n)
         def_label(done);
         repls.n = base;
         leave_loop();
+        mark_end(&ms);
         return;
     }
     case S_FOR:
@@ -2350,13 +2875,49 @@ static void gen_stmt(Node *n)
     case S_BREAK:
     case S_CONTINUE:
         if (loops.n <= loop_base) fatal_at(n->line, n->col, "%s fuera de un bucle", n->kind == S_BREAK ? "break" : "continue");
-        branch(CC_T, n->kind == S_BREAK ? loops.v[loops.n - 1].brk : loops.v[loops.n - 1].cont);
+        {
+            Loop *lp = &loops.v[loops.n - 1];
+            free_owned(lp->depth, 0);
+            if (sp_depth != lp->sp) { w(0x4FEF); w(sp_depth - lp->sp); }
+            branch(CC_T, n->kind == S_BREAK ? lp->brk : lp->cont);
+        }
         return;
-    case S_RETURN:
-        if (n->a && ret_branch >= 0) gen_branch(n->a, ret_branch, ret_when);
-        else if (n->a) value(n->a);
+    case S_RETURN: {
+        int owned = has_owned(0, 1);
+        if (n->a && ret_branch >= 0) {
+            if (owned) {
+                value(n->a);
+                push_d0();
+                free_owned(0, 1);
+                pop_d0();
+                tst_d0();
+                branch(ret_when ? CC_NE : CC_EQ, ret_branch);
+            } else {
+                gen_branch(n->a, ret_branch, ret_when);
+            }
+        } else if (n->a) {
+            ty = gen_expr(n->a);
+            need_value(n->a, ty);
+            if (cur_ret == TY_STR) {
+                to_str(ty);
+                /* un texto que ya es de alguien sale como temporal de quien llama */
+                if (!is_tmp_expr(n->a)) {
+                    push_d0();
+                    rt_call("_dl_str_ret", 1, 1);
+                }
+            }
+            if (owned) {
+                push_d0();
+                free_owned(0, 1);
+                pop_d0();
+            }
+        } else if (owned) {
+            free_owned(0, 1);
+        }
+        if (sp_depth != ret_sp) { w(0x4FEF); w(sp_depth - ret_sp); }   /* lea: fuera las marcas de los bucles */
         branch(CC_T, ret_label);
         return;
+    }
     }
     fatal_at(n->line, n->col, "instrucción no admitida");
 }
@@ -2368,10 +2929,13 @@ static void gen_block(NodeList *b)
 }
 
 /* una pasada sobre la función: link a5,#-marco; guarda registros ... recupera; unlk a5; rts */
+static void gen_global_inits(void);
+
 static void gen_function_pass(int label, Func *f, NodeList *body)
 {
     uint32_t frame_at = 0;
     int i, nregs = 0, mask_push = 0, mask_pop = 0, last = 0;
+    MarkScope fm;
 
     locals.n = 0;
     depth = 0;
@@ -2419,6 +2983,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             lc.val = 0;
             lc.ranged = 0;
             lc.entry = 0;
+            lc.owned = 0;
             VEC_PUSH(locals, lc);
             if (slot_reg.v[lc.slot] >= 0) {
                 if (frameless) {
@@ -2430,8 +2995,40 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 }
             }
         }
+    mark_seq = 0;
+    made_tmp = 0;
+    cur_ret = f ? f->ret : TY_VOID;
+    if (f) {
+        /* un parámetro de texto que el cuerpo cambia: una copia suya, como en ./dash */
+        int idx = (int)(f - prog->funcs.v);
+        for (i = 0; i < f->params.n; i++)
+            if (f->params.v[i].type == TY_STR && param_set[idx][i]) {
+                Var v = lookup(f->params.v[i].name);
+                op_ea(0x2F00, &v);                     /* move.l p,-(sp) */
+                sp_depth += 4;
+                rt_call("_dl_str_dup", 1, 0);
+                store_d0(&v);
+                locals.v[i].owned = 1;
+            }
+        fm = mark_begin();
+    } else {
+        gen_global_inits();
+    }
+    ret_sp = sp_depth;
     gen_block(body);
+    if (f) free_owned(0, 1);                           /* cayendo por el final */
     def_label(ret_label);
+    if (f) {
+        if (pass == 1) mark_need.v[fm.idx] = made_tmp;
+        if (fm.on) {
+            /* fuera los temporales de la función, menos el texto que devuelve */
+            push_d0();
+            w(0x2F2F); w(4);                           /* move.l 4(sp),-(sp): la marca */
+            sp_depth += 4;
+            rt_call(cur_ret == TY_STR ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
+            pop_args(1);
+        }
+    }
     if (sp_depth) fatal("la pila no cuadra (fallo de dashc)");
     if (nregs == 1) w(0x201F | last << 9);             /* move.l (sp)+,dN */
     else if (nregs) { w(0x4CDF); w(mask_pop); }        /* movem.l (sp)+,regs */
@@ -2475,6 +3072,7 @@ static void gen_function(int label, Func *f, NodeList *body)
 
     /* primera pasada: todo en el marco, contando usos */
     slot_reg.n = 0;
+    mark_need.n = 0;
     frameless = 0;
     pass = 1;
     gen_function_pass(label, f, body);
@@ -2583,16 +3181,24 @@ void gen_program(Program *p, Obj *o)
         func_label[i] = new_label();
     }
 
-    /* globales: sus valores iniciales van en el hunk de datos */
+    /* globales: sus valores iniciales van en el hunk de datos (los textos, al empezar Main) */
     global_type = xmalloc(sizeof(int) * (p->globals.n + 1));
     for (i = 0; i < p->globals.n; i++) {
-        long v;
+        long v = 0;
         Global *g = &p->globals.v[i];
-        if (!fold(g->init, &v))
-            fatal_at(g->line, g->col, "dashc (prueba): el valor inicial de %s tiene que ser un número fijo", g->name);
         global_type[i] = g->type;
+        if (g->type == TY_STR) {
+            if (g->init->kind != E_STR && g->init->kind != E_NIL && g->init->kind != E_INTERP)
+                fatal_at(g->line, g->col, "dashc (prueba): el valor inicial de %s tiene que ser un texto fijo", g->name);
+        } else if (!fold(g->init, &v)) {
+            fatal_at(g->line, g->col, "dashc (prueba): el valor inicial de %s tiene que ser un número fijo", g->name);
+        }
         buf_long(&o->data, (uint32_t)v);
     }
+    /* lo que devuelve cada función */
+    fret_state = xmalloc(sizeof(int) * (p->funcs.n + 1));
+    memset(fret_state, 0, sizeof(int) * (p->funcs.n + 1));
+    for (i = 0; i < p->funcs.n; i++) func_ret(i);
 
     /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */
     main_label = new_label();
