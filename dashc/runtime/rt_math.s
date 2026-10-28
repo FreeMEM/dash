@@ -128,6 +128,62 @@ __dash_mod:
 3:	move.l	(sp)+,d3
 	rts
 
+| d0 / d1 y d0 % d1 con d1 de 2 a 65535 (una constante del programa): el código ya
+| probó el divu.w directo, así que d0 es negativo o el cociente no cabe en 16 bits.
+| Sin comprobar el divisor: dos divu.w con el valor absoluto. d2 se guarda en a1.
+	.macro	DIVK16		| sin signo: d0 = d0 / d1, d2 = d0 % d1
+	moveq	#0,d2
+	swap	d0
+	move.w	d0,d2
+	divu.w	d1,d2		| d2 = resto1:cociente1
+	move.w	d2,d0
+	swap	d0		| d0 = cociente1:parte baja
+	move.w	d0,d2		| d2 = resto1:parte baja
+	divu.w	d1,d2		| d2 = resto2:cociente2
+	move.w	d2,d0		| d0 = cociente1:cociente2
+	clr.w	d2
+	swap	d2		| d2 = resto2
+	.endm
+
+	.globl	__dash_divk
+__dash_divk:
+	tst.b	__dash_cpu020
+	jne	7f
+	move.l	d2,a1
+	tst.l	d0
+	jmi	1f
+	DIVK16
+	move.l	a1,d2
+	rts
+1:	neg.l	d0
+	DIVK16
+	neg.l	d0
+	move.l	a1,d2
+	rts
+7:	DIVS_L_D1_D0
+	rts
+
+	.globl	__dash_modk
+__dash_modk:
+	tst.b	__dash_cpu020
+	jne	7f
+	move.l	d2,a1
+	tst.l	d0
+	jmi	1f
+	DIVK16
+	move.l	d2,d0
+	move.l	a1,d2
+	rts
+1:	neg.l	d0
+	DIVK16
+	move.l	d2,d0
+	neg.l	d0
+	move.l	a1,d2
+	rts
+7:	DIVSL_L_D1_D1_D0
+	move.l	d1,d0
+	rts
+
 | sin signo: d0 = d0 / d1, d1 = d0 % d1. Un divisor 0 es un error del programa.
 __dash_udivmod:
 	tst.l	d1

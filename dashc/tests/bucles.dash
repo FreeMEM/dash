@@ -87,6 +87,38 @@ func tres(x)
     return b - x
 end
 
+func cuenta_while(a, b)
+    r = 0
+    k = a
+    while k < b
+        r = r + 1
+        k = k + 1
+    end
+    Print k
+    k = a
+    while k <= b
+        k = k + 1
+        r = r + 10
+    end
+    Print k
+    k = b
+    while k > a
+        r = r + 100
+        k = k - 1
+    end
+    Print k
+    k = b
+    while a <= k
+        k = k - 1
+        if r > 1000000
+            break
+        end
+        r = r + 1000
+    end
+    Print k
+    return r
+end
+
 Main
     # i sin usar en el cuerpo: solo el contador
     c = 0
@@ -224,4 +256,23 @@ Main
     Print tres(5) - tres(9)
     Print tres(5) * tres(-9)
     Print (tres(3) & 6) + (tres(4) | 1)
+    # while con contador
+    Print cuenta_while(1, 10)
+    Print cuenta_while(10, 1)
+    Print cuenta_while(-5, -5)
+    Print cuenta_while(0, 70000)
+    Print cuenta_while(-2147483647, -2147483600)
+    # con rangos: divisiones y productos sin comprobar
+    s = 0
+    for v in (458740..458751)
+        s = s + v / 7 + v % 7 + v % 8 + v / 16
+    end
+    Print s
+    s = 0
+    for a in (-32768..-32766)
+        for b in (32765..32767)
+            s = s + a * b + a * a
+        end
+    end
+    Print s
 end
