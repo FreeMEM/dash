@@ -568,7 +568,8 @@ typedef struct _DashStrHdr {
 
 #define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
 #define _DASH_STR_TEMP 0x01000000UL   /* in the stack of temporaries */
-#define _DASH_STR_TAG  0x5A000000UL
+#define _DASH_STR_HASHED 0x02000000UL /* a dictionary key literal: its hash in the LONG before the header */
+#define _DASH_STR_TAG  0x58000000UL
 #define _DASH_STR_KEY  0xDA5C7E57UL
 #define _DASH_STR_SIZE(h) ((h)->size & 0x00FFFFFFUL)
 #define _DASH_STR_HDR(p) ((_DashStrHdr *)((UBYTE *)(p) - sizeof(_DashStrHdr)))
@@ -586,6 +587,13 @@ static __inline__ _DASH_NOASAN BOOL _dash_str_ours(CONST_STRPTR p) {
     return h->self == (ULONG)((ULONG)h + _DASH_STR_KEY);   /* (ULONG: 32 bits also on the PC of the tests) */
 }
 #define _DASH_STR_OURS(p) _dash_str_ours((CONST_STRPTR)(p))
+
+/* A literal used as a dictionary key (d["color"]): a text of Dash made by the compiler, with its length and,
+   before its header, its hash (_dash_dict_hash). Escaped: never freed nor written */
+#define _DASH_KEY(s, hash) ({ static const struct { ULONG h0; _DashStrHdr h; char t[sizeof(s)]; } \
+    __attribute__((aligned(2))) _dash_k = { (hash), { (sizeof(_DashStrHdr) + sizeof(s)) | _DASH_STR_TAG | \
+    _DASH_STR_KEEP | _DASH_STR_HASHED, sizeof(s) - 1, (ULONG)&_dash_k.h + _DASH_STR_KEY }, s }; \
+    (STRPTR)_dash_k.t; })
 
 /* The stack of temporaries: the first 32 in place, more in a block of the pool that doubles */
 typedef struct { _DashStrHdr *h; ULONG serial; } _DashTmp;
@@ -1439,6 +1447,23 @@ static ULONG _dash_dict_hash(STRPTR k) {
     return h;
 }
 
+/* The hash and length of a key: the hash made by the compiler for a literal (_DASH_KEY), the length from the
+   header of a text of Dash; else computed */
+static __inline__ ULONG _dash_dict_keyhash(STRPTR k, ULONG *len) {
+    ULONG h = 5381, n;
+    const UBYTE *p = (const UBYTE *)k;
+    if (_DASH_STR_OURS(k)) {
+        _DashStrHdr *hd = _DASH_STR_HDR(k);
+        *len = n = hd->len;
+        if (hd->size & _DASH_STR_HASHED) return ((const ULONG *)hd)[-1];
+        while (n--) h = (h << 5) + h + *p++;
+        return h;
+    }
+    while (*p) h = (h << 5) + h + *p++;
+    *len = (const UBYTE *)p - (const UBYTE *)k;
+    return h;
+}
+
 /* An Int key mixed with shifts (no multiplication on a 68000): consecutive keys stay apart */
 static ULONG _dash_dict_hashi(LONG k) {
     ULONG h = (ULONG)k;
@@ -1486,9 +1511,19 @@ static DashDict *DashDict_new(LONG kind) {
 }
 
 /* The slot of key, or the free one where it would go (the table must exist) */
+/* (the keys are the dictionary's own texts: their lengths are in their headers, compared before the bytes) */
 static LONG _dash_dict_slot(DashDict *d, STRPTR key) {
-    ULONG mask = d->cap - 1, i = _dash_dict_hash(key) & mask;
-    while (d->keys[i] && strcmp((char *)d->keys[i], (char *)key)) i = (i + 1) & mask;
+    ULONG len, mask = d->cap - 1, i = _dash_dict_keyhash(key, &len) & mask;
+    STRPTR k;
+    while ((k = d->keys[i])) {
+        if (_DASH_STR_HDR(k)->len == len) {
+            const UBYTE *a = (const UBYTE *)k, *b = (const UBYTE *)key;
+            ULONG n = len;
+            while (n && *a == *b) { a++; b++; n--; }
+            if (!n) break;
+        }
+        i = (i + 1) & mask;
+    }
     return (LONG)i;
 }
 
@@ -19753,6 +19788,18 @@ static {ret_type} {method_name}({params_str}) {{
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         self.emit(head + self._frees(owned) + release + f"{indent}return _dash_r; }}\n")
 
+    def _dict_key(self, node: ASTNode, int_keys: bool) -> str:
+        """A dictionary key: a String literal goes with its hash made here (_DASH_KEY), as the runtime makes it"""
+        code = self._generate_expression(node)
+        # (only plain ASCII without escapes: the bytes are then the text's, the hash the same as the runtime's)
+        if not int_keys and isinstance(node, StringLiteral) and re.fullmatch(r'"[ !#-\[\]-~]*"', code):
+            data = code[1:-1].encode("ascii")
+            h = 5381
+            for b in data:
+                h = (h * 33 + b) & 0xFFFFFFFF
+            return f"_DASH_KEY({code}, 0x{h:08X}UL)"
+        return code
+
     def visit_ArrayAssign(self, node: ArrayAssign):
         """Generate code for array element assignment."""
         self.uses_arrays = True
@@ -19764,9 +19811,9 @@ static {ret_type} {method_name}({params_str}) {{
             # d["clave"] = valor (dashweb D5)
             self.uses_dicts = self.uses_strings = True
             d = self._generate_expression(node.array)
-            key = self._generate_expression(node.index)
-            value = self._generate_expression(node.value)
             i = "i" if self._dict_int_keys(node.array) else ""       # {Int: T} (Lorraine D9)
+            key = self._dict_key(node.index, bool(i))
+            value = self._generate_expression(node.value)
             if kind == "string":
                 self.emit(f"{indent}DashDict_set_str{i}({d}, {key}, {self._str_kept(node.value, value)});\n")
             elif kind != "int":
@@ -20125,10 +20172,11 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             kind = self._dict_value_kind(node.array)
             i = "i" if self._dict_int_keys(node.array) else ""       # {Int: T} (Lorraine D9)
-            code = f"DashDict_get{i}({self._generate_expression(node.array)}, {self._generate_expression(node.index)})"
+            key = self._dict_key(node.index, bool(i))
+            code = f"DashDict_get{i}({self._generate_expression(node.array)}, {key})"
             if getattr(node, "default", None) is not None:      # d.get(k, default) (D65)
                 code = (f"DashDict_get_or{i}({self._generate_expression(node.array)}, "
-                        f"{self._generate_expression(node.index)}, (LONG)({self._generate_expression(node.default)}))")
+                        f"{key}, (LONG)({self._generate_expression(node.default)}))")
             if kind == "string":
                 return f"((STRPTR){code})"
             if kind == "array":
@@ -20653,8 +20701,8 @@ static {ret_type} {method_name}({params_str}) {{
             # d.has(k), d.remove(k), d.keys(), d.clear() (dashweb D5)
             self.uses_dicts = self.uses_arrays = self.uses_strings = True
             d = self._generate_expression(node.object)
-            args = "".join(", " + self._generate_expression(a) for a in node.arguments)
             i = "i" if node.method in ("has", "remove") and self._dict_int_keys(node.object) else ""
+            args = "".join(", " + self._dict_key(a, bool(i)) for a in node.arguments)
             return f"DashDict_{node.method}{i}({d}{args})"
         # Get the object and determine its type
         obj_expr = self._generate_expression(node.object)
