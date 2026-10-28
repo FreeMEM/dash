@@ -2792,6 +2792,97 @@ static int gen_dash_builtin(Node *n)
     }
 }
 
+/* task_start con una función de Dash: corre en otro proceso a la vez que el programa, y la memoria del runtime
+   (textos, listas, structs, Double, sus temporales) es de uno solo. Solo enteros, Bool, Float, globales de esos,
+   builtins que no dan textos ni listas, @extern y otras funciones así; un texto literal, solo para Print o
+   como argumento. Da por qué no (y dónde), o NULL. */
+static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at);
+
+static const char *task_impure_list(NodeList *l, int lit_ok, int *visited, Node **at)
+{
+    int i;
+    const char *r;
+    for (i = 0; i < l->n; i++)
+        if ((r = task_impure(l->v[i], lit_ok, visited, at))) return r;
+    return NULL;
+}
+
+static const char *task_impure_func(int idx, int *visited, Node **at)
+{
+    Func *f = &prog->funcs.v[idx];
+    int i;
+    if (visited[idx]) return NULL;
+    visited[idx] = 1;
+    if (f->native) return f->ret == TY_STR ? "llamar a una función de C que da un texto" : NULL;
+    for (i = 0; i < f->params.n; i++)
+        if (f->params.v[i].type != TY_INT && f->params.v[i].type != TY_BOOL && f->params.v[i].type != TY_FLOAT)
+            return "recibir un parámetro que no es Int, Bool ni Float";
+    if (f->ret != TY_VOID && f->ret != TY_INT && f->ret != TY_BOOL && f->ret != TY_FLOAT)
+        return "devolver algo que no es Int, Bool ni Float";
+    return task_impure_list(&f->body, 0, visited, at);
+}
+
+static const char *task_impure(Node *n, int lit_ok, int *visited, Node **at)
+{
+    const char *r = NULL;
+    int i;
+    if (!n) return NULL;
+    *at = n;
+    switch (n->kind) {
+    case E_STR:
+        return lit_ok ? NULL : "usar textos";
+    case E_INTERP: case E_LIST: case E_DICT: case E_INDEX: case E_SLICE: case E_FIELD: case E_MCALL:
+        return "usar textos, listas, diccionarios ni structs";
+    case S_STORE: case S_FOREACH:
+        return "usar listas ni structs";
+    case S_WINDOW: case S_EVLOOP: case S_ON: case S_STOP:
+        return "usar ventanas ni eventos";
+    case E_VAR:
+        for (i = 0; i < prog->globals.n; i++)
+            if (!strcmp(prog->globals.v[i].name, n->name)) {
+                int t = global_type[i];
+                if (IS_STRLIKE(t) || IS_OBJ(t) || t == TY_FIXED) return "usar un global que no es Int, Bool ni Float";
+            }
+        for (i = 0; i < prog->consts.n; i++)
+            if (!strcmp(prog->consts.v[i].name, n->name) && prog->consts.v[i].value->kind == E_STR && !lit_ok)
+                return "usar textos";
+        return NULL;
+    case S_VAR:
+        if (n->type && n->type != TY_INT && n->type != TY_BOOL && n->type != TY_FLOAT)
+            return "tener una variable que no es Int, Bool ni Float";
+        break;
+    case S_PRINT:
+        return task_impure(n->a, 1, visited, at);
+    case E_CALL: {
+        int idx, b;
+        Func *f = find_func(n->name, &idx);
+        if (!f && find_struct(n->name) >= 0) return "crear structs";
+        if (!f && lookup(n->name).kind != V_NONE) return "llamar a una función guardada en una variable";
+        if (f) {
+            if ((r = task_impure_func(idx, visited, at))) return r;
+        } else {
+            for (b = 0; builtins[b].name; b++)
+                if (!strcmp(builtins[b].name, n->name)) break;
+            if (!builtins[b].name) {
+                if (!strcmp(n->name, "Fixed") || !strcmp(n->name, "Double") || !strcmp(n->name, "String"))
+                    return "usar Fixed, Double ni textos";
+            } else if (builtins[b].ret >= 3) {
+                return "llamar a un builtin que da un texto, una lista o un Double";
+            }
+        }
+        *at = n;
+        return task_impure_list(&n->args, 1, visited, at);
+    }
+    default:
+        break;
+    }
+    if ((r = task_impure(n->a, 0, visited, at)) || (r = task_impure(n->b, 0, visited, at)) ||
+        (r = task_impure(n->c, 0, visited, at)) || (r = task_impure_list(&n->args, 0, visited, at)) ||
+        (r = task_impure_list(&n->body, 0, visited, at)) || (r = task_impure_list(&n->els, 0, visited, at)))
+        return r;
+    return NULL;
+}
+
 static int gen_builtin(Node *n)
 {
     int i, b;
@@ -2815,6 +2906,21 @@ static int gen_builtin(Node *n)
         v.off = (int)sink_off;
         store_d0(&v);
         return TY_VOID;
+    }
+    if ((!strcmp(n->name, "task_start") || !strcmp(n->name, "task_start_with")) && n->args.n >= 1 &&
+        n->args.v[0]->kind == E_FUNCREF) {
+        int idx;
+        Func *f = find_func(n->args.v[0]->name, &idx);
+        if (f && !f->native) {
+            int *visited = xmalloc(sizeof(int) * (prog->funcs.n + 1));
+            Node *at = n->args.v[0];
+            const char *why;
+            memset(visited, 0, sizeof(int) * (prog->funcs.n + 1));
+            if (f->params.n != 1) fatal_node(n, "task_start: %s tiene que recibir un Int", f->name);
+            if ((why = task_impure_func(idx, visited, &at)))
+                fatal_node(at, "task_start: %s corre a la vez que el programa y no puede %s", f->name, why);
+            free(visited);
+        }
     }
     for (b = 0; builtins[b].name; b++)
         if (!strcmp(builtins[b].name, n->name)) break;

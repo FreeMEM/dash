@@ -292,3 +292,14 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   un puntero en a2 (antes daba basura). Iguales que gcc en A1200 y A500. Un texto que devuelve la función de Dash
   es un temporal: el C lo copia si lo guarda.
   - Batería bien (42 de 42) y cobertura igual (208 de 312; 135 de 135).
+- D7 (6.ª parte): `task_start(f, n)` y `task_start_with` con una función de Dash (en ./dash, solo `@native`). Las
+  funciones de Dash ya siguen el convenio de C, así que el runtime de tareas de ./dash las llama tal cual; lo que
+  falta es seguridad: corre a la vez que el programa y la memoria del runtime (textos, listas, structs, Double y sus
+  temporales) es de uno solo. dashc lo comprueba al compilar (`task_impure`, también en las funciones a las que
+  llama): solo Int, Bool, Float, globales de esos, builtins que no dan textos, listas ni Double, `@extern` y textos
+  literales para `Print` o como argumento; si no, "task_start: f corre a la vez que el programa y no puede crear
+  structs" con su línea. dashc/tests/tareas.dash: primos en una tarea mientras el programa hace textos y listas,
+  con un global Int compartido: igual que gcc en A1200 y A500.
+  - Para Tachyon (decodificar imágenes, red de fondo) harán falta búferes compartidos: los `buffer_*` son
+    builtins de enteros y valen ya dentro de una tarea.
+  - Batería bien (44 de 44) y cobertura igual (208 de 312; 135 de 135).
