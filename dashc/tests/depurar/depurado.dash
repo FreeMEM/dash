@@ -1,0 +1,13 @@
+# El programa que depuran los tests de esta carpeta (dash --debug; las líneas cuentan)
+func doble(n: Int) -> Int
+    r = n * 2
+    return r
+end
+
+Main
+    a = 5
+    b = doble(a)
+    Print "b: #{b}"
+    c = b + 1
+    Print "c: #{c}"
+end

@@ -57,3 +57,13 @@ Como EDBG de AmigaE (DASHC_LOOP, D12): sin el bit de traza de la CPU, que Emu68 
   (sobre a5, con su línea), `L` el `NOP` de cada línea. `dashc --debug-info prog` lo enseña. Los 31 tests de dashc
   compilados con y sin `--debug` dan lo mismo en el A1200. Test `tests/unit/test_dashc_debug.py`. Antes, `dashc`
   traído a la rama (fusión con el runtime rehecho).
+- G3 hecha: `dashc/runtime/depurar.c` (en la librería tras `api.c`) con los builtins `dbg_*`, solo de dashc: sus filas
+  en `dashc/runtime/builtins_dashc.py`, que lee `gen_builtins_tab.py`. `dbg_start` (LoadSeg, el `HUNK_DEBUG` leído del
+  fichero, un proceso hijo con su `tc_TrapCode` que espera y ejecuta el programa con `RunCommand`, salida a T:),
+  `dbg_break`/`dbg_unbreak` (por el final del nombre del fichero), `dbg_continue`, `dbg_wait`, `dbg_state`,
+  `dbg_signal`, `dbg_file`/`dbg_line`/`dbg_function`, `dbg_reg`, `dbg_peek`, `dbg_output`, `dbg_end` (todas las
+  líneas a `TRAP` y en la siguiente a `_dash_quit(20)` del programa: `hunk.c` apunta su sitio con una línea `Q`),
+  `dbg_rc`; también `dbg_step`/`dbg_next`/`dbg_out`/`dbg_pause` (sin probar aún: G4). Los textos del C, con
+  escapes Latin-1. Tests: `dashc/tests/depurar.py` (en el A1200, con el depurado en DH0:), `basico` bien.
+- D13 (freememlang-51, 2026-10-29): Dash 2.0 mantiene los dos caminos (dashc y `./dash --c`, dash1); los `dbg_*` son
+  solo de dashc y lo dicen en su documentación.

@@ -223,6 +223,26 @@ const BuiltinInfo builtin_info[] = {
     {"cycle_set", 2, 0, 1, 0},
     {"date_text", 1, 3, 1, 0},
     {"date_text", 1, 3, 1, 0},
+    {"dbg_break", 2, 2, 0, 0},
+    {"dbg_continue", 0, 2, 0, 0},
+    {"dbg_end", 1, 2, 0, 0},
+    {"dbg_error", 0, 3, 0, 0},
+    {"dbg_file", 0, 3, 0, 0},
+    {"dbg_function", 0, 3, 0, 0},
+    {"dbg_line", 0, 1, 0, 0},
+    {"dbg_next", 0, 2, 0, 0},
+    {"dbg_out", 0, 2, 0, 0},
+    {"dbg_output", 0, 3, 0, 0},
+    {"dbg_pause", 0, 2, 0, 0},
+    {"dbg_peek", 2, 1, 0, 0},
+    {"dbg_rc", 0, 1, 0, 0},
+    {"dbg_reg", 1, 1, 0, 0},
+    {"dbg_signal", 0, 1, 0, 0},
+    {"dbg_start", 2, 2, 0, 0},
+    {"dbg_state", 0, 1, 0, 0},
+    {"dbg_step", 0, 2, 0, 0},
+    {"dbg_unbreak", 2, 2, 0, 0},
+    {"dbg_wait", 1, 1, 0, 0},
     {"debug_break", 0, 0, 1, 0},
     {"debug_break", 0, 0, 1, 0},
     {"deflate", 5, 1, 0, 0},
@@ -1546,7 +1566,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1544;
+const int builtin_count = 1564;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

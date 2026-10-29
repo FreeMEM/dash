@@ -126,7 +126,7 @@ def main():
     # las teclas de los gadgets ("_Vale"): dl_event_gt_on(1) las mira
     out.write_text("/* Generado por runtime/gen_lib.py a partir del C de ./dash: no editar */\n"
                    "#define _DASH_GADGET_KEYS\n" + text +
-                   '\n#include "api.c"\n' + natives() + builtin_wrappers(), encoding="latin-1")
+                   '\n#include "api.c"\n#include "depurar.c"\n' + natives() + builtin_wrappers(), encoding="latin-1")
 
 
 # usan el runtime de ventanas (_dash_win), que aún no va en la librería (D6 de docs/DASHC_LOOP.md)
