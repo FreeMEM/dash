@@ -35,7 +35,7 @@ GROUPS = [
     ("FONT_FUNCTIONS", "Fuentes y colores", "Fonts and colors"),  # dashweb D9
     ("BLEND_FUNCTIONS", "Transparencia y degradados", "Transparency and gradients"),
     ("RGB_FUNCTIONS", "Imágenes RGB desde un buffer (vídeo)", "RGB images from a buffer (video)"),
-    ("TASK_FUNCTIONS", "Tareas (C en otro proceso)", "Tasks (C in another process)"),  # dashweb D47
+    ("TASK_FUNCTIONS", "Tareas, reloj, traducciones y escritorio", "Tasks, clock, translations and desktop"),
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)", "Images (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos", "Arguments"),     # dashweb D19
     ("ZLIB_FUNCTIONS", "Compresión (zlib)", "Compression (zlib)"),  # Lorraine D6
@@ -47,6 +47,12 @@ GROUPS = [
     ("SIMINPUT_FUNCTIONS", "Simular teclado y ratón", "Simulated keyboard and mouse"),   # Lorraine D46
     ("CLIP_FUNCTIONS", "Portapapeles", "Clipboard"),   # Lorraine D18
     ("COLLATE_FUNCTIONS", "Ordenar textos según el idioma", "Sorting texts by language"),   # Lorraine D7
+    ("SYSPROG_FUNCTIONS", "Sistema y programa", "System and program"),   # Dash 2.0
+    ("IMGDEC_FUNCTIONS", "Imágenes decodificadas por el programa (sin datatypes)",
+     "Pictures decoded by the program (no datatypes)"),
+    ("TTF_FUNCTIONS", "Fuentes TrueType, WOFF y WOFF2", "TrueType, WOFF and WOFF2 fonts"),
+    ("NETBG_FUNCTIONS", "Red en una tarea aparte", "Network in a task of its own"),
+    ("OTHERWIN_FUNCTIONS", "Ventanas de otros programas (pruebas)", "Other programs' windows (tests)"),
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

@@ -1,0 +1,87 @@
+# Test: the builtins for test programs (Dash 2.0, what Tachyon's clicar and Trasfondo's tests did with @native): the
+# program finds its own window by its title as if it were another program's, its box, its gadgets (the checkbox by
+# its text, the button next to it: clicked there), a checkbox's state, a pixel of the screen, a command to a commodity that is not there, and a menu item
+# chosen with the mouse.
+# expect-out: encontrada: true 0
+# expect-out: caja: 300 120 -1
+# expect-out: botón y casilla: true true
+# expect-out: casilla antes: false
+# expect-out: píxel: 3 0
+# expect-out: commodity: -1
+# expect-out: menú en su sitio: true false
+# expect-out: botón 1
+# expect-out: casilla true
+# expect-out: menú 2
+# expect-out: casilla después: true
+# expect-out: fin
+
+Window W
+    title "Buscar ventanas"
+    width 300
+    height 120
+end
+
+Main
+    W.open
+    b = button_create(0, 10, 10, 80, 14, "Vale")
+    c = checkbox_create(0, 10, 30, "Activo")
+    gt_init()
+    menu_title("Proyecto")
+    menu_item("Abrir", "A", 1)
+    menu_item("Salir", "Q", 2)
+    menu_attach()
+    w = window_find("Buscar ven")
+    n0 = window_find("No está")
+    Print "encontrada: #{w != 0} #{n0}"
+    Print "caja: #{window_found_box(w, 2)} #{window_found_box(w, 3)} #{window_found_box(w, 9)}"
+    # (la casilla por su texto; el botón de GadTools no lo guarda: dos antes, tras el contexto de la casilla)
+    ci = gadget_index(w, "Activo")
+    bi = ci - 2
+    bx = gadget_x(w, bi)
+    by = gadget_y(w, bi)
+    cx = gadget_x(w, ci)
+    cy = gadget_y(w, ci)
+    Print "botón y casilla: #{bx > 10 and by > 10} #{cx > 10 and cy > by}"
+    s = gadget_selected(w, ci)
+    Print "casilla antes: #{s}"
+    gfx_pen(3)
+    gfx_rect(150, 40, 250, 90)
+    x = window_found_box(w, 0) + 200
+    y = window_found_box(w, 1) + 65
+    p1 = screen_pixel(x, y)
+    p2 = screen_pixel(-1, 0)
+    Print "píxel: #{p1} #{p2 + 1}"
+    r = cx_send("NoEstaCommodity", 21)
+    Print "commodity: #{r}"
+    window_found_activate(w)
+    input_click(bx, by, 0)
+    input_click(cx, cy, 0)
+    m1 = input_menu(0, 1, 5)
+    m2 = input_menu(3, 0, 5)
+    Print "menú en su sitio: #{m1} #{m2}"
+    n = 0
+    EventLoop
+        On Gadget
+            g = gadget_id()
+            n = n + 1
+            if g == b
+                Print "botón #{n}"
+            end
+            if g == c
+                Print "casilla " + checkbox_get(c)
+            end
+        end
+        On Menu
+            Print "menú #{menu_id()}"
+            if menu_id() == 2
+                Stop
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    s = gadget_selected(w, ci)
+    Print "casilla después: #{s}"
+    Print "fin"
+end

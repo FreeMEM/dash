@@ -7339,6 +7339,7 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
 #include <devices/inputevent.h>
 #include <proto/keymap.h>
 #include <proto/input.h>
+#include <proto/graphics.h>      /* (screen_pixel's ReadPixel) */
 #ifndef _DASH_KEYMAP_BASE
 #define _DASH_KEYMAP_BASE
 struct Library *KeymapBase = NULL;
@@ -7505,6 +7506,180 @@ static void _dash_input_drag(LONG x1, LONG y1, LONG x2, LONG y2) {
     for (i = 1; i <= n; i++)
         _dash_input_pointer(x1 + dx * i / n, y1 + dy * i / n, IEQUALIFIER_LEFTBUTTON);
     _dash_input_button(FALSE, 0);
+}
+
+/* Dash 2.0, what test programs did with @native (Tachyon's clicar, Trasfondo's tests): other programs' windows,
+   their gadgets and menus, the screen's pixels and commodities. A window is a number from window_find: it is
+   not valid once that program closes it. */
+
+/* The window whose title starts with title, on any screen; 0 if there is none */
+static LONG _dash_window_find(STRPTR title) {
+    struct Screen *s;
+    struct Window *w, *r = NULL;
+    ULONG lock;
+    LONG n;
+    if (!title) return 0;
+    n = strlen((char *)title);
+    lock = LockIBase(0);
+    for (s = IntuitionBase->FirstScreen; s && !r; s = s->NextScreen)
+        for (w = s->FirstWindow; w && !r; w = w->NextWindow)
+            if (w->Title && !strncmp((char *)w->Title, (char *)title, n)) r = w;
+    UnlockIBase(lock);
+    return (LONG)r;
+}
+
+/* Its screen and it in front, and it active (clicks and keys go to the active window) */
+static void _dash_window_found_activate(LONG win) {
+    struct Window *w = (struct Window *)win;
+    if (!w) return;
+    ScreenToFront(w->WScreen);
+    WindowToFront(w);
+    ActivateWindow(w);
+    Delay(10);
+}
+
+/* 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border */
+static LONG _dash_window_found_box(LONG win, LONG what) {
+    struct Window *w = (struct Window *)win;
+    if (!w) return -1;
+    switch (what) {
+    case 0: return w->LeftEdge;
+    case 1: return w->TopEdge;
+    case 2: return w->Width;
+    case 3: return w->Height;
+    case 4: return w->BorderLeft;
+    case 5: return w->BorderTop;
+    }
+    return -1;
+}
+
+/* A window's gadgets by their place (from 0, the window's own too: close, depth...). GadTools' buttons do not keep
+   their text in the gadget (checkboxes and fields with a label do): a button is found counting from a gadget
+   next to it that has one */
+static struct Gadget *_dash_gadget_nth(LONG win, LONG n) {
+    struct Window *w = (struct Window *)win;
+    struct Gadget *g;
+    if (!w || n < 0) return NULL;
+    for (g = w->FirstGadget; g && n > 0; g = g->NextGadget) n--;
+    return g;
+}
+
+/* The place of the first gadget whose text is text; -1 if there is none */
+static LONG _dash_gadget_index(LONG win, STRPTR text) {
+    struct Window *w = (struct Window *)win;
+    struct Gadget *g;
+    LONG i = 0;
+    if (!w || !text) return -1;
+    for (g = w->FirstGadget; g; g = g->NextGadget, i++)
+        if (g->GadgetText && g->GadgetText->IText && !strcmp((char *)g->GadgetText->IText, (char *)text)) return i;
+    return -1;
+}
+
+/* Its centre from the corner of the window (as input_click counts); -1 if there is no such gadget */
+static LONG _dash_gadget_xy(LONG win, LONG n, LONG y) {
+    struct Window *w = (struct Window *)win;
+    struct Gadget *g = _dash_gadget_nth(win, n);
+    LONG b;
+    if (!g) return -1;
+    /* (a GimmeZeroZero window counts its gadgets from inside its border) */
+    b = (w->Flags & WFLG_GIMMEZEROZERO) && !(g->GadgetType & GTYP_SYSGADGET) ? (y ? w->BorderTop : w->BorderLeft) : 0;
+    return y ? b + g->TopEdge + g->Height / 2 : b + g->LeftEdge + g->Width / 2;
+}
+
+static BOOL _dash_gadget_selected(LONG win, LONG n) {
+    struct Gadget *g = _dash_gadget_nth(win, n);
+    return g && (g->Flags & GFLG_SELECTED) != 0;
+}
+
+/* With buttons held (1 left, 2 right, 0 none), the pointer in steps of a pixel to (x, y) of the active window's
+   screen (a menu follows it: MUI's, which a jump would not open) */
+static void _dash_input_move_screen(LONG x, LONG y, LONG buttons) {
+    struct Window *w = IntuitionBase->ActiveWindow;
+    struct Screen *sc = w ? w->WScreen : IntuitionBase->FirstScreen;
+    struct InputEvent ie;
+    UWORD qual = IEQUALIFIER_RELATIVEMOUSE | ((buttons & 1) ? IEQUALIFIER_LEFTBUTTON : 0) |
+                 ((buttons & 2) ? IEQUALIFIER_RBUTTON : 0);
+    LONG steps = 0;
+    if (!sc) return;
+    while ((sc->MouseX != x || sc->MouseY != y) && steps++ < 2000) {
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_NOBUTTON;
+        ie.ie_Qualifier = qual;
+        ie.ie_X = sc->MouseX < x ? 1 : sc->MouseX > x ? -1 : 0;
+        ie.ie_Y = sc->MouseY < y ? 1 : sc->MouseY > y ? -1 : 0;
+        _dash_input_send(&ie);
+    }
+}
+
+/* Item item (from 0, separators too) of menu menu (from 0) of the active window, chosen with the mouse: the right
+   button on the menu's title, steps of a pixel to the item, held hold ticks, let go. False if there is no such
+   item */
+static BOOL _dash_input_menu(LONG menu, LONG item, LONG hold) {
+    struct Window *w = IntuitionBase->ActiveWindow;
+    struct Menu *m;
+    struct MenuItem *it;
+    struct Screen *sc;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    LONG k;
+    if (!w || !(m = w->MenuStrip)) return FALSE;
+    for (k = 0; k < menu && m; k++) m = m->NextMenu;
+    it = m ? m->FirstItem : NULL;
+    for (k = 0; k < item && it; k++) it = it->NextItem;
+    if (!it) return FALSE;
+    sc = w->WScreen;
+    memset(&ie, 0, sizeof(ie));
+    pp.iepp_Screen = sc;
+    pp.iepp_Position.X = m->LeftEdge + m->Width / 2;
+    pp.iepp_Position.Y = sc->BarHeight / 2;
+    ie.ie_Class = IECLASS_NEWPOINTERPOS;
+    ie.ie_SubClass = IESUBCLASS_PIXEL;
+    ie.ie_EventAddress = (APTR)&pp;
+    _dash_input_send(&ie);
+    Delay(4);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = IECODE_RBUTTON;
+    ie.ie_Qualifier = IEQUALIFIER_RBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+    _dash_input_send(&ie);
+    Delay(9);
+    _dash_input_move_screen(m->LeftEdge + it->LeftEdge + it->Width / 2, sc->BarHeight + 1 + it->TopEdge + it->Height / 2, 2);
+    Delay(hold > 10 ? hold : 10);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = IECODE_RBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+    _dash_input_send(&ie);
+    return TRUE;
+}
+
+/* The pen of a pixel of the screen in front (x, y on it); -1 outside */
+static LONG _dash_screen_pixel(LONG x, LONG y) {
+    struct Screen *sc;
+    LONG r = -1;
+    ULONG lock = LockIBase(0);
+    sc = IntuitionBase->FirstScreen;
+    if (sc && x >= 0 && y >= 0 && x < sc->Width && y < sc->Height) r = ReadPixel(&sc->RastPort, x, y);
+    UnlockIBase(lock);
+    return r;
+}
+
+/* A command to a commodity by its name, as Exchange does (commodities.library's private BrokerCommand, LVO -198):
+   1 hide, 2 show... (CXCMD_*: 15 disable, 17 enable, 19 appear, 21 disappear, 23 kill...); 0 done, -1 no such
+   commodity, -2 it has no port, -3 no memory, -99 no commodities.library */
+static LONG _dash_cx_send(STRPTR name, LONG command) {
+    struct Library *cx = OpenLibrary((CONST_STRPTR)"commodities.library", 37);
+    LONG r = -99;
+    if (cx && name) {
+        register LONG d0 __asm("d0") = command;
+        register STRPTR a0 __asm("a0") = name;
+        register struct Library *a6 __asm("a6") = cx;
+        __asm volatile ("jsr a6@(-198:W)" : "+r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
+        r = d0;
+    }
+    if (cx) CloseLibrary(cx);
+    return r;
 }
 
 /* The title of the active window, "" if there is none */

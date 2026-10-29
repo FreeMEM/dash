@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 727 functions, 727 implemented, 0 not implemented.
+Total: 738 functions, 738 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -363,18 +363,6 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `net_bg_open(host, port, timeout_ms)` | `LONG` | Ask for a TCP connection that a task of its own opens, sends and receives while the program is busy (up to 48): its number, or -1. net_bg_state tells how it goes |  |
-| `net_bg_open_tls(host, port, timeout_ms)` | `LONG` | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
-| `net_bg_state(c)` | `LONG` | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
-| `net_bg_stage(c)` | `LONG` | While connecting, its stage, as net_connect_stage |  |
-| `net_bg_error(c)` | `STRPTR` | Why a connection failed or closed, "" if it did not |  |
-| `net_bg_send(c, text)` | `BOOL` | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
-| `net_bg_send_buffer(c, buffer, n)` | `BOOL` | net_bg_send of n bytes of a buffer |  |
-| `net_bg_recv(c, buffer, max)` | `LONG` | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
-| `net_bg_pending(c)` | `LONG` | How many bytes have come and are not read yet |  |
-| `net_bg_close(c)` | `void` | Close a connection and free its number |  |
-| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000); another starts when needed |  |
-| `net_bg_stop()` | `void` | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
 | `net_connect(host, port, timeout_ms)` | `LONG` | TCP connection to host:port (name or address); the socket, or -1 (see net_error) |  |
 | `net_connect_start(host, port, timeout_ms)` | `LONG` | Start a TCP connection without waiting (the name is looked up in another process); the socket, or -1 (see net_error) |  |
 | `net_connect_poll(sock)` | `LONG` | Go on with net_connect_start without waiting: 1 connected, 0 not yet, -1 failed (the socket is closed; see net_error) |  |
@@ -420,9 +408,6 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `font_from_ttf(file, size, width)` | `LONG` | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
-| `font_ttf_free(font)` | `void` | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
-| `font_ttf_forget(file)` | `void` | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
 | `font_open(name, size)` | `LONG` | Open a font ("helvetica.font", size in pixels, at least 2): the font, or 0 if there is none |  |
 | `font_use(font)` | `void` | Draw text with this font |  |
 | `font_close(font)` | `void` | Close a font (the open ones close at exit) |  |
@@ -448,7 +433,7 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 | `gfx_rgb_draw(buffer, width, height, x, y)` | `void` | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
 | `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)` | `void` | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
 
-## Tasks (C in another process)
+## Tasks, clock, translations and desktop
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
@@ -528,20 +513,6 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 | `file_notify_signal()` | `LONG` | The signal of the watched files, for mui_wait_event_signals (0 before any file_notify) |  |
 | `run_program(command)` | `BOOL` | Start a command line ("SYS:Prefs/Font", "\"Work:My Prog\" arg") in another process without waiting, its input and output NIL:; false if it could not start |  |
 | `program_relaunch()` | `void` | When the program ends, start it again (after everything of its end, single_instance's port too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its arguments. For updating itself |  |
-| `time_unix()` | `LONG` | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
-| `clock_days()` | `LONG` | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
-| `mem_largest()` | `LONG` | The largest free block of memory, chip or fast, in bytes |  |
-| `run_command(command)` | `LONG` | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
-| `wb_open(path)` | `BOOL` | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
-| `program_path()` | `STRPTR` | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |
-| `locale_language()` | `STRPTR` | The user's first preferred language in Locale prefs ("español"), "" without one |  |
-| `cpu_model()` | `LONG` | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
-| `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
-| `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
-| `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
-| `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
-| `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
-| `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
 | `dos_requesters(on)` | `void` | false: no "Insert volume" or disk error requesters for this program (the call fails instead); true: as before. The program's end puts them back |  |
 | `base64_to_file(text, file)` | `LONG` | Write the bytes of base64 text to a file (spaces and line ends skipped, = padding or not): the bytes written, or -1 if the text is not base64 (no file then) or the file cannot be written |  |
 | `cpu_start()` | `BOOL` | Start counting the CPU of every task (exec's switch hooks; a task with hooks of another program is not counted): false without EClock or before OS 2.04 |  |
@@ -565,13 +536,6 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 | `image_draw_part(image, sx, sy, x, y, w, h)` | `void` | Draw the part w x h at sx, sy of an image at x, y |  |
 | `image_scale(image, w, h)` | `LONG` | A copy of an image at w x h pixels: a new image, or 0 |  |
 | `image_free(image)` | `void` | Free an image (the ones left are freed at exit) |  |
-| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
-| `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
-| `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
-| `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
-| `image_decoded_pixels(d)` | `APTR` | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
-| `image_decoded_free(d)` | `void` | Free a decoded picture |  |
-| `image_from_decoded(d)` | `LONG` | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
 | `image_from_rgb(buffer, width, height, alpha)` | `LONG` | An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on RTG, drawn from 128 on a palette screen), with the colors of the screen: the image, or 0 (needs picture.datatype V43, AmigaOS 3.5+, except on RTG screens) |  |
 
 ## Arguments
@@ -667,6 +631,8 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 | `input_button(button, down)` | `void` | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
 | `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
 | `input_qualifiers()` | `LONG` | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
+| `input_menu(menu, item, hold)` | `BOOL` | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
+| `input_move_screen(x, y, buttons)` | `void` | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
 | `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
 
 ## Clipboard
@@ -684,6 +650,76 @@ Total: 727 functions, 727 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `str_compare_locale(a, b, ignore_case)` | `LONG` | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
+
+## System and program
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `time_unix()` | `LONG` | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
+| `clock_days()` | `LONG` | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
+| `mem_largest()` | `LONG` | The largest free block of memory, chip or fast, in bytes |  |
+| `run_command(command)` | `LONG` | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
+| `wb_open(path)` | `BOOL` | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
+| `program_path()` | `STRPTR` | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |
+| `locale_language()` | `STRPTR` | The user's first preferred language in Locale prefs ("español"), "" without one |  |
+| `cpu_model()` | `LONG` | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
+| `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
+| `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
+| `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
+| `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
+| `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
+| `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
+
+## Pictures decoded by the program (no datatypes)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
+| `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
+| `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
+| `image_decoded_pixels(d)` | `APTR` | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
+| `image_decoded_free(d)` | `void` | Free a decoded picture |  |
+| `image_from_decoded(d)` | `LONG` | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
+
+## TrueType, WOFF and WOFF2 fonts
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `font_from_ttf(file, size, width)` | `LONG` | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
+| `font_ttf_free(font)` | `void` | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
+| `font_ttf_forget(file)` | `void` | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
+
+## Network in a task of its own
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `net_bg_open(host, port, timeout_ms)` | `LONG` | Ask for a TCP connection that a task of its own opens, sends and receives while the program is busy (up to 48): its number, or -1. net_bg_state tells how it goes |  |
+| `net_bg_open_tls(host, port, timeout_ms)` | `LONG` | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
+| `net_bg_state(c)` | `LONG` | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
+| `net_bg_stage(c)` | `LONG` | While connecting, its stage, as net_connect_stage |  |
+| `net_bg_error(c)` | `STRPTR` | Why a connection failed or closed, "" if it did not |  |
+| `net_bg_send(c, text)` | `BOOL` | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
+| `net_bg_send_buffer(c, buffer, n)` | `BOOL` | net_bg_send of n bytes of a buffer |  |
+| `net_bg_recv(c, buffer, max)` | `LONG` | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
+| `net_bg_pending(c)` | `LONG` | How many bytes have come and are not read yet |  |
+| `net_bg_close(c)` | `void` | Close a connection and free its number |  |
+| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000); another starts when needed |  |
+| `net_bg_stop()` | `void` | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
+
+## Other programs' windows (tests)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `window_find(title)` | `LONG` | Another program's window (or the program's own) whose title starts with title, on any screen: a number for window_found_* and gadget_*, 0 if none (not valid once it is closed) |  |
+| `window_found_activate(win)` | `void` | A window of window_find in front, with its screen, and active (input_* go to the active window) |  |
+| `window_found_box(win, what)` | `LONG` | Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border |  |
+| `gadget_index(win, text)` | `LONG` | The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them |  |
+| `gadget_x(win, n)` | `LONG` | x of the centre of the gadget at place n of a window of window_find, from its corner (as input_click counts); -1 if there is none |  |
+| `gadget_y(win, n)` | `LONG` | y of the centre of that gadget, as gadget_x |  |
+| `gadget_selected(win, n)` | `BOOL` | True if the gadget at place n (a checkbox) is selected |  |
+| `screen_pixel(x, y)` | `LONG` | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
+| `cx_send(name, command)` | `LONG` | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
 
 ## Audio
 

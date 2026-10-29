@@ -424,3 +424,23 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     da error. Ahora dashc también: "no se puede guardar un Int en t, que guarda un String".
   - Los programas llevan 8 bytes más: dos entradas en la tabla de limpiezas (fuentes y red de fondo).
   - Batería bien; cobertura 214 de 318 y 144 de 144.
+- D7 (15.ª parte): los builtins de pruebas de la conclusión 3 (738 builtins), lo que hacían con `@native` el
+  `clicar` de Tachyon y las pruebas de Trasfondo: `window_find` (una ventana por el principio de su título, en
+  cualquier pantalla), `window_found_activate`, `window_found_box`, `gadget_index` (por su texto), `gadget_x`,
+  `gadget_y`, `gadget_selected` (por su sitio: los botones de GadTools no guardan su texto en el gadget, se
+  encuentran contando desde uno con texto, como hacía Trasfondo), `input_menu` (un menú elegido con el ratón),
+  `input_move_screen` (paso a paso, con botones: los menús de MUI), `screen_pixel` y `cx_send` (BrokerCommand, el
+  privado de commodities, como Exchange). En SIMINPUT_RUNTIME. tests/test_window_find.dash: el programa se busca a
+  sí mismo como si fuera otro, clica sus gadgets, lee un píxel, manda una orden a una commodity que no está y elige
+  "Salir" con el ratón; igual con gcc y con dashc.
+  - De la conclusión 3 ya no queda ninguno: los `@native` de Tachyon, Trasfondo y Lorraine que no son C de
+    terceros tienen su builtin.
+  - Arreglado: SIMINPUT_RUNTIME sin `proto/graphics.h` (el `ReadPixel` de `screen_pixel`) rompía los programas que
+    usan ese runtime sin gráficos (test_sysinfo, test_mui_toolbar).
+  - docs/BUILTINS.md: los builtins nuevos de Dash 2.0 tenían secciones que no eran suyas (`time_unix` en "Tareas (C
+    en otro proceso)", `image_decode` en "Imágenes (datatypes)"...). Ahora en grupos propios de amiga_builtins.py
+    (`_move`): "Sistema y programa", "Imágenes decodificadas por el programa", "Fuentes TrueType, WOFF y WOFF2",
+    "Red en una tarea aparte" y "Ventanas de otros programas (pruebas)"; y "Tareas, reloj, traducciones y
+    escritorio" en vez de "Tareas (C en otro proceso)". Pendiente para D9: las descripciones en castellano (hoy van
+    en inglés en los dos ficheros, como todas) y ejemplos.
+  - Tests de ./dash: 465 bien; batería bien; cobertura 215 de 319 y 145 de 145.

@@ -4866,6 +4866,56 @@ SIMINPUT_FUNCTIONS = {
         name="input_qualifiers", params=[], return_type="LONG", c_template="_dash_input_qualifiers()",
         description="The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; "
                     "64, 128 Amiga; 0 if input.device cannot be opened"),
+    # Dash 2.0: for test programs (what Tachyon's clicar and Trasfondo's tests did with @native)
+    "window_find": BuiltinFunc(
+        name="window_find", params=["title"], return_type="LONG", c_template="_dash_window_find(${title})",
+        reads_only=True,
+        description="Another program's window (or the program's own) whose title starts with title, on any screen: "
+                    "a number for window_found_* and gadget_*, 0 if none (not valid once it is closed)"),
+    "window_found_activate": BuiltinFunc(
+        name="window_found_activate", params=["win"], return_type="void",
+        c_template="_dash_window_found_activate(${win})",
+        description="A window of window_find in front, with its screen, and active (input_* go to the active window)"),
+    "window_found_box": BuiltinFunc(
+        name="window_found_box", params=["win", "what"], return_type="LONG",
+        c_template="_dash_window_found_box(${win}, ${what})",
+        description="Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, "
+                    "5 top border"),
+    "gadget_index": BuiltinFunc(
+        name="gadget_index", params=["win", "text"], return_type="LONG", c_template="_dash_gadget_index(${win}, ${text})",
+        reads_only=True,
+        description="The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of "
+                    "window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them"),
+    "gadget_x": BuiltinFunc(
+        name="gadget_x", params=["win", "n"], return_type="LONG", c_template="_dash_gadget_xy(${win}, ${n}, 0)",
+        description="x of the centre of the gadget at place n of a window of window_find, from its corner (as "
+                    "input_click counts); -1 if there is none"),
+    "gadget_y": BuiltinFunc(
+        name="gadget_y", params=["win", "n"], return_type="LONG", c_template="_dash_gadget_xy(${win}, ${n}, 1)",
+        description="y of the centre of that gadget, as gadget_x"),
+    "gadget_selected": BuiltinFunc(
+        name="gadget_selected", params=["win", "n"], return_type="BOOL", c_template="_dash_gadget_selected(${win}, ${n})",
+        description="True if the gadget at place n (a checkbox) is selected"),
+    "input_menu": BuiltinFunc(
+        name="input_menu", params=["menu", "item", "hold"], return_type="BOOL",
+        c_template="_dash_input_menu(${menu}, ${item}, ${hold})",
+        description="Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as "
+                    "a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if "
+                    "there is no such item"),
+    "input_move_screen": BuiltinFunc(
+        name="input_move_screen", params=["x", "y", "buttons"], return_type="void",
+        c_template="_dash_input_move_screen(${x}, ${y}, ${buttons})",
+        description="The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 "
+                    "none): MUI's menus follow it"),
+    "screen_pixel": BuiltinFunc(
+        name="screen_pixel", params=["x", "y"], return_type="LONG", c_template="_dash_screen_pixel(${x}, ${y})",
+        needs_gfx=True,
+        description="The pen of the pixel (x, y) of the screen in front; -1 outside it"),
+    "cx_send": BuiltinFunc(
+        name="cx_send", params=["name", "command"], return_type="LONG", c_template="_dash_cx_send(${name}, ${command})",
+        reads_only=True,
+        description="A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 "
+                    "hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library"),
     "input_active_title": BuiltinFunc(
         name="input_active_title", params=[], return_type="STRPTR", c_template="_dash_input_active_title()",
         description="Title of the active window (\"\" if none): to wait for the window of the program to test"),
@@ -4907,6 +4957,23 @@ CLIP_FUNCTIONS = {
 # All built-in functions combined
 # =============================================================================
 
+# Dash 2.0: what programs did with @native (docs/DASHC_NATIVE.md), in groups of their own for docs/BUILTINS.md
+def _move(src, names):
+    return {n: src.pop(n) for n in names}
+
+
+SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
+    "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
+    "cpu_model", "fpu_model", "library_version", "task_priority", "build_date", "build_time", "console_flush"])
+IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
+    "image_decode", "image_decoded_width", "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
+    "image_decoded_free", "image_from_decoded"])
+TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_free", "font_ttf_forget"])
+NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
+OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
+    "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",
+    "gadget_selected", "screen_pixel", "cx_send"])
+
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
     **GRAPHICS_ADVANCED,
@@ -4936,6 +5003,11 @@ ALL_BUILTINS = {
     **SIMINPUT_FUNCTIONS,      # Lorraine D46
     **CLIP_FUNCTIONS,          # Lorraine D18
     **COLLATE_FUNCTIONS,       # Lorraine D7
+    **SYSPROG_FUNCTIONS,       # Dash 2.0
+    **IMGDEC_FUNCTIONS,
+    **TTF_FUNCTIONS,
+    **NETBG_FUNCTIONS,
+    **OTHERWIN_FUNCTIONS,
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,
