@@ -82,8 +82,26 @@ static void usage(void)
     exit(1);
 }
 
+/* La carpeta de Dash, para los import de lib/ desde cualquier sitio: $DASH_HOME, y si no, la de arriba de
+   la de dashc (dashc/dashc en el repositorio); en el Amiga, la de dashc (PROGDIR:) */
+char dash_home[1024];
+
+static void find_dash_home(const char *argv0)
+{
+    const char *e = getenv("DASH_HOME"), *slash;
+#ifdef __amigaos__
+    (void)argv0;
+    snprintf(dash_home, sizeof dash_home, "%s", e && *e ? e : "PROGDIR:");
+#else
+    if (e && *e) { snprintf(dash_home, sizeof dash_home, "%s", e); return; }
+    slash = argv0 ? strrchr(argv0, '/') : NULL;
+    if (slash) snprintf(dash_home, sizeof dash_home, "%.*s/..", (int)(slash - argv0), argv0);
+#endif
+}
+
 int main(int argc, char **argv)
 {
+    find_dash_home(argv[0]);
     const char *in = NULL, *out = NULL, *rt_path = NULL, *header = NULL;
     const uint8_t *rt = NULL;
     size_t rtlen = 0, len;

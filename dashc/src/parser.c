@@ -631,7 +631,7 @@ static char *normalize(const char *path)
 }
 
 /* import "x.dash": como ./dash, relativo al fichero que importa y si no, a sus carpetas de más arriba
-   (la raíz de Dash, con lib/amiga) y a la carpeta actual */
+   (la raíz de Dash, con lib/amiga), a la carpeta actual y a la de Dash (dash_home) */
 static void parse_into(Program *p);
 
 static void import_file(Program *p, Token *at, const char *path)
@@ -659,6 +659,15 @@ static void import_file(Program *p, Token *at, const char *path)
         }
     }
     if (!full && (text = read_text(path)) != NULL) full = normalize(path);
+    if (!full && dash_home[0]) {
+        /* la carpeta de Dash: import "lib/json.dash" desde un programa de cualquier sitio */
+        char cand[2048], *norm;
+        size_t k = strlen(dash_home);
+        snprintf(cand, sizeof cand, "%s%s%s", dash_home, dash_home[k - 1] == ':' || dash_home[k - 1] == '/' ? "" : "/",
+                 path);
+        norm = dash_home[k - 1] == ':' ? xstrndup(cand, strlen(cand)) : normalize(cand);
+        if ((text = read_text(norm)) != NULL) full = norm;
+    }
     if (!full) fatal_at(at->line, at->col, "no encuentro %s para importarlo", path);
     for (i = 0; i < src_files.n; i++)
         if (!strcmp(src_files.v[i], full)) return;     /* ya importado */
