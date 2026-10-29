@@ -14,6 +14,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <dos/var.h>
 
 double dash_fd_floor(double);
 double __ieee754_log(double);
@@ -212,18 +213,83 @@ void abort(void)
     _dash_quit(20);
 }
 
-/* ---- stdio, a Output() ---- */
+/* ---- stdio: stdout y stderr a Output() (con su búfer, como Print); los ficheros de fopen, a uno de DOS ---- */
 
 static FILE dash_files[3];
 static FILE *dash_sf[3] = {&dash_files[0], &dash_files[1], &dash_files[2]};
 FILE **__sF = dash_sf;
 
+/* un fichero de fopen: el FILE de libnix delante (sus macros ven _r y _w a 0 y llaman a las funciones) */
+typedef struct { FILE f; BPTR fh; int eof; } DashFile;
+
+static BPTR dash_fh(FILE *f)
+{
+    if (!f || f == &dash_files[0] || f == &dash_files[1] || f == &dash_files[2]) return Output();
+    return ((DashFile *)f)->fh;
+}
+
+FILE *fopen(const char *name, const char *mode)
+{
+    DashFile *d;
+    LONG m = mode[0] == 'r' ? MODE_OLDFILE : mode[0] == 'w' ? MODE_NEWFILE : MODE_READWRITE;
+    BPTR fh;
+    if (mode[0] == 'r' && strchr(mode, '+')) m = MODE_OLDFILE;
+    if (!(fh = Open((CONST_STRPTR)name, m))) return NULL;
+    if (mode[0] == 'a') Seek(fh, 0, OFFSET_END);
+    if (!(d = (DashFile *)AllocVec(sizeof(DashFile), MEMF_CLEAR))) {
+        Close(fh);
+        return NULL;
+    }
+    d->fh = fh;
+    return &d->f;
+}
+
+int fclose(FILE *f)
+{
+    DashFile *d = (DashFile *)f;
+    if (!f || dash_fh(f) == Output()) return 0;
+    Close(d->fh);
+    FreeVec(d);
+    return 0;
+}
+
+size_t fread(void *p, size_t size, size_t n, FILE *f)
+{
+    LONG r;
+    if (!size || !n) return 0;
+    r = Read(dash_fh(f), p, size * n);
+    if (r <= 0) {
+        if (dash_fh(f) != Output()) ((DashFile *)f)->eof = 1;
+        return 0;
+    }
+    return (size_t)r / size;
+}
+
+int fseek(FILE *f, long off, int whence)
+{
+    if (dash_fh(f) == Output()) return -1;
+    ((DashFile *)f)->eof = 0;
+    return Seek(((DashFile *)f)->fh, off, whence == SEEK_SET ? OFFSET_BEGINNING : whence == SEEK_CUR ?
+                OFFSET_CURRENT : OFFSET_END) < 0 ? -1 : 0;
+}
+
+long ftell(FILE *f)
+{
+    return dash_fh(f) == Output() ? -1 : Seek(((DashFile *)f)->fh, 0, OFFSET_CURRENT);
+}
+
+int setvbuf(FILE *f, char *buf, int mode, size_t size)
+{
+    (void)f; (void)buf; (void)mode; (void)size;
+    return 0;
+}
+
 int vfprintf(FILE *f, const char *fmt, va_list ap)
 {
     char buf[512];
     int n = vsnprintf(buf, sizeof buf, fmt, ap);
-    (void)f;
-    if (Output()) FWrite(Output(), (APTR)buf, 1, n < (int)sizeof buf ? n : (int)sizeof buf - 1);
+    BPTR fh = dash_fh(f);
+    if (fh) FWrite(fh, (APTR)buf, 1, n < (int)sizeof buf ? n : (int)sizeof buf - 1);
     return n;
 }
 
@@ -249,22 +315,22 @@ int printf(const char *fmt, ...)
 
 size_t fwrite(const void *p, size_t size, size_t n, FILE *f)
 {
-    (void)f;
-    if (Output() && size * n) FWrite(Output(), (APTR)p, 1, size * n);
+    BPTR fh = dash_fh(f);
+    if (fh && size * n) FWrite(fh, (APTR)p, 1, size * n);
     return n;
 }
 
 int fputc(int c, FILE *f)
 {
-    (void)f;
-    if (Output()) FPutC(Output(), c);
+    BPTR fh = dash_fh(f);
+    if (fh) FPutC(fh, c);
     return c;
 }
 
 int fputs(const char *s, FILE *f)
 {
-    (void)f;
-    if (Output()) FPuts(Output(), (CONST_STRPTR)s);
+    BPTR fh = dash_fh(f);
+    if (fh) FPuts(fh, (CONST_STRPTR)s);
     return 0;
 }
 
@@ -275,6 +341,42 @@ int puts(const char *s)
         FPutC(Output(), '\n');
     }
     return 0;
+}
+
+/* ---- más de libc: getenv, strcspn, assert, clock ---- */
+
+char *getenv(const char *name)
+{
+    static char buf[256];
+    return GetVar((CONST_STRPTR)name, (STRPTR)buf, sizeof buf, 0) >= 0 ? buf : NULL;
+}
+
+size_t strcspn(const char *s, const char *reject)
+{
+    size_t n = 0;
+    for (; s[n]; n++)
+        if (strchr(reject, s[n])) break;
+    return n;
+}
+
+void __assert_func(const char *file, int line, const char *func, const char *expr)
+{
+    char b[200];
+    snprintf(b, sizeof b, "assert: %s (%s, %s:%d)\n", expr ? expr : "?", func ? func : "?", file ? file : "?", line);
+    if (Output()) FPuts(Output(), (CONST_STRPTR)b);
+    _dash_quit(20);
+}
+
+clock_t clock(void)
+{
+    /* (los tics de 1/50 s desde la primera llamada, en las unidades de CLOCKS_PER_SEC) */
+    static LONG first = -1;
+    struct DateStamp d;
+    LONG t;
+    DateStamp(&d);
+    t = (d.ds_Days * 1440 + d.ds_Minute) * 3000 + d.ds_Tick;
+    if (first < 0) first = t;
+    return (clock_t)((t - first) * (CLOCKS_PER_SEC / 50));
 }
 
 /* ---- fecha (la del reloj del sistema, sin zona horaria: como si fuera UTC) ---- */

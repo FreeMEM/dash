@@ -389,3 +389,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   junto a dashc y se lee de `PROGDIR:` solo con `--memcheck` (sin él, un error que lo dice). El dashc del Amiga:
   1,0 MB. El del PC lo sigue llevando dentro. Probado en el A1200: `--memcheck` con structs.dash da el mismo
   ejecutable que el PC.
+- D7 (12.ª parte): decidido por el usuario (2026-10-29): el vídeo de Tachyon (MintVID, 7,2 MB de fuente con un
+  decodificador H.264) no va como builtins: Tachyon lo llama con `@link` y `@extern` a su API `dwv_*` (su
+  `video.dash` ya son envoltorios de una línea). Para que su `libvideo.a` enlace con dashc, `rt_compat.c` lleva
+  ahora ficheros de stdio de verdad (`fopen`, `fread`, `fseek`, `ftell`, `fclose`, `setvbuf`; un FILE propio con el
+  de libnix delante, y `fwrite`, `fputc`, `fputs`, `fprintf` escriben al fichero que sea), `getenv`, `strcspn`,
+  `clock` y `__assert_func`. Le quedan 4 nombres que no son de libc (`gFdct32HalfSparse16Precondition*`, comunes
+  que hunk.c ya resuelve, y `mr_yuv_dither_q6_*`, de otra parte de Tachyon). externo y QuickJS, como antes.
