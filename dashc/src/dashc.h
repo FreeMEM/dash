@@ -259,6 +259,8 @@ typedef struct {
 void gen_program(Program *prog, Obj *obj);
 void write_c_header(Program *prog, FILE *f);   /* dashc --cabecera */
 extern int memcheck;
+extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info) */
+extern Buf debug_info;
 extern int profile;    /* --perfil */   /* --memcheck: como ./dash --memcheck */
 
 /* builtins (build/builtins_tab.c): ret 0 nada, 1 Int, 2 Bool, 3 String, 4 [String]; keeps: guarda lo

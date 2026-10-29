@@ -82,6 +82,41 @@ static void usage(void)
     exit(1);
 }
 
+/* dashc --debug-info prog: el texto del HUNK_DEBUG de un ejecutable hecho con --debug */
+static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]; }
+
+static int debug_info_show(const char *path)
+{
+    size_t len, at;
+    uint8_t *d = read_file(path, &len);
+    uint32_t first, last, n, type;
+    if (len < 20 || be32(d) != 0x3F3) fatal("%s no es un ejecutable de Amiga", path);
+    first = be32(d + 12);
+    last = be32(d + 16);
+    at = 20 + 4 * (size_t)(last - first + 1);
+    while (at + 4 <= len) {
+        type = be32(d + at) & 0x3FFFFFFF;
+        at += 4;
+        if (type == 0x3E9 || type == 0x3EA) at += 4 + 4 * (size_t)be32(d + at);           /* código, datos */
+        else if (type == 0x3EB) at += 4;                                                    /* BSS */
+        else if (type == 0x3EC) {                                                           /* RELOC32 */
+            while ((n = be32(d + at)) != 0) at += 8 + 4 * (size_t)n;
+            at += 4;
+        } else if (type == 0x3F1) {                                                         /* DEBUG */
+            n = be32(d + at);
+            if (n >= 3 && !memcmp(d + at + 4, "DASH-DEBUG", 10)) {
+                size_t k = 0;
+                while (k < 4 * (size_t)n && d[at + 4 + k]) k++;
+                fwrite(d + at + 4, 1, k, stdout);
+                return 0;
+            }
+            at += 4 + 4 * (size_t)n;
+        } else if (type != 0x3F2) break;                                                    /* END */
+    }
+    fprintf(stderr, "dashc: %s no lleva información de depuración (compílalo con --debug)\n", path);
+    return 1;
+}
+
 /* La carpeta de Dash, para los import de lib/ desde cualquier sitio: $DASH_HOME, y si no, la de arriba de
    la de dashc (dashc/dashc en el repositorio); en el Amiga, la de dashc (PROGDIR:) */
 char dash_home[1024];
@@ -115,6 +150,8 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
+        else if (!strcmp(argv[i], "--debug")) debug = 1;
+        else if (!strcmp(argv[i], "--debug-info") && i + 1 < argc) return debug_info_show(argv[i + 1]);
         else if (!strcmp(argv[i], "--perfil") || !strcmp(argv[i], "--profile")) profile = 1;
         else if (!strcmp(argv[i], "--fpu")) fpu = 1;
         else if (!strcmp(argv[i], "--cabecera") && i + 1 < argc) header = argv[++i];

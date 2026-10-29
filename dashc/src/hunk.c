@@ -850,6 +850,15 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
             }
             wl(f, 0);
         }
+        if (k == 0 && debug_info.n) {
+            /* --debug: el texto para el depurador (gen68k.c, debug_text); LoadSeg no lo carga */
+            static const uint8_t zero[4];
+            uint32_t n = ((uint32_t)debug_info.n + 3) / 4;
+            wl(f, HUNK_DEBUG);
+            wl(f, n);
+            fwrite(debug_info.p, 1, debug_info.n, f);
+            fwrite(zero, 1, n * 4 - debug_info.n, f);
+        }
         wl(f, HUNK_END);
     }
     if (fclose(f)) fatal("no se puede escribir %s", out);

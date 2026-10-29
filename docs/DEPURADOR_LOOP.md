@@ -50,3 +50,10 @@ Como EDBG de AmigaE (DASHC_LOOP, D12): sin el bit de traza de la CPU, que Emu68 
 
 - 2026-10-29: plan. freememlang-51 fusiona `ide-piezas` en `dashc` (piezas 1-5 y 7-10); este trabajo toca
   `gen68k.c`, que también cambia el bucle de dashc: tras su fusión, traer `dashc` aquí antes de G1.
+- G1 y G2 hechas: `dashc --debug` (también `./dash --debug`, que ya no remite a dash1) pone un `NOP` con su etiqueta
+  (se recoloca al acortar saltos) en cada línea, sin copiar en línea, sin variables en registros ni como constantes,
+  todas las funciones con marco; el `HUNK_DEBUG` de texto tras el hunk de código: `F` ficheros, `G` globales
+  (desplazamiento en datos), `S` campos, `P` funciones (inicio y fin en el código), `V` variables y parámetros
+  (sobre a5, con su línea), `L` el `NOP` de cada línea. `dashc --debug-info prog` lo enseña. Los 31 tests de dashc
+  compilados con y sin `--debug` dan lo mismo en el A1200. Test `tests/unit/test_dashc_debug.py`. Antes, `dashc`
+  traído a la rama (fusión con el runtime rehecho).
