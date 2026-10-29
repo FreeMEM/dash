@@ -1,0 +1,18 @@
+# Un texto comparado con un literal (== y !=): dashc lo hace letra a letra en línea (hasta 8 letras; de uno más
+# largo, las dos primeras y el resto con dl_str_cmp). nil no es igual a ningún literal, ni a "".
+func _se_hereda(p: String) -> Bool
+    return p == "color" or p == "font-family" or p == "font-size" or p == "line-height" or p == "-webkit-text-fill-color"
+end
+
+func mirar(s: String)
+    Print s + ": " + (s == "") + " " + (s == "a") + " " + (s == "ab") + " " + (s != "abc") + " " + (s == "abcdefgh") + " " + (s == "abcdefghi") + " " + ("abcdefghij" == s) + " " + _se_hereda(s)
+end
+
+Main
+    for s in ["", "a", "ab", "abc", "abd", "abcdefgh", "abcdefghi", "abcdefghij", "abcdefghijk", "color", "colo", "colors", "font-size", "font-sizes", "line-height", "-webkit-text-fill-color", "-webkit-text-fill-colo"]
+        mirar(s)
+    end
+    var n: String = nil
+    Print "nil: " + (n == "") + " " + (n != "") + " " + (n == "abc") + " " + (n != "abcdefghijk")
+    Print "é: " + ("é" == "é") + " " + ("año" == "año") + " " + ("año" == "ano")
+end

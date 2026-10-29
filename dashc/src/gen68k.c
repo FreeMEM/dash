@@ -26,6 +26,8 @@ enum { CC_T = 0, CC_F, CC_HI, CC_LS, CC_CC, CC_CS, CC_NE, CC_EQ, CC_VC, CC_VS,
 static Program *prog;
 static Obj *obj;
 int memcheck;
+int profile;          /* --perfil: dl_prof_enter/leave en cada función */
+static int prof_label = -1;   /* los nombres de las funciones, para el perfil */
 
 /* ---- etiquetas y saltos ---- */
 static struct { long *v; int n, cap; } labels;  /* posición en el código, -1 sin poner */
@@ -2744,6 +2746,40 @@ static int gen_compare(Node *n)
         tst_d0();
         return cc;
     }
+    /* un texto == o != un literal: letra a letra en línea (hasta 8; de uno más largo, las dos primeras y el resto
+       con dl_str_cmp), sin llamar a nada si ya difiere la primera: _se_hereda de Tachyon son 20 seguidas. nil no es
+       igual a ningún literal. */
+    if (ta == TY_STR && tb == TY_STR && (n->op == P_EQ || n->op == P_NE) &&
+        ((n->b->kind == E_STR && n->a->kind != E_STR) || (n->a->kind == E_STR && n->b->kind != E_STR))) {
+        Node *lit = n->b->kind == E_STR ? n->b : n->a, *s = lit == n->b ? n->a : n->b;
+        int i, ok, done, len = lit->len, inl = len <= 8 ? len : 2;
+        if ((int)strlen(lit->str) == len) {
+            value(s);
+            tst_d0();
+            ok = new_label();
+            done = new_label();
+            branch(CC_NE, ok);
+            w(0x7001);                                 /* moveq #1,d0: nil, distinto (Z = 0) */
+            branch(CC_T, done);
+            def_label(ok);
+            w(0x2040);                                 /* movea.l d0,a0 */
+            for (i = 0; i < inl; i++) {
+                w(0x0C18); w((unsigned char)lit->str[i]);   /* cmpi.b #letra,(a0)+ */
+                branch(CC_NE, done);
+            }
+            if (inl == len) {
+                w(0x4A10);                             /* tst.b (a0): el final */
+            } else {
+                pea_string(lit->str + inl, len - inl);
+                w(0x2F08);                             /* move.l a0,-(sp) */
+                sp_depth += 4;
+                rt_call("_dl_str_cmp", 2, 0);
+                w(0x4A80);                             /* tst.l d0 */
+            }
+            def_label(done);
+            return cc;
+        }
+    }
     /* textos: el signo de strcmp (nil va antes que cualquier texto) */
     if (ta == TY_STR && tb == TY_STR) {
         Node *a[2];
@@ -5224,8 +5260,28 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 store_d0(&v);
                 locals.v[i].owned = str ? 1 : 2;
             }
+        if (profile) {
+            w(0x4878); w(idx + 1);                     /* pea número.w */
+            sp_depth += 4;
+            rt_call("_dl_prof_enter", 1, 0);
+        }
         fm = mark_begin();
     } else {
+        if (profile) {
+            Fixup fx;
+            w(0x4878); w(prog->funcs.n + 1);           /* pea cuántas.w */
+            sp_depth += 4;
+            w(0x4879);                                 /* pea nombres */
+            fx.at = (uint32_t)obj->code.n;
+            fx.label = prof_label;
+            fx.abs = 1;
+            fx.size = 2;
+            VEC_PUSH(fixups, fx);
+            add_reloc(fx.at, HK_CODE, NULL);
+            l(0);
+            sp_depth += 4;
+            rt_call("_dl_prof_start", 2, 0);
+        }
         gen_global_inits();
     }
     ret_sp = sp_depth;
@@ -5265,6 +5321,13 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             push_d0();
             rt_call("_dl_obj_float", 1, 0);
         }
+        if (profile) {
+            push_d0();
+            jsr_sym("_dl_prof_leave");
+            pop_d0();
+        }
+    } else if (profile) {
+        jsr_sym("_dl_prof_report");
     }
     if (sp_depth) fatal("la pila no cuadra (fallo de dashc)");
     if (nregs == 1) w(0x201F | last << 9);             /* move.l (sp)+,dN */
@@ -5742,6 +5805,7 @@ void gen_program(Program *p, Obj *o)
     cur_file_g = 0;
     tenv_on = 0;
     collect_set = 0;
+    if (profile) prof_label = new_label();
 
     /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */
     main_label = new_label();
@@ -5836,6 +5900,16 @@ void gen_program(Program *p, Obj *o)
         l(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
     }
     l(0);
+    if (profile) {
+        /* --perfil: el nombre de cada función (0 es Main) */
+        def_label(prof_label);
+        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+        l(add_string("Main", 4));
+        for (i = 0; i < p->funcs.n; i++) {
+            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+            l(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));
+        }
+    }
     resolve_fixups();
     /* las @export, con su nombre de C, para hunk.c */
     for (i = 0; i < p->funcs.n; i++)

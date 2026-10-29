@@ -802,3 +802,107 @@ LONG dl_win_member(struct Window *w, const struct DashWinDesc *d, LONG m)
 /* --memcheck: leer un campo weak cuyo objeto ya se liberó es un error (y nil) */
 APTR dl_weak_check(APTR p) { return _dash_weak_check(p); }
 #endif
+
+/* ---- --perfil (como ./dash --profile, dashweb D23): cada función de Dash pone su número en una pila mientras
+   corre (dl_prof_enter/dl_prof_leave, que dashc pone a la entrada y a la salida; las copiadas en línea cuentan
+   como la que las contiene) y una interrupción de VBlank (50 veces por segundo en PAL) mira dónde está: la cima
+   (tiempo propio) y todas las de la pila (total). Al acabar Main, la tabla, de la más lenta a la más rápida. ---- */
+#include <hardware/intbits.h>
+#define DL_PROF_DEPTH 256
+static STRPTR *dl_prof_names;
+static LONG dl_prof_n;
+static ULONG *dl_prof_calls, *dl_prof_self, *dl_prof_total;
+static UWORD *dl_prof_seen;
+static UWORD dl_prof_gen;
+static volatile WORD dl_prof_stack[DL_PROF_DEPTH];
+static volatile LONG dl_prof_depth;
+static volatile ULONG dl_prof_samples;
+static struct Interrupt dl_prof_int;
+static BOOL dl_prof_on;
+
+static ULONG dl_prof_tick(void)
+{
+    LONG d = dl_prof_depth, i;
+    WORD id;
+    if (d > DL_PROF_DEPTH) d = DL_PROF_DEPTH;
+    dl_prof_samples++;
+    dl_prof_gen++;
+    dl_prof_total[0]++;
+    if (d == 0) dl_prof_self[0]++;
+    else dl_prof_self[dl_prof_stack[d - 1]]++;
+    for (i = 0; i < d; i++) {
+        id = dl_prof_stack[i];
+        if (dl_prof_seen[id] != dl_prof_gen) {
+            dl_prof_seen[id] = dl_prof_gen;
+            dl_prof_total[id]++;
+        }
+    }
+    return 0;
+}
+
+/* names: los nombres (0 es Main), n cuántos */
+void dl_prof_start(STRPTR *names, LONG n)
+{
+    ULONG *p = AllocVec((ULONG)n * 14, MEMF_CLEAR);
+    if (!p) return;
+    dl_prof_names = names;
+    dl_prof_n = n;
+    dl_prof_calls = p;
+    dl_prof_self = p + n;
+    dl_prof_total = p + 2 * n;
+    dl_prof_seen = (UWORD *)(p + 3 * n);
+    dl_prof_calls[0] = 1;
+    dl_prof_int.is_Node.ln_Type = NT_INTERRUPT;
+    dl_prof_int.is_Node.ln_Pri = -60;
+    dl_prof_int.is_Node.ln_Name = (char *)"dash profiler";
+    dl_prof_int.is_Data = NULL;
+    dl_prof_int.is_Code = (VOID (*)())dl_prof_tick;
+    AddIntServer(INTB_VERTB, &dl_prof_int);
+    dl_prof_on = TRUE;
+}
+
+void dl_prof_enter(LONG id)
+{
+    if (!dl_prof_on) return;
+    dl_prof_calls[id]++;
+    if (dl_prof_depth < DL_PROF_DEPTH) dl_prof_stack[dl_prof_depth] = (WORD)id;
+    dl_prof_depth++;
+}
+
+void dl_prof_leave(void)
+{
+    if (dl_prof_depth > 0) dl_prof_depth--;
+}
+
+void dl_prof_report(void)
+{
+    LONG i, j, best, n = dl_prof_n;
+    ULONG s, args[6];
+    UBYTE *done;
+    if (!dl_prof_on) return;
+    RemIntServer(INTB_VERTB, &dl_prof_int);
+    dl_prof_on = FALSE;
+    if (!(done = AllocVec((ULONG)n, MEMF_CLEAR))) return;
+    s = dl_prof_samples ? dl_prof_samples : 1;
+    args[0] = dl_prof_samples;
+    VPrintf((CONST_STRPTR)"perfil: %lu muestras (VBlank)\n", (APTR)args);
+    PutStr((CONST_STRPTR)"perfil:  propio   total  llamadas  funcion\n");
+    for (i = 0; i < n; i++) {
+        best = -1;
+        for (j = 0; j < n; j++)
+            if (!done[j] && (best < 0 || dl_prof_self[j] > dl_prof_self[best]
+                             || (dl_prof_self[j] == dl_prof_self[best] && dl_prof_total[j] > dl_prof_total[best])))
+                best = j;
+        if (best < 0) break;
+        done[best] = 1;
+        if (!dl_prof_calls[best] && !dl_prof_total[best]) continue;
+        args[0] = dl_prof_self[best] * 100 / s;
+        args[1] = dl_prof_self[best] * 1000 / s % 10;
+        args[2] = dl_prof_total[best] * 100 / s;
+        args[3] = dl_prof_total[best] * 1000 / s % 10;
+        args[4] = dl_prof_calls[best];
+        args[5] = (ULONG)dl_prof_names[best];
+        VPrintf((CONST_STRPTR)"perfil: %3ld.%ld%% %3ld.%ld%% %9lu  %s\n", (APTR)args);
+    }
+    FreeVec(done);
+}

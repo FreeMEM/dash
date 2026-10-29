@@ -74,6 +74,7 @@ static void usage(void)
             "  --fpu          Float y Double con la FPU (68020 y 68881/68882, o 68040/68060)\n"
             "  --cpu X        se acepta como en Dash 1 (68000...68060): el código vale para todas\n"
             "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
+            "  --perfil       al acabar, en qué funciones se fue el tiempo (también --profile)\n"
             "  --cabecera x.h los structs del programa en C, para el C de @link (sin -o, solo eso)\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
@@ -96,6 +97,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
+        else if (!strcmp(argv[i], "--perfil") || !strcmp(argv[i], "--profile")) profile = 1;
         else if (!strcmp(argv[i], "--fpu")) fpu = 1;
         else if (!strcmp(argv[i], "--cabecera") && i + 1 < argc) header = argv[++i];
         else if (!strcmp(argv[i], "--cpu") && i + 1 < argc) {

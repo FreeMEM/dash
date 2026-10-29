@@ -13,7 +13,7 @@ import sys
 ROOT = os.path.dirname(os.path.realpath(__file__))
 DASHC = os.path.join(ROOT, "dashc", "dashc")
 # las opciones de dash1 que dashc aún no tiene
-SOLO_DASH1 = {"--debug", "--profile", "--multifile", "--small", "-O", "--optimize", "-O0",
+SOLO_DASH1 = {"--debug", "--multifile", "--small", "-O", "--optimize", "-O0",
               "--no-optimize", "--no-hunk"}
 
 
@@ -31,6 +31,8 @@ def main():
         return 1
     # (-v y -q de dash1 no hacen falta: dashc solo escribe si hay un error)
     args = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
+    if os.environ.get("DASH_PROFILE") == "1" and "--perfil" not in args and "--profile" not in args:
+        args.append("--perfil")        # (como dash1: tools/medir_visor.py --perfil)
     if not os.path.exists(DASHC):
         print("dash: falta dashc; constrúyelo con: make -C dashc", file=sys.stderr)
         return 1
