@@ -33,6 +33,49 @@ con parámetros y `return`, `if`/`elif`/`else`, `while`, `for` con rango (`step`
 Falta: diccionarios, métodos de texto (`find`, `upper`...), `sort`, lambdas, enums, Float y Fixed,
 builtins, ventanas, `@native`, `import`.
 
+## Depurar
+
+`dashc --debug prog.dash -o prog` (o `./dash --debug`) pone una instrucción `NOP` al principio de cada línea y
+añade al ejecutable un `HUNK_DEBUG` con ficheros, líneas, funciones, variables, globales y campos de los structs
+(`dashc --debug-info prog` lo enseña). Sin copiar funciones en línea y con todas las variables en el marco, para que
+el depurador las encuentre; el programa hace lo mismo que sin `--debug`.
+
+Los builtins `dbg_*` depuran un programa así desde otro (Forja, el IDE), compilado con cualquiera de los dos
+Dash (`./dash` o `./dash --c`):
+
+```ruby
+dbg_start("Work:prog", "")              # cargado y en pausa antes de su primera línea
+dbg_break("prog.dash", 12)              # un punto de parada (por el final del nombre del fichero)
+dbg_continue()
+if dbg_wait(0) == 3                     # 3: parado en una línea; 4: acabado
+    Print "#{dbg_function()} #{dbg_line()}: p = " + dbg_value(0, "p")
+end
+dbg_next()                              # dbg_step entra en las funciones; dbg_out sale de esta
+dbg_end(5000)                           # lo acaba (su limpieza de siempre); dbg_rc() da su código
+```
+
+| Builtin | Qué hace |
+|---------|----------|
+| `dbg_start(prog, args)`, `dbg_error()` | Cargar en pausa; por qué falló |
+| `dbg_state()`, `dbg_wait(ms)`, `dbg_signal()` | Estado (0 nada, 1 en pausa al empezar, 2 corriendo, 3 parado, 4 acabado); esperar; la señal que llega al parar o acabar (para `mui_wait_event_signals`) |
+| `dbg_break(fichero, línea)`, `dbg_unbreak(...)` | Puntos de parada |
+| `dbg_continue()`, `dbg_step()`, `dbg_next()`, `dbg_out()`, `dbg_pause()` | Seguir, entrar, pasar, salir, parar en la siguiente línea |
+| `dbg_end(ms)`, `dbg_rc()`, `dbg_output()` | Acabarlo, su código, lo que ha escrito |
+| `dbg_file()`, `dbg_line()`, `dbg_function()` | Dónde está parado |
+| `dbg_frames()`, `dbg_frame_function/line/file(i)` | La pila de llamadas (0, donde está) |
+| `dbg_vars(i)`, `dbg_var_name/type(i, k)`, `dbg_globals()`, `dbg_global_name(g)` | Las variables de cada marco y las globales |
+| `dbg_value(i, expr)`, `dbg_value_type(i, expr)` | El valor como texto (`"p.hijos[0].x"`) y su tipo |
+| `dbg_reg(n)`, `dbg_peek(dir, tamaño)` | Registros (0-7 d0-d7, 8-15 a0-a7, 16 el PC) y memoria |
+
+Cómo va (`DEBUGGER_RUNTIME` de `compiler/codegen.py`, plan en `docs/DEPURADOR_LOOP.md`): el programa corre en un proceso hijo con su
+manejador de excepciones; un punto de parada cambia el `NOP` de la línea por `TRAP #15`, y al seguir no hay nada que
+reponer. Paso a paso, todas las líneas paran y se mira el marco (`a5`). No usa el bit de traza de la CPU, así que
+funciona igual en un 68000, en FS-UAE y en Emu68.
+
+Límites: una tarea de `task_start` que pase por una línea con `TRAP` cae (no tiene el manejador); un programa que
+espera sin pasar por ninguna línea (en `mui_wait_event`) no acaba con `dbg_end` hasta que vuelve a su código; la
+salida se lee antes de `dbg_end`. Tests: `python3 tests/depurar.py [--a500] [--c]`.
+
 ## Cómo está hecho
 
 | Fichero | Qué hace |

@@ -198,6 +198,12 @@ DESC_ES = {
     "dir_create": "Crea un cajón",
     "dir_change": "Cambia el cajón actual",
     "dir_current": "El nombre entero del cajón actual (\"Ram Disk:\"...)",
+    "dir_read": "Lee lo que hay en un cajón, por orden de nombre (sin mirar mayúsculas): cuántas entradas, -1 si no es "
+                "un cajón que se pueda leer. dir_entry_name y las demás las leen, hasta el siguiente dir_read",
+    "dir_entry_name": "El nombre de la entrada i (desde 0) del último dir_read; \"\" si no la hay",
+    "dir_entry_size": "El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón)",
+    "dir_entry_is_dir": "Verdadero si la entrada i del último dir_read es un cajón",
+    "dir_entry_date": "La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970",
     "console_read": "Lee de la consola",
     "console_write": "Escribe en la consola (sin búfer)",
     "file_load": "Carga un fichero entero en un búfer: los bytes leídos, o -1",
@@ -423,6 +429,71 @@ DESC_ES = {
     "time_unix": "El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies)",
     "clock_days": "Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp)",
     "mem_largest": "El bloque de memoria libre más grande, chip o fast, en bytes",
+    "dbg_start": "Carga un programa compilado con dash --debug y lo lanza en un proceso propio, en pausa antes de su primera línea (se ponen los puntos de parada y luego dbg_continue): falso si no pudo (dbg_error dice por qué)",
+    "dbg_error": "Por qué falló el último dbg_start",
+    "dbg_state": "El programa depurado: 0 ninguno, 1 en pausa antes de empezar, 2 corriendo, 3 parado en una línea, 4 acabado",
+    "dbg_signal": "La señal que recibe el depurador cuando el programa para o acaba (para mui_wait_event_signals)",
+    "dbg_wait": "Espera a que el programa pare o acabe, como mucho ms (0: sin tope): su estado",
+    "dbg_break": "Un punto de parada en esa línea de ese fichero (\"prog.dash\": el final de su ruta): falso si la línea no tiene código",
+    "dbg_unbreak": "Quita el punto de parada de esa línea",
+    "dbg_continue": "Sigue (desde el principio o una parada) hasta un punto de parada o el final",
+    "dbg_step": "Sigue hasta la línea siguiente, entrando en las funciones a las que llama",
+    "dbg_next": "Sigue hasta la línea siguiente de esta función (o de la que la llamó)",
+    "dbg_out": "Sigue hasta que la función vuelve: la línea siguiente de la que la llamó",
+    "dbg_pause": "Para el programa que corre en la siguiente línea que ejecute",
+    "dbg_end": "Acaba el programa (Ctrl-C y, en su siguiente línea, su final de siempre): verdadero si acabó en ms",
+    "dbg_rc": "El código de retorno del programa acabado",
+    "dbg_file": "El fichero de la línea donde paró el programa (su ruta entera)",
+    "dbg_line": "La línea donde paró el programa (0 si no está parado)",
+    "dbg_function": "La función donde paró el programa (\"Main\", \"Punto.mover\"...)",
+    "dbg_frames": "Cuántas llamadas hay abiertas donde paró: 1 en Main, 2 en una función que llamó Main... (0 si no está parado)",
+    "dbg_frame_function": "La función de la llamada i: 0 donde paró, 1 la que la llamó...",
+    "dbg_frame_line": "La línea donde está la llamada i: 0 donde paró, 1 la de la llamada en la que la llamó...",
+    "dbg_frame_file": "El fichero de la llamada i (su ruta entera)",
+    "dbg_vars": "Cuántas variables ve la llamada i: sus parámetros y las variables declaradas antes de su línea",
+    "dbg_var_name": "El nombre de la variable k (desde 0) de la llamada i",
+    "dbg_var_type": "El tipo de la variable k de la llamada i, como en Dash (\"Int\", \"[String]\", \"Punto\")",
+    "dbg_globals": "Cuántas variables globales tiene el programa",
+    "dbg_global_name": "El nombre de la global g (desde 0)",
+    "dbg_value": "El valor de expr en la llamada i, como texto: una variable de esa llamada o una global, con .campo y [n] detrás (\"p.hijos[0].x\"): 3, \"hola\", Punto(x: 3, y: 4), [1, 2], nil; \"? \" y el porqué si no se puede",
+    "dbg_value_type": "El tipo de expr en la llamada i (\"\" si no se puede)",
+    "dbg_reg": "Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC",
+    "dbg_peek": "1, 2 o 4 bytes de memoria en addr, sin signo",
+    "dbg_output": "Lo que ha escrito el programa hasta ahora (salida y salida de errores)",
+    "rexx_send": "Manda una orden ARexx al puerto público de otro programa (\"MULTIVIEW.1\"; \"REXX\": ejecutar un "
+                 "script) y espera la respuesta: su RESULT (\"\" si no hay), el RC en rexx_rc(). No al puerto del "
+                 "propio programa: se esperaría a sí mismo",
+    "rexx_rc": "El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin "
+               "rexxsyslib.library",
+    "ports_read": "Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, "
+                  "hasta el siguiente ports_read",
+    "port_name": "El nombre del puerto i (desde 0) del último ports_read",
+    "tasks_read": "Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, "
+                  "hasta el siguiente tasks_read",
+    "task_entry_name": "El nombre de la tarea i del último tasks_read (\"Shell Process\", \"input.device\"...)",
+    "task_entry_command": "La orden que ejecuta un proceso de Shell del último tasks_read (\"\" si ninguna)",
+    "task_entry_state": "El estado de la tarea i: \"running\" (el programa), \"ready\" o \"waiting\"",
+    "task_entry_priority": "La prioridad de la tarea i del último tasks_read",
+    "task_entry_cli": "El número de Shell de la tarea i (el que da Status, para Break), 0 si no es un proceso de Shell",
+    "assigns_read": "Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta "
+                    "el siguiente assigns_read",
+    "assign_name": "El nombre de la asignación i del último assigns_read, sin los dos puntos",
+    "assign_path": "Adónde apunta la asignación i: un cajón (\"Workbench:C\"), varios separados por \";\", o el "
+                   "nombre que buscará una diferida o no ligada",
+    "run_capture": "Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código "
+                   "de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y "
+                   "otra vez cada segundo hasta que acaba)",
+    "run_start": "run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El "
+                 "programa espera al acabar a las que no terminó",
+    "run_ready": "Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo)",
+    "run_break": "Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba)",
+    "run_finish": "Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida",
+    "run_rc": "El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si "
+              "se le acabó el tiempo",
+    "env_get": "Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; \"\" "
+               "si no existe",
+    "env_set": "Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso "
+               "si no pudo",
     "run_command": "Ejecuta una orden y espera a que acabe, con su salida en la del programa: su código de retorno, -1 "
                    "si no pudo empezar",
     "wb_open": "Abre un cajón, un programa o un proyecto como un doble clic en su icono (workbench.library 44, OS "
@@ -840,6 +911,12 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
+                    "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
+                    "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "
+                    "mui_wait_event espera",
+    "mui_rexx_fail": "Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin "
+                     "RESULT)",
     "mui_app_begin": "Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU "
                      "es un 68000",
     "mui_app_end": "Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar)",

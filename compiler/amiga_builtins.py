@@ -2246,7 +2246,7 @@ DOS_FUNCTIONS = {
         name="dir_create",
         params=["path"],
         return_type="BOOL",
-        c_template="(CreateDir(${path}) != 0)",
+        c_template="_dash_dir_create(${path})",
         needs_dos=True,
         description="Create directory"
     ),
@@ -2266,6 +2266,26 @@ DOS_FUNCTIONS = {
         needs_dos=True,
         description="Full name of the current directory (\"Ram Disk:\" ...)"
     ),
+    # Dash 2.0 (Inferencia, the IDE): what a directory holds
+    "dir_read": BuiltinFunc(
+        name="dir_read", params=["path"], return_type="LONG", c_template="_dash_dir_read(${path})",
+        needs_dos=True, reads_only=True,
+        description="Read what a directory holds, sorted by name (case does not count): the number of entries, "
+                    "-1 if it is not a directory that can be read. dir_entry_name and the others read them, until "
+                    "the next dir_read"),
+    "dir_entry_name": BuiltinFunc(
+        name="dir_entry_name", params=["i"], return_type="STRPTR", c_template="_dash_dir_entry_name(${i})",
+        needs_dos=True, description="Name of entry i (from 0) of the last dir_read; \"\" past the end"),
+    "dir_entry_size": BuiltinFunc(
+        name="dir_entry_size", params=["i"], return_type="LONG", c_template="_dash_dir_entry_size(${i})",
+        needs_dos=True, description="Size in bytes of entry i of the last dir_read (0 for a directory)"),
+    "dir_entry_is_dir": BuiltinFunc(
+        name="dir_entry_is_dir", params=["i"], return_type="BOOL", c_template="_dash_dir_entry_is_dir(${i})",
+        needs_dos=True, description="True if entry i of the last dir_read is a directory"),
+    "dir_entry_date": BuiltinFunc(
+        name="dir_entry_date", params=["i"], return_type="LONG", c_template="_dash_dir_entry_date(${i})",
+        needs_dos=True,
+        description="Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970"),
 
     # Console I/O
     "console_read": BuiltinFunc(
@@ -3201,6 +3221,17 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    # Dash 2.0 (Inferencia): the application's own ARexx commands
+    "mui_app_rexx": BuiltinFunc(
+        name="mui_app_rexx", params=["app", "func"], return_type="void",
+        c_template="_dash_mui_app_rexx(${app}, ${func})",
+        description="Every ARexx command to the application's port (its base and \".1\": \"BASE.1\") that MUI does "
+                    "not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole "
+                    "command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. "
+                    "It runs while mui_wait_event waits"),
+    "mui_rexx_fail": BuiltinFunc(
+        name="mui_rexx_fail", params=["rc"], return_type="void", c_template="_dash_mui_rexx_fail(${rc})",
+        description="From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then)"),
     "mui_app_end": BuiltinFunc(
         name="mui_app_end",
         params=[],
@@ -4547,6 +4578,90 @@ TASK_FUNCTIONS = {
         reads_only=True,
         description="Run a command line and wait for it to end, its output the program's own: its return code, "
                     "-1 if it could not start"),
+    # Dash 2.0 (Inferencia, the IDE): running a command and taking its output; environment variables
+    "run_capture": BuiltinFunc(
+        name="run_capture", params=["command", "timeout_ms"], return_type="STRPTR",
+        c_template="_dash_run_capture(${command}, ${timeout_ms})", reads_only=True,
+        description="Run a command line and wait for it to end: what it wrote (output and error output), its "
+                    "return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets "
+                    "Ctrl-C (and again every second until it ends)"),
+    "run_start": BuiltinFunc(
+        name="run_start", params=["command", "timeout_ms"], return_type="LONG",
+        c_template="_dash_run_start(${command}, ${timeout_ms})", reads_only=True,
+        description="run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it "
+                    "could not start. The program waits at its end for the ones it did not finish"),
+    "run_ready": BuiltinFunc(
+        name="run_ready", params=["run"], return_type="BOOL", c_template="_dash_run_ready(${run})",
+        description="True when a run_start has ended (it does not wait; it also applies the time limit)"),
+    "run_break": BuiltinFunc(
+        name="run_break", params=["run"], return_type="void", c_template="_dash_run_break(${run})",
+        description="Send Ctrl-C to a run_start that is still running (again every second until it ends)"),
+    "run_finish": BuiltinFunc(
+        name="run_finish", params=["run"], return_type="STRPTR", c_template="_dash_run_finish(${run})",
+        description="What a run_start wrote, as run_capture (it waits if it is still running), and forget it"),
+    "run_rc": BuiltinFunc(
+        name="run_rc", params=[], return_type="LONG", c_template="_dash_run_rc()",
+        description="Return code of the last run_capture or run_finish: the command's, -1 if it could not "
+                    "start, -2 if its time ran out"),
+    "env_get": BuiltinFunc(
+        name="env_get", params=["name"], return_type="STRPTR", c_template="_dash_env_get(${name})",
+        reads_only=True,
+        description="An environment variable (of the program's Shell, else of ENV:), up to its first line "
+                    "end; \"\" if there is none"),
+    "env_set": BuiltinFunc(
+        name="env_set", params=["name", "value", "save"], return_type="BOOL",
+        c_template="_dash_env_set(${name}, ${value}, ${save})", reads_only=True,
+        description="Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); "
+                    "false if it could not"),
+    # Dash 2.0 (Inferencia): ARexx as a client; ports, tasks and assigns
+    "rexx_send": BuiltinFunc(
+        name="rexx_send", params=["port", "command"], return_type="STRPTR",
+        c_template="_dash_rexx_send(${port}, ${command})", reads_only=True,
+        description="Send an ARexx command to a public port (\"MULTIVIEW.1\"; \"REXX\": run a script) and wait "
+                    "for the answer: its RESULT (\"\" without one), the RC in rexx_rc(). Not to the program's own "
+                    "port: it would wait for itself"),
+    "rexx_rc": BuiltinFunc(
+        name="rexx_rc", params=[], return_type="LONG", c_template="_dash_rexx_rc()",
+        description="RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no "
+                    "rexxsyslib.library"),
+    "ports_read": BuiltinFunc(
+        name="ports_read", params=[], return_type="LONG", c_template="_dash_ports_read()",
+        description="Read the names of the public message ports open now (ARexx ports among them): how many, "
+                    "for port_name, until the next ports_read"),
+    "port_name": BuiltinFunc(
+        name="port_name", params=["i"], return_type="STRPTR", c_template="_dash_port_name(${i})",
+        description="Name of port i (from 0) of the last ports_read"),
+    "tasks_read": BuiltinFunc(
+        name="tasks_read", params=[], return_type="LONG", c_template="_dash_tasks_read()",
+        description="Read the tasks and processes of the system (the program first): how many, for the "
+                    "task_entry_ functions, until the next tasks_read"),
+    "task_entry_name": BuiltinFunc(
+        name="task_entry_name", params=["i"], return_type="STRPTR", c_template="_dash_task_entry_name(${i})",
+        description="Name of task i of the last tasks_read (\"Shell Process\", \"input.device\"...)"),
+    "task_entry_command": BuiltinFunc(
+        name="task_entry_command", params=["i"], return_type="STRPTR",
+        c_template="_dash_task_entry_command(${i})",
+        description="The command a Shell process of the last tasks_read is running (\"\" if none)"),
+    "task_entry_state": BuiltinFunc(
+        name="task_entry_state", params=["i"], return_type="STRPTR", c_template="_dash_task_entry_state(${i})",
+        description="State of task i: \"running\" (the program), \"ready\" or \"waiting\""),
+    "task_entry_priority": BuiltinFunc(
+        name="task_entry_priority", params=["i"], return_type="LONG",
+        c_template="_dash_task_entry_priority(${i})", description="Priority of task i of the last tasks_read"),
+    "task_entry_cli": BuiltinFunc(
+        name="task_entry_cli", params=["i"], return_type="LONG", c_template="_dash_task_entry_cli(${i})",
+        description="Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process"),
+    "assigns_read": BuiltinFunc(
+        name="assigns_read", params=[], return_type="LONG", c_template="_dash_assigns_read()",
+        description="Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, "
+                    "until the next assigns_read"),
+    "assign_name": BuiltinFunc(
+        name="assign_name", params=["i"], return_type="STRPTR", c_template="_dash_assign_name(${i})",
+        description="Name of assign i of the last assigns_read, without the colon"),
+    "assign_path": BuiltinFunc(
+        name="assign_path", params=["i"], return_type="STRPTR", c_template="_dash_assign_path(${i})",
+        description="Where assign i points: a directory (\"Workbench:C\"), several separated by \";\", or the name "
+                    "a late or deferred one will look for"),
     "wb_open": BuiltinFunc(
         name="wb_open", params=["path"], return_type="BOOL", c_template="_dash_wb_open(${path})",
         reads_only=True,
@@ -4980,6 +5095,104 @@ CLIP_FUNCTIONS = {
                             "there is none or something else was copied after it, -2 if it does not fit in max"),
 }
 
+# Dash 2.0 (Forja, the IDE): the debugger. The debugged program is built with dash --debug (dashc); the debugger
+# with either Dash (docs/DEPURADOR_LOOP.md)
+DEBUGGER_FUNCTIONS = {
+    "dbg_start": BuiltinFunc(
+        name="dbg_start", params=['program', 'args'], return_type="BOOL", c_template="((BOOL)_dash_dbg_start((LONG)(${program}), (LONG)(${args})))",
+        reads_only=True, description='Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why)'),
+    "dbg_error": BuiltinFunc(
+        name="dbg_error", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_error())",
+        reads_only=True, description='Why the last dbg_start failed'),
+    "dbg_state": BuiltinFunc(
+        name="dbg_state", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_state())",
+        reads_only=True, description='The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended'),
+    "dbg_signal": BuiltinFunc(
+        name="dbg_signal", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_signal())",
+        reads_only=True, description='The signal the debugger gets when the program stops or ends (for mui_wait_event_signals)'),
+    "dbg_wait": BuiltinFunc(
+        name="dbg_wait", params=['ms'], return_type="LONG", c_template="((LONG)_dash_dbg_wait((LONG)(${ms})))",
+        reads_only=True, description='Wait until the program stops or ends, ms at most (0: no limit): its state'),
+    "dbg_break": BuiltinFunc(
+        name="dbg_break", params=['file', 'line'], return_type="BOOL", c_template="((BOOL)_dash_dbg_break((LONG)(${file}), (LONG)(${line})))",
+        reads_only=True, description='A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code'),
+    "dbg_unbreak": BuiltinFunc(
+        name="dbg_unbreak", params=['file', 'line'], return_type="BOOL", c_template="((BOOL)_dash_dbg_unbreak((LONG)(${file}), (LONG)(${line})))",
+        reads_only=True, description='Take the breakpoint out of that line'),
+    "dbg_continue": BuiltinFunc(
+        name="dbg_continue", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_continue())",
+        reads_only=True, description='Go on (from the start or a stop) until a breakpoint or the end'),
+    "dbg_step": BuiltinFunc(
+        name="dbg_step", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_step())",
+        reads_only=True, description='Go on to the next line, into the functions it calls'),
+    "dbg_next": BuiltinFunc(
+        name="dbg_next", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_next())",
+        reads_only=True, description='Go on to the next line of this function (or of the one that called it)'),
+    "dbg_out": BuiltinFunc(
+        name="dbg_out", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_out())",
+        reads_only=True, description='Go on until the function returns: the next line of the one that called it'),
+    "dbg_pause": BuiltinFunc(
+        name="dbg_pause", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_pause())",
+        reads_only=True, description='Stop the running program at the next line it runs'),
+    "dbg_end": BuiltinFunc(
+        name="dbg_end", params=['ms'], return_type="BOOL", c_template="((BOOL)_dash_dbg_end((LONG)(${ms})))",
+        reads_only=True, description='End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms'),
+    "dbg_rc": BuiltinFunc(
+        name="dbg_rc", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_rc())",
+        reads_only=True, description='The return code of the ended program'),
+    "dbg_file": BuiltinFunc(
+        name="dbg_file", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_file())",
+        reads_only=True, description='The file of the line where the program stopped (its full path)'),
+    "dbg_line": BuiltinFunc(
+        name="dbg_line", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_line())",
+        reads_only=True, description='The line where the program stopped (0 if it is not stopped)'),
+    "dbg_function": BuiltinFunc(
+        name="dbg_function", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_function())",
+        reads_only=True, description='The function where the program stopped ("Main", "Punto.mover"...)'),
+    "dbg_frames": BuiltinFunc(
+        name="dbg_frames", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_frames())",
+        reads_only=True, description='How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped)'),
+    "dbg_frame_function": BuiltinFunc(
+        name="dbg_frame_function", params=['i'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_frame_function((LONG)(${i})))",
+        reads_only=True, description='The function of call i: 0 the one where it stopped, 1 the one that called it...'),
+    "dbg_frame_line": BuiltinFunc(
+        name="dbg_frame_line", params=['i'], return_type="LONG", c_template="((LONG)_dash_dbg_frame_line((LONG)(${i})))",
+        reads_only=True, description='The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it...'),
+    "dbg_frame_file": BuiltinFunc(
+        name="dbg_frame_file", params=['i'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_frame_file((LONG)(${i})))",
+        reads_only=True, description='The file of call i (its full path)'),
+    "dbg_vars": BuiltinFunc(
+        name="dbg_vars", params=['i'], return_type="LONG", c_template="((LONG)_dash_dbg_vars((LONG)(${i})))",
+        reads_only=True, description='How many variables call i sees: its parameters and the variables declared up to its line'),
+    "dbg_var_name": BuiltinFunc(
+        name="dbg_var_name", params=['i', 'k'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_var_name((LONG)(${i}), (LONG)(${k})))",
+        reads_only=True, description='Name of variable k (from 0) of call i'),
+    "dbg_var_type": BuiltinFunc(
+        name="dbg_var_type", params=['i', 'k'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_var_type((LONG)(${i}), (LONG)(${k})))",
+        reads_only=True, description='Type of variable k of call i, as in Dash ("Int", "[String]", "Punto")'),
+    "dbg_globals": BuiltinFunc(
+        name="dbg_globals", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_globals())",
+        reads_only=True, description='How many global variables the program has'),
+    "dbg_global_name": BuiltinFunc(
+        name="dbg_global_name", params=['g'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_global_name((LONG)(${g})))",
+        reads_only=True, description='Name of global g (from 0)'),
+    "dbg_value": BuiltinFunc(
+        name="dbg_value", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value((LONG)(${i}), (LONG)(${expr})))",
+        reads_only=True, description='The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot'),
+    "dbg_value_type": BuiltinFunc(
+        name="dbg_value_type", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value_type((LONG)(${i}), (LONG)(${expr})))",
+        reads_only=True, description='The type of expr in call i ("" if it cannot)'),
+    "dbg_reg": BuiltinFunc(
+        name="dbg_reg", params=['n'], return_type="LONG", c_template="((LONG)_dash_dbg_reg((LONG)(${n})))",
+        reads_only=True, description='A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC'),
+    "dbg_peek": BuiltinFunc(
+        name="dbg_peek", params=['addr', 'size'], return_type="LONG", c_template="((LONG)_dash_dbg_peek((LONG)(${addr}), (LONG)(${size})))",
+        reads_only=True, description='1, 2 or 4 bytes of memory at addr, without sign'),
+    "dbg_output": BuiltinFunc(
+        name="dbg_output", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_output())",
+        reads_only=True, description='What the program has written so far (output and error output)'),
+}
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
@@ -4992,7 +5205,10 @@ def _move(src, names):
 SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
-    "build_date", "build_time", "console_flush"])
+    "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
+    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "ports_read", "port_name", "tasks_read",
+    "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
+    "assigns_read", "assign_name", "assign_path"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
     "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
@@ -5033,6 +5249,7 @@ ALL_BUILTINS = {
     **CLIP_FUNCTIONS,          # Lorraine D18
     **COLLATE_FUNCTIONS,       # Lorraine D7
     **SYSPROG_FUNCTIONS,       # Dash 2.0
+    **DEBUGGER_FUNCTIONS,      # Dash 2.0: Forja
     **IMGDEC_FUNCTIONS,
     **TTF_FUNCTIONS,
     **NETBG_FUNCTIONS,

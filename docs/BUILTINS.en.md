@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 744 functions, 744 implemented, 0 not implemented.
+Total: 803 functions, 803 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -316,6 +316,11 @@ Total: 744 functions, 744 implemented, 0 not implemented.
 | `dir_create(path)` | `BOOL` | Create directory |  |
 | `dir_change(path)` | `BOOL` | Change current directory |  |
 | `dir_current()` | `STRPTR` | Full name of the current directory ("Ram Disk:" ...) |  |
+| `dir_read(path)` | `LONG` | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
+| `dir_entry_name(i)` | `STRPTR` | Name of entry i (from 0) of the last dir_read; "" past the end |  |
+| `dir_entry_size(i)` | `LONG` | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
+| `dir_entry_is_dir(i)` | `BOOL` | True if entry i of the last dir_read is a directory |  |
+| `dir_entry_date(i)` | `LONG` | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
 | `console_read(buffer, maxlen)` | `LONG` | Read from console |  |
 | `console_write(str)` | `void` | Write to console |  |
 | `file_load(filename, buffer, maxsize)` | `LONG` | Load entire file into buffer, returns bytes read or -1 |  |
@@ -671,6 +676,63 @@ Total: 744 functions, 744 implemented, 0 not implemented.
 | `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
 | `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote (output and error output), its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends) |  |
+| `run_start(command, timeout_ms)` | `LONG` | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
+| `run_ready(run)` | `BOOL` | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
+| `run_break(run)` | `void` | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |
+| `run_finish(run)` | `STRPTR` | What a run_start wrote, as run_capture (it waits if it is still running), and forget it |  |
+| `run_rc()` | `LONG` | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
+| `env_get(name)` | `STRPTR` | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
+| `env_set(name, value, save)` | `BOOL` | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
+| `rexx_send(port, command)` | `STRPTR` | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
+| `rexx_rc()` | `LONG` | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
+| `ports_read()` | `LONG` | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
+| `port_name(i)` | `STRPTR` | Name of port i (from 0) of the last ports_read |  |
+| `tasks_read()` | `LONG` | Read the tasks and processes of the system (the program first): how many, for the task_entry_ functions, until the next tasks_read |  |
+| `task_entry_name(i)` | `STRPTR` | Name of task i of the last tasks_read ("Shell Process", "input.device"...) |  |
+| `task_entry_command(i)` | `STRPTR` | The command a Shell process of the last tasks_read is running ("" if none) |  |
+| `task_entry_state(i)` | `STRPTR` | State of task i: "running" (the program), "ready" or "waiting" |  |
+| `task_entry_priority(i)` | `LONG` | Priority of task i of the last tasks_read |  |
+| `task_entry_cli(i)` | `LONG` | Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process |  |
+| `assigns_read()` | `LONG` | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
+| `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
+| `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+
+## Debugger (the debugged program, built with dash --debug)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `dbg_start(program, args)` | `BOOL` | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
+| `dbg_error()` | `STRPTR` | Why the last dbg_start failed |  |
+| `dbg_state()` | `LONG` | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
+| `dbg_signal()` | `LONG` | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
+| `dbg_wait(ms)` | `LONG` | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
+| `dbg_break(file, line)` | `BOOL` | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
+| `dbg_unbreak(file, line)` | `BOOL` | Take the breakpoint out of that line |  |
+| `dbg_continue()` | `BOOL` | Go on (from the start or a stop) until a breakpoint or the end |  |
+| `dbg_step()` | `BOOL` | Go on to the next line, into the functions it calls |  |
+| `dbg_next()` | `BOOL` | Go on to the next line of this function (or of the one that called it) |  |
+| `dbg_out()` | `BOOL` | Go on until the function returns: the next line of the one that called it |  |
+| `dbg_pause()` | `BOOL` | Stop the running program at the next line it runs |  |
+| `dbg_end(ms)` | `BOOL` | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
+| `dbg_rc()` | `LONG` | The return code of the ended program |  |
+| `dbg_file()` | `STRPTR` | The file of the line where the program stopped (its full path) |  |
+| `dbg_line()` | `LONG` | The line where the program stopped (0 if it is not stopped) |  |
+| `dbg_function()` | `STRPTR` | The function where the program stopped ("Main", "Punto.mover"...) |  |
+| `dbg_frames()` | `LONG` | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
+| `dbg_frame_function(i)` | `STRPTR` | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
+| `dbg_frame_line(i)` | `LONG` | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
+| `dbg_frame_file(i)` | `STRPTR` | The file of call i (its full path) |  |
+| `dbg_vars(i)` | `LONG` | How many variables call i sees: its parameters and the variables declared up to its line |  |
+| `dbg_var_name(i, k)` | `STRPTR` | Name of variable k (from 0) of call i |  |
+| `dbg_var_type(i, k)` | `STRPTR` | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
+| `dbg_globals()` | `LONG` | How many global variables the program has |  |
+| `dbg_global_name(g)` | `STRPTR` | Name of global g (from 0) |  |
+| `dbg_value(i, expr)` | `STRPTR` | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
+| `dbg_value_type(i, expr)` | `STRPTR` | The type of expr in call i ("" if it cannot) |  |
+| `dbg_reg(n)` | `LONG` | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
+| `dbg_peek(addr, size)` | `LONG` | 1, 2 or 4 bytes of memory at addr, without sign |  |
+| `dbg_output()` | `STRPTR` | What the program has written so far (output and error output) |  |
 
 ## Pictures decoded by the program (no datatypes)
 
@@ -842,6 +904,8 @@ Total: 744 functions, 744 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_app_rexx(app, func)` | `void` | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
+| `mui_rexx_fail(rc)` | `void` | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
 | `mui_app_end()` | `void` | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
 | `mui_window_begin(title, id)` | `APTR` | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
 | `mui_window_end()` | `void` | End the window started with mui_window_begin |  |

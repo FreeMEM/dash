@@ -39,7 +39,7 @@ else
 fi
 mkdir -p "$2/Libs" "$2/C"
 for lib in asl diskfont iffparse locale mathieeesingtrans mathieeedoubbas mathieeedoubtrans \
-           mathtrans lowlevel commodities datatypes workbench icon 68040 68060 680x0 mmu; do
+           mathtrans lowlevel commodities datatypes workbench icon 68040 68060 680x0 mmu rexxsyslib; do
     "$XDF" "$tmp/disk.hdf" read "Libs/$lib.library" "$2/Libs/$lib.library" >/dev/null 2>&1 \
         && echo "Libs/$lib.library"
 done

@@ -28,6 +28,17 @@ static Obj *obj;
 int memcheck;
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
 int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
+/* --debug (el depurador, docs/DEPURADOR_LOOP.md): un NOP al principio de cada línea, que el depurador cambia por
+   un TRAP; sin copiar funciones en línea, sin variables en registros ni como constantes; y la información para el
+   depurador en debug_info (el texto del HUNK_DEBUG, que escribe hunk.c) */
+int debug;
+Buf debug_info;
+typedef struct { int label, file, line; } DbgLine;
+typedef struct { char *name; int start, end, file, line; } DbgFunc;
+typedef struct { int func, type, off, line; char *name; } DbgVar;
+static struct { DbgLine *v; int n, cap; } dbg_lines;
+static struct { DbgFunc *v; int n, cap; } dbg_funcs;
+static struct { DbgVar *v; int n, cap; } dbg_vars;
 static int prof_label = -1;   /* los nombres de las funciones, para el perfil */
 
 /* ---- etiquetas y saltos ---- */
@@ -556,6 +567,20 @@ static void add_repl(Node *n, int slot, int need_reg)
     VEC_PUSH(repls, r);
 }
 
+/* --debug: una variable o parámetro de la función que se genera, con dónde está (en el marco: su desplazamiento
+   sobre a5) */
+static void dbg_var(const char *name, int type, int slot, int line)
+{
+    DbgVar d;
+    if (!debug || pass != 2 || !dbg_funcs.n || slot < 0) return;
+    d.func = dbg_funcs.n - 1;
+    d.name = (char *)name;
+    d.type = type;
+    d.off = slot_off.v[slot];
+    d.line = line;
+    VEC_PUSH(dbg_vars, d);
+}
+
 static Var declare(const char *name, int type)
 {
     Local lc;
@@ -570,6 +595,7 @@ static Var declare(const char *name, int type)
     lc.owned = 0;
     VEC_PUSH(locals, lc);
     use_slot(lc.slot);
+    dbg_var(name, type, lc.slot, cur_line);
     return slot_var(lc.slot, type);
 }
 
@@ -3209,6 +3235,7 @@ static int can_inline(int idx)
 {
     int i;
     static int sin_copiar = -1;
+    if (debug) return 0;                               /* --debug: cada función en su sitio */
     if (sin_copiar < 0) sin_copiar = getenv("DASHC_SIN_COPIAR") != NULL;   /* (para buscar fallos: sin copiar en línea) */
     if (sin_copiar) return 0;
     {
@@ -5472,6 +5499,18 @@ static void gen_stmt(Node *n)
     cur_file = n->file;
     cur_file_g = n->file;
     src_name = src_files.v[n->file];                   /* para los errores al compilar */
+    if (debug) {
+        /* el sitio de la línea: un NOP que el depurador cambia por un TRAP */
+        if (pass == 2) {
+            DbgLine d;
+            d.label = new_label();
+            def_label(d.label);
+            d.file = n->file;
+            d.line = n->line;
+            VEC_PUSH(dbg_lines, d);
+        }
+        w(0x4E71);                                     /* nop */
+    }
     if (memcheck) {
         /* el sitio de la instrucción, para los avisos (_DASH_MC_WHERE de ./dash) */
         char where[600];
@@ -5551,7 +5590,7 @@ static void gen_stmt(Node *n)
             }
         }
         if (n->kind == S_ASSIGN && gen_update(n)) return;
-        if (fold(n->a, &k) && lookup_kind(n->name) == V_GLOBAL && !lookup_global(n->name) &&
+        if (!debug && fold(n->a, &k) && lookup_kind(n->name) == V_GLOBAL && !lookup_global(n->name) &&
             count_assigns(cur_body(), n->name) == 1) {
             /* una variable que solo se asigna una vez, con un valor fijo, es una constante */
             Local lc;
@@ -5814,6 +5853,15 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
     sp_depth = 0;
     param_base = 4 + 4 * nregs;                        /* dirección de vuelta y registros guardados */
     def_label(label);
+    if (debug && pass == 2) {
+        DbgFunc d;
+        d.name = f ? f->name : "Main";
+        d.start = label;
+        d.end = -1;
+        d.file = f ? f->file : 0;
+        d.line = f ? f->line : 0;
+        VEC_PUSH(dbg_funcs, d);
+    }
     if (!frameless) {
         w(0x4E55);                                     /* link a5,#-marco */
         frame_at = (uint32_t)obj->code.n;
@@ -5835,6 +5883,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             lc.entry = 0;
             lc.owned = 0;
             VEC_PUSH(locals, lc);
+            dbg_var(lc.name, lc.type, lc.slot, f->line);
             if (slot_reg.v[lc.slot] >= 0) {
                 if (frameless) {
                     w(0x202F | slot_reg.v[lc.slot] << 9);   /* move.l d16(sp),dN */
@@ -5940,6 +5989,10 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         put_word(obj->code.p + frame_at, -4 * nframe);
     }
     w(0x4E75);                                         /* rts */
+    if (debug && pass == 2) {
+        dbg_funcs.v[dbg_funcs.n - 1].end = new_label();
+        def_label(dbg_funcs.v[dbg_funcs.n - 1].end);
+    }
 }
 
 /* lo generado hasta un punto, para deshacer lo que venga después */
@@ -5984,7 +6037,7 @@ static void gen_function(int label, Func *f, NodeList *body)
     /* de más a menos usado: al primer registro libre durante toda su vida, desde que
        se asigna hasta su último uso (dos variables que no viven a la vez lo comparten) */
     for (i = 0; i < slot_reg.n; i++) slot_reg.v[i] = -1;
-    for (;;) {
+    while (!debug) {                                   /* (--debug: todas en el marco, donde las lee el depurador) */
         int best = -1, j;
         for (i = 0; i < slot_uses.n; i++)
             if (slot_reg.v[i] == -1 && slot_uses.v[i] >= MIN_USES && (best < 0 || slot_uses.v[i] > slot_uses.v[best]))
@@ -6007,6 +6060,7 @@ static void gen_function(int label, Func *f, NodeList *body)
         if (slot_reg.v[i] < 0) slot_reg.v[i] = -1;
         if (slot_reg.v[i] < 0 && slot_off.v[i] < 0) frameless = 0;
     }
+    if (debug) frameless = 0;
     pass = 2;
     gen_function_pass(label, f, body);
 }
@@ -6296,6 +6350,77 @@ static void gen_struct_types(void)
     }
 }
 
+/* ---- --debug: el texto del HUNK_DEBUG (docs/DEPURADOR_LOOP.md) ---- */
+
+static void dbg_printf(const char *fmt, ...)
+{
+    char tmp[2200];
+    va_list ap;
+    int n;
+    va_start(ap, fmt);
+    n = vsnprintf(tmp, sizeof tmp, fmt, ap);
+    va_end(ap);
+    buf_bytes(&debug_info, tmp, (size_t)(n < (int)sizeof tmp ? n : (int)sizeof tmp - 1));
+}
+
+/* un tipo como en Dash, sin espacios: Int, String, Punto, [Int], {String:Int} */
+static void dbg_type(int t)
+{
+    if (IS_ARR(t)) {
+        dbg_printf("[");
+        dbg_type(t - TY_ARR);
+        dbg_printf("]");
+    } else if (IS_DICT(t)) {
+        dbg_printf("{");
+        dbg_type(dict_types.v[t - TY_DICT].key);
+        dbg_printf(":");
+        dbg_type(dict_types.v[t - TY_DICT].val);
+        dbg_printf("}");
+    } else if (IS_STRUCT(t)) {
+        dbg_printf("%s", prog->structs.v[t - TY_STRUCT].name);
+    } else {
+        static const char *const names[] = {"Void", "Int", "Bool", "String", "Char", "Nil", "Float", "Double", "Fixed"};
+        dbg_printf("%s", t >= 0 && t <= TY_FIXED ? names[t] : "Int");
+    }
+}
+
+/* Una cosa por línea: F ficheros, G globales (desplazamiento en el hunk de datos), S campos de los structs
+   (desplazamiento desde el puntero al objeto), P funciones (dónde empiezan y acaban en el hunk de código), V sus
+   variables y parámetros (desplazamiento sobre a5, línea donde se declaran) y L el NOP de cada línea. */
+static void debug_text(Program *p)
+{
+    int i, j;
+    debug_info.n = 0;
+    dbg_printf("DASH-DEBUG 1\n");
+    for (i = 0; i < src_files.n; i++) dbg_printf("F %d %s\n", i, src_files.v[i]);
+    for (i = 0; i < p->globals.n; i++) {
+        dbg_printf("G %s ", p->globals.v[i].name);
+        dbg_type(global_type[i]);
+        dbg_printf(" %d %d\n", i * 4, p->globals.v[i].file);
+    }
+    for (i = 0; i < p->structs.n; i++) {
+        Struct *st = &p->structs.v[i];
+        if (st->iface) continue;
+        for (j = 0; j < st->fields.n; j++) {
+            dbg_printf("S %s %s ", st->name, st->fields.v[j].name);
+            dbg_type(resolve_type(st->fields.v[j].type, st->fields.v[j].line, st->fields.v[j].col));
+            dbg_printf(" %d\n", 4 * j);
+        }
+    }
+    for (i = 0; i < dbg_funcs.n; i++) {
+        DbgFunc *d = &dbg_funcs.v[i];
+        dbg_printf("P %d %s %ld %ld %d %d\n", i, d->name, labels.v[d->start], labels.v[d->end], d->file, d->line);
+    }
+    for (i = 0; i < dbg_vars.n; i++) {
+        DbgVar *d = &dbg_vars.v[i];
+        dbg_printf("V %d %s ", d->func, d->name);
+        dbg_type(d->type);
+        dbg_printf(" %d %d\n", d->off, d->line);
+    }
+    for (i = 0; i < dbg_lines.n; i++)
+        dbg_printf("L %ld %d %d\n", labels.v[dbg_lines.v[i].label], dbg_lines.v[i].file, dbg_lines.v[i].line);
+}
+
 void gen_program(Program *p, Obj *o)
 {
     int i, main_label, again, files_label;
@@ -6517,6 +6642,7 @@ void gen_program(Program *p, Obj *o)
         }
     }
     resolve_fixups();
+    if (debug) debug_text(p);
     /* las @export, con su nombre de C, para hunk.c */
     for (i = 0; i < p->funcs.n; i++)
         if (p->funcs.v[i].exported) {

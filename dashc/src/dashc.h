@@ -231,6 +231,7 @@ typedef struct {
 Program *parse(Token *toks);
 char *dashui_generate(const char *json, const char *filename);   /* dashui.c: un .dashui como Dash */
 char *read_text(const char *path);   /* main.c: el fichero entero, o NULL */
+extern char dash_home[1024];        /* main.c: la carpeta de Dash (con lib/), "" sin ella */
 int runtime_has(const char *sym);    /* hunk.c: ¿define el runtime este símbolo? */
 extern const uint8_t *rt_blob;       /* main.c: el runtime que se va a enlazar */
 extern size_t rt_blob_len;
@@ -258,6 +259,8 @@ typedef struct {
 void gen_program(Program *prog, Obj *obj);
 void write_c_header(Program *prog, FILE *f);   /* dashc --cabecera */
 extern int memcheck;
+extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info) */
+extern Buf debug_info;
 extern int profile;    /* --perfil */
 extern int cpu020;     /* --fpu o --cpu 68020 y más */   /* --memcheck: como ./dash --memcheck */
 

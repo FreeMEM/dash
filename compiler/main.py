@@ -190,6 +190,10 @@ class DashCompiler:
         cwd = os.getcwd()
         if cwd not in search_paths:
             search_paths.append(cwd)
+        # and Dash's own folder (with lib/): import "lib/json.dash" from a program anywhere
+        home = os.environ.get("DASH_HOME") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if home not in search_paths:
+            search_paths.append(home)
 
         # Try each search path
         for base in search_paths:

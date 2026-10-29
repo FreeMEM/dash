@@ -13,7 +13,7 @@ import sys
 ROOT = os.path.dirname(os.path.realpath(__file__))
 DASHC = os.path.join(ROOT, "dashc", "dashc")
 # las opciones de dash1 que dashc aún no tiene
-SOLO_DASH1 = {"--debug", "--multifile", "--small", "-O", "--optimize", "-O0",
+SOLO_DASH1 = {"--multifile", "--small", "-O", "--optimize", "-O0",
               "--no-optimize", "--no-hunk"}
 
 

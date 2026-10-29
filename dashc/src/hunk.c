@@ -810,6 +810,15 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
                 fprintf(stderr, "%6u %c %s\n", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], name);
             }
 
+    if (debug_info.n) {
+        /* --debug: dónde quedó _dash_quit (el depurador acaba el programa por ahí) */
+        Sym *q = find_sym("__dash_quit");
+        if (q && !q->abs && keep[q->hunk] && outh[q->hunk] == 0) {
+            char line[40];
+            snprintf(line, sizeof line, "Q %u\n", (unsigned)(base[q->hunk] + q->val));
+            buf_bytes(&debug_info, line, strlen(line));
+        }
+    }
     f = fopen(out, "wb");
     if (!f) fatal("no se puede escribir %s", out);
     wl(f, HUNK_HEADER);
@@ -849,6 +858,15 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
                     if (outrel[k].v[m].target == j) wl(f, outrel[k].v[m].off);
             }
             wl(f, 0);
+        }
+        if (k == 0 && debug_info.n) {
+            /* --debug: el texto para el depurador (gen68k.c, debug_text); LoadSeg no lo carga */
+            static const uint8_t zero[4];
+            uint32_t n = ((uint32_t)debug_info.n + 3) / 4;
+            wl(f, HUNK_DEBUG);
+            wl(f, n);
+            fwrite(debug_info.p, 1, debug_info.n, f);
+            fwrite(zero, 1, n * 4 - debug_info.n, f);
         }
         wl(f, HUNK_END);
     }

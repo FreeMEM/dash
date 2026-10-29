@@ -28,7 +28,8 @@ Machines (EMU_MACHINES): --emu is an A1200 with Kickstart 3.1, --emu-a500 an A50
 ($DASH_KICKSTART_32 and $DASH_EMU_SYS_32: the files of a 3.2 Workbench).
 Tests with "# emu-net: PORT" run in their own boot with FS-UAE's bsdsocket.library (the PC's
 network) and an echo server on 127.0.0.1:PORT of the PC (one line in, "eco: <line>" out);
-"# emu-net-tls: PORT" makes it a TLS server. Tests with "# emu-needs: amisslmaster.library" boot
+"# emu-net-tls: PORT" makes it a TLS server, "# emu-http: PORT" an HTTP server that answers every request with JSON:
+its method, path, Content-Type, X-Prueba header and body (lib/red/http.dash). Tests with "# emu-needs: amisslmaster.library" boot
 the system in $DASH_EMU_SYS_SSL / $DASH_EMU_SYS_32_SSL (tools/emu_sys_amissl.sh), not on the A500.
 Tests with "# emu-needs: muimaster.library" run in a second boot with MUI 5 installed
 ($DASH_EMU_SYS_MUI, $DASH_EMU_SYS_32_MUI: tools/emu_sys_mui.sh); not on the A500 (MUI needs a 68020).
@@ -453,8 +454,10 @@ def run_multifile_test(test_file: Path) -> TestResult:
             softfloat += libraries_for((Path(f).read_text() for f in c_files), gcc_path)
             from compiler.cflags import mui_flags
             from compiler.cflags import link_flags
-            try:   # MUI SDK headers when a module uses MUI; @link files (dashweb D10)
+            from compiler.cflags import amissl_flags
+            try:   # MUI SDK headers when a module uses MUI; AmiSSL's for TLS; @link files (dashweb D10)
                 mui = mui_flags(Path(f).read_text() for f in c_files)
+                mui += amissl_flags([Path(f).read_text() for f in c_files])
                 link_includes, link_files = link_flags([Path(f).read_text() for f in c_files])
             except FileNotFoundError as e:
                 mui, link_includes, link_files, error = [], [], [], str(e)
@@ -547,9 +550,15 @@ def emu_net_port(test_file: Path) -> Optional[int]:
     bsdsocket.library (the PC's network) and, on 127.0.0.1:PORT of the PC, an echo server that
     reads one line and answers "eco: <line>" before closing."""
     for l in test_file.read_text().splitlines():
-        if l.startswith("# emu-net:") or l.startswith("# emu-net-tls:"):
+        if l.startswith("# emu-net:") or l.startswith("# emu-net-tls:") or l.startswith("# emu-http:"):
             return int(l.split(":", 1)[1].strip())
     return None
+
+
+def emu_http(test_file: Path) -> bool:
+    """'# emu-http: PORT' (lib/red/http.dash): the server on PORT speaks HTTP/1.1 and answers each request with
+    JSON of what it got ({"method", "path", "type", "x", "body"}), Content-Length and Connection: close."""
+    return any(l.startswith("# emu-http:") for l in test_file.read_text().splitlines())
 
 
 def emu_net_tls(test_file: Path) -> bool:
@@ -560,10 +569,33 @@ def emu_net_tls(test_file: Path) -> bool:
 
 class _EchoServer:
     """The server of '# emu-net:' tests, in a thread while the emulator runs (TLS on tls_ports)."""
-    def __init__(self, ports, tls_ports=()):
+    def __init__(self, ports, tls_ports=(), http_ports=()):
+        import http.server
+        import json
         import socketserver
         import threading
         context = self._tls_context() if tls_ports else None
+
+        class HTTPHandler(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def answer(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                body = self.rfile.read(n).decode("latin-1") if n else ""
+                out = json.dumps({"method": self.command, "path": self.path,
+                                  "type": self.headers.get("Content-Type") or "",
+                                  "x": self.headers.get("X-Prueba") or "", "body": body}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(out)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(out)
+
+            do_GET = do_POST = do_PUT = do_DELETE = answer
+
+            def log_message(self, *args):
+                pass
 
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
@@ -579,7 +611,8 @@ class _EchoServer:
                 pass   # a client that refuses the certificate (a test of that) is not an error here
 
         socketserver.ThreadingTCPServer.allow_reuse_address = True
-        self.servers = [(TLSServer if port in tls_ports else socketserver.ThreadingTCPServer)(("127.0.0.1", port), Handler)
+        self.servers = [(TLSServer if port in tls_ports else socketserver.ThreadingTCPServer)(
+                            ("127.0.0.1", port), HTTPHandler if port in http_ports else Handler)
                         for port in ports]
         for server in self.servers:
             threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -672,7 +705,8 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         servers = plain + ssl_tests
         if servers:
             server = _EchoServer(sorted({emu_net_port(t) for t in servers}),
-                                 {emu_net_port(t) for t in servers if emu_net_tls(t)})
+                                 {emu_net_port(t) for t in servers if emu_net_tls(t)},
+                                 {emu_net_port(t) for t in servers if emu_http(t)})
             try:
                 if plain:
                     results += run_emu_boot(plain, machine, rom, os.environ.get(machine["sys_env"]), memcheck,

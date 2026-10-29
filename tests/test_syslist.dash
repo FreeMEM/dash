@@ -1,0 +1,44 @@
+# Test: what runs in the system (Dash 2.0, for Inferencia): the tasks (the program first, running, in a Shell),
+# the assigns (C: and LIBS: always there), the public ports, and an ARexx command to a port that is not there.
+# emu-needs: rexxsyslib.library
+# expect-out: tareas: true running true true
+# expect-out: input.device: true waiting
+# expect-out: asignaciones: true true true
+# expect-out: puertos: true
+# expect-out: rexx: [] -1
+
+Main
+    n = tasks_read()
+    yo = task_entry_state(0)
+    cli = task_entry_cli(0)
+    cmd = task_entry_command(0)
+    Print "tareas: #{n > 3} #{yo} #{cli > 0} #{cmd.length > 0}"
+    hay = false
+    estado = ""
+    for i in (0..n - 1)
+        if task_entry_name(i) == "input.device"
+            hay = true
+            estado = task_entry_state(i)
+        end
+    end
+    Print "input.device: #{hay} #{estado}"
+
+    m = assigns_read()
+    c = false
+    libs = false
+    for i in (0..m - 1)
+        if assign_name(i) == "C"
+            c = str_contains(assign_path(i), ":")
+        end
+        if assign_name(i) == "LIBS"
+            libs = assign_path(i).length > 0
+        end
+    end
+    Print "asignaciones: #{m > 2} #{c} #{libs}"
+
+    p = ports_read()
+    Print "puertos: #{p >= 0}"
+
+    r = rexx_send("NOESTE.1", "HOLA")
+    Print "rexx: [#{r}] #{rexx_rc()}"
+end

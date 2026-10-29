@@ -5289,6 +5289,1285 @@ static LONG _dash_task_priority(LONG n) {
     return SetTaskPri(FindTask(NULL), n);
 }
 
+/* env_get(name): a variable of the program's Shell or of ENV: (GetVar, up to its first line end); "" without it.
+   env_set(name, value, save): in ENV:, and with save also in ENVARC: (V39+) */
+static STRPTR _dash_env_get(STRPTR name) {
+    LONG size = 1024, n;
+    STRPTR buf, r;
+    if (!name || !*name) return _dash_str_dup((STRPTR)"", TRUE);
+    for (;;) {
+        if (!(buf = (STRPTR)AllocVec(size, MEMF_ANY))) return _dash_str_dup((STRPTR)"", TRUE);
+        n = GetVar(name, buf, size, 0);
+        if (n < size - 1 || size >= 262144) break;
+        FreeVec(buf);          /* it may not have fitted */
+        size *= 8;
+    }
+    if (n < 0) buf[0] = 0;
+    r = _dash_str_dup(buf, TRUE);
+    FreeVec(buf);
+    return r;
+}
+
+static BOOL _dash_env_set(STRPTR name, STRPTR value, BOOL save) {
+    if (!name || !*name) return FALSE;
+    if (!value) value = (STRPTR)"";
+    return SetVar(name, value, strlen((char *)value), GVF_GLOBAL_ONLY | (save ? GVF_SAVE_VAR : 0)) != 0;
+}
+
+"""
+
+    # Dash 2.0 (for Inferencia): ARexx as a client, and what runs in the system: public ports, tasks, assigns
+    SYSLIST_RUNTIME = """\
+/* rexx_send(port, command): an ARexx command to the public port of another program ("address PORT command"),
+   waiting for its answer: RESULT as the text it returns, RC in rexx_rc() (-1: no such port, -2: no rexxsyslib).
+   ports_read, tasks_read and assigns_read take a picture of the public ports, the tasks and the assigns, read
+   with port_name(i), task_entry_*(i) and assign_*(i) until the next one. */
+#define REXXSYSLIB_BASE_NAME _dash_rexx_base
+#include <rexx/storage.h>
+#include <rexx/errors.h>
+#include <proto/rexxsyslib.h>
+#include <dos/dosextens.h>
+static struct Library *_dash_rexx_base = NULL;
+static LONG _dash_rexx_rc_last = 0;
+
+static STRPTR _dash_rexx_send(STRPTR port, STRPTR command) {
+    struct MsgPort *reply, *to = NULL;
+    struct RexxMsg *rm;
+    STRPTR res = NULL;
+    _dash_rexx_rc_last = -1;
+    if (!port || !command) return _dash_str_dup((STRPTR)"", TRUE);
+    if (!_dash_rexx_base && !(_dash_rexx_base = OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36))) {
+        _dash_rexx_rc_last = -2;
+        return _dash_str_dup((STRPTR)"", TRUE);
+    }
+    if (!(reply = CreateMsgPort())) return _dash_str_dup((STRPTR)"", TRUE);
+    if ((rm = CreateRexxMsg(reply, NULL, NULL))) {
+        if ((rm->rm_Args[0] = (STRPTR)CreateArgstring(command, strlen((char *)command)))) {
+            rm->rm_Action = RXCOMM | RXFF_RESULT;
+            Forbid();
+            if ((to = FindPort(port))) PutMsg(to, &rm->rm_Node);
+            Permit();
+            if (to) {
+                /* (it must come back before the message can be freed: no time limit) */
+                WaitPort(reply);
+                GetMsg(reply);
+                _dash_rexx_rc_last = rm->rm_Result1;
+                if (rm->rm_Result1 == 0 && rm->rm_Result2) {
+                    res = _dash_str_dup((STRPTR)rm->rm_Result2, TRUE);
+                    DeleteArgstring((UBYTE *)rm->rm_Result2);
+                }
+            }
+            DeleteArgstring((UBYTE *)rm->rm_Args[0]);
+        }
+        DeleteRexxMsg(rm);
+    }
+    DeleteMsgPort(reply);
+    return res ? res : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static LONG _dash_rexx_rc(void) { return _dash_rexx_rc_last; }
+
+/* A picture: texts one after another in one block, a table of where each starts, and numbers */
+typedef struct { LONG n; char **text; LONG *num; char *pool; } _DashSysTab;
+static _DashSysTab _dash_ports_tab, _dash_tasks_tab, _dash_assigns_tab;
+
+static void _dash_systab_free(_DashSysTab *t) {
+    if (t->text) FreeVec(t->text);
+    if (t->num) FreeVec(t->num);
+    if (t->pool) FreeVec(t->pool);
+    t->text = NULL;
+    t->num = NULL;
+    t->pool = NULL;
+    t->n = 0;
+}
+
+/* Room for n rows of k texts and k numbers, and size bytes of text */
+static BOOL _dash_systab_alloc(_DashSysTab *t, LONG n, LONG k, LONG size) {
+    _dash_systab_free(t);
+    t->text = (char **)AllocVec((n * k + 1) * sizeof(char *), MEMF_ANY | MEMF_CLEAR);
+    t->num = (LONG *)AllocVec((n * k + 1) * sizeof(LONG), MEMF_ANY | MEMF_CLEAR);
+    t->pool = (char *)AllocVec(size + 1, MEMF_ANY);
+    if (!t->text || !t->num || !t->pool) { _dash_systab_free(t); return FALSE; }
+    return TRUE;
+}
+
+static STRPTR _dash_systab_text(_DashSysTab *t, LONG k, LONG i, LONG j) {
+    char *s = i >= 0 && i < t->n ? t->text[i * k + j] : NULL;
+    return _dash_str_dup((STRPTR)(s ? s : ""), TRUE);
+}
+
+static LONG _dash_systab_num(_DashSysTab *t, LONG k, LONG i, LONG j) {
+    return i >= 0 && i < t->n ? t->num[i * k + j] : 0;
+}
+
+/* Copy a C text (or BSTR, bstr TRUE) into the pool: where it went */
+static char *_dash_systab_put(char **at, char *end, const char *s, LONG len) {
+    char *r = *at;
+    if (len < 0) len = s ? strlen(s) : 0;
+    if (r + len + 1 > end) return NULL;
+    if (len) CopyMem((APTR)s, r, len);
+    r[len] = 0;
+    *at = r + len + 1;
+    return r;
+}
+
+static LONG _dash_ports_read(void) {
+    struct Node *nd;
+    LONG n = 0, size = 0;
+    char *at, *end;
+    Forbid();
+    for (nd = SysBase->PortList.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        if (nd->ln_Name) { n++; size += strlen(nd->ln_Name) + 1; }
+    Permit();
+    n += 16;
+    size += 1024;
+    if (!_dash_systab_alloc(&_dash_ports_tab, n, 1, size)) return -1;
+    at = _dash_ports_tab.pool;
+    end = at + size;
+    Forbid();
+    for (nd = SysBase->PortList.lh_Head; nd->ln_Succ && _dash_ports_tab.n < n; nd = nd->ln_Succ) {
+        char *s;
+        if (!nd->ln_Name || !(s = _dash_systab_put(&at, end, nd->ln_Name, -1))) continue;
+        _dash_ports_tab.text[_dash_ports_tab.n++] = s;
+    }
+    Permit();
+    return _dash_ports_tab.n;
+}
+
+static STRPTR _dash_port_name(LONG i) { return _dash_systab_text(&_dash_ports_tab, 1, i, 0); }
+
+/* Tasks: name, command of a Shell process, state; priority, CLI number */
+static void _dash_tasks_add(struct Task *tk, char **at, char *end, LONG n, const char *state) {
+    _DashSysTab *t = &_dash_tasks_tab;
+    LONG r = t->n;
+    if (r >= n) return;
+    t->text[r * 3] = _dash_systab_put(at, end, tk->tc_Node.ln_Name ? tk->tc_Node.ln_Name : "", -1);
+    t->text[r * 3 + 1] = NULL;
+    t->text[r * 3 + 2] = (char *)state;
+    t->num[r * 3] = tk->tc_Node.ln_Pri;
+    t->num[r * 3 + 1] = 0;
+    if (tk->tc_Node.ln_Type == NT_PROCESS) {
+        struct Process *pr = (struct Process *)tk;
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(pr->pr_CLI);
+        if (cli) {
+            UBYTE *b = (UBYTE *)BADDR(cli->cli_CommandName);
+            t->num[r * 3 + 1] = pr->pr_TaskNum;
+            if (b && b[0]) t->text[r * 3 + 1] = _dash_systab_put(at, end, (char *)b + 1, b[0]);
+        }
+    }
+    t->n++;
+}
+
+static LONG _dash_tasks_read(void) {
+    struct Node *nd;
+    LONG n = 1;
+    LONG size;
+    char *at, *end;
+    Forbid();
+    for (nd = SysBase->TaskReady.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    for (nd = SysBase->TaskWait.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    Permit();
+    n += 16;
+    size = n * 160;
+    if (!_dash_systab_alloc(&_dash_tasks_tab, n, 3, size)) return -1;
+    at = _dash_tasks_tab.pool;
+    end = at + size;
+    Forbid();
+    _dash_tasks_add(SysBase->ThisTask, &at, end, n, "running");
+    for (nd = SysBase->TaskReady.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        _dash_tasks_add((struct Task *)nd, &at, end, n, "ready");
+    for (nd = SysBase->TaskWait.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        _dash_tasks_add((struct Task *)nd, &at, end, n, "waiting");
+    Permit();
+    return _dash_tasks_tab.n;
+}
+
+static STRPTR _dash_task_entry_name(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 0); }
+static STRPTR _dash_task_entry_command(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 1); }
+static STRPTR _dash_task_entry_state(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 2); }
+static LONG _dash_task_entry_priority(LONG i) { return _dash_systab_num(&_dash_tasks_tab, 3, i, 0); }
+static LONG _dash_task_entry_cli(LONG i) { return _dash_systab_num(&_dash_tasks_tab, 3, i, 1); }
+
+/* Assigns: name and where (a directory, several separated by ";", or the name of a late or deferred one) */
+static LONG _dash_assigns_read(void) {
+    struct DosList *dl;
+    LONG n = 0, size;
+    char *at, *end, buf[256];
+    dl = LockDosList(LDF_ASSIGNS | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_ASSIGNS))) n++;
+    UnLockDosList(LDF_ASSIGNS | LDF_READ);
+    n += 16;
+    size = n * 400;
+    if (!_dash_systab_alloc(&_dash_assigns_tab, n, 2, size)) return -1;
+    at = _dash_assigns_tab.pool;
+    end = at + size;
+    dl = LockDosList(LDF_ASSIGNS | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_ASSIGNS)) && _dash_assigns_tab.n < n) {
+        UBYTE *b = (UBYTE *)BADDR(dl->dol_Name);
+        LONG r = _dash_assigns_tab.n;
+        char *name, *where = at;
+        if (!b || !(name = _dash_systab_put(&at, end, (char *)b + 1, b[0]))) continue;
+        where = at;
+        if (dl->dol_Type == DLT_DIRECTORY) {
+            struct AssignList *al;
+            BOOL first = TRUE;
+            /* (as C:Assign does, the list held while it asks for the names) */
+            if (dl->dol_Lock && NameFromLock(dl->dol_Lock, (STRPTR)buf, sizeof(buf)))
+                _dash_systab_put(&at, end, buf, -1), first = FALSE;
+            for (al = dl->dol_misc.dol_assign.dol_List; al; al = al->al_Next)
+                if (al->al_Lock && NameFromLock(al->al_Lock, (STRPTR)buf, sizeof(buf))) {
+                    if (!first && at > where) at[-1] = ';';
+                    _dash_systab_put(&at, end, buf, -1);
+                    first = FALSE;
+                }
+            if (first) _dash_systab_put(&at, end, "", 0);
+        } else {
+            STRPTR s = dl->dol_misc.dol_assign.dol_AssignName;
+            _dash_systab_put(&at, end, s ? (char *)s : "", -1);
+        }
+        _dash_assigns_tab.text[r * 2] = name;
+        _dash_assigns_tab.text[r * 2 + 1] = where;
+        _dash_assigns_tab.n++;
+    }
+    UnLockDosList(LDF_ASSIGNS | LDF_READ);
+    return _dash_assigns_tab.n;
+}
+
+static STRPTR _dash_assign_name(LONG i) { return _dash_systab_text(&_dash_assigns_tab, 2, i, 0); }
+static STRPTR _dash_assign_path(LONG i) { return _dash_systab_text(&_dash_assigns_tab, 2, i, 1); }
+
+static void _dash_syslist_cleanup(void) {
+    _dash_systab_free(&_dash_ports_tab);
+    _dash_systab_free(&_dash_tasks_tab);
+    _dash_systab_free(&_dash_assigns_tab);
+    if (_dash_rexx_base) { CloseLibrary(_dash_rexx_base); _dash_rexx_base = NULL; }
+}
+
+"""
+
+    # Dash 2.0 (Forja, the IDE): debugging a program built with dashc --debug (docs/DEPURADOR_LOOP.md)
+    DEBUGGER_RUNTIME = r"""/* Dash debugger runtime (docs/DEPURADOR_LOOP.md): los builtins dbg_*, en los dos Dash. El programa depurado se
+   compila con dashc --debug (dash --debug); el depurador, con cualquiera de los dos.
+
+   Un programa compilado con dashc --debug lleva un NOP al principio de cada línea y un HUNK_DEBUG con dónde está
+   cada cosa (gen68k.c, debug_text). dbg_start lo carga (LoadSeg) y lo lanza en un proceso hijo cuya entrada es
+   _dbg_child: pone su tc_TrapCode (el runtime de Dash, al empezar, pone el suyo y le pasa los TRAP que no son
+   errores) y espera la orden de empezar; entonces lo ejecuta con RunCommand, la salida a un fichero de T:.
+
+   Un punto de parada cambia el NOP de la línea por TRAP #15. El manejador apunta el PC del marco (la instrucción de
+   después del TRAP) y vuelve en modo usuario a _dbg_user_stop, en el proceso hijo: guarda los registros, avisa al
+   depurador y espera. Al seguir los repone y salta al PC apuntado: no hay nada que reponer, el TRAP ocupaba el
+   sitio de un NOP. Paso a paso: todos los NOP a TRAP, y al parar se mira a7 para ver si es la línea que toca. Sin
+   el bit de traza de la CPU, así que vale en Emu68. */
+
+#include <dos/dostags.h>
+#include <dos/dosextens.h>
+#define _DBG_TRAP 0x4E4F                 /* trap #15 (excepción 47) */
+#define _DBG_NOP 0x4E71
+
+enum { DBG_NONE, DBG_PAUSED, DBG_RUNNING, DBG_STOPPED, DBG_ENDED };
+enum { DBG_CONT, DBG_STEP, DBG_NEXT, DBG_OUT };
+
+typedef struct { ULONG off; UWORD file, line; } _DbgLine;
+typedef struct { char *name; ULONG start, end; UWORD file, line; } _DbgFunc;
+typedef struct { char *name, *type; LONG func, off, line; } _DbgVar;     /* func -1: una global (off en datos) */
+typedef struct { char *strct, *name, *type; LONG off; } _DbgField;
+
+static struct {
+    char *text;                          /* el HUNK_DEBUG, partido en trozos (los nombres apuntan dentro) */
+    char *files[64];
+    LONG nfiles;
+    _DbgLine *lines;
+    LONG nlines;
+    UBYTE *bp;                           /* un punto de parada en cada línea */
+    _DbgFunc *funcs;
+    LONG nfuncs;
+    _DbgVar *vars;
+    LONG nvars;
+    _DbgField *fields;
+    LONG nfields;
+    ULONG quit;                          /* _dash_quit del programa (desplazamiento en el código) */
+    BPTR seg;
+    ULONG code, data;                    /* dónde quedaron los hunks de código y datos */
+    struct Task *owner, *child;
+    ULONG owner_mask, child_mask;
+    BYTE owner_sig;
+    BPTR out;
+    char outname[48], *args, *path;
+    volatile LONG state, rc, mode, kill;
+    ULONG ref_a5;                        /* el marco donde se paró al pedir pasar o salir */
+    ULONG *regs;                         /* d0-d7, a0-a6 y el PC de vuelta, en la pila del hijo */
+    ULONG a7, pc;
+    LONG at;                             /* la línea (índice en lines) donde está parado, -1 si ninguna */
+    char error[160];
+    BOOL atexit_done;
+} _dbg;
+
+ULONG _dbg_pc;                           /* (del manejador a _dbg_user_stop) */
+APTR _dbg_old_trap;
+void _dbg_trap(void);
+void _dbg_user_stop(void);
+void _dbg_stopped(ULONG *regs) __attribute__((used));
+
+__asm__(
+"       .section .text._dbg_asm,\"ax\"\n"
+"       .even\n"
+"       .globl  __dbg_trap\n"
+"__dbg_trap:\n"
+"       cmpl    #47,sp@\n"
+"       bne     9f\n"
+"       movel   sp@(6),__dbg_pc\n"          /* el PC del marco (tras el número y el SR) */
+"       movel   #__dbg_user_stop,sp@(6)\n"
+"       addql   #4,sp\n"
+"       rte\n"
+"9:     movel   __dbg_old_trap,sp@-\n"
+"       rts\n"
+"       .globl  __dbg_user_stop\n"
+"__dbg_user_stop:\n"
+"       subql   #4,sp\n"
+"       moveml  d0-d7/a0-a6,sp@-\n"
+"       movel   __dbg_pc,sp@(60)\n"
+"       movel   sp,sp@-\n"
+"       jsr     __dbg_stopped\n"
+"       addql   #4,sp\n"
+"       moveml  sp@+,d0-d7/a0-a6\n"
+"       rts\n"
+);
+
+static void _dbg_fail(const char *what) {
+    strncpy(_dbg.error, what, sizeof(_dbg.error) - 1);
+    _dbg.error[sizeof(_dbg.error) - 1] = 0;
+}
+
+/* La línea (índice) del NOP en esa dirección, -1 si no hay (búsqueda binaria: van en orden) */
+static LONG _dbg_line_at(ULONG addr) {
+    LONG lo = 0, hi = _dbg.nlines - 1;
+    ULONG off = addr - _dbg.code;
+    while (lo <= hi) {
+        LONG m = (lo + hi) / 2;
+        if (_dbg.lines[m].off == off) return m;
+        if (_dbg.lines[m].off < off) lo = m + 1;
+        else hi = m - 1;
+    }
+    return -1;
+}
+
+static void _dbg_patch(LONG i, UWORD op) {
+    *(volatile UWORD *)(_dbg.code + _dbg.lines[i].off) = op;
+}
+
+/* Los TRAP de ahora: los de los puntos de parada, y todos si se va paso a paso */
+static void _dbg_patch_all(BOOL every) {
+    LONG i;
+    for (i = 0; i < _dbg.nlines; i++) _dbg_patch(i, every || _dbg.bp[i] ? _DBG_TRAP : _DBG_NOP);
+    if (SysBase->LibNode.lib_Version >= 37) CacheClearU();
+}
+
+/* En el proceso hijo, en cada TRAP: ¿se para aquí? */
+void _dbg_stopped(ULONG *regs) {
+    ULONG a7 = (ULONG)(regs + 16), pc = regs[15] - 2;
+    LONG i = _dbg_line_at(pc);
+    if (_dbg.kill) {
+        /* acabar: a _dash_quit(20) del programa, con su limpieza de siempre */
+        regs[15] = _dbg.code + _dbg.quit;
+        ((ULONG *)a7)[1] = 20;
+        return;
+    }
+    if (i < 0) return;
+    switch (_dbg.mode) {
+    case DBG_CONT: if (!_dbg.bp[i]) return; break;
+    case DBG_STEP: break;
+    /* (por el marco, a5: dentro de un bucle, a7 puede estar más abajo) */
+    case DBG_NEXT: if (regs[13] < _dbg.ref_a5 && !_dbg.bp[i]) return; break;   /* más hondo: una función a la que llamó */
+    case DBG_OUT: if (regs[13] <= _dbg.ref_a5 && !_dbg.bp[i]) return; break;   /* aún en la función (o más hondo) */
+    }
+    _dbg.regs = regs;
+    _dbg.a7 = a7;
+    _dbg.pc = pc;
+    _dbg.at = i;
+    _dbg.state = DBG_STOPPED;
+    Signal(_dbg.owner, _dbg.owner_mask);
+    Wait(_dbg.child_mask);
+    _dbg.regs = NULL;
+    _dbg.at = -1;
+    if (_dbg.kill) {
+        regs[15] = _dbg.code + _dbg.quit;
+        ((ULONG *)a7)[1] = 20;
+    }
+}
+
+/* La entrada del proceso hijo: su manejador de TRAP, esperar la orden de empezar y el programa */
+static void _dbg_child(void) {
+    struct Task *me = FindTask(NULL);
+    BYTE sig = AllocSignal(-1);
+    LONG rc;
+    _dbg_old_trap = me->tc_TrapCode;
+    me->tc_TrapCode = (APTR)_dbg_trap;
+    _dbg.child_mask = sig >= 0 ? 1UL << sig : SIGBREAKF_CTRL_F;
+    _dbg.child = me;
+    _dbg.state = DBG_PAUSED;
+    Signal(_dbg.owner, _dbg.owner_mask);
+    Wait(_dbg.child_mask);
+    _dbg.state = DBG_RUNNING;
+    SetProgramName((STRPTR)_dbg.path);
+    rc = RunCommand(_dbg.seg, 65536, (STRPTR)_dbg.args, strlen(_dbg.args));
+    me->tc_TrapCode = _dbg_old_trap;
+    if (sig >= 0) FreeSignal(sig);
+    Forbid();                            /* (acabado del todo solo cuando ya ha salido de este código) */
+    _dbg.rc = rc;
+    _dbg.state = DBG_ENDED;
+    Signal(_dbg.owner, _dbg.owner_mask);
+}
+
+/* ---- la información de depuración ---- */
+
+static char *_dbg_word(char **p) {
+    char *s = *p, *e;
+    while (*s == ' ') s++;
+    for (e = s; *e && *e != ' ' && *e != '\n'; e++) ;
+    *p = *e == ' ' ? e + 1 : e;
+    if (*e == ' ') *e = 0;
+    return s;
+}
+
+static LONG _dbg_num(char **p) {
+    char *s = _dbg_word(p);
+    LONG n = 0, neg = 0;
+    if (*s == '-') { neg = 1; s++; }
+    while (*s >= '0' && *s <= '9') n = n * 10 + (*s++ - '0');
+    return neg ? -n : n;
+}
+
+/* El HUNK_DEBUG del ejecutable (el fichero: LoadSeg no lo carga) */
+static BOOL _dbg_read_info(STRPTR path) {
+    BPTR f = Open(path, MODE_OLDFILE);
+    LONG size, at, n, i, nl = 0, nf = 0, nv = 0, ns = 0;
+    ULONG *d = NULL, first, last, type;
+    char *t, *ln, *next;
+    if (!f) { _dbg_fail("no puedo abrir el programa"); return FALSE; }
+    Seek(f, 0, OFFSET_END);
+    size = Seek(f, 0, OFFSET_BEGINNING);
+    if (size > 20 && (d = (ULONG *)AllocVec(size + 4, MEMF_ANY)) && Read(f, d, size) == size) ;
+    else { if (d) FreeVec(d); d = NULL; }
+    Close(f);
+    if (!d || d[0] != 0x3F3) { if (d) FreeVec(d); _dbg_fail("no es un programa de Amiga"); return FALSE; }
+    first = d[3];
+    last = d[4];
+    at = 5 + (last - first + 1);
+    t = NULL;
+    while (at < size / 4) {
+        type = d[at++] & 0x3FFFFFFF;
+        if (type == 0x3E9 || type == 0x3EA) at += 1 + d[at];
+        else if (type == 0x3EB) at++;
+        else if (type == 0x3EC) { while ((n = d[at]) != 0) at += 2 + n; at++; }
+        else if (type == 0x3F1) {
+            n = d[at];
+            if (!strncmp((char *)&d[at + 1], "DASH-DEBUG", 10)) {
+                if ((t = (char *)AllocVec(n * 4 + 2, MEMF_ANY))) {
+                    CopyMem(&d[at + 1], t, n * 4);
+                    t[n * 4] = 0;
+                }
+                break;
+            }
+            at += 1 + n;
+        } else if (type != 0x3F2) break;
+    }
+    FreeVec(d);
+    if (!t) { _dbg_fail("el programa no lleva informaci\363n de depuraci\363n (comp\355lalo con dash --debug)"); return FALSE; }
+    _dbg.text = t;
+    for (ln = t; *ln; ln = next) {
+        for (next = ln; *next && *next != '\n'; next++) ;
+        if (*next) next++;
+        if (*ln == 'L') nl++;
+        else if (*ln == 'P') nf++;
+        else if (*ln == 'V' || *ln == 'G') nv++;
+        else if (*ln == 'S') ns++;
+    }
+    _dbg.lines = (_DbgLine *)AllocVec((nl + 1) * sizeof(_DbgLine), MEMF_ANY | MEMF_CLEAR);
+    _dbg.bp = (UBYTE *)AllocVec(nl + 1, MEMF_ANY | MEMF_CLEAR);
+    _dbg.funcs = (_DbgFunc *)AllocVec((nf + 1) * sizeof(_DbgFunc), MEMF_ANY | MEMF_CLEAR);
+    _dbg.vars = (_DbgVar *)AllocVec((nv + 1) * sizeof(_DbgVar), MEMF_ANY | MEMF_CLEAR);
+    _dbg.fields = (_DbgField *)AllocVec((ns + 1) * sizeof(_DbgField), MEMF_ANY | MEMF_CLEAR);
+    if (!_dbg.lines || !_dbg.bp || !_dbg.funcs || !_dbg.vars || !_dbg.fields) { _dbg_fail("sin memoria"); return FALSE; }
+    for (ln = t; *ln; ln = next) {
+        char *p = ln + 2, k = *ln;
+        for (next = ln; *next && *next != '\n'; next++) ;
+        if (*next) *next++ = 0;
+        if (k == 'F') {
+            i = _dbg_num(&p);
+            if (i >= 0 && i < 64) { _dbg.files[i] = p; if (i >= _dbg.nfiles) _dbg.nfiles = i + 1; }
+        } else if (k == 'L') {
+            _DbgLine *l = &_dbg.lines[_dbg.nlines++];
+            l->off = _dbg_num(&p);
+            l->file = _dbg_num(&p);
+            l->line = _dbg_num(&p);
+        } else if (k == 'P') {
+            _DbgFunc *fn = &_dbg.funcs[_dbg.nfuncs++];
+            _dbg_num(&p);
+            fn->name = _dbg_word(&p);
+            fn->start = _dbg_num(&p);
+            fn->end = _dbg_num(&p);
+            fn->file = _dbg_num(&p);
+            fn->line = _dbg_num(&p);
+        } else if (k == 'V') {
+            _DbgVar *v = &_dbg.vars[_dbg.nvars++];
+            v->func = _dbg_num(&p);
+            v->name = _dbg_word(&p);
+            v->type = _dbg_word(&p);
+            v->off = _dbg_num(&p);
+            v->line = _dbg_num(&p);
+        } else if (k == 'G') {
+            _DbgVar *v = &_dbg.vars[_dbg.nvars++];
+            v->func = -1;
+            v->name = _dbg_word(&p);
+            v->type = _dbg_word(&p);
+            v->off = _dbg_num(&p);
+            v->line = 0;
+        } else if (k == 'S') {
+            _DbgField *s = &_dbg.fields[_dbg.nfields++];
+            s->strct = _dbg_word(&p);
+            s->name = _dbg_word(&p);
+            s->type = _dbg_word(&p);
+            s->off = _dbg_num(&p);
+        } else if (k == 'Q') {
+            _dbg.quit = _dbg_num(&p);
+        }
+    }
+    return TRUE;
+}
+
+/* (keep: el programa acabó; quedan su estado y su código para dbg_state y dbg_rc) */
+static void _dbg_free(BOOL keep) {
+    if (_dbg.seg) { UnLoadSeg(_dbg.seg); _dbg.seg = 0; }
+    if (_dbg.text) FreeVec(_dbg.text);
+    if (_dbg.lines) FreeVec(_dbg.lines);
+    if (_dbg.bp) FreeVec(_dbg.bp);
+    if (_dbg.funcs) FreeVec(_dbg.funcs);
+    if (_dbg.vars) FreeVec(_dbg.vars);
+    if (_dbg.fields) FreeVec(_dbg.fields);
+    if (_dbg.args) FreeVec(_dbg.args);
+    if (_dbg.path) FreeVec(_dbg.path);
+    if (_dbg.owner_sig >= 0 && _dbg.owner) FreeSignal(_dbg.owner_sig);
+    if (_dbg.outname[0]) DeleteFile((STRPTR)_dbg.outname);
+    {
+        char err[160];
+        LONG rc = _dbg.rc;
+        BOOL atexit_done = _dbg.atexit_done;
+        CopyMem(_dbg.error, err, sizeof(err));
+        memset(&_dbg, 0, sizeof(_dbg));
+        CopyMem(err, _dbg.error, sizeof(err));
+        _dbg.atexit_done = atexit_done;
+        if (keep) {
+            _dbg.state = DBG_ENDED;
+            _dbg.rc = rc;
+        }
+    }
+    _dbg.owner_sig = -1;
+    _dbg.at = -1;
+}
+
+/* Esperar a que deje de correr, hasta ms (0: sin tope): el estado */
+static LONG _dbg_wait_ms(LONG ms) {
+    LONG t = 0;
+    while (_dbg.state == DBG_RUNNING && (ms <= 0 || t < ms)) {
+        Delay(1);
+        t += 20;
+    }
+    SetSignal(0, _dbg.owner_mask);
+    return _dbg.state;
+}
+
+/* Acabar el programa depurado: Ctrl-C, todas las líneas paran y van a _dash_quit; espera hasta ms */
+static BOOL _dbg_end(LONG ms) {
+    if (_dbg.state == DBG_NONE || (_dbg.state == DBG_ENDED && !_dbg.seg)) return TRUE;
+    if (_dbg.state == DBG_PAUSED) {
+        /* (sin empezar: empieza y acaba en su primera línea) */
+        _dbg.kill = 1;
+        _dbg_patch_all(TRUE);
+        Signal(_dbg.child, _dbg.child_mask);
+        _dbg.state = DBG_RUNNING;
+    } else if (_dbg.state != DBG_ENDED) {
+        _dbg.kill = 1;
+        _dbg_patch_all(TRUE);
+        Signal(_dbg.child, SIGBREAKF_CTRL_C);
+        if (_dbg.state == DBG_STOPPED) {
+            _dbg.state = DBG_RUNNING;
+            Signal(_dbg.child, _dbg.child_mask);
+        }
+    }
+    _dbg_wait_ms(ms);
+    if (_dbg.state != DBG_ENDED) return FALSE;   /* sigue: no se puede descargar su código */
+    if (_dbg.out) { Close(_dbg.out); _dbg.out = 0; }
+    _dbg_free(TRUE);
+    return TRUE;
+}
+
+static void _dbg_cleanup(void) {
+    _dbg_end(0);
+}
+
+/* ---- los builtins ---- */
+
+/* dbg_start(programa, argumentos): cargado y en pausa antes de su primera línea */
+static LONG _dash_dbg_start(LONG path_, LONG args_) {
+    STRPTR path = (STRPTR)path_, args = (STRPTR)args_;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    BPTR in;
+    if (_dbg.state != DBG_NONE && !_dbg_end(5000)) { _dbg_fail("el programa de antes no acaba"); return FALSE; }
+    _dbg.error[0] = 0;
+    _dbg.owner_sig = -1;
+    _dbg.at = -1;
+    if (!path || !*path) { _dbg_fail("sin programa"); return FALSE; }
+    if (!_dbg.atexit_done) { _dash_atexit(_dbg_cleanup); _dbg.atexit_done = TRUE; }
+    if (!_dbg_read_info(path)) { _dbg_free(FALSE); return FALSE; }
+    if (!_dbg.quit) { _dbg_free(FALSE); _dbg_fail("informaci\363n de depuraci\363n vieja (sin _dash_quit)"); return FALSE; }
+    if (!(_dbg.seg = LoadSeg(path))) { _dbg_free(FALSE); _dbg_fail("no puedo cargar el programa"); return FALSE; }
+    _dbg.code = (ULONG)BADDR(_dbg.seg) + 4;
+    _dbg.data = *(BPTR *)BADDR(_dbg.seg) ? (ULONG)BADDR(*(BPTR *)BADDR(_dbg.seg)) + 4 : 0;
+    _dbg.path = (char *)AllocVec(strlen((char *)path) + 1, MEMF_ANY);
+    _dbg.args = (char *)AllocVec((args ? strlen((char *)args) : 0) + 2, MEMF_ANY);
+    if (!_dbg.path || !_dbg.args) { _dbg_free(FALSE); _dbg_fail("sin memoria"); return FALSE; }
+    strcpy(_dbg.path, (char *)path);
+    strcpy(_dbg.args, args ? (char *)args : "");
+    strcat(_dbg.args, "\n");
+    _dbg.owner = &me->pr_Task;
+    if ((_dbg.owner_sig = AllocSignal(-1)) < 0) { _dbg_free(FALSE); _dbg_fail("sin se\361ales libres"); return FALSE; }
+    _dbg.owner_mask = 1UL << _dbg.owner_sig;
+    /* (compartido, no MODE_NEWFILE: dbg_output lo lee mientras el programa escribe) */
+    sprintf(_dbg.outname, "T:dash_dbg_%lx", (unsigned long)me);
+    DeleteFile((STRPTR)_dbg.outname);
+    if (!(_dbg.out = Open((STRPTR)_dbg.outname, MODE_READWRITE))) {
+        sprintf(_dbg.outname, "RAM:dash_dbg_%lx", (unsigned long)me);
+        DeleteFile((STRPTR)_dbg.outname);
+        _dbg.out = Open((STRPTR)_dbg.outname, MODE_READWRITE);
+    }
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    if (!_dbg.out || !in) {
+        if (in) Close(in);
+        if (_dbg.out) { Close(_dbg.out); _dbg.out = 0; }
+        _dbg_free(FALSE);
+        _dbg_fail("no puedo abrir la salida del programa");
+        return FALSE;
+    }
+    SetSignal(0, _dbg.owner_mask);
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dbg_child, NP_Name, (ULONG)FilePart(path), NP_Cli, TRUE,
+                           NP_Input, in, NP_Output, _dbg.out, NP_CloseInput, TRUE, NP_CloseOutput, FALSE,
+                           NP_StackSize, 8192, TAG_DONE)) {
+        Close(in);
+        Close(_dbg.out);
+        _dbg.out = 0;
+        _dbg_free(FALSE);
+        _dbg_fail("no puedo crear el proceso");
+        return FALSE;
+    }
+    while (_dbg.state != DBG_PAUSED) Wait(_dbg.owner_mask);
+    return TRUE;
+}
+
+/* Por qué falló el último dbg_start */
+static LONG _dash_dbg_error(void) { return (LONG)_dash_str_dup((STRPTR)_dbg.error, TRUE); }
+
+/* El estado: 0 sin programa, 1 en pausa sin empezar, 2 corriendo, 3 parado en una línea, 4 acabado */
+static LONG _dash_dbg_state(void) { return _dbg.state; }
+
+/* La señal que el depurador recibe cuando el programa para o acaba (para mui_wait_event_signals) */
+static LONG _dash_dbg_signal(void) { return (LONG)_dbg.owner_mask; }
+
+static LONG _dash_dbg_wait(LONG ms) { return _dbg_wait_ms(ms); }
+
+/* Las líneas de ese fichero (por el final de su nombre: "prog.dash") con un NOP: true si hay alguna */
+static BOOL _dbg_set(STRPTR file, LONG line, UBYTE on) {
+    LONG i, k = file ? strlen((char *)file) : 0;
+    BOOL found = FALSE;
+    for (i = 0; i < _dbg.nlines; i++) {
+        char *f = _dbg.lines[i].file < _dbg.nfiles ? _dbg.files[_dbg.lines[i].file] : NULL;
+        LONG fl;
+        if (!f || _dbg.lines[i].line != line) continue;
+        fl = strlen(f);
+        if (k > fl || strcmp(f + fl - k, (char *)file) || (fl > k && f[fl - k - 1] != '/' && f[fl - k - 1] != ':'))
+            continue;
+        _dbg.bp[i] = on;
+        found = TRUE;
+    }
+    if (found && _dbg.state != DBG_RUNNING) _dbg_patch_all(FALSE);
+    else if (found) {
+        /* corriendo: solo ese cambio (no se quitan los de paso a paso, que no los hay) */
+        for (i = 0; i < _dbg.nlines; i++) _dbg_patch(i, _dbg.bp[i] ? _DBG_TRAP : _DBG_NOP);
+        if (SysBase->LibNode.lib_Version >= 37) CacheClearU();
+    }
+    return found;
+}
+
+static LONG _dash_dbg_break(LONG file, LONG line) { return _dbg_set((STRPTR)file, line, 1); }
+static LONG _dash_dbg_unbreak(LONG file, LONG line) { return _dbg_set((STRPTR)file, line, 0); }
+
+/* Seguir (de la pausa del principio o de una parada) hasta un punto de parada o el final */
+static LONG _dbg_go(LONG mode) {
+    if (_dbg.state != DBG_PAUSED && _dbg.state != DBG_STOPPED) return FALSE;
+    _dbg.mode = mode;
+    _dbg.ref_a5 = _dbg.state == DBG_STOPPED && _dbg.regs ? _dbg.regs[13] : 0;
+    _dbg_patch_all(mode != DBG_CONT);
+    SetSignal(0, _dbg.owner_mask);
+    _dbg.state = DBG_RUNNING;
+    Signal(_dbg.child, _dbg.child_mask);
+    return TRUE;
+}
+
+static LONG _dash_dbg_continue(void) { return _dbg_go(DBG_CONT); }
+static LONG _dash_dbg_step(void) { return _dbg_go(DBG_STEP); }
+static LONG _dash_dbg_next(void) { return _dbg_go(DBG_NEXT); }
+static LONG _dash_dbg_out(void) { return _dbg_go(DBG_OUT); }
+
+/* Parar en la siguiente línea que pase (el programa corriendo) */
+static LONG _dash_dbg_pause(void) {
+    if (_dbg.state != DBG_RUNNING) return FALSE;
+    _dbg.mode = DBG_STEP;
+    _dbg_patch_all(TRUE);
+    return TRUE;
+}
+
+/* Acabarlo (Ctrl-C y _dash_quit en su siguiente línea): true si acabó en ms */
+static LONG _dash_dbg_end(LONG ms) { return _dbg_end(ms); }
+
+/* El código de salida del programa (acabado) */
+static LONG _dash_dbg_rc(void) { return _dbg.rc; }
+
+/* Dónde está parado: fichero (el nombre entero), línea y función */
+static LONG _dash_dbg_file(void) {
+    char *f = _dbg.at >= 0 && _dbg.lines[_dbg.at].file < _dbg.nfiles ? _dbg.files[_dbg.lines[_dbg.at].file] : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f : ""), TRUE);
+}
+
+static LONG _dash_dbg_line(void) { return _dbg.at >= 0 ? _dbg.lines[_dbg.at].line : 0; }
+
+static _DbgFunc *_dbg_func_at(ULONG pc) {
+    LONG i;
+    ULONG off = pc - _dbg.code;
+    for (i = 0; i < _dbg.nfuncs; i++)
+        if (off >= _dbg.funcs[i].start && off < _dbg.funcs[i].end) return &_dbg.funcs[i];
+    return NULL;
+}
+
+static LONG _dash_dbg_function(void) {
+    _DbgFunc *f = _dbg.at >= 0 ? _dbg_func_at(_dbg.pc) : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f->name : ""), TRUE);
+}
+
+/* Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC (la línea) */
+static LONG _dash_dbg_reg(LONG n) {
+    if (_dbg.state != DBG_STOPPED || !_dbg.regs) return 0;
+    if (n >= 0 && n < 15) return _dbg.regs[n];
+    if (n == 15) return _dbg.a7;
+    if (n == 16) return _dbg.pc;
+    return 0;
+}
+
+/* Memoria: 1, 2 o 4 bytes en addr (sin signo); 0 en una dirección impar con 2 o 4 */
+static LONG _dash_dbg_peek(LONG addr, LONG size) {
+    if (size == 1) return *(volatile UBYTE *)addr;
+    if (addr & 1) return 0;
+    if (size == 2) return *(volatile UWORD *)addr;
+    return *(volatile ULONG *)addr;
+}
+
+/* Lo que el programa ha escrito hasta ahora (su salida y su salida de errores) */
+static LONG _dash_dbg_output(void) {
+    BPTR f;
+    STRPTR s = NULL;
+    LONG n;
+    if (!_dbg.outname[0]) return (LONG)_dash_str_dup((STRPTR)"", TRUE);
+    if (_dbg.out) Flush(_dbg.out);
+    if ((f = Open((STRPTR)_dbg.outname, MODE_OLDFILE))) {
+        Seek(f, 0, OFFSET_END);
+        n = Seek(f, 0, OFFSET_BEGINNING);
+        if (n > 0 && (s = _dash_str_alloc(n, TRUE))) {
+            LONG got = Read(f, s, n);
+            s[got > 0 ? got : 0] = 0;
+        }
+        Close(f);
+    }
+    return (LONG)(s ? s : _dash_str_dup((STRPTR)"", TRUE));
+}
+
+/* ---- la pila de llamadas: la cadena de marcos de a5 (con --debug, todas las funciones tienen marco) ---- */
+
+/* La línea de la dirección pc: la del último NOP antes de ella dentro de su función, -1 si no es de Dash */
+static LONG _dbg_line_before(ULONG pc) {
+    _DbgFunc *f = _dbg_func_at(pc);
+    LONG lo = 0, hi = _dbg.nlines - 1, best = -1;
+    ULONG off = pc - _dbg.code;
+    if (!f) return -1;
+    while (lo <= hi) {
+        LONG m = (lo + hi) / 2;
+        if (_dbg.lines[m].off < off) { best = m; lo = m + 1; }
+        else hi = m - 1;
+    }
+    return best >= 0 && _dbg.lines[best].off >= f->start ? best : -1;
+}
+
+/* El marco i (0, donde está parado; 1, quien lo llamó...): su a5 y su línea (índice en lines); FALSE si no hay */
+static BOOL _dbg_frame(LONG i, ULONG *a5, LONG *line) {
+    ULONG fp, pc;
+    LONG at;
+    if (_dbg.state != DBG_STOPPED || !_dbg.regs || i < 0) return FALSE;
+    fp = _dbg.regs[13];
+    at = _dbg.at;
+    while (i-- > 0) {
+        if (!fp || (fp & 1)) return FALSE;
+        pc = ((ULONG *)fp)[1];                       /* la vuelta, tras el a5 guardado */
+        fp = ((ULONG *)fp)[0];
+        if ((at = _dbg_line_before(pc)) < 0) return FALSE;
+    }
+    if (a5) *a5 = fp;
+    if (line) *line = at;
+    return TRUE;
+}
+
+/* Cuántos marcos hay (1 parado en Main; 0 si no está parado) */
+static LONG _dash_dbg_frames(void) {
+    LONG n = 0;
+    while (n < 1000 && _dbg_frame(n, NULL, NULL)) n++;
+    return n;
+}
+
+static LONG _dash_dbg_frame_line(LONG i) {
+    LONG at;
+    return _dbg_frame(i, NULL, &at) ? _dbg.lines[at].line : 0;
+}
+
+static LONG _dash_dbg_frame_file(LONG i) {
+    LONG at;
+    char *f = _dbg_frame(i, NULL, &at) && _dbg.lines[at].file < _dbg.nfiles ? _dbg.files[_dbg.lines[at].file] : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f : ""), TRUE);
+}
+
+static LONG _dash_dbg_frame_function(LONG i) {
+    LONG at;
+    _DbgFunc *f = _dbg_frame(i, NULL, &at) ? _dbg_func_at(_dbg.code + _dbg.lines[at].off) : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f->name : ""), TRUE);
+}
+
+/* ---- las variables y su valor (G5) ---- */
+
+/* Las variables visibles en el marco i: los parámetros y las de su función declaradas antes de la línea donde está
+   (de dos con el mismo nombre, la última); en vis, sus índices en vars */
+static LONG _dbg_visible(LONG i, LONG *vis, LONG max, ULONG *a5) {
+    LONG at, k, j, n = 0, fi = -1, line;
+    _DbgFunc *f;
+    if (!_dbg_frame(i, a5, &at)) return 0;
+    f = _dbg_func_at(_dbg.code + _dbg.lines[at].off);
+    line = _dbg.lines[at].line;
+    for (k = 0; k < _dbg.nfuncs; k++)
+        if (&_dbg.funcs[k] == f) fi = k;
+    for (k = 0; k < _dbg.nvars && n < max; k++) {
+        _DbgVar *v = &_dbg.vars[k];
+        if (v->func != fi || (v->off < 0 && v->line >= line)) continue;   /* (la de esta línea aún no tiene valor) */
+        for (j = 0; j < n; j++)
+            if (!strcmp(_dbg.vars[vis[j]].name, v->name)) break;
+        if (j < n) vis[j] = k;                       /* la de después tapa a la de antes */
+        else vis[n++] = k;
+    }
+    return n;
+}
+
+/* Un texto que crece (lo que se enseña de un valor), hasta 1000 bytes */
+typedef struct { char t[1024]; LONG n; } _DbgOut;
+
+static void _dbg_put(_DbgOut *o, const char *s) {
+    while (*s && o->n < 1000) o->t[o->n++] = *s++;
+    if (*s && o->n == 1000) { o->t[o->n++] = '.'; o->t[o->n++] = '.'; o->t[o->n++] = '.'; }
+    o->t[o->n] = 0;
+}
+
+static void _dbg_put_num(_DbgOut *o, LONG v) {
+    char b[16];
+    sprintf(b, "%ld", (long)v);
+    _dbg_put(o, b);
+}
+
+/* ¿Se puede leer esa dirección como un puntero de Dash? (par, no en los vectores de la CPU) */
+static BOOL _dbg_ptr_ok(ULONG p) { return p >= 0x400 && !(p & 1); }
+
+static void _dbg_show(_DbgOut *o, const char *type, ULONG v, LONG depth);
+
+/* Los campos de un struct: Punto(x: 3, nombre: "a") */
+static void _dbg_show_struct(_DbgOut *o, const char *type, ULONG p, LONG depth) {
+    LONG k, n = 0;
+    _dbg_put(o, type);
+    if (depth > 1) { _dbg_put(o, "(...)"); return; }
+    _dbg_put(o, "(");
+    for (k = 0; k < _dbg.nfields; k++) {
+        _DbgField *fd = &_dbg.fields[k];
+        if (strcmp(fd->strct, type)) continue;
+        if (n++) _dbg_put(o, ", ");
+        _dbg_put(o, fd->name);
+        _dbg_put(o, ": ");
+        _dbg_show(o, fd->type, *(ULONG *)(p + fd->off), depth + 1);
+    }
+    _dbg_put(o, ")");
+}
+
+/* Un valor de ese tipo (el de Dash, como en el HUNK_DEBUG) */
+static void _dbg_show(_DbgOut *o, const char *type, ULONG v, LONG depth) {
+    if (!strcmp(type, "Int") || !strcmp(type, "Char")) { _dbg_put_num(o, (LONG)v); return; }
+    if (!strcmp(type, "Bool")) { _dbg_put(o, v ? "true" : "false"); return; }
+    if (!strcmp(type, "Fixed")) {
+        char b[24];
+        LONG w = (LONG)v >> 16, frac = ((v & 0xFFFF) * 10000 + 32768) >> 16;
+        if ((LONG)v < 0 && (v & 0xFFFF)) { w += 1; frac = 10000 - frac; }
+        sprintf(b, "%s%ld.%04ld", (LONG)v < 0 && w == 0 ? "-" : "", (long)w, (long)frac);
+        _dbg_put(o, b);
+        return;
+    }
+    if (!strcmp(type, "Float")) { _dbg_put(o, (char *)DashString_from_float(_dash_l2f((LONG)v))); return; }
+    if (!v) { _dbg_put(o, "nil"); return; }
+    if (!_dbg_ptr_ok(v)) { _dbg_put(o, "?"); return; }
+    if (!strcmp(type, "Double")) {
+        /* (en dashc, un Double es una caja: un texto con sus 8 bytes en hexadecimal) */
+        union { double d; UBYTE b[8]; } u;
+        LONG k, h;
+        for (k = 0; k < 16; k++) {
+            UBYTE ch = ((UBYTE *)v)[k];
+            h = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+            if (h < 0) { _dbg_put(o, "?"); return; }
+            if (k & 1) u.b[k / 2] |= h; else u.b[k / 2] = h << 4;
+        }
+        _dbg_put(o, (char *)DashString_from_double(u.d));
+        return;
+    }
+    if (!strcmp(type, "String")) {
+        char b[2];
+        UBYTE *s = (UBYTE *)v;
+        LONG k;
+        _dbg_put(o, "\"");
+        for (k = 0; s[k] && k < 200; k++) {
+            if (s[k] == '"' || s[k] == '\\') { b[0] = '\\'; b[1] = 0; _dbg_put(o, b); }
+            if (s[k] == '\n') { _dbg_put(o, "\\n"); continue; }
+            b[0] = s[k] < 32 ? '?' : s[k];
+            b[1] = 0;
+            _dbg_put(o, b);
+        }
+        _dbg_put(o, s[k] ? "...\"" : "\"");
+        return;
+    }
+    if (type[0] == '[') {
+        LONG n = DashArray_length((DashArrayLong *)v), k;
+        char inner[64];
+        LONG l = strlen(type);
+        strncpy(inner, type + 1, l - 2 < 63 ? l - 2 : 63);
+        inner[l - 2 < 63 ? l - 2 : 63] = 0;
+        if (depth > 1) { _dbg_put(o, "["); _dbg_put_num(o, n); _dbg_put(o, " elementos]"); return; }
+        _dbg_put(o, "[");
+        for (k = 0; k < n && k < 20; k++) {
+            if (k) _dbg_put(o, ", ");
+            _dbg_show(o, inner, (ULONG)DashArray_get((DashArrayLong *)v, k), depth + 1);
+        }
+        _dbg_put(o, n > 20 ? ", ...]" : "]");
+        return;
+    }
+    if (type[0] == '{') {
+        _dbg_put(o, "{");
+        _dbg_put_num(o, DashDict_length((DashDict *)v));
+        _dbg_put(o, " claves}");
+        return;
+    }
+    _dbg_show_struct(o, type, v, depth);
+}
+
+static _DbgVar *_dbg_global(const char *name) {
+    LONG k;
+    for (k = 0; k < _dbg.nvars; k++)
+        if (_dbg.vars[k].func < 0 && !strcmp(_dbg.vars[k].name, name)) return &_dbg.vars[k];
+    return NULL;
+}
+
+/* Lo que vale expr en el marco i: un nombre (local o global) seguido de .campo y [n] ("p.hijos[0].x"); FALSE con
+   el porqué en o */
+static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut *o) {
+    LONG vis[128], n, k;
+    ULONG a5 = 0;
+    char name[64];
+    const char *p = expr;
+    _DbgVar *v = NULL;
+    for (k = 0; *p && *p != '.' && *p != '[' && k < 63; p++) name[k++] = *p;
+    name[k] = 0;
+    n = _dbg_visible(i, vis, 128, &a5);
+    for (k = 0; k < n; k++)
+        if (!strcmp(_dbg.vars[vis[k]].name, name)) v = &_dbg.vars[vis[k]];
+    if (v) *val = *(ULONG *)(a5 + v->off);
+    else if ((v = _dbg_global(name)) && _dbg.data) *val = *(ULONG *)(_dbg.data + v->off);
+    else { _dbg_put(o, "no existe: "); _dbg_put(o, name); return FALSE; }
+    strcpy(type, v->type);
+    while (*p) {
+        if (*p == '.') {
+            char field[64];
+            _DbgField *fd = NULL;
+            for (p++, k = 0; *p && *p != '.' && *p != '[' && k < 63; p++) field[k++] = *p;
+            field[k] = 0;
+            for (k = 0; k < _dbg.nfields; k++)
+                if (!strcmp(_dbg.fields[k].strct, type) && !strcmp(_dbg.fields[k].name, field)) fd = &_dbg.fields[k];
+            if (!fd) { _dbg_put(o, type); _dbg_put(o, " no tiene "); _dbg_put(o, field); return FALSE; }
+            if (!*val || !_dbg_ptr_ok(*val)) { _dbg_put(o, "nil"); return FALSE; }
+            *val = *(ULONG *)(*val + fd->off);
+            strcpy(type, fd->type);
+        } else if (*p == '[') {
+            LONG idx = 0, l = strlen(type), neg = 0;
+            for (p++; *p == ' '; p++) ;
+            if (*p == '-') { neg = 1; p++; }
+            while (*p >= '0' && *p <= '9') idx = idx * 10 + (*p++ - '0');
+            while (*p == ' ') p++;
+            if (*p++ != ']' || type[0] != '[') { _dbg_put(o, "no es una lista"); return FALSE; }
+            if (neg || !*val || idx >= DashArray_length((DashArrayLong *)*val)) { _dbg_put(o, "fuera de la lista"); return FALSE; }
+            *val = (ULONG)DashArray_get((DashArrayLong *)*val, idx);
+            memmove(type, type + 1, l - 2);
+            type[l - 2] = 0;
+        } else {
+            _dbg_put(o, "no lo entiendo");
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/* Cuántas variables se ven en el marco i (sus parámetros y las suyas declaradas hasta esa línea) */
+static LONG _dash_dbg_vars(LONG i) {
+    LONG vis[128];
+    return _dbg_visible(i, vis, 128, NULL);
+}
+
+static _DbgVar *_dbg_var_k(LONG i, LONG k) {
+    LONG vis[128], n = _dbg_visible(i, vis, 128, NULL);
+    return k >= 0 && k < n ? &_dbg.vars[vis[k]] : NULL;
+}
+
+static LONG _dash_dbg_var_name(LONG i, LONG k) {
+    _DbgVar *v = _dbg_var_k(i, k);
+    return (LONG)_dash_str_dup((STRPTR)(v ? v->name : ""), TRUE);
+}
+
+static LONG _dash_dbg_var_type(LONG i, LONG k) {
+    _DbgVar *v = _dbg_var_k(i, k);
+    return (LONG)_dash_str_dup((STRPTR)(v ? v->type : ""), TRUE);
+}
+
+/* Las globales del programa */
+static LONG _dash_dbg_globals(void) {
+    LONG k, n = 0;
+    for (k = 0; k < _dbg.nvars; k++) n += _dbg.vars[k].func < 0;
+    return n;
+}
+
+static LONG _dash_dbg_global_name(LONG g) {
+    LONG k;
+    for (k = 0; k < _dbg.nvars; k++)
+        if (_dbg.vars[k].func < 0 && g-- == 0) return (LONG)_dash_str_dup((STRPTR)_dbg.vars[k].name, TRUE);
+    return (LONG)_dash_str_dup((STRPTR)"", TRUE);
+}
+
+/* El valor de expr en el marco i como texto (3, "hola", Punto(x: 3, y: 4), [1, 2], nil...); "?" y el porqué si no
+   se puede */
+static LONG _dash_dbg_value(LONG i, LONG expr) {
+    _DbgOut o;
+    char type[64];
+    ULONG v;
+    o.n = 0;
+    o.t[0] = 0;
+    if (_dbg.state != DBG_STOPPED) _dbg_put(&o, "? no está parado");
+    else if (!expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) {
+        char why[200];
+        strcpy(why, o.t);
+        o.n = 0;
+        _dbg_put(&o, "? ");
+        _dbg_put(&o, why);
+    } else _dbg_show(&o, type, v, 0);
+    return (LONG)_dash_str_dup((STRPTR)o.t, TRUE);
+}
+
+/* El tipo de expr en el marco i ("Int", "Punto", "[String]"...), "" si no se puede */
+static LONG _dash_dbg_value_type(LONG i, LONG expr) {
+    _DbgOut o;
+    char type[64];
+    ULONG v;
+    o.n = 0;
+    if (_dbg.state != DBG_STOPPED || !expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) type[0] = 0;
+    return (LONG)_dash_str_dup((STRPTR)type, TRUE);
+}
+"""
+
+    # Dash 2.0 (for Inferencia, the IDE): running a command line and taking its output
+    RUNCAP_RUNTIME = """\
+/* run_start(command, timeout_ms) runs a command line in a process of its own (with the program's path and
+   directory), its output and error output to a file in T: (RAM: without T:), and run_finish gives that back as a
+   text, its return code in run_rc. When the time runs out, Ctrl-C goes to the command's shell (again every second
+   until it ends: a command that does not stop is waited for). run_capture does both. */
+#include <dos/dostags.h>
+#include <dos/dosextens.h>
+typedef struct _DashRun {
+    struct _DashRun *next;           /* all of them, for the exit */
+    BPTR in, out;
+    LONG rc, timeout, breaks, pri;   /* timeout and the last break: ticks since start */
+    BOOL timed;                      /* the time ran out */
+    volatile LONG done, started;
+    struct DateStamp start;
+    char file[48];
+    char cmd[1];
+} _DashRun;
+static _DashRun *_dash_runs = NULL;
+static _DashRun * volatile _dash_run_new = NULL;
+static LONG _dash_run_rc_last = 0;
+static ULONG _dash_run_count = 0;
+
+static void _dash_run_proc(void) {
+    _DashRun *r = _dash_run_new;
+    r->started = 1;
+    r->rc = SystemTags((STRPTR)r->cmd, SYS_Input, r->in, SYS_Output, r->out, SYS_Error, r->out,
+                       NP_Priority, r->pri, NP_StackSize, 32768, TAG_DONE);
+    Forbid();                        /* done only once this process has left the program's code */
+    r->done = 1;
+}
+
+static LONG _dash_run_start(STRPTR command, LONG timeout_ms) {
+    struct Process *me = (struct Process *)FindTask(NULL);
+    _DashRun *r;
+    if (!command || !*command) return 0;
+    if (!(r = (_DashRun *)AllocVec(sizeof(_DashRun) + strlen((char *)command), MEMF_PUBLIC | MEMF_CLEAR))) return 0;
+    strcpy(r->cmd, (char *)command);
+    r->timeout = timeout_ms > 0 ? (timeout_ms + 19) / 20 : 0;
+    r->pri = me->pr_Task.tc_Node.ln_Pri;   /* (the command at the program's priority: it goes on answering) */
+    sprintf(r->file, "T:dash_run_%lx_%lu", (unsigned long)me, (unsigned long)++_dash_run_count);
+    if (!(r->out = Open((CONST_STRPTR)r->file, MODE_NEWFILE))) {
+        sprintf(r->file, "RAM:dash_run_%lx_%lu", (unsigned long)me, (unsigned long)_dash_run_count);
+        r->out = Open((CONST_STRPTR)r->file, MODE_NEWFILE);
+    }
+    r->in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
+    if (!r->in || !r->out) {
+        if (r->in) Close(r->in);
+        if (r->out) { Close(r->out); DeleteFile((CONST_STRPTR)r->file); }
+        FreeVec(r);
+        return 0;
+    }
+    if (Output()) Flush(Output());   /* (what Print left in the buffer) */
+    DateStamp(&r->start);
+    _dash_run_new = r;
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_run_proc, NP_Name, (ULONG)"dash_run", NP_Cli, TRUE,
+                           NP_Priority, r->pri, NP_StackSize, 8192, TAG_DONE)) {
+        Close(r->in);
+        Close(r->out);
+        DeleteFile((CONST_STRPTR)r->file);
+        FreeVec(r);
+        return 0;
+    }
+    while (!r->started) Delay(1);
+    r->next = _dash_runs;
+    _dash_runs = r;
+    return (LONG)r;
+}
+
+/* Ticks since the command started */
+static LONG _dash_run_ticks(_DashRun *r) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return (d.ds_Days - r->start.ds_Days) * 4320000L + (d.ds_Minute - r->start.ds_Minute) * 3000L +
+           (d.ds_Tick - r->start.ds_Tick);
+}
+
+/* Ctrl-C to the shell that runs it (the one whose input is ours) */
+static void _dash_run_break_now(_DashRun *r) {
+    LONG i, n;
+    struct Process *p;
+    Forbid();
+    if (!r->done)
+        for (i = 1, n = MaxCli(); i <= n; i++)
+            if ((p = FindCliProc(i)) && p->pr_CIS == r->in) Signal(&p->pr_Task, SIGBREAKF_CTRL_C);
+    Permit();
+}
+
+static void _dash_run_break(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    if (!r || r->done) return;
+    r->breaks = _dash_run_ticks(r);
+    if (!r->breaks) r->breaks = 1;
+    _dash_run_break_now(r);
+}
+
+/* The time limit: Ctrl-C when it runs out, again every second */
+static void _dash_run_check(_DashRun *r) {
+    LONG t;
+    if (r->done || (!r->timeout && !r->breaks)) return;
+    t = _dash_run_ticks(r);
+    if (r->breaks ? t - r->breaks >= 50 : t >= r->timeout) {
+        if (!r->breaks) r->timed = TRUE;
+        r->breaks = t ? t : 1;
+        _dash_run_break_now(r);
+    }
+}
+
+static BOOL _dash_run_ready(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    if (!r) return TRUE;
+    _dash_run_check(r);
+    return r->done != 0;
+}
+
+static void _dash_run_wait(_DashRun *r) {
+    while (!r->done) {
+        Delay(1);
+        _dash_run_check(r);
+    }
+}
+
+/* Forget it: its files closed and gone */
+static void _dash_run_free(_DashRun *r) {
+    _DashRun **p;
+    for (p = &_dash_runs; *p; p = &(*p)->next)
+        if (*p == r) { *p = r->next; break; }
+    Close(r->in);
+    if (r->out) Close(r->out);
+    DeleteFile((CONST_STRPTR)r->file);
+    FreeVec(r);
+}
+
+static STRPTR _dash_run_finish(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    STRPTR s = NULL;
+    BPTR f;
+    LONG n;
+    if (!r) { _dash_run_rc_last = -1; return _dash_str_dup((STRPTR)"", TRUE); }
+    _dash_run_wait(r);
+    /* (a time limit that ran out is -2 whatever the command gave) */
+    _dash_run_rc_last = r->timed ? -2 : (r->rc < 0 ? -1 : r->rc);
+    Close(r->out);
+    r->out = 0;
+    if ((f = Open((CONST_STRPTR)r->file, MODE_OLDFILE))) {
+        Seek(f, 0, OFFSET_END);
+        n = Seek(f, 0, OFFSET_BEGINNING);
+        if (n > 0 && (s = _dash_str_alloc(n, TRUE))) {
+            LONG got = Read(f, s, n);
+            s[got > 0 ? got : 0] = 0;
+        }
+        Close(f);
+    }
+    _dash_run_free(r);
+    return s ? s : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_run_capture(STRPTR command, LONG timeout_ms) {
+    LONG h = _dash_run_start(command, timeout_ms);
+    if (!h) { _dash_run_rc_last = -1; return _dash_str_dup((STRPTR)"", TRUE); }
+    return _dash_run_finish(h);
+}
+
+static LONG _dash_run_rc(void) { return _dash_run_rc_last; }
+
+/* At exit: the processes run code of the program, which must stay loaded until they end */
+static void _dash_runcap_cleanup(void) {
+    while (_dash_runs) {
+        _dash_run_break((LONG)_dash_runs);
+        _dash_run_wait(_dash_runs);
+        _dash_run_free(_dash_runs);
+    }
+}
+
 """
 
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
@@ -11119,11 +12398,100 @@ static STRPTR _dash_dir_current(void) {
     return _dash_str_dup((STRPTR)buf, TRUE);
 }
 
+/* (CreateDir gives an exclusive lock: without UnLock, nothing else could use the new directory) */
+static BOOL _dash_dir_create(STRPTR path) {
+    BPTR l = CreateDir(path);
+    if (!l) return FALSE;
+    UnLock(l);
+    return TRUE;
+}
+
+/* dir_read(path): what a directory holds, sorted by name (case does not count), kept until the next dir_read;
+   dir_entry_*(i) read it (Dash 2.0, for Inferencia) */
+typedef struct { LONG size, date; BOOL dir; char name[1]; } _DashDirEnt;
+static _DashDirEnt **_dash_dir_ents = NULL;
+static LONG _dash_dir_n = 0, _dash_dir_cap = 0;
+
+static void _dash_dir_free(void) {
+    LONG i;
+    for (i = 0; i < _dash_dir_n; i++) FreeVec(_dash_dir_ents[i]);
+    if (_dash_dir_ents) FreeVec(_dash_dir_ents);
+    _dash_dir_ents = NULL;
+    _dash_dir_n = _dash_dir_cap = 0;
+}
+
+/* Latin-1 letters as capitals */
+static UBYTE _dash_dir_up(UBYTE c) {
+    return (c >= 'a' && c <= 'z') || (c >= 0xE0 && c != 0xF7 && c != 0xFF) ? c - 32 : c;
+}
+
+static LONG _dash_dir_cmp(const char *a, const char *b) {
+    UBYTE x, y;
+    for (;; a++, b++) {
+        x = _dash_dir_up((UBYTE)*a);
+        y = _dash_dir_up((UBYTE)*b);
+        if (x != y || !x) return (LONG)x - (LONG)y;
+    }
+}
+
+static LONG _dash_dir_read(STRPTR path) {
+    struct FileInfoBlock *fib;
+    BPTR lock;
+    LONG gap, i, j;
+    _dash_dir_free();
+    if (!path) return -1;
+    if (!(lock = Lock(path, SHARED_LOCK))) return -1;
+    if (!(fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) { UnLock(lock); return -1; }
+    if (!Examine(lock, fib) || fib->fib_DirEntryType <= 0) { FreeDosObject(DOS_FIB, fib); UnLock(lock); return -1; }
+    while (ExNext(lock, fib)) {
+        _DashDirEnt *e;
+        if (_dash_dir_n == _dash_dir_cap) {
+            LONG cap = _dash_dir_cap ? _dash_dir_cap * 2 : 32;
+            _DashDirEnt **v = (_DashDirEnt **)AllocVec(cap * sizeof(APTR), MEMF_ANY);
+            if (!v) break;
+            if (_dash_dir_n) CopyMem(_dash_dir_ents, v, _dash_dir_n * sizeof(APTR));
+            if (_dash_dir_ents) FreeVec(_dash_dir_ents);
+            _dash_dir_ents = v;
+            _dash_dir_cap = cap;
+        }
+        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName), MEMF_ANY))) break;
+        strcpy(e->name, fib->fib_FileName);
+        e->dir = fib->fib_DirEntryType > 0 && fib->fib_DirEntryType != ST_SOFTLINK;
+        e->size = e->dir ? 0 : fib->fib_Size;
+        /* (as time_unix: seconds since 1970 by the system's clock) */
+        e->date = 252460800L + fib->fib_Date.ds_Days * 86400L + fib->fib_Date.ds_Minute * 60L +
+                  fib->fib_Date.ds_Tick / 50;
+        _dash_dir_ents[_dash_dir_n++] = e;
+    }
+    FreeDosObject(DOS_FIB, fib);
+    UnLock(lock);
+    for (gap = _dash_dir_n / 2; gap > 0; gap /= 2)          /* Shell sort */
+        for (i = gap; i < _dash_dir_n; i++) {
+            _DashDirEnt *e = _dash_dir_ents[i];
+            for (j = i; j >= gap && _dash_dir_cmp(_dash_dir_ents[j - gap]->name, e->name) > 0; j -= gap)
+                _dash_dir_ents[j] = _dash_dir_ents[j - gap];
+            _dash_dir_ents[j] = e;
+        }
+    return _dash_dir_n;
+}
+
+static _DashDirEnt *_dash_dir_ent(LONG i) {
+    return i >= 0 && i < _dash_dir_n ? _dash_dir_ents[i] : NULL;
+}
+static STRPTR _dash_dir_entry_name(LONG i) {
+    _DashDirEnt *e = _dash_dir_ent(i);
+    return _dash_str_dup(e ? (STRPTR)e->name : (STRPTR)"", TRUE);
+}
+static LONG _dash_dir_entry_size(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->size : -1; }
+static BOOL _dash_dir_entry_is_dir(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->dir : FALSE; }
+static LONG _dash_dir_entry_date(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->date : 0; }
+
 static void _dash_dir_cleanup(void) {
     if (_dash_dir_changed) {
         UnLock(CurrentDir(_dash_orig_dir));
         _dash_dir_changed = FALSE;
     }
+    _dash_dir_free();
 }
 
 """
@@ -15789,6 +17157,35 @@ static APTR _dash_mui_app_begin(STRPTR title, STRPTR base) {
     return _dash_mui_app;
 }
 
+/* mui_app_rexx(app, f): every ARexx command to the application's port that MUI does not answer itself (QUIT,
+   SHOW...) calls the program's f(command) -> String; what it returns is the RESULT, and mui_rexx_fail(rc) during
+   the call its RC (Dash 2.0, for Inferencia) */
+#include <rexx/storage.h>
+static APTR _dash_mui_rexx_func = NULL;
+static LONG _dash_mui_rexx_rc = 0;
+static struct Hook _dash_mui_rexx_hook;
+
+static ULONG _dash_mui_rexx_entry(struct Hook *h __asm("a0"), Object *app __asm("a2"), struct RexxMsg *rm __asm("a1")) {
+    STRPTR r;
+    (void)h;
+    if (!_dash_mui_rexx_func || !rm || !rm->rm_Args[0]) return 20;
+    _dash_mui_rexx_rc = 0;
+    /* (la orden tal cual: la función la recibe prestada y no la guarda) */
+    r = ((STRPTR (*)(STRPTR))_dash_mui_rexx_func)((STRPTR)rm->rm_Args[0]);
+    /* (MUI copies the text) */
+    if (!_dash_mui_rexx_rc && r && *r && (rm->rm_Action & RXFF_RESULT))
+        SetAttrs(app, MUIA_Application_RexxString, (IPTR)r, TAG_DONE);
+    return (ULONG)_dash_mui_rexx_rc;
+}
+
+static void _dash_mui_app_rexx(APTR app, APTR func) {
+    _dash_mui_rexx_func = func;
+    _dash_mui_rexx_hook.h_Entry = (ULONG (*)())_dash_mui_rexx_entry;
+    if (app) SetAttrs((Object *)app, MUIA_Application_RexxHook, (IPTR)(func ? &_dash_mui_rexx_hook : NULL), TAG_DONE);
+}
+
+static void _dash_mui_rexx_fail(LONG rc) { _dash_mui_rexx_rc = rc; }
+
 static APTR _dash_mui_add(Object *obj);
 
 static LONG _dash_mui_kind(Object *obj) {
@@ -17704,6 +19101,9 @@ _RUNTIME_FLAGS = [
     ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
+    ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
+    ("SYSLIST_RUNTIME", "uses_syslist"),    # Dash 2.0: rexx_send, ports_read, tasks_read, assigns_read
+    ("DEBUGGER_RUNTIME", "uses_debugger"),  # Dash 2.0: dbg_* (Forja)
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
@@ -18008,6 +19408,9 @@ class CodeGenerator(ASTVisitor):
         self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
+        self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
+        self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
+        self.uses_debugger: bool = False  # dbg_* (DEBUGGER_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
@@ -18373,6 +19776,12 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.PROC_RUNTIME)
         if self.uses_sysinfo:
             parts.append(CTemplates.SYSINFO_RUNTIME)
+        if self.uses_runcap:
+            parts.append(CTemplates.RUNCAP_RUNTIME)
+        if self.uses_syslist:
+            parts.append(CTemplates.SYSLIST_RUNTIME)
+        if self.uses_debugger:
+            parts.append(CTemplates.DEBUGGER_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -18605,6 +20014,10 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_runcap:
+            cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
+        if self.uses_syslist:
+            cleanup.append("    _dash_syslist_cleanup();\n")
         if self.uses_netbg:
             cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
         if self.uses_instance:
@@ -21123,6 +22536,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
+        if self.uses_debugger:
+            # dbg_value shows lists, dictionaries, Floats and Doubles of the debugged program
+            self.uses_arrays = self.uses_dicts = self.uses_float = self.uses_double = True
         if self.uses_mouse:
             self.uses_arrays = True    # mouse_curve takes a list
         if self.catalog:

@@ -1,0 +1,12 @@
+# La línea de tiempo de una carga (tarea 33): con traza_activa, cada paso sale por la salida con los ms desde
+# traza_t0 y la memoria libre ("[1234 98000K] llega https://...: 200, 5120 bytes en 830 ms"). dashweb la enciende con el argumento TRAZA
+# (tools/medir_visor.py --traza). Apagada no cuesta nada: quien la llama mira antes traza_activa.
+
+var traza_activa: Bool = false
+var traza_t0: Int = 0
+
+func traza(texto: String)
+    if traza_activa
+        Print "[" + (time_ms() - traza_t0) + " " + mem_total() / 1024 + "K] " + texto
+    end
+end

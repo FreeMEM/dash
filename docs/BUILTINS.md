@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 744 funciones, 744 implementadas, 0 sin implementar.
+Total: 803 funciones, 803 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -316,6 +316,11 @@ Total: 744 funciones, 744 implementadas, 0 sin implementar.
 | `dir_create(path)` | `BOOL` | Crea un cajón |  |
 | `dir_change(path)` | `BOOL` | Cambia el cajón actual |  |
 | `dir_current()` | `STRPTR` | El nombre entero del cajón actual ("Ram Disk:"...) |  |
+| `dir_read(path)` | `LONG` | Lee lo que hay en un cajón, por orden de nombre (sin mirar mayúsculas): cuántas entradas, -1 si no es un cajón que se pueda leer. dir_entry_name y las demás las leen, hasta el siguiente dir_read |  |
+| `dir_entry_name(i)` | `STRPTR` | El nombre de la entrada i (desde 0) del último dir_read; "" si no la hay |  |
+| `dir_entry_size(i)` | `LONG` | El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón) |  |
+| `dir_entry_is_dir(i)` | `BOOL` | Verdadero si la entrada i del último dir_read es un cajón |  |
+| `dir_entry_date(i)` | `LONG` | La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970 |  |
 | `console_read(buffer, maxlen)` | `LONG` | Lee de la consola |  |
 | `console_write(str)` | `void` | Escribe en la consola (sin búfer) |  |
 | `file_load(filename, buffer, maxsize)` | `LONG` | Carga un fichero entero en un búfer: los bytes leídos, o -1 |  |
@@ -671,6 +676,63 @@ Total: 744 funciones, 744 implementadas, 0 sin implementar.
 | `build_date()` | `STRPTR` | La fecha en que se compiló el programa, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | La hora en que se compiló el programa, "20:45:10" |  |
 | `console_flush()` | `void` | Saca ya lo que Print dejó en el búfer de la salida (una línea de progreso sin su final) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta que acaba) |  |
+| `run_start(command, timeout_ms)` | `LONG` | run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El programa espera al acabar a las que no terminó |  |
+| `run_ready(run)` | `BOOL` | Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo) |  |
+| `run_break(run)` | `void` | Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba) |  |
+| `run_finish(run)` | `STRPTR` | Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida |  |
+| `run_rc()` | `LONG` | El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si se le acabó el tiempo |  |
+| `env_get(name)` | `STRPTR` | Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; "" si no existe |  |
+| `env_set(name, value, save)` | `BOOL` | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
+| `rexx_send(port, command)` | `STRPTR` | Manda una orden ARexx al puerto público de otro programa ("MULTIVIEW.1"; "REXX": ejecutar un script) y espera la respuesta: su RESULT ("" si no hay), el RC en rexx_rc(). No al puerto del propio programa: se esperaría a sí mismo |  |
+| `rexx_rc()` | `LONG` | El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin rexxsyslib.library |  |
+| `ports_read()` | `LONG` | Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, hasta el siguiente ports_read |  |
+| `port_name(i)` | `STRPTR` | El nombre del puerto i (desde 0) del último ports_read |  |
+| `tasks_read()` | `LONG` | Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, hasta el siguiente tasks_read |  |
+| `task_entry_name(i)` | `STRPTR` | El nombre de la tarea i del último tasks_read ("Shell Process", "input.device"...) |  |
+| `task_entry_command(i)` | `STRPTR` | La orden que ejecuta un proceso de Shell del último tasks_read ("" si ninguna) |  |
+| `task_entry_state(i)` | `STRPTR` | El estado de la tarea i: "running" (el programa), "ready" o "waiting" |  |
+| `task_entry_priority(i)` | `LONG` | La prioridad de la tarea i del último tasks_read |  |
+| `task_entry_cli(i)` | `LONG` | El número de Shell de la tarea i (el que da Status, para Break), 0 si no es un proceso de Shell |  |
+| `assigns_read()` | `LONG` | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
+| `assign_name(i)` | `STRPTR` | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
+| `assign_path(i)` | `STRPTR` | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
+
+## Depurador (el programa depurado, con dash --debug)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `dbg_start(program, args)` | `BOOL` | Carga un programa compilado con dash --debug y lo lanza en un proceso propio, en pausa antes de su primera línea (se ponen los puntos de parada y luego dbg_continue): falso si no pudo (dbg_error dice por qué) |  |
+| `dbg_error()` | `STRPTR` | Por qué falló el último dbg_start |  |
+| `dbg_state()` | `LONG` | El programa depurado: 0 ninguno, 1 en pausa antes de empezar, 2 corriendo, 3 parado en una línea, 4 acabado |  |
+| `dbg_signal()` | `LONG` | La señal que recibe el depurador cuando el programa para o acaba (para mui_wait_event_signals) |  |
+| `dbg_wait(ms)` | `LONG` | Espera a que el programa pare o acabe, como mucho ms (0: sin tope): su estado |  |
+| `dbg_break(file, line)` | `BOOL` | Un punto de parada en esa línea de ese fichero ("prog.dash": el final de su ruta): falso si la línea no tiene código |  |
+| `dbg_unbreak(file, line)` | `BOOL` | Quita el punto de parada de esa línea |  |
+| `dbg_continue()` | `BOOL` | Sigue (desde el principio o una parada) hasta un punto de parada o el final |  |
+| `dbg_step()` | `BOOL` | Sigue hasta la línea siguiente, entrando en las funciones a las que llama |  |
+| `dbg_next()` | `BOOL` | Sigue hasta la línea siguiente de esta función (o de la que la llamó) |  |
+| `dbg_out()` | `BOOL` | Sigue hasta que la función vuelve: la línea siguiente de la que la llamó |  |
+| `dbg_pause()` | `BOOL` | Para el programa que corre en la siguiente línea que ejecute |  |
+| `dbg_end(ms)` | `BOOL` | Acaba el programa (Ctrl-C y, en su siguiente línea, su final de siempre): verdadero si acabó en ms |  |
+| `dbg_rc()` | `LONG` | El código de retorno del programa acabado |  |
+| `dbg_file()` | `STRPTR` | El fichero de la línea donde paró el programa (su ruta entera) |  |
+| `dbg_line()` | `LONG` | La línea donde paró el programa (0 si no está parado) |  |
+| `dbg_function()` | `STRPTR` | La función donde paró el programa ("Main", "Punto.mover"...) |  |
+| `dbg_frames()` | `LONG` | Cuántas llamadas hay abiertas donde paró: 1 en Main, 2 en una función que llamó Main... (0 si no está parado) |  |
+| `dbg_frame_function(i)` | `STRPTR` | La función de la llamada i: 0 donde paró, 1 la que la llamó... |  |
+| `dbg_frame_line(i)` | `LONG` | La línea donde está la llamada i: 0 donde paró, 1 la de la llamada en la que la llamó... |  |
+| `dbg_frame_file(i)` | `STRPTR` | El fichero de la llamada i (su ruta entera) |  |
+| `dbg_vars(i)` | `LONG` | Cuántas variables ve la llamada i: sus parámetros y las variables declaradas antes de su línea |  |
+| `dbg_var_name(i, k)` | `STRPTR` | El nombre de la variable k (desde 0) de la llamada i |  |
+| `dbg_var_type(i, k)` | `STRPTR` | El tipo de la variable k de la llamada i, como en Dash ("Int", "[String]", "Punto") |  |
+| `dbg_globals()` | `LONG` | Cuántas variables globales tiene el programa |  |
+| `dbg_global_name(g)` | `STRPTR` | El nombre de la global g (desde 0) |  |
+| `dbg_value(i, expr)` | `STRPTR` | El valor de expr en la llamada i, como texto: una variable de esa llamada o una global, con .campo y [n] detrás ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " y el porqué si no se puede |  |
+| `dbg_value_type(i, expr)` | `STRPTR` | El tipo de expr en la llamada i ("" si no se puede) |  |
+| `dbg_reg(n)` | `LONG` | Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC |  |
+| `dbg_peek(addr, size)` | `LONG` | 1, 2 o 4 bytes de memoria en addr, sin signo |  |
+| `dbg_output()` | `STRPTR` | Lo que ha escrito el programa hasta ahora (salida y salida de errores) |  |
 
 ## Imágenes decodificadas por el programa (sin datatypes)
 
@@ -842,6 +904,8 @@ Total: 744 funciones, 744 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
+| `mui_app_rexx(app, func)` | `void` | Cada orden ARexx al puerto de la aplicación (su base y ".1": "BASE.1") que MUI no contesta por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras mui_wait_event espera |  |
+| `mui_rexx_fail(rc)` | `void` | Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin RESULT) |  |
 | `mui_app_end()` | `void` | Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar) |  |
 | `mui_window_begin(title, id)` | `APTR` | Empieza una ventana (id 1-255: MUI recuerda su tamaño y su sitio; 0 ninguno) con un grupo raíz vertical |  |
 | `mui_window_end()` | `void` | Acaba la ventana empezada con mui_window_begin |  |
