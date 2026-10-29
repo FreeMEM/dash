@@ -1,0 +1,59 @@
+# Un while contado (i < total, i + 1 al final) cuyo cuerpo copia en línea una función con un bucle que usa muchas
+# variables: en la primera pasada el bucle va con un contador y total no se lee dentro, así que su registro se lo
+# daba a otra variable; en la segunda el contador se queda sin registro, el bucle va con su condición, lee total en
+# cada vuelta y leía esa otra variable (Tachyon: animaciones_de se colgaba)
+struct Anim
+    nombre: String
+    relleno: String = "none"
+    vueltas: Int = 0
+    suma: Int = 0
+end
+
+func _atajo(a: Anim, item: String)
+    p = 0
+    q = 0
+    r = 0
+    for t in str_split(item, " ")
+        c = str_code(t, 0)
+        k = 0
+        while k < 3
+            p = p + c
+            q = q + c * 2
+            r = r + p - q
+            k = k + 1
+        end
+        if t == "forwards" or t == "backwards"
+            a.relleno = t
+        elif a.nombre == ""
+            a.nombre = t
+        else
+            a.vueltas = a.vueltas + 1
+        end
+    end
+    a.suma = p + q + r
+end
+
+func todas(items: [String], extra: Int) -> [Anim]
+    var r: [Anim] = []
+    total = items.length
+    if extra > total
+        total = extra
+    end
+    i = 0
+    while i < total
+        a = Anim("")
+        if i < items.length
+            _atajo(a, items[i])
+        end
+        r.push(a)
+        i = i + 1
+    end
+    return r
+end
+
+Main
+    for a in todas(["x 1s forwards", "c 2s linear", "z"], 4)
+        Print a.nombre + " " + a.relleno + " " + a.vueltas + " " + a.suma
+    end
+    Print "fin"
+end

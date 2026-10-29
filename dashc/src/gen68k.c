@@ -4332,6 +4332,12 @@ static int gen_counted_while(Node *n)
     use_slot(slot);
     enter_loop();
     use_slot(slot);
+    /* si en la segunda pasada el hueco se queda sin registro, el bucle va con su condición (S_WHILE), que lee
+       el fin en cada vuelta: tiene que seguir vivo en todo el bucle (si no, su registro lo toma otra variable) */
+    if (pass == 1 && end->kind == E_VAR) {
+        Local *le = find_local(end->name);
+        if (le && le->slot >= 0) use_slot(le->slot);
+    }
     def_label(top);
     mark_release(&ms);
     lp.brk = done;
