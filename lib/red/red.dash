@@ -1,0 +1,395 @@
+# Conexiones TCP con lectura por líneas y por trozos. Toda la red va en una tarea aparte (los builtins net_bg_* de
+# Dash 2.0; antes, C propio con task_start, D69 de Dash): allí se buscan los nombres, se conecta, se negocia TLS
+# (AmiSSL), se envía y se recibe aunque el programa esté ocupado (el JavaScript de una página o una maqueta de varios
+# segundos: antes la red se paraba entonces; tarea 42e). La tarea empieza con la primera conexión y acaba sola tras
+# red_ociosa_ms sin tráfico (cierra las conexiones guardadas para reusar), o con red_terminar() (el programa espera a
+# sus tareas al acabar: llamarla antes si red_ociosa_ms es largo).
+#
+#   c = red_abrir("ejemplo.org", 80, 10000)     # tiempo límite en ms para cada espera
+#   c = red_abrir_tls("ejemplo.org", 443, 10000) # lo mismo con TLS (AmiSSL), certificado comprobado
+#   if c.error != ""
+#       Print c.error
+#   end
+#   red_enviar(c, "GET / HTTP/1.0\r\n\r\n")
+#   linea = red_leer_linea(c)                   # sin el salto de línea; nil al cerrarse
+#   cuerpo = red_leer_todo(c)
+#   red_copiar(c, fichero, n)                   # n bytes tal cual a un fichero abierto (-1: hasta el cierre)
+#   n = red_recibir_ya(c)                       # lo que haya llegado, sin esperar (-1: cerrada)
+#   red_cerrar(c)
+#
+# Abrir sin esperar:
+#   c = red_abrir_empezar("ejemplo.org", 443, true, 10000)
+#   while red_abrir_avanzar(c) == 0     # 1 abierta, -1 error (c.error)
+#       ... la interfaz; red_fase(c) dice en qué está: "buscando", "conectando", "negociando"
+#   end
+#
+# Lo recibido se guarda en bytes (un buffer): las líneas y los textos se sacan de ahí (los bytes 0 pasan a
+# espacios) y red_copiar lleva los bytes sin tocar a un fichero (imágenes).
+
+const RED_TROZO = 4096
+
+struct Conexion
+    sock: Int         # el sitio de la conexión en la tabla de la tarea (-1: ninguno)
+    tls: Int          # (sin uso: la TLS es de la tarea; se deja por los que lo miran)
+    espera: Int
+    buf: Int          # lo recibido sin leer son los bytes [ini, fin) de buf (de cap bytes)
+    cap: Int
+    ini: Int
+    fin: Int
+    cerrada: Bool
+    error: String
+    fase: Int = 0     # abriéndose: 1 nombre y conexión, 2 negociación TLS; 0 abierta
+    host: String = ""
+    con_tls: Bool = false
+    puerto: Int = 0
+    empezada: Int = 0      # time_ms de cuando se pidió la conexión
+    reintentos: Int = 0
+end
+
+# Sin ninguna conexión, la tarea de la red acaba tras esto (ms); dashweb lo sube y llama a red_terminar al salir
+var red_ociosa_ms: Int = 2000
+
+# === La tarea (builtins net_bg_* de Dash 2.0: la tabla de conexiones y la tarea van en su runtime) ===
+
+# La tarea acaba sola tras red_ociosa_ms sin tráfico; otra empieza cuando hace falta
+func _rt_asegurar()
+    net_bg_idle(red_ociosa_ms)
+end
+
+# Para la tarea de la red (cierra lo que quede); el programa espera a sus tareas al acabar: llamarla antes de salir
+func red_terminar()
+    net_bg_stop()
+end
+
+# === Conexiones ===
+
+func red_abrir(host: String, puerto: Int, espera_ms: Int) -> Conexion
+    c = red_abrir_empezar(host, puerto, false, espera_ms)
+    _red_esperar_abierta(c)
+    return c
+end
+
+func red_abrir_tls(host: String, puerto: Int, espera_ms: Int) -> Conexion
+    c = red_abrir_empezar(host, puerto, true, espera_ms)
+    _red_esperar_abierta(c)
+    return c
+end
+
+func _red_esperar_abierta(c: Conexion)
+    desde = time_ms()
+    while red_abrir_avanzar(c) == 0
+        if c.espera > 0 and time_ms() - desde > c.espera * 3
+            c.error = "timed out"
+            red_cerrar(c)
+            return
+        end
+        time_delay(1)
+    end
+end
+
+# Empieza a abrir la conexión y vuelve en seguida (red_abrir_avanzar la sigue)
+func red_abrir_empezar(host: String, puerto: Int, con_tls: Bool, espera_ms: Int) -> Conexion
+    c = Conexion(-1, -1, espera_ms, buffer_alloc(RED_TROZO * 4), RED_TROZO * 4, 0, 0, false, "")
+    c.host = host
+    c.con_tls = con_tls
+    c.puerto = puerto
+    c.empezada = time_ms()
+    _rt_asegurar()
+    if con_tls
+        c.sock = net_bg_open_tls(host, puerto, espera_ms)
+    else
+        c.sock = net_bg_open(host, puerto, espera_ms)
+    end
+    if c.sock < 0
+        c.error = "too many connections"
+        red_cerrar(c)
+        return c
+    end
+    c.fase = 1
+    return c
+end
+
+# Sigue abriendo sin esperar: 1 abierta, 0 todavía no, -1 error (c.error, y la conexión queda cerrada)
+func red_abrir_avanzar(c: Conexion) -> Int
+    if c.cerrada
+        return -1
+    end
+    if c.fase == 0
+        return 1
+    end
+    e = net_bg_state(c.sock)
+    if e == 6 or e == 5
+        c.error = net_bg_error(c.sock)
+        if c.error == ""
+            c.error = "connection closed"
+        end
+        red_cerrar(c)
+        return -1
+    end
+    if e == 4
+        c.fase = 0
+        return 1
+    end
+    if e == 3
+        c.fase = 2
+    end
+    return 0
+end
+
+# En qué está una conexión que se abre: "buscando" (el nombre), "conectando", "negociando" (TLS); "" abierta
+func red_fase(c: Conexion) -> String
+    if c.cerrada or c.fase == 0
+        return ""
+    end
+    e = net_bg_state(c.sock)
+    if e == 3
+        return "negociando"
+    elif e == 2 and net_bg_stage(c.sock) != 0
+        return "conectando"
+    end
+    return "buscando"
+end
+
+func red_enviar(c: Conexion, texto: String) -> Bool
+    if c.cerrada
+        return false
+    end
+    if texto.length == 0
+        return true
+    end
+    ok = net_bg_send(c.sock, texto)
+    if not ok
+        c.error = "out of memory"
+    end
+    return ok
+end
+
+# Sitio para un trozo más al final del buffer: lo no leído pasa al principio (sin solaparse)
+# o a un buffer más grande
+func _red_sitio(c: Conexion)
+    sin_leer = c.fin - c.ini
+    if c.cap - c.fin >= RED_TROZO
+        return
+    end
+    if c.ini >= sin_leer and c.cap - sin_leer >= RED_TROZO
+        buffer_copy(c.buf, 0, c.buf, c.ini, sin_leer)
+    else
+        cap = c.cap
+        while cap - sin_leer < RED_TROZO
+            cap = cap * 2
+        end
+        nuevo = buffer_alloc(cap)
+        buffer_copy(nuevo, 0, c.buf, c.ini, sin_leer)
+        buffer_free(c.buf)
+        c.buf = nuevo
+        c.cap = cap
+    end
+    c.ini = 0
+    c.fin = sin_leer
+end
+
+# Trae otro trozo (espera hasta c.espera); false si la conexión se cerró o no llegó nada a tiempo
+func _red_traer(c: Conexion) -> Bool
+    if c.cerrada
+        return false
+    end
+    desde = time_ms()
+    while true
+        n = red_recibir_ya(c)
+        if n > 0
+            return true
+        end
+        if n < 0
+            return false
+        end
+        if c.espera >= 0 and time_ms() - desde > c.espera
+            c.error = "timed out"
+            c.cerrada = true
+            return false
+        end
+        time_delay(1)
+    end
+    return false
+end
+
+# Lo que haya llegado, sin esperar: los bytes nuevos (0 si no hay), -1 si la conexión se cerró
+func red_recibir_ya(c: Conexion) -> Int
+    if c.cerrada
+        return -1
+    end
+    if c.fase != 0 and red_abrir_avanzar(c) != 1
+        return 0
+    end
+    _red_sitio(c)
+    n = net_bg_recv(c.sock, c.buf + c.fin, c.cap - c.fin)
+    if n < 0
+        c.cerrada = true
+        if c.error == ""
+            c.error = net_bg_error(c.sock)
+        end
+        return -1
+    end
+    c.fin = c.fin + n
+    return n
+end
+
+# Bytes recibidos y sin leer
+func red_pendientes(c: Conexion) -> Int
+    return c.fin - c.ini
+end
+
+# Los n primeros bytes sin leer como texto, y los da por leídos
+func _red_sacar(c: Conexion, n: Int) -> String
+    t = str_from_buffer(c.buf, c.ini, n)
+    c.ini = c.ini + n
+    # (vacío tras algo grande: otra vez pequeño, que la conexión puede seguir abierta mucho rato)
+    if c.ini == c.fin and c.cap > 1048576
+        buffer_free(c.buf)
+        c.buf = buffer_alloc(RED_TROZO * 4)
+        c.cap = RED_TROZO * 4
+        c.ini = 0
+        c.fin = 0
+    end
+    return t
+end
+
+# Una línea sin "\r\n" ni "\n"; nil si la conexión se cerró sin dar más
+func red_leer_linea(c: Conexion) -> String
+    i = c.ini
+    while true
+        while i < c.fin
+            if buffer_get_byte(c.buf, i) == 10
+                fin = i
+                if fin > c.ini and buffer_get_byte(c.buf, fin - 1) == 13
+                    fin = fin - 1
+                end
+                linea = _red_sacar(c, fin - c.ini)
+                c.ini = i + 1
+                return linea
+            end
+            i = i + 1
+        end
+        visto = i - c.ini
+        if not _red_traer(c)
+            if c.fin > c.ini
+                return _red_sacar(c, c.fin - c.ini)
+            end
+            var nada: String = nil
+            return nada
+        end
+        i = c.ini + visto
+    end
+    var nunca: String = nil
+    return nunca
+end
+
+# n bytes como texto (menos si la conexión se cierra antes); n < 0: hasta el cierre
+func red_leer(c: Conexion, n: Int) -> String
+    # todo en el búfer y un solo texto al final: juntando trozos (r + trozo) Dash reserva el doble y, pasados unos
+    # 8 MB, no podía (un texto llega a 16 MB): el texto volvía a empezar vacío y quedaba la cola (el script de 10,8 MB
+    # de YouTube daba "unexpected end of comment"; tarea 38a)
+    while n < 0 or c.fin - c.ini < n
+        if not _red_traer(c)
+            break
+        end
+    end
+    toma = c.fin - c.ini
+    if n >= 0 and toma > n
+        toma = n
+    end
+    return _red_sacar(c, toma)
+end
+
+# Todo lo que llegue hasta que la conexión se cierre
+func red_leer_todo(c: Conexion) -> String
+    return red_leer(c, -1)
+end
+
+# n bytes tal cual al fichero abierto f (n < 0: hasta el cierre); cuántos se escribieron
+func red_copiar(c: Conexion, f: Int, n: Int) -> Int
+    hechos = 0
+    while n < 0 or hechos < n
+        if c.fin == c.ini and not _red_traer(c)
+            break
+        end
+        toma = c.fin - c.ini
+        if n >= 0 and toma > n - hechos
+            toma = n - hechos
+        end
+        if file_write(f, c.buf + c.ini, toma) != toma
+            c.error = "can't write"
+            break
+        end
+        c.ini = c.ini + toma
+        hechos = hechos + toma
+    end
+    return hechos
+end
+
+# Bytes sueltos que crecen (un cuerpo comprimido, que no puede pasar por un texto: tiene bytes 0)
+struct Bytes
+    buf: Int = 0
+    n: Int = 0
+    cap: Int = 0
+end
+
+func bytes_meter(b: Bytes, origen: Int, n: Int) -> Bool
+    if b.n + n > b.cap
+        cap = (b.n + n) * 2 + 4096
+        nuevo = buffer_alloc(cap)
+        if nuevo == 0
+            return false
+        end
+        if b.buf != 0
+            buffer_copy(nuevo, 0, b.buf, 0, b.n)
+            buffer_free(b.buf)
+        end
+        b.buf = nuevo
+        b.cap = cap
+    end
+    buffer_copy(b.buf, b.n, origen, 0, n)
+    b.n = b.n + n
+    return true
+end
+
+func bytes_liberar(b: Bytes)
+    if b.buf != 0
+        buffer_free(b.buf)
+    end
+    b.buf = 0
+    b.n = 0
+    b.cap = 0
+end
+
+# Como red_copiar, pero al final de b
+func red_juntar(c: Conexion, b: Bytes, n: Int) -> Int
+    hechos = 0
+    while n < 0 or hechos < n
+        if c.fin == c.ini and not _red_traer(c)
+            break
+        end
+        toma = c.fin - c.ini
+        if n >= 0 and toma > n - hechos
+            toma = n - hechos
+        end
+        if not bytes_meter(b, c.buf + c.ini, toma)
+            c.error = "out of memory"
+            break
+        end
+        c.ini = c.ini + toma
+        hechos = hechos + toma
+    end
+    return hechos
+end
+
+func red_cerrar(c: Conexion)
+    if c.buf != 0
+        buffer_free(c.buf)
+        c.buf = 0
+    end
+    if c.sock >= 0
+        net_bg_close(c.sock)
+        c.sock = -1
+    end
+    c.cerrada = true
+end

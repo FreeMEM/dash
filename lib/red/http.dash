@@ -1,0 +1,1063 @@
+# Cliente HTTP/1.1 y HTTPS (AmiSSL): GET con redirecciones, Content-Length, chunked y hasta el cierre.
+# Viene de Tachyon (su lib/http.dash). POST, PUT... con cabeceras propias: http_empezar_metodo.
+# Sus mensajes de error van con tr() (números 400 a 442): un programa con catálogo no debe usar esos números.
+#
+#   r = http_get("http://ejemplo.org/", 15000)
+#   if r.error != ""
+#       Print r.error
+#   end
+#   Print r.estado                  # 200
+#   Print r.cabeceras["content-type"]
+#   html = http_texto(r)            # el cuerpo en Latin-1 si venía en UTF-8 (r.cuerpo: tal cual)
+#   r = http_a_fichero("http://ejemplo.org/logo.png", "T:logo.png", 15000)
+#   Print r.bytes                   # el cuerpo va tal cual al fichero (con estado 2xx; si no, a r.cuerpo)
+#
+# Sin esperar (para una interfaz que no se congela): ni la consulta DNS, ni la conexión, ni la
+# negociación TLS, ni recibir.
+#   c = http_empezar("http://ejemplo.org/", 15000)
+#   while not http_avanzar(c)                  # sigue la carga; true al acabar
+#       ... la interfaz; http_fase(c), http_recibidos(c), http_total(c) para el progreso; http_cancelar(c)
+#   end
+#   r = c.respuesta
+#
+# Las cabeceras se guardan con el nombre en minúsculas. En http_get el cuerpo es texto: los
+# bytes 0 pasan a espacios.
+
+import "url.dash"
+import "idioma.dash"
+import "red.dash"
+import "traza.dash"
+import "cookies.dash"
+
+const HTTP_MAX_REDIRECCIONES = 5
+# User-Agent de cada petición (un programa pone el suyo: "Tachyon/0.7 (AmigaOS)"; http_con_agente lo cambia para una carga)
+var http_agente: String = "Dash (AmigaOS)"
+
+# Accept-Language de cada petición ("es-ES,es;q=0.9,en;q=0.8"; "" sin ella): lo pone el programa con el idioma de Locale
+var http_idiomas: String = ""
+
+# Conexiones que siguen abiertas tras una respuesta (keep-alive), para la siguiente petición al mismo servidor
+# sin volver a conectar ni negociar TLS. Solo las cargas sin espera (http_empezar...) y solo si el programa lo
+# pide: http_seguir = true, y http_cerrar_libres() al acabar.
+var http_seguir: Bool = false
+var _http_libres: [Conexion] = nil
+const HTTP_LIBRES_MAX = 8
+const HTTP_LIBRE_MS = 10000     # una conexión libre más vieja se cierra (el servidor ya la habrá cerrado)
+
+struct Respuesta
+    estado: Int
+    razon: String
+    cabeceras: {String: String}
+    cuerpo: String
+    url: String
+    tipo: String
+    juego: String
+    error: String
+    bytes: Int        # bytes escritos en el fichero (http_a_fichero)
+    version_11: Bool = false   # HTTP/1.1 (la conexión puede seguir abierta tras la respuesta)
+    set_cookies: [String] = nil  # cada Set-Cookie (no se pueden juntar con comas: Expires lleva una)
+end
+
+func _respuesta_vacia(url: String) -> Respuesta
+    var c: {String: String} = {}
+    return Respuesta(0, "", c, "", url, "", "", "", 0)
+end
+
+# GET de una URL, siguiendo hasta 5 redirecciones
+func http_get(direccion: String, espera_ms: Int) -> Respuesta
+    return _http_get(direccion, espera_ms, "")
+end
+
+# Lo mismo, con el cuerpo de una respuesta 2xx escrito tal cual en el fichero (imágenes)
+func http_a_fichero(direccion: String, fichero: String, espera_ms: Int) -> Respuesta
+    return _http_get(direccion, espera_ms, fichero)
+end
+
+func _http_get(direccion: String, espera_ms: Int, fichero: String) -> Respuesta
+    actual = url_parse(direccion)
+    for vuelta in (0..HTTP_MAX_REDIRECCIONES)
+        r = _http_una(actual, espera_ms, fichero)
+        if r.error != ""
+            return r
+        end
+        es_redireccion = r.estado == 301 or r.estado == 302 or r.estado == 303 or r.estado == 307 or r.estado == 308
+        if not es_redireccion or not r.cabeceras.has("location")
+            return r
+        end
+        actual = url_resolve(actual, r.cabeceras["location"])
+    end
+    r = _respuesta_vacia(url_text(actual))
+    r.error = tr(400, "too many redirects")
+    return r
+end
+
+func _http_una(u: Url, espera_ms: Int, fichero: String) -> Respuesta
+    r = _respuesta_vacia(url_text(u))
+    c = _http_conectar(u, espera_ms, r, fichero == "")
+    if c == nil
+        return r
+    end
+    _http_leer(c, r, fichero)
+    _http_cookies(u, r)
+    return r
+end
+
+# Las Set-Cookie de la respuesta, al tarro (lib/cookies.dash)
+func _http_cookies(u: Url, r: Respuesta)
+    if r.set_cookies == nil
+        return
+    end
+    for v in r.set_cookies
+        cookies_recibir(u, v)
+    end
+    var nada: [String] = nil
+    r.set_cookies = nada
+end
+
+# El error de una conexión en el idioma de Tachyon: los de lib/red.dash (en inglés: corre en la tarea de la red, que
+# no abre el catálogo) y los de la red de Dash (en castellano); otro, tal cual
+func _http_error_red(e: String) -> String
+    claves = ["timed out", "too many connections", "connection closed", "out of memory", "can't send", "network closed", "conexión rechazada", "demasiadas conexiones a la vez", "demasiadas conexiones TLS", "error al enviar", "error al recibir", "error de red", "error de TLS", "la red es de otra tarea", "no hay AmiSSL (amisslmaster.library)", "no hay bsdsocket.library (falta una pila TCP/IP)", "no se encuentra el servidor", "no se puede abrir AmiSSL (hace falta AmiSSL 5.1 o posterior)", "no se puede abrir un socket", "no se puede buscar el servidor", "tiempo agotado al conectar", "tiempo agotado al negociar TLS", "tiempo agotado buscando el servidor", "can't write"]
+    textos = [tr(407, "timed out"), tr(420, "too many connections"), tr(421, "connection closed"), tr(422, "out of memory"), tr(423, "can't send"), tr(424, "network closed"), tr(425, "connection refused"), tr(426, "too many connections at once"), tr(427, "too many TLS connections"), tr(428, "error sending"), tr(429, "error receiving"), tr(430, "network error"), tr(431, "TLS error"), tr(432, "the network belongs to another task"), tr(433, "AmiSSL is missing (amisslmaster.library)"), tr(434, "no bsdsocket.library (a TCP/IP stack is missing)"), tr(435, "server not found"), tr(436, "can't open AmiSSL (5.1 or later is needed)"), tr(437, "can't open a socket"), tr(438, "can't look up the server"), tr(439, "timed out connecting"), tr(440, "timed out negotiating TLS"), tr(441, "timed out looking up the server"), tr(442, "can't write the file")]
+    for i in (0..claves.length - 1)
+        if e == claves[i]
+            return textos[i]
+        end
+    end
+    return e
+end
+
+# Conecta y manda la petición; nil (con r.error) si no se pudo
+func _http_conectar(u: Url, espera_ms: Int, r: Respuesta, comprimir: Bool) -> Conexion
+    return _http_conectar_con(u, espera_ms, r, "GET", "", "", comprimir)
+end
+
+# Con método y cuerpo (POST: el cuerpo y su Content-Type)
+func _http_conectar_con(u: Url, espera_ms: Int, r: Respuesta, metodo: String, cuerpo: String, tipo: String, comprimir: Bool) -> Conexion
+    var c: Conexion = nil
+    if u.esquema != "http" and u.esquema != "https"
+        r.error = hueco(tr(409, "unsupported scheme: %1"), u.esquema)
+        return c
+    end
+    if u.esquema == "https"
+        c = red_abrir_tls(u.host, url_port(u), espera_ms)
+    else
+        c = red_abrir(u.host, url_port(u), espera_ms)
+    end
+    if c.error != ""
+        r.error = _http_error_red(c.error)
+        var nada: Conexion = nil
+        return nada
+    end
+    if not red_enviar(c, _http_peticion(u, metodo, cuerpo, tipo, "", false, comprimir, ""))
+        r.error = _http_error_red(c.error)
+        red_cerrar(c)
+        var nada: Conexion = nil
+        return nada
+    end
+    return c
+end
+
+# agente: el User-Agent ("" el de dashweb; YouTube contesta según el cliente que dice ser). comprimir: pide gzip
+# (HTML, CSS y JS ocupan de 4 a 6 veces menos); lo que va a un fichero (imágenes, vídeo, fuentes) llega tal cual
+# (extra: cabeceras de más, "Nombre: valor" separadas por \r\n, las del XMLHttpRequest y el fetch del JavaScript)
+func _http_peticion(u: Url, metodo: String, cuerpo: String, tipo: String, agente: String, seguir: Bool, comprimir: Bool, extra: String) -> String
+    ruta = u.ruta
+    if ruta == ""
+        ruta = "/"
+    end
+    if u.tiene_consulta
+        ruta = ruta + "?" + u.consulta
+    end
+    host = u.host
+    if u.puerto >= 0
+        host = host + ":" + u.puerto
+    end
+    ua = http_agente
+    if agente != ""
+        ua = agente
+    end
+    peticion = metodo + " " + ruta + " HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: " + ua
+    codificacion = "identity"
+    if comprimir
+        codificacion = "gzip, deflate"
+    end
+    peticion = peticion + "\r\nAccept: */*\r\nAccept-Encoding: " + codificacion + "\r\nConnection: "
+    if seguir
+        peticion = peticion + "keep-alive"
+    else
+        peticion = peticion + "close"
+    end
+    if http_idiomas != ""
+        peticion = peticion + "\r\nAccept-Language: " + http_idiomas
+    end
+    galletas = cookies_para(u)
+    if galletas != ""
+        peticion = peticion + "\r\nCookie: " + galletas
+    end
+    if extra != ""
+        peticion = peticion + "\r\n" + extra
+    end
+    if metodo == "POST" or (cuerpo != "" and metodo != "GET" and metodo != "HEAD")
+        if tipo != ""
+            peticion = peticion + "\r\nContent-Type: " + tipo
+        end
+        peticion = peticion + "\r\nContent-Length: " + cuerpo.length
+    end
+    return peticion + "\r\n\r\n" + cuerpo
+end
+
+# Lee la respuesta (estado, cabeceras y cuerpo, a r.cuerpo o al fichero) y cierra la conexión
+func _http_leer(c: Conexion, r: Respuesta, fichero: String)
+    _http_leer_respuesta(c, r, fichero)
+    red_cerrar(c)
+end
+
+# Lo mismo sin cerrarla
+func _http_leer_respuesta(c: Conexion, r: Respuesta, fichero: String)
+    _leer_estado(c, r)
+    if r.error == ""
+        _leer_cabeceras(c, r)
+    end
+    if r.error == ""
+        f = 0
+        if fichero != "" and r.estado >= 200 and r.estado < 300
+            f = file_open(fichero, 1006)
+            if f == 0
+                r.error = hueco(tr(410, "can't write %1"), fichero)
+            end
+        end
+        if r.error == ""
+            _leer_cuerpo(c, r, f)
+        end
+        if f != 0
+            file_close(f)
+        end
+    end
+end
+
+# "HTTP/1.1 200 OK"
+func _leer_estado(c: Conexion, r: Respuesta)
+    linea = red_leer_linea(c)
+    if linea == nil
+        r.error = tr(401, "the server closed without answering")
+        if c.error != ""
+            r.error = _http_error_red(c.error)
+        end
+        return
+    end
+    if not str_starts(linea, "HTTP/")
+        r.error = tr(402, "an answer that isn't HTTP")
+        return
+    end
+    r.version_11 = str_starts(linea, "HTTP/1.1")
+    p = str_find(linea, " ")
+    if p < 0
+        r.error = tr(403, "broken status line")
+        return
+    end
+    resto = linea[p + 1:]
+    r.estado = Int(resto)
+    q = str_find(resto, " ")
+    if q >= 0
+        r.razon = resto[q + 1:]
+    end
+end
+
+# "Nombre: valor" hasta una línea vacía; nombres en minúsculas
+func _leer_cabeceras(c: Conexion, r: Respuesta)
+    linea = red_leer_linea(c)
+    while linea != nil and linea != ""
+        p = str_find(linea, ":")
+        if p > 0
+            nombre = str_lower(str_trim(linea[:p]))
+            valor = str_trim(linea[p + 1:])
+            if nombre == "set-cookie"
+                if r.set_cookies == nil
+                    var l: [String] = []
+                    r.set_cookies = l
+                end
+                r.set_cookies.push(valor)
+            end
+            if r.cabeceras.has(nombre)
+                r.cabeceras[nombre] = r.cabeceras[nombre] + ", " + valor
+            else
+                r.cabeceras[nombre] = valor
+            end
+        end
+        linea = red_leer_linea(c)
+    end
+    if linea == nil
+        r.error = tr(404, "cut headers")
+        return
+    end
+    if r.cabeceras.has("content-type")
+        _tipo_y_juego(r, r.cabeceras["content-type"])
+    end
+end
+
+# "text/html; charset=UTF-8" -> tipo "text/html", juego "utf-8"
+func _tipo_y_juego(r: Respuesta, valor: String)
+    v = str_lower(valor)
+    p = str_find(v, ";")
+    if p < 0
+        r.tipo = str_trim(v)
+        return
+    end
+    r.tipo = str_trim(v[:p])
+    q = str_find(v, "charset=")
+    if q >= 0
+        j = str_trim(v[q + 8:])
+        fin = str_find(j, ";")
+        if fin >= 0
+            j = j[:fin]
+        end
+        r.juego = str_replace(str_trim(j), "\"", "")
+    end
+end
+
+# El cuerpo como texto en r.cuerpo, o tal cual al fichero f si no es 0
+func _leer_cuerpo(c: Conexion, r: Respuesta, f: Int)
+    if r.estado == 204 or r.estado == 304 or (r.estado >= 100 and r.estado < 200)
+        return
+    end
+    var b: Bytes = nil
+    if f == 0 and r.cabeceras.has("content-encoding")
+        ce = str_lower(str_trim(r.cabeceras["content-encoding"]))
+        if ce == "gzip" or ce == "x-gzip" or ce == "deflate"
+            b = Bytes()
+        end
+    end
+    codificacion = ""
+    if r.cabeceras.has("transfer-encoding")
+        codificacion = str_lower(r.cabeceras["transfer-encoding"])
+    end
+    if str_find(codificacion, "chunked") >= 0
+        _leer_chunked(c, r, f, b)
+    elif r.cabeceras.has("content-length")
+        n = Int(r.cabeceras["content-length"])
+        if b != nil
+            if red_juntar(c, b, n) < n
+                r.error = tr(405, "cut body")
+            end
+        elif f != 0
+            r.bytes = red_copiar(c, f, n)
+            if r.bytes < n
+                r.error = tr(405, "cut body")
+            end
+        else
+            r.cuerpo = red_leer(c, n)
+            if r.cuerpo.length < n
+                r.error = tr(405, "cut body")
+            end
+        end
+    elif b != nil
+        red_juntar(c, b, -1)
+    elif f != 0
+        r.bytes = red_copiar(c, f, -1)
+    else
+        r.cuerpo = red_leer_todo(c)
+    end
+    if b != nil
+        if r.error == ""
+            _http_inflar(r, b.buf, b.n)
+        end
+        bytes_liberar(b)
+    end
+end
+
+# Un cuerpo gzip (RFC 1952) o deflate (zlib, RFC 1950, o sin cabecera) descomprimido con inflate_auto a r.cuerpo;
+# si no se puede, r.error. El destino crece mientras no quepa (-2)
+func _http_inflar(r: Respuesta, datos: Int, n: Int)
+    max = n * 4 + 1024
+    while datos != 0 and n > 0
+        dest = buffer_alloc(max)
+        if dest == 0
+            break
+        end
+        k = inflate_auto(datos, n, dest, max)
+        if k >= 0
+            r.cuerpo = str_from_buffer(dest, 0, k)
+            buffer_free(dest)
+            return
+        end
+        buffer_free(dest)
+        if k != -2
+            break
+        end
+        max = max * 2
+    end
+    r.error = tr(406, "could not decompress")
+end
+
+# Trozos: tamaño en hexadecimal, datos, salto; un trozo de tamaño 0 termina
+func _leer_chunked(c: Conexion, r: Respuesta, f: Int, b: Bytes)
+    cuerpo = ""
+    linea = red_leer_linea(c)
+    while linea != nil
+        n = str_to_int(str_trim(linea), 16)
+        if n <= 0
+            # cabeceras finales, hasta una línea vacía
+            fin = red_leer_linea(c)
+            while fin != nil and fin != ""
+                fin = red_leer_linea(c)
+            end
+            r.cuerpo = cuerpo
+            return
+        end
+        llegados = 0
+        if b != nil
+            llegados = red_juntar(c, b, n)
+        elif f != 0
+            llegados = red_copiar(c, f, n)
+            r.bytes = r.bytes + llegados
+        else
+            trozo = red_leer(c, n)
+            cuerpo = cuerpo + trozo
+            llegados = trozo.length
+        end
+        if llegados < n
+            r.cuerpo = cuerpo
+            r.error = tr(405, "cut body")
+            return
+        end
+        red_leer_linea(c)
+        linea = red_leer_linea(c)
+    end
+    r.cuerpo = cuerpo
+    r.error = tr(405, "cut body")
+end
+
+# El cuerpo en Latin-1, según su juego de caracteres (sin él: UTF-8)
+func http_texto(r: Respuesta) -> String
+    if str_contains(str_lower(r.juego), "utf-8") or str_contains(str_lower(r.juego), "utf8")
+        return utf8_to_latin1(r.cuerpo)
+    end
+    return r.cuerpo
+end
+
+# === Sin esperar ===
+
+struct Carga
+    actual: Url
+    conexion: Conexion
+    espera: Int            # ms sin recibir nada antes de darla por perdida
+    redirecciones: Int
+    hecha: Bool
+    respuesta: Respuesta
+    total: Int             # bytes de la respuesta entera si se sabe (Content-Length), -1 si aún no, -2 si no
+    ultimo: Int            # time_ms del último dato
+    fichero: String = ""   # el cuerpo de una respuesta 2xx va a este fichero (http_empezar_a_fichero)
+    metodo: String = "GET"
+    cuerpo: String = ""    # lo que se manda con POST
+    extra: String = ""     # cabeceras de más ("Nombre: valor" separadas por \r\n; XMLHttpRequest y fetch)
+    tipo: String = ""      # su Content-Type
+    agente: String = ""    # el User-Agent, si no es el de dashweb (http_con_agente)
+    cabecera: Int = -1     # bytes de la línea de estado y las cabeceras, cuando ya llegaron (http_parcial)
+    enviada: Bool = false  # la petición ya salió por la conexión
+    reusada: Bool = false  # la conexión venía de otra respuesta (si resulta cerrada, se abre otra)
+    otra: Bool = false     # ya se abrió otra porque el servidor cerró una nueva sin responder
+    t0: Int = 0            # time_ms de cuando se pidió (traza)
+    # http_volcar: el cuerpo de una respuesta 2xx va a su fichero según llega, sin juntarlo entero en memoria (un
+    # .lha grande agotaba la memoria; tarea 40b). volcando: ya se escribe en el fichero f; restan: bytes del cuerpo
+    # que faltan (-1: hasta el cierre)
+    volcar: Bool = false
+    volcando: Bool = false
+    f: Int = 0
+    volcados: Int = 0
+    restan: Int = -1
+end
+
+# Que el cuerpo de esta carga a fichero (http_empezar_a_fichero) se escriba según llega, sin juntarlo entero en
+# memoria (las descargas): cuando son 2xx sin chunked ni compresión; si no, como siempre. No con http_parcial (lo
+# que ya llegó se va al fichero)
+func http_volcar(c: Carga) -> Carga
+    c.volcar = true
+    return c
+end
+
+# ¿Ya llegaron las cabeceras de una respuesta que se puede volcar? Entonces las lee (quedan en c.respuesta), abre el
+# fichero y empieza a volcar
+func _carga_empezar_volcado(c: Carga)
+    cab = http_cabeceras_ya(c)
+    if cab == nil
+        return
+    end
+    # (una redirección o un error van como siempre: la carga sigue volcando la respuesta de la redirección)
+    if cab.estado < 200 or cab.estado >= 300
+        return
+    end
+    if cab.cabeceras.has("content-encoding")
+        c.volcar = false
+        return
+    end
+    if cab.cabeceras.has("transfer-encoding") and str_find(str_lower(cab.cabeceras["transfer-encoding"]), "chunked") >= 0
+        c.volcar = false
+        return
+    end
+    r = c.respuesta
+    _leer_estado(c.conexion, r)
+    if r.error == ""
+        _leer_cabeceras(c.conexion, r)
+    end
+    if r.error != ""
+        c.volcar = false
+        return
+    end
+    c.f = file_open(c.fichero, 1006)
+    if c.f == 0
+        r.error = hueco(tr(410, "can't write %1"), c.fichero)
+        return
+    end
+    c.restan = -1
+    if r.cabeceras.has("content-length")
+        c.restan = Int(r.cabeceras["content-length"])
+    end
+    c.volcando = true
+end
+
+func http_empezar(direccion: String, espera_ms: Int) -> Carga
+    var sin: Conexion = nil
+    c = Carga(url_parse(direccion), sin, espera_ms, 0, false, _respuesta_vacia(direccion), -1, time_ms())
+    c.t0 = c.ultimo
+    if traza_activa
+        traza("pide " + direccion)
+    end
+    _carga_conectar(c)
+    return c
+end
+
+# Lo mismo que http_a_fichero, sin esperar
+func http_empezar_a_fichero(direccion: String, fichero: String, espera_ms: Int) -> Carga
+    var sin: Conexion = nil
+    c = Carga(url_parse(direccion), sin, espera_ms, 0, false, _respuesta_vacia(direccion), -1, time_ms())
+    c.t0 = c.ultimo
+    c.fichero = fichero
+    if traza_activa
+        traza("pide " + direccion)
+    end
+    _carga_conectar(c)
+    return c
+end
+
+# POST sin esperar: el cuerpo (application/x-www-form-urlencoded si tipo es "")
+func http_empezar_post(direccion: String, cuerpo: String, tipo: String, espera_ms: Int) -> Carga
+    var sin: Conexion = nil
+    c = Carga(url_parse(direccion), sin, espera_ms, 0, false, _respuesta_vacia(direccion), -1, time_ms())
+    c.metodo = "POST"
+    c.cuerpo = cuerpo
+    c.tipo = tipo
+    if tipo == ""
+        c.tipo = "application/x-www-form-urlencoded"
+    end
+    _carga_conectar(c)
+    return c
+end
+
+# Cualquier método, con su cuerpo, su Content-Type y cabeceras de más (el XMLHttpRequest y el fetch del JavaScript,
+# tarea 37e2), sin esperar
+func http_empezar_metodo(direccion: String, metodo: String, cuerpo: String, tipo: String, extra: String, espera_ms: Int) -> Carga
+    var sin: Conexion = nil
+    c = Carga(url_parse(direccion), sin, espera_ms, 0, false, _respuesta_vacia(direccion), -1, time_ms())
+    c.t0 = c.ultimo
+    c.metodo = metodo
+    c.cuerpo = cuerpo
+    c.tipo = tipo
+    c.extra = extra
+    if traza_activa
+        traza("pide " + metodo + " " + direccion + " (JavaScript)")
+    end
+    _carga_conectar(c)
+    return c
+end
+
+# Cualquier método esperando a la respuesta (una API: POST con JSON y una cabecera Authorization). extra son
+# cabeceras de más, una por línea separadas por "\r\n" ("Authorization: Bearer x\r\nX-Title: y")
+func http_pedir(direccion: String, metodo: String, cuerpo: String, tipo: String, extra: String, espera_ms: Int) -> Respuesta
+    c = http_empezar_metodo(direccion, metodo, cuerpo, tipo, extra, espera_ms)
+    while not http_avanzar(c)
+        time_delay(1)
+    end
+    return c.respuesta
+end
+
+# La misma carga con otro User-Agent (antes de su primer http_avanzar: la petición aún no se ha mandado)
+func http_con_agente(c: Carga, agente: String) -> Carga
+    c.agente = agente
+    return c
+end
+
+# Empieza a abrir la conexión sin esperar (http_avanzar manda la petición cuando está abierta)
+func _carga_conectar(c: Carga)
+    c.respuesta = _respuesta_vacia(url_text(c.actual))
+    c.total = -1
+    c.cabecera = -1
+    c.ultimo = time_ms()
+    c.enviada = false
+    c.reusada = false
+    u = c.actual
+    if u.esquema != "http" and u.esquema != "https"
+        c.respuesta.error = hueco(tr(409, "unsupported scheme: %1"), u.esquema)
+        var nada: Conexion = nil
+        c.conexion = nada
+        c.hecha = true
+        return
+    end
+    if http_seguir
+        libre = _http_libre(u.host, url_port(u), u.esquema == "https")
+        if libre != nil
+            c.conexion = libre
+            c.reusada = true
+            return
+        end
+    end
+    c.conexion = red_abrir_empezar(u.host, url_port(u), u.esquema == "https", c.espera)
+    if c.conexion.cerrada
+        c.respuesta.error = _http_error_red(c.conexion.error)
+        c.hecha = true
+    end
+end
+
+# Lo que hace la carga ahora: "buscando" (el nombre del servidor), "conectando", "negociando" (TLS),
+# "recibiendo"; "" si acabó
+func http_fase(c: Carga) -> String
+    if c.hecha
+        return ""
+    end
+    f = red_fase(c.conexion)
+    if f == ""
+        return "recibiendo"
+    end
+    return f
+end
+
+# Lee lo que haya llegado sin esperar; true cuando la respuesta está entera (o hubo error) en c.respuesta
+func http_avanzar(c: Carga) -> Bool
+    if c.hecha
+        return true
+    end
+    if c.conexion.fase != 0
+        abierta = red_abrir_avanzar(c.conexion)
+        if abierta == 0
+            return false
+        end
+        if abierta < 0
+            c.respuesta.error = _http_error_red(c.conexion.error)
+            red_cerrar(c.conexion)
+            c.hecha = true
+            return true
+        end
+    end
+    if not c.enviada
+        if not red_enviar(c.conexion, _http_peticion(c.actual, c.metodo, c.cuerpo, c.tipo, c.agente, http_seguir, c.fichero == "", c.extra))
+            if c.reusada
+                _carga_otra_conexion(c)
+                return false
+            end
+            c.respuesta.error = _http_error_red(c.conexion.error)
+            red_cerrar(c.conexion)
+            c.hecha = true
+            return true
+        end
+        c.enviada = true
+        c.ultimo = time_ms()
+        if traza_activa
+            reusada = ""
+            if c.reusada
+                reusada = " (conexión reusada)"
+            end
+            traza("enviada " + url_text(c.actual) + " a los " + (c.ultimo - c.t0) + " ms" + reusada)
+        end
+    end
+    n = red_recibir_ya(c.conexion)
+    while n > 0
+        c.ultimo = time_ms()
+        n = red_recibir_ya(c.conexion)
+    end
+    if n < 0 and c.reusada and red_pendientes(c.conexion) == 0
+        # el servidor había cerrado la conexión libre: otra vez, con una nueva
+        _carga_otra_conexion(c)
+        return false
+    end
+    if n < 0 and not c.otra and c.metodo == "GET" and red_pendientes(c.conexion) == 0
+        # una nueva que cerró sin responder nada: la red la abre en cuanto se pide y la petición puede salir muchos
+        # segundos después (el programa maquetaba), cuando el servidor ya se cansó de esperarla; una vez más
+        c.otra = true
+        _carga_otra_conexion(c)
+        return false
+    end
+    if c.volcar and not c.volcando and c.fichero != ""
+        _carga_empezar_volcado(c)
+        if c.respuesta.error != ""
+            red_cerrar(c.conexion)
+            c.hecha = true
+            return true
+        end
+    end
+    if c.volcando
+        return _carga_volcar(c, n < 0)
+    end
+    if c.total == -1
+        c.total = _carga_total(c.conexion)
+    end
+    if c.total == -3
+        # chunked: entera cuando ha llegado el trozo de tamaño 0 y sus cabeceras finales
+        fin = _chunked_fin(c.conexion)
+        if fin > 0
+            c.total = fin
+        end
+    end
+    entera = n < 0 or (c.total > 0 and red_pendientes(c.conexion) >= c.total)
+    if not entera
+        if time_ms() - c.ultimo > c.espera
+            red_cerrar(c.conexion)
+            c.respuesta.error = tr(407, "timed out")
+            c.hecha = true
+            return true
+        end
+        return false
+    end
+    _http_leer_respuesta(c.conexion, c.respuesta, c.fichero)
+    _http_cookies(c.actual, c.respuesta)
+    r = c.respuesta
+    _http_soltar(c.conexion, r, n < 0)
+    redireccion = r.estado == 301 or r.estado == 302 or r.estado == 303 or r.estado == 307 or r.estado == 308
+    if r.error == "" and redireccion and r.cabeceras.has("location")
+        if c.redirecciones >= HTTP_MAX_REDIRECCIONES
+            r.error = tr(400, "too many redirects")
+        else
+            c.redirecciones = c.redirecciones + 1
+            c.actual = url_resolve(c.actual, r.cabeceras["location"])
+            if r.estado != 307 and r.estado != 308
+                # tras un POST, la redirección se sigue con GET (como los navegadores)
+                c.metodo = "GET"
+                c.cuerpo = ""
+            end
+            _carga_conectar(c)
+            return c.hecha
+        end
+    end
+    c.hecha = true
+    if traza_activa
+        traza("llega " + url_text(c.actual) + ": " + r.estado + " " + r.error + ", " + (r.cuerpo.length + r.bytes) + " bytes en " + (time_ms() - c.t0) + " ms")
+    end
+    return true
+end
+
+# Lo que ha llegado, al fichero (cerrada: el servidor cerró la conexión); true cuando acaba
+func _carga_volcar(c: Carga, cerrada: Bool) -> Bool
+    hay = red_pendientes(c.conexion)
+    if c.restan >= 0 and hay > c.restan
+        hay = c.restan
+    end
+    if hay > 0
+        # (no más de lo que ya hay: red_copiar no espera a la red)
+        escritos = red_copiar(c.conexion, c.f, hay)
+        c.volcados = c.volcados + escritos
+        if c.restan >= 0
+            c.restan = c.restan - escritos
+        end
+        if escritos < hay
+            c.respuesta.error = hueco(tr(410, "can't write %1"), c.fichero)
+        end
+    end
+    r = c.respuesta
+    acabada = c.restan == 0 or cerrada or r.error != ""
+    if not acabada
+        if time_ms() - c.ultimo > c.espera
+            r.error = tr(407, "timed out")
+        else
+            return false
+        end
+    end
+    file_close(c.f)
+    c.f = 0
+    c.volcando = false
+    r.bytes = c.volcados
+    if r.error == "" and c.restan > 0
+        r.error = tr(405, "cut body")
+    end
+    _http_cookies(c.actual, r)
+    if r.error == "" and c.restan == 0
+        _http_soltar(c.conexion, r, cerrada)
+    else
+        red_cerrar(c.conexion)
+    end
+    c.hecha = true
+    if traza_activa
+        traza("llega " + url_text(c.actual) + ": " + r.estado + " " + r.error + ", " + r.bytes + " bytes (volcados) en " + (time_ms() - c.t0) + " ms")
+    end
+    return true
+end
+
+# Las cabeceras de la respuesta en cuanto han llegado, sin esperar al cuerpo (una Respuesta con estado,
+# cabeceras, tipo y la dirección; sin cuerpo), o nil si aún no. Para saber pronto qué viene (una descarga).
+func http_cabeceras_ya(c: Carga) -> Respuesta
+    var nada: Respuesta = nil
+    if c.hecha or c.conexion == nil or c.conexion.fase != 0
+        return nada
+    end
+    if c.cabecera < 0
+        c.cabecera = _carga_cabecera(c.conexion)
+    end
+    if c.cabecera <= 12
+        return nada
+    end
+    texto = str_from_buffer(c.conexion.buf, c.conexion.ini, c.cabecera)
+    r = _respuesta_vacia(url_text(c.actual))
+    primera = true
+    for linea in str_split(texto, "\r\n")
+        if primera
+            p = str_find(linea, " ")
+            if p > 0
+                r.estado = Int(linea[p + 1:p + 4])
+            end
+            primera = false
+        else
+            p = str_find(linea, ":")
+            if p > 0
+                nombre = str_lower(str_trim(linea[:p]))
+                if not r.cabeceras.has(nombre)
+                    r.cabeceras[nombre] = str_trim(linea[p + 1:])
+                end
+            end
+        end
+    end
+    if r.cabeceras.has("content-type")
+        _tipo_y_juego(r, r.cabeceras["content-type"])
+    end
+    return r
+end
+
+# Bytes de la respuesta ya recibidos y lo que medirá entera (-1 si no se sabe), para el progreso
+func http_recibidos(c: Carga) -> Int
+    if c.conexion == nil or c.conexion.fase != 0
+        return 0
+    end
+    return c.volcados + red_pendientes(c.conexion)
+end
+
+func http_total(c: Carga) -> Int
+    if c.total < 0
+        return -1
+    end
+    return c.total
+end
+
+func http_cancelar(c: Carga)
+    if not c.hecha
+        if c.f != 0
+            file_close(c.f)
+            c.f = 0
+        end
+        red_cerrar(c.conexion)     # también si aún se estaba abriendo
+        c.respuesta.error = tr(408, "cancelled")
+        c.hecha = true
+    end
+end
+
+# Lo que ya ha llegado del cuerpo de una respuesta 2xx con Content-Length, para usarlo antes de que acabe
+# (un vídeo que empieza mientras se baja): su dirección en el búfer de la conexión, o 0 si aún no se sabe o no
+# vale (redirección, chunked). El búfer se mueve al crecer: pedirla otra vez tras cada http_avanzar. Al acabar la
+# carga el búfer se libera (el cuerpo ya está en su fichero).
+func http_parcial(c: Carga) -> Int
+    if c.hecha or c.conexion == nil or c.conexion.fase != 0 or c.total <= 0
+        return 0
+    end
+    if c.cabecera < 0
+        c.cabecera = _carga_cabecera(c.conexion)
+    end
+    # "HTTP/1.1 2xx": el estado empieza en el byte 9
+    if c.cabecera <= 12 or buffer_get_byte(c.conexion.buf, c.conexion.ini + 9) != 50
+        return 0
+    end
+    return c.conexion.buf + c.conexion.ini + c.cabecera
+end
+
+# Bytes del cuerpo que ya han llegado (con http_parcial) y los que tendrá entero
+func http_parcial_listos(c: Carga) -> Int
+    if http_parcial(c) == 0
+        return 0
+    end
+    return red_pendientes(c.conexion) - c.cabecera
+end
+
+func http_parcial_total(c: Carga) -> Int
+    if http_parcial(c) == 0
+        return 0
+    end
+    return c.total - c.cabecera
+end
+
+# Bytes de la línea de estado y las cabeceras (con la línea vacía), o -1 si aún no han llegado
+func _carga_cabecera(c: Conexion) -> Int
+    n = red_pendientes(c)
+    i = 0
+    while i + 3 < n
+        if buffer_get_byte(c.buf, c.ini + i) == 13 and buffer_get_byte(c.buf, c.ini + i + 1) == 10 and buffer_get_byte(c.buf, c.ini + i + 2) == 13 and buffer_get_byte(c.buf, c.ini + i + 3) == 10
+            return i + 4
+        end
+        i = i + 1
+    end
+    return -1
+end
+
+# Cabeceras + Content-Length cuando ya llegaron las cabeceras: el tamaño de la respuesta entera;
+# -1 si aún no han llegado, -2 si no lo dicen (hasta el cierre), -3 chunked (_chunked_fin)
+func _carga_total(c: Conexion) -> Int
+    n = red_pendientes(c)
+    i = 0
+    while i + 3 < n
+        if buffer_get_byte(c.buf, c.ini + i) == 13 and buffer_get_byte(c.buf, c.ini + i + 1) == 10 and buffer_get_byte(c.buf, c.ini + i + 2) == 13 and buffer_get_byte(c.buf, c.ini + i + 3) == 10
+            cabeceras = str_lower(str_from_buffer(c.buf, c.ini, i))
+            estado = Int(cabeceras[9:12])
+            if estado == 204 or estado == 304 or (estado >= 100 and estado < 200)
+                return i + 4          # sin cuerpo
+            end
+            if str_find(cabeceras, "\ntransfer-encoding:") >= 0 and str_find(cabeceras, "chunked") >= 0
+                return -3
+            end
+            p = str_find(cabeceras, "\ncontent-length:")
+            if p < 0
+                return -2
+            end
+            fin = str_find_from(cabeceras, "\r", p + 1)
+            if fin < 0
+                fin = cabeceras.length
+            end
+            return i + 4 + Int(str_trim(cabeceras[p + 16:fin]))
+        end
+        i = i + 1
+    end
+    return -1
+end
+
+
+# Una respuesta chunked: su tamaño entero (cabeceras, trozos, el de tamaño 0 y las cabeceras finales) si ya ha
+# llegado entera; -1 si aún no
+func _chunked_fin(c: Conexion) -> Int
+    n = red_pendientes(c)
+    p = _carga_cabecera(c)
+    if p < 0
+        return -1
+    end
+    while true
+        # la línea del tamaño, en hexadecimal (puede llevar ";extensiones")
+        e = _red_fin_de_linea(c, p, n)
+        if e < 0
+            return -1
+        end
+        tam = str_to_int(str_trim(str_from_buffer(c.buf, c.ini + p, e - p)), 16)
+        p = e + 2
+        if tam <= 0
+            # cabeceras finales, hasta una línea vacía
+            while true
+                e = _red_fin_de_linea(c, p, n)
+                if e < 0
+                    return -1
+                end
+                if e == p
+                    return p + 2
+                end
+                p = e + 2
+            end
+        end
+        p = p + tam + 2
+        if p > n
+            return -1
+        end
+    end
+    return -1
+end
+
+# Dónde está el \r\n que acaba la línea que empieza en p (bytes [p, n) de lo recibido); -1 si aún no ha llegado
+func _red_fin_de_linea(c: Conexion, p: Int, n: Int) -> Int
+    i = p
+    while i + 1 < n
+        if buffer_get_byte(c.buf, c.ini + i) == 13 and buffer_get_byte(c.buf, c.ini + i + 1) == 10
+            return i
+        end
+        i = i + 1
+    end
+    return -1
+end
+
+# === Conexiones que siguen abiertas ===
+
+# Tras leer una respuesta entera: la conexión se guarda para otra petición si se puede (HTTP/1.1, sin
+# "Connection: close", el servidor no la cerró y no sobró nada); si no, se cierra
+func _http_soltar(c: Conexion, r: Respuesta, cerrada: Bool)
+    seguir = http_seguir and not cerrada and not c.cerrada and r.error == "" and red_pendientes(c) == 0 and r.version_11
+    if seguir and r.cabeceras.has("connection") and str_find(str_lower(r.cabeceras["connection"]), "close") >= 0
+        seguir = false
+    end
+    if not seguir
+        red_cerrar(c)
+        return
+    end
+    if _http_libres == nil
+        var nuevas: [Conexion] = []
+        _http_libres = nuevas
+    end
+    if _http_libres.length >= HTTP_LIBRES_MAX
+        red_cerrar(_http_libres[0])
+        _http_libres.remove(0)
+    end
+    c.empezada = time_ms()        # (desde cuándo está libre)
+    _http_libres.push(c)
+end
+
+# Una conexión libre a ese servidor que siga abierta (se saca de la lista), o nil
+func _http_libre(host: String, puerto: Int, con_tls: Bool) -> Conexion
+    var nada: Conexion = nil
+    if _http_libres == nil
+        return nada
+    end
+    i = 0
+    while i < _http_libres.length
+        x = _http_libres[i]
+        if time_ms() - x.empezada > HTTP_LIBRE_MS
+            red_cerrar(x)
+            _http_libres.remove(i)
+            continue
+        end
+        if x.host == host and x.puerto == puerto and x.con_tls == con_tls
+            _http_libres.remove(i)
+            # si el servidor ya la cerró (o mandó algo sin pedirlo), no vale
+            if red_recibir_ya(x) != 0
+                red_cerrar(x)
+                continue
+            end
+            return x
+        end
+        i = i + 1
+    end
+    return nada
+end
+
+# La conexión reusada resultó cerrada: una nueva para la misma petición
+func _carga_otra_conexion(c: Carga)
+    red_cerrar(c.conexion)
+    u = c.actual
+    c.conexion = red_abrir_empezar(u.host, url_port(u), u.esquema == "https", c.espera)
+    c.reusada = false
+    c.enviada = false
+    c.ultimo = time_ms()
+    if c.conexion.cerrada
+        c.respuesta.error = _http_error_red(c.conexion.error)
+        c.hecha = true
+    end
+end
+
+# Cierra las conexiones libres (al acabar el programa)
+func http_cerrar_libres()
+    if _http_libres == nil
+        return
+    end
+    for x in _http_libres
+        red_cerrar(x)
+    end
+    _http_libres.clear()
+    var nada: [Conexion] = nil
+    _http_libres = nada
+end

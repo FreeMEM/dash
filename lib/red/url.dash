@@ -1,0 +1,403 @@
+# URLs: analizar, resolver relativas y escribir (subconjunto de RFC 3986).
+#
+#   u = url_parse("http://Ejemplo.org:8080/a/b?x=1#arriba")
+#   v = url_resolve(u, "../c.html")       # http://ejemplo.org:8080/c.html
+#   Print url_text(v)
+#
+# El esquema y el host se guardan en minúsculas. "puerto" es -1 si la URL no lo da
+# (url_port() devuelve el de siempre: 80 para http, 443 para https). Los "tiene_"
+# distinguen una parte vacía ("http://a/?") de una que no está ("http://a/").
+
+struct Url
+    esquema: String
+    tiene_autoridad: Bool
+    usuario: String
+    host: String
+    puerto: Int
+    ruta: String
+    tiene_consulta: Bool
+    consulta: String
+    tiene_fragmento: Bool
+    fragmento: String
+end
+
+# Analiza una URL (absoluta o relativa: entonces el esquema queda vacío)
+func url_parse(texto: String) -> Url
+    u = Url("", false, "", "", -1, "", false, "", false, "")
+    s = texto
+    # fragmento: desde el primer "#"
+    p = str_find(s, "#")
+    if p >= 0
+        u.tiene_fragmento = true
+        u.fragmento = s[p + 1:]
+        s = s[:p]
+    end
+    # consulta: desde el primer "?"
+    p = str_find(s, "?")
+    if p >= 0
+        u.tiene_consulta = true
+        u.consulta = s[p + 1:]
+        s = s[:p]
+    end
+    # esquema: letras, cifras, "+", "-" o "." antes del primer ":", empezando por letra
+    p = _scheme_end(s)
+    if p > 0
+        u.esquema = str_lower(s[:p])
+        s = s[p + 1:]
+    end
+    # autoridad: tras "//" hasta la siguiente "/"
+    if str_starts(s, "//")
+        u.tiene_autoridad = true
+        s = s[2:]
+        p = str_find(s, "/")
+        autoridad = s
+        if p >= 0
+            autoridad = s[:p]
+            s = s[p:]
+        else
+            s = ""
+        end
+        _parse_authority(u, autoridad)
+    end
+    u.ruta = s
+    return u
+end
+
+# Posición del ":" que cierra el esquema, o -1 si el texto no empieza por un esquema
+func _scheme_end(s: String) -> Int
+    n = s.length
+    i = 0
+    while i < n
+        c = str_code(s, i)
+        letra = (c >= 97 and c <= 122) or (c >= 65 and c <= 90)
+        if c == 58
+            if i > 0
+                return i
+            end
+            return -1
+        end
+        if not letra
+            if i == 0
+                return -1
+            end
+            otro = (c >= 48 and c <= 57) or c == 43 or c == 45 or c == 46
+            if not otro
+                return -1
+            end
+        end
+        i = i + 1
+    end
+    return -1
+end
+
+# usuario@host:puerto (el host entre corchetes si es IPv6)
+func _parse_authority(u: Url, autoridad: String)
+    a = autoridad
+    p = str_find(a, "@")
+    if p >= 0
+        u.usuario = a[:p]
+        a = a[p + 1:]
+    end
+    fin_host = 0
+    if str_starts(a, "[")
+        fin_host = str_find(a, "]") + 1
+        if fin_host <= 0
+            fin_host = a.length
+        end
+    end
+    p = str_find_from(a, ":", fin_host)
+    if p >= 0
+        if p + 1 < a.length
+            u.puerto = Int(a[p + 1:])
+        end
+        a = a[:p]
+    end
+    u.host = str_lower(a)
+end
+
+# Puerto que se usa: el de la URL o el del esquema (-1 si no se sabe)
+func url_port(u: Url) -> Int
+    if u.puerto >= 0
+        return u.puerto
+    end
+    if u.esquema == "http"
+        return 80
+    end
+    if u.esquema == "https"
+        return 443
+    end
+    return -1
+end
+
+# La URL como texto
+func url_text(u: Url) -> String
+    t = ""
+    if u.esquema != ""
+        t = u.esquema + ":"
+    end
+    if u.tiene_autoridad
+        t = t + "//"
+        if u.usuario != ""
+            t = t + u.usuario + "@"
+        end
+        t = t + u.host
+        if u.puerto >= 0
+            t = t + ":" + u.puerto
+        end
+    end
+    t = t + u.ruta
+    if u.tiene_consulta
+        t = t + "?" + u.consulta
+    end
+    if u.tiene_fragmento
+        t = t + "#" + u.fragmento
+    end
+    return t
+end
+
+# Resuelve ref (absoluta o relativa) contra base: RFC 3986, apartado 5.2.2
+func url_resolve(base: Url, ref: String) -> Url
+    r = url_parse(ref)
+    t = Url("", false, "", "", -1, "", false, "", false, "")
+    if r.esquema != ""
+        t = r
+        t.ruta = url_remove_dots(r.ruta)
+        return t
+    end
+    t.esquema = base.esquema
+    if r.tiene_autoridad
+        t.tiene_autoridad = true
+        t.usuario = r.usuario
+        t.host = r.host
+        t.puerto = r.puerto
+        t.ruta = url_remove_dots(r.ruta)
+        t.tiene_consulta = r.tiene_consulta
+        t.consulta = r.consulta
+    else
+        t.tiene_autoridad = base.tiene_autoridad
+        t.usuario = base.usuario
+        t.host = base.host
+        t.puerto = base.puerto
+        if r.ruta == ""
+            t.ruta = base.ruta
+            t.tiene_consulta = base.tiene_consulta
+            t.consulta = base.consulta
+            if r.tiene_consulta
+                t.consulta = r.consulta
+            end
+            if r.tiene_consulta
+                t.tiene_consulta = true
+            end
+        else
+            if str_starts(r.ruta, "/")
+                t.ruta = url_remove_dots(r.ruta)
+            else
+                t.ruta = url_remove_dots(_merge(base, r.ruta))
+            end
+            t.tiene_consulta = r.tiene_consulta
+            t.consulta = r.consulta
+        end
+    end
+    t.tiene_fragmento = r.tiene_fragmento
+    t.fragmento = r.fragmento
+    return t
+end
+
+# Ruta relativa sobre la de base: todo hasta la última "/" de la base, más la relativa
+func _merge(base: Url, ruta: String) -> String
+    if base.tiene_autoridad and base.ruta == ""
+        return "/" + ruta
+    end
+    p = -1
+    i = str_find(base.ruta, "/")
+    while i >= 0
+        p = i
+        i = str_find_from(base.ruta, "/", i + 1)
+    end
+    if p < 0
+        return ruta
+    end
+    return base.ruta[:p + 1] + ruta
+end
+
+# Quita los segmentos "." y ".." de una ruta (RFC 3986, apartado 5.2.4)
+func url_remove_dots(ruta: String) -> String
+    entrada = ruta
+    salida = ""
+    while entrada != ""
+        if str_starts(entrada, "../")
+            entrada = entrada[3:]
+        elif str_starts(entrada, "./")
+            entrada = entrada[2:]
+        elif str_starts(entrada, "/./")
+            entrada = entrada[2:]
+        elif entrada == "/."
+            entrada = "/"
+        elif str_starts(entrada, "/../")
+            entrada = entrada[3:]
+            salida = _drop_last_segment(salida)
+        elif entrada == "/.."
+            entrada = "/"
+            salida = _drop_last_segment(salida)
+        elif entrada == "." or entrada == ".."
+            entrada = ""
+        else
+            # mueve el primer segmento (con su "/" inicial, si la tiene) a la salida
+            desde = 0
+            if str_starts(entrada, "/")
+                desde = 1
+            end
+            p = str_find_from(entrada, "/", desde)
+            if p < 0
+                salida = salida + entrada
+                entrada = ""
+            else
+                salida = salida + entrada[:p]
+                entrada = entrada[p:]
+            end
+        end
+    end
+    return salida
+end
+
+# Quita el último segmento y su "/" anterior
+func _drop_last_segment(s: String) -> String
+    p = -1
+    i = str_find(s, "/")
+    while i >= 0
+        p = i
+        i = str_find_from(s, "/", i + 1)
+    end
+    if p < 0
+        return ""
+    end
+    return s[:p]
+end
+
+# Un texto (Latin-1) para una URL o un formulario: UTF-8 con %XX salvo letras, cifras y - _ . ~;
+# el espacio como "+" (application/x-www-form-urlencoded)
+func url_codificar(t: String) -> String
+    hex = "0123456789ABCDEF"
+    r = ""
+    n = t.length
+    for i in (0..n - 1)
+        c = str_code(t, i)
+        if (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 45 or c == 95 or c == 46 or c == 126
+            r = r + str_char(c)
+        elif c == 32
+            r = r + "+"
+        elif c < 128
+            r = r + "%" + hex[c / 16] + hex[c % 16]
+        else
+            # Latin-1 a UTF-8: dos bytes
+            b1 = 192 + c / 64
+            b2 = 128 + c % 64
+            r = r + "%" + hex[b1 / 16] + hex[b1 % 16] + "%" + hex[b2 / 16] + hex[b2 % 16]
+        end
+    end
+    return r
+end
+
+# La ruta del Amiga de una dirección file: (otra cosa queda igual). Como NetSurf, el primer trozo es el volumen:
+# file:///Programs/Web/a.html = Programs:Web/a.html; también file:///DH0:a.html, file://Work/a.html y
+# file://localhost/Work/a.html. Sin "/" (file:///a.html) es relativa al directorio actual. Los %XX se deshacen
+# (y los de UTF-8 pasan a Latin-1).
+# Las de esquemas de la web que no son ficheros (data:, about:, javascript:, blob:...) dan NIL: (se lee vacío): como
+# ruta del Amiga, "data:..." es el volumen DATA y AmigaOS pedía insertarlo (meneame.net, usuario 2026-10-21).
+func url_fichero(direccion: String) -> String
+    if _url_no_es_fichero(direccion)
+        return "NIL:"
+    end
+    if not str_starts(str_lower(direccion), "file:")
+        return direccion
+    end
+    u = url_parse(direccion)
+    ruta = u.ruta
+    if u.host != "" and u.host != "localhost"
+        ruta = "/" + u.host + ruta
+    end
+    while str_starts(ruta, "/")
+        ruta = ruta[1:]
+    end
+    barra = str_find(ruta, "/")
+    if str_find(ruta, ":") < 0 and barra > 0
+        ruta = ruta[:barra] + ":" + ruta[barra + 1:]
+    end
+    return _url_deshacer(ruta)
+end
+
+# ¿Una dirección data: (lo que va dentro de la propia dirección: data:image/png;base64,...)?
+func url_es_data(direccion: String) -> Bool
+    return str_starts(str_lower(direccion[:5]), "data:")
+end
+
+# Los %XX deshechos (los de UTF-8 pasan a Latin-1)
+func url_deshacer(t: String) -> String
+    return _url_deshacer(t)
+end
+
+func _url_no_es_fichero(direccion: String) -> Bool
+    p = str_find(direccion, ":")
+    if p <= 0
+        return false
+    end
+    e = str_lower(direccion[:p])
+    return e == "data" or e == "about" or e == "javascript" or e == "blob" or e == "mailto" or e == "tel" or e == "sms" or e == "ws" or e == "wss" or e == "chrome" or e == "chrome-extension" or e == "moz-extension" or e == "intent" or e == "ftp" or e == "http" or e == "https"
+end
+
+func _url_hex(c: Int) -> Int
+    if c >= 48 and c <= 57
+        return c - 48
+    elif c >= 65 and c <= 70
+        return c - 55
+    elif c >= 97 and c <= 102
+        return c - 87
+    end
+    return -1
+end
+
+func _url_deshacer(t: String) -> String
+    if str_find(t, "%") < 0
+        return t
+    end
+    r = ""
+    i = 0
+    n = t.length
+    previo = -1
+    while i < n
+        c = str_code(t, i)
+        if c == 37 and i + 2 < n and _url_hex(str_code(t, i + 1)) >= 0 and _url_hex(str_code(t, i + 2)) >= 0
+            c = _url_hex(str_code(t, i + 1)) * 16 + _url_hex(str_code(t, i + 2))
+            i = i + 3
+        else
+            i = i + 1
+        end
+        if previo >= 0
+            if c >= 128 and c < 192
+                r = r + str_char((previo % 32) * 64 + c % 64)
+                previo = -1
+                continue
+            end
+            r = r + str_char(previo)
+            previo = -1
+        end
+        if c == 194 or c == 195
+            previo = c
+        else
+            r = r + str_char(c)
+        end
+    end
+    if previo >= 0
+        r = r + str_char(previo)
+    end
+    return r
+end
+
+# Un nombre de fichero que valga en el Amiga: los %XX deshechos y sin ":" ni "/" (como mucho 100 caracteres)
+func url_fichero_nombre(n: String) -> String
+    t = str_replace(str_replace(_url_deshacer(n), ":", "_"), "/", "_")
+    if t.length > 100
+        t = t[t.length - 100:]
+    end
+    return t
+end

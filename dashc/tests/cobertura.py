@@ -109,7 +109,7 @@ def main():
         return "muimaster.library" in lines_with(x[2], "# emu-needs:")
 
     def net(x):
-        return bool(lines_with(x[2], "# emu-net:") or lines_with(x[2], "# emu-net-tls:"))
+        return bool(lines_with(x[2], "# emu-net:") or lines_with(x[2], "# emu-net-tls:") or lines_with(x[2], "# emu-http:"))
 
     def tls(x):
         return bool(lines_with(x[2], "# emu-net-tls:"))
@@ -132,8 +132,11 @@ def main():
         if "bsdsocket" in config:
             sys.path.insert(0, str(REPO / "tests"))
             from run_tests import _EchoServer
-            ports = {int((lines_with(t, "# emu-net:") or lines_with(t, "# emu-net-tls:"))[0]) for _, _, t in g}
-            server = _EchoServer(sorted(ports), {p for p in ports if system == os.environ.get("DASH_EMU_SYS_SSL")})
+            def port(t):
+                return int((lines_with(t, "# emu-net:") or lines_with(t, "# emu-net-tls:") or lines_with(t, "# emu-http:"))[0])
+            ports = {port(t) for _, _, t in g}
+            server = _EchoServer(sorted(ports), {p for p in ports if system == os.environ.get("DASH_EMU_SYS_SSL")},
+                                 {port(t) for _, _, t in g if lines_with(t, "# emu-http:")})
         try:
             res += emu_run.run_programs([str(e) for _, e, _ in g], timeout=900, kickstart=rom, system=system,
                                         args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in g],

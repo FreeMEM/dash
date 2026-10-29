@@ -1,0 +1,12 @@
+# Los textos de la interfaz en el idioma del usuario (tarea 45g): la función tr de Dash, con un número y el texto en
+# español, los saca del catálogo (src/dashweb.dash: @catalog; catalogos/LEEME). Lo que lleva algo dentro va con
+# huecos, para no partir las frases: hueco del texto del catálogo "Descarga cancelada: %1" con el nombre, hueco2 con
+# dos (%1 y %2). (Sin escribir aquí la llamada: tools/catalogo.py también lee los comentarios.)
+
+func hueco(t: String, a: String) -> String
+    return str_replace(t, "%1", a)
+end
+
+func hueco2(t: String, a: String, b: String) -> String
+    return str_replace(str_replace(t, "%1", a), "%2", b)
+end

@@ -1,0 +1,367 @@
+# Cookies HTTP (RFC 6265, lo que usan las webs): lib/http.dash guarda las de cada Set-Cookie y manda las que tocan
+# en la cabecera Cookie de cada petición. Por dominio (con Domain= también los subdominios; sin él, solo ese host),
+# ruta, Secure (solo por https), caducidad (Expires y Max-Age; sin ellas, de sesión: se olvidan al salir) y
+# HttpOnly (el JavaScript no las ve).
+#
+#   cookies_recibir(url_parse("https://a.org/x/"), "id=7; Path=/; Max-Age=3600; HttpOnly")
+#   Print cookies_para(url_parse("https://a.org/y"))      # "id=7"
+#   cookies_guardar("PROGDIR:cookies")                     # las que no son de sesión
+#   cookies_cargar("PROGDIR:cookies")
+
+import "url.dash"
+
+struct Cookie
+    nombre: String
+    valor: String
+    dominio: String        # en minúsculas, sin el punto del principio
+    solo_host: Bool        # sin Domain=: solo ese host, no sus subdominios
+    ruta: String
+    caduca: Int            # segundos desde 1970 (hora del Amiga); -1: de sesión
+    segura: Bool
+    solo_http: Bool
+end
+
+var cookies_todas: [Cookie] = []
+const COOKIES_MAX = 300
+const COOKIES_SIEMPRE = 2147483000     # "no caduca" (enero de 2038: un Int no llega más allá)
+
+# Segundos desde el 1 de enero de 1970 según el reloj del Amiga (DateStamp cuenta desde 1978)
+func cookies_ahora() -> Int
+    return time_unix()
+end
+
+# Los trozos de t entre cualquiera de los caracteres de seps (sin los vacíos)
+func _cookies_trozos(t: String, seps: String) -> [String]
+    var r: [String] = []
+    desde = 0
+    i = 0
+    while i <= t.length
+        if i == t.length or str_find(seps, t[i:i + 1]) >= 0
+            if i > desde
+                r.push(t[desde:i])
+            end
+            desde = i + 1
+        end
+        i = i + 1
+    end
+    return r
+end
+
+# Días desde 1970 de una fecha (año, mes 1-12, día)
+func _cookies_dias(a: Int, m: Int, d: Int) -> Int
+    y = a
+    if m <= 2
+        y = y - 1
+    end
+    era = y / 400
+    yoe = y - era * 400
+    mp = (m + 9) % 12
+    doy = (153 * mp + 2) / 5 + d - 1
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+end
+
+# "Wed, 21 Oct 2026 07:28:00 GMT" (y las variantes viejas con guiones) -> segundos desde 1970; -1 si no se entiende
+func cookies_fecha(t: String) -> Int
+    meses = "jan feb mar apr may jun jul aug sep oct nov dec"
+    dia = -1
+    mes = -1
+    ano = -1
+    h = 0
+    mi = 0
+    s = 0
+    for trozo in _cookies_trozos(str_lower(t), " ,-")
+        if str_find(trozo, ":") > 0
+            p = _cookies_trozos(trozo, ":")
+            if p.length >= 2
+                h = Int(p[0])
+                mi = Int(p[1])
+                if p.length >= 3
+                    s = Int(p[2])
+                end
+            end
+        elif trozo.length >= 3 and str_find(meses, trozo[:3]) >= 0 and str_code(trozo, 0) >= 97
+            mes = str_find(meses, trozo[:3]) / 4 + 1
+        elif trozo.length > 0 and str_code(trozo, 0) >= 48 and str_code(trozo, 0) <= 57
+            n = Int(trozo)
+            if trozo.length >= 3
+                ano = n
+            elif dia < 0
+                dia = n
+            else
+                ano = n
+            end
+        end
+    end
+    if ano >= 0 and ano < 70
+        ano = ano + 2000
+    elif ano >= 70 and ano < 100
+        ano = ano + 1900
+    end
+    if dia < 1 or mes < 1 or ano < 1601
+        return -1
+    end
+    # (un Int llega hasta 2038: lo que caduca después, al final)
+    if ano >= 2038
+        return COOKIES_SIEMPRE
+    end
+    return _cookies_dias(ano, mes, dia) * 86400 + h * 3600 + mi * 60 + s
+end
+
+# La ruta por defecto: la de la petición hasta su última "/" (sin ella)
+func _cookies_ruta_de(ruta: String) -> String
+    if ruta == "" or not str_starts(ruta, "/")
+        return "/"
+    end
+    p = -1
+    i = 0
+    while i < ruta.length
+        if str_code(ruta, i) == 47
+            p = i
+        end
+        i = i + 1
+    end
+    if p <= 0
+        return "/"
+    end
+    return ruta[:p]
+end
+
+# Una cabecera Set-Cookie recibida de esa dirección
+func cookies_recibir(u: Url, cabecera: String)
+    cookies_poner(u, cabecera, true)
+end
+
+# desde_http false: document.cookie (no puede poner ni pisar una HttpOnly)
+func cookies_poner(u: Url, cabecera: String, desde_http: Bool)
+    partes = _cookies_trozos(cabecera, ";")
+    if partes.length == 0
+        return
+    end
+    primera = partes[0]
+    igual = str_find(primera, "=")
+    if igual <= 0
+        return
+    end
+    nombre = str_trim(primera[:igual])
+    valor = str_trim(primera[igual + 1:])
+    host = str_lower(u.host)
+    c = Cookie(nombre, valor, host, true, _cookies_ruta_de(u.ruta), -1, false, false)
+    borrar = false
+    edad_puesta = false
+    i = 1
+    while i < partes.length
+        a = str_trim(partes[i])
+        p = str_find(a, "=")
+        clave = str_lower(a)
+        v = ""
+        if p >= 0
+            clave = str_lower(str_trim(a[:p]))
+            v = str_trim(a[p + 1:])
+        end
+        if clave == "domain" and v != ""
+            d = str_lower(v)
+            if str_starts(d, ".")
+                d = d[1:]
+            end
+            # tiene que ser el host o uno de sus padres, y no un dominio sin punto ("com")
+            if d != host and not str_ends(host, "." + d)
+                return
+            end
+            if str_find(d, ".") < 0 and d != host
+                return
+            end
+            c.dominio = d
+            c.solo_host = false
+        elif clave == "path" and str_starts(v, "/")
+            c.ruta = v
+        elif clave == "max-age"
+            edad_puesta = true
+            n = Int(v)
+            if n <= 0
+                borrar = true
+            else
+                c.caduca = COOKIES_SIEMPRE
+                if n < COOKIES_SIEMPRE - cookies_ahora()
+                    c.caduca = cookies_ahora() + n
+                end
+            end
+        elif clave == "expires" and not edad_puesta
+            f = cookies_fecha(v)
+            if f >= 0
+                if f <= cookies_ahora()
+                    borrar = true
+                else
+                    c.caduca = f
+                end
+            end
+        elif clave == "secure"
+            c.segura = true
+        elif clave == "httponly"
+            c.solo_http = true
+        end
+        i = i + 1
+    end
+    if c.segura and u.esquema != "https"
+        return
+    end
+    if c.solo_http and not desde_http
+        return
+    end
+    # la misma (nombre, dominio y ruta) se cambia o se borra
+    k = 0
+    while k < cookies_todas.length
+        o = cookies_todas[k]
+        if o.nombre == c.nombre and o.dominio == c.dominio and o.ruta == c.ruta
+            if o.solo_http and not desde_http
+                return
+            end
+            cookies_todas.remove(k)
+        else
+            k = k + 1
+        end
+    end
+    if not borrar
+        if cookies_todas.length >= COOKIES_MAX
+            cookies_todas.remove(0)
+        end
+        cookies_todas.push(c)
+    end
+end
+
+func _cookies_vale(c: Cookie, u: Url, ahora: Int, para_js: Bool) -> Bool
+    host = str_lower(u.host)
+    if c.solo_host
+        if host != c.dominio
+            return false
+        end
+    elif host != c.dominio and not str_ends(host, "." + c.dominio)
+        return false
+    end
+    ruta = u.ruta
+    if ruta == ""
+        ruta = "/"
+    end
+    if ruta != c.ruta
+        if not str_starts(ruta, c.ruta)
+            return false
+        end
+        if not str_ends(c.ruta, "/") and str_code(ruta, c.ruta.length) != 47
+            return false
+        end
+    end
+    if c.segura and u.esquema != "https"
+        return false
+    end
+    if c.caduca >= 0 and c.caduca <= ahora
+        return false
+    end
+    if para_js and c.solo_http
+        return false
+    end
+    return true
+end
+
+# "a=1; b=2": las que se mandan a esa dirección (las de ruta más larga primero); "" si ninguna
+func cookies_para(u: Url) -> String
+    return _cookies_lista(u, false)
+end
+
+# Lo que ve document.cookie en esa página (sin las HttpOnly)
+func cookies_js(u: Url) -> String
+    return _cookies_lista(u, true)
+end
+
+func _cookies_lista(u: Url, para_js: Bool) -> String
+    ahora = cookies_ahora()
+    var elegidas: [Cookie] = []
+    for c in cookies_todas
+        if _cookies_vale(c, u, ahora, para_js)
+            # en orden de ruta más larga
+            i = 0
+            while i < elegidas.length and elegidas[i].ruta.length >= c.ruta.length
+                i = i + 1
+            end
+            elegidas.insert(i, c)
+        end
+    end
+    r = ""
+    for c in elegidas
+        if r != ""
+            r = r + "; "
+        end
+        r = r + c.nombre + "=" + c.valor
+    end
+    return r
+end
+
+# Las que no son de sesión ni han caducado, una por línea (separadas por tabuladores)
+func cookies_guardar(fichero: String) -> Bool
+    ahora = cookies_ahora()
+    t = ""
+    for c in cookies_todas
+        if c.caduca > ahora
+            t = t + c.dominio + "\t" + c.solo_host + "\t" + c.ruta + "\t" + c.segura + "\t" + c.solo_http + "\t" + c.caduca + "\t" + c.nombre + "\t" + c.valor + "\n"
+        end
+    end
+    return file_write_text(fichero, t)
+end
+
+func cookies_cargar(fichero: String)
+    t = file_read_text(fichero)
+    if t == nil
+        return
+    end
+    ahora = cookies_ahora()
+    for linea in _cookies_trozos(t, "\n")
+        p = _cookies_trozos(linea, "\t")
+        if p.length >= 8
+            caduca = Int(p[5])
+            if caduca > ahora
+                cookies_todas.push(Cookie(p[6], p[7], p[0], p[1] == "1" or p[1] == "true", p[2], caduca, p[3] == "1" or p[3] == "true", p[4] == "1" or p[4] == "true"))
+            end
+        end
+    end
+end
+
+# Borra las de ese dominio ("" todas)
+func cookies_borrar(dominio: String)
+    if dominio == ""
+        cookies_todas.clear()
+        return
+    end
+    k = 0
+    while k < cookies_todas.length
+        if cookies_todas[k].dominio == dominio
+            cookies_todas.remove(k)
+        else
+            k = k + 1
+        end
+    end
+end
+
+# "2026-10-21" de unos segundos desde 1970
+func cookies_dia(s: Int) -> String
+    z = s / 86400 + 719468
+    era = z / 146097
+    doe = z - era * 146097
+    yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    y = yoe + era * 400
+    doy = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp = (5 * doy + 2) / 153
+    d = doy - (153 * mp + 2) / 5 + 1
+    m = mp + 3
+    if m > 12
+        m = m - 12
+        y = y + 1
+    end
+    t = "" + y + "-"
+    if m < 10
+        t = t + "0"
+    end
+    t = t + m + "-"
+    if d < 10
+        t = t + "0"
+    end
+    return t + d
+end
