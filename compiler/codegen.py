@@ -5289,6 +5289,207 @@ static LONG _dash_task_priority(LONG n) {
     return SetTaskPri(FindTask(NULL), n);
 }
 
+/* env_get(name): a variable of the program's Shell or of ENV: (GetVar, up to its first line end); "" without it.
+   env_set(name, value, save): in ENV:, and with save also in ENVARC: (V39+) */
+static STRPTR _dash_env_get(STRPTR name) {
+    LONG size = 1024, n;
+    STRPTR buf, r;
+    if (!name || !*name) return _dash_str_dup((STRPTR)"", TRUE);
+    for (;;) {
+        if (!(buf = (STRPTR)AllocVec(size, MEMF_ANY))) return _dash_str_dup((STRPTR)"", TRUE);
+        n = GetVar(name, buf, size, 0);
+        if (n < size - 1 || size >= 262144) break;
+        FreeVec(buf);          /* it may not have fitted */
+        size *= 8;
+    }
+    if (n < 0) buf[0] = 0;
+    r = _dash_str_dup(buf, TRUE);
+    FreeVec(buf);
+    return r;
+}
+
+static BOOL _dash_env_set(STRPTR name, STRPTR value, BOOL save) {
+    if (!name || !*name) return FALSE;
+    if (!value) value = (STRPTR)"";
+    return SetVar(name, value, strlen((char *)value), GVF_GLOBAL_ONLY | (save ? GVF_SAVE_VAR : 0)) != 0;
+}
+
+"""
+
+    # Dash 2.0 (for Inferencia, the IDE): running a command line and taking its output
+    RUNCAP_RUNTIME = """\
+/* run_start(command, timeout_ms) runs a command line in a process of its own (with the program's path and
+   directory), its output and error output to a file in T: (RAM: without T:), and run_finish gives that back as a
+   text, its return code in run_rc. When the time runs out, Ctrl-C goes to the command's shell (again every second
+   until it ends: a command that does not stop is waited for). run_capture does both. */
+#include <dos/dostags.h>
+#include <dos/dosextens.h>
+typedef struct _DashRun {
+    struct _DashRun *next;           /* all of them, for the exit */
+    BPTR in, out;
+    LONG rc, timeout, breaks, pri;   /* timeout and the last break: ticks since start */
+    BOOL timed;                      /* the time ran out */
+    volatile LONG done, started;
+    struct DateStamp start;
+    char file[48];
+    char cmd[1];
+} _DashRun;
+static _DashRun *_dash_runs = NULL;
+static _DashRun * volatile _dash_run_new = NULL;
+static LONG _dash_run_rc_last = 0;
+static ULONG _dash_run_count = 0;
+
+static void _dash_run_proc(void) {
+    _DashRun *r = _dash_run_new;
+    r->started = 1;
+    r->rc = SystemTags((STRPTR)r->cmd, SYS_Input, r->in, SYS_Output, r->out, SYS_Error, r->out,
+                       NP_Priority, r->pri, NP_StackSize, 32768, TAG_DONE);
+    Forbid();                        /* done only once this process has left the program's code */
+    r->done = 1;
+}
+
+static LONG _dash_run_start(STRPTR command, LONG timeout_ms) {
+    struct Process *me = (struct Process *)FindTask(NULL);
+    _DashRun *r;
+    if (!command || !*command) return 0;
+    if (!(r = (_DashRun *)AllocVec(sizeof(_DashRun) + strlen((char *)command), MEMF_PUBLIC | MEMF_CLEAR))) return 0;
+    strcpy(r->cmd, (char *)command);
+    r->timeout = timeout_ms > 0 ? (timeout_ms + 19) / 20 : 0;
+    r->pri = me->pr_Task.tc_Node.ln_Pri;   /* (the command at the program's priority: it goes on answering) */
+    sprintf(r->file, "T:dash_run_%lx_%lu", (unsigned long)me, (unsigned long)++_dash_run_count);
+    if (!(r->out = Open((CONST_STRPTR)r->file, MODE_NEWFILE))) {
+        sprintf(r->file, "RAM:dash_run_%lx_%lu", (unsigned long)me, (unsigned long)_dash_run_count);
+        r->out = Open((CONST_STRPTR)r->file, MODE_NEWFILE);
+    }
+    r->in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
+    if (!r->in || !r->out) {
+        if (r->in) Close(r->in);
+        if (r->out) { Close(r->out); DeleteFile((CONST_STRPTR)r->file); }
+        FreeVec(r);
+        return 0;
+    }
+    if (Output()) Flush(Output());   /* (what Print left in the buffer) */
+    DateStamp(&r->start);
+    _dash_run_new = r;
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_run_proc, NP_Name, (ULONG)"dash_run", NP_Cli, TRUE,
+                           NP_Priority, r->pri, NP_StackSize, 8192, TAG_DONE)) {
+        Close(r->in);
+        Close(r->out);
+        DeleteFile((CONST_STRPTR)r->file);
+        FreeVec(r);
+        return 0;
+    }
+    while (!r->started) Delay(1);
+    r->next = _dash_runs;
+    _dash_runs = r;
+    return (LONG)r;
+}
+
+/* Ticks since the command started */
+static LONG _dash_run_ticks(_DashRun *r) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return (d.ds_Days - r->start.ds_Days) * 4320000L + (d.ds_Minute - r->start.ds_Minute) * 3000L +
+           (d.ds_Tick - r->start.ds_Tick);
+}
+
+/* Ctrl-C to the shell that runs it (the one whose input is ours) */
+static void _dash_run_break_now(_DashRun *r) {
+    LONG i, n;
+    struct Process *p;
+    Forbid();
+    if (!r->done)
+        for (i = 1, n = MaxCli(); i <= n; i++)
+            if ((p = FindCliProc(i)) && p->pr_CIS == r->in) Signal(&p->pr_Task, SIGBREAKF_CTRL_C);
+    Permit();
+}
+
+static void _dash_run_break(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    if (!r || r->done) return;
+    r->breaks = _dash_run_ticks(r);
+    if (!r->breaks) r->breaks = 1;
+    _dash_run_break_now(r);
+}
+
+/* The time limit: Ctrl-C when it runs out, again every second */
+static void _dash_run_check(_DashRun *r) {
+    LONG t;
+    if (r->done || (!r->timeout && !r->breaks)) return;
+    t = _dash_run_ticks(r);
+    if (r->breaks ? t - r->breaks >= 50 : t >= r->timeout) {
+        if (!r->breaks) r->timed = TRUE;
+        r->breaks = t ? t : 1;
+        _dash_run_break_now(r);
+    }
+}
+
+static BOOL _dash_run_ready(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    if (!r) return TRUE;
+    _dash_run_check(r);
+    return r->done != 0;
+}
+
+static void _dash_run_wait(_DashRun *r) {
+    while (!r->done) {
+        Delay(1);
+        _dash_run_check(r);
+    }
+}
+
+/* Forget it: its files closed and gone */
+static void _dash_run_free(_DashRun *r) {
+    _DashRun **p;
+    for (p = &_dash_runs; *p; p = &(*p)->next)
+        if (*p == r) { *p = r->next; break; }
+    Close(r->in);
+    if (r->out) Close(r->out);
+    DeleteFile((CONST_STRPTR)r->file);
+    FreeVec(r);
+}
+
+static STRPTR _dash_run_finish(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    STRPTR s = NULL;
+    BPTR f;
+    LONG n;
+    if (!r) { _dash_run_rc_last = -1; return _dash_str_dup((STRPTR)"", TRUE); }
+    _dash_run_wait(r);
+    /* (a time limit that ran out is -2 whatever the command gave) */
+    _dash_run_rc_last = r->timed ? -2 : (r->rc < 0 ? -1 : r->rc);
+    Close(r->out);
+    r->out = 0;
+    if ((f = Open((CONST_STRPTR)r->file, MODE_OLDFILE))) {
+        Seek(f, 0, OFFSET_END);
+        n = Seek(f, 0, OFFSET_BEGINNING);
+        if (n > 0 && (s = _dash_str_alloc(n, TRUE))) {
+            LONG got = Read(f, s, n);
+            s[got > 0 ? got : 0] = 0;
+        }
+        Close(f);
+    }
+    _dash_run_free(r);
+    return s ? s : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_run_capture(STRPTR command, LONG timeout_ms) {
+    LONG h = _dash_run_start(command, timeout_ms);
+    if (!h) { _dash_run_rc_last = -1; return _dash_str_dup((STRPTR)"", TRUE); }
+    return _dash_run_finish(h);
+}
+
+static LONG _dash_run_rc(void) { return _dash_run_rc_last; }
+
+/* At exit: the processes run code of the program, which must stay loaded until they end */
+static void _dash_runcap_cleanup(void) {
+    while (_dash_runs) {
+        _dash_run_break((LONG)_dash_runs);
+        _dash_run_wait(_dash_runs);
+        _dash_run_free(_dash_runs);
+    }
+}
+
 """
 
     # The "Insert volume" and disk error requesters of the program (dashweb D68)
@@ -11119,11 +11320,100 @@ static STRPTR _dash_dir_current(void) {
     return _dash_str_dup((STRPTR)buf, TRUE);
 }
 
+/* (CreateDir gives an exclusive lock: without UnLock, nothing else could use the new directory) */
+static BOOL _dash_dir_create(STRPTR path) {
+    BPTR l = CreateDir(path);
+    if (!l) return FALSE;
+    UnLock(l);
+    return TRUE;
+}
+
+/* dir_read(path): what a directory holds, sorted by name (case does not count), kept until the next dir_read;
+   dir_entry_*(i) read it (Dash 2.0, for Inferencia) */
+typedef struct { LONG size, date; BOOL dir; char name[1]; } _DashDirEnt;
+static _DashDirEnt **_dash_dir_ents = NULL;
+static LONG _dash_dir_n = 0, _dash_dir_cap = 0;
+
+static void _dash_dir_free(void) {
+    LONG i;
+    for (i = 0; i < _dash_dir_n; i++) FreeVec(_dash_dir_ents[i]);
+    if (_dash_dir_ents) FreeVec(_dash_dir_ents);
+    _dash_dir_ents = NULL;
+    _dash_dir_n = _dash_dir_cap = 0;
+}
+
+/* Latin-1 letters as capitals */
+static UBYTE _dash_dir_up(UBYTE c) {
+    return (c >= 'a' && c <= 'z') || (c >= 0xE0 && c != 0xF7 && c != 0xFF) ? c - 32 : c;
+}
+
+static LONG _dash_dir_cmp(const char *a, const char *b) {
+    UBYTE x, y;
+    for (;; a++, b++) {
+        x = _dash_dir_up((UBYTE)*a);
+        y = _dash_dir_up((UBYTE)*b);
+        if (x != y || !x) return (LONG)x - (LONG)y;
+    }
+}
+
+static LONG _dash_dir_read(STRPTR path) {
+    struct FileInfoBlock *fib;
+    BPTR lock;
+    LONG gap, i, j;
+    _dash_dir_free();
+    if (!path) return -1;
+    if (!(lock = Lock(path, SHARED_LOCK))) return -1;
+    if (!(fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) { UnLock(lock); return -1; }
+    if (!Examine(lock, fib) || fib->fib_DirEntryType <= 0) { FreeDosObject(DOS_FIB, fib); UnLock(lock); return -1; }
+    while (ExNext(lock, fib)) {
+        _DashDirEnt *e;
+        if (_dash_dir_n == _dash_dir_cap) {
+            LONG cap = _dash_dir_cap ? _dash_dir_cap * 2 : 32;
+            _DashDirEnt **v = (_DashDirEnt **)AllocVec(cap * sizeof(APTR), MEMF_ANY);
+            if (!v) break;
+            if (_dash_dir_n) CopyMem(_dash_dir_ents, v, _dash_dir_n * sizeof(APTR));
+            if (_dash_dir_ents) FreeVec(_dash_dir_ents);
+            _dash_dir_ents = v;
+            _dash_dir_cap = cap;
+        }
+        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName), MEMF_ANY))) break;
+        strcpy(e->name, fib->fib_FileName);
+        e->dir = fib->fib_DirEntryType > 0 && fib->fib_DirEntryType != ST_SOFTLINK;
+        e->size = e->dir ? 0 : fib->fib_Size;
+        /* (as time_unix: seconds since 1970 by the system's clock) */
+        e->date = 252460800L + fib->fib_Date.ds_Days * 86400L + fib->fib_Date.ds_Minute * 60L +
+                  fib->fib_Date.ds_Tick / 50;
+        _dash_dir_ents[_dash_dir_n++] = e;
+    }
+    FreeDosObject(DOS_FIB, fib);
+    UnLock(lock);
+    for (gap = _dash_dir_n / 2; gap > 0; gap /= 2)          /* Shell sort */
+        for (i = gap; i < _dash_dir_n; i++) {
+            _DashDirEnt *e = _dash_dir_ents[i];
+            for (j = i; j >= gap && _dash_dir_cmp(_dash_dir_ents[j - gap]->name, e->name) > 0; j -= gap)
+                _dash_dir_ents[j] = _dash_dir_ents[j - gap];
+            _dash_dir_ents[j] = e;
+        }
+    return _dash_dir_n;
+}
+
+static _DashDirEnt *_dash_dir_ent(LONG i) {
+    return i >= 0 && i < _dash_dir_n ? _dash_dir_ents[i] : NULL;
+}
+static STRPTR _dash_dir_entry_name(LONG i) {
+    _DashDirEnt *e = _dash_dir_ent(i);
+    return _dash_str_dup(e ? (STRPTR)e->name : (STRPTR)"", TRUE);
+}
+static LONG _dash_dir_entry_size(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->size : -1; }
+static BOOL _dash_dir_entry_is_dir(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->dir : FALSE; }
+static LONG _dash_dir_entry_date(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->date : 0; }
+
 static void _dash_dir_cleanup(void) {
     if (_dash_dir_changed) {
         UnLock(CurrentDir(_dash_orig_dir));
         _dash_dir_changed = FALSE;
     }
+    _dash_dir_free();
 }
 
 """
@@ -17704,6 +17994,7 @@ _RUNTIME_FLAGS = [
     ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
+    ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
@@ -18008,6 +18299,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
+        self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
@@ -18373,6 +18665,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.PROC_RUNTIME)
         if self.uses_sysinfo:
             parts.append(CTemplates.SYSINFO_RUNTIME)
+        if self.uses_runcap:
+            parts.append(CTemplates.RUNCAP_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -18605,6 +18899,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_runcap:
+            cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
         if self.uses_netbg:
             cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
         if self.uses_instance:

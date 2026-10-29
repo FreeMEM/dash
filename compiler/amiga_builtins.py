@@ -2246,7 +2246,7 @@ DOS_FUNCTIONS = {
         name="dir_create",
         params=["path"],
         return_type="BOOL",
-        c_template="(CreateDir(${path}) != 0)",
+        c_template="_dash_dir_create(${path})",
         needs_dos=True,
         description="Create directory"
     ),
@@ -2266,6 +2266,26 @@ DOS_FUNCTIONS = {
         needs_dos=True,
         description="Full name of the current directory (\"Ram Disk:\" ...)"
     ),
+    # Dash 2.0 (Inferencia, the IDE): what a directory holds
+    "dir_read": BuiltinFunc(
+        name="dir_read", params=["path"], return_type="LONG", c_template="_dash_dir_read(${path})",
+        needs_dos=True, reads_only=True,
+        description="Read what a directory holds, sorted by name (case does not count): the number of entries, "
+                    "-1 if it is not a directory that can be read. dir_entry_name and the others read them, until "
+                    "the next dir_read"),
+    "dir_entry_name": BuiltinFunc(
+        name="dir_entry_name", params=["i"], return_type="STRPTR", c_template="_dash_dir_entry_name(${i})",
+        needs_dos=True, description="Name of entry i (from 0) of the last dir_read; \"\" past the end"),
+    "dir_entry_size": BuiltinFunc(
+        name="dir_entry_size", params=["i"], return_type="LONG", c_template="_dash_dir_entry_size(${i})",
+        needs_dos=True, description="Size in bytes of entry i of the last dir_read (0 for a directory)"),
+    "dir_entry_is_dir": BuiltinFunc(
+        name="dir_entry_is_dir", params=["i"], return_type="BOOL", c_template="_dash_dir_entry_is_dir(${i})",
+        needs_dos=True, description="True if entry i of the last dir_read is a directory"),
+    "dir_entry_date": BuiltinFunc(
+        name="dir_entry_date", params=["i"], return_type="LONG", c_template="_dash_dir_entry_date(${i})",
+        needs_dos=True,
+        description="Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970"),
 
     # Console I/O
     "console_read": BuiltinFunc(
@@ -4547,6 +4567,41 @@ TASK_FUNCTIONS = {
         reads_only=True,
         description="Run a command line and wait for it to end, its output the program's own: its return code, "
                     "-1 if it could not start"),
+    # Dash 2.0 (Inferencia, the IDE): running a command and taking its output; environment variables
+    "run_capture": BuiltinFunc(
+        name="run_capture", params=["command", "timeout_ms"], return_type="STRPTR",
+        c_template="_dash_run_capture(${command}, ${timeout_ms})", reads_only=True,
+        description="Run a command line and wait for it to end: what it wrote (output and error output), its "
+                    "return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets "
+                    "Ctrl-C (and again every second until it ends)"),
+    "run_start": BuiltinFunc(
+        name="run_start", params=["command", "timeout_ms"], return_type="LONG",
+        c_template="_dash_run_start(${command}, ${timeout_ms})", reads_only=True,
+        description="run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it "
+                    "could not start. The program waits at its end for the ones it did not finish"),
+    "run_ready": BuiltinFunc(
+        name="run_ready", params=["run"], return_type="BOOL", c_template="_dash_run_ready(${run})",
+        description="True when a run_start has ended (it does not wait; it also applies the time limit)"),
+    "run_break": BuiltinFunc(
+        name="run_break", params=["run"], return_type="void", c_template="_dash_run_break(${run})",
+        description="Send Ctrl-C to a run_start that is still running (again every second until it ends)"),
+    "run_finish": BuiltinFunc(
+        name="run_finish", params=["run"], return_type="STRPTR", c_template="_dash_run_finish(${run})",
+        description="What a run_start wrote, as run_capture (it waits if it is still running), and forget it"),
+    "run_rc": BuiltinFunc(
+        name="run_rc", params=[], return_type="LONG", c_template="_dash_run_rc()",
+        description="Return code of the last run_capture or run_finish: the command's, -1 if it could not "
+                    "start, -2 if its time ran out"),
+    "env_get": BuiltinFunc(
+        name="env_get", params=["name"], return_type="STRPTR", c_template="_dash_env_get(${name})",
+        reads_only=True,
+        description="An environment variable (of the program's Shell, else of ENV:), up to its first line "
+                    "end; \"\" if there is none"),
+    "env_set": BuiltinFunc(
+        name="env_set", params=["name", "value", "save"], return_type="BOOL",
+        c_template="_dash_env_set(${name}, ${value}, ${save})", reads_only=True,
+        description="Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); "
+                    "false if it could not"),
     "wb_open": BuiltinFunc(
         name="wb_open", params=["path"], return_type="BOOL", c_template="_dash_wb_open(${path})",
         reads_only=True,
@@ -4992,7 +5047,8 @@ def _move(src, names):
 SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
-    "build_date", "build_time", "console_flush"])
+    "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
+    "run_finish", "run_rc", "env_get", "env_set"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
     "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",

@@ -1,0 +1,69 @@
+# Test: running a command and taking its output (run_capture, run_start...), reading a directory (dir_read) and
+# environment variables (env_get, env_set): Dash 2.0, for Inferencia, the IDE.
+# expect-out: salida: [hola desde la orden] 0
+# expect-out: rc: 5
+# expect-out: error: true 10
+# expect-out: vacía: [] -1
+# expect-out: espera: true -2
+# expect-out: asíncrona: true [uno] 0
+# expect-out: cajón: 3 [a.txt] 5 false [B] true [c.dash] 0 false
+# expect-out: fecha: true
+# expect-out: no cajón: -1 -1 []
+# expect-out: entorno: [valor de prueba] []
+
+func lento()
+    for i in (1..250)
+        if break_check()
+            return
+        end
+        time_delay(1)
+    end
+end
+
+Main
+    # (el propio programa con "lento" es la orden que tarda: hasta 5 s o Ctrl-C)
+    if arg(0) == "lento"
+        lento()
+    else
+        yo = program_path()
+        s = run_capture("Echo hola desde la orden", 0)
+        Print "salida: [#{str_trim(s)}] #{run_rc()}"
+        s = run_capture("C:Assign >NIL: NOESTA: EXISTS", 0)
+        Print "rc: #{run_rc()}"
+        s = run_capture("C:NoEsta", 0)
+        Print "error: #{s.length > 0} #{run_rc()}"
+        s = run_capture("", 0)
+        Print "vacía: [#{s}] #{run_rc()}"
+        # una orden que tarda 5 s, cortada al segundo
+        t0 = time_ms()
+        s = run_capture("\"" + yo + "\" lento", 1000)
+        Print "espera: #{time_ms() - t0 < 4000} #{run_rc()}"
+        h = run_start("Echo uno", 0)
+        while not run_ready(h)
+            Wait 1
+        end
+        s = run_finish(h)
+        Print "asíncrona: true [#{str_trim(s)}] #{run_rc()}"
+
+        dir_create("RAM:dash_dir")
+        dir_create("RAM:dash_dir/B")
+        file_write_text("RAM:dash_dir/c.dash", "")
+        file_write_text("RAM:dash_dir/a.txt", "12345")
+        n = dir_read("RAM:dash_dir")
+        Print "cajón: #{n} [#{dir_entry_name(0)}] #{dir_entry_size(0)} #{dir_entry_is_dir(0)} [#{dir_entry_name(1)}] #{dir_entry_is_dir(1)} [#{dir_entry_name(2)}] #{dir_entry_size(2)} #{dir_entry_is_dir(2)}"
+        Print "fecha: #{dir_entry_date(0) - time_unix() < 120 and time_unix() - dir_entry_date(0) < 120}"
+        n1 = dir_read("RAM:dash_dir/a.txt")
+        n2 = dir_read("RAM:noesta")
+        Print "no cajón: #{n1} #{n2} [#{dir_entry_name(0)}]"
+        file_delete("RAM:dash_dir/a.txt")
+        file_delete("RAM:dash_dir/c.dash")
+        file_delete("RAM:dash_dir/B")
+        file_delete("RAM:dash_dir")
+
+        env_set("DashPrueba", "valor de prueba", false)
+        v1 = env_get("DashPrueba")
+        v2 = env_get("DashNoEsta")
+        Print "entorno: [#{v1}] [#{v2}]"
+        file_delete("ENV:DashPrueba")
+    end
+end

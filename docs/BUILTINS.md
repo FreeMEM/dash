@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 744 funciones, 744 implementadas, 0 sin implementar.
+Total: 757 funciones, 757 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -316,6 +316,11 @@ Total: 744 funciones, 744 implementadas, 0 sin implementar.
 | `dir_create(path)` | `BOOL` | Crea un cajón |  |
 | `dir_change(path)` | `BOOL` | Cambia el cajón actual |  |
 | `dir_current()` | `STRPTR` | El nombre entero del cajón actual ("Ram Disk:"...) |  |
+| `dir_read(path)` | `LONG` | Lee lo que hay en un cajón, por orden de nombre (sin mirar mayúsculas): cuántas entradas, -1 si no es un cajón que se pueda leer. dir_entry_name y las demás las leen, hasta el siguiente dir_read |  |
+| `dir_entry_name(i)` | `STRPTR` | El nombre de la entrada i (desde 0) del último dir_read; "" si no la hay |  |
+| `dir_entry_size(i)` | `LONG` | El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón) |  |
+| `dir_entry_is_dir(i)` | `BOOL` | Verdadero si la entrada i del último dir_read es un cajón |  |
+| `dir_entry_date(i)` | `LONG` | La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970 |  |
 | `console_read(buffer, maxlen)` | `LONG` | Lee de la consola |  |
 | `console_write(str)` | `void` | Escribe en la consola (sin búfer) |  |
 | `file_load(filename, buffer, maxsize)` | `LONG` | Carga un fichero entero en un búfer: los bytes leídos, o -1 |  |
@@ -671,6 +676,14 @@ Total: 744 funciones, 744 implementadas, 0 sin implementar.
 | `build_date()` | `STRPTR` | La fecha en que se compiló el programa, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | La hora en que se compiló el programa, "20:45:10" |  |
 | `console_flush()` | `void` | Saca ya lo que Print dejó en el búfer de la salida (una línea de progreso sin su final) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta que acaba) |  |
+| `run_start(command, timeout_ms)` | `LONG` | run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El programa espera al acabar a las que no terminó |  |
+| `run_ready(run)` | `BOOL` | Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo) |  |
+| `run_break(run)` | `void` | Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba) |  |
+| `run_finish(run)` | `STRPTR` | Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida |  |
+| `run_rc()` | `LONG` | El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si se le acabó el tiempo |  |
+| `env_get(name)` | `STRPTR` | Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; "" si no existe |  |
+| `env_set(name, value, save)` | `BOOL` | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
 
 ## Imágenes decodificadas por el programa (sin datatypes)
 

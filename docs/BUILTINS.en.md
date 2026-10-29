@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 744 functions, 744 implemented, 0 not implemented.
+Total: 757 functions, 757 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -316,6 +316,11 @@ Total: 744 functions, 744 implemented, 0 not implemented.
 | `dir_create(path)` | `BOOL` | Create directory |  |
 | `dir_change(path)` | `BOOL` | Change current directory |  |
 | `dir_current()` | `STRPTR` | Full name of the current directory ("Ram Disk:" ...) |  |
+| `dir_read(path)` | `LONG` | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
+| `dir_entry_name(i)` | `STRPTR` | Name of entry i (from 0) of the last dir_read; "" past the end |  |
+| `dir_entry_size(i)` | `LONG` | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
+| `dir_entry_is_dir(i)` | `BOOL` | True if entry i of the last dir_read is a directory |  |
+| `dir_entry_date(i)` | `LONG` | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
 | `console_read(buffer, maxlen)` | `LONG` | Read from console |  |
 | `console_write(str)` | `void` | Write to console |  |
 | `file_load(filename, buffer, maxsize)` | `LONG` | Load entire file into buffer, returns bytes read or -1 |  |
@@ -671,6 +676,14 @@ Total: 744 functions, 744 implemented, 0 not implemented.
 | `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
 | `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote (output and error output), its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends) |  |
+| `run_start(command, timeout_ms)` | `LONG` | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
+| `run_ready(run)` | `BOOL` | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
+| `run_break(run)` | `void` | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |
+| `run_finish(run)` | `STRPTR` | What a run_start wrote, as run_capture (it waits if it is still running), and forget it |  |
+| `run_rc()` | `LONG` | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
+| `env_get(name)` | `STRPTR` | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
+| `env_set(name, value, save)` | `BOOL` | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
 
 ## Pictures decoded by the program (no datatypes)
 

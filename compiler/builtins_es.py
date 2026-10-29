@@ -198,6 +198,12 @@ DESC_ES = {
     "dir_create": "Crea un cajón",
     "dir_change": "Cambia el cajón actual",
     "dir_current": "El nombre entero del cajón actual (\"Ram Disk:\"...)",
+    "dir_read": "Lee lo que hay en un cajón, por orden de nombre (sin mirar mayúsculas): cuántas entradas, -1 si no es "
+                "un cajón que se pueda leer. dir_entry_name y las demás las leen, hasta el siguiente dir_read",
+    "dir_entry_name": "El nombre de la entrada i (desde 0) del último dir_read; \"\" si no la hay",
+    "dir_entry_size": "El tamaño en bytes de la entrada i del último dir_read (0 si es un cajón)",
+    "dir_entry_is_dir": "Verdadero si la entrada i del último dir_read es un cajón",
+    "dir_entry_date": "La fecha de la entrada i del último dir_read, como time_unix: segundos desde el 1 de enero de 1970",
     "console_read": "Lee de la consola",
     "console_write": "Escribe en la consola (sin búfer)",
     "file_load": "Carga un fichero entero en un búfer: los bytes leídos, o -1",
@@ -423,6 +429,20 @@ DESC_ES = {
     "time_unix": "El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies)",
     "clock_days": "Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp)",
     "mem_largest": "El bloque de memoria libre más grande, chip o fast, en bytes",
+    "run_capture": "Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código "
+                   "de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y "
+                   "otra vez cada segundo hasta que acaba)",
+    "run_start": "run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El "
+                 "programa espera al acabar a las que no terminó",
+    "run_ready": "Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo)",
+    "run_break": "Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba)",
+    "run_finish": "Lo que escribió un run_start, como run_capture (espera si sigue en marcha), y lo olvida",
+    "run_rc": "El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si "
+              "se le acabó el tiempo",
+    "env_get": "Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; \"\" "
+               "si no existe",
+    "env_set": "Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso "
+               "si no pudo",
     "run_command": "Ejecuta una orden y espera a que acabe, con su salida en la del programa: su código de retorno, -1 "
                    "si no pudo empezar",
     "wb_open": "Abre un cajón, un programa o un proyecto como un doble clic en su icono (workbench.library 44, OS "
