@@ -602,5 +602,13 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Con esos arreglos, la tanda completa de Tachyon con dashc: 114 de 114 (43 min).
   - El navegador (src/dashweb.dash, 4,5 MB) compilado con dashc --fpu, en el emulador con RTG y MUI 3.8
     (`tools/medir_visor.py --maquina rtg --sistema ~/.cache/dash-emu/sys32rtg38`): pinta prueba.html (499 ms) y
-    lienzo.html, con su JavaScript y el canvas (921 ms), bien en las capturas. No medido aún contra el de dash1.
+    lienzo.html, con su JavaScript y el canvas (921 ms), bien en las capturas.
+  - Velocidad, mismo Tachyon (rama dash2) con dash1 y con dashc, `tools/medir_visor.py --fases` en el A1200,
+    prueba.html (ms): tokens 541 / 2.797, dom 1.071 / 3.485, estilo 3.905 / 5.346, maqueta 11.840 / 15.684.
+    - Tokens y dom: dashc copiaba `t.texto` (la página, 9 KB) en cada llamada a `_siguiente(t, t.texto)`. Un campo
+      de texto que va de argumento se copia si algo asigna ese campo, y dashc lo miraba solo por el nombre:
+      dom.dash asigna `texto` de un Nodo. Ahora, como ./dash, por struct y campo (`walk_types` anota el struct del
+      campo de cada asignación, ya con los tipos de las variables; si no se sabe, vale para todos). Test
+      prestamo.dash. Tras el arreglo: tokens 593, dom 1.281, estilo 5.392, maqueta 15.604.
+    - Pendiente: estilo (+38 %) y maqueta (+32 %).
 - Pendiente: D12, depurador (ver arriba); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
