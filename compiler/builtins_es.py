@@ -911,6 +911,11 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_set_background": "Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una "
+                          "lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si "
+                          "no tienen el suyo",
+    "mui_set_text_pen": "El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo "
+                        "mantiene",
     "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
                     "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
                     "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "

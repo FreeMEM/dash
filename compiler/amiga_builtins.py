@@ -3221,6 +3221,17 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    # Dash 2.0 (Forja): colours without MUI's prefs
+    "mui_set_background": BuiltinFunc(
+        name="mui_set_background", params=["obj", "r", "g", "b"], return_type="void",
+        c_template="_dash_mui_set_background(${obj}, ${r}, ${g}, ${b})",
+        description="An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the "
+                    "list inside it) or a window (its root group); the objects inside take it unless they have "
+                    "their own"),
+    "mui_set_text_pen": BuiltinFunc(
+        name="mui_set_text_pen", params=["obj", "r", "g", "b"], return_type="void",
+        c_template="_dash_mui_set_text_pen(${obj}, ${r}, ${g}, ${b})",
+        description="The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it"),
     # Dash 2.0 (Inferencia): the application's own ARexx commands
     "mui_app_rexx": BuiltinFunc(
         name="mui_app_rexx", params=["app", "func"], return_type="void",

@@ -17872,19 +17872,114 @@ static LONG _dash_mui_size(APTR obj, LONG height) {
 }
 
 /* MUI's own text, copied by Dash when it is kept in a variable */
+/* mui_set_text_pen (Dash 2.0, Forja): the colour of a text, label or button, as an escape of MUI's text engine
+   in front of its text: "\\33P[RRGGBB]" on a screen of more than 256 colours, else "\\33P[n]" with the pen of the
+   default public screen (where the windows open) nearest to that colour (ObtainBestPen, given back at the end).
+   mui_set_text keeps it and mui_get_text leaves it out. */
+#define _DASH_MUI_PENS 64
+static APTR _dash_mui_pen_obj[_DASH_MUI_PENS];
+static char _dash_mui_pen_esc[_DASH_MUI_PENS][12];
+static LONG _dash_mui_npens = 0;
+static struct Screen *_dash_mui_pen_scr = NULL;
+static LONG _dash_mui_pen_got[_DASH_MUI_PENS];
+static LONG _dash_mui_npen_got = 0;
+
+static void _dash_mui_pens_free(void) {
+    LONG i;
+    if (_dash_mui_pen_scr) {
+        for (i = 0; i < _dash_mui_npen_got; i++) ReleasePen(_dash_mui_pen_scr->ViewPort.ColorMap, _dash_mui_pen_got[i]);
+        UnlockPubScreen(NULL, _dash_mui_pen_scr);
+    }
+    _dash_mui_pen_scr = NULL;
+    _dash_mui_npen_got = 0;
+    _dash_mui_npens = 0;
+}
+
+static char *_dash_mui_pen_of(APTR obj) {
+    LONG i;
+    for (i = 0; i < _dash_mui_npens; i++)
+        if (_dash_mui_pen_obj[i] == obj) return _dash_mui_pen_esc[i];
+    return NULL;
+}
+
 static STRPTR _dash_mui_get_text(APTR obj) {
     STRPTR text = NULL;
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
+    char *pen;
     if (attr) GetAttr(attr, _dash_mui_combo_str(obj), (IPTR *)&text);
+    if (text && attr == MUIA_Text_Contents && (pen = _dash_mui_pen_of(obj)) &&
+        !strncmp((char *)text, pen, strlen(pen)))
+        text += strlen(pen);
     return text ? text : (STRPTR)"";
 }
 
 static void _dash_mui_set_text(APTR obj, STRPTR text) {
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
+    char *pen;
     if (!attr) return;
     if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name || attr == MUIA_Menuitem_Title)
         text = _dash_mui_keep(text);   /* they keep the pointer */
+    if (attr == MUIA_Text_Contents && (pen = _dash_mui_pen_of(obj))) {
+        /* (MUI copies the text: a buffer of its own for the escape in front) */
+        ULONG len = text ? strlen((char *)text) : 0, plen = strlen(pen);
+        STRPTR both = (STRPTR)AllocVec(len + plen + 1, MEMF_ANY);
+        if (both) {
+            strcpy((char *)both, pen);
+            if (len) strcpy((char *)both + plen, (char *)text);
+            SetAttrs(obj, attr, (IPTR)both, TAG_DONE);
+            FreeVec(both);
+            return;
+        }
+    }
     SetAttrs(_dash_mui_combo_str(obj), attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
+}
+
+static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
+    char *pen;
+    STRPTR text;
+    if (!obj || _dash_mui_text_attr(obj) != MUIA_Text_Contents) return;
+    text = _dash_mui_get_text(obj);
+    {
+        /* (the text as it is now, without the colour before: it is replaced) */
+        ULONG len = strlen((char *)text);
+        STRPTR copy = (STRPTR)AllocVec(len + 1, MEMF_ANY);
+        if (!copy) return;
+        strcpy((char *)copy, (char *)text);
+        if (!(pen = _dash_mui_pen_of(obj))) {
+            if (_dash_mui_npens == _DASH_MUI_PENS) { FreeVec(copy); return; }
+            _dash_mui_pen_obj[_dash_mui_npens] = obj;
+            pen = _dash_mui_pen_esc[_dash_mui_npens++];
+        }
+        if (!_dash_mui_pen_scr && (_dash_mui_pen_scr = LockPubScreen(NULL))) _dash_mui_on_end(_dash_mui_pens_free);
+        if (_dash_mui_pen_scr && GetBitMapAttr(_dash_mui_pen_scr->RastPort.BitMap, BMA_DEPTH) <= 8) {
+            LONG n = ObtainBestPen(_dash_mui_pen_scr->ViewPort.ColorMap, (r & 255) * 0x01010101UL,
+                                   (g & 255) * 0x01010101UL, (b & 255) * 0x01010101UL,
+                                   OBP_Precision, PRECISION_GUI, TAG_DONE);
+            if (n >= 0 && _dash_mui_npen_got < _DASH_MUI_PENS) _dash_mui_pen_got[_dash_mui_npen_got++] = n;
+            else if (n >= 0) ReleasePen(_dash_mui_pen_scr->ViewPort.ColorMap, n);
+            sprintf(pen, "\\33P[%ld]", (long)(n >= 0 ? n : 1));
+        } else {
+            sprintf(pen, "\\33P[%02lx%02lx%02lx]", (unsigned long)(r & 255), (unsigned long)(g & 255), (unsigned long)(b & 255));
+        }
+        _dash_mui_set_text(obj, copy);
+        FreeVec(copy);
+    }
+}
+
+/* mui_set_background (Dash 2.0, Forja): an RGB background ("2:rrrrrrrr,gggggggg,bbbbbbbb", MUI allocates the pen
+   on a screen with a palette); a window's goes to its root group, a list's also to the list inside */
+static void _dash_mui_set_background(APTR obj, LONG r, LONG g, LONG b) {
+    char spec[32];
+    STRPTR keep;
+    Object *o = (Object *)obj, *inner = NULL;
+    if (!obj) return;
+    sprintf(spec, "2:%08lx,%08lx,%08lx", (unsigned long)((r & 255) * 0x01010101UL),
+            (unsigned long)((g & 255) * 0x01010101UL), (unsigned long)((b & 255) * 0x01010101UL));
+    keep = _dash_mui_keep((STRPTR)spec);
+    if (_dash_mui_kind(o) == _DASH_MUI_WINDOW) GetAttr(MUIA_Window_RootObject, o, (IPTR *)&o);
+    else if (_dash_mui_kind(o) == _DASH_MUI_LIST) GetAttr(MUIA_Listview_List, o, (IPTR *)&inner);
+    if (o) SetAttrs(o, MUIA_Background, (IPTR)keep, TAG_DONE);
+    if (inner) SetAttrs(inner, MUIA_Background, (IPTR)keep, TAG_DONE);
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
