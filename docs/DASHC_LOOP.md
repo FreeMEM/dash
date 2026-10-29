@@ -78,8 +78,16 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   fichero y la línea de un fallo en tiempo de ejecución, y el depurador de la extensión de VS Code usa `dash1`.
   Aviso de David Martínez por Telegram (2026-10-29): en Emu68 la depuración línea a línea de SAS/C y otras
   herramientas no funciona, porque a la emulación le falta algo por implementar; el compilador de E (AmigaE) lo
-  hace de otra forma y en Emu68 sí depura línea a línea. Antes de diseñar D12, mirar cómo lo hace E (su
-  información de líneas y su depurador) para que el de dashc valga también en Emu68.
+  hace de otra forma y en Emu68 sí depura línea a línea. El motivo: Emu68 no implementa el modo traza de la CPU
+  (el bit T del SR), y esos depuradores paso a paso dependen de él.
+  - Cómo lo hace EDBG, según Darren Coles, que mantiene el compilador de E (E-VO): compilado en modo depuración,
+    E pone un `NOP` antes de cada línea de código fuente. Al arrancar, EDBG busca esos `NOP` con los hunks de
+    depuración (línea → dirección) y los cambia todos por `TRAP`. Cada `TRAP` entra en el manejador de EDBG, que
+    mira los puntos de parada, el paso a paso, etc. No usa la traza de la CPU.
+  - Idea para D12: el mismo enfoque. `dashc --debug` pondría un `NOP` (o un `TRAP` fijo) al principio de cada
+    línea de Dash y un `HUNK_DEBUG` con la tabla línea → dirección (dashc ya lleva fichero y línea en `cur_file` y
+    `cur_line`). El depurador sería un programa del Amiga, o el manejador de `TRAP` del runtime, que ya tiene
+    `tc_TrapCode` propio. Así funcionaría igual en un 68000 real, en FS-UAE y en Emu68.
 
 ## Bitácora
 
