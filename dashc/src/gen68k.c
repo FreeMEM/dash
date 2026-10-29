@@ -1515,8 +1515,29 @@ static void gen_interp(Node *n)
 /* a + b con algún texto: DashString_concat, con un número pasado a texto */
 static void gen_concat(Node *n)
 {
-    Node *a[2];
+    Node *a[2], *e, join;
     static const char str[2] = {1, 1};
+    int np = 0, i;
+    /* a + b + c...: una sola reserva para toda la cadena (DashString_join, como ./dash), no un texto intermedio por
+       cada +; solo los + que ya dan texto (1 + 2 + "x" suma antes 1 + 2) */
+    for (e = n; e->kind == E_BIN && e->op == P_PLUS && expr_type(e) == TY_STR; e = e->a) np++;
+    if (np >= 2) {
+        memset(&join, 0, sizeof join);
+        join.kind = E_INTERP;
+        join.line = n->line;
+        join.col = n->col;
+        join.file = n->file;
+        for (i = 0; i <= np; i++) VEC_PUSH(join.args, NULL);
+        for (e = n, i = np; i > 0; e = e->a, i--) join.args.v[i] = e->b;
+        join.args.v[0] = e;
+        if (join.args.v[0]->kind == E_STR && join.args.v[0]->len == 0) {   /* "" + ...: el primero sobra */
+            memmove(join.args.v, join.args.v + 1, sizeof(Node *) * np);
+            join.args.n--;
+        }
+        gen_interp(&join);
+        free(join.args.v);
+        return;
+    }
     a[0] = n->a;
     a[1] = n->b;
     args_to_stack(a, 2, str);
