@@ -222,10 +222,80 @@ static void relax_branches(void)
     }
 }
 
+/* mete n bytes a 0 en pos (lo de pos en adelante se mueve: etiquetas, saltos y reubicaciones) */
+static void insert_code(uint32_t pos, int n)
+{
+    int i;
+    for (i = 0; i < n; i++) buf_byte(&obj->code, 0);
+    memmove(obj->code.p + pos + n, obj->code.p + pos, obj->code.n - pos - n);
+    memset(obj->code.p + pos, 0, n);
+    for (i = 0; i < labels.n; i++)
+        if (labels.v[i] >= (long)pos) labels.v[i] += n;
+    for (i = 0; i < fixups.n; i++)
+        if (fixups.v[i].at >= pos) fixups.v[i].at += n;
+    for (i = 0; i < obj->relocs.n; i++)
+        if (obj->relocs.v[i].off >= pos) obj->relocs.v[i].off += n;
+}
+
+/* Lo contrario de relax_branches, para lo que no llega (una función de más de 32 KB, Main con mucho copiado en
+   línea): un Bcc.s que se quedó lejos pasa a .w, y un .w que no llega a 32 KB, a un jmp absoluto reubicado (bra:
+   jmp; Bcc: la condición contraria .s por encima de un jmp; dbra: por encima de un bra.s y un jmp). Crecer aleja
+   destinos, así que se repite hasta que todo llega. */
+static void grow_branches(void)
+{
+    int changed = 1, i;
+    while (changed) {
+        changed = 0;
+        for (i = 0; i < fixups.n; i++) {
+            Fixup *f = &fixups.v[i];
+            uint8_t *p;
+            long target, d;
+            uint32_t at = f->at;
+            if (f->abs || !f->size) continue;
+            target = labels.v[f->label];
+            if (target < 0) continue;
+            d = target - (long)at;
+            p = obj->code.p + at - 2;
+            if (f->size == 1) {
+                if (d >= -128 && d <= 127) continue;
+                p[1] = 0;                                  /* Bcc.s -> Bcc.w */
+                insert_code(at, 2);
+                f->size = 2;
+                changed = 1;
+                continue;
+            }
+            if (d >= -32768 && d <= 32767) continue;
+            if (p[0] == 0x60) {                            /* bra.w -> jmp abs.l */
+                insert_code(at + 2, 2);
+                p = obj->code.p + at - 2;
+                p[0] = 0x4E; p[1] = 0xF9;
+            } else if ((p[0] & 0xF0) == 0x60) {            /* Bcc.w -> B!cc.s +6; jmp abs.l */
+                insert_code(at + 2, 4);
+                p = obj->code.p + at - 2;
+                p[0] = (uint8_t)(p[0] ^ 1);
+                p[1] = 6;
+                p[2] = 0x4E; p[3] = 0xF9;
+                f->at = at += 2;
+            } else {                                       /* dbra dn,+4; bra.s +6; jmp abs.l */
+                insert_code(at + 2, 8);
+                p = obj->code.p + at;
+                p[0] = 0; p[1] = 4;
+                p[2] = 0x60; p[3] = 6;
+                p[4] = 0x4E; p[5] = 0xF9;
+                f->at = at += 6;
+            }
+            f->abs = 1;
+            add_reloc(f->at, HK_CODE, NULL);
+            changed = 1;
+        }
+    }
+}
+
 static void resolve_fixups(void)
 {
     int i;
     relax_branches();
+    grow_branches();
     for (i = 0; i < fixups.n; i++) {
         Fixup *f = &fixups.v[i];
         long target = labels.v[f->label];
@@ -237,7 +307,7 @@ static void resolve_fixups(void)
             obj->code.p[f->at - 1] = (uint8_t)((target - (long)f->at) & 0xFF);
         } else {
             long d = target - (long)f->at;
-            if (d < -32768 || d > 32767) fatal("salto de más de 32 KB (aún no admitido)");
+            if (d < -32768 || d > 32767) fatal("salto de más de 32 KB (fallo de dashc: grow_branches)");
             put_word(obj->code.p + f->at, (int)d);
         }
     }
