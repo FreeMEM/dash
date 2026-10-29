@@ -9,6 +9,7 @@
 # expect-out: ancho 50: 7 11
 # expect-out: no está: 0
 # expect-out: no es fuente: 0
+# expect-out: icono: 8 0
 
 func escribir(nombre: String, datos: Array) -> Bool
     b = buffer_alloc(datos.length)
@@ -59,4 +60,11 @@ Main
     file_write_text("RAM:p.txt", "esto no es una fuente")
     n = font_from_ttf("RAM:p.txt", 20, 0)
     Print "no es fuente: #{n}"
+    # font_ttf_icon: la "A" es el carácter 66 ("B", de 400 unidades: 8 px)
+    f = font_ttf_icon("RAM:p.ttf", 20, 66)
+    font_use(f)
+    w = font_text_width("A")
+    sin = font_ttf_icon("RAM:p.ttf", 20, 0)
+    Print "icono: #{w} #{sin}"
+    font_ttf_free(f)
 end

@@ -272,8 +272,9 @@ static int dash_imgdec_is_svg(UBYTE *data, LONG len)
 }
 
 /* An SVG drawn by nanosvg (RGBA): at its own size (width/height or viewBox), or, with maxw x maxh, at the smallest
-   scale that covers it (it is drawn, not reduced: it may grow); NULL if it cannot be parsed */
-static DashImgDec *dash_imgdec_svg(UBYTE *data, LONG len, LONG maxw, LONG maxh)
+   scale that covers it (it is drawn, not reduced: it may grow); with limit, at its own size but not bigger than
+   maxw x maxh (the size at which it is seen is not known); NULL if it cannot be parsed */
+static DashImgDec *dash_imgdec_svg(UBYTE *data, LONG len, LONG maxw, LONG maxh, int limit)
 {
     char *text = (char *)AllocVec(len + 1, MEMF_ANY);
     NSVGimage *svg;
@@ -294,7 +295,8 @@ static DashImgDec *dash_imgdec_svg(UBYTE *data, LONG len, LONG maxw, LONG maxh)
     if (maxw > 0 && maxh > 0 && maxw < 0x7FFFFFF) {
         ex = (float)maxw / svg->width;
         ey = (float)maxh / svg->height;
-        scale = ex > ey ? ex : ey;
+        if (!limit) scale = ex > ey ? ex : ey;
+        else if (ex < 1.0f || ey < 1.0f) scale = ex < ey ? ex : ey;
     }
     w = (LONG)(svg->width * scale + 0.5f);
     h = (LONG)(svg->height * scale + 0.5f);
@@ -310,19 +312,25 @@ static DashImgDec *dash_imgdec_svg(UBYTE *data, LONG len, LONG maxw, LONG maxh)
     return img;
 }
 
-/* The file decoded (NULL if it is not of these formats or cannot be read); maxw, maxh 0: its own size */
+/* The file decoded (NULL if it is not of these formats or cannot be read); maxw, maxh 0: its own size; negative:
+   a limit (the same for the others; an SVG at its own size, made smaller to fit) */
 void *dash_imgdec_decode(const char *file, long maxw, long maxh)
 {
     LONG len = 0;
     UBYTE *data;
     DashImgDec *img = NULL;
+    int limit = maxw < 0 && maxh < 0;
     if (!file || !(data = dash_imgdec_file(file, &len))) return NULL;
+    if (limit) {
+        maxw = -maxw;
+        maxh = -maxh;
+    }
     if (maxw <= 0 || maxh <= 0) maxw = maxh = 0x7FFFFFF;
     if (len > 2 && data[0] == 0xFF && data[1] == 0xD8) img = dash_imgdec_jpeg(data, len, maxw, maxh);
     else if (len > 12 && !memcmp(data, "RIFF", 4) && !memcmp(data + 8, "WEBP", 4))
         img = dash_imgdec_webp(data, len, maxw, maxh);
     else if (dash_imgdec_is_svg(data, len))
-        img = dash_imgdec_svg(data, len, maxw, maxh);
+        img = dash_imgdec_svg(data, len, maxw, maxh, limit);
     if (!img) img = dash_imgdec_stb(data, len, maxw, maxh);
     FreeVec(data);
     return img;

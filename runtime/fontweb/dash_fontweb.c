@@ -408,7 +408,7 @@ static LONG _fw_siguiente = 0;
 
 #define _FW_LO 32
 #define _FW_HI 255
-static LONG _fw_icono = 0;     /* (Tachyon: un icono de la zona privada de Unicode en la "A"; aquí, nunca) */
+static LONG _fw_icono = 0;     /* font_ttf_icon: el carácter que va en la "A" (un icono de la web), mientras se hace */
 #define _FW_N (_FW_HI - _FW_LO + 2)      /* y uno más: el que sale con los que no tiene */
 
 /* Si el píxel (x, y) del glifo en grises va con tinta en el plano de 1 bit: con gris de 112 o más, o si es el más
@@ -573,6 +573,18 @@ void *dash_fontweb_open(const char *file, long size, long width)
     for (i = 0; i < _FW_HECHAS && _fw_hechas[i]; i++) ;
     if (i < _FW_HECHAS) _fw_hechas[i] = tf;
     return tf;
+}
+
+/* font_ttf_icon: a font of the file whose "A" is the character code (an icon of a web font, in Unicode's private
+   area), the other letters empty; NULL if it cannot */
+void *dash_fontweb_icon(const char *file, long size, long code)
+{
+    void *f;
+    if (code <= 0) return NULL;
+    _fw_icono = code;
+    f = dash_fontweb_open(file, size, 100);
+    _fw_icono = 0;
+    return f;
 }
 
 /* font_ttf_free (never CloseFont: the font is one AllocVec) */

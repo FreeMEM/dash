@@ -4112,6 +4112,11 @@ FONT_FUNCTIONS = {
         description="A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels "
                     "of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): "
                     "a font for font_use, or 0. Free it with font_ttf_free, not font_close"),
+    "font_ttf_icon": BuiltinFunc(
+        name="font_ttf_icon", params=["file", "size", "code"], return_type="LONG",
+        c_template="_dash_font_ttf_icon(${file}, ${size}, ${code})", reads_only=True,
+        description="A font of the file whose \"A\" is the character code (an icon of a web font, in Unicode's "
+                    "private area) at size pixels, the other letters empty: draw \"A\" with it; 0 if it cannot"),
     "font_ttf_free": BuiltinFunc(
         name="font_ttf_free", params=["font"], return_type="void", c_template="_dash_font_ttf_free(${font})",
         description="Free a font of font_from_ttf (not while a window still writes with it); the ones left are "
@@ -4564,6 +4569,15 @@ TASK_FUNCTIONS = {
         reads_only=True,
         description="The version of a library (\"muimaster.library\"), loading it if it is not in memory; -1 if "
                     "it is not there"),
+    "library_revision": BuiltinFunc(
+        name="library_revision", params=["name"], return_type="LONG", c_template="_dash_library_revision(${name})",
+        reads_only=True,
+        description="The revision of a library (the 3 of 47.3), as library_version; -1 if it is not there"),
+    "resident_version": BuiltinFunc(
+        name="resident_version", params=["name"], return_type="LONG", c_template="_dash_resident_version(${name})",
+        reads_only=True,
+        description="The version of a resident module of the system (FindResident: \"MorphOS\" says the program "
+                    "runs on MorphOS); -1 if there is none"),
     "task_priority": BuiltinFunc(
         name="task_priority", params=["n"], return_type="LONG", c_template="_dash_task_priority(${n})",
         description="Set the program's priority (-128 to 127; the Shell gives 0): the one it had"),
@@ -4659,7 +4673,18 @@ IMAGE_FUNCTIONS = {
                          "Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG "
                          "(nanosvg: drawn to cover maxw x maxh, RGBA) to "
                          "RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its "
-                         "size): the decoded picture, or 0. Without datatypes, and it may run in a task_start"),
+                         "size; negative, a limit: an SVG then at its own size, smaller if it does not fit): the "
+                         "decoded picture, or 0. Without datatypes, and it may run in a task_start"),
+    "image_decode_start": _dec("image_decode_start", ["file", "maxw", "maxh"], "LONG",
+                               "_dash_image_decode_start(${file}, ${maxw}, ${maxh})",
+                               "image_decode in a process of its own, one below the program's priority, so the "
+                               "window goes on answering: a number for image_decode_ready and image_decode_finish, "
+                               "or 0 if it could not start"),
+    "image_decode_ready": _dec("image_decode_ready", ["t"], "BOOL", "_dash_image_decode_ready(${t})",
+                               "True when an image_decode_start has finished (it does not wait)"),
+    "image_decode_finish": _dec("image_decode_finish", ["t"], "LONG", "_dash_image_decode_finish(${t})",
+                                "What an image_decode_start decoded, as image_decode (0 if it could not); it waits "
+                                "if it is still running, and frees its process"),
     "image_decoded_width": _dec("image_decoded_width", ["d"], "LONG", "_dash_image_decoded_width(${d})",
                                 "Width of a decoded picture"),
     "image_decoded_height": _dec("image_decoded_height", ["d"], "LONG", "_dash_image_decoded_height(${d})",
@@ -4966,11 +4991,13 @@ def _move(src, names):
 
 SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
-    "cpu_model", "fpu_model", "library_version", "task_priority", "build_date", "build_time", "console_flush"])
+    "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
+    "build_date", "build_time", "console_flush"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
-    "image_decode", "image_decoded_width", "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
+    "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
+    "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
     "image_decoded_free", "image_from_decoded"])
-TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_free", "font_ttf_forget"])
+TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
     "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",

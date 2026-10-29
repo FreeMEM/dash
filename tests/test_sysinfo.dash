@@ -1,6 +1,6 @@
 # Test: builtins for what programs did with @native (Dash 2.0, docs/DASHC_NATIVE.md): the clock as Unix seconds
 # and days, the largest free block, running a command and waiting, the program's path, the preferred language,
-# the CPU and FPU (the emulated A1200: 68020 without FPU), library versions, the priority, the date it was compiled, the keys held and console_flush.
+# the CPU and FPU (the emulated A1200: 68020 without FPU), library versions and revisions, resident modules (no MorphOS), the priority, the date it was compiled, the keys held and console_flush.
 # expect-out: unix y días: true true
 # expect-out: bloque: true
 # expect-out: antes de la orden
@@ -10,6 +10,7 @@
 # expect-out: idioma: true
 # expect-out: cpu: true 0
 # expect-out: versiones: true -1
+# expect-out: revisiones: true -1 -1 true
 # expect-out: prioridad: 0 -5
 # expect-out: compilado: 10 -- 8 ::
 # expect-out: teclas: 0
@@ -36,6 +37,11 @@ Main
     ve = library_version("exec.library")
     vn = library_version("noesta.library")
     Print "versiones: #{ve >= 37} #{vn}"
+    re = library_revision("exec.library")
+    rn = library_revision("noesta.library")
+    mo = resident_version("MorphOS")
+    rd = resident_version("dos.library")
+    Print "revisiones: #{re >= 0} #{rn} #{mo} #{rd >= 37}"
     a = task_priority(-5)
     b = task_priority(a)
     Print "prioridad: #{a} #{b}"

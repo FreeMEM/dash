@@ -182,6 +182,16 @@ LONG _dash_init(const char *cmd, LONG len)
         dash_split_args(cmd, len);
     }
     _dash_cpu020 = (SysBase->AttnFlags & AFF_68020) != 0;
+#ifdef __HAVE_68881__
+    /* --fpu: la FPU en precisión extendida (bits 6-7 del FPCR a 0). Hay sistemas que dejan el programa en
+       precisión simple (el CoffinOS de un usuario de Tachyon: Date.now() a saltos, tarea 49 de Tachyon) */
+    if (SysBase->AttnFlags & (AFF_68881 | AFF_68882 | AFF_FPU40)) {
+        ULONG v;
+        __asm__ volatile ("fmove.l %%fpcr,%0" : "=d"(v));
+        v &= ~0xC0UL;
+        __asm__ volatile ("fmove.l %0,%%fpcr" : : "d"(v));
+    }
+#endif
     _dash_trap_on();
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 37);
     DOSBase = (struct DosLibrary *)OpenLibrary((CONST_STRPTR)"dos.library", 37);

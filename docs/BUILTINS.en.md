@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 738 functions, 738 implemented, 0 not implemented.
+Total: 744 functions, 744 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -665,6 +665,8 @@ Total: 738 functions, 738 implemented, 0 not implemented.
 | `cpu_model()` | `LONG` | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
 | `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
 | `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
+| `library_revision(name)` | `LONG` | The revision of a library (the 3 of 47.3), as library_version; -1 if it is not there |  |
+| `resident_version(name)` | `LONG` | The version of a resident module of the system (FindResident: "MorphOS" says the program runs on MorphOS); -1 if there is none |  |
 | `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
 | `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
@@ -674,7 +676,10 @@ Total: 738 functions, 738 implemented, 0 not implemented.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size; negative, a limit: an SVG then at its own size, smaller if it does not fit): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| `image_decode_start(file, maxw, maxh)` | `LONG` | image_decode in a process of its own, one below the program's priority, so the window goes on answering: a number for image_decode_ready and image_decode_finish, or 0 if it could not start |  |
+| `image_decode_ready(t)` | `BOOL` | True when an image_decode_start has finished (it does not wait) |  |
+| `image_decode_finish(t)` | `LONG` | What an image_decode_start decoded, as image_decode (0 if it could not); it waits if it is still running, and frees its process |  |
 | `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
 | `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
 | `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
@@ -687,6 +692,7 @@ Total: 738 functions, 738 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `font_from_ttf(file, size, width)` | `LONG` | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
+| `font_ttf_icon(file, size, code)` | `LONG` | A font of the file whose "A" is the character code (an icon of a web font, in Unicode's private area) at size pixels, the other letters empty: draw "A" with it; 0 if it cannot |  |
 | `font_ttf_free(font)` | `void` | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
 | `font_ttf_forget(file)` | `void` | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
 

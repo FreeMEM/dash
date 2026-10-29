@@ -349,6 +349,8 @@ const BuiltinInfo builtin_info[] = {
     {"font_ttf_forget", 1, 0, 0, 0},
     {"font_ttf_free", 1, 0, 1, 0},
     {"font_ttf_free", 1, 0, 1, 0},
+    {"font_ttf_icon", 3, 1, 0, 0},
+    {"font_ttf_icon", 3, 1, 0, 0},
     {"font_use", 1, 0, 0, 0},
     {"font_use", 1, 0, 0, 0},
     {"fpu_model", 0, 1, 1, 0},
@@ -475,6 +477,12 @@ const BuiltinInfo builtin_info[] = {
     {"gt_wait_event", 0, 1, 1, 0},
     {"image_decode", 3, 1, 0, 0},
     {"image_decode", 3, 1, 0, 0},
+    {"image_decode_finish", 1, 1, 0, 0},
+    {"image_decode_finish", 1, 1, 0, 0},
+    {"image_decode_ready", 1, 2, 0, 0},
+    {"image_decode_ready", 1, 2, 0, 0},
+    {"image_decode_start", 3, 1, 0, 0},
+    {"image_decode_start", 3, 1, 0, 0},
     {"image_decoded_alpha", 1, 2, 0, 0},
     {"image_decoded_alpha", 1, 2, 0, 0},
     {"image_decoded_free", 1, 0, 0, 0},
@@ -565,6 +573,8 @@ const BuiltinInfo builtin_info[] = {
     {"key_wait", 0, 1, 1, 0},
     {"latin1_to_utf8", 1, 3, 0, 0},
     {"latin1_to_utf8", 1, 3, 0, 0},
+    {"library_revision", 1, 1, 0, 0},
+    {"library_revision", 1, 1, 0, 0},
     {"library_version", 1, 1, 0, 0},
     {"library_version", 1, 1, 0, 0},
     {"listview_add", 2, 0, 0, 0},
@@ -1161,6 +1171,8 @@ const BuiltinInfo builtin_info[] = {
     {"regex_match", 3, 2, 0, 0},
     {"release", 1, 0, 0, 0},
     {"release", 1, 0, 0, 0},
+    {"resident_version", 1, 1, 0, 0},
+    {"resident_version", 1, 1, 0, 0},
     {"retain", 1, 0, 0, 0},
     {"retain", 1, 0, 0, 0},
     {"round", 1, 5, 0, 1},
@@ -1478,7 +1490,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1476;
+const int builtin_count = 1488;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

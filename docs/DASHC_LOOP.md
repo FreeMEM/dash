@@ -55,6 +55,19 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     README.es.md en castellano): docs/BUILTINS.en.md en inglés y docs/BUILTINS.md en castellano.
   - D9c la documentación de la 2.0 (README, SINTAXIS, MANUAL, VERSIONES, AGENTS) en los dos idiomas.
   - D9d un PR de la rama dashc a main, sin fusionar ni publicar: el usuario decide cuándo.
+- D11 Tachyon sin C (pedido por el usuario el 2026-10-29: "mueve sus C a builtins"), en la rama `dash2` de Tachyon
+  (worktree `~/Projects/tachyon/.worktrees/dash2`, sale de `dev`; sin subir). Se prueba con su runner y dashc:
+  `DASH=~/Projects/FreeMEMLang/.worktrees/dashc python3 tests/run.py <filtro>`. Por partes:
+  - D11a red (`net_bg_*`), D11b gzip (`inflate_auto`), horas (`time_unix`), esperas de los tests (`time_delay`),
+    D11c imágenes (`image_decode*`; nuevos `image_decode_start/ready/finish` y tamaños negativos como tope),
+    D11d fuentes web (`font_from_ttf`; nuevo `font_ttf_icon`), D11e vídeo y YouTube (`@link` + `@extern` a `dwv_*`),
+    D11f actualizar y descargas, D11g `src/dashweb.dash` (la precisión de la FPU la pone el runtime de `--fpu`).
+  - D11h informe del sistema: `library_revision`, `resident_version` (MorphOS).
+  - D11i herramientas (`tools/amiga/clicar.dash`, `latido.dash`) y el tutorial (`paso5_tarea`).
+  - D11j QuickJS, DOM, lienzo y HTML5 (`js`, `jsdom`, `lienzo`, `html5`, `documento`: ~2.200 líneas de `@c` que
+    llaman a funciones de Dash y leen sus structs `_Dash_Nodo` y listas): su C a ficheros .c de Tachyon dentro de
+    sus librerías (`libqjs.a`, `libimg.a`) con `@extern`; para lo que el C lee de Dash, o retrollamadas a Dash, o una
+    cabecera con la forma de los structs de dashc (`dashc --cabecera`). Diseño antes de hacerlo.
 
 ## Bitácora
 

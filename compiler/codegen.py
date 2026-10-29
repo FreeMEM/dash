@@ -5268,6 +5268,21 @@ static LONG _dash_library_version(STRPTR name) {
     return v;
 }
 
+static LONG _dash_library_revision(STRPTR name) {
+    struct Library *l;
+    LONG v;
+    if (!name || !*name || !(l = OpenLibrary((CONST_STRPTR)name, 0))) return -1;
+    v = l->lib_Revision;
+    CloseLibrary(l);
+    return v;
+}
+
+static LONG _dash_resident_version(STRPTR name) {
+    struct Resident *r;
+    if (!name || !*name || !(r = FindResident((CONST_STRPTR)name))) return -1;
+    return r->rt_Version;
+}
+
 static LONG _dash_task_priority(LONG n) {
     if (n < -128) n = -128;
     if (n > 127) n = 127;
@@ -5797,11 +5812,13 @@ static LONG _dash_net_bg_open_tls(STRPTR host, LONG port, LONG timeout_ms) {
     FONTWEB_RUNTIME = """\
 /* Dash Web Font Runtime */
 void *dash_fontweb_open(const char *file, long size, long width);
+void *dash_fontweb_icon(const char *file, long size, long code);
 void dash_fontweb_free(void *f);
 void dash_fontweb_forget(const char *file);
 void dash_fontweb_cleanup(void);
 
 static LONG _dash_font_from_ttf(STRPTR file, LONG size, LONG width) { return (LONG)dash_fontweb_open((const char *)file, size, width); }
+static LONG _dash_font_ttf_icon(STRPTR file, LONG size, LONG code) { return (LONG)dash_fontweb_icon((const char *)file, size, code); }
 static void _dash_font_ttf_free(LONG f) { dash_fontweb_free((void *)f); }
 static void _dash_font_ttf_forget(STRPTR file) { dash_fontweb_forget((const char *)file); }
 static void _dash_fontweb_cleanup(void) { dash_fontweb_cleanup(); }
@@ -5824,6 +5841,37 @@ static LONG _dash_image_decoded_height(LONG d) { return dash_imgdec_height((void
 static BOOL _dash_image_decoded_alpha(LONG d) { return dash_imgdec_alpha((void *)d) != 0; }
 static APTR _dash_image_decoded_pixels(LONG d) { return dash_imgdec_pixels((void *)d); }
 static void _dash_image_decoded_free(LONG d) { dash_imgdec_free((void *)d); }
+
+/* image_decode_start: the same in a process of its own (TASK_RUNTIME's, 256 KB of stack: stb_image, nanosvg and
+   libwebp want it; one below the program's priority, so it goes on while the program waits), with its own copy
+   of the name. image_decode_finish takes the result, frees the process and the copy. */
+typedef struct { LONG maxw, maxh; char file[1]; } _DashImgDecJob;
+static LONG _dash_imgdec_job(LONG arg) {
+    _DashImgDecJob *j = (_DashImgDecJob *)arg;
+    return (LONG)dash_imgdec_decode(j->file, j->maxw, j->maxh);
+}
+static LONG _dash_image_decode_start(STRPTR file, LONG maxw, LONG maxh) {
+    _DashImgDecJob *j;
+    LONG t;
+    if (!file) return 0;
+    if (!(j = (_DashImgDecJob *)AllocVec(sizeof(_DashImgDecJob) + strlen((const char *)file), MEMF_ANY))) return 0;
+    j->maxw = maxw;
+    j->maxh = maxh;
+    strcpy(j->file, (const char *)file);
+    if (!(t = _dash_task_start_with((APTR)_dash_imgdec_job, (LONG)j, 262144, -1))) FreeVec(j);
+    return t;
+}
+static BOOL _dash_image_decode_ready(LONG t) { return _dash_task_done(t) != 0; }
+static LONG _dash_image_decode_finish(LONG t) {
+    LONG d;
+    APTR j;
+    if (!t) return 0;
+    d = _dash_task_result(t);
+    j = (APTR)((struct _DashTask *)t)->arg;
+    _dash_task_free(t);
+    FreeVec(j);
+    return d;
+}
 
 """
 
@@ -21092,6 +21140,8 @@ static {ret_type} {method_name}({params_str}) {{
         if self.uses_cpu:
             self.uses_time = True      # CPU_RUNTIME reads the EClock of TIME_RUNTIME
             self.uses_strings = True   # cpu_task_name gives a String
+        if self.uses_imgdec:
+            self.uses_tasks = True     # image_decode_start decodes in a TASK_RUNTIME process
         if self.uses_netbg_tls:
             self.uses_netbg = self.uses_tls = True   # NETBG_TLS_RUNTIME fills NETBG's hooks with TLS_RUNTIME
         if self.uses_netbg:

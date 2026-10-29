@@ -434,6 +434,8 @@ DESC_ES = {
     "fpu_model": "La FPU: 68881, 68882, 68040 o 68060 (la del procesador); 0 si no hay",
     "library_version": "La versión de una librería (\"muimaster.library\"), cargándola si no está en memoria; -1 si no "
                        "está",
+    "library_revision": "La revisión de una librería (el 3 de 47.3), como library_version; -1 si no está",
+    "resident_version": "La versión de un módulo residente del sistema (FindResident: \"MorphOS\" dice que el programa corre en MorphOS); -1 si no hay",
     "task_priority": "Pone la prioridad del programa (-128 a 127; el Shell da 0): la que tenía",
     "build_date": "La fecha en que se compiló el programa, \"2026-10-28\"",
     "build_time": "La hora en que se compiló el programa, \"20:45:10\"",
@@ -441,8 +443,12 @@ DESC_ES = {
     # Imágenes decodificadas por el programa
     "image_decode": "Decodifica un JPEG (TJpgDec), WebP (libwebp; los dos ya reducidos al decodificar), PNG, GIF, BMP "
                     "(stb_image) o SVG (nanosvg: dibujado para cubrir maxw x maxh, RGBA) a píxeles RGB o RGBA, "
-                    "reducidos hasta que no pasen mucho de maxw x maxh (0, 0: su tamaño): la imagen decodificada, o 0. "
+                    "reducidos hasta que no pasen mucho de maxw x maxh (0, 0: su tamaño; negativos, un tope: un SVG va "
+                    "entonces a su tamaño, más pequeño si no cabe): la imagen decodificada, o 0. "
                     "Sin datatypes, y vale dentro de un task_start",
+    "image_decode_start": "image_decode en un proceso aparte, uno por debajo de la prioridad del programa, para que la ventana siga respondiendo: un número para image_decode_ready e image_decode_finish, o 0 si no pudo empezar",
+    "image_decode_ready": "Cierto cuando un image_decode_start ha terminado (no espera)",
+    "image_decode_finish": "Lo que decodificó un image_decode_start, como image_decode (0 si no pudo); espera si aún no ha acabado y libera su proceso",
     "image_decoded_width": "El ancho de una imagen decodificada",
     "image_decoded_height": "El alto de una imagen decodificada",
     "image_decoded_alpha": "True si una imagen decodificada tiene alfa (4 bytes por píxel, RGBA; si no, 3, RGB)",
@@ -454,6 +460,7 @@ DESC_ES = {
     "font_from_ttf": "Una fuente TrueType (TTF, un OTF con contornos TrueType, o un WOFF o WOFF2 de ellos) a size "
                      "píxeles de em y al width % de su ancho (0: 100), sus caracteres Latin-1 en un plano de 1 bit "
                      "(stb_truetype): una fuente para font_use, o 0. Se libera con font_ttf_free, no con font_close",
+    "font_ttf_icon": "Una fuente del fichero cuya \"A\" es el carácter code (un icono de una fuente web, en la zona privada de Unicode) a size píxeles, con las demás letras vacías: se dibuja \"A\" con ella; 0 si no se puede",
     "font_ttf_free": "Libera una fuente de font_from_ttf (no mientras una ventana siga escribiendo con ella); las que "
                      "queden se liberan al acabar",
     "font_ttf_forget": "font_from_ttf guarda los 8 últimos ficheros leídos para otros tamaños: este se lee otra vez la "

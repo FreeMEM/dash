@@ -15,8 +15,12 @@
 # expect-out: webp sin pérdida con alfa: 16x8 true rojo azul verde
 # expect-out: svg: 16x8 true rojo azul verde
 # expect-out: svg a 32x16: 32x16 true rojo azul verde
+# expect-out: svg con tope 100x100: 16x8 true rojo azul verde
+# expect-out: svg con tope 8x8: 8x4
 # expect-out: no es imagen: 0
 # expect-out: no está: 0
+# expect-out: aparte: 16x8 false rojo azul verde
+# expect-out: aparte, no está: 0
 
 func escribir(nombre: String, datos: Array) -> Bool
     b = buffer_alloc(datos.length)
@@ -53,7 +57,10 @@ func color(d: Int, x: Int, y: Int) -> String
 end
 
 func probar(nombre: String, fichero: String, maxw: Int, maxh: Int)
-    d = image_decode(fichero, maxw, maxh)
+    ver(nombre, image_decode(fichero, maxw, maxh))
+end
+
+func ver(nombre: String, d: Int)
     if d == 0
         Print "#{nombre}: 0"
         return
@@ -98,7 +105,20 @@ Main
     file_write_text("RAM:t.svg", svg)
     probar("svg", "RAM:t.svg", 0, 0)
     probar("svg a 32x16", "RAM:t.svg", 30, 16)
+    probar("svg con tope 100x100", "RAM:t.svg", -100, -100)
+    d = image_decode("RAM:t.svg", -8, -8)       # (la fila verde, de medio píxel: solo el tamaño)
+    Print "svg con tope 8x8: #{image_decoded_width(d)}x#{image_decoded_height(d)}"
+    image_decoded_free(d)
     file_write_text("RAM:t.txt", "hola")
     probar("no es imagen", "RAM:t.txt", 0, 0)
     probar("no está", "RAM:noesta.png", 0, 0)
+    # image_decode_start: en un proceso aparte mientras el programa sigue
+    t = image_decode_start("RAM:t.jpg", 16, 8)
+    vueltas = 0
+    while not image_decode_ready(t)
+        vueltas = vueltas + 1
+        time_delay(1)
+    end
+    ver("aparte", image_decode_finish(t))
+    ver("aparte, no está", image_decode_finish(image_decode_start("RAM:noesta.png", 0, 0)))
 end
