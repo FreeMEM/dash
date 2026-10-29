@@ -1,0 +1,813 @@
+# ========================================
+# Dash JSON module
+# Read a JSON text into a tree of Json and write a tree back as text
+# ========================================
+#
+#   import "lib/json.dash"
+#   j = json_parse(texto)                 # nil if it is not JSON: json_error() says why and where
+#   c = json_path_str(j, "choices.0.message.content")
+#   o = json_object()
+#   json_set(o, "model", json_string("x"))
+#   json_set(o, "max_tokens", json_int(200))
+#   Print json_write(o)                   # {"model":"x","max_tokens":200}
+#
+# Texts are UTF-8, as JSON wants: \uXXXX becomes its UTF-8 bytes, and json_write leaves bytes from 128 on as
+# they are (a Latin-1 text of the Amiga goes through latin1_to_utf8 first; utf8_to_latin1 for the way back).
+
+const JSON_NULL = 0
+const JSON_BOOL = 1
+const JSON_NUMBER = 2
+const JSON_STRING = 3
+const JSON_ARRAY = 4
+const JSON_OBJECT = 5
+
+# (nesting deeper than this is an error: each level takes stack)
+const JSON_MAX_DEPTH = 64
+
+struct Json
+    kind: Int = 0          # JSON_NULL, JSON_BOOL...
+    flag: Bool = false     # JSON_BOOL: its value
+    num: Int = 0           # JSON_NUMBER: its value as an Int (without the decimals)
+    text: String = ""      # JSON_STRING: the text; JSON_NUMBER: the number as written
+    items: [Json] = nil    # JSON_ARRAY: the elements; JSON_OBJECT: the values, in the order of names
+    names: [String] = nil  # JSON_OBJECT: the names
+end
+
+var _json_err: String = ""
+
+# ---------- Making values ----------
+
+func json_null() -> Json
+    return Json()
+end
+
+func json_bool(b: Bool) -> Json
+    j = Json()
+    j.kind = JSON_BOOL
+    j.flag = b
+    return j
+end
+
+func json_int(n: Int) -> Json
+    j = Json()
+    j.kind = JSON_NUMBER
+    j.num = n
+    j.text = "#{n}"
+    return j
+end
+
+# A number written as it comes ("0.7", "1e-3"); "" if it is not a JSON number
+func json_number(text: String) -> Json
+    r = _JsonIn()
+    r.s = text
+    r.n = text.length
+    j = _json_num(r)
+    if r.bad or r.i != r.n
+        return nil
+    end
+    return j
+end
+
+func json_real(x: Float) -> Json
+    j = Json()
+    j.kind = JSON_NUMBER
+    j.num = Int(x)
+    j.text = "#{x}"
+    return j
+end
+
+func json_string(s: String) -> Json
+    j = Json()
+    j.kind = JSON_STRING
+    j.text = s
+    return j
+end
+
+func json_array() -> Json
+    j = Json()
+    j.kind = JSON_ARRAY
+    j.items = []
+    return j
+end
+
+func json_object() -> Json
+    j = Json()
+    j.kind = JSON_OBJECT
+    j.items = []
+    j.names = []
+    return j
+end
+
+# ---------- Changing arrays and objects ----------
+
+# Add v at the end of an array
+func json_push(a: Json, v: Json)
+    if a == nil or a.kind != JSON_ARRAY
+        return
+    end
+    if v == nil
+        v = Json()
+    end
+    a.items.push(v)
+end
+
+# Put v under name in an object (in the place of the one there, or at the end)
+func json_set(o: Json, name: String, v: Json)
+    if o == nil or o.kind != JSON_OBJECT
+        return
+    end
+    if v == nil
+        v = Json()
+    end
+    i = _json_find(o, name)
+    if i >= 0
+        o.items[i] = v
+    else
+        o.names.push(name)
+        o.items.push(v)
+    end
+end
+
+func json_set_str(o: Json, name: String, s: String)
+    json_set(o, name, json_string(s))
+end
+
+func json_set_int(o: Json, name: String, n: Int)
+    json_set(o, name, json_int(n))
+end
+
+func json_set_bool(o: Json, name: String, b: Bool)
+    json_set(o, name, json_bool(b))
+end
+
+# Take name out of an object: true if it was there
+func json_remove(o: Json, name: String) -> Bool
+    if o == nil or o.kind != JSON_OBJECT
+        return false
+    end
+    i = _json_find(o, name)
+    if i < 0
+        return false
+    end
+    o.names.remove(i)
+    o.items.remove(i)
+    return true
+end
+
+# ---------- Reading values ----------
+
+# Elements of an array or names of an object (0 for the rest)
+func json_length(j: Json) -> Int
+    if j == nil
+        return 0
+    end
+    if j.kind == JSON_ARRAY or j.kind == JSON_OBJECT
+        return j.items.length
+    end
+    return 0
+end
+
+# Element i of an array (from 0), nil if there is none
+func json_at(a: Json, i: Int) -> Json
+    if a == nil or a.kind != JSON_ARRAY or i < 0 or i >= a.items.length
+        return nil
+    end
+    return a.items[i]
+end
+
+# The value under name in an object, nil if there is none
+func json_get(o: Json, name: String) -> Json
+    if o == nil or o.kind != JSON_OBJECT
+        return nil
+    end
+    i = _json_find(o, name)
+    if i < 0
+        return nil
+    end
+    return o.items[i]
+end
+
+func json_has(o: Json, name: String) -> Bool
+    return json_get(o, name) != nil
+end
+
+# Name i of an object (from 0), "" if there is none
+func json_name_at(o: Json, i: Int) -> String
+    if o == nil or o.kind != JSON_OBJECT or i < 0 or i >= o.names.length
+        return ""
+    end
+    return o.names[i]
+end
+
+# Value i of an object, in the order of its names
+func json_value_at(o: Json, i: Int) -> Json
+    if o == nil or o.kind != JSON_OBJECT or i < 0 or i >= o.items.length
+        return nil
+    end
+    return o.items[i]
+end
+
+func json_is_null(j: Json) -> Bool
+    return j == nil or j.kind == JSON_NULL
+end
+
+# The text of a string, "" for anything else
+func json_str(j: Json) -> String
+    if j == nil or j.kind != JSON_STRING
+        return ""
+    end
+    return j.text
+end
+
+# The value of a number (without decimals), 0 for anything else
+func json_num(j: Json) -> Int
+    if j == nil or j.kind != JSON_NUMBER
+        return 0
+    end
+    return j.num
+end
+
+# The value of true or false; false for anything else
+func json_true(j: Json) -> Bool
+    return j != nil and j.kind == JSON_BOOL and j.flag
+end
+
+# The value of a number as a Float (0.0 for anything else)
+func json_float(j: Json) -> Float
+    if j == nil or j.kind != JSON_NUMBER
+        return 0.0
+    end
+    return _json_to_float(j.text)
+end
+
+func json_get_str(o: Json, name: String) -> String
+    return json_str(json_get(o, name))
+end
+
+func json_get_int(o: Json, name: String) -> Int
+    return json_num(json_get(o, name))
+end
+
+func json_get_bool(o: Json, name: String) -> Bool
+    return json_true(json_get(o, name))
+end
+
+# Down a path of names and positions split by dots ("choices.0.message.content"): nil if a step is missing
+func json_path(j: Json, path: String) -> Json
+    if path == ""
+        return j
+    end
+    for part in str_split(path, ".")
+        if j == nil
+            return nil
+        end
+        if j.kind == JSON_ARRAY
+            if not _json_digits(part)
+                return nil
+            end
+            j = json_at(j, Int(part))
+        else
+            j = json_get(j, part)
+        end
+    end
+    return j
+end
+
+func json_path_str(j: Json, path: String) -> String
+    return json_str(json_path(j, path))
+end
+
+func json_path_int(j: Json, path: String) -> Int
+    return json_num(json_path(j, path))
+end
+
+# ---------- Reading a text ----------
+
+struct _JsonIn
+    s: String = ""
+    i: Int = 0
+    n: Int = 0
+    bad: Bool = false
+end
+
+# Why the last json_parse gave nil ("" if it did not)
+func json_error() -> String
+    return _json_err
+end
+
+# The tree of a JSON text; nil if it is not JSON (json_error says why)
+func json_parse(text: String) -> Json
+    _json_err = ""
+    if text == nil
+        _json_err = "no text"
+        return nil
+    end
+    r = _JsonIn()
+    r.s = text
+    r.n = text.length
+    v = _json_value(r, 0)
+    if r.bad
+        return nil
+    end
+    _json_ws(r)
+    if r.i < r.n
+        _json_fail(r, "something after the end")
+        return nil
+    end
+    return v
+end
+
+func _json_fail(r: _JsonIn, why: String)
+    if not r.bad
+        r.bad = true
+        _json_err = "#{why} at byte #{r.i}"
+    end
+end
+
+func _json_ws(r: _JsonIn)
+    while r.i < r.n
+        c = str_code(r.s, r.i)
+        if c != 32 and c != 10 and c != 13 and c != 9
+            return
+        end
+        r.i = r.i + 1
+    end
+end
+
+func _json_value(r: _JsonIn, depth: Int) -> Json
+    _json_ws(r)
+    if r.i >= r.n
+        _json_fail(r, "unexpected end")
+        return nil
+    end
+    c = str_code(r.s, r.i)
+    if c == 34
+        return json_string(_json_str(r))
+    end
+    if c == 123 or c == 91
+        if depth >= JSON_MAX_DEPTH
+            _json_fail(r, "too deep")
+            return nil
+        end
+        if c == 123
+            return _json_obj(r, depth + 1)
+        end
+        return _json_arr(r, depth + 1)
+    end
+    if c == 45 or (c >= 48 and c <= 57)
+        return _json_num(r)
+    end
+    if _json_word(r, "true")
+        return json_bool(true)
+    end
+    if _json_word(r, "false")
+        return json_bool(false)
+    end
+    if _json_word(r, "null")
+        return Json()
+    end
+    _json_fail(r, "unexpected character")
+    return nil
+end
+
+func _json_word(r: _JsonIn, w: String) -> Bool
+    n = w.length
+    if r.i + n > r.n
+        return false
+    end
+    if r.s[r.i:r.i + n] != w
+        return false
+    end
+    r.i = r.i + n
+    return true
+end
+
+func _json_obj(r: _JsonIn, depth: Int) -> Json
+    o = json_object()
+    r.i = r.i + 1
+    _json_ws(r)
+    if str_code(r.s, r.i) == 125
+        r.i = r.i + 1
+        return o
+    end
+    while true
+        _json_ws(r)
+        if str_code(r.s, r.i) != 34
+            _json_fail(r, "a name was expected")
+            return nil
+        end
+        name = _json_str(r)
+        if r.bad
+            return nil
+        end
+        _json_ws(r)
+        if str_code(r.s, r.i) != 58
+            _json_fail(r, "':' was expected")
+            return nil
+        end
+        r.i = r.i + 1
+        v = _json_value(r, depth)
+        if r.bad
+            return nil
+        end
+        o.names.push(name)
+        o.items.push(v)
+        _json_ws(r)
+        c = str_code(r.s, r.i)
+        r.i = r.i + 1
+        if c == 125
+            return o
+        end
+        if c != 44
+            r.i = r.i - 1
+            _json_fail(r, "',' or '}' was expected")
+            return nil
+        end
+    end
+    return o
+end
+
+func _json_arr(r: _JsonIn, depth: Int) -> Json
+    a = json_array()
+    r.i = r.i + 1
+    _json_ws(r)
+    if str_code(r.s, r.i) == 93
+        r.i = r.i + 1
+        return a
+    end
+    while true
+        v = _json_value(r, depth)
+        if r.bad
+            return nil
+        end
+        a.items.push(v)
+        _json_ws(r)
+        c = str_code(r.s, r.i)
+        r.i = r.i + 1
+        if c == 93
+            return a
+        end
+        if c != 44
+            r.i = r.i - 1
+            _json_fail(r, "',' or ']' was expected")
+            return nil
+        end
+    end
+    return a
+end
+
+func _json_hex(c: Int) -> Int
+    if c >= 48 and c <= 57
+        return c - 48
+    end
+    if c >= 97 and c <= 102
+        return c - 87
+    end
+    if c >= 65 and c <= 70
+        return c - 55
+    end
+    return -1
+end
+
+# The 4 hex digits at r.i (-1 if they are not)
+func _json_u4(r: _JsonIn) -> Int
+    if r.i + 4 > r.n
+        return -1
+    end
+    v = 0
+    for k in (0..3)
+        h = _json_hex(str_code(r.s, r.i + k))
+        if h < 0
+            return -1
+        end
+        v = v * 16 + h
+    end
+    r.i = r.i + 4
+    return v
+end
+
+# The string at r.i (on its opening quote), without its escapes
+func _json_str(r: _JsonIn) -> String
+    r.i = r.i + 1
+    out = ""
+    start = r.i
+    while r.i < r.n
+        c = str_code(r.s, r.i)
+        if c == 34
+            if r.i > start
+                out = out + r.s[start:r.i]
+            end
+            r.i = r.i + 1
+            return out
+        end
+        if c == 92
+            if r.i > start
+                out = out + r.s[start:r.i]
+            end
+            r.i = r.i + 1
+            e = str_code(r.s, r.i)
+            r.i = r.i + 1
+            if e == 110
+                out = out + "\n"
+            elif e == 116
+                out = out + "\t"
+            elif e == 114
+                out = out + str_char(13)
+            elif e == 34 or e == 92 or e == 47
+                out = out + str_char(e)
+            elif e == 98
+                out = out + str_char(8)
+            elif e == 102
+                out = out + str_char(12)
+            elif e == 117
+                cp = _json_u4(r)
+                if cp < 0
+                    _json_fail(r, "bad \\u escape")
+                    return ""
+                end
+                # a pair of surrogates is one character
+                if cp >= 0xD800 and cp <= 0xDBFF and str_code(r.s, r.i) == 92 and str_code(r.s, r.i + 1) == 117
+                    r.i = r.i + 2
+                    lo = _json_u4(r)
+                    if lo >= 0xDC00 and lo <= 0xDFFF
+                        cp = 0x10000 + (cp - 0xD800) * 1024 + (lo - 0xDC00)
+                    else
+                        r.i = r.i - 6
+                    end
+                end
+                if cp == 0
+                    out = out + " "
+                else
+                    out = out + utf8_char(cp)
+                end
+            else
+                r.i = r.i - 1
+                _json_fail(r, "bad escape")
+                return ""
+            end
+            start = r.i
+        else
+            r.i = r.i + 1
+        end
+    end
+    _json_fail(r, "a string without its end")
+    return ""
+end
+
+func _json_digit(r: _JsonIn) -> Bool
+    c = str_code(r.s, r.i)
+    return c >= 48 and c <= 57
+end
+
+func _json_num(r: _JsonIn) -> Json
+    start = r.i
+    whole = true
+    if str_code(r.s, r.i) == 45
+        r.i = r.i + 1
+    end
+    if not _json_digit(r)
+        _json_fail(r, "bad number")
+        return nil
+    end
+    while r.i < r.n and _json_digit(r)
+        r.i = r.i + 1
+    end
+    if r.i < r.n and str_code(r.s, r.i) == 46
+        whole = false
+        r.i = r.i + 1
+        if not _json_digit(r)
+            _json_fail(r, "bad number")
+            return nil
+        end
+        while r.i < r.n and _json_digit(r)
+            r.i = r.i + 1
+        end
+    end
+    c = str_code(r.s, r.i)
+    if c == 101 or c == 69
+        whole = false
+        r.i = r.i + 1
+        c = str_code(r.s, r.i)
+        if c == 43 or c == 45
+            r.i = r.i + 1
+        end
+        if not _json_digit(r)
+            _json_fail(r, "bad number")
+            return nil
+        end
+        while r.i < r.n and _json_digit(r)
+            r.i = r.i + 1
+        end
+    end
+    j = Json()
+    j.kind = JSON_NUMBER
+    j.text = r.s[start:r.i]
+    if whole
+        j.num = Int(j.text)
+    else
+        j.num = Int(_json_to_float(j.text))
+    end
+    return j
+end
+
+func _json_digits(s: String) -> Bool
+    if s.length == 0
+        return false
+    end
+    for i in (0..s.length - 1)
+        c = str_code(s, i)
+        if c < 48 or c > 57
+            return false
+        end
+    end
+    return true
+end
+
+# A JSON number as a Float
+func _json_to_float(t: String) -> Float
+    x = 0.0
+    i = 0
+    n = t.length
+    neg = false
+    if str_code(t, 0) == 45
+        neg = true
+        i = 1
+    end
+    while i < n and str_code(t, i) >= 48 and str_code(t, i) <= 57
+        x = x * 10.0 + Float(str_code(t, i) - 48)
+        i = i + 1
+    end
+    if i < n and str_code(t, i) == 46
+        i = i + 1
+        f = 0.1
+        while i < n and str_code(t, i) >= 48 and str_code(t, i) <= 57
+            x = x + f * Float(str_code(t, i) - 48)
+            f = f / 10.0
+            i = i + 1
+        end
+    end
+    if i < n and (str_code(t, i) == 101 or str_code(t, i) == 69)
+        i = i + 1
+        eneg = false
+        if str_code(t, i) == 45
+            eneg = true
+        end
+        if str_code(t, i) == 45 or str_code(t, i) == 43
+            i = i + 1
+        end
+        e = 0
+        while i < n and str_code(t, i) >= 48 and str_code(t, i) <= 57
+            if e < 400
+                e = e * 10 + str_code(t, i) - 48
+            end
+            i = i + 1
+        end
+        while e > 0
+            if eneg
+                x = x / 10.0
+            else
+                x = x * 10.0
+            end
+            e = e - 1
+        end
+    end
+    if neg
+        return 0.0 - x
+    end
+    return x
+end
+
+func _json_find(o: Json, name: String) -> Int
+    n = o.names.length
+    i = 0
+    while i < n
+        if o.names[i] == name
+            return i
+        end
+        i = i + 1
+    end
+    return -1
+end
+
+# ---------- Writing a text ----------
+
+# A text as a JSON string, with its quotes and escapes
+func json_quote(s: String) -> String
+    out = "\""
+    start = 0
+    n = s.length
+    i = 0
+    while i < n
+        c = str_code(s, i)
+        if c < 32 or c == 34 or c == 92
+            if i > start
+                out = out + s[start:i]
+            end
+            if c == 34
+                out = out + "\\\""
+            elif c == 92
+                out = out + "\\\\"
+            elif c == 10
+                out = out + "\\n"
+            elif c == 13
+                out = out + "\\r"
+            elif c == 9
+                out = out + "\\t"
+            elif c == 8
+                out = out + "\\b"
+            elif c == 12
+                out = out + "\\f"
+            else
+                out = out + "\\u00" + _json_hex2(c)
+            end
+            start = i + 1
+        end
+        i = i + 1
+    end
+    if n > start
+        out = out + s[start:n]
+    end
+    return out + "\""
+end
+
+func _json_hex2(c: Int) -> String
+    d = "0123456789abcdef"
+    return d[c / 16:c / 16 + 1] + d[c % 16:c % 16 + 1]
+end
+
+# The tree as JSON text, all on one line
+func json_write(j: Json) -> String
+    return _json_out(j, -1, 0)
+end
+
+# The tree as JSON text, one element per line with two spaces for each level
+func json_pretty(j: Json) -> String
+    return _json_out(j, 2, 0)
+end
+
+func _json_nl(indent: Int, level: Int) -> String
+    out = "\n"
+    k = indent * level
+    while k > 0
+        out = out + " "
+        k = k - 1
+    end
+    return out
+end
+
+func _json_out(j: Json, indent: Int, level: Int) -> String
+    if j == nil or j.kind == JSON_NULL
+        return "null"
+    end
+    if j.kind == JSON_BOOL
+        if j.flag
+            return "true"
+        end
+        return "false"
+    end
+    if j.kind == JSON_NUMBER
+        return j.text
+    end
+    if j.kind == JSON_STRING
+        return json_quote(j.text)
+    end
+    n = j.items.length
+    if j.kind == JSON_ARRAY
+        if n == 0
+            return "[]"
+        end
+        out = "["
+        for i in (0..n - 1)
+            if i > 0
+                out = out + ","
+            end
+            if indent >= 0
+                out = out + _json_nl(indent, level + 1)
+            end
+            out = out + _json_out(j.items[i], indent, level + 1)
+        end
+        if indent >= 0
+            out = out + _json_nl(indent, level)
+        end
+        return out + "]"
+    end
+    if n == 0
+        return "{}"
+    end
+    out = "{"
+    for i in (0..n - 1)
+        if i > 0
+            out = out + ","
+        end
+        if indent >= 0
+            out = out + _json_nl(indent, level + 1) + json_quote(j.names[i]) + ": "
+        else
+            out = out + json_quote(j.names[i]) + ":"
+        end
+        out = out + _json_out(j.items[i], indent, level + 1)
+    end
+    if indent >= 0
+        out = out + _json_nl(indent, level)
+    end
+    return out + "}"
+end
