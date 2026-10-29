@@ -794,7 +794,7 @@ static void parse_into(Program *p)
             continue;
         }
         if (t->kind == T_ID && !strcmp(t->text, "@extern")) {
-            /* @extern("lo que sea") func f(a: Int, s: String) -> Int: una función de C de lo de @link */
+            /* @extern("lo que sea") func f(a: Int, s: String, n: Nodo) -> Int: una función de C de lo de @link */
             Func f = {0};
             Token *name;
             if (accept(P_LP)) {
@@ -814,16 +814,20 @@ static void parse_into(Program *p)
                     pa.name = expect(T_ID)->text;
                     pa.untyped = !accept(P_COLON);
                     pa.type = pa.untyped ? TY_INT : parse_type();
-                    if (pa.type != TY_INT && pa.type != TY_BOOL && pa.type != TY_STR)
-                        fatal_at(name->line, name->col, "@extern %s: sus parámetros son Int, Bool o String", f.name);
+                    /* (un struct: su puntero, prestado mientras dura la llamada) */
+                    if (pa.type != TY_INT && pa.type != TY_BOOL && pa.type != TY_STR &&
+                        (pa.type < TY_NAMED || pa.type >= TY_ARR))
+                        fatal_at(name->line, name->col, "@extern %s: sus parámetros son Int, Bool, String o un struct", f.name);
                     VEC_PUSH(f.params, pa);
                 } while (accept(P_COMMA));
                 expect(P_RP);
             }
             f.ret = TY_VOID;
             if (accept(P_ARROW)) f.ret = parse_type();
-            if (f.ret != TY_VOID && f.ret != TY_INT && f.ret != TY_BOOL && f.ret != TY_STR)
-                fatal_at(name->line, name->col, "@extern %s: devuelve Int, Bool, String o nada", f.name);
+            /* (un struct: uno que el C toma de Dash, prestado: se sostiene al guardarlo, como el de una función) */
+            if (f.ret != TY_VOID && f.ret != TY_INT && f.ret != TY_BOOL && f.ret != TY_STR &&
+                (f.ret < TY_NAMED || f.ret >= TY_ARR))
+                fatal_at(name->line, name->col, "@extern %s: devuelve Int, Bool, String, un struct o nada", f.name);
             f.declared = 1;
             f.native = 2;
             VEC_PUSH(p->funcs, f);

@@ -17,6 +17,8 @@
 @extern("externo") func ext_malloc_vueltas(n: Int) -> Int
 @extern("externo") func ext_llama_dash(x: Int) -> Int
 @extern("externo") func ext_largo_dash(n: Int) -> Int
+@extern("externo") func ext_caja_v(c: Caja) -> Int
+@extern("externo") func ext_mismo(c: Caja) -> Caja
 
 # @export: el C las llama por su nombre (sin pasarlas como Func); nadie las llama desde Dash
 @export func dash_triple(x: Int) -> Int
@@ -75,4 +77,9 @@ Main
     otra = task_result(tarea)
     Print "malloc a la vez: #{mia == otra} #{mia > 0}"
     Print "C llama a Dash: #{ext_llama_dash(14)} #{ext_largo_dash(12)}"
+    # un struct a C y de vuelta (prestado: sigue siendo de caja)
+    caja = Caja(41, "uno")
+    devuelta = ext_mismo(caja)
+    caja = nil
+    Print "struct: #{ext_caja_v(devuelta)} #{devuelta.nombre} #{ext_caja_v(nil)}"
 end

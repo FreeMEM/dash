@@ -96,3 +96,7 @@ extern long dash_triple(long x);
 extern const char *dash_nombre(long n);
 long ext_llama_dash(long x) { return dash_triple(x) + 1; }
 long ext_largo_dash(long n) { return (long)strlen(dash_nombre(n)); }
+
+/* @extern con structs (D11j): el puntero de un objeto de Dash, que apunta a su primer campo */
+long ext_caja_v(long *c) { return c ? c[0] : -1; }
+void *ext_mismo(void *c) { return c; }
