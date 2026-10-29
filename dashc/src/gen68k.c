@@ -3118,6 +3118,8 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
 {
     int i, saved_frame = cur_frame, saved_ret = ret_label, saved_base = loop_base, frame = ++frame_count;
     int saved_branch = ret_branch, saved_when = ret_when, saved_cur_ret = cur_ret, saved_ret_sp = ret_sp;
+    int saved_file_g = cur_file_g, saved_file = cur_file, saved_line = cur_line;
+    const char *saved_src = src_name;
     Local *binds = xmalloc(sizeof(Local) * (n->args.n + 1));
 
     enter_scope();
@@ -3208,6 +3210,11 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
     ret_branch = saved_branch;
     ret_when = saved_when;
     cur_ret = saved_cur_ret;
+    /* (lo copiado es de su fichero: lo que sigue en la instrucción que llama, otra vez del suyo, con sus globales) */
+    cur_file_g = saved_file_g;
+    cur_file = saved_file;
+    cur_line = saved_line;
+    src_name = saved_src;
     ret_sp = saved_ret_sp;
     loop_base = saved_base;
     cur_frame = saved_frame;

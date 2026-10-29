@@ -67,7 +67,13 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - D11j QuickJS, DOM, lienzo y HTML5 (`js`, `jsdom`, `lienzo`, `html5`, `documento`: ~2.200 líneas de `@c` que
     llaman a funciones de Dash y leen sus structs `_Dash_Nodo` y listas): su C a ficheros .c de Tachyon dentro de
     sus librerías (`libqjs.a`, `libimg.a`) con `@extern`; para lo que el C lee de Dash, o retrollamadas a Dash, o una
-    cabecera con la forma de los structs de dashc (`dashc --cabecera`). Diseño antes de hacerlo.
+    cabecera con la forma de los structs de dashc (`dashc --cabecera`). Diseño (2026-10-29): (1) hunk.c resuelve
+    los símbolos que pide un objeto de `@link` y nadie define con las funciones de Dash del mismo nombre
+    (`_jsdom_por_id`: ya siguen el convenio de C); (2) `dashc --cabecera prog.dash` escribe un .h con los structs de
+    Dash tal como los coloca dashc (cabecera de objeto y campos) para el C del módulo; (3) `dash.h`, una API del
+    runtime con nombres que se pueden enlazar (`dl_str_dup`, `dl_array_length`, `dl_array_get`, `dl_retain`,
+    `dl_release`...: las de ./dash son `static`). El C de Tachyon pasa de `@c` a ficheros .c en sus librerías
+    (tools/build_qjs.sh) casi sin cambios: los nombres de esa API.
 
 ## Bitácora
 
@@ -505,3 +511,27 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Lo que queda para Tachyon: su código aún tiene unos 150 bloques de C (`@native`, `@c`, `@header` en lib/red,
     js, html5, video, imagen_dec, fuente_web...). Hay que pasarlos a los builtins de D7 y a `@link`/`@extern`: es
     trabajo de Tachyon, en su repositorio. Hasta entonces, Tachyon se compila con `./dash1 --fpu`.
+- D11 (1.ª parte, 2026-10-29): Tachyon sin C, rama `dash2` de Tachyon (7 commits, sin subir). Pasados a builtins o
+  a Dash: la red de fondo (`net_bg_*`), el gzip de HTTP (`inflate_auto`, el destino crece mientras no quepa), las
+  horas de cookies e historial (`time_unix`), las esperas de los tests (`time_delay`), las imágenes (`image_decode*`),
+  las fuentes web (`font_from_ttf`), el vídeo y YouTube (`@link` + `@extern` a `dwv_*` de `libvideo.a`), actualizar
+  (catálogo IFF, idioma, instalar el .gz con su CRC, relanzar), descargas (`wb_open`, `dialog_file_at`), el informe
+  del sistema, `src/dashweb.dash` (teclas, salida, MUI, versión con `@version`, fecha de compilación), `clicar` y el
+  paso 5 del tutorial (una función de Dash en `task_start`, también en TUTORIAL.md y .en.md). `latido` lee exec por
+  dentro: sigue con dash1. Con dashc pasan test_red, los 5 de HTTP, marcadores, imagen_dec, fuente_web, video,
+  video_bajando, youtube y actualizar.
+  - Builtins nuevos (y en ./dash): `image_decode_start/ready/finish` (decodificar en un proceso aparte: una tarea de
+    Dash no puede recibir el nombre como texto), tamaños negativos en `image_decode` como tope (un SVG a su tamaño;
+    Tachyon pasa así 1280x1024 o más, "no se sabe a qué tamaño se ve"), `font_ttf_icon` (la "A" de la fuente es un
+    icono de la zona privada de Unicode), `library_revision` y `resident_version` (MorphOS). 745 builtins.
+  - `--fpu` pone la FPU en precisión extendida al arrancar (api.c): un sistema del usuario la dejaba en simple
+    (Tachyon lo hacía con C, tarea 49).
+  - Arreglado en dashc: una función de otro fichero copiada en línea dentro de una condición dejaba como fichero
+    actual el suyo, y lo que seguía en la instrucción ya no veía las globales del programa ("la variable lienzo no
+    existe" en Trasfondo). gen_inline guarda y repone el fichero, la línea y el nombre. dashc/tests/importa.dash lo
+    prueba. Con esto Trasfondo (panel y preferencias) compila entero con dashc y se ve en el Workbench emulado.
+  - dashc/bench/bench_run.py compara con `dash1` (desde D9a, `./dash` es dashc).
+  - Queda D11j (QuickJS, DOM, lienzo, HTML5) con el diseño de arriba, y `editor/tmgrammar` se regenera al añadir
+    builtins (tools/gen_tmgrammar.py; el runner lo exige).
+  - Tests de ./dash: 470, bien salvo la gramática (regenerada); batería de dashc bien; cobertura 144 de 145 (el de
+    inf con FPU, del emulador).

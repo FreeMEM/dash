@@ -9,3 +9,12 @@ end
 func peta(c: Cuadro) -> Int
     return c.lado
 end
+
+var _cambiado: Bool = true
+
+# Pequeña (se copia donde se llama) y de otro fichero: tras ella, la instrucción que llama sigue viendo sus globales
+func cambio() -> Bool
+    c = _cambiado
+    _cambiado = false
+    return c
+end

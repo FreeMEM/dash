@@ -34,7 +34,7 @@ def main():
         subprocess.run([str(HERE.parent / "dashc"), str(src), "-o", str(a)], check=True)
         conlib = tmp / src.name
         conlib.write_text('import "bench_lib.dash"\n' + src.read_text())
-        r = subprocess.run([str(REPO / "dash"), str(conlib), "-o", str(b)], capture_output=True, text=True, cwd=REPO)
+        r = subprocess.run([str(REPO / "dash1"), str(conlib), "-o", str(b)], capture_output=True, text=True, cwd=REPO)
         if r.returncode:
             sys.exit(f"./dash no compila {src.name}:\n{r.stdout}{r.stderr}")
         progs += [a, b]
