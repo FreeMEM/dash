@@ -38,7 +38,7 @@ def main():
         if r.returncode:
             print(f"FALLO {t.name}: dashc no lo compila\n{r.stderr}")
             return 1
-        r = subprocess.run([str(REPO / "dash"), str(t), "-o", str(b)], capture_output=True, text=True, cwd=REPO)
+        r = subprocess.run([str(REPO / "dash1"), str(t), "-o", str(b)], capture_output=True, text=True, cwd=REPO)
         if r.returncode:
             print(f"FALLO {t.name}: ./dash no lo compila\n{r.stdout}{r.stderr}")
             return 1

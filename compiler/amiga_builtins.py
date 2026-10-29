@@ -4181,8 +4181,10 @@ TASK_FUNCTIONS = {
     "task_start": BuiltinFunc(
         name="task_start", params=["func", "arg"], return_type="LONG",
         c_template="_dash_task_start((APTR)${func}, ${arg})",
-        description="Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, "
-                    "Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0"),
+        description="Run a function f(arg: Int) -> Int in another process: a Dash one that only uses Int, Bool, "
+                    "Float and builtins that give no texts or lists (the compiler checks it), or one of C (@extern, "
+                    "@native: malloc/free yes, Dash strings and lists no); 128 KB of stack, the program's priority: "
+                    "the task, or 0"),
     "task_start_with": BuiltinFunc(
         name="task_start_with", params=["func", "arg", "stack", "priority"], return_type="LONG",
         c_template="_dash_task_start_with((APTR)${func}, ${arg}, ${stack}, ${priority})",

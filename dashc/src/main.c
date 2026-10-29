@@ -13,6 +13,8 @@ unsigned long __stack = 65536;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */
+#define DASH_VERSION "2.0.0"
+
 /* los runtimes (build/rt_blob.c, runtime/rt_blob.py): el normal tal cual; el de --memcheck, comprimido */
 extern const unsigned char rt_normal[], rt_mc_z[];
 extern const unsigned int rt_normal_len, rt_mc_zlen, rt_mc_len;
@@ -64,8 +66,12 @@ size_t rt_blob_len;
 static void usage(void)
 {
     fprintf(stderr,
-            "uso: dashc programa.dash -o ejecutable [--memcheck] [--runtime objeto.o]\n"
-            "Prueba de concepto: compila Dash a un ejecutable de Amiga sin compilador de C.\n");
+            "uso: dashc programa.dash -o ejecutable [--memcheck] [--stack bytes] [--version]\n"
+            "Compila Dash a un ejecutable de Amiga sin compilador de C (Dash 2.0).\n"
+            "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
+            "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
+            "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
+            "  --tiempos      lo que lleva cada fase\n");
     exit(1);
 }
 
@@ -77,6 +83,7 @@ int main(int argc, char **argv)
     uint8_t *src;
     Program *prog;
     static Obj obj;
+    long cli_stack = 0;
     int i;
 
     for (i = 1; i < argc; i++) {
@@ -84,6 +91,11 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
         else if (!strcmp(argv[i], "--tiempos")) tiempos = 1;
+        else if (!strcmp(argv[i], "--stack") && i + 1 < argc) cli_stack = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--version")) {
+            printf("Dash %s (dashc)\n", DASH_VERSION);
+            return 0;
+        }
         else if (!strcmp(argv[i], "--preparar") && i + 2 < argc) {
             /* al construir dashc: el runtime (objeto Hunk) ya leído, troceado y atado (hunk.c) */
             size_t n;
@@ -131,6 +143,7 @@ int main(int argc, char **argv)
     rt_blob_len = rtlen;
     tiempo("inicio");
     prog = parse(lex((const char *)src));
+    if (cli_stack > prog->stack_min) prog->stack_min = cli_stack;   /* --stack N: como @stack N */
     tiempo("leer");
     gen_program(prog, &obj);
     tiempo("generar");

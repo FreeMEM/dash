@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Dash 2.0: `./dash` is dashc (no C compiler) and `./dash1` the Dash that compiles through C. The tasks, the
+  debugger and the MUI preview use `./dash1` where there is one, since they need what only it does (`--fpu`,
+  `--cpu`, `--debug`, `DASH_TEST_AUTOCLOSE`, `DASH_PRINT_FLUSH`); with an older Dash, `./dash` as before.
+
 ## 0.3.0 (2026-10-27)
 
 - New versions of Dash: once a day the extension looks at Dash's releases on GitHub (tags `v1.0.0`...) and, if

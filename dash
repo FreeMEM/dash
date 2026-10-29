@@ -1,270 +1,47 @@
 #!/usr/bin/env python3
-"""
-Dash - Amiga Programming Language Compiler CLI
-Compiles .dash source files to native Amiga executables.
-"""
+"""Dash 2.0: compila un programa Dash a un ejecutable de Amiga con dashc, sin compilador de C.
 
-import argparse
-import glob
+    ./dash programa.dash -o programa [--memcheck] [--stack N]
+
+dashc está en dashc/dashc (make -C dashc lo construye). Lo que dashc no hace (C en el programa: @native, @c, @header;
+--fpu, --cpu, --debug, --small...) lo hace todavía el Dash de Python, la 1.x: ./dash1."""
 import os
-import shlex
-import shutil
+import re
 import subprocess
 import sys
 
-def find_elf2hunk():
-    """Busca elf2hunk en ubicaciones conocidas."""
-    locations = [
-        "/opt/amiga/bin/elf2hunk",
-    ]
-
-    # Buscar en extensiones de VS Code (cualquier versión)
-    vscode_ext_path = os.path.expanduser("~/.vscode/extensions/")
-    if os.path.exists(vscode_ext_path):
-        for entry in os.listdir(vscode_ext_path):
-            if entry.startswith("bartmanabyss.amiga-debug"):
-                candidate = os.path.join(vscode_ext_path, entry, "bin/linux/elf2hunk")
-                if os.path.exists(candidate):
-                    locations.insert(0, candidate)
-
-    for loc in locations:
-        if os.path.exists(loc):
-            return loc
-
-    return None
-
-QUIET = False      # -q: without the commands it runs and the step headers (the IDE's tasks)
-
-
-def say(text):
-    if not QUIET:
-        print(text)
-
-
-def run_command(command, env=None):
-    """Runs a command and prints its output in real-time, exiting on error."""
-    say(f"Executing: {' '.join(command)}")
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
-
-    while True:
-        output = process.stdout.readline()
-        if output and not (QUIET and output.startswith("Transpiled!")):
-            sys.stdout.write(output)
-
-        return_code = process.poll()
-        if return_code is not None:
-            if return_code != 0:
-                print(f"Error: Command failed with exit code {return_code}", file=sys.stderr)
-                sys.exit(return_code)
-            break
-
-def dash_version():
-    """The version of this compiler (compiler/__init__.py; read as text: ./dash runs before the package is on the path)."""
-    import re
-    init = os.path.join(os.path.dirname(os.path.realpath(__file__)), "compiler", "__init__.py")
-    with open(init, encoding="utf-8") as f:
-        m = re.search(r'__version__ = "([^"]+)"', f.read())
-    return m.group(1) if m else "?"
+ROOT = os.path.dirname(os.path.realpath(__file__))
+DASHC = os.path.join(ROOT, "dashc", "dashc")
+# las opciones de dash1 que dashc aún no tiene
+SOLO_DASH1 = {"--fpu", "--cpu", "--debug", "--profile", "--multifile", "--small", "-O", "--optimize", "-O0",
+              "--no-optimize", "--no-hunk"}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Dash - Amiga Programming Language Compiler")
-    parser.add_argument("--version", action="version", version=f"Dash {dash_version()}")
-    parser.add_argument("input_file", help="Input Dash source file (.dash)")
-    parser.add_argument("-o", "--output", required=True, help="Output Amiga executable file")
-    parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")
-    parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
-    parser.add_argument("--stack", type=int, metavar="BYTES",
-                        help="Minimum stack for the program (default 16384; the 3.1 shell gives 4096). "
-                             "0: keep the stack it was started with (720 bytes smaller)")
-    parser.add_argument("--small", action="store_true",
-                        help="Optimize for size (gcc -Os): about 7%% smaller, 10-50%% slower in loops")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show verbose output")
-    parser.add_argument("-q", "--quiet", action="store_true",
-                        help="Only warnings, errors and the result (not each command and step)")
-    parser.add_argument("-O", "--optimize", action="store_true",
-                        help="Optimize the generated 68000 code with gcc -O2 (default)")
-    parser.add_argument("-O0", "--no-optimize", dest="no_optimize", action="store_true",
-                        help="Do not optimize (gcc -O0): easier to debug")
-    parser.add_argument("--debug", action="store_true",
-                        help="For the debugger (gdb, VS Code): gcc -O0 -g, and #line to the .dash lines")
-    parser.add_argument("--fpu", action="store_true",
-                        help="For Amigas with a 68881/68882 FPU: Float uses FPU instructions "
-                             "(needs a 68020 or better; the program will not run without an FPU)")
-    parser.add_argument("--cpu", choices=["68000", "68020", "68030", "68040", "68060"],
-                        help="Code for this CPU or better (default 68000, runs on every Amiga): faster on "
-                             "accelerated Amigas, but the program will not start on a lower CPU")
-    parser.add_argument("--profile", action="store_true",
-                        help="Profile build: at exit, how many times each function was called and where the "
-                             "time went (sampled 50 times a second)")
-    parser.add_argument("--memcheck", action="store_true",
-                        help="Memory check build: reports objects or strings freed twice or used after "
-                             "being freed, and what is still alive at exit (slower; for testing)")
-    args = parser.parse_args()
-    global QUIET
-    QUIET = args.quiet
-    if args.debug:
-        os.environ["DASH_DEBUG_LINES"] = "1"   # the transpiler leaves #line marks (compiler/debuglines.py)
-        os.environ["DASH_PRINT_FLUSH"] = "1"   # and each Print goes out at once (the debugger shows it)
-        args.no_optimize = True
-    if args.memcheck:
-        os.environ["DASH_MEMCHECK_C"] = "1"   # the transpiler also checks field accesses for nil
-    if args.profile:
-        os.environ["DASH_PROFILE"] = "1"      # the transpiler instruments every function
+    args = sys.argv[1:]
+    if "--version" in args:
+        return subprocess.call([DASHC, "--version"])
+    if not args or "-h" in args or "--help" in args:
+        print(__doc__.strip())
+        return 0 if args else 1
+    otras = [a for a in args if a.split("=")[0] in SOLO_DASH1]
+    if otras:
+        print(f"dash: {' '.join(otras)} no lo hace aún dashc (Dash 2.0); con el Dash 1.x: ./dash1 {' '.join(args)}",
+              file=sys.stderr)
+        return 1
+    # (-v y -q de dash1 no hacen falta: dashc solo escribe si hay un error)
+    args = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
+    if not os.path.exists(DASHC):
+        print("dash: falta dashc; constrúyelo con: make -C dashc", file=sys.stderr)
+        return 1
+    r = subprocess.run([DASHC, *args], capture_output=True, text=True, errors="replace")
+    sys.stdout.write(r.stdout)
+    err = r.stderr
+    if re.search(r"(lleva C|no admite C)", err):
+        err += "dash: Dash 2.0 no compila C en los programas; el Dash 1.x sí: ./dash1 " + " ".join(sys.argv[1:]) + "\n"
+    sys.stderr.write(err)
+    return r.returncode
 
-    input_filename = args.input_file
-    output_filename = args.output
-
-    base_name = os.path.splitext(os.path.basename(input_filename))[0]
-
-    build_dir = "build"
-    os.makedirs(build_dir, exist_ok=True)
-    # build/<name>.c and .elf are the same for every program of that name (a/main.dash and b/main.dash, or one
-    # compiled twice at once from VS Code): one at a time, the others wait (it gave a program the other's code)
-    import fcntl
-    build_lock = open(os.path.join(build_dir, base_name + ".lock"), "w")
-    fcntl.flock(build_lock, fcntl.LOCK_EX)
-    if os.path.dirname(output_filename):      # -o bin/x: its folder, if it is not there yet
-        os.makedirs(os.path.dirname(output_filename), exist_ok=True)
-
-    # --- Toolchain Paths --- (DASH_TOOLCHAIN: bebbo's toolchain somewhere else than /opt/amiga)
-    toolchain = os.environ.get("DASH_TOOLCHAIN") or "/opt/amiga"
-    amiga_toolchain_bin = os.path.join(toolchain, "bin")
-    amiga_ndk_include = os.path.join(toolchain, "m68k-amigaos", "ndk-include")
-    amiga_lib_path = os.path.join(toolchain, "m68k-amigaos", "lib")
-
-    # Verificar que el toolchain existe
-    if not os.path.exists(f"{amiga_toolchain_bin}/m68k-amigaos-gcc"):
-        print(f"Error: m68k-amigaos-gcc not found in {amiga_toolchain_bin}/", file=sys.stderr)
-        print("Falta el compilador de Amiga (m68k-amigaos-gcc de bebbo, github.com/bebbo/amiga-gcc): "
-              "instálalo en /opt/amiga, o pon su carpeta en DASH_TOOLCHAIN.", file=sys.stderr)
-        sys.exit(1)
-
-    # --- Step 1: Transpile Dash to C ---
-    say("--- Transpiling Dash to C ---")
-
-    if args.multifile:
-        # Multi-file mode: generate multiple .c and .h files
-        # Create a subdirectory for this specific build to avoid mixing with other builds
-        multifile_build_dir = os.path.join(build_dir, f"{base_name}_multi")
-        os.makedirs(multifile_build_dir, exist_ok=True)
-
-        # Clean previous generated files
-        for old_file in glob.glob(os.path.join(multifile_build_dir, "*.[ch]")):
-            os.remove(old_file)
-
-        transpile_command = [
-            "python3", "-m", "compiler.main",
-            input_filename,
-            "-o", multifile_build_dir,
-            "--multifile"
-        ]
-        if args.verbose:
-            transpile_command.append("-v")
-        run_command(transpile_command)
-
-        # Find all generated .c files in the multifile build directory
-        c_files = glob.glob(os.path.join(multifile_build_dir, "*.c"))
-        if not c_files:
-            print("Error: No C files generated", file=sys.stderr)
-            sys.exit(1)
-
-        print(f"Found {len(c_files)} C file(s) to compile")
-
-        # Update build_dir for include path and ELF output
-        build_dir = multifile_build_dir
-        elf_output_file = os.path.join(build_dir, f"{base_name}.elf")
-    else:
-        # Single-file mode (default)
-        c_output_file = os.path.join(build_dir, f"{base_name}.c")
-        elf_output_file = os.path.join(build_dir, f"{base_name}.elf")
-        transpile_command = ["python3", "-m", "compiler.main", input_filename, "-o", c_output_file]
-        if args.verbose:
-            transpile_command.append("-v")
-        run_command(transpile_command)
-        c_files = [c_output_file]
-
-    # --- Step 2: Compile C to Amiga executable ---
-    say("\n--- Compiling C to Amiga executable ---")
-    env = os.environ.copy()
-    env["PATH"] = f"{amiga_toolchain_bin}:{env['PATH']}"
-
-    compile_command = [
-        "m68k-amigaos-gcc",
-        "-noixemul",
-        "-I" + amiga_ndk_include,
-        "-I" + build_dir,  # For local headers
-        "-L" + amiga_lib_path,
-    ]
-    # -O2 -fomit-frame-pointer and bebbo's optimizer without one pass: compiler/cflags.py
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from compiler.cflags import opt_flags, mui_flags
-    compile_command.extend(opt_flags(args.no_optimize, args.small))
-    if args.debug:
-        compile_command.append("-g")      # DWARF in the hunk file (.dwarf2), read by m68k-amigaos-gdb
-        from compiler.cflags import debug_link_flags   # and .bss in .data, for gdb (see there)
-        compile_command.extend(debug_link_flags(os.path.join(amiga_toolchain_bin, "m68k-amigaos-ld"), build_dir))
-    try:   # the MUI SDK headers, when the program uses MUI
-        compile_command.extend(mui_flags(open(f).read() for f in c_files))
-        from compiler.cflags import amissl_flags   # and AmiSSL's, when it uses tls_* (dashweb D11)
-        compile_command.extend(amissl_flags(open(f).read() for f in c_files))
-        from compiler.cflags import link_flags     # @link objects and libraries (dashweb D10)
-        link_includes, link_files = link_flags([open(f).read() for f in c_files])
-        compile_command.extend(link_includes)
-    except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    from compiler.cflags import cpu_flags
-    compile_command.extend(cpu_flags(args.cpu, args.fpu))
-    if args.stack is not None:
-        compile_command.append(f"-DDASH_STACK={args.stack}")
-    if args.memcheck:
-        compile_command.append("-DDASH_MEMCHECK")
-    # extra gcc options, for experiments (e.g. DASH_CFLAGS="-Os")
-    compile_command.extend(shlex.split(os.environ.get("DASH_CFLAGS", "")))
-    compile_command.extend(c_files)
-    compile_command.extend(link_files)
-    # Float: GCC's own software floating point (runtime/softfloat), linked before
-    # -lm so it does not go through mathieeesingbas.library
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from compiler.softfloat import softfloat_objects, uses_float
-    if not args.fpu and any(uses_float(open(f).read()) for f in c_files):
-        compile_command.extend(softfloat_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
-                                                 build_dir))
-    from compiler.softfloat import softfloat_double_objects, uses_double   # Double (Lorraine D1)
-    if not args.fpu and any(uses_double(open(f).read()) for f in c_files):
-        for obj in softfloat_double_objects(os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"), build_dir):
-            if obj not in compile_command:
-                compile_command.append(obj)
-    # zlib and Ryu (Lorraine D6, D1), compiled for these CPU options (compiler/clibs.py)
-    from compiler.clibs import libraries_for
-    compile_command.extend(libraries_for((open(f).read() for f in c_files),
-                                         os.path.join(amiga_toolchain_bin, "m68k-amigaos-gcc"),
-                                         cpu_flags(args.cpu, args.fpu), build_dir))
-    compile_command.extend([
-        "-o",
-        output_filename if args.no_hunk else elf_output_file,
-        "-lm",
-    ])
-    run_command(compile_command, env=env)
-
-    # --- Step 3: Convert ELF to Hunk (only if gcc produced ELF) ---
-    if not args.no_hunk:
-        with open(elf_output_file, "rb") as f:
-            is_elf = f.read(4) == b"\x7fELF"
-        elf2hunk = find_elf2hunk() if is_elf else None
-        if not is_elf:
-            # m68k-amigaos-gcc already writes the native Hunk format
-            shutil.move(elf_output_file, output_filename)
-        elif not elf2hunk:
-            print("Warning: elf2hunk not found. Executable remains in ELF format.", file=sys.stderr)
-            shutil.move(elf_output_file, output_filename)
-        else:
-            say("\n--- Converting ELF to Hunk ---")
-            convert_command = [elf2hunk, elf_output_file, output_filename]
-            run_command(convert_command)
-
-    print(f"\nSuccess! Amiga executable created at '{output_filename}'")
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

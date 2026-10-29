@@ -112,6 +112,12 @@ function runPreview({ dashDir, dashuiText, windowName, kickstart, system, workbe
    window: the same window again is not compiled again), then shown and pictured there. */
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+
+// From Dash 2.0, ./dash is dashc (no C compiler) and ./dash1 the Dash that compiles through C, with what these
+// tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH): dash1 where there is one
+function dashExe(dashDir) {
+    return fs.existsSync(path.join(dashDir, 'dash1')) ? 'dash1' : 'dash';
+}
 const IDLE_MS = 10 * 60 * 1000;
 
 class PreviewServer {
@@ -220,7 +226,7 @@ function compilePreview(dashDir, dashuiText, windowName, env) {
     fs.writeFileSync(path.join(dir, 'preview.dashui'), dashuiText);
     fs.writeFileSync(path.join(dir, 'preview.dash'), previewProgram(windowName, true));
     return new Promise((resolve, reject) => {
-        execFile(path.join(dashDir, 'dash'), [path.join(dir, 'preview.dash'), '-o', exe + '.tmp'],
+        execFile(path.join(dashDir, dashExe(dashDir)), [path.join(dir, 'preview.dash'), '-o', exe + '.tmp'],
                  { cwd: dashDir, env: Object.assign({}, process.env, env || {}), maxBuffer: 4 * 1024 * 1024 },
                  (err, stdout, stderr) => {
                      if (err || !fs.existsSync(exe + '.tmp')) {

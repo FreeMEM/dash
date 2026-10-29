@@ -1,4 +1,4 @@
-"""./dash with odd paths (docs/IDE_VIDEO_LOOP.md v9): spaces, accents and ñ in folders and files, an import
+"""./dash1 (the Dash 1.x CLI) with odd paths (docs/IDE_VIDEO_LOOP.md v9): spaces, accents and ñ in folders and files, an import
 from a folder like that, and -o into a folder that is not there yet (it ended in a traceback); -q leaves only the
 result.
 
@@ -25,7 +25,7 @@ class OddPaths(unittest.TestCase):
             with open(program, "w") as f:
                 f.write('import "sub carpeta/útil ñ.dash"\nMain\n    Print "Ñandú: #{doble(21)}"\nend\n')
             exe = os.path.join(folder, "bin", "juego ñandú")
-            r = subprocess.run([sys.executable, os.path.join(ROOT, "dash"), "-q", program, "-o", exe],
+            r = subprocess.run([sys.executable, os.path.join(ROOT, "dash1"), "-q", program, "-o", exe],
                                cwd=ROOT, capture_output=True, text=True, timeout=300)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             self.assertTrue(os.path.exists(exe))
@@ -49,7 +49,7 @@ class AtTheSameTime(unittest.TestCase):
                 for d in "ab":
                     exe = os.path.join(tmp, d, "bin", f"main{i}")
                     jobs.append((d, exe, subprocess.Popen(
-                        [sys.executable, os.path.join(ROOT, "dash"), "-q", os.path.join(tmp, d, "main.dash"), "-o", exe],
+                        [sys.executable, os.path.join(ROOT, "dash1"), "-q", os.path.join(tmp, d, "main.dash"), "-o", exe],
                         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)))
             for d, exe, job in jobs:
                 out = job.communicate(timeout=600)[0].decode()
@@ -129,7 +129,7 @@ class Version(unittest.TestCase):
     def test_version_is_the_package_one(self):
         """./dash --version says the version of compiler/__init__.py (the one releases and the VS Code notice use)"""
         from compiler import __version__
-        r = subprocess.run([sys.executable, os.path.join(ROOT, "dash"), "--version"],
+        r = subprocess.run([sys.executable, os.path.join(ROOT, "dash1"), "--version"],
                            cwd=ROOT, capture_output=True, text=True, timeout=60)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.strip(), f"Dash {__version__}")

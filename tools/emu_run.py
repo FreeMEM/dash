@@ -139,7 +139,7 @@ class EmuResult:
 
 
 def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: bool = False) -> None:
-    cmd = [sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)]
+    cmd = [sys.executable, str(ROOT / "dash1"), str(src), "-o", str(exe)]
     if optimize:
         cmd.append("-O")
     if fpu:

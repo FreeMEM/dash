@@ -437,7 +437,7 @@ Total: 738 functions, 738 implemented, 0 not implemented.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
+| `task_start(func, arg)` | `LONG` | Run a function f(arg: Int) -> Int in another process: a Dash one that only uses Int, Bool, Float and builtins that give no texts or lists (the compiler checks it), or one of C (@extern, @native: malloc/free yes, Dash strings and lists no); 128 KB of stack, the program's priority: the task, or 0 |  |
 | `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
 | `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
 | `desktop_canvas(x, y, width, height)` | `APTR` | An area of the Workbench's desktop (below the screen's title bar), behind the icons and without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be |  |

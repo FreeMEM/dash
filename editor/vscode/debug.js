@@ -79,7 +79,9 @@ function setupDebugger(vscode, context, helpers) {
     const build = (dashDir, file, exe) => new Promise((resolve) => {
         const env = Object.assign({}, process.env, helpers.env(), { DASH_PRINT_FLUSH: '1' });
         fs.mkdirSync(path.dirname(exe), { recursive: true });
-        execFile(path.join(dashDir, 'dash'), ['--debug', file, '-o', exe], { cwd: dashDir, env, maxBuffer: 1 << 24 },
+        // (--debug is Dash 1.x's: from Dash 2.0, ./dash is dashc and ./dash1 the Dash that compiles through C)
+        const dash = fs.existsSync(path.join(dashDir, 'dash1')) ? 'dash1' : 'dash';
+        execFile(path.join(dashDir, dash), ['--debug', file, '-o', exe], { cwd: dashDir, env, maxBuffer: 1 << 24 },
                  (error, stdout, stderr) => resolve({ ok: !error, text: String(stdout) + String(stderr) }));
     });
 

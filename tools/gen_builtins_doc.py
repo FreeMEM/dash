@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import compiler.amiga_builtins as builtins_module  # noqa: E402
 from compiler.amiga_builtins import BuiltinFunc  # noqa: E402
 from compiler.codegen import unimplemented_builtins  # noqa: E402
+from compiler.builtins_es import DESC_ES  # noqa: E402
 
 OUTPUTS = {"es": PROJECT_ROOT / "docs" / "BUILTINS.md", "en": PROJECT_ROOT / "docs" / "BUILTINS.en.md"}
 
@@ -59,7 +60,8 @@ GROUPS = [
     ("MUI_FUNCTIONS", "MUI", "MUI"),
 ]
 
-# The generator's own texts; the descriptions of the builtins are in English in the code, in both files
+# The generator's own texts. The descriptions of the builtins: in English in the code (BUILTINS.en.md), in Spanish in
+# compiler/builtins_es.py (BUILTINS.md)
 TEXTS = {
     "es": {
         "switch": "*[English](BUILTINS.en.md) | Castellano*",
@@ -99,7 +101,13 @@ def render(lang: str) -> str:
             status = t["unimplemented"] if name in missing else ""
             implemented += name not in missing
             params = ", ".join(b.params)
-            desc = b.description.replace("|", "\\|")
+            if lang == "es":
+                if name not in DESC_ES:
+                    raise SystemExit(f"tools/gen_builtins_doc.py: {name} has no Spanish description in "
+                                     "compiler/builtins_es.py")
+                desc = DESC_ES[name].replace("|", "\\|")
+            else:
+                desc = b.description.replace("|", "\\|")
             rows.append(f"| `{name}({params})` | `{b.return_type}` | {desc} | {status} |")
         title = title_es if lang == "es" else title_en
         sections += [f"## {title}", "", t["header"], "|---|---|---|---|", *rows, ""]

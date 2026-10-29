@@ -71,7 +71,7 @@ def watcher_program() -> Path:
         exe.parent.mkdir(parents=True, exist_ok=True)
         src = exe.with_suffix(".dash")
         src.write_text(WATCHER)
-        run = subprocess.run([str(ROOT / "dash"), str(src), "-o", str(exe)], cwd=ROOT, capture_output=True, text=True)
+        run = subprocess.run([str(ROOT / "dash1"), str(src), "-o", str(exe)], cwd=ROOT, capture_output=True, text=True)
         if run.returncode != 0 or not exe.exists():
             raise RuntimeError("the watcher does not compile: " + (run.stdout + run.stderr)[-500:])
     return exe

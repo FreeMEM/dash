@@ -87,7 +87,7 @@ class CompileTest(unittest.TestCase):
     @unittest.skipUnless(os.path.exists(GDB) and os.path.exists("/opt/amiga/bin/m68k-amigaos-gcc"), "no toolchain")
     def test_gdb_reads_dash_lines(self):
         exe = os.path.join(self.dir, "prog")
-        subprocess.run([os.path.join(ROOT, "dash"), "--debug", self.src, "-o", exe], cwd=ROOT, check=True,
+        subprocess.run([os.path.join(ROOT, "dash1"), "--debug", self.src, "-o", exe], cwd=ROOT, check=True,
                        capture_output=True)
         run = subprocess.run([GDB, "-batch", "-ex", "info line doble", "-ex", "info line prog.dash:8",
                               "-ex", "info scope doble", exe], capture_output=True, text=True, timeout=120)

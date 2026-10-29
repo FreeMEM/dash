@@ -68,7 +68,7 @@ class DebugLinkTest(unittest.TestCase):
 
     def test_globals_in_one_hunk_at_their_dwarf_place(self):
         exe = os.path.join(self.dir, "prog")
-        subprocess.run([os.path.join(ROOT, "dash"), "--debug", self.src, "-o", exe], cwd=ROOT, check=True,
+        subprocess.run([os.path.join(ROOT, "dash1"), "--debug", self.src, "-o", exe], cwd=ROOT, check=True,
                        capture_output=True)
         sizes = gdb_relay.hunk_sizes(exe)
         self.assertEqual(len(sizes), 2)                       # code, and data with the bss in it

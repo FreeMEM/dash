@@ -48,6 +48,13 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   una `.library` (`@extern("x.library")`: por registros, con su base). Nombres decididos por el usuario
   (2026-10-28): `tachyonjs.library` y `tachyonhtml5.library` (no `dash...`).
 - D9 Cierre: `./dash` llama a dashc (o dashc pasa a ser `dash`), documentación en dos idiomas, versión 2.0.
+  Decidido por el usuario (2026-10-29):
+  - D9a `dash` es dashc; un programa con C (`@native`, `@c`, `@header`) da un error claro que remite a `dash1`, el
+    Dash de Python (1.x), que sigue tal cual para lo viejo.
+  - D9b las descripciones de los 738 builtins en los dos idiomas, como el README (README.md en inglés,
+    README.es.md en castellano): docs/BUILTINS.en.md en inglés y docs/BUILTINS.md en castellano.
+  - D9c la documentación de la 2.0 (README, SINTAXIS, MANUAL, VERSIONES, AGENTS) en los dos idiomas.
+  - D9d un PR de la rama dashc a main, sin fusionar ni publicar: el usuario decide cuándo.
 
 ## Bitácora
 
@@ -444,3 +451,19 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     escritorio" en vez de "Tareas (C en otro proceso)". Pendiente para D9: las descripciones en castellano (hoy van
     en inglés en los dos ficheros, como todas) y ejemplos.
   - Tests de ./dash: 465 bien; batería bien; cobertura 215 de 319 y 145 de 145.
+- D9a: `./dash` es dashc. El script de Python pasa a `./dash1` (Dash 1.x, sin cambios); el nuevo `./dash` llama a
+  `dashc/dashc` (`make -C dashc`) y, con C en el programa (`@native`, `@c`, `@header`) o con una opción que dashc
+  no tiene (`--fpu`, `--cpu`, `--debug`, `--small`, `--multifile`...), da un error que dice la orden de `dash1`.
+  dashc tiene ya `--stack N` (como `@stack`) y `--version` ("Dash 2.0.0 (dashc)"). Las herramientas de pruebas de la
+  1.x (`emu_run`, `bench`, `fuzz_refcount`, `emu_preview`, `compile_all.sh`, los tests unitarios y la batería de
+  dashc, que compara con gcc) llaman a `dash1`. La extensión de VS Code usa `dash1` donde lo hay para sus tareas, el
+  depurador y la vista previa de MUI (necesitan `--fpu`, `--debug`, `DASH_TEST_AUTOCLOSE`, `DASH_PRINT_FLUSH`);
+  CHANGELOG, "Unreleased". tests/unit/test_dash2_cli.py.
+  - Pendientes que salen de aquí: dashc no genera código de FPU (Tachyon se compila con `--fpu`: con dashc, sus
+    Double y Float por software) ni tiene `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` (para que la extensión use
+    dashc). Los tests de la extensión (`npm test`) no arrancan en este equipo: falta `vscode-textmate` (npm install).
+- D9b: las descripciones de los 738 builtins en castellano, en `compiler/builtins_es.py` (`DESC_ES`), que
+  tools/gen_builtins_doc.py pone en docs/BUILTINS.md (BUILTINS.en.md sigue con las de amiga_builtins.py, en inglés).
+  Si un builtin no tiene la suya, el generador falla y con él la comprobación de la documentación (docs/builtins):
+  quien añada un builtin (también la sesión de Tachyon en su rama) tiene que añadir su línea ahí. Corregida de paso la
+  de `task_start`, que decía "solo C".
