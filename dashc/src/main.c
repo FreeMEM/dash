@@ -72,7 +72,7 @@ static void usage(void)
             "uso: dashc programa.dash -o ejecutable [--fpu] [--memcheck] [--stack bytes] [--version]\n"
             "Compila Dash a un ejecutable de Amiga sin compilador de C (Dash 2.0).\n"
             "  --fpu          Float y Double con la FPU (68020 y 68881/68882, o 68040/68060)\n"
-            "  --cpu X        se acepta como en Dash 1 (68000...68060): el código vale para todas\n"
+            "  --cpu X        68000 (por defecto) o 68020...68060: multiplica y divide con muls.l y divs.l\n"
             "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
             "  --perfil       al acabar, en qué funciones se fue el tiempo (también --profile)\n"
             "  --cabecera x.h los structs del programa en C, para el C de @link (sin -o, solo eso)\n"
@@ -98,13 +98,14 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
         else if (!strcmp(argv[i], "--perfil") || !strcmp(argv[i], "--profile")) profile = 1;
-        else if (!strcmp(argv[i], "--fpu")) fpu = 1;
+        else if (!strcmp(argv[i], "--fpu")) fpu = cpu020 = 1;   /* (la FPU pide un 68020) */
         else if (!strcmp(argv[i], "--cabecera") && i + 1 < argc) header = argv[++i];
         else if (!strcmp(argv[i], "--cpu") && i + 1 < argc) {
             const char *c = argv[++i];
             if (strcmp(c, "68000") && strcmp(c, "68020") && strcmp(c, "68030") && strcmp(c, "68040") &&
                 strcmp(c, "68060"))
                 fatal("--cpu: 68000, 68020, 68030, 68040 o 68060");
+            cpu020 = strcmp(c, "68000") != 0;          /* muls.l y divs.l */
         }
         else if (!strcmp(argv[i], "--tiempos")) tiempos = 1;
         else if (!strcmp(argv[i], "--stack") && i + 1 < argc) cli_stack = atol(argv[++i]);

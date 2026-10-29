@@ -27,6 +27,7 @@ static Program *prog;
 static Obj *obj;
 int memcheck;
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
+int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
 static int prof_label = -1;   /* los nombres de las funciones, para el perfil */
 
 /* ---- etiquetas y saltos ---- */
@@ -2324,6 +2325,10 @@ static void mul_const(long k, int src)
     uint32_t m = k < 0 ? 0u - (uint32_t)k : (uint32_t)k;
     int neg = k < 0, s = 0;
     if (k == 0) { w(0x7000); return; }                 /* moveq #0,d0 */
+    if (cpu020 && popcount(m) > 2) {
+        w(0x4C3C); w(0x0800); l((uint32_t)k);          /* muls.l #k,d0 */
+        return;
+    }
     if (popcount(m) == 1) {
         while ((1u << s) != m) s++;
         shift_d0(1, s);
@@ -2418,6 +2423,13 @@ static void divmod_const(int op, long k)
 static void divmod_d1(int op)
 {
     int x = op == P_SLASH ? 6 : 4;                     /* lo que saca el cociente o el resto */
+    if (cpu020) {
+        w(0x4C41);                                     /* divs.l d1,d0 / divsl.l d1,d1:d0 */
+        if (op == P_SLASH) w(0x0800);
+        else { w(0x0801); w(0x2001); }                 /* el resto, a d0: move.l d1,d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return;
+    }
     w(0xB2BC); l(0x7FFF);                              /* cmp.l #$7FFF,d1 */
     w(0x6200 | (18 + x));                              /* bhi.s lento (también los negativos) */
     w(0x4A41);                                         /* tst.w d1 */
@@ -2437,6 +2449,11 @@ static void divmod_d1(int op)
 /* d0 = d0 * d1: muls.w si los dos caben en 16 bits con signo; si no, el runtime */
 static void mul_d1(void)
 {
+    if (cpu020) {
+        w(0x4C01); w(0x0800);                          /* muls.l d1,d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return;
+    }
     w(0x3040); w(0xB088); w(0x6606);                   /* movea.w d0,a0; cmp.l a0,d0; bne.s lento */
     w(0x3041); w(0xB288); w(0x670A);                   /* movea.w d1,a0; cmp.l a0,d1; beq.s rápido */
     jsr_sym("__dash_mul");                             /* lento */
@@ -2449,6 +2466,11 @@ static void mul_d1(void)
 /* d0 = d0 * d0 */
 static void square_d0(void)
 {
+    if (cpu020) {
+        w(0x4C00); w(0x0800);                          /* muls.l d0,d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return;
+    }
     w(0x3040); w(0xB088); w(0x670C);                   /* movea.w d0,a0; cmp.l a0,d0; beq.s rápido */
     w(0x2200);                                         /* move.l d0,d1 */
     jsr_sym("__dash_mul");
@@ -2517,7 +2539,7 @@ static void bin_ea(int op, Var *v)
     case P_STAR: mul_d1(); break;
     case P_SLASH:
     case P_PERCENT:
-        if (loop_weight > 1) divmod_d1(op);            /* en un bucle, el camino rápido aquí */
+        if (loop_weight > 1 || cpu020) divmod_d1(op);  /* en un bucle, el camino rápido aquí */
         else jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
         break;
     }
