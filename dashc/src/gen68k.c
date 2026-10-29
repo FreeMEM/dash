@@ -3350,7 +3350,7 @@ static int gen_call(Node *n)
         rt_call(sym, n->args.n, 0);
         if (f->ret == TY_STR) {
             push_d0();
-            rt_call("_dl_str_tmpcopy", 1, 1);
+            rt_call("_dl_str_tmpcopy_c", 1, 1);
         } else if (f->ret == TY_BOOL) {
             w(0x4A80);                                 /* tst.l d0 (un BOOL de C puede ser cualquier no 0) */
             w(0x56C0);                                 /* sne d0 */

@@ -1,5 +1,5 @@
 /* C de fuera para tests/externo.dash (@link y @extern): se compila una vez con el gcc de Amiga
-     m68k-amigaos-gcc -O2 -fomit-frame-pointer -c tests/c/externo.c -o tests/c/externo.o
+     m68k-amigaos-gcc -noixemul -O2 -fomit-frame-pointer -c tests/c/externo.c -o tests/c/externo.o
    y dashc enlaza el objeto (va en git: dashc no necesita gcc). */
 #include <string.h>
 
@@ -112,5 +112,21 @@ const char *ext_strtod(const char *s)
     snprintf(buf, sizeof buf, "%ld %ld %ld %ld", (long)(d * 1000.0), (long)(fin - s), (long)strlen(c),
              (long)(creal(z) * 1000.0));
     free(c);
+    return buf;
+}
+
+/* ctype de libnix (sus macros leen el puntero _ctype_: rt_compat.c lo pone) */
+#include <ctype.h>
+const char *ext_ctype(const char *s)
+{
+    long may = 0, dig = 0, i;
+    for (i = 0; s[i]; i++) {
+        if (isupper((unsigned char)s[i])) may++;
+        if (isdigit((unsigned char)s[i])) dig++;
+        buf[i] = (char)tolower((unsigned char)s[i]);
+    }
+    buf[i] = 0;
+    snprintf(buf + 100, 50, " %ld %ld", may, dig);
+    strcat(buf, buf + 100);
     return buf;
 }

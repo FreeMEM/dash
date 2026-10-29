@@ -745,9 +745,10 @@ int sscanf(const char *s, const char *f, ...)
 }
 
 /* ---- lo que pide Hubbub (el HTML5 de Tachyon) y otros: bsearch, strncasecmp y la tabla de ctype de libnix
-   (sus macros isalpha... la leen: el EOF delante y los 256 caracteres; ASCII, la configuración C) ---- */
+   (sus macros isalpha... la leen por el puntero _ctype_: el EOF delante y los 256 caracteres; ASCII, la
+   configuración C) ---- */
 
-const char _ctype_[1 + 256] = {
+static const char dash_ctype_tab[1 + 256] = {
     0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 40, 40, 40, 40, 40, 32,
     32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
     32, 136, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
@@ -766,6 +767,10 @@ const char _ctype_[1 + 256] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0
 };
+/* (libnix declara _ctype_ como puntero, "extern const char *_ctype_": un array aquí se leía como una dirección) */
+const char *_ctype_ = dash_ctype_tab;
+/* (y las cabeceras de newlib, las de gcc sin -noixemul: la misma tabla por una función) */
+const char *__locale_ctype_ptr(void) { return dash_ctype_tab; }
 
 static int dash_lower(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
 

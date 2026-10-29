@@ -598,6 +598,9 @@ void dl_str_set_copy(STRPTR *var, STRPTR v) { _dash_str_set_copy(var, v); }
 void dl_str_free(STRPTR p) { _dash_str_free(p); }
 STRPTR dl_str_ret(STRPTR p) { return _dash_str_ret(p); }
 STRPTR dl_str_tmpcopy(STRPTR p) { return _dash_str_tmpcopy(p); }
+/* lo que devuelve una @extern: un texto de C, quizá en un búfer suyo que reutiliza; su largo guardado (de otra
+   vez, con otro texto en el mismo sitio) no vale */
+STRPTR dl_str_tmpcopy_c(STRPTR p) { _dash_str_forget(p); return _dash_str_tmpcopy(p); }
 void dl_str_append(STRPTR *var, STRPTR add) { _dash_str_append(var, add); }
 STRPTR dl_str_concat(STRPTR a, STRPTR b) { return DashString_concat(a, b); }
 STRPTR dl_str_join(LONG n, STRPTR *parts) { return DashString_join(n, parts); }

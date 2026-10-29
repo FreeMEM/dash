@@ -20,6 +20,7 @@
 @extern("externo") func ext_caja_v(c: Caja) -> Int
 @extern("externo") func ext_mismo(c: Caja) -> Caja
 @extern("externo") func ext_strtod(s: String) -> String
+@extern("externo") func ext_ctype(s: String) -> String
 
 # @export: el C las llama por su nombre (sin pasarlas como Func); nadie las llama desde Dash
 @export func dash_triple(x: Int) -> Int
@@ -87,4 +88,6 @@ Main
     for t in ["0.5", "  -1.5e3x", "5.", ".25", "1e", "inf", "250"]
         Print "strtod [#{t}]: #{ext_strtod(t)}"
     end
+    ct = ext_ctype("UTF-8 Hola 42")
+    Print "ctype: #{ct}"
 end
