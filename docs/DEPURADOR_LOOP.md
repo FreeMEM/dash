@@ -72,3 +72,9 @@ Como EDBG de AmigaE (DASHC_LOOP, D12): sin el bit de traza de la CPU, que Emu68 
   a5 (`dbg_frames`, `dbg_frame_function/line/file`: la línea de una llamada es la del último `NOP` antes de su
   vuelta). `dbg_end` deja el estado (4) y el código (20 si lo acabó el depurador). Tests `basico` y `pasos` bien en
   A1200 y A500 (`depurar.py --a500`).
+- G5 hecha: `dbg_vars(i)` y `dbg_var_name/type(i, k)` (los parámetros y las variables declaradas antes de la línea
+  del marco i; de dos con el mismo nombre, la última), `dbg_globals`/`dbg_global_name`, `dbg_value(i, expr)` y
+  `dbg_value_type`: una variable del marco o una global con `.campo` y `[n]` detrás, como texto (Int, Bool, Fixed,
+  Float y Double con el runtime, textos entre comillas, structs con sus campos a dos niveles, listas hasta 20,
+  diccionarios con su número de claves, nil) o "? " y el porqué. La salida del programa ya estaba (`dbg_output`,
+  G3). Los depurados de los tests son `depurado*.dash`. Tests `basico`, `pasos` y `variables` bien en A1200 y A500.

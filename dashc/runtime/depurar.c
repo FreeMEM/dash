@@ -596,3 +596,237 @@ LONG db_dbg_frame_function(LONG i) {
     _DbgFunc *f = _dbg_frame(i, NULL, &at) ? _dbg_func_at(_dbg.code + _dbg.lines[at].off) : NULL;
     return (LONG)_dash_str_dup((STRPTR)(f ? f->name : ""), TRUE);
 }
+
+/* ---- las variables y su valor (G5) ---- */
+
+/* Las variables visibles en el marco i: los parámetros y las de su función declaradas antes de la línea donde está
+   (de dos con el mismo nombre, la última); en vis, sus índices en vars */
+static LONG _dbg_visible(LONG i, LONG *vis, LONG max, ULONG *a5) {
+    LONG at, k, j, n = 0, fi = -1, line;
+    _DbgFunc *f;
+    if (!_dbg_frame(i, a5, &at)) return 0;
+    f = _dbg_func_at(_dbg.code + _dbg.lines[at].off);
+    line = _dbg.lines[at].line;
+    for (k = 0; k < _dbg.nfuncs; k++)
+        if (&_dbg.funcs[k] == f) fi = k;
+    for (k = 0; k < _dbg.nvars && n < max; k++) {
+        _DbgVar *v = &_dbg.vars[k];
+        if (v->func != fi || (v->off < 0 && v->line >= line)) continue;   /* (la de esta línea aún no tiene valor) */
+        for (j = 0; j < n; j++)
+            if (!strcmp(_dbg.vars[vis[j]].name, v->name)) break;
+        if (j < n) vis[j] = k;                       /* la de después tapa a la de antes */
+        else vis[n++] = k;
+    }
+    return n;
+}
+
+/* Un texto que crece (lo que se enseña de un valor), hasta 1000 bytes */
+typedef struct { char t[1024]; LONG n; } _DbgOut;
+
+static void _dbg_put(_DbgOut *o, const char *s) {
+    while (*s && o->n < 1000) o->t[o->n++] = *s++;
+    if (*s && o->n == 1000) { o->t[o->n++] = '.'; o->t[o->n++] = '.'; o->t[o->n++] = '.'; }
+    o->t[o->n] = 0;
+}
+
+static void _dbg_put_num(_DbgOut *o, LONG v) {
+    char b[16];
+    sprintf(b, "%ld", (long)v);
+    _dbg_put(o, b);
+}
+
+/* ¿Se puede leer esa dirección como un puntero de Dash? (par, no en los vectores de la CPU) */
+static BOOL _dbg_ptr_ok(ULONG p) { return p >= 0x400 && !(p & 1); }
+
+static void _dbg_show(_DbgOut *o, const char *type, ULONG v, LONG depth);
+
+/* Los campos de un struct: Punto(x: 3, nombre: "a") */
+static void _dbg_show_struct(_DbgOut *o, const char *type, ULONG p, LONG depth) {
+    LONG k, n = 0;
+    _dbg_put(o, type);
+    if (depth > 1) { _dbg_put(o, "(...)"); return; }
+    _dbg_put(o, "(");
+    for (k = 0; k < _dbg.nfields; k++) {
+        _DbgField *fd = &_dbg.fields[k];
+        if (strcmp(fd->strct, type)) continue;
+        if (n++) _dbg_put(o, ", ");
+        _dbg_put(o, fd->name);
+        _dbg_put(o, ": ");
+        _dbg_show(o, fd->type, *(ULONG *)(p + fd->off), depth + 1);
+    }
+    _dbg_put(o, ")");
+}
+
+/* Un valor de ese tipo (el de Dash, como en el HUNK_DEBUG) */
+static void _dbg_show(_DbgOut *o, const char *type, ULONG v, LONG depth) {
+    if (!strcmp(type, "Int") || !strcmp(type, "Char")) { _dbg_put_num(o, (LONG)v); return; }
+    if (!strcmp(type, "Bool")) { _dbg_put(o, v ? "true" : "false"); return; }
+    if (!strcmp(type, "Fixed")) {
+        char b[24];
+        LONG w = (LONG)v >> 16, frac = ((v & 0xFFFF) * 10000 + 32768) >> 16;
+        if ((LONG)v < 0 && (v & 0xFFFF)) { w += 1; frac = 10000 - frac; }
+        sprintf(b, "%s%ld.%04ld", (LONG)v < 0 && w == 0 ? "-" : "", (long)w, (long)frac);
+        _dbg_put(o, b);
+        return;
+    }
+    if (!strcmp(type, "Float")) { _dbg_put(o, (char *)dl_str_from_float((LONG)v)); return; }
+    if (!v) { _dbg_put(o, "nil"); return; }
+    if (!_dbg_ptr_ok(v)) { _dbg_put(o, "?"); return; }
+    if (!strcmp(type, "Double")) { _dbg_put(o, (char *)dl_d_str((STRPTR)v)); return; }
+    if (!strcmp(type, "String")) {
+        char b[2];
+        UBYTE *s = (UBYTE *)v;
+        LONG k;
+        _dbg_put(o, "\"");
+        for (k = 0; s[k] && k < 200; k++) {
+            if (s[k] == '"' || s[k] == '\\') { b[0] = '\\'; b[1] = 0; _dbg_put(o, b); }
+            if (s[k] == '\n') { _dbg_put(o, "\\n"); continue; }
+            b[0] = s[k] < 32 ? '?' : s[k];
+            b[1] = 0;
+            _dbg_put(o, b);
+        }
+        _dbg_put(o, s[k] ? "...\"" : "\"");
+        return;
+    }
+    if (type[0] == '[') {
+        LONG n = dl_arr_length((DashArrayLong *)v), k;
+        char inner[64];
+        LONG l = strlen(type);
+        strncpy(inner, type + 1, l - 2 < 63 ? l - 2 : 63);
+        inner[l - 2 < 63 ? l - 2 : 63] = 0;
+        if (depth > 1) { _dbg_put(o, "["); _dbg_put_num(o, n); _dbg_put(o, " elementos]"); return; }
+        _dbg_put(o, "[");
+        for (k = 0; k < n && k < 20; k++) {
+            if (k) _dbg_put(o, ", ");
+            _dbg_show(o, inner, (ULONG)dl_arr_get((DashArrayLong *)v, k), depth + 1);
+        }
+        _dbg_put(o, n > 20 ? ", ...]" : "]");
+        return;
+    }
+    if (type[0] == '{') {
+        _dbg_put(o, "{");
+        _dbg_put_num(o, dl_dict_length((DashDict *)v));
+        _dbg_put(o, " claves}");
+        return;
+    }
+    _dbg_show_struct(o, type, v, depth);
+}
+
+static _DbgVar *_dbg_global(const char *name) {
+    LONG k;
+    for (k = 0; k < _dbg.nvars; k++)
+        if (_dbg.vars[k].func < 0 && !strcmp(_dbg.vars[k].name, name)) return &_dbg.vars[k];
+    return NULL;
+}
+
+/* Lo que vale expr en el marco i: un nombre (local o global) seguido de .campo y [n] ("p.hijos[0].x"); FALSE con
+   el porqué en o */
+static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut *o) {
+    LONG vis[128], n, k;
+    ULONG a5 = 0;
+    char name[64];
+    const char *p = expr;
+    _DbgVar *v = NULL;
+    for (k = 0; *p && *p != '.' && *p != '[' && k < 63; p++) name[k++] = *p;
+    name[k] = 0;
+    n = _dbg_visible(i, vis, 128, &a5);
+    for (k = 0; k < n; k++)
+        if (!strcmp(_dbg.vars[vis[k]].name, name)) v = &_dbg.vars[vis[k]];
+    if (v) *val = *(ULONG *)(a5 + v->off);
+    else if ((v = _dbg_global(name)) && _dbg.data) *val = *(ULONG *)(_dbg.data + v->off);
+    else { _dbg_put(o, "no existe: "); _dbg_put(o, name); return FALSE; }
+    strcpy(type, v->type);
+    while (*p) {
+        if (*p == '.') {
+            char field[64];
+            _DbgField *fd = NULL;
+            for (p++, k = 0; *p && *p != '.' && *p != '[' && k < 63; p++) field[k++] = *p;
+            field[k] = 0;
+            for (k = 0; k < _dbg.nfields; k++)
+                if (!strcmp(_dbg.fields[k].strct, type) && !strcmp(_dbg.fields[k].name, field)) fd = &_dbg.fields[k];
+            if (!fd) { _dbg_put(o, type); _dbg_put(o, " no tiene "); _dbg_put(o, field); return FALSE; }
+            if (!*val || !_dbg_ptr_ok(*val)) { _dbg_put(o, "nil"); return FALSE; }
+            *val = *(ULONG *)(*val + fd->off);
+            strcpy(type, fd->type);
+        } else if (*p == '[') {
+            LONG idx = 0, l = strlen(type), neg = 0;
+            for (p++; *p == ' '; p++) ;
+            if (*p == '-') { neg = 1; p++; }
+            while (*p >= '0' && *p <= '9') idx = idx * 10 + (*p++ - '0');
+            while (*p == ' ') p++;
+            if (*p++ != ']' || type[0] != '[') { _dbg_put(o, "no es una lista"); return FALSE; }
+            if (neg || !*val || idx >= dl_arr_length((DashArrayLong *)*val)) { _dbg_put(o, "fuera de la lista"); return FALSE; }
+            *val = (ULONG)dl_arr_get((DashArrayLong *)*val, idx);
+            memmove(type, type + 1, l - 2);
+            type[l - 2] = 0;
+        } else {
+            _dbg_put(o, "no lo entiendo");
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/* Cuántas variables se ven en el marco i (sus parámetros y las suyas declaradas hasta esa línea) */
+LONG db_dbg_vars(LONG i) {
+    LONG vis[128];
+    return _dbg_visible(i, vis, 128, NULL);
+}
+
+static _DbgVar *_dbg_var_k(LONG i, LONG k) {
+    LONG vis[128], n = _dbg_visible(i, vis, 128, NULL);
+    return k >= 0 && k < n ? &_dbg.vars[vis[k]] : NULL;
+}
+
+LONG db_dbg_var_name(LONG i, LONG k) {
+    _DbgVar *v = _dbg_var_k(i, k);
+    return (LONG)_dash_str_dup((STRPTR)(v ? v->name : ""), TRUE);
+}
+
+LONG db_dbg_var_type(LONG i, LONG k) {
+    _DbgVar *v = _dbg_var_k(i, k);
+    return (LONG)_dash_str_dup((STRPTR)(v ? v->type : ""), TRUE);
+}
+
+/* Las globales del programa */
+LONG db_dbg_globals(void) {
+    LONG k, n = 0;
+    for (k = 0; k < _dbg.nvars; k++) n += _dbg.vars[k].func < 0;
+    return n;
+}
+
+LONG db_dbg_global_name(LONG g) {
+    LONG k;
+    for (k = 0; k < _dbg.nvars; k++)
+        if (_dbg.vars[k].func < 0 && g-- == 0) return (LONG)_dash_str_dup((STRPTR)_dbg.vars[k].name, TRUE);
+    return (LONG)_dash_str_dup((STRPTR)"", TRUE);
+}
+
+/* El valor de expr en el marco i como texto (3, "hola", Punto(x: 3, y: 4), [1, 2], nil...); "?" y el porqué si no
+   se puede */
+LONG db_dbg_value(LONG i, LONG expr) {
+    _DbgOut o;
+    char type[64];
+    ULONG v;
+    o.n = 0;
+    o.t[0] = 0;
+    if (_dbg.state != DBG_STOPPED) _dbg_put(&o, "? no está parado");
+    else if (!expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) {
+        char why[200];
+        strcpy(why, o.t);
+        o.n = 0;
+        _dbg_put(&o, "? ");
+        _dbg_put(&o, why);
+    } else _dbg_show(&o, type, v, 0);
+    return (LONG)_dash_str_dup((STRPTR)o.t, TRUE);
+}
+
+/* El tipo de expr en el marco i ("Int", "Punto", "[String]"...), "" si no se puede */
+LONG db_dbg_value_type(LONG i, LONG expr) {
+    _DbgOut o;
+    char type[64];
+    ULONG v;
+    o.n = 0;
+    if (_dbg.state != DBG_STOPPED || !expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) type[0] = 0;
+    return (LONG)_dash_str_dup((STRPTR)type, TRUE);
+}

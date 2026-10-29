@@ -1,0 +1,25 @@
+# Otro programa depurado: structs, textos, listas, Float, Bool y globales (dash --debug; las líneas cuentan)
+struct Punto
+    x: Int = 0
+    nombre: String = ""
+    hijos: [Punto] = nil
+end
+
+var cuenta: Int = 7
+var saludo: String = "hola"
+
+func mira(p: Punto, n: Int) -> Int
+    t = p.x + n
+    return t
+end
+
+Main
+    lista = [10, 20, 30]
+    p = Punto(3, "uno", nil)
+    var vacio: Punto = nil
+    q = Punto(4, "dos \"x\"", [p])
+    f = 1.5
+    ok = true
+    r = mira(q, 2)
+    Print "r: #{r}"
+end

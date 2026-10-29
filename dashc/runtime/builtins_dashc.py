@@ -33,6 +33,16 @@ DASHC_BUILTINS = {
     "dbg_frame_line": (["i"], "LONG", "The line where call i is: 0 where it stopped, 1 the line of the call in the "
                                      "one that called it..."),
     "dbg_frame_file": (["i"], "STRPTR", "The file of call i (its full path)"),
+    "dbg_vars": (["i"], "LONG", "How many variables call i sees: its parameters and the variables declared up to "
+                                "its line"),
+    "dbg_var_name": (["i", "k"], "STRPTR", "Name of variable k (from 0) of call i"),
+    "dbg_var_type": (["i", "k"], "STRPTR", "Type of variable k of call i, as in Dash (\"Int\", \"[String]\", \"Punto\")"),
+    "dbg_globals": ([], "LONG", "How many global variables the program has"),
+    "dbg_global_name": (["g"], "STRPTR", "Name of global g (from 0)"),
+    "dbg_value": (["i", "expr"], "STRPTR", "The value of expr in call i as text: a variable of that call or a global, "
+                                           "with .field and [n] after it (\"p.hijos[0].x\"): 3, \"hola\", "
+                                           "Punto(x: 3, y: 4), [1, 2], nil; \"? \" and why if it cannot"),
+    "dbg_value_type": (["i", "expr"], "STRPTR", "The type of expr in call i (\"\" if it cannot)"),
     "dbg_reg": (["n"], "LONG", "A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC"),
     "dbg_peek": (["addr", "size"], "LONG", "1, 2 or 4 bytes of memory at addr, without sign"),
     "dbg_output": ([], "STRPTR", "What the program has written so far (output and error output)"),

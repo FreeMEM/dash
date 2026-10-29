@@ -233,6 +233,8 @@ const BuiltinInfo builtin_info[] = {
     {"dbg_frame_line", 1, 1, 0, 0},
     {"dbg_frames", 0, 1, 0, 0},
     {"dbg_function", 0, 3, 0, 0},
+    {"dbg_global_name", 1, 3, 0, 0},
+    {"dbg_globals", 0, 1, 0, 0},
     {"dbg_line", 0, 1, 0, 0},
     {"dbg_next", 0, 2, 0, 0},
     {"dbg_out", 0, 2, 0, 0},
@@ -246,6 +248,11 @@ const BuiltinInfo builtin_info[] = {
     {"dbg_state", 0, 1, 0, 0},
     {"dbg_step", 0, 2, 0, 0},
     {"dbg_unbreak", 2, 2, 0, 0},
+    {"dbg_value", 2, 3, 0, 0},
+    {"dbg_value_type", 2, 3, 0, 0},
+    {"dbg_var_name", 2, 3, 0, 0},
+    {"dbg_var_type", 2, 3, 0, 0},
+    {"dbg_vars", 1, 1, 0, 0},
     {"dbg_wait", 1, 1, 0, 0},
     {"debug_break", 0, 0, 1, 0},
     {"debug_break", 0, 0, 1, 0},
@@ -1570,7 +1577,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1568;
+const int builtin_count = 1575;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Los tests del depurador (docs/DEPURADOR_LOOP.md): cada tests/depurar/*.dash menos depurado.dash es un depurador
-que se compila con dashc y se ejecuta en el A1200 emulado con, en DH0:, depurado (depurado.dash con --debug) y
-sin_debug (el mismo sin --debug). Su salida tiene que ser la de sus líneas "# expect-out:".
+que se compila con dashc y se ejecuta en el A1200 emulado con, en DH0:, cada depurado*.dash compilado con --debug
+y sin_debug (depurado.dash sin --debug). Su salida tiene que ser la de sus líneas "# expect-out:".
 
     python3 tests/depurar.py [--a500] [filtro]      (--a500: un A500 con 68000 en vez del A1200)"""
 import os
@@ -23,12 +23,14 @@ def main():
     args = [a for a in args if a != "--a500"]
     filtro = args[0] if args else ""
     d = HERE / "depurar"
-    tests = sorted(t for t in d.glob("*.dash") if t.name != "depurado.dash" and filtro in t.stem)
+    tests = sorted(t for t in d.glob("*.dash") if not t.name.startswith("depurado") and filtro in t.stem)
+    debugged = sorted(t.stem for t in d.glob("depurado*.dash"))
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         dash = str(REPO / "dash")
-        for flags, name in ((["--debug"], "depurado"), ([], "sin_debug")):
-            subprocess.run([dash, *flags, "depurado.dash", "-o", str(tmp / name)], cwd=d, check=True)
+        for name in debugged:
+            subprocess.run([dash, "--debug", name + ".dash", "-o", str(tmp / name)], cwd=d, check=True)
+        subprocess.run([dash, "depurado.dash", "-o", str(tmp / "sin_debug")], cwd=d, check=True)
         exes = []
         for t in tests:
             exe = tmp / t.stem
@@ -36,7 +38,7 @@ def main():
             exes.append(str(exe))
 
         def on_disk(hd):
-            for name in ("depurado", "sin_debug"):
+            for name in debugged + ["sin_debug"]:
                 shutil.copy(tmp / name, Path(hd) / name)
 
         res = emu_run.run_programs(exes, timeout=600,
