@@ -610,5 +610,18 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
       dom.dash asigna `texto` de un Nodo. Ahora, como ./dash, por struct y campo (`walk_types` anota el struct del
       campo de cada asignación, ya con los tipos de las variables; si no se sabe, vale para todos). Test
       prestamo.dash. Tras el arreglo: tokens 593, dom 1.281, estilo 5.392, maqueta 15.604.
-    - Pendiente: estilo (+38 %) y maqueta (+32 %).
+    - El usuario (2026-10-29): Dash 2.0 tiene que ser más rápido que el antiguo; hay que acelerar dashc y Tachyon.
+    - `dashc --perfil` (y `./dash --profile`, `DASH_PROFILE=1`), como el de dash1: cada función pone su número en una
+      pila (dl_prof_enter/leave) y el VBlank cuenta dónde está; tabla al acabar Main. Con él y medidas pequeñas
+      contra dash1, llevado a dashc lo que dash1 (gcc y sus reglas) ya hacía:
+      - un texto == o != un literal, letra a letra en línea (`_se_hereda`: 20 comparaciones);
+      - `for x in lista` de objetos sin referencia por vuelta si el cuerpo no puede sacarlo (`_loop_keeps_elements`;
+        recorrer 20 hijos: 1.850 a 565 ms, dash1 246);
+      - claves literales de diccionario con el hash calculado al compilar (dl_dict_*_h);
+      - variables que toman prestado su texto u objeto en funciones que no liberan nada (D66 y D44; `d =
+        e.get(...)`: 1.897 a 670 ms, dash1 793);
+      - `for k in d.keys()` por la tabla, sin la lista de claves (`_keys_in_place`).
+      Tests comparar, bucle_objetos, dicc_literal, prestado, dicc_claves.
+    - prueba.html tras todo eso (ms, dash1 / dashc): tokens 541 / 571, dom 1.071 / 1.179, estilo 3.905 / 4.069,
+      maqueta 11.840 / 13.799.
 - Pendiente: D12, depurador (ver arriba); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).

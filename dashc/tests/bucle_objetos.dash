@@ -1,0 +1,61 @@
+# for x in lista de objetos: x va sin referencia propia si el cuerpo no puede sacarlo de una lista (como ./dash);
+# si puede (pop, remove, clear, l[i] = y, o una función que lo hace), x se sostiene durante la vuelta
+struct Cosa
+    nombre: String
+    n: Int
+end
+
+func vaciar(l: [Cosa])
+    l.clear()
+end
+
+func cambiar(l: [Cosa], i: Int)
+    l[i] = Cosa("nueva", 0)
+end
+
+func suma(l: [Cosa]) -> Int
+    k = 0
+    for c in l
+        k = k + c.n + c.nombre.length
+    end
+    return k
+end
+
+func lista() -> [Cosa]
+    var l: [Cosa] = []
+    for i in (1..5)
+        l.push(Cosa("cosa" + i, i))
+    end
+    return l
+end
+
+Main
+    l = lista()
+    Print "suma " + suma(l)
+    for c in l
+        c.n = c.n * 10
+    end
+    Print "suma " + suma(l)
+    l = lista()
+    for c in l
+        vaciar(l)
+        Print "tras vaciar: " + c.nombre + " " + c.n + " " + l.length
+    end
+    l = lista()
+    for c in l
+        if c.n == 2
+            cambiar(l, 1)
+        end
+        Print "cambiar: " + c.nombre
+    end
+    l = lista()
+    for c in l
+        x = l.pop()
+        Print "pop: " + c.nombre + " " + x.nombre
+    end
+    var d: {String: String} = {}
+    for c in lista()
+        d[c.nombre] = "" + c.n
+    end
+    Print "dicc " + d.length
+end

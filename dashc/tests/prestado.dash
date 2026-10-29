@@ -1,0 +1,77 @@
+# Variables que toman prestado su valor (como ./dash, D66 y D44): en una función que no libera nada, un texto que solo
+# recibe literales y elementos de un diccionario o lista de textos de un parámetro, y un objeto que solo recibe
+# campos o elementos de un parámetro, no se copian ni se sostienen. Si la función puede liberar (cambia el
+# diccionario, asigna un campo de texto, llama a una que lo hace) o el objeto sale de ella, se copian como siempre.
+struct Nodo
+    nombre: String
+    padre: Nodo
+    estilo: {String: String}
+    hijos: [Nodo]
+end
+
+func _val(e: {String: String}, p: String, defecto: String) -> String
+    if e.has(p)
+        v = e[p]
+        return v
+    end
+    return defecto
+end
+
+func mirar(n: Nodo) -> String
+    e = n.estilo
+    d = e.get("display", "block")
+    if d == "block"
+        d = "es bloque"
+    end
+    p = n.padre
+    pe = p.estilo
+    c = pe.get("color", "negro")
+    return n.nombre + ": " + d + ", " + c + ", " + _val(e, "color", "?")
+end
+
+func cambia(n: Nodo) -> String
+    e = n.estilo
+    d = e.get("display", "block")
+    e["display"] = "flex"
+    return d + " -> " + e["display"]
+end
+
+func renombra(n: Nodo) -> String
+    viejo = n.nombre
+    h = n.hijos[0]
+    n.nombre = "otro"
+    return viejo + " " + h.nombre + " " + n.nombre
+end
+
+func primero(n: Nodo) -> Nodo
+    h = n.hijos[0]
+    return h
+end
+
+func quita(n: Nodo) -> String
+    h = n.hijos[0]
+    n.hijos.pop()
+    return h.nombre
+end
+
+func nuevo(nombre: String, padre: Nodo) -> Nodo
+    var e: {String: String} = {}
+    var hs: [Nodo] = []
+    return Nodo(nombre, padre, e, hs)
+end
+
+Main
+    var nada: Nodo = nil
+    raiz = nuevo("raiz", nada)
+    raiz.estilo["color"] = "rojo"
+    hijo = nuevo("hijo", raiz)
+    hijo.estilo["display"] = "block"
+    raiz.hijos.push(hijo)
+    Print mirar(hijo)
+    Print cambia(hijo)
+    Print mirar(hijo)
+    Print renombra(raiz)
+    Print primero(raiz).nombre
+    Print quita(raiz)
+    Print raiz.hijos.length
+end
