@@ -5049,7 +5049,13 @@ static void gen_stmt(Node *n)
                 }
                 /* dentro de un bucle (sus marcas en la pila: un for de otra función copiada en una condición), fuera
                    antes de saltar */
-                if (sp_depth != ret_sp) { w(0x4FEF); w(sp_depth - ret_sp); }
+                if (sp_depth != ret_sp) {
+                    w(0x4FEF); w(sp_depth - ret_sp);
+                    tst_d0();
+                    branch(ret_when ? CC_NE : CC_EQ, ret_branch);
+                    branch(CC_T, ret_label);           /* (ya sin las marcas: no otra vez abajo) */
+                    return;
+                }
                 tst_d0();
                 branch(ret_when ? CC_NE : CC_EQ, ret_branch);
             } else {

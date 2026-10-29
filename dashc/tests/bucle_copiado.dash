@@ -1,5 +1,7 @@
 # Un return dentro de un for de una función copiada en una condición ("if not _tiene_clase(n, c)" de Tachyon, dentro
-# de otro for): saltaba fuera sin quitar de la pila las marcas del bucle, y lo que seguía leía mal sus variables
+# de otro for): saltaba fuera sin quitar de la pila las marcas del bucle, y lo que seguía leía mal sus variables; y
+# luego, cuando no saltaba, las quitaba dos veces (Tachyon se colgaba al ver estilos): muchas vueltas de bucles
+# anidados tras la llamada lo notan
 struct Atr
     nombre: String
     valor: String
@@ -113,5 +115,16 @@ Main
     if _cumple_simple(ns[0], s)
         k = k + 100
     end
-    Print "k #{k}"
+    # (cada vuelta: un bucle con marcas detrás de la llamada copiada; con la pila torcida, los textos se pierden)
+    t = ""
+    for v in (1..200)
+        for n in ns
+            if _cumple_simple(n, s)
+                for a in n.atributos
+                    t = a.valor
+                end
+            end
+        end
+    end
+    Print "k #{k} [#{t}]"
 end
