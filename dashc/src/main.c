@@ -74,6 +74,7 @@ static void usage(void)
             "  --fpu          Float y Double con la FPU (68020 y 68881/68882, o 68040/68060)\n"
             "  --cpu X        se acepta como en Dash 1 (68000...68060): el código vale para todas\n"
             "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
+            "  --cabecera x.h los structs del programa en C, para el C de @link (sin -o, solo eso)\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
             "  --tiempos      lo que lleva cada fase\n");
@@ -82,7 +83,7 @@ static void usage(void)
 
 int main(int argc, char **argv)
 {
-    const char *in = NULL, *out = NULL, *rt_path = NULL;
+    const char *in = NULL, *out = NULL, *rt_path = NULL, *header = NULL;
     const uint8_t *rt = NULL;
     size_t rtlen = 0, len;
     uint8_t *src;
@@ -96,6 +97,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
         else if (!strcmp(argv[i], "--fpu")) fpu = 1;
+        else if (!strcmp(argv[i], "--cabecera") && i + 1 < argc) header = argv[++i];
         else if (!strcmp(argv[i], "--cpu") && i + 1 < argc) {
             const char *c = argv[++i];
             if (strcmp(c, "68000") && strcmp(c, "68020") && strcmp(c, "68030") && strcmp(c, "68040") &&
@@ -126,7 +128,7 @@ int main(int argc, char **argv)
         else if (!in) in = argv[i];
         else usage();
     }
-    if (!in || !out) usage();
+    if (!in || (!out && !header)) usage();
     tiempo("cargar");
 
     rt = rt_normal;
@@ -163,8 +165,17 @@ int main(int argc, char **argv)
     rt_blob = rt;
     rt_blob_len = rtlen;
     tiempo("inicio");
+    parse_module_ok = header && !out;
     prog = parse(lex((const char *)src));
     if (cli_stack > prog->stack_min) prog->stack_min = cli_stack;   /* --stack N: como @stack N */
+    if (header) {
+        /* los structs del programa para el C de un módulo de @link */
+        FILE *f = fopen(header, "w");
+        if (!f) fatal("no se puede escribir %s", header);
+        write_c_header(prog, f);
+        fclose(f);
+        if (!out) return 0;
+    }
     tiempo("leer");
     gen_program(prog, &obj);
     tiempo("generar");

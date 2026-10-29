@@ -549,6 +549,8 @@ static void block(NodeList *out, int stop1, int stop2, int stop3)
 }
 
 /* func nombre(params) -> Tipo ... end; en un struct st, el método lleva self delante */
+int parse_module_ok;
+
 static void parse_func(Program *p, Struct *st)
 {
     Func f = {0};
@@ -699,7 +701,7 @@ Program *parse(Token *toks)
     tk = toks;
     parse_into(p);
     while (lambdas.n) VEC_PUSH(p->funcs, lambdas.v[--lambdas.n]);
-    if (!p->has_main) fatal("falta el bloque Main");
+    if (!p->has_main && !parse_module_ok) fatal("falta el bloque Main");
     return p;
 }
 
@@ -825,6 +827,14 @@ static void parse_into(Program *p)
             f.declared = 1;
             f.native = 2;
             VEC_PUSH(p->funcs, f);
+            continue;
+        }
+        if (t->kind == T_ID && !strcmp(t->text, "@export")) {
+            /* @export func f(...): una función de Dash que el C de @link llama por su nombre */
+            int n0 = p->funcs.n;
+            if (peek()->kind != K_FUNC) fatal_at(t->line, t->col, "@export va delante de una func");
+            parse_func(p, NULL);
+            if (p->funcs.n > n0) p->funcs.v[p->funcs.n - 1].exported = 1;
             continue;
         }
         if (0)

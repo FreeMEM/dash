@@ -139,7 +139,7 @@
           }
         },
         {
-          "match": "(?:@workbench_output|@catalog|@version|@extern|@header|@native|@stack|@link|@c)\\b",
+          "match": "(?:@workbench_output|@catalog|@version|@export|@extern|@header|@native|@stack|@link|@c)\\b",
           "name": "keyword.other.directive.dash"
         }
       ]

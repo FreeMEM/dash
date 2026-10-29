@@ -20505,6 +20505,9 @@ static {ret_type} {method_name}({params_str}) {{
             name=node.name,
             params=params
         )
+        if node.exported:
+            # @export (Dash 2.0): an external name for the C of @link
+            proto = proto.replace("static ", "", 1).replace("__attribute__((unused))", "__attribute__((used))")
         self.prototypes.append(proto)
 
         # Generate function definition
@@ -20514,6 +20517,8 @@ static {ret_type} {method_name}({params_str}) {{
             params=params,
             body=body
         )
+        if node.exported:
+            code = code.replace("static ", "", 1)
         self.functions.append(self._debug_wrap(node, code))
         self.current_function = None
 

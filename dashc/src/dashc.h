@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 /* ---- utilidades (util.c) ---- */
 typedef struct {
@@ -34,6 +35,7 @@ char *xstrndup(const char *s, size_t n);
         (vec).v[(vec).n++] = (x); \
     } while (0)
 
+extern int parse_module_ok;     /* --cabecera de un módulo: sin Main vale */
 extern const char *src_name;   /* el fichero de los errores de ahora (fatal_at) */
 /* los ficheros del programa: el principal y los importados (en los errores al ejecutar, por número) */
 extern struct SrcFiles { const char **v; int n, cap; } src_files;
@@ -153,6 +155,7 @@ typedef struct {
     int has_value;   /* tiene algún "return valor" */
     int native;      /* 1, @native: su C va en la librería de dashc (solo los de lib/amiga); 2, @extern: de @link */
     int boolret;     /* una lambda "fn(a, b) -> a < b": da un Bool (sort: si a va antes que b) */
+    int exported;    /* @export: va siempre, con su nombre de C (_nombre), para el C de @link */
     NodeList body;
 } Func;
 
@@ -242,11 +245,18 @@ typedef struct {
 } Reloc;
 
 typedef struct {
+    const char *name;  /* "_nombre", como lo pide el C */
+    uint32_t off;      /* en el código del programa */
+} Export;
+
+typedef struct {
     Buf code, data;
     struct { Reloc *v; int n, cap; } relocs;
+    struct { Export *v; int n, cap; } exports;   /* las funciones @export */
 } Obj;
 
 void gen_program(Program *prog, Obj *obj);
+void write_c_header(Program *prog, FILE *f);   /* dashc --cabecera */
 extern int memcheck;   /* --memcheck: como ./dash --memcheck */
 
 /* builtins (build/builtins_tab.c): ret 0 nada, 1 Int, 2 Bool, 3 String, 4 [String]; keeps: guarda lo

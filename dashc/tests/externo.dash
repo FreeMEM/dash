@@ -1,4 +1,5 @@
-# @link y @extern: funciones de C de un objeto ya compilado (tests/c/externo.o), con enteros, textos y Bool, y lo de libc (rt_compat.c) frente al de libnix
+# @link y @extern: funciones de C de un objeto ya compilado (tests/c/externo.o), con enteros, textos y Bool, y lo de libc (rt_compat.c) frente al de libnix;
+# y @export: funciones de Dash que ese C llama por su nombre
 @link "c/externo.o"
 
 @extern("externo") func ext_suma(a: Int, b: Int) -> Int
@@ -14,6 +15,17 @@
 @extern("externo") func ext_aplicar(f: Func, x: Int) -> Int
 @extern("externo") func ext_sumar_con(f: Func) -> Int
 @extern("externo") func ext_malloc_vueltas(n: Int) -> Int
+@extern("externo") func ext_llama_dash(x: Int) -> Int
+@extern("externo") func ext_largo_dash(n: Int) -> Int
+
+# @export: el C las llama por su nombre (sin pasarlas como Func); nadie las llama desde Dash
+@export func dash_triple(x: Int) -> Int
+    return x * 3
+end
+
+@export func dash_nombre(n: Int) -> String
+    return "#{n} cosas"
+end
 
 struct Caja
     v: Int
@@ -62,4 +74,5 @@ Main
     mia = ext_malloc_vueltas(3000)
     otra = task_result(tarea)
     Print "malloc a la vez: #{mia == otra} #{mia > 0}"
+    Print "C llama a Dash: #{ext_llama_dash(14)} #{ext_largo_dash(12)}"
 end

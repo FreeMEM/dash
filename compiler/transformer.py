@@ -826,6 +826,11 @@ class DashASTBuilder(Transformer):
         self._functions.append(func)
         return ""
 
+    def export_func(self, items) -> str:
+        """@export func ...: the function just built, callable by its name from the C of @link."""
+        self._functions[-1].exported = True
+        return ""
+
     def param_list(self, items) -> List:
         """Process parameter list - returns FunctionParam or string."""
         result = []

@@ -392,6 +392,7 @@ class FunctionDef(ASTNode):
     body: List[ASTNode] = field(default_factory=list)
     return_type: Optional[str] = None
     location: Optional[SourceLocation] = None
+    exported: bool = False      # @export: not static, so the C of @link calls it by its name
 
     def get_param_names(self) -> List[str]:
         """Get list of parameter names."""

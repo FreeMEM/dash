@@ -90,3 +90,9 @@ long ext_malloc_vueltas(long n)
     }
     return suma;
 }
+
+/* @export (Dash 2.0): C que llama por su nombre a funciones de Dash del programa */
+extern long dash_triple(long x);
+extern const char *dash_nombre(long n);
+long ext_llama_dash(long x) { return dash_triple(x) + 1; }
+long ext_largo_dash(long n) { return (long)strlen(dash_nombre(n)); }

@@ -5649,6 +5649,9 @@ void gen_program(Program *p, Obj *o)
             }
         }
     }
+    /* las @export van siempre: las llama el C de @link */
+    for (i = 0; i < p->funcs.n; i++)
+        if (p->funcs.v[i].exported && !needed[i]) needed[i] = 1;
     /* Main y las funciones a las que se llama de verdad (no copiadas) */
     gen_one(-1, main_label, NULL, &p->main);
     do {
@@ -5690,4 +5693,93 @@ void gen_program(Program *p, Obj *o)
     }
     l(0);
     resolve_fixups();
+    /* las @export, con su nombre de C, para hunk.c */
+    for (i = 0; i < p->funcs.n; i++)
+        if (p->funcs.v[i].exported) {
+            Export e;
+            char *nm = xmalloc(strlen(p->funcs.v[i].name) + 2);
+            nm[0] = '_';
+            strcpy(nm + 1, p->funcs.v[i].name);
+            e.name = nm;
+            e.off = (uint32_t)labels.v[func_label[i]];
+            VEC_PUSH(obj->exports, e);
+        }
+}
+
+/* ---- dashc --cabecera: los structs del programa para el C de @link ---- */
+
+/* el tipo de C de un campo, tal como lo guarda dashc (4 bytes cada uno) */
+static void c_field_type(FILE *f, int t)
+{
+    if (IS_STRUCT(t)) fprintf(f, "struct _Dash_%s *", prog->structs.v[t - TY_STRUCT].name);
+    else if (IS_ARR(t)) fprintf(f, "DashArray *");
+    else if (IS_DICT(t)) fprintf(f, "DashDict *");
+    else if (t == TY_STR) fprintf(f, "STRPTR ");
+    else if (t == TY_DOUBLE) fprintf(f, "STRPTR /* Double: su caja */ ");
+    else if (t == TY_FLOAT) fprintf(f, "ULONG /* Float: sus bits */ ");
+    else if (t == TY_BOOL) fprintf(f, "LONG /* Bool: 0 o 1 */ ");
+    else fprintf(f, "LONG ");
+}
+
+void write_c_header(Program *p, FILE *f)
+{
+    int i, j;
+    prog = p;
+    fprintf(f, "/* Los structs de Dash del programa tal como los coloca dashc (dashc --cabecera), y lo del runtime que\n"
+               "   puede usar el C de @link. El puntero a un objeto apunta a su primer campo; cada campo, 4 bytes. Un\n"
+               "   texto que una función de C devuelve a Dash (@extern -> String) lo copia dashc: puede ser suyo. */\n"
+               "#ifndef DASH_TIPOS_H\n#define DASH_TIPOS_H\n#include <exec/types.h>\n\n"
+               "typedef struct DashArray DashArray;\ntypedef struct DashDict DashDict;\n\n"
+               "/* textos: una copia de Dash (se libera con dl_str_free), su largo */\n"
+               "STRPTR dl_str_dup(STRPTR s);\nvoid dl_str_free(STRPTR s);\nLONG dl_str_len(STRPTR s);\n"
+               "/* objetos (structs, listas, diccionarios): sostenerlos y soltarlos */\n"
+               "void dl_retain(void *o);\nvoid dl_release(void *o);\n"
+               "/* listas: largo y elemento i (un número, o el puntero de un texto u objeto) */\n"
+               "LONG dl_arr_length(DashArray *a);\nLONG dl_arr_get(DashArray *a, LONG i);\n"
+               "/* diccionarios de texto: largo y valor */\n"
+               "LONG dl_dict_length(DashDict *d);\nLONG dl_dict_get(DashDict *d, STRPTR k);\n"
+               "/* un temporal de Dash (se libera solo); olvidar el largo guardado de un texto de C que se libera */\n"
+               "STRPTR dl_str_temp(STRPTR s);\nvoid dl_str_forget(STRPTR s);\n"
+               "/* los builtins, como db_nombre(LONG...) (db_time_ms()...) */\n\n"
+               "/* los nombres del C de ./dash (Dash 1.x), para el C que venía de @native o @c */\n"
+               "#define _dash_str_dup(s, temp) ((temp) ? dl_str_temp((STRPTR)(s)) : dl_str_dup((STRPTR)(s)))\n"
+               "#define _dash_str_len(s) dl_str_len((STRPTR)(s))\n#define _dash_str_forget(s) dl_str_forget((STRPTR)(s))\n"
+               "#define _dash_retain(o) dl_retain((void *)(o))\n#define _dash_release(o) dl_release((void *)(o))\n"
+               "#define DashArray_length(a) dl_arr_length((DashArray *)(a))\n"
+               "#define DashArray_get(a, i) dl_arr_get((DashArray *)(a), (i))\n"
+               "#define _dash_time_ms() db_time_ms()\nLONG db_time_ms(void);\n\n");
+    for (i = 0; i < p->structs.n; i++)
+        if (!p->structs.v[i].iface) fprintf(f, "struct _Dash_%s;\n", p->structs.v[i].name);
+    for (i = 0; i < p->structs.n; i++) {
+        Struct *st = &p->structs.v[i];
+        if (st->iface) continue;
+        fprintf(f, "\ntypedef struct _Dash_%s {\n", st->name);
+        for (j = 0; j < st->fields.n; j++) {
+            Field *fd = &st->fields.v[j];
+            fprintf(f, "    ");
+            c_field_type(f, resolve_type(fd->type, fd->line, fd->col));
+            fprintf(f, "%s;%s\n", fd->name, fd->weak ? "   /* weak */" : "");
+        }
+        if (!st->fields.n) fprintf(f, "    LONG _vacio;\n");
+        fprintf(f, "} _Dash_%s;\n", st->name);
+    }
+    /* las funciones @export: las que el C llama por su nombre */
+    for (i = 0; i < p->funcs.n; i++) {
+        Func *fn = &p->funcs.v[i];
+        if (!fn->exported) continue;
+        fprintf(f, "%s", i ? "" : "\n");
+        if (fn->ret == TY_VOID) fprintf(f, "\nvoid ");
+        else {
+            fprintf(f, "\n");
+            c_field_type(f, resolve_type(fn->ret, fn->line, fn->col));
+        }
+        fprintf(f, "%s(", fn->name);
+        for (j = 0; j < fn->params.n; j++) {
+            fprintf(f, "%s", j ? ", " : "");
+            c_field_type(f, resolve_type(fn->params.v[j].type, fn->line, fn->col));
+            fprintf(f, "%s", fn->params.v[j].name);
+        }
+        fprintf(f, "%s);", fn->params.n ? "" : "void");
+    }
+    fprintf(f, "\n\n#endif\n");
 }

@@ -676,6 +676,9 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     }
     tiempo("runtime");
     for (i = 0; i < link_files.n; i++) read_linked(link_files.v[i]);
+    /* las funciones @export del programa, por su nombre de C (si ni el runtime ni lo de @link lo tienen ya) */
+    for (i = 0; i < obj->exports.n; i++)
+        if (!find_sym(obj->exports.v[i].name)) add_sym(obj->exports.v[i].name, HK_CODE, obj->exports.v[i].off, 0);
     /* un común que nadie define: un BSS suyo */
     for (i = 0; i < commons.n; i++)
         if (!find_sym(commons.v[i].name)) {

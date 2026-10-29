@@ -589,6 +589,10 @@ STRPTR dl_str_assign(STRPTR var, STRPTR v) { _dash_str_set(&var, v); return var;
 STRPTR dl_str_assign_copy(STRPTR var, STRPTR v) { _dash_str_set_copy(&var, v); return var; }
 STRPTR dl_str_append_r(STRPTR var, STRPTR add) { _dash_str_append(&var, add); return var; }
 STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
+/* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo), y olvidar el largo guardado de un
+   texto de C que se libera */
+STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
+void dl_str_forget(STRPTR s) { _dash_str_forget(s); }
 void dl_str_set(STRPTR *var, STRPTR v) { _dash_str_set(var, v); }
 void dl_str_set_copy(STRPTR *var, STRPTR v) { _dash_str_set_copy(var, v); }
 void dl_str_free(STRPTR p) { _dash_str_free(p); }
