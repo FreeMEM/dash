@@ -74,6 +74,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     runtime con nombres que se pueden enlazar (`dl_str_dup`, `dl_array_length`, `dl_array_get`, `dl_retain`,
     `dl_release`...: las de ./dash son `static`). El C de Tachyon pasa de `@c` a ficheros .c en sus librerías
     (tools/build_qjs.sh) casi sin cambios: los nombres de esa API.
+- D12 Depurador con dashc (pendiente, sin diseñar; anotado el 2026-10-29). Hoy dashc no tiene `--debug`: solo da el
+  fichero y la línea de un fallo en tiempo de ejecución, y el depurador de la extensión de VS Code usa `dash1`.
+  Aviso de David Martínez por Telegram (2026-10-29): en Emu68 la depuración línea a línea de SAS/C y otras
+  herramientas no funciona, porque a la emulación le falta algo por implementar; el compilador de E (AmigaE) lo
+  hace de otra forma y en Emu68 sí depura línea a línea. Antes de diseñar D12, mirar cómo lo hace E (su
+  información de líneas y su depurador) para que el de dashc valga también en Emu68.
 
 ## Bitácora
 
