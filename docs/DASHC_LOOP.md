@@ -599,4 +599,5 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     enlazaba su C).
   - Primera tanda completa de Tachyon con dashc: 30 de 114. Casi todos los fallos eran esperas agotadas en grupo,
     porque test_animacion se colgaba y todos los tests del mismo arranque del emulador esperaban.
+  - Con esos arreglos, la tanda completa de Tachyon con dashc: 114 de 114 (43 min).
 - Pendiente: D12, depurador (ver arriba); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
