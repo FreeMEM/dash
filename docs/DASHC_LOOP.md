@@ -600,4 +600,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Primera tanda completa de Tachyon con dashc: 30 de 114. Casi todos los fallos eran esperas agotadas en grupo,
     porque test_animacion se colgaba y todos los tests del mismo arranque del emulador esperaban.
   - Con esos arreglos, la tanda completa de Tachyon con dashc: 114 de 114 (43 min).
+  - El navegador (src/dashweb.dash, 4,5 MB) compilado con dashc --fpu, en el emulador con RTG y MUI 3.8
+    (`tools/medir_visor.py --maquina rtg --sistema ~/.cache/dash-emu/sys32rtg38`): pinta prueba.html (499 ms) y
+    lienzo.html, con su JavaScript y el canvas (921 ms), bien en las capturas. No medido aún contra el de dash1.
 - Pendiente: D12, depurador (ver arriba); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
