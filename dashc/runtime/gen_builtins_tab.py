@@ -30,10 +30,6 @@ def main():
             keeps = n not in CodeGenerator._STRING_READERS and not b.reads_only
             dmask = sum(1 << i for i in double_params(n, b))
             rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}}},\n')
-    # los que solo tiene dashc (su C en dashc/runtime)
-    from builtins_dashc import DASHC_BUILTINS
-    for n, (params, ret, _desc) in DASHC_BUILTINS.items():
-        rows.append(f'    {{"{n}", {len(params)}, {RET[ret]}, 0, 0}},\n')
     from compiler.ast_nodes import KEY_NAMES
     keys = "".join(f'    {{"{k}", {v}}},\n' for k, v in sorted(KEY_NAMES.items()))
     out = Path(sys.argv[1])

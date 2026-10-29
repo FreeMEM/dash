@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 772 funciones, 772 implementadas, 0 sin implementar.
+Total: 803 funciones, 803 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -697,6 +697,42 @@ Total: 772 funciones, 772 implementadas, 0 sin implementar.
 | `assigns_read()` | `LONG` | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
 | `assign_name(i)` | `STRPTR` | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
 | `assign_path(i)` | `STRPTR` | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
+
+## Depurador (el programa depurado, con dash --debug)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `dbg_start(program, args)` | `BOOL` | Carga un programa compilado con dash --debug y lo lanza en un proceso propio, en pausa antes de su primera línea (se ponen los puntos de parada y luego dbg_continue): falso si no pudo (dbg_error dice por qué) |  |
+| `dbg_error()` | `STRPTR` | Por qué falló el último dbg_start |  |
+| `dbg_state()` | `LONG` | El programa depurado: 0 ninguno, 1 en pausa antes de empezar, 2 corriendo, 3 parado en una línea, 4 acabado |  |
+| `dbg_signal()` | `LONG` | La señal que recibe el depurador cuando el programa para o acaba (para mui_wait_event_signals) |  |
+| `dbg_wait(ms)` | `LONG` | Espera a que el programa pare o acabe, como mucho ms (0: sin tope): su estado |  |
+| `dbg_break(file, line)` | `BOOL` | Un punto de parada en esa línea de ese fichero ("prog.dash": el final de su ruta): falso si la línea no tiene código |  |
+| `dbg_unbreak(file, line)` | `BOOL` | Quita el punto de parada de esa línea |  |
+| `dbg_continue()` | `BOOL` | Sigue (desde el principio o una parada) hasta un punto de parada o el final |  |
+| `dbg_step()` | `BOOL` | Sigue hasta la línea siguiente, entrando en las funciones a las que llama |  |
+| `dbg_next()` | `BOOL` | Sigue hasta la línea siguiente de esta función (o de la que la llamó) |  |
+| `dbg_out()` | `BOOL` | Sigue hasta que la función vuelve: la línea siguiente de la que la llamó |  |
+| `dbg_pause()` | `BOOL` | Para el programa que corre en la siguiente línea que ejecute |  |
+| `dbg_end(ms)` | `BOOL` | Acaba el programa (Ctrl-C y, en su siguiente línea, su final de siempre): verdadero si acabó en ms |  |
+| `dbg_rc()` | `LONG` | El código de retorno del programa acabado |  |
+| `dbg_file()` | `STRPTR` | El fichero de la línea donde paró el programa (su ruta entera) |  |
+| `dbg_line()` | `LONG` | La línea donde paró el programa (0 si no está parado) |  |
+| `dbg_function()` | `STRPTR` | La función donde paró el programa ("Main", "Punto.mover"...) |  |
+| `dbg_frames()` | `LONG` | Cuántas llamadas hay abiertas donde paró: 1 en Main, 2 en una función que llamó Main... (0 si no está parado) |  |
+| `dbg_frame_function(i)` | `STRPTR` | La función de la llamada i: 0 donde paró, 1 la que la llamó... |  |
+| `dbg_frame_line(i)` | `LONG` | La línea donde está la llamada i: 0 donde paró, 1 la de la llamada en la que la llamó... |  |
+| `dbg_frame_file(i)` | `STRPTR` | El fichero de la llamada i (su ruta entera) |  |
+| `dbg_vars(i)` | `LONG` | Cuántas variables ve la llamada i: sus parámetros y las variables declaradas antes de su línea |  |
+| `dbg_var_name(i, k)` | `STRPTR` | El nombre de la variable k (desde 0) de la llamada i |  |
+| `dbg_var_type(i, k)` | `STRPTR` | El tipo de la variable k de la llamada i, como en Dash ("Int", "[String]", "Punto") |  |
+| `dbg_globals()` | `LONG` | Cuántas variables globales tiene el programa |  |
+| `dbg_global_name(g)` | `STRPTR` | El nombre de la global g (desde 0) |  |
+| `dbg_value(i, expr)` | `STRPTR` | El valor de expr en la llamada i, como texto: una variable de esa llamada o una global, con .campo y [n] detrás ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " y el porqué si no se puede |  |
+| `dbg_value_type(i, expr)` | `STRPTR` | El tipo de expr en la llamada i ("" si no se puede) |  |
+| `dbg_reg(n)` | `LONG` | Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC |  |
+| `dbg_peek(addr, size)` | `LONG` | 1, 2 o 4 bytes de memoria en addr, sin signo |  |
+| `dbg_output()` | `STRPTR` | Lo que ha escrito el programa hasta ahora (salida y salida de errores) |  |
 
 ## Imágenes decodificadas por el programa (sin datatypes)
 

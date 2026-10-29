@@ -21,7 +21,8 @@ Main
     dbg_continue()
     e = dbg_wait(10000)
     f = dbg_file()
-    Print "parado: #{e} #{dbg_function()} #{dbg_line()} #{str_ends(f, "depurado.dash")}"
+    es = str_ends(f, "depurado.dash")
+    Print "parado: #{e} #{dbg_function()} #{dbg_line()} #{es}"
     pc = dbg_reg(16)
     Print "pc en la línea: #{dbg_peek(pc, 2) == 0x4E4F}"
     s = dbg_output()

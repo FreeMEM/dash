@@ -3,7 +3,9 @@
 que se compila con dashc y se ejecuta en el A1200 emulado con, en DH0:, cada depurado*.dash compilado con --debug
 y sin_debug (depurado.dash sin --debug). Su salida tiene que ser la de sus líneas "# expect-out:".
 
-    python3 tests/depurar.py [--a500] [filtro]      (--a500: un A500 con 68000 en vez del A1200)"""
+    python3 tests/depurar.py [--a500] [--c] [filtro]
+--a500: un A500 con 68000 en vez del A1200; --c: los depuradores con el Dash 1.x (./dash1, C y gcc; los depurados
+siempre con dashc --debug)."""
 import os
 import shutil
 import subprocess
@@ -20,7 +22,8 @@ import emu_run  # noqa: E402
 def main():
     args = sys.argv[1:]
     a500 = "--a500" in args
-    args = [a for a in args if a != "--a500"]
+    con_c = "--c" in args
+    args = [a for a in args if a not in ("--a500", "--c")]
     filtro = args[0] if args else ""
     d = HERE / "depurar"
     tests = sorted(t for t in d.glob("*.dash") if not t.name.startswith("depurado") and filtro in t.stem)
@@ -34,7 +37,11 @@ def main():
         exes = []
         for t in tests:
             exe = tmp / t.stem
-            subprocess.run([dash, t.name, "-o", str(exe)], cwd=d, check=True)
+            if con_c:
+                subprocess.run([str(REPO / "dash1"), str(t), "-o", str(exe)], cwd=REPO, check=True,
+                               stdout=subprocess.DEVNULL)
+            else:
+                subprocess.run([dash, t.name, "-o", str(exe)], cwd=d, check=True)
             exes.append(str(exe))
 
         def on_disk(hd):

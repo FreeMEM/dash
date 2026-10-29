@@ -5095,6 +5095,104 @@ CLIP_FUNCTIONS = {
                             "there is none or something else was copied after it, -2 if it does not fit in max"),
 }
 
+# Dash 2.0 (Forja, the IDE): the debugger. The debugged program is built with dash --debug (dashc); the debugger
+# with either Dash (docs/DEPURADOR_LOOP.md)
+DEBUGGER_FUNCTIONS = {
+    "dbg_start": BuiltinFunc(
+        name="dbg_start", params=['program', 'args'], return_type="BOOL", c_template="((BOOL)_dash_dbg_start((LONG)(${program}), (LONG)(${args})))",
+        reads_only=True, description='Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why)'),
+    "dbg_error": BuiltinFunc(
+        name="dbg_error", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_error())",
+        reads_only=True, description='Why the last dbg_start failed'),
+    "dbg_state": BuiltinFunc(
+        name="dbg_state", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_state())",
+        reads_only=True, description='The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended'),
+    "dbg_signal": BuiltinFunc(
+        name="dbg_signal", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_signal())",
+        reads_only=True, description='The signal the debugger gets when the program stops or ends (for mui_wait_event_signals)'),
+    "dbg_wait": BuiltinFunc(
+        name="dbg_wait", params=['ms'], return_type="LONG", c_template="((LONG)_dash_dbg_wait((LONG)(${ms})))",
+        reads_only=True, description='Wait until the program stops or ends, ms at most (0: no limit): its state'),
+    "dbg_break": BuiltinFunc(
+        name="dbg_break", params=['file', 'line'], return_type="BOOL", c_template="((BOOL)_dash_dbg_break((LONG)(${file}), (LONG)(${line})))",
+        reads_only=True, description='A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code'),
+    "dbg_unbreak": BuiltinFunc(
+        name="dbg_unbreak", params=['file', 'line'], return_type="BOOL", c_template="((BOOL)_dash_dbg_unbreak((LONG)(${file}), (LONG)(${line})))",
+        reads_only=True, description='Take the breakpoint out of that line'),
+    "dbg_continue": BuiltinFunc(
+        name="dbg_continue", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_continue())",
+        reads_only=True, description='Go on (from the start or a stop) until a breakpoint or the end'),
+    "dbg_step": BuiltinFunc(
+        name="dbg_step", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_step())",
+        reads_only=True, description='Go on to the next line, into the functions it calls'),
+    "dbg_next": BuiltinFunc(
+        name="dbg_next", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_next())",
+        reads_only=True, description='Go on to the next line of this function (or of the one that called it)'),
+    "dbg_out": BuiltinFunc(
+        name="dbg_out", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_out())",
+        reads_only=True, description='Go on until the function returns: the next line of the one that called it'),
+    "dbg_pause": BuiltinFunc(
+        name="dbg_pause", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_pause())",
+        reads_only=True, description='Stop the running program at the next line it runs'),
+    "dbg_end": BuiltinFunc(
+        name="dbg_end", params=['ms'], return_type="BOOL", c_template="((BOOL)_dash_dbg_end((LONG)(${ms})))",
+        reads_only=True, description='End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms'),
+    "dbg_rc": BuiltinFunc(
+        name="dbg_rc", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_rc())",
+        reads_only=True, description='The return code of the ended program'),
+    "dbg_file": BuiltinFunc(
+        name="dbg_file", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_file())",
+        reads_only=True, description='The file of the line where the program stopped (its full path)'),
+    "dbg_line": BuiltinFunc(
+        name="dbg_line", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_line())",
+        reads_only=True, description='The line where the program stopped (0 if it is not stopped)'),
+    "dbg_function": BuiltinFunc(
+        name="dbg_function", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_function())",
+        reads_only=True, description='The function where the program stopped ("Main", "Punto.mover"...)'),
+    "dbg_frames": BuiltinFunc(
+        name="dbg_frames", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_frames())",
+        reads_only=True, description='How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped)'),
+    "dbg_frame_function": BuiltinFunc(
+        name="dbg_frame_function", params=['i'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_frame_function((LONG)(${i})))",
+        reads_only=True, description='The function of call i: 0 the one where it stopped, 1 the one that called it...'),
+    "dbg_frame_line": BuiltinFunc(
+        name="dbg_frame_line", params=['i'], return_type="LONG", c_template="((LONG)_dash_dbg_frame_line((LONG)(${i})))",
+        reads_only=True, description='The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it...'),
+    "dbg_frame_file": BuiltinFunc(
+        name="dbg_frame_file", params=['i'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_frame_file((LONG)(${i})))",
+        reads_only=True, description='The file of call i (its full path)'),
+    "dbg_vars": BuiltinFunc(
+        name="dbg_vars", params=['i'], return_type="LONG", c_template="((LONG)_dash_dbg_vars((LONG)(${i})))",
+        reads_only=True, description='How many variables call i sees: its parameters and the variables declared up to its line'),
+    "dbg_var_name": BuiltinFunc(
+        name="dbg_var_name", params=['i', 'k'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_var_name((LONG)(${i}), (LONG)(${k})))",
+        reads_only=True, description='Name of variable k (from 0) of call i'),
+    "dbg_var_type": BuiltinFunc(
+        name="dbg_var_type", params=['i', 'k'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_var_type((LONG)(${i}), (LONG)(${k})))",
+        reads_only=True, description='Type of variable k of call i, as in Dash ("Int", "[String]", "Punto")'),
+    "dbg_globals": BuiltinFunc(
+        name="dbg_globals", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_globals())",
+        reads_only=True, description='How many global variables the program has'),
+    "dbg_global_name": BuiltinFunc(
+        name="dbg_global_name", params=['g'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_global_name((LONG)(${g})))",
+        reads_only=True, description='Name of global g (from 0)'),
+    "dbg_value": BuiltinFunc(
+        name="dbg_value", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value((LONG)(${i}), (LONG)(${expr})))",
+        reads_only=True, description='The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot'),
+    "dbg_value_type": BuiltinFunc(
+        name="dbg_value_type", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value_type((LONG)(${i}), (LONG)(${expr})))",
+        reads_only=True, description='The type of expr in call i ("" if it cannot)'),
+    "dbg_reg": BuiltinFunc(
+        name="dbg_reg", params=['n'], return_type="LONG", c_template="((LONG)_dash_dbg_reg((LONG)(${n})))",
+        reads_only=True, description='A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC'),
+    "dbg_peek": BuiltinFunc(
+        name="dbg_peek", params=['addr', 'size'], return_type="LONG", c_template="((LONG)_dash_dbg_peek((LONG)(${addr}), (LONG)(${size})))",
+        reads_only=True, description='1, 2 or 4 bytes of memory at addr, without sign'),
+    "dbg_output": BuiltinFunc(
+        name="dbg_output", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_output())",
+        reads_only=True, description='What the program has written so far (output and error output)'),
+}
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
@@ -5151,6 +5249,7 @@ ALL_BUILTINS = {
     **CLIP_FUNCTIONS,          # Lorraine D18
     **COLLATE_FUNCTIONS,       # Lorraine D7
     **SYSPROG_FUNCTIONS,       # Dash 2.0
+    **DEBUGGER_FUNCTIONS,      # Dash 2.0: Forja
     **IMGDEC_FUNCTIONS,
     **TTF_FUNCTIONS,
     **NETBG_FUNCTIONS,

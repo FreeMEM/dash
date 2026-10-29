@@ -40,8 +40,8 @@ builtins, windows, `@native`, `import`.
 (`dashc --debug-info prog` prints it). No function is copied inline and every variable stays in the frame, where the
 debugger finds it; the program does the same as without `--debug`.
 
-The `dbg_*` builtins, only in dashc (Dash 1.x does not have them), debug such a program from another one (Forja, the
-IDE):
+The `dbg_*` builtins debug such a program from another one (Forja, the IDE), built with either Dash (`./dash` or
+`./dash --c`):
 
 ```ruby
 dbg_start("Work:prog", "")              # loaded and paused before its first line
@@ -67,14 +67,14 @@ dbg_end(5000)                           # ends it (its usual cleanup); dbg_rc() 
 | `dbg_value(i, expr)`, `dbg_value_type(i, expr)` | The value as text (`"p.hijos[0].x"`) and its type |
 | `dbg_reg(n)`, `dbg_peek(addr, size)` | Registers (0-7 d0-d7, 8-15 a0-a7, 16 the PC) and memory |
 
-How it works (`runtime/depurar.c`, plan in `docs/DEPURADOR_LOOP.md`): the program runs in a child process with its
+How it works (`DEBUGGER_RUNTIME` in `compiler/codegen.py`, plan in `docs/DEPURADOR_LOOP.md`): the program runs in a child process with its
 own exception handler; a breakpoint turns the line's `NOP` into `TRAP #15`, and going on needs nothing put back.
 Stepping makes every line stop and looks at the frame (`a5`). It does not use the CPU's trace bit, so it works the
 same on a 68000, in FS-UAE and in Emu68.
 
 Limits: a `task_start` task that runs a line with a `TRAP` crashes (it has no handler); a program waiting without
 running any line (in `mui_wait_event`) does not end with `dbg_end` until it is back in its code; read the output
-before `dbg_end`. Tests: `python3 tests/depurar.py [--a500]`.
+before `dbg_end`. Tests: `python3 tests/depurar.py [--a500] [--c]`.
 
 ## How it is built
 

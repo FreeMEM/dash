@@ -40,7 +40,8 @@ añade al ejecutable un `HUNK_DEBUG` con ficheros, líneas, funciones, variables
 (`dashc --debug-info prog` lo enseña). Sin copiar funciones en línea y con todas las variables en el marco, para que
 el depurador las encuentre; el programa hace lo mismo que sin `--debug`.
 
-Los builtins `dbg_*`, solo de dashc (no están en el Dash 1.x), depuran un programa así desde otro (Forja, el IDE):
+Los builtins `dbg_*` depuran un programa así desde otro (Forja, el IDE), compilado con cualquiera de los dos
+Dash (`./dash` o `./dash --c`):
 
 ```ruby
 dbg_start("Work:prog", "")              # cargado y en pausa antes de su primera línea
@@ -66,14 +67,14 @@ dbg_end(5000)                           # lo acaba (su limpieza de siempre); dbg
 | `dbg_value(i, expr)`, `dbg_value_type(i, expr)` | El valor como texto (`"p.hijos[0].x"`) y su tipo |
 | `dbg_reg(n)`, `dbg_peek(dir, tamaño)` | Registros (0-7 d0-d7, 8-15 a0-a7, 16 el PC) y memoria |
 
-Cómo va (`runtime/depurar.c`, plan en `docs/DEPURADOR_LOOP.md`): el programa corre en un proceso hijo con su
+Cómo va (`DEBUGGER_RUNTIME` de `compiler/codegen.py`, plan en `docs/DEPURADOR_LOOP.md`): el programa corre en un proceso hijo con su
 manejador de excepciones; un punto de parada cambia el `NOP` de la línea por `TRAP #15`, y al seguir no hay nada que
 reponer. Paso a paso, todas las líneas paran y se mira el marco (`a5`). No usa el bit de traza de la CPU, así que
 funciona igual en un 68000, en FS-UAE y en Emu68.
 
 Límites: una tarea de `task_start` que pase por una línea con `TRAP` cae (no tiene el manejador); un programa que
 espera sin pasar por ninguna línea (en `mui_wait_event`) no acaba con `dbg_end` hasta que vuelve a su código; la
-salida se lee antes de `dbg_end`. Tests: `python3 tests/depurar.py [--a500]`.
+salida se lee antes de `dbg_end`. Tests: `python3 tests/depurar.py [--a500] [--c]`.
 
 ## Cómo está hecho
 

@@ -80,3 +80,9 @@ Como EDBG de AmigaE (DASHC_LOOP, D12): sin el bit de traza de la CPU, que Emu68 
   G3). Los depurados de los tests son `depurado*.dash`. Tests `basico`, `pasos` y `variables` bien en A1200 y A500.
 - G6: el depurador en `dashc/README.md` y `README.en.md` (sección "Depurar"/"Debugging": cómo se usa, los `dbg_*`,
   cómo va y sus límites).
+- 2026-10-30: el usuario retira el "nada para dash1"; vale la D13. Los `dbg_*` pasan a los dos Dash: su C es la
+  plantilla `DEBUGGER_RUNTIME` de `compiler/codegen.py` (con listas, diccionarios, Float y Double; un Double del
+  programa depurado es la caja de dashc, que se lee aquí) y sus entradas, `DEBUGGER_FUNCTIONS` de
+  `amiga_builtins.py`; fuera `dashc/runtime/depurar.c` y `builtins_dashc.py`. El depurado sigue siendo de
+  `dashc --debug`. `tests/depurar.py --c` compila los depuradores con dash1: los tres bien en A1200 y A500, como
+  con dashc.

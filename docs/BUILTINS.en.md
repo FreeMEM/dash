@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 772 functions, 772 implemented, 0 not implemented.
+Total: 803 functions, 803 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -697,6 +697,42 @@ Total: 772 functions, 772 implemented, 0 not implemented.
 | `assigns_read()` | `LONG` | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
 | `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
 | `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+
+## Debugger (the debugged program, built with dash --debug)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `dbg_start(program, args)` | `BOOL` | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
+| `dbg_error()` | `STRPTR` | Why the last dbg_start failed |  |
+| `dbg_state()` | `LONG` | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
+| `dbg_signal()` | `LONG` | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
+| `dbg_wait(ms)` | `LONG` | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
+| `dbg_break(file, line)` | `BOOL` | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
+| `dbg_unbreak(file, line)` | `BOOL` | Take the breakpoint out of that line |  |
+| `dbg_continue()` | `BOOL` | Go on (from the start or a stop) until a breakpoint or the end |  |
+| `dbg_step()` | `BOOL` | Go on to the next line, into the functions it calls |  |
+| `dbg_next()` | `BOOL` | Go on to the next line of this function (or of the one that called it) |  |
+| `dbg_out()` | `BOOL` | Go on until the function returns: the next line of the one that called it |  |
+| `dbg_pause()` | `BOOL` | Stop the running program at the next line it runs |  |
+| `dbg_end(ms)` | `BOOL` | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
+| `dbg_rc()` | `LONG` | The return code of the ended program |  |
+| `dbg_file()` | `STRPTR` | The file of the line where the program stopped (its full path) |  |
+| `dbg_line()` | `LONG` | The line where the program stopped (0 if it is not stopped) |  |
+| `dbg_function()` | `STRPTR` | The function where the program stopped ("Main", "Punto.mover"...) |  |
+| `dbg_frames()` | `LONG` | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
+| `dbg_frame_function(i)` | `STRPTR` | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
+| `dbg_frame_line(i)` | `LONG` | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
+| `dbg_frame_file(i)` | `STRPTR` | The file of call i (its full path) |  |
+| `dbg_vars(i)` | `LONG` | How many variables call i sees: its parameters and the variables declared up to its line |  |
+| `dbg_var_name(i, k)` | `STRPTR` | Name of variable k (from 0) of call i |  |
+| `dbg_var_type(i, k)` | `STRPTR` | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
+| `dbg_globals()` | `LONG` | How many global variables the program has |  |
+| `dbg_global_name(g)` | `STRPTR` | Name of global g (from 0) |  |
+| `dbg_value(i, expr)` | `STRPTR` | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
+| `dbg_value_type(i, expr)` | `STRPTR` | The type of expr in call i ("" if it cannot) |  |
+| `dbg_reg(n)` | `LONG` | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
+| `dbg_peek(addr, size)` | `LONG` | 1, 2 or 4 bytes of memory at addr, without sign |  |
+| `dbg_output()` | `STRPTR` | What the program has written so far (output and error output) |  |
 
 ## Pictures decoded by the program (no datatypes)
 
