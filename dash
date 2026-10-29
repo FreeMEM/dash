@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Dash 2.0: compila un programa Dash a un ejecutable de Amiga con dashc, sin compilador de C.
 
-    ./dash programa.dash -o programa [--memcheck] [--stack N]
+    ./dash programa.dash -o programa [--fpu] [--memcheck] [--stack N]
 
 dashc está en dashc/dashc (make -C dashc lo construye). Lo que dashc no hace (C en el programa: @native, @c, @header;
---fpu, --cpu, --debug, --small...) lo hace todavía el Dash de Python, la 1.x: ./dash1."""
+--debug, --small...) lo hace todavía el Dash de Python, la 1.x: ./dash1."""
 import os
 import re
 import subprocess
@@ -13,7 +13,7 @@ import sys
 ROOT = os.path.dirname(os.path.realpath(__file__))
 DASHC = os.path.join(ROOT, "dashc", "dashc")
 # las opciones de dash1 que dashc aún no tiene
-SOLO_DASH1 = {"--fpu", "--cpu", "--debug", "--profile", "--multifile", "--small", "-O", "--optimize", "-O0",
+SOLO_DASH1 = {"--debug", "--profile", "--multifile", "--small", "-O", "--optimize", "-O0",
               "--no-optimize", "--no-hunk"}
 
 

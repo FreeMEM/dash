@@ -6,7 +6,11 @@ comprimido entero con zlib (se usa poco: main.c lo descomprime solo entonces).
 
     python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt > build/rt_blob.c
     python3 runtime/rt_blob.py build/dashrt.drt - > build/rt_blob_amiga.c          (sin el de --memcheck)
-    python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt build/dashc_mc.drt   (él solo, en DRT2)"""
+    python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt build/dashc_mc.drt   (él solo, en DRT2)
+El de --fpu, en DRT2 como el normal (en el dashc del Amiga va aparte, dashc_fpu.drt):
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt > build/rt_fpu_blob.c
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt - > build/rt_fpu_blob_amiga.c
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt build/dashc_fpu.drt"""
 import struct
 import sys
 import zlib
@@ -49,6 +53,16 @@ def array(name, data):
 
 
 def main():
+    if sys.argv[1] == "--fpu":
+        if sys.argv[3:] == ["-"]:
+            sys.stdout.write("const unsigned char rt_fpu[1];\nconst unsigned int rt_fpu_len = 0;\n")
+            return
+        a = drt2(open(sys.argv[2], "rb").read())
+        if len(sys.argv) < 4:
+            sys.stdout.write(array("rt_fpu", a) + f"const unsigned int rt_fpu_len = {len(a)};\n")
+        else:
+            open(sys.argv[3], "wb").write(a)
+        return
     a = drt2(open(sys.argv[1], "rb").read())
     if sys.argv[2] == "-":
         # (el dashc del Amiga: el de --memcheck va aparte, dashc_mc.drt, y se lee solo con --memcheck)

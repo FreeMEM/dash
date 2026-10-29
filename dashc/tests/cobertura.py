@@ -53,6 +53,10 @@ def catalogs(hd, group):
             out.write_bytes(data)
 
 
+def fpu(text):
+    return any(l.strip() == "# fpu" for l in text.splitlines())
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sin-emu", action="store_true")
@@ -68,6 +72,8 @@ def main():
         exe = tmp / f"{f.parent.name}_{f.stem}"
         # como tests/run_tests.py: desde la raíz, con la ruta relativa (sale en los errores)
         mc = ["--memcheck"] if "\n# memcheck" in "\n" + f.read_text(encoding="utf-8", errors="replace") else []
+        # '# fpu': con --fpu, y en un 68040 (como el runner)
+        mc += ["--fpu"] if fpu(f.read_text(encoding="utf-8", errors="replace")) else []
         r = subprocess.run([str(DASHC), str(f.relative_to(REPO)), "-o", str(exe)] + mc, capture_output=True,
                            text=True, cwd=REPO, errors="replace")
         if r.returncode == 0:
@@ -96,8 +102,7 @@ def main():
     if not rom:
         print("falta $DASH_KICKSTART: no se ejecuta")
         return 1
-    # dos arranques: los de MUI con su sistema
-    # cuatro arranques: los de MUI con su sistema, los de red ('# emu-net: PUERTO') con la bsdsocket.library de
+    # cinco arranques: los de FPU ('# fpu') en un 68040, los de MUI con su sistema, los de red ('# emu-net: PUERTO') con la bsdsocket.library de
     # FS-UAE y el servidor de eco del runner, y los de TLS ('# emu-net-tls:') con el sistema con AmiSSL
     # ($DASH_EMU_SYS_SSL) y el eco hablando TLS
     def mui(x):
@@ -109,7 +114,11 @@ def main():
     def tls(x):
         return bool(lines_with(x[2], "# emu-net-tls:"))
 
-    groups = [([x for x in runnable if not mui(x) and not net(x)], os.environ.get("DASH_EMU_SYS"), ""),
+    groups = [([x for x in runnable if not mui(x) and not net(x) and not fpu(x[2])], os.environ.get("DASH_EMU_SYS"),
+               ""),
+              # (FS-UAE pasa inf a 2.0 al guardar un registro de la FPU entero, fmove.x: test_double_texto_fpu da
+              # "raros: 2.0 -2.0 1.0"; con uae_fpu_softfloat falla más, también con ./dash1 --fpu)
+              ([x for x in runnable if fpu(x[2])], os.environ.get("DASH_EMU_SYS"), "cpu = 68040\nfpu = 68040\n"),
               ([x for x in runnable if mui(x)], os.environ.get("DASH_EMU_SYS_MUI"), ""),
               ([x for x in runnable if net(x) and not mui(x) and not tls(x)], os.environ.get("DASH_EMU_SYS"),
                "bsdsocket_library = 1\n"),
@@ -120,7 +129,7 @@ def main():
             continue
         runnable += g
         server = None
-        if config:
+        if "bsdsocket" in config:
             sys.path.insert(0, str(REPO / "tests"))
             from run_tests import _EchoServer
             ports = {int((lines_with(t, "# emu-net:") or lines_with(t, "# emu-net-tls:"))[0]) for _, _, t in g}

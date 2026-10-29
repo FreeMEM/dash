@@ -35,9 +35,17 @@ class TestDash2Cli(unittest.TestCase):
             self.assertIn("./dash1", r.stderr)
 
     def test_options_of_dash1_point_to_it(self):
-        r = self.run_dash("--fpu", os.path.join(ROOT, "examples", "hola.dash"), "-o", "/dev/null")
+        r = self.run_dash("--debug", os.path.join(ROOT, "examples", "hola.dash"), "-o", "/dev/null")
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("./dash1 --fpu", r.stderr)
+        self.assertIn("./dash1 --debug", r.stderr)
+
+    def test_fpu_and_cpu_as_in_dash1(self):
+        # (como Tachyon, tools/paquete.sh: ./dash --fpu)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "x")
+            r = self.run_dash("--fpu", "--cpu", "68040", os.path.join(ROOT, "examples", "hola.dash"), "-o", out)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue(os.path.getsize(out) > 0)
 
 
 if __name__ == "__main__":

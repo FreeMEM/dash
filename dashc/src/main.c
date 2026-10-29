@@ -18,6 +18,9 @@ unsigned long __stack = 65536;
 /* los runtimes (build/rt_blob.c, runtime/rt_blob.py): el normal tal cual; el de --memcheck, comprimido */
 extern const unsigned char rt_normal[], rt_mc_z[];
 extern const unsigned int rt_normal_len, rt_mc_zlen, rt_mc_len;
+/* el de --fpu (build/rt_fpu_blob.c), preparado como el normal; en el dashc del Amiga, aparte (rt_fpu_len = 0) */
+extern const unsigned char rt_fpu[];
+extern const unsigned int rt_fpu_len;
 
 /* descomprime z en dst, que tiene sitio para raw bytes */
 static void rt_unpack(const unsigned char *z, unsigned int zlen, uint8_t *dst, unsigned int raw)
@@ -66,8 +69,10 @@ size_t rt_blob_len;
 static void usage(void)
 {
     fprintf(stderr,
-            "uso: dashc programa.dash -o ejecutable [--memcheck] [--stack bytes] [--version]\n"
+            "uso: dashc programa.dash -o ejecutable [--fpu] [--memcheck] [--stack bytes] [--version]\n"
             "Compila Dash a un ejecutable de Amiga sin compilador de C (Dash 2.0).\n"
+            "  --fpu          Float y Double con la FPU (68020 y 68881/68882, o 68040/68060)\n"
+            "  --cpu X        se acepta como en Dash 1 (68000...68060): el código vale para todas\n"
             "  --memcheck     comprueba la memoria (avisa de nil y dice lo vivo al acabar)\n"
             "  --stack N      pide al menos N bytes de pila (como @stack N)\n"
             "  --runtime X    otro runtime (un objeto Hunk o uno preparado: para probar)\n"
@@ -84,12 +89,19 @@ int main(int argc, char **argv)
     Program *prog;
     static Obj obj;
     long cli_stack = 0;
-    int i;
+    int i, fpu = 0;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-o") && i + 1 < argc) out = argv[++i];
         else if (!strcmp(argv[i], "--runtime") && i + 1 < argc) rt_path = argv[++i];
         else if (!strcmp(argv[i], "--memcheck")) memcheck = 1;
+        else if (!strcmp(argv[i], "--fpu")) fpu = 1;
+        else if (!strcmp(argv[i], "--cpu") && i + 1 < argc) {
+            const char *c = argv[++i];
+            if (strcmp(c, "68000") && strcmp(c, "68020") && strcmp(c, "68030") && strcmp(c, "68040") &&
+                strcmp(c, "68060"))
+                fatal("--cpu: 68000, 68020, 68030, 68040 o 68060");
+        }
         else if (!strcmp(argv[i], "--tiempos")) tiempos = 1;
         else if (!strcmp(argv[i], "--stack") && i + 1 < argc) cli_stack = atol(argv[++i]);
         else if (!strcmp(argv[i], "--version")) {
@@ -132,6 +144,15 @@ int main(int argc, char **argv)
         tiempo("descomprimir");
         rt = buf;
         rtlen = rt_mc_len;
+    } else if (fpu && rt_fpu_len) {
+        /* (con --memcheck, el de --memcheck: Float por software) */
+        rt = rt_fpu;
+        rtlen = rt_fpu_len;
+    } else if (fpu) {
+        FILE *f = fopen("PROGDIR:dashc_fpu.drt", "rb");
+        if (!f) fatal("--fpu necesita dashc_fpu.drt junto a dashc");
+        fclose(f);
+        rt = read_file("PROGDIR:dashc_fpu.drt", &rtlen);
     }
     src_name = in;
     VEC_PUSH(src_files, in);

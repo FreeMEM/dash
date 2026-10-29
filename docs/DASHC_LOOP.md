@@ -467,3 +467,28 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   Si un builtin no tiene la suya, el generador falla y con él la comprobación de la documentación (docs/builtins):
   quien añada un builtin (también la sesión de Tachyon en su rama) tiene que añadir su línea ahí. Corregida de paso la
   de `task_start`, que decía "solo C".
+- D9e: `--fpu` en dashc, para compilar Tachyon como antes (`./dash --fpu`, tools/paquete.sh). Un tercer runtime,
+  `runtime/dashrt_fpu.o` (runtime/build_lib.py): el C para 68020 + 68881, como `./dash --fpu`, sin el float por
+  software y con `runtime/rt_fpu.s`, las siete funciones de Float que llama el código de dashc (`__addsf3`,
+  `__subsf3`, `__mulsf3`, `__divsf3`, `__floatsisf`, `__fixsfsi`, `__cmpsf2`) con la FPU, devolviendo en d0
+  como las de fp-bit (`__fixsfsi` cambia el redondeo del FPCR en vez de usar `fintrz`, que el 68040 no tiene).
+  El código de dashc sigue siendo de 68000: el runtime pasa los Double en cajas y los Float como LONG, y `@extern`
+  solo admite Int, Bool y String, así que lo que el C con FPU devuelve en fp0 no llega a dashc. El dashc del PC lo
+  lleva dentro (DRT2, como el normal); el del Amiga, aparte en `dashc_fpu.drt` junto a él (como `dashc_mc.drt`).
+  Con `--memcheck`, el runtime de `--memcheck` (Float por software). `--cpu X` se acepta y no cambia nada (el
+  código vale para todas). `./dash` ya no remite a dash1 por `--fpu` ni `--cpu`.
+  - Arreglado: el runtime se compilaba sin las opciones de `./dash` (compiler/cflags.py), con todas las pasadas de
+    `-fbbb`, también las que dan código erróneo: con FPU salía `2.0000000039833282e300` por `2.0e300`. Ahora
+    `opt_flags()`, también en el runtime normal y el de `--memcheck`.
+  - FS-UAE pasa inf a 2.0 (y nan a 1.0) al guardar un registro de la FPU en 80 bits (`fmove.x`), lo que hace el C
+    al guardar un valor antes de llamar a otra función: `str_from_double(1/0, 2)` da "2.0" (en test_double_texto_fpu,
+    la línea "raros"). Comprobado con un `@native` de dash1: es el emulador. Su modo exacto (`uae_fpu_softfloat`)
+    arregla eso pero rompe más (raíces, conversiones y denormales salen mal, también con `./dash1 --fpu`), así que
+    cobertura.py usa el normal, un 68040 como el runner, y esa línea queda como diferencia conocida del emulador.
+  - tests/cobertura.py compila los `# fpu` con `--fpu` y los ejecuta en un 68040: 4 de 5 iguales, el quinto por lo
+    de inf (test_fpu_68040 lleva `@native`). El dashc del Amiga con `--fpu` da el mismo ejecutable, byte a byte,
+    que el del PC. Batería de dashc (run.py) bien con el runtime rehecho; cobertura: 142 de 145 con el modo exacto
+    de FS-UAE (los tres fallos, del emulador, comprobados con dash1).
+  - Lo que queda para Tachyon: su código aún tiene unos 150 bloques de C (`@native`, `@c`, `@header` en lib/red,
+    js, html5, video, imagen_dec, fuente_web...). Hay que pasarlos a los builtins de D7 y a `@link`/`@extern`: es
+    trabajo de Tachyon, en su repositorio. Hasta entonces, Tachyon se compila con `./dash1 --fpu`.
