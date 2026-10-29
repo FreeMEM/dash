@@ -469,7 +469,13 @@ time_t mktime(struct tm *tm)
 
 /* ---- matemáticas (con las de fdlibm del runtime) ---- */
 
-static int is_nan(double x) { return x != x; }
+/* (por los bits: con la FPU emulada de FS-UAE, inf != inf es cierto) */
+static int is_nan(double x)
+{
+    union { double d; unsigned long long u; } v;
+    v.d = x;
+    return (v.u & 0x7fffffffffffffffULL) > 0x7ff0000000000000ULL;
+}
 
 double trunc(double x)
 {
@@ -490,18 +496,30 @@ long lrint(double x)
     return (long)t;
 }
 
+/* El orden de dos double por sus bits (los negativos, al revés): sin comparar en la FPU, que en FS-UAE compara mal
+   los infinitos (Math.max(1, Infinity) de QuickJS daba 1; con libnix salía bien) */
+static int dash_dmayor(double a, double b)
+{
+    union { double d; unsigned long long u; } x, y;
+    x.d = a;
+    y.d = b;
+    x.u = (x.u >> 63) ? ~x.u : x.u | 0x8000000000000000ULL;
+    y.u = (y.u >> 63) ? ~y.u : y.u | 0x8000000000000000ULL;
+    return x.u > y.u;
+}
+
 double fmax(double a, double b)
 {
     if (is_nan(a)) return b;
     if (is_nan(b)) return a;
-    return a > b ? a : b;
+    return dash_dmayor(a, b) ? a : b;
 }
 
 double fmin(double a, double b)
 {
     if (is_nan(a)) return b;
     if (is_nan(b)) return a;
-    return a < b ? a : b;
+    return dash_dmayor(b, a) ? a : b;
 }
 
 double log2(double x)
