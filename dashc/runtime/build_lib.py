@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Construye runtime/dashrt.o, runtime/dashrt_mc.o (--memcheck) y runtime/dashrt_fpu.o (--fpu): el runtime que dashc lleva dentro.
+"""Construye runtime/dashrt.o, runtime/dashrt_mc.o (--memcheck), runtime/dashrt_fpu.o (--fpu) y dashrt_fpu_mc.o
+(--fpu --memcheck): el runtime que dashc lleva dentro.
 
     python3 runtime/build_lib.py        (make runtime)
 
@@ -58,7 +59,10 @@ def main():
     # --fpu: todo para 68020 + 68881 (como ./dash --fpu), el Float de dashc por rt_fpu.s
     fpu = [f for f in FLAGS if f != "-m68000"] + ["-m68020", "-m68881"]
     run([GCC, *fpu, *inc, "-c", str(src), "-o", str(build / "dashlib_fpu.o")])
-    write(HERE / "dashrt_fpu.o", [build / "dashlib_fpu.o"] + objects(build, fpu, "_fpu", "-m68020", "-m68881"))
+    run([GCC, *fpu, *inc, "-DDASH_MEMCHECK", "-c", str(src), "-o", str(build / "dashlib_fpu_mc.o")])
+    common = objects(build, fpu, "_fpu", "-m68020", "-m68881")
+    write(HERE / "dashrt_fpu.o", [build / "dashlib_fpu.o"] + common)
+    write(HERE / "dashrt_fpu_mc.o", [build / "dashlib_fpu_mc.o"] + common)   # --fpu --memcheck
 
 
 def write(out, objs):

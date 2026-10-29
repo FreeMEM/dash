@@ -19,8 +19,8 @@ unsigned long __stack = 65536;
 extern const unsigned char rt_normal[], rt_mc_z[];
 extern const unsigned int rt_normal_len, rt_mc_zlen, rt_mc_len;
 /* el de --fpu (build/rt_fpu_blob.c), preparado como el normal; en el dashc del Amiga, aparte (rt_fpu_len = 0) */
-extern const unsigned char rt_fpu[];
-extern const unsigned int rt_fpu_len;
+extern const unsigned char rt_fpu[], rt_fpu_mc[];
+extern const unsigned int rt_fpu_len, rt_fpu_mc_len;
 
 /* descomprime z en dst, que tiene sitio para raw bytes */
 static void rt_unpack(const unsigned char *z, unsigned int zlen, uint8_t *dst, unsigned int raw)
@@ -133,7 +133,19 @@ int main(int argc, char **argv)
 
     rt = rt_normal;
     rtlen = rt_normal_len;
-    if (memcheck && !rt_mc_len) {
+    if (memcheck && fpu) {
+        /* --fpu --memcheck: el suyo (el de --memcheck lleva el Float por software, y mezclado con el C de @link
+           compilado para FPU daba números rotos) */
+        if (rt_fpu_mc_len) {
+            rt = rt_fpu_mc;
+            rtlen = rt_fpu_mc_len;
+        } else {
+            FILE *f = fopen("PROGDIR:dashc_fpu_mc.drt", "rb");
+            if (!f) fatal("--fpu --memcheck necesita dashc_fpu_mc.drt junto a dashc");
+            fclose(f);
+            rt = read_file("PROGDIR:dashc_fpu_mc.drt", &rtlen);
+        }
+    } else if (memcheck && !rt_mc_len) {
         /* el dashc del Amiga no lo lleva dentro (es la mitad de su tamaño): dashc_mc.drt, junto a él */
         FILE *f = fopen("PROGDIR:dashc_mc.drt", "rb");
         if (!f) fatal("--memcheck necesita dashc_mc.drt junto a dashc");
@@ -147,7 +159,6 @@ int main(int argc, char **argv)
         rt = buf;
         rtlen = rt_mc_len;
     } else if (fpu && rt_fpu_len) {
-        /* (con --memcheck, el de --memcheck: Float por software) */
         rt = rt_fpu;
         rtlen = rt_fpu_len;
     } else if (fpu) {

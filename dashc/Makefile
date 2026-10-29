@@ -13,13 +13,13 @@ Z = ../runtime/zlib
 ZLIB = -DZ_PREFIX -DNO_GZIP -I$(Z) $(Z)/inflate.c $(Z)/inftrees.c $(Z)/inffast.c $(Z)/zutil.c $(Z)/adler32.c $(Z)/crc32.c
 SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c src/dashui.c
 
-dashc: $(SRC) src/dashc.h build/rt_blob.c build/rt_fpu_blob.c build/builtins_tab.c
-	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/rt_fpu_blob.c build/builtins_tab.c $(RYU) $(ZLIB)
+dashc: $(SRC) src/dashc.h build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c
+	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c $(RYU) $(ZLIB)
 
 amiga: build/dashc.amiga
 # (los runtimes de --memcheck y --fpu van aparte, en build/dashc_mc.drt y build/dashc_fpu.drt: se copian junto a dashc)
-build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/dashc_mc.drt build/dashc_fpu.drt build/builtins_tab.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
+build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/dashc_mc.drt build/dashc_fpu.drt build/dashc_fpu_mc.drt build/builtins_tab.c
+	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
 		build/softfloat_df.o build/softfloat.o build/fastfp.o -lm   # (el float por software, como ./dash: el de la ROM se cuelga en FS-UAE)
 
 # lo que pide y devuelve cada builtin (la tabla va en git: no hace falta Python para construir dashc)
@@ -32,7 +32,7 @@ build/builtins_tab.c: runtime/builtins_tab.c
 # comprimido. build/preparar es dashc sin runtime dentro.
 build/rt_stub.c:
 	@mkdir -p build
-	echo 'const unsigned char rt_normal[1], rt_mc_z[1], rt_fpu[1]; const unsigned int rt_normal_len, rt_mc_zlen, rt_mc_len, rt_fpu_len;' > $@
+	echo 'const unsigned char rt_normal[1], rt_mc_z[1], rt_fpu[1], rt_fpu_mc[1]; const unsigned int rt_normal_len, rt_mc_zlen, rt_mc_len, rt_fpu_len, rt_fpu_mc_len;' > $@
 build/preparar: $(SRC) src/dashc.h build/rt_stub.c build/builtins_tab.c
 	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_stub.c build/builtins_tab.c $(RYU) $(ZLIB)
 build/dashrt.drt: runtime/dashrt.o build/preparar
@@ -53,6 +53,14 @@ build/rt_fpu_blob_amiga.c: runtime/rt_blob.py
 	python3 runtime/rt_blob.py --fpu - - > $@
 build/dashc_fpu.drt: build/dashrt_fpu.drt runtime/rt_blob.py
 	python3 runtime/rt_blob.py --fpu $< $@
+build/dashrt_fpu_mc.drt: runtime/dashrt_fpu_mc.o build/preparar
+	build/preparar --preparar $< $@
+build/rt_fpu_mc_blob.c: build/dashrt_fpu_mc.drt runtime/rt_blob.py
+	python3 runtime/rt_blob.py --fpu-mc $< > $@
+build/rt_fpu_mc_blob_amiga.c: runtime/rt_blob.py
+	python3 runtime/rt_blob.py --fpu-mc - - > $@
+build/dashc_fpu_mc.drt: build/dashrt_fpu_mc.drt runtime/rt_blob.py
+	python3 runtime/rt_blob.py --fpu-mc $< $@
 
 # el runtime de ./dash (gen_lib.py), compilado y con lo que necesita: runtime/build_lib.py
 runtime:

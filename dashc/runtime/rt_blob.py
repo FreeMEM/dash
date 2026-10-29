@@ -10,7 +10,8 @@ comprimido entero con zlib (se usa poco: main.c lo descomprime solo entonces).
 El de --fpu, en DRT2 como el normal (en el dashc del Amiga va aparte, dashc_fpu.drt):
     python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt > build/rt_fpu_blob.c
     python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt - > build/rt_fpu_blob_amiga.c
-    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt build/dashc_fpu.drt"""
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt build/dashc_fpu.drt
+(y --fpu-mc, el de --fpu --memcheck: rt_fpu_mc, dashc_fpu_mc.drt)"""
 import struct
 import sys
 import zlib
@@ -53,13 +54,14 @@ def array(name, data):
 
 
 def main():
-    if sys.argv[1] == "--fpu":
+    if sys.argv[1] in ("--fpu", "--fpu-mc"):
+        nombre = "rt_fpu" if sys.argv[1] == "--fpu" else "rt_fpu_mc"
         if sys.argv[3:] == ["-"]:
-            sys.stdout.write("const unsigned char rt_fpu[1];\nconst unsigned int rt_fpu_len = 0;\n")
+            sys.stdout.write(f"const unsigned char {nombre}[1];\nconst unsigned int {nombre}_len = 0;\n")
             return
         a = drt2(open(sys.argv[2], "rb").read())
         if len(sys.argv) < 4:
-            sys.stdout.write(array("rt_fpu", a) + f"const unsigned int rt_fpu_len = {len(a)};\n")
+            sys.stdout.write(array(nombre, a) + f"const unsigned int {nombre}_len = {len(a)};\n")
         else:
             open(sys.argv[3], "wb").write(a)
         return

@@ -1,0 +1,117 @@
+# Un return dentro de un for de una función copiada en una condición ("if not _tiene_clase(n, c)" de Tachyon, dentro
+# de otro for): saltaba fuera sin quitar de la pila las marcas del bucle, y lo que seguía leía mal sus variables
+struct Atr
+    nombre: String
+    valor: String
+end
+
+struct Nodo
+    tipo: Int
+    nombre: String
+    atributos: [Atr]
+    clases_cache: [String] = nil
+end
+
+struct SelSimple
+    etiqueta: String
+    id: String
+    clases: [String]
+    atributos: [String]
+    pseudo: [String]
+    pseudo_elemento: String = ""
+end
+
+func dom_atributo(n: Nodo, nombre: String) -> String
+    for a in n.atributos
+        if a.nombre == nombre
+            return a.valor
+        end
+    end
+    return ""
+end
+
+func dom_clases(n: Nodo) -> [String]
+    if n.clases_cache == nil
+        var r: [String] = []
+        t = dom_atributo(n, "class")
+        i = 0
+        while i < t.length
+            while i < t.length and str_code(t, i) <= 32
+                i = i + 1
+            end
+            inicio = i
+            while i < t.length and str_code(t, i) > 32
+                i = i + 1
+            end
+            if i > inicio
+                r.push(t[inicio:i])
+            end
+        end
+        n.clases_cache = r
+    end
+    return n.clases_cache
+end
+
+func _tiene_clase(n: Nodo, clase: String) -> Bool
+    for c in dom_clases(n)
+        if c == clase
+            return true
+        end
+    end
+    return false
+end
+
+func _cumple_simple(n: Nodo, s: SelSimple) -> Bool
+    if n.tipo != 1 or s.pseudo_elemento != ""
+        return false
+    end
+    if s.etiqueta != "" and s.etiqueta != n.nombre
+        return false
+    end
+    if s.id != "" and dom_atributo(n, "id") != s.id
+        return false
+    end
+    for c in s.clases
+        if not _tiene_clase(n, c)
+            return false
+        end
+    end
+    for a in s.atributos
+        if dom_atributo(n, a) == ""
+            return false
+        end
+    end
+    for p in s.pseudo
+        if p == "x"
+            return false
+        end
+    end
+    return true
+end
+
+Main
+    var ns: [Nodo] = []
+    for i in (1..3)
+        var at: [Atr] = []
+        if i > 1
+            at.push(Atr("class", "par otra"))
+        end
+        ns.push(Nodo(1, "li", at))
+    end
+    var cl: [String] = []
+    cl.push("par")
+    var vacia: [String] = []
+    s = SelSimple("li", "", cl, vacia, vacia)
+    k = 0
+    for v in (1..2)
+        for n in ns
+            if _cumple_simple(n, s)
+                k = k + 1
+            end
+        end
+    end
+    if _cumple_simple(ns[0], s)
+        k = k + 100
+    end
+    Print "k #{k}"
+end

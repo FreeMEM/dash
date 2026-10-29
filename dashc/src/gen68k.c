@@ -160,6 +160,21 @@ static void jsr_label(int label)
     l(0);
 }
 
+/* el nombre de C (_nombre) de una función de Dash: sin el sufijo de privada de su módulo (_x__m2 es _x) */
+static char *c_symbol(const char *name)
+{
+    char *sym = xmalloc(strlen(name) + 2), *m;
+    sym[0] = '_';
+    strcpy(sym + 1, name);
+    m = strstr(sym, "__m");
+    if (m && isdigit((unsigned char)m[3])) {
+        char *e = m + 3;
+        while (isdigit((unsigned char)*e)) e++;
+        if (!*e) *m = 0;
+    }
+    return sym;
+}
+
 /* jsr a una función del runtime */
 static void jsr_sym(const char *sym)
 {
@@ -3073,6 +3088,20 @@ static struct { int *v; int n, cap; } sub_stack;  /* funciones de una línea pue
 static int can_inline(int idx)
 {
     int i;
+    static int sin_copiar = -1;
+    if (sin_copiar < 0) sin_copiar = getenv("DASHC_SIN_COPIAR") != NULL;   /* (para buscar fallos: sin copiar en línea) */
+    if (sin_copiar) return 0;
+    {
+        /* DASHC_NO_COPIAR=f,g: esas no (para buscar cuál da un fallo) */
+        const char *no = getenv("DASHC_NO_COPIAR"), *nm = no ? c_symbol(prog->funcs.v[idx].name) + 1 : "";
+        size_t ln = strlen(nm);
+        while (no && *no) {
+            const char *c = strchr(no, ',');
+            size_t k = c ? (size_t)(c - no) : strlen(no);
+            if (k == ln && !strncmp(no, nm, k)) return 0;
+            no = c ? c + 1 : NULL;
+        }
+    }
     if (inl_stack.n + sub_stack.n >= INLINE_DEPTH || prog->funcs.v[idx].native) return 0;
     for (i = 0; i < inl_stack.n; i++)
         if (inl_stack.v[i] == idx) return 0;
@@ -3316,9 +3345,7 @@ static int gen_call(Node *n)
     if (f->native == 2) {
         /* @extern: la función de C de lo de @link, como una del runtime (los argumentos en la pila, de
            derecha a izquierda; lo devuelto en d0); un texto que devuelve se copia a un temporal de Dash */
-        char *sym = xmalloc(strlen(f->name) + 2);
-        sym[0] = '_';
-        strcpy(sym + 1, f->name);
+        char *sym = c_symbol(f->name);
         for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
         rt_call(sym, n->args.n, 0);
         if (f->ret == TY_STR) {
@@ -3500,9 +3527,7 @@ static int gen_expr(Node *n)
             if (fn && fn->native == 2) {
                 /* una de @extern: la dirección de su símbolo de C (un puntero a función para otro C, o la función
                    de un task_start) */
-                char *sym = xmalloc(strlen(fn->name) + 2);
-                sym[0] = '_';
-                strcpy(sym + 1, fn->name);
+                char *sym = c_symbol(fn->name);
                 w(0x203C);                             /* move.l #_función,d0 */
                 add_reloc((uint32_t)obj->code.n, -1, sym);
                 l(0);
@@ -5015,11 +5040,16 @@ static void gen_stmt(Node *n)
     case S_RETURN: {
         int owned = has_owned(0, 1);
         if (n->a && ret_branch >= 0) {
-            if (owned) {
+            if (owned || sp_depth != ret_sp) {
                 value(n->a);
-                push_d0();
-                free_owned(0, 1);
-                pop_d0();
+                if (owned) {
+                    push_d0();
+                    free_owned(0, 1);
+                    pop_d0();
+                }
+                /* dentro de un bucle (sus marcas en la pila: un for de otra función copiada en una condición), fuera
+                   antes de saltar */
+                if (sp_depth != ret_sp) { w(0x4FEF); w(sp_depth - ret_sp); }
                 tst_d0();
                 branch(ret_when ? CC_NE : CC_EQ, ret_branch);
             } else {
@@ -5767,10 +5797,7 @@ void gen_program(Program *p, Obj *o)
     for (i = 0; i < p->funcs.n; i++)
         if (p->funcs.v[i].exported) {
             Export e;
-            char *nm = xmalloc(strlen(p->funcs.v[i].name) + 2);
-            nm[0] = '_';
-            strcpy(nm + 1, p->funcs.v[i].name);
-            e.name = nm;
+            e.name = c_symbol(p->funcs.v[i].name);
             e.off = (uint32_t)labels.v[func_label[i]];
             VEC_PUSH(obj->exports, e);
         }
@@ -5849,7 +5876,7 @@ void write_c_header(Program *p, FILE *f)
             fprintf(f, "\n");
             c_field_type(f, resolve_type(fn->ret, fn->line, fn->col));
         }
-        fprintf(f, "%s(", fn->name);
+        fprintf(f, "%s(", c_symbol(fn->name) + 1);
         for (j = 0; j < fn->params.n; j++) {
             fprintf(f, "%s", j ? ", " : "");
             c_field_type(f, resolve_type(fn->params.v[j].type, fn->line, fn->col));
