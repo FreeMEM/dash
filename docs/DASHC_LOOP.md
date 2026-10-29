@@ -74,6 +74,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     runtime con nombres que se pueden enlazar (`dl_str_dup`, `dl_array_length`, `dl_array_get`, `dl_retain`,
     `dl_release`...: las de ./dash son `static`). El C de Tachyon pasa de `@c` a ficheros .c en sus librerías
     (tools/build_qjs.sh) casi sin cambios: los nombres de esa API.
+- D13 Dos caminos en Dash 2.0 (decidido por el usuario el 2026-10-29): `./dash` compila con dashc (68000 nativo,
+  por defecto); `./dash --c` va por dash1 (el C con gcc, como la 1.x); `./dash --c --solo-c` deja el C sin compilar.
+  dash1 se mantiene al día con lo que entra en Dash 2.0. Regla: algo nuevo del lenguaje o un builtin no está hecho
+  hasta que pasa la batería con los dos (dashc/tests/run.py ya compila cada test con los dos y compara la salida). El
+  camino a C deja abierta, más adelante, la salida nativa para AmigaOS 4, MorphOS y AROS (adaptando el runtime, no
+  otro compilador). Va después de la fusión de ide-piezas.
 - D12 Depurador con dashc (pendiente, sin diseñar; anotado el 2026-10-29). Hoy dashc no tiene `--debug`: solo da el
   fichero y la línea de un fallo en tiempo de ejecución, y el depurador de la extensión de VS Code usa `dash1`.
   Aviso de David Martínez por Telegram (2026-10-29): en Emu68 la depuración línea a línea de SAS/C y otras
