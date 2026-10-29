@@ -4061,6 +4061,21 @@ def _gfx(name, params, ret, template, desc):
 
 
 FONT_FUNCTIONS = {
+    # Dash 2.0: TrueType fonts made by the program itself (runtime/fontweb), what Tachyon did with @native
+    "font_from_ttf": BuiltinFunc(
+        name="font_from_ttf", params=["file", "size", "width"], return_type="LONG",
+        c_template="_dash_font_from_ttf(${file}, ${size}, ${width})", reads_only=True,
+        description="A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels "
+                    "of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): "
+                    "a font for font_use, or 0. Free it with font_ttf_free, not font_close"),
+    "font_ttf_free": BuiltinFunc(
+        name="font_ttf_free", params=["font"], return_type="void", c_template="_dash_font_ttf_free(${font})",
+        description="Free a font of font_from_ttf (not while a window still writes with it); the ones left are "
+                    "freed at exit"),
+    "font_ttf_forget": BuiltinFunc(
+        name="font_ttf_forget", params=["file"], return_type="void", c_template="_dash_font_ttf_forget(${file})",
+        reads_only=True,
+        description="font_from_ttf keeps the last 8 files read for other sizes: read this one again next time"),
     "font_open": _gfx("font_open", ["name", "size"], "LONG", "_dash_font_open(${name}, ${size})",
                       "Open a font (\"helvetica.font\", size in pixels, at least 2): the font, or 0 if there is none"),
     "font_use": _gfx("font_use", ["font"], "void", "_dash_font_use(${font})", "Draw text with this font"),

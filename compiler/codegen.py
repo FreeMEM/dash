@@ -5375,6 +5375,21 @@ static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
 
 """
 
+    # Dash 2.0: font_from_ttf, compiled apart (compiler/clibs.py, runtime/fontweb)
+    FONTWEB_RUNTIME = """\
+/* Dash Web Font Runtime */
+void *dash_fontweb_open(const char *file, long size, long width);
+void dash_fontweb_free(void *f);
+void dash_fontweb_forget(const char *file);
+void dash_fontweb_cleanup(void);
+
+static LONG _dash_font_from_ttf(STRPTR file, LONG size, LONG width) { return (LONG)dash_fontweb_open((const char *)file, size, width); }
+static void _dash_font_ttf_free(LONG f) { dash_fontweb_free((void *)f); }
+static void _dash_font_ttf_forget(STRPTR file) { dash_fontweb_forget((const char *)file); }
+static void _dash_fontweb_cleanup(void) { dash_fontweb_cleanup(); }
+
+"""
+
     # Dash 2.0: image_decode, compiled apart (compiler/clibs.py, runtime/imgdec)
     IMGDEC_RUNTIME = """\
 /* Dash Image Decode Runtime */
@@ -17052,6 +17067,7 @@ _RUNTIME_FLAGS = [
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
     ("IMGDEC_RUNTIME", "uses_imgdec"),      # Dash 2.0: image_decode
+    ("FONTWEB_RUNTIME", "uses_fontweb"),    # Dash 2.0: font_from_ttf
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
@@ -17353,6 +17369,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
         self.uses_imgdec: bool = False   # image_decode (IMGDEC_RUNTIME, Dash 2.0)
+        self.uses_fontweb: bool = False  # font_from_ttf (FONTWEB_RUNTIME, Dash 2.0)
         self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
         self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
         self.uses_regex: bool = False  # regex_*, wildcard_match (REGEX_RUNTIME, Lorraine D45)
@@ -17719,6 +17736,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.ZLIB_RUNTIME)
         if self.uses_imgdec:
             parts.append(CTemplates.IMGDEC_RUNTIME)
+        if self.uses_fontweb:
+            parts.append(CTemplates.FONTWEB_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -17971,6 +17990,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_net_cleanup();\n")
         if self.uses_notify:
             cleanup.append("    _dash_notify_cleanup();\n")
+        if self.uses_fontweb:
+            cleanup.append("    _dash_fontweb_cleanup();\n")
         if self.uses_proc:
             cleanup.append("    _dash_relaunch_now();\n")   # after all the rest: single_instance's port too
         if self._uses_pool():

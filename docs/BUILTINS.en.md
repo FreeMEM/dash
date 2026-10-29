@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 712 functions, 712 implemented, 0 not implemented.
+Total: 715 functions, 715 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -408,6 +408,9 @@ Total: 712 functions, 712 implemented, 0 not implemented.
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
+| `font_from_ttf(file, size, width)` | `LONG` | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
+| `font_ttf_free(font)` | `void` | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
+| `font_ttf_forget(file)` | `void` | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
 | `font_open(name, size)` | `LONG` | Open a font ("helvetica.font", size in pixels, at least 2): the font, or 0 if there is none |  |
 | `font_use(font)` | `void` | Draw text with this font |  |
 | `font_close(font)` | `void` | Close a font (the open ones close at exit) |  |

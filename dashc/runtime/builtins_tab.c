@@ -331,6 +331,8 @@ const BuiltinInfo builtin_info[] = {
     {"font_baseline", 0, 1, 0, 0},
     {"font_close", 1, 0, 0, 0},
     {"font_close", 1, 0, 0, 0},
+    {"font_from_ttf", 3, 1, 0, 0},
+    {"font_from_ttf", 3, 1, 0, 0},
     {"font_height", 0, 1, 0, 0},
     {"font_height", 0, 1, 0, 0},
     {"font_open", 2, 1, 0, 0},
@@ -341,6 +343,10 @@ const BuiltinInfo builtin_info[] = {
     {"font_style", 1, 0, 0, 0},
     {"font_text_width", 1, 1, 0, 0},
     {"font_text_width", 1, 1, 0, 0},
+    {"font_ttf_forget", 1, 0, 0, 0},
+    {"font_ttf_forget", 1, 0, 0, 0},
+    {"font_ttf_free", 1, 0, 1, 0},
+    {"font_ttf_free", 1, 0, 1, 0},
     {"font_use", 1, 0, 0, 0},
     {"font_use", 1, 0, 0, 0},
     {"fpu_model", 0, 1, 1, 0},
@@ -1426,7 +1432,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1424;
+const int builtin_count = 1430;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

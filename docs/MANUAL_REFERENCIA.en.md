@@ -4397,7 +4397,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Text | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
 | Network (TCP and UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
-| Fonts and colors | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
+| Fonts and colors | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
 | Transparency and gradients | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
 | RGB images from a buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tasks, CPU and desktop | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
@@ -4424,7 +4424,7 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Intuition | 53 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
 | MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **712** | |
+| **Total** | **715** | |
 
 ### Standard Amiga Colors
 

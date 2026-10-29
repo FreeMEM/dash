@@ -27,14 +27,16 @@ RENAMES = {"___addsf3": "___dash_fb_addsf3", "___subsf3": "___dash_fb_subsf3",
 
 # ... and image_decode's (Dash 2.0): its SVG is drawn with float and double maths (nanosvg)
 IMGDEC_MARKER = "/* Dash Image Decode Runtime */"
+# ... and font_from_ttf's (stb_truetype draws with float and double)
+FONTWEB_MARKER = "/* Dash Web Font Runtime */"
 
 
 def uses_float(c_code: str) -> bool:
-    return FLOAT_MARKER in c_code or IMGDEC_MARKER in c_code
+    return FLOAT_MARKER in c_code or IMGDEC_MARKER in c_code or FONTWEB_MARKER in c_code
 
 
 def uses_double(c_code: str) -> bool:
-    return DOUBLE_MARKER in c_code or IMGDEC_MARKER in c_code
+    return DOUBLE_MARKER in c_code or IMGDEC_MARKER in c_code or FONTWEB_MARKER in c_code
 
 
 def softfloat_double_objects(gcc: str, build_dir: Path = ROOT / "build") -> list:

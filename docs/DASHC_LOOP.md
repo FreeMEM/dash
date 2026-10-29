@@ -370,3 +370,17 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   tests/test_image_decode.dash con un SVG (`#ff0000`, `#00f`, `rgb(0, 255, 0)`) a su tamaño y a 32x16: igual con
   gcc y con dashc.
   - Tests de ./dash: 461 bien (test_image_decode también en el A500); batería bien; cobertura 211 de 315 y 138 de 138.
+- D7 (11.ª parte): `font_from_ttf(fichero, tam, ancho)`, `font_ttf_free` y `font_ttf_forget` (715 builtins): una
+  fuente TrueType (TTF, OTF con contornos TrueType, WOFF o WOFF2 de ellas) hecha TextFont de 1 bit para `font_use`,
+  sin diskfont ni bullet. En `runtime/fontweb` (biblioteca aparte): stb_truetype 1.26, el descompresor de Brotli
+  1.1.0 y `dash_fontweb.c`, el C de Tachyon (WOFF 1 con el zlib de Dash, WOFF 2 con Brotli y glyf/loca/hmtx
+  rehechas) con memoria de exec y cuentas en el fdlibm de Dash. ./dash enlaza con ella zlib, fdlibm y el float por
+  software (un marcador de clibs puede ser varios; las bibliotecas van en orden de enlace: fontweb antes de zlib).
+  - Parecía colgarse con la segunda fuente: era lentitud. Cada fuente dibujaba los 224 caracteres de Latin-1 con
+    coma flotante por software (23 s en el A1200 emulado, con gcc y con dashc), y en la fuente de prueba 220 eran
+    el mismo .notdef. Ahora un glifo que ya está no se dibuja otra vez (comparten su trozo del plano): 0,66 s.
+    Una fuente de verdad (~190 glifos distintos) seguirá siendo lenta sin FPU.
+  - tests/test_font_ttf.dash: una fuente diminuta hecha con fontTools en el PC (venv en el scratchpad), en TTF,
+    WOFF y WOFF2 (glyf transformada): las tres dan las mismas medidas, también al 50 % de ancho; igual con gcc y
+    con dashc.
+  - Tests de ./dash: 462 bien (test_font_ttf también en el A500); batería bien; cobertura 212 de 316 y 139 de 139.

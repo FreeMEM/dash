@@ -4397,7 +4397,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
 | Red (TCP y UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
-| Fuentes y colores | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
+| Fuentes y colores | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
@@ -4424,7 +4424,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 53 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
 | MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **712** | |
+| **Total** | **715** | |
 
 ### Colores Estandar Amiga
 
