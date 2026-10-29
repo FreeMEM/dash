@@ -1,0 +1,53 @@
+# Test: lib/dashui.dash (Dash 2.0, for the IDE's preview): the window of tests/lib/ventana_prueba.dashui built
+# while the program runs, read from the file, with the same objects, texts and events as import (test_dashui);
+# and a bad file says why.
+# emu-needs: muimaster.library
+# expect-out: ventanas: Prueba
+# expect-out: objetos: 8 url ir icono pestanas pagina fuente estado progreso
+# expect-out: ventana abierta
+# expect-out: estado: Listo "ya"
+# expect-out: url: http://aminet.net/
+# expect-out: evento 12
+# expect-out: evento 13, pestaña 1
+# expect-out: mala: [unknown object type: boton] 0
+# expect-out: otra: [no window Otra]
+# expect-out: fin
+
+import "lib/dashui.dash"
+
+Main
+    # (tests/lib/ventana_prueba.dashui, the one of test_dashui; a program reads it with file_read_text)
+    texto = "{\"dashui\":1,\"windows\":[{\"name\":\"Prueba\",\"title\":\"Ventana del editor\",\"id\":0,\"size\":[70,60],\"menus\":[{\"title\":\"Proyecto\",\"items\":[{\"label\":\"Acerca de\",\"key\":\"\",\"event\":21},{\"separator\":true},{\"label\":\"Salir\",\"key\":\"Q\",\"event\":22}]}],\"root\":{\"type\":\"vgroup\",\"children\":[{\"type\":\"hgroup\",\"children\":[{\"type\":\"label\",\"text\":\"URL:\"},{\"type\":\"string\",\"name\":\"url\",\"text\":\"http://aminet.net/\",\"max\":200,\"ack\":11},{\"type\":\"button\",\"name\":\"ir\",\"label\":\"_Ir\",\"event\":12,\"help\":\"Ir a la direcci\\u00f3n\"},{\"type\":\"image_button\",\"name\":\"icono\",\"file\":\"T:no_existe.iff\",\"event\":14}]},{\"type\":\"tabs\",\"name\":\"pestanas\",\"titles\":\"P\\u00e1gina|Fuente\",\"change\":13,\"children\":[{\"type\":\"canvas\",\"name\":\"pagina\",\"min_width\":200,\"min_height\":80},{\"type\":\"list\",\"name\":\"fuente\"}]},{\"type\":\"hgroup\",\"children\":[{\"type\":\"text\",\"name\":\"estado\",\"text\":\"Listo \\\"ya\\\"\"},{\"type\":\"gauge\",\"name\":\"progreso\",\"max\":100,\"weight\":30}]}]}}]}"
+    nombres = dashui_window_names(texto)
+    Print "ventanas: #{nombres[0]}"
+    if mui_app_begin("Vista", "DASHUIVISTA") == 0
+        Print "sin MUI"
+    else
+        v = dashui_window(texto, "")
+        o = "objetos: #{v.names.length}"
+        for n in v.names
+            o = o + " " + n
+        end
+        Print o
+        if mui_window_open(v.window)
+            Print "ventana abierta"
+        end
+        t = mui_get_text(dashui_object(v, "estado"))
+        Print "estado: #{t}"
+        t = mui_get_text(dashui_object(v, "url"))
+        Print "url: #{t}"
+        mui_press(dashui_object(v, "ir"))
+        ev = mui_wait_event()
+        Print "evento #{ev}"
+        mui_set_value(dashui_object(v, "pestanas"), 1)
+        ev = mui_wait_event()
+        p = mui_get_value(dashui_object(v, "pestanas"))
+        Print "evento #{ev}, pestaña #{p}"
+        m = dashui_window("{\"dashui\": 1, \"windows\": [{\"name\": \"M\", \"root\": {\"type\": \"boton\"}}]}", "M")
+        Print "mala: [#{m.error}] #{m.window}"
+        m = dashui_window(texto, "Otra")
+        Print "otra: [#{m.error}]"
+        mui_app_end()
+        Print "fin"
+    end
+end
