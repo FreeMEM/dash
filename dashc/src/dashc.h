@@ -261,7 +261,8 @@ void write_c_header(Program *prog, FILE *f);   /* dashc --cabecera */
 extern int memcheck;
 extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info) */
 extern Buf debug_info;
-extern int profile;    /* --perfil */   /* --memcheck: como ./dash --memcheck */
+extern int profile;    /* --perfil */
+extern int cpu020;     /* --fpu o --cpu 68020 y más */   /* --memcheck: como ./dash --memcheck */
 
 /* builtins (build/builtins_tab.c): ret 0 nada, 1 Int, 2 Bool, 3 String, 4 [String]; keeps: guarda lo
    que recibe (un texto o un objeto pasa escapado) */

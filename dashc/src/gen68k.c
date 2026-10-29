@@ -27,6 +27,7 @@ static Program *prog;
 static Obj *obj;
 int memcheck;
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
+int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
 /* --debug (el depurador, docs/DEPURADOR_LOOP.md): un NOP al principio de cada línea, que el depurador cambia por
    un TRAP; sin copiar funciones en línea, sin variables en registros ni como constantes; y la información para el
    depurador en debug_info (el texto del HUNK_DEBUG, que escribe hunk.c) */
@@ -1541,8 +1542,29 @@ static void gen_interp(Node *n)
 /* a + b con algún texto: DashString_concat, con un número pasado a texto */
 static void gen_concat(Node *n)
 {
-    Node *a[2];
+    Node *a[2], *e, join;
     static const char str[2] = {1, 1};
+    int np = 0, i;
+    /* a + b + c...: una sola reserva para toda la cadena (DashString_join, como ./dash), no un texto intermedio por
+       cada +; solo los + que ya dan texto (1 + 2 + "x" suma antes 1 + 2) */
+    for (e = n; e->kind == E_BIN && e->op == P_PLUS && expr_type(e) == TY_STR; e = e->a) np++;
+    if (np >= 2) {
+        memset(&join, 0, sizeof join);
+        join.kind = E_INTERP;
+        join.line = n->line;
+        join.col = n->col;
+        join.file = n->file;
+        for (i = 0; i <= np; i++) VEC_PUSH(join.args, NULL);
+        for (e = n, i = np; i > 0; e = e->a, i--) join.args.v[i] = e->b;
+        join.args.v[0] = e;
+        if (join.args.v[0]->kind == E_STR && join.args.v[0]->len == 0) {   /* "" + ...: el primero sobra */
+            memmove(join.args.v, join.args.v + 1, sizeof(Node *) * np);
+            join.args.n--;
+        }
+        gen_interp(&join);
+        free(join.args.v);
+        return;
+    }
     a[0] = n->a;
     a[1] = n->b;
     args_to_stack(a, 2, str);
@@ -2329,6 +2351,10 @@ static void mul_const(long k, int src)
     uint32_t m = k < 0 ? 0u - (uint32_t)k : (uint32_t)k;
     int neg = k < 0, s = 0;
     if (k == 0) { w(0x7000); return; }                 /* moveq #0,d0 */
+    if (cpu020 && popcount(m) > 2) {
+        w(0x4C3C); w(0x0800); l((uint32_t)k);          /* muls.l #k,d0 */
+        return;
+    }
     if (popcount(m) == 1) {
         while ((1u << s) != m) s++;
         shift_d0(1, s);
@@ -2423,6 +2449,13 @@ static void divmod_const(int op, long k)
 static void divmod_d1(int op)
 {
     int x = op == P_SLASH ? 6 : 4;                     /* lo que saca el cociente o el resto */
+    if (cpu020) {
+        w(0x4C41);                                     /* divs.l d1,d0 / divsl.l d1,d1:d0 */
+        if (op == P_SLASH) w(0x0800);
+        else { w(0x0801); w(0x2001); }                 /* el resto, a d0: move.l d1,d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return;
+    }
     w(0xB2BC); l(0x7FFF);                              /* cmp.l #$7FFF,d1 */
     w(0x6200 | (18 + x));                              /* bhi.s lento (también los negativos) */
     w(0x4A41);                                         /* tst.w d1 */
@@ -2442,6 +2475,11 @@ static void divmod_d1(int op)
 /* d0 = d0 * d1: muls.w si los dos caben en 16 bits con signo; si no, el runtime */
 static void mul_d1(void)
 {
+    if (cpu020) {
+        w(0x4C01); w(0x0800);                          /* muls.l d1,d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return;
+    }
     w(0x3040); w(0xB088); w(0x6606);                   /* movea.w d0,a0; cmp.l a0,d0; bne.s lento */
     w(0x3041); w(0xB288); w(0x670A);                   /* movea.w d1,a0; cmp.l a0,d1; beq.s rápido */
     jsr_sym("__dash_mul");                             /* lento */
@@ -2454,6 +2492,11 @@ static void mul_d1(void)
 /* d0 = d0 * d0 */
 static void square_d0(void)
 {
+    if (cpu020) {
+        w(0x4C00); w(0x0800);                          /* muls.l d0,d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return;
+    }
     w(0x3040); w(0xB088); w(0x670C);                   /* movea.w d0,a0; cmp.l a0,d0; beq.s rápido */
     w(0x2200);                                         /* move.l d0,d1 */
     jsr_sym("__dash_mul");
@@ -2522,7 +2565,7 @@ static void bin_ea(int op, Var *v)
     case P_STAR: mul_d1(); break;
     case P_SLASH:
     case P_PERCENT:
-        if (loop_weight > 1) divmod_d1(op);            /* en un bucle, el camino rápido aquí */
+        if (loop_weight > 1 || cpu020) divmod_d1(op);  /* en un bucle, el camino rápido aquí */
         else jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
         break;
     }
@@ -4684,11 +4727,21 @@ static void gen_foreach_str(Node *n)
    distinguen: cualquier x[i] = y, pop, remove o clear cuenta). Se calcula una vez (punto fijo). */
 static char *keeps_fn;   /* por función: 1 conserva */
 
+/* ¿pasa e una función de Dash como argumento (una retrollamada que el builtin puede llamar)? */
+static int passes_func(Node *e)
+{
+    int i;
+    for (i = 0; i < e->args.n; i++)
+        if (e->args.v[i]->kind == E_FUNCREF) return 1;
+    return 0;
+}
+
 static int call_keeps(Node *e)
 {
     int idx, b;
     if (find_func(e->name, &idx)) return keeps_fn[idx];
     if (find_struct(e->name) >= 0) return 1;           /* un constructor: un objeto nuevo */
+    if (passes_func(e)) return 0;
     if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;   /* pueden llamar a Dash */
     if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
         !strcmp(e->name, "Fixed")) return 1;
@@ -4935,6 +4988,7 @@ static int call_nofree(Node *e, char *nf)
     int idx, b;
     if (find_func(e->name, &idx)) return nf[idx];
     if (find_struct(e->name) >= 0) return 1;
+    if (passes_func(e)) return 0;
     if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;
     if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
         !strcmp(e->name, "Fixed")) return 1;
