@@ -4396,6 +4396,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
 | Red (TCP y UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
+| Red en una tarea aparte | 12 | `net_bg_open`, `net_bg_open_tls`, `net_bg_state`, `net_bg_send`, `net_bg_recv`, `net_bg_close`, `net_bg_stop` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
 | Fuentes y colores | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
@@ -4424,7 +4425,7 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Intuition | 53 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
 | MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
-| **Total** | **715** | |
+| **Total** | **727** | |
 
 ### Colores Estandar Amiga
 

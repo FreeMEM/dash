@@ -34,7 +34,8 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   del usuario NO se admite en Dash 2.0. Lo que hacen los `@native` de tachyon (137), trasfondo (33) y Lorraine (1)
   se cubre con builtins o con el lenguaje: clasificación en `docs/DASHC_NATIVE.md`.
 - D8 Optimizaciones nuevas que salgan al medir programas reales (no solo enteros).
-- D10 QuickJS y Hubbub como librerías compartidas (en `LIBS:`, con nombre propio), pedido por el
+- D10 (descartada por el usuario el 2026-10-29: QuickJS, Hubbub y MintVID van enlazados en Tachyon con `@link`; se
+  retoma si otro programa los quiere) QuickJS y Hubbub como librerías compartidas (en `LIBS:`, con nombre propio), pedido por el
   usuario (2026-10-28): con `@link`, cada programa lleva su copia (QuickJS, unos 800 KB); una `.library` se carga
   una vez y la usan todos los programas, y se actualiza sin recompilarlos. Hace falta: la librería con su tabla de
   funciones (libinit de bebbo), dentro lo de libc que necesitan (`realloc`, `snprintf`...), que la abran varios
@@ -396,3 +397,17 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   de libnix delante, y `fwrite`, `fputc`, `fputs`, `fprintf` escriben al fichero que sea), `getenv`, `strcspn`,
   `clock` y `__assert_func`. Le quedan 4 nombres que no son de libc (`gFdct32HalfSparse16Precondition*`, comunes
   que hunk.c ya resuelve, y `mr_yuv_dither_q6_*`, de otra parte de Tachyon). externo y QuickJS, como antes.
+- D7 (13.ª parte): la red de fondo de Tachyon como builtins `net_bg_*` (727 builtins): `net_bg_open`/`_tls` piden
+  una conexión que una tarea propia (la de `task_start`, 64 KB de pila) busca, conecta, negocia, envía y recibe
+  mientras el programa está ocupado (hasta 48); `net_bg_state`, `_stage`, `_error`, `_send`, `_send_buffer`,
+  `_recv` (sin esperar), `_pending`, `_close`, `_idle` y `_stop`. El C de Tachyon (`lib/red.dash`) en
+  `NETBG_RUNTIME`; la TLS en `NETBG_TLS_RUNTIME`, por punteros que llena `net_bg_open_tls`: un programa sin TLS no
+  lleva AmiSSL. Las dependencias entre runtimes van donde las demás (`uses_tls` → `uses_net`...): al principio las
+  puse al montar el programa, tarde, y faltaba el runtime de texto. Al acabar el programa, la tarea acaba antes de
+  que se espere a las tareas.
+  - tests/test_net_bg.dash (dos conexiones al eco a la vez mientras el programa sigue, y un puerto cerrado) y
+    test_net_bg_tls.dash (TLS con el certificado de prueba, y un nombre que no existe): iguales con gcc y con
+    dashc. La cobertura ya ejecuta también los de `# emu-net-tls:` (con `$DASH_EMU_SYS_SSL`).
+  - Ojo al escribir tests: `time_delay_ms` de menos de 20 ms (un tic) no espera nada; el bucle de espera del test
+    acababa antes de que la tarea hiciera nada.
+  - Tests de ./dash: 464 bien; batería bien; cobertura (ya con TLS): 214 de 318 y 144 de 144.

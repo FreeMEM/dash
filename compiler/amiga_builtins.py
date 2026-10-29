@@ -3947,6 +3947,50 @@ TEXT_FUNCTIONS = {
 # =============================================================================
 
 NET_FUNCTIONS = {
+    # Dash 2.0: connections in a task of their own (NETBG_RUNTIME), what Tachyon's lib/red.dash did with @native
+    "net_bg_open": BuiltinFunc(
+        name="net_bg_open", params=["host", "port", "timeout_ms"], return_type="LONG",
+        c_template="_dash_net_bg_open(${host}, ${port}, ${timeout_ms})", reads_only=True,
+        description="Ask for a TCP connection that a task of its own opens, sends and receives while the program "
+                    "is busy (up to 48): its number, or -1. net_bg_state tells how it goes"),
+    "net_bg_open_tls": BuiltinFunc(
+        name="net_bg_open_tls", params=["host", "port", "timeout_ms"], return_type="LONG",
+        c_template="_dash_net_bg_open_tls(${host}, ${port}, ${timeout_ms})", reads_only=True,
+        description="net_bg_open with TLS (AmiSSL, its certificate checked)"),
+    "net_bg_state": BuiltinFunc(
+        name="net_bg_state", params=["c"], return_type="LONG", c_template="_dash_net_bg_state(${c})",
+        description="1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why)"),
+    "net_bg_stage": BuiltinFunc(
+        name="net_bg_stage", params=["c"], return_type="LONG", c_template="_dash_net_bg_stage(${c})",
+        description="While connecting, its stage, as net_connect_stage"),
+    "net_bg_error": BuiltinFunc(
+        name="net_bg_error", params=["c"], return_type="STRPTR", c_template="_dash_net_bg_error(${c})",
+        description="Why a connection failed or closed, \"\" if it did not"),
+    "net_bg_send": BuiltinFunc(
+        name="net_bg_send", params=["c", "text"], return_type="BOOL", c_template="_dash_net_bg_send(${c}, ${text})",
+        reads_only=True,
+        description="Put text to send (the task sends it as soon as the connection is open); false without memory"),
+    "net_bg_send_buffer": BuiltinFunc(
+        name="net_bg_send_buffer", params=["c", "buffer", "n"], return_type="BOOL",
+        c_template="_dash_net_bg_send_buffer(${c}, (APTR)${buffer}, ${n})",
+        description="net_bg_send of n bytes of a buffer"),
+    "net_bg_recv": BuiltinFunc(
+        name="net_bg_recv", params=["c", "buffer", "max"], return_type="LONG",
+        c_template="_dash_net_bg_recv(${c}, (APTR)${buffer}, ${max})",
+        description="Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 "
+                    "if it is closed and nothing is left. task_signal wakes the program when something comes"),
+    "net_bg_pending": BuiltinFunc(
+        name="net_bg_pending", params=["c"], return_type="LONG", c_template="_dash_net_bg_pending(${c})",
+        description="How many bytes have come and are not read yet"),
+    "net_bg_close": BuiltinFunc(
+        name="net_bg_close", params=["c"], return_type="void", c_template="_dash_net_bg_close(${c})",
+        description="Close a connection and free its number"),
+    "net_bg_idle": BuiltinFunc(
+        name="net_bg_idle", params=["ms"], return_type="void", c_template="_dash_net_bg_idle(${ms})",
+        description="The task ends by itself after this many ms without traffic (2000); another starts when needed"),
+    "net_bg_stop": BuiltinFunc(
+        name="net_bg_stop", params=[], return_type="void", c_template="_dash_net_bg_stop()",
+        description="End the task now (it closes what is open) and wait for it; also done at the end of the program"),
     "net_connect": _text("net_connect", ["host", "port", "timeout_ms"], "LONG",
                          "_dash_net_connect(${host}, ${port}, ${timeout_ms})",
                          "TCP connection to host:port (name or address); the socket, or -1 (see net_error)"),

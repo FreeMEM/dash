@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 715 funciones, 715 implementadas, 0 sin implementar.
+Total: 727 funciones, 727 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -363,6 +363,18 @@ Total: 715 funciones, 715 implementadas, 0 sin implementar.
 
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
+| `net_bg_open(host, port, timeout_ms)` | `LONG` | Ask for a TCP connection that a task of its own opens, sends and receives while the program is busy (up to 48): its number, or -1. net_bg_state tells how it goes |  |
+| `net_bg_open_tls(host, port, timeout_ms)` | `LONG` | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
+| `net_bg_state(c)` | `LONG` | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
+| `net_bg_stage(c)` | `LONG` | While connecting, its stage, as net_connect_stage |  |
+| `net_bg_error(c)` | `STRPTR` | Why a connection failed or closed, "" if it did not |  |
+| `net_bg_send(c, text)` | `BOOL` | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
+| `net_bg_send_buffer(c, buffer, n)` | `BOOL` | net_bg_send of n bytes of a buffer |  |
+| `net_bg_recv(c, buffer, max)` | `LONG` | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
+| `net_bg_pending(c)` | `LONG` | How many bytes have come and are not read yet |  |
+| `net_bg_close(c)` | `void` | Close a connection and free its number |  |
+| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000); another starts when needed |  |
+| `net_bg_stop()` | `void` | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
 | `net_connect(host, port, timeout_ms)` | `LONG` | TCP connection to host:port (name or address); the socket, or -1 (see net_error) |  |
 | `net_connect_start(host, port, timeout_ms)` | `LONG` | Start a TCP connection without waiting (the name is looked up in another process); the socket, or -1 (see net_error) |  |
 | `net_connect_poll(sock)` | `LONG` | Go on with net_connect_start without waiting: 1 connected, 0 not yet, -1 failed (the socket is closed; see net_error) |  |

@@ -5375,6 +5375,424 @@ static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
 
 """
 
+    # Dash 2.0: connections that go on in a task of their own (what Tachyon's lib/red.dash did with @native)
+    NETBG_RUNTIME = """\
+/* Dash background network runtime: net_bg_open asks for a connection and a task of its own (task_start's)
+   looks up the name, connects, negotiates TLS (net_bg_open_tls), sends and receives while the program is busy
+   (a long layout, JavaScript...). The program only puts and takes bytes from a table behind a semaphore. The
+   task starts with the first connection and ends by itself after net_bg_idle's ms without traffic (2 s), or at
+   net_bg_stop and at the end of the program. TLS goes through hooks NETBG_TLS_RUNTIME fills: a program without
+   net_bg_open_tls does not take AmiSSL. */
+#include <exec/semaphores.h>
+#define _DASH_NBG_MAX 48
+enum { _NBG_FREE, _NBG_ASKED, _NBG_CONNECTING, _NBG_NEGOTIATING, _NBG_OPEN, _NBG_CLOSED, _NBG_ERROR };
+typedef struct {
+    volatile LONG state;
+    char host[256];
+    LONG port, tls_wanted, timeout, sock, tls, started, retries, stage, sent;
+    UBYTE *out; LONG out_len, out_cap;
+    UBYTE *in; LONG in_len, in_cap;
+    volatile LONG drop;
+    char error[160];
+} _DashNbgSlot;
+static _DashNbgSlot _dash_nbg[_DASH_NBG_MAX];
+static struct SignalSemaphore _dash_nbg_sem;
+static volatile LONG _dash_nbg_quit = 0, _dash_nbg_alive = 0, _dash_nbg_idle_ms = 2000;
+static LONG _dash_nbg_sem_ready = 0, _dash_nbg_taskh = 0;
+static struct Task * volatile _dash_nbg_task = NULL;
+/* (a server stops answering a TCP connection kept quiet for many seconds before the TLS handshake: another one
+   is opened, at most twice) */
+#define _DASH_NBG_QUIET_MS 5000
+/* TLS, if the program uses net_bg_open_tls (NETBG_TLS_RUNTIME) */
+static LONG (*_dash_nbg_tls_start)(LONG sock, STRPTR host, LONG timeout_ms) = NULL;
+static LONG (*_dash_nbg_tls_poll)(LONG t) = NULL;
+static void (*_dash_nbg_tls_close)(LONG t) = NULL;
+static LONG (*_dash_nbg_tls_send)(LONG t, APTR data, LONG len) = NULL;
+static LONG (*_dash_nbg_tls_read)(LONG t, APTR buf, LONG max) = NULL;
+
+static void _dash_nbg_free_slot(_DashNbgSlot *s) {
+    if (s->out) FreeVec(s->out);
+    if (s->in) FreeVec(s->in);
+    s->out = s->in = NULL;
+    s->out_len = s->out_cap = s->in_len = s->in_cap = 0;
+    s->drop = 0;
+    s->state = _NBG_FREE;
+}
+
+static void _dash_nbg_err(_DashNbgSlot *s) {
+    strncpy(s->error, (const char *)_dash_net_error(), sizeof(s->error) - 1);
+}
+
+static void _dash_nbg_shut(_DashNbgSlot *s) {
+    if (s->tls >= 0 && _dash_nbg_tls_close) _dash_nbg_tls_close(s->tls);
+    s->tls = -1;
+    if (s->sock >= 0) _dash_net_close(s->sock);
+    s->sock = -1;
+}
+
+/* Room for n more bytes in what came in (with the semaphore held) */
+static void _dash_nbg_in_room(_DashNbgSlot *s, LONG n) {
+    LONG cap;
+    UBYTE *nb;
+    if (s->in_cap - s->in_len >= n) return;
+    cap = s->in_cap ? s->in_cap * 2 : 16384;
+    if (cap < s->in_len + n) cap = s->in_len + n;
+    if ((nb = (UBYTE *)AllocVec(cap, MEMF_PUBLIC))) {
+        if (s->in) { memcpy(nb, s->in, s->in_len); FreeVec(s->in); }
+        s->in = nb;
+        s->in_cap = cap;
+    }
+}
+
+/* The task: moves every connection on until net_bg_stop or the idle time without any */
+static LONG _dash_nbg_loop(LONG arg) {
+    LONG i, idle = 0, done, active, r, n, t;
+    struct DateStamp ds;
+    (void)arg;
+    _dash_nbg_task = FindTask(NULL);
+    while (!_dash_nbg_quit) {
+        done = 0;
+        active = 0;
+        DateStamp(&ds);
+        t = ((LONG)ds.ds_Minute * 60 + ds.ds_Tick / 50) * 1000 + (ds.ds_Tick % 50) * 20;
+        for (i = 0; i < _DASH_NBG_MAX; i++) {
+            _DashNbgSlot *s = &_dash_nbg[i];
+            LONG e = s->state;
+            if (e == _NBG_FREE) continue;
+            /* (open ones with nothing to send, closed ones and errors do not keep it alive) */
+            if (e < _NBG_OPEN || (e == _NBG_OPEN && s->out_len > 0) || s->drop) active++;
+            if (s->drop) {
+                _dash_nbg_shut(s);
+                ObtainSemaphore(&_dash_nbg_sem);
+                _dash_nbg_free_slot(s);
+                ReleaseSemaphore(&_dash_nbg_sem);
+                continue;
+            }
+            if (e == _NBG_ASKED) {
+                /* (Dash opens at most _DASH_NET_PENDING at a time: the others wait their turn) */
+                if (_dash_net_npend >= _DASH_NET_PENDING) continue;
+                s->sock = _dash_net_connect_start((STRPTR)s->host, s->port, s->timeout);
+                s->started = t;
+                if (s->sock < 0) {
+                    _dash_nbg_err(s);
+                    s->state = _NBG_ERROR;
+                } else s->state = _NBG_CONNECTING;
+                done = 1;
+            } else if (e == _NBG_CONNECTING) {
+                s->stage = _dash_net_connect_stage(s->sock);
+                r = _dash_net_connect_poll(s->sock);
+                if (r < 0) {
+                    _dash_nbg_err(s);
+                    s->sock = -1;
+                    s->state = _NBG_ERROR;
+                    done = 1;
+                } else if (r > 0) {
+                    if (!s->tls_wanted) s->state = _NBG_OPEN;
+                    else if (!_dash_nbg_tls_start) {
+                        strcpy(s->error, "no TLS");
+                        _dash_nbg_shut(s);
+                        s->state = _NBG_ERROR;
+                    } else if (t - s->started > _DASH_NBG_QUIET_MS && s->retries < 2) {
+                        _dash_nbg_shut(s);
+                        s->retries++;
+                        s->state = _NBG_ASKED;
+                    } else {
+                        s->tls = _dash_nbg_tls_start(s->sock, (STRPTR)s->host, s->timeout);
+                        if (s->tls < 0) {
+                            _dash_nbg_err(s);
+                            _dash_nbg_shut(s);
+                            s->state = _NBG_ERROR;
+                        } else s->state = _NBG_NEGOTIATING;
+                    }
+                    done = 1;
+                }
+            } else if (e == _NBG_NEGOTIATING) {
+                r = _dash_nbg_tls_poll(s->tls);
+                if (r < 0) {
+                    _dash_nbg_err(s);
+                    s->tls = -1;
+                    _dash_nbg_shut(s);
+                    if (s->retries < 2 && !strncmp(s->error, "timed out", 9)) {
+                        s->retries++;
+                        s->error[0] = 0;
+                        s->state = _NBG_ASKED;
+                    } else s->state = _NBG_ERROR;
+                    done = 1;
+                } else if (r > 0) {
+                    s->state = _NBG_OPEN;
+                    done = 1;
+                }
+            } else if (e == _NBG_OPEN) {
+                /* what there is to send (send waits until it has all gone) */
+                if (s->out_len > 0) {
+                    UBYTE *b;
+                    LONG len;
+                    ObtainSemaphore(&_dash_nbg_sem);
+                    b = s->out;
+                    len = s->out_len;
+                    s->out = NULL;
+                    s->out_len = s->out_cap = 0;
+                    ReleaseSemaphore(&_dash_nbg_sem);
+                    n = s->tls >= 0 ? _dash_nbg_tls_send(s->tls, b, len) : _dash_net_send_buffer(s->sock, b, len);
+                    FreeVec(b);
+                    s->sent = 1;
+                    if (n < 0) {
+                        _dash_nbg_err(s);
+                        s->state = _NBG_CLOSED;
+                    }
+                    done = 1;
+                }
+                /* what has come, to its buffer (which grows) */
+                if (s->state == _NBG_OPEN) {
+                    UBYTE tmp[4096];
+                    ObtainSemaphore(&_dash_nbg_sem);
+                    _dash_nbg_in_room(s, 4096);
+                    ReleaseSemaphore(&_dash_nbg_sem);
+                    if (s->tls >= 0) n = _dash_nbg_tls_read(s->tls, tmp, sizeof(tmp));
+                    else n = _dash_net_recv_buffer(s->sock, tmp, sizeof(tmp), 0);
+                    if (n > 0) {
+                        ObtainSemaphore(&_dash_nbg_sem);
+                        _dash_nbg_in_room(s, n);
+                        if (s->in_cap - s->in_len >= n) {
+                            memcpy(s->in + s->in_len, tmp, n);
+                            s->in_len += n;
+                        }
+                        ReleaseSemaphore(&_dash_nbg_sem);
+                        done = 1;
+                    } else if (n < 0 && !s->sent && s->retries < 4) {
+                        /* the server closed it before the program sent anything (opened early, the program
+                           busy: it got tired of waiting): another one */
+                        _dash_nbg_shut(s);
+                        s->retries++;
+                        s->state = _NBG_ASKED;
+                    } else if (n < 0) {
+                        s->state = _NBG_CLOSED;
+                        done = 1;
+                    }
+                }
+            }
+        }
+        if (done) {
+            _dash_task_wake();
+            idle = 0;
+            continue;
+        }
+        if (active == 0) {
+            idle += 20;
+            if (idle >= _dash_nbg_idle_ms) break;
+        } else idle = 0;
+        Delay(1);
+    }
+    /* at the end: everything closed in its own process (the network goes with the task) */
+    for (i = 0; i < _DASH_NBG_MAX; i++) {
+        _DashNbgSlot *s = &_dash_nbg[i];
+        /* (one asked while it was ending stays asked: net_bg_state starts another task) */
+        if (s->state == _NBG_FREE || (s->state == _NBG_ASKED && !s->drop)) continue;
+        _dash_nbg_shut(s);
+        ObtainSemaphore(&_dash_nbg_sem);
+        if (s->state != _NBG_ERROR) {
+            s->state = _NBG_CLOSED;
+            if (!s->error[0]) strcpy(s->error, "network closed");
+        }
+        ReleaseSemaphore(&_dash_nbg_sem);
+    }
+    ObtainSemaphore(&_dash_nbg_sem);
+    _dash_nbg_alive = 0;
+    for (i = 0; i < _DASH_NBG_MAX; i++)
+        if (_dash_nbg[i].state != _NBG_FREE && _dash_nbg[i].drop) _dash_nbg_free_slot(&_dash_nbg[i]);
+    ReleaseSemaphore(&_dash_nbg_sem);
+    _dash_nbg_task = NULL;
+    return 0;
+}
+
+/* The task running (started if it is not, or if the one before has ended) */
+static void _dash_nbg_ensure(void) {
+    if (!_dash_nbg_sem_ready) {
+        InitSemaphore(&_dash_nbg_sem);
+        _dash_nbg_sem_ready = 1;
+    }
+    if (_dash_nbg_alive) return;
+    if (_dash_nbg_taskh) {
+        _dash_task_free(_dash_nbg_taskh);    /* (it has ended: waits nothing) */
+        _dash_nbg_taskh = 0;
+    }
+    _dash_nbg_quit = 0;
+    _dash_nbg_alive = 1;
+    if (!(_dash_nbg_taskh = _dash_task_start_with((APTR)_dash_nbg_loop, 0, 65536, 0))) _dash_nbg_alive = 0;
+}
+
+static LONG _dash_net_bg_open_ex(STRPTR host, LONG port, LONG tls, LONG timeout_ms) {
+    LONG i;
+    if (!host) return -1;
+    _dash_nbg_ensure();
+    ObtainSemaphore(&_dash_nbg_sem);
+    for (i = 0; i < _DASH_NBG_MAX; i++) {
+        _DashNbgSlot *s = &_dash_nbg[i];
+        if (s->state != _NBG_FREE) continue;
+        memset(s, 0, sizeof(*s));
+        strncpy(s->host, (const char *)host, sizeof(s->host) - 1);
+        s->port = port;
+        s->tls_wanted = tls;
+        s->timeout = timeout_ms;
+        s->sock = -1;
+        s->tls = -1;
+        s->state = _NBG_ASKED;
+        ReleaseSemaphore(&_dash_nbg_sem);
+        return i;
+    }
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return -1;
+}
+
+static LONG _dash_net_bg_open(STRPTR host, LONG port, LONG timeout_ms) {
+    return _dash_net_bg_open_ex(host, port, 0, timeout_ms);
+}
+
+/* 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (0: no such connection). A connection
+   still asked when the task had ended starts another one */
+static LONG _dash_net_bg_state(LONG c) {
+    if (c < 0 || c >= _DASH_NBG_MAX) return 0;
+    if (_dash_nbg[c].state == _NBG_ASKED && !_dash_nbg_alive) _dash_nbg_ensure();
+    return _dash_nbg[c].state;
+}
+
+static LONG _dash_net_bg_stage(LONG c) {
+    return (c >= 0 && c < _DASH_NBG_MAX) ? _dash_nbg[c].stage : 0;
+}
+
+static STRPTR _dash_net_bg_error(LONG c) {
+    char b[160];
+    b[0] = 0;
+    if (c >= 0 && c < _DASH_NBG_MAX && _dash_nbg_sem_ready) {
+        ObtainSemaphore(&_dash_nbg_sem);
+        strcpy(b, _dash_nbg[c].error);
+        ReleaseSemaphore(&_dash_nbg_sem);
+    }
+    return _dash_str_dup((STRPTR)b, TRUE);
+}
+
+static BOOL _dash_net_bg_send_buffer(LONG c, APTR data, LONG n) {
+    _DashNbgSlot *s;
+    if (c < 0 || c >= _DASH_NBG_MAX || n < 0 || _dash_nbg[c].state == _NBG_FREE) return FALSE;
+    s = &_dash_nbg[c];
+    ObtainSemaphore(&_dash_nbg_sem);
+    if (s->out_cap - s->out_len < n) {
+        LONG cap = (s->out_len + n) * 2 + 256;
+        UBYTE *nb = (UBYTE *)AllocVec(cap, MEMF_PUBLIC);
+        if (!nb) {
+            ReleaseSemaphore(&_dash_nbg_sem);
+            return FALSE;
+        }
+        if (s->out) { memcpy(nb, s->out, s->out_len); FreeVec(s->out); }
+        s->out = nb;
+        s->out_cap = cap;
+    }
+    if (n) memcpy(s->out + s->out_len, data, n);
+    s->out_len += n;
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return TRUE;
+}
+
+static BOOL _dash_net_bg_send(LONG c, STRPTR text) {
+    return text ? _dash_net_bg_send_buffer(c, (APTR)text, strlen((char *)text)) : FALSE;
+}
+
+/* Up to max bytes of what has come, to buffer: how many; -1 if it is closed and nothing is left */
+static LONG _dash_net_bg_recv(LONG c, APTR buffer, LONG max) {
+    _DashNbgSlot *s;
+    LONG n;
+    if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return -1;
+    s = &_dash_nbg[c];
+    ObtainSemaphore(&_dash_nbg_sem);
+    n = s->in_len < max ? s->in_len : max;
+    if (n > 0) {
+        memcpy(buffer, s->in, n);
+        memmove(s->in, s->in + n, s->in_len - n);
+        s->in_len -= n;
+        /* (empty after something big: let go; the task asks for a small one when more comes) */
+        if (s->in_len == 0 && s->in_cap > 1048576) { FreeVec(s->in); s->in = NULL; s->in_cap = 0; }
+    } else if (s->state == _NBG_CLOSED || s->state == _NBG_ERROR || s->state == _NBG_FREE) n = -1;
+    else n = 0;
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return n;
+}
+
+static LONG _dash_net_bg_pending(LONG c) {
+    LONG n;
+    if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return 0;
+    ObtainSemaphore(&_dash_nbg_sem);
+    n = _dash_nbg[c].in_len;
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return n;
+}
+
+/* The task closes it and frees its place */
+static void _dash_net_bg_close(LONG c) {
+    if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return;
+    ObtainSemaphore(&_dash_nbg_sem);
+    if (_dash_nbg[c].state != _NBG_FREE) {
+        if (_dash_nbg_alive) _dash_nbg[c].drop = 1;
+        else _dash_nbg_free_slot(&_dash_nbg[c]);    /* (no task: here) */
+    }
+    ReleaseSemaphore(&_dash_nbg_sem);
+}
+
+static void _dash_net_bg_idle(LONG ms) { _dash_nbg_idle_ms = ms > 0 ? ms : 1; }
+
+/* The task ends (it closes what is open) and the program waits for it */
+static void _dash_net_bg_stop(void) {
+    _dash_nbg_quit = 1;
+    if (_dash_nbg_taskh) {
+        _dash_task_free(_dash_nbg_taskh);
+        _dash_nbg_taskh = 0;
+    }
+}
+
+/* (at the end of the program: before the tasks are waited for) */
+static void _dash_netbg_cleanup(void) {
+    LONG i;
+    _dash_net_bg_stop();
+    for (i = 0; i < _DASH_NBG_MAX; i++)
+        if (_dash_nbg[i].state != _NBG_FREE) _dash_nbg_free_slot(&_dash_nbg[i]);
+}
+
+"""
+
+    # net_bg_open_tls: TLS for the background connections (AmiSSL, TLS_RUNTIME), through NETBG's hooks
+    NETBG_TLS_RUNTIME = """\
+/* Dash background TLS runtime */
+/* What has come on a TLS connection, without blocking: SSL_read with the socket ready may wait (after the
+   handshake come TLS 1.3's session tickets and then it waits for the answer, which will not come if the request
+   has not gone yet) and stop the other connections. n > 0 bytes, 0 nothing yet, -1 closed or failed */
+static LONG _dash_nbg_tls_read_nb(LONG t, APTR buf, LONG max) {
+    SSL *ssl = _dash_tls_get(t);
+    LONG fd, on = 1, off = 0, e = 0, n;
+    if (!ssl) return -1;
+    fd = SSL_get_fd(ssl);
+    n = SSL_pending(ssl) ? 1 : _dash_net_select(fd, FALSE, 0);
+    if (n <= 0) return n < 0 ? -1 : 0;
+    IoctlSocket(fd, FIONBIO, (char *)&on);
+    n = SSL_read(ssl, buf, max);
+    if (n <= 0) e = SSL_get_error(ssl, n);
+    IoctlSocket(fd, FIONBIO, (char *)&off);
+    if (n > 0) {
+        if (!_dash_tls_saved[t]) _dash_tls_sess_keep(t);
+        return n;
+    }
+    return (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) ? 0 : -1;
+}
+
+static LONG _dash_net_bg_open_tls(STRPTR host, LONG port, LONG timeout_ms) {
+    _dash_nbg_tls_start = _dash_tls_connect_start;
+    _dash_nbg_tls_poll = _dash_tls_connect_poll;
+    _dash_nbg_tls_close = _dash_tls_close;
+    _dash_nbg_tls_send = _dash_tls_send_buffer;
+    _dash_nbg_tls_read = _dash_nbg_tls_read_nb;
+    return _dash_net_bg_open_ex(host, port, 1, timeout_ms);
+}
+
+"""
+
     # Dash 2.0: font_from_ttf, compiled apart (compiler/clibs.py, runtime/fontweb)
     FONTWEB_RUNTIME = """\
 /* Dash Web Font Runtime */
@@ -17068,6 +17486,8 @@ _RUNTIME_FLAGS = [
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
     ("IMGDEC_RUNTIME", "uses_imgdec"),      # Dash 2.0: image_decode
     ("FONTWEB_RUNTIME", "uses_fontweb"),    # Dash 2.0: font_from_ttf
+    ("NETBG_RUNTIME", "uses_netbg"),        # Dash 2.0: net_bg_*
+    ("NETBG_TLS_RUNTIME", "uses_netbg_tls"),  # Dash 2.0: net_bg_open_tls
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
@@ -17370,6 +17790,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
         self.uses_imgdec: bool = False   # image_decode (IMGDEC_RUNTIME, Dash 2.0)
         self.uses_fontweb: bool = False  # font_from_ttf (FONTWEB_RUNTIME, Dash 2.0)
+        self.uses_netbg: bool = False    # net_bg_* (NETBG_RUNTIME, Dash 2.0): with NET and TASK
+        self.uses_netbg_tls: bool = False  # net_bg_open_tls (NETBG_TLS_RUNTIME): with NETBG and TLS
         self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
         self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
         self.uses_regex: bool = False  # regex_*, wildcard_match (REGEX_RUNTIME, Lorraine D45)
@@ -17738,6 +18160,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.IMGDEC_RUNTIME)
         if self.uses_fontweb:
             parts.append(CTemplates.FONTWEB_RUNTIME)
+        if self.uses_netbg:
+            parts.append(CTemplates.NETBG_RUNTIME)
+        if self.uses_netbg_tls:
+            parts.append(CTemplates.NETBG_TLS_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -17956,6 +18382,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_netbg:
+            cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
         if self.uses_instance:
             cleanup.append("    _dash_instance_cleanup();\n")
         if self.uses_cx:
@@ -20489,6 +20917,10 @@ static {ret_type} {method_name}({params_str}) {{
         if self.uses_cpu:
             self.uses_time = True      # CPU_RUNTIME reads the EClock of TIME_RUNTIME
             self.uses_strings = True   # cpu_task_name gives a String
+        if self.uses_netbg_tls:
+            self.uses_netbg = self.uses_tls = True   # NETBG_TLS_RUNTIME fills NETBG's hooks with TLS_RUNTIME
+        if self.uses_netbg:
+            self.uses_net = self.uses_tasks = self.uses_strings = True   # its task, the sockets, net_bg_error
         if self.uses_tls:
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:

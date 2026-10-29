@@ -1,0 +1,53 @@
+# Test: net_bg_open_tls (Dash 2.0): a TLS connection in the network task to the runner's echo server, which speaks
+# TLS with a certificate for 127.0.0.1 signed by the test CA of the emulated AmiSSL:Certs; and one to
+# "localhost.invalid" (a name no server has) gives an error.
+# emu-net-tls: 40874
+# emu-needs: amisslmaster.library
+# expect-out: abierta: 4
+# expect-out: eco: hola tls
+# expect-out: otro nombre: 6 true
+# expect-out: fin
+
+# lo que llegue hasta que se cierre (-1), como texto
+func todo(c: Int) -> String
+    buf = buffer_alloc(256)
+    t = ""
+    n = 0
+    vueltas = 0
+    while n >= 0 and vueltas < 250
+        n = net_bg_recv(c, buf, 256)
+        if n > 0
+            t = t + str_from_buffer(buf, 0, n)
+        elif n == 0
+            time_delay_ms(40)
+        end
+        vueltas = vueltas + 1
+    end
+    buffer_free(buf)
+    return str_replace(str_replace(t, "\r", ""), "\n", "")
+end
+
+func esperar(c: Int, estado: Int)
+    vueltas = 0
+    while net_bg_state(c) < estado and vueltas < 400
+        time_delay_ms(40)
+        vueltas = vueltas + 1
+    end
+end
+
+Main
+    c = net_bg_open_tls("127.0.0.1", 40874, 8000)
+    esperar(c, 4)
+    Print "abierta: #{net_bg_state(c)}"
+    net_bg_send(c, "hola tls\r\n")
+    t = todo(c)
+    Print t
+    net_bg_close(c)
+    m = net_bg_open_tls("localhost.invalid", 40874, 8000)
+    esperar(m, 5)
+    e = net_bg_error(m)
+    Print "otro nombre: #{net_bg_state(m)} #{e.length > 0}"
+    net_bg_close(m)
+    net_bg_stop()
+    Print "fin"
+end

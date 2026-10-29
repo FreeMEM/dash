@@ -24,7 +24,7 @@ sys.path.insert(0, str(REPO / "tools"))
 import emu_run  # noqa: E402
 
 
-SKIP_MARKS = ("# rtg", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu", "# emu-net-tls")
+SKIP_MARKS = ("# rtg", "# autoclose:", "# emu-shot", "# emu-rtg", "# emu-fpu")
 
 
 def lines_with(text, mark):
@@ -35,6 +35,8 @@ def has_lib(name):
     """'# emu-needs: x.library': MUI con su sistema aparte; lo demás, si lo tiene $DASH_EMU_SYS"""
     if name == "muimaster.library":
         return bool(os.environ.get("DASH_EMU_SYS_MUI"))
+    if name == "amisslmaster.library":
+        return bool(os.environ.get("DASH_EMU_SYS_SSL"))
     sys_dir = os.environ.get("DASH_EMU_SYS")
     return bool(sys_dir) and (Path(sys_dir) / "Libs" / name).exists()
 
@@ -95,18 +97,23 @@ def main():
         print("falta $DASH_KICKSTART: no se ejecuta")
         return 1
     # dos arranques: los de MUI con su sistema
-    # tres arranques: los de MUI con su sistema y los de red ('# emu-net: PUERTO') con la bsdsocket.library de
-    # FS-UAE y el servidor de eco del runner
+    # cuatro arranques: los de MUI con su sistema, los de red ('# emu-net: PUERTO') con la bsdsocket.library de
+    # FS-UAE y el servidor de eco del runner, y los de TLS ('# emu-net-tls:') con el sistema con AmiSSL
+    # ($DASH_EMU_SYS_SSL) y el eco hablando TLS
     def mui(x):
         return "muimaster.library" in lines_with(x[2], "# emu-needs:")
 
     def net(x):
-        return bool(lines_with(x[2], "# emu-net:"))
+        return bool(lines_with(x[2], "# emu-net:") or lines_with(x[2], "# emu-net-tls:"))
+
+    def tls(x):
+        return bool(lines_with(x[2], "# emu-net-tls:"))
 
     groups = [([x for x in runnable if not mui(x) and not net(x)], os.environ.get("DASH_EMU_SYS"), ""),
               ([x for x in runnable if mui(x)], os.environ.get("DASH_EMU_SYS_MUI"), ""),
-              ([x for x in runnable if net(x) and not mui(x)], os.environ.get("DASH_EMU_SYS"),
-               "bsdsocket_library = 1\n")]
+              ([x for x in runnable if net(x) and not mui(x) and not tls(x)], os.environ.get("DASH_EMU_SYS"),
+               "bsdsocket_library = 1\n"),
+              ([x for x in runnable if tls(x)], os.environ.get("DASH_EMU_SYS_SSL"), "bsdsocket_library = 1\n")]
     runnable, res = [], []
     for g, system, config in groups:
         if not g:
@@ -116,7 +123,8 @@ def main():
         if config:
             sys.path.insert(0, str(REPO / "tests"))
             from run_tests import _EchoServer
-            server = _EchoServer(sorted({int(lines_with(t, "# emu-net:")[0]) for _, _, t in g}))
+            ports = {int((lines_with(t, "# emu-net:") or lines_with(t, "# emu-net-tls:"))[0]) for _, _, t in g}
+            server = _EchoServer(sorted(ports), {p for p in ports if system == os.environ.get("DASH_EMU_SYS_SSL")})
         try:
             res += emu_run.run_programs([str(e) for _, e, _ in g], timeout=900, kickstart=rom, system=system,
                                         args=[(lines_with(t, "# emu-args:") or [""])[0] for _, _, t in g],
