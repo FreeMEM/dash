@@ -107,7 +107,14 @@ int main(int argc, char **argv)
 
     rt = rt_normal;
     rtlen = rt_normal_len;
-    if (memcheck) {
+    if (memcheck && !rt_mc_len) {
+        /* el dashc del Amiga no lo lleva dentro (es la mitad de su tamaño): dashc_mc.drt, junto a él */
+        FILE *f = fopen("PROGDIR:dashc_mc.drt", "rb");
+        if (!f) fatal("--memcheck necesita dashc_mc.drt junto a dashc");
+        fclose(f);
+        rt = read_file("PROGDIR:dashc_mc.drt", &rtlen);
+        tiempo("descomprimir");
+    } else if (memcheck) {
         uint8_t *buf = xmalloc(rt_mc_len);
         rt_unpack(rt_mc_z, rt_mc_zlen, buf, rt_mc_len);
         tiempo("descomprimir");

@@ -384,3 +384,8 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     WOFF y WOFF2 (glyf transformada): las tres dan las mismas medidas, también al 50 % de ancho; igual con gcc y
     con dashc.
   - Tests de ./dash: 462 bien (test_font_ttf también en el A500); batería bien; cobertura 212 de 316 y 139 de 139.
+- D8 (3.ª parte): con las bibliotecas de imágenes y fuentes, el dashc del Amiga subió a 1,5 MB, la mitad por la
+  copia del runtime de `--memcheck`. En el Amiga va aparte: `build/dashc_mc.drt` (770 KB, en DRT2), que se copia
+  junto a dashc y se lee de `PROGDIR:` solo con `--memcheck` (sin él, un error que lo dice). El dashc del Amiga:
+  1,0 MB. El del PC lo sigue llevando dentro. Probado en el A1200: `--memcheck` con structs.dash da el mismo
+  ejecutable que el PC.

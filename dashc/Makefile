@@ -17,8 +17,9 @@ dashc: $(SRC) src/dashc.h build/rt_blob.c build/builtins_tab.c
 	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c $(RYU) $(ZLIB)
 
 amiga: build/dashc.amiga
-build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob.c build/builtins_tab.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob.c build/builtins_tab.c $(RYU) $(ZLIB) \
+# (el runtime de --memcheck va aparte, en build/dashc_mc.drt: se copia junto a dashc)
+build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob_amiga.c build/dashc_mc.drt build/builtins_tab.c
+	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
 		build/softfloat_df.o build/softfloat.o build/fastfp.o -lm   # (el float por software, como ./dash: el de la ROM se cuelga en FS-UAE)
 
 # lo que pide y devuelve cada builtin (la tabla va en git: no hace falta Python para construir dashc)
@@ -40,6 +41,10 @@ build/dashrt_mc.drt: runtime/dashrt_mc.o build/preparar
 	build/preparar --preparar $< $@
 build/rt_blob.c: build/dashrt.drt build/dashrt_mc.drt runtime/rt_blob.py
 	python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt > $@
+build/rt_blob_amiga.c: build/dashrt.drt runtime/rt_blob.py
+	python3 runtime/rt_blob.py build/dashrt.drt - > $@
+build/dashc_mc.drt: build/dashrt.drt build/dashrt_mc.drt runtime/rt_blob.py
+	python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt $@
 
 # el runtime de ./dash (gen_lib.py), compilado y con lo que necesita: runtime/build_lib.py
 runtime:

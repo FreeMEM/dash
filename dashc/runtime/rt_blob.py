@@ -4,7 +4,9 @@
 van en el programa (descomprimirlo entero en cada compilación costaba 4,5 s en un A1200). El de --memcheck,
 comprimido entero con zlib (se usa poco: main.c lo descomprime solo entonces).
 
-    python3 runtime/rt_blob.py runtime/dashrt.o runtime/dashrt_mc.o > build/rt_blob.c"""
+    python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt > build/rt_blob.c
+    python3 runtime/rt_blob.py build/dashrt.drt - > build/rt_blob_amiga.c          (sin el de --memcheck)
+    python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt build/dashc_mc.drt   (él solo, en DRT2)"""
 import struct
 import sys
 import zlib
@@ -48,6 +50,14 @@ def array(name, data):
 
 def main():
     a = drt2(open(sys.argv[1], "rb").read())
+    if sys.argv[2] == "-":
+        # (el dashc del Amiga: el de --memcheck va aparte, dashc_mc.drt, y se lee solo con --memcheck)
+        sys.stdout.write(array("rt_normal", a) + f"const unsigned int rt_normal_len = {len(a)};\n" +
+                         "const unsigned char rt_mc_z[1];\nconst unsigned int rt_mc_zlen = 0, rt_mc_len = 0;\n")
+        return
+    if len(sys.argv) > 3:
+        open(sys.argv[3], "wb").write(drt2(open(sys.argv[2], "rb").read()))
+        return
     b = open(sys.argv[2], "rb").read()
     z = zlib.compress(b, 9)
     sys.stdout.write(array("rt_normal", a) + f"const unsigned int rt_normal_len = {len(a)};\n" +
