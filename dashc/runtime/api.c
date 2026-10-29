@@ -906,3 +906,33 @@ void dl_prof_report(void)
     }
     FreeVec(done);
 }
+
+/* ---- diccionarios con una clave literal: su hash (_dash_dict_hash) lo calcula dashc al compilar (como hace gcc en
+   el C de ./dash con un literal) ---- */
+static LONG dl_dict_slot_h(DashDict *d, STRPTR key, ULONG h)
+{
+    ULONG mask = d->cap - 1, i = h & mask;
+    while (d->keys[i] && strcmp((char *)d->keys[i], (char *)key)) i = (i + 1) & mask;
+    return (LONG)i;
+}
+
+LONG dl_dict_get_h(DashDict *d, STRPTR k, ULONG h)
+{
+    LONG s;
+    if (!d || !d->cap) return 0;
+    s = dl_dict_slot_h(d, k, h);
+    return d->keys[s] ? d->vals[s] : 0;
+}
+
+LONG dl_dict_get_or_h(DashDict *d, STRPTR k, LONG v, ULONG h)
+{
+    LONG s;
+    if (!d || !d->cap) return v;
+    s = dl_dict_slot_h(d, k, h);
+    return d->keys[s] ? d->vals[s] : v;
+}
+
+LONG dl_dict_has_h(DashDict *d, STRPTR k, ULONG h)
+{
+    return d && d->cap && d->keys[dl_dict_slot_h(d, k, h)] != NULL;
+}

@@ -1148,7 +1148,10 @@ static void infer_calls(Node *e)
 }
 
 static int collect_set;   /* walk_types anota los campos a los que algo asigna (lend) */
+static int collect_fn;    /* y de qué función es lo que recorre (-1: Main) */
 static void add_set_field(int st, char *name);
+static void collect_lent(Node *st);
+static int is_lent(int obj, const char *name);
 
 static void walk_types(NodeList *l, int *ret)
 {
@@ -1161,6 +1164,7 @@ static void walk_types(NodeList *l, int *ret)
             int ts = expr_type(st->b->a);
             add_set_field(IS_STRUCT(ts) ? ts - TY_STRUCT : -1, st->b->name);
         }
+        if (collect_set) collect_lent(st);
         if (infer_on) {
             infer_calls(st->a);
             infer_calls(st->b);
@@ -2068,6 +2072,19 @@ static int gen_dict(Node *n)
 
 static int dict_ikeys(int t) { return dict_types.v[t - TY_DICT].key == TY_INT; }
 
+/* una clave literal de un diccionario de textos: su hash (el _dash_dict_hash del runtime), en la pila antes que los
+   argumentos (va el último): dl_dict_*_h no lo calcula en cada llamada */
+static int push_key_hash(int t, Node *k)
+{
+    uint32_t h = 5381;
+    int i;
+    if (dict_ikeys(t) || k->kind != E_STR || (int)strlen(k->str) != k->len) return 0;
+    for (i = 0; i < k->len; i++) h = (h << 5) + h + (unsigned char)k->str[i];
+    w(0x2F3C); l(h);                                   /* move.l #hash,-(sp) */
+    sp_depth += 4;
+    return 1;
+}
+
 /* d[k] */
 static int gen_dict_get(Node *n)
 {
@@ -2075,6 +2092,11 @@ static int gen_dict_get(Node *n)
     int t = expr_type(n->a);
     a[0] = n->a;
     a[1] = n->b;
+    if (push_key_hash(t, n->b)) {
+        args_to_stack(a, 2, NULL);
+        rt_call("_dl_dict_get_h", 3, 0);
+        return dict_val(t);
+    }
     args_to_stack(a, 2, NULL);
     rt_call(dict_ikeys(t) ? "_dl_dict_geti" : "_dl_dict_get", 2, 0);
     return dict_val(t);
@@ -2126,6 +2148,16 @@ static int gen_dict_method(Node *n)
     a[0] = n->a;
     if (na >= 1) a[1] = n->args.v[0];
     if (na >= 2) a[2] = n->args.v[1];
+    if (!strcmp(n->name, "has") && na == 1 && push_key_hash(t, a[1])) {
+        args_to_stack(a, 2, NULL);
+        rt_call("_dl_dict_has_h", 3, 0);
+        return TY_BOOL;
+    }
+    if (!strcmp(n->name, "get") && na == 2 && push_key_hash(t, a[1])) {
+        args_to_stack(a, 3, NULL);
+        rt_call("_dl_dict_get_or_h", 4, 0);
+        return dict_val(t);
+    }
     if (!strcmp(n->name, "has") && na == 1) {
         args_to_stack(a, 2, NULL);
         rt_call(ik ? "_dl_dict_hasi" : "_dl_dict_has", 2, 0);
@@ -4432,6 +4464,13 @@ static void gen_str_assign(Node *n, int ty)
         set_imm(&v, 0);
         return;
     }
+    if (ty == TY_STR && e->kind != E_NIL && (lc || fresh) && is_lent(0, n->name)) {
+        /* toma prestado el texto (un literal, o de una lista o diccionario de un parámetro): ni copia ni free */
+        value(e);
+        v = fresh ? declare(n->name, ty) : lookup(n->name);
+        store_d0(&v);
+        return;
+    }
     if (e->kind == E_NIL) load_imm(0, 0);
     else if (ty == TY_DOUBLE) dbl_value(e);            /* (una caja; un número, convertido) */
     else str_value(e);
@@ -4497,6 +4536,13 @@ static void gen_obj_assign(Node *n, int tt)
     int fresh = n->kind == S_VAR || (!lc && !lookup_global(n->name)), lit = is_new_obj(e);
     Var v;
     if (lc && lc->slot < 0) fatal_node(n, "%s es una constante", n->name);
+    if ((e->kind == E_FIELD || e->kind == E_INDEX) && (lc || fresh) && is_lent(1, n->name)) {
+        /* toma prestado el objeto (de un campo o elemento de lo que sostiene otro): sin referencia propia */
+        value(e);
+        v = fresh ? declare(n->name, tt) : lookup(n->name);
+        store_d0(&v);
+        return;
+    }
     list_hint(e, tt);
     if (e->kind == E_LIST) gen_list(e, 1);
     else if (lit) gen_new(e, find_struct(e->name), 1);
@@ -4605,10 +4651,387 @@ static void gen_foreach_str(Node *n)
     mark_end(&ms);
 }
 
+/* ---- for x in lista sin una referencia por vuelta (como ./dash, _loop_keeps_elements) ----
+   El bucle sostiene la lista: un elemento solo se va si algo lo saca de una lista (pop, remove, clear, l[i] = y).
+   Una función "conserva" si nunca lo hace, ni ella ni lo que llama (en su cuerpo una lista y un diccionario no se
+   distinguen: cualquier x[i] = y, pop, remove o clear cuenta). Se calcula una vez (punto fijo). */
+static char *keeps_fn;   /* por función: 1 conserva */
+
+static int call_keeps(Node *e)
+{
+    int idx, b;
+    if (find_func(e->name, &idx)) return keeps_fn[idx];
+    if (find_struct(e->name) >= 0) return 1;           /* un constructor: un objeto nuevo */
+    if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;   /* pueden llamar a Dash */
+    if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
+        !strcmp(e->name, "Fixed")) return 1;
+    for (b = 0; b < builtin_count; b++)
+        if (!strcmp(builtin_info[b].name, e->name)) return 1;
+    return 0;                                          /* una Func, o algo que no se sabe */
+}
+
+/* ¿un método de ese nombre que no conserva? (sin tipos: todos los "Struct.name") */
+static int method_keeps(const char *name)
+{
+    int i;
+    size_t ln = strlen(name);
+    for (i = 0; i < prog->funcs.n; i++) {
+        const char *fn = prog->funcs.v[i].name, *dot = strchr(fn, '.');
+        if (dot && strlen(dot + 1) == ln && !strcmp(dot + 1, name) && !keeps_fn[i]) return 0;
+    }
+    return 1;
+}
+
+static int node_keeps(Node *e, int any_index);
+
+static int list_keeps(NodeList *l, int any_index)
+{
+    int i;
+    for (i = 0; i < l->n; i++)
+        if (!node_keeps(l->v[i], any_index)) return 0;
+    return 1;
+}
+
+/* any_index: x[i] = y cuenta aunque x sea un diccionario (en el cuerpo de otra función no se sabe) */
+static int node_keeps(Node *e, int any_index)
+{
+    if (!e) return 1;
+    switch (e->kind) {
+    case S_EVLOOP: case S_WINDOW: case S_ON: case S_STOP:
+        return 0;
+    case S_STORE:
+        if (e->b->kind == E_INDEX && (any_index || !IS_DICT(expr_type(e->b->a)))) return 0;
+        break;
+    case E_MCALL:
+        if (!strcmp(e->name, "pop") || !strcmp(e->name, "remove") || !strcmp(e->name, "clear")) {
+            if (any_index || !IS_DICT(expr_type(e->a))) return 0;
+        } else if (!method_keeps(e->name)) {
+            return 0;
+        }
+        break;
+    case E_CALL:
+        if (!call_keeps(e)) return 0;
+        break;
+    }
+    return node_keeps(e->a, any_index) && node_keeps(e->b, any_index) && node_keeps(e->c, any_index) &&
+           list_keeps(&e->args, any_index) && list_keeps(&e->body, any_index) && list_keeps(&e->els, any_index);
+}
+
+static void compute_keeps(void)
+{
+    int i, changed = 1;
+    keeps_fn = xmalloc(prog->funcs.n + 1);
+    for (i = 0; i < prog->funcs.n; i++) keeps_fn[i] = !prog->funcs.v[i].native;
+    while (changed) {
+        changed = 0;
+        for (i = 0; i < prog->funcs.n; i++)
+            if (keeps_fn[i] && !list_keeps(&prog->funcs.v[i].body, 1)) {
+                keeps_fn[i] = 0;
+                changed = 1;
+            }
+    }
+}
+
+/* ---- variables que toman prestado su valor, sin copia ni referencia propia (como ./dash: D66 los textos, Lorraine
+   D44 los objetos) ----
+   Una función "no libera" si nada de lo que hace, ni lo que llama, puede liberar algo que ya existía: ningún x[i] = y,
+   pop, remove ni clear; ningún campo que no sea un número asignado (de los objetos: tampoco un texto); ninguna global
+   ni parámetro que no sea un número reasignado; ni ventanas, ni EventLoop; solo builtins sin retrollamadas,
+   constructores y funciones como ella. En una así:
+   - un texto que solo recibe literales y elementos de una lista o diccionario de textos que cuelga de un parámetro
+     (d[k], l[i], d.get(k, literal o parámetro)) apunta al texto, sin copiarlo (y sin liberarlo al salir);
+   - un struct, lista o diccionario que solo recibe campos o elementos de un parámetro, global u otra variable así, y
+     que no sale de la función (return, a otra variable, campo, lista, literal, constructor o builtin), también. */
+typedef struct { char *name, *root; int kind; } LentAssign;   /* kind: 0 otro, 1 literal, 2 texto prestable, 3 objeto */
+typedef struct { char **v; int n, cap; } NameVec;
+typedef struct {
+    struct { LentAssign *v; int n, cap; } as;
+    NameVec others, escaped, lstr, lobj;
+    int frees;   /* 1: puede liberar un texto u objeto (campo, parámetro o global); 2: un objeto */
+} LentInfo;
+static LentInfo *lent_info;
+static char *nofree_txt, *nofree_obj;
+
+static int name_in(NameVec *v, const char *name)
+{
+    int i;
+    for (i = 0; i < v->n; i++)
+        if (!strcmp(v->v[i], name)) return 1;
+    return 0;
+}
+
+static void name_add(NameVec *v, char *name)
+{
+    if (!name_in(v, name)) VEC_PUSH(*v, name);
+}
+
+static int harmless(int t, int objs)
+{
+    return t == TY_INT || t == TY_BOOL || t == TY_CHAR || t == TY_FIXED || t == TY_FLOAT ||
+           (objs && (t == TY_STR || t == TY_DOUBLE));
+}
+
+/* el campo name del struct st (-1: de todos los structs con un campo así) guarda algo que no se libera */
+static int field_harmless(int st, const char *name, int objs)
+{
+    int i, j;
+    for (i = 0; i < prog->structs.n; i++) {
+        Struct *s = &prog->structs.v[i];
+        if (st >= 0 && i != st) continue;
+        for (j = 0; j < s->fields.n; j++)
+            if (!strcmp(s->fields.v[j].name, name) && !harmless(s->fields.v[j].type, objs)) return 0;
+    }
+    return 1;
+}
+
+static int in_tenv(const char *name)
+{
+    int i;
+    for (i = tenv.n - 1; i >= tenv_base; i--)
+        if (!strcmp(tenv.v[i].name, name)) return 1;
+    return 0;
+}
+
+/* la variable de la que cuelga e (a.b.c, l[i].x...), o NULL */
+static char *lent_root(Node *e, int index_too)
+{
+    while (e->kind == E_FIELD || (index_too && e->kind == E_INDEX)) e = e->a;
+    return e->kind == E_VAR ? e->name : NULL;
+}
+
+static int lent_str_value(Func *f, Node *v)
+{
+    int tc;
+    char *r;
+    Node *c;
+    if (v->kind == E_INDEX) {
+        c = v->a;
+    } else if (v->kind == E_MCALL && !strcmp(v->name, "get") && v->args.n == 2) {
+        Node *d = v->args.v[1];
+        int pi;
+        c = v->a;
+        if (!(d->kind == E_STR || (d->kind == E_VAR && (pi = param_index(f, d->name)) >= 0 &&
+                                   f->params.v[pi].type == TY_STR))) return 0;
+        if (!IS_DICT(expr_type(c))) return 0;
+    } else {
+        return 0;
+    }
+    tc = expr_type(c);
+    if (!((IS_DICT(tc) && dict_types.v[tc - TY_DICT].val == TY_STR) || tc == TY_ARR + TY_STR)) return 0;
+    r = lent_root(c, 0);
+    return r && param_index(f, r) >= 0;
+}
+
+static void lent_escape(LentInfo *li, Node *e)
+{
+    if (e && e->kind == E_VAR) name_add(&li->escaped, e->name);
+}
+
+/* los objetos que salen dentro de una expresión: a una lista o diccionario literal, a push/insert, a un builtin o
+   constructor */
+static void lent_escapes_expr(LentInfo *li, Node *e)
+{
+    int i;
+    if (!e) return;
+    if (e->kind == E_LIST) for (i = 0; i < e->args.n; i++) lent_escape(li, e->args.v[i]);
+    if (e->kind == E_DICT) for (i = 1; i < e->args.n; i += 2) lent_escape(li, e->args.v[i]);
+    if (e->kind == E_MCALL && (!strcmp(e->name, "push") || !strcmp(e->name, "insert")))
+        for (i = 0; i < e->args.n; i++) lent_escape(li, e->args.v[i]);
+    if (e->kind == E_CALL && !find_func(e->name, NULL))
+        for (i = 0; i < e->args.n; i++) lent_escape(li, e->args.v[i]);
+    lent_escapes_expr(li, e->a);
+    lent_escapes_expr(li, e->b);
+    lent_escapes_expr(li, e->c);
+    for (i = 0; i < e->args.n; i++) lent_escapes_expr(li, e->args.v[i]);
+}
+
+static void lent_begin(void)
+{
+    lent_info = xmalloc(sizeof(LentInfo) * (prog->funcs.n + 1));
+    memset(lent_info, 0, sizeof(LentInfo) * (prog->funcs.n + 1));
+}
+
+/* walk_types (collect_set) con los tipos de las variables a mano: lo de cada sentencia de la función collect_fn */
+static void collect_lent(Node *st)
+{
+    LentInfo *li;
+    Func *f;
+    if (collect_fn < 0) return;
+    li = &lent_info[collect_fn];
+    f = &prog->funcs.v[collect_fn];
+    switch (st->kind) {
+    case S_STORE:
+        if (st->b->kind == E_FIELD) {
+            int ts = expr_type(st->b->a), s = IS_STRUCT(ts) ? ts - TY_STRUCT : -1;
+            if (!field_harmless(s, st->b->name, 0)) li->frees |= 1;
+            if (!field_harmless(s, st->b->name, 1)) li->frees |= 2;
+        }
+        lent_escape(li, st->a);
+        break;
+    case S_ASSIGN: {
+        int pi = param_index(f, st->name);
+        LentAssign la;
+        if (pi >= 0) {
+            if (!harmless(f->params.v[pi].type, 0)) li->frees |= 1;
+            if (!harmless(f->params.v[pi].type, 1)) li->frees |= 2;
+            break;
+        }
+        if (!in_tenv(st->name) && var_type(st->name) != TY_VOID) {   /* una global */
+            li->frees |= 1;
+            if (!harmless(var_type(st->name), 1)) li->frees |= 2;
+            break;
+        }
+        la.name = st->name;
+        la.root = NULL;
+        la.kind = 0;
+        if (st->a->kind == E_STR) la.kind = 1;
+        else if (lent_str_value(f, st->a)) la.kind = 2;
+        else if ((st->a->kind == E_FIELD || st->a->kind == E_INDEX) && IS_OBJ(expr_type(st->a)) &&
+                 (la.root = lent_root(st->a, 1))) la.kind = 3;
+        VEC_PUSH(li->as, la);
+        lent_escape(li, st->a);
+        break;
+    }
+    case S_VAR: case S_FOREACH: case S_FOR:
+        name_add(&li->others, st->name);
+        break;
+    case S_RETURN:
+        lent_escape(li, st->a);
+        break;
+    }
+    lent_escapes_expr(li, st->a);
+    if (st->kind != S_ASSIGN && st->kind != S_VAR) lent_escapes_expr(li, st->b);
+}
+
+static int call_nofree(Node *e, char *nf)
+{
+    int idx, b;
+    if (find_func(e->name, &idx)) return nf[idx];
+    if (find_struct(e->name) >= 0) return 1;
+    if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;
+    if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
+        !strcmp(e->name, "Fixed")) return 1;
+    for (b = 0; b < builtin_count; b++)
+        if (!strcmp(builtin_info[b].name, e->name)) return 1;
+    return 0;
+}
+
+static int node_nofree(Node *e, char *nf);
+
+static int list_nofree(NodeList *l, char *nf)
+{
+    int i;
+    for (i = 0; i < l->n; i++)
+        if (!node_nofree(l->v[i], nf)) return 0;
+    return 1;
+}
+
+static int node_nofree(Node *e, char *nf)
+{
+    if (!e) return 1;
+    switch (e->kind) {
+    case S_EVLOOP: case S_WINDOW: case S_ON: case S_STOP:
+        return 0;
+    case S_STORE:
+        if (e->b->kind == E_INDEX) return 0;
+        break;
+    case E_MCALL: {
+        int i;
+        size_t ln = strlen(e->name);
+        if (!strcmp(e->name, "pop") || !strcmp(e->name, "remove") || !strcmp(e->name, "clear")) return 0;
+        for (i = 0; i < prog->funcs.n; i++) {
+            const char *dot = strchr(prog->funcs.v[i].name, '.');
+            if (dot && strlen(dot + 1) == ln && !strcmp(dot + 1, e->name) && !nf[i]) return 0;
+        }
+        break;
+    }
+    case E_CALL:
+        if (!call_nofree(e, nf)) return 0;
+        break;
+    }
+    return node_nofree(e->a, nf) && node_nofree(e->b, nf) && node_nofree(e->c, nf) && list_nofree(&e->args, nf) &&
+           list_nofree(&e->body, nf) && list_nofree(&e->els, nf);
+}
+
+static void nofree_fixpoint(char *nf, int bit)
+{
+    int i, changed = 1;
+    for (i = 0; i < prog->funcs.n; i++) nf[i] = !prog->funcs.v[i].native && !(lent_info[i].frees & bit);
+    while (changed) {
+        changed = 0;
+        for (i = 0; i < prog->funcs.n; i++)
+            if (nf[i] && !list_nofree(&prog->funcs.v[i].body, nf)) {
+                nf[i] = 0;
+                changed = 1;
+            }
+    }
+}
+
+static void lent_end(void)
+{
+    int i, j, k, changed;
+    nofree_txt = xmalloc(prog->funcs.n + 1);
+    nofree_obj = xmalloc(prog->funcs.n + 1);
+    nofree_fixpoint(nofree_txt, 1);
+    nofree_fixpoint(nofree_obj, 2);
+    for (i = 0; i < prog->funcs.n; i++) {
+        LentInfo *li = &lent_info[i];
+        Func *f = &prog->funcs.v[i];
+        for (j = 0; j < li->as.n; j++) {
+            char *name = li->as.v[j].name;
+            int all_str = 1, any_str = 0, all_obj = 1;
+            if (name_in(&li->lstr, name) || name_in(&li->lobj, name) || name_in(&li->others, name)) continue;
+            for (k = 0; k < li->as.n; k++)
+                if (!strcmp(li->as.v[k].name, name)) {
+                    int kd = li->as.v[k].kind;
+                    if (kd != 1 && kd != 2) all_str = 0;
+                    if (kd == 2) any_str = 1;
+                    if (kd != 3) all_obj = 0;
+                }
+            if (nofree_txt[i] && all_str && any_str && !name_in(&li->escaped, name)) VEC_PUSH(li->lstr, name);
+            if (nofree_obj[i] && all_obj && !name_in(&li->escaped, name)) VEC_PUSH(li->lobj, name);
+        }
+        /* lo que cuelga de una variable con referencia propia puede irse cuando esa cambia */
+        cur_file_g = f->file;
+        for (changed = 1; changed; ) {
+            changed = 0;
+            for (j = 0; j < li->lobj.n; j++)
+                for (k = 0; k < li->as.n; k++) {
+                    char *r = li->as.v[k].root;
+                    if (strcmp(li->as.v[k].name, li->lobj.v[j])) continue;
+                    if (param_index(f, r) < 0 && !lookup_global(r) && !name_in(&li->lobj, r)) {
+                        li->lobj.v[j] = li->lobj.v[--li->lobj.n];
+                        changed = 1;
+                        break;
+                    }
+                }
+        }
+    }
+    cur_file_g = 0;
+}
+
+/* ¿name toma prestado su valor en la función que se genera ahora (obj: un objeto; si no, un texto)? */
+static int is_lent(int obj, const char *name)
+{
+    int idx;
+    if (!lent_info || !inl_stack.n) return 0;
+    idx = inl_stack.v[inl_stack.n - 1];
+    if (idx < 0 || idx >= prog->funcs.n) return 0;
+    return name_in(obj ? &lent_info[idx].lobj : &lent_info[idx].lstr, name);
+}
+
+/* for x in lista: ¿puede el cuerpo sacar x de una lista? (si no, x va sin referencia propia) */
+static int loop_keeps_elements(Node *n)
+{
+    if (!keeps_fn) compute_keeps();
+    if (list_assigns(&n->body, n->name)) return 0;
+    return list_keeps(&n->body, 0);
+}
+
 static void gen_foreach(Node *n)
 {
     int t = expr_type(n->a), et, top = new_label(), test = new_label(), cont = new_label(), done = new_label();
-    int arr_slot, idx_slot;
+    int arr_slot, idx_slot, keep;
     MarkScope ms;
     Loop lp;
     Var va, vi, vx;
@@ -4651,13 +5074,14 @@ static void gen_foreach(Node *n)
     load_var(0, &vi);
     w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2): bytes */
     w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
-    if (IS_OBJ(et)) {
+    keep = IS_OBJ(et) && !loop_keeps_elements(n);
+    if (keep) {
         /* un objeto, con una referencia durante la vuelta: el cuerpo podría sacarlo de la lista */
         push_d0();
         rt_call("_dl_retain_r", 1, 0);
     }
     vx = declare(n->name, et);
-    if (IS_OBJ(et)) locals.v[locals.n - 1].owned = 2;
+    if (keep) locals.v[locals.n - 1].owned = 2;
     store_d0(&vx);
     gen_block(&n->body);
     loops.n--;
@@ -5783,8 +6207,10 @@ void gen_program(Program *p, Obj *o)
     collect_set = 1;
     tenv_on = 1;
     tenv_base = tenv.n;
+    lent_begin();
     {
         int r = TY_VOID;
+        collect_fn = -1;
         walk_types(&p->main, &r);
     }
     tenv.n = tenv_base;
@@ -5792,6 +6218,7 @@ void gen_program(Program *p, Obj *o)
         Func *f = &p->funcs.v[i];
         int j, r = TY_VOID;
         if (f->native) continue;
+        collect_fn = i;
         cur_file_g = f->file;
         for (j = 0; j < f->params.n; j++) {
             TBind b;
@@ -5805,6 +6232,7 @@ void gen_program(Program *p, Obj *o)
     cur_file_g = 0;
     tenv_on = 0;
     collect_set = 0;
+    lent_end();
     if (profile) prof_label = new_label();
 
     /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */
