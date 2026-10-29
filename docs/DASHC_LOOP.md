@@ -576,3 +576,27 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     compila (con build/dash_tipos.h de `dashc --cabecera`) a libpegamento.a, que tests/run.py rehace si hace falta.
     Ya no queda C en lib/ ni src/ de Tachyon (solo tools/amiga/latido.dash, con dash1). Tachyon entero compila con
     dashc --fpu en 1 s en el PC (4,3 MB).
+- D11j (3.ª parte, 2026-10-29): la tanda de Tachyon con dashc.
+  - Arreglado en dashc:
+    - `_ctype_` de rt_compat.c era un array, y libnix lo declara `const char *_ctype_`: las macros
+      `isupper`/`tolower` del C de `@link` leían basura (Hubbub no reconocía "UTF-8"). Ahora es un puntero, y hay
+      también `__locale_ctype_ptr` para las cabeceras de newlib.
+    - Un texto devuelto por `@extern` reusaba el largo guardado de una dirección reciclada: se copia con
+      `dl_str_tmpcopy_c`, que primero olvida ese largo.
+    - El `return` de una copia en una condición, dentro de su bucle, quitaba las marcas dos veces cuando no saltaba:
+      Tachyon se colgaba al calcular estilos (`_cumple_atributo`).
+    - `fmax`, `fmin` y la prueba de NaN miran los bits: la FPU de FS-UAE da `inf != inf`, y
+      `Math.max(1, Infinity)` daba 1 (test_js_infinito).
+    - Un `while` contado (`i < total`, `i + 1` al final) se genera en la primera pasada con un contador, y `total` ya
+      no se lee dentro: su registro se lo llevaba otra variable. Si en la segunda pasada al contador no le toca
+      registro, el bucle va con su condición, que lee `total` en cada vuelta: leía esa otra variable y no acababa
+      (test_animacion, en `animaciones_de`, por la copia de `_animacion_atajo`). Ahora, en la primera pasada, el
+      final sigue vivo en todo el bucle. Test bucle_fin.dash.
+    - Para buscar un fallo de copia: la bisección "sin copiar la mitad" engaña cuando hay más de una culpable. Va
+      mejor al revés, copiando solo una mitad (las demás en `DASHC_NO_COPIAR`), y desensamblando con
+      `m68k-amigaos-objdump -d`.
+  - En Tachyon (rama dash2): `lienzo.dash` y `html5.dash` enlazan también libpegamento (sin js.dash no se
+    enlazaba su C).
+  - Primera tanda completa de Tachyon con dashc: 30 de 114. Casi todos los fallos eran esperas agotadas en grupo,
+    porque test_animacion se colgaba y todos los tests del mismo arranque del emulador esperaban.
+- Pendiente: D12, depurador (ver arriba); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
