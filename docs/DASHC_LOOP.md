@@ -535,3 +535,30 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     builtins (tools/gen_tmgrammar.py; el runner lo exige).
   - Tests de ./dash: 470, bien salvo la gramática (regenerada); batería de dashc bien; cobertura 144 de 145 (el de
     inf con FPU, del emulador).
+- D11j (2.ª parte, 2026-10-29): el C de QuickJS, DOM, lienzo y HTML5 de Tachyon como módulo de C.
+  - En Dash: `@export func f(...)` (también en ./dash: la función no es `static`): dashc la genera aunque nadie la
+    llame desde Dash y hunk.c le da su símbolo de C (`_f`, sin el sufijo `__mN` de una privada), para el C de
+    `@link`. `@extern` admite structs (su puntero, prestado; uno devuelto se sostiene al guardarlo, como el de una
+    función). `dashc --cabecera x.h prog.dash` (también de un módulo sin Main): los structs como los coloca dashc
+    (el puntero, al primer campo; 4 bytes por campo), las constantes enteras, la API del runtime (`dl_str_dup`,
+    `dl_str_temp`, `dl_str_forget`, `dl_retain`, `dl_release`, `dl_arr_length`, `dl_arr_get`, `dl_dict_*`, los
+    `db_*` de los builtins), los nombres del C de ./dash como macros (`_dash_str_dup`, `DashArray_get`...) y los
+    prototipos de las `@export`. Tests: externo.dash (C que llama a Dash por su nombre, structs de ida y vuelta) y
+    tests/unit/test_dashc_cabecera.py.
+  - rt_compat.c: `exit`, `strdup`, `strtod` (con el s2d de Ryu: exacto; el de libnix falla en la última cifra) y
+    `cexp`/`cexpf`.
+  - Saltos de más de 32 KB (Main de un test de Tachyon): `grow_branches` alarga los que no llegan (.s a .w; .w a
+    `jmp` absoluto reubicado, Bcc con la condición contraria por encima, dbra por encima de un bra.s). Test lejos.dash
+    (de paso: ahí el ejecutable de dashc ocupa 3 veces el de gcc, por el % de una constante grande en línea: D8).
+  - Un cuarto runtime, `--fpu --memcheck` (dashrt_fpu_mc.o): el de `--memcheck` lleva el float por software y,
+    mezclado con el C de Tachyon compilado para FPU, rompía los números. 99 tests de Tachyon usan `# memcheck`.
+  - Arreglado: un `return` dentro de un `for` de una función copiada en una condición ("if not _tiene_clase(n, c)",
+    dentro de otro for) saltaba fuera sin quitar de la pila las marcas del bucle: lo que seguía leía mal sus
+    variables (nil). Encontrado por bisección con `DASHC_NO_COPIAR=f,g` (y `DASHC_SIN_COPIAR`), nuevos para eso.
+    Test bucle_copiado.dash.
+  - En Tachyon (rama dash2): tools/a_modulo.py sacó el `@c`, `@header` y `@native` de js, lienzo, jsdom, html5 y
+    documento a src_c/tachyon.c (2.800 líneas, un solo fichero como en ./dash: jsdom usa lo static de js), con
+    `@extern` en los .dash y `@export` en las 43 funciones de Dash que llama ese C; tools/build_pegamento.sh lo
+    compila (con build/dash_tipos.h de `dashc --cabecera`) a libpegamento.a, que tests/run.py rehace si hace falta.
+    Ya no queda C en lib/ ni src/ de Tachyon (solo tools/amiga/latido.dash, con dash1). Tachyon entero compila con
+    dashc --fpu en 1 s en el PC (4,3 MB).
