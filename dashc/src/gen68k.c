@@ -5028,6 +5028,126 @@ static int loop_keeps_elements(Node *n)
     return list_keeps(&n->body, 0);
 }
 
+/* ---- for k in d.keys() por la tabla de d, sin hacer la lista de claves (como ./dash, _keys_in_place) ----
+   d es una variable local o un parámetro (un diccionario de textos) y el cuerpo no puede quitar ninguna clave: no
+   asigna d ni d[...], no llama a pop, remove ni clear, y solo llama a builtins sin retrollamadas, constructores y
+   funciones que nunca sacan nada de una lista o diccionario (keeps_fn). k toma prestada cada clave; d se sostiene
+   durante el bucle y su tabla se lee en cada vuelta. */
+static int keys_body_ok(Node *e, const char *d)
+{
+    int i;
+    if (!e) return 1;
+    switch (e->kind) {
+    case S_EVLOOP: case S_WINDOW: case S_ON: case S_STOP:
+        return 0;
+    case S_ASSIGN:
+        if (!strcmp(e->name, d)) return 0;
+        break;
+    case S_STORE:
+        if (e->b->kind == E_INDEX && e->b->a->kind == E_VAR && !strcmp(e->b->a->name, d)) return 0;
+        break;
+    case E_MCALL:
+        if (!strcmp(e->name, "pop") || !strcmp(e->name, "remove") || !strcmp(e->name, "clear")) return 0;
+        if (!method_keeps(e->name)) return 0;
+        break;
+    case E_CALL:
+        if (!call_keeps(e)) return 0;
+        break;
+    }
+    if (!keys_body_ok(e->a, d) || !keys_body_ok(e->b, d) || !keys_body_ok(e->c, d)) return 0;
+    for (i = 0; i < e->args.n; i++)
+        if (!keys_body_ok(e->args.v[i], d)) return 0;
+    for (i = 0; i < e->body.n; i++)
+        if (!keys_body_ok(e->body.v[i], d)) return 0;
+    for (i = 0; i < e->els.n; i++)
+        if (!keys_body_ok(e->els.v[i], d)) return 0;
+    return 1;
+}
+
+static int keys_in_place(Node *n)
+{
+    Node *it = n->a;
+    int t, i;
+    if (it->kind != E_MCALL || strcmp(it->name, "keys") || it->args.n || it->a->kind != E_VAR) return 0;
+    t = expr_type(it->a);
+    if (!IS_DICT(t) || dict_ikeys(t) || !find_local(it->a->name)) return 0;
+    if (!keeps_fn) compute_keeps();
+    for (i = 0; i < n->body.n; i++)
+        if (!keys_body_ok(n->body.v[i], it->a->name)) return 0;
+    return 1;
+}
+
+static void gen_keys_loop(Node *n)
+{
+    int top = new_label(), test = new_label(), cont = new_label(), done = new_label(), d_slot, idx_slot;
+    MarkScope ms;
+    Loop lp;
+    Var vd, vi, vx;
+    int t = expr_type(n->a->a);
+    ms = mark_begin();
+    enter_scope();
+    value(n->a->a);
+    vd = declare_slot("", t, &d_slot);
+    locals.v[locals.n - 1].owned = 2;                  /* al acabar, _dash_release */
+    store_d0(&vd);
+    push_d0();
+    rt_call("_dl_hold", 1, 0);
+    vi = declare_slot("", TY_INT, &idx_slot);
+    set_imm(&vi, 0);
+    enter_loop();
+    use_slot(d_slot);
+    use_slot(idx_slot);
+    branch(CC_T, test);
+    def_label(top);
+    mark_release(&ms);
+    lp.brk = done;
+    lp.cont = cont;
+    enter_scope();
+    lp.depth = depth;
+    lp.sp = sp_depth;
+    VEC_PUSH(loops, lp);
+    /* k = d->keys[i]; sin clave, la siguiente */
+    use_slot(d_slot);
+    vd = slot_var(d_slot, t);
+    if (vd.kind == V_REG) w(0x2040 | vd.reg);          /* movea.l dN,a0 */
+    else op_ea(0x2040, &vd);                           /* movea.l d,a0 */
+    w(0x2050);                                         /* movea.l (a0),a0: keys */
+    use_slot(idx_slot);
+    vi = slot_var(idx_slot, TY_INT);
+    load_var(0, &vi);
+    w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2) */
+    w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+    branch(CC_EQ, cont);
+    vx = declare(n->name, TY_STR);
+    store_d0(&vx);
+    gen_block(&n->body);
+    loops.n--;
+    leave_scope();
+    def_label(cont);
+    use_slot(idx_slot);
+    add_imm_ea(1, &vi);
+    def_label(test);
+    /* ¿d, de claves de texto, e i < cap? */
+    use_slot(d_slot);
+    load_var(0, &vd);
+    branch(CC_EQ, done);
+    w(0x2040);                                         /* movea.l d0,a0 */
+    w(0x4A68); w(24);                                  /* tst.w 24(a0): ikeys */
+    branch(CC_NE, done);
+    use_slot(idx_slot);
+    if (vi.kind == V_REG) {
+        w(0xB0A8 | vi.reg << 9); w(12);                /* cmp.l 12(a0),dI: cap */
+    } else {
+        load_var(1, &vi);
+        w(0xB2A8); w(12);                              /* cmp.l 12(a0),d1 */
+    }
+    branch(CC_LT, top);
+    def_label(done);
+    leave_loop();
+    leave_scope();                                     /* _dash_release de d */
+    mark_end(&ms);
+}
+
 static void gen_foreach(Node *n)
 {
     int t = expr_type(n->a), et, top = new_label(), test = new_label(), cont = new_label(), done = new_label();
@@ -5037,6 +5157,10 @@ static void gen_foreach(Node *n)
     Var va, vi, vx;
     if (t == TY_STR) {
         gen_foreach_str(n);
+        return;
+    }
+    if (keys_in_place(n)) {
+        gen_keys_loop(n);
         return;
     }
     if (!IS_ARR(t)) fatal_node(n, "for ... in pide una lista");
