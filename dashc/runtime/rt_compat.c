@@ -213,6 +213,20 @@ void abort(void)
     _dash_quit(20);
 }
 
+/* exit: como acaba el programa (las limpiezas de Dash y la lista de atexit) */
+void exit(int code)
+{
+    _dash_quit(code);
+}
+
+char *strdup(const char *s)
+{
+    size_t n = strlen(s) + 1;
+    char *r = (char *)malloc(n);
+    if (r) memcpy(r, s, n);
+    return r;
+}
+
 /* ---- stdio: stdout y stderr a Output() (con su búfer, como Print); los ficheros de fopen, a uno de DOS ---- */
 
 static FILE dash_files[3];
@@ -580,6 +594,67 @@ long long strtoll(const char *s, char **end, int base)
     return neg ? -(long long)v : (long long)v;
 }
 
+/* strtod: el número del principio (blancos, signo, cifras, punto, exponente; inf y nan) con el s2d de Ryu del runtime
+   (exacto: el de libnix falla en la última cifra) */
+int dash_ryu_s2d(const char *s, int len, double *out);
+double strtod(const char *s, char **end)
+{
+    const char *p = s, *q;
+    double r = 0.0;
+    int neg = 0, cifras = 0;
+    while (*p == ' ' || (*p >= 9 && *p <= 13)) p++;
+    q = p;
+    if (*q == '+' || *q == '-') neg = *q++ == '-';
+    if ((q[0] | 32) == 'i' && (q[1] | 32) == 'n' && (q[2] | 32) == 'f') {
+        q += 3;
+        if ((q[0] | 32) == 'i' && (q[1] | 32) == 'n' && (q[2] | 32) == 'i' && (q[3] | 32) == 't' && (q[4] | 32) == 'y') q += 5;
+        if (end) *end = (char *)q;
+        return neg ? -__builtin_inf() : __builtin_inf();
+    }
+    if ((q[0] | 32) == 'n' && (q[1] | 32) == 'a' && (q[2] | 32) == 'n') {
+        if (end) *end = (char *)q + 3;
+        return __builtin_nan("");
+    }
+    while (*q >= '0' && *q <= '9') q++, cifras++;
+    if (*q == '.') {
+        q++;
+        while (*q >= '0' && *q <= '9') q++, cifras++;
+    }
+    if (!cifras) {
+        if (end) *end = (char *)s;
+        return 0.0;
+    }
+    if ((*q | 32) == 'e') {
+        const char *e = q + 1;
+        if (*e == '+' || *e == '-') e++;
+        if (*e >= '0' && *e <= '9') {
+            while (*e >= '0' && *e <= '9') e++;
+            q = e;
+        }
+    }
+    {
+        /* (Ryu lee "1.5e3" pero no el signo de delante ni "5." o ".5": se le dan las cifras como están) */
+        const char *d = p + (*p == '+' || *p == '-');
+        if (dash_ryu_s2d(d, (int)(q - d), &r)) {
+            /* (un caso que Ryu no lee, como "5." o ".5": con un 0 al lado) */
+            char b[400];
+            int n = (int)(q - d);
+            if (n > 380) n = 380;
+            if (*d == '.') { b[0] = '0'; memcpy(b + 1, d, n); n++; }
+            else { memcpy(b, d, n); }
+            if (n && b[n - 1] == '.') b[n++] = '0';
+            else {
+                char *pt = memchr(b, '.', n);
+                if (pt && pt + 1 < b + n && (pt[1] | 32) == 'e') { memmove(pt + 2, pt + 1, b + n - pt - 1); pt[1] = '0'; n++; }
+            }
+            r = 0.0;
+            dash_ryu_s2d(b, n, &r);
+        }
+    }
+    if (end) *end = (char *)q;
+    return neg ? -r : r;
+}
+
 long strtol(const char *s, char **end, int base)
 {
     return (long)strtoll(s, end, base);
@@ -741,4 +816,21 @@ float atan2f(float y, float x) { return (float)__ieee754_atan2(y, x); }
 float acosf(float x) { return (float)__ieee754_acos(x); }
 float powf(float x, float y) { return (float)__ieee754_pow(x, y); }
 float expf(float x) { return (float)__ieee754_exp(x); }
+/* cexp y cexpf (las copias de nanosvg y stb de un programa las piden) */
+double _Complex cexp(double _Complex z)
+{
+    double r = exp(__real__ z), i = __imag__ z;
+    double _Complex w;
+    __real__ w = r * cos(i);
+    __imag__ w = r * sin(i);
+    return w;
+}
+float _Complex cexpf(float _Complex z)
+{
+    float r = expf(__real__ z), i = __imag__ z;
+    float _Complex w;
+    __real__ w = r * cosf(i);
+    __imag__ w = r * sinf(i);
+    return w;
+}
 float logf(float x) { return (float)__ieee754_log(x); }

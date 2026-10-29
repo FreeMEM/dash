@@ -5748,6 +5748,12 @@ void write_c_header(Program *p, FILE *f)
                "#define DashArray_length(a) dl_arr_length((DashArray *)(a))\n"
                "#define DashArray_get(a, i) dl_arr_get((DashArray *)(a), (i))\n"
                "#define _dash_time_ms() db_time_ms()\nLONG db_time_ms(void);\n\n");
+    fprintf(f, "typedef DashArray DashArrayLong;\n\n/* las constantes enteras del programa */\n");
+    for (i = 0; i < p->consts.n; i++) {
+        long k;
+        if (fold(p->consts.v[i].value, &k)) fprintf(f, "#define %s %ldL\n", p->consts.v[i].name, k);
+    }
+    fprintf(f, "\n");
     for (i = 0; i < p->structs.n; i++)
         if (!p->structs.v[i].iface) fprintf(f, "struct _Dash_%s;\n", p->structs.v[i].name);
     for (i = 0; i < p->structs.n; i++) {

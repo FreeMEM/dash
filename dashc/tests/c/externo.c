@@ -100,3 +100,17 @@ long ext_largo_dash(long n) { return (long)strlen(dash_nombre(n)); }
 /* @extern con structs (D11j): el puntero de un objeto de Dash, que apunta a su primer campo */
 long ext_caja_v(long *c) { return c ? c[0] : -1; }
 void *ext_mismo(void *c) { return c; }
+
+/* strtod, strdup y cexp (rt_compat.c; con gcc, los de libnix) */
+#include <complex.h>
+const char *ext_strtod(const char *s)
+{
+    char *fin;
+    double d = strtod(s, &fin);
+    char *c = strdup(s);
+    double complex z = cexp(I * 0.0 + 1.0);
+    snprintf(buf, sizeof buf, "%ld %ld %ld %ld", (long)(d * 1000.0), (long)(fin - s), (long)strlen(c),
+             (long)(creal(z) * 1000.0));
+    free(c);
+    return buf;
+}
