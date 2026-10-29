@@ -1145,6 +1145,9 @@ static void infer_calls(Node *e)
         }
 }
 
+static int collect_set;   /* walk_types anota los campos a los que algo asigna (lend) */
+static void add_set_field(int st, char *name);
+
 static void walk_types(NodeList *l, int *ret)
 {
     int i;
@@ -1152,6 +1155,10 @@ static void walk_types(NodeList *l, int *ret)
         Node *st = l->v[i];
         TBind b;
         b.name = st->name;
+        if (collect_set && st->kind == S_STORE && st->b->kind == E_FIELD) {
+            int ts = expr_type(st->b->a);
+            add_set_field(IS_STRUCT(ts) ? ts - TY_STRUCT : -1, st->b->name);
+        }
         if (infer_on) {
             infer_calls(st->a);
             infer_calls(st->b);
@@ -1792,29 +1799,28 @@ static int gen_new(Node *n, int si, int fresh)
    (un campo, una global o un elemento de lista: la función puede cambiarlo). Un texto va como
    copia temporal y un objeto con una referencia hasta que se sueltan los temporales de quien
    llama (_dash_obj_lend). Un campo que nada en el programa cambia va tal cual (dashweb D22). */
-static struct { char **v; int n, cap; } set_fields;   /* campos a los que algo asigna */
+/* (de qué struct es cada uno, como ./dash: el mismo nombre en otro struct no cuenta; -1 si no se sabe, y entonces
+   vale para todos) */
+typedef struct { char *name; int st; } SetField;
+static struct { SetField *v; int n, cap; } set_fields;   /* campos a los que algo asigna */
 static int lookup_global(const char *name);
 
-static void find_set_fields(NodeList *l)
+static void add_set_field(int st, char *name)
 {
-    int i, j;
-    for (i = 0; i < l->n; i++) {
-        Node *n = l->v[i];
-        if (n->kind == S_STORE && n->b->kind == E_FIELD) {
-            for (j = 0; j < set_fields.n && strcmp(set_fields.v[j], n->b->name); j++)
-                ;
-            if (j == set_fields.n) VEC_PUSH(set_fields, n->b->name);
-        }
-        find_set_fields(&n->body);
-        find_set_fields(&n->els);
-    }
+    int j;
+    SetField sf;
+    for (j = 0; j < set_fields.n; j++)
+        if (set_fields.v[j].st == st && !strcmp(set_fields.v[j].name, name)) return;
+    sf.name = name;
+    sf.st = st;
+    VEC_PUSH(set_fields, sf);
 }
 
-static int field_is_set(const char *name)
+static int field_is_set(int st, const char *name)
 {
     int j;
     for (j = 0; j < set_fields.n; j++)
-        if (!strcmp(set_fields.v[j], name)) return 1;
+        if ((set_fields.v[j].st == st || set_fields.v[j].st < 0) && !strcmp(set_fields.v[j].name, name)) return 1;
     return 0;
 }
 
@@ -1826,7 +1832,10 @@ static void lend(Node *a)
     shared = a->kind == E_FIELD || a->kind == E_INDEX ||
              (a->kind == E_VAR && !find_local(a->name) && lookup_global(a->name));
     if (!shared) return;
-    if (a->kind == E_FIELD && IS_STRUCT(expr_type(a->a)) && !field_is_set(a->name)) return;
+    if (a->kind == E_FIELD) {
+        int ts = expr_type(a->a);
+        if (IS_STRUCT(ts) && !field_is_set(ts - TY_STRUCT, a->name)) return;
+    }
     push_d0();
     rt_call(IS_STRLIKE(t) ? "_dl_str_tmpcopy" : "_dl_obj_lend", 1, 1);
 }
@@ -5690,9 +5699,6 @@ void gen_program(Program *p, Obj *o)
         if (!IS_STRLIKE(g->type) && !IS_OBJ(g->type)) fold(g->init, &v);
         buf_long(&o->data, (uint32_t)v);
     }
-    /* los campos a los que algo asigna (préstamos) */
-    find_set_fields(&p->main);
-    for (i = 0; i < p->funcs.n; i++) find_set_fields(&p->funcs.v[i].body);
 
     /* las ventanas: su variable, tras las globales */
     win_off = xmalloc(sizeof(long) * (p->windows.n + 1));
@@ -5710,6 +5716,32 @@ void gen_program(Program *p, Obj *o)
     memset(fret_state, 0, sizeof(int) * (p->funcs.n + 1));
     infer_params(p);
     for (i = 0; i < p->funcs.n; i++) func_ret(i);
+    /* los campos a los que algo asigna (préstamos), con los tipos de las variables ya sabidos */
+    collect_set = 1;
+    tenv_on = 1;
+    tenv_base = tenv.n;
+    {
+        int r = TY_VOID;
+        walk_types(&p->main, &r);
+    }
+    tenv.n = tenv_base;
+    for (i = 0; i < p->funcs.n; i++) {
+        Func *f = &p->funcs.v[i];
+        int j, r = TY_VOID;
+        if (f->native) continue;
+        cur_file_g = f->file;
+        for (j = 0; j < f->params.n; j++) {
+            TBind b;
+            b.name = f->params.v[j].name;
+            b.type = f->params.v[j].type;
+            VEC_PUSH(tenv, b);
+        }
+        walk_types(&f->body, &r);
+        tenv.n = tenv_base;
+    }
+    cur_file_g = 0;
+    tenv_on = 0;
+    collect_set = 0;
 
     /* arranque: _dash_start (rt_math.s) guarda registros, abre lo necesario, ejecuta Main y sale */
     main_label = new_label();

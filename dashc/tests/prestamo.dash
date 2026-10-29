@@ -1,0 +1,44 @@
+# Un campo de texto que va de argumento se copia solo si algo asigna ese campo de ese struct (como ./dash): otro struct
+# con un campo del mismo nombre no cuenta (Tachyon copiaba t.texto, la página entera, en cada token: dom.dash asigna
+# el texto de un Nodo). Si la función llamada cambia el campo, el argumento sigue siendo el texto de antes.
+struct Lector
+    texto: String
+    pos: Int
+end
+
+struct Nota
+    texto: String
+end
+
+struct Caja
+    texto: String
+end
+
+func _leer(l: Lector, s: String) -> Int
+    l.pos = l.pos + 1
+    return str_code(s, l.pos - 1)
+end
+
+func cambiar_nota(n: Nota)
+    n.texto = n.texto + "!"
+end
+
+func _usar(c: Caja, s: String) -> String
+    c.texto = "otro"
+    return s + "/" + c.texto
+end
+
+Main
+    l = Lector("abcdef", 0)
+    k = 0
+    for i in (1..6)
+        k = k + _leer(l, l.texto)
+    end
+    Print "lector " + k
+    n = Nota("hola")
+    cambiar_nota(n)
+    Print n.texto
+    c = Caja("antes")
+    Print _usar(c, c.texto)
+    Print c.texto
+end
