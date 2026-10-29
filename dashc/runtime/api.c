@@ -2,6 +2,7 @@
    de las librerías, el arranque y la salida sin libnix, Print, bench_* y, con nombre dl_*, lo que el
    código de dashc llama (en C son static, macros o en línea). Todo se llama como en C: argumentos en la
    pila, resultado en d0. */
+#include <exec/semaphores.h>
 #include <devices/timer.h>
 #include <proto/timer.h>
 #include <proto/graphics.h>
@@ -68,14 +69,34 @@ void _dash_stack_free(void)
     FreeMem(dl_sss.stk_Lower, dl_stack_size);
 }
 
-/* malloc y free para el C de dentro (zlib...): de un pool de exec que se borra al acabar, como el malloc
-   de libnix */
+/* malloc y free para el C de dentro (zlib, lo de @link...): de un pool de exec que se borra al acabar, como el
+   malloc de libnix. Con un semáforo, como el de libnix: el C de @link puede pedir memoria desde una tarea suya (el
+   sonido de MintVID) a la vez que el programa (los pools de exec no son para dos a la vez) */
 static APTR dl_malloc_pool;
+static struct SignalSemaphore dl_malloc_sem;
+static volatile LONG dl_malloc_sem_ok;
+
+static void dl_malloc_lock(void)
+{
+    if (!dl_malloc_sem_ok) {
+        Forbid();
+        if (!dl_malloc_sem_ok) {
+            InitSemaphore(&dl_malloc_sem);
+            dl_malloc_sem_ok = 1;
+        }
+        Permit();
+    }
+    ObtainSemaphore(&dl_malloc_sem);
+}
+
 void *malloc(size_t n)
 {
-    ULONG *p;
-    if (!dl_malloc_pool && !(dl_malloc_pool = CreatePool(MEMF_ANY, 16384, 4096))) return NULL;
-    if (!(p = AllocPooled(dl_malloc_pool, n + 4))) return NULL;
+    ULONG *p = NULL;
+    dl_malloc_lock();
+    if (dl_malloc_pool || (dl_malloc_pool = CreatePool(MEMF_ANY, 16384, 4096)))
+        p = AllocPooled(dl_malloc_pool, n + 4);
+    ReleaseSemaphore(&dl_malloc_sem);
+    if (!p) return NULL;
     *p = n + 4;
     return p + 1;
 }
@@ -84,7 +105,9 @@ void free(void *x)
 {
     if (x) {
         ULONG *p = (ULONG *)x - 1;
+        dl_malloc_lock();
         FreePooled(dl_malloc_pool, p, *p);
+        ReleaseSemaphore(&dl_malloc_sem);
     }
 }
 

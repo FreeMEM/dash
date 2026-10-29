@@ -3420,6 +3420,17 @@ static int gen_expr(Node *n)
                 if (!needed[idx]) needed[idx] = 1;
                 return TY_INT;
             }
+            if (fn && fn->native == 2) {
+                /* una de @extern: la dirección de su símbolo de C (un puntero a función para otro C, o la función
+                   de un task_start) */
+                char *sym = xmalloc(strlen(fn->name) + 2);
+                sym[0] = '_';
+                strcpy(sym + 1, fn->name);
+                w(0x203C);                             /* move.l #_función,d0 */
+                add_reloc((uint32_t)obj->code.n, -1, sym);
+                l(0);
+                return TY_INT;
+            }
             fatal_node(n, "%s: una función de @native no puede ir como valor", n->name);
             return TY_VOID;
         }
@@ -4757,6 +4768,13 @@ static void gen_stmt(Node *n)
         {
             int tt = n->kind == S_VAR ? n->type : var_type(n->name);
             if (tt == TY_VOID) tt = expr_type(n->a);   /* una variable nueva */
+            else if (n->kind == S_ASSIGN && tt == TY_STR && n->a->kind != E_NIL) {
+                /* (como ./dash: un número en una variable que guarda un texto es un error, no un texto) */
+                int et = expr_type(n->a);
+                if (et == TY_INT || et == TY_BOOL || et == TY_FLOAT || et == TY_FIXED)
+                    fatal_node(n, "no se puede guardar un %s en %s, que guarda un String",
+                               et == TY_BOOL ? "Bool" : et == TY_FLOAT ? "Float" : et == TY_FIXED ? "Fixed" : "Int", n->name);
+            }
             if (IS_STRLIKE(tt)) {
                 gen_str_assign(n, tt);
                 return;

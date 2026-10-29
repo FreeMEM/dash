@@ -668,3 +668,77 @@ int sscanf(const char *s, const char *f, ...)
     va_end(ap);
     return n;
 }
+
+/* ---- lo que pide Hubbub (el HTML5 de Tachyon) y otros: bsearch, strncasecmp y la tabla de ctype de libnix
+   (sus macros isalpha... la leen: el EOF delante y los 256 caracteres; ASCII, la configuración C) ---- */
+
+const char _ctype_[1 + 256] = {
+    0, 32, 32, 32, 32, 32, 32, 32, 32, 32, 40, 40, 40, 40, 40, 32,
+    32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+    32, 136, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+    16, 68, 68, 68, 68, 68, 68, 68, 68, 68, 68, 16, 16, 16, 16, 16,
+    16, 16, 65, 65, 65, 65, 65, 65, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 16, 16, 16, 16,
+    16, 16, 66, 66, 66, 66, 66, 66, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 16, 16, 16, 16,
+    32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0
+};
+
+static int dash_lower(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
+
+int strncasecmp(const char *a, const char *b, size_t n)
+{
+    for (; n; n--, a++, b++) {
+        int x = dash_lower((unsigned char)*a), y = dash_lower((unsigned char)*b);
+        if (x != y || !x) return x - y;
+    }
+    return 0;
+}
+
+int strcasecmp(const char *a, const char *b)
+{
+    return strncasecmp(a, b, (size_t)-1);
+}
+
+void *bsearch(const void *key, const void *base, size_t n, size_t size, int (*cmp)(const void *, const void *))
+{
+    size_t lo = 0, hi = n;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        const void *p = (const char *)base + mid * size;
+        int r = cmp(key, p);
+        if (!r) return (void *)p;
+        if (r < 0) hi = mid;
+        else lo = mid + 1;
+    }
+    return NULL;
+}
+
+/* las de float de libm, sobre las de double (el fdlibm del runtime) */
+double dash_fd_sin(double);
+double dash_fd_cos(double);
+double dash_fd_tan(double);
+double dash_fd_ceil(double);
+double __ieee754_exp(double);
+
+float sqrtf(float x) { return (float)__ieee754_sqrt(x); }
+float floorf(float x) { return (float)dash_fd_floor(x); }
+float ceilf(float x) { return (float)dash_fd_ceil(x); }
+float roundf(float x) { return x < 0 ? -(float)dash_fd_floor(0.5 - x) : (float)dash_fd_floor(x + 0.5); }
+float fabsf(float x) { return x < 0 ? -x : x; }
+float sinf(float x) { return (float)dash_fd_sin(x); }
+float cosf(float x) { return (float)dash_fd_cos(x); }
+float tanf(float x) { return (float)dash_fd_tan(x); }
+float atan2f(float y, float x) { return (float)__ieee754_atan2(y, x); }
+float acosf(float x) { return (float)__ieee754_acos(x); }
+float powf(float x, float y) { return (float)__ieee754_pow(x, y); }
+float expf(float x) { return (float)__ieee754_exp(x); }
+float logf(float x) { return (float)__ieee754_log(x); }

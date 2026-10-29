@@ -75,3 +75,18 @@ long ext_sumar_con(long (*f)(long))
     for (i = 0; i < 6; i++) s += f(p[i]) + p[i];
     return s;
 }
+
+/* malloc y free sin parar (para una tarea y el programa a la vez: el malloc del runtime de dashc lleva semáforo) */
+long ext_malloc_vueltas(long n)
+{
+    long i, j, suma = 0;
+    for (i = 0; i < n; i++) {
+        long tam = 16 + (i * 37) % 900;
+        unsigned char *p = (unsigned char *)malloc(tam);
+        if (!p) return -1;
+        for (j = 0; j < tam; j++) p[j] = (unsigned char)(i + j);
+        for (j = 0; j < tam; j += 7) suma += p[j];
+        free(p);
+    }
+    return suma;
+}

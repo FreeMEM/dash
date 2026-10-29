@@ -411,3 +411,16 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Ojo al escribir tests: `time_delay_ms` de menos de 20 ms (un tic) no espera nada; el bucle de espera del test
     acababa antes de que la tarea hiciera nada.
   - Tests de ./dash: 464 bien; batería bien; cobertura (ya con TLS): 214 de 318 y 144 de 144.
+- D7 (14.ª parte), pedido por el usuario: el `malloc` y el `free` del runtime de dashc (los del C de `@link`) con
+  un semáforo, como los de libnix: el sonido de MintVID pide memoria desde una tarea suya. Probado: una función
+  `@extern` de C en `task_start` haciendo 3.000 malloc/free mientras el programa hace los mismos: las dos sumas
+  iguales (externo.dash, también con gcc). Para eso, una función `@extern` puede ir como valor (`task_start(f, n)`
+  o un puntero para otro C): la dirección de su símbolo.
+  - Para Hubbub (el HTML5 de Tachyon, que va con `@link`): `bsearch`, `strncasecmp`, `strcasecmp` y la tabla
+    `_ctype_` de libnix (sus macros `isalpha`... la leen). Y las de float de libm (`sqrtf`, `floorf`, `sinf`,
+    `powf`...). A la `libimg.a` de Tachyon solo le quedan `cexpf` y `emutls` de sus copias de nanosvg y stb, que con
+    dashc cambiará por `image_decode` y `font_from_ttf`.
+  - Encontrado al probar: dashc dejaba guardar un número en una variable que guarda un texto (lo convertía); ./dash
+    da error. Ahora dashc también: "no se puede guardar un Int en t, que guarda un String".
+  - Los programas llevan 8 bytes más: dos entradas en la tabla de limpiezas (fuentes y red de fondo).
+  - Batería bien; cobertura 214 de 318 y 144 de 144.

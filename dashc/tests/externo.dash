@@ -13,6 +13,7 @@
 @extern("externo") func ext_mates(x: Int) -> Int
 @extern("externo") func ext_aplicar(f: Func, x: Int) -> Int
 @extern("externo") func ext_sumar_con(f: Func) -> Int
+@extern("externo") func ext_malloc_vueltas(n: Int) -> Int
 
 struct Caja
     v: Int
@@ -56,4 +57,9 @@ Main
     Print ext_aplicar(doble, 21)
     Print ext_sumar_con(guardar)
     Print "#{cajas.length} #{cajas[5].nombre} #{cajas[5].v}"
+    # una función de @extern en una tarea, pidiendo memoria a la vez que el programa
+    tarea = task_start(ext_malloc_vueltas, 3000)
+    mia = ext_malloc_vueltas(3000)
+    otra = task_result(tarea)
+    Print "malloc a la vez: #{mia == otra} #{mia > 0}"
 end
