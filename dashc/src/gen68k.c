@@ -4700,11 +4700,21 @@ static void gen_foreach_str(Node *n)
    distinguen: cualquier x[i] = y, pop, remove o clear cuenta). Se calcula una vez (punto fijo). */
 static char *keeps_fn;   /* por función: 1 conserva */
 
+/* ¿pasa e una función de Dash como argumento (una retrollamada que el builtin puede llamar)? */
+static int passes_func(Node *e)
+{
+    int i;
+    for (i = 0; i < e->args.n; i++)
+        if (e->args.v[i]->kind == E_FUNCREF) return 1;
+    return 0;
+}
+
 static int call_keeps(Node *e)
 {
     int idx, b;
     if (find_func(e->name, &idx)) return keeps_fn[idx];
     if (find_struct(e->name) >= 0) return 1;           /* un constructor: un objeto nuevo */
+    if (passes_func(e)) return 0;
     if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;   /* pueden llamar a Dash */
     if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
         !strcmp(e->name, "Fixed")) return 1;
@@ -4951,6 +4961,7 @@ static int call_nofree(Node *e, char *nf)
     int idx, b;
     if (find_func(e->name, &idx)) return nf[idx];
     if (find_struct(e->name) >= 0) return 1;
+    if (passes_func(e)) return 0;
     if (!strncmp(e->name, "mui_", 4) || !strncmp(e->name, "ra_", 3)) return 0;
     if (!strcmp(e->name, "Int") || !strcmp(e->name, "Float") || !strcmp(e->name, "Double") ||
         !strcmp(e->name, "Fixed")) return 1;
