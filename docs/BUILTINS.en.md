@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 757 functions, 757 implemented, 0 not implemented.
+Total: 772 functions, 772 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -684,6 +684,19 @@ Total: 757 functions, 757 implemented, 0 not implemented.
 | `run_rc()` | `LONG` | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
 | `env_get(name)` | `STRPTR` | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
 | `env_set(name, value, save)` | `BOOL` | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
+| `rexx_send(port, command)` | `STRPTR` | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
+| `rexx_rc()` | `LONG` | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
+| `ports_read()` | `LONG` | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
+| `port_name(i)` | `STRPTR` | Name of port i (from 0) of the last ports_read |  |
+| `tasks_read()` | `LONG` | Read the tasks and processes of the system (the program first): how many, for the task_entry_ functions, until the next tasks_read |  |
+| `task_entry_name(i)` | `STRPTR` | Name of task i of the last tasks_read ("Shell Process", "input.device"...) |  |
+| `task_entry_command(i)` | `STRPTR` | The command a Shell process of the last tasks_read is running ("" if none) |  |
+| `task_entry_state(i)` | `STRPTR` | State of task i: "running" (the program), "ready" or "waiting" |  |
+| `task_entry_priority(i)` | `LONG` | Priority of task i of the last tasks_read |  |
+| `task_entry_cli(i)` | `LONG` | Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process |  |
+| `assigns_read()` | `LONG` | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
+| `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
+| `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
 
 ## Pictures decoded by the program (no datatypes)
 
@@ -855,6 +868,8 @@ Total: 757 functions, 757 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_app_rexx(app, func)` | `void` | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
+| `mui_rexx_fail(rc)` | `void` | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
 | `mui_app_end()` | `void` | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
 | `mui_window_begin(title, id)` | `APTR` | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
 | `mui_window_end()` | `void` | End the window started with mui_window_begin |  |

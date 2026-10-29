@@ -614,7 +614,7 @@ func _json_digits(s: String) -> Bool
     if s.length == 0
         return false
     end
-    for i in (0..s.length - 1)
+    for i in (0..s.length - 1 step 1)
         c = str_code(s, i)
         if c < 48 or c > 57
             return false
@@ -777,7 +777,7 @@ func _json_out(j: Json, indent: Int, level: Int) -> String
             return "[]"
         end
         out = "["
-        for i in (0..n - 1)
+        for i in (0..n - 1 step 1)
             if i > 0
                 out = out + ","
             end
@@ -795,7 +795,7 @@ func _json_out(j: Json, indent: Int, level: Int) -> String
         return "{}"
     end
     out = "{"
-    for i in (0..n - 1)
+    for i in (0..n - 1 step 1)
         if i > 0
             out = out + ","
         end

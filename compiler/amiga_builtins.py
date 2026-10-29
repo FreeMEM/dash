@@ -3221,6 +3221,17 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    # Dash 2.0 (Inferencia): the application's own ARexx commands
+    "mui_app_rexx": BuiltinFunc(
+        name="mui_app_rexx", params=["app", "func"], return_type="void",
+        c_template="_dash_mui_app_rexx(${app}, ${func})",
+        description="Every ARexx command to the application's port (its base and \".1\": \"BASE.1\") that MUI does "
+                    "not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole "
+                    "command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. "
+                    "It runs while mui_wait_event waits"),
+    "mui_rexx_fail": BuiltinFunc(
+        name="mui_rexx_fail", params=["rc"], return_type="void", c_template="_dash_mui_rexx_fail(${rc})",
+        description="From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then)"),
     "mui_app_end": BuiltinFunc(
         name="mui_app_end",
         params=[],
@@ -4602,6 +4613,55 @@ TASK_FUNCTIONS = {
         c_template="_dash_env_set(${name}, ${value}, ${save})", reads_only=True,
         description="Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); "
                     "false if it could not"),
+    # Dash 2.0 (Inferencia): ARexx as a client; ports, tasks and assigns
+    "rexx_send": BuiltinFunc(
+        name="rexx_send", params=["port", "command"], return_type="STRPTR",
+        c_template="_dash_rexx_send(${port}, ${command})", reads_only=True,
+        description="Send an ARexx command to a public port (\"MULTIVIEW.1\"; \"REXX\": run a script) and wait "
+                    "for the answer: its RESULT (\"\" without one), the RC in rexx_rc(). Not to the program's own "
+                    "port: it would wait for itself"),
+    "rexx_rc": BuiltinFunc(
+        name="rexx_rc", params=[], return_type="LONG", c_template="_dash_rexx_rc()",
+        description="RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no "
+                    "rexxsyslib.library"),
+    "ports_read": BuiltinFunc(
+        name="ports_read", params=[], return_type="LONG", c_template="_dash_ports_read()",
+        description="Read the names of the public message ports open now (ARexx ports among them): how many, "
+                    "for port_name, until the next ports_read"),
+    "port_name": BuiltinFunc(
+        name="port_name", params=["i"], return_type="STRPTR", c_template="_dash_port_name(${i})",
+        description="Name of port i (from 0) of the last ports_read"),
+    "tasks_read": BuiltinFunc(
+        name="tasks_read", params=[], return_type="LONG", c_template="_dash_tasks_read()",
+        description="Read the tasks and processes of the system (the program first): how many, for the "
+                    "task_entry_ functions, until the next tasks_read"),
+    "task_entry_name": BuiltinFunc(
+        name="task_entry_name", params=["i"], return_type="STRPTR", c_template="_dash_task_entry_name(${i})",
+        description="Name of task i of the last tasks_read (\"Shell Process\", \"input.device\"...)"),
+    "task_entry_command": BuiltinFunc(
+        name="task_entry_command", params=["i"], return_type="STRPTR",
+        c_template="_dash_task_entry_command(${i})",
+        description="The command a Shell process of the last tasks_read is running (\"\" if none)"),
+    "task_entry_state": BuiltinFunc(
+        name="task_entry_state", params=["i"], return_type="STRPTR", c_template="_dash_task_entry_state(${i})",
+        description="State of task i: \"running\" (the program), \"ready\" or \"waiting\""),
+    "task_entry_priority": BuiltinFunc(
+        name="task_entry_priority", params=["i"], return_type="LONG",
+        c_template="_dash_task_entry_priority(${i})", description="Priority of task i of the last tasks_read"),
+    "task_entry_cli": BuiltinFunc(
+        name="task_entry_cli", params=["i"], return_type="LONG", c_template="_dash_task_entry_cli(${i})",
+        description="Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process"),
+    "assigns_read": BuiltinFunc(
+        name="assigns_read", params=[], return_type="LONG", c_template="_dash_assigns_read()",
+        description="Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, "
+                    "until the next assigns_read"),
+    "assign_name": BuiltinFunc(
+        name="assign_name", params=["i"], return_type="STRPTR", c_template="_dash_assign_name(${i})",
+        description="Name of assign i of the last assigns_read, without the colon"),
+    "assign_path": BuiltinFunc(
+        name="assign_path", params=["i"], return_type="STRPTR", c_template="_dash_assign_path(${i})",
+        description="Where assign i points: a directory (\"Workbench:C\"), several separated by \";\", or the name "
+                    "a late or deferred one will look for"),
     "wb_open": BuiltinFunc(
         name="wb_open", params=["path"], return_type="BOOL", c_template="_dash_wb_open(${path})",
         reads_only=True,
@@ -5048,7 +5108,9 @@ SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
-    "run_finish", "run_rc", "env_get", "env_set"])
+    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "ports_read", "port_name", "tasks_read",
+    "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
+    "assigns_read", "assign_name", "assign_path"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
     "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",

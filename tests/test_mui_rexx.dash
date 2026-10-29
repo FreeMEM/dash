@@ -1,0 +1,54 @@
+# Test: ARexx (Dash 2.0, for Inferencia): the MUI application answers its own commands with a Dash function
+# (mui_app_rexx, mui_rexx_fail), and the program itself, started again as "cliente" with run_start, sends them
+# with rexx_send and finds the port with ports_read.
+# emu-needs: muimaster.library
+# emu-needs: rexxsyslib.library
+# expect-out: suma: [5] 0
+# expect-out: mal: [] 10
+# expect-out: puerto: true
+# expect-out: órdenes: 2
+
+var ordenes: Int = 0
+
+func orden(c: String) -> String
+    ordenes = ordenes + 1
+    p = str_split(c, " ")
+    if p[0] == "SUMA" and p.length == 3
+        return "" + (Int(p[1]) + Int(p[2]))
+    end
+    mui_rexx_fail(10)
+    return ""
+end
+
+Main
+    if arg(0) == "cliente"
+        r = rexx_send("PRUEBAREXX.1", "SUMA 2 3")
+        Print "suma: [#{r}] #{rexx_rc()}"
+        r = rexx_send("PRUEBAREXX.1", "MAL")
+        Print "mal: [#{r}] #{rexx_rc()}"
+        hay = false
+        n = ports_read()
+        for i in (0..n - 1)
+            if port_name(i) == "PRUEBAREXX.1"
+                hay = true
+            end
+        end
+        Print "puerto: #{hay}"
+    elif mui_app_begin("Prueba", "PRUEBAREXX") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("ARexx", 0)
+            t = mui_text("Órdenes ARexx")
+        mui_window_end()
+        mui_app_rexx(mui_app_begin("Prueba", "PRUEBAREXX"), orden)
+        h = run_start("\"" + program_path() + "\" cliente", 30000)
+        while not run_ready(h)
+            mui_timer(100, 7)
+            ev = mui_wait_event()
+        end
+        s = run_finish(h)
+        Print str_trim(s)
+        Print "órdenes: #{ordenes}"
+        mui_app_end()
+    end
+end

@@ -429,6 +429,26 @@ DESC_ES = {
     "time_unix": "El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies)",
     "clock_days": "Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp)",
     "mem_largest": "El bloque de memoria libre más grande, chip o fast, en bytes",
+    "rexx_send": "Manda una orden ARexx al puerto público de otro programa (\"MULTIVIEW.1\"; \"REXX\": ejecutar un "
+                 "script) y espera la respuesta: su RESULT (\"\" si no hay), el RC en rexx_rc(). No al puerto del "
+                 "propio programa: se esperaría a sí mismo",
+    "rexx_rc": "El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin "
+               "rexxsyslib.library",
+    "ports_read": "Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, "
+                  "hasta el siguiente ports_read",
+    "port_name": "El nombre del puerto i (desde 0) del último ports_read",
+    "tasks_read": "Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, "
+                  "hasta el siguiente tasks_read",
+    "task_entry_name": "El nombre de la tarea i del último tasks_read (\"Shell Process\", \"input.device\"...)",
+    "task_entry_command": "La orden que ejecuta un proceso de Shell del último tasks_read (\"\" si ninguna)",
+    "task_entry_state": "El estado de la tarea i: \"running\" (el programa), \"ready\" o \"waiting\"",
+    "task_entry_priority": "La prioridad de la tarea i del último tasks_read",
+    "task_entry_cli": "El número de Shell de la tarea i (el que da Status, para Break), 0 si no es un proceso de Shell",
+    "assigns_read": "Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta "
+                    "el siguiente assigns_read",
+    "assign_name": "El nombre de la asignación i del último assigns_read, sin los dos puntos",
+    "assign_path": "Adónde apunta la asignación i: un cajón (\"Workbench:C\"), varios separados por \";\", o el "
+                   "nombre que buscará una diferida o no ligada",
     "run_capture": "Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código "
                    "de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y "
                    "otra vez cada segundo hasta que acaba)",
@@ -860,6 +880,12 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
+                    "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
+                    "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "
+                    "mui_wait_event espera",
+    "mui_rexx_fail": "Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin "
+                     "RESULT)",
     "mui_app_begin": "Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU "
                      "es un 68000",
     "mui_app_end": "Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar)",

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 757 funciones, 757 implementadas, 0 sin implementar.
+Total: 772 funciones, 772 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -684,6 +684,19 @@ Total: 757 funciones, 757 implementadas, 0 sin implementar.
 | `run_rc()` | `LONG` | El código de retorno del último run_capture o run_finish: el de la orden, -1 si no pudo empezar, -2 si se le acabó el tiempo |  |
 | `env_get(name)` | `STRPTR` | Una variable de entorno (de la Shell del programa y si no, de ENV:), hasta su primer fin de línea; "" si no existe |  |
 | `env_set(name, value, save)` | `BOOL` | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
+| `rexx_send(port, command)` | `STRPTR` | Manda una orden ARexx al puerto público de otro programa ("MULTIVIEW.1"; "REXX": ejecutar un script) y espera la respuesta: su RESULT ("" si no hay), el RC en rexx_rc(). No al puerto del propio programa: se esperaría a sí mismo |  |
+| `rexx_rc()` | `LONG` | El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin rexxsyslib.library |  |
+| `ports_read()` | `LONG` | Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, hasta el siguiente ports_read |  |
+| `port_name(i)` | `STRPTR` | El nombre del puerto i (desde 0) del último ports_read |  |
+| `tasks_read()` | `LONG` | Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, hasta el siguiente tasks_read |  |
+| `task_entry_name(i)` | `STRPTR` | El nombre de la tarea i del último tasks_read ("Shell Process", "input.device"...) |  |
+| `task_entry_command(i)` | `STRPTR` | La orden que ejecuta un proceso de Shell del último tasks_read ("" si ninguna) |  |
+| `task_entry_state(i)` | `STRPTR` | El estado de la tarea i: "running" (el programa), "ready" o "waiting" |  |
+| `task_entry_priority(i)` | `LONG` | La prioridad de la tarea i del último tasks_read |  |
+| `task_entry_cli(i)` | `LONG` | El número de Shell de la tarea i (el que da Status, para Break), 0 si no es un proceso de Shell |  |
+| `assigns_read()` | `LONG` | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
+| `assign_name(i)` | `STRPTR` | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
+| `assign_path(i)` | `STRPTR` | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
 
 ## Imágenes decodificadas por el programa (sin datatypes)
 
@@ -855,6 +868,8 @@ Total: 757 funciones, 757 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
+| `mui_app_rexx(app, func)` | `void` | Cada orden ARexx al puerto de la aplicación (su base y ".1": "BASE.1") que MUI no contesta por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras mui_wait_event espera |  |
+| `mui_rexx_fail(rc)` | `void` | Desde la función de mui_app_rexx: el RC de la orden (5 aviso, 10 error, 20 fallo; entonces sin RESULT) |  |
 | `mui_app_end()` | `void` | Deshace la aplicación con sus ventanas y objetos, y cierra MUI (también al acabar) |  |
 | `mui_window_begin(title, id)` | `APTR` | Empieza una ventana (id 1-255: MUI recuerda su tamaño y su sitio; 0 ninguno) con un grupo raíz vertical |  |
 | `mui_window_end()` | `void` | Acaba la ventana empezada con mui_window_begin |  |

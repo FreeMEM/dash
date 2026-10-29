@@ -5316,6 +5316,235 @@ static BOOL _dash_env_set(STRPTR name, STRPTR value, BOOL save) {
 
 """
 
+    # Dash 2.0 (for Inferencia): ARexx as a client, and what runs in the system: public ports, tasks, assigns
+    SYSLIST_RUNTIME = """\
+/* rexx_send(port, command): an ARexx command to the public port of another program ("address PORT command"),
+   waiting for its answer: RESULT as the text it returns, RC in rexx_rc() (-1: no such port, -2: no rexxsyslib).
+   ports_read, tasks_read and assigns_read take a picture of the public ports, the tasks and the assigns, read
+   with port_name(i), task_entry_*(i) and assign_*(i) until the next one. */
+#define REXXSYSLIB_BASE_NAME _dash_rexx_base
+#include <rexx/storage.h>
+#include <rexx/errors.h>
+#include <proto/rexxsyslib.h>
+#include <dos/dosextens.h>
+static struct Library *_dash_rexx_base = NULL;
+static LONG _dash_rexx_rc_last = 0;
+
+static STRPTR _dash_rexx_send(STRPTR port, STRPTR command) {
+    struct MsgPort *reply, *to = NULL;
+    struct RexxMsg *rm;
+    STRPTR res = NULL;
+    _dash_rexx_rc_last = -1;
+    if (!port || !command) return _dash_str_dup((STRPTR)"", TRUE);
+    if (!_dash_rexx_base && !(_dash_rexx_base = OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36))) {
+        _dash_rexx_rc_last = -2;
+        return _dash_str_dup((STRPTR)"", TRUE);
+    }
+    if (!(reply = CreateMsgPort())) return _dash_str_dup((STRPTR)"", TRUE);
+    if ((rm = CreateRexxMsg(reply, NULL, NULL))) {
+        if ((rm->rm_Args[0] = (STRPTR)CreateArgstring(command, strlen((char *)command)))) {
+            rm->rm_Action = RXCOMM | RXFF_RESULT;
+            Forbid();
+            if ((to = FindPort(port))) PutMsg(to, &rm->rm_Node);
+            Permit();
+            if (to) {
+                /* (it must come back before the message can be freed: no time limit) */
+                WaitPort(reply);
+                GetMsg(reply);
+                _dash_rexx_rc_last = rm->rm_Result1;
+                if (rm->rm_Result1 == 0 && rm->rm_Result2) {
+                    res = _dash_str_dup((STRPTR)rm->rm_Result2, TRUE);
+                    DeleteArgstring((UBYTE *)rm->rm_Result2);
+                }
+            }
+            DeleteArgstring((UBYTE *)rm->rm_Args[0]);
+        }
+        DeleteRexxMsg(rm);
+    }
+    DeleteMsgPort(reply);
+    return res ? res : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static LONG _dash_rexx_rc(void) { return _dash_rexx_rc_last; }
+
+/* A picture: texts one after another in one block, a table of where each starts, and numbers */
+typedef struct { LONG n; char **text; LONG *num; char *pool; } _DashSysTab;
+static _DashSysTab _dash_ports_tab, _dash_tasks_tab, _dash_assigns_tab;
+
+static void _dash_systab_free(_DashSysTab *t) {
+    if (t->text) FreeVec(t->text);
+    if (t->num) FreeVec(t->num);
+    if (t->pool) FreeVec(t->pool);
+    t->text = NULL;
+    t->num = NULL;
+    t->pool = NULL;
+    t->n = 0;
+}
+
+/* Room for n rows of k texts and k numbers, and size bytes of text */
+static BOOL _dash_systab_alloc(_DashSysTab *t, LONG n, LONG k, LONG size) {
+    _dash_systab_free(t);
+    t->text = (char **)AllocVec((n * k + 1) * sizeof(char *), MEMF_ANY | MEMF_CLEAR);
+    t->num = (LONG *)AllocVec((n * k + 1) * sizeof(LONG), MEMF_ANY | MEMF_CLEAR);
+    t->pool = (char *)AllocVec(size + 1, MEMF_ANY);
+    if (!t->text || !t->num || !t->pool) { _dash_systab_free(t); return FALSE; }
+    return TRUE;
+}
+
+static STRPTR _dash_systab_text(_DashSysTab *t, LONG k, LONG i, LONG j) {
+    char *s = i >= 0 && i < t->n ? t->text[i * k + j] : NULL;
+    return _dash_str_dup((STRPTR)(s ? s : ""), TRUE);
+}
+
+static LONG _dash_systab_num(_DashSysTab *t, LONG k, LONG i, LONG j) {
+    return i >= 0 && i < t->n ? t->num[i * k + j] : 0;
+}
+
+/* Copy a C text (or BSTR, bstr TRUE) into the pool: where it went */
+static char *_dash_systab_put(char **at, char *end, const char *s, LONG len) {
+    char *r = *at;
+    if (len < 0) len = s ? strlen(s) : 0;
+    if (r + len + 1 > end) return NULL;
+    if (len) CopyMem((APTR)s, r, len);
+    r[len] = 0;
+    *at = r + len + 1;
+    return r;
+}
+
+static LONG _dash_ports_read(void) {
+    struct Node *nd;
+    LONG n = 0, size = 0;
+    char *at, *end;
+    Forbid();
+    for (nd = SysBase->PortList.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        if (nd->ln_Name) { n++; size += strlen(nd->ln_Name) + 1; }
+    Permit();
+    n += 16;
+    size += 1024;
+    if (!_dash_systab_alloc(&_dash_ports_tab, n, 1, size)) return -1;
+    at = _dash_ports_tab.pool;
+    end = at + size;
+    Forbid();
+    for (nd = SysBase->PortList.lh_Head; nd->ln_Succ && _dash_ports_tab.n < n; nd = nd->ln_Succ) {
+        char *s;
+        if (!nd->ln_Name || !(s = _dash_systab_put(&at, end, nd->ln_Name, -1))) continue;
+        _dash_ports_tab.text[_dash_ports_tab.n++] = s;
+    }
+    Permit();
+    return _dash_ports_tab.n;
+}
+
+static STRPTR _dash_port_name(LONG i) { return _dash_systab_text(&_dash_ports_tab, 1, i, 0); }
+
+/* Tasks: name, command of a Shell process, state; priority, CLI number */
+static void _dash_tasks_add(struct Task *tk, char **at, char *end, LONG n, const char *state) {
+    _DashSysTab *t = &_dash_tasks_tab;
+    LONG r = t->n;
+    if (r >= n) return;
+    t->text[r * 3] = _dash_systab_put(at, end, tk->tc_Node.ln_Name ? tk->tc_Node.ln_Name : "", -1);
+    t->text[r * 3 + 1] = NULL;
+    t->text[r * 3 + 2] = (char *)state;
+    t->num[r * 3] = tk->tc_Node.ln_Pri;
+    t->num[r * 3 + 1] = 0;
+    if (tk->tc_Node.ln_Type == NT_PROCESS) {
+        struct Process *pr = (struct Process *)tk;
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(pr->pr_CLI);
+        if (cli) {
+            UBYTE *b = (UBYTE *)BADDR(cli->cli_CommandName);
+            t->num[r * 3 + 1] = pr->pr_TaskNum;
+            if (b && b[0]) t->text[r * 3 + 1] = _dash_systab_put(at, end, (char *)b + 1, b[0]);
+        }
+    }
+    t->n++;
+}
+
+static LONG _dash_tasks_read(void) {
+    struct Node *nd;
+    LONG n = 1;
+    LONG size;
+    char *at, *end;
+    Forbid();
+    for (nd = SysBase->TaskReady.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    for (nd = SysBase->TaskWait.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    Permit();
+    n += 16;
+    size = n * 160;
+    if (!_dash_systab_alloc(&_dash_tasks_tab, n, 3, size)) return -1;
+    at = _dash_tasks_tab.pool;
+    end = at + size;
+    Forbid();
+    _dash_tasks_add(SysBase->ThisTask, &at, end, n, "running");
+    for (nd = SysBase->TaskReady.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        _dash_tasks_add((struct Task *)nd, &at, end, n, "ready");
+    for (nd = SysBase->TaskWait.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        _dash_tasks_add((struct Task *)nd, &at, end, n, "waiting");
+    Permit();
+    return _dash_tasks_tab.n;
+}
+
+static STRPTR _dash_task_entry_name(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 0); }
+static STRPTR _dash_task_entry_command(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 1); }
+static STRPTR _dash_task_entry_state(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 2); }
+static LONG _dash_task_entry_priority(LONG i) { return _dash_systab_num(&_dash_tasks_tab, 3, i, 0); }
+static LONG _dash_task_entry_cli(LONG i) { return _dash_systab_num(&_dash_tasks_tab, 3, i, 1); }
+
+/* Assigns: name and where (a directory, several separated by ";", or the name of a late or deferred one) */
+static LONG _dash_assigns_read(void) {
+    struct DosList *dl;
+    LONG n = 0, size;
+    char *at, *end, buf[256];
+    dl = LockDosList(LDF_ASSIGNS | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_ASSIGNS))) n++;
+    UnLockDosList(LDF_ASSIGNS | LDF_READ);
+    n += 16;
+    size = n * 400;
+    if (!_dash_systab_alloc(&_dash_assigns_tab, n, 2, size)) return -1;
+    at = _dash_assigns_tab.pool;
+    end = at + size;
+    dl = LockDosList(LDF_ASSIGNS | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_ASSIGNS)) && _dash_assigns_tab.n < n) {
+        UBYTE *b = (UBYTE *)BADDR(dl->dol_Name);
+        LONG r = _dash_assigns_tab.n;
+        char *name, *where = at;
+        if (!b || !(name = _dash_systab_put(&at, end, (char *)b + 1, b[0]))) continue;
+        where = at;
+        if (dl->dol_Type == DLT_DIRECTORY) {
+            struct AssignList *al;
+            BOOL first = TRUE;
+            /* (as C:Assign does, the list held while it asks for the names) */
+            if (dl->dol_Lock && NameFromLock(dl->dol_Lock, (STRPTR)buf, sizeof(buf)))
+                _dash_systab_put(&at, end, buf, -1), first = FALSE;
+            for (al = dl->dol_misc.dol_assign.dol_List; al; al = al->al_Next)
+                if (al->al_Lock && NameFromLock(al->al_Lock, (STRPTR)buf, sizeof(buf))) {
+                    if (!first && at > where) at[-1] = ';';
+                    _dash_systab_put(&at, end, buf, -1);
+                    first = FALSE;
+                }
+            if (first) _dash_systab_put(&at, end, "", 0);
+        } else {
+            STRPTR s = dl->dol_misc.dol_assign.dol_AssignName;
+            _dash_systab_put(&at, end, s ? (char *)s : "", -1);
+        }
+        _dash_assigns_tab.text[r * 2] = name;
+        _dash_assigns_tab.text[r * 2 + 1] = where;
+        _dash_assigns_tab.n++;
+    }
+    UnLockDosList(LDF_ASSIGNS | LDF_READ);
+    return _dash_assigns_tab.n;
+}
+
+static STRPTR _dash_assign_name(LONG i) { return _dash_systab_text(&_dash_assigns_tab, 2, i, 0); }
+static STRPTR _dash_assign_path(LONG i) { return _dash_systab_text(&_dash_assigns_tab, 2, i, 1); }
+
+static void _dash_syslist_cleanup(void) {
+    _dash_systab_free(&_dash_ports_tab);
+    _dash_systab_free(&_dash_tasks_tab);
+    _dash_systab_free(&_dash_assigns_tab);
+    if (_dash_rexx_base) { CloseLibrary(_dash_rexx_base); _dash_rexx_base = NULL; }
+}
+
+"""
+
     # Dash 2.0 (for Inferencia, the IDE): running a command line and taking its output
     RUNCAP_RUNTIME = """\
 /* run_start(command, timeout_ms) runs a command line in a process of its own (with the program's path and
@@ -16079,6 +16308,34 @@ static APTR _dash_mui_app_begin(STRPTR title, STRPTR base) {
     return _dash_mui_app;
 }
 
+/* mui_app_rexx(app, f): every ARexx command to the application's port that MUI does not answer itself (QUIT,
+   SHOW...) calls the program's f(command) -> String; what it returns is the RESULT, and mui_rexx_fail(rc) during
+   the call its RC (Dash 2.0, for Inferencia) */
+#include <rexx/storage.h>
+static APTR _dash_mui_rexx_func = NULL;
+static LONG _dash_mui_rexx_rc = 0;
+static struct Hook _dash_mui_rexx_hook;
+
+static ULONG _dash_mui_rexx_entry(struct Hook *h __asm("a0"), Object *app __asm("a2"), struct RexxMsg *rm __asm("a1")) {
+    STRPTR r;
+    (void)h;
+    if (!_dash_mui_rexx_func || !rm || !rm->rm_Args[0]) return 20;
+    _dash_mui_rexx_rc = 0;
+    r = ((STRPTR (*)(STRPTR))_dash_mui_rexx_func)(_dash_str_dup((STRPTR)rm->rm_Args[0], TRUE));
+    /* (MUI copies the text) */
+    if (!_dash_mui_rexx_rc && r && *r && (rm->rm_Action & RXFF_RESULT))
+        SetAttrs(app, MUIA_Application_RexxString, (IPTR)r, TAG_DONE);
+    return (ULONG)_dash_mui_rexx_rc;
+}
+
+static void _dash_mui_app_rexx(APTR app, APTR func) {
+    _dash_mui_rexx_func = func;
+    _dash_mui_rexx_hook.h_Entry = (ULONG (*)())_dash_mui_rexx_entry;
+    if (app) SetAttrs((Object *)app, MUIA_Application_RexxHook, (IPTR)(func ? &_dash_mui_rexx_hook : NULL), TAG_DONE);
+}
+
+static void _dash_mui_rexx_fail(LONG rc) { _dash_mui_rexx_rc = rc; }
+
 static APTR _dash_mui_add(Object *obj);
 
 static LONG _dash_mui_kind(Object *obj) {
@@ -17995,6 +18252,7 @@ _RUNTIME_FLAGS = [
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
     ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
+    ("SYSLIST_RUNTIME", "uses_syslist"),    # Dash 2.0: rexx_send, ports_read, tasks_read, assigns_read
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
@@ -18300,6 +18558,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
         self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
+        self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
@@ -18667,6 +18926,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.SYSINFO_RUNTIME)
         if self.uses_runcap:
             parts.append(CTemplates.RUNCAP_RUNTIME)
+        if self.uses_syslist:
+            parts.append(CTemplates.SYSLIST_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
@@ -18901,6 +19162,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
         if self.uses_runcap:
             cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
+        if self.uses_syslist:
+            cleanup.append("    _dash_syslist_cleanup();\n")
         if self.uses_netbg:
             cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
         if self.uses_instance:
