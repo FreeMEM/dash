@@ -10,4 +10,15 @@ Main
     Print "b: #{b}"
     c = b + 1
     Print "c: #{c}"
+    if arg(0) == "bucle"
+        vueltas()
+    end
+end
+
+# (con el argumento "bucle" no acaba solo: para dbg_pause y dbg_end)
+func vueltas()
+    n = 0
+    while true
+        n = n + 1
+    end
 end

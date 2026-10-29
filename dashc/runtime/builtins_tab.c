@@ -228,6 +228,10 @@ const BuiltinInfo builtin_info[] = {
     {"dbg_end", 1, 2, 0, 0},
     {"dbg_error", 0, 3, 0, 0},
     {"dbg_file", 0, 3, 0, 0},
+    {"dbg_frame_file", 1, 3, 0, 0},
+    {"dbg_frame_function", 1, 3, 0, 0},
+    {"dbg_frame_line", 1, 1, 0, 0},
+    {"dbg_frames", 0, 1, 0, 0},
     {"dbg_function", 0, 3, 0, 0},
     {"dbg_line", 0, 1, 0, 0},
     {"dbg_next", 0, 2, 0, 0},
@@ -1566,7 +1570,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1564;
+const int builtin_count = 1568;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

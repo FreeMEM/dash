@@ -3,7 +3,7 @@
 que se compila con dashc y se ejecuta en el A1200 emulado con, en DH0:, depurado (depurado.dash con --debug) y
 sin_debug (el mismo sin --debug). Su salida tiene que ser la de sus líneas "# expect-out:".
 
-    python3 tests/depurar.py [filtro]"""
+    python3 tests/depurar.py [--a500] [filtro]      (--a500: un A500 con 68000 en vez del A1200)"""
 import os
 import shutil
 import subprocess
@@ -18,7 +18,10 @@ import emu_run  # noqa: E402
 
 
 def main():
-    filtro = sys.argv[1] if len(sys.argv) > 1 else ""
+    args = sys.argv[1:]
+    a500 = "--a500" in args
+    args = [a for a in args if a != "--a500"]
+    filtro = args[0] if args else ""
     d = HERE / "depurar"
     tests = sorted(t for t in d.glob("*.dash") if t.name != "depurado.dash" and filtro in t.stem)
     with tempfile.TemporaryDirectory() as tmp:
@@ -36,8 +39,10 @@ def main():
             for name in ("depurado", "sin_debug"):
                 shutil.copy(tmp / name, Path(hd) / name)
 
-        res = emu_run.run_programs(exes, timeout=600, kickstart=os.environ["DASH_KICKSTART"],
-                                   system=os.environ.get("DASH_EMU_SYS"), on_disk=on_disk)
+        res = emu_run.run_programs(exes, timeout=600,
+                                   kickstart=os.environ["DASH_KICKSTART_A500" if a500 else "DASH_KICKSTART"],
+                                   system=os.environ.get("DASH_EMU_SYS"), on_disk=on_disk,
+                                   extra_config="amiga_model = A500\n" if a500 else "")
     bad = 0
     for t, r in zip(tests, res):
         want = [l.split(":", 1)[1].strip() for l in t.read_text().splitlines() if l.startswith("# expect-out:")]

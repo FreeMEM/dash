@@ -45,7 +45,7 @@ static struct {
     BPTR out;
     char outname[48], *args, *path;
     volatile LONG state, rc, mode, kill;
-    ULONG ref_a7, ref_a5;                /* donde se paró al pedir pasar o salir */
+    ULONG ref_a5;                        /* el marco donde se paró al pedir pasar o salir */
     ULONG *regs;                         /* d0-d7, a0-a6 y el PC de vuelta, en la pila del hijo */
     ULONG a7, pc;
     LONG at;                             /* la línea (índice en lines) donde está parado, -1 si ninguna */
@@ -127,8 +127,9 @@ void _dbg_stopped(ULONG *regs) {
     switch (_dbg.mode) {
     case DBG_CONT: if (!_dbg.bp[i]) return; break;
     case DBG_STEP: break;
-    case DBG_NEXT: if (a7 < _dbg.ref_a7 && !_dbg.bp[i]) return; break;   /* más hondo: una función a la que llamó */
-    case DBG_OUT: if (a7 <= _dbg.ref_a5 && !_dbg.bp[i]) return; break;  /* aún en la función (o más hondo) */
+    /* (por el marco, a5: dentro de un bucle, a7 puede estar más abajo) */
+    case DBG_NEXT: if (regs[13] < _dbg.ref_a5 && !_dbg.bp[i]) return; break;   /* más hondo: una función a la que llamó */
+    case DBG_OUT: if (regs[13] <= _dbg.ref_a5 && !_dbg.bp[i]) return; break;   /* aún en la función (o más hondo) */
     }
     _dbg.regs = regs;
     _dbg.a7 = a7;
@@ -285,7 +286,8 @@ static BOOL _dbg_read_info(STRPTR path) {
     return TRUE;
 }
 
-static void _dbg_free(void) {
+/* (keep: el programa acabó; quedan su estado y su código para dbg_state y dbg_rc) */
+static void _dbg_free(BOOL keep) {
     if (_dbg.seg) { UnLoadSeg(_dbg.seg); _dbg.seg = 0; }
     if (_dbg.text) FreeVec(_dbg.text);
     if (_dbg.lines) FreeVec(_dbg.lines);
@@ -299,11 +301,19 @@ static void _dbg_free(void) {
     if (_dbg.outname[0]) DeleteFile((STRPTR)_dbg.outname);
     {
         char err[160];
+        LONG rc = _dbg.rc;
+        BOOL atexit_done = _dbg.atexit_done;
         CopyMem(_dbg.error, err, sizeof(err));
         memset(&_dbg, 0, sizeof(_dbg));
         CopyMem(err, _dbg.error, sizeof(err));
+        _dbg.atexit_done = atexit_done;
+        if (keep) {
+            _dbg.state = DBG_ENDED;
+            _dbg.rc = rc;
+        }
     }
     _dbg.owner_sig = -1;
+    _dbg.at = -1;
 }
 
 /* Esperar a que deje de correr, hasta ms (0: sin tope): el estado */
@@ -319,7 +329,7 @@ static LONG _dbg_wait_ms(LONG ms) {
 
 /* Acabar el programa depurado: Ctrl-C, todas las líneas paran y van a _dash_quit; espera hasta ms */
 static BOOL _dbg_end(LONG ms) {
-    if (_dbg.state == DBG_NONE) return TRUE;
+    if (_dbg.state == DBG_NONE || (_dbg.state == DBG_ENDED && !_dbg.seg)) return TRUE;
     if (_dbg.state == DBG_PAUSED) {
         /* (sin empezar: empieza y acaba en su primera línea) */
         _dbg.kill = 1;
@@ -338,7 +348,7 @@ static BOOL _dbg_end(LONG ms) {
     _dbg_wait_ms(ms);
     if (_dbg.state != DBG_ENDED) return FALSE;   /* sigue: no se puede descargar su código */
     if (_dbg.out) { Close(_dbg.out); _dbg.out = 0; }
-    _dbg_free();
+    _dbg_free(TRUE);
     return TRUE;
 }
 
@@ -359,19 +369,19 @@ LONG db_dbg_start(LONG path_, LONG args_) {
     _dbg.at = -1;
     if (!path || !*path) { _dbg_fail("sin programa"); return FALSE; }
     if (!_dbg.atexit_done) { _dash_atexit(_dbg_cleanup); _dbg.atexit_done = TRUE; }
-    if (!_dbg_read_info(path)) { _dbg_free(); return FALSE; }
-    if (!_dbg.quit) { _dbg_free(); _dbg_fail("informaci\363n de depuraci\363n vieja (sin _dash_quit)"); return FALSE; }
-    if (!(_dbg.seg = LoadSeg(path))) { _dbg_free(); _dbg_fail("no puedo cargar el programa"); return FALSE; }
+    if (!_dbg_read_info(path)) { _dbg_free(FALSE); return FALSE; }
+    if (!_dbg.quit) { _dbg_free(FALSE); _dbg_fail("informaci\363n de depuraci\363n vieja (sin _dash_quit)"); return FALSE; }
+    if (!(_dbg.seg = LoadSeg(path))) { _dbg_free(FALSE); _dbg_fail("no puedo cargar el programa"); return FALSE; }
     _dbg.code = (ULONG)BADDR(_dbg.seg) + 4;
     _dbg.data = *(BPTR *)BADDR(_dbg.seg) ? (ULONG)BADDR(*(BPTR *)BADDR(_dbg.seg)) + 4 : 0;
     _dbg.path = (char *)AllocVec(strlen((char *)path) + 1, MEMF_ANY);
     _dbg.args = (char *)AllocVec((args ? strlen((char *)args) : 0) + 2, MEMF_ANY);
-    if (!_dbg.path || !_dbg.args) { _dbg_free(); _dbg_fail("sin memoria"); return FALSE; }
+    if (!_dbg.path || !_dbg.args) { _dbg_free(FALSE); _dbg_fail("sin memoria"); return FALSE; }
     strcpy(_dbg.path, (char *)path);
     strcpy(_dbg.args, args ? (char *)args : "");
     strcat(_dbg.args, "\n");
     _dbg.owner = &me->pr_Task;
-    if ((_dbg.owner_sig = AllocSignal(-1)) < 0) { _dbg_free(); _dbg_fail("sin se\361ales libres"); return FALSE; }
+    if ((_dbg.owner_sig = AllocSignal(-1)) < 0) { _dbg_free(FALSE); _dbg_fail("sin se\361ales libres"); return FALSE; }
     _dbg.owner_mask = 1UL << _dbg.owner_sig;
     /* (compartido, no MODE_NEWFILE: dbg_output lo lee mientras el programa escribe) */
     sprintf(_dbg.outname, "T:dash_dbg_%lx", (unsigned long)me);
@@ -385,7 +395,7 @@ LONG db_dbg_start(LONG path_, LONG args_) {
     if (!_dbg.out || !in) {
         if (in) Close(in);
         if (_dbg.out) { Close(_dbg.out); _dbg.out = 0; }
-        _dbg_free();
+        _dbg_free(FALSE);
         _dbg_fail("no puedo abrir la salida del programa");
         return FALSE;
     }
@@ -396,7 +406,7 @@ LONG db_dbg_start(LONG path_, LONG args_) {
         Close(in);
         Close(_dbg.out);
         _dbg.out = 0;
-        _dbg_free();
+        _dbg_free(FALSE);
         _dbg_fail("no puedo crear el proceso");
         return FALSE;
     }
@@ -445,13 +455,7 @@ LONG db_dbg_unbreak(LONG file, LONG line) { return _dbg_set((STRPTR)file, line, 
 static LONG _dbg_go(LONG mode) {
     if (_dbg.state != DBG_PAUSED && _dbg.state != DBG_STOPPED) return FALSE;
     _dbg.mode = mode;
-    if (_dbg.state == DBG_STOPPED) {
-        _dbg.ref_a7 = _dbg.a7;
-        _dbg.ref_a5 = _dbg.regs ? _dbg.regs[13] : 0;
-    } else {
-        _dbg.ref_a7 = 0xFFFFFFFF;
-        _dbg.ref_a5 = 0;
-    }
+    _dbg.ref_a5 = _dbg.state == DBG_STOPPED && _dbg.regs ? _dbg.regs[13] : 0;
     _dbg_patch_all(mode != DBG_CONT);
     SetSignal(0, _dbg.owner_mask);
     _dbg.state = DBG_RUNNING;
@@ -533,4 +537,62 @@ LONG db_dbg_output(void) {
         Close(f);
     }
     return (LONG)(s ? s : _dash_str_dup((STRPTR)"", TRUE));
+}
+
+/* ---- la pila de llamadas: la cadena de marcos de a5 (con --debug, todas las funciones tienen marco) ---- */
+
+/* La línea de la dirección pc: la del último NOP antes de ella dentro de su función, -1 si no es de Dash */
+static LONG _dbg_line_before(ULONG pc) {
+    _DbgFunc *f = _dbg_func_at(pc);
+    LONG lo = 0, hi = _dbg.nlines - 1, best = -1;
+    ULONG off = pc - _dbg.code;
+    if (!f) return -1;
+    while (lo <= hi) {
+        LONG m = (lo + hi) / 2;
+        if (_dbg.lines[m].off < off) { best = m; lo = m + 1; }
+        else hi = m - 1;
+    }
+    return best >= 0 && _dbg.lines[best].off >= f->start ? best : -1;
+}
+
+/* El marco i (0, donde está parado; 1, quien lo llamó...): su a5 y su línea (índice en lines); FALSE si no hay */
+static BOOL _dbg_frame(LONG i, ULONG *a5, LONG *line) {
+    ULONG fp, pc;
+    LONG at;
+    if (_dbg.state != DBG_STOPPED || !_dbg.regs || i < 0) return FALSE;
+    fp = _dbg.regs[13];
+    at = _dbg.at;
+    while (i-- > 0) {
+        if (!fp || (fp & 1)) return FALSE;
+        pc = ((ULONG *)fp)[1];                       /* la vuelta, tras el a5 guardado */
+        fp = ((ULONG *)fp)[0];
+        if ((at = _dbg_line_before(pc)) < 0) return FALSE;
+    }
+    if (a5) *a5 = fp;
+    if (line) *line = at;
+    return TRUE;
+}
+
+/* Cuántos marcos hay (1 parado en Main; 0 si no está parado) */
+LONG db_dbg_frames(void) {
+    LONG n = 0;
+    while (n < 1000 && _dbg_frame(n, NULL, NULL)) n++;
+    return n;
+}
+
+LONG db_dbg_frame_line(LONG i) {
+    LONG at;
+    return _dbg_frame(i, NULL, &at) ? _dbg.lines[at].line : 0;
+}
+
+LONG db_dbg_frame_file(LONG i) {
+    LONG at;
+    char *f = _dbg_frame(i, NULL, &at) && _dbg.lines[at].file < _dbg.nfiles ? _dbg.files[_dbg.lines[at].file] : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f : ""), TRUE);
+}
+
+LONG db_dbg_frame_function(LONG i) {
+    LONG at;
+    _DbgFunc *f = _dbg_frame(i, NULL, &at) ? _dbg_func_at(_dbg.code + _dbg.lines[at].off) : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f->name : ""), TRUE);
 }

@@ -67,3 +67,8 @@ Como EDBG de AmigaE (DASHC_LOOP, D12): sin el bit de traza de la CPU, que Emu68 
   escapes Latin-1. Tests: `dashc/tests/depurar.py` (en el A1200, con el depurado en DH0:), `basico` bien.
 - D13 (freememlang-51, 2026-10-29): Dash 2.0 mantiene los dos caminos (dashc y `./dash --c`, dash1); los `dbg_*` son
   solo de dashc y lo dicen en su documentación.
+- G4 hecha: `dbg_step` (entra en las funciones), `dbg_next` y `dbg_out` miran el marco (a5, no a7: dentro de un
+  bucle dashc deja cosas en la pila), `dbg_pause` (todas las líneas a `TRAP`), la pila de llamadas por la cadena de
+  a5 (`dbg_frames`, `dbg_frame_function/line/file`: la línea de una llamada es la del último `NOP` antes de su
+  vuelta). `dbg_end` deja el estado (4) y el código (20 si lo acabó el depurador). Tests `basico` y `pasos` bien en
+  A1200 y A500 (`depurar.py --a500`).

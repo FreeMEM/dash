@@ -26,6 +26,13 @@ DASHC_BUILTINS = {
     "dbg_file": ([], "STRPTR", "The file of the line where the program stopped (its full path)"),
     "dbg_line": ([], "LONG", "The line where the program stopped (0 if it is not stopped)"),
     "dbg_function": ([], "STRPTR", "The function where the program stopped (\"Main\", \"Punto.mover\"...)"),
+    "dbg_frames": ([], "LONG", "How many calls are open where the program stopped: 1 in Main, 2 in a function Main "
+                                "called... (0 if it is not stopped)"),
+    "dbg_frame_function": (["i"], "STRPTR", "The function of call i: 0 the one where it stopped, 1 the one that called "
+                                           "it..."),
+    "dbg_frame_line": (["i"], "LONG", "The line where call i is: 0 where it stopped, 1 the line of the call in the "
+                                     "one that called it..."),
+    "dbg_frame_file": (["i"], "STRPTR", "The file of call i (its full path)"),
     "dbg_reg": (["n"], "LONG", "A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC"),
     "dbg_peek": (["addr", "size"], "LONG", "1, 2 or 4 bytes of memory at addr, without sign"),
     "dbg_output": ([], "STRPTR", "What the program has written so far (output and error output)"),
