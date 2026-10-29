@@ -78,3 +78,5 @@ Como EDBG de AmigaE (DASHC_LOOP, D12): sin el bit de traza de la CPU, que Emu68 
   Float y Double con el runtime, textos entre comillas, structs con sus campos a dos niveles, listas hasta 20,
   diccionarios con su número de claves, nil) o "? " y el porqué. La salida del programa ya estaba (`dbg_output`,
   G3). Los depurados de los tests son `depurado*.dash`. Tests `basico`, `pasos` y `variables` bien en A1200 y A500.
+- G6: el depurador en `dashc/README.md` y `README.en.md` (sección "Depurar"/"Debugging": cómo se usa, los `dbg_*`,
+  cómo va y sus límites).

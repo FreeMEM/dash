@@ -33,6 +33,49 @@ with parameters and `return`, `if`/`elif`/`else`, `while`, `for` over a range (`
 Missing: dictionaries, string methods (`find`, `upper`...), `sort`, lambdas, enums, Float and Fixed,
 builtins, windows, `@native`, `import`.
 
+## Debugging
+
+`dashc --debug prog.dash -o prog` (or `./dash --debug`) puts a `NOP` at the start of every line and adds a
+`HUNK_DEBUG` to the executable with the files, lines, functions, variables, globals and struct fields
+(`dashc --debug-info prog` prints it). No function is copied inline and every variable stays in the frame, where the
+debugger finds it; the program does the same as without `--debug`.
+
+The `dbg_*` builtins, only in dashc (Dash 1.x does not have them), debug such a program from another one (Forja, the
+IDE):
+
+```ruby
+dbg_start("Work:prog", "")              # loaded and paused before its first line
+dbg_break("prog.dash", 12)              # a breakpoint (by the end of the file name)
+dbg_continue()
+if dbg_wait(0) == 3                     # 3: stopped at a line; 4: ended
+    Print "#{dbg_function()} #{dbg_line()}: p = " + dbg_value(0, "p")
+end
+dbg_next()                              # dbg_step goes into functions; dbg_out leaves this one
+dbg_end(5000)                           # ends it (its usual cleanup); dbg_rc() gives its code
+```
+
+| Builtin | What it does |
+|---------|--------------|
+| `dbg_start(prog, args)`, `dbg_error()` | Load paused; why it failed |
+| `dbg_state()`, `dbg_wait(ms)`, `dbg_signal()` | State (0 none, 1 paused at the start, 2 running, 3 stopped, 4 ended); wait; the signal that comes when it stops or ends (for `mui_wait_event_signals`) |
+| `dbg_break(file, line)`, `dbg_unbreak(...)` | Breakpoints |
+| `dbg_continue()`, `dbg_step()`, `dbg_next()`, `dbg_out()`, `dbg_pause()` | Go on, step in, step over, step out, stop at the next line |
+| `dbg_end(ms)`, `dbg_rc()`, `dbg_output()` | End it, its code, what it wrote |
+| `dbg_file()`, `dbg_line()`, `dbg_function()` | Where it stopped |
+| `dbg_frames()`, `dbg_frame_function/line/file(i)` | The call stack (0, where it is) |
+| `dbg_vars(i)`, `dbg_var_name/type(i, k)`, `dbg_globals()`, `dbg_global_name(g)` | The variables of each call and the globals |
+| `dbg_value(i, expr)`, `dbg_value_type(i, expr)` | The value as text (`"p.hijos[0].x"`) and its type |
+| `dbg_reg(n)`, `dbg_peek(addr, size)` | Registers (0-7 d0-d7, 8-15 a0-a7, 16 the PC) and memory |
+
+How it works (`runtime/depurar.c`, plan in `docs/DEPURADOR_LOOP.md`): the program runs in a child process with its
+own exception handler; a breakpoint turns the line's `NOP` into `TRAP #15`, and going on needs nothing put back.
+Stepping makes every line stop and looks at the frame (`a5`). It does not use the CPU's trace bit, so it works the
+same on a 68000, in FS-UAE and in Emu68.
+
+Limits: a `task_start` task that runs a line with a `TRAP` crashes (it has no handler); a program waiting without
+running any line (in `mui_wait_event`) does not end with `dbg_end` until it is back in its code; read the output
+before `dbg_end`. Tests: `python3 tests/depurar.py [--a500]`.
+
 ## How it is built
 
 | File | What it does |
