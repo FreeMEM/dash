@@ -5552,6 +5552,11 @@ static void gen_stmt(Node *n)
         {
             Local *lc = find_local(n->name);
             if (lc) lc->entry = 0;                     /* el rango de entrada ya no vale */
+            /* x = nil de una variable nueva: no dice qué guarda (lo que se le asigne después se perdía), como ./dash */
+            if (n->kind == S_ASSIGN && n->a->kind == E_NIL && !lc && lookup_kind(n->name) == V_GLOBAL &&
+                !lookup_global(n->name))
+                fatal_node(n, "'%s = nil' no dice qué guarda %s: decláralo con su tipo (var %s: Tipo = nil)",
+                           n->name, n->name, n->name);
         }
         if (n->kind == S_ASSIGN && n->a->kind == E_CALL) {
             int idx;
