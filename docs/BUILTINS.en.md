@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 803 functions, 803 implemented, 0 not implemented.
+Total: 806 functions, 806 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -676,7 +676,7 @@ Total: 803 functions, 803 implemented, 0 not implemented.
 | `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
 | `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
-| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote (output and error output), its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's stderr goes to the console; dashc writes its errors to its output on the Amiga) |  |
 | `run_start(command, timeout_ms)` | `LONG` | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
 | `run_ready(run)` | `BOOL` | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
 | `run_break(run)` | `void` | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |
@@ -904,6 +904,9 @@ Total: 803 functions, 803 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_request(window, title, text, buttons)` | `LONG` | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
+| `mui_set_background(obj, r, g, b)` | `void` | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |
+| `mui_set_text_pen(obj, r, g, b)` | `void` | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |
 | `mui_app_rexx(app, func)` | `void` | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
 | `mui_rexx_fail(rc)` | `void` | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
 | `mui_app_end()` | `void` | Dispose the application with its windows and objects, close MUI (also done at exit) |  |

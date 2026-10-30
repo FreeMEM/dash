@@ -480,9 +480,10 @@ DESC_ES = {
     "assign_name": "El nombre de la asignación i del último assigns_read, sin los dos puntos",
     "assign_path": "Adónde apunta la asignación i: un cajón (\"Workbench:C\"), varios separados por \";\", o el "
                    "nombre que buscará una diferida o no ligada",
-    "run_capture": "Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código "
-                   "de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y "
-                   "otra vez cada segundo hasta que acaba)",
+    "run_capture": "Ejecuta una orden y espera a que acabe: lo que escribió, con su código de retorno en run_rc(). Con "
+                   "timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta "
+                   "que acaba). Solo su salida: AmigaOS no da canal de errores a una orden lanzada así (el stderr de un "
+                   "programa en C va a la consola; dashc escribe sus errores por su salida en el Amiga)",
     "run_start": "run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El "
                  "programa espera al acabar a las que no terminó",
     "run_ready": "Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo)",
@@ -911,6 +912,14 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_request": "Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados "
+                   "por \"|\" (\"_Guardar|_Descartar|_Cancelar\"); las ventanas de la aplicación esperan. El botón elegido: "
+                   "1, 2... desde la izquierda, 0 el último (también Esc)",
+    "mui_set_background": "Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una "
+                          "lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si "
+                          "no tienen el suyo",
+    "mui_set_text_pen": "El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo "
+                        "mantiene",
     "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
                     "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
                     "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "

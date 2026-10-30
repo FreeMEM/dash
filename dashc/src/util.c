@@ -102,13 +102,44 @@ uint32_t get_long(const uint8_t *p)
     return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
 }
 
+/* Un error o aviso de dashc (DASHC_ERR). Los textos de dashc van en UTF-8; en el Amiga, en Latin-1 (lo que no es
+   UTF-8 válido, como un nombre de fichero que ya está en Latin-1, queda como está) */
+static void err_out(const char *fmt, va_list ap)
+{
+    char msg[2048];
+    vsnprintf(msg, sizeof msg, fmt, ap);
+#ifdef __amigaos__
+    {
+        unsigned char *s = (unsigned char *)msg, *d = s;
+        for (; *s; s++) {
+            if ((s[0] == 0xC2 || s[0] == 0xC3) && (s[1] & 0xC0) == 0x80) {
+                *d++ = (unsigned char)((s[0] & 0x03) << 6 | (s[1] & 0x3F));
+                s++;
+            } else {
+                *d++ = *s;
+            }
+        }
+        *d = 0;
+    }
+#endif
+    fputs(msg, DASHC_ERR);
+}
+
+void err_printf(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    err_out(fmt, ap);
+    va_end(ap);
+}
+
 void fatal(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "dashc: Error: ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+    err_printf("dashc: Error: ");
+    err_out(fmt, ap);
+    err_printf("\n");
     va_end(ap);
     exit(1);
 }
@@ -118,7 +149,7 @@ void fatal_at(int line, int col, const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     char msg[1024], *m;
-    fprintf(stderr, "%s:%d:%d: Error: ", src_name, line, col);
+    err_printf("%s:%d:%d: Error: ", src_name, line, col);
     vsnprintf(msg, sizeof msg, fmt, ap);
     /* (sin el sufijo de los nombres privados de un módulo: `_x__m2` es `_x`, rename_private) */
     for (m = msg; *m; m++) {
@@ -127,7 +158,7 @@ void fatal_at(int line, int col, const char *fmt, ...)
         while (isdigit((unsigned char)*e)) e++;
         if (!isalnum((unsigned char)*e) && *e != '_') memmove(m, e, strlen(e) + 1);
     }
-    fprintf(stderr, "%s\n", msg);
+    err_printf("%s\n", msg);
     va_end(ap);
     exit(1);
 }

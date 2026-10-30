@@ -1,0 +1,2 @@
+{"dashui": 1, "windows": [{"name": "Mala", "root": {"type": "vgroup", "children": [
+  {"type": "list", "name": "lista", "color": [1, 2, 3]}]}}]}

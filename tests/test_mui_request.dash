@@ -1,0 +1,43 @@
+# MUI's requester (Dash 2.0, Forja: "there are unsaved changes"): over a window and over the application; the program
+# started again as "letra" or "esc" presses G (the underlined letter of "_Guardar": Return does not choose a button in
+# MUI's requesters) or Esc once the requester is the active window.
+# emu-needs: muimaster.library
+# expect-out: guardar: 1
+# expect-out: cancelar: 0
+# expect-out: fin
+
+func teclas(tecla: Int)
+    t = 0
+    while input_active_title() != "Forja" and t < 300
+        time_delay(5)
+        t = t + 1
+    end
+    time_delay(25)
+    input_key(tecla, 0)
+end
+
+Main
+    if arg(0) == "letra"
+        teclas(0x24)
+    elif arg(0) == "esc"
+        teclas(0x45)
+    elif mui_app_begin("Pregunta", "DASHREQUEST") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Pregunta", 0)
+            t = mui_text("Hola")
+        mui_window_end()
+        mui_window_open(w)
+        yo = "\"" + program_path() + "\""
+        h = run_start(yo + " letra", 60000)
+        r = mui_request(w, "Forja", "main.dash tiene cambios sin guardar (100%).", "_Guardar|_Descartar|_Cancelar")
+        s = run_finish(h)
+        Print "guardar: #{r}"
+        h = run_start(yo + " esc", 60000)
+        r = mui_request(0, "Forja", "¿Salir?", "_Salir|_Cancelar")
+        s = run_finish(h)
+        Print "cancelar: #{r}"
+        mui_app_end()
+        Print "fin"
+    end
+end

@@ -127,6 +127,10 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   «+ menú contextual» y el objeto lo elige en su propiedad `context_menu`.
 - **Tab en un lienzo** (Lorraine D48): `"take_tab": true` en un `canvas` hace que Tab y Mayúsculas+Tab sobre él sean
   teclas suyas (`mui_canvas_take_tab`), no el paso al gadget siguiente. En otro tipo es un error.
+- **Colores** (Forja, el tema oscuro sin las preferencias de MUI): `"background": [r, g, b]` (de 0 a 255) en un objeto,
+  un grupo o la ventana (su grupo raíz) le da ese fondo (`mui_set_background`), y `"color": [r, g, b]` en un `text`, un
+  `label` o un `button`, el color de su texto (`mui_set_text_pen`). En una pantalla de 256 colores o menos, el más
+  parecido de su paleta.
 - **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
   principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
   `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca

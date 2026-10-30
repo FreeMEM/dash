@@ -1,0 +1,40 @@
+# MUI colours without MUI's prefs (Dash 2.0, Forja's dark theme): an RGB background for a window (its root group), a
+# group, a text and a button (mui_set_background), and the colour of a text (mui_set_text_pen), which mui_set_text
+# keeps and mui_get_text leaves out.
+# emu-needs: muimaster.library
+# (on the 4 colours of the emulated Workbench: the window black, the button's text white, its red background grey)
+# emu-shot: 10 300 150 000000
+# emu-shot: 10 301 131 ffffff
+# expect-out: texto: [Texto claro]
+# expect-out: cambiado: [Otro texto]
+# expect-out: botón: [Vale]
+# expect-out: fin
+
+Main
+    if mui_app_begin("Colores", "DASHCOLORES") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Oscura", 0)
+            g = mui_vgroup_begin()
+                t = mui_text("Texto claro")
+                b = mui_button("_Vale")
+            mui_group_end()
+        mui_window_end()
+        mui_set_background(w, 20, 20, 24)
+        mui_set_background(t, 20, 20, 24)
+        mui_set_text_pen(t, 220, 220, 220)
+        mui_set_background(b, 200, 40, 40)
+        mui_set_text_pen(b, 255, 255, 255)
+        mui_window_open(w)
+        Print "texto: [#{mui_get_text(t)}]"
+        mui_timer(8000, 1)
+        ev = mui_wait_event()
+        mui_set_text(t, "Otro texto")
+        Print "cambiado: [#{mui_get_text(t)}]"
+        Print "botón: [#{mui_get_text(b)}]"
+        mui_timer(8000, 1)
+        ev = mui_wait_event()
+        mui_app_end()
+        Print "fin"
+    end
+end
