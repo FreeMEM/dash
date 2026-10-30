@@ -17172,9 +17172,8 @@ static ULONG _dash_mui_rexx_entry(struct Hook *h __asm("a0"), Object *app __asm(
     _dash_mui_rexx_rc = 0;
     /* (la orden tal cual: la función la recibe prestada y no la guarda) */
     r = ((STRPTR (*)(STRPTR))_dash_mui_rexx_func)((STRPTR)rm->rm_Args[0]);
-    /* (MUI copies the text) */
-    if (!_dash_mui_rexx_rc && r && *r && (rm->rm_Action & RXFF_RESULT))
-        SetAttrs(app, MUIA_Application_RexxString, (IPTR)r, TAG_DONE);
+    /* Always, "" too: MUI keeps the last one and would answer it again (MUI copies the text) */
+    SetAttrs(app, MUIA_Application_RexxString, (IPTR)(!_dash_mui_rexx_rc && r ? r : (STRPTR)""), TAG_DONE);
     return (ULONG)_dash_mui_rexx_rc;
 }
 

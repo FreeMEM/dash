@@ -5,8 +5,9 @@
 # emu-needs: rexxsyslib.library
 # expect-out: suma: [5] 0
 # expect-out: mal: [] 10
+# expect-out: vacío: [] 0
 # expect-out: puerto: true
-# expect-out: órdenes: 2
+# expect-out: órdenes: 4
 
 var ordenes: Int = 0
 
@@ -15,6 +16,9 @@ func orden(c: String) -> String
     p = str_split(c, " ")
     if p[0] == "SUMA" and p.length == 3
         return "" + (Int(p[1]) + Int(p[2]))
+    end
+    if p[0] == "NADA"
+        return ""
     end
     mui_rexx_fail(10)
     return ""
@@ -26,6 +30,10 @@ Main
         Print "suma: [#{r}] #{rexx_rc()}"
         r = rexx_send("PRUEBAREXX.1", "MAL")
         Print "mal: [#{r}] #{rexx_rc()}"
+        # (una que contesta "" tras una que contestó algo: "", no lo de antes)
+        r = rexx_send("PRUEBAREXX.1", "SUMA 1 1")
+        r = rexx_send("PRUEBAREXX.1", "NADA")
+        Print "vacío: [#{r}] #{rexx_rc()}"
         hay = false
         n = ports_read()
         for i in (0..n - 1)
