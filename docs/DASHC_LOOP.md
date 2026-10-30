@@ -713,4 +713,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Literales de hasta 24 letras comparados en línea: con ellos, D16 sale siempre; se quedan en 8.
   - Para buscar así: interruptores DASHC_X_* provisionales y tandas completas (cada una 42 min). Ojo con el
     tiempo de arranque de los scripts propios (60 s en vez de 600: los "fallos" eran tiempo agotado).
+- 2026-10-30, Tachyon D80 (encargo de la sesión tachyon-e6): `mem_puddle(bytes)` (tamaño de los charcos del
+  pool, de 1 KB a 1 MB, solo antes de pedir memoria) y `mem_trim()` (los bloques pequeños libres de sus listas al
+  pool; da los bytes). En dash1 (codegen) y, por su runtime, en dashc. Medido: exec de 3.1 y de 3.2 no devuelve al
+  sistema un charco vacío (2000 bloques de 32 bytes pedidos y soltados: 65 KB que no vuelven hasta DeletePool),
+  así que `mem_trim` no da memoria al sistema; sirve para que esos bloques los use otro tamaño. Test
+  memoria_devolver: tras soltar 3.000 structs con texto y `mem_trim`, 500 textos de 200 letras caben sin pedir
+  20 KB al sistema (sin `mem_trim`, no). Devolverla de verdad pediría bloques pequeños propios con su cuenta de
+  vivos por charco. Batería de dashc entera bien, run_tests 510 de 510.
 - Pendiente: D16; D15; D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).

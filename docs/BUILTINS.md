@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 817 funciones, 817 implementadas, 0 sin implementar.
+Total: 819 funciones, 819 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -291,6 +291,8 @@ Total: 817 funciones, 817 implementadas, 0 sin implementar.
 | `refcount(obj)` | `LONG` | El contador de referencias de un objeto |  |
 | `retain(obj)` | `void` | Suma una referencia a mano |  |
 | `release(obj)` | `void` | Quita una referencia a mano (libera el objeto si llega a 0) |  |
+| `mem_trim()` | `LONG` | Devuelve al pool los bloques pequeños libres, para bloques de cualquier tamaño (exec guarda los charcos hasta salir); los bytes devueltos |  |
+| `mem_puddle(bytes)` | `BOOL` | El tamaño de los charcos del pool de memoria (de 1 KB a 1 MB; 4 KB si no); solo antes de pedir memoria |  |
 
 ## Ficheros (DOS)
 

@@ -2087,6 +2087,21 @@ SYSTEM_FUNCTIONS = {
         c_template="_dash_release((void *)(${obj}))",
         description="Manually decrement reference count (frees if 0)"
     ),
+    # Tachyon D80: the small free blocks back to the pool
+    "mem_trim": BuiltinFunc(
+        name="mem_trim",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_mem_trim()",
+        description="Give the free small blocks back to the pool, for blocks of any size (exec keeps the puddles until exit); bytes given back"
+    ),
+    "mem_puddle": BuiltinFunc(
+        name="mem_puddle",
+        params=["bytes"],
+        return_type="BOOL",
+        c_template="_dash_mem_puddle(${bytes})",
+        description="Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation"
+    ),
 }
 
 

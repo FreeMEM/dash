@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 817 functions, 817 implemented, 0 not implemented.
+Total: 819 functions, 819 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -291,6 +291,8 @@ Total: 817 functions, 817 implemented, 0 not implemented.
 | `refcount(obj)` | `LONG` | Get reference count of object |  |
 | `retain(obj)` | `void` | Manually increment reference count |  |
 | `release(obj)` | `void` | Manually decrement reference count (frees if 0) |  |
+| `mem_trim()` | `LONG` | Give the free small blocks back to the pool, for blocks of any size (exec keeps the puddles until exit); bytes given back |  |
+| `mem_puddle(bytes)` | `BOOL` | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
 
 ## Files (DOS)
 

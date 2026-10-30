@@ -1,0 +1,39 @@
+# mem_puddle y mem_trim (Tachyon D80): charcos del pool de otro tamaño, antes de pedir memoria, y los bloques
+# pequeños libres de vuelta al pool, donde sirven para bloques de otro tamaño (exec 3.1 y 3.2 no devuelven al
+# sistema los charcos vacíos: solo DeletePool, al salir)
+import "lib/amiga/memory.dash"
+
+struct Nodo
+    n: Int = 0
+    texto: String = ""
+end
+
+Main
+    Print mem_puddle(16384)
+    Print mem_puddle(100)
+    var l: [Nodo] = []
+    for i in (1..3000)
+        l.push(Nodo(i, "n" + i))
+    end
+    Print l.length
+    antes = mem_free_total()
+    var vacia: [Nodo] = []
+    l = vacia
+    Print mem_puddle(8192)
+    d = mem_trim()
+    Print d > 50000
+    Print mem_trim()
+    antes = mem_free_total()
+    base = ""
+    for j in (1..20)
+        base = base + "0123456789"
+    end
+    var t: [String] = []
+    for i in (1..500)
+        t.push(base + i)
+    end
+    Print t.length
+    Print antes - mem_free_total() < 20000
+    s = "otra" + " vez"
+    Print s
+end

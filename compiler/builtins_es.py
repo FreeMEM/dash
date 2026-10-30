@@ -175,6 +175,8 @@ DESC_ES = {
     "arena_used": "Los bytes usados de una arena",
     "arena_available": "Los bytes libres de una arena",
     "refcount": "El contador de referencias de un objeto",
+    "mem_trim": "Devuelve al pool los bloques pequeños libres, para bloques de cualquier tamaño (exec guarda los charcos hasta salir); los bytes devueltos",
+    "mem_puddle": "El tamaño de los charcos del pool de memoria (de 1 KB a 1 MB; 4 KB si no); solo antes de pedir memoria",
     "retain": "Suma una referencia a mano",
     "release": "Quita una referencia a mano (libera el objeto si llega a 0)",
     # Ficheros (DOS)

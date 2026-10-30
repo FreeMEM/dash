@@ -701,8 +701,12 @@ const BuiltinInfo builtin_info[] = {
     {"mem_fast_total", 0, 1, 1, 0},
     {"mem_largest", 0, 1, 1, 0},
     {"mem_largest", 0, 1, 1, 0},
+    {"mem_puddle", 1, 2, 1, 0},
+    {"mem_puddle", 1, 2, 1, 0},
     {"mem_total", 0, 1, 1, 0},
     {"mem_total", 0, 1, 1, 0},
+    {"mem_trim", 0, 1, 1, 0},
+    {"mem_trim", 0, 1, 1, 0},
     {"menu_attach", 0, 2, 1, 0},
     {"menu_attach", 0, 2, 1, 0},
     {"menu_check_item", 3, 0, 1, 0},
@@ -1636,7 +1640,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1634;
+const int builtin_count = 1638;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

@@ -489,12 +489,23 @@ static BOOL _dash_mc_hold(APTR *b, ULONG *size) {
 }
 #endif
 
+/* the size of the pool's puddles (mem_puddle, before the pool exists: Tachyon D80); blocks over a quarter of it
+   get one of their own, which goes back to the system when freed */
+static ULONG _dash_puddle = 4096;
+
 static APTR _dash_alloc(ULONG size) {
     if (!_dash_pool) {
-        _dash_pool = CreatePool(MEMF_ANY | MEMF_CLEAR, 4096, 1024);
+        _dash_pool = CreatePool(MEMF_ANY | MEMF_CLEAR, _dash_puddle, _dash_puddle / 4);
         if (!_dash_pool) return NULL;
     }
     return AllocPooled(_dash_pool, size);
+}
+
+/* mem_puddle(bytes): puddles of that size (1 KB to 1 MB), only before the pool exists */
+static BOOL _dash_mem_puddle(LONG bytes) {
+    if (_dash_pool || bytes < 1024 || bytes > 1048576) return FALSE;
+    _dash_puddle = (ULONG)bytes;
+    return TRUE;
 }
 
 /* Small blocks (up to 128 bytes: strings, structs, array headers and data)
@@ -536,6 +547,25 @@ static APTR _dash_block_get_clear(ULONG size) {
         return _dash_alloc((c + 1) << 3);
     }
     return _dash_alloc(size);
+}
+
+/* mem_trim() (Tachyon D80): the small free blocks back to the pool, where blocks of any size can use them; without
+   it they stay in their lists for good. Exec (3.1 and 3.2, measured) does not give an empty puddle back to the
+   system: only DeletePool, at exit. The bytes given back */
+static LONG _dash_mem_trim(void) {
+    LONG n = 0, c;
+    if (!_dash_pool) return 0;
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++) {
+        APTR b = _dash_small_free[c];
+        while (b) {
+            APTR next = *(APTR *)b;
+            FreePooled(_dash_pool, b, (c + 1) << 3);   /* (the size _dash_block_get asked for) */
+            n += (c + 1) << 3;
+            b = next;
+        }
+        _dash_small_free[c] = NULL;
+    }
+    return n;
 }
 
 static __inline__ void _dash_block_put(APTR b, ULONG size) {
@@ -23328,7 +23358,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_arenas = True
 
         # Track refcount usage for manual retain/release
-        if builtin.name in ("refcount", "retain", "release"):
+        if builtin.name in ("refcount", "retain", "release", "mem_trim", "mem_puddle"):
             self.uses_refcount = True
 
         # Build parameter mapping. Arguments that are not plain values are computed
