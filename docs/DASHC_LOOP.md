@@ -89,6 +89,9 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   ellos no sale, y ninguno avisa (ni bloques de malloc pisados ni bloques de Dash escritos tras liberarse). Es
   decir: cualquier cambio de dónde cae la memoria lo esconde. Pendiente: otra vía (un depurador en el momento del
   assert, o el mismo fallo con dash1).
+  También d[k] leído de la casilla en for k in d.keys() (61c4b46, deshecho): la tanda completa da 106 de 114 dos
+  veces igual (test_js corta su salida en '{"a"' y los últimos del arranque se quedan sin tiempo); test_js y su
+  grupo pasan solos. D16 bloquea las mejoras: cada cambio puede sacarlo. Va antes que la velocidad.
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
