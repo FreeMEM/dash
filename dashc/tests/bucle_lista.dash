@@ -1,0 +1,78 @@
+# for x in lista con un cuerpo que no puede cambiar listas (sin llamadas ni escrituras en campos o elementos):
+# puntero a los datos y vueltas que quedan, leídos una vez. continue, break, return, nil, vacía, anidado,
+# elementos nil, textos y enteros
+struct Nodo
+    tipo: Int
+    nombre: String
+end
+
+func suma(l: [Nodo]) -> Int
+    k = 0
+    for h in l
+        if h == nil
+            continue
+        end
+        k = k + h.tipo
+    end
+    return k
+end
+
+func primero_mayor(l: [Int], m: Int) -> Int
+    for x in l
+        if x > m
+            return x
+        end
+    end
+    return -1
+end
+
+func pares(l: [Int]) -> Int
+    n = 0
+    for a in l
+        for b in l
+            if a < b
+                n = n + 1
+            end
+        end
+    end
+    return n
+end
+
+func largo_total(l: [String]) -> Int
+    t = 0
+    ultimo = ""
+    for s in l
+        t = t + s.length
+        ultimo = s
+        if s == "fin"
+            break
+        end
+    end
+    return t * 100 + ultimo.length
+end
+
+Main
+    var l: [Nodo] = []
+    l.push(Nodo(3, "a"))
+    var nada: Nodo = nil
+    l.push(nada)
+    l.push(Nodo(4, "b"))
+    Print suma(l)
+    var vacia: [Nodo] = []
+    Print suma(vacia)
+    var nula: [Nodo] = nil
+    Print suma(nula)
+    Print primero_mayor([1, 5, 9, 2], 4)
+    Print primero_mayor([1, 2], 4)
+    Print pares([3, 1, 2, 5])
+    Print largo_total(["uno", "dos", "fin", "nunca"])
+    total = 0
+    for i in (1..3)
+        for h in l
+            if h != nil
+                total = total + h.tipo * i
+            end
+        end
+    end
+    Print total
+end

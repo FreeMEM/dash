@@ -57,6 +57,8 @@ static int new_label(void)
 static uint32_t last_branch = (uint32_t)-1;   /* dónde empieza el último Bcc.w */
 static uint32_t dead_at = (uint32_t)-1;       /* después de un bra: hasta la próxima etiqueta no se llega */
 static uint32_t d0_loaded = (uint32_t)-1;     /* dónde acaba el último move/moveq a d0 */
+static uint32_t d0_stored = (uint32_t)-1;     /* dónde acaba el último move.l d0,dN (store_d0) */
+static int d0_stored_reg;
 /* Los códigos de condición dicen cómo es dN (flags_reg) comparado con 0 si la última
    instrucción, que acaba en flags_at, lo cambió: para todo si flags_full (V = 0) o
    solo para == y != (una suma puede poner V) */
@@ -109,6 +111,7 @@ static void def_label_at(int l, int keep)
     }
     if (!keep) {
         d0_loaded = (uint32_t)-1;                      /* se puede llegar de otro sitio */
+        d0_stored = (uint32_t)-1;
         flags_at = (uint32_t)-1;
     }
 }
@@ -822,6 +825,9 @@ static void load_imm(int reg, long v)
 static void load_var(int reg, Var *v)
 {
     if (v->kind == V_CONST) load_imm(reg, v->val);
+    else if (reg == 0 && v->kind == V_REG && d0_stored == obj->code.n && d0_stored_reg == v->reg &&
+             obj->code.n >= 2 && obj->code.p[obj->code.n - 2] == (0x20 | v->reg << 1) && obj->code.p[obj->code.n - 1] == 0)
+        d0_loaded = (uint32_t)obj->code.n;             /* (lo último fue move.l d0,dN: d0 ya lo tiene, con N y Z) */
     else if (!(v->kind == V_REG && v->reg == reg)) {
         op_ea(0x2000 | reg << 9, v);                   /* move.l v,dN */
         if (reg == 0) d0_loaded = (uint32_t)obj->code.n;
@@ -850,6 +856,8 @@ static void store_d0(Var *v)
     if (v->kind == V_REG) {
         w(0x2000 | v->reg << 9);                       /* move.l d0,dN */
         flags_set(v->reg, 1);
+        d0_stored = (uint32_t)obj->code.n;
+        d0_stored_reg = v->reg;
     } else if (v->kind == V_LOCAL) {
         w(0x2B40);                                     /* move.l d0,off(a5) */
         w(v->off);
@@ -5327,6 +5335,86 @@ static void gen_keys_loop(Node *n)
     mark_end(&ms);
 }
 
+/* ¿Nada en el cuerpo de un for puede cambiar listas? Sin llamadas (funciones, builtins, métodos ni constructores),
+   sin escribir campos ni elementos (S_STORE), sin asignar globales ni EventLoop. Entonces la lista del for (que se
+   sostiene) no cambia: sus datos y su largo se leen una vez (gen_foreach) */
+static int body_frozen(Node *e)
+{
+    int i;
+    if (!e) return 1;
+    switch (e->kind) {
+    case E_CALL: case E_MCALL: case E_FUNCREF: case E_LIST: case E_DICT:
+    case S_STORE: case S_EVLOOP: case S_WINDOW: case S_ON: case S_STOP:
+        return 0;
+    case S_ASSIGN:
+        if (lookup_global(e->name) && !find_local(e->name)) return 0;
+        break;
+    default:
+        break;
+    }
+    if (!body_frozen(e->a) || !body_frozen(e->b) || !body_frozen(e->c)) return 0;
+    for (i = 0; i < e->args.n; i++)
+        if (!body_frozen(e->args.v[i])) return 0;
+    for (i = 0; i < e->body.n; i++)
+        if (!body_frozen(e->body.v[i])) return 0;
+    for (i = 0; i < e->els.n; i++)
+        if (!body_frozen(e->els.v[i])) return 0;
+    return 1;
+}
+
+/* for x in lista con el cuerpo sin nada que cambie listas (body_frozen) y sin referencia ni copia por vuelta: un
+   puntero a los datos que avanza y las vueltas que quedan, leídos una vez (como gcc con el C de ./dash) */
+static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *ms)
+{
+    int top = new_label(), cont = new_label(), done = new_label(), ptr_slot, cnt_slot;
+    Var va, vp, vc, vx;
+    Loop lp;
+    use_slot(arr_slot);
+    va = slot_var(arr_slot, t);
+    load_var(0, &va);
+    branch(CC_EQ, done);                               /* (una lista nil no tiene elementos) */
+    w(0x2040);                                         /* movea.l d0,a0 */
+    w(0x2028); w(4);                                   /* move.l 4(a0),d0: el largo */
+    branch(CC_LE, done);
+    vc = declare_slot("", TY_INT, &cnt_slot);
+    store_d0(&vc);
+    w(0x2010);                                         /* move.l (a0),d0: los datos */
+    vp = declare_slot("", TY_INT, &ptr_slot);
+    store_d0(&vp);
+    enter_loop();
+    use_slot(arr_slot);
+    use_slot(ptr_slot);
+    use_slot(cnt_slot);
+    def_label(top);
+    mark_release(ms);
+    lp.brk = done;
+    lp.cont = cont;
+    enter_scope();
+    lp.depth = depth;
+    lp.sp = sp_depth;
+    VEC_PUSH(loops, lp);
+    use_slot(ptr_slot);
+    vp = slot_var(ptr_slot, TY_INT);
+    if (vp.kind == V_REG) w(0x2040 | vp.reg);          /* movea.l dP,a0 */
+    else op_ea(0x2040, &vp);                           /* movea.l puntero,a0 */
+    w(0x2010);                                         /* move.l (a0),d0 */
+    add_imm_ea(4, &vp);                                /* addq.l #4,puntero */
+    vx = declare(n->name, et);
+    store_d0(&vx);
+    gen_block(&n->body);
+    loops.n--;
+    leave_scope();
+    def_label(cont);
+    use_slot(cnt_slot);
+    vc = slot_var(cnt_slot, TY_INT);
+    add_imm_ea(-1, &vc);                               /* subq.l #1,vueltas */
+    branch(CC_NE, top);
+    def_label(done);
+    leave_loop();
+    leave_scope();                                     /* _dash_release de la lista */
+    mark_end(ms);
+}
+
 static void gen_foreach(Node *n)
 {
     int t = expr_type(n->a), et, top = new_label(), test = new_label(), cont = new_label(), done = new_label();
@@ -5352,6 +5440,15 @@ static void gen_foreach(Node *n)
     store_d0(&va);
     push_d0();
     rt_call("_dl_hold", 1, 0);
+    keep = (IS_OBJ(et) && !loop_keeps_elements(n)) || (IS_STRLIKE(et) && list_assigns(&n->body, n->name));
+    if (!keep && !debug) {
+        int frozen = 1, i;
+        for (i = 0; i < n->body.n && frozen; i++) frozen = body_frozen(n->body.v[i]);
+        if (frozen) {
+            gen_foreach_frozen(n, t, et, arr_slot, &ms);
+            return;
+        }
+    }
     vi = declare_slot("", TY_INT, &idx_slot);
     set_imm(&vi, 0);
     enter_loop();
