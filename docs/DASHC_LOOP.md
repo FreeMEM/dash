@@ -636,4 +636,14 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
       Tests comparar, bucle_objetos, dicc_literal, prestado, dicc_claves.
     - prueba.html tras todo eso (ms, dash1 / dashc): tokens 541 / 571, dom 1.071 / 1.179, estilo 3.905 / 4.069,
       maqueta 11.840 / 13.799.
-- Pendiente: D12, depurador (ver arriba); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
+    - `a + b + c` de textos en un solo `DashString_join` (como la interpolación; test concat). Con `--fpu` o
+      `--cpu 68020` y más, muls.l, divs.l y divsl.l en vez de las rutinas de 68000.
+    - Una llamada que pasa una función (`E_FUNCREF`) cuenta como desconocida para "conserva elementos" y "no
+      libera". Una tanda dio una vez 73 de 114, con un assert de QuickJS en test_jsdom_texto y textos rotos; no se
+      repitió solo. Tras esto, tanda completa 114 de 114 (2026-10-30).
+  - Fusionada ide-piezas (525fff2): builtins de Inferencia y Forja, lib/json, lib/dashui, lib/red y el depurador de
+    dashc (D12, hecho en la otra sesión). Batería todo bien, depurar.py con dashc y con --c, run_tests 482/482.
+  - D14: `--memcheck` ya rellenaba lo liberado con 0xDB, lo apartaba y avisaba con fichero y línea al retener,
+    soltar o liberar dos veces (también con dashc, por `_dash_mc_where`). Apartaba solo 64 bloques: en Tachyon un
+    bloque vuelve a usarse enseguida y el fallo no se ve. Ahora 1024.
+- Pendiente: D14 (fugas en Tachyon con --memcheck); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
