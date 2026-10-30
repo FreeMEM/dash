@@ -663,4 +663,9 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     faltaba, test_net_server, chocaba con test_http_lib: su servidor de prueba (# emu-http) estaba en el puerto
     40841 del PC, el mismo que test_net_server abre en el Amiga (bsdsocket de FS-UAE usa los del PC).
     test_http_lib pasa al 40861. D14 hecha.
+  - Velocidad: un campo de texto que empieza con un literal (`text: String = ""`) apunta a un texto fijo de Dash
+    (dash_lit: 12 bytes de cabecera delante del texto en los datos, rellenados al arrancar por `_dl_str_lit`, con
+    KEEP), sin pedir memoria ni copiar al crear el objeto ni liberar al soltarlo. Un struct de 6 campos como
+    `Json()` 5.000 veces: 823 a 487 ms (dash1 737). Ojo: cada función se genera dos veces y `undo` deshace los
+    datos; los literales de lo deshecho se olvidan. Test campo_literal. Tachyon con dashc: 114 de 114.
 - Pendiente: D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
