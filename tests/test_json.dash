@@ -3,6 +3,8 @@
 # expect-out: modelo: [gpt-x] 3 true
 # expect-out: texto: [Hola "mundo"\n] 13
 # expect-out: unicode: [c3a9 e282ac f09f9880] true
+# expect-out: surrogados sueltos: [efbfbd78] [efbfbd41]
+# expect-out: hondo: [too deep at byte 64]
 # expect-out: números: -12 3 2500 [1.5e3] true
 # expect-out: nulos: true true false
 # expect-out: lista: 4 [b] 7
@@ -53,6 +55,15 @@ Main
 
     u = json_parse("[\"\\u00e9\", \"\\u20AC\", \"\\ud83d\\ude00\"]")
     Print "unicode: [#{hex(json_str(json_at(u, 0)))} #{hex(json_str(json_at(u, 1)))} #{hex(json_str(json_at(u, 2)))}] #{json_length(u) == 3}"
+
+    u = json_parse("[\"\\ud800x\", \"\\ud800\\u0041\"]")
+    Print "surrogados sueltos: [#{hex(json_str(json_at(u, 0)))}] [#{hex(json_str(json_at(u, 1)))}]"
+    h = ""
+    for i in (1..70)
+        h = h + "["
+    end
+    e0 = json_parse(h)
+    Print "hondo: [#{json_error()}]"
 
     n = json_parse("[-12, 3.75, 2.5e3, 1.5e3, 0]")
     f = json_float(json_at(n, 1))

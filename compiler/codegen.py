@@ -6394,6 +6394,305 @@ static LONG _dash_dbg_value_type(LONG i, LONG expr) {
 }
 """
 
+    # Dash 2.0 (lib/json.dash for Inferencia and Forja): reading JSON in C, the tree made in Dash from its nodes
+    JSON_RUNTIME = r"""
+/* json_scan(text): the JSON text read at once, as lib/json.dash read it (the same errors, at the same byte), into a
+   table of nodes in order (each one followed by what it holds): its kind (JSON_NULL 0 ... JSON_OBJECT 5), the text
+   of a string (escapes and \uXXXX undone, in UTF-8) or of a number (as written), how many it holds (an array or
+   object; true 1 for a Bool) and its name inside an object. lib/json.dash makes the tree of Json from it. */
+typedef struct { LONG kind, count, text, len, name, nlen; } _DashJsonNode;
+static _DashJsonNode *_dash_json_nodes = NULL;
+static LONG _dash_json_n = 0, _dash_json_cap = 0;
+static char *_dash_json_buf = NULL;            /* the texts, one after another */
+static LONG _dash_json_blen = 0, _dash_json_bcap = 0;
+static const UBYTE *_dash_json_s;
+static LONG _dash_json_i, _dash_json_len, _dash_json_bad;
+static char _dash_json_err[80];
+
+static void _dash_json_cleanup(void) {
+    if (_dash_json_nodes) FreeVec(_dash_json_nodes);
+    if (_dash_json_buf) FreeVec(_dash_json_buf);
+    _dash_json_nodes = NULL;
+    _dash_json_buf = NULL;
+    _dash_json_n = _dash_json_cap = _dash_json_blen = _dash_json_bcap = 0;
+}
+
+static void _dash_json_fail(const char *why) {
+    if (_dash_json_bad) return;
+    _dash_json_bad = 1;
+    sprintf(_dash_json_err, "%s at byte %ld", why, (long)_dash_json_i);
+}
+
+/* (0 past the end, as str_code) */
+#define _DASH_JC(k) ((k) < _dash_json_len && (k) >= 0 ? _dash_json_s[k] : 0)
+
+static LONG _dash_json_node(LONG kind) {
+    if (_dash_json_n == _dash_json_cap) {
+        LONG cap = _dash_json_cap ? _dash_json_cap * 2 : 64;
+        _DashJsonNode *v = (_DashJsonNode *)AllocVec(cap * sizeof(_DashJsonNode), MEMF_ANY);
+        if (!v) { _dash_json_fail("out of memory"); return -1; }
+        if (_dash_json_n) CopyMem(_dash_json_nodes, v, _dash_json_n * sizeof(_DashJsonNode));
+        if (_dash_json_nodes) FreeVec(_dash_json_nodes);
+        _dash_json_nodes = v;
+        _dash_json_cap = cap;
+    }
+    _dash_json_nodes[_dash_json_n].kind = kind;
+    _dash_json_nodes[_dash_json_n].count = 0;
+    _dash_json_nodes[_dash_json_n].text = _dash_json_nodes[_dash_json_n].len = 0;
+    _dash_json_nodes[_dash_json_n].name = _dash_json_nodes[_dash_json_n].nlen = 0;
+    return _dash_json_n++;
+}
+
+static BOOL _dash_json_put(const void *p, LONG n) {
+    if (_dash_json_blen + n > _dash_json_bcap) {
+        LONG cap = _dash_json_bcap ? _dash_json_bcap * 2 : 1024;
+        char *b;
+        while (cap < _dash_json_blen + n) cap *= 2;
+        if (!(b = (char *)AllocVec(cap, MEMF_ANY))) { _dash_json_fail("out of memory"); return FALSE; }
+        if (_dash_json_blen) CopyMem(_dash_json_buf, b, _dash_json_blen);
+        if (_dash_json_buf) FreeVec(_dash_json_buf);
+        _dash_json_buf = b;
+        _dash_json_bcap = cap;
+    }
+    if (n) CopyMem((APTR)p, _dash_json_buf + _dash_json_blen, n);
+    _dash_json_blen += n;
+    return TRUE;
+}
+
+static void _dash_json_ws(void) {
+    while (_dash_json_i < _dash_json_len) {
+        UBYTE c = _dash_json_s[_dash_json_i];
+        if (c != 32 && c != 10 && c != 13 && c != 9) return;
+        _dash_json_i++;
+    }
+}
+
+static LONG _dash_json_hex(LONG c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static LONG _dash_json_u4(void) {
+    LONG v = 0, k, h;
+    if (_dash_json_i + 4 > _dash_json_len) return -1;
+    for (k = 0; k < 4; k++) {
+        if ((h = _dash_json_hex(_DASH_JC(_dash_json_i + k))) < 0) return -1;
+        v = v * 16 + h;
+    }
+    _dash_json_i += 4;
+    return v;
+}
+
+/* The string at i (on its opening quote) into the texts: where it starts (its length in *len), -1 if it is bad */
+static LONG _dash_json_str(LONG *len) {
+    LONG at = _dash_json_blen, start;
+    _dash_json_i++;
+    start = _dash_json_i;
+    while (_dash_json_i < _dash_json_len) {
+        UBYTE c = _dash_json_s[_dash_json_i];
+        if (c == '"') {
+            if (!_dash_json_put(_dash_json_s + start, _dash_json_i - start)) return -1;
+            _dash_json_i++;
+            *len = _dash_json_blen - at;
+            return at;
+        }
+        if (c == '\\') {
+            UBYTE e, u[4];
+            LONG n = 1, cp;
+            if (!_dash_json_put(_dash_json_s + start, _dash_json_i - start)) return -1;
+            _dash_json_i++;
+            e = _DASH_JC(_dash_json_i);
+            _dash_json_i++;
+            if (e == 'n') u[0] = 10;
+            else if (e == 't') u[0] = 9;
+            else if (e == 'r') u[0] = 13;
+            else if (e == '"' || e == '\\' || e == '/') u[0] = e;
+            else if (e == 'b') u[0] = 8;
+            else if (e == 'f') u[0] = 12;
+            else if (e == 'u') {
+                if ((cp = _dash_json_u4()) < 0) { _dash_json_fail("bad \\u escape"); return -1; }
+                /* a pair of surrogates is one character */
+                if (cp >= 0xD800 && cp <= 0xDBFF && _DASH_JC(_dash_json_i) == '\\' && _DASH_JC(_dash_json_i + 1) == 'u') {
+                    LONG lo;
+                    _dash_json_i += 2;
+                    lo = _dash_json_u4();
+                    if (lo >= 0xDC00 && lo <= 0xDFFF) cp = 0x10000 + (cp - 0xD800) * 1024 + (lo - 0xDC00);
+                    else _dash_json_i -= lo >= 0 ? 6 : 2;
+                }
+                if (cp == 0) u[0] = ' ';
+                else {
+                    if ((cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) cp = 0xFFFD;   /* (as utf8_char) */
+                    if (cp < 0x80) u[0] = (UBYTE)cp;
+                    else if (cp < 0x800) { u[0] = 0xC0 | cp >> 6; u[1] = 0x80 | (cp & 63); n = 2; }
+                    else if (cp < 0x10000) { u[0] = 0xE0 | cp >> 12; u[1] = 0x80 | (cp >> 6 & 63); u[2] = 0x80 | (cp & 63); n = 3; }
+                    else { u[0] = 0xF0 | cp >> 18; u[1] = 0x80 | (cp >> 12 & 63); u[2] = 0x80 | (cp >> 6 & 63); u[3] = 0x80 | (cp & 63); n = 4; }
+                }
+            } else {
+                _dash_json_i--;
+                _dash_json_fail("bad escape");
+                return -1;
+            }
+            if (!_dash_json_put(u, n)) return -1;
+            start = _dash_json_i;
+        } else {
+            _dash_json_i++;
+        }
+    }
+    _dash_json_fail("a string without its end");
+    return -1;
+}
+
+#define _DASH_JD(k) (_DASH_JC(k) >= '0' && _DASH_JC(k) <= '9')
+
+static void _dash_json_num(void) {
+    LONG start = _dash_json_i, node;
+    UBYTE c;
+    if (_DASH_JC(_dash_json_i) == '-') _dash_json_i++;
+    if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+    while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    if (_dash_json_i < _dash_json_len && _DASH_JC(_dash_json_i) == '.') {
+        _dash_json_i++;
+        if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+        while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    }
+    c = _DASH_JC(_dash_json_i);
+    if (c == 'e' || c == 'E') {
+        _dash_json_i++;
+        c = _DASH_JC(_dash_json_i);
+        if (c == '+' || c == '-') _dash_json_i++;
+        if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+        while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    }
+    if ((node = _dash_json_node(2)) < 0) return;
+    _dash_json_nodes[node].text = _dash_json_blen;
+    _dash_json_nodes[node].len = _dash_json_i - start;
+    _dash_json_put(_dash_json_s + start, _dash_json_i - start);
+}
+
+static BOOL _dash_json_word(const char *w) {
+    LONG n = strlen(w);
+    if (_dash_json_i + n > _dash_json_len || strncmp((const char *)_dash_json_s + _dash_json_i, w, n)) return FALSE;
+    _dash_json_i += n;
+    return TRUE;
+}
+
+static void _dash_json_value(LONG depth);
+
+static void _dash_json_obj(LONG depth) {
+    LONG node = _dash_json_node(5);
+    if (node < 0) return;
+    _dash_json_i++;
+    _dash_json_ws();
+    if (_DASH_JC(_dash_json_i) == '}') { _dash_json_i++; return; }
+    for (;;) {
+        LONG name, nlen, child;
+        UBYTE c;
+        _dash_json_ws();
+        if (_DASH_JC(_dash_json_i) != '"') { _dash_json_fail("a name was expected"); return; }
+        if ((name = _dash_json_str(&nlen)) < 0) return;
+        _dash_json_ws();
+        if (_DASH_JC(_dash_json_i) != ':') { _dash_json_fail("':' was expected"); return; }
+        _dash_json_i++;
+        child = _dash_json_n;
+        _dash_json_value(depth);
+        if (_dash_json_bad) return;
+        _dash_json_nodes[child].name = name;
+        _dash_json_nodes[child].nlen = nlen;
+        _dash_json_nodes[node].count++;
+        _dash_json_ws();
+        c = _DASH_JC(_dash_json_i);
+        _dash_json_i++;
+        if (c == '}') return;
+        if (c != ',') { _dash_json_i--; _dash_json_fail("',' or '}' was expected"); return; }
+    }
+}
+
+static void _dash_json_arr(LONG depth) {
+    LONG node = _dash_json_node(4);
+    if (node < 0) return;
+    _dash_json_i++;
+    _dash_json_ws();
+    if (_DASH_JC(_dash_json_i) == ']') { _dash_json_i++; return; }
+    for (;;) {
+        UBYTE c;
+        _dash_json_value(depth);
+        if (_dash_json_bad) return;
+        _dash_json_nodes[node].count++;
+        _dash_json_ws();
+        c = _DASH_JC(_dash_json_i);
+        _dash_json_i++;
+        if (c == ']') return;
+        if (c != ',') { _dash_json_i--; _dash_json_fail("',' or ']' was expected"); return; }
+    }
+}
+
+static void _dash_json_value(LONG depth) {
+    UBYTE c;
+    LONG node, len, at;
+    _dash_json_ws();
+    if (_dash_json_i >= _dash_json_len) { _dash_json_fail("unexpected end"); return; }
+    c = _dash_json_s[_dash_json_i];
+    if (c == '"') {
+        if ((node = _dash_json_node(3)) < 0) return;
+        if ((at = _dash_json_str(&len)) < 0) return;
+        _dash_json_nodes[node].text = at;
+        _dash_json_nodes[node].len = len;
+        return;
+    }
+    if (c == '{' || c == '[') {
+        if (depth >= 64) { _dash_json_fail("too deep"); return; }     /* (each level takes stack) */
+        if (c == '{') _dash_json_obj(depth + 1);
+        else _dash_json_arr(depth + 1);
+        return;
+    }
+    if (c == '-' || (c >= '0' && c <= '9')) { _dash_json_num(); return; }
+    if (_dash_json_word("true")) { if ((node = _dash_json_node(1)) >= 0) _dash_json_nodes[node].count = 1; return; }
+    if (_dash_json_word("false")) { _dash_json_node(1); return; }
+    if (_dash_json_word("null")) { _dash_json_node(0); return; }
+    _dash_json_fail("unexpected character");
+}
+
+/* How many nodes, -1 if it is not JSON (json_scan_error says why and where) */
+static LONG _dash_json_scan(STRPTR text) {
+    static BOOL at_exit = FALSE;
+    if (!at_exit) at_exit = _dash_atexit(_dash_json_cleanup) == 0;
+    _dash_json_n = _dash_json_blen = 0;
+    _dash_json_bad = 0;
+    _dash_json_err[0] = 0;
+    _dash_json_s = (const UBYTE *)(text ? (char *)text : "");
+    _dash_json_len = strlen((const char *)_dash_json_s);
+    _dash_json_i = 0;
+    _dash_json_value(0);
+    if (!_dash_json_bad) {
+        _dash_json_ws();
+        if (_dash_json_i < _dash_json_len) _dash_json_fail("something after the end");
+    }
+    return _dash_json_bad ? -1 : _dash_json_n;
+}
+
+static STRPTR _dash_json_scan_error(void) { return _dash_str_dup((STRPTR)_dash_json_err, TRUE); }
+
+static LONG _dash_json_scan_kind(LONG i) { return i >= 0 && i < _dash_json_n ? _dash_json_nodes[i].kind : 0; }
+static LONG _dash_json_scan_count(LONG i) { return i >= 0 && i < _dash_json_n ? _dash_json_nodes[i].count : 0; }
+
+static STRPTR _dash_json_take(LONG at, LONG len) {
+    STRPTR s = _dash_str_alloc(len, TRUE);
+    if (s && len) CopyMem(_dash_json_buf + at, s, len);
+    return s;
+}
+
+static STRPTR _dash_json_scan_text(LONG i) {
+    return i >= 0 && i < _dash_json_n ? _dash_json_take(_dash_json_nodes[i].text, _dash_json_nodes[i].len) : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_json_scan_name(LONG i) {
+    return i >= 0 && i < _dash_json_n ? _dash_json_take(_dash_json_nodes[i].name, _dash_json_nodes[i].nlen) : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+"""
+
     # Dash 2.0 (for Inferencia, the IDE): running a command line and taking its output
     RUNCAP_RUNTIME = """\
 /* run_start(command, timeout_ms) runs a command line in a process of its own (with the program's path and
@@ -19308,6 +19607,7 @@ _RUNTIME_FLAGS = [
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
     ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
+    ("JSON_RUNTIME", "uses_json"),          # Dash 2.0: json_scan (lib/json.dash)
     ("SYSLIST_RUNTIME", "uses_syslist"),    # Dash 2.0: rexx_send, ports_read, tasks_read, assigns_read
     ("DEBUGGER_RUNTIME", "uses_debugger"),  # Dash 2.0: dbg_* (Forja)
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
@@ -19615,6 +19915,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
         self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
+        self.uses_json: bool = False     # json_scan (JSON_RUNTIME, Dash 2.0: lib/json.dash)
         self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
         self.uses_debugger: bool = False  # dbg_* (DEBUGGER_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
@@ -19984,6 +20285,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.SYSINFO_RUNTIME)
         if self.uses_runcap:
             parts.append(CTemplates.RUNCAP_RUNTIME)
+        if self.uses_json:
+            parts.append(CTemplates.JSON_RUNTIME)
         if self.uses_syslist:
             parts.append(CTemplates.SYSLIST_RUNTIME)
         if self.uses_debugger:

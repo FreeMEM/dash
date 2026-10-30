@@ -49,6 +49,7 @@ GROUPS = [
     ("CLIP_FUNCTIONS", "Portapapeles", "Clipboard"),   # Lorraine D18
     ("COLLATE_FUNCTIONS", "Ordenar textos según el idioma", "Sorting texts by language"),   # Lorraine D7
     ("SYSPROG_FUNCTIONS", "Sistema y programa", "System and program"),   # Dash 2.0
+    ("JSON_FUNCTIONS", "JSON leído en C (para lib/json.dash)", "JSON read in C (for lib/json.dash)"),   # Dash 2.0
     ("DEBUGGER_FUNCTIONS", "Depurador (el programa depurado, con dash --debug)",
      "Debugger (the debugged program, built with dash --debug)"),   # Dash 2.0: Forja
     ("IMGDEC_FUNCTIONS", "Imágenes decodificadas por el programa (sin datatypes)",

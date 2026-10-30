@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 809 funciones, 809 implementadas, 0 sin implementar.
+Total: 815 funciones, 815 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -697,6 +697,17 @@ Total: 809 funciones, 809 implementadas, 0 sin implementar.
 | `assigns_read()` | `LONG` | Lee las asignaciones (C:, LIBS:, las de Assign): cuántas, para assign_name y assign_path, hasta el siguiente assigns_read |  |
 | `assign_name(i)` | `STRPTR` | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
 | `assign_path(i)` | `STRPTR` | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
+
+## JSON leído en C (para lib/json.dash)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `json_scan(text)` | `LONG` | Lee un texto JSON a una tabla de nodos en orden, cada uno seguido de lo que contiene (lib/json.dash hace su árbol con ella): cuántos, -1 si no es JSON (json_scan_error dice por qué y dónde) |  |
+| `json_scan_error()` | `STRPTR` | Por qué el último json_scan dio -1, y en qué byte ("unexpected end at byte 1") |  |
+| `json_scan_kind(i)` | `LONG` | El tipo del nodo i: 0 null, 1 true o false, 2 número, 3 texto, 4 lista, 5 objeto |  |
+| `json_scan_count(i)` | `LONG` | Cuántos elementos tiene un nodo de lista u objeto (van detrás); 1 si es true, 0 si es false |  |
+| `json_scan_text(i)` | `STRPTR` | El texto de un nodo de texto (sin sus escapes, \uXXXX en UTF-8) o de número (como está escrito) |  |
+| `json_scan_name(i)` | `STRPTR` | El nombre del nodo i dentro de su objeto ("" en una lista o arriba del todo) |  |
 
 ## Depurador (el programa depurado, con dash --debug)
 

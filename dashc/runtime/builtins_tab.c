@@ -643,6 +643,18 @@ const BuiltinInfo builtin_info[] = {
     {"joy_x", 1, 1, 1, 0},
     {"joy_y", 1, 1, 1, 0},
     {"joy_y", 1, 1, 1, 0},
+    {"json_scan", 1, 1, 0, 0},
+    {"json_scan", 1, 1, 0, 0},
+    {"json_scan_count", 1, 1, 1, 0},
+    {"json_scan_count", 1, 1, 1, 0},
+    {"json_scan_error", 0, 3, 1, 0},
+    {"json_scan_error", 0, 3, 1, 0},
+    {"json_scan_kind", 1, 1, 1, 0},
+    {"json_scan_kind", 1, 1, 1, 0},
+    {"json_scan_name", 1, 3, 1, 0},
+    {"json_scan_name", 1, 3, 1, 0},
+    {"json_scan_text", 1, 3, 1, 0},
+    {"json_scan_text", 1, 3, 1, 0},
     {"key_get", 0, 1, 1, 0},
     {"key_get", 0, 1, 1, 0},
     {"key_pressed", 0, 2, 1, 0},
@@ -1620,7 +1632,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1618;
+const int builtin_count = 1630;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

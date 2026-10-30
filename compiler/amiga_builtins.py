@@ -5133,6 +5133,30 @@ CLIP_FUNCTIONS = {
                             "there is none or something else was copied after it, -2 if it does not fit in max"),
 }
 
+# Dash 2.0: JSON read in C for lib/json.dash (json_parse makes its tree of Json from these nodes)
+JSON_FUNCTIONS = {
+    "json_scan": BuiltinFunc(
+        name="json_scan", params=["text"], return_type="LONG", c_template="_dash_json_scan(${text})", reads_only=True,
+        description="Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash "
+                    "makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where)"),
+    "json_scan_error": BuiltinFunc(
+        name="json_scan_error", params=[], return_type="STRPTR", c_template="_dash_json_scan_error()",
+        description="Why the last json_scan gave -1, and at which byte (\"unexpected end at byte 1\")"),
+    "json_scan_kind": BuiltinFunc(
+        name="json_scan_kind", params=["i"], return_type="LONG", c_template="_dash_json_scan_kind(${i})",
+        description="Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object"),
+    "json_scan_count": BuiltinFunc(
+        name="json_scan_count", params=["i"], return_type="LONG", c_template="_dash_json_scan_count(${i})",
+        description="How many elements an array or object node holds (they follow it); 1 for true, 0 for false"),
+    "json_scan_text": BuiltinFunc(
+        name="json_scan_text", params=["i"], return_type="STRPTR", c_template="_dash_json_scan_text(${i})",
+        description="The text of a string node (its escapes and \\uXXXX undone, in UTF-8) or a number node (as "
+                    "written)"),
+    "json_scan_name": BuiltinFunc(
+        name="json_scan_name", params=["i"], return_type="STRPTR", c_template="_dash_json_scan_name(${i})",
+        description="The name of node i inside its object (\"\" in an array or at the top)"),
+}
+
 # Dash 2.0 (Forja, the IDE): the debugger. The debugged program is built with dash --debug (dashc); the debugger
 # with either Dash (docs/DEPURADOR_LOOP.md)
 DEBUGGER_FUNCTIONS = {
@@ -5288,6 +5312,7 @@ ALL_BUILTINS = {
     **COLLATE_FUNCTIONS,       # Lorraine D7
     **SYSPROG_FUNCTIONS,       # Dash 2.0
     **DEBUGGER_FUNCTIONS,      # Dash 2.0: Forja
+    **JSON_FUNCTIONS,          # Dash 2.0: lib/json.dash
     **IMGDEC_FUNCTIONS,
     **TTF_FUNCTIONS,
     **NETBG_FUNCTIONS,

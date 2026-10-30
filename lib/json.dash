@@ -21,7 +21,7 @@ const JSON_STRING = 3
 const JSON_ARRAY = 4
 const JSON_OBJECT = 5
 
-# (nesting deeper than this is an error: each level takes stack)
+# (nesting deeper than this is an error: each level takes stack; json_scan, in C, keeps it)
 const JSON_MAX_DEPTH = 64
 
 struct Json
@@ -295,26 +295,62 @@ func json_error() -> String
     return _json_err
 end
 
-# The tree of a JSON text; nil if it is not JSON (json_error says why)
+# The tree of a JSON text; nil if it is not JSON (json_error says why). The text is read in C (json_scan) into a
+# table of nodes in order; the tree is made from it here
 func json_parse(text: String) -> Json
     _json_err = ""
     if text == nil
         _json_err = "no text"
         return nil
     end
-    r = _JsonIn()
-    r.s = text
-    r.n = text.length
-    v = _json_value(r, 0)
-    if r.bad
+    if json_scan(text) < 0
+        _json_err = json_scan_error()
         return nil
     end
-    _json_ws(r)
-    if r.i < r.n
-        _json_fail(r, "something after the end")
-        return nil
+    _json_next = 0
+    return _json_build()
+end
+
+var _json_next: Int = 0
+
+# The node _json_next and what it holds, as a tree
+func _json_build() -> Json
+    i = _json_next
+    _json_next = i + 1
+    k = json_scan_kind(i)
+    if k == JSON_STRING
+        return json_string(json_scan_text(i))
     end
-    return v
+    if k == JSON_NUMBER
+        j = Json()
+        j.kind = JSON_NUMBER
+        j.text = json_scan_text(i)
+        if str_contains(j.text, ".") or str_contains(j.text, "e") or str_contains(j.text, "E")
+            j.num = Int(_json_to_float(j.text))
+        else
+            j.num = Int(j.text)
+        end
+        return j
+    end
+    if k == JSON_BOOL
+        return json_bool(json_scan_count(i) != 0)
+    end
+    if k == JSON_ARRAY
+        a = json_array()
+        for m in (1..json_scan_count(i) step 1)
+            a.items.push(_json_build())
+        end
+        return a
+    end
+    if k == JSON_OBJECT
+        o = json_object()
+        for m in (1..json_scan_count(i) step 1)
+            o.names.push(json_scan_name(_json_next))
+            o.items.push(_json_build())
+        end
+        return o
+    end
+    return Json()
 end
 
 func _json_fail(r: _JsonIn, why: String)
@@ -322,236 +358,6 @@ func _json_fail(r: _JsonIn, why: String)
         r.bad = true
         _json_err = "#{why} at byte #{r.i}"
     end
-end
-
-func _json_ws(r: _JsonIn)
-    while r.i < r.n
-        c = str_code(r.s, r.i)
-        if c != 32 and c != 10 and c != 13 and c != 9
-            return
-        end
-        r.i = r.i + 1
-    end
-end
-
-func _json_value(r: _JsonIn, depth: Int) -> Json
-    _json_ws(r)
-    if r.i >= r.n
-        _json_fail(r, "unexpected end")
-        return nil
-    end
-    c = str_code(r.s, r.i)
-    if c == 34
-        return json_string(_json_str(r))
-    end
-    if c == 123 or c == 91
-        if depth >= JSON_MAX_DEPTH
-            _json_fail(r, "too deep")
-            return nil
-        end
-        if c == 123
-            return _json_obj(r, depth + 1)
-        end
-        return _json_arr(r, depth + 1)
-    end
-    if c == 45 or (c >= 48 and c <= 57)
-        return _json_num(r)
-    end
-    if _json_word(r, "true")
-        return json_bool(true)
-    end
-    if _json_word(r, "false")
-        return json_bool(false)
-    end
-    if _json_word(r, "null")
-        return Json()
-    end
-    _json_fail(r, "unexpected character")
-    return nil
-end
-
-func _json_word(r: _JsonIn, w: String) -> Bool
-    n = w.length
-    if r.i + n > r.n
-        return false
-    end
-    if r.s[r.i:r.i + n] != w
-        return false
-    end
-    r.i = r.i + n
-    return true
-end
-
-func _json_obj(r: _JsonIn, depth: Int) -> Json
-    o = json_object()
-    r.i = r.i + 1
-    _json_ws(r)
-    if str_code(r.s, r.i) == 125
-        r.i = r.i + 1
-        return o
-    end
-    while true
-        _json_ws(r)
-        if str_code(r.s, r.i) != 34
-            _json_fail(r, "a name was expected")
-            return nil
-        end
-        name = _json_str(r)
-        if r.bad
-            return nil
-        end
-        _json_ws(r)
-        if str_code(r.s, r.i) != 58
-            _json_fail(r, "':' was expected")
-            return nil
-        end
-        r.i = r.i + 1
-        v = _json_value(r, depth)
-        if r.bad
-            return nil
-        end
-        o.names.push(name)
-        o.items.push(v)
-        _json_ws(r)
-        c = str_code(r.s, r.i)
-        r.i = r.i + 1
-        if c == 125
-            return o
-        end
-        if c != 44
-            r.i = r.i - 1
-            _json_fail(r, "',' or '}' was expected")
-            return nil
-        end
-    end
-    return o
-end
-
-func _json_arr(r: _JsonIn, depth: Int) -> Json
-    a = json_array()
-    r.i = r.i + 1
-    _json_ws(r)
-    if str_code(r.s, r.i) == 93
-        r.i = r.i + 1
-        return a
-    end
-    while true
-        v = _json_value(r, depth)
-        if r.bad
-            return nil
-        end
-        a.items.push(v)
-        _json_ws(r)
-        c = str_code(r.s, r.i)
-        r.i = r.i + 1
-        if c == 93
-            return a
-        end
-        if c != 44
-            r.i = r.i - 1
-            _json_fail(r, "',' or ']' was expected")
-            return nil
-        end
-    end
-    return a
-end
-
-func _json_hex(c: Int) -> Int
-    if c >= 48 and c <= 57
-        return c - 48
-    end
-    if c >= 97 and c <= 102
-        return c - 87
-    end
-    if c >= 65 and c <= 70
-        return c - 55
-    end
-    return -1
-end
-
-# The 4 hex digits at r.i (-1 if they are not)
-func _json_u4(r: _JsonIn) -> Int
-    if r.i + 4 > r.n
-        return -1
-    end
-    v = 0
-    for k in (0..3)
-        h = _json_hex(str_code(r.s, r.i + k))
-        if h < 0
-            return -1
-        end
-        v = v * 16 + h
-    end
-    r.i = r.i + 4
-    return v
-end
-
-# The string at r.i (on its opening quote), without its escapes
-func _json_str(r: _JsonIn) -> String
-    r.i = r.i + 1
-    out = ""
-    start = r.i
-    while r.i < r.n
-        c = str_code(r.s, r.i)
-        if c == 34
-            if r.i > start
-                out = out + r.s[start:r.i]
-            end
-            r.i = r.i + 1
-            return out
-        end
-        if c == 92
-            if r.i > start
-                out = out + r.s[start:r.i]
-            end
-            r.i = r.i + 1
-            e = str_code(r.s, r.i)
-            r.i = r.i + 1
-            if e == 110
-                out = out + "\n"
-            elif e == 116
-                out = out + "\t"
-            elif e == 114
-                out = out + str_char(13)
-            elif e == 34 or e == 92 or e == 47
-                out = out + str_char(e)
-            elif e == 98
-                out = out + str_char(8)
-            elif e == 102
-                out = out + str_char(12)
-            elif e == 117
-                cp = _json_u4(r)
-                if cp < 0
-                    _json_fail(r, "bad \\u escape")
-                    return ""
-                end
-                # a pair of surrogates is one character
-                if cp >= 0xD800 and cp <= 0xDBFF and str_code(r.s, r.i) == 92 and str_code(r.s, r.i + 1) == 117
-                    r.i = r.i + 2
-                    lo = _json_u4(r)
-                    if lo >= 0xDC00 and lo <= 0xDFFF
-                        cp = 0x10000 + (cp - 0xD800) * 1024 + (lo - 0xDC00)
-                    else
-                        r.i = r.i - 6
-                    end
-                end
-                if cp == 0
-                    out = out + " "
-                else
-                    out = out + utf8_char(cp)
-                end
-            else
-                r.i = r.i - 1
-                _json_fail(r, "bad escape")
-                return ""
-            end
-            start = r.i
-        else
-            r.i = r.i + 1
-        end
-    end
-    _json_fail(r, "a string without its end")
-    return ""
 end
 
 func _json_digit(r: _JsonIn) -> Bool

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 809 functions, 809 implemented, 0 not implemented.
+Total: 815 functions, 815 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -697,6 +697,17 @@ Total: 809 functions, 809 implemented, 0 not implemented.
 | `assigns_read()` | `LONG` | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
 | `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
 | `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+
+## JSON read in C (for lib/json.dash)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `json_scan(text)` | `LONG` | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
+| `json_scan_error()` | `STRPTR` | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
+| `json_scan_kind(i)` | `LONG` | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
+| `json_scan_count(i)` | `LONG` | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
+| `json_scan_text(i)` | `STRPTR` | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
+| `json_scan_name(i)` | `STRPTR` | The name of node i inside its object ("" in an array or at the top) |  |
 
 ## Debugger (the debugged program, built with dash --debug)
 
