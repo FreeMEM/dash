@@ -22767,7 +22767,9 @@ static {ret_type} {method_name}({params_str}) {{
                 code += f"    {name} = _dash_str_dup({name}, FALSE);\n"
                 self.context.own(name)
             elif vt.startswith("struct:") or vt.startswith("array"):
-                code += f"    _dash_retain({name});\n"
+                # a hold, not a retain: a temporary of the caller stays one (a retain took it out of the
+                # temporaries, and the release at the end freed it while the caller still used it)
+                code += f"    _dash_hold({name});\n"
                 self.context.own(name, "obj")
         return code
 

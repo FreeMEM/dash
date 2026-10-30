@@ -628,6 +628,9 @@ void *dl_obj_escape(void *p) { return _dash_obj_escape(p); }
 STRPTR dl_str_escape(STRPTR p) { return _dash_str_escape(p); }
 
 void *dl_retain_r(void *p) { _dash_retain(p); return p; }
+/* un parámetro objeto que la función cambia: una referencia, sin sacar de los temporales uno que lo es (es de quien
+   llamó: al soltarla al salir no se libera) */
+void *dl_hold_r(void *p) { _dash_hold(p); return p; }
 /* var = valor para una lista o un struct, devolviendo lo que queda en var */
 void *dl_obj_assign(void *var, void *v) { _dash_obj_set(&var, v); return var; }
 void *dl_obj_assign_new(void *var, void *v) { _dash_obj_set_new(&var, v); return var; }
