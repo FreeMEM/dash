@@ -588,6 +588,15 @@ char *dashui_generate(const char *json, const char *filename)
     Buf o = {0};
     int i, j;
     char w[600];
+    Buf u = {0};
+    if (!strncmp(json, "\xEF\xBB\xBF", 3)) json += 3;   /* la marca de UTF-8 de los editores de Windows */
+    if (!valid_utf8((const unsigned char *)json)) {
+        /* en Latin-1 (guardado en el Amiga, Forja): a UTF-8, como lo lee ./dash, para que case con los \u */
+        const unsigned char *c;
+        for (c = (const unsigned char *)json; *c; c++) utf8(&u, *c);
+        buf_byte(&u, 0);
+        json = (const char *)u.p;
+    }
     jp = json;
     jfile = filename;
     data = jvalue();

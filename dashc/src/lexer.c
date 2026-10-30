@@ -40,6 +40,21 @@ long float_bits(double d)
     return (long)(int32_t)x.u;
 }
 
+/* un fuente que no es UTF-8 válido está en Latin-1, el del Amiga (Forja, los editores del Amiga): cada byte es
+   su carácter (como ./dash) */
+static int lex_latin1;
+
+int valid_utf8(const unsigned char *s)
+{
+    while (*s) {
+        int n = *s < 0x80 ? 0 : (*s & 0xE0) == 0xC0 ? 1 : (*s & 0xF0) == 0xE0 ? 2 : (*s & 0xF8) == 0xF0 ? 3 : -1;
+        if (n < 0 || (n == 1 && *s < 0xC2)) return 0;
+        for (s++; n > 0; n--, s++)
+            if ((*s & 0xC0) != 0x80) return 0;
+    }
+    return 1;
+}
+
 /* Los textos van en Latin-1, como en el Amiga: de UTF-8 se pasan los caracteres
    de U+0080 a U+00FF; los demás quedan como "?". Un #{...} corta el texto: t recibe
    los trozos (texto, código, texto...) y el token pasa a T_ISTR. */
@@ -141,7 +156,7 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
             s++;
             continue;
         }
-        if (c < 0x80) {
+        if (c < 0x80 || lex_latin1) {
             buf_byte(&b, c);
             s++;
         } else if ((c & 0xE0) == 0xC0 && ((unsigned char)s[1] & 0xC0) == 0x80) {
@@ -196,8 +211,12 @@ static void rename_private(Token *t)
 Token *lex(const char *src)
 {
     TokVec toks = {0};
-    const char *s = src, *line_start = src;
+    const char *s, *line_start;
     int line = 1;
+
+    if (!strncmp(src, "\xEF\xBB\xBF", 3)) src += 3;   /* la marca de UTF-8 de los editores de Windows */
+    lex_latin1 = !valid_utf8((const unsigned char *)src);
+    s = line_start = src;
 
     for (;;) {
         Token t = {0};
