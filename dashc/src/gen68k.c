@@ -3036,7 +3036,7 @@ static int gen_compare(Node *n)
     }
     /* un texto == o != un literal: letra a letra en línea (hasta 8; de uno más largo, las dos primeras y el resto
        con dl_str_cmp), sin llamar a nada si ya difiere la primera: _se_hereda de Tachyon son 20 seguidas. nil no es
-       igual a ningún literal. */
+       igual a ningún literal. (Hasta 24 sacaba siempre el fallo de memoria de D16 en Tachyon) */
     if (ta == TY_STR && tb == TY_STR && (n->op == P_EQ || n->op == P_NE) &&
         ((n->b->kind == E_STR && n->a->kind != E_STR) || (n->a->kind == E_STR && n->b->kind != E_STR))) {
         Node *lit = n->b->kind == E_STR ? n->b : n->a, *s = lit == n->b ? n->a : n->b;
@@ -6235,7 +6235,9 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             }
         n_plen = 0;
         plen_depth = -1;
-        if (!debug)
+        /* (solo si la función no puede liberar textos ni objetos, ni ella ni lo que llama: si no, el texto del
+           parámetro podría liberarse, o su memoria ser de otro, mientras corre; Tachyon colgaba así) */
+        if (!debug && nofree_txt && nofree_txt[idx] && nofree_obj[idx])
             for (i = 0; i < f->params.n && n_plen < 8; i++)
                 if (f->params.v[i].type == TY_STR && !param_set[idx][i] && len_uses(body, f->params.v[i].name)) {
                     Node pv;

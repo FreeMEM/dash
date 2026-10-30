@@ -74,6 +74,14 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     runtime con nombres que se pueden enlazar (`dl_str_dup`, `dl_array_length`, `dl_array_get`, `dl_retain`,
     `dl_release`...: las de ./dash son `static`). El C de Tachyon pasa de `@c` a ficheros .c en sus librerías
     (tools/build_qjs.sh) casi sin cambios: los nombres de esa API.
+- D16 Un fallo de memoria de Tachyon con dashc que sale según cómo quede el código (2026-10-30). Síntoma: un assert
+  de QuickJS con textos rotos ("dashweb: assert de QuickJS: .180s (.60s, línea 2812640)") y el arranque se cuelga;
+  los tests sueltos pasan. Salió una vez el 2026-10-29 (test_jsdom_texto, antes de passes_func) y el 2026-10-30
+  siempre con los literales de hasta 24 letras en línea (test_css_escapes tras acid2, animacion, buscadores,
+  colores4, css y css_cdo en un arranque), aunque comparar solo lee. Sospecha: algo usa memoria ya liberada; un
+  bloque grande de Dash vuelve al sistema al liberarse y luego es de QuickJS (malloc de api.c, otro pool).
+  Reproducir: esos 7 tests en un arranque (scratchpad tboot.py, con el tiempo de tests/run.py: 600 s + 20 por
+  test). Siguiente paso: los mismos con --memcheck y con un runtime que no devuelva nunca bloques al sistema.
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
@@ -674,4 +682,20 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     KEEP), sin pedir memoria ni copiar al crear el objeto ni liberar al soltarlo. Un struct de 6 campos como
     `Json()` 5.000 veces: 823 a 487 ms (dash1 737). Ojo: cada función se genera dos veces y `undo` deshace los
     datos; los literales de lo deshecho se olvidan. Test campo_literal. Tachyon con dashc: 114 de 114.
-- Pendiente: D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
+- 2026-10-30, velocidad (prueba.html, ms, dashc / dash1): tokens 412 / 406, dom 940 / 826, hojas 375 / 396,
+  estilo 3.404 / 2.881, maqueta 11.077 / 9.938.
+  - str_code(s, i), s[i] y s.length en línea (largo de la cabecera de un texto de Dash; si no, el runtime);
+    api.c comprueba al compilar la cabecera que se lee. Texto e índice sin pasar por la pila.
+  - for x in lista con un cuerpo que no puede cambiar listas (body_frozen): puntero y vueltas leídos una vez.
+    Recorrer 20 hijos 5.000 veces: 570 a 357 ms (dash1 256).
+  - No recargar d0 justo después de guardarlo en un registro; soltar temporales solo si el contador pasó de la
+    marca (dl_tmp_serial_p, en línea).
+  - El largo de un parámetro de texto que la función no cambia, medido al entrar (estilo_px suelta: 17.033 a
+    8.797 ms, dash1 8.321). Al principio en cualquier función: Tachyon 67 de 114 dos veces (test_documento_raton
+    sin salida y los siguientes sin tiempo). El texto del parámetro puede liberarse, o su memoria ser de otro,
+    mientras la función corre (JavaScript que cambia el DOM). Ahora solo en funciones que no pueden liberar
+    textos ni objetos (nofree_txt y nofree_obj).
+  - Literales de hasta 24 letras comparados en línea: con ellos, D16 sale siempre; se quedan en 8.
+  - Para buscar así: interruptores DASHC_X_* provisionales y tandas completas (cada una 42 min). Ojo con el
+    tiempo de arranque de los scripts propios (60 s en vez de 600: los "fallos" eran tiempo agotado).
+- Pendiente: D16; D15; D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
