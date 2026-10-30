@@ -2305,10 +2305,75 @@ static int push_key_hash(int t, Node *k)
 }
 
 /* d[k] */
+/* for k in d.keys() por la tabla (gen_keys_loop): d[k] dentro es el valor de la misma casilla, sin buscar la
+   clave. Solo si d es una variable que el cuerpo no pasa a nada (ni llamadas ni métodos: nada le puede meter
+   claves, que moverían la tabla) y k no se reasigna */
+typedef struct { const char *d, *k; int d_local, k_slot, depth, dict_slot, idx_slot; } KLoop;
+static struct { KLoop *v; int n, cap; } kloops;
+
+static int dict_passed(Node *e, const char *d)
+{
+    int i;
+    if (!e) return 0;
+    if (e->kind == E_CALL || e->kind == E_MCALL || e->kind == S_ASSIGN || e->kind == S_STORE || e->kind == S_RETURN ||
+        e->kind == E_LIST || e->kind == E_DICT) {
+        /* d como argumento, receptor de un método (salvo leer), valor asignado o devuelto */
+        if (e->kind == E_MCALL && e->a && e->a->kind == E_VAR && !strcmp(e->a->name, d) &&
+            strcmp(e->name, "has") && strcmp(e->name, "get") && strcmp(e->name, "keys") && strcmp(e->name, "length"))
+            return 1;
+        for (i = 0; i < e->args.n; i++)
+            if (e->args.v[i]->kind == E_VAR && !strcmp(e->args.v[i]->name, d)) return 1;
+        if ((e->kind == S_ASSIGN || e->kind == S_RETURN) && e->a && e->a->kind == E_VAR && !strcmp(e->a->name, d))
+            return 1;
+        if (e->kind == S_STORE && e->a && e->a->kind == E_VAR && !strcmp(e->a->name, d)) return 1;
+    }
+    if (dict_passed(e->a, d) || dict_passed(e->b, d) || dict_passed(e->c, d)) return 1;
+    for (i = 0; i < e->args.n; i++)
+        if (dict_passed(e->args.v[i], d)) return 1;
+    for (i = 0; i < e->body.n; i++)
+        if (dict_passed(e->body.v[i], d)) return 1;
+    for (i = 0; i < e->els.n; i++)
+        if (dict_passed(e->els.v[i], d)) return 1;
+    return 0;
+}
+
+/* ¿d[k] de un for k in d.keys() que se está recorriendo? Su KLoop, o NULL */
+static KLoop *kloop_of(Node *d, Node *k)
+{
+    int i;
+    Local *ld, *lk;
+    if (d->kind != E_VAR || k->kind != E_VAR) return NULL;
+    for (i = kloops.n - 1; i >= 0; i--) {
+        KLoop *kl = &kloops.v[i];
+        if (kl->depth != inl_stack.n || strcmp(kl->d, d->name) || strcmp(kl->k, k->name)) continue;
+        ld = find_local(d->name);
+        lk = find_local(k->name);
+        if (!ld || ld->slot != kl->d_local || !lk || lk->slot != kl->k_slot) return NULL;
+        return kl;
+    }
+    return NULL;
+}
+
 static int gen_dict_get(Node *n)
 {
     Node *a[2];
     int t = expr_type(n->a);
+    KLoop *kl = kloop_of(n->a, n->b);
+    if (kl && !dict_ikeys(t)) {
+        Var vd, vi;
+        use_slot(kl->dict_slot);
+        vd = slot_var(kl->dict_slot, t);
+        if (vd.kind == V_REG) w(0x2040 | vd.reg);      /* movea.l dN,a0 */
+        else op_ea(0x2040, &vd);                       /* movea.l d,a0 */
+        w(0x2068); w(4);                               /* movea.l 4(a0),a0: vals */
+        use_slot(kl->idx_slot);
+        vi = slot_var(kl->idx_slot, TY_INT);
+        load_var(0, &vi);
+        w(0xD080); w(0xD080);                          /* add.l d0,d0 (x2) */
+        w(0x2030); w(0x0800);                          /* move.l (0,a0,d0.l),d0 */
+        d0_loaded = (uint32_t)obj->code.n;
+        return dict_val(t);
+    }
     a[0] = n->a;
     a[1] = n->b;
     if (push_key_hash(t, n->b)) {
@@ -5393,7 +5458,29 @@ static void gen_keys_loop(Node *n)
     branch(CC_EQ, cont);
     vx = declare(n->name, TY_STR);
     store_d0(&vx);
-    gen_block(&n->body);
+    {
+        /* d[k] del cuerpo: de la casilla (kloop_of) */
+        Local *ld = n->a->a->kind == E_VAR ? find_local(n->a->a->name) : NULL;
+        int pushed = 0;
+        if (ld && !debug && !list_assigns(&n->body, n->name)) {
+            int i, passed = 0;
+            for (i = 0; i < n->body.n && !passed; i++) passed = dict_passed(n->body.v[i], n->a->a->name);
+            if (!passed) {
+                KLoop kl;
+                kl.d = n->a->a->name;
+                kl.k = n->name;
+                kl.d_local = ld->slot;
+                kl.k_slot = locals.v[locals.n - 1].slot;
+                kl.depth = inl_stack.n;
+                kl.dict_slot = d_slot;
+                kl.idx_slot = idx_slot;
+                VEC_PUSH(kloops, kl);
+                pushed = 1;
+            }
+        }
+        gen_block(&n->body);
+        if (pushed) kloops.n--;
+    }
     loops.n--;
     leave_scope();
     def_label(cont);
