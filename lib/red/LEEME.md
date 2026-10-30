@@ -24,6 +24,16 @@ if r.error == ""
 end
 ```
 
+Una respuesta que se lee según llega (`"stream": true`, eventos SSE), sin compresión:
+
+```dash
+c = http_empezar_flujo(url, "POST", json_write(peticion), "application/json", "Authorization: Bearer " + clave, 300000)
+while not http_avanzar(c)
+    nuevo = http_flujo_leer(c)            # lo nuevo del cuerpo, sin el marco de chunked; "" si no hay
+end
+nuevo = http_flujo_leer(c)                # lo último; c.respuesta queda entera (un 4xx con su JSON)
+```
+
 Los errores de red van con `tr()` y los números 400 a 442: un programa con catálogo no debe usar esos números.
 
 ## Diferencias con los de Tachyon
@@ -32,7 +42,7 @@ Lo que es solo del navegador se quedó fuera:
 
 - `http.dash`: el User-Agent es la variable `http_agente` ("Dash (AmigaOS)"; antes, la constante `HTTP_AGENTE`).
   `http_texto` pasa a Latin-1 solo un cuerpo en UTF-8, con `utf8_to_latin1` (el de Tachyon usaba
-  `texto_decodificar` de su `texto.dash`). Nueva: `http_pedir`, cualquier método esperando a la respuesta.
+  `texto_decodificar` de su `texto.dash`). Nuevas: `http_pedir`, cualquier método esperando a la respuesta, y `http_empezar_flujo` con `http_flujo_leer`.
 - `url.dash`: sin `url_fuentes_latin1` (Google Fonts) ni `url_rastreador` y sus constantes.
 - `cookies.dash`: sin `cookies_html` (la página `tachyon:cookies`).
 

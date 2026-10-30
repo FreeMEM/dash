@@ -466,6 +466,16 @@ struct Carga
     f: Int = 0
     volcados: Int = 0
     restan: Int = -1
+    # http_empezar_flujo: sin compresión, y lo que http_flujo_leer ya dio: la conexión que lee, por dónde va (bytes
+    # tras las cabeceras), si es chunked (-1 aún no se sabe, 0 no, 1 sí), la fase de chunked (0 la línea del tamaño, 1
+    # dentro de un trozo, 2 su \r\n, 3 acabado), lo que falta del trozo y los bytes del cuerpo ya dados
+    sin_comprimir: Bool = false
+    flujo_con: Conexion = nil
+    flujo_p: Int = 0
+    flujo_chunked: Int = -1
+    flujo_fase: Int = 0
+    flujo_resta: Int = 0
+    flujo_dados: Int = 0
 end
 
 # Que el cuerpo de esta carga a fichero (http_empezar_a_fichero) se escriba según llega, sin juntarlo entero en
@@ -581,6 +591,122 @@ func http_pedir(direccion: String, metodo: String, cuerpo: String, tipo: String,
     return c.respuesta
 end
 
+# Una petición cuya respuesta se lee según llega (el "stream": true de una API, eventos SSE): como
+# http_empezar_metodo, pero sin pedir compresión (un flujo comprimido no se puede leer a trozos)
+#
+#   c = http_empezar_flujo(url, "POST", cuerpo, "application/json", cabeceras, 300000)
+#   while not http_avanzar(c)
+#       nuevo = http_flujo_leer(c)      # "data: {...}\n\n" según llega
+#   end
+#   nuevo = http_flujo_leer(c)          # lo último; c.respuesta, entera como siempre (un 4xx con su JSON)
+func http_empezar_flujo(direccion: String, metodo: String, cuerpo: String, tipo: String, extra: String, espera_ms: Int) -> Carga
+    var sin: Conexion = nil
+    c = Carga(url_parse(direccion), sin, espera_ms, 0, false, _respuesta_vacia(direccion), -1, time_ms())
+    c.t0 = c.ultimo
+    c.metodo = metodo
+    c.cuerpo = cuerpo
+    c.tipo = tipo
+    c.extra = extra
+    c.sin_comprimir = true
+    _carga_conectar(c)
+    return c
+end
+
+# Lo del cuerpo que ha llegado desde la última llamada, ya sin el marco de chunked; solo de una respuesta 2xx, "" si
+# no hay nada nuevo. Se llama tras cada http_avanzar, y una vez más cuando acaba (lo que quedaba)
+func http_flujo_leer(c: Carga) -> String
+    if c.hecha
+        r = c.respuesta
+        if r.estado < 200 or r.estado > 299 or c.flujo_dados >= r.cuerpo.length
+            return ""
+        end
+        resto = r.cuerpo[c.flujo_dados:]
+        c.flujo_dados = r.cuerpo.length
+        return resto
+    end
+    con = c.conexion
+    if con == nil or con.fase != 0
+        return ""
+    end
+    if con != c.flujo_con
+        # (otra conexión: una redirección, o una nueva tras una cerrada)
+        c.flujo_con = con
+        c.flujo_p = 0
+        c.flujo_chunked = -1
+        c.flujo_fase = 0
+        c.flujo_dados = 0
+        c.cabecera = -1
+    end
+    if c.cabecera < 0
+        c.cabecera = _carga_cabecera(con)
+        if c.cabecera < 0
+            return ""
+        end
+    end
+    # "HTTP/1.1 2xx": el estado empieza en el byte 9
+    if c.cabecera <= 12 or buffer_get_byte(con.buf, con.ini + 9) != 50
+        return ""
+    end
+    if c.flujo_chunked < 0
+        cab = str_lower(str_from_buffer(con.buf, con.ini, c.cabecera))
+        c.flujo_chunked = 0
+        if str_contains(cab, "transfer-encoding: chunked")
+            c.flujo_chunked = 1
+        end
+    end
+    n = red_pendientes(con)
+    p = c.cabecera + c.flujo_p
+    out = ""
+    if c.flujo_chunked == 0
+        if n > p
+            out = str_from_buffer(con.buf, con.ini + p, n - p)
+            p = n
+        end
+    else
+        seguir = true
+        while seguir
+            seguir = false
+            if c.flujo_fase == 0
+                e = _red_fin_de_linea(con, p, n)
+                if e >= 0
+                    tam = str_to_int(str_trim(str_from_buffer(con.buf, con.ini + p, e - p)), 16)
+                    p = e + 2
+                    if tam <= 0
+                        c.flujo_fase = 3
+                    else
+                        c.flujo_resta = tam
+                        c.flujo_fase = 1
+                        seguir = true
+                    end
+                end
+            elif c.flujo_fase == 1
+                k = n - p
+                if k > c.flujo_resta
+                    k = c.flujo_resta
+                end
+                if k > 0
+                    out = out + str_from_buffer(con.buf, con.ini + p, k)
+                    p = p + k
+                    c.flujo_resta = c.flujo_resta - k
+                    if c.flujo_resta == 0
+                        c.flujo_fase = 2
+                    end
+                    seguir = true
+                end
+            elif c.flujo_fase == 2
+                if n - p >= 2
+                    p = p + 2
+                    c.flujo_fase = 0
+                    seguir = true
+                end
+            end
+        end
+    end
+    c.flujo_p = p - c.cabecera
+    c.flujo_dados = c.flujo_dados + out.length
+    return out
+end
+
 # La misma carga con otro User-Agent (antes de su primer http_avanzar: la petición aún no se ha mandado)
 func http_con_agente(c: Carga, agente: String) -> Carga
     c.agente = agente
@@ -649,7 +775,7 @@ func http_avanzar(c: Carga) -> Bool
         end
     end
     if not c.enviada
-        if not red_enviar(c.conexion, _http_peticion(c.actual, c.metodo, c.cuerpo, c.tipo, c.agente, http_seguir, c.fichero == "", c.extra))
+        if not red_enviar(c.conexion, _http_peticion(c.actual, c.metodo, c.cuerpo, c.tipo, c.agente, http_seguir, c.fichero == "" and not c.sin_comprimir, c.extra))
             if c.reusada
                 _carga_otra_conexion(c)
                 return false
