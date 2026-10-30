@@ -1,0 +1,7 @@
+# expect: is for a text, label or button
+# ("color" is the colour of a text: Forja's dark theme)
+import "../lib/ventana_color_mal.dashui"
+
+Main
+    v = Mala_create()
+end

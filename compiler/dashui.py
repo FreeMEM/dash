@@ -33,6 +33,14 @@ def _check_name(name, what, where):
         raise DashUIError(f"{where}: {what} name {name!r} is a word of the language")
 
 
+def _rgb(value, what, where):
+    """[r, g, b], each 0-255 ("background", "color": Forja's dark theme)"""
+    if not (isinstance(value, list) and len(value) == 3 and
+            all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in value)):
+        raise DashUIError(f"{where}: {what} is [r, g, b], each 0 to 255, not {value!r}")
+    return f"{value[0]}, {value[1]}, {value[2]}"
+
+
 def _int(value, what, where):
     """A whole number of the file ("event": "uno" ended in a Python error)"""
     if isinstance(value, bool) or not isinstance(value, int):
@@ -169,7 +177,7 @@ class _Window:
             raise DashUIError(f"{self.where}: object without 'type': {node!r}")
         kind = node["type"]
         indent = "    " * depth
-        settings = [k for k in ("weight", "disabled", "hidden", "help") if k in node] + \
+        settings = [k for k in ("weight", "disabled", "hidden", "help", "background", "color") if k in node] + \
             (["context_menu"] if node.get("context_menu") else []) + (["take_tab"] if node.get("take_tab") else [])
         events = [k for k in _EVENTS if k in node]
         if kind in _GROUPS:
@@ -193,6 +201,12 @@ class _Window:
             self.after.append(f"    mui_set_visible({var}, false)")
         if node.get("help"):
             self.after.append(f"    mui_help({var}, {_text(node, 'help', '', ids)})")
+        if "background" in node:
+            self.after.append(f"    mui_set_background({var}, {_rgb(node['background'], 'background', self.where)})")
+        if "color" in node:   # the colour of a text, label or button
+            if kind not in ("text", "label", "button"):
+                raise DashUIError(f"{self.where}: \"color\" is for a text, label or button, not a {kind!r}")
+            self.after.append(f"    mui_set_text_pen({var}, {_rgb(node['color'], 'color', self.where)})")
         if node.get("take_tab"):   # Tab is a key over the canvas (Lorraine D48)
             if kind != "canvas":
                 raise DashUIError(f"{self.where}: \"take_tab\" is for a canvas, not a {kind!r}")
@@ -276,7 +290,7 @@ class _Window:
         if root:
             # the window's own group is vertical: a root vgroup goes straight into it
             if root.get("type") == "vgroup" and not root.get("name") and \
-                    not any(k in root for k in ("weight", "disabled", "hidden", "help")):
+                    not any(k in root for k in ("weight", "disabled", "hidden", "help", "background")):
                 for child in root.get("children", []):
                     self.node(child, 2)
             else:
@@ -291,6 +305,8 @@ class _Window:
             self.lines.append("    mui_menu_end()")
         if "close" in win:
             self.after.append(f"    mui_on_close(_window, {_int(win['close'], 'close', self.where)})")
+        if "background" in win:   # (its root group's)
+            self.after.append(f"    mui_set_background(_window, {_rgb(win['background'], 'background', self.where)})")
         if "size" in win:
             # [width, height] in percent of the visible screen, when it opens (dashweb D38)
             size = win["size"]

@@ -203,6 +203,19 @@ static long jint(JVal *v, const char *what)
     return v->num;
 }
 
+/* [r, g, b], cada uno de 0 a 255 ("background", "color": el tema oscuro de Forja), como "r, g, b" */
+static const char *jrgb(JVal *v, const char *what)
+{
+    static char buf[40];
+    int i;
+    if (!v || v->kind != J_ARR || v->items.n != 3) uifail("%s es [r, g, b], cada uno de 0 a 255", what);
+    for (i = 0; i < 3; i++)
+        if (v->items.v[i]->kind != J_INT || v->items.v[i]->num < 0 || v->items.v[i]->num > 255)
+            uifail("%s es [r, g, b], cada uno de 0 a 255", what);
+    snprintf(buf, sizeof buf, "%ld, %ld, %ld", v->items.v[0]->num, v->items.v[1]->num, v->items.v[2]->num);
+    return buf;
+}
+
 /* las palabras del lenguaje (las del editor, media/model.js), menos las de los On */
 static void check_name(const char *name, const char *what)
 {
@@ -374,6 +387,7 @@ static void gen_node(Win *w, JVal *node, int depth)
     if (!k->type) uifail("tipo de objeto desconocido: %s", kind);
     for (i = 0; events[i][0]; i++) nev += jget(node, events[i][0]) != NULL;
     needs = nev || jget(node, "weight") || jget(node, "disabled") || jget(node, "hidden") || jget(node, "help") ||
+            jget(node, "background") || jget(node, "color") ||
             jtrue(jget(node, "context_menu")) || jtrue(jget(node, "take_tab"));
     snprintf(var, sizeof var, "%s", var_for(w, node, needs));
     indent(&w->lines, depth);
@@ -394,6 +408,12 @@ static void gen_node(Win *w, JVal *node, int depth)
         out(&w->after, "    mui_help(%s, ", var);
         text(&w->after, node, kind, "help", &empty);
         out(&w->after, ")\n");
+    }
+    if (jget(node, "background")) out(&w->after, "    mui_set_background(%s, %s)\n", var, jrgb(jget(node, "background"), "\"background\""));
+    if (jget(node, "color")) {
+        if (strcmp(kind, "text") && strcmp(kind, "label") && strcmp(kind, "button"))
+            uifail("\"color\" es de un text, label o button, no de un %s", kind);
+        out(&w->after, "    mui_set_text_pen(%s, %s)\n", var, jrgb(jget(node, "color"), "\"color\""));
     }
     if (jtrue(jget(node, "take_tab"))) {
         if (strcmp(kind, "canvas")) uifail("\"take_tab\" es de un canvas, no de un %s", kind);
@@ -517,7 +537,8 @@ static void gen_window(Buf *o, JVal *win)
         JVal *rt = jget(root, "type");
         /* el grupo de la ventana ya es vertical: un vgroup raíz va directo dentro */
         if (rt && rt->kind == J_STR && !strcmp(rt->str, "vgroup") && !jtrue(jget(root, "name")) &&
-            !jget(root, "weight") && !jget(root, "disabled") && !jget(root, "hidden") && !jget(root, "help")) {
+            !jget(root, "weight") && !jget(root, "disabled") && !jget(root, "hidden") && !jget(root, "help") &&
+            !jget(root, "background")) {
             JVal *ch = jget(root, "children");
             for (i = 0; ch && ch->kind == J_ARR && i < ch->items.n; i++) gen_node(&w, ch->items.v[i], 2);
         } else {
@@ -534,6 +555,8 @@ static void gen_window(Buf *o, JVal *win)
         out(&w.lines, "    mui_menu_end()\n");
     }
     if ((v = jget(win, "close")) != NULL) out(&w.after, "    mui_on_close(_window, %ld)\n", jint(v, "close"));
+    if ((v = jget(win, "background")) != NULL)   /* (el de su grupo raíz) */
+        out(&w.after, "    mui_set_background(_window, %s)\n", jrgb(v, "\"background\""));
     if ((v = jget(win, "size")) != NULL) {
         if (v->kind != J_ARR || v->items.n != 2 || v->items.v[0]->kind != J_INT || v->items.v[1]->kind != J_INT)
             uifail("\"size\" es [ancho, alto] en tanto por ciento");

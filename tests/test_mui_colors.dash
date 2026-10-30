@@ -7,7 +7,7 @@
 # emu-shot: 10 301 131 ffffff
 # expect-out: texto: [Texto claro]
 # expect-out: cambiado: [Otro texto]
-# expect-out: botón: [_Vale]
+# expect-out: botón: [Vale]
 # expect-out: fin
 
 Main

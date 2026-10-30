@@ -16,8 +16,8 @@
 #   mui_on_press(dashui_object(ui, "ir"), 1)
 #   mui_window_open(ui.window)
 #
-# The events, menus and context menus of the file are set as import does. "tr" numbers are not used: the texts
-# come as written. Format: docs/MUI_EDITOR.md.
+# The events, menus, context menus and colours ("background", "color") of the file are set as import does. "tr"
+# numbers are not used: the texts come as written. Format: docs/MUI_EDITOR.md.
 
 import "json.dash"
 
@@ -182,7 +182,7 @@ func _ui_build(u: DashUI, w: Json)
     root = json_get(w, "root")
     if root != nil and not json_is_null(root)
         # (the window's group is already vertical: a plain vgroup at the root goes straight in)
-        plain = json_get_str(root, "type") == "vgroup" and json_get_str(root, "name") == "" and not json_has(root, "weight") and not json_has(root, "disabled") and not json_has(root, "hidden") and not json_has(root, "help")
+        plain = json_get_str(root, "type") == "vgroup" and json_get_str(root, "name") == "" and not json_has(root, "weight") and not json_has(root, "disabled") and not json_has(root, "hidden") and not json_has(root, "help") and not json_has(root, "background")
         if plain
             ch = json_get(root, "children")
             for i in (0..json_length(ch) - 1 step 1)
@@ -213,6 +213,10 @@ func _ui_build(u: DashUI, w: Json)
     u.later_nodes = []
     if json_has(w, "close")
         mui_on_close(win, json_get_int(w, "close"))
+    end
+    c3 = json_get(w, "background")
+    if json_length(c3) == 3
+        mui_set_background(win, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
     end
     s = json_get(w, "size")
     if json_length(s) == 2
@@ -339,6 +343,14 @@ func _ui_after(o: Int, n: Json, ctx_names: [String], ctx_menus: [Int])
     end
     if _ui_s(n, "help", "") != ""
         mui_help(o, _ui_s(n, "help", ""))
+    end
+    c3 = json_get(n, "background")
+    if json_length(c3) == 3
+        mui_set_background(o, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
+    end
+    c3 = json_get(n, "color")
+    if json_length(c3) == 3
+        mui_set_text_pen(o, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
     end
     if json_get_bool(n, "take_tab")
         mui_canvas_take_tab(o, true)
