@@ -83,7 +83,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   Reproducir: esos 7 tests en un arranque (scratchpad tboot.py, con el tiempo de tests/run.py: 600 s + 20 por
   test). Con --memcheck (tests compilados así) no sale y no avisa de nada: ni uso tras liberar ni doble free en
   textos u objetos de Dash. Sospecha nueva: la parte de C (QuickJS, pegamento, el malloc de api.c con su tamaño
-  delante). Siguiente paso: un malloc de prueba con marcas antes y después de cada bloque, comprobadas en free.
+  delante). Probado el 2026-10-30, todo con los literales de 24 letras (con los que sale siempre): un malloc con
+  marcas delante y detrás (alineado a 8 o a 4 como el normal), con todos los bloques vivos en una lista mirada al
+  salir, y un runtime que no devuelve los bloques grandes de Dash sino que los marca y guarda: con cualquiera de
+  ellos no sale, y ninguno avisa (ni bloques de malloc pisados ni bloques de Dash escritos tras liberarse). Es
+  decir: cualquier cambio de dónde cae la memoria lo esconde. Pendiente: otra vía (un depurador en el momento del
+  assert, o el mismo fallo con dash1).
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
