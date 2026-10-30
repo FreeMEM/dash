@@ -64,6 +64,7 @@ _LEAVES = {
     "image_button": ("mui_image_button", [("file", "")]),
     "image_toggle": ("mui_image_toggle", [("file", ""), ("group", 0), ("checked", False)]),
     "combo": ("mui_combo", [("text", ""), ("options", "")]),
+    "text_editor": ("mui_text_editor", [("lines", 4)]),     # several lines (Inferencia)
     "space": ("mui_space", []),
     "balance": ("mui_balance", []),
 }

@@ -17409,7 +17409,7 @@ static LONG _dash_mui_nradio = 0;
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
        _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
        _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR, _DASH_MUI_IMAGE,
-       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO };
+       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO, _DASH_MUI_EDITOR };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -17819,6 +17819,23 @@ static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
         MUIA_String_Contents, (IPTR)initial), _DASH_MUI_STRING);
 }
 
+/* A text field of several lines (Dash 2.0, Inferencia: the question), Textinputscroll.mcc of MUI: lines high, with
+   its scroller; Return makes a new line, and mui_on_ack gives the event of sending it */
+static APTR _dash_mui_text_editor(LONG lines) {
+    char fix[40];
+    LONG i, k = 0;
+    if (lines < 1) lines = 1;
+    if (lines > 30) lines = 30;
+    for (i = 1; i < lines; i++) fix[k++] = '\\n';
+    fix[k++] = 'X';
+    fix[k] = 0;
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Textinputscroll,
+        MUIA_CycleChain, 1,
+        MUIA_Textinput_Multiline, TRUE,
+        MUIA_Textinput_Contents, (IPTR)"",
+        MUIA_FixHeightTxt, (IPTR)_dash_mui_keep((STRPTR)fix)), _DASH_MUI_EDITOR);
+}
+
 static APTR _dash_mui_checkbox(LONG checked) {
     ULONG params[] = { 0 };
     Object *obj = MUI_MakeObjectA(MUIO_Checkmark, params);
@@ -17990,6 +18007,7 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_TOGGLE:
     case _DASH_MUI_RADIO:  return MUIA_Dtpic_Name;
     case _DASH_MUI_COMBO:  return MUIA_String_Contents;      /* of its text field (_dash_mui_combo_str) */
+    case _DASH_MUI_EDITOR: return MUIA_Textinput_Contents;
     case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Title;       /* "Abrir recientes" (Lorraine D13) */
     }
     return 0;
@@ -18418,6 +18436,20 @@ static void _dash_mui_on_change(APTR obj, LONG id) {
 static void _dash_mui_on_ack(APTR obj, LONG id) {
     if (!obj || !_dash_mui_app) return;
     obj = _dash_mui_combo_str(obj);   /* a combo: its field, which a line picked acknowledges too */
+    if (_dash_mui_kind(obj) == _DASH_MUI_EDITOR) {
+        /* a field of several lines gives no Acknowledge (Return is a new line): Amiga+Return in its window, which
+           the field lets through without touching the text (Ctrl+Return would also put a new line in it) */
+        IPTR win = 0;
+        GetAttr(MUIA_WindowObject, obj, &win);
+        if (!win) win = (IPTR)_DASH_MUI_OWNER;
+        if (win) {
+            _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_InputEvent, (IPTR)"rcommand return",
+                         (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+            _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_InputEvent, (IPTR)"lcommand return",
+                         (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+        }
+        return;
+    }
     _DASH_MUI_DO(obj, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime,
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }

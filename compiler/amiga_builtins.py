@@ -3221,6 +3221,11 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    "mui_text_editor": BuiltinFunc(
+        name="mui_text_editor", params=["lines"], return_type="APTR", c_template="_dash_mui_text_editor(${lines})",
+        description="A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return "
+                    "starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of "
+                    "sending it (Amiga+Return in its window)"),
     "mui_window_open_back": BuiltinFunc(
         name="mui_window_open_back", params=["win"], return_type="LONG",
         c_template="_dash_mui_window_open_back(${win})",

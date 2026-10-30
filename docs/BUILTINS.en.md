@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 815 functions, 815 implemented, 0 not implemented.
+Total: 816 functions, 816 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -915,6 +915,7 @@ Total: 815 functions, 815 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_text_editor(lines)` | `APTR` | A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
 | `mui_window_open_back(win)` | `LONG` | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
 | `mui_window_activate(win)` | `void` | Make a window the active one, in front of the others (it opens if it is closed) |  |
 | `mui_window_dispose(window)` | `void` | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |

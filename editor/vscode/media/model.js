@@ -31,6 +31,7 @@
         image_button: { group: false, label: 'Botón con imagen', props: [['file', 'string', '']], events: ['event'] },
         image_toggle: { group: false, label: 'Botón que se queda pulsado', props: [['file', 'string', ''], ['group', 'int', 0], ['checked', 'bool', false]], events: ['change'] },
         combo:    { group: false, label: 'Desplegable editable', props: [['text', 'string', ''], ['options', 'string', 'Uno|Dos']], events: ['ack', 'change'] },
+        text_editor: { group: false, label: 'Texto de varias líneas', props: [['lines', 'int', 4]], events: ['ack'] },
         space:    { group: false, label: 'Espacio',          props: [], events: [] },
         balance:  { group: false, label: 'Separador',        props: [], events: [] },
     };
@@ -345,6 +346,7 @@
             case 'image_button': return `<button${attrs}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
             case 'image_toggle': return `<button${attrs}${n.checked ? ' data-pressed="1"' : ''}>${esc(String(n.file || 'icono').replace(/^.*[\/:]/, ''))}</button>`;
             case 'combo': return `<span${attrs}><input value="${esc(n.text || '')}" readonly><button>▾</button></span>`;
+            case 'text_editor': return `<textarea${attrs} rows="${Math.max(1, Number(n.lines) || 4)}" readonly></textarea>`;
             default: return `<div${attrs}></div>`;
             }
         }

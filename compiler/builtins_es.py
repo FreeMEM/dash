@@ -919,6 +919,9 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_text_editor": "Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto, con su "
+                       "barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el "
+                       "evento de mandarlo (Amiga+Return en su ventana)",
     "mui_window_open_back": "Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo "
                             "abrirse",
     "mui_window_activate": "Hace activa una ventana, delante de las demás (si está cerrada, la abre)",

@@ -127,6 +127,8 @@ Rules checked by the compiler (`compiler/dashui.py`; the editor flags the same o
   "+ menú contextual" and the object picks one in its `context_menu` property.
 - **Tab on a canvas** (Lorraine D48): `"take_tab": true` on a `canvas` makes Tab and Shift+Tab over it its keys
   (`mui_canvas_take_tab`), not the move to the next gadget. On any other type it is an error.
+- **Text of several lines** (Inferencia): `"type": "text_editor"` with `"lines"` (its height in lines, 4 if not
+  given) is `mui_text_editor`: Return starts a new line and its `"ack"` comes with Amiga+Return.
 - **Colours** (Forja, the dark theme without MUI's prefs): `"background": [r, g, b]` (0 to 255) on an object, a group
   or the window (its root group) gives it that background (`mui_set_background`), and `"color": [r, g, b]` on a
   `text`, `label` or `button`, the colour of its text (`mui_set_text_pen`). On a screen of 256 colours or fewer, the
