@@ -1,0 +1,38 @@
+# env_set while another process reads the same variable with env_get (Dash 2.0, Inferencia's tests): a shorter value
+# must not leave the end of the longer one ("libre" over "pidiendo" gave "librendo": SetVar of 3.1 wrote over the file
+# without cutting it while it was open). The program started again as "lector" reads it all the time.
+# expect-out: malos: 0 []
+func lector()
+    t0 = time_ms()
+    while time_ms() - t0 < 15000
+        v = env_get("DASHPRUEBA")
+        if v == "fin"
+            return
+        end
+    end
+end
+
+Main
+    if arg(0) == "lector"
+        lector()
+    else
+        env_set("DASHPRUEBA", "pidiendo", false)
+        h = run_start("\"" + program_path() + "\" lector", 30000)
+        time_delay(10)
+        malos = 0
+        ejemplo = ""
+        for i in (1..100)
+            env_set("DASHPRUEBA", "pidiendo", false)
+            env_set("DASHPRUEBA", "libre", false)
+            v = file_read_text("ENV:DASHPRUEBA")
+            if v != "libre"
+                malos = malos + 1
+                ejemplo = v
+            end
+        end
+        env_set("DASHPRUEBA", "fin", false)
+        s = run_finish(h)
+        file_delete("ENV:DASHPRUEBA")
+        Print "malos: #{malos} [#{ejemplo}]"
+    end
+end

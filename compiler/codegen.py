@@ -5308,10 +5308,35 @@ static STRPTR _dash_env_get(STRPTR name) {
     return r;
 }
 
+/* The file of a global variable written here, not with SetVar: when another process was reading it (GetVar),
+   SetVar of 3.1 wrote over it without cutting it ("libre" over "pidiendo" left "librendo"). MODE_NEWFILE is
+   exclusive and empties it: while someone reads it, it is tried again each tick, a second at most */
+static BOOL _dash_env_file(const char *dir, STRPTR name, STRPTR value, LONG len) {
+    char path[300];
+    BPTR f = 0;
+    LONG k;
+    BOOL ok;
+    if (strlen((char *)name) > 250) return FALSE;
+    sprintf(path, "%s%s", dir, (char *)name);
+    for (k = 0; k < 50 && !(f = Open((CONST_STRPTR)path, MODE_NEWFILE)); k++) {
+        if (IoErr() != ERROR_OBJECT_IN_USE) return FALSE;
+        Delay(1);
+    }
+    if (!f) return FALSE;
+    ok = Write(f, value, len) == len;
+    Close(f);
+    return ok;
+}
+
 static BOOL _dash_env_set(STRPTR name, STRPTR value, BOOL save) {
+    LONG len;
     if (!name || !*name) return FALSE;
     if (!value) value = (STRPTR)"";
-    return SetVar(name, value, strlen((char *)value), GVF_GLOBAL_ONLY | (save ? GVF_SAVE_VAR : 0)) != 0;
+    len = strlen((char *)value);
+    if (_dash_env_file("ENV:", name, value, len) && (!save || _dash_env_file("ENVARC:", name, value, len)))
+        return TRUE;
+    /* (ENV: or a drawer of the name that is not there: as before) */
+    return SetVar(name, value, len, GVF_GLOBAL_ONLY | (save ? GVF_SAVE_VAR : 0)) != 0;
 }
 
 """
