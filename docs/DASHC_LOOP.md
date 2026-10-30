@@ -644,6 +644,15 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Fusionada ide-piezas (525fff2): builtins de Inferencia y Forja, lib/json, lib/dashui, lib/red y el depurador de
     dashc (D12, hecho en la otra sesión). Batería todo bien, depurar.py con dashc y con --c, run_tests 482/482.
   - D14: `--memcheck` ya rellenaba lo liberado con 0xDB, lo apartaba y avisaba con fichero y línea al retener,
-    soltar o liberar dos veces (también con dashc, por `_dash_mc_where`). Apartaba solo 64 bloques: en Tachyon un
-    bloque vuelve a usarse enseguida y el fallo no se ve. Ahora 1024.
-- Pendiente: D14 (fugas en Tachyon con --memcheck); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
+    soltar o liberar dos veces (también con dashc, por `_dash_mc_where`). Aparta 64 bloques. Probado con 1024:
+    Tachyon con dashc --memcheck, 114 de 114 sin fugas ni errores; pero los tests que miden que la memoria quede
+    estable (test_object_memory, test_mouse_curve, test_refcount_lists y _paths, test_string_memory) ven crecer
+    la memoria apartada (hasta 1024 bloques del tamaño que toque, unos 40 KB), así que se queda en 64.
+  - Tachyon con dashc --memcheck (64): sin fugas. Batería de Dash `--emu --memcheck`: sin fugas ni errores de
+    memoria; fallan test_desktop_canvas_fondo, _fondo_area, _otro y _veil y test_on_click_timer, que fallan
+    también sin --memcheck y solo en la tanda (solos pasan): el clic no llega a su ventana. Con --memcheck,
+    test_on_click_timer no acaba y los que van detrás en el mismo arranque agotan el tiempo. test_net_server
+    falla también sin --memcheck.
+  - Un fallo de mis optimizaciones lo encontró la sesión de ide-piezas (Inferencia): la variable de un for sobre
+    textos o sobre `d.keys()` que el cuerpo reasigna se liberaba dos veces (arreglado allí, 4d64e31).
+- Pendiente: D14 (por qué test_on_click_timer pierde el clic en la tanda); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).

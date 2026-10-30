@@ -442,7 +442,7 @@ static void *_dash_mc_nn(void *p) {
    so a freed object or string is recognised (its count or size reads
    _DASH_MC_DEAD). Errors are printed as they happen; a summary at exit. */
 #define _DASH_MC_DEAD 0xDBDBDBDBUL
-#define _DASH_MC_HOLD 1024
+#define _DASH_MC_HOLD 64
 static LONG _dash_mc_objs, _dash_mc_strs, _dash_mc_obj_esc, _dash_mc_str_esc, _dash_mc_errors;
 static APTR _dash_mc_held[_DASH_MC_HOLD];
 static ULONG _dash_mc_held_size[_DASH_MC_HOLD];
