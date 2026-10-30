@@ -1,0 +1,39 @@
+# Test: a division by zero deep in recursion with a MUI window open (R11): the recovery goes on in the
+# program's own stack from where main began (no 8 KB of its own any more) and the cleanup closes MUI, which
+# needs stack, before ending with code 20; the next program of the boot runs as usual.
+# emu-needs: muimaster.library
+# expect-rc: 20
+# expect-out: ventana: true
+# expect-out: Error: división por cero (excepción 5)
+# ignore-out: en 
+
+@native func dividir(a: Int, b: Int) -> Int
+"""
+    LONG r = a;
+    __asm__ volatile ("divs.w %1,%0" : "+d"(r) : "d"((WORD)b));
+    return (WORD)r;
+"""
+end
+
+func hondo(n: Int, b: Int) -> Int
+    if n == 0
+        return dividir(10, b)
+    end
+    return hondo(n - 1, b) + 1
+end
+
+Main
+    if mui_app_begin("Trampa", "DASHTRAPMUI") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Trampa", 0)
+        mui_text("hola")
+        mui_window_end()
+        mui_window_open(win)
+        if win != 0
+            Print "ventana: true"       # (no text made: what the trap leaves behind is not freed)
+        end
+        Print hondo(200, 0)
+        Print "no llega"
+    end
+end

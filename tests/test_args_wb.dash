@@ -9,6 +9,9 @@
 # expect-out: fuera: []
 
 @header "#include <dos/dostags.h>"
+# the copy started as from the Workbench writes nothing on a console: with --memcheck its summary at exit opened
+# one (libnix's, which waits to be closed) over the screen of the next tests of the boot
+@workbench_output "NIL:"
 
 @native func desde_wb() -> Bool
 """
@@ -44,8 +47,12 @@ end
     wb->sm_Segment = seg;
     wb->sm_NumArgs = 4;
     wb->sm_ArgList = a;
+    /* as the Workbench: no input or output of DOS's (the default, NIL: opened and closed by DOS, met the
+       console of libnix at exit: "file closed twice", a Software Failure requester that stayed over the
+       screen of the next tests of the boot) */
     pr = CreateNewProcTags(NP_Seglist, seg, NP_FreeSeglist, FALSE, NP_Name, (ULONG)"test_args_wb",
-                           NP_StackSize, 16384, TAG_DONE);
+                           NP_StackSize, 16384, NP_Input, 0, NP_Output, 0, NP_CloseInput, FALSE,
+                           NP_CloseOutput, FALSE, TAG_DONE);
     if (!pr) return -4;
     wb->sm_Process = &pr->pr_MsgPort;
     PutMsg(&pr->pr_MsgPort, (struct Message *)wb);

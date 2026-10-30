@@ -75,6 +75,25 @@ __asm__(
 "   bset #31,d0\n"               /* ma << 8 = ah:al (16 bits each) */
 "   and.l #0x7FFFFF,d1\n"
 "   bset #23,d1\n"               /* mb = bh:bl (8 and 16 bits) */
+"   move.b ___dash_fp020,d3\n"   /* a 68020, 030 or 040: one mulu.l (64 bits) */
+"   bmi.s .Lm_000\n"             /* (the 68000 goes on with one short branch: 26 cycles) */
+"   bne.s .Lm_020\n"
+"   move.l 4.w,a0\n"             /* the first time: the CPU from AttnFlags of ExecBase */
+"   move.w 296(a0),d3\n"
+"   moveq #-1,d4\n"
+"   btst #1,d3\n"                /* AFF_68020 (also set on 030, 040 and 060) */
+"   beq.s .Lm_set\n"
+"   btst #7,d3\n"                /* AFF_68060: no 64-bit mulu.l (68060.library emulates it, slowly) */
+"   bne.s .Lm_set\n"
+"   moveq #1,d4\n"
+".Lm_set:\n"
+"   move.b d4,___dash_fp020\n"
+"   bmi.s .Lm_000\n"
+".Lm_020:\n"
+"   move.l d0,d5\n"
+"   .word 0x4C01,0x5400\n"       /* mulu.l d1,d0:d5 (written as words: the file is 68000 code) */
+"   bra .Lm_prod\n"
+".Lm_000:\n"
 "   move.l d0,d3\n"
 "   swap d3\n"                   /* d3.w = ah */
 "   move.l d1,d4\n"
@@ -95,6 +114,7 @@ __asm__(
 "   moveq #0,d1\n"
 "   addx.l d1,d0\n"
 "   add.l d3,d0\n"               /* hi = hh + (mid >> 16) + carry */
+".Lm_prod:\n"                    /* hi in d0, lo in d5 */
 "   btst #23,d0\n"
 "   bne.s .Lm_top\n"
 "   add.l d5,d5\n"               /* top bit is 54: mantissa = hi:lo << 1 */
@@ -129,6 +149,12 @@ __asm__(
 ".Lm_slow:\n"
 "   movem.l (sp)+,d2-d5\n"
 "   jmp ___dash_fb_mulsf3\n"
+"   .data\n"
+"   .globl ___dash_fp020\n"
+"___dash_fp020:\n"
+"   .byte 0\n"                   /* 0: not looked yet; 1: 68020-68040; -1: 68000, 010 or 060 */
+"   .even\n"
+"   .text\n"
 );
 #else
 float DASH_MULSF3(float a, float b)
