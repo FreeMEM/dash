@@ -1,0 +1,7 @@
+# expect: "field_colors" is [[r, g, b], [r, g, b], [r, g, b]]
+# ("field_colors" are three colours: the fields without the cursor, with it, and the cursor)
+import "../lib/ventana_campos_mal.dashui"
+
+Main
+    v = Mala_create()
+end

@@ -559,7 +559,8 @@ DESC_ES = {
                    "cerrada y no queda nada. task_signal despierta al programa cuando llega algo",
     "net_bg_pending": "Cuántos bytes han llegado y no se han leído",
     "net_bg_close": "Cierra una conexión y deja libre su número",
-    "net_bg_idle": "La tarea acaba sola tras tantos ms sin tráfico (2000); cuando hace falta empieza otra",
+    "net_bg_idle": "La tarea acaba sola tras tantos ms sin tráfico (2000; una conexión que el programa sigue leyendo, "
+                   "esperando la respuesta, cuenta como tráfico); cuando hace falta empieza otra",
     "net_bg_stop": "Acaba la tarea ya (cierra lo que esté abierto) y la espera; también al acabar el programa",
     # Ventanas de otros programas
     "window_find": "La ventana de otro programa (o la del propio) cuyo título empieza por title, en cualquier pantalla: "
@@ -936,6 +937,10 @@ DESC_ES = {
                           "no tienen el suyo",
     "mui_set_text_pen": "El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo "
                         "mantiene",
+    "mui_app_field_colors": "El fondo (RGB, 0-255 cada uno) de todos los campos de texto de la aplicación (string, "
+                            "text_editor, combo), sin el cursor y con él, y el color del cursor; lo toman las ventanas "
+                            "que se abran después. El texto sigue negro: un gris en el que aún se lea, como 96, 96, "
+                            "104 y 120, 120, 128",
     "mui_app_rexx": "Cada orden ARexx al puerto de la aplicación (su base y \".1\": \"BASE.1\") que MUI no contesta "
                     "por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: "
                     "lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras "

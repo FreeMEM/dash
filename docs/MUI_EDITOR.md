@@ -132,7 +132,10 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
 - **Colores** (Forja, el tema oscuro sin las preferencias de MUI): `"background": [r, g, b]` (de 0 a 255) en un objeto,
   un grupo o la ventana (su grupo raíz) le da ese fondo (`mui_set_background`), y `"color": [r, g, b]` en un `text`, un
   `label` o un `button`, el color de su texto (`mui_set_text_pen`). En una pantalla de 256 colores o menos, el más
-  parecido de su paleta.
+  parecido de su paleta. Los campos de texto (`string`, `text_editor`, `combo`) no los toman: sus colores son de toda
+  la aplicación, con `"field_colors": [[r, g, b], [r, g, b], [r, g, b]]` en una ventana (`mui_app_field_colors`: el
+  fondo sin el cursor, con él y el cursor). Su texto sigue negro, así que conviene un gris en el que se lea, como
+  `[96, 96, 104]` y `[120, 120, 128]`.
 - **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
   principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
   `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca

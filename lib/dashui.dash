@@ -218,6 +218,13 @@ func _ui_build(u: DashUI, w: Json)
     if json_length(c3) == 3
         mui_set_background(win, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
     end
+    fc = json_get(w, "field_colors")
+    if json_length(fc) == 3
+        f0 = json_at(fc, 0)
+        f1 = json_at(fc, 1)
+        f2 = json_at(fc, 2)
+        mui_app_field_colors(json_num(json_at(f0, 0)), json_num(json_at(f0, 1)), json_num(json_at(f0, 2)), json_num(json_at(f1, 0)), json_num(json_at(f1, 1)), json_num(json_at(f1, 2)), json_num(json_at(f2, 0)), json_num(json_at(f2, 1)), json_num(json_at(f2, 2)))
+    end
     s = json_get(w, "size")
     if json_length(s) == 2
         mui_window_size(win, json_num(json_at(s, 0)), json_num(json_at(s, 1)))

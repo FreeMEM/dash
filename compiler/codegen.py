@@ -7174,7 +7174,8 @@ static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
 /* Dash background network runtime: net_bg_open asks for a connection and a task of its own (task_start's)
    looks up the name, connects, negotiates TLS (net_bg_open_tls), sends and receives while the program is busy
    (a long layout, JavaScript...). The program only puts and takes bytes from a table behind a semaphore. The
-   task starts with the first connection and ends by itself after net_bg_idle's ms without traffic (2 s), or at
+   task starts with the first connection and ends by itself after net_bg_idle's ms without traffic (2 s; a
+   connection the program keeps reading is traffic, even with nothing coming), or at
    net_bg_stop and at the end of the program. TLS goes through hooks NETBG_TLS_RUNTIME fills: a program without
    net_bg_open_tls does not take AmiSSL. */
 #include <exec/semaphores.h>
@@ -7187,6 +7188,7 @@ typedef struct {
     UBYTE *out; LONG out_len, out_cap;
     UBYTE *in; LONG in_len, in_cap;
     volatile LONG drop;
+    volatile LONG polled;   /* the program asked it for what came (net_bg_recv, net_bg_pending) */
     char error[160];
 } _DashNbgSlot;
 static _DashNbgSlot _dash_nbg[_DASH_NBG_MAX];
@@ -7253,8 +7255,10 @@ static LONG _dash_nbg_loop(LONG arg) {
             _DashNbgSlot *s = &_dash_nbg[i];
             LONG e = s->state;
             if (e == _NBG_FREE) continue;
-            /* (open ones with nothing to send, closed ones and errors do not keep it alive) */
-            if (e < _NBG_OPEN || (e == _NBG_OPEN && s->out_len > 0) || s->drop) active++;
+            /* (open ones with nothing to send and that nobody reads, closed ones and errors do not keep it alive:
+               one the program waits on, a server thinking before it answers (Ollama, Inferencia), does) */
+            if (e < _NBG_OPEN || (e == _NBG_OPEN && (s->out_len > 0 || s->polled)) || s->drop) active++;
+            s->polled = 0;
             if (s->drop) {
                 _dash_nbg_shut(s);
                 ObtainSemaphore(&_dash_nbg_sem);
@@ -7497,6 +7501,7 @@ static LONG _dash_net_bg_recv(LONG c, APTR buffer, LONG max) {
     LONG n;
     if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return -1;
     s = &_dash_nbg[c];
+    s->polled = 1;
     ObtainSemaphore(&_dash_nbg_sem);
     n = s->in_len < max ? s->in_len : max;
     if (n > 0) {
@@ -7514,6 +7519,7 @@ static LONG _dash_net_bg_recv(LONG c, APTR buffer, LONG max) {
 static LONG _dash_net_bg_pending(LONG c) {
     LONG n;
     if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return 0;
+    _dash_nbg[c].polled = 1;
     ObtainSemaphore(&_dash_nbg_sem);
     n = _dash_nbg[c].in_len;
     ReleaseSemaphore(&_dash_nbg_sem);
@@ -18546,6 +18552,25 @@ static void _dash_mui_set_background(APTR obj, LONG r, LONG g, LONG b) {
     else if (_dash_mui_kind(o) == _DASH_MUI_LIST) GetAttr(MUIA_Listview_List, o, (IPTR *)&inner);
     if (o) SetAttrs(o, MUIA_Background, (IPTR)keep, TAG_DONE);
     if (inner) SetAttrs(inner, MUIA_Background, (IPTR)keep, TAG_DONE);
+}
+
+/* mui_app_field_colors (Dash 2.0, Forja and Inferencia: the dark theme): the background of the text fields
+   (strings, text editors, combos) inactive and active and their cursor, for the whole application. MUI keeps them in
+   its config, not per object (MUIA_Background of a field goes back to the prefs' on activating it), and the text
+   stays black: these are the ids of its "Strings" page (not in the SDK; 0x84, 0x86, 0xf0 in MUI 5). The windows
+   take them when they open. */
+static void _dash_mui_app_field_colors(LONG r, LONG g, LONG b, LONG ar, LONG ag, LONG ab, LONG cr, LONG cg, LONG cb) {
+    char spec[32];
+    if (!_dash_mui_app) return;
+    sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((r & 255) * 0x01010101UL),
+            (unsigned long)((g & 255) * 0x01010101UL), (unsigned long)((b & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x84, (IPTR)_dash_mui_keep((STRPTR)spec));
+    sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((ar & 255) * 0x01010101UL),
+            (unsigned long)((ag & 255) * 0x01010101UL), (unsigned long)((ab & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x86, (IPTR)_dash_mui_keep((STRPTR)spec));
+    sprintf(spec, "r%08lx,%08lx,%08lx", (unsigned long)((cr & 255) * 0x01010101UL),
+            (unsigned long)((cg & 255) * 0x01010101UL), (unsigned long)((cb & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0xf0, (IPTR)_dash_mui_keep((STRPTR)spec));
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {

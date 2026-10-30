@@ -234,6 +234,7 @@ char *read_text(const char *path);   /* main.c: el fichero entero, o NULL */
 /* Los errores y avisos de dashc: en el PC por stderr; en el Amiga por stdout, porque antes de 3.2 una orden lanzada
    con System (la de un IDE, run_start de Dash) no tiene canal de errores y libnix mandaría stderr a "*", la consola
    del que la lanzó (o a ningún sitio): así se recogen con la salida */
+int valid_utf8(const unsigned char *s);   /* lexer.c: si no, el fuente está en Latin-1 */
 void err_printf(const char *fmt, ...);   /* util.c: por DASHC_ERR, en Latin-1 en el Amiga */
 #ifdef __amigaos__
 #define DASHC_ERR stdout

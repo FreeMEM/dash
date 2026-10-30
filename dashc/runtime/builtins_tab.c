@@ -747,6 +747,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_app_begin", 2, 1, 0, 0},
     {"mui_app_end", 0, 0, 1, 0},
     {"mui_app_end", 0, 0, 1, 0},
+    {"mui_app_field_colors", 9, 0, 1, 0},
+    {"mui_app_field_colors", 9, 0, 1, 0},
     {"mui_app_rexx", 2, 0, 1, 0},
     {"mui_app_rexx", 2, 0, 1, 0},
     {"mui_balance", 0, 1, 1, 0},
@@ -1634,7 +1636,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1632;
+const int builtin_count = 1634;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},
