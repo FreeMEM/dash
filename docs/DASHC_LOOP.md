@@ -655,4 +655,8 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     falla también sin --memcheck.
   - Un fallo de mis optimizaciones lo encontró la sesión de ide-piezas (Inferencia): la variable de un for sobre
     textos o sobre `d.keys()` que el cuerpo reasigna se liberaba dos veces (arreglado allí, 4d64e31).
-- Pendiente: D14 (por qué test_on_click_timer pierde el clic en la tanda); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
+  - La causa de test_on_click_timer y desktop_canvas_*: a la rama le faltaban 22 commits de main (1.0.1, ronda 3
+    de recursos), entre ellos los arreglos de test_mouse_curve (dejaba el botón pulsado y la pantalla arrastrada)
+    y test_args_wb. Fusionado main (8e82817). R8 lleva el largo en la cabecera de cada texto: en dashc,
+    `dl_str_forget` ya no hace nada. Batería normal en el A1200 742 de 743 (test_net_server, que pasa solo).
+- Pendiente: D14 (cerrar con la batería --memcheck tras la fusión de main); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
