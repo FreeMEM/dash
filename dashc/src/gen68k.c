@@ -878,6 +878,30 @@ static uint32_t add_string(const char *s, int len)
     return off;
 }
 
+/* Un literal como texto de Dash fijo (escapado: nunca se libera ni se escribe en su sitio), para un campo que
+   empieza con él: el campo lo apunta tal cual, sin pedir memoria ni copiarlo. En los datos, 12 bytes para la
+   cabecera (_DashStrHdr) y el texto; al arrancar, _dl_str_lit pone la cabecera (lit_init_label) */
+static struct { uint32_t off; const char *s; int len; } *dash_lits;
+static int n_dash_lits, cap_dash_lits;
+static int lit_init_label = -1;
+static uint32_t dash_lit(const char *s, int len)
+{
+    int i;
+    for (i = 0; i < n_dash_lits; i++)
+        if (dash_lits[i].len == len && !memcmp(dash_lits[i].s, s, (size_t)len)) return dash_lits[i].off;
+    if (n_dash_lits == cap_dash_lits) {
+        cap_dash_lits = cap_dash_lits ? cap_dash_lits * 2 : 16;
+        dash_lits = realloc(dash_lits, sizeof(*dash_lits) * (size_t)cap_dash_lits);
+    }
+    buf_long(&obj->data, 0);
+    buf_long(&obj->data, 0);
+    buf_long(&obj->data, 0);
+    dash_lits[n_dash_lits].off = add_string(s, len);
+    dash_lits[n_dash_lits].s = s;
+    dash_lits[n_dash_lits].len = len;
+    return dash_lits[n_dash_lits++].off;
+}
+
 /* move.l #texto (o #n),var: una variable del runtime, al arrancar */
 static void set_rt_var(const char *sym, const char *str, long n)
 {
@@ -1824,7 +1848,13 @@ static int gen_new(Node *n, int si, int fresh)
     w(0x2440);                                         /* movea.l d0,a2 (C no toca a2) */
     for (i = 0; i < nf; i++) {
         int ft = st->fields.v[i].type, off = 4 * i;
-        if (IS_STRLIKE(ft)) {
+        if (ft == TY_STR && vals[i]->kind == E_STR) {
+            /* un literal: el texto fijo de Dash (dash_lit), sin copia */
+            w(0x257C);                                 /* move.l #texto,off(a2) */
+            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+            l(dash_lit(vals[i]->str, vals[i]->len));
+            w(off);
+        } else if (IS_STRLIKE(ft)) {
             w(0x42AA); w(off);                         /* clr.l off(a2) */
             w(0x2F2F); w(4 * i + 4);                   /* move.l v(sp),-(sp) */
             sp_depth += 4;
@@ -6026,6 +6056,7 @@ static void undo(Mark *m)
 {
     obj->code.n = m->code_n;
     obj->data.n = m->data_n;
+    while (n_dash_lits && dash_lits[n_dash_lits - 1].off >= m->data_n) n_dash_lits--;   /* (sus datos ya no están) */
     obj->relocs.n = m->relocs_n;
     fixups.n = m->fixups_n;
     labels.n = m->labels_n;
@@ -6563,6 +6594,19 @@ void gen_program(Program *p, Obj *o)
     }
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
     {
+        /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
+        Fixup f;
+        lit_init_label = new_label();
+        w(0x4EB9);                                     /* jsr lit_init */
+        f.at = (uint32_t)obj->code.n;
+        f.label = lit_init_label;
+        f.abs = 1;
+        f.size = 2;
+        VEC_PUSH(fixups, f);
+        add_reloc(f.at, HK_CODE, NULL);
+        l(0);
+    }
+    {
         /* la pila que pide (16 KB, como ./dash; 32 KB con MUI, 64 KB con AmiSSL; más con @stack): _dash_start
            cambia a una así si la del shell es menor */
         long stack = uses_tls ? 65536 : uses_mui ? 32768 : 16384;
@@ -6628,6 +6672,20 @@ void gen_program(Program *p, Obj *o)
         }
     gen_struct_types();
     gen_window_descs();
+    {
+        int i;
+        def_label(lit_init_label);
+        w(0x48E7); w(0x8080);                          /* movem.l d0/a0,-(sp) (la línea de órdenes) */
+        for (i = 0; i < n_dash_lits; i++) {
+            w(0x4879);                                 /* pea texto */
+            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+            l(dash_lits[i].off);
+            jsr_sym("_dl_str_lit");
+            w(0x588F);                                 /* addq.l #4,sp */
+        }
+        w(0x4CDF); w(0x0101);                          /* movem.l (sp)+,d0/a0 */
+        w(0x4E75);                                     /* rts */
+    }
     if (p->version) {
         /* @version: "$VER: versión (d.m.aaaa)", como ./dash (lo lee la orden Version) */
         char ver[512];

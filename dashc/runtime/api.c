@@ -593,6 +593,16 @@ STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
    largo va en la cabecera de cada texto de Dash (R8 de main) y un texto de C no la tiene; se queda por el C ya
    compilado que la llama */
 STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
+/* un literal de dashc como texto de Dash fijo (dash_lit de gen68k.c, que deja 12 bytes delante para la cabecera):
+   escapado, nunca se libera ni se escribe en su sitio */
+typedef char _dl_str_hdr_12[sizeof(_DashStrHdr) == 12 ? 1 : -1];
+void dl_str_lit(STRPTR t) {
+    _DashStrHdr *h = _DASH_STR_HDR(t);
+    ULONG n = strlen((const char *)t);
+    h->size = (sizeof(_DashStrHdr) + n + 1) | _DASH_STR_TAG | _DASH_STR_KEEP;
+    h->len = n;
+    h->self = (ULONG)h + _DASH_STR_KEY;
+}
 void dl_str_forget(STRPTR s) { (void)s; }
 void dl_str_set(STRPTR *var, STRPTR v) { _dash_str_set(var, v); }
 void dl_str_set_copy(STRPTR *var, STRPTR v) { _dash_str_set_copy(var, v); }
