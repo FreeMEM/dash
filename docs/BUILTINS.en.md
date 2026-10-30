@@ -676,7 +676,7 @@ Total: 806 functions, 806 implemented, 0 not implemented.
 | `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
 | `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
-| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote (output and error output), its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's stderr goes to the console; dashc writes its errors to its output on the Amiga) |  |
 | `run_start(command, timeout_ms)` | `LONG` | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
 | `run_ready(run)` | `BOOL` | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
 | `run_break(run)` | `void` | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |

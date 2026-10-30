@@ -68,7 +68,7 @@ size_t rt_blob_len;
 
 static void usage(void)
 {
-    fprintf(stderr,
+    err_printf(
             "uso: dashc programa.dash -o ejecutable [--fpu] [--memcheck] [--stack bytes] [--version]\n"
             "Compila Dash a un ejecutable de Amiga sin compilador de C (Dash 2.0).\n"
             "  --fpu          Float y Double con la FPU (68020 y 68881/68882, o 68040/68060)\n"
@@ -113,7 +113,7 @@ static int debug_info_show(const char *path)
             at += 4 + 4 * (size_t)n;
         } else if (type != 0x3F2) break;                                                    /* END */
     }
-    fprintf(stderr, "dashc: %s no lleva información de depuración (compílalo con --debug)\n", path);
+    err_printf("dashc: %s no lleva información de depuración (compílalo con --debug)\n", path);
     return 1;
 }
 

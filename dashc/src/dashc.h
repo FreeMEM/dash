@@ -231,6 +231,15 @@ typedef struct {
 Program *parse(Token *toks);
 char *dashui_generate(const char *json, const char *filename);   /* dashui.c: un .dashui como Dash */
 char *read_text(const char *path);   /* main.c: el fichero entero, o NULL */
+/* Los errores y avisos de dashc: en el PC por stderr; en el Amiga por stdout, porque antes de 3.2 una orden lanzada
+   con System (la de un IDE, run_start de Dash) no tiene canal de errores y libnix mandaría stderr a "*", la consola
+   del que la lanzó (o a ningún sitio): así se recogen con la salida */
+void err_printf(const char *fmt, ...);   /* util.c: por DASHC_ERR, en Latin-1 en el Amiga */
+#ifdef __amigaos__
+#define DASHC_ERR stdout
+#else
+#define DASHC_ERR stderr
+#endif
 extern char dash_home[1024];        /* main.c: la carpeta de Dash (con lib/), "" sin ella */
 int runtime_has(const char *sym);    /* hunk.c: ¿define el runtime este símbolo? */
 extern const uint8_t *rt_blob;       /* main.c: el runtime que se va a enlazar */

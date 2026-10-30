@@ -676,7 +676,7 @@ Total: 806 funciones, 806 implementadas, 0 sin implementar.
 | `build_date()` | `STRPTR` | La fecha en que se compiló el programa, "2026-10-28" |  |
 | `build_time()` | `STRPTR` | La hora en que se compiló el programa, "20:45:10" |  |
 | `console_flush()` | `void` | Saca ya lo que Print dejó en el búfer de la salida (una línea de progreso sin su final) |  |
-| `run_capture(command, timeout_ms)` | `STRPTR` | Ejecuta una orden y espera a que acabe: lo que escribió (salida y salida de errores), con su código de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta que acaba) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Ejecuta una orden y espera a que acabe: lo que escribió, con su código de retorno en run_rc(). Con timeout_ms mayor que 0, al pasar ese tiempo la orden recibe Ctrl-C (y otra vez cada segundo hasta que acaba). Solo su salida: AmigaOS no da canal de errores a una orden lanzada así (el stderr de un programa en C va a la consola; dashc escribe sus errores por su salida en el Amiga) |  |
 | `run_start(command, timeout_ms)` | `LONG` | run_capture sin esperar: un número para run_ready, run_break y run_finish, 0 si no pudo empezar. El programa espera al acabar a las que no terminó |  |
 | `run_ready(run)` | `BOOL` | Verdadero cuando un run_start ha acabado (no espera; también aplica el tope de tiempo) |  |
 | `run_break(run)` | `void` | Manda Ctrl-C a un run_start que sigue en marcha (y otra vez cada segundo hasta que acaba) |  |

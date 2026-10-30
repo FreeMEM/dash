@@ -4600,9 +4600,10 @@ TASK_FUNCTIONS = {
     "run_capture": BuiltinFunc(
         name="run_capture", params=["command", "timeout_ms"], return_type="STRPTR",
         c_template="_dash_run_capture(${command}, ${timeout_ms})", reads_only=True,
-        description="Run a command line and wait for it to end: what it wrote (output and error output), its "
-                    "return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets "
-                    "Ctrl-C (and again every second until it ends)"),
+        description="Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With "
+                    "timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until "
+                    "it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's "
+                    "stderr goes to the console; dashc writes its errors to its output on the Amiga)"),
     "run_start": BuiltinFunc(
         name="run_start", params=["command", "timeout_ms"], return_type="LONG",
         c_template="_dash_run_start(${command}, ${timeout_ms})", reads_only=True,

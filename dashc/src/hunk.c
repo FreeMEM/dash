@@ -360,7 +360,7 @@ static int touches_own_data(int t, const int *keep, const int *core)
                 int k;
                 for (k = 0; k < syms.n; k++)
                     if (syms.v[k].hunk == d) b = syms.v[k].name;
-                fprintf(stderr, "limpieza %s por %s\n", a ? a : "?", b ? b : "?");
+                err_printf("limpieza %s por %s\n", a ? a : "?", b ? b : "?");
             }
             return 1;
         }
@@ -752,9 +752,9 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     }
 
     if (missing.n) {
-        fprintf(stderr, "dashc: Error: nadie define (ni el runtime ni lo de @link):");
-        for (i = 0; i < missing.n; i++) fprintf(stderr, " %s", missing.v[i][0] == '_' ? missing.v[i] + 1 : missing.v[i]);
-        fprintf(stderr, "\n");
+        err_printf("dashc: Error: nadie define (ni el runtime ni lo de @link):");
+        for (i = 0; i < missing.n; i++) err_printf(" %s", missing.v[i][0] == '_' ? missing.v[i] + 1 : missing.v[i]);
+        err_printf("\n");
         exit(1);
     }
 
@@ -807,7 +807,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
                 const char *name = hunks.v[i].secname ? hunks.v[i].secname : "?";
                 for (j = 0; j < syms.n; j++)
                     if (syms.v[j].hunk == i) name = syms.v[j].name;
-                fprintf(stderr, "%6u %c %s\n", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], name);
+                err_printf("%6u %c %s\n", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], name);
             }
 
     if (debug_info.n) {
