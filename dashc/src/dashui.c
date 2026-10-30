@@ -558,6 +558,14 @@ static void gen_window(Buf *o, JVal *win)
     if ((v = jget(win, "close")) != NULL) out(&w.after, "    mui_on_close(_window, %ld)\n", jint(v, "close"));
     if ((v = jget(win, "background")) != NULL)   /* (el de su grupo raíz) */
         out(&w.after, "    mui_set_background(_window, %s)\n", jrgb(v, "\"background\""));
+    if ((v = jget(win, "field_colors")) != NULL) {
+        /* [[r, g, b] sin el cursor, [r, g, b] con él, [r, g, b] el cursor] de los campos de la aplicación (Forja) */
+        char c[3][40];
+        if (v->kind != J_ARR || v->items.n != 3)
+            uifail("\"field_colors\" es [[r, g, b], [r, g, b], [r, g, b]] (sin el cursor, con él y el cursor)");
+        for (i = 0; i < 3; i++) snprintf(c[i], sizeof c[i], "%s", jrgb(v->items.v[i], "\"field_colors\""));
+        out(&w.after, "    mui_app_field_colors(%s, %s, %s)\n", c[0], c[1], c[2]);
+    }
     if ((v = jget(win, "size")) != NULL) {
         if (v->kind != J_ARR || v->items.n != 2 || v->items.v[0]->kind != J_INT || v->items.v[1]->kind != J_INT)
             uifail("\"size\" es [ancho, alto] en tanto por ciento");

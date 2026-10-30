@@ -308,6 +308,13 @@ class _Window:
             self.after.append(f"    mui_on_close(_window, {_int(win['close'], 'close', self.where)})")
         if "background" in win:   # (its root group's)
             self.after.append(f"    mui_set_background(_window, {_rgb(win['background'], 'background', self.where)})")
+        if "field_colors" in win:
+            # [[r, g, b] inactive, [r, g, b] active, [r, g, b] cursor] of the application's text fields (Forja)
+            fc = win["field_colors"]
+            if not (isinstance(fc, list) and len(fc) == 3):
+                raise DashUIError(f"{self.where}: \"field_colors\" is [[r, g, b], [r, g, b], [r, g, b]] (inactive, active, cursor)")
+            self.after.append("    mui_app_field_colors(" +
+                              ", ".join(_rgb(c, '"field_colors"', self.where) for c in fc) + ")")
         if "size" in win:
             # [width, height] in percent of the visible screen, when it opens (dashweb D38)
             size = win["size"]

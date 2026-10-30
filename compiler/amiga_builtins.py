@@ -3259,6 +3259,14 @@ MUI_FUNCTIONS = {
         name="mui_set_text_pen", params=["obj", "r", "g", "b"], return_type="void",
         c_template="_dash_mui_set_text_pen(${obj}, ${r}, ${g}, ${b})",
         description="The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it"),
+    "mui_app_field_colors": BuiltinFunc(
+        name="mui_app_field_colors", params=["r", "g", "b", "active_r", "active_g", "active_b",
+                                             "cursor_r", "cursor_g", "cursor_b"], return_type="void",
+        c_template="_dash_mui_app_field_colors(${r}, ${g}, ${b}, ${active_r}, ${active_g}, ${active_b}, "
+                   "${cursor_r}, ${cursor_g}, ${cursor_b})",
+        description="The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, "
+                    "combo), inactive and active, and their cursor; the windows opened after it take them. The text "
+                    "stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128"),
     # Dash 2.0 (Inferencia): the application's own ARexx commands
     "mui_app_rexx": BuiltinFunc(
         name="mui_app_rexx", params=["app", "func"], return_type="void",

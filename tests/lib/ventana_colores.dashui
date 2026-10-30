@@ -5,11 +5,13 @@
       "name": "Oscura",
       "title": "Oscura",
       "background": [20, 20, 24],
+      "field_colors": [[96, 96, 104], [120, 120, 128], [255, 200, 0]],
       "root": {
         "type": "vgroup",
         "children": [
           { "type": "text", "name": "texto", "text": "Texto claro", "background": [20, 20, 24], "color": [220, 220, 220] },
-          { "type": "button", "name": "boton", "label": "Vale", "color": [255, 255, 255] }
+          { "type": "button", "name": "boton", "label": "Vale", "color": [255, 255, 255] },
+          { "type": "string", "name": "campo", "text": "Campo" }
         ]
       }
     }

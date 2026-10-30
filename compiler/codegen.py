@@ -18548,6 +18548,25 @@ static void _dash_mui_set_background(APTR obj, LONG r, LONG g, LONG b) {
     if (inner) SetAttrs(inner, MUIA_Background, (IPTR)keep, TAG_DONE);
 }
 
+/* mui_app_field_colors (Dash 2.0, Forja and Inferencia: the dark theme): the background of the text fields
+   (strings, text editors, combos) inactive and active and their cursor, for the whole application. MUI keeps them in
+   its config, not per object (MUIA_Background of a field goes back to the prefs' on activating it), and the text
+   stays black: these are the ids of its "Strings" page (not in the SDK; 0x84, 0x86, 0xf0 in MUI 5). The windows
+   take them when they open. */
+static void _dash_mui_app_field_colors(LONG r, LONG g, LONG b, LONG ar, LONG ag, LONG ab, LONG cr, LONG cg, LONG cb) {
+    char spec[32];
+    if (!_dash_mui_app) return;
+    sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((r & 255) * 0x01010101UL),
+            (unsigned long)((g & 255) * 0x01010101UL), (unsigned long)((b & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x84, (IPTR)_dash_mui_keep((STRPTR)spec));
+    sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((ar & 255) * 0x01010101UL),
+            (unsigned long)((ag & 255) * 0x01010101UL), (unsigned long)((ab & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x86, (IPTR)_dash_mui_keep((STRPTR)spec));
+    sprintf(spec, "r%08lx,%08lx,%08lx", (unsigned long)((cr & 255) * 0x01010101UL),
+            (unsigned long)((cg & 255) * 0x01010101UL), (unsigned long)((cb & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0xf0, (IPTR)_dash_mui_keep((STRPTR)spec));
+}
+
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
     if (!obj) return;
     if (_dash_mui_kind(obj) == _DASH_MUI_MENUITEM)      /* an item or a whole menu (Lorraine D13): each */
