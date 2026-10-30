@@ -419,6 +419,11 @@ static void _dash_close_window(void)
 static UWORD dl_ev_code;
 LONG dl_event_code(void) { return dl_ev_code; }
 
+/* DASH_TEST_AUTOCLOSE al compilar: cada vuelta de un while (el reloj, cada 1024); DASH_PRINT_FLUSH: cada Print sale
+   enseguida */
+void dl_ac_loop(void) { _dash_ac_loop(); }
+void dl_print_flush(void) { Flush(Output()); }
+
 static void dl_close_windows(void)
 {
     int i;

@@ -47,6 +47,25 @@ class TestDash2Cli(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertTrue(os.path.getsize(out) > 0)
 
+    def test_test_mode_as_in_dash1(self):
+        # DASH_TEST_AUTOCLOSE (the program ends by itself: tools/emu_run.py) and DASH_PRINT_FLUSH (the VS Code
+        # extension) while compiling: each adds code (a call in each while, a Flush after each Print)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "x.dash")
+            with open(src, "w") as f:
+                f.write('Main\n    n = 0\n    while n < 3\n        n = n + 1\n        Print "#{n}"\n    end\nend\n')
+            sizes = {}
+            for name, extra in (("plain", {}), ("autoclose", {"DASH_TEST_AUTOCLOSE": "5"}),
+                                ("flush", {"DASH_PRINT_FLUSH": "1"})):
+                env = {k: v for k, v in os.environ.items() if k not in ("DASH_TEST_AUTOCLOSE", "DASH_PRINT_FLUSH")}
+                env.update(extra)
+                out = os.path.join(tmp, name)
+                r = subprocess.run([DASHC, src, "-o", out], capture_output=True, text=True, env=env)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                sizes[name] = os.path.getsize(out)
+            self.assertGreater(sizes["autoclose"], sizes["plain"])
+            self.assertGreater(sizes["flush"], sizes["plain"])
+
 
 if __name__ == "__main__":
     unittest.main()

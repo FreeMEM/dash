@@ -8,6 +8,7 @@ Dash de Python para cocina.dash, un programa que usa todo eso. Así dashc lleva 
 Se quita lo del programa (sus structs, funciones y main) y lo que depende de libnix (exit, la lista de
 salida de stabs.h, la pila): api.c, que se incluye al final, pone el arranque y la salida de dashc y
 exporta con nombre dl_* lo que llama el código de dashc."""
+import os
 import re
 import subprocess
 import sys
@@ -35,12 +36,29 @@ def main():
         calls = "".join(f"    {n}({', '.join('0' for _ in b.params)})\n" for n, b in sorted(builtins().items()))
         src.write_text((HERE / "cocina.dash").read_text(encoding="utf-8") +
                        "\nfunc _cocina_builtins()\n" + calls + "end\n", encoding="utf-8")
+        # con el cierre automático de los tests (DASH_TEST_AUTOCLOSE) a 7777 s, que luego es _dash_ac_secs
+        env = dict(os.environ, DASH_TEST_AUTOCLOSE="7777")
+        env.pop("DASH_PRINT_FLUSH", None)
         r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)],
-                           cwd=REPO, capture_output=True, text=True)
+                           cwd=REPO, capture_output=True, text=True, env=env)
         if r.returncode:
             sys.exit(f"gen_lib: ./dash no transpila la cocina:\n{r.stdout}{r.stderr}")
         text = c.read_text(encoding="latin-1")
 
+    # DASH_TEST_AUTOCLOSE: los segundos los pone el programa (_dash_ac_secs, 0 = no); sin ellos, Wait y WaitPort
+    # esperan como siempre
+    for a, b in (("#define _DASH_AUTOCLOSE 1\n", "#define _DASH_AUTOCLOSE 1\nLONG _dash_ac_secs = 0;\n"),
+                 ("after 7777 seconds", "after _dash_ac_secs seconds"),
+                 ("(7777 + 5) * 50", "(_dash_ac_secs + 5) * 50"),
+                 ("7777 * 50", "_dash_ac_secs * 50"),
+                 ("    if (!DOSBase) return;\n    DateStamp(&ds);", "    if (!DOSBase || !_dash_ac_secs) return;\n    DateStamp(&ds);"),
+                 ("static void _dash_ac_waitport(struct MsgPort *port) {\n",
+                  "static void _dash_ac_waitport(struct MsgPort *port) {\n    if (!_dash_ac_secs) { WaitPort(port); return; }\n"),
+                 ("static ULONG _dash_ac_wait(ULONG mask) {\n    ULONG got;\n",
+                  "static ULONG _dash_ac_wait(ULONG mask) {\n    ULONG got;\n    if (!_dash_ac_secs) return Wait(mask);\n")):
+        assert text.count(a) == 1, f"gen_lib: el cierre automático de ./dash ha cambiado ({a!r})"
+        text = text.replace(a, b)
+    assert "7777" not in text, "gen_lib: quedan los segundos de prueba del cierre automático"
     # libnix: ADD2EXIT (la lista de salida la recorre _dash_quit) y la pila de swapstack
     text = text.replace("#include <stabs.h>\n", "")
     text = text.replace("ADD2EXIT(_dash_atexit_run, 0);\n", "")

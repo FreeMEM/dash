@@ -732,4 +732,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   tiempo, mientras otra sesión tenía su emulador y servidores en marcha. Repetidos por grupos, pasan los 20; una
   vez test_imagenes_data se quedó sin tiempo en el grupo "imagen" y a la siguiente pasó. Pendiente una tanda
   completa con la máquina sola.
-- Pendiente: D16; D15; D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
+- 2026-10-30, `DASH_TEST_AUTOCLOSE` y `DASH_PRINT_FLUSH` en dashc, como en dash1: el runtime lleva siempre el cierre
+  automático de ./dash, apagado (gen_lib lo saca con 7777 s y lo cambia por `_dash_ac_secs`; con 0, Wait y WaitPort
+  esperan como siempre). Con `DASH_TEST_AUTOCLOSE=<s>` al compilar, el programa pone `_dash_ac_secs` al arrancar y
+  cada vuelta de un while llama a `dl_ac_loop` (sin el while contado de gen_counted_while); con `DASH_PRINT_FLUSH=1`,
+  cada Print acaba con `dl_print_flush` (Flush de dos). Probado en el emulador: un `while true` y una ventana con
+  EventLoop acaban solos a los 2 s con código 0; textos.dash con Flush da la misma salida. Test en
+  tests/unit/test_dash2_cli.py. Batería de dashc entera bien. Falta: que tools/emu_run.py y la extensión de VS Code
+  compilen con dashc (siguen con dash1).
+- Pendiente: D16; D15; D9c, D9d; emu_run y la extensión con dashc; D8 (tamaño).

@@ -892,6 +892,10 @@ static uint32_t add_string(const char *s, int len)
 static struct { uint32_t off; const char *s; int len; } *dash_lits;
 static int n_dash_lits, cap_dash_lits;
 static int lit_init_label = -1;
+
+/* modo de prueba, como ./dash: DASH_TEST_AUTOCLOSE=<segundos> al compilar (el programa acaba solo; tools/emu_run.py)
+   y DASH_PRINT_FLUSH=1 (cada Print sale enseguida) */
+static int autoclose, print_flush;
 static uint32_t dash_lit(const char *s, int len)
 {
     int i;
@@ -5929,6 +5933,7 @@ static void gen_stmt(Node *n)
                     ty == TY_CHAR ? "__dash_print_char" : "__dash_print_int");
         }
         pop_args(1);
+        if (print_flush) rt_call("_dl_print_flush", 0, 0);
         return;
     case S_ASSIGN:
     case S_VAR:
@@ -6046,7 +6051,7 @@ static void gen_stmt(Node *n)
         Loop lp;
         MarkScope ms;
         int top, test, done, base = repls.n, slots = slot_uses.n;
-        if (gen_counted_while(n)) return;
+        if (!autoclose && gen_counted_while(n)) return;
         top = new_label();
         test = new_label();
         done = new_label();
@@ -6062,6 +6067,7 @@ static void gen_stmt(Node *n)
         else if (!true_at_entry(n->a)) gen_branch(n->a, done, 0);   /* si se sabe que se cumple, nada */
         def_label(top);
         mark_release(&ms);
+        if (autoclose) rt_call("_dl_ac_loop", 0, 0);
         lp.brk = done;
         lp.cont = test;
         enter_scope();
@@ -6875,6 +6881,13 @@ void gen_program(Program *p, Obj *o)
     int i, main_label, again, files_label;
     prog = p;
     obj = o;
+    {
+        const char *e = getenv("DASH_TEST_AUTOCLOSE");
+        autoclose = e ? atoi(e) : 0;
+        if (autoclose < 0) autoclose = 0;
+        e = getenv("DASH_PRINT_FLUSH");
+        print_flush = e && *e && strcmp(e, "0");
+    }
 
     call_sites = xmalloc(sizeof(int) * (p->funcs.n + 1));
     body_size = xmalloc(sizeof(int) * (p->funcs.n + 1));
@@ -6999,6 +7012,7 @@ void gen_program(Program *p, Obj *o)
         if (p->catalog_lang) set_rt_var("__dash_catalog_builtin", p->catalog_lang, 0);
     }
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
+    if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
     {
         /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
         Fixup f;
