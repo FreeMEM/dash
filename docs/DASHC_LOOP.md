@@ -81,7 +81,9 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   colores4, css y css_cdo en un arranque), aunque comparar solo lee. Sospecha: algo usa memoria ya liberada; un
   bloque grande de Dash vuelve al sistema al liberarse y luego es de QuickJS (malloc de api.c, otro pool).
   Reproducir: esos 7 tests en un arranque (scratchpad tboot.py, con el tiempo de tests/run.py: 600 s + 20 por
-  test). Siguiente paso: los mismos con --memcheck y con un runtime que no devuelva nunca bloques al sistema.
+  test). Con --memcheck (tests compilados así) no sale y no avisa de nada: ni uso tras liberar ni doble free en
+  textos u objetos de Dash. Sospecha nueva: la parte de C (QuickJS, pegamento, el malloc de api.c con su tamaño
+  delante). Siguiente paso: un malloc de prueba con marcas antes y después de cada bloque, comprobadas en free.
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
