@@ -291,7 +291,7 @@ Total: 819 functions, 819 implemented, 0 not implemented.
 | `refcount(obj)` | `LONG` | Get reference count of object |  |
 | `retain(obj)` | `void` | Manually increment reference count |  |
 | `release(obj)` | `void` | Manually decrement reference count (frees if 0) |  |
-| `mem_trim()` | `LONG` | Give the free small blocks back to the pool, for blocks of any size (exec keeps the puddles until exit); bytes given back |  |
+| `mem_trim()` | `LONG` | Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back |  |
 | `mem_puddle(bytes)` | `BOOL` | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
 
 ## Files (DOS)

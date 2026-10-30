@@ -21,6 +21,8 @@ static void FreePooled(APTR pool, APTR m, ULONG n){ live--; free(m); }
 #define TRUE 1
 #define FALSE 0
 static void DeletePool(APTR pool){ free(pool); }
+static APTR AllocMem(ULONG n, ULONG f){ return calloc(1,n); }
+static void FreeMem(APTR m, ULONG n){ free(m); }
 /* dos.library's Printf: LONG is 32 bits here, so %ld is printed as %d */
 static int Printf(CONST_STRPTR f, ...){ char fmt[256]; int j=0; va_list ap;
  for(int i=0; f[i] && j<250; i++){ if(f[i]=='%' && f[i+1]=='l' && f[i+2]=='d'){ fmt[j++]='%'; fmt[j++]='d'; i+=2; } else fmt[j++]=f[i]; }
@@ -30,13 +32,17 @@ static int Printf(CONST_STRPTR f, ...){ char fmt[256]; int j=0; va_list ap;
 #define _DASH_NOASAN __attribute__((no_sanitize_address))
 /*RUNTIME*/
 
+/* small blocks handed out of their slabs (all of a slab but the rest of the last one of each class) */
+static long slab_blocks(void){ long n=0; for(_DashSlab *s=_dash_slabs;s;s=s->next) n+=s->n;
+ for(int c=0;c<_DASH_SMALL_CLASSES;c++) if(_dash_slab_next[c]) n-=(_dash_slab_end[c]-_dash_slab_next[c])/((c+1)<<3);
+ return n; }
 /* blocks parked in the small-string free lists count as freed */
 static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_SMALL_CLASSES;c++) for(APTR b=_dash_small_free[c];b;b=*(APTR*)b) n++;
 #ifdef DASH_MEMCHECK
  for(int i=0;i<_DASH_MC_HOLD;i++) if(_dash_mc_held[i]) n++;   /* freed, held back by --memcheck */
 #endif
  return n; }
-#define LIVE (live - cached_blocks())
+#define LIVE (live + slab_blocks() - cached_blocks())
 #define CHECK(c) do{ if(!(c)){ printf("FALLO linea %d: %s\n", __LINE__, #c); fails++; } }while(0)
 int main(void){ int fails=0;
  DashArrayLong *a = DashArray_from(5, (LONG[]){1,2,3,4,5});

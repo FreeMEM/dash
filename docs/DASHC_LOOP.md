@@ -718,11 +718,14 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Para buscar así: interruptores DASHC_X_* provisionales y tandas completas (cada una 42 min). Ojo con el
     tiempo de arranque de los scripts propios (60 s en vez de 600: los "fallos" eran tiempo agotado).
 - 2026-10-30, Tachyon D80 (encargo de la sesión tachyon-e6): `mem_puddle(bytes)` (tamaño de los charcos del
-  pool, de 1 KB a 1 MB, solo antes de pedir memoria) y `mem_trim()` (los bloques pequeños libres de sus listas al
-  pool; da los bytes). En dash1 (codegen) y, por su runtime, en dashc. Medido: exec de 3.1 y de 3.2 no devuelve al
-  sistema un charco vacío (2000 bloques de 32 bytes pedidos y soltados: 65 KB que no vuelven hasta DeletePool),
-  así que `mem_trim` no da memoria al sistema; sirve para que esos bloques los use otro tamaño. Test
-  memoria_devolver: tras soltar 3.000 structs con texto y `mem_trim`, 500 textos de 200 letras caben sin pedir
-  20 KB al sistema (sin `mem_trim`, no). Devolverla de verdad pediría bloques pequeños propios con su cuenta de
-  vivos por charco. Batería de dashc entera bien, run_tests 510 de 510.
+  pool, de 1 KB a 1 MB, solo antes de pedir memoria) y `mem_trim()`. Medido: exec de 3.1 y de 3.2 no devuelve al
+  sistema un charco vacío del pool (2000 bloques de 32 bytes pedidos y soltados: 65 KB que no vuelven hasta
+  DeletePool). Por eso los bloques de hasta 128 bytes salen ahora de charcos propios por tamaño (un AllocMem
+  borrado, de 16 bloques y el siguiente del doble, hasta 4 KB, repartidos en orden), y `mem_trim` devuelve al
+  sistema los que tienen todos sus bloques libres (ordena los charcos por dirección y cuenta los libres de cada
+  uno). Tras soltar 3.000 structs con texto: 149 KB al sistema. En dash1 (codegen) y, por su runtime, en dashc;
+  también en la rama dashweb (3bdc7be) para Tachyon. Tests memoria_devolver y test_mem_trim; el arnés del runtime
+  en el PC cuenta los bloques de los charcos. Batería de dashc entera bien, run_tests 510 de 510, emulador (A1200 y
+  A500) 959 de 960 (test_net_server chocaba con un servidor de la tanda de otra sesión en su puerto; solo, pasa).
+  Fuera: los bloques de 129 bytes a un cuarto del charco del pool siguen en el pool, que no los devuelve.
 - Pendiente: D16; D15; D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).

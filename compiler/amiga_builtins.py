@@ -2087,13 +2087,13 @@ SYSTEM_FUNCTIONS = {
         c_template="_dash_release((void *)(${obj}))",
         description="Manually decrement reference count (frees if 0)"
     ),
-    # Tachyon D80: the small free blocks back to the pool
+    # Tachyon D80: memory back to the system
     "mem_trim": BuiltinFunc(
         name="mem_trim",
         params=[],
         return_type="LONG",
         c_template="_dash_mem_trim()",
-        description="Give the free small blocks back to the pool, for blocks of any size (exec keeps the puddles until exit); bytes given back"
+        description="Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back"
     ),
     "mem_puddle": BuiltinFunc(
         name="mem_puddle",

@@ -514,10 +514,49 @@ static BOOL _dash_mem_puddle(LONG bytes) {
    a free list a few dozen. A loop that makes a short string, a struct or a
    small array per iteration reuses the same blocks. 8-byte classes waste 3.5
    bytes per block on average (16-byte classes: 7.5). The size given to
-   _dash_block_put must be the one given to _dash_block_get. */
+   _dash_block_put must be the one given to _dash_block_get.
+   New blocks come from slabs of their class (one AllocMem each, cleared, handed out in order), not from the pool:
+   exec never gives an empty puddle back to the system (3.1 and 3.2, measured), and mem_trim() gives back every slab
+   whose blocks are all free (Tachyon D80). A slab has 16 blocks, the next of its class twice as many, up to 4 KB. */
 #define _DASH_SMALL_CLASSES 16
 #define _DASH_SMALL_MAX (8 * _DASH_SMALL_CLASSES)
 static APTR _dash_small_free[_DASH_SMALL_CLASSES];
+
+typedef struct _DashSlab {
+    struct _DashSlab *next;
+    ULONG bytes;                /* the whole AllocMem, this header included */
+    UWORD n;                    /* blocks */
+    UWORD free;                 /* (mem_trim: its blocks in the free lists) */
+    ULONG pad;                  /* (16 bytes: the blocks stay 8-aligned) */
+} _DashSlab;
+static _DashSlab *_dash_slabs;
+static UBYTE *_dash_slab_next[_DASH_SMALL_CLASSES], *_dash_slab_end[_DASH_SMALL_CLASSES];
+static UWORD _dash_slab_blocks[_DASH_SMALL_CLASSES];
+
+/* a block of class c when its free list is empty: the next one of its slab, or a new slab */
+static __attribute__((noinline)) APTR _dash_small_more(ULONG c) {
+    ULONG size = (c + 1) << 3, n;
+    _DashSlab *s;
+    UBYTE *b = _dash_slab_next[c];
+    if (b < _dash_slab_end[c]) {
+        _dash_slab_next[c] = b + size;
+        return b;
+    }
+    n = _dash_slab_blocks[c];
+    if (!n) n = 16;
+    s = (_DashSlab *)AllocMem(sizeof(_DashSlab) + n * size, MEMF_ANY | MEMF_CLEAR);
+    if (!s) return NULL;
+    s->next = _dash_slabs;
+    _dash_slabs = s;
+    s->bytes = sizeof(_DashSlab) + n * size;
+    s->n = (UWORD)n;
+    if (n * size * 2 <= 4096) _dash_slab_blocks[c] = (UWORD)(n * 2);
+    else _dash_slab_blocks[c] = (UWORD)n;
+    b = (UBYTE *)(s + 1);
+    _dash_slab_next[c] = b + size;
+    _dash_slab_end[c] = b + n * size;
+    return b;
+}
 
 /* contents undefined (a recycled block is not cleared) */
 static __inline__ APTR _dash_block_get(ULONG size) {
@@ -528,7 +567,7 @@ static __inline__ APTR _dash_block_get(ULONG size) {
             _dash_small_free[c] = *(APTR *)b;
             return b;
         }
-        return _dash_alloc((c + 1) << 3);
+        return _dash_small_more(c);
     }
     return _dash_alloc(size);
 }
@@ -544,28 +583,84 @@ static APTR _dash_block_get_clear(ULONG size) {
             do { q[0] = 0; q[1] = 0; q += 2; } while (c--);
             return b;
         }
-        return _dash_alloc((c + 1) << 3);
+        return _dash_small_more(c);      /* (never handed out: still cleared) */
     }
     return _dash_alloc(size);
 }
 
-/* mem_trim() (Tachyon D80): the small free blocks back to the pool, where blocks of any size can use them; without
-   it they stay in their lists for good. Exec (3.1 and 3.2, measured) does not give an empty puddle back to the
-   system: only DeletePool, at exit. The bytes given back */
-static LONG _dash_mem_trim(void) {
-    LONG n = 0, c;
-    if (!_dash_pool) return 0;
-    for (c = 0; c < _DASH_SMALL_CLASSES; c++) {
-        APTR b = _dash_small_free[c];
-        while (b) {
-            APTR next = *(APTR *)b;
-            FreePooled(_dash_pool, b, (c + 1) << 3);   /* (the size _dash_block_get asked for) */
-            n += (c + 1) << 3;
-            b = next;
-        }
-        _dash_small_free[c] = NULL;
+/* the slab of block b in v (n slabs by address), or NULL */
+static _DashSlab *_dash_slab_of(_DashSlab **v, LONG n, UBYTE *b) {
+    LONG lo = 0, hi = n - 1, m;
+    while (lo < hi) {
+        m = (lo + hi + 1) >> 1;
+        if ((UBYTE *)v[m] <= b) lo = m;
+        else hi = m - 1;
     }
-    return n;
+    if ((UBYTE *)v[lo] <= b && b < (UBYTE *)v[lo] + v[lo]->bytes) return v[lo];
+    return NULL;
+}
+
+/* mem_trim() (Tachyon D80): the slabs whose blocks are all free go back to the system; without it they stay in
+   the free lists for good, and they split the system's memory. The bytes given back */
+static LONG _dash_mem_trim(void) {
+    _DashSlab **v, *s, **ps;
+    LONG n = 0, k, i, m, c, freed = 0;
+    APTR *pp;
+    UBYTE *b;
+    for (s = _dash_slabs; s; s = s->next) n++;
+    if (!n) return 0;
+    v = (_DashSlab **)AllocMem(n * sizeof(APTR), MEMF_ANY);
+    if (!v) return 0;
+    for (k = 0, s = _dash_slabs; s; s = s->next) {
+        s->free = 0;
+        v[k++] = s;
+    }
+    for (m = n >> 1; m > 0; m >>= 1)                     /* by address (Shell sort) */
+        for (i = m; i < n; i++) {
+            s = v[i];
+            for (k = i; k >= m && v[k - m] > s; k -= m) v[k] = v[k - m];
+            v[k] = s;
+        }
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++) {
+        ULONG size = (c + 1) << 3;
+        /* the blocks never handed out of the last slab, to the list */
+        for (b = _dash_slab_next[c]; b < _dash_slab_end[c]; b += size) {
+            *(APTR *)b = _dash_small_free[c];
+            _dash_small_free[c] = b;
+        }
+        _dash_slab_next[c] = _dash_slab_end[c] = NULL;
+        for (b = (UBYTE *)_dash_small_free[c]; b; b = *(UBYTE **)b)
+            if ((s = _dash_slab_of(v, n, b)) != NULL) s->free++;
+    }
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++)            /* the blocks of the empty slabs out of the lists */
+        for (pp = &_dash_small_free[c]; *pp; ) {
+            s = _dash_slab_of(v, n, (UBYTE *)*pp);
+            if (s && s->free == s->n) *pp = *(APTR *)*pp;
+            else pp = (APTR *)*pp;
+        }
+    for (ps = &_dash_slabs; *ps; ) {
+        s = *ps;
+        if (s->free == s->n) {
+            *ps = s->next;
+            freed += s->bytes;
+            FreeMem(s, s->bytes);
+        } else ps = &s->next;
+    }
+    FreeMem(v, n * sizeof(APTR));
+    return freed;
+}
+
+static void _dash_slabs_free(void) {
+    LONG c;
+    while (_dash_slabs) {
+        _DashSlab *s = _dash_slabs;
+        _dash_slabs = s->next;
+        FreeMem(s, s->bytes);
+    }
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++) {
+        _dash_slab_next[c] = _dash_slab_end[c] = NULL;
+        _dash_slab_blocks[c] = 0;
+    }
 }
 
 static __inline__ void _dash_block_put(APTR b, ULONG size) {
@@ -1178,6 +1273,7 @@ static void _dash_mem_cleanup(void) {
         DeletePool(_dash_pool);
         _dash_pool = NULL;
     }
+    _dash_slabs_free();
     _dash_ts = _dash_ts_first;          /* (a bigger stack was in the pool) */
     _dash_ts_n = 0;
     _dash_ts_cap = _DASH_TS_FIRST;
