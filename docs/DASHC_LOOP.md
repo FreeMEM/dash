@@ -97,6 +97,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   y los literales de 24 y 32 letras pasan en la tanda corta; pero d[k] vuelve a dar 107 de 114 (test_selectores4
   corta su salida tras "li:nth-last-of-type(1)" y los 6 siguientes se quedan sin tiempo). O d[k] tiene un fallo
   propio (un diccionario que cambia dentro del bucle) o D16 sigue ahí. d[k] queda fuera.
+  Vuelve d[k] con una comprobación: lee la casilla solo si i < cap y keys[i] sigue siendo k; si no, busca. No
+  encontré el fallo propio: meter claves por otro nombre del mismo diccionario no lo rompía ni sin comprobación
+  (las claves no cambian de casilla al crecer). Con ella, tanda completa 113 de 114, y el que falta
+  (test_http_seguir, una conexión de más) chocaba con la tanda de otra sesión en el mismo puerto: solo, pasa.
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
