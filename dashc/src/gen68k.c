@@ -5153,6 +5153,7 @@ static int keys_in_place(Node *n)
     t = expr_type(it->a);
     if (!IS_DICT(t) || dict_ikeys(t) || !find_local(it->a->name)) return 0;
     if (!keeps_fn) compute_keeps();
+    if (list_assigns(&n->body, n->name)) return 0;     /* (k = ...: k no puede tomar prestada la clave) */
     for (i = 0; i < n->body.n; i++)
         if (!keys_body_ok(n->body.v[i], it->a->name)) return 0;
     return 1;
@@ -5284,9 +5285,15 @@ static void gen_foreach(Node *n)
         /* un objeto, con una referencia durante la vuelta: el cuerpo podría sacarlo de la lista */
         push_d0();
         rt_call("_dl_retain_r", 1, 0);
+    } else if (IS_STRLIKE(et) && list_assigns(&n->body, n->name)) {
+        /* un texto que el cuerpo cambia (x = str_trim(x)): una copia suya, como ./dash; si no, la asignación
+           liberaba el de la lista (y la lista, otra vez al acabar) */
+        push_d0();
+        rt_call("_dl_str_dup", 1, 0);
+        keep = 1;
     }
     vx = declare(n->name, et);
-    if (keep) locals.v[locals.n - 1].owned = 2;
+    if (keep) locals.v[locals.n - 1].owned = IS_OBJ(et) ? 2 : 1;
     store_d0(&vx);
     gen_block(&n->body);
     loops.n--;
