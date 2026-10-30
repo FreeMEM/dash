@@ -580,6 +580,9 @@ LONG dl_event_next_timer(struct Window **pw, LONG ms)
 /* ---- textos ---- */
 ULONG dl_tmp_mark(void) { return _dash_tmp_mark(); }
 void dl_tmp_release(ULONG m) { _dash_tmp_release(m); }
+/* el número del último temporal hecho: dashc lo compara en línea con la marca y llama a dl_tmp_release solo si se
+   hizo alguno después (el atajo de _dash_tmp_release) */
+ULONG *dl_tmp_serial_p = &_dash_tmp_serial;
 /* al salir de una función: fuera sus temporales menos el texto que devuelve, que sigue en d0 */
 STRPTR dl_tmp_release_keep(ULONG m, STRPTR keep) { _dash_tmp_release_keep(m, keep); return keep; }
 LONG dl_tmp_release_ret(ULONG m, LONG v) { _dash_tmp_release(m); return v; }

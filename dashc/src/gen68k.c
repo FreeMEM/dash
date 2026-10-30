@@ -1620,16 +1620,75 @@ static void str_ours(int slow, int nil_label)
 }
 
 /* str_code(s, i) en línea, como _dash_str_code: un texto de Dash con su largo en la cabecera; si no, _dl_str_code */
+/* el texto a a0 (sin pasar por la pila si es una variable) */
+static void str_to_a0(Var *vs)
+{
+    if (vs->kind == V_REG) w(0x2040 | vs->reg);        /* movea.l dN,a0 */
+    else op_ea(0x2040, vs);                            /* movea.l v,a0 */
+}
+
+/* el índice a d1 */
+static void index_to_d1(Node *i)
+{
+    Var vi;
+    if (simple(i, &vi)) load_var(1, &vi);
+    else {
+        value(i);
+        w(0x2200);                                     /* move.l d0,d1 */
+    }
+}
+
+/* Los parámetros de texto que la función no cambia: su largo, medido al entrar (plen_slot), y str_code, s[i] y
+   .length solo comparan con él. Un texto no cambia y el argumento que algo podría cambiar llega copiado (lend).
+   Solo en el cuerpo de la propia función (no en lo copiado en línea dentro, con otros nombres) */
+static struct { const char *name; int slot, param; } plen[8];
+static int n_plen, plen_depth = -1;
+
+static int plen_slot(Node *s)
+{
+    int k;
+    Local *lc;
+    if (s->kind != E_VAR || inl_stack.n != plen_depth) return -1;
+    for (k = 0; k < n_plen; k++)
+        if (!strcmp(plen[k].name, s->name)) {
+            lc = find_local(s->name);
+            return lc && lc->slot == plen[k].param ? plen[k].slot : -1;
+        }
+    return -1;
+}
+
 static void str_code_inline(Node *s, Node *i)
 {
-    Node *a[2];
+    Var vs;
+    int ps = plen_slot(s);
+    if (ps >= 0 && simple(s, &vs)) {
+        int zero = new_label(), done = new_label();
+        Var vl;
+        index_to_d1(i);
+        use_slot(ps);
+        vl = slot_var(ps, TY_INT);
+        op_ea(0xB280, &vl);                            /* cmp.l largo,d1 */
+        branch(CC_CC, zero);                           /* (sin signo: también i < 0; y nil, con largo 0) */
+        str_to_a0(&vs);
+        w(0x7000);                                     /* moveq #0,d0 */
+        w(0x1030); w(0x1800);                          /* move.b 0(a0,d1.l),d0 */
+        branch(CC_T, done);
+        def_label(zero);
+        w(0x7000);                                     /* moveq #0,d0 */
+        def_label(done);
+        return;
+    }
     int slow = new_label(), zero = new_label(), done = new_label();
-    a[0] = s;
-    a[1] = i;
-    args_to_stack(a, 2, NULL);
-    w(0x205F);                                         /* movea.l (sp)+,a0 */
-    w(0x221F);                                         /* move.l (sp)+,d1 */
-    sp_depth -= 8;
+    if (simple(s, &vs) && vs.kind != V_CONST) {
+        index_to_d1(i);
+        str_to_a0(&vs);
+    } else {
+        value(s);
+        push_d0();
+        index_to_d1(i);
+        w(0x205F);                                     /* movea.l (sp)+,a0 */
+        sp_depth -= 4;
+    }
     str_ours(slow, zero);
     w(0xB2A9); w(0x0004);                              /* cmp.l 4(a1),d1 */
     branch(CC_CC, zero);                               /* (sin signo: también i < 0) */
@@ -1649,10 +1708,21 @@ static void str_code_inline(Node *s, Node *i)
 /* s.length en línea: de la cabecera si es de Dash; si no, _dl_str_len */
 static void str_len_inline(Node *s)
 {
+    Var vs;
+    int ps = plen_slot(s);
+    if (ps >= 0) {
+        Var vl;
+        use_slot(ps);
+        vl = slot_var(ps, TY_INT);
+        load_var(0, &vl);
+        return;
+    }
     int slow = new_label(), zero = new_label(), done = new_label();
-    args_to_stack(&s, 1, NULL);
-    w(0x205F);                                         /* movea.l (sp)+,a0 */
-    sp_depth -= 4;
+    if (simple(s, &vs) && vs.kind != V_CONST) str_to_a0(&vs);
+    else {
+        value(s);
+        w(0x2040);                                     /* movea.l d0,a0 */
+    }
     str_ours(slow, zero);
     w(0x2029); w(0x0004);                              /* move.l 4(a1),d0 */
     branch(CC_T, done);
@@ -2409,12 +2479,28 @@ static MarkScope mark_begin(void)
 }
 
 /* al empezar cada vuelta: fuera los temporales de la anterior */
+/* ¿Se hizo algún temporal desde la marca de off(sp)? Si no, salta a skip (como _dash_tmp_release: el contador de
+   temporales no pasa de la marca). Usa a0 y d1 */
+static void tmp_newer(int off, int skip)
+{
+    w(0x2079);                                         /* movea.l _dl_tmp_serial_p,a0 */
+    add_reloc((uint32_t)obj->code.n, -1, "_dl_tmp_serial_p");
+    l(0);
+    w(0x2210);                                         /* move.l (a0),d1 */
+    w(0xB2AF); w(off);                                 /* cmp.l marca(sp),d1 */
+    branch(CC_LS, skip);
+}
+
 static void mark_release(MarkScope *m)
 {
+    int skip;
     if (!m->on) return;
+    skip = new_label();
+    tmp_newer(sp_depth - m->sp, skip);
     w(0x2F2F); w(sp_depth - m->sp);                    /* move.l marca(sp),-(sp) */
     sp_depth += 4;
     rt_call("_dl_tmp_release", 1, 0);
+    def_label(skip);
 }
 
 /* al acabar: fuera los temporales y la marca */
@@ -6025,12 +6111,41 @@ static void gen_block(NodeList *b)
 /* una pasada sobre la función: link a5,#-marco; guarda registros ... recupera; unlk a5; rts */
 static void gen_global_inits(void);
 
+/* ¿Usa el cuerpo str_code(name, ...), name[i] o name.length? */
+static int len_uses_node(Node *e, const char *name)
+{
+    int i;
+    if (!e) return 0;
+    if (e->kind == E_CALL && !strcmp(e->name, "str_code") && e->args.n == 2 && e->args.v[0]->kind == E_VAR &&
+        !strcmp(e->args.v[0]->name, name)) return 1;
+    if ((e->kind == E_INDEX || (e->kind == E_FIELD && !strcmp(e->name, "length"))) && e->a && e->a->kind == E_VAR &&
+        !strcmp(e->a->name, name)) return 1;
+    if (len_uses_node(e->a, name) || len_uses_node(e->b, name) || len_uses_node(e->c, name)) return 1;
+    for (i = 0; i < e->args.n; i++)
+        if (len_uses_node(e->args.v[i], name)) return 1;
+    for (i = 0; i < e->body.n; i++)
+        if (len_uses_node(e->body.v[i], name)) return 1;
+    for (i = 0; i < e->els.n; i++)
+        if (len_uses_node(e->els.v[i], name)) return 1;
+    return 0;
+}
+
+static int len_uses(NodeList *body, const char *name)
+{
+    int i;
+    for (i = 0; i < body->n; i++)
+        if (len_uses_node(body->v[i], name)) return 1;
+    return 0;
+}
+
 static void gen_function_pass(int label, Func *f, NodeList *body)
 {
     uint32_t frame_at = 0;
     int i, nregs = 0, mask_push = 0, mask_pop = 0, last = 0;
     MarkScope fm;
 
+    n_plen = 0;
+    plen_depth = -1;
     locals.n = 0;
     depth = 0;
     nframe = 0;
@@ -6118,6 +6233,24 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 store_d0(&v);
                 locals.v[i].owned = str ? 1 : 2;
             }
+        n_plen = 0;
+        plen_depth = -1;
+        if (!debug)
+            for (i = 0; i < f->params.n && n_plen < 8; i++)
+                if (f->params.v[i].type == TY_STR && !param_set[idx][i] && len_uses(body, f->params.v[i].name)) {
+                    Node pv;
+                    Var vl;
+                    memset(&pv, 0, sizeof pv);
+                    pv.kind = E_VAR;
+                    pv.name = f->params.v[i].name;
+                    str_len_inline(&pv);                   /* (aún sin plen: lo mide) */
+                    plen[n_plen].name = pv.name;
+                    plen[n_plen].param = locals.v[i].slot;
+                    vl = declare_slot("", TY_INT, &plen[n_plen].slot);
+                    store_d0(&vl);
+                    n_plen++;
+                }
+        plen_depth = inl_stack.n;
         if (profile) {
             w(0x4878); w(idx + 1);                     /* pea número.w */
             sp_depth += 4;
@@ -6169,10 +6302,13 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         if (pass == 1) mark_need.v[fm.idx] = made_tmp;
         if (fm.on) {
             /* fuera los temporales de la función, menos el texto que devuelve */
+            int skip = new_label();
+            if (!IS_STRLIKE(cur_ret)) tmp_newer(0, skip);   /* (d0, lo que devuelve, no se toca) */
             push_d0();
             w(0x2F2F); w(4);                           /* move.l 4(sp),-(sp): la marca */
             sp_depth += 4;
             rt_call(IS_STRLIKE(cur_ret) ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
+            def_label(skip);
             pop_args(1);
         }
         if (IS_OBJ(cur_ret)) {

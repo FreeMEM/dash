@@ -4,6 +4,26 @@ func largo(s: String) -> Int
     return s.length
 end
 
+# un parámetro que no cambia: su largo se mide al entrar
+func cuenta(s: String, c: Int) -> Int
+    n = 0
+    i = 0
+    while i < s.length
+        if str_code(s, i) == c or s[i] == 120
+            n = n + 1
+        end
+        i = i + 1
+    end
+    return n * 100 + str_code(s, s.length - 1) + str_code(s, 99) + str_code(s, -1)
+end
+
+# uno que cambia: como siempre
+func recorta(s: String) -> Int
+    k = s.length
+    s = s + "zz"
+    return k * 10 + s.length + str_code(s, k)
+end
+
 Main
     lit = "abc"
     h = "ho" + "la"
@@ -23,4 +43,10 @@ Main
         i = i + 1
     end
     Print k
+    Print cuenta("banana", 97)
+    Print cuenta(str_lower("BANANAX"), 97)
+    Print cuenta(nada, 97)
+    Print cuenta(h + "aa", 97)
+    Print recorta("abc")
+    Print recorta(nada)
 end
