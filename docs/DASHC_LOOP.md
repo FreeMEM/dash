@@ -92,6 +92,11 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   También d[k] leído de la casilla en for k in d.keys() (61c4b46, deshecho): la tanda completa da 106 de 114 dos
   veces igual (test_js corta su salida en '{"a"' y los últimos del arranque se quedan sin tiempo); test_js y su
   grupo pasan solos. D16 bloquea las mejoras: cada cambio puede sacarlo. Va antes que la velocidad.
+  El texto roto del assert venía del sprintf del runtime de dashc, que no sabía de precisión ("%.60s"):
+  arreglado en e753d5f (vsnprintf completo, prueba en externo.dash). Con él, la tanda sin d[k] da 114 de 114,
+  y los literales de 24 y 32 letras pasan en la tanda corta; pero d[k] vuelve a dar 107 de 114 (test_selectores4
+  corta su salida tras "li:nth-last-of-type(1)" y los 6 siguientes se quedan sin tiempo). O d[k] tiene un fallo
+  propio (un diccionario que cambia dentro del bucle) o D16 sigue ahí. d[k] queda fuera.
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
