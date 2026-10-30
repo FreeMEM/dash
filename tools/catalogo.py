@@ -108,8 +108,29 @@ def dashui_texts(doc: dict, where: str):
             yield from walk(win["root"])
 
 
+def find_import(name: str, where: Path) -> Path:
+    """The file of import "name" in the file where, as the compilers look for it: next to it, in the folders above
+    it, in the current folder and in Dash's own (lib/red/http.dash from a program anywhere; $DASH_HOME changes it)"""
+    import os
+    if os.path.isabs(name):
+        return Path(name)
+    tries, d = [], where.parent
+    for _ in range(10):
+        tries.append(d / name)
+        if d.parent == d:
+            break
+        d = d.parent
+    tries.append(Path.cwd() / name)
+    tries.append(Path(os.environ.get("DASH_HOME") or Path(__file__).resolve().parent.parent) / name)
+    for c in tries:
+        if c.is_file():
+            return c
+    raise CatalogError(f"{where}: cannot find {name} to import it")
+
+
 def collect(files):
-    """{id: (text, name)} of the program: its files and the .dashui files they import"""
+    """{id: (text, name)} of the program: its files and the .dashui files they import, also those of Dash's lib/
+    (lib/red/http.dash keeps the numbers 400 to 442: a program using one of them gets an error here)"""
     texts, consts, seen = {}, {}, set()
     sources = []
     queue = [Path(f) for f in files]
@@ -125,7 +146,7 @@ def collect(files):
         sources.append((f, src))
         consts.update((m.group(1), _number(m.group(2))) for m in _CONST.finditer(src))
         for m in re.finditer(r'^\s*import\s+"([^"]+)"', src, re.M):
-            queue.append(f.parent / m.group(1))
+            queue.append(find_import(m.group(1), f))
     for f, src in sources:
         found = (dashui_texts(json.loads(f.read_text(encoding="utf-8")), str(f)) if src is None
                  else dash_texts(src, str(f), consts))
