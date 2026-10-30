@@ -589,18 +589,18 @@ STRPTR dl_str_assign(STRPTR var, STRPTR v) { _dash_str_set(&var, v); return var;
 STRPTR dl_str_assign_copy(STRPTR var, STRPTR v) { _dash_str_set_copy(&var, v); return var; }
 STRPTR dl_str_append_r(STRPTR var, STRPTR add) { _dash_str_append(&var, add); return var; }
 STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
-/* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo), y olvidar el largo guardado de un
-   texto de C que se libera */
+/* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo). dl_str_forget ya no hace nada: el
+   largo va en la cabecera de cada texto de Dash (R8 de main) y un texto de C no la tiene; se queda por el C ya
+   compilado que la llama */
 STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
-void dl_str_forget(STRPTR s) { _dash_str_forget(s); }
+void dl_str_forget(STRPTR s) { (void)s; }
 void dl_str_set(STRPTR *var, STRPTR v) { _dash_str_set(var, v); }
 void dl_str_set_copy(STRPTR *var, STRPTR v) { _dash_str_set_copy(var, v); }
 void dl_str_free(STRPTR p) { _dash_str_free(p); }
 STRPTR dl_str_ret(STRPTR p) { return _dash_str_ret(p); }
 STRPTR dl_str_tmpcopy(STRPTR p) { return _dash_str_tmpcopy(p); }
-/* lo que devuelve una @extern: un texto de C, quizá en un búfer suyo que reutiliza; su largo guardado (de otra
-   vez, con otro texto en el mismo sitio) no vale */
-STRPTR dl_str_tmpcopy_c(STRPTR p) { _dash_str_forget(p); return _dash_str_tmpcopy(p); }
+/* lo que devuelve una @extern: un texto de C, quizá en un búfer suyo que reutiliza */
+STRPTR dl_str_tmpcopy_c(STRPTR p) { return _dash_str_tmpcopy(p); }
 void dl_str_append(STRPTR *var, STRPTR add) { _dash_str_append(var, add); }
 STRPTR dl_str_concat(STRPTR a, STRPTR b) { return DashString_concat(a, b); }
 STRPTR dl_str_join(LONG n, STRPTR *parts) { return DashString_join(n, parts); }

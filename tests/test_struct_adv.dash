@@ -6,7 +6,7 @@
 # expect-c: _Dash_Nodo * sig;
 # expect-c: _Dash_Caja * caja;
 # expect-c: Printf("%ld\n", _DASH_NN(_DASH_NN(b, 0x2b)->sig, 0x2b)->valor);
-# expect-c: _dash_r = DashString_concat("Hola ", self->nombre);
+# expect-c: _dash_r = DashString_concat_h("Hola ", sizeof("Hola ") - 1, self->nombre, -1);
 # expect-c: _dash_str_set(&s, Persona_saludo(_DASH_NN(p, 0x32)));
 # expect-c: Printf("%s\n", Persona_saludo(_DASH_NN(p, 0x34)));
 # expect-c: _dash_block_get(sizeof(_Dash_RefHeader) + size)

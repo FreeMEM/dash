@@ -1,7 +1,7 @@
 # Test: a function that only makes texts in its error returns takes the temporaries mark there, not on
 # each call, and its loop has none (Lorraine D42); the error path still frees what it made
 # memcheck
-# expect-c: { ULONG _dash_fm = _dash_tmp_mark(); __typeof__(fallo(x, DashString_concat("cero en ",
+# expect-c: { ULONG _dash_fm = _dash_tmp_mark(); __typeof__(fallo(x, DashString_concat_h("cero en ", sizeof("cero en ") - 1,
 # expect-no-c: cierre(_Dash_X * x, APTR b) {\n    ULONG _dash_fm
 # expect-no-c: ULONG _dash_tm1 = _dash_tmp_mark();
 # expect-out: bien: 1000 0

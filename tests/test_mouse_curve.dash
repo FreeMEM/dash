@@ -154,20 +154,22 @@ end
 """
 end
 
-# from a fake hid.class: a left button press, the wheel (NewMouse's rawkey 0x7A) and an absolute position
+# from a fake hid.class: a left button press (and its release: a button left down made the next moves drag
+# the Workbench screen, which stayed lower for the next tests of the boot and took test_on_click_timer's click),
+# the wheel (NewMouse's rawkey 0x7A) and an absolute position
 @native func otros(emisor: Int)
 """
     char name[24];
-    static const LONG cls[3] = { IECLASS_RAWMOUSE, IECLASS_RAWKEY, IECLASS_NEWPOINTERPOS };
-    static const LONG code[3] = { IECODE_LBUTTON, 0x7A, IECODE_NOBUTTON };
+    static const LONG cls[4] = { IECLASS_RAWMOUSE, IECLASS_RAWMOUSE, IECLASS_RAWKEY, IECLASS_NEWPOINTERPOS };
+    static const LONG code[4] = { IECODE_LBUTTON, IECODE_LBUTTON | IECODE_UP_PREFIX, 0x7A, IECODE_NOBUTTON };
     LONG i;
     sprintf(name, "hid.class<%08lx>", (ULONG)emisor);
     t_parent = FindTask(NULL);
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 4; i++) {
         f_cmd = IND_WRITEEVENT; f_n = 1;
         f_class = cls[i]; f_code = code[i];
-        f_qual = i == 0 ? IEQUALIFIER_RELATIVEMOUSE : 0;
-        f_x = i == 2 ? 100 : i == 1 ? 7 : 0; f_y = i == 2 ? 50 : 0;
+        f_qual = i <= 1 ? IEQUALIFIER_RELATIVEMOUSE : 0;
+        f_x = i == 3 ? 100 : i == 2 ? 7 : 0; f_y = i == 3 ? 50 : 0;
         SetSignal(0, SIGBREAKF_CTRL_F);
         if (CreateNewProcTags(NP_Entry, (ULONG)t_fake, NP_Name, (ULONG)name, TAG_DONE)) Wait(SIGBREAKF_CTRL_F);
     }

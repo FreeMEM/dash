@@ -1,0 +1,37 @@
+# Test: dictionary keys written as literals go with their hash made by the compiler (_DASH_KEY, R12); keys
+# computed at run time hash the same: put with one and read with the other, both ways, has and remove, a key
+# with an accent (no hash made: an escape in C) and keys of the same length.
+# memcheck
+# expect-c: _DASH_KEY("margin-left", 0xC0708E3BUL)
+# expect-out: 1 1
+# expect-out: 2 2
+# expect-out: true true
+# expect-out: 3 3
+# expect-out: 4 5
+# expect-out: false 0
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+Main
+    d = {"x": 0}
+    k = "margin" + "-left"
+    d[k] = 1
+    v = d["margin-left"]
+    Print "#{v} #{d[k]}"
+    d["padding-top"] = 2
+    p = "padding" + "-top"
+    v = d.get("padding-top", 9)
+    Print "#{d[p]} #{v}"
+    h = d.has("margin-left")
+    Print "#{h} #{d.has(p)}"
+    d["año"] = 3
+    a = "a" + "ño"
+    v = d["año"]
+    Print "#{d[a]} #{v}"
+    d["abcd"] = 4
+    d["abce"] = 5
+    v = d["abcd"]
+    w = d["abce"]
+    Print "#{v} #{w}"
+    d.remove("margin-left")
+    Print "#{d.has(k)} #{d[k]}"
+end
