@@ -3462,7 +3462,7 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
                 /* un parámetro de texto que la función cambia: una copia suya (un objeto: una referencia) */
                 op_ea(0x2F00, &t);                     /* move.l p,-(sp) */
                 sp_depth += 4;
-                rt_call(IS_STRLIKE(b->type) ? "_dl_str_dup" : "_dl_retain_r", 1, 0);
+                rt_call(IS_STRLIKE(b->type) ? "_dl_str_dup" : "_dl_hold_r", 1, 0);
                 store_d0(&t);
                 b->owned = IS_STRLIKE(b->type) ? 1 : 2;
             }
@@ -5944,12 +5944,13 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         int idx = (int)(f - prog->funcs.v);
         for (i = 0; i < f->params.n; i++)
             if ((IS_STRLIKE(f->params.v[i].type) || IS_OBJ(f->params.v[i].type)) && param_set[idx][i]) {
-                /* (una lista o un struct: una referencia suya) */
+                /* (una lista o un struct: una referencia suya; un temporal de quien llama sigue siéndolo, si no al
+                   soltarla al salir se liberaba mientras quien llamó aún lo usa) */
                 int str = IS_STRLIKE(f->params.v[i].type);
                 Var v = lookup(f->params.v[i].name);
                 op_ea(0x2F00, &v);                     /* move.l p,-(sp) */
                 sp_depth += 4;
-                rt_call(str ? "_dl_str_dup" : "_dl_retain_r", 1, 0);
+                rt_call(str ? "_dl_str_dup" : "_dl_hold_r", 1, 0);
                 store_d0(&v);
                 locals.v[i].owned = str ? 1 : 2;
             }

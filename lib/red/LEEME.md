@@ -35,6 +35,7 @@ nuevo = http_flujo_leer(c)                # lo último; c.respuesta queda entera
 ```
 
 Los errores de red van con `tr()` y los números 400 a 442: un programa con catálogo no debe usar esos números.
+`tools/catalogo.py` los mete en el catálogo del programa (para traducirlos) y da error si el programa usa uno.
 
 ## Diferencias con los de Tachyon
 
