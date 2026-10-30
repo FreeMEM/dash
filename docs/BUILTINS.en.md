@@ -783,7 +783,7 @@ Total: 817 functions, 817 implemented, 0 not implemented.
 | `net_bg_recv(c, buffer, max)` | `LONG` | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
 | `net_bg_pending(c)` | `LONG` | How many bytes have come and are not read yet |  |
 | `net_bg_close(c)` | `void` | Close a connection and free its number |  |
-| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000); another starts when needed |  |
+| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000; a connection the program keeps reading, waiting for an answer, counts as traffic); another starts when needed |  |
 | `net_bg_stop()` | `void` | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
 
 ## Other programs' windows (tests)

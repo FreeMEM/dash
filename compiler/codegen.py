@@ -7174,7 +7174,8 @@ static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
 /* Dash background network runtime: net_bg_open asks for a connection and a task of its own (task_start's)
    looks up the name, connects, negotiates TLS (net_bg_open_tls), sends and receives while the program is busy
    (a long layout, JavaScript...). The program only puts and takes bytes from a table behind a semaphore. The
-   task starts with the first connection and ends by itself after net_bg_idle's ms without traffic (2 s), or at
+   task starts with the first connection and ends by itself after net_bg_idle's ms without traffic (2 s; a
+   connection the program keeps reading is traffic, even with nothing coming), or at
    net_bg_stop and at the end of the program. TLS goes through hooks NETBG_TLS_RUNTIME fills: a program without
    net_bg_open_tls does not take AmiSSL. */
 #include <exec/semaphores.h>
@@ -7187,6 +7188,7 @@ typedef struct {
     UBYTE *out; LONG out_len, out_cap;
     UBYTE *in; LONG in_len, in_cap;
     volatile LONG drop;
+    volatile LONG polled;   /* the program asked it for what came (net_bg_recv, net_bg_pending) */
     char error[160];
 } _DashNbgSlot;
 static _DashNbgSlot _dash_nbg[_DASH_NBG_MAX];
@@ -7253,8 +7255,10 @@ static LONG _dash_nbg_loop(LONG arg) {
             _DashNbgSlot *s = &_dash_nbg[i];
             LONG e = s->state;
             if (e == _NBG_FREE) continue;
-            /* (open ones with nothing to send, closed ones and errors do not keep it alive) */
-            if (e < _NBG_OPEN || (e == _NBG_OPEN && s->out_len > 0) || s->drop) active++;
+            /* (open ones with nothing to send and that nobody reads, closed ones and errors do not keep it alive:
+               one the program waits on, a server thinking before it answers (Ollama, Inferencia), does) */
+            if (e < _NBG_OPEN || (e == _NBG_OPEN && (s->out_len > 0 || s->polled)) || s->drop) active++;
+            s->polled = 0;
             if (s->drop) {
                 _dash_nbg_shut(s);
                 ObtainSemaphore(&_dash_nbg_sem);
@@ -7497,6 +7501,7 @@ static LONG _dash_net_bg_recv(LONG c, APTR buffer, LONG max) {
     LONG n;
     if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return -1;
     s = &_dash_nbg[c];
+    s->polled = 1;
     ObtainSemaphore(&_dash_nbg_sem);
     n = s->in_len < max ? s->in_len : max;
     if (n > 0) {
@@ -7514,6 +7519,7 @@ static LONG _dash_net_bg_recv(LONG c, APTR buffer, LONG max) {
 static LONG _dash_net_bg_pending(LONG c) {
     LONG n;
     if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return 0;
+    _dash_nbg[c].polled = 1;
     ObtainSemaphore(&_dash_nbg_sem);
     n = _dash_nbg[c].in_len;
     ReleaseSemaphore(&_dash_nbg_sem);

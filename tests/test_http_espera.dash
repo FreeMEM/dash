@@ -1,0 +1,23 @@
+# A server that thinks before it answers (Inferencia with Ollama: nothing comes while it reads a long prompt): the
+# network task ends after 2 s without traffic, but a connection the program keeps reading counts as traffic, so the
+# answer comes after 8 s quiet, before its headers (http_pedir) or after them (http_empezar_flujo).
+# emu-http: 40845
+# expect-out: pedir: 200 [] {"ok": true}
+# expect-out: flujo: 200 [] {"ok": true}
+# expect-out: fin
+
+import "lib/red/http.dash"
+
+Main
+    r = http_pedir("http://127.0.0.1:40845/lento", "POST", "{}", "application/json", "", 20000)
+    Print "pedir: #{r.estado} [#{r.error}] #{r.cuerpo}"
+    c = http_empezar_flujo("http://127.0.0.1:40845/lento-flujo", "POST", "{}", "application/json", "", 20000)
+    leido = ""
+    while not http_avanzar(c)
+        leido = leido + http_flujo_leer(c)
+        time_delay(2)
+    end
+    leido = leido + http_flujo_leer(c)
+    Print "flujo: #{c.respuesta.estado} [#{c.respuesta.error}] #{leido}"
+    Print "fin"
+end

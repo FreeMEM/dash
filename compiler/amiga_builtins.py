@@ -4068,7 +4068,8 @@ NET_FUNCTIONS = {
         description="Close a connection and free its number"),
     "net_bg_idle": BuiltinFunc(
         name="net_bg_idle", params=["ms"], return_type="void", c_template="_dash_net_bg_idle(${ms})",
-        description="The task ends by itself after this many ms without traffic (2000); another starts when needed"),
+        description="The task ends by itself after this many ms without traffic (2000; a connection the program keeps "
+                    "reading, waiting for an answer, counts as traffic); another starts when needed"),
     "net_bg_stop": BuiltinFunc(
         name="net_bg_stop", params=[], return_type="void", c_template="_dash_net_bg_stop()",
         description="End the task now (it closes what is open) and wait for it; also done at the end of the program"),

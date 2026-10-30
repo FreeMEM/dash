@@ -559,7 +559,8 @@ DESC_ES = {
                    "cerrada y no queda nada. task_signal despierta al programa cuando llega algo",
     "net_bg_pending": "Cuántos bytes han llegado y no se han leído",
     "net_bg_close": "Cierra una conexión y deja libre su número",
-    "net_bg_idle": "La tarea acaba sola tras tantos ms sin tráfico (2000); cuando hace falta empieza otra",
+    "net_bg_idle": "La tarea acaba sola tras tantos ms sin tráfico (2000; una conexión que el programa sigue leyendo, "
+                   "esperando la respuesta, cuenta como tráfico); cuando hace falta empieza otra",
     "net_bg_stop": "Acaba la tarea ya (cierra lo que esté abierto) y la espera; también al acabar el programa",
     # Ventanas de otros programas
     "window_find": "La ventana de otro programa (o la del propio) cuyo título empieza por title, en cualquier pantalla: "

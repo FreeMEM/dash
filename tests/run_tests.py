@@ -598,6 +598,24 @@ class _EchoServer:
                         time.sleep(0.6)
                     self.wfile.write(b"0\r\n\r\n")
                     return
+                if self.path.startswith("/lento"):
+                    # a server that thinks before it answers (Ollama with a long prompt): quiet before the answer
+                    # (/lento) or after its headers (/lento-flujo); the network task must not close it at its 2 s
+                    # (8 s of the PC: the emulated clock goes slower, 3 s were less than 2 s there)
+                    import time
+                    out = b'{"ok": true}'
+                    if not self.path.startswith("/lento-flujo"):
+                        time.sleep(8)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Transfer-Encoding", "chunked")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.wfile.flush()
+                    if self.path.startswith("/lento-flujo"):
+                        time.sleep(8)
+                    self.wfile.write(b"%x\r\n%s\r\n0\r\n\r\n" % (len(out), out))
+                    return
                 if self.path.startswith("/error"):
                     out = b'{"error": {"message": "sin cuota"}}'
                     self.send_response(400)
