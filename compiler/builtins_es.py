@@ -911,6 +911,9 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_request": "Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados "
+                   "por \"|\" (\"_Guardar|_Descartar|_Cancelar\"); las ventanas de la aplicación esperan. El botón elegido: "
+                   "1, 2... desde la izquierda, 0 el último (también Esc)",
     "mui_set_background": "Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una "
                           "lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si "
                           "no tienen el suyo",

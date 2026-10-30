@@ -863,6 +863,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_press", 1, 0, 1, 0},
     {"mui_register_begin", 1, 1, 0, 0},
     {"mui_register_begin", 1, 1, 0, 0},
+    {"mui_request", 4, 1, 0, 0},
+    {"mui_request", 4, 1, 0, 0},
     {"mui_rexx_fail", 1, 0, 1, 0},
     {"mui_rexx_fail", 1, 0, 1, 0},
     {"mui_scroll_begin", 0, 1, 1, 0},
@@ -1612,7 +1614,7 @@ const BuiltinInfo builtin_info[] = {
     {"window_to_front", 1, 0, 1, 0},
     {"window_to_front", 1, 0, 1, 0},
 };
-const int builtin_count = 1610;
+const int builtin_count = 1612;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

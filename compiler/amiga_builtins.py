@@ -3221,6 +3221,13 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    # Dash 2.0 (Forja): asking the user
+    "mui_request": BuiltinFunc(
+        name="mui_request", params=["window", "title", "text", "buttons"], return_type="LONG",
+        c_template="_dash_mui_request(${window}, ${title}, ${text}, ${buttons})", reads_only=True,
+        description="Ask with MUI's requester over a window (0: over the application), its buttons separated by \"|\" "
+                    "(\"_Guardar|_Descartar|_Cancelar\"); the application's windows wait. The button chosen: 1, 2... "
+                    "from the left, 0 the last one (also Esc)"),
     # Dash 2.0 (Forja): colours without MUI's prefs
     "mui_set_background": BuiltinFunc(
         name="mui_set_background", params=["obj", "r", "g", "b"], return_type="void",

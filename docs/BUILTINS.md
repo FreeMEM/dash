@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 805 funciones, 805 implementadas, 0 sin implementar.
+Total: 806 funciones, 806 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -904,6 +904,7 @@ Total: 805 funciones, 805 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
+| `mui_request(window, title, text, buttons)` | `LONG` | Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados por "\|" ("_Guardar\|_Descartar\|_Cancelar"); las ventanas de la aplicación esperan. El botón elegido: 1, 2... desde la izquierda, 0 el último (también Esc) |  |
 | `mui_set_background(obj, r, g, b)` | `void` | Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si no tienen el suyo |  |
 | `mui_set_text_pen(obj, r, g, b)` | `void` | El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo mantiene |  |
 | `mui_app_rexx(app, func)` | `void` | Cada orden ARexx al puerto de la aplicación (su base y ".1": "BASE.1") que MUI no contesta por sí mismo (QUIT, SHOW, HIDE, INFO...) llama a f(orden: String) -> String con la línea entera: lo que devuelve es el RESULT, y mui_rexx_fail durante la llamada pone el RC. Se ejecuta mientras mui_wait_event espera |  |

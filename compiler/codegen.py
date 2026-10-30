@@ -17966,6 +17966,17 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
     }
 }
 
+/* mui_request (Dash 2.0, Forja): MUI's requester over a window (0: over the application), buttons separated by "|";
+   modal, the application's windows wait. Its answer as MUI gives it: 1, 2... from the left, 0 the last one (and Esc).
+   (The text goes as the argument of "%s": a "%" in it is shown as it is.) */
+static LONG _dash_mui_request(APTR win, STRPTR title, STRPTR text, STRPTR buttons) {
+    APTR params[1];
+    if (!_dash_mui_app) return 0;
+    params[0] = text ? text : (STRPTR)"";
+    return MUI_RequestA((Object *)_dash_mui_app, (Object *)win, 0, title, buttons && *buttons ? buttons : (STRPTR)"_Ok",
+                        (STRPTR)"%s", params);
+}
+
 /* mui_set_background (Dash 2.0, Forja): an RGB background ("2:rrrrrrrr,gggggggg,bbbbbbbb", MUI allocates the pen
    on a screen with a palette); a window's goes to its root group, a list's also to the list inside */
 static void _dash_mui_set_background(APTR obj, LONG r, LONG g, LONG b) {
