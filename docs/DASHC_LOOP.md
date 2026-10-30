@@ -659,4 +659,8 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     de recursos), entre ellos los arreglos de test_mouse_curve (dejaba el botón pulsado y la pantalla arrastrada)
     y test_args_wb. Fusionado main (8e82817). R8 lleva el largo en la cabecera de cada texto: en dashc,
     `dl_str_forget` ya no hace nada. Batería normal en el A1200 742 de 743 (test_net_server, que pasa solo).
-- Pendiente: D14 (cerrar con la batería --memcheck tras la fusión de main); D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
+  - Tras la fusión de main, batería `--emu --memcheck` 740 de 741: sin fugas ni errores de memoria. El que
+    faltaba, test_net_server, chocaba con test_http_lib: su servidor de prueba (# emu-http) estaba en el puerto
+    40841 del PC, el mismo que test_net_server abre en el Amiga (bsdsocket de FS-UAE usa los del PC).
+    test_http_lib pasa al 40861. D14 hecha.
+- Pendiente: D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).

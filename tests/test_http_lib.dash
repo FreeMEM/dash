@@ -1,7 +1,7 @@
 # Test: lib/red/http.dash (from Tachyon, Dash 2.0, for Inferencia): GET waiting, POST with JSON and a header of
 # its own (http_pedir), PUT without waiting (http_empezar_metodo), against the runner's HTTP server, which answers
 # with JSON of what it got; and a closed port (an error).
-# emu-http: 40841
+# emu-http: 40861
 # expect-out: get: 200 [application/json] GET /hola?x=1
 # expect-out: post: 200 POST /v1/chat [application/json] [clave] {"model":"m","n":2}
 # expect-out: put: true PUT [texto] fases: true
@@ -12,7 +12,7 @@ import "lib/red/http.dash"
 import "lib/json.dash"
 
 Main
-    r = http_get("http://127.0.0.1:40841/hola?x=1", 10000)
+    r = http_get("http://127.0.0.1:40861/hola?x=1", 10000)
     j = json_parse(r.cuerpo)
     m = json_get_str(j, "method")
     p = json_get_str(j, "path")
@@ -21,7 +21,7 @@ Main
     o = json_object()
     json_set_str(o, "model", "m")
     json_set_int(o, "n", 2)
-    r = http_pedir("http://127.0.0.1:40841/v1/chat", "POST", json_write(o), "application/json", "X-Prueba: clave\r\nX-Otra: 1", 10000)
+    r = http_pedir("http://127.0.0.1:40861/v1/chat", "POST", json_write(o), "application/json", "X-Prueba: clave\r\nX-Otra: 1", 10000)
     j = json_parse(r.cuerpo)
     m = json_get_str(j, "method")
     p = json_get_str(j, "path")
@@ -30,7 +30,7 @@ Main
     b = json_get_str(j, "body")
     Print "post: #{r.estado} #{m} #{p} [#{ty}] [#{x}] #{b}"
 
-    c = http_empezar_metodo("http://127.0.0.1:40841/f", "PUT", "texto", "text/plain", "", 10000)
+    c = http_empezar_metodo("http://127.0.0.1:40861/f", "PUT", "texto", "text/plain", "", 10000)
     fases = true
     while not http_avanzar(c)
         if http_fase(c) == ""
