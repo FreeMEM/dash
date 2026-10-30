@@ -3221,6 +3221,12 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    "mui_window_dispose": BuiltinFunc(
+        name="mui_window_dispose", params=["window"], return_type="void",
+        c_template="_dash_mui_window_dispose(${window})",
+        description="Close a window, take it out of the application and free it with all its objects (and the context "
+                    "menus made after it): for windows made again and again (a preview). Nothing for 0 or a window "
+                    "already gone; its objects must not be used after"),
     # Dash 2.0 (Forja): asking the user
     "mui_request": BuiltinFunc(
         name="mui_request", params=["window", "title", "text", "buttons"], return_type="LONG",
@@ -3576,6 +3582,7 @@ MUI_FUNCTIONS = {
         name="mui_menu_check",
         params=["title", "key", "id", "checked"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_menu_check(${title}, ${key}, ${id}, ${checked})",
         description="Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; "
                     "mui_get_value / mui_set_value read and set the mark"
@@ -3584,6 +3591,7 @@ MUI_FUNCTIONS = {
         name="mui_submenu_begin",
         params=["title"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_submenu_begin(${title})",
         description="Start a submenu in the menu being built (one level): its items go in until mui_submenu_end"
     ),
@@ -3605,6 +3613,7 @@ MUI_FUNCTIONS = {
         name="mui_context_menu_begin",
         params=["title"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_context_menu_begin(${title})",
         description="Start a context menu (anywhere, not only in a window): its items as in a menu "
                     "(mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object "
@@ -3858,6 +3867,7 @@ MUI_FUNCTIONS = {
         name="mui_combo",
         params=["text", "options"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_combo(${text}, ${options})",
         description="Text field with a list that drops down (font, size; options \"A|B\"): write or pick a line "
                     "(double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return "

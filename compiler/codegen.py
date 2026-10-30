@@ -17071,6 +17071,12 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
+/* the windows alive (mui_window_dispose: a second call, or one with a window already gone, does nothing) and the
+   last one built (its context menus, made after mui_window_end, are its own) */
+#define _DASH_MUI_WINS 64
+static Object *_dash_mui_wins[_DASH_MUI_WINS];
+static LONG _dash_mui_nwins = 0;
+static Object *_dash_mui_last_win = NULL;
 static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
@@ -17235,6 +17241,7 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
         return NULL;
     }
     _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)win);
+    if (_dash_mui_nwins < _DASH_MUI_WINS) _dash_mui_wins[_dash_mui_nwins++] = win;
     if (!_dash_mui_first_win) {
         _dash_mui_first_win = win;
         _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
@@ -17253,6 +17260,7 @@ static void _dash_mui_window_end(void) {
     if (_dash_mui_depth != 1) _dash_mui_error("mui_window_end with groups still open");
     if (_dash_mui_cur_menu) _dash_mui_error("mui_window_end with a menu still open");
     _dash_mui_depth = 0;
+    _dash_mui_last_win = _dash_mui_cur_win;
     _dash_mui_cur_win = NULL;
     _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
 }
@@ -17427,6 +17435,7 @@ static void _dash_mui_menu_end(void) {
    no object: MUI does not dispose it, _dash_mui_ctx_cleanup does once the windows are gone. */
 #define _DASH_MUI_CTXMENUS 16
 static Object *_dash_mui_ctx[_DASH_MUI_CTXMENUS];
+static Object *_dash_mui_ctx_win[_DASH_MUI_CTXMENUS];   /* the window built just before (mui_window_dispose) */
 static LONG _dash_mui_nctx = 0;
 
 static void _dash_mui_ctx_cleanup(void) {
@@ -17443,6 +17452,7 @@ static APTR _dash_mui_context_menu_begin(STRPTR title) {
         return NULL;
     }
     _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_ctx_win[_dash_mui_nctx] = _dash_mui_last_win;
     _dash_mui_ctx[_dash_mui_nctx++] = strip;
     _dash_mui_on_end(_dash_mui_ctx_cleanup);
     _dash_mui_cur_menu = menu;
@@ -17963,6 +17973,60 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
         _dash_mui_set_text(obj, copy);
         FreeVec(copy);
     }
+}
+
+/* mui_window_dispose (Dash 2.0, Forja: the preview of the .dashui editor, made again on each change): close the
+   window, take it out of the application and free it with all its objects; the runtime forgets what pointed into it
+   (mui_press, exclusive groups, text colours) and frees the context menus made after it. Nothing for 0 or for a
+   window already gone. */
+static BOOL _dash_mui_in_win(Object *o, Object *win) {
+    IPTR w = 0;
+    if (!o) return FALSE;
+    if (o == win) return TRUE;
+    GetAttr(MUIA_WindowObject, o, &w);   /* (while the window is in the application) */
+    return (Object *)w == win;
+}
+
+static void _dash_mui_window_dispose(APTR win_) {
+    Object *win = (Object *)win_;
+    LONG i, j, k = -1;
+    if (!win || !_dash_mui_app) return;
+    for (i = 0; i < _dash_mui_nwins; i++)
+        if (_dash_mui_wins[i] == win) k = i;
+    if (k < 0 || win == _dash_mui_cur_win) return;
+    SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+    for (i = j = 0; i < _dash_mui_npress; i++)
+        if (!_dash_mui_in_win(_dash_mui_press_obj[i], win)) {
+            _dash_mui_press_obj[j] = _dash_mui_press_obj[i];
+            _dash_mui_press_id[j++] = _dash_mui_press_id[i];
+        }
+    _dash_mui_npress = j;
+    for (i = j = 0; i < _dash_mui_nradio; i++)
+        if (!_dash_mui_in_win(_dash_mui_radio_obj[i], win)) {
+            _dash_mui_radio_obj[j] = _dash_mui_radio_obj[i];
+            _dash_mui_radio_group[j++] = _dash_mui_radio_group[i];
+        }
+    _dash_mui_nradio = j;
+    for (i = j = 0; i < _dash_mui_npens; i++)
+        if (!_dash_mui_in_win(_dash_mui_pen_obj[i], win)) {
+            _dash_mui_pen_obj[j] = _dash_mui_pen_obj[i];
+            if (j != i) CopyMem(_dash_mui_pen_esc[i], _dash_mui_pen_esc[j], sizeof(_dash_mui_pen_esc[0]));
+            j++;
+        }
+    _dash_mui_npens = j;
+    if (_dash_mui_first_win == win) _dash_mui_first_win = NULL;
+    if (_dash_mui_last_win == win) _dash_mui_last_win = NULL;
+    _dash_mui_wins[k] = _dash_mui_wins[--_dash_mui_nwins];
+    _DASH_MUI_DO(_dash_mui_app, OM_REMMEMBER, (IPTR)win);
+    MUI_DisposeObject(win);
+    /* its context menus: no object of it points to them any more */
+    for (i = j = 0; i < _dash_mui_nctx; i++)
+        if (_dash_mui_ctx_win[i] == win) MUI_DisposeObject(_dash_mui_ctx[i]);
+        else {
+            _dash_mui_ctx[j] = _dash_mui_ctx[i];
+            _dash_mui_ctx_win[j++] = _dash_mui_ctx_win[i];
+        }
+    _dash_mui_nctx = j;
 }
 
 /* mui_request (Dash 2.0, Forja): MUI's requester over a window (0: over the application), buttons separated by "|";

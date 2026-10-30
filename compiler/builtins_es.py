@@ -912,6 +912,9 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_window_dispose": "Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús "
+                          "contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). "
+                          "Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después",
     "mui_request": "Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados "
                    "por \"|\" (\"_Guardar|_Descartar|_Cancelar\"); las ventanas de la aplicación esperan. El botón elegido: "
                    "1, 2... desde la izquierda, 0 el último (también Esc)",
