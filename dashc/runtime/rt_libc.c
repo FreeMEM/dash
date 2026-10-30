@@ -107,68 +107,14 @@ void __bcopz(const void *s, void *d, size_t n)
     memmove(d, s, n);
 }
 
-/* sprintf con lo que usa el runtime: %d %i %u %x %X %c %s %%, con l, 0, - y anchura (int = 32 bits) */
+/* sprintf: el vsnprintf de rt_compat.c (precisión, *, ll...). El de antes solo sabía %d %i %u %x %X %c %s %% con l,
+   0, - y anchura: "%.60s" salía tal cual y descolocaba los argumentos (el assert de QuickJS de Tachyon, D16) */
 #include <stdarg.h>
-
-static char *put_num(char *o, unsigned long v, int base, int upper, int neg, int width, int zero, int left)
-{
-    char tmp[12];
-    int n = 0, len;
-    const char *dig = upper ? "0123456789ABCDEF" : "0123456789abcdef";
-    do {
-        tmp[n++] = dig[v % base];
-        v /= base;
-    } while (v);
-    len = n + neg;
-    if (!left && !zero)
-        for (; width > len; width--) *o++ = ' ';
-    if (neg) *o++ = '-';
-    if (!left && zero)
-        for (; width > len; width--) *o++ = '0';
-    while (n) *o++ = tmp[--n];
-    if (left)
-        for (; width > len; width--) *o++ = ' ';
-    return o;
-}
+int vsnprintf(char *out, size_t max, const char *f, va_list ap);
 
 int vsprintf(char *out, const char *f, va_list ap)
 {
-    char *o = out;
-    for (; *f; f++) {
-        int width = 0, zero = 0, left = 0;
-        if (*f != '%') {
-            *o++ = *f;
-            continue;
-        }
-        f++;
-        if (*f == '-') { left = 1; f++; }
-        if (*f == '0') { zero = 1; f++; }
-        while (*f >= '0' && *f <= '9') width = width * 10 + *f++ - '0';
-        if (*f == 'l') f++;
-        switch (*f) {
-        case 'd': case 'i': {
-            long v = va_arg(ap, long);
-            o = put_num(o, v < 0 ? 0ul - (unsigned long)v : (unsigned long)v, 10, 0, v < 0, width, zero, left);
-            break;
-        }
-        case 'u': o = put_num(o, va_arg(ap, unsigned long), 10, 0, 0, width, zero, left); break;
-        case 'x': o = put_num(o, va_arg(ap, unsigned long), 16, 0, 0, width, zero, left); break;
-        case 'X': o = put_num(o, va_arg(ap, unsigned long), 16, 1, 0, width, zero, left); break;
-        case 'c': *o++ = (char)va_arg(ap, int); break;
-        case 's': {
-            const char *s = va_arg(ap, const char *);
-            int len = (int)strlen(s ? s : "");
-            if (!left) for (; width > len; width--) *o++ = ' ';
-            while (s && *s) *o++ = *s++;
-            if (left) for (; width > len; width--) *o++ = ' ';
-            break;
-        }
-        case '%': *o++ = '%'; break;
-        default: *o++ = *f; break;
-        }
-    }
-    *o = 0;
-    return (int)(o - out);
+    return vsnprintf(out, 0x7FFFFFFF, f, ap);
 }
 
 int sprintf(char *out, const char *f, ...)

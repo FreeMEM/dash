@@ -34,6 +34,13 @@ const char *ext_formato(long n)
     return buf;
 }
 
+/* sprintf (no snprintf): precisión, anchura con * y l (el de dashc no sabía la precisión: D16) */
+const char *ext_sprintf(long n)
+{
+    sprintf(buf, "<%.3s|%6.2s|%-4ld|%*s|%05lu|%.60s>", "abcdef", "xyz", n, 3, "q", (unsigned long)n, "fin");
+    return buf;
+}
+
 long ext_crece(long n)
 {
     long i, s = 0;
