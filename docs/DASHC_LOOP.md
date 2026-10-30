@@ -728,4 +728,8 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   en el PC cuenta los bloques de los charcos. Batería de dashc entera bien, run_tests 510 de 510, emulador (A1200 y
   A500) 959 de 960 (test_net_server chocaba con un servidor de la tanda de otra sesión en su puerto; solo, pasa).
   Fuera: los bloques de 129 bytes a un cuarto del charco del pool siguen en el pool, que no los devuelve.
+  Tachyon con dashc y D80: tanda completa 94 de 114, con los 20 que fallan todos de servidor (emu-server) y sin
+  tiempo, mientras otra sesión tenía su emulador y servidores en marcha. Repetidos por grupos, pasan los 20; una
+  vez test_imagenes_data se quedó sin tiempo en el grupo "imagen" y a la siguiente pasó. Pendiente una tanda
+  completa con la máquina sola.
 - Pendiente: D16; D15; D9c, D9d; `DASH_TEST_AUTOCLOSE`/`DASH_PRINT_FLUSH` en dashc; D8 (tamaño).
