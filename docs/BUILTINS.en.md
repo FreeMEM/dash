@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 807 functions, 807 implemented, 0 not implemented.
+Total: 809 functions, 809 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -904,6 +904,8 @@ Total: 807 functions, 807 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_window_open_back(win)` | `LONG` | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
+| `mui_window_activate(win)` | `void` | Make a window the active one, in front of the others (it opens if it is closed) |  |
 | `mui_window_dispose(window)` | `void` | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
 | `mui_request(window, title, text, buttons)` | `LONG` | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
 | `mui_set_background(obj, r, g, b)` | `void` | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |

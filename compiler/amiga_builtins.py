@@ -3221,6 +3221,15 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    "mui_window_open_back": BuiltinFunc(
+        name="mui_window_open_back", params=["win"], return_type="LONG",
+        c_template="_dash_mui_window_open_back(${win})",
+        description="Open a window without making it the active one: the keyboard stays where it was; false if it "
+                    "could not open"),
+    "mui_window_activate": BuiltinFunc(
+        name="mui_window_activate", params=["win"], return_type="void",
+        c_template="_dash_mui_window_activate(${win})",
+        description="Make a window the active one, in front of the others (it opens if it is closed)"),
     "mui_window_dispose": BuiltinFunc(
         name="mui_window_dispose", params=["window"], return_type="void",
         c_template="_dash_mui_window_dispose(${window})",

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 807 funciones, 807 implementadas, 0 sin implementar.
+Total: 809 funciones, 809 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -904,6 +904,8 @@ Total: 807 funciones, 807 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
+| `mui_window_open_back(win)` | `LONG` | Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo abrirse |  |
+| `mui_window_activate(win)` | `void` | Hace activa una ventana, delante de las demás (si está cerrada, la abre) |  |
 | `mui_window_dispose(window)` | `void` | Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después |  |
 | `mui_request(window, title, text, buttons)` | `LONG` | Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados por "\|" ("_Guardar\|_Descartar\|_Cancelar"); las ventanas de la aplicación esperan. El botón elegido: 1, 2... desde la izquierda, 0 el último (también Esc) |  |
 | `mui_set_background(obj, r, g, b)` | `void` | Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si no tienen el suyo |  |

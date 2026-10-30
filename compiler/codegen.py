@@ -17077,6 +17077,9 @@ static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
 static Object *_dash_mui_wins[_DASH_MUI_WINS];
 static LONG _dash_mui_nwins = 0;
 static Object *_dash_mui_last_win = NULL;
+/* the window of an object being set up: the one being built, or the last one built (what a .dashui sets after
+   mui_window_end) */
+#define _DASH_MUI_OWNER (_dash_mui_cur_win ? _dash_mui_cur_win : _dash_mui_last_win)
 static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
@@ -17093,10 +17096,12 @@ static void _dash_mui_on_end(void (*hook)(void)) {
 }
 #define _DASH_MUI_PRESSES 64
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
+static Object *_dash_mui_press_win[_DASH_MUI_PRESSES];  /* its window (mui_window_dispose) */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
 static LONG _dash_mui_npress = 0;
 #define _DASH_MUI_RADIOS 32                 /* buttons in exclusive groups (Lorraine D14) */
 static Object *_dash_mui_radio_obj[_DASH_MUI_RADIOS];
+static Object *_dash_mui_radio_win[_DASH_MUI_RADIOS];
 static LONG _dash_mui_radio_group[_DASH_MUI_RADIOS];
 static LONG _dash_mui_nradio = 0;
 
@@ -17268,9 +17273,33 @@ static void _dash_mui_window_end(void) {
 static LONG _dash_mui_window_open(APTR win) {
     IPTR open = FALSE;
     if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);   /* (after a mui_window_open_back) */
     SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
     GetAttr(MUIA_Window_Open, win, &open);
     return open != 0;
+}
+
+/* Open it without taking the keyboard from the active window (Dash 2.0, Forja: the preview of the .dashui editor):
+   MUIA_Window_Activate FALSE before opening */
+static LONG _dash_mui_window_open_back(APTR win) {
+    IPTR open = FALSE;
+    if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Activate, FALSE, TAG_DONE);
+    SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
+    GetAttr(MUIA_Window_Open, win, &open);
+    return open != 0;
+}
+
+/* Make it the active window, in front (opening it if it is closed) */
+static void _dash_mui_window_activate(APTR win) {
+    struct Window *w = NULL;
+    IPTR open = FALSE;
+    if (!win) return;
+    GetAttr(MUIA_Window_Open, (Object *)win, &open);
+    if (!open) { _dash_mui_window_open(win); return; }
+    GetAttr(MUIA_Window_Window, (Object *)win, (IPTR *)&w);
+    if (w) WindowToFront(w);
+    SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);
 }
 
 static void _dash_mui_window_close(APTR win) {
@@ -17709,6 +17738,7 @@ static APTR _dash_mui_image_toggle(STRPTR file, LONG group, LONG selected) {
                 _DASH_MUI_DO(other, MUIM_Notify, MUIA_Selected, TRUE, (IPTR)obj, 3, MUIM_Set, MUIA_Selected, FALSE);
             }
             _dash_mui_radio_obj[_dash_mui_nradio] = obj;
+            _dash_mui_radio_win[_dash_mui_nradio] = _DASH_MUI_OWNER;
             _dash_mui_radio_group[_dash_mui_nradio++] = group;
         }
     }
@@ -17887,6 +17917,7 @@ static LONG _dash_mui_size(APTR obj, LONG height) {
    mui_set_text keeps it and mui_get_text leaves it out. */
 #define _DASH_MUI_PENS 64
 static APTR _dash_mui_pen_obj[_DASH_MUI_PENS];
+static Object *_dash_mui_pen_win[_DASH_MUI_PENS];
 static char _dash_mui_pen_esc[_DASH_MUI_PENS][12];
 static LONG _dash_mui_npens = 0;
 static struct Screen *_dash_mui_pen_scr = NULL;
@@ -17957,6 +17988,7 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
         if (!(pen = _dash_mui_pen_of(obj))) {
             if (_dash_mui_npens == _DASH_MUI_PENS) { FreeVec(copy); return; }
             _dash_mui_pen_obj[_dash_mui_npens] = obj;
+            _dash_mui_pen_win[_dash_mui_npens] = _DASH_MUI_OWNER;
             pen = _dash_mui_pen_esc[_dash_mui_npens++];
         }
         if (!_dash_mui_pen_scr && (_dash_mui_pen_scr = LockPubScreen(NULL))) _dash_mui_on_end(_dash_mui_pens_free);
@@ -17995,21 +18027,25 @@ static void _dash_mui_window_dispose(APTR win_) {
         if (_dash_mui_wins[i] == win) k = i;
     if (k < 0 || win == _dash_mui_cur_win) return;
     SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+    /* (each entry knows its window; MUIA_WindowObject for one set up later, from outside) */
     for (i = j = 0; i < _dash_mui_npress; i++)
-        if (!_dash_mui_in_win(_dash_mui_press_obj[i], win)) {
+        if (_dash_mui_press_win[i] != win && !_dash_mui_in_win(_dash_mui_press_obj[i], win)) {
             _dash_mui_press_obj[j] = _dash_mui_press_obj[i];
+            _dash_mui_press_win[j] = _dash_mui_press_win[i];
             _dash_mui_press_id[j++] = _dash_mui_press_id[i];
         }
     _dash_mui_npress = j;
     for (i = j = 0; i < _dash_mui_nradio; i++)
-        if (!_dash_mui_in_win(_dash_mui_radio_obj[i], win)) {
+        if (_dash_mui_radio_win[i] != win && !_dash_mui_in_win(_dash_mui_radio_obj[i], win)) {
             _dash_mui_radio_obj[j] = _dash_mui_radio_obj[i];
+            _dash_mui_radio_win[j] = _dash_mui_radio_win[i];
             _dash_mui_radio_group[j++] = _dash_mui_radio_group[i];
         }
     _dash_mui_nradio = j;
     for (i = j = 0; i < _dash_mui_npens; i++)
-        if (!_dash_mui_in_win(_dash_mui_pen_obj[i], win)) {
+        if (_dash_mui_pen_win[i] != win && !_dash_mui_in_win(_dash_mui_pen_obj[i], win)) {
             _dash_mui_pen_obj[j] = _dash_mui_pen_obj[i];
+            _dash_mui_pen_win[j] = _dash_mui_pen_win[i];
             if (j != i) CopyMem(_dash_mui_pen_esc[i], _dash_mui_pen_esc[j], sizeof(_dash_mui_pen_esc[0]));
             j++;
         }
@@ -18093,6 +18129,7 @@ static void _dash_mui_on_press(APTR obj, LONG id) {
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
     if (_dash_mui_npress < _DASH_MUI_PRESSES) {
         _dash_mui_press_obj[_dash_mui_npress] = obj;
+        _dash_mui_press_win[_dash_mui_npress] = _DASH_MUI_OWNER;
         _dash_mui_press_id[_dash_mui_npress++] = id;
     }
 }

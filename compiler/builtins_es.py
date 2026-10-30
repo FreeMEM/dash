@@ -912,6 +912,9 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_window_open_back": "Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo "
+                            "abrirse",
+    "mui_window_activate": "Hace activa una ventana, delante de las demás (si está cerrada, la abre)",
     "mui_window_dispose": "Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús "
                           "contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). "
                           "Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después",
