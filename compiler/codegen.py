@@ -6394,6 +6394,305 @@ static LONG _dash_dbg_value_type(LONG i, LONG expr) {
 }
 """
 
+    # Dash 2.0 (lib/json.dash for Inferencia and Forja): reading JSON in C, the tree made in Dash from its nodes
+    JSON_RUNTIME = r"""
+/* json_scan(text): the JSON text read at once, as lib/json.dash read it (the same errors, at the same byte), into a
+   table of nodes in order (each one followed by what it holds): its kind (JSON_NULL 0 ... JSON_OBJECT 5), the text
+   of a string (escapes and \uXXXX undone, in UTF-8) or of a number (as written), how many it holds (an array or
+   object; true 1 for a Bool) and its name inside an object. lib/json.dash makes the tree of Json from it. */
+typedef struct { LONG kind, count, text, len, name, nlen; } _DashJsonNode;
+static _DashJsonNode *_dash_json_nodes = NULL;
+static LONG _dash_json_n = 0, _dash_json_cap = 0;
+static char *_dash_json_buf = NULL;            /* the texts, one after another */
+static LONG _dash_json_blen = 0, _dash_json_bcap = 0;
+static const UBYTE *_dash_json_s;
+static LONG _dash_json_i, _dash_json_len, _dash_json_bad;
+static char _dash_json_err[80];
+
+static void _dash_json_cleanup(void) {
+    if (_dash_json_nodes) FreeVec(_dash_json_nodes);
+    if (_dash_json_buf) FreeVec(_dash_json_buf);
+    _dash_json_nodes = NULL;
+    _dash_json_buf = NULL;
+    _dash_json_n = _dash_json_cap = _dash_json_blen = _dash_json_bcap = 0;
+}
+
+static void _dash_json_fail(const char *why) {
+    if (_dash_json_bad) return;
+    _dash_json_bad = 1;
+    sprintf(_dash_json_err, "%s at byte %ld", why, (long)_dash_json_i);
+}
+
+/* (0 past the end, as str_code) */
+#define _DASH_JC(k) ((k) < _dash_json_len && (k) >= 0 ? _dash_json_s[k] : 0)
+
+static LONG _dash_json_node(LONG kind) {
+    if (_dash_json_n == _dash_json_cap) {
+        LONG cap = _dash_json_cap ? _dash_json_cap * 2 : 64;
+        _DashJsonNode *v = (_DashJsonNode *)AllocVec(cap * sizeof(_DashJsonNode), MEMF_ANY);
+        if (!v) { _dash_json_fail("out of memory"); return -1; }
+        if (_dash_json_n) CopyMem(_dash_json_nodes, v, _dash_json_n * sizeof(_DashJsonNode));
+        if (_dash_json_nodes) FreeVec(_dash_json_nodes);
+        _dash_json_nodes = v;
+        _dash_json_cap = cap;
+    }
+    _dash_json_nodes[_dash_json_n].kind = kind;
+    _dash_json_nodes[_dash_json_n].count = 0;
+    _dash_json_nodes[_dash_json_n].text = _dash_json_nodes[_dash_json_n].len = 0;
+    _dash_json_nodes[_dash_json_n].name = _dash_json_nodes[_dash_json_n].nlen = 0;
+    return _dash_json_n++;
+}
+
+static BOOL _dash_json_put(const void *p, LONG n) {
+    if (_dash_json_blen + n > _dash_json_bcap) {
+        LONG cap = _dash_json_bcap ? _dash_json_bcap * 2 : 1024;
+        char *b;
+        while (cap < _dash_json_blen + n) cap *= 2;
+        if (!(b = (char *)AllocVec(cap, MEMF_ANY))) { _dash_json_fail("out of memory"); return FALSE; }
+        if (_dash_json_blen) CopyMem(_dash_json_buf, b, _dash_json_blen);
+        if (_dash_json_buf) FreeVec(_dash_json_buf);
+        _dash_json_buf = b;
+        _dash_json_bcap = cap;
+    }
+    if (n) CopyMem((APTR)p, _dash_json_buf + _dash_json_blen, n);
+    _dash_json_blen += n;
+    return TRUE;
+}
+
+static void _dash_json_ws(void) {
+    while (_dash_json_i < _dash_json_len) {
+        UBYTE c = _dash_json_s[_dash_json_i];
+        if (c != 32 && c != 10 && c != 13 && c != 9) return;
+        _dash_json_i++;
+    }
+}
+
+static LONG _dash_json_hex(LONG c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static LONG _dash_json_u4(void) {
+    LONG v = 0, k, h;
+    if (_dash_json_i + 4 > _dash_json_len) return -1;
+    for (k = 0; k < 4; k++) {
+        if ((h = _dash_json_hex(_DASH_JC(_dash_json_i + k))) < 0) return -1;
+        v = v * 16 + h;
+    }
+    _dash_json_i += 4;
+    return v;
+}
+
+/* The string at i (on its opening quote) into the texts: where it starts (its length in *len), -1 if it is bad */
+static LONG _dash_json_str(LONG *len) {
+    LONG at = _dash_json_blen, start;
+    _dash_json_i++;
+    start = _dash_json_i;
+    while (_dash_json_i < _dash_json_len) {
+        UBYTE c = _dash_json_s[_dash_json_i];
+        if (c == '"') {
+            if (!_dash_json_put(_dash_json_s + start, _dash_json_i - start)) return -1;
+            _dash_json_i++;
+            *len = _dash_json_blen - at;
+            return at;
+        }
+        if (c == '\\') {
+            UBYTE e, u[4];
+            LONG n = 1, cp;
+            if (!_dash_json_put(_dash_json_s + start, _dash_json_i - start)) return -1;
+            _dash_json_i++;
+            e = _DASH_JC(_dash_json_i);
+            _dash_json_i++;
+            if (e == 'n') u[0] = 10;
+            else if (e == 't') u[0] = 9;
+            else if (e == 'r') u[0] = 13;
+            else if (e == '"' || e == '\\' || e == '/') u[0] = e;
+            else if (e == 'b') u[0] = 8;
+            else if (e == 'f') u[0] = 12;
+            else if (e == 'u') {
+                if ((cp = _dash_json_u4()) < 0) { _dash_json_fail("bad \\u escape"); return -1; }
+                /* a pair of surrogates is one character */
+                if (cp >= 0xD800 && cp <= 0xDBFF && _DASH_JC(_dash_json_i) == '\\' && _DASH_JC(_dash_json_i + 1) == 'u') {
+                    LONG lo;
+                    _dash_json_i += 2;
+                    lo = _dash_json_u4();
+                    if (lo >= 0xDC00 && lo <= 0xDFFF) cp = 0x10000 + (cp - 0xD800) * 1024 + (lo - 0xDC00);
+                    else _dash_json_i -= lo >= 0 ? 6 : 2;
+                }
+                if (cp == 0) u[0] = ' ';
+                else {
+                    if ((cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) cp = 0xFFFD;   /* (as utf8_char) */
+                    if (cp < 0x80) u[0] = (UBYTE)cp;
+                    else if (cp < 0x800) { u[0] = 0xC0 | cp >> 6; u[1] = 0x80 | (cp & 63); n = 2; }
+                    else if (cp < 0x10000) { u[0] = 0xE0 | cp >> 12; u[1] = 0x80 | (cp >> 6 & 63); u[2] = 0x80 | (cp & 63); n = 3; }
+                    else { u[0] = 0xF0 | cp >> 18; u[1] = 0x80 | (cp >> 12 & 63); u[2] = 0x80 | (cp >> 6 & 63); u[3] = 0x80 | (cp & 63); n = 4; }
+                }
+            } else {
+                _dash_json_i--;
+                _dash_json_fail("bad escape");
+                return -1;
+            }
+            if (!_dash_json_put(u, n)) return -1;
+            start = _dash_json_i;
+        } else {
+            _dash_json_i++;
+        }
+    }
+    _dash_json_fail("a string without its end");
+    return -1;
+}
+
+#define _DASH_JD(k) (_DASH_JC(k) >= '0' && _DASH_JC(k) <= '9')
+
+static void _dash_json_num(void) {
+    LONG start = _dash_json_i, node;
+    UBYTE c;
+    if (_DASH_JC(_dash_json_i) == '-') _dash_json_i++;
+    if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+    while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    if (_dash_json_i < _dash_json_len && _DASH_JC(_dash_json_i) == '.') {
+        _dash_json_i++;
+        if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+        while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    }
+    c = _DASH_JC(_dash_json_i);
+    if (c == 'e' || c == 'E') {
+        _dash_json_i++;
+        c = _DASH_JC(_dash_json_i);
+        if (c == '+' || c == '-') _dash_json_i++;
+        if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+        while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    }
+    if ((node = _dash_json_node(2)) < 0) return;
+    _dash_json_nodes[node].text = _dash_json_blen;
+    _dash_json_nodes[node].len = _dash_json_i - start;
+    _dash_json_put(_dash_json_s + start, _dash_json_i - start);
+}
+
+static BOOL _dash_json_word(const char *w) {
+    LONG n = strlen(w);
+    if (_dash_json_i + n > _dash_json_len || strncmp((const char *)_dash_json_s + _dash_json_i, w, n)) return FALSE;
+    _dash_json_i += n;
+    return TRUE;
+}
+
+static void _dash_json_value(LONG depth);
+
+static void _dash_json_obj(LONG depth) {
+    LONG node = _dash_json_node(5);
+    if (node < 0) return;
+    _dash_json_i++;
+    _dash_json_ws();
+    if (_DASH_JC(_dash_json_i) == '}') { _dash_json_i++; return; }
+    for (;;) {
+        LONG name, nlen, child;
+        UBYTE c;
+        _dash_json_ws();
+        if (_DASH_JC(_dash_json_i) != '"') { _dash_json_fail("a name was expected"); return; }
+        if ((name = _dash_json_str(&nlen)) < 0) return;
+        _dash_json_ws();
+        if (_DASH_JC(_dash_json_i) != ':') { _dash_json_fail("':' was expected"); return; }
+        _dash_json_i++;
+        child = _dash_json_n;
+        _dash_json_value(depth);
+        if (_dash_json_bad) return;
+        _dash_json_nodes[child].name = name;
+        _dash_json_nodes[child].nlen = nlen;
+        _dash_json_nodes[node].count++;
+        _dash_json_ws();
+        c = _DASH_JC(_dash_json_i);
+        _dash_json_i++;
+        if (c == '}') return;
+        if (c != ',') { _dash_json_i--; _dash_json_fail("',' or '}' was expected"); return; }
+    }
+}
+
+static void _dash_json_arr(LONG depth) {
+    LONG node = _dash_json_node(4);
+    if (node < 0) return;
+    _dash_json_i++;
+    _dash_json_ws();
+    if (_DASH_JC(_dash_json_i) == ']') { _dash_json_i++; return; }
+    for (;;) {
+        UBYTE c;
+        _dash_json_value(depth);
+        if (_dash_json_bad) return;
+        _dash_json_nodes[node].count++;
+        _dash_json_ws();
+        c = _DASH_JC(_dash_json_i);
+        _dash_json_i++;
+        if (c == ']') return;
+        if (c != ',') { _dash_json_i--; _dash_json_fail("',' or ']' was expected"); return; }
+    }
+}
+
+static void _dash_json_value(LONG depth) {
+    UBYTE c;
+    LONG node, len, at;
+    _dash_json_ws();
+    if (_dash_json_i >= _dash_json_len) { _dash_json_fail("unexpected end"); return; }
+    c = _dash_json_s[_dash_json_i];
+    if (c == '"') {
+        if ((node = _dash_json_node(3)) < 0) return;
+        if ((at = _dash_json_str(&len)) < 0) return;
+        _dash_json_nodes[node].text = at;
+        _dash_json_nodes[node].len = len;
+        return;
+    }
+    if (c == '{' || c == '[') {
+        if (depth >= 64) { _dash_json_fail("too deep"); return; }     /* (each level takes stack) */
+        if (c == '{') _dash_json_obj(depth + 1);
+        else _dash_json_arr(depth + 1);
+        return;
+    }
+    if (c == '-' || (c >= '0' && c <= '9')) { _dash_json_num(); return; }
+    if (_dash_json_word("true")) { if ((node = _dash_json_node(1)) >= 0) _dash_json_nodes[node].count = 1; return; }
+    if (_dash_json_word("false")) { _dash_json_node(1); return; }
+    if (_dash_json_word("null")) { _dash_json_node(0); return; }
+    _dash_json_fail("unexpected character");
+}
+
+/* How many nodes, -1 if it is not JSON (json_scan_error says why and where) */
+static LONG _dash_json_scan(STRPTR text) {
+    static BOOL at_exit = FALSE;
+    if (!at_exit) at_exit = _dash_atexit(_dash_json_cleanup) == 0;
+    _dash_json_n = _dash_json_blen = 0;
+    _dash_json_bad = 0;
+    _dash_json_err[0] = 0;
+    _dash_json_s = (const UBYTE *)(text ? (char *)text : "");
+    _dash_json_len = strlen((const char *)_dash_json_s);
+    _dash_json_i = 0;
+    _dash_json_value(0);
+    if (!_dash_json_bad) {
+        _dash_json_ws();
+        if (_dash_json_i < _dash_json_len) _dash_json_fail("something after the end");
+    }
+    return _dash_json_bad ? -1 : _dash_json_n;
+}
+
+static STRPTR _dash_json_scan_error(void) { return _dash_str_dup((STRPTR)_dash_json_err, TRUE); }
+
+static LONG _dash_json_scan_kind(LONG i) { return i >= 0 && i < _dash_json_n ? _dash_json_nodes[i].kind : 0; }
+static LONG _dash_json_scan_count(LONG i) { return i >= 0 && i < _dash_json_n ? _dash_json_nodes[i].count : 0; }
+
+static STRPTR _dash_json_take(LONG at, LONG len) {
+    STRPTR s = _dash_str_alloc(len, TRUE);
+    if (s && len) CopyMem(_dash_json_buf + at, s, len);
+    return s;
+}
+
+static STRPTR _dash_json_scan_text(LONG i) {
+    return i >= 0 && i < _dash_json_n ? _dash_json_take(_dash_json_nodes[i].text, _dash_json_nodes[i].len) : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_json_scan_name(LONG i) {
+    return i >= 0 && i < _dash_json_n ? _dash_json_take(_dash_json_nodes[i].name, _dash_json_nodes[i].nlen) : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+"""
+
     # Dash 2.0 (for Inferencia, the IDE): running a command line and taking its output
     RUNCAP_RUNTIME = """\
 /* run_start(command, timeout_ms) runs a command line in a process of its own (with the program's path and
@@ -17071,6 +17370,15 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
+/* the windows alive (mui_window_dispose: a second call, or one with a window already gone, does nothing) and the
+   last one built (its context menus, made after mui_window_end, are its own) */
+#define _DASH_MUI_WINS 64
+static Object *_dash_mui_wins[_DASH_MUI_WINS];
+static LONG _dash_mui_nwins = 0;
+static Object *_dash_mui_last_win = NULL;
+/* the window of an object being set up: the one being built, or the last one built (what a .dashui sets after
+   mui_window_end) */
+#define _DASH_MUI_OWNER (_dash_mui_cur_win ? _dash_mui_cur_win : _dash_mui_last_win)
 static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
@@ -17087,10 +17395,12 @@ static void _dash_mui_on_end(void (*hook)(void)) {
 }
 #define _DASH_MUI_PRESSES 64
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
+static Object *_dash_mui_press_win[_DASH_MUI_PRESSES];  /* its window (mui_window_dispose) */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
 static LONG _dash_mui_npress = 0;
 #define _DASH_MUI_RADIOS 32                 /* buttons in exclusive groups (Lorraine D14) */
 static Object *_dash_mui_radio_obj[_DASH_MUI_RADIOS];
+static Object *_dash_mui_radio_win[_DASH_MUI_RADIOS];
 static LONG _dash_mui_radio_group[_DASH_MUI_RADIOS];
 static LONG _dash_mui_nradio = 0;
 
@@ -17099,7 +17409,7 @@ static LONG _dash_mui_nradio = 0;
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
        _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
        _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR, _DASH_MUI_IMAGE,
-       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO };
+       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO, _DASH_MUI_EDITOR };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -17235,6 +17545,7 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
         return NULL;
     }
     _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)win);
+    if (_dash_mui_nwins < _DASH_MUI_WINS) _dash_mui_wins[_dash_mui_nwins++] = win;
     if (!_dash_mui_first_win) {
         _dash_mui_first_win = win;
         _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
@@ -17253,6 +17564,7 @@ static void _dash_mui_window_end(void) {
     if (_dash_mui_depth != 1) _dash_mui_error("mui_window_end with groups still open");
     if (_dash_mui_cur_menu) _dash_mui_error("mui_window_end with a menu still open");
     _dash_mui_depth = 0;
+    _dash_mui_last_win = _dash_mui_cur_win;
     _dash_mui_cur_win = NULL;
     _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
 }
@@ -17260,9 +17572,33 @@ static void _dash_mui_window_end(void) {
 static LONG _dash_mui_window_open(APTR win) {
     IPTR open = FALSE;
     if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);   /* (after a mui_window_open_back) */
     SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
     GetAttr(MUIA_Window_Open, win, &open);
     return open != 0;
+}
+
+/* Open it without taking the keyboard from the active window (Dash 2.0, Forja: the preview of the .dashui editor):
+   MUIA_Window_Activate FALSE before opening */
+static LONG _dash_mui_window_open_back(APTR win) {
+    IPTR open = FALSE;
+    if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Activate, FALSE, TAG_DONE);
+    SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
+    GetAttr(MUIA_Window_Open, win, &open);
+    return open != 0;
+}
+
+/* Make it the active window, in front (opening it if it is closed) */
+static void _dash_mui_window_activate(APTR win) {
+    struct Window *w = NULL;
+    IPTR open = FALSE;
+    if (!win) return;
+    GetAttr(MUIA_Window_Open, (Object *)win, &open);
+    if (!open) { _dash_mui_window_open(win); return; }
+    GetAttr(MUIA_Window_Window, (Object *)win, (IPTR *)&w);
+    if (w) WindowToFront(w);
+    SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);
 }
 
 static void _dash_mui_window_close(APTR win) {
@@ -17427,6 +17763,7 @@ static void _dash_mui_menu_end(void) {
    no object: MUI does not dispose it, _dash_mui_ctx_cleanup does once the windows are gone. */
 #define _DASH_MUI_CTXMENUS 16
 static Object *_dash_mui_ctx[_DASH_MUI_CTXMENUS];
+static Object *_dash_mui_ctx_win[_DASH_MUI_CTXMENUS];   /* the window built just before (mui_window_dispose) */
 static LONG _dash_mui_nctx = 0;
 
 static void _dash_mui_ctx_cleanup(void) {
@@ -17443,6 +17780,7 @@ static APTR _dash_mui_context_menu_begin(STRPTR title) {
         return NULL;
     }
     _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_ctx_win[_dash_mui_nctx] = _dash_mui_last_win;
     _dash_mui_ctx[_dash_mui_nctx++] = strip;
     _dash_mui_on_end(_dash_mui_ctx_cleanup);
     _dash_mui_cur_menu = menu;
@@ -17479,6 +17817,23 @@ static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
         MUIA_CycleChain, 1,
         MUIA_String_MaxLen, (maxlen > 0 ? maxlen : 80) + 1,   /* MaxLen counts the final 0 */
         MUIA_String_Contents, (IPTR)initial), _DASH_MUI_STRING);
+}
+
+/* A text field of several lines (Dash 2.0, Inferencia: the question), Textinputscroll.mcc of MUI: lines high, with
+   its scroller; Return makes a new line, and mui_on_ack gives the event of sending it */
+static APTR _dash_mui_text_editor(LONG lines) {
+    char fix[40];
+    LONG i, k = 0;
+    if (lines < 1) lines = 1;
+    if (lines > 30) lines = 30;
+    for (i = 1; i < lines; i++) fix[k++] = '\\n';
+    fix[k++] = 'X';
+    fix[k] = 0;
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Textinputscroll,
+        MUIA_CycleChain, 1,
+        MUIA_Textinput_Multiline, TRUE,
+        MUIA_Textinput_Contents, (IPTR)"",
+        MUIA_FixHeightTxt, (IPTR)_dash_mui_keep((STRPTR)fix)), _DASH_MUI_EDITOR);
 }
 
 static APTR _dash_mui_checkbox(LONG checked) {
@@ -17652,6 +18007,7 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_TOGGLE:
     case _DASH_MUI_RADIO:  return MUIA_Dtpic_Name;
     case _DASH_MUI_COMBO:  return MUIA_String_Contents;      /* of its text field (_dash_mui_combo_str) */
+    case _DASH_MUI_EDITOR: return MUIA_Textinput_Contents;
     case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Title;       /* "Abrir recientes" (Lorraine D13) */
     }
     return 0;
@@ -17699,6 +18055,7 @@ static APTR _dash_mui_image_toggle(STRPTR file, LONG group, LONG selected) {
                 _DASH_MUI_DO(other, MUIM_Notify, MUIA_Selected, TRUE, (IPTR)obj, 3, MUIM_Set, MUIA_Selected, FALSE);
             }
             _dash_mui_radio_obj[_dash_mui_nradio] = obj;
+            _dash_mui_radio_win[_dash_mui_nradio] = _DASH_MUI_OWNER;
             _dash_mui_radio_group[_dash_mui_nradio++] = group;
         }
     }
@@ -17877,6 +18234,7 @@ static LONG _dash_mui_size(APTR obj, LONG height) {
    mui_set_text keeps it and mui_get_text leaves it out. */
 #define _DASH_MUI_PENS 64
 static APTR _dash_mui_pen_obj[_DASH_MUI_PENS];
+static Object *_dash_mui_pen_win[_DASH_MUI_PENS];
 static char _dash_mui_pen_esc[_DASH_MUI_PENS][12];
 static LONG _dash_mui_npens = 0;
 static struct Screen *_dash_mui_pen_scr = NULL;
@@ -17947,6 +18305,7 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
         if (!(pen = _dash_mui_pen_of(obj))) {
             if (_dash_mui_npens == _DASH_MUI_PENS) { FreeVec(copy); return; }
             _dash_mui_pen_obj[_dash_mui_npens] = obj;
+            _dash_mui_pen_win[_dash_mui_npens] = _DASH_MUI_OWNER;
             pen = _dash_mui_pen_esc[_dash_mui_npens++];
         }
         if (!_dash_mui_pen_scr && (_dash_mui_pen_scr = LockPubScreen(NULL))) _dash_mui_on_end(_dash_mui_pens_free);
@@ -17963,6 +18322,64 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
         _dash_mui_set_text(obj, copy);
         FreeVec(copy);
     }
+}
+
+/* mui_window_dispose (Dash 2.0, Forja: the preview of the .dashui editor, made again on each change): close the
+   window, take it out of the application and free it with all its objects; the runtime forgets what pointed into it
+   (mui_press, exclusive groups, text colours) and frees the context menus made after it. Nothing for 0 or for a
+   window already gone. */
+static BOOL _dash_mui_in_win(Object *o, Object *win) {
+    IPTR w = 0;
+    if (!o) return FALSE;
+    if (o == win) return TRUE;
+    GetAttr(MUIA_WindowObject, o, &w);   /* (while the window is in the application) */
+    return (Object *)w == win;
+}
+
+static void _dash_mui_window_dispose(APTR win_) {
+    Object *win = (Object *)win_;
+    LONG i, j, k = -1;
+    if (!win || !_dash_mui_app) return;
+    for (i = 0; i < _dash_mui_nwins; i++)
+        if (_dash_mui_wins[i] == win) k = i;
+    if (k < 0 || win == _dash_mui_cur_win) return;
+    SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+    /* (each entry knows its window; MUIA_WindowObject for one set up later, from outside) */
+    for (i = j = 0; i < _dash_mui_npress; i++)
+        if (_dash_mui_press_win[i] != win && !_dash_mui_in_win(_dash_mui_press_obj[i], win)) {
+            _dash_mui_press_obj[j] = _dash_mui_press_obj[i];
+            _dash_mui_press_win[j] = _dash_mui_press_win[i];
+            _dash_mui_press_id[j++] = _dash_mui_press_id[i];
+        }
+    _dash_mui_npress = j;
+    for (i = j = 0; i < _dash_mui_nradio; i++)
+        if (_dash_mui_radio_win[i] != win && !_dash_mui_in_win(_dash_mui_radio_obj[i], win)) {
+            _dash_mui_radio_obj[j] = _dash_mui_radio_obj[i];
+            _dash_mui_radio_win[j] = _dash_mui_radio_win[i];
+            _dash_mui_radio_group[j++] = _dash_mui_radio_group[i];
+        }
+    _dash_mui_nradio = j;
+    for (i = j = 0; i < _dash_mui_npens; i++)
+        if (_dash_mui_pen_win[i] != win && !_dash_mui_in_win(_dash_mui_pen_obj[i], win)) {
+            _dash_mui_pen_obj[j] = _dash_mui_pen_obj[i];
+            _dash_mui_pen_win[j] = _dash_mui_pen_win[i];
+            if (j != i) CopyMem(_dash_mui_pen_esc[i], _dash_mui_pen_esc[j], sizeof(_dash_mui_pen_esc[0]));
+            j++;
+        }
+    _dash_mui_npens = j;
+    if (_dash_mui_first_win == win) _dash_mui_first_win = NULL;
+    if (_dash_mui_last_win == win) _dash_mui_last_win = NULL;
+    _dash_mui_wins[k] = _dash_mui_wins[--_dash_mui_nwins];
+    _DASH_MUI_DO(_dash_mui_app, OM_REMMEMBER, (IPTR)win);
+    MUI_DisposeObject(win);
+    /* its context menus: no object of it points to them any more */
+    for (i = j = 0; i < _dash_mui_nctx; i++)
+        if (_dash_mui_ctx_win[i] == win) MUI_DisposeObject(_dash_mui_ctx[i]);
+        else {
+            _dash_mui_ctx[j] = _dash_mui_ctx[i];
+            _dash_mui_ctx_win[j++] = _dash_mui_ctx_win[i];
+        }
+    _dash_mui_nctx = j;
 }
 
 /* mui_request (Dash 2.0, Forja): MUI's requester over a window (0: over the application), buttons separated by "|";
@@ -18019,6 +18436,20 @@ static void _dash_mui_on_change(APTR obj, LONG id) {
 static void _dash_mui_on_ack(APTR obj, LONG id) {
     if (!obj || !_dash_mui_app) return;
     obj = _dash_mui_combo_str(obj);   /* a combo: its field, which a line picked acknowledges too */
+    if (_dash_mui_kind(obj) == _DASH_MUI_EDITOR) {
+        /* a field of several lines gives no Acknowledge (Return is a new line): Amiga+Return in its window, which
+           the field lets through without touching the text (Ctrl+Return would also put a new line in it) */
+        IPTR win = 0;
+        GetAttr(MUIA_WindowObject, obj, &win);
+        if (!win) win = (IPTR)_DASH_MUI_OWNER;
+        if (win) {
+            _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_InputEvent, (IPTR)"rcommand return",
+                         (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+            _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_InputEvent, (IPTR)"lcommand return",
+                         (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+        }
+        return;
+    }
     _DASH_MUI_DO(obj, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime,
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
@@ -18029,6 +18460,7 @@ static void _dash_mui_on_press(APTR obj, LONG id) {
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
     if (_dash_mui_npress < _DASH_MUI_PRESSES) {
         _dash_mui_press_obj[_dash_mui_npress] = obj;
+        _dash_mui_press_win[_dash_mui_npress] = _DASH_MUI_OWNER;
         _dash_mui_press_id[_dash_mui_npress++] = id;
     }
 }
@@ -19207,6 +19639,7 @@ _RUNTIME_FLAGS = [
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
     ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
     ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
+    ("JSON_RUNTIME", "uses_json"),          # Dash 2.0: json_scan (lib/json.dash)
     ("SYSLIST_RUNTIME", "uses_syslist"),    # Dash 2.0: rexx_send, ports_read, tasks_read, assigns_read
     ("DEBUGGER_RUNTIME", "uses_debugger"),  # Dash 2.0: dbg_* (Forja)
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
@@ -19514,6 +19947,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
         self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
         self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
+        self.uses_json: bool = False     # json_scan (JSON_RUNTIME, Dash 2.0: lib/json.dash)
         self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
         self.uses_debugger: bool = False  # dbg_* (DEBUGGER_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
@@ -19883,6 +20317,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.SYSINFO_RUNTIME)
         if self.uses_runcap:
             parts.append(CTemplates.RUNCAP_RUNTIME)
+        if self.uses_json:
+            parts.append(CTemplates.JSON_RUNTIME)
         if self.uses_syslist:
             parts.append(CTemplates.SYSLIST_RUNTIME)
         if self.uses_debugger:

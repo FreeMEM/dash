@@ -582,6 +582,31 @@ class _EchoServer:
             def answer(self):
                 n = int(self.headers.get("Content-Length") or 0)
                 body = self.rfile.read(n).decode("latin-1") if n else ""
+                if self.path.startswith("/flujo"):
+                    # an answer read as it comes (lib/red/http.dash, http_flujo_leer): SSE events, chunked, in three
+                    # pieces with pauses between them; X-Prueba: the encoding asked for
+                    import time
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Transfer-Encoding", "chunked")
+                    self.send_header("X-Prueba", self.headers.get("Accept-Encoding") or "")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    for piece in (b"data: uno\n\n", b"data: dos\n\ndata: tr", b"es\n\n"):
+                        self.wfile.write(b"%x\r\n%s\r\n" % (len(piece), piece))
+                        self.wfile.flush()
+                        time.sleep(0.6)
+                    self.wfile.write(b"0\r\n\r\n")
+                    return
+                if self.path.startswith("/error"):
+                    out = b'{"error": {"message": "sin cuota"}}'
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(out)))
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.wfile.write(out)
+                    return
                 out = json.dumps({"method": self.command, "path": self.path,
                                   "type": self.headers.get("Content-Type") or "",
                                   "x": self.headers.get("X-Prueba") or "", "body": body}).encode()

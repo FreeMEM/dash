@@ -89,7 +89,7 @@ end
 
 # ---------- Checking (before anything is made: a window half built would stay in MUI) ----------
 
-const _UI_KINDS = "|text|label|button|string|checkbox|cycle|slider|gauge|list|canvas|scrollbar|image|image_button|image_toggle|combo|space|balance|vgroup|hgroup|frame|columns|tabs|scroll|"
+const _UI_KINDS = "|text|label|button|string|checkbox|cycle|slider|gauge|list|canvas|scrollbar|image|image_button|image_toggle|combo|text_editor|space|balance|vgroup|hgroup|frame|columns|tabs|scroll|"
 const _UI_GROUPS = "|vgroup|hgroup|frame|columns|tabs|scroll|"
 
 func _ui_check_window(w: Json) -> String
@@ -290,6 +290,8 @@ func _ui_node(u: DashUI, n: Json)
         o = mui_image_toggle(_ui_s(n, "file", ""), _ui_i(n, "group", 0), _ui_b(n, "checked", false))
     elif t == "combo"
         o = mui_combo(_ui_s(n, "text", ""), _ui_s(n, "options", ""))
+    elif t == "text_editor"
+        o = mui_text_editor(_ui_i(n, "lines", 4))
     elif t == "space"
         o = mui_space()
     elif t == "balance"

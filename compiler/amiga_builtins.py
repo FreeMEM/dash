@@ -3221,6 +3221,26 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    "mui_text_editor": BuiltinFunc(
+        name="mui_text_editor", params=["lines"], return_type="APTR", c_template="_dash_mui_text_editor(${lines})",
+        description="A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return "
+                    "starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of "
+                    "sending it (Amiga+Return in its window)"),
+    "mui_window_open_back": BuiltinFunc(
+        name="mui_window_open_back", params=["win"], return_type="LONG",
+        c_template="_dash_mui_window_open_back(${win})",
+        description="Open a window without making it the active one: the keyboard stays where it was; false if it "
+                    "could not open"),
+    "mui_window_activate": BuiltinFunc(
+        name="mui_window_activate", params=["win"], return_type="void",
+        c_template="_dash_mui_window_activate(${win})",
+        description="Make a window the active one, in front of the others (it opens if it is closed)"),
+    "mui_window_dispose": BuiltinFunc(
+        name="mui_window_dispose", params=["window"], return_type="void",
+        c_template="_dash_mui_window_dispose(${window})",
+        description="Close a window, take it out of the application and free it with all its objects (and the context "
+                    "menus made after it): for windows made again and again (a preview). Nothing for 0 or a window "
+                    "already gone; its objects must not be used after"),
     # Dash 2.0 (Forja): asking the user
     "mui_request": BuiltinFunc(
         name="mui_request", params=["window", "title", "text", "buttons"], return_type="LONG",
@@ -3576,6 +3596,7 @@ MUI_FUNCTIONS = {
         name="mui_menu_check",
         params=["title", "key", "id", "checked"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_menu_check(${title}, ${key}, ${id}, ${checked})",
         description="Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; "
                     "mui_get_value / mui_set_value read and set the mark"
@@ -3584,6 +3605,7 @@ MUI_FUNCTIONS = {
         name="mui_submenu_begin",
         params=["title"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_submenu_begin(${title})",
         description="Start a submenu in the menu being built (one level): its items go in until mui_submenu_end"
     ),
@@ -3605,6 +3627,7 @@ MUI_FUNCTIONS = {
         name="mui_context_menu_begin",
         params=["title"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_context_menu_begin(${title})",
         description="Start a context menu (anywhere, not only in a window): its items as in a menu "
                     "(mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object "
@@ -3858,6 +3881,7 @@ MUI_FUNCTIONS = {
         name="mui_combo",
         params=["text", "options"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_combo(${text}, ${options})",
         description="Text field with a list that drops down (font, size; options \"A|B\"): write or pick a line "
                     "(double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return "
@@ -5114,6 +5138,30 @@ CLIP_FUNCTIONS = {
                             "there is none or something else was copied after it, -2 if it does not fit in max"),
 }
 
+# Dash 2.0: JSON read in C for lib/json.dash (json_parse makes its tree of Json from these nodes)
+JSON_FUNCTIONS = {
+    "json_scan": BuiltinFunc(
+        name="json_scan", params=["text"], return_type="LONG", c_template="_dash_json_scan(${text})", reads_only=True,
+        description="Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash "
+                    "makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where)"),
+    "json_scan_error": BuiltinFunc(
+        name="json_scan_error", params=[], return_type="STRPTR", c_template="_dash_json_scan_error()",
+        description="Why the last json_scan gave -1, and at which byte (\"unexpected end at byte 1\")"),
+    "json_scan_kind": BuiltinFunc(
+        name="json_scan_kind", params=["i"], return_type="LONG", c_template="_dash_json_scan_kind(${i})",
+        description="Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object"),
+    "json_scan_count": BuiltinFunc(
+        name="json_scan_count", params=["i"], return_type="LONG", c_template="_dash_json_scan_count(${i})",
+        description="How many elements an array or object node holds (they follow it); 1 for true, 0 for false"),
+    "json_scan_text": BuiltinFunc(
+        name="json_scan_text", params=["i"], return_type="STRPTR", c_template="_dash_json_scan_text(${i})",
+        description="The text of a string node (its escapes and \\uXXXX undone, in UTF-8) or a number node (as "
+                    "written)"),
+    "json_scan_name": BuiltinFunc(
+        name="json_scan_name", params=["i"], return_type="STRPTR", c_template="_dash_json_scan_name(${i})",
+        description="The name of node i inside its object (\"\" in an array or at the top)"),
+}
+
 # Dash 2.0 (Forja, the IDE): the debugger. The debugged program is built with dash --debug (dashc); the debugger
 # with either Dash (docs/DEPURADOR_LOOP.md)
 DEBUGGER_FUNCTIONS = {
@@ -5269,6 +5317,7 @@ ALL_BUILTINS = {
     **COLLATE_FUNCTIONS,       # Lorraine D7
     **SYSPROG_FUNCTIONS,       # Dash 2.0
     **DEBUGGER_FUNCTIONS,      # Dash 2.0: Forja
+    **JSON_FUNCTIONS,          # Dash 2.0: lib/json.dash
     **IMGDEC_FUNCTIONS,
     **TTF_FUNCTIONS,
     **NETBG_FUNCTIONS,

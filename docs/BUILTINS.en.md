@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 806 functions, 806 implemented, 0 not implemented.
+Total: 816 functions, 816 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -698,6 +698,17 @@ Total: 806 functions, 806 implemented, 0 not implemented.
 | `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
 | `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
 
+## JSON read in C (for lib/json.dash)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `json_scan(text)` | `LONG` | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
+| `json_scan_error()` | `STRPTR` | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
+| `json_scan_kind(i)` | `LONG` | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
+| `json_scan_count(i)` | `LONG` | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
+| `json_scan_text(i)` | `STRPTR` | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
+| `json_scan_name(i)` | `STRPTR` | The name of node i inside its object ("" in an array or at the top) |  |
+
 ## Debugger (the debugged program, built with dash --debug)
 
 | Function | Returns | Description | Status |
@@ -904,6 +915,10 @@ Total: 806 functions, 806 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_text_editor(lines)` | `APTR` | A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
+| `mui_window_open_back(win)` | `LONG` | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
+| `mui_window_activate(win)` | `void` | Make a window the active one, in front of the others (it opens if it is closed) |  |
+| `mui_window_dispose(window)` | `void` | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
 | `mui_request(window, title, text, buttons)` | `LONG` | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
 | `mui_set_background(obj, r, g, b)` | `void` | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |
 | `mui_set_text_pen(obj, r, g, b)` | `void` | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |

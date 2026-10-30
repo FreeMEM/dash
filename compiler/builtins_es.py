@@ -429,6 +429,13 @@ DESC_ES = {
     "time_unix": "El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies)",
     "clock_days": "Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp)",
     "mem_largest": "El bloque de memoria libre más grande, chip o fast, en bytes",
+    "json_scan": "Lee un texto JSON a una tabla de nodos en orden, cada uno seguido de lo que contiene (lib/json.dash hace "
+                 "su árbol con ella): cuántos, -1 si no es JSON (json_scan_error dice por qué y dónde)",
+    "json_scan_error": "Por qué el último json_scan dio -1, y en qué byte (\"unexpected end at byte 1\")",
+    "json_scan_kind": "El tipo del nodo i: 0 null, 1 true o false, 2 número, 3 texto, 4 lista, 5 objeto",
+    "json_scan_count": "Cuántos elementos tiene un nodo de lista u objeto (van detrás); 1 si es true, 0 si es false",
+    "json_scan_text": "El texto de un nodo de texto (sin sus escapes, \\uXXXX en UTF-8) o de número (como está escrito)",
+    "json_scan_name": "El nombre del nodo i dentro de su objeto (\"\" en una lista o arriba del todo)",
     "dbg_start": "Carga un programa compilado con dash --debug y lo lanza en un proceso propio, en pausa antes de su primera línea (se ponen los puntos de parada y luego dbg_continue): falso si no pudo (dbg_error dice por qué)",
     "dbg_error": "Por qué falló el último dbg_start",
     "dbg_state": "El programa depurado: 0 ninguno, 1 en pausa antes de empezar, 2 corriendo, 3 parado en una línea, 4 acabado",
@@ -912,6 +919,15 @@ DESC_ES = {
     "RA_EVENT_MENU": "Evento: se eligió una opción de menú (ra_menu_id)",
     "ra_add_getfile": "Añade un botón que abre un diálogo de ficheros; ra_get_string(id) da el fichero elegido",
     # MUI
+    "mui_text_editor": "Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto, con su "
+                       "barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el "
+                       "evento de mandarlo (Amiga+Return en su ventana)",
+    "mui_window_open_back": "Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo "
+                            "abrirse",
+    "mui_window_activate": "Hace activa una ventana, delante de las demás (si está cerrada, la abre)",
+    "mui_window_dispose": "Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús "
+                          "contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). "
+                          "Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después",
     "mui_request": "Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados "
                    "por \"|\" (\"_Guardar|_Descartar|_Cancelar\"); las ventanas de la aplicación esperan. El botón elegido: "
                    "1, 2... desde la izquierda, 0 el último (también Esc)",

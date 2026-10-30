@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 806 funciones, 806 implementadas, 0 sin implementar.
+Total: 816 funciones, 816 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -698,6 +698,17 @@ Total: 806 funciones, 806 implementadas, 0 sin implementar.
 | `assign_name(i)` | `STRPTR` | El nombre de la asignación i del último assigns_read, sin los dos puntos |  |
 | `assign_path(i)` | `STRPTR` | Adónde apunta la asignación i: un cajón ("Workbench:C"), varios separados por ";", o el nombre que buscará una diferida o no ligada |  |
 
+## JSON leído en C (para lib/json.dash)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `json_scan(text)` | `LONG` | Lee un texto JSON a una tabla de nodos en orden, cada uno seguido de lo que contiene (lib/json.dash hace su árbol con ella): cuántos, -1 si no es JSON (json_scan_error dice por qué y dónde) |  |
+| `json_scan_error()` | `STRPTR` | Por qué el último json_scan dio -1, y en qué byte ("unexpected end at byte 1") |  |
+| `json_scan_kind(i)` | `LONG` | El tipo del nodo i: 0 null, 1 true o false, 2 número, 3 texto, 4 lista, 5 objeto |  |
+| `json_scan_count(i)` | `LONG` | Cuántos elementos tiene un nodo de lista u objeto (van detrás); 1 si es true, 0 si es false |  |
+| `json_scan_text(i)` | `STRPTR` | El texto de un nodo de texto (sin sus escapes, \uXXXX en UTF-8) o de número (como está escrito) |  |
+| `json_scan_name(i)` | `STRPTR` | El nombre del nodo i dentro de su objeto ("" en una lista o arriba del todo) |  |
+
 ## Depurador (el programa depurado, con dash --debug)
 
 | Función | Devuelve | Descripción | Estado |
@@ -904,6 +915,10 @@ Total: 806 funciones, 806 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Abre muimaster.library y crea la aplicación MUI (base: el nombre ARexx); 0 si no hay MUI o la CPU es un 68000 |  |
+| `mui_text_editor(lines)` | `APTR` | Un campo de texto de varias líneas (el Textinput de MUI), de ese número de líneas de alto, con su barra: Return empieza otra línea; mui_get_text y mui_set_text lo leen y lo cambian, mui_on_ack da el evento de mandarlo (Amiga+Return en su ventana) |  |
+| `mui_window_open_back(win)` | `LONG` | Abre una ventana sin hacerla la activa: el teclado se queda donde estaba; falso si no pudo abrirse |  |
+| `mui_window_activate(win)` | `void` | Hace activa una ventana, delante de las demás (si está cerrada, la abre) |  |
+| `mui_window_dispose(window)` | `void` | Cierra una ventana, la quita de la aplicación y la libera con todos sus objetos (y los menús contextuales hechos tras ella): para ventanas que se hacen una y otra vez (una vista previa). Nada con 0 o con una ventana que ya no está; sus objetos no se pueden usar después |  |
 | `mui_request(window, title, text, buttons)` | `LONG` | Pregunta con la petición de MUI sobre una ventana (0: sobre la aplicación), con sus botones separados por "\|" ("_Guardar\|_Descartar\|_Cancelar"); las ventanas de la aplicación esperan. El botón elegido: 1, 2... desde la izquierda, 0 el último (también Esc) |  |
 | `mui_set_background(obj, r, g, b)` | `void` | Un fondo RGB (0-255 cada uno) para un objeto: un grupo, un texto, una etiqueta, un botón, una lista (y la lista de dentro) o una ventana (su grupo raíz); los objetos de dentro lo toman si no tienen el suyo |  |
 | `mui_set_text_pen(obj, r, g, b)` | `void` | El color (RGB, 0-255 cada uno) del texto de un texto, una etiqueta o un botón; mui_set_text lo mantiene |  |

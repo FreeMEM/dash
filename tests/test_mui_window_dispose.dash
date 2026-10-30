@@ -1,0 +1,70 @@
+# Destroying a MUI window (Dash 2.0, Forja: the preview of the .dashui editor, made again on each change): 20 windows
+# made with lib/dashui.dash (an event, a text colour, a context menu) and destroyed; the program's memory does not
+# grow with them, nothing of Dash is left (memcheck), and the application goes on (its first window, a timer).
+# Destroying twice or 0 does nothing. Then windows like the browser's (hidden list and balance, disabled button, canvas,
+# scrollbar, the same id): each one made before the last one is destroyed, as a preview does.
+# emu-needs: muimaster.library
+# memcheck
+# expect-out: ventanas: 20
+# expect-out: memoria: true
+# expect-out: navegador: 6
+# expect-out: sigue: 9
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+import "lib/dashui.dash"
+
+func una() -> Int
+    t = "{\"dashui\":1,\"windows\":[{\"name\":\"V\",\"title\":\"Vista\",\"root\":{\"type\":\"vgroup\",\"children\":[{\"type\":\"button\",\"name\":\"b\",\"label\":\"Hola\",\"event\":5,\"context_menu\":\"m\"},{\"type\":\"text\",\"text\":\"Texto\",\"color\":[200,200,200]}]},\"context_menus\":[{\"name\":\"m\",\"title\":\"M\",\"items\":[{\"label\":\"Uno\",\"event\":6}]}]}]}"
+    ui = dashui_window(t, "")
+    if ui.error != ""
+        Print ui.error
+        return 0
+    end
+    mui_window_open(ui.window)
+    mui_window_dispose(ui.window)
+    mui_window_dispose(ui.window)
+    return 1
+end
+
+func navegador() -> Int
+    t = "{\"dashui\":1,\"windows\":[{\"name\":\"N\",\"title\":\"Nav\",\"id\":1,\"menus\":[{\"title\":\"P\",\"items\":[{\"label\":\"Salir\",\"key\":\"Q\",\"event\":9}]}],\"root\":{\"type\":\"vgroup\",\"children\":[{\"type\":\"hgroup\",\"children\":[{\"type\":\"button\",\"name\":\"atras\",\"label\":\"<\",\"event\":1,\"disabled\":true},{\"type\":\"button\",\"name\":\"ir\",\"label\":\"_Ir\",\"event\":3},{\"type\":\"string\",\"name\":\"url\",\"text\":\"http://\",\"max\":100,\"ack\":4}]},{\"type\":\"hgroup\",\"children\":[{\"type\":\"list\",\"name\":\"historial\",\"double\":6,\"weight\":25,\"hidden\":true},{\"type\":\"balance\",\"name\":\"separador\",\"hidden\":true},{\"type\":\"canvas\",\"name\":\"pagina\",\"min_width\":100,\"min_height\":50},{\"type\":\"scrollbar\",\"name\":\"barra\",\"vertical\":true,\"change\":5}]}]}}]}"
+    var antes: DashUI = nil
+    n = 0
+    for i in (1..6)
+        ui = dashui_window(t, "")
+        mui_window_open(ui.window)
+        if antes != nil
+            mui_window_dispose(antes.window)
+        end
+        antes = ui
+        n = n + 1
+    end
+    mui_window_dispose(antes.window)
+    return n
+end
+
+Main
+    if mui_app_begin("Prueba", "DASHDISPOSE") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Principal", 0)
+            t = mui_text("Hola")
+        mui_window_end()
+        mui_window_open(w)
+        n = una()
+        antes = mem_total()
+        for i in (1..19)
+            n = n + una()
+        end
+        Print "ventanas: #{n}"
+        # (lo que MUI guarde de más no llega a 2 KB por ventana)
+        Print "memoria: #{antes - mem_total() < 40000}"
+        Print "navegador: #{navegador()}"
+        mui_window_dispose(0)
+        mui_timer(200, 9)
+        Print "sigue: #{mui_wait_event()}"
+        mui_app_end()
+        Print "fin"
+    end
+end

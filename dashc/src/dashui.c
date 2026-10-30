@@ -323,6 +323,7 @@ static Kind kinds[] = {
     {"image_toggle", "mui_image_toggle", {"file", "group", "checked"},
      {{J_STR, 0, ""}, {J_INT, 0, NULL}, {J_BOOL, 0, NULL}}, 0},
     {"combo", "mui_combo", {"text", "options"}, {{J_STR, 0, ""}, {J_STR, 0, ""}}, 0},
+    {"text_editor", "mui_text_editor", {"lines"}, {{J_INT, 4, NULL}}, 0},
     {"space", "mui_space", {NULL}, {{0}}, 0},
     {"balance", "mui_balance", {NULL}, {{0}}, 0},
     {"vgroup", "mui_vgroup_begin", {NULL}, {{0}}, 1},

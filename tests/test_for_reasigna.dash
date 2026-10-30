@@ -1,0 +1,58 @@
+# A for over a list of texts (or a dictionary's keys) whose body changes its variable (x = str_trim(x)): the variable
+# gets a copy of its own, so that the assignment does not free the list's text (dashc freed it twice: Inferencia hung
+# the Amiga). Also with continue and break taken, and inside a function that fills a global list.
+# memcheck
+# expect-out: [entorno] [portapapeles] [orden ECHO]
+# expect-out: a c
+# expect-out: A B
+# expect-out: lista intacta: [ a,b ,  c]
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+var permitidos: [String] = []
+
+func permisos_leer(texto: String)
+    permitidos = []
+    for p in str_split(texto, ",")
+        p = str_trim(p)
+        if p != ""
+            partes = str_split(p, " ")
+            if partes[0] == "orden" and partes.length > 1
+                permitidos.push("orden " + str_upper(partes[1]))
+            else
+                permitidos.push(str_lower(p))
+            end
+        end
+    end
+end
+
+Main
+    permisos_leer("entorno,portapapeles,orden echo,")
+    s = ""
+    for x in permitidos
+        s = s + "[" + x + "] "
+    end
+    Print str_trim(s)
+
+    l = [" a", "b ", " c", "d"]
+    s = ""
+    for p in l
+        p = str_trim(p)
+        if p == "b"
+            continue
+        end
+        if p == "d"
+            break
+        end
+        s = s + p + " "
+    end
+    Print str_trim(s)
+
+    d = {"a": 1, "b": 2}
+    s = ""
+    for k in d.keys()
+        k = str_upper(k)
+        s = s + k + " "
+    end
+    Print str_trim(s)
+    Print "lista intacta: [" + l[0] + "," + l[1] + ", " + l[2] + "]"
+end
