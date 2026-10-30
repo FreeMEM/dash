@@ -74,6 +74,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     runtime con nombres que se pueden enlazar (`dl_str_dup`, `dl_array_length`, `dl_array_get`, `dl_retain`,
     `dl_release`...: las de ./dash son `static`). El C de Tachyon pasa de `@c` a ficheros .c en sus librerías
     (tools/build_qjs.sh) casi sin cambios: los nombres de esa API.
+- D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
+  C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
+  dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
+  perfil de Tachyon qué rutinas del runtime pesan (candidatas: buscar en un diccionario, pedir y soltar bloques,
+  crear y comparar textos) y escribir solo las dos o tres de arriba; cada una con su test contra la versión de C
+  y su medida antes y después. Antes, lo que más rinde: llamar menos al runtime (hacer en línea lo frecuente).
 - D14 Fugas y uso tras liberar (pedido por el usuario el 2026-10-30, "como la herramienta de Linux": Valgrind). (1)
   Fugas: todos los tests de Tachyon con `tests/run.py --memcheck` y dashc, y la batería de Dash con memcheck; cada
   fuga, arreglada donde esté (código de dashc, runtime o Tachyon). (2) Uso tras liberar: con `--memcheck`, lo
