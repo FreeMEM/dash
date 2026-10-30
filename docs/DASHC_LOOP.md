@@ -740,4 +740,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   EventLoop acaban solos a los 2 s con código 0; textos.dash con Flush da la misma salida. Test en
   tests/unit/test_dash2_cli.py. Batería de dashc entera bien. Falta: que tools/emu_run.py y la extensión de VS Code
   compilen con dashc (siguen con dash1).
-- Pendiente: D16; D15; D9c, D9d; emu_run y la extensión con dashc; D8 (tamaño).
+- 2026-10-30, `tools/emu_run.py --dash2`: compila los .dash con ./dash (dashc) y, si dashc dice "./dash1" (C en el
+  programa, -O...), con ./dash1. La extensión de VS Code lo usa para "ejecutar en el emulador" (runCommand). Las
+  pruebas de la 1.x siguen sin --dash2. Probado: una ventana con --autoclose sale igual que con ./dash y un programa
+  con @native va a dash1 (tests/unit/test_dash2_cli.py). Los tests de la extensión (npm test) no arrancan aquí: solo
+  comprobada su sintaxis con node --check.
+- Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
+  D8 (tamaño).

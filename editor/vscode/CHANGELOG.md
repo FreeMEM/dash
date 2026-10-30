@@ -5,6 +5,8 @@
 - Dash 2.0: `./dash` is dashc (no C compiler) and `./dash1` the Dash that compiles through C. The tasks, the
   debugger and the MUI preview use `./dash1` where there is one, since they need what only it does (`--fpu`,
   `--cpu`, `--debug`, `DASH_TEST_AUTOCLOSE`, `DASH_PRINT_FLUSH`); with an older Dash, `./dash` as before.
+- "Run in the emulator" compiles with `./dash` (dashc, through `tools/emu_run.py --dash2`), which now has
+  `DASH_TEST_AUTOCLOSE` and `DASH_PRINT_FLUSH`; a program with C still goes to `./dash1`.
 
 ## 0.3.0 (2026-10-27)
 

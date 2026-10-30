@@ -680,11 +680,11 @@ async function extensionTests() {
     });
     await check('extension: run command with autoclose', () => {
         const c = ext.runCommand(repo, file, 5);
-        assert.strictEqual(c, `python3 '${repo}/tools/emu_run.py' --autoclose 5 '${file}'`);
+        assert.strictEqual(c, `python3 '${repo}/tools/emu_run.py' --dash2 --autoclose 5 '${file}'`);
     });
     await check('extension: quotes paths with spaces and quotes', () => {
         const c = ext.runCommand('/a b', "/x/it's.dash", 0);
-        assert.strictEqual(c, `python3 '/a b/tools/emu_run.py' '/x/it'\\''s.dash'`);
+        assert.strictEqual(c, `python3 '/a b/tools/emu_run.py' --dash2 '/x/it'\\''s.dash'`);
     });
     await check('extension: compile from the active editor', async () => {
         fakeVscode.window.activeTextEditor = { document: { languageId: 'dash', isDirty: false, fileName: file } };

@@ -66,6 +66,31 @@ class TestDash2Cli(unittest.TestCase):
             self.assertGreater(sizes["autoclose"], sizes["plain"])
             self.assertGreater(sizes["flush"], sizes["plain"])
 
+    def test_emu_run_dash2(self):
+        # tools/emu_run.py --dash2 (the VS Code extension's "run"): ./dash, and ./dash1 for a program with C
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import emu_run
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            plain = os.path.join(tmp, "a.dash")
+            with open(plain, "w") as f:
+                f.write('Main\n    Print "hola"\nend\n')
+            with_c = os.path.join(tmp, "c.dash")
+            with open(with_c, "w") as f:
+                f.write('@native func doble(x: Int) -> Int\n"""\n    return x * 2;\n"""\nend\n\nMain\n    Print doble(2)\nend\n')
+            old = emu_run.DASH2
+            emu_run.DASH2 = True
+            try:
+                emu_run.compile_dash(Path(plain), Path(tmp, "a"), False)
+                emu_run.compile_dash(Path(with_c), Path(tmp, "c"), False)
+            finally:
+                emu_run.DASH2 = old
+            r = self.run_dash(plain, "-o", os.path.join(tmp, "a_dashc"))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(os.path.join(tmp, "a"), "rb") as f1, open(os.path.join(tmp, "a_dashc"), "rb") as f2:
+                self.assertEqual(f1.read(), f2.read())
+            self.assertTrue(os.path.getsize(os.path.join(tmp, "c")) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()
