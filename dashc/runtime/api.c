@@ -596,6 +596,10 @@ STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
 /* un literal de dashc como texto de Dash fijo (dash_lit de gen68k.c, que deja 12 bytes delante para la cabecera):
    escapado, nunca se libera ni se escribe en su sitio */
 typedef char _dl_str_hdr_12[sizeof(_DashStrHdr) == 12 ? 1 : -1];
+/* (y lo que str_ours de gen68k.c lee en línea: el largo en +4, self en +8 y la clave) */
+typedef char _dl_str_hdr_len[__builtin_offsetof(_DashStrHdr, len) == 4 ? 1 : -1];
+typedef char _dl_str_hdr_self[__builtin_offsetof(_DashStrHdr, self) == 8 ? 1 : -1];
+typedef char _dl_str_key[_DASH_STR_KEY == 0xDA5C7E57UL ? 1 : -1];
 void dl_str_lit(STRPTR t) {
     _DashStrHdr *h = _DASH_STR_HDR(t);
     ULONG n = strlen((const char *)t);

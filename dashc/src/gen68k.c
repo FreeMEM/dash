@@ -1595,14 +1595,73 @@ static void gen_concat(Node *n)
     rt_call("_dl_str_concat", 2, 1);
 }
 
+/* ¿El texto de a0 es de Dash? (como _DASH_STR_OURS: impar no; self de la cabecera = cabecera + _DASH_STR_KEY; api.c
+   comprueba al compilar que la cabecera sigue siendo { size, len, self } de 12 bytes y la clave). Si lo es, a1 = su
+   cabecera; si no, a slow; nil, a nil_label */
+static void str_ours(int slow, int nil_label)
+{
+    w(0x2008);                                         /* move.l a0,d0 */
+    branch(CC_EQ, nil_label);
+    w(0x0800); w(0x0000);                              /* btst #0,d0 */
+    branch(CC_NE, slow);
+    w(0x43E8); w(0xFFF4);                              /* lea -12(a0),a1 */
+    w(0x2009);                                         /* move.l a1,d0 */
+    w(0x0680); l(0xDA5C7E57);                          /* addi.l #_DASH_STR_KEY,d0 */
+    w(0xB0A9); w(0x0008);                              /* cmp.l 8(a1),d0 */
+    branch(CC_NE, slow);
+}
+
+/* str_code(s, i) en línea, como _dash_str_code: un texto de Dash con su largo en la cabecera; si no, _dl_str_code */
+static void str_code_inline(Node *s, Node *i)
+{
+    Node *a[2];
+    int slow = new_label(), zero = new_label(), done = new_label();
+    a[0] = s;
+    a[1] = i;
+    args_to_stack(a, 2, NULL);
+    w(0x205F);                                         /* movea.l (sp)+,a0 */
+    w(0x221F);                                         /* move.l (sp)+,d1 */
+    sp_depth -= 8;
+    str_ours(slow, zero);
+    w(0xB2A9); w(0x0004);                              /* cmp.l 4(a1),d1 */
+    branch(CC_CC, zero);                               /* (sin signo: también i < 0) */
+    w(0x7000);                                         /* moveq #0,d0 */
+    w(0x1030); w(0x1800);                              /* move.b 0(a0,d1.l),d0 */
+    branch(CC_T, done);
+    def_label(slow);
+    w(0x2F01); w(0x2F08);                              /* move.l d1,-(sp); move.l a0,-(sp) */
+    jsr_sym("_dl_str_code");
+    w(0x508F);                                         /* addq.l #8,sp */
+    branch(CC_T, done);
+    def_label(zero);
+    w(0x7000);                                         /* moveq #0,d0 */
+    def_label(done);
+}
+
+/* s.length en línea: de la cabecera si es de Dash; si no, _dl_str_len */
+static void str_len_inline(Node *s)
+{
+    int slow = new_label(), zero = new_label(), done = new_label();
+    args_to_stack(&s, 1, NULL);
+    w(0x205F);                                         /* movea.l (sp)+,a0 */
+    sp_depth -= 4;
+    str_ours(slow, zero);
+    w(0x2029); w(0x0004);                              /* move.l 4(a1),d0 */
+    branch(CC_T, done);
+    def_label(slow);
+    w(0x2F08);                                         /* move.l a0,-(sp) */
+    jsr_sym("_dl_str_len");
+    w(0x588F);                                         /* addq.l #4,sp */
+    branch(CC_T, done);
+    def_label(zero);
+    w(0x7000);                                         /* moveq #0,d0 */
+    def_label(done);
+}
+
 /* s[i]: el byte, con signo (char en el C de ./dash) */
 static int gen_str_index(Node *n)
 {
-    Node *a[2];
-    a[0] = n->a;
-    a[1] = n->b;
-    args_to_stack(a, 2, NULL);
-    rt_call("_dl_str_code", 2, 0);
+    str_code_inline(n->a, n->b);
     w(0x4880); w(0x48C0);                              /* ext.w d0; ext.l d0 */
     return TY_CHAR;
 }
@@ -1627,7 +1686,11 @@ static int gen_str_slice(Node *n)
 static int gen_field(Node *n)
 {
     int t = expr_type(n->a);
-    if (!strcmp(n->name, "length") && (t == TY_STR || IS_ARR(t) || IS_DICT(t))) {
+    if (!strcmp(n->name, "length") && t == TY_STR) {
+        str_len_inline(n->a);
+        return TY_INT;
+    }
+    if (!strcmp(n->name, "length") && (IS_ARR(t) || IS_DICT(t))) {
         args_to_stack(&n->a, 1, NULL);
         rt_call(t == TY_STR ? "_dl_str_len" : IS_DICT(t) ? "_dl_dict_length" : "_dl_arr_length", 1, 0);
         return TY_INT;
@@ -3182,6 +3245,10 @@ static int gen_builtin(Node *n)
                 fatal_node(at, "task_start: %s corre a la vez que el programa y no puede %s", f->name, why);
             free(visited);
         }
+    }
+    if (!strcmp(n->name, "str_code") && n->args.n == 2 && expr_type(n->args.v[0]) == TY_STR) {
+        str_code_inline(n->args.v[0], n->args.v[1]);
+        return TY_INT;
     }
     for (b = 0; builtins[b].name; b++)
         if (!strcmp(builtins[b].name, n->name)) break;
