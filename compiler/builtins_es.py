@@ -639,6 +639,30 @@ DESC_ES = {
     "cx_broker": "El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, "
                  "título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se "
                  "quita al acabar el programa",
+    "cx_key_add": "Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "
+                  "\"rawmouse lalt mouse_leftpress\"): cx_command da 100 + n al pulsarla, y el evento no sigue; "
+                  "\"\" quita la tecla n; false si la descripción no vale (o no hay cx_broker)",
+    "wm_read": "Lee las ventanas de la pantalla del Workbench, de delante atrás (hasta 64): cuántas, para wm_id, "
+               "wm_title, wm_task, wm_box y wm_flags, hasta el siguiente wm_read",
+    "wm_id": "El id de la ventana i del último wm_read, para wm_set_box, wm_front... (0 fuera de la lista)",
+    "wm_title": "El título de la ventana i del último wm_read (\"\" si no tiene)",
+    "wm_task": "El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea "
+               "(\"Workbench\")",
+    "wm_box": "De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, "
+              "7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista",
+    "wm_flags": "De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, "
+                "16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester",
+    "wm_set_box": "Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene "
+                  "botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después",
+    "wm_front": "Una ventana delante de las demás; false si ya no está abierta",
+    "wm_back": "Una ventana detrás de las demás; false si ya no está abierta",
+    "wm_activate": "Hace activa una ventana (las teclas van a ella); false si ya no está abierta",
+    "wm_zip": "Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta",
+    "wm_active": "El id de la ventana activa, si está en la pantalla del Workbench; 0 si no",
+    "wm_at": "El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna",
+    "wm_pointer_x": "Dónde está el puntero en la pantalla del Workbench: la x",
+    "wm_pointer_y": "Dónde está el puntero en la pantalla del Workbench: la y",
+    "wm_bar_height": "El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas)",
     "cx_hotkey": "La tecla rápida de la commodity, según su descripción (\"ctrl alt t\"): cx_command da 6 al pulsarla; "
                  "false si la descripción no vale (o no hay cx_broker); \"\" la quita",
     "cx_command": "La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, "

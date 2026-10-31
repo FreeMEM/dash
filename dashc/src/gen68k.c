@@ -401,7 +401,7 @@ static long *win_off;         /* y dónde está su variable en los datos */
 /* EventLoop abiertos: su salida y, dentro de sus On, la profundidad y la pila (Stop) */
 typedef struct { int done, depth, sp; } EvLoop;
 static struct { EvLoop *v; int n, cap; } evloops;
-static int uses_keys, uses_click;   /* IDCMP de las ventanas */
+static int uses_keys, uses_click, uses_inactive;   /* IDCMP de las ventanas */
 /* GadTools, como ./dash: gadgets (GT_GetIMsg y On Gadget), gadgets o menús (sus IDCMP) y teclas de gadgets */
 static int uses_gadgets, needs_gt, gadget_keys;
 static int needs_area;   /* gfx_circle_fill...: la ventana prepara el relleno de áreas al abrirse */
@@ -5798,7 +5798,8 @@ static void gen_evloop(Node *n)
     }
     for (i = 0; i < n->body.n; i++) {
         Node *h = n->body.v[i];
-        static const long cls[] = {0x200 /* CLOSEWINDOW */, 0x400 /* RAWKEY */, 0x8 /* MOUSEBUTTONS */, -1, 0x40, 0x100};
+        static const long cls[] = {0x200 /* CLOSEWINDOW */, 0x400 /* RAWKEY */, 0x8 /* MOUSEBUTTONS */, -1, 0x40, 0x100,
+                                   0x8 /* MOUSEBUTTONS */, 0x80000 /* INACTIVEWINDOW */};
         int next = new_label(), skip = new_label();
         /* la clase está en d0 hasta aquí: cada On la compara y, si no es la suya, salta al siguiente */
         if (cls[h->val] >= -128 && cls[h->val] <= 127) {
@@ -5839,9 +5840,9 @@ static void gen_evloop(Node *n)
                     branch(CC_NE, skip);
                 }
             }
-        } else if (h->val == ON_CLICK) {
+        } else if (h->val == ON_CLICK || h->val == ON_RIGHTCLICK) {
             jsr_sym("_dl_event_code");
-            w(0xB0BC); l(0x68);                        /* cmp.l #SELECTDOWN,d0 */
+            w(0xB0BC); l(h->val == ON_CLICK ? 0x68 : 0x69);   /* cmp.l #SELECTDOWN (MENUDOWN),d0 */
             branch(CC_NE, skip);
         }
         {
@@ -6599,7 +6600,8 @@ static void find_uses(NodeList *l)
     for (i = 0; i < l->n; i++) {
         Node *n = l->v[i];
         if (n->kind == S_ON && n->val == ON_KEY) uses_keys = 1;
-        if (n->kind == S_ON && n->val == ON_CLICK) uses_click = 1;
+        if (n->kind == S_ON && (n->val == ON_CLICK || n->val == ON_RIGHTCLICK)) uses_click = 1;
+        if (n->kind == S_ON && n->val == ON_INACTIVE) uses_inactive = 1;
         if (n->kind == S_ON && n->val == ON_GADGET) uses_gadgets = needs_gt = 1;
         if (n->kind == S_ON && n->val == ON_MENU) needs_gt = 1;
         find_uses_expr(n->a);
@@ -6617,7 +6619,8 @@ static void gen_window_descs(void)
         WindowDef *wd = &prog->windows.v[i];
         long left = 50, top = 50, width = 0, height = 0, flags = 1 | 2 | 4 | 32, k;
         const char *title = "";
-        static const char *const fl[] = {"closegadget", "dragbar", "depthgadget", "sizegadget", "borderless", "activate"};
+        static const char *const fl[] = {"closegadget", "dragbar", "depthgadget", "sizegadget", "borderless", "activate",
+                                         "rmbtrap"};
         for (j = 0; j < wd->props.n; j++) {
             Node *v = wd->props.v[j];
             int f;
@@ -6632,9 +6635,9 @@ static void gen_window_descs(void)
             else if (!strcmp(v->name, "width")) width = k;
             else if (!strcmp(v->name, "height")) height = k;
             else {
-                for (f = 0; f < 6 && strcmp(fl[f], v->name); f++)
+                for (f = 0; f < 7 && strcmp(fl[f], v->name); f++)
                     ;
-                if (f < 6) flags = k ? flags | 1L << f : flags & ~(1L << f);
+                if (f < 7) flags = k ? flags | 1L << f : flags & ~(1L << f);
             }
         }
         def_label(win_desc_label[i]);
@@ -6646,6 +6649,7 @@ static void gen_window_descs(void)
         l((uint32_t)height);
         l((uint32_t)flags);
         l(0x200 | (uses_keys ? 0x400 : 0) | (uses_click ? 0x8 : 0) |   /* CLOSEWINDOW, RAWKEY, MOUSEBUTTONS */
+          (uses_inactive ? 0x80000 : 0) |                             /* INACTIVEWINDOW */
           (needs_gt ? 0x174 : 0));   /* GADGETUP, GADGETDOWN, MOUSEMOVE, MENUPICK, REFRESHWINDOW */
     }
 }

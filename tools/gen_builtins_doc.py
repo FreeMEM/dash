@@ -57,6 +57,7 @@ GROUPS = [
     ("TTF_FUNCTIONS", "Fuentes TrueType, WOFF y WOFF2", "TrueType, WOFF and WOFF2 fonts"),
     ("NETBG_FUNCTIONS", "Red en una tarea aparte", "Network in a task of its own"),
     ("OTHERWIN_FUNCTIONS", "Ventanas de otros programas (pruebas)", "Other programs' windows (tests)"),
+    ("WM_FUNCTIONS", "Gestor de ventanas (las de todos los programas)", "Window manager (every program's windows)"),
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),

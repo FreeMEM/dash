@@ -751,7 +751,7 @@ end
 ```
 
 Solo valen dentro de un `while` o `for`. Dentro de cualquier manejador `On ...` del `EventLoop`
-(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On Timer`), aunque el `EventLoop` esté
+(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On RightClick`, `On Inactive`, `On Timer`), aunque el `EventLoop` esté
 dentro de un bucle, son un error: para salir del `EventLoop` se usa `Stop`.
 
 ### Comandos de Control
@@ -1387,9 +1387,13 @@ end
 | `sizegadget` | Permite redimensionar (por defecto `false`) | Bool |
 | `borderless` | Sin bordes (por defecto `false`) | Bool |
 | `activate` | Activa la ventana al abrirla (por defecto `true`) | Bool |
+| `rmbtrap` | El botón derecho va al programa (`On RightClick`), no a los menús (por defecto `false`) | Bool |
 
 `closegadget`, `dragbar` y `depthgadget` valen `true` por defecto. Una propiedad
 desconocida o con un valor del tipo equivocado (`closegadget 1`) es un error.
+
+Con `title ""`, `borderless true` y los tres botones a `false`, la ventana no tiene barra de título
+(lo mismo `window_create("", x, y, w, h, 2 | 4)`).
 
 Se pueden leer `MiVentana.width`, `.height`, `.left`, `.top` y `.title`: con la ventana
 abierta dan el valor actual (tras redimensionarla o moverla); si no, el de la definición.
@@ -1418,7 +1422,7 @@ window_close(a)
 ```
 
 - `flags`: 1 = se puede redimensionar, 2 = sin bordes, 4 = sin boton de cerrar, 8 = ancho y alto son el
-  interior, sin los bordes (se suman).
+  interior, sin los bordes, 16 = el botón derecho al programa (`On RightClick`, como `rmbtrap`) (se suman).
 - Para que quepa con cualquier fuente: `screen_font_height()` y `screen_font_text_width(texto)` miden con la
   fuente de la pantalla (la del programa o la del Workbench), que es la de las barras de titulo y la de los
   gadgets de GadTools. Con la ventana abierta, `window_border_top()`, `window_border_bottom()`,
@@ -1894,6 +1898,12 @@ paso = 100
 EventLoop
     On Click            # boton izquierdo pulsado en la ventana
         Print "" + click_x() + "," + click_y()   # dentro de los bordes (donde se dibuja)
+    end
+    On RightClick       # boton derecho, en una ventana con rmbtrap (si no, abre los menus)
+        Print "derecho en " + click_x() + "," + click_y()
+    end
+    On Inactive         # la ventana dejo de ser la activa (se pulso fuera): event_window() dice cual
+        Print "fuera"
     end
     On Timer paso       # cada 100 ms (un numero o una variable, que se lee cada vez)
         Print "tic"

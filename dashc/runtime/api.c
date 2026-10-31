@@ -338,13 +338,14 @@ LONG dl_window_open(const struct DashWinDesc *d, struct Window **pvar)
     struct Window *w = OpenWindowTags(NULL,
         WA_Left, d->left, WA_Top, d->top,
         WA_Width, d->width, WA_Height, d->height,
-        WA_Title, (ULONG)d->title,
+        WA_Title, (ULONG)(d->title[0] ? d->title : NULL),   /* "": sin barra de título si no hay gadgets */
         WA_CloseGadget, (d->flags & 1) != 0,
         WA_DragBar, (d->flags & 2) != 0,
         WA_DepthGadget, (d->flags & 4) != 0,
         WA_SizeGadget, (d->flags & 8) != 0,
         WA_Borderless, (d->flags & 16) != 0,
         WA_Activate, (d->flags & 32) != 0,
+        WA_RMBTrap, (d->flags & 64) != 0,      /* rmbtrap: el botón derecho al programa (On RightClick), sin menús */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,

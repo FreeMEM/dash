@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 819 functions, 819 implemented, 0 not implemented.
+Total: 836 functions, 836 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -460,6 +460,7 @@ Total: 819 functions, 819 implemented, 0 not implemented.
 | `tooltype(name, default)` | `STRPTR` | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
 | `cx_broker(name, title, description, priority)` | `BOOL` | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | `cx_hotkey(description)` | `BOOL` | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
+| `cx_key_add(description, n)` | `BOOL` | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
 | `cx_command()` | `LONG` | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
 | `cx_wait(ms)` | `LONG` | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
 | `disks_read(ms)` | `LONG` | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
@@ -801,6 +802,27 @@ Total: 819 functions, 819 implemented, 0 not implemented.
 | `gadget_selected(win, n)` | `BOOL` | True if the gadget at place n (a checkbox) is selected |  |
 | `screen_pixel(x, y)` | `LONG` | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
 | `cx_send(name, command)` | `LONG` | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
+
+## Window manager (every program's windows)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `wm_read()` | `LONG` | Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, wm_title, wm_task, wm_box and wm_flags, until the next wm_read |  |
+| `wm_id(i)` | `LONG` | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
+| `wm_title(i)` | `STRPTR` | The title of window i of the last wm_read ("" if it has none) |  |
+| `wm_task(i)` | `STRPTR` | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
+| `wm_box(i, what)` | `LONG` | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
+| `wm_flags(i)` | `LONG` | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
+| `wm_set_box(id, x, y, width, height)` | `BOOL` | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
+| `wm_front(id)` | `BOOL` | A window in front of the others; false if it is not open any more |  |
+| `wm_back(id)` | `BOOL` | A window behind the others; false if it is not open any more |  |
+| `wm_activate(id)` | `BOOL` | Make a window the active one (keys go to it); false if it is not open any more |  |
+| `wm_zip(id)` | `BOOL` | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| `wm_active()` | `LONG` | The id of the active window, if it is on the Workbench screen; 0 if not |  |
+| `wm_at(x, y)` | `LONG` | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
+| `wm_pointer_x()` | `LONG` | Where the pointer is on the Workbench screen: x |  |
+| `wm_pointer_y()` | `LONG` | Where the pointer is on the Workbench screen: y |  |
+| `wm_bar_height()` | `LONG` | The height of the Workbench screen's title bar (where windows usually start) |  |
 
 ## Audio
 

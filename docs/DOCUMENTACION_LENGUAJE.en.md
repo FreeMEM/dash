@@ -314,7 +314,8 @@ end
 ```
 
 `On Key` (one key, or any key if nothing is given), `On Close`, `On Gadget` (gadgets by number), `On Menu` (menus),
-`On Click` (left button in the window: `click_x()`, `click_y()`) and `On Timer 100` (every 100 ms; takes a
+`On Click` (left button in the window: `click_x()`, `click_y()`), `On RightClick` (the right one, in a window
+with `rmbtrap`), `On Inactive` (the window stopped being the active one) and `On Timer 100` (every 100 ms; takes a
 number or a variable). There are also windows created from code
 (`window_create`, by number; the `EventLoop` handles them and `event_window()` tells which one), custom screens
 (`screen_open`) and RTG.

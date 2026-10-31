@@ -191,6 +191,10 @@ Main
         end
         On Click           # left button in the window: click_x(), click_y() inside the borders
         end
+        On RightClick      # right button, in a window with rmbtrap true (window_create flag 16)
+        end
+        On Inactive        # the window stopped being the active one; event_window(): which
+        end
         On Timer 100       # every 100 ms (a number or a variable)
         end
         On Gadget          # gadget_id(): the gadget used; event_window(): its window (window_create)

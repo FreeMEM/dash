@@ -314,7 +314,8 @@ end
 ```
 
 `On Key` (una tecla, o sin nada cualquiera), `On Close`, `On Gadget` (gadgets por número), `On Menu` (menús),
-`On Click` (botón izquierdo en la ventana: `click_x()`, `click_y()`) y `On Timer 100` (cada 100 ms; vale un
+`On Click` (botón izquierdo en la ventana: `click_x()`, `click_y()`), `On RightClick` (el derecho, en una
+ventana con `rmbtrap`), `On Inactive` (la ventana dejó de ser la activa) y `On Timer 100` (cada 100 ms; vale un
 número o una variable). También ventanas desde el código
 (`window_create`, con número; el `EventLoop` las atiende y `event_window()` dice cuál), pantallas propias
 (`screen_open`) y RTG.

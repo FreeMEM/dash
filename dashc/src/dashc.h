@@ -201,7 +201,7 @@ typedef struct {
     struct { long *v; int n, cap; } vals;
 } Enum;
 
-enum { ON_CLOSE, ON_KEY, ON_CLICK, ON_TIMER, ON_GADGET, ON_MENU };
+enum { ON_CLOSE, ON_KEY, ON_CLICK, ON_TIMER, ON_GADGET, ON_MENU, ON_RIGHTCLICK, ON_INACTIVE };
 
 /* Window Nombre ... end: sus propiedades (title, width...), cada una con su valor */
 typedef struct {

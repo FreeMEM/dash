@@ -1,0 +1,32 @@
+# Test: a borderless window with title "" and no gadgets has no title bar (WA_Title NULL: Intuition draws one
+# for a title "", and GimmeZeroZero moves the drawing below it); window_create with flags 2 | 4 too
+#
+# expect-c: WA_Title, (ULONG)NULL,
+# expect-out: 0
+# expect-out: 0
+# expect-out: 0
+
+Window Barra
+    title ""
+    width 200
+    height 24
+    left 0
+    top 0
+    borderless true
+    closegadget false
+    dragbar false
+    depthgadget false
+    activate false
+end
+
+Main
+    Barra.open
+    Print window_border_top()
+    Barra.close
+    w = window_create("", 0, 0, 200, 24, 2 | 4)
+    Print window_border_top()
+    window_close(w)
+    w = window_create("", 0, 30, 200, 24, 2 | 4 | 8)
+    Print window_border_top()
+    window_close(w)
+end

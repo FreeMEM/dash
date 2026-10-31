@@ -46,6 +46,12 @@ func ventana()
         On Click
             Print click_x()
         end
+        On RightClick
+            Print click_y()
+        end
+        On Inactive
+            Print event_window()
+        end
         On Timer 100
             Print "tic"
         end

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 819 funciones, 819 implementadas, 0 sin implementar.
+Total: 836 funciones, 836 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -460,6 +460,7 @@ Total: 819 funciones, 819 implementadas, 0 sin implementar.
 | `tooltype(name, default)` | `STRPTR` | Un tooltype del programa: desde el Shell, el argumento NOMBRE=valor (también NOMBRE="a b"); si no (o desde el Workbench), el tooltype de su icono; default si no está en ninguno |  |
 | `cx_broker(name, title, description, priority)` | `BOOL` | El programa en Exchange como commodity, con Mostrar y Ocultar, activado (nombre de hasta 23 letras, título y descripción de hasta 39); false sin commodities.library o si ya hay uno con ese nombre. Se quita al acabar el programa |  |
 | `cx_hotkey(description)` | `BOOL` | La tecla rápida de la commodity, según su descripción ("ctrl alt t"): cx_command da 6 al pulsarla; false si la descripción no vale (o no hay cx_broker); "" la quita |  |
+| `cx_key_add(description, n)` | `BOOL` | Una tecla rápida más para la commodity (hasta 32, n de 1 a 32; también un botón del ratón: "rawmouse lalt mouse_leftpress"): cx_command da 100 + n al pulsarla, y el evento no sigue; "" quita la tecla n; false si la descripción no vale (o no hay cx_broker) |  |
 | `cx_command()` | `LONG` | La siguiente orden de Exchange o de la tecla rápida: 0 ninguna, 1 ocultar, 2 mostrar, 3 desactivar, 4 activar, 5 quitar, 6 tecla rápida. Desactivar y activar apagan y encienden la commodity (y su tecla) |  |
 | `cx_wait(ms)` | `LONG` | Espera, sin gastar nada, hasta que llegue una orden (la da como cx_command), un Ctrl-C (-1, se borra) o pasen ms milisegundos (0) |  |
 | `disks_read(ms)` | `LONG` | Lee los volúmenes montados (con disco dentro), su tamaño y su espacio libre, preguntando a todos a la vez y esperando como mucho ms milisegundos: cuántos hay. No pide ningún disco |  |
@@ -801,6 +802,27 @@ Total: 819 funciones, 819 implementadas, 0 sin implementar.
 | `gadget_selected(win, n)` | `BOOL` | True si el gadget del sitio n (una casilla) está marcado |  |
 | `screen_pixel(x, y)` | `LONG` | El color del píxel (x, y) de la pantalla de delante; -1 fuera de ella |  |
 | `cx_send(name, command)` | `LONG` | Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 ocultar, 23 quitar...): 0 hecho, -1 no hay esa commodity, -2 no tiene puerto, -99 no hay commodities.library |  |
+
+## Gestor de ventanas (las de todos los programas)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `wm_read()` | `LONG` | Lee las ventanas de la pantalla del Workbench, de delante atrás (hasta 64): cuántas, para wm_id, wm_title, wm_task, wm_box y wm_flags, hasta el siguiente wm_read |  |
+| `wm_id(i)` | `LONG` | El id de la ventana i del último wm_read, para wm_set_box, wm_front... (0 fuera de la lista) |  |
+| `wm_title(i)` | `STRPTR` | El título de la ventana i del último wm_read ("" si no tiene) |  |
+| `wm_task(i)` | `STRPTR` | El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea ("Workbench") |  |
+| `wm_box(i, what)` | `LONG` | De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, 7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista |  |
+| `wm_flags(i)` | `LONG` | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester |  |
+| `wm_set_box(id, x, y, width, height)` | `BOOL` | Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después |  |
+| `wm_front(id)` | `BOOL` | Una ventana delante de las demás; false si ya no está abierta |  |
+| `wm_back(id)` | `BOOL` | Una ventana detrás de las demás; false si ya no está abierta |  |
+| `wm_activate(id)` | `BOOL` | Hace activa una ventana (las teclas van a ella); false si ya no está abierta |  |
+| `wm_zip(id)` | `BOOL` | Una ventana a su otro tamaño, como su botón de zoom; false si ya no está abierta |  |
+| `wm_active()` | `LONG` | El id de la ventana activa, si está en la pantalla del Workbench; 0 si no |  |
+| `wm_at(x, y)` | `LONG` | El id de la ventana que hay en (x, y) de la pantalla del Workbench, la de delante; 0 si ninguna |  |
+| `wm_pointer_x()` | `LONG` | Dónde está el puntero en la pantalla del Workbench: la x |  |
+| `wm_pointer_y()` | `LONG` | Dónde está el puntero en la pantalla del Workbench: la y |  |
+| `wm_bar_height()` | `LONG` | El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas) |  |
 
 ## Audio
 

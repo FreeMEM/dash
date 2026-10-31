@@ -13,7 +13,7 @@ from string import Template
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -3600,6 +3600,7 @@ extern struct WBStartup *_WBenchMsg;
 static BOOL _dash_cx_lib_ours = FALSE, _dash_icon_lib_ours = FALSE;
 static struct MsgPort *_dash_cx_port = NULL;
 static CxObj *_dash_cx_broker = NULL, *_dash_cx_key = NULL;
+static CxObj *_dash_cx_keys[33];       /* the hotkeys of cx_key_add, by n */
 static struct MsgPort *_dash_cx_tport = NULL;
 static struct timerequest *_dash_cx_tr = NULL;
 #define _DASH_CX_KEY_ID 1
@@ -3690,7 +3691,7 @@ static STRPTR _dash_tooltype(STRPTR name, STRPTR dflt) {
 
 static void _dash_cx_cleanup(void) {
     struct Message *m;
-    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; }
+    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; memset(_dash_cx_keys, 0, sizeof(_dash_cx_keys)); }
     if (_dash_cx_port) {
         while ((m = GetMsg(_dash_cx_port))) ReplyMsg(m);
         DeleteMsgPort(_dash_cx_port);
@@ -3720,7 +3721,7 @@ static BOOL _dash_cx_broker_new(STRPTR name, STRPTR title, STRPTR descr, LONG pr
     _dash_cx_at_exit();
     if (!CxBase) { CxBase = OpenLibrary((CONST_STRPTR)"commodities.library", 37); _dash_cx_lib_ours = CxBase != NULL; }
     if (!CxBase || !name || !*name) return FALSE;
-    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; }
+    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; memset(_dash_cx_keys, 0, sizeof(_dash_cx_keys)); }
     if (!_dash_cx_port && !(_dash_cx_port = CreateMsgPort())) return FALSE;
     strncpy(n, (char *)name, sizeof(n) - 1); n[sizeof(n) - 1] = 0;
     strncpy(t, title ? (char *)title : n, sizeof(t) - 1); t[sizeof(t) - 1] = 0;
@@ -3758,7 +3759,31 @@ static BOOL _dash_cx_hotkey(STRPTR descr) {
     return TRUE;
 }
 
-/* The next command: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill (remove), 6 the hotkey. Disable and
+/* One more hotkey (n from 1 to 32): cx_command gives 100 + n; the event is eaten (CX_TRANSLATE to nothing).
+   They go with the broker (DeleteCxObjAll); a second one with the same n replaces the first, and "" takes it
+   away. */
+static BOOL _dash_cx_key_add(STRPTR descr, LONG n) {
+    IX ix;
+    CxObj *filter;
+    if (!_dash_cx_broker || n < 1 || n > 32) return FALSE;
+    if (!descr || !*descr) {                  /* "": that one goes */
+        if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); _dash_cx_keys[n] = NULL; }
+        return TRUE;
+    }
+    memset(&ix, 0, sizeof(ix));
+    if (ParseIX((CONST_STRPTR)descr, &ix) != 0) return FALSE;
+    if (!(filter = CreateCxObj(CX_FILTER, (LONG)descr, 0))) return FALSE;
+    AttachCxObj(filter, CreateCxObj(CX_SEND, (LONG)_dash_cx_port, 100 + n));
+    AttachCxObj(filter, CreateCxObj(CX_TRANSLATE, 0, 0));
+    if (CxObjError(filter)) { DeleteCxObjAll(filter); return FALSE; }
+    if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); }
+    AttachCxObj(_dash_cx_broker, filter);
+    _dash_cx_keys[n] = filter;
+    return TRUE;
+}
+
+/* The next command: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill (remove), 6 the hotkey (100 + n, the
+   hotkey n of cx_key_add). Disable and
    enable switch the broker itself (Exchange shows it, the hotkey does nothing while it is off). */
 static LONG _dash_cx_command(void) {
     CxMsg *m;
@@ -3768,6 +3793,7 @@ static LONG _dash_cx_command(void) {
         LONG r = 0;
         ReplyMsg((struct Message *)m);
         if (type == CXM_IEVENT && id == _DASH_CX_KEY_ID) r = 6;
+        else if (type == CXM_IEVENT && id > 100 && id <= 132) r = (LONG)id;
         else if (type == CXM_COMMAND) {
             switch (id) {
             case CXCMD_DISAPPEAR: r = 1; break;
@@ -3834,6 +3860,199 @@ static LONG _dash_cx_wait(LONG ms) {
 
     # Disks, network interfaces and WiFi signal for a meter (Trasfondo): every reading is made afresh and
     # nothing waits longer than its time
+    # Trasfondo 2.0: TrasfondoVentanas moves, sizes and tiles the windows of every program
+    WM_RUNTIME = """\
+/* Dash window manager runtime (Trasfondo 2.0): the windows of the Workbench screen (the default public
+   screen), front to back by their layers, with their box, limits, flags and the task they belong to
+   (wm_read and wm_*(i)); and, by the id wm_id gives, moving and sizing them (ChangeWindowBox, within their
+   limits and the screen), in front, behind, active or zipped. An id is checked under Forbid against the
+   screens' window lists before each call: a window closed in between is not touched (false). The calls
+   do not wait for Intuition (it does them in input.device). Nothing patched. */
+#include <graphics/layers.h>
+#include <proto/layers.h>
+#define _DASH_WM_MAX 64
+static struct Window *_dash_wm_w[_DASH_WM_MAX];
+static LONG _dash_wm_n = 0;
+static WORD _dash_wm_box[_DASH_WM_MAX][8];
+static LONG _dash_wm_fl[_DASH_WM_MAX];
+static char _dash_wm_title[_DASH_WM_MAX][80];
+static char _dash_wm_task[_DASH_WM_MAX][32];
+
+/* The screen they are on: the default public one (the Workbench's), its pointer only to compare and read */
+static struct Screen *_dash_wm_screen(void) {
+    struct Screen *s = LockPubScreen(NULL);
+    if (s) UnlockPubScreen(NULL, s);
+    return s;
+}
+
+static void _dash_wm_copy(char *d, const UBYTE *src, LONG n, LONG size) {
+    if (!src) n = 0;
+    else if (n < 0) n = strlen((const char *)src);
+    if (n >= size) n = size - 1;
+    if (n > 0) CopyMem((APTR)src, d, n);
+    d[n] = 0;
+}
+
+/* Its task's name: of a Shell process its command (without the path), else the task's */
+static void _dash_wm_owner(struct Window *w, char *d) {
+    struct Task *t = w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL;
+    d[0] = 0;
+    if (!t) return;
+    if (t->tc_Node.ln_Type == NT_PROCESS) {
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(((struct Process *)t)->pr_CLI);
+        UBYTE *b = cli ? (UBYTE *)BADDR(cli->cli_CommandName) : NULL;
+        if (b && b[0]) {
+            LONG i = b[0];
+            while (i > 0 && b[i] != '/' && b[i] != ':') i--;
+            _dash_wm_copy(d, b + i + 1, b[0] - i, 32);
+            return;
+        }
+    }
+    _dash_wm_copy(d, (UBYTE *)t->tc_Node.ln_Name, -1, 32);
+}
+
+/* Read the windows: how many (up to 64), for wm_*(i) until the next wm_read */
+static LONG _dash_wm_read(void) {
+    struct Screen *s = _dash_wm_screen();
+    struct Layer *l;
+    struct Task *me = FindTask(NULL);
+    _dash_wm_n = 0;
+    if (!s) return 0;
+    LockLayerInfo(&s->LayerInfo);
+    for (l = s->LayerInfo.top_layer; l && _dash_wm_n < _DASH_WM_MAX; l = l->back) {
+        struct Window *w = (struct Window *)l->Window;
+        LONG i, f = 0;
+        if (!w || l != w->WLayer) continue;      /* (a GimmeZeroZero window has two layers) */
+        i = _dash_wm_n++;
+        _dash_wm_w[i] = w;
+        _dash_wm_box[i][0] = w->LeftEdge;
+        _dash_wm_box[i][1] = w->TopEdge;
+        _dash_wm_box[i][2] = w->Width;
+        _dash_wm_box[i][3] = w->Height;
+        _dash_wm_box[i][4] = w->MinWidth;
+        _dash_wm_box[i][5] = w->MinHeight;
+        _dash_wm_box[i][6] = w->MaxWidth;
+        _dash_wm_box[i][7] = w->MaxHeight;
+        if (w->Flags & WFLG_SIZEGADGET) f |= 1;
+        if (w->Flags & WFLG_BACKDROP) f |= 2;
+        if (w->Flags & WFLG_BORDERLESS) f |= 4;
+        if (w->Flags & WFLG_WINDOWACTIVE) f |= 8;
+        if (w->Flags & WFLG_DRAGBAR) f |= 16;
+        if (w->UserPort && w->UserPort->mp_SigTask == me) f |= 32;
+        if (w->Flags & WFLG_WBENCHWINDOW) f |= 64;
+        if (w->FirstRequest) f |= 128;
+        _dash_wm_fl[i] = f;
+        _dash_wm_copy(_dash_wm_title[i], w->Title, -1, 80);
+        _dash_wm_owner(w, _dash_wm_task[i]);
+    }
+    UnlockLayerInfo(&s->LayerInfo);
+    return _dash_wm_n;
+}
+
+static LONG _dash_wm_id(LONG i) { return i >= 0 && i < _dash_wm_n ? (LONG)_dash_wm_w[i] : 0; }
+static STRPTR _dash_wm_title_of(LONG i) {
+    return _dash_str_dup(i >= 0 && i < _dash_wm_n ? (STRPTR)_dash_wm_title[i] : (STRPTR)"", TRUE);
+}
+static STRPTR _dash_wm_task_of(LONG i) {
+    return _dash_str_dup(i >= 0 && i < _dash_wm_n ? (STRPTR)_dash_wm_task[i] : (STRPTR)"", TRUE);
+}
+static LONG _dash_wm_box_of(LONG i, LONG what) {
+    if (i < 0 || i >= _dash_wm_n || what < 0 || what > 7) return -1;
+    return _dash_wm_box[i][what];
+}
+static LONG _dash_wm_flags(LONG i) { return i >= 0 && i < _dash_wm_n ? _dash_wm_fl[i] : 0; }
+
+/* The window of that id if it is still open (call under Forbid); NULL if not */
+static struct Window *_dash_wm_find(LONG id) {
+    struct Screen *s;
+    struct Window *w;
+    if (!id) return NULL;
+    for (s = IntuitionBase->FirstScreen; s; s = s->NextScreen)
+        for (w = s->FirstWindow; w; w = w->NextWindow)
+            if ((LONG)w == id) return w;
+    return NULL;
+}
+
+/* Move and size: within its limits (the size stays if it has no size gadget) and inside its screen */
+static BOOL _dash_wm_set_box(LONG id, LONG x, LONG y, LONG wd, LONG ht) {
+    struct Window *w;
+    LONG sw, sh, maxw, maxh;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    sw = w->WScreen->Width;
+    sh = w->WScreen->Height;
+    if (!(w->Flags & WFLG_SIZEGADGET)) { wd = w->Width; ht = w->Height; }
+    maxw = (UWORD)w->MaxWidth;
+    maxh = (UWORD)w->MaxHeight;
+    if (maxw <= 0 || maxw > sw) maxw = sw;
+    if (maxh <= 0 || maxh > sh) maxh = sh;
+    if (wd > maxw) wd = maxw;
+    if (ht > maxh) ht = maxh;
+    if (wd < w->MinWidth) wd = w->MinWidth;
+    if (ht < w->MinHeight) ht = w->MinHeight;
+    if (wd > sw) wd = sw;
+    if (ht > sh) ht = sh;
+    if (x + wd > sw) x = sw - wd;
+    if (y + ht > sh) y = sh - ht;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    ChangeWindowBox(w, x, y, wd, ht);
+    Permit();
+    return TRUE;
+}
+
+/* 0 in front, 1 behind, 2 active, 3 zip (its other size, the one of its zoom gadget) */
+static BOOL _dash_wm_do(LONG id, LONG what) {
+    struct Window *w;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    switch (what) {
+    case 0: WindowToFront(w); break;
+    case 1: WindowToBack(w); break;
+    case 2: ActivateWindow(w); break;
+    case 3: ZipWindow(w); break;
+    }
+    Permit();
+    return TRUE;
+}
+
+/* The active window, if it is on the Workbench screen; 0 if not */
+static LONG _dash_wm_active(void) {
+    struct Screen *s = _dash_wm_screen();
+    ULONG lock = LockIBase(0);
+    struct Window *w = IntuitionBase->ActiveWindow;
+    LONG r = w && w->WScreen == s ? (LONG)w : 0;
+    UnlockIBase(lock);
+    return r;
+}
+
+/* The window at (x, y) of the Workbench screen, the one in front there; 0 if the background */
+static LONG _dash_wm_at(LONG x, LONG y) {
+    struct Screen *s = _dash_wm_screen();
+    struct Layer *l;
+    LONG r = 0;
+    if (!s) return 0;
+    LockLayerInfo(&s->LayerInfo);
+    l = WhichLayer(&s->LayerInfo, x, y);
+    if (l && l->Window) r = (LONG)l->Window;
+    UnlockLayerInfo(&s->LayerInfo);
+    return r;
+}
+
+/* Where the pointer is on the Workbench screen; the height of its title bar */
+static LONG _dash_wm_pointer(LONG y) {
+    struct Screen *s = _dash_wm_screen();
+    if (!s) return 0;
+    return y ? s->MouseY : s->MouseX;
+}
+
+static LONG _dash_wm_bar_height(void) {
+    struct Screen *s = _dash_wm_screen();
+    return s ? s->BarHeight + 1 : 0;
+}
+
+"""
+
     METER_RUNTIME = """\
 /* Dash meter runtime (Trasfondo): disks_read(ms), the mounted volumes with their size and free space (each
    handler is asked with ACTION_DISK_INFO and the answers waited for ms at most: one that does not answer is
@@ -12820,12 +13039,13 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
     win = OpenWindowTags(NULL,
         WA_Left, x, WA_Top, y,
         (flags & 8) ? WA_InnerWidth : WA_Width, w, (flags & 8) ? WA_InnerHeight : WA_Height, h,   /* 8: inside */
-        WA_Title, (ULONG)title,
+        WA_Title, (ULONG)(title && title[0] ? title : NULL),   /* "": no title bar if no gadgets */
         WA_CloseGadget, !(flags & 4),
         WA_DragBar, !(flags & 2),
         WA_DepthGadget, !(flags & 2),
         WA_SizeGadget, (flags & 1) != 0,
         WA_Borderless, (flags & 2) != 0,
+        WA_RMBTrap, (flags & 16) != 0,   /* 16: the right button to the program (On RightClick), no menus */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_Activate, TRUE,
@@ -19747,6 +19967,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_DepthGadget, $depthgadget,
         WA_SizeGadget, $sizegadget,
         WA_Borderless, $borderless,
+        WA_RMBTrap, $rmbtrap,
         WA_Activate, $activate,
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
@@ -19922,6 +20143,7 @@ _RUNTIME_FLAGS = [
     ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
     ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
+    ("WM_RUNTIME", "uses_wm"),              # Trasfondo 2.0: the windows of every program
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
@@ -20221,6 +20443,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_tasks: bool = False    # task_start... (TASK_RUNTIME, dashweb D47)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
+        self.uses_inactive: bool = False  # On Inactive: windows ask for IDCMP_INACTIVEWINDOW
         self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
@@ -20228,6 +20451,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
+        self.uses_wm: bool = False       # wm_read, wm_set_box... (WM_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
@@ -20332,8 +20556,10 @@ class CodeGenerator(ASTVisitor):
             if isinstance(n, FunctionCall) and n.name in area_funcs:
                 self.needs_area = True
             # Windows must ask Intuition for key events before they open
-            if isinstance(n, OnClickHandler):
+            if isinstance(n, (OnClickHandler, OnRightClickHandler)):
                 self.uses_click = True        # the window asks for mouse buttons when it opens
+            if isinstance(n, OnInactiveHandler):
+                self.uses_inactive = True
             if isinstance(n, OnTimerHandler):
                 self.uses_loop_timer = True
             if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
@@ -20525,7 +20751,8 @@ class CodeGenerator(ASTVisitor):
 
         if self.uses_winmgr:
             idcmp = ("IDCMP_CLOSEWINDOW" + (" | IDCMP_RAWKEY" if self.uses_keys else "")
-                     + (" | IDCMP_MOUSEBUTTONS" if self.uses_click else ""))
+                     + (" | IDCMP_MOUSEBUTTONS" if self.uses_click else "")
+                     + (" | IDCMP_INACTIVEWINDOW" if self.uses_inactive else ""))
             parts.append(f"#define _DASH_WIN_IDCMP ({idcmp})\n"
                          "static void _dash_window_closed(struct Window *win);\n")
             parts.append(CTemplates.WINMGR_RUNTIME)
@@ -20564,6 +20791,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CX_RUNTIME)
         if self.uses_meter:
             parts.append(CTemplates.METER_RUNTIME)
+        if self.uses_wm:
+            parts.append(CTemplates.WM_RUNTIME)
         if self.uses_mouse:
             parts.append(CTemplates.MOUSE_RUNTIME)
         if self.uses_catalog:
@@ -21416,6 +21645,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.idcmp_flags.add("IDCMP_RAWKEY")
         if self.uses_click:
             self.context.idcmp_flags.add("IDCMP_MOUSEBUTTONS")
+        if self.uses_inactive:
+            self.context.idcmp_flags.add("IDCMP_INACTIVEWINDOW")
         idcmp_str = " | ".join(sorted(self.context.idcmp_flags))
 
         # Get window properties with defaults
@@ -21425,12 +21656,13 @@ static {ret_type} {method_name}({params_str}) {{
             top=self._get_window_prop(window_def, "top", 50),
             width=window_def.width,
             height=window_def.height,
-            title=window_def.title,
+            title="NULL" if window_def.title == '""' else window_def.title,   # "": no title bar
             closegadget=self._get_window_prop(window_def, "closegadget", "TRUE"),
             dragbar=self._get_window_prop(window_def, "dragbar", "TRUE"),
             depthgadget=self._get_window_prop(window_def, "depthgadget", "TRUE"),
             sizegadget=self._get_window_prop(window_def, "sizegadget", "FALSE"),
             borderless=self._get_window_prop(window_def, "borderless", "FALSE"),
+            rmbtrap=self._get_window_prop(window_def, "rmbtrap", "FALSE"),
             activate=self._get_window_prop(window_def, "activate", "TRUE"),
             idcmp_flags=idcmp_str
         )
@@ -21467,7 +21699,7 @@ static {ret_type} {method_name}({params_str}) {{
         # Start event loop
         key_record = ("            if (msg_class == IDCMP_RAWKEY) _dash_key_record(msg);\n"
                       if self.uses_keys else "")
-        if any(isinstance(h, OnClickHandler) for h in node.handlers):
+        if any(isinstance(h, (OnClickHandler, OnRightClickHandler)) for h in node.handlers):
             # where, before the message goes back: inside the borders (the window's own
             # coordinates for drawing, also in GimmeZeroZero windows)
             key_record += ("            if (msg_class == IDCMP_MOUSEBUTTONS) { _dash_click_x = msg->MouseX - msg->IDCMPWindow->BorderLeft; "
@@ -21522,8 +21754,9 @@ static {ret_type} {method_name}({params_str}) {{
         # Generate handlers; all On Key handlers share one "case IDCMP_RAWKEY"
         key_handlers = [h for h in node.handlers if isinstance(h, OnKeyHandler)]
         for handler in node.handlers:
-            if not isinstance(handler, (OnKeyHandler, OnTimerHandler)):
+            if not isinstance(handler, (OnKeyHandler, OnTimerHandler, OnClickHandler, OnRightClickHandler)):
                 self.visit(handler)
+        self._generate_button_handlers([h for h in node.handlers if isinstance(h, (OnClickHandler, OnRightClickHandler))])
         if key_handlers:
             self._generate_key_handlers(key_handlers)
 
@@ -21562,15 +21795,31 @@ static {ret_type} {method_name}({params_str}) {{
         )
         self.emit(code)
 
-    def visit_OnClickHandler(self, node: OnClickHandler):
-        """On Click: the left button went down in the window (click_x(), click_y())."""
+    def _generate_button_handlers(self, handlers):
+        """On Click (the left button went down in the window) and On RightClick (the right one, in a window
+        with rmbtrap), click_x() and click_y() where: one "case IDCMP_MOUSEBUTTONS" for both."""
+        if not handlers:
+            return
         self.uses_click = True
-        self.emit("                case IDCMP_MOUSEBUTTONS:\n                    if (msg_code == SELECTDOWN) {\n")
+        self.emit("                case IDCMP_MOUSEBUTTONS:\n")
+        for h in handlers:
+            code = "SELECTDOWN" if isinstance(h, OnClickHandler) else "MENUDOWN"
+            self.emit(f"                    if (msg_code == {code}) {{\n")
+            self.context.enter_scope("handler")
+            body = "".join(self._generate_statement(stmt) for stmt in h.body)
+            body += self._frees(self.context.current_owned())
+            self.context.exit_scope()
+            self.emit(body + "                    }\n")
+        self.emit("                    break;\n")
+
+    def visit_OnInactiveHandler(self, node: OnInactiveHandler):
+        """On Inactive: a window stopped being the active one (event_window() tells which)."""
+        self.emit("                case IDCMP_INACTIVEWINDOW: {\n")
         self.context.enter_scope("handler")
         body = "".join(self._generate_statement(stmt) for stmt in node.body)
         body += self._frees(self.context.current_owned())
         self.context.exit_scope()
-        self.emit(body + "                    }\n                    break;\n")
+        self.emit(body + "                    break;\n                }\n")
 
     def visit_OnMenuHandler(self, node: OnMenuHandler):
         """On Menu: an item of the menus made with menu_title/menu_item... was chosen; the
@@ -23381,8 +23630,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_catalog = True   # @catalog: its runtime even before any tr
         if self.uses_catalog or self.uses_date:
             self.uses_strings = True   # catalog_language and date_text give a String
-        if self.uses_cx or self.uses_meter or self.uses_mouse:
-            self.uses_strings = True   # tooltype, disk_name and net_if_name give a String
+        if self.uses_cx or self.uses_meter or self.uses_mouse or self.uses_wm:
+            self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:

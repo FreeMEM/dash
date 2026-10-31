@@ -4369,6 +4369,12 @@ TASK_FUNCTIONS = {
         c_template="_dash_cx_hotkey(${description})",
         description="The commodity's hotkey, from its description (\"ctrl alt t\"): cx_command gives 6 when it is "
                     "pressed; false if the description is not valid (or there is no cx_broker); \"\" takes it away"),
+    "cx_key_add": BuiltinFunc(
+        name="cx_key_add", params=["description", "n"], return_type="BOOL",
+        c_template="_dash_cx_key_add(${description}, ${n})",
+        description="One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: \"rawmouse "
+                    "lalt mouse_leftpress\"): cx_command gives 100 + n when it is pressed, and the event goes no "
+                    "further; \"\" takes hotkey n away; false if the description is not valid (or there is no cx_broker)"),
     "cx_command": BuiltinFunc(
         name="cx_command", params=[], return_type="LONG",
         c_template="_dash_cx_command()",
@@ -4379,6 +4385,61 @@ TASK_FUNCTIONS = {
         c_template="_dash_cx_wait(${ms})",
         description="Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) "
                     "or ms milliseconds pass (0)"),
+    # Trasfondo 2.0: the windows of every program on the Workbench screen (TrasfondoVentanas)
+    "wm_read": BuiltinFunc(
+        name="wm_read", params=[], return_type="LONG", c_template="_dash_wm_read()",
+        description="Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, "
+                    "wm_title, wm_task, wm_box and wm_flags, until the next wm_read"),
+    "wm_id": BuiltinFunc(
+        name="wm_id", params=["i"], return_type="LONG", c_template="_dash_wm_id(${i})",
+        description="The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list)"),
+    "wm_title": BuiltinFunc(
+        name="wm_title", params=["i"], return_type="STRPTR", c_template="_dash_wm_title_of(${i})",
+        description="The title of window i of the last wm_read (\"\" if it has none)"),
+    "wm_task": BuiltinFunc(
+        name="wm_task", params=["i"], return_type="STRPTR", c_template="_dash_wm_task_of(${i})",
+        description="The program of window i: the command of a Shell process (without its path), else its task's "
+                    "name (\"Workbench\")"),
+    "wm_box": BuiltinFunc(
+        name="wm_box", params=["i", "what"], return_type="LONG", c_template="_dash_wm_box_of(${i}, ${what})",
+        description="Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum "
+                    "width, 7 maximum height (0 or 65535: no limit); -1 outside the list"),
+    "wm_flags": BuiltinFunc(
+        name="wm_flags", params=["i"], return_type="LONG", c_template="_dash_wm_flags(${i})",
+        description="Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, "
+                    "32 the program's own, 64 a Workbench drawer, 128 with a requester open"),
+    "wm_set_box": BuiltinFunc(
+        name="wm_set_box", params=["id", "x", "y", "width", "height"], return_type="BOOL",
+        c_template="_dash_wm_set_box(${id}, ${x}, ${y}, ${width}, ${height})",
+        description="Move and size a window by its id, within its limits and its screen (one without a size "
+                    "gadget keeps its size); false if it is not open any more. Intuition does it right after"),
+    "wm_front": BuiltinFunc(
+        name="wm_front", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 0)",
+        description="A window in front of the others; false if it is not open any more"),
+    "wm_back": BuiltinFunc(
+        name="wm_back", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 1)",
+        description="A window behind the others; false if it is not open any more"),
+    "wm_activate": BuiltinFunc(
+        name="wm_activate", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 2)",
+        description="Make a window the active one (keys go to it); false if it is not open any more"),
+    "wm_zip": BuiltinFunc(
+        name="wm_zip", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 3)",
+        description="A window to its other size, as its zoom gadget does; false if it is not open any more"),
+    "wm_active": BuiltinFunc(
+        name="wm_active", params=[], return_type="LONG", c_template="_dash_wm_active()",
+        description="The id of the active window, if it is on the Workbench screen; 0 if not"),
+    "wm_at": BuiltinFunc(
+        name="wm_at", params=["x", "y"], return_type="LONG", c_template="_dash_wm_at(${x}, ${y})",
+        description="The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none"),
+    "wm_pointer_x": BuiltinFunc(
+        name="wm_pointer_x", params=[], return_type="LONG", c_template="_dash_wm_pointer(0)",
+        description="Where the pointer is on the Workbench screen: x"),
+    "wm_pointer_y": BuiltinFunc(
+        name="wm_pointer_y", params=[], return_type="LONG", c_template="_dash_wm_pointer(1)",
+        description="Where the pointer is on the Workbench screen: y"),
+    "wm_bar_height": BuiltinFunc(
+        name="wm_bar_height", params=[], return_type="LONG", c_template="_dash_wm_bar_height()",
+        description="The height of the Workbench screen's title bar (where windows usually start)"),
     # Trasfondo: disks, network and WiFi for a meter; each reading afresh, none waits longer than its time
     "disks_read": BuiltinFunc(
         name="disks_read", params=["ms"], return_type="LONG",
@@ -5304,6 +5365,9 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
     "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
     "image_decoded_free", "image_from_decoded"])
+WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
+    "wm_read", "wm_id", "wm_title", "wm_task", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
+    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
@@ -5346,6 +5410,7 @@ ALL_BUILTINS = {
     **TTF_FUNCTIONS,
     **NETBG_FUNCTIONS,
     **OTHERWIN_FUNCTIONS,
+    **WM_FUNCTIONS,
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

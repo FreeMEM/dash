@@ -751,7 +751,7 @@ end
 ```
 
 They are only valid inside a `while` or `for`. Inside any `On ...` handler of the `EventLoop`
-(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On Timer`), even if the `EventLoop` is
+(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On RightClick`, `On Inactive`, `On Timer`), even if the `EventLoop` is
 inside a loop, they are an error: to leave the `EventLoop` use `Stop`.
 
 ### Control Commands
@@ -1387,9 +1387,13 @@ end
 | `sizegadget` | Allows resizing (default `false`) | Bool |
 | `borderless` | No borders (default `false`) | Bool |
 | `activate` | Activates the window when it opens (default `true`) | Bool |
+| `rmbtrap` | The right button goes to the program (`On RightClick`), not to the menus (default `false`) | Bool |
 
 `closegadget`, `dragbar` and `depthgadget` are `true` by default. An unknown
 property or one with a value of the wrong type (`closegadget 1`) is an error.
+
+With `title ""`, `borderless true` and the three gadgets `false`, the window has no title bar
+(the same with `window_create("", x, y, w, h, 2 | 4)`).
 
 `MiVentana.width`, `.height`, `.left`, `.top` and `.title` can be read: with the window
 open they give the current value (after resizing or moving it); otherwise, the one in the definition.
@@ -1418,7 +1422,8 @@ window_close(a)
 ```
 
 - `flags`: 1 = resizable, 2 = borderless, 4 = no close button, 8 = width and height are the
-  interior, without the borders (they are added together).
+  interior, without the borders, 16 = the right button to the program (`On RightClick`, like `rmbtrap`) (they
+  are added together).
 - To make it fit with any font: `screen_font_height()` and `screen_font_text_width(texto)` measure with the
   screen font (the program's or the Workbench's), which is the one used by title bars and
   GadTools gadgets. With the window open, `window_border_top()`, `window_border_bottom()`,
@@ -1894,6 +1899,12 @@ paso = 100
 EventLoop
     On Click            # left button pressed in the window
         Print "" + click_x() + "," + click_y()   # inside the borders (where drawing happens)
+    end
+    On RightClick       # right button, in a window with rmbtrap (otherwise it opens the menus)
+        Print "right at " + click_x() + "," + click_y()
+    end
+    On Inactive         # the window stopped being the active one (a click outside): event_window() says which
+        Print "outside"
     end
     On Timer paso       # every 100 ms (a number or a variable, which is read each time)
         Print "tic"

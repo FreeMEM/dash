@@ -470,12 +470,13 @@ static Node *stmt(void)
         if (!strcmp(t->text, "Stop") && peek()->line != t->line)
             return node(S_STOP, t);
         if (!strcmp(t->text, "EventLoop")) {
-            /* EventLoop / On Close|Key ["x"|n]|Click|Timer n|Gadget|Menu ... end / end */
+            /* EventLoop / On Close|Key ["x"|n]|Click|Timer n|Gadget|Menu|RightClick|Inactive ... end / end */
             n = node(S_EVLOOP, t);
             while (!accept(K_END)) {
                 Token *on = expect(T_ID), *kind;
                 Node *h;
-                static const char *const names[] = {"Close", "Key", "Click", "Timer", "Gadget", "Menu", NULL};
+                static const char *const names[] = {"Close", "Key", "Click", "Timer", "Gadget", "Menu", "RightClick",
+                                                     "Inactive", NULL};
                 int i;
                 if (strcmp(on->text, "On")) fatal_at(on->line, on->col, "en un EventLoop va On ...");
                 kind = expect(T_ID);
