@@ -1391,6 +1391,9 @@ end
 `closegadget`, `dragbar` and `depthgadget` are `true` by default. An unknown
 property or one with a value of the wrong type (`closegadget 1`) is an error.
 
+With `title ""`, `borderless true` and the three gadgets `false`, the window has no title bar
+(the same with `window_create("", x, y, w, h, 2 | 4)`).
+
 `MiVentana.width`, `.height`, `.left`, `.top` and `.title` can be read: with the window
 open they give the current value (after resizing or moving it); otherwise, the one in the definition.
 `.inner_left`, `.inner_top`, `.inner_width` and `.inner_height` give the area inside the
