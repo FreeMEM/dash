@@ -32,7 +32,7 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
-### 2.0.0 (unreleased)
+### 2.0.0 (2026-10-31, pre-release: not in main yet)
 
 A new compiler. `./dash` is now **dashc**: written in C, it generates the 68000 code itself and links the
 executable with its runtime, without gcc or the Python with Lark of before. The 1.x compiler stays, unchanged, as
@@ -44,7 +44,8 @@ executable with its runtime, without gcc or the Python with Lark of before. The 
   1.x (all but one, because of the emulator's FPU). Building it needs only a C compiler for the PC and Python 3
   (`make -C dashc`). `./dash --version` says "Dash 2.0.0 (dashc)".
 - **On the Amiga:** dashc is also compiled for the Amiga (`make -C dashc amiga`, it runs on a 68000) and, from the
-  same input file, writes the same executable byte for byte as the PC one.
+  same input file, writes the same executable byte for byte as the PC one. To install it there,
+  `dash-2.0.0-amiga.lha` (from `tools/paquete_amiga.py`), with its installer: the Dash drawer and the `DASH:` assign.
 - **What to change:** a program with `@native`, `@c` or `@header`, to `./dash1`, or its C into an object with
   `@link` and `@extern`. The options `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk`, to `./dash1`. In both
   cases `./dash` gives an error with the `./dash1` command that does it. `--stack 0` no longer keeps the shell's

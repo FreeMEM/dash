@@ -33,7 +33,7 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
-### 2.0.0 (sin publicar)
+### 2.0.0 (2026-10-31, versión previa: todavía no está en main)
 
 Un compilador nuevo. `./dash` es ahora **dashc**: escrito en C, genera él mismo el código 68000 y enlaza el
 ejecutable con su runtime, sin gcc ni el Python con Lark de antes. El compilador de la 1.x sigue, sin cambios,
@@ -45,7 +45,8 @@ como `./dash1`. Sube el número mayor porque `./dash` deja de compilar los progr
   el emulador dan la misma salida que con la 1.x (salvo uno, por la FPU del emulador). Para construirlo basta un compilador de C del PC y Python 3
   (`make -C dashc`). `./dash --version` dice "Dash 2.0.0 (dashc)".
 - **En el Amiga:** dashc también se compila para el Amiga (`make -C dashc amiga`, corre en un 68000) y, con el
-  mismo fichero de entrada, escribe el mismo ejecutable byte a byte que el del PC.
+  mismo fichero de entrada, escribe el mismo ejecutable byte a byte que el del PC. Para instalarlo allí,
+  `dash-2.0.0-amiga.lha` (de `tools/paquete_amiga.py`), con su instalador: el cajón Dash y el `Assign DASH:`.
 - **Qué cambiar:** un programa con `@native`, `@c` o `@header`, a `./dash1`, o su C a un objeto con `@link` y
   `@extern`. Las opciones `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk`, a `./dash1`. En los dos casos
   `./dash` da un error con la orden de `./dash1` que lo hace. `--stack 0` ya no deja la pila del shell.

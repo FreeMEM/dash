@@ -4,14 +4,15 @@
 
 **Development Amiga Synthesis Hub**
 
-A high-level programming language that transpiles to C for the **Commodore Amiga**.
+A high-level programming language for the **Commodore Amiga**: its compiler (dashc) generates the 68000 code itself, on the PC or on the Amiga itself.
 
 Write clean code, synthesise native executables.
 
-Current version: **1.0.0** (`./dash --version`). What each number means and what each version brings: [docs/VERSIONES.en.md](docs/VERSIONES.en.md).
+Current version: **2.0.0** (`./dash --version`; the 1.x compiler, `./dash1`, is 1.0.1). What each number means and what each version brings: [docs/VERSIONES.en.md](docs/VERSIONES.en.md).
 
 ```
-Source (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → Amiga Executable
+Dash 2.0: Source (.dash) → dashc → 68000 code + runtime → Amiga executable
+Dash 1.x: Source (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → Amiga executable
 ```
 
 ## Why Dash
@@ -176,7 +177,7 @@ debugging and debugging on a real Amiga.
 
 ### Installing the extension
 
-1. Dash and the Amiga compiler, as in [Quick installation](#quick-installation) (for the emulator, FS-UAE and a
+1. Dash, as in [Installation](#installation) (with `./dash1` and its C, bebbo's gcc too; for the emulator, FS-UAE and a
    Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
 2. The extension: the file `dash-mui-editor-0.3.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.0), and in VS Code (1.86 or later)
    **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.0.vsix`. It can also
@@ -202,9 +203,65 @@ The extension is a thin layer: what it does is done by the tools in this reposit
 That is why, when you update Dash (`git pull`), what the extension knows about the language is updated too, without
 reinstalling it. The extension and the compiler live in the same repository so that they do not drift apart.
 
-## Quick installation
+## Installation
 
-### Ubuntu / Debian
+Dash 2.0 installs differently from 1.x. Before, it needed bebbo's Amiga gcc (30 minutes to 2 hours to build it)
+and Lark; now `./dash` is dashc, which generates the 68000 code itself, and all it needs is a C compiler for the
+PC, `make` and Python 3. bebbo's gcc is only needed for `./dash1` (below).
+
+### Linux
+
+```bash
+# Ubuntu / Debian
+sudo apt install -y git make gcc python3
+# CachyOS / Arch Linux
+sudo pacman -S --needed git make gcc python
+
+git clone --branch v2.0.0 https://github.com/FreeMEM/dash.git
+cd dash
+make -C dashc                      # dashc, in a few seconds
+./dash examples/hola.dash -o bin/hola
+```
+
+To try programs without an Amiga: FS-UAE (`sudo apt install fs-uae` or `sudo pacman -S fs-uae`), a Kickstart ROM
+in `$DASH_KICKSTART` and `python3 tools/emu_run.py bin/hola`.
+
+### macOS
+
+```bash
+xcode-select --install             # Apple's clang, make, git and Python 3
+git clone --branch v2.0.0 https://github.com/FreeMEM/dash.git
+cd dash
+make -C dashc
+./dash examples/hola.dash -o bin/hola
+```
+
+FS-UAE for macOS: `brew install --cask fs-uae`. dashc builds the same with gcc and with clang (checked on Linux:
+the same executables, byte for byte), but it has not been tried on a Mac yet; if something fails, please open an
+issue.
+
+### On the Amiga
+
+dashc also runs on the Amiga itself (68000, AmigaOS 2.0 or later). The
+[releases](https://github.com/FreeMEM/dash/releases) have `dash-2.0.0-amiga.lha`: unpack it, and its `Instalar`
+copies the Dash drawer (dashc, its runtimes, `lib/` and the examples) and adds the `DASH:` assign and the `Path`
+to `S:User-Startup`. Then, from a Shell:
+
+```
+dashc DASH:examples/hola.dash -o RAM:hola
+RAM:hola
+```
+
+With the same source, the executable comes out identical to the one dashc makes on the PC.
+
+### Dash 1.x with bebbo's gcc
+
+`./dash1` is the 1.x compiler: it turns the program into C and builds it with bebbo's Amiga gcc. It stays for
+programs with C inside (`@native`, `@c`, `@header`) and for the gcc options (`-O`, `--small`...), and it is kept
+with the future in mind: gcc can generate PowerPC code, and that is the way to compiling for MorphOS and AmigaOS 4,
+while dashc only generates 68000 code.
+
+#### Ubuntu / Debian
 
 ```bash
 # 1. System dependencies
@@ -228,13 +285,11 @@ make sdk=cgx            # CyberGraphX headers (rtg_* functions)
 echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
-# 5. Clone Dash and try it
-git clone https://github.com/FreeMEM/dash.git
-cd dash
-./dash examples/hola.dash -o bin/hola
+# 5. Try it (in the Dash folder)
+./dash1 examples/hola.dash -o bin/hola
 ```
 
-### CachyOS / Arch Linux
+#### CachyOS / Arch Linux
 
 ```bash
 # 1. System dependencies
@@ -257,10 +312,8 @@ make sdk=cgx            # CyberGraphX headers (rtg_* functions)
 echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
-# 5. Clone Dash and try it
-git clone https://github.com/FreeMEM/dash.git
-cd dash
-./dash examples/hola.dash -o bin/hola
+# 5. Try it (in the Dash folder)
+./dash1 examples/hola.dash -o bin/hola
 ```
 
 > Building the cross-compiler takes between 30 minutes and 2 hours depending on your hardware. See [docs/INSTALACION.en.md](docs/INSTALACION.en.md) for the full guide, troubleshooting and advanced options (macOS, GCC versions, elf2hunk).

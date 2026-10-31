@@ -1,0 +1,55 @@
+; Instalador de Dash 2.0 para el Installer del sistema (AmigaOS 2.0 a 3.2).
+; Copia el cajón Dash (dashc, sus runtimes, lib/ y los ejemplos) donde se elija y añade a S:User-Startup el
+; Assign DASH: y el Path, para escribir "dashc" desde cualquier Shell. Habla en inglés, o en castellano si el
+; sistema lo está. Este fichero se escribe en UTF-8 y tools/paquete_amiga.py lo pasa a ISO-8859-1, que es lo que
+; lee el Amiga.
+
+(set @app-name "Dash")
+(set #es (OR (= @language "español") (= @language "spanish")))
+
+(welcome
+    (if #es "Este programa instala Dash 2.0: el compilador de Dash (dashc), que corre en el propio Amiga y hace ejecutables sin compilador de C."
+            "This program installs Dash 2.0: the Dash compiler (dashc), which runs on the Amiga itself and makes executables without a C compiler."))
+
+(if (< (/ (getversion "exec.library" (resident)) 65536) 36)
+    (message (if #es "Dash necesita AmigaOS 2.0 o superior. Se instalará igual."
+                     "Dash needs AmigaOS 2.0 or later. It will be installed anyway.")))
+
+; --- Dónde (Work: si lo hay; si no, SYS:) ---
+(set #donde
+    (askdir
+        (prompt (if #es "¿Dónde instalo Dash? Se creará ahí el cajón \"Dash\"."
+                        "Where should Dash go? The \"Dash\" drawer will be made there."))
+        (help @askdir-help)
+        (default (if (exists "Work:" (noreq)) "Work:" "SYS:"))))
+(set #cajon (tackon #donde "Dash"))
+(set @default-dest #cajon)
+
+; --- Copiar: todo el cajón menos el instalador ---
+(if (not (exists #cajon (noreq)))
+    (makedir #cajon (infos)))
+(foreach "" "#?"
+    (if (AND (<> @each-name "Instalar") (<> @each-name "Instalar.info"))
+        (if (= @each-type 2)
+            (copyfiles (source @each-name) (dest (tackon #cajon @each-name)) (all) (infos))
+            (copyfiles (source @each-name) (dest #cajon)))))
+
+; --- DASH: y el Path, en S:User-Startup (entre ;BEGIN Dash y ;END Dash: otra instalación lo cambia) ---
+(startup "Dash"
+    (prompt (if #es "Añado a S:User-Startup el Assign DASH: y el Path, para usar dashc desde cualquier Shell."
+                    "I add the DASH: assign and the Path to S:User-Startup, to use dashc from any Shell."))
+    (help @startup-help)
+    (command (cat "Assign DASH: \"" #cajon "\"\n" "Path DASH: ADD\n")))
+(run (cat "Assign DASH: \"" #cajon "\""))
+
+(exit (if #es
+          (cat "Dash está en " #cajon ".\n\n"
+               "Desde un Shell nuevo (o tras reiniciar):\n"
+               "  dashc DASH:examples/hola.dash -o RAM:hola\n"
+               "  RAM:hola\n\n"
+               "Con --fpu (68020 y FPU), --memcheck y --stack. Más en DASH:LEEME.")
+          (cat "Dash is in " #cajon ".\n\n"
+               "From a new Shell (or after rebooting):\n"
+               "  dashc DASH:examples/hola.dash -o RAM:hola\n"
+               "  RAM:hola\n\n"
+               "With --fpu (68020 and FPU), --memcheck and --stack. More in DASH:README.")))
