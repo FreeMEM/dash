@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="128" height="128" shape-rendering="crispEdges">
+  <!-- Logo de Dash: una D de cuadros y el cursor del Shell, en los colores del Workbench.
+       Rejilla de 16x16: se ve nítido a 16, 32, 64, 128... px -->
+  <title>Dash</title>
+  <rect width="16" height="16" rx="2.5" fill="#0055AA" shape-rendering="auto"/>
+  <g fill="#FF8800">
+    <rect x="3" y="4" width="5" height="1"/>
+    <rect x="3" y="5" width="2" height="6"/>
+    <rect x="7" y="5" width="2" height="6"/>
+    <rect x="3" y="11" width="5" height="1"/>
+  </g>
+  <rect x="10" y="11" width="3" height="1" fill="#FFFFFF"/>
+</svg>
