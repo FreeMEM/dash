@@ -1,11 +1,9 @@
 # Bucle del depurador de dashc (pieza 6 de Forja; D12 de DASHC_LOOP)
 
-Encargo (2026-10-29, sesión "dashc", pedido por el usuario: "arranca la 6 aquí, trabaja en loop"): información de
+Encargo (2026-10-29, rama dashc, pedido por el usuario): información de
 depuración en dashc y una librería de depurador para Forja, el IDE de Dash: lanzar un programa como proceso hijo,
 puntos de parada, paso a paso, leer su memoria, sus registros y sus variables. Solo dashc: nada para dash1 (el
 usuario, 2026-10-29: "no quiero generar nada para dash1"). Rama `ide-piezas` (worktree `.worktrees/ide-piezas`).
-
-Tope: al 90 % del uso semanal (`~/.claude/state/uso-7d.txt`) se para todo (al empezar, 55 %).
 
 ## Diseño
 

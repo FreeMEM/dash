@@ -4,7 +4,6 @@ Encargo (2026-10-28): con dashc (rama `dashc`, worktree `.worktrees/dashc`) llev
 autosuficiente, sin Python ni compilador de C, que corre en Linux y en el Amiga. En este bucle: ejecutables
 pequeños, más optimización donde se pueda y el lenguaje completo, con el mismo comportamiento que `./dash`.
 
-Tope: al 90 % del uso semanal (`~/.claude/state/uso-7d.txt`) se para todo (al empezar, 32 %).
 Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
 
 ## Cómo se mide el avance
@@ -100,7 +99,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   Vuelve d[k] con una comprobación: lee la casilla solo si i < cap y keys[i] sigue siendo k; si no, busca. No
   encontré el fallo propio: meter claves por otro nombre del mismo diccionario no lo rompía ni sin comprobación
   (las claves no cambian de casilla al crecer). Con ella, tanda completa 113 de 114, y el que falta
-  (test_http_seguir, una conexión de más) chocaba con la tanda de otra sesión en el mismo puerto: solo, pasa.
+  (test_http_seguir, una conexión de más) chocaba con otra tanda en el mismo puerto: solo, pasa.
 - D15 Runtime en ensamblador, solo para dashc (pedido por el usuario el 2026-10-30). El runtime de dashc sale del
   C de dash1 compilado con gcc; las rutinas que más se llaman, escritas a mano en 68000, en su propio fichero de
   dashc/runtime (como rt_math.s), sin tocar el runtime de dash1 ni compiler/. Primero medir con `--perfil` y el
@@ -543,7 +542,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
 - D9b: las descripciones de los 738 builtins en castellano, en `compiler/builtins_es.py` (`DESC_ES`), que
   tools/gen_builtins_doc.py pone en docs/BUILTINS.md (BUILTINS.en.md sigue con las de amiga_builtins.py, en inglés).
   Si un builtin no tiene la suya, el generador falla y con él la comprobación de la documentación (docs/builtins):
-  quien añada un builtin (también la sesión de Tachyon en su rama) tiene que añadir su línea ahí. Corregida de paso la
+  quien añada un builtin (también Tachyon en su rama) tiene que añadir su línea ahí. Corregida de paso la
   de `task_start`, que decía "solo C".
 - D9e: `--fpu` en dashc, para compilar Tachyon como antes (`./dash --fpu`, tools/paquete.sh). Un tercer runtime,
   `runtime/dashrt_fpu.o` (runtime/build_lib.py): el C para 68020 + 68881, como `./dash --fpu`, sin el float por
@@ -675,7 +674,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
       libera". Una tanda dio una vez 73 de 114, con un assert de QuickJS en test_jsdom_texto y textos rotos; no se
       repitió solo. Tras esto, tanda completa 114 de 114 (2026-10-30).
   - Fusionada ide-piezas (525fff2): builtins de Inferencia y Forja, lib/json, lib/dashui, lib/red y el depurador de
-    dashc (D12, hecho en la otra sesión). Batería todo bien, depurar.py con dashc y con --c, run_tests 482/482.
+    dashc (D12, hecho en otra rama). Batería todo bien, depurar.py con dashc y con --c, run_tests 482/482.
   - D14: `--memcheck` ya rellenaba lo liberado con 0xDB, lo apartaba y avisaba con fichero y línea al retener,
     soltar o liberar dos veces (también con dashc, por `_dash_mc_where`). Aparta 64 bloques. Probado con 1024:
     Tachyon con dashc --memcheck, 114 de 114 sin fugas ni errores; pero los tests que miden que la memoria quede
@@ -686,7 +685,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     también sin --memcheck y solo en la tanda (solos pasan): el clic no llega a su ventana. Con --memcheck,
     test_on_click_timer no acaba y los que van detrás en el mismo arranque agotan el tiempo. test_net_server
     falla también sin --memcheck.
-  - Un fallo de mis optimizaciones lo encontró la sesión de ide-piezas (Inferencia): la variable de un for sobre
+  - Un fallo de mis optimizaciones salió en la rama ide-piezas (Inferencia): la variable de un for sobre
     textos o sobre `d.keys()` que el cuerpo reasigna se liberaba dos veces (arreglado allí, 4d64e31).
   - La causa de test_on_click_timer y desktop_canvas_*: a la rama le faltaban 22 commits de main (1.0.1, ronda 3
     de recursos), entre ellos los arreglos de test_mouse_curve (dejaba el botón pulsado y la pantalla arrastrada)
@@ -717,7 +716,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   - Literales de hasta 24 letras comparados en línea: con ellos, D16 sale siempre; se quedan en 8.
   - Para buscar así: interruptores DASHC_X_* provisionales y tandas completas (cada una 42 min). Ojo con el
     tiempo de arranque de los scripts propios (60 s en vez de 600: los "fallos" eran tiempo agotado).
-- 2026-10-30, Tachyon D80 (encargo de la sesión tachyon-e6): `mem_puddle(bytes)` (tamaño de los charcos del
+- 2026-10-30, Tachyon D80 (pedido desde Tachyon): `mem_puddle(bytes)` (tamaño de los charcos del
   pool, de 1 KB a 1 MB, solo antes de pedir memoria) y `mem_trim()`. Medido: exec de 3.1 y de 3.2 no devuelve al
   sistema un charco vacío del pool (2000 bloques de 32 bytes pedidos y soltados: 65 KB que no vuelven hasta
   DeletePool). Por eso los bloques de hasta 128 bytes salen ahora de charcos propios por tamaño (un AllocMem
@@ -726,10 +725,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   uno). Tras soltar 3.000 structs con texto: 149 KB al sistema. En dash1 (codegen) y, por su runtime, en dashc;
   también en la rama dashweb (3bdc7be) para Tachyon. Tests memoria_devolver y test_mem_trim; el arnés del runtime
   en el PC cuenta los bloques de los charcos. Batería de dashc entera bien, run_tests 510 de 510, emulador (A1200 y
-  A500) 959 de 960 (test_net_server chocaba con un servidor de la tanda de otra sesión en su puerto; solo, pasa).
+  A500) 959 de 960 (test_net_server chocaba con un servidor de otra tanda en su puerto; solo, pasa).
   Fuera: los bloques de 129 bytes a un cuarto del charco del pool siguen en el pool, que no los devuelve.
   Tachyon con dashc y D80: tanda completa 94 de 114, con los 20 que fallan todos de servidor (emu-server) y sin
-  tiempo, mientras otra sesión tenía su emulador y servidores en marcha. Repetidos por grupos, pasan los 20; una
+  tiempo, mientras otra tanda tenía su emulador y servidores en marcha. Repetidos por grupos, pasan los 20; una
   vez test_imagenes_data se quedó sin tiempo en el grupo "imagen" y a la siguiente pasó. Pendiente una tanda
   completa con la máquina sola.
 - 2026-10-30, `DASH_TEST_AUTOCLOSE` y `DASH_PRINT_FLUSH` en dashc, como en dash1: el runtime lleva siempre el cierre
@@ -746,7 +745,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   con @native va a dash1 (tests/unit/test_dash2_cli.py). Los tests de la extensión (npm test) no arrancan aquí: solo
   comprobada su sintaxis con node --check.
 - 2026-10-31, D80 con dashc en Tachyon: la tanda completa da 94 de 114 también con la máquina sola (cerrojo
-  /run/user/1000/dash-emu-red.lock, acordado con la sesión tachyon-e6). Con dashweb (dash1, gcc) y D80, la de
+  /run/user/1000/dash-emu-red.lock, acordado con Tachyon). Con dashweb (dash1, gcc) y D80, la de
   tachyon-e6 da 117 de 117: el fallo es de dashc. En el arranque del grupo de servidor (emu-server, bsdsocket),
   test_formularios_post se cuelga sin escribir nada tras acid2_pagina, actualizar, cookies, descargas,
   documento_tipo y estilo_enlaces; los 26 o solo esos 7, igual. Solo, o tras documento_tipo, pasa. Con un contador
@@ -766,7 +765,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   bloque libre. Es decir: lo que cambia la memoria o su contenido lo esconde, como D16; ni desbordes de bloques
   pequeños ni escrituras tras liberar en esa disposición. Siguiente: leer tras liberar (el veneno lo esconde:
   algo podría leer un bloque libre y fiarse de lo que había) o un depurador en el cuelgue.
-- Estado al parar (2026-10-31 02:15, parada pedida por el usuario a través de la sesión tachyon-e6): el codegen
+- Estado al parar (2026-10-31 02:15, parada pedida por el usuario): el codegen
   lleva D81 (f2c1ef6) pero dashc/runtime/dashrt*.o no: falta `make runtime`, la batería de dashc y su commit.
   No queda nada sin commit ni worktrees provisionales.
 - Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
@@ -880,7 +879,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   bien en A1200 y A500; cobertura 239 de 344 compilan (los 105 que no, con C) y 164 de 165 con la salida esperada
   en el A1200 (el de inf con FPU, del emulador); Tachyon con dashc 114 de 114; extensión de VS Code 101 de 101 y
   22 de 22. Se fusiona con origin/main (c0e57ee) sin conflictos. La rama dashc no lleva el trabajo de
-  trasfondo-2 (su worktree es de otra sesión): la PR sale de trasfondo-2 o de dashc tras fusionarla allí.
+  trasfondo-2 (se trabaja en otro worktree): la PR sale de trasfondo-2 o de dashc tras fusionarla allí.
   Quedan: el número de versión del README y de compiler/__init__.py al publicar; la tabla de categorías de
   builtins de MANUAL_REFERENCIA suma 738 (la lista completa, 836, en BUILTINS); los límites del depurador con
   dashc (paso 4).
