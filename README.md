@@ -197,7 +197,7 @@ The extension is a thin layer: what it does is done by the tools in this reposit
 | Compile | `./dash` |
 | Run, memory and profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
 | Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
-| Debug (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py` and `bgdbserver` |
+| Debug (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` and `tools/amiga/dbgserver.dash`; with C in the program, `./dash1 --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py` and `bgdbserver` |
 
 That is why, when you update Dash (`git pull`), what the extension knows about the language is updated too, without
 reinstalling it. The extension and the compiler live in the same repository so that they do not drift apart.
@@ -282,7 +282,7 @@ make -C dashc amiga                           # dashc for the Amiga (with bebbo'
 What `./dash` does not accept: C inside the program (`@native`, `@c`, `@header`) and the options `-O`, `-O0`,
 `--small`, `--multifile` and `--no-hunk`. In those cases it gives an error with the `./dash1` command that does
 it. The other options in [Usage](#usage) work with both; `./dash --debug` prepares the program for the debugger of
-the `dbg_*` builtins, and the VS Code one (gdb) stays with `./dash1 --debug`.
+the `dbg_*` builtins, which the VS Code debugger uses too (a program with C goes to `./dash1 --debug` and gdb).
 
 Outside C is compiled separately with the Amiga gcc and linked: `@link` names the object or library, `@extern`
 declares its functions and `@export` marks the Dash functions that C calls by their name.

@@ -76,6 +76,11 @@ Limits: a `task_start` task that runs a line with a `TRAP` crashes (it has no ha
 running any line (in `mui_wait_event`) does not end with `dbg_end` until it is back in its code; read the output
 before `dbg_end`. Tests: `python3 tests/depurar.py [--a500] [--c]`.
 
+`tools/amiga/dbgserver.dash` puts these builtins on the network: it debugs a program and serves one-line orders
+over TCP (its protocol is at the top of the file). It is the debugger of the VS Code extension
+(`editor/vscode/dashDebug.js`); `tools/emu_run.py --dbgserver PORT prog` starts it in the emulator. Tests:
+`python3 tests/depurar_vscode.py [--a500]` (the server and, with node, the VS Code adapter).
+
 ## How it is built
 
 | File | What it does |

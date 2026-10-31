@@ -76,6 +76,11 @@ Límites: una tarea de `task_start` que pase por una línea con `TRAP` cae (no t
 espera sin pasar por ninguna línea (en `mui_wait_event`) no acaba con `dbg_end` hasta que vuelve a su código; la
 salida se lee antes de `dbg_end`. Tests: `python3 tests/depurar.py [--a500] [--c]`.
 
+`tools/amiga/dbgserver.dash` pone estos builtins en la red: depura un programa y atiende órdenes de una línea por
+TCP (su protocolo está al principio del fichero). Es el depurador de la extensión de VS Code
+(`editor/vscode/dashDebug.js`); `tools/emu_run.py --dbgserver PUERTO prog` lo arranca en el emulador. Tests:
+`python3 tests/depurar_vscode.py [--a500]` (el servidor y, con node, el adaptador de VS Code).
+
 ## Cómo está hecho
 
 | Fichero | Qué hace |

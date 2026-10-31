@@ -197,7 +197,7 @@ La extensión es una capa fina: lo que hace lo hacen las herramientas de este re
 | Compilar | `./dash` |
 | Ejecutar, memoria y perfil | `./dash` y `tools/emu_run.py` (FS-UAE o Amiberry) |
 | Editor visual y Ver en Amiga | `.dashui` (`compiler/dashui.py`) y `tools/emu_preview.py` |
-| Depurar (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
+| Depurar (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` y `tools/amiga/dbgserver.dash`; con C en el programa, `./dash1 --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
 
 Por eso, al actualizar Dash (`git pull`), lo que la extensión sabe del lenguaje se actualiza también, sin
 reinstalarla. La extensión y el compilador van en el mismo repositorio para que no se separen.
@@ -282,7 +282,7 @@ make -C dashc amiga                           # dashc para el Amiga (con el gcc 
 Lo que `./dash` no admite: C dentro del programa (`@native`, `@c`, `@header`) y las opciones `-O`, `-O0`,
 `--small`, `--multifile` y `--no-hunk`. En esos casos da un error con la orden de `./dash1` que lo hace. Las demás
 opciones de [Uso](#uso) valen con los dos; `--debug` de `./dash` prepara el programa para el depurador de los
-builtins `dbg_*`, y el de VS Code (gdb) sigue con `./dash1 --debug`.
+builtins `dbg_*`, que usa también el depurador de VS Code (un programa con C va a `./dash1 --debug` y gdb).
 
 El C de fuera se compila aparte con el gcc de Amiga y se enlaza: `@link` dice el objeto o la biblioteca,
 `@extern` declara sus funciones y `@export` marca las funciones de Dash que ese C llama por su nombre.

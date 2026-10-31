@@ -32,6 +32,10 @@ each Print goes out at once). The VS Code extension runs programs this way.
 
     tools/emu_run.py --machine a500 --window --follow prog.dash
 
+--dbgserver PORT runs the first program (built with ./dash --debug) under tools/amiga/dbgserver.dash, the
+debugger of Dash 2.0 (the dbg_* builtins) on the network: the PC connects to 127.0.0.1:PORT and drives it with
+lines of text (the VS Code extension does, editor/vscode/dashDebug.js; dashc/tests/depurar_vscode.py tests it).
+
 --workbench runs C:LoadWB from those files before the programs, as on a real Amiga:
 in AmigaOS 3.2 window.class (ReAction) waits for the Workbench when it is opened.
 
@@ -285,7 +289,7 @@ def time_limit(args, argv) -> float:
     or a debugger (--gdbserver): someone is there, and a debug session lasts what it lasts."""
     if any(a == "--timeout" or a.startswith("--timeout=") for a in argv):
         return args.timeout
-    return 0 if args.window or args.gdbserver else args.timeout
+    return 0 if args.window or args.gdbserver or getattr(args, "dbgserver", None) else args.timeout
 
 
 def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
@@ -293,7 +297,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  keep: str = None, fpu: bool = False, system: str = None, workbench: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
-                 model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None):
+                 model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None,
+                 dbgserver: int = 0):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -305,7 +310,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
     writes while it runs. emulator: "fs-uae" or "amiberry" (model A1200 or A500; its own options,
     so extra_config, screenshots and debug are FS-UAE's only). on_disk(hd): called with the emulated
     disk's directory (DH0: on the PC) once it is ready, before the emulator starts: to add files there and
-    talk to the programs through it while they run (tools/emu_preview.py)."""
+    talk to the programs through it while they run (tools/emu_preview.py). dbgserver: a port; the first
+    program runs under tools/amiga/dbgserver.dash, which listens there (see --dbgserver)."""
     if not shutil.which(emulator):
         raise RuntimeError(f"{emulator} not found")
     if emulator == "amiberry" and (debug is not None or screenshot or extra_config.strip()):
@@ -391,6 +397,9 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 lines.append('Echo >ENV:DASH_OUT "DH0:dashout.txt" NOLINE')
                 # bgdbserver listens on a port of its own; gdb's goes through tools/gdb_relay.py (globals)
                 lines.append(f"C:bgdbserver :{inner_port} DH0:p{i}{extra} >DH0:out{i}.txt")
+            elif dbgserver and i == 0:
+                # the program waits for whoever connects to dbgserver (its arguments come with its "start")
+                lines.append(f"C:dbgserver {dbgserver} DH0:p{i} >DH0:out{i}.txt")
             else:
                 lines.append(f"DH0:p{i}{extra} >DH0:out{i}.txt")
             lines.append(f'Echo "$RC" >DH0:rc{i}.txt')
@@ -405,6 +414,15 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 raise RuntimeError(f"bgdbserver not found: {server} (tools/get_bgdbserver.sh, or $DASH_BGDBSERVER)")
             (hd / "C").mkdir(exist_ok=True)
             shutil.copy(server, hd / "C" / "bgdbserver")
+            if emulator == "fs-uae" and "bsdsocket_library" not in extra_config:
+                extra_config += "bsdsocket_library = 1\n"
+        if dbgserver:
+            # the debugger of Dash 2.0, built with ./dash (dashc) each time: a moment
+            (hd / "C").mkdir(exist_ok=True)
+            built = subprocess.run([sys.executable, str(ROOT / "dash"), str(ROOT / "tools" / "amiga" / "dbgserver.dash"),
+                                    "-o", str(hd / "C" / "dbgserver")], capture_output=True, text=True)
+            if built.returncode:
+                raise RuntimeError("tools/amiga/dbgserver.dash does not build: " + (built.stderr or built.stdout).strip())
             if emulator == "fs-uae" and "bsdsocket_library" not in extra_config:
                 extra_config += "bsdsocket_library = 1\n"
         lines.append('Echo "fin" >DH0:done.txt')
@@ -540,6 +558,9 @@ def main():
                         help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
                              "connects with target remote :PORT (build it with ./dash --debug; tools/gdb_relay.py "
                              "in between, so gdb finds the globals); no time limit unless --timeout")
+    parser.add_argument("--dbgserver", type=int, metavar="PORT",
+                        help="run the first program (built with ./dash --debug) under tools/amiga/dbgserver.dash, "
+                             "Dash 2.0's debugger, listening on PORT of the PC; no time limit unless --timeout")
     parser.add_argument("--no-relay", action="store_true",
                         help="with --gdbserver: bgdbserver itself on PORT, as on a real Amiga (gdb then needs "
                              "tools/gdb_relay.py in between for the globals; the VS Code extension puts it)")
@@ -568,7 +589,8 @@ def main():
                                args.keep, args.fpu, system, args.workbench or bool(machine and machine["workbench"]),
                                args.screenshot, debug=args.debug, window=args.window, follow=follow,
                                emulator=args.emulator, model=machine["model"] if machine else "A1200",
-                               gdbserver=args.gdbserver or 0, relay=not args.no_relay)
+                               gdbserver=args.gdbserver or 0, relay=not args.no_relay,
+                               dbgserver=args.dbgserver or 0)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

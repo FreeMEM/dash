@@ -4661,7 +4661,10 @@ Un programa así se depura desde otro con los builtins `dbg_*` (lista en [BUILTI
 y la memoria. Un punto de parada cambia el `NOP` de su línea por un `TRAP`: no usa el modo traza de la CPU, el
 que Emu68 no tiene.
 
-El depurador de VS Code (gdb, F5) necesita la información de depuración de gcc: compila con `./dash1 --debug`.
+El depurador de VS Code (F5) usa estos mismos builtins: compila con `./dash --debug` y arranca el programa en el
+Amiga emulado bajo `tools/amiga/dbgserver.dash`, un programa de Dash que lo maneja con los `dbg_*` y atiende a VS
+Code por TCP (`tools/emu_run.py --dbgserver PUERTO`). Un programa con C lo compila `./dash1 --debug` y lo depura
+gdb, como en la 1.x; `"debugger": "gdb"` en `launch.json` elige ese camino siempre.
 
 ### dashc en el Amiga
 
@@ -4696,7 +4699,7 @@ nombre del fichero va dentro, para los mensajes de error: tiene que ser el mismo
 | Un programa con `@native`, `@c` o `@header` | `./dash1`, o pasar el C a un objeto con `@link` y `@extern`. El `@native` de los módulos de `lib/amiga` sí vale: va compilado dentro de dashc |
 | `-O`, `-O0`, `--small`, `--multifile`, `--no-hunk` | `./dash1`. dashc no tiene niveles de optimización y escribe Hunk directamente |
 | Ver o compilar el C generado (`python3 -m compiler.main`) | Es de la 1.x: dashc no genera C |
-| Depurar con gdb o con el depurador de VS Code | `./dash1 --debug`. El `--debug` de dashc es para los builtins `dbg_*` |
+| Depurar con gdb | `./dash1 --debug`. El `--debug` de dashc es para los builtins `dbg_*` (y el depurador de VS Code, que los usa) |
 | `@link "x.c"` | Compilar el `.c` antes con el gcc de Amiga y enlazar el `.o` |
 | Una función de una `.library` por `@extern` | dashc no llama por registros: un builtin, o C enlazado que la llame |
 | `Float` o `Double` en una función de `@extern` | Pasarlos como texto o como enteros (por ejemplo, en coma fija) |

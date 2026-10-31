@@ -4662,7 +4662,10 @@ A program built this way is debugged from another one with the `dbg_*` builtins 
 variables, registers and memory. A breakpoint turns the `NOP` of its line into a `TRAP`: it does not use the CPU's
 trace mode, which Emu68 does not have.
 
-The VS Code debugger (gdb, F5) needs gcc's debug information: compile with `./dash1 --debug`.
+The VS Code debugger (F5) uses these same builtins: it compiles with `./dash --debug` and starts the program on
+the emulated Amiga under `tools/amiga/dbgserver.dash`, a Dash program that drives it with the `dbg_*` and serves VS
+Code over TCP (`tools/emu_run.py --dbgserver PORT`). A program with C is compiled by `./dash1 --debug` and debugged
+by gdb, as in 1.x; `"debugger": "gdb"` in `launch.json` always picks that way.
 
 ### dashc on the Amiga
 
@@ -4698,7 +4701,7 @@ name goes inside, for error messages: it has to be the same).
 | A program with `@native`, `@c` or `@header` | `./dash1`, or move the C into an object with `@link` and `@extern`. The `@native` of the `lib/amiga` modules is fine: it is compiled inside dashc |
 | `-O`, `-O0`, `--small`, `--multifile`, `--no-hunk` | `./dash1`. dashc has no optimization levels and writes Hunk directly |
 | Seeing or compiling the generated C (`python3 -m compiler.main`) | That is 1.x: dashc does not generate C |
-| Debugging with gdb or the VS Code debugger | `./dash1 --debug`. dashc's `--debug` is for the `dbg_*` builtins |
+| Debugging with gdb | `./dash1 --debug`. dashc's `--debug` is for the `dbg_*` builtins (and the VS Code debugger, which uses them) |
 | `@link "x.c"` | Compile the `.c` first with the Amiga gcc and link the `.o` |
 | A `.library` function through `@extern` | dashc does not call through registers: a builtin, or linked C that calls it |
 | `Float` or `Double` in an `@extern` function | Pass them as text or as integers (fixed point, for example) |

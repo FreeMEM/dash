@@ -817,3 +817,28 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   519 (test_dash2_cli.py, con el respaldo), los de la extensión (node test/run.js, tras `npm ci`) todos bien.
   Queda el depurador: el de VS Code sigue con `./dash1 --debug` (gdb y bgdbserver); con dashc haría falta un
   adaptador de depuración que hable con un programa del Amiga hecho con los `dbg_*`.
+- 2026-10-31, paso 4 (el depurador): F5 en VS Code depura con dashc. `tools/amiga/dbgserver.dash`, un programa de
+  Dash compilado con `./dash`, depura otro con los `dbg_*` y atiende por TCP órdenes de una línea con los campos
+  separados por tabuladores (start, break, unbreak, continue, step, next, out, pause, frames, vars, globals,
+  values, state, end, quit); contesta "ok" o "error" y, entre respuestas, avisa con "*out" (la salida del
+  programa, también mientras corre: lee su fichero de T: tal cual, sin el Flush de `dbg_output`, que solo vale con
+  el programa quieto), "*stopped" y "*ended". `tools/emu_run.py --dbgserver PUERTO prog` lo arranca en el emulador
+  con el programa en DH0: (el bsdsocket de FS-UAE usa los sockets del PC: se le llega en 127.0.0.1:PUERTO). En la
+  extensión, `dashDebug.js` es el adaptador de depuración (DAP, dentro de la extensión, sin dependencias nuevas):
+  puntos de parada (primero con el nombre entero del fichero, luego con el nombre solo), condiciones, cuenta de
+  pasadas y logpoints resueltos en la extensión, la pila, las variables de cada marco y las globales (structs y
+  listas se abren), expresiones de Dash (variables con `.campo` y `[n]`, números, textos, aritmética,
+  comparaciones, `and`/`or`/`not`, `.length`) en la consola, el watch y el hover, la salida y el código del final.
+  `debug.js` compila con `./dash --debug` y `DASH_FALLBACK_DASH1=1`: si `./dash` lo pasa a `./dash1` (C en el
+  programa), el camino de antes (bgdbserver y gdb); también con `"debugger": "gdb"`, y para "Preparar para un Amiga
+  real" y `attach`. Nuevos en launch.json: `args` y `debugger`. Probado: `dashc/tests/depurar_vscode.py` (el
+  servidor por TCP: parada en la línea 12, la pila, variables, valores, globales, pasar, salir, salida y código,
+  otro programa con argumentos, su salida mientras corre, pausa y acabarlo; y luego
+  `editor/vscode/test/dashc_emu.js`, el adaptador con un cliente DAP en node contra el emulador), bien en A1200 y
+  A500; los tests de la extensión en un VS Code de verdad (`npm run test:vscode`, sin ventana), 22 de 22, con F5
+  por los dos caminos; `node test/run.js` con 6 más (el protocolo, las expresiones y el adaptador con un dbgserver
+  de mentira); run_tests 519 de 519 (`--dbgserver` sin tope de tiempo, como `--gdbserver`: test_emu_run_limit).
+  Queda: un error en tiempo de ejecución no para el programa (acaba con su mensaje; con gdb paraba como
+  excepción); un programa esperando en `mui_wait_event` no se pausa hasta que pasa por una línea suya; sin
+  diccionarios por dentro (dbgserver da su número de claves), sin cambiar valores y sin puntos de parada en
+  funciones; dbgserver en un Amiga de verdad (`attach`) aún no: "Preparar para un Amiga real" sigue con bgdbserver.

@@ -47,8 +47,8 @@ executable with its runtime, without gcc or the Python with Lark of before. The 
   same input file, writes the same executable byte for byte as the PC one.
 - **What to change:** a program with `@native`, `@c` or `@header`, to `./dash1`, or its C into an object with
   `@link` and `@extern`. The options `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk`, to `./dash1`. In both
-  cases `./dash` gives an error with the `./dash1` command that does it. The VS Code debugger (gdb) stays with
-  `./dash1 --debug`. `--stack 0` no longer keeps the shell's stack.
+  cases `./dash` gives an error with the `./dash1` command that does it. `--stack 0` no longer keeps the shell's
+  stack.
 - **Already compiled C:** `@link "x.o"` or `"libx.a"` links an object or library from the Amiga gcc; `@extern`
   declares its functions (with `Int`, `Bool`, `String`, structs and `Func`); `@export` (new, also in 1.x) lets that
   C call a Dash function by its name. The runtime provides the libc and libm parts that C needs, and
@@ -74,7 +74,9 @@ executable with its runtime, without gcc or the Python with Lark of before. The 
   was in that memory before. dashc prevents it.
 - **VS Code:** the tasks (compile, run in the emulator, with memory checking or with profiling) and the MUI preview
   ("Ver en Amiga") compile with `./dash`, and with `./dash1` if the program has C (`DASH_FALLBACK_DASH1=1` in
-  `./dash`). The debugger stays with `./dash1 --debug`.
+  `./dash`). So does the debugger (F5): it compiles with `./dash --debug` and debugs on the emulated Amiga with the
+  new debugger, through `tools/amiga/dbgserver.dash`, which drives it with the `dbg_*` and talks to VS Code over
+  the network. A program with C stays with `./dash1 --debug` and gdb, as before.
 - **Measurements:** the executables of the test programs usually come out somewhat smaller than with gcc, though
   some are larger. In Tachyon, for now, slower than 1.x in almost every phase (up to 18 %, on an emulated A1200).
 - Tested on emulated A1200 and A500 (FS-UAE).

@@ -48,8 +48,7 @@ como `./dash1`. Sube el número mayor porque `./dash` deja de compilar los progr
   mismo fichero de entrada, escribe el mismo ejecutable byte a byte que el del PC.
 - **Qué cambiar:** un programa con `@native`, `@c` o `@header`, a `./dash1`, o su C a un objeto con `@link` y
   `@extern`. Las opciones `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk`, a `./dash1`. En los dos casos
-  `./dash` da un error con la orden de `./dash1` que lo hace. El depurador de VS Code (gdb) sigue con
-  `./dash1 --debug`. `--stack 0` ya no deja la pila del shell.
+  `./dash` da un error con la orden de `./dash1` que lo hace. `--stack 0` ya no deja la pila del shell.
 - **C ya compilado:** `@link "x.o"` o `"libx.a"` enlaza un objeto o una biblioteca del gcc de Amiga; `@extern`
   declara sus funciones (con `Int`, `Bool`, `String`, structs y `Func`); `@export` (nuevo, también en la 1.x)
   hace que una función de Dash se pueda llamar desde ese C por su nombre. El runtime pone lo de libc y libm que
@@ -75,7 +74,9 @@ como `./dash1`. Sube el número mayor porque `./dash` deja de compilar los progr
   en esa memoria. dashc lo evita.
 - **VS Code:** las tareas (compilar, ejecutar en el emulador, con comprobación de memoria o con perfil) y la vista
   previa de MUI ("Ver en Amiga") compilan con `./dash`, y con `./dash1` si el programa lleva C (`DASH_FALLBACK_DASH1=1`
-  en `./dash`). El depurador sigue con `./dash1 --debug`.
+  en `./dash`). El depurador (F5) también: compila con `./dash --debug` y depura en el Amiga emulado con el depurador
+  nuevo, a través de `tools/amiga/dbgserver.dash`, que lo maneja con los `dbg_*` y habla con VS Code por la red. Un
+  programa con C sigue con `./dash1 --debug` y gdb, como antes.
 - **Medidas:** los ejecutables de los programas de prueba suelen salir algo más pequeños que con gcc, aunque hay
   casos más grandes. En Tachyon, de momento, más lento que la 1.x en casi todas las fases (hasta un 18 %, en un
   A1200 emulado).

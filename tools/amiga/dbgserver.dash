@@ -1,0 +1,284 @@
+# dbgserver: el depurador de Dash 2.0 por la red (docs/DEPURADOR_LOOP.md). Depura con los dbg_* un programa compilado
+# con ./dash --debug y atiende a quien se conecte por TCP: la extensión de VS Code (editor/vscode/dashDebug.js).
+#
+#     dbgserver PUERTO [PROGRAMA]
+#
+# Escucha en PUERTO, acepta una conexión, saluda con "dbgserver 1" y lee órdenes de una línea, con los campos
+# separados por tabuladores (también en las respuestas y los avisos):
+#
+#     start PROGRAMA ARGUMENTOS   lo carga en pausa antes de su primera línea (PROGRAMA vacío: el de la línea de órdenes)
+#     break FICHERO LÍNEA         un punto de parada ("prog.dash" o el nombre entero); unbreak lo quita
+#     continue, step, next, out   seguir, entrar, pasar, salir de la función
+#     pause                       parar en la siguiente línea que pase
+#     frames                      la pila: "frame LÍNEA FUNCIÓN FICHERO" por cada marco (0, donde está parado)
+#     vars MARCO                  "var NOMBRE TIPO VALOR" por cada variable de ese marco
+#     globals                     "var NOMBRE TIPO VALOR" por cada global
+#     values MARCO EXPR...        "val TIPO VALOR" por cada expresión (una variable con .campo y [n] detrás; en el
+#                                 marco -1, solo las globales)
+#     state                       el estado (0 nada, 1 en pausa al empezar, 2 corriendo, 3 parado, 4 acabado)
+#     end                         lo acaba (con su limpieza de siempre); quit, además, cierra el servidor
+#
+# Cada respuesta acaba en "ok" (a veces con un dato detrás) o "error MOTIVO". Entre respuestas llegan avisos, que
+# empiezan por "*": "*out TEXTO" (lo que el programa ha escrito), "*stopped MOTIVO FICHERO LÍNEA FUNCIÓN" (MOTIVO:
+# breakpoint, step o pause) y "*ended CÓDIGO". En los campos, \ \n \t y \r van escapados con una \ delante.
+# Al cerrarse la conexión, acaba el programa y el servidor.
+
+var con: Int = -1
+var programa: String = ""
+var corriendo: Bool = false
+var motivo: String = "breakpoint"
+var enviado: Int = 0                     # cuánto de la salida del programa se ha mandado ya
+var salida: String = ""                  # su fichero en T: (dbg_start), para leerla mientras corre
+var antes: String = "/"                  # los ficheros dash_dbg_ que ya había (de otros depuradores)
+var vueltas: Int = 0
+
+func enviar(linea: String)
+    net_send(con, linea + "\n")
+end
+
+func escapar(s: String) -> String
+    t = str_replace(s, "\\", "\\\\")
+    t = str_replace(t, "\n", "\\n")
+    t = str_replace(t, "\t", "\\t")
+    t = str_replace(t, "\r", "\\r")
+    return t
+end
+
+func mandar_salida(todo: String)
+    if todo != nil and todo.length > enviado
+        enviar("*out\t" + escapar(todo[enviado:]))
+        enviado = todo.length
+    end
+end
+
+# Los ficheros de salida de los dbg_* (dash_dbg_ y la dirección del proceso) que hay en T: y en RAM:, separados por /
+func ficheros_salida() -> String
+    lista = "/"
+    for carpeta in ["T:", "RAM:"]
+        n = dir_read(carpeta)
+        k = 0
+        while k < n
+            nombre = dir_entry_name(k)
+            if str_starts(nombre, "dash_dbg_")
+                lista = lista + carpeta + nombre + "/"
+            end
+            k = k + 1
+        end
+    end
+    return lista
+end
+
+# El fichero de la salida tras dbg_start: el que no estaba antes, o el de la vez anterior (su nombre es el de este
+# proceso, y dbg_start lo borra y lo vuelve a crear)
+func buscar_salida()
+    ahora = ficheros_salida()
+    if salida != "" and str_contains(ahora, "/" + salida + "/")
+        return
+    end
+    salida = ""
+    for f in str_split(ahora, "/")
+        if f != "" and not str_contains(antes, "/" + f + "/")
+            salida = f
+        end
+    end
+end
+
+# Corriendo: ¿ha parado o acabado? Si no, lo nuevo de su salida de vez en cuando. Su fichero se lee tal cual:
+# dbg_output hace Flush de un fichero que el programa está usando, y eso solo con el programa quieto.
+func mirar()
+    e = dbg_state()
+    if e == 3
+        corriendo = false
+        mandar_salida(dbg_output())
+        enviar("*stopped\t" + motivo + "\t" + escapar(dbg_file()) + "\t#{dbg_line()}\t" + escapar(dbg_function()))
+    elif e == 4
+        corriendo = false
+        mandar_salida(dbg_output())
+        enviar("*ended\t#{dbg_rc()}")
+    else
+        vueltas = vueltas + 1
+        if salida != "" and vueltas % 3 == 0
+            if file_size(salida) > enviado
+                mandar_salida(file_read_text(salida))
+            end
+        end
+    end
+end
+
+func seguir(como: String)
+    ok = false
+    if como == "continue"
+        ok = dbg_continue()
+        motivo = "breakpoint"
+    elif como == "step"
+        ok = dbg_step()
+        motivo = "step"
+    elif como == "next"
+        ok = dbg_next()
+        motivo = "step"
+    else
+        ok = dbg_out()
+        motivo = "step"
+    end
+    if ok
+        corriendo = true
+        enviar("ok")
+    else
+        enviar("error\tno está parado")
+    end
+end
+
+func var_linea(nombre: String, tipo: String, valor: String) -> String
+    return "var\t" + escapar(nombre) + "\t" + escapar(tipo) + "\t" + escapar(valor)
+end
+
+# Una orden; false para acabar
+func orden(linea: String) -> Bool
+    c = str_split(linea, "\t")
+    o = c[0]
+    if o == "start"
+        prog = programa
+        args = ""
+        if c.length > 1 and c[1] != ""
+            prog = c[1]
+        end
+        if c.length > 2
+            args = c[2]
+        end
+        antes = ficheros_salida()
+        if dbg_start(prog, args)
+            enviado = 0
+            corriendo = false
+            buscar_salida()
+            enviar("ok")
+        else
+            enviar("error\t" + escapar(dbg_error()))
+        end
+    elif o == "break" or o == "unbreak"
+        if c.length < 3
+            enviar("error\tfalta el fichero o la línea")
+        elif o == "break"
+            enviar("ok\t#{dbg_break(c[1], str_to_int(c[2]))}")
+        else
+            enviar("ok\t#{dbg_unbreak(c[1], str_to_int(c[2]))}")
+        end
+    elif o == "continue" or o == "step" or o == "next" or o == "out"
+        seguir(o)
+    elif o == "pause"
+        if dbg_pause()
+            motivo = "pause"
+            enviar("ok")
+        else
+            enviar("error\tno está corriendo")
+        end
+    elif o == "frames"
+        n = dbg_frames()
+        i = 0
+        while i < n
+            enviar("frame\t#{dbg_frame_line(i)}\t" + escapar(dbg_frame_function(i)) + "\t" + escapar(dbg_frame_file(i)))
+            i = i + 1
+        end
+        enviar("ok")
+    elif o == "vars"
+        m = 0
+        if c.length > 1
+            m = str_to_int(c[1])
+        end
+        n = dbg_vars(m)
+        k = 0
+        while k < n
+            nombre = dbg_var_name(m, k)
+            enviar(var_linea(nombre, dbg_var_type(m, k), dbg_value(m, nombre)))
+            k = k + 1
+        end
+        enviar("ok")
+    elif o == "globals"
+        # (en el marco -1, que no hay, el nombre es el de la global aunque una local se llame igual)
+        fuera = -1
+        n = dbg_globals()
+        g = 0
+        while g < n
+            nombre = dbg_global_name(g)
+            enviar(var_linea(nombre, dbg_value_type(fuera, nombre), dbg_value(fuera, nombre)))
+            g = g + 1
+        end
+        enviar("ok")
+    elif o == "values"
+        m = 0
+        if c.length > 1
+            m = str_to_int(c[1])
+        end
+        k = 2
+        while k < c.length
+            enviar("val\t" + escapar(dbg_value_type(m, c[k])) + "\t" + escapar(dbg_value(m, c[k])))
+            k = k + 1
+        end
+        enviar("ok")
+    elif o == "state"
+        enviar("ok\t#{dbg_state()}")
+    elif o == "end" or o == "quit"
+        e = dbg_state()
+        if e == 1 or e == 3 or e == 4
+            mandar_salida(dbg_output())
+        end
+        corriendo = false
+        if e != 0 and e != 4
+            dbg_end(5000)
+        end
+        enviar("ok\t#{dbg_rc()}")
+        if o == "quit"
+            return false
+        end
+    elif o != ""
+        enviar("error\torden desconocida: " + o)
+    end
+    return true
+end
+
+Main
+    puerto = 6510
+    if arg_count() > 0
+        puerto = str_to_int(arg(0))
+    end
+    if arg_count() > 1
+        programa = arg(1)
+    end
+    srv = net_listen(puerto)
+    if srv < 0
+        Print "dbgserver: no puedo escuchar en el puerto #{puerto}: " + net_error()
+        return
+    end
+    con = net_accept(srv, -1)
+    net_close(srv)
+    if con < 0
+        Print "dbgserver: " + net_error()
+        return
+    end
+    enviar("dbgserver\t1")
+    pendiente = ""
+    sigue = true
+    while sigue
+        espera = -1
+        if corriendo
+            espera = 60
+        end
+        llega = net_recv(con, 1024, espera)
+        if llega == nil
+            sigue = false
+        else
+            pendiente = pendiente + llega
+            p = str_find(pendiente, "\n")
+            while p >= 0 and sigue
+                linea = str_replace(pendiente[:p], "\r", "")
+                pendiente = pendiente[p + 1:]
+                sigue = orden(linea)
+                p = str_find(pendiente, "\n")
+            end
+        end
+        if corriendo and sigue
+            mirar()
+        end
+    end
+    dbg_end(5000)
+    net_close(con)
+end
