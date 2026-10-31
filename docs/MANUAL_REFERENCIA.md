@@ -1391,6 +1391,9 @@ end
 `closegadget`, `dragbar` y `depthgadget` valen `true` por defecto. Una propiedad
 desconocida o con un valor del tipo equivocado (`closegadget 1`) es un error.
 
+Con `title ""`, `borderless true` y los tres botones a `false`, la ventana no tiene barra de título
+(lo mismo `window_create("", x, y, w, h, 2 | 4)`).
+
 Se pueden leer `MiVentana.width`, `.height`, `.left`, `.top` y `.title`: con la ventana
 abierta dan el valor actual (tras redimensionarla o moverla); si no, el de la definición.
 `.inner_left`, `.inner_top`, `.inner_width` e `.inner_height` dan la zona de dentro de los

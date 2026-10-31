@@ -10265,7 +10265,7 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
     win = OpenWindowTags(NULL,
         WA_Left, x, WA_Top, y,
         (flags & 8) ? WA_InnerWidth : WA_Width, w, (flags & 8) ? WA_InnerHeight : WA_Height, h,   /* 8: inside */
-        WA_Title, (ULONG)title,
+        WA_Title, (ULONG)(title && title[0] ? title : NULL),   /* "": no title bar if no gadgets */
         WA_CloseGadget, !(flags & 4),
         WA_DragBar, !(flags & 2),
         WA_DepthGadget, !(flags & 2),
@@ -18429,7 +18429,7 @@ static {ret_type} {method_name}({params_str}) {{
             top=self._get_window_prop(window_def, "top", 50),
             width=window_def.width,
             height=window_def.height,
-            title=window_def.title,
+            title="NULL" if window_def.title == '""' else window_def.title,   # "": no title bar
             closegadget=self._get_window_prop(window_def, "closegadget", "TRUE"),
             dragbar=self._get_window_prop(window_def, "dragbar", "TRUE"),
             depthgadget=self._get_window_prop(window_def, "depthgadget", "TRUE"),
