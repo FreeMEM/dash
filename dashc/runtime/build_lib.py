@@ -8,7 +8,7 @@
 2. Se compila con gcc de bebbo, normal y con DASH_MEMCHECK, una sección por función (hunk.c se queda solo
    con lo que usa cada programa).
 3. Se añaden las librerías de C que ./dash compila aparte (compiler/clibs.py: zlib...), la libc mínima de
-   rt_libc.c, las rutinas de rt_math.s y las de libgcc que hacen falta (64 bits).
+   rt_libc.c, las rutinas de rt_math.s y rt_asm.s y las de libgcc que hacen falta (64 bits).
 4. Los objetos van uno tras otro (sin ld -r, que juntaría las secciones): hunk.c lee las unidades.
 
 Necesita el gcc de bebbo, el Dash de Python y el SDK de AmiSSL (tools/get_amissl.sh)."""
@@ -86,6 +86,8 @@ def objects(build, flags, sfx, *cpu):
     common.append(build / "rt_math.o")
     run([GCC, "-m68000", "-c", str(HERE / "rt_libs.s"), "-o", str(build / "rt_libs.o")])
     common.append(build / "rt_libs.o")
+    run([GCC, "-m68000", "-c", str(HERE / "rt_asm.s"), "-o", str(build / "rt_asm.o")])   # D15: memcpy, dl_dict_slot
+    common.append(build / "rt_asm.o")
     # las librerías de C de ./dash, con sus opciones
     from compiler.clibs import LIBRARIES
     for name, spec in LIBRARIES.items():

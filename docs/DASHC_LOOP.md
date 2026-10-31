@@ -855,3 +855,23 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   runtime en Trasfondo (6 bytes cada uno con su reubicación) podrían ser `bsr.w` donde llegue a 32 KB; pide saber
   dónde cae el runtime antes de cerrar el código (gen68k y hunk.c), y con el runtime detrás del programa solo
   llegaría una parte: queda para después.
+- 2026-10-31, paso 6 (D15, runtime en ensamblador). Medir primero: `--perfil` cuenta además, en cada VBlank, el PC
+  interrumpido si es del programa (el marco de la excepción se busca en las primeras muestras: la distancia a la
+  pila del supervisor donde más veces hay un SR de usuario con un PC del programa, 36 palabras en la ROM 3.1) y
+  saca "perfil-pc:" en trozos de 16 bytes; `DASHC_MAPA=1` da el sitio de cada hunk y
+  `dashc/tests/perfil_pc.py mapa salida` lo reparte por rutina. Tachyon, prueba.html (`medir_visor.py --fases
+  --perfil`, 813 muestras): el código del programa 22 %, `_dash_str_dup` 8,9 % (un tercio, su copia byte a
+  byte), `_dash_dict_slot` 8,2 %, `_dash_str_alloc_tmp` 6,5 %, `_dash_str_set` 3,7 %, `_dash_tmp_release_f` 3,4 %,
+  `_dash_str_alloc_own` 3,2 %, strcmp 2,6 %. En `runtime/rt_asm.s` (solo dashc: gen_lib.py cambia el C del
+  runtime para llamarlas; ./dash1 sigue con el suyo): `memcpy` de 16 en 16 bytes con la misma paridad (en
+  rt_libc.c quedaba el de C) y `_dash_copy` con él desde 8 bytes (antes byte a byte hasta 32); `dl_dict_slot`, la
+  búsqueda de `_dash_dict_slot` entera (hash, largo y bytes de 4 en 4). Test `rt_asm.dash` (copias de 0 a 70 y de
+  70.000 bytes desde sitio par e impar, claves de 0 a 40 letras, literales con hash, claves que no están), igual
+  que el C de ./dash en A1200 y A500. Medidas, antes / después: un banco (200 claves leídas 40 veces; 8.000 trozos
+  de texto) en el A500: diccionario 1.917 / 1.781 ms, copias 3.163 / 3.171; en el A1200: 677 / 573 y 1.193 /
+  1.189. Tachyon (68020 con FPU, --fases, ms): maqueta 11.013 / 11.000, estilo 3.024 / 3.025, igual en el resto.
+  Es decir: el gcc del runtime ya hace bien estos bucles y en un 68020 la copia byte a byte va casi igual; el
+  tiempo de los textos está en pedir y soltar bloques y en la pila de temporales (lo que rinde de verdad es
+  llamar menos al runtime, como decía D15). No sigo con más rutinas en ensamblador. Con rt_asm.s: batería de
+  dashc bien en A1200 y A500; Tachyon con dashc, tanda completa 114 de 114 (2.503 s; QuickJS también usa ese
+  memcpy).

@@ -91,6 +91,7 @@ over TCP (its protocol is at the top of the file). It is the debugger of the VS 
 | `runtime/gen_lib.py` | Takes `./dash`'s runtime from the C it generates for `runtime/cocina.dash`, without libnix |
 | `runtime/api.c` | Startup and exit, `Print`, and named `dl_*` what dashc's code calls |
 | `runtime/rt_math.s`, `runtime/rt_libc.c` | `_dash_start`, 32-bit multiply and divide, the little libc needed |
+| `runtime/rt_asm.s` | Runtime routines written by hand: `memcpy` and the dictionary lookup (`tests/perfil_pc.py` tells where the time goes with `--perfil`) |
 
 ## What was checked
 

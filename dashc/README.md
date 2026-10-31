@@ -91,6 +91,7 @@ TCP (su protocolo está al principio del fichero). Es el depurador de la extensi
 | `runtime/gen_lib.py` | Saca el runtime de `./dash` del C que genera para `runtime/cocina.dash`, sin lo de libnix |
 | `runtime/api.c` | Arranque y salida, `Print`, y con nombre `dl_*` lo que llama el código de dashc |
 | `runtime/rt_math.s`, `runtime/rt_libc.c` | `_dash_start`, multiplicar y dividir de 32 bits, lo poco de libc que hace falta |
+| `runtime/rt_asm.s` | Rutinas del runtime escritas a mano: `memcpy` y la búsqueda en un diccionario (`tests/perfil_pc.py` dice dónde se va el tiempo con `--perfil`) |
 
 ## Lo comprobado
 

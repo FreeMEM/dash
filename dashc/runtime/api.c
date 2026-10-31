@@ -860,10 +860,54 @@ static volatile ULONG dl_prof_samples;
 static struct Interrupt dl_prof_int;
 static BOOL dl_prof_on;
 
+/* El sitio del código (D15): la interrupción también mira el PC que interrumpió, si es del programa (su hunk de
+   código, con el runtime), y cuenta en trozos de 16 bytes; dashc/tests/perfil_pc.py los pone a nombre con el mapa
+   del enlazador. El marco de la excepción (SR y PC) está en la pila del supervisor a una distancia fija de la de
+   esta función, que depende de la ROM: se busca en las primeras muestras (la distancia en la que más veces hay un
+   SR de usuario con un PC del programa) y luego solo se mira ahí. */
+#define DL_PC_FAR 96                                 /* hasta dónde se busca, en palabras */
+static UBYTE *dl_pc_code;
+static ULONG dl_pc_size;
+static ULONG *dl_pc_hist;
+static UWORD dl_pc_cand[DL_PC_FAR];
+static LONG dl_pc_at = -1;
+static ULONG dl_pc_out;                              /* muestras fuera del programa (la ROM, otras tareas) */
+
+static int dl_pc_frame(UWORD *sp, LONG o)
+{
+    ULONG pc;
+    if (sp[o] & 0xFFE0) return 0;                    /* modo usuario, sin traza ni nivel de interrupción */
+    pc = (ULONG)sp[o + 1] << 16 | sp[o + 2];
+    return pc - (ULONG)dl_pc_code < dl_pc_size;
+}
+
+static void dl_pc_sample(UWORD *sp)
+{
+    LONG o, best;
+    if (dl_pc_at >= 0) {
+        if (dl_pc_frame(sp, dl_pc_at)) {
+            UWORD *f = sp + dl_pc_at;
+            dl_pc_hist[(((ULONG)f[1] << 16 | f[2]) - (ULONG)dl_pc_code) >> 4]++;
+        } else {
+            dl_pc_out++;
+        }
+        return;
+    }
+    best = 0;
+    for (o = 0; o < DL_PC_FAR; o++) {
+        if (dl_pc_frame(sp, o)) dl_pc_cand[o]++;
+        if (dl_pc_cand[o] > dl_pc_cand[best]) best = o;
+    }
+    if (dl_pc_cand[best] >= 16) dl_pc_at = best;
+}
+
 static ULONG dl_prof_tick(void)
 {
     LONG d = dl_prof_depth, i;
     WORD id;
+    UWORD *sp;
+    __asm__ volatile ("move.l %%sp,%0" : "=r" (sp));
+    if (dl_pc_hist) dl_pc_sample(sp);
     if (d > DL_PROF_DEPTH) d = DL_PROF_DEPTH;
     dl_prof_samples++;
     dl_prof_gen++;
@@ -892,6 +936,20 @@ void dl_prof_start(STRPTR *names, LONG n)
     dl_prof_total = p + 2 * n;
     dl_prof_seen = (UWORD *)(p + 3 * n);
     dl_prof_calls[0] = 1;
+    {
+        /* el hunk de código: el primero de la lista de segmentos (en la memoria de LoadSeg, su tamaño va delante) */
+        struct Process *pr = (struct Process *)FindTask(NULL);
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(pr->pr_CLI);
+        BPTR seg = _WBenchMsg ? _WBenchMsg->sm_Segment : cli ? cli->cli_Module : 0;
+        if (seg) {
+            ULONG *h = (ULONG *)BADDR(seg);
+            dl_pc_code = (UBYTE *)(h + 1);
+            dl_pc_size = h[-1] - 8;
+            if ((UBYTE *)dl_prof_tick - dl_pc_code >= (LONG)dl_pc_size
+                || !(dl_pc_hist = AllocVec((dl_pc_size >> 4) * 4 + 4, MEMF_CLEAR)))
+                dl_pc_code = NULL, dl_pc_size = 0;   /* no es el de este programa (otro proceso): sin esto */
+        }
+    }
     dl_prof_int.is_Node.ln_Type = NT_INTERRUPT;
     dl_prof_int.is_Node.ln_Pri = -60;
     dl_prof_int.is_Node.ln_Name = (char *)"dash profiler";
@@ -945,6 +1003,24 @@ void dl_prof_report(void)
         VPrintf((CONST_STRPTR)"perfil: %3ld.%ld%% %3ld.%ld%% %9lu  %s\n", (APTR)args);
     }
     FreeVec(done);
+    if (dl_pc_hist) {
+        /* "perfil-pc: FUERA DISTANCIA" y luego "perfil-pc: SITIO MUESTRAS..." (sitio en el hunk de código, en hex) */
+        ULONG k, nb = dl_pc_size >> 4, line = 0;
+        args[0] = dl_pc_out;
+        args[1] = (ULONG)dl_pc_at;
+        VPrintf((CONST_STRPTR)"perfil-pc: fuera %lu distancia %ld\n", (APTR)args);
+        for (k = 0; k <= nb; k++) {
+            if (!dl_pc_hist[k]) continue;
+            if (!line) PutStr((CONST_STRPTR)"perfil-pc:");
+            args[0] = k << 4;
+            args[1] = dl_pc_hist[k];
+            VPrintf((CONST_STRPTR)" %lx:%lu", (APTR)args);
+            if (++line == 8) { PutStr((CONST_STRPTR)"\n"); line = 0; }
+        }
+        if (line) PutStr((CONST_STRPTR)"\n");
+        FreeVec(dl_pc_hist);
+        dl_pc_hist = NULL;
+    }
 }
 
 /* ---- diccionarios con una clave literal: su hash (_dash_dict_hash) lo calcula dashc al compilar (como hace gcc en

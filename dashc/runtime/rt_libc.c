@@ -3,22 +3,8 @@
    a ellas mismas. */
 #include <stddef.h>
 
-void *memcpy(void *d, const void *s, size_t n)
-{
-    unsigned char *p = d;
-    const unsigned char *q = s;
-    /* de 4 en 4 si los dos están en dirección par (el 68000 lee longs en direcciones pares) */
-    if (!(((unsigned long)p | (unsigned long)q) & 1)) {
-        while (n >= 4) {
-            *(unsigned long *)p = *(const unsigned long *)q;
-            p += 4;
-            q += 4;
-            n -= 4;
-        }
-    }
-    while (n--) *p++ = *q++;
-    return d;
-}
+/* memcpy, en ensamblador: rt_asm.s */
+void *memcpy(void *d, const void *s, size_t n);
 
 void *memmove(void *d, const void *s, size_t n)
 {

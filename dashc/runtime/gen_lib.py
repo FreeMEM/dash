@@ -59,6 +59,17 @@ def main():
         assert text.count(a) == 1, f"gen_lib: el cierre automático de ./dash ha cambiado ({a!r})"
         text = text.replace(a, b)
     assert "7777" not in text, "gen_lib: quedan los segundos de prueba del cierre automático"
+    # D15: lo que va en ensamblador (runtime/rt_asm.s). Copiar textos: memcpy de 4 en 4 desde 8 bytes (el C de
+    # ./dash copia byte a byte hasta 32, porque el memcpy de libnix primero arregla la alineación). Buscar en un
+    # diccionario: dl_dict_slot entera
+    old = "static __inline__ void _dash_copy(STRPTR d, CONST_STRPTR s, ULONG n) {\n    if (n >= 32) {\n"
+    assert text.count(old) == 1, "gen_lib: _dash_copy ha cambiado"
+    text = text.replace(old, old.replace("n >= 32", "n >= 8"))
+    m = re.search(r"static LONG _dash_dict_slot\(DashDict \*d, STRPTR key\) \{\n.*?\n\}\n", text, re.S)
+    assert m and "_dash_dict_keyhash(key, &len)" in m.group(0), "gen_lib: _dash_dict_slot ha cambiado"
+    text = text.replace(m.group(0), "LONG dl_dict_slot(STRPTR *keys, ULONG mask, STRPTR key);\n"
+                        "static LONG _dash_dict_slot(DashDict *d, STRPTR key) {\n"
+                        "    return dl_dict_slot(d->keys, d->cap - 1, key);\n}\n")
     # libnix: ADD2EXIT (la lista de salida la recorre _dash_quit) y la pila de swapstack
     text = text.replace("#include <stabs.h>\n", "")
     text = text.replace("ADD2EXIT(_dash_atexit_run, 0);\n", "")

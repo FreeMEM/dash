@@ -820,7 +820,8 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         for (i = 2; i < hunks.n; i++)
             if (keep[i]) {
                 int by = why[i];
-                err_printf("%6u %c %s", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], hunk_name(i));
+                err_printf("%6u %c %06x %s", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE],
+                           (unsigned)base[i], hunk_name(i));
                 err_printf(" <- %s\n", by < 0 ? "(limpieza)" : by < 2 ? "(programa)" : hunk_name(by));
             }
 
