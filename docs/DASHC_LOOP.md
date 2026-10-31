@@ -776,3 +776,23 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   (los 105 que no, todos con C: @native, @c o @header; dos de ellos con @native(borrow), que el parser de dashc no
   conoce y da "se esperaba func"), y en el A1200 164 de 165 con la salida esperada (el de inf con FPU, del
   emulador). Batería de dashc (run.py): todo bien en A1200 y en A500.
+- 2026-10-31, D80 y D16 resueltos: el fallo era de exec, no de dashc. El FreePooled de exec 40 (Kickstart 3.1) da
+  un charco por vacío mirando el long que hay tras su MemHeader (+32), que nadie escribe; en un pool sin MEMF_CLEAR
+  es lo que hubiera en esa memoria. Si vale justo el tamaño del charco (0x4000), el siguiente FreePooled en ese
+  charco lo devuelve entero al sistema (FreeVec) con sus bloques vivos dentro, y la memoria acaba con dos dueños.
+  El malloc de dashc (api.c) es un pool de exec de 16 KB sin MEMF_CLEAR; el de libnix (dash1) lleva su propia lista
+  sobre AllocMem y el de Dash (_dash_pool) es MEMF_CLEAR: por eso solo fallaba dashc, y solo según lo que dejaran
+  en la memoria los programas de antes (D80 cambió la disposición, no la causa). También explica lo medido con D80:
+  exec "no devuelve un charco vacío" porque ese long casi nunca coincide. Cómo se encontró, con el depurador de
+  FS-UAE (memwatch, `D80_DEBUG` en el lanzador del scratchpad) sobre un binario fijo, donde el fallo es determinista:
+  la k escrita tras un bloque de QuickJS venía de un memcpy legítimo en un bloque que el pool había dado encima de
+  otro vivo; ese bloque salía de un charco que exec había soltado (FreeVec de 0x4028 bytes) dentro del FreePooled de
+  un bloque de 3.620 (QuickJS agrandando un búfer); el código de FreePooled en la ROM (F822D8) compara
+  `*(mh + 32) + mh_Lower - mh_Upper` con 0. Comprobado aparte en C (exec solo, sin Dash): con 0x4000 en ese long, el
+  FreePooled suelta el charco y el AllocPooled siguiente pisa 452 bytes de un bloque vivo; con 0, nada.
+  Arreglo (api.c, dl_pool_sano): un charco nuevo entra el primero de la lista del pool (y FreePooled pone delante el
+  que usa), así que tras cada AllocPooled ese long del primero se pone a 0 (es el hueco entre el MemHeader y su
+  primer bloque). Test en tests/externo.dash (ext_pool_basura de tests/c/externo.c): llena la memoria libre de
+  0x4000, crea charcos nuevos, suelta la mitad de los bloques y mira que la otra mitad sigue intacta; sin el arreglo
+  el Amiga se queda colgado. Tachyon con dashc: los 7 del arranque que fallaba, 3 de 3 bien (antes ~9 de cada 10
+  mal); la tanda completa, 114 de 114 (2.520 s). El dash1 de Tachyon (dashweb) no lo sufre: libnix no usa pools.

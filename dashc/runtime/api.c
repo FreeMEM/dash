@@ -89,12 +89,26 @@ static void dl_malloc_lock(void)
     ObtainSemaphore(&dl_malloc_sem);
 }
 
+/* El FreePooled de exec 40 (Kickstart 3.1) da un charco por vacío mirando el long que hay tras su MemHeader (+32),
+   que nadie escribe: en un pool sin MEMF_CLEAR es lo que hubiera en esa memoria. Si vale justo el tamaño del charco
+   (0x4000 es un número corriente), el siguiente FreePooled en ese charco lo devuelve entero al sistema con sus
+   bloques vivos, y la memoria acaba con dos dueños (Tachyon D80: QuickJS con listas en ciclo y código pisado). Un
+   charco nuevo entra el primero de la lista del pool (y FreePooled pone delante el que usa): tras cada AllocPooled,
+   ese long del primero a 0. Con 0 nunca se da por vacío, como pasa casi siempre (el long no es del charco: es el
+   hueco entre el MemHeader y su primer bloque) */
+static void dl_pool_sano(APTR pool)
+{
+    struct Node *h = (struct Node *)((struct MinList *)pool)->mlh_Head;
+    if (h->ln_Succ && h->ln_Type == NT_MEMORY) *(ULONG *)((UBYTE *)h + sizeof(struct MemHeader)) = 0;
+}
+
 void *malloc(size_t n)
 {
     ULONG *p = NULL;
     dl_malloc_lock();
     if (dl_malloc_pool || (dl_malloc_pool = CreatePool(MEMF_ANY, 16384, 4096)))
         p = AllocPooled(dl_malloc_pool, n + 4);
+    if (p) dl_pool_sano(dl_malloc_pool);
     ReleaseSemaphore(&dl_malloc_sem);
     if (!p) return NULL;
     *p = n + 4;

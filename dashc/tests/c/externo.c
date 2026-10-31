@@ -98,6 +98,37 @@ long ext_malloc_vueltas(long n)
     return suma;
 }
 
+/* El FreePooled de exec 40 (Kickstart 3.1) da por vacío un charco si el long tras su MemHeader vale lo que el
+   charco: con la memoria libre llena de 0x4000 (lo que dejó otro programa), el charco nuevo del malloc de dashc sale
+   de ahí y, sin el arreglo de api.c (dl_pool_sano), un free lo devuelve al sistema con bloques vivos dentro, que el
+   malloc siguiente pisa. Los bytes pisados (0 si bien) */
+#include <exec/memory.h>
+#include <proto/exec.h>
+long ext_pool_basura(void)
+{
+    static ULONG *trozo[64];
+    unsigned char *f[8], *g[4];
+    long i, k, n, mal = 0;
+    for (n = 0; n < 64 && (trozo[n] = (ULONG *)AllocMem(32768, MEMF_ANY)); n++)
+        for (k = 0; k < 8192; k++) trozo[n][k] = 0x4000;
+    for (i = 0; i < n; i++) FreeMem(trozo[i], 32768);
+    /* charcos nuevos de esa memoria (y los pares sueltos: sin el arreglo, el charco se va con los impares dentro) */
+    for (i = 0; i < 8; i++) {
+        if (!(f[i] = (unsigned char *)malloc(4000))) return -1;
+        memset(f[i], 0x5A, 4000);
+    }
+    for (i = 0; i < 8; i += 2) free(f[i]);
+    for (i = 0; i < 4; i++) {
+        g[i] = (unsigned char *)malloc(4000);
+        if (g[i]) memset(g[i], 0x11, 4000);
+    }
+    for (i = 1; i < 8; i += 2)
+        for (k = 0; k < 4000; k++) if (f[i][k] != 0x5A) mal++;
+    for (i = 0; i < 4; i++) free(g[i]);
+    for (i = 1; i < 8; i += 2) free(f[i]);
+    return mal;
+}
+
 /* @export (Dash 2.0): C que llama por su nombre a funciones de Dash del programa */
 extern long dash_triple(long x);
 extern const char *dash_nombre(long n);
