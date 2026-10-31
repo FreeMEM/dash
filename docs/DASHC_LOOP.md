@@ -796,3 +796,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   0x4000, crea charcos nuevos, suelta la mitad de los bloques y mira que la otra mitad sigue intacta; sin el arreglo
   el Amiga se queda colgado. Tachyon con dashc: los 7 del arranque que fallaba, 3 de 3 bien (antes ~9 de cada 10
   mal); la tanda completa, 114 de 114 (2.520 s). El dash1 de Tachyon (dashweb) no lo sufre: libnix no usa pools.
+- 2026-10-31, D9c: la documentación de la 2.0 en los dos idiomas. README (sección "Dash 2.0": `./dash` y `./dash1`,
+  qué no admite, C de fuera con `@link`/`@extern`/`@export`), VERSIONES (la 2.0.0, sin publicar), MANUAL_REFERENCIA
+  (sección 24: opciones y variables de entorno de dashc, `@link`/`@extern`/`@export` con sus tipos y un ejemplo en C
+  y en Dash, lo de libc del runtime, `--cabecera`, `--memcheck`, `--fpu`, `--stack`, `--debug`, el dashc del Amiga,
+  diferencias con la 1.x) y DOCUMENTACION_LENGUAJE (la sintaxis de `@link`, `@extern` y `@export`). Los ejemplos
+  con `@link` compilan con `./dash` (y el del manual con `./dash1`) y dan su salida en el emulador. De paso, en git
+  `dashc/runtime/dashrt_fpu_mc.o` (lo excluía el `*.o` de .gitignore: un clon nuevo no podía construir dashc sin el
+  gcc de Amiga). Pendiente de aquí: AGENTS.md es local (no va en git); `./dash --help` aún dice que `--debug` es de
+  dash1; README dice "Versión actual: 1.0.0" hasta que se publique la 2.0. run_tests 518 de 518.

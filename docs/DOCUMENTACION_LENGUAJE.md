@@ -40,6 +40,13 @@ programa.dash → parser (Lark) → AST → análisis → generador de C → GCC
 - El ejecutable abre las librerías que necesita, pide su pila y, al salir (también por error), cierra todo lo
   que abrió.
 
+Así es Dash 1.x, que desde Dash 2.0 se llama `./dash1`. En Dash 2.0, `./dash` es **dashc**: un compilador escrito
+en C que genera él mismo el código 68000 y enlaza el ejecutable con su runtime, sin GCC; también corre en el
+Amiga. El lenguaje, los builtins y el runtime son los mismos. Lo que cambia: dashc no admite C dentro del
+programa (`@native`, `@c`, `@header`), que sigue compilando `./dash1`, ni las opciones `-O0`, `-O`, `--small`,
+`--multifile` y `--no-hunk`. Las opciones de la sección 3 son las de `./dash1`. Todo sobre dashc, en la
+[sección 24 del manual](MANUAL_REFERENCIA.md#24-dash-20-el-compilador-dashc).
+
 ## 3. Primeros pasos
 
 ```bash
@@ -469,6 +476,43 @@ end` pone C libre (por ejemplo funciones que llaman a Dash), `@stack N` pide una
 `@workbench_output "NIL:"` evita la ventana de consola al arrancar desde el Workbench (lo escrito se pierde),
 `@version "Prog 1.2"` pone la versión y `@catalog "Prog.catalog" 1` el catálogo de idioma (sección 5.6).
 `@native(borrow) func` indica que el C solo usa sus argumentos durante la llamada (se ahorra copiarlos).
+
+Todo esto es C dentro del programa, y solo lo compila Dash 1.x (`./dash1`).
+
+### C de fuera, también con Dash 2.0: @link, @extern y @export
+
+Con Dash 2.0 (`./dash`) el C va aparte: se compila con el GCC de Amiga a un objeto (`.o`) o una biblioteca (`.a`)
+y el programa lo enlaza. Funciona igual con `./dash1`.
+
+```ruby
+@link "c/saludo.o"                               # ruta relativa a este fichero
+
+@extern("saludo") func suma(a: Int, b: Int) -> Int   # una función del C enlazado
+@extern("saludo") func aplicar(f: Func, x: Int) -> Int
+
+@export func triple(x: Int) -> Int                # el C la llama por su nombre: long triple(long x)
+    return x * 3
+end
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+Main
+    Print suma(2, 40)                            # 42
+    Print aplicar(doble, 5)                      # el C llama a doble(5) y a triple(5)
+end
+```
+
+- `@link "x.o"` o `@link "libx.a"`: el objeto o la biblioteca que se enlaza con el programa.
+- `@extern("nombre") func f(...) -> T`: una función de ese C, con los argumentos y el resultado como en C. Admite
+  `Int`, `Bool`, `String`, structs (su puntero), `Func` (una función de Dash que el C puede llamar) y `Pointer`;
+  no admite `Float`, `Double`, `Fixed`, listas ni diccionarios.
+- `@export func f(...)`: una función de Dash que el C llama por su nombre. No tiene que ver con lo público de los
+  módulos (sección 11).
+
+El C completo de este ejemplo, los tipos uno a uno y lo que el C encuentra de libc están en la
+[sección 24 del manual](MANUAL_REFERENCIA.md#24-dash-20-el-compilador-dashc).
 
 ## 8. Herramientas
 

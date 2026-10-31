@@ -265,6 +265,40 @@ cd dash
 
 > La compilación del cross-compiler tarda entre 30 minutos y 2 horas según tu hardware. Ver [docs/INSTALACION.md](docs/INSTALACION.md) para la guía completa, resolución de problemas y opciones avanzadas (macOS, versiones de GCC, elf2hunk).
 
+## Dash 2.0
+
+En Dash 2.0, `./dash` es **dashc**: un compilador escrito en C que genera él mismo el código 68000 y enlaza el
+ejecutable con su runtime. No necesita gcc ni Lark, y también corre dentro del Amiga. El lenguaje, los builtins y
+lo que hacen los programas son los de siempre. El compilador de la 1.x sigue, sin cambios, como `./dash1`.
+
+```bash
+make -C dashc                                 # construye dashc (un compilador de C del PC y Python 3)
+./dash archivo.dash -o bin/archivo            # Dash 2.0
+./dash --fpu --memcheck archivo.dash -o bin/archivo
+./dash1 archivo.dash -o bin/archivo           # Dash 1.x: a C y con gcc
+make -C dashc amiga                           # dashc para el Amiga (con el gcc de bebbo)
+```
+
+Lo que `./dash` no admite: C dentro del programa (`@native`, `@c`, `@header`) y las opciones `-O`, `-O0`,
+`--small`, `--multifile` y `--no-hunk`. En esos casos da un error con la orden de `./dash1` que lo hace. Las demás
+opciones de [Uso](#uso) valen con los dos; `--debug` de `./dash` prepara el programa para el depurador de los
+builtins `dbg_*`, y el de VS Code (gdb) sigue con `./dash1 --debug`.
+
+El C de fuera se compila aparte con el gcc de Amiga y se enlaza: `@link` dice el objeto o la biblioteca,
+`@extern` declara sus funciones y `@export` marca las funciones de Dash que ese C llama por su nombre.
+
+```ruby
+@link "c/saludo.o"
+@extern("saludo") func suma(a: Int, b: Int) -> Int
+
+@export func triple(x: Int) -> Int
+    return x * 3
+end
+```
+
+Todo sobre dashc (opciones, tipos de `@extern`, el dashc del Amiga y cuándo usar `./dash1`), en el
+[manual de referencia, sección 24](docs/MANUAL_REFERENCIA.md#24-dash-20-el-compilador-dashc).
+
 ## Uso
 
 ```bash

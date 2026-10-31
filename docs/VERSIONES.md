@@ -33,6 +33,53 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.0.0 (sin publicar)
+
+Un compilador nuevo. `./dash` es ahora **dashc**: escrito en C, genera él mismo el código 68000 y enlaza el
+ejecutable con su runtime, sin gcc ni el Python con Lark de antes. El compilador de la 1.x sigue, sin cambios,
+como `./dash1`. Sube el número mayor porque `./dash` deja de compilar los programas con C dentro y algunas opciones;
+`./dash1` los compila como siempre. Detalle en el [manual, sección 24](MANUAL_REFERENCIA.md#24-dash-20-el-compilador-dashc).
+
+- **dashc:** el mismo lenguaje, los mismos builtins y el mismo runtime que la 1.x, así que los programas hacen lo
+  mismo. En la batería de tests de Dash compilan todos los programas que no llevan C, y los que se comprueban en
+  el emulador dan la misma salida que con la 1.x (salvo uno, por la FPU del emulador). Para construirlo basta un compilador de C del PC y Python 3
+  (`make -C dashc`). `./dash --version` dice "Dash 2.0.0 (dashc)".
+- **En el Amiga:** dashc también se compila para el Amiga (`make -C dashc amiga`, corre en un 68000) y, con el
+  mismo fichero de entrada, escribe el mismo ejecutable byte a byte que el del PC.
+- **Qué cambiar:** un programa con `@native`, `@c` o `@header`, a `./dash1`, o su C a un objeto con `@link` y
+  `@extern`. Las opciones `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk`, a `./dash1`. En los dos casos
+  `./dash` da un error con la orden de `./dash1` que lo hace. El depurador de VS Code (gdb) sigue con
+  `./dash1 --debug`. `--stack 0` ya no deja la pila del shell.
+- **C ya compilado:** `@link "x.o"` o `"libx.a"` enlaza un objeto o una biblioteca del gcc de Amiga; `@extern`
+  declara sus funciones (con `Int`, `Bool`, `String`, structs y `Func`); `@export` (nuevo, también en la 1.x)
+  hace que una función de Dash se pueda llamar desde ese C por su nombre. El runtime pone lo de libc y libm que
+  ese C necesita, y `dashc --cabecera` escribe los structs del programa como cabecera de C.
+- **Opciones de dashc:** `--fpu`, `--cpu`, `--memcheck` (también junto con `--fpu`), `--stack`, `--profile` y
+  `--debug`, que prepara el programa para el depurador nuevo.
+- **Depurador nuevo:** los builtins `dbg_*` depuran desde otro programa uno compilado con `./dash --debug`
+  (puntos de parada, paso a paso, pila, variables, registros y memoria). No usa el modo traza de la CPU, el que
+  Emu68 no tiene.
+- **`task_start`** acepta una función de Dash; dashc comprueba al compilar que no crea textos, listas ni structs
+  (corre a la vez que el programa).
+- **Builtins nuevos (también en la 1.x), 836 en total:** imágenes PNG, JPEG, GIF, BMP, WebP y SVG decodificadas
+  por el programa, sin datatypes (`image_decode`); fuentes TrueType, WOFF y WOFF2 (`font_from_ttf`); red en una
+  tarea aparte (`net_bg_*`); gzip y zlib (`inflate_auto`); sistema y programa (`time_unix`, `run_command`,
+  `program_path`, `cpu_model`...); tareas, puertos y asignaciones del sistema (`tasks_read`, `ports_read`,
+  `assigns_read`); ARexx (`rexx_send`); variables de entorno (`env_get`, `env_set`); memoria (`mem_puddle`,
+  `mem_trim`); ventanas de otros programas, para pruebas (`window_find`, `input_menu`...); un gestor de ventanas
+  (`wm_*`); el depurador (`dbg_*`) y más MUI.
+- **Ventanas (también en la 1.x):** `On RightClick` (con `rmbtrap`), `On Inactive` y ventanas sin barra de título
+  (`title ""`).
+- **Memoria del C enlazado:** el `malloc` de dashc para ese C usa un pool de exec, y el `FreePooled` de exec 40
+  (Kickstart 3.1) podía devolver al sistema un trozo del pool con bloques aún en uso, según lo que hubiera antes
+  en esa memoria. dashc lo evita.
+- **VS Code:** "ejecutar en el emulador" compila con `./dash` (y con `./dash1` si el programa lleva C); las
+  tareas, el depurador y la vista previa de MUI siguen con `./dash1`.
+- **Medidas:** los ejecutables de los programas de prueba suelen salir algo más pequeños que con gcc, aunque hay
+  casos más grandes. En Tachyon, de momento, más lento que la 1.x en casi todas las fases (hasta un 18 %, en un
+  A1200 emulado).
+- Probado en A1200 y A500 emulados (FS-UAE).
+
 ### 1.0.1 (2026-10-28)
 
 Programas más rápidos y con menos memoria. No cambia nada del lenguaje: lo que compilaba con la 1.0.0 compila igual.
