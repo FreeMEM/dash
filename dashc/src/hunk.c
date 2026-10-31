@@ -301,6 +301,15 @@ static Hunk own_hunk(int type, Buf *b)
 
 /* Desde los hunks de la pila, marca en keep los que alcanzan sus reubicaciones (atando antes los
    símbolos de cada uno); lo que apunta un hunk débil no cuenta */
+static int *why;
+static const char *hunk_name(int i)
+{
+    const char *name = hunks.v[i].secname ? hunks.v[i].secname : "?";
+    int j;
+    for (j = 0; j < syms.n; j++)                     /* el símbolo del principio, si lo hay */
+        if (syms.v[j].hunk == i && (name == hunks.v[i].secname || !syms.v[j].val)) name = syms.v[j].name;
+    return name;
+}                                  /* DASHC_MAPA: quién trajo cada hunk */
 static void reach(int *keep, int *stack, int sp, const int *weak)
 {
     int j;
@@ -318,6 +327,7 @@ static void reach(int *keep, int *stack, int sp, const int *weak)
         for (j = 0; j < h->relocs.n; j++)
             if (!keep[h->relocs.v[j].target]) {
                 keep[h->relocs.v[j].target] = 1;
+                if (why) why[h->relocs.v[j].target] = cur;
                 stack[sp++] = h->relocs.v[j].target;
             }
     }
@@ -714,6 +724,10 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     memset(weak, 0, sizeof(int) * hunks.n);
     for (i = 0; i < syms.n; i++)
         if (syms.v[i].hunk >= 0 && !strncmp(syms.v[i].name, "__dash_weak_", 12)) weak[syms.v[i].hunk] = 1;
+    if (getenv("DASHC_MAPA")) {
+        why = xmalloc(sizeof(int) * hunks.n);
+        for (i = 0; i < hunks.n; i++) why[i] = -1;
+    }
     keep[0] = keep[1] = 1;
     stack[sp++] = 0;
     stack[sp++] = 1;
@@ -801,13 +815,13 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
         }
     }
     nout = outsize[2] ? 3 : 2;
-    if (getenv("DASHC_MAPA"))
+    if (why)
+        /* el tamaño, el tipo, el nombre y quién lo trajo (el programa, otro hunk o, si nada, una limpieza) */
         for (i = 2; i < hunks.n; i++)
             if (keep[i]) {
-                const char *name = hunks.v[i].secname ? hunks.v[i].secname : "?";
-                for (j = 0; j < syms.n; j++)
-                    if (syms.v[j].hunk == i) name = syms.v[j].name;
-                err_printf("%6u %c %s\n", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], name);
+                int by = why[i];
+                err_printf("%6u %c %s", (unsigned)hunks.v[i].size, "CDB"[hunks.v[i].type - HUNK_CODE], hunk_name(i));
+                err_printf(" <- %s\n", by < 0 ? "(limpieza)" : by < 2 ? "(programa)" : hunk_name(by));
             }
 
     if (debug_info.n) {

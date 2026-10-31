@@ -2837,7 +2837,8 @@ static void bin_ea(int op, Var *v)
     case P_STAR: mul_d1(); break;
     case P_SLASH:
     case P_PERCENT:
-        if (loop_weight > 1 || cpu020) divmod_d1(op);  /* en un bucle, el camino rápido aquí */
+        /* en un bucle, el camino rápido aquí (no con un divisor fijo, que ya se sabe que no cabe en 16 bits) */
+        if (cpu020 || (loop_weight > 1 && v->kind != V_CONST)) divmod_d1(op);
         else jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
         break;
     }

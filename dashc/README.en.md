@@ -87,7 +87,7 @@ over TCP (its protocol is at the top of the file). It is the debugger of the VS 
 |------|--------------|
 | `src/lexer.c`, `src/parser.c` | Text to tree, with the grammar of `compiler/grammar.py` |
 | `src/gen68k.c` | 68000 code: the value in d0, C-like calls; each function is generated twice to keep the most used variables in d2-d7 |
-| `src/hunk.c` | Reads the runtime's Hunk object, joins the hunks and writes the executable |
+| `src/hunk.c` | Reads the runtime's Hunk object, joins the hunks that are reached and writes the executable (with `DASHC_MAPA=1`, it lists what goes in from the runtime, its size and what brought it) |
 | `runtime/gen_lib.py` | Takes `./dash`'s runtime from the C it generates for `runtime/cocina.dash`, without libnix |
 | `runtime/api.c` | Startup and exit, `Print`, and named `dl_*` what dashc's code calls |
 | `runtime/rt_math.s`, `runtime/rt_libc.c` | `_dash_start`, 32-bit multiply and divide, the little libc needed |

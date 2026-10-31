@@ -87,7 +87,7 @@ TCP (su protocolo está al principio del fichero). Es el depurador de la extensi
 |---------|----------|
 | `src/lexer.c`, `src/parser.c` | Del texto al árbol, con la gramática de `compiler/grammar.py` |
 | `src/gen68k.c` | Código 68000: el valor en d0, llamadas como las de C; cada función se genera dos veces para poner en d2-d7 las variables más usadas |
-| `src/hunk.c` | Lee el objeto Hunk del runtime, junta los hunks y escribe el ejecutable |
+| `src/hunk.c` | Lee el objeto Hunk del runtime, junta los hunks a los que se llega y escribe el ejecutable (con `DASHC_MAPA=1`, lista lo que entra del runtime, su tamaño y quién lo trajo) |
 | `runtime/gen_lib.py` | Saca el runtime de `./dash` del C que genera para `runtime/cocina.dash`, sin lo de libnix |
 | `runtime/api.c` | Arranque y salida, `Print`, y con nombre `dl_*` lo que llama el código de dashc |
 | `runtime/rt_math.s`, `runtime/rt_libc.c` | `_dash_start`, multiplicar y dividir de 32 bits, lo poco de libc que hace falta |

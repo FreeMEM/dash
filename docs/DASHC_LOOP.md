@@ -842,3 +842,16 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   excepción); un programa esperando en `mui_wait_event` no se pausa hasta que pasa por una línea suya; sin
   diccionarios por dentro (dbgserver da su número de claves), sin cambiar valores y sin puntos de parada en
   funciones; dbgserver en un Amiga de verdad (`attach`) aún no: "Preparar para un Amiga real" sigue con bgdbserver.
+- 2026-10-31, paso 5 (D8, tamaño medido en programas reales): en ellos casi todo es runtime, no el código del
+  programa (Trasfondo: 63 KB de runtime y 46 de programa; mui_navegador: 23 y 3; hola: 4,6 KB y 165 bytes), y los
+  ejemplos ya salen a la par de gcc o por debajo. `DASHC_MAPA=1` dice ahora, además, quién trajo cada hunk del
+  runtime (`<- función`, `(programa)` o `(limpieza)`). Recortes: `_dash_relaunch_now` arma la orden con strcpy y
+  strcat, no con sprintf (dashc traía su vsnprintf, put_u y la división de 64 bits: 4 KB); `cpu_sample` saca el
+  tanto por mil en 32 bits (`_dash_cpu_permil`, sin `___udivdi3`: 1,7 KB); un `/` o `%` por una constante que no
+  cabe en 16 bits llama directamente al runtime, sin el camino rápido que con ese divisor nunca se toma (26 bytes
+  menos por operación). Trasfondo 141.632 → 135.596 bytes, la barra 74.448 → 72.636, lejos.dash 284.880 →
+  140.960; los ejemplos, igual. Probado: batería de dashc bien en A1200 y A500; run_tests 519 de 519 (también
+  test_cpu_tasks, con dash1, que comparte ese runtime). Medido y no hecho: 1.708 `jsr abs.l` del programa al
+  runtime en Trasfondo (6 bytes cada uno con su reubicación) podrían ser `bsr.w` donde llegue a 32 KB; pide saber
+  dónde cae el runtime antes de cerrar el código (gen68k y hunk.c), y con el runtime detrás del programa solo
+  llegaría una parte: queda para después.

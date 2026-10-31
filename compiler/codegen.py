@@ -5655,13 +5655,18 @@ static void _dash_relaunch_now(void) {
             CloseLibrary(WorkbenchBase);
             if (ok) return;
         }
-        sprintf(cmd, "\\"%s\\"", path);
+        strcpy(cmd, "\\"");                /* (strcpy and strcat, not sprintf: dashc would bring its printf) */
+        strcat(cmd, path);
+        strcat(cmd, "\\"");
     } else {
         if (!NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path))) return;
         if (!GetProgramName((STRPTR)cmd, 256)) return;
         AddPart((STRPTR)path, FilePart((CONST_STRPTR)cmd), sizeof(path));
         args = GetArgStr();
-        sprintf(cmd, "\\"%s\\" %s", path, args ? (char *)args : "");
+        strcpy(cmd, "\\"");
+        strcat(cmd, path);
+        strcat(cmd, "\\" ");
+        if (args) strcat(cmd, (char *)args);
         n = strlen(cmd);
         while (n > 0 && (cmd[n - 1] == '\\n' || cmd[n - 1] == ' ')) cmd[--n] = 0;
     }
@@ -9282,6 +9287,16 @@ static void _dash_cpu_task_name(struct Task *t, char *d) {
     d[i] = 0;
 }
 
+/* x * 1000 / dt (per thousand) in 32 bits: both halved until x * 1000 fits (no 64-bit division in the runtime) */
+static LONG _dash_cpu_permil(unsigned long long x, unsigned long long dt) {
+    while (dt > 0x3FFFFF || x > 0x3FFFFF) {
+        x >>= 1;
+        dt >>= 1;
+    }
+    if (!dt) dt = 1;
+    return (LONG)((ULONG)x * 1000UL / (ULONG)dt);
+}
+
 static LONG _dash_cpu_sample(void) {
     static unsigned long long d[_DASH_CPU_MAX];
     unsigned long long now, dt, sum = 0;
@@ -9311,8 +9326,8 @@ static LONG _dash_cpu_sample(void) {
     _dash_cpu_last = now;
     if (!dt) dt = 1;
     for (i = 0; i < n; i++) sum += d[i];
-    _dash_cpu_sum = (LONG)(sum * 1000 / dt);
-    for (i = 0; i < n; i++) _dash_cpu_load[i] = (LONG)(d[i] * 1000 / dt);
+    _dash_cpu_sum = _dash_cpu_permil(sum, dt);
+    for (i = 0; i < n; i++) _dash_cpu_load[i] = _dash_cpu_permil(d[i], dt);
     for (i = 1; i < n; i++)                  /* most first */
         for (j = i; j > 0 && _dash_cpu_load[j] > _dash_cpu_load[j - 1]; j--) {
             char t[32];
