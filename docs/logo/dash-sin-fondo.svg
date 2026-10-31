@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="3 4 10 8" width="100" height="80" shape-rendering="crispEdges">
+  <!-- Logo de Dash sin el cuadro azul, para poner sobre fondos propios.
+       El guion va en azul para que se vea también sobre blanco. -->
+  <title>Dash</title>
+  <g fill="#FF8800">
+    <rect x="3" y="4" width="5" height="1"/>
+    <rect x="3" y="5" width="2" height="6"/>
+    <rect x="7" y="5" width="2" height="6"/>
+    <rect x="3" y="11" width="5" height="1"/>
+  </g>
+  <rect x="10" y="11" width="3" height="1" fill="#0055AA"/>
+</svg>
