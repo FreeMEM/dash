@@ -771,3 +771,8 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   No queda nada sin commit ni worktrees provisionales.
 - Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
   D8 (tamaño).
+- 2026-10-31, rama trasfondo-2 (sale de dashc; Trasfondo 2.0): ventana sin barra de título, On RightClick, On
+  Inactive, rmbtrap, cx_key_add y wm_* en dash1 y dashc (8567ee7). Medido después: cobertura 239 de 344 compilan
+  (los 105 que no, todos con C: @native, @c o @header; dos de ellos con @native(borrow), que el parser de dashc no
+  conoce y da "se esperaba func"), y en el A1200 164 de 165 con la salida esperada (el de inf con FPU, del
+  emulador). Batería de dashc (run.py): todo bien en A1200 y en A500.
