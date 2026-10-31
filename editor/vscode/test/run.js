@@ -560,7 +560,8 @@ async function previewTests() {
     });
     await check('preview: the program that takes its own picture', () => {
         const prog = P.previewProgram('Principal', true);
-        assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);
+        assert.match(prog, /mui_window_open\(v.window\)\n        time_delay\(25\).*\n        run_command\("C:dash_shot 1 DH0:shot.dsh"\).*\n        mui_app_end\(\)/);
+        assert.doesNotMatch(prog, /@native|@header/);    // (without C: Dash 2.0 compiles it)
         assert.match(prog, /C:dash_shot 1 DH0:shot.dsh/);
         assert.strictEqual(P.previewMachine('a500'), 'a1200');
         assert.strictEqual(P.previewMachine('rtg'), 'rtg');
@@ -859,13 +860,13 @@ async function taskTests() {
     });
     await check('tasks: compile, run with --memcheck and with autoclose', () => {
         assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
-                           "mkdir -p '/p/bin' && '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
+                           "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
         assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
-                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
+                           "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
                            "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --window '/p/bin/x'");
         assert.strictEqual(taskCommand('run', '/d', '/p/x.dash', { machine: 'a500', emulator: 'amiberry', window: false,
                                                                  system: '/s y' }),
-                           "mkdir -p '/p/bin' && DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
+                           "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
                            "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
     });

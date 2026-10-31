@@ -805,3 +805,15 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   `dashc/runtime/dashrt_fpu_mc.o` (lo excluía el `*.o` de .gitignore: un clon nuevo no podía construir dashc sin el
   gcc de Amiga). Pendiente de aquí: AGENTS.md es local (no va en git); `./dash --help` aún dice que `--debug` es de
   dash1; README dice "Versión actual: 1.0.0" hasta que se publique la 2.0. run_tests 518 de 518.
+- 2026-10-31, paso 4 (primera parte): la vista previa de MUI y las tareas de VS Code con dashc. `./dash` con
+  `DASH_FALLBACK_DASH1=1` compila con `./dash1` lo que dashc no hace (C en el programa, `-O`, `--small`...) en vez de
+  dar el error; sin la variable, igual que antes (D9a). Las tareas (compilar, ejecutar, memcheck, perfil) y "Ver en
+  Amiga" usan `./dash` con ella; el programa de la vista previa ya no lleva C (`time_delay` y `run_command` en vez
+  de `Delay` y `SystemTags` con `@native`/`@header`), así que lo compila dashc; el vigilante de
+  tools/emu_preview.py, también. Probado: la ventana de examples/mui_navegador.dashui, compilada con dashc, sale
+  en el emulador (A1200 con MUI) por emu_preview.py. De paso, `RightClick` e `Inactive` (On RightClick, On
+  Inactive) son palabras de evento en compiler/dashui.py, como `Click`: no reservadas para los nombres de los
+  .dashui (la lista del editor de VS Code, media/model.js, no las tenía y su test fallaba). Tests: run_tests 519 de
+  519 (test_dash2_cli.py, con el respaldo), los de la extensión (node test/run.js, tras `npm ci`) todos bien.
+  Queda el depurador: el de VS Code sigue con `./dash1 --debug` (gdb y bgdbserver); con dashc haría falta un
+  adaptador de depuración que hable con un programa del Amiga hecho con los `dbg_*`.

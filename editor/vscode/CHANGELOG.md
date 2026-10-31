@@ -7,6 +7,10 @@
   `--cpu`, `--debug`, `DASH_TEST_AUTOCLOSE`, `DASH_PRINT_FLUSH`); with an older Dash, `./dash` as before.
 - "Run in the emulator" compiles with `./dash` (dashc, through `tools/emu_run.py --dash2`), which now has
   `DASH_TEST_AUTOCLOSE` and `DASH_PRINT_FLUSH`; a program with C still goes to `./dash1`.
+- The tasks (compile, run, memcheck, profile) and the MUI preview ("Ver en Amiga") compile with `./dash` (dashc),
+  which has `--fpu`, `--cpu`, `DASH_TEST_AUTOCLOSE` and `DASH_PRINT_FLUSH`; with `DASH_FALLBACK_DASH1=1`, a program
+  with C goes to `./dash1` by itself. The preview program takes its picture without C (`time_delay`,
+  `run_command`). The debugger still uses `./dash1 --debug`.
 
 ## 0.3.0 (2026-10-27)
 

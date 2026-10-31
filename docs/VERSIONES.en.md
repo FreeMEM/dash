@@ -72,8 +72,9 @@ executable with its runtime, without gcc or the Python with Lark of before. The 
 - **Memory of linked C:** dashc's `malloc` for that C uses an exec pool, and the `FreePooled` of exec 40
   (Kickstart 3.1) could give back to the system a piece of the pool with blocks still in use, depending on what
   was in that memory before. dashc prevents it.
-- **VS Code:** "run in the emulator" compiles with `./dash` (and with `./dash1` if the program has C); the tasks,
-  the debugger and the MUI preview stay with `./dash1`.
+- **VS Code:** the tasks (compile, run in the emulator, with memory checking or with profiling) and the MUI preview
+  ("Ver en Amiga") compile with `./dash`, and with `./dash1` if the program has C (`DASH_FALLBACK_DASH1=1` in
+  `./dash`). The debugger stays with `./dash1 --debug`.
 - **Measurements:** the executables of the test programs usually come out somewhat smaller than with gcc, though
   some are larger. In Tachyon, for now, slower than 1.x in almost every phase (up to 18 %, on an emulated A1200).
 - Tested on emulated A1200 and A500 (FS-UAE).

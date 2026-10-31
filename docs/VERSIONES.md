@@ -73,8 +73,9 @@ como `./dash1`. Sube el número mayor porque `./dash` deja de compilar los progr
 - **Memoria del C enlazado:** el `malloc` de dashc para ese C usa un pool de exec, y el `FreePooled` de exec 40
   (Kickstart 3.1) podía devolver al sistema un trozo del pool con bloques aún en uso, según lo que hubiera antes
   en esa memoria. dashc lo evita.
-- **VS Code:** "ejecutar en el emulador" compila con `./dash` (y con `./dash1` si el programa lleva C); las
-  tareas, el depurador y la vista previa de MUI siguen con `./dash1`.
+- **VS Code:** las tareas (compilar, ejecutar en el emulador, con comprobación de memoria o con perfil) y la vista
+  previa de MUI ("Ver en Amiga") compilan con `./dash`, y con `./dash1` si el programa lleva C (`DASH_FALLBACK_DASH1=1`
+  en `./dash`). El depurador sigue con `./dash1 --debug`.
 - **Medidas:** los ejecutables de los programas de prueba suelen salir algo más pequeños que con gcc, aunque hay
   casos más grandes. En Tachyon, de momento, más lento que la 1.x en casi todas las fases (hasta un 18 %, en un
   A1200 emulado).

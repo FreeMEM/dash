@@ -7,10 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const { missing } = require('./missing');
 
-// From Dash 2.0, ./dash is dashc (no C compiler) and ./dash1 the Dash that compiles through C, with what these
-// tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH): dash1 where there is one
+// ./dash: Dash 2.0 (dashc), which has what these tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH); a
+// program with C in it it compiles with ./dash1, the Dash that goes through C (DASH_FALLBACK_DASH1)
 function dashExe(dashDir) {
-    return fs.existsSync(path.join(dashDir, 'dash1')) ? 'dash1' : 'dash';
+    return 'dash';
 }
 
 /** @param {string} arg */
@@ -44,7 +44,7 @@ function taskCommand(kind, dashDir, file, options = {}) {
     // (test mode, DASH_TEST_AUTOCLOSE, read when it is compiled)
     const seconds = k.run && options.autoclose && options.autoclose > 0 ? Math.floor(options.autoclose) : 0;
     // to run it: each Print goes out at once (DASH_PRINT_FLUSH), so the output shows while it runs
-    const compile = `mkdir -p ${quote(path.dirname(out))} && ` + (seconds ? `DASH_TEST_AUTOCLOSE=${seconds} ` : '') +
+    const compile = `mkdir -p ${quote(path.dirname(out))} && DASH_FALLBACK_DASH1=1 ` + (seconds ? `DASH_TEST_AUTOCLOSE=${seconds} ` : '') +
         (k.run ? 'DASH_PRINT_FLUSH=1 ' : '') +
         `${quote(path.join(dashDir, dashExe(dashDir)))} -q` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
     if (!k.run) return compile;

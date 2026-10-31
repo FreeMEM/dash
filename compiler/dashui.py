@@ -16,7 +16,7 @@ _NAME_RULE = "letters without accents, digits and _, not starting with a digit"
 
 
 # words of "On Click", "On Key"...: names like any other where they are not after On
-_EVENT_WORDS = {"Click", "Close", "Gadget", "Key", "Menu", "On", "Timer"}
+_EVENT_WORDS = {"Click", "Close", "Gadget", "Inactive", "Key", "Menu", "On", "RightClick", "Timer"}
 
 
 def reserved():

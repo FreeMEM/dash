@@ -4534,6 +4534,7 @@ Environment variables when compiling:
 | Variable | What for |
 |---|---|
 | `DASH_PRINT_FLUSH=1` | Each `Print` goes out at once, as in 1.x |
+| `DASH_FALLBACK_DASH1=1` | A program with C or a 1.x option is compiled with `./dash1` instead of giving the error (the VS Code extension uses it) |
 | `DASH_TEST_AUTOCLOSE=<s>` | The program ends by itself after `s` seconds with code 0 (for tests in the emulator) |
 | `DASH_PROFILE=1` | The same as `--profile` (only with `./dash`) |
 | `DASH_HOME` | Dash's folder, for the `import`s of `lib/`. If unset, the one above `dashc/` (on the Amiga, dashc's own) |

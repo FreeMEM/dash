@@ -4531,6 +4531,7 @@ Variables de entorno al compilar:
 | Variable | Para qué |
 |---|---|
 | `DASH_PRINT_FLUSH=1` | Cada `Print` sale en el momento, como en la 1.x |
+| `DASH_FALLBACK_DASH1=1` | Un programa con C o una opción de la 1.x se compila con `./dash1` en vez de dar el error (lo usa la extensión de VS Code) |
 | `DASH_TEST_AUTOCLOSE=<s>` | El programa acaba solo a los `s` segundos con código 0 (para pruebas en el emulador) |
 | `DASH_PROFILE=1` | Lo mismo que `--profile` (solo con `./dash`) |
 | `DASH_HOME` | La carpeta de Dash, para los `import` de `lib/`. Si no está, la de encima de `dashc/` (en el Amiga, la de dashc) |
