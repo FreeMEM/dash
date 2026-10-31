@@ -745,5 +745,18 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   pruebas de la 1.x siguen sin --dash2. Probado: una ventana con --autoclose sale igual que con ./dash y un programa
   con @native va a dash1 (tests/unit/test_dash2_cli.py). Los tests de la extensión (npm test) no arrancan aquí: solo
   comprobada su sintaxis con node --check.
+- 2026-10-31, D80 con dashc en Tachyon: la tanda completa da 94 de 114 también con la máquina sola (cerrojo
+  /run/user/1000/dash-emu-red.lock, acordado con la sesión tachyon-e6). Con dashweb (dash1, gcc) y D80, la de
+  tachyon-e6 da 117 de 117: el fallo es de dashc. En el arranque del grupo de servidor (emu-server, bsdsocket),
+  test_formularios_post se cuelga sin escribir nada tras acid2_pagina, actualizar, cookies, descargas,
+  documento_tipo y estilo_enlaces; los 26 o solo esos 7, igual. Solo, o tras documento_tipo, pasa. Con un contador
+  de charcos en el runtime (Printf al salir) los 26 pasaron: cambia con la disposición, como D16. No es una fuga:
+  todos los charcos se liberan al salir (los 15 y 49 KB que faltan tras el primer test de red ya faltaban antes:
+  bibliotecas que se quedan). Lanzador con servidores: scratchpad tbootr.py (TBOOT_T = segundos de margen).
+- 2026-10-31, D81 (encargo de tachyon-e6): una imagen RGBA del todo transparente se pintaba opaca (_dash_rgba_mask
+  quitaba la máscara si no había ningún opaco). Ahora, sin máscara solo si no hay ningún claro; todo claro, máscara
+  vacía. Test tests/test_image_clear_rtg.dash (RTG del 3.2): sin el arreglo, "transparente: 248". En dashweb
+  3f9493e (358 de 358 sin emulador, 18 de 18 de imagen en el emulador). _dash_img_alpha (datatypes) sigue tomando
+  "todo alfa 0" como sin alfa, a propósito.
 - Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
   D8 (tamaño).

@@ -3049,14 +3049,16 @@ static UBYTE *_dash_rgba_alpha(UBYTE *pixels, LONG w, LONG h) {
 static UBYTE *_dash_rgba_mask(UBYTE *pixels, LONG w, LONG h, LONG mod) {
     UBYTE *mask = (UBYTE *)_DASH_PIXALLOC(mod * h, MEMF_CLEAR), *p;
     LONG x, y;
-    BOOL clear = FALSE, opaque = FALSE;
+    BOOL clear = FALSE;
     if (!mask) return NULL;
     for (y = 0, p = pixels + 3; y < h; y++)
         for (x = 0; x < w; x++, p += 4) {
-            if (*p >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
+            if (*p >= 128) mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7);
             else clear = TRUE;
         }
-    if (!(clear && opaque)) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
+    /* all opaque: no mask; all clear: the empty mask, so nothing is drawn (dashweb D81: a PNG whose only colour
+       is transparent came out opaque) */
+    if (!clear) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
     return mask;
 }
 
