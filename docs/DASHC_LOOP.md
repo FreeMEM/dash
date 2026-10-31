@@ -88,11 +88,11 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   ellos no sale, y ninguno avisa (ni bloques de malloc pisados ni bloques de Dash escritos tras liberarse). Es
   decir: cualquier cambio de dónde cae la memoria lo esconde. Pendiente: otra vía (un depurador en el momento del
   assert, o el mismo fallo con dash1).
-  También d[k] leído de la casilla en for k in d.keys() (61c4b46, deshecho): la tanda completa da 106 de 114 dos
+  También d[k] leído de la casilla en for k in d.keys() (76cf177, deshecho): la tanda completa da 106 de 114 dos
   veces igual (test_js corta su salida en '{"a"' y los últimos del arranque se quedan sin tiempo); test_js y su
   grupo pasan solos. D16 bloquea las mejoras: cada cambio puede sacarlo. Va antes que la velocidad.
   El texto roto del assert venía del sprintf del runtime de dashc, que no sabía de precisión ("%.60s"):
-  arreglado en e753d5f (vsnprintf completo, prueba en externo.dash). Con él, la tanda sin d[k] da 114 de 114,
+  arreglado en f0338db (vsnprintf completo, prueba en externo.dash). Con él, la tanda sin d[k] da 114 de 114,
   y los literales de 24 y 32 letras pasan en la tanda corta; pero d[k] vuelve a dar 107 de 114 (test_selectores4
   corta su salida tras "li:nth-last-of-type(1)" y los 6 siguientes se quedan sin tiempo). O d[k] tiene un fallo
   propio (un diccionario que cambia dentro del bucle) o D16 sigue ahí. d[k] queda fuera.
@@ -673,7 +673,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     - Una llamada que pasa una función (`E_FUNCREF`) cuenta como desconocida para "conserva elementos" y "no
       libera". Una tanda dio una vez 73 de 114, con un assert de QuickJS en test_jsdom_texto y textos rotos; no se
       repitió solo. Tras esto, tanda completa 114 de 114 (2026-10-30).
-  - Fusionada ide-piezas (525fff2): builtins de Inferencia y Forja, lib/json, lib/dashui, lib/red y el depurador de
+  - Fusionada ide-piezas (306460c): builtins de Inferencia y Forja, lib/json, lib/dashui, lib/red y el depurador de
     dashc (D12, hecho en otra rama). Batería todo bien, depurar.py con dashc y con --c, run_tests 482/482.
   - D14: `--memcheck` ya rellenaba lo liberado con 0xDB, lo apartaba y avisaba con fichero y línea al retener,
     soltar o liberar dos veces (también con dashc, por `_dash_mc_where`). Aparta 64 bloques. Probado con 1024:
@@ -686,10 +686,10 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
     test_on_click_timer no acaba y los que van detrás en el mismo arranque agotan el tiempo. test_net_server
     falla también sin --memcheck.
   - Un fallo de mis optimizaciones salió en la rama ide-piezas (Inferencia): la variable de un for sobre
-    textos o sobre `d.keys()` que el cuerpo reasigna se liberaba dos veces (arreglado allí, 4d64e31).
+    textos o sobre `d.keys()` que el cuerpo reasigna se liberaba dos veces (arreglado allí, e22113c).
   - La causa de test_on_click_timer y desktop_canvas_*: a la rama le faltaban 22 commits de main (1.0.1, ronda 3
     de recursos), entre ellos los arreglos de test_mouse_curve (dejaba el botón pulsado y la pantalla arrastrada)
-    y test_args_wb. Fusionado main (8e82817). R8 lleva el largo en la cabecera de cada texto: en dashc,
+    y test_args_wb. Fusionado main (933e6e1). R8 lleva el largo en la cabecera de cada texto: en dashc,
     `dl_str_forget` ya no hace nada. Batería normal en el A1200 742 de 743 (test_net_server, que pasa solo).
   - Tras la fusión de main, batería `--emu --memcheck` 740 de 741: sin fugas ni errores de memoria. El que
     faltaba, test_net_server, chocaba con test_http_lib: su servidor de prueba (# emu-http) estaba en el puerto
@@ -757,7 +757,7 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   vacía. Test tests/test_image_clear_rtg.dash (RTG del 3.2): sin el arreglo, "transparente: 248". En dashweb
   3f9493e (358 de 358 sin emulador, 18 de 18 de imagen en el emulador). _dash_img_alpha (datatypes) sigue tomando
   "todo alfa 0" como sin alfa, a propósito.
-- 2026-10-31, D80 con dashc, más: con el dashc de antes de D80 (0cead4d) los siete (acid2_pagina, actualizar,
+- 2026-10-31, D80 con dashc, más: con el dashc de antes de D80 (e4c6518) los siete (acid2_pagina, actualizar,
   cookies, descargas, documento_tipo, estilo_enlaces, formularios_post, en un arranque con servidores) pasan 2 de 2;
   con D80, formularios_post se cuelga sin escribir nada en cada intento (3 de 3). Cada mitad de los seis previos con
   formularios_post pasa. Con 8 bytes de guarda tras cada bloque pequeño, pasa y ninguna guarda se pisa; con los
@@ -766,12 +766,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   pequeños ni escrituras tras liberar en esa disposición. Siguiente: leer tras liberar (el veneno lo esconde:
   algo podría leer un bloque libre y fiarse de lo que había) o un depurador en el cuelgue.
 - Estado al parar (2026-10-31 02:15, parada pedida por el usuario): el codegen
-  lleva D81 (f2c1ef6) pero dashc/runtime/dashrt*.o no: falta `make runtime`, la batería de dashc y su commit.
+  lleva D81 (c3a1ce3) pero dashc/runtime/dashrt*.o no: falta `make runtime`, la batería de dashc y su commit.
   No queda nada sin commit ni worktrees provisionales.
 - Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
   D8 (tamaño).
 - 2026-10-31, rama trasfondo-2 (sale de dashc; Trasfondo 2.0): ventana sin barra de título, On RightClick, On
-  Inactive, rmbtrap, cx_key_add y wm_* en dash1 y dashc (8567ee7). Medido después: cobertura 239 de 344 compilan
+  Inactive, rmbtrap, cx_key_add y wm_* en dash1 y dashc (9fa2eac). Medido después: cobertura 239 de 344 compilan
   (los 105 que no, todos con C: @native, @c o @header; dos de ellos con @native(borrow), que el parser de dashc no
   conoce y da "se esperaba func"), y en el A1200 164 de 165 con la salida esperada (el de inf con FPU, del
   emulador). Batería de dashc (run.py): todo bien en A1200 y en A500.
