@@ -44,12 +44,14 @@
 
 (exit (if #es
           (cat "Dash está en " #cajon ".\n\n"
-               "Desde un Shell nuevo (o tras reiniciar):\n"
+               "Desde un Shell nuevo (o tras reiniciar), para compilar un ejemplo:\n"
                "  dashc DASH:examples/hola.dash -o RAM:hola\n"
+               "y para ejecutarlo:\n"
                "  RAM:hola\n\n"
                "Con --fpu (68020 y FPU), --memcheck y --stack. Más en DASH:LEEME.")
           (cat "Dash is in " #cajon ".\n\n"
-               "From a new Shell (or after rebooting):\n"
+               "From a new Shell (or after rebooting), to build an example:\n"
                "  dashc DASH:examples/hola.dash -o RAM:hola\n"
+               "and to run it:\n"
                "  RAM:hola\n\n"
                "With --fpu (68020 and FPU), --memcheck and --stack. More in DASH:README.")))
