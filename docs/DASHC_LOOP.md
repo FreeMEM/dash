@@ -758,5 +758,16 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   vacía. Test tests/test_image_clear_rtg.dash (RTG del 3.2): sin el arreglo, "transparente: 248". En dashweb
   3f9493e (358 de 358 sin emulador, 18 de 18 de imagen en el emulador). _dash_img_alpha (datatypes) sigue tomando
   "todo alfa 0" como sin alfa, a propósito.
+- 2026-10-31, D80 con dashc, más: con el dashc de antes de D80 (0cead4d) los siete (acid2_pagina, actualizar,
+  cookies, descargas, documento_tipo, estilo_enlaces, formularios_post, en un arranque con servidores) pasan 2 de 2;
+  con D80, formularios_post se cuelga sin escribir nada en cada intento (3 de 3). Cada mitad de los seis previos con
+  formularios_post pasa. Con 8 bytes de guarda tras cada bloque pequeño, pasa y ninguna guarda se pisa; con los
+  bloques libres envenenados (0xDB, comprobado al darlos otra vez; sin mover nada), pasa y nadie escribe en un
+  bloque libre. Es decir: lo que cambia la memoria o su contenido lo esconde, como D16; ni desbordes de bloques
+  pequeños ni escrituras tras liberar en esa disposición. Siguiente: leer tras liberar (el veneno lo esconde:
+  algo podría leer un bloque libre y fiarse de lo que había) o un depurador en el cuelgue.
+- Estado al parar (2026-10-31 02:15, parada pedida por el usuario a través de la sesión tachyon-e6): el codegen
+  lleva D81 (f2c1ef6) pero dashc/runtime/dashrt*.o no: falta `make runtime`, la batería de dashc y su commit.
+  No queda nada sin commit ni worktrees provisionales.
 - Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
   D8 (tamaño).
