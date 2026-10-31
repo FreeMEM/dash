@@ -875,3 +875,12 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
   llamar menos al runtime, como decía D15). No sigo con más rutinas en ensamblador. Con rt_asm.s: batería de
   dashc bien en A1200 y A500; Tachyon con dashc, tanda completa 114 de 114 (2.503 s; QuickJS también usa ese
   memcpy).
+- 2026-10-31, paso 7 (D9d): la PR, preparada y sin crear. Crearla pide subir la rama, y eso publica Dash 2.0: lo
+  decide el usuario. Estado final de trasfondo-2 (dashc y 9 commits más): run_tests 519 de 519; batería de dashc
+  bien en A1200 y A500; cobertura 239 de 344 compilan (los 105 que no, con C) y 164 de 165 con la salida esperada
+  en el A1200 (el de inf con FPU, del emulador); Tachyon con dashc 114 de 114; extensión de VS Code 101 de 101 y
+  22 de 22. Se fusiona con origin/main (c0e57ee) sin conflictos. La rama dashc no lleva el trabajo de
+  trasfondo-2 (su worktree es de otra sesión): la PR sale de trasfondo-2 o de dashc tras fusionarla allí.
+  Quedan: el número de versión del README y de compiler/__init__.py al publicar; la tabla de categorías de
+  builtins de MANUAL_REFERENCIA suma 738 (la lista completa, 836, en BUILTINS); los límites del depurador con
+  dashc (paso 4).
