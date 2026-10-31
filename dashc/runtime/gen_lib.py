@@ -87,6 +87,10 @@ def main():
     text, n = re.subn(r"static const char \*const _dash_srcfiles\[\] = \{[^\n]*\};",
                       "const char *_dash_srcfiles[64];", text)
     assert n == 1, "gen_lib: no encuentro _dash_srcfiles"
+    # @version: program_version() da el nombre y la versión que pone el programa al arrancar (en ./dash, una macro)
+    old = "static STRPTR _dash_program_version(void) { return (STRPTR)_DASH_VERSION; }"
+    assert old in text, "gen_lib: no encuentro _dash_program_version"
+    text = text.replace(old, 'char *_dash_version = "";\nstatic STRPTR _dash_program_version(void) { return (STRPTR)_dash_version; }')
     # --memcheck: dashc pone el sitio de cada instrucción en _dash_mc_where (tiene que verse fuera)
     old = "static const char *_dash_mc_where = NULL;"
     assert old in text, "gen_lib: no encuentro _dash_mc_where"

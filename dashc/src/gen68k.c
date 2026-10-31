@@ -7017,6 +7017,7 @@ void gen_program(Program *p, Obj *o)
         if (p->catalog_lang) set_rt_var("__dash_catalog_builtin", p->catalog_lang, 0);
     }
     if (p->wb_output) set_rt_var("__dash_stdiowin", p->wb_output, 0);
+    if (p->version) set_rt_var("__dash_version", p->version, 0);   /* program_version() */
     if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
     {
         /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
