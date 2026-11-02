@@ -768,6 +768,17 @@ Plan anterior y decisiones de fondo: `dashc/PLAN_DATOS.md`, `dashc/README.md`.
 - Estado al parar (2026-10-31 02:15, parada pedida por el usuario): el codegen
   lleva D81 (c3a1ce3) pero dashc/runtime/dashrt*.o no: falta `make runtime`, la batería de dashc y su commit.
   No queda nada sin commit ni worktrees provisionales.
+- 2026-11-02, Amiberry se cerraba entero con Tachyon 0.8.0 (compilado con este compilador; release retirada por el
+  usuario): en su CoffinOS (Amiberry 8.2.2, 68040 con JIT), al cargar freemem.space. Reproducido en una copia del
+  disco: SIGABRT de Amiberry tras un SIGSEGV al leer el siguiente opcode; regs.pc_p con la mitad alta perdida, justo
+  después del `dbls` de z_inflate (zlib del runtime, compilado con gcc). Con el JIT apagado, bien; la 0.7.5 (gcc
+  entero) no cae. Programas mínimos con `dbls` o con z_inflate no lo reproducen. Arreglo: `-fno-branch-count-reg` en
+  compiler/cflags.py (gcc no genera DBcc con condición; quita también los dbra) y `make runtime` (lleva ya D81).
+  Con él, y con las librerías de C de Tachyon igual (rama dash2-08, d0f1f0c), Tachyon carga la página; el mismo
+  Tachyon sin la opción se cae a los 5 s. Coste (tools/bench.py, dash1): A1200 sin cambio claro (±3 %), A500 hasta
+  +10 % en bucles cerrados (int_loop, while_loop, func_call); 0,13 % más pequeño. Aviso a Amiberry:
+  https://github.com/BlitterStudio/amiberry/issues/2591. Queda un dbne en js_bigint_divrem de QuickJS que gcc genera
+  igualmente, y uno escrito a mano en rt_math.s (__dash_start, una vez al arrancar). Sin la batería de dashc.
 - Pendiente: D16 (y D80 con dashc: 94 de 114); D15; D9c, D9d; el depurador y la vista previa de MUI con dashc;
   D8 (tamaño).
 - 2026-10-31, rama trasfondo-2 (sale de dashc; Trasfondo 2.0): ventana sin barra de título, On RightClick, On
