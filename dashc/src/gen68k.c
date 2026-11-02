@@ -1777,7 +1777,7 @@ static int gen_field(Node *n)
         rt_call(t == TY_STR ? "_dl_str_len" : IS_DICT(t) ? "_dl_dict_length" : "_dl_arr_length", 1, 0);
         return TY_INT;
     }
-    fatal_node(n, "dashc (prueba): .%s aún no está", n->name);
+    fatal_node(n, "(sin --gcc) .%s aún no está", n->name);
     return TY_VOID;
 }
 
@@ -2246,7 +2246,7 @@ static int gen_list_method(Node *n)
         rt_call("_dl_arr_clear", 1, 0);
         return TY_VOID;
     }
-    fatal_node(n, "dashc (prueba): .%s aún no está", n->name);
+    fatal_node(n, "(sin --gcc) .%s aún no está", n->name);
     return TY_VOID;
 }
 
@@ -3258,7 +3258,7 @@ static int gen_dash_builtin(Node *n)
     strcpy(sym, "_db_");
     strcat(sym, n->name);
     if (!runtime_has(sym))
-        fatal_node(n, "dashc (prueba): el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
+        fatal_node(n, "(sin --gcc) el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
     np = builtin_info[b].nparams;
     if (n->args.n > np) fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, np, n->args.n);
     if (np) {
@@ -3484,7 +3484,7 @@ static int gen_builtin(Node *n)
     for (i = n->args.n - 1; i >= 0; i--) {
         Node *a = n->args.v[i];
         if (builtins[b].args[i] == 'S') {
-            if (a->kind != E_STR) fatal_node(a, "dashc (prueba): aquí va un texto literal");
+            if (a->kind != E_STR) fatal_node(a, "(sin --gcc) aquí va un texto literal");
             pea_string(a->str, a->len);
         } else {
             push_value(a);
@@ -3921,7 +3921,7 @@ static int gen_expr(Node *n)
             w(0x4480);                                 /* neg.l d0 */
             return TY_INT;
         }
-        fatal_node(n, "dashc (prueba): .%s() aún no está", n->name);
+        fatal_node(n, "(sin --gcc) .%s() aún no está", n->name);
         return TY_VOID;
     case E_VAR:
         v = lookup(n->name);
@@ -6120,7 +6120,7 @@ static void gen_stmt(Node *n)
             gen_dict_set(n->b, n->a);
             return;
         }
-        fatal_node(n, "dashc (prueba): esta asignación aún no está");
+        fatal_node(n, "(sin --gcc) esta asignación aún no está");
         return;
     case S_BREAK:
     case S_CONTINUE:

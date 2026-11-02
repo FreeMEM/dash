@@ -1,60 +1,59 @@
 #!/usr/bin/env python3
-"""Dash 2.0: compila un programa Dash a un ejecutable de Amiga con dashc, sin compilador de C.
+"""Dash: compila un programa Dash a un ejecutable de Amiga.
 
-    ./dash programa.dash -o programa [--fpu] [--memcheck] [--stack N]
+    ./dash programa.dash -o programa [--fpu] [--cpu 68040] [--memcheck] [--stack N] [--debug]
+    ./dash --gcc programa.dash -o programa [...]
 
-dashc está en dashc/dashc (make -C dashc lo construye). Lo que dashc no hace (C en el programa: @native, @c, @header;
--O, --small, --multifile...) lo hace todavía el Dash de Python, la 1.x: ./dash1. Con DASH_FALLBACK_DASH1=1 (la
-extensión de VS Code), en esos casos compila con ./dash1 en vez de dar el error."""
+Sin --gcc, el compilador de Dash genera él mismo el código del Amiga (no hace falta un compilador de C).
+Con --gcc, el programa pasa a C y lo compila el gcc de Amiga de bebbo, como en la 1.x. Lo que el compilador
+propio no hace (C en el programa: @native, @c, @header; -O, --small, --multifile...) va solo por C con gcc,
+y lo dice en una línea."""
 import os
 import re
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.realpath(__file__))
-DASHC = os.path.join(ROOT, "dashc", "dashc")
-# las opciones de dash1 que dashc aún no tiene
-SOLO_DASH1 = {"--multifile", "--small", "-O", "--optimize", "-O0",
-              "--no-optimize", "--no-hunk"}
+NATIVO = os.path.join(ROOT, "dashc", "dashc")
+CON_GCC = os.path.join(ROOT, "dash1")       # el camino por C (pieza interna: se usa con --gcc)
+# opciones que solo tiene el camino por C
+SOLO_GCC = {"--multifile", "--small", "-O", "--optimize", "-O0",
+            "--no-optimize", "--no-hunk"}
+NOTA = "se compila por C con gcc"            # (la extensión de VS Code la busca para saber cómo depurar)
 
 
-def con_dash1(motivo):
-    """DASH_FALLBACK_DASH1=1: lo que dashc no hace, con ./dash1 (lo dice en stderr)"""
-    print(f"dash: {motivo}: con ./dash1", file=sys.stderr)
-    sys.stderr.flush()
-    return subprocess.call([sys.executable, os.path.join(ROOT, "dash1"), *sys.argv[1:]])
+def por_c(args, motivo=None):
+    """El programa por C con gcc; con motivo, una línea que dice por qué"""
+    if motivo:
+        print(f"dash: {motivo}: {NOTA}", file=sys.stderr)
+        sys.stderr.flush()
+    return subprocess.call([sys.executable, CON_GCC, *args])
 
 
 def main():
     args = sys.argv[1:]
+    if "--gcc" in args:
+        return por_c([a for a in args if a != "--gcc"])
     if "--version" in args:
-        return subprocess.call([DASHC, "--version"])
+        return subprocess.call([NATIVO, "--version"])
     if not args or "-h" in args or "--help" in args:
         print(__doc__.strip())
         return 0 if args else 1
-    respaldo = os.environ.get("DASH_FALLBACK_DASH1") == "1"
-    otras = [a for a in args if a.split("=")[0] in SOLO_DASH1]
-    if otras and respaldo:
-        return con_dash1(f"{' '.join(otras)} es de la 1.x")
+    otras = [a for a in args if a.split("=")[0] in SOLO_GCC]
     if otras:
-        print(f"dash: {' '.join(otras)} no lo hace aún dashc (Dash 2.0); con el Dash 1.x: ./dash1 {' '.join(args)}",
-              file=sys.stderr)
+        return por_c(args, " ".join(otras))
+    # (-v y -q no hacen falta: el compilador solo escribe si hay un error)
+    nat = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
+    if os.environ.get("DASH_PROFILE") == "1" and "--perfil" not in nat and "--profile" not in nat:
+        nat.append("--perfil")        # (tools/medir_visor.py --perfil)
+    if not os.path.exists(NATIVO):
+        print("dash: falta el compilador; constrúyelo con: make -C dashc", file=sys.stderr)
         return 1
-    # (-v y -q de dash1 no hacen falta: dashc solo escribe si hay un error)
-    args = [a for a in args if a not in ("-v", "--verbose", "-q", "--quiet")]
-    if os.environ.get("DASH_PROFILE") == "1" and "--perfil" not in args and "--profile" not in args:
-        args.append("--perfil")        # (como dash1: tools/medir_visor.py --perfil)
-    if not os.path.exists(DASHC):
-        print("dash: falta dashc; constrúyelo con: make -C dashc", file=sys.stderr)
-        return 1
-    r = subprocess.run([DASHC, *args], capture_output=True, text=True, errors="replace")
+    r = subprocess.run([NATIVO, *nat], capture_output=True, text=True, errors="replace")
     sys.stdout.write(r.stdout)
-    err = r.stderr
-    if respaldo and r.returncode and re.search(r"(lleva C|no admite C)", err):
-        return con_dash1("el programa lleva C")
-    if re.search(r"(lleva C|no admite C)", err):
-        err += "dash: Dash 2.0 no compila C en los programas; el Dash 1.x sí: ./dash1 " + " ".join(sys.argv[1:]) + "\n"
-    sys.stderr.write(err)
+    if r.returncode and re.search(r"(lleva C|no admite C)", r.stderr):
+        return por_c(args, "el programa lleva C")
+    sys.stderr.write(r.stderr)
     return r.returncode
 
 

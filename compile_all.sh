@@ -14,7 +14,7 @@ for file in examples/*.dash; do
     name=$(basename "$file" .dash)
     printf "%-30s " "$name"
 
-    if ./dash1 "$file" -o "bin/$name" > "$LOG" 2>&1; then
+    if ./dash --gcc "$file" -o "bin/$name" > "$LOG" 2>&1; then
         if grep -q "Success" "$LOG"; then
             echo "[OK]"
             SUCCESS=$((SUCCESS + 1))

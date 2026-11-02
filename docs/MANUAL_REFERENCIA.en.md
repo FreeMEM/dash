@@ -34,7 +34,7 @@
 21. [Modules and Imports](#21-modules-and-imports)
 22. [Complete Examples](#22-complete-examples)
 23. [Quick Reference](#23-quick-reference)
-24. [Dash 2.0: the dashc compiler](#24-dash-20-the-dashc-compiler)
+24. [Dash 2.0: the straight compiler](#24-dash-20-the-straight-compiler)
 
 ---
 
@@ -79,9 +79,9 @@ end
 
 ### Compiling
 
-The commands in this part are those of Dash 1.x, which from Dash 2.0 on is `./dash1`. In Dash 2.0, `./dash` is
-dashc, which does not use gcc: its options, what it does not accept and how to use C with it are in
-[section 24](#24-dash-20-the-dashc-compiler).
+The commands in this part are those of the path through C with gcc, which from Dash 2.0 on is `./dash --gcc`.
+Without `--gcc`, `./dash` compiles straight to hunk, without gcc: its options, what it does not accept and how to
+use C with it are in [section 24](#24-dash-20-the-straight-compiler).
 
 ```bash
 ./dash programa.dash -o programa              # gcc -O2, for 68000
@@ -3549,8 +3549,9 @@ end
 
 ### C Code: @native and @extern
 
-This part and the next one are about Dash 1.x (`./dash1`). Dash 2.0 (`./dash`) does not accept C inside the
-program: it links C that is already compiled with `@link`, `@extern` and `@export` ([section 24](#24-dash-20-the-dashc-compiler)).
+This part and the next one are about the path through C (`./dash --gcc`; `./dash` goes that way by itself when
+it sees C in the program). The straight compiler does not accept C inside the program: it links C that is already
+compiled with `@link`, `@extern` and `@export` ([section 24](#24-dash-20-the-straight-compiler)).
 
 `@native` writes a function in C inside the program. Its parameters and its result are Dash
 types (`Int` is `LONG`, `String` is `STRPTR`, `Pointer` is `APTR`):
@@ -4470,32 +4471,32 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 
 ---
 
-## 24. Dash 2.0: the dashc compiler
+## 24. Dash 2.0: the straight compiler
 
-### `./dash` and `./dash1`
+### `./dash` and `./dash --gcc`
 
-From Dash 2.0 on, `./dash` is **dashc**: a compiler written in C that generates the 68000 code itself and links
-the Hunk executable with its runtime, which it carries inside already compiled. It needs neither gcc nor the
+From Dash 2.0 on, `./dash` compiles **straight to hunk**: its compiler, written in C (folder `dashc/`), generates
+the 68000 code itself and links the Hunk executable with its runtime, which it carries inside already compiled. It needs neither gcc nor the
 Python with Lark of 1.x. The same code is compiled for the PC and for the Amiga, so it also compiles on the Amiga
 itself.
 
 The language, the builtins and the runtime are those of 1.x: programs do the same, memory included. New language
 features and new builtins go into both compilers.
 
-The 1.x compiler stays, unchanged, as `./dash1`: it translates to C and compiles with gcc, and everything the
-previous sections say about the generated C applies to it. It is needed for programs with C inside (see
-"Differences from 1.x" below).
+The 1.x path stays, unchanged, as `./dash --gcc`: it translates to C and compiles with gcc, and everything the
+previous sections say about the generated C applies to it. It is needed for programs with C inside (see "When it
+goes through C" below); `./dash` takes them that way by itself.
 
 ```bash
-make -C dashc                                   # builds dashc/dashc (a C compiler for the PC and Python 3)
-./dash programa.dash -o programa                # Dash 2.0 (dashc)
-./dash1 programa.dash -o programa               # Dash 1.x (C and gcc)
-./dash --version                                # Dash 2.0.0 (dashc)
+make -C dashc                                   # builds the compiler (a C compiler for the PC and Python 3)
+./dash programa.dash -o programa                # straight to hunk
+./dash --gcc programa.dash -o programa          # through C with gcc
+./dash --version                                # Dash 2.0.1
 ```
 
-`./dash` is a short script that calls `dashc/dashc`; dashc can also be called directly. If the program has C in
-it, or an option dashc does not have is given, `./dash` stops with an error that gives the `./dash1` command
-that does it.
+`./dash` is a short script that calls the compiler (`dashc/dashc`) or, with `--gcc`, the path through C. If the
+program has C in it, or an option only that path has is given, `./dash` takes it through C by itself and says so
+in a line: `dash: el programa lleva C: se compila por C con gcc`.
 
 ### Options
 
@@ -4507,7 +4508,7 @@ that does it.
 ./dash --stack 65536 programa.dash -o programa  # minimum stack in bytes, like @stack
 ./dash --profile programa.dash -o programa      # profile at exit (also --perfil)
 ./dash --debug programa.dash -o programa        # for the debugger of the dbg_* builtins
-dashc/dashc --cabecera tipos.h programa.dash    # the program's structs in C, for the C of @link
+./dash --cabecera tipos.h programa.dash         # the program's structs in C, for the C of @link
 ```
 
 | Option | What it does |
@@ -4523,24 +4524,24 @@ dashc/dashc --cabecera tipos.h programa.dash    # the program's structs in C, fo
 | `--cabecera x.h` | Writes a C header with the program's structs (below). Without `-o`, only that |
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
-| `--version` | `Dash 2.0.0 (dashc)` |
+| `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |
+| `--version` | `Dash 2.0.1` |
 
-`./dash` accepts the `-v` and `-q` of 1.x and they change nothing: dashc only writes when there is an error.
+`./dash` accepts the `-v` and `-q` of 1.x and without `--gcc` they change nothing: the compiler only writes when there is an error.
 Errors say where, like those of 1.x: `file.dash:line:column: Error: message`. Link errors (for example, an
-`@extern` function nobody defines) start with `dashc: Error:`.
+`@extern` function nobody defines) start with `dash: Error:`.
 
 Environment variables when compiling:
 
 | Variable | What for |
 |---|---|
 | `DASH_PRINT_FLUSH=1` | Each `Print` goes out at once, as in 1.x |
-| `DASH_FALLBACK_DASH1=1` | A program with C or a 1.x option is compiled with `./dash1` instead of giving the error (the VS Code extension uses it) |
 | `DASH_TEST_AUTOCLOSE=<s>` | The program ends by itself after `s` seconds with code 0 (for tests in the emulator) |
 | `DASH_PROFILE=1` | The same as `--profile` (only with `./dash`) |
-| `DASH_HOME` | Dash's folder, for the `import`s of `lib/`. If unset, the one above `dashc/` (on the Amiga, dashc's own) |
+| `DASH_HOME` | Dash's folder, for the `import`s of `lib/`. If unset, the one above `dashc/` (on the Amiga, the `dash` command's own) |
 
-`tools/emu_run.py --dash2 programa.dash` compiles with `./dash` and, if the program has C, with `./dash1`; then it
-runs it in the emulator as usual.
+`tools/emu_run.py --dash2 programa.dash` compiles with `./dash` (if the program has C, through C) and runs it in
+the emulator as usual; without `--dash2`, with `./dash --gcc`.
 
 ### Outside C: @link, @extern and @export
 
@@ -4549,10 +4550,10 @@ gcc (`m68k-amigaos-gcc`) into a `.o` object or a `.a` library, and the program u
 
 - `@link "c/saludo.o"` (or `"libx.a"`) links the object or the library, with the path relative to the `.dash`
   file that says it. Only what the program reaches goes in; an object compiled without `-ffunction-sections` goes
-  in whole. A `.c` file will not do: dashc says it is not a Hunk object.
+  in whole. A `.c` file will not do: the compiler says it is not a Hunk object.
 - `@extern("name") func f(a: Int, s: String) -> Int` declares a C function of what is linked. It is called as in
-  C: arguments on the stack and the result in `d0`. dashc does not use the text in brackets (1.x requires it).
-- `@export func f(...)` is a Dash function that the C calls by its name. dashc generates it even if nothing calls
+  C: arguments on the stack and the result in `d0`. The straight compiler does not use the text in brackets (the C path requires it).
+- `@export func f(...)` is a Dash function that the C calls by its name. The compiler generates it even if nothing calls
   it from Dash and gives it its Dash name as its C name, also when it is private to a module.
 
 Types `@extern` accepts:
@@ -4616,19 +4617,19 @@ Main
 end
 ```
 
-It compiles the same with `./dash` and with `./dash1`.
+It compiles the same with `./dash` and with `./dash --gcc`.
 
 **What the C finds in the runtime.** The C of `@link` is compiled with libnix's headers, but it is not linked with
-libnix: what it calls from libc, libm and libgcc comes from dashc's runtime, and only what is used goes in. There
+libnix: what it calls from libc, libm and libgcc comes from the compiler's runtime, and only what is used goes in. There
 are `malloc`, `calloc`, `realloc` and `free` (with a semaphore: they work from a `task_start` task), the string
 functions (`strchr`, `strdup`, `strtol`, `strtod`, `qsort`...), `printf`, `snprintf` and file stdio (`fopen`,
 `fread`, `fwrite`...; standard output goes to the program's), `gmtime`, `localtime`, `mktime`, the `ctype.h` table
-and the `math.h` functions (`sin`, `pow`, `sqrt`, `round`...). If something is missing, dashc says at link time
+and the `math.h` functions (`sin`, `pow`, `sqrt`, `round`...). If something is missing, the compiler says at link time
 which names nobody defines. One difference from libnix: the `printf` family does not write floating-point numbers
 (`%f`, `%e` and `%g` print `?`).
 
-**Dash structs in C.** `dashc/dashc --cabecera tipos.h programa.dash` writes a header with the structs as dashc
-lays them out (the pointer points to the first field; each field takes 4 bytes), the integer constants, the
+**Dash structs in C.** `./dash --cabecera tipos.h programa.dash` writes a header with the structs as the
+compiler lays them out (the pointer points to the first field; each field takes 4 bytes), the integer constants, the
 prototypes of the `@export` functions and the runtime functions that C can use: `dl_str_dup`, `dl_str_free`,
 `dl_str_len`, `dl_str_temp`, `dl_retain`, `dl_release`, `dl_arr_length`, `dl_arr_get`, `dl_dict_length` and
 `dl_dict_get`. It also works for a module without `Main`. For C that came from an `@native` or a `@c` of 1.x, the
@@ -4653,7 +4654,7 @@ does not keep the shell's stack.
 ### --debug and the debugger
 
 `./dash --debug` puts a `NOP` at the start of each Dash line and adds to the executable a `HUNK_DEBUG` block with
-the files, lines, functions, variables, globals and struct fields (`dashc/dashc --debug-info programa` shows it).
+the files, lines, functions, variables, globals and struct fields (`./dash --debug-info programa` shows it).
 It does not copy functions inline and keeps every variable in memory, so the debugger can find them; the program
 does the same as without `--debug`.
 
@@ -4664,48 +4665,49 @@ trace mode, which Emu68 does not have.
 
 The VS Code debugger (F5) uses these same builtins: it compiles with `./dash --debug` and starts the program on
 the emulated Amiga under `tools/amiga/dbgserver.dash`, a Dash program that drives it with the `dbg_*` and serves VS
-Code over TCP (`tools/emu_run.py --dbgserver PORT`). A program with C is compiled by `./dash1 --debug` and debugged
-by gdb, as in 1.x; `"debugger": "gdb"` in `launch.json` always picks that way.
+Code over TCP (`tools/emu_run.py --dbgserver PORT`). A program with C is compiled through C (`./dash --gcc --debug`)
+and debugged by gdb, as in 1.x; `"debugger": "gdb"` in `launch.json` always picks that way.
 
-### dashc on the Amiga
+### The compiler on the Amiga
 
 ```bash
 make -C dashc amiga                             # dashc/build/dashc.amiga (needs bebbo's gcc)
+python3 tools/paquete_amiga.py                  # the package for the Amiga, with its installer
 ```
 
-`dashc/build/dashc.amiga` is dashc for the Amiga (it runs on a 68000). It is copied to the Amiga as `dashc`, and
-next to it, if they will be used, the runtimes it does not carry inside so as not to double its size:
+`dashc/build/dashc.amiga` is the compiler for the Amiga (it runs on a 68000). The package copies it as `dash`, and
+next to it the runtimes it does not carry inside so as not to double its size:
 
-| File (in `dashc/build/`) | For |
+| On the Amiga (in `dashc/build/`) | For |
 |---|---|
-| `dashc_mc.drt` | `--memcheck` |
-| `dashc_fpu.drt` | `--fpu` |
-| `dashc_fpu_mc.drt` | `--fpu --memcheck` |
+| `dash_mc.drt` (`dashc_mc.drt`) | `--memcheck` |
+| `dash_fpu.drt` (`dashc_fpu.drt`) | `--fpu` |
+| `dash_fpu_mc.drt` (`dashc_fpu_mc.drt`) | `--fpu --memcheck` |
 
 A `.drt` is a runtime already prepared (read, split and compressed) so that compiling does not have to do it each
-time. dashc looks for them in its own folder (`PROGDIR:`); if the one needed is missing, it says so. For the
-`import`s of `lib/`, the `lib` folder goes next to dashc, or the `DASH_HOME` variable says where the folder that
+time. The command looks for them in its own folder (`PROGDIR:`); if the one needed is missing, it says so. For
+the `import`s of `lib/`, the `lib` folder goes next to it, or the `DASH_HOME` variable says where the folder that
 holds it is.
 
 ```
-dashc programa.dash -o programa
+dash programa.dash -o programa
 ```
 
-From the same input file, the Amiga dashc writes the same executable, byte for byte, as the PC one (the file
+From the same input file, the Amiga compiler writes the same executable, byte for byte, as the PC one (the file
 name goes inside, for error messages: it has to be the same).
 
-### Differences from 1.x: when to use dash1
+### When it goes through C (`--gcc`)
 
-| With `./dash` (2.0) | What to do |
+| Without `--gcc` | What happens or what to do |
 |---|---|
-| A program with `@native`, `@c` or `@header` | `./dash1`, or move the C into an object with `@link` and `@extern`. The `@native` of the `lib/amiga` modules is fine: it is compiled inside dashc |
-| `-O`, `-O0`, `--small`, `--multifile`, `--no-hunk` | `./dash1`. dashc has no optimization levels and writes Hunk directly |
-| Seeing or compiling the generated C (`python3 -m compiler.main`) | That is 1.x: dashc does not generate C |
-| Debugging with gdb | `./dash1 --debug`. dashc's `--debug` is for the `dbg_*` builtins (and the VS Code debugger, which uses them) |
+| A program with `@native`, `@c` or `@header` | `./dash` takes it through C by itself; or move the C into an object with `@link` and `@extern`. The `@native` of the `lib/amiga` modules is fine: it is compiled inside the compiler |
+| `-O`, `-O0`, `--small`, `--multifile`, `--no-hunk` | They go through C. The straight compiler has no optimization levels and writes Hunk directly |
+| Seeing or compiling the generated C (`python3 -m compiler.main`) | That is the C path: the straight compiler does not generate C |
+| Debugging with gdb | `./dash --gcc --debug`. The straight `--debug` is for the `dbg_*` builtins (and the VS Code debugger, which uses them) |
 | `@link "x.c"` | Compile the `.c` first with the Amiga gcc and link the `.o` |
-| A `.library` function through `@extern` | dashc does not call through registers: a builtin, or linked C that calls it |
+| A `.library` function through `@extern` | The straight compiler does not call through registers: a builtin, or linked C that calls it |
 | `Float` or `Double` in an `@extern` function | Pass them as text or as integers (fixed point, for example) |
-| `--stack 0` | It does not keep the shell's stack; dashc always asks for its own |
+| `--stack 0` | It does not keep the shell's stack; the straight compiler always asks for its own |
 
 Everything else is the same: the language, the builtins, the runtime, the programs' error messages and what they
 need to start (Kickstart 3.0 and a 68000; MUI 5 and TLS, a 68020).

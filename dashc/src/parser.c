@@ -96,7 +96,7 @@ static int parse_type(void)
     if (!strcmp(t->text, "Fixed")) return TY_FIXED;      /* coma fija 16.16 en un LONG */
     if (!strcmp(t->text, "Void")) return TY_VOID;          /* -> Void: no devuelve nada */
     if (0)
-        fatal_at(t->line, t->col, "dashc (prueba): el tipo %s aún no está", t->text);
+        fatal_at(t->line, t->col, "(sin --gcc) el tipo %s aún no está", t->text);
     for (i = 0; i < type_names.n; i++)
         if (!strcmp(type_names.v[i], t->text)) return TY_NAMED + i;
     VEC_PUSH(type_names, t->text);
@@ -852,7 +852,7 @@ static void parse_into(Program *p)
             continue;
         }
         if (0)
-            fatal_at(t->line, t->col, "dashc (prueba): %s aún no está", t->text);
+            fatal_at(t->line, t->col, "(sin --gcc) %s aún no está", t->text);
         if (t->kind == T_ID && t->text[0] == '@')
             fatal_at(t->line, t->col, "%s lleva C, y Dash 2.0 no admite C en los programas", t->text);
         if (t->kind == K_FUNC) {

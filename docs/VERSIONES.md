@@ -33,12 +33,32 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
-### 2.0.0 (2026-10-31, versión previa: todavía no está en main)
+### 2.0.1 (2026-11-02)
+
+La 2.0 pasa a `main`. Una sola orden, `./dash`, con dos caminos: directo a hunk (por defecto) y por C con gcc
+(`--gcc`). Cómo instalar cada uno y cuándo usarlo: [README, Instalación](../README.es.md#instalación).
+
+- **Un solo `dash`:** lo que en la 2.0.0 era la orden `./dash1` es ahora `./dash --gcc`. Un programa con C dentro
+  (`@native`, `@c`, `@header`) o una opción de gcc (`-O`, `-O0`, `--small`, `--multifile`, `--no-hunk`) ya no da
+  un error: `./dash` lo pasa por C él solo y lo dice en una línea. `./dash --version` dice "Dash 2.0.1". En el
+  Amiga la orden también se llama `dash` (antes `dashc`), y sus runtimes, `dash_*.drt`.
+- **Amiberry con JIT ya no se cierra:** en Amiberry 8.2.2 con JIT, en un PC, el emulador entero se cerraba con
+  algunos programas (lo vio Tachyon, al descomprimir con zlib). Es un fallo de Amiberry
+  ([aviso](https://github.com/BlitterStudio/amiberry/issues/2591)); gcc ya no genera las instrucciones que lo
+  provocan (`-fno-branch-count-reg`), tampoco en el runtime del compilador directo. En un A500, algunos bucles
+  muy cerrados compilados por C van hasta un 10 % más lentos; en un A1200, sin cambio claro.
+- **`cpu_start` y `cpu_sample` con varios programas a la vez:** antes, dos programas que medían la CPU (la barra y
+  el panel de Trasfondo) se repartían las tareas y cada uno veía solo las suyas. Ahora el primero publica su tabla
+  y los demás la leen: todos ven todas las tareas.
+- **Extensión de VS Code:** sus tareas, la vista previa y el depurador usan `./dash` y `./dash --gcc`; con una
+  2.0.0 siguen como antes.
+
+### 2.0.0 (2026-10-31, versión previa)
 
 Un compilador nuevo. `./dash` es ahora **dashc**: escrito en C, genera él mismo el código 68000 y enlaza el
 ejecutable con su runtime, sin gcc ni el Python con Lark de antes. El compilador de la 1.x sigue, sin cambios,
 como `./dash1`. Sube el número mayor porque `./dash` deja de compilar los programas con C dentro y algunas opciones;
-`./dash1` los compila como siempre. Detalle en el [manual, sección 24](MANUAL_REFERENCIA.md#24-dash-20-el-compilador-dashc).
+`./dash1` los compila como siempre. Detalle en el [manual, sección 24](MANUAL_REFERENCIA.md#24-dash-20-el-compilador-directo).
 
 - **dashc:** el mismo lenguaje, los mismos builtins y el mismo runtime que la 1.x, así que los programas hacen lo
   mismo. En la batería de tests de Dash compilan todos los programas que no llevan C, y los que se comprueban en

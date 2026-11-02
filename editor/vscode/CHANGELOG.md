@@ -1,24 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-02)
 
-- Dash 2.0: `./dash` is dashc (no C compiler) and `./dash1` the Dash that compiles through C. The tasks, the
-  debugger and the MUI preview use `./dash1` where there is one, since they need what only it does (`--fpu`,
-  `--cpu`, `--debug`, `DASH_TEST_AUTOCLOSE`, `DASH_PRINT_FLUSH`); with an older Dash, `./dash` as before.
-- "Run in the emulator" compiles with `./dash` (dashc, through `tools/emu_run.py --dash2`), which now has
-  `DASH_TEST_AUTOCLOSE` and `DASH_PRINT_FLUSH`; a program with C still goes to `./dash1`.
-- The tasks (compile, run, memcheck, profile) and the MUI preview ("Ver en Amiga") compile with `./dash` (dashc),
-  which has `--fpu`, `--cpu`, `DASH_TEST_AUTOCLOSE` and `DASH_PRINT_FLUSH`; with `DASH_FALLBACK_DASH1=1`, a program
-  with C goes to `./dash1` by itself. The preview program takes its picture without C (`time_delay`,
-  `run_command`).
-- The debugger (F5) uses Dash 2.0's: the program is built with `./dash --debug` (dashc) and runs in the emulator
-  under `tools/amiga/dbgserver.dash` (`tools/emu_run.py --dbgserver PORT`), which debugs it with the `dbg_*`
-  builtins and talks lines of text over TCP; `dashDebug.js` is the debug adapter (DAP, inside the extension, no
-  gdb or bgdbserver needed). Breakpoints with conditions, hit counts and logpoints, continue, step over/into/out,
-  pause, the stack, locals and globals (structs and lists open), Dash expressions in the debug console, watch and
-  hover, the program's output as it runs and its exit code. New `launch.json` settings: `args` (the program's) and
-  `debugger` (`"gdb"`: the old way). A program with C in it is built with `./dash1 --debug` and debugged with gdb
-  and bgdbserver, as before; so are **Dash: Preparar para un Amiga real** and `attach`.
+For Dash 2.0.1, where `./dash` compiles straight to hunk and `./dash --gcc` goes through C with gcc (with an older
+Dash, as before).
+
+- The tasks (compile, run, memcheck, profile), "Run in the emulator" and the MUI preview ("Ver en Amiga") compile
+  with `./dash`; a program with C in it goes through C by itself. The preview program takes its picture without C
+  (`time_delay`, `run_command`).
+- The debugger (F5) is Dash 2.0's: the program is built with `./dash --debug` and runs in the emulator under
+  `tools/amiga/dbgserver.dash` (`tools/emu_run.py --dbgserver PORT`), which debugs it with the `dbg_*` builtins
+  and talks lines of text over TCP; `dashDebug.js` is the debug adapter (DAP, inside the extension, no gdb or
+  bgdbserver needed). Breakpoints with conditions, hit counts and logpoints, continue, step over/into/out, pause,
+  the stack, locals and globals (structs and lists open), Dash expressions in the debug console, watch and hover,
+  the program's output as it runs and its exit code. New `launch.json` settings: `args` (the program's) and
+  `debugger` (`"gdb"`: the old way). A program with C in it is built through C (`./dash --gcc --debug`) and
+  debugged with gdb and bgdbserver, as before; so are **Dash: Preparar para un Amiga real** and `attach`.
 
 ## 0.3.1 (2026-11-02)
 

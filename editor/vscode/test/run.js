@@ -1065,6 +1065,7 @@ async function dashcDebugTests() {
     await check('dashc debugger: built by dashc or handed to ./dash1 (C in it); the emulator with dbgserver or bgdbserver', () => {
         assert.strictEqual(engineOf(''), 'dash');
         assert.strictEqual(engineOf('dash: el programa lleva C: con ./dash1\n'), 'gdb');
+        assert.strictEqual(engineOf('dash: el programa lleva C: se compila por C con gcc\n'), 'gdb');
         const args = emulatorArgs('/d', '/p/bin/x.debug', 31000, { machine: 'a500' }, 'dash');
         assert.deepStrictEqual(args, ['/d/tools/emu_run.py', '--follow', '--dbgserver', '31000', '--window', '--machine', 'a500', '/p/bin/x.debug']);
         assert(emulatorArgs('/d', 'x', 1, {}, 'gdb').includes('--gdbserver'));

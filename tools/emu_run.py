@@ -9,7 +9,7 @@ S:Startup-Sequence runs each program with its output redirected to a file.
 
     tools/emu_run.py prog.dash [otro.dash ...]   # compile and run
     tools/emu_run.py --opt prog.dash             # compile with -O
-    tools/emu_run.py --dash2 prog.dash           # compile with ./dash (dashc; with C in it, ./dash1)
+    tools/emu_run.py --dash2 prog.dash           # compile with ./dash (without --gcc; with C in it, through C)
     tools/emu_run.py bin/programa                # already compiled
 
     tools/emu_run.py --autoclose 3 ventana.dash  # ends by itself after 3 s
@@ -93,7 +93,7 @@ MACHINES = {
 
 
 FLUSH_PRINT = False      # set by --follow (compile_dash builds with DASH_PRINT_FLUSH)
-DASH2 = False            # set by --dash2: .dash with ./dash (dashc), what it cannot do with ./dash1
+DASH2 = False            # set by --dash2: .dash with ./dash, not ./dash --gcc
 
 
 def _stop_on_signal(*_):
@@ -151,15 +151,9 @@ def compile_dash(src: Path, exe: Path, optimize: bool, autoclose: int = 0, fpu: 
         env["DASH_TEST_AUTOCLOSE"] = str(autoclose)
     if FLUSH_PRINT:
         env["DASH_PRINT_FLUSH"] = "1"          # --follow: each Print goes out at once
-    if DASH2:
-        # Dash 2.0 (dashc); a program with C, or an option it does not have, says so with "./dash1": that one
-        result = subprocess.run([sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)] + opts,
-                                capture_output=True, text=True, env=env)
-        if result.returncode == 0 and exe.exists():
-            return
-        if "./dash1" not in result.stdout + result.stderr:
-            raise RuntimeError(f"{src}: compile failed\n{result.stdout}{result.stderr}")
-    cmd = [sys.executable, str(ROOT / "dash1"), str(src), "-o", str(exe)] + opts
+    # --dash2: ./dash (its own compiler; a program with C, or an option only the C path has, goes through C with
+    # gcc by itself); else ./dash --gcc (the tests of the C path)
+    cmd = [sys.executable, str(ROOT / "dash")] + ([] if DASH2 else ["--gcc"]) + [str(src), "-o", str(exe)] + opts
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0 or not exe.exists():
         raise RuntimeError(f"{src}: compile failed\n{result.stdout}{result.stderr}")
@@ -553,7 +547,7 @@ def main():
                         help="show the emulator's window (and play its sound); no time limit unless --timeout")
     parser.add_argument("--follow", action="store_true", help="print what the programs write while they run")
     parser.add_argument("--dash2", action="store_true",
-                        help="compile .dash with ./dash (Dash 2.0, dashc); with C in it or -O, with ./dash1")
+                        help="compile .dash with ./dash (its own compiler); with C in it or -O, through C with gcc")
     parser.add_argument("--gdbserver", type=int, metavar="PORT",
                         help="run the first program under bgdbserver (tools/get_bgdbserver.sh): m68k-amigaos-gdb "
                              "connects with target remote :PORT (build it with ./dash --debug; tools/gdb_relay.py "

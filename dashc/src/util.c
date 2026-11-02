@@ -137,7 +137,7 @@ void fatal(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    err_printf("dashc: Error: ");
+    err_printf("dash: Error: ");
     err_out(fmt, ap);
     err_printf("\n");
     va_end(ap);

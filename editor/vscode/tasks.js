@@ -8,7 +8,7 @@ const path = require('path');
 const { missing } = require('./missing');
 
 // ./dash: Dash 2.0 (dashc), which has what these tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH); a
-// program with C in it it compiles with ./dash1, the Dash that goes through C (DASH_FALLBACK_DASH1)
+// program with C in it ./dash compiles it through C with gcc (DASH_FALLBACK_DASH1 for Dash 2.0.0)
 function dashExe(dashDir) {
     return 'dash';
 }

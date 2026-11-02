@@ -1,4 +1,5 @@
-"""./dash of Dash 2.0: dashc (no C compiler), and what it leaves to ./dash1 (the Dash that compiles through C)."""
+"""./dash of Dash 2.0: its own compiler (no C compiler), and --gcc, the path through C with gcc (also by itself for a
+program with C or an option only that path has)."""
 import os
 import subprocess
 import sys
@@ -15,10 +16,10 @@ class TestDash2Cli(unittest.TestCase):
     def run_dash(self, *args):
         return subprocess.run([sys.executable, DASH, *args], capture_output=True, text=True, cwd=ROOT)
 
-    def test_version_is_dashc(self):
+    def test_version(self):
         r = self.run_dash("--version")
         self.assertEqual(r.returncode, 0)
-        self.assertIn("(dashc)", r.stdout)
+        self.assertRegex(r.stdout, r"^Dash 2\.\d+\.\d+\n$")
 
     def test_compiles_a_hunk_executable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -28,27 +29,42 @@ class TestDash2Cli(unittest.TestCase):
             with open(exe, "rb") as f:
                 self.assertEqual(f.read(4), b"\x00\x00\x03\xf3")   # HUNK_HEADER
 
-    def test_c_in_the_program_points_to_dash1(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            r = self.run_dash(os.path.join(ROOT, "tests", "test_c_link.dash"), "-o", os.path.join(tmp, "x"))
-            self.assertNotEqual(r.returncode, 0)
-            self.assertIn("./dash1", r.stderr)
-
-    def test_fallback_to_dash1(self):
-        """DASH_FALLBACK_DASH1=1 (the VS Code extension): a program with C, compiled with ./dash1"""
+    def test_c_in_the_program_goes_through_gcc(self):
+        """a program with C: through C with gcc by itself, and it says so in a line"""
         with tempfile.TemporaryDirectory() as tmp:
             exe = os.path.join(tmp, "x")
-            r = subprocess.run([sys.executable, DASH, "-q", os.path.join(ROOT, "tests", "test_args_wb.dash"), "-o", exe],
-                               capture_output=True, text=True, cwd=ROOT, env=dict(os.environ, DASH_FALLBACK_DASH1="1"))
+            r = self.run_dash("-q", os.path.join(ROOT, "tests", "test_args_wb.dash"), "-o", exe)
             self.assertEqual(r.returncode, 0, r.stderr)
-            self.assertIn("con ./dash1", r.stderr)
+            self.assertIn("el programa lleva C: se compila por C con gcc", r.stderr)
             with open(exe, "rb") as f:
                 self.assertEqual(f.read(4), b"\x00\x00\x03\xf3")
 
-    def test_options_of_dash1_point_to_it(self):
-        r = self.run_dash("--small", os.path.join(ROOT, "examples", "hola.dash"), "-o", "/dev/null")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("./dash1 --small", r.stderr)
+    def test_gcc_option(self):
+        """--gcc: through C with gcc, without a line (it was asked for)"""
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = os.path.join(tmp, "x")
+            r = self.run_dash("--gcc", "-q", os.path.join(ROOT, "examples", "hola.dash"), "-o", exe)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertNotIn("se compila por C", r.stderr)
+            self.assertTrue(os.path.exists(os.path.join(ROOT, "build", "hola.c")) or os.path.getsize(exe) > 0)
+
+    def test_options_of_the_c_path_go_there(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.run_dash("--small", "-q", os.path.join(ROOT, "examples", "hola.dash"), "-o", os.path.join(tmp, "x"))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("--small: se compila por C con gcc", r.stderr)
+
+    def test_messages_do_not_name_the_parts(self):
+        """the user sees one dash: no "dashc" or "dash1" in what ./dash says"""
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "mal.dash")
+            with open(src, "w") as f:
+                f.write("Main\n    x = \n")
+            r = self.run_dash(src, "-o", os.path.join(tmp, "x"))
+            self.assertNotEqual(r.returncode, 0)
+            for out in (r.stdout + r.stderr, self.run_dash("--help").stdout):
+                self.assertNotIn("dashc", out)
+                self.assertNotIn("dash1", out)
 
     def test_fpu_and_cpu_as_in_dash1(self):
         # (como Tachyon, tools/paquete.sh: ./dash --fpu)
@@ -78,7 +94,7 @@ class TestDash2Cli(unittest.TestCase):
             self.assertGreater(sizes["flush"], sizes["plain"])
 
     def test_emu_run_dash2(self):
-        # tools/emu_run.py --dash2 (the VS Code extension's "run"): ./dash, and ./dash1 for a program with C
+        # tools/emu_run.py --dash2 (the VS Code extension's "run"): ./dash, also for a program with C (through C)
         sys.path.insert(0, os.path.join(ROOT, "tools"))
         import emu_run
         from pathlib import Path

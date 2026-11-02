@@ -65,14 +65,20 @@ function netstatListening(text, port) {
     return false;
 }
 
-/** Can this Dash debug with dashc (Dash 2.0: ./dash1 beside ./dash, and tools/amiga/dbgserver.dash)? */
+/** Can this Dash debug with its own compiler (Dash 2.0: the C path beside ./dash, and tools/amiga/dbgserver.dash)? */
 function hasDbgserver(dashDir) {
     return fs.existsSync(path.join(dashDir, 'dash1')) && fs.existsSync(path.join(dashDir, 'tools', 'amiga', 'dbgserver.dash'));
 }
 
-/** The Dash that built it, from what ./dash said: 'gdb' if it handed it to ./dash1 (DASH_FALLBACK_DASH1), else 'dash' */
+/** How it was built, from what ./dash said: 'gdb' if it went through C ("se compila por C con gcc"; 2.0.0 said
+ *  ": con ./dash1"), else 'dash' */
 function engineOf(text) {
-    return /: con \.\/dash1/.test(text) ? 'gdb' : 'dash';
+    return /(se compila por C con gcc|: con \.\/dash1)/.test(text) ? 'gdb' : 'dash';
+}
+
+/** Does this ./dash take --gcc (2.0.1 on; before, the C path was the command ./dash1)? */
+function hasGccOption(dashDir) {
+    try { return fs.readFileSync(path.join(dashDir, 'dash'), 'utf8').includes('"--gcc"'); } catch (e) { return false; }
 }
 
 /** The command line of the emulator for a debug session (engine 'dash': dbgserver; else bgdbserver) */
@@ -114,15 +120,17 @@ function setupDebugger(vscode, context, helpers) {
         }
     };
 
-    /* the program with --debug: with ./dash (dashc), which hands what it cannot do (C in it) to ./dash1, the Dash
-       for gdb; engine 'gdb' (a real Amiga with bgdbserver, "debugger": "gdb") with ./dash1. engine of the answer:
-       the debugger that goes with what was built */
+    /* the program with --debug: with ./dash, which takes what its own compiler cannot do (C in it) through C, the
+       build for gdb; engine 'gdb' (a real Amiga with bgdbserver, "debugger": "gdb") through C (./dash --gcc).
+       engine of the answer: the debugger that goes with what was built */
     const build = (dashDir, file, exe, engine) => new Promise((resolve) => {
         const env = Object.assign({}, process.env, helpers.env(), { DASH_PRINT_FLUSH: '1', DASH_FALLBACK_DASH1: '1' });
         fs.mkdirSync(path.dirname(exe), { recursive: true });
         const dashc = engine !== 'gdb' && hasDbgserver(dashDir);
-        const dash = dashc || !fs.existsSync(path.join(dashDir, 'dash1')) ? 'dash' : 'dash1';
-        execFile(path.join(dashDir, dash), ['--debug', file, '-o', exe], { cwd: dashDir, env, maxBuffer: 1 << 24 },
+        const viaC = !dashc && fs.existsSync(path.join(dashDir, 'dash1'));
+        const gcc = viaC && hasGccOption(dashDir);
+        const dash = viaC && !gcc ? 'dash1' : 'dash';
+        execFile(path.join(dashDir, dash), [...(gcc ? ['--gcc'] : []), '--debug', file, '-o', exe], { cwd: dashDir, env, maxBuffer: 1 << 24 },
                  (error, stdout, stderr) => {
                      const text = String(stdout) + String(stderr);
                      resolve({ ok: !error, text, engine: dashc ? engineOf(text) : 'gdb' });

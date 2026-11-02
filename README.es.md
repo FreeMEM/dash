@@ -4,15 +4,15 @@
 
 **Development Amiga Synthesis Hub**
 
-Lenguaje de programación de alto nivel para **Commodore Amiga**: su compilador (dashc) genera el código 68000 él mismo, en el PC o en el propio Amiga.
+Lenguaje de programación de alto nivel para **Commodore Amiga**: su compilador genera el ejecutable de Amiga él mismo, en el PC o en el propio Amiga, y si se le pide lo hace pasando por C con el gcc de Amiga.
 
 Escribe código limpio, sintetiza ejecutables nativos.
 
-Versión actual: **2.0.0** (`./dash --version`; el compilador de la 1.x, `./dash1`, es la 1.0.1). Qué significa cada número y qué trae cada versión: [docs/VERSIONES.md](docs/VERSIONES.md).
+Versión actual: **2.0.1** (`./dash --version`). Qué significa cada número y qué trae cada versión: [docs/VERSIONES.md](docs/VERSIONES.md).
 
 ```
-Dash 2.0: Fuente (.dash) → dashc → código 68000 + runtime → ejecutable de Amiga
-Dash 1.x: Fuente (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → ejecutable de Amiga
+./dash        Fuente (.dash) → compilador de Dash → código 68000 + runtime → ejecutable (hunk)
+./dash --gcc  Fuente (.dash) → Parser (Lark) → AST → Analyzer → CodeGen → C → GCC → ejecutable (hunk)
 ```
 
 ## Por qué Dash
@@ -177,10 +177,10 @@ depurar y depurar en un Amiga de verdad.
 
 ### Instalar la extensión
 
-1. Dash, como en [Instalación](#instalación) (con `./dash1` y su C, también el gcc de bebbo; para el emulador, FS-UAE y una
+1. Dash, como en [Instalación](#instalación) (para `--gcc` y los programas con C, también el gcc de bebbo; para el emulador, FS-UAE y una
    ROM de Kickstart; para ventanas MUI, `tools/get_mui_sdk.sh` y `tools/emu_sys_mui.sh`).
-2. La extensión: el fichero `dash-mui-editor-0.3.1.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.1), y en VS Code (1.86 o posterior)
-   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.3.1.vsix`. También se
+2. La extensión: el fichero `dash-mui-editor-0.4.0.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.4.0), y en VS Code (1.86 o posterior)
+   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.4.0.vsix`. También se
    puede construir: `cd editor/vscode && npm install && npm run package`.
 3. Un proyecto: **Dash: Nuevo proyecto**. Si su carpeta no está dentro de este repositorio, **Dash: Elegir la
    carpeta del compilador** (el ajuste `dash.path`). La guía **Primeros pasos con Dash** lleva paso a paso, y si
@@ -198,18 +198,26 @@ La extensión es una capa fina: lo que hace lo hacen las herramientas de este re
 | Compilar | `./dash` |
 | Ejecutar, memoria y perfil | `./dash` y `tools/emu_run.py` (FS-UAE o Amiberry) |
 | Editor visual y Ver en Amiga | `.dashui` (`compiler/dashui.py`) y `tools/emu_preview.py` |
-| Depurar (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` y `tools/amiga/dbgserver.dash`; con C en el programa, `./dash1 --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
+| Depurar (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` y `tools/amiga/dbgserver.dash`; con C en el programa, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
 
 Por eso, al actualizar Dash (`git pull`), lo que la extensión sabe del lenguaje se actualiza también, sin
 reinstalarla. La extensión y el compilador van en el mismo repositorio para que no se separen.
 
 ## Instalación
 
-Dash 2.0 se instala distinto que la 1.x. Antes hacía falta el gcc de Amiga de bebbo (de 30 minutos a 2 horas
-compilándolo) y Lark; ahora `./dash` es dashc, que genera él mismo el código 68000, y basta un compilador de C del
-PC, `make` y Python 3. El gcc de bebbo solo hace falta para `./dash1` (más abajo).
+Dash compila de dos formas, con la misma orden:
 
-### Linux
+| | Directo a hunk (`./dash`) | Por C con gcc (`./dash --gcc`) |
+|---|---|---|
+| Qué hace | El compilador de Dash genera él mismo el código 68000 y el ejecutable (hunk) | El programa pasa a C y lo compila el gcc de Amiga de bebbo |
+| Qué hace falta | Un compilador de C del PC, `make` y Python 3 | Además, el gcc de Amiga (de 30 minutos a 2 horas compilándolo) y Lark |
+| Dónde corre | En el PC (Linux, macOS) y en el propio Amiga | En el PC |
+| Para qué | Todo programa en Dash | Programas con C dentro (`@native`, `@c`, `@header`) y las opciones de gcc (`-O`, `-O0`, `--small`, `--multifile`, `--no-hunk`) |
+
+El directo es el de siempre: basta con él para empezar. El camino por C se instala aparte, solo si hace falta.
+Cuando un programa lleva C, o pide una opción de gcc, `./dash` lo pasa por C él solo y lo dice en una línea.
+
+### Directo a hunk en Linux
 
 ```bash
 # Ubuntu / Debian
@@ -217,49 +225,48 @@ sudo apt install -y git make gcc python3
 # CachyOS / Arch Linux
 sudo pacman -S --needed git make gcc python
 
-git clone --branch v2.0.0 https://github.com/FreeMEM/dash.git
+git clone --branch v2.0.1 https://github.com/FreeMEM/dash.git
 cd dash
-make -C dashc                      # dashc, en unos segundos
+make -C dashc                      # el compilador de Dash, en unos segundos
 ./dash examples/hola.dash -o bin/hola
 ```
 
 Para probar los programas sin un Amiga: FS-UAE (`sudo apt install fs-uae` o `sudo pacman -S fs-uae`), una ROM de
 Kickstart en `$DASH_KICKSTART` y `python3 tools/emu_run.py bin/hola`.
 
-### macOS
+### Directo a hunk en macOS
 
 ```bash
 xcode-select --install             # clang, make, git y Python 3 de Apple
-git clone --branch v2.0.0 https://github.com/FreeMEM/dash.git
+git clone --branch v2.0.1 https://github.com/FreeMEM/dash.git
 cd dash
 make -C dashc
 ./dash examples/hola.dash -o bin/hola
 ```
 
-FS-UAE para macOS: `brew install --cask fs-uae`. dashc se compila igual con gcc que con clang (comprobado en
-Linux: los mismos ejecutables, byte a byte), pero todavía no se ha probado en un Mac; si algo falla, abre una
-incidencia.
+FS-UAE para macOS: `brew install --cask fs-uae`. El compilador se construye igual con gcc que con clang
+(comprobado en Linux: los mismos ejecutables, byte a byte), pero todavía no se ha probado en un Mac; si algo
+falla, abre una incidencia.
 
-### En el Amiga
+### Directo a hunk en el Amiga
 
-dashc también corre en el propio Amiga (68000, AmigaOS 2.0 o superior). En las
-[releases](https://github.com/FreeMEM/dash/releases) está `dash-2.0.0-amiga.lha`: se descomprime, y su `Instalar`
-copia el cajón Dash (dashc, sus runtimes, `lib/` y los ejemplos) y añade a `S:User-Startup` el `Assign DASH:` y el
-`Path`. Luego, desde un Shell:
+El compilador también corre en el propio Amiga (68000, AmigaOS 2.0 o superior). En las
+[releases](https://github.com/FreeMEM/dash/releases) está `dash-2.0.1-amiga.lha`: se descomprime, y su `Instalar`
+copia el cajón Dash (la orden `dash`, sus runtimes, `lib/` y los ejemplos) y añade a `S:User-Startup` el
+`Assign DASH:` y el `Path`. Luego, desde un Shell:
 
 ```
-dashc DASH:examples/hola.dash -o RAM:hola
+dash DASH:examples/hola.dash -o RAM:hola
 RAM:hola
 ```
 
-Con el mismo fuente, el ejecutable sale idéntico al que hace dashc en el PC.
+Con el mismo fuente, el ejecutable sale idéntico al que hace `./dash` en el PC. En el Amiga no hay `--gcc`.
 
-### Dash 1.x con el gcc de bebbo
+### Por C con gcc (`--gcc`)
 
-`./dash1` es el compilador de la 1.x: pasa el programa a C y lo compila con el gcc de Amiga de bebbo. Sigue para
-los programas que llevan C dentro (`@native`, `@c`, `@header`) y para las opciones de gcc (`-O`, `--small`...), y
-se mantiene pensando en el futuro: gcc sabe generar código PowerPC, y por ahí vendrá compilar para MorphOS y
-AmigaOS 4, mientras que dashc solo genera código 68000.
+Hace falta el gcc de Amiga de bebbo y el parser Lark, en el mismo PC donde ya funciona `./dash`. Además de los
+programas con C, este camino mira al futuro: gcc sabe generar código PowerPC, y por ahí vendrá compilar para
+MorphOS y AmigaOS 4.
 
 #### Ubuntu / Debian
 
@@ -286,7 +293,7 @@ echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
 # 5. Probar (en la carpeta de Dash)
-./dash1 examples/hola.dash -o bin/hola
+./dash --gcc examples/hola.dash -o bin/hola
 ```
 
 #### CachyOS / Arch Linux
@@ -313,32 +320,30 @@ echo 'export PATH="/opt/amiga/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 
 # 5. Probar (en la carpeta de Dash)
-./dash1 examples/hola.dash -o bin/hola
+./dash --gcc examples/hola.dash -o bin/hola
 ```
 
 > La compilación del cross-compiler tarda entre 30 minutos y 2 horas según tu hardware. Ver [docs/INSTALACION.md](docs/INSTALACION.md) para la guía completa, resolución de problemas y opciones avanzadas (macOS, versiones de GCC, elf2hunk).
 
-## Dash 2.0
-
-En Dash 2.0, `./dash` es **dashc**: un compilador escrito en C que genera él mismo el código 68000 y enlaza el
-ejecutable con su runtime. No necesita gcc ni Lark, y también corre dentro del Amiga. El lenguaje, los builtins y
-lo que hacen los programas son los de siempre. El compilador de la 1.x sigue, sin cambios, como `./dash1`.
+## Los dos caminos
 
 ```bash
-make -C dashc                                 # construye dashc (un compilador de C del PC y Python 3)
-./dash archivo.dash -o bin/archivo            # Dash 2.0
+./dash archivo.dash -o bin/archivo            # directo a hunk
 ./dash --fpu --memcheck archivo.dash -o bin/archivo
-./dash1 archivo.dash -o bin/archivo           # Dash 1.x: a C y con gcc
-make -C dashc amiga                           # dashc para el Amiga (con el gcc de bebbo)
+./dash --gcc archivo.dash -o bin/archivo      # por C con gcc
+./dash --gcc -O0 archivo.dash -o bin/archivo  # opciones de gcc (con ellas va por C aunque no se ponga --gcc)
+make -C dashc amiga                           # el compilador para el Amiga (con el gcc de bebbo)
 ```
 
-Lo que `./dash` no admite: C dentro del programa (`@native`, `@c`, `@header`) y las opciones `-O`, `-O0`,
-`--small`, `--multifile` y `--no-hunk`. En esos casos da un error con la orden de `./dash1` que lo hace. Las demás
-opciones de [Uso](#uso) valen con los dos; `--debug` de `./dash` prepara el programa para el depurador de los
-builtins `dbg_*`, que usa también el depurador de VS Code (un programa con C va a `./dash1 --debug` y gdb).
+El lenguaje, los builtins y lo que hacen los programas son los mismos por los dos caminos. Valen con los dos
+`--fpu`, `--cpu`, `--memcheck`, `--stack` y `--debug`. El directo no admite C dentro del programa (`@native`,
+`@c`, `@header`) ni las opciones `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk`: con ellos, `./dash` pasa el
+programa por C él solo y lo dice ("dash: el programa lleva C: se compila por C con gcc"). `--debug` prepara el
+programa para el depurador de los builtins `dbg_*`, el de VS Code; un programa con C se depura con gdb.
 
-El C de fuera se compila aparte con el gcc de Amiga y se enlaza: `@link` dice el objeto o la biblioteca,
-`@extern` declara sus funciones y `@export` marca las funciones de Dash que ese C llama por su nombre.
+El C de fuera también vale sin `--gcc`: se compila aparte con el gcc de Amiga y se enlaza. `@link` dice el
+objeto o la biblioteca, `@extern` declara sus funciones y `@export` marca las funciones de Dash que ese C llama
+por su nombre.
 
 ```ruby
 @link "c/saludo.o"
@@ -349,13 +354,13 @@ El C de fuera se compila aparte con el gcc de Amiga y se enlaza: `@link` dice el
 end
 ```
 
-Todo sobre dashc (opciones, tipos de `@extern`, el dashc del Amiga y cuándo usar `./dash1`), en el
-[manual de referencia, sección 24](docs/MANUAL_REFERENCIA.md#24-dash-20-el-compilador-dashc).
+Todo sobre el compilador directo (opciones, tipos de `@extern`, el compilador del Amiga y cuándo usar `--gcc`),
+en el [manual de referencia, sección 24](docs/MANUAL_REFERENCIA.md#24-dash-20-el-compilador-directo).
 
 ## Uso
 
 ```bash
-# Compilar a ejecutable Amiga (optimizado con gcc -O2)
+# Compilar a ejecutable Amiga (directo a hunk; con --gcc, por C con gcc -O2)
 ./dash archivo.dash -o bin/archivo
 
 # Sin optimizar (más fácil de depurar)

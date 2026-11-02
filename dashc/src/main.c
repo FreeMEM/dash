@@ -13,7 +13,7 @@ unsigned long __stack = 65536;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */
-#define DASH_VERSION "2.0.0"
+#define DASH_VERSION "2.0.1"
 
 /* los runtimes (build/rt_blob.c, runtime/rt_blob.py): el normal tal cual; el de --memcheck, comprimido */
 extern const unsigned char rt_normal[], rt_mc_z[];
@@ -69,7 +69,7 @@ size_t rt_blob_len;
 static void usage(void)
 {
     err_printf(
-            "uso: dashc programa.dash -o ejecutable [--fpu] [--memcheck] [--stack bytes] [--version]\n"
+            "uso: dash programa.dash -o ejecutable [--fpu] [--memcheck] [--stack bytes] [--version]\n"
             "Compila Dash a un ejecutable de Amiga sin compilador de C (Dash 2.0).\n"
             "  --fpu          Float y Double con la FPU (68020 y 68881/68882, o 68040/68060)\n"
             "  --cpu X        68000 (por defecto) o 68020...68060: multiplica y divide con muls.l y divs.l\n"
@@ -113,7 +113,7 @@ static int debug_info_show(const char *path)
             at += 4 + 4 * (size_t)n;
         } else if (type != 0x3F2) break;                                                    /* END */
     }
-    err_printf("dashc: %s no lleva información de depuración (compílalo con --debug)\n", path);
+    err_printf("dash: %s no lleva información de depuración (compílalo con --debug)\n", path);
     return 1;
 }
 
@@ -165,7 +165,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--tiempos")) tiempos = 1;
         else if (!strcmp(argv[i], "--stack") && i + 1 < argc) cli_stack = atol(argv[++i]);
         else if (!strcmp(argv[i], "--version")) {
-            printf("Dash %s (dashc)\n", DASH_VERSION);
+            printf("Dash %s\n", DASH_VERSION);
             return 0;
         }
         else if (!strcmp(argv[i], "--preparar") && i + 2 < argc) {
@@ -198,17 +198,17 @@ int main(int argc, char **argv)
             rt = rt_fpu_mc;
             rtlen = rt_fpu_mc_len;
         } else {
-            FILE *f = fopen("PROGDIR:dashc_fpu_mc.drt", "rb");
-            if (!f) fatal("--fpu --memcheck necesita dashc_fpu_mc.drt junto a dashc");
+            FILE *f = fopen("PROGDIR:dash_fpu_mc.drt", "rb");
+            if (!f) fatal("--fpu --memcheck necesita dash_fpu_mc.drt junto a dash");
             fclose(f);
-            rt = read_file("PROGDIR:dashc_fpu_mc.drt", &rtlen);
+            rt = read_file("PROGDIR:dash_fpu_mc.drt", &rtlen);
         }
     } else if (memcheck && !rt_mc_len) {
         /* el dashc del Amiga no lo lleva dentro (es la mitad de su tamaño): dashc_mc.drt, junto a él */
-        FILE *f = fopen("PROGDIR:dashc_mc.drt", "rb");
-        if (!f) fatal("--memcheck necesita dashc_mc.drt junto a dashc");
+        FILE *f = fopen("PROGDIR:dash_mc.drt", "rb");
+        if (!f) fatal("--memcheck necesita dash_mc.drt junto a dash");
         fclose(f);
-        rt = read_file("PROGDIR:dashc_mc.drt", &rtlen);
+        rt = read_file("PROGDIR:dash_mc.drt", &rtlen);
         tiempo("descomprimir");
     } else if (memcheck) {
         uint8_t *buf = xmalloc(rt_mc_len);
@@ -220,10 +220,10 @@ int main(int argc, char **argv)
         rt = rt_fpu;
         rtlen = rt_fpu_len;
     } else if (fpu) {
-        FILE *f = fopen("PROGDIR:dashc_fpu.drt", "rb");
-        if (!f) fatal("--fpu necesita dashc_fpu.drt junto a dashc");
+        FILE *f = fopen("PROGDIR:dash_fpu.drt", "rb");
+        if (!f) fatal("--fpu necesita dash_fpu.drt junto a dash");
         fclose(f);
-        rt = read_file("PROGDIR:dashc_fpu.drt", &rtlen);
+        rt = read_file("PROGDIR:dash_fpu.drt", &rtlen);
     }
     src_name = in;
     VEC_PUSH(src_files, in);

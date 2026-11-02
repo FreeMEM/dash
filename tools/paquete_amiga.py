@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""El paquete de Dash 2.0 para el Amiga: dashc, que corre en el propio Amiga (68000, OS 2.0 o superior), con sus
+"""El paquete de Dash 2.0 para el Amiga: el compilador (la orden dash), que corre en el propio Amiga (68000, OS 2.0 o superior), con sus
 runtimes, la carpeta lib/ de los import, los ejemplos que compila y el instalador.
 
     python3 tools/paquete_amiga.py        →  build/paquete_amiga/Dash/...  y  build/dash-<versión>-amiga.lha
@@ -38,10 +38,11 @@ def main():
     caj.mkdir(parents=True)
     (dest / "Dash.info").write_bytes(situar(info(cajon(), WBDRAWER), 10, 6))
     b = raiz / "dashc/build"
-    shutil.copy(b / "dashc.amiga", caj / "dashc")
-    (caj / "dashc").chmod(0o755)
-    for drt in ("dashc_mc.drt", "dashc_fpu.drt", "dashc_fpu_mc.drt"):
-        shutil.copy(b / drt, caj / drt)
+    # (en el Amiga la orden se llama dash, como en el PC; sus runtimes, dash_*.drt)
+    shutil.copy(b / "dashc.amiga", caj / "dash")
+    (caj / "dash").chmod(0o755)
+    for drt in ("mc", "fpu", "fpu_mc"):
+        shutil.copy(b / f"dashc_{drt}.drt", caj / f"dash_{drt}.drt")
     shutil.copytree(raiz / "lib", caj / "lib", ignore=shutil.ignore_patterns("__pycache__"))
     # los ejemplos que compila dashc (en el PC, con el mismo dashc)
     (caj / "examples").mkdir()

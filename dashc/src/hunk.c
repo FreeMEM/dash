@@ -766,7 +766,7 @@ void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out)
     }
 
     if (missing.n) {
-        err_printf("dashc: Error: nadie define (ni el runtime ni lo de @link):");
+        err_printf("dash: Error: nadie define (ni el runtime ni lo de @link):");
         for (i = 0; i < missing.n; i++) err_printf(" %s", missing.v[i][0] == '_' ? missing.v[i] + 1 : missing.v[i]);
         err_printf("\n");
         exit(1);
