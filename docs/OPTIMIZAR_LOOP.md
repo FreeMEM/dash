@@ -37,7 +37,7 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
 
 - [x] O1 lista: `a[i]` y `a[i] = x` en línea en gen68k (comprobación de nil y de límites, y la carga), con el mismo
   comportamiento que el runtime ante un índice fuera de rango.
-- [ ] O2 `%` y `/` con divisor constante: `divu` directo cuando se sabe que el dividendo cabe (rango del `for`,
+- [x] O2 `%` y `/` con divisor constante: `divu` directo cuando se sabe que el dividendo cabe (rango del `for`,
   valores pequeños), y la rutina solo si no.
 - [x] O3 flotante: ver qué rutinas llama el directo y usar las rápidas (fastfp) del camino por C.
 - [~] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
@@ -86,4 +86,14 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   Medida completa (A1200 / A500, ms, directo frente a por C): bucle 623/625 y 2845/3240; flotante 494/488 y
   2423/2401; lineas 4934/4989 y 6679/6829; lista 2048/1549 y 9817/7561; llamada 245/219 y 1089/1059; texto
   2181/1520 y 9371/6426; vacio 43/51 y 147/155.
+- 2026-11-02, O1b y O2: con la lista en una variable local, `a[i]` calcula el índice y carga la lista directamente
+  en a0, y `a[i] = x` lleva el índice a d1 sin pasar por la pila (simple) o con un solo apilado; `var_range` conoce el
+  rango de `x + k`, `x - k` y `k + x` (si no se sale de 32 bits): `(i + 1) % 10` en un for usa `divu` sin comprobar,
+  y con un cociente que no cabe (hasta 700.005) sigue comprobando. Quitado un bloque repetido de O1 que nunca se
+  ejecutaba. Mismo resultado que por C. `make -C dashc test` entero bien. lista: A1200 2048 → 1787 ms (por C 1549,
+  +15 %), A500 9817 → 8467 (por C 7561, +12 %).
+- Estado (2026-11-02, uso semanal al 99 %): hechas O1, O2, O3; O4 y O5 a medias. Queda: texto (+44 %: el perfil
+  `--perfil` da 106 muestras, casi todas en el runtime, 0x1200-0x14D0; mirar qué rutina con el mapa del hunk y
+  `dashc/tests/perfil_pc.py`), llamada (+12 % en A1200), el resto de lista (+15 %), luego O6 (medida completa, web y
+  `docs/COMPARATIVA*.md`) y la PR. Antes de la PR: `python3 tests/run_tests.py` y `--emu --emu-a500`.
 

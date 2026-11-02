@@ -2147,16 +2147,31 @@ static int gen_method(Node *n, int t)
     return r;
 }
 
+/* ¿La lista es una variable local (en un registro o en el marco)? Entonces se puede leer en cualquier momento: nada
+   de lo que se calcula entre medias la cambia (las globales sí podría cambiarlas una función) */
+static int arr_local(Node *a, Var *va)
+{
+    if (a->kind != E_VAR || !find_local(a->name) || !simple(a, va)) return 0;
+    return va->kind == V_REG || va->kind == V_LOCAL;
+}
+
 /* a[i] de una lista, en línea (como DashArray_get: nil o un índice fuera de rango dan 0; data en 0(a), length
    en 4(a)): lo que gcc hace con el camino por C, en vez de llamar a dl_arr_get con los argumentos en la pila */
 static int gen_arr_index(Node *n)
 {
     int t = expr_type(n->a);
-    value(n->a);
-    push_d0();
-    value(n->b);
-    w(0x205F);                                         /* movea.l (sp)+,a0 */
-    sp_depth -= 4;
+    Var va;
+    if (arr_local(n->a, &va)) {
+        /* la lista es una variable local: el índice primero y la lista directa a a0, sin pasar por la pila */
+        value(n->b);
+        op_ea(0x2040, &va);                            /* movea.l lista,a0 */
+    } else {
+        value(n->a);
+        push_d0();
+        value(n->b);
+        w(0x205F);                                     /* movea.l (sp)+,a0 */
+        sp_depth -= 4;
+    }
     w(0x2208);                                         /* move.l a0,d1 */
     w(0x6710);                                         /* beq.s cero */
     w(0xB0A8); w(4);                                   /* cmp.l 4(a0),d0 */
@@ -2522,22 +2537,23 @@ static void gen_arr_store(Node *target, Node *v)
 {
     int et = learn_elem(target->a, v), kind = elem_kind(et), i;
     Node *a[3];
+    Var va, vi;
     a[0] = target->a;
     a[1] = target->b;
     a[2] = v;
-    if (kind == 0) {
-        /* una lista de valores (no textos ni objetos, que llevan cuenta de referencias): en línea, como
-           DashArray_set (nil o un índice fuera de rango no hacen nada) */
-        w(0x518F);                                     /* subq.l #8,sp */
-        sp_depth += 8;
-        value(a[0]);
-        w(0x2E80);                                     /* move.l d0,(sp) */
-        value(a[1]);
-        w(0x2F40); w(4);                               /* move.l d0,4(sp) */
-        elem_value(a[2], et);
-        w(0x205F);                                     /* movea.l (sp)+,a0 */
-        w(0x221F);                                     /* move.l (sp)+,d1 */
-        sp_depth -= 8;
+    if (kind == 0 && arr_local(a[0], &va)) {
+        /* la lista es una variable local: el índice a d1 (simple, o por la pila si no), el valor a d0 y la lista a a0 */
+        if (simple(a[1], &vi) && (vi.kind == V_CONST || vi.type == TY_INT || vi.type == TY_CHAR)) {
+            elem_value(a[2], et);
+            load_var(1, &vi);                          /* move.l i,d1 */
+        } else {
+            value(a[1]);
+            push_d0();
+            elem_value(a[2], et);
+            w(0x221F);                                 /* move.l (sp)+,d1 */
+            sp_depth -= 4;
+        }
+        op_ea(0x2040, &va);                            /* movea.l lista,a0 */
         w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
         w(0x670E);                                     /* beq.s fin */
         w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
@@ -2952,6 +2968,21 @@ static int var_range(Node *n, long *lo, long *hi)
     int idx, i;
     if (fold(n, lo)) {
         *hi = *lo;
+        return 1;
+    }
+    if (n->kind == E_BIN && (n->op == P_PLUS || n->op == P_MINUS) && expr_type(n) == TY_INT) {
+        /* x + k, x - k y k + x: el rango de x, movido (si sigue dentro de 32 bits) */
+        long k, a, b;
+        long long l2, h2;
+        if (fold(n->b, &k) && var_range(n->a, &a, &b)) {
+            if (n->op == P_MINUS) k = -k;
+        } else if (n->op == P_PLUS && fold(n->a, &k) && var_range(n->b, &a, &b)) {
+        } else return 0;
+        l2 = (long long)a + k;
+        h2 = (long long)b + k;
+        if (l2 < INT32_MIN || h2 > INT32_MAX || b == INT32_MAX) return 0;
+        *lo = (long)l2;
+        *hi = (long)h2;
         return 1;
     }
     if (n->kind != E_VAR || !(lc = find_local(n->name)) || lc->slot < 0) return 0;
