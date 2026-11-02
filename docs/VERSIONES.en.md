@@ -32,6 +32,22 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.0.2 (2026-11-03)
+
+The straight compiler generates faster code. It is now as fast as or faster than the C path (`--gcc`) in almost
+everything. Nothing to change in programs.
+
+- **Text:** joining strings (`s = a + b`, `s = "x" + n`, `"...#{x}..."`) takes half the time it did in 2.0.1. It is
+  now 9 % faster than through C on an A1200 and 7 % on an A500.
+- **Floating point:** half the time of 2.0.1; the same as through C. Calculations that do not change inside a loop
+  are done once, before it.
+- **Lists:** reading and writing `a[i]` is inline, without calling the runtime: 31 % less time. Still 12-15 %
+  slower than through C.
+- **Integers:** `r = a + b` is computed in `r`'s register, and division by a constant skips its checks when the
+  range is known. Function calls, 8 % faster.
+
+Measured with `tools/comparativa/medir_dash.py` on an emulated A1200 and A500.
+
 ### 2.0.1 (2026-11-02)
 
 2.0 goes into `main`. One command, `./dash`, with two paths: straight to hunk (the default) and through C with

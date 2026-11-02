@@ -33,6 +33,22 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.0.2 (2026-11-03)
+
+El compilador directo genera código más rápido. Ya va igual o más rápido que el camino por C (`--gcc`) en casi
+todo. Nada que cambiar en los programas.
+
+- **Textos:** unir textos (`s = a + b`, `s = "x" + n`, `"...#{x}..."`) va la mitad de tiempo que en la 2.0.1. Ya es
+  un 9 % más rápido que por C en un A1200 y un 7 % en un A500.
+- **Coma flotante:** la mitad de tiempo que en la 2.0.1; igual que por C. Los cálculos que no cambian dentro de un
+  bucle se hacen una sola vez, antes.
+- **Listas:** leer y escribir `a[i]` va en línea, sin llamar al runtime: un 31 % menos de tiempo. Aún es un 12-15 %
+  más lento que por C.
+- **Enteros:** `r = a + b` se calcula en el registro de `r`, y dividir por una constante sin comprobaciones cuando
+  se sabe el rango. Las llamadas a funciones, un 8 % más rápidas.
+
+Medido con `tools/comparativa/medir_dash.py` en un A1200 y un A500 emulados.
+
 ### 2.0.1 (2026-11-02)
 
 La 2.0 pasa a `main`. Una sola orden, `./dash`, con dos caminos: directo a hunk (por defecto) y por C con gcc

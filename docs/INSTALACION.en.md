@@ -1,7 +1,7 @@
 # Dash Installation Guide
 
 *English | [Castellano](INSTALACION.md)*
-Version: 2.2 (up to date as of 2026-11-02, Dash 2.0.1)
+Version: 2.2 (up to date as of 2026-11-03, Dash 2.0.2)
 
 This document describes how to install Dash, from scratch. There are three ways, depending on where you want to
 compile:
@@ -46,8 +46,8 @@ What it needs:
 
 To install it:
 
-1. Copy `dash-X.Y.Z-amiga.lha` to the Amiga and unpack it, for example in `RAM:` (`lha x dash-2.0.1-amiga.lha RAM:`).
-   If your PC's browser saved it as `dash-2.0.1-amiga (1).lha`, rename it first: LhA reads "(1)" as a wildcard.
+1. Copy `dash-X.Y.Z-amiga.lha` to the Amiga and unpack it, for example in `RAM:` (`lha x dash-2.0.2-amiga.lha RAM:`).
+   If your PC's browser saved it as `dash-2.0.2-amiga (1).lha`, rename it first: LhA reads "(1)" as a wildcard.
 2. Open the `Dash` drawer and double-click **Instalar**. It asks where to put the drawer (it suggests `Work:` if
    there is one, otherwise `SYS:`), copies it with its icons and adds to `S:User-Startup`:
    ```

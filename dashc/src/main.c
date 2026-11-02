@@ -13,7 +13,7 @@ unsigned long __stack = 65536;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */
-#define DASH_VERSION "2.0.1"
+#define DASH_VERSION "2.0.2"
 
 /* los runtimes (build/rt_blob.c, runtime/rt_blob.py): el normal tal cual; el de --memcheck, comprimido */
 extern const unsigned char rt_normal[], rt_mc_z[];
