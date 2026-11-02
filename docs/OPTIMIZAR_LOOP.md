@@ -41,9 +41,9 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   valores pequeños), y la rutina solo si no.
 - [x] O3 flotante: ver qué rutinas llama el directo y usar las rápidas (fastfp) del camino por C.
 - [x] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
-- [~] O5 llamada: menos trabajo por llamada (registros que se guardan, argumentos en registros para funciones
+- [x] O5 llamada: menos trabajo por llamada (registros que se guardan, argumentos en registros para funciones
   `static` del programa, si el resto del compilador lo permite).
-- [ ] O6 Medir de nuevo con `medir_dash.py`, actualizar la comparativa de la web (dash.freemem.space, columnas
+- [x] O6 Medir de nuevo con `medir_dash.py`, actualizar la comparativa de la web (dash.freemem.space, columnas
   "Dash (directo)" y "Dash (por C)") y `docs/COMPARATIVA*.md`.
 
 ## Cómo se trabaja
@@ -110,4 +110,9 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   6684/6729; lista 1790/1555 y 8468/7539; llamada 249/224 y 1086/1068; texto 1381/1522 y 5951/6413; vacio 37/46 y
   145/150. Quedan detrás lista (+15 % / +12 %: gcc comprueba nil una vez fuera del bucle) y llamada en el A1200
   (+11 %, una instrucción por vuelta).
+- 2026-11-02, O6: medida final arriba; `python3 tests/run_tests.py` 521 de 521 (el camino por C no cambia en esta rama:
+  solo `dashc/src/gen68k.c` y `dashc/runtime/api.c`, por eso no se pasó `--emu`). La web (dash.freemem.space) tiene las
+  cifras nuevas preparadas, sin subir hasta que esto esté en `main` y publicado. `docs/COMPARATIVA*.md` sigue con las
+  de la primera medida (su generador, `gen.py`, no tiene aún la columna del directo). Pendiente para otra vuelta: lista
+  (comprobar nil una vez fuera del bucle) y la instrucción de más por vuelta en llamada.
 
