@@ -178,8 +178,8 @@ debugging and debugging on a real Amiga.
 
 1. Dash and the Amiga compiler, as in [Quick installation](#quick-installation) (for the emulator, FS-UAE and a
    Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. The extension: the file `dash-mui-editor-0.3.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.0), and in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.0.vsix`. It can also
+2. The extension: the file `dash-mui-editor-0.3.1.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.1), and in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.1.vsix`. It can also
    be built: `cd editor/vscode && npm install && npm run package`.
 3. A project: **Dash: Nuevo proyecto**. If its folder is not inside this repository, **Dash: Elegir la
    carpeta del compilador** (the `dash.path` setting). The **Primeros pasos con Dash** walkthrough guides you step by step, and if

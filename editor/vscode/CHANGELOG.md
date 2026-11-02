@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-11-02)
+
+- Debugging on macOS and Windows: to know when bgdbserver is listening in the emulator, the extension read
+  `/proc/net/tcp`, which only Linux has. Elsewhere it never saw it, waited until the emulator closed and said
+  that bgdbserver had not started. Now it asks `netstat` there.
+
 ## 0.3.0 (2026-10-27)
 
 - New versions of Dash: once a day the extension looks at Dash's releases on GitHub (tags `v1.0.0`...) and, if

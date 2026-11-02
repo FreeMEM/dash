@@ -6,7 +6,7 @@
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
-const { spawn, execFile } = require('child_process');
+const { spawn, execFile, execFileSync } = require('child_process');
 const { makeProxy } = require('./debugProxy');
 const { savedFile } = require('./tasks');
 const { missing } = require('./missing');
@@ -24,16 +24,38 @@ function freePort() {
     });
 }
 
-/** Is something listening on this port? Read from /proc (a connection would take bgdbserver's only one) */
+/** Is something listening on this port? Without connecting (a connection would take bgdbserver's only one):
+ *  /proc on Linux; netstat on macOS and Windows, which have no /proc (before 0.3.1 the debugger never saw
+ *  bgdbserver there and gave up when the emulator closed) */
 function listening(port) {
     const hex = port.toString(16).toUpperCase().padStart(4, '0');
+    let proc = false;
     for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
         let text = '';
         try { text = fs.readFileSync(file, 'utf8'); } catch (e) { continue; }
+        proc = true;
         for (const line of text.split('\n').slice(1)) {
             const cols = line.trim().split(/\s+/);
             if (cols.length > 3 && cols[1].endsWith(':' + hex) && cols[3] === '0A') return true;   // 0A: LISTEN
         }
+    }
+    if (proc) return false;
+    let text = '';
+    try {
+        text = execFileSync('netstat', process.platform === 'win32' ? ['-an', '-p', 'TCP'] : ['-an', '-p', 'tcp'],
+                            { encoding: 'utf8', timeout: 5000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch (e) { return false; }
+    return netstatListening(text, port);
+}
+
+/** In the output of netstat -an: a socket in LISTEN on that port. macOS: "tcp4 0 0 127.0.0.1.2345 *.* LISTEN"
+ *  (the port after a dot); Windows: "TCP 0.0.0.0:2345 0.0.0.0:0 LISTENING" (after a colon) */
+function netstatListening(text, port) {
+    for (const line of text.split(/\r?\n/)) {
+        const cols = line.trim().split(/\s+/);
+        if (cols[cols.length - 1] !== 'LISTEN' && cols[cols.length - 1] !== 'LISTENING') continue;
+        const local = cols[0] === 'TCP' ? cols[1] : cols[3];   // the local address: Windows "TCP", macOS "tcp4"...
+        if (local && (local.endsWith('.' + port) || local.endsWith(':' + port))) return true;
     }
     return false;
 }
@@ -249,4 +271,4 @@ function setupDebugger(vscode, context, helpers) {
     }), { dispose: () => { for (const t of [...emulators.keys()]) stopEmulator(t); } });
 }
 
-module.exports = { setupDebugger, emulatorArgs, freePort, listening };
+module.exports = { setupDebugger, emulatorArgs, freePort, listening, netstatListening };
