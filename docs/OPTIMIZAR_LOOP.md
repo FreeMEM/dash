@@ -35,7 +35,7 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
 
 ## Tareas
 
-- [ ] O1 lista: `a[i]` y `a[i] = x` en línea en gen68k (comprobación de nil y de límites, y la carga), con el mismo
+- [x] O1 lista: `a[i]` y `a[i] = x` en línea en gen68k (comprobación de nil y de límites, y la carga), con el mismo
   comportamiento que el runtime ante un índice fuera de rango.
 - [ ] O2 `%` y `/` con divisor constante: `divu` directo cuando se sabe que el dividendo cabe (rango del `for`,
   valores pequeños), y la rutina solo si no.
@@ -61,3 +61,10 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
 ## Bitácora
 
 - 2026-11-02: plan, rama y `tools/comparativa/medir_dash.py` (mide los dos caminos en A1200 y A500 de una vez).
+- 2026-11-02, O1: `a[i]` en línea en gen68k (movea, comparación sin signo con la longitud, que cubre también el
+  índice negativo, y la carga; nil o fuera de rango dan 0, como `DashArray_get`) y `a[i] = x` en línea para listas
+  de valores (las de textos y objetos siguen por el runtime, por la cuenta de referencias). Mismo resultado que por C
+  en un programa de bordes (índices -1, 3, 100000, nil, escritura fuera de rango, Float, textos). `make -C dashc test`
+  entero bien. lista: A1200 2601 → 2051 ms (−21 %), A500 12596 → 9815 ms (−22 %); por C, 1553 y 7524: aún falta.
+  Lo que queda en el bucle: la lista se apila y se recoge (sin registro libre fijo) y el `%` con su comprobación.
+

@@ -2132,15 +2132,26 @@ static int gen_method(Node *n, int t)
     return r;
 }
 
-/* a[i] de una lista */
+/* a[i] de una lista, en línea (como DashArray_get: nil o un índice fuera de rango dan 0; data en 0(a), length
+   en 4(a)): lo que gcc hace con el camino por C, en vez de llamar a dl_arr_get con los argumentos en la pila */
 static int gen_arr_index(Node *n)
 {
-    Node *a[2];
     int t = expr_type(n->a);
-    a[0] = n->a;
-    a[1] = n->b;
-    args_to_stack(a, 2, NULL);
-    rt_call("_dl_arr_get", 2, 0);
+    value(n->a);
+    push_d0();
+    value(n->b);
+    w(0x205F);                                         /* movea.l (sp)+,a0 */
+    sp_depth -= 4;
+    w(0x2208);                                         /* move.l a0,d1 */
+    w(0x6710);                                         /* beq.s cero */
+    w(0xB0A8); w(4);                                   /* cmp.l 4(a0),d0 */
+    w(0x640A);                                         /* bcc.s cero (sin signo: también un índice negativo) */
+    w(0x2050);                                         /* movea.l (a0),a0 */
+    w(0xE588);                                         /* lsl.l #2,d0 */
+    w(0x2030); w(0x0800);                              /* move.l 0(a0,d0.l),d0 */
+    w(0x6002);                                         /* bra.s fin */
+    w(0x7000);                                         /* cero: moveq #0,d0 */
+    d0_loaded = (uint32_t)-1;                          /* fin: */
     return t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
 }
 
@@ -2499,6 +2510,52 @@ static void gen_arr_store(Node *target, Node *v)
     a[0] = target->a;
     a[1] = target->b;
     a[2] = v;
+    if (kind == 0) {
+        /* una lista de valores (no textos ni objetos, que llevan cuenta de referencias): en línea, como
+           DashArray_set (nil o un índice fuera de rango no hacen nada) */
+        w(0x518F);                                     /* subq.l #8,sp */
+        sp_depth += 8;
+        value(a[0]);
+        w(0x2E80);                                     /* move.l d0,(sp) */
+        value(a[1]);
+        w(0x2F40); w(4);                               /* move.l d0,4(sp) */
+        elem_value(a[2], et);
+        w(0x205F);                                     /* movea.l (sp)+,a0 */
+        w(0x221F);                                     /* move.l (sp)+,d1 */
+        sp_depth -= 8;
+        w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
+        w(0x670E);                                     /* beq.s fin */
+        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
+        w(0x6408);                                     /* bcc.s fin */
+        w(0x2050);                                     /* movea.l (a0),a0 */
+        w(0xE589);                                     /* lsl.l #2,d1 */
+        w(0x2180); w(0x1800);                          /* move.l d0,0(a0,d1.l) */
+        d0_loaded = (uint32_t)-1;                      /* fin: */
+        return;
+    }
+    if (kind == 0) {
+        /* una lista de valores (no textos ni objetos, que llevan cuenta de referencias): en línea, como
+           DashArray_set (nil o un índice fuera de rango no hacen nada) */
+        w(0x518F);                                     /* subq.l #8,sp */
+        sp_depth += 8;
+        value(a[0]);
+        w(0x2E80);                                     /* move.l d0,(sp) */
+        value(a[1]);
+        w(0x2F40); w(4);                               /* move.l d0,4(sp) */
+        elem_value(a[2], et);
+        w(0x205F);                                     /* movea.l (sp)+,a0 */
+        w(0x221F);                                     /* move.l (sp)+,d1 */
+        sp_depth -= 8;
+        w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
+        w(0x670E);                                     /* beq.s fin */
+        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
+        w(0x6408);                                     /* bcc.s fin */
+        w(0x2050);                                     /* movea.l (a0),a0 */
+        w(0xE589);                                     /* lsl.l #2,d1 */
+        w(0x2180); w(0x1800);                          /* move.l d0,0(a0,d1.l) */
+        d0_loaded = (uint32_t)-1;                      /* fin: */
+        return;
+    }
     w(0x4FEF); w(-12);                                 /* lea -12(sp),sp */
     sp_depth += 12;
     for (i = 0; i < 3; i++) {
