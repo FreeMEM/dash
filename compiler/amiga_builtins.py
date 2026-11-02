@@ -503,6 +503,14 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="Set BOB animation frame"
     ),
+    "bob_frame_width": BuiltinFunc(
+        name="bob_frame_width",
+        params=["id", "width"],
+        return_type="void",
+        c_template="_dash_bob_frame_width(${id}, ${width})",
+        needs_gfx=True,
+        description="The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames)"
+    ),
     "bob_free": BuiltinFunc(
         name="bob_free",
         params=["id"],

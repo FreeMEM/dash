@@ -12163,6 +12163,7 @@ typedef struct {
 } _DashBitmap;
 static _DashBitmap _dash_bitmaps[_DASH_MAX_BITMAPS];
 static ULONG _dash_bitmap_version[_DASH_MAX_BITMAPS];  /* bumped when the image may change (bob masks) */
+static LONG _dash_bitmap_fw[_DASH_MAX_BITMAPS];        /* frame width from an FRJA chunk (Forja), 0 if none */
 static struct RastPort *_dash_screen_rp = NULL;   /* the window's while drawing to a bitmap */
 
 static _DashBitmap *_dash_bitmap_get(LONG id) {
@@ -12187,6 +12188,7 @@ static void _dash_bitmap_free(LONG id) {
 }
 
 static BOOL _dash_bitmap_create(LONG id, LONG width, LONG height, LONG depth) {
+    if (id >= 0 && id < _DASH_MAX_BITMAPS) _dash_bitmap_fw[id] = 0;
     _DashBitmap *b;
     if (id < 0 || id >= _DASH_MAX_BITMAPS || width < 1 || height < 1 || depth < 1 || depth > 8) return FALSE;
     _dash_bitmap_free(id);
@@ -12231,7 +12233,7 @@ static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
     BPTR fh = Open(filename, MODE_OLDFILE);
     UBYTE hdr[12], chunk[8], bmhd[20], *body = NULL;
     UBYTE cmap[3 * 256];
-    LONG w = 0, h = 0, depth = 0, ncolors = 0, body_len = 0, comp = 0, masking = 0;
+    LONG w = 0, h = 0, depth = 0, ncolors = 0, body_len = 0, comp = 0, masking = 0, fw = 0;
     BOOL ok = FALSE;
     if (!fh) return FALSE;
     if (Read(fh, hdr, 12) != 12 || _dash_iff_long(hdr) != 0x464F524D || _dash_iff_long(hdr + 8) != 0x494C424D)
@@ -12250,6 +12252,15 @@ static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
             ncolors = len / 3 > 256 ? 256 : len / 3;
             if (Read(fh, cmap, ncolors * 3) != ncolors * 3) goto done;
             Seek(fh, len - ncolors * 3 + pad, OFFSET_CURRENT);
+        } else if (type == 0x46524A41 && len < 64) {                 /* FRJA (Forja): "1 kind width speed" */
+            char t[64];
+            LONG i, n = 0, campo = 0;
+            if (Read(fh, t, len + pad) != (LONG)(len + pad)) goto done;
+            for (i = 0; i < (LONG)len; i++) {
+                if (t[i] == ' ') { if (campo == 2) break; campo++; n = 0; }
+                else if (t[i] >= '0' && t[i] <= '9') n = n * 10 + (t[i] - '0');
+            }
+            if (campo == 2) fw = n;
         } else if (type == 0x424F4459) {                             /* BODY */
             body = (UBYTE *)AllocVec(len, MEMF_ANY);
             if (!body || Read(fh, body, len) != (LONG)len) goto done;
@@ -12261,6 +12272,7 @@ static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
     }
     if (!body || !w || !h || depth < 1 || depth > 8 || masking == 1) goto done;   /* masking 1: extra plane, not supported */
     if (!_dash_bitmap_create(id, w, h, depth)) goto done;
+    _dash_bitmap_fw[id] = fw > 0 && w % fw == 0 ? fw : 0;
     {
         struct BitMap *bm = _dash_bitmaps[id].bm;
         LONG row_bytes = ((w + 15) >> 4) << 1, y, p, pos = 0;
@@ -12395,7 +12407,10 @@ static void _dash_bob_setup(LONG id) {
     o->used = TRUE;
     o->fw = b->w;
     o->frames = 1;
-    if (b->w > b->h && b->w % b->h == 0) {   /* strip of square frames */
+    if (_dash_bitmap_fw[id] > 0) {           /* the frame width of an FRJA chunk (Forja's sprite editor) */
+        o->fw = _dash_bitmap_fw[id];
+        o->frames = b->w / o->fw;
+    } else if (b->w > b->h && b->w % b->h == 0) {   /* strip of square frames */
         o->fw = b->h;
         o->frames = b->w / b->h;
     }
@@ -12452,6 +12467,17 @@ static void _dash_bob_erase(LONG id) {
     ClipBlit(&o->back_rp, 0, 0, o->drawn_rp, o->bx, o->by, o->fw, _dash_bitmaps[id].h, 0xC0);
     o->drawn = FALSE;
 }
+
+/* Frames of any width: the image is a strip of frames width pixels wide (bob_load guesses square frames) */
+static void _dash_bob_frame_width(LONG id, LONG width) {
+    _DashBob *o = _dash_bob_get(id);
+    if (!o || width < 1 || width > _dash_bitmaps[id].w) return;
+    if (o->drawn) _dash_bob_erase(id);
+    o->fw = width;
+    o->frames = _dash_bitmaps[id].w / width;
+    if (o->frame >= o->frames) o->frame = 0;
+}
+
 
 static void _dash_bob_draw(LONG id) {
     _DashBob *o = _dash_bob_get(id);

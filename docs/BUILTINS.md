@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 836 funciones, 836 implementadas, 0 sin implementar.
+Total: 837 funciones, 837 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -73,6 +73,7 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `bob_draw(id)` | `void` | Dibuja un BOB |  |
 | `bob_erase(id)` | `void` | Borra un BOB (deja el fondo como estaba) |  |
 | `bob_frame(id, frame)` | `void` | Pone el fotograma de la animación de un BOB |  |
+| `bob_frame_width(id, width)` | `void` | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
 | `bob_free(id)` | `void` | Libera la memoria de un BOB |  |
 | `bob_collision(id1, id2)` | `BOOL` | Mira si chocan dos BOB |  |
 | `copper_create(size)` | `BOOL` | Crea una lista del copper |  |

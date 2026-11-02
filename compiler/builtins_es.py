@@ -61,6 +61,7 @@ DESC_ES = {
     "bob_draw": "Dibuja un BOB",
     "bob_erase": "Borra un BOB (deja el fondo como estaba)",
     "bob_frame": "Pone el fotograma de la animación de un BOB",
+    "bob_frame_width": "La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados)",
     "bob_free": "Libera la memoria de un BOB",
     "bob_collision": "Mira si chocan dos BOB",
     "copper_create": "Crea una lista del copper",

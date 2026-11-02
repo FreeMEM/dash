@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 836 functions, 836 implemented, 0 not implemented.
+Total: 837 functions, 837 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -73,6 +73,7 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `bob_draw(id)` | `void` | Draw BOB |  |
 | `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
+| `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list |  |
