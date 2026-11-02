@@ -18,8 +18,8 @@ running, debugging, and debugging a real Amiga.
 1. Dash and the Amiga toolchain, as in the
    [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
    emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. This extension: `dash-mui-editor-0.3.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.0), then in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.0.vsix`.
+2. This extension: `dash-mui-editor-0.3.1.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.1), then in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.1.vsix`.
 
 ## How it works with Dash
 

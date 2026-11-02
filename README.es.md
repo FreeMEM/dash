@@ -178,8 +178,8 @@ depurar y depurar en un Amiga de verdad.
 
 1. Dash y el compilador de Amiga, como en [Instalación rápida](#instalación-rápida) (para el emulador, FS-UAE y una
    ROM de Kickstart; para ventanas MUI, `tools/get_mui_sdk.sh` y `tools/emu_sys_mui.sh`).
-2. La extensión: el fichero `dash-mui-editor-0.3.0.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.0), y en VS Code (1.86 o posterior)
-   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.3.0.vsix`. También se
+2. La extensión: el fichero `dash-mui-editor-0.3.1.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.1), y en VS Code (1.86 o posterior)
+   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.3.1.vsix`. También se
    puede construir: `cd editor/vscode && npm install && npm run package`.
 3. Un proyecto: **Dash: Nuevo proyecto**. Si su carpeta no está dentro de este repositorio, **Dash: Elegir la
    carpeta del compilador** (el ajuste `dash.path`). La guía **Primeros pasos con Dash** lleva paso a paso, y si
