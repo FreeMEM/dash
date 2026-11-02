@@ -1,16 +1,19 @@
 # Guía de Instalación de Dash
 
 *[English](INSTALACION.en.md) | Castellano*
-Versión: 2.1 (al día el 2026-10-24)
+Versión: 2.2 (al día el 2026-11-02, Dash 2.0.1)
 
-Este documento describe cómo configurar un entorno de desarrollo completo para programar en Dash, desde cero.
+Este documento describe cómo instalar Dash, desde cero. Hay tres formas, según dónde quieras compilar:
 
-## Requisitos del Sistema Host
+| | Dónde se compila | Qué hace falta | Dónde se explica |
+|---|---|---|---|
+| **En el Amiga** | En el propio Amiga, con la orden `dash` | Un 68000 y AmigaOS 2.0 o superior | [Instalar en el Amiga](#instalar-en-el-amiga) |
+| **En el PC, directo a hunk** | En Linux o macOS (en Windows, con WSL2), con `./dash` | Un compilador de C del PC, `make` y Python 3 | [Instalar en el PC](#instalar-en-el-pc-directo-a-hunk) |
+| **En el PC, por C con gcc** | En el PC, con `./dash --gcc` | Además, el gcc de Amiga de bebbo y Lark | Pasos 1 a 5 de esta guía |
 
-- **Sistema Operativo:** Linux (Ubuntu/Debian recomendado), macOS, o Windows con WSL2
-- **RAM:** Mínimo 8GB (16GB+ recomendado para compilar el toolchain)
-- **Disco:** Mínimo 10GB libres para el toolchain
-- **CPU:** Multi-core recomendado (la compilación usa todos los núcleos)
+Las dos primeras generan el mismo ejecutable, byte a byte. La tercera hace falta para los programas que llevan C
+dentro (`@native`, `@c`, `@header`) y para las opciones de gcc (`-O`, `--small`...): `./dash` pasa esos programas
+por C él solo, si el gcc de Amiga está instalado.
 
 ## Requisitos del Amiga
 
@@ -25,6 +28,86 @@ Lo que necesitan los programas hechos con Dash, en un Amiga real o emulado:
 - **Interfaces de red y WiFi** (`net_ifs_read`, `wifi_read`): Roadshow. **USB** (`usb_hid_*`): Poseidon.
 
 La lista completa está en `REQUERIMIENTOS_SISTEMA.md`.
+
+## Instalar en el Amiga
+
+El paquete `dash-X.Y.Z-amiga.lha` de las [releases](https://github.com/FreeMEM/dash/releases) trae el
+compilador para el propio Amiga (la orden `dash`), sus runtimes, la carpeta `lib/` de los `import`, los ejemplos y
+su propio instalador. Trae también **Forja**, el IDE de Dash, e **Inferencia**, la IA que programa en el Amiga
+hablando con Forja por ARexx.
+
+Lo que necesita:
+
+- Para compilar: un 68000 o superior y AmigaOS 2.0 o superior. Los programas que salen necesitan AmigaOS 3.0
+  (ver [Requisitos del Amiga](#requisitos-del-amiga)).
+- Para Forja: MUI. Para Inferencia: AmigaOS 3.0 con un 68020, MUI 5, una pila TCP/IP, AmiSSL 5 y un modelo de
+  lenguaje (OpenRouter, Anthropic, o uno en un PC de tu red con Ollama o LM Studio); detalles en su README.
+
+Para instalarlo:
+
+1. Copia `dash-X.Y.Z-amiga.lha` al Amiga y descomprímelo, por ejemplo en `RAM:` (`lha x dash-2.0.1-amiga.lha RAM:`).
+   Si el navegador del PC lo guardó como `dash-2.0.1-amiga (1).lha`, cámbiale el nombre antes: LhA toma "(1)"
+   como un comodín.
+2. Abre el cajón `Dash` y haz doble clic en **Instalar**. Pregunta dónde dejar el cajón (propone `Work:` si
+   existe, y si no `SYS:`), lo copia con sus iconos y añade a `S:User-Startup`:
+   ```
+   Assign DASH: "Work:Dash"
+   Path DASH: ADD
+   ```
+   Habla en castellano o en inglés, según el idioma de las Preferencias de Locale.
+3. Reinicia, o escribe esas dos líneas en un Shell, para usar `dash` desde cualquier sitio.
+
+Sin el instalador (por ejemplo, en un AmigaOS 2.0 sin Installer): copia el cajón `Dash` donde quieras y añade a
+mano esas dos líneas a `S:User-Startup`.
+
+Para compilar, desde un Shell:
+
+```
+dash DASH:examples/hola.dash -o RAM:hola
+RAM:hola
+dash --fpu programa.dash -o programa          ; Float y Double con la FPU (68020 con 68881/68882 o superior)
+dash --memcheck programa.dash -o programa     ; versión de prueba que vigila la memoria
+```
+
+`--fpu` y `--memcheck` usan los ficheros `dash_fpu.drt`, `dash_mc.drt` y `dash_fpu_mc.drt`, que van junto a la
+orden: no los borres si vas a usar esas opciones. En el Amiga no hay `--gcc`: un programa con C dentro se compila
+en el PC.
+
+Forja, en `DASH:Forja`, compila con esa misma orden `dash` (o con la que digas en sus preferencias, que guarda en
+`ENV:Forja/dashc`).
+
+## Instalar en el PC, directo a hunk
+
+Basta un compilador de C del PC, `make` y Python 3:
+
+```bash
+# Ubuntu / Debian
+sudo apt install -y git make gcc python3
+# CachyOS / Arch Linux
+sudo pacman -S --needed git make gcc python
+# macOS
+xcode-select --install
+
+git clone https://github.com/FreeMEM/dash.git
+cd dash
+make -C dashc                      # el compilador de Dash, en unos segundos
+./dash examples/hola.dash -o bin/hola
+```
+
+El ejecutable que sale se copia al Amiga y se ejecuta. Para probarlo sin Amiga, el [Paso 6](#paso-6-probar-en-un-emulador-opcional)
+(FS-UAE). Si solo vas a compilar así, no necesitas los pasos 1 a 5.
+
+## En el PC, por C con gcc: pasos 1 a 5
+
+Lo que sigue instala el camino por C (`./dash --gcc`): el gcc de Amiga de bebbo y el parser Lark. Hace falta para
+los programas con C dentro y para las opciones de gcc.
+
+### Requisitos del Sistema Host
+
+- **Sistema Operativo:** Linux (Ubuntu/Debian recomendado), macOS, o Windows con WSL2
+- **RAM:** Mínimo 8GB (16GB+ recomendado para compilar el toolchain)
+- **Disco:** Mínimo 10GB libres para el toolchain
+- **CPU:** Multi-core recomendado (la compilación usa todos los núcleos)
 
 ## Paso 1: Instalar Python y Dependencias de Dash
 
@@ -309,10 +392,10 @@ echo -n "GDB (depurador de VS Code): "
 echo "=== Fin de verificación ==="
 ```
 
-Y un programa de prueba: `./dash examples/hola.dash -o bin/hola`.
+Y un programa de prueba: `./dash --gcc examples/hola.dash -o bin/hola`.
 
-`./dash` compila con `gcc -O2` (opciones en `compiler/cflags.py`). `DASH_CFLAGS` añade opciones a gcc, para
-probar: `DASH_CFLAGS="-Os" ./dash prog.dash -o bin/prog`.
+`./dash --gcc` compila con `gcc -O2` (opciones en `compiler/cflags.py`). `DASH_CFLAGS` añade opciones a gcc, para
+probar: `DASH_CFLAGS="-Os" ./dash --gcc prog.dash -o bin/prog`.
 
 ## Paso 6: Probar en un emulador (opcional)
 
