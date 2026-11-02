@@ -611,6 +611,78 @@ LONG dl_tmp_release_ret(ULONG m, LONG v) { _dash_tmp_release(m); return v; }
 STRPTR dl_str_assign(STRPTR var, STRPTR v) { _dash_str_set(&var, v); return var; }
 STRPTR dl_str_assign_copy(STRPTR var, STRPTR v) { _dash_str_set_copy(&var, v); return var; }
 STRPTR dl_str_append_r(STRPTR var, STRPTR add) { _dash_str_append(&var, add); return var; }
+/* var = a + b + ... o una interpolación (hasta 6 partes), escrito en el texto de var si cabe (como _dash_str_set_join
+   del camino por C: s = "x" + i en un bucle no reserva nada); hints: la longitud de un literal, o -1 */
+STRPTR dl_str_set_join_r(STRPTR var, LONG n, STRPTR *parts, const LONG *hints) { _dash_str_set_join(&var, n, parts, hints); return var; }
+
+/* var = a + b escrito a mano, sin bucles ni tablas (lo que sale del camino por C cuando gcc mete _dash_str_set_join
+   en el programa con dos partes): en el texto de var si cabe y ninguna parte está en él; si no, en uno nuevo.
+   la, lb: el largo, o la pista (-1 no se sabe, -2 un texto de C) */
+static __inline__ __attribute__((always_inline)) STRPTR _dl_cat2(STRPTR var, STRPTR a, LONG la, STRPTR b, LONG lb)
+{
+    STRPTR d, p;
+    _DashStrHdr *h;
+    LONG total;
+    if (la < 0) la = _DASH_HLEN(a, la);
+    if (lb < 0) lb = _DASH_HLEN(b, lb);
+    total = la + lb;
+    d = NULL;
+    if (var && _DASH_STR_OURS(var) && !((h = _DASH_STR_HDR(var))->size & (_DASH_STR_KEEP | _DASH_STR_TEMP))
+        && (ULONG)total + sizeof(_DashStrHdr) + 1 <= _DASH_STR_SIZE(h)) {
+        STRPTR end = (STRPTR)h + _DASH_STR_SIZE(h);
+        if (!(a >= var && a < end) && !(b >= var && b < end)) d = var;
+    }
+    if (!d && !(d = _dash_str_alloc(total, FALSE))) {
+        _dash_str_free(var);
+        return NULL;
+    }
+    p = d;
+    while (la--) *p++ = *a++;
+    while (lb--) *p++ = *b++;
+    *p = 0;
+    if (d == var) _dash_str_setlen(d, total);
+    else _dash_str_free(var);
+    return d;
+}
+
+STRPTR dl_str_cat2_r(STRPTR var, LONG la, LONG lb, STRPTR a, STRPTR b) { return _dl_cat2(var, a, la, b, lb); }
+
+/* n en decimal, hacia atrás desde end (el 0 del final ya puesto): dos cifras por división, con divu.w cuando el
+   cociente cabe en 16 bits (como DashString_from_int); devuelve el principio */
+static __inline__ __attribute__((always_inline)) char *_dl_utoa(char *end, LONG n)
+{
+    ULONG u = n < 0 ? -(ULONG)n : (ULONG)n, q, rem;
+    const char *d;
+    do {
+#if defined(__mc68000__) && !defined(_DASH_68020)
+        if (u < 6553600UL) {
+            ULONG r = u;
+            __asm__ ("divu.w #100,%0" : "+d"(r) : : "cc");
+            q = (UWORD)r;
+            rem = r >> 16;
+        } else
+#endif
+        {
+            q = u / 100;
+            rem = u - q * 100;
+        }
+        d = _dash_digits2 + (rem << 1);
+        *--end = d[1];
+        if (q || rem >= 10) *--end = d[0];
+        u = q;
+    } while (u);
+    if (n < 0) *--end = '-';
+    return end;
+}
+
+/* var = literal + número (s = "x" + i): todo aquí dentro, en una llamada (el número en un búfer de la pila) */
+STRPTR dl_str_cat_li_r(STRPTR var, STRPTR lit, LONG llit, LONG n)
+{
+    char buf[12], *s;
+    buf[11] = 0;
+    s = _dl_utoa(buf + 11, n);
+    return _dl_cat2(var, lit, llit, s, (LONG)(buf + 11 - s));
+}
 STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
 /* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo). dl_str_forget ya no hace nada: el
    largo va en la cabecera de cada texto de Dash (R8 de main) y un texto de C no la tiene; se queda por el C ya

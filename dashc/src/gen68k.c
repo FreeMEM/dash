@@ -380,7 +380,7 @@ static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están ge
 /* Expresiones que se leen de un hueco en vez de calcularse: i * k en un for (el hueco
    suma paso * k en cada vuelta) y las constantes grandes de la condición de un bucle
    (need_reg: solo si el hueco tiene registro; si no, se usa la constante). */
-typedef struct { Node *n; int slot, need_reg; } Repl;
+typedef struct { Node *n; int slot, need_reg, type; } Repl;   /* type: TY_INT, o TY_FLOAT (un Float sacado del bucle) */
 static struct { Repl *v; int n, cap; } repls;
 
 /* depth: la de las variables del cuerpo; sp: sp_depth dentro del cuerpo */
@@ -547,7 +547,7 @@ static int repl_var(Node *n, Var *v)
             Repl *r = &repls.v[i];
             if (r->need_reg && pass == 2 && slot_reg.v[r->slot] < 0) return 0;
             use_slot(r->slot);
-            *v = slot_var(r->slot, TY_INT);
+            *v = slot_var(r->slot, r->type);
             return 1;
         }
     return 0;
@@ -567,6 +567,7 @@ static void add_repl(Node *n, int slot, int need_reg)
     r.n = n;
     r.slot = slot;
     r.need_reg = need_reg;
+    r.type = TY_INT;
     VEC_PUSH(repls, r);
 }
 
@@ -866,6 +867,20 @@ static void store_d0(Var *v)
         add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
         l((uint32_t)v->off);
     }
+}
+
+/* store_d0 al final de una sentencia (nadie usa d0 después): si lo último fue move.l dX,d0, va move.l dX,dN sin
+   pasar por d0 (y = f(y, i) con f en línea: lo que devuelve f ya está en un registro) */
+static void store_d0_stmt(Var *v)
+{
+    int x;
+    if (v->kind == V_REG && (x = take_move_to_d0()) >= 0) {
+        if (x != v->reg) w(0x2000 | v->reg << 9 | x);  /* move.l dX,dN */
+        flags_set(v->reg, 1);
+        d0_stored = (uint32_t)-1;
+        return;
+    }
+    store_d0(v);
 }
 
 /* suma k a la variable, sin pasar por d0 */
@@ -1384,8 +1399,10 @@ static void to_str(int ty)
 {
     switch (ty) {
     case TY_INT:
+        /* (uno de los 16 búferes fijos de DashString_from_int: no es un temporal que haya que soltar, así que no pide
+           marca de temporales; quien lo guarda lo copia, porque no es suyo) */
         push_d0();
-        rt_call("_dl_str_from_int", 1, 1);
+        rt_call("_dl_str_from_int", 1, 0);
         break;
     case TY_CHAR:
         push_d0();
@@ -2132,15 +2149,41 @@ static int gen_method(Node *n, int t)
     return r;
 }
 
-/* a[i] de una lista */
+/* ¿La lista es una variable local (en un registro o en el marco)? Entonces se puede leer en cualquier momento: nada
+   de lo que se calcula entre medias la cambia (las globales sí podría cambiarlas una función) */
+static int arr_local(Node *a, Var *va)
+{
+    if (a->kind != E_VAR || !find_local(a->name) || !simple(a, va)) return 0;
+    return va->kind == V_REG || va->kind == V_LOCAL;
+}
+
+/* a[i] de una lista, en línea (como DashArray_get: nil o un índice fuera de rango dan 0; data en 0(a), length
+   en 4(a)): lo que gcc hace con el camino por C, en vez de llamar a dl_arr_get con los argumentos en la pila */
 static int gen_arr_index(Node *n)
 {
-    Node *a[2];
     int t = expr_type(n->a);
-    a[0] = n->a;
-    a[1] = n->b;
-    args_to_stack(a, 2, NULL);
-    rt_call("_dl_arr_get", 2, 0);
+    Var va;
+    if (arr_local(n->a, &va)) {
+        /* la lista es una variable local: el índice primero y la lista directa a a0, sin pasar por la pila */
+        value(n->b);
+        op_ea(0x2040, &va);                            /* movea.l lista,a0 */
+    } else {
+        value(n->a);
+        push_d0();
+        value(n->b);
+        w(0x205F);                                     /* movea.l (sp)+,a0 */
+        sp_depth -= 4;
+    }
+    w(0x2208);                                         /* move.l a0,d1 */
+    w(0x6710);                                         /* beq.s cero */
+    w(0xB0A8); w(4);                                   /* cmp.l 4(a0),d0 */
+    w(0x640A);                                         /* bcc.s cero (sin signo: también un índice negativo) */
+    w(0x2050);                                         /* movea.l (a0),a0 */
+    w(0xE588);                                         /* lsl.l #2,d0 */
+    w(0x2030); w(0x0800);                              /* move.l 0(a0,d0.l),d0 */
+    w(0x6002);                                         /* bra.s fin */
+    w(0x7000);                                         /* cero: moveq #0,d0 */
+    d0_loaded = (uint32_t)-1;                          /* fin: */
     return t == TY_ARR + TY_VOID ? TY_INT : t - TY_ARR;
 }
 
@@ -2496,9 +2539,56 @@ static void gen_arr_store(Node *target, Node *v)
 {
     int et = learn_elem(target->a, v), kind = elem_kind(et), i;
     Node *a[3];
+    Var va, vi;
     a[0] = target->a;
     a[1] = target->b;
     a[2] = v;
+    if (kind == 0 && arr_local(a[0], &va)) {
+        /* la lista es una variable local: el índice a d1 (simple, o por la pila si no), el valor a d0 y la lista a a0 */
+        if (simple(a[1], &vi) && (vi.kind == V_CONST || vi.type == TY_INT || vi.type == TY_CHAR)) {
+            elem_value(a[2], et);
+            load_var(1, &vi);                          /* move.l i,d1 */
+        } else {
+            value(a[1]);
+            push_d0();
+            elem_value(a[2], et);
+            w(0x221F);                                 /* move.l (sp)+,d1 */
+            sp_depth -= 4;
+        }
+        op_ea(0x2040, &va);                            /* movea.l lista,a0 */
+        w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
+        w(0x670E);                                     /* beq.s fin */
+        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
+        w(0x6408);                                     /* bcc.s fin */
+        w(0x2050);                                     /* movea.l (a0),a0 */
+        w(0xE589);                                     /* lsl.l #2,d1 */
+        w(0x2180); w(0x1800);                          /* move.l d0,0(a0,d1.l) */
+        d0_loaded = (uint32_t)-1;                      /* fin: */
+        return;
+    }
+    if (kind == 0) {
+        /* una lista de valores (no textos ni objetos, que llevan cuenta de referencias): en línea, como
+           DashArray_set (nil o un índice fuera de rango no hacen nada) */
+        w(0x518F);                                     /* subq.l #8,sp */
+        sp_depth += 8;
+        value(a[0]);
+        w(0x2E80);                                     /* move.l d0,(sp) */
+        value(a[1]);
+        w(0x2F40); w(4);                               /* move.l d0,4(sp) */
+        elem_value(a[2], et);
+        w(0x205F);                                     /* movea.l (sp)+,a0 */
+        w(0x221F);                                     /* move.l (sp)+,d1 */
+        sp_depth -= 8;
+        w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
+        w(0x670E);                                     /* beq.s fin */
+        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
+        w(0x6408);                                     /* bcc.s fin */
+        w(0x2050);                                     /* movea.l (a0),a0 */
+        w(0xE589);                                     /* lsl.l #2,d1 */
+        w(0x2180); w(0x1800);                          /* move.l d0,0(a0,d1.l) */
+        d0_loaded = (uint32_t)-1;                      /* fin: */
+        return;
+    }
     w(0x4FEF); w(-12);                                 /* lea -12(sp),sp */
     sp_depth += 12;
     for (i = 0; i < 3; i++) {
@@ -2880,6 +2970,21 @@ static int var_range(Node *n, long *lo, long *hi)
     int idx, i;
     if (fold(n, lo)) {
         *hi = *lo;
+        return 1;
+    }
+    if (n->kind == E_BIN && (n->op == P_PLUS || n->op == P_MINUS) && expr_type(n) == TY_INT) {
+        /* x + k, x - k y k + x: el rango de x, movido (si sigue dentro de 32 bits) */
+        long k, a, b;
+        long long l2, h2;
+        if (fold(n->b, &k) && var_range(n->a, &a, &b)) {
+            if (n->op == P_MINUS) k = -k;
+        } else if (n->op == P_PLUS && fold(n->a, &k) && var_range(n->b, &a, &b)) {
+        } else return 0;
+        l2 = (long long)a + k;
+        h2 = (long long)b + k;
+        if (l2 < INT32_MIN || h2 > INT32_MAX || b == INT32_MAX) return 0;
+        *lo = (long)l2;
+        *hi = (long)h2;
         return 1;
     }
     if (n->kind != E_VAR || !(lc = find_local(n->name)) || lc->slot < 0) return 0;
@@ -3838,7 +3943,7 @@ static int gen_expr(Node *n)
 
     if (repl_var(n, &v)) {
         load_var(0, &v);
-        return TY_INT;
+        return v.type;
     }
     if (n->kind != E_CMP && n->kind != E_AND && n->kind != E_OR && n->kind != E_NOT && fold(n, &k)) {
         load_imm(0, k);
@@ -4201,6 +4306,46 @@ static int stable(Node *n, NodeList *body)
     return stable(n->a, body) && stable(n->b, body);
 }
 
+#define MAX_INV 6
+
+/* ¿e no cambia en el cuerpo de un for? Literales, constantes y variables locales que el cuerpo no asigna (ni la
+   del for), y +, -, *, / y el signo de ellas. Las globales no: una función que llama el cuerpo podría cambiarlas */
+static int loop_inv(Node *e, NodeList *body, const char *ivar)
+{
+    Local *lc;
+    switch (e->kind) {
+    case E_FLOAT: case E_INT: return 1;
+    case E_NEG: return loop_inv(e->a, body, ivar);
+    case E_VAR:
+        lc = find_local(e->name);
+        return lc && strcmp(e->name, ivar) && !list_assigns(body, e->name);
+    case E_BIN:
+        return (e->op == P_PLUS || e->op == P_MINUS || e->op == P_STAR || e->op == P_SLASH) &&
+               loop_inv(e->a, body, ivar) && loop_inv(e->b, body, ivar);
+    default: return 0;
+    }
+}
+
+/* Las operaciones de Float del cuerpo que no cambian en él (las más grandes): se calculan una vez antes del bucle
+   (gcc lo hace igual por el camino por C). Sin efectos ni errores (dividir por cero da infinito), así que da igual
+   que el cuerpo no llegue a ejecutarlas */
+static void find_float_inv(Node *n, NodeList *body, const char *ivar, Node **inv, int *ninv)
+{
+    int i;
+    if (!n || *ninv >= MAX_INV) return;
+    if (n->kind == E_BIN && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH) &&
+        expr_type(n) == TY_FLOAT && loop_inv(n, body, ivar) && !(n->a->kind == E_FLOAT && n->b->kind == E_FLOAT)) {
+        inv[(*ninv)++] = n;
+        return;
+    }
+    find_float_inv(n->a, body, ivar, inv, ninv);
+    find_float_inv(n->b, body, ivar, inv, ninv);
+    find_float_inv(n->c, body, ivar, inv, ninv);
+    for (i = 0; i < n->args.n; i++) find_float_inv(n->args.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->els.n; i++) find_float_inv(n->els.v[i], body, ivar, inv, ninv);
+}
+
 static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *nm)
 {
     Node *o = NULL;
@@ -4238,6 +4383,8 @@ static void gen_for(Node *n)
     Mult m[MAX_MULTS];
     long sr_k[MAX_SR];
     int sr_slot[MAX_SR];
+    Node *inv[MAX_INV];
+    int ninv = 0, inv_slot[MAX_INV];
     Var vi, vend, vstep, vc, sr_v[MAX_SR];
     Loop lp;
     MarkScope ms;
@@ -4318,6 +4465,16 @@ static void gen_for(Node *n)
     }
     for (i = repl_base; i < repls.n; i++)
         if (repls.v[i].slot < 0) repls.v[i--] = repls.v[--repls.n];   /* sin hueco (más de MAX_SR) */
+    /* los Float que no cambian en el cuerpo, en huecos (antes de reservar los del contador) */
+    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], &n->body, n->name, inv, &ninv);
+    for (j = 0; j < ninv; j++) {
+        Var vv;
+        float_value(inv[j]);
+        vv = declare_slot("", TY_FLOAT, &inv_slot[j]);
+        store_d0(&vv);
+        add_repl(inv[j], inv_slot[j], 0);
+        repls.v[repls.n - 1].type = TY_FLOAT;
+    }
 
     if (counted) {
         if (count >= 0) {
@@ -4361,6 +4518,7 @@ static void gen_for(Node *n)
     if (step_slot >= 0) use_slot(step_slot);
     if (cnt_slot >= 0) use_slot(cnt_slot);
     for (j = 0; j < nsr; j++) use_slot(sr_slot[j]);
+    for (j = 0; j < ninv; j++) use_slot(inv_slot[j]);
 
     /* sin contador, la comparación va al final: una vuelta es cuerpo, incremento y un salto */
     if (!counted) {
@@ -4785,6 +4943,142 @@ static int gen_counted_while(Node *n)
     return 1;
 }
 
+/* r = a + b o r = a - b de enteros, con r en un registro y a y b simples (ninguno lee r): se calcula en el registro
+   de r, sin pasar por d0 (como gcc). 0: no es el caso */
+static int assign_in_reg(Node *n)
+{
+    Node *e = n->a;
+    Var v, va, vb;
+    long k;
+    if (e->kind != E_BIN || (e->op != P_PLUS && e->op != P_MINUS) || expr_type(e) != TY_INT) return 0;
+    v = lookup(n->name);
+    if (v.kind != V_NONE && (v.kind != V_REG || v.type != TY_INT)) return 0;
+    if (refs(e->b, n->name) || refs(e->a, n->name)) return 0;
+    if (!simple(e->a, &va) || !simple(e->b, &vb)) return 0;
+    if (va.kind != V_CONST && va.type != TY_INT && va.type != TY_CHAR) return 0;
+    if (vb.kind != V_CONST && vb.type != TY_INT && vb.type != TY_CHAR) return 0;
+    if (v.kind == V_NONE) {                            /* la primera asignación declara */
+        v = declare(n->name, TY_INT);
+        if (v.kind != V_REG) {                         /* sin registro: como siempre */
+            value(e);
+            store_d0(&v);
+            return 1;
+        }
+    }
+    load_var(v.reg, &va);                              /* move.l a,dN */
+    if (vb.kind == V_CONST) {
+        k = e->op == P_PLUS ? vb.val : -vb.val;
+        add_imm_ea(k, &v);
+        if (!k) flags_set(v.reg, 1);
+    } else {
+        op_ea((e->op == P_PLUS ? 0xD080 : 0x9080) | v.reg << 9, &vb);   /* add.l / sub.l b,dN */
+        flags_set(v.reg, 0);
+    }
+    return 1;
+}
+
+/* La pista de una parte de una unión: el largo de un literal; -2 un número, carácter o Bool pasado a texto (un
+   texto de C: strlen, sin mirar cabecera); -1 lo demás */
+static int join_hint(Node *p)
+{
+    int ty;
+    if (p->kind == E_STR && p->len < 32768) return p->len;
+    ty = expr_type(p);
+    if (ty == TY_INT || ty == TY_CHAR || ty == TY_BOOL) return -2;
+    return -1;
+}
+
+/* s = a + b + ... o s = "...#{x}..." (hasta 6 partes): dl_str_set_join_r escribe en el texto de s si cabe, sin
+   el temporal de la unión ni su copia (como _dash_str_set_join del camino por C). 0: no es el caso */
+static int str_set_join(Node *n, Node *e, int fresh)
+{
+    Node *parts[6], *x;
+    char str[6];
+    int np = 0, i;
+    Var v;
+    if (e->kind == E_INTERP) {
+        if (e->args.n < 1 || e->args.n > 6) return 0;
+        for (i = 0; i < e->args.n; i++) parts[i] = e->args.v[i];
+        np = e->args.n;
+    } else if (e->kind == E_BIN && e->op == P_PLUS && expr_type(e) == TY_STR) {
+        for (x = e; x->kind == E_BIN && x->op == P_PLUS && expr_type(x) == TY_STR; x = x->a) {
+            if (np >= 5) return 0;
+            np++;
+        }
+        parts[0] = x;
+        for (x = e, i = np; i > 0; x = x->a, i--) parts[i] = x->b;
+        np++;
+    } else return 0;
+    if (np == 2 && parts[0]->kind == E_STR && parts[0]->len < 32768 && expr_type(parts[1]) == TY_INT) {
+        /* literal + número: dl_str_cat_li_r(var, literal, largo, n) */
+        value(parts[1]);
+        push_d0();
+        w(0x4878); w(parts[0]->len);                   /* pea largo.w */
+        sp_depth += 4;
+        load_str_lit(parts[0]->str, parts[0]->len);
+        push_d0();
+        if (fresh) {
+            w(0x4878); w(0);                           /* pea 0.w: sin texto antes */
+            sp_depth += 4;
+        } else {
+            v = lookup(n->name);
+            op_ea(0x2F00, &v);                         /* move.l s,-(sp) */
+            sp_depth += 4;
+        }
+        rt_call("_dl_str_cat_li_r", 4, 0);
+        goto guardar;
+    }
+    for (i = 0; i < np; i++) str[i] = 1;
+    args_to_stack(parts, np, str);                     /* las partes, en la pila */
+    if (np == 2) {
+        /* dos partes: dl_str_cat2_r(var, pista a, pista b, a, b), con las partes ya en la pila */
+        for (i = 1; i >= 0; i--) {
+            w(0x4878); w(join_hint(parts[i]));         /* pea pista.w */
+            sp_depth += 4;
+        }
+        if (fresh) {
+            w(0x4878); w(0);
+            sp_depth += 4;
+        } else {
+            v = lookup(n->name);
+            op_ea(0x2F00, &v);
+            sp_depth += 4;
+        }
+        rt_call("_dl_str_cat2_r", 5, 0);
+        goto guardar;
+    }
+    w(0x4FEF); w(-4 * np);                             /* lea -4n(sp),sp: las pistas */
+    sp_depth += 4 * np;
+    for (i = 0; i < np; i++) {
+        w(0x2F7C);                                     /* move.l #pista,d16(sp) */
+        l((uint32_t)(long)join_hint(parts[i]));
+        w(4 * i);
+    }
+    w(0x4857);                                         /* pea (sp): las pistas */
+    sp_depth += 4;
+    w(0x486F); w(4 + 4 * np);                          /* pea 4+4n(sp): las partes */
+    sp_depth += 4;
+    w(0x4878); w(np);                                  /* pea n.w */
+    sp_depth += 4;
+    if (fresh) {
+        w(0x4878); w(0);                               /* pea 0.w: sin texto antes */
+        sp_depth += 4;
+    } else {
+        v = lookup(n->name);
+        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
+        sp_depth += 4;
+    }
+    rt_call("_dl_str_set_join_r", 4, 0);
+    pop_args(2 * np);
+guardar:
+    if (fresh) {
+        v = declare(n->name, TY_STR);
+        locals.v[locals.n - 1].owned = 1;
+    }
+    store_d0(&v);
+    return 1;
+}
+
 /* s = valor para una variable de texto: la variable es dueña de su texto; s = s + x añade
    en su sitio (_dash_str_append); una variable nueva empieza sin texto */
 static void gen_str_assign(Node *n, int ty)
@@ -4811,6 +5105,7 @@ static void gen_str_assign(Node *n, int ty)
         set_imm(&v, 0);
         return;
     }
+    if (ty == TY_STR && str_set_join(n, e, fresh)) return;
     if (ty == TY_STR && e->kind != E_NIL && (lc || fresh) && is_lent(0, n->name)) {
         /* toma prestado el texto (un literal, o de una lista o diccionario de un parámetro): ni copia ni free */
         value(e);
@@ -6020,6 +6315,7 @@ static void gen_stmt(Node *n)
             }
             return;
         }
+        if (n->kind == S_ASSIGN && forced < 0 && assign_in_reg(n)) return;
         ty = gen_expr(n->a);
         need_value(n->a, ty);
         if (forced >= 0) ty = forced;
@@ -6030,7 +6326,7 @@ static void gen_stmt(Node *n)
         } else if (v.kind == V_CONST) {
             fatal_node(n, "%s es una constante", n->name);
         }
-        store_d0(&v);
+        store_d0_stmt(&v);
         return;
     case S_EXPR:
         gen_expr(n->a);
