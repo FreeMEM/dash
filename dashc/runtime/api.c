@@ -618,7 +618,7 @@ STRPTR dl_str_set_join_r(STRPTR var, LONG n, STRPTR *parts, const LONG *hints) {
 /* var = a + b escrito a mano, sin bucles ni tablas (lo que sale del camino por C cuando gcc mete _dash_str_set_join
    en el programa con dos partes): en el texto de var si cabe y ninguna parte está en él; si no, en uno nuevo.
    la, lb: el largo, o la pista (-1 no se sabe, -2 un texto de C) */
-static STRPTR _dl_cat2(STRPTR var, STRPTR a, LONG la, STRPTR b, LONG lb)
+static __inline__ __attribute__((always_inline)) STRPTR _dl_cat2(STRPTR var, STRPTR a, LONG la, STRPTR b, LONG lb)
 {
     STRPTR d, p;
     _DashStrHdr *h;
@@ -647,10 +647,41 @@ static STRPTR _dl_cat2(STRPTR var, STRPTR a, LONG la, STRPTR b, LONG lb)
 
 STRPTR dl_str_cat2_r(STRPTR var, LONG la, LONG lb, STRPTR a, STRPTR b) { return _dl_cat2(var, a, la, b, lb); }
 
-/* var = literal + número (s = "x" + i): una llamada en vez de dos (DashString_from_int va aquí dentro) */
+/* n en decimal, hacia atrás desde end (el 0 del final ya puesto): dos cifras por división, con divu.w cuando el
+   cociente cabe en 16 bits (como DashString_from_int); devuelve el principio */
+static __inline__ __attribute__((always_inline)) char *_dl_utoa(char *end, LONG n)
+{
+    ULONG u = n < 0 ? -(ULONG)n : (ULONG)n, q, rem;
+    const char *d;
+    do {
+#if defined(__mc68000__) && !defined(_DASH_68020)
+        if (u < 6553600UL) {
+            ULONG r = u;
+            __asm__ ("divu.w #100,%0" : "+d"(r) : : "cc");
+            q = (UWORD)r;
+            rem = r >> 16;
+        } else
+#endif
+        {
+            q = u / 100;
+            rem = u - q * 100;
+        }
+        d = _dash_digits2 + (rem << 1);
+        *--end = d[1];
+        if (q || rem >= 10) *--end = d[0];
+        u = q;
+    } while (u);
+    if (n < 0) *--end = '-';
+    return end;
+}
+
+/* var = literal + número (s = "x" + i): todo aquí dentro, en una llamada (el número en un búfer de la pila) */
 STRPTR dl_str_cat_li_r(STRPTR var, STRPTR lit, LONG llit, LONG n)
 {
-    return _dl_cat2(var, lit, llit, DashString_from_int(n), -2);
+    char buf[12], *s;
+    buf[11] = 0;
+    s = _dl_utoa(buf + 11, n);
+    return _dl_cat2(var, lit, llit, s, (LONG)(buf + 11 - s));
 }
 STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
 /* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo). dl_str_forget ya no hace nada: el

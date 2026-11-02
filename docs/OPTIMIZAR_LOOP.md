@@ -40,7 +40,7 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
 - [x] O2 `%` y `/` con divisor constante: `divu` directo cuando se sabe que el dividendo cabe (rango del `for`,
   valores pequeños), y la rutina solo si no.
 - [x] O3 flotante: ver qué rutinas llama el directo y usar las rápidas (fastfp) del camino por C.
-- [~] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
+- [x] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
 - [~] O5 llamada: menos trabajo por llamada (registros que se guardan, argumentos en registros para funciones
   `static` del programa, si el resto del compilador lo permite).
 - [ ] O6 Medir de nuevo con `medir_dash.py`, actualizar la comparativa de la web (dash.freemem.space, columnas
@@ -103,4 +103,11 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   (texto de C), como por C. `s = "x" + "12345"`: 962 ms frente a 1136 por C (ya más rápido). Mismo resultado que por
   C y `--memcheck` limpio. `make -C dashc test` entero bien. Medida (directo / por C): texto 1847/1525 (A1200),
   7855/6411 (A500); lista 1787/1550 y 8479/7509; llamada 246/219 y 1086/1072; el resto, igual o mejor.
+- 2026-11-02, O4 (fin): `dl_str_cat_li_r` lleva dentro la conversión (`_dl_utoa`, dos cifras por `divu.w`, en un búfer
+  de la pila) y `_dl_cat2` en línea: una sola llamada por vuelta. texto: A1200 1381 ms (por C 1522, −9 %), A500 5951
+  (por C 6413, −7 %): ya más rápido que por C. Mismo resultado y `--memcheck` limpio. `make -C dashc test` entero bien.
+  Medida completa (directo / por C): bucle 632/645 y 2833/3233; flotante 491/493 y 2421/2388; lineas 4935/5009 y
+  6684/6729; lista 1790/1555 y 8468/7539; llamada 249/224 y 1086/1068; texto 1381/1522 y 5951/6413; vacio 37/46 y
+  145/150. Quedan detrás lista (+15 % / +12 %: gcc comprueba nil una vez fuera del bucle) y llamada en el A1200
+  (+11 %, una instrucción por vuelta).
 
