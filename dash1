@@ -44,6 +44,11 @@ def say(text):
 def run_command(command, env=None):
     """Runs a command and prints its output in real-time, exiting on error."""
     say(f"Executing: {' '.join(command)}")
+    if env is None and command[:3] == ["python3", "-m", "compiler.main"]:
+        # the transpiler of this Dash, from any folder (not only from the repository's)
+        env = os.environ.copy()
+        here = os.path.dirname(os.path.abspath(__file__))
+        env["PYTHONPATH"] = here + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
 
     while True:
@@ -71,7 +76,10 @@ def main():
     parser = argparse.ArgumentParser(description="Dash - Amiga Programming Language Compiler")
     parser.add_argument("--version", action="version", version=f"Dash {dash_version()}")
     parser.add_argument("input_file", help="Input Dash source file (.dash)")
-    parser.add_argument("-o", "--output", required=True, help="Output Amiga executable file")
+    parser.add_argument("-o", "--output", help="Output Amiga executable file")
+    parser.add_argument("--cabecera", metavar="FILE.h",
+                        help="the program's structs (as this compiler lays them out), constants and @export "
+                             "prototypes, for the C of @link; without -o, only that")
     parser.add_argument("--no-hunk", action="store_true", help="Skip ELF to Hunk conversion (keep ELF)")
     parser.add_argument("--multifile", action="store_true", help="Generate and compile multiple C files")
     parser.add_argument("--stack", type=int, metavar="BYTES",
@@ -114,6 +122,15 @@ def main():
 
     input_filename = args.input_file
     output_filename = args.output
+    if args.cabecera and not output_filename:
+        # only the header (as the straight compiler's --cabecera): no build, no toolchain
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        os.makedirs("build", exist_ok=True)
+        c_tmp = os.path.join("build", os.path.splitext(os.path.basename(input_filename))[0] + ".cabecera.c")
+        run_command(["python3", "-m", "compiler.main", input_filename, "-o", c_tmp, "--cabecera", args.cabecera])
+        return
+    if not output_filename:
+        parser.error("the following arguments are required: -o/--output")
 
     base_name = os.path.splitext(os.path.basename(input_filename))[0]
 
@@ -179,6 +196,8 @@ def main():
         c_output_file = os.path.join(build_dir, f"{base_name}.c")
         elf_output_file = os.path.join(build_dir, f"{base_name}.elf")
         transpile_command = ["python3", "-m", "compiler.main", input_filename, "-o", c_output_file]
+        if args.cabecera:
+            transpile_command += ["--cabecera", args.cabecera]
         if args.verbose:
             transpile_command.append("-v")
         run_command(transpile_command)

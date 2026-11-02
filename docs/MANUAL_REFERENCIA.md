@@ -4635,6 +4635,12 @@ los prototipos de las `@export` y las funciones del runtime que puede usar ese C
 `dl_dict_get`. Vale también para un módulo sin `Main`. Para C que venía de un `@native` o de un `@c` de la 1.x,
 la cabecera define los nombres de entonces (`_dash_str_dup`, `_dash_retain`, `DashArray_get`...) sobre estas.
 
+**El mismo C por los dos caminos.** Por C con gcc vale el mismo C de `@link`: `./dash --gcc` da al programa las
+funciones `dl_*` y los builtins `db_nombre` que ese C llama (los mira en el objeto o la librería). Los structs se
+colocan distinto (un `Bool` ocupa 2 bytes, un `Double` 8), así que ese C se compila aparte para cada camino, con
+su cabecera: `./dash --gcc --cabecera tipos.h programa.dash` escribe la del camino por C, con los mismos nombres.
+Un C que lee los campos por su nombre vale tal cual para los dos.
+
 ### --memcheck, --fpu y --stack
 
 `--memcheck` es el de la 1.x (sección 1): avisa en cuanto algo se libera dos veces o se usa después de liberarse,

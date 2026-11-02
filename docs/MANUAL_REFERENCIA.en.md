@@ -4635,6 +4635,12 @@ prototypes of the `@export` functions and the runtime functions that C can use: 
 `dl_dict_get`. It also works for a module without `Main`. For C that came from an `@native` or a `@c` of 1.x, the
 header defines the names of back then (`_dash_str_dup`, `_dash_retain`, `DashArray_get`...) on top of these.
 
+**The same C on both paths.** The same `@link` C works through C with gcc: `./dash --gcc` gives the program the
+`dl_*` functions and the `db_name` builtins that C calls (it looks for them in the object or library). Structs are
+laid out differently (a `Bool` takes 2 bytes, a `Double` 8), so that C is compiled separately for each path, with
+its header: `./dash --gcc --cabecera tipos.h programa.dash` writes the one for the C path, with the same names.
+C that reads fields by name works as it is for both.
+
 ### --memcheck, --fpu and --stack
 
 `--memcheck` is the one from 1.x (section 1): it warns as soon as something is freed twice or used after being
