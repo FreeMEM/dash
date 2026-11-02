@@ -1399,8 +1399,10 @@ static void to_str(int ty)
 {
     switch (ty) {
     case TY_INT:
+        /* (uno de los 16 búferes fijos de DashString_from_int: no es un temporal que haya que soltar, así que no pide
+           marca de temporales; quien lo guarda lo copia, porque no es suyo) */
         push_d0();
-        rt_call("_dl_str_from_int", 1, 1);
+        rt_call("_dl_str_from_int", 1, 0);
         break;
     case TY_CHAR:
         push_d0();
@@ -4975,6 +4977,17 @@ static int assign_in_reg(Node *n)
     return 1;
 }
 
+/* La pista de una parte de una unión: el largo de un literal; -2 un número, carácter o Bool pasado a texto (un
+   texto de C: strlen, sin mirar cabecera); -1 lo demás */
+static int join_hint(Node *p)
+{
+    int ty;
+    if (p->kind == E_STR && p->len < 32768) return p->len;
+    ty = expr_type(p);
+    if (ty == TY_INT || ty == TY_CHAR || ty == TY_BOOL) return -2;
+    return -1;
+}
+
 /* s = a + b + ... o s = "...#{x}..." (hasta 6 partes): dl_str_set_join_r escribe en el texto de s si cabe, sin
    el temporal de la unión ni su copia (como _dash_str_set_join del camino por C). 0: no es el caso */
 static int str_set_join(Node *n, Node *e, int fresh)
@@ -4996,13 +5009,49 @@ static int str_set_join(Node *n, Node *e, int fresh)
         for (x = e, i = np; i > 0; x = x->a, i--) parts[i] = x->b;
         np++;
     } else return 0;
+    if (np == 2 && parts[0]->kind == E_STR && parts[0]->len < 32768 && expr_type(parts[1]) == TY_INT) {
+        /* literal + número: dl_str_cat_li_r(var, literal, largo, n) */
+        value(parts[1]);
+        push_d0();
+        w(0x4878); w(parts[0]->len);                   /* pea largo.w */
+        sp_depth += 4;
+        load_str_lit(parts[0]->str, parts[0]->len);
+        push_d0();
+        if (fresh) {
+            w(0x4878); w(0);                           /* pea 0.w: sin texto antes */
+            sp_depth += 4;
+        } else {
+            v = lookup(n->name);
+            op_ea(0x2F00, &v);                         /* move.l s,-(sp) */
+            sp_depth += 4;
+        }
+        rt_call("_dl_str_cat_li_r", 4, 0);
+        goto guardar;
+    }
     for (i = 0; i < np; i++) str[i] = 1;
     args_to_stack(parts, np, str);                     /* las partes, en la pila */
+    if (np == 2) {
+        /* dos partes: dl_str_cat2_r(var, pista a, pista b, a, b), con las partes ya en la pila */
+        for (i = 1; i >= 0; i--) {
+            w(0x4878); w(join_hint(parts[i]));         /* pea pista.w */
+            sp_depth += 4;
+        }
+        if (fresh) {
+            w(0x4878); w(0);
+            sp_depth += 4;
+        } else {
+            v = lookup(n->name);
+            op_ea(0x2F00, &v);
+            sp_depth += 4;
+        }
+        rt_call("_dl_str_cat2_r", 5, 0);
+        goto guardar;
+    }
     w(0x4FEF); w(-4 * np);                             /* lea -4n(sp),sp: las pistas */
     sp_depth += 4 * np;
     for (i = 0; i < np; i++) {
         w(0x2F7C);                                     /* move.l #pista,d16(sp) */
-        l((uint32_t)(parts[i]->kind == E_STR ? parts[i]->len : -1));
+        l((uint32_t)(long)join_hint(parts[i]));
         w(4 * i);
     }
     w(0x4857);                                         /* pea (sp): las pistas */
@@ -5021,6 +5070,7 @@ static int str_set_join(Node *n, Node *e, int fresh)
     }
     rt_call("_dl_str_set_join_r", 4, 0);
     pop_args(2 * np);
+guardar:
     if (fresh) {
         v = declare(n->name, TY_STR);
         locals.v[locals.n - 1].owned = 1;

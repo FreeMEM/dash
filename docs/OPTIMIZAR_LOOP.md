@@ -96,4 +96,11 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   `--perfil` da 106 muestras, casi todas en el runtime, 0x1200-0x14D0; mirar qué rutina con el mapa del hunk y
   `dashc/tests/perfil_pc.py`), llamada (+12 % en A1200), el resto de lista (+15 %), luego O6 (medida completa, web y
   `docs/COMPARATIVA*.md`) y la PR. Antes de la PR: `python3 tests/run_tests.py` y `--emu --emu-a500`.
+- 2026-11-02, O4 (más): probado y quitado: `dl_str_set_join2_r`/`3_r` (la función genérica con n fijo, para que gcc la
+  simplifique) dio texto un 4 % peor. Medido por partes (A1200): la unión de dos literales iba casi igual que por C;
+  lo caro era el número (1.090 ms frente a 400). Ahora `s = a + b` (dos partes) va a `dl_str_cat2_r`, escrita a mano
+  sin bucles ni tablas, y `s = "lit" + n` a `dl_str_cat_li_r` (una llamada); las partes numéricas llevan la pista -2
+  (texto de C), como por C. `s = "x" + "12345"`: 962 ms frente a 1136 por C (ya más rápido). Mismo resultado que por
+  C y `--memcheck` limpio. `make -C dashc test` entero bien. Medida (directo / por C): texto 1847/1525 (A1200),
+  7855/6411 (A500); lista 1787/1550 y 8479/7509; llamada 246/219 y 1086/1072; el resto, igual o mejor.
 

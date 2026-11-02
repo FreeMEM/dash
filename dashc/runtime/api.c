@@ -614,6 +614,44 @@ STRPTR dl_str_append_r(STRPTR var, STRPTR add) { _dash_str_append(&var, add); re
 /* var = a + b + ... o una interpolación (hasta 6 partes), escrito en el texto de var si cabe (como _dash_str_set_join
    del camino por C: s = "x" + i en un bucle no reserva nada); hints: la longitud de un literal, o -1 */
 STRPTR dl_str_set_join_r(STRPTR var, LONG n, STRPTR *parts, const LONG *hints) { _dash_str_set_join(&var, n, parts, hints); return var; }
+
+/* var = a + b escrito a mano, sin bucles ni tablas (lo que sale del camino por C cuando gcc mete _dash_str_set_join
+   en el programa con dos partes): en el texto de var si cabe y ninguna parte está en él; si no, en uno nuevo.
+   la, lb: el largo, o la pista (-1 no se sabe, -2 un texto de C) */
+static STRPTR _dl_cat2(STRPTR var, STRPTR a, LONG la, STRPTR b, LONG lb)
+{
+    STRPTR d, p;
+    _DashStrHdr *h;
+    LONG total;
+    if (la < 0) la = _DASH_HLEN(a, la);
+    if (lb < 0) lb = _DASH_HLEN(b, lb);
+    total = la + lb;
+    d = NULL;
+    if (var && _DASH_STR_OURS(var) && !((h = _DASH_STR_HDR(var))->size & (_DASH_STR_KEEP | _DASH_STR_TEMP))
+        && (ULONG)total + sizeof(_DashStrHdr) + 1 <= _DASH_STR_SIZE(h)) {
+        STRPTR end = (STRPTR)h + _DASH_STR_SIZE(h);
+        if (!(a >= var && a < end) && !(b >= var && b < end)) d = var;
+    }
+    if (!d && !(d = _dash_str_alloc(total, FALSE))) {
+        _dash_str_free(var);
+        return NULL;
+    }
+    p = d;
+    while (la--) *p++ = *a++;
+    while (lb--) *p++ = *b++;
+    *p = 0;
+    if (d == var) _dash_str_setlen(d, total);
+    else _dash_str_free(var);
+    return d;
+}
+
+STRPTR dl_str_cat2_r(STRPTR var, LONG la, LONG lb, STRPTR a, STRPTR b) { return _dl_cat2(var, a, la, b, lb); }
+
+/* var = literal + número (s = "x" + i): una llamada en vez de dos (DashString_from_int va aquí dentro) */
+STRPTR dl_str_cat_li_r(STRPTR var, STRPTR lit, LONG llit, LONG n)
+{
+    return _dl_cat2(var, lit, llit, DashString_from_int(n), -2);
+}
 STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
 /* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo). dl_str_forget ya no hace nada: el
    largo va en la cabecera de cada texto de Dash (R8 de main) y un texto de C no la tiene; se queda por el C ya
