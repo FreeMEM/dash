@@ -1,0 +1,152 @@
+# Test: two programs measuring the CPU at once (Trasfondo's bar and panel). Before, each one hooked the
+# tasks the other had not, and each saw only its own half (Tachyon in the bar, not in the panel). Now the
+# first one publishes its table ("dash.cpu") and the second reads it. The program runs a second copy of
+# itself (another program, with its own runtime): the copy must be a reader and see a busy task of the
+# first one, and the first one must see the copy's busy task. After cpu_stop, no hooks and no semaphore.
+# expect-out: dueño: true
+# expect-out: la copia lee la tabla: true
+# expect-out: la copia ve la carga del dueño: true
+# expect-out: el dueño ve la carga de la copia: true
+# expect-out: ganchos fuera: true
+# expect-out: semáforo fuera: true
+# expect-out: fin
+
+@c
+"""
+static volatile LONG _carga_parar = 0;
+"""
+end
+
+@native func carga_dueno(x: Int) -> Int
+"""
+    FindTask(NULL)->tc_Node.ln_Name = (char *)"carga_dueno";
+    while (!_carga_parar) ;
+    return 0;
+"""
+end
+
+@native func carga_copia(x: Int) -> Int
+"""
+    FindTask(NULL)->tc_Node.ln_Name = (char *)"carga_copia";
+    while (!_carga_parar) ;
+    return 0;
+"""
+end
+
+@native func parar_cargas() -> Int
+"""
+    _carga_parar = 1;
+    return 0;
+"""
+end
+
+@native func soy_lector() -> Bool
+"""
+    return _dash_cpu_reader;
+"""
+end
+
+@native func publicado() -> Bool
+"""
+    struct SignalSemaphore *s;
+    Forbid();
+    s = FindSemaphore((STRPTR)"dash.cpu");
+    Permit();
+    return s != NULL;
+"""
+end
+
+# ninguna tarea de las listas de exec con nuestros ganchos
+@native func sin_ganchos() -> Bool
+"""
+    struct Node *n;
+    BOOL ok = TRUE;
+    Disable();
+    for (n = SysBase->TaskReady.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        if (((struct Task *)n)->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    for (n = SysBase->TaskWait.lh_Head; n->ln_Succ; n = n->ln_Succ)
+        if (((struct Task *)n)->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    if (SysBase->ThisTask->tc_Switch == (APTR)_dash_cpu_switch) ok = FALSE;
+    Enable();
+    return ok;
+"""
+end
+
+# un fichero vacío en T: (lo que la copia le dice al dueño)
+@native func marcar(nombre: String) -> Int
+"""
+    BPTR f = Open((STRPTR)nombre, MODE_NEWFILE);
+    if (f) Close(f);
+    return f != 0;
+"""
+end
+
+func carga_de(nombre: String, n: Int) -> Int
+    for i in (0..n - 1)
+        if cpu_task_name(i) == nombre
+            return cpu_task_load(i)
+        end
+    end
+    return -1
+end
+
+func copia()
+    cpu_start()
+    if soy_lector()
+        marcar("T:cpu_lectora")
+    end
+    carga = task_start_with(carga_copia, 0, 0, -1)
+    n = 0
+    vista = false
+    for i in (1..8)
+        time_delay(25)
+        n = cpu_sample()
+        if carga_de("carga_dueno", n) >= 150
+            vista = true
+        end
+    end
+    if vista
+        marcar("T:cpu_vista")
+    end
+    marcar("T:cpu_hecho")
+    time_delay(50)
+    parar_cargas()
+    task_free(carga)
+    cpu_stop()
+end
+
+Main
+    if arg_count() > 0 and arg(0) == "copia"
+        copia()
+    else
+        file_delete("T:cpu_lectora")
+        file_delete("T:cpu_vista")
+        file_delete("T:cpu_hecho")
+        Print "dueño: #{cpu_start() and publicado() and not soy_lector()}"
+        carga = task_start_with(carga_dueno, 0, 0, -1)
+        run_command("Run >NIL: \"" + program_path() + "\" copia")
+        vi = false
+        for i in (1..60)
+            time_delay(25)
+            n = cpu_sample()
+            if carga_de("carga_copia", n) >= 150
+                vi = true
+            end
+            if file_exists("T:cpu_hecho") and vi
+                break
+            end
+        end
+        time_delay(100)
+        lectora = file_exists("T:cpu_lectora")
+        vista = file_exists("T:cpu_vista")
+        Print "la copia lee la tabla: #{lectora}"
+        Print "la copia ve la carga del dueño: #{vista}"
+        Print "el dueño ve la carga de la copia: #{vi}"
+        parar_cargas()
+        task_free(carga)
+        cpu_stop()
+        Print "ganchos fuera: #{sin_ganchos()}"
+        Print "semáforo fuera: #{not publicado()}"
+        Print "fin"
+    end
+end

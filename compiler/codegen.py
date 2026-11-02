@@ -9116,8 +9116,14 @@ static BOOL _dash_m_is_inf(double x) {
    a table open by the task's address. Each cpu_sample() hooks the tasks that appeared since and
    forgets the ones that ended. The hooks must be gone before the program unloads: cpu_stop(), and
    the program's exit (also exit() and the libnix's end, atexit). Time with no task counted is
-   idle (or tasks of another program's hooks). */
+   idle (or tasks of another program's hooks).
+   Several programs measuring at once (Trasfondo's bar and panel): the first one hooks the tasks and
+   publishes its table with a public semaphore "dash.cpu"; the others don't hook anything, and at each
+   sample they call its refresh (new tasks hooked, ended ones out) and read its times, each with its
+   own "before". When it ends, it takes the semaphore away, waits for whoever is reading, takes its
+   hooks out, and the next program to sample takes over. */
 #include <exec/execbase.h>
+#include <exec/semaphores.h>
 #include <dos/dosextens.h>
 #define _DASH_CPU_SLOTS 256                  /* a power of two */
 #define _DASH_CPU_GONE ((struct Task *)1)    /* a slot whose task ended (the chain goes on) */
@@ -9137,6 +9143,17 @@ static LONG _dash_cpu_n = 0;                 /* the last sample, most first */
 static LONG _dash_cpu_load[_DASH_CPU_MAX];
 static char _dash_cpu_name[_DASH_CPU_MAX][32];
 static LONG _dash_cpu_sum = 0;
+/* The table another program publishes (see above) */
+struct _DashCpuShared {
+    struct SignalSemaphore sem;
+    char name[12];
+    struct _DashCpuSlot *slots;              /* the owner's table */
+    void (*refresh)(void);                   /* the owner's: call it in Disable */
+};
+static struct _DashCpuShared *_dash_cpu_sh;  /* ours, if we hook the tasks (the owner) */
+static BOOL _dash_cpu_reader = FALSE;        /* another program hooks them: we read its table */
+static struct _DashCpuSlot _dash_cpu_mine[_DASH_CPU_SLOTS];   /* a reader's: task -> its time at our last sample */
+static LONG _dash_cpu_mine_used;
 
 static unsigned long long _dash_cpu_now(void) {
     struct EClockVal e;
@@ -9144,14 +9161,15 @@ static unsigned long long _dash_cpu_now(void) {
     return (unsigned long long)e.ev_hi << 32 | e.ev_lo;
 }
 
-static struct _DashCpuSlot *_dash_cpu_find(struct Task *t) {
+static struct _DashCpuSlot *_dash_cpu_find_in(struct _DashCpuSlot *tab, struct Task *t) {
     ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1), n;
     for (n = 0; n < _DASH_CPU_SLOTS; n++, i = (i + 1) & (_DASH_CPU_SLOTS - 1)) {
-        if (_dash_cpu_slots[i].task == t) return &_dash_cpu_slots[i];
-        if (!_dash_cpu_slots[i].task) return NULL;
+        if (tab[i].task == t) return &tab[i];
+        if (!tab[i].task) return NULL;
     }
     return NULL;
 }
+#define _dash_cpu_find(t) _dash_cpu_find_in(_dash_cpu_slots, (t))
 
 /* The hooks (called through the stubs below, which keep every register as exec wants) */
 __attribute__((used)) void _dash_cpu_launch_c(void) {
@@ -9183,14 +9201,15 @@ void _dash_cpu_launch(void);
 void _dash_cpu_switch(void);
 
 /* A slot for a task not in the table (the table is never full: see _dash_cpu_compact) */
-static struct _DashCpuSlot *_dash_cpu_add(struct Task *t) {
+static struct _DashCpuSlot *_dash_cpu_add_in(struct _DashCpuSlot *tab, LONG *used, struct Task *t) {
     ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1);
-    while (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) i = (i + 1) & (_DASH_CPU_SLOTS - 1);
-    if (!_dash_cpu_slots[i].task) _dash_cpu_used++;
-    _dash_cpu_slots[i].task = t;
-    _dash_cpu_slots[i].time = _dash_cpu_slots[i].before = 0;
-    return &_dash_cpu_slots[i];
+    while (tab[i].task && tab[i].task != _DASH_CPU_GONE) i = (i + 1) & (_DASH_CPU_SLOTS - 1);
+    if (!tab[i].task) (*used)++;
+    tab[i].task = t;
+    tab[i].time = tab[i].before = 0;
+    return &tab[i];
 }
+#define _dash_cpu_add(t) _dash_cpu_add_in(_dash_cpu_slots, &_dash_cpu_used, (t))
 
 /* A task of the lists: hooked if it has no hooks; seen if it is ours (in Disable) */
 static void _dash_cpu_hook(struct Task *t) {
@@ -9221,15 +9240,19 @@ static void _dash_cpu_unhook(struct Task *t) {
 }
 
 /* With the ended tasks out, the chains are rebuilt when the table fills up with them (in Disable) */
-static void _dash_cpu_compact(void) {
+static void _dash_cpu_compact_in(struct _DashCpuSlot *tab, LONG *used) {
     static struct _DashCpuSlot keep[_DASH_CPU_SLOTS];
     LONG i, n = 0;
-    if (_dash_cpu_used < _DASH_CPU_SLOTS / 2) return;
+    if (*used < _DASH_CPU_SLOTS / 2) return;
     for (i = 0; i < _DASH_CPU_SLOTS; i++)
-        if (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) keep[n++] = _dash_cpu_slots[i];
-    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
-    _dash_cpu_used = 0;
-    for (i = 0; i < n; i++) *_dash_cpu_add(keep[i].task) = keep[i];
+        if (tab[i].task && tab[i].task != _DASH_CPU_GONE) keep[n++] = tab[i];
+    memset(tab, 0, sizeof(struct _DashCpuSlot) * _DASH_CPU_SLOTS);
+    *used = 0;
+    for (i = 0; i < n; i++) *_dash_cpu_add_in(tab, used, keep[i].task) = keep[i];
+}
+
+static void _dash_cpu_compact(void) {
+    _dash_cpu_compact_in(_dash_cpu_slots, &_dash_cpu_used);
     _dash_cpu_in = _dash_cpu_find(SysBase->ThisTask);   /* the one on the CPU (us) moved too */
 }
 
@@ -9241,13 +9264,97 @@ static void _dash_cpu_each(void (*f)(struct Task *)) {
     f(SysBase->ThisTask);
 }
 
+/* The owner's refresh (in Disable; a reader calls it through the published pointer): the tasks that
+   appeared since are hooked and the ones that ended are forgotten */
+static void _dash_cpu_refresh(void) {
+    LONG i;
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_slots[i].seen = FALSE;
+    _dash_cpu_each(_dash_cpu_hook);
+    for (i = 0; i < _DASH_CPU_SLOTS; i++)
+        if (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE && !_dash_cpu_slots[i].seen)
+            _dash_cpu_slots[i].task = _DASH_CPU_GONE;      /* ended since (what it took before going is lost) */
+    _dash_cpu_compact();
+}
+
+/* The owner out: nobody finds its table any more, the readers that have it finish, and the hooks go */
 static void _dash_cpu_stop(void) {
     if (!_dash_cpu_on) return;
+    if (_dash_cpu_sh) {
+        Forbid();
+        RemSemaphore(&_dash_cpu_sh->sem);
+        Permit();
+        ObtainSemaphore(&_dash_cpu_sh->sem);
+        ReleaseSemaphore(&_dash_cpu_sh->sem);
+    }
     Disable();
-    _dash_cpu_each(_dash_cpu_unhook);
+    if (!_dash_cpu_reader) _dash_cpu_each(_dash_cpu_unhook);
     _dash_cpu_in = NULL;
     _dash_cpu_on = FALSE;
     Enable();
+    if (_dash_cpu_sh) FreeMem(_dash_cpu_sh, sizeof(struct _DashCpuShared));
+    _dash_cpu_sh = NULL;
+    _dash_cpu_reader = FALSE;
+}
+
+static void _dash_cpu_task_name(struct Task *t, char *d);
+
+/* The table another program publishes, taken for reading (NULL: nobody publishes one) */
+static struct _DashCpuShared *_dash_cpu_find_shared(void) {
+    struct _DashCpuShared *sh;
+    Forbid();
+    sh = (struct _DashCpuShared *)FindSemaphore((STRPTR)"dash.cpu");
+    if (sh) ObtainSemaphoreShared(&sh->sem);
+    Permit();
+    return sh;
+}
+
+/* A reader's sample (in Disable): the owner's refresh, and each task's time since our last sample in d[] */
+static LONG _dash_cpu_read(struct _DashCpuShared *sh, unsigned long long *d) {
+    LONG i, n = 0;
+    sh->refresh();
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_mine[i].seen = FALSE;
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) {
+        struct _DashCpuSlot *s = &sh->slots[i], *m;
+        if (!s->task || s->task == _DASH_CPU_GONE) continue;
+        m = _dash_cpu_find_in(_dash_cpu_mine, s->task);
+        if (!m) {
+            if (_dash_cpu_mine_used >= _DASH_CPU_SLOTS * 3 / 4) continue;
+            m = _dash_cpu_add_in(_dash_cpu_mine, &_dash_cpu_mine_used, s->task);
+            m->before = s->time;            /* new to us: from now on */
+        }
+        m->seen = TRUE;
+        if (d && n < _DASH_CPU_MAX) {
+            d[n] = s->time - m->before;
+            _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
+            n++;
+        }
+        m->before = s->time;
+    }
+    for (i = 0; i < _DASH_CPU_SLOTS; i++)
+        if (_dash_cpu_mine[i].task && _dash_cpu_mine[i].task != _DASH_CPU_GONE && !_dash_cpu_mine[i].seen)
+            _dash_cpu_mine[i].task = _DASH_CPU_GONE;
+    _dash_cpu_compact_in(_dash_cpu_mine, &_dash_cpu_mine_used);
+    return n;
+}
+
+/* Hooks on every task and the table published (without memory for it, it measures alone, as before) */
+static void _dash_cpu_own(void) {
+    struct _DashCpuShared *sh = (struct _DashCpuShared *)AllocMem(sizeof(struct _DashCpuShared), MEMF_PUBLIC | MEMF_CLEAR);
+    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
+    _dash_cpu_used = 0;
+    _dash_cpu_reader = FALSE;
+    Disable();
+    _dash_cpu_each(_dash_cpu_hook);
+    Enable();
+    if (sh) {
+        memcpy(sh->name, "dash.cpu", 9);
+        sh->sem.ss_Link.ln_Name = sh->name;
+        sh->sem.ss_Link.ln_Pri = 0;
+        sh->slots = _dash_cpu_slots;
+        sh->refresh = _dash_cpu_refresh;
+        AddSemaphore(&sh->sem);
+    }
+    _dash_cpu_sh = sh;
 }
 
 static BOOL _dash_cpu_start(void) {
@@ -9256,14 +9363,21 @@ static BOOL _dash_cpu_start(void) {
     _dash_time_init();
     if (!_dash_time_freq || SysBase->LibNode.lib_Version < 37) return FALSE;
     if (!at_exit) at_exit = _dash_atexit(_dash_cpu_stop) == 0;
-    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
-    _dash_cpu_used = 0;
     _dash_cpu_n = _dash_cpu_sum = 0;
-    Disable();
-    _dash_cpu_each(_dash_cpu_hook);
+    {
+        struct _DashCpuShared *sh = _dash_cpu_find_shared();
+        if (sh) {                            /* another program measures: we read its table */
+            memset(_dash_cpu_mine, 0, sizeof(_dash_cpu_mine));
+            _dash_cpu_mine_used = 0;
+            _dash_cpu_reader = TRUE;
+            Disable();
+            _dash_cpu_read(sh, NULL);        /* everyone's time so far, as "before" */
+            Enable();
+            ReleaseSemaphore(&sh->sem);
+        } else _dash_cpu_own();
+    }
     _dash_cpu_on = TRUE;
     _dash_cpu_last = _dash_cpu_now();
-    Enable();
     return TRUE;
 }
 
@@ -9302,26 +9416,36 @@ static LONG _dash_cpu_sample(void) {
     unsigned long long now, dt, sum = 0;
     LONG i, j, n = 0;
     if (!_dash_cpu_on) return 0;
-    Disable();
-    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_slots[i].seen = FALSE;
-    _dash_cpu_each(_dash_cpu_hook);
-    now = _dash_cpu_now();
-    for (i = 0; i < _DASH_CPU_SLOTS; i++) {
-        struct _DashCpuSlot *s = &_dash_cpu_slots[i];
-        if (!s->task || s->task == _DASH_CPU_GONE) continue;
-        if (!s->seen) {                      /* ended since (what it took before going is lost) */
-            s->task = _DASH_CPU_GONE;
-            continue;
+    if (_dash_cpu_reader) {
+        struct _DashCpuShared *sh = _dash_cpu_find_shared();
+        if (sh) {
+            Disable();
+            now = _dash_cpu_now();
+            n = _dash_cpu_read(sh, d);
+            Enable();
+            ReleaseSemaphore(&sh->sem);
+        } else {                             /* the owner ended: we hook the tasks from now on */
+            _dash_cpu_own();
+            _dash_cpu_last = _dash_cpu_now();
+            _dash_cpu_n = _dash_cpu_sum = 0;
+            return 0;
         }
-        if (n < _DASH_CPU_MAX) {
-            d[n] = s->time - s->before;
-            _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
-            n++;
+    } else {
+        Disable();
+        _dash_cpu_refresh();
+        now = _dash_cpu_now();
+        for (i = 0; i < _DASH_CPU_SLOTS; i++) {
+            struct _DashCpuSlot *s = &_dash_cpu_slots[i];
+            if (!s->task || s->task == _DASH_CPU_GONE) continue;
+            if (n < _DASH_CPU_MAX) {
+                d[n] = s->time - s->before;
+                _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
+                n++;
+            }
+            s->before = s->time;
         }
-        s->before = s->time;
+        Enable();
     }
-    _dash_cpu_compact();
-    Enable();
     dt = now - _dash_cpu_last;
     _dash_cpu_last = now;
     if (!dt) dt = 1;
