@@ -611,6 +611,9 @@ LONG dl_tmp_release_ret(ULONG m, LONG v) { _dash_tmp_release(m); return v; }
 STRPTR dl_str_assign(STRPTR var, STRPTR v) { _dash_str_set(&var, v); return var; }
 STRPTR dl_str_assign_copy(STRPTR var, STRPTR v) { _dash_str_set_copy(&var, v); return var; }
 STRPTR dl_str_append_r(STRPTR var, STRPTR add) { _dash_str_append(&var, add); return var; }
+/* var = a + b + ... o una interpolación (hasta 6 partes), escrito en el texto de var si cabe (como _dash_str_set_join
+   del camino por C: s = "x" + i en un bucle no reserva nada); hints: la longitud de un literal, o -1 */
+STRPTR dl_str_set_join_r(STRPTR var, LONG n, STRPTR *parts, const LONG *hints) { _dash_str_set_join(&var, n, parts, hints); return var; }
 STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
 /* para el C de @link (dashc --cabecera): un temporal de Dash (se libera solo). dl_str_forget ya no hace nada: el
    largo va en la cabecera de cada texto de Dash (R8 de main) y un texto de C no la tiene; se queda por el C ya

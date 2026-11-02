@@ -380,7 +380,7 @@ static struct { int *v; int n, cap; } inl_stack;   /* funciones que se están ge
 /* Expresiones que se leen de un hueco en vez de calcularse: i * k en un for (el hueco
    suma paso * k en cada vuelta) y las constantes grandes de la condición de un bucle
    (need_reg: solo si el hueco tiene registro; si no, se usa la constante). */
-typedef struct { Node *n; int slot, need_reg; } Repl;
+typedef struct { Node *n; int slot, need_reg, type; } Repl;   /* type: TY_INT, o TY_FLOAT (un Float sacado del bucle) */
 static struct { Repl *v; int n, cap; } repls;
 
 /* depth: la de las variables del cuerpo; sp: sp_depth dentro del cuerpo */
@@ -547,7 +547,7 @@ static int repl_var(Node *n, Var *v)
             Repl *r = &repls.v[i];
             if (r->need_reg && pass == 2 && slot_reg.v[r->slot] < 0) return 0;
             use_slot(r->slot);
-            *v = slot_var(r->slot, TY_INT);
+            *v = slot_var(r->slot, r->type);
             return 1;
         }
     return 0;
@@ -567,6 +567,7 @@ static void add_repl(Node *n, int slot, int need_reg)
     r.n = n;
     r.slot = slot;
     r.need_reg = need_reg;
+    r.type = TY_INT;
     VEC_PUSH(repls, r);
 }
 
@@ -3895,7 +3896,7 @@ static int gen_expr(Node *n)
 
     if (repl_var(n, &v)) {
         load_var(0, &v);
-        return TY_INT;
+        return v.type;
     }
     if (n->kind != E_CMP && n->kind != E_AND && n->kind != E_OR && n->kind != E_NOT && fold(n, &k)) {
         load_imm(0, k);
@@ -4258,6 +4259,46 @@ static int stable(Node *n, NodeList *body)
     return stable(n->a, body) && stable(n->b, body);
 }
 
+#define MAX_INV 6
+
+/* ¿e no cambia en el cuerpo de un for? Literales, constantes y variables locales que el cuerpo no asigna (ni la
+   del for), y +, -, *, / y el signo de ellas. Las globales no: una función que llama el cuerpo podría cambiarlas */
+static int loop_inv(Node *e, NodeList *body, const char *ivar)
+{
+    Local *lc;
+    switch (e->kind) {
+    case E_FLOAT: case E_INT: return 1;
+    case E_NEG: return loop_inv(e->a, body, ivar);
+    case E_VAR:
+        lc = find_local(e->name);
+        return lc && strcmp(e->name, ivar) && !list_assigns(body, e->name);
+    case E_BIN:
+        return (e->op == P_PLUS || e->op == P_MINUS || e->op == P_STAR || e->op == P_SLASH) &&
+               loop_inv(e->a, body, ivar) && loop_inv(e->b, body, ivar);
+    default: return 0;
+    }
+}
+
+/* Las operaciones de Float del cuerpo que no cambian en él (las más grandes): se calculan una vez antes del bucle
+   (gcc lo hace igual por el camino por C). Sin efectos ni errores (dividir por cero da infinito), así que da igual
+   que el cuerpo no llegue a ejecutarlas */
+static void find_float_inv(Node *n, NodeList *body, const char *ivar, Node **inv, int *ninv)
+{
+    int i;
+    if (!n || *ninv >= MAX_INV) return;
+    if (n->kind == E_BIN && (n->op == P_PLUS || n->op == P_MINUS || n->op == P_STAR || n->op == P_SLASH) &&
+        expr_type(n) == TY_FLOAT && loop_inv(n, body, ivar) && !(n->a->kind == E_FLOAT && n->b->kind == E_FLOAT)) {
+        inv[(*ninv)++] = n;
+        return;
+    }
+    find_float_inv(n->a, body, ivar, inv, ninv);
+    find_float_inv(n->b, body, ivar, inv, ninv);
+    find_float_inv(n->c, body, ivar, inv, ninv);
+    for (i = 0; i < n->args.n; i++) find_float_inv(n->args.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], body, ivar, inv, ninv);
+    for (i = 0; i < n->els.n; i++) find_float_inv(n->els.v[i], body, ivar, inv, ninv);
+}
+
 static void find_mults(Node *n, const char *name, NodeList *body, Mult *m, int *nm)
 {
     Node *o = NULL;
@@ -4295,6 +4336,8 @@ static void gen_for(Node *n)
     Mult m[MAX_MULTS];
     long sr_k[MAX_SR];
     int sr_slot[MAX_SR];
+    Node *inv[MAX_INV];
+    int ninv = 0, inv_slot[MAX_INV];
     Var vi, vend, vstep, vc, sr_v[MAX_SR];
     Loop lp;
     MarkScope ms;
@@ -4375,6 +4418,16 @@ static void gen_for(Node *n)
     }
     for (i = repl_base; i < repls.n; i++)
         if (repls.v[i].slot < 0) repls.v[i--] = repls.v[--repls.n];   /* sin hueco (más de MAX_SR) */
+    /* los Float que no cambian en el cuerpo, en huecos (antes de reservar los del contador) */
+    for (i = 0; i < n->body.n; i++) find_float_inv(n->body.v[i], &n->body, n->name, inv, &ninv);
+    for (j = 0; j < ninv; j++) {
+        Var vv;
+        float_value(inv[j]);
+        vv = declare_slot("", TY_FLOAT, &inv_slot[j]);
+        store_d0(&vv);
+        add_repl(inv[j], inv_slot[j], 0);
+        repls.v[repls.n - 1].type = TY_FLOAT;
+    }
 
     if (counted) {
         if (count >= 0) {
@@ -4418,6 +4471,7 @@ static void gen_for(Node *n)
     if (step_slot >= 0) use_slot(step_slot);
     if (cnt_slot >= 0) use_slot(cnt_slot);
     for (j = 0; j < nsr; j++) use_slot(sr_slot[j]);
+    for (j = 0; j < ninv; j++) use_slot(inv_slot[j]);
 
     /* sin contador, la comparación va al final: una vuelta es cuerpo, incremento y un salto */
     if (!counted) {
@@ -4842,6 +4896,60 @@ static int gen_counted_while(Node *n)
     return 1;
 }
 
+/* s = a + b + ... o s = "...#{x}..." (hasta 6 partes): dl_str_set_join_r escribe en el texto de s si cabe, sin
+   el temporal de la unión ni su copia (como _dash_str_set_join del camino por C). 0: no es el caso */
+static int str_set_join(Node *n, Node *e, int fresh)
+{
+    Node *parts[6], *x;
+    char str[6];
+    int np = 0, i;
+    Var v;
+    if (e->kind == E_INTERP) {
+        if (e->args.n < 1 || e->args.n > 6) return 0;
+        for (i = 0; i < e->args.n; i++) parts[i] = e->args.v[i];
+        np = e->args.n;
+    } else if (e->kind == E_BIN && e->op == P_PLUS && expr_type(e) == TY_STR) {
+        for (x = e; x->kind == E_BIN && x->op == P_PLUS && expr_type(x) == TY_STR; x = x->a) {
+            if (np >= 5) return 0;
+            np++;
+        }
+        parts[0] = x;
+        for (x = e, i = np; i > 0; x = x->a, i--) parts[i] = x->b;
+        np++;
+    } else return 0;
+    for (i = 0; i < np; i++) str[i] = 1;
+    args_to_stack(parts, np, str);                     /* las partes, en la pila */
+    w(0x4FEF); w(-4 * np);                             /* lea -4n(sp),sp: las pistas */
+    sp_depth += 4 * np;
+    for (i = 0; i < np; i++) {
+        w(0x2F7C);                                     /* move.l #pista,d16(sp) */
+        l((uint32_t)(parts[i]->kind == E_STR ? parts[i]->len : -1));
+        w(4 * i);
+    }
+    w(0x4857);                                         /* pea (sp): las pistas */
+    sp_depth += 4;
+    w(0x486F); w(4 + 4 * np);                          /* pea 4+4n(sp): las partes */
+    sp_depth += 4;
+    w(0x4878); w(np);                                  /* pea n.w */
+    sp_depth += 4;
+    if (fresh) {
+        w(0x4878); w(0);                               /* pea 0.w: sin texto antes */
+        sp_depth += 4;
+    } else {
+        v = lookup(n->name);
+        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
+        sp_depth += 4;
+    }
+    rt_call("_dl_str_set_join_r", 4, 0);
+    pop_args(2 * np);
+    if (fresh) {
+        v = declare(n->name, TY_STR);
+        locals.v[locals.n - 1].owned = 1;
+    }
+    store_d0(&v);
+    return 1;
+}
+
 /* s = valor para una variable de texto: la variable es dueña de su texto; s = s + x añade
    en su sitio (_dash_str_append); una variable nueva empieza sin texto */
 static void gen_str_assign(Node *n, int ty)
@@ -4868,6 +4976,7 @@ static void gen_str_assign(Node *n, int ty)
         set_imm(&v, 0);
         return;
     }
+    if (ty == TY_STR && str_set_join(n, e, fresh)) return;
     if (ty == TY_STR && e->kind != E_NIL && (lc || fresh) && is_lent(0, n->name)) {
         /* toma prestado el texto (un literal, o de una lista o diccionario de un parámetro): ni copia ni free */
         value(e);

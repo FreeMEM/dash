@@ -39,8 +39,8 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   comportamiento que el runtime ante un índice fuera de rango.
 - [ ] O2 `%` y `/` con divisor constante: `divu` directo cuando se sabe que el dividendo cabe (rango del `for`,
   valores pequeños), y la rutina solo si no.
-- [ ] O3 flotante: ver qué rutinas llama el directo y usar las rápidas (fastfp) del camino por C.
-- [ ] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
+- [x] O3 flotante: ver qué rutinas llama el directo y usar las rápidas (fastfp) del camino por C.
+- [~] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
 - [ ] O5 llamada: menos trabajo por llamada (registros que se guardan, argumentos en registros para funciones
   `static` del programa, si el resto del compilador lo permite).
 - [ ] O6 Medir de nuevo con `medir_dash.py`, actualizar la comparativa de la web (dash.freemem.space, columnas
@@ -67,4 +67,15 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   en un programa de bordes (índices -1, 3, 100000, nil, escritura fuera de rango, Float, textos). `make -C dashc test`
   entero bien. lista: A1200 2601 → 2051 ms (−21 %), A500 12596 → 9815 ms (−22 %); por C, 1553 y 7524: aún falta.
   Lo que queda en el bucle: la lista se apila y se recoge (sin registro libre fijo) y el `%` con su comprobación.
+- 2026-11-02, O4 (parte): `s = a + b + ...` y `s = "...#{x}..."` (hasta 6 partes) a una variable de texto llaman a
+  `dl_str_set_join_r` (nuevo en `runtime/api.c`, sobre `_dash_str_set_join`, como el camino por C): escribe en el
+  texto de `s` si cabe, sin el temporal de la unión ni su copia. Mismo resultado que por C y `--memcheck` limpio en un
+  programa con uniones de literales, números, interpolación, la propia variable, una global y una función.
+  texto: A1200 2758 → 2181 ms (−21 %), A500 11817 → 9373 (−21 %); por C, 1516 y 6411. Queda: cada parte numérica
+  pasa por `dl_str_from_int` (una llamada de más) y lo demás de la vuelta; mirar con `--perfil`.
+- 2026-11-02, O3: el `for` saca del bucle las operaciones de Float (+, -, *, /) cuyos operandos no cambian en el
+  cuerpo (literales, constantes y locales que el cuerpo no asigna; las globales no, por las llamadas): se calculan
+  una vez en un hueco (`Repl` lleva ahora su tipo). Es lo que hace gcc en `flotante` (`g * 0.5`). Mismo resultado que
+  por C con una variable que sí cambia, una llamada y una división por cero en una rama que no se ejecuta.
+  flotante: A1200 999 → 495 ms (por C 491), A500 4880 → 2431 (por C 2378): ya igual. `make -C dashc test` entero bien.
 
