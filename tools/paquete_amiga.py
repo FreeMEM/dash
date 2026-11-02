@@ -57,6 +57,17 @@ def main():
                 shutil.copy(f, caj / "examples" / f.name)
             else:
                 fuera.append(f.name)
+    # Forja (el IDE de Dash) e Inferencia (la IA que programa en el Amiga por ARexx con Forja), ya empaquetadas por su
+    # tools/paquete.py en build/paquete/ de su proyecto (FORJA y INFERENCIA, o ~/Projects/forja e inferencia): sus
+    # cajones van dentro del de Dash, y el instalador los copia con él. Si falta alguna, el paquete sale sin ella.
+    for nombre, var in (("Forja", "FORJA"), ("Inferencia", "INFERENCIA")):
+        pq = Path(os.environ.get(var) or Path.home() / "Projects" / nombre.lower()) / "build/paquete"
+        if (pq / nombre).is_dir():
+            shutil.copytree(pq / nombre, caj / nombre)
+            if (pq / f"{nombre}.info").exists():
+                shutil.copy(pq / f"{nombre}.info", caj / f"{nombre}.info")
+        else:
+            print(f"sin {nombre}: falta {pq / nombre} (python3 tools/paquete.py en su proyecto)")
     # el Amiga lee ISO-8859-1: el script y los textos, de UTF-8 a Latin-1
     (caj / "Instalar").write_bytes((raiz / "paquete/Instalar").read_text().encode("latin-1"))
     (caj / "Instalar.info").write_bytes(

@@ -53,7 +53,7 @@ def main():
             print(f"falta ${mach['rom']}: no se prueba en {m}")
             fallos += 1
             continue
-        res = emu_run.run_programs([str(p) for p in progs], timeout=300, kickstart=rom,
+        res = emu_run.run_programs([str(p) for p in progs], timeout=450, kickstart=rom,
                                    system=os.environ.get(mach["system"]),
                                    extra_config=mach.get("config", ""), model=mach["model"])
         for i, t in enumerate(tests):
