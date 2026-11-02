@@ -869,6 +869,20 @@ static void store_d0(Var *v)
     }
 }
 
+/* store_d0 al final de una sentencia (nadie usa d0 después): si lo último fue move.l dX,d0, va move.l dX,dN sin
+   pasar por d0 (y = f(y, i) con f en línea: lo que devuelve f ya está en un registro) */
+static void store_d0_stmt(Var *v)
+{
+    int x;
+    if (v->kind == V_REG && (x = take_move_to_d0()) >= 0) {
+        if (x != v->reg) w(0x2000 | v->reg << 9 | x);  /* move.l dX,dN */
+        flags_set(v->reg, 1);
+        d0_stored = (uint32_t)-1;
+        return;
+    }
+    store_d0(v);
+}
+
 /* suma k a la variable, sin pasar por d0 */
 static void add_imm_ea(long k, Var *v)
 {
@@ -4896,6 +4910,40 @@ static int gen_counted_while(Node *n)
     return 1;
 }
 
+/* r = a + b o r = a - b de enteros, con r en un registro y a y b simples (ninguno lee r): se calcula en el registro
+   de r, sin pasar por d0 (como gcc). 0: no es el caso */
+static int assign_in_reg(Node *n)
+{
+    Node *e = n->a;
+    Var v, va, vb;
+    long k;
+    if (e->kind != E_BIN || (e->op != P_PLUS && e->op != P_MINUS) || expr_type(e) != TY_INT) return 0;
+    v = lookup(n->name);
+    if (v.kind != V_NONE && (v.kind != V_REG || v.type != TY_INT)) return 0;
+    if (refs(e->b, n->name) || refs(e->a, n->name)) return 0;
+    if (!simple(e->a, &va) || !simple(e->b, &vb)) return 0;
+    if (va.kind != V_CONST && va.type != TY_INT && va.type != TY_CHAR) return 0;
+    if (vb.kind != V_CONST && vb.type != TY_INT && vb.type != TY_CHAR) return 0;
+    if (v.kind == V_NONE) {                            /* la primera asignación declara */
+        v = declare(n->name, TY_INT);
+        if (v.kind != V_REG) {                         /* sin registro: como siempre */
+            value(e);
+            store_d0(&v);
+            return 1;
+        }
+    }
+    load_var(v.reg, &va);                              /* move.l a,dN */
+    if (vb.kind == V_CONST) {
+        k = e->op == P_PLUS ? vb.val : -vb.val;
+        add_imm_ea(k, &v);
+        if (!k) flags_set(v.reg, 1);
+    } else {
+        op_ea((e->op == P_PLUS ? 0xD080 : 0x9080) | v.reg << 9, &vb);   /* add.l / sub.l b,dN */
+        flags_set(v.reg, 0);
+    }
+    return 1;
+}
+
 /* s = a + b + ... o s = "...#{x}..." (hasta 6 partes): dl_str_set_join_r escribe en el texto de s si cabe, sin
    el temporal de la unión ni su copia (como _dash_str_set_join del camino por C). 0: no es el caso */
 static int str_set_join(Node *n, Node *e, int fresh)
@@ -6186,6 +6234,7 @@ static void gen_stmt(Node *n)
             }
             return;
         }
+        if (n->kind == S_ASSIGN && forced < 0 && assign_in_reg(n)) return;
         ty = gen_expr(n->a);
         need_value(n->a, ty);
         if (forced >= 0) ty = forced;
@@ -6196,7 +6245,7 @@ static void gen_stmt(Node *n)
         } else if (v.kind == V_CONST) {
             fatal_node(n, "%s es una constante", n->name);
         }
-        store_d0(&v);
+        store_d0_stmt(&v);
         return;
     case S_EXPR:
         gen_expr(n->a);

@@ -41,7 +41,7 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   valores pequeños), y la rutina solo si no.
 - [x] O3 flotante: ver qué rutinas llama el directo y usar las rápidas (fastfp) del camino por C.
 - [~] O4 texto: perfil de `s = "x" + i` y quitar copias o llamadas que el camino por C no hace.
-- [ ] O5 llamada: menos trabajo por llamada (registros que se guardan, argumentos en registros para funciones
+- [~] O5 llamada: menos trabajo por llamada (registros que se guardan, argumentos en registros para funciones
   `static` del programa, si el resto del compilador lo permite).
 - [ ] O6 Medir de nuevo con `medir_dash.py`, actualizar la comparativa de la web (dash.freemem.space, columnas
   "Dash (directo)" y "Dash (por C)") y `docs/COMPARATIVA*.md`.
@@ -78,4 +78,12 @@ Objetivo: que el directo no sea más lento que el de C en ninguna prueba, en las
   una vez en un hueco (`Repl` lleva ahora su tipo). Es lo que hace gcc en `flotante` (`g * 0.5`). Mismo resultado que
   por C con una variable que sí cambia, una llamada y una división por cero en una rama que no se ejecuta.
   flotante: A1200 999 → 495 ms (por C 491), A500 4880 → 2431 (por C 2378): ya igual. `make -C dashc test` entero bien.
+- 2026-11-02, O5 (parte): `r = a + b` y `r = a - b` de enteros con `r` en un registro (también la primera
+  asignación) se calculan en el registro de `r` sin pasar por d0, y al final de una asignación `move.l dX,d0;
+  move.l d0,dN` queda en `move.l dX,dN` (`store_d0_stmt`, con `take_move_to_d0`): lo que devuelve una función en
+  línea ya no da la vuelta por d0. El bucle de llamada, de 11 instrucciones a 8 (gcc, 7). Mismo resultado que por C en
+  un programa de bordes (desbordamiento, negativos, Char, funciones en línea). `make -C dashc test` entero bien.
+  Medida completa (A1200 / A500, ms, directo frente a por C): bucle 623/625 y 2845/3240; flotante 494/488 y
+  2423/2401; lineas 4934/4989 y 6679/6829; lista 2048/1549 y 9817/7561; llamada 245/219 y 1089/1059; texto
+  2181/1520 y 9371/6426; vacio 43/51 y 147/155.
 
