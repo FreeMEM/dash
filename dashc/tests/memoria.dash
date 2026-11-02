@@ -1,0 +1,44 @@
+# Muchas vueltas creando textos: si los temporales o las variables no se liberasen,
+# un A500 se quedaría sin memoria
+func etiqueta(n) -> String
+    t = "n" + "#{n}"
+    if n % 2 == 0
+        return t + "p"
+    end
+    return t
+end
+
+func cuenta(s: String) -> Int
+    c = 0
+    for i in (0..s.length - 1)
+        if s[i] == "1"
+            c = c + 1
+        end
+    end
+    return c
+end
+
+Main
+    total = 0
+    acc = ""
+    for i in (1..50000)
+        e = etiqueta(i)
+        total = total + cuenta(e) + e.length
+        if i % 10000 == 0
+            acc = acc + e[0:3]
+            Print e
+        end
+    end
+    Print total
+    Print acc
+    k = 0
+    s = ""
+    while k < 30000
+        k = k + 1
+        s = "x#{k}" + "y"
+        if k == 29999
+            break
+        end
+    end
+    Print s
+end

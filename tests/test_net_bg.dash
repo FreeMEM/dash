@@ -1,0 +1,65 @@
+# Test: net_bg_* (Dash 2.0, what Tachyon's lib/red.dash did with @native): two connections to the runner's echo
+# server in the network task while the program goes on with its own things, and one to a closed port (an error).
+# The echo server answers one line with "eco: " and closes.
+# emu-net: 40833
+# expect-out: abiertas: 4 4
+# expect-out: a: eco: hola a
+# expect-out: b: eco: hola b
+# expect-out: cerradas: 5 5
+# expect-out: el programa siguió: true
+# expect-out: puerto cerrado: 6 true
+# expect-out: fin
+
+# lo que llegue hasta que se cierre (-1), como texto
+func todo(c: Int) -> String
+    buf = buffer_alloc(256)
+    t = ""
+    n = 0
+    vueltas = 0
+    while n >= 0 and vueltas < 250
+        n = net_bg_recv(c, buf, 256)
+        if n > 0
+            t = t + str_from_buffer(buf, 0, n)
+        elif n == 0
+            time_delay_ms(40)
+        end
+        vueltas = vueltas + 1
+    end
+    buffer_free(buf)
+    return str_replace(str_replace(t, "\r", ""), "\n", "")
+end
+
+Main
+    a = net_bg_open("127.0.0.1", 40833, 5000)
+    b = net_bg_open("127.0.0.1", 40833, 5000)
+    trabajo = 0
+    vueltas = 0
+    # (de 40 en 40 ms: time_delay_ms de menos de un tic, 20 ms, no espera)
+    while (net_bg_state(a) < 4 or net_bg_state(b) < 4) and vueltas < 250
+        trabajo = trabajo + 1
+        time_delay_ms(40)
+        vueltas = vueltas + 1
+    end
+    Print "abiertas: #{net_bg_state(a)} #{net_bg_state(b)}"
+    net_bg_send(a, "hola a\r\n")
+    net_bg_send(b, "hola b\r\n")
+    ta = todo(a)
+    tb = todo(b)
+    Print "a: #{ta}"
+    Print "b: #{tb}"
+    Print "cerradas: #{net_bg_state(a)} #{net_bg_state(b)}"
+    Print "el programa siguió: #{trabajo > 0}"
+    net_bg_close(a)
+    net_bg_close(b)
+    m = net_bg_open("127.0.0.1", 9, 3000)
+    vueltas = 0
+    while net_bg_state(m) < 5 and vueltas < 250
+        time_delay_ms(40)
+        vueltas = vueltas + 1
+    end
+    e = net_bg_error(m)
+    Print "puerto cerrado: #{net_bg_state(m)} #{e.length > 0}"
+    net_bg_close(m)
+    net_bg_stop()
+    Print "fin"
+end

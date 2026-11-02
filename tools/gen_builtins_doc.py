@@ -14,6 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import compiler.amiga_builtins as builtins_module  # noqa: E402
 from compiler.amiga_builtins import BuiltinFunc  # noqa: E402
 from compiler.codegen import unimplemented_builtins  # noqa: E402
+from compiler.builtins_es import DESC_ES  # noqa: E402
 
 OUTPUTS = {"es": PROJECT_ROOT / "docs" / "BUILTINS.md", "en": PROJECT_ROOT / "docs" / "BUILTINS.en.md"}
 
@@ -35,7 +36,7 @@ GROUPS = [
     ("FONT_FUNCTIONS", "Fuentes y colores", "Fonts and colors"),  # dashweb D9
     ("BLEND_FUNCTIONS", "Transparencia y degradados", "Transparency and gradients"),
     ("RGB_FUNCTIONS", "Imágenes RGB desde un buffer (vídeo)", "RGB images from a buffer (video)"),
-    ("TASK_FUNCTIONS", "Tareas (C en otro proceso)", "Tasks (C in another process)"),  # dashweb D47
+    ("TASK_FUNCTIONS", "Tareas, reloj, traducciones y escritorio", "Tasks, clock, translations and desktop"),
     ("IMAGE_FUNCTIONS", "Imágenes (datatypes)", "Images (datatypes)"),  # dashweb D12
     ("ARGS_FUNCTIONS", "Argumentos", "Arguments"),     # dashweb D19
     ("ZLIB_FUNCTIONS", "Compresión (zlib)", "Compression (zlib)"),  # Lorraine D6
@@ -47,13 +48,24 @@ GROUPS = [
     ("SIMINPUT_FUNCTIONS", "Simular teclado y ratón", "Simulated keyboard and mouse"),   # Lorraine D46
     ("CLIP_FUNCTIONS", "Portapapeles", "Clipboard"),   # Lorraine D18
     ("COLLATE_FUNCTIONS", "Ordenar textos según el idioma", "Sorting texts by language"),   # Lorraine D7
+    ("SYSPROG_FUNCTIONS", "Sistema y programa", "System and program"),   # Dash 2.0
+    ("JSON_FUNCTIONS", "JSON leído en C (para lib/json.dash)", "JSON read in C (for lib/json.dash)"),   # Dash 2.0
+    ("DEBUGGER_FUNCTIONS", "Depurador (el programa depurado, con dash --debug)",
+     "Debugger (the debugged program, built with dash --debug)"),   # Dash 2.0: Forja
+    ("IMGDEC_FUNCTIONS", "Imágenes decodificadas por el programa (sin datatypes)",
+     "Pictures decoded by the program (no datatypes)"),
+    ("TTF_FUNCTIONS", "Fuentes TrueType, WOFF y WOFF2", "TrueType, WOFF and WOFF2 fonts"),
+    ("NETBG_FUNCTIONS", "Red en una tarea aparte", "Network in a task of its own"),
+    ("OTHERWIN_FUNCTIONS", "Ventanas de otros programas (pruebas)", "Other programs' windows (tests)"),
+    ("WM_FUNCTIONS", "Gestor de ventanas (las de todos los programas)", "Window manager (every program's windows)"),
     ("AUDIO_FUNCTIONS", "Audio", "Audio"),
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),
     ("MUI_FUNCTIONS", "MUI", "MUI"),
 ]
 
-# The generator's own texts; the descriptions of the builtins are in English in the code, in both files
+# The generator's own texts. The descriptions of the builtins: in English in the code (BUILTINS.en.md), in Spanish in
+# compiler/builtins_es.py (BUILTINS.md)
 TEXTS = {
     "es": {
         "switch": "*[English](BUILTINS.en.md) | Castellano*",
@@ -93,7 +105,13 @@ def render(lang: str) -> str:
             status = t["unimplemented"] if name in missing else ""
             implemented += name not in missing
             params = ", ".join(b.params)
-            desc = b.description.replace("|", "\\|")
+            if lang == "es":
+                if name not in DESC_ES:
+                    raise SystemExit(f"tools/gen_builtins_doc.py: {name} has no Spanish description in "
+                                     "compiler/builtins_es.py")
+                desc = DESC_ES[name].replace("|", "\\|")
+            else:
+                desc = b.description.replace("|", "\\|")
             rows.append(f"| `{name}({params})` | `{b.return_type}` | {desc} | {status} |")
         title = title_es if lang == "es" else title_en
         sections += [f"## {title}", "", t["header"], "|---|---|---|---|", *rows, ""]

@@ -82,6 +82,22 @@ class TestCatalogo(unittest.TestCase):
         with self.assertRaisesRegex(catalogo.CatalogError, "number 1"):
             catalogo.collect([self.dir / "prog.dash"])
 
+    def test_imports_of_dash_lib(self):
+        # import "lib/red/http.dash" from a program anywhere, found in Dash's folder as the compilers do: its
+        # texts go in (its numbers 400-442), and one of the program with the same number is an error
+        src = self.dir / "src"
+        src.mkdir()
+        (src / "prog.dash").write_text('import "lib/red/http.dash"\nMain\n    Print tr(1, "Hola")\nend\n')
+        texts = catalogo.collect([src / "prog.dash"])
+        self.assertEqual(texts[1][0], "Hola")
+        self.assertEqual(texts[407][0], "timed out")
+        (src / "prog.dash").write_text('import "lib/red/http.dash"\nMain\n    Print tr(407, "Otro")\nend\n')
+        with self.assertRaisesRegex(catalogo.CatalogError, "number 407"):
+            catalogo.collect([src / "prog.dash"])
+        (src / "prog.dash").write_text('import "no_esta.dash"\nMain\nend\n')
+        with self.assertRaisesRegex(catalogo.CatalogError, "cannot find no_esta.dash"):
+            catalogo.collect([src / "prog.dash"])
+
     def test_tr_of_something_not_a_const(self):
         (self.dir / "prog.dash").write_text('Main\n    Print tr(n, "Hola")\nend\n')
         with self.assertRaisesRegex(catalogo.CatalogError, "not a const"):

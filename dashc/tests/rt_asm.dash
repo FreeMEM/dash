@@ -1,0 +1,84 @@
+# Las rutinas del runtime en ensamblador (D15, runtime/rt_asm.s) contra el C de ./dash: memcpy (copias de 0 a 70
+# bytes y de 70.000, desde dirección par e impar: los trozos de un texto empiezan donde caiga) y la búsqueda en
+# un diccionario (claves de 0 a 40 letras, que difieren solo en la última, literales con el hash de dashc y claves
+# que no están).
+func suma(s: String) -> Int
+    h = 0
+    i = 0
+    while i < s.length
+        h = (h * 31 + str_code(s, i) + i) % 1000003
+        i = i + 1
+    end
+    return h
+end
+
+func letras(n: Int, ultima: Int) -> String
+    s = ""
+    i = 0
+    while i < n
+        if i == n - 1
+            s = s + str_char(97 + ultima)
+        else
+            s = s + str_char(65 + (i * 7) % 26)
+        end
+        i = i + 1
+    end
+    return s
+end
+
+Main
+    base = letras(80, 3)
+    total = 0
+    n = 0
+    while n <= 70
+        par = base[0:n]
+        impar = base[1:n + 1]
+        copia = par + ""
+        junta = impar + par
+        total = (total + suma(par) + suma(impar) * 3 + suma(copia) * 5 + suma(junta) * 7) % 1000003
+        n = n + 1
+    end
+    Print "copias: #{total}"
+
+    grande = ""
+    trozo = letras(70, 5)
+    k = 0
+    while k < 1000
+        grande = grande + trozo
+        k = k + 1
+    end
+    a = grande[1:70001]
+    b = grande[2:70002]
+    c = a + b
+    Print "grande: #{a.length} #{b.length} #{c.length} #{suma(a)} #{suma(b)} #{suma(c)}"
+
+    var d: {String: Int} = {}
+    m = 0
+    while m <= 40
+        d[letras(m, 0)] = m
+        d[letras(m, 1)] = m * 100
+        m = m + 1
+    end
+    d["color"] = 7
+    d["margin-left"] = 8
+    halladas = 0
+    sumadas = 0
+    m = 0
+    while m <= 40
+        if d.has(letras(m, 0))
+            halladas = halladas + 1
+            sumadas = sumadas + d[letras(m, 0)] + d[letras(m, 1)]
+        end
+        if d.has(letras(m, 2))
+            halladas = halladas + 1000
+        end
+        m = m + 1
+    end
+    color = d["color"]
+    margen = d["margin-left"]
+    otra = d.has("colour")
+    Print "claves: #{d.length} #{halladas} #{sumadas} #{color} #{margen} #{otra}"
+    clave = "x" + "color"
+    por_trozo = d[clave[1:6]]
+    Print "trozo de clave: #{por_trozo}"
+end

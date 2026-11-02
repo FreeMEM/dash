@@ -1,0 +1,61 @@
+# for k in d.keys() por la tabla de d (como ./dash): con continue y break, un diccionario vacío o nil, uno anidado,
+# y un cuerpo que escribe en otro diccionario o llama a una función. Si el cuerpo cambia d, la lista de claves.
+func suma(d: {String: Int}) -> Int
+    k = 0
+    for c in d.keys()
+        if c == "b"
+            continue
+        end
+        k = k + d[c]
+    end
+    return k
+end
+
+func copia(d: {String: String}) -> {String: String}
+    var e: {String: String} = {}
+    for c in d.keys()
+        e[c] = d[c] + "!"
+    end
+    return e
+end
+
+func cambia(d: {String: Int}) -> Int
+    n = 0
+    for c in d.keys()
+        d[c + "x"] = 1
+        n = n + 1
+    end
+    return n
+end
+
+func largo(s: String) -> Int
+    return s.length
+end
+
+Main
+    var d: {String: Int} = {}
+    Print "vacío " + suma(d)
+    for i in (1..30)
+        d["k" + i] = i
+    end
+    d["b"] = 1000
+    Print "suma " + suma(d)
+    var s: {String: String} = {}
+    s["uno"] = "1"
+    s["dos"] = "2"
+    e = copia(s)
+    t = 0
+    for c in e.keys()
+        t = t + largo(c) + largo(e[c])
+        for c2 in s.keys()
+            t = t + 1
+        end
+        if t > 1000
+            break
+        end
+    end
+    Print "anidado " + t + " " + e.length
+    Print "cambia " + cambia(d) + " " + d.length
+    var nada: {String: Int} = nil
+    Print "nil " + suma(nada)
+end

@@ -43,7 +43,7 @@ def compile_all(paths, out_dir, cpu=None):
     exes = {}
     for src in paths:
         exe = Path(out_dir) / (src.stem + (f"_{cpu}" if cpu else ""))
-        r = subprocess.run([sys.executable, str(ROOT / "dash"), str(src), "-o", str(exe)]
+        r = subprocess.run([sys.executable, str(ROOT / "dash1"), str(src), "-o", str(exe)]
                            + (["--cpu", cpu] if cpu else []),
                            capture_output=True, text=True)
         if r.returncode == 0 and exe.exists():

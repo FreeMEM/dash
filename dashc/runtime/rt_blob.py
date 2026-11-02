@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""Los dos runtimes preparados (dashc --preparar, "DRT1") como arrays de C dentro de dashc. El normal pasa a
+"DRT2": los datos de cada hunk comprimidos aparte (deflate crudo), y hunk.c descomprime solo los de los hunks que
+van en el programa (descomprimirlo entero en cada compilación costaba 4,5 s en un A1200). El de --memcheck,
+comprimido entero con zlib (se usa poco: main.c lo descomprime solo entonces).
+
+    python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt > build/rt_blob.c
+    python3 runtime/rt_blob.py build/dashrt.drt - > build/rt_blob_amiga.c          (sin el de --memcheck)
+    python3 runtime/rt_blob.py build/dashrt.drt build/dashrt_mc.drt build/dashc_mc.drt   (él solo, en DRT2)
+El de --fpu, en DRT2 como el normal (en el dashc del Amiga va aparte, dashc_fpu.drt):
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt > build/rt_fpu_blob.c
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt - > build/rt_fpu_blob_amiga.c
+    python3 runtime/rt_blob.py --fpu build/dashrt_fpu.drt build/dashc_fpu.drt
+(y --fpu-mc, el de --fpu --memcheck: rt_fpu_mc, dashc_fpu_mc.drt)"""
+import struct
+import sys
+import zlib
+
+
+def drt2(b):
+    """DRT1 -> DRT2: tras las referencias, una tabla con el tamaño comprimido de cada hunk (0: va tal cual), y
+    los datos de cada uno comprimidos si así ocupan menos"""
+    L = lambda o: struct.unpack_from(">I", b, o)[0]
+    nh, ns, nr, nrel, stl, dl = (L(4 * i) for i in range(1, 7))
+    hp = 28
+    fp_end = hp + nh * 28 + nrel * 8 + ns * 12 + nr * 12
+    strs = b[fp_end:fp_end + stl]
+    data = b[fp_end + stl:fp_end + stl + dl]
+    table = bytearray(b[hp:hp + nh * 28])
+    zl, out = [], bytearray()
+    for i in range(nh):
+        size, off = L(hp + i * 28 + 4), L(hp + i * 28 + 16)
+        if off == 0xFFFFFFFF:
+            zl.append(0)
+            continue
+        raw = data[off:off + size]
+        c = zlib.compressobj(9, zlib.DEFLATED, -15)
+        z = c.compress(raw) + c.flush()
+        struct.pack_into(">I", table, i * 28 + 16, len(out))
+        if len(z) + 8 < len(raw):
+            out += z
+            zl.append(len(z))
+        else:
+            out += raw
+            zl.append(0)
+        while len(out) & 3:
+            out.append(0)
+    head = b"DRT2" + struct.pack(">6I", nh, ns, nr, nrel, stl, len(out))
+    return (head + bytes(table) + b[hp + nh * 28:fp_end] + struct.pack(f">{nh}I", *zl) + strs + bytes(out))
+
+
+def array(name, data):
+    return f"const unsigned char {name}[] = {{{','.join(str(b) for b in data)}}};\n"
+
+
+def main():
+    if sys.argv[1] in ("--fpu", "--fpu-mc"):
+        nombre = "rt_fpu" if sys.argv[1] == "--fpu" else "rt_fpu_mc"
+        if sys.argv[3:] == ["-"]:
+            sys.stdout.write(f"const unsigned char {nombre}[1];\nconst unsigned int {nombre}_len = 0;\n")
+            return
+        a = drt2(open(sys.argv[2], "rb").read())
+        if len(sys.argv) < 4:
+            sys.stdout.write(array(nombre, a) + f"const unsigned int {nombre}_len = {len(a)};\n")
+        else:
+            open(sys.argv[3], "wb").write(a)
+        return
+    a = drt2(open(sys.argv[1], "rb").read())
+    if sys.argv[2] == "-":
+        # (el dashc del Amiga: el de --memcheck va aparte, dashc_mc.drt, y se lee solo con --memcheck)
+        sys.stdout.write(array("rt_normal", a) + f"const unsigned int rt_normal_len = {len(a)};\n" +
+                         "const unsigned char rt_mc_z[1];\nconst unsigned int rt_mc_zlen = 0, rt_mc_len = 0;\n")
+        return
+    if len(sys.argv) > 3:
+        open(sys.argv[3], "wb").write(drt2(open(sys.argv[2], "rb").read()))
+        return
+    b = open(sys.argv[2], "rb").read()
+    z = zlib.compress(b, 9)
+    sys.stdout.write(array("rt_normal", a) + f"const unsigned int rt_normal_len = {len(a)};\n" +
+                     array("rt_mc_z", z) + f"const unsigned int rt_mc_zlen = {len(z)}, rt_mc_len = {len(b)};\n")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,5 @@
+# Los argumentos de la línea de órdenes (el runner no pasa ninguno: 0 y "")
+Main
+    Print arg_count()
+    Print "[" + arg(0) + "]"
+end

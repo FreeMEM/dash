@@ -1,0 +1,97 @@
+# if/elif/else, while, for, break, continue, and/or/not
+var llamadas: Int = 0
+
+func cuenta(v)
+    llamadas = llamadas + 1
+    return v
+end
+
+func clasifica(n)
+    if n < 0
+        Print "negativo"
+    elif n == 0
+        Print "cero"
+    elif n < 10
+        Print "pequeño"
+    else
+        Print "grande"
+    end
+end
+
+Main
+    clasifica(-5)
+    clasifica(0)
+    clasifica(7)
+    clasifica(99)
+
+    i = 0
+    while i < 10
+        i = i + 1
+        if i % 2 == 0
+            continue
+        end
+        if i > 7
+            break
+        end
+        Print i
+    end
+
+    for j in (1..5)
+        Print j
+    end
+    for j in (5..1)
+        Print j
+    end
+    for j in (0..20 step 7)
+        Print j
+    end
+    for j in (10..1 step -3)
+        Print j
+    end
+    desde = 3
+    hasta = 6
+    paso = 2
+    for j in (desde..hasta)
+        Print j * 10
+    end
+    for j in (desde..hasta step paso)
+        Print j * 100
+    end
+    for j in (hasta..desde)
+        Print j
+    end
+
+    total = 0
+    for a in (1..4)
+        for b in (1..4)
+            if b == 3
+                break
+            end
+            total = total + a * b
+        end
+    end
+    Print total
+
+    # cortocircuito: la segunda parte no se evalúa si no hace falta
+    if cuenta(0) == 1 and cuenta(1) == 1
+        Print "no"
+    end
+    if cuenta(1) == 1 or cuenta(2) == 2
+        Print "sí"
+    end
+    Print llamadas
+    x = 5
+    Print x > 3 and x < 10
+    Print not (x > 3)
+    Print x == 5 or x == 6
+    b = x != 5
+    Print b
+    if not b
+        Print "b es falso"
+    end
+    if x
+        Print "x no es cero"
+    end
+    Print true
+    Print false
+end

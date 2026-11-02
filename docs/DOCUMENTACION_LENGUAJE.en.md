@@ -16,7 +16,7 @@ but without pointers, without `includes` and without freeing memory by hand.
 
 - **Clean syntax**, in the style of Ruby and Python: blocks that end in `end`, types that are inferred.
 - **The Amiga API at your fingertips:** windows, graphics, sprites, copper, blitter, sound, files, networking, and three
-  ways to build user interfaces (GadTools, ReAction and MUI). There are 686 ready-made functions (builtins), listed in
+  ways to build user interfaces (GadTools, ReAction and MUI). There are 836 ready-made functions (builtins), listed in
   [BUILTINS.md](BUILTINS.en.md).
 - **Automatic, lightweight memory management:** no garbage collector and no pauses (section 4.10).
 - **For a real Amiga:** it runs on an A500 with a 68000 and Kickstart 3.0; anything that needs more
@@ -39,6 +39,13 @@ programa.dash → parser (Lark) → AST → analysis → C generator → GCC m68
 - GCC (`m68k-amigaos-gcc`, by bebbo) compiles it with `-O2` and produces the executable in Hunk format.
 - The executable opens the libraries it needs, requests its stack and, on exit (including on error), closes everything
   it opened.
+
+That is Dash 1.x, which from Dash 2.0 on is called `./dash1`. In Dash 2.0, `./dash` is **dashc**: a compiler
+written in C that generates the 68000 code itself and links the executable with its runtime, without GCC; it also
+runs on the Amiga. The language, the builtins and the runtime are the same. What changes: dashc does not accept C
+inside the program (`@native`, `@c`, `@header`), which `./dash1` still compiles, nor the options `-O0`, `-O`,
+`--small`, `--multifile` and `--no-hunk`. The options in section 3 are those of `./dash1`. All about dashc in
+[section 24 of the manual](MANUAL_REFERENCIA.en.md#24-dash-20-the-dashc-compiler).
 
 ## 3. Getting started
 
@@ -314,7 +321,8 @@ end
 ```
 
 `On Key` (one key, or any key if nothing is given), `On Close`, `On Gadget` (gadgets by number), `On Menu` (menus),
-`On Click` (left button in the window: `click_x()`, `click_y()`) and `On Timer 100` (every 100 ms; takes a
+`On Click` (left button in the window: `click_x()`, `click_y()`), `On RightClick` (the right one, in a window
+with `rmbtrap`), `On Inactive` (the window stopped being the active one) and `On Timer 100` (every 100 ms; takes a
 number or a variable). There are also windows created from code
 (`window_create`, by number; the `EventLoop` handles them and `event_window()` tells which one), custom screens
 (`screen_open`) and RTG.
@@ -468,6 +476,43 @@ end` inserts free-form C (for example functions that call into Dash), `@stack N`
 `@workbench_output "NIL:"` avoids the console window when started from the Workbench (anything written is lost),
 `@version "Prog 1.2"` sets the version and `@catalog "Prog.catalog" 1` the language catalog (section 5.6).
 `@native(borrow) func` indicates that the C code only uses its arguments during the call (saves copying them).
+
+All of this is C inside the program, and only Dash 1.x (`./dash1`) compiles it.
+
+### Outside C, also with Dash 2.0: @link, @extern and @export
+
+With Dash 2.0 (`./dash`) the C goes apart: it is compiled with the Amiga GCC into an object (`.o`) or a library
+(`.a`) and the program links it. It works the same with `./dash1`.
+
+```ruby
+@link "c/saludo.o"                               # path relative to this file
+
+@extern("saludo") func suma(a: Int, b: Int) -> Int   # a function of the linked C
+@extern("saludo") func aplicar(f: Func, x: Int) -> Int
+
+@export func triple(x: Int) -> Int                # the C calls it by its name: long triple(long x)
+    return x * 3
+end
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+Main
+    Print suma(2, 40)                            # 42
+    Print aplicar(doble, 5)                      # the C calls doble(5) and triple(5)
+end
+```
+
+- `@link "x.o"` or `@link "libx.a"`: the object or library linked with the program.
+- `@extern("name") func f(...) -> T`: a function of that C, with arguments and result as in C. It accepts `Int`,
+  `Bool`, `String`, structs (their pointer), `Func` (a Dash function the C can call) and `Pointer`; it does not
+  accept `Float`, `Double`, `Fixed`, lists or dictionaries.
+- `@export func f(...)`: a Dash function that the C calls by its name. It has nothing to do with what is public in
+  modules (section 11).
+
+The full C of this example, the types one by one and what the C finds of libc are in
+[section 24 of the manual](MANUAL_REFERENCIA.en.md#24-dash-20-the-dashc-compiler).
 
 ## 8. Tools
 

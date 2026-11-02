@@ -1,0 +1,43 @@
+# mem_puddle y mem_trim (Tachyon D80): charcos del pool de otro tamaño, antes de pedir memoria, y los bloques
+# pequeños: salen de charcos propios por tamaño, y mem_trim devuelve al sistema los que están del todo libres
+# expect-out: true
+# expect-out: false
+# expect-out: 3000
+# expect-out: n1235
+# expect-out: false
+# expect-out: true
+# expect-out: true
+# expect-out: 0
+# expect-out: otra vez
+# expect-out: m500
+import "lib/amiga/memory.dash"
+
+struct Nodo
+    n: Int = 0
+    texto: String = ""
+end
+
+Main
+    Print mem_puddle(16384)
+    Print mem_puddle(100)
+    var l: [Nodo] = []
+    for i in (1..3000)
+        l.push(Nodo(i, "n" + i))
+    end
+    Print l.length
+    Print l[1234].texto
+    var vacia: [Nodo] = []
+    l = vacia
+    Print mem_puddle(8192)
+    antes = mem_free_total()
+    d = mem_trim()
+    Print d > 50000
+    Print mem_free_total() - antes > 50000
+    Print mem_trim()
+    s = "otra" + " vez"
+    Print s
+    for i in (1..500)
+        l.push(Nodo(i, "m" + i))
+    end
+    Print l[499].texto
+end

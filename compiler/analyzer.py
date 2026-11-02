@@ -9,7 +9,7 @@ from enum import Enum, auto
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, ReturnStmt,
     BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, MethodCall, DictLiteral,
@@ -476,6 +476,16 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_OnClickHandler(self, node: OnClickHandler):
         self.enter_scope("on_click")
+        self._visit_new_body(node.body)
+        self.exit_scope()
+
+    def visit_OnRightClickHandler(self, node: OnRightClickHandler):
+        self.enter_scope("on_rightclick")
+        self._visit_new_body(node.body)
+        self.exit_scope()
+
+    def visit_OnInactiveHandler(self, node: OnInactiveHandler):
+        self.enter_scope("on_inactive")
         self._visit_new_body(node.body)
         self.exit_scope()
 

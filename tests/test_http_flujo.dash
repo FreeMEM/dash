@@ -1,0 +1,48 @@
+# An HTTP answer read as it comes (lib/red/http.dash, Dash 2.0: Inferencia with "stream": true): the runner's server
+# sends SSE events chunked in three pieces with pauses; http_flujo_leer gives them without the chunked frame before
+# the end, and c.respuesta stays whole. Without compression asked. An error answer: nothing read, its JSON body kept.
+# emu-http: 40843
+# expect-out: trozos antes del final: true
+# expect-out: leído: [data: uno||data: dos||data: tres||]
+# expect-out: respuesta: 200 [text/event-stream] igual: true
+# expect-out: compresión pedida: [identity]
+# expect-out: error: 400 [] {"error": {"message": "sin cuota"}}
+# expect-out: fin
+
+import "lib/red/http.dash"
+
+Main
+    c = http_empezar_flujo("http://127.0.0.1:40843/flujo", "POST", "{}", "application/json", "", 20000)
+    leido = ""
+    trozos = 0
+    while not http_avanzar(c)
+        nuevo = http_flujo_leer(c)
+        if nuevo != ""
+            trozos = trozos + 1
+            leido = leido + nuevo
+        end
+        time_delay(2)
+    end
+    leido = leido + http_flujo_leer(c)
+    Print "trozos antes del final: #{trozos >= 2}"
+    Print "leído: [" + str_replace(leido, "\n", "|") + "]"
+    r = c.respuesta
+    igual = r.cuerpo == leido
+    Print "respuesta: #{r.estado} [#{r.tipo}] igual: #{igual}"
+    pedida = ""
+    if r.cabeceras.has("x-prueba")
+        pedida = r.cabeceras["x-prueba"]
+    end
+    Print "compresión pedida: [" + pedida + "]"
+
+    c = http_empezar_flujo("http://127.0.0.1:40843/error", "POST", "{}", "application/json", "", 20000)
+    leido = ""
+    while not http_avanzar(c)
+        leido = leido + http_flujo_leer(c)
+        time_delay(2)
+    end
+    leido = leido + http_flujo_leer(c)
+    Print "error: #{c.respuesta.estado} [" + leido + "] " + c.respuesta.cuerpo
+    red_terminar()
+    Print "fin"
+end

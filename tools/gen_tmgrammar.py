@@ -27,13 +27,13 @@ OUTPUT = PROJECT_ROOT / "editor" / "vscode" / "syntaxes" / "dash.tmLanguage.json
 KEYWORDS = {
     "keyword.control": ["if", "elif", "else", "while", "for", "in", "step", "return", "break", "continue", "end"],
     "keyword.other": ["import", "Main", "EventLoop", "On", "Print", "Wait", "Stop"],
-    "keyword.other.event": ["Close", "Key", "Gadget", "Menu", "Click", "Timer"],
+    "keyword.other.event": ["Close", "Key", "Gadget", "Menu", "Click", "RightClick", "Inactive", "Timer"],
     "keyword.operator.logical": ["and", "or", "not"],
     "storage.type": ["func", "fn", "struct", "interface", "enum", "Window"],
     "storage.modifier": ["const", "var", "weak", "borrow"],
     "constant.language": ["true", "false", "nil"],
     "variable.language.self": ["self"],
-    "keyword.other.directive": ["@native", "@extern", "@header", "@link", "@c", "@stack", "@workbench_output", "@catalog", "@version"],
+    "keyword.other.directive": ["@native", "@extern", "@export", "@header", "@link", "@c", "@stack", "@workbench_output", "@catalog", "@version"],
 }
 LIST_METHODS = ["push", "pop", "insert", "remove", "clear", "has", "keys"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"

@@ -1,0 +1,64 @@
+# Test: an RGBA image transparent all over (alpha 0 everywhere; dashweb D81: a PNG whose only colour is
+# transparent, like a 1-bit logo with tRNS) draws nothing. There was no mask when no pixel was opaque,
+# and the image came out as an opaque box. A 40x40 blue image with alpha 0 over a red background, on a
+# graphics card screen and scaled: the background must stay; an opaque image (the control) must not.
+# rtg
+# expect-out: transparente: ok
+# expect-out: escalada: ok
+# expect-out: opaca: ok
+# expect-out: fin
+
+Window W
+    title "Clara"
+    width 300
+    height 150
+end
+
+func imagen(alfa: Int) -> Int
+    w = 40
+    v = buffer_alloc(w * w * 4)
+    for i in (0..w * w - 1)
+        buffer_set_byte(v, i * 4 + 2, 255)
+        buffer_set_byte(v, i * 4 + 3, alfa)
+    end
+    img = image_from_rgb(v, w, w, true)
+    buffer_free(v)
+    return img
+end
+
+Main
+    W.open
+    n = 200 * 60
+    rojo = buffer_alloc(n * 3)
+    for i in (0..n - 1)
+        buffer_set_byte(rojo, i * 3, 255)
+    end
+    gfx_rgb_draw(rojo, 200, 60, 20, 20)
+    buffer_free(rojo)
+    fondo = gfx_pixel_rgb(25, 25)
+    img = imagen(0)
+    image_draw(img, 22, 22)
+    if gfx_pixel_rgb(40, 40) == fondo
+        Print "transparente: ok"
+    else
+        Print "transparente: #{gfx_pixel_rgb(40, 40)}, fondo #{fondo}"
+    end
+    e = image_scale(img, 20, 20)
+    image_draw(e, 90, 22)
+    if gfx_pixel_rgb(100, 30) == fondo
+        Print "escalada: ok"
+    else
+        Print "escalada: #{gfx_pixel_rgb(100, 30)}, fondo #{fondo}"
+    end
+    image_free(e)
+    image_free(img)
+    o = imagen(255)
+    image_draw(o, 150, 22)
+    if gfx_pixel_rgb(170, 40) != fondo
+        Print "opaca: ok"
+    else
+        Print "opaca: igual que el fondo"
+    end
+    image_free(o)
+    Print "fin"
+end

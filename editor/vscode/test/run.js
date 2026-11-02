@@ -560,7 +560,8 @@ async function previewTests() {
     });
     await check('preview: the program that takes its own picture', () => {
         const prog = P.previewProgram('Principal', true);
-        assert.match(prog, /mui_window_open\(v.window\)\n        capturar\(\)\n        mui_app_end\(\)/);
+        assert.match(prog, /mui_window_open\(v.window\)\n        time_delay\(25\).*\n        run_command\("C:dash_shot 1 DH0:shot.dsh"\).*\n        mui_app_end\(\)/);
+        assert.doesNotMatch(prog, /@native|@header/);    // (without C: Dash 2.0 compiles it)
         assert.match(prog, /C:dash_shot 1 DH0:shot.dsh/);
         assert.strictEqual(P.previewMachine('a500'), 'a1200');
         assert.strictEqual(P.previewMachine('rtg'), 'rtg');
@@ -680,11 +681,11 @@ async function extensionTests() {
     });
     await check('extension: run command with autoclose', () => {
         const c = ext.runCommand(repo, file, 5);
-        assert.strictEqual(c, `python3 '${repo}/tools/emu_run.py' --autoclose 5 '${file}'`);
+        assert.strictEqual(c, `python3 '${repo}/tools/emu_run.py' --dash2 --autoclose 5 '${file}'`);
     });
     await check('extension: quotes paths with spaces and quotes', () => {
         const c = ext.runCommand('/a b', "/x/it's.dash", 0);
-        assert.strictEqual(c, `python3 '/a b/tools/emu_run.py' '/x/it'\\''s.dash'`);
+        assert.strictEqual(c, `python3 '/a b/tools/emu_run.py' --dash2 '/x/it'\\''s.dash'`);
     });
     await check('extension: compile from the active editor', async () => {
         fakeVscode.window.activeTextEditor = { document: { languageId: 'dash', isDirty: false, fileName: file } };
@@ -859,13 +860,13 @@ async function taskTests() {
     });
     await check('tasks: compile, run with --memcheck and with autoclose', () => {
         assert.strictEqual(taskCommand('compile', '/d', '/p/a b.dash'),
-                           "mkdir -p '/p/bin' && '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
+                           "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 '/d/dash' -q '/p/a b.dash' -o '/p/bin/a b'");
         assert.strictEqual(taskCommand('memcheck', '/d', '/p/x.dash', { autoclose: 5 }),
-                           "mkdir -p '/p/bin' && DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
+                           "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_TEST_AUTOCLOSE=5 DASH_PRINT_FLUSH=1 '/d/dash' -q --memcheck '/p/x.dash' " +
                            "-o '/p/bin/x' && python3 '/d/tools/emu_run.py' --follow --window '/p/bin/x'");
         assert.strictEqual(taskCommand('run', '/d', '/p/x.dash', { machine: 'a500', emulator: 'amiberry', window: false,
                                                                  system: '/s y' }),
-                           "mkdir -p '/p/bin' && DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
+                           "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
                            "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
     });
@@ -1018,6 +1019,189 @@ async function debugTests() {
     });
 }
 
+// --- dashDebug.js: the debugger of Dash 2.0 (dbgserver on the Amiga) ------------------------------------------------
+async function dashcDebugTests() {
+    const dd = require('../dashDebug.js');
+    const { emulatorArgs, engineOf } = require('../debug.js');
+    const net = require('net');
+    await check('dashc debugger: the lines of dbgserver (tabs, escapes, UTF-8 names and Latin-1 texts)', () => {
+        assert.deepStrictEqual(dd.parseLine(Buffer.from('var\tp\tPunto\tPunto(x: 1, s: "a\\\\n\\tb")', 'utf8')),
+                               ['var', 'p', 'Punto', 'Punto(x: 1, s: "a\\n\tb")']);
+        assert.deepStrictEqual(dd.parseLine(Buffer.from('frame\t3\tMain\t/home/año/x.dash', 'utf8')), ['frame', '3', 'Main', '/home/año/x.dash']);
+        assert.deepStrictEqual(dd.parseLine(Buffer.from('*out\tcañón\\n', 'latin1')), ['*out', 'cañón\n']);
+        assert.strictEqual(dd.unescapeField(dd.escapeField('a\\b\nc\td')), 'a\\b\nc\td');
+    });
+    await check('dashc debugger: what opens in the variables view (struct fields, list elements)', () => {
+        assert.deepStrictEqual(dd.splitTop('x: 1, s: "a, b", h: [P(x: 1, y: 2), nil], d: {2 claves}'),
+                               ['x: 1', 's: "a, b"', 'h: [P(x: 1, y: 2), nil]', 'd: {2 claves}']);
+        assert(dd.expandable('Punto', 'Punto(x: 1)') && dd.expandable('[Int]', '[1, 2]'));
+        assert(!dd.expandable('Punto', 'nil') && !dd.expandable('[Int]', '[]') && !dd.expandable('Int', '3') &&
+               !dd.expandable('Punto', 'Punto(...)') && !dd.expandable('String', '"a(b)"') && !dd.expandable('', '? no existe: x'));
+        assert.deepStrictEqual(dd.childrenOf('p', 'Punto', 'Punto(x: 1, nombre: "a: b", hijos: [Punto(...)])').children.map((c) => c.expr),
+                               ['p.x', 'p.nombre', 'p.hijos']);
+        const l = dd.childrenOf('p.l', '[Int]', '[1, 2, 3]');
+        assert.deepStrictEqual(l.children.map((c) => [c.name, c.expr]), [['[0]', 'p.l[0]'], ['[1]', 'p.l[1]'], ['[2]', 'p.l[2]']]);
+        const long = dd.childrenOf('l', '[Int]', '[' + Array.from({ length: 20 }, (_, i) => i).join(', ') + ', ...]');
+        assert(long.more && long.children.length === 200);
+    });
+    await check('dashc debugger: expressions in Dash worked out with the values of dbgserver', async () => {
+        const vals = { n: ['Int', '7'], f: ['Float', '1.5'], s: ['String', '"hola \\"x\\""'], ok: ['Bool', 'true'], v: ['Punto', 'nil'],
+                       p: ['Punto', 'Punto(x: 3)'], 'p.x': ['Int', '3'], l: ['[Int]', '[10, 20, 30]'], 'l[1]': ['Int', '20'],
+                       'l[2]': ['Int', '30'] };
+        const lookup = async (t) => { if (!vals[t]) throw new Error('no existe: ' + t); return dd.fromServer(...vals[t]); };
+        const ev = async (e) => { try { return dd.showValue(await dd.evaluateTree(dd.parseExpression(e), lookup, async () => 3)); }
+                                  catch (x) { return '! ' + x.message; } };
+        const cases = [['n * 2 + 1', '15'], ['n / 2', '3'], ['-n % 4', '-3'], ['f * 2', '3.0'], ['n + f', '8.5'],
+                       ['s.length', '8'], ['s == "hola \\"x\\""', 'true'], ['l[n - 6] + 1', '21'], ['l[1 + 1]', '30'],
+                       ['l.length', '3'], ['v == nil and not (n < 3)', 'true'], ['p != nil or nada', 'true'],
+                       ['ok and p.x >= 3', 'true'], ['n & 3 | 8', '11'], ['1 << 4', '16'], ['"a" + "b"', '"ab"'],
+                       ['nada + 1', '! no existe: nada'], ['n / 0', '! división por cero'], ['n +', '! falta algo al final'],
+                       ['n n', '! sobra: n'], ['s + 1', '! + entre String y Int']];
+        for (const [e, want] of cases) assert.strictEqual(await ev(e), want, e);
+        assert(dd.isPath('p.hijos[0].x') && dd.isPath('l[ 3 ]') && !dd.isPath('l[i]') && !dd.isPath('s.length') && !dd.isPath('nil'));
+        assert(dd.hitMet('3', 3) && !dd.hitMet('3', 2) && dd.hitMet('% 2', 4) && !dd.hitMet('% 2', 3) && dd.hitMet('== 1', 1) &&
+               !dd.hitMet('> 2', 2) && dd.hitMet('', 1));
+    });
+    await check('dashc debugger: built by dashc or handed to ./dash1 (C in it); the emulator with dbgserver or bgdbserver', () => {
+        assert.strictEqual(engineOf(''), 'dash');
+        assert.strictEqual(engineOf('dash: el programa lleva C: con ./dash1\n'), 'gdb');
+        assert.strictEqual(engineOf('dash: el programa lleva C: se compila por C con gcc\n'), 'gdb');
+        const args = emulatorArgs('/d', '/p/bin/x.debug', 31000, { machine: 'a500' }, 'dash');
+        assert.deepStrictEqual(args, ['/d/tools/emu_run.py', '--follow', '--dbgserver', '31000', '--window', '--machine', 'a500', '/p/bin/x.debug']);
+        assert(emulatorArgs('/d', 'x', 1, {}, 'gdb').includes('--gdbserver'));
+    });
+
+    /** A dbgserver of mentira: a TCP server that answers the orders from a table and can send lines by itself */
+    function fakeServer(answers) {
+        const got = [];
+        let socket = null;
+        const server = net.createServer((s) => {
+            socket = s;
+            s.write('dbgserver\t1\n');
+            let buf = '';
+            s.on('data', (d) => {
+                buf += d.toString('latin1');
+                for (let at = buf.indexOf('\n'); at >= 0; at = buf.indexOf('\n')) {
+                    const line = buf.slice(0, at);
+                    buf = buf.slice(at + 1);
+                    got.push(line);
+                    const f = line.split('\t');
+                    const a = answers[f[0]];
+                    const out = typeof a === 'function' ? a(f) : a || 'ok';
+                    if (out) s.write(out + '\n');
+                    if (f[0] === 'quit') s.end();
+                }
+            });
+        });
+        return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
+            port: server.address().port, got, say: (line) => socket.write(line + '\n'), close: () => server.close() })));
+    }
+    function dap(adapter) {
+        let seq = 0;
+        const waiting = new Map(), events = [];
+        adapter.onDidSendMessage((m) => {
+            if (m.type === 'response' && waiting.has(m.request_seq)) { waiting.get(m.request_seq)(m); waiting.delete(m.request_seq); }
+            else if (m.type === 'event') events.push(m);
+        });
+        const request = (command, args) => new Promise((resolve) => {
+            const s = ++seq;
+            waiting.set(s, resolve);
+            adapter.handleMessage({ seq: s, type: 'request', command, arguments: args || {} });
+        });
+        const until = async (test) => { for (let i = 0; i < 100 && !test(); i++) await new Promise((r) => setTimeout(r, 20)); return test(); };
+        return { request, events, until };
+    }
+    const emitter = { EventEmitter: class { constructor() { this.l = []; this.event = (f) => this.l.push(f); } fire(m) { for (const f of this.l) f(m); } dispose() {} } };
+    const src = path.join(fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash-dbg-')), 'x.dash');   // (the breakpoints' source)
+    fs.writeFileSync(src, 'Main\n    Print 1\nend\n');
+
+    await check('dashc debugger: launch, breakpoints (whole name, then the name alone), a stop, a condition and a logpoint', async () => {
+        const fake = await fakeServer({
+            break: (f) => (f[1] === 'x.dash' || f[2] === '5' ? 'ok\ttrue' : 'ok\tfalse'),
+            frames: 'frame\t5\tMain\t/otra/parte/x.dash\nok',
+            values: (f) => f.slice(2).map((e) => (e === 'i' ? 'val\tInt\t3' : 'val\t\t? no existe: ' + e)).join('\n') + '\nok',
+            quit: 'ok\t0',
+        });
+        const adapter = new dd.DashDebugAdapter(emitter, { sourceDir: path.dirname(src) });
+        const c = dap(adapter);
+        await c.request('initialize');
+        const launch = await c.request('launch', { port: fake.port, args: 'uno dos' });
+        assert(launch.success, launch.message);
+        assert(c.events.some((e) => e.event === 'initialized'));
+        const bps = await c.request('setBreakpoints', { source: { path: src }, breakpoints: [
+            { line: 5 }, { line: 7, condition: 'i == 4' }, { line: 9, logMessage: 'i vale {i + 1}' }, { line: 11 }] });
+        // 5 with its whole name; the others with the name alone (the debug information named it otherwise)
+        assert.deepStrictEqual(fake.got.slice(0, 1), ['start\t\tuno dos']);
+        assert.deepStrictEqual(fake.got.filter((l) => l.startsWith('break')).map((l) => l.replace(src, 'SRC')),
+            ['break\tSRC\t5', 'break\tSRC\t7', 'break\tx.dash\t7', 'break\tSRC\t9', 'break\tx.dash\t9', 'break\tSRC\t11', 'break\tx.dash\t11']);
+        assert.deepStrictEqual(bps.body.breakpoints.map((b) => b.verified), [true, true, true, true]);
+        await c.request('configurationDone');
+        assert(await c.until(() => fake.got.includes('continue')));
+        fake.say('*out\tcañón\\n');
+        fake.say('*stopped\tbreakpoint\t/otra/parte/x.dash\t7\tMain');      // i == 4 does not hold: on it goes
+        assert(await c.until(() => fake.got.filter((l) => l === 'continue').length === 2));
+        fake.say('*stopped\tbreakpoint\t/otra/parte/x.dash\t9\tMain');      // the logpoint: it writes and goes on
+        assert(await c.until(() => fake.got.filter((l) => l === 'continue').length === 3));
+        fake.say('*stopped\tbreakpoint\t/otra/parte/x.dash\t5\tMain');
+        assert(await c.until(() => c.events.some((e) => e.event === 'stopped')));
+        const stops = c.events.filter((e) => e.event === 'stopped');
+        assert.deepStrictEqual(stops.map((e) => e.body.reason), ['breakpoint']);
+        const trace = await c.request('stackTrace', { threadId: 1 });
+        assert.deepStrictEqual(trace.body.stackFrames.map((f) => [f.name, f.line, f.source.path]), [['Main', 5, src]]);
+        const outs = c.events.filter((e) => e.event === 'output').map((e) => e.body.output);
+        assert.deepStrictEqual(outs, ['cañón\n', 'i vale 4\n']);
+        // a breakpoint taken out: unbreak with the name it was set with
+        await c.request('setBreakpoints', { source: { path: src }, breakpoints: [{ line: 5 }, { line: 9 }] });
+        assert.deepStrictEqual(fake.got.filter((l) => l.startsWith('unbreak')).map((l) => l.replace(src, 'SRC')),
+                               ['unbreak\tx.dash\t7', 'unbreak\tx.dash\t11']);
+        const r = await c.request('evaluate', { expression: 'nada', frameId: 1, context: 'hover' });
+        assert(!r.success && r.message === 'no existe: nada', JSON.stringify(r));
+        fake.say('*ended\t5');
+        assert(await c.until(() => c.events.some((e) => e.event === 'terminated')));
+        assert.strictEqual(c.events.find((e) => e.event === 'exited').body.exitCode, 5);
+        const bye = await c.request('disconnect');
+        assert(bye.success && fake.got[fake.got.length - 1] === 'quit');
+        adapter.dispose();
+        fake.close();
+    });
+    await check('dashc debugger: stopOnEntry (a step, seen as "entry"); a program that does not start; the Amiga gone', async () => {
+        let fake = await fakeServer({ quit: 'ok\t0' });
+        let adapter = new dd.DashDebugAdapter(emitter, {});
+        let c = dap(adapter);
+        await c.request('launch', { port: fake.port, stopOnEntry: true });
+        await c.request('configurationDone');
+        assert(await c.until(() => fake.got.includes('step')) && !fake.got.includes('continue'));
+        fake.say('*stopped\tstep\t/a/x.dash\t1\tMain');
+        assert(await c.until(() => c.events.some((e) => e.event === 'stopped')));
+        assert.strictEqual(c.events.find((e) => e.event === 'stopped').body.reason, 'entry');
+        await c.request('pause');                                              // (stopped: nothing to send)
+        assert(!fake.got.includes('pause'));
+        fake.close();
+        adapter.dispose();
+
+        fake = await fakeServer({ start: 'error\tno puedo cargar el programa', quit: 'ok\t0' });
+        adapter = new dd.DashDebugAdapter(emitter, {});
+        c = dap(adapter);
+        const launch = await c.request('launch', { port: fake.port });
+        assert(!launch.success && /no puedo cargar el programa/.test(launch.message), JSON.stringify(launch));
+        assert(c.events.some((e) => e.event === 'terminated'));
+        fake.close();
+        adapter.dispose();
+
+        fake = await fakeServer({});
+        adapter = new dd.DashDebugAdapter(emitter, {});
+        c = dap(adapter);
+        await c.request('launch', { port: fake.port });
+        await c.request('configurationDone');
+        assert(await c.until(() => fake.got.includes('continue')));
+        fake.close();
+        adapter.server.socket.destroy();                                      // the connection cut
+        assert(await c.until(() => c.events.some((e) => e.event === 'terminated')));
+        assert(c.events.some((e) => e.event === 'output' && /cortado la conexión/.test(e.body.output)));
+        adapter.dispose();
+    });
+}
+
 // --- new versions of Dash (updates.js) ---------------------------------------------
 async function updateTests() {
     const { checkUpdates, latestRelease, isNewer, localVersion } = require('../updates');
@@ -1090,6 +1274,7 @@ async function updateTests() {
 (async () => {
     await grammarTests();
     await debugTests();
+    await dashcDebugTests();
     await taskTests();
     await editingTests();
     await modelTests();

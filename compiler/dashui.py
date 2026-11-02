@@ -16,7 +16,7 @@ _NAME_RULE = "letters without accents, digits and _, not starting with a digit"
 
 
 # words of "On Click", "On Key"...: names like any other where they are not after On
-_EVENT_WORDS = {"Click", "Close", "Gadget", "Key", "Menu", "On", "Timer"}
+_EVENT_WORDS = {"Click", "Close", "Gadget", "Inactive", "Key", "Menu", "On", "RightClick", "Timer"}
 
 
 def reserved():
@@ -31,6 +31,14 @@ def _check_name(name, what, where):
         raise DashUIError(f"{where}: bad {what} name {name!r} ({_NAME_RULE})")
     if name in reserved():
         raise DashUIError(f"{where}: {what} name {name!r} is a word of the language")
+
+
+def _rgb(value, what, where):
+    """[r, g, b], each 0-255 ("background", "color": Forja's dark theme)"""
+    if not (isinstance(value, list) and len(value) == 3 and
+            all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in value)):
+        raise DashUIError(f"{where}: {what} is [r, g, b], each 0 to 255, not {value!r}")
+    return f"{value[0]}, {value[1]}, {value[2]}"
 
 
 def _int(value, what, where):
@@ -56,6 +64,7 @@ _LEAVES = {
     "image_button": ("mui_image_button", [("file", "")]),
     "image_toggle": ("mui_image_toggle", [("file", ""), ("group", 0), ("checked", False)]),
     "combo": ("mui_combo", [("text", ""), ("options", "")]),
+    "text_editor": ("mui_text_editor", [("lines", 4)]),     # several lines (Inferencia)
     "space": ("mui_space", []),
     "balance": ("mui_balance", []),
 }
@@ -169,7 +178,7 @@ class _Window:
             raise DashUIError(f"{self.where}: object without 'type': {node!r}")
         kind = node["type"]
         indent = "    " * depth
-        settings = [k for k in ("weight", "disabled", "hidden", "help") if k in node] + \
+        settings = [k for k in ("weight", "disabled", "hidden", "help", "background", "color") if k in node] + \
             (["context_menu"] if node.get("context_menu") else []) + (["take_tab"] if node.get("take_tab") else [])
         events = [k for k in _EVENTS if k in node]
         if kind in _GROUPS:
@@ -193,6 +202,12 @@ class _Window:
             self.after.append(f"    mui_set_visible({var}, false)")
         if node.get("help"):
             self.after.append(f"    mui_help({var}, {_text(node, 'help', '', ids)})")
+        if "background" in node:
+            self.after.append(f"    mui_set_background({var}, {_rgb(node['background'], 'background', self.where)})")
+        if "color" in node:   # the colour of a text, label or button
+            if kind not in ("text", "label", "button"):
+                raise DashUIError(f"{self.where}: \"color\" is for a text, label or button, not a {kind!r}")
+            self.after.append(f"    mui_set_text_pen({var}, {_rgb(node['color'], 'color', self.where)})")
         if node.get("take_tab"):   # Tab is a key over the canvas (Lorraine D48)
             if kind != "canvas":
                 raise DashUIError(f"{self.where}: \"take_tab\" is for a canvas, not a {kind!r}")
@@ -276,7 +291,7 @@ class _Window:
         if root:
             # the window's own group is vertical: a root vgroup goes straight into it
             if root.get("type") == "vgroup" and not root.get("name") and \
-                    not any(k in root for k in ("weight", "disabled", "hidden", "help")):
+                    not any(k in root for k in ("weight", "disabled", "hidden", "help", "background")):
                 for child in root.get("children", []):
                     self.node(child, 2)
             else:
@@ -291,6 +306,15 @@ class _Window:
             self.lines.append("    mui_menu_end()")
         if "close" in win:
             self.after.append(f"    mui_on_close(_window, {_int(win['close'], 'close', self.where)})")
+        if "background" in win:   # (its root group's)
+            self.after.append(f"    mui_set_background(_window, {_rgb(win['background'], 'background', self.where)})")
+        if "field_colors" in win:
+            # [[r, g, b] inactive, [r, g, b] active, [r, g, b] cursor] of the application's text fields (Forja)
+            fc = win["field_colors"]
+            if not (isinstance(fc, list) and len(fc) == 3):
+                raise DashUIError(f"{self.where}: \"field_colors\" is [[r, g, b], [r, g, b], [r, g, b]] (inactive, active, cursor)")
+            self.after.append("    mui_app_field_colors(" +
+                              ", ".join(_rgb(c, '"field_colors"', self.where) for c in fc) + ")")
         if "size" in win:
             # [width, height] in percent of the visible screen, when it opens (dashweb D38)
             size = win["size"]

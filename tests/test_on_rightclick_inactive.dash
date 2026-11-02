@@ -1,0 +1,67 @@
+# Test: On RightClick in a window with rmbtrap (the right button goes to the program, not to the menus) and
+# On Inactive (event_window() tells which window stopped being the active one), for the barra of Trasfondo 2.0.
+# The program moves the pointer and presses the right button itself (input_*); then it opens two windows with
+# window_create, each one taking the activation from the one before.
+# expect-c: WA_RMBTrap, TRUE,
+# expect-c: case IDCMP_INACTIVEWINDOW:
+# expect-out: derecho en 30,20
+# expect-out: inactiva 0
+# expect-out: inactiva 1
+# expect-out: fin
+
+Window W
+    title "Panel"
+    width 200
+    height 80
+    rmbtrap true
+end
+
+Main
+    W.open
+    n = 0
+    vistas = 0
+    derecho = false                  # las de antes del clic no cuentan: en 3.2 el Workbench se lleva la activación al abrir
+    EventLoop
+        On Timer 100
+            n = n + 1
+            if n == 2
+                window_activate(0)           # (en 3.2, el Workbench puede quedarse la activación al abrir)
+            end
+            if n == 3
+                input_move(30, 20)
+                input_button(2, true)
+                input_button(2, false)
+            end
+            if n == 6
+                window_create("Otra", 250, 20, 120, 60, 0)
+            end
+            if n == 9
+                window_create("Tercera", 250, 100, 120, 60, 0)
+            end
+            if n > 80
+                Print "sin eventos"
+                Stop
+            end
+        end
+        On Click
+            Print "izquierdo"
+        end
+        On RightClick
+            Print "derecho en " + (click_x() + window_border_left()) + "," + (click_y() + window_border_top())
+            derecho = true
+        end
+        On Inactive
+            if derecho
+                Print "inactiva " + event_window()
+                vistas = vistas + 1
+                if vistas == 2
+                    Stop
+                end
+            end
+        end
+        On Close
+            Stop
+        end
+    end
+    Print "fin"
+end

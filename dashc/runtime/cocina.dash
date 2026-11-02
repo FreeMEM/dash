@@ -1,0 +1,113 @@
+struct K
+    n: Int = 0
+    s: String = ""
+    o: K = nil
+    weak w: K = nil
+end
+
+func f(a: String, l: Array) -> String
+    return a + "#{l.length}"
+end
+
+func dicc(d: {String: Int}, e: {Int: String}) -> [String]
+    d["a"] = 1
+    e[2] = "b"
+    Print d["a"] + d.get("z", 3) + d.length
+    if e.has(2) and d.has("a")
+        d.remove("a")
+        e.remove(2)
+    end
+    f = {"x": "y"}
+    g = {1: K(1, "q", nil)}
+    Print f["x"] + g[1].s + e.get(9, "w")
+    d.clear()
+    return d.keys()
+end
+
+Window CocinaWin
+    title "cocina"
+    width 200
+    height 100
+end
+
+func ventana()
+    CocinaWin.open
+    gfx_pen(1)
+    EventLoop
+        On Close
+            Stop
+        end
+        On Key "a"
+            Print key_raw()
+        end
+        On Key
+            Print "tecla"
+        end
+        On Click
+            Print click_x()
+        end
+        On RightClick
+            Print click_y()
+        end
+        On Inactive
+            Print event_window()
+        end
+        On Timer 100
+            Print "tic"
+        end
+    end
+    CocinaWin.close
+end
+
+func flotante(f: Float) -> Float
+    g = f * 2.5 + 1
+    Print g
+    Print "f=#{f}"
+    return -g / 3.0
+end
+
+func fijo(f: Fixed) -> Fixed
+    g = f * Fixed(1.5) / f + 2
+    Print g
+    Print "#{Int(g)} #{fx_sqrt(g)} #{fx_sin(g)} #{fx_cos(g)} #{g > 1} #{Float(g)}"
+    return g * 2
+end
+
+func antes(a: Int, b: Int) -> Bool
+    return a < b
+end
+
+func doble(d: Double) -> Double
+    e = d * Double(2) + Double(0.5)
+    Print e
+    Print "d=#{d} #{Int(d)} #{Float(d)}"
+    return e
+end
+
+Main
+    s = "abc"
+    t = s + "d"
+    Print t[1:2]
+    Print t[0]
+    Print t.length
+    if s == t
+        Print "="
+    end
+    a = [1, 2]
+    a.push(3)
+    a[0] = 5
+    b = a[1:2]
+    a = a + [7]
+    a.sort(antes)
+    for x in a
+        Print x
+    end
+    c = ["x", "y"]
+    c.push(t)
+    Print c[0]
+    k = K(1, "q", nil)
+    d = [k]
+    d.push(K(2, "r", k))
+    Print f(s, a)
+    Print d[1].o.s
+end

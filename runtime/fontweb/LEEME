@@ -1,0 +1,12 @@
+Fuentes TrueType para `font_from_ttf` (Dash 2.0: lo que Tachyon hacía con @native, lib/fuente_web.dash).
+
+- stb_truetype v1.26 (Sean Barrett), https://github.com/nothings/stb, commit f58f558c120e9b32c217290b80bad1a0729fbb2c.
+  `stb_truetype.h` sin cambios. Licencia: dominio público o MIT (al final del fichero).
+- Brotli 1.1.0 (Google), https://github.com/google/brotli: solo el descompresor (`brotli/common`, `brotli/dec`,
+  `brotli/include`), sin cambios. Licencia MIT (`brotli/LICENSE`). Para WOFF2.
+
+`dash_fontweb.c` (de Dash): el C de Tachyon (WOFF 1.0 con el zlib de Dash, WOFF 2.0 con Brotli y la reconstrucción
+de glyf, loca y hmtx transformadas, y el paso a un TextFont de 1 bit), con su memoria de exec, sus cuentas sobre el
+fdlibm de Dash y un cambio: un glifo que ya está (el de otro carácter) no se dibuja otra vez. Sin FPU, dibujar un
+glifo con la coma flotante por software cuesta: una fuente de Latin-1 entera son ~190 glifos.
+compiler/clibs.py los compila aparte, como zlib.

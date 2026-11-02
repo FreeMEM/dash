@@ -1,0 +1,375 @@
+# ========================================
+# Dash .dashui module
+# Build a window of the MUI visual editor (.dashui) while the program runs
+# ========================================
+#
+# import "x.dashui" turns the windows into code when the program is compiled; this module reads the same JSON
+# at run time and builds the window with the same mui_ builtins (a preview in an editor, windows that change
+# without compiling):
+#
+#   import "lib/dashui.dash"
+#   mui_app_begin("Vista", "VISTA")
+#   ui = dashui_window(file_read_text("ventana.dashui"), "Principal")    # "": the first window
+#   if ui.error != ""
+#       Print ui.error
+#   end
+#   mui_on_press(dashui_object(ui, "ir"), 1)
+#   mui_window_open(ui.window)
+#
+# The events, menus, context menus and colours ("background", "color") of the file are set as import does. "tr"
+# numbers are not used: the texts come as written. Format: docs/MUI_EDITOR.md.
+
+import "json.dash"
+
+struct DashUI
+    window: Int = 0            # the window (0 if it could not be built)
+    error: String = ""         # why not ("" if it was built)
+    names: [String] = nil      # the objects with a name...
+    objects: [Int] = nil       # ...and what each one is
+    # (what each object has besides itself, events, weight, context menu..., is set once the window is made, as
+    # import does: the objects and their nodes)
+    later_objects: [Int] = nil
+    later_nodes: [Json] = nil
+end
+
+# The window called name of a .dashui text ("" for the first one), built (not opened)
+func dashui_window(text: String, name: String) -> DashUI
+    u = DashUI()
+    u.names = []
+    u.objects = []
+    j = json_parse(text)
+    if j == nil
+        u.error = "not JSON: " + json_error()
+        return u
+    end
+    if json_get_int(j, "dashui") != 1
+        u.error = "not a .dashui of version 1"
+        return u
+    end
+    wins = json_get(j, "windows")
+    var w: Json = nil
+    for i in (0..json_length(wins) - 1 step 1)
+        x = json_at(wins, i)
+        if w == nil and (name == "" or json_get_str(x, "name") == name)
+            w = x
+        end
+    end
+    if w == nil
+        u.error = "no window " + name
+        return u
+    end
+    e = _ui_check_window(w)
+    if e != ""
+        u.error = e
+        return u
+    end
+    _ui_build(u, w)
+    return u
+end
+
+# The names of the windows of a .dashui text
+func dashui_window_names(text: String) -> [String]
+    var out: [String] = []
+    wins = json_get(json_parse(text), "windows")
+    for i in (0..json_length(wins) - 1 step 1)
+        out.push(json_get_str(json_at(wins, i), "name"))
+    end
+    return out
+end
+
+# The object with that name of a window built by dashui_window (0 if there is none)
+func dashui_object(u: DashUI, name: String) -> Int
+    for i in (0..u.names.length - 1 step 1)
+        if u.names[i] == name
+            return u.objects[i]
+        end
+    end
+    return 0
+end
+
+# ---------- Checking (before anything is made: a window half built would stay in MUI) ----------
+
+const _UI_KINDS = "|text|label|button|string|checkbox|cycle|slider|gauge|list|canvas|scrollbar|image|image_button|image_toggle|combo|text_editor|space|balance|vgroup|hgroup|frame|columns|tabs|scroll|"
+const _UI_GROUPS = "|vgroup|hgroup|frame|columns|tabs|scroll|"
+
+func _ui_check_window(w: Json) -> String
+    root = json_get(w, "root")
+    if root != nil and not json_is_null(root)
+        e = _ui_check_node(root)
+        if e != ""
+            return e
+        end
+    end
+    s = json_get(w, "size")
+    if s != nil and json_length(s) != 2
+        return "\"size\" is [width, height] in percent"
+    end
+    return ""
+end
+
+func _ui_check_node(n: Json) -> String
+    if n == nil or n.kind != JSON_OBJECT
+        return "an object that is not one"
+    end
+    t = json_get_str(n, "type")
+    if t == "" or not str_contains(_UI_KINDS, "|" + t + "|")
+        return "unknown object type: " + t
+    end
+    ch = json_get(n, "children")
+    if json_length(ch) > 0 and not str_contains(_UI_GROUPS, "|" + t + "|")
+        return "a " + t + " cannot have children"
+    end
+    if json_has(n, "take_tab") and json_get_bool(n, "take_tab") and t != "canvas"
+        return "\"take_tab\" is for a canvas, not a " + t
+    end
+    for i in (0..json_length(ch) - 1 step 1)
+        e = _ui_check_node(json_at(ch, i))
+        if e != ""
+            return e
+        end
+    end
+    return ""
+end
+
+# ---------- Building ----------
+
+# (the texts of a .dashui are UTF-8; MUI shows Latin-1, as import leaves them)
+func _ui_s(n: Json, key: String, def: String) -> String
+    v = json_get(n, key)
+    if v == nil or v.kind != JSON_STRING
+        return def
+    end
+    return utf8_to_latin1(v.text)
+end
+
+func _ui_i(n: Json, key: String, def: Int) -> Int
+    v = json_get(n, key)
+    if v == nil or v.kind != JSON_NUMBER
+        return def
+    end
+    return v.num
+end
+
+func _ui_b(n: Json, key: String, def: Bool) -> Bool
+    v = json_get(n, key)
+    if v == nil or v.kind != JSON_BOOL
+        return def
+    end
+    return v.flag
+end
+
+
+func _ui_name(u: DashUI, n: Json, o: Int)
+    name = json_get_str(n, "name")
+    if name != ""
+        u.names.push(name)
+        u.objects.push(o)
+    end
+end
+
+func _ui_build(u: DashUI, w: Json)
+    u.later_objects = []
+    u.later_nodes = []
+    win = mui_window_begin(_ui_s(w, "title", utf8_to_latin1(json_get_str(w, "name"))), _ui_i(w, "id", 0))
+    menus = json_get(w, "menus")
+    for i in (0..json_length(menus) - 1 step 1)
+        m = json_at(menus, i)
+        _ui_name(u, m, mui_menu_begin(_ui_s(m, "title", "")))
+        _ui_disabled(json_get(m, "disabled"), dashui_object(u, json_get_str(m, "name")))
+        _ui_items(u, json_get(m, "items"), true)
+        mui_menu_end()
+    end
+    root = json_get(w, "root")
+    if root != nil and not json_is_null(root)
+        # (the window's group is already vertical: a plain vgroup at the root goes straight in)
+        plain = json_get_str(root, "type") == "vgroup" and json_get_str(root, "name") == "" and not json_has(root, "weight") and not json_has(root, "disabled") and not json_has(root, "hidden") and not json_has(root, "help") and not json_has(root, "background")
+        if plain
+            ch = json_get(root, "children")
+            for i in (0..json_length(ch) - 1 step 1)
+                _ui_node(u, json_at(ch, i))
+            end
+        else
+            _ui_node(u, root)
+        end
+    end
+    mui_window_end()
+    u.window = win
+    ctx = json_get(w, "context_menus")
+    var ctx_names: [String] = []
+    var ctx_menus: [Int] = []
+    for i in (0..json_length(ctx) - 1 step 1)
+        m = json_at(ctx, i)
+        cm = mui_context_menu_begin(_ui_s(m, "title", ""))
+        _ui_name(u, m, cm)
+        _ui_items(u, json_get(m, "items"), true)
+        mui_menu_end()
+        ctx_names.push(json_get_str(m, "name"))
+        ctx_menus.push(cm)
+    end
+    for i in (0..u.later_objects.length - 1 step 1)
+        _ui_after(u.later_objects[i], u.later_nodes[i], ctx_names, ctx_menus)
+    end
+    u.later_objects = []
+    u.later_nodes = []
+    if json_has(w, "close")
+        mui_on_close(win, json_get_int(w, "close"))
+    end
+    c3 = json_get(w, "background")
+    if json_length(c3) == 3
+        mui_set_background(win, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
+    end
+    fc = json_get(w, "field_colors")
+    if json_length(fc) == 3
+        f0 = json_at(fc, 0)
+        f1 = json_at(fc, 1)
+        f2 = json_at(fc, 2)
+        mui_app_field_colors(json_num(json_at(f0, 0)), json_num(json_at(f0, 1)), json_num(json_at(f0, 2)), json_num(json_at(f1, 0)), json_num(json_at(f1, 1)), json_num(json_at(f1, 2)), json_num(json_at(f2, 0)), json_num(json_at(f2, 1)), json_num(json_at(f2, 2)))
+    end
+    s = json_get(w, "size")
+    if json_length(s) == 2
+        mui_window_size(win, json_num(json_at(s, 0)), json_num(json_at(s, 1)))
+    end
+end
+
+func _ui_disabled(d: Json, o: Int)
+    if json_true(d) and o != 0
+        mui_set_enabled(o, false)
+    end
+end
+
+func _ui_items(u: DashUI, items: Json, top: Bool)
+    for i in (0..json_length(items) - 1 step 1)
+        it = json_at(items, i)
+        if json_get_bool(it, "separator")
+            mui_menu_separator()
+        elif json_has(it, "submenu") and top
+            _ui_name(u, it, mui_submenu_begin(_ui_s(it, "label", "")))
+            _ui_disabled(json_get(it, "disabled"), dashui_object(u, json_get_str(it, "name")))
+            _ui_items(u, json_get(it, "submenu"), false)
+            mui_submenu_end()
+        else
+            label = _ui_s(it, "label", "")
+            key = _ui_s(it, "key", "")
+            ev = _ui_i(it, "event", 0)
+            o = 0
+            if json_get_bool(it, "check")
+                o = mui_menu_check(label, key, ev, json_get_bool(it, "checked"))
+            else
+                o = mui_menu_item(label, key, ev)
+            end
+            _ui_name(u, it, o)
+            _ui_disabled(json_get(it, "disabled"), o)
+        end
+    end
+end
+
+func _ui_node(u: DashUI, n: Json)
+    t = json_get_str(n, "type")
+    group = str_contains(_UI_GROUPS, "|" + t + "|")
+    o = 0
+    if t == "text"
+        o = mui_text(_ui_s(n, "text", ""))
+    elif t == "label"
+        o = mui_label(_ui_s(n, "text", ""))
+    elif t == "button"
+        o = mui_button(_ui_s(n, "label", ""))
+    elif t == "string"
+        o = mui_string(_ui_s(n, "text", ""), _ui_i(n, "max", 80))
+    elif t == "checkbox"
+        o = mui_checkbox(_ui_b(n, "checked", false))
+    elif t == "cycle"
+        o = mui_cycle(_ui_s(n, "options", ""))
+    elif t == "slider"
+        o = mui_slider(_ui_i(n, "min", 0), _ui_i(n, "max", 100), _ui_i(n, "value", 0))
+    elif t == "gauge"
+        o = mui_gauge(_ui_i(n, "max", 100))
+    elif t == "list"
+        o = mui_list()
+    elif t == "canvas"
+        o = mui_canvas(_ui_i(n, "min_width", 64), _ui_i(n, "min_height", 32))
+    elif t == "scrollbar"
+        o = mui_scrollbar(_ui_b(n, "vertical", true))
+    elif t == "image"
+        o = mui_image(_ui_s(n, "file", ""))
+    elif t == "image_button"
+        o = mui_image_button(_ui_s(n, "file", ""))
+    elif t == "image_toggle"
+        o = mui_image_toggle(_ui_s(n, "file", ""), _ui_i(n, "group", 0), _ui_b(n, "checked", false))
+    elif t == "combo"
+        o = mui_combo(_ui_s(n, "text", ""), _ui_s(n, "options", ""))
+    elif t == "text_editor"
+        o = mui_text_editor(_ui_i(n, "lines", 4))
+    elif t == "space"
+        o = mui_space()
+    elif t == "balance"
+        o = mui_balance()
+    elif t == "vgroup"
+        o = mui_vgroup_begin()
+    elif t == "hgroup"
+        o = mui_hgroup_begin()
+    elif t == "frame"
+        o = mui_frame_begin(_ui_s(n, "title", ""), _ui_b(n, "horizontal", false))
+    elif t == "columns"
+        o = mui_columns_begin(_ui_i(n, "columns", 2))
+    elif t == "tabs"
+        o = mui_register_begin(_ui_s(n, "titles", ""))
+    elif t == "scroll"
+        o = mui_scroll_begin()
+    end
+    _ui_name(u, n, o)
+    if group
+        ch = json_get(n, "children")
+        for i in (0..json_length(ch) - 1 step 1)
+            _ui_node(u, json_at(ch, i))
+        end
+        mui_group_end()
+    end
+    if o != 0
+        u.later_objects.push(o)
+        u.later_nodes.push(n)
+    end
+end
+
+func _ui_after(o: Int, n: Json, ctx_names: [String], ctx_menus: [Int])
+    if json_has(n, "event")
+        mui_on_press(o, json_get_int(n, "event"))
+    end
+    if json_has(n, "change")
+        mui_on_change(o, json_get_int(n, "change"))
+    end
+    if json_has(n, "ack")
+        mui_on_ack(o, json_get_int(n, "ack"))
+    end
+    if json_has(n, "double")
+        mui_on_double(o, json_get_int(n, "double"))
+    end
+    if json_has(n, "weight")
+        mui_weight(o, json_get_int(n, "weight"))
+    end
+    _ui_disabled(json_get(n, "disabled"), o)
+    if json_get_bool(n, "hidden")
+        mui_set_visible(o, false)
+    end
+    if _ui_s(n, "help", "") != ""
+        mui_help(o, _ui_s(n, "help", ""))
+    end
+    c3 = json_get(n, "background")
+    if json_length(c3) == 3
+        mui_set_background(o, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
+    end
+    c3 = json_get(n, "color")
+    if json_length(c3) == 3
+        mui_set_text_pen(o, json_num(json_at(c3, 0)), json_num(json_at(c3, 1)), json_num(json_at(c3, 2)))
+    end
+    if json_get_bool(n, "take_tab")
+        mui_canvas_take_tab(o, true)
+    end
+    c = _ui_s(n, "context_menu", "")
+    if c != ""
+        for k in (0..ctx_names.length - 1 step 1)
+            if ctx_names[k] == c
+                mui_set_context_menu(o, ctx_menus[k])
+            end
+        end
+    end
+end

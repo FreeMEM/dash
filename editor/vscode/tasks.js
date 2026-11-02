@@ -3,8 +3,15 @@
 // with --memcheck or --profile. Their output goes through the "$dash" problem matcher (package.json:
 // file:line:column: Error: message, as compiler/main.py prints them) and "$gcc" for the C, so the errors
 // land in Problems and on the code. Also the CodeLens over Main and the status bar button.
+const fs = require('fs');
 const path = require('path');
 const { missing } = require('./missing');
+
+// ./dash: Dash 2.0 (dashc), which has what these tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH); a
+// program with C in it ./dash compiles it through C with gcc (DASH_FALLBACK_DASH1 for Dash 2.0.0)
+function dashExe(dashDir) {
+    return 'dash';
+}
 
 /** @param {string} arg */
 function quote(arg) {
@@ -37,9 +44,9 @@ function taskCommand(kind, dashDir, file, options = {}) {
     // (test mode, DASH_TEST_AUTOCLOSE, read when it is compiled)
     const seconds = k.run && options.autoclose && options.autoclose > 0 ? Math.floor(options.autoclose) : 0;
     // to run it: each Print goes out at once (DASH_PRINT_FLUSH), so the output shows while it runs
-    const compile = `mkdir -p ${quote(path.dirname(out))} && ` + (seconds ? `DASH_TEST_AUTOCLOSE=${seconds} ` : '') +
+    const compile = `mkdir -p ${quote(path.dirname(out))} && DASH_FALLBACK_DASH1=1 ` + (seconds ? `DASH_TEST_AUTOCLOSE=${seconds} ` : '') +
         (k.run ? 'DASH_PRINT_FLUSH=1 ' : '') +
-        `${quote(path.join(dashDir, 'dash'))} -q` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
+        `${quote(path.join(dashDir, dashExe(dashDir)))} -q` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
     if (!k.run) return compile;
     // the program is built here (with its option) and the emulator runs the binary as it is
     const emu = [' --follow'];

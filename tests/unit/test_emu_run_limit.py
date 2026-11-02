@@ -13,8 +13,9 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import emu_run  # noqa: E402
 
 
-def limit(argv, window=False, gdbserver=None, timeout=60.0):
-    return emu_run.time_limit(Namespace(window=window, gdbserver=gdbserver, timeout=timeout), ["emu_run.py"] + argv)
+def limit(argv, window=False, gdbserver=None, timeout=60.0, dbgserver=None):
+    return emu_run.time_limit(Namespace(window=window, gdbserver=gdbserver, dbgserver=dbgserver, timeout=timeout),
+                              ["emu_run.py"] + argv)
 
 
 class TimeLimit(unittest.TestCase):
@@ -24,6 +25,7 @@ class TimeLimit(unittest.TestCase):
     def test_window_and_debugger_have_none(self):
         self.assertEqual(limit(["--window", "p"], window=True), 0)
         self.assertEqual(limit(["--gdbserver", "2345", "p"], gdbserver=2345), 0)
+        self.assertEqual(limit(["--dbgserver", "6510", "p"], dbgserver=6510), 0)   # (Dash 2.0's debugger)
 
     def test_timeout_given_wins(self):
         self.assertEqual(limit(["--gdbserver", "2345", "--timeout", "30", "p"], gdbserver=2345, timeout=30.0), 30.0)

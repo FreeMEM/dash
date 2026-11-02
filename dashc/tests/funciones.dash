@@ -1,0 +1,68 @@
+# funciones, recursión, globales y ámbitos
+var veces: Int = 0
+var activo: Bool = true
+
+func fib(n)
+    veces = veces + 1
+    if n < 2
+        return n
+    end
+    return fib(n - 1) + fib(n - 2)
+end
+
+func ack(m, n)
+    if m == 0
+        return n + 1
+    end
+    if n == 0
+        return ack(m - 1, 1)
+    end
+    return ack(m - 1, ack(m, n - 1))
+end
+
+func mcd(a: Int, b: Int) -> Int
+    while b != 0
+        t = b
+        b = a % b
+        a = t
+    end
+    return a
+end
+
+func es_par(n) -> Bool
+    return n % 2 == 0
+end
+
+func saluda()
+    Print "hola desde una función"
+end
+
+func suma4(a, b, c, d)
+    return a * 1000 + b * 100 + c * 10 + d
+end
+
+Main
+    Print fib(20)
+    Print veces
+    Print ack(2, 3)
+    Print mcd(1071, 462)
+    Print es_par(10)
+    Print es_par(7)
+    saluda()
+    Print suma4(1, 2, 3, 4)
+    Print suma4(fib(5), mcd(12, 18), 0 - 1, ack(1, 1))
+    if activo
+        Print "activo"
+    end
+    activo = false
+    Print activo
+    x = 1
+    if x == 1
+        y = 2
+        x = x + y
+    end
+    Print x
+    var z: Int = 40
+    z = z + 2
+    Print z
+end

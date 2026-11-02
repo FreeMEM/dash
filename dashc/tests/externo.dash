@@ -1,0 +1,97 @@
+# @link y @extern: funciones de C de un objeto ya compilado (tests/c/externo.o), con enteros, textos y Bool, y lo de libc (rt_compat.c) frente al de libnix;
+# y @export: funciones de Dash que ese C llama por su nombre
+@link "c/externo.o"
+
+@extern("externo") func ext_suma(a: Int, b: Int) -> Int
+@extern("externo") func ext_largo(s: String) -> Int
+@extern("externo") func ext_saludo() -> String
+@extern("externo") func ext_es_par(n: Int) -> Bool
+@extern("externo") func ext_contar()
+@extern("externo") func ext_cuenta() -> Int
+@extern("externo") func ext_formato(n: Int) -> String
+@extern("externo") func ext_sprintf(n: Int) -> String
+@extern("externo") func ext_crece(n: Int) -> Int
+@extern("externo") func ext_fecha(t: Int) -> String
+@extern("externo") func ext_mates(x: Int) -> Int
+@extern("externo") func ext_aplicar(f: Func, x: Int) -> Int
+@extern("externo") func ext_sumar_con(f: Func) -> Int
+@extern("externo") func ext_malloc_vueltas(n: Int) -> Int
+@extern("externo") func ext_llama_dash(x: Int) -> Int
+@extern("externo") func ext_largo_dash(n: Int) -> Int
+@extern("externo") func ext_caja_v(c: Caja) -> Int
+@extern("externo") func ext_mismo(c: Caja) -> Caja
+@extern("externo") func ext_strtod(s: String) -> String
+@extern("externo") func ext_ctype(s: String) -> String
+@extern("externo") func ext_pool_basura() -> Int
+
+# @export: el C las llama por su nombre (sin pasarlas como Func); nadie las llama desde Dash
+@export func dash_triple(x: Int) -> Int
+    return x * 3
+end
+
+@export func dash_nombre(n: Int) -> String
+    return "#{n} cosas"
+end
+
+struct Caja
+    v: Int
+    nombre: String
+end
+
+var cajas: [Caja] = []
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+# (crea un struct con un texto: usa registros y llama al runtime)
+func guardar(x: Int) -> Int
+    c = Caja(x * x, "caja " + x)
+    cajas.push(c)
+    return c.v
+end
+
+Main
+    Print "pool: #{ext_pool_basura()} bytes pisados"   # (lo primero: un charco nuevo del malloc)
+    Print ext_suma(2, 40)
+    t = "Amiga"
+    Print ext_largo(t + " 1200")
+    s = ext_saludo()
+    Print s + " (" + s.length + ")"
+    Print "#{ext_es_par(4)} #{ext_es_par(7)}"
+    if ext_es_par(10)
+        Print "par"
+    end
+    for i in (1..3)
+        ext_contar()
+    end
+    Print ext_cuenta()
+    Print ext_formato(-42)
+    Print ext_formato(305419896)
+    Print ext_sprintf(42)
+    Print ext_crece(100)
+    Print ext_fecha(0)
+    Print ext_fecha(951782400)
+    Print ext_fecha(1793220724)
+    Print ext_mates(64)
+    Print ext_aplicar(doble, 21)
+    Print ext_sumar_con(guardar)
+    Print "#{cajas.length} #{cajas[5].nombre} #{cajas[5].v}"
+    # una función de @extern en una tarea, pidiendo memoria a la vez que el programa
+    tarea = task_start(ext_malloc_vueltas, 3000)
+    mia = ext_malloc_vueltas(3000)
+    otra = task_result(tarea)
+    Print "malloc a la vez: #{mia == otra} #{mia > 0}"
+    Print "C llama a Dash: #{ext_llama_dash(14)} #{ext_largo_dash(12)}"
+    # un struct a C y de vuelta (prestado: sigue siendo de caja)
+    caja = Caja(41, "uno")
+    devuelta = ext_mismo(caja)
+    caja = nil
+    Print "struct: #{ext_caja_v(devuelta)} #{devuelta.nombre} #{ext_caja_v(nil)}"
+    # (el strtod de libnix falla en la última cifra, 3.25 da 3249, y con "abc" avanza el final: aquí, los que lee bien)
+    for t in ["0.5", "  -1.5e3x", "5.", ".25", "1e", "inf", "250"]
+        Print "strtod [#{t}]: #{ext_strtod(t)}"
+    end
+    ct = ext_ctype("UTF-8 Hola 42")
+    Print "ctype: #{ct}"
+end

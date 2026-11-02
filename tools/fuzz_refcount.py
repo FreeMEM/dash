@@ -346,7 +346,7 @@ def main():
                 dash.write_text(src)
                 exe = tmp / f"fz{seed}"
                 flags = [] if args.normal else ["--memcheck"]
-                r = subprocess.run([sys.executable, str(ROOT / "dash"), *flags, str(dash), "-o", str(exe)],
+                r = subprocess.run([sys.executable, str(ROOT / "dash1"), *flags, str(dash), "-o", str(exe)],
                                    capture_output=True, text=True)
                 if r.returncode != 0 or not exe.exists():
                     print(f"seed {seed}: does not compile\n{(r.stdout + r.stderr)[-600:]}")

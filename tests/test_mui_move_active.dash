@@ -1,0 +1,28 @@
+# mui_window_move and mui_set_active (Dash 2.0: Tachyon did them with @native): an open window moves by some
+# pixels and a string gadget becomes its active object; neither does anything with a window not open or 0.
+# emu-needs: muimaster.library
+# expect-out: movida
+# expect-out: activo
+# expect-out: sin ventana: bien
+
+Main
+    if mui_app_begin("Mover", "DASHMOVE") == 0
+        Print "sin MUI"
+    else
+        c = 0
+        win = mui_window_begin("Mover", 0)
+            mui_button("Uno")
+            c = mui_string("Campo", 40)
+        mui_window_end()
+        mui_window_move(win, 10, 10)
+        mui_window_open(win)
+        mui_window_move(win, 20, 15)
+        Print "movida"
+        mui_set_active(win, c)
+        Print "activo"
+        mui_set_active(0, c)
+        mui_window_move(0, 5, 5)
+        Print "sin ventana: bien"
+        mui_app_end()
+    end
+end

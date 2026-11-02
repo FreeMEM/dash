@@ -1,0 +1,66 @@
+# Structs: constructor con valores por defecto, campos, métodos, nil, listas enlazadas, listas de structs
+struct Punto
+    x: Int = 0
+    y: Int = 0
+    nombre: String = "sin"
+
+    func mueve(dx)
+        self.x = self.x + dx
+    end
+
+    func texto() -> String
+        return self.nombre + "(#{self.x},#{self.y})"
+    end
+end
+
+struct Nodo
+    v: Int
+    sig: Nodo = nil
+    p: Punto = nil
+end
+
+func crea(n) -> Nodo
+    return Nodo(n, nil, Punto(n, n, "p#{n}"))
+end
+
+func suma(l: Nodo) -> Int
+    s = 0
+    while l != nil
+        s = s + l.v
+        l = l.sig
+    end
+    return s
+end
+
+func usa(p: Punto)
+    Print p.x
+end
+
+Main
+    p = Punto(1, 2, "a")
+    p.mueve(5)
+    Print p.texto()
+    q = Punto()
+    Print q.nombre
+    q.nombre = "b" + "c"
+    Print q.texto()
+    var lista: Nodo = nil
+    for i in (1..5)
+        n = crea(i)
+        n.sig = lista
+        lista = n
+    end
+    Print suma(lista)
+    Print lista.p.nombre
+    usa(lista.p)
+    ps = [p, q]
+    ps.push(Punto(7, 8, "z"))
+    for e in ps
+        Print e.x
+    end
+    ps[0].x = 99
+    Print p.x
+    r = p
+    r.y = 50
+    Print p.y
+end

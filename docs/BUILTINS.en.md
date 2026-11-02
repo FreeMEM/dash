@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 686 functions, 686 implemented, 0 not implemented.
+Total: 836 functions, 836 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -291,6 +291,8 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `refcount(obj)` | `LONG` | Get reference count of object |  |
 | `retain(obj)` | `void` | Manually increment reference count |  |
 | `release(obj)` | `void` | Manually decrement reference count (frees if 0) |  |
+| `mem_trim()` | `LONG` | Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back |  |
+| `mem_puddle(bytes)` | `BOOL` | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
 
 ## Files (DOS)
 
@@ -316,6 +318,11 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `dir_create(path)` | `BOOL` | Create directory |  |
 | `dir_change(path)` | `BOOL` | Change current directory |  |
 | `dir_current()` | `STRPTR` | Full name of the current directory ("Ram Disk:" ...) |  |
+| `dir_read(path)` | `LONG` | Read what a directory holds, sorted by name (case does not count): the number of entries, -1 if it is not a directory that can be read. dir_entry_name and the others read them, until the next dir_read |  |
+| `dir_entry_name(i)` | `STRPTR` | Name of entry i (from 0) of the last dir_read; "" past the end |  |
+| `dir_entry_size(i)` | `LONG` | Size in bytes of entry i of the last dir_read (0 for a directory) |  |
+| `dir_entry_is_dir(i)` | `BOOL` | True if entry i of the last dir_read is a directory |  |
+| `dir_entry_date(i)` | `LONG` | Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970 |  |
 | `console_read(buffer, maxlen)` | `LONG` | Read from console |  |
 | `console_write(str)` | `void` | Write to console |  |
 | `file_load(filename, buffer, maxsize)` | `LONG` | Load entire file into buffer, returns bytes read or -1 |  |
@@ -433,11 +440,11 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `gfx_rgb_draw(buffer, width, height, x, y)` | `void` | Draw an RGB24 buffer (3 bytes a pixel, rows one after another) at x, y (RTG: in one WritePixelArray; palette screens: the closest pens) |  |
 | `gfx_rgb_draw_scaled(buffer, width, height, x, y, dest_width, dest_height)` | `void` | Draw an RGB24 buffer at x, y as dest_width x dest_height (nearest pixel, row by row) |  |
 
-## Tasks (C in another process)
+## Tasks, clock, translations and desktop
 
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `task_start(func, arg)` | `LONG` | Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0 |  |
+| `task_start(func, arg)` | `LONG` | Run a function f(arg: Int) -> Int in another process: a Dash one that only uses Int, Bool, Float and builtins that give no texts or lists (the compiler checks it), or one of C (@extern, @native: malloc/free yes, Dash strings and lists no); 128 KB of stack, the program's priority: the task, or 0 |  |
 | `task_start_with(func, arg, stack, priority)` | `LONG` | task_start with its stack in bytes (0: 128 KB) and its priority relative to the program's (-1: it only runs when the program waits) |  |
 | `task_done(task)` | `BOOL` | True once the function has returned (does not wait) |  |
 | `desktop_canvas(x, y, width, height)` | `APTR` | An area of the Workbench's desktop (below the screen's title bar), behind the icons and without clicks, in backdrop mode or not, planar or RTG; negative x or y: from the right or bottom edge (-1 touches it). 0 if it cannot be |  |
@@ -453,6 +460,7 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `tooltype(name, default)` | `STRPTR` | A tooltype of the program: from the Shell, the argument NAME=value (NAME="a b" too); else (or from the Workbench) the tooltype of its icon; default if it is in neither |  |
 | `cx_broker(name, title, description, priority)` | `BOOL` | The program in Exchange as a commodity, with Show and Hide, enabled (name up to 23 letters, title and description up to 39); false without commodities.library or with that name there. It goes at the program's end |  |
 | `cx_hotkey(description)` | `BOOL` | The commodity's hotkey, from its description ("ctrl alt t"): cx_command gives 6 when it is pressed; false if the description is not valid (or there is no cx_broker); "" takes it away |  |
+| `cx_key_add(description, n)` | `BOOL` | One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: "rawmouse lalt mouse_leftpress"): cx_command gives 100 + n when it is pressed, and the event goes no further; "" takes hotkey n away; false if the description is not valid (or there is no cx_broker) |  |
 | `cx_command()` | `LONG` | The next command from Exchange or the hotkey: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill, 6 hotkey. Disable and enable switch the commodity off and on (the hotkey too) |  |
 | `cx_wait(ms)` | `LONG` | Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) or ms milliseconds pass (0) |  |
 | `disks_read(ms)` | `LONG` | Reads the mounted volumes (with a disk in) and their size and free space, asked to all at once and waiting ms milliseconds at most: how many there are. Nothing asks for a disk |  |
@@ -553,6 +561,7 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `inflate(src, n, dest, max)` | `LONG` | Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, -3 if there is no memory (zlib) |  |
+| `inflate_auto(src, n, dest, max)` | `LONG` | inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with Content-Encoding gzip or deflate): the bytes written, or as inflate |  |
 | `deflate(src, n, dest, max, level)` | `LONG` | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
 | `crc32(buffer, n, crc)` | `LONG` | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
 
@@ -629,6 +638,9 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `input_click(x, y, qualifiers)` | `void` | Click with the left button at (x, y) from the corner of the active window, with qualifiers 1 Shift, 2 Ctrl, 4 Alt (Amiga + click is the system's) |  |
 | `input_button(button, down)` | `void` | Press (down true) or let go a mouse button where the pointer is: 1 left, 2 right (menus, a context menu), 3 middle |  |
 | `input_drag(x1, y1, x2, y2)` | `void` | Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner of the active window) |  |
+| `input_qualifiers()` | `LONG` | The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; 64, 128 Amiga; 0 if input.device cannot be opened |  |
+| `input_menu(menu, item, hold)` | `BOOL` | Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if there is no such item |  |
+| `input_move_screen(x, y, buttons)` | `void` | The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 none): MUI's menus follow it |  |
 | `input_active_title()` | `STRPTR` | Title of the active window ("" if none): to wait for the window of the program to test |  |
 
 ## Clipboard
@@ -646,6 +658,171 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `str_compare_locale(a, b, ignore_case)` | `LONG` | Compare two UTF-8 texts in the order of the user's language (locale.library): -1 if a goes first, 0 if they are equal, 1 if b does; accents and case count only after the letters ("árbol" before "barco", "apple" before "Banana"), and not at all with ignore_case. Without locale.library, by their Latin-1 bytes |  |
+
+## System and program
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `time_unix()` | `LONG` | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
+| `clock_days()` | `LONG` | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
+| `mem_largest()` | `LONG` | The largest free block of memory, chip or fast, in bytes |  |
+| `run_command(command)` | `LONG` | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
+| `wb_open(path)` | `BOOL` | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
+| `program_path()` | `STRPTR` | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |
+| `locale_language()` | `STRPTR` | The user's first preferred language in Locale prefs ("español"), "" without one |  |
+| `cpu_model()` | `LONG` | The processor: 68000, 68010, 68020, 68030, 68040 or 68060 |  |
+| `fpu_model()` | `LONG` | The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one |  |
+| `library_version(name)` | `LONG` | The version of a library ("muimaster.library"), loading it if it is not in memory; -1 if it is not there |  |
+| `library_revision(name)` | `LONG` | The revision of a library (the 3 of 47.3), as library_version; -1 if it is not there |  |
+| `resident_version(name)` | `LONG` | The version of a resident module of the system (FindResident: "MorphOS" says the program runs on MorphOS); -1 if there is none |  |
+| `task_priority(n)` | `LONG` | Set the program's priority (-128 to 127; the Shell gives 0): the one it had |  |
+| `build_date()` | `STRPTR` | The date the program was compiled, "2026-10-28" |  |
+| `build_time()` | `STRPTR` | The time the program was compiled, "20:45:10" |  |
+| `console_flush()` | `void` | Write out now what Print left in the output's buffer (a progress line without its end) |  |
+| `run_capture(command, timeout_ms)` | `STRPTR` | Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's stderr goes to the console; dashc writes its errors to its output on the Amiga) |  |
+| `run_start(command, timeout_ms)` | `LONG` | run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it could not start. The program waits at its end for the ones it did not finish |  |
+| `run_ready(run)` | `BOOL` | True when a run_start has ended (it does not wait; it also applies the time limit) |  |
+| `run_break(run)` | `void` | Send Ctrl-C to a run_start that is still running (again every second until it ends) |  |
+| `run_finish(run)` | `STRPTR` | What a run_start wrote, as run_capture (it waits if it is still running), and forget it |  |
+| `run_rc()` | `LONG` | Return code of the last run_capture or run_finish: the command's, -1 if it could not start, -2 if its time ran out |  |
+| `env_get(name)` | `STRPTR` | An environment variable (of the program's Shell, else of ENV:), up to its first line end; "" if there is none |  |
+| `env_set(name, value, save)` | `BOOL` | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
+| `rexx_send(port, command)` | `STRPTR` | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
+| `rexx_rc()` | `LONG` | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
+| `ports_read()` | `LONG` | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
+| `port_name(i)` | `STRPTR` | Name of port i (from 0) of the last ports_read |  |
+| `tasks_read()` | `LONG` | Read the tasks and processes of the system (the program first): how many, for the task_entry_ functions, until the next tasks_read |  |
+| `task_entry_name(i)` | `STRPTR` | Name of task i of the last tasks_read ("Shell Process", "input.device"...) |  |
+| `task_entry_command(i)` | `STRPTR` | The command a Shell process of the last tasks_read is running ("" if none) |  |
+| `task_entry_state(i)` | `STRPTR` | State of task i: "running" (the program), "ready" or "waiting" |  |
+| `task_entry_priority(i)` | `LONG` | Priority of task i of the last tasks_read |  |
+| `task_entry_cli(i)` | `LONG` | Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process |  |
+| `assigns_read()` | `LONG` | Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, until the next assigns_read |  |
+| `assign_name(i)` | `STRPTR` | Name of assign i of the last assigns_read, without the colon |  |
+| `assign_path(i)` | `STRPTR` | Where assign i points: a directory ("Workbench:C"), several separated by ";", or the name a late or deferred one will look for |  |
+
+## JSON read in C (for lib/json.dash)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `json_scan(text)` | `LONG` | Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where) |  |
+| `json_scan_error()` | `STRPTR` | Why the last json_scan gave -1, and at which byte ("unexpected end at byte 1") |  |
+| `json_scan_kind(i)` | `LONG` | Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object |  |
+| `json_scan_count(i)` | `LONG` | How many elements an array or object node holds (they follow it); 1 for true, 0 for false |  |
+| `json_scan_text(i)` | `STRPTR` | The text of a string node (its escapes and \uXXXX undone, in UTF-8) or a number node (as written) |  |
+| `json_scan_name(i)` | `STRPTR` | The name of node i inside its object ("" in an array or at the top) |  |
+
+## Debugger (the debugged program, built with dash --debug)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `dbg_start(program, args)` | `BOOL` | Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why) |  |
+| `dbg_error()` | `STRPTR` | Why the last dbg_start failed |  |
+| `dbg_state()` | `LONG` | The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended |  |
+| `dbg_signal()` | `LONG` | The signal the debugger gets when the program stops or ends (for mui_wait_event_signals) |  |
+| `dbg_wait(ms)` | `LONG` | Wait until the program stops or ends, ms at most (0: no limit): its state |  |
+| `dbg_break(file, line)` | `BOOL` | A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code |  |
+| `dbg_unbreak(file, line)` | `BOOL` | Take the breakpoint out of that line |  |
+| `dbg_continue()` | `BOOL` | Go on (from the start or a stop) until a breakpoint or the end |  |
+| `dbg_step()` | `BOOL` | Go on to the next line, into the functions it calls |  |
+| `dbg_next()` | `BOOL` | Go on to the next line of this function (or of the one that called it) |  |
+| `dbg_out()` | `BOOL` | Go on until the function returns: the next line of the one that called it |  |
+| `dbg_pause()` | `BOOL` | Stop the running program at the next line it runs |  |
+| `dbg_end(ms)` | `BOOL` | End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms |  |
+| `dbg_rc()` | `LONG` | The return code of the ended program |  |
+| `dbg_file()` | `STRPTR` | The file of the line where the program stopped (its full path) |  |
+| `dbg_line()` | `LONG` | The line where the program stopped (0 if it is not stopped) |  |
+| `dbg_function()` | `STRPTR` | The function where the program stopped ("Main", "Punto.mover"...) |  |
+| `dbg_frames()` | `LONG` | How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped) |  |
+| `dbg_frame_function(i)` | `STRPTR` | The function of call i: 0 the one where it stopped, 1 the one that called it... |  |
+| `dbg_frame_line(i)` | `LONG` | The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it... |  |
+| `dbg_frame_file(i)` | `STRPTR` | The file of call i (its full path) |  |
+| `dbg_vars(i)` | `LONG` | How many variables call i sees: its parameters and the variables declared up to its line |  |
+| `dbg_var_name(i, k)` | `STRPTR` | Name of variable k (from 0) of call i |  |
+| `dbg_var_type(i, k)` | `STRPTR` | Type of variable k of call i, as in Dash ("Int", "[String]", "Punto") |  |
+| `dbg_globals()` | `LONG` | How many global variables the program has |  |
+| `dbg_global_name(g)` | `STRPTR` | Name of global g (from 0) |  |
+| `dbg_value(i, expr)` | `STRPTR` | The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot |  |
+| `dbg_value_type(i, expr)` | `STRPTR` | The type of expr in call i ("" if it cannot) |  |
+| `dbg_reg(n)` | `LONG` | A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC |  |
+| `dbg_peek(addr, size)` | `LONG` | 1, 2 or 4 bytes of memory at addr, without sign |  |
+| `dbg_output()` | `STRPTR` | What the program has written so far (output and error output) |  |
+
+## Pictures decoded by the program (no datatypes)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `image_decode(file, maxw, maxh)` | `LONG` | Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG (nanosvg: drawn to cover maxw x maxh, RGBA) to RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its size; negative, a limit: an SVG then at its own size, smaller if it does not fit): the decoded picture, or 0. Without datatypes, and it may run in a task_start |  |
+| `image_decode_start(file, maxw, maxh)` | `LONG` | image_decode in a process of its own, one below the program's priority, so the window goes on answering: a number for image_decode_ready and image_decode_finish, or 0 if it could not start |  |
+| `image_decode_ready(t)` | `BOOL` | True when an image_decode_start has finished (it does not wait) |  |
+| `image_decode_finish(t)` | `LONG` | What an image_decode_start decoded, as image_decode (0 if it could not); it waits if it is still running, and frees its process |  |
+| `image_decoded_width(d)` | `LONG` | Width of a decoded picture |  |
+| `image_decoded_height(d)` | `LONG` | Height of a decoded picture |  |
+| `image_decoded_alpha(d)` | `BOOL` | True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB) |  |
+| `image_decoded_pixels(d)` | `APTR` | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
+| `image_decoded_free(d)` | `void` | Free a decoded picture |  |
+| `image_from_decoded(d)` | `LONG` | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
+
+## TrueType, WOFF and WOFF2 fonts
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `font_from_ttf(file, size, width)` | `LONG` | A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): a font for font_use, or 0. Free it with font_ttf_free, not font_close |  |
+| `font_ttf_icon(file, size, code)` | `LONG` | A font of the file whose "A" is the character code (an icon of a web font, in Unicode's private area) at size pixels, the other letters empty: draw "A" with it; 0 if it cannot |  |
+| `font_ttf_free(font)` | `void` | Free a font of font_from_ttf (not while a window still writes with it); the ones left are freed at exit |  |
+| `font_ttf_forget(file)` | `void` | font_from_ttf keeps the last 8 files read for other sizes: read this one again next time |  |
+
+## Network in a task of its own
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `net_bg_open(host, port, timeout_ms)` | `LONG` | Ask for a TCP connection that a task of its own opens, sends and receives while the program is busy (up to 48): its number, or -1. net_bg_state tells how it goes |  |
+| `net_bg_open_tls(host, port, timeout_ms)` | `LONG` | net_bg_open with TLS (AmiSSL, its certificate checked) |  |
+| `net_bg_state(c)` | `LONG` | 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why) |  |
+| `net_bg_stage(c)` | `LONG` | While connecting, its stage, as net_connect_stage |  |
+| `net_bg_error(c)` | `STRPTR` | Why a connection failed or closed, "" if it did not |  |
+| `net_bg_send(c, text)` | `BOOL` | Put text to send (the task sends it as soon as the connection is open); false without memory |  |
+| `net_bg_send_buffer(c, buffer, n)` | `BOOL` | net_bg_send of n bytes of a buffer |  |
+| `net_bg_recv(c, buffer, max)` | `LONG` | Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 if it is closed and nothing is left. task_signal wakes the program when something comes |  |
+| `net_bg_pending(c)` | `LONG` | How many bytes have come and are not read yet |  |
+| `net_bg_close(c)` | `void` | Close a connection and free its number |  |
+| `net_bg_idle(ms)` | `void` | The task ends by itself after this many ms without traffic (2000; a connection the program keeps reading, waiting for an answer, counts as traffic); another starts when needed |  |
+| `net_bg_stop()` | `void` | End the task now (it closes what is open) and wait for it; also done at the end of the program |  |
+
+## Other programs' windows (tests)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `window_find(title)` | `LONG` | Another program's window (or the program's own) whose title starts with title, on any screen: a number for window_found_* and gadget_*, 0 if none (not valid once it is closed) |  |
+| `window_found_activate(win)` | `void` | A window of window_find in front, with its screen, and active (input_* go to the active window) |  |
+| `window_found_box(win, what)` | `LONG` | Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border |  |
+| `gadget_index(win, text)` | `LONG` | The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them |  |
+| `gadget_x(win, n)` | `LONG` | x of the centre of the gadget at place n of a window of window_find, from its corner (as input_click counts); -1 if there is none |  |
+| `gadget_y(win, n)` | `LONG` | y of the centre of that gadget, as gadget_x |  |
+| `gadget_selected(win, n)` | `BOOL` | True if the gadget at place n (a checkbox) is selected |  |
+| `screen_pixel(x, y)` | `LONG` | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
+| `cx_send(name, command)` | `LONG` | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
+
+## Window manager (every program's windows)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `wm_read()` | `LONG` | Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, wm_title, wm_task, wm_box and wm_flags, until the next wm_read |  |
+| `wm_id(i)` | `LONG` | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
+| `wm_title(i)` | `STRPTR` | The title of window i of the last wm_read ("" if it has none) |  |
+| `wm_task(i)` | `STRPTR` | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
+| `wm_box(i, what)` | `LONG` | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
+| `wm_flags(i)` | `LONG` | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
+| `wm_set_box(id, x, y, width, height)` | `BOOL` | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
+| `wm_front(id)` | `BOOL` | A window in front of the others; false if it is not open any more |  |
+| `wm_back(id)` | `BOOL` | A window behind the others; false if it is not open any more |  |
+| `wm_activate(id)` | `BOOL` | Make a window the active one (keys go to it); false if it is not open any more |  |
+| `wm_zip(id)` | `BOOL` | A window to its other size, as its zoom gadget does; false if it is not open any more |  |
+| `wm_active()` | `LONG` | The id of the active window, if it is on the Workbench screen; 0 if not |  |
+| `wm_at(x, y)` | `LONG` | The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none |  |
+| `wm_pointer_x()` | `LONG` | Where the pointer is on the Workbench screen: x |  |
+| `wm_pointer_y()` | `LONG` | Where the pointer is on the Workbench screen: y |  |
+| `wm_bar_height()` | `LONG` | The height of the Workbench screen's title bar (where windows usually start) |  |
 
 ## Audio
 
@@ -727,6 +904,7 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `number_create(win, x, y, w, h, value)` | `LONG` | Create a box that shows a number |  |
 | `number_set(gad, value)` | `void` | Change the number shown |  |
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
+| `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
 | `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
 | `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
 
@@ -761,6 +939,16 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `mui_app_begin(title, base)` | `APTR` | Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000 |  |
+| `mui_text_editor(lines)` | `APTR` | A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of sending it (Amiga+Return in its window) |  |
+| `mui_window_open_back(win)` | `LONG` | Open a window without making it the active one: the keyboard stays where it was; false if it could not open |  |
+| `mui_window_activate(win)` | `void` | Make a window the active one, in front of the others (it opens if it is closed) |  |
+| `mui_window_dispose(window)` | `void` | Close a window, take it out of the application and free it with all its objects (and the context menus made after it): for windows made again and again (a preview). Nothing for 0 or a window already gone; its objects must not be used after |  |
+| `mui_request(window, title, text, buttons)` | `LONG` | Ask with MUI's requester over a window (0: over the application), its buttons separated by "\|" ("_Guardar\|_Descartar\|_Cancelar"); the application's windows wait. The button chosen: 1, 2... from the left, 0 the last one (also Esc) |  |
+| `mui_set_background(obj, r, g, b)` | `void` | An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the list inside it) or a window (its root group); the objects inside take it unless they have their own |  |
+| `mui_set_text_pen(obj, r, g, b)` | `void` | The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it |  |
+| `mui_app_field_colors(r, g, b, active_r, active_g, active_b, cursor_r, cursor_g, cursor_b)` | `void` | The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, combo), inactive and active, and their cursor; the windows opened after it take them. The text stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128 |  |
+| `mui_app_rexx(app, func)` | `void` | Every ARexx command to the application's port (its base and ".1": "BASE.1") that MUI does not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. It runs while mui_wait_event waits |  |
+| `mui_rexx_fail(rc)` | `void` | From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then) |  |
 | `mui_app_end()` | `void` | Dispose the application with its windows and objects, close MUI (also done at exit) |  |
 | `mui_window_begin(title, id)` | `APTR` | Start a window (id 1-255: MUI remembers its size and place; 0 none) with a vertical root group |  |
 | `mui_window_end()` | `void` | End the window started with mui_window_begin |  |
@@ -847,6 +1035,8 @@ Total: 686 functions, 686 implemented, 0 not implemented.
 | `mui_image_toggle(file, group, selected)` | `APTR` | Picture button that stays pressed (bold, italic): value 1/0 with mui_get_value / mui_set_value, mui_on_change when it changes; group > 0: pressing one lets go the others of that group (alignment), and mui_on_change only fires for the one pressed |  |
 | `mui_combo(text, options)` | `APTR` | Text field with a list that drops down (font, size; options "A\|B"): write or pick a line (double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return or when a line is picked |  |
 | `mui_help(obj, text)` | `void` | Bubble help shown when the pointer rests on the object |  |
+| `mui_window_move(win, dx, dy)` | `void` | Move an open window by dx, dy pixels (windows of one .dashui open in the same place) |  |
+| `mui_set_active(win, obj)` | `void` | Make obj the window's active object: the cursor goes to that string gadget (Amiga-L) |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
 | `mui_window_own_screen(win)` | `BOOL` | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |

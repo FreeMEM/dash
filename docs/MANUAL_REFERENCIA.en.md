@@ -34,6 +34,7 @@
 21. [Modules and Imports](#21-modules-and-imports)
 22. [Complete Examples](#22-complete-examples)
 23. [Quick Reference](#23-quick-reference)
+24. [Dash 2.0: the straight compiler](#24-dash-20-the-straight-compiler)
 
 ---
 
@@ -77,6 +78,10 @@ end
 ```
 
 ### Compiling
+
+The commands in this part are those of the path through C with gcc, which from Dash 2.0 on is `./dash --gcc`.
+Without `--gcc`, `./dash` compiles straight to hunk, without gcc: its options, what it does not accept and how to
+use C with it are in [section 24](#24-dash-20-the-straight-compiler).
 
 ```bash
 ./dash programa.dash -o programa              # gcc -O2, for 68000
@@ -751,7 +756,7 @@ end
 ```
 
 They are only valid inside a `while` or `for`. Inside any `On ...` handler of the `EventLoop`
-(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On Timer`), even if the `EventLoop` is
+(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On RightClick`, `On Inactive`, `On Timer`), even if the `EventLoop` is
 inside a loop, they are an error: to leave the `EventLoop` use `Stop`.
 
 ### Control Commands
@@ -1387,6 +1392,7 @@ end
 | `sizegadget` | Allows resizing (default `false`) | Bool |
 | `borderless` | No borders (default `false`) | Bool |
 | `activate` | Activates the window when it opens (default `true`) | Bool |
+| `rmbtrap` | The right button goes to the program (`On RightClick`), not to the menus (default `false`) | Bool |
 
 `closegadget`, `dragbar` and `depthgadget` are `true` by default. An unknown
 property or one with a value of the wrong type (`closegadget 1`) is an error.
@@ -1421,7 +1427,8 @@ window_close(a)
 ```
 
 - `flags`: 1 = resizable, 2 = borderless, 4 = no close button, 8 = width and height are the
-  interior, without the borders (they are added together).
+  interior, without the borders, 16 = the right button to the program (`On RightClick`, like `rmbtrap`) (they
+  are added together).
 - To make it fit with any font: `screen_font_height()` and `screen_font_text_width(texto)` measure with the
   screen font (the program's or the Workbench's), which is the one used by title bars and
   GadTools gadgets. With the window open, `window_border_top()`, `window_border_bottom()`,
@@ -1897,6 +1904,12 @@ paso = 100
 EventLoop
     On Click            # left button pressed in the window
         Print "" + click_x() + "," + click_y()   # inside the borders (where drawing happens)
+    end
+    On RightClick       # right button, in a window with rmbtrap (otherwise it opens the menus)
+        Print "right at " + click_x() + "," + click_y()
+    end
+    On Inactive         # the window stopped being the active one (a click outside): event_window() says which
+        Print "outside"
     end
     On Timer paso       # every 100 ms (a number or a variable, which is read each time)
         Print "tic"
@@ -3536,6 +3549,10 @@ end
 
 ### C Code: @native and @extern
 
+This part and the next one are about the path through C (`./dash --gcc`; `./dash` goes that way by itself when
+it sees C in the program). The straight compiler does not accept C inside the program: it links C that is already
+compiled with `@link`, `@extern` and `@export` ([section 24](#24-dash-20-the-straight-compiler)).
+
 `@native` writes a function in C inside the program. Its parameters and its result are Dash
 types (`Int` is `LONG`, `String` is `STRPTR`, `Pointer` is `APTR`):
 
@@ -4399,33 +4416,37 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Text | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
 | Network (TCP and UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
+| Network in a task of its own | 12 | `net_bg_open`, `net_bg_open_tls`, `net_bg_state`, `net_bg_send`, `net_bg_recv`, `net_bg_close`, `net_bg_stop` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
-| Fonts and colors | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
+| Fonts and colors | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
 | Transparency and gradients | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
 | RGB images from a buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tasks, CPU and desktop | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
-| Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Commodity (Exchange) | 6 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`, `cx_send` |
 | Watched files and programs | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
+| System and program | 14 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest`, `build_date`, `build_time` |
 | Date, time and version | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
 | Translations (catalogs) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | A curve for each mouse | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Disks, network, WiFi and temperature | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simulated keyboard and mouse | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
+| Simulated keyboard and mouse | 10 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title`, `input_qualifiers`, `input_menu`, `input_move_screen` |
+| Other programs' windows (tests) | 8 | `window_find`, `window_found_activate`, `window_found_box`, `gadget_index`, `gadget_x`, `gadget_y`, `gadget_selected`, `screen_pixel` |
 | Sorting texts by language | 1 | `str_compare_locale` |
 | Clipboard | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Images (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
+| Pictures decoded by the program | 7 | `image_decode`, `image_decoded_width`, `image_decoded_height`, `image_decoded_alpha`, `image_decoded_pixels`, `image_from_decoded`, `image_decoded_free` |
 | Arguments, clicks and clock | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
-| Compression (zlib) | 3 | `inflate`, `deflate`, `crc32` |
+| Compression (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparing and searching in a buffer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double and text | 2 | `str_from_double`, `str_to_double` |
 | Regular expressions and wildcards | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
 | Double math | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 52 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
+| Intuition | 53 | `window_*` (also `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
-| MUI | 94 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **686** | |
+| MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
+| **Total** | **738** | |
 
 ### Standard Amiga Colors
 
@@ -4447,6 +4468,249 @@ Full list with parameters: [docs/BUILTINS.en.md](BUILTINS.en.md). All of them ar
 | DOWN | 77 |
 | LEFT | 79 |
 | RIGHT | 78 |
+
+---
+
+## 24. Dash 2.0: the straight compiler
+
+### `./dash` and `./dash --gcc`
+
+From Dash 2.0 on, `./dash` compiles **straight to hunk**: its compiler, written in C (folder `dashc/`), generates
+the 68000 code itself and links the Hunk executable with its runtime, which it carries inside already compiled. It needs neither gcc nor the
+Python with Lark of 1.x. The same code is compiled for the PC and for the Amiga, so it also compiles on the Amiga
+itself.
+
+The language, the builtins and the runtime are those of 1.x: programs do the same, memory included. New language
+features and new builtins go into both compilers.
+
+The 1.x path stays, unchanged, as `./dash --gcc`: it translates to C and compiles with gcc, and everything the
+previous sections say about the generated C applies to it. It is needed for programs with C inside (see "When it
+goes through C" below); `./dash` takes them that way by itself.
+
+```bash
+make -C dashc                                   # builds the compiler (a C compiler for the PC and Python 3)
+./dash programa.dash -o programa                # straight to hunk
+./dash --gcc programa.dash -o programa          # through C with gcc
+./dash --version                                # Dash 2.0.1
+```
+
+`./dash` is a short script that calls the compiler (`dashc/dashc`) or, with `--gcc`, the path through C. If the
+program has C in it, or an option only that path has is given, `./dash` takes it through C by itself and says so
+in a line: `dash: el programa lleva C: se compila por C con gcc`.
+
+### Options
+
+```bash
+./dash programa.dash -o programa                # 68000 code, starts on any Amiga
+./dash --fpu programa.dash -o programa          # Float and Double on the FPU (68020 with 68881/68882, 68040 or 68060)
+./dash --cpu 68020 programa.dash -o programa    # multiplies and divides with muls.l and divs.l (68020 to 68060)
+./dash --memcheck programa.dash -o programa     # memory checking
+./dash --stack 65536 programa.dash -o programa  # minimum stack in bytes, like @stack
+./dash --profile programa.dash -o programa      # profile at exit (also --perfil)
+./dash --debug programa.dash -o programa        # for the debugger of the dbg_* builtins
+./dash --cabecera tipos.h programa.dash         # the program's structs in C, for the C of @link
+```
+
+| Option | What it does |
+|---|---|
+| `-o file` | The executable to write |
+| `--fpu` | Float and Double on the FPU. The program needs a 68020 or better with an FPU |
+| `--cpu X` | `68000` (default), `68020`, `68030`, `68040` or `68060`. From `68020` on, the code multiplies and divides with 32-bit instructions (`muls.l`, `divs.l`), which the 68000 lacks |
+| `--memcheck` | Test build that watches memory (below) |
+| `--stack N` | Asks for at least N bytes of stack, like `@stack N` |
+| `--profile`, `--perfil` | When `Main` ends, how many times each function was called and where the time went |
+| `--debug` | A `NOP` at the start of each line and the debug information (below) |
+| `--debug-info prog` | Shows the debug information of an executable built with `--debug` |
+| `--cabecera x.h` | Writes a C header with the program's structs (below). Without `-o`, only that |
+| `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
+| `--tiempos` | How long each phase of the compilation takes |
+| `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |
+| `--version` | `Dash 2.0.1` |
+
+`./dash` accepts the `-v` and `-q` of 1.x and without `--gcc` they change nothing: the compiler only writes when there is an error.
+Errors say where, like those of 1.x: `file.dash:line:column: Error: message`. Link errors (for example, an
+`@extern` function nobody defines) start with `dash: Error:`.
+
+Environment variables when compiling:
+
+| Variable | What for |
+|---|---|
+| `DASH_PRINT_FLUSH=1` | Each `Print` goes out at once, as in 1.x |
+| `DASH_TEST_AUTOCLOSE=<s>` | The program ends by itself after `s` seconds with code 0 (for tests in the emulator) |
+| `DASH_PROFILE=1` | The same as `--profile` (only with `./dash`) |
+| `DASH_HOME` | Dash's folder, for the `import`s of `lib/`. If unset, the one above `dashc/` (on the Amiga, the `dash` command's own) |
+
+`tools/emu_run.py --dash2 programa.dash` compiles with `./dash` (if the program has C, through C) and runs it in
+the emulator as usual; without `--dash2`, with `./dash --gcc`.
+
+### Outside C: @link, @extern and @export
+
+Dash 2.0 does not compile C, but it links C that is already compiled. The C is compiled separately with the Amiga
+gcc (`m68k-amigaos-gcc`) into a `.o` object or a `.a` library, and the program uses it like this:
+
+- `@link "c/saludo.o"` (or `"libx.a"`) links the object or the library, with the path relative to the `.dash`
+  file that says it. Only what the program reaches goes in; an object compiled without `-ffunction-sections` goes
+  in whole. A `.c` file will not do: the compiler says it is not a Hunk object.
+- `@extern("name") func f(a: Int, s: String) -> Int` declares a C function of what is linked. It is called as in
+  C: arguments on the stack and the result in `d0`. The straight compiler does not use the text in brackets (the C path requires it).
+- `@export func f(...)` is a Dash function that the C calls by its name. The compiler generates it even if nothing calls
+  it from Dash and gives it its Dash name as its C name, also when it is private to a module.
+
+Types `@extern` accepts:
+
+| Dash type | In C | Notes |
+|---|---|---|
+| `Int`, `Pointer` | `long`, a pointer | A 32-bit number. A parameter without a type is `Int` |
+| `Bool` | `long` | What the C returns becomes `true` or `false` (any value other than 0 is `true`) |
+| `String` | `const char *` | Dash's string, to use during the call: if the C keeps it, it copies it. One the C returns is copied into a Dash string |
+| A struct | pointer to the first field | Lent for the call. One the C returns is held when stored, like one from a Dash function |
+| `Func` | function pointer | The address of a Dash function, which the C calls like one of its own: `long (*f)(long)` |
+
+`Float`, `Double`, `Fixed`, lists and dictionaries cannot be passed or returned. An `@extern` function without
+`->` returns nothing. An `@extern` function is also a value: it can be passed to `task_start(f, n)` or to other C.
+
+Dash functions follow the C convention (stack, `d0`, and they save the registers they use), so the C can call them
+through a `Func` or, if they are `@export`, by their name. A string returned by a Dash function is a temporary: if
+the C keeps it, it copies it.
+
+A complete example. The C, compiled with
+`m68k-amigaos-gcc -noixemul -O2 -fomit-frame-pointer -c c/saludo.c -o c/saludo.o`:
+
+```c
+#include <stdio.h>
+
+extern long triple(long x);                  /* from Dash: @export func triple */
+
+long suma(long a, long b) { return a + b; }
+
+const char *saludo(long n)
+{
+    static char buf[40];
+    snprintf(buf, sizeof buf, "hola %ld veces", n);
+    return buf;
+}
+
+long aplicar(long (*f)(long), long x) { return f(x) + triple(x); }
+```
+
+The program:
+
+```ruby
+@link "c/saludo.o"
+
+@extern("saludo") func suma(a: Int, b: Int) -> Int
+@extern("saludo") func saludo(n: Int) -> String
+@extern("saludo") func aplicar(f: Func, x: Int) -> Int
+
+@export func triple(x: Int) -> Int
+    return x * 3
+end
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+Main
+    Print suma(2, 40)                # 42
+    Print saludo(3)                  # hola 3 veces
+    Print aplicar(doble, 5)          # 25: doble(5) + triple(5)
+end
+```
+
+It compiles the same with `./dash` and with `./dash --gcc`.
+
+**What the C finds in the runtime.** The C of `@link` is compiled with libnix's headers, but it is not linked with
+libnix: what it calls from libc, libm and libgcc comes from the compiler's runtime, and only what is used goes in. There
+are `malloc`, `calloc`, `realloc` and `free` (with a semaphore: they work from a `task_start` task), the string
+functions (`strchr`, `strdup`, `strtol`, `strtod`, `qsort`...), `printf`, `snprintf` and file stdio (`fopen`,
+`fread`, `fwrite`...; standard output goes to the program's), `gmtime`, `localtime`, `mktime`, the `ctype.h` table
+and the `math.h` functions (`sin`, `pow`, `sqrt`, `round`...). If something is missing, the compiler says at link time
+which names nobody defines. One difference from libnix: the `printf` family does not write floating-point numbers
+(`%f`, `%e` and `%g` print `?`).
+
+**Dash structs in C.** `./dash --cabecera tipos.h programa.dash` writes a header with the structs as the
+compiler lays them out (the pointer points to the first field; each field takes 4 bytes), the integer constants, the
+prototypes of the `@export` functions and the runtime functions that C can use: `dl_str_dup`, `dl_str_free`,
+`dl_str_len`, `dl_str_temp`, `dl_retain`, `dl_release`, `dl_arr_length`, `dl_arr_get`, `dl_dict_length` and
+`dl_dict_get`. It also works for a module without `Main`. For C that came from an `@native` or a `@c` of 1.x, the
+header defines the names of back then (`_dash_str_dup`, `_dash_retain`, `DashArray_get`...) on top of these.
+
+### --memcheck, --fpu and --stack
+
+`--memcheck` is the one from 1.x (section 1): it warns as soon as something is freed twice or used after being
+freed, with the file and line (`memcheck: ERROR campo de nil (en prog.dash:15)`), and at exit it says what is
+still alive. It fills freed memory with `0xDB` and does not reuse the last 64 blocks. It has its own runtime, so
+without the option it costs nothing.
+
+With `--fpu`, `Float` and `Double` are computed on the FPU, and the runtime is compiled for a 68020 with an FPU;
+the program's code is still 68000 code. The program sets the FPU to extended precision at start. The C of `@link`
+may be compiled for the FPU (`-m68020 -m68881`), although `@extern` does not pass floating-point numbers.
+`--fpu --memcheck` has its own runtime.
+
+At start a program asks for at least 16 KB of stack (32 KB with MUI and 64 KB with TLS) and switches to a new one
+if the shell gives it less. `@stack N` and `--stack N` ask for more; the largest wins. Unlike 1.x, `--stack 0`
+does not keep the shell's stack.
+
+### --debug and the debugger
+
+`./dash --debug` puts a `NOP` at the start of each Dash line and adds to the executable a `HUNK_DEBUG` block with
+the files, lines, functions, variables, globals and struct fields (`./dash --debug-info programa` shows it).
+It does not copy functions inline and keeps every variable in memory, so the debugger can find them; the program
+does the same as without `--debug`.
+
+A program built this way is debugged from another one with the `dbg_*` builtins (list in
+[BUILTINS.en.md](BUILTINS.en.md), section "Debugger"): load it paused, breakpoints, stepping, the call stack,
+variables, registers and memory. A breakpoint turns the `NOP` of its line into a `TRAP`: it does not use the CPU's
+trace mode, which Emu68 does not have.
+
+The VS Code debugger (F5) uses these same builtins: it compiles with `./dash --debug` and starts the program on
+the emulated Amiga under `tools/amiga/dbgserver.dash`, a Dash program that drives it with the `dbg_*` and serves VS
+Code over TCP (`tools/emu_run.py --dbgserver PORT`). A program with C is compiled through C (`./dash --gcc --debug`)
+and debugged by gdb, as in 1.x; `"debugger": "gdb"` in `launch.json` always picks that way.
+
+### The compiler on the Amiga
+
+```bash
+make -C dashc amiga                             # dashc/build/dashc.amiga (needs bebbo's gcc)
+python3 tools/paquete_amiga.py                  # the package for the Amiga, with its installer
+```
+
+`dashc/build/dashc.amiga` is the compiler for the Amiga (it runs on a 68000). The package copies it as `dash`, and
+next to it the runtimes it does not carry inside so as not to double its size:
+
+| On the Amiga (in `dashc/build/`) | For |
+|---|---|
+| `dash_mc.drt` (`dashc_mc.drt`) | `--memcheck` |
+| `dash_fpu.drt` (`dashc_fpu.drt`) | `--fpu` |
+| `dash_fpu_mc.drt` (`dashc_fpu_mc.drt`) | `--fpu --memcheck` |
+
+A `.drt` is a runtime already prepared (read, split and compressed) so that compiling does not have to do it each
+time. The command looks for them in its own folder (`PROGDIR:`); if the one needed is missing, it says so. For
+the `import`s of `lib/`, the `lib` folder goes next to it, or the `DASH_HOME` variable says where the folder that
+holds it is.
+
+```
+dash programa.dash -o programa
+```
+
+From the same input file, the Amiga compiler writes the same executable, byte for byte, as the PC one (the file
+name goes inside, for error messages: it has to be the same).
+
+### When it goes through C (`--gcc`)
+
+| Without `--gcc` | What happens or what to do |
+|---|---|
+| A program with `@native`, `@c` or `@header` | `./dash` takes it through C by itself; or move the C into an object with `@link` and `@extern`. The `@native` of the `lib/amiga` modules is fine: it is compiled inside the compiler |
+| `-O`, `-O0`, `--small`, `--multifile`, `--no-hunk` | They go through C. The straight compiler has no optimization levels and writes Hunk directly |
+| Seeing or compiling the generated C (`python3 -m compiler.main`) | That is the C path: the straight compiler does not generate C |
+| Debugging with gdb | `./dash --gcc --debug`. The straight `--debug` is for the `dbg_*` builtins (and the VS Code debugger, which uses them) |
+| `@link "x.c"` | Compile the `.c` first with the Amiga gcc and link the `.o` |
+| A `.library` function through `@extern` | The straight compiler does not call through registers: a builtin, or linked C that calls it |
+| `Float` or `Double` in an `@extern` function | Pass them as text or as integers (fixed point, for example) |
+| `--stack 0` | It does not keep the shell's stack; the straight compiler always asks for its own |
+
+Everything else is the same: the language, the builtins, the runtime, the programs' error messages and what they
+need to start (Kickstart 3.0 and a 68000; MUI 5 and TLS, a 68020).
 
 ---
 

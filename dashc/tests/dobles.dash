@@ -1,0 +1,40 @@
+# Double: literales con todas sus cifras, cuentas, comparaciones (con nan), conversiones, texto,
+# parámetros, campos, globales, listas y builtins de math
+
+struct Punto
+    x: Double = 0.5
+    y: Double
+end
+
+var total: Double = 0.1
+
+func doble(d: Double) -> Double
+    e = d * Double(2) + 0.5
+    return e
+end
+
+func suma(l: [Double]) -> Double
+    t = Double(0)
+    for v in l
+        t = t + v
+    end
+    return t
+end
+
+Main
+    t = "2.5"
+    Print Double(t)
+    x = doble(Double(1.25))
+    Print "d=#{x} #{Int(x)} #{Float(x)} #{-x} #{x / 3 - 1}"
+    Print "#{Double(0.1) + Double(0.2)} #{total + 0.2} #{1.0e300 * Double(10)}"
+    n = Double(0) / Double(0)
+    Print "#{n == n} #{n != n} #{n < 1} #{n > 1} #{x > 1} #{x <= 3} #{x >= 3.0}"
+    p = Punto(Double(3))
+    p.y = 4
+    Print "#{p.x} #{p.y} #{sqrt(p.y * p.y + 9)}"
+    l = [Double(0.25), 2, 3]
+    l.push(4)
+    l[1] = 0.5
+    Print "#{suma(l)} #{l.length} #{l.pop()}"
+    Print "#{pow(2, 10)} #{floor(Double(-2.5))} #{str_from_double(Double(2.675), 2)}"
+end

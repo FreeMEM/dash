@@ -1,0 +1,26 @@
+# Colours in a .dashui (Dash 2.0, Forja's dark theme): "background" on the window and a text, "color" on a text and a
+# button become mui_set_background and mui_set_text_pen; "field_colors" on the window, mui_app_field_colors.
+# emu-needs: muimaster.library
+# expect-c: mui_set_background(
+# expect-c: mui_app_field_colors(96, 96, 104, 120, 120, 128, 255, 200, 0)
+# (on the 4 colours of the emulated Workbench: the window black; the string's grey, the blue of its palette)
+# emu-shot: 10 300 100 000000
+# emu-shot: 10 360 148 6688bb
+# expect-out: texto: [Texto claro]
+# expect-out: fin
+
+import "lib/ventana_colores.dashui"
+
+Main
+    if mui_app_begin("Colores", "DASHUICOLORES") == 0
+        Print "sin MUI"
+    else
+        v = Oscura_create()
+        mui_window_open(v.window)
+        Print "texto: [#{mui_get_text(v.texto)}]"
+        mui_timer(12000, 1)
+        ev = mui_wait_event()
+        mui_app_end()
+        Print "fin"
+    end
+end

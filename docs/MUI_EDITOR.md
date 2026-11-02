@@ -127,6 +127,15 @@ Reglas que comprueba el compilador (`compiler/dashui.py`; el editor marca las mi
   «+ menú contextual» y el objeto lo elige en su propiedad `context_menu`.
 - **Tab en un lienzo** (Lorraine D48): `"take_tab": true` en un `canvas` hace que Tab y Mayúsculas+Tab sobre él sean
   teclas suyas (`mui_canvas_take_tab`), no el paso al gadget siguiente. En otro tipo es un error.
+- **Texto de varias líneas** (Inferencia): `"type": "text_editor"` con `"lines"` (alto en líneas, 4 si no se
+  da) es `mui_text_editor`: Return empieza otra línea y su `"ack"` llega con Amiga+Return.
+- **Colores** (Forja, el tema oscuro sin las preferencias de MUI): `"background": [r, g, b]` (de 0 a 255) en un objeto,
+  un grupo o la ventana (su grupo raíz) le da ese fondo (`mui_set_background`), y `"color": [r, g, b]` en un `text`, un
+  `label` o un `button`, el color de su texto (`mui_set_text_pen`). En una pantalla de 256 colores o menos, el más
+  parecido de su paleta. Los campos de texto (`string`, `text_editor`, `combo`) no los toman: sus colores son de toda
+  la aplicación, con `"field_colors": [[r, g, b], [r, g, b], [r, g, b]]` en una ventana (`mui_app_field_colors`: el
+  fondo sin el cursor, con él y el cursor). Su texto sigue negro, así que conviene un gris en el que se lea, como
+  `[96, 96, 104]` y `[120, 120, 128]`.
 - **Traducciones** (dashweb D71): `"tr": N` en un objeto, una ventana, un menú o un elemento de menú da al texto
   principal (`text`, `label`, `title`, `titles`, `options`) el número `N` del catálogo: el código lo pide con
   `tr(N, "texto")`. Para varios textos del mismo objeto, `"tr": { "label": 12, "help": 13 }`. Los saca

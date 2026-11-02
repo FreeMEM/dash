@@ -9,6 +9,9 @@ of each marker found. A library pulls only the objects a program calls.
           program may have its own inflate or crc32.
     ryu:  a double to its shortest decimal and back (runtime/ryu/LEEME).
     fdlibm: sqrt, pow, sin... of a double (runtime/fdlibm/README.md).
+    fontweb: font_from_ttf, TrueType, WOFF and WOFF2 fonts with stb_truetype and Brotli (runtime/fontweb/LEEME).
+    imgdec: image_decode, JPEG with TJpgDec, WebP with libwebp, SVG with nanosvg, PNG, GIF, BMP with stb_image
+            (runtime/imgdec/LEEME).
 """
 
 import hashlib
@@ -19,8 +22,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 LIBRARIES = {
+    # (in link order: one that uses another goes before it, fontweb before zlib and fdlibm)
+    "fontweb": {
+        "marker": "/* Dash Web Font Runtime */",
+        # Brotli: only its decoder (common, dec), for WOFF2; its malloc and free to exec (dash_fontweb.c)
+        "sources": ["dash_fontweb.c"] +
+                   sorted(str(p.relative_to(ROOT / "runtime" / "fontweb"))
+                          for d in ("common", "dec")
+                          for p in (ROOT / "runtime" / "fontweb" / "brotli" / d).glob("*.c")),
+        "defines": [f"-I{ROOT / 'runtime' / 'fontweb' / 'brotli' / 'include'}", "-DNDEBUG",
+                    "-Dmalloc=dash_fontweb_malloc", "-Dfree=dash_fontweb_free_mem"],
+    },
+    "imgdec": {
+        "marker": "/* Dash Image Decode Runtime */",
+        # libwebp: only its decoder (src/dec, src/dsp, src/utils), its memory through dash_imgdec.c (exec)
+        "sources": ["dash_imgdec.c", "stb_image_dash.c", "tjpgd.c", "nanosvg_dash.c", "dash_imgdec_mathf.c"] +
+                   sorted(str(p.relative_to(ROOT / "runtime" / "imgdec"))
+                          for d in ("dec", "dsp", "utils")
+                          for p in (ROOT / "runtime" / "imgdec" / "libwebp" / "src" / d).glob("*.c")),
+        "defines": [f"-I{ROOT / 'runtime' / 'imgdec' / 'libwebp'}", "-DNDEBUG", "-Dmalloc=dash_imgdec_malloc",
+                    "-Dcalloc=dash_imgdec_calloc", "-Drealloc=dash_imgdec_realloc", "-Dfree=dash_imgdec_free_mem"],
+    },
     "zlib": {
-        "marker": "/* Dash zlib Runtime */",
+        # (font_from_ttf's WOFF uses it too)
+        "marker": ("/* Dash zlib Runtime */", "/* Dash Web Font Runtime */"),
         "sources": ["adler32.c", "crc32.c", "deflate.c", "inffast.c", "inflate.c", "inftrees.c", "trees.c",
                     "zutil.c", "dash_inflate.c", "dash_deflate.c", "dash_crc32.c"],
         # NO_GZIP: inflate without the gzip header code; Z_TESTW=0: crc32 a byte at a time with one table of
@@ -33,7 +58,8 @@ LIBRARIES = {
         "defines": ["-DNDEBUG"],
     },
     "fdlibm": {
-        "marker": "/* Dash Math Runtime */",
+        # (image_decode's SVG uses it too: runtime/imgdec/dash_imgdec_mathf.c)
+        "marker": ("/* Dash Math Runtime */", "/* Dash Image Decode Runtime */", "/* Dash Web Font Runtime */"),
         "sources": ["e_acos.c", "e_asin.c", "e_atan2.c", "e_exp.c", "e_fmod.c", "e_log.c", "e_log10.c", "e_pow.c",
                     "e_rem_pio2.c", "e_sqrt.c", "k_cos.c", "k_rem_pio2.c", "k_sin.c", "k_tan.c", "s_atan.c",
                     "s_ceil.c", "s_copysign.c", "s_cos.c", "s_fabs.c", "s_floor.c", "s_scalbn.c", "s_sin.c",
@@ -45,7 +71,8 @@ LIBRARIES = {
 
 
 def uses_library(name: str, c_code: str) -> bool:
-    return LIBRARIES[name]["marker"] in c_code
+    m = LIBRARIES[name]["marker"]
+    return any(x in c_code for x in (m if isinstance(m, tuple) else (m,)))
 
 
 def library(name: str, gcc: str, cpu_flags: list = (), build_dir: Path = ROOT / "build") -> str:

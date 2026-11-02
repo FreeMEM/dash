@@ -2087,6 +2087,21 @@ SYSTEM_FUNCTIONS = {
         c_template="_dash_release((void *)(${obj}))",
         description="Manually decrement reference count (frees if 0)"
     ),
+    # Tachyon D80: memory back to the system
+    "mem_trim": BuiltinFunc(
+        name="mem_trim",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_mem_trim()",
+        description="Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back"
+    ),
+    "mem_puddle": BuiltinFunc(
+        name="mem_puddle",
+        params=["bytes"],
+        return_type="BOOL",
+        c_template="_dash_mem_puddle(${bytes})",
+        description="Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation"
+    ),
 }
 
 
@@ -2246,7 +2261,7 @@ DOS_FUNCTIONS = {
         name="dir_create",
         params=["path"],
         return_type="BOOL",
-        c_template="(CreateDir(${path}) != 0)",
+        c_template="_dash_dir_create(${path})",
         needs_dos=True,
         description="Create directory"
     ),
@@ -2266,6 +2281,26 @@ DOS_FUNCTIONS = {
         needs_dos=True,
         description="Full name of the current directory (\"Ram Disk:\" ...)"
     ),
+    # Dash 2.0 (Inferencia, the IDE): what a directory holds
+    "dir_read": BuiltinFunc(
+        name="dir_read", params=["path"], return_type="LONG", c_template="_dash_dir_read(${path})",
+        needs_dos=True, reads_only=True,
+        description="Read what a directory holds, sorted by name (case does not count): the number of entries, "
+                    "-1 if it is not a directory that can be read. dir_entry_name and the others read them, until "
+                    "the next dir_read"),
+    "dir_entry_name": BuiltinFunc(
+        name="dir_entry_name", params=["i"], return_type="STRPTR", c_template="_dash_dir_entry_name(${i})",
+        needs_dos=True, description="Name of entry i (from 0) of the last dir_read; \"\" past the end"),
+    "dir_entry_size": BuiltinFunc(
+        name="dir_entry_size", params=["i"], return_type="LONG", c_template="_dash_dir_entry_size(${i})",
+        needs_dos=True, description="Size in bytes of entry i of the last dir_read (0 for a directory)"),
+    "dir_entry_is_dir": BuiltinFunc(
+        name="dir_entry_is_dir", params=["i"], return_type="BOOL", c_template="_dash_dir_entry_is_dir(${i})",
+        needs_dos=True, description="True if entry i of the last dir_read is a directory"),
+    "dir_entry_date": BuiltinFunc(
+        name="dir_entry_date", params=["i"], return_type="LONG", c_template="_dash_dir_entry_date(${i})",
+        needs_dos=True,
+        description="Date of entry i of the last dir_read, as time_unix: seconds since 1 January 1970"),
 
     # Console I/O
     "console_read": BuiltinFunc(
@@ -2971,6 +3006,15 @@ INTUITION_EXPANDED = {
         needs_asl=True,
         description="File requester: full path of the chosen file, \"\" if cancelled (save_mode true: save requester)"
     ),
+    "dialog_file_at": BuiltinFunc(
+        name="dialog_file_at",
+        params=["title", "pattern", "save_mode", "drawer", "file"],
+        return_type="STRPTR",
+        c_template="_dash_dialog_file_at(${title}, ${pattern}, ${save_mode}, ${drawer}, ${file})",
+        needs_asl=True,
+        reads_only=True,
+        description="dialog_file opening in that drawer with that file name (\"\": as dialog_file does)"
+    ),
     "dialog_color": BuiltinFunc(
         name="dialog_color",
         params=["title", "initial"],
@@ -3192,6 +3236,63 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_app_begin(${title}, ${base})",
         description="Open muimaster.library and create the MUI application (base: ARexx name); 0 if MUI is missing or the CPU is a 68000"
     ),
+    "mui_text_editor": BuiltinFunc(
+        name="mui_text_editor", params=["lines"], return_type="APTR", c_template="_dash_mui_text_editor(${lines})",
+        description="A text field of several lines (MUI's Textinput), that many lines high, with a scroller: Return "
+                    "starts a new line; mui_get_text and mui_set_text read and set it, mui_on_ack gives the event of "
+                    "sending it (Amiga+Return in its window)"),
+    "mui_window_open_back": BuiltinFunc(
+        name="mui_window_open_back", params=["win"], return_type="LONG",
+        c_template="_dash_mui_window_open_back(${win})",
+        description="Open a window without making it the active one: the keyboard stays where it was; false if it "
+                    "could not open"),
+    "mui_window_activate": BuiltinFunc(
+        name="mui_window_activate", params=["win"], return_type="void",
+        c_template="_dash_mui_window_activate(${win})",
+        description="Make a window the active one, in front of the others (it opens if it is closed)"),
+    "mui_window_dispose": BuiltinFunc(
+        name="mui_window_dispose", params=["window"], return_type="void",
+        c_template="_dash_mui_window_dispose(${window})",
+        description="Close a window, take it out of the application and free it with all its objects (and the context "
+                    "menus made after it): for windows made again and again (a preview). Nothing for 0 or a window "
+                    "already gone; its objects must not be used after"),
+    # Dash 2.0 (Forja): asking the user
+    "mui_request": BuiltinFunc(
+        name="mui_request", params=["window", "title", "text", "buttons"], return_type="LONG",
+        c_template="_dash_mui_request(${window}, ${title}, ${text}, ${buttons})", reads_only=True,
+        description="Ask with MUI's requester over a window (0: over the application), its buttons separated by \"|\" "
+                    "(\"_Guardar|_Descartar|_Cancelar\"); the application's windows wait. The button chosen: 1, 2... "
+                    "from the left, 0 the last one (also Esc)"),
+    # Dash 2.0 (Forja): colours without MUI's prefs
+    "mui_set_background": BuiltinFunc(
+        name="mui_set_background", params=["obj", "r", "g", "b"], return_type="void",
+        c_template="_dash_mui_set_background(${obj}, ${r}, ${g}, ${b})",
+        description="An RGB background (0-255 each) for an object: a group, a text, a label, a button, a list (and the "
+                    "list inside it) or a window (its root group); the objects inside take it unless they have "
+                    "their own"),
+    "mui_set_text_pen": BuiltinFunc(
+        name="mui_set_text_pen", params=["obj", "r", "g", "b"], return_type="void",
+        c_template="_dash_mui_set_text_pen(${obj}, ${r}, ${g}, ${b})",
+        description="The colour (RGB, 0-255 each) of the text of a text, label or button; mui_set_text keeps it"),
+    "mui_app_field_colors": BuiltinFunc(
+        name="mui_app_field_colors", params=["r", "g", "b", "active_r", "active_g", "active_b",
+                                             "cursor_r", "cursor_g", "cursor_b"], return_type="void",
+        c_template="_dash_mui_app_field_colors(${r}, ${g}, ${b}, ${active_r}, ${active_g}, ${active_b}, "
+                   "${cursor_r}, ${cursor_g}, ${cursor_b})",
+        description="The background (RGB, 0-255 each) of all the application's text fields (string, text_editor, "
+                    "combo), inactive and active, and their cursor; the windows opened after it take them. The text "
+                    "stays black: a grey where it still reads, like 96, 96, 104 and 120, 120, 128"),
+    # Dash 2.0 (Inferencia): the application's own ARexx commands
+    "mui_app_rexx": BuiltinFunc(
+        name="mui_app_rexx", params=["app", "func"], return_type="void",
+        c_template="_dash_mui_app_rexx(${app}, ${func})",
+        description="Every ARexx command to the application's port (its base and \".1\": \"BASE.1\") that MUI does "
+                    "not answer itself (QUIT, SHOW, HIDE, INFO...) calls f(command: String) -> String with the whole "
+                    "command line: what it returns is the RESULT, and mui_rexx_fail during the call sets the RC. "
+                    "It runs while mui_wait_event waits"),
+    "mui_rexx_fail": BuiltinFunc(
+        name="mui_rexx_fail", params=["rc"], return_type="void", c_template="_dash_mui_rexx_fail(${rc})",
+        description="From mui_app_rexx's function: the command's RC (5 warning, 10 error, 20 failure; no RESULT then)"),
     "mui_app_end": BuiltinFunc(
         name="mui_app_end",
         params=[],
@@ -3518,6 +3619,7 @@ MUI_FUNCTIONS = {
         name="mui_menu_check",
         params=["title", "key", "id", "checked"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_menu_check(${title}, ${key}, ${id}, ${checked})",
         description="Menu item with a check mark: choosing it toggles the mark and mui_wait_event returns id; "
                     "mui_get_value / mui_set_value read and set the mark"
@@ -3526,6 +3628,7 @@ MUI_FUNCTIONS = {
         name="mui_submenu_begin",
         params=["title"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_submenu_begin(${title})",
         description="Start a submenu in the menu being built (one level): its items go in until mui_submenu_end"
     ),
@@ -3547,6 +3650,7 @@ MUI_FUNCTIONS = {
         name="mui_context_menu_begin",
         params=["title"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_context_menu_begin(${title})",
         description="Start a context menu (anywhere, not only in a window): its items as in a menu "
                     "(mui_menu_item, mui_menu_check, mui_submenu_begin...) until mui_menu_end; give it to an object "
@@ -3800,6 +3904,7 @@ MUI_FUNCTIONS = {
         name="mui_combo",
         params=["text", "options"],
         return_type="APTR",
+        reads_only=True,   # (it copies its texts: _dash_mui_keep, or MUI does)
         c_template="_dash_mui_combo(${text}, ${options})",
         description="Text field with a list that drops down (font, size; options \"A|B\"): write or pick a line "
                     "(double click); mui_get_text / mui_set_text, mui_list_* change the lines, mui_on_ack on Return "
@@ -3811,6 +3916,20 @@ MUI_FUNCTIONS = {
         return_type="void",
         c_template="_dash_mui_help(${obj}, ${text})",
         description="Bubble help shown when the pointer rests on the object"
+    ),
+    "mui_window_move": BuiltinFunc(
+        name="mui_window_move",
+        params=["win", "dx", "dy"],
+        return_type="void",
+        c_template="_dash_mui_window_move(${win}, ${dx}, ${dy})",
+        description="Move an open window by dx, dy pixels (windows of one .dashui open in the same place)"
+    ),
+    "mui_set_active": BuiltinFunc(
+        name="mui_set_active",
+        params=["win", "obj"],
+        return_type="void",
+        c_template="_dash_mui_set_active(${win}, ${obj})",
+        description="Make obj the window's active object: the cursor goes to that string gadget (Amiga-L)"
     ),
     "mui_window_size": BuiltinFunc(
         name="mui_window_size",
@@ -3924,6 +4043,51 @@ TEXT_FUNCTIONS = {
 # =============================================================================
 
 NET_FUNCTIONS = {
+    # Dash 2.0: connections in a task of their own (NETBG_RUNTIME), what Tachyon's lib/red.dash did with @native
+    "net_bg_open": BuiltinFunc(
+        name="net_bg_open", params=["host", "port", "timeout_ms"], return_type="LONG",
+        c_template="_dash_net_bg_open(${host}, ${port}, ${timeout_ms})", reads_only=True,
+        description="Ask for a TCP connection that a task of its own opens, sends and receives while the program "
+                    "is busy (up to 48): its number, or -1. net_bg_state tells how it goes"),
+    "net_bg_open_tls": BuiltinFunc(
+        name="net_bg_open_tls", params=["host", "port", "timeout_ms"], return_type="LONG",
+        c_template="_dash_net_bg_open_tls(${host}, ${port}, ${timeout_ms})", reads_only=True,
+        description="net_bg_open with TLS (AmiSSL, its certificate checked)"),
+    "net_bg_state": BuiltinFunc(
+        name="net_bg_state", params=["c"], return_type="LONG", c_template="_dash_net_bg_state(${c})",
+        description="1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (net_bg_error says why)"),
+    "net_bg_stage": BuiltinFunc(
+        name="net_bg_stage", params=["c"], return_type="LONG", c_template="_dash_net_bg_stage(${c})",
+        description="While connecting, its stage, as net_connect_stage"),
+    "net_bg_error": BuiltinFunc(
+        name="net_bg_error", params=["c"], return_type="STRPTR", c_template="_dash_net_bg_error(${c})",
+        description="Why a connection failed or closed, \"\" if it did not"),
+    "net_bg_send": BuiltinFunc(
+        name="net_bg_send", params=["c", "text"], return_type="BOOL", c_template="_dash_net_bg_send(${c}, ${text})",
+        reads_only=True,
+        description="Put text to send (the task sends it as soon as the connection is open); false without memory"),
+    "net_bg_send_buffer": BuiltinFunc(
+        name="net_bg_send_buffer", params=["c", "buffer", "n"], return_type="BOOL",
+        c_template="_dash_net_bg_send_buffer(${c}, (APTR)${buffer}, ${n})",
+        description="net_bg_send of n bytes of a buffer"),
+    "net_bg_recv": BuiltinFunc(
+        name="net_bg_recv", params=["c", "buffer", "max"], return_type="LONG",
+        c_template="_dash_net_bg_recv(${c}, (APTR)${buffer}, ${max})",
+        description="Up to max bytes of what has come, to a buffer, without waiting: how many (0: nothing yet), -1 "
+                    "if it is closed and nothing is left. task_signal wakes the program when something comes"),
+    "net_bg_pending": BuiltinFunc(
+        name="net_bg_pending", params=["c"], return_type="LONG", c_template="_dash_net_bg_pending(${c})",
+        description="How many bytes have come and are not read yet"),
+    "net_bg_close": BuiltinFunc(
+        name="net_bg_close", params=["c"], return_type="void", c_template="_dash_net_bg_close(${c})",
+        description="Close a connection and free its number"),
+    "net_bg_idle": BuiltinFunc(
+        name="net_bg_idle", params=["ms"], return_type="void", c_template="_dash_net_bg_idle(${ms})",
+        description="The task ends by itself after this many ms without traffic (2000; a connection the program keeps "
+                    "reading, waiting for an answer, counts as traffic); another starts when needed"),
+    "net_bg_stop": BuiltinFunc(
+        name="net_bg_stop", params=[], return_type="void", c_template="_dash_net_bg_stop()",
+        description="End the task now (it closes what is open) and wait for it; also done at the end of the program"),
     "net_connect": _text("net_connect", ["host", "port", "timeout_ms"], "LONG",
                          "_dash_net_connect(${host}, ${port}, ${timeout_ms})",
                          "TCP connection to host:port (name or address); the socket, or -1 (see net_error)"),
@@ -4038,6 +4202,26 @@ def _gfx(name, params, ret, template, desc):
 
 
 FONT_FUNCTIONS = {
+    # Dash 2.0: TrueType fonts made by the program itself (runtime/fontweb), what Tachyon did with @native
+    "font_from_ttf": BuiltinFunc(
+        name="font_from_ttf", params=["file", "size", "width"], return_type="LONG",
+        c_template="_dash_font_from_ttf(${file}, ${size}, ${width})", reads_only=True,
+        description="A TrueType font (TTF, an OTF with TrueType outlines, or a WOFF or WOFF2 of them) at size pixels "
+                    "of em and width % of its width (0: 100), its Latin-1 characters in one bit plane (stb_truetype): "
+                    "a font for font_use, or 0. Free it with font_ttf_free, not font_close"),
+    "font_ttf_icon": BuiltinFunc(
+        name="font_ttf_icon", params=["file", "size", "code"], return_type="LONG",
+        c_template="_dash_font_ttf_icon(${file}, ${size}, ${code})", reads_only=True,
+        description="A font of the file whose \"A\" is the character code (an icon of a web font, in Unicode's "
+                    "private area) at size pixels, the other letters empty: draw \"A\" with it; 0 if it cannot"),
+    "font_ttf_free": BuiltinFunc(
+        name="font_ttf_free", params=["font"], return_type="void", c_template="_dash_font_ttf_free(${font})",
+        description="Free a font of font_from_ttf (not while a window still writes with it); the ones left are "
+                    "freed at exit"),
+    "font_ttf_forget": BuiltinFunc(
+        name="font_ttf_forget", params=["file"], return_type="void", c_template="_dash_font_ttf_forget(${file})",
+        reads_only=True,
+        description="font_from_ttf keeps the last 8 files read for other sizes: read this one again next time"),
     "font_open": _gfx("font_open", ["name", "size"], "LONG", "_dash_font_open(${name}, ${size})",
                       "Open a font (\"helvetica.font\", size in pixels, at least 2): the font, or 0 if there is none"),
     "font_use": _gfx("font_use", ["font"], "void", "_dash_font_use(${font})", "Draw text with this font"),
@@ -4099,8 +4283,10 @@ TASK_FUNCTIONS = {
     "task_start": BuiltinFunc(
         name="task_start", params=["func", "arg"], return_type="LONG",
         c_template="_dash_task_start((APTR)${func}, ${arg})",
-        description="Run an @native function f(arg: Int) -> Int in another process (C only: malloc/free yes, "
-                    "Dash strings and lists no; 128 KB of stack, the program's priority): the task, or 0"),
+        description="Run a function f(arg: Int) -> Int in another process: a Dash one that only uses Int, Bool, "
+                    "Float and builtins that give no texts or lists (the compiler checks it), or one of C (@extern, "
+                    "@native: malloc/free yes, Dash strings and lists no); 128 KB of stack, the program's priority: "
+                    "the task, or 0"),
     "task_start_with": BuiltinFunc(
         name="task_start_with", params=["func", "arg", "stack", "priority"], return_type="LONG",
         c_template="_dash_task_start_with((APTR)${func}, ${arg}, ${stack}, ${priority})",
@@ -4183,6 +4369,12 @@ TASK_FUNCTIONS = {
         c_template="_dash_cx_hotkey(${description})",
         description="The commodity's hotkey, from its description (\"ctrl alt t\"): cx_command gives 6 when it is "
                     "pressed; false if the description is not valid (or there is no cx_broker); \"\" takes it away"),
+    "cx_key_add": BuiltinFunc(
+        name="cx_key_add", params=["description", "n"], return_type="BOOL",
+        c_template="_dash_cx_key_add(${description}, ${n})",
+        description="One more hotkey for the commodity (up to 32, n from 1 to 32; a mouse button too: \"rawmouse "
+                    "lalt mouse_leftpress\"): cx_command gives 100 + n when it is pressed, and the event goes no "
+                    "further; \"\" takes hotkey n away; false if the description is not valid (or there is no cx_broker)"),
     "cx_command": BuiltinFunc(
         name="cx_command", params=[], return_type="LONG",
         c_template="_dash_cx_command()",
@@ -4193,6 +4385,61 @@ TASK_FUNCTIONS = {
         c_template="_dash_cx_wait(${ms})",
         description="Waits, spending nothing, until a command comes (given as cx_command), Ctrl-C (-1, cleared) "
                     "or ms milliseconds pass (0)"),
+    # Trasfondo 2.0: the windows of every program on the Workbench screen (TrasfondoVentanas)
+    "wm_read": BuiltinFunc(
+        name="wm_read", params=[], return_type="LONG", c_template="_dash_wm_read()",
+        description="Read the windows of the Workbench screen, front to back (up to 64): how many, for wm_id, "
+                    "wm_title, wm_task, wm_box and wm_flags, until the next wm_read"),
+    "wm_id": BuiltinFunc(
+        name="wm_id", params=["i"], return_type="LONG", c_template="_dash_wm_id(${i})",
+        description="The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list)"),
+    "wm_title": BuiltinFunc(
+        name="wm_title", params=["i"], return_type="STRPTR", c_template="_dash_wm_title_of(${i})",
+        description="The title of window i of the last wm_read (\"\" if it has none)"),
+    "wm_task": BuiltinFunc(
+        name="wm_task", params=["i"], return_type="STRPTR", c_template="_dash_wm_task_of(${i})",
+        description="The program of window i: the command of a Shell process (without its path), else its task's "
+                    "name (\"Workbench\")"),
+    "wm_box": BuiltinFunc(
+        name="wm_box", params=["i", "what"], return_type="LONG", c_template="_dash_wm_box_of(${i}, ${what})",
+        description="Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum "
+                    "width, 7 maximum height (0 or 65535: no limit); -1 outside the list"),
+    "wm_flags": BuiltinFunc(
+        name="wm_flags", params=["i"], return_type="LONG", c_template="_dash_wm_flags(${i})",
+        description="Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, "
+                    "32 the program's own, 64 a Workbench drawer, 128 with a requester open"),
+    "wm_set_box": BuiltinFunc(
+        name="wm_set_box", params=["id", "x", "y", "width", "height"], return_type="BOOL",
+        c_template="_dash_wm_set_box(${id}, ${x}, ${y}, ${width}, ${height})",
+        description="Move and size a window by its id, within its limits and its screen (one without a size "
+                    "gadget keeps its size); false if it is not open any more. Intuition does it right after"),
+    "wm_front": BuiltinFunc(
+        name="wm_front", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 0)",
+        description="A window in front of the others; false if it is not open any more"),
+    "wm_back": BuiltinFunc(
+        name="wm_back", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 1)",
+        description="A window behind the others; false if it is not open any more"),
+    "wm_activate": BuiltinFunc(
+        name="wm_activate", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 2)",
+        description="Make a window the active one (keys go to it); false if it is not open any more"),
+    "wm_zip": BuiltinFunc(
+        name="wm_zip", params=["id"], return_type="BOOL", c_template="_dash_wm_do(${id}, 3)",
+        description="A window to its other size, as its zoom gadget does; false if it is not open any more"),
+    "wm_active": BuiltinFunc(
+        name="wm_active", params=[], return_type="LONG", c_template="_dash_wm_active()",
+        description="The id of the active window, if it is on the Workbench screen; 0 if not"),
+    "wm_at": BuiltinFunc(
+        name="wm_at", params=["x", "y"], return_type="LONG", c_template="_dash_wm_at(${x}, ${y})",
+        description="The id of the window at (x, y) of the Workbench screen, the one in front there; 0 if none"),
+    "wm_pointer_x": BuiltinFunc(
+        name="wm_pointer_x", params=[], return_type="LONG", c_template="_dash_wm_pointer(0)",
+        description="Where the pointer is on the Workbench screen: x"),
+    "wm_pointer_y": BuiltinFunc(
+        name="wm_pointer_y", params=[], return_type="LONG", c_template="_dash_wm_pointer(1)",
+        description="Where the pointer is on the Workbench screen: y"),
+    "wm_bar_height": BuiltinFunc(
+        name="wm_bar_height", params=[], return_type="LONG", c_template="_dash_wm_bar_height()",
+        description="The height of the Workbench screen's title bar (where windows usually start)"),
     # Trasfondo: disks, network and WiFi for a meter; each reading afresh, none waits longer than its time
     "disks_read": BuiltinFunc(
         name="disks_read", params=["ms"], return_type="LONG",
@@ -4443,6 +4690,149 @@ TASK_FUNCTIONS = {
         description="When the program ends, start it again (after everything of its end, single_instance's port "
                     "too), as it started: from the Workbench (3.5+: with its icon) or from a Shell with its "
                     "arguments. For updating itself"),
+    # Dash 2.0: what programs did with @native (docs/DASHC_NATIVE.md)
+    "time_unix": BuiltinFunc(
+        name="time_unix", params=[], return_type="LONG", c_template="_dash_time_unix()",
+        description="The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies)"),
+    "clock_days": BuiltinFunc(
+        name="clock_days", params=[], return_type="LONG", c_template="_dash_clock_days()",
+        description="Days since 1 January 1978 by the system's clock (DateStamp's ds_Days)"),
+    "mem_largest": BuiltinFunc(
+        name="mem_largest", params=[], return_type="LONG", c_template="(LONG)AvailMem(MEMF_ANY | MEMF_LARGEST)",
+        description="The largest free block of memory, chip or fast, in bytes"),
+    "run_command": BuiltinFunc(
+        name="run_command", params=["command"], return_type="LONG", c_template="_dash_run_command(${command})",
+        reads_only=True,
+        description="Run a command line and wait for it to end, its output the program's own: its return code, "
+                    "-1 if it could not start"),
+    # Dash 2.0 (Inferencia, the IDE): running a command and taking its output; environment variables
+    "run_capture": BuiltinFunc(
+        name="run_capture", params=["command", "timeout_ms"], return_type="STRPTR",
+        c_template="_dash_run_capture(${command}, ${timeout_ms})", reads_only=True,
+        description="Run a command line and wait for it to end: what it wrote, its return code in run_rc(). With "
+                    "timeout_ms over 0, when that time runs out the command gets Ctrl-C (and again every second until "
+                    "it ends). Only its output: AmigaOS gives a command run this way no error channel (a C program's "
+                    "stderr goes to the console; dashc writes its errors to its output on the Amiga)"),
+    "run_start": BuiltinFunc(
+        name="run_start", params=["command", "timeout_ms"], return_type="LONG",
+        c_template="_dash_run_start(${command}, ${timeout_ms})", reads_only=True,
+        description="run_capture without waiting: a number for run_ready, run_break and run_finish, 0 if it "
+                    "could not start. The program waits at its end for the ones it did not finish"),
+    "run_ready": BuiltinFunc(
+        name="run_ready", params=["run"], return_type="BOOL", c_template="_dash_run_ready(${run})",
+        description="True when a run_start has ended (it does not wait; it also applies the time limit)"),
+    "run_break": BuiltinFunc(
+        name="run_break", params=["run"], return_type="void", c_template="_dash_run_break(${run})",
+        description="Send Ctrl-C to a run_start that is still running (again every second until it ends)"),
+    "run_finish": BuiltinFunc(
+        name="run_finish", params=["run"], return_type="STRPTR", c_template="_dash_run_finish(${run})",
+        description="What a run_start wrote, as run_capture (it waits if it is still running), and forget it"),
+    "run_rc": BuiltinFunc(
+        name="run_rc", params=[], return_type="LONG", c_template="_dash_run_rc()",
+        description="Return code of the last run_capture or run_finish: the command's, -1 if it could not "
+                    "start, -2 if its time ran out"),
+    "env_get": BuiltinFunc(
+        name="env_get", params=["name"], return_type="STRPTR", c_template="_dash_env_get(${name})",
+        reads_only=True,
+        description="An environment variable (of the program's Shell, else of ENV:), up to its first line "
+                    "end; \"\" if there is none"),
+    "env_set": BuiltinFunc(
+        name="env_set", params=["name", "value", "save"], return_type="BOOL",
+        c_template="_dash_env_set(${name}, ${value}, ${save})", reads_only=True,
+        description="Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); "
+                    "false if it could not"),
+    # Dash 2.0 (Inferencia): ARexx as a client; ports, tasks and assigns
+    "rexx_send": BuiltinFunc(
+        name="rexx_send", params=["port", "command"], return_type="STRPTR",
+        c_template="_dash_rexx_send(${port}, ${command})", reads_only=True,
+        description="Send an ARexx command to a public port (\"MULTIVIEW.1\"; \"REXX\": run a script) and wait "
+                    "for the answer: its RESULT (\"\" without one), the RC in rexx_rc(). Not to the program's own "
+                    "port: it would wait for itself"),
+    "rexx_rc": BuiltinFunc(
+        name="rexx_rc", params=[], return_type="LONG", c_template="_dash_rexx_rc()",
+        description="RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no "
+                    "rexxsyslib.library"),
+    "ports_read": BuiltinFunc(
+        name="ports_read", params=[], return_type="LONG", c_template="_dash_ports_read()",
+        description="Read the names of the public message ports open now (ARexx ports among them): how many, "
+                    "for port_name, until the next ports_read"),
+    "port_name": BuiltinFunc(
+        name="port_name", params=["i"], return_type="STRPTR", c_template="_dash_port_name(${i})",
+        description="Name of port i (from 0) of the last ports_read"),
+    "tasks_read": BuiltinFunc(
+        name="tasks_read", params=[], return_type="LONG", c_template="_dash_tasks_read()",
+        description="Read the tasks and processes of the system (the program first): how many, for the "
+                    "task_entry_ functions, until the next tasks_read"),
+    "task_entry_name": BuiltinFunc(
+        name="task_entry_name", params=["i"], return_type="STRPTR", c_template="_dash_task_entry_name(${i})",
+        description="Name of task i of the last tasks_read (\"Shell Process\", \"input.device\"...)"),
+    "task_entry_command": BuiltinFunc(
+        name="task_entry_command", params=["i"], return_type="STRPTR",
+        c_template="_dash_task_entry_command(${i})",
+        description="The command a Shell process of the last tasks_read is running (\"\" if none)"),
+    "task_entry_state": BuiltinFunc(
+        name="task_entry_state", params=["i"], return_type="STRPTR", c_template="_dash_task_entry_state(${i})",
+        description="State of task i: \"running\" (the program), \"ready\" or \"waiting\""),
+    "task_entry_priority": BuiltinFunc(
+        name="task_entry_priority", params=["i"], return_type="LONG",
+        c_template="_dash_task_entry_priority(${i})", description="Priority of task i of the last tasks_read"),
+    "task_entry_cli": BuiltinFunc(
+        name="task_entry_cli", params=["i"], return_type="LONG", c_template="_dash_task_entry_cli(${i})",
+        description="Shell number of task i (what Status shows, for Break), 0 if it is not a Shell process"),
+    "assigns_read": BuiltinFunc(
+        name="assigns_read", params=[], return_type="LONG", c_template="_dash_assigns_read()",
+        description="Read the assigns (C:, LIBS:, those of Assign): how many, for assign_name and assign_path, "
+                    "until the next assigns_read"),
+    "assign_name": BuiltinFunc(
+        name="assign_name", params=["i"], return_type="STRPTR", c_template="_dash_assign_name(${i})",
+        description="Name of assign i of the last assigns_read, without the colon"),
+    "assign_path": BuiltinFunc(
+        name="assign_path", params=["i"], return_type="STRPTR", c_template="_dash_assign_path(${i})",
+        description="Where assign i points: a directory (\"Workbench:C\"), several separated by \";\", or the name "
+                    "a late or deferred one will look for"),
+    "wb_open": BuiltinFunc(
+        name="wb_open", params=["path"], return_type="BOOL", c_template="_dash_wb_open(${path})",
+        reads_only=True,
+        description="Open a drawer, a program or a project as a double click on its icon does (workbench.library "
+                    "44, OS 3.5+); false if it could not"),
+    "program_path": BuiltinFunc(
+        name="program_path", params=[], return_type="STRPTR", c_template="_dash_program_path()",
+        description="The program's full path (\"Work:Tachyon/Tachyon\"), from a Shell or from the Workbench"),
+    "locale_language": BuiltinFunc(
+        name="locale_language", params=[], return_type="STRPTR", c_template="_dash_locale_language()",
+        description="The user's first preferred language in Locale prefs (\"español\"), \"\" without one"),
+    "cpu_model": BuiltinFunc(
+        name="cpu_model", params=[], return_type="LONG", c_template="_dash_cpu_model()",
+        description="The processor: 68000, 68010, 68020, 68030, 68040 or 68060"),
+    "fpu_model": BuiltinFunc(
+        name="fpu_model", params=[], return_type="LONG", c_template="_dash_fpu_model()",
+        description="The FPU: 68881, 68882, 68040 or 68060 (the one in the processor), 0 without one"),
+    "library_version": BuiltinFunc(
+        name="library_version", params=["name"], return_type="LONG", c_template="_dash_library_version(${name})",
+        reads_only=True,
+        description="The version of a library (\"muimaster.library\"), loading it if it is not in memory; -1 if "
+                    "it is not there"),
+    "library_revision": BuiltinFunc(
+        name="library_revision", params=["name"], return_type="LONG", c_template="_dash_library_revision(${name})",
+        reads_only=True,
+        description="The revision of a library (the 3 of 47.3), as library_version; -1 if it is not there"),
+    "resident_version": BuiltinFunc(
+        name="resident_version", params=["name"], return_type="LONG", c_template="_dash_resident_version(${name})",
+        reads_only=True,
+        description="The version of a resident module of the system (FindResident: \"MorphOS\" says the program "
+                    "runs on MorphOS); -1 if there is none"),
+    "task_priority": BuiltinFunc(
+        name="task_priority", params=["n"], return_type="LONG", c_template="_dash_task_priority(${n})",
+        description="Set the program's priority (-128 to 127; the Shell gives 0): the one it had"),
+    "build_date": BuiltinFunc(
+        name="build_date", params=[], return_type="STRPTR", c_template="_dash_build_date()",
+        description="The date the program was compiled, \"2026-10-28\""),
+    "build_time": BuiltinFunc(
+        name="build_time", params=[], return_type="STRPTR", c_template="(STRPTR)__TIME__",
+        description="The time the program was compiled, \"20:45:10\""),
+    "console_flush": BuiltinFunc(
+        name="console_flush", params=[], return_type="void", c_template="_dash_console_flush()",
+        description="Write out now what Print left in the output's buffer (a progress line without its end)"),
     # dashweb D68
     "dos_requesters": BuiltinFunc(
         name="dos_requesters", params=["on"], return_type="void",
@@ -4500,6 +4890,12 @@ TASK_FUNCTIONS = {
 # Pictures by datatypes (dashweb D12)
 # =============================================================================
 
+def _dec(name, params, ret, template, desc):
+    """image_decode and its parts (Dash 2.0): no graphics, only memory and files"""
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       reads_only=True)
+
+
 IMAGE_FUNCTIONS = {
     "image_load": _gfx("image_load", ["file"], "LONG", "_dash_image_load(${file})",
                        "Picture from a file by datatypes (ILBM; PNG, GIF, JPEG if the system has them), "
@@ -4515,6 +4911,38 @@ IMAGE_FUNCTIONS = {
                         "A copy of an image at w x h pixels: a new image, or 0"),
     "image_free": _gfx("image_free", ["image"], "void", "_dash_image_free(${image})",
                        "Free an image (the ones left are freed at exit)"),
+    # Dash 2.0: decoded by the program itself (runtime/imgdec), what Tachyon did with @native
+    "image_decode": _dec("image_decode", ["file", "maxw", "maxh"], "LONG", "_dash_image_decode(${file}, ${maxw}, ${maxh})",
+                         "Decode a JPEG (TJpgDec), WebP (libwebp; both already reduced while they decode), PNG, GIF, BMP (stb_image) or SVG "
+                         "(nanosvg: drawn to cover maxw x maxh, RGBA) to "
+                         "RGB or RGBA pixels, made smaller until it is not much bigger than maxw x maxh (0, 0: its "
+                         "size; negative, a limit: an SVG then at its own size, smaller if it does not fit): the "
+                         "decoded picture, or 0. Without datatypes, and it may run in a task_start"),
+    "image_decode_start": _dec("image_decode_start", ["file", "maxw", "maxh"], "LONG",
+                               "_dash_image_decode_start(${file}, ${maxw}, ${maxh})",
+                               "image_decode in a process of its own, one below the program's priority, so the "
+                               "window goes on answering: a number for image_decode_ready and image_decode_finish, "
+                               "or 0 if it could not start"),
+    "image_decode_ready": _dec("image_decode_ready", ["t"], "BOOL", "_dash_image_decode_ready(${t})",
+                               "True when an image_decode_start has finished (it does not wait)"),
+    "image_decode_finish": _dec("image_decode_finish", ["t"], "LONG", "_dash_image_decode_finish(${t})",
+                                "What an image_decode_start decoded, as image_decode (0 if it could not); it waits "
+                                "if it is still running, and frees its process"),
+    "image_decoded_width": _dec("image_decoded_width", ["d"], "LONG", "_dash_image_decoded_width(${d})",
+                                "Width of a decoded picture"),
+    "image_decoded_height": _dec("image_decoded_height", ["d"], "LONG", "_dash_image_decoded_height(${d})",
+                                 "Height of a decoded picture"),
+    "image_decoded_alpha": _dec("image_decoded_alpha", ["d"], "BOOL", "_dash_image_decoded_alpha(${d})",
+                                "True if a decoded picture has alpha (4 bytes per pixel, RGBA; else 3, RGB)"),
+    "image_decoded_pixels": _dec("image_decoded_pixels", ["d"], "APTR", "_dash_image_decoded_pixels(${d})",
+                                 "The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or "
+                                 "image_from_rgb"),
+    "image_decoded_free": _dec("image_decoded_free", ["d"], "void", "_dash_image_decoded_free(${d})",
+                               "Free a decoded picture"),
+    "image_from_decoded": _gfx("image_from_decoded", ["d"], "LONG",
+                               "_dash_image_from_rgb(_dash_image_decoded_pixels(${d}), _dash_image_decoded_width(${d}), "
+                               "_dash_image_decoded_height(${d}), _dash_image_decoded_alpha(${d}))",
+                               "An image (as image_from_rgb) from a decoded picture, which is still to be freed"),
     "image_from_rgb": _gfx("image_from_rgb", ["buffer", "width", "height", "alpha"], "LONG",
                            "_dash_image_from_rgb((APTR)${buffer}, ${width}, ${height}, ${alpha})",
                            "An image from pixels in a buffer (RGB, or RGBA with alpha: mixed with what is under it on "
@@ -4554,6 +4982,10 @@ ZLIB_FUNCTIONS = {
                     "Uncompress n bytes of raw deflate (as in a ZIP) from buffer src into dest: the bytes written, "
                     "or -1 if the data is not raw deflate or is cut short, -2 if it does not fit in max, "
                     "-3 if there is no memory (zlib)"),
+    "inflate_auto": _buf("inflate_auto", ["src", "n", "dest", "max"], "LONG",
+                         "_dash_inflate_auto(${src}, ${n}, ${dest}, ${max})",
+                         "inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with "
+                         "Content-Encoding gzip or deflate): the bytes written, or as inflate"),
     "deflate": _buf("deflate", ["src", "n", "dest", "max", "level"], "LONG",
                     "_dash_deflate(${src}, ${n}, ${dest}, ${max}, ${level})",
                     "Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; "
@@ -4700,6 +5132,60 @@ SIMINPUT_FUNCTIONS = {
         c_template="_dash_input_drag(${x1}, ${y1}, ${x2}, ${y2})",
         description="Press the left button at (x1, y1), move to (x2, y2) with it down and let go (from the corner "
                     "of the active window)"),
+    "input_qualifiers": BuiltinFunc(
+        name="input_qualifiers", params=[], return_type="LONG", c_template="_dash_input_qualifiers()",
+        description="The keys held down now (input.device's PeekQualifier): 1, 2 Shift; 8 Ctrl; 16, 32 Alt; "
+                    "64, 128 Amiga; 0 if input.device cannot be opened"),
+    # Dash 2.0: for test programs (what Tachyon's clicar and Trasfondo's tests did with @native)
+    "window_find": BuiltinFunc(
+        name="window_find", params=["title"], return_type="LONG", c_template="_dash_window_find(${title})",
+        reads_only=True,
+        description="Another program's window (or the program's own) whose title starts with title, on any screen: "
+                    "a number for window_found_* and gadget_*, 0 if none (not valid once it is closed)"),
+    "window_found_activate": BuiltinFunc(
+        name="window_found_activate", params=["win"], return_type="void",
+        c_template="_dash_window_found_activate(${win})",
+        description="A window of window_find in front, with its screen, and active (input_* go to the active window)"),
+    "window_found_box": BuiltinFunc(
+        name="window_found_box", params=["win", "what"], return_type="LONG",
+        c_template="_dash_window_found_box(${win}, ${what})",
+        description="Of a window of window_find: 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, "
+                    "5 top border"),
+    "gadget_index": BuiltinFunc(
+        name="gadget_index", params=["win", "text"], return_type="LONG", c_template="_dash_gadget_index(${win}, ${text})",
+        reads_only=True,
+        description="The place (from 0, the window's own gadgets too) of the gadget whose text is text in a window of "
+                    "window_find; -1 if none. GadTools' buttons do not keep their text: count from one next to them"),
+    "gadget_x": BuiltinFunc(
+        name="gadget_x", params=["win", "n"], return_type="LONG", c_template="_dash_gadget_xy(${win}, ${n}, 0)",
+        description="x of the centre of the gadget at place n of a window of window_find, from its corner (as "
+                    "input_click counts); -1 if there is none"),
+    "gadget_y": BuiltinFunc(
+        name="gadget_y", params=["win", "n"], return_type="LONG", c_template="_dash_gadget_xy(${win}, ${n}, 1)",
+        description="y of the centre of that gadget, as gadget_x"),
+    "gadget_selected": BuiltinFunc(
+        name="gadget_selected", params=["win", "n"], return_type="BOOL", c_template="_dash_gadget_selected(${win}, ${n})",
+        description="True if the gadget at place n (a checkbox) is selected"),
+    "input_menu": BuiltinFunc(
+        name="input_menu", params=["menu", "item", "hold"], return_type="BOOL",
+        c_template="_dash_input_menu(${menu}, ${item}, ${hold})",
+        description="Choose item (from 0, separators too) of menu (from 0) of the active window with the mouse, as "
+                    "a user: the right button on its title, to the item, held hold ticks (1/50 s), let go; false if "
+                    "there is no such item"),
+    "input_move_screen": BuiltinFunc(
+        name="input_move_screen", params=["x", "y", "buttons"], return_type="void",
+        c_template="_dash_input_move_screen(${x}, ${y}, ${buttons})",
+        description="The pointer to (x, y) of the screen in steps of a pixel with buttons held (1 left, 2 right, 0 "
+                    "none): MUI's menus follow it"),
+    "screen_pixel": BuiltinFunc(
+        name="screen_pixel", params=["x", "y"], return_type="LONG", c_template="_dash_screen_pixel(${x}, ${y})",
+        needs_gfx=True,
+        description="The pen of the pixel (x, y) of the screen in front; -1 outside it"),
+    "cx_send": BuiltinFunc(
+        name="cx_send", params=["name", "command"], return_type="LONG", c_template="_dash_cx_send(${name}, ${command})",
+        reads_only=True,
+        description="A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 "
+                    "hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library"),
     "input_active_title": BuiltinFunc(
         name="input_active_title", params=[], return_type="STRPTR", c_template="_dash_input_active_title()",
         description="Title of the active window (\"\" if none): to wait for the window of the program to test"),
@@ -4737,9 +5223,156 @@ CLIP_FUNCTIONS = {
                             "there is none or something else was copied after it, -2 if it does not fit in max"),
 }
 
+# Dash 2.0: JSON read in C for lib/json.dash (json_parse makes its tree of Json from these nodes)
+JSON_FUNCTIONS = {
+    "json_scan": BuiltinFunc(
+        name="json_scan", params=["text"], return_type="LONG", c_template="_dash_json_scan(${text})", reads_only=True,
+        description="Read a JSON text into a table of nodes in order, each followed by what it holds (lib/json.dash "
+                    "makes its tree from it): how many, -1 if it is not JSON (json_scan_error says why and where)"),
+    "json_scan_error": BuiltinFunc(
+        name="json_scan_error", params=[], return_type="STRPTR", c_template="_dash_json_scan_error()",
+        description="Why the last json_scan gave -1, and at which byte (\"unexpected end at byte 1\")"),
+    "json_scan_kind": BuiltinFunc(
+        name="json_scan_kind", params=["i"], return_type="LONG", c_template="_dash_json_scan_kind(${i})",
+        description="Kind of node i: 0 null, 1 true or false, 2 number, 3 string, 4 array, 5 object"),
+    "json_scan_count": BuiltinFunc(
+        name="json_scan_count", params=["i"], return_type="LONG", c_template="_dash_json_scan_count(${i})",
+        description="How many elements an array or object node holds (they follow it); 1 for true, 0 for false"),
+    "json_scan_text": BuiltinFunc(
+        name="json_scan_text", params=["i"], return_type="STRPTR", c_template="_dash_json_scan_text(${i})",
+        description="The text of a string node (its escapes and \\uXXXX undone, in UTF-8) or a number node (as "
+                    "written)"),
+    "json_scan_name": BuiltinFunc(
+        name="json_scan_name", params=["i"], return_type="STRPTR", c_template="_dash_json_scan_name(${i})",
+        description="The name of node i inside its object (\"\" in an array or at the top)"),
+}
+
+# Dash 2.0 (Forja, the IDE): the debugger. The debugged program is built with dash --debug (dashc); the debugger
+# with either Dash (docs/DEPURADOR_LOOP.md)
+DEBUGGER_FUNCTIONS = {
+    "dbg_start": BuiltinFunc(
+        name="dbg_start", params=['program', 'args'], return_type="BOOL", c_template="((BOOL)_dash_dbg_start((LONG)(${program}), (LONG)(${args})))",
+        reads_only=True, description='Load a program built with dash --debug and start it in a process of its own, paused before its first line (set breakpoints, then dbg_continue): false if it could not (dbg_error says why)'),
+    "dbg_error": BuiltinFunc(
+        name="dbg_error", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_error())",
+        reads_only=True, description='Why the last dbg_start failed'),
+    "dbg_state": BuiltinFunc(
+        name="dbg_state", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_state())",
+        reads_only=True, description='The debugged program: 0 none, 1 paused before starting, 2 running, 3 stopped at a line, 4 ended'),
+    "dbg_signal": BuiltinFunc(
+        name="dbg_signal", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_signal())",
+        reads_only=True, description='The signal the debugger gets when the program stops or ends (for mui_wait_event_signals)'),
+    "dbg_wait": BuiltinFunc(
+        name="dbg_wait", params=['ms'], return_type="LONG", c_template="((LONG)_dash_dbg_wait((LONG)(${ms})))",
+        reads_only=True, description='Wait until the program stops or ends, ms at most (0: no limit): its state'),
+    "dbg_break": BuiltinFunc(
+        name="dbg_break", params=['file', 'line'], return_type="BOOL", c_template="((BOOL)_dash_dbg_break((LONG)(${file}), (LONG)(${line})))",
+        reads_only=True, description='A breakpoint at that line of that file ("prog.dash": the end of its path): false if the line has no code'),
+    "dbg_unbreak": BuiltinFunc(
+        name="dbg_unbreak", params=['file', 'line'], return_type="BOOL", c_template="((BOOL)_dash_dbg_unbreak((LONG)(${file}), (LONG)(${line})))",
+        reads_only=True, description='Take the breakpoint out of that line'),
+    "dbg_continue": BuiltinFunc(
+        name="dbg_continue", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_continue())",
+        reads_only=True, description='Go on (from the start or a stop) until a breakpoint or the end'),
+    "dbg_step": BuiltinFunc(
+        name="dbg_step", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_step())",
+        reads_only=True, description='Go on to the next line, into the functions it calls'),
+    "dbg_next": BuiltinFunc(
+        name="dbg_next", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_next())",
+        reads_only=True, description='Go on to the next line of this function (or of the one that called it)'),
+    "dbg_out": BuiltinFunc(
+        name="dbg_out", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_out())",
+        reads_only=True, description='Go on until the function returns: the next line of the one that called it'),
+    "dbg_pause": BuiltinFunc(
+        name="dbg_pause", params=[], return_type="BOOL", c_template="((BOOL)_dash_dbg_pause())",
+        reads_only=True, description='Stop the running program at the next line it runs'),
+    "dbg_end": BuiltinFunc(
+        name="dbg_end", params=['ms'], return_type="BOOL", c_template="((BOOL)_dash_dbg_end((LONG)(${ms})))",
+        reads_only=True, description='End the program (Ctrl-C, and at its next line its usual end): true if it ended within ms'),
+    "dbg_rc": BuiltinFunc(
+        name="dbg_rc", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_rc())",
+        reads_only=True, description='The return code of the ended program'),
+    "dbg_file": BuiltinFunc(
+        name="dbg_file", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_file())",
+        reads_only=True, description='The file of the line where the program stopped (its full path)'),
+    "dbg_line": BuiltinFunc(
+        name="dbg_line", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_line())",
+        reads_only=True, description='The line where the program stopped (0 if it is not stopped)'),
+    "dbg_function": BuiltinFunc(
+        name="dbg_function", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_function())",
+        reads_only=True, description='The function where the program stopped ("Main", "Punto.mover"...)'),
+    "dbg_frames": BuiltinFunc(
+        name="dbg_frames", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_frames())",
+        reads_only=True, description='How many calls are open where the program stopped: 1 in Main, 2 in a function Main called... (0 if it is not stopped)'),
+    "dbg_frame_function": BuiltinFunc(
+        name="dbg_frame_function", params=['i'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_frame_function((LONG)(${i})))",
+        reads_only=True, description='The function of call i: 0 the one where it stopped, 1 the one that called it...'),
+    "dbg_frame_line": BuiltinFunc(
+        name="dbg_frame_line", params=['i'], return_type="LONG", c_template="((LONG)_dash_dbg_frame_line((LONG)(${i})))",
+        reads_only=True, description='The line where call i is: 0 where it stopped, 1 the line of the call in the one that called it...'),
+    "dbg_frame_file": BuiltinFunc(
+        name="dbg_frame_file", params=['i'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_frame_file((LONG)(${i})))",
+        reads_only=True, description='The file of call i (its full path)'),
+    "dbg_vars": BuiltinFunc(
+        name="dbg_vars", params=['i'], return_type="LONG", c_template="((LONG)_dash_dbg_vars((LONG)(${i})))",
+        reads_only=True, description='How many variables call i sees: its parameters and the variables declared up to its line'),
+    "dbg_var_name": BuiltinFunc(
+        name="dbg_var_name", params=['i', 'k'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_var_name((LONG)(${i}), (LONG)(${k})))",
+        reads_only=True, description='Name of variable k (from 0) of call i'),
+    "dbg_var_type": BuiltinFunc(
+        name="dbg_var_type", params=['i', 'k'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_var_type((LONG)(${i}), (LONG)(${k})))",
+        reads_only=True, description='Type of variable k of call i, as in Dash ("Int", "[String]", "Punto")'),
+    "dbg_globals": BuiltinFunc(
+        name="dbg_globals", params=[], return_type="LONG", c_template="((LONG)_dash_dbg_globals())",
+        reads_only=True, description='How many global variables the program has'),
+    "dbg_global_name": BuiltinFunc(
+        name="dbg_global_name", params=['g'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_global_name((LONG)(${g})))",
+        reads_only=True, description='Name of global g (from 0)'),
+    "dbg_value": BuiltinFunc(
+        name="dbg_value", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value((LONG)(${i}), (LONG)(${expr})))",
+        reads_only=True, description='The value of expr in call i as text: a variable of that call or a global, with .field and [n] after it ("p.hijos[0].x"): 3, "hola", Punto(x: 3, y: 4), [1, 2], nil; "? " and why if it cannot'),
+    "dbg_value_type": BuiltinFunc(
+        name="dbg_value_type", params=['i', 'expr'], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_value_type((LONG)(${i}), (LONG)(${expr})))",
+        reads_only=True, description='The type of expr in call i ("" if it cannot)'),
+    "dbg_reg": BuiltinFunc(
+        name="dbg_reg", params=['n'], return_type="LONG", c_template="((LONG)_dash_dbg_reg((LONG)(${n})))",
+        reads_only=True, description='A register of the stopped program: 0-7 d0-d7, 8-15 a0-a7, 16 the PC'),
+    "dbg_peek": BuiltinFunc(
+        name="dbg_peek", params=['addr', 'size'], return_type="LONG", c_template="((LONG)_dash_dbg_peek((LONG)(${addr}), (LONG)(${size})))",
+        reads_only=True, description='1, 2 or 4 bytes of memory at addr, without sign'),
+    "dbg_output": BuiltinFunc(
+        name="dbg_output", params=[], return_type="STRPTR", c_template="((STRPTR)_dash_dbg_output())",
+        reads_only=True, description='What the program has written so far (output and error output)'),
+}
+
 # =============================================================================
 # All built-in functions combined
 # =============================================================================
+
+# Dash 2.0: what programs did with @native (docs/DASHC_NATIVE.md), in groups of their own for docs/BUILTINS.md
+def _move(src, names):
+    return {n: src.pop(n) for n in names}
+
+
+SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
+    "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
+    "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
+    "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
+    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "ports_read", "port_name", "tasks_read",
+    "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
+    "assigns_read", "assign_name", "assign_path"])
+IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
+    "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
+    "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
+    "image_decoded_free", "image_from_decoded"])
+WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
+    "wm_read", "wm_id", "wm_title", "wm_task", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
+    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height"])
+TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
+NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
+OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
+    "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",
+    "gadget_selected", "screen_pixel", "cx_send"])
 
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
@@ -4770,6 +5403,14 @@ ALL_BUILTINS = {
     **SIMINPUT_FUNCTIONS,      # Lorraine D46
     **CLIP_FUNCTIONS,          # Lorraine D18
     **COLLATE_FUNCTIONS,       # Lorraine D7
+    **SYSPROG_FUNCTIONS,       # Dash 2.0
+    **DEBUGGER_FUNCTIONS,      # Dash 2.0: Forja
+    **JSON_FUNCTIONS,          # Dash 2.0: lib/json.dash
+    **IMGDEC_FUNCTIONS,
+    **TTF_FUNCTIONS,
+    **NETBG_FUNCTIONS,
+    **OTHERWIN_FUNCTIONS,
+    **WM_FUNCTIONS,
     **AUDIO_FUNCTIONS,
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,

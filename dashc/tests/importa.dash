@@ -1,0 +1,23 @@
+# import: módulos con structs, constantes y funciones; un módulo que importa otro; un error de nil
+# en una función de otro fichero dice ese fichero; una función de otro fichero copiada en una condición con una
+# global de este (Trasfondo: "la variable lienzo no existe")
+import "modulos/formas.dash"
+import "modulos/colores.dash"
+
+var marca: Int = 7
+
+Main
+    for i in (1..2)
+        if cambio() and marca != 0
+            Print "cambio y marca #{marca}"
+        else
+            Print "sin cambio"
+        end
+    end
+    c = Cuadro(3, "verde")
+    Print describe(c)
+    Print LADOS * c.area()
+    Print nombre_color(1)
+    var nada: Cuadro = nil
+    Print peta(nada)
+end

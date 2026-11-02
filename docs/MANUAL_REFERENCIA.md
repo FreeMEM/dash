@@ -34,6 +34,7 @@
 21. [Modulos e Imports](#21-modulos-e-imports)
 22. [Ejemplos Completos](#22-ejemplos-completos)
 23. [Referencia Rapida](#23-referencia-rapida)
+24. [Dash 2.0: el compilador directo](#24-dash-20-el-compilador-directo)
 
 ---
 
@@ -77,6 +78,10 @@ end
 ```
 
 ### Compilacion
+
+Las órdenes de este apartado son las del camino por C con gcc, que desde Dash 2.0 es `./dash --gcc`. Sin
+`--gcc`, `./dash` compila directo a hunk, sin gcc: sus opciones, lo que no admite y cómo usar C con él, en la
+[sección 24](#24-dash-20-el-compilador-directo).
 
 ```bash
 ./dash programa.dash -o programa              # gcc -O2, para 68000
@@ -751,7 +756,7 @@ end
 ```
 
 Solo valen dentro de un `while` o `for`. Dentro de cualquier manejador `On ...` del `EventLoop`
-(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On Timer`), aunque el `EventLoop` esté
+(`On Close`, `On Key`, `On Gadget`, `On Menu`, `On Click`, `On RightClick`, `On Inactive`, `On Timer`), aunque el `EventLoop` esté
 dentro de un bucle, son un error: para salir del `EventLoop` se usa `Stop`.
 
 ### Comandos de Control
@@ -1387,6 +1392,7 @@ end
 | `sizegadget` | Permite redimensionar (por defecto `false`) | Bool |
 | `borderless` | Sin bordes (por defecto `false`) | Bool |
 | `activate` | Activa la ventana al abrirla (por defecto `true`) | Bool |
+| `rmbtrap` | El botón derecho va al programa (`On RightClick`), no a los menús (por defecto `false`) | Bool |
 
 `closegadget`, `dragbar` y `depthgadget` valen `true` por defecto. Una propiedad
 desconocida o con un valor del tipo equivocado (`closegadget 1`) es un error.
@@ -1421,7 +1427,7 @@ window_close(a)
 ```
 
 - `flags`: 1 = se puede redimensionar, 2 = sin bordes, 4 = sin boton de cerrar, 8 = ancho y alto son el
-  interior, sin los bordes (se suman).
+  interior, sin los bordes, 16 = el botón derecho al programa (`On RightClick`, como `rmbtrap`) (se suman).
 - Para que quepa con cualquier fuente: `screen_font_height()` y `screen_font_text_width(texto)` miden con la
   fuente de la pantalla (la del programa o la del Workbench), que es la de las barras de titulo y la de los
   gadgets de GadTools. Con la ventana abierta, `window_border_top()`, `window_border_bottom()`,
@@ -1897,6 +1903,12 @@ paso = 100
 EventLoop
     On Click            # boton izquierdo pulsado en la ventana
         Print "" + click_x() + "," + click_y()   # dentro de los bordes (donde se dibuja)
+    end
+    On RightClick       # boton derecho, en una ventana con rmbtrap (si no, abre los menus)
+        Print "derecho en " + click_x() + "," + click_y()
+    end
+    On Inactive         # la ventana dejo de ser la activa (se pulso fuera): event_window() dice cual
+        Print "fuera"
     end
     On Timer paso       # cada 100 ms (un numero o una variable, que se lee cada vez)
         Print "tic"
@@ -3536,6 +3548,10 @@ end
 
 ### Codigo C: @native y @extern
 
+Este apartado y el siguiente son del camino por C (`./dash --gcc`; `./dash` va por ahí solo cuando ve C en el
+programa). El compilador directo no admite C dentro del programa: enlaza C ya compilado con `@link`, `@extern` y
+`@export` ([sección 24](#24-dash-20-el-compilador-directo)).
+
 `@native` escribe una funcion en C dentro del programa. Sus parametros y su resultado son los tipos
 de Dash (`Int` es `LONG`, `String` es `STRPTR`, `Pointer` es `APTR`):
 
@@ -4399,33 +4415,37 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | Buffers | 10 | `buffer_alloc`, `buffer_get_byte`, `buffer_copy` |
 | Texto | 18 | `str_find`, `str_split`, `str_replace`, `file_read_text` |
 | Red (TCP y UDP) | 26 | `net_connect`, `net_send`, `net_recv`, `net_listen`, `net_accept`, `net_udp_open`, `net_udp_send`, `net_udp_recv` |
+| Red en una tarea aparte | 12 | `net_bg_open`, `net_bg_open_tls`, `net_bg_state`, `net_bg_send`, `net_bg_recv`, `net_bg_close`, `net_bg_stop` |
 | TLS (AmiSSL) | 9 | `tls_connect`, `tls_send`, `tls_recv` |
-| Fuentes y colores | 9 | `font_open`, `font_use`, `font_text_width`, `color_pen` |
+| Fuentes y colores | 12 | `font_open`, `font_use`, `font_text_width`, `color_pen`, `font_from_ttf`, `font_ttf_free`, `font_ttf_forget` |
 | Transparencia y degradados | 3 | `gfx_blend_rect`, `gfx_gradient_rect`, `gfx_pixel_rgb` |
 | Imagenes RGB desde un buffer | 2 | `gfx_rgb_draw`, `gfx_rgb_draw_scaled` |
 | Tareas, CPU y escritorio | 22 | `task_start`, `cpu_sample`, `desktop_canvas`, `break_check`, `single_instance` |
-| Commodity (Exchange) | 5 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait` |
+| Commodity (Exchange) | 6 | `tooltype`, `cx_broker`, `cx_hotkey`, `cx_command`, `cx_wait`, `cx_send` |
 | Ficheros vigilados y programas | 6 | `file_notify`, `file_changed`, `run_program`, `program_relaunch` |
+| Sistema y programa | 14 | `time_unix`, `clock_days`, `run_command`, `wb_open`, `program_path`, `locale_language`, `cpu_model`, `fpu_model`, `library_version`, `task_priority`, `console_flush`, `mem_largest`, `build_date`, `build_time` |
 | Fecha, hora y versión | 13 | `clock_read`, `clock_year`, `clock_hour`, `date_text`, `locale_decimal_point`, `program_version` |
 | Traducciones (catálogos) | 3 | `tr`, `catalog_open`, `catalog_language` |
 | Una curva para cada ratón | 14 | `mouse_curve`, `mouse_curves_off`, `mouse_prefs_set`, `usb_hid_read`, `usb_hid_emitter` |
 | Discos, red, WiFi y temperatura | 22 | `disks_read`, `disk_kb`, `net_ifs_read`, `net_if_bytes_in`, `net_drivers_read`, `net_driver_read`, `wifi_read`, `wifi_read_device`, `wifi_signal`, `pistorm_temperature` |
-| Simular teclado y ratón | 7 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title` |
+| Simular teclado y ratón | 10 | `input_key`, `input_text`, `input_click`, `input_button`, `input_drag`, `input_active_title`, `input_qualifiers`, `input_menu`, `input_move_screen` |
+| Ventanas de otros programas (pruebas) | 8 | `window_find`, `window_found_activate`, `window_found_box`, `gadget_index`, `gadget_x`, `gadget_y`, `gadget_selected`, `screen_pixel` |
 | Ordenar textos según el idioma | 1 | `str_compare_locale` |
 | Portapapeles | 5 | `clip_write_text`, `clip_read_text`, `clip_write_block`, `clip_block_size`, `clip_read_block` |
 | Imagenes (datatypes) | 8 | `image_load`, `image_draw`, `image_scale`, `image_from_rgb` |
+| Imágenes decodificadas por el programa | 7 | `image_decode`, `image_decoded_width`, `image_decoded_height`, `image_decoded_alpha`, `image_decoded_pixels`, `image_from_decoded`, `image_decoded_free` |
 | Argumentos, clics y reloj | 5 | `arg_count`, `arg`, `click_x`, `click_y`, `time_ms` |
-| Compresión (zlib) | 3 | `inflate`, `deflate`, `crc32` |
+| Compresión (zlib) | 4 | `inflate`, `inflate_auto`, `deflate`, `crc32` |
 | UTF-8 | 8 | `utf8_next`, `utf8_prev`, `utf8_code`, `utf8_char`, `utf8_length`, `utf8_to_latin1`, `latin1_to_utf8`, `utf8_check` |
 | Comparar y buscar en un búfer | 3 | `buffer_equals`, `buffer_find_byte`, `buffer_find_any` |
 | Double y texto | 2 | `str_from_double`, `str_to_double` |
 | Expresiones regulares y comodines | 5 | `regex_match`, `regex_find`, `regex_length`, `regex_error`, `wildcard_match` |
 | Matemáticas de Double | 20 | `sqrt`, `pow`, `exp`, `log`, `sin`, `atan2`, `floor`, `round`, `fmod`, `abs`, `is_nan` |
 | Audio | 21 | `sound_*`, `music_*`, `tone_play` |
-| Intuition | 52 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file` |
+| Intuition | 53 | `window_*` (también `window_border_*`), `screen_font_height`, `button_*`, `listview_*`, `dialog_file`, `dialog_file_at` |
 | RTG | 21 | `rtg_*` |
-| MUI | 94 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event` |
-| **Total** | **686** | |
+| MUI | 96 | `mui_app_begin`, `mui_window_begin`, `mui_button`, `mui_list`, `mui_canvas`, `mui_timer`, `mui_wait_event`, `mui_window_move`, `mui_set_active` |
+| **Total** | **738** | |
 
 ### Colores Estandar Amiga
 
@@ -4447,6 +4467,249 @@ Lista completa con parametros: [docs/BUILTINS.md](BUILTINS.md). Todas estan impl
 | DOWN | 77 |
 | LEFT | 79 |
 | RIGHT | 78 |
+
+---
+
+## 24. Dash 2.0: el compilador directo
+
+### `./dash` y `./dash --gcc`
+
+Desde Dash 2.0, `./dash` compila **directo a hunk**: su compilador, escrito en C (carpeta `dashc/`), genera él
+mismo el código 68000 y enlaza el ejecutable Hunk con su runtime, que ya lleva dentro compilado. No necesita gcc ni el Python con Lark de la 1.x.
+El mismo código se compila para el PC y para el Amiga, así que también compila dentro del Amiga.
+
+El lenguaje, los builtins y el runtime son los de la 1.x: los programas hacen lo mismo, también con la memoria.
+Lo nuevo del lenguaje y los builtins nuevos entran en los dos compiladores.
+
+El camino de la 1.x sigue, sin cambios, como `./dash --gcc`: traduce a C y compila con gcc, y todo lo que dicen
+las secciones anteriores sobre el C generado vale para él. Hace falta para los programas con C dentro (ver
+"Cuándo va por C" más abajo); `./dash` los pasa por ahí él solo.
+
+```bash
+make -C dashc                                   # construye el compilador (un compilador de C del PC y Python 3)
+./dash programa.dash -o programa                # directo a hunk
+./dash --gcc programa.dash -o programa          # por C con gcc
+./dash --version                                # Dash 2.0.1
+```
+
+`./dash` es un guion corto que llama al compilador (`dashc/dashc`) o, con `--gcc`, al camino por C. Si el
+programa lleva C o se pide una opción que solo tiene ese camino, `./dash` lo pasa por C él solo y lo dice en una
+línea: `dash: el programa lleva C: se compila por C con gcc`.
+
+### Opciones
+
+```bash
+./dash programa.dash -o programa                # código de 68000, arranca en cualquier Amiga
+./dash --fpu programa.dash -o programa          # Float y Double con la FPU (68020 con 68881/68882, 68040 o 68060)
+./dash --cpu 68020 programa.dash -o programa    # multiplica y divide con muls.l y divs.l (68020 a 68060)
+./dash --memcheck programa.dash -o programa     # comprobación de memoria
+./dash --stack 65536 programa.dash -o programa  # pila mínima en bytes, como @stack
+./dash --profile programa.dash -o programa      # perfil al acabar (también --perfil)
+./dash --debug programa.dash -o programa        # para el depurador de los builtins dbg_*
+./dash --cabecera tipos.h programa.dash         # los structs del programa en C, para el C de @link
+```
+
+| Opción | Qué hace |
+|---|---|
+| `-o fichero` | El ejecutable que se escribe |
+| `--fpu` | Float y Double con la FPU. El programa necesita un 68020 o superior con FPU |
+| `--cpu X` | `68000` (por defecto), `68020`, `68030`, `68040` o `68060`. Desde `68020`, el código multiplica y divide con instrucciones de 32 bits (`muls.l`, `divs.l`), que el 68000 no tiene |
+| `--memcheck` | Versión de prueba que vigila la memoria (abajo) |
+| `--stack N` | Pide al menos N bytes de pila, como `@stack N` |
+| `--profile`, `--perfil` | Al acabar `Main`, cuántas veces se llamó a cada función y dónde se fue el tiempo |
+| `--debug` | Un `NOP` al principio de cada línea y la información de depuración (abajo) |
+| `--debug-info prog` | Enseña la información de depuración de un ejecutable hecho con `--debug` |
+| `--cabecera x.h` | Escribe una cabecera de C con los structs del programa (abajo). Sin `-o`, solo eso |
+| `--dashui fichero` | Enseña el código Dash que sale de un `.dashui` (el que compila un `import`) |
+| `--tiempos` | Cuánto tarda cada fase de la compilación |
+| `--gcc` | Por C con gcc (la 1.x). Con él valen además `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk` |
+| `--version` | `Dash 2.0.1` |
+
+`./dash` acepta `-v` y `-q` de la 1.x y sin `--gcc` no cambian nada: el compilador solo escribe si hay un error. Los errores dicen dónde, como los
+de la 1.x: `fichero.dash:línea:columna: Error: mensaje`. Los del enlazado (por ejemplo, una función de `@extern`
+que nadie define) empiezan por `dash: Error:`.
+
+Variables de entorno al compilar:
+
+| Variable | Para qué |
+|---|---|
+| `DASH_PRINT_FLUSH=1` | Cada `Print` sale en el momento, como en la 1.x |
+| `DASH_TEST_AUTOCLOSE=<s>` | El programa acaba solo a los `s` segundos con código 0 (para pruebas en el emulador) |
+| `DASH_PROFILE=1` | Lo mismo que `--profile` (solo con `./dash`) |
+| `DASH_HOME` | La carpeta de Dash, para los `import` de `lib/`. Si no está, la de encima de `dashc/` (en el Amiga, la de la orden `dash`) |
+
+`tools/emu_run.py --dash2 programa.dash` compila con `./dash` (si el programa lleva C, por C) y lo ejecuta en el
+emulador como siempre; sin `--dash2`, con `./dash --gcc`.
+
+### C de fuera: @link, @extern y @export
+
+El compilador directo no compila C, pero enlaza C ya compilado. El C se compila aparte con el gcc de Amiga (`m68k-amigaos-gcc`)
+a un objeto `.o` o una biblioteca `.a`, y el programa lo usa así:
+
+- `@link "c/saludo.o"` (o `"libx.a"`) enlaza el objeto o la biblioteca, con la ruta relativa al fichero `.dash`
+  que lo dice. Solo entra lo que el programa alcanza; un objeto compilado sin `-ffunction-sections` entra entero.
+  Un fichero `.c` no vale: el compilador dice que no es un objeto Hunk.
+- `@extern("nombre") func f(a: Int, s: String) -> Int` declara una función de C de lo enlazado. Se llama como en
+  C: los argumentos en la pila y el resultado en `d0`. El texto entre paréntesis no lo usa el compilador
+  directo (el camino por C lo pide).
+- `@export func f(...)` es una función de Dash que el C llama por su nombre. El compilador la genera aunque nadie la llame
+  desde Dash y le da como nombre de C el suyo de Dash, también si es privada de un módulo.
+
+Tipos que admite `@extern`:
+
+| Tipo de Dash | En C | Notas |
+|---|---|---|
+| `Int`, `Pointer` | `long`, un puntero | Un número de 32 bits. Un parámetro sin tipo es `Int` |
+| `Bool` | `long` | Lo que devuelve el C pasa a `true` o `false` (cualquier valor distinto de 0 es `true`) |
+| `String` | `const char *` | El texto de Dash, para usarlo durante la llamada: si el C lo guarda, lo copia. Uno que devuelve el C se copia a un texto de Dash |
+| Un struct | puntero al primer campo | Prestado durante la llamada. Uno que devuelve el C se sostiene al guardarlo, como el de una función de Dash |
+| `Func` | puntero a función | La dirección de una función de Dash, que el C llama como una suya: `long (*f)(long)` |
+
+`Float`, `Double`, `Fixed`, las listas y los diccionarios no se pueden pasar ni devolver. Una función de
+`@extern` sin `->` no devuelve nada. Una función de `@extern` también es un valor: se puede pasar a
+`task_start(f, n)` o a otro C.
+
+Las funciones de Dash siguen el convenio de C (pila, `d0`, y guardan los registros que usan), así que el C las
+puede llamar por un `Func` o, si son `@export`, por su nombre. Un texto que devuelve una función de Dash es un
+temporal: si el C lo guarda, lo copia.
+
+Un ejemplo completo. El C, compilado con
+`m68k-amigaos-gcc -noixemul -O2 -fomit-frame-pointer -c c/saludo.c -o c/saludo.o`:
+
+```c
+#include <stdio.h>
+
+extern long triple(long x);                  /* de Dash: @export func triple */
+
+long suma(long a, long b) { return a + b; }
+
+const char *saludo(long n)
+{
+    static char buf[40];
+    snprintf(buf, sizeof buf, "hola %ld veces", n);
+    return buf;
+}
+
+long aplicar(long (*f)(long), long x) { return f(x) + triple(x); }
+```
+
+El programa:
+
+```ruby
+@link "c/saludo.o"
+
+@extern("saludo") func suma(a: Int, b: Int) -> Int
+@extern("saludo") func saludo(n: Int) -> String
+@extern("saludo") func aplicar(f: Func, x: Int) -> Int
+
+@export func triple(x: Int) -> Int
+    return x * 3
+end
+
+func doble(x: Int) -> Int
+    return x * 2
+end
+
+Main
+    Print suma(2, 40)                # 42
+    Print saludo(3)                  # hola 3 veces
+    Print aplicar(doble, 5)          # 25: doble(5) + triple(5)
+end
+```
+
+Compila igual con `./dash` y con `./dash --gcc`.
+
+**Lo que el C encuentra en el runtime.** El C de `@link` se compila con las cabeceras de libnix, pero no se
+enlaza con libnix: lo que llama de libc, libm y libgcc lo pone el runtime del compilador, y solo entra lo que se usa.
+Están `malloc`, `calloc`, `realloc` y `free` (con un semáforo: valen desde una tarea de `task_start`), las de
+textos (`strchr`, `strdup`, `strtol`, `strtod`, `qsort`...), `printf`, `snprintf` y el stdio de ficheros
+(`fopen`, `fread`, `fwrite`...; la salida estándar va a la del programa), `gmtime`, `localtime`, `mktime`, la
+tabla de `ctype.h` y las de `math.h` (`sin`, `pow`, `sqrt`, `round`...). Si falta algo, el compilador dice al enlazar qué
+nombres no define nadie. Diferencia con libnix: la familia de `printf` no escribe números de coma flotante
+(`%f`, `%e` y `%g` sacan `?`).
+
+**Los structs de Dash en C.** `./dash --cabecera tipos.h programa.dash` escribe una cabecera con los structs
+tal como los coloca el compilador (el puntero apunta al primer campo; cada campo ocupa 4 bytes), las constantes enteras,
+los prototipos de las `@export` y las funciones del runtime que puede usar ese C: `dl_str_dup`, `dl_str_free`,
+`dl_str_len`, `dl_str_temp`, `dl_retain`, `dl_release`, `dl_arr_length`, `dl_arr_get`, `dl_dict_length` y
+`dl_dict_get`. Vale también para un módulo sin `Main`. Para C que venía de un `@native` o de un `@c` de la 1.x,
+la cabecera define los nombres de entonces (`_dash_str_dup`, `_dash_retain`, `DashArray_get`...) sobre estas.
+
+### --memcheck, --fpu y --stack
+
+`--memcheck` es el de la 1.x (sección 1): avisa en cuanto algo se libera dos veces o se usa después de liberarse,
+con el fichero y la línea (`memcheck: ERROR campo de nil (en prog.dash:15)`), y al salir dice lo que queda vivo.
+Rellena lo liberado con `0xDB` y no reutiliza los 64 últimos bloques. Lleva su propio runtime, así que no cuesta
+nada sin la opción.
+
+Con `--fpu`, `Float` y `Double` se calculan con la FPU, y el runtime está compilado para 68020 con FPU; el
+código del programa sigue siendo de 68000. El programa pone la FPU en precisión extendida al arrancar. El C de
+`@link` puede estar compilado para la FPU (`-m68020 -m68881`), aunque `@extern` no pasa números de coma
+flotante. `--fpu --memcheck` va con su propio runtime.
+
+Un programa pide al arrancar al menos 16 KB de pila (32 KB con MUI y 64 KB con TLS) y la cambia por una nueva si
+el shell le da menos. `@stack N` y `--stack N` piden más; manda el mayor. A diferencia de la 1.x, `--stack 0` no
+deja la pila del shell.
+
+### --debug y el depurador
+
+`./dash --debug` pone un `NOP` al principio de cada línea de Dash y añade al ejecutable un bloque `HUNK_DEBUG`
+con los ficheros, las líneas, las funciones, las variables, las globales y los campos de los structs
+(`./dash --debug-info programa` lo enseña). No copia funciones en línea y deja todas las variables en
+memoria, para que el depurador las encuentre; el programa hace lo mismo que sin `--debug`.
+
+Un programa así se depura desde otro con los builtins `dbg_*` (lista en [BUILTINS.md](BUILTINS.md), sección
+"Depurador"): cargarlo en pausa, puntos de parada, paso a paso, la pila de llamadas, las variables, los registros
+y la memoria. Un punto de parada cambia el `NOP` de su línea por un `TRAP`: no usa el modo traza de la CPU, el
+que Emu68 no tiene.
+
+El depurador de VS Code (F5) usa estos mismos builtins: compila con `./dash --debug` y arranca el programa en el
+Amiga emulado bajo `tools/amiga/dbgserver.dash`, un programa de Dash que lo maneja con los `dbg_*` y atiende a VS
+Code por TCP (`tools/emu_run.py --dbgserver PUERTO`). Un programa con C se compila por C (`./dash --gcc --debug`) y
+lo depura gdb, como en la 1.x; `"debugger": "gdb"` en `launch.json` elige ese camino siempre.
+
+### El compilador en el Amiga
+
+```bash
+make -C dashc amiga                             # dashc/build/dashc.amiga (necesita el gcc de bebbo)
+python3 tools/paquete_amiga.py                  # el paquete para el Amiga, con su instalador
+```
+
+`dashc/build/dashc.amiga` es el compilador para el Amiga (corre en un 68000). El paquete lo copia con el nombre
+`dash`, y junto a él los runtimes que no lleva dentro para no ocupar el doble:
+
+| En el Amiga (en `dashc/build/`) | Para |
+|---|---|
+| `dash_mc.drt` (`dashc_mc.drt`) | `--memcheck` |
+| `dash_fpu.drt` (`dashc_fpu.drt`) | `--fpu` |
+| `dash_fpu_mc.drt` (`dashc_fpu_mc.drt`) | `--fpu --memcheck` |
+
+Un `.drt` es un runtime ya preparado (leído, troceado y comprimido) para que compilar no tenga que hacerlo cada
+vez. La orden los busca en su carpeta (`PROGDIR:`); si falta el que hace falta, lo dice. Para los `import` de
+`lib/`, la carpeta `lib` va junto a ella, o la variable `DASH_HOME` dice dónde está la que la contiene.
+
+```
+dash programa.dash -o programa
+```
+
+Con el mismo fichero de entrada, el compilador del Amiga escribe el mismo ejecutable, byte a byte, que el del PC (el
+nombre del fichero va dentro, para los mensajes de error: tiene que ser el mismo).
+
+### Cuándo va por C (`--gcc`)
+
+| Sin `--gcc` | Qué pasa o qué hacer |
+|---|---|
+| Un programa con `@native`, `@c` o `@header` | `./dash` lo pasa por C él solo; o pasar el C a un objeto con `@link` y `@extern`. El `@native` de los módulos de `lib/amiga` sí vale: va compilado dentro del compilador |
+| `-O`, `-O0`, `--small`, `--multifile`, `--no-hunk` | Van por C. El compilador directo no tiene niveles de optimización y escribe Hunk directamente |
+| Ver o compilar el C generado (`python3 -m compiler.main`) | Es del camino por C: el compilador directo no genera C |
+| Depurar con gdb | `./dash --gcc --debug`. El `--debug` directo es para los builtins `dbg_*` (y el depurador de VS Code, que los usa) |
+| `@link "x.c"` | Compilar el `.c` antes con el gcc de Amiga y enlazar el `.o` |
+| Una función de una `.library` por `@extern` | El compilador directo no llama por registros: un builtin, o C enlazado que la llame |
+| `Float` o `Double` en una función de `@extern` | Pasarlos como texto o como enteros (por ejemplo, en coma fija) |
+| `--stack 0` | No deja la pila del shell; el compilador directo pide siempre la suya |
+
+Lo demás es igual: el lenguaje, los builtins, el runtime, los mensajes de error de los programas y lo que
+necesitan para arrancar (Kickstart 3.0 y un 68000; MUI 5 y TLS, un 68020).
 
 ---
 

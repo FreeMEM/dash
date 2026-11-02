@@ -13,7 +13,7 @@ from string import Template
 
 from compiler.ast_nodes import (
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral,
@@ -489,12 +489,23 @@ static BOOL _dash_mc_hold(APTR *b, ULONG *size) {
 }
 #endif
 
+/* the size of the pool's puddles (mem_puddle, before the pool exists: Tachyon D80); blocks over a quarter of it
+   get one of their own, which goes back to the system when freed */
+static ULONG _dash_puddle = 4096;
+
 static APTR _dash_alloc(ULONG size) {
     if (!_dash_pool) {
-        _dash_pool = CreatePool(MEMF_ANY | MEMF_CLEAR, 4096, 1024);
+        _dash_pool = CreatePool(MEMF_ANY | MEMF_CLEAR, _dash_puddle, _dash_puddle / 4);
         if (!_dash_pool) return NULL;
     }
     return AllocPooled(_dash_pool, size);
+}
+
+/* mem_puddle(bytes): puddles of that size (1 KB to 1 MB), only before the pool exists */
+static BOOL _dash_mem_puddle(LONG bytes) {
+    if (_dash_pool || bytes < 1024 || bytes > 1048576) return FALSE;
+    _dash_puddle = (ULONG)bytes;
+    return TRUE;
 }
 
 /* Small blocks (up to 128 bytes: strings, structs, array headers and data)
@@ -503,10 +514,49 @@ static APTR _dash_alloc(ULONG size) {
    a free list a few dozen. A loop that makes a short string, a struct or a
    small array per iteration reuses the same blocks. 8-byte classes waste 3.5
    bytes per block on average (16-byte classes: 7.5). The size given to
-   _dash_block_put must be the one given to _dash_block_get. */
+   _dash_block_put must be the one given to _dash_block_get.
+   New blocks come from slabs of their class (one AllocMem each, cleared, handed out in order), not from the pool:
+   exec never gives an empty puddle back to the system (3.1 and 3.2, measured), and mem_trim() gives back every slab
+   whose blocks are all free (Tachyon D80). A slab has 16 blocks, the next of its class twice as many, up to 4 KB. */
 #define _DASH_SMALL_CLASSES 16
 #define _DASH_SMALL_MAX (8 * _DASH_SMALL_CLASSES)
 static APTR _dash_small_free[_DASH_SMALL_CLASSES];
+
+typedef struct _DashSlab {
+    struct _DashSlab *next;
+    ULONG bytes;                /* the whole AllocMem, this header included */
+    UWORD n;                    /* blocks */
+    UWORD free;                 /* (mem_trim: its blocks in the free lists) */
+    ULONG pad;                  /* (16 bytes: the blocks stay 8-aligned) */
+} _DashSlab;
+static _DashSlab *_dash_slabs;
+static UBYTE *_dash_slab_next[_DASH_SMALL_CLASSES], *_dash_slab_end[_DASH_SMALL_CLASSES];
+static UWORD _dash_slab_blocks[_DASH_SMALL_CLASSES];
+
+/* a block of class c when its free list is empty: the next one of its slab, or a new slab */
+static __attribute__((noinline)) APTR _dash_small_more(ULONG c) {
+    ULONG size = (c + 1) << 3, n;
+    _DashSlab *s;
+    UBYTE *b = _dash_slab_next[c];
+    if (b < _dash_slab_end[c]) {
+        _dash_slab_next[c] = b + size;
+        return b;
+    }
+    n = _dash_slab_blocks[c];
+    if (!n) n = 16;
+    s = (_DashSlab *)AllocMem(sizeof(_DashSlab) + n * size, MEMF_ANY | MEMF_CLEAR);
+    if (!s) return NULL;
+    s->next = _dash_slabs;
+    _dash_slabs = s;
+    s->bytes = sizeof(_DashSlab) + n * size;
+    s->n = (UWORD)n;
+    if (n * size * 2 <= 4096) _dash_slab_blocks[c] = (UWORD)(n * 2);
+    else _dash_slab_blocks[c] = (UWORD)n;
+    b = (UBYTE *)(s + 1);
+    _dash_slab_next[c] = b + size;
+    _dash_slab_end[c] = b + n * size;
+    return b;
+}
 
 /* contents undefined (a recycled block is not cleared) */
 static __inline__ APTR _dash_block_get(ULONG size) {
@@ -517,7 +567,7 @@ static __inline__ APTR _dash_block_get(ULONG size) {
             _dash_small_free[c] = *(APTR *)b;
             return b;
         }
-        return _dash_alloc((c + 1) << 3);
+        return _dash_small_more(c);
     }
     return _dash_alloc(size);
 }
@@ -533,9 +583,84 @@ static APTR _dash_block_get_clear(ULONG size) {
             do { q[0] = 0; q[1] = 0; q += 2; } while (c--);
             return b;
         }
-        return _dash_alloc((c + 1) << 3);
+        return _dash_small_more(c);      /* (never handed out: still cleared) */
     }
     return _dash_alloc(size);
+}
+
+/* the slab of block b in v (n slabs by address), or NULL */
+static _DashSlab *_dash_slab_of(_DashSlab **v, LONG n, UBYTE *b) {
+    LONG lo = 0, hi = n - 1, m;
+    while (lo < hi) {
+        m = (lo + hi + 1) >> 1;
+        if ((UBYTE *)v[m] <= b) lo = m;
+        else hi = m - 1;
+    }
+    if ((UBYTE *)v[lo] <= b && b < (UBYTE *)v[lo] + v[lo]->bytes) return v[lo];
+    return NULL;
+}
+
+/* mem_trim() (Tachyon D80): the slabs whose blocks are all free go back to the system; without it they stay in
+   the free lists for good, and they split the system's memory. The bytes given back */
+static LONG _dash_mem_trim(void) {
+    _DashSlab **v, *s, **ps;
+    LONG n = 0, k, i, m, c, freed = 0;
+    APTR *pp;
+    UBYTE *b;
+    for (s = _dash_slabs; s; s = s->next) n++;
+    if (!n) return 0;
+    v = (_DashSlab **)AllocMem(n * sizeof(APTR), MEMF_ANY);
+    if (!v) return 0;
+    for (k = 0, s = _dash_slabs; s; s = s->next) {
+        s->free = 0;
+        v[k++] = s;
+    }
+    for (m = n >> 1; m > 0; m >>= 1)                     /* by address (Shell sort) */
+        for (i = m; i < n; i++) {
+            s = v[i];
+            for (k = i; k >= m && v[k - m] > s; k -= m) v[k] = v[k - m];
+            v[k] = s;
+        }
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++) {
+        ULONG size = (c + 1) << 3;
+        /* the blocks never handed out of the last slab, to the list */
+        for (b = _dash_slab_next[c]; b < _dash_slab_end[c]; b += size) {
+            *(APTR *)b = _dash_small_free[c];
+            _dash_small_free[c] = b;
+        }
+        _dash_slab_next[c] = _dash_slab_end[c] = NULL;
+        for (b = (UBYTE *)_dash_small_free[c]; b; b = *(UBYTE **)b)
+            if ((s = _dash_slab_of(v, n, b)) != NULL) s->free++;
+    }
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++)            /* the blocks of the empty slabs out of the lists */
+        for (pp = &_dash_small_free[c]; *pp; ) {
+            s = _dash_slab_of(v, n, (UBYTE *)*pp);
+            if (s && s->free == s->n) *pp = *(APTR *)*pp;
+            else pp = (APTR *)*pp;
+        }
+    for (ps = &_dash_slabs; *ps; ) {
+        s = *ps;
+        if (s->free == s->n) {
+            *ps = s->next;
+            freed += s->bytes;
+            FreeMem(s, s->bytes);
+        } else ps = &s->next;
+    }
+    FreeMem(v, n * sizeof(APTR));
+    return freed;
+}
+
+static void _dash_slabs_free(void) {
+    LONG c;
+    while (_dash_slabs) {
+        _DashSlab *s = _dash_slabs;
+        _dash_slabs = s->next;
+        FreeMem(s, s->bytes);
+    }
+    for (c = 0; c < _DASH_SMALL_CLASSES; c++) {
+        _dash_slab_next[c] = _dash_slab_end[c] = NULL;
+        _dash_slab_blocks[c] = 0;
+    }
 }
 
 static __inline__ void _dash_block_put(APTR b, ULONG size) {
@@ -1148,6 +1273,7 @@ static void _dash_mem_cleanup(void) {
         DeletePool(_dash_pool);
         _dash_pool = NULL;
     }
+    _dash_slabs_free();
     _dash_ts = _dash_ts_first;          /* (a bigger stack was in the pool) */
     _dash_ts_n = 0;
     _dash_ts_cap = _DASH_TS_FIRST;
@@ -2923,14 +3049,16 @@ static UBYTE *_dash_rgba_alpha(UBYTE *pixels, LONG w, LONG h) {
 static UBYTE *_dash_rgba_mask(UBYTE *pixels, LONG w, LONG h, LONG mod) {
     UBYTE *mask = (UBYTE *)_DASH_PIXALLOC(mod * h, MEMF_CLEAR), *p;
     LONG x, y;
-    BOOL clear = FALSE, opaque = FALSE;
+    BOOL clear = FALSE;
     if (!mask) return NULL;
     for (y = 0, p = pixels + 3; y < h; y++)
         for (x = 0; x < w; x++, p += 4) {
-            if (*p >= 128) { mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7); opaque = TRUE; }
+            if (*p >= 128) mask[y * mod + (x >> 3)] |= 0x80 >> (x & 7);
             else clear = TRUE;
         }
-    if (!(clear && opaque)) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
+    /* all opaque: no mask; all clear: the empty mask, so nothing is drawn (dashweb D81: a PNG whose only colour
+       is transparent came out opaque) */
+    if (!clear) { _DASH_PIXFREE(mask, "mask"); mask = NULL; }
     return mask;
 }
 
@@ -3472,6 +3600,7 @@ extern struct WBStartup *_WBenchMsg;
 static BOOL _dash_cx_lib_ours = FALSE, _dash_icon_lib_ours = FALSE;
 static struct MsgPort *_dash_cx_port = NULL;
 static CxObj *_dash_cx_broker = NULL, *_dash_cx_key = NULL;
+static CxObj *_dash_cx_keys[33];       /* the hotkeys of cx_key_add, by n */
 static struct MsgPort *_dash_cx_tport = NULL;
 static struct timerequest *_dash_cx_tr = NULL;
 #define _DASH_CX_KEY_ID 1
@@ -3562,7 +3691,7 @@ static STRPTR _dash_tooltype(STRPTR name, STRPTR dflt) {
 
 static void _dash_cx_cleanup(void) {
     struct Message *m;
-    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; }
+    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; memset(_dash_cx_keys, 0, sizeof(_dash_cx_keys)); }
     if (_dash_cx_port) {
         while ((m = GetMsg(_dash_cx_port))) ReplyMsg(m);
         DeleteMsgPort(_dash_cx_port);
@@ -3592,7 +3721,7 @@ static BOOL _dash_cx_broker_new(STRPTR name, STRPTR title, STRPTR descr, LONG pr
     _dash_cx_at_exit();
     if (!CxBase) { CxBase = OpenLibrary((CONST_STRPTR)"commodities.library", 37); _dash_cx_lib_ours = CxBase != NULL; }
     if (!CxBase || !name || !*name) return FALSE;
-    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; }
+    if (_dash_cx_broker) { DeleteCxObjAll(_dash_cx_broker); _dash_cx_broker = NULL; _dash_cx_key = NULL; memset(_dash_cx_keys, 0, sizeof(_dash_cx_keys)); }
     if (!_dash_cx_port && !(_dash_cx_port = CreateMsgPort())) return FALSE;
     strncpy(n, (char *)name, sizeof(n) - 1); n[sizeof(n) - 1] = 0;
     strncpy(t, title ? (char *)title : n, sizeof(t) - 1); t[sizeof(t) - 1] = 0;
@@ -3630,7 +3759,31 @@ static BOOL _dash_cx_hotkey(STRPTR descr) {
     return TRUE;
 }
 
-/* The next command: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill (remove), 6 the hotkey. Disable and
+/* One more hotkey (n from 1 to 32): cx_command gives 100 + n; the event is eaten (CX_TRANSLATE to nothing).
+   They go with the broker (DeleteCxObjAll); a second one with the same n replaces the first, and "" takes it
+   away. */
+static BOOL _dash_cx_key_add(STRPTR descr, LONG n) {
+    IX ix;
+    CxObj *filter;
+    if (!_dash_cx_broker || n < 1 || n > 32) return FALSE;
+    if (!descr || !*descr) {                  /* "": that one goes */
+        if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); _dash_cx_keys[n] = NULL; }
+        return TRUE;
+    }
+    memset(&ix, 0, sizeof(ix));
+    if (ParseIX((CONST_STRPTR)descr, &ix) != 0) return FALSE;
+    if (!(filter = CreateCxObj(CX_FILTER, (LONG)descr, 0))) return FALSE;
+    AttachCxObj(filter, CreateCxObj(CX_SEND, (LONG)_dash_cx_port, 100 + n));
+    AttachCxObj(filter, CreateCxObj(CX_TRANSLATE, 0, 0));
+    if (CxObjError(filter)) { DeleteCxObjAll(filter); return FALSE; }
+    if (_dash_cx_keys[n]) { RemoveCxObj(_dash_cx_keys[n]); DeleteCxObjAll(_dash_cx_keys[n]); }
+    AttachCxObj(_dash_cx_broker, filter);
+    _dash_cx_keys[n] = filter;
+    return TRUE;
+}
+
+/* The next command: 0 none, 1 hide, 2 show, 3 disable, 4 enable, 5 kill (remove), 6 the hotkey (100 + n, the
+   hotkey n of cx_key_add). Disable and
    enable switch the broker itself (Exchange shows it, the hotkey does nothing while it is off). */
 static LONG _dash_cx_command(void) {
     CxMsg *m;
@@ -3640,6 +3793,7 @@ static LONG _dash_cx_command(void) {
         LONG r = 0;
         ReplyMsg((struct Message *)m);
         if (type == CXM_IEVENT && id == _DASH_CX_KEY_ID) r = 6;
+        else if (type == CXM_IEVENT && id > 100 && id <= 132) r = (LONG)id;
         else if (type == CXM_COMMAND) {
             switch (id) {
             case CXCMD_DISAPPEAR: r = 1; break;
@@ -3706,6 +3860,199 @@ static LONG _dash_cx_wait(LONG ms) {
 
     # Disks, network interfaces and WiFi signal for a meter (Trasfondo): every reading is made afresh and
     # nothing waits longer than its time
+    # Trasfondo 2.0: TrasfondoVentanas moves, sizes and tiles the windows of every program
+    WM_RUNTIME = """\
+/* Dash window manager runtime (Trasfondo 2.0): the windows of the Workbench screen (the default public
+   screen), front to back by their layers, with their box, limits, flags and the task they belong to
+   (wm_read and wm_*(i)); and, by the id wm_id gives, moving and sizing them (ChangeWindowBox, within their
+   limits and the screen), in front, behind, active or zipped. An id is checked under Forbid against the
+   screens' window lists before each call: a window closed in between is not touched (false). The calls
+   do not wait for Intuition (it does them in input.device). Nothing patched. */
+#include <graphics/layers.h>
+#include <proto/layers.h>
+#define _DASH_WM_MAX 64
+static struct Window *_dash_wm_w[_DASH_WM_MAX];
+static LONG _dash_wm_n = 0;
+static WORD _dash_wm_box[_DASH_WM_MAX][8];
+static LONG _dash_wm_fl[_DASH_WM_MAX];
+static char _dash_wm_title[_DASH_WM_MAX][80];
+static char _dash_wm_task[_DASH_WM_MAX][32];
+
+/* The screen they are on: the default public one (the Workbench's), its pointer only to compare and read */
+static struct Screen *_dash_wm_screen(void) {
+    struct Screen *s = LockPubScreen(NULL);
+    if (s) UnlockPubScreen(NULL, s);
+    return s;
+}
+
+static void _dash_wm_copy(char *d, const UBYTE *src, LONG n, LONG size) {
+    if (!src) n = 0;
+    else if (n < 0) n = strlen((const char *)src);
+    if (n >= size) n = size - 1;
+    if (n > 0) CopyMem((APTR)src, d, n);
+    d[n] = 0;
+}
+
+/* Its task's name: of a Shell process its command (without the path), else the task's */
+static void _dash_wm_owner(struct Window *w, char *d) {
+    struct Task *t = w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL;
+    d[0] = 0;
+    if (!t) return;
+    if (t->tc_Node.ln_Type == NT_PROCESS) {
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(((struct Process *)t)->pr_CLI);
+        UBYTE *b = cli ? (UBYTE *)BADDR(cli->cli_CommandName) : NULL;
+        if (b && b[0]) {
+            LONG i = b[0];
+            while (i > 0 && b[i] != '/' && b[i] != ':') i--;
+            _dash_wm_copy(d, b + i + 1, b[0] - i, 32);
+            return;
+        }
+    }
+    _dash_wm_copy(d, (UBYTE *)t->tc_Node.ln_Name, -1, 32);
+}
+
+/* Read the windows: how many (up to 64), for wm_*(i) until the next wm_read */
+static LONG _dash_wm_read(void) {
+    struct Screen *s = _dash_wm_screen();
+    struct Layer *l;
+    struct Task *me = FindTask(NULL);
+    _dash_wm_n = 0;
+    if (!s) return 0;
+    LockLayerInfo(&s->LayerInfo);
+    for (l = s->LayerInfo.top_layer; l && _dash_wm_n < _DASH_WM_MAX; l = l->back) {
+        struct Window *w = (struct Window *)l->Window;
+        LONG i, f = 0;
+        if (!w || l != w->WLayer) continue;      /* (a GimmeZeroZero window has two layers) */
+        i = _dash_wm_n++;
+        _dash_wm_w[i] = w;
+        _dash_wm_box[i][0] = w->LeftEdge;
+        _dash_wm_box[i][1] = w->TopEdge;
+        _dash_wm_box[i][2] = w->Width;
+        _dash_wm_box[i][3] = w->Height;
+        _dash_wm_box[i][4] = w->MinWidth;
+        _dash_wm_box[i][5] = w->MinHeight;
+        _dash_wm_box[i][6] = w->MaxWidth;
+        _dash_wm_box[i][7] = w->MaxHeight;
+        if (w->Flags & WFLG_SIZEGADGET) f |= 1;
+        if (w->Flags & WFLG_BACKDROP) f |= 2;
+        if (w->Flags & WFLG_BORDERLESS) f |= 4;
+        if (w->Flags & WFLG_WINDOWACTIVE) f |= 8;
+        if (w->Flags & WFLG_DRAGBAR) f |= 16;
+        if (w->UserPort && w->UserPort->mp_SigTask == me) f |= 32;
+        if (w->Flags & WFLG_WBENCHWINDOW) f |= 64;
+        if (w->FirstRequest) f |= 128;
+        _dash_wm_fl[i] = f;
+        _dash_wm_copy(_dash_wm_title[i], w->Title, -1, 80);
+        _dash_wm_owner(w, _dash_wm_task[i]);
+    }
+    UnlockLayerInfo(&s->LayerInfo);
+    return _dash_wm_n;
+}
+
+static LONG _dash_wm_id(LONG i) { return i >= 0 && i < _dash_wm_n ? (LONG)_dash_wm_w[i] : 0; }
+static STRPTR _dash_wm_title_of(LONG i) {
+    return _dash_str_dup(i >= 0 && i < _dash_wm_n ? (STRPTR)_dash_wm_title[i] : (STRPTR)"", TRUE);
+}
+static STRPTR _dash_wm_task_of(LONG i) {
+    return _dash_str_dup(i >= 0 && i < _dash_wm_n ? (STRPTR)_dash_wm_task[i] : (STRPTR)"", TRUE);
+}
+static LONG _dash_wm_box_of(LONG i, LONG what) {
+    if (i < 0 || i >= _dash_wm_n || what < 0 || what > 7) return -1;
+    return _dash_wm_box[i][what];
+}
+static LONG _dash_wm_flags(LONG i) { return i >= 0 && i < _dash_wm_n ? _dash_wm_fl[i] : 0; }
+
+/* The window of that id if it is still open (call under Forbid); NULL if not */
+static struct Window *_dash_wm_find(LONG id) {
+    struct Screen *s;
+    struct Window *w;
+    if (!id) return NULL;
+    for (s = IntuitionBase->FirstScreen; s; s = s->NextScreen)
+        for (w = s->FirstWindow; w; w = w->NextWindow)
+            if ((LONG)w == id) return w;
+    return NULL;
+}
+
+/* Move and size: within its limits (the size stays if it has no size gadget) and inside its screen */
+static BOOL _dash_wm_set_box(LONG id, LONG x, LONG y, LONG wd, LONG ht) {
+    struct Window *w;
+    LONG sw, sh, maxw, maxh;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    sw = w->WScreen->Width;
+    sh = w->WScreen->Height;
+    if (!(w->Flags & WFLG_SIZEGADGET)) { wd = w->Width; ht = w->Height; }
+    maxw = (UWORD)w->MaxWidth;
+    maxh = (UWORD)w->MaxHeight;
+    if (maxw <= 0 || maxw > sw) maxw = sw;
+    if (maxh <= 0 || maxh > sh) maxh = sh;
+    if (wd > maxw) wd = maxw;
+    if (ht > maxh) ht = maxh;
+    if (wd < w->MinWidth) wd = w->MinWidth;
+    if (ht < w->MinHeight) ht = w->MinHeight;
+    if (wd > sw) wd = sw;
+    if (ht > sh) ht = sh;
+    if (x + wd > sw) x = sw - wd;
+    if (y + ht > sh) y = sh - ht;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    ChangeWindowBox(w, x, y, wd, ht);
+    Permit();
+    return TRUE;
+}
+
+/* 0 in front, 1 behind, 2 active, 3 zip (its other size, the one of its zoom gadget) */
+static BOOL _dash_wm_do(LONG id, LONG what) {
+    struct Window *w;
+    Forbid();
+    if (!(w = _dash_wm_find(id))) { Permit(); return FALSE; }
+    switch (what) {
+    case 0: WindowToFront(w); break;
+    case 1: WindowToBack(w); break;
+    case 2: ActivateWindow(w); break;
+    case 3: ZipWindow(w); break;
+    }
+    Permit();
+    return TRUE;
+}
+
+/* The active window, if it is on the Workbench screen; 0 if not */
+static LONG _dash_wm_active(void) {
+    struct Screen *s = _dash_wm_screen();
+    ULONG lock = LockIBase(0);
+    struct Window *w = IntuitionBase->ActiveWindow;
+    LONG r = w && w->WScreen == s ? (LONG)w : 0;
+    UnlockIBase(lock);
+    return r;
+}
+
+/* The window at (x, y) of the Workbench screen, the one in front there; 0 if the background */
+static LONG _dash_wm_at(LONG x, LONG y) {
+    struct Screen *s = _dash_wm_screen();
+    struct Layer *l;
+    LONG r = 0;
+    if (!s) return 0;
+    LockLayerInfo(&s->LayerInfo);
+    l = WhichLayer(&s->LayerInfo, x, y);
+    if (l && l->Window) r = (LONG)l->Window;
+    UnlockLayerInfo(&s->LayerInfo);
+    return r;
+}
+
+/* Where the pointer is on the Workbench screen; the height of its title bar */
+static LONG _dash_wm_pointer(LONG y) {
+    struct Screen *s = _dash_wm_screen();
+    if (!s) return 0;
+    return y ? s->MouseY : s->MouseX;
+}
+
+static LONG _dash_wm_bar_height(void) {
+    struct Screen *s = _dash_wm_screen();
+    return s ? s->BarHeight + 1 : 0;
+}
+
+"""
+
     METER_RUNTIME = """\
 /* Dash meter runtime (Trasfondo): disks_read(ms), the mounted volumes with their size and free space (each
    handler is asked with ACTION_DISK_INFO and the answers waited for ms at most: one that does not answer is
@@ -5308,17 +5655,1769 @@ static void _dash_relaunch_now(void) {
             CloseLibrary(WorkbenchBase);
             if (ok) return;
         }
-        sprintf(cmd, "\\"%s\\"", path);
+        strcpy(cmd, "\\"");                /* (strcpy and strcat, not sprintf: dashc would bring its printf) */
+        strcat(cmd, path);
+        strcat(cmd, "\\"");
     } else {
         if (!NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path))) return;
         if (!GetProgramName((STRPTR)cmd, 256)) return;
         AddPart((STRPTR)path, FilePart((CONST_STRPTR)cmd), sizeof(path));
         args = GetArgStr();
-        sprintf(cmd, "\\"%s\\" %s", path, args ? (char *)args : "");
+        strcpy(cmd, "\\"");
+        strcat(cmd, path);
+        strcat(cmd, "\\" ");
+        if (args) strcat(cmd, (char *)args);
         n = strlen(cmd);
         while (n > 0 && (cmd[n - 1] == '\\n' || cmd[n - 1] == ' ')) cmd[--n] = 0;
     }
     _dash_run_program((STRPTR)cmd);
+}
+
+"""
+
+    # Dash 2.0: what programs did with @native (docs/DASHC_NATIVE.md)
+    SYSINFO_RUNTIME = """\
+/* Dash system runtime: the clock as Unix seconds and as days, running a command and waiting, opening an icon,
+   the program's path, the preferred language, the CPU and the FPU, library versions, the task's priority. */
+#include <dos/dostags.h>
+#include <workbench/startup.h>
+#include <proto/wb.h>
+#include <libraries/locale.h>
+#include <proto/locale.h>
+extern struct WBStartup *_WBenchMsg;
+
+static LONG _dash_time_unix(void) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return 252460800L + d.ds_Days * 86400L + d.ds_Minute * 60L + d.ds_Tick / 50;   /* 1978 - 1970 */
+}
+
+static LONG _dash_clock_days(void) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return d.ds_Days;
+}
+
+static STRPTR _dash_build_date(void) {
+    static const char months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    static char d[11];
+    const char *s = __DATE__;          /* "Oct 28 2026" */
+    int i, m = 1;
+    for (i = 0; i < 12; i++)
+        if (!strncmp(months + 3 * i, s, 3)) m = i + 1;
+    sprintf(d, "%.4s-%02d-%c%c", s + 7, m, s[4] == ' ' ? '0' : s[4], s[5]);
+    return (STRPTR)d;
+}
+
+static void _dash_console_flush(void) {
+    if (Output()) Flush(Output());
+}
+
+static LONG _dash_run_command(STRPTR command) {
+    BPTR nil;
+    LONG rc;
+    if (!command || !*command) return -1;
+    if (!(nil = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE))) return -1;
+    _dash_console_flush();          /* what Print left in the buffer goes before the command's output */
+    /* (waiting for it, System does not close them) */
+    rc = SystemTags(command, SYS_Input, nil, SYS_Output, Output() ? Output() : nil, NP_StackSize, 16384, TAG_DONE);
+    Close(nil);
+    return rc;
+}
+
+static BOOL _dash_wb_open(STRPTR path) {
+    struct Library *WorkbenchBase;
+    BOOL r = FALSE;
+    if (!path || !*path) return FALSE;
+    if ((WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 44))) {
+        r = OpenWorkbenchObjectA(path, NULL);
+        CloseLibrary(WorkbenchBase);
+    }
+    return r;
+}
+
+static STRPTR _dash_program_path(void) {
+    char dir[300], name[108];
+    struct Process *p = (struct Process *)FindTask(NULL);
+    dir[0] = 0;
+    name[0] = 0;
+    if (!GetProgramDir() || !NameFromLock(GetProgramDir(), (STRPTR)dir, 200)) return _dash_str_dup((STRPTR)"", TRUE);
+    if (p->pr_CLI) GetProgramName((STRPTR)name, sizeof(name));
+    else if (_WBenchMsg && _WBenchMsg->sm_NumArgs > 0) strncpy(name, (char *)_WBenchMsg->sm_ArgList[0].wa_Name, sizeof(name) - 1);
+    else if (p->pr_Task.tc_Node.ln_Name) strncpy(name, p->pr_Task.tc_Node.ln_Name, sizeof(name) - 1);
+    name[sizeof(name) - 1] = 0;
+    AddPart((STRPTR)dir, FilePart((STRPTR)name), sizeof(dir));
+    return _dash_str_dup((STRPTR)dir, TRUE);
+}
+
+static STRPTR _dash_locale_language(void) {
+    /* (a base of its own: the program may not use locale.library) */
+    struct LocaleBase *LocaleBase = (struct LocaleBase *)OpenLibrary((CONST_STRPTR)"locale.library", 38);
+    char lang[64];
+    lang[0] = 0;
+    if (LocaleBase) {
+        struct Locale *loc = OpenLocale(NULL);
+        if (loc) {
+            if (loc->loc_PrefLanguages[0]) {
+                strncpy(lang, (char *)loc->loc_PrefLanguages[0], sizeof(lang) - 1);
+                lang[sizeof(lang) - 1] = 0;
+            }
+            CloseLocale(loc);
+        }
+        CloseLibrary((struct Library *)LocaleBase);
+    }
+    return _dash_str_dup((STRPTR)lang, TRUE);
+}
+
+static LONG _dash_cpu_model(void) {
+    UWORD f = SysBase->AttnFlags;
+    if (f & (1 << 7)) return 68060;          /* AFF_68060 */
+    if (f & AFF_68040) return 68040;
+    if (f & AFF_68030) return 68030;
+    if (f & AFF_68020) return 68020;
+    if (f & AFF_68010) return 68010;
+    return 68000;
+}
+
+static LONG _dash_fpu_model(void) {
+    UWORD f = SysBase->AttnFlags;
+    if (f & AFF_FPU40) return (f & (1 << 7)) ? 68060 : 68040;
+    if (f & AFF_68882) return 68882;
+    if (f & AFF_68881) return 68881;
+    return 0;
+}
+
+static LONG _dash_library_version(STRPTR name) {
+    struct Library *l;
+    LONG v;
+    if (!name || !*name || !(l = OpenLibrary((CONST_STRPTR)name, 0))) return -1;
+    v = l->lib_Version;
+    CloseLibrary(l);
+    return v;
+}
+
+static LONG _dash_library_revision(STRPTR name) {
+    struct Library *l;
+    LONG v;
+    if (!name || !*name || !(l = OpenLibrary((CONST_STRPTR)name, 0))) return -1;
+    v = l->lib_Revision;
+    CloseLibrary(l);
+    return v;
+}
+
+static LONG _dash_resident_version(STRPTR name) {
+    struct Resident *r;
+    if (!name || !*name || !(r = FindResident((CONST_STRPTR)name))) return -1;
+    return r->rt_Version;
+}
+
+static LONG _dash_task_priority(LONG n) {
+    if (n < -128) n = -128;
+    if (n > 127) n = 127;
+    return SetTaskPri(FindTask(NULL), n);
+}
+
+/* env_get(name): a variable of the program's Shell or of ENV: (GetVar, up to its first line end); "" without it.
+   env_set(name, value, save): in ENV:, and with save also in ENVARC: (V39+) */
+static STRPTR _dash_env_get(STRPTR name) {
+    LONG size = 1024, n;
+    STRPTR buf, r;
+    if (!name || !*name) return _dash_str_dup((STRPTR)"", TRUE);
+    for (;;) {
+        if (!(buf = (STRPTR)AllocVec(size, MEMF_ANY))) return _dash_str_dup((STRPTR)"", TRUE);
+        n = GetVar(name, buf, size, 0);
+        if (n < size - 1 || size >= 262144) break;
+        FreeVec(buf);          /* it may not have fitted */
+        size *= 8;
+    }
+    if (n < 0) buf[0] = 0;
+    r = _dash_str_dup(buf, TRUE);
+    FreeVec(buf);
+    return r;
+}
+
+/* The file of a global variable written here, not with SetVar: when another process was reading it (GetVar),
+   SetVar of 3.1 wrote over it without cutting it ("libre" over "pidiendo" left "librendo"). MODE_NEWFILE is
+   exclusive and empties it: while someone reads it, it is tried again each tick, a second at most */
+static BOOL _dash_env_file(const char *dir, STRPTR name, STRPTR value, LONG len) {
+    char path[300];
+    BPTR f = 0;
+    LONG k;
+    BOOL ok;
+    if (strlen((char *)name) > 250) return FALSE;
+    sprintf(path, "%s%s", dir, (char *)name);
+    for (k = 0; k < 50 && !(f = Open((CONST_STRPTR)path, MODE_NEWFILE)); k++) {
+        if (IoErr() != ERROR_OBJECT_IN_USE) return FALSE;
+        Delay(1);
+    }
+    if (!f) return FALSE;
+    ok = Write(f, value, len) == len;
+    Close(f);
+    return ok;
+}
+
+static BOOL _dash_env_set(STRPTR name, STRPTR value, BOOL save) {
+    LONG len;
+    if (!name || !*name) return FALSE;
+    if (!value) value = (STRPTR)"";
+    len = strlen((char *)value);
+    if (_dash_env_file("ENV:", name, value, len) && (!save || _dash_env_file("ENVARC:", name, value, len)))
+        return TRUE;
+    /* (ENV: or a drawer of the name that is not there: as before) */
+    return SetVar(name, value, len, GVF_GLOBAL_ONLY | (save ? GVF_SAVE_VAR : 0)) != 0;
+}
+
+"""
+
+    # Dash 2.0 (for Inferencia): ARexx as a client, and what runs in the system: public ports, tasks, assigns
+    SYSLIST_RUNTIME = """\
+/* rexx_send(port, command): an ARexx command to the public port of another program ("address PORT command"),
+   waiting for its answer: RESULT as the text it returns, RC in rexx_rc() (-1: no such port, -2: no rexxsyslib).
+   ports_read, tasks_read and assigns_read take a picture of the public ports, the tasks and the assigns, read
+   with port_name(i), task_entry_*(i) and assign_*(i) until the next one. */
+#define REXXSYSLIB_BASE_NAME _dash_rexx_base
+#include <rexx/storage.h>
+#include <rexx/errors.h>
+#include <proto/rexxsyslib.h>
+#include <dos/dosextens.h>
+static struct Library *_dash_rexx_base = NULL;
+static LONG _dash_rexx_rc_last = 0;
+
+static STRPTR _dash_rexx_send(STRPTR port, STRPTR command) {
+    struct MsgPort *reply, *to = NULL;
+    struct RexxMsg *rm;
+    STRPTR res = NULL;
+    _dash_rexx_rc_last = -1;
+    if (!port || !command) return _dash_str_dup((STRPTR)"", TRUE);
+    if (!_dash_rexx_base && !(_dash_rexx_base = OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36))) {
+        _dash_rexx_rc_last = -2;
+        return _dash_str_dup((STRPTR)"", TRUE);
+    }
+    if (!(reply = CreateMsgPort())) return _dash_str_dup((STRPTR)"", TRUE);
+    if ((rm = CreateRexxMsg(reply, NULL, NULL))) {
+        if ((rm->rm_Args[0] = (STRPTR)CreateArgstring(command, strlen((char *)command)))) {
+            rm->rm_Action = RXCOMM | RXFF_RESULT;
+            Forbid();
+            if ((to = FindPort(port))) PutMsg(to, &rm->rm_Node);
+            Permit();
+            if (to) {
+                /* (it must come back before the message can be freed: no time limit) */
+                WaitPort(reply);
+                GetMsg(reply);
+                _dash_rexx_rc_last = rm->rm_Result1;
+                if (rm->rm_Result1 == 0 && rm->rm_Result2) {
+                    res = _dash_str_dup((STRPTR)rm->rm_Result2, TRUE);
+                    DeleteArgstring((UBYTE *)rm->rm_Result2);
+                }
+            }
+            DeleteArgstring((UBYTE *)rm->rm_Args[0]);
+        }
+        DeleteRexxMsg(rm);
+    }
+    DeleteMsgPort(reply);
+    return res ? res : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static LONG _dash_rexx_rc(void) { return _dash_rexx_rc_last; }
+
+/* A picture: texts one after another in one block, a table of where each starts, and numbers */
+typedef struct { LONG n; char **text; LONG *num; char *pool; } _DashSysTab;
+static _DashSysTab _dash_ports_tab, _dash_tasks_tab, _dash_assigns_tab;
+
+static void _dash_systab_free(_DashSysTab *t) {
+    if (t->text) FreeVec(t->text);
+    if (t->num) FreeVec(t->num);
+    if (t->pool) FreeVec(t->pool);
+    t->text = NULL;
+    t->num = NULL;
+    t->pool = NULL;
+    t->n = 0;
+}
+
+/* Room for n rows of k texts and k numbers, and size bytes of text */
+static BOOL _dash_systab_alloc(_DashSysTab *t, LONG n, LONG k, LONG size) {
+    _dash_systab_free(t);
+    t->text = (char **)AllocVec((n * k + 1) * sizeof(char *), MEMF_ANY | MEMF_CLEAR);
+    t->num = (LONG *)AllocVec((n * k + 1) * sizeof(LONG), MEMF_ANY | MEMF_CLEAR);
+    t->pool = (char *)AllocVec(size + 1, MEMF_ANY);
+    if (!t->text || !t->num || !t->pool) { _dash_systab_free(t); return FALSE; }
+    return TRUE;
+}
+
+static STRPTR _dash_systab_text(_DashSysTab *t, LONG k, LONG i, LONG j) {
+    char *s = i >= 0 && i < t->n ? t->text[i * k + j] : NULL;
+    return _dash_str_dup((STRPTR)(s ? s : ""), TRUE);
+}
+
+static LONG _dash_systab_num(_DashSysTab *t, LONG k, LONG i, LONG j) {
+    return i >= 0 && i < t->n ? t->num[i * k + j] : 0;
+}
+
+/* Copy a C text (or BSTR, bstr TRUE) into the pool: where it went */
+static char *_dash_systab_put(char **at, char *end, const char *s, LONG len) {
+    char *r = *at;
+    if (len < 0) len = s ? strlen(s) : 0;
+    if (r + len + 1 > end) return NULL;
+    if (len) CopyMem((APTR)s, r, len);
+    r[len] = 0;
+    *at = r + len + 1;
+    return r;
+}
+
+static LONG _dash_ports_read(void) {
+    struct Node *nd;
+    LONG n = 0, size = 0;
+    char *at, *end;
+    Forbid();
+    for (nd = SysBase->PortList.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        if (nd->ln_Name) { n++; size += strlen(nd->ln_Name) + 1; }
+    Permit();
+    n += 16;
+    size += 1024;
+    if (!_dash_systab_alloc(&_dash_ports_tab, n, 1, size)) return -1;
+    at = _dash_ports_tab.pool;
+    end = at + size;
+    Forbid();
+    for (nd = SysBase->PortList.lh_Head; nd->ln_Succ && _dash_ports_tab.n < n; nd = nd->ln_Succ) {
+        char *s;
+        if (!nd->ln_Name || !(s = _dash_systab_put(&at, end, nd->ln_Name, -1))) continue;
+        _dash_ports_tab.text[_dash_ports_tab.n++] = s;
+    }
+    Permit();
+    return _dash_ports_tab.n;
+}
+
+static STRPTR _dash_port_name(LONG i) { return _dash_systab_text(&_dash_ports_tab, 1, i, 0); }
+
+/* Tasks: name, command of a Shell process, state; priority, CLI number */
+static void _dash_tasks_add(struct Task *tk, char **at, char *end, LONG n, const char *state) {
+    _DashSysTab *t = &_dash_tasks_tab;
+    LONG r = t->n;
+    if (r >= n) return;
+    t->text[r * 3] = _dash_systab_put(at, end, tk->tc_Node.ln_Name ? tk->tc_Node.ln_Name : "", -1);
+    t->text[r * 3 + 1] = NULL;
+    t->text[r * 3 + 2] = (char *)state;
+    t->num[r * 3] = tk->tc_Node.ln_Pri;
+    t->num[r * 3 + 1] = 0;
+    if (tk->tc_Node.ln_Type == NT_PROCESS) {
+        struct Process *pr = (struct Process *)tk;
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(pr->pr_CLI);
+        if (cli) {
+            UBYTE *b = (UBYTE *)BADDR(cli->cli_CommandName);
+            t->num[r * 3 + 1] = pr->pr_TaskNum;
+            if (b && b[0]) t->text[r * 3 + 1] = _dash_systab_put(at, end, (char *)b + 1, b[0]);
+        }
+    }
+    t->n++;
+}
+
+static LONG _dash_tasks_read(void) {
+    struct Node *nd;
+    LONG n = 1;
+    LONG size;
+    char *at, *end;
+    Forbid();
+    for (nd = SysBase->TaskReady.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    for (nd = SysBase->TaskWait.lh_Head; nd->ln_Succ; nd = nd->ln_Succ) n++;
+    Permit();
+    n += 16;
+    size = n * 160;
+    if (!_dash_systab_alloc(&_dash_tasks_tab, n, 3, size)) return -1;
+    at = _dash_tasks_tab.pool;
+    end = at + size;
+    Forbid();
+    _dash_tasks_add(SysBase->ThisTask, &at, end, n, "running");
+    for (nd = SysBase->TaskReady.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        _dash_tasks_add((struct Task *)nd, &at, end, n, "ready");
+    for (nd = SysBase->TaskWait.lh_Head; nd->ln_Succ; nd = nd->ln_Succ)
+        _dash_tasks_add((struct Task *)nd, &at, end, n, "waiting");
+    Permit();
+    return _dash_tasks_tab.n;
+}
+
+static STRPTR _dash_task_entry_name(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 0); }
+static STRPTR _dash_task_entry_command(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 1); }
+static STRPTR _dash_task_entry_state(LONG i) { return _dash_systab_text(&_dash_tasks_tab, 3, i, 2); }
+static LONG _dash_task_entry_priority(LONG i) { return _dash_systab_num(&_dash_tasks_tab, 3, i, 0); }
+static LONG _dash_task_entry_cli(LONG i) { return _dash_systab_num(&_dash_tasks_tab, 3, i, 1); }
+
+/* Assigns: name and where (a directory, several separated by ";", or the name of a late or deferred one) */
+static LONG _dash_assigns_read(void) {
+    struct DosList *dl;
+    LONG n = 0, size;
+    char *at, *end, buf[256];
+    dl = LockDosList(LDF_ASSIGNS | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_ASSIGNS))) n++;
+    UnLockDosList(LDF_ASSIGNS | LDF_READ);
+    n += 16;
+    size = n * 400;
+    if (!_dash_systab_alloc(&_dash_assigns_tab, n, 2, size)) return -1;
+    at = _dash_assigns_tab.pool;
+    end = at + size;
+    dl = LockDosList(LDF_ASSIGNS | LDF_READ);
+    while ((dl = NextDosEntry(dl, LDF_ASSIGNS)) && _dash_assigns_tab.n < n) {
+        UBYTE *b = (UBYTE *)BADDR(dl->dol_Name);
+        LONG r = _dash_assigns_tab.n;
+        char *name, *where = at;
+        if (!b || !(name = _dash_systab_put(&at, end, (char *)b + 1, b[0]))) continue;
+        where = at;
+        if (dl->dol_Type == DLT_DIRECTORY) {
+            struct AssignList *al;
+            BOOL first = TRUE;
+            /* (as C:Assign does, the list held while it asks for the names) */
+            if (dl->dol_Lock && NameFromLock(dl->dol_Lock, (STRPTR)buf, sizeof(buf)))
+                _dash_systab_put(&at, end, buf, -1), first = FALSE;
+            for (al = dl->dol_misc.dol_assign.dol_List; al; al = al->al_Next)
+                if (al->al_Lock && NameFromLock(al->al_Lock, (STRPTR)buf, sizeof(buf))) {
+                    if (!first && at > where) at[-1] = ';';
+                    _dash_systab_put(&at, end, buf, -1);
+                    first = FALSE;
+                }
+            if (first) _dash_systab_put(&at, end, "", 0);
+        } else {
+            STRPTR s = dl->dol_misc.dol_assign.dol_AssignName;
+            _dash_systab_put(&at, end, s ? (char *)s : "", -1);
+        }
+        _dash_assigns_tab.text[r * 2] = name;
+        _dash_assigns_tab.text[r * 2 + 1] = where;
+        _dash_assigns_tab.n++;
+    }
+    UnLockDosList(LDF_ASSIGNS | LDF_READ);
+    return _dash_assigns_tab.n;
+}
+
+static STRPTR _dash_assign_name(LONG i) { return _dash_systab_text(&_dash_assigns_tab, 2, i, 0); }
+static STRPTR _dash_assign_path(LONG i) { return _dash_systab_text(&_dash_assigns_tab, 2, i, 1); }
+
+static void _dash_syslist_cleanup(void) {
+    _dash_systab_free(&_dash_ports_tab);
+    _dash_systab_free(&_dash_tasks_tab);
+    _dash_systab_free(&_dash_assigns_tab);
+    if (_dash_rexx_base) { CloseLibrary(_dash_rexx_base); _dash_rexx_base = NULL; }
+}
+
+"""
+
+    # Dash 2.0 (Forja, the IDE): debugging a program built with dashc --debug (docs/DEPURADOR_LOOP.md)
+    DEBUGGER_RUNTIME = r"""/* Dash debugger runtime (docs/DEPURADOR_LOOP.md): los builtins dbg_*, en los dos Dash. El programa depurado se
+   compila con dashc --debug (dash --debug); el depurador, con cualquiera de los dos.
+
+   Un programa compilado con dashc --debug lleva un NOP al principio de cada línea y un HUNK_DEBUG con dónde está
+   cada cosa (gen68k.c, debug_text). dbg_start lo carga (LoadSeg) y lo lanza en un proceso hijo cuya entrada es
+   _dbg_child: pone su tc_TrapCode (el runtime de Dash, al empezar, pone el suyo y le pasa los TRAP que no son
+   errores) y espera la orden de empezar; entonces lo ejecuta con RunCommand, la salida a un fichero de T:.
+
+   Un punto de parada cambia el NOP de la línea por TRAP #15. El manejador apunta el PC del marco (la instrucción de
+   después del TRAP) y vuelve en modo usuario a _dbg_user_stop, en el proceso hijo: guarda los registros, avisa al
+   depurador y espera. Al seguir los repone y salta al PC apuntado: no hay nada que reponer, el TRAP ocupaba el
+   sitio de un NOP. Paso a paso: todos los NOP a TRAP, y al parar se mira a7 para ver si es la línea que toca. Sin
+   el bit de traza de la CPU, así que vale en Emu68. */
+
+#include <dos/dostags.h>
+#include <dos/dosextens.h>
+#define _DBG_TRAP 0x4E4F                 /* trap #15 (excepción 47) */
+#define _DBG_NOP 0x4E71
+
+enum { DBG_NONE, DBG_PAUSED, DBG_RUNNING, DBG_STOPPED, DBG_ENDED };
+enum { DBG_CONT, DBG_STEP, DBG_NEXT, DBG_OUT };
+
+typedef struct { ULONG off; UWORD file, line; } _DbgLine;
+typedef struct { char *name; ULONG start, end; UWORD file, line; } _DbgFunc;
+typedef struct { char *name, *type; LONG func, off, line; } _DbgVar;     /* func -1: una global (off en datos) */
+typedef struct { char *strct, *name, *type; LONG off; } _DbgField;
+
+static struct {
+    char *text;                          /* el HUNK_DEBUG, partido en trozos (los nombres apuntan dentro) */
+    char *files[64];
+    LONG nfiles;
+    _DbgLine *lines;
+    LONG nlines;
+    UBYTE *bp;                           /* un punto de parada en cada línea */
+    _DbgFunc *funcs;
+    LONG nfuncs;
+    _DbgVar *vars;
+    LONG nvars;
+    _DbgField *fields;
+    LONG nfields;
+    ULONG quit;                          /* _dash_quit del programa (desplazamiento en el código) */
+    BPTR seg;
+    ULONG code, data;                    /* dónde quedaron los hunks de código y datos */
+    struct Task *owner, *child;
+    ULONG owner_mask, child_mask;
+    BYTE owner_sig;
+    BPTR out;
+    char outname[48], *args, *path;
+    volatile LONG state, rc, mode, kill;
+    ULONG ref_a5;                        /* el marco donde se paró al pedir pasar o salir */
+    ULONG *regs;                         /* d0-d7, a0-a6 y el PC de vuelta, en la pila del hijo */
+    ULONG a7, pc;
+    LONG at;                             /* la línea (índice en lines) donde está parado, -1 si ninguna */
+    char error[160];
+    BOOL atexit_done;
+} _dbg;
+
+ULONG _dbg_pc;                           /* (del manejador a _dbg_user_stop) */
+APTR _dbg_old_trap;
+void _dbg_trap(void);
+void _dbg_user_stop(void);
+void _dbg_stopped(ULONG *regs) __attribute__((used));
+
+__asm__(
+"       .section .text._dbg_asm,\"ax\"\n"
+"       .even\n"
+"       .globl  __dbg_trap\n"
+"__dbg_trap:\n"
+"       cmpl    #47,sp@\n"
+"       bne     9f\n"
+"       movel   sp@(6),__dbg_pc\n"          /* el PC del marco (tras el número y el SR) */
+"       movel   #__dbg_user_stop,sp@(6)\n"
+"       addql   #4,sp\n"
+"       rte\n"
+"9:     movel   __dbg_old_trap,sp@-\n"
+"       rts\n"
+"       .globl  __dbg_user_stop\n"
+"__dbg_user_stop:\n"
+"       subql   #4,sp\n"
+"       moveml  d0-d7/a0-a6,sp@-\n"
+"       movel   __dbg_pc,sp@(60)\n"
+"       movel   sp,sp@-\n"
+"       jsr     __dbg_stopped\n"
+"       addql   #4,sp\n"
+"       moveml  sp@+,d0-d7/a0-a6\n"
+"       rts\n"
+);
+
+static void _dbg_fail(const char *what) {
+    strncpy(_dbg.error, what, sizeof(_dbg.error) - 1);
+    _dbg.error[sizeof(_dbg.error) - 1] = 0;
+}
+
+/* La línea (índice) del NOP en esa dirección, -1 si no hay (búsqueda binaria: van en orden) */
+static LONG _dbg_line_at(ULONG addr) {
+    LONG lo = 0, hi = _dbg.nlines - 1;
+    ULONG off = addr - _dbg.code;
+    while (lo <= hi) {
+        LONG m = (lo + hi) / 2;
+        if (_dbg.lines[m].off == off) return m;
+        if (_dbg.lines[m].off < off) lo = m + 1;
+        else hi = m - 1;
+    }
+    return -1;
+}
+
+static void _dbg_patch(LONG i, UWORD op) {
+    *(volatile UWORD *)(_dbg.code + _dbg.lines[i].off) = op;
+}
+
+/* Los TRAP de ahora: los de los puntos de parada, y todos si se va paso a paso */
+static void _dbg_patch_all(BOOL every) {
+    LONG i;
+    for (i = 0; i < _dbg.nlines; i++) _dbg_patch(i, every || _dbg.bp[i] ? _DBG_TRAP : _DBG_NOP);
+    if (SysBase->LibNode.lib_Version >= 37) CacheClearU();
+}
+
+/* En el proceso hijo, en cada TRAP: ¿se para aquí? */
+void _dbg_stopped(ULONG *regs) {
+    ULONG a7 = (ULONG)(regs + 16), pc = regs[15] - 2;
+    LONG i = _dbg_line_at(pc);
+    if (_dbg.kill) {
+        /* acabar: a _dash_quit(20) del programa, con su limpieza de siempre */
+        regs[15] = _dbg.code + _dbg.quit;
+        ((ULONG *)a7)[1] = 20;
+        return;
+    }
+    if (i < 0) return;
+    switch (_dbg.mode) {
+    case DBG_CONT: if (!_dbg.bp[i]) return; break;
+    case DBG_STEP: break;
+    /* (por el marco, a5: dentro de un bucle, a7 puede estar más abajo) */
+    case DBG_NEXT: if (regs[13] < _dbg.ref_a5 && !_dbg.bp[i]) return; break;   /* más hondo: una función a la que llamó */
+    case DBG_OUT: if (regs[13] <= _dbg.ref_a5 && !_dbg.bp[i]) return; break;   /* aún en la función (o más hondo) */
+    }
+    _dbg.regs = regs;
+    _dbg.a7 = a7;
+    _dbg.pc = pc;
+    _dbg.at = i;
+    _dbg.state = DBG_STOPPED;
+    Signal(_dbg.owner, _dbg.owner_mask);
+    Wait(_dbg.child_mask);
+    _dbg.regs = NULL;
+    _dbg.at = -1;
+    if (_dbg.kill) {
+        regs[15] = _dbg.code + _dbg.quit;
+        ((ULONG *)a7)[1] = 20;
+    }
+}
+
+/* La entrada del proceso hijo: su manejador de TRAP, esperar la orden de empezar y el programa */
+static void _dbg_child(void) {
+    struct Task *me = FindTask(NULL);
+    BYTE sig = AllocSignal(-1);
+    LONG rc;
+    _dbg_old_trap = me->tc_TrapCode;
+    me->tc_TrapCode = (APTR)_dbg_trap;
+    _dbg.child_mask = sig >= 0 ? 1UL << sig : SIGBREAKF_CTRL_F;
+    _dbg.child = me;
+    _dbg.state = DBG_PAUSED;
+    Signal(_dbg.owner, _dbg.owner_mask);
+    Wait(_dbg.child_mask);
+    _dbg.state = DBG_RUNNING;
+    SetProgramName((STRPTR)_dbg.path);
+    rc = RunCommand(_dbg.seg, 65536, (STRPTR)_dbg.args, strlen(_dbg.args));
+    me->tc_TrapCode = _dbg_old_trap;
+    if (sig >= 0) FreeSignal(sig);
+    Forbid();                            /* (acabado del todo solo cuando ya ha salido de este código) */
+    _dbg.rc = rc;
+    _dbg.state = DBG_ENDED;
+    Signal(_dbg.owner, _dbg.owner_mask);
+}
+
+/* ---- la información de depuración ---- */
+
+static char *_dbg_word(char **p) {
+    char *s = *p, *e;
+    while (*s == ' ') s++;
+    for (e = s; *e && *e != ' ' && *e != '\n'; e++) ;
+    *p = *e == ' ' ? e + 1 : e;
+    if (*e == ' ') *e = 0;
+    return s;
+}
+
+static LONG _dbg_num(char **p) {
+    char *s = _dbg_word(p);
+    LONG n = 0, neg = 0;
+    if (*s == '-') { neg = 1; s++; }
+    while (*s >= '0' && *s <= '9') n = n * 10 + (*s++ - '0');
+    return neg ? -n : n;
+}
+
+/* El HUNK_DEBUG del ejecutable (el fichero: LoadSeg no lo carga) */
+static BOOL _dbg_read_info(STRPTR path) {
+    BPTR f = Open(path, MODE_OLDFILE);
+    LONG size, at, n, i, nl = 0, nf = 0, nv = 0, ns = 0;
+    ULONG *d = NULL, first, last, type;
+    char *t, *ln, *next;
+    if (!f) { _dbg_fail("no puedo abrir el programa"); return FALSE; }
+    Seek(f, 0, OFFSET_END);
+    size = Seek(f, 0, OFFSET_BEGINNING);
+    if (size > 20 && (d = (ULONG *)AllocVec(size + 4, MEMF_ANY)) && Read(f, d, size) == size) ;
+    else { if (d) FreeVec(d); d = NULL; }
+    Close(f);
+    if (!d || d[0] != 0x3F3) { if (d) FreeVec(d); _dbg_fail("no es un programa de Amiga"); return FALSE; }
+    first = d[3];
+    last = d[4];
+    at = 5 + (last - first + 1);
+    t = NULL;
+    while (at < size / 4) {
+        type = d[at++] & 0x3FFFFFFF;
+        if (type == 0x3E9 || type == 0x3EA) at += 1 + d[at];
+        else if (type == 0x3EB) at++;
+        else if (type == 0x3EC) { while ((n = d[at]) != 0) at += 2 + n; at++; }
+        else if (type == 0x3F1) {
+            n = d[at];
+            if (!strncmp((char *)&d[at + 1], "DASH-DEBUG", 10)) {
+                if ((t = (char *)AllocVec(n * 4 + 2, MEMF_ANY))) {
+                    CopyMem(&d[at + 1], t, n * 4);
+                    t[n * 4] = 0;
+                }
+                break;
+            }
+            at += 1 + n;
+        } else if (type != 0x3F2) break;
+    }
+    FreeVec(d);
+    if (!t) { _dbg_fail("el programa no lleva informaci\363n de depuraci\363n (comp\355lalo con dash --debug)"); return FALSE; }
+    _dbg.text = t;
+    for (ln = t; *ln; ln = next) {
+        for (next = ln; *next && *next != '\n'; next++) ;
+        if (*next) next++;
+        if (*ln == 'L') nl++;
+        else if (*ln == 'P') nf++;
+        else if (*ln == 'V' || *ln == 'G') nv++;
+        else if (*ln == 'S') ns++;
+    }
+    _dbg.lines = (_DbgLine *)AllocVec((nl + 1) * sizeof(_DbgLine), MEMF_ANY | MEMF_CLEAR);
+    _dbg.bp = (UBYTE *)AllocVec(nl + 1, MEMF_ANY | MEMF_CLEAR);
+    _dbg.funcs = (_DbgFunc *)AllocVec((nf + 1) * sizeof(_DbgFunc), MEMF_ANY | MEMF_CLEAR);
+    _dbg.vars = (_DbgVar *)AllocVec((nv + 1) * sizeof(_DbgVar), MEMF_ANY | MEMF_CLEAR);
+    _dbg.fields = (_DbgField *)AllocVec((ns + 1) * sizeof(_DbgField), MEMF_ANY | MEMF_CLEAR);
+    if (!_dbg.lines || !_dbg.bp || !_dbg.funcs || !_dbg.vars || !_dbg.fields) { _dbg_fail("sin memoria"); return FALSE; }
+    for (ln = t; *ln; ln = next) {
+        char *p = ln + 2, k = *ln;
+        for (next = ln; *next && *next != '\n'; next++) ;
+        if (*next) *next++ = 0;
+        if (k == 'F') {
+            i = _dbg_num(&p);
+            if (i >= 0 && i < 64) { _dbg.files[i] = p; if (i >= _dbg.nfiles) _dbg.nfiles = i + 1; }
+        } else if (k == 'L') {
+            _DbgLine *l = &_dbg.lines[_dbg.nlines++];
+            l->off = _dbg_num(&p);
+            l->file = _dbg_num(&p);
+            l->line = _dbg_num(&p);
+        } else if (k == 'P') {
+            _DbgFunc *fn = &_dbg.funcs[_dbg.nfuncs++];
+            _dbg_num(&p);
+            fn->name = _dbg_word(&p);
+            fn->start = _dbg_num(&p);
+            fn->end = _dbg_num(&p);
+            fn->file = _dbg_num(&p);
+            fn->line = _dbg_num(&p);
+        } else if (k == 'V') {
+            _DbgVar *v = &_dbg.vars[_dbg.nvars++];
+            v->func = _dbg_num(&p);
+            v->name = _dbg_word(&p);
+            v->type = _dbg_word(&p);
+            v->off = _dbg_num(&p);
+            v->line = _dbg_num(&p);
+        } else if (k == 'G') {
+            _DbgVar *v = &_dbg.vars[_dbg.nvars++];
+            v->func = -1;
+            v->name = _dbg_word(&p);
+            v->type = _dbg_word(&p);
+            v->off = _dbg_num(&p);
+            v->line = 0;
+        } else if (k == 'S') {
+            _DbgField *s = &_dbg.fields[_dbg.nfields++];
+            s->strct = _dbg_word(&p);
+            s->name = _dbg_word(&p);
+            s->type = _dbg_word(&p);
+            s->off = _dbg_num(&p);
+        } else if (k == 'Q') {
+            _dbg.quit = _dbg_num(&p);
+        }
+    }
+    return TRUE;
+}
+
+/* (keep: el programa acabó; quedan su estado y su código para dbg_state y dbg_rc) */
+static void _dbg_free(BOOL keep) {
+    if (_dbg.seg) { UnLoadSeg(_dbg.seg); _dbg.seg = 0; }
+    if (_dbg.text) FreeVec(_dbg.text);
+    if (_dbg.lines) FreeVec(_dbg.lines);
+    if (_dbg.bp) FreeVec(_dbg.bp);
+    if (_dbg.funcs) FreeVec(_dbg.funcs);
+    if (_dbg.vars) FreeVec(_dbg.vars);
+    if (_dbg.fields) FreeVec(_dbg.fields);
+    if (_dbg.args) FreeVec(_dbg.args);
+    if (_dbg.path) FreeVec(_dbg.path);
+    if (_dbg.owner_sig >= 0 && _dbg.owner) FreeSignal(_dbg.owner_sig);
+    if (_dbg.outname[0]) DeleteFile((STRPTR)_dbg.outname);
+    {
+        char err[160];
+        LONG rc = _dbg.rc;
+        BOOL atexit_done = _dbg.atexit_done;
+        CopyMem(_dbg.error, err, sizeof(err));
+        memset(&_dbg, 0, sizeof(_dbg));
+        CopyMem(err, _dbg.error, sizeof(err));
+        _dbg.atexit_done = atexit_done;
+        if (keep) {
+            _dbg.state = DBG_ENDED;
+            _dbg.rc = rc;
+        }
+    }
+    _dbg.owner_sig = -1;
+    _dbg.at = -1;
+}
+
+/* Esperar a que deje de correr, hasta ms (0: sin tope): el estado */
+static LONG _dbg_wait_ms(LONG ms) {
+    LONG t = 0;
+    while (_dbg.state == DBG_RUNNING && (ms <= 0 || t < ms)) {
+        Delay(1);
+        t += 20;
+    }
+    SetSignal(0, _dbg.owner_mask);
+    return _dbg.state;
+}
+
+/* Acabar el programa depurado: Ctrl-C, todas las líneas paran y van a _dash_quit; espera hasta ms */
+static BOOL _dbg_end(LONG ms) {
+    if (_dbg.state == DBG_NONE || (_dbg.state == DBG_ENDED && !_dbg.seg)) return TRUE;
+    if (_dbg.state == DBG_PAUSED) {
+        /* (sin empezar: empieza y acaba en su primera línea) */
+        _dbg.kill = 1;
+        _dbg_patch_all(TRUE);
+        Signal(_dbg.child, _dbg.child_mask);
+        _dbg.state = DBG_RUNNING;
+    } else if (_dbg.state != DBG_ENDED) {
+        _dbg.kill = 1;
+        _dbg_patch_all(TRUE);
+        Signal(_dbg.child, SIGBREAKF_CTRL_C);
+        if (_dbg.state == DBG_STOPPED) {
+            _dbg.state = DBG_RUNNING;
+            Signal(_dbg.child, _dbg.child_mask);
+        }
+    }
+    _dbg_wait_ms(ms);
+    if (_dbg.state != DBG_ENDED) return FALSE;   /* sigue: no se puede descargar su código */
+    if (_dbg.out) { Close(_dbg.out); _dbg.out = 0; }
+    _dbg_free(TRUE);
+    return TRUE;
+}
+
+static void _dbg_cleanup(void) {
+    _dbg_end(0);
+}
+
+/* ---- los builtins ---- */
+
+/* dbg_start(programa, argumentos): cargado y en pausa antes de su primera línea */
+static LONG _dash_dbg_start(LONG path_, LONG args_) {
+    STRPTR path = (STRPTR)path_, args = (STRPTR)args_;
+    struct Process *me = (struct Process *)FindTask(NULL);
+    BPTR in;
+    if (_dbg.state != DBG_NONE && !_dbg_end(5000)) { _dbg_fail("el programa de antes no acaba"); return FALSE; }
+    _dbg.error[0] = 0;
+    _dbg.owner_sig = -1;
+    _dbg.at = -1;
+    if (!path || !*path) { _dbg_fail("sin programa"); return FALSE; }
+    if (!_dbg.atexit_done) { _dash_atexit(_dbg_cleanup); _dbg.atexit_done = TRUE; }
+    if (!_dbg_read_info(path)) { _dbg_free(FALSE); return FALSE; }
+    if (!_dbg.quit) { _dbg_free(FALSE); _dbg_fail("informaci\363n de depuraci\363n vieja (sin _dash_quit)"); return FALSE; }
+    if (!(_dbg.seg = LoadSeg(path))) { _dbg_free(FALSE); _dbg_fail("no puedo cargar el programa"); return FALSE; }
+    _dbg.code = (ULONG)BADDR(_dbg.seg) + 4;
+    _dbg.data = *(BPTR *)BADDR(_dbg.seg) ? (ULONG)BADDR(*(BPTR *)BADDR(_dbg.seg)) + 4 : 0;
+    _dbg.path = (char *)AllocVec(strlen((char *)path) + 1, MEMF_ANY);
+    _dbg.args = (char *)AllocVec((args ? strlen((char *)args) : 0) + 2, MEMF_ANY);
+    if (!_dbg.path || !_dbg.args) { _dbg_free(FALSE); _dbg_fail("sin memoria"); return FALSE; }
+    strcpy(_dbg.path, (char *)path);
+    strcpy(_dbg.args, args ? (char *)args : "");
+    strcat(_dbg.args, "\n");
+    _dbg.owner = &me->pr_Task;
+    if ((_dbg.owner_sig = AllocSignal(-1)) < 0) { _dbg_free(FALSE); _dbg_fail("sin se\361ales libres"); return FALSE; }
+    _dbg.owner_mask = 1UL << _dbg.owner_sig;
+    /* (compartido, no MODE_NEWFILE: dbg_output lo lee mientras el programa escribe) */
+    sprintf(_dbg.outname, "T:dash_dbg_%lx", (unsigned long)me);
+    DeleteFile((STRPTR)_dbg.outname);
+    if (!(_dbg.out = Open((STRPTR)_dbg.outname, MODE_READWRITE))) {
+        sprintf(_dbg.outname, "RAM:dash_dbg_%lx", (unsigned long)me);
+        DeleteFile((STRPTR)_dbg.outname);
+        _dbg.out = Open((STRPTR)_dbg.outname, MODE_READWRITE);
+    }
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    if (!_dbg.out || !in) {
+        if (in) Close(in);
+        if (_dbg.out) { Close(_dbg.out); _dbg.out = 0; }
+        _dbg_free(FALSE);
+        _dbg_fail("no puedo abrir la salida del programa");
+        return FALSE;
+    }
+    SetSignal(0, _dbg.owner_mask);
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dbg_child, NP_Name, (ULONG)FilePart(path), NP_Cli, TRUE,
+                           NP_Input, in, NP_Output, _dbg.out, NP_CloseInput, TRUE, NP_CloseOutput, FALSE,
+                           NP_StackSize, 8192, TAG_DONE)) {
+        Close(in);
+        Close(_dbg.out);
+        _dbg.out = 0;
+        _dbg_free(FALSE);
+        _dbg_fail("no puedo crear el proceso");
+        return FALSE;
+    }
+    while (_dbg.state != DBG_PAUSED) Wait(_dbg.owner_mask);
+    return TRUE;
+}
+
+/* Por qué falló el último dbg_start */
+static LONG _dash_dbg_error(void) { return (LONG)_dash_str_dup((STRPTR)_dbg.error, TRUE); }
+
+/* El estado: 0 sin programa, 1 en pausa sin empezar, 2 corriendo, 3 parado en una línea, 4 acabado */
+static LONG _dash_dbg_state(void) { return _dbg.state; }
+
+/* La señal que el depurador recibe cuando el programa para o acaba (para mui_wait_event_signals) */
+static LONG _dash_dbg_signal(void) { return (LONG)_dbg.owner_mask; }
+
+static LONG _dash_dbg_wait(LONG ms) { return _dbg_wait_ms(ms); }
+
+/* Las líneas de ese fichero (por el final de su nombre: "prog.dash") con un NOP: true si hay alguna */
+static BOOL _dbg_set(STRPTR file, LONG line, UBYTE on) {
+    LONG i, k = file ? strlen((char *)file) : 0;
+    BOOL found = FALSE;
+    for (i = 0; i < _dbg.nlines; i++) {
+        char *f = _dbg.lines[i].file < _dbg.nfiles ? _dbg.files[_dbg.lines[i].file] : NULL;
+        LONG fl;
+        if (!f || _dbg.lines[i].line != line) continue;
+        fl = strlen(f);
+        if (k > fl || strcmp(f + fl - k, (char *)file) || (fl > k && f[fl - k - 1] != '/' && f[fl - k - 1] != ':'))
+            continue;
+        _dbg.bp[i] = on;
+        found = TRUE;
+    }
+    if (found && _dbg.state != DBG_RUNNING) _dbg_patch_all(FALSE);
+    else if (found) {
+        /* corriendo: solo ese cambio (no se quitan los de paso a paso, que no los hay) */
+        for (i = 0; i < _dbg.nlines; i++) _dbg_patch(i, _dbg.bp[i] ? _DBG_TRAP : _DBG_NOP);
+        if (SysBase->LibNode.lib_Version >= 37) CacheClearU();
+    }
+    return found;
+}
+
+static LONG _dash_dbg_break(LONG file, LONG line) { return _dbg_set((STRPTR)file, line, 1); }
+static LONG _dash_dbg_unbreak(LONG file, LONG line) { return _dbg_set((STRPTR)file, line, 0); }
+
+/* Seguir (de la pausa del principio o de una parada) hasta un punto de parada o el final */
+static LONG _dbg_go(LONG mode) {
+    if (_dbg.state != DBG_PAUSED && _dbg.state != DBG_STOPPED) return FALSE;
+    _dbg.mode = mode;
+    _dbg.ref_a5 = _dbg.state == DBG_STOPPED && _dbg.regs ? _dbg.regs[13] : 0;
+    _dbg_patch_all(mode != DBG_CONT);
+    SetSignal(0, _dbg.owner_mask);
+    _dbg.state = DBG_RUNNING;
+    Signal(_dbg.child, _dbg.child_mask);
+    return TRUE;
+}
+
+static LONG _dash_dbg_continue(void) { return _dbg_go(DBG_CONT); }
+static LONG _dash_dbg_step(void) { return _dbg_go(DBG_STEP); }
+static LONG _dash_dbg_next(void) { return _dbg_go(DBG_NEXT); }
+static LONG _dash_dbg_out(void) { return _dbg_go(DBG_OUT); }
+
+/* Parar en la siguiente línea que pase (el programa corriendo) */
+static LONG _dash_dbg_pause(void) {
+    if (_dbg.state != DBG_RUNNING) return FALSE;
+    _dbg.mode = DBG_STEP;
+    _dbg_patch_all(TRUE);
+    return TRUE;
+}
+
+/* Acabarlo (Ctrl-C y _dash_quit en su siguiente línea): true si acabó en ms */
+static LONG _dash_dbg_end(LONG ms) { return _dbg_end(ms); }
+
+/* El código de salida del programa (acabado) */
+static LONG _dash_dbg_rc(void) { return _dbg.rc; }
+
+/* Dónde está parado: fichero (el nombre entero), línea y función */
+static LONG _dash_dbg_file(void) {
+    char *f = _dbg.at >= 0 && _dbg.lines[_dbg.at].file < _dbg.nfiles ? _dbg.files[_dbg.lines[_dbg.at].file] : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f : ""), TRUE);
+}
+
+static LONG _dash_dbg_line(void) { return _dbg.at >= 0 ? _dbg.lines[_dbg.at].line : 0; }
+
+static _DbgFunc *_dbg_func_at(ULONG pc) {
+    LONG i;
+    ULONG off = pc - _dbg.code;
+    for (i = 0; i < _dbg.nfuncs; i++)
+        if (off >= _dbg.funcs[i].start && off < _dbg.funcs[i].end) return &_dbg.funcs[i];
+    return NULL;
+}
+
+static LONG _dash_dbg_function(void) {
+    _DbgFunc *f = _dbg.at >= 0 ? _dbg_func_at(_dbg.pc) : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f->name : ""), TRUE);
+}
+
+/* Un registro del programa parado: 0-7 d0-d7, 8-15 a0-a7, 16 el PC (la línea) */
+static LONG _dash_dbg_reg(LONG n) {
+    if (_dbg.state != DBG_STOPPED || !_dbg.regs) return 0;
+    if (n >= 0 && n < 15) return _dbg.regs[n];
+    if (n == 15) return _dbg.a7;
+    if (n == 16) return _dbg.pc;
+    return 0;
+}
+
+/* Memoria: 1, 2 o 4 bytes en addr (sin signo); 0 en una dirección impar con 2 o 4 */
+static LONG _dash_dbg_peek(LONG addr, LONG size) {
+    if (size == 1) return *(volatile UBYTE *)addr;
+    if (addr & 1) return 0;
+    if (size == 2) return *(volatile UWORD *)addr;
+    return *(volatile ULONG *)addr;
+}
+
+/* Lo que el programa ha escrito hasta ahora (su salida y su salida de errores) */
+static LONG _dash_dbg_output(void) {
+    BPTR f;
+    STRPTR s = NULL;
+    LONG n;
+    if (!_dbg.outname[0]) return (LONG)_dash_str_dup((STRPTR)"", TRUE);
+    if (_dbg.out) Flush(_dbg.out);
+    if ((f = Open((STRPTR)_dbg.outname, MODE_OLDFILE))) {
+        Seek(f, 0, OFFSET_END);
+        n = Seek(f, 0, OFFSET_BEGINNING);
+        if (n > 0 && (s = _dash_str_alloc(n, TRUE))) {
+            LONG got = Read(f, s, n);
+            s[got > 0 ? got : 0] = 0;
+        }
+        Close(f);
+    }
+    return (LONG)(s ? s : _dash_str_dup((STRPTR)"", TRUE));
+}
+
+/* ---- la pila de llamadas: la cadena de marcos de a5 (con --debug, todas las funciones tienen marco) ---- */
+
+/* La línea de la dirección pc: la del último NOP antes de ella dentro de su función, -1 si no es de Dash */
+static LONG _dbg_line_before(ULONG pc) {
+    _DbgFunc *f = _dbg_func_at(pc);
+    LONG lo = 0, hi = _dbg.nlines - 1, best = -1;
+    ULONG off = pc - _dbg.code;
+    if (!f) return -1;
+    while (lo <= hi) {
+        LONG m = (lo + hi) / 2;
+        if (_dbg.lines[m].off < off) { best = m; lo = m + 1; }
+        else hi = m - 1;
+    }
+    return best >= 0 && _dbg.lines[best].off >= f->start ? best : -1;
+}
+
+/* El marco i (0, donde está parado; 1, quien lo llamó...): su a5 y su línea (índice en lines); FALSE si no hay */
+static BOOL _dbg_frame(LONG i, ULONG *a5, LONG *line) {
+    ULONG fp, pc;
+    LONG at;
+    if (_dbg.state != DBG_STOPPED || !_dbg.regs || i < 0) return FALSE;
+    fp = _dbg.regs[13];
+    at = _dbg.at;
+    while (i-- > 0) {
+        if (!fp || (fp & 1)) return FALSE;
+        pc = ((ULONG *)fp)[1];                       /* la vuelta, tras el a5 guardado */
+        fp = ((ULONG *)fp)[0];
+        if ((at = _dbg_line_before(pc)) < 0) return FALSE;
+    }
+    if (a5) *a5 = fp;
+    if (line) *line = at;
+    return TRUE;
+}
+
+/* Cuántos marcos hay (1 parado en Main; 0 si no está parado) */
+static LONG _dash_dbg_frames(void) {
+    LONG n = 0;
+    while (n < 1000 && _dbg_frame(n, NULL, NULL)) n++;
+    return n;
+}
+
+static LONG _dash_dbg_frame_line(LONG i) {
+    LONG at;
+    return _dbg_frame(i, NULL, &at) ? _dbg.lines[at].line : 0;
+}
+
+static LONG _dash_dbg_frame_file(LONG i) {
+    LONG at;
+    char *f = _dbg_frame(i, NULL, &at) && _dbg.lines[at].file < _dbg.nfiles ? _dbg.files[_dbg.lines[at].file] : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f : ""), TRUE);
+}
+
+static LONG _dash_dbg_frame_function(LONG i) {
+    LONG at;
+    _DbgFunc *f = _dbg_frame(i, NULL, &at) ? _dbg_func_at(_dbg.code + _dbg.lines[at].off) : NULL;
+    return (LONG)_dash_str_dup((STRPTR)(f ? f->name : ""), TRUE);
+}
+
+/* ---- las variables y su valor (G5) ---- */
+
+/* Las variables visibles en el marco i: los parámetros y las de su función declaradas antes de la línea donde está
+   (de dos con el mismo nombre, la última); en vis, sus índices en vars */
+static LONG _dbg_visible(LONG i, LONG *vis, LONG max, ULONG *a5) {
+    LONG at, k, j, n = 0, fi = -1, line;
+    _DbgFunc *f;
+    if (!_dbg_frame(i, a5, &at)) return 0;
+    f = _dbg_func_at(_dbg.code + _dbg.lines[at].off);
+    line = _dbg.lines[at].line;
+    for (k = 0; k < _dbg.nfuncs; k++)
+        if (&_dbg.funcs[k] == f) fi = k;
+    for (k = 0; k < _dbg.nvars && n < max; k++) {
+        _DbgVar *v = &_dbg.vars[k];
+        if (v->func != fi || (v->off < 0 && v->line >= line)) continue;   /* (la de esta línea aún no tiene valor) */
+        for (j = 0; j < n; j++)
+            if (!strcmp(_dbg.vars[vis[j]].name, v->name)) break;
+        if (j < n) vis[j] = k;                       /* la de después tapa a la de antes */
+        else vis[n++] = k;
+    }
+    return n;
+}
+
+/* Un texto que crece (lo que se enseña de un valor), hasta 1000 bytes */
+typedef struct { char t[1024]; LONG n; } _DbgOut;
+
+static void _dbg_put(_DbgOut *o, const char *s) {
+    while (*s && o->n < 1000) o->t[o->n++] = *s++;
+    if (*s && o->n == 1000) { o->t[o->n++] = '.'; o->t[o->n++] = '.'; o->t[o->n++] = '.'; }
+    o->t[o->n] = 0;
+}
+
+static void _dbg_put_num(_DbgOut *o, LONG v) {
+    char b[16];
+    sprintf(b, "%ld", (long)v);
+    _dbg_put(o, b);
+}
+
+/* ¿Se puede leer esa dirección como un puntero de Dash? (par, no en los vectores de la CPU) */
+static BOOL _dbg_ptr_ok(ULONG p) { return p >= 0x400 && !(p & 1); }
+
+static void _dbg_show(_DbgOut *o, const char *type, ULONG v, LONG depth);
+
+/* Los campos de un struct: Punto(x: 3, nombre: "a") */
+static void _dbg_show_struct(_DbgOut *o, const char *type, ULONG p, LONG depth) {
+    LONG k, n = 0;
+    _dbg_put(o, type);
+    if (depth > 1) { _dbg_put(o, "(...)"); return; }
+    _dbg_put(o, "(");
+    for (k = 0; k < _dbg.nfields; k++) {
+        _DbgField *fd = &_dbg.fields[k];
+        if (strcmp(fd->strct, type)) continue;
+        if (n++) _dbg_put(o, ", ");
+        _dbg_put(o, fd->name);
+        _dbg_put(o, ": ");
+        _dbg_show(o, fd->type, *(ULONG *)(p + fd->off), depth + 1);
+    }
+    _dbg_put(o, ")");
+}
+
+/* Un valor de ese tipo (el de Dash, como en el HUNK_DEBUG) */
+static void _dbg_show(_DbgOut *o, const char *type, ULONG v, LONG depth) {
+    if (!strcmp(type, "Int") || !strcmp(type, "Char")) { _dbg_put_num(o, (LONG)v); return; }
+    if (!strcmp(type, "Bool")) { _dbg_put(o, v ? "true" : "false"); return; }
+    if (!strcmp(type, "Fixed")) {
+        char b[24];
+        LONG w = (LONG)v >> 16, frac = ((v & 0xFFFF) * 10000 + 32768) >> 16;
+        if ((LONG)v < 0 && (v & 0xFFFF)) { w += 1; frac = 10000 - frac; }
+        sprintf(b, "%s%ld.%04ld", (LONG)v < 0 && w == 0 ? "-" : "", (long)w, (long)frac);
+        _dbg_put(o, b);
+        return;
+    }
+    if (!strcmp(type, "Float")) { _dbg_put(o, (char *)DashString_from_float(_dash_l2f((LONG)v))); return; }
+    if (!v) { _dbg_put(o, "nil"); return; }
+    if (!_dbg_ptr_ok(v)) { _dbg_put(o, "?"); return; }
+    if (!strcmp(type, "Double")) {
+        /* (en dashc, un Double es una caja: un texto con sus 8 bytes en hexadecimal) */
+        union { double d; UBYTE b[8]; } u;
+        LONG k, h;
+        for (k = 0; k < 16; k++) {
+            UBYTE ch = ((UBYTE *)v)[k];
+            h = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+            if (h < 0) { _dbg_put(o, "?"); return; }
+            if (k & 1) u.b[k / 2] |= h; else u.b[k / 2] = h << 4;
+        }
+        _dbg_put(o, (char *)DashString_from_double(u.d));
+        return;
+    }
+    if (!strcmp(type, "String")) {
+        char b[2];
+        UBYTE *s = (UBYTE *)v;
+        LONG k;
+        _dbg_put(o, "\"");
+        for (k = 0; s[k] && k < 200; k++) {
+            if (s[k] == '"' || s[k] == '\\') { b[0] = '\\'; b[1] = 0; _dbg_put(o, b); }
+            if (s[k] == '\n') { _dbg_put(o, "\\n"); continue; }
+            b[0] = s[k] < 32 ? '?' : s[k];
+            b[1] = 0;
+            _dbg_put(o, b);
+        }
+        _dbg_put(o, s[k] ? "...\"" : "\"");
+        return;
+    }
+    if (type[0] == '[') {
+        LONG n = DashArray_length((DashArrayLong *)v), k;
+        char inner[64];
+        LONG l = strlen(type);
+        strncpy(inner, type + 1, l - 2 < 63 ? l - 2 : 63);
+        inner[l - 2 < 63 ? l - 2 : 63] = 0;
+        if (depth > 1) { _dbg_put(o, "["); _dbg_put_num(o, n); _dbg_put(o, " elementos]"); return; }
+        _dbg_put(o, "[");
+        for (k = 0; k < n && k < 20; k++) {
+            if (k) _dbg_put(o, ", ");
+            _dbg_show(o, inner, (ULONG)DashArray_get((DashArrayLong *)v, k), depth + 1);
+        }
+        _dbg_put(o, n > 20 ? ", ...]" : "]");
+        return;
+    }
+    if (type[0] == '{') {
+        _dbg_put(o, "{");
+        _dbg_put_num(o, DashDict_length((DashDict *)v));
+        _dbg_put(o, " claves}");
+        return;
+    }
+    _dbg_show_struct(o, type, v, depth);
+}
+
+static _DbgVar *_dbg_global(const char *name) {
+    LONG k;
+    for (k = 0; k < _dbg.nvars; k++)
+        if (_dbg.vars[k].func < 0 && !strcmp(_dbg.vars[k].name, name)) return &_dbg.vars[k];
+    return NULL;
+}
+
+/* Lo que vale expr en el marco i: un nombre (local o global) seguido de .campo y [n] ("p.hijos[0].x"); FALSE con
+   el porqué en o */
+static BOOL _dbg_eval(LONG i, const char *expr, char *type, ULONG *val, _DbgOut *o) {
+    LONG vis[128], n, k;
+    ULONG a5 = 0;
+    char name[64];
+    const char *p = expr;
+    _DbgVar *v = NULL;
+    for (k = 0; *p && *p != '.' && *p != '[' && k < 63; p++) name[k++] = *p;
+    name[k] = 0;
+    n = _dbg_visible(i, vis, 128, &a5);
+    for (k = 0; k < n; k++)
+        if (!strcmp(_dbg.vars[vis[k]].name, name)) v = &_dbg.vars[vis[k]];
+    if (v) *val = *(ULONG *)(a5 + v->off);
+    else if ((v = _dbg_global(name)) && _dbg.data) *val = *(ULONG *)(_dbg.data + v->off);
+    else { _dbg_put(o, "no existe: "); _dbg_put(o, name); return FALSE; }
+    strcpy(type, v->type);
+    while (*p) {
+        if (*p == '.') {
+            char field[64];
+            _DbgField *fd = NULL;
+            for (p++, k = 0; *p && *p != '.' && *p != '[' && k < 63; p++) field[k++] = *p;
+            field[k] = 0;
+            for (k = 0; k < _dbg.nfields; k++)
+                if (!strcmp(_dbg.fields[k].strct, type) && !strcmp(_dbg.fields[k].name, field)) fd = &_dbg.fields[k];
+            if (!fd) { _dbg_put(o, type); _dbg_put(o, " no tiene "); _dbg_put(o, field); return FALSE; }
+            if (!*val || !_dbg_ptr_ok(*val)) { _dbg_put(o, "nil"); return FALSE; }
+            *val = *(ULONG *)(*val + fd->off);
+            strcpy(type, fd->type);
+        } else if (*p == '[') {
+            LONG idx = 0, l = strlen(type), neg = 0;
+            for (p++; *p == ' '; p++) ;
+            if (*p == '-') { neg = 1; p++; }
+            while (*p >= '0' && *p <= '9') idx = idx * 10 + (*p++ - '0');
+            while (*p == ' ') p++;
+            if (*p++ != ']' || type[0] != '[') { _dbg_put(o, "no es una lista"); return FALSE; }
+            if (neg || !*val || idx >= DashArray_length((DashArrayLong *)*val)) { _dbg_put(o, "fuera de la lista"); return FALSE; }
+            *val = (ULONG)DashArray_get((DashArrayLong *)*val, idx);
+            memmove(type, type + 1, l - 2);
+            type[l - 2] = 0;
+        } else {
+            _dbg_put(o, "no lo entiendo");
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/* Cuántas variables se ven en el marco i (sus parámetros y las suyas declaradas hasta esa línea) */
+static LONG _dash_dbg_vars(LONG i) {
+    LONG vis[128];
+    return _dbg_visible(i, vis, 128, NULL);
+}
+
+static _DbgVar *_dbg_var_k(LONG i, LONG k) {
+    LONG vis[128], n = _dbg_visible(i, vis, 128, NULL);
+    return k >= 0 && k < n ? &_dbg.vars[vis[k]] : NULL;
+}
+
+static LONG _dash_dbg_var_name(LONG i, LONG k) {
+    _DbgVar *v = _dbg_var_k(i, k);
+    return (LONG)_dash_str_dup((STRPTR)(v ? v->name : ""), TRUE);
+}
+
+static LONG _dash_dbg_var_type(LONG i, LONG k) {
+    _DbgVar *v = _dbg_var_k(i, k);
+    return (LONG)_dash_str_dup((STRPTR)(v ? v->type : ""), TRUE);
+}
+
+/* Las globales del programa */
+static LONG _dash_dbg_globals(void) {
+    LONG k, n = 0;
+    for (k = 0; k < _dbg.nvars; k++) n += _dbg.vars[k].func < 0;
+    return n;
+}
+
+static LONG _dash_dbg_global_name(LONG g) {
+    LONG k;
+    for (k = 0; k < _dbg.nvars; k++)
+        if (_dbg.vars[k].func < 0 && g-- == 0) return (LONG)_dash_str_dup((STRPTR)_dbg.vars[k].name, TRUE);
+    return (LONG)_dash_str_dup((STRPTR)"", TRUE);
+}
+
+/* El valor de expr en el marco i como texto (3, "hola", Punto(x: 3, y: 4), [1, 2], nil...); "?" y el porqué si no
+   se puede */
+static LONG _dash_dbg_value(LONG i, LONG expr) {
+    _DbgOut o;
+    char type[64];
+    ULONG v;
+    o.n = 0;
+    o.t[0] = 0;
+    if (_dbg.state != DBG_STOPPED) _dbg_put(&o, "? no está parado");
+    else if (!expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) {
+        char why[200];
+        strcpy(why, o.t);
+        o.n = 0;
+        _dbg_put(&o, "? ");
+        _dbg_put(&o, why);
+    } else _dbg_show(&o, type, v, 0);
+    return (LONG)_dash_str_dup((STRPTR)o.t, TRUE);
+}
+
+/* El tipo de expr en el marco i ("Int", "Punto", "[String]"...), "" si no se puede */
+static LONG _dash_dbg_value_type(LONG i, LONG expr) {
+    _DbgOut o;
+    char type[64];
+    ULONG v;
+    o.n = 0;
+    if (_dbg.state != DBG_STOPPED || !expr || !_dbg_eval(i, (const char *)expr, type, &v, &o)) type[0] = 0;
+    return (LONG)_dash_str_dup((STRPTR)type, TRUE);
+}
+"""
+
+    # Dash 2.0 (lib/json.dash for Inferencia and Forja): reading JSON in C, the tree made in Dash from its nodes
+    JSON_RUNTIME = r"""
+/* json_scan(text): the JSON text read at once, as lib/json.dash read it (the same errors, at the same byte), into a
+   table of nodes in order (each one followed by what it holds): its kind (JSON_NULL 0 ... JSON_OBJECT 5), the text
+   of a string (escapes and \uXXXX undone, in UTF-8) or of a number (as written), how many it holds (an array or
+   object; true 1 for a Bool) and its name inside an object. lib/json.dash makes the tree of Json from it. */
+typedef struct { LONG kind, count, text, len, name, nlen; } _DashJsonNode;
+static _DashJsonNode *_dash_json_nodes = NULL;
+static LONG _dash_json_n = 0, _dash_json_cap = 0;
+static char *_dash_json_buf = NULL;            /* the texts, one after another */
+static LONG _dash_json_blen = 0, _dash_json_bcap = 0;
+static const UBYTE *_dash_json_s;
+static LONG _dash_json_i, _dash_json_len, _dash_json_bad;
+static char _dash_json_err[80];
+
+static void _dash_json_cleanup(void) {
+    if (_dash_json_nodes) FreeVec(_dash_json_nodes);
+    if (_dash_json_buf) FreeVec(_dash_json_buf);
+    _dash_json_nodes = NULL;
+    _dash_json_buf = NULL;
+    _dash_json_n = _dash_json_cap = _dash_json_blen = _dash_json_bcap = 0;
+}
+
+static void _dash_json_fail(const char *why) {
+    if (_dash_json_bad) return;
+    _dash_json_bad = 1;
+    sprintf(_dash_json_err, "%s at byte %ld", why, (long)_dash_json_i);
+}
+
+/* (0 past the end, as str_code) */
+#define _DASH_JC(k) ((k) < _dash_json_len && (k) >= 0 ? _dash_json_s[k] : 0)
+
+static LONG _dash_json_node(LONG kind) {
+    if (_dash_json_n == _dash_json_cap) {
+        LONG cap = _dash_json_cap ? _dash_json_cap * 2 : 64;
+        _DashJsonNode *v = (_DashJsonNode *)AllocVec(cap * sizeof(_DashJsonNode), MEMF_ANY);
+        if (!v) { _dash_json_fail("out of memory"); return -1; }
+        if (_dash_json_n) CopyMem(_dash_json_nodes, v, _dash_json_n * sizeof(_DashJsonNode));
+        if (_dash_json_nodes) FreeVec(_dash_json_nodes);
+        _dash_json_nodes = v;
+        _dash_json_cap = cap;
+    }
+    _dash_json_nodes[_dash_json_n].kind = kind;
+    _dash_json_nodes[_dash_json_n].count = 0;
+    _dash_json_nodes[_dash_json_n].text = _dash_json_nodes[_dash_json_n].len = 0;
+    _dash_json_nodes[_dash_json_n].name = _dash_json_nodes[_dash_json_n].nlen = 0;
+    return _dash_json_n++;
+}
+
+static BOOL _dash_json_put(const void *p, LONG n) {
+    if (_dash_json_blen + n > _dash_json_bcap) {
+        LONG cap = _dash_json_bcap ? _dash_json_bcap * 2 : 1024;
+        char *b;
+        while (cap < _dash_json_blen + n) cap *= 2;
+        if (!(b = (char *)AllocVec(cap, MEMF_ANY))) { _dash_json_fail("out of memory"); return FALSE; }
+        if (_dash_json_blen) CopyMem(_dash_json_buf, b, _dash_json_blen);
+        if (_dash_json_buf) FreeVec(_dash_json_buf);
+        _dash_json_buf = b;
+        _dash_json_bcap = cap;
+    }
+    if (n) CopyMem((APTR)p, _dash_json_buf + _dash_json_blen, n);
+    _dash_json_blen += n;
+    return TRUE;
+}
+
+static void _dash_json_ws(void) {
+    while (_dash_json_i < _dash_json_len) {
+        UBYTE c = _dash_json_s[_dash_json_i];
+        if (c != 32 && c != 10 && c != 13 && c != 9) return;
+        _dash_json_i++;
+    }
+}
+
+static LONG _dash_json_hex(LONG c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static LONG _dash_json_u4(void) {
+    LONG v = 0, k, h;
+    if (_dash_json_i + 4 > _dash_json_len) return -1;
+    for (k = 0; k < 4; k++) {
+        if ((h = _dash_json_hex(_DASH_JC(_dash_json_i + k))) < 0) return -1;
+        v = v * 16 + h;
+    }
+    _dash_json_i += 4;
+    return v;
+}
+
+/* The string at i (on its opening quote) into the texts: where it starts (its length in *len), -1 if it is bad */
+static LONG _dash_json_str(LONG *len) {
+    LONG at = _dash_json_blen, start;
+    _dash_json_i++;
+    start = _dash_json_i;
+    while (_dash_json_i < _dash_json_len) {
+        UBYTE c = _dash_json_s[_dash_json_i];
+        if (c == '"') {
+            if (!_dash_json_put(_dash_json_s + start, _dash_json_i - start)) return -1;
+            _dash_json_i++;
+            *len = _dash_json_blen - at;
+            return at;
+        }
+        if (c == '\\') {
+            UBYTE e, u[4];
+            LONG n = 1, cp;
+            if (!_dash_json_put(_dash_json_s + start, _dash_json_i - start)) return -1;
+            _dash_json_i++;
+            e = _DASH_JC(_dash_json_i);
+            _dash_json_i++;
+            if (e == 'n') u[0] = 10;
+            else if (e == 't') u[0] = 9;
+            else if (e == 'r') u[0] = 13;
+            else if (e == '"' || e == '\\' || e == '/') u[0] = e;
+            else if (e == 'b') u[0] = 8;
+            else if (e == 'f') u[0] = 12;
+            else if (e == 'u') {
+                if ((cp = _dash_json_u4()) < 0) { _dash_json_fail("bad \\u escape"); return -1; }
+                /* a pair of surrogates is one character */
+                if (cp >= 0xD800 && cp <= 0xDBFF && _DASH_JC(_dash_json_i) == '\\' && _DASH_JC(_dash_json_i + 1) == 'u') {
+                    LONG lo;
+                    _dash_json_i += 2;
+                    lo = _dash_json_u4();
+                    if (lo >= 0xDC00 && lo <= 0xDFFF) cp = 0x10000 + (cp - 0xD800) * 1024 + (lo - 0xDC00);
+                    else _dash_json_i -= lo >= 0 ? 6 : 2;
+                }
+                if (cp == 0) u[0] = ' ';
+                else {
+                    if ((cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) cp = 0xFFFD;   /* (as utf8_char) */
+                    if (cp < 0x80) u[0] = (UBYTE)cp;
+                    else if (cp < 0x800) { u[0] = 0xC0 | cp >> 6; u[1] = 0x80 | (cp & 63); n = 2; }
+                    else if (cp < 0x10000) { u[0] = 0xE0 | cp >> 12; u[1] = 0x80 | (cp >> 6 & 63); u[2] = 0x80 | (cp & 63); n = 3; }
+                    else { u[0] = 0xF0 | cp >> 18; u[1] = 0x80 | (cp >> 12 & 63); u[2] = 0x80 | (cp >> 6 & 63); u[3] = 0x80 | (cp & 63); n = 4; }
+                }
+            } else {
+                _dash_json_i--;
+                _dash_json_fail("bad escape");
+                return -1;
+            }
+            if (!_dash_json_put(u, n)) return -1;
+            start = _dash_json_i;
+        } else {
+            _dash_json_i++;
+        }
+    }
+    _dash_json_fail("a string without its end");
+    return -1;
+}
+
+#define _DASH_JD(k) (_DASH_JC(k) >= '0' && _DASH_JC(k) <= '9')
+
+static void _dash_json_num(void) {
+    LONG start = _dash_json_i, node;
+    UBYTE c;
+    if (_DASH_JC(_dash_json_i) == '-') _dash_json_i++;
+    if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+    while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    if (_dash_json_i < _dash_json_len && _DASH_JC(_dash_json_i) == '.') {
+        _dash_json_i++;
+        if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+        while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    }
+    c = _DASH_JC(_dash_json_i);
+    if (c == 'e' || c == 'E') {
+        _dash_json_i++;
+        c = _DASH_JC(_dash_json_i);
+        if (c == '+' || c == '-') _dash_json_i++;
+        if (!_DASH_JD(_dash_json_i)) { _dash_json_fail("bad number"); return; }
+        while (_dash_json_i < _dash_json_len && _DASH_JD(_dash_json_i)) _dash_json_i++;
+    }
+    if ((node = _dash_json_node(2)) < 0) return;
+    _dash_json_nodes[node].text = _dash_json_blen;
+    _dash_json_nodes[node].len = _dash_json_i - start;
+    _dash_json_put(_dash_json_s + start, _dash_json_i - start);
+}
+
+static BOOL _dash_json_word(const char *w) {
+    LONG n = strlen(w);
+    if (_dash_json_i + n > _dash_json_len || strncmp((const char *)_dash_json_s + _dash_json_i, w, n)) return FALSE;
+    _dash_json_i += n;
+    return TRUE;
+}
+
+static void _dash_json_value(LONG depth);
+
+static void _dash_json_obj(LONG depth) {
+    LONG node = _dash_json_node(5);
+    if (node < 0) return;
+    _dash_json_i++;
+    _dash_json_ws();
+    if (_DASH_JC(_dash_json_i) == '}') { _dash_json_i++; return; }
+    for (;;) {
+        LONG name, nlen, child;
+        UBYTE c;
+        _dash_json_ws();
+        if (_DASH_JC(_dash_json_i) != '"') { _dash_json_fail("a name was expected"); return; }
+        if ((name = _dash_json_str(&nlen)) < 0) return;
+        _dash_json_ws();
+        if (_DASH_JC(_dash_json_i) != ':') { _dash_json_fail("':' was expected"); return; }
+        _dash_json_i++;
+        child = _dash_json_n;
+        _dash_json_value(depth);
+        if (_dash_json_bad) return;
+        _dash_json_nodes[child].name = name;
+        _dash_json_nodes[child].nlen = nlen;
+        _dash_json_nodes[node].count++;
+        _dash_json_ws();
+        c = _DASH_JC(_dash_json_i);
+        _dash_json_i++;
+        if (c == '}') return;
+        if (c != ',') { _dash_json_i--; _dash_json_fail("',' or '}' was expected"); return; }
+    }
+}
+
+static void _dash_json_arr(LONG depth) {
+    LONG node = _dash_json_node(4);
+    if (node < 0) return;
+    _dash_json_i++;
+    _dash_json_ws();
+    if (_DASH_JC(_dash_json_i) == ']') { _dash_json_i++; return; }
+    for (;;) {
+        UBYTE c;
+        _dash_json_value(depth);
+        if (_dash_json_bad) return;
+        _dash_json_nodes[node].count++;
+        _dash_json_ws();
+        c = _DASH_JC(_dash_json_i);
+        _dash_json_i++;
+        if (c == ']') return;
+        if (c != ',') { _dash_json_i--; _dash_json_fail("',' or ']' was expected"); return; }
+    }
+}
+
+static void _dash_json_value(LONG depth) {
+    UBYTE c;
+    LONG node, len, at;
+    _dash_json_ws();
+    if (_dash_json_i >= _dash_json_len) { _dash_json_fail("unexpected end"); return; }
+    c = _dash_json_s[_dash_json_i];
+    if (c == '"') {
+        if ((node = _dash_json_node(3)) < 0) return;
+        if ((at = _dash_json_str(&len)) < 0) return;
+        _dash_json_nodes[node].text = at;
+        _dash_json_nodes[node].len = len;
+        return;
+    }
+    if (c == '{' || c == '[') {
+        if (depth >= 64) { _dash_json_fail("too deep"); return; }     /* (each level takes stack) */
+        if (c == '{') _dash_json_obj(depth + 1);
+        else _dash_json_arr(depth + 1);
+        return;
+    }
+    if (c == '-' || (c >= '0' && c <= '9')) { _dash_json_num(); return; }
+    if (_dash_json_word("true")) { if ((node = _dash_json_node(1)) >= 0) _dash_json_nodes[node].count = 1; return; }
+    if (_dash_json_word("false")) { _dash_json_node(1); return; }
+    if (_dash_json_word("null")) { _dash_json_node(0); return; }
+    _dash_json_fail("unexpected character");
+}
+
+/* How many nodes, -1 if it is not JSON (json_scan_error says why and where) */
+static LONG _dash_json_scan(STRPTR text) {
+    static BOOL at_exit = FALSE;
+    if (!at_exit) at_exit = _dash_atexit(_dash_json_cleanup) == 0;
+    _dash_json_n = _dash_json_blen = 0;
+    _dash_json_bad = 0;
+    _dash_json_err[0] = 0;
+    _dash_json_s = (const UBYTE *)(text ? (char *)text : "");
+    _dash_json_len = strlen((const char *)_dash_json_s);
+    _dash_json_i = 0;
+    _dash_json_value(0);
+    if (!_dash_json_bad) {
+        _dash_json_ws();
+        if (_dash_json_i < _dash_json_len) _dash_json_fail("something after the end");
+    }
+    return _dash_json_bad ? -1 : _dash_json_n;
+}
+
+static STRPTR _dash_json_scan_error(void) { return _dash_str_dup((STRPTR)_dash_json_err, TRUE); }
+
+static LONG _dash_json_scan_kind(LONG i) { return i >= 0 && i < _dash_json_n ? _dash_json_nodes[i].kind : 0; }
+static LONG _dash_json_scan_count(LONG i) { return i >= 0 && i < _dash_json_n ? _dash_json_nodes[i].count : 0; }
+
+static STRPTR _dash_json_take(LONG at, LONG len) {
+    STRPTR s = _dash_str_alloc(len, TRUE);
+    if (s && len) CopyMem(_dash_json_buf + at, s, len);
+    return s;
+}
+
+static STRPTR _dash_json_scan_text(LONG i) {
+    return i >= 0 && i < _dash_json_n ? _dash_json_take(_dash_json_nodes[i].text, _dash_json_nodes[i].len) : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_json_scan_name(LONG i) {
+    return i >= 0 && i < _dash_json_n ? _dash_json_take(_dash_json_nodes[i].name, _dash_json_nodes[i].nlen) : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+"""
+
+    # Dash 2.0 (for Inferencia, the IDE): running a command line and taking its output
+    RUNCAP_RUNTIME = """\
+/* run_start(command, timeout_ms) runs a command line in a process of its own (with the program's path and
+   directory), its output and error output to a file in T: (RAM: without T:), and run_finish gives that back as a
+   text, its return code in run_rc. When the time runs out, Ctrl-C goes to the command's shell (again every second
+   until it ends: a command that does not stop is waited for). run_capture does both. */
+#include <dos/dostags.h>
+#include <dos/dosextens.h>
+typedef struct _DashRun {
+    struct _DashRun *next;           /* all of them, for the exit */
+    BPTR in, out;
+    LONG rc, timeout, breaks, pri;   /* timeout and the last break: ticks since start */
+    BOOL timed;                      /* the time ran out */
+    volatile LONG done, started;
+    struct DateStamp start;
+    char file[48];
+    char cmd[1];
+} _DashRun;
+static _DashRun *_dash_runs = NULL;
+static _DashRun * volatile _dash_run_new = NULL;
+static LONG _dash_run_rc_last = 0;
+static ULONG _dash_run_count = 0;
+
+static void _dash_run_proc(void) {
+    _DashRun *r = _dash_run_new;
+    r->started = 1;
+    r->rc = SystemTags((STRPTR)r->cmd, SYS_Input, r->in, SYS_Output, r->out, SYS_Error, r->out,
+                       NP_Priority, r->pri, NP_StackSize, 32768, TAG_DONE);
+    Forbid();                        /* done only once this process has left the program's code */
+    r->done = 1;
+}
+
+static LONG _dash_run_start(STRPTR command, LONG timeout_ms) {
+    struct Process *me = (struct Process *)FindTask(NULL);
+    _DashRun *r;
+    if (!command || !*command) return 0;
+    if (!(r = (_DashRun *)AllocVec(sizeof(_DashRun) + strlen((char *)command), MEMF_PUBLIC | MEMF_CLEAR))) return 0;
+    strcpy(r->cmd, (char *)command);
+    r->timeout = timeout_ms > 0 ? (timeout_ms + 19) / 20 : 0;
+    r->pri = me->pr_Task.tc_Node.ln_Pri;   /* (the command at the program's priority: it goes on answering) */
+    sprintf(r->file, "T:dash_run_%lx_%lu", (unsigned long)me, (unsigned long)++_dash_run_count);
+    if (!(r->out = Open((CONST_STRPTR)r->file, MODE_NEWFILE))) {
+        sprintf(r->file, "RAM:dash_run_%lx_%lu", (unsigned long)me, (unsigned long)_dash_run_count);
+        r->out = Open((CONST_STRPTR)r->file, MODE_NEWFILE);
+    }
+    r->in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
+    if (!r->in || !r->out) {
+        if (r->in) Close(r->in);
+        if (r->out) { Close(r->out); DeleteFile((CONST_STRPTR)r->file); }
+        FreeVec(r);
+        return 0;
+    }
+    if (Output()) Flush(Output());   /* (what Print left in the buffer) */
+    DateStamp(&r->start);
+    _dash_run_new = r;
+    if (!CreateNewProcTags(NP_Entry, (ULONG)_dash_run_proc, NP_Name, (ULONG)"dash_run", NP_Cli, TRUE,
+                           NP_Priority, r->pri, NP_StackSize, 8192, TAG_DONE)) {
+        Close(r->in);
+        Close(r->out);
+        DeleteFile((CONST_STRPTR)r->file);
+        FreeVec(r);
+        return 0;
+    }
+    while (!r->started) Delay(1);
+    r->next = _dash_runs;
+    _dash_runs = r;
+    return (LONG)r;
+}
+
+/* Ticks since the command started */
+static LONG _dash_run_ticks(_DashRun *r) {
+    struct DateStamp d;
+    DateStamp(&d);
+    return (d.ds_Days - r->start.ds_Days) * 4320000L + (d.ds_Minute - r->start.ds_Minute) * 3000L +
+           (d.ds_Tick - r->start.ds_Tick);
+}
+
+/* Ctrl-C to the shell that runs it (the one whose input is ours) */
+static void _dash_run_break_now(_DashRun *r) {
+    LONG i, n;
+    struct Process *p;
+    Forbid();
+    if (!r->done)
+        for (i = 1, n = MaxCli(); i <= n; i++)
+            if ((p = FindCliProc(i)) && p->pr_CIS == r->in) Signal(&p->pr_Task, SIGBREAKF_CTRL_C);
+    Permit();
+}
+
+static void _dash_run_break(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    if (!r || r->done) return;
+    r->breaks = _dash_run_ticks(r);
+    if (!r->breaks) r->breaks = 1;
+    _dash_run_break_now(r);
+}
+
+/* The time limit: Ctrl-C when it runs out, again every second */
+static void _dash_run_check(_DashRun *r) {
+    LONG t;
+    if (r->done || (!r->timeout && !r->breaks)) return;
+    t = _dash_run_ticks(r);
+    if (r->breaks ? t - r->breaks >= 50 : t >= r->timeout) {
+        if (!r->breaks) r->timed = TRUE;
+        r->breaks = t ? t : 1;
+        _dash_run_break_now(r);
+    }
+}
+
+static BOOL _dash_run_ready(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    if (!r) return TRUE;
+    _dash_run_check(r);
+    return r->done != 0;
+}
+
+static void _dash_run_wait(_DashRun *r) {
+    while (!r->done) {
+        Delay(1);
+        _dash_run_check(r);
+    }
+}
+
+/* Forget it: its files closed and gone */
+static void _dash_run_free(_DashRun *r) {
+    _DashRun **p;
+    for (p = &_dash_runs; *p; p = &(*p)->next)
+        if (*p == r) { *p = r->next; break; }
+    Close(r->in);
+    if (r->out) Close(r->out);
+    DeleteFile((CONST_STRPTR)r->file);
+    FreeVec(r);
+}
+
+static STRPTR _dash_run_finish(LONG h) {
+    _DashRun *r = (_DashRun *)h;
+    STRPTR s = NULL;
+    BPTR f;
+    LONG n;
+    if (!r) { _dash_run_rc_last = -1; return _dash_str_dup((STRPTR)"", TRUE); }
+    _dash_run_wait(r);
+    /* (a time limit that ran out is -2 whatever the command gave) */
+    _dash_run_rc_last = r->timed ? -2 : (r->rc < 0 ? -1 : r->rc);
+    Close(r->out);
+    r->out = 0;
+    if ((f = Open((CONST_STRPTR)r->file, MODE_OLDFILE))) {
+        Seek(f, 0, OFFSET_END);
+        n = Seek(f, 0, OFFSET_BEGINNING);
+        if (n > 0 && (s = _dash_str_alloc(n, TRUE))) {
+            LONG got = Read(f, s, n);
+            s[got > 0 ? got : 0] = 0;
+        }
+        Close(f);
+    }
+    _dash_run_free(r);
+    return s ? s : _dash_str_dup((STRPTR)"", TRUE);
+}
+
+static STRPTR _dash_run_capture(STRPTR command, LONG timeout_ms) {
+    LONG h = _dash_run_start(command, timeout_ms);
+    if (!h) { _dash_run_rc_last = -1; return _dash_str_dup((STRPTR)"", TRUE); }
+    return _dash_run_finish(h);
+}
+
+static LONG _dash_run_rc(void) { return _dash_run_rc_last; }
+
+/* At exit: the processes run code of the program, which must stay loaded until they end */
+static void _dash_runcap_cleanup(void) {
+    while (_dash_runs) {
+        _dash_run_break((LONG)_dash_runs);
+        _dash_run_wait(_dash_runs);
+        _dash_run_free(_dash_runs);
+    }
 }
 
 """
@@ -5407,12 +7506,508 @@ static LONG _dash_inflate(APTR src, LONG n, APTR dst, LONG max) {
     return dash_zlib_inflate(src, n, dst, max);
 }
 
+long dash_zlib_inflate_auto(const void *src, long n, void *dst, long max);
+static LONG _dash_inflate_auto(APTR src, LONG n, APTR dst, LONG max) {
+    return dash_zlib_inflate_auto(src, n, dst, max);
+}
+
 static LONG _dash_deflate(APTR src, LONG n, APTR dst, LONG max, LONG level) {
     return dash_zlib_deflate(src, n, dst, max, level);
 }
 
 static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
     return (LONG)dash_zlib_crc32(buf, n, (ULONG)crc);
+}
+
+"""
+
+    # Dash 2.0: connections that go on in a task of their own (what Tachyon's lib/red.dash did with @native)
+    NETBG_RUNTIME = """\
+/* Dash background network runtime: net_bg_open asks for a connection and a task of its own (task_start's)
+   looks up the name, connects, negotiates TLS (net_bg_open_tls), sends and receives while the program is busy
+   (a long layout, JavaScript...). The program only puts and takes bytes from a table behind a semaphore. The
+   task starts with the first connection and ends by itself after net_bg_idle's ms without traffic (2 s; a
+   connection the program keeps reading is traffic, even with nothing coming), or at
+   net_bg_stop and at the end of the program. TLS goes through hooks NETBG_TLS_RUNTIME fills: a program without
+   net_bg_open_tls does not take AmiSSL. */
+#include <exec/semaphores.h>
+#define _DASH_NBG_MAX 48
+enum { _NBG_FREE, _NBG_ASKED, _NBG_CONNECTING, _NBG_NEGOTIATING, _NBG_OPEN, _NBG_CLOSED, _NBG_ERROR };
+typedef struct {
+    volatile LONG state;
+    char host[256];
+    LONG port, tls_wanted, timeout, sock, tls, started, retries, stage, sent;
+    UBYTE *out; LONG out_len, out_cap;
+    UBYTE *in; LONG in_len, in_cap;
+    volatile LONG drop;
+    volatile LONG polled;   /* the program asked it for what came (net_bg_recv, net_bg_pending) */
+    char error[160];
+} _DashNbgSlot;
+static _DashNbgSlot _dash_nbg[_DASH_NBG_MAX];
+static struct SignalSemaphore _dash_nbg_sem;
+static volatile LONG _dash_nbg_quit = 0, _dash_nbg_alive = 0, _dash_nbg_idle_ms = 2000;
+static LONG _dash_nbg_sem_ready = 0, _dash_nbg_taskh = 0;
+static struct Task * volatile _dash_nbg_task = NULL;
+/* (a server stops answering a TCP connection kept quiet for many seconds before the TLS handshake: another one
+   is opened, at most twice) */
+#define _DASH_NBG_QUIET_MS 5000
+/* TLS, if the program uses net_bg_open_tls (NETBG_TLS_RUNTIME) */
+static LONG (*_dash_nbg_tls_start)(LONG sock, STRPTR host, LONG timeout_ms) = NULL;
+static LONG (*_dash_nbg_tls_poll)(LONG t) = NULL;
+static void (*_dash_nbg_tls_close)(LONG t) = NULL;
+static LONG (*_dash_nbg_tls_send)(LONG t, APTR data, LONG len) = NULL;
+static LONG (*_dash_nbg_tls_read)(LONG t, APTR buf, LONG max) = NULL;
+
+static void _dash_nbg_free_slot(_DashNbgSlot *s) {
+    if (s->out) FreeVec(s->out);
+    if (s->in) FreeVec(s->in);
+    s->out = s->in = NULL;
+    s->out_len = s->out_cap = s->in_len = s->in_cap = 0;
+    s->drop = 0;
+    s->state = _NBG_FREE;
+}
+
+static void _dash_nbg_err(_DashNbgSlot *s) {
+    strncpy(s->error, (const char *)_dash_net_error(), sizeof(s->error) - 1);
+}
+
+static void _dash_nbg_shut(_DashNbgSlot *s) {
+    if (s->tls >= 0 && _dash_nbg_tls_close) _dash_nbg_tls_close(s->tls);
+    s->tls = -1;
+    if (s->sock >= 0) _dash_net_close(s->sock);
+    s->sock = -1;
+}
+
+/* Room for n more bytes in what came in (with the semaphore held) */
+static void _dash_nbg_in_room(_DashNbgSlot *s, LONG n) {
+    LONG cap;
+    UBYTE *nb;
+    if (s->in_cap - s->in_len >= n) return;
+    cap = s->in_cap ? s->in_cap * 2 : 16384;
+    if (cap < s->in_len + n) cap = s->in_len + n;
+    if ((nb = (UBYTE *)AllocVec(cap, MEMF_PUBLIC))) {
+        if (s->in) { memcpy(nb, s->in, s->in_len); FreeVec(s->in); }
+        s->in = nb;
+        s->in_cap = cap;
+    }
+}
+
+/* The task: moves every connection on until net_bg_stop or the idle time without any */
+static LONG _dash_nbg_loop(LONG arg) {
+    LONG i, idle = 0, done, active, r, n, t;
+    struct DateStamp ds;
+    (void)arg;
+    _dash_nbg_task = FindTask(NULL);
+    while (!_dash_nbg_quit) {
+        done = 0;
+        active = 0;
+        DateStamp(&ds);
+        t = ((LONG)ds.ds_Minute * 60 + ds.ds_Tick / 50) * 1000 + (ds.ds_Tick % 50) * 20;
+        for (i = 0; i < _DASH_NBG_MAX; i++) {
+            _DashNbgSlot *s = &_dash_nbg[i];
+            LONG e = s->state;
+            if (e == _NBG_FREE) continue;
+            /* (open ones with nothing to send and that nobody reads, closed ones and errors do not keep it alive:
+               one the program waits on, a server thinking before it answers (Ollama, Inferencia), does) */
+            if (e < _NBG_OPEN || (e == _NBG_OPEN && (s->out_len > 0 || s->polled)) || s->drop) active++;
+            s->polled = 0;
+            if (s->drop) {
+                _dash_nbg_shut(s);
+                ObtainSemaphore(&_dash_nbg_sem);
+                _dash_nbg_free_slot(s);
+                ReleaseSemaphore(&_dash_nbg_sem);
+                continue;
+            }
+            if (e == _NBG_ASKED) {
+                /* (Dash opens at most _DASH_NET_PENDING at a time: the others wait their turn) */
+                if (_dash_net_npend >= _DASH_NET_PENDING) continue;
+                s->sock = _dash_net_connect_start((STRPTR)s->host, s->port, s->timeout);
+                s->started = t;
+                if (s->sock < 0) {
+                    _dash_nbg_err(s);
+                    s->state = _NBG_ERROR;
+                } else s->state = _NBG_CONNECTING;
+                done = 1;
+            } else if (e == _NBG_CONNECTING) {
+                s->stage = _dash_net_connect_stage(s->sock);
+                r = _dash_net_connect_poll(s->sock);
+                if (r < 0) {
+                    _dash_nbg_err(s);
+                    s->sock = -1;
+                    s->state = _NBG_ERROR;
+                    done = 1;
+                } else if (r > 0) {
+                    if (!s->tls_wanted) s->state = _NBG_OPEN;
+                    else if (!_dash_nbg_tls_start) {
+                        strcpy(s->error, "no TLS");
+                        _dash_nbg_shut(s);
+                        s->state = _NBG_ERROR;
+                    } else if (t - s->started > _DASH_NBG_QUIET_MS && s->retries < 2) {
+                        _dash_nbg_shut(s);
+                        s->retries++;
+                        s->state = _NBG_ASKED;
+                    } else {
+                        s->tls = _dash_nbg_tls_start(s->sock, (STRPTR)s->host, s->timeout);
+                        if (s->tls < 0) {
+                            _dash_nbg_err(s);
+                            _dash_nbg_shut(s);
+                            s->state = _NBG_ERROR;
+                        } else s->state = _NBG_NEGOTIATING;
+                    }
+                    done = 1;
+                }
+            } else if (e == _NBG_NEGOTIATING) {
+                r = _dash_nbg_tls_poll(s->tls);
+                if (r < 0) {
+                    _dash_nbg_err(s);
+                    s->tls = -1;
+                    _dash_nbg_shut(s);
+                    if (s->retries < 2 && !strncmp(s->error, "timed out", 9)) {
+                        s->retries++;
+                        s->error[0] = 0;
+                        s->state = _NBG_ASKED;
+                    } else s->state = _NBG_ERROR;
+                    done = 1;
+                } else if (r > 0) {
+                    s->state = _NBG_OPEN;
+                    done = 1;
+                }
+            } else if (e == _NBG_OPEN) {
+                /* what there is to send (send waits until it has all gone) */
+                if (s->out_len > 0) {
+                    UBYTE *b;
+                    LONG len;
+                    ObtainSemaphore(&_dash_nbg_sem);
+                    b = s->out;
+                    len = s->out_len;
+                    s->out = NULL;
+                    s->out_len = s->out_cap = 0;
+                    ReleaseSemaphore(&_dash_nbg_sem);
+                    n = s->tls >= 0 ? _dash_nbg_tls_send(s->tls, b, len) : _dash_net_send_buffer(s->sock, b, len);
+                    FreeVec(b);
+                    s->sent = 1;
+                    if (n < 0) {
+                        _dash_nbg_err(s);
+                        s->state = _NBG_CLOSED;
+                    }
+                    done = 1;
+                }
+                /* what has come, to its buffer (which grows) */
+                if (s->state == _NBG_OPEN) {
+                    UBYTE tmp[4096];
+                    ObtainSemaphore(&_dash_nbg_sem);
+                    _dash_nbg_in_room(s, 4096);
+                    ReleaseSemaphore(&_dash_nbg_sem);
+                    if (s->tls >= 0) n = _dash_nbg_tls_read(s->tls, tmp, sizeof(tmp));
+                    else n = _dash_net_recv_buffer(s->sock, tmp, sizeof(tmp), 0);
+                    if (n > 0) {
+                        ObtainSemaphore(&_dash_nbg_sem);
+                        _dash_nbg_in_room(s, n);
+                        if (s->in_cap - s->in_len >= n) {
+                            memcpy(s->in + s->in_len, tmp, n);
+                            s->in_len += n;
+                        }
+                        ReleaseSemaphore(&_dash_nbg_sem);
+                        done = 1;
+                    } else if (n < 0 && !s->sent && s->retries < 4) {
+                        /* the server closed it before the program sent anything (opened early, the program
+                           busy: it got tired of waiting): another one */
+                        _dash_nbg_shut(s);
+                        s->retries++;
+                        s->state = _NBG_ASKED;
+                    } else if (n < 0) {
+                        s->state = _NBG_CLOSED;
+                        done = 1;
+                    }
+                }
+            }
+        }
+        if (done) {
+            _dash_task_wake();
+            idle = 0;
+            continue;
+        }
+        if (active == 0) {
+            idle += 20;
+            if (idle >= _dash_nbg_idle_ms) break;
+        } else idle = 0;
+        Delay(1);
+    }
+    /* at the end: everything closed in its own process (the network goes with the task) */
+    for (i = 0; i < _DASH_NBG_MAX; i++) {
+        _DashNbgSlot *s = &_dash_nbg[i];
+        /* (one asked while it was ending stays asked: net_bg_state starts another task) */
+        if (s->state == _NBG_FREE || (s->state == _NBG_ASKED && !s->drop)) continue;
+        _dash_nbg_shut(s);
+        ObtainSemaphore(&_dash_nbg_sem);
+        if (s->state != _NBG_ERROR) {
+            s->state = _NBG_CLOSED;
+            if (!s->error[0]) strcpy(s->error, "network closed");
+        }
+        ReleaseSemaphore(&_dash_nbg_sem);
+    }
+    ObtainSemaphore(&_dash_nbg_sem);
+    _dash_nbg_alive = 0;
+    for (i = 0; i < _DASH_NBG_MAX; i++)
+        if (_dash_nbg[i].state != _NBG_FREE && _dash_nbg[i].drop) _dash_nbg_free_slot(&_dash_nbg[i]);
+    ReleaseSemaphore(&_dash_nbg_sem);
+    _dash_nbg_task = NULL;
+    return 0;
+}
+
+/* The task running (started if it is not, or if the one before has ended) */
+static void _dash_nbg_ensure(void) {
+    if (!_dash_nbg_sem_ready) {
+        InitSemaphore(&_dash_nbg_sem);
+        _dash_nbg_sem_ready = 1;
+    }
+    if (_dash_nbg_alive) return;
+    if (_dash_nbg_taskh) {
+        _dash_task_free(_dash_nbg_taskh);    /* (it has ended: waits nothing) */
+        _dash_nbg_taskh = 0;
+    }
+    _dash_nbg_quit = 0;
+    _dash_nbg_alive = 1;
+    if (!(_dash_nbg_taskh = _dash_task_start_with((APTR)_dash_nbg_loop, 0, 65536, 0))) _dash_nbg_alive = 0;
+}
+
+static LONG _dash_net_bg_open_ex(STRPTR host, LONG port, LONG tls, LONG timeout_ms) {
+    LONG i;
+    if (!host) return -1;
+    _dash_nbg_ensure();
+    ObtainSemaphore(&_dash_nbg_sem);
+    for (i = 0; i < _DASH_NBG_MAX; i++) {
+        _DashNbgSlot *s = &_dash_nbg[i];
+        if (s->state != _NBG_FREE) continue;
+        memset(s, 0, sizeof(*s));
+        strncpy(s->host, (const char *)host, sizeof(s->host) - 1);
+        s->port = port;
+        s->tls_wanted = tls;
+        s->timeout = timeout_ms;
+        s->sock = -1;
+        s->tls = -1;
+        s->state = _NBG_ASKED;
+        ReleaseSemaphore(&_dash_nbg_sem);
+        return i;
+    }
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return -1;
+}
+
+static LONG _dash_net_bg_open(STRPTR host, LONG port, LONG timeout_ms) {
+    return _dash_net_bg_open_ex(host, port, 0, timeout_ms);
+}
+
+/* 1 asked, 2 connecting, 3 negotiating TLS, 4 open, 5 closed, 6 error (0: no such connection). A connection
+   still asked when the task had ended starts another one */
+static LONG _dash_net_bg_state(LONG c) {
+    if (c < 0 || c >= _DASH_NBG_MAX) return 0;
+    if (_dash_nbg[c].state == _NBG_ASKED && !_dash_nbg_alive) _dash_nbg_ensure();
+    return _dash_nbg[c].state;
+}
+
+static LONG _dash_net_bg_stage(LONG c) {
+    return (c >= 0 && c < _DASH_NBG_MAX) ? _dash_nbg[c].stage : 0;
+}
+
+static STRPTR _dash_net_bg_error(LONG c) {
+    char b[160];
+    b[0] = 0;
+    if (c >= 0 && c < _DASH_NBG_MAX && _dash_nbg_sem_ready) {
+        ObtainSemaphore(&_dash_nbg_sem);
+        strcpy(b, _dash_nbg[c].error);
+        ReleaseSemaphore(&_dash_nbg_sem);
+    }
+    return _dash_str_dup((STRPTR)b, TRUE);
+}
+
+static BOOL _dash_net_bg_send_buffer(LONG c, APTR data, LONG n) {
+    _DashNbgSlot *s;
+    if (c < 0 || c >= _DASH_NBG_MAX || n < 0 || _dash_nbg[c].state == _NBG_FREE) return FALSE;
+    s = &_dash_nbg[c];
+    ObtainSemaphore(&_dash_nbg_sem);
+    if (s->out_cap - s->out_len < n) {
+        LONG cap = (s->out_len + n) * 2 + 256;
+        UBYTE *nb = (UBYTE *)AllocVec(cap, MEMF_PUBLIC);
+        if (!nb) {
+            ReleaseSemaphore(&_dash_nbg_sem);
+            return FALSE;
+        }
+        if (s->out) { memcpy(nb, s->out, s->out_len); FreeVec(s->out); }
+        s->out = nb;
+        s->out_cap = cap;
+    }
+    if (n) memcpy(s->out + s->out_len, data, n);
+    s->out_len += n;
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return TRUE;
+}
+
+static BOOL _dash_net_bg_send(LONG c, STRPTR text) {
+    return text ? _dash_net_bg_send_buffer(c, (APTR)text, strlen((char *)text)) : FALSE;
+}
+
+/* Up to max bytes of what has come, to buffer: how many; -1 if it is closed and nothing is left */
+static LONG _dash_net_bg_recv(LONG c, APTR buffer, LONG max) {
+    _DashNbgSlot *s;
+    LONG n;
+    if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return -1;
+    s = &_dash_nbg[c];
+    s->polled = 1;
+    ObtainSemaphore(&_dash_nbg_sem);
+    n = s->in_len < max ? s->in_len : max;
+    if (n > 0) {
+        memcpy(buffer, s->in, n);
+        memmove(s->in, s->in + n, s->in_len - n);
+        s->in_len -= n;
+        /* (empty after something big: let go; the task asks for a small one when more comes) */
+        if (s->in_len == 0 && s->in_cap > 1048576) { FreeVec(s->in); s->in = NULL; s->in_cap = 0; }
+    } else if (s->state == _NBG_CLOSED || s->state == _NBG_ERROR || s->state == _NBG_FREE) n = -1;
+    else n = 0;
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return n;
+}
+
+static LONG _dash_net_bg_pending(LONG c) {
+    LONG n;
+    if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return 0;
+    _dash_nbg[c].polled = 1;
+    ObtainSemaphore(&_dash_nbg_sem);
+    n = _dash_nbg[c].in_len;
+    ReleaseSemaphore(&_dash_nbg_sem);
+    return n;
+}
+
+/* The task closes it and frees its place */
+static void _dash_net_bg_close(LONG c) {
+    if (c < 0 || c >= _DASH_NBG_MAX || !_dash_nbg_sem_ready) return;
+    ObtainSemaphore(&_dash_nbg_sem);
+    if (_dash_nbg[c].state != _NBG_FREE) {
+        if (_dash_nbg_alive) _dash_nbg[c].drop = 1;
+        else _dash_nbg_free_slot(&_dash_nbg[c]);    /* (no task: here) */
+    }
+    ReleaseSemaphore(&_dash_nbg_sem);
+}
+
+static void _dash_net_bg_idle(LONG ms) { _dash_nbg_idle_ms = ms > 0 ? ms : 1; }
+
+/* The task ends (it closes what is open) and the program waits for it */
+static void _dash_net_bg_stop(void) {
+    _dash_nbg_quit = 1;
+    if (_dash_nbg_taskh) {
+        _dash_task_free(_dash_nbg_taskh);
+        _dash_nbg_taskh = 0;
+    }
+}
+
+/* (at the end of the program: before the tasks are waited for) */
+static void _dash_netbg_cleanup(void) {
+    LONG i;
+    _dash_net_bg_stop();
+    for (i = 0; i < _DASH_NBG_MAX; i++)
+        if (_dash_nbg[i].state != _NBG_FREE) _dash_nbg_free_slot(&_dash_nbg[i]);
+}
+
+"""
+
+    # net_bg_open_tls: TLS for the background connections (AmiSSL, TLS_RUNTIME), through NETBG's hooks
+    NETBG_TLS_RUNTIME = """\
+/* Dash background TLS runtime */
+/* What has come on a TLS connection, without blocking: SSL_read with the socket ready may wait (after the
+   handshake come TLS 1.3's session tickets and then it waits for the answer, which will not come if the request
+   has not gone yet) and stop the other connections. n > 0 bytes, 0 nothing yet, -1 closed or failed */
+static LONG _dash_nbg_tls_read_nb(LONG t, APTR buf, LONG max) {
+    SSL *ssl = _dash_tls_get(t);
+    LONG fd, on = 1, off = 0, e = 0, n;
+    if (!ssl) return -1;
+    fd = SSL_get_fd(ssl);
+    n = SSL_pending(ssl) ? 1 : _dash_net_select(fd, FALSE, 0);
+    if (n <= 0) return n < 0 ? -1 : 0;
+    IoctlSocket(fd, FIONBIO, (char *)&on);
+    n = SSL_read(ssl, buf, max);
+    if (n <= 0) e = SSL_get_error(ssl, n);
+    IoctlSocket(fd, FIONBIO, (char *)&off);
+    if (n > 0) {
+        if (!_dash_tls_saved[t]) _dash_tls_sess_keep(t);
+        return n;
+    }
+    return (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) ? 0 : -1;
+}
+
+static LONG _dash_net_bg_open_tls(STRPTR host, LONG port, LONG timeout_ms) {
+    _dash_nbg_tls_start = _dash_tls_connect_start;
+    _dash_nbg_tls_poll = _dash_tls_connect_poll;
+    _dash_nbg_tls_close = _dash_tls_close;
+    _dash_nbg_tls_send = _dash_tls_send_buffer;
+    _dash_nbg_tls_read = _dash_nbg_tls_read_nb;
+    return _dash_net_bg_open_ex(host, port, 1, timeout_ms);
+}
+
+"""
+
+    # Dash 2.0: font_from_ttf, compiled apart (compiler/clibs.py, runtime/fontweb)
+    FONTWEB_RUNTIME = """\
+/* Dash Web Font Runtime */
+void *dash_fontweb_open(const char *file, long size, long width);
+void *dash_fontweb_icon(const char *file, long size, long code);
+void dash_fontweb_free(void *f);
+void dash_fontweb_forget(const char *file);
+void dash_fontweb_cleanup(void);
+
+static LONG _dash_font_from_ttf(STRPTR file, LONG size, LONG width) { return (LONG)dash_fontweb_open((const char *)file, size, width); }
+static LONG _dash_font_ttf_icon(STRPTR file, LONG size, LONG code) { return (LONG)dash_fontweb_icon((const char *)file, size, code); }
+static void _dash_font_ttf_free(LONG f) { dash_fontweb_free((void *)f); }
+static void _dash_font_ttf_forget(STRPTR file) { dash_fontweb_forget((const char *)file); }
+static void _dash_fontweb_cleanup(void) { dash_fontweb_cleanup(); }
+
+"""
+
+    # Dash 2.0: image_decode, compiled apart (compiler/clibs.py, runtime/imgdec)
+    IMGDEC_RUNTIME = """\
+/* Dash Image Decode Runtime */
+void *dash_imgdec_decode(const char *file, long maxw, long maxh);
+long dash_imgdec_width(void *d);
+long dash_imgdec_height(void *d);
+long dash_imgdec_alpha(void *d);
+void *dash_imgdec_pixels(void *d);
+void dash_imgdec_free(void *d);
+
+static LONG _dash_image_decode(STRPTR file, LONG maxw, LONG maxh) { return (LONG)dash_imgdec_decode((const char *)file, maxw, maxh); }
+static LONG _dash_image_decoded_width(LONG d) { return dash_imgdec_width((void *)d); }
+static LONG _dash_image_decoded_height(LONG d) { return dash_imgdec_height((void *)d); }
+static BOOL _dash_image_decoded_alpha(LONG d) { return dash_imgdec_alpha((void *)d) != 0; }
+static APTR _dash_image_decoded_pixels(LONG d) { return dash_imgdec_pixels((void *)d); }
+static void _dash_image_decoded_free(LONG d) { dash_imgdec_free((void *)d); }
+
+/* image_decode_start: the same in a process of its own (TASK_RUNTIME's, 256 KB of stack: stb_image, nanosvg and
+   libwebp want it; one below the program's priority, so it goes on while the program waits), with its own copy
+   of the name. image_decode_finish takes the result, frees the process and the copy. */
+typedef struct { LONG maxw, maxh; char file[1]; } _DashImgDecJob;
+static LONG _dash_imgdec_job(LONG arg) {
+    _DashImgDecJob *j = (_DashImgDecJob *)arg;
+    return (LONG)dash_imgdec_decode(j->file, j->maxw, j->maxh);
+}
+static LONG _dash_image_decode_start(STRPTR file, LONG maxw, LONG maxh) {
+    _DashImgDecJob *j;
+    LONG t;
+    if (!file) return 0;
+    if (!(j = (_DashImgDecJob *)AllocVec(sizeof(_DashImgDecJob) + strlen((const char *)file), MEMF_ANY))) return 0;
+    j->maxw = maxw;
+    j->maxh = maxh;
+    strcpy(j->file, (const char *)file);
+    if (!(t = _dash_task_start_with((APTR)_dash_imgdec_job, (LONG)j, 262144, -1))) FreeVec(j);
+    return t;
+}
+static BOOL _dash_image_decode_ready(LONG t) { return _dash_task_done(t) != 0; }
+static LONG _dash_image_decode_finish(LONG t) {
+    LONG d;
+    APTR j;
+    if (!t) return 0;
+    d = _dash_task_result(t);
+    j = (APTR)((struct _DashTask *)t)->arg;
+    _dash_task_free(t);
+    FreeVec(j);
+    return d;
 }
 
 """
@@ -6521,8 +9116,14 @@ static BOOL _dash_m_is_inf(double x) {
    a table open by the task's address. Each cpu_sample() hooks the tasks that appeared since and
    forgets the ones that ended. The hooks must be gone before the program unloads: cpu_stop(), and
    the program's exit (also exit() and the libnix's end, atexit). Time with no task counted is
-   idle (or tasks of another program's hooks). */
+   idle (or tasks of another program's hooks).
+   Several programs measuring at once (Trasfondo's bar and panel): the first one hooks the tasks and
+   publishes its table with a public semaphore "dash.cpu"; the others don't hook anything, and at each
+   sample they call its refresh (new tasks hooked, ended ones out) and read its times, each with its
+   own "before". When it ends, it takes the semaphore away, waits for whoever is reading, takes its
+   hooks out, and the next program to sample takes over. */
 #include <exec/execbase.h>
+#include <exec/semaphores.h>
 #include <dos/dosextens.h>
 #define _DASH_CPU_SLOTS 256                  /* a power of two */
 #define _DASH_CPU_GONE ((struct Task *)1)    /* a slot whose task ended (the chain goes on) */
@@ -6542,6 +9143,17 @@ static LONG _dash_cpu_n = 0;                 /* the last sample, most first */
 static LONG _dash_cpu_load[_DASH_CPU_MAX];
 static char _dash_cpu_name[_DASH_CPU_MAX][32];
 static LONG _dash_cpu_sum = 0;
+/* The table another program publishes (see above) */
+struct _DashCpuShared {
+    struct SignalSemaphore sem;
+    char name[12];
+    struct _DashCpuSlot *slots;              /* the owner's table */
+    void (*refresh)(void);                   /* the owner's: call it in Disable */
+};
+static struct _DashCpuShared *_dash_cpu_sh;  /* ours, if we hook the tasks (the owner) */
+static BOOL _dash_cpu_reader = FALSE;        /* another program hooks them: we read its table */
+static struct _DashCpuSlot _dash_cpu_mine[_DASH_CPU_SLOTS];   /* a reader's: task -> its time at our last sample */
+static LONG _dash_cpu_mine_used;
 
 static unsigned long long _dash_cpu_now(void) {
     struct EClockVal e;
@@ -6549,14 +9161,15 @@ static unsigned long long _dash_cpu_now(void) {
     return (unsigned long long)e.ev_hi << 32 | e.ev_lo;
 }
 
-static struct _DashCpuSlot *_dash_cpu_find(struct Task *t) {
+static struct _DashCpuSlot *_dash_cpu_find_in(struct _DashCpuSlot *tab, struct Task *t) {
     ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1), n;
     for (n = 0; n < _DASH_CPU_SLOTS; n++, i = (i + 1) & (_DASH_CPU_SLOTS - 1)) {
-        if (_dash_cpu_slots[i].task == t) return &_dash_cpu_slots[i];
-        if (!_dash_cpu_slots[i].task) return NULL;
+        if (tab[i].task == t) return &tab[i];
+        if (!tab[i].task) return NULL;
     }
     return NULL;
 }
+#define _dash_cpu_find(t) _dash_cpu_find_in(_dash_cpu_slots, (t))
 
 /* The hooks (called through the stubs below, which keep every register as exec wants) */
 __attribute__((used)) void _dash_cpu_launch_c(void) {
@@ -6588,14 +9201,15 @@ void _dash_cpu_launch(void);
 void _dash_cpu_switch(void);
 
 /* A slot for a task not in the table (the table is never full: see _dash_cpu_compact) */
-static struct _DashCpuSlot *_dash_cpu_add(struct Task *t) {
+static struct _DashCpuSlot *_dash_cpu_add_in(struct _DashCpuSlot *tab, LONG *used, struct Task *t) {
     ULONG i = ((ULONG)t >> 4) & (_DASH_CPU_SLOTS - 1);
-    while (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) i = (i + 1) & (_DASH_CPU_SLOTS - 1);
-    if (!_dash_cpu_slots[i].task) _dash_cpu_used++;
-    _dash_cpu_slots[i].task = t;
-    _dash_cpu_slots[i].time = _dash_cpu_slots[i].before = 0;
-    return &_dash_cpu_slots[i];
+    while (tab[i].task && tab[i].task != _DASH_CPU_GONE) i = (i + 1) & (_DASH_CPU_SLOTS - 1);
+    if (!tab[i].task) (*used)++;
+    tab[i].task = t;
+    tab[i].time = tab[i].before = 0;
+    return &tab[i];
 }
+#define _dash_cpu_add(t) _dash_cpu_add_in(_dash_cpu_slots, &_dash_cpu_used, (t))
 
 /* A task of the lists: hooked if it has no hooks; seen if it is ours (in Disable) */
 static void _dash_cpu_hook(struct Task *t) {
@@ -6626,15 +9240,19 @@ static void _dash_cpu_unhook(struct Task *t) {
 }
 
 /* With the ended tasks out, the chains are rebuilt when the table fills up with them (in Disable) */
-static void _dash_cpu_compact(void) {
+static void _dash_cpu_compact_in(struct _DashCpuSlot *tab, LONG *used) {
     static struct _DashCpuSlot keep[_DASH_CPU_SLOTS];
     LONG i, n = 0;
-    if (_dash_cpu_used < _DASH_CPU_SLOTS / 2) return;
+    if (*used < _DASH_CPU_SLOTS / 2) return;
     for (i = 0; i < _DASH_CPU_SLOTS; i++)
-        if (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE) keep[n++] = _dash_cpu_slots[i];
-    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
-    _dash_cpu_used = 0;
-    for (i = 0; i < n; i++) *_dash_cpu_add(keep[i].task) = keep[i];
+        if (tab[i].task && tab[i].task != _DASH_CPU_GONE) keep[n++] = tab[i];
+    memset(tab, 0, sizeof(struct _DashCpuSlot) * _DASH_CPU_SLOTS);
+    *used = 0;
+    for (i = 0; i < n; i++) *_dash_cpu_add_in(tab, used, keep[i].task) = keep[i];
+}
+
+static void _dash_cpu_compact(void) {
+    _dash_cpu_compact_in(_dash_cpu_slots, &_dash_cpu_used);
     _dash_cpu_in = _dash_cpu_find(SysBase->ThisTask);   /* the one on the CPU (us) moved too */
 }
 
@@ -6646,13 +9264,97 @@ static void _dash_cpu_each(void (*f)(struct Task *)) {
     f(SysBase->ThisTask);
 }
 
+/* The owner's refresh (in Disable; a reader calls it through the published pointer): the tasks that
+   appeared since are hooked and the ones that ended are forgotten */
+static void _dash_cpu_refresh(void) {
+    LONG i;
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_slots[i].seen = FALSE;
+    _dash_cpu_each(_dash_cpu_hook);
+    for (i = 0; i < _DASH_CPU_SLOTS; i++)
+        if (_dash_cpu_slots[i].task && _dash_cpu_slots[i].task != _DASH_CPU_GONE && !_dash_cpu_slots[i].seen)
+            _dash_cpu_slots[i].task = _DASH_CPU_GONE;      /* ended since (what it took before going is lost) */
+    _dash_cpu_compact();
+}
+
+/* The owner out: nobody finds its table any more, the readers that have it finish, and the hooks go */
 static void _dash_cpu_stop(void) {
     if (!_dash_cpu_on) return;
+    if (_dash_cpu_sh) {
+        Forbid();
+        RemSemaphore(&_dash_cpu_sh->sem);
+        Permit();
+        ObtainSemaphore(&_dash_cpu_sh->sem);
+        ReleaseSemaphore(&_dash_cpu_sh->sem);
+    }
     Disable();
-    _dash_cpu_each(_dash_cpu_unhook);
+    if (!_dash_cpu_reader) _dash_cpu_each(_dash_cpu_unhook);
     _dash_cpu_in = NULL;
     _dash_cpu_on = FALSE;
     Enable();
+    if (_dash_cpu_sh) FreeMem(_dash_cpu_sh, sizeof(struct _DashCpuShared));
+    _dash_cpu_sh = NULL;
+    _dash_cpu_reader = FALSE;
+}
+
+static void _dash_cpu_task_name(struct Task *t, char *d);
+
+/* The table another program publishes, taken for reading (NULL: nobody publishes one) */
+static struct _DashCpuShared *_dash_cpu_find_shared(void) {
+    struct _DashCpuShared *sh;
+    Forbid();
+    sh = (struct _DashCpuShared *)FindSemaphore((STRPTR)"dash.cpu");
+    if (sh) ObtainSemaphoreShared(&sh->sem);
+    Permit();
+    return sh;
+}
+
+/* A reader's sample (in Disable): the owner's refresh, and each task's time since our last sample in d[] */
+static LONG _dash_cpu_read(struct _DashCpuShared *sh, unsigned long long *d) {
+    LONG i, n = 0;
+    sh->refresh();
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_mine[i].seen = FALSE;
+    for (i = 0; i < _DASH_CPU_SLOTS; i++) {
+        struct _DashCpuSlot *s = &sh->slots[i], *m;
+        if (!s->task || s->task == _DASH_CPU_GONE) continue;
+        m = _dash_cpu_find_in(_dash_cpu_mine, s->task);
+        if (!m) {
+            if (_dash_cpu_mine_used >= _DASH_CPU_SLOTS * 3 / 4) continue;
+            m = _dash_cpu_add_in(_dash_cpu_mine, &_dash_cpu_mine_used, s->task);
+            m->before = s->time;            /* new to us: from now on */
+        }
+        m->seen = TRUE;
+        if (d && n < _DASH_CPU_MAX) {
+            d[n] = s->time - m->before;
+            _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
+            n++;
+        }
+        m->before = s->time;
+    }
+    for (i = 0; i < _DASH_CPU_SLOTS; i++)
+        if (_dash_cpu_mine[i].task && _dash_cpu_mine[i].task != _DASH_CPU_GONE && !_dash_cpu_mine[i].seen)
+            _dash_cpu_mine[i].task = _DASH_CPU_GONE;
+    _dash_cpu_compact_in(_dash_cpu_mine, &_dash_cpu_mine_used);
+    return n;
+}
+
+/* Hooks on every task and the table published (without memory for it, it measures alone, as before) */
+static void _dash_cpu_own(void) {
+    struct _DashCpuShared *sh = (struct _DashCpuShared *)AllocMem(sizeof(struct _DashCpuShared), MEMF_PUBLIC | MEMF_CLEAR);
+    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
+    _dash_cpu_used = 0;
+    _dash_cpu_reader = FALSE;
+    Disable();
+    _dash_cpu_each(_dash_cpu_hook);
+    Enable();
+    if (sh) {
+        memcpy(sh->name, "dash.cpu", 9);
+        sh->sem.ss_Link.ln_Name = sh->name;
+        sh->sem.ss_Link.ln_Pri = 0;
+        sh->slots = _dash_cpu_slots;
+        sh->refresh = _dash_cpu_refresh;
+        AddSemaphore(&sh->sem);
+    }
+    _dash_cpu_sh = sh;
 }
 
 static BOOL _dash_cpu_start(void) {
@@ -6661,14 +9363,21 @@ static BOOL _dash_cpu_start(void) {
     _dash_time_init();
     if (!_dash_time_freq || SysBase->LibNode.lib_Version < 37) return FALSE;
     if (!at_exit) at_exit = _dash_atexit(_dash_cpu_stop) == 0;
-    memset(_dash_cpu_slots, 0, sizeof(_dash_cpu_slots));
-    _dash_cpu_used = 0;
     _dash_cpu_n = _dash_cpu_sum = 0;
-    Disable();
-    _dash_cpu_each(_dash_cpu_hook);
+    {
+        struct _DashCpuShared *sh = _dash_cpu_find_shared();
+        if (sh) {                            /* another program measures: we read its table */
+            memset(_dash_cpu_mine, 0, sizeof(_dash_cpu_mine));
+            _dash_cpu_mine_used = 0;
+            _dash_cpu_reader = TRUE;
+            Disable();
+            _dash_cpu_read(sh, NULL);        /* everyone's time so far, as "before" */
+            Enable();
+            ReleaseSemaphore(&sh->sem);
+        } else _dash_cpu_own();
+    }
     _dash_cpu_on = TRUE;
     _dash_cpu_last = _dash_cpu_now();
-    Enable();
     return TRUE;
 }
 
@@ -6692,37 +9401,57 @@ static void _dash_cpu_task_name(struct Task *t, char *d) {
     d[i] = 0;
 }
 
+/* x * 1000 / dt (per thousand) in 32 bits: both halved until x * 1000 fits (no 64-bit division in the runtime) */
+static LONG _dash_cpu_permil(unsigned long long x, unsigned long long dt) {
+    while (dt > 0x3FFFFF || x > 0x3FFFFF) {
+        x >>= 1;
+        dt >>= 1;
+    }
+    if (!dt) dt = 1;
+    return (LONG)((ULONG)x * 1000UL / (ULONG)dt);
+}
+
 static LONG _dash_cpu_sample(void) {
     static unsigned long long d[_DASH_CPU_MAX];
     unsigned long long now, dt, sum = 0;
     LONG i, j, n = 0;
     if (!_dash_cpu_on) return 0;
-    Disable();
-    for (i = 0; i < _DASH_CPU_SLOTS; i++) _dash_cpu_slots[i].seen = FALSE;
-    _dash_cpu_each(_dash_cpu_hook);
-    now = _dash_cpu_now();
-    for (i = 0; i < _DASH_CPU_SLOTS; i++) {
-        struct _DashCpuSlot *s = &_dash_cpu_slots[i];
-        if (!s->task || s->task == _DASH_CPU_GONE) continue;
-        if (!s->seen) {                      /* ended since (what it took before going is lost) */
-            s->task = _DASH_CPU_GONE;
-            continue;
+    if (_dash_cpu_reader) {
+        struct _DashCpuShared *sh = _dash_cpu_find_shared();
+        if (sh) {
+            Disable();
+            now = _dash_cpu_now();
+            n = _dash_cpu_read(sh, d);
+            Enable();
+            ReleaseSemaphore(&sh->sem);
+        } else {                             /* the owner ended: we hook the tasks from now on */
+            _dash_cpu_own();
+            _dash_cpu_last = _dash_cpu_now();
+            _dash_cpu_n = _dash_cpu_sum = 0;
+            return 0;
         }
-        if (n < _DASH_CPU_MAX) {
-            d[n] = s->time - s->before;
-            _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
-            n++;
+    } else {
+        Disable();
+        _dash_cpu_refresh();
+        now = _dash_cpu_now();
+        for (i = 0; i < _DASH_CPU_SLOTS; i++) {
+            struct _DashCpuSlot *s = &_dash_cpu_slots[i];
+            if (!s->task || s->task == _DASH_CPU_GONE) continue;
+            if (n < _DASH_CPU_MAX) {
+                d[n] = s->time - s->before;
+                _dash_cpu_task_name(s->task, _dash_cpu_name[n]);
+                n++;
+            }
+            s->before = s->time;
         }
-        s->before = s->time;
+        Enable();
     }
-    _dash_cpu_compact();
-    Enable();
     dt = now - _dash_cpu_last;
     _dash_cpu_last = now;
     if (!dt) dt = 1;
     for (i = 0; i < n; i++) sum += d[i];
-    _dash_cpu_sum = (LONG)(sum * 1000 / dt);
-    for (i = 0; i < n; i++) _dash_cpu_load[i] = (LONG)(d[i] * 1000 / dt);
+    _dash_cpu_sum = _dash_cpu_permil(sum, dt);
+    for (i = 0; i < n; i++) _dash_cpu_load[i] = _dash_cpu_permil(d[i], dt);
     for (i = 1; i < n; i++)                  /* most first */
         for (j = i; j > 0 && _dash_cpu_load[j] > _dash_cpu_load[j - 1]; j--) {
             char t[32];
@@ -6925,6 +9654,8 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
 #include <devices/input.h>
 #include <devices/inputevent.h>
 #include <proto/keymap.h>
+#include <proto/input.h>
+#include <proto/graphics.h>      /* (screen_pixel's ReadPixel) */
 #ifndef _DASH_KEYMAP_BASE
 #define _DASH_KEYMAP_BASE
 struct Library *KeymapBase = NULL;
@@ -6952,6 +9683,14 @@ static void _dash_input_cleanup(void) {
     _dash_in_port = NULL;
     if (_dash_in_keymap && KeymapBase) { CloseLibrary(KeymapBase); KeymapBase = NULL; }
     _dash_in_keymap = FALSE;
+}
+
+/* The keys held down now (PeekQualifier) */
+static LONG _dash_input_qualifiers(void) {
+    struct Device *InputBase;
+    if (!_dash_input_init()) return 0;
+    InputBase = _dash_in_io->io_Device;
+    return PeekQualifier() & 0xFF;
 }
 
 /* One event, then a tick (20 ms) for the programs to take it */
@@ -7083,6 +9822,180 @@ static void _dash_input_drag(LONG x1, LONG y1, LONG x2, LONG y2) {
     for (i = 1; i <= n; i++)
         _dash_input_pointer(x1 + dx * i / n, y1 + dy * i / n, IEQUALIFIER_LEFTBUTTON);
     _dash_input_button(FALSE, 0);
+}
+
+/* Dash 2.0, what test programs did with @native (Tachyon's clicar, Trasfondo's tests): other programs' windows,
+   their gadgets and menus, the screen's pixels and commodities. A window is a number from window_find: it is
+   not valid once that program closes it. */
+
+/* The window whose title starts with title, on any screen; 0 if there is none */
+static LONG _dash_window_find(STRPTR title) {
+    struct Screen *s;
+    struct Window *w, *r = NULL;
+    ULONG lock;
+    LONG n;
+    if (!title) return 0;
+    n = strlen((char *)title);
+    lock = LockIBase(0);
+    for (s = IntuitionBase->FirstScreen; s && !r; s = s->NextScreen)
+        for (w = s->FirstWindow; w && !r; w = w->NextWindow)
+            if (w->Title && !strncmp((char *)w->Title, (char *)title, n)) r = w;
+    UnlockIBase(lock);
+    return (LONG)r;
+}
+
+/* Its screen and it in front, and it active (clicks and keys go to the active window) */
+static void _dash_window_found_activate(LONG win) {
+    struct Window *w = (struct Window *)win;
+    if (!w) return;
+    ScreenToFront(w->WScreen);
+    WindowToFront(w);
+    ActivateWindow(w);
+    Delay(10);
+}
+
+/* 0 left, 1 top (on its screen), 2 width, 3 height, 4 left border, 5 top border */
+static LONG _dash_window_found_box(LONG win, LONG what) {
+    struct Window *w = (struct Window *)win;
+    if (!w) return -1;
+    switch (what) {
+    case 0: return w->LeftEdge;
+    case 1: return w->TopEdge;
+    case 2: return w->Width;
+    case 3: return w->Height;
+    case 4: return w->BorderLeft;
+    case 5: return w->BorderTop;
+    }
+    return -1;
+}
+
+/* A window's gadgets by their place (from 0, the window's own too: close, depth...). GadTools' buttons do not keep
+   their text in the gadget (checkboxes and fields with a label do): a button is found counting from a gadget
+   next to it that has one */
+static struct Gadget *_dash_gadget_nth(LONG win, LONG n) {
+    struct Window *w = (struct Window *)win;
+    struct Gadget *g;
+    if (!w || n < 0) return NULL;
+    for (g = w->FirstGadget; g && n > 0; g = g->NextGadget) n--;
+    return g;
+}
+
+/* The place of the first gadget whose text is text; -1 if there is none */
+static LONG _dash_gadget_index(LONG win, STRPTR text) {
+    struct Window *w = (struct Window *)win;
+    struct Gadget *g;
+    LONG i = 0;
+    if (!w || !text) return -1;
+    for (g = w->FirstGadget; g; g = g->NextGadget, i++)
+        if (g->GadgetText && g->GadgetText->IText && !strcmp((char *)g->GadgetText->IText, (char *)text)) return i;
+    return -1;
+}
+
+/* Its centre from the corner of the window (as input_click counts); -1 if there is no such gadget */
+static LONG _dash_gadget_xy(LONG win, LONG n, LONG y) {
+    struct Window *w = (struct Window *)win;
+    struct Gadget *g = _dash_gadget_nth(win, n);
+    LONG b;
+    if (!g) return -1;
+    /* (a GimmeZeroZero window counts its gadgets from inside its border) */
+    b = (w->Flags & WFLG_GIMMEZEROZERO) && !(g->GadgetType & GTYP_SYSGADGET) ? (y ? w->BorderTop : w->BorderLeft) : 0;
+    return y ? b + g->TopEdge + g->Height / 2 : b + g->LeftEdge + g->Width / 2;
+}
+
+static BOOL _dash_gadget_selected(LONG win, LONG n) {
+    struct Gadget *g = _dash_gadget_nth(win, n);
+    return g && (g->Flags & GFLG_SELECTED) != 0;
+}
+
+/* With buttons held (1 left, 2 right, 0 none), the pointer in steps of a pixel to (x, y) of the active window's
+   screen (a menu follows it: MUI's, which a jump would not open) */
+static void _dash_input_move_screen(LONG x, LONG y, LONG buttons) {
+    struct Window *w = IntuitionBase->ActiveWindow;
+    struct Screen *sc = w ? w->WScreen : IntuitionBase->FirstScreen;
+    struct InputEvent ie;
+    UWORD qual = IEQUALIFIER_RELATIVEMOUSE | ((buttons & 1) ? IEQUALIFIER_LEFTBUTTON : 0) |
+                 ((buttons & 2) ? IEQUALIFIER_RBUTTON : 0);
+    LONG steps = 0;
+    if (!sc) return;
+    while ((sc->MouseX != x || sc->MouseY != y) && steps++ < 2000) {
+        memset(&ie, 0, sizeof(ie));
+        ie.ie_Class = IECLASS_RAWMOUSE;
+        ie.ie_Code = IECODE_NOBUTTON;
+        ie.ie_Qualifier = qual;
+        ie.ie_X = sc->MouseX < x ? 1 : sc->MouseX > x ? -1 : 0;
+        ie.ie_Y = sc->MouseY < y ? 1 : sc->MouseY > y ? -1 : 0;
+        _dash_input_send(&ie);
+    }
+}
+
+/* Item item (from 0, separators too) of menu menu (from 0) of the active window, chosen with the mouse: the right
+   button on the menu's title, steps of a pixel to the item, held hold ticks, let go. False if there is no such
+   item */
+static BOOL _dash_input_menu(LONG menu, LONG item, LONG hold) {
+    struct Window *w = IntuitionBase->ActiveWindow;
+    struct Menu *m;
+    struct MenuItem *it;
+    struct Screen *sc;
+    struct InputEvent ie;
+    struct IEPointerPixel pp;
+    LONG k;
+    if (!w || !(m = w->MenuStrip)) return FALSE;
+    for (k = 0; k < menu && m; k++) m = m->NextMenu;
+    it = m ? m->FirstItem : NULL;
+    for (k = 0; k < item && it; k++) it = it->NextItem;
+    if (!it) return FALSE;
+    sc = w->WScreen;
+    memset(&ie, 0, sizeof(ie));
+    pp.iepp_Screen = sc;
+    pp.iepp_Position.X = m->LeftEdge + m->Width / 2;
+    pp.iepp_Position.Y = sc->BarHeight / 2;
+    ie.ie_Class = IECLASS_NEWPOINTERPOS;
+    ie.ie_SubClass = IESUBCLASS_PIXEL;
+    ie.ie_EventAddress = (APTR)&pp;
+    _dash_input_send(&ie);
+    Delay(4);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = IECODE_RBUTTON;
+    ie.ie_Qualifier = IEQUALIFIER_RBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+    _dash_input_send(&ie);
+    Delay(9);
+    _dash_input_move_screen(m->LeftEdge + it->LeftEdge + it->Width / 2, sc->BarHeight + 1 + it->TopEdge + it->Height / 2, 2);
+    Delay(hold > 10 ? hold : 10);
+    memset(&ie, 0, sizeof(ie));
+    ie.ie_Class = IECLASS_RAWMOUSE;
+    ie.ie_Code = IECODE_RBUTTON | IECODE_UP_PREFIX;
+    ie.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+    _dash_input_send(&ie);
+    return TRUE;
+}
+
+/* The pen of a pixel of the screen in front (x, y on it); -1 outside */
+static LONG _dash_screen_pixel(LONG x, LONG y) {
+    struct Screen *sc;
+    LONG r = -1;
+    ULONG lock = LockIBase(0);
+    sc = IntuitionBase->FirstScreen;
+    if (sc && x >= 0 && y >= 0 && x < sc->Width && y < sc->Height) r = ReadPixel(&sc->RastPort, x, y);
+    UnlockIBase(lock);
+    return r;
+}
+
+/* A command to a commodity by its name, as Exchange does (commodities.library's private BrokerCommand, LVO -198):
+   1 hide, 2 show... (CXCMD_*: 15 disable, 17 enable, 19 appear, 21 disappear, 23 kill...); 0 done, -1 no such
+   commodity, -2 it has no port, -3 no memory, -99 no commodities.library */
+static LONG _dash_cx_send(STRPTR name, LONG command) {
+    struct Library *cx = OpenLibrary((CONST_STRPTR)"commodities.library", 37);
+    LONG r = -99;
+    if (cx && name) {
+        register LONG d0 __asm("d0") = command;
+        register STRPTR a0 __asm("a0") = name;
+        register struct Library *a6 __asm("a6") = cx;
+        __asm volatile ("jsr a6@(-198:W)" : "+r"(d0), "+r"(a0) : "r"(a6) : "d1", "a1", "cc", "memory");
+        r = d0;
+    }
+    if (cx) CloseLibrary(cx);
+    return r;
 }
 
 /* The title of the active window, "" if there is none */
@@ -10271,6 +13184,7 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
         WA_DepthGadget, !(flags & 2),
         WA_SizeGadget, (flags & 1) != 0,
         WA_Borderless, (flags & 2) != 0,
+        WA_RMBTrap, (flags & 16) != 0,   /* 16: the right button to the program (On RightClick), no menus */
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_Activate, TRUE,
@@ -10396,11 +13310,100 @@ static STRPTR _dash_dir_current(void) {
     return _dash_str_dup((STRPTR)buf, TRUE);
 }
 
+/* (CreateDir gives an exclusive lock: without UnLock, nothing else could use the new directory) */
+static BOOL _dash_dir_create(STRPTR path) {
+    BPTR l = CreateDir(path);
+    if (!l) return FALSE;
+    UnLock(l);
+    return TRUE;
+}
+
+/* dir_read(path): what a directory holds, sorted by name (case does not count), kept until the next dir_read;
+   dir_entry_*(i) read it (Dash 2.0, for Inferencia) */
+typedef struct { LONG size, date; BOOL dir; char name[1]; } _DashDirEnt;
+static _DashDirEnt **_dash_dir_ents = NULL;
+static LONG _dash_dir_n = 0, _dash_dir_cap = 0;
+
+static void _dash_dir_free(void) {
+    LONG i;
+    for (i = 0; i < _dash_dir_n; i++) FreeVec(_dash_dir_ents[i]);
+    if (_dash_dir_ents) FreeVec(_dash_dir_ents);
+    _dash_dir_ents = NULL;
+    _dash_dir_n = _dash_dir_cap = 0;
+}
+
+/* Latin-1 letters as capitals */
+static UBYTE _dash_dir_up(UBYTE c) {
+    return (c >= 'a' && c <= 'z') || (c >= 0xE0 && c != 0xF7 && c != 0xFF) ? c - 32 : c;
+}
+
+static LONG _dash_dir_cmp(const char *a, const char *b) {
+    UBYTE x, y;
+    for (;; a++, b++) {
+        x = _dash_dir_up((UBYTE)*a);
+        y = _dash_dir_up((UBYTE)*b);
+        if (x != y || !x) return (LONG)x - (LONG)y;
+    }
+}
+
+static LONG _dash_dir_read(STRPTR path) {
+    struct FileInfoBlock *fib;
+    BPTR lock;
+    LONG gap, i, j;
+    _dash_dir_free();
+    if (!path) return -1;
+    if (!(lock = Lock(path, SHARED_LOCK))) return -1;
+    if (!(fib = (struct FileInfoBlock *)AllocDosObject(DOS_FIB, NULL))) { UnLock(lock); return -1; }
+    if (!Examine(lock, fib) || fib->fib_DirEntryType <= 0) { FreeDosObject(DOS_FIB, fib); UnLock(lock); return -1; }
+    while (ExNext(lock, fib)) {
+        _DashDirEnt *e;
+        if (_dash_dir_n == _dash_dir_cap) {
+            LONG cap = _dash_dir_cap ? _dash_dir_cap * 2 : 32;
+            _DashDirEnt **v = (_DashDirEnt **)AllocVec(cap * sizeof(APTR), MEMF_ANY);
+            if (!v) break;
+            if (_dash_dir_n) CopyMem(_dash_dir_ents, v, _dash_dir_n * sizeof(APTR));
+            if (_dash_dir_ents) FreeVec(_dash_dir_ents);
+            _dash_dir_ents = v;
+            _dash_dir_cap = cap;
+        }
+        if (!(e = (_DashDirEnt *)AllocVec(sizeof(_DashDirEnt) + strlen(fib->fib_FileName), MEMF_ANY))) break;
+        strcpy(e->name, fib->fib_FileName);
+        e->dir = fib->fib_DirEntryType > 0 && fib->fib_DirEntryType != ST_SOFTLINK;
+        e->size = e->dir ? 0 : fib->fib_Size;
+        /* (as time_unix: seconds since 1970 by the system's clock) */
+        e->date = 252460800L + fib->fib_Date.ds_Days * 86400L + fib->fib_Date.ds_Minute * 60L +
+                  fib->fib_Date.ds_Tick / 50;
+        _dash_dir_ents[_dash_dir_n++] = e;
+    }
+    FreeDosObject(DOS_FIB, fib);
+    UnLock(lock);
+    for (gap = _dash_dir_n / 2; gap > 0; gap /= 2)          /* Shell sort */
+        for (i = gap; i < _dash_dir_n; i++) {
+            _DashDirEnt *e = _dash_dir_ents[i];
+            for (j = i; j >= gap && _dash_dir_cmp(_dash_dir_ents[j - gap]->name, e->name) > 0; j -= gap)
+                _dash_dir_ents[j] = _dash_dir_ents[j - gap];
+            _dash_dir_ents[j] = e;
+        }
+    return _dash_dir_n;
+}
+
+static _DashDirEnt *_dash_dir_ent(LONG i) {
+    return i >= 0 && i < _dash_dir_n ? _dash_dir_ents[i] : NULL;
+}
+static STRPTR _dash_dir_entry_name(LONG i) {
+    _DashDirEnt *e = _dash_dir_ent(i);
+    return _dash_str_dup(e ? (STRPTR)e->name : (STRPTR)"", TRUE);
+}
+static LONG _dash_dir_entry_size(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->size : -1; }
+static BOOL _dash_dir_entry_is_dir(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->dir : FALSE; }
+static LONG _dash_dir_entry_date(LONG i) { _DashDirEnt *e = _dash_dir_ent(i); return e ? e->date : 0; }
+
 static void _dash_dir_cleanup(void) {
     if (_dash_dir_changed) {
         UnLock(CurrentDir(_dash_orig_dir));
         _dash_dir_changed = FALSE;
     }
+    _dash_dir_free();
 }
 
 """
@@ -13351,10 +16354,12 @@ static void _dash_asl_cleanup(void) {
     }
 }
 
-static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
+static BOOL _dash_file_request_at(STRPTR title, STRPTR pattern, BOOL save, STRPTR drawer, STRPTR file) {
     if (!_dash_asl_init()) return FALSE;
     BOOL result = AslRequestTags(_dash_freq,
         ASLFR_TitleText, (ULONG)title,
+        drawer && *drawer ? ASLFR_InitialDrawer : TAG_IGNORE, (ULONG)drawer,
+        file && *file ? ASLFR_InitialFile : TAG_IGNORE, (ULONG)file,
         ASLFR_InitialPattern, (ULONG)pattern,
         ASLFR_DoPatterns, TRUE,
         ASLFR_DoSaveMode, save,
@@ -13366,6 +16371,10 @@ static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
         strcpy(_dash_asl_file, _dash_freq->fr_File);
     }
     return result;
+}
+
+static BOOL _dash_file_request(STRPTR title, STRPTR pattern, BOOL save) {
+    return _dash_file_request_at(title, pattern, save, NULL, NULL);
 }
 
 static STRPTR _dash_get_path(void) { return _dash_asl_path; }
@@ -13389,6 +16398,12 @@ static STRPTR _dash_file_fullpath(void) {
 /* dialog_file: full path of the chosen file, "" if cancelled (a temporary string) */
 static STRPTR _dash_dialog_file(STRPTR title, STRPTR pattern, LONG save_mode) {
     if (!_dash_file_request(title, (pattern && pattern[0]) ? pattern : (STRPTR)"#?", save_mode != 0))
+        return _dash_str_dup((STRPTR)"", TRUE);
+    return _dash_str_dup(_dash_file_fullpath(), TRUE);
+}
+
+static STRPTR _dash_dialog_file_at(STRPTR title, STRPTR pattern, LONG save_mode, STRPTR drawer, STRPTR file) {
+    if (!_dash_file_request_at(title, (pattern && pattern[0]) ? pattern : (STRPTR)"#?", save_mode != 0, drawer, file))
         return _dash_str_dup((STRPTR)"", TRUE);
     return _dash_str_dup(_dash_file_fullpath(), TRUE);
 }
@@ -14987,6 +18002,15 @@ static LONG _dash_mui_depth = 0;
 static Object *_dash_mui_first_win = NULL;          /* closing it quits, unless on_close */
 static Object *_dash_mui_cur_win = NULL;            /* window being built */
 static Object *_dash_mui_cur_menu = NULL;           /* menu being built */
+/* the windows alive (mui_window_dispose: a second call, or one with a window already gone, does nothing) and the
+   last one built (its context menus, made after mui_window_end, are its own) */
+#define _DASH_MUI_WINS 64
+static Object *_dash_mui_wins[_DASH_MUI_WINS];
+static LONG _dash_mui_nwins = 0;
+static Object *_dash_mui_last_win = NULL;
+/* the window of an object being set up: the one being built, or the last one built (what a .dashui sets after
+   mui_window_end) */
+#define _DASH_MUI_OWNER (_dash_mui_cur_win ? _dash_mui_cur_win : _dash_mui_last_win)
 static Object *_dash_mui_sub_parent = NULL;         /* its menu while a submenu is built (Lorraine D13) */
 static void (*_dash_mui_end_hooks[8])(void);       /* free classes, timer... before MUI closes */
 static ULONG _dash_mui_timer_sig = 0;               /* timer.device signal, once mui_timer is used */
@@ -15003,10 +18027,12 @@ static void _dash_mui_on_end(void (*hook)(void)) {
 }
 #define _DASH_MUI_PRESSES 64
 static Object *_dash_mui_press_obj[_DASH_MUI_PRESSES];  /* for _dash_mui_press() */
+static Object *_dash_mui_press_win[_DASH_MUI_PRESSES];  /* its window (mui_window_dispose) */
 static LONG _dash_mui_press_id[_DASH_MUI_PRESSES];
 static LONG _dash_mui_npress = 0;
 #define _DASH_MUI_RADIOS 32                 /* buttons in exclusive groups (Lorraine D14) */
 static Object *_dash_mui_radio_obj[_DASH_MUI_RADIOS];
+static Object *_dash_mui_radio_win[_DASH_MUI_RADIOS];
 static LONG _dash_mui_radio_group[_DASH_MUI_RADIOS];
 static LONG _dash_mui_nradio = 0;
 
@@ -15015,7 +18041,7 @@ static LONG _dash_mui_nradio = 0;
 enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DASH_MUI_CHECK,
        _DASH_MUI_CYCLE, _DASH_MUI_SLIDER, _DASH_MUI_GAUGE, _DASH_MUI_WINDOW, _DASH_MUI_LIST,
        _DASH_MUI_REGISTER, _DASH_MUI_MENUITEM, _DASH_MUI_CANVAS, _DASH_MUI_SCROLLBAR, _DASH_MUI_IMAGE,
-       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO };
+       _DASH_MUI_TOGGLE, _DASH_MUI_RADIO, _DASH_MUI_COMBO, _DASH_MUI_EDITOR };
 
 #define _DASH_MUI_NEW(cls, ...) \\
     ({ ULONG _dash_t[] = { __VA_ARGS__, TAG_DONE }; MUI_NewObjectA((CONST_STRPTR)(cls), (struct TagItem *)_dash_t); })
@@ -15073,6 +18099,34 @@ static APTR _dash_mui_app_begin(STRPTR title, STRPTR base) {
     return _dash_mui_app;
 }
 
+/* mui_app_rexx(app, f): every ARexx command to the application's port that MUI does not answer itself (QUIT,
+   SHOW...) calls the program's f(command) -> String; what it returns is the RESULT, and mui_rexx_fail(rc) during
+   the call its RC (Dash 2.0, for Inferencia) */
+#include <rexx/storage.h>
+static APTR _dash_mui_rexx_func = NULL;
+static LONG _dash_mui_rexx_rc = 0;
+static struct Hook _dash_mui_rexx_hook;
+
+static ULONG _dash_mui_rexx_entry(struct Hook *h __asm("a0"), Object *app __asm("a2"), struct RexxMsg *rm __asm("a1")) {
+    STRPTR r;
+    (void)h;
+    if (!_dash_mui_rexx_func || !rm || !rm->rm_Args[0]) return 20;
+    _dash_mui_rexx_rc = 0;
+    /* (la orden tal cual: la función la recibe prestada y no la guarda) */
+    r = ((STRPTR (*)(STRPTR))_dash_mui_rexx_func)((STRPTR)rm->rm_Args[0]);
+    /* Always, "" too: MUI keeps the last one and would answer it again (MUI copies the text) */
+    SetAttrs(app, MUIA_Application_RexxString, (IPTR)(!_dash_mui_rexx_rc && r ? r : (STRPTR)""), TAG_DONE);
+    return (ULONG)_dash_mui_rexx_rc;
+}
+
+static void _dash_mui_app_rexx(APTR app, APTR func) {
+    _dash_mui_rexx_func = func;
+    _dash_mui_rexx_hook.h_Entry = (ULONG (*)())_dash_mui_rexx_entry;
+    if (app) SetAttrs((Object *)app, MUIA_Application_RexxHook, (IPTR)(func ? &_dash_mui_rexx_hook : NULL), TAG_DONE);
+}
+
+static void _dash_mui_rexx_fail(LONG rc) { _dash_mui_rexx_rc = rc; }
+
 static APTR _dash_mui_add(Object *obj);
 
 static LONG _dash_mui_kind(Object *obj) {
@@ -15123,6 +18177,7 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
         return NULL;
     }
     _DASH_MUI_DO(_dash_mui_app, OM_ADDMEMBER, (IPTR)win);
+    if (_dash_mui_nwins < _DASH_MUI_WINS) _dash_mui_wins[_dash_mui_nwins++] = win;
     if (!_dash_mui_first_win) {
         _dash_mui_first_win = win;
         _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_CloseRequest, TRUE,
@@ -15141,6 +18196,7 @@ static void _dash_mui_window_end(void) {
     if (_dash_mui_depth != 1) _dash_mui_error("mui_window_end with groups still open");
     if (_dash_mui_cur_menu) _dash_mui_error("mui_window_end with a menu still open");
     _dash_mui_depth = 0;
+    _dash_mui_last_win = _dash_mui_cur_win;
     _dash_mui_cur_win = NULL;
     _dash_mui_cur_menu = _dash_mui_sub_parent = NULL;
 }
@@ -15148,9 +18204,33 @@ static void _dash_mui_window_end(void) {
 static LONG _dash_mui_window_open(APTR win) {
     IPTR open = FALSE;
     if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);   /* (after a mui_window_open_back) */
     SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
     GetAttr(MUIA_Window_Open, win, &open);
     return open != 0;
+}
+
+/* Open it without taking the keyboard from the active window (Dash 2.0, Forja: the preview of the .dashui editor):
+   MUIA_Window_Activate FALSE before opening */
+static LONG _dash_mui_window_open_back(APTR win) {
+    IPTR open = FALSE;
+    if (!win) return 0;
+    SetAttrs(win, MUIA_Window_Activate, FALSE, TAG_DONE);
+    SetAttrs(win, MUIA_Window_Open, TRUE, TAG_DONE);
+    GetAttr(MUIA_Window_Open, win, &open);
+    return open != 0;
+}
+
+/* Make it the active window, in front (opening it if it is closed) */
+static void _dash_mui_window_activate(APTR win) {
+    struct Window *w = NULL;
+    IPTR open = FALSE;
+    if (!win) return;
+    GetAttr(MUIA_Window_Open, (Object *)win, &open);
+    if (!open) { _dash_mui_window_open(win); return; }
+    GetAttr(MUIA_Window_Window, (Object *)win, (IPTR *)&w);
+    if (w) WindowToFront(w);
+    SetAttrs(win, MUIA_Window_Activate, TRUE, TAG_DONE);
 }
 
 static void _dash_mui_window_close(APTR win) {
@@ -15159,6 +18239,16 @@ static void _dash_mui_window_close(APTR win) {
 
 /* TRUE if the window is the active one: the one the user is using (dashweb D32: several windows
    made from the same .dashui share their event numbers) */
+static void _dash_mui_window_move(APTR win, LONG dx, LONG dy) {
+    struct Window *w = NULL;
+    if (win) GetAttr(MUIA_Window_Window, (Object *)win, (IPTR *)&w);
+    if (w) MoveWindow(w, dx, dy);
+}
+
+static void _dash_mui_set_active(APTR win, APTR obj) {
+    if (win && obj) SetAttrs((Object *)win, MUIA_Window_ActiveObject, (IPTR)obj, TAG_DONE);
+}
+
 static LONG _dash_mui_window_active(APTR win) {
     IPTR active = 0;
     if (win) GetAttr(MUIA_Window_Activate, (Object *)win, &active);
@@ -15305,6 +18395,7 @@ static void _dash_mui_menu_end(void) {
    no object: MUI does not dispose it, _dash_mui_ctx_cleanup does once the windows are gone. */
 #define _DASH_MUI_CTXMENUS 16
 static Object *_dash_mui_ctx[_DASH_MUI_CTXMENUS];
+static Object *_dash_mui_ctx_win[_DASH_MUI_CTXMENUS];   /* the window built just before (mui_window_dispose) */
 static LONG _dash_mui_nctx = 0;
 
 static void _dash_mui_ctx_cleanup(void) {
@@ -15321,6 +18412,7 @@ static APTR _dash_mui_context_menu_begin(STRPTR title) {
         return NULL;
     }
     _DASH_MUI_DO(strip, OM_ADDMEMBER, (IPTR)menu);
+    _dash_mui_ctx_win[_dash_mui_nctx] = _dash_mui_last_win;
     _dash_mui_ctx[_dash_mui_nctx++] = strip;
     _dash_mui_on_end(_dash_mui_ctx_cleanup);
     _dash_mui_cur_menu = menu;
@@ -15357,6 +18449,23 @@ static APTR _dash_mui_string(STRPTR initial, LONG maxlen) {
         MUIA_CycleChain, 1,
         MUIA_String_MaxLen, (maxlen > 0 ? maxlen : 80) + 1,   /* MaxLen counts the final 0 */
         MUIA_String_Contents, (IPTR)initial), _DASH_MUI_STRING);
+}
+
+/* A text field of several lines (Dash 2.0, Inferencia: the question), Textinputscroll.mcc of MUI: lines high, with
+   its scroller; Return makes a new line, and mui_on_ack gives the event of sending it */
+static APTR _dash_mui_text_editor(LONG lines) {
+    char fix[40];
+    LONG i, k = 0;
+    if (lines < 1) lines = 1;
+    if (lines > 30) lines = 30;
+    for (i = 1; i < lines; i++) fix[k++] = '\\n';
+    fix[k++] = 'X';
+    fix[k] = 0;
+    return _dash_mui_add_kind(_DASH_MUI_NEW(MUIC_Textinputscroll,
+        MUIA_CycleChain, 1,
+        MUIA_Textinput_Multiline, TRUE,
+        MUIA_Textinput_Contents, (IPTR)"",
+        MUIA_FixHeightTxt, (IPTR)_dash_mui_keep((STRPTR)fix)), _DASH_MUI_EDITOR);
 }
 
 static APTR _dash_mui_checkbox(LONG checked) {
@@ -15530,6 +18639,7 @@ static ULONG _dash_mui_text_attr(Object *obj) {
     case _DASH_MUI_TOGGLE:
     case _DASH_MUI_RADIO:  return MUIA_Dtpic_Name;
     case _DASH_MUI_COMBO:  return MUIA_String_Contents;      /* of its text field (_dash_mui_combo_str) */
+    case _DASH_MUI_EDITOR: return MUIA_Textinput_Contents;
     case _DASH_MUI_MENUITEM: return MUIA_Menuitem_Title;       /* "Abrir recientes" (Lorraine D13) */
     }
     return 0;
@@ -15577,6 +18687,7 @@ static APTR _dash_mui_image_toggle(STRPTR file, LONG group, LONG selected) {
                 _DASH_MUI_DO(other, MUIM_Notify, MUIA_Selected, TRUE, (IPTR)obj, 3, MUIM_Set, MUIA_Selected, FALSE);
             }
             _dash_mui_radio_obj[_dash_mui_nradio] = obj;
+            _dash_mui_radio_win[_dash_mui_nradio] = _DASH_MUI_OWNER;
             _dash_mui_radio_group[_dash_mui_nradio++] = group;
         }
     }
@@ -15749,19 +18860,204 @@ static LONG _dash_mui_size(APTR obj, LONG height) {
 }
 
 /* MUI's own text, copied by Dash when it is kept in a variable */
+/* mui_set_text_pen (Dash 2.0, Forja): the colour of a text, label or button, as an escape of MUI's text engine
+   in front of its text: "\\33P[RRGGBB]" on a screen of more than 256 colours, else "\\33P[n]" with the pen of the
+   default public screen (where the windows open) nearest to that colour (ObtainBestPen, given back at the end).
+   mui_set_text keeps it and mui_get_text leaves it out. */
+#define _DASH_MUI_PENS 64
+static APTR _dash_mui_pen_obj[_DASH_MUI_PENS];
+static Object *_dash_mui_pen_win[_DASH_MUI_PENS];
+static char _dash_mui_pen_esc[_DASH_MUI_PENS][12];
+static LONG _dash_mui_npens = 0;
+static struct Screen *_dash_mui_pen_scr = NULL;
+static LONG _dash_mui_pen_got[_DASH_MUI_PENS];
+static LONG _dash_mui_npen_got = 0;
+
+static void _dash_mui_pens_free(void) {
+    LONG i;
+    if (_dash_mui_pen_scr) {
+        for (i = 0; i < _dash_mui_npen_got; i++) ReleasePen(_dash_mui_pen_scr->ViewPort.ColorMap, _dash_mui_pen_got[i]);
+        UnlockPubScreen(NULL, _dash_mui_pen_scr);
+    }
+    _dash_mui_pen_scr = NULL;
+    _dash_mui_npen_got = 0;
+    _dash_mui_npens = 0;
+}
+
+static char *_dash_mui_pen_of(APTR obj) {
+    LONG i;
+    for (i = 0; i < _dash_mui_npens; i++)
+        if (_dash_mui_pen_obj[i] == obj) return _dash_mui_pen_esc[i];
+    return NULL;
+}
+
 static STRPTR _dash_mui_get_text(APTR obj) {
     STRPTR text = NULL;
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
+    char *pen;
     if (attr) GetAttr(attr, _dash_mui_combo_str(obj), (IPTR *)&text);
+    if (text && attr == MUIA_Text_Contents && (pen = _dash_mui_pen_of(obj)) &&
+        !strncmp((char *)text, pen, strlen(pen)))
+        text += strlen(pen);
     return text ? text : (STRPTR)"";
 }
 
 static void _dash_mui_set_text(APTR obj, STRPTR text) {
     ULONG attr = obj ? _dash_mui_text_attr(obj) : 0;
+    char *pen;
     if (!attr) return;
     if (attr == MUIA_Window_Title || attr == MUIA_Dtpic_Name || attr == MUIA_Menuitem_Title)
         text = _dash_mui_keep(text);   /* they keep the pointer */
+    if (attr == MUIA_Text_Contents && (pen = _dash_mui_pen_of(obj))) {
+        /* (MUI copies the text: a buffer of its own for the escape in front) */
+        ULONG len = text ? strlen((char *)text) : 0, plen = strlen(pen);
+        STRPTR both = (STRPTR)AllocVec(len + plen + 1, MEMF_ANY);
+        if (both) {
+            strcpy((char *)both, pen);
+            if (len) strcpy((char *)both + plen, (char *)text);
+            SetAttrs(obj, attr, (IPTR)both, TAG_DONE);
+            FreeVec(both);
+            return;
+        }
+    }
     SetAttrs(_dash_mui_combo_str(obj), attr, (IPTR)(text ? text : (STRPTR)""), TAG_DONE);
+}
+
+static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
+    char *pen;
+    STRPTR text;
+    if (!obj || _dash_mui_text_attr(obj) != MUIA_Text_Contents) return;
+    text = _dash_mui_get_text(obj);
+    {
+        /* (the text as it is now, without the colour before: it is replaced) */
+        ULONG len = strlen((char *)text);
+        STRPTR copy = (STRPTR)AllocVec(len + 1, MEMF_ANY);
+        if (!copy) return;
+        strcpy((char *)copy, (char *)text);
+        if (!(pen = _dash_mui_pen_of(obj))) {
+            if (_dash_mui_npens == _DASH_MUI_PENS) { FreeVec(copy); return; }
+            _dash_mui_pen_obj[_dash_mui_npens] = obj;
+            _dash_mui_pen_win[_dash_mui_npens] = _DASH_MUI_OWNER;
+            pen = _dash_mui_pen_esc[_dash_mui_npens++];
+        }
+        if (!_dash_mui_pen_scr && (_dash_mui_pen_scr = LockPubScreen(NULL))) _dash_mui_on_end(_dash_mui_pens_free);
+        if (_dash_mui_pen_scr && GetBitMapAttr(_dash_mui_pen_scr->RastPort.BitMap, BMA_DEPTH) <= 8) {
+            LONG n = ObtainBestPen(_dash_mui_pen_scr->ViewPort.ColorMap, (r & 255) * 0x01010101UL,
+                                   (g & 255) * 0x01010101UL, (b & 255) * 0x01010101UL,
+                                   OBP_Precision, PRECISION_GUI, TAG_DONE);
+            if (n >= 0 && _dash_mui_npen_got < _DASH_MUI_PENS) _dash_mui_pen_got[_dash_mui_npen_got++] = n;
+            else if (n >= 0) ReleasePen(_dash_mui_pen_scr->ViewPort.ColorMap, n);
+            sprintf(pen, "\\33P[%ld]", (long)(n >= 0 ? n : 1));
+        } else {
+            sprintf(pen, "\\33P[%02lx%02lx%02lx]", (unsigned long)(r & 255), (unsigned long)(g & 255), (unsigned long)(b & 255));
+        }
+        _dash_mui_set_text(obj, copy);
+        FreeVec(copy);
+    }
+}
+
+/* mui_window_dispose (Dash 2.0, Forja: the preview of the .dashui editor, made again on each change): close the
+   window, take it out of the application and free it with all its objects; the runtime forgets what pointed into it
+   (mui_press, exclusive groups, text colours) and frees the context menus made after it. Nothing for 0 or for a
+   window already gone. */
+static BOOL _dash_mui_in_win(Object *o, Object *win) {
+    IPTR w = 0;
+    if (!o) return FALSE;
+    if (o == win) return TRUE;
+    GetAttr(MUIA_WindowObject, o, &w);   /* (while the window is in the application) */
+    return (Object *)w == win;
+}
+
+static void _dash_mui_window_dispose(APTR win_) {
+    Object *win = (Object *)win_;
+    LONG i, j, k = -1;
+    if (!win || !_dash_mui_app) return;
+    for (i = 0; i < _dash_mui_nwins; i++)
+        if (_dash_mui_wins[i] == win) k = i;
+    if (k < 0 || win == _dash_mui_cur_win) return;
+    SetAttrs(win, MUIA_Window_Open, FALSE, TAG_DONE);
+    /* (each entry knows its window; MUIA_WindowObject for one set up later, from outside) */
+    for (i = j = 0; i < _dash_mui_npress; i++)
+        if (_dash_mui_press_win[i] != win && !_dash_mui_in_win(_dash_mui_press_obj[i], win)) {
+            _dash_mui_press_obj[j] = _dash_mui_press_obj[i];
+            _dash_mui_press_win[j] = _dash_mui_press_win[i];
+            _dash_mui_press_id[j++] = _dash_mui_press_id[i];
+        }
+    _dash_mui_npress = j;
+    for (i = j = 0; i < _dash_mui_nradio; i++)
+        if (_dash_mui_radio_win[i] != win && !_dash_mui_in_win(_dash_mui_radio_obj[i], win)) {
+            _dash_mui_radio_obj[j] = _dash_mui_radio_obj[i];
+            _dash_mui_radio_win[j] = _dash_mui_radio_win[i];
+            _dash_mui_radio_group[j++] = _dash_mui_radio_group[i];
+        }
+    _dash_mui_nradio = j;
+    for (i = j = 0; i < _dash_mui_npens; i++)
+        if (_dash_mui_pen_win[i] != win && !_dash_mui_in_win(_dash_mui_pen_obj[i], win)) {
+            _dash_mui_pen_obj[j] = _dash_mui_pen_obj[i];
+            _dash_mui_pen_win[j] = _dash_mui_pen_win[i];
+            if (j != i) CopyMem(_dash_mui_pen_esc[i], _dash_mui_pen_esc[j], sizeof(_dash_mui_pen_esc[0]));
+            j++;
+        }
+    _dash_mui_npens = j;
+    if (_dash_mui_first_win == win) _dash_mui_first_win = NULL;
+    if (_dash_mui_last_win == win) _dash_mui_last_win = NULL;
+    _dash_mui_wins[k] = _dash_mui_wins[--_dash_mui_nwins];
+    _DASH_MUI_DO(_dash_mui_app, OM_REMMEMBER, (IPTR)win);
+    MUI_DisposeObject(win);
+    /* its context menus: no object of it points to them any more */
+    for (i = j = 0; i < _dash_mui_nctx; i++)
+        if (_dash_mui_ctx_win[i] == win) MUI_DisposeObject(_dash_mui_ctx[i]);
+        else {
+            _dash_mui_ctx[j] = _dash_mui_ctx[i];
+            _dash_mui_ctx_win[j++] = _dash_mui_ctx_win[i];
+        }
+    _dash_mui_nctx = j;
+}
+
+/* mui_request (Dash 2.0, Forja): MUI's requester over a window (0: over the application), buttons separated by "|";
+   modal, the application's windows wait. Its answer as MUI gives it: 1, 2... from the left, 0 the last one (and Esc).
+   (The text goes as the argument of "%s": a "%" in it is shown as it is.) */
+static LONG _dash_mui_request(APTR win, STRPTR title, STRPTR text, STRPTR buttons) {
+    APTR params[1];
+    if (!_dash_mui_app) return 0;
+    params[0] = text ? text : (STRPTR)"";
+    return MUI_RequestA((Object *)_dash_mui_app, (Object *)win, 0, title, buttons && *buttons ? buttons : (STRPTR)"_Ok",
+                        (STRPTR)"%s", params);
+}
+
+/* mui_set_background (Dash 2.0, Forja): an RGB background ("2:rrrrrrrr,gggggggg,bbbbbbbb", MUI allocates the pen
+   on a screen with a palette); a window's goes to its root group, a list's also to the list inside */
+static void _dash_mui_set_background(APTR obj, LONG r, LONG g, LONG b) {
+    char spec[32];
+    STRPTR keep;
+    Object *o = (Object *)obj, *inner = NULL;
+    if (!obj) return;
+    sprintf(spec, "2:%08lx,%08lx,%08lx", (unsigned long)((r & 255) * 0x01010101UL),
+            (unsigned long)((g & 255) * 0x01010101UL), (unsigned long)((b & 255) * 0x01010101UL));
+    keep = _dash_mui_keep((STRPTR)spec);
+    if (_dash_mui_kind(o) == _DASH_MUI_WINDOW) GetAttr(MUIA_Window_RootObject, o, (IPTR *)&o);
+    else if (_dash_mui_kind(o) == _DASH_MUI_LIST) GetAttr(MUIA_Listview_List, o, (IPTR *)&inner);
+    if (o) SetAttrs(o, MUIA_Background, (IPTR)keep, TAG_DONE);
+    if (inner) SetAttrs(inner, MUIA_Background, (IPTR)keep, TAG_DONE);
+}
+
+/* mui_app_field_colors (Dash 2.0, Forja and Inferencia: the dark theme): the background of the text fields
+   (strings, text editors, combos) inactive and active and their cursor, for the whole application. MUI keeps them in
+   its config, not per object (MUIA_Background of a field goes back to the prefs' on activating it), and the text
+   stays black: these are the ids of its "Strings" page (not in the SDK; 0x84, 0x86, 0xf0 in MUI 5). The windows
+   take them when they open. */
+static void _dash_mui_app_field_colors(LONG r, LONG g, LONG b, LONG ar, LONG ag, LONG ab, LONG cr, LONG cg, LONG cb) {
+    char spec[32];
+    if (!_dash_mui_app) return;
+    sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((r & 255) * 0x01010101UL),
+            (unsigned long)((g & 255) * 0x01010101UL), (unsigned long)((b & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x84, (IPTR)_dash_mui_keep((STRPTR)spec));
+    sprintf(spec, "2:r%08lx,%08lx,%08lx", (unsigned long)((ar & 255) * 0x01010101UL),
+            (unsigned long)((ag & 255) * 0x01010101UL), (unsigned long)((ab & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0x86, (IPTR)_dash_mui_keep((STRPTR)spec));
+    sprintf(spec, "r%08lx,%08lx,%08lx", (unsigned long)((cr & 255) * 0x01010101UL),
+            (unsigned long)((cg & 255) * 0x01010101UL), (unsigned long)((cb & 255) * 0x01010101UL));
+    _DASH_MUI_DO(_dash_mui_app, MUIM_Application_SetConfigItem, 0xf0, (IPTR)_dash_mui_keep((STRPTR)spec));
 }
 
 static void _dash_mui_set_enabled(APTR obj, LONG enabled) {
@@ -15791,6 +19087,20 @@ static void _dash_mui_on_change(APTR obj, LONG id) {
 static void _dash_mui_on_ack(APTR obj, LONG id) {
     if (!obj || !_dash_mui_app) return;
     obj = _dash_mui_combo_str(obj);   /* a combo: its field, which a line picked acknowledges too */
+    if (_dash_mui_kind(obj) == _DASH_MUI_EDITOR) {
+        /* a field of several lines gives no Acknowledge (Return is a new line): Amiga+Return in its window, which
+           the field lets through without touching the text (Ctrl+Return would also put a new line in it) */
+        IPTR win = 0;
+        GetAttr(MUIA_WindowObject, obj, &win);
+        if (!win) win = (IPTR)_DASH_MUI_OWNER;
+        if (win) {
+            _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_InputEvent, (IPTR)"rcommand return",
+                         (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+            _DASH_MUI_DO(win, MUIM_Notify, MUIA_Window_InputEvent, (IPTR)"lcommand return",
+                         (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
+        }
+        return;
+    }
     _DASH_MUI_DO(obj, MUIM_Notify, MUIA_String_Acknowledge, MUIV_EveryTime,
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
 }
@@ -15801,6 +19111,7 @@ static void _dash_mui_on_press(APTR obj, LONG id) {
                  (IPTR)_dash_mui_app, 2, MUIM_Application_ReturnID, id);
     if (_dash_mui_npress < _DASH_MUI_PRESSES) {
         _dash_mui_press_obj[_dash_mui_npress] = obj;
+        _dash_mui_press_win[_dash_mui_npress] = _DASH_MUI_OWNER;
         _dash_mui_press_id[_dash_mui_npress++] = id;
     }
 }
@@ -16795,6 +20106,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_DepthGadget, $depthgadget,
         WA_SizeGadget, $sizegadget,
         WA_Borderless, $borderless,
+        WA_RMBTrap, $rmbtrap,
         WA_Activate, $activate,
         WA_MinWidth, 40, WA_MinHeight, 20,
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
@@ -16970,6 +20282,7 @@ _RUNTIME_FLAGS = [
     ("INSTANCE_RUNTIME", "uses_instance"),  # Trasfondo
     ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
+    ("WM_RUNTIME", "uses_wm"),              # Trasfondo 2.0: the windows of every program
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
@@ -16977,9 +20290,18 @@ _RUNTIME_FLAGS = [
     ("VERSION_RUNTIME", "uses_version"),    # Trasfondo 0.7: @version
     ("NOTIFY_RUNTIME", "uses_notify"),      # Trasfondo 0.7: file_notify
     ("PROC_RUNTIME", "uses_proc"),          # Trasfondo 0.7: run_program, program_relaunch
+    ("SYSINFO_RUNTIME", "uses_sysinfo"),    # Dash 2.0: time_unix, run_command, cpu_model...
+    ("RUNCAP_RUNTIME", "uses_runcap"),      # Dash 2.0: run_capture, run_start...
+    ("JSON_RUNTIME", "uses_json"),          # Dash 2.0: json_scan (lib/json.dash)
+    ("SYSLIST_RUNTIME", "uses_syslist"),    # Dash 2.0: rexx_send, ports_read, tasks_read, assigns_read
+    ("DEBUGGER_RUNTIME", "uses_debugger"),  # Dash 2.0: dbg_* (Forja)
     ("DOSREQ_RUNTIME", "uses_dosreq"),      # dashweb D68
     ("BASE64_RUNTIME", "uses_base64"),      # dashweb D68
     ("ZLIB_RUNTIME", "uses_zlib"),          # Lorraine D6
+    ("IMGDEC_RUNTIME", "uses_imgdec"),      # Dash 2.0: image_decode
+    ("FONTWEB_RUNTIME", "uses_fontweb"),    # Dash 2.0: font_from_ttf
+    ("NETBG_RUNTIME", "uses_netbg"),        # Dash 2.0: net_bg_*
+    ("NETBG_TLS_RUNTIME", "uses_netbg_tls"),  # Dash 2.0: net_bg_open_tls
     ("UTF8_RUNTIME", "uses_utf8"),          # Lorraine D5
     ("BUFSEARCH_RUNTIME", "uses_bufsearch"),  # Lorraine D38, D39
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
@@ -17260,6 +20582,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_tasks: bool = False    # task_start... (TASK_RUNTIME, dashweb D47)
         self.uses_images: bool = False   # image_* (IMAGE_RUNTIME)
         self.uses_click: bool = False    # On Click, click_x/y (CLICK_RUNTIME)
+        self.uses_inactive: bool = False  # On Inactive: windows ask for IDCMP_INACTIVEWINDOW
         self.uses_loop_timer: bool = False   # On Timer (LOOP_TIMER_RUNTIME)
         self.uses_args: bool = False     # arg_count, arg (ARGS_RUNTIME)
         self.uses_time: bool = False     # time_ms (TIME_RUNTIME)
@@ -17267,6 +20590,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_instance: bool = False # single_instance (INSTANCE_RUNTIME, Trasfondo)
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
+        self.uses_wm: bool = False       # wm_read, wm_set_box... (WM_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
@@ -17276,9 +20600,18 @@ class CodeGenerator(ASTVisitor):
         self.version = None              # @version: its C literal
         self.uses_notify: bool = False   # file_notify... (NOTIFY_RUNTIME)
         self.uses_proc: bool = False     # run_program, program_relaunch (PROC_RUNTIME)
+        self.uses_sysinfo: bool = False  # time_unix, run_command, cpu_model... (SYSINFO_RUNTIME, Dash 2.0)
+        self.uses_runcap: bool = False   # run_capture, run_start... (RUNCAP_RUNTIME, Dash 2.0)
+        self.uses_json: bool = False     # json_scan (JSON_RUNTIME, Dash 2.0: lib/json.dash)
+        self.uses_syslist: bool = False  # rexx_send, ports_read, tasks_read, assigns_read (SYSLIST_RUNTIME, Dash 2.0)
+        self.uses_debugger: bool = False  # dbg_* (DEBUGGER_RUNTIME, Dash 2.0)
         self.uses_dosreq: bool = False   # dos_requesters (DOSREQ_RUNTIME, dashweb D68)
         self.uses_base64: bool = False   # base64_to_file (BASE64_RUNTIME, dashweb D68)
         self.uses_zlib: bool = False     # inflate, deflate, crc32 (ZLIB_RUNTIME, Lorraine D6)
+        self.uses_imgdec: bool = False   # image_decode (IMGDEC_RUNTIME, Dash 2.0)
+        self.uses_fontweb: bool = False  # font_from_ttf (FONTWEB_RUNTIME, Dash 2.0)
+        self.uses_netbg: bool = False    # net_bg_* (NETBG_RUNTIME, Dash 2.0): with NET and TASK
+        self.uses_netbg_tls: bool = False  # net_bg_open_tls (NETBG_TLS_RUNTIME): with NETBG and TLS
         self.uses_utf8: bool = False     # utf8_* (UTF8_RUNTIME, Lorraine D5)
         self.uses_bufsearch: bool = False  # buffer_equals, buffer_find_* (BUFSEARCH_RUNTIME, Lorraine D38, D39)
         self.uses_regex: bool = False  # regex_*, wildcard_match (REGEX_RUNTIME, Lorraine D45)
@@ -17362,8 +20695,10 @@ class CodeGenerator(ASTVisitor):
             if isinstance(n, FunctionCall) and n.name in area_funcs:
                 self.needs_area = True
             # Windows must ask Intuition for key events before they open
-            if isinstance(n, OnClickHandler):
+            if isinstance(n, (OnClickHandler, OnRightClickHandler)):
                 self.uses_click = True        # the window asks for mouse buttons when it opens
+            if isinstance(n, OnInactiveHandler):
+                self.uses_inactive = True
             if isinstance(n, OnTimerHandler):
                 self.uses_loop_timer = True
             if isinstance(n, OnKeyHandler) or (isinstance(n, FunctionCall) and n.name in key_funcs):
@@ -17555,7 +20890,8 @@ class CodeGenerator(ASTVisitor):
 
         if self.uses_winmgr:
             idcmp = ("IDCMP_CLOSEWINDOW" + (" | IDCMP_RAWKEY" if self.uses_keys else "")
-                     + (" | IDCMP_MOUSEBUTTONS" if self.uses_click else ""))
+                     + (" | IDCMP_MOUSEBUTTONS" if self.uses_click else "")
+                     + (" | IDCMP_INACTIVEWINDOW" if self.uses_inactive else ""))
             parts.append(f"#define _DASH_WIN_IDCMP ({idcmp})\n"
                          "static void _dash_window_closed(struct Window *win);\n")
             parts.append(CTemplates.WINMGR_RUNTIME)
@@ -17594,6 +20930,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.CX_RUNTIME)
         if self.uses_meter:
             parts.append(CTemplates.METER_RUNTIME)
+        if self.uses_wm:
+            parts.append(CTemplates.WM_RUNTIME)
         if self.uses_mouse:
             parts.append(CTemplates.MOUSE_RUNTIME)
         if self.uses_catalog:
@@ -17612,12 +20950,30 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.NOTIFY_RUNTIME)
         if self.uses_proc:
             parts.append(CTemplates.PROC_RUNTIME)
+        if self.uses_sysinfo:
+            parts.append(CTemplates.SYSINFO_RUNTIME)
+        if self.uses_runcap:
+            parts.append(CTemplates.RUNCAP_RUNTIME)
+        if self.uses_json:
+            parts.append(CTemplates.JSON_RUNTIME)
+        if self.uses_syslist:
+            parts.append(CTemplates.SYSLIST_RUNTIME)
+        if self.uses_debugger:
+            parts.append(CTemplates.DEBUGGER_RUNTIME)
         if self.uses_dosreq:
             parts.append(CTemplates.DOSREQ_RUNTIME)
         if self.uses_base64:
             parts.append(CTemplates.BASE64_RUNTIME)
         if self.uses_zlib:
             parts.append(CTemplates.ZLIB_RUNTIME)
+        if self.uses_imgdec:
+            parts.append(CTemplates.IMGDEC_RUNTIME)
+        if self.uses_fontweb:
+            parts.append(CTemplates.FONTWEB_RUNTIME)
+        if self.uses_netbg:
+            parts.append(CTemplates.NETBG_RUNTIME)
+        if self.uses_netbg_tls:
+            parts.append(CTemplates.NETBG_TLS_RUNTIME)
 
         if self.uses_bitmaps:
             parts.append(CTemplates.BITMAP_RUNTIME)
@@ -17836,6 +21192,12 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_lt_cleanup();\n")
         if self.uses_tasks:
             cleanup.insert(0, "    _dash_task_cleanup();\n")   # first: they may use what the rest frees
+        if self.uses_runcap:
+            cleanup.insert(0, "    _dash_runcap_cleanup();\n")   # the commands still running end first
+        if self.uses_syslist:
+            cleanup.append("    _dash_syslist_cleanup();\n")
+        if self.uses_netbg:
+            cleanup.insert(0, "    _dash_netbg_cleanup();\n")   # before the tasks are waited for: it ends its own
         if self.uses_instance:
             cleanup.append("    _dash_instance_cleanup();\n")
         if self.uses_cx:
@@ -17870,6 +21232,8 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_net_cleanup();\n")
         if self.uses_notify:
             cleanup.append("    _dash_notify_cleanup();\n")
+        if self.uses_fontweb:
+            cleanup.append("    _dash_fontweb_cleanup();\n")
         if self.uses_proc:
             cleanup.append("    _dash_relaunch_now();\n")   # after all the rest: single_instance's port too
         if self._uses_pool():
@@ -18420,6 +21784,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.idcmp_flags.add("IDCMP_RAWKEY")
         if self.uses_click:
             self.context.idcmp_flags.add("IDCMP_MOUSEBUTTONS")
+        if self.uses_inactive:
+            self.context.idcmp_flags.add("IDCMP_INACTIVEWINDOW")
         idcmp_str = " | ".join(sorted(self.context.idcmp_flags))
 
         # Get window properties with defaults
@@ -18435,6 +21801,7 @@ static {ret_type} {method_name}({params_str}) {{
             depthgadget=self._get_window_prop(window_def, "depthgadget", "TRUE"),
             sizegadget=self._get_window_prop(window_def, "sizegadget", "FALSE"),
             borderless=self._get_window_prop(window_def, "borderless", "FALSE"),
+            rmbtrap=self._get_window_prop(window_def, "rmbtrap", "FALSE"),
             activate=self._get_window_prop(window_def, "activate", "TRUE"),
             idcmp_flags=idcmp_str
         )
@@ -18471,7 +21838,7 @@ static {ret_type} {method_name}({params_str}) {{
         # Start event loop
         key_record = ("            if (msg_class == IDCMP_RAWKEY) _dash_key_record(msg);\n"
                       if self.uses_keys else "")
-        if any(isinstance(h, OnClickHandler) for h in node.handlers):
+        if any(isinstance(h, (OnClickHandler, OnRightClickHandler)) for h in node.handlers):
             # where, before the message goes back: inside the borders (the window's own
             # coordinates for drawing, also in GimmeZeroZero windows)
             key_record += ("            if (msg_class == IDCMP_MOUSEBUTTONS) { _dash_click_x = msg->MouseX - msg->IDCMPWindow->BorderLeft; "
@@ -18526,8 +21893,9 @@ static {ret_type} {method_name}({params_str}) {{
         # Generate handlers; all On Key handlers share one "case IDCMP_RAWKEY"
         key_handlers = [h for h in node.handlers if isinstance(h, OnKeyHandler)]
         for handler in node.handlers:
-            if not isinstance(handler, (OnKeyHandler, OnTimerHandler)):
+            if not isinstance(handler, (OnKeyHandler, OnTimerHandler, OnClickHandler, OnRightClickHandler)):
                 self.visit(handler)
+        self._generate_button_handlers([h for h in node.handlers if isinstance(h, (OnClickHandler, OnRightClickHandler))])
         if key_handlers:
             self._generate_key_handlers(key_handlers)
 
@@ -18566,15 +21934,31 @@ static {ret_type} {method_name}({params_str}) {{
         )
         self.emit(code)
 
-    def visit_OnClickHandler(self, node: OnClickHandler):
-        """On Click: the left button went down in the window (click_x(), click_y())."""
+    def _generate_button_handlers(self, handlers):
+        """On Click (the left button went down in the window) and On RightClick (the right one, in a window
+        with rmbtrap), click_x() and click_y() where: one "case IDCMP_MOUSEBUTTONS" for both."""
+        if not handlers:
+            return
         self.uses_click = True
-        self.emit("                case IDCMP_MOUSEBUTTONS:\n                    if (msg_code == SELECTDOWN) {\n")
+        self.emit("                case IDCMP_MOUSEBUTTONS:\n")
+        for h in handlers:
+            code = "SELECTDOWN" if isinstance(h, OnClickHandler) else "MENUDOWN"
+            self.emit(f"                    if (msg_code == {code}) {{\n")
+            self.context.enter_scope("handler")
+            body = "".join(self._generate_statement(stmt) for stmt in h.body)
+            body += self._frees(self.context.current_owned())
+            self.context.exit_scope()
+            self.emit(body + "                    }\n")
+        self.emit("                    break;\n")
+
+    def visit_OnInactiveHandler(self, node: OnInactiveHandler):
+        """On Inactive: a window stopped being the active one (event_window() tells which)."""
+        self.emit("                case IDCMP_INACTIVEWINDOW: {\n")
         self.context.enter_scope("handler")
         body = "".join(self._generate_statement(stmt) for stmt in node.body)
         body += self._frees(self.context.current_owned())
         self.context.exit_scope()
-        self.emit(body + "                    }\n                    break;\n")
+        self.emit(body + "                    break;\n                }\n")
 
     def visit_OnMenuHandler(self, node: OnMenuHandler):
         """On Menu: an item of the menus made with menu_title/menu_item... was chosen; the
@@ -19732,6 +23116,9 @@ static {ret_type} {method_name}({params_str}) {{
             name=node.name,
             params=params
         )
+        if node.exported:
+            # @export (Dash 2.0): an external name for the C of @link
+            proto = proto.replace("static ", "", 1).replace("__attribute__((unused))", "__attribute__((used))")
         self.prototypes.append(proto)
 
         # Generate function definition
@@ -19741,6 +23128,8 @@ static {ret_type} {method_name}({params_str}) {{
             params=params,
             body=body
         )
+        if node.exported:
+            code = code.replace("static ", "", 1)
         self.functions.append(self._debug_wrap(node, code))
         self.current_function = None
 
@@ -20022,7 +23411,9 @@ static {ret_type} {method_name}({params_str}) {{
                 code += f"    {name} = _dash_str_dup({name}, FALSE);\n"
                 self.context.own(name)
             elif vt.startswith("struct:") or vt.startswith("array"):
-                code += f"    _dash_retain({name});\n"
+                # a hold, not a retain: a temporary of the caller stays one (a retain took it out of the
+                # temporaries, and the release at the end freed it while the caller still used it)
+                code += f"    _dash_hold({name});\n"
                 self.context.own(name, "obj")
         return code
 
@@ -20303,6 +23694,10 @@ static {ret_type} {method_name}({params_str}) {{
                     self.uses_strings = True
                     self.uses_text = True
                     return f"_dash_str_len({node.object_name})"
+                # a String constant is a C literal (#define): its length, not an array's
+                const = self.analysis.program.get_constant(node.object_name)
+                if const and isinstance(const.value, StringLiteral) and node.object_name not in self.var_types:
+                    return f"((LONG)strlen({node.object_name}))"
                 if var_type and (var_type == "dict" or var_type.startswith("dict:")):
                     self.uses_dicts = True
                     return f"DashDict_length({node.object_name})"
@@ -20365,14 +23760,17 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
+        if self.uses_debugger:
+            # dbg_value shows lists, dictionaries, Floats and Doubles of the debugged program
+            self.uses_arrays = self.uses_dicts = self.uses_float = self.uses_double = True
         if self.uses_mouse:
             self.uses_arrays = True    # mouse_curve takes a list
         if self.catalog:
             self.uses_catalog = True   # @catalog: its runtime even before any tr
         if self.uses_catalog or self.uses_date:
             self.uses_strings = True   # catalog_language and date_text give a String
-        if self.uses_cx or self.uses_meter or self.uses_mouse:
-            self.uses_strings = True   # tooltype, disk_name and net_if_name give a String
+        if self.uses_cx or self.uses_meter or self.uses_mouse or self.uses_wm:
+            self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:
@@ -20387,6 +23785,12 @@ static {ret_type} {method_name}({params_str}) {{
         if self.uses_cpu:
             self.uses_time = True      # CPU_RUNTIME reads the EClock of TIME_RUNTIME
             self.uses_strings = True   # cpu_task_name gives a String
+        if self.uses_imgdec:
+            self.uses_tasks = True     # image_decode_start decodes in a TASK_RUNTIME process
+        if self.uses_netbg_tls:
+            self.uses_netbg = self.uses_tls = True   # NETBG_TLS_RUNTIME fills NETBG's hooks with TLS_RUNTIME
+        if self.uses_netbg:
+            self.uses_net = self.uses_tasks = self.uses_strings = True   # its task, the sockets, net_bg_error
         if self.uses_tls:
             self.uses_net = True       # TLS goes over the sockets of NET_RUNTIME
         if self.uses_net:
@@ -20440,7 +23844,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_arenas = True
 
         # Track refcount usage for manual retain/release
-        if builtin.name in ("refcount", "retain", "release"):
+        if builtin.name in ("refcount", "retain", "release", "mem_trim", "mem_puddle"):
             self.uses_refcount = True
 
         # Build parameter mapping. Arguments that are not plain values are computed

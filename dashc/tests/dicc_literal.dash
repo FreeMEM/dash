@@ -1,0 +1,23 @@
+# Un diccionario de textos con una clave literal: d[k], d.has(k) y d.get(k, defecto) con el hash calculado al
+# compilar (dl_dict_*_h). Con claves que chocan en la tabla, que faltan, "" y un diccionario vacío.
+func ver(e: {String: String})
+    Print e.has("display") + " " + e.get("display", "block") + " " + e["color"] + "|" + e.has("") + " " + e.get("", "vacio") + " " + e.has("float") + " " + e.get("float", "none")
+end
+
+Main
+    var e: {String: String} = {}
+    ver(e)
+    e["display"] = "flex"
+    e["color"] = "red"
+    ver(e)
+    for i in (1..40)
+        e["clave" + i] = "v" + i
+    end
+    e[""] = "nada"
+    e["float"] = "left"
+    ver(e)
+    Print e["clave7"] + " " + e.get("clave33", "?") + " " + e.has("clave41") + " " + e.length
+    var n: {String: Int} = {}
+    n["uno"] = 1
+    Print n["uno"] + n.get("dos", 2) + n["tres"]
+end

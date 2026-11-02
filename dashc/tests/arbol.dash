@@ -1,0 +1,91 @@
+# Structs recursivos (un árbol), campos de lista y texto, muchos structs creados y soltados
+struct Arbol
+    v: Int
+    izq: Arbol = nil
+    der: Arbol = nil
+end
+
+struct Caja
+    nombre: String = "caja"
+    cosas: [Int] = []
+    dentro: Caja = nil
+
+    func mete(x)
+        self.cosas.push(x)
+        self.nombre = self.nombre + "+"
+    end
+
+    func copia() -> Caja
+        c = Caja(self.nombre + "'", [], self)
+        for x in self.cosas
+            c.cosas.push(x * 10)
+        end
+        return c
+    end
+end
+
+func inserta(a: Arbol, v) -> Arbol
+    if a == nil
+        return Arbol(v)
+    end
+    if v < a.v
+        a.izq = inserta(a.izq, v)
+    else
+        a.der = inserta(a.der, v)
+    end
+    return a
+end
+
+func suma(a: Arbol) -> Int
+    if a == nil
+        return 0
+    end
+    return a.v + suma(a.izq) + suma(a.der)
+end
+
+func alto(a: Arbol) -> Int
+    if a == nil
+        return 0
+    end
+    i = alto(a.izq)
+    d = alto(a.der)
+    if i > d
+        return i + 1
+    end
+    return d + 1
+end
+
+Main
+    var raiz: Arbol = nil
+    for i in (1..200)
+        raiz = inserta(raiz, (i * 37) % 101)
+    end
+    Print suma(raiz)
+    Print alto(raiz)
+    b = Caja()
+    b.mete(1)
+    b.mete(2)
+    Print b.nombre
+    var c: Caja = b.copia()
+    Print c.nombre
+    Print c.cosas[1]
+    Print c.dentro.nombre
+    c.dentro.dentro = Caja("honda")
+    Print b.dentro.nombre
+    c.dentro.cosas[0] = 77
+    Print b.cosas[0]
+    total = 0
+    for k in (1..3000)
+        var t: Arbol = nil
+        t = inserta(t, k)
+        t = inserta(t, k + 1)
+        x = Caja("k#{k}")
+        x.mete(k)
+        total = total + suma(t) + x.cosas.length + x.nombre.length
+    end
+    Print total
+    var nada: Caja = nil
+    Print "antes del error"
+    Print nada.nombre
+    Print "no se llega"
+end

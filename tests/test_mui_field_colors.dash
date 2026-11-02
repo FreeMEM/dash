@@ -1,0 +1,29 @@
+# The background of the application's text fields, without and with the cursor, and the cursor's colour
+# (mui_app_field_colors; Forja and Inferencia in dark): MUI keeps them in its config for the whole application, so
+# a string and a text editor of a window opened after it take them.
+# emu-needs: muimaster.library
+# (on the 4 colours of the emulated Workbench: the blue of its palette, inside the string and the text editor)
+# emu-shot: 10 350 96 6688bb
+# emu-shot: 10 300 125 6688bb
+# expect-out: campo: [texto]
+# expect-out: fin
+
+Main
+    if mui_app_begin("Campos", "DASHCAMPOS") == 0
+        Print "sin MUI"
+    else
+        mui_app_field_colors(102, 136, 187, 255, 255, 255, 0, 0, 0)
+        w = mui_window_begin("Campos", 0)
+            g = mui_vgroup_begin()
+                s = mui_string("texto", 40)
+                e = mui_text_editor(3)
+            mui_group_end()
+        mui_window_end()
+        mui_window_open(w)
+        Print "campo: [#{mui_get_text(s)}]"
+        mui_timer(8000, 1)
+        ev = mui_wait_event()
+        mui_app_end()
+        Print "fin"
+    end
+end

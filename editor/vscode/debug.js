@@ -1,13 +1,18 @@
 // @ts-check
 // Debugging Dash programs on the Amiga (docs/IDE_LOOP.md, tasks 12-14): F5 on a .dash builds it with
-// ./dash --debug (#line to the .dash), starts the emulator with the program under bgdbserver
-// (tools/emu_run.py --gdbserver PORT) and m68k-amigaos-gdb -i=dap is the debug adapter, attached to
-// localhost:PORT. Breakpoints, steps, the stack and the variables come from gdb, in Dash lines.
+// ./dash --debug and starts the emulator with it. Two ways:
+// - Dash 2.0 (dashc, the usual one): the program under tools/amiga/dbgserver.dash (tools/emu_run.py --dbgserver
+//   PORT), which debugs it with the dbg_* builtins; dashDebug.js is the debug adapter, connected to localhost:PORT.
+// - Dash 1.x (./dash1, through C: a program with C in it, "debugger": "gdb", or a Dash without dashc): the program
+//   under bgdbserver (tools/emu_run.py --gdbserver PORT) and m68k-amigaos-gdb -i=dap is the debug adapter,
+//   attached to localhost:PORT (#line to the .dash).
+// Either way breakpoints, steps, the stack and the variables are in Dash lines.
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
 const { spawn, execFile, execFileSync } = require('child_process');
 const { makeProxy } = require('./debugProxy');
+const { DashDebugAdapter } = require('./dashDebug');
 const { savedFile } = require('./tasks');
 const { missing } = require('./missing');
 
@@ -60,9 +65,26 @@ function netstatListening(text, port) {
     return false;
 }
 
-/** The command line of the emulator for a debug session */
-function emulatorArgs(dashDir, exe, port, options) {
-    const args = [path.join(dashDir, 'tools', 'emu_run.py'), '--follow', '--gdbserver', String(port)];
+/** Can this Dash debug with its own compiler (Dash 2.0: the C path beside ./dash, and tools/amiga/dbgserver.dash)? */
+function hasDbgserver(dashDir) {
+    return fs.existsSync(path.join(dashDir, 'dash1')) && fs.existsSync(path.join(dashDir, 'tools', 'amiga', 'dbgserver.dash'));
+}
+
+/** How it was built, from what ./dash said: 'gdb' if it went through C ("se compila por C con gcc"; 2.0.0 said
+ *  ": con ./dash1"), else 'dash' */
+function engineOf(text) {
+    return /(se compila por C con gcc|: con \.\/dash1)/.test(text) ? 'gdb' : 'dash';
+}
+
+/** Does this ./dash take --gcc (2.0.1 on; before, the C path was the command ./dash1)? */
+function hasGccOption(dashDir) {
+    try { return fs.readFileSync(path.join(dashDir, 'dash'), 'utf8').includes('"--gcc"'); } catch (e) { return false; }
+}
+
+/** The command line of the emulator for a debug session (engine 'dash': dbgserver; else bgdbserver) */
+function emulatorArgs(dashDir, exe, port, options, engine) {
+    const args = [path.join(dashDir, 'tools', 'emu_run.py'), '--follow',
+                  engine === 'dash' ? '--dbgserver' : '--gdbserver', String(port)];
     if (options.window !== false) args.push('--window');
     if (options.machine && options.machine !== 'a1200') args.push('--machine', options.machine);
     if (options.emulator === 'amiberry') args.push('--emulator', 'amiberry');
@@ -98,11 +120,21 @@ function setupDebugger(vscode, context, helpers) {
         }
     };
 
-    const build = (dashDir, file, exe) => new Promise((resolve) => {
-        const env = Object.assign({}, process.env, helpers.env(), { DASH_PRINT_FLUSH: '1' });
+    /* the program with --debug: with ./dash, which takes what its own compiler cannot do (C in it) through C, the
+       build for gdb; engine 'gdb' (a real Amiga with bgdbserver, "debugger": "gdb") through C (./dash --gcc).
+       engine of the answer: the debugger that goes with what was built */
+    const build = (dashDir, file, exe, engine) => new Promise((resolve) => {
+        const env = Object.assign({}, process.env, helpers.env(), { DASH_PRINT_FLUSH: '1', DASH_FALLBACK_DASH1: '1' });
         fs.mkdirSync(path.dirname(exe), { recursive: true });
-        execFile(path.join(dashDir, 'dash'), ['--debug', file, '-o', exe], { cwd: dashDir, env, maxBuffer: 1 << 24 },
-                 (error, stdout, stderr) => resolve({ ok: !error, text: String(stdout) + String(stderr) }));
+        const dashc = engine !== 'gdb' && hasDbgserver(dashDir);
+        const viaC = !dashc && fs.existsSync(path.join(dashDir, 'dash1'));
+        const gcc = viaC && hasGccOption(dashDir);
+        const dash = viaC && !gcc ? 'dash1' : 'dash';
+        execFile(path.join(dashDir, dash), [...(gcc ? ['--gcc'] : []), '--debug', file, '-o', exe], { cwd: dashDir, env, maxBuffer: 1 << 24 },
+                 (error, stdout, stderr) => {
+                     const text = String(stdout) + String(stderr);
+                     resolve({ ok: !error, text, engine: dashc ? engineOf(text) : 'gdb' });
+                 });
     });
 
     /** The executable for the debugger of a .dash (what F5 and "Preparar para un Amiga real" build) */
@@ -175,7 +207,8 @@ function setupDebugger(vscode, context, helpers) {
             return vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Depurar en el Amiga' },
                                               async (progress) => {
                 progress.report({ message: 'compilando con --debug…' });
-                const built = await build(dashDir, file, exe);
+                const built = await build(dashDir, file, exe, config.debugger === 'gdb' ? 'gdb' : 'auto');
+                const engine = built.engine;
                 output.clear();
                 output.append(built.text);
                 if (!built.ok) {
@@ -189,11 +222,16 @@ function setupDebugger(vscode, context, helpers) {
                                               config.emulator ? { emulator: config.emulator } : {},
                                               config.window !== undefined ? { window: config.window } : {});
                 progress.report({ message: 'arrancando el emulador…' });
-                const child = spawn('python3', emulatorArgs(dashDir, exe, port, options),
+                const child = spawn('python3', emulatorArgs(dashDir, exe, port, options, engine),
                                     { cwd: dashDir, env: Object.assign({}, process.env, helpers.env()), detached: true });
                 const target = `localhost:${port}`;
                 let said = '';             // what it says: if it does not start, what is missing
-                child.stdout.on('data', (d) => { said += d; output.append(d.toString('utf8')); toConsole(target, d.toString('utf8')); });
+                child.stdout.on('data', (d) => {
+                    said += d;
+                    output.append(d.toString('utf8'));
+                    // (with dbgserver the program's output comes through it: what emu_run says is dbgserver's)
+                    if (engine !== 'dash') toConsole(target, d.toString('utf8'));
+                });
                 child.stderr.on('data', (d) => { said += d; output.append(d.toString('utf8')); });
                 emulators.set(target, child);
                 for (let i = 0; i < 1200 && !listening(port); i++) {        // up to 2 minutes (a 68000 boots slowly)
@@ -203,19 +241,29 @@ function setupDebugger(vscode, context, helpers) {
                 if (!listening(port)) {
                     stopEmulator(target);
                     output.show(true);
-                    vscode.window.showErrorMessage(missing(said) || ('El emulador no arrancó bgdbserver: mira "Dash: Amiga" ' +
-                                                   '(¿falta tools/get_bgdbserver.sh, la ROM o el sistema?).'));
+                    vscode.window.showErrorMessage(missing(said) || (engine === 'dash'
+                        ? 'El emulador no arrancó dbgserver: mira "Dash: Amiga" (¿falta la ROM o el sistema?).'
+                        : 'El emulador no arrancó bgdbserver: mira "Dash: Amiga" ' +
+                          '(¿falta tools/get_bgdbserver.sh, la ROM o el sistema?).'));
                     return undefined;
                 }
+                if (engine === 'dash')
+                    return Object.assign({}, config, { engine, program: exe, source: file, host: '127.0.0.1', port, target });
                 return Object.assign({}, config, { request: 'attach', program: exe, target });
             });
         },
     }));
 
-    // gdb itself is the adapter (DAP); a different gdb with dash.debug.gdb. With tools/gdb/dash.py of the Dash
-    // compiler: values as Dash shows them (texts, lists, dictionaries, structs) and the stack without the runtime
+    // Dash 2.0: dashDebug.js, connected to dbgserver. Dash 1.x: gdb itself is the adapter (DAP); a different gdb
+    // with dash.debug.gdb. With tools/gdb/dash.py of the Dash compiler: values as Dash shows them (texts, lists,
+    // dictionaries, structs) and the stack without the runtime
     context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory('dash', {
         createDebugAdapterDescriptor: (session) => {
+            const c = session.configuration;
+            if (c.engine === 'dash') {
+                return new vscode.DebugAdapterInlineImplementation(/** @type {any} */ (new DashDebugAdapter(vscode,
+                    { sourceDir: path.dirname(c.source || c.program), name: path.basename(c.source || c.program, '.dash') })));
+            }
             const args = ['-i=dap', '-q'];
             const dashDir = session.configuration.program ? helpers.findDash(session.configuration.program) : null;
             const script = dashDir ? path.join(dashDir, 'tools', 'gdb', 'dash.py') : null;
@@ -254,7 +302,7 @@ function setupDebugger(vscode, context, helpers) {
         const dashDir = helpers.findDash(file);
         if (!dashDir) { vscode.window.showErrorMessage(helpers.noDash()); return; }
         const exe = debugExe(file);
-        const built = await build(dashDir, file, exe);
+        const built = await build(dashDir, file, exe, 'gdb');
         output.clear();
         output.append(built.text);
         if (!built.ok) { output.show(true); vscode.window.showErrorMessage('No compila: mira "Dash: Amiga".'); return; }
@@ -271,4 +319,4 @@ function setupDebugger(vscode, context, helpers) {
     }), { dispose: () => { for (const t of [...emulators.keys()]) stopEmulator(t); } });
 }
 
-module.exports = { setupDebugger, emulatorArgs, freePort, listening, netstatListening };
+module.exports = { setupDebugger, emulatorArgs, freePort, listening, netstatListening, engineOf, hasDbgserver };

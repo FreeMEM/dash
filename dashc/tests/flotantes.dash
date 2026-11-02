@@ -1,0 +1,22 @@
+# Float (como el de ./dash: el de gcc por software): operaciones, mezcla con Int, Int(), funciones, Print e interpolación
+func area(r: Float) -> Float
+    return 3.14159 * r * r
+end
+
+Main
+    x = 1.5
+    y = x * 2.0 + 1
+    Print y
+    Print area(2.0)
+    i = 7
+    z = i / 2.0
+    Print z
+    if z > 3.0
+        Print "mayor"
+    end
+    n = Int(z)
+    Print n
+    Print "v=#{x}"
+    w = -x
+    Print w
+end

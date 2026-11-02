@@ -7,7 +7,7 @@ from typing import List, Any, Optional
 
 from compiler.ast_nodes import (
     ASTNode, Program, WindowDef, WindowProperty, MainBlock, EventLoop,
-    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
+    OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
     VarDecl, VarAssign, VarRef, FunctionDef, FunctionCall, MethodCall,
     ReturnStmt, BinaryOp, UnaryOp, StringLiteral, NumberLiteral, BoolLiteral, NilLiteral,
@@ -639,7 +639,8 @@ class DashASTBuilder(Transformer):
     def event_loop(self, items) -> EventLoop:
         """Build an event loop node."""
         handlers = [item for item in items if isinstance(item, (OnCloseHandler, OnKeyHandler, OnGadgetHandler,
-                                                                OnMenuHandler, OnClickHandler, OnTimerHandler))]
+                                                                OnMenuHandler, OnClickHandler, OnRightClickHandler,
+                                                                OnInactiveHandler, OnTimerHandler))]
         return EventLoop(handlers=handlers)
 
     def event_handler(self, items):
@@ -659,6 +660,12 @@ class DashASTBuilder(Transformer):
 
     def on_click(self, items) -> OnClickHandler:
         return OnClickHandler(body=self._flatten_statements(items))
+
+    def on_rightclick(self, items) -> OnRightClickHandler:
+        return OnRightClickHandler(body=self._flatten_statements(items))
+
+    def on_inactive(self, items) -> OnInactiveHandler:
+        return OnInactiveHandler(body=self._flatten_statements(items))
 
     def on_timer(self, items) -> OnTimerHandler:
         token = items.pop(0)
@@ -824,6 +831,11 @@ class DashASTBuilder(Transformer):
 
         func = FunctionDef(name=name, params=params, body=body, return_type=return_type)
         self._functions.append(func)
+        return ""
+
+    def export_func(self, items) -> str:
+        """@export func ...: the function just built, callable by its name from the C of @link."""
+        self._functions[-1].exported = True
         return ""
 
     def param_list(self, items) -> List:

@@ -1,0 +1,145 @@
+# Casos de las optimizaciones: constantes, potencias de dos, registros
+const GRANDE = 2147483647
+
+func divs(x)
+    Print x / 2
+    Print x % 2
+    Print x / 8
+    Print x % 8
+    Print x / -4
+    Print x % -4
+    Print x / 1024
+    Print x % 1024
+    Print x / 65536
+    Print x % 65536
+    Print x / 7
+    Print x % 7
+    Print x / 1
+    Print x % 1
+    Print x / -1
+    Print x % 2 == 0
+    Print x % 4 != 0
+end
+
+func muls(x)
+    Print x * 2
+    Print x * 3
+    Print x * 10
+    Print x * 12
+    Print x * -5
+    Print x * 1000
+    Print x * 65535
+    Print x * 70001
+    Print x * -70001
+    Print x * 305419896
+    Print x * -1000003
+    Print x * 196608
+    Print x * 0
+    Print x * 1
+    Print x * -1
+    Print 3 * x
+    Print x << 3
+    Print x >> 2
+    Print x << 12
+    Print x >> 20
+    Print x & 255
+    Print x | 4096
+    Print x ^ 21845
+end
+
+func compara(a, b)
+    Print a < b
+    Print 5 < a
+    Print a == 5
+    Print 0 == a
+    Print a + 1 > b - 1
+    Print 10 >= a + b
+    Print a != b
+end
+
+# muchas variables vivas a la vez: más que registros
+func muchas(n)
+    a = n + 1
+    b = n + 2
+    c = n + 3
+    d = n + 4
+    e = n + 5
+    f = n + 6
+    g = n + 7
+    h = n + 8
+    for i in (1..10)
+        a = a + i
+        b = b + a
+        c = c + b
+        d = d + c
+        e = e + d
+        f = f + e
+        g = g + f
+        h = h + g
+    end
+    return a + b + c + d + e + f + g + h
+end
+
+# una función que usa registros llama a otra que también los usa
+func interior(n)
+    s = 0
+    for i in (1..n)
+        s = s + i * i
+    end
+    return s
+end
+
+func exterior(n)
+    t = 0
+    for j in (1..n)
+        t = t + interior(j) - j
+    end
+    return t
+end
+
+# parámetros leídos con sp mientras hay argumentos en la pila (funciones sin marco)
+func suma3(a, b, c)
+    return a * 100 + b * 10 + c
+end
+
+func anida(a, b, c)
+    return suma3(a, suma3(b, c, a), c) - (b - suma3(c, c, c)) + (a - b) * (c - a)
+end
+
+Main
+    Print anida(1, 2, 3)
+    Print anida(-4, 7, 30)
+    Print 3 * anida(2, 1, 0) + 1
+    divs(1000)
+    divs(-1000)
+    divs(7)
+    divs(-7)
+    divs(GRANDE)
+    divs(-GRANDE - 1)
+    muls(7)
+    muls(-123456)
+    muls(GRANDE)
+    compara(3, 4)
+    compara(5, 5)
+    compara(9, -2)
+    Print muchas(1)
+    Print exterior(20)
+    x = 0
+    y = 100
+    while x < y
+        x = x + 3
+        y = y - 2
+    end
+    Print x
+    Print y
+    k = 7
+    k = k - 10
+    k = k & 255
+    k = k | 4096
+    Print k
+    m = 5
+    m = 10 - m
+    Print m
+    m = m - m * 3
+    Print m
+end

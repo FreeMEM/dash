@@ -1,0 +1,39 @@
+# task_start con una función de Dash: corre en otro proceso mientras el programa sigue con sus textos y listas
+var vueltas: Int = 0
+
+func primos(hasta: Int) -> Int
+    n = 0
+    for i in (2..hasta)
+        es = true
+        d = 2
+        while d * d <= i and es
+            if i % d == 0
+                es = false
+            end
+            d = d + 1
+        end
+        if es
+            n = n + 1
+        end
+        vueltas = vueltas + 1
+    end
+    return n
+end
+
+Main
+    t = task_start(primos, 3000)
+    var nombres: [String] = []
+    k = 0
+    while not task_done(t)
+        nombres.push("n" + k)
+        if nombres.length > 50
+            nombres = []
+        end
+        k = k + 1
+        time_delay_ms(1)
+    end
+    Print "primos hasta 3000: #{task_result(t)}"
+    Print "vueltas: #{vueltas}"
+    Print "el programa siguió: #{k > 0}"
+    task_free(t)
+end

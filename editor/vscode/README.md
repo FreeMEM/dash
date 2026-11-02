@@ -18,8 +18,8 @@ running, debugging, and debugging a real Amiga.
 1. Dash and the Amiga toolchain, as in the
    [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
    emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. This extension: `dash-mui-editor-0.3.1.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.3.1), then in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.3.1.vsix`.
+2. This extension: `dash-mui-editor-0.4.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.4.0), then in VS Code (1.86 or later)
+   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.4.0.vsix`.
 
 ## How it works with Dash
 
@@ -33,7 +33,7 @@ reinstalling it.
 | Compile | `./dash` |
 | Run, memory check, profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
 | Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
-| Debugging (F5) | `./dash --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py`, `bgdbserver` |
+| Debugging (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` and `tools/amiga/dbgserver.dash` (the `dbg_*` builtins); with C in the program, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py`, `bgdbserver` |
 
 ## Getting started
 
@@ -84,10 +84,22 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   and the language server need a trusted folder.
 - **Debugging (F5)**: breakpoints in the `.dash`, continue, step over/into/out, pause, the call stack and the
   variables, in Dash lines, on the emulated Amiga. F5 (or **Dash: Depurar en el Amiga**, or "Depurar" over
-  `Main`) builds the program with `./dash --debug`, starts the emulator with it under `bgdbserver`
-  (`tools/get_bgdbserver.sh` of the Dash repository, once) and attaches `m68k-amigaos-gdb -i=dap` to it (gdb is the
-  debug adapter; `dash.debug.gdb`). The emulator stops with the session. `launch.json`: `program`, `stopOnEntry`,
-  `machine`, `emulator`, `window`; `attach` with `target` (host:port of a bgdbserver) for a real Amiga.
+  `Main`) builds the program with `./dash --debug` (Dash's own compiler) and starts the emulator with it under
+  `tools/amiga/dbgserver.dash`, a Dash program that debugs it with the `dbg_*` builtins and listens on a TCP port
+  (the emulator's network is the PC's); the extension's own debug adapter (`dashDebug.js`) talks to it. Nothing
+  else to install. The emulator stops with the session. `launch.json`: `program`, `args` (the program's),
+  `stopOnEntry`, `machine`, `emulator`, `window`, `debugger`.
+  Values show as Dash writes them (texts, lists, structs with their fields, which open, Fixed, Float, Bool); the
+  locals of each frame and the globals. Expressions in the debug console, watch, hover, breakpoint conditions,
+  hit counts and logpoints are Dash, worked out by the extension with the values it reads: variables with `.field`
+  and `[n]`, numbers, texts, `+ - * / %`, comparisons, `and`/`or`/`not`, `nil`, `s.length` and `l.length`.
+  What the program prints comes out in the debug console as it runs, and its exit code at the end.
+  Limits: a runtime error ends the program with its message (it does not stop there), and a program waiting in
+  `mui_wait_event` does not pause until it runs a line of its own.
+- **Debugging with gdb**: a program with C in it (`@native`, `@c`), or `"debugger": "gdb"` in `launch.json`, is
+  built through C (`./dash --gcc --debug`) and debugged as before: the emulator runs it under `bgdbserver`
+  (`tools/get_bgdbserver.sh` of the Dash repository, once) and `m68k-amigaos-gdb -i=dap` attaches to it (gdb is the
+  debug adapter; `dash.debug.gdb`); `attach` with `target` (host:port of a bgdbserver) for a real Amiga.
   Step into (F11) goes only into the program's functions, not into the runtime's C.
   Values show as Dash writes them (texts, lists, dictionaries, structs with their fields, Fixed, Bool) and the
   runtime's frames and temporaries stay out of the stack and the variables (`tools/gdb/dash.py`).
@@ -140,7 +152,9 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
 The Amiga needs a TCP/IP stack (Roadshow, AmiTCP, Miami...) and `bgdbserver` (Aminet `dev/debug/bgdbserver`;
 `tools/get_bgdbserver.sh` of the Dash repository downloads it to `~/.cache/dash-debug/x/bgdbserver/`).
 
-1. Open the `.dash` and run **Dash: Preparar para un Amiga real**: it builds `bin/<name>.debug` (`./dash --debug`).
+This is the gdb way: the program is built through C with `./dash --gcc --debug`.
+
+1. Open the `.dash` and run **Dash: Preparar para un Amiga real**: it builds `bin/<name>.debug` (`./dash --gcc --debug`).
 2. Copy that file and `bgdbserver` to the Amiga, and in its Shell: `bgdbserver :2345 <name>.debug`
    (the port is yours; it must be below 32768). The program waits for the debugger.
 3. In VS Code, a `launch.json` configuration "Dash: depurar en un Amiga real" (snippet), with `target` set to the
@@ -168,7 +182,7 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
   `dash.emulator.window` (show the emulator's window and hear it; off: hidden, as in the tests).
 - `dash.editor.autoEnd`: the `end` of a block added on Enter.
 - `dash.languageServer.enabled` and `dash.python` (the Python of the language server; it needs `lark`).
-- `dash.debug.gdb`: the `m68k-amigaos-gdb` used as debug adapter.
+- `dash.debug.gdb`: the `m68k-amigaos-gdb` used as debug adapter (the gdb way: programs with C).
 
 ## Development
 

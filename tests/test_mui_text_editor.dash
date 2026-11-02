@@ -1,0 +1,54 @@
+# A MUI text field of several lines (Dash 2.0, Inferencia: the question): mui_text_editor, its text with
+# mui_get_text and mui_set_text, Return a new line and Amiga+Return the event of mui_on_ack (without touching the
+# text). The program started again as "teclas" types in it.
+# emu-needs: muimaster.library
+# expect-out: puesto: [uno|dos]
+# expect-out: escrito: [hola|mundo] evento 7
+# expect-out: fin
+
+func teclas()
+    t = 0
+    while input_active_title() != "Editor" and t < 200
+        time_delay(5)
+        t = t + 1
+    end
+    time_delay(25)
+    input_text("hola")
+    input_key(0x44, 0)
+    input_text("mundo")
+    time_delay(10)
+    input_key(0x44, 8)
+end
+
+Main
+    if arg(0) == "teclas"
+        teclas()
+    elif mui_app_begin("Editor", "DASHEDITOR") == 0
+        Print "sin MUI"
+    else
+        w = mui_window_begin("Editor", 0)
+            e = mui_text_editor(4)
+        mui_window_end()
+        mui_on_ack(e, 7)
+        mui_set_text(e, "uno\ndos")
+        mui_window_open(w)
+        Print "puesto: [" + str_replace(mui_get_text(e), "\n", "|") + "]"
+        mui_set_text(e, "")
+        mui_set_active(w, e)
+        h = run_start("\"" + program_path() + "\" teclas", 30000)
+        ev = 0
+        vueltas = 0
+        while ev != 7 and vueltas < 100
+            mui_timer(100, 1)
+            x = mui_wait_event()
+            if x == 7
+                ev = 7
+            end
+            vueltas = vueltas + 1
+        end
+        s = run_finish(h)
+        Print "escrito: [" + str_replace(mui_get_text(e), "\n", "|") + "] evento #{ev}"
+        mui_app_end()
+        Print "fin"
+    end
+end

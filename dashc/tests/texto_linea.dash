@@ -1,0 +1,52 @@
+# str_code(s, i), s[i] y s.length en línea: de un texto de Dash, de su cabecera; de un literal (texto de C), por el
+# runtime. Fuera del texto (i < 0 o i >= largo) y de nil, 0
+func largo(s: String) -> Int
+    return s.length
+end
+
+# un parámetro que no cambia: su largo se mide al entrar
+func cuenta(s: String, c: Int) -> Int
+    n = 0
+    i = 0
+    while i < s.length
+        if str_code(s, i) == c or s[i] == 120
+            n = n + 1
+        end
+        i = i + 1
+    end
+    return n * 100 + str_code(s, s.length - 1) + str_code(s, 99) + str_code(s, -1)
+end
+
+# uno que cambia: como siempre
+func recorta(s: String) -> Int
+    k = s.length
+    s = s + "zz"
+    return k * 10 + s.length + str_code(s, k)
+end
+
+Main
+    lit = "abc"
+    h = "ho" + "la"
+    var nada: String = nil
+    alto = "x" + "é"
+    Print "" + str_code(lit, 0) + " " + str_code(lit, 2) + " " + str_code(lit, 3) + " " + str_code(lit, -1)
+    Print "" + str_code(h, 0) + " " + str_code(h, 3) + " " + str_code(h, 4) + " " + str_code(h, -5)
+    Print "" + str_code(nada, 0) + " " + largo(nada) + " " + lit.length + " " + h.length + " " + "".length
+    Print "" + str_code(alto, 1) + " " + alto.length
+    Print "" + str_code(h + "!", 4) + " " + (h + "!!").length
+    c = h[1]
+    Print c
+    k = 0
+    i = 0
+    while i < h.length
+        k = k + str_code(h, i)
+        i = i + 1
+    end
+    Print k
+    Print cuenta("banana", 97)
+    Print cuenta(str_lower("BANANAX"), 97)
+    Print cuenta(nada, 97)
+    Print cuenta(h + "aa", 97)
+    Print recorta("abc")
+    Print recorta(nada)
+end

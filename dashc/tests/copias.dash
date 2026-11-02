@@ -1,0 +1,111 @@
+# Funciones copiadas en el sitio de la llamada: tiene que dar lo mismo que llamarlas
+var veces: Int = 0
+var total: Int = 100
+
+func cuenta(v)
+    veces = veces + 1
+    return v
+end
+
+# cambia su parámetro: el de fuera no puede cambiar
+func cuenta_atras(n)
+    pasos = 0
+    while n > 0
+        n = n - 3
+        pasos = pasos + 1
+    end
+    return pasos
+end
+
+# usa la global total
+func mas_total(x)
+    return x + total
+end
+
+# el parámetro se usa dos veces: el argumento se calcula una sola
+func doble(x)
+    return x + x
+end
+
+# return a mitad de un bucle, y un bucle con break dentro de otro de fuera
+func busca(limite)
+    for i in (1..100)
+        if i * i > limite
+            return i
+        end
+    end
+    return -1
+end
+
+func es_par(n) -> Bool
+    return n % 2 == 0
+end
+
+func uno_mas(n)
+    return n + 1
+end
+
+func dos_mas(n)
+    return uno_mas(uno_mas(n))
+end
+
+# recursión cruzada: no se puede copiar sin fin
+func par(n) -> Bool
+    if n == 0
+        return true
+    end
+    return impar(n - 1)
+end
+
+func impar(n) -> Bool
+    if n == 0
+        return false
+    end
+    return par(n - 1)
+end
+
+func nunca_llamada(a)
+    return a * 2
+end
+
+func sin_valor(a)
+    if a > 5
+        Print "grande"
+        return
+    end
+    Print "pequeño"
+end
+
+Main
+    n = 10
+    pasos = 99
+    Print cuenta_atras(n)
+    Print n
+    Print pasos
+    total = 7
+    Print mas_total(1)
+    Print doble(cuenta(21))
+    Print veces
+    Print busca(50)
+    Print busca(100000)
+    suma = 0
+    for i in (1..10)
+        if busca(i * 10) > 5
+            break
+        end
+        suma = suma + busca(i * 10)
+    end
+    Print suma
+    Print es_par(4)
+    Print es_par(7)
+    Print dos_mas(40)
+    Print par(10)
+    Print impar(7)
+    Print par(7)
+    sin_valor(9)
+    sin_valor(2)
+    x = 5
+    x = uno_mas(x) * uno_mas(x + 1)
+    Print x
+    Print doble(doble(doble(3)))
+end

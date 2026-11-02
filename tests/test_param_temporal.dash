@@ -1,0 +1,67 @@
+# A temporary object passed to a function that passes it on to one that changes its parameter (json_path does
+# j = json_get(j, part)): it stays the caller's temporary and is not freed while the caller still uses it (it was
+# freed at the end of the inner call: Inferencia hit an odd address). Also kept in a global, returned, replaced, in a
+# recursion and from a list.
+# memcheck
+# expect-out: dos veces: xx
+# expect-out: guardado: 7
+# expect-out: devuelto: 7
+# expect-out: cambiado: 9 7
+# expect-out: recursión: 3
+# expect-out: de la lista: 1 2
+# expect-out: fin
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+
+import "lib/json.dash"
+
+struct Caja
+    n: Int = 0
+    hija: Caja = nil
+end
+
+var guardada: Caja = nil
+
+func f(j: Json) -> String
+    return json_path_str(j, "a.b") + json_path_str(j, "a.b")
+end
+
+func guarda(c: Caja)
+    c = c
+    guardada = c
+end
+
+func devuelve(c: Caja) -> Caja
+    c = c
+    return c
+end
+
+func cambia(c: Caja) -> Int
+    otra = Caja(9, nil)
+    c = otra
+    return c.n
+end
+
+func hondo(c: Caja, k: Int) -> Int
+    if k == 0
+        return c.n
+    end
+    c = Caja(c.n + 1, c)
+    return hondo(c, k - 1)
+end
+
+Main
+    Print "dos veces: " + f(json_parse("{\"a\": {\"b\": \"x\"}}"))
+    guarda(Caja(7, nil))
+    Print "guardado: #{guardada.n}"
+    d = devuelve(Caja(7, nil))
+    Print "devuelto: #{d.n}"
+    c = Caja(7, nil)
+    Print "cambiado: #{cambia(c)} #{c.n}"
+    Print "recursión: #{hondo(Caja(0, nil), 3)}"
+    l = [Caja(1, nil), Caja(2, nil)]
+    a = devuelve(l[0])
+    b = devuelve(l[1])
+    Print "de la lista: #{a.n} #{b.n}"
+    guardada = nil
+    Print "fin"
+end

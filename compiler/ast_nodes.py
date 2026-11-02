@@ -124,7 +124,7 @@ class WindowDef(ASTNode):
         "title": "string",
         "width": "int", "height": "int", "left": "int", "top": "int",
         "closegadget": "bool", "dragbar": "bool", "depthgadget": "bool",
-        "sizegadget": "bool", "borderless": "bool", "activate": "bool",
+        "sizegadget": "bool", "borderless": "bool", "activate": "bool", "rmbtrap": "bool",
     }
 
     name: str
@@ -242,6 +242,20 @@ class OnGadgetHandler(ASTNode):
 @dataclass
 class OnClickHandler(ASTNode):
     """On Click: the left mouse button went down in the window (click_x(), click_y()) (dashweb D27)."""
+    body: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class OnRightClickHandler(ASTNode):
+    """On RightClick: the right mouse button went down in a window with rmbtrap (click_x(), click_y())."""
+    body: List[ASTNode] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class OnInactiveHandler(ASTNode):
+    """On Inactive: a window stopped being the active one (event_window() tells which)."""
     body: List[ASTNode] = field(default_factory=list)
     location: Optional[SourceLocation] = None
 
@@ -392,6 +406,7 @@ class FunctionDef(ASTNode):
     body: List[ASTNode] = field(default_factory=list)
     return_type: Optional[str] = None
     location: Optional[SourceLocation] = None
+    exported: bool = False      # @export: not static, so the C of @link calls it by its name
 
     def get_param_names(self) -> List[str]:
         """Get list of parameter names."""

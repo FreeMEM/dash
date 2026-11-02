@@ -1,0 +1,21 @@
+# a + b + c... de textos: una sola reserva (DashString_join, como ./dash). Con números, letras, Bool, "" al principio,
+# paréntesis, 1 + 2 + "x" (suma antes) y cadenas largas.
+func trozo(n: Int) -> String
+    return "<" + n + ">"
+end
+
+Main
+    s = "Hola"
+    n = 42
+    c = s[0]
+    Print s + "-" + s
+    Print "" + n + " " + (n * 2) + " " + true
+    Print 1 + 2 + "x" + 3 + 4
+    Print "a" + (1 + 2) + ("b" + "c") + trozo(n) + c
+    t = ""
+    for i in (1..12)
+        t = t + i + "," + trozo(i) + ";"
+    end
+    Print t
+    Print "uno" + "dos" + "tres" + "cuatro" + "cinco" + "seis" + "siete" + "ocho" + "nueve" + n
+end

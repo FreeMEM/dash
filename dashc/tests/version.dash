@@ -1,0 +1,6 @@
+# program_version(): el nombre y la versión de @version (en dashc, el runtime los recibe al arrancar)
+@version "Prueba 1.2"
+
+Main
+    Print "versión: [#{program_version()}]"
+end

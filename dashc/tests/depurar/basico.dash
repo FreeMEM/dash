@@ -1,0 +1,37 @@
+# El depurador: cargar un programa en pausa, un punto de parada, seguir hasta él, dónde está, registros y memoria,
+# seguir hasta el final con su salida y su código; y un programa sin --debug.
+# expect-out: estado: 1
+# expect-out: punto: true false
+# expect-out: parado: 3 Main 10 true
+# expect-out: pc en la línea: true
+# expect-out: salida hasta aquí: []
+# expect-out: acabado: 4 0
+# expect-out: b: 10
+# expect-out: c: 11
+# expect-out: sin debug: false [el programa no lleva información de depuración (compílalo con dash --debug)]
+
+Main
+    if not dbg_start("DH0:depurado", "")
+        Print "error: #{dbg_error()}"
+    end
+    Print "estado: #{dbg_state()}"
+    ok = dbg_break("depurado.dash", 10)
+    no = dbg_break("depurado.dash", 2)
+    Print "punto: #{ok} #{no}"
+    dbg_continue()
+    e = dbg_wait(10000)
+    f = dbg_file()
+    es = str_ends(f, "depurado.dash")
+    Print "parado: #{e} #{dbg_function()} #{dbg_line()} #{es}"
+    pc = dbg_reg(16)
+    Print "pc en la línea: #{dbg_peek(pc, 2) == 0x4E4F}"
+    s = dbg_output()
+    Print "salida hasta aquí: [#{str_trim(s)}]"
+    dbg_unbreak("depurado.dash", 10)
+    dbg_continue()
+    e = dbg_wait(10000)
+    Print "acabado: #{e} #{dbg_rc()}"
+    Print str_trim(dbg_output())
+    ok = dbg_start("DH0:sin_debug", "")
+    Print "sin debug: #{ok} [#{dbg_error()}]"
+end

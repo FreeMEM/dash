@@ -1,0 +1,45 @@
+# Operadores de enteros: los mismos resultados que el C de gcc
+const BASE = 1 << 4
+const MASCARA = BASE - 1
+
+func op(a, b)
+    Print a + b
+    Print a - b
+    Print a * b
+    Print a / b
+    Print a % b
+    Print a & b
+    Print a | b
+    Print a ^ b
+end
+
+Main
+    op(7, 2)
+    op(-7, 2)
+    op(7, -2)
+    op(-7, -2)
+    op(100000, 3)
+    op(123456789, 1000)
+    op(-123456789, 70000)
+    op(46341, 46341)
+    op(2147483647, 65536)
+    a = 300
+    b = 70000
+    Print a * b
+    Print b * a
+    Print -a * b
+    Print 1000000 * 1000000
+    Print b << 3
+    Print -b >> 2
+    Print ~a
+    Print -(a - b)
+    Print BASE
+    Print MASCARA
+    Print 0xFF + $10 + 0b101
+    c = 2147483647
+    Print c + 1
+    Print c / 1
+    Print 1 + 2 * 3 - 4 / 2
+    Print (1 + 2) * (3 - 4) / 2
+    Print 7 % 3 * 2
+end

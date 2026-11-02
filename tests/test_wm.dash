@@ -1,0 +1,63 @@
+# Test: the window manager builtins (Trasfondo 2.0): wm_read lists the windows of the Workbench screen, front to
+# back, with their box and flags; wm_set_box moves and sizes one by its id, within its limits; an id of a
+# window that is not open is not touched; cx_key_add takes keys and mouse buttons and refuses a bad description.
+# expect-out: propia 1 16 32
+# expect-out: caja 40,50 200x100
+# expect-out: delante true
+# expect-out: caja 60,70 300x120
+# expect-out: limite 40x20
+# expect-out: fija 150x60
+# expect-out: cerrada false false
+# expect-out: teclas true true false true
+
+# the own window among the ones of the screen; -1 if it is not there
+func propia(titulo: String) -> Int
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_title(i) == titulo and wm_flags(i) & 32 != 0
+            return i
+        end
+    end
+    return -1
+end
+
+func caja(i: Int) -> String
+    return "#{wm_box(i, 0)},#{wm_box(i, 1)} #{wm_box(i, 2)}x#{wm_box(i, 3)}"
+end
+
+Main
+    a = window_create("WM a", 40, 50, 200, 100, 1)
+    b = window_create("WM b", 300, 50, 150, 60, 0)
+    time_delay(10)
+    i = propia("WM a")
+    f = wm_flags(i)
+    Print "propia #{f & 1} #{f & 16} #{f & 32}"
+    Print "caja " + caja(i)
+    # b is in front (opened last): the list goes front to back
+    Print "delante #{propia(\"WM b\") < propia(\"WM a\")}"
+    id = wm_id(i)
+    wm_set_box(id, 60, 70, 300, 120)
+    time_delay(10)
+    Print "caja " + caja(propia("WM a"))
+    wm_set_box(id, 60, 70, 1, 1)          # below its minimum (40 x 20): the minimum
+    time_delay(10)
+    i = propia("WM a")
+    Print "limite #{wm_box(i, 2)}x#{wm_box(i, 3)}"
+    # b cannot be sized: it keeps its size
+    j = propia("WM b")
+    wm_set_box(wm_id(j), 20, 20, 400, 300)
+    time_delay(10)
+    j = propia("WM b")
+    Print "fija #{wm_box(j, 2)}x#{wm_box(j, 3)}"
+    idb = wm_id(j)
+    window_close(b)
+    time_delay(5)
+    Print "cerrada #{wm_set_box(idb, 0, 0, 10, 10)} #{wm_front(idb)}"
+    teclas = "teclas"
+    if cx_broker("TestWM", "Test", "Test", 0)
+        teclas = teclas + " #{cx_key_add(\"ctrl alt up\", 1)} #{cx_key_add(\"rawmouse lalt mouse_leftpress\", 2)}"
+        teclas = teclas + " #{cx_key_add(\"esto no vale\", 3)} #{cx_key_add(\"\", 2)}"
+    end
+    Print teclas
+    window_close(a)
+end

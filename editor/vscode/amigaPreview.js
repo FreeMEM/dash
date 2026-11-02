@@ -14,14 +14,6 @@ function previewProgram(windowName, selfShot) {
     if (selfShot) {
         return [
             'import "preview.dashui"',
-            '@header "#include <dos/dostags.h>"',
-            '',
-            '@native func capturar() -> Int',
-            '"""',
-            '    Delay(25);    /* MUI has drawn the window by now */',
-            '    return SystemTags((CONST_STRPTR)"C:dash_shot 1 DH0:shot.dsh", TAG_DONE);   /* (a PPM on RTG) */',
-            '"""',
-            'end',
             '',
             'Main',
             '    if mui_app_begin("Vista previa", "DASHPREVIEW") == 0',
@@ -29,7 +21,8 @@ function previewProgram(windowName, selfShot) {
             '    else',
             `        v = ${windowName}_create()`,
             '        mui_window_open(v.window)',
-            '        capturar()',
+            '        time_delay(25)    # MUI has drawn the window by now',
+            '        run_command("C:dash_shot 1 DH0:shot.dsh")    # (a PPM on RTG)',
             '        mui_app_end()',
             '    end',
             'end',
@@ -112,6 +105,12 @@ function runPreview({ dashDir, dashuiText, windowName, kickstart, system, workbe
    window: the same window again is not compiled again), then shown and pictured there. */
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+
+// ./dash: Dash 2.0 (dashc), which has what these tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH); a
+// program with C in it ./dash compiles it through C with gcc (DASH_FALLBACK_DASH1 for Dash 2.0.0)
+function dashExe(dashDir) {
+    return 'dash';
+}
 const IDLE_MS = 10 * 60 * 1000;
 
 class PreviewServer {
@@ -220,8 +219,8 @@ function compilePreview(dashDir, dashuiText, windowName, env) {
     fs.writeFileSync(path.join(dir, 'preview.dashui'), dashuiText);
     fs.writeFileSync(path.join(dir, 'preview.dash'), previewProgram(windowName, true));
     return new Promise((resolve, reject) => {
-        execFile(path.join(dashDir, 'dash'), [path.join(dir, 'preview.dash'), '-o', exe + '.tmp'],
-                 { cwd: dashDir, env: Object.assign({}, process.env, env || {}), maxBuffer: 4 * 1024 * 1024 },
+        execFile(path.join(dashDir, dashExe(dashDir)), [path.join(dir, 'preview.dash'), '-o', exe + '.tmp'],
+                 { cwd: dashDir, env: Object.assign({}, process.env, env || {}, { DASH_FALLBACK_DASH1: '1' }), maxBuffer: 4 * 1024 * 1024 },
                  (err, stdout, stderr) => {
                      if (err || !fs.existsSync(exe + '.tmp')) {
                          // the compiler's own message (file:line:col: Error: ...), without the path of the temporary file

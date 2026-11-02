@@ -1,0 +1,40 @@
+# Opening a MUI window without taking the keyboard (mui_window_open_back) and making one the active window
+# (mui_window_activate): Dash 2.0, Forja's preview of the .dashui editor.
+# emu-needs: muimaster.library
+# expect-out: A abierta: 1 [Ventana A]
+# expect-out: B detrás: 1 0 [Ventana A]
+# expect-out: B activa: 0 1 [Ventana B]
+# expect-out: A otra vez: 1 0 [Ventana A]
+# expect-out: fin
+
+func espera()
+    mui_timer(300, 7)
+    ev = mui_wait_event()
+end
+
+Main
+    if mui_app_begin("Ventanas", "DASHVENTANAS") == 0
+        Print "sin MUI"
+    else
+        a = mui_window_begin("Ventana A", 0)
+            t = mui_text("A")
+        mui_window_end()
+        b = mui_window_begin("Ventana B", 0)
+            u = mui_text("B")
+        mui_window_end()
+        mui_window_open(a)
+        espera()
+        Print "A abierta: #{mui_window_active(a)} [#{input_active_title()}]"
+        mui_window_open_back(b)
+        espera()
+        Print "B detrás: #{mui_window_active(a)} #{mui_window_active(b)} [#{input_active_title()}]"
+        mui_window_activate(b)
+        espera()
+        Print "B activa: #{mui_window_active(a)} #{mui_window_active(b)} [#{input_active_title()}]"
+        mui_window_activate(a)
+        espera()
+        Print "A otra vez: #{mui_window_active(a)} #{mui_window_active(b)} [#{input_active_title()}]"
+        mui_app_end()
+        Print "fin"
+    end
+end

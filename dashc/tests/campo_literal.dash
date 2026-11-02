@@ -1,0 +1,39 @@
+# Un campo de texto que empieza con un literal apunta a un texto fijo de Dash (sin copia): reasignarlo,
+# añadirle, copiarlo a otra variable o a una lista y liberar el objeto no lo toca
+struct Ficha
+    nombre: String = "sin nombre"
+    nota: String = ""
+    n: Int = 0
+end
+
+func crear(i: Int) -> Ficha
+    f = Ficha()
+    f.n = i
+    return f
+end
+
+Main
+    a = Ficha()
+    b = Ficha()
+    Print a.nombre + "|" + a.nota + "|" + a.nombre.length
+    a.nombre = a.nombre + " (a)"
+    b.nota = b.nota + "x"
+    b.nota = b.nota + "y"
+    Print a.nombre + "|" + b.nombre + "|" + b.nota
+    guardado = b.nombre
+    var l: [String] = []
+    l.push(b.nombre)
+    b = Ficha()
+    b = crear(3)
+    Print guardado + "|" + l[0] + "|" + b.nombre + " " + b.n
+    total = 0
+    for i in (1..200)
+        f = crear(i)
+        if f.nombre == "sin nombre" and f.nota == ""
+            total = total + f.n
+        end
+    end
+    Print total
+    c = Ficha("uno", "dos", 2)
+    Print c.nombre + " " + c.nota + " " + c.n
+end

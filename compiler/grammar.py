@@ -6,7 +6,7 @@ Extensible Lark grammar for the Dash programming language.
 # Grammar with variables and expressions support
 dash_grammar_minimal = r"""
     ?start: program
-    program: (import_stmt | const_decl | global_var_decl | struct_def | interface_def | enum_def | window_def | function_def | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
+    program: (import_stmt | const_decl | global_var_decl | struct_def | interface_def | enum_def | window_def | function_def | export_func | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
 
     // Constant declaration
     // a literal or an integer expression known when compiling (const MASCARA = 1 << 4)
@@ -57,6 +57,8 @@ dash_grammar_minimal = r"""
 
     // FFI - External function declaration
     extern_func: "@extern" "(" ESCAPED_STRING ")" "func" ID "(" param_list? ")" return_type?
+    // Dash 2.0: a Dash function the C of @link calls by its name
+    export_func: "@export" function_def
 
     // Native C code block
     native_func: "@native" native_borrow? "func" ID "(" param_list? ")" return_type? native_body "end"
@@ -167,7 +169,7 @@ dash_grammar_minimal = r"""
 
     // Event loop
     event_loop: "EventLoop" (event_handler | comment_line)* "end"
-    ?event_handler: on_close | on_key | on_gadget | on_menu | on_click | on_timer
+    ?event_handler: on_close | on_key | on_gadget | on_menu | on_click | on_rightclick | on_inactive | on_timer
 
     on_close: "On" "Close" instruction* "end"
     on_gadget: "On" "Gadget" instruction* "end"
@@ -175,6 +177,10 @@ dash_grammar_minimal = r"""
     on_key: "On" "Key" (ESCAPED_STRING | INT)? instruction* "end"
     // dashweb D27: a left click in the window (click_x(), click_y()); every N ms (a number or a variable)
     on_click: "On" "Click" instruction* "end"
+    // the right button went down in a window with rmbtrap (click_x(), click_y()); the window stopped being
+    // the active one (event_window() tells which)
+    on_rightclick: "On" "RightClick" instruction* "end"
+    on_inactive: "On" "Inactive" instruction* "end"
     on_timer: "On" "Timer" (INT | ID) instruction* "end"
 
     // Expressions with precedence

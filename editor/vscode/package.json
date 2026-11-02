@@ -2,7 +2,7 @@
   "name": "dash-mui-editor",
   "displayName": "Dash for Amiga",
   "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "publisher": "FreeMEM",
   "author": {
     "name": "Francisco Antonio Tapias Bravo",
@@ -397,6 +397,24 @@
                 "default": "${file}",
                 "description": "El .dash que se depura (se compila con ./dash --debug)."
               },
+              "args": {
+                "type": "string",
+                "default": "",
+                "description": "Los argumentos del programa, como en el Shell (con el depurador de Dash 2.0)."
+              },
+              "debugger": {
+                "type": "string",
+                "enum": [
+                  "dash",
+                  "gdb"
+                ],
+                "enumDescriptions": [
+                  "El de Dash 2.0: el programa compilado por el compilador propio de Dash (./dash), depurado en el Amiga por tools/amiga/dbgserver.dash.",
+                  "El de Dash 1.x: el programa compilado por C con gcc (./dash --gcc), bajo bgdbserver y m68k-amigaos-gdb."
+                ],
+                "default": "dash",
+                "description": "Con qué se depura. Un programa con C dentro va siempre con gdb."
+              },
               "stopOnEntry": {
                 "type": "boolean",
                 "default": false,
@@ -440,7 +458,7 @@
               },
               "program": {
                 "type": "string",
-                "description": "El ejecutable compilado con ./dash --debug (sus símbolos), o el .dash (entonces bin/<nombre>.debug, como lo deja \"Dash: Preparar para un Amiga real\")."
+                "description": "El ejecutable compilado con ./dash --gcc --debug (sus símbolos), o el .dash (entonces bin/<nombre>.debug, como lo deja \"Dash: Preparar para un Amiga real\")."
               },
               "relay": {
                 "type": "boolean",

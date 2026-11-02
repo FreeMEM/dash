@@ -281,7 +281,8 @@ async function run() {
         assert(tab, 'no profile panel');
         fs.rmSync(dir, { recursive: true, force: true });
     });
-    await check('debugger: F5 stops at a breakpoint in the .dash, with its stack in Dash lines', async () => {
+    // both debuggers: Dash 2.0's (dashc, dbgserver: dashDebug.js) and Dash 1.x's (./dash1, bgdbserver and gdb)
+    for (const engine of ['dash', 'gdb']) await check(`debugger (${engine}): F5 stops at a breakpoint in the .dash, with its stack in Dash lines`, async () => {
         const path = require('path');
         const os = require('os');
         await vscode.workspace.getConfiguration('dash.emulator').update('window', false, vscode.ConfigurationTarget.Global);
@@ -306,7 +307,8 @@ async function run() {
             const sub = vscode.debug.onDidTerminateDebugSession(() => { sub.dispose(); resolve(true); });
         });
         try {
-            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'launch', name: 'prueba', program: file }));
+            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'launch', name: 'prueba', program: file,
+                                                                   debugger: engine }));
             for (let i = 0; i < 1200 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
             assert(stopped, 'did not stop at the breakpoint');
             const session = vscode.debug.activeDebugSession;
@@ -317,7 +319,7 @@ async function run() {
             const scopes = await session.customRequest('scopes', { frameId: top.id });
             const locals = await session.customRequest('variables', { variablesReference: scopes.scopes[0].variablesReference });
             assert(locals.variables.some((v) => v.name === 'x' && v.value === '20'), JSON.stringify(locals.variables));
-            // tools/gdb/dash.py: values as Dash shows them (a breakpoint further down, on "Print s")
+            // values as Dash shows them (gdb: tools/gdb/dash.py; a breakpoint further down, on "Print s")
             vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(11, 0)))]);
             stopped = null;
             await session.customRequest('continue', { threadId: 1 });
@@ -328,23 +330,23 @@ async function run() {
             const vars2 = (await session.customRequest('variables', { variablesReference: scopes2.scopes[0].variablesReference })).variables;
             const byName = Object.fromEntries(vars2.map((v) => [v.name, v]));
             assert.strictEqual(byName.s.value, '"hola"', JSON.stringify(vars2));
-            assert.match(byName.l.value, /lista de 2/);
+            assert.match(byName.l.value, engine === 'dash' ? /^\[1, 2\]$/ : /lista de 2/);
             const items = (await session.customRequest('variables', { variablesReference: byName.l.variablesReference })).variables;
             assert.deepStrictEqual(items.map((v) => v.value), ['1', '2']);
             assert(!vars2.some((v) => v.name.startsWith('_dash_')), 'temporaries shown');
-            // expressions in Dash (debugProxy.js turns them into C; $at and $len of tools/gdb/dash.py)
+            // expressions in Dash (dashDebug.js works them out; debugProxy.js turns them into C for gdb)
             const ev = async (expression, context) => (await session.customRequest('evaluate',
                 { expression, frameId: trace2.stackFrames[0].id, context: context || 'repl' })).result;
             assert.strictEqual(await ev('l[1] + 1'), '3');
             assert.strictEqual(await ev('s.length', 'watch'), '4');
-            assert.strictEqual(await ev('x == 20 and y == 40', 'hover'), '1');
+            assert.strictEqual(await ev('x == 20 and y == 40', 'hover'), engine === 'dash' ? 'true' : '1');
             // a condition in Dash, and a logpoint
             vscode.debug.removeBreakpoints(vscode.debug.breakpoints);
             vscode.debug.addBreakpoints([
                 new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(14, 0)), true, 'i == 3 and total > 0'),
                 new vscode.SourceBreakpoint(new vscode.Location(uri, new vscode.Position(16, 0)), true, undefined, undefined, 'total vale {total}'),
             ]);
-            await new Promise((r) => setTimeout(r, 1500));          // the breakpoints reach gdb
+            await new Promise((r) => setTimeout(r, 1500));          // the breakpoints reach the Amiga
             stopped = null;
             await session.customRequest('continue', { threadId: 1 });
             for (let i = 0; i < 600 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
@@ -365,7 +367,8 @@ async function run() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
-    await check('debugger: a runtime error stops as an exception, on its Dash line', async () => {
+    // (gdb only: a program of dashc ends at a runtime error, with its message)
+    await check('debugger (gdb): a runtime error stops as an exception, on its Dash line', async () => {
         const path = require('path');
         const os = require('os');
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash_it_'));
@@ -379,7 +382,8 @@ async function run() {
             const sub = vscode.debug.onDidTerminateDebugSession(() => { sub.dispose(); resolve(true); });
         });
         try {
-            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'launch', name: 'fallo', program: file }));
+            assert(await vscode.debug.startDebugging(undefined, { type: 'dash', request: 'launch', name: 'fallo', program: file,
+                                                                   debugger: 'gdb' }));
             for (let i = 0; i < 1200 && !stopped; i++) await new Promise((r) => setTimeout(r, 100));
             assert(stopped, 'did not stop at the error');
             assert.match(String(stopped.body.text), /ndice fuera de la lista/, JSON.stringify(stopped.body));
