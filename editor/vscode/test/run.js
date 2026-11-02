@@ -911,6 +911,23 @@ async function taskTests() {
 
 // --- debugProxy.js: Dash expressions for gdb ---------------------------------------------------------
 async function debugTests() {
+    await check('debugger: bgdbserver listening, seen with netstat on macOS and Windows (no /proc; 0.3.1)', () => {
+        const { netstatListening } = require('../debug.js');
+        const mac = 'Active Internet connections (including servers)\n' +
+            'Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)\n' +
+            'tcp4       0      0  127.0.0.1.52011        127.0.0.1.2345         ESTABLISHED\n' +
+            'tcp4       0      0  *.2345                 *.*                    LISTEN\n' +
+            'tcp6       0      0  *.12345                *.*                    LISTEN\n';
+        const win = '\r\nActive Connections\r\n\r\n  Proto  Local Address          Foreign Address        State\r\n' +
+            '  TCP    0.0.0.0:2345           0.0.0.0:0              LISTENING\r\n' +
+            '  TCP    127.0.0.1:50000        127.0.0.1:61000        ESTABLISHED\r\n';
+        assert.strictEqual(netstatListening(mac, 2345), true);
+        assert.strictEqual(netstatListening(mac, 52011), false);      // connected, not listening
+        assert.strictEqual(netstatListening(mac, 345), false);        // a port that ends the same
+        assert.strictEqual(netstatListening(win, 2345), true);
+        assert.strictEqual(netstatListening(win, 61000), false);      // the remote end
+        assert.strictEqual(netstatListening(win, 50000), false);
+    });
     const { dashToC, logMessageToC } = require('../debugProxy.js');
     await check('debugger: Dash expressions become C for gdb', () => {
         const cases = [

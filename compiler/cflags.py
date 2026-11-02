@@ -24,8 +24,13 @@ BBB = "-fbbb=abcfhilmnpz0"
 # into a trap instruction (the program crashes instead of reading garbage), and drops
 # NULL checks that come after a dereference.
 NULL_OK = ["-fno-isolate-erroneous-paths-dereference", "-fno-delete-null-pointer-checks"]
-OPTIMIZE = ["-O2", "-fomit-frame-pointer", BBB] + NULL_OK
-SMALL = ["-Os", "-fomit-frame-pointer", BBB] + NULL_OK
+# -fno-branch-count-reg: no DBcc with a condition (dbls, dbne...). Amiberry 8.2.2's JIT on x86-64 lost the high
+# half of its host PC pointer after the dbls of zlib's inflate in Tachyon 0.8.0 and the whole emulator aborted
+# (2026-11-02, https://github.com/BlitterStudio/amiberry/issues/2591). It also drops gcc's dbra loops: up to 10 %
+# slower in tight loops on the A500, no clear change on the A1200 (tools/bench.py), 0.13 % smaller.
+NO_DBCC = ["-fno-branch-count-reg"]
+OPTIMIZE = ["-O2", "-fomit-frame-pointer", BBB] + NULL_OK + NO_DBCC
+SMALL = ["-Os", "-fomit-frame-pointer", BBB] + NULL_OK + NO_DBCC
 DEBUG = ["-O0"]
 
 
