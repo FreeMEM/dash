@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from string import Template
 
-from compiler.ast_nodes import (
+from compiler.ast_nodes import (AmigaCast, AmigaStructDef,
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
@@ -169,6 +169,16 @@ class CTemplates:
 #include <stdlib.h>
 #include <stabs.h>
 
+/* An integer the size of a pointer: LONG on the Amiga, 64 bits on DashOS (runtime/dashos/dash_dashos.h);
+   _DashUP without sign. Macros on the Amiga: gcc sees the same C as before (a typedef changed its code) */
+#ifndef _DASH_DASHOS
+#define _DashP LONG
+#define _DashUP ULONG
+/* amiga_alloc, amiga_free (@amiga struct) */
+#define _DASH_AMIGA_ALLOC(n) ((LONG)AllocMem((ULONG)(n), MEMF_PUBLIC | MEMF_CLEAR))
+#define _DASH_AMIGA_FREE(p, n) FreeMem((APTR)(p), (ULONG)(n))
+#endif
+
 static void _dash_exit(int code);
 
 /* What runs when the program ends, however it ends (libnix's exit list), last in first: libnix's atexit
@@ -190,14 +200,16 @@ ADD2EXIT(_dash_atexit_run, 0);
    ./dash --debug stops in the debugger first. */
 /* The message of a runtime error (fmt with up to 4 arguments, lines separated by \\n): on the output,
    or in a requester when there is none (a program started from the Workbench) */
-static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) __attribute__((unused));
-static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) {
-    LONG args[4];
+static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP d) __attribute__((unused));
+static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP d) {
+    _DashP args[4];
     args[0] = a; args[1] = b; args[2] = c; args[3] = d;
     if (DOSBase && Output()) {
         VPrintf((CONST_STRPTR)fmt, args);
         PutStr((CONST_STRPTR)"\\n");
-    } else if (IntuitionBase) {
+    }
+#ifndef _DASH_DASHOS
+    else if (IntuitionBase) {
         struct EasyStruct es;
         es.es_StructSize = sizeof(es);
         es.es_Flags = 0;
@@ -206,6 +218,7 @@ static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) {
         es.es_GadgetFormat = (UBYTE *)"Vale";
         EasyRequestArgs(NULL, &es, NULL, args);
     }
+#endif
 }
 
 static void _dash_fail(const char *what, const char *where) __attribute__((noreturn, unused));
@@ -213,8 +226,8 @@ static void _dash_fail(const char *what, const char *where) {
 #ifdef _dash_debug_trap
     _dash_debug_trap(what);
 #endif
-    if (where) _dash_fail_say("Error: %s (en %s)", (LONG)what, (LONG)where, 0, 0);
-    else _dash_fail_say("Error: %s", (LONG)what, 0, 0, 0);
+    if (where) _dash_fail_say("Error: %s (en %s)", (_DashP)what, (_DashP)where, 0, 0);
+    else _dash_fail_say("Error: %s", (_DashP)what, 0, 0, 0);
     _dash_exit(20);
     for (;;) ;
 }
@@ -230,7 +243,7 @@ static void _dash_fail_at(const char *what, LONG w) __attribute__((noreturn, unu
 #if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
 #define _DASH_68020 1
 #endif
-#ifdef _DASH_68020
+#if defined(_DASH_68020) || !defined(__mc68000__)
 #define _DASH_MUL(a, b) ((LONG)(a) * (LONG)(b))
 #define _DASH_DIV(a, b) ((LONG)(a) / (LONG)(b))
 #define _DASH_MOD(a, b) ((LONG)(a) % (LONG)(b))
@@ -274,7 +287,7 @@ static void _dash_fail_at(const char *what, LONG w) {
 #ifdef _dash_debug_trap
     _dash_debug_trap(what);
 #endif
-    _dash_fail_say("Error: %s (en %s:%ld)", (LONG)what, (LONG)_dash_srcfiles[f], w & 0xFFFF, 0);
+    _dash_fail_say("Error: %s (en %s:%ld)", (_DashP)what, (_DashP)_dash_srcfiles[f], w & 0xFFFF, 0);
     _dash_exit(20);
     for (;;) ;
 }
@@ -403,7 +416,7 @@ void _dash_trap_recover(void) {
     else
         _dash_fail_say("Error: %s (excepción %ld)\\nen $%lx, fuera del programa (una librería)", (LONG)what, (LONG)num, (LONG)pc, 0);
 #if defined(DASH_MEMCHECK) && defined(_DASH_MEMORY_RUNTIME)
-    if (_dash_mc_where && DOSBase && Output()) Printf((CONST_STRPTR)"en %s\\n", (LONG)_dash_mc_where);
+    if (_dash_mc_where && DOSBase && Output()) Printf((CONST_STRPTR)"en %s\\n", (_DashP)_dash_mc_where);
 #endif
     _dash_exit(20);
     for (;;) ;
@@ -459,7 +472,7 @@ static const char *_dash_mc_where = NULL;
 
 static void _dash_mc_error(CONST_STRPTR what) {
     if (++_dash_mc_errors > 20) return;
-    if (_dash_mc_where) Printf((CONST_STRPTR)"memcheck: ERROR %s (en %s)\\n", what, (LONG)_dash_mc_where);
+    if (_dash_mc_where) Printf((CONST_STRPTR)"memcheck: ERROR %s (en %s)\\n", what, (_DashP)_dash_mc_where);
     else Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
 }
 
@@ -688,7 +701,7 @@ static __inline__ void _dash_block_put(APTR b, ULONG size) {
 typedef struct _DashStrHdr {
     ULONG size;                 /* bytes allocated, header included (+ tag, TEMP and KEEP bits) */
     ULONG len;                  /* length of the text */
-    ULONG self;                 /* (ULONG)header + _DASH_STR_KEY */
+    _DashUP self;               /* (_DashUP)header + _DASH_STR_KEY */
 } _DashStrHdr;
 
 #define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
@@ -706,18 +719,18 @@ typedef struct _DashStrHdr {
 #endif
 static __inline__ _DASH_NOASAN BOOL _dash_str_ours(CONST_STRPTR p) {
     const _DashStrHdr *h = _DASH_STR_HDR(p);
-    if ((ULONG)p & 1) return FALSE;
+    if ((_DashUP)p & 1) return FALSE;
     /* (a literal's address is a constant of alignment 1 for GCC: it would read the long byte by byte) */
     __asm__ ("" : "+r" (h));
-    return h->self == (ULONG)((ULONG)h + _DASH_STR_KEY);   /* (ULONG: 32 bits also on the PC of the tests) */
+    return h->self == (_DashUP)((_DashUP)h + _DASH_STR_KEY);
 }
 #define _DASH_STR_OURS(p) _dash_str_ours((CONST_STRPTR)(p))
 
 /* A literal used as a dictionary key (d["color"]): a text of Dash made by the compiler, with its length and,
    before its header, its hash (_dash_dict_hash). Escaped: never freed nor written */
-#define _DASH_KEY(s, hash) ({ static const struct { ULONG h0; _DashStrHdr h; char t[sizeof(s)]; } \
+#define _DASH_KEY(s, hash) ({ static const struct { _DashUP h0; _DashStrHdr h; char t[sizeof(s)]; } \
     __attribute__((aligned(2))) _dash_k = { (hash), { (sizeof(_DashStrHdr) + sizeof(s)) | _DASH_STR_TAG | \
-    _DASH_STR_KEEP | _DASH_STR_HASHED, sizeof(s) - 1, (ULONG)&_dash_k.h + _DASH_STR_KEY }, s }; \
+    _DASH_STR_KEEP | _DASH_STR_HASHED, sizeof(s) - 1, (_DashUP)&_dash_k.h + _DASH_STR_KEY }, s }; \
     (STRPTR)_dash_k.t; })
 
 /* The stack of temporaries: the first 32 in place, more in a block of the pool that doubles */
@@ -773,7 +786,7 @@ static __inline__ __attribute__((always_inline)) STRPTR _dash_str_alloc_in(ULONG
     _dash_mc_strs++;
 #endif
     h->len = len;
-    h->self = (ULONG)((ULONG)h + _DASH_STR_KEY);
+    h->self = (_DashUP)((_DashUP)h + _DASH_STR_KEY);
     if (temp) {
         _DashTmp *t = &_dash_ts[_dash_ts_n++];
         t->h = h;
@@ -1287,8 +1300,14 @@ static void _dash_mem_cleanup(void) {
     # Array runtime (included when arrays are used)
     ARRAY_RUNTIME = """\
 /* Dash Array Runtime */
+/* The bytes of an element (one _DashP: an Int, the bits of a Float, a pointer) as a shift: 2 on the Amiga, 3
+   with 64-bit pointers (runtime/dashos/dash_dashos.h). A Double takes 1 << _DASH_DBL_SH elements. */
+#ifndef _DASH_SLOT_SH
+#define _DASH_SLOT_SH 2
+#endif
+#define _DASH_DBL_SH (_DASH_SLOT_SH == 2)
 typedef struct {
-    LONG *data;
+    _DashP *data;
     LONG length;
     LONG capacity;   /* elements allocated (low 24 bits) and what they are (top byte) */
 } DashArrayLong;
@@ -1305,7 +1324,7 @@ typedef struct {
 #define _DASH_ARR_DBLS 3
 /* LONGs per element as a shift: 1 for a Double (2 LONGs), 0 else. A shift, not a multiplication: that is a
    call to libgcc on a 68000 */
-#define _DASH_ARR_SH(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 1 : 0)
+#define _DASH_ARR_SH(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? _DASH_DBL_SH : 0)
 
 /* apart, so that freeing a list of Ints stays a short leaf function */
 static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
@@ -1323,11 +1342,11 @@ static void DashArray_destroy(void *obj) {
     if (!arr->data) return;
     kind = _DASH_ARR_KIND(arr);
     if (!kind) {                     /* Ints: the usual case, a shift and no call (a multiplication is one on a 68000) */
-        _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << 2);
+        _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << _DASH_SLOT_SH);
         return;
     }
     if (kind != _DASH_ARR_DBLS) DashArray_drop_elements(arr);
-    _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << (kind == _DASH_ARR_DBLS ? 3 : 2));
+    _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << (kind == _DASH_ARR_DBLS ? 3 : _DASH_SLOT_SH));
 }
 
 static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
@@ -1338,7 +1357,7 @@ static DashArrayLong* DashArray_create(LONG size) {
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
-        arr->data = (LONG *)_dash_block_get_clear(sizeof(LONG) * size);
+        arr->data = (_DashP *)_dash_block_get_clear(sizeof(_DashP) * size);
         if (!arr->data) return NULL;
     }
     arr->length = size;
@@ -1346,7 +1365,7 @@ static DashArrayLong* DashArray_create(LONG size) {
     return arr;
 }
 
-static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
+static DashArrayLong* DashArray_from(LONG size, const _DashP *values) {
     DashArrayLong *arr = DashArray_create(size);
     if (arr) {
         for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
@@ -1356,12 +1375,12 @@ static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
 
 /* DashArray_from for "var = [...]": the new array has one reference and is not a
    temporary (see _dash_rc_new_obj) */
-static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
+static DashArrayLong* DashArray_from_new(LONG size, const _DashP *values) {
     DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(sizeof(DashArrayLong), &_dash_array_type);
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
-        arr->data = (LONG *)_dash_block_get(sizeof(LONG) * size);
+        arr->data = (_DashP *)_dash_block_get(sizeof(_DashP) * size);
         if (!arr->data) return NULL;
         for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
     }
@@ -1370,12 +1389,12 @@ static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
     return arr;
 }
 
-static LONG DashArray_get(DashArrayLong *arr, LONG index) {
+static _DashP DashArray_get(DashArrayLong *arr, LONG index) {
     if (!arr || index < 0 || index >= arr->length) return 0;
     return arr->data[index];
 }
 
-static void DashArray_set(DashArrayLong *arr, LONG index, LONG value) {
+static void DashArray_set(DashArrayLong *arr, LONG index, _DashP value) {
     if (!arr || index < 0 || index >= arr->length) return;
     arr->data[index] = value;
 }
@@ -1414,7 +1433,7 @@ static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
 
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
     LONG sh, kind, n;
-    LONG *from;
+    _DashP *from;
     if (!arr) return NULL;
     sh = _DASH_ARR_SH(arr);
     kind = _DASH_ARR_KIND(arr);
@@ -1576,7 +1595,7 @@ static STRPTR DashString_join_h(LONG n, STRPTR *parts, const LONG *hints) {
 /* Dash Dict Runtime */
 typedef struct {
     STRPTR *keys;      /* NULL = free slot; {Int: T}: the keys themselves, used[] says which slots hold one */
-    LONG *vals;
+    _DashP *vals;
     LONG count;
     LONG cap;          /* slots: 0 or a power of two */
     LONG kind;         /* 0, _DASH_ARR_OBJS or _DASH_ARR_STRS */
@@ -1600,7 +1619,7 @@ static __inline__ ULONG _dash_dict_keyhash(STRPTR k, ULONG *len) {
     if (_DASH_STR_OURS(k)) {
         _DashStrHdr *hd = _DASH_STR_HDR(k);
         *len = n = hd->len;
-        if (hd->size & _DASH_STR_HASHED) return ((const ULONG *)hd)[-1];
+        if (hd->size & _DASH_STR_HASHED) return (ULONG)((const _DashUP *)hd)[-1];
         while (n--) h = (h << 5) + h + *p++;
         return h;
     }
@@ -1617,7 +1636,7 @@ static ULONG _dash_dict_hashi(LONG k) {
     return h;
 }
 
-static void _dash_dict_drop(DashDict *d, LONG v, BOOL child) {
+static void _dash_dict_drop(DashDict *d, _DashP v, BOOL child) {
     if (d->kind == _DASH_ARR_OBJS) {
         if (child) _dash_release_child((void *)v); else _dash_release((void *)v);
     } else if (d->kind == _DASH_ARR_STRS) {
@@ -1636,7 +1655,7 @@ static void DashDict_destroy(void *obj) {
         }
     }
     _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
-    _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+    _dash_block_put(d->vals, sizeof(_DashP) * d->cap);
     if (d->used) _dash_block_put(d->used, d->cap);
 }
 
@@ -1675,17 +1694,17 @@ static LONG _dash_dict_slot(DashDict *d, STRPTR key) {
 /* {Int: T}: the slot of key, or the free one where it would go */
 static LONG _dash_dict_sloti(DashDict *d, LONG key) {
     ULONG mask = d->cap - 1, i = _dash_dict_hashi(key) & mask;
-    while (d->used[i] && (LONG)d->keys[i] != key) i = (i + 1) & mask;
+    while (d->used[i] && (LONG)(_DashP)d->keys[i] != key) i = (i + 1) & mask;
     return (LONG)i;
 }
 
 static BOOL _dash_dict_grow(DashDict *d) {
     LONG oldcap = d->cap, newcap = oldcap ? oldcap * 2 : 8, i, s;
     STRPTR *oldkeys = d->keys;
-    LONG *oldvals = d->vals;
+    _DashP *oldvals = d->vals;
     UBYTE *oldused = d->used, *used = NULL;
     STRPTR *keys = (STRPTR *)_dash_block_get_clear(sizeof(STRPTR) * newcap);
-    LONG *vals = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
+    _DashP *vals = (_DashP *)_dash_block_get(sizeof(_DashP) * newcap);
     if (!keys || !vals) return FALSE;
     if (d->ikeys && !(used = (UBYTE *)_dash_block_get_clear(newcap))) return FALSE;
     d->keys = keys;
@@ -1695,14 +1714,14 @@ static BOOL _dash_dict_grow(DashDict *d) {
     for (i = 0; i < oldcap; i++) {
         if (d->ikeys) {
             if (oldused[i]) {
-                s = _dash_dict_sloti(d, (LONG)oldkeys[i]);
+                s = _dash_dict_sloti(d, (LONG)(_DashP)oldkeys[i]);
                 keys[s] = oldkeys[i]; vals[s] = oldvals[i]; used[s] = 1;
             }
         } else if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
     }
     if (oldcap) {
         _dash_block_put(oldkeys, sizeof(STRPTR) * oldcap);
-        _dash_block_put(oldvals, sizeof(LONG) * oldcap);
+        _dash_block_put(oldvals, sizeof(_DashP) * oldcap);
         if (oldused) _dash_block_put(oldused, oldcap);
     }
     return TRUE;
@@ -1722,7 +1741,7 @@ static LONG _dash_dict_put(DashDict *d, STRPTR key) {
     return s;
 }
 
-static void DashDict_set(DashDict *d, STRPTR key, LONG value) {
+static void DashDict_set(DashDict *d, STRPTR key, _DashP value) {
     LONG s = _dash_dict_put(d, key);
     if (s >= 0) d->vals[s] = value;
 }
@@ -1742,7 +1761,7 @@ static void DashDict_set_str(DashDict *d, STRPTR key, STRPTR value) {
 }
 
 /* The value, or 0 (nil, "" for nobody) if the key is not there */
-static LONG DashDict_get(DashDict *d, STRPTR key) {
+static _DashP DashDict_get(DashDict *d, STRPTR key) {
     LONG s;
     if (!d || !key || !d->cap) return 0;
     s = _dash_dict_slot(d, key);
@@ -1750,7 +1769,7 @@ static LONG DashDict_get(DashDict *d, STRPTR key) {
 }
 
 /* d.get(key, dflt) (D65): the value, or dflt if the key is not there; one lookup (has, then [], took three) */
-static LONG DashDict_get_or(DashDict *d, STRPTR key, LONG dflt) {
+static _DashP DashDict_get_or(DashDict *d, STRPTR key, _DashP dflt) {
     LONG s;
     if (!d || !key || !d->cap) return dflt;
     s = _dash_dict_slot(d, key);
@@ -1769,7 +1788,7 @@ static LONG _dash_dict_puti(DashDict *d, LONG key) {
         if (d->count) return -1;                 /* (the analyzer keeps String and Int keys apart) */
         if (d->cap) {                            /* emptied String table: start again */
             _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
-            _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+            _dash_block_put(d->vals, sizeof(_DashP) * d->cap);
             d->keys = NULL; d->vals = NULL; d->cap = 0;
         }
         d->ikeys = TRUE;
@@ -1778,14 +1797,14 @@ static LONG _dash_dict_puti(DashDict *d, LONG key) {
     s = _dash_dict_sloti(d, key);
     if (!d->used[s]) {
         d->used[s] = 1;
-        d->keys[s] = (STRPTR)key;
+        d->keys[s] = (STRPTR)(_DashP)key;
         d->vals[s] = 0;
         d->count++;
     }
     return s;
 }
 
-static void DashDict_seti(DashDict *d, LONG key, LONG value) {
+static void DashDict_seti(DashDict *d, LONG key, _DashP value) {
     LONG s = _dash_dict_puti(d, key);
     if (s >= 0) d->vals[s] = value;
 }
@@ -1804,14 +1823,14 @@ static void DashDict_set_stri(DashDict *d, LONG key, STRPTR value) {
     _dash_str_set((STRPTR *)&d->vals[s], value);
 }
 
-static LONG DashDict_get_ori(DashDict *d, LONG key, LONG dflt) {
+static _DashP DashDict_get_ori(DashDict *d, LONG key, _DashP dflt) {
     LONG s;
     if (!d || !d->ikeys || !d->cap) return dflt;
     s = _dash_dict_sloti(d, key);
     return d->used[s] ? d->vals[s] : dflt;
 }
 
-static LONG DashDict_geti(DashDict *d, LONG key) {
+static _DashP DashDict_geti(DashDict *d, LONG key) {
     return DashDict_get_ori(d, key, 0);
 }
 
@@ -1829,7 +1848,7 @@ static void DashDict_removei(DashDict *d, LONG key) {
     d->count--;
     mask = d->cap - 1;
     for (j = (s + 1) & mask; d->used[j]; j = (j + 1) & mask) {
-        h = _dash_dict_hashi((LONG)d->keys[j]) & mask;
+        h = _dash_dict_hashi((LONG)(_DashP)d->keys[j]) & mask;
         if ((j > s && (h <= s || h > j)) || (j < s && h <= s && h > j)) {
             d->keys[s] = d->keys[j];
             d->vals[s] = d->vals[j];
@@ -1841,7 +1860,7 @@ static void DashDict_removei(DashDict *d, LONG key) {
 }
 
 /* {1: "a", ...} */
-static DashDict *DashDict_fromi(LONG kind, LONG n, LONG *keys, LONG *vals) {
+static DashDict *DashDict_fromi(LONG kind, LONG n, LONG *keys, _DashP *vals) {
     DashDict *d = DashDict_new(kind);
     LONG i;
     for (i = 0; d && i < n; i++) {
@@ -1897,12 +1916,12 @@ static DashArrayLong *DashDict_keys(DashDict *d) {
     LONG i, j = 0;
     DashArrayLong *arr = DashArray_create(d ? d->count : 0);
     if (!arr || !d) return arr;
-    for (i = 0; i < d->cap; i++) if (_DASH_DICT_USED(d, i)) arr->data[j++] = (LONG)d->keys[i];
+    for (i = 0; i < d->cap; i++) if (_DASH_DICT_USED(d, i)) arr->data[j++] = (_DashP)d->keys[i];
     return d->ikeys ? arr : DashArray_own(arr, _DASH_ARR_STRS);
 }
 
 /* {"a": 1, ...} */
-static DashDict *DashDict_from(LONG kind, LONG n, STRPTR *keys, LONG *vals) {
+static DashDict *DashDict_from(LONG kind, LONG n, STRPTR *keys, _DashP *vals) {
     DashDict *d = DashDict_new(kind);
     LONG i;
     for (i = 0; d && i < n; i++) {
@@ -8449,7 +8468,7 @@ static LONG _dash_buffer_find2(UBYTE *buf, LONG from, LONG to, UBYTE a, UBYTE b)
     ULONG pa = a | (a << 8), pb = b | (b << 8), w;
     pa |= pa << 16;
     pb |= pb << 16;
-    for (; p < e && ((ULONG)p & 3); p++) if (*p == a || *p == b) return p - buf;
+    for (; p < e && ((_DashUP)p & 3); p++) if (*p == a || *p == b) return p - buf;
     if (a == b) {
         for (; p + 4 <= e; p += 4) {
             w = *(ULONG *)p ^ pa;
@@ -9087,17 +9106,26 @@ static LONG _dash_double_digits(double d, char *digits, LONG *point) {
     return n;
 }
 
+#ifndef _DASH_W_HI   /* the halves of a double in two ULONGs: the high one first, but not on a little-endian CPU */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define _DASH_W_HI 1
+#define _DASH_W_LO 0
+#else
+#define _DASH_W_HI 0
+#define _DASH_W_LO 1
+#endif
+#endif
 /* inf, -inf, nan or 0 from the bits of d (with an FPU a comparison with infinity may not say it): the
    text, or NULL for any other number; *neg its sign */
 static const char *_dash_double_special(double d, BOOL *neg) {
     union { double d; ULONG w[2]; } bits;
     bits.d = d;
-    *neg = (bits.w[0] & 0x80000000UL) != 0;
-    if ((bits.w[0] & 0x7FF00000UL) == 0x7FF00000UL) {
-        if ((bits.w[0] & 0x000FFFFFUL) || bits.w[1]) { *neg = FALSE; return "nan"; }
+    *neg = (bits.w[_DASH_W_HI] & 0x80000000UL) != 0;
+    if ((bits.w[_DASH_W_HI] & 0x7FF00000UL) == 0x7FF00000UL) {
+        if ((bits.w[_DASH_W_HI] & 0x000FFFFFUL) || bits.w[_DASH_W_LO]) { *neg = FALSE; return "nan"; }
         return "inf";
     }
-    if (!(bits.w[0] & 0x7FFFFFFFUL) && !bits.w[1]) return "0.0";
+    if (!(bits.w[_DASH_W_HI] & 0x7FFFFFFFUL) && !bits.w[_DASH_W_LO]) return "0.0";
     return NULL;
 }
 
@@ -9274,6 +9302,15 @@ double __ieee754_fmod(double, double);
 double dash_fd_sin(double), dash_fd_cos(double), dash_fd_tan(double), dash_fd_atan(double);
 double dash_fd_floor(double), dash_fd_ceil(double);
 
+#ifndef _DASH_W_HI   /* the halves of a double in two ULONGs: the high one first, but not on a little-endian CPU */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define _DASH_W_HI 1
+#define _DASH_W_LO 0
+#else
+#define _DASH_W_HI 0
+#define _DASH_W_LO 1
+#endif
+#endif
 typedef union { double d; ULONG w[2]; } _DashDoubleBits;
 
 static double _dash_m_sqrt(double x) {
@@ -9304,7 +9341,7 @@ static double _dash_m_fmod(double x, double y) { return __ieee754_fmod(x, y); }
 static double _dash_m_trunc(double x) {
     _DashDoubleBits b;
     b.d = x;
-    return (b.w[0] & 0x80000000UL) ? dash_fd_ceil(x) : dash_fd_floor(x);
+    return (b.w[_DASH_W_HI] & 0x80000000UL) ? dash_fd_ceil(x) : dash_fd_floor(x);
 }
 
 /* half away from zero (2.5 is 3, -2.5 is -3); x - t is exact, floor(x + 0.5) is not for 0.49999999999999994 */
@@ -9318,7 +9355,7 @@ static double _dash_m_round(double x) {
 static double _dash_m_abs(double x) {
     _DashDoubleBits b;
     b.d = x;
-    b.w[0] &= 0x7FFFFFFFUL;
+    b.w[_DASH_W_HI] &= 0x7FFFFFFFUL;
     return b.d;
 }
 
@@ -9326,13 +9363,13 @@ static double _dash_m_abs(double x) {
 static BOOL _dash_m_is_nan(double x) {
     _DashDoubleBits b;
     b.d = x;
-    return (b.w[0] & 0x7FF00000UL) == 0x7FF00000UL && ((b.w[0] & 0x000FFFFFUL) || b.w[1]);
+    return (b.w[_DASH_W_HI] & 0x7FF00000UL) == 0x7FF00000UL && ((b.w[_DASH_W_HI] & 0x000FFFFFUL) || b.w[_DASH_W_LO]);
 }
 
 static BOOL _dash_m_is_inf(double x) {
     _DashDoubleBits b;
     b.d = x;
-    return (b.w[0] & 0x7FFFFFFFUL) == 0x7FF00000UL && !b.w[1];
+    return (b.w[_DASH_W_HI] & 0x7FFFFFFFUL) == 0x7FF00000UL && !b.w[_DASH_W_LO];
 }
 
 """
@@ -9717,15 +9754,15 @@ static LONG _dash_cpu_total(void) {
     LIST_RUNTIME = """\
 /* Dash List Runtime */
 static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
-    LONG cap = _DASH_ARR_CAP(arr), sh = _DASH_ARR_SH(arr) + 2, newcap, i, n;
-    LONG *data;
+    LONG cap = _DASH_ARR_CAP(arr), sh = _DASH_ARR_SH(arr) + _DASH_SLOT_SH, newcap, i, n;
+    _DashP *data;
     if (need <= cap) return TRUE;
     newcap = cap * 2;
     if (newcap < 4) newcap = 4;
     if (newcap < need) newcap = need;
-    data = (LONG *)_dash_block_get((ULONG)newcap << sh);
+    data = (_DashP *)_dash_block_get((ULONG)newcap << sh);
     if (!data) return FALSE;
-    n = arr->length << (sh - 2);
+    n = arr->length << (sh - _DASH_SLOT_SH);
     for (i = 0; i < n; i++) data[i] = arr->data[i];
     if (arr->data) _dash_block_put(arr->data, (ULONG)cap << sh);
     arr->data = data;
@@ -9744,7 +9781,7 @@ static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
     return TRUE;
 }
 
-static void DashArray_insert(DashArrayLong *arr, LONG index, LONG value) {
+static void DashArray_insert(DashArrayLong *arr, LONG index, _DashP value) {
     if (DashArray_open(arr, index)) arr->data[index] = value;
 }
 
@@ -9752,7 +9789,7 @@ static void DashArray_insert_obj(DashArrayLong *arr, LONG index, void *value) {
     if (!DashArray_open(arr, index)) return;
     arr->capacity |= (LONG)_DASH_ARR_OBJS << 24;
     _dash_retain(value);
-    arr->data[index] = (LONG)value;
+    arr->data[index] = (_DashP)value;
 }
 
 static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
@@ -9774,8 +9811,8 @@ static void DashArray_close(DashArrayLong *arr, LONG index) {
 }
 
 /* Takes the element out (0 if the index is outside the list) */
-static LONG DashArray_take(DashArrayLong *arr, LONG index) {
-    LONG v;
+static _DashP DashArray_take(DashArrayLong *arr, LONG index) {
+    _DashP v;
     if (!arr || index < 0 || index >= arr->length) return 0;
     v = arr->data[index];
     DashArray_close(arr, index);
@@ -9804,7 +9841,7 @@ static STRPTR DashArray_pop_str(DashArrayLong *arr) {
 
 /* remove(i): the element goes (released or freed if the list owned it) */
 static void DashArray_remove(DashArrayLong *arr, LONG index) {
-    LONG v;
+    _DashP v;
     if (!arr || index < 0 || index >= arr->length) return;
     v = DashArray_take(arr, index);
     if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS) _dash_release((void *)v);
@@ -9824,12 +9861,12 @@ static void DashArray_clear(DashArrayLong *arr) {
 /* Dash Sort Runtime */
 /* Puts src[from..mid) and src[mid..to) (sorted, w LONGs per element) in order into dst[from..to): an element
    of the second half goes first only if after(first's, second's) says so, which keeps equal ones in order */
-static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG sh,
-                             LONG (*after)(const LONG *, const LONG *)) {
+static void _dash_sort_merge(const _DashP *src, _DashP *dst, LONG from, LONG mid, LONG to, LONG sh,
+                             LONG (*after)(const _DashP *, const _DashP *)) {
     LONG i = from, j = mid, w = 1 << sh, c;
-    LONG *out = dst + (from << sh);
+    _DashP *out = dst + (from << sh);
     while (i < mid || j < to) {
-        const LONG *e;
+        const _DashP *e;
         if (j >= to || (i < mid && !after(src + (i << sh), src + (j << sh)))) e = src + ((i++) << sh);
         else e = src + ((j++) << sh);
         for (c = 0; c < w; c++) *out++ = e[c];
@@ -9839,14 +9876,14 @@ static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LO
 /* Sorts the list in place, keeping the order of equal elements. after(a, b): nonzero if the element at b goes
    before the one at a. Runs of 8 by insertion, then merges through a buffer as long as the list (without
    memory for it, insertion all along). Element k is at data + (k << sh): shifts, no multiplications */
-static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const LONG *)) {
+static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const _DashP *, const _DashP *)) {
     LONG n, sh, w, i, j, c, width, run = 8;
-    LONG *buf, *src, *dst, t[2];
+    _DashP *buf, *src, *dst, t[2];
     if (!arr || arr->length < 2) return;
     n = arr->length;
     sh = _DASH_ARR_SH(arr);
     w = 1 << sh;
-    buf = (LONG *)_dash_block_get((ULONG)n << (sh + 2));
+    buf = (_DashP *)_dash_block_get((ULONG)n << (sh + _DASH_SLOT_SH));
     if (!buf) run = n;
     for (i = 0; i < n; i += run) {
         LONG end = i + run < n ? i + run : n;
@@ -9868,10 +9905,10 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
             LONG mid = i + width < n ? i + width : n, to = i + 2 * width < n ? i + 2 * width : n;
             _dash_sort_merge(src, dst, i, mid, to, sh, after);
         }
-        { LONG *x = src; src = dst; dst = x; }
+        { _DashP *x = src; src = dst; dst = x; }
     }
     if (src != arr->data) for (i = 0; i < (n << sh); i++) arr->data[i] = src[i];
-    _dash_block_put(buf, (ULONG)n << (sh + 2));
+    _dash_block_put(buf, (ULONG)n << (sh + _DASH_SLOT_SH));
 }
 
 """
@@ -10491,7 +10528,7 @@ static LONG _dash_clip_read_block(LONG unit, STRPTR type, APTR dest, LONG max) {
     DBL_LIST_RUNTIME = """\
 /* Dash Double List Runtime */
 static DashArrayLong *DashArray_create_dbl(LONG size) {
-    DashArrayLong *arr = DashArray_create(size * 2);
+    DashArrayLong *arr = DashArray_create(size << _DASH_DBL_SH);
     if (!arr) return NULL;
     arr->length = size;
     arr->capacity = size | ((LONG)_DASH_ARR_DBLS << 24);
@@ -10519,7 +10556,7 @@ static void DashArray_insert_dbl(DashArrayLong *arr, LONG index, double value) {
     if (!arr) return;
     if (_DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) {
         if (arr->length) return;
-        if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
+        if (arr->data) _dash_block_put(arr->data, sizeof(_DashP) * _DASH_ARR_CAP(arr));
         arr->data = NULL;
         arr->capacity = (LONG)_DASH_ARR_DBLS << 24;
     }
@@ -10559,7 +10596,7 @@ static DashArrayLong *_dash_str_split(STRPTR s, STRPTR sep) {
         if (s[i] == sep[0] && !strncmp((char *)s + i, (char *)sep, m)) {
             STRPTR piece = _dash_str_alloc(i - start, FALSE);
             if (piece) _dash_copy(piece, s + start, i - start);
-            arr->data[k++] = (LONG)piece;
+            arr->data[k++] = (_DashP)piece;
             i += m;
             start = i;
         } else {
@@ -10569,7 +10606,7 @@ static DashArrayLong *_dash_str_split(STRPTR s, STRPTR sep) {
     {
         STRPTR piece = _dash_str_alloc(len - start, FALSE);
         if (piece) _dash_copy(piece, s + start, len - start);
-        arr->data[k] = (LONG)piece;
+        arr->data[k] = (_DashP)piece;
     }
     return arr;
 }
@@ -11629,7 +11666,7 @@ static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
     LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, sh;
     DashArrayLong *result;
     kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
-    sh = kind == _DASH_ARR_DBLS ? 1 : 0;
+    sh = kind == _DASH_ARR_DBLS ? _DASH_DBL_SH : 0;
     result = DashArray_create((la + lb) << sh);
     if (!result) return NULL;
     la <<= sh;
@@ -11741,18 +11778,31 @@ static BOOL _dash_str_ends(STRPTR s, STRPTR suffix) {
     return s && suffix && len >= n && !strcmp((char *)s + len - n, (char *)suffix);
 }
 
-/* Latin-1: A-Z and 0xC0-0xDE (not 0xD7) are the capitals of a-z and 0xE0-0xFE (not 0xF7) */
+/* Latin-1: A-Z and 0xC0-0xDE (not 0xD7) are the capitals of a-z and 0xE0-0xFE (not 0xF7). On DashOS the texts
+   are UTF-8: the same letters, in two bytes */
 static STRPTR _dash_str_case(STRPTR s, BOOL upper) {
     LONG len = _dash_str_len(s), i;
     STRPTR r = _dash_str_alloc(len, TRUE);
     if (!r) return NULL;
     for (i = 0; i < len; i++) {
         UBYTE c = s[i];
+#ifdef _DASH_DASHOS
+        /* UTF-8: the same letters, as 0xC3 and a second byte (0xA0-0xBE / 0x80-0x9E) */
+        if (c == 0xC3 && i + 1 < len) {
+            UBYTE d = s[i + 1];
+            if (upper ? (d >= 0xA0 && d <= 0xBE && d != 0xB7) : (d >= 0x80 && d <= 0x9E && d != 0x97)) d ^= 0x20;
+            r[i++] = c;
+            r[i] = d;
+            continue;
+        }
+        if (upper) { if (c >= 'a' && c <= 'z') c -= 32; } else if (c >= 'A' && c <= 'Z') c += 32;
+#else
         if (upper) {
             if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7)) c -= 32;
         } else {
             if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c += 32;
         }
+#endif
         r[i] = c;
     }
     r[len] = 0;
@@ -11766,7 +11816,16 @@ static BOOL _dash_str_ieq(STRPTR s, STRPTR low) {
     if (!s) s = (STRPTR)"";
     for (;; s++, low++) {
         UBYTE c = *s;
+#ifdef _DASH_DASHOS
+        if (c >= 'A' && c <= 'Z') c += 32;
+        else if (c == 0xC3 && s[1] >= 0x80 && s[1] <= 0x9E && s[1] != 0x97) {
+            if ((UBYTE)*low != 0xC3 || (UBYTE)low[1] != (UBYTE)(s[1] | 0x20)) return FALSE;
+            s++; low++;
+            continue;
+        }
+#else
         if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c += 32;
+#endif
         if (c != (UBYTE)*low) return FALSE;
         if (!c) return TRUE;
     }
@@ -19263,7 +19322,7 @@ enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DAS
     ({ ULONG _dash_m[] = { __VA_ARGS__ }; DoMethodA((Object *)(obj), (Msg)_dash_m); })
 
 static void _dash_mui_error(CONST_STRPTR what) {
-    Printf("MUI: %s\\n", (LONG)what);
+    Printf("MUI: %s\\n", (_DashP)what);
 }
 
 static STRPTR _dash_mui_keep(STRPTR text) {
@@ -21799,6 +21858,9 @@ class CodeGenerator(ASTVisitor):
         self.prof_names: List[str] = ["Main"]
         # ./dash --memcheck: field accesses check for nil (_DASH_NN)
         self.memcheck = os.environ.get("DASH_MEMCHECK_C") == "1"
+        # ./dash --dashos (DASH_TARGET=dashos, docs/AARCH64_LOOP.md): C for DashOS (AArch64 big-endian), on
+        # runtime/dashos instead of AmigaOS
+        self.target = os.environ.get("DASH_TARGET") or "amiga"
         self.cur_where = 0       # file << 16 | line of the statement being generated (for _DASH_NN)
         self.src_files: List[str] = []   # the files of cur_where (_dash_srcfiles)
         self.globals: List[str] = []
@@ -22287,7 +22349,7 @@ class CodeGenerator(ASTVisitor):
         # methods may draw (_dash_rp) or use any builtin
         # Their constructors and methods go after the prototypes of the functions, so a method can call any
         # function, constructor or method of the program
-        if self.struct_typedefs or self.analysis.program.structs:
+        if self.struct_typedefs or self.analysis.program.structs or getattr(self, "amiga", None):
             parts.append("\n/* Struct Definitions */\n")
             # an interface's values are pointers to any struct that has it (Lorraine D43)
             parts.append("".join(f"typedef void _Dash_{st.name};\n" if st.is_interface else
@@ -22535,6 +22597,26 @@ static LONG _dash_event_window_handle(void) {{
             m = re.search(r"^#define DASH_STACK (\d+).*$", program, re.M)
             if m and int(m.group(1)) < self.stack_min:
                 program = program[:m.start()] + f"#define DASH_STACK {self.stack_min}  /* @stack */" + program[m.end():]
+        if self.target == "dashos":
+            program = self._dashos_port(program)
+        return program
+
+    def _dashos_port(self, program: str) -> str:
+        """The program for DashOS: runtime/dashos/dash_dashos.h instead of AmigaOS's headers, no libnix
+        (stack, exit list), no trap handler, no libraries to open."""
+        import re
+        head = "#include <proto/exec.h>\n#include <proto/intuition.h>\n#include <proto/dos.h>\n" \
+               "#include <string.h>\n#include <stdlib.h>\n#include <stabs.h>\n"
+        assert program.count(head) == 1, "dashos: the program header changed"
+        program = program.replace(head, '#include "dash_dashos.h"\n', 1)
+        program = program.replace("ADD2EXIT(_dash_atexit_run, 0);\n", "", 1)
+        stack = program.index("/* Stack: at least DASH_STACK")
+        program = program[:stack] + program[program.index("#endif\n", stack) + 7:]
+        trap = program.index("/* Dash Trap Runtime")
+        program = program[:trap] + program[program.index("\nint main(", trap) + 1:]
+        program = program.replace("    _dash_trap_on();\n", "", 1)
+        program = re.sub(r"^ *(IntuitionBase|DOSBase) = \(struct \w+ \*\)OpenLibrary\(.*\n", "", program, flags=re.M)
+        program = re.sub(r"^ *if \((IntuitionBase|DOSBase)\) CloseLibrary\(.*\n", "", program, flags=re.M)
         return program
 
     def _get_main_template(self) -> Template:
@@ -22564,8 +22646,135 @@ static LONG _dash_event_window_handle(void) {{
 
     # === Visitor Methods ===
 
+    # ---- @amiga struct (docs/AARCH64_LOOP.md, A6): views of memory with the 68000 layout ----
+    def _amiga_setup(self, program):
+        """Their C (packed, aligned to 2, with the padding of the 68000 written out) and _dash_a32"""
+        from compiler.amiga_structs import layouts, SCALARS
+        self.amiga = layouts(program)
+        if not self.amiga:
+            return
+        out = ["/* @amiga struct: the layout of the 68000 (32-bit pointers: an address in a ULONG) */\n"
+               "static __inline__ ULONG _dash_a32(_DashUP p) {\n"
+               "#ifdef _DASH_DASHOS\n"
+               "    if (p >> 32) _dash_fail(\"puntero de Amiga de 4 GB o más\", NULL);\n"
+               "#endif\n"
+               "    return (ULONG)p;\n}\n"
+               "/* the memory of the Amiga is big-endian: a little-endian program turns the bytes of Word and Long */\n"
+               "#if defined(_DASH_DASHOS) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__\n"
+               "#define _DASH_BE16(x) __builtin_bswap16(x)\n#define _DASH_BE32(x) __builtin_bswap32(x)\n"
+               "#else\n#define _DASH_BE16(x) (x)\n#define _DASH_BE32(x) (x)\n#endif\n"]
+        for name, lt in self.amiga.items():
+            fields, pos, npad = [], 0, 0
+            for fname in lt.order:
+                f = lt.fields[fname]
+                if f.off > pos:
+                    fields.append(f"    UBYTE _dash_pad{npad}[{f.off - pos}];\n")
+                    npad += 1
+                if f.kind == "scalar":
+                    decl = f"{SCALARS[f.scalar][2]} {f.name}"
+                elif f.kind == "table":
+                    decl = f"{SCALARS[f.scalar][2]} {f.name}[{f.count}]"
+                elif f.kind == "struct":
+                    decl = f"_DashA_{f.target} {f.name}"
+                else:
+                    decl = f"ULONG {f.name}"
+                fields.append(f"    {decl};   /* {f.off} */\n")
+                pos = f.off + f.size
+            if lt.size > pos:
+                fields.append(f"    UBYTE _dash_pad{npad}[{lt.size - pos}];\n")
+            out.append(f"typedef struct __attribute__((packed, aligned(2))) _DashA_{name} {{\n{''.join(fields) or '    UBYTE _dash_empty;\n'}}}"
+                       f" _DashA_{name};   /* {lt.size} bytes */\n")
+        self.struct_bodies.insert(0, "".join(out) + "\n")
+
+    def _amiga_c(self, target: str) -> str:
+        """The C pointer type of "Ptr target" """
+        from compiler.amiga_structs import SCALARS
+        return f"{SCALARS[target][2]} *" if target in SCALARS else f"_DashA_{target} *"
+
+    @staticmethod
+    def _amiga_be(f, expr: str) -> str:
+        """expr (the C of a scalar, BPTR or pointer field, or of what goes in it) in the byte order of the Amiga"""
+        from compiler.amiga_structs import SCALARS
+        size, _, ctype = SCALARS[f.scalar] if f.kind == "scalar" else (4, False, "ULONG")
+        return expr if size == 1 else f"(({ctype})_DASH_BE{size * 8}({expr}))"
+
+    def _amiga_of(self, node) -> Optional[str]:
+        """What a pointer expression points to (an @amiga struct or scalar name), or None"""
+        from compiler.amiga_structs import field_value_type, ptr_target
+        if not getattr(self, "amiga", None):
+            return None
+        if isinstance(node, AmigaCast):
+            return node.target
+        if isinstance(node, VarRef):
+            vt = self.var_types.get(node.name) or ""
+            return vt[5:] if vt.startswith("aptr:") else None
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            base = self._amiga_of(VarRef(name=node.object_name) if isinstance(node, MemberAccess) else node.object)
+            lt = self.amiga.get(base or "")
+            if lt is None:
+                return None
+            return ptr_target(field_value_type(lt, node.member if isinstance(node, MemberAccess) else node.property))
+        return None
+
+    def _amiga_field(self, node):
+        """(C of the base pointer, FieldInfo) when node is a field of an @amiga struct, else None"""
+        if not getattr(self, "amiga", None) or not isinstance(node, (MemberAccess, PropertyAccess)):
+            return None
+        base_node = VarRef(name=node.object_name) if isinstance(node, MemberAccess) else node.object
+        base = self._amiga_of(base_node)
+        lt = self.amiga.get(base or "")
+        if lt is None:
+            return None
+        fname = node.member if isinstance(node, MemberAccess) else node.property
+        f = lt.fields.get(fname)
+        if f is None:
+            raise ValueError(f"@amiga struct {lt.name} has no field '{fname}'")
+        return self._generate_expression(base_node), f
+
+    def _amiga_expr(self, node) -> Optional[str]:
+        """The C of an expression of @amiga structs (Ptr X(x), sizeof, offsetof, a field), or None"""
+        if not getattr(self, "amiga", None):
+            return None
+        if isinstance(node, AmigaCast):
+            return f"(({self._amiga_c(node.target)})(_DashUP)({self._generate_expression(node.value)}))"
+        if isinstance(node, FunctionCall) and node.name in ("sizeof", "offsetof") and node.arguments \
+                and isinstance(node.arguments[0], VarRef) and node.arguments[0].name in self.amiga:
+            lt = self.amiga[node.arguments[0].name]
+            return str(lt.size if node.name == "sizeof" else lt.fields[node.arguments[1].name].off)
+        acc = self._amiga_field(node)
+        if acc is None:
+            return None
+        base, f = acc
+        if f.kind in ("scalar", "bptr"):
+            return f"((LONG){self._amiga_be(f, f'({base})->{f.name}')})"
+        if f.kind == "ptr":
+            return f"(({self._amiga_c(f.target)})(_DashUP){self._amiga_be(f, f'({base})->{f.name}')})"
+        return f"(&({base})->{f.name})" if f.kind == "struct" else f"(({base})->{f.name})"
+
+    def _amiga_assign(self, node) -> bool:
+        """p.f = v on an @amiga struct: True if done"""
+        from compiler.amiga_structs import SCALARS
+        target = PropertyAccess(object=node.target, property=node.member) if node.target is not None else \
+            MemberAccess(object_name=node.object_name, member=node.member)
+        acc = self._amiga_field(target)
+        if acc is None:
+            return False
+        base, f = acc
+        value = self._generate_expression(node.value)
+        if f.kind == "scalar":
+            value = f"({SCALARS[f.scalar][2]})({value})"
+        elif f.kind == "bptr":
+            value = f"(ULONG)({value})"
+        elif f.kind == "ptr":
+            value = f"_dash_a32((_DashUP)({value}))"
+        else:
+            raise ValueError(f"{f.name}: a nested @amiga struct or a table is not assigned (its fields are)")
+        self.emit(f"{self.context.indent}({base})->{f.name} = {self._amiga_be(f, value)};\n")
+        return True
+
     def visit_Program(self, node: Program):
         """Generate code for the program."""
+        self._amiga_setup(node)
         # Store custom headers from @header directives
         self.custom_headers = node.headers if node.headers else []
         self.links = list(node.links)          # @link (dashweb D10)
@@ -22723,10 +22932,10 @@ static LONG _dash_event_window_handle(void) {{
         params = []
         for p in extern.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params) if params else "void"
 
         proto = f"extern {ret_type} {extern.name}({params_str});"
@@ -22750,10 +22959,10 @@ static LONG _dash_event_window_handle(void) {{
         params = []
         for p in native.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params) if params else "void"
 
         # Generate function prototype
@@ -22927,9 +23136,9 @@ static void {struct.name}_release({c_name} *obj) {{
         params = [f"{c_name} *self"]
         for p in method.params:
             if isinstance(p, FunctionParam):
-                params.append(f"{self._dash_type_to_c(p.param_type) if p.param_type else 'LONG'} {p.name}")
+                params.append(f"{self._dash_type_to_c(p.param_type) if p.param_type else '_DashP'} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         return f"static {self._method_c_type(method)} {struct.name}_{method.name}({', '.join(params)}) __attribute__((unused));\n"
 
     def _generate_struct_method(self, struct: StructDef, method: StructMethod,
@@ -22942,10 +23151,10 @@ static void {struct.name}_release({c_name} *obj) {{
         params = [f"{c_name} *self"]
         for p in method.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params)
 
         # Generate method body
@@ -23331,6 +23540,9 @@ static {ret_type} {method_name}({params_str}) {{
             init = node.initial_value
             if init is not None and isinstance(init, NilLiteral):
                 init = None
+            from compiler.amiga_structs import ptr_target
+            if ptr_target(node.var_type) and getattr(self, "amiga", None) is not None:
+                self.var_types[node.name] = "aptr:" + ptr_target(node.var_type)
             if self._is_obj_c_type(c_type):
                 self.var_types[node.name] = (self._list_var_type(node.var_type)
                                              if c_type in ("DashArrayLong *", "DashDict *")
@@ -23457,6 +23669,8 @@ static {ret_type} {method_name}({params_str}) {{
             self._mark_num_list(node.name, self._num_list(node.value))
         elif var_type == "DashDict *":
             self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
+        elif self._amiga_of(node.value) is not None:
+            self.var_types[node.name] = "aptr:" + self._amiga_of(node.value)
         elif var_type == "APTR" and (isinstance(node.value, (LambdaFunc, FunctionRef))
                                      or self.var_types.get(getattr(node.value, "name", None)) == "func"
                                      or self._names_function(node.value)):
@@ -23567,6 +23781,12 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
+        target = self._amiga_of(node)
+        if target is not None:
+            return self._amiga_c(target)
+        if self._amiga_field(node) is not None or (isinstance(node, FunctionCall) and node.name in ("sizeof", "offsetof")
+                                                   and self._amiga_expr(node) is not None):
+            return "LONG"
         if self._is_fixed_expr(node):
             self.uses_fixed = True
             return "DashFixed"
@@ -24282,7 +24502,7 @@ static {ret_type} {method_name}({params_str}) {{
         ints = self._dict_int_keys(node.iterable.object)       # {Int: T} (Lorraine D9)
         body = self._generate_loop_body(node, "number" if ints else "string", mark)
         self.context.exit_scope()
-        head = (f"{indent}        LONG {var} = (LONG)_dk_{var}->keys[_di_{var}];\n"
+        head = (f"{indent}        LONG {var} = (LONG)(_DashP)_dk_{var}->keys[_di_{var}];\n"
                 f"{indent}        if (!_dk_{var}->used[_di_{var}]) continue;\n" if ints else
                 f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
                 f"{indent}        if (!{var}) continue;\n")
@@ -24324,11 +24544,11 @@ static {ret_type} {method_name}({params_str}) {{
         param_names = []
         for p in node.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 param_strs.append(f"{p_type} {p.name}")
                 param_names.append(p.name)
             else:
-                param_strs.append(f"LONG {p}")
+                param_strs.append(f"_DashP {p}")
                 param_names.append(p)
         params = ", ".join(param_strs) if param_strs else "void"
 
@@ -24422,14 +24642,14 @@ static {ret_type} {method_name}({params_str}) {{
                  else self._generate_expression(self._list_hint(node.value, ret)))
         if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
             # lambdas return LONG: the string leaves Dash's control
-            head = f"{indent}{{ LONG _dash_r = (LONG){self._escape(node.value, value)};\n"
+            head = f"{indent}{{ _DashP _dash_r = (_DashP){self._escape(node.value, value)};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         elif self._is_string_expr(node.value):
             self.uses_strings = True
             head = f"{indent}{{ STRPTR _dash_r = {self._str_as_temp(node.value, value)};\n"
             release = f"{indent}_dash_tmp_release_keep(_dash_fm, _dash_r);\n"
         elif self._is_obj_expr(node.value) and getattr(self, "_lambda_depth", 0):
-            head = f"{indent}{{ LONG _dash_r = (LONG)_dash_obj_escape({value});\n"
+            head = f"{indent}{{ _DashP _dash_r = (_DashP)_dash_obj_escape({value});\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         elif self._is_obj_expr(node.value):
             # hold the object while locals and temporaries go, then hand it to the
@@ -24439,6 +24659,10 @@ static {ret_type} {method_name}({params_str}) {{
             release = (f"{indent}_dash_tmp_release(_dash_fm);\n"
                        f"{indent}_dash_obj_float(_dash_r);\n")
         else:
+            # an element of an untyped list (a _DashP) returned as a struct: as the struct's pointer
+            ret_c = self._dash_type_to_c(ret, "") if ret and not getattr(self, "_lambda_depth", 0) else ""
+            if ret_c.startswith("_Dash_") and isinstance(node.value, ArrayAccess) and self._infer_c_type(node.value) == "LONG":
+                value = f"(({ret_c}){value})"
             head = f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         self.emit(head + self._frees(owned) + release + f"{indent}return _dash_r; }}\n")
@@ -24500,7 +24724,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.emit(f"{indent}DashArray_set_obj({array_name}, {index}, {value});\n")
             return
         if self._is_string_expr(node.value) or self._is_obj_expr(node.value):
-            value = f"(LONG){self._escape_any(node.value, value)}"
+            value = f"(_DashP){self._escape_any(node.value, value)}"
         self.emit(f"{indent}DashArray_set({array_name}, {index}, {value});\n")
 
     def visit_FunctionCall(self, node: FunctionCall):
@@ -24540,9 +24764,31 @@ static {ret_type} {method_name}({params_str}) {{
                 code = self._double_value(arg)
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
-                code = f"(LONG){code}"
+                code = f"(_DashP){code}"
             args.append(code)
         return ", ".join(args)
+
+    def _func_value(self, name: str) -> str:
+        """DashOS: a named function used as a Func value goes through a wrapper with the signature of every Func
+        call, _DashP f(_DashP, ...): an Int comes back with its sign in 64 bits, and its arguments are cut to their
+        types. (On the Amiga every value is 32 bits: the function itself.)"""
+        func = self.analysis.program.get_function(name)
+        if not func:
+            return name
+        types = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
+                 for p in func.params]
+        ret = self._function_c_type(func)
+        if any(c in ("float", "double", "DashFixed") for c in types + [ret]):
+            return name      # (Float, Double and Fixed through a Func: as on the Amiga)
+        wrapper = f"_dash_fv_{name}"
+        done = self.__dict__.setdefault("_func_values", set())
+        if name not in done:
+            done.add(name)
+            params = ", ".join(f"_DashP a{i}" for i in range(len(types))) or "void"
+            args = ", ".join(f"({c})a{i}" for i, c in enumerate(types))
+            body = f"{name}({args}); return 0;" if ret == "void" else f"return (_DashP){name}({args});"
+            self.lambda_funcs.append(f"\nstatic _DashP {wrapper}({params}) {{ {body} }}\n")
+        return wrapper
 
     def _names_function(self, node: ASTNode) -> bool:
         """A bare name of a user function (g = doble): its address, a Func value."""
@@ -24553,8 +24799,8 @@ static {ret_type} {method_name}({params_str}) {{
         """Name to call; function pointers (lambdas, Func params) are cast first."""
         if self.var_types.get(node.name) != "func":
             return node.name
-        params = ", ".join(["LONG"] * len(node.arguments)) or "void"
-        return f"((LONG (*)({params})){node.name})"
+        params = ", ".join(["_DashP"] * len(node.arguments)) or "void"
+        return f"((_DashP (*)({params})){node.name})"
 
     def generic_visit(self, node: ASTNode):
         """Handle unknown nodes."""
@@ -24689,6 +24935,9 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _generate_expression(self, node: ASTNode) -> str:
         """Generate code for an expression."""
+        amiga = self._amiga_expr(node)
+        if amiga is not None:
+            return amiga
         if isinstance(node, StringLiteral):
             return node.value
         elif isinstance(node, NumberLiteral):
@@ -24704,6 +24953,8 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, NilLiteral):
             return "NULL"
         elif isinstance(node, VarRef):
+            if self.target == "dashos" and self._names_function(node):
+                return self._func_value(node.name)
             return node.name
         elif isinstance(node, BinaryOp) and (self._is_fixed_expr(node) or (
                 node.operator in ("==", "!=", "<", ">", "<=", ">=")
@@ -24844,7 +25095,7 @@ static {ret_type} {method_name}({params_str}) {{
             code = f"DashDict_get{i}({self._generate_expression(node.array)}, {key})"
             if getattr(node, "default", None) is not None:      # d.get(k, default) (D65)
                 code = (f"DashDict_get_or{i}({self._generate_expression(node.array)}, "
-                        f"{key}, (LONG)({self._generate_expression(node.default)}))")
+                        f"{key}, (_DashP)({self._generate_expression(node.default)}))")
             if kind == "string":
                 return f"((STRPTR){code})"
             if kind == "array":
@@ -24957,6 +25208,8 @@ static {ret_type} {method_name}({params_str}) {{
             return self._generate_lambda(node)
         elif isinstance(node, FunctionRef):
             # Return pointer to named function
+            if self.target == "dashos":
+                return f"(APTR){self._func_value(node.name)}"
             return f"(APTR){node.name}"
         elif isinstance(node, SelfRef):
             # Reference to self in struct method
@@ -25150,8 +25403,9 @@ static {ret_type} {method_name}({params_str}) {{
         code = template.substitute(param_values)
         if hoisted:
             code = "({ " + " ".join(hoisted) + " " + code + "; })"
-        if sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR":
-            code = f"(LONG){code}"
+        if (sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR"
+                and builtin.return_type not in ("DashArrayLong *", "DashDict *")):
+            code = f"(LONG){code}"   # (a handle the program keeps as an Int: AmigaOS only)
         return code
 
     def _fast_int_op(self, node: BinaryOp) -> Optional[str]:
@@ -25216,6 +25470,8 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_MemberAssign(self, node: MemberAssign):
         """Generate code for member assignment (player.x = 10)."""
+        if self._amiga_assign(node):
+            return
         indent = self.context.indent
         value = self._generate_expression(node.value)
         owner = self._generate_expression(node.target) if node.target is not None else node.object_name
@@ -25352,14 +25608,14 @@ static {ret_type} {method_name}({params_str}) {{
         name = f.name if isinstance(f, (VarRef, FunctionRef)) else None
         func = self.analysis.program.get_function(name) if name and self.var_types.get(name) != "func" else None
         if func:
-            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
                       for p in func.params][:2]
             ret = self._function_c_type(func)
             boolean = func.return_type == "Bool"
         elif isinstance(f, LambdaFunc):
-            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
                       for p in f.params][:2]
-            ret = "LONG"
+            ret = "_DashP"
             boolean = bool(f.is_expression and self._is_bool_expr(f.body))
         else:
             params, ret, boolean = [c_type, c_type], "LONG", False
@@ -25370,7 +25626,7 @@ static {ret_type} {method_name}({params_str}) {{
         a, b = read.format("a"), read.format("b")
         test = f"{call}({b}, {a}) != 0" if boolean else f"{call}({a}, {b}) > 0"
         self.emit_global(f"static APTR _dash_sort_fn_{n};\n"
-                         f"static LONG _dash_sort_after_{n}(const LONG *a, const LONG *b) {{\n"
+                         f"static LONG _dash_sort_after_{n}(const _DashP *a, const _DashP *b) {{\n"
                          f"    return {test};\n}}\n")
         return f"(_dash_sort_fn_{n} = (APTR)({self._generate_expression(f)}), DashArray_sort({arr}, _dash_sort_after_{n}))"
 
@@ -25432,7 +25688,7 @@ static {ret_type} {method_name}({params_str}) {{
         self._icall_counter = getattr(self, "_icall_counter", 0) + 1
         o = f"_dash_io{self._icall_counter}"
         params = ["void *"] + [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type
-                               else "LONG" for p in method.params]
+                               else "_DashP" for p in method.params]
         args = [o] + [self._method_arg(method, i, a) for i, a in enumerate(node.arguments)]
         ret = self._method_c_type(method)
         return (f"({{ void *{o} = {self._nn(self._lend(node.object, obj_expr))}; "
@@ -26175,11 +26431,11 @@ static {ret_type} {method_name}({params_str}) {{
         if not node.keys:
             return f"DashDict_new({kind})"
         keys = ", ".join(self._generate_expression(k) for k in node.keys)
-        values = ", ".join(f"(LONG)({self._generate_expression(v)})" for v in node.values)
+        values = ", ".join(f"(_DashP)({self._generate_expression(v)})" for v in node.values)
         n = len(node.keys)
         if self._dict_int_keys(node):            # {1: "a"} (Lorraine D9)
-            return f"DashDict_fromi({kind}, {n}, (LONG[]){{{keys}}}, (LONG[]){{{values}}})"
-        return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (LONG[]){{{values}}})"
+            return f"DashDict_fromi({kind}, {n}, (LONG[]){{{keys}}}, (_DashP[]){{{values}}})"
+        return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (_DashP[]){{{values}}})"
 
     def _generate_array_literal(self, node: ArrayLiteral) -> str:
         """Generate code for array literal - returns a temp variable name."""
@@ -26199,16 +26455,16 @@ static {ret_type} {method_name}({params_str}) {{
             if all(consts):
                 self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
                 name = f"_dash_arrlit_{self._arrlit_counter}"
-                self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(m.group(1) for m in consts)}}};\n")
+                self.emit_global(f"static const _DashP {name}[{size}] = {{{', '.join(m.group(1) for m in consts)}}};\n")
                 return f"DashArray_from({size}, {name})"
-            return f"DashArray_from({size}, (LONG[]){{{', '.join(codes)}}})"
+            return f"DashArray_from({size}, (_DashP[]){{{', '.join(codes)}}})"
         # All constant: a static table (no stack copy; a big compound literal
         # would overflow the 4 KB stack a Kickstart 3.1 shell gives programs)
         values = [constant_int(e, self.analysis.program) for e in node.elements]
         if all(v is not None for v in values):
             self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
             name = f"_dash_arrlit_{self._arrlit_counter}"
-            self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(c_int_literal(v) for v in values)}}};\n")
+            self.emit_global(f"static const _DashP {name}[{size}] = {{{', '.join(c_int_literal(v) for v in values)}}};\n")
             return f"DashArray_from({size}, {name})"
         # Values go through a C99 compound literal; strings are stored as LONG.
         # A list of Strings, structs or arrays owns its elements (DashArray_own);
@@ -26218,11 +26474,11 @@ static {ret_type} {method_name}({params_str}) {{
         for e in node.elements:
             code = self._generate_expression(e)
             if elem:
-                elements.append(f"(LONG){code}")
+                elements.append(f"(_DashP){code}")
             else:
-                elements.append(f"(LONG){self._escape_any(e, code)}"
+                elements.append(f"(_DashP){self._escape_any(e, code)}"
                                 if self._is_string_expr(e) or self._is_obj_expr(e) else code)
-        literal = f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
+        literal = f"DashArray_from({size}, (_DashP[]){{{', '.join(elements)}}})"
         if elem:
             kind = "_DASH_ARR_STRS" if elem == "string" else "_DASH_ARR_OBJS"
             return f"DashArray_own({literal}, {kind})"
@@ -26244,7 +26500,7 @@ static {ret_type} {method_name}({params_str}) {{
             if size == 0:
                 return "DashArray_create(0)"
             codes = [f"_dash_f2l({self._generate_expression(e)})" for e in node.elements]
-            c_type, table = "LONG", None
+            c_type, table = "_DashP", None
         values = []
         for e in node.elements:
             lit, sign = (e.operand, -1) if isinstance(e, UnaryOp) and e.operator == "-" else (e, 1)
@@ -26475,10 +26731,10 @@ static {ret_type} {method_name}({params_str}) {{
         params = []
         for p in node.params:
             if isinstance(p, FunctionParam):
-                c_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
+                c_type = self._dash_type_to_c(p.param_type) if p.param_type else "_DashP"
                 params.append(f"{c_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
 
         param_str = ", ".join(params) if params else "void"
 
@@ -26492,10 +26748,10 @@ static {ret_type} {method_name}({params_str}) {{
             self._seed_param_types(node.params)
             expr = self._generate_expression(node.body)
             if self._is_string_expr(node.body) or self._is_obj_expr(node.body):
-                expr = f"(LONG){self._escape_any(node.body, expr)}"
+                expr = f"(_DashP){self._escape_any(node.body, expr)}"
             self.var_types = saved_var_types
             body = f"    return {expr};"
-            return_type = "LONG"  # Assume LONG for now
+            return_type = "_DashP"   # (any Dash value: Func values are called as _DashP f(_DashP, ...))
         else:
             # Block body
             saved_var_types = self.var_types
@@ -26513,7 +26769,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.exit_scope()
             self.var_types = saved_var_types
             self.int_key_dicts = saved_int_keys
-            return_type = "LONG" if self._returns_value(node.body) else "void"
+            return_type = "_DashP" if self._returns_value(node.body) else "void"
 
         # Generate the lambda function
         func_code = f"""
@@ -26737,6 +26993,9 @@ static {return_type} {lambda_name}({param_str}) {{
 
     def _dash_type_to_c(self, dash_type: Optional[str], default: str = "LONG") -> str:
         """Convert a Dash type annotation to its C type (struct names become pointers)."""
+        from compiler.amiga_structs import ptr_target
+        if ptr_target(dash_type):
+            return self._amiga_c(ptr_target(dash_type))
         if dash_type == "Float":
             self.uses_float = True   # any Float links Dash's soft float
         if dash_type == "Double":
@@ -27074,7 +27333,7 @@ class MultiFileGenerator:
         ret_type = self._dash_type_to_c(func.return_type) if func.return_type else "void"
         params = []
         for p in func.params:
-            p_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
+            p_type = self._dash_type_to_c(p.param_type) if p.param_type else "_DashP"
             params.append(f"{p_type} {p.name}")
         params_str = ", ".join(params) if params else "void"
         return f"{ret_type} {func.name}({params_str});"

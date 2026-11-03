@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 893 functions, 893 implemented, 0 not implemented.
+Total: 895 functions, 895 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -324,6 +324,8 @@ Total: 893 functions, 893 implemented, 0 not implemented.
 | `peek_long(addr)` | `LONG` | Read long from memory address |  |
 | `poke_byte(addr, value)` | `void` | Write byte to memory address |  |
 | `poke_word(addr, value)` | `void` | Write word to memory address |  |
+| `amiga_alloc(size)` | `LONG` | size bytes for AmigaOS structures (@amiga struct), cleared: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) on the Amiga, memory of the Amiga box (below 4 GB) on DashOS; 0 without memory |  |
+| `amiga_free(addr, size)` | `void` | Gives back what amiga_alloc gave (with the same size) |  |
 | `poke_long(addr, value)` | `void` | Write long to memory address |  |
 | `time_delay(ticks)` | `void` | Delay in ticks (50 per second) |  |
 | `time_delay_ms(ms)` | `void` | Delay in milliseconds |  |

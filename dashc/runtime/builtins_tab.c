@@ -11,6 +11,10 @@ const BuiltinInfo builtin_info[] = {
     {"abs", 1, 5, 0, 1},
     {"acos", 1, 5, 0, 1},
     {"acos", 1, 5, 0, 1},
+    {"amiga_alloc", 1, 1, 1, 0},
+    {"amiga_alloc", 1, 1, 1, 0},
+    {"amiga_free", 2, 0, 1, 0},
+    {"amiga_free", 2, 0, 1, 0},
     {"arena_alloc", 2, 1, 1, 0},
     {"arena_alloc", 2, 1, 1, 0},
     {"arena_available", 1, 1, 1, 0},
@@ -1788,7 +1792,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1786;
+const int builtin_count = 1790;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

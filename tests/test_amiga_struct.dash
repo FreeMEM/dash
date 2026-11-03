@@ -1,0 +1,51 @@
+# Test: @amiga struct (docs/AARCH64_LOOP.md, A6): la disposición del 68000 (sizeof, offsetof), campos de 1, 2 y 4
+# bytes (cortados al escribir), punteros de 32 bits, structs anidados (dan su dirección) y tablas; amiga_alloc
+# expect-out: 14 10 26 20
+# expect-out: 44 7 -5 200 -5
+# expect-out: 44 7 true
+# expect-out: vacío
+# expect-out: pri -5 nil
+@amiga struct Node
+    ln_Succ: Ptr Node
+    ln_Pred: Ptr Node
+    ln_Type: UByte
+    ln_Pri: Byte
+    ln_Name: Ptr UByte
+end
+
+@amiga struct MsgPort
+    mp_Node: Node
+    mp_Flags: UByte
+    mp_SigBit: UByte
+    mp_SigTask: Ptr Node
+    mp_Data: UWord[3]
+end
+
+func prioridad(n: Ptr Node) -> Int
+    return n.ln_Pri
+end
+
+Main
+    Print "#{sizeof(Node)} #{offsetof(Node, ln_Name)} #{sizeof(MsgPort)} #{offsetof(MsgPort, mp_Data)}"
+    m = amiga_alloc(sizeof(MsgPort))
+    p = Ptr MsgPort(m)
+    p.mp_Flags = 300
+    p.mp_SigBit = 7
+    n = p.mp_Node
+    n.ln_Pri = -5
+    n.ln_Type = 200
+    p.mp_SigTask = n
+    t = p.mp_SigTask
+    Print "#{p.mp_Flags} #{p.mp_SigBit} #{t.ln_Pri} #{t.ln_Type} #{p.mp_Node.ln_Pri}"
+    # (byte a byte: la memoria del Amiga es big-endian también en un programa little-endian de DashOS)
+    sig = peek_byte(m + 16) << 24 | peek_byte(m + 17) << 16 | peek_byte(m + 18) << 8 | peek_byte(m + 19)
+    Print "#{peek_byte(m + 14)} #{peek_byte(m + 15)} #{sig == m}"
+    if p.mp_Node.ln_Succ == nil
+        Print "vacío"
+    end
+    var q: Ptr Node = nil
+    if q == nil
+        Print "pri #{prioridad(p.mp_Node)} nil"
+    end
+    amiga_free(m, sizeof(MsgPort))
+end

@@ -19,6 +19,7 @@
 # expect-out: comodin: true true false true true true false
 # expect-out: comodin escape: true false true true
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+# dashos-skip: pasa a UTF-8 textos en Latin-1 (en DashOS ya lo son)
 
 func sb(b: Bool) -> String
     return "#{b}"

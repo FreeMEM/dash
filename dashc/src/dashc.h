@@ -91,6 +91,7 @@ enum {
     E_FLOAT,    /* val: los bits del float */
     E_FUNCREF,  /* name: una función como valor (Func), su dirección */
     E_NN,       /* a, comprobando que no es nil (lo pone gen68k.c en las llamadas a métodos) */
+    E_ACAST,    /* Ptr name(a): la dirección a como puntero a una @amiga struct (o a un Byte, UByte...) */
     S_ASSIGN, S_VAR, S_IF, S_WHILE, S_FOR, S_RETURN, S_BREAK, S_CONTINUE, S_PRINT, S_EXPR,
     S_STORE,    /* a = b con a un a[i] o un p.campo */
     S_FOREACH,  /* for name in a */
@@ -112,7 +113,10 @@ long float_bits(double d);   /* lexer.c: los bits del float de 32 bits más cerc
 #define TY_DICT 0x4000   /* + n: dict_types.v[n] */
 #define TY_NAMED 0x8000
 #define TY_ARR 0x10000
-#define IS_STRUCT(t) ((t) >= TY_STRUCT && (t) < TY_DICT)
+#define TY_APTR 0x3000   /* + n: puntero a la @amiga struct amiga.v[n]; + APTR_SCALAR + k: a un escalar (Byte...) */
+#define APTR_SCALAR 0x800
+#define IS_STRUCT(t) ((t) >= TY_STRUCT && (t) < TY_APTR)
+#define IS_APTR(t) ((t) >= TY_APTR && (t) < TY_DICT)
 #define IS_DICT(t) ((t) >= TY_DICT && (t) < TY_NAMED)
 #define IS_ARR(t) ((t) >= TY_ARR)
 #define IS_OBJ(t) (IS_STRUCT(t) || IS_DICT(t) || IS_ARR(t))
@@ -210,7 +214,24 @@ typedef struct {
     NodeList props;   /* E_* con name = la propiedad */
 } WindowDef;
 
+/* @amiga struct (docs/AARCH64_LOOP.md, A6): una vista sobre memoria con la disposición del 68000. Cada campo: su
+   tipo tal cual (ftype: "UByte", "Ptr Node", "Node", "UByte[16]"); gen68k.c pone el resto (amiga_layout) */
+enum { AF_SCALAR, AF_PTR, AF_BPTR, AF_STRUCT, AF_TABLE };
 typedef struct {
+    char *name, *ftype;
+    int line, col;
+    int kind, off, size;
+    int scalar;          /* AF_SCALAR y AF_TABLE: 1 Byte, 2 UByte, 3 Word, 4 UWord, 5 Long, 6 ULong */
+    int target;          /* AF_PTR: el tipo apuntado (TY_APTR + ...); AF_STRUCT: la struct anidada */
+} AField;
+typedef struct {
+    char *name;
+    int line, col, size, done;
+    struct { AField *v; int n, cap; } fields;
+} AStruct;
+
+typedef struct {
+    struct { AStruct *v; int n, cap; } amiga;
     struct { WindowDef *v; int n, cap; } windows;
     struct { Enum *v; int n, cap; } enums;
     struct { Struct *v; int n, cap; } structs;
@@ -253,6 +274,9 @@ typedef struct {
     uint32_t off;      /* dónde está el long que hay que reubicar */
     int hunk;          /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
     const char *sym;
+    int type;          /* AArch64: el tipo de reubicación de ELF (R_AARCH64_*); el 68000 no lo usa */
+    long addend;       /* AArch64: el sumando (en el 68000 va en los bytes del código) */
+    int in_data;       /* AArch64: el sitio está en los datos (si no, en el código) */
 } Reloc;
 
 typedef struct {
@@ -269,6 +293,7 @@ typedef struct {
 void gen_program(Program *prog, Obj *obj);
 void write_c_header(Program *prog, FILE *f);   /* dashc --cabecera */
 extern int memcheck;
+extern int elf_be;      /* AArch64: datos y ELF en big-endian (--be: bibliotecas de la caja Amiga); si no, little */
 extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info) */
 extern Buf debug_info;
 extern int profile;    /* --perfil */
@@ -285,6 +310,7 @@ extern const KeyName key_names[];
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);
+void write_elf_obj(Obj *obj, const char *out);   /* dashc para DashOS (-DDASH_A64): el objeto ELF (elf.c) */
 void link_add(const char *path);
 void prepare_runtime(const uint8_t *rt, size_t len, const char *out);   /* dashc --preparar: hunk.c */     /* @link: un objeto o una biblioteca más que enlazar */
 

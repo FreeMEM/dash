@@ -29,7 +29,7 @@ Main
     Print "#{Double(0.1) + Double(0.2)} #{total + 0.2} #{1.0e300 * Double(10)}"
     n = Double(0) / Double(0)
     Print "#{n == n} #{n != n} #{n < 1} #{n > 1} #{x > 1} #{x <= 3} #{x >= 3.0}"
-    p = Punto(Double(3))
+    p = Punto(Double(3), Double(0))
     p.y = 4
     Print "#{p.x} #{p.y} #{sqrt(p.y * p.y + 9)}"
     l = [Double(0.25), 2, 3]

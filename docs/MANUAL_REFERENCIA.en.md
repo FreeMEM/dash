@@ -4718,6 +4718,72 @@ name goes inside, for error messages: it has to be the same).
 Everything else is the same: the language, the builtins, the runtime, the programs' error messages and what they
 need to start (Kickstart 3.0 and a 68000; MUI 5 and TLS, a 68020).
 
+## 25. DashOS (AArch64)
+
+The same Dash program also compiles for DashOS, the system for the Raspberry Pi with an Amiga box inside. It is an
+AArch64 little-endian ELF, the native order of DashOS. The details and the status are in `docs/AARCH64_LOOP.md`.
+
+```bash
+make -C dashc dashc-a64                          # once: the straight compiler for ARM
+./dash --dashos program.dash -o program          # straight
+./dash --dashos --gcc program.dash -o program    # through C, with clang
+./dash --dashos --pie program.dash -o program    # loads at any address (otherwise at 0x400000)
+./dash --dashos --be program.dash -o program     # big-endian: the libraries of the Amiga box
+python3 tools/dashos_run.py program.dash         # compile it and run it on the PC (qemu-aarch64)
+```
+
+It needs `clang` (with the `aarch64-none-elf` and `aarch64_be-none-elf` targets), `ld.lld` and, to test on the PC,
+`qemu-aarch64` (and `qemu-aarch64_be` for `--be`).
+
+- The language is the same: strings, lists, dictionaries, structs, interfaces, Float, Double, Fixed.
+- So are the builtins that do not depend on AmigaOS: strings, maths, UTF-8, regular expressions, `peek_*` and
+  `poke_*`, among others. Windows, graphics, files and network will come with the DashOS API.
+- Pointers are 64-bit. An Int is still 32-bit.
+- Float and Double use the processor's FPU.
+- Strings are UTF-8 (on the Amiga, Latin-1).
+
+### Amiga structures: `@amiga struct`
+
+An `@amiga struct` is a view of memory with the 68000 layout, like the ones in the AmigaOS includes. It is not a
+Dash object: it has no reference count and is not created with `Node(...)`.
+
+```dash
+@amiga struct Node
+    ln_Succ: Ptr Node
+    ln_Pred: Ptr Node
+    ln_Type: UByte
+    ln_Pri: Byte
+    ln_Name: Ptr UByte
+end
+
+# (Task and List, also declared with @amiga struct)
+@amiga struct MsgPort
+    mp_Node: Node            # by value
+    mp_Flags: UByte
+    mp_SigBit: UByte
+    mp_SigTask: Ptr Task
+    mp_MsgList: List
+end
+
+Main
+    m = amiga_alloc(sizeof(MsgPort))
+    p = Ptr MsgPort(m)
+    p.mp_SigBit = 7
+    n = p.mp_Node                     # a nested field gives its address
+    Print offsetof(Node, ln_Name)     # 10
+    amiga_free(m, sizeof(MsgPort))
+end
+```
+
+- Field types: `Byte`, `UByte`, `Word`, `UWord`, `Long`, `ULong`, `Ptr T` (32 bits), `BPtr`, another `@amiga struct`
+  by value, and tables like `UByte[16]`. A field reads as an Int and is cut to its size when written.
+- The 68000 layout: `Byte` and `UByte` are aligned to 1 and the rest to 2. `sizeof` and `offsetof` are constants.
+- `Ptr T(x)` takes an address. Variables and parameters can be of type `Ptr T`.
+- `amiga_alloc(bytes)` and `amiga_free(address, bytes)`: `AllocMem` and `FreeMem` on the Amiga; on DashOS, memory of
+  the Amiga box, below 4 GB. On DashOS, writing an address of 4 GB or more into a `Ptr` field is a run-time error.
+- The Amiga's memory is big-endian. In a little-endian program, `Word` and `Long` fields are read and written with
+  their bytes swapped, so they hold the same values as on the Amiga. `peek_*` and `poke_*` use the processor's order.
+
 ---
 
 ## Appendix: Common Errors

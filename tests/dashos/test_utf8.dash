@@ -1,0 +1,18 @@
+# Test (solo DashOS): los textos son UTF-8, como en el fuente. length cuenta bytes; utf8_length, caracteres.
+# expect-out: vacío ñandú
+# expect-out: VACÍO ÑANDÚ
+# expect-out: árbol ñ
+# expect-out: 14 11
+# expect-out: true true
+# expect-out: canción
+Main
+    s = "vacío ñandú"
+    Print s
+    Print str_upper(s)
+    Print str_lower("ÁRBOL Ñ")
+    Print "#{s.length} #{utf8_length(s)}"
+    a = regex_match("ÑANDÚ", "ñandú", true)
+    b = str_lower("ÑANDÚ") == "ñandú"
+    Print "#{a} #{b}"
+    Print "canci" + utf8_char(243) + "n"
+end

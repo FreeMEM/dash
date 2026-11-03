@@ -55,7 +55,7 @@ int valid_utf8(const unsigned char *s)
     return 1;
 }
 
-/* Los textos van en Latin-1, como en el Amiga: de UTF-8 se pasan los caracteres
+/* Los textos van en Latin-1, como en el Amiga (en DashOS, en UTF-8): de UTF-8 se pasan los caracteres
    de U+0080 a U+00FF; los demás quedan como "?". Un #{...} corta el texto: t recibe
    los trozos (texto, código, texto...) y el token pasa a T_ISTR. */
 static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
@@ -156,6 +156,20 @@ static char *lex_string(const char **ps, int line, int col, int *len, Token *t)
             s++;
             continue;
         }
+#ifdef DASH_A64
+        /* DashOS: los textos van en UTF-8 (los de un fuente en Latin-1 se pasan) */
+        if (c >= 0x80 && lex_latin1) {
+            buf_byte(&b, 0xC0 | c >> 6);
+            buf_byte(&b, 0x80 | (c & 0x3F));
+            s++;
+            continue;
+        }
+        if (c >= 0x80) {
+            buf_byte(&b, c);
+            s++;
+            continue;
+        }
+#endif
         if (c < 0x80 || lex_latin1) {
             buf_byte(&b, c);
             s++;

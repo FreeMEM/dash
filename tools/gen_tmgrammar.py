@@ -29,11 +29,11 @@ KEYWORDS = {
     "keyword.other": ["import", "Main", "EventLoop", "On", "Print", "Wait", "Stop"],
     "keyword.other.event": ["Close", "Key", "Gadget", "Menu", "Click", "RightClick", "Inactive", "Timer"],
     "keyword.operator.logical": ["and", "or", "not"],
-    "storage.type": ["func", "fn", "struct", "interface", "enum", "Window"],
+    "storage.type": ["func", "fn", "struct", "interface", "enum", "Window", "Ptr"],
     "storage.modifier": ["const", "var", "weak", "borrow"],
     "constant.language": ["true", "false", "nil"],
     "variable.language.self": ["self"],
-    "keyword.other.directive": ["@native", "@extern", "@export", "@header", "@link", "@c", "@stack", "@workbench_output", "@catalog", "@version"],
+    "keyword.other.directive": ["@native", "@extern", "@export", "@header", "@link", "@c", "@stack", "@workbench_output", "@catalog", "@version", "@amiga"],
 }
 LIST_METHODS = ["push", "pop", "insert", "remove", "clear", "has", "keys"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"

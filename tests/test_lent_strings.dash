@@ -4,7 +4,7 @@
 # them (no copy, no free), and the texts it passes to such functions go as they are. Where something can free
 # the text (a function that writes the dictionary) it is still copied: the value read before the change stays.
 # memcheck
-# expect-c: STRPTR v = (STRPTR)(((STRPTR)DashDict_get_or(e, prop, (LONG)(""))));
+# expect-c: STRPTR v = (STRPTR)(((STRPTR)DashDict_get_or(e, prop, (_DashP)(""))));
 # expect-c: _dash_str_set_copy(&x, ((STRPTR)DashDict_get(e, _DASH_KEY("color", 0x0F3D3244UL))));
 # expect-out: 4 4 0
 # expect-out: rojo azul

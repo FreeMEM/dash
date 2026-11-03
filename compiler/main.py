@@ -524,7 +524,9 @@ class DashCompiler:
             print("Stage 3: Generating C code...", file=sys.stderr)
 
         generator = CodeGenerator(analysis)
-        c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
+        c_code = generator.generate()
+        if os.environ.get("DASH_TARGET") != "dashos":   # AmigaOS texts are Latin-1; DashOS's, UTF-8 (as in the source)
+            c_code = latin1_literals(c_code)
         self.generator = generator                       # (--cabecera: generator.c_header())
 
         if self.verbose:
@@ -723,7 +725,8 @@ class DashCompiler:
             print("Stage 4: Generating C files...", file=sys.stderr)
 
         generator = MultiFileGenerator(analysis, modules, main_path)
-        output_files = {name: latin1_literals(code) for name, code in generator.generate().items()}
+        output_files = {name: code if os.environ.get("DASH_TARGET") == "dashos" else latin1_literals(code)
+                        for name, code in generator.generate().items()}
 
         if self.verbose:
             print(f"  Generated {len(output_files)} file(s)", file=sys.stderr)

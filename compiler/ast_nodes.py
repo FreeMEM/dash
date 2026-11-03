@@ -541,6 +541,30 @@ class SelfRef(ASTNode):
 
 
 @dataclass
+class AmigaField(ASTNode):
+    """A field of an @amiga struct: its type as written (UByte, Ptr Node, Node, UByte[16]...)."""
+    name: str
+    field_type: str
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class AmigaStructDef(ASTNode):
+    """@amiga struct (docs/AARCH64_LOOP.md, A6): a view of memory with the 68000 layout, not a Dash object."""
+    name: str
+    fields: List['AmigaField'] = field(default_factory=list)
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
+class AmigaCast(ASTNode):
+    """Ptr Node(x): the address x as a pointer to an @amiga struct (or Byte, UByte...)."""
+    target: str
+    value: 'ASTNode'
+    location: Optional[SourceLocation] = None
+
+
+@dataclass
 class StructDef(ASTNode):
     """Struct definition with optional methods."""
     name: str
@@ -692,6 +716,7 @@ class Program(ASTNode):
     constants: List['ConstDecl'] = field(default_factory=list)
     global_vars: List['GlobalVarDecl'] = field(default_factory=list)
     structs: List[StructDef] = field(default_factory=list)
+    amiga_structs: List['AmigaStructDef'] = field(default_factory=list)
     enums: List['EnumDef'] = field(default_factory=list)
     windows: List[WindowDef] = field(default_factory=list)
     main: Optional[MainBlock] = None

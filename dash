@@ -3,11 +3,18 @@
 
     ./dash programa.dash -o programa [--fpu] [--cpu 68040] [--memcheck] [--stack N] [--debug]
     ./dash --gcc programa.dash -o programa [...]
+    ./dash --dashos programa.dash -o programa [--memcheck] [--gcc] [--pie] [--be]
+
 
 Sin --gcc, el compilador de Dash genera él mismo el código del Amiga (no hace falta un compilador de C).
 Con --gcc, el programa pasa a C y lo compila el gcc de Amiga de bebbo, como en la 1.x. Lo que el compilador
 propio no hace (C en el programa: @native, @c, @header; -O, --small, --multifile...) va solo por C con gcc,
-y lo dice en una línea."""
+y lo dice en una línea.
+
+Con --dashos, el programa es para DashOS (AArch64 little-endian, ELF), también directo y enlazado con ld.lld; con
+--dashos --gcc, por C con clang (docs/AARCH64_LOOP.md). Con --pie, el ejecutable funciona cargado en cualquier
+dirección (si no, va fijo en 0x400000). Con --be, big-endian: las bibliotecas de la caja Amiga.
+tools/dashos_run.py lo ejecuta en el PC con qemu-aarch64 (o qemu-aarch64_be)."""
 import os
 import re
 import subprocess
@@ -30,8 +37,35 @@ def por_c(args, motivo=None):
     return subprocess.call([sys.executable, CON_GCC, *args])
 
 
+def dashos(args):
+    """--dashos: directo (dashc-a64) o, con --gcc, por C con clang (tools/dashos_run.py, plataforma de DashOS)"""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import dashos_run
+    from pathlib import Path
+    por_gcc = "--gcc" in args
+    opts = [a for a in args if a not in ("--dashos", "--gcc")]
+    out = opts[opts.index("-o") + 1] if "-o" in opts else None
+    srcs = [a for a in opts if a.endswith(".dash")]
+    otras = [a for a in opts if a.startswith("-") and a not in ("-o", "--memcheck", "--pie", "--be")]
+    if not out or len(srcs) != 1 or otras:
+        print("uso: dash --dashos programa.dash -o programa [--memcheck] [--pie] [--be]" +
+              (f" (DashOS aún no admite {' '.join(otras)})" if otras else ""), file=sys.stderr)
+        return 1
+    if not por_gcc and not os.path.exists(os.path.join(ROOT, "dashc", "dashc-a64")):
+        print("dash: falta el compilador para DashOS; constrúyelo con: make -C dashc dashc-a64", file=sys.stderr)
+        return 1
+    ok, msg = (dashos_run.build if por_gcc else dashos_run.build_direct)(
+        Path(srcs[0]).resolve(), Path(out).resolve(), linux=False, memcheck="--memcheck" in opts,
+        pie="--pie" in opts, be="--be" in opts)
+    if not ok:
+        sys.stderr.write(msg)
+    return 0 if ok else 1
+
+
 def main():
     args = sys.argv[1:]
+    if "--dashos" in args:
+        return dashos(args)
     if "--gcc" in args:
         return por_c([a for a in args if a != "--gcc"])
     if "--version" in args:

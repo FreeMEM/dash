@@ -1,0 +1,33 @@
+# Test: funciones como valores. Una lambda o una función con nombre llamada por un Func da su Int con signo
+# (en DashOS, con punteros de 64 bits, la lambda recibía un negativo como positivo).
+# expect-out: -3
+# expect-out: menor
+# expect-out: -10
+# expect-out: 12
+# expect-out: negativo
+# expect-out: -6
+func menos(x: Int) -> Int
+    return 0 - x
+end
+
+func aplica(f: Func, v)
+    return f(v)
+end
+
+Main
+    neg = fn(x) -> x - 5
+    Print neg(2)
+    if neg(1) < 0
+        Print "menor"
+    end
+    g = menos
+    Print aplica(g, 10)
+    suma = fn(a, b) -> a + b
+    Print suma(5, 7)
+    es_neg = fn(x) -> x < 0
+    if es_neg(0 - 1)
+        Print "negativo"
+    end
+    h = menos
+    Print h(6)
+end

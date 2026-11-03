@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 893 funciones, 893 implementadas, 0 sin implementar.
+Total: 895 funciones, 895 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -324,6 +324,8 @@ Total: 893 funciones, 893 implementadas, 0 sin implementar.
 | `peek_long(addr)` | `LONG` | Lee un long (32 bits) de una dirección de memoria |  |
 | `poke_byte(addr, value)` | `void` | Escribe un byte en una dirección de memoria |  |
 | `poke_word(addr, value)` | `void` | Escribe un word (16 bits) en una dirección de memoria |  |
+| `amiga_alloc(size)` | `LONG` | size bytes para estructuras de AmigaOS (@amiga struct), a cero: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) en el Amiga, memoria de la caja Amiga (por debajo de 4 GB) en DashOS; 0 si no hay memoria |  |
+| `amiga_free(addr, size)` | `void` | Devuelve lo que dio amiga_alloc (con el mismo tamaño) |  |
 | `poke_long(addr, value)` | `void` | Escribe un long (32 bits) en una dirección de memoria |  |
 | `time_delay(ticks)` | `void` | Espera tics (50 por segundo) |  |
 | `time_delay_ms(ms)` | `void` | Espera milisegundos (de 20 en 20: lo que dura un tic) |  |

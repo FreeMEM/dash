@@ -6,7 +6,7 @@ Extensible Lark grammar for the Dash programming language.
 # Grammar with variables and expressions support
 dash_grammar_minimal = r"""
     ?start: program
-    program: (import_stmt | const_decl | global_var_decl | struct_def | interface_def | enum_def | window_def | function_def | export_func | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
+    program: (import_stmt | const_decl | global_var_decl | struct_def | amiga_struct_def | interface_def | enum_def | window_def | function_def | export_func | extern_func | native_func | header_directive | link_directive | c_block | stack_directive | workbench_output_directive | catalog_directive | version_directive | main_block | comment_line)*
 
     // Constant declaration
     // a literal or an integer expression known when compiling (const MASCARA = 1 << 4)
@@ -20,6 +20,11 @@ dash_grammar_minimal = r"""
 
     // Struct definition with optional methods
     struct_def: "struct" ID struct_impls? struct_member* "end"
+    // @amiga struct (docs/AARCH64_LOOP.md, A6): a view of memory with the 68000 layout (fields of 1, 2 and 4 bytes,
+    // 32-bit pointers, nested structs and tables), not a Dash object
+    amiga_struct_def: "@amiga" "struct" ID (amiga_field | comment_line)* "end"
+    amiga_field: ID ":" AMIGA_TYPE
+    AMIGA_TYPE: /Ptr[ \t]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*(\[[ \t]*[0-9]+[ \t]*\])?/
     struct_impls: ":" ID ("," ID)*
     // An interface (Lorraine D43): methods that structs declaring it (struct X: Orden) have, called through
     // a table in each struct's type descriptor
@@ -32,7 +37,7 @@ dash_grammar_minimal = r"""
     struct_method: "func" ID "(" param_list? ")" return_type? instruction* "end"
     // [T]: a list whose elements are T ("[String]", "[Nodo]", "[[Int]]")
     // {String: T}: a dictionary from String to T; {Int: T} from Int (Lorraine D9)
-    TYPE_NAME: "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\]/ | /\{[ \t]*(?:String|Int)[ \t]*:[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\}/
+    TYPE_NAME: /Ptr[ \t]+[A-Za-z_][A-Za-z0-9_]*/ | "Int" | "Float" | "String" | "Bool" | "Pointer" | "Func" | ID | /\[[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\]/ | /\{[ \t]*(?:String|Int)[ \t]*:[ \t]*[\[{A-Za-z_][\[\]{}:A-Za-z0-9_ \t]*\}/
 
     // Enum definition
     enum_def: "enum" ID (enum_value ","? | comment_line)* "end"
@@ -231,6 +236,7 @@ dash_grammar_minimal = r"""
          | dict_literal
          | lambda_func
          | function_call
+         | "Ptr" ID "(" expression ")" -> amiga_cast
          | ID -> var_ref
          | "(" expression ")"
 
