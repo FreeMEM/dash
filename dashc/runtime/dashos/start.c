@@ -2,6 +2,9 @@
    rt_math.s (_dash_start, _dash_quit) y _dash_init/_dash_finish de api.c. El código de dashc entra en _dashc_start,
    que llama a _dash_start(main, ficheros, pila). */
 const char *_dash_srcfiles[64];
+/* lo que el código de dashc pone al arrancar y en DashOS aún no se usa */
+LONG _dash_ac_secs;
+const char *_dash_stdiowin;
 
 
 void _dash_quit(int code)

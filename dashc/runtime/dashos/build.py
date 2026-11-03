@@ -65,6 +65,11 @@ def runtime_c(memcheck):
     text, n = re.subn(r"static const char \*const _dash_srcfiles\[\] = \{[^\n]*\};", "extern const char *_dash_srcfiles[64];", text)
     assert n == 1, "no encuentro _dash_srcfiles"
     text = text.replace("static const char *_dash_mc_where = NULL;", "const char *_dash_mc_where = NULL;")
+    # @version: program_version() da lo que pone el programa al arrancar (como gen_lib.py)
+    old = "static STRPTR _dash_program_version(void) { return (STRPTR)_DASH_VERSION; }"
+    if old in text:
+        text = text.replace(old, 'char *_dash_version = "";\n'
+                            'static STRPTR _dash_program_version(void) { return (STRPTR)_dash_version; }')
     return text
 
 
