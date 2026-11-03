@@ -273,3 +273,153 @@ static void str_to_a0(Var *vs)
     if (vs->kind == V_REG) w(0x2040 | vs->reg);        /* movea.l dN,a0 */
     else op_ea(0x2040, vs);                            /* movea.l v,a0 */
 }
+
+/* ---- la pila: los argumentos de las llamadas (de derecha a izquierda) y los valores de paso ---- */
+/* una variable o constante a la pila (pea k.w si cabe en 16 bits) */
+static void push_var(Var *v)
+{
+    if (v->kind == V_CONST && v->val >= -32768 && v->val <= 32767) {
+        w(0x4878);                                     /* pea k.w */
+        w((int)v->val);
+    } else {
+        op_ea(0x2F00, v);                              /* move.l v,-(sp) */
+    }
+    sp_depth += 4;
+}
+
+static void push_word(int k)                           /* un número de 16 bits con signo */
+{
+    w(0x4878); w(k);                                   /* pea k.w */
+    sp_depth += 4;
+}
+
+static void push_long(uint32_t k)
+{
+    w(0x2F3C); l(k);                                   /* move.l #k,-(sp) */
+    sp_depth += 4;
+}
+
+static void push_sp(void)                              /* la dirección de lo que está en lo alto de la pila */
+{
+    w(0x4857);                                         /* pea (sp) */
+    sp_depth += 4;
+}
+
+static void push_sp_off(int off)                       /* lo que hay en off(sp) */
+{
+    w(0x2F2F); w(off);                                 /* move.l off(sp),-(sp) */
+    sp_depth += 4;
+}
+
+static void push_label(int label)                      /* la dirección de una etiqueta del código */
+{
+    Fixup f;
+    w(0x4879);                                         /* pea etiqueta */
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 1;
+    f.size = 2;
+    VEC_PUSH(fixups, f);
+    add_reloc(f.at, HK_CODE, NULL);
+    l(0);
+    sp_depth += 4;
+}
+
+/* hueco para n argumentos, que se llenan con store_d0_arg (el 0 es el de más arriba) */
+static void reserve_args(int n)
+{
+    w(0x4FEF); w(-4 * n);                              /* lea -4n(sp),sp */
+    sp_depth += 4 * n;
+}
+
+static void store_d0_arg(int i)
+{
+    if (i) { w(0x2F40); w(4 * i); }                    /* move.l d0,4i(sp) */
+    else w(0x2E80);                                    /* move.l d0,(sp) */
+}
+
+/* v a una variable de los datos (sin pasar por d0) */
+static void store_var_data(Var *v, long off)
+{
+    op_ea(0x23C0, v);                                  /* move.l v,abs */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l((uint32_t)off);
+}
+
+/* ---- conversiones de d0 ---- */
+static void sext_byte(void) { w(0x4880); w(0x48C0); }  /* ext.w d0; ext.l d0 */
+
+static void int_to_fixed(void)                         /* d0 << 16 */
+{
+    w(0x4840);                                         /* swap d0 */
+    w(0x4240);                                         /* clr.w d0 */
+    d0_loaded = (uint32_t)-1;
+}
+
+static void load_str_lit(const char *str, int len)
+{
+    w(0x203C);                                         /* move.l #texto,d0 */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(add_string(str, len));
+    d0_loaded = (uint32_t)obj->code.n;
+}
+
+/* d0 (Bool) al texto "true" o "false" */
+static void bool_to_str(void)
+{
+    tst_d0();
+    w(0x6708);                                         /* beq.s +8 */
+    load_str_lit("true", 4);
+    w(0x6006);                                         /* bra.s +6 */
+    load_str_lit("false", 5);
+    d0_loaded = (uint32_t)-1;
+}
+
+/* ---- structs: el puntero en a0; cada campo, una palabra larga ---- */
+static int field_off(int f) { return 4 * f; }
+
+static void load_a0_off(int off)
+{
+    w(0x2028); w(off);                                 /* move.l off(a0),d0 */
+    d0_loaded = (uint32_t)obj->code.n;
+}
+
+/* si d0 es nil: "Error: campo de nil (en fichero:línea)", y se acaba (_dl_fail_at no vuelve) */
+static void fail_if_nil(int file, int line)
+{
+    tst_d0();
+    if (file) {
+        w(0x6612);                                     /* bne.s +18 */
+        w(0x4879); l((uint32_t)file << 16 | (line & 0xFFFF));   /* pea fichero << 16 | línea */
+    } else {
+        w(0x6610);                                     /* bne.s +16 */
+        w(0x4878); w(line & 0x7FFF);                   /* pea línea.w (fichero 0) */
+    }
+    w(0x4879);                                         /* pea "campo de nil" */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(add_string("campo de nil", 12));
+    jsr_sym("_dl_fail_at");
+}
+
+/* al empezar cada vuelta: fuera los temporales de la anterior */
+/* ¿Se hizo algún temporal desde la marca de off(sp)? Si no, salta a skip (como _dash_tmp_release: el contador de
+   temporales no pasa de la marca). Usa a0 y d1 */
+static void tmp_newer(int off, int skip)
+{
+    w(0x2079);                                         /* movea.l _dl_tmp_serial_p,a0 */
+    add_reloc((uint32_t)obj->code.n, -1, "_dl_tmp_serial_p");
+    l(0);
+    w(0x2210);                                         /* move.l (a0),d1 */
+    w(0xB2AF); w(off);                                 /* cmp.l marca(sp),d1 */
+    branch(CC_LS, skip);
+}
+
+/* pea de la variable de la ventana (un puntero a ella, para dl_window_close y dl_event_next) */
+static void pea_window(int wi)
+{
+    w(0x4879);                                         /* pea variable */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l((uint32_t)win_off[wi]);
+    sp_depth += 4;
+}
+

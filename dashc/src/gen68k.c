@@ -533,13 +533,7 @@ static void push_value(Node *n)
         return;
     }
     if (simple(n, &v)) {
-        if (v.kind == V_CONST && v.val >= -32768 && v.val <= 32767) {
-            w(0x4878);                                 /* pea k.w */
-            w((int)v.val);
-        } else {
-            op_ea(0x2F00, &v);                         /* move.l v,-(sp) */
-        }
-        sp_depth += 4;
+        push_var(&v);
         return;
     }
     value(n);
@@ -559,14 +553,6 @@ static void rt_call(const char *sym, int nargs, int tmp)
     jsr_sym(sym);
     pop_args(nargs);
     if (tmp) made_tmp = 1;
-}
-
-static void load_str_lit(const char *str, int len)
-{
-    w(0x203C);                                         /* move.l #texto,d0 */
-    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-    l(add_string(str, len));
-    d0_loaded = (uint32_t)obj->code.n;
 }
 
 /* ---- tipos sin generar código: los de las variables, y lo que devuelve una función ---- */
@@ -935,12 +921,7 @@ static void to_str(int ty)
         rt_call("_dl_fx_str", 1, 1);
         break;
     case TY_BOOL:
-        tst_d0();
-        w(0x6708);                                     /* beq.s +8 */
-        load_str_lit("true", 4);
-        w(0x6006);                                     /* bra.s +6 */
-        load_str_lit("false", 5);
-        d0_loaded = (uint32_t)-1;
+        bool_to_str();
         break;
     }
 }
@@ -1001,9 +982,7 @@ static void fix_value(Node *n)
         rt_call("_dl_fx_from_float", 1, 0);
         return;
     }
-    w(0x4840);                                         /* swap d0 */
-    w(0x4240);                                         /* clr.w d0: << 16 */
-    d0_loaded = (uint32_t)-1;
+    int_to_fixed();
 }
 
 /* el valor de n como Float (un número fijo, ya convertido al compilar) */
@@ -1077,16 +1056,14 @@ static void args_to_stack(Node **a, int n, const char *str)
         push_d0();
         return;
     }
-    w(0x4FEF); w(-4 * n);                              /* lea -4n(sp),sp */
-    sp_depth += 4 * n;
+    reserve_args(n);
     for (i = 0; i < n; i++) {
         if (str && str[i] == 2) float_value(a[i]);
         else if (str && str[i] == 3) dbl_value(a[i]);
         else if (str && str[i] == 4) fix_value(a[i]);
         else if (str && str[i]) str_value(a[i]);
         else value(a[i]);
-        if (i) { w(0x2F40); w(4 * i); }                /* move.l d0,4i(sp) */
-        else w(0x2E80);                                /* move.l d0,(sp) */
+        store_d0_arg(i);
     }
 }
 
@@ -1098,10 +1075,8 @@ static void gen_interp(Node *n)
     for (i = 0; i < np; i++) str[i] = 1;
     args_to_stack(n->args.v, np, str);
     free(str);
-    w(0x4857);                                         /* pea (sp): la dirección de los trozos */
-    sp_depth += 4;
-    w(0x4878); w(np);                                  /* pea n.w */
-    sp_depth += 4;
+    push_sp();                                         /* la dirección de los trozos */
+    push_word(np);
     rt_call("_dl_str_join", 2, 1);
     pop_args(np);
 }
@@ -1245,7 +1220,7 @@ static void str_len_inline(Node *s)
 static int gen_str_index(Node *n)
 {
     str_code_inline(n->a, n->b);
-    w(0x4880); w(0x48C0);                              /* ext.w d0; ext.l d0 */
+    sext_byte();
     return TY_CHAR;
 }
 
@@ -1373,18 +1348,7 @@ static void nil_check(void)
         rt_call("_dl_mc_nn", 1, 0);
         return;
     }
-    tst_d0();
-    if (cur_file) {
-        w(0x6612);                                     /* bne.s +18 */
-        w(0x4879); l((uint32_t)cur_file << 16 | (cur_line & 0xFFFF));   /* pea fichero << 16 | línea */
-    } else {
-        w(0x6610);                                     /* bne.s +16 */
-        w(0x4878); w(cur_line & 0x7FFF);               /* pea línea.w (fichero 0) */
-    }
-    w(0x4879);                                         /* pea "campo de nil" */
-    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-    l(add_string("campo de nil", 12));
-    jsr_sym("_dl_fail_at");                            /* no vuelve */
+    fail_if_nil(cur_file, cur_line);
 }
 
 /* el struct de n en d0 y a0, comprobado (self no: ya se comprobó al llamar al método) */
@@ -1398,8 +1362,8 @@ static Struct *struct_ptr(Node *n, const char *field, int *off, int *ftype)
     if (f < 0) return NULL;
     value(n);
     if (!(n->kind == E_VAR && !strcmp(n->name, "self"))) nil_check();
-    w(0x2040);                                         /* movea.l d0,a0 */
-    *off = 4 * f;
+    move_d0_a0();
+    *off = field_off(f);
     *ftype = st->fields.v[f].type;
     return st;
 }
@@ -1417,8 +1381,7 @@ static int gen_struct_field(Node *n)
 {
     int off, ft;
     if (!struct_ptr(n->a, n->name, &off, &ft)) return -1;
-    w(0x2028); w(off);                                 /* move.l off(a0),d0 */
-    d0_loaded = (uint32_t)obj->code.n;
+    load_a0_off(off);
     if (memcheck && field_weak(n)) {
         /* --memcheck: un weak a un objeto ya liberado es un error (y nil), como _DASH_WEAK de ./dash */
         push_d0();
@@ -1834,8 +1797,7 @@ static int push_key_hash(int t, Node *k)
     int i;
     if (dict_ikeys(t) || k->kind != E_STR || (int)strlen(k->str) != k->len) return 0;
     for (i = 0; i < k->len; i++) h = (h << 5) + h + (unsigned char)k->str[i];
-    w(0x2F3C); l(h);                                   /* move.l #hash,-(sp) */
-    sp_depth += 4;
+    push_long(h);
     return 1;
 }
 
@@ -2141,27 +2103,13 @@ static MarkScope mark_begin(void)
     return m;
 }
 
-/* al empezar cada vuelta: fuera los temporales de la anterior */
-/* ¿Se hizo algún temporal desde la marca de off(sp)? Si no, salta a skip (como _dash_tmp_release: el contador de
-   temporales no pasa de la marca). Usa a0 y d1 */
-static void tmp_newer(int off, int skip)
-{
-    w(0x2079);                                         /* movea.l _dl_tmp_serial_p,a0 */
-    add_reloc((uint32_t)obj->code.n, -1, "_dl_tmp_serial_p");
-    l(0);
-    w(0x2210);                                         /* move.l (a0),d1 */
-    w(0xB2AF); w(off);                                 /* cmp.l marca(sp),d1 */
-    branch(CC_LS, skip);
-}
-
 static void mark_release(MarkScope *m)
 {
     int skip;
     if (!m->on) return;
     skip = new_label();
     tmp_newer(sp_depth - m->sp, skip);
-    w(0x2F2F); w(sp_depth - m->sp);                    /* move.l marca(sp),-(sp) */
-    sp_depth += 4;
+    push_sp_off(sp_depth - m->sp);                     /* la marca */
     rt_call("_dl_tmp_release", 1, 0);
     def_label(skip);
 }
@@ -2749,9 +2697,7 @@ static int gen_builtin(Node *n)
             buf_long(&obj->data, 0);
         }
         if (n->args.v[0]->kind == E_VAR && simple(n->args.v[0], &src) && src.kind != V_CONST) {
-            op_ea(0x23C0, &src);                       /* move.l v,sumidero */
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l((uint32_t)sink_off);
+            store_var_data(&src, sink_off);            /* al sumidero */
             return TY_VOID;
         }
         value(n->args.v[0]);
@@ -4262,8 +4208,7 @@ static int str_set_join(Node *n, Node *e, int fresh)
         load_str_lit(parts[0]->str, parts[0]->len);
         push_d0();
         if (fresh) {
-            w(0x4878); w(0);                           /* pea 0.w: sin texto antes */
-            sp_depth += 4;
+            push_word(0);                                  /* sin texto antes */
         } else {
             v = lookup(n->name);
             op_ea(0x2F00, &v);                         /* move.l s,-(sp) */
@@ -4305,8 +4250,7 @@ static int str_set_join(Node *n, Node *e, int fresh)
     w(0x4878); w(np);                                  /* pea n.w */
     sp_depth += 4;
     if (fresh) {
-        w(0x4878); w(0);                               /* pea 0.w: sin texto antes */
-        sp_depth += 4;
+        push_word(0);                                  /* sin texto antes */
     } else {
         v = lookup(n->name);
         op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
@@ -4362,8 +4306,7 @@ static void gen_str_assign(Node *n, int ty)
     else str_value(e);
     push_d0();
     if (fresh) {
-        w(0x4878); w(0);                               /* pea 0.w: sin texto antes */
-        sp_depth += 4;
+        push_word(0);                                  /* sin texto antes */
     } else {
         v = lookup(n->name);
         op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
@@ -4393,8 +4336,7 @@ static void gen_global_inits(void)
             if (global_type[i] == TY_DOUBLE) dbl_value(g->init);
             else str_value(g->init);
             push_d0();
-            w(0x4878); w(0);                           /* pea 0.w */
-            sp_depth += 4;
+            push_word(0);
             rt_call(is_tmp_expr(g->init) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
         } else if (IS_OBJ(global_type[i])) {
             if (g->init->kind == E_LIST && g->init->args.n) gen_list(g->init, 1);
@@ -4441,8 +4383,7 @@ static void gen_obj_assign(Node *n, int tt)
     }
     push_d0();
     if (fresh) {
-        w(0x4878); w(0);                               /* pea 0.w */
-        sp_depth += 4;
+        push_word(0);
     } else {
         v = lookup(n->name);
         op_ea(0x2F00, &v);                             /* move.l v,-(sp) */
@@ -5257,31 +5198,13 @@ static int find_window(const char *name)
     return -1;
 }
 
-/* pea de la variable de la ventana (un puntero a ella, para dl_window_close y dl_event_next) */
-static void pea_window(int wi)
-{
-    w(0x4879);                                         /* pea variable */
-    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-    l((uint32_t)win_off[wi]);
-    sp_depth += 4;
-}
-
 static void gen_window_op(Node *n)
 {
     int wi = find_window(n->name);
     if (wi < 0) fatal_node(n, "la ventana %s no existe", n->name);
     if (n->val) {
-        Fixup f;
         pea_window(wi);                                /* dl_window_open(descriptor, &variable) */
-        w(0x4879);                                     /* pea descriptor */
-        f.at = (uint32_t)obj->code.n;
-        f.label = win_desc_label[wi];
-        f.abs = 1;
-        f.size = 2;
-        VEC_PUSH(fixups, f);
-        add_reloc(f.at, HK_CODE, NULL);
-        l(0);
-        sp_depth += 4;
+        push_label(win_desc_label[wi]);                /* el descriptor */
         rt_call("_dl_window_open", 2, 0);
         if (needs_area) {
             /* _dash_init_area(_dash_rp, ancho, alto), como ./dash */
