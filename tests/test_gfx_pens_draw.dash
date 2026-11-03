@@ -1,0 +1,31 @@
+# Test: gfx_pens_draw draws an image of pens (a byte a pixel) in one call, each pixel zoom x zoom.
+# A 3 x 2 image: pens 1 2 3 / 3 2 1. At zoom 1 and at zoom 4, read back with gfx_pixel_read.
+#
+# expect-c: static void _dash_gfx_pens_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG zoom)
+# expect-out: zoom 1: 1 2 3 3 2 1
+# expect-out: zoom 4: 1 1 2 3 3 1
+# expect-out: fuera: 0
+
+Window W
+    title "Pens"
+    width 200
+    height 100
+end
+
+Main
+    W.open
+    b = buffer_alloc(6)
+    var pens: [Int] = [1, 2, 3, 3, 2, 1]
+    i = 0
+    while i < 6
+        buffer_set_byte(b, i, pens[i])
+        i = i + 1
+    end
+    gfx_pens_draw(b, 3, 2, 10, 10, 1)
+    Print "zoom 1: #{gfx_pixel_read(10, 10)} #{gfx_pixel_read(11, 10)} #{gfx_pixel_read(12, 10)} #{gfx_pixel_read(10, 11)} #{gfx_pixel_read(11, 11)} #{gfx_pixel_read(12, 11)}"
+    gfx_pens_draw(b, 3, 2, 40, 20, 4)
+    # (40,20) es el píxel 0,0; (43,23) también; (44,20) el 1,0; (48,20) el 2,0; (40,24) el 0,1; (51,27) el 2,1
+    Print "zoom 4: #{gfx_pixel_read(40, 20)} #{gfx_pixel_read(43, 23)} #{gfx_pixel_read(44, 20)} #{gfx_pixel_read(48, 20)} #{gfx_pixel_read(40, 24)} #{gfx_pixel_read(51, 27)}"
+    Print "fuera: #{gfx_pixel_read(52, 20)}"
+    buffer_free(b)
+end

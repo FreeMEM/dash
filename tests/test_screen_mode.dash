@@ -1,0 +1,20 @@
+# Test: screen_open_mode opens a screen with an exact display mode (PAL low resolution, 0x21000, 320 x 256 at 32
+# colours) and fails with a mode that does not exist. (dialog_screen_mode, asl.library's screen mode requester, is
+# not tested here: it waits for the user, and keys pressed by a task_start task do not reach it; Return is not its OK
+# either. It was checked by hand with another program clicking OK: true, mode 0x29000, PAL high resolution.)
+#
+# expect-c: static BOOL _dash_open_screen_mode(LONG mode, LONG w, LONG h, LONG depth, STRPTR title)
+# expect-out: PAL 320x256x5: true 320 256 5
+# expect-out: modo que no existe: false
+
+Main
+    ok = screen_open_mode(0x21000, 320, 256, 5, "PAL")
+    if ok
+        Print "PAL 320x256x5: #{ok} #{screen_width()} #{screen_height()} #{rtg_get_depth()}"
+        screen_close()
+    else
+        Print "PAL 320x256x5: false"
+    end
+    x = "X"
+    Print "modo que no existe: #{screen_open_mode(0x7FFF1234, 320, 256, 5, x)}"
+end

@@ -1,0 +1,19 @@
+# Test: a screen of the program's own with no window: gfx_rgb8 (its C used _dash_win->WScreen and the program hung,
+# (Forja D15d); now it sets the colour of the program's screen. mouse_x and mouse_y without a window give 0.
+#
+# expect-c: static void _dash_set_color8(LONG index, LONG r, LONG g, LONG b)
+# expect-out: rojo: true
+# expect-out: raton: 0 0
+# expect-out: fin
+
+Main
+    if screen_open_custom(320, 200, 4, "Sin ventana")
+        gfx_rgb8(1, 255, 0, 0)
+        gfx_pen(1)
+        gfx_pixel(5, 5)
+        Print "rojo: #{gfx_pixel_rgb(5, 5) == 0xFF0000}"
+        Print "raton: #{mouse_x()} #{mouse_y()}"
+        screen_close()
+    end
+    Print "fin"
+end
