@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 851 functions, 851 implemented, 0 not implemented.
+Total: 853 functions, 853 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -115,6 +115,8 @@ Total: 851 functions, 851 implemented, 0 not implemented.
 | `screen_clone_wb(name)` | `BOOL` | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
 | `screen_visitors()` | `LONG` | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
 | `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
+| `screen_double_buffer()` | `BOOL` | Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0 |  |
+| `screen_flip()` | `BOOL` | Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Open a custom screen with specific dimensions and depth |  |
 | `screen_close()` | `void` | Close the screen |  |
 | `screen_width()` | `LONG` | Get the screen width in pixels |  |

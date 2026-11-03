@@ -1,0 +1,46 @@
+# Test: screen_double_buffer gives the program's own screen two buffers (Forja D25). Drawing goes to the hidden one:
+# what is on display does not change until screen_flip, which shows it and leaves the other one for drawing (with
+# what it had). Without an own screen, or on a public one (screen_clone_wb), it gives false; screen_close frees the
+# buffers (the screen's own bitmap goes back on display first).
+# expect-c: static BOOL _dash_screen_double_buffer(void)
+# expect-out: sin pantalla false false
+# expect-out: doble true true
+# expect-out: antes del cambio: en pantalla 0, escondido 2
+# expect-out: cambio true: en pantalla 2, escondido 0
+# expect-out: otro cambio true: en pantalla 5, escondido 2
+# expect-out: cerrada, cambio false
+# expect-out: pública false
+# expect-out: fin
+
+# El color del píxel x, y en el bitmap que se ve
+@native func visto(x: Int, y: Int) -> Int
+"""
+    struct RastPort rp;
+    InitRastPort(&rp);
+    rp.BitMap = _dash_screen->ViewPort.RasInfo->BitMap;
+    return ReadPixel(&rp, x, y);
+"""
+end
+
+Main
+    Print "sin pantalla #{screen_double_buffer()} #{screen_flip()}"
+    if screen_open_custom(320, 200, 3, "Doble")
+        Print "doble #{screen_double_buffer()} #{screen_double_buffer()}"
+        gfx_pen(2)
+        gfx_rect(10, 30, 59, 79)
+        Print "antes del cambio: en pantalla #{visto(20, 40)}, escondido #{gfx_pixel_read(20, 40)}"
+        c = screen_flip()
+        Print "cambio #{c}: en pantalla #{visto(20, 40)}, escondido #{gfx_pixel_read(20, 40)}"
+        gfx_pen(5)
+        gfx_rect(10, 30, 59, 79)
+        c = screen_flip()
+        Print "otro cambio #{c}: en pantalla #{visto(20, 40)}, escondido #{gfx_pixel_read(20, 40)}"
+        screen_close()
+        Print "cerrada, cambio #{screen_flip()}"
+    end
+    if screen_clone_wb("DASHDOBLE")
+        Print "pública #{screen_double_buffer()}"
+        screen_close()
+    end
+    Print "fin"
+end
