@@ -3247,19 +3247,6 @@ static int list_assigns(NodeList *l, const char *name);
 static int refs(Node *n, const char *name);
 static int list_refs(NodeList *l, const char *name);
 
-/* dbra dN,etiqueta */
-static void dbra(int reg, int label)
-{
-    Fixup f;
-    w(0x51C8 | reg);
-    f.at = (uint32_t)obj->code.n;
-    f.label = label;
-    f.abs = 0;
-    f.size = 2;
-    VEC_PUSH(fixups, f);
-    w(0);
-}
-
 /* v = k */
 static void set_imm(Var *v, long k)
 {
@@ -3468,14 +3455,13 @@ static void gen_for(Node *n)
             /* vueltas - 1 = fin - inicio (o al revés); ninguna si es negativo */
             value(n->b);
             if (from_known) {
-                if (from >= 1 && from <= 8) w(0x5180 | (from & 7) << 9);   /* subq.l #inicio,d0 */
-                else if (from) { w(0x0480); l((uint32_t)from); }          /* subi.l #inicio,d0 */
+                if (from) sub_imm(from);
                 else tst_d0();
             } else {
-                op_ea(0x9080, &vi);                    /* sub.l i,d0 */
+                sub_ea(&vi);
             }
             branch(down ? CC_GT : CC_LT, done);
-            if (down) w(0x4480);                       /* neg.l d0 */
+            if (down) neg_d0();
             vc = declare_slot("", TY_INT, &cnt_slot);
             store_d0(&vc);
         }
@@ -3524,10 +3510,10 @@ static void gen_for(Node *n)
     def_label(cont);
     if (use_i) {
         if (!step_known) {
-            if (vi.kind == V_REG) op_ea(0xD080 | vi.reg << 9, &vstep);  /* add.l paso,di */
+            if (vi.kind == V_REG) add_to_reg(vi.reg, &vstep);
             else {
                 load_var(0, &vstep);
-                op_ea(0xD180, &vi);                    /* add.l d0,i */
+                op_reg_to(0, 0, &vi);                  /* i += d0 */
             }
         } else {
             add_imm_ea(step, &vi);
@@ -3535,32 +3521,22 @@ static void gen_for(Node *n)
     }
     for (j = 0; j < nsr; j++) add_imm_ea((long)(int32_t)((uint32_t)step * (uint32_t)sr_k[j]), &sr_v[j]);
     if (counted) {
-        if (vc.kind == V_REG) {
-            dbra(vc.reg, top);
-            if (count < 0 || count > 65536) {
-                /* más de 65536 vueltas: la parte alta del contador */
-                w(0x0480 | vc.reg); l(0x10000);        /* subi.l #$10000,dN */
-                branch(CC_CC, top);
-            }
-        } else {
-            op_ea(0x5380, &vc);                        /* subq.l #1,contador */
-            branch(CC_CC, top);
-        }
+        loop_count(&vc, top, count < 0 || count > 65536);
     } else {
         int pass_n, neg = new_label();
         def_label(test);
         if (!step_known) {
             /* el paso se sabe al ejecutar: su signo dice el sentido, como en ./dash */
-            op_ea(0x4A80, &vstep);                     /* tst.l paso */
+            tst_ea(&vstep);
             branch(CC_MI, neg);
         }
         for (pass_n = 0; pass_n < (step_known ? 1 : 2); pass_n++) {
             if (pass_n) def_label(neg);
-            if (vend.kind == V_CONST) op_imm_ea(0x0C80, vend.val, &vi);     /* cmpi.l #fin,i */
-            else if (vi.kind == V_REG) op_ea(0xB080 | vi.reg << 9, &vend);  /* cmp.l fin,di */
+            if (vend.kind == V_CONST) cmp_imm_ea(vend.val, &vi);
+            else if (vi.kind == V_REG) cmp_reg_ea(vi.reg, &vend);
             else {
                 load_var(0, &vi);
-                op_ea(0xB080, &vend);                  /* cmp.l fin,d0 */
+                cmp_reg_ea(0, &vend);
             }
             branch(pass_n || down ? CC_GE : CC_LE, top);
             if (!step_known && !pass_n) branch(CC_T, done);
@@ -3858,12 +3834,12 @@ static int gen_counted_while(Node *n)
     /* vueltas - 1: fin - v (- 1 con <) o v - fin (- 1 con >); ninguna si no llega */
     value(end);
     simple(vn, &vv);
-    op_ea(0x9080, &vv);                                /* sub.l v,d0: fin - v */
+    sub_ea(&vv);                                       /* fin - v */
     switch (op) {
-    case P_LT: branch(CC_LE, done); w(0x5380); break;          /* subq.l #1,d0 */
+    case P_LT: branch(CC_LE, done); sub_imm(1); break;
     case P_LE: branch(CC_LT, done); break;
-    case P_GT: branch(CC_GE, done); w(0x4480); w(0x5380); break;   /* neg.l d0; subq.l #1,d0 */
-    default: branch(CC_GT, done); w(0x4480); break;            /* neg.l d0 */
+    case P_GT: branch(CC_GE, done); neg_d0(); sub_imm(1); break;
+    default: branch(CC_GT, done); neg_d0(); break;
     }
     vc = slot_var(slot, TY_INT);
     store_d0(&vc);
@@ -3888,11 +3864,7 @@ static int gen_counted_while(Node *n)
     leave_scope();
     loops.n--;
     use_slot(slot);
-    if (vc.kind == V_REG) {
-        dbra(vc.reg, top);
-        w(0x0480 | vc.reg); l(0x10000);                /* subi.l #$10000,dN: más de 65536 vueltas */
-        branch(CC_CC, top);
-    }
+    if (vc.kind == V_REG) loop_count(&vc, top, 1);
     def_label(done);
     leave_loop();
     mark_end(&ms);
@@ -4197,7 +4169,7 @@ static void gen_foreach_str(Node *n)
         vl = slot_var(len_slot, TY_INT);
         load_var(1, &vl);
         load_var(0, &vi);
-        w(0xB081);                                     /* cmp.l d1,d0 */
+        cmp_d0_d1();
         branch(CC_GE, done);
     }
     if (src_slot >= 0) {
@@ -4207,10 +4179,9 @@ static void gen_foreach_str(Node *n)
     load_var(0, &vs);
     tst_d0();
     branch(CC_EQ, done);                               /* nil: ninguno */
-    w(0x2040);                                         /* movea.l d0,a0 */
+    move_d0_a0();
     load_var(0, &vi);
-    w(0x1030); w(0x0800);                              /* move.b (0,a0,d0.l),d0 */
-    w(0x4880); w(0x48C0);                              /* ext.w d0; ext.l d0 (un char de C) */
+    load_char();
     if (!assigned) branch(CC_EQ, done);                /* el 0 del final */
     vx = declare(n->name, TY_CHAR);
     store_d0(&vx);
@@ -4697,14 +4668,12 @@ static void gen_keys_loop(Node *n)
     /* k = d->keys[i]; sin clave, la siguiente */
     use_slot(d_slot);
     vd = slot_var(d_slot, t);
-    if (vd.kind == V_REG) w(0x2040 | vd.reg);          /* movea.l dN,a0 */
-    else op_ea(0x2040, &vd);                           /* movea.l d,a0 */
-    w(0x2050);                                         /* movea.l (a0),a0: keys */
+    load_a0(&vd);
+    a0_deref();                                       /* keys */
     use_slot(idx_slot);
     vi = slot_var(idx_slot, TY_INT);
     load_var(0, &vi);
-    w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2) */
-    w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+    load_elem();
     branch(CC_EQ, cont);
     vx = declare(n->name, TY_STR);
     store_d0(&vx);
@@ -4741,15 +4710,15 @@ static void gen_keys_loop(Node *n)
     use_slot(d_slot);
     load_var(0, &vd);
     branch(CC_EQ, done);
-    w(0x2040);                                         /* movea.l d0,a0 */
-    w(0x4A68); w(24);                                  /* tst.w 24(a0): ikeys */
+    move_d0_a0();
+    dict_test_ikeys();
     branch(CC_NE, done);
     use_slot(idx_slot);
     if (vi.kind == V_REG) {
-        w(0xB0A8 | vi.reg << 9); w(12);                /* cmp.l 12(a0),dI: cap */
+        cmp_reg_a0(vi.reg, DICT_CAP);
     } else {
         load_var(1, &vi);
-        w(0xB2A8); w(12);                              /* cmp.l 12(a0),d1 */
+        cmp_reg_a0(1, DICT_CAP);
     }
     branch(CC_LT, top);
     def_label(done);
@@ -4796,12 +4765,12 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     va = slot_var(arr_slot, t);
     load_var(0, &va);
     branch(CC_EQ, done);                               /* (una lista nil no tiene elementos) */
-    w(0x2040);                                         /* movea.l d0,a0 */
-    w(0x2028); w(4);                                   /* move.l 4(a0),d0: el largo */
+    move_d0_a0();
+    load_a0_raw(ARR_LEN);                              /* el largo */
     branch(CC_LE, done);
     vc = declare_slot("", TY_INT, &cnt_slot);
     store_d0(&vc);
-    w(0x2010);                                         /* move.l (a0),d0: los datos */
+    load_a0_raw(ARR_DATA);                             /* los datos */
     vp = declare_slot("", TY_INT, &ptr_slot);
     store_d0(&vp);
     enter_loop();
@@ -4818,10 +4787,9 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     VEC_PUSH(loops, lp);
     use_slot(ptr_slot);
     vp = slot_var(ptr_slot, TY_INT);
-    if (vp.kind == V_REG) w(0x2040 | vp.reg);          /* movea.l dP,a0 */
-    else op_ea(0x2040, &vp);                           /* movea.l puntero,a0 */
-    w(0x2010);                                         /* move.l (a0),d0 */
-    add_imm_ea(4, &vp);                                /* addq.l #4,puntero */
+    load_a0(&vp);
+    load_a0_raw(0);                                    /* el elemento */
+    add_imm_ea(ELEM, &vp);                             /* el puntero, al siguiente */
     vx = declare(n->name, et);
     store_d0(&vx);
     gen_block(&n->body);
@@ -4889,14 +4857,12 @@ static void gen_foreach(Node *n)
     /* x = data[i] */
     use_slot(arr_slot);
     va = slot_var(arr_slot, t);
-    if (va.kind == V_REG) w(0x2040 | va.reg);          /* movea.l dN,a0 */
-    else op_ea(0x2040, &va);                           /* movea.l lista,a0 */
-    w(0x2050);                                         /* movea.l (a0),a0: los datos */
+    load_a0(&va);
+    a0_deref();                                       /* los datos */
     use_slot(idx_slot);
     vi = slot_var(idx_slot, TY_INT);
     load_var(0, &vi);
-    w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2): bytes */
-    w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+    load_elem();
     keep = IS_OBJ(et) && !loop_keeps_elements(n);
     if (keep) {
         /* un objeto, con una referencia durante la vuelta: el cuerpo podría sacarlo de la lista */
@@ -4923,13 +4889,13 @@ static void gen_foreach(Node *n)
     use_slot(arr_slot);
     load_var(0, &va);
     branch(CC_EQ, done);
-    w(0x2040);                                         /* movea.l d0,a0 */
+    move_d0_a0();
     use_slot(idx_slot);
     if (vi.kind == V_REG) {
-        w(0xB0A8 | vi.reg << 9); w(4);                 /* cmp.l 4(a0),dI */
+        cmp_reg_a0(vi.reg, ARR_LEN);
     } else {
         load_var(1, &vi);
-        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
+        cmp_reg_a0(1, ARR_LEN);
     }
     branch(CC_LT, top);
     def_label(done);

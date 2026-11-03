@@ -748,3 +748,69 @@ static void reg_div_pow2(Var *v, int sh)
     w(0xE080 | (sh & 7) << 9 | v->reg);                /* asr.l #s,dN */
     flags_set(v->reg, 1);
 }
+
+/* ---- cómo son las listas y los diccionarios por dentro (el runtime de ./dash en el 68000) ---- */
+#define ELEM 4                                         /* bytes de un elemento de lista */
+#define ARR_DATA 0                                     /* DashArrayLong: data, length */
+#define ARR_LEN 4
+#define DICT_CAP 12                                    /* DashDict: keys 0, vals 4, count 8, cap 12, ikeys 24 */
+
+static void a0_deref(void) { w(0x2050); }              /* movea.l (a0),a0 */
+static void load_a0_raw(int off)                       /* d0 = off(a0) (sin tocar lo que se sabe de d0) */
+{
+    if (off) { w(0x2028); w(off); }                    /* move.l off(a0),d0 */
+    else w(0x2010);                                    /* move.l (a0),d0 */
+}
+
+static void load_elem(void)                            /* d0 = el elemento d0 de los datos de a0 */
+{
+    w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2): bytes */
+    w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+}
+
+static void load_char(void)                            /* d0 = el byte d0 de a0, con signo (un char de C) */
+{
+    w(0x1030); w(0x0800);                              /* move.b (0,a0,d0.l),d0 */
+    w(0x4880); w(0x48C0);                              /* ext.w d0; ext.l d0 */
+}
+
+static void cmp_reg_a0(int reg, int off) { w(0xB0A8 | reg << 9); w(off); }   /* cmp.l off(a0),dN */
+static void dict_test_ikeys(void) { w(0x4A68); w(24); }                       /* tst.w 24(a0): ikeys */
+
+/* d0 -= k o v; dN += v */
+static void sub_imm(long k)
+{
+    if (k >= 1 && k <= 8) w(0x5180 | (k & 7) << 9);   /* subq.l #k,d0 */
+    else { w(0x0480); l((uint32_t)k); }                /* subi.l #k,d0 */
+}
+static void sub_ea(Var *v) { op_ea(0x9080, v); }       /* sub.l v,d0 */
+static void add_to_reg(int reg, Var *v) { op_ea(0xD080 | reg << 9, v); }   /* add.l v,dN */
+
+/* dbra dN,etiqueta */
+static void dbra(int reg, int label)
+{
+    Fixup f;
+    w(0x51C8 | reg);
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 0;
+    f.size = 2;
+    VEC_PUSH(fixups, f);
+    w(0);
+}
+
+
+/* fin de una vuelta de un bucle con contador (vc, de vueltas - 1): si quedan, a top. big: puede pasar de 65536 */
+static void loop_count(Var *vc, int top, int big)
+{
+    if (vc->kind == V_REG) {
+        dbra(vc->reg, top);
+        if (big) {
+            w(0x0480 | vc->reg); l(0x10000);           /* subi.l #$10000,dN: la parte alta del contador */
+            branch(CC_CC, top);
+        }
+    } else {
+        op_ea(0x5380, vc);                             /* subq.l #1,contador */
+        branch(CC_CC, top);
+    }
+}
