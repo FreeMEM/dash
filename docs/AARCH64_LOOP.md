@@ -301,3 +301,7 @@ Print offsetof(Node, ln_Name)  # 10
 - 2026-11-03: la FPU de verdad. Fuera `+nofp+nosimd`, `aapcs-soft`, fp-bit y `softfloat_extra.c`; el directo hace
   Float con instrucciones de la FPU (`fpu_call` en `ta64_base.c`). qemu: por C 92/294 y directo 86/294, igual que
   antes, en little y big, con y sin PIE. 2376/2376 y 396/396.
+- 2026-11-03: los cuatro ELF con FPU (e9f3852) corren en DashOS (raspi4b), solos y en el mismo núcleo que fpu_b de
+  C28: salida exacta y código 0. Son tan cortos que no se turnan; para probar el cambio de hilo con la FPU viva,
+  freemem-f9 recibe `fpu_dash.elf` (directo, 1000 vueltas) y `fpu_dash_c.elf` (C, 20000), que comprueban cada
+  vuelta y salen con 20 si algo no cuadra (en `build/dashos/le/`, sin subir).
