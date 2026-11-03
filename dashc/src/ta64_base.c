@@ -192,12 +192,47 @@ static void jsr_sym(const char *sym)
     x0_dirty = 1;
 }
 
+/* Float: el recorrido pide las funciones de libgcc del 68000 (___addsf3, ___cmpsf2...), con los bits del float en
+   x0 y x1; en ARM son instrucciones de la FPU (DashOS guarda sus registros por hilo desde C28). El resultado, como
+   un Int: 32 bits con el signo extendido. */
+static int fpu_call(const char *sym)
+{
+    static const struct { const char *name; uint32_t op; } ops[] = {
+        {"___addsf3", 0x1E212800}, {"___subsf3", 0x1E213800}, {"___mulsf3", 0x1E210800},   /* fadd/fsub/fmul */
+        {"___divsf3", 0x1E211800},                                                          /* fdiv */
+        {"___cmpsf2", 0}, {"___floatsisf", 1}, {"___fixsfsi", 2}};
+    int i;
+    for (i = 0; i < (int)(sizeof ops / sizeof ops[0]) && strcmp(sym, ops[i].name); i++) ;
+    if (i == (int)(sizeof ops / sizeof ops[0])) return 0;
+    if (ops[i].op == 1) {
+        ins(0x1E220000);                               /* scvtf s0, w0 */
+        ins(0x1E260000);                               /* fmov w0, s0 */
+    } else if (ops[i].op == 2) {
+        ins(0x1E270000);                               /* fmov s0, w0 */
+        ins(0x1E380000);                               /* fcvtzs w0, s0 (hacia 0, como C) */
+    } else {
+        ins(0x1E270000);                               /* fmov s0, w0 */
+        ins(0x1E270021);                               /* fmov s1, w1 */
+        if (ops[i].op) {
+            ins(ops[i].op);
+            ins(0x1E260000);                           /* fmov w0, s0 */
+        } else {
+            /* -1, 0 o 1; con un NaN, 1 (como __cmpsf2) */
+            ins(0x1E212000);                           /* fcmp s0, s1 */
+            ins(0x1A9F07E0);                           /* cset w0, ne */
+            ins(0x5A9F5000);                           /* csinv w0, w0, wzr, pl: -1 si es menor */
+        }
+    }
+    ins(0x93407C00);                                   /* sxtw x0, w0 */
+    x0_dirty = 1;
+    return 1;
+}
+
 static void call_sym(const char *sym, int nargs)
 {
     load_args(nargs);
+    if (fpu_call(sym)) return;
     jsr_sym(sym);
-    /* las de libgcc (Float por software: ___addsf3, ___cmpsf2...) devuelven 32 bits en w0, sin extender: como un Int */
-    if (!strncmp(sym, "___", 3)) ins(0x93407C00);      /* sxtw x0, w0 */
 }
 static void call_label(int label, int nargs) { load_args(nargs); jsr_label(label); }
 

@@ -24,9 +24,8 @@ REPO = Path(__file__).resolve().parent.parent
 RT = REPO / "runtime" / "dashos"
 sys.path.insert(0, str(REPO))
 CFLAGS = ["--target=aarch64-none-elf", "-ffreestanding", "-fno-builtin", "-O2", "-fPIE",
-          # sin registros de coma flotante ni SIMD: DashOS no los deja usar en los programas (no los guarda al
-          # cambiar de hilo); Float y Double van por software (fp-bit de runtime/softfloat, softfloat_lib)
-          "-march=armv8-a+nofp+nosimd", "-mabi=aapcs-soft",
+          # con la FPU y SIMD: DashOS guarda sus registros por hilo (C28)
+          "-march=armv8-a",
           "-fno-delete-null-pointer-checks", "-fno-strict-aliasing", "-Wno-unknown-attributes", "-Wno-pointer-sign",
           "-Werror=implicit-function-declaration", "-Werror=int-conversion",
           "-Werror=pointer-to-int-cast", "-Werror=int-to-pointer-cast", "-Werror=incompatible-pointer-types",
@@ -77,35 +76,6 @@ def _library(name, be):
     return lib
 
 
-def softfloat_lib(be=False):
-    """Float y Double por software: el fp-bit de GCC (runtime/softfloat), de precisión simple y doble"""
-    with _lib_lock:
-        src = REPO / "runtime" / "softfloat"
-        lib = out_dir(be) / "softfloat.a"
-        lib.parent.mkdir(parents=True, exist_ok=True)
-        extra = RT / "softfloat_extra.c"   # (las conversiones que fp-bit no trae)
-        newest = max(p.stat().st_mtime for p in [src / "fp-bit.c", src / "fp-bit.h", extra, Path(__file__)])
-        if lib.exists() and lib.stat().st_mtime >= newest:
-            return lib
-        # (CMPtype: clang no conoce el modo de libgcc; mira el resultado en w0: un int)
-        flags = [f for f in cflags(be) if not f.startswith("-Werror")] + [
-            f"-I{src / 'stub'}", f"-I{src}", "-w", "-D__libgcc_cmp_return__=__SI__",
-            # (clang no lo define, y sin él fp-bit cambia de orden las mitades de un double)
-            f"-D__FLOAT_WORD_ORDER__=__ORDER_{'BIG' if be else 'LITTLE'}_ENDIAN__"]
-        with tempfile.TemporaryDirectory() as tmp:
-            objs = []
-            for name, defs in (("sf", ["-DFLOAT", "-DFLOAT_ONLY"]), ("df", [])):
-                o = Path(tmp) / f"fpbit_{name}.o"
-                subprocess.run(["clang", *flags, *defs, "-c", str(src / "fp-bit.c"), "-o", str(o)], check=True)
-                objs.append(str(o))
-            o = Path(tmp) / "extra.o"
-            subprocess.run(["clang", *flags, "-c", str(extra), "-o", str(o)], check=True)
-            objs.append(str(o))
-            subprocess.run(["llvm-ar", "rcs", str(Path(tmp) / lib.name), *objs], check=True)
-            shutil.move(str(Path(tmp) / lib.name), str(lib))
-        return lib
-
-
 def link_flags(entry, stack, pie):
     """Las opciones de ld.lld: un ELF estático en 0x400000 (lo que carga hoy DashOS) o, con pie, un PIE estático
     (ET_DYN sin enlazador dinámico) que se reubica solo al arrancar (_dash_relocate de plat.c) y funciona cargado en
@@ -134,7 +104,7 @@ def build(src, exe, linux=True, memcheck=False, pie=False, be=False):
                 return False, r.stderr.replace(str(c), "prog.c")
             objs.append(str(o))
         from compiler.clibs import LIBRARIES, uses_library
-        objs += [str(library(n, be)) for n in LIBRARIES if uses_library(n, text)] + [str(softfloat_lib(be))]
+        objs += [str(library(n, be)) for n in LIBRARIES if uses_library(n, text)]
         r = subprocess.run(["ld.lld", *link_flags("_start", stack, pie), *objs, "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:
             return False, r.stderr
@@ -166,7 +136,7 @@ def build_direct(src, exe, linux=True, memcheck=False, pie=False, be=False):
                             "-o", str(plat)], capture_output=True, text=True)
         if r.returncode:
             return False, r.stderr
-        libs = [str(library(n, be)) for n in ("ryu", "fdlibm", "zlib")] + [str(softfloat_lib(be))]
+        libs = [str(library(n, be)) for n in ("ryu", "fdlibm", "zlib")]
         r = subprocess.run(["ld.lld", *link_flags("_dash_entry", 65536, pie),
                             str(o), str(rt), str(plat), *libs, str(rt), "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:

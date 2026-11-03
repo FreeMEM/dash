@@ -56,7 +56,7 @@ bibliotecas de la caja Amiga). Rama `aarch64`, worktree `.worktrees/aarch64`.
 - **Salida:** un objeto ELF64 little-endian (big-endian con `--be`; .text, .data, .rela.*, .symtab), enlazado con
   ld.lld con el runtime de dashc para ARM. Reubicaciones: CALL26 (llamadas), ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC o LDST64/32_ABS_LO12_NC
   (direcciones y variables), ABS64 (punteros en tablas y descriptores). `Reloc` lleva tipo y sumando.
-- **Sin FP ni SIMD**, como el resto de lo de DashOS.
+- **Sin FP ni SIMD** al principio; desde C28 de DashOS, con la FPU (ver "Cambio: lo nativo pasa a little-endian").
 
 ## Herramientas
 
@@ -122,7 +122,11 @@ Sustituye lo de arriba donde choque (big-endian, sin PIE, sin FPU). Referencia c
 - **Hecho (2026-11-03):** `./dash --dashos` da ELF64 little-endian por los dos caminos; `--be` da el big-endian de
   antes (la caja) y `--pie` un PIE estático. En little-endian, los campos Word y Long de una `@amiga struct` se leen
   y escriben dando la vuelta a los bytes (la memoria del Amiga es big-endian); `peek_*`/`poke_*` van en el orden del
-  procesador. Aún sin FPU: Float y Double siguen por software (siguiente paso).
+  procesador.
+- **FPU (2026-11-03):** todo se compila con `-march=armv8-a` (FP y SIMD, ABI normal) y sin fp-bit. En el camino
+  directo, las llamadas de Float que pide el recorrido (`___addsf3`, `___cmpsf2`, `___floatsisf`...) son
+  instrucciones (`fadd s0`, `fcmp`, `scvtf`...); Double sigue en su caja de texto, con las cuentas en el runtime de C
+  (ya por la FPU).
 - Las tablas de números de llave de los canales (llamadas 4 y 5) van en el orden de bytes del proceso. Los mensajes
   que escribe el kernel (como el número de interrupción) van en little-endian.
 
@@ -294,3 +298,6 @@ Print offsetof(Node, ln_Name)  # 10
   proyecciones por proceso, el cargador rechaza W+X y segmentos en la misma página, TPIDR_EL0 por hilo (TLS),
   CNTVCT_EL0 y CNTFRQ_EL0 legibles en EL0. El montón de Dash proyecta siempre más arriba y mira el error: no le
   afecta. Siguiente: la FPU de verdad (C28).
+- 2026-11-03: la FPU de verdad. Fuera `+nofp+nosimd`, `aapcs-soft`, fp-bit y `softfloat_extra.c`; el directo hace
+  Float con instrucciones de la FPU (`fpu_call` en `ta64_base.c`). qemu: por C 92/294 y directo 86/294, igual que
+  antes, en little y big, con y sin PIE. 2376/2376 y 396/396.
