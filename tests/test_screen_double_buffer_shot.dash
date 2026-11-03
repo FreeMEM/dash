@@ -1,0 +1,19 @@
+# Test: with screen_double_buffer, the picture on display is the one flipped to, not the one being drawn: red is
+# shown with screen_flip, then blue is drawn in the hidden buffer and not shown (the screenshot copies the screen's
+# bitmap, which ChangeScreenBuffer changes too).
+# expect-out: fin
+# emu-shot: 6 160 120 ff0000
+Main
+    if screen_open_custom(320, 200, 3, "Doble") and screen_double_buffer()
+        gfx_rgb8(1, 255, 0, 0)
+        gfx_rgb8(2, 0, 0, 255)
+        gfx_pen(1)
+        gfx_rect(0, 20, 319, 199)
+        screen_flip()
+        gfx_pen(2)
+        gfx_rect(0, 20, 319, 199)
+        time_delay(500)
+        screen_close()
+    end
+    Print "fin"
+end

@@ -815,6 +815,22 @@ INPUT_FUNCTIONS = {
         needs_gfx=True,
         description="Open a screen cloning Workbench display mode with custom depth"
     ),
+    "screen_double_buffer": BuiltinFunc(
+        name="screen_double_buffer",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_screen_double_buffer()",
+        needs_gfx=True,
+        description="Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0"
+    ),
+    "screen_flip": BuiltinFunc(
+        name="screen_flip",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_screen_flip()",
+        needs_gfx=True,
+        description="Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now"
+    ),
     "screen_open_custom": BuiltinFunc(
         name="screen_open_custom",
         params=["width", "height", "depth", "title"],

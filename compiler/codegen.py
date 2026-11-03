@@ -14708,6 +14708,89 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
     return _dash_screen;
 }
 
+/* screen_double_buffer (Forja D25): two bitmaps for the program's own screen (AllocScreenBuffer, V39). Drawing
+   goes to the hidden one through a RastPort of its own; screen_flip shows it (ChangeScreenBuffer) and waits until
+   the other one is no longer on display, so it is safe to draw in: a flip a frame at most */
+#define _DASH_HAS_DBUF 1
+static struct ScreenBuffer *_dash_dbuf[2] = {NULL, NULL};    /* 0: the screen's own bitmap */
+static struct MsgPort *_dash_dbuf_safe = NULL;              /* "safe to draw in the old one" */
+static struct MsgPort *_dash_dbuf_disp = NULL;              /* "the new one is on display" */
+static BOOL _dash_dbuf_safe_ok = TRUE;
+static BOOL _dash_dbuf_disp_ok = TRUE;
+static LONG _dash_dbuf_back = 1;                            /* the hidden one, where drawing goes */
+static struct RastPort _dash_dbuf_rp;
+static struct RastPort *_dash_dbuf_old_rp = NULL;
+
+static void _dash_dbuf_wait(struct MsgPort *port, BOOL *ok) {
+    if (*ok) return;
+    while (!GetMsg(port)) Wait(1UL << port->mp_SigBit);
+    *ok = TRUE;
+}
+
+/* Back to the screen's own bitmap and frees the other (screen_close, or a new screen) */
+static void _dash_dbuf_free(void) {
+    if (!_dash_screen) return;
+    if (_dash_dbuf[0] && _dash_dbuf[1]) {
+        _dash_dbuf_wait(_dash_dbuf_safe, &_dash_dbuf_safe_ok);
+        _dash_dbuf_wait(_dash_dbuf_disp, &_dash_dbuf_disp_ok);
+        if (_dash_dbuf_back == 0) {           /* buffer 1 is on display: the screen's own one goes back first */
+            while (!ChangeScreenBuffer(_dash_screen, _dash_dbuf[0])) WaitTOF();
+            _dash_dbuf_safe_ok = _dash_dbuf_disp_ok = FALSE;
+            _dash_dbuf_wait(_dash_dbuf_safe, &_dash_dbuf_safe_ok);
+            _dash_dbuf_wait(_dash_dbuf_disp, &_dash_dbuf_disp_ok);
+        }
+    }
+    if (_dash_dbuf[1]) FreeScreenBuffer(_dash_screen, _dash_dbuf[1]);
+    if (_dash_dbuf[0]) FreeScreenBuffer(_dash_screen, _dash_dbuf[0]);
+    _dash_dbuf[0] = _dash_dbuf[1] = NULL;
+    if (_dash_dbuf_safe) { DeleteMsgPort(_dash_dbuf_safe); _dash_dbuf_safe = NULL; }
+    if (_dash_dbuf_disp) { DeleteMsgPort(_dash_dbuf_disp); _dash_dbuf_disp = NULL; }
+    _dash_dbuf_safe_ok = _dash_dbuf_disp_ok = TRUE;
+    _dash_dbuf_back = 1;
+    if (_dash_rp == &_dash_dbuf_rp) _dash_rp = _dash_dbuf_old_rp;
+    _dash_dbuf_old_rp = NULL;
+}
+
+/* TRUE if the program's own screen now has two buffers (already had them too); FALSE without an own screen, on a
+   public one (other programs' windows draw on it), on AmigaOS before 3.0 or without memory */
+static BOOL _dash_screen_double_buffer(void) {
+    LONG i;
+    if (_dash_dbuf[0]) return TRUE;
+    if (!_dash_screen || !_dash_own_screen || _dash_screen_public) return FALSE;
+    if (((struct Library *)IntuitionBase)->lib_Version < 39) return FALSE;
+    _dash_dbuf_safe = CreateMsgPort();
+    _dash_dbuf_disp = CreateMsgPort();
+    if (_dash_dbuf_safe && _dash_dbuf_disp) {
+        _dash_dbuf[0] = AllocScreenBuffer(_dash_screen, NULL, SB_SCREEN_BITMAP);
+        _dash_dbuf[1] = AllocScreenBuffer(_dash_screen, NULL, SB_COPY_BITMAP);
+    }
+    if (!_dash_dbuf[0] || !_dash_dbuf[1]) { _dash_dbuf_free(); return FALSE; }
+    for (i = 0; i < 2; i++) {
+        _dash_dbuf[i]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = _dash_dbuf_safe;
+        _dash_dbuf[i]->sb_DBufInfo->dbi_DispMessage.mn_ReplyPort = _dash_dbuf_disp;
+    }
+    _dash_dbuf_back = 1;
+    _dash_dbuf_rp = _dash_screen->RastPort;   /* its pens, font and modes, on the hidden bitmap */
+    _dash_dbuf_rp.Layer = NULL;
+    _dash_dbuf_rp.BitMap = _dash_dbuf[1]->sb_BitMap;
+    _dash_dbuf_old_rp = _dash_rp;
+    _dash_rp = &_dash_dbuf_rp;
+    return TRUE;
+}
+
+/* Shows what was drawn and swaps: TRUE if it changed (FALSE without screen_double_buffer, or if Intuition could not
+   change it now, as while a menu is open; then it shows on the next flip) */
+static BOOL _dash_screen_flip(void) {
+    if (!_dash_dbuf[0] || !_dash_screen) return FALSE;
+    _dash_dbuf_wait(_dash_dbuf_disp, &_dash_dbuf_disp_ok);
+    if (!ChangeScreenBuffer(_dash_screen, _dash_dbuf[_dash_dbuf_back])) return FALSE;
+    _dash_dbuf_safe_ok = _dash_dbuf_disp_ok = FALSE;
+    _dash_dbuf_back ^= 1;
+    _dash_dbuf_rp.BitMap = _dash_dbuf[_dash_dbuf_back]->sb_BitMap;
+    _dash_dbuf_wait(_dash_dbuf_safe, &_dash_dbuf_safe_ok);
+    return TRUE;
+}
+
 /* Called just before the program's own screen closes (FONT_RUNTIME hooks in: color_pen's pens on it go back first;
    releasing them after CloseScreen, at exit, touched a freed ColorMap: Forja D15c) */
 #define _DASH_HAS_SCREEN_CLOSING 1
@@ -14723,6 +14806,7 @@ static void _dash_close_screen(void) {
         _dash_screen_public = FALSE;
     }
     if (_dash_screen && _dash_own_screen) {
+        _dash_dbuf_free();
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
         if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
         CloseScreen(_dash_screen);
@@ -20484,6 +20568,9 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
 
     /* Close any existing screen */
     if (_dash_screen && _dash_own_screen) {
+#ifdef _DASH_HAS_DBUF
+        _dash_dbuf_free();
+#endif
 #ifdef _DASH_HAS_SCREEN_CLOSING
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
 #endif

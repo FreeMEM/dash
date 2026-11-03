@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 852 funciones, 852 implementadas, 0 sin implementar.
+Total: 854 funciones, 854 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -116,6 +116,8 @@ Total: 852 funciones, 852 implementadas, 0 sin implementar.
 | `screen_clone_wb(name)` | `BOOL` | Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas |  |
 | `screen_visitors()` | `LONG` | Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno |  |
 | `screen_open(depth, title)` | `BOOL` | Abre una pantalla con el modo del Workbench y la profundidad que se diga |  |
+| `screen_double_buffer()` | `BOOL` | Dos búferes para la pantalla propia del programa: se dibuja en el escondido y screen_flip lo enseña; falso sin pantalla propia (o si es pública) o antes de AmigaOS 3.0 |  |
+| `screen_flip()` | `BOOL` | Enseña lo dibujado en el búfer escondido (screen_double_buffer) y pasa a dibujar en el otro; espera a la pantalla, un fotograma como mucho. Falso si ahora no pudo cambiarlo |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Abre una pantalla propia del tamaño y la profundidad que se digan |  |
 | `screen_close()` | `void` | Cierra la pantalla |  |
 | `screen_width()` | `LONG` | El ancho de la pantalla en píxeles |  |

@@ -100,6 +100,8 @@ DESC_ES = {
     "screen_clone_wb": "Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas",
     "screen_visitors": "Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno",
     "screen_open": "Abre una pantalla con el modo del Workbench y la profundidad que se diga",
+    "screen_double_buffer": "Dos búferes para la pantalla propia del programa: se dibuja en el escondido y screen_flip lo enseña; falso sin pantalla propia (o si es pública) o antes de AmigaOS 3.0",
+    "screen_flip": "Enseña lo dibujado en el búfer escondido (screen_double_buffer) y pasa a dibujar en el otro; espera a la pantalla, un fotograma como mucho. Falso si ahora no pudo cambiarlo",
     "screen_open_custom": "Abre una pantalla propia del tamaño y la profundidad que se digan",
     "screen_close": "Cierra la pantalla",
     "screen_width": "El ancho de la pantalla en píxeles",
