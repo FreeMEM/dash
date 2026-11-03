@@ -369,6 +369,7 @@ LONG dl_window_open(const struct DashWinDesc *d, struct Window **pvar)
         TAG_DONE);
     if (!w) _dash_exit(20);
     _dash_win = w;
+    _dash_win_decl = w;
     _dash_rp = w->RPort;
     for (i = 0; i < 16; i++)
         if (!dl_open_wins[i]) {

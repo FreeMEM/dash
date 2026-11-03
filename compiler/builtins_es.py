@@ -633,6 +633,8 @@ DESC_ES = {
     "gadget_y": "La y del centro de ese gadget, como gadget_x",
     "gadget_selected": "True si el gadget del sitio n (una casilla) está marcado",
     "screen_pixel": "El color del píxel (x, y) de la pantalla de delante; -1 fuera de ella",
+    "screen_pixel_rgb": "El color del píxel (x, y) de la pantalla de delante como 0xRRGGBB, la pinte quien la pinte; "
+                        "-1 fuera de ella. Lo que hay detrás de una ventana antes de abrirla",
     "cx_send": "Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 "
                "ocultar, 23 quitar...): 0 hecho, -1 no hay esa commodity, -2 no tiene puerto, -99 no hay "
                "commodities.library",
@@ -702,6 +704,24 @@ DESC_ES = {
     "wm_title": "El título de la ventana i del último wm_read (\"\" si no tiene)",
     "wm_task": "El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea "
                "(\"Workbench\")",
+    "wm_path": "La ruta del programa de la ventana i (el directorio del que se cargó su proceso y su nombre): \"\" si "
+               "no es de un proceso, o si la ventana se cerró desde el wm_read",
+    "file_real_path": "La ruta real de un fichero o cajón, como la nombra su sistema de ficheros (\"SYS:Utilities/Clock\" "
+                      "da \"System:Utilities/Clock\"), para compararla con wm_path: \"\" si no está",
+    "app_window": "La ventana (0 la actual, o un número de window_create) acepta iconos soltados encima desde el "
+                  "Workbench (AppWindow): true si los acepta. Los da app_drop",
+    "app_drop": "La ruta del siguiente icono soltado en una app_window, \"\" si no hay (se mira desde On Timer); "
+                "app_drop_x y app_drop_y, dónde cayó",
+    "app_drop_x": "Dónde cayó el último icono de app_drop: x desde la esquina de la ventana",
+    "app_drop_y": "Dónde cayó el último icono de app_drop: y desde la esquina de la ventana",
+    "icon_load": "El icono (.info) de un programa, cajón o fichero (la ruta sin \".info\"), con icon.library y los "
+                 "colores de la pantalla de la ventana (3.5+: iconos en color y PNG, y el de su tipo si no tiene): un "
+                 "número para icon_draw, o 0",
+    "icon_draw": "Dibuja un icono de icon_load con su esquina de arriba a la izquierda en (x, y), como el Workbench, "
+                 "sin su nombre ni marco",
+    "icon_width": "El ancho de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
+    "icon_height": "El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
+    "icon_free": "Libera un icono de icon_load (los que queden, al salir)",
     "wm_box": "De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, "
               "7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista",
     "wm_flags": "De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, "
@@ -849,6 +869,8 @@ DESC_ES = {
     "window_to_front": "Pone una ventana delante (número 0: la actual)",
     "window_to_back": "Pone una ventana detrás (número 0: la actual)",
     "window_activate": "Activa una ventana (número 0: la actual)",
+    "window_use": "Hace actual una ventana, en la que dibujan los gfx_: un número de window_create, o 0 la ventana "
+                  "declarada (Window X ... end) abierta la última; false si no está abierta",
     "screen_to_front": "Pone delante la pantalla propia",
     "screen_to_back": "Pone detrás la pantalla propia",
     "gadget_id": "El número del último gadget usado (para el On Gadget del EventLoop)",

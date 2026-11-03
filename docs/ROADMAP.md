@@ -1033,6 +1033,10 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       que por C en casi todo (PR #79, 2.0.2)
 - [x] El C de `@link` por los dos caminos: `./dash --gcc` da las `dl_*` y `db_nombre` que ese C llama, y
       `./dash --gcc --cabecera` escribe sus structs (D82, para Tachyon y el camino a PowerPC)
+- [x] Lo que necesita el dock de Trasfondo 2.0 (2026-11-03), en los dos caminos: `wm_path` (la ruta del programa de
+      una ventana), `file_real_path`, `screen_pixel_rgb` (lo que hay detrás de una ventana), `app_window` y `app_drop`
+      (iconos soltados desde el Workbench), `icon_load`/`icon_draw` (iconos .info con icon.library, sin datatypes) y
+      `window_use` (volver a la ventana declarada). `tests/test_app_window.dash`
 
 ## Notas y Decisiones
 

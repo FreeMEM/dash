@@ -3120,6 +3120,10 @@ INTUITION_EXPANDED = {
         c_template="_dash_window_activate(${handle})",
         description="Activate window (handle 0: current window)"
     ),
+    "window_use": BuiltinFunc(
+        name="window_use", params=["handle"], return_type="BOOL", c_template="_dash_window_use(${handle})",
+        description="Makes a window the current one, the one gfx_ draws in: a handle of window_create, or 0 the "
+                    "declared window (Window X ... end) opened last; false if it is not open"),
 
     # Screens (legacy - use screen_open/screen_close from INPUT_FUNCTIONS instead)
     "screen_to_front": BuiltinFunc(
@@ -4841,6 +4845,49 @@ TASK_FUNCTIONS = {
         name="wm_task", params=["i"], return_type="STRPTR", c_template="_dash_wm_task_of(${i})",
         description="The program of window i: the command of a Shell process (without its path), else its task's "
                     "name (\"Workbench\")"),
+    "wm_path": BuiltinFunc(
+        name="wm_path", params=["i"], return_type="STRPTR", c_template="_dash_wm_path_of(${i})",
+        description="The path of the program of window i (its directory, the one its process was loaded from, and "
+                    "its name): \"\" if it is not a process's, or the window closed since wm_read"),
+    "file_real_path": BuiltinFunc(
+        name="file_real_path", params=["path"], return_type="STRPTR", c_template="_dash_file_real_path(${path})",
+        reads_only=True,
+        description="The real path of a file or drawer as its filesystem names it (\"SYS:Utilities/Clock\" gives "
+                    "\"System:Utilities/Clock\"), to compare it with wm_path: \"\" if it is not there"),
+    "app_window": BuiltinFunc(
+        name="app_window", params=["handle"], return_type="BOOL", c_template="_dash_app_window(${handle})",
+        description="The window (0 the current one, or a handle of window_create) takes icons dropped on it from the "
+                    "Workbench (AppWindow): true if it does. app_drop gives them"),
+    "app_drop": BuiltinFunc(
+        name="app_drop", params=[], return_type="STRPTR", c_template="_dash_app_drop()",
+        description="The path of the next icon dropped on an app_window, \"\" if none (poll it from On Timer); "
+                    "app_drop_x and app_drop_y, where it fell"),
+    "app_drop_x": BuiltinFunc(
+        name="app_drop_x", params=[], return_type="LONG", c_template="_dash_app_drop_x()",
+        description="Where the last icon of app_drop fell: x from the window's corner"),
+    "app_drop_y": BuiltinFunc(
+        name="app_drop_y", params=[], return_type="LONG", c_template="_dash_app_drop_y()",
+        description="Where the last icon of app_drop fell: y from the window's corner"),
+    "icon_load": BuiltinFunc(
+        name="icon_load", params=["path"], return_type="LONG", c_template="_dash_icon_load(${path})",
+        reads_only=True,
+        description="The icon (.info) of a program, drawer or file (path without \".info\"), by icon.library, with "
+                    "the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type "
+                    "if it has none): a number for icon_draw, or 0"),
+    "icon_draw": BuiltinFunc(
+        name="icon_draw", params=["icon", "x", "y"], return_type="void", c_template="_dash_icon_draw(${icon}, ${x}, ${y})",
+        needs_gfx=True,
+        description="Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its "
+                    "name or frame"),
+    "icon_width": BuiltinFunc(
+        name="icon_width", params=["icon"], return_type="LONG", c_template="_dash_icon_size(${icon}, 0)",
+        description="The width of an icon of icon_load as icon_draw draws it (0 without it)"),
+    "icon_height": BuiltinFunc(
+        name="icon_height", params=["icon"], return_type="LONG", c_template="_dash_icon_size(${icon}, 1)",
+        description="The height of an icon of icon_load as icon_draw draws it (0 without it)"),
+    "icon_free": BuiltinFunc(
+        name="icon_free", params=["icon"], return_type="void", c_template="_dash_icon_free(${icon})",
+        description="Frees an icon of icon_load (the ones left, at exit)"),
     "wm_box": BuiltinFunc(
         name="wm_box", params=["i", "what"], return_type="LONG", c_template="_dash_wm_box_of(${i}, ${what})",
         description="Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum "
@@ -5622,6 +5669,11 @@ SIMINPUT_FUNCTIONS = {
         name="screen_pixel", params=["x", "y"], return_type="LONG", c_template="_dash_screen_pixel(${x}, ${y})",
         needs_gfx=True,
         description="The pen of the pixel (x, y) of the screen in front; -1 outside it"),
+    "screen_pixel_rgb": BuiltinFunc(
+        name="screen_pixel_rgb", params=["x", "y"], return_type="LONG",
+        c_template="_dash_screen_pixel_rgb(${x}, ${y})", needs_gfx=True, reads_only=True,
+        description="The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside "
+                    "it. What is behind a window before it opens"),
     "cx_send": BuiltinFunc(
         name="cx_send", params=["name", "command"], return_type="LONG", c_template="_dash_cx_send(${name}, ${command})",
         reads_only=True,
@@ -5807,13 +5859,14 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
     "image_decoded_free", "image_from_decoded"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
-    "wm_read", "wm_id", "wm_title", "wm_task", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height"])
+    "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
+    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "file_real_path", "app_window",
+    "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
     "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",
-    "gadget_selected", "screen_pixel", "cx_send"])
+    "gadget_selected", "screen_pixel", "screen_pixel_rgb", "cx_send"])
 
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
