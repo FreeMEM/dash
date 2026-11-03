@@ -197,4 +197,6 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
     en `SLOT`, no en 4.
   - `runtime/dashos/portables.py`: 77 de 851 builtins compilan hoy para DashOS (textos, matemáticas, UTF-8,
     expresiones regulares...); van en el runtime directo como `db_*`. Los demás son de AmigaOS (A7).
+- 2026-11-03: el ELF del camino directo (`./dash --dashos`) corre en DashOS (QEMU raspi4b, FP bloqueada en EL0):
+  "hola 12", "a5", código 0. Los 31 tests de dashc que compilan por C dan lo mismo por el directo; 86 de los de Dash.
 
