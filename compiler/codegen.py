@@ -2877,12 +2877,45 @@ static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
     _dash_rgb_draw_scaled(buffer, w, h, x, y, w, h);
 }
 
+/* Sets bits x0 to x1 - 1 of a plane row (bit 7 of byte 0 is the first pixel) */
+static void _dash_bits_set(UBYTE *r, LONG x0, LONG x1) {
+    LONG b0 = x0 >> 3, b1 = (x1 - 1) >> 3;
+    UBYTE m0 = 0xFF >> (x0 & 7), m1 = (UBYTE)(0xFF << (7 - ((x1 - 1) & 7)));
+    if (b0 == b1) { r[b0] |= m0 & m1; return; }
+    r[b0++] |= m0;
+    while (b0 < b1) r[b0++] = 0xFF;
+    r[b1] |= m1;
+}
+
+/* For zoom 2 to 4: each plane byte (8 pixels) made zoom bytes, each bit zoom times. Built the first time */
+static UBYTE _dash_zoom_tab[3][256][4];
+static BOOL _dash_zoom_ok[3];
+static UBYTE *_dash_zoom_bytes(LONG zoom, UBYTE v) {
+    UBYTE (*t)[4] = _dash_zoom_tab[zoom - 2];
+    if (!_dash_zoom_ok[zoom - 2]) {
+        LONG i, j, k;
+        for (i = 0; i < 256; i++) {
+            ULONG acc = 0;
+            for (j = 7; j >= 0; j--)
+                for (k = 0; k < zoom; k++) acc = (acc << 1) | ((i >> j) & 1);
+            acc <<= 32 - 8 * zoom;
+            t[i][0] = acc >> 24; t[i][1] = acc >> 16; t[i][2] = acc >> 8; t[i][3] = acc;
+        }
+        _dash_zoom_ok[zoom - 2] = TRUE;
+    }
+    return t[v];
+}
+
 /* gfx_pens_draw (Forja D15b): an image of pens (one byte a pixel, rows one after another) at x, y, each pixel a
-   zoom x zoom square. On a planar bitmap (ECS/AGA) each source row is turned into planes here, in a band of zoom
-   lines, and the blitter copies the band (BltBitMapRastPort: clipped by the window's layer). WriteChunkyPixels
-   does that pixel by pixel in the OS and was slower than RectFill runs (A1200: 32x32 at zoom 4, 363 ms against
-   172). On RTG (a chunky bitmap) WriteChunkyPixels is the fast way. Without either, runs of RectFill. Without a
-   layer (a screen's RastPort) nothing is written outside the bitmap. */
+   zoom x zoom square. On a planar bitmap (ECS/AGA) the image is put in planes here, in a bitmap of its own, and the
+   blitter copies it in one go (BltBitMapRastPort: clipped by the window's layer); if the whole image does not fit
+   in chip memory, it goes in bands of fewer rows. On an A1200 with no fast memory every pixel touched costs a few
+   microseconds, so only the source pixels are turned into planes (8 at a time, the 8 x 8 bits turned over), and
+   zoom 2 to 4 widens each plane byte with a table; with a bigger zoom the image is small, and each run of one pen
+   sets its bits at once. One blit for each row cost 0.4 ms a row (Forja task 19). WriteChunkyPixels does that pixel
+   by pixel in the OS and was slower than RectFill runs (A1200: 32x32 at zoom 4, 363 ms against 172). On RTG (a
+   chunky bitmap) WriteChunkyPixels is the fast way. Without either, runs of RectFill. Without a layer (a screen's
+   RastPort) nothing is written outside the bitmap. */
 static void _dash_gfx_pens_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG zoom) {
     UBYTE *pix = (UBYTE *)buffer;
     LONG sx, sy, r, dw, depth = 0;
@@ -2899,27 +2932,80 @@ static void _dash_gfx_pens_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y, LON
         if (depth > 8) planar = FALSE;
     }
     if (planar) {
-        struct BitMap *band = AllocBitMap(dw, zoom, depth, BMF_CLEAR, NULL);
+        struct BitMap *band = NULL;
+        LONG rows = h;                                  /* source rows in a band: all of them if they fit */
+        while (rows > 0 && !(band = AllocBitMap(dw, rows * zoom, depth, 0, NULL))) rows /= 2;
         if (band) {
-            LONG bpr = band->BytesPerRow, p;
+            LONG bpr = band->BytesPerRow, nb = (dw + 7) >> 3, p, line = 0;
             for (sy = 0; sy < h; sy++) {
                 UBYTE *src = pix + sy * w;
-                WaitBlit();                          /* the blitter may still be reading the last band */
-                for (p = 0; p < depth; p++) memset(band->Planes[p], 0, bpr);
-                for (sx = 0; sx < w; sx++) {
-                    UBYTE c = src[sx];
-                    LONG dx = sx * zoom, e = dx + zoom;
-                    if (!c) continue;
-                    for (; dx < e; dx++) {
-                        UBYTE bit = 0x80 >> (dx & 7);
-                        LONG o = dx >> 3;
-                        for (p = 0; p < depth; p++) if (c & (1 << p)) band->Planes[p][o] |= bit;
+                LONG k = sy % rows;
+                if (k == 0) {
+                    if (sy > 0) BltBitMapRastPort(band, 0, 0, _dash_rp, x, y + (sy - rows) * zoom, dw, rows * zoom, 0xC0);
+                    WaitBlit();                          /* the blitter may still be reading the last band */
+                    line = 0;
+                }
+                if (zoom <= 4) {                         /* 8 source pixels at a time */
+                    LONG o, ob = 0;
+                    for (sx = 0; sx < w; sx += 8, ob += zoom) {
+                        UBYTE *e = src + sx, part[8], pl[8];
+                        ULONG a, b, t;
+                        if (w - sx < 8) {                /* the last ones, made 8 with pen 0 */
+                            for (o = 0; o < 8; o++) part[o] = o < w - sx ? e[o] : 0;
+                            e = part;
+                        }
+                        a = ((ULONG)e[0] << 24) | ((ULONG)e[1] << 16) | ((ULONG)e[2] << 8) | e[3];
+                        b = ((ULONG)e[4] << 24) | ((ULONG)e[5] << 16) | ((ULONG)e[6] << 8) | e[7];
+                        /* the 8 x 8 bits turned over (Hacker's Delight, transpose8): byte i of the result has
+                           bit 7 - i of each pixel, the first pixel on the left */
+                        t = (a ^ (a >> 7)) & 0x00AA00AAUL; a = a ^ t ^ (t << 7);
+                        t = (b ^ (b >> 7)) & 0x00AA00AAUL; b = b ^ t ^ (t << 7);
+                        t = (a ^ (a >> 14)) & 0x0000CCCCUL; a = a ^ t ^ (t << 14);
+                        t = (b ^ (b >> 14)) & 0x0000CCCCUL; b = b ^ t ^ (t << 14);
+                        t = (a & 0xF0F0F0F0UL) | ((b >> 4) & 0x0F0F0F0FUL);
+                        b = ((a << 4) & 0xF0F0F0F0UL) | (b & 0x0F0F0F0FUL);
+                        pl[7] = t >> 24; pl[6] = t >> 16; pl[5] = t >> 8; pl[4] = t;
+                        pl[3] = b >> 24; pl[2] = b >> 16; pl[1] = b >> 8; pl[0] = b;
+                        if (zoom == 1) {
+                            for (p = 0; p < depth; p++) band->Planes[p][line + ob] = pl[p];
+                        } else {
+                            LONG n = nb - ob < zoom ? nb - ob : zoom;
+                            for (p = 0; p < depth; p++) {
+                                UBYTE *z = _dash_zoom_bytes(zoom, pl[p]), *d = band->Planes[p] + line + ob;
+                                for (o = 0; o < n; o++) d[o] = z[o];
+                            }
+                        }
+                    }
+                } else {                                 /* runs of one pen */
+                    for (p = 0; p < depth; p++) {
+                        UBYTE *d = band->Planes[p] + line;
+                        LONG i;
+                        for (i = 0; i < nb; i++) d[i] = 0;
+                    }
+                    for (sx = 0; sx < w; ) {
+                        UBYTE c = src[sx];
+                        LONG e = sx + 1;
+                        while (e < w && src[e] == c) e++;
+                        if (c)
+                            for (p = 0; p < depth; p++)
+                                if (c & (1 << p)) _dash_bits_set(band->Planes[p] + line, sx * zoom, e * zoom);
+                        sx = e;
                     }
                 }
-                for (p = 0; p < depth; p++)
-                    for (r = 1; r < zoom; r++) CopyMem(band->Planes[p], band->Planes[p] + r * bpr, bpr);
-                BltBitMapRastPort(band, 0, 0, _dash_rp, x, y + sy * zoom, dw, zoom, 0xC0);
+                if (zoom > 1) {                          /* the row zoom times: by words (rows are word aligned) */
+                    LONG nw = (nb + 1) >> 1, i;
+                    for (p = 0; p < depth; p++) {
+                        UWORD *f = (UWORD *)(band->Planes[p] + line), *d = f;
+                        for (r = 1; r < zoom; r++) {
+                            d += bpr >> 1;
+                            for (i = 0; i < nw; i++) d[i] = f[i];
+                        }
+                    }
+                }
+                line += zoom * bpr;
             }
+            sy = (h - 1) / rows * rows;                  /* the last band */
+            BltBitMapRastPort(band, 0, 0, _dash_rp, x, y + sy * zoom, dw, (h - sy) * zoom, 0xC0);
             WaitBlit();
             FreeBitMap(band);
             return;
