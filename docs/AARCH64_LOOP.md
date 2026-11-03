@@ -335,3 +335,6 @@ Print offsetof(Node, ln_Name)  # 10
   revocar sobre memoria quita las proyecciones hechas con la copia revocable. Pendiente (mejora, no urgente): el
   montón de `plat.c` no devuelve nunca sus trozos; con memoria_quitar podría soltar los bloques grandes libres, y
   `amiga_free` su memoria de la caja.
+- 2026-11-03: DashOS C48 (28c7819): lo que escribe un programa sale por un registro de 64 KB y la consola (un
+  proceso), con "│ " delante de cada línea; si el registro se llena, lo nuevo se pierde. Para comparar la salida en
+  DashOS con la de qemu, quitar esa marca. 22 memoria_dma y 23 registro_leer son para controladores.
