@@ -1,0 +1,87 @@
+# Test: tile maps (Forja's map editor). Cells with mirror bits, layers (name, type, visible, add, remove, move),
+# resize, save and load as IFF FORM FMAP, and tilemap_draw / tilemap_draw_masked with a BOB made here as the
+# tileset: 3 tiles of 16 (1: pen 1 with the left column pen 2; 2: pen 2 with the bottom row pen 3; 3: the left half
+# pen 3, the right half colour 0).
+#
+# expect-c: static void _dash_tilemap_draw(LONG id, LONG l, LONG bob, LONG tx, LONG ty, LONG tw, LONG th, LONG x, LONG y,
+# expect-out: creado: true 10 8 16 2
+# expect-out: tiles de 12: false
+# expect-out: celdas: 1 16385 32770 0 0
+# expect-out: capas: fondo 0 true / choques 1 false
+# expect-out: añadir: 2 3, quitar: true 2, la única: false
+# expect-out: mover: choques fondo
+# expect-out: mayor: true 12 9 1 32770 0
+# expect-out: guardar: true
+# expect-out: cargar: true 12 9 16 2 tiles.iff choques fondo 1 32770 7
+# expect-out: no es un mapa: false 0
+# expect-out: pinta: 2 1 2 1 3 2 0
+# expect-out: con máscara: 3 1
+# expect-out: fin
+
+Window W
+    title "Mapa"
+    width 300
+    height 120
+end
+
+Main
+    Print "creado: #{tilemap_create(0, 10, 8, 16, 2)} #{tilemap_width(0)} #{tilemap_height(0)} #{tilemap_tile_size(0)} #{tilemap_layers(0)}"
+    Print "tiles de 12: #{tilemap_create(1, 4, 4, 12, 1)}"
+    tilemap_set(0, 0, 0, 0, 1)
+    tilemap_set(0, 0, 1, 0, 1 + 16384)
+    tilemap_set(0, 0, 2, 0, 2 + 32768)
+    tilemap_set(0, 0, 10, 0, 5)
+    Print "celdas: #{tilemap_get(0, 0, 0, 0)} #{tilemap_get(0, 0, 1, 0)} #{tilemap_get(0, 0, 2, 0)} #{tilemap_get(0, 0, 3, 0)} #{tilemap_get(0, 0, 10, 0)}"
+    tilemap_layer_set(0, 0, "fondo", 0, true)
+    tilemap_layer_set(0, 1, "choques", 1, false)
+    Print "capas: #{tilemap_layer_name(0, 0)} #{tilemap_layer_type(0, 0)} #{tilemap_layer_visible(0, 0)} / #{tilemap_layer_name(0, 1)} #{tilemap_layer_type(0, 1)} #{tilemap_layer_visible(0, 1)}"
+    a = tilemap_layer_add(0)
+    n = tilemap_layers(0)
+    q = tilemap_layer_remove(0, a)
+    Print "añadir: #{a} #{n}, quitar: #{q} #{tilemap_layers(0)}, la única: #{tilemap_create(2, 2, 2, 8, 1) and tilemap_layer_remove(2, 0)}"
+    tilemap_free(2)
+    tilemap_layer_move(0, 1, 0)
+    Print "mover: #{tilemap_layer_name(0, 0)} #{tilemap_layer_name(0, 1)}"
+    tilemap_layer_move(0, 0, 1)
+    tilemap_set(0, 1, 9, 7, 7)
+    r = tilemap_resize(0, 12, 9)
+    Print "mayor: #{r} #{tilemap_width(0)} #{tilemap_height(0)} #{tilemap_get(0, 0, 0, 0)} #{tilemap_get(0, 0, 2, 0)} #{tilemap_get(0, 0, 11, 8)}"
+    tilemap_set_tileset(0, "tiles.iff")
+    fichero = "RAM:prueba.fmap"
+    Print "guardar: #{tilemap_save(0, fichero)}"
+    tilemap_free(0)
+    c = tilemap_load(3, fichero)
+    Print "cargar: #{c} #{tilemap_width(3)} #{tilemap_height(3)} #{tilemap_tile_size(3)} #{tilemap_layers(3)} #{tilemap_tileset(3)} #{tilemap_layer_name(3, 1)} #{tilemap_layer_name(3, 0)} #{tilemap_get(3, 0, 0, 0)} #{tilemap_get(3, 0, 2, 0)} #{tilemap_get(3, 1, 9, 7)}"
+    file_write_text("RAM:no.fmap", "FORM nada")
+    no = "RAM:no.fmap"
+    Print "no es un mapa: #{tilemap_load(4, no)} #{tilemap_width(4)}"
+
+    # el tileset: un BOB de 48 x 16, tres fotogramas
+    W.open
+    bob_create(0, 48, 16, 2)
+    bitmap_draw_to(0)
+    gfx_pen(1)
+    gfx_rect(0, 0, 15, 15)
+    gfx_pen(2)
+    gfx_rect(0, 0, 0, 15)
+    gfx_rect(16, 0, 31, 15)
+    gfx_pen(3)
+    gfx_rect(16, 15, 31, 15)
+    gfx_rect(32, 0, 39, 15)
+    gfx_pen(0)
+    gfx_rect(40, 0, 47, 15)
+    bitmap_draw_screen()
+    # la capa 0 del mapa cargado: tile 1, tile 1 en espejo H, tile 2 en espejo V, vacía
+    gfx_pen(1)
+    gfx_rect(0, 0, 200, 60)
+    tilemap_draw(3, 0, 0, 0, 0, 4, 1, 10, 10)
+    Print "pinta: #{gfx_pixel_read(10, 10)} #{gfx_pixel_read(11, 10)} #{gfx_pixel_read(41, 12)} #{gfx_pixel_read(26, 12)} #{gfx_pixel_read(50, 10)} #{gfx_pixel_read(50, 25)} #{gfx_pixel_read(60, 12)}"
+    tilemap_set(3, 1, 0, 0, 3)
+    gfx_pen(1)
+    gfx_rect(100, 40, 140, 60)
+    tilemap_draw_masked(3, 1, 0, 0, 0, 2, 1, 100, 40)
+    Print "con máscara: #{gfx_pixel_read(102, 45)} #{gfx_pixel_read(112, 45)}"
+    bob_free(0)
+    tilemap_free(3)
+    Print "fin"
+end

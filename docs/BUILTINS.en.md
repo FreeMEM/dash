@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 855 functions, 855 implemented, 0 not implemented.
+Total: 877 functions, 877 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -80,6 +80,28 @@ Total: 855 functions, 855 implemented, 0 not implemented.
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
 | `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
+| `tilemap_create(id, width, height, tile, layers)` | `BOOL` | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
+| `tilemap_load(id, filename)` | `BOOL` | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
+| `tilemap_save(id, filename)` | `BOOL` | Save a tile map as IFF FORM FMAP; false if it cannot |  |
+| `tilemap_free(id)` | `void` | Free a tile map |  |
+| `tilemap_width(id)` | `LONG` | Width of a tile map in cells (0 if there is none) |  |
+| `tilemap_height(id)` | `LONG` | Height of a tile map in cells |  |
+| `tilemap_tile_size(id)` | `LONG` | The side of a tile map's tiles in pixels (8, 16 or 32) |  |
+| `tilemap_layers(id)` | `LONG` | How many layers a tile map has |  |
+| `tilemap_get(id, layer, x, y)` | `LONG` | A cell of a layer (0 the first): the tile (1 the first frame of the tileset, 0 empty) plus 16384 if mirrored left to right and 32768 if top to bottom; 0 outside the map |  |
+| `tilemap_set(id, layer, x, y, value)` | `void` | Set a cell of a layer (like tilemap_get gives it); nothing outside the map |  |
+| `tilemap_tileset(id)` | `STRPTR` | The file name of the map's tileset, as saved in it ("" if none) |  |
+| `tilemap_set_tileset(id, filename)` | `void` | The file name of the map's tileset (an IFF of Forja's sprite editor, a BOB with one frame a tile) |  |
+| `tilemap_layer_name(id, layer)` | `STRPTR` | The name of a layer |  |
+| `tilemap_layer_type(id, layer)` | `LONG` | The type of a layer (0 tiles; the editor uses others for collisions and objects) |  |
+| `tilemap_layer_visible(id, layer)` | `BOOL` | Whether a layer is shown (for the editor) |  |
+| `tilemap_layer_set(id, layer, name, type, visible)` | `void` | Name (up to 31 characters), type and visibility of a layer |  |
+| `tilemap_layer_add(id)` | `LONG` | A new empty layer at the end: its number, or -1 (there are 8 at most) |  |
+| `tilemap_layer_remove(id, layer)` | `BOOL` | Remove a layer (the ones after it move down one); false if it is the only one |  |
+| `tilemap_layer_move(id, from, to)` | `BOOL` | Move a layer to another place (the ones in between move one) |  |
+| `tilemap_resize(id, width, height)` | `BOOL` | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
+| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says); empty cells are pen 0. In one blit to the window |  |
+| `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list |  |
 | `copper_wait(y, x)` | `void` | Add copper WAIT instruction |  |
