@@ -576,3 +576,70 @@ static void push_obj_field(int off)
     w(0x2F2A); w(off);                                 /* move.l off(a2),-(sp) */
     sp_depth += 4;
 }
+
+static void move_ea_d1(Var *v) { op_ea(0x2200, v); }   /* move.l v,d1 (sin tocar lo que se sabe de los códigos) */
+
+/* ---- diccionarios (DashDict: keys en 0, vals en 4, cap en 12): la casilla d0 del de a0 ---- */
+/* si d0 no es una casilla (>= cap), a slow; si no, a1 = keys y d0 = el desplazamiento de la casilla */
+static void dict_slot(int slow)
+{
+    w(0xB0A8); w(12);                                  /* cmp.l 12(a0),d0: cap */
+    branch(CC_CC, slow);
+    w(0x2250);                                         /* movea.l (a0),a1: keys */
+    w(0xD080); w(0xD080);                              /* add.l d0,d0 (x2) */
+}
+
+/* si la clave de la casilla no es la de d1, a slow */
+static void dict_slot_key(int slow)
+{
+    w(0xB2B1); w(0x0800);                              /* cmp.l (0,a1,d0.l),d1 */
+    branch(CC_NE, slow);
+}
+
+static void dict_slot_val(void)                        /* d0 = el valor de la casilla */
+{
+    w(0x2068); w(4);                                   /* movea.l 4(a0),a0: vals */
+    w(0x2030); w(0x0800);                              /* move.l (0,a0,d0.l),d0 */
+}
+
+/* ---- comparaciones: dejan los códigos de condición para la condición que devuelve el recorrido (CC_*) ---- */
+static void test_d0(void) { w(0x4A80); }               /* tst.l d0 (siempre: tst_d0 se lo salta si ya vale) */
+static void tst_ea(Var *v) { op_ea(0x4A80, v); }       /* tst.l v */
+static void cmp_imm_ea(long k, Var *v) { op_imm_ea(0x0C80, k, v); }   /* cmpi.l #k,v */
+static void cmp_d0_d1(void) { w(0xB081); }             /* cmp.l d1,d0: d0 con d1 */
+static void set_ne(void) { w(0x7001); }                /* moveq #1,d0: Z = 0 */
+static void test_bit0(int reg) { w(0x0800 | reg); w(0); }   /* btst #0,dN: Z si es par */
+static void and_ea(Var *v) { op_ea(0xC080, v); }       /* and.l v,d0 */
+static void and_imm(uint32_t k) { w(0x0280); l(k); }   /* andi.l #k,d0 */
+
+/* el registro reg con v (o con d0 si v es NULL): cmp.l v,dN */
+static void cmp_reg_ea(int reg, Var *v)
+{
+    if (v) op_ea(0xB080 | reg << 9, v);
+    else w(0xB080 | reg << 9);
+}
+
+/* textos letra a letra: el byte de a0 con c, y a0 al siguiente; y si a0 está en el final */
+static void cmp_byte_next(int c) { w(0x0C18); w(c); }  /* cmpi.b #c,(a0)+ */
+static void tst_byte_a0(void) { w(0x4A10); }           /* tst.b (a0) */
+
+static void push_a0(void)
+{
+    w(0x2F08);                                         /* move.l a0,-(sp) */
+    sp_depth += 4;
+}
+
+/* d0 = lo de dl_d_cmp (-1, 0, 1 o 2 con un nan) para <, <=, >, >=: con 2, falso. gt: es > o >= */
+static void dbl_cmp_order(int gt)
+{
+    int no = new_label(), done = new_label();
+    w(0x0C80); l(2);                                   /* cmpi.l #2,d0 */
+    branch(CC_EQ, no);
+    w(0x4A80);                                         /* tst.l d0 */
+    branch(CC_T, done);
+    def_label(no);
+    /* d0 = 2: comparado con 0 da "mayor", así que < y <= quedan falsos; > y >= se fuerzan con -1 (menor) */
+    if (gt) w(0x70FF);                                 /* moveq #-1,d0 */
+    w(0x4A80);                                         /* tst.l d0 */
+    def_label(done);
+}

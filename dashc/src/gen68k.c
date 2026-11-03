@@ -1813,23 +1813,16 @@ static int gen_dict_get(Node *n)
         done = new_label();
         use_slot(kl->dict_slot);
         vd = slot_var(kl->dict_slot, t);
-        if (vd.kind == V_REG) w(0x2040 | vd.reg);      /* movea.l dN,a0 */
-        else op_ea(0x2040, &vd);                       /* movea.l d,a0 */
+        load_a0(&vd);
         use_slot(kl->idx_slot);
         vi = slot_var(kl->idx_slot, TY_INT);
         load_var(0, &vi);
-        w(0xB0A8); w(12);                              /* cmp.l 12(a0),d0: cap */
-        branch(CC_CC, slow);
-        w(0x2250);                                     /* movea.l (a0),a1: keys */
-        w(0xD080); w(0xD080);                          /* add.l d0,d0 (x2) */
+        dict_slot(slow);
         use_slot(kl->k_slot);
         vk = slot_var(kl->k_slot, TY_STR);
-        if (vk.kind == V_REG) w(0x2200 | vk.reg);      /* move.l dN,d1 */
-        else op_ea(0x2200, &vk);                       /* move.l k,d1 */
-        w(0xB2B1); w(0x0800);                          /* cmp.l (0,a1,d0.l),d1 */
-        branch(CC_NE, slow);
-        w(0x2068); w(4);                               /* movea.l 4(a0),a0: vals */
-        w(0x2030); w(0x0800);                          /* move.l (0,a0,d0.l),d0 */
+        move_ea_d1(&vk);
+        dict_slot_key(slow);
+        dict_slot_val();
         branch(CC_T, done);
         def_label(slow);
     }
@@ -2238,20 +2231,7 @@ static int gen_compare(Node *n)
             tst_d0();
             return cc;
         }
-        /* <, <=, >, >=: 2 tiene que dar falso */
-        w(0x0C80); l(2);                               /* cmpi.l #2,d0 */
-        {
-            int no = new_label(), done = new_label();
-            branch(CC_EQ, no);
-            w(0x4A80);                                 /* tst.l d0 */
-            branch(CC_T, done);
-            def_label(no);
-            /* d0 = 2: comparado con 0 da "mayor", así que < y <= quedan falsos; > y >= se fuerzan con -1
-               (menor) */
-            if (n->op == P_GT || n->op == P_GE) w(0x70FF);   /* moveq #-1,d0 */
-            w(0x4A80);                                 /* tst.l d0 */
-            def_label(done);
-        }
+        dbl_cmp_order(n->op == P_GT || n->op == P_GE);   /* <, <=, >, >=: 2 (nan) tiene que dar falso */
         return cc;
     }
     /* Float: __cmpsf2 da -1, 0 o 1 */
@@ -2278,22 +2258,21 @@ static int gen_compare(Node *n)
             ok = new_label();
             done = new_label();
             branch(CC_NE, ok);
-            w(0x7001);                                 /* moveq #1,d0: nil, distinto (Z = 0) */
+            set_ne();                                  /* nil: distinto */
             branch(CC_T, done);
             def_label(ok);
-            w(0x2040);                                 /* movea.l d0,a0 */
+            move_d0_a0();
             for (i = 0; i < inl; i++) {
-                w(0x0C18); w((unsigned char)lit->str[i]);   /* cmpi.b #letra,(a0)+ */
+                cmp_byte_next((unsigned char)lit->str[i]);
                 branch(CC_NE, done);
             }
             if (inl == len) {
-                w(0x4A10);                             /* tst.b (a0): el final */
+                tst_byte_a0();                         /* el final */
             } else {
                 pea_string(lit->str + inl, len - inl);
-                w(0x2F08);                             /* move.l a0,-(sp) */
-                sp_depth += 4;
+                push_a0();
                 rt_call("_dl_str_cmp", 2, 0);
-                w(0x4A80);                             /* tst.l d0 */
+                test_d0();
             }
             def_label(done);
             return cc;
@@ -2328,54 +2307,54 @@ static int gen_compare(Node *n)
         uint32_t mask = (k < 0 ? 0u - (uint32_t)k : (uint32_t)k) - 1;
         if (n->a->a->kind == E_VAR && simple(n->a->a, &va) && va.kind != V_CONST) {
             if (mask == 1 && va.kind == V_REG) {
-                w(0x0800 | va.reg); w(0);              /* btst #0,dN */
+                test_bit0(va.reg);
                 return cc;
             }
             if (mask <= 127) {
                 load_imm(0, (long)mask);
-                op_ea(0xC080, &va);                    /* moveq #mask,d0; and.l x,d0 */
+                and_ea(&va);
                 return cc;
             }
             load_var(0, &va);
         } else {
             value(n->a->a);
         }
-        w(0x0280); l(mask);                            /* andi.l #mask,d0 */
+        and_imm(mask);
         return cc;
     }
     if (simple(n->b, &vb)) {
         if (vb.kind == V_CONST && n->a->kind == E_VAR && simple(n->a, &va) && va.kind != V_CONST) {
             if (vb.val == 0) {
-                if (!flags_for(&va, cc)) op_ea(0x4A80, &va);   /* tst.l a */
+                if (!flags_for(&va, cc)) tst_ea(&va);
             } else if (va.kind == V_REG && vb.val >= -128 && vb.val <= 127) {
                 load_imm(0, vb.val);
-                w(0xB080 | va.reg << 9);               /* moveq #k,d0; cmp.l d0,dA */
+                cmp_reg_ea(va.reg, NULL);              /* dA con d0 */
             } else {
-                op_imm_ea(0x0C80, vb.val, &va);        /* cmpi.l #k,a */
+                cmp_imm_ea(vb.val, &va);
             }
             return cc;
         }
         if (vb.kind != V_CONST && n->a->kind == E_VAR && simple(n->a, &va) && va.kind == V_REG) {
-            op_ea(0xB080 | va.reg << 9, &vb);          /* cmp.l b,dA */
+            cmp_reg_ea(va.reg, &vb);                   /* dA con b */
             return cc;
         }
         value(n->a);
         if (vb.kind == V_CONST && vb.val == 0) tst_d0();
-        else op_ea(0xB080, &vb);                       /* cmp.l b,d0 */
+        else cmp_reg_ea(0, &vb);                       /* d0 con b */
         return cc;
     }
     if (simple(n->a, &va)) {
         /* b - a: la condición al revés */
         value(n->b);
-        op_ea(0xB080, &va);                            /* cmp.l a,d0 */
+        cmp_reg_ea(0, &va);                            /* d0 con a */
         return swap_cc(cc);
     }
     value(n->a);
     push_d0();
     value(n->b);
-    w(0x2200);                                         /* move.l d0,d1 */
+    move_d0_d1();
     pop_d0();
-    w(0xB081);                                         /* cmp.l d1,d0 */
+    cmp_d0_d1();
     return cc;
 }
 
