@@ -106,4 +106,12 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   - Con eso, 385/385 objetos de 68k idénticos al compilador de partida. Tests: 525/525.
 - Decisión técnica: por ahora toda casilla de lista es un `_DashP` (8 bytes en ARM, también las de Int). Guardar
   las listas de Int en 4 bytes queda para después, cuando funcione todo (es una optimización de memoria).
+- 2026-11-03: Ryu, fdlibm y zlib compiladas para ARM (`build/dashos/*.a`, con cabeceras mínimas en
+  `runtime/dashos/include/`); Double en ARM. Funciones como valores: los Func se llaman como
+  `_DashP f(_DashP, ...)` y las lambdas devuelven `_DashP`; en DashOS, las funciones con nombre usadas como valor van
+  por un envoltorio (`_dash_fv_*`): una lambda veía un Int negativo como positivo (`tests/test_func_valores.dash`,
+  también en el A1200). `./dash --dashos prog.dash -o prog`: ELF para DashOS (estático en 0x400000, segmentos en
+  páginas aparte, PT_GNU_STACK con la pila del programa). 91 de 284 tests en qemu; los demás piden AmigaOS (A7).
+  Ojo: un volcado de qemu (`*.core`) lleva el entorno y GitHub lo paró por un token: no se suben (`.gitignore`) y
+  `dashos_run.py` ejecuta qemu sin volcados.
 
