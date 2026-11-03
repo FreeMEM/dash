@@ -26,6 +26,18 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
 - **El camino de 68k no se toca.** Cada paso del reparto deja los ejecutables de 68k idénticos byte a byte
   (`dashc/tests/identicos.py`) y el C de `./dash --gcc` idéntico.
 
+## Diseño del reparto (A3)
+
+- `gen68k.c` es el recorrido común. Incluye en tiempo de compilación el generador del procesador: `t68k_base.c`
+  (código, etiquetas, saltos y su relajación) y `t68k_ops.c` (operandos y operaciones con valores de Dash). El de
+  AArch64 serán `ta64_*.c` con las mismas funciones, compilado como otro binario (`dashc` y `dashc-a64`): sin
+  punteros a funciones ni coste en tiempo de ejecución.
+- Cada paso saca del recorrido una secuencia de instrucciones de 68k a una función con nombre del generador (lo que
+  hace, no cómo), sin cambiar un byte: `dashc/tests/identicos.py` tras cada paso.
+- El modelo del recorrido se queda: el valor en un acumulador (d0, en ARM x0), los operandos en la pila, las
+  variables en huecos (registro, marco, global, constante). En ARM los argumentos de una llamada se sacan de la
+  pila a x0..x7 justo antes del `bl`.
+
 ## Herramientas
 
 - `clang --target=aarch64_be-none-elf` y `ld.lld` (clang 23 del sistema): compilan el runtime en C para ARM.
@@ -124,4 +136,7 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   -12). 92 de 294 tests en qemu, sin un solo registro de FP en los ejecutables. Fusionado `main` (fdc06b0): 395/395.
 - 2026-11-03: el ELF de 10448c2 corre en DashOS (QEMU raspi4b, cargador de C19, FP bloqueado en EL0): escribe
   "hola 12" y "a5" y sale con 0. Es el primer programa Dash en DashOS.
+- 2026-11-03: A3 empezada. Maquinaria de 68k fuera de `gen68k.c`, sin cambiar nada: `t68k_base.c` (284 líneas) y
+  `t68k_ops.c` (212). 2370/2370 idénticos. Quedan unas 600 instrucciones escritas a mano en el recorrido, repartidas
+  en unas 100 funciones (las que más: `gen_arr_store`, `gen_ranged`, `mul_const`, `gen_function_pass`, `gen_new`).
 
