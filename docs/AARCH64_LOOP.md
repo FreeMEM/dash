@@ -311,3 +311,7 @@ Print offsetof(Node, ln_Name)  # 10
   4 MB por objeto. `plat.c` repite la escritura con el resto y pide el montón (y `amiga_alloc`) en objetos de 4 MB
   proyectados seguidos. `topes.elf` y `topes_c.elf` (una línea de 600 bytes y una lista de 16 MB) dan la salida
   exacta en DashOS (raspi4b, aaa6a75).
+- 2026-11-03: DashOS C39 (bab0aa0) añade procesos: 12 proceso_crear(llave del ELF, tamaño, tabla de llaves, n)
+  → llave; 13 proceso_matar; 14 proceso_esperar → clase (0 salió, 1 matado, 2 fallo) y código. Para A7 (builtins
+  de DashOS); nada cambia en lo de ahora. Viene en la fase 3: canales que se cierran al morir, llaves con menos
+  derechos y revocables, cupos de memoria por grupo.
