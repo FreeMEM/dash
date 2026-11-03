@@ -73,10 +73,14 @@ static int new_label(void)
     return labels.n - 1;
 }
 
+/* Las banderas, como en el 68000 (donde mover a d0 las pone): cada camino que llega a una etiqueta las deja puestas
+   (si x0 cambió tras la última comparación, se compara con 0 antes de saltar o de seguir), y así en la etiqueta valen */
+static void cmp_x0_zero(void);
 static void def_label(int l)
 {
+    if (x0_dirty) cmp_x0_zero();       /* (el camino que sigue de largo) */
     labels.v[l] = (long)obj->code.n;
-    x0_dirty = 1;                      /* se puede llegar de otro sitio: sin saber qué comparó */
+    x0_dirty = 0;
 }
 static void def_label_fwd(int l) { def_label(l); }
 
@@ -109,8 +113,10 @@ static void branch(int cc, int label)
 {
     if (cc == CC_F) return;
     if (cc == CC_T) {
+        if (x0_dirty) cmp_x0_zero();
         fixup(label, 0);
         ins(0x14000000);                               /* b */
+        x0_dirty = 0;                                  /* (después no se llega de largo) */
         return;
     }
     if (x0_dirty) cmp_x0_zero();

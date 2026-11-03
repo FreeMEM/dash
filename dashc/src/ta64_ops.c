@@ -725,6 +725,7 @@ static void fn_epilogue(int frameless, int used, int nframe)
     ins(0x910003BF);                                   /* mov sp, x29 */
     ins(0xA8C17BFD);                                   /* ldp x29, x30, [sp], #16 */
     ins(0xD65F03C0);                                   /* ret */
+    x0_dirty = 0;
     frame = (8 * (fn_nparams + nframe) + 15) & ~15;
     if (frame > 4095) fatal("demasiadas variables en una función (dashc para DashOS)");
     ins_put(fn_frame_at, ins_at(fn_frame_at) | (uint32_t)frame << 10);
@@ -739,7 +740,7 @@ static void clear_global(long off)
 }
 
 /* ---- datos dentro del código (descriptores, tablas): punteros de 8 bytes, alineados ---- */
-static void code_align(void) { while (obj->code.n & 7) l(0); }
+static void code_align(void) { x0_dirty = 0; while (obj->code.n & 7) l(0); }   /* (detrás, datos: no se llega de largo) */
 static void code_long(uint32_t v) { l(v); }
 
 static void code_ptr(int label)
@@ -772,6 +773,7 @@ static void destroy_end(void)
     ins(0xF9400BFC);                                   /* ldr x28, [sp, #16] */
     ins(0xA8C27BFD);                                   /* ldp x29, x30, [sp], #32 */
     ins(0xD65F03C0);                                   /* ret */
+    x0_dirty = 0;
 }
 
 /* ---- el arranque: _dash_start(main, ficheros, pila) del runtime ---- */
@@ -784,12 +786,13 @@ static void jmp_sym(const char *sym)
     load_args(start_args);
     add_reloc_t((uint32_t)obj->code.n, -1, c_name(sym), R_JUMP26, 0);
     ins(0x14000000);                                   /* b sym */
+    x0_dirty = 0;
 }
 
 /* la cabecera de los literales de los campos (dash_lit), al arrancar */
 static void lit_init_begin(void) { ins(0xA9BF7BFD); ins(0x910003FD); }   /* stp x29, x30; mov x29, sp */
 static void lit_init_one(uint32_t off) { addr_data(0, off); jsr_sym("_dl_str_lit"); }
-static void lit_init_end(void) { ins(0xA8C17BFD); ins(0xD65F03C0); }    /* ldp x29, x30; ret */
+static void lit_init_end(void) { ins(0xA8C17BFD); ins(0xD65F03C0); x0_dirty = 0; }    /* ldp x29, x30; ret */
 
 /* la dirección de un array de n cosas que el recorrido dejó en la pila desde off(sp), cada una en 16 bytes: se
    juntan ahí mismo como las espera el C (lng: LONG de 4 bytes; si no, de 8) y se mete su dirección */
