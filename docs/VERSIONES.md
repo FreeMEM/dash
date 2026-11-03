@@ -33,6 +33,23 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.1.0 (2026-11-03)
+
+El mismo C de `@link` vale por los dos caminos, el directo y por C con gcc. Es el paso para llevar programas como
+Tachyon a PowerPC.
+
+- **`@link` por C con gcc:** `./dash --gcc` da al C enlazado las mismas funciones del runtime que el directo
+  (`dl_str_dup`, `dl_arr_get`, `dl_retain`...) y los builtins como `db_nombre` (`db_time_ms`...). Solo entran las
+  que ese C llama.
+- **`./dash --gcc --cabecera tipos.h programa.dash`:** escribe los structs del programa tal como los coloca el
+  camino por C, sus constantes y los prototipos de las `@export`, con los mismos nombres que la del directo. Un
+  `Bool` ocupa ahí 2 bytes, así que el C se compila aparte para cada camino, cada uno con su cabecera.
+- **`./dash --gcc` desde cualquier carpeta:** antes había que estar en la del repositorio o poner `PYTHONPATH`.
+- **Constructores:** solo se pueden omitir los últimos campos, y solo si tienen valor por defecto. Antes, con un
+  campo con valor por defecto en medio del struct, los dos compiladores aceptaban una llamada a la que le faltaba
+  un campo obligatorio de detrás. Ahora es un error, como dice el manual. Un programa que compilaba así tenía
+  los campos desplazados.
+
 ### 2.0.2 (2026-11-03)
 
 El compilador directo genera código más rápido. Ya va igual o más rápido que el camino por C (`--gcc`) en casi

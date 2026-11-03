@@ -525,6 +525,7 @@ class DashCompiler:
 
         generator = CodeGenerator(analysis)
         c_code = latin1_literals(generator.generate())   # AmigaOS texts are Latin-1
+        self.generator = generator                       # (--cabecera: generator.c_header())
 
         if self.verbose:
             print(f"  Generated {len(c_code)} characters of C code", file=sys.stderr)
@@ -795,6 +796,8 @@ def main():
                         help="Show compilation stages")
     parser.add_argument("--multifile", action="store_true",
                         help="Generate multiple C files (one per module)")
+    parser.add_argument("--cabecera", metavar="FILE.h",
+                        help="Also write the program's structs, constants and @export prototypes for the C of @link")
     args = parser.parse_args()
 
     input_filename = args.input_file
@@ -840,6 +843,9 @@ def main():
         else:
             # Single-file mode (default)
             c_output, _ = compiler.compile(source_code, filename=input_filename)
+            if args.cabecera:
+                with open(args.cabecera, "w") as f:
+                    f.write(compiler.generator.c_header())
             if "/*@dash-" in c_output:        # ./dash --debug: #line to the .dash (compiler/debuglines.py)
                 c_output = debuglines.apply(c_output, os.path.abspath(output_path))
 

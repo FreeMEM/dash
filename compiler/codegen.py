@@ -21025,6 +21025,8 @@ class CodeGenerator(ASTVisitor):
         # Pre-scan to detect Area fill usage before code generation
         self._prescan_for_area(self.analysis.program)
         self.visit(self.analysis.program)
+        if self.links:
+            self._link_api()
         return strip_unused_marks(self._assemble_program())
 
     def _prescan_for_area(self, node: ASTNode):
@@ -25637,6 +25639,176 @@ static {return_type} {lambda_name}({param_str}) {{
             ">=": ">=",
         }
         return op_map.get(op, op)
+
+    # ---- the C of @link (D82): the same API as the straight compiler (dl_* and db_<builtin>) ----
+
+    # name -> (definition, runtime flags it needs); as dashc/runtime/api.c
+    _LINK_API = {
+        "dl_str_dup": ("STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }", ("uses_strings",)),
+        "dl_str_temp": ("STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }", ("uses_strings",)),
+        "dl_str_free": ("void dl_str_free(STRPTR p) { _dash_str_free(p); }", ("uses_strings",)),
+        "dl_str_len": ("LONG dl_str_len(STRPTR s) { return _dash_str_len(s); }", ("uses_strings",)),
+        # (the length is in the header of each Dash text and a C text has none: nothing to forget)
+        "dl_str_forget": ("void dl_str_forget(STRPTR s) { (void)s; }", ()),
+        "dl_retain": ("void dl_retain(void *p) { _dash_retain(p); }", ("uses_refcount",)),
+        "dl_release": ("void dl_release(void *p) { _dash_release(p); }", ("uses_refcount",)),
+        "dl_arr_length": ("LONG dl_arr_length(DashArrayLong *a) { return DashArray_length(a); }", ("uses_arrays",)),
+        "dl_arr_get": ("LONG dl_arr_get(DashArrayLong *a, LONG i) { return DashArray_get(a, i); }", ("uses_arrays",)),
+        "dl_dict_length": ("LONG dl_dict_length(DashDict *d) { return DashDict_length(d); }",
+                           ("uses_dicts", "uses_arrays", "uses_strings")),
+        "dl_dict_get": ("LONG dl_dict_get(DashDict *d, STRPTR k) { return DashDict_get(d, k); }",
+                        ("uses_dicts", "uses_arrays", "uses_strings")),
+    }
+
+    def _link_wanted(self) -> Optional[Set[str]]:
+        """The dl_* and db_* names the @link objects and libraries call (their undefined symbols, by the
+        toolchain's nm); None if nm is not there."""
+        import shutil
+        import subprocess
+        tool = os.path.join(os.environ.get("DASH_TOOLCHAIN", "/opt/amiga"), "bin", "m68k-amigaos-nm")
+        if not os.path.exists(tool):
+            tool = shutil.which("m68k-amigaos-nm")
+        wanted = set()
+        for path in self.links:
+            if not os.path.isfile(path):
+                continue
+            if path.endswith(".c"):
+                # a C source (compiled with the program): the names it calls
+                with open(path, encoding="latin-1") as f:
+                    wanted.update(re.findall(r"\b((?:dl|db)_\w+)\s*\(", f.read()))
+                continue
+            if not tool:
+                return None
+            try:
+                out = subprocess.run([tool, "-u", path], capture_output=True, text=True, timeout=60).stdout
+            except (OSError, subprocess.SubprocessError):
+                return None
+            for line in out.splitlines():
+                name = line.split()[-1] if line.split() else ""
+                name = name[1:] if name.startswith("_") else name      # (a.out: C names start with _)
+                if name.startswith(("dl_", "db_")):
+                    wanted.add(name)
+        return wanted
+
+    def _link_api(self):
+        """Extern functions for the C of @link: the dl_* it calls (as the straight compiler's runtime) and
+        db_<builtin> (each builtin with its arguments and result as LONG, as there). Without nm, the dl_*
+        of the header (--cabecera) and db_time_ms."""
+        wanted = self._link_wanted()
+        if wanted is None:
+            wanted = set(self._LINK_API) | {"db_time_ms"}
+        code = []
+        for name in sorted(wanted):
+            if name in self._LINK_API:
+                definition, flags = self._LINK_API[name]
+                for flag in flags:
+                    setattr(self, flag, True)
+                code.append(definition + "\n")
+            elif name.startswith("db_"):
+                builtin = get_builtin(name[3:])
+                if builtin is None or builtin.return_type == "double" or self._double_params(builtin):
+                    continue          # (not a builtin, or with Doubles: the link says what is missing)
+                params = ", ".join(f"LONG _a{i}" for i in range(len(builtin.params))) or "void"
+                saved = self.var_types.copy() if isinstance(getattr(self, "var_types", None), dict) else None
+                if saved is not None:
+                    for i in range(len(builtin.params)):
+                        self.var_types[f"_a{i}"] = "LONG"
+                call = self._generate_builtin_call(builtin, [VarRef(name=f"_a{i}")
+                                                             for i in range(len(builtin.params))])
+                if saved is not None:
+                    self.var_types = saved
+                if builtin.return_type == "void":
+                    code.append(f"LONG {name}({params}) {{ {call}; return 0; }}\n")
+                else:
+                    code.append(f"LONG {name}({params}) {{ return (LONG)({call}); }}\n")
+        if code:
+            self.functions.append("\n/* for the C of @link: the API of the straight compiler (dl_*, db_*) */\n"
+                                  + "".join(code))
+
+    def _hdr_type(self, c_type: str, in_field: bool) -> str:
+        """The C type of the header (--cabecera) for one of this generator's C types: the same size and place
+        as in the program's C, with the names of the straight compiler's header."""
+        c = c_type.strip()
+        m = re.fullmatch(r"(_Dash_\w+)\s*\*", c)
+        if m:
+            return f"struct {m.group(1)} *"
+        if c.startswith("DashArray"):
+            return "DashArray *"
+        if c == "BOOL":
+            return "BOOL /* Bool: 0 o 1, 2 bytes */ "
+        if c == "float":
+            # (a field: its 4 bytes, as the straight compiler's header; a parameter or result goes as a float)
+            return "ULONG /* Float: sus bits */ " if in_field else "float "
+        if c == "DashFixed":
+            return "LONG /* Fixed */ "
+        return c + ("" if c.endswith("*") else " ")
+
+    def c_header(self) -> str:
+        """./dash --gcc --cabecera: the program's structs as this generator lays them out, its integer
+        constants and the prototypes of its @export functions, with the API (dl_*, db_*) that the C of
+        @link can use: the same names as the straight compiler's header, so one C serves both."""
+        prog = self.analysis.program
+        type_map = self._c_type_map
+        out = ["/* Los structs de Dash del programa tal como los coloca ./dash --gcc (--cabecera), y lo del runtime\n"
+               "   que puede usar el C de @link. El puntero a un objeto apunta a su primer campo; un Bool ocupa 2\n"
+               "   bytes y un Double 8. Los mismos nombres que la cabecera del compilador directo: el mismo C vale\n"
+               "   para los dos, compilado aparte con la cabecera de cada uno. */\n"
+               "#ifndef DASH_TIPOS_H\n#define DASH_TIPOS_H\n#include <exec/types.h>\n\n"
+               "typedef struct DashArray DashArray;\ntypedef struct DashDict DashDict;\n\n"
+               "/* textos: una copia de Dash (se libera con dl_str_free), su largo */\n"
+               "STRPTR dl_str_dup(STRPTR s);\nvoid dl_str_free(STRPTR s);\nLONG dl_str_len(STRPTR s);\n"
+               "/* objetos (structs, listas, diccionarios): sostenerlos y soltarlos */\n"
+               "void dl_retain(void *o);\nvoid dl_release(void *o);\n"
+               "/* listas: largo y elemento i (un número, o el puntero de un texto u objeto) */\n"
+               "LONG dl_arr_length(DashArray *a);\nLONG dl_arr_get(DashArray *a, LONG i);\n"
+               "/* diccionarios de texto: largo y valor */\n"
+               "LONG dl_dict_length(DashDict *d);\nLONG dl_dict_get(DashDict *d, STRPTR k);\n"
+               "/* un temporal de Dash (se libera solo); olvidar el largo guardado de un texto de C que se libera */\n"
+               "STRPTR dl_str_temp(STRPTR s);\nvoid dl_str_forget(STRPTR s);\n"
+               "/* los builtins, como db_nombre(LONG...) (db_time_ms()...) */\n\n"
+               "/* los nombres del C de ./dash (Dash 1.x), para el C que venía de @native o @c */\n"
+               "#define _dash_str_dup(s, temp) ((temp) ? dl_str_temp((STRPTR)(s)) : dl_str_dup((STRPTR)(s)))\n"
+               "#define _dash_str_len(s) dl_str_len((STRPTR)(s))\n#define _dash_str_forget(s) dl_str_forget((STRPTR)(s))\n"
+               "#define _dash_retain(o) dl_retain((void *)(o))\n#define _dash_release(o) dl_release((void *)(o))\n"
+               "#define DashArray_length(a) dl_arr_length((DashArray *)(a))\n"
+               "#define DashArray_get(a, i) dl_arr_get((DashArray *)(a), (i))\n"
+               "#define _dash_time_ms() db_time_ms()\nLONG db_time_ms(void);\n\n"
+               "typedef DashArray DashArrayLong;\n\n/* las constantes enteras del programa */\n"]
+        for const in prog.constants:
+            if isinstance(const.value, BoolLiteral):
+                out.append(f"#define {const.name} {1 if const.value.value else 0}L\n")
+            elif isinstance(const.value, NumberLiteral) and isinstance(const.value.value, int):
+                out.append(f"#define {const.name} {const.value.value}L\n")
+        out.append("\n")
+        structs = [st for st in prog.structs if not st.is_interface]
+        out.extend(f"struct _Dash_{st.name};\n" for st in structs)
+        for st in structs:
+            out.append(f"\ntypedef struct _Dash_{st.name} {{\n")
+            for fd in st.fields:
+                weak = "   /* weak */" if getattr(fd, "weak", False) else ""
+                out.append(f"    {self._hdr_type(type_map.get(fd.field_type, 'LONG'), True)}{fd.name};{weak}\n")
+            if not st.fields:
+                out.append("    LONG _vacio;\n")
+            out.append(f"}} _Dash_{st.name};\n")
+        first = True
+        for func in prog.functions:
+            if not func.exported:
+                continue
+            out.append("\n" if first else "")
+            first = False
+            # (as visit_FunctionDef declares it)
+            ret = (type_map.get(func.return_type, "LONG") if func.return_type
+                   else self._infer_function_return_type(func))
+            params = []
+            for prm in func.params:
+                if isinstance(prm, FunctionParam):
+                    params.append(self._hdr_type(type_map.get(prm.param_type, "LONG"), False) + prm.name)
+                else:
+                    params.append(f"LONG {prm}")
+            ret_c = "void " if ret == "void" else self._hdr_type(ret, False)
+            out.append(f"\n{ret_c}{func.name}({', '.join(params) or 'void'});")
+        out.append("\n\n#endif\n")
+        return "".join(out)
 
     _BASE_C_TYPES = {
         "Int": "LONG",

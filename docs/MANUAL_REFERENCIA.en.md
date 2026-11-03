@@ -4491,7 +4491,7 @@ goes through C" below); `./dash` takes them that way by itself.
 make -C dashc                                   # builds the compiler (a C compiler for the PC and Python 3)
 ./dash programa.dash -o programa                # straight to hunk
 ./dash --gcc programa.dash -o programa          # through C with gcc
-./dash --version                                # Dash 2.0.2
+./dash --version                                # Dash 2.1.0
 ```
 
 `./dash` is a short script that calls the compiler (`dashc/dashc`) or, with `--gcc`, the path through C. If the
@@ -4525,7 +4525,7 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |
-| `--version` | `Dash 2.0.2` |
+| `--version` | `Dash 2.1.0` |
 
 `./dash` accepts the `-v` and `-q` of 1.x and without `--gcc` they change nothing: the compiler only writes when there is an error.
 Errors say where, like those of 1.x: `file.dash:line:column: Error: message`. Link errors (for example, an
@@ -4634,6 +4634,12 @@ prototypes of the `@export` functions and the runtime functions that C can use: 
 `dl_str_len`, `dl_str_temp`, `dl_retain`, `dl_release`, `dl_arr_length`, `dl_arr_get`, `dl_dict_length` and
 `dl_dict_get`. It also works for a module without `Main`. For C that came from an `@native` or a `@c` of 1.x, the
 header defines the names of back then (`_dash_str_dup`, `_dash_retain`, `DashArray_get`...) on top of these.
+
+**The same C on both paths.** The same `@link` C works through C with gcc: `./dash --gcc` gives the program the
+`dl_*` functions and the `db_name` builtins that C calls (it looks for them in the object or library). Structs are
+laid out differently (a `Bool` takes 2 bytes, a `Double` 8), so that C is compiled separately for each path, with
+its header: `./dash --gcc --cabecera tipos.h programa.dash` writes the one for the C path, with the same names.
+C that reads fields by name works as it is for both.
 
 ### --memcheck, --fpu and --stack
 

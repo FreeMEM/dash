@@ -32,6 +32,22 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.1.0 (2026-11-03)
+
+The same `@link` C works on both paths, straight and through C with gcc. It is the step to take programs like
+Tachyon to PowerPC.
+
+- **`@link` through C with gcc:** `./dash --gcc` gives the linked C the same runtime functions as the straight
+  path (`dl_str_dup`, `dl_arr_get`, `dl_retain`...) and the builtins as `db_name` (`db_time_ms`...). Only the ones
+  that C calls go in.
+- **`./dash --gcc --cabecera tipos.h programa.dash`:** writes the program's structs as the C path lays them out,
+  its constants and the `@export` prototypes, with the same names as the straight path's header. A `Bool` takes
+  2 bytes there, so the C is compiled separately for each path, each with its header.
+- **`./dash --gcc` from any folder:** before, you had to be in the repository's folder or set `PYTHONPATH`.
+- **Constructors:** only the last fields can be left out, and only if they have a default. Before, with a field
+  with a default in the middle of the struct, both compilers accepted a call missing a required field after it.
+  Now it is an error, as the manual says. A program that compiled like that had its fields shifted.
+
 ### 2.0.2 (2026-11-03)
 
 The straight compiler generates faster code. It is now as fast as or faster than the C path (`--gcc`) in almost

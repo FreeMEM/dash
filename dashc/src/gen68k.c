@@ -1977,6 +1977,10 @@ static int gen_new(Node *n, int si, int fresh)
     int nf = st->fields.n, i;
     Node **vals = xmalloc(sizeof(Node *) * (nf + 1)), zero;
     if (n->args.n > nf) fatal_node(n, "%s tiene %d campos y se le dan %d", st->name, nf, n->args.n);
+    for (i = n->args.n; i < nf; i++)      /* solo se pueden omitir los últimos, y si tienen valor por defecto */
+        if (!st->fields.v[i].init)
+            fatal_node(n, "%s: falta %s (sin valor por defecto; solo se omiten los últimos campos)", st->name,
+                       st->fields.v[i].name);
     memset(&zero, 0, sizeof zero);
     zero.kind = E_INT;
     char *conv = xmalloc(nf + 1);

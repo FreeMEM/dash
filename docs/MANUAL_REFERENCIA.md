@@ -4489,7 +4489,7 @@ las secciones anteriores sobre el C generado vale para él. Hace falta para los 
 make -C dashc                                   # construye el compilador (un compilador de C del PC y Python 3)
 ./dash programa.dash -o programa                # directo a hunk
 ./dash --gcc programa.dash -o programa          # por C con gcc
-./dash --version                                # Dash 2.0.2
+./dash --version                                # Dash 2.1.0
 ```
 
 `./dash` es un guion corto que llama al compilador (`dashc/dashc`) o, con `--gcc`, al camino por C. Si el
@@ -4523,7 +4523,7 @@ línea: `dash: el programa lleva C: se compila por C con gcc`.
 | `--dashui fichero` | Enseña el código Dash que sale de un `.dashui` (el que compila un `import`) |
 | `--tiempos` | Cuánto tarda cada fase de la compilación |
 | `--gcc` | Por C con gcc (la 1.x). Con él valen además `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk` |
-| `--version` | `Dash 2.0.2` |
+| `--version` | `Dash 2.1.0` |
 
 `./dash` acepta `-v` y `-q` de la 1.x y sin `--gcc` no cambian nada: el compilador solo escribe si hay un error. Los errores dicen dónde, como los
 de la 1.x: `fichero.dash:línea:columna: Error: mensaje`. Los del enlazado (por ejemplo, una función de `@extern`
@@ -4634,6 +4634,12 @@ los prototipos de las `@export` y las funciones del runtime que puede usar ese C
 `dl_str_len`, `dl_str_temp`, `dl_retain`, `dl_release`, `dl_arr_length`, `dl_arr_get`, `dl_dict_length` y
 `dl_dict_get`. Vale también para un módulo sin `Main`. Para C que venía de un `@native` o de un `@c` de la 1.x,
 la cabecera define los nombres de entonces (`_dash_str_dup`, `_dash_retain`, `DashArray_get`...) sobre estas.
+
+**El mismo C por los dos caminos.** Por C con gcc vale el mismo C de `@link`: `./dash --gcc` da al programa las
+funciones `dl_*` y los builtins `db_nombre` que ese C llama (los mira en el objeto o la librería). Los structs se
+colocan distinto (un `Bool` ocupa 2 bytes, un `Double` 8), así que ese C se compila aparte para cada camino, con
+su cabecera: `./dash --gcc --cabecera tipos.h programa.dash` escribe la del camino por C, con los mismos nombres.
+Un C que lee los campos por su nombre vale tal cual para los dos.
 
 ### --memcheck, --fpu y --stack
 

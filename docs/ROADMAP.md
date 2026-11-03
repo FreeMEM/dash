@@ -1028,6 +1028,12 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
       retornar textos y crear structs casi como antes (R14-R16)
 - [x] Baterías sin fallos: 457 sin emulador (con 1.0.0), 1107 con `--emu --emu-a500 --emu-32`, 676 con `--memcheck`; detalle en `docs/RECURSOS_LOOP.md`
 
+### Dash 2.0 y 2.1 (2026-11-02/03, versiones 2.0.1, 2.0.2 y 2.1.0)
+- [x] Una sola orden: `./dash` directo a hunk, `./dash --gcc` por C con gcc (PR #74); el directo, igual o más rápido
+      que por C en casi todo (PR #79, 2.0.2)
+- [x] El C de `@link` por los dos caminos: `./dash --gcc` da las `dl_*` y `db_nombre` que ese C llama, y
+      `./dash --gcc --cabecera` escribe sus structs (D82, para Tachyon y el camino a PowerPC)
+
 ## Notas y Decisiones
 
 ### Decisiones tomadas:
