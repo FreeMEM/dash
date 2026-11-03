@@ -16,6 +16,11 @@ SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c src
 dashc: $(SRC) src/dashc.h src/t68k_base.c src/t68k_ops.c src/t68k_arith.c src/t68k_opt.c build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c
 	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c $(RYU) $(ZLIB)
 
+# dashc para DashOS (AArch64 big-endian, docs/AARCH64_LOOP.md): el mismo recorrido con el generador de ARM; escribe
+# un objeto ELF que se enlaza con el runtime para ARM
+dashc-a64: $(SRC) src/elf.c src/dashc.h src/ta64_base.c src/ta64_ops.c src/ta64_arith.c src/ta64_opt.c build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c
+	$(CC) $(CFLAGS) -DDASH_A64 -o $@ $(SRC) src/elf.c build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c $(RYU) $(ZLIB)
+
 amiga: build/dashc.amiga
 # (los runtimes de --memcheck y --fpu van aparte, en build/dashc_mc.drt y build/dashc_fpu.drt: se copian junto a dashc)
 build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/dashc_mc.drt build/dashc_fpu.drt build/dashc_fpu_mc.drt build/builtins_tab.c

@@ -287,6 +287,7 @@ extern const KeyName key_names[];
 
 /* ---- enlazado y ejecutable (hunk.c) ---- */
 void link_exe(Obj *obj, const uint8_t *rt, size_t rtlen, const char *out);
+void write_elf_obj(Obj *obj, const char *out);   /* dashc para DashOS (-DDASH_A64): el objeto ELF (elf.c) */
 void link_add(const char *path);
 void prepare_runtime(const uint8_t *rt, size_t len, const char *out);   /* dashc --preparar: hunk.c */     /* @link: un objeto o una biblioteca más que enlazar */
 

@@ -128,6 +128,34 @@ def _no_core():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))   # (un volcado de qemu lleva el entorno: secretos)
 
 
+def build_direct(src, exe, linux=True, memcheck=False):
+    """Por el compilador directo (dashc-a64: docs/AARCH64_LOOP.md, A4), sin C: el objeto ELF del programa, enlazado
+    con el runtime de dashc para ARM (runtime/dashos/build.py)"""
+    sys.path.insert(0, str(REPO / "dashc" / "runtime" / "dashos"))
+    import build as rt_build
+    dashc = REPO / "dashc" / "dashc-a64"
+    with tempfile.TemporaryDirectory() as tmp:
+        o = Path(tmp) / "prog.o"
+        r = subprocess.run([str(dashc), str(src), "-o", str(o), *(["--memcheck"] if memcheck else [])],
+                           cwd=REPO, capture_output=True, text=True)
+        if r.returncode:
+            return False, r.stdout + r.stderr
+        with _lib_lock:
+            rt = rt_build.build(memcheck)
+        plat = Path(tmp) / "plat.o"
+        r = subprocess.run(["clang", *CFLAGS, *(["-DDASH_PLAT_LINUX"] if linux else []), "-c", str(RT / "plat.c"),
+                            "-o", str(plat)], capture_output=True, text=True)
+        if r.returncode:
+            return False, r.stderr
+        libs = [str(library(n)) for n in ("ryu", "fdlibm", "zlib")] + [str(softfloat_lib())]
+        r = subprocess.run(["ld.lld", "-static", "-e", "_dashc_start", "--image-base=0x400000",
+                            "-z", "separate-loadable-segments", "-z", "stack-size=65536",
+                            str(o), str(rt), str(plat), *libs, str(rt), "-o", str(exe)], capture_output=True, text=True)
+        if r.returncode:
+            return False, r.stderr
+    return True, ""
+
+
 def run(exe, timeout=30):
     r = subprocess.run(["qemu-aarch64_be", str(exe)], capture_output=True, timeout=timeout, preexec_fn=_no_core)
     return r.returncode, r.stdout.decode("latin-1"), r.stderr.decode("latin-1")
@@ -139,10 +167,12 @@ def main():
     ap.add_argument("-o")
     ap.add_argument("--dashos", action="store_true", help="plataforma de DashOS (no se ejecuta)")
     ap.add_argument("--memcheck", action="store_true", help="como ./dash --memcheck")
+    ap.add_argument("--directo", action="store_true", help="por el compilador directo (dashc-a64), sin C")
     a = ap.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
         exe = Path(a.o) if a.o else Path(tmp) / "prog"
-        ok, msg = build(Path(a.src).resolve(), exe.resolve(), linux=not a.dashos, memcheck=a.memcheck)
+        ok, msg = (build_direct if a.directo else build)(Path(a.src).resolve(), exe.resolve(), linux=not a.dashos,
+                                                         memcheck=a.memcheck)
         if not ok:
             sys.exit(msg)
         if a.dashos:

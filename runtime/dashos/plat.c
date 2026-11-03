@@ -50,8 +50,8 @@ void *dash_plat_pages(unsigned long bytes)
 }
 #endif
 
-/* ---- arranque ---- */
-int main();
+/* ---- arranque (el del camino por C; el código de dashc entra por _dashc_start y no tiene main) ---- */
+int main() __attribute__((weak));
 void _dash_atexit_run(void);
 __asm__(".text\n.global _start\n.type _start, %function\n_start:\n"
         "    mov x29, #0\n    mov x30, #0\n    bl _dash_start_c\n    b .\n");

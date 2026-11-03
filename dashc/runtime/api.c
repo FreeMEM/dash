@@ -690,7 +690,7 @@ STRPTR dl_str_dup(STRPTR s) { return _dash_str_dup(s, FALSE); }
 STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
 /* un literal de dashc como texto de Dash fijo (dash_lit de gen68k.c, que deja 12 bytes delante para la cabecera):
    escapado, nunca se libera ni se escribe en su sitio */
-typedef char _dl_str_hdr_12[sizeof(_DashStrHdr) == 12 ? 1 : -1];
+typedef char _dl_str_hdr_12[sizeof(_DashStrHdr) == 8 + sizeof(_DashUP) ? 1 : -1];
 /* (y lo que str_ours de gen68k.c lee en línea: el largo en +4, self en +8 y la clave) */
 typedef char _dl_str_hdr_len[__builtin_offsetof(_DashStrHdr, len) == 4 ? 1 : -1];
 typedef char _dl_str_hdr_self[__builtin_offsetof(_DashStrHdr, self) == 8 ? 1 : -1];
@@ -700,7 +700,7 @@ void dl_str_lit(STRPTR t) {
     ULONG n = strlen((const char *)t);
     h->size = (sizeof(_DashStrHdr) + n + 1) | _DASH_STR_TAG | _DASH_STR_KEEP;
     h->len = n;
-    h->self = (ULONG)h + _DASH_STR_KEY;
+    h->self = (_DashUP)h + _DASH_STR_KEY;
 }
 void dl_str_forget(STRPTR s) { (void)s; }
 void dl_str_set(STRPTR *var, STRPTR v) { _dash_str_set(var, v); }
@@ -746,8 +746,8 @@ void *dl_obj_assign_new(void *var, void *v) { _dash_obj_set_new(&var, v); return
 
 /* ---- diccionarios: clave texto (dl_dict_*) o número (dl_dict_*i) ---- */
 DashDict *dl_dict_new(LONG kind) { return DashDict_new(kind); }
-DashDict *dl_dict_from(LONG kind, LONG n, STRPTR *k, LONG *v) { return DashDict_from(kind, n, k, v); }
-DashDict *dl_dict_fromi(LONG kind, LONG n, LONG *k, LONG *v) { return DashDict_fromi(kind, n, k, v); }
+DashDict *dl_dict_from(LONG kind, LONG n, STRPTR *k, _DashP *v) { return DashDict_from(kind, n, k, v); }
+DashDict *dl_dict_fromi(LONG kind, LONG n, LONG *k, _DashP *v) { return DashDict_fromi(kind, n, k, v); }
 LONG dl_dict_get(DashDict *d, STRPTR k) { return DashDict_get(d, k); }
 LONG dl_dict_geti(DashDict *d, LONG k) { return DashDict_geti(d, k); }
 LONG dl_dict_get_or(DashDict *d, STRPTR k, LONG v) { return DashDict_get_or(d, k, v); }
@@ -776,8 +776,8 @@ void *dl_arr_pop_obj(DashArrayLong *a) { return DashArray_pop_obj(a); }
 STRPTR dl_arr_pop_str(DashArrayLong *a) { return DashArray_pop_str(a); }
 void dl_arr_remove(DashArrayLong *a, LONG i) { DashArray_remove(a, i); }
 void dl_arr_clear(DashArrayLong *a) { DashArray_clear(a); }
-DashArrayLong *dl_arr_from(LONG n, const LONG *v) { return DashArray_from(n, v); }
-DashArrayLong *dl_arr_from_new(LONG n, const LONG *v) { return DashArray_from_new(n, v); }
+DashArrayLong *dl_arr_from(LONG n, const _DashP *v) { return DashArray_from(n, v); }
+DashArrayLong *dl_arr_from_new(LONG n, const _DashP *v) { return DashArray_from_new(n, v); }
 DashArrayLong *dl_arr_own(DashArrayLong *a, LONG kind) { return DashArray_own(a, kind); }
 LONG dl_arr_get(DashArrayLong *a, LONG i) { return DashArray_get(a, i); }
 void dl_arr_set(DashArrayLong *a, LONG i, LONG v) { DashArray_set(a, i, v); }
@@ -858,16 +858,16 @@ STRPTR dl_d_str(STRPTR a) { return DashString_from_double(dl_dget(a)); }
 
 /* l.sort(f): f(a, b) de dashc (como una de C, con los elementos como LONG: un número, los bits de un Float, un
    texto, una caja de Double, un objeto); boolean: f dice si a va antes que b; si no, da un Int (> 0: después) */
-static LONG (*dl_sort_fn)(LONG, LONG);
+static _DashP (*dl_sort_fn)(_DashP, _DashP);
 static LONG dl_sort_bool;
-static LONG dl_sort_after(const LONG *a, const LONG *b)
+static LONG dl_sort_after(const _DashP *a, const _DashP *b)
 {
     return dl_sort_bool ? dl_sort_fn(*b, *a) != 0 : dl_sort_fn(*a, *b) > 0;
 }
 
 void dl_arr_sort(DashArrayLong *arr, APTR fn, LONG boolean)
 {
-    dl_sort_fn = (LONG (*)(LONG, LONG))fn;
+    dl_sort_fn = (_DashP (*)(_DashP, _DashP))fn;
     dl_sort_bool = boolean;
     DashArray_sort(arr, dl_sort_after);
 }

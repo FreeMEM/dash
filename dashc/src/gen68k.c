@@ -37,7 +37,11 @@ static struct { DbgFunc *v; int n, cap; } dbg_funcs;
 static struct { DbgVar *v; int n, cap; } dbg_vars;
 static int prof_label = -1;   /* los nombres de las funciones, para el perfil */
 
+#ifdef DASH_A64
+#include "ta64_base.c"
+#else
 #include "t68k_base.c"
+#endif
 
 /* un error en un nodo: con el fichero del nodo (un módulo), no el de la última instrucción generada */
 static void fatal_node(Node *n, const char *fmt, ...)
@@ -475,7 +479,11 @@ static int pow2(long k)
    y DASH_PRINT_FLUSH=1 (cada Print sale enseguida) */
 static int autoclose, print_flush;
 
+#ifdef DASH_A64
+#include "ta64_ops.c"
+#else
 #include "t68k_ops.c"
+#endif
 
 /* un operando que se usa sin calcular nada: una constante o una variable */
 /* el tipo de una expresión que se sabe al compilar */
@@ -2033,7 +2041,11 @@ static void mark_end(MarkScope *m)
     pop_args(1);
 }
 
+#ifdef DASH_A64
+#include "ta64_arith.c"
+#else
 #include "t68k_arith.c"
+#endif
 
 static int commutative(int op)
 {
@@ -2105,7 +2117,11 @@ static int var_range(Node *n, long *lo, long *hi)
     return 1;
 }
 
+#ifdef DASH_A64
+#include "ta64_opt.c"
+#else
 #include "t68k_opt.c"
+#endif
 
 static void gen_binary(Node *n)
 {
@@ -5756,6 +5772,7 @@ static void gen_window_descs(void)
                 if (f < 7) flags = k ? flags | 1L << f : flags & ~(1L << f);
             }
         }
+        code_align();
         def_label(win_desc_label[i]);                  /* DashWinDesc */
         code_data_ptr(add_string(title, (int)strlen(title)));
         code_long((uint32_t)left);
@@ -5867,6 +5884,7 @@ static void gen_struct_types(void)
             }
             destroy_end();
         }
+        code_align();
         def_label(desc_label[si]);
         code_ptr(destroy);                             /* _DashType: destroy, size, methods */
         code_long((uint32_t)struct_bytes(st->fields.n));
@@ -6183,11 +6201,13 @@ void gen_program(Program *p, Obj *o)
         add_string(ver, (int)strlen(ver));
     }
     /* los nombres de los ficheros (_dash_srcfiles de ./dash), terminados en 0 */
+    code_align();
     def_label(files_label);
     for (i = 0; i < src_files.n && i < 63; i++) code_data_ptr(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
     code_long(0);
     if (profile) {
         /* --perfil: el nombre de cada función (0 es Main) */
+        code_align();
         def_label(prof_label);
         code_data_ptr(add_string("Main", 4));
         for (i = 0; i < p->funcs.n; i++) code_data_ptr(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));

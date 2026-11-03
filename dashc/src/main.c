@@ -248,7 +248,11 @@ int main(int argc, char **argv)
     tiempo("leer");
     gen_program(prog, &obj);
     tiempo("generar");
+#ifdef DASH_A64
+    write_elf_obj(&obj, out);   /* (se enlaza aparte con el runtime para ARM: docs/AARCH64_LOOP.md) */
+#else
     link_exe(&obj, rt, rtlen, out);
+#endif
     tiempo("escribir");
     return 0;
 }

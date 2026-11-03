@@ -176,4 +176,15 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
 - Siguiente: A4. `dashc-a64` (el mismo `gen68k.c` con `-DDASH_A64` y `ta64_*.c`), que escribe un objeto ELF y se
   enlaza (al principio con ld.lld) con el runtime de dashc compilado para ARM (gen_lib con `DASH_TARGET=dashos`,
   `api.c` sin AmigaOS).
+- 2026-11-03: A4 empezada, y el primer programa por el camino directo corre en ARM ("hola" y 6 * 7 = 42, en
+  qemu). `dashc-a64` (`make -C dashc dashc-a64`): `gen68k.c` con `-DDASH_A64` incluye `ta64_base.c` (codificación,
+  etiquetas, saltos, reubicaciones), `ta64_ops.c` (las ~110 operaciones), `ta64_arith.c` y `ta64_opt.c`; `elf.c`
+  escribe el objeto (ET_REL, .text/.data/.rela/.symtab; entrada `_dashc_start`). El recorrido dice ahora cuántos
+  argumentos lleva cada llamada (`call_sym`, `call_label`...), alinea los descriptores (`code_align`) y no hace
+  funciones sin marco si el generador no puede (`CAN_FRAMELESS`). El runtime de dashc para ARM
+  (`dashc/runtime/dashos/build.py` → `build/dashos/dashc_rt.a`): la cocina sin ventanas transpilada para DashOS,
+  las envolturas `dl_*` de `api.c` que no tocan AmigaOS (devolviendo `_DashP`) y `start.c` (arranque, Print).
+  `api.c`, limpio de tamaño de puntero con las macros: el runtime de 68k sale igual (solo cambia la hora de
+  compilación que lleva dentro). `tools/dashos_run.py --directo` compila, enlaza (ld.lld) y ejecuta.
+  2370/2370 y 395/395.
 

@@ -906,6 +906,7 @@ static void clear_global(long off)                     /* una global a 0 */
 }
 
 /* ---- datos dentro del código (descriptores _DashType, tablas de métodos) ---- */
+static void code_align(void) { }                       /* (palabras largas: el código ya va a 2 bytes) */
 static void code_long(uint32_t v) { l(v); }
 
 static void code_ptr(int label)                        /* la dirección de una etiqueta (-1: NULL) */
