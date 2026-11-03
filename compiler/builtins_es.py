@@ -98,6 +98,7 @@ DESC_ES = {
     "close_window": "Cierra la ventana actual",
     "screen_open_mode": "Abre una pantalla con un modo exacto (el de dialog_screen_mode, o uno conocido: 0x21000 es PAL de baja resolución y 0x29000 la de alta), tamaño y profundidad; falso si el modo no existe o no admite esa profundidad",
     "screen_clone_wb": "Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas",
+    "screen_make_default": "La pantalla pública del programa (screen_clone_wb) pasa a ser la pública por defecto: ahí se abren las ventanas que no dicen pantalla (los programas que lanza, las consolas); screen_close deja la de antes. Falso si no tiene pantalla pública",
     "screen_visitors": "Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno",
     "screen_open": "Abre una pantalla con el modo del Workbench y la profundidad que se diga",
     "screen_double_buffer": "Dos búferes para la pantalla propia del programa: se dibuja en el escondido y screen_flip lo enseña; falso sin pantalla propia (o si es pública) o antes de AmigaOS 3.0",

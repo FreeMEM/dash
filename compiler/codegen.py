@@ -13361,7 +13361,8 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
         WA_Activate, TRUE,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, _DASH_WIN_IDCMP,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
     if (!win) return 0;
     _dash_windows[i] = win;
@@ -14542,6 +14543,8 @@ static void _dash_before_close(struct Window *win) {
 static BOOL _dash_own_screen = FALSE;
 static BOOL _dash_screen_public = FALSE;   /* screen_clone_wb: a public screen others may open windows on */
 static char _dash_screen_pubname[64];
+static char _dash_screen_olddefault[MAXPUBSCREENNAME + 1];   /* screen_make_default: the one there was before */
+static BOOL _dash_screen_isdefault = FALSE;
 
 /* Blitter minterm constants for masked blits */
 #ifndef ABC
@@ -14612,6 +14615,31 @@ static LONG _dash_screen_visitors(void) {
         if (n->psn_Screen == _dash_screen) { v = n->psn_VisitorCount; break; }
     UnlockPubScreenList();
     return v;
+}
+
+/* screen_make_default (Forja G24): the program's public screen becomes the default public screen, where windows
+   with no screen of their own open (programs it starts, shells). screen_close puts the old one back. FALSE if
+   there is no public screen of the program's */
+static BOOL _dash_screen_make_default(void) {
+    if (!_dash_screen || !_dash_screen_public) return FALSE;
+    if (!_dash_screen_isdefault) {
+        _dash_screen_olddefault[0] = 0;
+        GetDefaultPubScreen((UBYTE *)_dash_screen_olddefault);
+    }
+    SetDefaultPubScreen((UBYTE *)_dash_screen_pubname);
+    _dash_screen_isdefault = TRUE;
+    return TRUE;
+}
+
+/* The default public screen back to the one before screen_make_default (the Workbench if that one is gone) */
+static void _dash_screen_default_back(void) {
+    struct Screen *s = NULL;
+    if (!_dash_screen_isdefault) return;
+    _dash_screen_isdefault = FALSE;
+    if (_dash_screen_olddefault[0] && strcmp(_dash_screen_olddefault, _dash_screen_pubname) != 0)
+        s = LockPubScreen((CONST_STRPTR)_dash_screen_olddefault);
+    SetDefaultPubScreen(s ? (UBYTE *)_dash_screen_olddefault : NULL);
+    if (s) UnlockPubScreen(NULL, s);
 }
 
 /* Screen Support - Clone Workbench properly */
@@ -14798,6 +14826,7 @@ static void (*_dash_screen_closing)(struct Screen *) = NULL;
 
 static void _dash_close_screen(void) {
     if (_dash_screen && _dash_own_screen && _dash_screen_public) {
+        _dash_screen_default_back();
         /* a public screen: private first (no new visitors), and wait for other programs' windows to close;
            after a minute with windows still open it is left open (closing it under them would crash) */
         LONG t = 0;
@@ -17309,7 +17338,8 @@ static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
         WA_DragBar, TRUE,
         WA_CloseGadget, TRUE,
         WA_SizeGadget, TRUE,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         WINDOW_Position, WPOS_CENTERSCREEN,
         WINDOW_Layout, _ra_layout,
         TAG_DONE);
@@ -20642,7 +20672,8 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, $idcmp_flags,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
 
     if (!win_$name) _dash_exit(20);
