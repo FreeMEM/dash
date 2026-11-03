@@ -1,7 +1,7 @@
 # Guía de Instalación de Dash
 
 *[English](INSTALACION.en.md) | Castellano*
-Versión: 2.2 (al día el 2026-11-03, Dash 2.0.2)
+Versión: 2.2 (al día el 2026-11-03, Dash 2.1.0)
 
 Este documento describe cómo instalar Dash, desde cero. Hay tres formas, según dónde quieras compilar:
 
@@ -45,8 +45,8 @@ Lo que necesita:
 
 Para instalarlo:
 
-1. Copia `dash-X.Y.Z-amiga.lha` al Amiga y descomprímelo, por ejemplo en `RAM:` (`lha x dash-2.0.2-amiga.lha RAM:`).
-   Si el navegador del PC lo guardó como `dash-2.0.2-amiga (1).lha`, cámbiale el nombre antes: LhA toma "(1)"
+1. Copia `dash-X.Y.Z-amiga.lha` al Amiga y descomprímelo, por ejemplo en `RAM:` (`lha x dash-2.1.0-amiga.lha RAM:`).
+   Si el navegador del PC lo guardó como `dash-2.1.0-amiga (1).lha`, cámbiale el nombre antes: LhA toma "(1)"
    como un comodín.
 2. Abre el cajón `Dash` y haz doble clic en **Instalar**. Pregunta dónde dejar el cajón (propone `Work:` si
    existe, y si no `SYS:`), lo copia con sus iconos y añade a `S:User-Startup`:
