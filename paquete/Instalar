@@ -45,6 +45,14 @@
     (command (cat "Assign DASH: \"" #cajon "\"\n" "Path DASH: ADD\n")))
 (run (cat "Assign DASH: \"" #cajon "\""))
 
+; --- Forja: dónde está la orden dash (ENV:Forja/dashc), para que funcione ya, sin reiniciar: el Path de
+; User-Startup no llega al Workbench que está en marcha. Solo si no lo había puesto el usuario ---
+(set #forja (not (exists "ENVARC:Forja/dashc" (noreq))))
+(if (AND #forja (not (exists "ENVARC:Forja" (noreq)))) (makedir "ENVARC:Forja"))
+(if (AND #forja (not (exists "ENV:Forja" (noreq)))) (makedir "ENV:Forja"))
+(if #forja (textfile (dest "ENVARC:Forja/dashc") (append (tackon #cajon "dash"))))
+(if #forja (textfile (dest "ENV:Forja/dashc") (append (tackon #cajon "dash"))))
+
 (exit (if #es
           (cat "Dash está en " #cajon ".\n\n"
                "Desde un Shell nuevo (o tras reiniciar), para compilar un ejemplo:\n"
