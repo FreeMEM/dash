@@ -23216,14 +23216,14 @@ static {ret_type} {method_name}({params_str}) {{
                  else self._generate_expression(self._list_hint(node.value, ret)))
         if self._is_string_expr(node.value) and getattr(self, "_lambda_depth", 0):
             # lambdas return LONG: the string leaves Dash's control
-            head = f"{indent}{{ LONG _dash_r = (LONG){self._escape(node.value, value)};\n"
+            head = f"{indent}{{ _DashP _dash_r = (_DashP){self._escape(node.value, value)};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         elif self._is_string_expr(node.value):
             self.uses_strings = True
             head = f"{indent}{{ STRPTR _dash_r = {self._str_as_temp(node.value, value)};\n"
             release = f"{indent}_dash_tmp_release_keep(_dash_fm, _dash_r);\n"
         elif self._is_obj_expr(node.value) and getattr(self, "_lambda_depth", 0):
-            head = f"{indent}{{ LONG _dash_r = (LONG)_dash_obj_escape({value});\n"
+            head = f"{indent}{{ _DashP _dash_r = (_DashP)_dash_obj_escape({value});\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         elif self._is_obj_expr(node.value):
             # hold the object while locals and temporaries go, then hand it to the
@@ -23342,6 +23342,28 @@ static {ret_type} {method_name}({params_str}) {{
             args.append(code)
         return ", ".join(args)
 
+    def _func_value(self, name: str) -> str:
+        """DashOS: a named function used as a Func value goes through a wrapper with the signature of every Func
+        call, _DashP f(_DashP, ...): an Int comes back with its sign in 64 bits, and its arguments are cut to their
+        types. (On the Amiga every value is 32 bits: the function itself.)"""
+        func = self.analysis.program.get_function(name)
+        if not func:
+            return name
+        types = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
+                 for p in func.params]
+        ret = self._function_c_type(func)
+        if any(c in ("float", "double", "DashFixed") for c in types + [ret]):
+            return name      # (Float, Double and Fixed through a Func: as on the Amiga)
+        wrapper = f"_dash_fv_{name}"
+        done = self.__dict__.setdefault("_func_values", set())
+        if name not in done:
+            done.add(name)
+            params = ", ".join(f"_DashP a{i}" for i in range(len(types))) or "void"
+            args = ", ".join(f"({c})a{i}" for i, c in enumerate(types))
+            body = f"{name}({args}); return 0;" if ret == "void" else f"return (_DashP){name}({args});"
+            self.lambda_funcs.append(f"\nstatic _DashP {wrapper}({params}) {{ {body} }}\n")
+        return wrapper
+
     def _names_function(self, node: ASTNode) -> bool:
         """A bare name of a user function (g = doble): its address, a Func value."""
         return (isinstance(node, VarRef) and node.name not in self.var_types
@@ -23351,8 +23373,8 @@ static {ret_type} {method_name}({params_str}) {{
         """Name to call; function pointers (lambdas, Func params) are cast first."""
         if self.var_types.get(node.name) != "func":
             return node.name
-        params = ", ".join(["LONG"] * len(node.arguments)) or "void"
-        return f"((LONG (*)({params})){node.name})"
+        params = ", ".join(["_DashP"] * len(node.arguments)) or "void"
+        return f"((_DashP (*)({params})){node.name})"
 
     def generic_visit(self, node: ASTNode):
         """Handle unknown nodes."""
@@ -23502,6 +23524,8 @@ static {ret_type} {method_name}({params_str}) {{
         elif isinstance(node, NilLiteral):
             return "NULL"
         elif isinstance(node, VarRef):
+            if self.target == "dashos" and self._names_function(node):
+                return self._func_value(node.name)
             return node.name
         elif isinstance(node, BinaryOp) and (self._is_fixed_expr(node) or (
                 node.operator in ("==", "!=", "<", ">", "<=", ">=")
@@ -23755,6 +23779,8 @@ static {ret_type} {method_name}({params_str}) {{
             return self._generate_lambda(node)
         elif isinstance(node, FunctionRef):
             # Return pointer to named function
+            if self.target == "dashos":
+                return f"(APTR){self._func_value(node.name)}"
             return f"(APTR){node.name}"
         elif isinstance(node, SelfRef):
             # Reference to self in struct method
@@ -24151,14 +24177,14 @@ static {ret_type} {method_name}({params_str}) {{
         name = f.name if isinstance(f, (VarRef, FunctionRef)) else None
         func = self.analysis.program.get_function(name) if name and self.var_types.get(name) != "func" else None
         if func:
-            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
                       for p in func.params][:2]
             ret = self._function_c_type(func)
             boolean = func.return_type == "Bool"
         elif isinstance(f, LambdaFunc):
-            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "LONG"
+            params = [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type else "_DashP"
                       for p in f.params][:2]
-            ret = "LONG"
+            ret = "_DashP"
             boolean = bool(f.is_expression and self._is_bool_expr(f.body))
         else:
             params, ret, boolean = [c_type, c_type], "LONG", False
@@ -24231,7 +24257,7 @@ static {ret_type} {method_name}({params_str}) {{
         self._icall_counter = getattr(self, "_icall_counter", 0) + 1
         o = f"_dash_io{self._icall_counter}"
         params = ["void *"] + [self._dash_type_to_c(p.param_type) if isinstance(p, FunctionParam) and p.param_type
-                               else "LONG" for p in method.params]
+                               else "_DashP" for p in method.params]
         args = [o] + [self._method_arg(method, i, a) for i, a in enumerate(node.arguments)]
         ret = self._method_c_type(method)
         return (f"({{ void *{o} = {self._nn(self._lend(node.object, obj_expr))}; "
@@ -25291,10 +25317,10 @@ static {ret_type} {method_name}({params_str}) {{
             self._seed_param_types(node.params)
             expr = self._generate_expression(node.body)
             if self._is_string_expr(node.body) or self._is_obj_expr(node.body):
-                expr = f"(LONG){self._escape_any(node.body, expr)}"
+                expr = f"(_DashP){self._escape_any(node.body, expr)}"
             self.var_types = saved_var_types
             body = f"    return {expr};"
-            return_type = "LONG"  # Assume LONG for now
+            return_type = "_DashP"   # (any Dash value: Func values are called as _DashP f(_DashP, ...))
         else:
             # Block body
             saved_var_types = self.var_types
@@ -25312,7 +25338,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.context.exit_scope()
             self.var_types = saved_var_types
             self.int_key_dicts = saved_int_keys
-            return_type = "LONG" if self._returns_value(node.body) else "void"
+            return_type = "_DashP" if self._returns_value(node.body) else "void"
 
         # Generate the lambda function
         func_code = f"""
@@ -25873,7 +25899,7 @@ class MultiFileGenerator:
         ret_type = self._dash_type_to_c(func.return_type) if func.return_type else "void"
         params = []
         for p in func.params:
-            p_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
+            p_type = self._dash_type_to_c(p.param_type) if p.param_type else "_DashP"
             params.append(f"{p_type} {p.name}")
         params_str = ", ".join(params) if params else "void"
         return f"{ret_type} {func.name}({params_str});"
@@ -25887,7 +25913,7 @@ class MultiFileGenerator:
                 p_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"_DashP {p}")
+                params.append(f"LONG {p}")
         params_str = ", ".join(params) if params else "void"
         return f"{ret_type} {native.name}({params_str});"
 
@@ -25901,7 +25927,7 @@ class MultiFileGenerator:
                 p_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"_DashP {p}")
+                params.append(f"LONG {p}")
         params_str = ", ".join(params) if params else "void"
 
         lines.append(f"{ret_type} {native.name}({params_str}) {{")

@@ -1,7 +1,7 @@
 # Test: a function kept in a variable and called later: g = doble, var h: Func = doble and
 # a global var gf: Func = doble. The call used to reach gcc without a cast ("called object
 # is not a function"), and g = doble was refused.
-# expect-c: ((LONG (*)(LONG))g)(4)
+# expect-c: ((_DashP (*)(_DashP))g)(4)
 # expect-c: APTR gf = NULL;
 # expect-out: 8
 # expect-out: 10

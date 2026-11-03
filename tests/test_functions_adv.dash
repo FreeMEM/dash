@@ -3,9 +3,9 @@
 # structs, struct-typed parameters, mutual recursion
 #
 # expect-c: APTR doble = (APTR)_dash_lambda_
-# expect-c: ((LONG (*)(LONG))doble)(4)
+# expect-c: ((_DashP (*)(_DashP))doble)(4)
 # expect-c: LONG aplica(APTR f, _DashP v) {
-# expect-c: _dash_r = ((LONG (*)(LONG))f)(v);
+# expect-c: _dash_r = ((_DashP (*)(_DashP))f)(v);
 # expect-c: DashArrayLong * lista(void)
 # expect-c: _dash_obj_set((void **)&l, lista());
 # expect-c: _Dash_Punto * crea(void)

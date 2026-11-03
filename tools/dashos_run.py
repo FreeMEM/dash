@@ -91,8 +91,13 @@ def build(src, exe, linux=True, memcheck=False):
     return True, ""
 
 
+def _no_core():
+    import resource
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))   # (un volcado de qemu lleva el entorno: secretos)
+
+
 def run(exe, timeout=30):
-    r = subprocess.run(["qemu-aarch64_be", str(exe)], capture_output=True, timeout=timeout)
+    r = subprocess.run(["qemu-aarch64_be", str(exe)], capture_output=True, timeout=timeout, preexec_fn=_no_core)
     return r.returncode, r.stdout.decode("latin-1"), r.stderr.decode("latin-1")
 
 
