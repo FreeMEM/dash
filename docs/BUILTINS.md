@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 840 funciones, 840 implementadas, 0 sin implementar.
+Total: 842 funciones, 842 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -54,6 +54,8 @@ Total: 840 funciones, 840 implementadas, 0 sin implementar.
 | `sprite_show(id)` | `void` | Hace visible un sprite |  |
 | `sprite_hide(id)` | `void` | Oculta un sprite |  |
 | `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (componentes de 0 a 15) |  |
+| `sprite_load_colors(id, filename)` | `BOOL` | Los colores 1-3 de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
+| `bob_load_colors(filename, first)` | `LONG` | Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso |  |
 | `sprite_rgb8(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2, con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
 | `sprite_frame(id, frame)` | `void` | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load |  |
 | `sprite_free(id)` | `void` | Libera la memoria de un sprite |  |

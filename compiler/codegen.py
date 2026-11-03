@@ -14983,6 +14983,49 @@ static void _dash_sprite_rgb8(LONG id, LONG index, LONG r, LONG g, LONG b) {
                  (ULONG)(b & 255) << 24);
 }
 
+/* The CMAP of an IFF ILBM: up to 256 colours as r, g, b; how many (0 if the file cannot be read or has none) */
+static LONG _dash_cmap_read(STRPTR file, UBYTE *cmap) {
+    BPTR fh;
+    UBYTE hdr[12], chunk[8];
+    LONG n = 0;
+    if (!file || !(fh = Open(file, MODE_OLDFILE))) return 0;
+    if (Read(fh, hdr, 12) == 12 && !memcmp(hdr, "FORM", 4) && !memcmp(hdr + 8, "ILBM", 4)) {
+        while (Read(fh, chunk, 8) == 8) {
+            ULONG len = ((ULONG)chunk[4] << 24) | ((ULONG)chunk[5] << 16) | ((ULONG)chunk[6] << 8) | chunk[7];
+            if (!memcmp(chunk, "CMAP", 4)) {
+                n = len / 3 > 256 ? 256 : len / 3;
+                if (Read(fh, cmap, n * 3) != n * 3) n = 0;
+                break;
+            }
+            if (!memcmp(chunk, "BODY", 4)) break;
+            Seek(fh, len + (len & 1), OFFSET_CURRENT);
+        }
+    }
+    Close(fh);
+    return n;
+}
+
+/* sprite_load_colors (Forja D17): colours 1-3 of a picture's CMAP as the sprite's colours (8 bits, like
+   sprite_rgb8): what Forja's sprite editor saves. FALSE if the file has no CMAP or the sprite does not exist */
+static BOOL _dash_sprite_load_colors(LONG id, STRPTR file) {
+    UBYTE cmap[3 * 256];
+    LONG n = _dash_cmap_read(file, cmap), i;
+    if (n < 2 || id < 0 || id >= DASH_MAX_SPRITES || !_dash_screen || _dash_sprite_num[id] < 0) return FALSE;
+    for (i = 1; i < 4 && i < n; i++) _dash_sprite_rgb8(id, i - 1, cmap[i * 3], cmap[i * 3 + 1], cmap[i * 3 + 2]);
+    return TRUE;
+}
+
+/* bob_load_colors (Forja D17): the colours of a picture's CMAP in the screen's palette (the program's screen, else
+   the window's) from colour first on; how many it set */
+static LONG _dash_bob_load_colors(STRPTR file, LONG first) {
+    UBYTE cmap[3 * 256];
+    LONG n = _dash_cmap_read(file, cmap), i;
+    if (first < 0) first = 0;
+    if (first + n > 256) n = 256 - first;
+    for (i = 0; i < n; i++) _dash_set_color8(first + i, cmap[i * 3], cmap[i * 3 + 1], cmap[i * 3 + 2]);
+    return n > 0 ? n : 0;
+}
+
 /* Shows frame number frame of a sprite from sprite_load (0 the first); nothing for any other */
 static void _dash_sprite_frame(LONG id, LONG frame) {
     UWORD *src, *dst;

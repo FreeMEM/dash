@@ -347,6 +347,22 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="Set a sprite colour, index 0-2 (components 0-15)"
     ),
+    "sprite_load_colors": BuiltinFunc(
+        name="sprite_load_colors",
+        params=["id", "filename"],
+        return_type="BOOL",
+        c_template="_dash_sprite_load_colors(${id}, ${filename})",
+        needs_gfx=True,
+        description="Colours 1-3 of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none"
+    ),
+    "bob_load_colors": BuiltinFunc(
+        name="bob_load_colors",
+        params=["filename", "first"],
+        return_type="LONG",
+        c_template="_dash_bob_load_colors(${filename}, ${first})",
+        needs_gfx=True,
+        description="The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many"
+    ),
     "sprite_rgb8": BuiltinFunc(
         name="sprite_rgb8",
         params=["id", "index", "r", "g", "b"],

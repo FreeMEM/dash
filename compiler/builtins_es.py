@@ -42,6 +42,8 @@ DESC_ES = {
     "sprite_show": "Hace visible un sprite",
     "sprite_hide": "Oculta un sprite",
     "sprite_color": "Pone un color de un sprite, índice 0-2 (componentes de 0 a 15)",
+    "sprite_load_colors": "Los colores 1-3 de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene",
+    "bob_load_colors": "Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso",
     "sprite_rgb8": "Pone un color de un sprite, índice 0-2, con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS)",
     "sprite_frame": "Enseña el fotograma frame (0 el primero) de un sprite de sprite_load",
     "sprite_free": "Libera la memoria de un sprite",
