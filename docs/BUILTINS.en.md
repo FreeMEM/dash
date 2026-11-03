@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 879 functions, 879 implemented, 0 not implemented.
+Total: 882 functions, 882 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -79,6 +79,9 @@ Total: 879 functions, 879 implemented, 0 not implemented.
 | `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
 | `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
+| `bob_width(id)` | `LONG` | The width of a frame of a BOB (0 if there is no such BOB) |  |
+| `bob_height(id)` | `LONG` | The height of a BOB |  |
+| `bob_frames(id)` | `LONG` | How many frames a BOB has |  |
 | `bob_paste(id, frame, x, y)` | `void` | Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering) |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
 | `tilemap_create(id, width, height, tile, layers)` | `BOOL` | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |

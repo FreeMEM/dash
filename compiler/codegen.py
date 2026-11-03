@@ -12781,6 +12781,13 @@ static void _dash_bob_draw(LONG id) {
     o->by = o->y;
 }
 
+/* bob_width, bob_height, bob_frames (Fragua): what a frame measures and how many there are (0 if no such BOB) */
+static LONG _dash_bob_info(LONG id, LONG what) {
+    _DashBob *o = _dash_bob_get(id);
+    if (!o) return 0;
+    return what == 0 ? o->fw : what == 1 ? _dash_bitmaps[id].h : o->frames;
+}
+
 /* bob_paste (Fragua): a frame of the BOB at x, y with its mask, without saving what was under it (a game that
    draws the whole frame every time, with double buffering, does not need it put back) */
 static void _dash_bob_paste(LONG id, LONG frame, LONG x, LONG y) {

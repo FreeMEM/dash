@@ -1,10 +1,12 @@
 # Test: bob_paste draws a frame of a BOB with its mask (colour 0 lets what is under it show) and saves nothing: a
-# second paste somewhere else leaves the first one. Frames out of range wrap around.
+# second paste somewhere else leaves the first one. Frames out of range wrap around. bob_width, bob_height and
+# bob_frames give its size.
 #
 # expect-c: static void _dash_bob_paste(LONG id, LONG frame, LONG x, LONG y)
 # expect-out: fotograma 1: 3 1
 # expect-out: el primero sigue: 3
 # expect-out: fotograma 2 es el 0: 2
+# expect-out: medidas: 16 16 2 0
 # expect-out: fin
 
 Window W
@@ -33,6 +35,7 @@ Main
     Print "el primero sigue: #{gfx_pixel_read(12, 12)}"
     bob_paste(0, 2, 100, 10)
     Print "fotograma 2 es el 0: #{gfx_pixel_read(105, 15)}"
+    Print "medidas: #{bob_width(0)} #{bob_height(0)} #{bob_frames(0)} #{bob_width(5)}"
     bob_free(0)
     Print "fin"
 end

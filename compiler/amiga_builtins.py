@@ -551,6 +551,30 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames)"
     ),
+    "bob_width": BuiltinFunc(
+        name="bob_width",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_bob_info(${id}, 0)",
+        needs_gfx=True,
+        description="The width of a frame of a BOB (0 if there is no such BOB)"
+    ),
+    "bob_height": BuiltinFunc(
+        name="bob_height",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_bob_info(${id}, 1)",
+        needs_gfx=True,
+        description="The height of a BOB"
+    ),
+    "bob_frames": BuiltinFunc(
+        name="bob_frames",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_bob_info(${id}, 2)",
+        needs_gfx=True,
+        description="How many frames a BOB has"
+    ),
     "bob_paste": BuiltinFunc(
         name="bob_paste",
         params=["id", "frame", "x", "y"],

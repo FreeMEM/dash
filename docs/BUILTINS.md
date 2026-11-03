@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 879 funciones, 879 implementadas, 0 sin implementar.
+Total: 882 funciones, 882 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -79,6 +79,9 @@ Total: 879 funciones, 879 implementadas, 0 sin implementar.
 | `bob_erase(id)` | `void` | Borra un BOB (deja el fondo como estaba) |  |
 | `bob_frame(id, frame)` | `void` | Pone el fotograma de la animación de un BOB |  |
 | `bob_frame_width(id, width)` | `void` | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
+| `bob_width(id)` | `LONG` | El ancho de un fotograma de un BOB (0 si no hay ese BOB) |  |
+| `bob_height(id)` | `LONG` | El alto de un BOB |  |
+| `bob_frames(id)` | `LONG` | Cuántos fotogramas tiene un BOB |  |
 | `bob_paste(id, frame, x, y)` | `void` | Pinta un fotograma de un BOB en x, y con su máscara (el color 0, transparente), sin guardar lo que hay debajo: para juegos que pintan el fotograma entero cada vez (doble búfer) |  |
 | `bob_free(id)` | `void` | Libera la memoria de un BOB |  |
 | `tilemap_create(id, width, height, tile, layers)` | `BOOL` | Un mapa de tiles nuevo en id (el que hubiera se va): ancho x alto celdas (de 1 a 1024 cada lado), tiles cuadrados de 8, 16 o 32 píxeles y de 1 a 8 capas de celdas vacías |  |
