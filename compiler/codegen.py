@@ -9905,7 +9905,38 @@ static BOOL _dash_input_init(void) {
     return TRUE;
 }
 
+/* key_down (Fragua): whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up...). It reads
+   keyboard.device's key matrix, so it needs no window or events: a game asks in each frame. */
+#include <devices/keyboard.h>
+static struct MsgPort *_dash_kbd_port = NULL;
+static struct IOStdReq *_dash_kbd_io = NULL;
+static BOOL _dash_kbd_open = FALSE, _dash_kbd_tried = FALSE;
+static UBYTE _dash_kbd_matrix[16];
+
+static BOOL _dash_key_down(LONG code) {
+    if (code < 0 || code > 127) return FALSE;
+    if (!_dash_kbd_open && !_dash_kbd_tried) {
+        _dash_kbd_tried = TRUE;
+        if ((_dash_kbd_port = CreateMsgPort()) &&
+            (_dash_kbd_io = (struct IOStdReq *)CreateIORequest(_dash_kbd_port, sizeof(struct IOStdReq))) &&
+            OpenDevice((CONST_STRPTR)"keyboard.device", 0, (struct IORequest *)_dash_kbd_io, 0) == 0)
+            _dash_kbd_open = TRUE;
+    }
+    if (!_dash_kbd_open) return FALSE;
+    _dash_kbd_io->io_Command = KBD_READMATRIX;
+    _dash_kbd_io->io_Data = (APTR)_dash_kbd_matrix;
+    _dash_kbd_io->io_Length = 16;
+    if (DoIO((struct IORequest *)_dash_kbd_io) != 0) return FALSE;
+    return (_dash_kbd_matrix[code >> 3] >> (code & 7)) & 1;
+}
+
 static void _dash_input_cleanup(void) {
+    if (_dash_kbd_open) CloseDevice((struct IORequest *)_dash_kbd_io);
+    if (_dash_kbd_io) DeleteIORequest((struct IORequest *)_dash_kbd_io);
+    if (_dash_kbd_port) DeleteMsgPort(_dash_kbd_port);
+    _dash_kbd_open = FALSE;
+    _dash_kbd_io = NULL;
+    _dash_kbd_port = NULL;
     if (_dash_in_open) CloseDevice((struct IORequest *)_dash_in_io);
     if (_dash_in_io) DeleteIORequest((struct IORequest *)_dash_in_io);
     if (_dash_in_port) DeleteMsgPort(_dash_in_port);
@@ -12748,6 +12779,20 @@ static void _dash_bob_draw(LONG id) {
     o->drawn_rp = _dash_rp;
     o->bx = o->x;
     o->by = o->y;
+}
+
+/* bob_paste (Fragua): a frame of the BOB at x, y with its mask, without saving what was under it (a game that
+   draws the whole frame every time, with double buffering, does not need it put back) */
+static void _dash_bob_paste(LONG id, LONG frame, LONG x, LONG y) {
+    _DashBob *o = _dash_bob_get(id);
+    _DashBitmap *b;
+    if (!o || !_dash_rp || !_dash_bob_mask(id)) return;
+    b = &_dash_bitmaps[id];
+    frame = ((frame % o->frames) + o->frames) % o->frames;
+    {
+        volatile LONG sx = frame * o->fw;   /* libgcc multiply on 68000: outside the macro */
+        BltMaskBitMapRastPort(b->bm, sx, 0, _dash_rp, x, y, o->fw, b->h, (ABC | ABNC | ANBC), o->mask->Planes[0]);
+    }
 }
 
 /* Bounding boxes first, then the masks pixel by pixel in the overlap */

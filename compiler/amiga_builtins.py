@@ -551,6 +551,14 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames)"
     ),
+    "bob_paste": BuiltinFunc(
+        name="bob_paste",
+        params=["id", "frame", "x", "y"],
+        return_type="void",
+        c_template="_dash_bob_paste(${id}, ${frame}, ${x}, ${y})",
+        needs_gfx=True,
+        description="Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering)"
+    ),
     "bob_free": BuiltinFunc(
         name="bob_free",
         params=["id"],
@@ -903,6 +911,13 @@ INPUT_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_key_raw()",
         description="Get raw key code (no translation)"
+    ),
+    "key_down": BuiltinFunc(
+        name="key_down",
+        params=["code"],
+        return_type="BOOL",
+        c_template="_dash_key_down(${code})",
+        description="Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window"
     ),
     "key_text": BuiltinFunc(
         name="key_text",

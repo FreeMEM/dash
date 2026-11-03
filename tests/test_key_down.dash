@@ -1,0 +1,21 @@
+# Test: key_down reads keyboard.device's key matrix: with nothing pressed, every key is up; codes out of range give
+# false. (A real key press cannot be made here: input_key goes through input.device, not the keyboard's matrix.)
+#
+# expect-c: static BOOL _dash_key_down(LONG code)
+# expect-out: pulsadas: 0
+# expect-out: fuera: false false
+# expect-out: fin
+
+Main
+    n = 0
+    k = 0
+    while k < 128
+        if key_down(k)
+            n = n + 1
+        end
+        k = k + 1
+    end
+    Print "pulsadas: #{n}"
+    Print "fuera: #{key_down(-1)} #{key_down(128)}"
+    Print "fin"
+end

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 877 functions, 877 implemented, 0 not implemented.
+Total: 879 functions, 879 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -79,6 +79,7 @@ Total: 877 functions, 877 implemented, 0 not implemented.
 | `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
 | `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
+| `bob_paste(id, frame, x, y)` | `void` | Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering) |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
 | `tilemap_create(id, width, height, tile, layers)` | `BOOL` | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
 | `tilemap_load(id, filename)` | `BOOL` | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
@@ -127,6 +128,7 @@ Total: 877 functions, 877 implemented, 0 not implemented.
 | `key_get()` | `LONG` | Get key code |  |
 | `key_wait()` | `LONG` | Wait for and return key |  |
 | `key_raw()` | `LONG` | Get raw key code (no translation) |  |
+| `key_down(code)` | `BOOL` | Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window |  |
 | `key_text(keycode)` | `STRPTR` | Convert keycode to text |  |
 | `mouse_x()` | `LONG` | Mouse X position relative to window inner area (0 without a window) |  |
 | `mouse_y()` | `LONG` | Mouse Y position relative to window inner area (0 without a window) |  |
