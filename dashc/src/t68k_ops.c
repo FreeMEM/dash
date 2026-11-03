@@ -504,3 +504,29 @@ static void arr_get(void)
     w(0x7000);                                         /* cero: moveq #0,d0 */
     d0_loaded = (uint32_t)-1;                          /* fin: */
 }
+
+static void pop_d1(void)
+{
+    w(0x221F);                                         /* move.l (sp)+,d1 */
+    sp_depth -= 4;
+}
+
+/* hueco para dos valores en la pila (más corto que reserve_args(2): subq) */
+static void reserve2(void)
+{
+    w(0x518F);                                         /* subq.l #8,sp */
+    sp_depth += 8;
+}
+
+/* la lista de a0 [d1] = d0, como DashArray_set: nil o un índice fuera no hacen nada */
+static void arr_put(void)
+{
+    w(0xB0FC); w(0);                                   /* cmpa.w #0,a0 */
+    w(0x670E);                                         /* beq.s fin */
+    w(0xB2A8); w(4);                                   /* cmp.l 4(a0),d1 */
+    w(0x6408);                                         /* bcc.s fin */
+    w(0x2050);                                         /* movea.l (a0),a0 */
+    w(0xE589);                                         /* lsl.l #2,d1 */
+    w(0x2180); w(0x1800);                              /* move.l d0,0(a0,d1.l) */
+    d0_loaded = (uint32_t)-1;                          /* fin: */
+}

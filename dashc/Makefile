@@ -13,7 +13,7 @@ Z = ../runtime/zlib
 ZLIB = -DZ_PREFIX -DNO_GZIP -I$(Z) $(Z)/inflate.c $(Z)/inftrees.c $(Z)/inffast.c $(Z)/zutil.c $(Z)/adler32.c $(Z)/crc32.c
 SRC = src/main.c src/util.c src/lexer.c src/parser.c src/gen68k.c src/hunk.c src/dashui.c
 
-dashc: $(SRC) src/dashc.h src/t68k_base.c src/t68k_ops.c src/t68k_arith.c build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c
+dashc: $(SRC) src/dashc.h src/t68k_base.c src/t68k_ops.c src/t68k_arith.c src/t68k_opt.c build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c
 	$(CC) $(CFLAGS) -o $@ $(SRC) build/rt_blob.c build/rt_fpu_blob.c build/rt_fpu_mc_blob.c build/builtins_tab.c $(RYU) $(ZLIB)
 
 amiga: build/dashc.amiga

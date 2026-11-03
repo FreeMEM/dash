@@ -1971,41 +1971,24 @@ static void gen_arr_store(Node *target, Node *v)
             value(a[1]);
             push_d0();
             elem_value(a[2], et);
-            w(0x221F);                                 /* move.l (sp)+,d1 */
-            sp_depth -= 4;
+            pop_d1();
         }
         load_a0(&va);
-        w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
-        w(0x670E);                                     /* beq.s fin */
-        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
-        w(0x6408);                                     /* bcc.s fin */
-        w(0x2050);                                     /* movea.l (a0),a0 */
-        w(0xE589);                                     /* lsl.l #2,d1 */
-        w(0x2180); w(0x1800);                          /* move.l d0,0(a0,d1.l) */
-        d0_loaded = (uint32_t)-1;                      /* fin: */
+        arr_put();
         return;
     }
     if (kind == 0) {
         /* una lista de valores (no textos ni objetos, que llevan cuenta de referencias): en línea, como
            DashArray_set (nil o un índice fuera de rango no hacen nada) */
-        w(0x518F);                                     /* subq.l #8,sp */
-        sp_depth += 8;
+        reserve2();
         value(a[0]);
-        w(0x2E80);                                     /* move.l d0,(sp) */
+        store_d0_arg(0);
         value(a[1]);
-        w(0x2F40); w(4);                               /* move.l d0,4(sp) */
+        store_d0_arg(1);
         elem_value(a[2], et);
-        w(0x205F);                                     /* movea.l (sp)+,a0 */
-        w(0x221F);                                     /* move.l (sp)+,d1 */
-        sp_depth -= 8;
-        w(0xB0FC); w(0);                               /* cmpa.w #0,a0 */
-        w(0x670E);                                     /* beq.s fin */
-        w(0xB2A8); w(4);                               /* cmp.l 4(a0),d1 */
-        w(0x6408);                                     /* bcc.s fin */
-        w(0x2050);                                     /* movea.l (a0),a0 */
-        w(0xE589);                                     /* lsl.l #2,d1 */
-        w(0x2180); w(0x1800);                          /* move.l d0,0(a0,d1.l) */
-        d0_loaded = (uint32_t)-1;                      /* fin: */
+        pop_a0();
+        pop_d1();
+        arr_put();
         return;
     }
     reserve_args(3);
@@ -2163,80 +2146,7 @@ static int var_range(Node *n, long *lo, long *hi)
     return 1;
 }
 
-/* con rangos conocidos: sin comprobar si cabe en 16 bits */
-static int gen_ranged(Node *n)
-{
-    long k, alo, ahi, blo, bhi;
-    Var v;
-    int op = n->op;
-    if (!var_range(n->a, &alo, &ahi)) return 0;
-    if ((op == P_SLASH || op == P_PERCENT) && alo >= 0 && fold(n->b, &k) && k > 1 && k <= 65535) {
-        int s = pow2(k);
-        if (!s && ahi >= (long)((uint32_t)k << 16)) return 0;   /* el cociente no cabe */
-        value(n->a);
-        if (s && op == P_SLASH) shift_d0(0, s);
-        else if (s) { w(0x0280); l((uint32_t)k - 1); }  /* andi.l #k-1,d0 */
-        else {
-            w(0x80FC); w((int)k);                      /* divu.w #k,d0 */
-            if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }   /* swap; clr.w; swap */
-            else { w(0x4240); w(0x4840); }             /* clr.w; swap */
-        }
-        d0_loaded = (uint32_t)obj->code.n;             /* los códigos dicen cómo es d0 */
-        return 1;
-    }
-    if ((op == P_SLASH || op == P_PERCENT) && alo >= 0 && ahi <= 0xFFFF && !fold(n->b, &k) && loop_weight > 1) {
-        /* dividendo de 16 bits: el cociente cabe; solo hace falta 1 <= divisor <= 65535 */
-        int x = op == P_SLASH ? 6 : 4, r = 1;
-        value(n->a);
-        if (simple(n->b, &v)) {
-            if (v.kind == V_REG) r = v.reg;            /* el divisor ya está en un registro */
-            else load_var(1, &v);
-        } else {
-            push_d0();
-            value(n->b);
-            w(0x2200);                                 /* move.l d0,d1 */
-            pop_d0();
-        }
-        if (!var_range(n->b, &blo, &bhi)) blo = -1, bhi = INT32_MAX;
-        if (blo >= 1 && bhi <= 0xFFFF) {
-            w(0x80C0 | r);                             /* divu.w dr,d0 */
-            if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }
-            else { w(0x4240); w(0x4840); }
-            d0_loaded = (uint32_t)obj->code.n;
-            return 1;
-        }
-        w(0xB0BC | r << 9); l(0xFFFF);                 /* cmp.l #$FFFF,dr */
-        if (blo >= 1) {
-            w(0x6200 | (4 + x));                       /* bhi.s lento; el divisor no es 0 */
-        } else {
-            w(0x6200 | (8 + x));                       /* bhi.s lento (también los negativos) */
-            w(0x4A40 | r);                             /* tst.w dr */
-            w(0x6700 | (4 + x));                       /* beq.s lento */
-        }
-        w(0x80C0 | r);                                 /* divu.w dr,d0 */
-        if (op == P_SLASH) { w(0x4840); w(0x4240); w(0x4840); }
-        else { w(0x4240); w(0x4840); }
-        w(r == 1 ? 0x6008 : 0x600A);                   /* bra.s fin */
-        if (r != 1) w(0x2200 | r);                     /* lento: move.l dr,d1 */
-        jsr_sym(op == P_SLASH ? "__dash_div" : "__dash_mod");
-        w(0x4A80);                                     /* tst.l d0: así los dos caminos dejan los códigos */
-        d0_loaded = (uint32_t)obj->code.n;
-        return 1;
-    }
-    if (op == P_STAR && alo >= -32768 && ahi <= 32767 && var_range(n->b, &blo, &bhi) &&
-        blo >= -32768 && bhi <= 32767 && !fold(n->a, &k) && !fold(n->b, &k)) {
-        value(n->a);
-        simple(n->b, &v);
-        if (v.kind != V_REG) {
-            load_var(1, &v);
-            v.kind = V_REG;
-            v.reg = 1;
-        }
-        w(0xC1C0 | v.reg);                             /* muls.w dN,d0 */
-        return 1;
-    }
-    return 0;
-}
+#include "t68k_opt.c"
 
 static void gen_binary(Node *n)
 {
