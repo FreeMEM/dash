@@ -8234,7 +8234,7 @@ static LONG _dash_buffer_find2(UBYTE *buf, LONG from, LONG to, UBYTE a, UBYTE b)
     ULONG pa = a | (a << 8), pb = b | (b << 8), w;
     pa |= pa << 16;
     pb |= pb << 16;
-    for (; p < e && ((ULONG)p & 3); p++) if (*p == a || *p == b) return p - buf;
+    for (; p < e && ((_DashUP)p & 3); p++) if (*p == a || *p == b) return p - buf;
     if (a == b) {
         for (; p + 4 <= e; p += 4) {
             w = *(ULONG *)p ^ pa;
@@ -23233,6 +23233,10 @@ static {ret_type} {method_name}({params_str}) {{
             release = (f"{indent}_dash_tmp_release(_dash_fm);\n"
                        f"{indent}_dash_obj_float(_dash_r);\n")
         else:
+            # an element of an untyped list (a _DashP) returned as a struct: as the struct's pointer
+            ret_c = self._dash_type_to_c(ret, "") if ret and not getattr(self, "_lambda_depth", 0) else ""
+            if ret_c.startswith("_Dash_") and isinstance(node.value, ArrayAccess) and self._infer_c_type(node.value) == "LONG":
+                value = f"(({ret_c}){value})"
             head = f"{indent}{{ __typeof__({value}) _dash_r = {value};\n"
             release = f"{indent}_dash_tmp_release(_dash_fm);\n"
         self.emit(head + self._frees(owned) + release + f"{indent}return _dash_r; }}\n")

@@ -10,19 +10,56 @@ Sale con el código del programa. Necesita clang (objetivo aarch64_be-none-elf),
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 RT = REPO / "runtime" / "dashos"
+sys.path.insert(0, str(REPO))
 CFLAGS = ["--target=aarch64_be-none-elf", "-ffreestanding", "-fno-builtin", "-O2", "-fno-pic", "-fno-pie",
           "-march=armv8-a",
           "-fno-delete-null-pointer-checks", "-Wno-unknown-attributes", "-Wno-pointer-sign",
           "-Werror=implicit-function-declaration", "-Werror=int-conversion",
           "-Werror=pointer-to-int-cast", "-Werror=int-to-pointer-cast", "-Werror=incompatible-pointer-types",
           "-I" + str(RT / "include"), "-I" + str(RT)]
+
+
+_lib_lock = threading.Lock()
+
+
+def library(name):
+    """La biblioteca del runtime (compiler/clibs.py: zlib, ryu, fdlibm...) compilada para ARM, en build/dashos/"""
+    with _lib_lock:   # (tests/dashos_tests.py compila en varios hilos)
+        return _library(name)
+
+
+def _library(name):
+    from compiler.clibs import LIBRARIES
+    spec = LIBRARIES[name]
+    src_dir = REPO / "runtime" / name
+    out = REPO / "build" / "dashos"
+    out.mkdir(parents=True, exist_ok=True)
+    lib = out / f"{name}.a"
+    sources = [src_dir / s for s in spec["sources"]]
+    newest = max(p.stat().st_mtime for p in sources + list(src_dir.rglob("*.h")) + list(RT.rglob("*.h")) +
+                 [Path(__file__)])
+    if lib.exists() and lib.stat().st_mtime >= newest:
+        return lib
+    flags = [f for f in CFLAGS if not f.startswith("-Werror")] + spec["defines"] + [f"-I{src_dir}"]
+    with tempfile.TemporaryDirectory() as tmp:
+        objs = []
+        for s in sources:
+            o = Path(tmp) / (s.stem + ".o")
+            subprocess.run(["clang", *flags, "-w", "-c", str(s), "-o", str(o)], check=True)
+            objs.append(str(o))
+        part = Path(tmp) / lib.name
+        subprocess.run(["llvm-ar", "rcs", str(part), *objs], check=True)
+        shutil.move(str(part), str(lib))
+    return lib
 
 
 def build(src, exe, linux=True, memcheck=False):
@@ -44,6 +81,8 @@ def build(src, exe, linux=True, memcheck=False):
             if r.returncode:
                 return False, r.stderr.replace(str(c), "prog.c")
             objs.append(str(o))
+        from compiler.clibs import LIBRARIES, uses_library
+        objs += [str(library(n)) for n in LIBRARIES if uses_library(n, text)]
         r = subprocess.run(["ld.lld", "-static", "-e", "_start", "--image-base=0x400000",
                             "-z", "separate-loadable-segments", "-z", f"stack-size={stack}",
                             *objs, "-o", str(exe)], capture_output=True, text=True)

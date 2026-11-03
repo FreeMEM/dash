@@ -31,7 +31,7 @@ def one(f, tmp):
     text = f.read_text(encoding="utf-8", errors="replace")
     exe = Path(tmp) / f.stem
     memcheck = any(l.strip() == "# memcheck" for l in text.splitlines())
-    ok, msg = dashos_run.build(f.resolve(), exe, memcheck=memcheck)
+    ok, msg = dashos_run.build(f.relative_to(REPO), exe, memcheck=memcheck)   # (relativo: como en los errores del A1200)
     if not ok:
         return "build", msg
     try:

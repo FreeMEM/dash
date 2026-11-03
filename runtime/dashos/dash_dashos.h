@@ -72,6 +72,10 @@ int strncmp(const char *a, const char *b, size_t n);
 char *strcpy(char *d, const char *s);
 char *strchr(const char *s, int c);
 void exit(int code) __attribute__((noreturn));
+void *malloc(size_t n);
+void *calloc(size_t n, size_t size);
+void *realloc(void *p, size_t n);
+void free(void *p);
 
 /* Las funciones de plataforma (plat.c tiene las de DashOS y las de Linux, para qemu-aarch64_be; quien aloje el
    runtime de otra manera pone las suyas): */

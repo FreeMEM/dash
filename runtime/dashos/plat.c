@@ -203,6 +203,23 @@ APTR AllocVec(ULONG size, ULONG flags) { return blk_alloc(size, (flags & MEMF_CL
 void FreeVec(APTR mem) { blk_free(mem); }
 void CopyMem(const void *src, void *dst, ULONG size) { memmove(dst, src, size); }
 
+/* las de la libc, para las bibliotecas del runtime (Ryu, zlib) */
+int errno;
+void *malloc(size_t n) { return blk_alloc(n, 0); }
+void *calloc(size_t n, size_t size) { return blk_alloc(n * size, 1); }
+void free(void *p) { blk_free(p); }
+void *realloc(void *p, size_t n)
+{
+    void *q;
+    if (!p) return malloc(n);
+    if (n <= ((Blk *)p - 1)->size) return p;
+    if ((q = malloc(n))) {
+        memcpy(q, p, ((Blk *)p - 1)->size);
+        free(p);
+    }
+    return q;
+}
+
 /* ---- salida ---- */
 APTR DOSBase = (APTR)1, IntuitionBase = (APTR)1;   /* (no son NULL: el runtime pregunta si hay dos.library) */
 BPTR Output(void) { return 1; }
