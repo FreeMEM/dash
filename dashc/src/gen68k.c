@@ -1431,53 +1431,30 @@ static int gen_new(Node *n, int si, int fresh)
     }
     if (nf) args_to_stack(vals, nf, conv);
     free(conv);
-    {
-        Fixup f;
-        w(0x4879);                                     /* pea descriptor */
-        f.at = (uint32_t)obj->code.n;
-        f.label = desc_label[si];
-        f.abs = 1;
-        f.size = 2;
-        VEC_PUSH(fixups, f);
-        add_reloc(f.at, HK_CODE, NULL);
-        l(0);
-        sp_depth += 4;
-    }
-    w(0x4878); w(4 * nf);                              /* pea tamaño.w */
-    sp_depth += 4;
+    push_label(desc_label[si]);                        /* el descriptor */
+    push_word(struct_bytes(nf));                       /* el tamaño */
     rt_call(fresh ? "_dl_rc_new_obj" : "_dl_rc_alloc_obj", 2, !fresh);
-    /* a2 se guarda: una función de Dash a la que llama C (una retrollamada) tiene que dejarlo como estaba */
-    w(0x2F0A);                                         /* move.l a2,-(sp) */
-    sp_depth += 4;
-    w(0x2440);                                         /* movea.l d0,a2 (C no toca a2) */
+    obj_begin();                                       /* el objeto nuevo, a mano mientras se llena */
     for (i = 0; i < nf; i++) {
-        int ft = st->fields.v[i].type, off = 4 * i;
+        int ft = st->fields.v[i].type, off = field_off(i);
         if (ft == TY_STR && vals[i]->kind == E_STR) {
             /* un literal: el texto fijo de Dash (dash_lit), sin copia */
-            w(0x257C);                                 /* move.l #texto,off(a2) */
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l(dash_lit(vals[i]->str, vals[i]->len));
-            w(off);
+            obj_field_data(off, dash_lit(vals[i]->str, vals[i]->len));
         } else if (IS_STRLIKE(ft)) {
-            w(0x42AA); w(off);                         /* clr.l off(a2) */
-            w(0x2F2F); w(4 * i + 4);                   /* move.l v(sp),-(sp) */
-            sp_depth += 4;
-            w(0x486A); w(off);                         /* pea off(a2) */
-            sp_depth += 4;
+            obj_field_clear(off);
+            push_sp_off(SLOT * (i + 1));               /* el valor (por encima, lo guardado de obj_begin) */
+            push_obj_field_addr(off);
             /* un texto que no es un temporal nuevo (una variable, un parámetro) se copia */
             rt_call(is_tmp_expr(vals[i]) ? "_dl_str_set" : "_dl_str_set_copy", 2, 0);
         } else {
-            w(0x256F); w(4 * i + 4); w(off);           /* move.l v(sp),off(a2) */
+            obj_field_from_sp(off, SLOT * (i + 1));
             if (IS_OBJ(ft) && !st->fields.v[i].weak) {
-                w(0x2F2A); w(off);                     /* move.l off(a2),-(sp) */
-                sp_depth += 4;
+                push_obj_field(off);
                 rt_call("_dl_retain", 1, 0);
             }
         }
     }
-    w(0x200A);                                         /* move.l a2,d0 */
-    w(0x245F);                                         /* movea.l (sp)+,a2 */
-    sp_depth -= 4;
+    obj_end();
     pop_args(nf);
     free(vals);
     return TY_STRUCT + si;

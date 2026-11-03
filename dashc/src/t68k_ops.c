@@ -530,3 +530,49 @@ static void arr_put(void)
     w(0x2180); w(0x1800);                              /* move.l d0,0(a0,d1.l) */
     d0_loaded = (uint32_t)-1;                          /* fin: */
 }
+
+/* ---- un objeto nuevo mientras se llenan sus campos: en a2, que se guarda (una función de Dash a la que llama C,
+   una retrollamada, tiene que dejarlo como estaba; C no lo toca) ---- */
+#define SLOT 4                                         /* lo que ocupa cada cosa de la pila */
+static int struct_bytes(int nfields) { return 4 * nfields; }
+
+static void obj_begin(void)                            /* el objeto de d0 */
+{
+    w(0x2F0A);                                         /* move.l a2,-(sp) */
+    sp_depth += 4;
+    w(0x2440);                                         /* movea.l d0,a2 */
+}
+
+static void obj_end(void)                              /* el objeto a d0 */
+{
+    w(0x200A);                                         /* move.l a2,d0 */
+    w(0x245F);                                         /* movea.l (sp)+,a2 */
+    sp_depth -= 4;
+}
+
+static void obj_field_data(int off, uint32_t data)     /* el campo apunta a algo de los datos */
+{
+    w(0x257C);                                         /* move.l #datos,off(a2) */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(data);
+    w(off);
+}
+
+static void obj_field_clear(int off) { w(0x42AA); w(off); }   /* clr.l off(a2) */
+
+static void obj_field_from_sp(int off, int spoff)
+{
+    w(0x256F); w(spoff); w(off);                       /* move.l spoff(sp),off(a2) */
+}
+
+static void push_obj_field_addr(int off)
+{
+    w(0x486A); w(off);                                 /* pea off(a2) */
+    sp_depth += 4;
+}
+
+static void push_obj_field(int off)
+{
+    w(0x2F2A); w(off);                                 /* move.l off(a2),-(sp) */
+    sp_depth += 4;
+}
