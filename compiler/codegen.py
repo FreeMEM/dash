@@ -1590,7 +1590,7 @@ static STRPTR DashString_join_h(LONG n, STRPTR *parts, const LONG *hints) {
 /* Dash Dict Runtime */
 typedef struct {
     STRPTR *keys;      /* NULL = free slot; {Int: T}: the keys themselves, used[] says which slots hold one */
-    LONG *vals;
+    _DashP *vals;
     LONG count;
     LONG cap;          /* slots: 0 or a power of two */
     LONG kind;         /* 0, _DASH_ARR_OBJS or _DASH_ARR_STRS */
@@ -1631,7 +1631,7 @@ static ULONG _dash_dict_hashi(LONG k) {
     return h;
 }
 
-static void _dash_dict_drop(DashDict *d, LONG v, BOOL child) {
+static void _dash_dict_drop(DashDict *d, _DashP v, BOOL child) {
     if (d->kind == _DASH_ARR_OBJS) {
         if (child) _dash_release_child((void *)v); else _dash_release((void *)v);
     } else if (d->kind == _DASH_ARR_STRS) {
@@ -1650,7 +1650,7 @@ static void DashDict_destroy(void *obj) {
         }
     }
     _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
-    _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+    _dash_block_put(d->vals, sizeof(_DashP) * d->cap);
     if (d->used) _dash_block_put(d->used, d->cap);
 }
 
@@ -1689,17 +1689,17 @@ static LONG _dash_dict_slot(DashDict *d, STRPTR key) {
 /* {Int: T}: the slot of key, or the free one where it would go */
 static LONG _dash_dict_sloti(DashDict *d, LONG key) {
     ULONG mask = d->cap - 1, i = _dash_dict_hashi(key) & mask;
-    while (d->used[i] && (LONG)d->keys[i] != key) i = (i + 1) & mask;
+    while (d->used[i] && (LONG)(_DashP)d->keys[i] != key) i = (i + 1) & mask;
     return (LONG)i;
 }
 
 static BOOL _dash_dict_grow(DashDict *d) {
     LONG oldcap = d->cap, newcap = oldcap ? oldcap * 2 : 8, i, s;
     STRPTR *oldkeys = d->keys;
-    LONG *oldvals = d->vals;
+    _DashP *oldvals = d->vals;
     UBYTE *oldused = d->used, *used = NULL;
     STRPTR *keys = (STRPTR *)_dash_block_get_clear(sizeof(STRPTR) * newcap);
-    LONG *vals = (LONG *)_dash_block_get(sizeof(LONG) * newcap);
+    _DashP *vals = (_DashP *)_dash_block_get(sizeof(_DashP) * newcap);
     if (!keys || !vals) return FALSE;
     if (d->ikeys && !(used = (UBYTE *)_dash_block_get_clear(newcap))) return FALSE;
     d->keys = keys;
@@ -1709,14 +1709,14 @@ static BOOL _dash_dict_grow(DashDict *d) {
     for (i = 0; i < oldcap; i++) {
         if (d->ikeys) {
             if (oldused[i]) {
-                s = _dash_dict_sloti(d, (LONG)oldkeys[i]);
+                s = _dash_dict_sloti(d, (LONG)(_DashP)oldkeys[i]);
                 keys[s] = oldkeys[i]; vals[s] = oldvals[i]; used[s] = 1;
             }
         } else if (oldkeys[i]) { s = _dash_dict_slot(d, oldkeys[i]); keys[s] = oldkeys[i]; vals[s] = oldvals[i]; }
     }
     if (oldcap) {
         _dash_block_put(oldkeys, sizeof(STRPTR) * oldcap);
-        _dash_block_put(oldvals, sizeof(LONG) * oldcap);
+        _dash_block_put(oldvals, sizeof(_DashP) * oldcap);
         if (oldused) _dash_block_put(oldused, oldcap);
     }
     return TRUE;
@@ -1736,7 +1736,7 @@ static LONG _dash_dict_put(DashDict *d, STRPTR key) {
     return s;
 }
 
-static void DashDict_set(DashDict *d, STRPTR key, LONG value) {
+static void DashDict_set(DashDict *d, STRPTR key, _DashP value) {
     LONG s = _dash_dict_put(d, key);
     if (s >= 0) d->vals[s] = value;
 }
@@ -1756,7 +1756,7 @@ static void DashDict_set_str(DashDict *d, STRPTR key, STRPTR value) {
 }
 
 /* The value, or 0 (nil, "" for nobody) if the key is not there */
-static LONG DashDict_get(DashDict *d, STRPTR key) {
+static _DashP DashDict_get(DashDict *d, STRPTR key) {
     LONG s;
     if (!d || !key || !d->cap) return 0;
     s = _dash_dict_slot(d, key);
@@ -1764,7 +1764,7 @@ static LONG DashDict_get(DashDict *d, STRPTR key) {
 }
 
 /* d.get(key, dflt) (D65): the value, or dflt if the key is not there; one lookup (has, then [], took three) */
-static LONG DashDict_get_or(DashDict *d, STRPTR key, LONG dflt) {
+static _DashP DashDict_get_or(DashDict *d, STRPTR key, _DashP dflt) {
     LONG s;
     if (!d || !key || !d->cap) return dflt;
     s = _dash_dict_slot(d, key);
@@ -1783,7 +1783,7 @@ static LONG _dash_dict_puti(DashDict *d, LONG key) {
         if (d->count) return -1;                 /* (the analyzer keeps String and Int keys apart) */
         if (d->cap) {                            /* emptied String table: start again */
             _dash_block_put(d->keys, sizeof(STRPTR) * d->cap);
-            _dash_block_put(d->vals, sizeof(LONG) * d->cap);
+            _dash_block_put(d->vals, sizeof(_DashP) * d->cap);
             d->keys = NULL; d->vals = NULL; d->cap = 0;
         }
         d->ikeys = TRUE;
@@ -1792,14 +1792,14 @@ static LONG _dash_dict_puti(DashDict *d, LONG key) {
     s = _dash_dict_sloti(d, key);
     if (!d->used[s]) {
         d->used[s] = 1;
-        d->keys[s] = (STRPTR)key;
+        d->keys[s] = (STRPTR)(_DashP)key;
         d->vals[s] = 0;
         d->count++;
     }
     return s;
 }
 
-static void DashDict_seti(DashDict *d, LONG key, LONG value) {
+static void DashDict_seti(DashDict *d, LONG key, _DashP value) {
     LONG s = _dash_dict_puti(d, key);
     if (s >= 0) d->vals[s] = value;
 }
@@ -1818,14 +1818,14 @@ static void DashDict_set_stri(DashDict *d, LONG key, STRPTR value) {
     _dash_str_set((STRPTR *)&d->vals[s], value);
 }
 
-static LONG DashDict_get_ori(DashDict *d, LONG key, LONG dflt) {
+static _DashP DashDict_get_ori(DashDict *d, LONG key, _DashP dflt) {
     LONG s;
     if (!d || !d->ikeys || !d->cap) return dflt;
     s = _dash_dict_sloti(d, key);
     return d->used[s] ? d->vals[s] : dflt;
 }
 
-static LONG DashDict_geti(DashDict *d, LONG key) {
+static _DashP DashDict_geti(DashDict *d, LONG key) {
     return DashDict_get_ori(d, key, 0);
 }
 
@@ -1843,7 +1843,7 @@ static void DashDict_removei(DashDict *d, LONG key) {
     d->count--;
     mask = d->cap - 1;
     for (j = (s + 1) & mask; d->used[j]; j = (j + 1) & mask) {
-        h = _dash_dict_hashi((LONG)d->keys[j]) & mask;
+        h = _dash_dict_hashi((LONG)(_DashP)d->keys[j]) & mask;
         if ((j > s && (h <= s || h > j)) || (j < s && h <= s && h > j)) {
             d->keys[s] = d->keys[j];
             d->vals[s] = d->vals[j];
@@ -1855,7 +1855,7 @@ static void DashDict_removei(DashDict *d, LONG key) {
 }
 
 /* {1: "a", ...} */
-static DashDict *DashDict_fromi(LONG kind, LONG n, LONG *keys, LONG *vals) {
+static DashDict *DashDict_fromi(LONG kind, LONG n, LONG *keys, _DashP *vals) {
     DashDict *d = DashDict_new(kind);
     LONG i;
     for (i = 0; d && i < n; i++) {
@@ -1916,7 +1916,7 @@ static DashArrayLong *DashDict_keys(DashDict *d) {
 }
 
 /* {"a": 1, ...} */
-static DashDict *DashDict_from(LONG kind, LONG n, STRPTR *keys, LONG *vals) {
+static DashDict *DashDict_from(LONG kind, LONG n, STRPTR *keys, _DashP *vals) {
     DashDict *d = DashDict_new(kind);
     LONG i;
     for (i = 0; d && i < n; i++) {
@@ -9587,7 +9587,7 @@ static STRPTR DashArray_pop_str(DashArrayLong *arr) {
 
 /* remove(i): the element goes (released or freed if the list owned it) */
 static void DashArray_remove(DashArrayLong *arr, LONG index) {
-    LONG v;
+    _DashP v;
     if (!arr || index < 0 || index >= arr->length) return;
     v = DashArray_take(arr, index);
     if (_DASH_ARR_KIND(arr) == _DASH_ARR_OBJS) _dash_release((void *)v);
@@ -21515,10 +21515,10 @@ static LONG _dash_event_window_handle(void) {{
         params = []
         for p in extern.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params) if params else "void"
 
         proto = f"extern {ret_type} {extern.name}({params_str});"
@@ -21542,10 +21542,10 @@ static LONG _dash_event_window_handle(void) {{
         params = []
         for p in native.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params) if params else "void"
 
         # Generate function prototype
@@ -21719,9 +21719,9 @@ static void {struct.name}_release({c_name} *obj) {{
         params = [f"{c_name} *self"]
         for p in method.params:
             if isinstance(p, FunctionParam):
-                params.append(f"{self._dash_type_to_c(p.param_type) if p.param_type else 'LONG'} {p.name}")
+                params.append(f"{self._dash_type_to_c(p.param_type) if p.param_type else '_DashP'} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         return f"static {self._method_c_type(method)} {struct.name}_{method.name}({', '.join(params)}) __attribute__((unused));\n"
 
     def _generate_struct_method(self, struct: StructDef, method: StructMethod,
@@ -21734,10 +21734,10 @@ static void {struct.name}_release({c_name} *obj) {{
         params = [f"{c_name} *self"]
         for p in method.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params)
 
         # Generate method body
@@ -23116,11 +23116,11 @@ static {ret_type} {method_name}({params_str}) {{
         param_names = []
         for p in node.params:
             if isinstance(p, FunctionParam):
-                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "LONG"
+                p_type = type_map.get(p.param_type, "LONG") if p.param_type else "_DashP"
                 param_strs.append(f"{p_type} {p.name}")
                 param_names.append(p.name)
             else:
-                param_strs.append(f"LONG {p}")
+                param_strs.append(f"_DashP {p}")
                 param_names.append(p)
         params = ", ".join(param_strs) if param_strs else "void"
 
@@ -23292,7 +23292,7 @@ static {ret_type} {method_name}({params_str}) {{
             self.emit(f"{indent}DashArray_set_obj({array_name}, {index}, {value});\n")
             return
         if self._is_string_expr(node.value) or self._is_obj_expr(node.value):
-            value = f"(LONG){self._escape_any(node.value, value)}"
+            value = f"(_DashP){self._escape_any(node.value, value)}"
         self.emit(f"{indent}DashArray_set({array_name}, {index}, {value});\n")
 
     def visit_FunctionCall(self, node: FunctionCall):
@@ -23332,7 +23332,7 @@ static {ret_type} {method_name}({params_str}) {{
                 code = self._double_value(arg)
             untyped = param is not None and not (isinstance(param, FunctionParam) and param.param_type)
             if untyped and self._infer_c_type(arg) not in ("LONG", "BOOL", "char"):
-                code = f"(LONG){code}"
+                code = f"(_DashP){code}"
             args.append(code)
         return ", ".join(args)
 
@@ -24967,11 +24967,11 @@ static {ret_type} {method_name}({params_str}) {{
         if not node.keys:
             return f"DashDict_new({kind})"
         keys = ", ".join(self._generate_expression(k) for k in node.keys)
-        values = ", ".join(f"(LONG)({self._generate_expression(v)})" for v in node.values)
+        values = ", ".join(f"(_DashP)({self._generate_expression(v)})" for v in node.values)
         n = len(node.keys)
         if self._dict_int_keys(node):            # {1: "a"} (Lorraine D9)
-            return f"DashDict_fromi({kind}, {n}, (LONG[]){{{keys}}}, (LONG[]){{{values}}})"
-        return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (LONG[]){{{values}}})"
+            return f"DashDict_fromi({kind}, {n}, (LONG[]){{{keys}}}, (_DashP[]){{{values}}})"
+        return f"DashDict_from({kind}, {n}, (STRPTR[]){{{keys}}}, (_DashP[]){{{values}}})"
 
     def _generate_array_literal(self, node: ArrayLiteral) -> str:
         """Generate code for array literal - returns a temp variable name."""
@@ -25267,10 +25267,10 @@ static {ret_type} {method_name}({params_str}) {{
         params = []
         for p in node.params:
             if isinstance(p, FunctionParam):
-                c_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
+                c_type = self._dash_type_to_c(p.param_type) if p.param_type else "_DashP"
                 params.append(f"{c_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
 
         param_str = ", ".join(params) if params else "void"
 
@@ -25880,7 +25880,7 @@ class MultiFileGenerator:
                 p_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params) if params else "void"
         return f"{ret_type} {native.name}({params_str});"
 
@@ -25894,7 +25894,7 @@ class MultiFileGenerator:
                 p_type = self._dash_type_to_c(p.param_type) if p.param_type else "LONG"
                 params.append(f"{p_type} {p.name}")
             else:
-                params.append(f"LONG {p}")
+                params.append(f"_DashP {p}")
         params_str = ", ".join(params) if params else "void"
 
         lines.append(f"{ret_type} {native.name}({params_str}) {{")
