@@ -307,3 +307,7 @@ Print offsetof(Node, ln_Name)  # 10
   vuelta y salen con 20 si algo no cuadra (en `build/dashos/le/`, sin subir).
 - 2026-11-03: `fpu_dash.elf` y `fpu_dash_c.elf` salen bien en DashOS junto a fpu_b, en el mismo núcleo: la FPU cambió
   de dueño 15 veces con los dos vivos y todas las comprobaciones cuadran. Cambio de hilo con s, d y q vivos, probado.
+- 2026-11-03: DashOS C35 pone topes de trabajo: escribir toma 256 bytes por llamada (y dice cuántos), memoria_crear
+  4 MB por objeto. `plat.c` repite la escritura con el resto y pide el montón (y `amiga_alloc`) en objetos de 4 MB
+  proyectados seguidos. `topes.elf` y `topes_c.elf` (una línea de 600 bytes y una lista de 16 MB) dan la salida
+  exacta en DashOS (raspi4b, aaa6a75).
