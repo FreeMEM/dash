@@ -4956,9 +4956,7 @@ static void gen_evloop(Node *n)
     if (timer >= 0) {
         Node *a[1];
         a[0] = n->body.v[timer]->a;
-        args_to_stack(a, 1, NULL);
-        w(0x2F00);                                     /* (move.l d0,-(sp): el intervalo, ya en la pila) */
-        obj->code.n -= 2;
+        args_to_stack(a, 1, NULL);                     /* el intervalo, en la pila */
         pea_window(wi);
         rt_call("_dl_event_next_timer", 2, 0);
     } else {
@@ -4980,19 +4978,13 @@ static void gen_evloop(Node *n)
                                    0x8 /* MOUSEBUTTONS */, 0x80000 /* INACTIVEWINDOW */};
         int next = new_label(), skip = new_label();
         /* la clase está en d0 hasta aquí: cada On la compara y, si no es la suya, salta al siguiente */
-        if (cls[h->val] >= -128 && cls[h->val] <= 127) {
-            w(0x7200 | (cls[h->val] & 0xFF));          /* moveq #clase,d1 */
-            w(0xB081);                                 /* cmp.l d1,d0 */
-        } else {
-            w(0xB0BC); l((uint32_t)cls[h->val]);       /* cmp.l #clase,d0 */
-        }
+        cmp_d0_k(cls[h->val], 1);
         branch(CC_NE, next);
-        w(0x2F00);                                     /* move.l d0,-(sp): la clase, para el On siguiente */
-        sp_depth += 4;
+        push_d0();                                     /* la clase, para el On siguiente */
         if (h->val == ON_KEY) {
             /* las teclas al soltarse no cuentan; On Key "a" mira el texto de la tecla, On Key 69 su código */
             jsr_sym("_dl_event_code");
-            w(0x0800); w(7);                           /* btst #7,d0: IECODE_UP_PREFIX */
+            test_bit_d0(7);                            /* IECODE_UP_PREFIX */
             branch(CC_NE, skip);
             if (h->a) {
                 long code = -1;
@@ -5014,13 +5006,13 @@ static void gen_evloop(Node *n)
                 }
                 if (code >= 0) {
                     jsr_sym("_dl_event_code");
-                    w(0xB0BC); l((uint32_t)code);      /* cmp.l #código,d0 */
+                    cmp_d0_k(code, 0);
                     branch(CC_NE, skip);
                 }
             }
         } else if (h->val == ON_CLICK || h->val == ON_RIGHTCLICK) {
             jsr_sym("_dl_event_code");
-            w(0xB0BC); l(h->val == ON_CLICK ? 0x68 : 0x69);   /* cmp.l #SELECTDOWN (MENUDOWN),d0 */
+            cmp_d0_k(h->val == ON_CLICK ? 0x68 : 0x69, 0);   /* SELECTDOWN (MENUDOWN) */
             branch(CC_NE, skip);
         }
         {
@@ -5082,17 +5074,13 @@ static void gen_stmt(Node *n)
             d.line = n->line;
             VEC_PUSH(dbg_lines, d);
         }
-        w(0x4E71);                                     /* nop */
+        debug_nop();
     }
     if (memcheck) {
         /* el sitio de la instrucción, para los avisos (_DASH_MC_WHERE de ./dash) */
         char where[600];
         snprintf(where, sizeof where, "%s:%d", src_files.v[n->file], n->line);
-        w(0x23FC);                                     /* move.l #"fuente:línea",_dash_mc_where */
-        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-        l(add_string(where, (int)strlen(where)));
-        add_reloc((uint32_t)obj->code.n, -1, "__dash_mc_where");
-        l(0);
+        set_rt_var("__dash_mc_where", where, 0);
     }
     switch (n->kind) {
     case S_PRINT:
@@ -5105,7 +5093,7 @@ static void gen_stmt(Node *n)
             push_d0();
             if (ty == TY_FLOAT || ty == TY_DOUBLE || ty == TY_FIXED) {
                 to_str(ty);                            /* un Float, como texto (DashString_from_float) */
-                w(0x2E80);                             /* move.l d0,(sp) */
+                store_d0_arg(0);
                 ty = TY_STR;
             }
             jsr_sym(ty == TY_BOOL ? "__dash_print_bool" : ty == TY_STR || ty == TY_NIL ? "__dash_print_str" :
@@ -5284,7 +5272,7 @@ static void gen_stmt(Node *n)
             /* como un break del EventLoop: lo de los bucles de dentro se suelta */
             EvLoop *ev = &evloops.v[evloops.n - 1];
             free_owned(ev->depth, 0);
-            if (sp_depth != ev->sp) { w(0x4FEF); w(sp_depth - ev->sp); }
+            if (sp_depth != ev->sp) skip_stack(sp_depth - ev->sp);
             branch(CC_T, ev->done);
         }
         return;
@@ -5306,7 +5294,7 @@ static void gen_stmt(Node *n)
         {
             Loop *lp = &loops.v[loops.n - 1];
             free_owned(lp->depth, 0);
-            if (sp_depth != lp->sp) { w(0x4FEF); w(sp_depth - lp->sp); }
+            if (sp_depth != lp->sp) skip_stack(sp_depth - lp->sp);
             branch(CC_T, n->kind == S_BREAK ? lp->brk : lp->cont);
         }
         return;
@@ -5323,7 +5311,7 @@ static void gen_stmt(Node *n)
                 /* dentro de un bucle (sus marcas en la pila: un for de otra función copiada en una condición), fuera
                    antes de saltar */
                 if (sp_depth != ret_sp) {
-                    w(0x4FEF); w(sp_depth - ret_sp);
+                    skip_stack(sp_depth - ret_sp);
                     tst_d0();
                     branch(ret_when ? CC_NE : CC_EQ, ret_branch);
                     branch(CC_T, ret_label);           /* (ya sin las marcas: no otra vez abajo) */
@@ -5383,7 +5371,7 @@ static void gen_stmt(Node *n)
         } else if (owned) {
             free_owned(0, 1);
         }
-        if (sp_depth != ret_sp) { w(0x4FEF); w(sp_depth - ret_sp); }   /* lea: fuera las marcas de los bucles */
+        if (sp_depth != ret_sp) skip_stack(sp_depth - ret_sp);   /* fuera las marcas de los bucles */
         branch(CC_T, ret_label);
         return;
     }

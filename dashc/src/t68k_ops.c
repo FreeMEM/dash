@@ -814,3 +814,20 @@ static void loop_count(Var *vc, int top, int big)
         branch(CC_CC, top);
     }
 }
+
+/* d0 con un número; small: con moveq a d1 si cabe en 8 bits (más corto) */
+static void cmp_d0_k(long k, int small)
+{
+    if (small && k >= -128 && k <= 127) {
+        w(0x7200 | (k & 0xFF));                        /* moveq #k,d1 */
+        w(0xB081);                                     /* cmp.l d1,d0 */
+    } else {
+        w(0xB0BC); l((uint32_t)k);                     /* cmp.l #k,d0 */
+    }
+}
+
+static void test_bit_d0(int bit) { w(0x0800); w(bit); }   /* btst #bit,d0: Z si está a 0 */
+static void debug_nop(void) { w(0x4E71); }             /* nop: donde --debug pone un TRAP */
+
+/* deja bytes de la pila antes de un salto (break, Stop, return): el código de después no lo ve (sin sp_depth) */
+static void skip_stack(int bytes) { w(0x4FEF); w(bytes); }   /* lea bytes(sp),sp */
