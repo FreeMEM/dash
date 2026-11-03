@@ -1455,6 +1455,8 @@ const BuiltinInfo builtin_info[] = {
     {"sprite_load", 2, 2, 0, 0},
     {"sprite_pos", 3, 0, 1, 0},
     {"sprite_pos", 3, 0, 1, 0},
+    {"sprite_rgb8", 5, 0, 1, 0},
+    {"sprite_rgb8", 5, 0, 1, 0},
     {"sprite_set_row", 4, 0, 1, 0},
     {"sprite_set_row", 4, 0, 1, 0},
     {"sprite_show", 1, 0, 1, 0},
@@ -1680,7 +1682,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1678;
+const int builtin_count = 1680;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

@@ -345,7 +345,15 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_color(${id}, ${index}, ${r}, ${g}, ${b})",
         needs_gfx=True,
-        description="Set sprite color"
+        description="Set a sprite colour, index 0-2 (components 0-15)"
+    ),
+    "sprite_rgb8": BuiltinFunc(
+        name="sprite_rgb8",
+        params=["id", "index", "r", "g", "b"],
+        return_type="void",
+        c_template="_dash_sprite_rgb8(${id}, ${index}, ${r}, ${g}, ${b})",
+        needs_gfx=True,
+        description="Set a sprite colour, index 0-2, with 8-bit components (0-255; exact on AGA, 4 bits on ECS)"
     ),
     "sprite_frame": BuiltinFunc(
         name="sprite_frame",

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 839 functions, 839 implemented, 0 not implemented.
+Total: 840 functions, 840 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -53,7 +53,8 @@ Total: 839 functions, 839 implemented, 0 not implemented.
 | `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
 | `sprite_show(id)` | `void` | Make sprite visible |  |
 | `sprite_hide(id)` | `void` | Hide sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Set sprite color |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (components 0-15) |  |
+| `sprite_rgb8(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2, with 8-bit components (0-255; exact on AGA, 4 bits on ECS) |  |
 | `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load |  |
 | `sprite_free(id)` | `void` | Free sprite memory |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |

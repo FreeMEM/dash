@@ -1,0 +1,20 @@
+# Test: sprite_rgb8 sets a sprite colour with 8-bit components (SetRGB32: exact on AGA, 4 bits on ECS), like
+# sprite_color with 4. In the emulator the colour itself is not checked: screen_open gives at most 4 planes there and
+# screen_open_custom with more picks an RTG mode (no hardware sprites), so colours 17-31 cannot be drawn and read
+# back. This checks that it runs on a native screen with a sprite, and does nothing for a sprite that does not exist.
+#
+# expect-c: SetRGB32(&_dash_screen->ViewPort, colorbase + index
+# expect-out: creado: true
+# expect-out: fin
+
+Main
+    if screen_open(4, "Sprites")
+        Print "creado: #{sprite_create(0, 16, 8)}"
+        sprite_rgb8(0, 0, 0x12, 0x34, 0x56)
+        sprite_rgb8(0, 2, 255, 128, 17)
+        sprite_rgb8(5, 0, 1, 2, 3)
+        sprite_free(0)
+        screen_close()
+    end
+    Print "fin"
+end

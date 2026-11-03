@@ -14972,6 +14972,17 @@ static void _dash_sprite_color(LONG id, LONG index, LONG r, LONG g, LONG b) {
     }
 }
 
+/* sprite_rgb8 (Forja D16): sprite_color with 8-bit components (SetRGB32): exact on AGA, the top 4 bits on ECS */
+static void _dash_sprite_rgb8(LONG id, LONG index, LONG r, LONG g, LONG b) {
+    LONG colorbase;
+    if (id < 0 || id >= DASH_MAX_SPRITES) return;
+    if (!_dash_screen || _dash_sprite_num[id] < 0) return;
+    colorbase = 16 + ((_dash_sprite_num[id] / 2) * 4) + 1;
+    if (index >= 0 && index < 3)
+        SetRGB32(&_dash_screen->ViewPort, colorbase + index, (ULONG)(r & 255) << 24, (ULONG)(g & 255) << 24,
+                 (ULONG)(b & 255) << 24);
+}
+
 /* Shows frame number frame of a sprite from sprite_load (0 the first); nothing for any other */
 static void _dash_sprite_frame(LONG id, LONG frame) {
     UWORD *src, *dst;
