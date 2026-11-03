@@ -114,10 +114,50 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
 - Al acabar una fase, aviso a freemem-f9 (DashOS).
 - El emulador se usa bajo `flock /run/user/1000/dash-emu-red.lock`.
 
+## Estructuras de Amiga (A6; sintaxis decidida por el usuario, 2026-11-03: estilo Dash)
+
+Lo que pide DashOS (freemem-f9) para escribir en Dash las bibliotecas de la caja Amiga:
+
+```
+@amiga struct Node
+    ln_Succ: Ptr Node
+    ln_Pred: Ptr Node
+    ln_Type: UByte
+    ln_Pri: Byte
+    ln_Name: Ptr UByte
+end
+
+@amiga struct MsgPort
+    mp_Node: Node              # anidada por valor
+    mp_Flags: UByte
+    mp_SigBit: UByte
+    mp_SigTask: Ptr Task
+    mp_MsgList: List
+end
+
+p = Ptr MsgPort(AllocMem(sizeof(MsgPort), MEMF_CLEAR))
+AddTail(lista, p.mp_Node)      # un campo anidado da su dirección
+Print offsetof(Node, ln_Name)  # 10
+```
+
+- Una vista sobre memoria, no un objeto de Dash: sin cabecera ni contador; no se crea con `Node(...)`.
+- Tipos de campo: `Byte`, `UByte`, `Word`, `UWord`, `Long`, `ULong`, `Ptr T` (32 bits), `BPtr` (puntero de dos.library,
+  desplazado 2 bits), otra `@amiga struct` por valor, y tablas `UByte[16]`. Al leer, un Int (con o sin signo según el
+  tipo); al escribir, se corta al tamaño.
+- Disposición del 68000: Byte y UByte alineados a 1; lo demás, a 2; el tamaño, redondeado a 2. `sizeof(S)` y
+  `offsetof(S, campo)` son constantes al compilar.
+- Un valor `Ptr T` es una dirección. `Ptr T(x)` la toma de un Int (de `AllocMem`, de un argumento del 68k...). `p.campo`
+  lee o escribe; un campo anidado o una tabla dan su dirección (`Ptr` del tipo).
+- En DashOS la caja tiene base 0: un puntero de 32 bits pasa a 64 con ceros y vuelve cortando, y escribir una
+  dirección de 4 GB o más es un error (no un corte). Una estructura de Amiga vive en memoria de la caja (el
+  `AllocMem` de su exec), nunca en el montón de Dash (desde 4 GB). Sin accesos exclusivos ni ldp/stp en estos campos.
+- En el Amiga, lo mismo con punteros de 32 bits de siempre.
+- Pendiente para después: bases de biblioteca con desplazamientos negativos (por ahora, `peek_*` con la dirección),
+  enlazar las bibliotecas de la caja por encima de 4 GB (base de enlace o PIE), aritmética de `Ptr`.
+
 ## Preguntas abiertas
 
-- Nombre de la opción: `--dashos` (propuesta).
-- Marca de las estructuras de Amiga: `@amiga struct X` (propuesta). Va en la gramática de los dos caminos.
+- Nombre de la opción: `--dashos` (propuesta, en uso).
 
 ## Bitácora
 
