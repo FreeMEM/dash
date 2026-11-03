@@ -27,7 +27,7 @@ enum { CC_T = 0, CC_F, CC_HI, CC_LS, CC_CC, CC_CS, CC_NE, CC_EQ, CC_VC, CC_VS,
 static const int arm_cc[16] = { 14, 15, 8, 9, 2, 3, 1, 0, 7, 6, 5, 4, 10, 11, 12, 13 };
 
 static int frame_off(int n) { return -8 * n; }       /* (se corrige con los parámetros: ver param_off) */
-static int global_off(int i) { return 8 * i; }
+static int global_off(int i) { return 16 + 8 * i; }   /* (ver data_start) */
 
 /* ---- el código ---- */
 static uint32_t x0_dirty = 0;   /* x0 cambió después de la última comparación: un Bcc tiene que compararlo antes */
@@ -177,10 +177,18 @@ static void resolve_fixups(void)
     }
 }
 
-/* ---- los datos: las globales (8 bytes cada una, desde el principio), las ventanas, las tablas ---- */
+/* ---- los datos: 16 bytes a 0, las globales (8 bytes cada una), las ventanas, las tablas, los textos ----
+   (los 16 primeros: el runtime mira la cabecera de un texto, 16 bytes antes, para saber si es de Dash; el primero de
+   los datos no puede tener detrás el principio del segmento) */
+static void data_start(void)
+{
+    if (!obj->data.n) { buf_long(&obj->data, 0); buf_long(&obj->data, 0); buf_long(&obj->data, 0); buf_long(&obj->data, 0); }
+}
+
 static long data_word(long v)                          /* una palabra (8 bytes) de los datos; devuelve dónde está */
 {
     long off;
+    data_start();
     while (obj->data.n & 7) buf_byte(&obj->data, 0);
     off = (long)obj->data.n;
     buf_long(&obj->data, (uint32_t)((unsigned long)v >> 32));
@@ -190,6 +198,7 @@ static long data_word(long v)                          /* una palabra (8 bytes) 
 
 static uint32_t data_align(void)
 {
+    data_start();
     while (obj->data.n & 7) buf_byte(&obj->data, 0);
     return (uint32_t)obj->data.n;
 }

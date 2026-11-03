@@ -86,16 +86,16 @@ static void pop_x(int t)                               /* ldr xt, [sp], #16 */
     wrote(t);
 }
 
-static void sxtw(int d) { ins(0x93407C00 | (uint32_t)d << 5 | (uint32_t)d); wrote(d); }
+static void sxtw(int d) { ins(0x93407C00 | (uint32_t)d << 5 | (uint32_t)d); }   /* (no toca las banderas) */
 
 /* operaciones de Int (en w, el resultado extendido): op = 'a' add, 's' sub, '&', '|', '^', '*', '/', '%', '<' lsl, '>' asr */
 static void wop(int op, int d, int n, int m)
 {
     uint32_t r = (uint32_t)m << 16 | (uint32_t)n << 5 | (uint32_t)d;
-    switch (op) {
-    case 'a': ins(0x0B000000 | r); break;
-    case 's': ins(0x4B000000 | r); break;
-    case '&': ins(0x0A000000 | r); break;
+    switch (op) {   /* (add, sub y and ponen las banderas, como en el 68000: el recorrido a veces las usa) */
+    case 'a': ins(0x2B000000 | r); sxtw(d); x0_dirty = 0; return;   /* adds */
+    case 's': ins(0x6B000000 | r); sxtw(d); x0_dirty = 0; return;   /* subs */
+    case '&': ins(0x6A000000 | r); sxtw(d); x0_dirty = 0; return;   /* ands */
     case '|': ins(0x2A000000 | r); break;
     case '^': ins(0x4A000000 | r); break;
     case '*': ins(0x1B007C00 | r); break;
@@ -116,6 +116,7 @@ static void wop(int op, int d, int n, int m)
     }
     }
     sxtw(d);
+    wrote(d);
 }
 
 static int pop_op(int op)                              /* el operador de Dash (P_*) a wop */
@@ -223,7 +224,9 @@ static void add_imm_ea(long k, Var *v)                 /* v += k */
 
 static uint32_t add_string(const char *s, int len)
 {
-    uint32_t off = (uint32_t)obj->data.n;
+    uint32_t off;
+    data_start();
+    off = (uint32_t)obj->data.n;
     buf_bytes(&obj->data, s, len);
     buf_byte(&obj->data, 0);
     if (obj->data.n & 1) buf_byte(&obj->data, 0);
@@ -370,6 +373,7 @@ static void int_to_fixed(void)                         /* d0 << 16 */
 {
     ins(0x53000000 | 16 << 16 | 15 << 10);             /* lsl w0, w0, #16 */
     sxtw(0);
+    wrote(0);
 }
 
 static void load_str_lit(const char *str, int len) { addr_data(0, add_string(str, len)); }
@@ -563,14 +567,15 @@ static void load_label(int label) { addr_label(0, label); }
 static void load_sym(const char *sym) { addr_sym(0, sym); }
 
 static void neg_d0(void) { wop('s', 0, 31, 0); }       /* (wzr - w0) */
-static void not_d0(void) { ins(0x2A2003E0); sxtw(0); } /* mvn w0, w0 */
-static void float_neg(void) { ins(0x52010000); sxtw(0); }   /* eor w0, w0, #0x80000000 */
+static void not_d0(void) { ins(0x2A2003E0); sxtw(0); wrote(0); } /* mvn w0, w0 */
+static void float_neg(void) { ins(0x52010000); sxtw(0); wrote(0); }   /* eor w0, w0, #0x80000000 */
 
 static void abs_d0(void)
 {
     ins(0x7100001F);                                   /* cmp w0, #0 */
     ins(0x5A800400 | 0 << 16 | 5 << 12 | 0);           /* cneg w0, w0, mi (csneg w0, w0, w0, pl) */
     sxtw(0);
+    wrote(0);
 }
 
 static void set_cc(int cc)                             /* d0 = 1 si se cumple cc */
@@ -613,6 +618,14 @@ static void reg_div_pow2(Var *v, int sh)               /* v (en un registro) /= 
 }
 
 static void a0_deref(void) { mem64(1, XA0, XA0, 0); }
+
+static void ptr_add(long k, Var *v)                    /* un puntero += k (en 64 bits) */
+{
+    if (v->kind == V_REG) { add_imm(XREG(v->reg), XREG(v->reg), k); return; }
+    var_to(XT, v);
+    add_imm(XT, XT, k);
+    x_to_var(XT, v);
+}
 static void load_a0_raw(int off)                       /* (el largo de una lista es un LONG; lo demás, punteros) */
 {
     if (off == ARR_LEN) ldrsw(0, XA0, off);

@@ -991,3 +991,5 @@ static void lit_init_end(void)
 }
 
 static void or_ea(Var *v) { op_ea(0x8080, v); }        /* or.l v,d0 */
+
+static void ptr_add(long k, Var *v) { add_imm_ea(k, v); }   /* un puntero += k (en el 68000, como un Int) */

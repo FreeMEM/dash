@@ -232,6 +232,9 @@ LONG Write(BPTR fh, const void *buf, LONG len)
     for (i = 0; i < len; i++) {
         if (out_n == (int)sizeof out_buf) Flush(1);
         out_buf[out_n++] = s[i];
+#ifdef DASH_PLAT_LINUX
+        if (s[i] == '\n') Flush(1);                    /* (en las pruebas: lo escrito se ve aunque el programa caiga) */
+#endif
     }
     return len;
 }

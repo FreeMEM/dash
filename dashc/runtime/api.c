@@ -605,7 +605,7 @@ void dl_tmp_release(ULONG m) { _dash_tmp_release(m); }
 ULONG *dl_tmp_serial_p = &_dash_tmp_serial;
 /* al salir de una función: fuera sus temporales menos el texto que devuelve, que sigue en d0 */
 STRPTR dl_tmp_release_keep(ULONG m, STRPTR keep) { _dash_tmp_release_keep(m, keep); return keep; }
-LONG dl_tmp_release_ret(ULONG m, LONG v) { _dash_tmp_release(m); return v; }
+_DashP dl_tmp_release_ret(ULONG m, _DashP v) { _dash_tmp_release(m); return v; }
 /* var = valor devolviendo el texto nuevo de var (dashc no siempre tiene la dirección de var:
    puede ir en un registro) */
 STRPTR dl_str_assign(STRPTR var, STRPTR v) { _dash_str_set(&var, v); return var; }

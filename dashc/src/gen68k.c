@@ -4794,7 +4794,7 @@ static void gen_foreach_frozen(Node *n, int t, int et, int arr_slot, MarkScope *
     vp = slot_var(ptr_slot, TY_INT);
     load_a0(&vp);
     load_a0_raw(0);                                    /* el elemento */
-    add_imm_ea(ELEM, &vp);                             /* el puntero, al siguiente */
+    ptr_add(ELEM, &vp);                                /* el puntero, al siguiente */
     vx = declare(n->name, et);
     store_d0(&vx);
     gen_block(&n->body);

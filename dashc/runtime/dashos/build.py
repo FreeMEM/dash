@@ -31,14 +31,29 @@ SKIP = {"dl_window_open", "dl_init_area", "dl_forget", "dl_window_close", "dl_ev
         "dl_prof_tick", "dl_prof_start", "dl_prof_enter", "dl_prof_leave", "dl_prof_report"}
 
 
+def portables():
+    """Los builtins que compilan para DashOS (runtime/dashos/portables.py, que se ejecuta si hace falta)"""
+    f = OUT / "portables.txt"
+    if not f.exists():
+        subprocess.run([sys.executable, str(HERE / "portables.py")], check=True)
+    return [n for n in f.read_text().split() if n]
+
+
 def runtime_c(memcheck):
-    """El C del runtime: el de la cocina sin lo del programa"""
+    """El C del runtime: el de la cocina (más una llamada a cada builtin que se puede usar) sin lo del programa"""
+    sys.path.insert(0, str(DASHC / "runtime"))
+    import gen_lib
+    bs = gen_lib.builtins()
     with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "cocina.dash"
+        src.write_text((HERE / "cocina.dash").read_text(encoding="utf-8") + "\nfunc _cocina_builtins()\n" +
+                       "".join(f"    {n}({', '.join('0' for _ in bs[n].params)})\n" for n in portables()) + "end\n",
+                       encoding="utf-8")
         c = Path(tmp) / "cocina.c"
         env = dict(os.environ, DASH_TARGET="dashos")
         if memcheck:
             env["DASH_MEMCHECK_C"] = "1"
-        r = subprocess.run([sys.executable, "-m", "compiler.main", str(HERE / "cocina.dash"), "-o", str(c)],
+        r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)],
                            cwd=REPO, capture_output=True, text=True, env=env)
         if r.returncode:
             sys.exit(f"dashos/build.py: no transpila la cocina:\n{r.stdout}{r.stderr}")
@@ -78,6 +93,31 @@ def api_wrappers():
     return text
 
 
+def builtin_wrappers():
+    """Cada builtin que se puede usar como db_nombre(_DashP...), como gen_lib.builtin_wrappers pero de 64 bits"""
+    from string import Template
+    sys.path.insert(0, str(DASHC / "runtime"))
+    import gen_lib
+    bs = gen_lib.builtins()
+    out = ["\n/* ---- builtins (compiler/amiga_builtins.py) ---- */\n"
+           "#pragma clang diagnostic ignored \"-Wint-conversion\"\n"
+           "#pragma clang diagnostic ignored \"-Wint-to-pointer-cast\"\n"
+           "#pragma clang diagnostic ignored \"-Wpointer-to-int-cast\"\n"]
+    for n in portables():
+        b = bs[n]
+        params = ", ".join(f"_DashP _a{i}" for i in range(len(b.params))) or "void"
+        dp = gen_lib.double_params(n, b)
+        code = Template(b.c_template).substitute({p: f"dl_dget((STRPTR)_a{i})" if i in dp else f"_a{i}"
+                                                  for i, p in enumerate(b.params)})
+        if b.return_type == "double":
+            out.append(f"_DashP db_{n}({params}) {{ return (_DashP)dl_dbox({code}); }}\n")
+        elif b.return_type == "void":
+            out.append(f"_DashP db_{n}({params}) {{ {code}; return 0; }}\n")
+        else:
+            out.append(f"_DashP db_{n}({params}) {{ return (_DashP)({code}); }}\n")
+    return "".join(out)
+
+
 def build(memcheck=False):
     import dashos_run
     OUT.mkdir(parents=True, exist_ok=True)
@@ -87,7 +127,7 @@ def build(memcheck=False):
     if lib.exists() and lib.stat().st_mtime >= max(p.stat().st_mtime for p in srcs):
         return lib
     text = runtime_c(memcheck) + "\n/* ---- runtime/api.c ---- */\n" + api_wrappers() + "\n" + \
-        (HERE / "start.c").read_text(encoding="utf-8")
+        (HERE / "start.c").read_text(encoding="utf-8") + builtin_wrappers()
     with tempfile.TemporaryDirectory() as tmp:
         c = Path(tmp) / "dashc_rt.c"
         c.write_text(text, encoding="latin-1")

@@ -6,6 +6,7 @@ la esperada, como en el A1200.
     python3 tests/dashos_tests.py              # recuento, y los errores de compilación más repetidos
     python3 tests/dashos_tests.py -k lista -v  # solo esos, con el detalle de cada fallo
     python3 tests/dashos_tests.py --lista      # qué da cada test (ok, build, salida, timeout, rc)
+    python3 tests/dashos_tests.py --directo    # por el compilador directo (dashc-a64), sin C
 
 Un test con "# expect-rc: N" debe acabar con ese código."""
 import argparse
@@ -27,11 +28,14 @@ def marks(text, mark):
     return [l.split(mark, 1)[1].strip() for l in text.splitlines() if l.strip().startswith(mark)]
 
 
+DIRECT = False
+
+
 def one(f, tmp):
     text = f.read_text(encoding="utf-8", errors="replace")
     exe = Path(tmp) / f.stem
     memcheck = any(l.strip() == "# memcheck" for l in text.splitlines())
-    ok, msg = dashos_run.build(f.relative_to(REPO), exe, memcheck=memcheck)   # (relativo: como en los errores del A1200)
+    ok, msg = (dashos_run.build_direct if DIRECT else dashos_run.build)(f.relative_to(REPO), exe, memcheck=memcheck)   # (relativo: como en los errores del A1200)
     if not ok:
         return "build", msg
     try:
@@ -55,7 +59,10 @@ def main():
     ap.add_argument("-k", default="")
     ap.add_argument("-v", action="store_true")
     ap.add_argument("--lista", action="store_true")
+    ap.add_argument("--directo", action="store_true")
     a = ap.parse_args()
+    global DIRECT
+    DIRECT = a.directo
     fs = [f for f in sorted(REPO.glob("tests/test_*.dash")) if a.k in f.name and
           "# expect-out:" in f.read_text(encoding="utf-8", errors="replace")]
     with tempfile.TemporaryDirectory() as tmp, cf.ThreadPoolExecutor(os.cpu_count()) as ex:
@@ -68,7 +75,7 @@ def main():
             print(f"--- {f.name}: {k}\n{m[:1500]}")
         if k == "build":
             for l in m.splitlines():
-                mm = re.search(r"error: (.*?)(\[-W|$)", l)
+                mm = re.search(r"error: (.*?)(\[-W|$)", l) or re.search(r"(aún no está .*)", l)
                 if mm:
                     errs[re.sub(r"'[^']*'", "'X'", mm.group(1))[:100]] += 1
     if not a.v:
