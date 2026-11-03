@@ -4752,6 +4752,7 @@ No es un objeto de Dash: no tiene contador de referencias y no se crea con `Node
     ln_Name: Ptr UByte
 end
 
+# (Task y List, declaradas también con @amiga struct)
 @amiga struct MsgPort
     mp_Node: Node            # por valor
     mp_Flags: UByte

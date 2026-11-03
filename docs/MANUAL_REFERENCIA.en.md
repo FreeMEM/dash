@@ -4752,6 +4752,7 @@ Dash object: it has no reference count and is not created with `Node(...)`.
     ln_Name: Ptr UByte
 end
 
+# (Task and List, also declared with @amiga struct)
 @amiga struct MsgPort
     mp_Node: Node            # by value
     mp_Flags: UByte
