@@ -321,6 +321,8 @@ const BuiltinInfo builtin_info[] = {
     {"dialog_file_at", 5, 3, 0, 0},
     {"dialog_font", 1, 3, 1, 0},
     {"dialog_font", 1, 3, 1, 0},
+    {"dialog_screen_mode", 1, 2, 1, 0},
+    {"dialog_screen_mode", 1, 2, 1, 0},
     {"dir_change", 1, 2, 1, 0},
     {"dir_change", 1, 2, 1, 0},
     {"dir_create", 1, 2, 0, 0},
@@ -1383,10 +1385,20 @@ const BuiltinInfo builtin_info[] = {
     {"screen_font_text_width", 1, 1, 1, 0},
     {"screen_height", 0, 1, 1, 0},
     {"screen_height", 0, 1, 1, 0},
+    {"screen_mode_depth", 0, 1, 1, 0},
+    {"screen_mode_depth", 0, 1, 1, 0},
+    {"screen_mode_height", 0, 1, 1, 0},
+    {"screen_mode_height", 0, 1, 1, 0},
+    {"screen_mode_id", 0, 1, 1, 0},
+    {"screen_mode_id", 0, 1, 1, 0},
+    {"screen_mode_width", 0, 1, 1, 0},
+    {"screen_mode_width", 0, 1, 1, 0},
     {"screen_open", 2, 2, 1, 0},
     {"screen_open", 2, 2, 1, 0},
     {"screen_open_custom", 4, 2, 1, 0},
     {"screen_open_custom", 4, 2, 1, 0},
+    {"screen_open_mode", 5, 2, 1, 0},
+    {"screen_open_mode", 5, 2, 1, 0},
     {"screen_pixel", 2, 1, 1, 0},
     {"screen_pixel", 2, 1, 1, 0},
     {"screen_to_back", 0, 0, 1, 0},
@@ -1692,7 +1704,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1690;
+const int builtin_count = 1702;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

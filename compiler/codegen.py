@@ -14541,6 +14541,19 @@ static LONG _dash_random(void) {
    address error on a 68000, a Guru on the A500) */
 static UWORD _dash_default_pens[] = { (UWORD)~0 };
 
+/* screen_open_mode (Forja G23): a screen with an exact display mode (from dialog_screen_mode, or a known one:
+   0x21000 is PAL low resolution, 0x29000 PAL high), size and depth. FALSE if the mode does not exist or cannot have that depth. */
+static BOOL _dash_open_screen_mode(LONG mode, LONG w, LONG h, LONG depth, STRPTR title) {
+    if (_dash_screen || ModeNotAvailable((ULONG)mode)) return FALSE;
+    _dash_screen = OpenScreenTags(NULL, SA_DisplayID, (ULONG)mode, SA_Width, w, SA_Height, h, SA_Depth, depth,
+                                  SA_Title, (ULONG)title, SA_ShowTitle, TRUE, SA_Pens, (ULONG)_dash_default_pens,
+                                  TAG_DONE);
+    if (!_dash_screen) return FALSE;
+    _dash_own_screen = TRUE;
+    if (!_dash_win) _dash_rp = &_dash_screen->RastPort;
+    return TRUE;
+}
+
 /* screen_clone_wb (Forja G21): a public screen just like the Workbench's (mode, size, depth, pens and font:
    SA_LikeWorkbench), named, with shared pens so other programs (and MUI) can open windows on it. FALSE if it
    cannot be opened or the name is taken. */
@@ -16700,6 +16713,41 @@ static STRPTR _dash_dialog_font(STRPTR title) {
         FreeAslRequest(fo);
     }
     return _dash_str_dup((STRPTR)buf, TRUE);
+}
+
+/* dialog_screen_mode (Forja G23): asl.library's screen mode requester (mode, width, height and depth), starting on
+   the Workbench's mode. TRUE if a mode was chosen; screen_mode_id, _width, _height and _depth give it. */
+static ULONG _dash_smode_id = 0;
+static LONG _dash_smode_w = 0, _dash_smode_h = 0, _dash_smode_d = 0;
+/* What dialog_screen_mode chose: 0 mode, 1 width, 2 height, 3 depth */
+static LONG _dash_screen_mode_get(LONG what) {
+    return what == 0 ? (LONG)_dash_smode_id : what == 1 ? _dash_smode_w : what == 2 ? _dash_smode_h : _dash_smode_d;
+}
+
+static BOOL _dash_dialog_screen_mode(STRPTR title) {
+    struct ScreenModeRequester *sm;
+    struct Screen *wb;
+    ULONG inicial = INVALID_ID;
+    BOOL ok = FALSE;
+    if ((wb = LockPubScreen(NULL))) {
+        inicial = GetVPModeID(&wb->ViewPort);
+        UnlockPubScreen(NULL, wb);
+    }
+    if (_dash_asl_open() && (sm = (struct ScreenModeRequester *)AllocAslRequestTags(ASL_ScreenModeRequest, TAG_DONE))) {
+        if (AslRequestTags(sm, ASLSM_TitleText, (ULONG)title,
+                           _dash_win ? ASLSM_Window : TAG_IGNORE, (ULONG)_dash_win,
+                           inicial != INVALID_ID ? ASLSM_InitialDisplayID : TAG_IGNORE, inicial,
+                           ASLSM_DoWidth, TRUE, ASLSM_DoHeight, TRUE, ASLSM_DoDepth, TRUE,
+                           TAG_DONE)) {
+            _dash_smode_id = sm->sm_DisplayID;
+            _dash_smode_w = sm->sm_DisplayWidth;
+            _dash_smode_h = sm->sm_DisplayHeight;
+            _dash_smode_d = sm->sm_DisplayDepth;
+            ok = TRUE;
+        }
+        FreeAslRequest(sm);
+    }
+    return ok;
 }
 
 /* dialog_color: asl.library 3.1 has no colour requester, so a small window with

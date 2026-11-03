@@ -95,6 +95,7 @@ DESC_ES = {
     "event_window": "En un EventLoop: la ventana de la que vino el evento (window_create), 0 para la del propio bucle",
     "window_check_close": "Mira si se pulsó el botón de cerrar (sin esperar)",
     "close_window": "Cierra la ventana actual",
+    "screen_open_mode": "Abre una pantalla con un modo exacto (el de dialog_screen_mode, o uno conocido: 0x21000 es PAL de baja resolución y 0x29000 la de alta), tamaño y profundidad; falso si el modo no existe o no admite esa profundidad",
     "screen_clone_wb": "Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas",
     "screen_visitors": "Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno",
     "screen_open": "Abre una pantalla con el modo del Workbench y la profundidad que se diga",
@@ -844,6 +845,11 @@ DESC_ES = {
     "dialog_file_at": "dialog_file abriéndose en ese cajón con ese nombre de fichero (\"\": como dialog_file)",
     "dialog_color": "Ventana con la paleta: da el color elegido (con un clic, o con las flechas + Return); Esc deja el "
                     "inicial",
+    "dialog_screen_mode": "Petición de modo de pantalla (modo, ancho, alto y profundidad), empezando en el del Workbench: cierto si se eligió uno; screen_mode_id, _width, _height y _depth lo dan",
+    "screen_mode_id": "El modo del último dialog_screen_mode (para screen_open_mode)",
+    "screen_mode_width": "El ancho elegido en el último dialog_screen_mode",
+    "screen_mode_height": "El alto elegido en el último dialog_screen_mode",
+    "screen_mode_depth": "La profundidad (planos) elegida en el último dialog_screen_mode",
     "dialog_font": "Diálogo de fuentes: \"nombre.font/tamaño\", \"\" si se canceló",
     # RTG
     "rtg_available": "Mira si hay CyberGraphX o Picasso96",

@@ -775,6 +775,14 @@ INPUT_FUNCTIONS = {
     ),
 
     # Screen Support
+    "screen_open_mode": BuiltinFunc(
+        name="screen_open_mode",
+        params=["mode", "width", "height", "depth", "title"],
+        return_type="BOOL",
+        c_template="_dash_open_screen_mode(${mode}, ${width}, ${height}, ${depth}, ${title})",
+        needs_gfx=True,
+        description="Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth"
+    ),
     "screen_clone_wb": BuiltinFunc(
         name="screen_clone_wb",
         params=["name"],
@@ -3080,6 +3088,22 @@ INTUITION_EXPANDED = {
         needs_gfx=True,
         description="Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial"
     ),
+    "dialog_screen_mode": BuiltinFunc(
+        name="dialog_screen_mode",
+        params=["title"],
+        return_type="BOOL",
+        c_template="_dash_dialog_screen_mode(${title})",
+        needs_asl=True,
+        description="Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it"
+    ),
+    "screen_mode_id": BuiltinFunc(name="screen_mode_id", params=[], return_type="LONG", c_template="_dash_screen_mode_get(0)",
+                                  needs_asl=True, description="The display mode of the last dialog_screen_mode (for screen_open_mode)"),
+    "screen_mode_width": BuiltinFunc(name="screen_mode_width", params=[], return_type="LONG", c_template="_dash_screen_mode_get(1)",
+                                     needs_asl=True, description="The width chosen in the last dialog_screen_mode"),
+    "screen_mode_height": BuiltinFunc(name="screen_mode_height", params=[], return_type="LONG", c_template="_dash_screen_mode_get(2)",
+                                      needs_asl=True, description="The height chosen in the last dialog_screen_mode"),
+    "screen_mode_depth": BuiltinFunc(name="screen_mode_depth", params=[], return_type="LONG", c_template="_dash_screen_mode_get(3)",
+                                     needs_asl=True, description="The depth (planes) chosen in the last dialog_screen_mode"),
     "dialog_font": BuiltinFunc(
         name="dialog_font",
         params=["title"],

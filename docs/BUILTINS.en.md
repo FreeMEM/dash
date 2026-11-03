@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 845 functions, 845 implemented, 0 not implemented.
+Total: 851 functions, 851 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -111,6 +111,7 @@ Total: 845 functions, 845 implemented, 0 not implemented.
 | `event_window()` | `LONG` | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
 | `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
 | `close_window()` | `void` | Close the current window |  |
+| `screen_open_mode(mode, width, height, depth, title)` | `BOOL` | Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth |  |
 | `screen_clone_wb(name)` | `BOOL` | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
 | `screen_visitors()` | `LONG` | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
 | `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
@@ -914,6 +915,11 @@ Total: 845 functions, 845 implemented, 0 not implemented.
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
 | `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
 | `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
+| `dialog_screen_mode(title)` | `BOOL` | Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it |  |
+| `screen_mode_id()` | `LONG` | The display mode of the last dialog_screen_mode (for screen_open_mode) |  |
+| `screen_mode_width()` | `LONG` | The width chosen in the last dialog_screen_mode |  |
+| `screen_mode_height()` | `LONG` | The height chosen in the last dialog_screen_mode |  |
+| `screen_mode_depth()` | `LONG` | The depth (planes) chosen in the last dialog_screen_mode |  |
 | `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
 
 ## RTG (CyberGraphX / Picasso96)

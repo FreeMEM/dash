@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 845 funciones, 845 implementadas, 0 sin implementar.
+Total: 851 funciones, 851 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -111,6 +111,7 @@ Total: 845 funciones, 845 implementadas, 0 sin implementar.
 | `event_window()` | `LONG` | En un EventLoop: la ventana de la que vino el evento (window_create), 0 para la del propio bucle |  |
 | `window_check_close()` | `BOOL` | Mira si se pulsó el botón de cerrar (sin esperar) |  |
 | `close_window()` | `void` | Cierra la ventana actual |  |
+| `screen_open_mode(mode, width, height, depth, title)` | `BOOL` | Abre una pantalla con un modo exacto (el de dialog_screen_mode, o uno conocido: 0x21000 es PAL de baja resolución y 0x29000 la de alta), tamaño y profundidad; falso si el modo no existe o no admite esa profundidad |  |
 | `screen_clone_wb(name)` | `BOOL` | Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas |  |
 | `screen_visitors()` | `LONG` | Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno |  |
 | `screen_open(depth, title)` | `BOOL` | Abre una pantalla con el modo del Workbench y la profundidad que se diga |  |
@@ -914,6 +915,11 @@ Total: 845 funciones, 845 implementadas, 0 sin implementar.
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | Diálogo de ficheros: la ruta entera del fichero elegido, "" si se canceló (save_mode true: diálogo de guardar) |  |
 | `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file abriéndose en ese cajón con ese nombre de fichero ("": como dialog_file) |  |
 | `dialog_color(title, initial)` | `LONG` | Ventana con la paleta: da el color elegido (con un clic, o con las flechas + Return); Esc deja el inicial |  |
+| `dialog_screen_mode(title)` | `BOOL` | Petición de modo de pantalla (modo, ancho, alto y profundidad), empezando en el del Workbench: cierto si se eligió uno; screen_mode_id, _width, _height y _depth lo dan |  |
+| `screen_mode_id()` | `LONG` | El modo del último dialog_screen_mode (para screen_open_mode) |  |
+| `screen_mode_width()` | `LONG` | El ancho elegido en el último dialog_screen_mode |  |
+| `screen_mode_height()` | `LONG` | El alto elegido en el último dialog_screen_mode |  |
+| `screen_mode_depth()` | `LONG` | La profundidad (planos) elegida en el último dialog_screen_mode |  |
 | `dialog_font(title)` | `STRPTR` | Diálogo de fuentes: "nombre.font/tamaño", "" si se canceló |  |
 
 ## RTG (CyberGraphX / Picasso96)
