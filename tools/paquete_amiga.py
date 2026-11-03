@@ -68,8 +68,9 @@ def main():
                 shutil.copy(pq / f"{nombre}.info", caj / f"{nombre}.info")
         else:
             print(f"sin {nombre}: falta {pq / nombre} (python3 tools/paquete.py en su proyecto)")
-    # el Amiga lee ISO-8859-1: el script y los textos, de UTF-8 a Latin-1
-    (caj / "Instalar").write_bytes((raiz / "paquete/Instalar").read_text().encode("latin-1"))
+    # el Amiga lee ISO-8859-1: el script (con el número de la versión) y los textos, de UTF-8 a Latin-1
+    (caj / "Instalar").write_bytes((raiz / "paquete/Instalar").read_text().replace("@VERSION@", version)
+                                   .encode("latin-1"))
     (caj / "Instalar.info").write_bytes(
         situar(info(instalador(), WBPROJECT, herramienta="Installer",
                     tooltypes=["APPNAME=Dash", "MINUSER=AVERAGE", "DEFUSER=AVERAGE"]), 10, 6))
