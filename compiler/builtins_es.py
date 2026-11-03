@@ -96,7 +96,7 @@ DESC_ES = {
     "window_check_close": "Mira si se pulsó el botón de cerrar (sin esperar)",
     "close_window": "Cierra la ventana actual",
     "screen_clone_wb": "Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas",
-    "screen_visitors": "Cuántas ventanas de otros programas hay abiertas en la pantalla pública del programa",
+    "screen_visitors": "Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno",
     "screen_open": "Abre una pantalla con el modo del Workbench y la profundidad que se diga",
     "screen_open_custom": "Abre una pantalla propia del tamaño y la profundidad que se digan",
     "screen_close": "Cierra la pantalla",
@@ -1105,6 +1105,7 @@ DESC_ES = {
                        "de mui_window_open)",
     "mui_window_fullscreen": "La ventana ocupa toda la pantalla: sin bordes, barra de título ni gadgets, y activa (antes "
                              "de mui_window_open)",
+    "mui_window_screen": "La ventana se abre como una ventana normal en la pantalla pública con ese nombre (la de screen_clone_wb, o la de otro programa); antes de mui_window_open; falso si no existe esa pantalla",
     "mui_window_own_screen": "Pantalla completa en una pantalla propia, como la pública (antes de mui_window_open; false: "
                              "en la pública)",
     "mui_width": "El ancho de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana)",

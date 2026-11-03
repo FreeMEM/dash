@@ -967,6 +967,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_window_open_back", 1, 1, 1, 0},
     {"mui_window_own_screen", 1, 2, 1, 0},
     {"mui_window_own_screen", 1, 2, 1, 0},
+    {"mui_window_screen", 2, 2, 1, 0},
+    {"mui_window_screen", 2, 2, 1, 0},
     {"mui_window_size", 3, 0, 1, 0},
     {"mui_window_size", 3, 0, 1, 0},
     {"music_free", 0, 0, 1, 0},
@@ -1690,7 +1692,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1688;
+const int builtin_count = 1690;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

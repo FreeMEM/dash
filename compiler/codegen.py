@@ -19121,6 +19121,27 @@ static LONG _dash_mui_window_own_screen(APTR win) {
     return 1;
 }
 
+/* mui_window_screen (Forja G22): the window opens as a normal window on the public screen with that name (the
+   program's screen_clone_wb, or another program's); before mui_window_open. MUI keeps a pointer to the name: a
+   copy of each is kept until the end. FALSE if there is no such public screen now (the window would go to the
+   default one). */
+#define _DASH_MUI_PUBNAMES 8
+static char _dash_mui_pubnames[_DASH_MUI_PUBNAMES][64];
+static LONG _dash_mui_pubname_n = 0;
+static LONG _dash_mui_window_screen(APTR win, STRPTR name) {
+    struct Screen *pub;
+    char *copia;
+    if (!win || !name || !*name) return 0;
+    if (!(pub = LockPubScreen((CONST_STRPTR)name))) return 0;
+    UnlockPubScreen(NULL, pub);
+    copia = _dash_mui_pubnames[_dash_mui_pubname_n % _DASH_MUI_PUBNAMES];
+    _dash_mui_pubname_n++;
+    strncpy(copia, (const char *)name, 63);
+    copia[63] = 0;
+    SetAttrs(win, MUIA_Window_PublicScreen, (IPTR)copia, TAG_DONE);
+    return 1;
+}
+
 /* Size of an object on screen, in pixels (0 before its window opens) */
 static LONG _dash_mui_size(APTR obj, LONG height) {
     IPTR size = 0;

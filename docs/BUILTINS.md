@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 844 funciones, 844 implementadas, 0 sin implementar.
+Total: 845 funciones, 845 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -112,7 +112,7 @@ Total: 844 funciones, 844 implementadas, 0 sin implementar.
 | `window_check_close()` | `BOOL` | Mira si se pulsó el botón de cerrar (sin esperar) |  |
 | `close_window()` | `void` | Cierra la ventana actual |  |
 | `screen_clone_wb(name)` | `BOOL` | Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas |  |
-| `screen_visitors()` | `LONG` | Cuántas ventanas de otros programas hay abiertas en la pantalla pública del programa |  |
+| `screen_visitors()` | `LONG` | Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno |  |
 | `screen_open(depth, title)` | `BOOL` | Abre una pantalla con el modo del Workbench y la profundidad que se diga |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Abre una pantalla propia del tamaño y la profundidad que se digan |  |
 | `screen_close()` | `void` | Cierra la pantalla |  |
@@ -1047,6 +1047,7 @@ Total: 844 funciones, 844 implementadas, 0 sin implementar.
 | `mui_set_active(win, obj)` | `void` | Hace de obj el objeto activo de la ventana: el cursor va a ese campo de texto (Amiga-L) |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | El tamaño de la ventana al abrirse, en tanto por ciento de la pantalla visible, centrada (antes de mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | La ventana ocupa toda la pantalla: sin bordes, barra de título ni gadgets, y activa (antes de mui_window_open) |  |
+| `mui_window_screen(win, name)` | `BOOL` | La ventana se abre como una ventana normal en la pantalla pública con ese nombre (la de screen_clone_wb, o la de otro programa); antes de mui_window_open; falso si no existe esa pantalla |  |
 | `mui_window_own_screen(win)` | `BOOL` | Pantalla completa en una pantalla propia, como la pública (antes de mui_window_open; false: en la pública) |  |
 | `mui_width(obj)` | `LONG` | El ancho de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
 | `mui_height(obj)` | `LONG` | El alto de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |

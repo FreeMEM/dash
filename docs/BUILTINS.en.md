@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 844 functions, 844 implemented, 0 not implemented.
+Total: 845 functions, 845 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -112,7 +112,7 @@ Total: 844 functions, 844 implemented, 0 not implemented.
 | `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
 | `close_window()` | `void` | Close the current window |  |
 | `screen_clone_wb(name)` | `BOOL` | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
-| `screen_visitors()` | `LONG` | How many windows of other programs are open on the program's public screen |  |
+| `screen_visitors()` | `LONG` | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
 | `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Open a custom screen with specific dimensions and depth |  |
 | `screen_close()` | `void` | Close the screen |  |
@@ -1047,6 +1047,7 @@ Total: 844 functions, 844 implemented, 0 not implemented.
 | `mui_set_active(win, obj)` | `void` | Make obj the window's active object: the cursor goes to that string gadget (Amiga-L) |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
+| `mui_window_screen(win, name)` | `BOOL` | The window opens as a normal window on the public screen with that name (screen_clone_wb's, or another program's); before mui_window_open; false if there is no such screen |  |
 | `mui_window_own_screen(win)` | `BOOL` | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |
 | `mui_width(obj)` | `LONG` | Width of an object on screen in pixels (0 before its window opens) |  |
 | `mui_height(obj)` | `LONG` | Height of an object on screen in pixels (0 before its window opens) |  |

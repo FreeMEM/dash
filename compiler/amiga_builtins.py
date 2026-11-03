@@ -789,7 +789,7 @@ INPUT_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_screen_visitors()",
         needs_gfx=True,
-        description="How many windows of other programs are open on the program's public screen"
+        description="How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none"
     ),
     "screen_open": BuiltinFunc(
         name="screen_open",
@@ -4000,6 +4000,13 @@ MUI_FUNCTIONS = {
         return_type="void",
         c_template="_dash_mui_window_fullscreen(${win})",
         description="The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open)"
+    ),
+    "mui_window_screen": BuiltinFunc(
+        name="mui_window_screen",
+        params=["win", "name"],
+        return_type="BOOL",
+        c_template="_dash_mui_window_screen(${win}, ${name})",
+        description="The window opens as a normal window on the public screen with that name (screen_clone_wb's, or another program's); before mui_window_open; false if there is no such screen"
     ),
     "mui_window_own_screen": BuiltinFunc(
         name="mui_window_own_screen",

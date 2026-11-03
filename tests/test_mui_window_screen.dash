@@ -1,0 +1,50 @@
+# Test: mui_window_screen puts normal MUI windows on a public screen by name: two windows on the program's
+# screen_clone_wb, both on that screen and counted as visitors (MUI's locks of the screen count too: Intuition's
+# visitor count), none once closed; a name with no screen gives false.
+# emu-needs: muimaster.library
+# expect-c: static LONG _dash_mui_window_screen(APTR win, STRPTR name)
+# expect-out: clon: true
+# expect-out: a la pantalla: true true
+# expect-out: no existe: false
+# expect-out: las dos en el clon: true
+# expect-out: con visitas: true
+# expect-out: cerradas, visitas: 0
+# expect-out: fin
+
+@native func pantalla_de(win: Int) -> Int
+"""
+    struct Screen *scr = NULL;
+    GetAttr(MUIA_Window_Screen, (Object *)win, (IPTR *)&scr);
+    return (LONG)scr;
+"""
+end
+
+Main
+    if mui_app_begin("Pantallas", "DASHPUB") == 0
+        Print "sin MUI"
+    else
+        nombre = "DASHMUI"
+        Print "clon: #{screen_clone_wb(nombre)}"
+        a = mui_window_begin("Una", 1)
+            mui_text("En el clon")
+        mui_window_end()
+        b = mui_window_begin("Otra", 2)
+            mui_button("También")
+        mui_window_end()
+        Print "a la pantalla: #{mui_window_screen(a, nombre)} #{mui_window_screen(b, nombre)}"
+        c = mui_window_begin("Ninguna", 3)
+        mui_window_end()
+        otro = "NOEXISTE"
+        Print "no existe: #{mui_window_screen(c, otro)}"
+        mui_window_open(a)
+        mui_window_open(b)
+        Print "las dos en el clon: #{pantalla_de(a) != 0 and pantalla_de(a) == pantalla_de(b)}"
+        Print "con visitas: #{screen_visitors() > 0}"
+        mui_window_close(a)
+        mui_window_close(b)
+        mui_app_end()
+        Print "cerradas, visitas: #{screen_visitors()}"
+        screen_close()
+        Print "fin"
+    end
+end
