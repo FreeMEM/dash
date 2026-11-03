@@ -12782,7 +12782,10 @@ static void _dash_bob_free(LONG id) {
    is a word: the tile in the low 14 bits (1 is the first frame of the tileset, a BOB; 0 is empty), bit 14 mirrors
    it left to right and bit 15 top to bottom. The file is an IFF FORM FMAP: MHDR (version, width, height, tile side
    and layers, five words), TSET (the tileset's file name) and a LAYR for each layer (type, visible, the length of
-   the name, the name, a zero byte if that is odd, then the cells). Other chunks are skipped. */
+   the name, the name, a zero byte if that is odd, then the cells). Other chunks are skipped.
+   The map also has objects (up to 256): points in pixels with a kind ("player", "coin"...), a name and a sprite
+   file, for the game to turn into what it needs. OBJS: the count (a word), then each one: x and y (two words) and
+   the kind, the name and the sprite (each a length byte and its characters), and a zero byte if that is odd. */
 #define _DASH_MAX_TILEMAPS 8
 #define _DASH_TILEMAP_LAYERS 8
 typedef struct {
@@ -12791,7 +12794,14 @@ typedef struct {
     char name[_DASH_TILEMAP_LAYERS][32];
     UBYTE type[_DASH_TILEMAP_LAYERS], visible[_DASH_TILEMAP_LAYERS];
     char tileset[256];
+    struct _DashMapObject *objects;     /* _DASH_MAP_OBJECTS of them, allocated with the first one */
+    LONG nobjects;
 } _DashTilemap;
+#define _DASH_MAP_OBJECTS 256
+struct _DashMapObject {
+    WORD x, y;
+    char kind[32], name[32], sprite[128];
+};
 static _DashTilemap *_dash_tilemaps[_DASH_MAX_TILEMAPS];
 
 static _DashTilemap *_dash_tilemap_get(LONG id) {
@@ -12804,6 +12814,7 @@ static void _dash_tilemap_free(LONG id) {
     LONG i;
     if (!m) return;
     for (i = 0; i < _DASH_TILEMAP_LAYERS; i++) if (m->cells[i]) FreeVec(m->cells[i]);
+    if (m->objects) FreeVec(m->objects);
     FreeVec(m);
     _dash_tilemaps[id] = NULL;
 }
@@ -12954,6 +12965,96 @@ static BOOL _dash_tilemap_resize(LONG id, LONG w, LONG h) {
     return TRUE;
 }
 
+/* --- Objects --- */
+static struct _DashMapObject *_dash_tilemap_object(LONG id, LONG i) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m || i < 0 || i >= m->nobjects) return NULL;
+    return &m->objects[i];
+}
+
+static void _dash_map_copy(char *d, STRPTR s, LONG n) {
+    strncpy(d, s ? (const char *)s : "", n - 1);
+    d[n - 1] = 0;
+}
+
+/* A new object of that kind at x, y (no name, no sprite): its number, or -1 */
+static LONG _dash_tilemap_object_add(LONG id, LONG x, LONG y, STRPTR kind) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    struct _DashMapObject *o;
+    if (!m) return -1;
+    if (!m->objects && !(m->objects = (struct _DashMapObject *)AllocVec(_DASH_MAP_OBJECTS * sizeof(struct _DashMapObject),
+                                                                         MEMF_ANY | MEMF_CLEAR))) return -1;
+    if (m->nobjects >= _DASH_MAP_OBJECTS) return -1;
+    o = &m->objects[m->nobjects];
+    memset(o, 0, sizeof(*o));
+    o->x = (WORD)x; o->y = (WORD)y;
+    _dash_map_copy(o->kind, kind, sizeof(o->kind));
+    return m->nobjects++;
+}
+
+static BOOL _dash_tilemap_object_remove(LONG id, LONG i) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!_dash_tilemap_object(id, i)) return FALSE;
+    memmove(&m->objects[i], &m->objects[i + 1], (m->nobjects - i - 1) * sizeof(struct _DashMapObject));
+    m->nobjects--;
+    return TRUE;
+}
+
+static LONG _dash_tilemap_objects(LONG id) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    return m ? m->nobjects : 0;
+}
+
+/* what: 0 x, 1 y */
+static LONG _dash_tilemap_object_pos(LONG id, LONG i, LONG what) {
+    struct _DashMapObject *o = _dash_tilemap_object(id, i);
+    if (!o) return 0;
+    return what == 0 ? o->x : o->y;
+}
+
+static void _dash_tilemap_object_move(LONG id, LONG i, LONG x, LONG y) {
+    struct _DashMapObject *o = _dash_tilemap_object(id, i);
+    if (o) { o->x = (WORD)x; o->y = (WORD)y; }
+}
+
+/* what: 0 the kind, 1 the name, 2 the sprite */
+static STRPTR _dash_tilemap_object_text(LONG id, LONG i, LONG what) {
+    struct _DashMapObject *o = _dash_tilemap_object(id, i);
+    if (!o) return (STRPTR)"";
+    return (STRPTR)(what == 0 ? o->kind : what == 1 ? o->name : o->sprite);
+}
+
+static void _dash_tilemap_object_set(LONG id, LONG i, STRPTR kind, STRPTR name, STRPTR sprite) {
+    struct _DashMapObject *o = _dash_tilemap_object(id, i);
+    if (!o) return;
+    _dash_map_copy(o->kind, kind, sizeof(o->kind));
+    _dash_map_copy(o->name, name, sizeof(o->name));
+    _dash_map_copy(o->sprite, sprite, sizeof(o->sprite));
+}
+
+/* The first object of that kind from object from on (-1 if none): to find the player, the enemies... */
+static LONG _dash_tilemap_object_find(LONG id, STRPTR kind, LONG from) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    LONG i;
+    if (!m) return -1;
+    for (i = from < 0 ? 0 : from; i < m->nobjects; i++)
+        if (strcmp(m->objects[i].kind, kind ? (const char *)kind : "") == 0) return i;
+    return -1;
+}
+
+/* The OBJS chunk's length (0: no objects, no chunk) */
+static ULONG _dash_tilemap_objs_len(_DashTilemap *m) {
+    ULONG n = 2;
+    LONG i;
+    if (!m->nobjects) return 0;
+    for (i = 0; i < m->nobjects; i++) {
+        struct _DashMapObject *o = &m->objects[i];
+        ULONG e = 4 + 3 + strlen(o->kind) + strlen(o->name) + strlen(o->sprite);
+        n += (e + 1) & ~1UL;
+    }
+    return n;
+}
+
 static BOOL _dash_tilemap_write(BPTR f, const void *p, LONG n) { return Write(f, (APTR)p, n) == n; }
 
 static BOOL _dash_tilemap_save(LONG id, STRPTR filename) {
@@ -12970,6 +13071,7 @@ static BOOL _dash_tilemap_save(LONG id, STRPTR filename) {
         ULONG n = strlen(m->name[l]);
         form += 8 + ((3 + n + 1) & ~1UL) + m->w * m->h * 2;
     }
+    if (m->nobjects) form += 8 + _dash_tilemap_objs_len(m);
     if (!(f = Open((CONST_STRPTR)filename, MODE_NEWFILE))) return FALSE;
     hdr[0] = 0x464F524DUL; hdr[1] = form;                                  /* FORM */
     ok = ok && _dash_tilemap_write(f, hdr, 8) && _dash_tilemap_write(f, "FMAP", 4);
@@ -12988,6 +13090,27 @@ static BOOL _dash_tilemap_save(LONG id, STRPTR filename) {
              _dash_tilemap_write(f, m->name[l], n);
         if ((3 + n) & 1) ok = ok && _dash_tilemap_write(f, zero, 1);
         ok = ok && _dash_tilemap_write(f, m->cells[l], m->w * m->h * 2);
+    }
+    if (ok && m->nobjects) {
+        UWORD cnt = (UWORD)m->nobjects;
+        LONG i;
+        hdr[0] = 0x4F424A53UL; hdr[1] = _dash_tilemap_objs_len(m);         /* OBJS */
+        ok = _dash_tilemap_write(f, hdr, 8) && _dash_tilemap_write(f, &cnt, 2);
+        for (i = 0; ok && i < m->nobjects; i++) {
+            struct _DashMapObject *o = &m->objects[i];
+            const char *t[3];
+            WORD xy[2];
+            LONG k, e = 4 + 3;
+            t[0] = o->kind; t[1] = o->name; t[2] = o->sprite;
+            xy[0] = o->x; xy[1] = o->y;
+            ok = _dash_tilemap_write(f, xy, 4);
+            for (k = 0; ok && k < 3; k++) {
+                UBYTE n = (UBYTE)strlen(t[k]);
+                e += n;
+                ok = _dash_tilemap_write(f, &n, 1) && _dash_tilemap_write(f, t[k], n);
+            }
+            if (ok && (e & 1)) ok = _dash_tilemap_write(f, zero, 1);
+        }
     }
     if (!Close(f)) ok = FALSE;
     return ok;
@@ -13034,6 +13157,29 @@ static BOOL _dash_tilemap_load(LONG id, STRPTR filename) {
             if (Read(f, m->cells[layer], cells) != cells) { ok = FALSE; break; }
             if ((LONG)(len + pad) > hn + cells) Seek(f, len + pad - hn - cells, OFFSET_CURRENT);
             layer++;
+        } else if (ch[0] == 0x4F424A53UL && m && len >= 2) {              /* OBJS */
+            UBYTE *b = (UBYTE *)AllocVec(len + pad, MEMF_ANY);
+            ULONG p = 2;
+            LONG cnt, i;
+            if (!b || Read(f, b, len + pad) != (LONG)(len + pad)) { if (b) FreeVec(b); ok = FALSE; break; }
+            cnt = (b[0] << 8) | b[1];
+            for (i = 0; i < cnt && p + 7 <= len; i++) {
+                char t[3][128];
+                LONG k, x = (WORD)((b[p] << 8) | b[p + 1]), y = (WORD)((b[p + 2] << 8) | b[p + 3]), e = 4 + 3, o;
+                p += 4;
+                for (k = 0; k < 3; k++) {
+                    LONG n = p < len ? b[p] : 0;
+                    if (p + 1 + n > len) n = 0;
+                    memcpy(t[k], b + p + 1, n < 127 ? n : 127);
+                    t[k][n < 127 ? n : 127] = 0;
+                    p += 1 + n;
+                    e += n;
+                }
+                if (e & 1) p++;
+                o = _dash_tilemap_object_add(id, x, y, (STRPTR)t[0]);
+                if (o >= 0) _dash_tilemap_object_set(id, o, (STRPTR)t[0], (STRPTR)t[1], (STRPTR)t[2]);
+            }
+            FreeVec(b);
         } else {
             Seek(f, len + pad, OFFSET_CURRENT);
         }

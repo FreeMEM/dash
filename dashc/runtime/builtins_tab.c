@@ -1595,6 +1595,28 @@ const BuiltinInfo builtin_info[] = {
     {"tilemap_layers", 1, 1, 1, 0},
     {"tilemap_load", 2, 2, 1, 0},
     {"tilemap_load", 2, 2, 1, 0},
+    {"tilemap_object_add", 4, 1, 1, 0},
+    {"tilemap_object_add", 4, 1, 1, 0},
+    {"tilemap_object_find", 3, 1, 1, 0},
+    {"tilemap_object_find", 3, 1, 1, 0},
+    {"tilemap_object_kind", 2, 3, 1, 0},
+    {"tilemap_object_kind", 2, 3, 1, 0},
+    {"tilemap_object_move", 4, 0, 1, 0},
+    {"tilemap_object_move", 4, 0, 1, 0},
+    {"tilemap_object_name", 2, 3, 1, 0},
+    {"tilemap_object_name", 2, 3, 1, 0},
+    {"tilemap_object_remove", 2, 2, 1, 0},
+    {"tilemap_object_remove", 2, 2, 1, 0},
+    {"tilemap_object_set", 5, 0, 1, 0},
+    {"tilemap_object_set", 5, 0, 1, 0},
+    {"tilemap_object_sprite", 2, 3, 1, 0},
+    {"tilemap_object_sprite", 2, 3, 1, 0},
+    {"tilemap_object_x", 2, 1, 1, 0},
+    {"tilemap_object_x", 2, 1, 1, 0},
+    {"tilemap_object_y", 2, 1, 1, 0},
+    {"tilemap_object_y", 2, 1, 1, 0},
+    {"tilemap_objects", 1, 1, 1, 0},
+    {"tilemap_objects", 1, 1, 1, 0},
     {"tilemap_resize", 3, 2, 1, 0},
     {"tilemap_resize", 3, 2, 1, 0},
     {"tilemap_save", 2, 2, 1, 0},
@@ -1756,7 +1778,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1754;
+const int builtin_count = 1776;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},
