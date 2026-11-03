@@ -8,7 +8,7 @@ Lenguaje de programación de alto nivel para **Commodore Amiga**: su compilador 
 
 Escribe código limpio, sintetiza ejecutables nativos.
 
-Versión actual: **2.1.0** (`./dash --version`). Qué significa cada número y qué trae cada versión: [docs/VERSIONES.md](docs/VERSIONES.md).
+Versión actual: **2.2.0** (`./dash --version`). Qué significa cada número y qué trae cada versión: [docs/VERSIONES.md](docs/VERSIONES.md).
 
 ```
 ./dash        Fuente (.dash) → compilador de Dash → código 68000 + runtime → ejecutable (hunk)
@@ -225,7 +225,7 @@ sudo apt install -y git make gcc python3
 # CachyOS / Arch Linux
 sudo pacman -S --needed git make gcc python
 
-git clone --branch v2.1.0 https://github.com/FreeMEM/dash.git
+git clone --branch v2.2.0 https://github.com/FreeMEM/dash.git
 cd dash
 make -C dashc                      # el compilador de Dash, en unos segundos
 ./dash examples/hola.dash -o bin/hola
@@ -238,7 +238,7 @@ Kickstart en `$DASH_KICKSTART` y `python3 tools/emu_run.py bin/hola`.
 
 ```bash
 xcode-select --install             # clang, make, git y Python 3 de Apple
-git clone --branch v2.1.0 https://github.com/FreeMEM/dash.git
+git clone --branch v2.2.0 https://github.com/FreeMEM/dash.git
 cd dash
 make -C dashc
 ./dash examples/hola.dash -o bin/hola
@@ -251,7 +251,7 @@ falla, abre una incidencia.
 ### Directo a hunk en el Amiga
 
 El compilador también corre en el propio Amiga (68000, AmigaOS 2.0 o superior). En las
-[releases](https://github.com/FreeMEM/dash/releases) está `dash-2.1.0-amiga.lha`: se descomprime, y su `Instalar`
+[releases](https://github.com/FreeMEM/dash/releases) está `dash-2.2.0-amiga.lha`: se descomprime, y su `Instalar`
 copia el cajón Dash (la orden `dash`, sus runtimes, `lib/` y los ejemplos) y añade a `S:User-Startup` el
 `Assign DASH:` y el `Path`. Luego, desde un Shell:
 

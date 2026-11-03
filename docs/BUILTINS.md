@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 879 funciones, 879 implementadas, 0 sin implementar.
+Total: 895 funciones, 895 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -79,6 +79,10 @@ Total: 879 funciones, 879 implementadas, 0 sin implementar.
 | `bob_erase(id)` | `void` | Borra un BOB (deja el fondo como estaba) |  |
 | `bob_frame(id, frame)` | `void` | Pone el fotograma de la animación de un BOB |  |
 | `bob_frame_width(id, width)` | `void` | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
+| `bob_width(id)` | `LONG` | El ancho de un fotograma de un BOB (0 si no hay ese BOB) |  |
+| `bob_height(id)` | `LONG` | El alto de un BOB |  |
+| `bob_frames(id)` | `LONG` | Cuántos fotogramas tiene un BOB |  |
+| `bob_paste(id, frame, x, y)` | `void` | Pinta un fotograma de un BOB en x, y con su máscara (el color 0, transparente), sin guardar lo que hay debajo: para juegos que pintan el fotograma entero cada vez (doble búfer) |  |
 | `bob_free(id)` | `void` | Libera la memoria de un BOB |  |
 | `tilemap_create(id, width, height, tile, layers)` | `BOOL` | Un mapa de tiles nuevo en id (el que hubiera se va): ancho x alto celdas (de 1 a 1024 cada lado), tiles cuadrados de 8, 16 o 32 píxeles y de 1 a 8 capas de celdas vacías |  |
 | `tilemap_load(id, filename)` | `BOOL` | Carga en id un mapa de tiles (IFF FORM FMAP, el que guarda el editor de mapas de Forja); falso si no lo es |  |
@@ -102,6 +106,17 @@ Total: 879 funciones, 879 implementadas, 0 sin implementar.
 | `tilemap_resize(id, width, height)` | `BOOL` | Tamaño nuevo en celdas: lo que cabe se queda, desde la esquina de arriba a la izquierda, y las celdas nuevas van vacías |  |
 | `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Pinta tw x th celdas de una capa, desde la celda tx, ty, en x, y, con los fotogramas de un BOB (el tile n es el fotograma n - 1, en espejo si la celda lo dice; cada celda, del tamaño de un fotograma); las celdas vacías dejan ver lo de debajo. De una vez en la ventana |  |
 | `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Como tilemap_draw, pero el color 0 y las celdas vacías dejan ver lo de debajo (para las capas de delante) |  |
+| `tilemap_objects(id)` | `LONG` | Cuántos objetos tiene el mapa |  |
+| `tilemap_object_add(id, x, y, kind)` | `LONG` | Un objeto nuevo de esa clase (un texto: "jugador", "moneda"...) en x, y en píxeles del mapa: su número (0 el primero), o -1 (como mucho 256) |  |
+| `tilemap_object_remove(id, object)` | `BOOL` | Quita un objeto (los de detrás bajan un puesto) |  |
+| `tilemap_object_x(id, object)` | `LONG` | Dónde está un objeto: x en píxeles del mapa |  |
+| `tilemap_object_y(id, object)` | `LONG` | Dónde está un objeto: y en píxeles del mapa |  |
+| `tilemap_object_move(id, object, x, y)` | `void` | Lleva un objeto a x, y |  |
+| `tilemap_object_kind(id, object)` | `STRPTR` | La clase de un objeto |  |
+| `tilemap_object_name(id, object)` | `STRPTR` | El nombre de un objeto |  |
+| `tilemap_object_sprite(id, object)` | `STRPTR` | El fichero del sprite de un objeto ("" si no tiene) |  |
+| `tilemap_object_set(id, object, kind, name, sprite)` | `void` | Clase, nombre (hasta 31 caracteres cada uno) y fichero del sprite de un objeto |  |
+| `tilemap_object_find(id, kind, from)` | `LONG` | El primer objeto de esa clase desde el número from; -1 si no hay (para encontrar al jugador, o recorrer los enemigos) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Mira si chocan dos BOB |  |
 | `copper_create(size)` | `BOOL` | Crea una lista del copper |  |
 | `copper_wait(y, x)` | `void` | Añade una instrucción WAIT del copper |  |
@@ -127,6 +142,7 @@ Total: 879 funciones, 879 implementadas, 0 sin implementar.
 | `key_get()` | `LONG` | El código de la tecla |  |
 | `key_wait()` | `LONG` | Espera una tecla y da su código |  |
 | `key_raw()` | `LONG` | El código de tecla en bruto (sin traducir) |  |
+| `key_down(code)` | `BOOL` | Si una tecla está pulsada ahora, por su código (0x45 Esc, 0x40 espacio, 0x4C arriba, 0x4D abajo, 0x4E derecha, 0x4F izquierda): para juegos, se pregunta en cada fotograma; no necesita ventana |  |
 | `key_text(keycode)` | `STRPTR` | Pasa un código de tecla a texto |  |
 | `mouse_x()` | `LONG` | La X del ratón dentro del interior de la ventana (0 sin ventana) |  |
 | `mouse_y()` | `LONG` | La Y del ratón dentro del interior de la ventana (0 sin ventana) |  |

@@ -149,7 +149,8 @@ def texto_bcpl(s):
     return struct.pack(">I", len(b)) + b
 
 
-def info(lienzo, tipo, herramienta=None, tooltypes=None, pila=0):
+def info(lienzo, tipo, herramienta=None, tooltypes=None, pila=0, ventana=(60, 40, 360, 140)):
+    """ventana: x, y, ancho y alto de la ventana de un cajón al abrirse"""
     w, h = lienzo.ancho, lienzo.alto
     gadget = struct.pack(">IhhhhHHHIIIIIHI", 0, 0, 0, w, h + 1, 0x0004, 0x0003, 0x0001,
                          1, 0, 0, 0, 0, 0, 1)
@@ -160,7 +161,7 @@ def info(lienzo, tipo, herramienta=None, tooltypes=None, pila=0):
     r = disk
     if cajonero:
         # NewWindow (48) + CurrentX/Y del cajón abierto
-        r += struct.pack(">hhhhbbIIIIIIIhhHHH", 60, 40, 360, 140, -1, -1, 0, 0, 0, 0, 0, 0, 0,
+        r += struct.pack(">hhhhbbIIIIIIIhhHHH", *ventana, -1, -1, 0, 0, 0, 0, 0, 0, 0,
                          90, 40, 0xFFFF, 0xFFFF, 1) + struct.pack(">ii", 0, 0)
     r += struct.pack(">hhhhhIBBI", 0, 0, w, h, 2, 1, 3, 0, 0) + lienzo.planos()
     if herramienta:

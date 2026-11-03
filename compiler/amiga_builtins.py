@@ -551,6 +551,38 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames)"
     ),
+    "bob_width": BuiltinFunc(
+        name="bob_width",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_bob_info(${id}, 0)",
+        needs_gfx=True,
+        description="The width of a frame of a BOB (0 if there is no such BOB)"
+    ),
+    "bob_height": BuiltinFunc(
+        name="bob_height",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_bob_info(${id}, 1)",
+        needs_gfx=True,
+        description="The height of a BOB"
+    ),
+    "bob_frames": BuiltinFunc(
+        name="bob_frames",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_bob_info(${id}, 2)",
+        needs_gfx=True,
+        description="How many frames a BOB has"
+    ),
+    "bob_paste": BuiltinFunc(
+        name="bob_paste",
+        params=["id", "frame", "x", "y"],
+        return_type="void",
+        c_template="_dash_bob_paste(${id}, ${frame}, ${x}, ${y})",
+        needs_gfx=True,
+        description="Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering)"
+    ),
     "bob_free": BuiltinFunc(
         name="bob_free",
         params=["id"],
@@ -735,6 +767,94 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front)"
     ),
+    "tilemap_objects": BuiltinFunc(
+        name="tilemap_objects",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_tilemap_objects(${id})",
+        needs_gfx=True,
+        description="How many objects the map has"
+    ),
+    "tilemap_object_add": BuiltinFunc(
+        name="tilemap_object_add",
+        params=["id", "x", "y", "kind"],
+        return_type="LONG",
+        c_template="_dash_tilemap_object_add(${id}, ${x}, ${y}, ${kind})",
+        needs_gfx=True,
+        description="A new object of that kind (a text: \"player\", \"coin\"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most)"
+    ),
+    "tilemap_object_remove": BuiltinFunc(
+        name="tilemap_object_remove",
+        params=["id", "object"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_object_remove(${id}, ${object})",
+        needs_gfx=True,
+        description="Remove an object (the ones after it move down one)"
+    ),
+    "tilemap_object_x": BuiltinFunc(
+        name="tilemap_object_x",
+        params=["id", "object"],
+        return_type="LONG",
+        c_template="_dash_tilemap_object_pos(${id}, ${object}, 0)",
+        needs_gfx=True,
+        description="Where an object is: x in pixels of the map"
+    ),
+    "tilemap_object_y": BuiltinFunc(
+        name="tilemap_object_y",
+        params=["id", "object"],
+        return_type="LONG",
+        c_template="_dash_tilemap_object_pos(${id}, ${object}, 1)",
+        needs_gfx=True,
+        description="Where an object is: y in pixels of the map"
+    ),
+    "tilemap_object_move": BuiltinFunc(
+        name="tilemap_object_move",
+        params=["id", "object", "x", "y"],
+        return_type="void",
+        c_template="_dash_tilemap_object_move(${id}, ${object}, ${x}, ${y})",
+        needs_gfx=True,
+        description="Move an object to x, y"
+    ),
+    "tilemap_object_kind": BuiltinFunc(
+        name="tilemap_object_kind",
+        params=["id", "object"],
+        return_type="STRPTR",
+        c_template="_dash_tilemap_object_text(${id}, ${object}, 0)",
+        needs_gfx=True,
+        description="The kind of an object"
+    ),
+    "tilemap_object_name": BuiltinFunc(
+        name="tilemap_object_name",
+        params=["id", "object"],
+        return_type="STRPTR",
+        c_template="_dash_tilemap_object_text(${id}, ${object}, 1)",
+        needs_gfx=True,
+        description="The name of an object"
+    ),
+    "tilemap_object_sprite": BuiltinFunc(
+        name="tilemap_object_sprite",
+        params=["id", "object"],
+        return_type="STRPTR",
+        c_template="_dash_tilemap_object_text(${id}, ${object}, 2)",
+        needs_gfx=True,
+        description="The sprite file of an object (\"\" if none)"
+    ),
+    "tilemap_object_set": BuiltinFunc(
+        name="tilemap_object_set",
+        params=["id", "object", "kind", "name", "sprite"],
+        return_type="void",
+        c_template="_dash_tilemap_object_set(${id}, ${object}, ${kind}, ${name}, ${sprite})",
+        needs_gfx=True,
+        description="Kind, name (up to 31 characters each) and sprite file of an object"
+    ),
+    "tilemap_object_find": BuiltinFunc(
+        name="tilemap_object_find",
+        params=["id", "kind", "from"],
+        return_type="LONG",
+        c_template="_dash_tilemap_object_find(${id}, ${kind}, ${from})",
+        needs_gfx=True,
+        description="The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies)"
+    ),
     "bob_collision": BuiltinFunc(
         name="bob_collision",
         params=["id1", "id2"],
@@ -903,6 +1023,13 @@ INPUT_FUNCTIONS = {
         return_type="LONG",
         c_template="_dash_key_raw()",
         description="Get raw key code (no translation)"
+    ),
+    "key_down": BuiltinFunc(
+        name="key_down",
+        params=["code"],
+        return_type="BOOL",
+        c_template="_dash_key_down(${code})",
+        description="Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window"
     ),
     "key_text": BuiltinFunc(
         name="key_text",

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 879 functions, 879 implemented, 0 not implemented.
+Total: 895 functions, 895 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -79,6 +79,10 @@ Total: 879 functions, 879 implemented, 0 not implemented.
 | `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
 | `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
+| `bob_width(id)` | `LONG` | The width of a frame of a BOB (0 if there is no such BOB) |  |
+| `bob_height(id)` | `LONG` | The height of a BOB |  |
+| `bob_frames(id)` | `LONG` | How many frames a BOB has |  |
+| `bob_paste(id, frame, x, y)` | `void` | Draw a frame of a BOB at x, y with its mask (colour 0 transparent), without saving what is under it: for games that draw the whole frame each time (double buffering) |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
 | `tilemap_create(id, width, height, tile, layers)` | `BOOL` | A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells |  |
 | `tilemap_load(id, filename)` | `BOOL` | Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one |  |
@@ -102,6 +106,17 @@ Total: 879 functions, 879 implemented, 0 not implemented.
 | `tilemap_resize(id, width, height)` | `BOOL` | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
 | `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
 | `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
+| `tilemap_objects(id)` | `LONG` | How many objects the map has |  |
+| `tilemap_object_add(id, x, y, kind)` | `LONG` | A new object of that kind (a text: "player", "coin"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most) |  |
+| `tilemap_object_remove(id, object)` | `BOOL` | Remove an object (the ones after it move down one) |  |
+| `tilemap_object_x(id, object)` | `LONG` | Where an object is: x in pixels of the map |  |
+| `tilemap_object_y(id, object)` | `LONG` | Where an object is: y in pixels of the map |  |
+| `tilemap_object_move(id, object, x, y)` | `void` | Move an object to x, y |  |
+| `tilemap_object_kind(id, object)` | `STRPTR` | The kind of an object |  |
+| `tilemap_object_name(id, object)` | `STRPTR` | The name of an object |  |
+| `tilemap_object_sprite(id, object)` | `STRPTR` | The sprite file of an object ("" if none) |  |
+| `tilemap_object_set(id, object, kind, name, sprite)` | `void` | Kind, name (up to 31 characters each) and sprite file of an object |  |
+| `tilemap_object_find(id, kind, from)` | `LONG` | The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list |  |
 | `copper_wait(y, x)` | `void` | Add copper WAIT instruction |  |
@@ -127,6 +142,7 @@ Total: 879 functions, 879 implemented, 0 not implemented.
 | `key_get()` | `LONG` | Get key code |  |
 | `key_wait()` | `LONG` | Wait for and return key |  |
 | `key_raw()` | `LONG` | Get raw key code (no translation) |  |
+| `key_down(code)` | `BOOL` | Whether a key is held down now, by its raw code (0x45 Esc, 0x40 space, 0x4C up, 0x4D down, 0x4E right, 0x4F left): for games, asked in each frame; it needs no window |  |
 | `key_text(keycode)` | `STRPTR` | Convert keycode to text |  |
 | `mouse_x()` | `LONG` | Mouse X position relative to window inner area (0 without a window) |  |
 | `mouse_y()` | `LONG` | Mouse Y position relative to window inner area (0 without a window) |  |

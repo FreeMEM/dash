@@ -36,7 +36,9 @@ def main():
     shutil.rmtree(dest, ignore_errors=True)
     caj = dest / "Dash"
     caj.mkdir(parents=True)
-    (dest / "Dash.info").write_bytes(situar(info(cajon(), WBDRAWER), 10, 6))
+    # la ventana del cajón, con sitio para dos filas de iconos (cada uno en el suyo: si no, el Workbench pone
+    # Forja e Inferencia uno encima de otro)
+    (dest / "Dash.info").write_bytes(situar(info(cajon(), WBDRAWER, ventana=(60, 40, 440, 190)), 10, 6))
     b = raiz / "dashc/build"
     # (en el Amiga la orden se llama dash, como en el PC; sus runtimes, dash_*.drt)
     shutil.copy(b / "dashc.amiga", caj / "dash")
@@ -65,14 +67,19 @@ def main():
         if (pq / nombre).is_dir():
             shutil.copytree(pq / nombre, caj / nombre)
             if (pq / f"{nombre}.info").exists():
-                shutil.copy(pq / f"{nombre}.info", caj / f"{nombre}.info")
+                x = 250 if nombre == "Forja" else 330
+                (caj / f"{nombre}.info").write_bytes(situar((pq / f"{nombre}.info").read_bytes(), x, 6))
         else:
             print(f"sin {nombre}: falta {pq / nombre} (python3 tools/paquete.py en su proyecto)")
-    # el Amiga lee ISO-8859-1: el script y los textos, de UTF-8 a Latin-1
-    (caj / "Instalar").write_bytes((raiz / "paquete/Instalar").read_text().encode("latin-1"))
+    # el Amiga lee ISO-8859-1: el script (con el número de la versión) y los textos, de UTF-8 a Latin-1
+    (caj / "Instalar").write_bytes((raiz / "paquete/Instalar").read_text().replace("@VERSION@", version)
+                                   .encode("latin-1"))
     (caj / "Instalar.info").write_bytes(
         situar(info(instalador(), WBPROJECT, herramienta="Installer",
                     tooltypes=["APPNAME=Dash", "MINUSER=AVERAGE", "DEFUSER=AVERAGE"]), 10, 6))
+    # los cajones de los ejemplos y de lib/, en la segunda fila
+    (caj / "examples.info").write_bytes(situar(info(cajon(), WBDRAWER), 10, 80))
+    (caj / "lib.info").write_bytes(situar(info(cajon(), WBDRAWER), 90, 80))
     (caj / "LEEME").write_bytes((raiz / "README.es.md").read_text().encode("latin-1", "replace"))
     (caj / "LEEME.info").write_bytes(situar(info(documento(), WBPROJECT, herramienta="SYS:Utilities/MultiView"), 90, 6))
     (caj / "README").write_bytes((raiz / "README.md").read_text().encode("latin-1", "replace"))

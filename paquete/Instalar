@@ -1,4 +1,4 @@
-; Instalador de Dash 2.0 para el Installer del sistema (AmigaOS 2.0 a 3.2).
+; Instalador de Dash para el Installer del sistema (AmigaOS 2.0 a 3.2).
 ; Copia el cajón Dash (la orden dash, sus runtimes, lib/ y los ejemplos) donde se elija y añade a S:User-Startup el
 ; Assign DASH: y el Path, para escribir "dash" desde cualquier Shell. Habla en inglés, o en castellano si el
 ; sistema lo está. Este fichero se escribe en UTF-8 y tools/paquete_amiga.py lo pasa a ISO-8859-1, que es lo que
@@ -8,8 +8,8 @@
 (set #es (OR (= @language "español") (= @language "spanish")))
 
 (welcome
-    (if #es "Este programa instala Dash 2.0: el compilador de Dash (la orden dash), que corre en el propio Amiga y hace ejecutables sin compilador de C."
-            "This program installs Dash 2.0: the Dash compiler (the dash command), which runs on the Amiga itself and makes executables without a C compiler."))
+    (if #es "Este programa instala Dash @VERSION@: el compilador de Dash (la orden dash), que corre en el propio Amiga y hace ejecutables sin compilador de C. Trae también Forja, su entorno de programación, e Inferencia, la IA que programa en el Amiga."
+            "This program installs Dash @VERSION@: the Dash compiler (the dash command), which runs on the Amiga itself and makes executables without a C compiler. It also brings Forja, its programming environment, and Inferencia, the AI that programs on the Amiga."))
 
 (if (< (/ (getversion "exec.library" (resident)) 65536) 36)
     (message (if #es "Dash necesita AmigaOS 2.0 o superior. Se instalará igual."
@@ -28,6 +28,9 @@
 ; --- Copiar: todo el cajón menos el instalador ---
 (if (not (exists #cajon (noreq)))
     (makedir #cajon (infos)))
+; el icono del cajón, el del paquete (su ventana tiene el tamaño para sus iconos), si está al lado
+(if (exists "/Dash.info" (noreq))
+    (copyfiles (source "/Dash.info") (dest #donde) (nogauge)))
 (foreach "" "#?"
     (if (AND (<> @each-name "Instalar") (<> @each-name "Instalar.info"))
         (if (= @each-type 2)
@@ -42,16 +45,26 @@
     (command (cat "Assign DASH: \"" #cajon "\"\n" "Path DASH: ADD\n")))
 (run (cat "Assign DASH: \"" #cajon "\""))
 
+; --- Forja: dónde está la orden dash (ENV:Forja/dashc), para que funcione ya, sin reiniciar: el Path de
+; User-Startup no llega al Workbench que está en marcha. Solo si no lo había puesto el usuario ---
+(set #forja (not (exists "ENVARC:Forja/dashc" (noreq))))
+(if (AND #forja (not (exists "ENVARC:Forja" (noreq)))) (makedir "ENVARC:Forja"))
+(if (AND #forja (not (exists "ENV:Forja" (noreq)))) (makedir "ENV:Forja"))
+(if #forja (textfile (dest "ENVARC:Forja/dashc") (append (tackon #cajon "dash"))))
+(if #forja (textfile (dest "ENV:Forja/dashc") (append (tackon #cajon "dash"))))
+
 (exit (if #es
           (cat "Dash está en " #cajon ".\n\n"
                "Desde un Shell nuevo (o tras reiniciar), para compilar un ejemplo:\n"
                "  dash DASH:examples/hola.dash -o RAM:hola\n"
                "y para ejecutarlo:\n"
                "  RAM:hola\n\n"
-               "Con --fpu (68020 y FPU), --memcheck y --stack. Más en DASH:LEEME.")
+               "Con --fpu (68020 y FPU), --memcheck y --stack. Más en DASH:LEEME.\n\n"
+               "Forja, el entorno de programación, está en DASH:Forja.")
           (cat "Dash is in " #cajon ".\n\n"
                "From a new Shell (or after rebooting), to build an example:\n"
                "  dash DASH:examples/hola.dash -o RAM:hola\n"
                "and to run it:\n"
                "  RAM:hola\n\n"
-               "With --fpu (68020 and FPU), --memcheck and --stack. More in DASH:README.")))
+               "With --fpu (68020 and FPU), --memcheck and --stack. More in DASH:README.\n\n"
+               "Forja, the programming environment, is in DASH:Forja.")))
