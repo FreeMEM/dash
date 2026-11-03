@@ -2991,22 +2991,10 @@ static int gen_expr(Node *n)
         if (wm >= 0) {
             /* Win.width...: de la ventana abierta (puede haber cambiado) o de su definición, como ./dash */
             int wi = find_window(n->a->name);
-            Fixup f;
             load_imm(0, wm);
             push_d0();
-            w(0x4879);                                 /* pea descriptor */
-            f.at = (uint32_t)obj->code.n;
-            f.label = win_desc_label[wi];
-            f.abs = 1;
-            f.size = 2;
-            VEC_PUSH(fixups, f);
-            add_reloc(f.at, HK_CODE, NULL);
-            l(0);
-            sp_depth += 4;
-            w(0x2F39);                                 /* move.l ventana,-(sp) */
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l((uint32_t)win_off[wi]);
-            sp_depth += 4;
+            push_label(win_desc_label[wi]);            /* el descriptor */
+            push_data_long(win_off[wi]);               /* la ventana */
             rt_call("_dl_win_member", 3, 0);
             return wm == 4 ? TY_STR : TY_INT;
         }
@@ -3034,9 +3022,7 @@ static int gen_expr(Node *n)
         if (expr_type(n->a) == TY_INT && !strcmp(n->name, "abs") && !n->args.n) {
             /* x.abs(): el abs() de C, como ./dash */
             need_value(n->a, gen_expr(n->a));
-            tst_d0();
-            w(0x6A02);                                 /* bpl.s +2 */
-            w(0x4480);                                 /* neg.l d0 */
+            abs_d0();
             return TY_INT;
         }
         fatal_node(n, "(sin --gcc) .%s() aún no está", n->name);
@@ -3054,15 +3040,7 @@ static int gen_expr(Node *n)
             if (fn && !fn->native) {
                 /* una función como valor (mui_canvas_on_draw(lienzo, pinta)...): su dirección; la llaman
                    como a una de C, que es como van las de dashc */
-                Fixup f;
-                w(0x203C);                             /* move.l #función,d0 */
-                f.at = (uint32_t)obj->code.n;
-                f.label = func_label[idx];
-                f.abs = 1;
-                f.size = 2;
-                VEC_PUSH(fixups, f);
-                add_reloc(f.at, HK_CODE, NULL);
-                l(0);
+                load_label(func_label[idx]);
                 if (!needed[idx]) needed[idx] = 1;
                 return TY_INT;
             }
@@ -3070,9 +3048,7 @@ static int gen_expr(Node *n)
                 /* una de @extern: la dirección de su símbolo de C (un puntero a función para otro C, o la función
                    de un task_start) */
                 char *sym = c_symbol(fn->name);
-                w(0x203C);                             /* move.l #_función,d0 */
-                add_reloc((uint32_t)obj->code.n, -1, sym);
-                l(0);
+                load_sym(sym);
                 return TY_INT;
             }
             fatal_node(n, "%s: una función de @native no puede ir como valor", n->name);
@@ -3088,29 +3064,28 @@ static int gen_expr(Node *n)
         }
         if (expr_type(n->a) == TY_FLOAT) {
             value(n->a);
-            w(0x0A80); l(0x80000000);                  /* eori.l #$80000000,d0: el signo */
+            float_neg();
             return TY_FLOAT;
         }
         value(n->a);
-        w(0x4480);                                     /* neg.l d0 */
+        neg_d0();
         return expr_type(n->a) == TY_FIXED ? TY_FIXED : TY_INT;
     case E_BNOT:
         value(n->a);
-        w(0x4680);                                     /* not.l d0 */
+        not_d0();
         return TY_INT;
     case E_CMP:
-        w(0x50C0 | gen_compare(n) << 8);               /* scc d0 */
-        w(0x0280); l(1);                               /* andi.l #1,d0 */
+        set_cc(gen_compare(n));
         return TY_BOOL;
     case E_NOT:
     case E_AND:
     case E_OR: {
         int f = new_label(), done = new_label();
         gen_branch(n, f, 0);
-        w(0x7001);                                     /* moveq #1,d0 */
+        set_ne();                                      /* 1 */
         branch(CC_T, done);
         def_label(f);
-        w(0x7000);                                     /* moveq #0,d0 */
+        zero_d0();
         def_label(done);
         return TY_BOOL;
     }

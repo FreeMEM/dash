@@ -643,3 +643,50 @@ static void dbl_cmp_order(int gt)
     w(0x4A80);                                         /* tst.l d0 */
     def_label(done);
 }
+
+static void push_data_long(long off)                   /* lo que hay en una variable de los datos */
+{
+    w(0x2F39);                                         /* move.l datos,-(sp) */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l((uint32_t)off);
+    sp_depth += 4;
+}
+
+/* d0 = la dirección de una etiqueta del código, o de un símbolo de fuera (del runtime o de @link) */
+static void load_label(int label)
+{
+    Fixup f;
+    w(0x203C);                                         /* move.l #etiqueta,d0 */
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 1;
+    f.size = 2;
+    VEC_PUSH(fixups, f);
+    add_reloc(f.at, HK_CODE, NULL);
+    l(0);
+}
+
+static void load_sym(const char *sym)
+{
+    w(0x203C);                                         /* move.l #símbolo,d0 */
+    add_reloc((uint32_t)obj->code.n, -1, sym);
+    l(0);
+}
+
+/* ---- operaciones de un operando sobre d0 ---- */
+static void neg_d0(void) { w(0x4480); }                /* neg.l d0 */
+static void not_d0(void) { w(0x4680); }                /* not.l d0 */
+static void float_neg(void) { w(0x0A80); l(0x80000000); }   /* eori.l #$80000000,d0: el signo de un Float */
+
+static void abs_d0(void)
+{
+    tst_d0();
+    w(0x6A02);                                         /* bpl.s +2 */
+    w(0x4480);                                         /* neg.l d0 */
+}
+
+static void set_cc(int cc)                             /* d0 = 1 si se cumple la condición cc, 0 si no */
+{
+    w(0x50C0 | cc << 8);                               /* scc d0 */
+    w(0x0280); l(1);                                   /* andi.l #1,d0 */
+}
