@@ -5417,8 +5417,7 @@ static int len_uses(NodeList *body, const char *name)
 
 static void gen_function_pass(int label, Func *f, NodeList *body)
 {
-    uint32_t frame_at = 0;
-    int i, nregs = 0, mask_push = 0, mask_pop = 0, last = 0;
+    int i, nregs = 0, used = 0;
     MarkScope fm;
 
     n_plen = 0;
@@ -5441,15 +5440,13 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
 
     /* cada registro una vez, aunque lo compartan varias variables */
     for (i = 0; i < slot_reg.n; i++)
-        if (slot_reg.v[i] >= 0 && !(mask_pop & 1 << slot_reg.v[i])) {
+        if (slot_reg.v[i] >= 0 && !(used & 1 << slot_reg.v[i])) {
             nregs++;
-            last = slot_reg.v[i];
-            mask_push |= 0x8000 >> slot_reg.v[i];      /* movem -(sp): d0 es el bit 15 */
-            mask_pop |= 1 << slot_reg.v[i];            /* movem (sp)+: d0 es el bit 0 */
+            used |= 1 << slot_reg.v[i];
         }
 
     sp_depth = 0;
-    param_base = 4 + 4 * nregs;                        /* dirección de vuelta y registros guardados */
+    param_base = fn_param_base(nregs);
     def_label(label);
     if (debug && pass == 2) {
         DbgFunc d;
@@ -5460,19 +5457,13 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         d.line = f ? f->line : 0;
         VEC_PUSH(dbg_funcs, d);
     }
-    if (!frameless) {
-        w(0x4E55);                                     /* link a5,#-marco */
-        frame_at = (uint32_t)obj->code.n;
-        w(0);
-    }
-    if (nregs == 1) w(0x2F00 | last);                  /* move.l dN,-(sp) */
-    else if (nregs) { w(0x48E7); w(mask_push); }       /* movem.l regs,-(sp) */
+    fn_prologue(frameless, used);
 
     if (f)
         for (i = 0; i < f->params.n; i++) {
             Local lc;
             lc.name = f->params.v[i].name;
-            lc.slot = new_slot(8 + 4 * i);
+            lc.slot = new_slot(param_off(i));
             lc.type = f->params.v[i].type;
             lc.depth = 0;
             lc.frame = 0;
@@ -5482,15 +5473,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             lc.owned = 0;
             VEC_PUSH(locals, lc);
             dbg_var(lc.name, lc.type, lc.slot, f->line);
-            if (slot_reg.v[lc.slot] >= 0) {
-                if (frameless) {
-                    w(0x202F | slot_reg.v[lc.slot] << 9);   /* move.l d16(sp),dN */
-                    w(param_base + 4 * i);
-                } else {
-                    w(0x202D | slot_reg.v[lc.slot] << 9);   /* move.l 8+4i(a5),dN */
-                    w(8 + 4 * i);
-                }
-            }
+            if (slot_reg.v[lc.slot] >= 0) load_param(slot_reg.v[lc.slot], i, frameless);
         }
     mark_seq = 0;
     made_tmp = 0;
@@ -5530,25 +5513,14 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 }
         plen_depth = inl_stack.n;
         if (profile) {
-            w(0x4878); w(idx + 1);                     /* pea número.w */
-            sp_depth += 4;
+            push_word(idx + 1);                        /* su número */
             rt_call("_dl_prof_enter", 1, 0);
         }
         fm = mark_begin();
     } else {
         if (profile) {
-            Fixup fx;
-            w(0x4878); w(prog->funcs.n + 1);           /* pea cuántas.w */
-            sp_depth += 4;
-            w(0x4879);                                 /* pea nombres */
-            fx.at = (uint32_t)obj->code.n;
-            fx.label = prof_label;
-            fx.abs = 1;
-            fx.size = 2;
-            VEC_PUSH(fixups, fx);
-            add_reloc(fx.at, HK_CODE, NULL);
-            l(0);
-            sp_depth += 4;
+            push_word(prog->funcs.n + 1);              /* cuántas */
+            push_label(prof_label);                    /* sus nombres */
             rt_call("_dl_prof_start", 2, 0);
         }
         gen_global_inits();
@@ -5567,13 +5539,11 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 g.type = global_type[i];
                 push_ea(&g);
                 rt_call(IS_STRLIKE(global_type[i]) ? "_dl_str_free" : "_dl_release", 1, 0);
-                w(0x42B9);                             /* clr.l g */
-                add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-                l((uint32_t)g.off);
+                clear_global(g.off);
             }
         jsr_sym("_dl_tmp_release_all");
     }
-    if (f && IS_OBJ(cur_ret)) w(0x7000);               /* moveq #0,d0: sin return, nil */
+    if (f && IS_OBJ(cur_ret)) zero_d0();               /* sin return, nil */
     def_label(ret_label);
     if (f) {
         if (pass == 1) mark_need.v[fm.idx] = made_tmp;
@@ -5582,8 +5552,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             int skip = new_label();
             if (!IS_STRLIKE(cur_ret)) tmp_newer(0, skip);   /* (d0, lo que devuelve, no se toca) */
             push_d0();
-            w(0x2F2F); w(4);                           /* move.l 4(sp),-(sp): la marca */
-            sp_depth += 4;
+            push_sp_off(4);                            /* la marca */
             rt_call(IS_STRLIKE(cur_ret) ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
             def_label(skip);
             pop_args(1);
@@ -5601,14 +5570,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         jsr_sym("_dl_prof_report");
     }
     if (sp_depth) fatal("la pila no cuadra (fallo de dashc)");
-    if (nregs == 1) w(0x201F | last << 9);             /* move.l (sp)+,dN */
-    else if (nregs) { w(0x4CDF); w(mask_pop); }        /* movem.l (sp)+,regs */
-    if (!frameless) {
-        w(0x4E5D);                                     /* unlk a5 */
-        if (nframe * 4 > 32767) fatal("demasiadas variables en una función");
-        put_word(obj->code.p + frame_at, -4 * nframe);
-    }
-    w(0x4E75);                                         /* rts */
+    fn_epilogue(frameless, used, nframe);
     if (debug && pass == 2) {
         dbg_funcs.v[dbg_funcs.n - 1].end = new_label();
         def_label(dbg_funcs.v[dbg_funcs.n - 1].end);

@@ -831,3 +831,64 @@ static void debug_nop(void) { w(0x4E71); }             /* nop: donde --debug pon
 
 /* deja bytes de la pila antes de un salto (break, Stop, return): el código de después no lo ve (sin sp_depth) */
 static void skip_stack(int bytes) { w(0x4FEF); w(bytes); }   /* lea bytes(sp),sp */
+
+/* ---- funciones: marco con a5 (link/unlk) salvo frameless; las variables en registros (used: bit n = dN) se
+   guardan al entrar y se recuperan al salir; los parámetros, en la pila desde 8(a5) ---- */
+static uint32_t fn_frame_at;                           /* dónde va el tamaño del marco (link), que se sabe al final */
+
+static int fn_param_base(int nregs) { return 4 + 4 * nregs; }   /* dirección de vuelta y registros guardados */
+static int param_off(int i) { return 8 + 4 * i; }      /* el parámetro i, desde a5 */
+
+static int regs_count(int used, int *last)
+{
+    int r, n = 0;
+    for (r = 0; r < 8; r++)
+        if (used & 1 << r) { n++; *last = r; }
+    return n;
+}
+
+static void fn_prologue(int frameless, int used)
+{
+    int r, last = 0, n = regs_count(used, &last), mask = 0;
+    for (r = 0; r < 8; r++)
+        if (used & 1 << r) mask |= 0x8000 >> r;        /* movem -(sp): d0 es el bit 15 */
+    if (!frameless) {
+        w(0x4E55);                                     /* link a5,#-marco */
+        fn_frame_at = (uint32_t)obj->code.n;
+        w(0);
+    }
+    if (n == 1) w(0x2F00 | last);                      /* move.l dN,-(sp) */
+    else if (n) { w(0x48E7); w(mask); }                /* movem.l regs,-(sp) */
+}
+
+/* el parámetro i a su registro (sin marco: desde sp, por encima de lo guardado) */
+static void load_param(int reg, int i, int frameless)
+{
+    if (frameless) {
+        w(0x202F | reg << 9);                          /* move.l d16(sp),dN */
+        w(param_base + 4 * i);
+    } else {
+        w(0x202D | reg << 9);                          /* move.l 8+4i(a5),dN */
+        w(8 + 4 * i);
+    }
+}
+
+static void fn_epilogue(int frameless, int used, int nframe)
+{
+    int last = 0, n = regs_count(used, &last);
+    if (n == 1) w(0x201F | last << 9);                 /* move.l (sp)+,dN */
+    else if (n) { w(0x4CDF); w(used); }                /* movem.l (sp)+,regs: d0 es el bit 0 */
+    if (!frameless) {
+        w(0x4E5D);                                     /* unlk a5 */
+        if (nframe * 4 > 32767) fatal("demasiadas variables en una función");
+        put_word(obj->code.p + fn_frame_at, -4 * nframe);
+    }
+    w(0x4E75);                                         /* rts */
+}
+
+static void clear_global(long off)                     /* una global a 0 */
+{
+    w(0x42B9);                                         /* clr.l g */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l((uint32_t)off);
+}
