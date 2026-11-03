@@ -5767,17 +5767,16 @@ static void gen_window_descs(void)
                 if (f < 7) flags = k ? flags | 1L << f : flags & ~(1L << f);
             }
         }
-        def_label(win_desc_label[i]);
-        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-        l(add_string(title, (int)strlen(title)));
-        l((uint32_t)left);
-        l((uint32_t)top);
-        l((uint32_t)width);
-        l((uint32_t)height);
-        l((uint32_t)flags);
-        l(0x200 | (uses_keys ? 0x400 : 0) | (uses_click ? 0x8 : 0) |   /* CLOSEWINDOW, RAWKEY, MOUSEBUTTONS */
-          (uses_inactive ? 0x80000 : 0) |                             /* INACTIVEWINDOW */
-          (needs_gt ? 0x174 : 0));   /* GADGETUP, GADGETDOWN, MOUSEMOVE, MENUPICK, REFRESHWINDOW */
+        def_label(win_desc_label[i]);                  /* DashWinDesc */
+        code_data_ptr(add_string(title, (int)strlen(title)));
+        code_long((uint32_t)left);
+        code_long((uint32_t)top);
+        code_long((uint32_t)width);
+        code_long((uint32_t)height);
+        code_long((uint32_t)flags);
+        code_long(0x200 | (uses_keys ? 0x400 : 0) | (uses_click ? 0x8 : 0) |   /* CLOSEWINDOW, RAWKEY, MOUSEBUTTONS */
+                  (uses_inactive ? 0x80000 : 0) |                             /* INACTIVEWINDOW */
+                  (needs_gt ? 0x174 : 0));   /* GADGETUP, GADGETDOWN, MOUSEMOVE, MENUPICK, REFRESHWINDOW */
     }
 }
 
@@ -6123,41 +6122,21 @@ void gen_program(Program *p, Obj *o)
     if (autoclose) set_rt_var("__dash_ac_secs", NULL, autoclose);
     {
         /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
-        Fixup f;
         lit_init_label = new_label();
-        w(0x4EB9);                                     /* jsr lit_init */
-        f.at = (uint32_t)obj->code.n;
-        f.label = lit_init_label;
-        f.abs = 1;
-        f.size = 2;
-        VEC_PUSH(fixups, f);
-        add_reloc(f.at, HK_CODE, NULL);
-        l(0);
+        jsr_label(lit_init_label);
     }
     {
         /* la pila que pide (16 KB, como ./dash; 32 KB con MUI, 64 KB con AmiSSL; más con @stack): _dash_start
            cambia a una así si la del shell es menor */
         long stack = uses_tls ? 65536 : uses_mui ? 32768 : 16384;
         if (p->stack_min > stack) stack = p->stack_min;
-        w(0x2F3C); l((uint32_t)stack);                 /* move.l #pila,-(sp) */
+        start_arg_long((uint32_t)stack);               /* la pila */
     }
     {
         int k;
-        for (k = 0; k < 2; k++) {
-            Fixup f;
-            w(0x4879);                                 /* pea ficheros (sus nombres, para los errores); pea main */
-            f.at = (uint32_t)obj->code.n;
-            f.label = k ? main_label : files_label;
-            f.abs = 1;
-            f.size = 2;
-            VEC_PUSH(fixups, f);
-            add_reloc(f.at, HK_CODE, NULL);
-            l(0);
-        }
+        for (k = 0; k < 2; k++) start_arg_label(k ? main_label : files_label);   /* los ficheros (para los errores), main */
     }
-    w(0x4EF9);                                         /* jmp _dash_start */
-    add_reloc((uint32_t)obj->code.n, -1, "__dash_start");
-    l(0);
+    jmp_sym("__dash_start");
 
     /* los métodos de las interfaces van en las tablas de métodos: se generan aunque nadie los llame directo */
     for (i = 0; i < p->structs.n; i++) {
@@ -6203,16 +6182,9 @@ void gen_program(Program *p, Obj *o)
     {
         int i;
         def_label(lit_init_label);
-        w(0x48E7); w(0x8080);                          /* movem.l d0/a0,-(sp) (la línea de órdenes) */
-        for (i = 0; i < n_dash_lits; i++) {
-            w(0x4879);                                 /* pea texto */
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l(dash_lits[i].off);
-            jsr_sym("_dl_str_lit");
-            w(0x588F);                                 /* addq.l #4,sp */
-        }
-        w(0x4CDF); w(0x0101);                          /* movem.l (sp)+,d0/a0 */
-        w(0x4E75);                                     /* rts */
+        lit_init_begin();
+        for (i = 0; i < n_dash_lits; i++) lit_init_one(dash_lits[i].off);
+        lit_init_end();
     }
     if (p->version) {
         /* @version: "$VER: versión (d.m.aaaa)", como ./dash (lo lee la orden Version) */
@@ -6224,20 +6196,13 @@ void gen_program(Program *p, Obj *o)
     }
     /* los nombres de los ficheros (_dash_srcfiles de ./dash), terminados en 0 */
     def_label(files_label);
-    for (i = 0; i < src_files.n && i < 63; i++) {
-        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-        l(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
-    }
-    l(0);
+    for (i = 0; i < src_files.n && i < 63; i++) code_data_ptr(add_string(src_files.v[i], (int)strlen(src_files.v[i])));
+    code_long(0);
     if (profile) {
         /* --perfil: el nombre de cada función (0 es Main) */
         def_label(prof_label);
-        add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-        l(add_string("Main", 4));
-        for (i = 0; i < p->funcs.n; i++) {
-            add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
-            l(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));
-        }
+        code_data_ptr(add_string("Main", 4));
+        for (i = 0; i < p->funcs.n; i++) code_data_ptr(add_string(p->funcs.v[i].name, (int)strlen(p->funcs.v[i].name)));
     }
     resolve_fixups();
     if (debug) debug_text(p);

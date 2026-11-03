@@ -929,3 +929,50 @@ static void destroy_end(void)
     w(0x245F);                                         /* movea.l (sp)+,a2 */
     w(0x4E75);                                         /* rts */
 }
+
+static void code_data_ptr(uint32_t off)                /* la dirección de algo de los datos */
+{
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(off);
+}
+
+/* ---- el arranque: _dash_start(main, ficheros, pila) del runtime, con los argumentos en la pila ---- */
+static void start_arg_long(uint32_t v) { w(0x2F3C); l(v); }   /* move.l #v,-(sp) (sin sp_depth: no vuelve) */
+
+static void start_arg_label(int label)
+{
+    Fixup f;
+    w(0x4879);                                         /* pea etiqueta */
+    f.at = (uint32_t)obj->code.n;
+    f.label = label;
+    f.abs = 1;
+    f.size = 2;
+    VEC_PUSH(fixups, f);
+    add_reloc(f.at, HK_CODE, NULL);
+    l(0);
+}
+
+static void jmp_sym(const char *sym)
+{
+    w(0x4EF9);                                         /* jmp símbolo */
+    add_reloc((uint32_t)obj->code.n, -1, sym);
+    l(0);
+}
+
+/* la cabecera de los literales de los campos (dash_lit), al arrancar; d0 y a0 llevan la línea de órdenes */
+static void lit_init_begin(void) { w(0x48E7); w(0x8080); }   /* movem.l d0/a0,-(sp) */
+
+static void lit_init_one(uint32_t off)
+{
+    w(0x4879);                                         /* pea texto */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(off);
+    jsr_sym("_dl_str_lit");
+    w(0x588F);                                         /* addq.l #4,sp */
+}
+
+static void lit_init_end(void)
+{
+    w(0x4CDF); w(0x0101);                              /* movem.l (sp)+,d0/a0 */
+    w(0x4E75);                                         /* rts */
+}
