@@ -1389,6 +1389,8 @@ const BuiltinInfo builtin_info[] = {
     {"screen_font_text_width", 1, 1, 1, 0},
     {"screen_height", 0, 1, 1, 0},
     {"screen_height", 0, 1, 1, 0},
+    {"screen_make_default", 0, 2, 1, 0},
+    {"screen_make_default", 0, 2, 1, 0},
     {"screen_mode_depth", 0, 1, 1, 0},
     {"screen_mode_depth", 0, 1, 1, 0},
     {"screen_mode_height", 0, 1, 1, 0},
@@ -1710,7 +1712,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1708;
+const int builtin_count = 1710;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

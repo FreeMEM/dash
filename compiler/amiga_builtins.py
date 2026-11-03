@@ -807,6 +807,14 @@ INPUT_FUNCTIONS = {
         needs_gfx=True,
         description="How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none"
     ),
+    "screen_make_default": BuiltinFunc(
+        name="screen_make_default",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_screen_make_default()",
+        needs_gfx=True,
+        description="The program's public screen (screen_clone_wb) becomes the default public screen: windows with no screen of their own open there (programs it starts, shells); screen_close puts the old one back. False if it has no public screen"
+    ),
     "screen_open": BuiltinFunc(
         name="screen_open",
         params=["depth", "title"],
