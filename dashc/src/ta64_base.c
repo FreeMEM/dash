@@ -150,7 +150,13 @@ static void jsr_sym(const char *sym)
     x0_dirty = 1;
 }
 
-static void call_sym(const char *sym, int nargs) { load_args(nargs); jsr_sym(sym); }
+static void call_sym(const char *sym, int nargs)
+{
+    load_args(nargs);
+    jsr_sym(sym);
+    /* las de libgcc (Float por software: ___addsf3, ___cmpsf2...) devuelven 32 bits en w0, sin extender: como un Int */
+    if (!strncmp(sym, "___", 3)) ins(0x93407C00);      /* sxtw x0, w0 */
+}
 static void call_label(int label, int nargs) { load_args(nargs); jsr_label(label); }
 
 static void resolve_fixups(void)

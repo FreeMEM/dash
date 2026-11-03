@@ -5557,7 +5557,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             int skip = new_label();
             if (!IS_STRLIKE(cur_ret)) tmp_newer(0, skip);   /* (d0, lo que devuelve, no se toca) */
             push_d0();
-            push_sp_off(4);                            /* la marca */
+            push_sp_off(SLOT);                           /* la marca */
             rt_call(IS_STRLIKE(cur_ret) ? "_dl_tmp_release_keep" : "_dl_tmp_release_ret", 2, 0);
             def_label(skip);
             pop_args(1);

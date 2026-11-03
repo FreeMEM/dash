@@ -187,4 +187,14 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   `api.c`, limpio de tamaño de puntero con las macros: el runtime de 68k sale igual (solo cambia la hora de
   compilación que lleva dentro). `tools/dashos_run.py --directo` compila, enlaza (ld.lld) y ejecuta.
   2370/2370 y 395/395.
+- 2026-11-03: A4/A5. `tests/dashos_tests.py --directo`: 85 de 294 tests dan en ARM, por el camino directo, la misma
+  salida que en el A1200 (por C, 92; los demás piden AmigaOS). Arreglos:
+  - Los arrays que el recorrido deja en la pila (interpolaciones, listas literales, diccionarios) se juntan para el C
+    (`push_array`): en ARM cada cosa de la pila ocupa 16 bytes.
+  - Las banderas, como en el 68000: cada camino que llega a una etiqueta las deja puestas; add, sub y and las ponen.
+  - Datos con 16 bytes delante (el runtime mira la cabecera de un texto antes de él); punteros que avanzan en 64
+    bits (`ptr_add`); lo que devuelven las funciones de libgcc (Float), extendido; la marca del final de una función
+    en `SLOT`, no en 4.
+  - `runtime/dashos/portables.py`: 77 de 851 builtins compilan hoy para DashOS (textos, matemáticas, UTF-8,
+    expresiones regulares...); van en el runtime directo como `db_*`. Los demás son de AmigaOS (A7).
 
