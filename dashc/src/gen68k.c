@@ -1138,30 +1138,7 @@ static void gen_concat(Node *n)
     rt_call("_dl_str_concat", 2, 1);
 }
 
-/* ¿El texto de a0 es de Dash? (como _DASH_STR_OURS: impar no; self de la cabecera = cabecera + _DASH_STR_KEY; api.c
-   comprueba al compilar que la cabecera sigue siendo { size, len, self } de 12 bytes y la clave). Si lo es, a1 = su
-   cabecera; si no, a slow; nil, a nil_label */
-static void str_ours(int slow, int nil_label)
-{
-    w(0x2008);                                         /* move.l a0,d0 */
-    branch(CC_EQ, nil_label);
-    w(0x0800); w(0x0000);                              /* btst #0,d0 */
-    branch(CC_NE, slow);
-    w(0x43E8); w(0xFFF4);                              /* lea -12(a0),a1 */
-    w(0x2009);                                         /* move.l a1,d0 */
-    w(0x0680); l(0xDA5C7E57);                          /* addi.l #_DASH_STR_KEY,d0 */
-    w(0xB0A9); w(0x0008);                              /* cmp.l 8(a1),d0 */
-    branch(CC_NE, slow);
-}
-
 /* str_code(s, i) en línea, como _dash_str_code: un texto de Dash con su largo en la cabecera; si no, _dl_str_code */
-/* el texto a a0 (sin pasar por la pila si es una variable) */
-static void str_to_a0(Var *vs)
-{
-    if (vs->kind == V_REG) w(0x2040 | vs->reg);        /* movea.l dN,a0 */
-    else op_ea(0x2040, vs);                            /* movea.l v,a0 */
-}
-
 /* el índice a d1 */
 static void index_to_d1(Node *i)
 {
@@ -1169,7 +1146,7 @@ static void index_to_d1(Node *i)
     if (simple(i, &vi)) load_var(1, &vi);
     else {
         value(i);
-        w(0x2200);                                     /* move.l d0,d1 */
+        move_d0_d1();
     }
 }
 
@@ -1202,14 +1179,13 @@ static void str_code_inline(Node *s, Node *i)
         index_to_d1(i);
         use_slot(ps);
         vl = slot_var(ps, TY_INT);
-        op_ea(0xB280, &vl);                            /* cmp.l largo,d1 */
+        cmp_d1_ea(&vl);                                /* largo */
         branch(CC_CC, zero);                           /* (sin signo: también i < 0; y nil, con largo 0) */
         str_to_a0(&vs);
-        w(0x7000);                                     /* moveq #0,d0 */
-        w(0x1030); w(0x1800);                          /* move.b 0(a0,d1.l),d0 */
+        load_byte_a0_d1();
         branch(CC_T, done);
         def_label(zero);
-        w(0x7000);                                     /* moveq #0,d0 */
+        zero_d0();
         def_label(done);
         return;
     }
@@ -1221,22 +1197,18 @@ static void str_code_inline(Node *s, Node *i)
         value(s);
         push_d0();
         index_to_d1(i);
-        w(0x205F);                                     /* movea.l (sp)+,a0 */
-        sp_depth -= 4;
+        pop_a0();
     }
     str_ours(slow, zero);
-    w(0xB2A9); w(0x0004);                              /* cmp.l 4(a1),d1 */
+    cmp_d1_str_len();
     branch(CC_CC, zero);                               /* (sin signo: también i < 0) */
-    w(0x7000);                                         /* moveq #0,d0 */
-    w(0x1030); w(0x1800);                              /* move.b 0(a0,d1.l),d0 */
+    load_byte_a0_d1();
     branch(CC_T, done);
     def_label(slow);
-    w(0x2F01); w(0x2F08);                              /* move.l d1,-(sp); move.l a0,-(sp) */
-    jsr_sym("_dl_str_code");
-    w(0x508F);                                         /* addq.l #8,sp */
+    call_a0_d1("_dl_str_code");
     branch(CC_T, done);
     def_label(zero);
-    w(0x7000);                                         /* moveq #0,d0 */
+    zero_d0();
     def_label(done);
 }
 
@@ -1256,18 +1228,16 @@ static void str_len_inline(Node *s)
     if (simple(s, &vs) && vs.kind != V_CONST) str_to_a0(&vs);
     else {
         value(s);
-        w(0x2040);                                     /* movea.l d0,a0 */
+        move_d0_a0();
     }
     str_ours(slow, zero);
-    w(0x2029); w(0x0004);                              /* move.l 4(a1),d0 */
+    load_str_len();
     branch(CC_T, done);
     def_label(slow);
-    w(0x2F08);                                         /* move.l a0,-(sp) */
-    jsr_sym("_dl_str_len");
-    w(0x588F);                                         /* addq.l #4,sp */
+    call_a0("_dl_str_len");
     branch(CC_T, done);
     def_label(zero);
-    w(0x7000);                                         /* moveq #0,d0 */
+    zero_d0();
     def_label(done);
 }
 
