@@ -105,6 +105,21 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   memoria_proyectar(llave, va, permisos 1 leer | 2 escribir) = 8, con la VA alineada a 4 KB que elige el programa.
   Cambiarán con la API de S11: solo las funciones de plataforma conocen estos números.
 
+### Cambio: lo nativo pasa a little-endian (freemem-f9, 2026-11-03; aprobado por el usuario, DashOS C30, 13cf31e)
+
+Sustituye lo de arriba donde choque (big-endian, sin PIE, sin FPU). Referencia completa:
+`~/Projects/dashos/docs/referencia/kernel.md`. freemem-f9 pide un ELF little-endian de Dash para probarlo.
+
+- Cada proceso corre en el orden de bytes de su ELF (EI_DATA), con SCTLR_EL1.E0E por proceso. Los dos órdenes
+  conviven en el mismo núcleo, también con la FPU.
+- **Programas nativos de Dash (`--dashos`): ELF64 little-endian**, ET_EXEC en 0x400000 o PIE. Los PIE el kernel los
+  coloca al azar por encima de 4 GB y el programa aplica sus R_AARCH64_RELATIVE, que tienen que caer en segmentos RW.
+  Las llamadas 1, 2, 7 y 8 y PT_GNU_STACK no cambian. **La FPU ya está disponible** (C28).
+- Bibliotecas nativas de la caja Amiga: big-endian, con `@amiga struct` y punteros de 32 bits, mejor como PIE.
+  Latin-1 solo en los textos que van a estructuras del Amiga.
+- Las tablas de números de llave de los canales (llamadas 4 y 5) van en el orden de bytes del proceso. Los mensajes
+  que escribe el kernel (como el número de interrupción) van en little-endian.
+
 ## Reglas del bucle
 
 - Cada vuelta mira `~/.claude/state/uso-7d.txt`: con 90 % o más, se cierra en un punto seguro, se anota y se para.
