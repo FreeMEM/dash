@@ -4,6 +4,24 @@
 #define FIRST_REG 2
 #define MAX_REGS 6
 
+/* ---- los datos: las globales (una palabra larga cada una, desde el principio), las ventanas, las tablas ---- */
+static int global_off(int i) { return 4 * i; }
+
+static long data_word(long v)                          /* una palabra de los datos; devuelve dónde está */
+{
+    long off = (long)obj->data.n;
+    buf_long(&obj->data, (uint32_t)v);
+    return off;
+}
+
+static uint32_t data_align(void)                       /* alineado para una tabla de elementos de lista */
+{
+    if (obj->data.n & 3) buf_word(&obj->data, 0);
+    return (uint32_t)obj->data.n;
+}
+
+static void data_elem(long v) { buf_long(&obj->data, (uint32_t)v); }   /* un elemento de una lista de los datos */
+
 /* el hueco n de las variables del marco, desde a5 */
 static int frame_off(int n) { return -4 * n; }
 

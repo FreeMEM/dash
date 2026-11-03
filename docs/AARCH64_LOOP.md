@@ -146,4 +146,14 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   recorrido pide por nombre, como `gen_ranged`; en ARM devolverán 0). `SLOT` = lo que ocupa cada cosa de la pila.
   Siempre 2370/2370. Quedan unas 280 instrucciones a mano: `gen_function_pass`, `gen_program`, `gen_compare`,
   `gen_expr`, `str_set_join`, diccionarios, `gen_keys_loop`, `gen_stmt`, `gen_struct_types`, bucles y EventLoop.
+- 2026-11-03: A3 hecha en lo esencial. El recorrido común (`gen68k.c`, 6293 líneas) ya no escribe ninguna
+  instrucción ni sabe tamaños: todo pasa por unas 170 funciones del generador (`t68k_base.c`, `t68k_ops.c`,
+  `t68k_arith.c`, `t68k_opt.c`): pila (`SLOT`), listas y diccionarios por dentro (`ELEM`, `ARR_LEN`, `DICT_CAP`),
+  campos (`field_off`, `struct_bytes`), globales (`global_off`), marco (`frame_off`, `param_off`), registros
+  (`FIRST_REG`, `MAX_REGS`), prólogo y epílogo, descriptores, arranque. 2370/2370 en cada paso. Queda en el
+  recorrido el modelo (acumulador d0, d1, a0, a1, a2 para el objeto que se llena) y los códigos de condición CC_*,
+  que el generador de ARM traduce.
+- Siguiente: A4. `dashc-a64` (el mismo `gen68k.c` con `-DDASH_A64` y `ta64_*.c`), que escribe un objeto ELF y se
+  enlaza (al principio con ld.lld) con el runtime de dashc compilado para ARM (gen_lib con `DASH_TARGET=dashos`,
+  `api.c` sin AmigaOS).
 

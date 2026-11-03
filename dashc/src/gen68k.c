@@ -216,7 +216,7 @@ static Var lookup(const char *name)
     for (i = 0; i < prog->globals.n; i++)
         if (global_visible(i) && !strcmp(prog->globals.v[i].name, name)) {
             r.kind = V_GLOBAL;
-            r.off = i * 4;
+            r.off = global_off(i);
             r.type = global_type[i];
             return r;
         }
@@ -1295,12 +1295,10 @@ static void gen_list(Node *n, int fresh)
         if (!fold(n->args.v[i], &k)) all_const = 0;
     if (all_const && !kind && et != TY_FLOAT && et != TY_FIXED) {
         /* los números, en los datos */
-        uint32_t off;
-        if (obj->data.n & 3) buf_word(&obj->data, 0);
-        off = (uint32_t)obj->data.n;
+        uint32_t off = data_align();
         for (i = 0; i < np; i++) {
             fold(n->args.v[i], &k);
-            buf_long(&obj->data, (uint32_t)k);
+            data_elem(k);
         }
         push_data(off);
         push_word(np);
@@ -2510,8 +2508,7 @@ static int gen_builtin(Node *n)
         Var src;
         if (n->args.n != 1) fatal_node(n, "bench_sink pide 1 argumento");
         if (sink_off < 0) {
-            sink_off = (long)obj->data.n;
-            buf_long(&obj->data, 0);
+            sink_off = data_word(0);
         }
         if (n->args.v[0]->kind == E_VAR && simple(n->args.v[0], &src) && src.kind != V_CONST) {
             store_var_data(&src, sink_off);            /* al sumidero */
@@ -4043,7 +4040,7 @@ static void gen_global_inits(void)
         Var v;
         long k;
         v.kind = V_GLOBAL;
-        v.off = i * 4;
+        v.off = global_off(i);
         v.type = global_type[i];
         if (g->init->kind == E_NIL) continue;
         if (IS_STRLIKE(global_type[i])) {
@@ -5527,7 +5524,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
             if (IS_STRLIKE(global_type[i]) || IS_OBJ(global_type[i])) {
                 Var g;
                 g.kind = V_GLOBAL;
-                g.off = i * 4;
+                g.off = global_off(i);
                 g.type = global_type[i];
                 push_ea(&g);
                 rt_call(IS_STRLIKE(global_type[i]) ? "_dl_str_free" : "_dl_release", 1, 0);
@@ -6047,15 +6044,14 @@ void gen_program(Program *p, Obj *o)
         global_type[i] = g->type;
         /* un número fijo va en los datos; lo demás, al empezar Main (gen_global_inits) */
         if (!IS_STRLIKE(g->type) && !IS_OBJ(g->type)) fold(g->init, &v);
-        buf_long(&o->data, (uint32_t)v);
+        data_word(v);                                  /* (en global_off(i)) */
     }
 
     /* las ventanas: su variable, tras las globales */
     win_off = xmalloc(sizeof(long) * (p->windows.n + 1));
     win_desc_label = xmalloc(sizeof(int) * (p->windows.n + 1));
     for (i = 0; i < p->windows.n; i++) {
-        win_off[i] = (long)o->data.n;
-        buf_long(&o->data, 0);
+        win_off[i] = data_word(0);
         win_desc_label[i] = new_label();
     }
     find_uses(&p->main);
