@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 851 funciones, 851 implementadas, 0 sin implementar.
+Total: 852 funciones, 852 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -49,15 +49,16 @@ Total: 851 funciones, 851 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `sprite_load(id, filename)` | `BOOL` | Un sprite de una imagen (ILBM...): fotogramas de 16 píxeles uno al lado del otro, los colores 0-3 los suyos (el 0, transparente); FALSE si no se puede |  |
+| `sprite_load_attached(id, filename)` | `BOOL` | Un sprite de 15 colores de una imagen: una pareja de sprites acoplados; los colores 1-15 de la imagen (0 transparente) son los 17-31 de la pantalla. Falso si no puede |  |
 | `sprite_create(id, width, height)` | `BOOL` | Crea un sprite vacío |  |
 | `sprite_pos(id, x, y)` | `void` | Pone la posición de un sprite |  |
 | `sprite_show(id)` | `void` | Hace visible un sprite |  |
 | `sprite_hide(id)` | `void` | Oculta un sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (componentes de 0 a 15) |  |
-| `sprite_load_colors(id, filename)` | `BOOL` | Los colores 1-3 de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada; componentes de 0 a 15) |  |
+| `sprite_load_colors(id, filename)` | `BOOL` | Los colores 1-3 (1-15 en una pareja acoplada) de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
 | `bob_load_colors(filename, first)` | `LONG` | Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso |  |
-| `sprite_rgb8(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2, con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
-| `sprite_frame(id, frame)` | `void` | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load |  |
+| `sprite_rgb8(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada), con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
+| `sprite_frame(id, frame)` | `void` | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load o sprite_load_attached |  |
 | `sprite_free(id)` | `void` | Libera la memoria de un sprite |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Mira si chocan dos sprites |  |
 | `sprite_set_row(id, row, plane0, plane1)` | `void` | Pone una fila de los datos de un sprite (2 planos de bits) |  |
