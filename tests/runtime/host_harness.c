@@ -13,6 +13,7 @@
 #include <math.h>
 typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef const char *CONST_STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE; typedef uint16_t UWORD;
 typedef intptr_t _DashP;   /* an integer the size of a pointer (LONG on the Amiga) */
+typedef uintptr_t _DashUP;
 #define MEMF_ANY 0
 #define MEMF_CLEAR 0x10000
 static APTR CreatePool(ULONG r, ULONG p, ULONG t){ return malloc(1); }
@@ -46,7 +47,7 @@ static long cached_blocks(void){ long n=0; for(int c=0;c<_DASH_SMALL_CLASSES;c++
 #define LIVE (live + slab_blocks() - cached_blocks())
 #define CHECK(c) do{ if(!(c)){ printf("FALLO linea %d: %s\n", __LINE__, #c); fails++; } }while(0)
 int main(void){ int fails=0;
- DashArrayLong *a = DashArray_from(5, (LONG[]){1,2,3,4,5});
+ DashArrayLong *a = DashArray_from(5, (_DashP[]){1,2,3,4,5});
  CHECK(DashArray_length(a)==5); CHECK(DashArray_get(a,4)==5); CHECK(DashArray_get(a,5)==0); CHECK(DashArray_get(a,-1)==0);
  DashArray_set(a,9,7); DashArray_set(a,-1,7); CHECK(DashArray_get(a,0)==1);
  DashArrayLong *s1 = DashArray_slice(a,1,3); CHECK(DashArray_length(s1)==2 && DashArray_get(s1,0)==2);
@@ -106,11 +107,11 @@ int main(void){ int fails=0;
   void *o = _dash_rc_alloc(16); CHECK(_dash_refcount(o) == 0);
   _dash_retain(o); CHECK(_dash_refcount(o) == 1); _dash_retain(o); CHECK(_dash_refcount(o) == 2);
   _dash_release(o); _dash_release(o); CHECK(LIVE == base);              /* last reference: freed */
-  DashArray_from(3, (LONG[]){1, 2, 3}); CHECK(LIVE == base + 2);         /* object + data */
+  DashArray_from(3, (_DashP[]){1, 2, 3}); CHECK(LIVE == base + 2);         /* object + data */
   _dash_tmp_release(m); CHECK(LIVE == base);                             /* unused temporary */
   for (int i = 0; i < 1000; i++) {                                       /* a = [..] in a loop */
    ULONG it = _dash_tmp_mark();
-   _dash_obj_set((void **)&a1, DashArray_from(2, (LONG[]){i, i}));
+   _dash_obj_set((void **)&a1, DashArray_from(2, (_DashP[]){i, i}));
    _dash_tmp_release(it);
   }
   CHECK(LIVE == base + 2); CHECK(DashArray_get(a1, 1) == 999);

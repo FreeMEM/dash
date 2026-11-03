@@ -169,9 +169,11 @@ class CTemplates:
 #include <stdlib.h>
 #include <stabs.h>
 
-/* An integer the size of a pointer: LONG on the Amiga, 64 bits on DashOS (runtime/dashos/dash_dashos.h) */
+/* An integer the size of a pointer: LONG on the Amiga, 64 bits on DashOS (runtime/dashos/dash_dashos.h);
+   _DashUP without sign. Macros on the Amiga: gcc sees the same C as before (a typedef changed its code) */
 #ifndef _DASH_DASHOS
-typedef LONG _DashP;
+#define _DashP LONG
+#define _DashUP ULONG
 #endif
 
 static void _dash_exit(int code);
@@ -411,7 +413,7 @@ void _dash_trap_recover(void) {
     else
         _dash_fail_say("Error: %s (excepción %ld)\\nen $%lx, fuera del programa (una librería)", (LONG)what, (LONG)num, (LONG)pc, 0);
 #if defined(DASH_MEMCHECK) && defined(_DASH_MEMORY_RUNTIME)
-    if (_dash_mc_where && DOSBase && Output()) Printf((CONST_STRPTR)"en %s\\n", (LONG)_dash_mc_where);
+    if (_dash_mc_where && DOSBase && Output()) Printf((CONST_STRPTR)"en %s\\n", (_DashP)_dash_mc_where);
 #endif
     _dash_exit(20);
     for (;;) ;
@@ -467,7 +469,7 @@ static const char *_dash_mc_where = NULL;
 
 static void _dash_mc_error(CONST_STRPTR what) {
     if (++_dash_mc_errors > 20) return;
-    if (_dash_mc_where) Printf((CONST_STRPTR)"memcheck: ERROR %s (en %s)\\n", what, (LONG)_dash_mc_where);
+    if (_dash_mc_where) Printf((CONST_STRPTR)"memcheck: ERROR %s (en %s)\\n", what, (_DashP)_dash_mc_where);
     else Printf((CONST_STRPTR)"memcheck: ERROR %s\\n", what);
 }
 
@@ -696,7 +698,7 @@ static __inline__ void _dash_block_put(APTR b, ULONG size) {
 typedef struct _DashStrHdr {
     ULONG size;                 /* bytes allocated, header included (+ tag, TEMP and KEEP bits) */
     ULONG len;                  /* length of the text */
-    ULONG self;                 /* (ULONG)header + _DASH_STR_KEY */
+    _DashUP self;               /* (_DashUP)header + _DASH_STR_KEY */
 } _DashStrHdr;
 
 #define _DASH_STR_KEEP 0x80000000UL   /* escaped: freed only at exit, with the pool */
@@ -714,18 +716,18 @@ typedef struct _DashStrHdr {
 #endif
 static __inline__ _DASH_NOASAN BOOL _dash_str_ours(CONST_STRPTR p) {
     const _DashStrHdr *h = _DASH_STR_HDR(p);
-    if ((_DashP)p & 1) return FALSE;
+    if ((_DashUP)p & 1) return FALSE;
     /* (a literal's address is a constant of alignment 1 for GCC: it would read the long byte by byte) */
     __asm__ ("" : "+r" (h));
-    return h->self == (ULONG)((_DashP)h + _DASH_STR_KEY);   /* (ULONG: 32 bits also on the PC of the tests) */
+    return h->self == (_DashUP)((_DashUP)h + _DASH_STR_KEY);
 }
 #define _DASH_STR_OURS(p) _dash_str_ours((CONST_STRPTR)(p))
 
 /* A literal used as a dictionary key (d["color"]): a text of Dash made by the compiler, with its length and,
    before its header, its hash (_dash_dict_hash). Escaped: never freed nor written */
-#define _DASH_KEY(s, hash) ({ static const struct { ULONG h0; _DashStrHdr h; char t[sizeof(s)]; } \
+#define _DASH_KEY(s, hash) ({ static const struct { _DashUP h0; _DashStrHdr h; char t[sizeof(s)]; } \
     __attribute__((aligned(2))) _dash_k = { (hash), { (sizeof(_DashStrHdr) + sizeof(s)) | _DASH_STR_TAG | \
-    _DASH_STR_KEEP | _DASH_STR_HASHED, sizeof(s) - 1, (ULONG)&_dash_k.h + _DASH_STR_KEY }, s }; \
+    _DASH_STR_KEEP | _DASH_STR_HASHED, sizeof(s) - 1, (_DashUP)&_dash_k.h + _DASH_STR_KEY }, s }; \
     (STRPTR)_dash_k.t; })
 
 /* The stack of temporaries: the first 32 in place, more in a block of the pool that doubles */
@@ -781,7 +783,7 @@ static __inline__ __attribute__((always_inline)) STRPTR _dash_str_alloc_in(ULONG
     _dash_mc_strs++;
 #endif
     h->len = len;
-    h->self = (ULONG)((_DashP)h + _DASH_STR_KEY);
+    h->self = (_DashUP)((_DashUP)h + _DASH_STR_KEY);
     if (temp) {
         _DashTmp *t = &_dash_ts[_dash_ts_n++];
         t->h = h;
@@ -18063,7 +18065,7 @@ enum { _DASH_MUI_OTHER, _DASH_MUI_TEXT, _DASH_MUI_BUTTON, _DASH_MUI_STRING, _DAS
     ({ ULONG _dash_m[] = { __VA_ARGS__ }; DoMethodA((Object *)(obj), (Msg)_dash_m); })
 
 static void _dash_mui_error(CONST_STRPTR what) {
-    Printf("MUI: %s\\n", (LONG)what);
+    Printf("MUI: %s\\n", (_DashP)what);
 }
 
 static STRPTR _dash_mui_keep(STRPTR text) {
@@ -23074,7 +23076,7 @@ static {ret_type} {method_name}({params_str}) {{
         ints = self._dict_int_keys(node.iterable.object)       # {Int: T} (Lorraine D9)
         body = self._generate_loop_body(node, "number" if ints else "string", mark)
         self.context.exit_scope()
-        head = (f"{indent}        LONG {var} = (LONG)_dk_{var}->keys[_di_{var}];\n"
+        head = (f"{indent}        LONG {var} = (LONG)(_DashP)_dk_{var}->keys[_di_{var}];\n"
                 f"{indent}        if (!_dk_{var}->used[_di_{var}]) continue;\n" if ints else
                 f"{indent}        STRPTR {var} = _dk_{var}->keys[_di_{var}];\n"
                 f"{indent}        if (!{var}) continue;\n")
@@ -23636,7 +23638,7 @@ static {ret_type} {method_name}({params_str}) {{
             code = f"DashDict_get{i}({self._generate_expression(node.array)}, {key})"
             if getattr(node, "default", None) is not None:      # d.get(k, default) (D65)
                 code = (f"DashDict_get_or{i}({self._generate_expression(node.array)}, "
-                        f"{key}, (LONG)({self._generate_expression(node.default)}))")
+                        f"{key}, (_DashP)({self._generate_expression(node.default)}))")
             if kind == "string":
                 return f"((STRPTR){code})"
             if kind == "array":
@@ -23942,8 +23944,9 @@ static {ret_type} {method_name}({params_str}) {{
         code = template.substitute(param_values)
         if hoisted:
             code = "({ " + " ".join(hoisted) + " " + code + "; })"
-        if sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR":
-            code = f"(LONG){code}"
+        if (sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR"
+                and builtin.return_type not in ("DashArrayLong *", "DashDict *")):
+            code = f"(LONG){code}"   # (a handle the program keeps as an Int: AmigaOS only)
         return code
 
     def _fast_int_op(self, node: BinaryOp) -> Optional[str]:

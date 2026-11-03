@@ -4,7 +4,7 @@
 #
 # expect-c: STRPTR saluda(STRPTR nombre) {
 # expect-c: STRPTR nombre_fijo(void)
-# expect-c: void eco(LONG s) {
+# expect-c: void eco(_DashP s) {
 # expect-c: Printf("%ld\n", s);
 # expect-c: _dash_str_eq_lit(nombre_fijo(), "Ana", sizeof("Ana") - 1) == TRUE
 # expect-c: _dash_str_eq_lit(msg, "otro", sizeof("otro") - 1) != TRUE

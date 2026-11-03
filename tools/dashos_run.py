@@ -25,11 +25,11 @@ CFLAGS = ["--target=aarch64_be-none-elf", "-ffreestanding", "-fno-builtin", "-O2
           "-I" + str(RT / "include"), "-I" + str(RT)]
 
 
-def build(src, exe, linux=True, extra_env=None):
+def build(src, exe, linux=True, memcheck=False):
     """Transpila y enlaza; devuelve (ok, mensajes)"""
     with tempfile.TemporaryDirectory() as tmp:
         c = Path(tmp) / "prog.c"
-        env = dict(os.environ, DASH_TARGET="dashos", **(extra_env or {}))
+        env = dict(os.environ, DASH_TARGET="dashos", **({"DASH_MEMCHECK_C": "1"} if memcheck else {}))
         r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)], cwd=REPO, env=env,
                            capture_output=True, text=True)
         if r.returncode:
@@ -38,7 +38,7 @@ def build(src, exe, linux=True, extra_env=None):
         m = re.search(r"^#define DASH_STACK (\d+)", text, re.M)
         stack = max(int(m.group(1)) if m else 16384, 16384)
         objs = []
-        for f, defs in ((c, []), (RT / "plat.c", ["-DDASH_PLAT_LINUX"] if linux else [])):
+        for f, defs in ((c, ["-DDASH_MEMCHECK"] if memcheck else []), (RT / "plat.c", ["-DDASH_PLAT_LINUX"] if linux else [])):
             o = Path(tmp) / (f.stem + ".o")
             r = subprocess.run(["clang", *CFLAGS, *defs, "-c", str(f), "-o", str(o)], capture_output=True, text=True)
             if r.returncode:
@@ -62,10 +62,11 @@ def main():
     ap.add_argument("src")
     ap.add_argument("-o")
     ap.add_argument("--dashos", action="store_true", help="plataforma de DashOS (no se ejecuta)")
+    ap.add_argument("--memcheck", action="store_true", help="como ./dash --memcheck")
     a = ap.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
         exe = Path(a.o) if a.o else Path(tmp) / "prog"
-        ok, msg = build(Path(a.src).resolve(), exe.resolve(), linux=not a.dashos)
+        ok, msg = build(Path(a.src).resolve(), exe.resolve(), linux=not a.dashos, memcheck=a.memcheck)
         if not ok:
             sys.exit(msg)
         if a.dashos:

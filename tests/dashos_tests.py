@@ -30,7 +30,8 @@ def marks(text, mark):
 def one(f, tmp):
     text = f.read_text(encoding="utf-8", errors="replace")
     exe = Path(tmp) / f.stem
-    ok, msg = dashos_run.build(f.resolve(), exe)
+    memcheck = any(l.strip() == "# memcheck" for l in text.splitlines())
+    ok, msg = dashos_run.build(f.resolve(), exe, memcheck=memcheck)
     if not ok:
         return "build", msg
     try:

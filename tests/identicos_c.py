@@ -51,8 +51,10 @@ def objetos(src, tmp):
     """{variante: huella del objeto, o el texto del error}"""
     d = Path(tempfile.mkdtemp(dir=tmp))
     c = d / "prog.c"
-    env = dict(os.environ, PYTHONPATH=PYPATH) if PYPATH else None
-    r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)], cwd=REPO, env=env,
+    # (con --desde, desde la carpeta del compiler/ viejo: python -m toma antes la carpeta actual que PYTHONPATH;
+    # DASH_HOME, para que encuentre lib/ en este repositorio)
+    env = dict(os.environ, DASH_HOME=str(REPO)) if PYPATH else None
+    r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)], cwd=PYPATH or REPO, env=env,
                        capture_output=True, text=True, timeout=300)
     if r.returncode:
         return {"transpilar": (r.stdout + r.stderr).replace(str(c), "C")[-400:]}
@@ -67,7 +69,7 @@ def objetos(src, tmp):
         r = subprocess.run([GCC, "-noixemul", *FECHA, *flags, *extra, *opt_flags(), "-I/opt/amiga/m68k-amigaos/ndk-include",
                             "-c", "prog.c", "-o", o.name], cwd=d, capture_output=True, text=True, timeout=300)
         out[nombre] = huella(o) if r.returncode == 0 else \
-            "error: " + r.stderr.replace(str(d), "D")[-400:]
+            "error: " + re.sub(r"prog\.c:\d+:\d+", "prog.c", r.stderr.replace(str(d), "D"))[-400:]
     return out
 
 
@@ -84,6 +86,9 @@ def main():
             sys.exit("--desde va con --guardar")
         PYPATH = tempfile.mkdtemp()
         subprocess.run(f"git archive {a.desde} compiler | tar -x -C {PYPATH}", shell=True, cwd=REPO, check=True)
+        r = subprocess.run([sys.executable, "-c", "import compiler, os; print(os.path.dirname(compiler.__file__))"],
+                           cwd=PYPATH, capture_output=True, text=True)
+        assert r.stdout.strip().startswith(PYPATH), f"--desde: se usaría otro compiler/ ({r.stdout.strip()})"
     fs = [f for f in corpus() if a.k in f.name]
     ref = json.loads(REF.read_text()) if REF.exists() else None
     if not a.guardar and ref is None:

@@ -95,3 +95,15 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   qemu-aarch64_be: el primer programa (Print, funciones, textos) da su salida. `_DashP`, entero del tamaño de un
   puntero, para los primeros cortes. `identicos_c.py` compara secciones y relocaciones (`objdump -s -r`) sin los
   números de los static locales; `--desde COMMIT` saca la referencia de otro commit. 385/385.
+- 2026-11-03: listas, diccionarios, parámetros sin tipo y casts de valores a `_DashP` (casillas del tamaño de un
+  puntero; Int, Float y punteros en una casilla, Double en 1 << `_DASH_DBL_SH`). Cabecera de textos con `_DashUP`.
+  `tests/dashos_tests.py`: 73 de 284 tests con salida esperada pasan en qemu (los demás piden builtins de AmigaOS,
+  Float/Double o más cortes). Lecciones de la red de seguridad:
+  - `--desde` no funcionaba: `python -m` toma antes la carpeta actual que PYTHONPATH. Se ejecuta desde la copia
+    vieja; la referencia es el commit de partida de la rama (7a989d7), no `origin/main`, que avanza.
+  - En el Amiga, `_DashP` y `_DashUP` son macros de `LONG` y `ULONG`, no typedefs: con typedef, gcc cambiaba el
+    código de algunas funciones. Y donde había `(ULONG)` va `_DashUP`, no `_DashP`.
+  - Con eso, 385/385 objetos de 68k idénticos al compilador de partida. Tests: 525/525.
+- Decisión técnica: por ahora toda casilla de lista es un `_DashP` (8 bytes en ARM, también las de Int). Guardar
+  las listas de Int en 4 bytes queda para después, cuando funcione todo (es una optimización de memoria).
+
