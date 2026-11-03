@@ -1,0 +1,37 @@
+# Test: el C de @link usa la API del compilador directo (dl_* y db_nombre, la de ./dash --cabecera) también por C
+# con gcc: el programa la da con las funciones que ese C llama (D82)
+# expect-c: STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
+# expect-c: LONG db_str_upper(LONG _a0)
+# expect-c: LONG db_time_ms(void)
+# expect-no-c: dl_dict_get
+# expect-out: 36
+# expect-out: [HOLA, AMIGA]
+# expect-out: 5
+# expect-out: true true
+# expect-out: 8
+
+@link "lib/c_link_api.c"
+
+@extern("c_link_api") func c_suma_lista(l: [Int]) -> Int
+@extern("c_link_api") func c_grita(s: String) -> String
+@extern("c_link_api") func c_largo_copia(s: String) -> Int
+@extern("c_link_api") func c_sostiene(c: Caja) -> Bool
+@extern("c_link_api") func c_reloj() -> Bool
+@extern("c_link_api") func c_llama_dash(n: Int) -> Int
+
+struct Caja
+    v: Int
+end
+
+@export func dash_eco(n: Int) -> String
+    return "eco #{n}!!"
+end
+
+Main
+    Print c_suma_lista([1, 2, 3])
+    Print c_grita("hola, amiga")
+    Print c_largo_copia("Amiga")
+    c = Caja(1)
+    Print "#{c_sostiene(c)} #{c_reloj()}"
+    Print c_llama_dash(42)
+end
