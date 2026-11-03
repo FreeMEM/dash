@@ -324,3 +324,7 @@ Print offsetof(Node, ln_Name)  # 10
 - 2026-11-03: DashOS C41 (5253960): canal_leer da en x2 la marca de la llave que escribió; 15 llave_duplicar(llave,
   derechos, marca), 16 llave_revocable → copia y revocador, 17 revocar. Para A7 (un servidor sabe qué cliente
   escribe por la marca); nada cambia en lo de ahora.
+- 2026-11-03: DashOS C42 (923eda0): grupos con presupuesto de memoria (objetos, espacio, 64 KB por proceso, unos
+  26 KB por canal; al agotarse, E_MEMORIA). 18 grupo_crear, 19 grupo_matar, 20 grupo_uso; proceso_crear toma en x4
+  el grupo (0, el propio). Para A7: `_svc` de `plat.c` ya pone a 0 los argumentos que no usa. Un montón que no
+  crece por E_MEMORIA da NULL, como antes.
