@@ -328,3 +328,6 @@ Print offsetof(Node, ln_Name)  # 10
   26 KB por canal; al agotarse, E_MEMORIA). 18 grupo_crear, 19 grupo_matar, 20 grupo_uso; proceso_crear toma en x4
   el grupo (0, el propio). Para A7: `_svc` de `plat.c` ya pone a 0 los argumentos que no usa. Un montón que no
   crece por E_MEMORIA da NULL, como antes.
+- 2026-11-03: DashOS cierra su fase 3 (817aff1): revocables de 256 bytes y como mucho 4 anidados; grupos de 512
+  bytes y 7 niveles, uno matado no admite más; varios hilos pueden leer un lado de canal; el grupo raíz tiene límite;
+  la marca 0 es "sin marca" (y la del kernel). Para A7; nada cambia en lo de ahora.
