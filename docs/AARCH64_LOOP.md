@@ -331,3 +331,7 @@ Print offsetof(Node, ln_Name)  # 10
 - 2026-11-03: DashOS cierra su fase 3 (817aff1): revocables de 256 bytes y como mucho 4 anidados; grupos de 512
   bytes y 7 niveles, uno matado no admite más; varios hilos pueden leer un lado de canal; el grupo raíz tiene límite;
   la marca 0 es "sin marca" (y la del kernel). Para A7; nada cambia en lo de ahora.
+- 2026-11-03: DashOS C45 (c5295a4): 21 memoria_quitar(dirección) quita la proyección entera que empieza ahí;
+  revocar sobre memoria quita las proyecciones hechas con la copia revocable. Pendiente (mejora, no urgente): el
+  montón de `plat.c` no devuelve nunca sus trozos; con memoria_quitar podría soltar los bloques grandes libres, y
+  `amiga_free` su memoria de la caja.
