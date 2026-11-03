@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 838 functions, 838 implemented, 0 not implemented.
+Total: 839 functions, 839 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -426,6 +426,7 @@ Total: 838 functions, 838 implemented, 0 not implemented.
 | `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
 | `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
 | `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
+| `color_pen_free(pen)` | `void` | One color_pen of this pen is no longer needed; when none is left it goes back to the screen |  |
 
 ## Transparency and gradients
 

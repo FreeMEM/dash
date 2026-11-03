@@ -169,6 +169,8 @@ const BuiltinInfo builtin_info[] = {
     {"close_window", 0, 0, 1, 0},
     {"color_pen", 3, 1, 0, 0},
     {"color_pen", 3, 1, 0, 0},
+    {"color_pen_free", 1, 0, 0, 0},
+    {"color_pen_free", 1, 0, 0, 0},
     {"console_flush", 0, 0, 1, 0},
     {"console_flush", 0, 0, 1, 0},
     {"console_read", 2, 1, 1, 0},
@@ -1678,7 +1680,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1676;
+const int builtin_count = 1678;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

@@ -300,6 +300,7 @@ DESC_ES = {
     "font_text_width": "El ancho de un texto en píxeles con la fuente y el estilo actuales",
     "font_size": "El tamaño que dio el sistema para esta fuente (el más cercano que tiene)",
     "color_pen": "El color de la pantalla en la que se dibuja más parecido a r, g, b (0-255); para gfx_pen",
+    "color_pen_free": "Un color_pen de ese lápiz ya no hace falta; cuando no queda ninguno, vuelve a la pantalla (ReleasePen)",
     # Transparencia y degradados
     "gfx_blend_rect": "Mezcla el color 0xRRGGBB con lo dibujado, alfa 0-255 (pantallas de paleta: un tramado 4x4 del "
                       "color más cercano)",

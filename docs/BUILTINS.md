@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 838 funciones, 838 implementadas, 0 sin implementar.
+Total: 839 funciones, 839 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -426,6 +426,7 @@ Total: 838 funciones, 838 implementadas, 0 sin implementar.
 | `font_text_width(text)` | `LONG` | El ancho de un texto en píxeles con la fuente y el estilo actuales |  |
 | `font_size(font)` | `LONG` | El tamaño que dio el sistema para esta fuente (el más cercano que tiene) |  |
 | `color_pen(r, g, b)` | `LONG` | El color de la pantalla en la que se dibuja más parecido a r, g, b (0-255); para gfx_pen |  |
+| `color_pen_free(pen)` | `void` | Un color_pen de ese lápiz ya no hace falta; cuando no queda ninguno, vuelve a la pantalla (ReleasePen) |  |
 
 ## Transparencia y degradados
 

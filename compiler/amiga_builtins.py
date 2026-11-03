@@ -4254,6 +4254,8 @@ FONT_FUNCTIONS = {
                       "Size the system gave for this font (the nearest it has)"),
     "color_pen": _gfx("color_pen", ["r", "g", "b"], "LONG", "_dash_color_pen(${r}, ${g}, ${b})",
                       "Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen"),
+    "color_pen_free": _gfx("color_pen_free", ["pen"], "void", "_dash_color_pen_free(${pen})",
+                           "One color_pen of this pen is no longer needed; when none is left it goes back to the screen"),
 }
 
 # =============================================================================

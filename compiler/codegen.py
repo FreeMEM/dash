@@ -2015,9 +2015,9 @@ static LONG _dash_font_text_width(STRPTR s) {
 /* The real size of a font (the nearest one the system found) */
 static LONG _dash_font_size(LONG font) { return font ? ((struct TextFont *)font)->tf_YSize : 0; }
 
-#define _DASH_PENS_MAX 128
+#define _DASH_PENS_MAX 512          /* a 256-colour picture and the program's own colours (Forja D15c) */
 static struct ColorMap *_dash_pen_cm[_DASH_PENS_MAX];
-static LONG _dash_pen_rgb[_DASH_PENS_MAX], _dash_pen_num[_DASH_PENS_MAX], _dash_pens = 0;
+static LONG _dash_pen_rgb[_DASH_PENS_MAX], _dash_pen_num[_DASH_PENS_MAX], _dash_pen_refs[_DASH_PENS_MAX], _dash_pens = 0;
 static struct Screen *_dash_pub_screen = NULL;
 
 /* The screen we draw on: the window of _dash_rp, else the default public screen */
@@ -2028,25 +2028,67 @@ static struct Screen *_dash_pen_screen(void) {
     return _dash_pub_screen;
 }
 
+/* Before a screen closes: its pens go back, and leave the list (screen_close) */
+static void _dash_pens_forget(struct Screen *scr) {
+    struct ColorMap *cm = scr->ViewPort.ColorMap;
+    LONG i, n = 0;
+    for (i = 0; i < _dash_pens; i++) {
+        if (_dash_pen_cm[i] == cm) {
+            ReleasePen(cm, _dash_pen_num[i]);
+            continue;
+        }
+        _dash_pen_cm[n] = _dash_pen_cm[i];
+        _dash_pen_rgb[n] = _dash_pen_rgb[i];
+        _dash_pen_num[n] = _dash_pen_num[i];
+        _dash_pen_refs[n++] = _dash_pen_refs[i];
+    }
+    _dash_pens = n;
+}
+
 /* A pen as close as possible to r, g, b (0-255) on that screen */
 static LONG _dash_color_pen(LONG r, LONG g, LONG b) {
     struct Screen *scr = _dash_pen_screen();
     struct ColorMap *cm;
     LONG rgb = ((r & 255) << 16) | ((g & 255) << 8) | (b & 255), i, pen;
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    _dash_screen_closing = _dash_pens_forget;
+#endif
     if (!scr) return 1;
     cm = scr->ViewPort.ColorMap;
-    for (i = 0; i < _dash_pens; i++) if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) return _dash_pen_num[i];
+    for (i = 0; i < _dash_pens; i++)
+        if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) { _dash_pen_refs[i]++; return _dash_pen_num[i]; }
     pen = ObtainBestPen(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
                         (ULONG)(b & 255) * 0x01010101UL, OBP_Precision, PRECISION_IMAGE, TAG_DONE);
     if (pen < 0) return 1;
     if (_dash_pens < _DASH_PENS_MAX) {
         _dash_pen_cm[_dash_pens] = cm;
         _dash_pen_rgb[_dash_pens] = rgb;
+        _dash_pen_refs[_dash_pens] = 1;
         _dash_pen_num[_dash_pens++] = pen;
     } else {
         ReleasePen(cm, pen);     /* not kept: this one is only good until the next ObtainBestPen */
     }
     return pen;
+}
+
+/* color_pen_free (Forja D15c): one color_pen of that pen is no longer needed. color_pen counts how many times it
+   gave each pen; at 0 the pen goes back to the screen (ReleasePen), so a program that changes many colours (an
+   image editor) does not use up the screen's free pens. A pen color_pen did not give is left alone. */
+static void _dash_color_pen_free(LONG pen) {
+    struct Screen *scr = _dash_pen_screen();
+    struct ColorMap *cm = scr ? scr->ViewPort.ColorMap : NULL;
+    LONG i;
+    for (i = _dash_pens - 1; i >= 0; i--) {
+        if (_dash_pen_num[i] != pen || _dash_pen_cm[i] != cm) continue;
+        if (--_dash_pen_refs[i] > 0) return;
+        ReleasePen(cm, pen);
+        _dash_pens--;
+        _dash_pen_cm[i] = _dash_pen_cm[_dash_pens];
+        _dash_pen_rgb[i] = _dash_pen_rgb[_dash_pens];
+        _dash_pen_num[i] = _dash_pen_num[_dash_pens];
+        _dash_pen_refs[i] = _dash_pen_refs[_dash_pens];
+        return;
+    }
 }
 
 static void _dash_font_cleanup(void) {
@@ -14581,8 +14623,14 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
     return _dash_screen;
 }
 
+/* Called just before the program's own screen closes (FONT_RUNTIME hooks in: color_pen's pens on it go back first;
+   releasing them after CloseScreen, at exit, touched a freed ColorMap: Forja D15c) */
+#define _DASH_HAS_SCREEN_CLOSING 1
+static void (*_dash_screen_closing)(struct Screen *) = NULL;
+
 static void _dash_close_screen(void) {
     if (_dash_screen && _dash_own_screen) {
+        if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
         CloseScreen(_dash_screen);
         _dash_screen = NULL;
         _dash_own_screen = FALSE;
@@ -20149,6 +20197,9 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
 
     /* Close any existing screen */
     if (_dash_screen && _dash_own_screen) {
+#ifdef _DASH_HAS_SCREEN_CLOSING
+        if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
+#endif
         CloseScreen(_dash_screen);
     }
 
