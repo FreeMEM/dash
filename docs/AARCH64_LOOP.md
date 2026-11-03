@@ -139,4 +139,11 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
 - 2026-11-03: A3 empezada. Maquinaria de 68k fuera de `gen68k.c`, sin cambiar nada: `t68k_base.c` (284 líneas) y
   `t68k_ops.c` (212). 2370/2370 idénticos. Quedan unas 600 instrucciones escritas a mano en el recorrido, repartidas
   en unas 100 funciones (las que más: `gen_arr_store`, `gen_ranged`, `mul_const`, `gen_function_pass`, `gen_new`).
+- 2026-11-03: A3 sigue. Fuera del recorrido, con nombre: textos en línea (`str_ours`, largo, código), pila
+  (`push_var`, `push_word`, `reserve_args`/`store_d0_arg`...), campos y constructores (`field_off`, `struct_bytes`,
+  `obj_begin`...), nil (`fail_if_nil`), listas (`arr_get`, `arr_put`), llamadas por puntero y métodos
+  (`call_d0`, `call_method`), y `t68k_arith.c` (aritmética) y `t68k_opt.c` (optimizaciones del 68000 que el
+  recorrido pide por nombre, como `gen_ranged`; en ARM devolverán 0). `SLOT` = lo que ocupa cada cosa de la pila.
+  Siempre 2370/2370. Quedan unas 280 instrucciones a mano: `gen_function_pass`, `gen_program`, `gen_compare`,
+  `gen_expr`, `str_set_join`, diccionarios, `gen_keys_loop`, `gen_stmt`, `gen_struct_types`, bucles y EventLoop.
 
