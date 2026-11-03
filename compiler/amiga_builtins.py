@@ -307,6 +307,14 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot"
     ),
+    "sprite_load_attached": BuiltinFunc(
+        name="sprite_load_attached",
+        params=["id", "filename"],
+        return_type="BOOL",
+        c_template="_dash_sprite_load_attached(${id}, ${filename})",
+        needs_gfx=True,
+        description="Sprite of 15 colours from a picture: an attached pair of hardware sprites, pens 1-15 (0 clear) are colours 17-31; FALSE if it cannot"
+    ),
     "sprite_create": BuiltinFunc(
         name="sprite_create",
         params=["id", "width", "height"],
@@ -345,7 +353,7 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_color(${id}, ${index}, ${r}, ${g}, ${b})",
         needs_gfx=True,
-        description="Set a sprite colour, index 0-2 (components 0-15)"
+        description="Set a sprite colour, index 0-2 (0-14 for an attached pair; components 0-15)"
     ),
     "sprite_load_colors": BuiltinFunc(
         name="sprite_load_colors",
@@ -353,7 +361,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_sprite_load_colors(${id}, ${filename})",
         needs_gfx=True,
-        description="Colours 1-3 of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none"
+        description="Colours 1-3 (1-15 for an attached pair) of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none"
     ),
     "bob_load_colors": BuiltinFunc(
         name="bob_load_colors",
@@ -369,7 +377,7 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_rgb8(${id}, ${index}, ${r}, ${g}, ${b})",
         needs_gfx=True,
-        description="Set a sprite colour, index 0-2, with 8-bit components (0-255; exact on AGA, 4 bits on ECS)"
+        description="Set a sprite colour, index 0-2 (0-14 for an attached pair), with 8-bit components (0-255; exact on AGA, 4 bits on ECS)"
     ),
     "sprite_frame": BuiltinFunc(
         name="sprite_frame",
@@ -377,7 +385,7 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_frame(${id}, ${frame})",
         needs_gfx=True,
-        description="Show frame number frame (0 the first) of a sprite from sprite_load"
+        description="Show frame number frame (0 the first) of a sprite from sprite_load or sprite_load_attached"
     ),
     "sprite_free": BuiltinFunc(
         name="sprite_free",
@@ -799,6 +807,14 @@ INPUT_FUNCTIONS = {
         needs_gfx=True,
         description="How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none"
     ),
+    "screen_make_default": BuiltinFunc(
+        name="screen_make_default",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_screen_make_default()",
+        needs_gfx=True,
+        description="The program's public screen (screen_clone_wb) becomes the default public screen: windows with no screen of their own open there (programs it starts, shells); screen_close puts the old one back. False if it has no public screen"
+    ),
     "screen_open": BuiltinFunc(
         name="screen_open",
         params=["depth", "title"],
@@ -806,6 +822,22 @@ INPUT_FUNCTIONS = {
         c_template="_dash_open_screen(${depth}, ${title}) != NULL",
         needs_gfx=True,
         description="Open a screen cloning Workbench display mode with custom depth"
+    ),
+    "screen_double_buffer": BuiltinFunc(
+        name="screen_double_buffer",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_screen_double_buffer()",
+        needs_gfx=True,
+        description="Two buffers for the program's own screen: drawing goes to the hidden one and screen_flip shows it; FALSE without an own screen (or a public one) or on AmigaOS before 3.0"
+    ),
+    "screen_flip": BuiltinFunc(
+        name="screen_flip",
+        params=[],
+        return_type="BOOL",
+        c_template="_dash_screen_flip()",
+        needs_gfx=True,
+        description="Show what was drawn in the hidden buffer (screen_double_buffer) and draw in the other one; waits for the display, a frame at most. FALSE if it could not change now"
     ),
     "screen_open_custom": BuiltinFunc(
         name="screen_open_custom",

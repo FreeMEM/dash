@@ -1,0 +1,41 @@
+# Test: screen_make_default makes the program's public screen (screen_clone_wb) the default public screen: what a
+# program that names no screen gets (LockPubScreen(NULL), as Dash programs and MUI do) is the clone. screen_close
+# puts the old default (the Workbench) back. Without a public screen of the program's it gives false.
+#
+# expect-c: static BOOL _dash_screen_make_default(void)
+# expect-out: sin pantalla: false
+# expect-out: por defecto: true DASHDEFECTO
+# expect-out: la de un programa sin pantalla es el clon: true
+# expect-out: cerrada: Workbench
+# expect-out: fin
+
+# El nombre de la pantalla pública por defecto
+@native func por_defecto() -> String
+"""
+    static char nombre[MAXPUBSCREENNAME + 1];
+    nombre[0] = 0;
+    GetDefaultPubScreen((UBYTE *)nombre);
+    return (STRPTR)nombre;
+"""
+end
+
+# Si la pantalla que da LockPubScreen(NULL) es la de este programa
+@native func es_la_mia() -> Bool
+"""
+    struct Screen *s = LockPubScreen(NULL);
+    BOOL r = s != NULL && s == _dash_screen;
+    if (s) UnlockPubScreen(NULL, s);
+    return r;
+"""
+end
+
+Main
+    Print "sin pantalla: #{screen_make_default()}"
+    if screen_clone_wb("DASHDEFECTO")
+        Print "por defecto: #{screen_make_default()} #{por_defecto()}"
+        Print "la de un programa sin pantalla es el clon: #{es_la_mia()}"
+        screen_close()
+        Print "cerrada: #{por_defecto()}"
+    end
+    Print "fin"
+end

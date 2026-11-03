@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 853 funciones, 853 implementadas, 0 sin implementar.
+Total: 857 funciones, 857 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -49,15 +49,16 @@ Total: 853 funciones, 853 implementadas, 0 sin implementar.
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
 | `sprite_load(id, filename)` | `BOOL` | Un sprite de una imagen (ILBM...): fotogramas de 16 píxeles uno al lado del otro, los colores 0-3 los suyos (el 0, transparente); FALSE si no se puede |  |
+| `sprite_load_attached(id, filename)` | `BOOL` | Un sprite de 15 colores de una imagen: una pareja de sprites acoplados; los colores 1-15 de la imagen (0 transparente) son los 17-31 de la pantalla. Falso si no puede |  |
 | `sprite_create(id, width, height)` | `BOOL` | Crea un sprite vacío |  |
 | `sprite_pos(id, x, y)` | `void` | Pone la posición de un sprite |  |
 | `sprite_show(id)` | `void` | Hace visible un sprite |  |
 | `sprite_hide(id)` | `void` | Oculta un sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (componentes de 0 a 15) |  |
-| `sprite_load_colors(id, filename)` | `BOOL` | Los colores 1-3 de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada; componentes de 0 a 15) |  |
+| `sprite_load_colors(id, filename)` | `BOOL` | Los colores 1-3 (1-15 en una pareja acoplada) de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
 | `bob_load_colors(filename, first)` | `LONG` | Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso |  |
-| `sprite_rgb8(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2, con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
-| `sprite_frame(id, frame)` | `void` | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load |  |
+| `sprite_rgb8(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (0-14 en una pareja acoplada), con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
+| `sprite_frame(id, frame)` | `void` | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load o sprite_load_attached |  |
 | `sprite_free(id)` | `void` | Libera la memoria de un sprite |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Mira si chocan dos sprites |  |
 | `sprite_set_row(id, row, plane0, plane1)` | `void` | Pone una fila de los datos de un sprite (2 planos de bits) |  |
@@ -114,7 +115,10 @@ Total: 853 funciones, 853 implementadas, 0 sin implementar.
 | `screen_open_mode(mode, width, height, depth, title)` | `BOOL` | Abre una pantalla con un modo exacto (el de dialog_screen_mode, o uno conocido: 0x21000 es PAL de baja resolución y 0x29000 la de alta), tamaño y profundidad; falso si el modo no existe o no admite esa profundidad |  |
 | `screen_clone_wb(name)` | `BOOL` | Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas |  |
 | `screen_visitors()` | `LONG` | Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno |  |
+| `screen_make_default()` | `BOOL` | La pantalla pública del programa (screen_clone_wb) pasa a ser la pública por defecto: ahí se abren las ventanas que no dicen pantalla (los programas que lanza, las consolas); screen_close deja la de antes. Falso si no tiene pantalla pública |  |
 | `screen_open(depth, title)` | `BOOL` | Abre una pantalla con el modo del Workbench y la profundidad que se diga |  |
+| `screen_double_buffer()` | `BOOL` | Dos búferes para la pantalla propia del programa: se dibuja en el escondido y screen_flip lo enseña; falso sin pantalla propia (o si es pública) o antes de AmigaOS 3.0 |  |
+| `screen_flip()` | `BOOL` | Enseña lo dibujado en el búfer escondido (screen_double_buffer) y pasa a dibujar en el otro; espera a la pantalla, un fotograma como mucho. Falso si ahora no pudo cambiarlo |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Abre una pantalla propia del tamaño y la profundidad que se digan |  |
 | `screen_close()` | `void` | Cierra la pantalla |  |
 | `screen_width()` | `LONG` | El ancho de la pantalla en píxeles |  |

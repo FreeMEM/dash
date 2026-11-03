@@ -1383,12 +1383,18 @@ const BuiltinInfo builtin_info[] = {
     {"screen_clone_wb", 1, 2, 1, 0},
     {"screen_close", 0, 0, 1, 0},
     {"screen_close", 0, 0, 1, 0},
+    {"screen_double_buffer", 0, 2, 1, 0},
+    {"screen_double_buffer", 0, 2, 1, 0},
+    {"screen_flip", 0, 2, 1, 0},
+    {"screen_flip", 0, 2, 1, 0},
     {"screen_font_height", 0, 1, 1, 0},
     {"screen_font_height", 0, 1, 1, 0},
     {"screen_font_text_width", 1, 1, 1, 0},
     {"screen_font_text_width", 1, 1, 1, 0},
     {"screen_height", 0, 1, 1, 0},
     {"screen_height", 0, 1, 1, 0},
+    {"screen_make_default", 0, 2, 1, 0},
+    {"screen_make_default", 0, 2, 1, 0},
     {"screen_mode_depth", 0, 1, 1, 0},
     {"screen_mode_depth", 0, 1, 1, 0},
     {"screen_mode_height", 0, 1, 1, 0},
@@ -1477,6 +1483,8 @@ const BuiltinInfo builtin_info[] = {
     {"sprite_hide", 1, 0, 1, 0},
     {"sprite_load", 2, 2, 0, 0},
     {"sprite_load", 2, 2, 0, 0},
+    {"sprite_load_attached", 2, 2, 1, 0},
+    {"sprite_load_attached", 2, 2, 1, 0},
     {"sprite_load_colors", 2, 2, 1, 0},
     {"sprite_load_colors", 2, 2, 1, 0},
     {"sprite_pos", 3, 0, 1, 0},
@@ -1708,7 +1716,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1706;
+const int builtin_count = 1714;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

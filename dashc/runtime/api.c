@@ -364,7 +364,8 @@ LONG dl_window_open(const struct DashWinDesc *d, struct Window **pvar)
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, d->idcmp,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: la pública por defecto */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
     if (!w) _dash_exit(20);
     _dash_win = w;

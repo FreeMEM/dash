@@ -3119,56 +3119,79 @@ static LONG _dash_image_load(STRPTR file) {
     return 0;
 }
 
-/* A hardware sprite from a picture file (sprite_load): frames 16 pixels wide side by side, as many
-   as fit in its width, each as high as the picture. Its pens 0-3 are the colours of the sprite (0
-   clear; a higher pen counts as its two low bits). It shows the first frame; sprite_frame changes it.
-   FALSE if the file cannot be read or no hardware sprite is free */
-static BOOL _dash_sprite_load_file(LONG id, STRPTR file) {
+/* The frames of a sprite picture (sprite_load, sprite_load_attached): frames 16 pixels wide side by side, as
+   many as fit in its width, each as high as the picture; planes words a row (bit n of the pen in word n). The
+   frames (AllocVec), with their number and height, or NULL if the file cannot be read */
+static UWORD *_dash_sprite_read(STRPTR file, LONG planes, LONG *nfp, LONG *hp) {
     struct BitMapHeader *bmh = NULL;
     struct BitMap *bm = NULL;
     struct RastPort rp;
     Object *o;
-    LONG w, h, nf, f, x, y, pen;
-    UWORD *frames, *p, p0, p1;
-    BOOL ok = FALSE;
-    if (id < 0 || id >= DASH_MAX_SPRITES || !file) return FALSE;
+    LONG w, h, nf, f, x, y, pen, i;
+    UWORD *frames = NULL, *p, pl[4];
+    if (!file) return NULL;
     if (!DataTypesBase) DataTypesBase = OpenLibrary((CONST_STRPTR)"datatypes.library", 39);
-    if (!DataTypesBase) return FALSE;
+    if (!DataTypesBase) return NULL;
     o = NewDTObject((APTR)file, DTA_SourceType, DTST_FILE, DTA_GroupID, GID_PICTURE,
                     PDTA_Remap, FALSE, TAG_DONE);       /* the pens of the file, not the screen's */
-    if (!o) return FALSE;
+    if (!o) return NULL;
     DoDTMethod(o, NULL, NULL, DTM_PROCLAYOUT, NULL, TRUE);
     GetDTAttrs(o, PDTA_BitMapHeader, (ULONG)&bmh, PDTA_BitMap, (ULONG)&bm, TAG_DONE);
     if (bmh && bm && bmh->bmh_Height > 0) {
         w = bmh->bmh_Width;
         h = bmh->bmh_Height;
         nf = w >= 16 ? w / 16 : 1;
-        frames = (UWORD *)AllocVec(nf * h * 4, MEMF_ANY | MEMF_CLEAR);
+        frames = (UWORD *)AllocVec(nf * h * planes * 2, MEMF_ANY | MEMF_CLEAR);
         if (frames) {
             InitRastPort(&rp);
             rp.BitMap = bm;
             for (f = 0, p = frames; f < nf; f++)
                 for (y = 0; y < h; y++) {
-                    for (x = 0, p0 = p1 = 0; x < 16; x++) {
+                    for (i = 0; i < planes; i++) pl[i] = 0;
+                    for (x = 0; x < 16; x++) {
                         pen = f * 16 + x < w ? ReadPixel(&rp, f * 16 + x, y) : 0;
-                        if (pen & 1) p0 |= 0x8000 >> x;
-                        if (pen & 2) p1 |= 0x8000 >> x;
+                        for (i = 0; i < planes; i++)
+                            if (pen & (1 << i)) pl[i] |= 0x8000 >> x;
                     }
-                    *p++ = p0;
-                    *p++ = p1;
+                    for (i = 0; i < planes; i++) *p++ = pl[i];
                 }
-            if (_dash_sprite_create(id, 16, h)) {
-                _dash_sprite_frames[id] = frames;
-                _dash_sprite_nframes[id] = nf;
-                frames = NULL;
-                _dash_sprite_frame(id, 0);
-                ok = TRUE;
-            }
-            if (frames) FreeVec(frames);
+            *nfp = nf;
+            *hp = h;
         }
     }
     DisposeDTObject(o);
-    return ok;
+    return frames;
+}
+
+/* A hardware sprite from a picture file (sprite_load): frames 16 pixels wide side by side, as many
+   as fit in its width, each as high as the picture. Its pens 0-3 are the colours of the sprite (0
+   clear; a higher pen counts as its two low bits). It shows the first frame; sprite_frame changes it.
+   FALSE if the file cannot be read or no hardware sprite is free */
+static BOOL _dash_sprite_load_file(LONG id, STRPTR file) {
+    UWORD *frames;
+    LONG nf = 0, h = 0;
+    if (id < 0 || id >= DASH_MAX_SPRITES || !file) return FALSE;
+    if (!(frames = _dash_sprite_read(file, 2, &nf, &h))) return FALSE;
+    if (!_dash_sprite_create(id, 16, h)) { FreeVec(frames); return FALSE; }
+    _dash_sprite_frames[id] = frames;
+    _dash_sprite_nframes[id] = nf;
+    _dash_sprite_frame(id, 0);
+    return TRUE;
+}
+
+/* sprite_load_attached (Forja D18): like sprite_load, but an attached pair of hardware sprites (an even one and
+   the next) makes one sprite of 15 colours: pens 1-15 of the picture (0 clear), colours 17-31 of the screen.
+   FALSE if the file cannot be read or no pair is free */
+static BOOL _dash_sprite_load_attached(LONG id, STRPTR file) {
+    UWORD *frames;
+    LONG nf = 0, h = 0;
+    if (id < 0 || id >= DASH_MAX_SPRITES || !file) return FALSE;
+    if (!(frames = _dash_sprite_read(file, 4, &nf, &h))) return FALSE;
+    if (!_dash_sprite_create_pair(id, h)) { FreeVec(frames); return FALSE; }
+    _dash_sprite_frames[id] = frames;
+    _dash_sprite_nframes[id] = nf;
+    _dash_sprite_frame(id, 0);
+    return TRUE;
 }
 
 /* An image from pixels in memory (a program that decodes pictures itself, dashweb D40): rows of
@@ -13397,7 +13420,8 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
         WA_Activate, TRUE,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, _DASH_WIN_IDCMP,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
     if (!win) return 0;
     _dash_windows[i] = win;
@@ -14578,6 +14602,8 @@ static void _dash_before_close(struct Window *win) {
 static BOOL _dash_own_screen = FALSE;
 static BOOL _dash_screen_public = FALSE;   /* screen_clone_wb: a public screen others may open windows on */
 static char _dash_screen_pubname[64];
+static char _dash_screen_olddefault[MAXPUBSCREENNAME + 1];   /* screen_make_default: the one there was before */
+static BOOL _dash_screen_isdefault = FALSE;
 
 /* Blitter minterm constants for masked blits */
 #ifndef ABC
@@ -14648,6 +14674,31 @@ static LONG _dash_screen_visitors(void) {
         if (n->psn_Screen == _dash_screen) { v = n->psn_VisitorCount; break; }
     UnlockPubScreenList();
     return v;
+}
+
+/* screen_make_default (Forja G24): the program's public screen becomes the default public screen, where windows
+   with no screen of their own open (programs it starts, shells). screen_close puts the old one back. FALSE if
+   there is no public screen of the program's */
+static BOOL _dash_screen_make_default(void) {
+    if (!_dash_screen || !_dash_screen_public) return FALSE;
+    if (!_dash_screen_isdefault) {
+        _dash_screen_olddefault[0] = 0;
+        GetDefaultPubScreen((UBYTE *)_dash_screen_olddefault);
+    }
+    SetDefaultPubScreen((UBYTE *)_dash_screen_pubname);
+    _dash_screen_isdefault = TRUE;
+    return TRUE;
+}
+
+/* The default public screen back to the one before screen_make_default (the Workbench if that one is gone) */
+static void _dash_screen_default_back(void) {
+    struct Screen *s = NULL;
+    if (!_dash_screen_isdefault) return;
+    _dash_screen_isdefault = FALSE;
+    if (_dash_screen_olddefault[0] && strcmp(_dash_screen_olddefault, _dash_screen_pubname) != 0)
+        s = LockPubScreen((CONST_STRPTR)_dash_screen_olddefault);
+    SetDefaultPubScreen(s ? (UBYTE *)_dash_screen_olddefault : NULL);
+    if (s) UnlockPubScreen(NULL, s);
 }
 
 /* Screen Support - Clone Workbench properly */
@@ -14744,6 +14795,89 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
     return _dash_screen;
 }
 
+/* screen_double_buffer (Forja D25): two bitmaps for the program's own screen (AllocScreenBuffer, V39). Drawing
+   goes to the hidden one through a RastPort of its own; screen_flip shows it (ChangeScreenBuffer) and waits until
+   the other one is no longer on display, so it is safe to draw in: a flip a frame at most */
+#define _DASH_HAS_DBUF 1
+static struct ScreenBuffer *_dash_dbuf[2] = {NULL, NULL};    /* 0: the screen's own bitmap */
+static struct MsgPort *_dash_dbuf_safe = NULL;              /* "safe to draw in the old one" */
+static struct MsgPort *_dash_dbuf_disp = NULL;              /* "the new one is on display" */
+static BOOL _dash_dbuf_safe_ok = TRUE;
+static BOOL _dash_dbuf_disp_ok = TRUE;
+static LONG _dash_dbuf_back = 1;                            /* the hidden one, where drawing goes */
+static struct RastPort _dash_dbuf_rp;
+static struct RastPort *_dash_dbuf_old_rp = NULL;
+
+static void _dash_dbuf_wait(struct MsgPort *port, BOOL *ok) {
+    if (*ok) return;
+    while (!GetMsg(port)) Wait(1UL << port->mp_SigBit);
+    *ok = TRUE;
+}
+
+/* Back to the screen's own bitmap and frees the other (screen_close, or a new screen) */
+static void _dash_dbuf_free(void) {
+    if (!_dash_screen) return;
+    if (_dash_dbuf[0] && _dash_dbuf[1]) {
+        _dash_dbuf_wait(_dash_dbuf_safe, &_dash_dbuf_safe_ok);
+        _dash_dbuf_wait(_dash_dbuf_disp, &_dash_dbuf_disp_ok);
+        if (_dash_dbuf_back == 0) {           /* buffer 1 is on display: the screen's own one goes back first */
+            while (!ChangeScreenBuffer(_dash_screen, _dash_dbuf[0])) WaitTOF();
+            _dash_dbuf_safe_ok = _dash_dbuf_disp_ok = FALSE;
+            _dash_dbuf_wait(_dash_dbuf_safe, &_dash_dbuf_safe_ok);
+            _dash_dbuf_wait(_dash_dbuf_disp, &_dash_dbuf_disp_ok);
+        }
+    }
+    if (_dash_dbuf[1]) FreeScreenBuffer(_dash_screen, _dash_dbuf[1]);
+    if (_dash_dbuf[0]) FreeScreenBuffer(_dash_screen, _dash_dbuf[0]);
+    _dash_dbuf[0] = _dash_dbuf[1] = NULL;
+    if (_dash_dbuf_safe) { DeleteMsgPort(_dash_dbuf_safe); _dash_dbuf_safe = NULL; }
+    if (_dash_dbuf_disp) { DeleteMsgPort(_dash_dbuf_disp); _dash_dbuf_disp = NULL; }
+    _dash_dbuf_safe_ok = _dash_dbuf_disp_ok = TRUE;
+    _dash_dbuf_back = 1;
+    if (_dash_rp == &_dash_dbuf_rp) _dash_rp = _dash_dbuf_old_rp;
+    _dash_dbuf_old_rp = NULL;
+}
+
+/* TRUE if the program's own screen now has two buffers (already had them too); FALSE without an own screen, on a
+   public one (other programs' windows draw on it), on AmigaOS before 3.0 or without memory */
+static BOOL _dash_screen_double_buffer(void) {
+    LONG i;
+    if (_dash_dbuf[0]) return TRUE;
+    if (!_dash_screen || !_dash_own_screen || _dash_screen_public) return FALSE;
+    if (((struct Library *)IntuitionBase)->lib_Version < 39) return FALSE;
+    _dash_dbuf_safe = CreateMsgPort();
+    _dash_dbuf_disp = CreateMsgPort();
+    if (_dash_dbuf_safe && _dash_dbuf_disp) {
+        _dash_dbuf[0] = AllocScreenBuffer(_dash_screen, NULL, SB_SCREEN_BITMAP);
+        _dash_dbuf[1] = AllocScreenBuffer(_dash_screen, NULL, SB_COPY_BITMAP);
+    }
+    if (!_dash_dbuf[0] || !_dash_dbuf[1]) { _dash_dbuf_free(); return FALSE; }
+    for (i = 0; i < 2; i++) {
+        _dash_dbuf[i]->sb_DBufInfo->dbi_SafeMessage.mn_ReplyPort = _dash_dbuf_safe;
+        _dash_dbuf[i]->sb_DBufInfo->dbi_DispMessage.mn_ReplyPort = _dash_dbuf_disp;
+    }
+    _dash_dbuf_back = 1;
+    _dash_dbuf_rp = _dash_screen->RastPort;   /* its pens, font and modes, on the hidden bitmap */
+    _dash_dbuf_rp.Layer = NULL;
+    _dash_dbuf_rp.BitMap = _dash_dbuf[1]->sb_BitMap;
+    _dash_dbuf_old_rp = _dash_rp;
+    _dash_rp = &_dash_dbuf_rp;
+    return TRUE;
+}
+
+/* Shows what was drawn and swaps: TRUE if it changed (FALSE without screen_double_buffer, or if Intuition could not
+   change it now, as while a menu is open; then it shows on the next flip) */
+static BOOL _dash_screen_flip(void) {
+    if (!_dash_dbuf[0] || !_dash_screen) return FALSE;
+    _dash_dbuf_wait(_dash_dbuf_disp, &_dash_dbuf_disp_ok);
+    if (!ChangeScreenBuffer(_dash_screen, _dash_dbuf[_dash_dbuf_back])) return FALSE;
+    _dash_dbuf_safe_ok = _dash_dbuf_disp_ok = FALSE;
+    _dash_dbuf_back ^= 1;
+    _dash_dbuf_rp.BitMap = _dash_dbuf[_dash_dbuf_back]->sb_BitMap;
+    _dash_dbuf_wait(_dash_dbuf_safe, &_dash_dbuf_safe_ok);
+    return TRUE;
+}
+
 /* Called just before the program's own screen closes (FONT_RUNTIME hooks in: color_pen's pens on it go back first;
    releasing them after CloseScreen, at exit, touched a freed ColorMap: Forja D15c) */
 #define _DASH_HAS_SCREEN_CLOSING 1
@@ -14751,6 +14885,7 @@ static void (*_dash_screen_closing)(struct Screen *) = NULL;
 
 static void _dash_close_screen(void) {
     if (_dash_screen && _dash_own_screen && _dash_screen_public) {
+        _dash_screen_default_back();
         /* a public screen: private first (no new visitors), and wait for other programs' windows to close;
            after a minute with windows still open it is left open (closing it under them would crash) */
         LONG t = 0;
@@ -14759,6 +14894,7 @@ static void _dash_close_screen(void) {
         _dash_screen_public = FALSE;
     }
     if (_dash_screen && _dash_own_screen) {
+        _dash_dbuf_free();
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
         if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
         CloseScreen(_dash_screen);
@@ -14958,6 +15094,30 @@ static UWORD _dash_sprite_height[DASH_MAX_SPRITES] = {0};
 /* sprite_load: every frame of the picture, two words (the two planes) a row; sprite_frame copies one */
 static UWORD *_dash_sprite_frames[DASH_MAX_SPRITES] = {0};
 static UWORD _dash_sprite_nframes[DASH_MAX_SPRITES] = {0};
+/* sprite_load_attached (Forja D18): the odd hardware sprite of an attached pair (planes 2 and 3 of each row); NULL
+   and -1 for a single sprite. Its frames above are four words a row */
+static struct SimpleSprite *_dash_sprite_att[DASH_MAX_SPRITES] = {0};
+static UWORD *_dash_sprite_att_data[DASH_MAX_SPRITES] = {0};
+static WORD _dash_sprite_att_num[DASH_MAX_SPRITES] = {-1,-1,-1,-1,-1,-1,-1,-1};
+
+/* Frees the odd sprite of an attached pair (before _dash_sprite_height changes) */
+static void _dash_sprite_att_release(LONG id) {
+    if (_dash_sprite_att_num[id] >= 0) { FreeSprite(_dash_sprite_att_num[id]); _dash_sprite_att_num[id] = -1; }
+    if (_dash_sprite_att_data[id]) {
+        FreeMem(_dash_sprite_att_data[id], (_dash_sprite_height[id] + 2) * 4);
+        _dash_sprite_att_data[id] = NULL;
+    }
+    if (_dash_sprite_att[id]) { FreeMem(_dash_sprite_att[id], sizeof(struct SimpleSprite)); _dash_sprite_att[id] = NULL; }
+}
+
+/* The two control words of a sprite at x, y (the odd one of a pair with the attach bit) */
+static void _dash_sprite_ctl(UWORD *data, LONG x, LONG y, LONG height, BOOL attach) {
+    data[0] = ((y & 0xFF) << 8) | ((x >> 1) & 0xFF);
+    data[1] = (((y + height) & 0xFF) << 8) |
+              (((y + height) >> 8) << 1) |
+              (x & 1) |
+              ((y >> 8) << 2) | (attach ? SPRITE_ATTACHED : 0);
+}
 
 /* RTG Detection - check if we're on a native chipset screen */
 static BOOL _dash_is_rtg_screen(void) {
@@ -15004,6 +15164,7 @@ static BOOL _dash_sprite_create(LONG id, LONG width, LONG height) {
     }
 
     /* Free existing sprite if any */
+    _dash_sprite_att_release(id);
     if (_dash_sprites[id]) {
         if (_dash_sprite_num[id] >= 0) {
             FreeSprite(_dash_sprite_num[id]);
@@ -15064,13 +15225,12 @@ static void _dash_sprite_show(LONG id) {
     y = spr->y;
 
     /* Set sprite control words - position and height */
-    data[0] = ((y & 0xFF) << 8) | ((x >> 1) & 0xFF);
-    data[1] = (((y + height) & 0xFF) << 8) |
-              (((y + height) >> 8) << 1) |
-              (x & 1) |
-              ((y >> 8) << 2);
-
+    _dash_sprite_ctl(data, x, y, height, FALSE);
     ChangeSprite(&_dash_screen->ViewPort, _dash_sprites[id], (APTR)data);
+    if (_dash_sprite_att[id]) {
+        _dash_sprite_ctl(_dash_sprite_att_data[id], x, y, height, TRUE);
+        ChangeSprite(&_dash_screen->ViewPort, _dash_sprite_att[id], (APTR)_dash_sprite_att_data[id]);
+    }
 }
 
 static void _dash_sprite_hide(LONG id) {
@@ -15078,6 +15238,7 @@ static void _dash_sprite_hide(LONG id) {
     if (!_dash_sprites[id] || !_dash_screen) return;
     /* Move sprite off-screen */
     MoveSprite(&_dash_screen->ViewPort, _dash_sprites[id], 0, 400);
+    if (_dash_sprite_att[id]) MoveSprite(&_dash_screen->ViewPort, _dash_sprite_att[id], 0, 400);
 }
 
 static void _dash_sprite_color(LONG id, LONG index, LONG r, LONG g, LONG b) {
@@ -15086,7 +15247,9 @@ static void _dash_sprite_color(LONG id, LONG index, LONG r, LONG g, LONG b) {
     if (!_dash_screen || _dash_sprite_num[id] < 0) return;
     /* Sprite colors: pair 0-1 uses colors 17-19, pair 2-3 uses 21-23, etc */
     colorbase = 16 + ((_dash_sprite_num[id] / 2) * 4) + 1;
-    if (index >= 0 && index < 3) {
+    if (_dash_sprite_att[id]) {                 /* an attached pair: its 15 colours are 17-31 */
+        if (index >= 0 && index < 15) SetRGB4(&_dash_screen->ViewPort, 17 + index, r, g, b);
+    } else if (index >= 0 && index < 3) {
         SetRGB4(&_dash_screen->ViewPort, colorbase + index, r, g, b);
     }
 }
@@ -15096,8 +15259,8 @@ static void _dash_sprite_rgb8(LONG id, LONG index, LONG r, LONG g, LONG b) {
     LONG colorbase;
     if (id < 0 || id >= DASH_MAX_SPRITES) return;
     if (!_dash_screen || _dash_sprite_num[id] < 0) return;
-    colorbase = 16 + ((_dash_sprite_num[id] / 2) * 4) + 1;
-    if (index >= 0 && index < 3)
+    colorbase = _dash_sprite_att[id] ? 17 : 16 + ((_dash_sprite_num[id] / 2) * 4) + 1;
+    if (index >= 0 && index < (_dash_sprite_att[id] ? 15 : 3))
         SetRGB32(&_dash_screen->ViewPort, colorbase + index, (ULONG)(r & 255) << 24, (ULONG)(g & 255) << 24,
                  (ULONG)(b & 255) << 24);
 }
@@ -15130,7 +15293,7 @@ static BOOL _dash_sprite_load_colors(LONG id, STRPTR file) {
     UBYTE cmap[3 * 256];
     LONG n = _dash_cmap_read(file, cmap), i;
     if (n < 2 || id < 0 || id >= DASH_MAX_SPRITES || !_dash_screen || _dash_sprite_num[id] < 0) return FALSE;
-    for (i = 1; i < 4 && i < n; i++) _dash_sprite_rgb8(id, i - 1, cmap[i * 3], cmap[i * 3 + 1], cmap[i * 3 + 2]);
+    for (i = 1; i < (_dash_sprite_att[id] ? 16 : 4) && i < n; i++) _dash_sprite_rgb8(id, i - 1, cmap[i * 3], cmap[i * 3 + 1], cmap[i * 3 + 2]);
     return TRUE;
 }
 
@@ -15152,6 +15315,14 @@ static void _dash_sprite_frame(LONG id, LONG frame) {
     if (id < 0 || id >= DASH_MAX_SPRITES) return;
     if (!_dash_sprite_frames[id] || !_dash_sprite_data[id]) return;
     if (frame < 0 || frame >= _dash_sprite_nframes[id]) return;
+    if (_dash_sprite_att_data[id]) {           /* four words a row: two to each sprite of the pair */
+        UWORD *dst2 = _dash_sprite_att_data[id] + 2;
+        n = _dash_sprite_height[id];
+        src = _dash_sprite_frames[id] + frame * n * 4;
+        dst = _dash_sprite_data[id] + 2;
+        while (n-- > 0) { *dst++ = *src++; *dst++ = *src++; *dst2++ = *src++; *dst2++ = *src++; }
+        return;
+    }
     n = _dash_sprite_height[id] * 2;
     src = _dash_sprite_frames[id] + frame * n;
     dst = _dash_sprite_data[id] + 2;          /* after the two control words */
@@ -15160,6 +15331,7 @@ static void _dash_sprite_frame(LONG id, LONG frame) {
 
 static void _dash_sprite_free(LONG id) {
     if (id < 0 || id >= DASH_MAX_SPRITES) return;
+    _dash_sprite_att_release(id);
     if (_dash_sprite_num[id] >= 0) {
         FreeSprite(_dash_sprite_num[id]);
         _dash_sprite_num[id] = -1;
@@ -15175,6 +15347,44 @@ static void _dash_sprite_free(LONG id) {
     if (_dash_sprite_frames[id]) { FreeVec(_dash_sprite_frames[id]); _dash_sprite_frames[id] = NULL; }
     _dash_sprite_nframes[id] = 0;
     _dash_sprite_height[id] = 0;
+}
+
+/* An attached pair of hardware sprites for id (sprite_load_attached): an even one (2, 4 or 6; 0 is the pointer)
+   and the next, both height rows. FALSE if no pair is free or there is no memory */
+static BOOL _dash_sprite_create_pair(LONG id, LONG height) {
+    struct SimpleSprite *s1, *s2;
+    UWORD *d1, *d2;
+    ULONG size = (height + 2) * 4;
+    WORD n;
+    if (id < 0 || id >= DASH_MAX_SPRITES || !_dash_screen || height < 1) return FALSE;
+    _dash_sprite_free(id);
+    s1 = (struct SimpleSprite *)AllocMem(sizeof(struct SimpleSprite), MEMF_CLEAR);
+    s2 = (struct SimpleSprite *)AllocMem(sizeof(struct SimpleSprite), MEMF_CLEAR);
+    d1 = (UWORD *)AllocMem(size, MEMF_CHIP | MEMF_CLEAR);
+    d2 = (UWORD *)AllocMem(size, MEMF_CHIP | MEMF_CLEAR);
+    n = 8;
+    if (s1 && s2 && d1 && d2)
+        for (n = 2; n < 8; n += 2) {
+            if (GetSprite(s1, n) != n) continue;
+            if (GetSprite(s2, n + 1) == n + 1) break;
+            FreeSprite(n);
+        }
+    if (n >= 8) {
+        if (s1) FreeMem(s1, sizeof(struct SimpleSprite));
+        if (s2) FreeMem(s2, sizeof(struct SimpleSprite));
+        if (d1) FreeMem(d1, size);
+        if (d2) FreeMem(d2, size);
+        return FALSE;
+    }
+    s1->height = s2->height = height;
+    _dash_sprites[id] = s1;
+    _dash_sprite_data[id] = d1;
+    _dash_sprite_num[id] = n;
+    _dash_sprite_height[id] = height;
+    _dash_sprite_att[id] = s2;
+    _dash_sprite_att_data[id] = d2;
+    _dash_sprite_att_num[id] = n + 1;
+    return TRUE;
 }
 
 static BOOL _dash_sprite_collision(LONG id1, LONG id2) {
@@ -15212,13 +15422,15 @@ static void _dash_sprite_pos(LONG id, LONG x, LONG y) {
     /* Update control words in sprite data */
     data = _dash_sprite_data[id];
     height = _dash_sprite_height[id];
-    data[0] = ((y & 0xFF) << 8) | ((x >> 1) & 0xFF);
-    data[1] = (((y + height) & 0xFF) << 8) |
-              (((y + height) >> 8) << 1) |
-              (x & 1) |
-              ((y >> 8) << 2);
+    _dash_sprite_ctl(data, x, y, height, FALSE);
 
     MoveSprite(&_dash_screen->ViewPort, _dash_sprites[id], x, y);
+    if (_dash_sprite_att[id]) {                 /* the odd one of a pair goes with it, attached */
+        _dash_sprite_att[id]->x = x;
+        _dash_sprite_att[id]->y = y;
+        MoveSprite(&_dash_screen->ViewPort, _dash_sprite_att[id], x, y);
+        _dash_sprite_ctl(_dash_sprite_att_data[id], x, y, height, TRUE);
+    }
 }
 
 static void _dash_cleanup_sprites(void) {
@@ -17185,7 +17397,8 @@ static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
         WA_DragBar, TRUE,
         WA_CloseGadget, TRUE,
         WA_SizeGadget, TRUE,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         WINDOW_Position, WPOS_CENTERSCREEN,
         WINDOW_Layout, _ra_layout,
         TAG_DONE);
@@ -20444,6 +20657,9 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
 
     /* Close any existing screen */
     if (_dash_screen && _dash_own_screen) {
+#ifdef _DASH_HAS_DBUF
+        _dash_dbuf_free();
+#endif
 #ifdef _DASH_HAS_SCREEN_CLOSING
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
 #endif
@@ -20515,7 +20731,8 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, $idcmp_flags,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
 
     if (!win_$name) _dash_exit(20);
