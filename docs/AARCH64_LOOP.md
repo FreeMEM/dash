@@ -315,3 +315,9 @@ Print offsetof(Node, ln_Name)  # 10
   → llave; 13 proceso_matar; 14 proceso_esperar → clase (0 salió, 1 matado, 2 fallo) y código. Para A7 (builtins
   de DashOS); nada cambia en lo de ahora. Viene en la fase 3: canales que se cierran al morir, llaves con menos
   derechos y revocables, cupos de memoria por grupo.
+- 2026-11-03: DashOS C40 (65224d5): un lado de canal se cierra al soltarse su última llave (cerrar, muerte del
+  proceso, mensaje que nadie lee) y el otro recibe E_CERRADO; canal_escribir da E_ARGUMENTO si se manda un extremo
+  del mismo canal o una llave de interrupción asociada a él. Para A7; Dash aún no usa canales.
+- 2026-11-03: fusionado `main` (hasta 4394a56). Frente a `main`, 68k idéntico por los dos caminos salvo
+  `test_amiga_struct` (nuevo): 2400/2406 y 400/401. Tests 541/541, con emulador 1310/1310 (A1200, A500, 3.2),
+  `make -C dashc test` bien, ejemplos 34/34; DashOS en qemu 92 y 86. PR a `main`.
