@@ -17,6 +17,10 @@
 # expect-out: pinta: 2 1 2 1 3 2 1
 # expect-out: con máscara: 3 1
 # expect-out: celdas de 32: 3 3 1
+# expect-out: objetos: 0 1 2 -1
+# expect-out: objeto 1: moneda 48 32 oro moneda.iff
+# expect-out: buscar: 1 2 -1 0
+# expect-out: guardados: true 2 jugador 16 160 enemigo 200 100 malo
 # expect-out: fin
 
 Window W
@@ -95,6 +99,24 @@ Main
     Print "celdas de 32: #{gfx_pixel_read(150, 62)} #{gfx_pixel_read(181, 93)} #{gfx_pixel_read(182, 70)}"
     bob_free(1)
     bob_free(0)
+    a = tilemap_objects(3)
+    o1 = tilemap_object_add(3, 16, 160, "jugador")
+    o2 = tilemap_object_add(3, 40, 30, "moneda")
+    o3 = tilemap_object_add(3, 200, 100, "moneda")
+    o4 = tilemap_object_add(9, 0, 0, "x")
+    Print "objetos: #{a} #{o2} #{o3} #{o4}"
+    tilemap_object_set(3, 1, "moneda", "oro", "moneda.iff")
+    tilemap_object_move(3, 1, 48, 32)
+    Print "objeto 1: #{tilemap_object_kind(3, 1)} #{tilemap_object_x(3, 1)} #{tilemap_object_y(3, 1)} #{tilemap_object_name(3, 1)} #{tilemap_object_sprite(3, 1)}"
+    mo = "moneda"
+    ju = "jugador"
+    Print "buscar: #{tilemap_object_find(3, mo, 0)} #{tilemap_object_find(3, mo, 2)} #{tilemap_object_find(3, mo, 3)} #{tilemap_object_find(3, ju, 0)}"
+    tilemap_object_remove(3, 1)
+    tilemap_object_set(3, 1, "enemigo", "malo", "")
+    g = tilemap_save(3, fichero)
     tilemap_free(3)
+    c = tilemap_load(5, fichero)
+    Print "guardados: #{g and c} #{tilemap_objects(5)} #{tilemap_object_kind(5, 0)} #{tilemap_object_x(5, 0)} #{tilemap_object_y(5, 0)} #{tilemap_object_kind(5, 1)} #{tilemap_object_x(5, 1)} #{tilemap_object_y(5, 1)} #{tilemap_object_name(5, 1)}"
+    tilemap_free(5)
     Print "fin"
 end
