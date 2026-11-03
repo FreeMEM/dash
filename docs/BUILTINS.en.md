@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 853 functions, 853 implemented, 0 not implemented.
+Total: 854 functions, 854 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -49,15 +49,16 @@ Total: 853 functions, 853 implemented, 0 not implemented.
 | Function | Returns | Description | Status |
 |---|---|---|---|
 | `sprite_load(id, filename)` | `BOOL` | Sprite from a picture (ILBM...): 16-pixel frames side by side, pens 0-3 its colours (0 clear); FALSE if it cannot |  |
+| `sprite_load_attached(id, filename)` | `BOOL` | Sprite of 15 colours from a picture: an attached pair of hardware sprites, pens 1-15 (0 clear) are colours 17-31; FALSE if it cannot |  |
 | `sprite_create(id, width, height)` | `BOOL` | Create empty sprite |  |
 | `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
 | `sprite_show(id)` | `void` | Make sprite visible |  |
 | `sprite_hide(id)` | `void` | Hide sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (components 0-15) |  |
-| `sprite_load_colors(id, filename)` | `BOOL` | Colours 1-3 of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (0-14 for an attached pair; components 0-15) |  |
+| `sprite_load_colors(id, filename)` | `BOOL` | Colours 1-3 (1-15 for an attached pair) of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none |  |
 | `bob_load_colors(filename, first)` | `LONG` | The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many |  |
-| `sprite_rgb8(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2, with 8-bit components (0-255; exact on AGA, 4 bits on ECS) |  |
-| `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load |  |
+| `sprite_rgb8(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (0-14 for an attached pair), with 8-bit components (0-255; exact on AGA, 4 bits on ECS) |  |
+| `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load or sprite_load_attached |  |
 | `sprite_free(id)` | `void` | Free sprite memory |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |
 | `sprite_set_row(id, row, plane0, plane1)` | `void` | Set sprite data row (2 bitplanes) |  |

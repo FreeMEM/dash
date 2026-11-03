@@ -1,0 +1,85 @@
+# Test: sprite_load_attached (Forja D18) makes one sprite of 15 colours from an attached pair of hardware
+# sprites: an even one and the next. The test writes a 32 x 2 ILBM of 4 planes: two frames of 16 x 2 (frame 0:
+# pens 9 and 6; frame 1: pens 15 and 1). Planes 0 and 1 of each row go to the even sprite and planes 2 and 3 to
+# the odd one, which carries the attach bit (SPRITE_ATTACHED, 128) in its second control word, also after
+# sprite_pos. What the chip shows cannot be checked here: the emulator's screenshots copy the screen's bitmap,
+# without the sprites. A missing file gives false; sprite_free lets the pair be taken again.
+# expect-c: static BOOL _dash_sprite_load_attached(LONG id, STRPTR file)
+# expect-out: cargado true
+# expect-out: pareja true
+# expect-out: marco 0: 65535 0 0 65535 / 0 65535 65535 0
+# expect-out: marco 1: 65535 65535 65535 0 / 65535 65535 0 0
+# expect-out: acoplado 128 0
+# expect-out: colores true
+# expect-out: sin fichero false
+# expect-out: otra vez true
+# expect-out: fin
+
+@native func palabra(id: Int, i: Int) -> Int
+"""
+    return (LONG)_dash_sprite_data[id][i];
+"""
+end
+
+@native func palabra2(id: Int, i: Int) -> Int
+"""
+    return (LONG)_dash_sprite_att_data[id][i];
+"""
+end
+
+@native func pareja(id: Int) -> Bool
+"""
+    return _dash_sprite_num[id] >= 2 && (_dash_sprite_num[id] & 1) == 0 &&
+           _dash_sprite_att_num[id] == _dash_sprite_num[id] + 1;
+"""
+end
+
+func escribir_ilbm(ruta: String) -> Bool
+    bytes = [70, 79, 82, 77, 0, 0, 0, 128, 73, 76, 66, 77, 66, 77, 72, 68, 0, 0, 0, 20, 0, 32, 0, 2,
+             0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 10, 11, 1, 64, 1, 0, 67, 77, 65, 80, 0, 0, 0, 48,
+             0, 0, 255, 17, 0, 238, 34, 0, 221, 51, 0, 204, 68, 0, 187, 85, 0, 170, 102, 0, 153, 119, 0, 136,
+             136, 0, 119, 153, 0, 102, 170, 0, 85, 187, 0, 68, 204, 0, 51, 221, 0, 34, 238, 0, 17, 255, 0, 0,
+             66, 79, 68, 89, 0, 0, 0, 32,
+             255, 255, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255, 255,
+             0, 0, 255, 255, 255, 255, 0, 0, 255, 255, 0, 0, 0, 0, 0, 0]
+    f = file_open(ruta, 1006)
+    if f == 0
+        return false
+    end
+    for b in bytes
+        file_write_byte(f, b)
+    end
+    file_close(f)
+    return true
+end
+
+func filas(id: Int) -> String
+    return "#{palabra(id, 2)} #{palabra(id, 3)} #{palabra(id, 4)} #{palabra(id, 5)} / #{palabra2(id, 2)} #{palabra2(id, 3)} #{palabra2(id, 4)} #{palabra2(id, 5)}"
+end
+
+Main
+    screen_open(2, "Acoplados")
+    ruta = "T:dash_acoplado.ilbm"
+    escribir_ilbm(ruta)
+    ok = sprite_load_attached(0, ruta)
+    Print "cargado #{ok}"
+    if ok
+        Print "pareja #{pareja(0)}"
+        Print "marco 0: #{filas(0)}"
+        sprite_frame(0, 1)
+        Print "marco 1: #{filas(0)}"
+        sprite_pos(0, 100, 50)
+        sprite_show(0)
+        Print "acoplado #{palabra2(0, 1) & 128} #{palabra(0, 1) & 128}"
+        sprite_rgb8(0, 14, 255, 0, 0)
+        sprite_color(0, 8, 15, 15, 0)
+        Print "colores #{sprite_load_colors(0, ruta)}"
+        sprite_hide(0)
+    end
+    falta = sprite_load_attached(1, "T:no_existe.ilbm")
+    Print "sin fichero #{falta}"
+    sprite_free(0)
+    Print "otra vez #{sprite_load_attached(2, ruta)}"
+    sprite_free(2)
+    Print "fin"
+end
