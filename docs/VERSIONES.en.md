@@ -32,6 +32,27 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.2.0 (2026-11-03)
+
+What Forja's sprite and map editors and Fragua, the games library, need. All of it is new builtins; what compiled
+before stays the same, except windows with no screen of their own (below).
+
+- **Tile maps:** `tilemap_create`, `tilemap_load` and `tilemap_save` (IFF `FORM FMAP`, the one of Forja's map
+  editor), cells with mirroring (`tilemap_get`, `tilemap_set`), layers (name, type, visible; add, remove, move),
+  `tilemap_resize` and objects (`tilemap_object_add`, `_find`, `_x`, `_y`, `_kind`...). `tilemap_draw` and
+  `tilemap_draw_masked` draw a piece of the map with a BOB's frames, in one go on the window.
+- **Sprites and BOBs:** `sprite_load_attached` (attached 15-colour sprites), `sprite_rgb8`, `sprite_load_colors`,
+  `bob_load_colors`, `bob_frame_width` (and `bob_load` reads the frame width Forja saves), `bob_paste` (a frame
+  with its mask without saving the background) and `bob_width`, `bob_height`, `bob_frames`.
+- **Screens:** `screen_double_buffer` and `screen_flip` (double buffering), `screen_clone_wb` (a public clone of
+  the Workbench), `screen_make_default`, `screen_visitors`, `mui_window_screen`, `dialog_screen_mode` and
+  `screen_open_mode`. An own screen with no window can now be drawn on (`gfx_rgb8` hung).
+- **Windows with no screen of their own:** they open on the default public screen instead of always on the
+  Workbench. As long as nobody changes the default public screen, it is the Workbench, as before.
+- **Drawing:** `gfx_pens_draw` (a picture of pens in one go, with zoom; on planes, a single blitter copy),
+  `color_pen_free`, and `key_down` (whether a key is held down now, for games).
+- **For the Amiga:** the package brings Forja with its sprite and map editors.
+
 ### 2.1.0 (2026-11-03)
 
 The same `@link` C works on both paths, straight and through C with gcc. It is the step to take programs like
