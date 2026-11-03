@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 882 functions, 882 implemented, 0 not implemented.
+Total: 893 functions, 893 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -106,6 +106,17 @@ Total: 882 functions, 882 implemented, 0 not implemented.
 | `tilemap_resize(id, width, height)` | `BOOL` | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
 | `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
 | `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
+| `tilemap_objects(id)` | `LONG` | How many objects the map has |  |
+| `tilemap_object_add(id, x, y, kind)` | `LONG` | A new object of that kind (a text: "player", "coin"...) at x, y in pixels of the map: its number (0 the first), or -1 (256 at most) |  |
+| `tilemap_object_remove(id, object)` | `BOOL` | Remove an object (the ones after it move down one) |  |
+| `tilemap_object_x(id, object)` | `LONG` | Where an object is: x in pixels of the map |  |
+| `tilemap_object_y(id, object)` | `LONG` | Where an object is: y in pixels of the map |  |
+| `tilemap_object_move(id, object, x, y)` | `void` | Move an object to x, y |  |
+| `tilemap_object_kind(id, object)` | `STRPTR` | The kind of an object |  |
+| `tilemap_object_name(id, object)` | `STRPTR` | The name of an object |  |
+| `tilemap_object_sprite(id, object)` | `STRPTR` | The sprite file of an object ("" if none) |  |
+| `tilemap_object_set(id, object, kind, name, sprite)` | `void` | Kind, name (up to 31 characters each) and sprite file of an object |  |
+| `tilemap_object_find(id, kind, from)` | `LONG` | The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list |  |
 | `copper_wait(y, x)` | `void` | Add copper WAIT instruction |  |
