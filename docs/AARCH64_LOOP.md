@@ -12,6 +12,15 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
 - **Punteros de 32 bits solo en las estructuras de Amiga.** Los programas nativos usan punteros de 64 bits. Las
   estructuras que comparte la caja Amiga se marcan y guardan sus punteros en 32 bits; el código los convierte al
   leerlos y escribirlos. En 68k la marca no cambia nada.
+- **64 bits de verdad** (usuario, 2026-11-03, tras saber el coste). El runtime y los dos caminos guardan hoy punteros
+  en `LONG` (elementos de listas, valores de diccionarios, casillas). Se hacen limpios de tamaño de puntero:
+  - Int sigue siendo de 32 bits.
+  - Cada lista usa el tamaño de elemento de lo que guarda: Int 4 bytes; texto, objeto o lista 4 en 68k y 8 en
+    ARM; Double 8.
+  - Los structs se colocan con los tamaños del procesador.
+  - Se descartó tener toda la memoria por debajo de 2 GB: dejaba un límite para siempre en las bibliotecas.
+- **El C de `./dash --gcc` puede cambiar de texto, pero no de código de 68k.** La red de seguridad del camino por C
+  compara los objetos que da m68k-amigaos-gcc, no el C.
 - **Runtime sin sistema debajo.** El runtime pide la memoria y escribe la salida a través de unas pocas funciones
   de plataforma, que pone quien lo aloja (DashOS, o el arnés de pruebas).
 - **El camino de 68k no se toca.** Cada paso del reparto deja los ejecutables de 68k idénticos byte a byte
@@ -24,6 +33,8 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
   pruebas que habla con Linux (write, exit, mmap). DashOS pondrá la suya.
 - `dashc/tests/identicos.py`: 2310 compilaciones de 68k (tests, ejemplos, 6 juegos de opciones) contra un dashc de
   referencia, en un segundo. `--guardar` fija la referencia.
+- `tests/identicos_c.py`: el camino por C. Transpila 385 programas y compara los objetos de m68k-amigaos-gcc -c
+  (normal, `-DDASH_MEMCHECK` y `--fpu`; 1149 objetos y 4 errores) con `build/c_ref.json`, en 30 s.
 
 ## Fases
 
@@ -40,6 +51,24 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
 
 Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc` lo es del directo de 68k.
 
+## El cargador de DashOS (freemem-f9, 2026-11-03)
+
+`kernel/src/elf.rs` de `~/Projects/dashos` (C19); referencia que ya funciona: `usuario/enlace.ld` y
+`usuario/src/lib.rs`.
+
+- ELF64 big-endian (EI_DATA = 2), ET_EXEC, EM_AARCH64 (183), estático en 0x400000. Sin PIE, sin relocaciones ni
+  enlazado dinámico. Solo PT_LOAD.
+- Permisos por p_flags: X = código de solo lectura, W = datos sin ejecución, el resto solo lectura. memsz > filesz
+  queda a cero (.bss).
+- Cada segmento alineado a 4 KB y sin compartir página con otro. Toda VA por debajo de 1 << 39.
+- Entrada en e_entry. La pila acaba en 0x80000000 (SP inicial) y crece hacia abajo; se reserva entera al cargar.
+  Tamaño: el p_memsz de PT_GNU_STACK (con lld, `-z stack-size=N`), de 4 KB a 8 MB; si vale 0, 64 KB
+  (DashOS 4d653fe). Ningún segmento pasa de 0x80000000 - 8 MB; las proyecciones, por debajo de la pila.
+- Llamadas provisionales: `svc #0`, número en x8, argumentos en x0..x5, resultado en x0 (negativo = error).
+  escribir(ptr, len) = 1; salir(código) = 2; memoria_crear(tamaño) = 7 da una llave;
+  memoria_proyectar(llave, va, permisos 1 leer | 2 escribir) = 8, con la VA alineada a 4 KB que elige el programa.
+  Cambiarán con la API de S11: solo las funciones de plataforma conocen estos números.
+
 ## Preguntas abiertas
 
 - Nombre de la opción: `--dashos` (propuesta).
@@ -49,3 +78,5 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
 
 - 2026-11-03: plan. A0 hecha: `dashc/tests/identicos.py`, 2310/2310 idénticos. dashc compila 277 de 385 programas
   del corpus (tests, ejemplos y los suyos); el resto da error en los dos y también se compara.
+- 2026-11-03: el usuario elige 64 bits de verdad. `tests/identicos_c.py`: 385/385 idénticos (fecha y hora de gcc
+  fijas). Cargador y pila de DashOS apuntados.
