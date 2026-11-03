@@ -690,3 +690,61 @@ static void set_cc(int cc)                             /* d0 = 1 si se cumple la
     w(0x50C0 | cc << 8);                               /* scc d0 */
     w(0x0280); l(1);                                   /* andi.l #1,d0 */
 }
+
+static void push_ea(Var *v)                            /* una variable a la pila (move.l, también una constante) */
+{
+    op_ea(0x2F00, v);                                  /* move.l v,-(sp) */
+    sp_depth += 4;
+}
+
+static void store_arg_imm(int i, long k)               /* un número al argumento i (reserve_args) */
+{
+    w(0x2F7C);                                         /* move.l #k,d16(sp) */
+    l((uint32_t)k);
+    w(4 * i);
+}
+
+/* ---- v op= algo sin pasar por d0: op = 0 add, 1 sub, 2 and, 3 or ---- */
+/* dN op= s (o, si s es NULL, op= dX) */
+static void op_to_reg(int op, int reg, Var *s, int x)
+{
+    static const int to_reg[] = {0xD080, 0x9080, 0xC080, 0x8080};   /* op.l ea,dN */
+    if (s) op_ea(to_reg[op] | reg << 9, s);
+    else w(to_reg[op] | reg << 9 | x);
+    flags_set(reg, op >= 2);                           /* and y or ponen V = 0 */
+}
+
+static void op_reg_to(int op, int x, Var *v)           /* v op= dX */
+{
+    static const int to_mem[] = {0xD180, 0x9180, 0xC180, 0x8180};   /* op.l dN,ea */
+    op_ea(to_mem[op] | x << 9, v);
+}
+
+/* v op= k con op = P_AMP, P_BAR, P_CARET (v cualquiera) o P_SHL, P_SHR (v en un registro, k de 1 a 8) */
+static void op_imm_into(int op, long k, Var *v)
+{
+    switch (op) {
+    case P_AMP: op_imm_ea(0x0280, k, v); break;                /* andi.l #k,v */
+    case P_BAR: op_imm_ea(0x0080, k, v); break;                /* ori.l #k,v */
+    case P_CARET: op_imm_ea(0x0A80, k, v); break;              /* eori.l #k,v */
+    case P_SHL: w(0xE180 | (k & 7) << 9 | v->reg); break;      /* asl.l #k,dN */
+    case P_SHR: w(0xE080 | (k & 7) << 9 | v->reg); break;      /* asr.l #k,dN */
+    }
+    if (v->kind == V_REG) flags_set(v->reg, op != P_SHL);      /* asl puede poner V */
+}
+
+/* v (en un registro) /= 2^sh, redondeando hacia cero como divmod_pow2 */
+static void reg_div_pow2(Var *v, int sh)
+{
+    uint32_t mask = (1u << sh) - 1;
+    if (!flags_for(v, CC_PL)) w(0x4A80 | v->reg);      /* tst.l dN */
+    if (mask <= 8) {
+        w(0x6A02);                                     /* bpl.s +2 */
+        w(0x5080 | (mask & 7) << 9 | v->reg);          /* addq.l #mask,dN */
+    } else {
+        w(0x6A06);                                     /* bpl.s +6 */
+        w(0x0680 | v->reg); l(mask);                   /* addi.l #mask,dN */
+    }
+    w(0xE080 | (sh & 7) << 9 | v->reg);                /* asr.l #s,dN */
+    flags_set(v->reg, 1);
+}

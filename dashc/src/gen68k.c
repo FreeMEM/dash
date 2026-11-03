@@ -1982,8 +1982,7 @@ static void free_owned(int from_depth, int all_frame)
         if (!lc->owned || lc->frame != cur_frame || (!all_frame && lc->depth < from_depth)) continue;
         use_slot(lc->slot);
         v = slot_var(lc->slot, lc->type);
-        op_ea(0x2F00, &v);                             /* move.l v,-(sp) */
-        sp_depth += 4;
+        push_ea(&v);
         rt_call(lc->owned == 2 ? "_dl_release" : "_dl_str_free", 1, 0);
     }
 }
@@ -2386,8 +2385,7 @@ static int gen_dash_builtin(Node *n)
     np = builtin_info[b].nparams;
     if (n->args.n > np) fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, np, n->args.n);
     if (np) {
-        w(0x4FEF); w(-4 * np);                         /* lea -4n(sp),sp */
-        sp_depth += 4 * np;
+        reserve_args(np);
         for (i = 0; i < np; i++) {
             if (i < n->args.n) {
                 Node *a = n->args.v[i];
@@ -2404,10 +2402,9 @@ static int gen_dash_builtin(Node *n)
                     rt_call(t == TY_STR ? "_dl_str_escape" : "_dl_obj_escape", 1, 0);
                 }
             } else {
-                w(0x7000);                             /* moveq #0,d0: el que falta */
+                zero_d0();                             /* el que falta */
             }
-            if (i) { w(0x2F40); w(4 * i); }            /* move.l d0,4i(sp) */
-            else w(0x2E80);                            /* move.l d0,(sp) */
+            store_d0_arg(i);
         }
     }
     switch (builtin_info[b].ret) {
@@ -2829,8 +2826,7 @@ static int gen_inline(Node *n, Func *f, int idx, int branch_to, int when_true)
             }
             if ((IS_STRLIKE(b->type) || IS_OBJ(b->type)) && param_set[idx][i]) {
                 /* un parámetro de texto que la función cambia: una copia suya (un objeto: una referencia) */
-                op_ea(0x2F00, &t);                     /* move.l p,-(sp) */
-                sp_depth += 4;
+                push_ea(&t);
                 rt_call(IS_STRLIKE(b->type) ? "_dl_str_dup" : "_dl_hold_r", 1, 0);
                 store_d0(&t);
                 b->owned = IS_STRLIKE(b->type) ? 1 : 2;
@@ -3235,7 +3231,7 @@ static void gen_branch(Node *n, int label, int when_true)
         return;
     }
     if (n->kind == E_VAR && simple(n, &v)) {
-        if (!flags_for(&v, CC_NE)) op_ea(0x4A80, &v);   /* tst.l v */
+        if (!flags_for(&v, CC_NE)) tst_ea(&v);
     }
     else {
         value(n);
@@ -3636,36 +3632,25 @@ static int collect_terms(Node *e, const char *name, Node **t, int *neg, int *nt,
 /* v = v op t, con op = add, sub, and u or (índice en las tablas) */
 static void op_into(int op, Var *v, Node *t)
 {
-    static const int to_reg[] = {0xD080, 0x9080, 0xC080, 0x8080};   /* op.l ea,dN */
-    static const int to_mem[] = {0xD180, 0x9180, 0xC180, 0x8180};   /* op.l dN,ea */
     Var s;
     if (t && simple(t, &s) && s.kind != V_CONST) {
         if (v->kind == V_REG) {
-            op_ea(to_reg[op] | v->reg << 9, &s);
-            flags_set(v->reg, op >= 2);                /* and y or ponen V = 0 */
+            op_to_reg(op, v->reg, &s, -1);
             return;
         }
-        if (s.kind == V_REG) { op_ea(to_mem[op] | s.reg << 9, v); return; }
+        if (s.kind == V_REG) { op_reg_to(op, s.reg, v); return; }
         load_var(0, &s);
     } else if (t) {
         int x;
         value(t);
         if ((x = take_move_to_d0()) >= 0) {             /* el valor está en dX: sin pasar por d0 */
-            if (v->kind == V_REG) {
-                w(to_reg[op] | v->reg << 9 | x);
-                flags_set(v->reg, op >= 2);
-            } else {
-                op_ea(to_mem[op] | x << 9, v);
-            }
+            if (v->kind == V_REG) op_to_reg(op, v->reg, NULL, x);
+            else op_reg_to(op, x, v);
             return;
         }
     }
-    if (v->kind == V_REG) {
-        w(to_reg[op] | v->reg << 9);
-        flags_set(v->reg, op >= 2);
-    } else {
-        op_ea(to_mem[op], v);
-    }
+    if (v->kind == V_REG) op_to_reg(op, v->reg, NULL, 0);
+    else op_reg_to(op, 0, v);
 }
 
 /* v = v op e: la operación directamente sobre la variable. Una suma de varios
@@ -3699,18 +3684,8 @@ static int gen_update(Node *n)
     if (op == P_SLASH && kind == V_REG && fold(other, &k) && k > 1 && pow2(k) && pow2(k) <= 8) {
         /* x = x / 2^s en su registro: redondea hacia cero como divmod_pow2 */
         int sh = pow2(k);
-        uint32_t mask = (1u << sh) - 1;
         v = lookup(n->name);
-        if (!flags_for(&v, CC_PL)) w(0x4A80 | v.reg);  /* tst.l dN */
-        if (mask <= 8) {
-            w(0x6A02);                                 /* bpl.s +2 */
-            w(0x5080 | (mask & 7) << 9 | v.reg);       /* addq.l #mask,dN */
-        } else {
-            w(0x6A06);                                 /* bpl.s +6 */
-            w(0x0680 | v.reg); l(mask);                /* addi.l #mask,dN */
-        }
-        w(0xE080 | (sh & 7) << 9 | v.reg);             /* asr.l #s,dN */
-        flags_set(v.reg, 1);
+        reg_div_pow2(&v, sh);
         return 1;
     }
     if (op == P_CARET || op == P_SHL || op == P_SHR) {
@@ -3724,14 +3699,7 @@ static int gen_update(Node *n)
     v = lookup(n->name);
     if (v.kind == V_NONE || v.kind == V_CONST) return 0;
     if (fold(other, &k)) {
-        switch (op) {
-        case P_AMP: op_imm_ea(0x0280, k, &v); break;               /* andi.l #k,v */
-        case P_BAR: op_imm_ea(0x0080, k, &v); break;               /* ori.l #k,v */
-        case P_CARET: op_imm_ea(0x0A80, k, &v); break;             /* eori.l #k,v */
-        case P_SHL: w(0xE180 | (k & 7) << 9 | v.reg); break;       /* asl.l #k,dN */
-        case P_SHR: w(0xE080 | (k & 7) << 9 | v.reg); break;       /* asr.l #k,dN */
-        }
-        if (v.kind == V_REG) flags_set(v.reg, op != P_SHL);        /* asl puede poner V */
+        op_imm_into(op, k, &v);
         return 1;
     }
     op_into(op == P_AMP ? 2 : 3, &v, other);
@@ -4001,16 +3969,14 @@ static int str_set_join(Node *n, Node *e, int fresh)
         /* literal + número: dl_str_cat_li_r(var, literal, largo, n) */
         value(parts[1]);
         push_d0();
-        w(0x4878); w(parts[0]->len);                   /* pea largo.w */
-        sp_depth += 4;
+        push_word(parts[0]->len);                      /* el largo */
         load_str_lit(parts[0]->str, parts[0]->len);
         push_d0();
         if (fresh) {
             push_word(0);                                  /* sin texto antes */
         } else {
             v = lookup(n->name);
-            op_ea(0x2F00, &v);                         /* move.l s,-(sp) */
-            sp_depth += 4;
+            push_ea(&v);
         }
         rt_call("_dl_str_cat_li_r", 4, 0);
         goto guardar;
@@ -4020,38 +3986,27 @@ static int str_set_join(Node *n, Node *e, int fresh)
     if (np == 2) {
         /* dos partes: dl_str_cat2_r(var, pista a, pista b, a, b), con las partes ya en la pila */
         for (i = 1; i >= 0; i--) {
-            w(0x4878); w(join_hint(parts[i]));         /* pea pista.w */
-            sp_depth += 4;
+            push_word(join_hint(parts[i]));            /* su pista */
         }
         if (fresh) {
-            w(0x4878); w(0);
-            sp_depth += 4;
+            push_word(0);
         } else {
             v = lookup(n->name);
-            op_ea(0x2F00, &v);
-            sp_depth += 4;
+            push_ea(&v);
         }
         rt_call("_dl_str_cat2_r", 5, 0);
         goto guardar;
     }
-    w(0x4FEF); w(-4 * np);                             /* lea -4n(sp),sp: las pistas */
-    sp_depth += 4 * np;
-    for (i = 0; i < np; i++) {
-        w(0x2F7C);                                     /* move.l #pista,d16(sp) */
-        l((uint32_t)(long)join_hint(parts[i]));
-        w(4 * i);
-    }
-    w(0x4857);                                         /* pea (sp): las pistas */
-    sp_depth += 4;
-    w(0x486F); w(4 + 4 * np);                          /* pea 4+4n(sp): las partes */
-    sp_depth += 4;
+    reserve_args(np);                                  /* las pistas */
+    for (i = 0; i < np; i++) store_arg_imm(i, join_hint(parts[i]));
+    push_sp();                                         /* las pistas */
+    push_sp_addr(SLOT * (np + 1));                     /* las partes */
     push_word(np);
     if (fresh) {
         push_word(0);                                  /* sin texto antes */
     } else {
         v = lookup(n->name);
-        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
-        sp_depth += 4;
+        push_ea(&v);
     }
     rt_call("_dl_str_set_join_r", 4, 0);
     pop_args(2 * np);
@@ -4078,8 +4033,7 @@ static void gen_str_assign(Node *n, int ty)
         str_value(e->b);
         push_d0();
         v = lookup(n->name);
-        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
-        sp_depth += 4;
+        push_ea(&v);
         rt_call("_dl_str_append_r", 2, 0);
         store_d0(&v);
         return;
@@ -4106,8 +4060,7 @@ static void gen_str_assign(Node *n, int ty)
         push_word(0);                                  /* sin texto antes */
     } else {
         v = lookup(n->name);
-        op_ea(0x2F00, &v);                             /* move.l s,-(sp) */
-        sp_depth += 4;
+        push_ea(&v);
     }
     rt_call(is_tmp_expr(e) ? "_dl_str_assign" : "_dl_str_assign_copy", 2, 0);
     if (fresh) {
@@ -4183,8 +4136,7 @@ static void gen_obj_assign(Node *n, int tt)
         push_word(0);
     } else {
         v = lookup(n->name);
-        op_ea(0x2F00, &v);                             /* move.l v,-(sp) */
-        sp_depth += 4;
+        push_ea(&v);
     }
     rt_call(lit ? "_dl_obj_assign_new" : "_dl_obj_assign", 2, 0);
     if (fresh) {
@@ -5598,8 +5550,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                    soltarla al salir se liberaba mientras quien llamó aún lo usa) */
                 int str = IS_STRLIKE(f->params.v[i].type);
                 Var v = lookup(f->params.v[i].name);
-                op_ea(0x2F00, &v);                     /* move.l p,-(sp) */
-                sp_depth += 4;
+                push_ea(&v);
                 rt_call(str ? "_dl_str_dup" : "_dl_hold_r", 1, 0);
                 store_d0(&v);
                 locals.v[i].owned = str ? 1 : 2;
@@ -5660,8 +5611,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 g.kind = V_GLOBAL;
                 g.off = i * 4;
                 g.type = global_type[i];
-                op_ea(0x2F00, &g);                     /* move.l g,-(sp) */
-                sp_depth += 4;
+                push_ea(&g);
                 rt_call(IS_STRLIKE(global_type[i]) ? "_dl_str_free" : "_dl_release", 1, 0);
                 w(0x42B9);                             /* clr.l g */
                 add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
