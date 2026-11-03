@@ -1,0 +1,68 @@
+# Test: frames of any width. bob_load takes the frame width from Forja's FRJA chunk ("1 kind width speed"),
+# instead of guessing square frames; bob_frame_width says it for any other image.
+# The strip is 24 x 4 with three frames of 8 x 4: a pixel of colour 1 at x 0, of 2 at x 8 and of 3 at x 16.
+# Square frames (4 x 4) would give six frames, and frame 2 would start at x 8 (colour 2).
+#
+# expect-c: static void _dash_bob_frame_width(LONG id, LONG width)
+# expect-out: true
+# expect-out: con FRJA, fotograma 2: 3
+# expect-out: true
+# expect-out: sin FRJA, fotograma 2: 2
+# expect-out: con bob_frame_width 8, fotograma 2: 3
+
+Window W
+    title "Frames"
+    width 200
+    height 100
+end
+
+func escribir(ruta: String, bytes: [Int])
+    f = file_open(ruta, 1006)
+    for b in bytes
+        file_write_byte(f, b)
+    end
+    file_close(f)
+end
+
+Main
+    W.open
+    # FORM ILBM: BMHD 24 x 4, 2 planes; FRJA "1 0 8 6"; BODY (4 rows of 2 planes of 4 bytes)
+    var iff: [Int] = [70, 79, 82, 77, 0, 0, 0, 88, 73, 76, 66, 77,
+                      66, 77, 72, 68, 0, 0, 0, 20, 0, 24, 0, 4, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 10, 11, 0, 24, 0, 4,
+                      70, 82, 74, 65, 0, 0, 0, 7, 49, 32, 48, 32, 56, 32, 54, 0,
+                      66, 79, 68, 89, 0, 0, 0, 32,
+                      128, 0, 128, 0, 0, 128, 128, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0]
+    escribir("RAM:dash_frja.iff", iff)
+    Print bob_load(7, "RAM:dash_frja.iff")
+    bob_frame(7, 2)
+    bob_pos(7, 50, 20)
+    bob_draw(7)
+    Print "con FRJA, fotograma 2: #{gfx_pixel_read(50, 20)}"
+    bob_free(7)
+
+    # the same strip without FRJA (bitmap_save does not write it): square frames
+    bitmap_create(5, 24, 4, 2)
+    bitmap_draw_to(5)
+    gfx_pen(1)
+    gfx_pixel(0, 0)
+    gfx_pen(2)
+    gfx_pixel(8, 0)
+    gfx_pen(3)
+    gfx_pixel(16, 0)
+    bitmap_draw_screen()
+    bitmap_save(5, "RAM:dash_tira8.iff")
+    Print bob_load(6, "RAM:dash_tira8.iff")
+    bob_frame(6, 2)
+    bob_pos(6, 80, 20)
+    bob_draw(6)
+    Print "sin FRJA, fotograma 2: #{gfx_pixel_read(80, 20)}"
+    bob_frame_width(6, 8)
+    bob_frame(6, 2)
+    bob_pos(6, 110, 20)
+    bob_draw(6)
+    Print "con bob_frame_width 8, fotograma 2: #{gfx_pixel_read(110, 20)}"
+    bob_free(6)
+end

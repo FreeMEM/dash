@@ -2015,17 +2015,38 @@ static LONG _dash_font_text_width(STRPTR s) {
 /* The real size of a font (the nearest one the system found) */
 static LONG _dash_font_size(LONG font) { return font ? ((struct TextFont *)font)->tf_YSize : 0; }
 
-#define _DASH_PENS_MAX 128
+#define _DASH_PENS_MAX 512          /* a 256-colour picture and the program's own colours (Forja D15c) */
 static struct ColorMap *_dash_pen_cm[_DASH_PENS_MAX];
-static LONG _dash_pen_rgb[_DASH_PENS_MAX], _dash_pen_num[_DASH_PENS_MAX], _dash_pens = 0;
+static LONG _dash_pen_rgb[_DASH_PENS_MAX], _dash_pen_num[_DASH_PENS_MAX], _dash_pen_refs[_DASH_PENS_MAX], _dash_pens = 0;
 static struct Screen *_dash_pub_screen = NULL;
 
-/* The screen we draw on: the window of _dash_rp, else the default public screen */
+/* The screen we draw on: the window of _dash_rp, the program's own screen if it draws on it with no window, else the
+   default public screen */
 static struct Screen *_dash_pen_screen(void) {
     if (_dash_rp && _dash_rp->Layer && _dash_rp->Layer->Window)
         return ((struct Window *)_dash_rp->Layer->Window)->WScreen;
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    if (_dash_screen && _dash_rp == &_dash_screen->RastPort) return _dash_screen;   /* drawing on its own screen */
+#endif
     if (!_dash_pub_screen) _dash_pub_screen = LockPubScreen(NULL);
     return _dash_pub_screen;
+}
+
+/* Before a screen closes: its pens go back, and leave the list (screen_close) */
+static void _dash_pens_forget(struct Screen *scr) {
+    struct ColorMap *cm = scr->ViewPort.ColorMap;
+    LONG i, n = 0;
+    for (i = 0; i < _dash_pens; i++) {
+        if (_dash_pen_cm[i] == cm) {
+            ReleasePen(cm, _dash_pen_num[i]);
+            continue;
+        }
+        _dash_pen_cm[n] = _dash_pen_cm[i];
+        _dash_pen_rgb[n] = _dash_pen_rgb[i];
+        _dash_pen_num[n] = _dash_pen_num[i];
+        _dash_pen_refs[n++] = _dash_pen_refs[i];
+    }
+    _dash_pens = n;
 }
 
 /* A pen as close as possible to r, g, b (0-255) on that screen */
@@ -2033,20 +2054,45 @@ static LONG _dash_color_pen(LONG r, LONG g, LONG b) {
     struct Screen *scr = _dash_pen_screen();
     struct ColorMap *cm;
     LONG rgb = ((r & 255) << 16) | ((g & 255) << 8) | (b & 255), i, pen;
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    _dash_screen_closing = _dash_pens_forget;
+#endif
     if (!scr) return 1;
     cm = scr->ViewPort.ColorMap;
-    for (i = 0; i < _dash_pens; i++) if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) return _dash_pen_num[i];
+    for (i = 0; i < _dash_pens; i++)
+        if (_dash_pen_rgb[i] == rgb && _dash_pen_cm[i] == cm) { _dash_pen_refs[i]++; return _dash_pen_num[i]; }
     pen = ObtainBestPen(cm, (ULONG)(r & 255) * 0x01010101UL, (ULONG)(g & 255) * 0x01010101UL,
                         (ULONG)(b & 255) * 0x01010101UL, OBP_Precision, PRECISION_IMAGE, TAG_DONE);
     if (pen < 0) return 1;
     if (_dash_pens < _DASH_PENS_MAX) {
         _dash_pen_cm[_dash_pens] = cm;
         _dash_pen_rgb[_dash_pens] = rgb;
+        _dash_pen_refs[_dash_pens] = 1;
         _dash_pen_num[_dash_pens++] = pen;
     } else {
         ReleasePen(cm, pen);     /* not kept: this one is only good until the next ObtainBestPen */
     }
     return pen;
+}
+
+/* color_pen_free (Forja D15c): one color_pen of that pen is no longer needed. color_pen counts how many times it
+   gave each pen; at 0 the pen goes back to the screen (ReleasePen), so a program that changes many colours (an
+   image editor) does not use up the screen's free pens. A pen color_pen did not give is left alone. */
+static void _dash_color_pen_free(LONG pen) {
+    struct Screen *scr = _dash_pen_screen();
+    struct ColorMap *cm = scr ? scr->ViewPort.ColorMap : NULL;
+    LONG i;
+    for (i = _dash_pens - 1; i >= 0; i--) {
+        if (_dash_pen_num[i] != pen || _dash_pen_cm[i] != cm) continue;
+        if (--_dash_pen_refs[i] > 0) return;
+        ReleasePen(cm, pen);
+        _dash_pens--;
+        _dash_pen_cm[i] = _dash_pen_cm[_dash_pens];
+        _dash_pen_rgb[i] = _dash_pen_rgb[_dash_pens];
+        _dash_pen_num[i] = _dash_pen_num[_dash_pens];
+        _dash_pen_refs[i] = _dash_pen_refs[_dash_pens];
+        return;
+    }
 }
 
 static void _dash_font_cleanup(void) {
@@ -2829,6 +2875,82 @@ static void _dash_rgb_draw_scaled(LONG buffer, LONG w, LONG h, LONG x, LONG y, L
 
 static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
     _dash_rgb_draw_scaled(buffer, w, h, x, y, w, h);
+}
+
+/* gfx_pens_draw (Forja D15b): an image of pens (one byte a pixel, rows one after another) at x, y, each pixel a
+   zoom x zoom square. On a planar bitmap (ECS/AGA) each source row is turned into planes here, in a band of zoom
+   lines, and the blitter copies the band (BltBitMapRastPort: clipped by the window's layer). WriteChunkyPixels
+   does that pixel by pixel in the OS and was slower than RectFill runs (A1200: 32x32 at zoom 4, 363 ms against
+   172). On RTG (a chunky bitmap) WriteChunkyPixels is the fast way. Without either, runs of RectFill. Without a
+   layer (a screen's RastPort) nothing is written outside the bitmap. */
+static void _dash_gfx_pens_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG zoom) {
+    UBYTE *pix = (UBYTE *)buffer;
+    LONG sx, sy, r, dw, depth = 0;
+    BOOL planar = FALSE;
+    if (!pix || !_dash_rp || w <= 0 || h <= 0 || zoom < 1) return;
+    dw = w * zoom;
+    if (_dash_rp->BitMap) {
+        if (!_dash_rp->Layer) {
+            LONG maxw = GetBitMapAttr(_dash_rp->BitMap, BMA_WIDTH), maxh = GetBitMapAttr(_dash_rp->BitMap, BMA_HEIGHT);
+            if (x < 0 || y < 0 || x + dw > maxw || y + h * zoom > maxh) return;
+        }
+        planar = (GetBitMapAttr(_dash_rp->BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
+        depth = GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH);
+        if (depth > 8) planar = FALSE;
+    }
+    if (planar) {
+        struct BitMap *band = AllocBitMap(dw, zoom, depth, BMF_CLEAR, NULL);
+        if (band) {
+            LONG bpr = band->BytesPerRow, p;
+            for (sy = 0; sy < h; sy++) {
+                UBYTE *src = pix + sy * w;
+                WaitBlit();                          /* the blitter may still be reading the last band */
+                for (p = 0; p < depth; p++) memset(band->Planes[p], 0, bpr);
+                for (sx = 0; sx < w; sx++) {
+                    UBYTE c = src[sx];
+                    LONG dx = sx * zoom, e = dx + zoom;
+                    if (!c) continue;
+                    for (; dx < e; dx++) {
+                        UBYTE bit = 0x80 >> (dx & 7);
+                        LONG o = dx >> 3;
+                        for (p = 0; p < depth; p++) if (c & (1 << p)) band->Planes[p][o] |= bit;
+                    }
+                }
+                for (p = 0; p < depth; p++)
+                    for (r = 1; r < zoom; r++) CopyMem(band->Planes[p], band->Planes[p] + r * bpr, bpr);
+                BltBitMapRastPort(band, 0, 0, _dash_rp, x, y + sy * zoom, dw, zoom, 0xC0);
+            }
+            WaitBlit();
+            FreeBitMap(band);
+            return;
+        }
+    } else if (GfxBase->LibNode.lib_Version >= 40) {
+        UBYTE *row = (UBYTE *)AllocVec(dw, MEMF_ANY);
+        if (row) {
+            for (sy = 0; sy < h; sy++) {
+                UBYTE *src = pix + sy * w, *d = row;
+                for (sx = 0; sx < w; sx++) {
+                    UBYTE c = src[sx];
+                    for (r = 0; r < zoom; r++) *d++ = c;
+                }
+                for (r = 0; r < zoom; r++)
+                    WriteChunkyPixels(_dash_rp, x, y + sy * zoom + r, x + dw - 1, y + sy * zoom + r, row, dw);
+            }
+            FreeVec(row);
+            return;
+        }
+    }
+    for (sy = 0; sy < h; sy++) {
+        UBYTE *src = pix + sy * w;
+        LONG fy = y + sy * zoom;
+        for (sx = 0; sx < w; ) {
+            LONG e = sx + 1;
+            while (e < w && src[e] == src[sx]) e++;
+            SetAPen(_dash_rp, src[sx]);
+            RectFill(_dash_rp, x + sx * zoom, fy, x + e * zoom - 1, fy + zoom - 1);
+            sx = e;
+        }
+    }
 }
 
 static void _dash_blend_cleanup(void) {
@@ -12163,6 +12285,7 @@ typedef struct {
 } _DashBitmap;
 static _DashBitmap _dash_bitmaps[_DASH_MAX_BITMAPS];
 static ULONG _dash_bitmap_version[_DASH_MAX_BITMAPS];  /* bumped when the image may change (bob masks) */
+static LONG _dash_bitmap_fw[_DASH_MAX_BITMAPS];        /* frame width from an FRJA chunk (Forja), 0 if none */
 static struct RastPort *_dash_screen_rp = NULL;   /* the window's while drawing to a bitmap */
 
 static _DashBitmap *_dash_bitmap_get(LONG id) {
@@ -12187,6 +12310,7 @@ static void _dash_bitmap_free(LONG id) {
 }
 
 static BOOL _dash_bitmap_create(LONG id, LONG width, LONG height, LONG depth) {
+    if (id >= 0 && id < _DASH_MAX_BITMAPS) _dash_bitmap_fw[id] = 0;
     _DashBitmap *b;
     if (id < 0 || id >= _DASH_MAX_BITMAPS || width < 1 || height < 1 || depth < 1 || depth > 8) return FALSE;
     _dash_bitmap_free(id);
@@ -12231,7 +12355,7 @@ static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
     BPTR fh = Open(filename, MODE_OLDFILE);
     UBYTE hdr[12], chunk[8], bmhd[20], *body = NULL;
     UBYTE cmap[3 * 256];
-    LONG w = 0, h = 0, depth = 0, ncolors = 0, body_len = 0, comp = 0, masking = 0;
+    LONG w = 0, h = 0, depth = 0, ncolors = 0, body_len = 0, comp = 0, masking = 0, fw = 0;
     BOOL ok = FALSE;
     if (!fh) return FALSE;
     if (Read(fh, hdr, 12) != 12 || _dash_iff_long(hdr) != 0x464F524D || _dash_iff_long(hdr + 8) != 0x494C424D)
@@ -12250,6 +12374,15 @@ static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
             ncolors = len / 3 > 256 ? 256 : len / 3;
             if (Read(fh, cmap, ncolors * 3) != ncolors * 3) goto done;
             Seek(fh, len - ncolors * 3 + pad, OFFSET_CURRENT);
+        } else if (type == 0x46524A41 && len < 64) {                 /* FRJA (Forja): "1 kind width speed" */
+            char t[64];
+            LONG i, n = 0, campo = 0;
+            if (Read(fh, t, len + pad) != (LONG)(len + pad)) goto done;
+            for (i = 0; i < (LONG)len; i++) {
+                if (t[i] == ' ') { if (campo == 2) break; campo++; n = 0; }
+                else if (t[i] >= '0' && t[i] <= '9') n = n * 10 + (t[i] - '0');
+            }
+            if (campo == 2) fw = n;
         } else if (type == 0x424F4459) {                             /* BODY */
             body = (UBYTE *)AllocVec(len, MEMF_ANY);
             if (!body || Read(fh, body, len) != (LONG)len) goto done;
@@ -12261,6 +12394,7 @@ static BOOL _dash_bitmap_load(LONG id, STRPTR filename) {
     }
     if (!body || !w || !h || depth < 1 || depth > 8 || masking == 1) goto done;   /* masking 1: extra plane, not supported */
     if (!_dash_bitmap_create(id, w, h, depth)) goto done;
+    _dash_bitmap_fw[id] = fw > 0 && w % fw == 0 ? fw : 0;
     {
         struct BitMap *bm = _dash_bitmaps[id].bm;
         LONG row_bytes = ((w + 15) >> 4) << 1, y, p, pos = 0;
@@ -12395,7 +12529,10 @@ static void _dash_bob_setup(LONG id) {
     o->used = TRUE;
     o->fw = b->w;
     o->frames = 1;
-    if (b->w > b->h && b->w % b->h == 0) {   /* strip of square frames */
+    if (_dash_bitmap_fw[id] > 0) {           /* the frame width of an FRJA chunk (Forja's sprite editor) */
+        o->fw = _dash_bitmap_fw[id];
+        o->frames = b->w / o->fw;
+    } else if (b->w > b->h && b->w % b->h == 0) {   /* strip of square frames */
         o->fw = b->h;
         o->frames = b->w / b->h;
     }
@@ -12452,6 +12589,17 @@ static void _dash_bob_erase(LONG id) {
     ClipBlit(&o->back_rp, 0, 0, o->drawn_rp, o->bx, o->by, o->fw, _dash_bitmaps[id].h, 0xC0);
     o->drawn = FALSE;
 }
+
+/* Frames of any width: the image is a strip of frames width pixels wide (bob_load guesses square frames) */
+static void _dash_bob_frame_width(LONG id, LONG width) {
+    _DashBob *o = _dash_bob_get(id);
+    if (!o || width < 1 || width > _dash_bitmaps[id].w) return;
+    if (o->drawn) _dash_bob_erase(id);
+    o->fw = width;
+    o->frames = _dash_bitmaps[id].w / width;
+    if (o->frame >= o->frames) o->frame = 0;
+}
+
 
 static void _dash_bob_draw(LONG id) {
     _DashBob *o = _dash_bob_get(id);
@@ -14369,6 +14517,8 @@ static void _dash_before_close(struct Window *win) {
 }
 #endif
 static BOOL _dash_own_screen = FALSE;
+static BOOL _dash_screen_public = FALSE;   /* screen_clone_wb: a public screen others may open windows on */
+static char _dash_screen_pubname[64];
 
 /* Blitter minterm constants for masked blits */
 #ifndef ABC
@@ -14391,6 +14541,56 @@ static LONG _dash_random(void) {
    address error on a 68000, a Guru on the A500) */
 static UWORD _dash_default_pens[] = { (UWORD)~0 };
 
+/* screen_open_mode (Forja G23): a screen with an exact display mode (from dialog_screen_mode, or a known one:
+   0x21000 is PAL low resolution, 0x29000 PAL high), size and depth. FALSE if the mode does not exist or cannot have that depth. */
+static BOOL _dash_open_screen_mode(LONG mode, LONG w, LONG h, LONG depth, STRPTR title) {
+    if (_dash_screen || ModeNotAvailable((ULONG)mode)) return FALSE;
+    _dash_screen = OpenScreenTags(NULL, SA_DisplayID, (ULONG)mode, SA_Width, w, SA_Height, h, SA_Depth, depth,
+                                  SA_Title, (ULONG)title, SA_ShowTitle, TRUE, SA_Pens, (ULONG)_dash_default_pens,
+                                  TAG_DONE);
+    if (!_dash_screen) return FALSE;
+    _dash_own_screen = TRUE;
+    if (!_dash_win) _dash_rp = &_dash_screen->RastPort;
+    return TRUE;
+}
+
+/* screen_clone_wb (Forja G21): a public screen just like the Workbench's (mode, size, depth, pens and font:
+   SA_LikeWorkbench), named, with shared pens so other programs (and MUI) can open windows on it. FALSE if it
+   cannot be opened or the name is taken. */
+static BOOL _dash_clone_wb(STRPTR name) {
+    struct Screen *wb, *scr;
+    if (!name || !*name || _dash_screen) return FALSE;
+    if ((wb = LockPubScreen((CONST_STRPTR)name))) {          /* the name is taken */
+        UnlockPubScreen(NULL, wb);
+        return FALSE;
+    }
+    strncpy(_dash_screen_pubname, (const char *)name, sizeof(_dash_screen_pubname) - 1);
+    _dash_screen_pubname[sizeof(_dash_screen_pubname) - 1] = 0;
+    scr = OpenScreenTags(NULL, SA_LikeWorkbench, TRUE, SA_PubName, (ULONG)_dash_screen_pubname,
+                         SA_Title, (ULONG)_dash_screen_pubname, SA_ShowTitle, TRUE, SA_SharePens, TRUE,
+                         TAG_DONE);
+    if (!scr) return FALSE;
+    PubScreenStatus(scr, 0);                                 /* public from now on */
+    _dash_screen = scr;
+    _dash_own_screen = TRUE;
+    _dash_screen_public = TRUE;
+    if (!_dash_win) _dash_rp = &_dash_screen->RastPort;
+    return TRUE;
+}
+
+/* How many windows of other programs are open on the program's public screen (0 if it has none) */
+static LONG _dash_screen_visitors(void) {
+    struct List *l;
+    struct PubScreenNode *n;
+    LONG v = 0;
+    if (!_dash_screen || !_dash_screen_public) return 0;
+    l = LockPubScreenList();
+    for (n = (struct PubScreenNode *)l->lh_Head; n->psn_Node.ln_Succ; n = (struct PubScreenNode *)n->psn_Node.ln_Succ)
+        if (n->psn_Screen == _dash_screen) { v = n->psn_VisitorCount; break; }
+    UnlockPubScreenList();
+    return v;
+}
+
 /* Screen Support - Clone Workbench properly */
 static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
     struct Screen *wbscreen;
@@ -14408,6 +14608,8 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
             SA_ShowTitle, TRUE,
             SA_Pens, (ULONG)_dash_default_pens,
             TAG_DONE);
+        /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+        if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
         if (_dash_screen) _dash_own_screen = TRUE;
         return _dash_screen;
     }
@@ -14430,6 +14632,8 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
         SA_ShowTitle, TRUE,
         SA_AutoScroll, TRUE,
         TAG_DONE);
+    /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+    if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
 
     /* Cleanup */
     if (drawinfo) FreeScreenDrawInfo(wbscreen, drawinfo);
@@ -14472,6 +14676,8 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
         SA_AutoScroll, TRUE,
         SA_Pens, (ULONG)_dash_default_pens,
         TAG_DONE);
+    /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+    if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
 
     if (_dash_screen) {
         _dash_own_screen = TRUE;
@@ -14479,8 +14685,23 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
     return _dash_screen;
 }
 
+/* Called just before the program's own screen closes (FONT_RUNTIME hooks in: color_pen's pens on it go back first;
+   releasing them after CloseScreen, at exit, touched a freed ColorMap: Forja D15c) */
+#define _DASH_HAS_SCREEN_CLOSING 1
+static void (*_dash_screen_closing)(struct Screen *) = NULL;
+
 static void _dash_close_screen(void) {
+    if (_dash_screen && _dash_own_screen && _dash_screen_public) {
+        /* a public screen: private first (no new visitors), and wait for other programs' windows to close;
+           after a minute with windows still open it is left open (closing it under them would crash) */
+        LONG t = 0;
+        while (!(PubScreenStatus(_dash_screen, PSNF_PRIVATE) & PSNF_PRIVATE) && t < 120) { Delay(25); t++; }
+        if (t >= 120) return;
+        _dash_screen_public = FALSE;
+    }
     if (_dash_screen && _dash_own_screen) {
+        if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
+        if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
         CloseScreen(_dash_screen);
         _dash_screen = NULL;
         _dash_own_screen = FALSE;
@@ -14561,6 +14782,13 @@ static void _dash_set_color(LONG index, LONG r, LONG g, LONG b) {
     } else if (_dash_win) {
         SetRGB4(&_dash_win->WScreen->ViewPort, index, r, g, b);
     }
+}
+
+/* gfx_rgb8: the same with 8-bit components. It used _dash_win->WScreen and hung with a screen of its own and no
+   window (Forja D15d) */
+static void _dash_set_color8(LONG index, LONG r, LONG g, LONG b) {
+    struct ViewPort *vp = _dash_screen ? &_dash_screen->ViewPort : (_dash_win ? &_dash_win->WScreen->ViewPort : NULL);
+    if (vp) SetRGB32(vp, index, (ULONG)(r & 255) << 24, (ULONG)(g & 255) << 24, (ULONG)(b & 255) << 24);
 }
 
 /* Area Fill Support */
@@ -14802,6 +15030,60 @@ static void _dash_sprite_color(LONG id, LONG index, LONG r, LONG g, LONG b) {
     if (index >= 0 && index < 3) {
         SetRGB4(&_dash_screen->ViewPort, colorbase + index, r, g, b);
     }
+}
+
+/* sprite_rgb8 (Forja D16): sprite_color with 8-bit components (SetRGB32): exact on AGA, the top 4 bits on ECS */
+static void _dash_sprite_rgb8(LONG id, LONG index, LONG r, LONG g, LONG b) {
+    LONG colorbase;
+    if (id < 0 || id >= DASH_MAX_SPRITES) return;
+    if (!_dash_screen || _dash_sprite_num[id] < 0) return;
+    colorbase = 16 + ((_dash_sprite_num[id] / 2) * 4) + 1;
+    if (index >= 0 && index < 3)
+        SetRGB32(&_dash_screen->ViewPort, colorbase + index, (ULONG)(r & 255) << 24, (ULONG)(g & 255) << 24,
+                 (ULONG)(b & 255) << 24);
+}
+
+/* The CMAP of an IFF ILBM: up to 256 colours as r, g, b; how many (0 if the file cannot be read or has none) */
+static LONG _dash_cmap_read(STRPTR file, UBYTE *cmap) {
+    BPTR fh;
+    UBYTE hdr[12], chunk[8];
+    LONG n = 0;
+    if (!file || !(fh = Open(file, MODE_OLDFILE))) return 0;
+    if (Read(fh, hdr, 12) == 12 && !memcmp(hdr, "FORM", 4) && !memcmp(hdr + 8, "ILBM", 4)) {
+        while (Read(fh, chunk, 8) == 8) {
+            ULONG len = ((ULONG)chunk[4] << 24) | ((ULONG)chunk[5] << 16) | ((ULONG)chunk[6] << 8) | chunk[7];
+            if (!memcmp(chunk, "CMAP", 4)) {
+                n = len / 3 > 256 ? 256 : len / 3;
+                if (Read(fh, cmap, n * 3) != n * 3) n = 0;
+                break;
+            }
+            if (!memcmp(chunk, "BODY", 4)) break;
+            Seek(fh, len + (len & 1), OFFSET_CURRENT);
+        }
+    }
+    Close(fh);
+    return n;
+}
+
+/* sprite_load_colors (Forja D17): colours 1-3 of a picture's CMAP as the sprite's colours (8 bits, like
+   sprite_rgb8): what Forja's sprite editor saves. FALSE if the file has no CMAP or the sprite does not exist */
+static BOOL _dash_sprite_load_colors(LONG id, STRPTR file) {
+    UBYTE cmap[3 * 256];
+    LONG n = _dash_cmap_read(file, cmap), i;
+    if (n < 2 || id < 0 || id >= DASH_MAX_SPRITES || !_dash_screen || _dash_sprite_num[id] < 0) return FALSE;
+    for (i = 1; i < 4 && i < n; i++) _dash_sprite_rgb8(id, i - 1, cmap[i * 3], cmap[i * 3 + 1], cmap[i * 3 + 2]);
+    return TRUE;
+}
+
+/* bob_load_colors (Forja D17): the colours of a picture's CMAP in the screen's palette (the program's screen, else
+   the window's) from colour first on; how many it set */
+static LONG _dash_bob_load_colors(STRPTR file, LONG first) {
+    UBYTE cmap[3 * 256];
+    LONG n = _dash_cmap_read(file, cmap), i;
+    if (first < 0) first = 0;
+    if (first + n > 256) n = 256 - first;
+    for (i = 0; i < n; i++) _dash_set_color8(first + i, cmap[i * 3], cmap[i * 3 + 1], cmap[i * 3 + 2]);
+    return n > 0 ? n : 0;
 }
 
 /* Shows frame number frame of a sprite from sprite_load (0 the first); nothing for any other */
@@ -16431,6 +16713,41 @@ static STRPTR _dash_dialog_font(STRPTR title) {
         FreeAslRequest(fo);
     }
     return _dash_str_dup((STRPTR)buf, TRUE);
+}
+
+/* dialog_screen_mode (Forja G23): asl.library's screen mode requester (mode, width, height and depth), starting on
+   the Workbench's mode. TRUE if a mode was chosen; screen_mode_id, _width, _height and _depth give it. */
+static ULONG _dash_smode_id = 0;
+static LONG _dash_smode_w = 0, _dash_smode_h = 0, _dash_smode_d = 0;
+/* What dialog_screen_mode chose: 0 mode, 1 width, 2 height, 3 depth */
+static LONG _dash_screen_mode_get(LONG what) {
+    return what == 0 ? (LONG)_dash_smode_id : what == 1 ? _dash_smode_w : what == 2 ? _dash_smode_h : _dash_smode_d;
+}
+
+static BOOL _dash_dialog_screen_mode(STRPTR title) {
+    struct ScreenModeRequester *sm;
+    struct Screen *wb;
+    ULONG inicial = INVALID_ID;
+    BOOL ok = FALSE;
+    if ((wb = LockPubScreen(NULL))) {
+        inicial = GetVPModeID(&wb->ViewPort);
+        UnlockPubScreen(NULL, wb);
+    }
+    if (_dash_asl_open() && (sm = (struct ScreenModeRequester *)AllocAslRequestTags(ASL_ScreenModeRequest, TAG_DONE))) {
+        if (AslRequestTags(sm, ASLSM_TitleText, (ULONG)title,
+                           _dash_win ? ASLSM_Window : TAG_IGNORE, (ULONG)_dash_win,
+                           inicial != INVALID_ID ? ASLSM_InitialDisplayID : TAG_IGNORE, inicial,
+                           ASLSM_DoWidth, TRUE, ASLSM_DoHeight, TRUE, ASLSM_DoDepth, TRUE,
+                           TAG_DONE)) {
+            _dash_smode_id = sm->sm_DisplayID;
+            _dash_smode_w = sm->sm_DisplayWidth;
+            _dash_smode_h = sm->sm_DisplayHeight;
+            _dash_smode_d = sm->sm_DisplayDepth;
+            ok = TRUE;
+        }
+        FreeAslRequest(sm);
+    }
+    return ok;
 }
 
 /* dialog_color: asl.library 3.1 has no colour requester, so a small window with
@@ -18852,6 +19169,27 @@ static LONG _dash_mui_window_own_screen(APTR win) {
     return 1;
 }
 
+/* mui_window_screen (Forja G22): the window opens as a normal window on the public screen with that name (the
+   program's screen_clone_wb, or another program's); before mui_window_open. MUI keeps a pointer to the name: a
+   copy of each is kept until the end. FALSE if there is no such public screen now (the window would go to the
+   default one). */
+#define _DASH_MUI_PUBNAMES 8
+static char _dash_mui_pubnames[_DASH_MUI_PUBNAMES][64];
+static LONG _dash_mui_pubname_n = 0;
+static LONG _dash_mui_window_screen(APTR win, STRPTR name) {
+    struct Screen *pub;
+    char *copia;
+    if (!win || !name || !*name) return 0;
+    if (!(pub = LockPubScreen((CONST_STRPTR)name))) return 0;
+    UnlockPubScreen(NULL, pub);
+    copia = _dash_mui_pubnames[_dash_mui_pubname_n % _DASH_MUI_PUBNAMES];
+    _dash_mui_pubname_n++;
+    strncpy(copia, (const char *)name, 63);
+    copia[63] = 0;
+    SetAttrs(win, MUIA_Window_PublicScreen, (IPTR)copia, TAG_DONE);
+    return 1;
+}
+
 /* Size of an object on screen, in pixels (0 before its window opens) */
 static LONG _dash_mui_size(APTR obj, LONG height) {
     IPTR size = 0;
@@ -20047,6 +20385,10 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
 
     /* Close any existing screen */
     if (_dash_screen && _dash_own_screen) {
+#ifdef _DASH_HAS_SCREEN_CLOSING
+        if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
+#endif
+        if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
         CloseScreen(_dash_screen);
     }
 
@@ -20059,6 +20401,8 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
         SA_ShowTitle, TRUE,
         SA_AutoScroll, TRUE,
         TAG_DONE);
+    /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+    if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
 
     if (_dash_screen) {
         _dash_own_screen = TRUE;

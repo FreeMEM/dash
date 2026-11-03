@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 836 funciones, 836 implementadas, 0 sin implementar.
+Total: 851 funciones, 851 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -41,6 +41,7 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `gfx_poly_begin(x, y)` | `void` | Empieza un polígono en un punto |  |
 | `gfx_poly_add(x, y)` | `void` | Añade un vértice al polígono |  |
 | `gfx_poly_end()` | `void` | Cierra y rellena el polígono |  |
+| `gfx_pens_draw(buffer, width, height, x, y, zoom)` | `void` | Dibuja una imagen de lápices (un byte por píxel, fila tras fila) en x, y, cada píxel de zoom x zoom: una imagen entera en una llamada (3.1: WriteChunkyPixels) |  |
 | `gfx_copy(sx, sy, w, h, dx, dy)` | `void` | Copia una zona dentro de la ventana |  |
 
 ## Gráficos avanzados
@@ -52,7 +53,10 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `sprite_pos(id, x, y)` | `void` | Pone la posición de un sprite |  |
 | `sprite_show(id)` | `void` | Hace visible un sprite |  |
 | `sprite_hide(id)` | `void` | Oculta un sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2 (componentes de 0 a 15) |  |
+| `sprite_load_colors(id, filename)` | `BOOL` | Los colores 1-3 de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene |  |
+| `bob_load_colors(filename, first)` | `LONG` | Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso |  |
+| `sprite_rgb8(id, index, r, g, b)` | `void` | Pone un color de un sprite, índice 0-2, con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS) |  |
 | `sprite_frame(id, frame)` | `void` | Enseña el fotograma frame (0 el primero) de un sprite de sprite_load |  |
 | `sprite_free(id)` | `void` | Libera la memoria de un sprite |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Mira si chocan dos sprites |  |
@@ -73,6 +77,7 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `bob_draw(id)` | `void` | Dibuja un BOB |  |
 | `bob_erase(id)` | `void` | Borra un BOB (deja el fondo como estaba) |  |
 | `bob_frame(id, frame)` | `void` | Pone el fotograma de la animación de un BOB |  |
+| `bob_frame_width(id, width)` | `void` | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
 | `bob_free(id)` | `void` | Libera la memoria de un BOB |  |
 | `bob_collision(id1, id2)` | `BOOL` | Mira si chocan dos BOB |  |
 | `copper_create(size)` | `BOOL` | Crea una lista del copper |  |
@@ -100,12 +105,15 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `key_wait()` | `LONG` | Espera una tecla y da su código |  |
 | `key_raw()` | `LONG` | El código de tecla en bruto (sin traducir) |  |
 | `key_text(keycode)` | `STRPTR` | Pasa un código de tecla a texto |  |
-| `mouse_x()` | `LONG` | La X del ratón dentro del interior de la ventana |  |
-| `mouse_y()` | `LONG` | La Y del ratón dentro del interior de la ventana |  |
+| `mouse_x()` | `LONG` | La X del ratón dentro del interior de la ventana (0 sin ventana) |  |
+| `mouse_y()` | `LONG` | La Y del ratón dentro del interior de la ventana (0 sin ventana) |  |
 | `mouse_button(btn)` | `BOOL` | Mira un botón del ratón (0 izquierdo, 1 derecho) |  |
 | `event_window()` | `LONG` | En un EventLoop: la ventana de la que vino el evento (window_create), 0 para la del propio bucle |  |
 | `window_check_close()` | `BOOL` | Mira si se pulsó el botón de cerrar (sin esperar) |  |
 | `close_window()` | `void` | Cierra la ventana actual |  |
+| `screen_open_mode(mode, width, height, depth, title)` | `BOOL` | Abre una pantalla con un modo exacto (el de dialog_screen_mode, o uno conocido: 0x21000 es PAL de baja resolución y 0x29000 la de alta), tamaño y profundidad; falso si el modo no existe o no admite esa profundidad |  |
+| `screen_clone_wb(name)` | `BOOL` | Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas |  |
+| `screen_visitors()` | `LONG` | Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno |  |
 | `screen_open(depth, title)` | `BOOL` | Abre una pantalla con el modo del Workbench y la profundidad que se diga |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Abre una pantalla propia del tamaño y la profundidad que se digan |  |
 | `screen_close()` | `void` | Cierra la pantalla |  |
@@ -424,6 +432,7 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `font_text_width(text)` | `LONG` | El ancho de un texto en píxeles con la fuente y el estilo actuales |  |
 | `font_size(font)` | `LONG` | El tamaño que dio el sistema para esta fuente (el más cercano que tiene) |  |
 | `color_pen(r, g, b)` | `LONG` | El color de la pantalla en la que se dibuja más parecido a r, g, b (0-255); para gfx_pen |  |
+| `color_pen_free(pen)` | `void` | Un color_pen de ese lápiz ya no hace falta; cuando no queda ninguno, vuelve a la pantalla (ReleasePen) |  |
 
 ## Transparencia y degradados
 
@@ -906,6 +915,11 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | Diálogo de ficheros: la ruta entera del fichero elegido, "" si se canceló (save_mode true: diálogo de guardar) |  |
 | `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file abriéndose en ese cajón con ese nombre de fichero ("": como dialog_file) |  |
 | `dialog_color(title, initial)` | `LONG` | Ventana con la paleta: da el color elegido (con un clic, o con las flechas + Return); Esc deja el inicial |  |
+| `dialog_screen_mode(title)` | `BOOL` | Petición de modo de pantalla (modo, ancho, alto y profundidad), empezando en el del Workbench: cierto si se eligió uno; screen_mode_id, _width, _height y _depth lo dan |  |
+| `screen_mode_id()` | `LONG` | El modo del último dialog_screen_mode (para screen_open_mode) |  |
+| `screen_mode_width()` | `LONG` | El ancho elegido en el último dialog_screen_mode |  |
+| `screen_mode_height()` | `LONG` | El alto elegido en el último dialog_screen_mode |  |
+| `screen_mode_depth()` | `LONG` | La profundidad (planos) elegida en el último dialog_screen_mode |  |
 | `dialog_font(title)` | `STRPTR` | Diálogo de fuentes: "nombre.font/tamaño", "" si se canceló |  |
 
 ## RTG (CyberGraphX / Picasso96)
@@ -1039,6 +1053,7 @@ Total: 836 funciones, 836 implementadas, 0 sin implementar.
 | `mui_set_active(win, obj)` | `void` | Hace de obj el objeto activo de la ventana: el cursor va a ese campo de texto (Amiga-L) |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | El tamaño de la ventana al abrirse, en tanto por ciento de la pantalla visible, centrada (antes de mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | La ventana ocupa toda la pantalla: sin bordes, barra de título ni gadgets, y activa (antes de mui_window_open) |  |
+| `mui_window_screen(win, name)` | `BOOL` | La ventana se abre como una ventana normal en la pantalla pública con ese nombre (la de screen_clone_wb, o la de otro programa); antes de mui_window_open; falso si no existe esa pantalla |  |
 | `mui_window_own_screen(win)` | `BOOL` | Pantalla completa en una pantalla propia, como la pública (antes de mui_window_open; false: en la pública) |  |
 | `mui_width(obj)` | `LONG` | El ancho de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
 | `mui_height(obj)` | `LONG` | El alto de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |

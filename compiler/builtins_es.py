@@ -32,6 +32,7 @@ DESC_ES = {
     "gfx_poly_begin": "Empieza un polígono en un punto",
     "gfx_poly_add": "Añade un vértice al polígono",
     "gfx_poly_end": "Cierra y rellena el polígono",
+    "gfx_pens_draw": "Dibuja una imagen de lápices (un byte por píxel, fila tras fila) en x, y, cada píxel de zoom x zoom: una imagen entera en una llamada (3.1: WriteChunkyPixels)",
     "gfx_copy": "Copia una zona dentro de la ventana",
     # Gráficos avanzados
     "sprite_load": "Un sprite de una imagen (ILBM...): fotogramas de 16 píxeles uno al lado del otro, los colores 0-3 "
@@ -40,7 +41,10 @@ DESC_ES = {
     "sprite_pos": "Pone la posición de un sprite",
     "sprite_show": "Hace visible un sprite",
     "sprite_hide": "Oculta un sprite",
-    "sprite_color": "Pone un color de un sprite",
+    "sprite_color": "Pone un color de un sprite, índice 0-2 (componentes de 0 a 15)",
+    "sprite_load_colors": "Los colores 1-3 de la paleta (CMAP) de una imagen como los colores del sprite, con 8 bits; falso si el fichero no la tiene",
+    "bob_load_colors": "Los colores de la paleta (CMAP) de una imagen en la paleta de la pantalla desde el color first: cuántos puso",
+    "sprite_rgb8": "Pone un color de un sprite, índice 0-2, con componentes de 8 bits (0-255; exacto en AGA, 4 bits en ECS)",
     "sprite_frame": "Enseña el fotograma frame (0 el primero) de un sprite de sprite_load",
     "sprite_free": "Libera la memoria de un sprite",
     "sprite_collision": "Mira si chocan dos sprites",
@@ -61,6 +65,7 @@ DESC_ES = {
     "bob_draw": "Dibuja un BOB",
     "bob_erase": "Borra un BOB (deja el fondo como estaba)",
     "bob_frame": "Pone el fotograma de la animación de un BOB",
+    "bob_frame_width": "La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados)",
     "bob_free": "Libera la memoria de un BOB",
     "bob_collision": "Mira si chocan dos BOB",
     "copper_create": "Crea una lista del copper",
@@ -84,12 +89,15 @@ DESC_ES = {
     "key_wait": "Espera una tecla y da su código",
     "key_raw": "El código de tecla en bruto (sin traducir)",
     "key_text": "Pasa un código de tecla a texto",
-    "mouse_x": "La X del ratón dentro del interior de la ventana",
-    "mouse_y": "La Y del ratón dentro del interior de la ventana",
+    "mouse_x": "La X del ratón dentro del interior de la ventana (0 sin ventana)",
+    "mouse_y": "La Y del ratón dentro del interior de la ventana (0 sin ventana)",
     "mouse_button": "Mira un botón del ratón (0 izquierdo, 1 derecho)",
     "event_window": "En un EventLoop: la ventana de la que vino el evento (window_create), 0 para la del propio bucle",
     "window_check_close": "Mira si se pulsó el botón de cerrar (sin esperar)",
     "close_window": "Cierra la ventana actual",
+    "screen_open_mode": "Abre una pantalla con un modo exacto (el de dialog_screen_mode, o uno conocido: 0x21000 es PAL de baja resolución y 0x29000 la de alta), tamaño y profundidad; falso si el modo no existe o no admite esa profundidad",
+    "screen_clone_wb": "Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas",
+    "screen_visitors": "Cuántos usos de la pantalla pública del programa hay: ventanas y bloqueos (LockPubScreen; una ventana de MUI puede contar dos); 0 si ninguno",
     "screen_open": "Abre una pantalla con el modo del Workbench y la profundidad que se diga",
     "screen_open_custom": "Abre una pantalla propia del tamaño y la profundidad que se digan",
     "screen_close": "Cierra la pantalla",
@@ -298,6 +306,7 @@ DESC_ES = {
     "font_text_width": "El ancho de un texto en píxeles con la fuente y el estilo actuales",
     "font_size": "El tamaño que dio el sistema para esta fuente (el más cercano que tiene)",
     "color_pen": "El color de la pantalla en la que se dibuja más parecido a r, g, b (0-255); para gfx_pen",
+    "color_pen_free": "Un color_pen de ese lápiz ya no hace falta; cuando no queda ninguno, vuelve a la pantalla (ReleasePen)",
     # Transparencia y degradados
     "gfx_blend_rect": "Mezcla el color 0xRRGGBB con lo dibujado, alfa 0-255 (pantallas de paleta: un tramado 4x4 del "
                       "color más cercano)",
@@ -836,6 +845,11 @@ DESC_ES = {
     "dialog_file_at": "dialog_file abriéndose en ese cajón con ese nombre de fichero (\"\": como dialog_file)",
     "dialog_color": "Ventana con la paleta: da el color elegido (con un clic, o con las flechas + Return); Esc deja el "
                     "inicial",
+    "dialog_screen_mode": "Petición de modo de pantalla (modo, ancho, alto y profundidad), empezando en el del Workbench: cierto si se eligió uno; screen_mode_id, _width, _height y _depth lo dan",
+    "screen_mode_id": "El modo del último dialog_screen_mode (para screen_open_mode)",
+    "screen_mode_width": "El ancho elegido en el último dialog_screen_mode",
+    "screen_mode_height": "El alto elegido en el último dialog_screen_mode",
+    "screen_mode_depth": "La profundidad (planos) elegida en el último dialog_screen_mode",
     "dialog_font": "Diálogo de fuentes: \"nombre.font/tamaño\", \"\" si se canceló",
     # RTG
     "rtg_available": "Mira si hay CyberGraphX o Picasso96",
@@ -1097,6 +1111,7 @@ DESC_ES = {
                        "de mui_window_open)",
     "mui_window_fullscreen": "La ventana ocupa toda la pantalla: sin bordes, barra de título ni gadgets, y activa (antes "
                              "de mui_window_open)",
+    "mui_window_screen": "La ventana se abre como una ventana normal en la pantalla pública con ese nombre (la de screen_clone_wb, o la de otro programa); antes de mui_window_open; falso si no existe esa pantalla",
     "mui_window_own_screen": "Pantalla completa en una pantalla propia, como la pública (antes de mui_window_open; false: "
                              "en la pública)",
     "mui_width": "El ancho de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana)",

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 836 functions, 836 implemented, 0 not implemented.
+Total: 851 functions, 851 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -41,6 +41,7 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `gfx_poly_begin(x, y)` | `void` | Begin polygon at point |  |
 | `gfx_poly_add(x, y)` | `void` | Add polygon vertex |  |
 | `gfx_poly_end()` | `void` | Close and fill polygon |  |
+| `gfx_pens_draw(buffer, width, height, x, y, zoom)` | `void` | Draw an image of pens (a byte per pixel, row after row) at x, y, each pixel zoom x zoom: a whole picture in one call (3.1: WriteChunkyPixels) |  |
 | `gfx_copy(sx, sy, w, h, dx, dy)` | `void` | Copy region within window |  |
 
 ## Advanced graphics
@@ -52,7 +53,10 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `sprite_pos(id, x, y)` | `void` | Set sprite position |  |
 | `sprite_show(id)` | `void` | Make sprite visible |  |
 | `sprite_hide(id)` | `void` | Hide sprite |  |
-| `sprite_color(id, index, r, g, b)` | `void` | Set sprite color |  |
+| `sprite_color(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2 (components 0-15) |  |
+| `sprite_load_colors(id, filename)` | `BOOL` | Colours 1-3 of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none |  |
+| `bob_load_colors(filename, first)` | `LONG` | The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many |  |
+| `sprite_rgb8(id, index, r, g, b)` | `void` | Set a sprite colour, index 0-2, with 8-bit components (0-255; exact on AGA, 4 bits on ECS) |  |
 | `sprite_frame(id, frame)` | `void` | Show frame number frame (0 the first) of a sprite from sprite_load |  |
 | `sprite_free(id)` | `void` | Free sprite memory |  |
 | `sprite_collision(id1, id2)` | `BOOL` | Check sprite collision |  |
@@ -73,6 +77,7 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `bob_draw(id)` | `void` | Draw BOB |  |
 | `bob_erase(id)` | `void` | Erase BOB (restore background) |  |
 | `bob_frame(id, frame)` | `void` | Set BOB animation frame |  |
+| `bob_frame_width(id, width)` | `void` | The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames) |  |
 | `bob_free(id)` | `void` | Free BOB memory |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list |  |
@@ -100,12 +105,15 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `key_wait()` | `LONG` | Wait for and return key |  |
 | `key_raw()` | `LONG` | Get raw key code (no translation) |  |
 | `key_text(keycode)` | `STRPTR` | Convert keycode to text |  |
-| `mouse_x()` | `LONG` | Mouse X position relative to window inner area |  |
-| `mouse_y()` | `LONG` | Mouse Y position relative to window inner area |  |
+| `mouse_x()` | `LONG` | Mouse X position relative to window inner area (0 without a window) |  |
+| `mouse_y()` | `LONG` | Mouse Y position relative to window inner area (0 without a window) |  |
 | `mouse_button(btn)` | `BOOL` | Check mouse button (0=left, 1=right) |  |
 | `event_window()` | `LONG` | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
 | `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
 | `close_window()` | `void` | Close the current window |  |
+| `screen_open_mode(mode, width, height, depth, title)` | `BOOL` | Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth |  |
+| `screen_clone_wb(name)` | `BOOL` | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
+| `screen_visitors()` | `LONG` | How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none |  |
 | `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Open a custom screen with specific dimensions and depth |  |
 | `screen_close()` | `void` | Close the screen |  |
@@ -424,6 +432,7 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `font_text_width(text)` | `LONG` | Width of a text in pixels with the current font and style |  |
 | `font_size(font)` | `LONG` | Size the system gave for this font (the nearest it has) |  |
 | `color_pen(r, g, b)` | `LONG` | Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen |  |
+| `color_pen_free(pen)` | `void` | One color_pen of this pen is no longer needed; when none is left it goes back to the screen |  |
 
 ## Transparency and gradients
 
@@ -906,6 +915,11 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `dialog_file(title, pattern, save_mode)` | `STRPTR` | File requester: full path of the chosen file, "" if cancelled (save_mode true: save requester) |  |
 | `dialog_file_at(title, pattern, save_mode, drawer, file)` | `STRPTR` | dialog_file opening in that drawer with that file name ("": as dialog_file does) |  |
 | `dialog_color(title, initial)` | `LONG` | Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial |  |
+| `dialog_screen_mode(title)` | `BOOL` | Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it |  |
+| `screen_mode_id()` | `LONG` | The display mode of the last dialog_screen_mode (for screen_open_mode) |  |
+| `screen_mode_width()` | `LONG` | The width chosen in the last dialog_screen_mode |  |
+| `screen_mode_height()` | `LONG` | The height chosen in the last dialog_screen_mode |  |
+| `screen_mode_depth()` | `LONG` | The depth (planes) chosen in the last dialog_screen_mode |  |
 | `dialog_font(title)` | `STRPTR` | Font requester: "name.font/size", "" if cancelled |  |
 
 ## RTG (CyberGraphX / Picasso96)
@@ -1039,6 +1053,7 @@ Total: 836 functions, 836 implemented, 0 not implemented.
 | `mui_set_active(win, obj)` | `void` | Make obj the window's active object: the cursor goes to that string gadget (Amiga-L) |  |
 | `mui_window_size(win, width_pct, height_pct)` | `void` | Size of the window when it opens, in percent of the visible screen, centred (before mui_window_open) |  |
 | `mui_window_fullscreen(win)` | `void` | The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open) |  |
+| `mui_window_screen(win, name)` | `BOOL` | The window opens as a normal window on the public screen with that name (screen_clone_wb's, or another program's); before mui_window_open; false if there is no such screen |  |
 | `mui_window_own_screen(win)` | `BOOL` | Full screen on a screen of its own, like the public one (before mui_window_open; false: on the public one) |  |
 | `mui_width(obj)` | `LONG` | Width of an object on screen in pixels (0 before its window opens) |  |
 | `mui_height(obj)` | `LONG` | Height of an object on screen in pixels (0 before its window opens) |  |

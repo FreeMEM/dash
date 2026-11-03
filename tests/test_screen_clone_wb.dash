@@ -1,0 +1,30 @@
+# Test: screen_clone_wb opens a public screen like the Workbench's (same size and depth), with a name other programs
+# use: a CON: window opened on it by name ("SCREEN name") is a visitor; once closed, screen_close closes the screen.
+# The same name twice gives false.
+#
+# expect-c: static BOOL _dash_clone_wb(STRPTR name)
+# expect-out: clon: true
+# expect-out: como el Workbench: true
+# expect-out: otra con el mismo nombre: false
+# expect-out: visitas con la consola: 1
+# expect-out: visitas sin ella: 0
+# expect-out: fin
+
+Main
+    w = rtg_get_width()
+    h = rtg_get_height()
+    d = rtg_get_depth()
+    nombre = "DASHPRUEBA"
+    Print "clon: #{screen_clone_wb(nombre)}"
+    Print "como el Workbench: #{rtg_get_width() == w and rtg_get_height() == h and rtg_get_depth() == d}"
+    Print "otra con el mismo nombre: #{screen_clone_wb(nombre)}"
+    con = file_open("CON:0/20/300/60/Visita/SCREEN DASHPRUEBA", 1006)
+    if con != 0
+        file_write_line(con, "una ventana de AmigaDOS en el clon")
+        Print "visitas con la consola: #{screen_visitors()}"
+        file_close(con)
+    end
+    Print "visitas sin ella: #{screen_visitors()}"
+    screen_close()
+    Print "fin"
+end

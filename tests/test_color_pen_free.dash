@@ -1,0 +1,42 @@
+# Test: color_pen counts the times it gives a pen; color_pen_free gives one back, and the pen goes back to the screen
+# at 0. On a 32-colour screen with a window: the same colour gives the same pen; a pen asked for twice and freed
+# once is still in use; freed to 0 and asked for again, it comes out as the first time (with PRECISION_IMAGE the
+# screen may give a near pen it already has: whether ReleasePen frees a pen is not seen from Dash). Then pens are left asked for and the
+# screen is closed: screen_close gives them back first (before, ReleasePen ran at exit on the closed screen's
+# ColorMap and the program hung).
+#
+# expect-c: static void _dash_color_pen_free(LONG pen)
+# expect-out: mismo: true
+# expect-out: sigue pedido: true
+# expect-out: otra vez, igual que antes: true
+# expect-out: fin
+
+func exacto(p: Int, rgb: Int) -> Bool
+    gfx_pen(p)
+    gfx_pixel(5, 5)
+    return gfx_pixel_rgb(5, 5) == rgb
+end
+
+Main
+    if screen_open_custom(320, 200, 5, "Lapices")
+        window_create("Lapices", 0, 12, 320, 180, 2)
+        a = color_pen(204, 17, 17)
+        antes = exacto(a, 0xCC1111)
+        b = color_pen(204, 17, 17)
+        Print "mismo: #{a == b}"
+        color_pen_free(a)
+        c = color_pen(17, 204, 17)
+        Print "sigue pedido: #{c != a}"
+        color_pen_free(a)
+        d = color_pen(204, 17, 17)
+        Print "otra vez, igual que antes: #{exacto(d, 0xCC1111) == antes}"
+        i = 0
+        while i < 20
+            color_pen((i * 67) % 256, (i * 139 + 50) % 256, (i * 29 + 200) % 256)
+            i = i + 1
+        end
+        window_close(0)
+        screen_close()
+    end
+    Print "fin"
+end

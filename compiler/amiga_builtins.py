@@ -87,7 +87,7 @@ GRAPHICS_BASIC = {
         name="gfx_rgb8",
         params=["index", "r", "g", "b"],
         return_type="void",
-        c_template="SetRGB32(&_dash_win->WScreen->ViewPort, ${index}, ${r}<<24, ${g}<<24, ${b}<<24)",
+        c_template="_dash_set_color8(${index}, ${r}, ${g}, ${b})",
         needs_gfx=True,
         description="Set palette color (8-bit components, AGA)"
     ),
@@ -274,6 +274,14 @@ GRAPHICS_BASIC = {
     ),
 
     # Blitting
+    "gfx_pens_draw": BuiltinFunc(
+        name="gfx_pens_draw",
+        params=["buffer", "width", "height", "x", "y", "zoom"],
+        return_type="void",
+        c_template="_dash_gfx_pens_draw(${buffer}, ${width}, ${height}, ${x}, ${y}, ${zoom})",
+        needs_gfx=True,
+        description="Draw an image of pens (a byte per pixel, row after row) at x, y, each pixel zoom x zoom: a whole picture in one call (3.1: WriteChunkyPixels)"
+    ),
     "gfx_copy": BuiltinFunc(
         name="gfx_copy",
         params=["sx", "sy", "w", "h", "dx", "dy"],
@@ -337,7 +345,31 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_sprite_color(${id}, ${index}, ${r}, ${g}, ${b})",
         needs_gfx=True,
-        description="Set sprite color"
+        description="Set a sprite colour, index 0-2 (components 0-15)"
+    ),
+    "sprite_load_colors": BuiltinFunc(
+        name="sprite_load_colors",
+        params=["id", "filename"],
+        return_type="BOOL",
+        c_template="_dash_sprite_load_colors(${id}, ${filename})",
+        needs_gfx=True,
+        description="Colours 1-3 of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none"
+    ),
+    "bob_load_colors": BuiltinFunc(
+        name="bob_load_colors",
+        params=["filename", "first"],
+        return_type="LONG",
+        c_template="_dash_bob_load_colors(${filename}, ${first})",
+        needs_gfx=True,
+        description="The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many"
+    ),
+    "sprite_rgb8": BuiltinFunc(
+        name="sprite_rgb8",
+        params=["id", "index", "r", "g", "b"],
+        return_type="void",
+        c_template="_dash_sprite_rgb8(${id}, ${index}, ${r}, ${g}, ${b})",
+        needs_gfx=True,
+        description="Set a sprite colour, index 0-2, with 8-bit components (0-255; exact on AGA, 4 bits on ECS)"
     ),
     "sprite_frame": BuiltinFunc(
         name="sprite_frame",
@@ -502,6 +534,14 @@ GRAPHICS_ADVANCED = {
         c_template="_dash_bob_frame(${id}, ${frame})",
         needs_gfx=True,
         description="Set BOB animation frame"
+    ),
+    "bob_frame_width": BuiltinFunc(
+        name="bob_frame_width",
+        params=["id", "width"],
+        return_type="void",
+        c_template="_dash_bob_frame_width(${id}, ${width})",
+        needs_gfx=True,
+        description="The BOB's image is a strip of frames this many pixels wide (bob_load takes it from Forja's FRJA chunk, or else guesses square frames)"
     ),
     "bob_free": BuiltinFunc(
         name="bob_free",
@@ -693,15 +733,15 @@ INPUT_FUNCTIONS = {
         name="mouse_x",
         params=[],
         return_type="LONG",
-        c_template="(_dash_win->MouseX - _dash_win->BorderLeft)",
-        description="Mouse X position relative to window inner area"
+        c_template="(_dash_win ? _dash_win->MouseX - _dash_win->BorderLeft : 0)",
+        description="Mouse X position relative to window inner area (0 without a window)"
     ),
     "mouse_y": BuiltinFunc(
         name="mouse_y",
         params=[],
         return_type="LONG",
-        c_template="(_dash_win->MouseY - _dash_win->BorderTop)",
-        description="Mouse Y position relative to window inner area"
+        c_template="(_dash_win ? _dash_win->MouseY - _dash_win->BorderTop : 0)",
+        description="Mouse Y position relative to window inner area (0 without a window)"
     ),
     "mouse_button": BuiltinFunc(
         name="mouse_button",
@@ -735,6 +775,30 @@ INPUT_FUNCTIONS = {
     ),
 
     # Screen Support
+    "screen_open_mode": BuiltinFunc(
+        name="screen_open_mode",
+        params=["mode", "width", "height", "depth", "title"],
+        return_type="BOOL",
+        c_template="_dash_open_screen_mode(${mode}, ${width}, ${height}, ${depth}, ${title})",
+        needs_gfx=True,
+        description="Open a screen with an exact display mode (dialog_screen_mode's, or e.g. 0x21000 PAL low resolution, 0x29000 PAL high resolution), size and depth; false if the mode does not exist or cannot have that depth"
+    ),
+    "screen_clone_wb": BuiltinFunc(
+        name="screen_clone_wb",
+        params=["name"],
+        return_type="BOOL",
+        c_template="_dash_clone_wb(${name})",
+        needs_gfx=True,
+        description="Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close"
+    ),
+    "screen_visitors": BuiltinFunc(
+        name="screen_visitors",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_screen_visitors()",
+        needs_gfx=True,
+        description="How many uses of the program's public screen there are by others: windows and locks (LockPubScreen; a MUI window may count twice); 0 when none"
+    ),
     "screen_open": BuiltinFunc(
         name="screen_open",
         params=["depth", "title"],
@@ -3024,6 +3088,22 @@ INTUITION_EXPANDED = {
         needs_gfx=True,
         description="Palette window: returns the chosen pen (click, or arrows + Return); Esc keeps initial"
     ),
+    "dialog_screen_mode": BuiltinFunc(
+        name="dialog_screen_mode",
+        params=["title"],
+        return_type="BOOL",
+        c_template="_dash_dialog_screen_mode(${title})",
+        needs_asl=True,
+        description="Screen mode requester (mode, width, height, depth), starting on the Workbench's: true if one was chosen; screen_mode_id/_width/_height/_depth give it"
+    ),
+    "screen_mode_id": BuiltinFunc(name="screen_mode_id", params=[], return_type="LONG", c_template="_dash_screen_mode_get(0)",
+                                  needs_asl=True, description="The display mode of the last dialog_screen_mode (for screen_open_mode)"),
+    "screen_mode_width": BuiltinFunc(name="screen_mode_width", params=[], return_type="LONG", c_template="_dash_screen_mode_get(1)",
+                                     needs_asl=True, description="The width chosen in the last dialog_screen_mode"),
+    "screen_mode_height": BuiltinFunc(name="screen_mode_height", params=[], return_type="LONG", c_template="_dash_screen_mode_get(2)",
+                                      needs_asl=True, description="The height chosen in the last dialog_screen_mode"),
+    "screen_mode_depth": BuiltinFunc(name="screen_mode_depth", params=[], return_type="LONG", c_template="_dash_screen_mode_get(3)",
+                                     needs_asl=True, description="The depth (planes) chosen in the last dialog_screen_mode"),
     "dialog_font": BuiltinFunc(
         name="dialog_font",
         params=["title"],
@@ -3945,6 +4025,13 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_window_fullscreen(${win})",
         description="The window over the whole screen: no borders, title bar or gadgets, active (before mui_window_open)"
     ),
+    "mui_window_screen": BuiltinFunc(
+        name="mui_window_screen",
+        params=["win", "name"],
+        return_type="BOOL",
+        c_template="_dash_mui_window_screen(${win}, ${name})",
+        description="The window opens as a normal window on the public screen with that name (screen_clone_wb's, or another program's); before mui_window_open; false if there is no such screen"
+    ),
     "mui_window_own_screen": BuiltinFunc(
         name="mui_window_own_screen",
         params=["win"],
@@ -4238,6 +4325,8 @@ FONT_FUNCTIONS = {
                       "Size the system gave for this font (the nearest it has)"),
     "color_pen": _gfx("color_pen", ["r", "g", "b"], "LONG", "_dash_color_pen(${r}, ${g}, ${b})",
                       "Pen with the color closest to r, g, b (0-255) on the screen drawn on; for gfx_pen"),
+    "color_pen_free": _gfx("color_pen_free", ["pen"], "void", "_dash_color_pen_free(${pen})",
+                           "One color_pen of this pen is no longer needed; when none is left it goes back to the screen"),
 }
 
 # =============================================================================
