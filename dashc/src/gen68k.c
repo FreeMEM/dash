@@ -17,7 +17,6 @@
 #include "dashc.h"
 
 
-#define MAX_REGS 6   /* d2-d7 */
 #define MIN_USES 3   /* menos usos no pagan guardar y recuperar el registro */
 
 static Program *prog;
@@ -152,13 +151,6 @@ enum { V_NONE, V_LOCAL, V_REG, V_GLOBAL, V_CONST, V_STACK };
 static int frameless, sp_depth, param_base;
 typedef struct { int kind, off, reg, type; long val; } Var;
 
-/* ¿los códigos de condición ya comparan v con 0 para la condición cc? */
-static int flags_for(Var *v, int cc)
-{
-    return v->kind == V_REG && flags_at == obj->code.n && flags_reg == v->reg &&
-           (flags_full || cc == CC_EQ || cc == CC_NE);
-}
-
 static int fold(Node *n, long *v);
 static int fold_literal;   /* fold sin las variables que valen una constante */
 
@@ -253,7 +245,7 @@ static int new_slot_opt(int param_off, int opt)
     } else if (slot_reg.v[slot] >= 0 || opt) {
         VEC_PUSH(slot_off, 0);
     } else {
-        VEC_PUSH(slot_off, -4 * ++nframe);
+        VEC_PUSH(slot_off, frame_off(++nframe));
     }
     return slot;
 }
@@ -1532,7 +1524,7 @@ static int gen_iface_call(Node *n, int t)
     push_d0();                                         /* self */
     call_method(m->slot);
     pop_args(n->args.n + 1);
-    d0_loaded = (uint32_t)-1;
+    forget_d0();
     if (IS_STRLIKE(m->ret) || IS_OBJ(m->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
     return m->ret;
 }
@@ -1724,7 +1716,7 @@ static int gen_dict(Node *n)
         /* (con uno solo, args_to_stack lo mete con push: igual vale como array) */
     }
     args_to_stack(keys, np, NULL);
-    push_sp_addr(4 * np);                              /* los valores */
+    push_sp_addr(SLOT * np);                           /* los valores */
     push_sp_addr(4);                                   /* las claves: justo encima */
     push_word(np);
     push_word(kind);
@@ -2131,7 +2123,8 @@ static void gen_binary(Node *n)
     } else if ((n->op == P_AMP || n->op == P_BAR) && fold(n->b, &k) && k >= -128 && k <= 127 &&
                n->a->kind == E_VAR && simple(n->a, &v) && v.kind != V_CONST) {
         load_imm(0, k);                                /* x & 1: moveq #1,d0; and.l x,d0 */
-        op_ea(n->op == P_AMP ? 0xC080 : 0x8080, &v);
+        if (n->op == P_AMP) and_ea(&v);
+        else or_ea(&v);
     } else if (n->op == P_STAR && (fold(n->b, &k) ? (x = n->a) : fold(n->a, &k) ? (x = n->b) : NULL) &&
                x->kind == E_VAR && simple(x, &v) && v.kind == V_REG) {
         load_var(0, &v);                               /* x * k con x en un registro */
@@ -2877,7 +2870,7 @@ static int gen_call(Node *n)
         load_var(0, &v);
         call_d0();
         pop_args(n->args.n);
-        d0_loaded = (uint32_t)-1;
+        forget_d0();
         return TY_INT;
     }
     if (!f) return gen_builtin(n);
@@ -2895,7 +2888,7 @@ static int gen_call(Node *n)
         } else if (f->ret == TY_BOOL) {
             c_bool();
         }
-        d0_loaded = (uint32_t)-1;
+        forget_d0();
         return f->ret;
     }
     if (f->native) {
@@ -3899,8 +3892,7 @@ static int assign_in_reg(Node *n)
         add_imm_ea(k, &v);
         if (!k) flags_set(v.reg, 1);
     } else {
-        op_ea((e->op == P_PLUS ? 0xD080 : 0x9080) | v.reg << 9, &vb);   /* add.l / sub.l b,dN */
-        flags_set(v.reg, 0);
+        op_to_reg(e->op == P_PLUS ? 0 : 1, v.reg, &vb, -1);   /* dN += b o -= b */
     }
     return 1;
 }
@@ -5627,7 +5619,7 @@ static void gen_function(int label, Func *f, NodeList *body)
                 best = i;
         if (best < 0) break;
         slot_reg.v[best] = -2;                         /* visto: si no hay registro, al marco */
-        for (r = 2; r < 2 + MAX_REGS; r++) {
+        for (r = FIRST_REG; r < FIRST_REG + MAX_REGS; r++) {
             for (j = 0; j < slot_uses.n; j++)
                 if (slot_reg.v[j] == r && slot_start.v[j] < slot_end.v[best] && slot_start.v[best] < slot_end.v[j])
                     break;

@@ -1,5 +1,15 @@
 /* Generador de 68000 de dashc (docs/AARCH64_LOOP.md, fase A3): lo que sabe de las instrucciones del 68000. Lo
    incluye gen68k.c donde iba (un solo fichero de C: comparte sus estáticos). */
+/* ¿los códigos de condición ya comparan v con 0 para la condición cc? */
+static int flags_for(Var *v, int cc)
+{
+    return v->kind == V_REG && flags_at == obj->code.n && flags_reg == v->reg &&
+           (flags_full || cc == CC_EQ || cc == CC_NE);
+}
+
+/* d0 ya no tiene lo que se sabía (lo dejó una llamada) */
+static void forget_d0(void) { d0_loaded = (uint32_t)-1; }
+
 /* ---- direcciones efectivas: una variable como operando de una instrucción ---- */
 static int ea_bits(Var *v)
 {
@@ -976,3 +986,5 @@ static void lit_init_end(void)
     w(0x4CDF); w(0x0101);                              /* movem.l (sp)+,d0/a0 */
     w(0x4E75);                                         /* rts */
 }
+
+static void or_ea(Var *v) { op_ea(0x8080, v); }        /* or.l v,d0 */

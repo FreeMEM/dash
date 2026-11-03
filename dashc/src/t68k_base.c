@@ -1,5 +1,12 @@
 /* Generador de 68000 de dashc (docs/AARCH64_LOOP.md, fase A3): lo que sabe de las instrucciones del 68000. Lo
    incluye gen68k.c donde iba (un solo fichero de C: comparte sus estáticos). */
+/* los registros para variables: d2-d7 (d0 y d1 son de trabajo) */
+#define FIRST_REG 2
+#define MAX_REGS 6
+
+/* el hueco n de las variables del marco, desde a5 */
+static int frame_off(int n) { return -4 * n; }
+
 /* códigos de condición del 68000 */
 enum { CC_T = 0, CC_F, CC_HI, CC_LS, CC_CC, CC_CS, CC_NE, CC_EQ, CC_VC, CC_VS,
        CC_PL, CC_MI, CC_GE, CC_LT, CC_GT, CC_LE };
