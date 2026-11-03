@@ -64,6 +64,10 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
 - Entrada en e_entry. La pila acaba en 0x80000000 (SP inicial) y crece hacia abajo; se reserva entera al cargar.
   Tamaño: el p_memsz de PT_GNU_STACK (con lld, `-z stack-size=N`), de 4 KB a 8 MB; si vale 0, 64 KB
   (DashOS 4d653fe). Ningún segmento pasa de 0x80000000 - 8 MB; las proyecciones, por debajo de la pila.
+- **Sin FP ni SIMD en los programas** (DashOS, 2026-11-03): el kernel no guarda esos registros al cambiar de hilo.
+  Todo se compila con `-march=armv8-a+nofp+nosimd -mabi=aapcs-soft`; Float y Double van por el fp-bit de
+  `runtime/softfloat` más `runtime/dashos/softfloat_extra.c`. Usar la FPU de verdad es decisión del usuario (trabajo
+  de kernel en DashOS).
 - Llamadas provisionales: `svc #0`, número en x8, argumentos en x0..x5, resultado en x0 (negativo = error).
   escribir(ptr, len) = 1; salir(código) = 2; memoria_crear(tamaño) = 7 da una llave;
   memoria_proyectar(llave, va, permisos 1 leer | 2 escribir) = 8, con la VA alineada a 4 KB que elige el programa.
@@ -114,4 +118,8 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   páginas aparte, PT_GNU_STACK con la pila del programa). 91 de 284 tests en qemu; los demás piden AmigaOS (A7).
   Ojo: un volcado de qemu (`*.core`) lleva el entorno y GitHub lo paró por un token: no se suben (`.gitignore`) y
   `dashos_run.py` ejecuta qemu sin volcados.
+- 2026-11-03: DashOS cargó `hola_dashos.elf` y se paró en la primera instrucción SIMD (memset vectorizado): sus
+  programas no pueden usar FP/SIMD. Ahora sin ellos (ver arriba); fp-bit necesita
+  `-D__FLOAT_WORD_ORDER__=__ORDER_BIG_ENDIAN__` con clang (si no, da la vuelta a las mitades de un double: 5 * 2 daba
+  -12). 92 de 294 tests en qemu, sin un solo registro de FP en los ejecutables. Fusionado `main` (fdc06b0): 395/395.
 

@@ -21,8 +21,10 @@ REPO = Path(__file__).resolve().parent.parent
 RT = REPO / "runtime" / "dashos"
 sys.path.insert(0, str(REPO))
 CFLAGS = ["--target=aarch64_be-none-elf", "-ffreestanding", "-fno-builtin", "-O2", "-fno-pic", "-fno-pie",
-          "-march=armv8-a",
-          "-fno-delete-null-pointer-checks", "-Wno-unknown-attributes", "-Wno-pointer-sign",
+          # sin registros de coma flotante ni SIMD: DashOS no los deja usar en los programas (no los guarda al
+          # cambiar de hilo); Float y Double van por software (fp-bit de runtime/softfloat, softfloat_lib)
+          "-march=armv8-a+nofp+nosimd", "-mabi=aapcs-soft",
+          "-fno-delete-null-pointer-checks", "-fno-strict-aliasing", "-Wno-unknown-attributes", "-Wno-pointer-sign",
           "-Werror=implicit-function-declaration", "-Werror=int-conversion",
           "-Werror=pointer-to-int-cast", "-Werror=int-to-pointer-cast", "-Werror=incompatible-pointer-types",
           "-I" + str(RT / "include"), "-I" + str(RT)]
@@ -62,6 +64,36 @@ def _library(name):
     return lib
 
 
+def softfloat_lib():
+    """Float y Double por software: el fp-bit de GCC (runtime/softfloat), de precisión simple y doble"""
+    with _lib_lock:
+        src = REPO / "runtime" / "softfloat"
+        lib = REPO / "build" / "dashos" / "softfloat.a"
+        lib.parent.mkdir(parents=True, exist_ok=True)
+        extra = RT / "softfloat_extra.c"   # (las conversiones que fp-bit no trae)
+        newest = max(p.stat().st_mtime for p in [src / "fp-bit.c", src / "fp-bit.h", extra, Path(__file__)])
+        if lib.exists() and lib.stat().st_mtime >= newest:
+            return lib
+        # (CMPtype: clang no conoce el modo de libgcc; mira el resultado en w0: un int)
+        flags = [f for f in CFLAGS if not f.startswith("-Werror")] + [f"-I{src / 'stub'}", f"-I{src}", "-w",
+                                                                      "-D__libgcc_cmp_return__=__SI__",
+                                                                      # (clang no lo define, y sin él fp-bit
+                                                                      # cambia de orden las mitades de un double)
+                                                                      "-D__FLOAT_WORD_ORDER__=__ORDER_BIG_ENDIAN__"]
+        with tempfile.TemporaryDirectory() as tmp:
+            objs = []
+            for name, defs in (("sf", ["-DFLOAT", "-DFLOAT_ONLY"]), ("df", [])):
+                o = Path(tmp) / f"fpbit_{name}.o"
+                subprocess.run(["clang", *flags, *defs, "-c", str(src / "fp-bit.c"), "-o", str(o)], check=True)
+                objs.append(str(o))
+            o = Path(tmp) / "extra.o"
+            subprocess.run(["clang", *flags, "-c", str(extra), "-o", str(o)], check=True)
+            objs.append(str(o))
+            subprocess.run(["llvm-ar", "rcs", str(Path(tmp) / lib.name), *objs], check=True)
+            shutil.move(str(Path(tmp) / lib.name), str(lib))
+        return lib
+
+
 def build(src, exe, linux=True, memcheck=False):
     """Transpila y enlaza; devuelve (ok, mensajes)"""
     with tempfile.TemporaryDirectory() as tmp:
@@ -82,7 +114,7 @@ def build(src, exe, linux=True, memcheck=False):
                 return False, r.stderr.replace(str(c), "prog.c")
             objs.append(str(o))
         from compiler.clibs import LIBRARIES, uses_library
-        objs += [str(library(n)) for n in LIBRARIES if uses_library(n, text)]
+        objs += [str(library(n)) for n in LIBRARIES if uses_library(n, text)] + [str(softfloat_lib())]
         r = subprocess.run(["ld.lld", "-static", "-e", "_start", "--image-base=0x400000",
                             "-z", "separate-loadable-segments", "-z", f"stack-size={stack}",
                             *objs, "-o", str(exe)], capture_output=True, text=True)
