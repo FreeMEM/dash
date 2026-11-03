@@ -4717,26 +4717,29 @@ nombre del fichero va dentro, para los mensajes de error: tiene que ser el mismo
 Lo demás es igual: el lenguaje, los builtins, el runtime, los mensajes de error de los programas y lo que
 necesitan para arrancar (Kickstart 3.0 y un 68000; MUI 5 y TLS, un 68020).
 
-## 25. DashOS (AArch64 big-endian)
+## 25. DashOS (AArch64)
 
 El mismo programa Dash compila también para DashOS, el sistema para Raspberry Pi con una caja Amiga dentro. Es un
-ELF de AArch64 big-endian. Los detalles y el estado están en `docs/AARCH64_LOOP.md`.
+ELF de AArch64 little-endian, lo nativo de DashOS. Los detalles y el estado están en `docs/AARCH64_LOOP.md`.
 
 ```bash
 make -C dashc dashc-a64                          # una vez: el compilador directo para ARM
 ./dash --dashos programa.dash -o programa        # directo
 ./dash --dashos --gcc programa.dash -o programa  # por C, con clang
-python3 tools/dashos_run.py programa.dash        # compilarlo y ejecutarlo en el PC (qemu-aarch64_be)
+./dash --dashos --pie programa.dash -o programa  # se carga en cualquier dirección (si no, en 0x400000)
+./dash --dashos --be programa.dash -o programa   # big-endian: las bibliotecas de la caja Amiga
+python3 tools/dashos_run.py programa.dash        # compilarlo y ejecutarlo en el PC (qemu-aarch64)
 ```
 
-Hace falta `clang` (con el objetivo `aarch64_be-none-elf`), `ld.lld` y, para probar en el PC,
-`qemu-aarch64_be`.
+Hace falta `clang` (con los objetivos `aarch64-none-elf` y `aarch64_be-none-elf`), `ld.lld` y, para probar en el PC,
+`qemu-aarch64` (y `qemu-aarch64_be` para `--be`).
 
 - El lenguaje es el mismo: textos, listas, diccionarios, structs, interfaces, Float, Double, Fixed.
 - Los builtins que no dependen de AmigaOS, también: textos, matemáticas, UTF-8, expresiones regulares, `peek_*` y
   `poke_*`, entre otros. Los de ventanas, gráficos, ficheros o red llegarán con la API de DashOS.
 - Los punteros son de 64 bits. Un Int sigue siendo de 32.
-- DashOS no deja usar la FPU en los programas: Float y Double van por software.
+- Float y Double usan la FPU del procesador.
+- Los textos van en UTF-8 (en el Amiga, en Latin-1).
 
 ### Estructuras de Amiga: `@amiga struct`
 
@@ -4778,6 +4781,9 @@ end
 - `amiga_alloc(bytes)` y `amiga_free(dirección, bytes)`: en el Amiga son `AllocMem` y `FreeMem`; en DashOS, memoria
   de la caja Amiga, por debajo de 4 GB. En DashOS, escribir en un campo `Ptr` una dirección de 4 GB o más es un
   error de ejecución.
+- La memoria del Amiga es big-endian. En un programa little-endian, los campos `Word` y `Long` se leen y escriben
+  dando la vuelta a los bytes, así que valen lo mismo que en el Amiga. `peek_*` y `poke_*` usan el orden del
+  procesador.
 
 ---
 

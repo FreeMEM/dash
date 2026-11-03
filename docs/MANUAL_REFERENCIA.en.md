@@ -4718,25 +4718,29 @@ name goes inside, for error messages: it has to be the same).
 Everything else is the same: the language, the builtins, the runtime, the programs' error messages and what they
 need to start (Kickstart 3.0 and a 68000; MUI 5 and TLS, a 68020).
 
-## 25. DashOS (AArch64 big-endian)
+## 25. DashOS (AArch64)
 
 The same Dash program also compiles for DashOS, the system for the Raspberry Pi with an Amiga box inside. It is an
-AArch64 big-endian ELF. The details and the status are in `docs/AARCH64_LOOP.md`.
+AArch64 little-endian ELF, the native order of DashOS. The details and the status are in `docs/AARCH64_LOOP.md`.
 
 ```bash
 make -C dashc dashc-a64                          # once: the straight compiler for ARM
 ./dash --dashos program.dash -o program          # straight
 ./dash --dashos --gcc program.dash -o program    # through C, with clang
-python3 tools/dashos_run.py program.dash         # compile it and run it on the PC (qemu-aarch64_be)
+./dash --dashos --pie program.dash -o program    # loads at any address (otherwise at 0x400000)
+./dash --dashos --be program.dash -o program     # big-endian: the libraries of the Amiga box
+python3 tools/dashos_run.py program.dash         # compile it and run it on the PC (qemu-aarch64)
 ```
 
-It needs `clang` (with the `aarch64_be-none-elf` target), `ld.lld` and, to test on the PC, `qemu-aarch64_be`.
+It needs `clang` (with the `aarch64-none-elf` and `aarch64_be-none-elf` targets), `ld.lld` and, to test on the PC,
+`qemu-aarch64` (and `qemu-aarch64_be` for `--be`).
 
 - The language is the same: strings, lists, dictionaries, structs, interfaces, Float, Double, Fixed.
 - So are the builtins that do not depend on AmigaOS: strings, maths, UTF-8, regular expressions, `peek_*` and
   `poke_*`, among others. Windows, graphics, files and network will come with the DashOS API.
 - Pointers are 64-bit. An Int is still 32-bit.
-- DashOS does not let programs use the FPU: Float and Double are done in software.
+- Float and Double use the processor's FPU.
+- Strings are UTF-8 (on the Amiga, Latin-1).
 
 ### Amiga structures: `@amiga struct`
 
@@ -4777,6 +4781,8 @@ end
 - `Ptr T(x)` takes an address. Variables and parameters can be of type `Ptr T`.
 - `amiga_alloc(bytes)` and `amiga_free(address, bytes)`: `AllocMem` and `FreeMem` on the Amiga; on DashOS, memory of
   the Amiga box, below 4 GB. On DashOS, writing an address of 4 GB or more into a `Ptr` field is a run-time error.
+- The Amiga's memory is big-endian. In a little-endian program, `Word` and `Long` fields are read and written with
+  their bytes swapped, so they hold the same values as on the Amiga. `peek_*` and `poke_*` use the processor's order.
 
 ---
 
