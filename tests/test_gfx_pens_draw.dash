@@ -1,10 +1,14 @@
 # Test: gfx_pens_draw draws an image of pens (a byte a pixel) in one call, each pixel zoom x zoom.
-# A 3 x 2 image: pens 1 2 3 / 3 2 1. At zoom 1 and at zoom 4, read back with gfx_pixel_read.
+# A 3 x 2 image: pens 1 2 3 / 3 2 1. At zoom 1 and at zoom 4, read back with gfx_pixel_read. Then a 37 x 5 image
+# (a width that is not a multiple of 8) at zoom 3, and 13 x 3 at zoom 6 (another way inside), checked pixel by
+# pixel.
 #
 # expect-c: static void _dash_gfx_pens_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG zoom)
 # expect-out: zoom 1: 1 2 3 3 2 1
 # expect-out: zoom 4: 1 1 2 3 3 1
 # expect-out: fuera: 0
+# expect-out: 37 x 5 a zoom 3: 0 distintos
+# expect-out: 13 x 3 a zoom 6: 0 distintos
 
 Window W
     title "Pens"
@@ -27,5 +31,40 @@ Main
     # (40,20) es el píxel 0,0; (43,23) también; (44,20) el 1,0; (48,20) el 2,0; (40,24) el 0,1; (51,27) el 2,1
     Print "zoom 4: #{gfx_pixel_read(40, 20)} #{gfx_pixel_read(43, 23)} #{gfx_pixel_read(44, 20)} #{gfx_pixel_read(48, 20)} #{gfx_pixel_read(40, 24)} #{gfx_pixel_read(51, 27)}"
     Print "fuera: #{gfx_pixel_read(52, 20)}"
+    buffer_free(b)
+    b = buffer_alloc(37 * 5)
+    i = 0
+    while i < 37 * 5
+        buffer_set_byte(b, i, (i * 7 + i / 37) % 4)
+        i = i + 1
+    end
+    gfx_pens_draw(b, 37, 5, 5, 40, 3)
+    mal = 0
+    y = 0
+    while y < 15
+        x = 0
+        while x < 111
+            if gfx_pixel_read(5 + x, 40 + y) != buffer_get_byte(b, (y / 3) * 37 + x / 3)
+                mal = mal + 1
+            end
+            x = x + 1
+        end
+        y = y + 1
+    end
+    Print "37 x 5 a zoom 3: #{mal} distintos"
+    gfx_pens_draw(b, 13, 3, 100, 5, 6)
+    mal = 0
+    y = 0
+    while y < 18
+        x = 0
+        while x < 78
+            if gfx_pixel_read(100 + x, 5 + y) != buffer_get_byte(b, (y / 6) * 13 + x / 6)
+                mal = mal + 1
+            end
+            x = x + 1
+        end
+        y = y + 1
+    end
+    Print "13 x 3 a zoom 6: #{mal} distintos"
     buffer_free(b)
 end
