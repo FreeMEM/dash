@@ -38,6 +38,26 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
   variables en huecos (registro, marco, global, constante). En ARM los argumentos de una llamada se sacan de la
   pila a x0..x7 justo antes del `bl`.
 
+## Diseño del generador de AArch64 (A4)
+
+- **Registros:** d0 = x0 (el valor; también lo que devuelve una llamada), d1 = x1, a0 = x9, a1 = x10, a2 (el
+  objeto que se llena) = x28. Las variables en registros: x19-x27 (`FIRST_REG` 2..10 = x19..x27, `MAX_REGS` 9).
+  x29 marco, x30 vuelta.
+- **Valores de 64 bits canónicos:** un Int vive en un registro de 64 bits con su signo extendido. Las operaciones de
+  Int se hacen en 32 bits (w) y el resultado se extiende (`sxtw`): así el desbordamiento es el de 32 bits y las
+  comparaciones y `tst` pueden ser siempre de 64 bits (sirven para Int y para punteros).
+- **Pila:** `SLOT` = 16 (cada cosa que se mete ocupa 16 bytes: sp siempre alineado). Variables del marco de 8
+  bytes, bajo x29. Siempre con marco (`CAN_FRAMELESS` 0).
+- **Llamadas:** todas con el convenio de C (AAPCS64), también entre funciones de Dash: los argumentos que el
+  recorrido metió en la pila se cargan en x0..x7 justo antes del `bl` (`call_sym(sym, n)`, `call_label`...); al
+  entrar, cada parámetro se guarda en su hueco del marco. Más de 8 argumentos: aún no.
+- **El runtime visto desde el código:** las funciones `dl_*` de ARM devuelven `_DashP` (un Int de C en w0 deja la
+  parte alta sin definir).
+- **Salida:** un objeto ELF64 big-endian (.text, .data, .rela.*, .symtab), enlazado con ld.lld con el runtime de
+  dashc para ARM. Reubicaciones: CALL26 (llamadas), ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC o LDST64/32_ABS_LO12_NC
+  (direcciones y variables), ABS64 (punteros en tablas y descriptores). `Reloc` lleva tipo y sumando.
+- **Sin FP ni SIMD**, como el resto de lo de DashOS.
+
 ## Herramientas
 
 - `clang --target=aarch64_be-none-elf` y `ld.lld` (clang 23 del sistema): compilan el runtime en C para ARM.
