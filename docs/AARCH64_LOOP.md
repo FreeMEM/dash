@@ -305,3 +305,5 @@ Print offsetof(Node, ln_Name)  # 10
   C28: salida exacta y código 0. Son tan cortos que no se turnan; para probar el cambio de hilo con la FPU viva,
   freemem-f9 recibe `fpu_dash.elf` (directo, 1000 vueltas) y `fpu_dash_c.elf` (C, 20000), que comprueban cada
   vuelta y salen con 20 si algo no cuadra (en `build/dashos/le/`, sin subir).
+- 2026-11-03: `fpu_dash.elf` y `fpu_dash_c.elf` salen bien en DashOS junto a fpu_b, en el mismo núcleo: la FPU cambió
+  de dueño 15 veces con los dos vivos y todas las comprobaciones cuadran. Cambio de hilo con s, d y q vivos, probado.
