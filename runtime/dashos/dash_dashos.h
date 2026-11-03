@@ -25,6 +25,7 @@ typedef float FLOAT;
 typedef double DOUBLE;
 typedef void VOID;
 typedef intptr_t _DashP;   /* un entero del tamaño de un puntero (en el Amiga, LONG) */
+#define _DASH_SLOT_SH 3          /* los bytes de un elemento de lista (un _DashP) como desplazamiento */
 #define CONST const
 #define TRUE 1
 #define FALSE 0

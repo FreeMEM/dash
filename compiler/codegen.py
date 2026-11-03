@@ -1295,8 +1295,14 @@ static void _dash_mem_cleanup(void) {
     # Array runtime (included when arrays are used)
     ARRAY_RUNTIME = """\
 /* Dash Array Runtime */
+/* The bytes of an element (one _DashP: an Int, the bits of a Float, a pointer) as a shift: 2 on the Amiga, 3
+   with 64-bit pointers (runtime/dashos/dash_dashos.h). A Double takes 1 << _DASH_DBL_SH elements. */
+#ifndef _DASH_SLOT_SH
+#define _DASH_SLOT_SH 2
+#endif
+#define _DASH_DBL_SH (_DASH_SLOT_SH == 2)
 typedef struct {
-    LONG *data;
+    _DashP *data;
     LONG length;
     LONG capacity;   /* elements allocated (low 24 bits) and what they are (top byte) */
 } DashArrayLong;
@@ -1313,7 +1319,7 @@ typedef struct {
 #define _DASH_ARR_DBLS 3
 /* LONGs per element as a shift: 1 for a Double (2 LONGs), 0 else. A shift, not a multiplication: that is a
    call to libgcc on a 68000 */
-#define _DASH_ARR_SH(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? 1 : 0)
+#define _DASH_ARR_SH(a) (_DASH_ARR_KIND(a) == _DASH_ARR_DBLS ? _DASH_DBL_SH : 0)
 
 /* apart, so that freeing a list of Ints stays a short leaf function */
 static __attribute__((noinline)) void DashArray_drop_elements(DashArrayLong *arr) {
@@ -1331,11 +1337,11 @@ static void DashArray_destroy(void *obj) {
     if (!arr->data) return;
     kind = _DASH_ARR_KIND(arr);
     if (!kind) {                     /* Ints: the usual case, a shift and no call (a multiplication is one on a 68000) */
-        _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << 2);
+        _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << _DASH_SLOT_SH);
         return;
     }
     if (kind != _DASH_ARR_DBLS) DashArray_drop_elements(arr);
-    _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << (kind == _DASH_ARR_DBLS ? 3 : 2));
+    _dash_block_put(arr->data, (ULONG)_DASH_ARR_CAP(arr) << (kind == _DASH_ARR_DBLS ? 3 : _DASH_SLOT_SH));
 }
 
 static const _DashType _dash_array_type = { DashArray_destroy, sizeof(DashArrayLong) };
@@ -1346,7 +1352,7 @@ static DashArrayLong* DashArray_create(LONG size) {
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
-        arr->data = (LONG *)_dash_block_get_clear(sizeof(LONG) * size);
+        arr->data = (_DashP *)_dash_block_get_clear(sizeof(_DashP) * size);
         if (!arr->data) return NULL;
     }
     arr->length = size;
@@ -1354,7 +1360,7 @@ static DashArrayLong* DashArray_create(LONG size) {
     return arr;
 }
 
-static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
+static DashArrayLong* DashArray_from(LONG size, const _DashP *values) {
     DashArrayLong *arr = DashArray_create(size);
     if (arr) {
         for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
@@ -1364,12 +1370,12 @@ static DashArrayLong* DashArray_from(LONG size, const LONG *values) {
 
 /* DashArray_from for "var = [...]": the new array has one reference and is not a
    temporary (see _dash_rc_new_obj) */
-static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
+static DashArrayLong* DashArray_from_new(LONG size, const _DashP *values) {
     DashArrayLong *arr = (DashArrayLong *)_dash_rc_new_obj(sizeof(DashArrayLong), &_dash_array_type);
     if (!arr) return NULL;
     arr->data = NULL;
     if (size > 0) {
-        arr->data = (LONG *)_dash_block_get(sizeof(LONG) * size);
+        arr->data = (_DashP *)_dash_block_get(sizeof(_DashP) * size);
         if (!arr->data) return NULL;
         for (LONG i = 0; i < size; i++) arr->data[i] = values[i];
     }
@@ -1378,12 +1384,12 @@ static DashArrayLong* DashArray_from_new(LONG size, const LONG *values) {
     return arr;
 }
 
-static LONG DashArray_get(DashArrayLong *arr, LONG index) {
+static _DashP DashArray_get(DashArrayLong *arr, LONG index) {
     if (!arr || index < 0 || index >= arr->length) return 0;
     return arr->data[index];
 }
 
-static void DashArray_set(DashArrayLong *arr, LONG index, LONG value) {
+static void DashArray_set(DashArrayLong *arr, LONG index, _DashP value) {
     if (!arr || index < 0 || index >= arr->length) return;
     arr->data[index] = value;
 }
@@ -1422,7 +1428,7 @@ static void DashArray_set_str(DashArrayLong *arr, LONG index, STRPTR value) {
 
 static DashArrayLong *DashArray_slice(DashArrayLong *arr, LONG start, LONG end) {
     LONG sh, kind, n;
-    LONG *from;
+    _DashP *from;
     if (!arr) return NULL;
     sh = _DASH_ARR_SH(arr);
     kind = _DASH_ARR_KIND(arr);
@@ -1905,7 +1911,7 @@ static DashArrayLong *DashDict_keys(DashDict *d) {
     LONG i, j = 0;
     DashArrayLong *arr = DashArray_create(d ? d->count : 0);
     if (!arr || !d) return arr;
-    for (i = 0; i < d->cap; i++) if (_DASH_DICT_USED(d, i)) arr->data[j++] = (LONG)d->keys[i];
+    for (i = 0; i < d->cap; i++) if (_DASH_DICT_USED(d, i)) arr->data[j++] = (_DashP)d->keys[i];
     return d->ikeys ? arr : DashArray_own(arr, _DASH_ARR_STRS);
 }
 
@@ -9494,15 +9500,15 @@ static LONG _dash_cpu_total(void) {
     LIST_RUNTIME = """\
 /* Dash List Runtime */
 static BOOL DashArray_reserve(DashArrayLong *arr, LONG need) {
-    LONG cap = _DASH_ARR_CAP(arr), sh = _DASH_ARR_SH(arr) + 2, newcap, i, n;
-    LONG *data;
+    LONG cap = _DASH_ARR_CAP(arr), sh = _DASH_ARR_SH(arr) + _DASH_SLOT_SH, newcap, i, n;
+    _DashP *data;
     if (need <= cap) return TRUE;
     newcap = cap * 2;
     if (newcap < 4) newcap = 4;
     if (newcap < need) newcap = need;
-    data = (LONG *)_dash_block_get((ULONG)newcap << sh);
+    data = (_DashP *)_dash_block_get((ULONG)newcap << sh);
     if (!data) return FALSE;
-    n = arr->length << (sh - 2);
+    n = arr->length << (sh - _DASH_SLOT_SH);
     for (i = 0; i < n; i++) data[i] = arr->data[i];
     if (arr->data) _dash_block_put(arr->data, (ULONG)cap << sh);
     arr->data = data;
@@ -9521,7 +9527,7 @@ static BOOL DashArray_open(DashArrayLong *arr, LONG index) {
     return TRUE;
 }
 
-static void DashArray_insert(DashArrayLong *arr, LONG index, LONG value) {
+static void DashArray_insert(DashArrayLong *arr, LONG index, _DashP value) {
     if (DashArray_open(arr, index)) arr->data[index] = value;
 }
 
@@ -9529,7 +9535,7 @@ static void DashArray_insert_obj(DashArrayLong *arr, LONG index, void *value) {
     if (!DashArray_open(arr, index)) return;
     arr->capacity |= (LONG)_DASH_ARR_OBJS << 24;
     _dash_retain(value);
-    arr->data[index] = (LONG)value;
+    arr->data[index] = (_DashP)value;
 }
 
 static void DashArray_insert_str(DashArrayLong *arr, LONG index, STRPTR value) {
@@ -9551,8 +9557,8 @@ static void DashArray_close(DashArrayLong *arr, LONG index) {
 }
 
 /* Takes the element out (0 if the index is outside the list) */
-static LONG DashArray_take(DashArrayLong *arr, LONG index) {
-    LONG v;
+static _DashP DashArray_take(DashArrayLong *arr, LONG index) {
+    _DashP v;
     if (!arr || index < 0 || index >= arr->length) return 0;
     v = arr->data[index];
     DashArray_close(arr, index);
@@ -9601,12 +9607,12 @@ static void DashArray_clear(DashArrayLong *arr) {
 /* Dash Sort Runtime */
 /* Puts src[from..mid) and src[mid..to) (sorted, w LONGs per element) in order into dst[from..to): an element
    of the second half goes first only if after(first's, second's) says so, which keeps equal ones in order */
-static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LONG to, LONG sh,
-                             LONG (*after)(const LONG *, const LONG *)) {
+static void _dash_sort_merge(const _DashP *src, _DashP *dst, LONG from, LONG mid, LONG to, LONG sh,
+                             LONG (*after)(const _DashP *, const _DashP *)) {
     LONG i = from, j = mid, w = 1 << sh, c;
-    LONG *out = dst + (from << sh);
+    _DashP *out = dst + (from << sh);
     while (i < mid || j < to) {
-        const LONG *e;
+        const _DashP *e;
         if (j >= to || (i < mid && !after(src + (i << sh), src + (j << sh)))) e = src + ((i++) << sh);
         else e = src + ((j++) << sh);
         for (c = 0; c < w; c++) *out++ = e[c];
@@ -9616,14 +9622,14 @@ static void _dash_sort_merge(const LONG *src, LONG *dst, LONG from, LONG mid, LO
 /* Sorts the list in place, keeping the order of equal elements. after(a, b): nonzero if the element at b goes
    before the one at a. Runs of 8 by insertion, then merges through a buffer as long as the list (without
    memory for it, insertion all along). Element k is at data + (k << sh): shifts, no multiplications */
-static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const LONG *)) {
+static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const _DashP *, const _DashP *)) {
     LONG n, sh, w, i, j, c, width, run = 8;
-    LONG *buf, *src, *dst, t[2];
+    _DashP *buf, *src, *dst, t[2];
     if (!arr || arr->length < 2) return;
     n = arr->length;
     sh = _DASH_ARR_SH(arr);
     w = 1 << sh;
-    buf = (LONG *)_dash_block_get((ULONG)n << (sh + 2));
+    buf = (_DashP *)_dash_block_get((ULONG)n << (sh + _DASH_SLOT_SH));
     if (!buf) run = n;
     for (i = 0; i < n; i += run) {
         LONG end = i + run < n ? i + run : n;
@@ -9645,10 +9651,10 @@ static void DashArray_sort(DashArrayLong *arr, LONG (*after)(const LONG *, const
             LONG mid = i + width < n ? i + width : n, to = i + 2 * width < n ? i + 2 * width : n;
             _dash_sort_merge(src, dst, i, mid, to, sh, after);
         }
-        { LONG *x = src; src = dst; dst = x; }
+        { _DashP *x = src; src = dst; dst = x; }
     }
     if (src != arr->data) for (i = 0; i < (n << sh); i++) arr->data[i] = src[i];
-    _dash_block_put(buf, (ULONG)n << (sh + 2));
+    _dash_block_put(buf, (ULONG)n << (sh + _DASH_SLOT_SH));
 }
 
 """
@@ -10237,7 +10243,7 @@ static LONG _dash_clip_read_block(LONG unit, STRPTR type, APTR dest, LONG max) {
     DBL_LIST_RUNTIME = """\
 /* Dash Double List Runtime */
 static DashArrayLong *DashArray_create_dbl(LONG size) {
-    DashArrayLong *arr = DashArray_create(size * 2);
+    DashArrayLong *arr = DashArray_create(size << _DASH_DBL_SH);
     if (!arr) return NULL;
     arr->length = size;
     arr->capacity = size | ((LONG)_DASH_ARR_DBLS << 24);
@@ -10265,7 +10271,7 @@ static void DashArray_insert_dbl(DashArrayLong *arr, LONG index, double value) {
     if (!arr) return;
     if (_DASH_ARR_KIND(arr) != _DASH_ARR_DBLS) {
         if (arr->length) return;
-        if (arr->data) _dash_block_put(arr->data, sizeof(LONG) * _DASH_ARR_CAP(arr));
+        if (arr->data) _dash_block_put(arr->data, sizeof(_DashP) * _DASH_ARR_CAP(arr));
         arr->data = NULL;
         arr->capacity = (LONG)_DASH_ARR_DBLS << 24;
     }
@@ -10305,7 +10311,7 @@ static DashArrayLong *_dash_str_split(STRPTR s, STRPTR sep) {
         if (s[i] == sep[0] && !strncmp((char *)s + i, (char *)sep, m)) {
             STRPTR piece = _dash_str_alloc(i - start, FALSE);
             if (piece) _dash_copy(piece, s + start, i - start);
-            arr->data[k++] = (LONG)piece;
+            arr->data[k++] = (_DashP)piece;
             i += m;
             start = i;
         } else {
@@ -10315,7 +10321,7 @@ static DashArrayLong *_dash_str_split(STRPTR s, STRPTR sep) {
     {
         STRPTR piece = _dash_str_alloc(len - start, FALSE);
         if (piece) _dash_copy(piece, s + start, len - start);
-        arr->data[k] = (LONG)piece;
+        arr->data[k] = (_DashP)piece;
     }
     return arr;
 }
@@ -11375,7 +11381,7 @@ static DashArrayLong *DashArray_concat(DashArrayLong *a, DashArrayLong *b) {
     LONG la = a ? a->length : 0, lb = b ? b->length : 0, i, kind, sh;
     DashArrayLong *result;
     kind = (a && _DASH_ARR_KIND(a)) ? _DASH_ARR_KIND(a) : (b ? _DASH_ARR_KIND(b) : 0);
-    sh = kind == _DASH_ARR_DBLS ? 1 : 0;
+    sh = kind == _DASH_ARR_DBLS ? _DASH_DBL_SH : 0;
     result = DashArray_create((la + lb) << sh);
     if (!result) return NULL;
     la <<= sh;
@@ -24156,7 +24162,7 @@ static {ret_type} {method_name}({params_str}) {{
         a, b = read.format("a"), read.format("b")
         test = f"{call}({b}, {a}) != 0" if boolean else f"{call}({a}, {b}) > 0"
         self.emit_global(f"static APTR _dash_sort_fn_{n};\n"
-                         f"static LONG _dash_sort_after_{n}(const LONG *a, const LONG *b) {{\n"
+                         f"static LONG _dash_sort_after_{n}(const _DashP *a, const _DashP *b) {{\n"
                          f"    return {test};\n}}\n")
         return f"(_dash_sort_fn_{n} = (APTR)({self._generate_expression(f)}), DashArray_sort({arr}, _dash_sort_after_{n}))"
 
@@ -24985,16 +24991,16 @@ static {ret_type} {method_name}({params_str}) {{
             if all(consts):
                 self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
                 name = f"_dash_arrlit_{self._arrlit_counter}"
-                self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(m.group(1) for m in consts)}}};\n")
+                self.emit_global(f"static const _DashP {name}[{size}] = {{{', '.join(m.group(1) for m in consts)}}};\n")
                 return f"DashArray_from({size}, {name})"
-            return f"DashArray_from({size}, (LONG[]){{{', '.join(codes)}}})"
+            return f"DashArray_from({size}, (_DashP[]){{{', '.join(codes)}}})"
         # All constant: a static table (no stack copy; a big compound literal
         # would overflow the 4 KB stack a Kickstart 3.1 shell gives programs)
         values = [constant_int(e, self.analysis.program) for e in node.elements]
         if all(v is not None for v in values):
             self._arrlit_counter = getattr(self, "_arrlit_counter", 0) + 1
             name = f"_dash_arrlit_{self._arrlit_counter}"
-            self.emit_global(f"static const LONG {name}[{size}] = {{{', '.join(c_int_literal(v) for v in values)}}};\n")
+            self.emit_global(f"static const _DashP {name}[{size}] = {{{', '.join(c_int_literal(v) for v in values)}}};\n")
             return f"DashArray_from({size}, {name})"
         # Values go through a C99 compound literal; strings are stored as LONG.
         # A list of Strings, structs or arrays owns its elements (DashArray_own);
@@ -25004,11 +25010,11 @@ static {ret_type} {method_name}({params_str}) {{
         for e in node.elements:
             code = self._generate_expression(e)
             if elem:
-                elements.append(f"(LONG){code}")
+                elements.append(f"(_DashP){code}")
             else:
-                elements.append(f"(LONG){self._escape_any(e, code)}"
+                elements.append(f"(_DashP){self._escape_any(e, code)}"
                                 if self._is_string_expr(e) or self._is_obj_expr(e) else code)
-        literal = f"DashArray_from({size}, (LONG[]){{{', '.join(elements)}}})"
+        literal = f"DashArray_from({size}, (_DashP[]){{{', '.join(elements)}}})"
         if elem:
             kind = "_DASH_ARR_STRS" if elem == "string" else "_DASH_ARR_OBJS"
             return f"DashArray_own({literal}, {kind})"
@@ -25030,7 +25036,7 @@ static {ret_type} {method_name}({params_str}) {{
             if size == 0:
                 return "DashArray_create(0)"
             codes = [f"_dash_f2l({self._generate_expression(e)})" for e in node.elements]
-            c_type, table = "LONG", None
+            c_type, table = "_DashP", None
         values = []
         for e in node.elements:
             lit, sign = (e.operand, -1) if isinstance(e, UnaryOp) and e.operator == "-" else (e, 1)
