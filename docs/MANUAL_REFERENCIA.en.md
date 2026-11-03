@@ -4491,7 +4491,7 @@ goes through C" below); `./dash` takes them that way by itself.
 make -C dashc                                   # builds the compiler (a C compiler for the PC and Python 3)
 ./dash programa.dash -o programa                # straight to hunk
 ./dash --gcc programa.dash -o programa          # through C with gcc
-./dash --version                                # Dash 2.1.0
+./dash --version                                # Dash 2.2.0
 ```
 
 `./dash` is a short script that calls the compiler (`dashc/dashc`) or, with `--gcc`, the path through C. If the
@@ -4525,7 +4525,7 @@ in a line: `dash: el programa lleva C: se compila por C con gcc`.
 | `--dashui file` | Shows the Dash code that comes out of a `.dashui` (what an `import` compiles) |
 | `--tiempos` | How long each phase of the compilation takes |
 | `--gcc` | Through C with gcc (1.x). With it, `-O`, `-O0`, `--small`, `--multifile` and `--no-hunk` work too |
-| `--version` | `Dash 2.1.0` |
+| `--version` | `Dash 2.2.0` |
 
 `./dash` accepts the `-v` and `-q` of 1.x and without `--gcc` they change nothing: the compiler only writes when there is an error.
 Errors say where, like those of 1.x: `file.dash:line:column: Error: message`. Link errors (for example, an

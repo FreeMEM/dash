@@ -33,6 +33,27 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.2.0 (2026-11-03)
+
+Lo que piden el editor de sprites y de mapas de Forja y Fragua, la biblioteca de juegos. Todo son builtins nuevos;
+lo que ya compilaba sigue igual, salvo las ventanas sin pantalla propia (abajo).
+
+- **Mapas de tiles:** `tilemap_create`, `tilemap_load` y `tilemap_save` (IFF `FORM FMAP`, el del editor de mapas
+  de Forja), celdas con espejo (`tilemap_get`, `tilemap_set`), capas (nombre, tipo, visibles; añadir, quitar,
+  mover), `tilemap_resize` y objetos (`tilemap_object_add`, `_find`, `_x`, `_y`, `_kind`...). `tilemap_draw` y
+  `tilemap_draw_masked` pintan un trozo del mapa con los fotogramas de un BOB, de una vez en la ventana.
+- **Sprites y BOB:** `sprite_load_attached` (sprites acoplados de 15 colores), `sprite_rgb8`, `sprite_load_colors`,
+  `bob_load_colors`, `bob_frame_width` (y `bob_load` lee el ancho de fotograma que guarda Forja), `bob_paste`
+  (un fotograma con máscara sin guardar el fondo) y `bob_width`, `bob_height`, `bob_frames`.
+- **Pantallas:** `screen_double_buffer` y `screen_flip` (doble búfer), `screen_clone_wb` (un clon público del
+  Workbench), `screen_make_default`, `screen_visitors`, `mui_window_screen`, `dialog_screen_mode` y
+  `screen_open_mode`. Una pantalla propia sin ventana ya se puede dibujar (`gfx_rgb8` colgaba).
+- **Ventanas sin pantalla propia:** se abren en la pantalla pública por defecto en vez de en el Workbench siempre.
+  Mientras nadie cambie la pública por defecto, es el Workbench, como antes.
+- **Dibujo:** `gfx_pens_draw` (una imagen de lápices de una vez, con zoom; en planos, una sola copia del blitter),
+  `color_pen_free`, y `key_down` (si una tecla está pulsada ahora, para juegos).
+- **Para el Amiga:** el paquete trae Forja con sus editores de sprites y de mapas.
+
 ### 2.1.0 (2026-11-03)
 
 El mismo C de `@link` vale por los dos caminos, el directo y por C con gcc. Es el paso para llevar programas como
