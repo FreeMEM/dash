@@ -28,6 +28,9 @@
 ; --- Copiar: todo el cajón menos el instalador ---
 (if (not (exists #cajon (noreq)))
     (makedir #cajon (infos)))
+; el icono del cajón, el del paquete (su ventana tiene el tamaño para sus iconos), si está al lado
+(if (exists "/Dash.info" (noreq))
+    (copyfiles (source "/Dash.info") (dest #donde) (nogauge)))
 (foreach "" "#?"
     (if (AND (<> @each-name "Instalar") (<> @each-name "Instalar.info"))
         (if (= @each-type 2)
