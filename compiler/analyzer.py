@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Any
 from enum import Enum, auto
 
-from compiler.ast_nodes import (
+from compiler.ast_nodes import (AmigaCast,
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
@@ -284,6 +284,14 @@ class SemanticAnalyzer(ASTVisitor):
             )
             self.define_symbol(symbol, enum)
 
+        # @amiga struct (A6): their layout, and their names as types ("Ptr Node")
+        from compiler.amiga_structs import layouts, AmigaError, SCALARS
+        try:
+            self.amiga = layouts(node)
+        except AmigaError as e:
+            self.amiga = {}
+            self.error(str(e), node)
+        self._amiga_types = {f"Ptr {n}" for n in list(self.amiga) + list(SCALARS)}
         self._check_type_names(node)
 
         # Register all constants
@@ -556,7 +564,7 @@ class SemanticAnalyzer(ASTVisitor):
 
         if node.var_type:
             known = self._TYPE_NAMES | {st.name for st in self.structs} | {
-                e.name for e in (self.program.enums if self.program else [])}
+                e.name for e in (self.program.enums if self.program else [])} | getattr(self, "_amiga_types", set())
             if not type_is_known(node.var_type, known):
                 self.error(f"Unknown type '{node.var_type}' (variable '{node.name}')", node)
             if node.initial_value is not None:
@@ -903,8 +911,26 @@ class SemanticAnalyzer(ASTVisitor):
         self.exit_scope()
         self.in_function = False
 
+    def visit_AmigaCast(self, node: AmigaCast):
+        """Ptr Node(x): x is an address"""
+        from compiler.amiga_structs import SCALARS
+        if node.target not in getattr(self, "amiga", {}) and node.target not in SCALARS:
+            self.error(f"Ptr {node.target}: {node.target} is not an @amiga struct or Byte, UByte, Word, UWord, "
+                       f"Long, ULong", node)
+        self.visit(node.value)
+
     def visit_FunctionCall(self, node: FunctionCall):
         """Visit a function call."""
+        # sizeof(S), offsetof(S, campo) of an @amiga struct (A6): constants
+        if node.name in ("sizeof", "offsetof") and node.arguments and isinstance(node.arguments[0], VarRef) \
+                and node.arguments[0].name in getattr(self, "amiga", {}):
+            lt = self.amiga[node.arguments[0].name]
+            if node.name == "sizeof" and len(node.arguments) != 1:
+                self.error("sizeof(S) takes one @amiga struct", node)
+            if node.name == "offsetof" and (len(node.arguments) != 2 or not isinstance(node.arguments[1], VarRef)
+                                             or node.arguments[1].name not in lt.fields):
+                self.error(f"offsetof({lt.name}, field): {lt.name} has no such field", node)
+            return
         # Int(x) / Float(x) / Double(x) / Fixed(x): conversions; fx_*: Fixed functions
         if node.name in ("Int", "Float", "Double", "Fixed", "fx_sqrt", "fx_sin", "fx_cos"):
             if len(node.arguments) != 1:
@@ -1258,6 +1284,10 @@ class SemanticAnalyzer(ASTVisitor):
             self._not_defined("Variable", node.object_name, node)
             return
 
+        if self._amiga_type_of(node.target if node.target is not None else VarRef(name=node.object_name)):
+            # a field of an @amiga struct (A6): checked by the code generator, which knows the layout
+            self.visit(node.value)
+            return
         if node.target is not None:
             # a.b.c = x: every step before the last one must be a struct field
             self.visit(node.target)
@@ -1370,9 +1400,27 @@ class SemanticAnalyzer(ASTVisitor):
         return self._struct_type_name(list_elem_type(type_name))
 
     def _struct_type_name(self, type_name: Optional[str]) -> Optional[str]:
-        """The type annotation itself when it names a struct."""
+        """The type annotation itself when it names a struct (or is "Ptr X" of an @amiga struct)."""
         if type_name and self.program and self.program.get_struct(type_name):
             return type_name
+        if type_name and type_name in getattr(self, "_amiga_types", ()):
+            return type_name
+        return None
+
+    def _amiga_type_of(self, expr) -> Optional[str]:
+        """"Ptr X" when the expression is a pointer to an @amiga struct (or scalar), else None"""
+        from compiler.amiga_structs import field_value_type, ptr_target
+        if isinstance(expr, AmigaCast):
+            return f"Ptr {expr.target}"
+        if isinstance(expr, VarRef):
+            symbol = self.lookup_symbol(expr.name)
+            name = symbol.struct_name if symbol else None
+            return name if ptr_target(name) else None
+        if isinstance(expr, (MemberAccess, PropertyAccess)):
+            base = self._amiga_type_of(VarRef(name=expr.object_name) if isinstance(expr, MemberAccess) else expr.object)
+            lt = getattr(self, "amiga", {}).get(ptr_target(base) or "")
+            t = field_value_type(lt, expr.member if isinstance(expr, MemberAccess) else expr.property) if lt else None
+            return t if ptr_target(t) else None
         return None
 
     def _list_kind(self, expr: ASTNode) -> Optional[str]:
@@ -1507,6 +1555,9 @@ class SemanticAnalyzer(ASTVisitor):
         prog = self.program
         if prog is None or expr is None:
             return None
+        amiga = self._amiga_type_of(expr)
+        if amiga:
+            return amiga
         if isinstance(expr, VarRef):
             symbol = self.lookup_symbol(expr.name)
             return symbol.struct_name if symbol else None
@@ -1847,7 +1898,8 @@ class SemanticAnalyzer(ASTVisitor):
     def _check_type_names(self, program: Program):
         """Every type annotation names a type: an unknown name used to compile as
         Int silently (an Array field then kept its lists until exit)."""
-        known = self._TYPE_NAMES | {s.name for s in program.structs} | {e.name for e in program.enums}
+        known = self._TYPE_NAMES | {s.name for s in program.structs} | {e.name for e in program.enums} | \
+            getattr(self, "_amiga_types", set())
 
         def check(type_name, where):
             if type_name and not type_is_known(type_name, known):

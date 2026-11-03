@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from string import Template
 
-from compiler.ast_nodes import (
+from compiler.ast_nodes import (AmigaCast, AmigaStructDef,
     ASTNode, ASTVisitor, Program, WindowDef, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
@@ -174,6 +174,9 @@ class CTemplates:
 #ifndef _DASH_DASHOS
 #define _DashP LONG
 #define _DashUP ULONG
+/* amiga_alloc, amiga_free (@amiga struct) */
+#define _DASH_AMIGA_ALLOC(n) ((LONG)AllocMem((ULONG)(n), MEMF_PUBLIC | MEMF_CLEAR))
+#define _DASH_AMIGA_FREE(p, n) FreeMem((APTR)(p), (ULONG)(n))
 #endif
 
 static void _dash_exit(int code);
@@ -21405,7 +21408,7 @@ class CodeGenerator(ASTVisitor):
         # methods may draw (_dash_rp) or use any builtin
         # Their constructors and methods go after the prototypes of the functions, so a method can call any
         # function, constructor or method of the program
-        if self.struct_typedefs or self.analysis.program.structs:
+        if self.struct_typedefs or self.analysis.program.structs or getattr(self, "amiga", None):
             parts.append("\n/* Struct Definitions */\n")
             # an interface's values are pointers to any struct that has it (Lorraine D43)
             parts.append("".join(f"typedef void _Dash_{st.name};\n" if st.is_interface else
@@ -21702,8 +21705,124 @@ static LONG _dash_event_window_handle(void) {{
 
     # === Visitor Methods ===
 
+    # ---- @amiga struct (docs/AARCH64_LOOP.md, A6): views of memory with the 68000 layout ----
+    def _amiga_setup(self, program):
+        """Their C (packed, aligned to 2, with the padding of the 68000 written out) and _dash_a32"""
+        from compiler.amiga_structs import layouts, SCALARS
+        self.amiga = layouts(program)
+        if not self.amiga:
+            return
+        out = ["/* @amiga struct: the layout of the 68000 (32-bit pointers: an address in a ULONG) */\n"
+               "static __inline__ ULONG _dash_a32(_DashUP p) {\n"
+               "#ifdef _DASH_DASHOS\n"
+               "    if (p >> 32) _dash_fail(\"puntero de Amiga de 4 GB o m\\341s\", NULL);\n"
+               "#endif\n"
+               "    return (ULONG)p;\n}\n"]
+        for name, lt in self.amiga.items():
+            fields, pos, npad = [], 0, 0
+            for fname in lt.order:
+                f = lt.fields[fname]
+                if f.off > pos:
+                    fields.append(f"    UBYTE _dash_pad{npad}[{f.off - pos}];\n")
+                    npad += 1
+                if f.kind == "scalar":
+                    decl = f"{SCALARS[f.scalar][2]} {f.name}"
+                elif f.kind == "table":
+                    decl = f"{SCALARS[f.scalar][2]} {f.name}[{f.count}]"
+                elif f.kind == "struct":
+                    decl = f"_DashA_{f.target} {f.name}"
+                else:
+                    decl = f"ULONG {f.name}"
+                fields.append(f"    {decl};   /* {f.off} */\n")
+                pos = f.off + f.size
+            if lt.size > pos:
+                fields.append(f"    UBYTE _dash_pad{npad}[{lt.size - pos}];\n")
+            out.append(f"typedef struct __attribute__((packed, aligned(2))) _DashA_{name} {{\n{''.join(fields) or '    UBYTE _dash_empty;\n'}}}"
+                       f" _DashA_{name};   /* {lt.size} bytes */\n")
+        self.struct_bodies.insert(0, "".join(out) + "\n")
+
+    def _amiga_c(self, target: str) -> str:
+        """The C pointer type of "Ptr target" """
+        from compiler.amiga_structs import SCALARS
+        return f"{SCALARS[target][2]} *" if target in SCALARS else f"_DashA_{target} *"
+
+    def _amiga_of(self, node) -> Optional[str]:
+        """What a pointer expression points to (an @amiga struct or scalar name), or None"""
+        from compiler.amiga_structs import field_value_type, ptr_target
+        if not getattr(self, "amiga", None):
+            return None
+        if isinstance(node, AmigaCast):
+            return node.target
+        if isinstance(node, VarRef):
+            vt = self.var_types.get(node.name) or ""
+            return vt[5:] if vt.startswith("aptr:") else None
+        if isinstance(node, (MemberAccess, PropertyAccess)):
+            base = self._amiga_of(VarRef(name=node.object_name) if isinstance(node, MemberAccess) else node.object)
+            lt = self.amiga.get(base or "")
+            if lt is None:
+                return None
+            return ptr_target(field_value_type(lt, node.member if isinstance(node, MemberAccess) else node.property))
+        return None
+
+    def _amiga_field(self, node):
+        """(C of the base pointer, FieldInfo) when node is a field of an @amiga struct, else None"""
+        if not getattr(self, "amiga", None) or not isinstance(node, (MemberAccess, PropertyAccess)):
+            return None
+        base_node = VarRef(name=node.object_name) if isinstance(node, MemberAccess) else node.object
+        base = self._amiga_of(base_node)
+        lt = self.amiga.get(base or "")
+        if lt is None:
+            return None
+        fname = node.member if isinstance(node, MemberAccess) else node.property
+        f = lt.fields.get(fname)
+        if f is None:
+            raise ValueError(f"@amiga struct {lt.name} has no field '{fname}'")
+        return self._generate_expression(base_node), f
+
+    def _amiga_expr(self, node) -> Optional[str]:
+        """The C of an expression of @amiga structs (Ptr X(x), sizeof, offsetof, a field), or None"""
+        if not getattr(self, "amiga", None):
+            return None
+        if isinstance(node, AmigaCast):
+            return f"(({self._amiga_c(node.target)})(_DashUP)({self._generate_expression(node.value)}))"
+        if isinstance(node, FunctionCall) and node.name in ("sizeof", "offsetof") and node.arguments \
+                and isinstance(node.arguments[0], VarRef) and node.arguments[0].name in self.amiga:
+            lt = self.amiga[node.arguments[0].name]
+            return str(lt.size if node.name == "sizeof" else lt.fields[node.arguments[1].name].off)
+        acc = self._amiga_field(node)
+        if acc is None:
+            return None
+        base, f = acc
+        if f.kind in ("scalar", "bptr"):
+            return f"((LONG)({base})->{f.name})"
+        if f.kind == "ptr":
+            return f"(({self._amiga_c(f.target)})(_DashUP)({base})->{f.name})"
+        return f"(&({base})->{f.name})" if f.kind == "struct" else f"(({base})->{f.name})"
+
+    def _amiga_assign(self, node) -> bool:
+        """p.f = v on an @amiga struct: True if done"""
+        from compiler.amiga_structs import SCALARS
+        target = PropertyAccess(object=node.target, property=node.member) if node.target is not None else \
+            MemberAccess(object_name=node.object_name, member=node.member)
+        acc = self._amiga_field(target)
+        if acc is None:
+            return False
+        base, f = acc
+        value = self._generate_expression(node.value)
+        if f.kind == "scalar":
+            value = f"({SCALARS[f.scalar][2]})({value})"
+        elif f.kind == "bptr":
+            value = f"(ULONG)({value})"
+        elif f.kind == "ptr":
+            value = f"_dash_a32((_DashUP)({value}))"
+        else:
+            raise ValueError(f"{f.name}: a nested @amiga struct or a table is not assigned (its fields are)")
+        self.emit(f"{self.context.indent}({base})->{f.name} = {value};\n")
+        return True
+
     def visit_Program(self, node: Program):
         """Generate code for the program."""
+        self._amiga_setup(node)
         # Store custom headers from @header directives
         self.custom_headers = node.headers if node.headers else []
         self.links = list(node.links)          # @link (dashweb D10)
@@ -22469,6 +22588,9 @@ static {ret_type} {method_name}({params_str}) {{
             init = node.initial_value
             if init is not None and isinstance(init, NilLiteral):
                 init = None
+            from compiler.amiga_structs import ptr_target
+            if ptr_target(node.var_type) and getattr(self, "amiga", None) is not None:
+                self.var_types[node.name] = "aptr:" + ptr_target(node.var_type)
             if self._is_obj_c_type(c_type):
                 self.var_types[node.name] = (self._list_var_type(node.var_type)
                                              if c_type in ("DashArrayLong *", "DashDict *")
@@ -22595,6 +22717,8 @@ static {ret_type} {method_name}({params_str}) {{
             self._mark_num_list(node.name, self._num_list(node.value))
         elif var_type == "DashDict *":
             self.var_types[node.name] = "dict:" + (self._dict_value_kind(node.value) or "int")
+        elif self._amiga_of(node.value) is not None:
+            self.var_types[node.name] = "aptr:" + self._amiga_of(node.value)
         elif var_type == "APTR" and (isinstance(node.value, (LambdaFunc, FunctionRef))
                                      or self.var_types.get(getattr(node.value, "name", None)) == "func"
                                      or self._names_function(node.value)):
@@ -22705,6 +22829,12 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _infer_c_type(self, node) -> str:
         """Infer C type from an AST node."""
+        target = self._amiga_of(node)
+        if target is not None:
+            return self._amiga_c(target)
+        if self._amiga_field(node) is not None or (isinstance(node, FunctionCall) and node.name in ("sizeof", "offsetof")
+                                                   and self._amiga_expr(node) is not None):
+            return "LONG"
         if self._is_fixed_expr(node):
             self.uses_fixed = True
             return "DashFixed"
@@ -23853,6 +23983,9 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _generate_expression(self, node: ASTNode) -> str:
         """Generate code for an expression."""
+        amiga = self._amiga_expr(node)
+        if amiga is not None:
+            return amiga
         if isinstance(node, StringLiteral):
             return node.value
         elif isinstance(node, NumberLiteral):
@@ -24385,6 +24518,8 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_MemberAssign(self, node: MemberAssign):
         """Generate code for member assignment (player.x = 10)."""
+        if self._amiga_assign(node):
+            return
         indent = self.context.indent
         value = self._generate_expression(node.value)
         owner = self._generate_expression(node.target) if node.target is not None else node.object_name
@@ -25906,6 +26041,9 @@ static {return_type} {lambda_name}({param_str}) {{
 
     def _dash_type_to_c(self, dash_type: Optional[str], default: str = "LONG") -> str:
         """Convert a Dash type annotation to its C type (struct names become pointers)."""
+        from compiler.amiga_structs import ptr_target
+        if ptr_target(dash_type):
+            return self._amiga_c(ptr_target(dash_type))
         if dash_type == "Float":
             self.uses_float = True   # any Float links Dash's soft float
         if dash_type == "Double":

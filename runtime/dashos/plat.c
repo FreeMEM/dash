@@ -50,6 +50,34 @@ void *dash_plat_pages(unsigned long bytes)
 }
 #endif
 
+/* ---- memoria de la caja Amiga (amiga_alloc): por debajo de 4 GB, desde 1 GB. Provisional: sin devolverla (en
+   DashOS la dará el exec de la caja) ---- */
+#define DASH_BOX_BASE 0x40000000UL
+static unsigned long box_next = DASH_BOX_BASE, box_end = DASH_BOX_BASE;
+
+void *dash_plat_box_alloc(unsigned long bytes)
+{
+    unsigned long n = (bytes + 7) & ~7UL, p;
+    if (box_next + n > box_end) {
+        unsigned long want = (n + 0xFFFFUL) & ~0xFFFFUL;
+#ifdef DASH_PLAT_LINUX
+        long r = _svc(222, (long)box_end, (long)want, 3, 0x02 | 0x20 | 0x100000, -1, 0);
+        if (r < 0 || (unsigned long)r != box_end) return NULL;
+#else
+        long key = _svc(7, (long)want, 0, 0, 0, 0, 0);
+        if (key < 0 || _svc(8, key, (long)box_end, 3, 0, 0, 0) < 0) return NULL;
+#endif
+        if (box_next == box_end) box_next = box_end;
+        box_end += want;
+    }
+    p = box_next;
+    box_next += n;
+    memset((void *)p, 0, n);
+    return (void *)p;
+}
+
+void dash_plat_box_free(void *p, unsigned long bytes) { (void)p; (void)bytes; }
+
 /* ---- arranque (el del camino por C; el código de dashc entra por _dashc_start y no tiene main) ---- */
 int main() __attribute__((weak));
 void _dash_atexit_run(void);

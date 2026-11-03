@@ -11,9 +11,9 @@ Con --gcc, el programa pasa a C y lo compila el gcc de Amiga de bebbo, como en l
 propio no hace (C en el programa: @native, @c, @header; -O, --small, --multifile...) va solo por C con gcc,
 y lo dice en una línea.
 
-Con --dashos, el programa es para DashOS (AArch64 big-endian, ELF), también directo (dashc-a64: make -C dashc
-dashc-a64) y enlazado con ld.lld; con --dashos --gcc, por C con clang (docs/AARCH64_LOOP.md). tools/dashos_run.py
-lo ejecuta en el PC con qemu-aarch64_be."""
+Con --dashos, el programa es para DashOS (AArch64 big-endian, ELF), también directo y enlazado con ld.lld; con
+--dashos --gcc, por C con clang (docs/AARCH64_LOOP.md). tools/dashos_run.py lo ejecuta en el PC con
+qemu-aarch64_be."""
 import os
 import re
 import subprocess

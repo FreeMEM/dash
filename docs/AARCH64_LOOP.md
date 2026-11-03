@@ -239,4 +239,10 @@ Print offsetof(Node, ln_Name)  # 10
     expresiones regulares...); van en el runtime directo como `db_*`. Los demás son de AmigaOS (A7).
 - 2026-11-03: el ELF del camino directo (`./dash --dashos`) corre en DashOS (QEMU raspi4b, FP bloqueada en EL0):
   "hola 12", "a5", código 0. Los 31 tests de dashc que compilan por C dan lo mismo por el directo; 86 de los de Dash.
+- 2026-11-03: A6 por el camino de C. `@amiga struct` en la gramática (y `Ptr X` como tipo y como conversión),
+  `compiler/amiga_structs.py` (disposición del 68000, tipos), analizador y generador de C (typedef empaquetado y
+  alineado a 2 con el relleno escrito; `_dash_a32` comprueba en DashOS que un puntero quepa en 32 bits). Builtins
+  nuevos `amiga_alloc` y `amiga_free` (AllocMem/FreeMem en el Amiga; en DashOS, memoria de la plataforma desde
+  1 GB, provisional). `peek_*`/`poke_*` pasan la dirección por ULONG (en ARM, con ceros). `tests/test_amiga_struct.dash`
+  pasa en el A1200 emulado y en ARM (qemu). Falta el camino directo (parser.c, recorrido y los dos generadores).
 

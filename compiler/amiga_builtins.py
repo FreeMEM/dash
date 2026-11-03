@@ -1987,42 +1987,59 @@ SYSTEM_FUNCTIONS = {
         name="peek_byte",
         params=["addr"],
         return_type="LONG",
-        c_template="(*((UBYTE *)(${addr})))",
+        c_template="(*((UBYTE *)(_DashUP)(ULONG)(${addr})))",
         description="Read byte from memory address"
     ),
     "peek_word": BuiltinFunc(
         name="peek_word",
         params=["addr"],
         return_type="LONG",
-        c_template="(*((UWORD *)(${addr})))",
+        c_template="(*((UWORD *)(_DashUP)(ULONG)(${addr})))",
         description="Read word from memory address"
     ),
     "peek_long": BuiltinFunc(
         name="peek_long",
         params=["addr"],
         return_type="LONG",
-        c_template="(*((ULONG *)(${addr})))",
+        c_template="(*((ULONG *)(_DashUP)(ULONG)(${addr})))",
         description="Read long from memory address"
     ),
     "poke_byte": BuiltinFunc(
         name="poke_byte",
         params=["addr", "value"],
         return_type="void",
-        c_template="*((UBYTE *)(${addr})) = (UBYTE)(${value})",
+        c_template="*((UBYTE *)(_DashUP)(ULONG)(${addr})) = (UBYTE)(${value})",
         description="Write byte to memory address"
     ),
     "poke_word": BuiltinFunc(
         name="poke_word",
         params=["addr", "value"],
         return_type="void",
-        c_template="*((UWORD *)(${addr})) = (UWORD)(${value})",
+        c_template="*((UWORD *)(_DashUP)(ULONG)(${addr})) = (UWORD)(${value})",
         description="Write word to memory address"
+    ),
+    # @amiga struct (docs/AARCH64_LOOP.md, A6): memory for the structures of AmigaOS (on DashOS, of its Amiga box,
+    # below 4 GB)
+    "amiga_alloc": BuiltinFunc(
+        name="amiga_alloc",
+        params=["size"],
+        return_type="LONG",
+        c_template="_DASH_AMIGA_ALLOC(${size})",
+        description="size bytes for AmigaOS structures (@amiga struct), cleared: AllocMem(MEMF_PUBLIC | MEMF_CLEAR) "
+                    "on the Amiga, memory of the Amiga box (below 4 GB) on DashOS; 0 without memory"
+    ),
+    "amiga_free": BuiltinFunc(
+        name="amiga_free",
+        params=["addr", "size"],
+        return_type="void",
+        c_template="_DASH_AMIGA_FREE(${addr}, ${size})",
+        description="Gives back what amiga_alloc gave (with the same size)"
     ),
     "poke_long": BuiltinFunc(
         name="poke_long",
         params=["addr", "value"],
         return_type="void",
-        c_template="*((ULONG *)(${addr})) = (ULONG)(${value})",
+        c_template="*((ULONG *)(_DashUP)(ULONG)(${addr})) = (ULONG)(${value})",
         description="Write long to memory address"
     ),
 

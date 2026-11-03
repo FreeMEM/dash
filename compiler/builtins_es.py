@@ -169,6 +169,9 @@ DESC_ES = {
     "poke_byte": "Escribe un byte en una dirección de memoria",
     "poke_word": "Escribe un word (16 bits) en una dirección de memoria",
     "poke_long": "Escribe un long (32 bits) en una dirección de memoria",
+    "amiga_alloc": "size bytes para estructuras de AmigaOS (@amiga struct), a cero: AllocMem(MEMF_PUBLIC | MEMF_CLEAR) "
+                   "en el Amiga, memoria de la caja Amiga (por debajo de 4 GB) en DashOS; 0 si no hay memoria",
+    "amiga_free": "Devuelve lo que dio amiga_alloc (con el mismo tamaño)",
     "time_delay": "Espera tics (50 por segundo)",
     "time_delay_ms": "Espera milisegundos (de 20 en 20: lo que dura un tic)",
     "random": "Un número al azar",

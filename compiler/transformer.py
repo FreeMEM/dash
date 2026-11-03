@@ -2,10 +2,11 @@
 Dash Language Parser/Transformer
 Converts Lark parse tree to Dash AST nodes.
 """
+import re
 from lark import Transformer, Token, Tree
 from typing import List, Any, Optional
 
-from compiler.ast_nodes import (
+from compiler.ast_nodes import (AmigaStructDef, AmigaField, AmigaCast,
     ASTNode, Program, WindowDef, WindowProperty, MainBlock, EventLoop,
     OnCloseHandler, OnKeyHandler, OnGadgetHandler, OnMenuHandler, OnClickHandler, OnRightClickHandler, OnInactiveHandler, OnTimerHandler, WindowOpen, WindowClose, PrintStmt, WaitStmt,
     FloatLiteral, StopStmt, BreakStmt, ContinueStmt, Comment, IfStmt, WhileStmt, ForRangeStmt, ForEachStmt,
@@ -71,6 +72,7 @@ class DashASTBuilder(Transformer):
         self._constants: List[ConstDecl] = []
         self._global_vars: List[GlobalVarDecl] = []
         self._structs: List[StructDef] = []
+        self._amiga_structs: List[AmigaStructDef] = []
         self._enums: List[EnumDef] = []
         self._windows: List[WindowDef] = []
         self._functions: List[FunctionDef] = []
@@ -85,7 +87,7 @@ class DashASTBuilder(Transformer):
         self._version: Optional[str] = None
 
     # the top-level definitions are kept in these lists (their rules return "")
-    _COLLECTED = ("_imports", "_constants", "_global_vars", "_structs", "_enums", "_windows", "_functions",
+    _COLLECTED = ("_imports", "_constants", "_global_vars", "_structs", "_amiga_structs", "_enums", "_windows", "_functions",
                   "_extern_funcs", "_native_funcs")
 
     def _call_userfunc(self, tree, new_children=None):
@@ -135,6 +137,7 @@ class DashASTBuilder(Transformer):
             constants=self._constants,
             global_vars=self._global_vars,
             structs=self._structs,
+            amiga_structs=self._amiga_structs,
             enums=self._enums,
             windows=self._windows,
             main=main_block,
@@ -272,6 +275,23 @@ class DashASTBuilder(Transformer):
         )
         self._structs.append(struct)
         return ""  # Return empty string to not include in program items
+
+    def amiga_struct_def(self, items) -> str:
+        """@amiga struct (A6): a view of memory with the 68000 layout"""
+        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        fields = [item for item in items[1:] if isinstance(item, AmigaField)]
+        self._amiga_structs.append(AmigaStructDef(name=name, fields=fields, location=self._get_location(items[0])))
+        return ""
+
+    def amiga_field(self, items) -> AmigaField:
+        name = items[0].value if isinstance(items[0], Token) else str(items[0])
+        ftype = " ".join(str(items[1]).split())
+        ftype = re.sub(r"\s*\[\s*(\d+)\s*\]", r"[\1]", ftype)
+        return AmigaField(name=name, field_type=ftype, location=self._get_location(items[0]))
+
+    def amiga_cast(self, items) -> AmigaCast:
+        """Ptr Node(x)"""
+        return AmigaCast(target=items[0].value if isinstance(items[0], Token) else str(items[0]), value=items[1])
 
     def struct_impls(self, items):
         """struct X: Orden, Filtro (Lorraine D43)"""
