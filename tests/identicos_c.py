@@ -4,15 +4,20 @@ limpios de tamaño de puntero), pero el código de 68k que sale de él no. Trans
 compila con m68k-amigaos-gcc -c (normal, --memcheck y --fpu) y compara los objetos con los guardados.
 
     python3 tests/identicos_c.py --guardar   # guarda los objetos de ahora como referencia (build/c_ref.json)
+    python3 tests/identicos_c.py --guardar --desde origin/main   # la referencia, con compiler/ de ese commit
     python3 tests/identicos_c.py             # comparar
     python3 tests/identicos_c.py -k lista    # solo los ficheros con "lista" en el nombre
 
+Se compara lo que hay en las secciones y sus relocaciones (objdump -s -r), con los números que gcc pone a los
+static locales (_names.6353) quitados: cambian con cualquier declaración nueva, sin cambiar el código.
 __DATE__ y __TIME__ van fijos; los programas con @version cambian con el día: si difieren, se reintenta una vez."""
 import argparse
 import concurrent.futures as cf
 import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +28,8 @@ sys.path.insert(0, str(REPO))
 from compiler.cflags import opt_flags, mui_flags, amissl_flags  # noqa: E402
 
 GCC = "/opt/amiga/bin/m68k-amigaos-gcc"
+OBJDUMP = "/opt/amiga/bin/m68k-amigaos-objdump"
+PYPATH = None   # --desde: el compiler/ de otro commit
 REF = REPO / "build" / "c_ref.json"
 # build_date()/build_time() salen de __DATE__ y __TIME__: fijos, para que no cambien con la hora
 FECHA = ["-Wno-builtin-macro-redefined", '-D__DATE__="Nov  3 2026"', '-D__TIME__="12:00:00"']
@@ -34,11 +41,18 @@ def corpus():
         sorted(REPO.glob("dashc/tests/*.dash"))
 
 
+def huella(o):
+    r = subprocess.run([OBJDUMP, "-s", "-r", o.name], cwd=o.parent, capture_output=True, text=True)
+    text = re.sub(r"\.\d+\b", ".N", r.stdout + r.stderr)
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
 def objetos(src, tmp):
-    """{variante: sha256 del objeto, o el texto del error}"""
+    """{variante: huella del objeto, o el texto del error}"""
     d = Path(tempfile.mkdtemp(dir=tmp))
     c = d / "prog.c"
-    r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)], cwd=REPO,
+    env = dict(os.environ, PYTHONPATH=PYPATH) if PYPATH else None
+    r = subprocess.run([sys.executable, "-m", "compiler.main", str(src), "-o", str(c)], cwd=REPO, env=env,
                        capture_output=True, text=True, timeout=300)
     if r.returncode:
         return {"transpilar": (r.stdout + r.stderr).replace(str(c), "C")[-400:]}
@@ -52,7 +66,7 @@ def objetos(src, tmp):
         o = d / f"prog{nombre}.o"
         r = subprocess.run([GCC, "-noixemul", *FECHA, *flags, *extra, *opt_flags(), "-I/opt/amiga/m68k-amigaos/ndk-include",
                             "-c", "prog.c", "-o", o.name], cwd=d, capture_output=True, text=True, timeout=300)
-        out[nombre] = hashlib.sha256(o.read_bytes()).hexdigest() if r.returncode == 0 else \
+        out[nombre] = huella(o) if r.returncode == 0 else \
             "error: " + r.stderr.replace(str(d), "D")[-400:]
     return out
 
@@ -61,8 +75,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--guardar", action="store_true")
     ap.add_argument("-k", default="")
+    ap.add_argument("--desde", metavar="COMMIT")
     ap.add_argument("-j", type=int, default=os.cpu_count())
     a = ap.parse_args()
+    global PYPATH
+    if a.desde:
+        if not a.guardar:
+            sys.exit("--desde va con --guardar")
+        PYPATH = tempfile.mkdtemp()
+        subprocess.run(f"git archive {a.desde} compiler | tar -x -C {PYPATH}", shell=True, cwd=REPO, check=True)
     fs = [f for f in corpus() if a.k in f.name]
     ref = json.loads(REF.read_text()) if REF.exists() else None
     if not a.guardar and ref is None:

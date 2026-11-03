@@ -69,6 +69,15 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   memoria_proyectar(llave, va, permisos 1 leer | 2 escribir) = 8, con la VA alineada a 4 KB que elige el programa.
   Cambiarán con la API de S11: solo las funciones de plataforma conocen estos números.
 
+## Reglas del bucle
+
+- Cada vuelta mira `~/.claude/state/uso-7d.txt`: con 90 % o más, se cierra en un punto seguro, se anota y se para.
+- Se hace el siguiente paso pendiente, con sus pruebas. Antes de cada commit que toque `compiler/` o `dashc/src/`,
+  pasan `tests/identicos_c.py` y `dashc/tests/identicos.py`.
+- Commit y push de la rama `aarch64`; una línea en la bitácora. Sin pausas entre vueltas.
+- Al acabar una fase, aviso a freemem-f9 (DashOS).
+- El emulador se usa bajo `flock /run/user/1000/dash-emu-red.lock`.
+
 ## Preguntas abiertas
 
 - Nombre de la opción: `--dashos` (propuesta).
@@ -80,3 +89,9 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   del corpus (tests, ejemplos y los suyos); el resto da error en los dos y también se compara.
 - 2026-11-03: el usuario elige 64 bits de verdad. `tests/identicos_c.py`: 385/385 idénticos (fecha y hora de gcc
   fijas). Cargador y pila de DashOS apuntados.
+- 2026-11-03: A1 empezada. `runtime/dashos/` (`dash_dashos.h`: tipos del Amiga con punteros de 64 bits;
+  `plat.c`: arranque, memoria con los nombres de exec desde 4 GB, Printf, libc mínima; plataformas DashOS y Linux)
+  y `DASH_TARGET=dashos` en codegen (`_dashos_port`). `tools/dashos_run.py` compila con clang y ld.lld y ejecuta en
+  qemu-aarch64_be: el primer programa (Print, funciones, textos) da su salida. `_DashP`, entero del tamaño de un
+  puntero, para los primeros cortes. `identicos_c.py` compara secciones y relocaciones (`objdump -s -r`) sin los
+  números de los static locales; `--desde COMMIT` saca la referencia de otro commit. 385/385.

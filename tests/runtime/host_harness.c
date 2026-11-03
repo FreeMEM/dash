@@ -12,6 +12,7 @@
 #include <stdarg.h>
 #include <math.h>
 typedef int32_t LONG; typedef uint32_t ULONG; typedef char *STRPTR; typedef const char *CONST_STRPTR; typedef short BOOL; typedef void *APTR; typedef unsigned char UBYTE; typedef uint16_t UWORD;
+typedef intptr_t _DashP;   /* an integer the size of a pointer (LONG on the Amiga) */
 #define MEMF_ANY 0
 #define MEMF_CLEAR 0x10000
 static APTR CreatePool(ULONG r, ULONG p, ULONG t){ return malloc(1); }

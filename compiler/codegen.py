@@ -169,6 +169,11 @@ class CTemplates:
 #include <stdlib.h>
 #include <stabs.h>
 
+/* An integer the size of a pointer: LONG on the Amiga, 64 bits on DashOS (runtime/dashos/dash_dashos.h) */
+#ifndef _DASH_DASHOS
+typedef LONG _DashP;
+#endif
+
 static void _dash_exit(int code);
 
 /* What runs when the program ends, however it ends (libnix's exit list), last in first: libnix's atexit
@@ -190,14 +195,16 @@ ADD2EXIT(_dash_atexit_run, 0);
    ./dash --debug stops in the debugger first. */
 /* The message of a runtime error (fmt with up to 4 arguments, lines separated by \\n): on the output,
    or in a requester when there is none (a program started from the Workbench) */
-static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) __attribute__((unused));
-static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) {
-    LONG args[4];
+static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP d) __attribute__((unused));
+static void _dash_fail_say(const char *fmt, _DashP a, _DashP b, _DashP c, _DashP d) {
+    _DashP args[4];
     args[0] = a; args[1] = b; args[2] = c; args[3] = d;
     if (DOSBase && Output()) {
         VPrintf((CONST_STRPTR)fmt, args);
         PutStr((CONST_STRPTR)"\\n");
-    } else if (IntuitionBase) {
+    }
+#ifndef _DASH_DASHOS
+    else if (IntuitionBase) {
         struct EasyStruct es;
         es.es_StructSize = sizeof(es);
         es.es_Flags = 0;
@@ -206,6 +213,7 @@ static void _dash_fail_say(const char *fmt, LONG a, LONG b, LONG c, LONG d) {
         es.es_GadgetFormat = (UBYTE *)"Vale";
         EasyRequestArgs(NULL, &es, NULL, args);
     }
+#endif
 }
 
 static void _dash_fail(const char *what, const char *where) __attribute__((noreturn, unused));
@@ -213,8 +221,8 @@ static void _dash_fail(const char *what, const char *where) {
 #ifdef _dash_debug_trap
     _dash_debug_trap(what);
 #endif
-    if (where) _dash_fail_say("Error: %s (en %s)", (LONG)what, (LONG)where, 0, 0);
-    else _dash_fail_say("Error: %s", (LONG)what, 0, 0, 0);
+    if (where) _dash_fail_say("Error: %s (en %s)", (_DashP)what, (_DashP)where, 0, 0);
+    else _dash_fail_say("Error: %s", (_DashP)what, 0, 0, 0);
     _dash_exit(20);
     for (;;) ;
 }
@@ -230,7 +238,7 @@ static void _dash_fail_at(const char *what, LONG w) __attribute__((noreturn, unu
 #if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
 #define _DASH_68020 1
 #endif
-#ifdef _DASH_68020
+#if defined(_DASH_68020) || !defined(__mc68000__)
 #define _DASH_MUL(a, b) ((LONG)(a) * (LONG)(b))
 #define _DASH_DIV(a, b) ((LONG)(a) / (LONG)(b))
 #define _DASH_MOD(a, b) ((LONG)(a) % (LONG)(b))
@@ -274,7 +282,7 @@ static void _dash_fail_at(const char *what, LONG w) {
 #ifdef _dash_debug_trap
     _dash_debug_trap(what);
 #endif
-    _dash_fail_say("Error: %s (en %s:%ld)", (LONG)what, (LONG)_dash_srcfiles[f], w & 0xFFFF, 0);
+    _dash_fail_say("Error: %s (en %s:%ld)", (_DashP)what, (_DashP)_dash_srcfiles[f], w & 0xFFFF, 0);
     _dash_exit(20);
     for (;;) ;
 }
@@ -706,10 +714,10 @@ typedef struct _DashStrHdr {
 #endif
 static __inline__ _DASH_NOASAN BOOL _dash_str_ours(CONST_STRPTR p) {
     const _DashStrHdr *h = _DASH_STR_HDR(p);
-    if ((ULONG)p & 1) return FALSE;
+    if ((_DashP)p & 1) return FALSE;
     /* (a literal's address is a constant of alignment 1 for GCC: it would read the long byte by byte) */
     __asm__ ("" : "+r" (h));
-    return h->self == (ULONG)((ULONG)h + _DASH_STR_KEY);   /* (ULONG: 32 bits also on the PC of the tests) */
+    return h->self == (ULONG)((_DashP)h + _DASH_STR_KEY);   /* (ULONG: 32 bits also on the PC of the tests) */
 }
 #define _DASH_STR_OURS(p) _dash_str_ours((CONST_STRPTR)(p))
 
@@ -773,7 +781,7 @@ static __inline__ __attribute__((always_inline)) STRPTR _dash_str_alloc_in(ULONG
     _dash_mc_strs++;
 #endif
     h->len = len;
-    h->self = (ULONG)((ULONG)h + _DASH_STR_KEY);
+    h->self = (ULONG)((_DashP)h + _DASH_STR_KEY);
     if (temp) {
         _DashTmp *t = &_dash_ts[_dash_ts_n++];
         t->h = h;
@@ -20554,6 +20562,9 @@ class CodeGenerator(ASTVisitor):
         self.prof_names: List[str] = ["Main"]
         # ./dash --memcheck: field accesses check for nil (_DASH_NN)
         self.memcheck = os.environ.get("DASH_MEMCHECK_C") == "1"
+        # ./dash --dashos (DASH_TARGET=dashos, docs/AARCH64_LOOP.md): C for DashOS (AArch64 big-endian), on
+        # runtime/dashos instead of AmigaOS
+        self.target = os.environ.get("DASH_TARGET") or "amiga"
         self.cur_where = 0       # file << 16 | line of the statement being generated (for _DASH_NN)
         self.src_files: List[str] = []   # the files of cur_where (_dash_srcfiles)
         self.globals: List[str] = []
@@ -21290,6 +21301,26 @@ static LONG _dash_event_window_handle(void) {{
             m = re.search(r"^#define DASH_STACK (\d+).*$", program, re.M)
             if m and int(m.group(1)) < self.stack_min:
                 program = program[:m.start()] + f"#define DASH_STACK {self.stack_min}  /* @stack */" + program[m.end():]
+        if self.target == "dashos":
+            program = self._dashos_port(program)
+        return program
+
+    def _dashos_port(self, program: str) -> str:
+        """The program for DashOS: runtime/dashos/dash_dashos.h instead of AmigaOS's headers, no libnix
+        (stack, exit list), no trap handler, no libraries to open."""
+        import re
+        head = "#include <proto/exec.h>\n#include <proto/intuition.h>\n#include <proto/dos.h>\n" \
+               "#include <string.h>\n#include <stdlib.h>\n#include <stabs.h>\n"
+        assert program.count(head) == 1, "dashos: the program header changed"
+        program = program.replace(head, '#include "dash_dashos.h"\n', 1)
+        program = program.replace("ADD2EXIT(_dash_atexit_run, 0);\n", "", 1)
+        stack = program.index("/* Stack: at least DASH_STACK")
+        program = program[:stack] + program[program.index("#endif\n", stack) + 7:]
+        trap = program.index("/* Dash Trap Runtime")
+        program = program[:trap] + program[program.index("\nint main(", trap) + 1:]
+        program = program.replace("    _dash_trap_on();\n", "", 1)
+        program = re.sub(r"^ *(IntuitionBase|DOSBase) = \(struct \w+ \*\)OpenLibrary\(.*\n", "", program, flags=re.M)
+        program = re.sub(r"^ *if \((IntuitionBase|DOSBase)\) CloseLibrary\(.*\n", "", program, flags=re.M)
         return program
 
     def _get_main_template(self) -> Template:
