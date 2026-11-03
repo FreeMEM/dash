@@ -2355,6 +2355,30 @@ static LONG _dash_pixel_rgb(LONG x, LONG y) {
     return (LONG)(((c[0] >> 24) << 16) | ((c[1] >> 24) << 8) | (c[2] >> 24));
 }
 
+/* The colour of pixel (x, y) of the front screen as 0xRRGGBB, whatever window or backdrop drew it (its bitmap,
+   not a layer's); -1 outside it. To see what is behind a window before opening it (rounded corners). */
+static LONG _dash_screen_pixel_rgb(LONG x, LONG y) {
+    struct Screen *sc;
+    ULONG c[3], lock;
+    LONG r = -1, pen;
+    if (!_dash_blend_libs) {
+        _dash_blend_libs = 1;
+        if (!CyberGfxBase) CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
+        if (!_dash_p96) _dash_p96 = OpenLibrary((CONST_STRPTR)"Picasso96API.library", 2);
+    }
+    lock = LockIBase(0);
+    sc = IntuitionBase->FirstScreen;
+    if (sc && x >= 0 && y >= 0 && x < sc->Width && y < sc->Height) {
+        if (_dash_blend_truecolor(&sc->RastPort)) r = (LONG)_dash_rgb_read(&sc->RastPort, x, y);
+        else if ((pen = ReadPixel(&sc->RastPort, x, y)) >= 0) {
+            GetRGB32(sc->ViewPort.ColorMap, pen, 1, c);
+            r = (LONG)(((c[0] >> 24) << 16) | ((c[1] >> 24) << 8) | (c[2] >> 24));
+        }
+    }
+    UnlockIBase(lock);
+    return r;
+}
+
 /* The part of x1..x2, y1..y2 inside the drawing area (the window's inner layer, or the bitmap) */
 static BOOL _dash_blend_clip(LONG *x1, LONG *y1, LONG *x2, LONG *y2) {
     LONG t, w, h;
@@ -4223,6 +4247,54 @@ static struct Window *_dash_wm_find(LONG id) {
     return NULL;
 }
 
+/* The real path of a file or drawer, as its filesystem names it ("SYS:Utilities/Clock" -> "System:Utilities/Clock"),
+   to compare it with wm_path: "" if it is not there */
+static STRPTR _dash_file_real_path(STRPTR p) {
+    char path[256];
+    BPTR l = p && *p ? Lock((CONST_STRPTR)p, ACCESS_READ) : 0;
+    path[0] = 0;
+    if (l) {
+        if (!NameFromLock(l, (STRPTR)path, sizeof(path))) path[0] = 0;
+        UnLock(l);
+    }
+    return _dash_str_dup((STRPTR)path, TRUE);
+}
+
+/* The path of the program of window i: the directory it was loaded from (its process's pr_HomeDir, which the
+   Workbench and the Shell both set) and its name (the command of a Shell process, else the task's). "" if the
+   window is not a process's with a home directory, or it closed since wm_read. For the dock: what it pins. */
+static STRPTR _dash_wm_path_of(LONG i) {
+    char path[256], name[108];
+    BPTR home = 0;
+    struct Window *w;
+    struct Task *t;
+    path[0] = 0;
+    name[0] = 0;
+    if (i >= 0 && i < _dash_wm_n) {
+        Forbid();
+        w = _dash_wm_find((LONG)_dash_wm_w[i]);
+        t = w && w->UserPort ? (struct Task *)w->UserPort->mp_SigTask : NULL;
+        if (t && t->tc_Node.ln_Type == NT_PROCESS && ((struct Process *)t)->pr_HomeDir) {
+            struct Process *pr = (struct Process *)t;
+            struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(pr->pr_CLI);
+            UBYTE *b = cli ? (UBYTE *)BADDR(cli->cli_CommandName) : NULL;
+            if (b && b[0]) _dash_wm_copy(name, b + 1, b[0], sizeof(name));
+            else _dash_wm_copy(name, (UBYTE *)t->tc_Node.ln_Name, -1, sizeof(name));
+            /* (a copy of the lock while it is still the process's: its handler answers this before an UnLock
+               that comes later) */
+            home = DupLock(pr->pr_HomeDir);
+        }
+        Permit();
+        if (home) {
+            if (!name[0] || !NameFromLock(home, (STRPTR)path, sizeof(path))
+                || !AddPart((STRPTR)path, FilePart((STRPTR)name), sizeof(path)))
+                path[0] = 0;
+            UnLock(home);
+        }
+    }
+    return _dash_str_dup((STRPTR)path, TRUE);
+}
+
 /* Move and size: within its limits (the size stays if it has no size gadget) and inside its screen */
 static BOOL _dash_wm_set_box(LONG id, LONG x, LONG y, LONG wd, LONG ht) {
     struct Window *w;
@@ -4301,6 +4373,229 @@ static LONG _dash_wm_bar_height(void) {
     return s ? s->BarHeight + 1 : 0;
 }
 
+"""
+
+    # Trasfondo 2.0 (the dock): icons dropped on a window of the program from the Workbench
+    APPWIN_RUNTIME = """\
+/* Dash AppWindows (Trasfondo 2.0, the dock): a window of the program takes the icons dropped on it from the
+   Workbench (AddAppWindow, workbench.library 36). app_drop() gives their paths one by one (the drawer and the
+   icon's name; a drawer, its own path), and app_drop_x/y where the last one fell, from the window's corner.
+   Polled, from On Timer: the EventLoop does not wait for them. Removed before the window closes (a close hook)
+   and at exit. */
+#include <workbench/workbench.h>
+#include <workbench/startup.h>
+#include <proto/wb.h>
+#define _DASH_APPW_MAX 4
+#define _DASH_APPW_Q 16
+static struct Library *_dash_appw_wbase = NULL;
+static struct MsgPort *_dash_appw_port = NULL;
+static struct AppWindow *_dash_appw[_DASH_APPW_MAX];
+static struct Window *_dash_appw_win[_DASH_APPW_MAX];
+static char _dash_appw_q[_DASH_APPW_Q][256];
+static WORD _dash_appw_qx[_DASH_APPW_Q], _dash_appw_qy[_DASH_APPW_Q];
+static LONG _dash_appw_head = 0, _dash_appw_n = 0, _dash_appw_x = 0, _dash_appw_y = 0;
+
+/* Out of the Workbench: the AppWindows of win (all with NULL) */
+static void _dash_appw_remove(struct Window *win) {
+    struct Library *WorkbenchBase = _dash_appw_wbase;
+    LONG i;
+    for (i = 0; i < _DASH_APPW_MAX; i++)
+        if (_dash_appw[i] && (!win || _dash_appw_win[i] == win)) {
+            RemoveAppWindow(_dash_appw[i]);
+            _dash_appw[i] = NULL;
+            _dash_appw_win[i] = NULL;
+        }
+}
+
+static void _dash_appw_cleanup(void) {
+    struct Message *m;
+    _dash_appw_remove(NULL);
+    if (_dash_appw_port) {
+        while ((m = GetMsg(_dash_appw_port))) ReplyMsg(m);
+        DeleteMsgPort(_dash_appw_port);
+        _dash_appw_port = NULL;
+    }
+    if (_dash_appw_wbase) {
+        CloseLibrary(_dash_appw_wbase);
+        _dash_appw_wbase = NULL;
+    }
+}
+
+/* The window (0 the current one, or a handle of window_create) takes dropped icons: true if it does */
+static BOOL _dash_app_window(LONG h) {
+    struct Library *WorkbenchBase;
+    struct Window *win = _dash_window_get(h);
+    LONG i, slot = -1;
+    if (!win) return FALSE;
+    for (i = 0; i < _DASH_APPW_MAX; i++) {
+        if (_dash_appw[i] && _dash_appw_win[i] == win) return TRUE;
+        if (!_dash_appw[i] && slot < 0) slot = i;
+    }
+    if (slot < 0) return FALSE;
+    if (!_dash_appw_wbase) {
+        if (!(_dash_appw_wbase = OpenLibrary((CONST_STRPTR)"workbench.library", 36))) return FALSE;
+        _dash_atexit(_dash_appw_cleanup);
+    }
+    if (!_dash_appw_port && !(_dash_appw_port = CreateMsgPort())) return FALSE;
+    WorkbenchBase = _dash_appw_wbase;
+    if (!(_dash_appw[slot] = AddAppWindowA(0, 0, win, _dash_appw_port, NULL))) return FALSE;
+    _dash_appw_win[slot] = win;
+    _dash_on_close(_dash_appw_remove);
+    return TRUE;
+}
+
+/* The messages waiting, each icon to the queue (when full, the oldest goes) */
+static void _dash_appw_take(void) {
+    struct AppMessage *am;
+    char path[256];
+    LONG i, k;
+    if (!_dash_appw_port) return;
+    while ((am = (struct AppMessage *)GetMsg(_dash_appw_port))) {
+        if (am->am_Type == AMTYPE_APPWINDOW)
+            for (i = 0; i < am->am_NumArgs; i++) {
+                struct WBArg *a = &am->am_ArgList[i];
+                path[0] = 0;
+                if (!a->wa_Lock || !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) continue;
+                if (a->wa_Name && a->wa_Name[0] && !AddPart((STRPTR)path, a->wa_Name, sizeof(path))) continue;
+                if (_dash_appw_n == _DASH_APPW_Q) {
+                    _dash_appw_head = (_dash_appw_head + 1) % _DASH_APPW_Q;
+                    _dash_appw_n--;
+                }
+                k = (_dash_appw_head + _dash_appw_n++) % _DASH_APPW_Q;
+                strcpy(_dash_appw_q[k], path);
+                _dash_appw_qx[k] = am->am_MouseX;
+                _dash_appw_qy[k] = am->am_MouseY;
+            }
+        ReplyMsg((struct Message *)am);
+    }
+}
+
+/* The path of the next icon dropped on the program's AppWindows; "" if none */
+static STRPTR _dash_app_drop(void) {
+    LONG k;
+    _dash_appw_take();
+    if (!_dash_appw_n) return _dash_str_dup((STRPTR)"", TRUE);
+    k = _dash_appw_head;
+    _dash_appw_head = (k + 1) % _DASH_APPW_Q;
+    _dash_appw_n--;
+    _dash_appw_x = _dash_appw_qx[k];
+    _dash_appw_y = _dash_appw_qy[k];
+    return _dash_str_dup((STRPTR)_dash_appw_q[k], TRUE);
+}
+
+static LONG _dash_app_drop_x(void) { return _dash_appw_x; }
+static LONG _dash_app_drop_y(void) { return _dash_appw_y; }
+"""
+
+    # Trasfondo 2.0 (the dock): icons (.info) drawn as the Workbench draws them, without datatypes
+    ICON_RUNTIME = """\
+/* Dash icons (Trasfondo 2.0, the dock): the icon (.info) of a program, a drawer or a file, by icon.library, drawn
+   as the Workbench draws it. From 3.5 (icon.library 44) with its colours mapped to the screen of the window
+   (colour icons, and PNG ones where the system reads them) and, for a file without an icon, the default one of its
+   type; before, its planar image (and the default one of icon.library 36). Up to 64 at a time; freed at exit. */
+#include <workbench/workbench.h>
+#include <workbench/icon.h>
+#include <proto/icon.h>
+#define _DASH_ICONS_MAX 64
+static struct Library *_dash_icons_lib = NULL;
+static struct DiskObject *_dash_icons[_DASH_ICONS_MAX + 1];
+static WORD _dash_icons_box[_DASH_ICONS_MAX + 1][4];    /* left, top (from where it is drawn), width, height */
+
+static void _dash_icons_cleanup(void) {
+    struct Library *IconBase = _dash_icons_lib;
+    LONG i;
+    if (!IconBase) return;
+    for (i = 1; i <= _DASH_ICONS_MAX; i++)
+        if (_dash_icons[i]) {
+            FreeDiskObject(_dash_icons[i]);
+            _dash_icons[i] = NULL;
+        }
+    CloseLibrary(IconBase);
+    _dash_icons_lib = NULL;
+}
+
+/* The icon of path (without ".info"): a number for icon_draw, or 0 */
+static LONG _dash_icon_load(STRPTR path) {
+    struct Library *IconBase;
+    struct DiskObject *d = NULL;
+    LONG i, slot = 0;
+    if (!path || !*path) return 0;
+    if (!_dash_icons_lib) {
+        if (!(_dash_icons_lib = OpenLibrary((CONST_STRPTR)"icon.library", 36))) return 0;
+        _dash_atexit(_dash_icons_cleanup);
+    }
+    IconBase = _dash_icons_lib;
+    for (i = 1; i <= _DASH_ICONS_MAX && !slot; i++)
+        if (!_dash_icons[i]) slot = i;
+    if (!slot) return 0;
+    _dash_icons_box[slot][0] = _dash_icons_box[slot][1] = 0;
+    if (IconBase->lib_Version >= 44) {
+        struct Screen *s = _dash_win ? _dash_win->WScreen : NULL, *pub = NULL;
+        struct Rectangle r;
+        struct TagItem get[3], box[3];
+        if (!s) s = pub = LockPubScreen(NULL);
+        get[0].ti_Tag = ICONGETA_Screen; get[0].ti_Data = (ULONG)s;
+        get[1].ti_Tag = ICONGETA_FailIfUnavailable; get[1].ti_Data = FALSE;
+        get[2].ti_Tag = TAG_DONE;
+        d = GetIconTagList((CONST_STRPTR)path, get);
+        box[0].ti_Tag = ICONDRAWA_Borderless; box[0].ti_Data = TRUE;
+        box[1].ti_Tag = ICONDRAWA_Frameless; box[1].ti_Data = TRUE;
+        box[2].ti_Tag = TAG_DONE;
+        if (d && s && GetIconRectangleA(&s->RastPort, d, NULL, &r, box)) {
+            _dash_icons_box[slot][0] = r.MinX;
+            _dash_icons_box[slot][1] = r.MinY;
+            _dash_icons_box[slot][2] = r.MaxX - r.MinX + 1;
+            _dash_icons_box[slot][3] = r.MaxY - r.MinY + 1;
+        } else if (d) {
+            _dash_icons_box[slot][2] = d->do_Gadget.Width;
+            _dash_icons_box[slot][3] = d->do_Gadget.Height;
+        }
+        if (pub) UnlockPubScreen(NULL, pub);
+    } else {
+        d = GetDiskObjectNew((CONST_STRPTR)path);
+        if (d) {
+            _dash_icons_box[slot][2] = d->do_Gadget.Width;
+            _dash_icons_box[slot][3] = d->do_Gadget.Height;
+        }
+    }
+    if (!d) return 0;
+    _dash_icons[slot] = d;
+    return slot;
+}
+
+static struct DiskObject *_dash_icon_get(LONG id) {
+    return id >= 1 && id <= _DASH_ICONS_MAX ? _dash_icons[id] : NULL;
+}
+
+/* Its width (what 0) or height (1) as it is drawn; 0 without that icon */
+static LONG _dash_icon_size(LONG id, LONG what) {
+    if (!_dash_icon_get(id) || what < 0 || what > 1) return 0;
+    return _dash_icons_box[id][2 + what];
+}
+
+/* Drawn with its top left corner at (x, y) of the window, over what is there (no frame, no name) */
+static void _dash_icon_draw(LONG id, LONG x, LONG y) {
+    struct Library *IconBase = _dash_icons_lib;
+    struct DiskObject *d = _dash_icon_get(id);
+    if (!d || !_dash_rp || !IconBase) return;
+    if (IconBase->lib_Version >= 44) {
+        struct TagItem tags[4];
+        tags[0].ti_Tag = ICONDRAWA_Borderless; tags[0].ti_Data = TRUE;
+        tags[1].ti_Tag = ICONDRAWA_Frameless; tags[1].ti_Data = TRUE;
+        tags[2].ti_Tag = ICONDRAWA_EraseBackground; tags[2].ti_Data = FALSE;
+        tags[3].ti_Tag = TAG_DONE;
+        DrawIconStateA(_dash_rp, d, NULL, x - _dash_icons_box[id][0], y - _dash_icons_box[id][1], IDS_NORMAL, tags);
+    } else if (d->do_Gadget.GadgetRender)
+        DrawImage(_dash_rp, (struct Image *)d->do_Gadget.GadgetRender, x, y);
+}
+
+static void _dash_icon_free(LONG id) {
+    struct Library *IconBase = _dash_icons_lib;
+    struct DiskObject *d = _dash_icon_get(id);
+    if (!d || !IconBase) return;
+    FreeDiskObject(d);
+    _dash_icons[id] = NULL;
+}
 """
 
     METER_RUNTIME = """\
@@ -12451,6 +12746,7 @@ $user_code
 #define _DASH_WINDOW_VARS_DEFINED
 struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
+struct Window *_dash_win_decl = NULL;   /* the declared window (Window X ... end) opened last: window_use(0) */
 struct Screen *_dash_screen = NULL;
 /* Runtimes that keep something of a window (menus, gadgets) let go of it here,
    just before every CloseWindow */
@@ -12465,6 +12761,7 @@ static void _dash_on_close(void (*hook)(struct Window *)) {
 static void _dash_before_close(struct Window *win) {
     LONG i;
     if (!win) return;
+    if (_dash_win_decl == win) _dash_win_decl = NULL;
     for (i = 0; i < 3; i++) if (_dash_close_hooks[i]) _dash_close_hooks[i](win);
 }
 #endif
@@ -14180,6 +14477,16 @@ static void _dash_window_to_back(LONG h) {
     if (w) WindowToBack(w);
 }
 
+/* The current window, the one gfx_ and the rest draw in: a handle of window_create, or 0 the declared window
+   (Window X ... end) opened last, for after drawing in another one. False if it is not open */
+static BOOL _dash_window_use(LONG h) {
+    struct Window *w = h ? _dash_window_get(h) : _dash_win_decl;
+    if (!w) return FALSE;
+    _dash_win = w;
+    _dash_rp = w->RPort;
+    return TRUE;
+}
+
 static void _dash_window_activate(LONG h) {
     struct Window *w = _dash_window_get(h);
     if (w) ActivateWindow(w);
@@ -15266,6 +15573,7 @@ struct GfxBase *GfxBase = NULL;
 #define _DASH_WINDOW_VARS_DEFINED
 struct RastPort *_dash_rp = NULL;
 struct Window *_dash_win = NULL;
+struct Window *_dash_win_decl = NULL;   /* the declared window (Window X ... end) opened last: window_use(0) */
 struct Screen *_dash_screen = NULL;
 /* Runtimes that keep something of a window (menus, gadgets) let go of it here,
    just before every CloseWindow */
@@ -15280,6 +15588,7 @@ static void _dash_on_close(void (*hook)(struct Window *)) {
 static void _dash_before_close(struct Window *win) {
     LONG i;
     if (!win) return;
+    if (_dash_win_decl == win) _dash_win_decl = NULL;
     for (i = 0; i < 3; i++) if (_dash_close_hooks[i]) _dash_close_hooks[i](win);
 }
 #endif
@@ -21421,6 +21730,7 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
 
     if (!win_$name) _dash_exit(20);
     _dash_win = win_$name;
+    _dash_win_decl = win_$name;
     _dash_rp = win_$name->RPort;
 """)
 
@@ -21587,6 +21897,8 @@ _RUNTIME_FLAGS = [
     ("CX_RUNTIME", "uses_cx"),              # Trasfondo: commodity
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
     ("WM_RUNTIME", "uses_wm"),              # Trasfondo 2.0: the windows of every program
+    ("APPWIN_RUNTIME", "uses_appwin"),      # Trasfondo 2.0: icons dropped on a window (the dock)
+    ("ICON_RUNTIME", "uses_icons"),         # Trasfondo 2.0: icons drawn by icon.library (the dock)
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
     ("DATE_RUNTIME", "uses_date"),          # Trasfondo 0.7: the clock
@@ -21898,6 +22210,8 @@ class CodeGenerator(ASTVisitor):
         self.uses_cx: bool = False       # tooltype, cx_* (CX_RUNTIME, Trasfondo)
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
         self.uses_wm: bool = False       # wm_read, wm_set_box... (WM_RUNTIME, Trasfondo 2.0)
+        self.uses_appwin: bool = False   # app_window, app_drop (APPWIN_RUNTIME, Trasfondo 2.0)
+        self.uses_icons: bool = False    # icon_load, icon_draw (ICON_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
         self.catalog = None              # @catalog: (name literal, version, built-in language literal or None)
@@ -22241,6 +22555,10 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.METER_RUNTIME)
         if self.uses_wm:
             parts.append(CTemplates.WM_RUNTIME)
+        if self.uses_appwin:
+            parts.append(CTemplates.APPWIN_RUNTIME)
+        if self.uses_icons:
+            parts.append(CTemplates.ICON_RUNTIME)
         if self.uses_mouse:
             parts.append(CTemplates.MOUSE_RUNTIME)
         if self.uses_catalog:
@@ -22511,6 +22829,10 @@ static LONG _dash_event_window_handle(void) {{
             cleanup.append("    _dash_instance_cleanup();\n")
         if self.uses_cx:
             cleanup.insert(0, "    _dash_cx_cleanup();\n")   # the broker out of Exchange first
+        if self.uses_appwin:
+            cleanup.insert(0, "    _dash_appw_cleanup();\n")   # out of the Workbench before the windows close
+        if self.uses_icons:
+            cleanup.append("    _dash_icons_cleanup();\n")
         if self.uses_meter:
             cleanup.append("    _dash_meter_cleanup();\n")
         if self.uses_mouse:
@@ -25271,6 +25593,11 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # catalog_language and date_text give a String
         if self.uses_cx or self.uses_meter or self.uses_mouse or self.uses_wm:
             self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
+        if self.uses_appwin:
+            self.uses_strings = True   # app_drop gives a String
+            self.uses_winmgr = True    # app_window takes a window handle (_dash_window_get)
+        if self.uses_icons:
+            self.needs_gfx = True      # ICON_RUNTIME draws on _dash_rp
         if self.uses_blend:
             self.uses_fonts = True     # BLEND_RUNTIME takes its pens from FONT_RUNTIME
         if self.uses_fonts:

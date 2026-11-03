@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 895 functions, 895 implemented, 0 not implemented.
+Total: 908 functions, 908 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -854,6 +854,7 @@ Total: 895 functions, 895 implemented, 0 not implemented.
 | `gadget_y(win, n)` | `LONG` | y of the centre of that gadget, as gadget_x |  |
 | `gadget_selected(win, n)` | `BOOL` | True if the gadget at place n (a checkbox) is selected |  |
 | `screen_pixel(x, y)` | `LONG` | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
+| `screen_pixel_rgb(x, y)` | `LONG` | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
 | `cx_send(name, command)` | `LONG` | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
 
 ## Window manager (every program's windows)
@@ -864,6 +865,7 @@ Total: 895 functions, 895 implemented, 0 not implemented.
 | `wm_id(i)` | `LONG` | The id of window i of the last wm_read, for wm_set_box, wm_front... (0 outside the list) |  |
 | `wm_title(i)` | `STRPTR` | The title of window i of the last wm_read ("" if it has none) |  |
 | `wm_task(i)` | `STRPTR` | The program of window i: the command of a Shell process (without its path), else its task's name ("Workbench") |  |
+| `wm_path(i)` | `STRPTR` | The path of the program of window i (its directory, the one its process was loaded from, and its name): "" if it is not a process's, or the window closed since wm_read |  |
 | `wm_box(i, what)` | `LONG` | Of window i: 0 left, 1 top, 2 width, 3 height, 4 minimum width, 5 minimum height, 6 maximum width, 7 maximum height (0 or 65535: no limit); -1 outside the list |  |
 | `wm_flags(i)` | `LONG` | Of window i, added up: 1 it can be sized, 2 backdrop, 4 borderless, 8 active, 16 drag bar, 32 the program's own, 64 a Workbench drawer, 128 with a requester open |  |
 | `wm_set_box(id, x, y, width, height)` | `BOOL` | Move and size a window by its id, within its limits and its screen (one without a size gadget keeps its size); false if it is not open any more. Intuition does it right after |  |
@@ -876,6 +878,16 @@ Total: 895 functions, 895 implemented, 0 not implemented.
 | `wm_pointer_x()` | `LONG` | Where the pointer is on the Workbench screen: x |  |
 | `wm_pointer_y()` | `LONG` | Where the pointer is on the Workbench screen: y |  |
 | `wm_bar_height()` | `LONG` | The height of the Workbench screen's title bar (where windows usually start) |  |
+| `file_real_path(path)` | `STRPTR` | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
+| `app_window(handle)` | `BOOL` | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
+| `app_drop()` | `STRPTR` | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |
+| `app_drop_x()` | `LONG` | Where the last icon of app_drop fell: x from the window's corner |  |
+| `app_drop_y()` | `LONG` | Where the last icon of app_drop fell: y from the window's corner |  |
+| `icon_load(path)` | `LONG` | The icon (.info) of a program, drawer or file (path without ".info"), by icon.library, with the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type if it has none): a number for icon_draw, or 0 |  |
+| `icon_draw(icon, x, y)` | `void` | Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its name or frame |  |
+| `icon_width(icon)` | `LONG` | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
+| `icon_height(icon)` | `LONG` | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
+| `icon_free(icon)` | `void` | Frees an icon of icon_load (the ones left, at exit) |  |
 
 ## Audio
 
@@ -921,6 +933,7 @@ Total: 895 functions, 895 implemented, 0 not implemented.
 | `window_to_front(handle)` | `void` | Bring window to front (handle 0: current window) |  |
 | `window_to_back(handle)` | `void` | Send window to back (handle 0: current window) |  |
 | `window_activate(handle)` | `void` | Activate window (handle 0: current window) |  |
+| `window_use(handle)` | `BOOL` | Makes a window the current one, the one gfx_ draws in: a handle of window_create, or 0 the declared window (Window X ... end) opened last; false if it is not open |  |
 | `screen_to_front()` | `void` | Bring custom screen to front |  |
 | `screen_to_back()` | `void` | Send custom screen to back |  |
 | `gadget_id()` | `LONG` | Handle of the last gadget used (for On Gadget in the EventLoop) |  |

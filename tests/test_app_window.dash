@@ -1,0 +1,71 @@
+# Test: lo que usa el dock de Trasfondo 2.0. wm_path da la ruta del programa de una ventana (la de la propia:
+# la de program_path); screen_pixel_rgb lee el color de la pantalla, sea de quien sea la ventana (el mismo que
+# gfx_pixel_rgb en la propia); app_window hace que una ventana acepte iconos soltados y app_drop no da nada si
+# no se ha soltado ninguno. Una ventana cerrada no tiene ruta. icon_load da el icono de un fichero (el programa, sin .info: el
+# de su tipo) e icon_draw lo dibuja. window_use vuelve a la ventana declarada tras abrir otra.
+# expect-out: ruta true
+# expect-out: real true ""
+# expect-out: otra ruta true
+# expect-out: color true
+# expect-out: usa true true false
+# expect-out: fuera -1
+# expect-out: app ""
+# expect-out: donde 0 0
+# expect-out: cerrada ""
+# expect-out: icono true true
+# expect-out: libre 0
+
+Window Dock
+    title "Dock a"
+    width 200
+    height 100
+    left 40
+    top 50
+end
+
+func propia(titulo: String) -> Int
+    n = wm_read()
+    for i in (0..n - 1)
+        if wm_title(i) == titulo and wm_flags(i) & 32 != 0
+            return i
+        end
+    end
+    return -1
+end
+
+Main
+    Dock.open
+    # un rectángulo de un color en la ventana Dock (antes de abrir otra: window_create cambia la actual)
+    gfx_pen(color_pen(200, 40, 90))
+    gfx_rect(10, 10, 60, 40)
+    c = gfx_pixel_rgb(30, 25)
+    bl = window_border_left()
+    bt = window_border_top()
+    b = window_create("Dock b", 300, 50, 150, 60, 0)
+    time_delay(10)
+    i = propia("Dock a")
+    Print "ruta #{wm_path(i) == program_path()}"
+    Print "real #{file_real_path(program_path()) == program_path()} \"#{file_real_path(\"RAM:no-esta\")}\""
+    Print "otra ruta #{wm_path(propia(\"Dock b\")) == program_path()}"
+    # su color leído de la pantalla (las ventanas de Dash dibujan dentro del borde)
+    x = wm_box(i, 0) + bl + 30
+    y = wm_box(i, 1) + bt + 25
+    Print "color #{screen_pixel_rgb(x, y) == c}"
+    # window_create dejó b como la actual; window_use(0) vuelve a la declarada
+    u = window_use(0)
+    Print "usa #{u} #{gfx_pixel_rgb(30, 25) == c} #{window_use(9)}"
+    Print "fuera #{screen_pixel_rgb(-1, 5)}"
+    ok = app_window(0)
+    Print "app \"#{app_drop()}\""
+    Print "donde #{app_drop_x()} #{app_drop_y()}"
+    j = propia("Dock b")
+    window_close(b)
+    time_delay(5)
+    Print "cerrada \"#{wm_path(j)}\""
+    ic = icon_load(program_path())
+    Print "icono #{ic > 0} #{icon_width(ic) > 0 and icon_height(ic) > 0}"
+    icon_draw(ic, 100, 10)
+    icon_free(ic)
+    Print "libre #{icon_width(ic)}"
+    Dock.close
+end

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 895 funciones, 895 implementadas, 0 sin implementar.
+Total: 908 funciones, 908 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -854,6 +854,7 @@ Total: 895 funciones, 895 implementadas, 0 sin implementar.
 | `gadget_y(win, n)` | `LONG` | La y del centro de ese gadget, como gadget_x |  |
 | `gadget_selected(win, n)` | `BOOL` | True si el gadget del sitio n (una casilla) está marcado |  |
 | `screen_pixel(x, y)` | `LONG` | El color del píxel (x, y) de la pantalla de delante; -1 fuera de ella |  |
+| `screen_pixel_rgb(x, y)` | `LONG` | El color del píxel (x, y) de la pantalla de delante como 0xRRGGBB, la pinte quien la pinte; -1 fuera de ella. Lo que hay detrás de una ventana antes de abrirla |  |
 | `cx_send(name, command)` | `LONG` | Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 ocultar, 23 quitar...): 0 hecho, -1 no hay esa commodity, -2 no tiene puerto, -99 no hay commodities.library |  |
 
 ## Gestor de ventanas (las de todos los programas)
@@ -864,6 +865,7 @@ Total: 895 funciones, 895 implementadas, 0 sin implementar.
 | `wm_id(i)` | `LONG` | El id de la ventana i del último wm_read, para wm_set_box, wm_front... (0 fuera de la lista) |  |
 | `wm_title(i)` | `STRPTR` | El título de la ventana i del último wm_read ("" si no tiene) |  |
 | `wm_task(i)` | `STRPTR` | El programa de la ventana i: la orden de un proceso de Shell (sin su ruta), o el nombre de su tarea ("Workbench") |  |
+| `wm_path(i)` | `STRPTR` | La ruta del programa de la ventana i (el directorio del que se cargó su proceso y su nombre): "" si no es de un proceso, o si la ventana se cerró desde el wm_read |  |
 | `wm_box(i, what)` | `LONG` | De la ventana i: 0 izquierda, 1 arriba, 2 ancho, 3 alto, 4 ancho mínimo, 5 alto mínimo, 6 ancho máximo, 7 alto máximo (0 o 65535: sin límite); -1 fuera de la lista |  |
 | `wm_flags(i)` | `LONG` | De la ventana i, sumados: 1 se puede redimensionar, 2 de fondo (backdrop), 4 sin bordes, 8 activa, 16 con barra de arrastre, 32 del propio programa, 64 un cajón del Workbench, 128 con un requester |  |
 | `wm_set_box(id, x, y, width, height)` | `BOOL` | Mueve y redimensiona una ventana por su id, dentro de sus límites y de su pantalla (la que no tiene botón de tamaño se queda con el suyo); false si ya no está abierta. Intuition lo hace justo después |  |
@@ -876,6 +878,16 @@ Total: 895 funciones, 895 implementadas, 0 sin implementar.
 | `wm_pointer_x()` | `LONG` | Dónde está el puntero en la pantalla del Workbench: la x |  |
 | `wm_pointer_y()` | `LONG` | Dónde está el puntero en la pantalla del Workbench: la y |  |
 | `wm_bar_height()` | `LONG` | El alto de la barra de título de la pantalla del Workbench (donde suelen empezar las ventanas) |  |
+| `file_real_path(path)` | `STRPTR` | La ruta real de un fichero o cajón, como la nombra su sistema de ficheros ("SYS:Utilities/Clock" da "System:Utilities/Clock"), para compararla con wm_path: "" si no está |  |
+| `app_window(handle)` | `BOOL` | La ventana (0 la actual, o un número de window_create) acepta iconos soltados encima desde el Workbench (AppWindow): true si los acepta. Los da app_drop |  |
+| `app_drop()` | `STRPTR` | La ruta del siguiente icono soltado en una app_window, "" si no hay (se mira desde On Timer); app_drop_x y app_drop_y, dónde cayó |  |
+| `app_drop_x()` | `LONG` | Dónde cayó el último icono de app_drop: x desde la esquina de la ventana |  |
+| `app_drop_y()` | `LONG` | Dónde cayó el último icono de app_drop: y desde la esquina de la ventana |  |
+| `icon_load(path)` | `LONG` | El icono (.info) de un programa, cajón o fichero (la ruta sin ".info"), con icon.library y los colores de la pantalla de la ventana (3.5+: iconos en color y PNG, y el de su tipo si no tiene): un número para icon_draw, o 0 |  |
+| `icon_draw(icon, x, y)` | `void` | Dibuja un icono de icon_load con su esquina de arriba a la izquierda en (x, y), como el Workbench, sin su nombre ni marco |  |
+| `icon_width(icon)` | `LONG` | El ancho de un icono de icon_load tal como lo dibuja icon_draw (0 si no está) |  |
+| `icon_height(icon)` | `LONG` | El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está) |  |
+| `icon_free(icon)` | `void` | Libera un icono de icon_load (los que queden, al salir) |  |
 
 ## Audio
 
@@ -921,6 +933,7 @@ Total: 895 funciones, 895 implementadas, 0 sin implementar.
 | `window_to_front(handle)` | `void` | Pone una ventana delante (número 0: la actual) |  |
 | `window_to_back(handle)` | `void` | Pone una ventana detrás (número 0: la actual) |  |
 | `window_activate(handle)` | `void` | Activa una ventana (número 0: la actual) |  |
+| `window_use(handle)` | `BOOL` | Hace actual una ventana, en la que dibujan los gfx_: un número de window_create, o 0 la ventana declarada (Window X ... end) abierta la última; false si no está abierta |  |
 | `screen_to_front()` | `void` | Pone delante la pantalla propia |  |
 | `screen_to_back()` | `void` | Pone detrás la pantalla propia |  |
 | `gadget_id()` | `LONG` | El número del último gadget usado (para el On Gadget del EventLoop) |  |
