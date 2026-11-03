@@ -945,8 +945,8 @@ class SemanticAnalyzer(ASTVisitor):
             elif isinstance(struct_node, StructDef):
                 for fdef, arg in zip(struct_node.fields, node.arguments):
                     self._check_struct_value(fdef.field_type, arg, f"Field '{node.name}.{fdef.name}'")
-                # Count required fields (without defaults)
-                required = sum(1 for f in struct_node.fields if f.default_value is None)
+                # Required: up to the last field without a default (only the last ones can be left out)
+                required = max((i + 1 for i, f in enumerate(struct_node.fields) if f.default_value is None), default=0)
                 total = len(struct_node.fields)
                 actual = len(node.arguments)
                 if actual < required or actual > total:

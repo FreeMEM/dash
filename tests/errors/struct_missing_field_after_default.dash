@@ -1,0 +1,13 @@
+# expect: Struct 'D' expects 4 arguments, got 3
+# (only the last fields can be left out: c and d have no default, so b's does not let D take 3)
+struct D
+    a: Int
+    b: Int = -1
+    c: Int
+    d: Int
+end
+
+Main
+    x = D(1, 2, 3)
+    Print x.a
+end
