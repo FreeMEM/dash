@@ -2020,10 +2020,14 @@ static struct ColorMap *_dash_pen_cm[_DASH_PENS_MAX];
 static LONG _dash_pen_rgb[_DASH_PENS_MAX], _dash_pen_num[_DASH_PENS_MAX], _dash_pen_refs[_DASH_PENS_MAX], _dash_pens = 0;
 static struct Screen *_dash_pub_screen = NULL;
 
-/* The screen we draw on: the window of _dash_rp, else the default public screen */
+/* The screen we draw on: the window of _dash_rp, the program's own screen if it draws on it with no window, else the
+   default public screen */
 static struct Screen *_dash_pen_screen(void) {
     if (_dash_rp && _dash_rp->Layer && _dash_rp->Layer->Window)
         return ((struct Window *)_dash_rp->Layer->Window)->WScreen;
+#ifdef _DASH_HAS_SCREEN_CLOSING
+    if (_dash_screen && _dash_rp == &_dash_screen->RastPort) return _dash_screen;   /* drawing on its own screen */
+#endif
     if (!_dash_pub_screen) _dash_pub_screen = LockPubScreen(NULL);
     return _dash_pub_screen;
 }
@@ -14552,6 +14556,8 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
             SA_ShowTitle, TRUE,
             SA_Pens, (ULONG)_dash_default_pens,
             TAG_DONE);
+        /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+        if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
         if (_dash_screen) _dash_own_screen = TRUE;
         return _dash_screen;
     }
@@ -14574,6 +14580,8 @@ static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
         SA_ShowTitle, TRUE,
         SA_AutoScroll, TRUE,
         TAG_DONE);
+    /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+    if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
 
     /* Cleanup */
     if (drawinfo) FreeScreenDrawInfo(wbscreen, drawinfo);
@@ -14616,6 +14624,8 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
         SA_AutoScroll, TRUE,
         SA_Pens, (ULONG)_dash_default_pens,
         TAG_DONE);
+    /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+    if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
 
     if (_dash_screen) {
         _dash_own_screen = TRUE;
@@ -14631,6 +14641,7 @@ static void (*_dash_screen_closing)(struct Screen *) = NULL;
 static void _dash_close_screen(void) {
     if (_dash_screen && _dash_own_screen) {
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
+        if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
         CloseScreen(_dash_screen);
         _dash_screen = NULL;
         _dash_own_screen = FALSE;
@@ -14711,6 +14722,13 @@ static void _dash_set_color(LONG index, LONG r, LONG g, LONG b) {
     } else if (_dash_win) {
         SetRGB4(&_dash_win->WScreen->ViewPort, index, r, g, b);
     }
+}
+
+/* gfx_rgb8: the same with 8-bit components. It used _dash_win->WScreen and hung with a screen of its own and no
+   window (Forja D15d) */
+static void _dash_set_color8(LONG index, LONG r, LONG g, LONG b) {
+    struct ViewPort *vp = _dash_screen ? &_dash_screen->ViewPort : (_dash_win ? &_dash_win->WScreen->ViewPort : NULL);
+    if (vp) SetRGB32(vp, index, (ULONG)(r & 255) << 24, (ULONG)(g & 255) << 24, (ULONG)(b & 255) << 24);
 }
 
 /* Area Fill Support */
@@ -20200,6 +20218,7 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
 #ifdef _DASH_HAS_SCREEN_CLOSING
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
 #endif
+        if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;
         CloseScreen(_dash_screen);
     }
 
@@ -20212,6 +20231,8 @@ static BOOL _dash_rtg_open_screen(LONG width, LONG height, LONG depth, STRPTR ti
         SA_ShowTitle, TRUE,
         SA_AutoScroll, TRUE,
         TAG_DONE);
+    /* with no window, gfx_ draws on the screen itself (it hung: _dash_rp was NULL, Forja D15d) */
+    if (_dash_screen && !_dash_win) _dash_rp = &_dash_screen->RastPort;
 
     if (_dash_screen) {
         _dash_own_screen = TRUE;

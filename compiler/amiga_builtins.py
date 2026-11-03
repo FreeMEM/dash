@@ -87,7 +87,7 @@ GRAPHICS_BASIC = {
         name="gfx_rgb8",
         params=["index", "r", "g", "b"],
         return_type="void",
-        c_template="SetRGB32(&_dash_win->WScreen->ViewPort, ${index}, ${r}<<24, ${g}<<24, ${b}<<24)",
+        c_template="_dash_set_color8(${index}, ${r}, ${g}, ${b})",
         needs_gfx=True,
         description="Set palette color (8-bit components, AGA)"
     ),
@@ -709,15 +709,15 @@ INPUT_FUNCTIONS = {
         name="mouse_x",
         params=[],
         return_type="LONG",
-        c_template="(_dash_win->MouseX - _dash_win->BorderLeft)",
-        description="Mouse X position relative to window inner area"
+        c_template="(_dash_win ? _dash_win->MouseX - _dash_win->BorderLeft : 0)",
+        description="Mouse X position relative to window inner area (0 without a window)"
     ),
     "mouse_y": BuiltinFunc(
         name="mouse_y",
         params=[],
         return_type="LONG",
-        c_template="(_dash_win->MouseY - _dash_win->BorderTop)",
-        description="Mouse Y position relative to window inner area"
+        c_template="(_dash_win ? _dash_win->MouseY - _dash_win->BorderTop : 0)",
+        description="Mouse Y position relative to window inner area (0 without a window)"
     ),
     "mouse_button": BuiltinFunc(
         name="mouse_button",

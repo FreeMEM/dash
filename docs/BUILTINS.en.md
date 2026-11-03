@@ -102,8 +102,8 @@ Total: 839 functions, 839 implemented, 0 not implemented.
 | `key_wait()` | `LONG` | Wait for and return key |  |
 | `key_raw()` | `LONG` | Get raw key code (no translation) |  |
 | `key_text(keycode)` | `STRPTR` | Convert keycode to text |  |
-| `mouse_x()` | `LONG` | Mouse X position relative to window inner area |  |
-| `mouse_y()` | `LONG` | Mouse Y position relative to window inner area |  |
+| `mouse_x()` | `LONG` | Mouse X position relative to window inner area (0 without a window) |  |
+| `mouse_y()` | `LONG` | Mouse Y position relative to window inner area (0 without a window) |  |
 | `mouse_button(btn)` | `BOOL` | Check mouse button (0=left, 1=right) |  |
 | `event_window()` | `LONG` | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
 | `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |

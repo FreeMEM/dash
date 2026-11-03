@@ -102,8 +102,8 @@ Total: 839 funciones, 839 implementadas, 0 sin implementar.
 | `key_wait()` | `LONG` | Espera una tecla y da su código |  |
 | `key_raw()` | `LONG` | El código de tecla en bruto (sin traducir) |  |
 | `key_text(keycode)` | `STRPTR` | Pasa un código de tecla a texto |  |
-| `mouse_x()` | `LONG` | La X del ratón dentro del interior de la ventana |  |
-| `mouse_y()` | `LONG` | La Y del ratón dentro del interior de la ventana |  |
+| `mouse_x()` | `LONG` | La X del ratón dentro del interior de la ventana (0 sin ventana) |  |
+| `mouse_y()` | `LONG` | La Y del ratón dentro del interior de la ventana (0 sin ventana) |  |
 | `mouse_button(btn)` | `BOOL` | Mira un botón del ratón (0 izquierdo, 1 derecho) |  |
 | `event_window()` | `LONG` | En un EventLoop: la ventana de la que vino el evento (window_create), 0 para la del propio bucle |  |
 | `window_check_close()` | `BOOL` | Mira si se pulsó el botón de cerrar (sin esperar) |  |
