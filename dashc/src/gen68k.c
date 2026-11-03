@@ -542,7 +542,7 @@ static int made_tmp;   /* desde la última marca, algo ha dejado temporales */
 /* jsr sym con nargs argumentos ya en la pila; tmp: el resultado es un temporal nuevo */
 static void rt_call(const char *sym, int nargs, int tmp)
 {
-    jsr_sym(sym);
+    call_sym(sym, nargs);
     pop_args(nargs);
     if (tmp) made_tmp = 1;
 }
@@ -1520,7 +1520,7 @@ static int gen_iface_call(Node *n, int t)
     value(n->a);
     nil_check();
     push_d0();                                         /* self */
-    call_method(m->slot);
+    call_method(m->slot, n->args.n + 1);
     pop_args(n->args.n + 1);
     forget_d0();
     if (IS_STRLIKE(m->ret) || IS_OBJ(m->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
@@ -2005,7 +2005,7 @@ static MarkScope mark_begin(void)
     m.saved = made_tmp;
     made_tmp = 0;
     if (m.on) {
-        jsr_sym("_dl_tmp_mark");
+        call_sym("_dl_tmp_mark", 0);
         push_d0();
     }
     m.sp = sp_depth;
@@ -2599,7 +2599,7 @@ static int gen_builtin(Node *n)
             push_value(a);
         }
     }
-    jsr_sym(builtins[b].sym);
+    call_sym(builtins[b].sym, n->args.n);
     pop_args(n->args.n);
     return builtins[b].ret;
 }
@@ -2865,7 +2865,7 @@ static int gen_call(Node *n)
         for (i = n->args.n - 1; i >= 0; i--) push_value(n->args.v[i]);
         v = lookup(n->name);
         load_var(0, &v);
-        call_d0();
+        call_d0(n->args.n);
         pop_args(n->args.n);
         forget_d0();
         return TY_INT;
@@ -2928,7 +2928,7 @@ static int gen_call(Node *n)
             push_value(a);
         }
     }
-    jsr_label(func_label[idx]);
+    call_label(func_label[idx], n->args.n);
     pop_args(n->args.n);
     if (!needed[idx]) needed[idx] = 1;               /* 2: ya generada */
     if (IS_STRLIKE(f->ret) || IS_OBJ(f->ret)) made_tmp = 1;   /* lo devuelto es un temporal de aquí */
@@ -4912,7 +4912,7 @@ static void gen_window_op(Node *n)
         rt_call("_dl_window_open", 2, 0);
         if (needs_area) {
             /* _dash_init_area(_dash_rp, ancho, alto), como ./dash */
-            jsr_sym("_dl_init_area");
+            call_sym("_dl_init_area", 0);
         }
     } else {
         pea_window(wi);
@@ -4972,7 +4972,7 @@ static void gen_evloop(Node *n)
         push_d0();                                     /* la clase, para el On siguiente */
         if (h->val == ON_KEY) {
             /* las teclas al soltarse no cuentan; On Key "a" mira el texto de la tecla, On Key 69 su código */
-            jsr_sym("_dl_event_code");
+            call_sym("_dl_event_code", 0);
             test_bit_d0(7);                            /* IECODE_UP_PREFIX */
             branch(CC_NE, skip);
             if (h->a) {
@@ -4994,13 +4994,13 @@ static void gen_evloop(Node *n)
                     if (code < 0) fatal_at(h->a->line, h->a->col, "la tecla %s no existe", h->a->str);
                 }
                 if (code >= 0) {
-                    jsr_sym("_dl_event_code");
+                    call_sym("_dl_event_code", 0);
                     cmp_d0_k(code, 0);
                     branch(CC_NE, skip);
                 }
             }
         } else if (h->val == ON_CLICK || h->val == ON_RIGHTCLICK) {
-            jsr_sym("_dl_event_code");
+            call_sym("_dl_event_code", 0);
             cmp_d0_k(h->val == ON_CLICK ? 0x68 : 0x69, 0);   /* SELECTDOWN (MENUDOWN) */
             branch(CC_NE, skip);
         }
@@ -5010,9 +5010,9 @@ static void gen_evloop(Node *n)
             int mtop = new_label();
             if (h->val == ON_MENU) {
                 /* una vez por cada opción elegida (menu_id dice cuál) */
-                jsr_sym("_dl_menu_begin");
+                call_sym("_dl_menu_begin", 0);
                 def_label(mtop);
-                jsr_sym("_dl_menu_next");
+                call_sym("_dl_menu_next", 0);
                 tst_d0();
                 branch(CC_EQ, skip);
             }
@@ -5075,7 +5075,7 @@ static void gen_stmt(Node *n)
     case S_PRINT:
         if (n->a->kind == E_STR) {
             pea_string(n->a->str, n->a->len);
-            jsr_sym("__dash_print_str");
+            call_sym("__dash_print_str", 1);
         } else {
             ty = gen_expr(n->a);
             need_value(n->a, ty);
@@ -5085,8 +5085,8 @@ static void gen_stmt(Node *n)
                 store_d0_arg(0);
                 ty = TY_STR;
             }
-            jsr_sym(ty == TY_BOOL ? "__dash_print_bool" : ty == TY_STR || ty == TY_NIL ? "__dash_print_str" :
-                    ty == TY_CHAR ? "__dash_print_char" : "__dash_print_int");
+            call_sym(ty == TY_BOOL ? "__dash_print_bool" : ty == TY_STR || ty == TY_NIL ? "__dash_print_str" :
+                     ty == TY_CHAR ? "__dash_print_char" : "__dash_print_int", 1);
         }
         pop_args(1);
         if (print_flush) rt_call("_dl_print_flush", 0, 0);
@@ -5530,7 +5530,7 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
                 rt_call(IS_STRLIKE(global_type[i]) ? "_dl_str_free" : "_dl_release", 1, 0);
                 clear_global(g.off);
             }
-        jsr_sym("_dl_tmp_release_all");
+        call_sym("_dl_tmp_release_all", 0);
     }
     if (f && IS_OBJ(cur_ret)) zero_d0();               /* sin return, nil */
     def_label(ret_label);
@@ -5552,11 +5552,11 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
         }
         if (profile) {
             push_d0();
-            jsr_sym("_dl_prof_leave");
+            call_sym("_dl_prof_leave", 0);
             pop_d0();
         }
     } else if (profile) {
-        jsr_sym("_dl_prof_report");
+        call_sym("_dl_prof_report", 0);
     }
     if (sp_depth) fatal("la pila no cuadra (fallo de dashc)");
     fn_epilogue(frameless, used, nframe);
@@ -5632,7 +5632,7 @@ static void gen_function(int label, Func *f, NodeList *body)
         if (slot_reg.v[i] < 0) slot_reg.v[i] = -1;
         if (slot_reg.v[i] < 0 && slot_off.v[i] < 0) frameless = 0;
     }
-    if (debug) frameless = 0;
+    if (debug || !CAN_FRAMELESS) frameless = 0;
     pass = 2;
     gen_function_pass(label, f, body);
 }
@@ -6111,7 +6111,7 @@ void gen_program(Program *p, Obj *o)
     {
         /* los literales de los campos como textos de Dash (dash_lit): su cabecera, antes que nada */
         lit_init_label = new_label();
-        jsr_label(lit_init_label);
+        call_label(lit_init_label, 0);
     }
     {
         /* la pila que pide (16 KB, como ./dash; 32 KB con MUI, 64 KB con AmiSSL; más con @stack): _dash_start

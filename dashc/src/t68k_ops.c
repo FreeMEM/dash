@@ -476,14 +476,16 @@ static int bin_pop(int op)
 
 /* llamadas por un puntero: a la función de d0, o al método slot del objeto de d0 (su _DashType, a -4 del objeto,
    tiene en 8 la tabla de métodos) */
-static void call_d0(void)
+static void call_d0(int nargs)
 {
+    (void)nargs;
     w(0x2040);                                         /* movea.l d0,a0 */
     w(0x4E90);                                         /* jsr (a0) */
 }
 
-static void call_method(int slot)
+static void call_method(int slot, int nargs)
 {
+    (void)nargs;
     w(0x2040);                                         /* movea.l d0,a0 */
     w(0x2068); w(-4);                                  /* movea.l -4(a0),a0: su tipo */
     w(0x2068); w(8);                                   /* movea.l 8(a0),a0: su tabla de métodos */

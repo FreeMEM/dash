@@ -1,5 +1,8 @@
 /* Generador de 68000 de dashc (docs/AARCH64_LOOP.md, fase A3): lo que sabe de las instrucciones del 68000. Lo
    incluye gen68k.c donde iba (un solo fichero de C: comparte sus estáticos). */
+/* una función sin variables en el marco puede no hacer link (lee sus parámetros con sp) */
+#define CAN_FRAMELESS 1
+
 /* los registros para variables: d2-d7 (d0 y d1 son de trabajo) */
 #define FIRST_REG 2
 #define MAX_REGS 6
@@ -154,6 +157,11 @@ static void jsr_label(int label)
     l(0);
 }
 
+
+/* las llamadas, con cuántos argumentos dejó el recorrido en la pila (el 68000 los deja allí: no hace falta) */
+static void jsr_sym(const char *sym);
+static void call_sym(const char *sym, int nargs) { (void)nargs; jsr_sym(sym); }
+static void call_label(int label, int nargs) { (void)nargs; jsr_label(label); }
 
 /* jsr a una función del runtime */
 static void jsr_sym(const char *sym)

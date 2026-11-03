@@ -253,6 +253,8 @@ typedef struct {
     uint32_t off;      /* dónde está el long que hay que reubicar */
     int hunk;          /* HK_CODE o HK_DATA, o -1 si va a un símbolo del runtime */
     const char *sym;
+    int type;          /* AArch64: el tipo de reubicación de ELF (R_AARCH64_*); el 68000 no lo usa */
+    long addend;       /* AArch64: el sumando (en el 68000 va en los bytes del código) */
 } Reloc;
 
 typedef struct {
