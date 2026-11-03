@@ -85,6 +85,16 @@ static int parse_type(void)
         return (i == TY_ARR + TY_VOID ? TY_ARR + TY_INT : i) + TY_ARR;
     }
     t = expect(T_ID);
+    if (!strcmp(t->text, "Ptr") && peek()->kind == T_ID) {
+        /* Ptr X: un puntero a una @amiga struct o a un escalar; con su nombre, que gen68k.c resuelve */
+        Token *x = next();
+        char *name = xmalloc(strlen(x->text) + 5);
+        sprintf(name, "Ptr %s", x->text);
+        for (i = 0; i < type_names.n; i++)
+            if (!strcmp(type_names.v[i], name)) return TY_NAMED + i;
+        VEC_PUSH(type_names, name);
+        return TY_NAMED + type_names.n - 1;
+    }
     if (!strcmp(t->text, "Int")) return TY_INT;
     if (!strcmp(t->text, "Bool")) return TY_BOOL;
     if (!strcmp(t->text, "String")) return TY_STR;
@@ -175,6 +185,15 @@ static Node *atom(void)
             n = node(E_STR, t);
             n->str = xstrndup(buf, strlen(buf));
             n->len = (int)strlen(buf);
+            return n;
+        }
+        if (!strcmp(t->text, "Ptr") && peek()->kind == T_ID && tk[1].kind == P_LP) {
+            /* Ptr X(dirección): una @amiga struct (A6) */
+            n = node(E_ACAST, t);
+            n->name = next()->text;
+            expect(P_LP);
+            n->a = expr();
+            expect(P_RP);
             return n;
         }
         if (accept(P_LP)) {
@@ -853,6 +872,40 @@ static void parse_into(Program *p)
         }
         if (0)
             fatal_at(t->line, t->col, "(sin --gcc) %s aún no está", t->text);
+        if (t->kind == T_ID && !strcmp(t->text, "@amiga")) {
+            /* @amiga struct Nombre / campo: Tipo ... / end (A6) */
+            AStruct as = {0};
+            Token *name;
+            if (next()->kind != K_STRUCT) fatal_at(t->line, t->col, "@amiga va delante de un struct");
+            name = expect(T_ID);
+            as.name = name->text;
+            as.line = name->line;
+            as.col = name->col;
+            while (!accept(K_END)) {
+                AField f = {0};
+                Token *fn = expect(T_ID), *ty;
+                f.name = fn->text;
+                f.line = fn->line;
+                f.col = fn->col;
+                expect(P_COLON);
+                ty = expect(T_ID);
+                if (!strcmp(ty->text, "Ptr")) {
+                    Token *x = expect(T_ID);
+                    f.ftype = xmalloc(strlen(x->text) + 5);
+                    sprintf(f.ftype, "Ptr %s", x->text);
+                } else if (accept(P_LB)) {
+                    Token *n = expect(T_INT);
+                    expect(P_RB);
+                    f.ftype = xmalloc(strlen(ty->text) + 24);
+                    sprintf(f.ftype, "%s[%ld]", ty->text, n->val);
+                } else {
+                    f.ftype = ty->text;
+                }
+                VEC_PUSH(as.fields, f);
+            }
+            VEC_PUSH(p->amiga, as);
+            continue;
+        }
         if (t->kind == T_ID && t->text[0] == '@')
             fatal_at(t->line, t->col, "%s lleva C, y Dash 2.0 no admite C en los programas", t->text);
         if (t->kind == K_FUNC) {

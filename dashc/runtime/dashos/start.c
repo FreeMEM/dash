@@ -27,3 +27,4 @@ void _dash_print_int(_DashP v) { Printf((CONST_STRPTR)"%ld\n", (LONG)v); }
 void _dash_print_char(_DashP c) { Printf((CONST_STRPTR)"%lc\n", (LONG)(UBYTE)c); }
 void _dash_print_bool(_DashP v) { PutStr((CONST_STRPTR)(v ? "true\n" : "false\n")); }
 void dl_div_zero(void) { _dash_fail("divisi\363n por cero", NULL); }
+void dl_a32_fail(void) { _dash_fail("puntero de Amiga de 4 GB o m\341s", NULL); }

@@ -245,4 +245,10 @@ Print offsetof(Node, ln_Name)  # 10
   nuevos `amiga_alloc` y `amiga_free` (AllocMem/FreeMem en el Amiga; en DashOS, memoria de la plataforma desde
   1 GB, provisional). `peek_*`/`poke_*` pasan la dirección por ULONG (en ARM, con ceros). `tests/test_amiga_struct.dash`
   pasa en el A1200 emulado y en ARM (qemu). Falta el camino directo (parser.c, recorrido y los dos generadores).
+- 2026-11-03: A6 hecha en los dos caminos. dashc: `@amiga struct` y `Ptr X` en parser.c (`AStruct`, `E_ACAST`,
+  `TY_APTR`), la disposición en el recorrido (`amiga_lay`, `sizeof`/`offsetof` constantes) y en los generadores
+  `amiga_load`/`amiga_store`/`amiga_addr` (68k: move.b/w/l; ARM: ldur*/stur* sin escalar, a 2 bytes), `zext_d0` y
+  `amiga_check32` (ARM: una dirección de 4 GB o más es un error, `dl_a32_fail`). `tests/test_amiga_struct.dash` da lo
+  mismo por los cuatro caminos (C y directo; A1200 y ARM). Runtime de 68k rehecho con `db_amiga_alloc`/`free` (los
+  ejecutables de siempre, iguales). Referencias de `identicos*.py` puestas al día con el test nuevo.
 

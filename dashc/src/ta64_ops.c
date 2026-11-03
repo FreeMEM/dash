@@ -807,3 +807,37 @@ static void push_array(int off, int n, int lng)
     add_imm(XT, 31, off);
     push_x(XT);
 }
+
+/* ---- @amiga struct (A6): campos de 1, 2 y 4 bytes en x9 + off (sin ldp ni exclusivos: van a 2 bytes) ---- */
+static void zext_d0(void) { ins(0x2A0003E0); wrote(0); }   /* mov w0, w0: con ceros arriba */
+
+static void amiga_check32(void)                        /* una dirección de 4 GB o más no cabe en un campo de 32 bits */
+{
+    int ok = new_label();
+    ins(0xD360FC10);                                   /* lsr x16, x0, #32 */
+    cbz_label(XT, ok, 0);
+    jsr_sym("_dl_a32_fail");
+    def_label(ok);
+}
+
+static void amem(uint32_t op, int t, int off)          /* op: la forma sin escalar (ldur...), con [x9 + off] */
+{
+    int base = XA0;
+    if (off < -256 || off > 255) { add_imm(XT, XA0, off); base = XT; off = 0; }
+    ins(op | ((uint32_t)off & 0x1FF) << 12 | (uint32_t)base << 5 | (uint32_t)t);
+}
+
+static void amiga_load(int off, int size, int sgn)
+{
+    if (size == 4) amem(sgn ? 0xB8800000 : 0xB8400000, 0, off);        /* ldursw x0 / ldur w0 */
+    else if (size == 2) amem(sgn ? 0x78800000 : 0x78400000, 0, off);   /* ldursh x0 / ldurh w0 */
+    else amem(sgn ? 0x38800000 : 0x38400000, 0, off);                 /* ldursb x0 / ldurb w0 */
+    wrote(0);
+}
+
+static void amiga_store(int off, int size)
+{
+    amem(size == 4 ? 0xB8000000 : size == 2 ? 0x78000000 : 0x38000000, 0, off);   /* stur w0 / sturh / sturb */
+}
+
+static void amiga_addr(int off) { add_imm(0, XA0, off); }

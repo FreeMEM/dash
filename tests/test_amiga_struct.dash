@@ -4,6 +4,7 @@
 # expect-out: 44 7 -5 200 -5
 # expect-out: 44 7 true
 # expect-out: vacío
+# expect-out: pri -5 nil
 @amiga struct Node
     ln_Succ: Ptr Node
     ln_Pred: Ptr Node
@@ -18,6 +19,10 @@ end
     mp_SigBit: UByte
     mp_SigTask: Ptr Node
     mp_Data: UWord[3]
+end
+
+func prioridad(n: Ptr Node) -> Int
+    return n.ln_Pri
 end
 
 Main
@@ -35,6 +40,10 @@ Main
     Print "#{peek_byte(m + 14)} #{peek_byte(m + 15)} #{peek_long(m + 16) == m}"
     if p.mp_Node.ln_Succ == nil
         Print "vacío"
+    end
+    var q: Ptr Node = nil
+    if q == nil
+        Print "pri #{prioridad(p.mp_Node)} nil"
     end
     amiga_free(m, sizeof(MsgPort))
 end

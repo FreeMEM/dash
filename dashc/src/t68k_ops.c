@@ -1003,3 +1003,34 @@ static void push_array(int off, int n, int lng)
     if (off) push_sp_addr(off);
     else push_sp();
 }
+
+/* ---- @amiga struct (A6): campos de 1, 2 y 4 bytes en a0 + off ---- */
+static void zext_d0(void) { }                          /* (una dirección de 32 bits: en el 68000 ya lo es) */
+static void amiga_check32(void) { }                    /* (en DashOS: que quepa en 32 bits) */
+
+static void amiga_load(int off, int size, int sgn)
+{
+    if (size == 4) { w(0x2028); w(off); }             /* move.l off(a0),d0 */
+    else if (size == 2) {
+        if (!sgn) w(0x7000);                           /* moveq #0,d0 */
+        w(0x3028); w(off);                             /* move.w off(a0),d0 */
+        if (sgn) w(0x48C0);                            /* ext.l d0 */
+    } else {
+        if (!sgn) w(0x7000);
+        w(0x1028); w(off);                             /* move.b off(a0),d0 */
+        if (sgn) { w(0x4880); w(0x48C0); }             /* ext.w d0; ext.l d0 */
+    }
+    d0_loaded = (uint32_t)-1;
+}
+
+static void amiga_store(int off, int size)
+{
+    w(size == 4 ? 0x2140 : size == 2 ? 0x3140 : 0x1140); w(off);   /* move.l/w/b d0,off(a0) */
+}
+
+static void amiga_addr(int off)                        /* d0 = a0 + off */
+{
+    w(0x41E8); w(off);                                 /* lea off(a0),a0 */
+    w(0x2008);                                         /* move.l a0,d0 */
+    d0_loaded = (uint32_t)-1;
+}

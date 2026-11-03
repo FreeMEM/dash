@@ -1229,6 +1229,8 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_PropertyAccess(self, node: PropertyAccess):
         """Visit a property access."""
         self.visit(node.object)
+        if self._amiga_type_of(node.object):
+            return                     # a field of an @amiga struct: the code generator checks it
         owner = self._struct_name_of(node.object)
         st = self.program.get_struct(owner) if (owner and self.program) else None
         if st and st.is_interface and node.property != "length":

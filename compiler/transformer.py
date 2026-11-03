@@ -705,7 +705,10 @@ class DashASTBuilder(Transformer):
 
     def TYPE_NAME(self, token):
         """Type annotations without spaces: "[ Nodo ]" is "[Nodo]"."""
-        return token.update(value="".join(str(token).split()))
+        text = str(token)
+        if text.startswith("Ptr") and len(text.split()) == 2:       # Ptr Node (@amiga struct): one space
+            return token.update(value=" ".join(text.split()))
+        return token.update(value="".join(text.split()))
 
     def if_stmt(self, items) -> IfStmt:
         """Build an if statement node. "elif c ... " becomes an if inside the else."""

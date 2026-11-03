@@ -407,8 +407,127 @@ static int window_member(Node *n)
     return -1;
 }
 
+/* ---- @amiga struct (docs/AARCH64_LOOP.md, A6): vistas sobre memoria con la disposición del 68000 ---- */
+static const char *const ascalar_names[] = {"", "Byte", "UByte", "Word", "UWord", "Long", "ULong"};
+
+static int amiga_index(const char *name)
+{
+    int i;
+    for (i = 0; i < prog->amiga.n; i++)
+        if (!strcmp(prog->amiga.v[i].name, name)) return i;
+    return -1;
+}
+
+static int ascalar(const char *name)
+{
+    int k;
+    for (k = 1; k <= 6; k++)
+        if (!strcmp(ascalar_names[k], name)) return k;
+    return !strcmp(name, "Int") ? 5 : 0;
+}
+static int ascalar_size(int k) { return k <= 2 ? 1 : k <= 4 ? 2 : 4; }
+static int ascalar_signed(int k) { return k == 1 || k == 3 || k == 5; }
+
+/* el tipo de "Ptr name" */
+static int aptr_of(const char *name, int line, int col)
+{
+    int i = amiga_index(name), k;
+    if (i >= 0) return TY_APTR + i;
+    if ((k = ascalar(name))) return TY_APTR + APTR_SCALAR + k;
+    fatal_at(line, col, "Ptr %s: %s no es una @amiga struct ni Byte, UByte, Word, UWord, Long o ULong", name, name);
+    return TY_INT;
+}
+
+static void amiga_lay(int si)
+{
+    AStruct *as = &prog->amiga.v[si];
+    int i, off = 0;
+    if (as->done == 2) return;
+    if (as->done == 1) fatal_at(as->line, as->col, "la @amiga struct %s se contiene a sí misma", as->name);
+    as->done = 1;
+    for (i = 0; i < as->fields.n; i++) {
+        AField *f = &as->fields.v[i];
+        const char *t = f->ftype, *br = strchr(t, '[');
+        int k, align;
+        if (!strncmp(t, "Ptr ", 4)) {
+            f->kind = AF_PTR;
+            f->size = 4;
+            f->target = aptr_of(t + 4, f->line, f->col);
+        } else if (!strcmp(t, "BPtr")) {
+            f->kind = AF_BPTR;
+            f->size = 4;
+        } else if (br) {
+            char base[64];
+            snprintf(base, sizeof base, "%.*s", (int)(br - t), t);
+            if (!(k = ascalar(base))) fatal_at(f->line, f->col, "%s: una tabla es de Byte, UByte, Word, UWord, Long o ULong", f->name);
+            f->kind = AF_TABLE;
+            f->scalar = k;
+            f->size = ascalar_size(k) * atoi(br + 1);
+        } else if ((k = ascalar(t))) {
+            f->kind = AF_SCALAR;
+            f->scalar = k;
+            f->size = ascalar_size(k);
+        } else if ((k = amiga_index(t)) >= 0) {
+            amiga_lay(k);
+            f->kind = AF_STRUCT;
+            f->target = k;
+            f->size = prog->amiga.v[k].size;
+        } else {
+            fatal_at(f->line, f->col, "%s: el tipo %s no existe (Byte, UByte, Word, UWord, Long, ULong, Ptr T, BPtr, "
+                     "una @amiga struct o una tabla como UByte[16])", f->name, t);
+        }
+        align = (f->kind == AF_SCALAR || f->kind == AF_TABLE) && ascalar_size(f->scalar) == 1 ? 1 : 2;
+        off = (off + align - 1) / align * align;
+        f->off = off;
+        off += f->size;
+    }
+    as->size = (off + 1) / 2 * 2;
+    as->done = 2;
+}
+
+static AField *amiga_field(int t, const char *name, Node *at)
+{
+    AStruct *as;
+    int i;
+    if (t >= TY_APTR + APTR_SCALAR) fatal_node(at, "un puntero a un escalar no tiene campos (.%s)", name);
+    as = &prog->amiga.v[t - TY_APTR];
+    for (i = 0; i < as->fields.n; i++)
+        if (!strcmp(as->fields.v[i].name, name)) return &as->fields.v[i];
+    fatal_node(at, "la @amiga struct %s no tiene el campo %s", as->name, name);
+    return NULL;
+}
+
+/* lo que da leer el campo: un Int, o un puntero (también un struct anidado o una tabla: su dirección) */
+static int amiga_field_type(AField *f)
+{
+    switch (f->kind) {
+    case AF_PTR: return f->target;
+    case AF_STRUCT: return TY_APTR + f->target;
+    case AF_TABLE: return TY_APTR + APTR_SCALAR + f->scalar;
+    default: return TY_INT;
+    }
+}
+
+/* sizeof(S), offsetof(S, campo): constantes (0 si n no es eso) */
+static int amiga_const(Node *n, long *v)
+{
+    int si;
+    if (n->kind != E_CALL || (strcmp(n->name, "sizeof") && strcmp(n->name, "offsetof")) || !n->args.n ||
+        n->args.v[0]->kind != E_VAR || (si = amiga_index(n->args.v[0]->name)) < 0)
+        return 0;
+    if (n->name[0] == 's') {
+        if (n->args.n != 1) fatal_node(n, "sizeof(S) es de una @amiga struct");
+        *v = prog->amiga.v[si].size;
+    } else {
+        if (n->args.n != 2 || n->args.v[1]->kind != E_VAR) fatal_node(n, "offsetof(S, campo)");
+        *v = amiga_field(TY_APTR + si, n->args.v[1]->name, n)->off;
+    }
+    return 1;
+}
+
 static int fold(Node *n, long *v)
 {
+    if (n->kind == E_CALL && amiga_const(n, v)) return 1;
     long a, b;
     if (n->kind == E_BIN && expr_type(n) == TY_FIXED) {
         /* Fixed: solo lo que es una cuenta de enteros (Fixed + Fixed, Fixed * Int, Fixed / Int); Fixed * Fixed y
@@ -603,6 +722,7 @@ static int expr_type(Node *n)
     case E_VAR:
         return var_type(n->name);
     case E_CALL:
+        if (amiga_const(n, (long[]){0})) return TY_INT;
         if (find_func(n->name, &idx)) return func_ret(idx);
         if (!strcmp(n->name, "Float")) return TY_FLOAT;
         if (!strcmp(n->name, "Double")) return TY_DOUBLE;
@@ -639,9 +759,12 @@ static int expr_type(Node *n)
         return TY_INT;
     case E_SLICE:
         return expr_type(n->a);
+    case E_ACAST:
+        return aptr_of(n->name, n->line, n->col);
     case E_FIELD:
         if (window_member(n) >= 0) return window_member(n) == 4 ? TY_STR : TY_INT;
         ta = expr_type(n->a);
+        if (IS_APTR(ta)) return amiga_field_type(amiga_field(ta, n->name, n));
         if (IS_STRUCT(ta)) {
             Struct *st = &prog->structs.v[ta - TY_STRUCT];
             int f = field_index(st, n->name);
@@ -1385,6 +1508,20 @@ static int gen_struct_field(Node *n)
 static int gen_field_store(Node *target, Node *v)
 {
     int off, ft;
+    if (IS_APTR(expr_type(target->a))) {
+        /* un campo de una @amiga struct: escrito con su tamaño (un puntero, comprobado: en DashOS, de 32 bits) */
+        AField *f = amiga_field(expr_type(target->a), target->name, target);
+        if (f->kind == AF_STRUCT || f->kind == AF_TABLE)
+            fatal_node(target, "%s es un struct anidado o una tabla: se escriben sus campos", f->name);
+        value(v);
+        push_d0();
+        value(target->a);
+        move_d0_a0();
+        pop_d0();
+        if (f->kind == AF_PTR) amiga_check32();
+        amiga_store(f->off, f->kind == AF_SCALAR ? ascalar_size(f->scalar) : 4);
+        return 1;
+    }
     if (!IS_STRUCT(expr_type(target->a))) return 0;
     ft = expr_type(target);
     list_hint(v, ft);
@@ -2990,6 +3127,16 @@ static int gen_expr(Node *n)
         return TY_VOID;
     case E_FIELD: {
         int t, wm = window_member(n);
+        if (IS_APTR(expr_type(n->a))) {
+            /* un campo de una @amiga struct: con su tamaño y signo; un struct anidado o una tabla, su dirección */
+            AField *f = amiga_field(expr_type(n->a), n->name, n);
+            value(n->a);
+            move_d0_a0();
+            if (f->kind == AF_STRUCT || f->kind == AF_TABLE) amiga_addr(f->off);
+            else if (f->kind == AF_SCALAR) amiga_load(f->off, ascalar_size(f->scalar), ascalar_signed(f->scalar));
+            else amiga_load(f->off, 4, 0);
+            return amiga_field_type(f);
+        }
         if (wm >= 0) {
             /* Win.width...: de la ventana abierta (puede haber cambiado) o de su definición, como ./dash */
             int wi = find_window(n->a->name);
@@ -3056,8 +3203,19 @@ static int gen_expr(Node *n)
             fatal_node(n, "%s: una función de @native no puede ir como valor", n->name);
             return TY_VOID;
         }
-    case E_CALL:
+    case E_CALL: {
+        long k;
+        if (amiga_const(n, &k)) {                      /* sizeof, offsetof de una @amiga struct */
+            load_imm(0, k);
+            return TY_INT;
+        }
         return gen_call(n);
+    }
+    case E_ACAST:
+        /* Ptr X(dirección): una dirección de 32 bits (en DashOS, con ceros arriba) */
+        value(n->a);
+        zext_d0();
+        return aptr_of(n->name, n->line, n->col);
     case E_NEG:
         if (expr_type(n->a) == TY_DOUBLE) {
             args_to_stack(&n->a, 1, NULL);
@@ -5794,6 +5952,8 @@ static int resolve_type(int t, int line, int col)
         t -= TY_ARR;
         d++;
     }
+    if (t >= TY_NAMED && !strncmp(type_names.v[t - TY_NAMED], "Ptr ", 4))
+        return aptr_of(type_names.v[t - TY_NAMED] + 4, line, col) + d * TY_ARR;
     if (t >= TY_NAMED) {
         int si = find_struct(type_names.v[t - TY_NAMED]), i;
         for (i = 0; si < 0 && i < prog->enums.n; i++)
@@ -6024,6 +6184,8 @@ void gen_program(Program *p, Obj *o)
         func_label[i] = new_label();
     }
 
+    /* las @amiga struct: su disposición (antes de los tipos: "Ptr X") */
+    for (i = 0; i < p->amiga.n; i++) amiga_lay(i);
     /* los nombres de tipos, a sus structs (también lo que guarda cada diccionario) */
     for (i = 0; i < dict_types.n; i++) dict_types.v[i].val = resolve_type(dict_types.v[i].val, 0, 0);
     desc_label = xmalloc(sizeof(int) * (p->structs.n + 1));
