@@ -2,8 +2,8 @@
    runtime de Dash, sobre tres funciones de plataforma: dash_plat_write, dash_plat_exit y dash_plat_pages.
 
    Las de plataforma hablan con el sistema por svc #0 (número en x8, argumentos en x0..x5, resultado en x0):
-   - DashOS (por defecto; llamadas provisionales de su C19): escribir = 1, salir = 2, memoria_crear = 7,
-     memoria_proyectar = 8.
+   - DashOS (por defecto; llamadas provisionales de su C19): escribir = 1 (256 bytes como mucho por llamada),
+     salir = 2, memoria_crear = 7 (4 MB como mucho por objeto), memoria_proyectar = 8 (no encima de algo).
    - Linux (-DDASH_PLAT_LINUX), para probar en el PC con qemu-aarch64 (o qemu-aarch64_be): write = 64, exit_group = 94, mmap = 222.
 
    La memoria de Dash empieza en 4 GB (DASH_HEAP_BASE): un puntero cortado a 32 bits cae fuera y el programa se
@@ -39,14 +39,40 @@ void *dash_plat_pages(unsigned long bytes)
     return (void *)r;
 }
 #else
-long dash_plat_write(const void *buf, long len) { return _svc(1, (long)buf, len, 0, 0, 0, 0); }
+/* escribir toma como mucho 256 bytes por llamada (DashOS C35) y dice cuántos tomó: se repite con el resto */
+long dash_plat_write(const void *buf, long len)
+{
+    long done = 0, r;
+    while (done < len) {
+        r = _svc(1, (long)buf + done, len - done, 0, 0, 0, 0);
+        if (r <= 0) return done ? done : r;
+        done += r;
+    }
+    return done;
+}
 void dash_plat_exit(int code) { for (;;) _svc(2, code, 0, 0, 0, 0, 0); }
+
+/* memoria_crear da como mucho 4 MB por objeto (C35): un trozo mayor son varios objetos proyectados seguidos desde
+   at. Devuelve cuántos bytes quedaron proyectados (bytes si todo fue bien); memoria_crear la da a cero */
+#define DASH_MAP_MAX 0x400000UL
+static unsigned long dashos_map(unsigned long at, unsigned long bytes)
+{
+    unsigned long done = 0, n;
+    long key;
+    while (done < bytes) {
+        n = bytes - done > DASH_MAP_MAX ? DASH_MAP_MAX : bytes - done;
+        key = _svc(7, (long)n, 0, 0, 0, 0, 0);
+        if (key < 0 || _svc(8, key, (long)(at + done), 3, 0, 0, 0) < 0) break;
+        done += n;
+    }
+    return done;
+}
+
 void *dash_plat_pages(unsigned long bytes)
 {
-    long key = _svc(7, (long)bytes, 0, 0, 0, 0, 0);
-    if (key < 0 || _svc(8, key, (long)heap_next, 3, 0, 0, 0) < 0) return NULL;
-    heap_next += bytes;
-    return (void *)(heap_next - bytes);   /* (memoria_crear la da a cero) */
+    unsigned long at = heap_next, got = dashos_map(at, bytes);
+    heap_next += got;                     /* (lo proyectado no se vuelve a proyectar, aunque falte el resto) */
+    return got == bytes ? (void *)at : NULL;
 }
 #endif
 
@@ -64,8 +90,8 @@ void *dash_plat_box_alloc(unsigned long bytes)
         long r = _svc(222, (long)box_end, (long)want, 3, 0x02 | 0x20 | 0x100000, -1, 0);
         if (r < 0 || (unsigned long)r != box_end) return NULL;
 #else
-        long key = _svc(7, (long)want, 0, 0, 0, 0, 0);
-        if (key < 0 || _svc(8, key, (long)box_end, 3, 0, 0, 0) < 0) return NULL;
+        unsigned long got = dashos_map(box_end, want);
+        if (got != want) { box_next = box_end += got; return NULL; }
 #endif
         if (box_next == box_end) box_next = box_end;
         box_end += want;
