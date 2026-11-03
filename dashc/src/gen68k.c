@@ -5871,41 +5871,21 @@ static void gen_struct_types(void)
                 destroy = new_label();
         if (destroy >= 0) {
             def_label(destroy);
-            w(0x2F0A);                                 /* move.l a2,-(sp) */
-            w(0x246F); w(8);                           /* movea.l 8(sp),a2 */
+            destroy_begin();
             for (i = 0; i < st->fields.n; i++) {
                 int ft = st->fields.v[i].type;
                 if ((!IS_STRLIKE(ft) && !IS_OBJ(ft)) || st->fields.v[i].weak) continue;
-                w(0x2F2A); w(4 * i);                   /* move.l campo(a2),-(sp) */
-                jsr_sym(IS_STRLIKE(ft) ? "_dl_str_free" : "_dl_release_child");
-                w(0x588F);                             /* addq.l #4,sp */
+                destroy_field(field_off(i), IS_STRLIKE(ft) ? "_dl_str_free" : "_dl_release_child");
             }
-            w(0x245F);                                 /* movea.l (sp)+,a2 */
-            w(0x4E75);                                 /* rts */
+            destroy_end();
         }
         def_label(desc_label[si]);
-        if (destroy >= 0) {
-            Fixup f;
-            f.at = (uint32_t)obj->code.n;
-            f.label = destroy;
-            f.abs = 1;
-            f.size = 2;
-            VEC_PUSH(fixups, f);
-            add_reloc(f.at, HK_CODE, NULL);
-        }
-        l(0);
-        l((uint32_t)(4 * st->fields.n));
+        code_ptr(destroy);                             /* _DashType: destroy, size, methods */
+        code_long((uint32_t)struct_bytes(st->fields.n));
         if (st->ifaces.n) {
             /* la tabla de métodos de sus interfaces: justo detrás */
-            Fixup f;
             int tab = new_label(), j, k;
-            f.at = (uint32_t)obj->code.n;
-            f.label = tab;
-            f.abs = 1;
-            f.size = 2;
-            VEC_PUSH(fixups, f);
-            add_reloc(f.at, HK_CODE, NULL);
-            l(0);
+            code_ptr(tab);
             def_label(tab);
             for (k = 0; k < prog->nslots; k++) {
                 /* el método de este slot: de una de sus interfaces, con su "Struct.metodo" */
@@ -5923,15 +5903,11 @@ static void gen_struct_types(void)
                     snprintf(full, sizeof full, "%s.%s", st->name, mname);
                     if (!find_func(full, &fi))
                         fatal_at(st->line, st->col, "%s no tiene el método %s de su interfaz", st->name, mname);
-                    f.at = (uint32_t)obj->code.n;
-                    f.label = func_label[fi];
-                    VEC_PUSH(fixups, f);
-                    add_reloc(f.at, HK_CODE, NULL);
                 }
-                l(0);
+                code_ptr(mname ? func_label[fi] : -1);
             }
         } else {
-            l(0);
+            code_ptr(-1);
         }
     }
 }

@@ -892,3 +892,40 @@ static void clear_global(long off)                     /* una global a 0 */
     add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
     l((uint32_t)off);
 }
+
+/* ---- datos dentro del código (descriptores _DashType, tablas de métodos) ---- */
+static void code_long(uint32_t v) { l(v); }
+
+static void code_ptr(int label)                        /* la dirección de una etiqueta (-1: NULL) */
+{
+    if (label >= 0) {
+        Fixup f;
+        f.at = (uint32_t)obj->code.n;
+        f.label = label;
+        f.abs = 1;
+        f.size = 2;
+        VEC_PUSH(fixups, f);
+        add_reloc(f.at, HK_CODE, NULL);
+    }
+    l(0);
+}
+
+/* el destructor de un struct (como lo llama el runtime: el objeto, de argumento): suelta sus campos con dueño */
+static void destroy_begin(void)
+{
+    w(0x2F0A);                                         /* move.l a2,-(sp) */
+    w(0x246F); w(8);                                   /* movea.l 8(sp),a2: el objeto */
+}
+
+static void destroy_field(int off, const char *sym)
+{
+    w(0x2F2A); w(off);                                 /* move.l campo(a2),-(sp) */
+    jsr_sym(sym);
+    w(0x588F);                                         /* addq.l #4,sp */
+}
+
+static void destroy_end(void)
+{
+    w(0x245F);                                         /* movea.l (sp)+,a2 */
+    w(0x4E75);                                         /* rts */
+}
