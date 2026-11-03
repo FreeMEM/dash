@@ -1,4 +1,5 @@
-/* dashc para DashOS (docs/AARCH64_LOOP.md, fase A4): el programa como objeto ELF64 big-endian de AArch64
+/* dashc para DashOS (docs/AARCH64_LOOP.md, fase A4): el programa como objeto ELF64 de AArch64, little-endian (o
+   big-endian con --be)
    (ET_REL), para enlazarlo con el runtime de dashc para ARM. Secciones: .text (el código; empieza por el arranque,
    el símbolo _dashc_start), .data (las globales, los textos...), .rela.text, .rela.data, .symtab, .strtab y
    .shstrtab. Las reubicaciones van a la sección .text o .data (con el sumando) o a un símbolo de fuera. */
@@ -8,9 +9,20 @@
 
 #include "dashc.h"
 
-static void be16(Buf *b, unsigned v) { buf_byte(b, (int)(v >> 8 & 0xFF)); buf_byte(b, (int)(v & 0xFF)); }
-static void be32(Buf *b, uint32_t v) { be16(b, v >> 16); be16(b, v & 0xFFFF); }
-static void be64(Buf *b, uint64_t v) { be32(b, (uint32_t)(v >> 32)); be32(b, (uint32_t)v); }
+/* en el orden de bytes del objeto: little-endian (lo nativo de DashOS) o, con --be, big-endian (la caja Amiga) */
+static void e16(Buf *b, unsigned v)
+{
+    if (elf_be) { buf_byte(b, (int)(v >> 8 & 0xFF)); buf_byte(b, (int)(v & 0xFF)); }
+    else { buf_byte(b, (int)(v & 0xFF)); buf_byte(b, (int)(v >> 8 & 0xFF)); }
+}
+static void e32(Buf *b, uint32_t v)
+{
+    if (elf_be) { e16(b, v >> 16); e16(b, v & 0xFFFF); } else { e16(b, v & 0xFFFF); e16(b, v >> 16); }
+}
+static void e64(Buf *b, uint64_t v)
+{
+    if (elf_be) { e32(b, (uint32_t)(v >> 32)); e32(b, (uint32_t)v); } else { e32(b, (uint32_t)v); e32(b, (uint32_t)(v >> 32)); }
+}
 
 /* las secciones: 0 nula, 1 .text, 2 .data, 3 .rela.text, 4 .rela.data, 5 .symtab, 6 .strtab, 7 .shstrtab */
 enum { S_TEXT = 1, S_DATA, S_RELT, S_RELD, S_SYM, S_STR, S_SHSTR, S_N };
@@ -79,12 +91,12 @@ void write_elf_obj(Obj *obj, const char *out)
         VEC_PUSH(syms, s);
     }
     for (i = 0; i < syms.n; i++) {
-        be32(&symtab, syms.v[i].name);
+        e32(&symtab, syms.v[i].name);
         buf_byte(&symtab, syms.v[i].info);
         buf_byte(&symtab, syms.v[i].other);
-        be16(&symtab, syms.v[i].shndx);
-        be64(&symtab, syms.v[i].value);
-        be64(&symtab, syms.v[i].size);
+        e16(&symtab, syms.v[i].shndx);
+        e64(&symtab, syms.v[i].value);
+        e64(&symtab, syms.v[i].size);
     }
     /* las reubicaciones (Elf64_Rela: offset, info = símbolo << 32 | tipo, sumando), cada una en la suya */
     for (i = 0; i < obj->relocs.n; i++) {
@@ -98,9 +110,9 @@ void write_elf_obj(Obj *obj, const char *out)
             for (j = 0; strcmp(ext[j].name, r->sym); j++) ;
             sym = (uint64_t)ext[j].idx;
         }
-        be64(b, r->off);
-        be64(b, sym << 32 | (uint32_t)r->type);
-        be64(b, (uint64_t)r->addend);
+        e64(b, r->off);
+        e64(b, sym << 32 | (uint32_t)r->type);
+        e64(b, (uint64_t)r->addend);
     }
     sh_name[0] = 0;
     sh_name[S_TEXT] = str_add(&shstr, ".text");
@@ -134,21 +146,21 @@ void write_elf_obj(Obj *obj, const char *out)
         /* cabecera */
         buf_bytes(&file, "\177ELF", 4);
         buf_byte(&file, 2);                            /* ELFCLASS64 */
-        buf_byte(&file, 2);                            /* ELFDATA2MSB */
+        buf_byte(&file, elf_be ? 2 : 1);               /* ELFDATA2MSB o ELFDATA2LSB */
         buf_byte(&file, 1);                            /* EV_CURRENT */
         for (i = 0; i < 9; i++) buf_byte(&file, 0);
-        be16(&file, 1);                                /* ET_REL */
-        be16(&file, 183);                              /* EM_AARCH64 */
-        be32(&file, 1);
-        be64(&file, 0);                                /* e_entry */
-        be64(&file, 0);                                /* e_phoff */
-        be64(&file, pos);                              /* e_shoff */
-        be32(&file, 0);                                /* e_flags */
-        be16(&file, 64);
-        be16(&file, 0); be16(&file, 0);                /* sin cabeceras de programa */
-        be16(&file, 64);                               /* e_shentsize */
-        be16(&file, S_N);
-        be16(&file, S_SHSTR);
+        e16(&file, 1);                                /* ET_REL */
+        e16(&file, 183);                              /* EM_AARCH64 */
+        e32(&file, 1);
+        e64(&file, 0);                                /* e_entry */
+        e64(&file, 0);                                /* e_phoff */
+        e64(&file, pos);                              /* e_shoff */
+        e32(&file, 0);                                /* e_flags */
+        e16(&file, 64);
+        e16(&file, 0); e16(&file, 0);                /* sin cabeceras de programa */
+        e16(&file, 64);                               /* e_shentsize */
+        e16(&file, S_N);
+        e16(&file, S_SHSTR);
         for (i = 1; i < S_N; i++) {
             while ((uint64_t)file.n < off[i]) buf_byte(&file, 0);
             buf_bytes(&file, (const char *)body[i]->p, body[i]->n);
@@ -163,16 +175,16 @@ void write_elf_obj(Obj *obj, const char *out)
             uint64_t entsize = 0;
             if (i == S_RELT || i == S_RELD) { link = S_SYM; info = i == S_RELT ? S_TEXT : S_DATA; entsize = 24; }
             if (i == S_SYM) { link = S_STR; info = (uint32_t)nlocal; entsize = 24; }
-            be32(&file, sh_name[i]);
-            be32(&file, type[i]);
-            be64(&file, flags[i]);
-            be64(&file, 0);
-            be64(&file, off[i]);
-            be64(&file, size[i]);
-            be32(&file, link);
-            be32(&file, info);
-            be64(&file, align[i]);
-            be64(&file, entsize);
+            e32(&file, sh_name[i]);
+            e32(&file, type[i]);
+            e64(&file, flags[i]);
+            e64(&file, 0);
+            e64(&file, off[i]);
+            e64(&file, size[i]);
+            e32(&file, link);
+            e32(&file, info);
+            e64(&file, align[i]);
+            e64(&file, entsize);
         }
     }
     f = fopen(out, "wb");

@@ -22,6 +22,7 @@
 static Program *prog;
 static Obj *obj;
 int memcheck;
+int elf_be;
 int profile;          /* --perfil: dl_prof_enter/leave en cada función */
 int cpu020;           /* --fpu o --cpu 68020 y más: muls.l, divs.l */
 /* --debug (el depurador, docs/DEPURADOR_LOOP.md): un NOP al principio de cada línea, que el depurador cambia por

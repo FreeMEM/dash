@@ -1,4 +1,4 @@
-/* Dash en DashOS (AArch64 big-endian, docs/AARCH64_LOOP.md): lo que el runtime de Dash toma de AmigaOS, sin
+/* Dash en DashOS (AArch64, little-endian o big-endian; docs/AARCH64_LOOP.md): lo que el runtime de Dash toma de AmigaOS, sin
    AmigaOS debajo. Los tipos tienen el tamaño de los del Amiga (LONG de 32 bits) y los punteros, el del
    procesador (64 bits). Las funciones de memoria y de salida tienen el nombre y el comportamiento de las de exec
    y dos; las pone plat.c sobre las funciones de plataforma (dash_plat_*), las únicas que saben del sistema. */
@@ -77,7 +77,7 @@ void *calloc(size_t n, size_t size);
 void *realloc(void *p, size_t n);
 void free(void *p);
 
-/* Las funciones de plataforma (plat.c tiene las de DashOS y las de Linux, para qemu-aarch64_be; quien aloje el
+/* Las funciones de plataforma (plat.c tiene las de DashOS y las de Linux, para qemu-aarch64; quien aloje el
    runtime de otra manera pone las suyas): */
 long dash_plat_write(const void *buf, long len);      /* a la salida del programa */
 void dash_plat_exit(int code) __attribute__((noreturn));

@@ -802,6 +802,14 @@ void dl_tmp_release_all(void) { _dash_tmp_release_f(0); }
 /* ---- Double (dashc): un texto de 16 cifras hexadecimales con sus 8 bytes, para que la variable, el campo
    o el elemento que lo guarda sea dueño de él como de un texto (copias, temporales, liberación). Las
    cuentas, con el float doble de gcc por software, como ./dash. Una caja nil vale 0.0. ---- */
+#ifndef _DASH_W_HI   /* las mitades de un double en dos ULONG: la alta primero, salvo en una CPU little-endian */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define _DASH_W_HI 1
+#else
+#define _DASH_W_HI 0
+#endif
+#endif
+
 static double dl_dget(STRPTR s)
 {
     union { double d; ULONG w[2]; } u;
@@ -810,7 +818,7 @@ static double dl_dget(STRPTR s)
     if (s)
         for (i = 0; i < 16 && s[i]; i++) {
             UBYTE c = s[i];
-            u.w[i >> 3] = u.w[i >> 3] << 4 | (c <= '9' ? c - '0' : c - 'A' + 10);
+            u.w[i >> 3 ^ _DASH_W_HI] = u.w[i >> 3 ^ _DASH_W_HI] << 4 | (c <= '9' ? c - '0' : c - 'A' + 10);
         }
     return u.d;
 }
@@ -823,7 +831,7 @@ static STRPTR dl_dbox(double d)
     int i;
     if (!s) return NULL;
     u.d = d;
-    for (i = 0; i < 16; i++) s[i] = hex[(u.w[i >> 3] >> (28 - 4 * (i & 7))) & 15];
+    for (i = 0; i < 16; i++) s[i] = hex[(u.w[i >> 3 ^ _DASH_W_HI] >> (28 - 4 * (i & 7))) & 15];
     s[16] = 0;
     return s;
 }

@@ -1,9 +1,10 @@
-/* Generador de AArch64 big-endian de dashc (docs/AARCH64_LOOP.md, fase A4): lo que sabe de las instrucciones de
+/* Generador de AArch64 de dashc (docs/AARCH64_LOOP.md, fase A4): lo que sabe de las instrucciones de
    ARM. Lo incluye gen68k.c (con -DDASH_A64) donde va t68k_base.c, con las mismas funciones.
 
-   Las instrucciones van siempre en little-endian (también en big-endian: así las lee la CPU); los datos, en
-   big-endian. Registros: d0 = x0, d1 = x1, a0 = x9, a1 = x10, a2 = x28; las variables en x19-x27; x16 y x17 de
-   paso. Un Int vive en 64 bits con el signo extendido (las operaciones se hacen en w y se extienden). */
+   Las instrucciones van siempre en little-endian (así las lee la CPU); los datos, en little-endian (lo nativo de
+   DashOS) o, con --be, en big-endian (bibliotecas de la caja Amiga). Registros: d0 = x0, d1 = x1, a0 = x9,
+   a1 = x10, a2 = x28; las variables en x19-x27; x16 y x17 de paso. Un Int vive en 64 bits con el signo extendido
+   (las operaciones se hacen en w y se extienden). */
 
 /* reubicaciones de ELF que usa el generador */
 enum { R_ABS64 = 257, R_PG_HI21 = 275, R_ADD_LO12 = 277, R_JUMP26 = 282, R_CALL26 = 283, R_LDST32_LO12 = 285,
@@ -71,12 +72,20 @@ static void ins_put(uint32_t at, uint32_t v)
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24);
 }
 
-/* un dato de una tabla (descriptores): big-endian */
+/* un LONG de los datos, en el orden de bytes del programa (little-endian; big-endian con --be) */
+static void dlong(uint32_t v)
+{
+    if (elf_be) { buf_long(&obj->data, v); return; }
+    buf_byte(&obj->data, (int)(v & 0xFF)); buf_byte(&obj->data, (int)(v >> 8 & 0xFF));
+    buf_byte(&obj->data, (int)(v >> 16 & 0xFF)); buf_byte(&obj->data, (int)(v >> 24));
+}
+
+/* un dato de una tabla (descriptores) */
 static void l(uint32_t v)
 {
     if (!in_table) { buf_long(&obj->code, v); return; }
     if (pend_labels.n) place_pending((long)obj->data.n | DATA_LABEL);
-    buf_long(&obj->data, v);
+    dlong(v);
 }
 
 static void a64_todo(const char *what)
@@ -241,8 +250,8 @@ static long data_word(long v)                          /* una palabra (8 bytes) 
     data_start();
     while (obj->data.n & 7) buf_byte(&obj->data, 0);
     off = (long)obj->data.n;
-    buf_long(&obj->data, (uint32_t)((unsigned long)v >> 32));
-    buf_long(&obj->data, (uint32_t)v);
+    if (elf_be) { dlong((uint32_t)((unsigned long)v >> 32)); dlong((uint32_t)v); }
+    else { dlong((uint32_t)v); dlong((uint32_t)((unsigned long)v >> 32)); }
     return off;
 }
 

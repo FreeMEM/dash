@@ -4,7 +4,7 @@
    Las de plataforma hablan con el sistema por svc #0 (número en x8, argumentos en x0..x5, resultado en x0):
    - DashOS (por defecto; llamadas provisionales de su C19): escribir = 1, salir = 2, memoria_crear = 7,
      memoria_proyectar = 8.
-   - Linux (-DDASH_PLAT_LINUX), para probar en el PC con qemu-aarch64_be: write = 64, exit_group = 94, mmap = 222.
+   - Linux (-DDASH_PLAT_LINUX), para probar en el PC con qemu-aarch64 (o qemu-aarch64_be): write = 64, exit_group = 94, mmap = 222.
 
    La memoria de Dash empieza en 4 GB (DASH_HEAP_BASE): un puntero cortado a 32 bits cae fuera y el programa se
    para en el acto, en vez de seguir con datos de otro sitio. */

@@ -1,8 +1,8 @@
-# Dash para DashOS: AArch64 big-endian (plan y bitácora)
+# Dash para DashOS: AArch64 (plan y bitácora)
 
 DashOS (`~/Projects/dashos`, su `PLAN.md`, "Dash en los dos sistemas") necesita que el mismo programa Dash compile
-para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama `aarch64`, worktree
-`.worktrees/aarch64`.
+para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64: little-endian lo nativo, big-endian con `--be` las
+bibliotecas de la caja Amiga). Rama `aarch64`, worktree `.worktrees/aarch64`.
 
 ## Decisiones (usuario, 2026-11-03)
 
@@ -53,15 +53,17 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
   entrar, cada parámetro se guarda en su hueco del marco. Más de 8 argumentos: aún no.
 - **El runtime visto desde el código:** las funciones `dl_*` de ARM devuelven `_DashP` (un Int de C en w0 deja la
   parte alta sin definir).
-- **Salida:** un objeto ELF64 big-endian (.text, .data, .rela.*, .symtab), enlazado con ld.lld con el runtime de
-  dashc para ARM. Reubicaciones: CALL26 (llamadas), ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC o LDST64/32_ABS_LO12_NC
+- **Salida:** un objeto ELF64 little-endian (big-endian con `--be`; .text, .data, .rela.*, .symtab), enlazado con
+  ld.lld con el runtime de dashc para ARM. Reubicaciones: CALL26 (llamadas), ADR_PREL_PG_HI21 + ADD_ABS_LO12_NC o LDST64/32_ABS_LO12_NC
   (direcciones y variables), ABS64 (punteros en tablas y descriptores). `Reloc` lleva tipo y sumando.
 - **Sin FP ni SIMD**, como el resto de lo de DashOS.
 
 ## Herramientas
 
-- `clang --target=aarch64_be-none-elf` y `ld.lld` (clang 23 del sistema): compilan el runtime en C para ARM.
-- `qemu-aarch64_be` (modo usuario): ejecuta en el PC los programas de prueba. Para eso hay una plataforma de
+- `clang --target=aarch64-none-elf` (con `--be`, `aarch64_be-none-elf`) y `ld.lld` (clang 23 del sistema): compilan
+  el runtime en C para ARM. Las bibliotecas compiladas, en `build/dashos/` (big-endian, en `build/dashos/be/`).
+- `qemu-aarch64` y `qemu-aarch64_be` (modo usuario): ejecutan en el PC los programas de prueba
+  (`tools/dashos_run.py` elige por el EI_DATA del ELF). Para eso hay una plataforma de
   pruebas que habla con Linux (write, exit, mmap). DashOS pondrá la suya.
 - `dashc/tests/identicos.py`: 2310 compilaciones de 68k (tests, ejemplos, 6 juegos de opciones) contra un dashc de
   referencia, en un segundo. `--guardar` fija la referencia.
@@ -74,7 +76,7 @@ para AmigaOS 3.x (hunks de 68k) y para DashOS (ELF de AArch64 big-endian). Rama 
 |---|---|---|
 | A0 | Red de seguridad: `identicos.py` | 2310/2310 idénticos con la referencia de `origin/main` |
 | A1 | Capa de plataforma en el runtime (memoria, salida, salida del programa, errores) | C de Amiga idéntico; el runtime compila para ARM sin sistema |
-| A2 | `./dash --gcc --dashos`: por C con clang, a ELF de AArch64 big-endian | Tests con `# expect-out` en `qemu-aarch64_be`, misma salida que en el A1200 |
+| A2 | `./dash --gcc --dashos`: por C con clang, a ELF de AArch64 (big-endian al principio; little desde C30) | Tests con `# expect-out` en `qemu-aarch64_be`, misma salida que en el A1200 |
 | A3 | Reparto de `gen68k.c`: recorrido común + interfaz de objetivo + generador de 68k | `identicos.py` tras cada paso; `make -C dashc test` al final |
 | A4 | Codificador de AArch64 y escritor de ELF (enlaza el runtime, un `.o` ELF) | Enteros, funciones, control y `Print`, contra A2 |
 | A5 | Cobertura en ARM: textos, listas, structs, diccionarios, Float y Double (FPU de ARM) | Los tests de A2 por el camino directo, misma salida |
@@ -117,6 +119,10 @@ Sustituye lo de arriba donde choque (big-endian, sin PIE, sin FPU). Referencia c
   Las llamadas 1, 2, 7 y 8 y PT_GNU_STACK no cambian. **La FPU ya está disponible** (C28).
 - Bibliotecas nativas de la caja Amiga: big-endian, con `@amiga struct` y punteros de 32 bits, mejor como PIE.
   Latin-1 solo en los textos que van a estructuras del Amiga.
+- **Hecho (2026-11-03):** `./dash --dashos` da ELF64 little-endian por los dos caminos; `--be` da el big-endian de
+  antes (la caja) y `--pie` un PIE estático. En little-endian, los campos Word y Long de una `@amiga struct` se leen
+  y escriben dando la vuelta a los bytes (la memoria del Amiga es big-endian); `peek_*`/`poke_*` van en el orden del
+  procesador. Aún sin FPU: Float y Double siguen por software (siguiente paso).
 - Las tablas de números de llave de los canales (llamadas 4 y 5) van en el orden de bytes del proceso. Los mensajes
   que escribe el kernel (como el número de interrupción) van en little-endian.
 
@@ -275,3 +281,10 @@ Print offsetof(Node, ln_Name)  # 10
   diccionarios toman y dan los valores en `_DashP` (cortaban a 32 bits un texto por encima de 4 GB). Textos en
   UTF-8 en los dos caminos (`# dashos-line N:` y `# dashos-skip:` en los tests; `tests/dashos/` solo de DashOS).
   qemu: por C 92/294 (también PIE), directo 86/294 (también PIE). 2376/2376 y 396/396.
+- 2026-11-03: lo nativo pasa a little-endian (DashOS C30). `dashc-a64` escribe los datos y el ELF en little-endian
+  (`--be`: big-endian); `tools/dashos_run.py`, `runtime/dashos/build.py`, `./dash --dashos` y
+  `tests/dashos_tests.py` toman `--be`. Lo que suponía big-endian: las mitades de un double en dos ULONG
+  (`_DASH_W_HI`, en codegen y en `api.c`), el hash de una clave literal leído como ULONG de un `_DashUP` y fp-bit
+  (`__FLOAT_WORD_ORDER__`). `@amiga struct` en little-endian con rev/rev16 (directo) y `_DASH_BE16/32` (C).
+  `test_amiga_struct` mira el puntero byte a byte (pasa en el A1200). qemu: por C 92/294 y directo 86/294, en
+  little y big, con y sin PIE. 2376/2376 y 396/396.

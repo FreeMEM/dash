@@ -834,9 +834,16 @@ static void amem(uint32_t op, int t, int off)          /* op: la forma sin escal
     ins(op | ((uint32_t)off & 0x1FF) << 12 | (uint32_t)base << 5 | (uint32_t)t);
 }
 
+/* La memoria del Amiga es big-endian: en un programa little-endian, Word y Long se leen y escriben dando la vuelta a
+   sus bytes (rev, rev16) */
 static void amiga_load(int off, int size, int sgn)
 {
-    if (size == 4) amem(sgn ? 0xB8800000 : 0xB8400000, 0, off);        /* ldursw x0 / ldur w0 */
+    if (!elf_be && size > 1) {
+        amem(size == 4 ? 0xB8400000 : 0x78400000, 0, off);            /* ldur w0 / ldurh w0 */
+        ins(size == 4 ? 0x5AC00800 : 0x5AC00400);                     /* rev w0, w0 / rev16 w0, w0 */
+        if (sgn) ins(size == 4 ? 0x93407C00 : 0x93403C00);            /* sxtw x0, w0 / sxth x0, w0 */
+    }
+    else if (size == 4) amem(sgn ? 0xB8800000 : 0xB8400000, 0, off);   /* ldursw x0 / ldur w0 */
     else if (size == 2) amem(sgn ? 0x78800000 : 0x78400000, 0, off);   /* ldursh x0 / ldurh w0 */
     else amem(sgn ? 0x38800000 : 0x38400000, 0, off);                 /* ldursb x0 / ldurb w0 */
     wrote(0);
@@ -844,7 +851,12 @@ static void amiga_load(int off, int size, int sgn)
 
 static void amiga_store(int off, int size)
 {
-    amem(size == 4 ? 0xB8000000 : size == 2 ? 0x78000000 : 0x38000000, 0, off);   /* stur w0 / sturh / sturb */
+    int t = 0;
+    if (!elf_be && size > 1) {
+        ins((size == 4 ? 0x5AC00800 : 0x5AC00400) | XT2);              /* rev w17, w0 / rev16 w17, w0 */
+        t = XT2;
+    }
+    amem(size == 4 ? 0xB8000000 : size == 2 ? 0x78000000 : 0x38000000, t, off);   /* stur w / sturh / sturb */
 }
 
 static void amiga_addr(int off) { add_imm(0, XA0, off); }

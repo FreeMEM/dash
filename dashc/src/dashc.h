@@ -293,6 +293,7 @@ typedef struct {
 void gen_program(Program *prog, Obj *obj);
 void write_c_header(Program *prog, FILE *f);   /* dashc --cabecera */
 extern int memcheck;
+extern int elf_be;      /* AArch64: datos y ELF en big-endian (--be: bibliotecas de la caja Amiga); si no, little */
 extern int debug;      /* --debug: un NOP por línea y el HUNK_DEBUG (debug_info) */
 extern Buf debug_info;
 extern int profile;    /* --perfil */

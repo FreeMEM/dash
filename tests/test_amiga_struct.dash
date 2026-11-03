@@ -37,7 +37,9 @@ Main
     p.mp_SigTask = n
     t = p.mp_SigTask
     Print "#{p.mp_Flags} #{p.mp_SigBit} #{t.ln_Pri} #{t.ln_Type} #{p.mp_Node.ln_Pri}"
-    Print "#{peek_byte(m + 14)} #{peek_byte(m + 15)} #{peek_long(m + 16) == m}"
+    # (byte a byte: la memoria del Amiga es big-endian también en un programa little-endian de DashOS)
+    sig = peek_byte(m + 16) << 24 | peek_byte(m + 17) << 16 | peek_byte(m + 18) << 8 | peek_byte(m + 19)
+    Print "#{peek_byte(m + 14)} #{peek_byte(m + 15)} #{sig == m}"
     if p.mp_Node.ln_Succ == nil
         Print "vacío"
     end

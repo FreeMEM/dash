@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Compila un programa Dash para DashOS por el camino de C (docs/AARCH64_LOOP.md, fase A2) y lo ejecuta en el PC
-con qemu-aarch64_be. Para probar: la plataforma es la de Linux (runtime/dashos/plat.c con DASH_PLAT_LINUX).
+con qemu-aarch64. Para probar: la plataforma es la de Linux (runtime/dashos/plat.c con DASH_PLAT_LINUX).
+
+Lo nativo de DashOS es little-endian; con --be, big-endian (las bibliotecas de la caja Amiga), en qemu-aarch64_be.
 
     python3 tools/dashos_run.py prog.dash            # compila, ejecuta y enseña la salida
     python3 tools/dashos_run.py prog.dash -o prog    # además deja el ELF
     python3 tools/dashos_run.py prog.dash --dashos -o prog   # el ELF para DashOS de verdad (no se ejecuta)
 
-Sale con el código del programa. Necesita clang (objetivo aarch64_be-none-elf), ld.lld y qemu-aarch64_be."""
+Sale con el código del programa. Necesita clang (objetivos aarch64-none-elf y aarch64_be-none-elf), ld.lld,
+qemu-aarch64 y qemu-aarch64_be."""
 import argparse
 import os
 import re
@@ -20,7 +23,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 RT = REPO / "runtime" / "dashos"
 sys.path.insert(0, str(REPO))
-CFLAGS = ["--target=aarch64_be-none-elf", "-ffreestanding", "-fno-builtin", "-O2", "-fPIE",
+CFLAGS = ["--target=aarch64-none-elf", "-ffreestanding", "-fno-builtin", "-O2", "-fPIE",
           # sin registros de coma flotante ni SIMD: DashOS no los deja usar en los programas (no los guarda al
           # cambiar de hilo); Float y Double van por software (fp-bit de runtime/softfloat, softfloat_lib)
           "-march=armv8-a+nofp+nosimd", "-mabi=aapcs-soft",
@@ -30,20 +33,30 @@ CFLAGS = ["--target=aarch64_be-none-elf", "-ffreestanding", "-fno-builtin", "-O2
           "-I" + str(RT / "include"), "-I" + str(RT)]
 
 
+def cflags(be=False):
+    """Las opciones de clang: little-endian (lo nativo de DashOS) o big-endian (la caja Amiga)"""
+    return ["--target=aarch64_be-none-elf", *CFLAGS[1:]] if be else CFLAGS
+
+
+def out_dir(be=False):
+    """Donde van las bibliotecas compiladas: build/dashos (little-endian) o build/dashos/be"""
+    return REPO / "build" / "dashos" / ("be" if be else "")
+
+
 _lib_lock = threading.Lock()
 
 
-def library(name):
+def library(name, be=False):
     """La biblioteca del runtime (compiler/clibs.py: zlib, ryu, fdlibm...) compilada para ARM, en build/dashos/"""
     with _lib_lock:   # (tests/dashos_tests.py compila en varios hilos)
-        return _library(name)
+        return _library(name, be)
 
 
-def _library(name):
+def _library(name, be):
     from compiler.clibs import LIBRARIES
     spec = LIBRARIES[name]
     src_dir = REPO / "runtime" / name
-    out = REPO / "build" / "dashos"
+    out = out_dir(be)
     out.mkdir(parents=True, exist_ok=True)
     lib = out / f"{name}.a"
     sources = [src_dir / s for s in spec["sources"]]
@@ -51,7 +64,7 @@ def _library(name):
                  [Path(__file__)])
     if lib.exists() and lib.stat().st_mtime >= newest:
         return lib
-    flags = [f for f in CFLAGS if not f.startswith("-Werror")] + spec["defines"] + [f"-I{src_dir}"]
+    flags = [f for f in cflags(be) if not f.startswith("-Werror")] + spec["defines"] + [f"-I{src_dir}"]
     with tempfile.TemporaryDirectory() as tmp:
         objs = []
         for s in sources:
@@ -64,22 +77,21 @@ def _library(name):
     return lib
 
 
-def softfloat_lib():
+def softfloat_lib(be=False):
     """Float y Double por software: el fp-bit de GCC (runtime/softfloat), de precisión simple y doble"""
     with _lib_lock:
         src = REPO / "runtime" / "softfloat"
-        lib = REPO / "build" / "dashos" / "softfloat.a"
+        lib = out_dir(be) / "softfloat.a"
         lib.parent.mkdir(parents=True, exist_ok=True)
         extra = RT / "softfloat_extra.c"   # (las conversiones que fp-bit no trae)
         newest = max(p.stat().st_mtime for p in [src / "fp-bit.c", src / "fp-bit.h", extra, Path(__file__)])
         if lib.exists() and lib.stat().st_mtime >= newest:
             return lib
         # (CMPtype: clang no conoce el modo de libgcc; mira el resultado en w0: un int)
-        flags = [f for f in CFLAGS if not f.startswith("-Werror")] + [f"-I{src / 'stub'}", f"-I{src}", "-w",
-                                                                      "-D__libgcc_cmp_return__=__SI__",
-                                                                      # (clang no lo define, y sin él fp-bit
-                                                                      # cambia de orden las mitades de un double)
-                                                                      "-D__FLOAT_WORD_ORDER__=__ORDER_BIG_ENDIAN__"]
+        flags = [f for f in cflags(be) if not f.startswith("-Werror")] + [
+            f"-I{src / 'stub'}", f"-I{src}", "-w", "-D__libgcc_cmp_return__=__SI__",
+            # (clang no lo define, y sin él fp-bit cambia de orden las mitades de un double)
+            f"-D__FLOAT_WORD_ORDER__=__ORDER_{'BIG' if be else 'LITTLE'}_ENDIAN__"]
         with tempfile.TemporaryDirectory() as tmp:
             objs = []
             for name, defs in (("sf", ["-DFLOAT", "-DFLOAT_ONLY"]), ("df", [])):
@@ -102,7 +114,7 @@ def link_flags(entry, stack, pie):
     return ["-static", *where, "-e", entry, "-z", "separate-loadable-segments", "-z", f"stack-size={stack}"]
 
 
-def build(src, exe, linux=True, memcheck=False, pie=False):
+def build(src, exe, linux=True, memcheck=False, pie=False, be=False):
     """Transpila y enlaza; devuelve (ok, mensajes)"""
     with tempfile.TemporaryDirectory() as tmp:
         c = Path(tmp) / "prog.c"
@@ -117,12 +129,12 @@ def build(src, exe, linux=True, memcheck=False, pie=False):
         objs = []
         for f, defs in ((c, ["-DDASH_MEMCHECK"] if memcheck else []), (RT / "plat.c", ["-DDASH_PLAT_LINUX"] if linux else [])):
             o = Path(tmp) / (f.stem + ".o")
-            r = subprocess.run(["clang", *CFLAGS, *defs, "-c", str(f), "-o", str(o)], capture_output=True, text=True)
+            r = subprocess.run(["clang", *cflags(be), *defs, "-c", str(f), "-o", str(o)], capture_output=True, text=True)
             if r.returncode:
                 return False, r.stderr.replace(str(c), "prog.c")
             objs.append(str(o))
         from compiler.clibs import LIBRARIES, uses_library
-        objs += [str(library(n)) for n in LIBRARIES if uses_library(n, text)] + [str(softfloat_lib())]
+        objs += [str(library(n, be)) for n in LIBRARIES if uses_library(n, text)] + [str(softfloat_lib(be))]
         r = subprocess.run(["ld.lld", *link_flags("_start", stack, pie), *objs, "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:
             return False, r.stderr
@@ -134,7 +146,7 @@ def _no_core():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))   # (un volcado de qemu lleva el entorno: secretos)
 
 
-def build_direct(src, exe, linux=True, memcheck=False, pie=False):
+def build_direct(src, exe, linux=True, memcheck=False, pie=False, be=False):
     """Por el compilador directo (dashc-a64: docs/AARCH64_LOOP.md, A4), sin C: el objeto ELF del programa, enlazado
     con el runtime de dashc para ARM (runtime/dashos/build.py)"""
     sys.path.insert(0, str(REPO / "dashc" / "runtime" / "dashos"))
@@ -142,18 +154,19 @@ def build_direct(src, exe, linux=True, memcheck=False, pie=False):
     dashc = REPO / "dashc" / "dashc-a64"
     with tempfile.TemporaryDirectory() as tmp:
         o = Path(tmp) / "prog.o"
-        r = subprocess.run([str(dashc), str(src), "-o", str(o), *(["--memcheck"] if memcheck else [])],
+        r = subprocess.run([str(dashc), str(src), "-o", str(o), *(["--memcheck"] if memcheck else []),
+                            *(["--be"] if be else [])],
                            cwd=REPO, capture_output=True, text=True)
         if r.returncode:
             return False, r.stdout + r.stderr
         with _lib_lock:
-            rt = rt_build.build(memcheck)
+            rt = rt_build.build(memcheck, be)
         plat = Path(tmp) / "plat.o"
-        r = subprocess.run(["clang", *CFLAGS, *(["-DDASH_PLAT_LINUX"] if linux else []), "-c", str(RT / "plat.c"),
+        r = subprocess.run(["clang", *cflags(be), *(["-DDASH_PLAT_LINUX"] if linux else []), "-c", str(RT / "plat.c"),
                             "-o", str(plat)], capture_output=True, text=True)
         if r.returncode:
             return False, r.stderr
-        libs = [str(library(n)) for n in ("ryu", "fdlibm", "zlib")] + [str(softfloat_lib())]
+        libs = [str(library(n, be)) for n in ("ryu", "fdlibm", "zlib")] + [str(softfloat_lib(be))]
         r = subprocess.run(["ld.lld", *link_flags("_dash_entry", 65536, pie),
                             str(o), str(rt), str(plat), *libs, str(rt), "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:
@@ -162,7 +175,9 @@ def build_direct(src, exe, linux=True, memcheck=False, pie=False):
 
 
 def run(exe, timeout=30):
-    r = subprocess.run(["qemu-aarch64_be", str(exe)], capture_output=True, timeout=timeout, preexec_fn=_no_core)
+    with open(exe, "rb") as f:
+        be = f.read(6)[5] == 2                         # (EI_DATA)
+    r = subprocess.run(["qemu-aarch64_be" if be else "qemu-aarch64", str(exe)], capture_output=True, timeout=timeout, preexec_fn=_no_core)
     return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")   # (DashOS: UTF-8)
 
 
@@ -174,11 +189,12 @@ def main():
     ap.add_argument("--memcheck", action="store_true", help="como ./dash --memcheck")
     ap.add_argument("--directo", action="store_true", help="por el compilador directo (dashc-a64), sin C")
     ap.add_argument("--pie", action="store_true", help="PIE estático: se carga en cualquier dirección")
+    ap.add_argument("--be", action="store_true", help="big-endian (bibliotecas de la caja Amiga)")
     a = ap.parse_args()
     with tempfile.TemporaryDirectory() as tmp:
         exe = Path(a.o) if a.o else Path(tmp) / "prog"
         ok, msg = (build_direct if a.directo else build)(Path(a.src).resolve(), exe.resolve(), linux=not a.dashos,
-                                                         memcheck=a.memcheck, pie=a.pie)
+                                                         memcheck=a.memcheck, pie=a.pie, be=a.be)
         if not ok:
             sys.exit(msg)
         if a.dashos:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Los tests de Dash en DashOS (docs/AARCH64_LOOP.md): cada tests/test_*.dash con "# expect-out:" se compila por
-el camino de C para AArch64 big-endian (tools/dashos_run.py) y se ejecuta en qemu-aarch64_be. Su salida debe ser
+el camino de C para AArch64 little-endian (tools/dashos_run.py) y se ejecuta en qemu-aarch64. Su salida debe ser
 la esperada, como en el A1200.
 
     python3 tests/dashos_tests.py              # recuento, y los errores de compilación más repetidos
@@ -8,6 +8,7 @@ la esperada, como en el A1200.
     python3 tests/dashos_tests.py --lista      # qué da cada test (ok, build, salida, timeout, rc)
     python3 tests/dashos_tests.py --directo    # por el compilador directo (dashc-a64), sin C
     python3 tests/dashos_tests.py --pie        # enlazados como PIE
+    python3 tests/dashos_tests.py --be         # en big-endian (la caja Amiga), en qemu-aarch64_be
 
 Un test con "# expect-rc: N" debe acabar con ese código. En DashOS los textos son UTF-8 (en el Amiga, Latin-1): una
 línea "# dashos-line N: texto" cambia la línea N de la salida esperada, y "# dashos-skip: motivo" deja fuera el test.
@@ -33,6 +34,7 @@ def marks(text, mark):
 
 DIRECT = False
 PIE = False
+BE = False
 
 
 def one(f, tmp):
@@ -40,7 +42,7 @@ def one(f, tmp):
     exe = Path(tmp) / f.stem
     memcheck = any(l.strip() == "# memcheck" for l in text.splitlines())
     ok, msg = (dashos_run.build_direct if DIRECT else dashos_run.build)(f.relative_to(REPO), exe, memcheck=memcheck,
-                                                                        pie=PIE)   # (relativo: como en los errores del A1200)
+                                                                        pie=PIE, be=BE)   # (relativo: como en los errores del A1200)
     if not ok:
         return "build", msg
     try:
@@ -69,10 +71,12 @@ def main():
     ap.add_argument("--lista", action="store_true")
     ap.add_argument("--directo", action="store_true")
     ap.add_argument("--pie", action="store_true", help="enlazados como PIE (qemu los carga en otra dirección)")
+    ap.add_argument("--be", action="store_true", help="big-endian (la caja Amiga)")
     a = ap.parse_args()
-    global DIRECT, PIE
+    global DIRECT, PIE, BE
     DIRECT = a.directo
     PIE = a.pie
+    BE = a.be
     fs = [f for f in sorted(REPO.glob("tests/test_*.dash")) + sorted(REPO.glob("tests/dashos/test_*.dash"))
           if a.k in f.name and "# expect-out:" in (t := f.read_text(encoding="utf-8", errors="replace"))
           and "# dashos-skip:" not in t]

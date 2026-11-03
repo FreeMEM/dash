@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """El runtime de dashc para DashOS (docs/AARCH64_LOOP.md, fase A4), como build/dashos/dashc_rt.a (y
-dashc_rt_mc.a, el de --memcheck).
+dashc_rt_mc.a, el de --memcheck); los de big-endian (--be, la caja Amiga), en build/dashos/be/.
 
 Sale como el del 68000 (runtime/gen_lib.py): el C que genera el Dash de Python para una cocina que lo usa todo
 (runtime/dashos/cocina.dash, sin ventanas), ahora para DashOS (DASH_TARGET=dashos), sin lo del programa; más las
@@ -8,7 +8,7 @@ envolturas dl_* de runtime/api.c que no tocan AmigaOS, con lo que devuelven como
 la parte alta del registro sin definir, y el código de dashc usa los 64 bits); y runtime/dashos/start.c (arranque,
 salida, Print). Se compila con clang como el resto de lo de DashOS (tools/dashos_run.py: sin FP ni SIMD).
 
-    python3 runtime/dashos/build.py          # (lo llama tools/dashos_run.py --directo cuando hace falta)
+    python3 runtime/dashos/build.py [--memcheck] [--be]   # (lo llama tools/dashos_run.py --directo cuando hace falta)
 """
 import os
 import re
@@ -123,10 +123,11 @@ def builtin_wrappers():
     return "".join(out)
 
 
-def build(memcheck=False):
+def build(memcheck=False, be=False):
     import dashos_run
-    OUT.mkdir(parents=True, exist_ok=True)
-    lib = OUT / ("dashc_rt_mc.a" if memcheck else "dashc_rt.a")
+    out = dashos_run.out_dir(be)
+    out.mkdir(parents=True, exist_ok=True)
+    lib = out / ("dashc_rt_mc.a" if memcheck else "dashc_rt.a")
     srcs = [HERE / "cocina.dash", HERE / "start.c", DASHC / "runtime" / "api.c", Path(__file__),
             REPO / "compiler" / "codegen.py", REPO / "compiler" / "latin1.py", REPO / "tools" / "dashos_run.py"]
     if lib.exists() and lib.stat().st_mtime >= max(p.stat().st_mtime for p in srcs):
@@ -139,12 +140,12 @@ def build(memcheck=False):
         c = Path(tmp) / "dashc_rt.c"
         c.write_text(text, encoding="utf-8")
         o = Path(tmp) / "dashc_rt.o"
-        flags = [f for f in dashos_run.CFLAGS if f != "-Werror=implicit-function-declaration"]
+        flags = [f for f in dashos_run.cflags(be) if f != "-Werror=implicit-function-declaration"]
         r = subprocess.run(["clang", *flags, *(["-DDASH_MEMCHECK"] if memcheck else []), "-Wno-unused-function",
                             "-c", str(c), "-o", str(o)], capture_output=True, text=True)
         if r.returncode:
-            (OUT / "dashc_rt_error.c").write_text(text, encoding="utf-8")
-            sys.exit(f"dashos/build.py: el runtime no compila (en {OUT / 'dashc_rt_error.c'}):\n{r.stderr[-6000:]}")
+            (out / "dashc_rt_error.c").write_text(text, encoding="utf-8")
+            sys.exit(f"dashos/build.py: el runtime no compila (en {out / 'dashc_rt_error.c'}):\n{r.stderr[-6000:]}")
         part = Path(tmp) / lib.name
         subprocess.run(["llvm-ar", "rcs", str(part), str(o)], check=True)
         import shutil
@@ -153,4 +154,4 @@ def build(memcheck=False):
 
 
 if __name__ == "__main__":
-    print(build("--memcheck" in sys.argv))
+    print(build("--memcheck" in sys.argv, "--be" in sys.argv))

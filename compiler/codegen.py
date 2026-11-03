@@ -1619,7 +1619,7 @@ static __inline__ ULONG _dash_dict_keyhash(STRPTR k, ULONG *len) {
     if (_DASH_STR_OURS(k)) {
         _DashStrHdr *hd = _DASH_STR_HDR(k);
         *len = n = hd->len;
-        if (hd->size & _DASH_STR_HASHED) return ((const ULONG *)hd)[-1];
+        if (hd->size & _DASH_STR_HASHED) return (ULONG)((const _DashUP *)hd)[-1];
         while (n--) h = (h << 5) + h + *p++;
         return h;
     }
@@ -8997,17 +8997,26 @@ static LONG _dash_double_digits(double d, char *digits, LONG *point) {
     return n;
 }
 
+#ifndef _DASH_W_HI   /* the halves of a double in two ULONGs: the high one first, but not on a little-endian CPU */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define _DASH_W_HI 1
+#define _DASH_W_LO 0
+#else
+#define _DASH_W_HI 0
+#define _DASH_W_LO 1
+#endif
+#endif
 /* inf, -inf, nan or 0 from the bits of d (with an FPU a comparison with infinity may not say it): the
    text, or NULL for any other number; *neg its sign */
 static const char *_dash_double_special(double d, BOOL *neg) {
     union { double d; ULONG w[2]; } bits;
     bits.d = d;
-    *neg = (bits.w[0] & 0x80000000UL) != 0;
-    if ((bits.w[0] & 0x7FF00000UL) == 0x7FF00000UL) {
-        if ((bits.w[0] & 0x000FFFFFUL) || bits.w[1]) { *neg = FALSE; return "nan"; }
+    *neg = (bits.w[_DASH_W_HI] & 0x80000000UL) != 0;
+    if ((bits.w[_DASH_W_HI] & 0x7FF00000UL) == 0x7FF00000UL) {
+        if ((bits.w[_DASH_W_HI] & 0x000FFFFFUL) || bits.w[_DASH_W_LO]) { *neg = FALSE; return "nan"; }
         return "inf";
     }
-    if (!(bits.w[0] & 0x7FFFFFFFUL) && !bits.w[1]) return "0.0";
+    if (!(bits.w[_DASH_W_HI] & 0x7FFFFFFFUL) && !bits.w[_DASH_W_LO]) return "0.0";
     return NULL;
 }
 
@@ -9184,6 +9193,15 @@ double __ieee754_fmod(double, double);
 double dash_fd_sin(double), dash_fd_cos(double), dash_fd_tan(double), dash_fd_atan(double);
 double dash_fd_floor(double), dash_fd_ceil(double);
 
+#ifndef _DASH_W_HI   /* the halves of a double in two ULONGs: the high one first, but not on a little-endian CPU */
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define _DASH_W_HI 1
+#define _DASH_W_LO 0
+#else
+#define _DASH_W_HI 0
+#define _DASH_W_LO 1
+#endif
+#endif
 typedef union { double d; ULONG w[2]; } _DashDoubleBits;
 
 static double _dash_m_sqrt(double x) {
@@ -9214,7 +9232,7 @@ static double _dash_m_fmod(double x, double y) { return __ieee754_fmod(x, y); }
 static double _dash_m_trunc(double x) {
     _DashDoubleBits b;
     b.d = x;
-    return (b.w[0] & 0x80000000UL) ? dash_fd_ceil(x) : dash_fd_floor(x);
+    return (b.w[_DASH_W_HI] & 0x80000000UL) ? dash_fd_ceil(x) : dash_fd_floor(x);
 }
 
 /* half away from zero (2.5 is 3, -2.5 is -3); x - t is exact, floor(x + 0.5) is not for 0.49999999999999994 */
@@ -9228,7 +9246,7 @@ static double _dash_m_round(double x) {
 static double _dash_m_abs(double x) {
     _DashDoubleBits b;
     b.d = x;
-    b.w[0] &= 0x7FFFFFFFUL;
+    b.w[_DASH_W_HI] &= 0x7FFFFFFFUL;
     return b.d;
 }
 
@@ -9236,13 +9254,13 @@ static double _dash_m_abs(double x) {
 static BOOL _dash_m_is_nan(double x) {
     _DashDoubleBits b;
     b.d = x;
-    return (b.w[0] & 0x7FF00000UL) == 0x7FF00000UL && ((b.w[0] & 0x000FFFFFUL) || b.w[1]);
+    return (b.w[_DASH_W_HI] & 0x7FF00000UL) == 0x7FF00000UL && ((b.w[_DASH_W_HI] & 0x000FFFFFUL) || b.w[_DASH_W_LO]);
 }
 
 static BOOL _dash_m_is_inf(double x) {
     _DashDoubleBits b;
     b.d = x;
-    return (b.w[0] & 0x7FFFFFFFUL) == 0x7FF00000UL && !b.w[1];
+    return (b.w[_DASH_W_HI] & 0x7FFFFFFFUL) == 0x7FF00000UL && !b.w[_DASH_W_LO];
 }
 
 """
@@ -21739,7 +21757,11 @@ static LONG _dash_event_window_handle(void) {{
                "#ifdef _DASH_DASHOS\n"
                "    if (p >> 32) _dash_fail(\"puntero de Amiga de 4 GB o más\", NULL);\n"
                "#endif\n"
-               "    return (ULONG)p;\n}\n"]
+               "    return (ULONG)p;\n}\n"
+               "/* the memory of the Amiga is big-endian: a little-endian program turns the bytes of Word and Long */\n"
+               "#if defined(_DASH_DASHOS) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__\n"
+               "#define _DASH_BE16(x) __builtin_bswap16(x)\n#define _DASH_BE32(x) __builtin_bswap32(x)\n"
+               "#else\n#define _DASH_BE16(x) (x)\n#define _DASH_BE32(x) (x)\n#endif\n"]
         for name, lt in self.amiga.items():
             fields, pos, npad = [], 0, 0
             for fname in lt.order:
@@ -21767,6 +21789,13 @@ static LONG _dash_event_window_handle(void) {{
         """The C pointer type of "Ptr target" """
         from compiler.amiga_structs import SCALARS
         return f"{SCALARS[target][2]} *" if target in SCALARS else f"_DashA_{target} *"
+
+    @staticmethod
+    def _amiga_be(f, expr: str) -> str:
+        """expr (the C of a scalar, BPTR or pointer field, or of what goes in it) in the byte order of the Amiga"""
+        from compiler.amiga_structs import SCALARS
+        size, _, ctype = SCALARS[f.scalar] if f.kind == "scalar" else (4, False, "ULONG")
+        return expr if size == 1 else f"(({ctype})_DASH_BE{size * 8}({expr}))"
 
     def _amiga_of(self, node) -> Optional[str]:
         """What a pointer expression points to (an @amiga struct or scalar name), or None"""
@@ -21816,9 +21845,9 @@ static LONG _dash_event_window_handle(void) {{
             return None
         base, f = acc
         if f.kind in ("scalar", "bptr"):
-            return f"((LONG)({base})->{f.name})"
+            return f"((LONG){self._amiga_be(f, f'({base})->{f.name}')})"
         if f.kind == "ptr":
-            return f"(({self._amiga_c(f.target)})(_DashUP)({base})->{f.name})"
+            return f"(({self._amiga_c(f.target)})(_DashUP){self._amiga_be(f, f'({base})->{f.name}')})"
         return f"(&({base})->{f.name})" if f.kind == "struct" else f"(({base})->{f.name})"
 
     def _amiga_assign(self, node) -> bool:
@@ -21839,7 +21868,7 @@ static LONG _dash_event_window_handle(void) {{
             value = f"_dash_a32((_DashUP)({value}))"
         else:
             raise ValueError(f"{f.name}: a nested @amiga struct or a table is not assigned (its fields are)")
-        self.emit(f"{self.context.indent}({base})->{f.name} = {value};\n")
+        self.emit(f"{self.context.indent}({base})->{f.name} = {self._amiga_be(f, value)};\n")
         return True
 
     def visit_Program(self, node: Program):
