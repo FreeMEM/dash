@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 837 funciones, 837 implementadas, 0 sin implementar.
+Total: 838 funciones, 838 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -41,6 +41,7 @@ Total: 837 funciones, 837 implementadas, 0 sin implementar.
 | `gfx_poly_begin(x, y)` | `void` | Empieza un polígono en un punto |  |
 | `gfx_poly_add(x, y)` | `void` | Añade un vértice al polígono |  |
 | `gfx_poly_end()` | `void` | Cierra y rellena el polígono |  |
+| `gfx_pens_draw(buffer, width, height, x, y, zoom)` | `void` | Dibuja una imagen de lápices (un byte por píxel, fila tras fila) en x, y, cada píxel de zoom x zoom: una imagen entera en una llamada (3.1: WriteChunkyPixels) |  |
 | `gfx_copy(sx, sy, w, h, dx, dy)` | `void` | Copia una zona dentro de la ventana |  |
 
 ## Gráficos avanzados

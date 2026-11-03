@@ -32,6 +32,7 @@ DESC_ES = {
     "gfx_poly_begin": "Empieza un polígono en un punto",
     "gfx_poly_add": "Añade un vértice al polígono",
     "gfx_poly_end": "Cierra y rellena el polígono",
+    "gfx_pens_draw": "Dibuja una imagen de lápices (un byte por píxel, fila tras fila) en x, y, cada píxel de zoom x zoom: una imagen entera en una llamada (3.1: WriteChunkyPixels)",
     "gfx_copy": "Copia una zona dentro de la ventana",
     # Gráficos avanzados
     "sprite_load": "Un sprite de una imagen (ILBM...): fotogramas de 16 píxeles uno al lado del otro, los colores 0-3 "

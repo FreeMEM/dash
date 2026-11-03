@@ -274,6 +274,14 @@ GRAPHICS_BASIC = {
     ),
 
     # Blitting
+    "gfx_pens_draw": BuiltinFunc(
+        name="gfx_pens_draw",
+        params=["buffer", "width", "height", "x", "y", "zoom"],
+        return_type="void",
+        c_template="_dash_gfx_pens_draw(${buffer}, ${width}, ${height}, ${x}, ${y}, ${zoom})",
+        needs_gfx=True,
+        description="Draw an image of pens (a byte per pixel, row after row) at x, y, each pixel zoom x zoom: a whole picture in one call (3.1: WriteChunkyPixels)"
+    ),
     "gfx_copy": BuiltinFunc(
         name="gfx_copy",
         params=["sx", "sy", "w", "h", "dx", "dy"],

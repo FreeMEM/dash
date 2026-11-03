@@ -2831,6 +2831,82 @@ static void _dash_rgb_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y) {
     _dash_rgb_draw_scaled(buffer, w, h, x, y, w, h);
 }
 
+/* gfx_pens_draw (Forja D15b): an image of pens (one byte a pixel, rows one after another) at x, y, each pixel a
+   zoom x zoom square. On a planar bitmap (ECS/AGA) each source row is turned into planes here, in a band of zoom
+   lines, and the blitter copies the band (BltBitMapRastPort: clipped by the window's layer). WriteChunkyPixels
+   does that pixel by pixel in the OS and was slower than RectFill runs (A1200: 32x32 at zoom 4, 363 ms against
+   172). On RTG (a chunky bitmap) WriteChunkyPixels is the fast way. Without either, runs of RectFill. Without a
+   layer (a screen's RastPort) nothing is written outside the bitmap. */
+static void _dash_gfx_pens_draw(LONG buffer, LONG w, LONG h, LONG x, LONG y, LONG zoom) {
+    UBYTE *pix = (UBYTE *)buffer;
+    LONG sx, sy, r, dw, depth = 0;
+    BOOL planar = FALSE;
+    if (!pix || !_dash_rp || w <= 0 || h <= 0 || zoom < 1) return;
+    dw = w * zoom;
+    if (_dash_rp->BitMap) {
+        if (!_dash_rp->Layer) {
+            LONG maxw = GetBitMapAttr(_dash_rp->BitMap, BMA_WIDTH), maxh = GetBitMapAttr(_dash_rp->BitMap, BMA_HEIGHT);
+            if (x < 0 || y < 0 || x + dw > maxw || y + h * zoom > maxh) return;
+        }
+        planar = (GetBitMapAttr(_dash_rp->BitMap, BMA_FLAGS) & BMF_STANDARD) != 0;
+        depth = GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH);
+        if (depth > 8) planar = FALSE;
+    }
+    if (planar) {
+        struct BitMap *band = AllocBitMap(dw, zoom, depth, BMF_CLEAR, NULL);
+        if (band) {
+            LONG bpr = band->BytesPerRow, p;
+            for (sy = 0; sy < h; sy++) {
+                UBYTE *src = pix + sy * w;
+                WaitBlit();                          /* the blitter may still be reading the last band */
+                for (p = 0; p < depth; p++) memset(band->Planes[p], 0, bpr);
+                for (sx = 0; sx < w; sx++) {
+                    UBYTE c = src[sx];
+                    LONG dx = sx * zoom, e = dx + zoom;
+                    if (!c) continue;
+                    for (; dx < e; dx++) {
+                        UBYTE bit = 0x80 >> (dx & 7);
+                        LONG o = dx >> 3;
+                        for (p = 0; p < depth; p++) if (c & (1 << p)) band->Planes[p][o] |= bit;
+                    }
+                }
+                for (p = 0; p < depth; p++)
+                    for (r = 1; r < zoom; r++) CopyMem(band->Planes[p], band->Planes[p] + r * bpr, bpr);
+                BltBitMapRastPort(band, 0, 0, _dash_rp, x, y + sy * zoom, dw, zoom, 0xC0);
+            }
+            WaitBlit();
+            FreeBitMap(band);
+            return;
+        }
+    } else if (GfxBase->LibNode.lib_Version >= 40) {
+        UBYTE *row = (UBYTE *)AllocVec(dw, MEMF_ANY);
+        if (row) {
+            for (sy = 0; sy < h; sy++) {
+                UBYTE *src = pix + sy * w, *d = row;
+                for (sx = 0; sx < w; sx++) {
+                    UBYTE c = src[sx];
+                    for (r = 0; r < zoom; r++) *d++ = c;
+                }
+                for (r = 0; r < zoom; r++)
+                    WriteChunkyPixels(_dash_rp, x, y + sy * zoom + r, x + dw - 1, y + sy * zoom + r, row, dw);
+            }
+            FreeVec(row);
+            return;
+        }
+    }
+    for (sy = 0; sy < h; sy++) {
+        UBYTE *src = pix + sy * w;
+        LONG fy = y + sy * zoom;
+        for (sx = 0; sx < w; ) {
+            LONG e = sx + 1;
+            while (e < w && src[e] == src[sx]) e++;
+            SetAPen(_dash_rp, src[sx]);
+            RectFill(_dash_rp, x + sx * zoom, fy, x + e * zoom - 1, fy + zoom - 1);
+            sx = e;
+        }
+    }
+}
+
 static void _dash_blend_cleanup(void) {
     if (_dash_p96) { CloseLibrary(_dash_p96); _dash_p96 = NULL; }
     _dash_blend_libs = 0;
