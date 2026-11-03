@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 857 funciones, 857 implementadas, 0 sin implementar.
+Total: 879 funciones, 879 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -80,6 +80,28 @@ Total: 857 funciones, 857 implementadas, 0 sin implementar.
 | `bob_frame(id, frame)` | `void` | Pone el fotograma de la animación de un BOB |  |
 | `bob_frame_width(id, width)` | `void` | La imagen del BOB es una tira de fotogramas de ese ancho en píxeles (bob_load lo toma del trozo FRJA de Forja; si no, supone fotogramas cuadrados) |  |
 | `bob_free(id)` | `void` | Libera la memoria de un BOB |  |
+| `tilemap_create(id, width, height, tile, layers)` | `BOOL` | Un mapa de tiles nuevo en id (el que hubiera se va): ancho x alto celdas (de 1 a 1024 cada lado), tiles cuadrados de 8, 16 o 32 píxeles y de 1 a 8 capas de celdas vacías |  |
+| `tilemap_load(id, filename)` | `BOOL` | Carga en id un mapa de tiles (IFF FORM FMAP, el que guarda el editor de mapas de Forja); falso si no lo es |  |
+| `tilemap_save(id, filename)` | `BOOL` | Guarda un mapa de tiles en IFF FORM FMAP; falso si no se puede |  |
+| `tilemap_free(id)` | `void` | Libera un mapa de tiles |  |
+| `tilemap_width(id)` | `LONG` | El ancho de un mapa de tiles en celdas (0 si no hay) |  |
+| `tilemap_height(id)` | `LONG` | El alto de un mapa de tiles en celdas |  |
+| `tilemap_tile_size(id)` | `LONG` | El lado de los tiles de un mapa en píxeles (8, 16 o 32) |  |
+| `tilemap_layers(id)` | `LONG` | Cuántas capas tiene un mapa de tiles |  |
+| `tilemap_get(id, layer, x, y)` | `LONG` | Una celda de una capa (0 la primera): el tile (1 el primer fotograma del tileset, 0 vacía) más 16384 si va en espejo de izquierda a derecha y 32768 si de arriba abajo; 0 fuera del mapa |  |
+| `tilemap_set(id, layer, x, y, value)` | `void` | Pone una celda de una capa (como la da tilemap_get); nada fuera del mapa |  |
+| `tilemap_tileset(id)` | `STRPTR` | El nombre del fichero del tileset del mapa, como va guardado en él ("" si no tiene) |  |
+| `tilemap_set_tileset(id, filename)` | `void` | El nombre del fichero del tileset del mapa (un IFF del editor de sprites de Forja: un BOB con un fotograma por tile) |  |
+| `tilemap_layer_name(id, layer)` | `STRPTR` | El nombre de una capa |  |
+| `tilemap_layer_type(id, layer)` | `LONG` | El tipo de una capa (0 tiles; el editor usa otros para choques y objetos) |  |
+| `tilemap_layer_visible(id, layer)` | `BOOL` | Si una capa se ve (para el editor) |  |
+| `tilemap_layer_set(id, layer, name, type, visible)` | `void` | Nombre (hasta 31 caracteres), tipo y si se ve de una capa |  |
+| `tilemap_layer_add(id)` | `LONG` | Una capa vacía nueva al final: su número, o -1 (como mucho hay 8) |  |
+| `tilemap_layer_remove(id, layer)` | `BOOL` | Quita una capa (las de detrás bajan un puesto); falso si es la única |  |
+| `tilemap_layer_move(id, from, to)` | `BOOL` | Mueve una capa a otro puesto (las de en medio se corren uno) |  |
+| `tilemap_resize(id, width, height)` | `BOOL` | Tamaño nuevo en celdas: lo que cabe se queda, desde la esquina de arriba a la izquierda, y las celdas nuevas van vacías |  |
+| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Pinta tw x th celdas de una capa, desde la celda tx, ty, en x, y, con los fotogramas de un BOB (el tile n es el fotograma n - 1, en espejo si la celda lo dice; cada celda, del tamaño de un fotograma); las celdas vacías dejan ver lo de debajo. De una vez en la ventana |  |
+| `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Como tilemap_draw, pero el color 0 y las celdas vacías dejan ver lo de debajo (para las capas de delante) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Mira si chocan dos BOB |  |
 | `copper_create(size)` | `BOOL` | Crea una lista del copper |  |
 | `copper_wait(y, x)` | `void` | Añade una instrucción WAIT del copper |  |

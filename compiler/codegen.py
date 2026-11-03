@@ -12674,6 +12674,10 @@ typedef struct {
     struct RastPort back_rp;
     struct RastPort *drawn_rp;
     LONG bx, by;
+    struct BitMap *flip[3], *flipmask[3];   /* tilemap_draw: the image and mask turned over (H, V, both) */
+    ULONG flip_version;
+    struct BitMap *il;                       /* tilemap_draw: the image interleaved (one blit for all planes) */
+    ULONG il_version;
 } _DashBob;
 static _DashBob _dash_bobs[_DASH_MAX_BITMAPS];
 
@@ -12682,11 +12686,23 @@ static _DashBob *_dash_bob_get(LONG id) {
     return &_dash_bobs[id];
 }
 
+static void _dash_bob_flips_free(_DashBob *o) {
+    LONG i;
+    for (i = 0; i < 3; i++) {
+        if (o->flip[i]) FreeBitMap(o->flip[i]);
+        if (o->flipmask[i]) FreeBitMap(o->flipmask[i]);
+        o->flip[i] = o->flipmask[i] = NULL;
+    }
+    if (o->il) FreeBitMap(o->il);
+    o->il = NULL;
+}
+
 static void _dash_bob_reset(LONG id) {
     _DashBob *o = &_dash_bobs[id];
     WaitBlit();
     if (o->mask) FreeBitMap(o->mask);
     if (o->back) FreeBitMap(o->back);
+    _dash_bob_flips_free(o);
     memset(o, 0, sizeof(*o));
 }
 
@@ -12821,8 +12837,392 @@ static void _dash_bob_free(LONG id) {
     _dash_bitmap_free(id);
 }
 
+/* Tile maps (Forja: the map editor, docs/MAPAS_DISENO.md there). A map is a grid of cells in up to 8 layers. A cell
+   is a word: the tile in the low 14 bits (1 is the first frame of the tileset, a BOB; 0 is empty), bit 14 mirrors
+   it left to right and bit 15 top to bottom. The file is an IFF FORM FMAP: MHDR (version, width, height, tile side
+   and layers, five words), TSET (the tileset's file name) and a LAYR for each layer (type, visible, the length of
+   the name, the name, a zero byte if that is odd, then the cells). Other chunks are skipped. */
+#define _DASH_MAX_TILEMAPS 8
+#define _DASH_TILEMAP_LAYERS 8
+typedef struct {
+    LONG w, h, tile, layers;
+    UWORD *cells[_DASH_TILEMAP_LAYERS];
+    char name[_DASH_TILEMAP_LAYERS][32];
+    UBYTE type[_DASH_TILEMAP_LAYERS], visible[_DASH_TILEMAP_LAYERS];
+    char tileset[256];
+} _DashTilemap;
+static _DashTilemap *_dash_tilemaps[_DASH_MAX_TILEMAPS];
+
+static _DashTilemap *_dash_tilemap_get(LONG id) {
+    if (id < 0 || id >= _DASH_MAX_TILEMAPS) return NULL;
+    return _dash_tilemaps[id];
+}
+
+static void _dash_tilemap_free(LONG id) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    LONG i;
+    if (!m) return;
+    for (i = 0; i < _DASH_TILEMAP_LAYERS; i++) if (m->cells[i]) FreeVec(m->cells[i]);
+    FreeVec(m);
+    _dash_tilemaps[id] = NULL;
+}
+
+/* A layer of empty cells, visible, of type 0 (tiles), no name */
+static BOOL _dash_tilemap_new_layer(_DashTilemap *m, LONG l) {
+    m->cells[l] = (UWORD *)AllocVec(m->w * m->h * 2, MEMF_ANY | MEMF_CLEAR);
+    m->name[l][0] = 0;
+    m->type[l] = 0;
+    m->visible[l] = 1;
+    return m->cells[l] != NULL;
+}
+
+/* A new map in id (the old one goes): 1 to 1024 cells a side, tiles of 8, 16 or 32, 1 to 8 layers */
+static _DashTilemap *_dash_tilemap_make(LONG id, LONG w, LONG h, LONG tile, LONG layers) {
+    _DashTilemap *m;
+    LONG l;
+    if (id < 0 || id >= _DASH_MAX_TILEMAPS || w < 1 || h < 1 || w > 1024 || h > 1024) return NULL;
+    if ((tile != 8 && tile != 16 && tile != 32) || layers < 1 || layers > _DASH_TILEMAP_LAYERS) return NULL;
+    _dash_tilemap_free(id);
+    m = (_DashTilemap *)AllocVec(sizeof(_DashTilemap), MEMF_ANY | MEMF_CLEAR);
+    if (!m) return NULL;
+    m->w = w; m->h = h; m->tile = tile; m->layers = layers;
+    _dash_tilemaps[id] = m;
+    for (l = 0; l < layers; l++)
+        if (!_dash_tilemap_new_layer(m, l)) { _dash_tilemap_free(id); return NULL; }
+    return m;
+}
+
+static BOOL _dash_tilemap_create(LONG id, LONG w, LONG h, LONG tile, LONG layers) {
+    return _dash_tilemap_make(id, w, h, tile, layers) != NULL;
+}
+
+static LONG _dash_tilemap_info(LONG id, LONG what) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m) return 0;
+    return what == 0 ? m->w : what == 1 ? m->h : what == 2 ? m->tile : m->layers;
+}
+
+static UWORD *_dash_tilemap_cell(LONG id, LONG l, LONG x, LONG y) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m || l < 0 || l >= m->layers || x < 0 || y < 0 || x >= m->w || y >= m->h) return NULL;
+    return m->cells[l] + y * m->w + x;
+}
+
+static LONG _dash_tilemap_get_cell(LONG id, LONG l, LONG x, LONG y) {
+    UWORD *c = _dash_tilemap_cell(id, l, x, y);
+    return c ? *c : 0;
+}
+
+static void _dash_tilemap_set_cell(LONG id, LONG l, LONG x, LONG y, LONG v) {
+    UWORD *c = _dash_tilemap_cell(id, l, x, y);
+    if (c) *c = (UWORD)v;
+}
+
+static STRPTR _dash_tilemap_tileset(LONG id) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    return (STRPTR)(m ? m->tileset : "");
+}
+
+static void _dash_tilemap_set_tileset(LONG id, STRPTR name) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m) return;
+    strncpy(m->tileset, name ? (const char *)name : "", sizeof(m->tileset) - 1);
+    m->tileset[sizeof(m->tileset) - 1] = 0;
+}
+
+static STRPTR _dash_tilemap_layer_name(LONG id, LONG l) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    return (STRPTR)(m && l >= 0 && l < m->layers ? m->name[l] : "");
+}
+
+/* what: 0 the type, 1 whether it is visible */
+static LONG _dash_tilemap_layer_info(LONG id, LONG l, LONG what) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m || l < 0 || l >= m->layers) return 0;
+    return what == 0 ? m->type[l] : m->visible[l];
+}
+
+static void _dash_tilemap_layer_set(LONG id, LONG l, STRPTR name, LONG type, BOOL visible) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m || l < 0 || l >= m->layers) return;
+    strncpy(m->name[l], name ? (const char *)name : "", sizeof(m->name[l]) - 1);
+    m->name[l][sizeof(m->name[l]) - 1] = 0;
+    m->type[l] = (UBYTE)type;
+    m->visible[l] = visible ? 1 : 0;
+}
+
+/* A new empty layer at the end: its number, or -1 */
+static LONG _dash_tilemap_layer_add(LONG id) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    if (!m || m->layers >= _DASH_TILEMAP_LAYERS || !_dash_tilemap_new_layer(m, m->layers)) return -1;
+    return m->layers++;
+}
+
+static BOOL _dash_tilemap_layer_remove(LONG id, LONG l) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    LONG i;
+    if (!m || l < 0 || l >= m->layers || m->layers == 1) return FALSE;
+    FreeVec(m->cells[l]);
+    for (i = l; i < m->layers - 1; i++) {
+        m->cells[i] = m->cells[i + 1];
+        memcpy(m->name[i], m->name[i + 1], sizeof(m->name[i]));
+        m->type[i] = m->type[i + 1];
+        m->visible[i] = m->visible[i + 1];
+    }
+    m->layers--;
+    m->cells[m->layers] = NULL;
+    return TRUE;
+}
+
+/* The layer from goes to place to (the others move up or down one) */
+static BOOL _dash_tilemap_layer_move(LONG id, LONG from, LONG to) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    UWORD *c;
+    char n[32];
+    UBYTE t, v;
+    if (!m || from < 0 || to < 0 || from >= m->layers || to >= m->layers) return FALSE;
+    c = m->cells[from]; memcpy(n, m->name[from], 32); t = m->type[from]; v = m->visible[from];
+    while (from != to) {
+        LONG nx = from < to ? from + 1 : from - 1;
+        m->cells[from] = m->cells[nx]; memcpy(m->name[from], m->name[nx], 32);
+        m->type[from] = m->type[nx]; m->visible[from] = m->visible[nx];
+        from = nx;
+    }
+    m->cells[to] = c; memcpy(m->name[to], n, 32); m->type[to] = t; m->visible[to] = v;
+    return TRUE;
+}
+
+/* New width and height: what fits stays, from the top left corner; the new cells are empty */
+static BOOL _dash_tilemap_resize(LONG id, LONG w, LONG h) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    UWORD *nc[_DASH_TILEMAP_LAYERS];
+    LONG l, y, cw, ch;
+    if (!m || w < 1 || h < 1 || w > 1024 || h > 1024) return FALSE;
+    for (l = 0; l < m->layers; l++) {
+        nc[l] = (UWORD *)AllocVec(w * h * 2, MEMF_ANY | MEMF_CLEAR);
+        if (!nc[l]) { while (--l >= 0) FreeVec(nc[l]); return FALSE; }
+    }
+    cw = w < m->w ? w : m->w;
+    ch = h < m->h ? h : m->h;
+    for (l = 0; l < m->layers; l++) {
+        for (y = 0; y < ch; y++) memcpy(nc[l] + y * w, m->cells[l] + y * m->w, cw * 2);
+        FreeVec(m->cells[l]);
+        m->cells[l] = nc[l];
+    }
+    m->w = w; m->h = h;
+    return TRUE;
+}
+
+static BOOL _dash_tilemap_write(BPTR f, const void *p, LONG n) { return Write(f, (APTR)p, n) == n; }
+
+static BOOL _dash_tilemap_save(LONG id, STRPTR filename) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    BPTR f;
+    ULONG form, tlen, l, hdr[2];
+    UWORD mhdr[5];
+    BOOL ok = TRUE;
+    static const UBYTE zero[2] = {0, 0};
+    if (!m || !filename) return FALSE;
+    tlen = strlen(m->tileset);
+    form = 4 + 8 + 10 + 8 + ((tlen + 1) & ~1UL);
+    for (l = 0; l < (ULONG)m->layers; l++) {
+        ULONG n = strlen(m->name[l]);
+        form += 8 + ((3 + n + 1) & ~1UL) + m->w * m->h * 2;
+    }
+    if (!(f = Open((CONST_STRPTR)filename, MODE_NEWFILE))) return FALSE;
+    hdr[0] = 0x464F524DUL; hdr[1] = form;                                  /* FORM */
+    ok = ok && _dash_tilemap_write(f, hdr, 8) && _dash_tilemap_write(f, "FMAP", 4);
+    hdr[0] = 0x4D484452UL; hdr[1] = 10;                                    /* MHDR */
+    mhdr[0] = 1; mhdr[1] = m->w; mhdr[2] = m->h; mhdr[3] = m->tile; mhdr[4] = m->layers;
+    ok = ok && _dash_tilemap_write(f, hdr, 8) && _dash_tilemap_write(f, mhdr, 10);
+    hdr[0] = 0x54534554UL; hdr[1] = tlen;                                  /* TSET */
+    ok = ok && _dash_tilemap_write(f, hdr, 8) && _dash_tilemap_write(f, m->tileset, tlen);
+    if (tlen & 1) ok = ok && _dash_tilemap_write(f, zero, 1);
+    for (l = 0; ok && l < (ULONG)m->layers; l++) {
+        UBYTE lh[3];
+        ULONG n = strlen(m->name[l]), lhn = (3 + n + 1) & ~1UL;
+        hdr[0] = 0x4C415952UL; hdr[1] = lhn + m->w * m->h * 2;              /* LAYR */
+        lh[0] = m->type[l]; lh[1] = m->visible[l]; lh[2] = (UBYTE)n;
+        ok = ok && _dash_tilemap_write(f, hdr, 8) && _dash_tilemap_write(f, lh, 3) &&
+             _dash_tilemap_write(f, m->name[l], n);
+        if ((3 + n) & 1) ok = ok && _dash_tilemap_write(f, zero, 1);
+        ok = ok && _dash_tilemap_write(f, m->cells[l], m->w * m->h * 2);
+    }
+    if (!Close(f)) ok = FALSE;
+    return ok;
+}
+
+/* Reads an FMAP into id (what was there goes); FALSE if it is not one, or is cut short */
+static BOOL _dash_tilemap_load(LONG id, STRPTR filename) {
+    BPTR f;
+    ULONG hdr[3], form, pos = 4;
+    LONG layer = 0;
+    _DashTilemap *m = NULL;
+    BOOL ok = FALSE;
+    if (id < 0 || id >= _DASH_MAX_TILEMAPS || !filename) return FALSE;
+    if (!(f = Open((CONST_STRPTR)filename, MODE_OLDFILE))) return FALSE;
+    if (Read(f, hdr, 12) != 12 || hdr[0] != 0x464F524DUL || hdr[2] != 0x464D4150UL) { Close(f); return FALSE; }
+    form = hdr[1];
+    while (pos + 8 <= form) {
+        ULONG ch[2], len, pad;
+        if (Read(f, ch, 8) != 8) break;
+        len = ch[1]; pad = len & 1;
+        pos += 8 + len + pad;
+        if (ch[0] == 0x4D484452UL && len >= 10 && !m) {                    /* MHDR */
+            UWORD mh[5];
+            if (Read(f, mh, 10) != 10) break;
+            if (!(m = _dash_tilemap_make(id, mh[1], mh[2], mh[3], mh[4]))) break;
+            if (len + pad > 10) Seek(f, len + pad - 10, OFFSET_CURRENT);
+            ok = TRUE;
+        } else if (ch[0] == 0x54534554UL && m) {                           /* TSET */
+            LONG n = len < sizeof(m->tileset) - 1 ? len : sizeof(m->tileset) - 1;
+            if (Read(f, m->tileset, n) != n) { ok = FALSE; break; }
+            m->tileset[n] = 0;
+            if ((LONG)(len + pad) > n) Seek(f, len + pad - n, OFFSET_CURRENT);
+        } else if (ch[0] == 0x4C415952UL && m && layer < m->layers) {      /* LAYR */
+            UBYTE lh[3];
+            LONG n, hn, cells = m->w * m->h * 2;
+            if (Read(f, lh, 3) != 3) { ok = FALSE; break; }
+            n = lh[2] < 31 ? lh[2] : 31;
+            hn = (3 + lh[2] + 1) & ~1L;
+            if ((LONG)len < hn + cells || Read(f, m->name[layer], n) != n) { ok = FALSE; break; }
+            m->name[layer][n] = 0;
+            if (hn - 3 - n > 0) Seek(f, hn - 3 - n, OFFSET_CURRENT);
+            m->type[layer] = lh[0];
+            m->visible[layer] = lh[1];
+            if (Read(f, m->cells[layer], cells) != cells) { ok = FALSE; break; }
+            if ((LONG)(len + pad) > hn + cells) Seek(f, len + pad - hn - cells, OFFSET_CURRENT);
+            layer++;
+        } else {
+            Seek(f, len + pad, OFFSET_CURRENT);
+        }
+    }
+    Close(f);
+    if (!ok) _dash_tilemap_free(id);
+    return ok;
+}
+
+static UBYTE _dash_rev8(UBYTE b) {
+    b = (UBYTE)((b >> 4) | (b << 4));
+    b = (UBYTE)(((b & 0xCC) >> 2) | ((b & 0x33) << 2));
+    return (UBYTE)(((b & 0xAA) >> 1) | ((b & 0x55) << 1));
+}
+
+/* A copy of a strip of frames fw wide, each frame turned over: kind 1 left to right, 2 top to bottom, 3 both */
+static struct BitMap *_dash_flip_strip(struct BitMap *src, LONG w, LONG h, LONG depth, LONG fw, LONG kind) {
+    struct BitMap *d = AllocBitMap(w, h, depth, BMF_CLEAR, NULL);
+    LONG p, y, x;
+    if (!d) return NULL;
+    WaitBlit();
+    for (p = 0; p < depth; p++) {
+        for (y = 0; y < h; y++) {
+            UBYTE *s = src->Planes[p] + y * src->BytesPerRow;
+            UBYTE *t = d->Planes[p] + ((kind & 2) ? h - 1 - y : y) * d->BytesPerRow;
+            if (!(kind & 1)) {
+                memcpy(t, s, src->BytesPerRow < d->BytesPerRow ? src->BytesPerRow : d->BytesPerRow);
+            } else if ((fw & 7) == 0) {                     /* frames of whole bytes */
+                LONG fb = fw >> 3, f0, i;
+                for (f0 = 0; f0 + fb <= (w >> 3); f0 += fb)
+                    for (i = 0; i < fb; i++) t[f0 + i] = _dash_rev8(s[f0 + fb - 1 - i]);
+            } else {
+                for (x = 0; x < w; x++) {
+                    LONG f0 = x - x % fw, tx = f0 + fw - 1 - (x - f0);
+                    if (tx < w && (s[x >> 3] & (0x80 >> (x & 7)))) t[tx >> 3] |= 0x80 >> (tx & 7);
+                }
+            }
+        }
+    }
+    return d;
+}
+
+/* The turned-over images and masks of a BOB, made when first needed (again if the image changed) */
+static BOOL _dash_bob_flips(LONG id, LONG kind) {
+    _DashBob *o = &_dash_bobs[id];
+    _DashBitmap *b = &_dash_bitmaps[id];
+    if (o->flip_version != _dash_bitmap_version[id]) {
+        _dash_bob_flips_free(o);
+        o->flip_version = _dash_bitmap_version[id];
+    }
+    if (!o->flip[kind - 1]) o->flip[kind - 1] = _dash_flip_strip(b->bm, b->w, b->h, b->depth, o->fw, kind);
+    if (!o->flipmask[kind - 1] && o->mask)
+        o->flipmask[kind - 1] = _dash_flip_strip(o->mask, b->w, b->h, 1, o->fw, kind);
+    return o->flip[kind - 1] && (!o->mask || o->flipmask[kind - 1]);
+}
+
+/* tilemap_draw: tw x th cells of a layer from cell tx, ty, at x, y, with the frames of BOB bob (tile n is frame
+   n - 1). Each cell is as big as the BOB's frames: the map's tile side, or bigger with a bigger BOB (Forja's editor
+   zooms that way). They go into a bitmap of their own, over a copy of what is on the window, and then to the
+   window in one blit (one blit a tile through the window's layers costs more). Empty cells (and cells outside the
+   map) let what is under them show; masked: colour 0 too. */
+static void _dash_tilemap_draw(LONG id, LONG l, LONG bob, LONG tx, LONG ty, LONG tw, LONG th, LONG x, LONG y,
+                               BOOL masked) {
+    _DashTilemap *m = _dash_tilemap_get(id);
+    _DashBob *o = _dash_bob_get(bob);
+    struct BitMap *off;
+    struct RastPort orp;
+    LONG ts, W, H, cx, cy, sw;
+    BOOL il;
+    _DashBitmap *b;
+    if (!m || !o || !_dash_rp || !_dash_rp->BitMap || l < 0 || l >= m->layers || tw < 1 || th < 1) return;
+    if (masked && !_dash_bob_mask(bob)) return;
+    b = &_dash_bitmaps[bob];
+    ts = o->fw;                                      /* the cell: as big as the BOB's frames */
+    sw = ts;
+    W = tw * ts; H = th * ts;
+    il = !masked && (GetBitMapAttr(_dash_rp->BitMap, BMA_FLAGS) & BMF_STANDARD) &&
+         (GetBitMapAttr(b->bm, BMA_FLAGS) & BMF_STANDARD);
+    if (il && (!o->il || o->il_version != _dash_bitmap_version[bob])) {
+        if (o->il) FreeBitMap(o->il);
+        o->il = AllocBitMap(b->w, b->h, b->depth, BMF_INTERLEAVED, NULL);
+        if (o->il) BltBitMap(b->bm, 0, 0, o->il, 0, 0, b->w, b->h, 0xC0, 0xFF, NULL);
+        o->il_version = _dash_bitmap_version[bob];
+    }
+    if (!o->il) il = FALSE;
+    off = il ? AllocBitMap(W, H, GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH), BMF_CLEAR | BMF_INTERLEAVED, NULL)
+             : AllocBitMap(W, H, GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH), BMF_CLEAR, _dash_rp->BitMap);
+    if (!off) return;
+    InitRastPort(&orp);
+    orp.BitMap = off;
+    ClipBlit(_dash_rp, x, y, &orp, 0, 0, W, H, 0xC0);   /* what is under: the empty cells show it */
+    for (cy = 0; cy < th; cy++) {
+        LONG my = ty + cy;
+        UWORD *row = (my >= 0 && my < m->h) ? m->cells[l] + my * m->w : NULL;
+        if (!row) continue;
+        for (cx = 0; cx < tw; cx++) {
+            LONG mx = tx + cx, n, kind;
+            struct BitMap *src = il ? o->il : b->bm;
+            PLANEPTR mask = masked ? o->mask->Planes[0] : NULL;
+            volatile LONG sx, dx = cx * ts, dy = cy * ts;    /* libgcc multiply on 68000: outside the macros */
+            if (mx < 0 || mx >= m->w) continue;
+            n = row[mx] & 0x3FFF;
+            if (n == 0 || n > o->frames) continue;
+            kind = row[mx] >> 14;
+            if (kind) {
+                if (!_dash_bob_flips(bob, kind)) continue;
+                src = o->flip[kind - 1];
+                if (masked) mask = o->flipmask[kind - 1]->Planes[0];
+            }
+            sx = (n - 1) * o->fw;
+            if (masked) {
+                BltMaskBitMapRastPort(src, sx, 0, &orp, dx, dy, sw, b->h < ts ? b->h : ts, (ABC | ABNC | ANBC), mask);
+            } else {
+                BltBitMap(src, sx, 0, off, dx, dy, sw, b->h < ts ? b->h : ts, 0xC0, 0xFF, NULL);
+            }
+        }
+    }
+    BltBitMapRastPort(off, 0, 0, _dash_rp, x, y, W, H, 0xC0);
+    WaitBlit();
+    FreeBitMap(off);
+}
+
+static void _dash_tilemaps_cleanup(void) {
+    LONG i;
+    for (i = 0; i < _DASH_MAX_TILEMAPS; i++) _dash_tilemap_free(i);
+}
+
 static void _dash_bitmaps_cleanup(void) {
     LONG i;
+    _dash_tilemaps_cleanup();
     _dash_bitmap_draw_screen();
     for (i = 0; i < _DASH_MAX_BITMAPS; i++) {
         if (_dash_bobs[i].used) _dash_bob_reset(i);

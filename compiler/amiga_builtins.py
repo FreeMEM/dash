@@ -559,6 +559,182 @@ GRAPHICS_ADVANCED = {
         needs_gfx=True,
         description="Free BOB memory"
     ),
+    "tilemap_create": BuiltinFunc(
+        name="tilemap_create",
+        params=["id", "width", "height", "tile", "layers"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_create(${id}, ${width}, ${height}, ${tile}, ${layers})",
+        needs_gfx=True,
+        description="A new tile map in id (the old one goes): width x height cells (1 to 1024 each), square tiles of 8, 16 or 32 pixels, 1 to 8 layers of empty cells"
+    ),
+    "tilemap_load": BuiltinFunc(
+        name="tilemap_load",
+        params=["id", "filename"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_load(${id}, ${filename})",
+        needs_gfx=True,
+        description="Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one"
+    ),
+    "tilemap_save": BuiltinFunc(
+        name="tilemap_save",
+        params=["id", "filename"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_save(${id}, ${filename})",
+        needs_gfx=True,
+        description="Save a tile map as IFF FORM FMAP; false if it cannot"
+    ),
+    "tilemap_free": BuiltinFunc(
+        name="tilemap_free",
+        params=["id"],
+        return_type="void",
+        c_template="_dash_tilemap_free(${id})",
+        needs_gfx=True,
+        description="Free a tile map"
+    ),
+    "tilemap_width": BuiltinFunc(
+        name="tilemap_width",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_tilemap_info(${id}, 0)",
+        needs_gfx=True,
+        description="Width of a tile map in cells (0 if there is none)"
+    ),
+    "tilemap_height": BuiltinFunc(
+        name="tilemap_height",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_tilemap_info(${id}, 1)",
+        needs_gfx=True,
+        description="Height of a tile map in cells"
+    ),
+    "tilemap_tile_size": BuiltinFunc(
+        name="tilemap_tile_size",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_tilemap_info(${id}, 2)",
+        needs_gfx=True,
+        description="The side of a tile map's tiles in pixels (8, 16 or 32)"
+    ),
+    "tilemap_layers": BuiltinFunc(
+        name="tilemap_layers",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_tilemap_info(${id}, 3)",
+        needs_gfx=True,
+        description="How many layers a tile map has"
+    ),
+    "tilemap_get": BuiltinFunc(
+        name="tilemap_get",
+        params=["id", "layer", "x", "y"],
+        return_type="LONG",
+        c_template="_dash_tilemap_get_cell(${id}, ${layer}, ${x}, ${y})",
+        needs_gfx=True,
+        description="A cell of a layer (0 the first): the tile (1 the first frame of the tileset, 0 empty) plus 16384 if mirrored left to right and 32768 if top to bottom; 0 outside the map"
+    ),
+    "tilemap_set": BuiltinFunc(
+        name="tilemap_set",
+        params=["id", "layer", "x", "y", "value"],
+        return_type="void",
+        c_template="_dash_tilemap_set_cell(${id}, ${layer}, ${x}, ${y}, ${value})",
+        needs_gfx=True,
+        description="Set a cell of a layer (like tilemap_get gives it); nothing outside the map"
+    ),
+    "tilemap_tileset": BuiltinFunc(
+        name="tilemap_tileset",
+        params=["id"],
+        return_type="STRPTR",
+        c_template="_dash_tilemap_tileset(${id})",
+        needs_gfx=True,
+        description="The file name of the map's tileset, as saved in it (\"\" if none)"
+    ),
+    "tilemap_set_tileset": BuiltinFunc(
+        name="tilemap_set_tileset",
+        params=["id", "filename"],
+        return_type="void",
+        c_template="_dash_tilemap_set_tileset(${id}, ${filename})",
+        needs_gfx=True,
+        description="The file name of the map's tileset (an IFF of Forja's sprite editor, a BOB with one frame a tile)"
+    ),
+    "tilemap_layer_name": BuiltinFunc(
+        name="tilemap_layer_name",
+        params=["id", "layer"],
+        return_type="STRPTR",
+        c_template="_dash_tilemap_layer_name(${id}, ${layer})",
+        needs_gfx=True,
+        description="The name of a layer"
+    ),
+    "tilemap_layer_type": BuiltinFunc(
+        name="tilemap_layer_type",
+        params=["id", "layer"],
+        return_type="LONG",
+        c_template="_dash_tilemap_layer_info(${id}, ${layer}, 0)",
+        needs_gfx=True,
+        description="The type of a layer (0 tiles; the editor uses others for collisions and objects)"
+    ),
+    "tilemap_layer_visible": BuiltinFunc(
+        name="tilemap_layer_visible",
+        params=["id", "layer"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_layer_info(${id}, ${layer}, 1)",
+        needs_gfx=True,
+        description="Whether a layer is shown (for the editor)"
+    ),
+    "tilemap_layer_set": BuiltinFunc(
+        name="tilemap_layer_set",
+        params=["id", "layer", "name", "type", "visible"],
+        return_type="void",
+        c_template="_dash_tilemap_layer_set(${id}, ${layer}, ${name}, ${type}, ${visible})",
+        needs_gfx=True,
+        description="Name (up to 31 characters), type and visibility of a layer"
+    ),
+    "tilemap_layer_add": BuiltinFunc(
+        name="tilemap_layer_add",
+        params=["id"],
+        return_type="LONG",
+        c_template="_dash_tilemap_layer_add(${id})",
+        needs_gfx=True,
+        description="A new empty layer at the end: its number, or -1 (there are 8 at most)"
+    ),
+    "tilemap_layer_remove": BuiltinFunc(
+        name="tilemap_layer_remove",
+        params=["id", "layer"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_layer_remove(${id}, ${layer})",
+        needs_gfx=True,
+        description="Remove a layer (the ones after it move down one); false if it is the only one"
+    ),
+    "tilemap_layer_move": BuiltinFunc(
+        name="tilemap_layer_move",
+        params=["id", "from", "to"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_layer_move(${id}, ${from}, ${to})",
+        needs_gfx=True,
+        description="Move a layer to another place (the ones in between move one)"
+    ),
+    "tilemap_resize": BuiltinFunc(
+        name="tilemap_resize",
+        params=["id", "width", "height"],
+        return_type="BOOL",
+        c_template="_dash_tilemap_resize(${id}, ${width}, ${height})",
+        needs_gfx=True,
+        description="New size in cells: what fits stays, from the top left corner, and the new cells are empty"
+    ),
+    "tilemap_draw": BuiltinFunc(
+        name="tilemap_draw",
+        params=["id", "layer", "bob", "tx", "ty", "tw", "th", "x", "y"],
+        return_type="void",
+        c_template="_dash_tilemap_draw(${id}, ${layer}, ${bob}, ${tx}, ${ty}, ${tw}, ${th}, ${x}, ${y}, FALSE)",
+        needs_gfx=True,
+        description="Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window"
+    ),
+    "tilemap_draw_masked": BuiltinFunc(
+        name="tilemap_draw_masked",
+        params=["id", "layer", "bob", "tx", "ty", "tw", "th", "x", "y"],
+        return_type="void",
+        c_template="_dash_tilemap_draw(${id}, ${layer}, ${bob}, ${tx}, ${ty}, ${tw}, ${th}, ${x}, ${y}, TRUE)",
+        needs_gfx=True,
+        description="Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front)"
+    ),
     "bob_collision": BuiltinFunc(
         name="bob_collision",
         params=["id1", "id2"],
