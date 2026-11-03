@@ -13361,7 +13361,8 @@ static LONG _dash_window_create(STRPTR title, LONG x, LONG y, LONG w, LONG h, LO
         WA_Activate, TRUE,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, _DASH_WIN_IDCMP,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
     if (!win) return 0;
     _dash_windows[i] = win;
@@ -17337,7 +17338,8 @@ static LONG ra_window_create(STRPTR title, LONG width, LONG height) {
         WA_DragBar, TRUE,
         WA_CloseGadget, TRUE,
         WA_SizeGadget, TRUE,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         WINDOW_Position, WPOS_CENTERSCREEN,
         WINDOW_Layout, _ra_layout,
         TAG_DONE);
@@ -20670,7 +20672,8 @@ static void _dash_rtg_scale_blit(struct BitMap *src, LONG sx, LONG sy, LONG sw, 
         WA_MaxWidth, (ULONG)~0, WA_MaxHeight, (ULONG)~0,
         WA_GimmeZeroZero, TRUE,
         WA_IDCMP, $idcmp_flags,
-        _dash_screen ? WA_CustomScreen : TAG_IGNORE, (ULONG)_dash_screen,
+        _dash_screen ? WA_CustomScreen : WA_PubScreenName, (ULONG)_dash_screen,   /* NULL: the default public one */
+        WA_PubScreenFallBack, TRUE,
         TAG_DONE);
 
     if (!win_$name) _dash_exit(20);
