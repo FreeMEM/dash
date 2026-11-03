@@ -25,7 +25,7 @@ static long _svc(long n, long a, long b, long c, long d, long e, long f)
 }
 
 #define DASH_HEAP_BASE 0x100000000UL
-static unsigned long heap_next = DASH_HEAP_BASE;
+static unsigned long heap_next = DASH_HEAP_BASE;   /* (los PIE de DashOS van de 128 a 256 GB: no chocan) */
 
 #ifdef DASH_PLAT_LINUX
 long dash_plat_write(const void *buf, long len) { return _svc(64, 1, (long)buf, len, 0, 0, 0); }
@@ -78,11 +78,38 @@ void *dash_plat_box_alloc(unsigned long bytes)
 
 void dash_plat_box_free(void *p, unsigned long bytes) { (void)p; (void)bytes; }
 
-/* ---- arranque (el del camino por C; el código de dashc entra por _dashc_start y no tiene main) ---- */
+/* ---- arranque ----
+   Un programa PIE (./dash --dashos --pie: ET_DYN estático, sin enlazador dinámico) se reubica a sí mismo antes de nada:
+   aplica las R_AARCH64_RELATIVE de su .dynamic con la dirección donde lo cargaron. Esta función no puede usar
+   punteros guardados (aún no valen): solo direcciones relativas al código (símbolos ocultos). Sin PIE no hay
+   _DYNAMIC y no hace nada. */
+extern const unsigned long _DYNAMIC[] __attribute__((weak, visibility("hidden")));
+extern const char __ehdr_start[] __attribute__((visibility("hidden")));
+void _dash_relocate(void) __attribute__((used));
+void _dash_relocate(void)
+{
+    unsigned long base = (unsigned long)__ehdr_start, rela = 0, size = 0, i;
+    const unsigned long *d = _DYNAMIC;
+    if (!d) return;
+    for (; d[0]; d += 2) {
+        if (d[0] == 7) rela = d[1];                   /* DT_RELA */
+        else if (d[0] == 8) size = d[1];              /* DT_RELASZ */
+    }
+    for (i = 0; i < size / 24; i++) {
+        const unsigned long *r = (const unsigned long *)(base + rela) + 3 * i;
+        if ((r[1] & 0xFFFFFFFF) == 1027)              /* R_AARCH64_RELATIVE */
+            *(unsigned long *)(base + r[0]) = base + r[2];
+    }
+}
+
+/* El camino por C entra por _start (y llama a main); el código de dashc, por _dash_entry, que sigue en su
+   _dashc_start (no tiene main) */
 int main() __attribute__((weak));
 void _dash_atexit_run(void);
 __asm__(".text\n.global _start\n.type _start, %function\n_start:\n"
-        "    mov x29, #0\n    mov x30, #0\n    bl _dash_start_c\n    b .\n");
+        "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    bl _dash_start_c\n    b .\n"
+        ".global _dash_entry\n.type _dash_entry, %function\n.weak _dashc_start\n_dash_entry:\n"
+        "    mov x29, #0\n    mov x30, #0\n    bl _dash_relocate\n    b _dashc_start\n");
 void _dash_start_c(void) __attribute__((noreturn, used));
 void _dash_start_c(void) { exit(main()); }
 

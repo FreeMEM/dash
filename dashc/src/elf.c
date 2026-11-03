@@ -89,7 +89,7 @@ void write_elf_obj(Obj *obj, const char *out)
     /* las reubicaciones (Elf64_Rela: offset, info = símbolo << 32 | tipo, sumando), cada una en la suya */
     for (i = 0; i < obj->relocs.n; i++) {
         Reloc *r = &obj->relocs.v[i];
-        Buf *b = &relt;   /* (el código; las de los datos irían en .rela.data: hoy no hay) */
+        Buf *b = r->in_data ? &reld : &relt;          /* (las de las tablas, en los datos) */
         uint64_t sym;
         if (r->hunk == HK_CODE) sym = 1;
         else if (r->hunk == HK_DATA) sym = 2;

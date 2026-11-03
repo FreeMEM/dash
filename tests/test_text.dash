@@ -24,6 +24,8 @@
 # expect-out: 0
 # expect-out: abcgg
 # expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
+# dashos-line 2: 24
+# dashos-line 11: A�
 
 func baja(s: String) -> String
     return str_lower(s)

@@ -739,8 +739,15 @@ static void clear_global(long off)
     x_to_var(31 /* xzr */, &g);
 }
 
-/* ---- datos dentro del código (descriptores, tablas): punteros de 8 bytes, alineados ---- */
-static void code_align(void) { x0_dirty = 0; while (obj->code.n & 7) l(0); }   /* (detrás, datos: no se llega de largo) */
+/* ---- las tablas que el recorrido pone "en el código" (descriptores...): en ARM, en los datos (ver in_table);
+   punteros de 8 bytes, alineados ---- */
+static void code_align(void)
+{
+    x0_dirty = 0;                                      /* (antes, el final de una función: no se llega de largo) */
+    in_table = 1;
+    data_start();
+    while (obj->data.n & 7) buf_byte(&obj->data, 0);   /* (de byte en byte: los textos dejan los datos en cualquier largo) */
+}
 static void code_long(uint32_t v) { l(v); }
 
 static void code_ptr(int label)
@@ -753,7 +760,7 @@ static void code_ptr(int label)
 static void code_data_ptr(uint32_t off)
 {
     code_align();
-    add_reloc_t((uint32_t)obj->code.n, HK_DATA, NULL, R_ABS64, off);
+    add_reloc_d((uint32_t)obj->data.n, HK_DATA, R_ABS64, off);
     l(0); l(0);
 }
 

@@ -32,8 +32,27 @@ static int global_off(int i) { return 16 + 8 * i; }   /* (ver data_start) */
 /* ---- el código ---- */
 static uint32_t x0_dirty = 0;   /* x0 cambió después de la última comparación: un Bcc tiene que compararlo antes */
 
+/* Las tablas que el recorrido pone "en el código" (descriptores de tipos, ventanas, ficheros) van a los datos: llevan
+   punteros que se reubican al cargar (PIE), y el código no se escribe nunca. Empiezan en code_align y acaban en la
+   siguiente instrucción; sus etiquetas llevan DATA_LABEL. */
+#define DATA_LABEL (1L << 40)
+static int in_table = 0;
+static void data_start(void);
+/* Una etiqueta puesta con in_table es de la tabla o de lo que viene detrás (un destructor, la función siguiente):
+   queda pendiente y la sitúa lo siguiente que se escriba, un dato (l) o una instrucción (ins) */
+static struct { int *v; int n, cap; } pend_labels;
+static struct { long *v; int n, cap; } labels;  /* posición en el código, -1 sin poner */
+static void place_pending(long at)
+{
+    int i;
+    for (i = 0; i < pend_labels.n; i++) labels.v[pend_labels.v[i]] = at;
+    pend_labels.n = 0;
+}
+
 static void ins(uint32_t v)
 {
+    if (pend_labels.n) place_pending((long)obj->code.n);
+    in_table = 0;
     buf_byte(&obj->code, (int)(v & 0xFF));
     buf_byte(&obj->code, (int)(v >> 8 & 0xFF));
     buf_byte(&obj->code, (int)(v >> 16 & 0xFF));
@@ -52,8 +71,13 @@ static void ins_put(uint32_t at, uint32_t v)
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24);
 }
 
-/* un dato dentro del código (descriptores): big-endian */
-static void l(uint32_t v) { buf_long(&obj->code, v); }
+/* un dato de una tabla (descriptores): big-endian */
+static void l(uint32_t v)
+{
+    if (!in_table) { buf_long(&obj->code, v); return; }
+    if (pend_labels.n) place_pending((long)obj->data.n | DATA_LABEL);
+    buf_long(&obj->data, v);
+}
 
 static void a64_todo(const char *what)
 {
@@ -61,10 +85,9 @@ static void a64_todo(const char *what)
 }
 
 /* ---- etiquetas y saltos ---- */
-static struct { long *v; int n, cap; } labels;  /* posición en el código, -1 sin poner */
-/* kind: 0 b, 1 b.cond, 2 bl, 3 adr (dirección de una etiqueta: reubicación al .text), 4 puntero de 64 bits a una
-   etiqueta (ABS64 al .text), 5 cbz/cbnz */
-typedef struct { uint32_t at; int label; int kind; } Fixup;
+/* kind: 0 b, 1 b.cond, 2 bl, 3 adr (dirección de una etiqueta: reubicación al .text o al .data), 4 puntero de 64
+   bits a una etiqueta (ABS64, en una tabla de los datos), 5 cbz/cbnz */
+typedef struct { uint32_t at; int label; int kind; int in_data; } Fixup;
 static struct { Fixup *v; int n, cap; } fixups;
 
 static int new_label(void)
@@ -78,6 +101,7 @@ static int new_label(void)
 static void cmp_x0_zero(void);
 static void def_label(int l)
 {
+    if (in_table) { VEC_PUSH(pend_labels, l); return; }
     if (x0_dirty) cmp_x0_zero();       /* (el camino que sigue de largo) */
     labels.v[l] = (long)obj->code.n;
     x0_dirty = 0;
@@ -94,15 +118,24 @@ static void add_reloc_t(uint32_t off, int hunk, const char *sym, int type, long 
     r.sym = sym;
     r.type = type;
     r.addend = addend;
+    r.in_data = 0;
     VEC_PUSH(obj->relocs, r);
+}
+
+/* una reubicación en una tabla de los datos */
+static void add_reloc_d(uint32_t off, int hunk, int type, long addend)
+{
+    add_reloc_t(off, hunk, NULL, type, addend);
+    obj->relocs.v[obj->relocs.n - 1].in_data = 1;
 }
 
 static void fixup(int label, int kind)
 {
     Fixup f;
-    f.at = (uint32_t)obj->code.n;
+    f.at = (uint32_t)(in_table ? obj->data.n : obj->code.n);
     f.label = label;
     f.kind = kind;
+    f.in_data = in_table;
     VEC_PUSH(fixups, f);
 }
 
@@ -162,11 +195,15 @@ static void call_label(int label, int nargs) { load_args(nargs); jsr_label(label
 static void resolve_fixups(void)
 {
     int i;
+    if (pend_labels.n) place_pending((long)obj->code.n);   /* (detrás de la última tabla no hay nada) */
     for (i = 0; i < fixups.n; i++) {
         Fixup *f = &fixups.v[i];
         long target = labels.v[f->label], d;
+        int sec = HK_CODE;
         uint32_t v;
         if (target < 0) fatal("etiqueta sin poner (fallo de dashc)");
+        if (target & DATA_LABEL) { sec = HK_DATA; target &= ~DATA_LABEL; }
+        if (f->kind != 3 && f->kind != 4 && (sec != HK_CODE || f->in_data)) fatal("salto a una tabla (fallo de dashc)");
         d = (target - (long)f->at) / 4;
         switch (f->kind) {
         case 0: case 2:
@@ -177,12 +214,13 @@ static void resolve_fixups(void)
             if (d < -(1L << 18) || d >= (1L << 18)) fatal("salto condicional de más de 1 MB (aún no)");
             ins_put(f->at, ins_at(f->at) | ((uint32_t)d & 0x7FFFF) << 5);
             break;
-        case 3:   /* adrp + add a una etiqueta del código: al .text más la posición */
-            add_reloc_t(f->at, HK_CODE, NULL, R_PG_HI21, target);
-            add_reloc_t(f->at + 4, HK_CODE, NULL, R_ADD_LO12, target);
+        case 3:   /* adrp + add a una etiqueta: a su sección más la posición */
+            add_reloc_t(f->at, sec, NULL, R_PG_HI21, target);
+            add_reloc_t(f->at + 4, sec, NULL, R_ADD_LO12, target);
             break;
         case 4:
-            add_reloc_t(f->at, HK_CODE, NULL, R_ABS64, target);
+            if (f->in_data) add_reloc_d(f->at, sec, R_ABS64, target);
+            else add_reloc_t(f->at, sec, NULL, R_ABS64, target);
             break;
         }
         (void)v;

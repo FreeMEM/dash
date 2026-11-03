@@ -3,7 +3,7 @@
 
     ./dash programa.dash -o programa [--fpu] [--cpu 68040] [--memcheck] [--stack N] [--debug]
     ./dash --gcc programa.dash -o programa [...]
-    ./dash --dashos programa.dash -o programa [--memcheck] [--gcc]
+    ./dash --dashos programa.dash -o programa [--memcheck] [--gcc] [--pie]
 
 
 Sin --gcc, el compilador de Dash genera él mismo el código del Amiga (no hace falta un compilador de C).
@@ -12,8 +12,8 @@ propio no hace (C en el programa: @native, @c, @header; -O, --small, --multifile
 y lo dice en una línea.
 
 Con --dashos, el programa es para DashOS (AArch64 big-endian, ELF), también directo y enlazado con ld.lld; con
---dashos --gcc, por C con clang (docs/AARCH64_LOOP.md). tools/dashos_run.py lo ejecuta en el PC con
-qemu-aarch64_be."""
+--dashos --gcc, por C con clang (docs/AARCH64_LOOP.md). Con --pie, el ejecutable funciona cargado en cualquier
+dirección (si no, va fijo en 0x400000). tools/dashos_run.py lo ejecuta en el PC con qemu-aarch64_be."""
 import os
 import re
 import subprocess
@@ -45,16 +45,17 @@ def dashos(args):
     opts = [a for a in args if a not in ("--dashos", "--gcc")]
     out = opts[opts.index("-o") + 1] if "-o" in opts else None
     srcs = [a for a in opts if a.endswith(".dash")]
-    otras = [a for a in opts if a.startswith("-") and a not in ("-o", "--memcheck")]
+    otras = [a for a in opts if a.startswith("-") and a not in ("-o", "--memcheck", "--pie")]
     if not out or len(srcs) != 1 or otras:
-        print("uso: dash --dashos programa.dash -o programa [--memcheck]" +
+        print("uso: dash --dashos programa.dash -o programa [--memcheck] [--pie]" +
               (f" (DashOS aún no admite {' '.join(otras)})" if otras else ""), file=sys.stderr)
         return 1
     if not por_gcc and not os.path.exists(os.path.join(ROOT, "dashc", "dashc-a64")):
         print("dash: falta el compilador para DashOS; constrúyelo con: make -C dashc dashc-a64", file=sys.stderr)
         return 1
     ok, msg = (dashos_run.build if por_gcc else dashos_run.build_direct)(
-        Path(srcs[0]).resolve(), Path(out).resolve(), linux=False, memcheck="--memcheck" in opts)
+        Path(srcs[0]).resolve(), Path(out).resolve(), linux=False, memcheck="--memcheck" in opts,
+        pie="--pie" in opts)
     if not ok:
         sys.stderr.write(msg)
     return 0 if ok else 1

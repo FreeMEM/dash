@@ -267,3 +267,11 @@ Print offsetof(Node, ln_Name)  # 10
   mismo por los cuatro caminos (C y directo; A1200 y ARM). Runtime de 68k rehecho con `db_amiga_alloc`/`free` (los
   ejecutables de siempre, iguales). Referencias de `identicos*.py` puestas al día con el test nuevo.
 
+- 2026-11-03: tablas a los datos (para PIE) y textos en UTF-8 en DashOS. En ARM, las tablas que el recorrido pone
+  "en el código" (descriptores, ventanas, ficheros) van a `.data`, con sus ABS64 en `.rela.data`; una etiqueta puesta
+  tras una tabla queda pendiente hasta lo siguiente que se escriba (dato o instrucción): así el destructor o la
+  función de detrás no caen en los datos. `--pie` (`./dash --dashos --pie`): PIE estático que se reubica solo
+  (`_dash_relocate`); el montón sigue en 4 GB (los PIE de DashOS van de 128 a 256 GB). Las `dl_*` de listas y
+  diccionarios toman y dan los valores en `_DashP` (cortaban a 32 bits un texto por encima de 4 GB). Textos en
+  UTF-8 en los dos caminos (`# dashos-line N:` y `# dashos-skip:` en los tests; `tests/dashos/` solo de DashOS).
+  qemu: por C 92/294 (también PIE), directo 86/294 (también PIE). 2376/2376 y 396/396.

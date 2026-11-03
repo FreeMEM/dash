@@ -5,6 +5,7 @@
 # expect-out: del módulo
 # expect-out: global intacta: 7 [programa]
 # expect-out: inicio: 3
+# dashos-line 1: 62
 
 import "lib/d14/modulo.dash"
 

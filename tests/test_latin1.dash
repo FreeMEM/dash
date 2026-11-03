@@ -5,6 +5,7 @@
 # expect-out: 5
 # expect-out: ñ
 # expect-out: Año 2026: ¿sí?
+# dashos-skip: prueba los textos en Latin-1 del Amiga (en DashOS son UTF-8)
 
 Main
     Print "Canción del pingüino"

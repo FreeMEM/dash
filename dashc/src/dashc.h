@@ -276,6 +276,7 @@ typedef struct {
     const char *sym;
     int type;          /* AArch64: el tipo de reubicación de ELF (R_AARCH64_*); el 68000 no lo usa */
     long addend;       /* AArch64: el sumando (en el 68000 va en los bytes del código) */
+    int in_data;       /* AArch64: el sitio está en los datos (si no, en el código) */
 } Reloc;
 
 typedef struct {

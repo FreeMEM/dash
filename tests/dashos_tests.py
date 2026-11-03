@@ -7,8 +7,11 @@ la esperada, como en el A1200.
     python3 tests/dashos_tests.py -k lista -v  # solo esos, con el detalle de cada fallo
     python3 tests/dashos_tests.py --lista      # qué da cada test (ok, build, salida, timeout, rc)
     python3 tests/dashos_tests.py --directo    # por el compilador directo (dashc-a64), sin C
+    python3 tests/dashos_tests.py --pie        # enlazados como PIE
 
-Un test con "# expect-rc: N" debe acabar con ese código."""
+Un test con "# expect-rc: N" debe acabar con ese código. En DashOS los textos son UTF-8 (en el Amiga, Latin-1): una
+línea "# dashos-line N: texto" cambia la línea N de la salida esperada, y "# dashos-skip: motivo" deja fuera el test.
+Los de tests/dashos/ son solo de DashOS."""
 import argparse
 import collections
 import concurrent.futures as cf
@@ -29,13 +32,15 @@ def marks(text, mark):
 
 
 DIRECT = False
+PIE = False
 
 
 def one(f, tmp):
     text = f.read_text(encoding="utf-8", errors="replace")
     exe = Path(tmp) / f.stem
     memcheck = any(l.strip() == "# memcheck" for l in text.splitlines())
-    ok, msg = (dashos_run.build_direct if DIRECT else dashos_run.build)(f.relative_to(REPO), exe, memcheck=memcheck)   # (relativo: como en los errores del A1200)
+    ok, msg = (dashos_run.build_direct if DIRECT else dashos_run.build)(f.relative_to(REPO), exe, memcheck=memcheck,
+                                                                        pie=PIE)   # (relativo: como en los errores del A1200)
     if not ok:
         return "build", msg
     try:
@@ -43,6 +48,9 @@ def one(f, tmp):
     except subprocess.TimeoutExpired:
         return "timeout", ""
     want = marks(text, "# expect-out:")
+    for m in marks(text, "# dashos-line"):
+        n, line = m.split(":", 1)
+        want[int(n) - 1] = line.strip()
     ignore = marks(text, "# ignore-out:")
     got = [l.rstrip() for l in out.splitlines() if not any(l.startswith(i) for i in ignore)]
     want = [l for l in want if not any(l.startswith(i) for i in ignore)]
@@ -60,11 +68,14 @@ def main():
     ap.add_argument("-v", action="store_true")
     ap.add_argument("--lista", action="store_true")
     ap.add_argument("--directo", action="store_true")
+    ap.add_argument("--pie", action="store_true", help="enlazados como PIE (qemu los carga en otra dirección)")
     a = ap.parse_args()
-    global DIRECT
+    global DIRECT, PIE
     DIRECT = a.directo
-    fs = [f for f in sorted(REPO.glob("tests/test_*.dash")) if a.k in f.name and
-          "# expect-out:" in f.read_text(encoding="utf-8", errors="replace")]
+    PIE = a.pie
+    fs = [f for f in sorted(REPO.glob("tests/test_*.dash")) + sorted(REPO.glob("tests/dashos/test_*.dash"))
+          if a.k in f.name and "# expect-out:" in (t := f.read_text(encoding="utf-8", errors="replace"))
+          and "# dashos-skip:" not in t]
     with tempfile.TemporaryDirectory() as tmp, cf.ThreadPoolExecutor(os.cpu_count()) as ex:
         res = dict(zip(fs, ex.map(lambda f: one(f, tmp), fs)))
     errs = collections.Counter()

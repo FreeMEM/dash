@@ -51,3 +51,14 @@ def latin1_literals(c_code: str) -> str:
             out.append(ch)
         i += 1
     return "".join(out)
+
+
+def latin1_escapes_to_utf8(c_code: str) -> str:
+    """For DashOS, whose texts are UTF-8: a C source written for the Amiga ("divisi\\363n") with its Latin-1 octal
+    escapes as the bytes of the same character in UTF-8 ("divisi\\303\\263n")"""
+    import re
+
+    def one(m):
+        code = int(m.group(2), 8)
+        return m.group(1) + "".join(f"\\{b:03o}" for b in chr(code).encode("utf-8"))
+    return re.sub(r"(?<!\\)((?:\\\\)*)\\([23][0-7][0-7])", one, c_code)

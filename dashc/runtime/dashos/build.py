@@ -57,7 +57,7 @@ def runtime_c(memcheck):
                            cwd=REPO, capture_output=True, text=True, env=env)
         if r.returncode:
             sys.exit(f"dashos/build.py: no transpila la cocina:\n{r.stdout}{r.stderr}")
-        text = c.read_text(encoding="latin-1")
+        text = c.read_text(encoding="utf-8")
     a = text.index("/* Struct Definitions */")
     b = text.index("static void _dash_exit_cleanup(void)", a)
     text = text[:a] + text[b:]
@@ -128,20 +128,22 @@ def build(memcheck=False):
     OUT.mkdir(parents=True, exist_ok=True)
     lib = OUT / ("dashc_rt_mc.a" if memcheck else "dashc_rt.a")
     srcs = [HERE / "cocina.dash", HERE / "start.c", DASHC / "runtime" / "api.c", Path(__file__),
-            REPO / "compiler" / "codegen.py", REPO / "tools" / "dashos_run.py"]
+            REPO / "compiler" / "codegen.py", REPO / "compiler" / "latin1.py", REPO / "tools" / "dashos_run.py"]
     if lib.exists() and lib.stat().st_mtime >= max(p.stat().st_mtime for p in srcs):
         return lib
-    text = runtime_c(memcheck) + "\n/* ---- runtime/api.c ---- */\n" + api_wrappers() + "\n" + \
-        (HERE / "start.c").read_text(encoding="utf-8") + builtin_wrappers()
+    sys.path.insert(0, str(REPO))
+    from compiler.latin1 import latin1_escapes_to_utf8      # (los textos de DashOS son UTF-8)
+    text = runtime_c(memcheck) + "\n/* ---- runtime/api.c ---- */\n" + \
+        latin1_escapes_to_utf8(api_wrappers() + "\n" + (HERE / "start.c").read_text(encoding="utf-8")) + builtin_wrappers()
     with tempfile.TemporaryDirectory() as tmp:
         c = Path(tmp) / "dashc_rt.c"
-        c.write_text(text, encoding="latin-1")
+        c.write_text(text, encoding="utf-8")
         o = Path(tmp) / "dashc_rt.o"
         flags = [f for f in dashos_run.CFLAGS if f != "-Werror=implicit-function-declaration"]
         r = subprocess.run(["clang", *flags, *(["-DDASH_MEMCHECK"] if memcheck else []), "-Wno-unused-function",
                             "-c", str(c), "-o", str(o)], capture_output=True, text=True)
         if r.returncode:
-            (OUT / "dashc_rt_error.c").write_text(text, encoding="latin-1")
+            (OUT / "dashc_rt_error.c").write_text(text, encoding="utf-8")
             sys.exit(f"dashos/build.py: el runtime no compila (en {OUT / 'dashc_rt_error.c'}):\n{r.stderr[-6000:]}")
         part = Path(tmp) / lib.name
         subprocess.run(["llvm-ar", "rcs", str(part), str(o)], check=True)

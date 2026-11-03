@@ -750,10 +750,10 @@ DashDict *dl_dict_from(LONG kind, LONG n, STRPTR *k, _DashP *v) { return DashDic
 DashDict *dl_dict_fromi(LONG kind, LONG n, LONG *k, _DashP *v) { return DashDict_fromi(kind, n, k, v); }
 LONG dl_dict_get(DashDict *d, STRPTR k) { return DashDict_get(d, k); }
 LONG dl_dict_geti(DashDict *d, LONG k) { return DashDict_geti(d, k); }
-LONG dl_dict_get_or(DashDict *d, STRPTR k, LONG v) { return DashDict_get_or(d, k, v); }
-LONG dl_dict_get_ori(DashDict *d, LONG k, LONG v) { return DashDict_get_ori(d, k, v); }
-void dl_dict_set(DashDict *d, STRPTR k, LONG v) { DashDict_set(d, k, v); }
-void dl_dict_seti(DashDict *d, LONG k, LONG v) { DashDict_seti(d, k, v); }
+_DashP dl_dict_get_or(DashDict *d, STRPTR k, _DashP v) { return DashDict_get_or(d, k, v); }
+_DashP dl_dict_get_ori(DashDict *d, LONG k, _DashP v) { return DashDict_get_ori(d, k, v); }
+void dl_dict_set(DashDict *d, STRPTR k, _DashP v) { DashDict_set(d, k, v); }
+void dl_dict_seti(DashDict *d, LONG k, _DashP v) { DashDict_seti(d, k, v); }
 void dl_dict_set_obj(DashDict *d, STRPTR k, void *v) { DashDict_set_obj(d, k, v); }
 void dl_dict_set_obji(DashDict *d, LONG k, void *v) { DashDict_set_obji(d, k, v); }
 void dl_dict_set_str(DashDict *d, STRPTR k, STRPTR v) { DashDict_set_str(d, k, v); }
@@ -768,7 +768,7 @@ DashArrayLong *dl_dict_keys(DashDict *d) { return DashDict_keys(d); }
 
 /* ---- listas ---- */
 DashArrayLong *dl_arr_create(LONG n) { return DashArray_create(n); }
-void dl_arr_insert(DashArrayLong *a, LONG i, LONG v) { DashArray_insert(a, i, v); }
+void dl_arr_insert(DashArrayLong *a, LONG i, _DashP v) { DashArray_insert(a, i, v); }
 void dl_arr_insert_obj(DashArrayLong *a, LONG i, void *v) { DashArray_insert_obj(a, i, v); }
 void dl_arr_insert_str(DashArrayLong *a, LONG i, STRPTR v) { DashArray_insert_str(a, i, v); }
 LONG dl_arr_pop(DashArrayLong *a) { return DashArray_pop(a); }
@@ -780,13 +780,13 @@ DashArrayLong *dl_arr_from(LONG n, const _DashP *v) { return DashArray_from(n, v
 DashArrayLong *dl_arr_from_new(LONG n, const _DashP *v) { return DashArray_from_new(n, v); }
 DashArrayLong *dl_arr_own(DashArrayLong *a, LONG kind) { return DashArray_own(a, kind); }
 LONG dl_arr_get(DashArrayLong *a, LONG i) { return DashArray_get(a, i); }
-void dl_arr_set(DashArrayLong *a, LONG i, LONG v) { DashArray_set(a, i, v); }
+void dl_arr_set(DashArrayLong *a, LONG i, _DashP v) { DashArray_set(a, i, v); }
 void dl_arr_set_obj(DashArrayLong *a, LONG i, void *v) { DashArray_set_obj(a, i, v); }
 void dl_arr_set_str(DashArrayLong *a, LONG i, STRPTR v) { DashArray_set_str(a, i, v); }
 LONG dl_arr_length(DashArrayLong *a) { return DashArray_length(a); }
 DashArrayLong *dl_arr_concat(DashArrayLong *a, DashArrayLong *b) { return DashArray_concat(a, b); }
 DashArrayLong *dl_arr_slice(DashArrayLong *a, LONG s, LONG e) { return DashArray_slice(a, s, e); }
-void dl_arr_push(DashArrayLong *a, LONG v) { DashArray_push(a, v); }
+void dl_arr_push(DashArrayLong *a, _DashP v) { DashArray_push(a, v); }
 void dl_arr_push_obj(DashArrayLong *a, void *v) { DashArray_push_obj(a, v); }
 void dl_arr_push_str(DashArrayLong *a, STRPTR v) { DashArray_push_str(a, v); }
 
@@ -1112,7 +1112,7 @@ LONG dl_dict_get_h(DashDict *d, STRPTR k, ULONG h)
     return d->keys[s] ? d->vals[s] : 0;
 }
 
-LONG dl_dict_get_or_h(DashDict *d, STRPTR k, LONG v, ULONG h)
+_DashP dl_dict_get_or_h(DashDict *d, STRPTR k, _DashP v, ULONG h)
 {
     LONG s;
     if (!d || !d->cap) return v;

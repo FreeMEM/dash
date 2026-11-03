@@ -11620,18 +11620,31 @@ static BOOL _dash_str_ends(STRPTR s, STRPTR suffix) {
     return s && suffix && len >= n && !strcmp((char *)s + len - n, (char *)suffix);
 }
 
-/* Latin-1: A-Z and 0xC0-0xDE (not 0xD7) are the capitals of a-z and 0xE0-0xFE (not 0xF7) */
+/* Latin-1: A-Z and 0xC0-0xDE (not 0xD7) are the capitals of a-z and 0xE0-0xFE (not 0xF7). On DashOS the texts
+   are UTF-8: the same letters, in two bytes */
 static STRPTR _dash_str_case(STRPTR s, BOOL upper) {
     LONG len = _dash_str_len(s), i;
     STRPTR r = _dash_str_alloc(len, TRUE);
     if (!r) return NULL;
     for (i = 0; i < len; i++) {
         UBYTE c = s[i];
+#ifdef _DASH_DASHOS
+        /* UTF-8: the same letters, as 0xC3 and a second byte (0xA0-0xBE / 0x80-0x9E) */
+        if (c == 0xC3 && i + 1 < len) {
+            UBYTE d = s[i + 1];
+            if (upper ? (d >= 0xA0 && d <= 0xBE && d != 0xB7) : (d >= 0x80 && d <= 0x9E && d != 0x97)) d ^= 0x20;
+            r[i++] = c;
+            r[i] = d;
+            continue;
+        }
+        if (upper) { if (c >= 'a' && c <= 'z') c -= 32; } else if (c >= 'A' && c <= 'Z') c += 32;
+#else
         if (upper) {
             if ((c >= 'a' && c <= 'z') || (c >= 0xE0 && c <= 0xFE && c != 0xF7)) c -= 32;
         } else {
             if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c += 32;
         }
+#endif
         r[i] = c;
     }
     r[len] = 0;
@@ -11645,7 +11658,16 @@ static BOOL _dash_str_ieq(STRPTR s, STRPTR low) {
     if (!s) s = (STRPTR)"";
     for (;; s++, low++) {
         UBYTE c = *s;
+#ifdef _DASH_DASHOS
+        if (c >= 'A' && c <= 'Z') c += 32;
+        else if (c == 0xC3 && s[1] >= 0x80 && s[1] <= 0x9E && s[1] != 0x97) {
+            if ((UBYTE)*low != 0xC3 || (UBYTE)low[1] != (UBYTE)(s[1] | 0x20)) return FALSE;
+            s++; low++;
+            continue;
+        }
+#else
         if ((c >= 'A' && c <= 'Z') || (c >= 0xC0 && c <= 0xDE && c != 0xD7)) c += 32;
+#endif
         if (c != (UBYTE)*low) return FALSE;
         if (!c) return TRUE;
     }
@@ -21715,7 +21737,7 @@ static LONG _dash_event_window_handle(void) {{
         out = ["/* @amiga struct: the layout of the 68000 (32-bit pointers: an address in a ULONG) */\n"
                "static __inline__ ULONG _dash_a32(_DashUP p) {\n"
                "#ifdef _DASH_DASHOS\n"
-               "    if (p >> 32) _dash_fail(\"puntero de Amiga de 4 GB o m\\341s\", NULL);\n"
+               "    if (p >> 32) _dash_fail(\"puntero de Amiga de 4 GB o más\", NULL);\n"
                "#endif\n"
                "    return (ULONG)p;\n}\n"]
         for name, lt in self.amiga.items():
