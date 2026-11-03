@@ -1075,7 +1075,7 @@ static void gen_interp(Node *n)
     for (i = 0; i < np; i++) str[i] = 1;
     args_to_stack(n->args.v, np, str);
     free(str);
-    push_sp();                                         /* la dirección de los trozos */
+    push_array(0, np, 0);                              /* la dirección de los trozos */
     push_word(np);
     rt_call("_dl_str_join", 2, 1);
     pop_args(np);
@@ -1316,7 +1316,7 @@ static void gen_list(Node *n, int fresh)
         memset(conv, et == TY_DOUBLE ? 3 : et == TY_FLOAT ? 2 : et == TY_FIXED ? 4 : 0, np);
         args_to_stack(n->args.v, np, conv);
         free(conv);
-        push_sp();
+        push_array(0, np, 0);
         push_word(np);
         rt_call(fresh ? "_dl_arr_from_new" : "_dl_arr_from", 2, !fresh);
         pop_args(np);
@@ -1722,8 +1722,8 @@ static int gen_dict(Node *n)
         /* (con uno solo, args_to_stack lo mete con push: igual vale como array) */
     }
     args_to_stack(keys, np, NULL);
-    push_sp_addr(SLOT * np);                           /* los valores */
-    push_sp_addr(4);                                   /* las claves: justo encima */
+    push_array(SLOT * np, np, 0);                      /* los valores */
+    push_array(SLOT, np, ikeys);                       /* las claves: justo encima (de Int: LONG) */
     push_word(np);
     push_word(kind);
     rt_call(ikeys ? "_dl_dict_fromi" : "_dl_dict_from", 4, 1);
@@ -3976,8 +3976,8 @@ static int str_set_join(Node *n, Node *e, int fresh)
     }
     reserve_args(np);                                  /* las pistas */
     for (i = 0; i < np; i++) store_arg_imm(i, join_hint(parts[i]));
-    push_sp();                                         /* las pistas */
-    push_sp_addr(SLOT * (np + 1));                     /* las partes */
+    push_array(0, np, 1);                              /* las pistas (LONG) */
+    push_array(SLOT * (np + 1), np, 0);                /* las partes */
     push_word(np);
     if (fresh) {
         push_word(0);                                  /* sin texto antes */

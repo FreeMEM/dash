@@ -330,11 +330,11 @@ static void push_var(Var *v) { var_to(XT, v); push_x(XT); }
 static void push_ea(Var *v) { var_to(XT, v); push_x(XT); }
 static void push_word(int k) { mov_imm(XT, k); push_x(XT); }
 static void push_long(uint32_t k) { mov_imm(XT, (long)k); push_x(XT); }
-static void push_sp(void) { mov_reg(XT, 31); push_x(XT); }
+static __attribute__((unused)) void push_sp(void) { mov_reg(XT, 31); push_x(XT); }
 static void push_sp_off(int off) { mem64(1, XT, 31, off); push_x(XT); }
 static void push_label(int label) { addr_label(XT, label); push_x(XT); }
 static void push_data(uint32_t off) { addr_data(XT, off); push_x(XT); }
-static void push_sp_addr(int off) { add_imm(XT, 31, off); push_x(XT); }
+static __attribute__((unused)) void push_sp_addr(int off) { add_imm(XT, 31, off); push_x(XT); }
 static void push_a0_addr(int off) { add_imm(XT, XA0, off); push_x(XT); }
 static void push_a0(void) { push_x(XA0); }
 static void pop_to_a0(int off) { pop_x(XT); mem64(0, XT, XA0, off); }
@@ -790,3 +790,17 @@ static void jmp_sym(const char *sym)
 static void lit_init_begin(void) { ins(0xA9BF7BFD); ins(0x910003FD); }   /* stp x29, x30; mov x29, sp */
 static void lit_init_one(uint32_t off) { addr_data(0, off); jsr_sym("_dl_str_lit"); }
 static void lit_init_end(void) { ins(0xA8C17BFD); ins(0xD65F03C0); }    /* ldp x29, x30; ret */
+
+/* la dirección de un array de n cosas que el recorrido dejó en la pila desde off(sp), cada una en 16 bytes: se
+   juntan ahí mismo como las espera el C (lng: LONG de 4 bytes; si no, de 8) y se mete su dirección */
+static void push_array(int off, int n, int lng)
+{
+    int i;
+    for (i = lng ? 0 : 1; i < n; i++) {
+        mem64(1, XT, 31, off + SLOT * i);
+        if (lng) ins(0xB9000000 | (uint32_t)((off + 4 * i) / 4) << 10 | 31 << 5 | XT);   /* str w16, [sp, #off+4i] */
+        else mem64(0, XT, 31, off + 8 * i);
+    }
+    add_imm(XT, 31, off);
+    push_x(XT);
+}

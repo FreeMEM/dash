@@ -993,3 +993,13 @@ static void lit_init_end(void)
 static void or_ea(Var *v) { op_ea(0x8080, v); }        /* or.l v,d0 */
 
 static void ptr_add(long k, Var *v) { add_imm_ea(k, v); }   /* un puntero += k (en el 68000, como un Int) */
+
+/* la dirección de un array de n cosas que el recorrido dejó en la pila desde off(sp) (lng: de LONG; si no, de
+   punteros): en el 68000 cada una ocupa ya 4 bytes */
+static void push_array(int off, int n, int lng)
+{
+    (void)n;
+    (void)lng;
+    if (off) push_sp_addr(off);
+    else push_sp();
+}
