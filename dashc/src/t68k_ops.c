@@ -267,8 +267,8 @@ static void str_ours(int slow, int nil_label)
 static void cmp_d1_str_len(void) { w(0xB2A9); w(0x0004); }   /* cmp.l 4(a1),d1 */
 static void load_str_len(void) { w(0x2029); w(0x0004); }     /* move.l 4(a1),d0 */
 
-/* el texto a a0 (sin pasar por la pila si es una variable) */
-static void str_to_a0(Var *vs)
+/* v (un texto, una lista...) a a0, sin pasar por la pila */
+static void load_a0(Var *vs)
 {
     if (vs->kind == V_REG) w(0x2040 | vs->reg);        /* movea.l dN,a0 */
     else op_ea(0x2040, vs);                            /* movea.l v,a0 */
@@ -423,3 +423,84 @@ static void pea_window(int wi)
     sp_depth += 4;
 }
 
+static void push_data(uint32_t off)                    /* la dirección de algo de los datos */
+{
+    w(0x4879);                                         /* pea datos */
+    add_reloc((uint32_t)obj->code.n, HK_DATA, NULL);
+    l(off);
+    sp_depth += 4;
+}
+
+static void push_sp_addr(int off)                      /* la dirección de off(sp) */
+{
+    w(0x486F); w(off);                                 /* pea off(sp) */
+    sp_depth += 4;
+}
+
+static void push_a0_addr(int off)                      /* la dirección de off(a0) */
+{
+    w(0x4868); w(off);                                 /* pea off(a0) */
+    sp_depth += 4;
+}
+
+static void pop_to_a0(int off)                         /* lo de lo alto de la pila a off(a0) */
+{
+    w(0x215F); w(off);                                 /* move.l (sp)+,off(a0) */
+    sp_depth -= 4;
+}
+
+static void mul_d1(void);
+
+/* d0 = (lo de lo alto de la pila) op d0, si la operación es de las que se hacen así; si no, 0 */
+static int bin_pop(int op)
+{
+    switch (op) {
+    case P_PLUS: w(0xD09F); sp_depth -= 4; return 1;            /* add.l (sp)+,d0 */
+    case P_AMP: w(0xC09F); sp_depth -= 4; return 1;             /* and.l (sp)+,d0 */
+    case P_BAR: w(0x809F); sp_depth -= 4; return 1;             /* or.l (sp)+,d0 */
+    case P_MINUS: w(0x909F); w(0x4480); sp_depth -= 4; return 1;   /* sub.l (sp)+,d0; neg.l d0 */
+    case P_STAR: w(0x221F); sp_depth -= 4; mul_d1(); return 1;     /* move.l (sp)+,d1 */
+    }
+    return 0;
+}
+
+/* llamadas por un puntero: a la función de d0, o al método slot del objeto de d0 (su _DashType, a -4 del objeto,
+   tiene en 8 la tabla de métodos) */
+static void call_d0(void)
+{
+    w(0x2040);                                         /* movea.l d0,a0 */
+    w(0x4E90);                                         /* jsr (a0) */
+}
+
+static void call_method(int slot)
+{
+    w(0x2040);                                         /* movea.l d0,a0 */
+    w(0x2068); w(-4);                                  /* movea.l -4(a0),a0: su tipo */
+    w(0x2068); w(8);                                   /* movea.l 8(a0),a0: su tabla de métodos */
+    w(0x2068); w(4 * slot);                            /* movea.l slot(a0),a0 */
+    w(0x4E90);                                         /* jsr (a0) */
+}
+
+/* un BOOL de C (cualquier no 0) a 0 o 1 */
+static void c_bool(void)
+{
+    w(0x4A80);                                         /* tst.l d0 */
+    w(0x56C0);                                         /* sne d0 */
+    w(0x4400);                                         /* neg.b d0 */
+    w(0x0280); l(1);                                   /* andi.l #1,d0 */
+}
+
+/* d0 = la lista de a0 [d0], como DashArray_get: nil o un índice fuera dan 0 (data en 0(a0), length en 4(a0)) */
+static void arr_get(void)
+{
+    w(0x2208);                                         /* move.l a0,d1 */
+    w(0x6710);                                         /* beq.s cero */
+    w(0xB0A8); w(4);                                   /* cmp.l 4(a0),d0 */
+    w(0x640A);                                         /* bcc.s cero (sin signo: también un índice negativo) */
+    w(0x2050);                                         /* movea.l (a0),a0 */
+    w(0xE588);                                         /* lsl.l #2,d0 */
+    w(0x2030); w(0x0800);                              /* move.l 0(a0,d0.l),d0 */
+    w(0x6002);                                         /* bra.s fin */
+    w(0x7000);                                         /* cero: moveq #0,d0 */
+    d0_loaded = (uint32_t)-1;                          /* fin: */
+}
