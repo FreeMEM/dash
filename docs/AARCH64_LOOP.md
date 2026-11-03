@@ -288,3 +288,9 @@ Print offsetof(Node, ln_Name)  # 10
   (`__FLOAT_WORD_ORDER__`). `@amiga struct` en little-endian con rev/rev16 (directo) y `_DASH_BE16/32` (C).
   `test_amiga_struct` mira el puntero byte a byte (pasa en el A1200). qemu: por C 92/294 y directo 86/294, en
   little y big, con y sin PIE. 2376/2376 y 396/396.
+- 2026-11-03: freemem-f9 probó los cuatro ELF little-endian de 25813b9 (directo y C, fijo y PIE) en DashOS (QEMU
+  raspi4b, kernel C32): salida exacta y código 0; los PIE se reubican bien en bases al azar. C32 trae: primeros
+  64 KB sin proyectar, proyectar encima de algo da E_ARGUMENTO, E_MEMORIA (−7) y E_LIMITE (−8), 1024 llaves y 1024
+  proyecciones por proceso, el cargador rechaza W+X y segmentos en la misma página, TPIDR_EL0 por hilo (TLS),
+  CNTVCT_EL0 y CNTFRQ_EL0 legibles en EL0. El montón de Dash proyecta siempre más arriba y mira el error: no le
+  afecta. Siguiente: la FPU de verdad (C28).
