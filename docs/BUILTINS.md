@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 842 funciones, 842 implementadas, 0 sin implementar.
+Total: 844 funciones, 844 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -111,6 +111,8 @@ Total: 842 funciones, 842 implementadas, 0 sin implementar.
 | `event_window()` | `LONG` | En un EventLoop: la ventana de la que vino el evento (window_create), 0 para la del propio bucle |  |
 | `window_check_close()` | `BOOL` | Mira si se pulsó el botón de cerrar (sin esperar) |  |
 | `close_window()` | `void` | Cierra la ventana actual |  |
+| `screen_clone_wb(name)` | `BOOL` | Abre una pantalla pública igual que la del Workbench (modo, tamaño, profundidad, lápices y fuente) con ese nombre, donde otros programas pueden abrir ventanas; falso si no se puede (o el nombre ya está). screen_close espera a que se cierren sus ventanas |  |
+| `screen_visitors()` | `LONG` | Cuántas ventanas de otros programas hay abiertas en la pantalla pública del programa |  |
 | `screen_open(depth, title)` | `BOOL` | Abre una pantalla con el modo del Workbench y la profundidad que se diga |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Abre una pantalla propia del tamaño y la profundidad que se digan |  |
 | `screen_close()` | `void` | Cierra la pantalla |  |

@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 842 functions, 842 implemented, 0 not implemented.
+Total: 844 functions, 844 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -111,6 +111,8 @@ Total: 842 functions, 842 implemented, 0 not implemented.
 | `event_window()` | `LONG` | In an EventLoop: handle of the window the event came from (window_create), 0 for the loop's own window |  |
 | `window_check_close()` | `BOOL` | Check if close button was clicked (non-blocking) |  |
 | `close_window()` | `void` | Close the current window |  |
+| `screen_clone_wb(name)` | `BOOL` | Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close |  |
+| `screen_visitors()` | `LONG` | How many windows of other programs are open on the program's public screen |  |
 | `screen_open(depth, title)` | `BOOL` | Open a screen cloning Workbench display mode with custom depth |  |
 | `screen_open_custom(width, height, depth, title)` | `BOOL` | Open a custom screen with specific dimensions and depth |  |
 | `screen_close()` | `void` | Close the screen |  |

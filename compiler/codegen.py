@@ -14517,6 +14517,8 @@ static void _dash_before_close(struct Window *win) {
 }
 #endif
 static BOOL _dash_own_screen = FALSE;
+static BOOL _dash_screen_public = FALSE;   /* screen_clone_wb: a public screen others may open windows on */
+static char _dash_screen_pubname[64];
 
 /* Blitter minterm constants for masked blits */
 #ifndef ABC
@@ -14538,6 +14540,43 @@ static LONG _dash_random(void) {
 /* SA_Pens wants a pen array ended by ~0, not ~0 itself: Intuition would read at $FFFFFFFF (an
    address error on a 68000, a Guru on the A500) */
 static UWORD _dash_default_pens[] = { (UWORD)~0 };
+
+/* screen_clone_wb (Forja G21): a public screen just like the Workbench's (mode, size, depth, pens and font:
+   SA_LikeWorkbench), named, with shared pens so other programs (and MUI) can open windows on it. FALSE if it
+   cannot be opened or the name is taken. */
+static BOOL _dash_clone_wb(STRPTR name) {
+    struct Screen *wb, *scr;
+    if (!name || !*name || _dash_screen) return FALSE;
+    if ((wb = LockPubScreen((CONST_STRPTR)name))) {          /* the name is taken */
+        UnlockPubScreen(NULL, wb);
+        return FALSE;
+    }
+    strncpy(_dash_screen_pubname, (const char *)name, sizeof(_dash_screen_pubname) - 1);
+    _dash_screen_pubname[sizeof(_dash_screen_pubname) - 1] = 0;
+    scr = OpenScreenTags(NULL, SA_LikeWorkbench, TRUE, SA_PubName, (ULONG)_dash_screen_pubname,
+                         SA_Title, (ULONG)_dash_screen_pubname, SA_ShowTitle, TRUE, SA_SharePens, TRUE,
+                         TAG_DONE);
+    if (!scr) return FALSE;
+    PubScreenStatus(scr, 0);                                 /* public from now on */
+    _dash_screen = scr;
+    _dash_own_screen = TRUE;
+    _dash_screen_public = TRUE;
+    if (!_dash_win) _dash_rp = &_dash_screen->RastPort;
+    return TRUE;
+}
+
+/* How many windows of other programs are open on the program's public screen (0 if it has none) */
+static LONG _dash_screen_visitors(void) {
+    struct List *l;
+    struct PubScreenNode *n;
+    LONG v = 0;
+    if (!_dash_screen || !_dash_screen_public) return 0;
+    l = LockPubScreenList();
+    for (n = (struct PubScreenNode *)l->lh_Head; n->psn_Node.ln_Succ; n = (struct PubScreenNode *)n->psn_Node.ln_Succ)
+        if (n->psn_Screen == _dash_screen) { v = n->psn_VisitorCount; break; }
+    UnlockPubScreenList();
+    return v;
+}
 
 /* Screen Support - Clone Workbench properly */
 static struct Screen* _dash_open_screen(LONG depth, STRPTR title) {
@@ -14639,6 +14678,14 @@ static struct Screen* _dash_open_screen_custom(LONG width, LONG height, LONG dep
 static void (*_dash_screen_closing)(struct Screen *) = NULL;
 
 static void _dash_close_screen(void) {
+    if (_dash_screen && _dash_own_screen && _dash_screen_public) {
+        /* a public screen: private first (no new visitors), and wait for other programs' windows to close;
+           after a minute with windows still open it is left open (closing it under them would crash) */
+        LONG t = 0;
+        while (!(PubScreenStatus(_dash_screen, PSNF_PRIVATE) & PSNF_PRIVATE) && t < 120) { Delay(25); t++; }
+        if (t >= 120) return;
+        _dash_screen_public = FALSE;
+    }
     if (_dash_screen && _dash_own_screen) {
         if (_dash_screen_closing) _dash_screen_closing(_dash_screen);
         if (_dash_rp == &_dash_screen->RastPort) _dash_rp = NULL;

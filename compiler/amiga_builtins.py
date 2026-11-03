@@ -775,6 +775,22 @@ INPUT_FUNCTIONS = {
     ),
 
     # Screen Support
+    "screen_clone_wb": BuiltinFunc(
+        name="screen_clone_wb",
+        params=["name"],
+        return_type="BOOL",
+        c_template="_dash_clone_wb(${name})",
+        needs_gfx=True,
+        description="Open a public screen like the Workbench's (mode, size, depth, pens, font) with that name, where other programs can open windows; false if it cannot (or the name is taken). screen_close waits for their windows to close"
+    ),
+    "screen_visitors": BuiltinFunc(
+        name="screen_visitors",
+        params=[],
+        return_type="LONG",
+        c_template="_dash_screen_visitors()",
+        needs_gfx=True,
+        description="How many windows of other programs are open on the program's public screen"
+    ),
     "screen_open": BuiltinFunc(
         name="screen_open",
         params=["depth", "title"],
