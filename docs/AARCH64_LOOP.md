@@ -122,4 +122,6 @@ Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc
   programas no pueden usar FP/SIMD. Ahora sin ellos (ver arriba); fp-bit necesita
   `-D__FLOAT_WORD_ORDER__=__ORDER_BIG_ENDIAN__` con clang (si no, da la vuelta a las mitades de un double: 5 * 2 daba
   -12). 92 de 294 tests en qemu, sin un solo registro de FP en los ejecutables. Fusionado `main` (fdc06b0): 395/395.
+- 2026-11-03: el ELF de 10448c2 corre en DashOS (QEMU raspi4b, cargador de C19, FP bloqueado en EL0): escribe
+  "hola 12" y "a5" y sale con 0. Es el primer programa Dash en DashOS.
 
