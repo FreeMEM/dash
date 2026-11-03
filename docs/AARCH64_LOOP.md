@@ -321,3 +321,6 @@ Print offsetof(Node, ln_Name)  # 10
 - 2026-11-03: fusionado `main` (hasta 4394a56). Frente a `main`, 68k idéntico por los dos caminos salvo
   `test_amiga_struct` (nuevo): 2400/2406 y 400/401. Tests 541/541, con emulador 1310/1310 (A1200, A500, 3.2),
   `make -C dashc test` bien, ejemplos 34/34; DashOS en qemu 92 y 86. PR a `main`.
+- 2026-11-03: DashOS C41 (5253960): canal_leer da en x2 la marca de la llave que escribió; 15 llave_duplicar(llave,
+  derechos, marca), 16 llave_revocable → copia y revocador, 17 revocar. Para A7 (un servidor sabe qué cliente
+  escribe por la marca); nada cambia en lo de ahora.
