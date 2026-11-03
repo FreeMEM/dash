@@ -13091,9 +13091,10 @@ static BOOL _dash_bob_flips(LONG id, LONG kind) {
 }
 
 /* tilemap_draw: tw x th cells of a layer from cell tx, ty, at x, y, with the frames of BOB bob (tile n is frame
-   n - 1). They go into a bitmap of their own and then to the window in one blit (one blit a tile through the
-   window's layers costs more). masked: colour 0 and empty cells let what is under them show; if not, empty cells
-   are pen 0. Cells outside the map are empty. */
+   n - 1). Each cell is as big as the BOB's frames: the map's tile side, or bigger with a bigger BOB (Forja's editor
+   zooms that way). They go into a bitmap of their own, over a copy of what is on the window, and then to the
+   window in one blit (one blit a tile through the window's layers costs more). Empty cells (and cells outside the
+   map) let what is under them show; masked: colour 0 too. */
 static void _dash_tilemap_draw(LONG id, LONG l, LONG bob, LONG tx, LONG ty, LONG tw, LONG th, LONG x, LONG y,
                                BOOL masked) {
     _DashTilemap *m = _dash_tilemap_get(id);
@@ -13106,8 +13107,8 @@ static void _dash_tilemap_draw(LONG id, LONG l, LONG bob, LONG tx, LONG ty, LONG
     if (!m || !o || !_dash_rp || !_dash_rp->BitMap || l < 0 || l >= m->layers || tw < 1 || th < 1) return;
     if (masked && !_dash_bob_mask(bob)) return;
     b = &_dash_bitmaps[bob];
-    ts = m->tile;
-    sw = o->fw < ts ? o->fw : ts;
+    ts = o->fw;                                      /* the cell: as big as the BOB's frames */
+    sw = ts;
     W = tw * ts; H = th * ts;
     il = !masked && (GetBitMapAttr(_dash_rp->BitMap, BMA_FLAGS) & BMF_STANDARD) &&
          (GetBitMapAttr(b->bm, BMA_FLAGS) & BMF_STANDARD);
@@ -13123,7 +13124,7 @@ static void _dash_tilemap_draw(LONG id, LONG l, LONG bob, LONG tx, LONG ty, LONG
     if (!off) return;
     InitRastPort(&orp);
     orp.BitMap = off;
-    if (masked) ClipBlit(_dash_rp, x, y, &orp, 0, 0, W, H, 0xC0);
+    ClipBlit(_dash_rp, x, y, &orp, 0, 0, W, H, 0xC0);   /* what is under: the empty cells show it */
     for (cy = 0; cy < th; cy++) {
         LONG my = ty + cy;
         UWORD *row = (my >= 0 && my < m->h) ? m->cells[l] + my * m->w : NULL;

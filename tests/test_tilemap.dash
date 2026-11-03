@@ -1,7 +1,7 @@
 # Test: tile maps (Forja's map editor). Cells with mirror bits, layers (name, type, visible, add, remove, move),
 # resize, save and load as IFF FORM FMAP, and tilemap_draw / tilemap_draw_masked with a BOB made here as the
 # tileset: 3 tiles of 16 (1: pen 1 with the left column pen 2; 2: pen 2 with the bottom row pen 3; 3: the left half
-# pen 3, the right half colour 0).
+# pen 3, the right half colour 0). Empty cells let what is under show; a BOB of frames of 32 draws cells of 32.
 #
 # expect-c: static void _dash_tilemap_draw(LONG id, LONG l, LONG bob, LONG tx, LONG ty, LONG tw, LONG th, LONG x, LONG y,
 # expect-out: creado: true 10 8 16 2
@@ -14,8 +14,9 @@
 # expect-out: guardar: true
 # expect-out: cargar: true 12 9 16 2 tiles.iff choques fondo 1 32770 7
 # expect-out: no es un mapa: false 0
-# expect-out: pinta: 2 1 2 1 3 2 0
+# expect-out: pinta: 2 1 2 1 3 2 1
 # expect-out: con máscara: 3 1
+# expect-out: celdas de 32: 3 3 1
 # expect-out: fin
 
 Window W
@@ -81,6 +82,18 @@ Main
     gfx_rect(100, 40, 140, 60)
     tilemap_draw_masked(3, 1, 0, 0, 0, 2, 1, 100, 40)
     Print "con máscara: #{gfx_pixel_read(102, 45)} #{gfx_pixel_read(112, 45)}"
+    # un BOB de fotogramas de 32: el tile 1, todo del lápiz 3
+    bob_create(1, 96, 32, 2)
+    bitmap_draw_to(1)
+    gfx_pen(3)
+    gfx_rect(0, 0, 31, 31)
+    bitmap_draw_screen()
+    gfx_pen(1)
+    gfx_rect(150, 60, 230, 100)
+    tilemap_set(3, 1, 0, 0, 1)
+    tilemap_draw(3, 1, 1, 0, 0, 2, 1, 150, 62)
+    Print "celdas de 32: #{gfx_pixel_read(150, 62)} #{gfx_pixel_read(181, 93)} #{gfx_pixel_read(182, 70)}"
+    bob_free(1)
     bob_free(0)
     tilemap_free(3)
     Print "fin"

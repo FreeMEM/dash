@@ -100,7 +100,7 @@ Total: 877 funciones, 877 implementadas, 0 sin implementar.
 | `tilemap_layer_remove(id, layer)` | `BOOL` | Quita una capa (las de detrás bajan un puesto); falso si es la única |  |
 | `tilemap_layer_move(id, from, to)` | `BOOL` | Mueve una capa a otro puesto (las de en medio se corren uno) |  |
 | `tilemap_resize(id, width, height)` | `BOOL` | Tamaño nuevo en celdas: lo que cabe se queda, desde la esquina de arriba a la izquierda, y las celdas nuevas van vacías |  |
-| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Pinta tw x th celdas de una capa, desde la celda tx, ty, en x, y, con los fotogramas de un BOB (el tile n es el fotograma n - 1, en espejo si la celda lo dice); las celdas vacías van con el lápiz 0. De una vez en la ventana |  |
+| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Pinta tw x th celdas de una capa, desde la celda tx, ty, en x, y, con los fotogramas de un BOB (el tile n es el fotograma n - 1, en espejo si la celda lo dice; cada celda, del tamaño de un fotograma); las celdas vacías dejan ver lo de debajo. De una vez en la ventana |  |
 | `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Como tilemap_draw, pero el color 0 y las celdas vacías dejan ver lo de debajo (para las capas de delante) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Mira si chocan dos BOB |  |
 | `copper_create(size)` | `BOOL` | Crea una lista del copper |  |

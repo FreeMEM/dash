@@ -100,7 +100,7 @@ Total: 877 functions, 877 implemented, 0 not implemented.
 | `tilemap_layer_remove(id, layer)` | `BOOL` | Remove a layer (the ones after it move down one); false if it is the only one |  |
 | `tilemap_layer_move(id, from, to)` | `BOOL` | Move a layer to another place (the ones in between move one) |  |
 | `tilemap_resize(id, width, height)` | `BOOL` | New size in cells: what fits stays, from the top left corner, and the new cells are empty |  |
-| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says); empty cells are pen 0. In one blit to the window |  |
+| `tilemap_draw(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window |  |
 | `tilemap_draw_masked(id, layer, bob, tx, ty, tw, th, x, y)` | `void` | Like tilemap_draw, but colour 0 and empty cells let what is under them show (for the layers in front) |  |
 | `bob_collision(id1, id2)` | `BOOL` | Check BOB collision |  |
 | `copper_create(size)` | `BOOL` | Create copper list |  |

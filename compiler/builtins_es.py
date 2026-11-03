@@ -87,7 +87,7 @@ DESC_ES = {
     "tilemap_layer_remove": "Quita una capa (las de detrás bajan un puesto); falso si es la única",
     "tilemap_layer_move": "Mueve una capa a otro puesto (las de en medio se corren uno)",
     "tilemap_resize": "Tamaño nuevo en celdas: lo que cabe se queda, desde la esquina de arriba a la izquierda, y las celdas nuevas van vacías",
-    "tilemap_draw": "Pinta tw x th celdas de una capa, desde la celda tx, ty, en x, y, con los fotogramas de un BOB (el tile n es el fotograma n - 1, en espejo si la celda lo dice); las celdas vacías van con el lápiz 0. De una vez en la ventana",
+    "tilemap_draw": "Pinta tw x th celdas de una capa, desde la celda tx, ty, en x, y, con los fotogramas de un BOB (el tile n es el fotograma n - 1, en espejo si la celda lo dice; cada celda, del tamaño de un fotograma); las celdas vacías dejan ver lo de debajo. De una vez en la ventana",
     "tilemap_draw_masked": "Como tilemap_draw, pero el color 0 y las celdas vacías dejan ver lo de debajo (para las capas de delante)",
     "bob_free": "Libera la memoria de un BOB",
     "bob_collision": "Mira si chocan dos BOB",

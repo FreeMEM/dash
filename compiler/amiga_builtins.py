@@ -725,7 +725,7 @@ GRAPHICS_ADVANCED = {
         return_type="void",
         c_template="_dash_tilemap_draw(${id}, ${layer}, ${bob}, ${tx}, ${ty}, ${tw}, ${th}, ${x}, ${y}, FALSE)",
         needs_gfx=True,
-        description="Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says); empty cells are pen 0. In one blit to the window"
+        description="Draw tw x th cells of a layer, from cell tx, ty, at x, y, with the frames of a BOB (tile n is frame n - 1, mirrored as the cell says; each cell as big as a frame); empty cells let what is under them show. In one blit to the window"
     ),
     "tilemap_draw_masked": BuiltinFunc(
         name="tilemap_draw_masked",
