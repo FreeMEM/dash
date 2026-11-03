@@ -8,7 +8,7 @@ A high-level programming language for the **Commodore Amiga**: its compiler make
 
 Write clean code, synthesise native executables.
 
-Current version: **2.0.2** (`./dash --version`). What each number means and what each version brings: [docs/VERSIONES.en.md](docs/VERSIONES.en.md).
+Current version: **2.1.0** (`./dash --version`). What each number means and what each version brings: [docs/VERSIONES.en.md](docs/VERSIONES.en.md).
 
 ```
 ./dash        Source (.dash) → Dash compiler → 68000 code + runtime → executable (hunk)
@@ -226,7 +226,7 @@ sudo apt install -y git make gcc python3
 # CachyOS / Arch Linux
 sudo pacman -S --needed git make gcc python
 
-git clone --branch v2.0.2 https://github.com/FreeMEM/dash.git
+git clone --branch v2.1.0 https://github.com/FreeMEM/dash.git
 cd dash
 make -C dashc                      # Dash's compiler, in a few seconds
 ./dash examples/hola.dash -o bin/hola
@@ -239,7 +239,7 @@ in `$DASH_KICKSTART` and `python3 tools/emu_run.py bin/hola`.
 
 ```bash
 xcode-select --install             # Apple's clang, make, git and Python 3
-git clone --branch v2.0.2 https://github.com/FreeMEM/dash.git
+git clone --branch v2.1.0 https://github.com/FreeMEM/dash.git
 cd dash
 make -C dashc
 ./dash examples/hola.dash -o bin/hola
@@ -252,7 +252,7 @@ open an issue.
 ### Straight to hunk on the Amiga
 
 The compiler also runs on the Amiga itself (68000, AmigaOS 2.0 or later). The
-[releases](https://github.com/FreeMEM/dash/releases) have `dash-2.0.2-amiga.lha`: unpack it, and its `Instalar`
+[releases](https://github.com/FreeMEM/dash/releases) have `dash-2.1.0-amiga.lha`: unpack it, and its `Instalar`
 copies the Dash drawer (the `dash` command, its runtimes, `lib/` and the examples) and adds the `DASH:` assign and
 the `Path` to `S:User-Startup`. Then, from a Shell:
 
