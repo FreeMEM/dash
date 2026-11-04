@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 921 funciones, 921 implementadas, 0 sin implementar.
+Total: 922 funciones, 922 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -898,6 +898,7 @@ Total: 921 funciones, 921 implementadas, 0 sin implementar.
 | `app_drop_y()` | `LONG` | Dónde cayó el último icono de app_drop: y desde la esquina de la ventana |  |
 | `icon_load(path)` | `LONG` | El icono (.info) de un programa, cajón o fichero (la ruta sin ".info"), con icon.library y los colores de la pantalla de la ventana (3.5+: iconos en color y PNG, y el de su tipo si no tiene): un número para icon_draw, o 0 |  |
 | `icon_draw(icon, x, y)` | `void` | Dibuja un icono de icon_load con su esquina de arriba a la izquierda en (x, y), como el Workbench, sin su nombre ni marco |  |
+| `icon_draw_size(icon, x, y, width, height)` | `void` | Dibuja un icono de icon_load en (x, y) a width x height, más pequeño o más grande, con los bordes suaves (en una pantalla de color real; en otra, a su tamaño, centrado en ese recuadro) |  |
 | `icon_width(icon)` | `LONG` | El ancho de un icono de icon_load tal como lo dibuja icon_draw (0 si no está) |  |
 | `icon_height(icon)` | `LONG` | El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está) |  |
 | `icon_free(icon)` | `void` | Libera un icono de icon_load (los que queden, al salir) |  |

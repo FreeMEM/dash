@@ -4879,6 +4879,11 @@ TASK_FUNCTIONS = {
         needs_gfx=True,
         description="Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its "
                     "name or frame"),
+    "icon_draw_size": BuiltinFunc(
+        name="icon_draw_size", params=["icon", "x", "y", "width", "height"], return_type="void",
+        c_template="_dash_icon_draw_size(${icon}, ${x}, ${y}, ${width}, ${height})", needs_gfx=True,
+        description="Draws an icon of icon_load at (x, y) at width x height, smaller or bigger, with soft edges (on "
+                    "a true colour screen; on others, at its size, centred in that box)"),
     "icon_width": BuiltinFunc(
         name="icon_width", params=["icon"], return_type="LONG", c_template="_dash_icon_size(${icon}, 0)",
         description="The width of an icon of icon_load as icon_draw draws it (0 without it)"),
@@ -5898,7 +5903,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
     "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "file_real_path", "app_window",
-    "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_width", "icon_height", "icon_free"])
+    "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [

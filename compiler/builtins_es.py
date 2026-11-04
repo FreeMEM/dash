@@ -737,6 +737,8 @@ DESC_ES = {
                  "número para icon_draw, o 0",
     "icon_draw": "Dibuja un icono de icon_load con su esquina de arriba a la izquierda en (x, y), como el Workbench, "
                  "sin su nombre ni marco",
+    "icon_draw_size": "Dibuja un icono de icon_load en (x, y) a width x height, más pequeño o más grande, con los bordes "
+                      "suaves (en una pantalla de color real; en otra, a su tamaño, centrado en ese recuadro)",
     "icon_width": "El ancho de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
     "icon_height": "El alto de un icono de icon_load tal como lo dibuja icon_draw (0 si no está)",
     "icon_free": "Libera un icono de icon_load (los que queden, al salir)",

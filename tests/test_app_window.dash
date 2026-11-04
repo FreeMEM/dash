@@ -2,7 +2,7 @@
 # la de program_path); screen_pixel_rgb lee el color de la pantalla, sea de quien sea la ventana (el mismo que
 # gfx_pixel_rgb en la propia); app_window hace que una ventana acepte iconos soltados y app_drop no da nada si
 # no se ha soltado ninguno. Una ventana cerrada no tiene ruta. icon_load da el icono de un fichero (el programa, sin .info: el
-# de su tipo) e icon_draw lo dibuja. window_use vuelve a la ventana declarada tras abrir otra.
+# de su tipo) e icon_draw lo dibuja (icon_draw_size, a otro tamaño). window_use vuelve a la ventana declarada tras abrir otra.
 # expect-out: ruta true
 # expect-out: real true ""
 # expect-out: otra ruta true
@@ -68,6 +68,8 @@ Main
     ic = icon_load(program_path())
     Print "icono #{ic > 0} #{icon_width(ic) > 0 and icon_height(ic) > 0}"
     icon_draw(ic, 100, 10)
+    icon_draw_size(ic, 100, 10, 24, 24)
+    icon_draw_size(ic, 100, 10, 80, 60)
     icon_free(ic)
     Print "libre #{icon_width(ic)}"
     Dock.close
