@@ -541,6 +541,14 @@ DESC_ES = {
                  "propio programa: se esperaría a sí mismo",
     "rexx_rc": "El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin "
                "rexxsyslib.library",
+    "rexx_port": "Abre el puerto ARexx propio del programa con ese nombre (\"ADDRESS NOMBRE\" desde ARexx): false si ya "
+                 "hay uno, o sin rexxsyslib.library. Sus órdenes, con rexx_get",
+    "rexx_get": "La siguiente orden que llegó al puerto de rexx_port (\"\" si ninguna): espera su rexx_reply (el siguiente "
+                "rexx_get la contesta con RC 0)",
+    "rexx_reply": "Contesta la orden de rexx_get: rc (0 bien, 5, 10, 20) y, con 0, result como RESULT (\"\": ninguno)",
+    "notify": "Un aviso para el escritorio, con el nombre del programa: a la barra de Trasfondo por ARexx (puerto "
+              "TRASFONDO) o, sin ella, a su lista (ENV:Trasfondo.avisos), que enseña al arrancar. False si no llegó a "
+              "ninguno de los dos",
     "ports_read": "Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, "
                   "hasta el siguiente ports_read",
     "port_name": "El nombre del puerto i (desde 0) del último ports_read",

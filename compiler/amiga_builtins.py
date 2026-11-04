@@ -5253,6 +5253,23 @@ TASK_FUNCTIONS = {
         name="rexx_rc", params=[], return_type="LONG", c_template="_dash_rexx_rc()",
         description="RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no "
                     "rexxsyslib.library"),
+    "rexx_port": BuiltinFunc(
+        name="rexx_port", params=["name"], return_type="BOOL", c_template="_dash_rexx_port(${name})",
+        description="Opens the program's own ARexx port with that name (\"ADDRESS NAME\" from ARexx): false if "
+                    "there is one already, or without rexxsyslib.library. Its commands, with rexx_get"),
+    "rexx_get": BuiltinFunc(
+        name="rexx_get", params=[], return_type="STRPTR", c_template="_dash_rexx_get()",
+        description="The next command that came to the rexx_port (\"\" if none): it waits for rexx_reply (the "
+                    "next rexx_get answers it with RC 0)"),
+    "rexx_reply": BuiltinFunc(
+        name="rexx_reply", params=["rc", "result"], return_type="void", c_template="_dash_rexx_reply(${rc}, ${result})",
+        description="Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT (\"\": "
+                    "none)"),
+    "notify": BuiltinFunc(
+        name="notify", params=["title", "text"], return_type="BOOL", c_template="_dash_notify_send(${title}, ${text})",
+        description="A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx "
+                    "(port TRASFONDO) or, without it, into its list (ENV:Trasfondo.avisos), which it shows when it "
+                    "starts. False if it got to neither"),
     "ports_read": BuiltinFunc(
         name="ports_read", params=[], return_type="LONG", c_template="_dash_ports_read()",
         description="Read the names of the public message ports open now (ARexx ports among them): how many, "
@@ -5893,7 +5910,7 @@ SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "time_unix", "clock_days", "mem_largest", "program_exit", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
-    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "ports_read", "port_name", "tasks_read",
+    "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "rexx_port", "rexx_get", "rexx_reply", "notify", "ports_read", "port_name", "tasks_read",
     "task_entry_name", "task_entry_command", "task_entry_state", "task_entry_priority", "task_entry_cli",
     "assigns_read", "assign_name", "assign_path"])
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [

@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 922 funciones, 922 implementadas, 0 sin implementar.
+Total: 926 funciones, 926 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -754,6 +754,10 @@ Total: 922 funciones, 922 implementadas, 0 sin implementar.
 | `env_set(name, value, save)` | `BOOL` | Pone una variable en ENV: (con save verdadero, también en ENVARC:, para que siga tras reiniciar); falso si no pudo |  |
 | `rexx_send(port, command)` | `STRPTR` | Manda una orden ARexx al puerto público de otro programa ("MULTIVIEW.1"; "REXX": ejecutar un script) y espera la respuesta: su RESULT ("" si no hay), el RC en rexx_rc(). No al puerto del propio programa: se esperaría a sí mismo |  |
 | `rexx_rc()` | `LONG` | El RC del último rexx_send: 0 bien, 5, 10, 20... los del programa; -1 si no existe el puerto, -2 sin rexxsyslib.library |  |
+| `rexx_port(name)` | `BOOL` | Abre el puerto ARexx propio del programa con ese nombre ("ADDRESS NOMBRE" desde ARexx): false si ya hay uno, o sin rexxsyslib.library. Sus órdenes, con rexx_get |  |
+| `rexx_get()` | `STRPTR` | La siguiente orden que llegó al puerto de rexx_port ("" si ninguna): espera su rexx_reply (el siguiente rexx_get la contesta con RC 0) |  |
+| `rexx_reply(rc, result)` | `void` | Contesta la orden de rexx_get: rc (0 bien, 5, 10, 20) y, con 0, result como RESULT ("": ninguno) |  |
+| `notify(title, text)` | `BOOL` | Un aviso para el escritorio, con el nombre del programa: a la barra de Trasfondo por ARexx (puerto TRASFONDO) o, sin ella, a su lista (ENV:Trasfondo.avisos), que enseña al arrancar. False si no llegó a ninguno de los dos |  |
 | `ports_read()` | `LONG` | Lee los nombres de los puertos públicos abiertos (los de ARexx entre ellos): cuántos, para port_name, hasta el siguiente ports_read |  |
 | `port_name(i)` | `STRPTR` | El nombre del puerto i (desde 0) del último ports_read |  |
 | `tasks_read()` | `LONG` | Lee las tareas y procesos del sistema (el programa, el primero): cuántos, para las task_entry_, hasta el siguiente tasks_read |  |

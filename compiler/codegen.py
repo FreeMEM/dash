@@ -6618,6 +6618,153 @@ static STRPTR _dash_rexx_send(STRPTR port, STRPTR command) {
 
 static LONG _dash_rexx_rc(void) { return _dash_rexx_rc_last; }
 
+/* The program's own ARexx port (rexx_port): commands arrive with rexx_get, one at a time, and each is answered
+   with rexx_reply (if not, the next rexx_get answers it with RC 0). At exit the port goes away and whatever
+   was waiting is answered with RC 20. */
+static struct MsgPort *_dash_rexx_host = NULL;
+static struct RexxMsg *_dash_rexx_cur = NULL;
+
+static void _dash_rexx_host_cleanup(void) {
+    struct Message *m;
+    if (_dash_rexx_cur) {
+        _dash_rexx_cur->rm_Result1 = 20;
+        _dash_rexx_cur->rm_Result2 = 0;
+        ReplyMsg(&_dash_rexx_cur->rm_Node);
+        _dash_rexx_cur = NULL;
+    }
+    if (!_dash_rexx_host) return;
+    Forbid();
+    RemPort(_dash_rexx_host);
+    while ((m = GetMsg(_dash_rexx_host))) {
+        ((struct RexxMsg *)m)->rm_Result1 = 20;
+        ((struct RexxMsg *)m)->rm_Result2 = 0;
+        ReplyMsg(m);
+    }
+    Permit();
+    if (_dash_rexx_host->mp_Node.ln_Name) FreeVec(_dash_rexx_host->mp_Node.ln_Name);
+    DeleteMsgPort(_dash_rexx_host);
+    _dash_rexx_host = NULL;
+}
+
+/* A public port with that name for ARexx ("ADDRESS NAME"): FALSE if there is one already (or no rexxsyslib) */
+static BOOL _dash_rexx_port(STRPTR name) {
+    struct MsgPort *p;
+    char *copia;
+    if (_dash_rexx_host || !name || !*name) return FALSE;
+    if (!_dash_rexx_base && !(_dash_rexx_base = OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36))) return FALSE;
+    if (!(p = CreateMsgPort())) return FALSE;
+    if (!(copia = (char *)AllocVec(strlen((char *)name) + 1, MEMF_PUBLIC))) {
+        DeleteMsgPort(p);
+        return FALSE;
+    }
+    strcpy(copia, (char *)name);
+    p->mp_Node.ln_Name = copia;
+    p->mp_Node.ln_Pri = 0;
+    Forbid();
+    if (FindPort((CONST_STRPTR)copia)) {
+        Permit();
+        FreeVec(copia);
+        DeleteMsgPort(p);
+        return FALSE;
+    }
+    AddPort(p);
+    Permit();
+    _dash_rexx_host = p;
+    _dash_atexit(_dash_rexx_host_cleanup);
+    return TRUE;
+}
+
+/* Answer the command rexx_get gave: rc (0 fine, 5, 10, 20) and, with 0 and if it was asked for, RESULT */
+static void _dash_rexx_reply(LONG rc, STRPTR result) {
+    struct RexxMsg *m = _dash_rexx_cur;
+    if (!m) return;
+    _dash_rexx_cur = NULL;
+    m->rm_Result1 = rc;
+    m->rm_Result2 = 0;
+    if (rc == 0 && result && *result && (m->rm_Action & RXFF_RESULT))
+        m->rm_Result2 = (LONG)CreateArgstring(result, strlen((char *)result));
+    ReplyMsg(&m->rm_Node);
+}
+
+/* The next command that came to the port ("" if none) */
+static STRPTR _dash_rexx_get(void) {
+    struct Message *m;
+    if (_dash_rexx_cur) _dash_rexx_reply(0, NULL);
+    if (!_dash_rexx_host) return _dash_str_dup((STRPTR)"", TRUE);
+    while ((m = GetMsg(_dash_rexx_host))) {
+        struct RexxMsg *rm = (struct RexxMsg *)m;
+        /* an ARexx command: its size, RXCOMM and a text (not IsRexxMsg: it wants the name "REXX", which the
+           messages of CreateRexxMsg in 3.x, rexx_send's among them, do not carry) */
+        if (m->mn_Length >= sizeof(struct RexxMsg) && (rm->rm_Action & RXCODEMASK) == RXCOMM && rm->rm_Args[0]) {
+            _dash_rexx_cur = rm;
+            return _dash_str_dup((STRPTR)rm->rm_Args[0], TRUE);
+        }
+        rm->rm_Result1 = 20;
+        rm->rm_Result2 = 0;
+        ReplyMsg(m);
+    }
+    return _dash_str_dup((STRPTR)"", TRUE);
+}
+
+/* A notification for the desktop: to Trasfondo's bar by ARexx (port TRASFONDO, NOTIFY TITLE=... TEXT=... FROM=the
+   program) or, without it, left in its list, ENV:Trasfondo.avisos, which it reads when it starts. TRUE if it got
+   to one of the two */
+static void _dash_notify_clean(char *d, STRPTR s, LONG max, BOOL quote) {
+    LONG i = 0;
+    while (s && *s && i < max) {
+        char c = (char)*s++;
+        if (c == '\\t' || c == '\\n' || c == '\\r') c = ' ';
+        if (quote && c == '"') c = '\\'';
+        d[i++] = c;
+    }
+    d[i] = 0;
+}
+
+static BOOL _dash_notify_send(STRPTR title, STRPTR text) {
+    struct Process *pr = (struct Process *)FindTask(NULL);
+    char quien[64], t[256], x[512], *linea;
+    struct DateStamp ds;
+    BPTR f;
+    LONG n;
+    BOOL ok;
+    quien[0] = 0;
+    if (pr->pr_Task.tc_Node.ln_Type == NT_PROCESS && pr->pr_CLI) {
+        struct CommandLineInterface *cli = (struct CommandLineInterface *)BADDR(pr->pr_CLI);
+        UBYTE *b = (UBYTE *)BADDR(cli->cli_CommandName);
+        if (b && b[0]) {
+            char nombre[256];
+            memcpy(nombre, b + 1, b[0]);
+            nombre[b[0]] = 0;
+            _dash_notify_clean(quien, (STRPTR)FilePart((CONST_STRPTR)nombre), 60, TRUE);
+        }
+    }
+    if (!quien[0]) _dash_notify_clean(quien, (STRPTR)pr->pr_Task.tc_Node.ln_Name, 60, TRUE);
+    if (!(linea = (char *)AllocVec(1024, MEMF_ANY))) return FALSE;
+    _dash_notify_clean(t, title, 250, TRUE);
+    _dash_notify_clean(x, text, 500, TRUE);
+    Forbid();
+    n = FindPort((CONST_STRPTR)"TRASFONDO") != NULL;
+    Permit();
+    if (n) {
+        sprintf(linea, "NOTIFY TITLE=\\"%s\\" TEXT=\\"%s\\" FROM=\\"%s\\"", t, x, quien);
+        _dash_rexx_send((STRPTR)"TRASFONDO", linea);
+        if (_dash_rexx_rc_last == 0) {
+            FreeVec(linea);
+            return TRUE;
+        }
+    }
+    DateStamp(&ds);
+    n = sprintf(linea, "%02ld:%02ld\\t%s\\t%s\\t%s\\n", (long)(ds.ds_Minute / 60), (long)(ds.ds_Minute % 60), quien, t, x);
+    ok = FALSE;
+    if ((f = Open((CONST_STRPTR)"ENV:Trasfondo.avisos", MODE_READWRITE))) {
+        Seek(f, 0, OFFSET_END);
+        ok = Write(f, linea, n) == n;
+        Close(f);
+    }
+    FreeVec(linea);
+    return ok;
+}
+
 /* A picture: texts one after another in one block, a table of where each starts, and numbers */
 typedef struct { LONG n; char **text; LONG *num; char *pool; } _DashSysTab;
 static _DashSysTab _dash_ports_tab, _dash_tasks_tab, _dash_assigns_tab;

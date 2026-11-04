@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 922 functions, 922 implemented, 0 not implemented.
+Total: 926 functions, 926 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -754,6 +754,10 @@ Total: 922 functions, 922 implemented, 0 not implemented.
 | `env_set(name, value, save)` | `BOOL` | Set a variable in ENV: (save true: also in ENVARC:, so that it stays after a reboot); false if it could not |  |
 | `rexx_send(port, command)` | `STRPTR` | Send an ARexx command to a public port ("MULTIVIEW.1"; "REXX": run a script) and wait for the answer: its RESULT ("" without one), the RC in rexx_rc(). Not to the program's own port: it would wait for itself |  |
 | `rexx_rc()` | `LONG` | RC of the last rexx_send: 0 fine, 5, 10, 20... from the program; -1 no such port, -2 no rexxsyslib.library |  |
+| `rexx_port(name)` | `BOOL` | Opens the program's own ARexx port with that name ("ADDRESS NAME" from ARexx): false if there is one already, or without rexxsyslib.library. Its commands, with rexx_get |  |
+| `rexx_get()` | `STRPTR` | The next command that came to the rexx_port ("" if none): it waits for rexx_reply (the next rexx_get answers it with RC 0) |  |
+| `rexx_reply(rc, result)` | `void` | Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT ("": none) |  |
+| `notify(title, text)` | `BOOL` | A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx (port TRASFONDO) or, without it, into its list (ENV:Trasfondo.avisos), which it shows when it starts. False if it got to neither |  |
 | `ports_read()` | `LONG` | Read the names of the public message ports open now (ARexx ports among them): how many, for port_name, until the next ports_read |  |
 | `port_name(i)` | `STRPTR` | Name of port i (from 0) of the last ports_read |  |
 | `tasks_read()` | `LONG` | Read the tasks and processes of the system (the program first): how many, for the task_entry_ functions, until the next tasks_read |  |

@@ -1,0 +1,47 @@
+# Test: el puerto ARexx propio (rexx_port, rexx_get, rexx_reply) y notify. El programa abre el puerto TRASFONDO,
+# como la barra de Trasfondo; una tarea llama a notify, que se lo manda por ARexx, y el programa recibe la orden
+# NOTIFY y la contesta. Un segundo puerto con el mismo nombre no se abre.
+# expect-out: puerto true
+# expect-out: otra vez false
+# expect-out: nada true
+# expect-out: orden NOTIFY TITLE="Hola" TEXT="desde la tarea"
+# expect-out: tarea 1
+# expect-out: por ARexx true
+
+func enviar(n: Int) -> Int
+    if notify("Hola", "desde la tarea")
+        return rexx_rc() + 1
+    end
+    return -1
+end
+
+Main
+    file_delete("ENV:Trasfondo.avisos")
+    ok = rexx_port("TRASFONDO")
+    Print "puerto #{ok}"
+    ok = rexx_port("TRASFONDO")
+    Print "otra vez #{ok}"
+    nada = rexx_get()
+    vacio = nada == ""
+    Print "nada #{vacio}"
+    t = task_start(enviar, 0)
+    i = 0
+    while i < 250
+        o = rexx_get()
+        if o != ""
+            f = str_find(o, " FROM=")
+            if f > 0
+                o = o[0:f]
+            end
+            Print "orden " + o
+            rexx_reply(0, "1")
+            i = 250
+        end
+        time_delay(1)
+        i = i + 1
+    end
+    r = task_result(t)
+    Print "tarea #{r}"
+    f2 = file_exists("ENV:Trasfondo.avisos")
+    Print "por ARexx #{not f2}"
+end
