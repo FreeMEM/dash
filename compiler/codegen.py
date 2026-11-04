@@ -11186,6 +11186,7 @@ static BYTE _dash_net_downbit = -1;
 #define _DASH_NET_DOWN_MASK() (_dash_net_downbit >= 0 && SysBase->ThisTask == _dash_net_owner ? \\
                                1UL << _dash_net_downbit : 0UL)
 static void _dash_net_release(void);
+static void _dash_net_cleanup(void);
 
 static void _dash_net_down(void) {
     _dash_net_release();
@@ -11208,8 +11209,13 @@ static BOOL _dash_net_init(void) {
     if (!_dash_net_owner) _dash_net_owner = me;
     Permit();
     if (_dash_net_owner != me) { _dash_net_err = "la red es de otra tarea"; return FALSE; }
-    if (!SocketBase && (SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))
-        && (_dash_net_downbit = AllocSignal(-1)) >= 0) {
+    if (!SocketBase && (SocketBase = OpenLibrary((CONST_STRPTR)"bsdsocket.library", 4))) {
+        /* closed at exit by ./dash's runtime too (./dash --gcc calls it from its cleanup): without it each program
+           left bsdsocket.library open, and in a Shell FS-UAE refused it from the ninth program on (dashgit) */
+        static BOOL at_exit = FALSE;
+        if (!at_exit) at_exit = _dash_atexit(_dash_net_cleanup) == 0;
+    }
+    if (SocketBase && _dash_net_downbit < 0 && (_dash_net_downbit = AllocSignal(-1)) >= 0) {
         tags[0].ti_Tag = SBTM_SETVAL(SBTC_BREAKMASK);
         tags[0].ti_Data = 1UL << _dash_net_downbit;
         tags[1].ti_Tag = TAG_DONE;
