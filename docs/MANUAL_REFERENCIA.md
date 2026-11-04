@@ -4489,7 +4489,7 @@ las secciones anteriores sobre el C generado vale para él. Hace falta para los 
 make -C dashc                                   # construye el compilador (un compilador de C del PC y Python 3)
 ./dash programa.dash -o programa                # directo a hunk
 ./dash --gcc programa.dash -o programa          # por C con gcc
-./dash --version                                # Dash 2.3.0
+./dash --version                                # Dash 2.3.1
 ```
 
 `./dash` es un guion corto que llama al compilador (`dashc/dashc`) o, con `--gcc`, al camino por C. Si el
@@ -4523,7 +4523,7 @@ línea: `dash: el programa lleva C: se compila por C con gcc`.
 | `--dashui fichero` | Enseña el código Dash que sale de un `.dashui` (el que compila un `import`) |
 | `--tiempos` | Cuánto tarda cada fase de la compilación |
 | `--gcc` | Por C con gcc (la 1.x). Con él valen además `-O`, `-O0`, `--small`, `--multifile` y `--no-hunk` |
-| `--version` | `Dash 2.3.0` |
+| `--version` | `Dash 2.3.1` |
 
 `./dash` acepta `-v` y `-q` de la 1.x y sin `--gcc` no cambian nada: el compilador solo escribe si hay un error. Los errores dicen dónde, como los
 de la 1.x: `fichero.dash:línea:columna: Error: mensaje`. Los del enlazado (por ejemplo, una función de `@extern`

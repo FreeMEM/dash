@@ -13,7 +13,7 @@ unsigned long __stack = 65536;
 #endif
 
 /* el runtime ya compilado, metido en dashc (build/rt_blob.c) */
-#define DASH_VERSION "2.3.0"
+#define DASH_VERSION "2.3.1"
 #ifndef DASH_FECHA
 #define DASH_FECHA "?"
 #endif

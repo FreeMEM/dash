@@ -8,8 +8,8 @@
 (set #es (OR (= @language "español") (= @language "spanish")))
 
 (welcome
-    (if #es "Este programa instala Dash @VERSION@: el compilador de Dash (la orden dash), que corre en el propio Amiga y hace ejecutables sin compilador de C. Trae también Forja, su entorno de programación, e Inferencia, la IA que programa en el Amiga."
-            "This program installs Dash @VERSION@: the Dash compiler (the dash command), which runs on the Amiga itself and makes executables without a C compiler. It also brings Forja, its programming environment, and Inferencia, the AI that programs on the Amiga."))
+    (if #es "Este programa instala Dash @VERSION@: el compilador de Dash (la orden dash), que corre en el propio Amiga y hace ejecutables sin compilador de C. Trae también Forja, su entorno de programación, Inferencia, la IA que programa en el Amiga, y dashgit, un git escrito en Dash (en alfa: queda mucho por probar)."
+            "This program installs Dash @VERSION@: the Dash compiler (the dash command), which runs on the Amiga itself and makes executables without a C compiler. It also brings Forja, its programming environment, Inferencia, the AI that programs on the Amiga, and dashgit, a git written in Dash (in alpha: much is still to be tested)."))
 
 (if (< (/ (getversion "exec.library" (resident)) 65536) 36)
     (message (if #es "Dash necesita AmigaOS 2.0 o superior. Se instalará igual."

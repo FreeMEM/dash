@@ -32,6 +32,17 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.3.1 (2026-11-04)
+
+Fixes and the Amiga package with dashgit. Nothing to change in programs.
+
+- **Network with `./dash`:** the direct compiler did not close `bsdsocket.library` at exit. Every program with
+  network left it open, and in one Shell FS-UAE refused it from the ninth on.
+- **Amiga package:** it brings dashgit, a git written in Dash (`DASH:dashgit`, GPLv2 like git, with
+  `DASH:dashgit.LICENSE`; sources at https://github.com/FreeMEM/dashgit). **It is in alpha:** much is still to be
+  tested. It brings Forja 0.3, with its Git menu, and the examples' `.dashui` files (without
+  `mui_navegador.dashui`, `mui_navegador_editor.dash` did not compile on the Amiga).
+
 ### 2.3.0 (2026-11-04)
 
 Dash for DashOS (AArch64), what Trasfondo 2.0's dock and colours ask for and what dashgit, a git written in Dash,
