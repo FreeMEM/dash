@@ -54,11 +54,12 @@
 
 ; --- DASH: y el Path, en S:User-Startup (entre ;BEGIN Dash y ;END Dash: otra instalación lo cambia) ---
 (startup "Dash"
-    (prompt (if #es "Añado a S:User-Startup el Assign DASH: y el Path, para usar dash desde cualquier Shell."
-                    "I add the DASH: assign and the Path to S:User-Startup, to use dash from any Shell."))
+    (prompt (if #es "Añado a S:User-Startup el Assign DASH: y el Path, para usar dash, forja e inferencia desde cualquier Shell."
+                    "I add the DASH: assign and the Path to S:User-Startup, to use dash, forja and inferencia from any Shell."))
     (help @startup-help)
     ; (solo si el cajón está: si un día se mueve, el arranque no se para en "Can't find")
-    (command (cat "If EXISTS \"" #cajon "\"\n  Assign DASH: \"" #cajon "\"\n  Path DASH: ADD\nEndIf\n")))
+    ; (Forja e Inferencia también en el Path: "forja" o "inferencia" desde cualquier Shell, como pidió Ferrán)
+    (command (cat "If EXISTS \"" #cajon "\"\n  Assign DASH: \"" #cajon "\"\n  Path DASH: DASH:Forja DASH:Inferencia ADD\nEndIf\n")))
 (run (cat "Assign DASH: \"" #cajon "\""))
 
 ; --- Forja: dónde está la orden dash (ENV:Forja/dashc), para que funcione ya, sin reiniciar: el Path de
