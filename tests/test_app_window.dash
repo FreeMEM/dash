@@ -9,6 +9,7 @@
 # expect-out: color true
 # expect-out: usa true true false
 # expect-out: fuera -1
+# expect-out: lapices true true -1
 # expect-out: app ""
 # expect-out: donde 0 0
 # expect-out: cerrada ""
@@ -55,6 +56,8 @@ Main
     u = window_use(0)
     Print "usa #{u} #{gfx_pixel_rgb(30, 25) == c} #{window_use(9)}"
     Print "fuera #{screen_pixel_rgb(-1, 5)}"
+    # los lápices del Workbench: el de texto y el de fondo son colores; uno que no hay, -1
+    Print "lapices #{screen_pen_rgb(2) >= 0} #{screen_pen_rgb(7) >= 0} #{screen_pen_rgb(99)}"
     ok = app_window(0)
     Print "app \"#{app_drop()}\""
     Print "donde #{app_drop_x()} #{app_drop_y()}"

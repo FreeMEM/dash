@@ -5669,6 +5669,12 @@ SIMINPUT_FUNCTIONS = {
         name="screen_pixel", params=["x", "y"], return_type="LONG", c_template="_dash_screen_pixel(${x}, ${y})",
         needs_gfx=True,
         description="The pen of the pixel (x, y) of the screen in front; -1 outside it"),
+    "screen_pen_rgb": BuiltinFunc(
+        name="screen_pen_rgb", params=["n"], return_type="LONG", c_template="_dash_screen_pen_rgb(${n})",
+        needs_gfx=True, reads_only=True,
+        description="The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, "
+                    "4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar "
+                    "detail, 10 bar block, 11 bar trim; -1 if it has no such pen"),
     "screen_pixel_rgb": BuiltinFunc(
         name="screen_pixel_rgb", params=["x", "y"], return_type="LONG",
         c_template="_dash_screen_pixel_rgb(${x}, ${y})", needs_gfx=True, reads_only=True,
@@ -5866,7 +5872,7 @@ TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_t
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
 OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
     "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",
-    "gadget_selected", "screen_pixel", "screen_pixel_rgb", "cx_send"])
+    "gadget_selected", "screen_pixel", "screen_pixel_rgb", "screen_pen_rgb", "cx_send"])
 
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,

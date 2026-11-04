@@ -2355,6 +2355,27 @@ static LONG _dash_pixel_rgb(LONG x, LONG y) {
     return (LONG)(((c[0] >> 24) << 16) | ((c[1] >> 24) << 8) | (c[2] >> 24));
 }
 
+/* The colour of pen n of the Workbench's DrawInfo (the default public screen) as 0xRRGGBB: 0 DETAILPEN, 1 BLOCKPEN,
+   2 TEXTPEN, 3 SHINEPEN, 4 SHADOWPEN, 5 FILLPEN (the active title bar), 6 FILLTEXTPEN, 7 BACKGROUNDPEN, 8
+   HIGHLIGHTTEXTPEN, 9 BARDETAILPEN, 10 BARBLOCKPEN, 11 BARTRIMPEN; -1 if the screen has no such pen. To look like the
+   Workbench (Trasfondo 2.0) */
+static LONG _dash_screen_pen_rgb(LONG n) {
+    struct Screen *s = LockPubScreen(NULL);
+    struct DrawInfo *dri;
+    ULONG c[3];
+    LONG r = -1;
+    if (!s) return -1;
+    if ((dri = GetScreenDrawInfo(s))) {
+        if (n >= 0 && n < dri->dri_NumPens) {
+            GetRGB32(s->ViewPort.ColorMap, dri->dri_Pens[n], 1, c);
+            r = (LONG)(((c[0] >> 24) << 16) | ((c[1] >> 24) << 8) | (c[2] >> 24));
+        }
+        FreeScreenDrawInfo(s, dri);
+    }
+    UnlockPubScreen(NULL, s);
+    return r;
+}
+
 /* The colour of pixel (x, y) of the front screen as 0xRRGGBB, whatever window or backdrop drew it (its bitmap,
    not a layer's); -1 outside it. To see what is behind a window before opening it (rounded corners). */
 static LONG _dash_screen_pixel_rgb(LONG x, LONG y) {
