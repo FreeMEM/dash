@@ -33,6 +33,17 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.3.1 (2026-11-04)
+
+Arreglos y el paquete del Amiga con dashgit. Nada que cambiar en los programas.
+
+- **Red con `./dash`:** el compilador directo no cerraba `bsdsocket.library` al salir. Cada programa con red la
+  dejaba abierta, y en un mismo Shell FS-UAE la negaba desde el noveno.
+- **Paquete del Amiga:** trae dashgit, un git escrito en Dash (`DASH:dashgit`, GPLv2 como git, con
+  `DASH:dashgit.LICENSE`; fuentes en https://github.com/FreeMEM/dashgit). **Está en alfa:** queda mucho por
+  probar. Trae Forja 0.3, con su menú Git, y los `.dashui` de los ejemplos (sin `mui_navegador.dashui`,
+  `mui_navegador_editor.dash` no compilaba en el Amiga).
+
 ### 2.3.0 (2026-11-04)
 
 Dash para DashOS (AArch64), lo que piden el dock y los colores de Trasfondo 2.0 y lo que necesita dashgit, un git
