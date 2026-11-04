@@ -51,7 +51,10 @@ def main():
     fuera = []
     with __import__("tempfile").TemporaryDirectory() as tmp:
         for f in sorted((raiz / "examples").iterdir()):
-            if f.suffix not in (".dash", ".dashui"):
+            if f.suffix == ".dashui":            # no se compila: lo importa su .dash (mui_navegador_editor)
+                shutil.copy(f, caj / "examples" / f.name)
+                continue
+            if f.suffix != ".dash":
                 continue
             r = subprocess.run([str(raiz / "dashc/dashc"), str(f), "-o", os.path.join(tmp, "x")],
                                cwd=raiz, capture_output=True, text=True)
