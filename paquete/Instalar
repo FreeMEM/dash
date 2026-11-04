@@ -15,26 +15,41 @@
     (message (if #es "Dash necesita AmigaOS 2.0 o superior. Se instalará igual."
                      "Dash needs AmigaOS 2.0 or later. It will be installed anyway.")))
 
-; --- Dónde (Work: si lo hay; si no, SYS:) ---
-(set #donde
-    (askdir
-        (prompt (if #es "¿Dónde instalo Dash? Se creará ahí el cajón \"Dash\"."
-                        "Where should Dash go? The \"Dash\" drawer will be made there."))
-        (help @askdir-help)
-        (default (if (exists "Work:" (noreq)) "Work:" "SYS:"))))
-(set #cajon (tackon #donde "Dash"))
+; --- Dónde: encima de la de antes si hay DASH: (y se quiere); si no, se pregunta (Work: si lo hay; si no, SYS:) ---
+(set #antes (getassign "DASH" "a"))
+(set #cajon "")
+(if (AND (<> #antes "") (exists #antes (noreq)))
+    (if (askbool
+            (prompt (if #es (cat "Ya hay Dash en " #antes ". ¿Lo pongo al día ahí?")
+                            (cat "Dash is already in " #antes ". Shall I update it there?")))
+            (help @askbool-help)
+            (default 1))
+        (set #cajon #antes)))
+(if (= #cajon "")
+    (set #cajon (tackon
+        (askdir
+            (prompt (if #es "¿Dónde instalo Dash? Se creará ahí el cajón \"Dash\"."
+                            "Where should Dash go? The \"Dash\" drawer will be made there."))
+            (help @askdir-help)
+            (default (if (exists "Work:" (noreq)) "Work:" "SYS:")))
+        "Dash")))
+(set #donde (pathonly #cajon))
 (set @default-dest #cajon)
 
 ; --- Copiar: todo el cajón menos el instalador ---
 (if (not (exists #cajon (noreq)))
     (makedir #cajon (infos)))
 ; el icono del cajón, el del paquete (su ventana tiene el tamaño para sus iconos), si está al lado
-(if (exists "/Dash.info" (noreq))
+(if (AND (exists "/Dash.info" (noreq)) (= (fileonly #cajon) "Dash"))
     (copyfiles (source "/Dash.info") (dest #donde) (nogauge)))
 (foreach "" "#?"
     (if (AND (<> @each-name "Instalar") (<> @each-name "Instalar.info"))
         (if (= @each-type 2)
-            (copyfiles (source @each-name) (dest (tackon #cajon @each-name)) (all) (infos))
+            ((set #ya (tackon #cajon @each-name))
+             ; un fichero con el nombre de un cajón del paquete (un Forja compilado ahí): aparte, como .antes
+             (if (= (exists #ya (noreq)) 1)
+                 (rename #ya (cat #ya ".antes")))
+             (copyfiles (source @each-name) (dest #ya) (all) (infos)))
             (copyfiles (source @each-name) (dest #cajon)))))
 
 ; --- DASH: y el Path, en S:User-Startup (entre ;BEGIN Dash y ;END Dash: otra instalación lo cambia) ---
@@ -42,7 +57,8 @@
     (prompt (if #es "Añado a S:User-Startup el Assign DASH: y el Path, para usar dash desde cualquier Shell."
                     "I add the DASH: assign and the Path to S:User-Startup, to use dash from any Shell."))
     (help @startup-help)
-    (command (cat "Assign DASH: \"" #cajon "\"\n" "Path DASH: ADD\n")))
+    ; (solo si el cajón está: si un día se mueve, el arranque no se para en "Can't find")
+    (command (cat "If EXISTS \"" #cajon "\"\n  Assign DASH: \"" #cajon "\"\n  Path DASH: ADD\nEndIf\n")))
 (run (cat "Assign DASH: \"" #cajon "\""))
 
 ; --- Forja: dónde está la orden dash (ENV:Forja/dashc), para que funcione ya, sin reiniciar: el Path de
@@ -50,8 +66,9 @@
 (set #forja (not (exists "ENVARC:Forja/dashc" (noreq))))
 (if (AND #forja (not (exists "ENVARC:Forja" (noreq)))) (makedir "ENVARC:Forja"))
 (if (AND #forja (not (exists "ENV:Forja" (noreq)))) (makedir "ENV:Forja"))
-(if #forja (textfile (dest "ENVARC:Forja/dashc") (append (tackon #cajon "dash"))))
-(if #forja (textfile (dest "ENV:Forja/dashc") (append (tackon #cajon "dash"))))
+; (DASH:dash, no la ruta entera: sigue valiendo si el cajón se mueve)
+(if #forja (textfile (dest "ENVARC:Forja/dashc") (append "DASH:dash")))
+(if #forja (textfile (dest "ENV:Forja/dashc") (append "DASH:dash")))
 
 (exit (if #es
           (cat "Dash está en " #cajon ".\n\n"

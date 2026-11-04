@@ -6360,7 +6360,9 @@ void gen_program(Program *p, Obj *o)
         char ver[512];
         time_t now = time(NULL);
         struct tm *tm = localtime(&now);
-        snprintf(ver, sizeof ver, "$VER: %s (%d.%d.%d)", p->version, tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900);
+        /* (el '$' aparte: con "$VER:" escrito aquí, la orden Version de dash diría "%s (%d.%d.%d)") */
+        snprintf(ver, sizeof ver, "%cVER: %s (%d.%d.%d)", '$', p->version, tm->tm_mday, tm->tm_mon + 1,
+                 tm->tm_year + 1900);
         add_string(ver, (int)strlen(ver));
     }
     /* los nombres de los ficheros (_dash_srcfiles de ./dash), terminados en 0 */

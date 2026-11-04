@@ -5720,7 +5720,8 @@ static ULONG _dash_cat_be32(UBYTE *p) {
 static LONG _dash_cat_version(UBYTE *c, ULONG len) {
     ULONG i = 0;
     LONG v = -1;
-    while (i + 5 <= len && memcmp(c + i, "$VER:", 5)) i++;
+    /* ('$' apart: a "$VER:" in the program would be the one C:Version finds, not the program's own) */
+    while (i + 5 <= len && !(c[i] == '$' && !memcmp(c + i + 1, "VER:", 4))) i++;
     if (i + 5 > len) return -1;
     for (i += 5; i < len && c[i] == ' '; i++) ;
     for (; i < len && c[i] && c[i] != ' '; i++) ;
