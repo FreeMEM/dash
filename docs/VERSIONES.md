@@ -33,6 +33,33 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.3.0 (2026-11-04)
+
+Dash para DashOS (AArch64), lo que piden el dock y los colores de Trasfondo 2.0 y lo que necesita dashgit, un git
+escrito en Dash. Todo son novedades; lo que ya compilaba sigue igual.
+
+- **DashOS:** `./dash --dashos` compila para DashOS, un ELF de AArch64 (little-endian; `--be` big-endian, `--pie`
+  en cualquier dirección), por los dos caminos (`--dashos --gcc`, con clang). Float y Double con la FPU, textos en
+  UTF-8. `@amiga struct` y `Ptr X`: vistas sobre memoria con la disposición del 68000, para las estructuras de
+  AmigaOS, con `amiga_alloc` y `amiga_free`. En 68k, los ejecutables salen igual que antes. Manual, sección 25.
+- **Ventanas de otros programas y del Workbench:** `wm_path` (la ruta del programa de una ventana),
+  `file_real_path`, `screen_pixel_rgb` (el color de la pantalla, sea de quien sea), `screen_pen_rgb` (los colores
+  del Workbench), `app_window` y `app_drop` (iconos soltados encima desde el Workbench), `icon_load` e
+  `icon_draw` (iconos .info como los pinta el Workbench, sin datatypes) y `window_use` (volver a dibujar en la
+  ventana declarada).
+- **Para git:** `sha1` y `sha1_text`, y por partes `sha1_new`, `sha1_add`, `sha1_hex`, `sha1_bytes`...;
+  `adler32`, `inflate_used` (dónde acaba un objeto comprimido), `program_exit(rc)` y `locale_gmt_offset`.
+- **`./dash --gcc` con C de `@link`:** lo que se le pasa ya no se queda sin liberar (con `--memcheck`, Tachyon dejaba
+  textos y objetos vivos) y sus librerías se enlazan en cualquier orden y solo con lo que se usa.
+- **`dash` en el Amiga:** `version dash` dice su versión (antes, "%s (%d.%d.%d)"), y los programas con catálogo ya
+  no llevan una marca de versión vacía delante de la suya.
+- **Instalador:** si ya hay `DASH:`, ofrece poner al día esa instalación en su sitio; un fichero que estorba se
+  aparta como `.antes`; en `S:User-Startup`, `DASH:` y el Path (también `DASH:Forja` y `DASH:Inferencia`: `forja` e
+  `inferencia` desde cualquier Shell) solo si su cajón está, así que mover el cajón ya no para el arranque; la ruta
+  de dash de Forja es `DASH:dash`. Trae Forja 0.2 e Inferencia 0.1, con su número de versión.
+- **MorphOS:** los ejecutables de 68k de Dash funcionan en MorphOS (los probó Tolkien).
+- Probado en A1200 (3.1 y 3.2) y A500 emulados, y el instalador en Coffin.
+
 ### 2.2.0 (2026-11-03)
 
 Lo que piden el editor de sprites y de mapas de Forja y Fragua, la biblioteca de juegos. Todo son builtins nuevos;
