@@ -1137,6 +1137,8 @@ const BuiltinInfo builtin_info[] = {
     {"net_udp_send_buffer", 5, 1, 0, 0},
     {"net_wait", 2, 1, 0, 0},
     {"net_wait", 2, 1, 0, 0},
+    {"notify", 2, 2, 1, 0},
+    {"notify", 2, 2, 1, 0},
     {"number_create", 6, 1, 1, 0},
     {"number_create", 6, 1, 1, 0},
     {"number_set", 2, 0, 1, 0},
@@ -1355,8 +1357,14 @@ const BuiltinInfo builtin_info[] = {
     {"resident_version", 1, 1, 0, 0},
     {"retain", 1, 0, 0, 0},
     {"retain", 1, 0, 0, 0},
+    {"rexx_get", 0, 3, 1, 0},
+    {"rexx_get", 0, 3, 1, 0},
+    {"rexx_port", 1, 2, 1, 0},
+    {"rexx_port", 1, 2, 1, 0},
     {"rexx_rc", 0, 1, 1, 0},
     {"rexx_rc", 0, 1, 1, 0},
+    {"rexx_reply", 2, 0, 1, 0},
+    {"rexx_reply", 2, 0, 1, 0},
     {"rexx_send", 2, 3, 0, 0},
     {"rexx_send", 2, 3, 0, 0},
     {"round", 1, 5, 0, 1},
@@ -1846,7 +1854,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1844;
+const int builtin_count = 1852;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

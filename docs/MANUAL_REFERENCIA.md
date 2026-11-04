@@ -1657,6 +1657,25 @@ gfx_scroll(dx, dy, x1, y1, x2, y2)  # Scroll de region
 gfx_copy(sx, sy, ancho, alto, dx, dy)   # Copia un trozo de la ventana a otro sitio de ella
 ```
 
+### Iconos del Workbench
+
+Los iconos `.info` de programas, cajones y ficheros, como los pinta el Workbench (en 3.5 o posterior, también los
+de color y PNG). Los usa el dock de Trasfondo.
+
+```
+ic = icon_load("SYS:Utilities/Clock")   # la ruta sin ".info"; 0 si no hay icono
+w = icon_width(ic)                      # lo que mide, tal como se dibuja
+h = icon_height(ic)
+icon_draw(ic, 10, 10)                   # a su tamaño, esquina en (10, 10)
+icon_draw_size(ic, 10, 10, 32, 32)      # a 32 x 32, más pequeño o más grande
+icon_free(ic)
+```
+
+`icon_draw_size` deja los bordes suaves: dibuja el icono una vez sobre negro y otra sobre blanco para saber lo
+transparente que es cada punto, y lo escala con la media de los puntos que cubre. Guarda el resultado hasta que se
+pida otro tamaño, así que repintar sale barato. En pantallas de paleta (256 colores o menos) lo dibuja a su
+tamaño, centrado en ese recuadro.
+
 ### Mas funciones de dibujo
 
 | Funcion | Que hace |
@@ -2599,6 +2618,57 @@ n = random()                        # Numero aleatorio
 dado = random_range(1, 6)           # Entre 1 y 6
 random_seed(12345)                  # Establecer semilla
 ```
+
+### ARexx: mandar y recibir órdenes
+
+Un programa en Dash puede mandar órdenes ARexx a otros y tener su propio puerto para recibirlas.
+
+```
+# mandar: al puerto público de otro programa, esperando su respuesta
+r = rexx_send("MULTIVIEW.1", "QUIT")    # su RESULT ("" si no hay)
+rc = rexx_rc()                          # 0 bien; -1 no existe ese puerto; -2 sin rexxsyslib.library
+
+# recibir: un puerto propio ("ADDRESS MIPROGRAMA" desde ARexx)
+if rexx_port("MIPROGRAMA")              # false si ya hay uno con ese nombre
+    ...
+end
+```
+
+Las órdenes llegan una a una con `rexx_get()` ("" si no hay ninguna). Cada una se contesta con
+`rexx_reply(rc, resultado)`: el RC (0 bien, 5, 10, 20) y, con 0, el texto que el guion recibe en `RESULT` ("":
+ninguno). Si no se contesta, el siguiente `rexx_get` lo hace con RC 0. Lo normal es mirar el puerto en el
+temporizador del `EventLoop`:
+
+```
+EventLoop
+    On Timer 100
+        orden = rexx_get()
+        while orden != ""
+            if str_upper(orden) == "HOLA"
+                rexx_reply(0, "hola a ti")
+            else
+                rexx_reply(10, "")
+            end
+            orden = rexx_get()
+        end
+    end
+end
+```
+
+Desde un guion: `ADDRESS MIPROGRAMA` y `'HOLA'`; con `OPTIONS RESULTS`, la respuesta queda en `RESULT`. Al acabar el
+programa, el puerto se quita y lo que estuviera esperando recibe RC 20.
+
+### Avisos en el escritorio
+
+`notify(titulo, texto)` deja un aviso con el nombre del programa:
+
+```
+ok = notify("Copia terminada", "12 ficheros a Work:Fotos")
+```
+
+Lo recibe la barra de [Trasfondo](https://github.com/FreeMEM/trasfondo) (su puerto ARexx `TRASFONDO`, orden
+`NOTIFY`), que lo enseña un momento y lo guarda en la lista de su panel. Si la barra no está en marcha, queda en esa
+lista (`ENV:Trasfondo.avisos`) y lo verá al arrancar. Da false si no llegó a ninguno de los dos sitios.
 
 ---
 

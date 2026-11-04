@@ -1040,6 +1040,9 @@ Lorraine (suite ofimática en Dash, `~/Projects/lorraine`) encarga lo que le fal
 - [x] 2.3.0 (2026-11-04): DashOS (AArch64, `--dashos`, PR #90), `screen_pen_rgb` (PR #105), lo de dashgit (`sha1`,
       `adler32`, `inflate_used`, `program_exit`, `locale_gmt_offset`; PR #108), el C de `@link` por `--gcc` como con
       `./dash` (PR #104) y el instalador con lo que encontró Ferrán García (PR #106 y #107)
+- [x] Para Trasfondo 2.2 (2026-11-04/05): `icon_draw_size` (iconos escalados con bordes suaves, PR #114), un puerto
+      ARexx propio (`rexx_port`, `rexx_get`, `rexx_reply`) y `notify` (avisos a la barra de Trasfondo por su puerto
+      `TRASFONDO`). `tests/test_rexx_port.dash`, `tests/test_notify.dash`
 
 ## Notas y Decisiones
 

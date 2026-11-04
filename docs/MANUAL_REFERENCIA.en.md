@@ -1658,6 +1658,25 @@ gfx_scroll(dx, dy, x1, y1, x2, y2)  # Scroll a region
 gfx_copy(sx, sy, ancho, alto, dx, dy)   # Copies a piece of the window to another place in it
 ```
 
+### Workbench icons
+
+The `.info` icons of programs, drawers and files, as the Workbench draws them (on 3.5 or later, colour and PNG
+ones too). Trasfondo's dock uses them.
+
+```
+ic = icon_load("SYS:Utilities/Clock")   # the path without ".info"; 0 if there is no icon
+w = icon_width(ic)                      # its size, as it is drawn
+h = icon_height(ic)
+icon_draw(ic, 10, 10)                   # at its size, corner at (10, 10)
+icon_draw_size(ic, 10, 10, 32, 32)      # at 32 x 32, smaller or bigger
+icon_free(ic)
+```
+
+`icon_draw_size` keeps the edges soft: it draws the icon once over black and once over white to learn how
+see-through each pixel is, and scales it with the average of the pixels it covers. It keeps the result until
+another size is asked for, so redrawing is cheap. On palette screens (256 colours or fewer) it draws it at its
+size, centred in that box.
+
 ### More drawing functions
 
 | Function | What it does |
@@ -2600,6 +2619,57 @@ n = random()                        # Random number
 dado = random_range(1, 6)           # Between 1 and 6
 random_seed(12345)                  # Set the seed
 ```
+
+### ARexx: sending and receiving commands
+
+A Dash program can send ARexx commands to others and have its own port to receive them.
+
+```
+# send: to another program's public port, waiting for its answer
+r = rexx_send("MULTIVIEW.1", "QUIT")    # its RESULT ("" if none)
+rc = rexx_rc()                          # 0 fine; -1 no such port; -2 no rexxsyslib.library
+
+# receive: a port of its own ("ADDRESS MYPROGRAM" from ARexx)
+if rexx_port("MYPROGRAM")               # false if there is one with that name already
+    ...
+end
+```
+
+Commands arrive one at a time with `rexx_get()` ("" if there is none). Each one is answered with
+`rexx_reply(rc, result)`: the RC (0 fine, 5, 10, 20) and, with 0, the text the script gets in `RESULT` ("": none).
+If it isn't answered, the next `rexx_get` does it with RC 0. The usual place to look at the port is the
+`EventLoop` timer:
+
+```
+EventLoop
+    On Timer 100
+        command = rexx_get()
+        while command != ""
+            if str_upper(command) == "HELLO"
+                rexx_reply(0, "hello to you")
+            else
+                rexx_reply(10, "")
+            end
+            command = rexx_get()
+        end
+    end
+end
+```
+
+From a script: `ADDRESS MYPROGRAM` and `'HELLO'`; with `OPTIONS RESULTS`, the answer is in `RESULT`. When the
+program ends, the port goes away and whatever was waiting gets RC 20.
+
+### Desktop notifications
+
+`notify(title, text)` leaves a notification with the program's name:
+
+```
+ok = notify("Backup done", "12 files to Work:Photos")
+```
+
+[Trasfondo](https://github.com/FreeMEM/trasfondo)'s bar gets it (its ARexx port `TRASFONDO`, command `NOTIFY`),
+shows it for a moment and keeps it in its panel's list. If the bar isn't running, it stays in that list
+(`ENV:Trasfondo.avisos`) and the bar shows it when it starts. It returns false if it got to neither.
 
 ---
 

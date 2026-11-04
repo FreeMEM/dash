@@ -1,0 +1,23 @@
+# Test: notify sin la barra de Trasfondo (no hay puerto TRASFONDO): el aviso queda en su lista,
+# ENV:Trasfondo.avisos, como una línea "hora <tab> programa <tab> título <tab> texto".
+# expect-out: llegó true
+# expect-out: campos 4
+# expect-out: hora true
+# expect-out: título Copia hecha
+# expect-out: texto 12 ficheros a Work:Fotos
+
+Main
+    file_delete("ENV:Trasfondo.avisos")
+    ok = notify("Copia hecha", "12 ficheros a Work:Fotos")
+    Print "llegó #{ok}"
+    t = file_read_text("ENV:Trasfondo.avisos")
+    if t != nil
+        var p: [String] = str_split(str_trim(t), "\t")
+        Print "campos #{p.length}"
+        h = str_contains(p[0], ":")
+        Print "hora #{h}"
+        Print "título " + p[2]
+        Print "texto " + p[3]
+    end
+    file_delete("ENV:Trasfondo.avisos")
+end

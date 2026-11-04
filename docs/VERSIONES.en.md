@@ -32,6 +32,18 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.4.0 (unreleased)
+
+What Trasfondo 2.2's dock and notifications need. All new features; what already compiled stays the same.
+
+- **Icons at another size:** `icon_draw_size(icon, x, y, width, height)` draws an `icon_load` icon smaller or
+  bigger, with soft edges (on true colour screens; on palette ones, at its size and centred).
+- **An ARexx port of its own:** `rexx_port(name)` opens it; commands arrive with `rexx_get()` and are answered with
+  `rexx_reply(rc, result)`. Before, Dash could only send commands (`rexx_send`). Manual, section 18.
+- **Notifications:** `notify(title, text)` leaves a notification on the desktop, with the program's name: to
+  Trasfondo's bar by ARexx (port `TRASFONDO`) or, if it isn't running, in its list, which it shows when it starts.
+- Tested on emulated A1200 (3.1 and 3.2) and A500, through both paths.
+
 ### 2.3.1 (2026-11-04)
 
 Fixes and the Amiga package with dashgit. Nothing to change in programs.

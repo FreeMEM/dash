@@ -33,6 +33,18 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.4.0 (sin publicar)
+
+Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que ya compilaba sigue igual.
+
+- **Iconos a otro tamaño:** `icon_draw_size(icon, x, y, ancho, alto)` dibuja un icono de `icon_load` más pequeño o
+  más grande, con los bordes suaves (en pantallas de color real; en las de paleta, a su tamaño y centrado).
+- **Un puerto ARexx propio:** `rexx_port(nombre)` lo abre; las órdenes llegan con `rexx_get()` y se contestan con
+  `rexx_reply(rc, resultado)`. Antes Dash solo podía mandar órdenes (`rexx_send`). Manual, sección 18.
+- **Avisos:** `notify(titulo, texto)` deja un aviso en el escritorio, con el nombre del programa: a la barra de
+  Trasfondo por ARexx (puerto `TRASFONDO`) o, si no está en marcha, en su lista, que enseña al arrancar.
+- Probado en A1200 (3.1 y 3.2) y A500 emulados, por los dos caminos.
+
 ### 2.3.1 (2026-11-04)
 
 Arreglos y el paquete del Amiga con dashgit. Nada que cambiar en los programas.
