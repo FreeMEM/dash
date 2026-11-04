@@ -32,6 +32,34 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.3.0 (2026-11-04)
+
+Dash for DashOS (AArch64), what Trasfondo 2.0's dock and colours ask for and what dashgit, a git written in Dash,
+needs. All of it is new; what compiled before stays the same.
+
+- **DashOS:** `./dash --dashos` compiles for DashOS, an AArch64 ELF (little-endian; `--be` big-endian, `--pie` at
+  any address), by both paths (`--dashos --gcc`, with clang). Float and Double on the FPU, texts in UTF-8.
+  `@amiga struct` and `Ptr X`: views on memory with the 68000's layout, for AmigaOS's structures, with
+  `amiga_alloc` and `amiga_free`. On 68k, executables come out as before. Manual, section 25.
+- **Windows of other programs and of the Workbench:** `wm_path` (the path of a window's program),
+  `file_real_path`, `screen_pixel_rgb` (the screen's colour, whoever drew it), `screen_pen_rgb` (the Workbench's
+  colours), `app_window` and `app_drop` (icons dropped on it from the Workbench), `icon_load` and `icon_draw`
+  (.info icons as the Workbench draws them, without datatypes) and `window_use` (drawing in the declared window
+  again).
+- **For git:** `sha1` and `sha1_text`, and bit by bit `sha1_new`, `sha1_add`, `sha1_hex`, `sha1_bytes`...;
+  `adler32`, `inflate_used` (where a compressed object ends), `program_exit(rc)` and `locale_gmt_offset`.
+- **`./dash --gcc` with C of `@link`:** what is passed to it is no longer kept forever (with `--memcheck`, Tachyon
+  left texts and objects alive) and its libraries link in any order and only with what is used.
+- **`dash` on the Amiga:** `version dash` gives its version (before, "%s (%d.%d.%d)"), and programs with a catalog
+  no longer carry an empty version mark before their own.
+- **Installer:** if there is a `DASH:` already, it offers to update that installation where it is; a file in the
+  way is moved aside as `.antes`; in `S:User-Startup`, `DASH:` and the Path (also `DASH:Forja` and
+  `DASH:Inferencia`: `forja` and `inferencia` from any Shell) only if their drawer is there, so moving the drawer
+  no longer stops the boot; Forja's dash path is `DASH:dash`. It brings Forja 0.2 and Inferencia 0.1, with their
+  version numbers.
+- **MorphOS:** Dash's 68k executables run on MorphOS (Tolkien tried them).
+- Tested on emulated A1200 (3.1 and 3.2) and A500, and the installer on Coffin.
+
 ### 2.2.0 (2026-11-03)
 
 What Forja's sprite and map editors and Fragua, the games library, need. All of it is new builtins; what compiled
