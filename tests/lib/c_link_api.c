@@ -55,6 +55,21 @@ LONG c_sostiene(void *o)
     return o != 0;
 }
 
+/* uno que el C se queda (dl_retain) y suelta más tarde: con memcheck, nada vivo al final */
+static void *guardado;
+LONG c_guarda(void *o)
+{
+    dl_retain(o);
+    guardado = o;
+    return o != 0;
+}
+
+void c_suelta(void)
+{
+    if (guardado) dl_release(guardado);
+    guardado = 0;
+}
+
 LONG c_reloj(void) { return db_time_ms() >= 0; }
 
 /* C que llama a una @export de Dash */

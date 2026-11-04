@@ -1,0 +1,13 @@
+# Test: las librerías de @link se enlazan como con ./dash por los dos caminos: en cualquier orden (libgrupo_a.a llama
+# a libgrupo_b.a, escrita antes) y solo con lo que el programa usa (libgrupo_a.a lleva una función sin usar que llama
+# a algo que no existe). Tachyon, por ./dash --gcc. Las librerías salen de lib/grupo_a.c y lib/grupo_b.c.
+# expect-out: 41
+
+@link "lib/libgrupo_b.a"
+@link "lib/libgrupo_a.a"
+
+@extern("grupo") func grupo_a(n: Int) -> Int
+
+Main
+    Print grupo_a(20)
+end

@@ -122,6 +122,18 @@ def link_flags(sources) -> tuple:
     return includes, files
 
 
+def link_args(files) -> list:
+    """The gcc arguments for the files of @link, as the direct compiler links them: the objects as they are; the
+    libraries in any order (a group: one may call another written before it) and only what the program uses
+    (--gc-sections: a library compiled with -ffunction-sections can carry functions that call what is not
+    there, which ./dash never takes). Tachyon's libpegamento.a by ./dash --gcc."""
+    objs = [f for f in files if not f.endswith(".a")]
+    libs = [f for f in files if f.endswith(".a")]
+    if not libs:
+        return objs
+    return objs + ["-Wl,--gc-sections", "-Wl,--start-group", *libs, "-Wl,--end-group"]
+
+
 # ./dash --debug: the zeroed globals (.bss) go in the hunk of .data, after its own. The DWARF keeps
 # the addresses of the ELF the linker made the hunk file from (.data after .text, .bss after .data)
 # and gdb places them with the offsets bgdbserver gives (qOffsets); gdb takes one offset for .data

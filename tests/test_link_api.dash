@@ -1,5 +1,6 @@
 # Test: el C de @link usa la API del compilador directo (dl_* y db_nombre, la de ./dash --cabecera) también por C
-# con gcc: el programa la da con las funciones que ese C llama (D82)
+# con gcc: el programa la da con las funciones que ese C llama (D82). Lo que se le pasa no se escapa: el C sostiene lo
+# que se queda (dl_retain, dl_str_dup), como con ./dash; memcheck acaba en 0
 # expect-c: STRPTR dl_str_temp(STRPTR s) { return _dash_str_dup(s, TRUE); }
 # expect-c: LONG db_str_upper(LONG _a0)
 # expect-c: LONG db_time_ms(void)
@@ -9,6 +10,9 @@
 # expect-out: 5
 # expect-out: true true
 # expect-out: 8
+# expect-out: 7 true
+# memcheck
+# expect-out: memcheck: vivos 0 objetos y 0 strings (escapados 0 y 0), errores 0
 
 @link "lib/c_link_api.c"
 
@@ -17,6 +21,8 @@
 @extern("c_link_api") func c_largo_copia(s: String) -> Int
 @extern("c_link_api") func c_sostiene(c: Caja) -> Bool
 @extern("c_link_api") func c_reloj() -> Bool
+@extern("c_link_api") func c_guarda(c: Caja) -> Bool
+@extern("c_link_api") func c_suelta()
 @extern("c_link_api") func c_llama_dash(n: Int) -> Int
 
 struct Caja
@@ -34,4 +40,9 @@ Main
     c = Caja(1)
     Print "#{c_sostiene(c)} #{c_reloj()}"
     Print c_llama_dash(42)
+    # un texto de una variable y un objeto que el C se queda hasta c_suelta
+    s = "Amiga" + "OS"
+    g = c_guarda(Caja(5))
+    Print "#{c_largo_copia(s)} #{g}"
+    c_suelta()
 end
