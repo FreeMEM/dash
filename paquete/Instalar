@@ -59,7 +59,10 @@
     (help @startup-help)
     ; (solo si el cajón está: si un día se mueve, el arranque no se para en "Can't find")
     ; (Forja e Inferencia también en el Path: "forja" o "inferencia" desde cualquier Shell, como pidió Ferrán)
-    (command (cat "If EXISTS \"" #cajon "\"\n  Assign DASH: \"" #cajon "\"\n  Path DASH: DASH:Forja DASH:Inferencia ADD\nEndIf\n")))
+    ; (cada cajón con su If: un Path a un cajón que no está también pararía el arranque)
+    (command (cat "If EXISTS \"" #cajon "\"\n  Assign DASH: \"" #cajon "\"\n  Path DASH: ADD\nEndIf\n"
+                  "If EXISTS \"" (tackon #cajon "Forja") "\"\n  Path DASH:Forja ADD\nEndIf\n"
+                  "If EXISTS \"" (tackon #cajon "Inferencia") "\"\n  Path DASH:Inferencia ADD\nEndIf\n")))
 (run (cat "Assign DASH: \"" #cajon "\""))
 
 ; --- Forja: dónde está la orden dash (ENV:Forja/dashc), para que funcione ya, sin reiniciar: el Path de
