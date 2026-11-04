@@ -25073,8 +25073,10 @@ static {ret_type} {method_name}({params_str}) {{
             if isinstance(param, FunctionParam):
                 self._list_hint(arg, param.param_type)      # f([1, 2]) to a [Double] (Lorraine D2)
             code = self._generate_expression(arg)
-            if foreign is not None and getattr(foreign, "borrows", False):
-                code = self._lend(arg, code)        # @native(borrow): only during the call (D26)
+            if foreign is not None and (getattr(foreign, "borrows", False) or isinstance(foreign, ExternFunc)):
+                # @native(borrow): only during the call (D26). @extern: the C of @link keeps what it wants with
+                # dl_retain and dl_str_dup, as with ./dash (escaped, it would never be freed: Tachyon's memcheck)
+                code = self._lend(arg, code)
             elif foreign is not None:
                 code = self._escape_any(arg, code)  # C code may keep the pointer
             elif func and not self._frees_nothing(func):

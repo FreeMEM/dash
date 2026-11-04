@@ -242,7 +242,8 @@ def main():
     # extra gcc options, for experiments (e.g. DASH_CFLAGS="-Os")
     compile_command.extend(shlex.split(os.environ.get("DASH_CFLAGS", "")))
     compile_command.extend(c_files)
-    compile_command.extend(link_files)
+    from compiler.cflags import link_args
+    compile_command.extend(link_args(link_files))
     # Float: GCC's own software floating point (runtime/softfloat), linked before
     # -lm so it does not go through mathieeesingbas.library
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

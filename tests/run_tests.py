@@ -286,7 +286,8 @@ def run_test(test_file: Path, verbose: bool = False, memcheck: bool = False) -> 
         from compiler.cflags import link_flags     # @link (dashweb D10), as ./dash
         link_includes, link_files = link_flags([c_file.read_text()])
         compile_cmd[1:1] = link_includes
-        compile_cmd[compile_cmd.index(str(c_file)) + 1:compile_cmd.index(str(c_file)) + 1] = link_files
+        from compiler.cflags import link_args
+        compile_cmd[compile_cmd.index(str(c_file)) + 1:compile_cmd.index(str(c_file)) + 1] = link_args(link_files)
     except FileNotFoundError as e:
         return TestResult(name=name, passed=False, transpile_ok=True, compile_ok=False,
                           error_message=str(e), duration=time.time() - start_time)
