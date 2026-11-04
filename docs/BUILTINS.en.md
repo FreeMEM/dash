@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 908 functions, 908 implemented, 0 not implemented.
+Total: 909 functions, 909 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -855,6 +855,7 @@ Total: 908 functions, 908 implemented, 0 not implemented.
 | `gadget_selected(win, n)` | `BOOL` | True if the gadget at place n (a checkbox) is selected |  |
 | `screen_pixel(x, y)` | `LONG` | The pen of the pixel (x, y) of the screen in front; -1 outside it |  |
 | `screen_pixel_rgb(x, y)` | `LONG` | The colour of the pixel (x, y) of the screen in front as 0xRRGGBB, whoever drew it; -1 outside it. What is behind a window before it opens |  |
+| `screen_pen_rgb(n)` | `LONG` | The colour of pen n of the Workbench screen as 0xRRGGBB: 0 detail, 1 block, 2 text, 3 shine, 4 shadow, 5 fill (the active title bar), 6 fill text, 7 background, 8 highlight text, 9 bar detail, 10 bar block, 11 bar trim; -1 if it has no such pen |  |
 | `cx_send(name, command)` | `LONG` | A command to a commodity by its name, as Exchange does (15 disable, 17 enable, 19 show, 21 hide, 23 kill...): 0 done, -1 no such commodity, -2 it has no port, -99 no commodities.library |  |
 
 ## Window manager (every program's windows)

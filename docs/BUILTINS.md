@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 908 funciones, 908 implementadas, 0 sin implementar.
+Total: 909 funciones, 909 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -855,6 +855,7 @@ Total: 908 funciones, 908 implementadas, 0 sin implementar.
 | `gadget_selected(win, n)` | `BOOL` | True si el gadget del sitio n (una casilla) está marcado |  |
 | `screen_pixel(x, y)` | `LONG` | El color del píxel (x, y) de la pantalla de delante; -1 fuera de ella |  |
 | `screen_pixel_rgb(x, y)` | `LONG` | El color del píxel (x, y) de la pantalla de delante como 0xRRGGBB, la pinte quien la pinte; -1 fuera de ella. Lo que hay detrás de una ventana antes de abrirla |  |
+| `screen_pen_rgb(n)` | `LONG` | El color del lápiz n de la pantalla del Workbench como 0xRRGGBB: 0 detalle, 1 bloque, 2 texto, 3 brillo, 4 sombra, 5 relleno (la barra de título activa), 6 texto del relleno, 7 fondo, 8 texto resaltado, 9 detalle de la barra, 10 bloque de la barra, 11 borde de la barra; -1 si no lo tiene |  |
 | `cx_send(name, command)` | `LONG` | Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 ocultar, 23 quitar...): 0 hecho, -1 no hay esa commodity, -2 no tiene puerto, -99 no hay commodities.library |  |
 
 ## Gestor de ventanas (las de todos los programas)

@@ -633,6 +633,9 @@ DESC_ES = {
     "gadget_y": "La y del centro de ese gadget, como gadget_x",
     "gadget_selected": "True si el gadget del sitio n (una casilla) está marcado",
     "screen_pixel": "El color del píxel (x, y) de la pantalla de delante; -1 fuera de ella",
+    "screen_pen_rgb": "El color del lápiz n de la pantalla del Workbench como 0xRRGGBB: 0 detalle, 1 bloque, 2 texto, 3 "
+                      "brillo, 4 sombra, 5 relleno (la barra de título activa), 6 texto del relleno, 7 fondo, 8 texto "
+                      "resaltado, 9 detalle de la barra, 10 bloque de la barra, 11 borde de la barra; -1 si no lo tiene",
     "screen_pixel_rgb": "El color del píxel (x, y) de la pantalla de delante como 0xRRGGBB, la pinte quien la pinte; "
                         "-1 fuera de ella. Lo que hay detrás de una ventana antes de abrirla",
     "cx_send": "Una orden a una commodity por su nombre, como hace Exchange (15 desactivar, 17 activar, 19 enseñar, 21 "
