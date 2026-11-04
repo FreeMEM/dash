@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 909 functions, 909 implemented, 0 not implemented.
+Total: 921 functions, 921 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -564,6 +564,7 @@ Total: 909 functions, 909 implemented, 0 not implemented.
 | `clock_minute()` | `LONG` | The minute of the last clock_read |  |
 | `clock_second()` | `LONG` | The second of the last clock_read |  |
 | `date_text(format)` | `STRPTR` | The date and time now as format says, with locale.library's FormatDate in the user's language and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library) |  |
+| `locale_gmt_offset()` | `LONG` | How many minutes the Amiga's clock is ahead of GMT (60 in Spain in winter), from Locale; 0 without locale.library. git keeps its times so ("+0100") |  |
 | `locale_decimal_point()` | `STRPTR` | What goes before the decimals in the user's country: "," in Spain, "." in English (also without locale.library) |  |
 | `locale_group_separator()` | `STRPTR` | What separates the thousands in the user's country: "." in Spain (1.234,5), "," in English (1,234.5); maybe "" |  |
 | `locale_date_order()` | `STRPTR` | The order of day, month and year in the user's short date: "DMY", "MDY" or "YMD" |  |
@@ -617,6 +618,16 @@ Total: 909 functions, 909 implemented, 0 not implemented.
 | `inflate_auto(src, n, dest, max)` | `LONG` | inflate for gzip, zlib or raw deflate, told by its first bytes (an HTTP body with Content-Encoding gzip or deflate): the bytes written, or as inflate |  |
 | `deflate(src, n, dest, max, level)` | `LONG` | Compress n bytes of buffer src into dest as raw deflate, level 0 (stored) to 9 (smallest; -1: 6): the bytes written, -2 if they do not fit in max, -3 if there is no memory (zlib; about 260 KB while it works, at any level) |  |
 | `crc32(buffer, n, crc)` | `LONG` | CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start) |  |
+| `adler32(buffer, n, a)` | `LONG` | Adler-32 (the checksum at the end of a zlib stream) of n bytes of a buffer, going on from a (1 to start) |  |
+| `inflate_used()` | `LONG` | The input bytes the last inflate or inflate_auto used (with a zlib wrapper, its adler32 too): where the next object starts in a git pack |  |
+| `sha1(buffer, n)` | `STRPTR` | SHA-1 of n bytes of a buffer, in 40 hex digits (git names its objects so) |  |
+| `sha1_text(s)` | `STRPTR` | SHA-1 of a text, in 40 hex digits |  |
+| `sha1_new()` | `LONG` | A SHA-1 made bit by bit with sha1_add, sha1_add_text and sha1_add_byte: its number (1-8), 0 if all are in use. sha1_hex or sha1_bytes end it |  |
+| `sha1_add(sha, buffer, n)` | `void` | Adds n bytes of a buffer to a SHA-1 of sha1_new |  |
+| `sha1_add_text(sha, s)` | `void` | Adds a text to a SHA-1 of sha1_new |  |
+| `sha1_add_byte(sha, b)` | `void` | Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's "blob 6") |  |
+| `sha1_hex(sha)` | `STRPTR` | Ends a SHA-1 of sha1_new: its 40 hex digits ("" if that number is not in use) |  |
+| `sha1_bytes(sha, out)` | `BOOL` | Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the index); false if that number is not in use |  |
 
 ## UTF-8
 
@@ -719,6 +730,7 @@ Total: 909 functions, 909 implemented, 0 not implemented.
 | `time_unix()` | `LONG` | The system's clock as seconds since 1 January 1970 (for HTTP dates and cookies) |  |
 | `clock_days()` | `LONG` | Days since 1 January 1978 by the system's clock (DateStamp's ds_Days) |  |
 | `mem_largest()` | `LONG` | The largest free block of memory, chip or fast, in bytes |  |
+| `program_exit(rc)` | `void` | Ends the program now with that return code (5 warning, 10 error, 20 failure), after the usual cleanup: windows, files and memory |  |
 | `run_command(command)` | `LONG` | Run a command line and wait for it to end, its output the program's own: its return code, -1 if it could not start |  |
 | `wb_open(path)` | `BOOL` | Open a drawer, a program or a project as a double click on its icon does (workbench.library 44, OS 3.5+); false if it could not |  |
 | `program_path()` | `STRPTR` | The program's full path ("Work:Tachyon/Tachyon"), from a Shell or from the Workbench |  |

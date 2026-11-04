@@ -266,7 +266,8 @@ Con el mismo fuente, el ejecutable sale idéntico al que hace `./dash` en el PC.
 
 Hace falta el gcc de Amiga de bebbo y el parser Lark, en el mismo PC donde ya funciona `./dash`. Además de los
 programas con C, este camino mira al futuro: gcc sabe generar código PowerPC, y por ahí vendrá compilar para
-MorphOS y AmigaOS 4.
+MorphOS y AmigaOS 4 de forma nativa. Mientras, los ejecutables de 68k que hace Dash (por los dos caminos) ya
+funcionan en MorphOS, en su emulación de 68k: los ha probado Tolkien, y lo que encontró está arreglado.
 
 #### Ubuntu / Debian
 

@@ -5981,6 +5981,13 @@ static struct Locale *_dash_user_locale(void) {
     return _dash_date_locale;
 }
 
+/* How many minutes the Amiga's clock is ahead of GMT (60 in Spain in winter), from Locale; 0 without it. git keeps
+   its times as UTC and this zone ("+0100") */
+static LONG _dash_locale_gmt_offset(void) {
+    struct Locale *l = _dash_user_locale();
+    return l ? -l->loc_GMTOffset : 0;
+}
+
 /* What goes before the decimals: "," in Spanish, "." in English (and without locale.library) */
 static STRPTR _dash_locale_decimal_point(void) {
     struct Locale *l = _dash_user_locale();
@@ -6290,6 +6297,11 @@ static LONG _dash_run_command(STRPTR command) {
     rc = SystemTags(command, SYS_Input, nil, SYS_Output, Output() ? Output() : nil, NP_StackSize, 16384, TAG_DONE);
     Close(nil);
     return rc;
+}
+
+/* Ends the program now with that return code, after the usual cleanup (dashgit, scripts: 5, 10, 20) */
+static void _dash_program_exit(LONG rc) {
+    _dash_exit((int)rc);
 }
 
 static BOOL _dash_wb_open(STRPTR path) {
@@ -8063,6 +8075,144 @@ static LONG _dash_base64_to_file(STRPTR text, STRPTR file) {
 
     # Lorraine D6: raw deflate (what a ZIP holds) and crc32 with zlib, compiled apart (compiler/clibs.py
     # links it when the C has this template's first line)
+    # SHA-1, for dashgit (git names its objects by their SHA-1)
+    SHA1_RUNTIME = """\
+/* Dash SHA-1 (FIPS 180-1): of a buffer or a text at once (sha1, sha1_text), or bit by bit (sha1_new, sha1_add,
+   sha1_add_text, sha1_add_byte, and sha1_hex or sha1_bytes, which end it). git names its objects by the SHA-1 of
+   "blob 6" + a 0 byte + the contents. Up to 8 at once; one that is not ended is freed at exit with the program. */
+#define _DASH_SHA1_MAX 8
+typedef struct { ULONG h[5]; ULONG nlo, nhi; UBYTE buf[64]; LONG len; BOOL used; } _DashSha1;
+static _DashSha1 _dash_sha1s[_DASH_SHA1_MAX + 1];
+
+#define _DASH_ROL(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
+static void _dash_sha1_block(ULONG *h, const UBYTE *p) {
+    ULONG w[16], a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f, k, t;
+    LONG i;
+    for (i = 0; i < 16; i++)
+        w[i] = ((ULONG)p[4 * i] << 24) | ((ULONG)p[4 * i + 1] << 16) | ((ULONG)p[4 * i + 2] << 8) | p[4 * i + 3];
+    for (i = 0; i < 80; i++) {
+        if (i >= 16) {
+            t = w[(i + 13) & 15] ^ w[(i + 8) & 15] ^ w[(i + 2) & 15] ^ w[i & 15];
+            w[i & 15] = _DASH_ROL(t, 1);
+        }
+        if (i < 20) { f = (b & c) | (~b & d); k = 0x5A827999UL; }
+        else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1UL; }
+        else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDCUL; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6UL; }
+        t = _DASH_ROL(a, 5) + f + e + k + w[i & 15];
+        e = d; d = c; c = _DASH_ROL(b, 30); b = a; a = t;
+    }
+    h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e;
+}
+
+/* A new SHA-1 to add to: its number (1-8), or 0 if all are in use */
+static LONG _dash_sha1_new(void) {
+    LONG i;
+    for (i = 1; i <= _DASH_SHA1_MAX; i++)
+        if (!_dash_sha1s[i].used) {
+            _DashSha1 *s = &_dash_sha1s[i];
+            s->h[0] = 0x67452301UL; s->h[1] = 0xEFCDAB89UL; s->h[2] = 0x98BADCFEUL;
+            s->h[3] = 0x10325476UL; s->h[4] = 0xC3D2E1F0UL;
+            s->nlo = s->nhi = 0;
+            s->len = 0;
+            s->used = TRUE;
+            return i;
+        }
+    return 0;
+}
+
+static _DashSha1 *_dash_sha1_get(LONG id) {
+    return id >= 1 && id <= _DASH_SHA1_MAX && _dash_sha1s[id].used ? &_dash_sha1s[id] : NULL;
+}
+
+static void _dash_sha1_add(LONG id, APTR data, LONG n) {
+    _DashSha1 *s = _dash_sha1_get(id);
+    const UBYTE *p = (const UBYTE *)data;
+    if (!s || !p || n <= 0) return;
+    if ((s->nlo += (ULONG)n) < (ULONG)n) s->nhi++;
+    while (n > 0) {
+        LONG k = 64 - s->len;
+        if (k > n) k = n;
+        CopyMem((APTR)p, s->buf + s->len, k);
+        s->len += k;
+        p += k;
+        n -= k;
+        if (s->len == 64) {
+            _dash_sha1_block(s->h, s->buf);
+            s->len = 0;
+        }
+    }
+}
+
+static void _dash_sha1_add_text(LONG id, STRPTR t) {
+    if (t) _dash_sha1_add(id, t, strlen((char *)t));
+}
+
+static void _dash_sha1_add_byte(LONG id, LONG b) {
+    UBYTE c = (UBYTE)b;
+    _dash_sha1_add(id, &c, 1);
+}
+
+/* The end: the 20 bytes of the hash to out, and the number free again */
+static BOOL _dash_sha1_end(LONG id, UBYTE *out) {
+    _DashSha1 *s = _dash_sha1_get(id);
+    ULONG hi, lo;
+    LONG i;
+    if (!s) return FALSE;
+    hi = (s->nhi << 3) | (s->nlo >> 29);
+    lo = s->nlo << 3;
+    s->buf[s->len++] = 0x80;
+    if (s->len > 56) {
+        while (s->len < 64) s->buf[s->len++] = 0;
+        _dash_sha1_block(s->h, s->buf);
+        s->len = 0;
+    }
+    while (s->len < 56) s->buf[s->len++] = 0;
+    for (i = 0; i < 4; i++) {
+        s->buf[56 + i] = (UBYTE)(hi >> (24 - 8 * i));
+        s->buf[60 + i] = (UBYTE)(lo >> (24 - 8 * i));
+    }
+    _dash_sha1_block(s->h, s->buf);
+    for (i = 0; i < 20; i++) out[i] = (UBYTE)(s->h[i >> 2] >> (24 - 8 * (i & 3)));
+    s->used = FALSE;
+    return TRUE;
+}
+
+/* Ends it: the hash in 40 hex digits ("" for a number that is not in use) */
+static STRPTR _dash_sha1_hex(LONG id) {
+    static const char hx[] = "0123456789abcdef";
+    UBYTE d[20];
+    char s[41];
+    LONG i;
+    s[0] = 0;
+    if (_dash_sha1_end(id, d)) {
+        for (i = 0; i < 20; i++) { s[2 * i] = hx[d[i] >> 4]; s[2 * i + 1] = hx[d[i] & 15]; }
+        s[40] = 0;
+    }
+    return _dash_str_dup((STRPTR)s, TRUE);
+}
+
+/* Ends it: the 20 bytes of the hash to a buffer; false for a number that is not in use */
+static BOOL _dash_sha1_bytes(LONG id, APTR out) {
+    UBYTE d[20];
+    if (!out || !_dash_sha1_end(id, d)) return FALSE;
+    CopyMem(d, out, 20);
+    return TRUE;
+}
+
+static STRPTR _dash_sha1(APTR buf, LONG n) {
+    LONG id = _dash_sha1_new();
+    _dash_sha1_add(id, buf, n);
+    return _dash_sha1_hex(id);
+}
+
+static STRPTR _dash_sha1_text(STRPTR t) {
+    LONG id = _dash_sha1_new();
+    _dash_sha1_add_text(id, t);
+    return _dash_sha1_hex(id);
+}
+"""
+
     ZLIB_RUNTIME = """\
 /* Dash zlib Runtime */
 long dash_zlib_inflate(const void *src, long n, void *dst, long max);
@@ -8085,6 +8235,14 @@ static LONG _dash_deflate(APTR src, LONG n, APTR dst, LONG max, LONG level) {
 static LONG _dash_crc32(APTR buf, LONG n, LONG crc) {
     return (LONG)dash_zlib_crc32(buf, n, (ULONG)crc);
 }
+
+unsigned long dash_zlib_adler32(const void *buf, long n, unsigned long a);
+static LONG _dash_adler32(APTR buf, LONG n, LONG a) {
+    return (LONG)dash_zlib_adler32(buf, n, (ULONG)a);
+}
+
+long dash_zlib_inflate_used(void);
+static LONG _dash_inflate_used(void) { return dash_zlib_inflate_used(); }
 
 """
 
@@ -21920,6 +22078,7 @@ _RUNTIME_FLAGS = [
     ("METER_RUNTIME", "uses_meter"),        # Trasfondo: disks, network, WiFi
     ("WM_RUNTIME", "uses_wm"),              # Trasfondo 2.0: the windows of every program
     ("APPWIN_RUNTIME", "uses_appwin"),      # Trasfondo 2.0: icons dropped on a window (the dock)
+    ("SHA1_RUNTIME", "uses_sha1"),          # dashgit: SHA-1
     ("ICON_RUNTIME", "uses_icons"),         # Trasfondo 2.0: icons drawn by icon.library (the dock)
     ("MOUSE_RUNTIME", "uses_mouse"),        # Ratonera: a curve for each mouse
     ("CATALOG_RUNTIME", "uses_catalog"),    # dashweb D71: translations
@@ -22233,6 +22392,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
         self.uses_wm: bool = False       # wm_read, wm_set_box... (WM_RUNTIME, Trasfondo 2.0)
         self.uses_appwin: bool = False   # app_window, app_drop (APPWIN_RUNTIME, Trasfondo 2.0)
+        self.uses_sha1: bool = False     # sha1, sha1_new... (SHA1_RUNTIME, dashgit)
         self.uses_icons: bool = False    # icon_load, icon_draw (ICON_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
         self.uses_catalog: bool = False  # tr, catalog_* and @catalog (CATALOG_RUNTIME, dashweb D71)
@@ -22579,6 +22739,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.WM_RUNTIME)
         if self.uses_appwin:
             parts.append(CTemplates.APPWIN_RUNTIME)
+        if self.uses_sha1:
+            parts.append(CTemplates.SHA1_RUNTIME)
         if self.uses_icons:
             parts.append(CTemplates.ICON_RUNTIME)
         if self.uses_mouse:
@@ -25617,6 +25779,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # catalog_language and date_text give a String
         if self.uses_cx or self.uses_meter or self.uses_mouse or self.uses_wm:
             self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
+        if self.uses_sha1:
+            self.uses_strings = True   # sha1 gives a String
         if self.uses_appwin:
             self.uses_strings = True   # app_drop gives a String
             self.uses_winmgr = True    # app_window takes a window handle (_dash_window_get)

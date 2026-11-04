@@ -1,0 +1,13 @@
+# Test: program_exit acaba el programa con su código de retorno (para dashgit y los scripts: 5, 10, 20), tras la
+# limpieza de siempre; locale_gmt_offset da la zona horaria de Locale en minutos (entre -12 h y +14 h).
+# expect-out: zona true
+# expect-out: antes
+# expect-rc: 10
+
+Main
+    z = locale_gmt_offset()
+    Print "zona #{z >= -720 and z <= 840}"
+    Print "antes"
+    program_exit(10)
+    Print "después"
+end
