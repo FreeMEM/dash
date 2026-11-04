@@ -5,6 +5,9 @@
 #   make test       compila tests/*.dash con dashc y con ./dash y compara su salida en FS-UAE
 CC ?= cc
 CFLAGS ?= -O2 -Wall -Wextra -std=c99
+# la fecha de la versión de dash ($VER: para la orden Version del Amiga)
+FECHA := $(shell date +%-d.%-m.%Y)
+CFLAGS += -DDASH_FECHA='"$(FECHA)"'
 AMIGA = /opt/amiga/bin/m68k-amigaos-
 # los literales Double, con el s2d de Ryu (exacto; el strtod de libnix falla en la última cifra)
 RYU = -I../runtime/ryu ../runtime/ryu/dash_ryu.c
@@ -24,7 +27,7 @@ dashc-a64: $(SRC) src/elf.c src/dashc.h src/ta64_base.c src/ta64_ops.c src/ta64_
 amiga: build/dashc.amiga
 # (los runtimes de --memcheck y --fpu van aparte, en build/dashc_mc.drt y build/dashc_fpu.drt: se copian junto a dashc)
 build/dashc.amiga: $(SRC) src/dashc.h build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/dashc_mc.drt build/dashc_fpu.drt build/dashc_fpu_mc.drt build/builtins_tab.c
-	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -o $@ $(SRC) build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
+	$(AMIGA)gcc -O2 -m68000 -noixemul -std=c99 -fno-branch-count-reg -DDASH_FECHA='"$(FECHA)"' -o $@ $(SRC) build/rt_blob_amiga.c build/rt_fpu_blob_amiga.c build/rt_fpu_mc_blob_amiga.c build/builtins_tab.c $(RYU) $(ZLIB) \
 		build/softfloat_df.o build/softfloat.o build/fastfp.o -lm   # (el float por software, como ./dash: el de la ROM se cuelga en FS-UAE)
 
 # lo que pide y devuelve cada builtin (la tabla va en git: no hace falta Python para construir dashc)
