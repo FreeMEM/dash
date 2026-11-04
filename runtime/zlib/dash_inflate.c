@@ -1,13 +1,21 @@
 #include "dash_zlib.h"
 
+/* the input bytes the last inflate used (with a zlib wrapper, its adler32 too): where the next object of a git
+   pack starts (dashgit) */
+static long dash_zlib_used = 0;
+
+long dash_zlib_inflate_used(void) { return dash_zlib_used; }
+
 static long dash_zlib_inflate_w(const void *src, long n, void *dst, long max, int wbits) {
     z_stream z;
     int r;
+    dash_zlib_used = 0;
     if (!src || !dst || n < 0 || max < 0) return -1;
     dash_zlib_stream(&z, src, n, dst, max);
     r = inflateInit2(&z, wbits);
     if (r != Z_OK) return r == Z_MEM_ERROR ? -3 : -1;
     r = inflate(&z, Z_FINISH);
+    dash_zlib_used = (long)z.total_in;
     inflateEnd(&z);
     if (r == Z_STREAM_END) return (long)z.total_out;
     if (r == Z_MEM_ERROR) return -3;
@@ -35,7 +43,9 @@ long dash_zlib_inflate_auto(const void *src, long n, void *dst, long max) {
         if (fl & 16) { while (i < n && p[i]) i++; i++; }             /* FCOMMENT */
         if (fl & 2) i += 2;                                          /* FHCRC */
         if (i >= n) return -1;
-        return dash_zlib_inflate_w(p + i, n - i, dst, max, -MAX_WBITS);
+        r = dash_zlib_inflate_w(p + i, n - i, dst, max, -MAX_WBITS);
+        dash_zlib_used += i;           /* (and its header) */
+        return r;
     }
     if (n >= 2 && (p[0] & 0x0F) == 8 && (p[0] >> 4) <= 7 && ((p[0] << 8) | p[1]) % 31 == 0) {
         r = dash_zlib_inflate_w(src, n, dst, max, MAX_WBITS);

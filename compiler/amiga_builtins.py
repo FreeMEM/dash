@@ -5140,6 +5140,10 @@ TASK_FUNCTIONS = {
         description="The date and time now as format says, with locale.library's FormatDate in the user's language "
                     "and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library)"),
     # Lorraine D19: how numbers and dates are written in the user's language and country
+    "locale_gmt_offset": BuiltinFunc(
+        name="locale_gmt_offset", params=[], return_type="LONG", c_template="_dash_locale_gmt_offset()",
+        description="How many minutes the Amiga's clock is ahead of GMT (60 in Spain in winter), from Locale; 0 "
+                    "without locale.library. git keeps its times so (\"+0100\")"),
     "locale_decimal_point": BuiltinFunc(
         name="locale_decimal_point", params=[], return_type="STRPTR", c_template="_dash_locale_decimal_point()",
         description="What goes before the decimals in the user's country: \",\" in Spain, \".\" in English (also "
@@ -5188,6 +5192,10 @@ TASK_FUNCTIONS = {
     "mem_largest": BuiltinFunc(
         name="mem_largest", params=[], return_type="LONG", c_template="(LONG)AvailMem(MEMF_ANY | MEMF_LARGEST)",
         description="The largest free block of memory, chip or fast, in bytes"),
+    "program_exit": BuiltinFunc(
+        name="program_exit", params=["rc"], return_type="void", c_template="_dash_program_exit(${rc})",
+        description="Ends the program now with that return code (5 warning, 10 error, 20 failure), after the usual "
+                    "cleanup: windows, files and memory"),
     "run_command": BuiltinFunc(
         name="run_command", params=["command"], return_type="LONG", c_template="_dash_run_command(${command})",
         reads_only=True,
@@ -5481,6 +5489,29 @@ ZLIB_FUNCTIONS = {
                     "about 260 KB while it works, at any level)"),
     "crc32": _buf("crc32", ["buffer", "n", "crc"], "LONG", "_dash_crc32(${buffer}, ${n}, ${crc})",
                   "CRC-32 (as in ZIP and PNG) of n bytes of a buffer, going on from crc (0 to start)"),
+    "adler32": _buf("adler32", ["buffer", "n", "a"], "LONG", "_dash_adler32(${buffer}, ${n}, ${a})",
+                    "Adler-32 (the checksum at the end of a zlib stream) of n bytes of a buffer, going on from a (1 to "
+                    "start)"),
+    "inflate_used": _buf("inflate_used", [], "LONG", "_dash_inflate_used()",
+                         "The input bytes the last inflate or inflate_auto used (with a zlib wrapper, its adler32 "
+                         "too): where the next object starts in a git pack"),
+    "sha1": _buf("sha1", ["buffer", "n"], "STRPTR", "_dash_sha1(${buffer}, ${n})",
+                 "SHA-1 of n bytes of a buffer, in 40 hex digits (git names its objects so)"),
+    "sha1_text": _buf("sha1_text", ["s"], "STRPTR", "_dash_sha1_text(${s})", "SHA-1 of a text, in 40 hex digits"),
+    "sha1_new": _buf("sha1_new", [], "LONG", "_dash_sha1_new()",
+                     "A SHA-1 made bit by bit with sha1_add, sha1_add_text and sha1_add_byte: its number (1-8), 0 if "
+                     "all are in use. sha1_hex or sha1_bytes end it"),
+    "sha1_add": _buf("sha1_add", ["sha", "buffer", "n"], "void", "_dash_sha1_add(${sha}, ${buffer}, ${n})",
+                     "Adds n bytes of a buffer to a SHA-1 of sha1_new"),
+    "sha1_add_text": _buf("sha1_add_text", ["sha", "s"], "void", "_dash_sha1_add_text(${sha}, ${s})",
+                          "Adds a text to a SHA-1 of sha1_new"),
+    "sha1_add_byte": _buf("sha1_add_byte", ["sha", "b"], "void", "_dash_sha1_add_byte(${sha}, ${b})",
+                          "Adds a byte (0-255) to a SHA-1 of sha1_new (the 0 after git's \"blob 6\")"),
+    "sha1_hex": _buf("sha1_hex", ["sha"], "STRPTR", "_dash_sha1_hex(${sha})",
+                     "Ends a SHA-1 of sha1_new: its 40 hex digits (\"\" if that number is not in use)"),
+    "sha1_bytes": _buf("sha1_bytes", ["sha", "out"], "BOOL", "_dash_sha1_bytes(${sha}, ${out})",
+                       "Ends a SHA-1 of sha1_new: its 20 bytes to a buffer (as git keeps them in trees and the "
+                       "index); false if that number is not in use"),
 }
 
 # =============================================================================
@@ -5854,7 +5885,7 @@ def _move(src, names):
 
 
 SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
-    "time_unix", "clock_days", "mem_largest", "run_command", "wb_open", "program_path", "locale_language",
+    "time_unix", "clock_days", "mem_largest", "program_exit", "run_command", "wb_open", "program_path", "locale_language",
     "cpu_model", "fpu_model", "library_version", "library_revision", "resident_version", "task_priority",
     "build_date", "build_time", "console_flush", "run_capture", "run_start", "run_ready", "run_break",
     "run_finish", "run_rc", "env_get", "env_set", "rexx_send", "rexx_rc", "ports_read", "port_name", "tasks_read",

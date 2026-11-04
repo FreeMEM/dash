@@ -267,8 +267,9 @@ on the Amiga.
 ### Through C with gcc (`--gcc`)
 
 It needs bebbo's Amiga gcc and the Lark parser, on the same PC where `./dash` already works. Besides programs with
-C, this path looks ahead: gcc can generate PowerPC code, and that is the way to compiling for MorphOS and
-AmigaOS 4.
+C, this path looks ahead: gcc can generate PowerPC code, and that is the way to compiling natively for MorphOS
+and AmigaOS 4. Meanwhile, the 68k executables Dash makes (by either path) already run on MorphOS, in its 68k
+emulation: Tolkien tried them, and what he found is fixed.
 
 #### Ubuntu / Debian
 

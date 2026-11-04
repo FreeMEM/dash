@@ -1,0 +1,86 @@
+# Test: SHA-1 (para dashgit), de un texto, de un búfer y por partes, con los resultados de hashlib de Python: el
+# vacío, "abc", el objeto de git de "hello\n" ("blob 6", un byte 0 y el contenido), los largos del borde de un
+# bloque (55, 56 y 64 bytes: el relleno cabe o no en el bloque) y 1000 bytes en trozos. Un número que no está en
+# uso da "". Y lo demás de git: adler32 (la suma de un zlib) e inflate_used (dónde acaba un objeto de un pack:
+# un zlib hecho a mano, 78 9C + deflate + adler32, con bytes detrás).
+# expect-out: da39a3ee5e6b4b0d3255bfef95601890afd80709
+# expect-out: a9993e364706816aba3e25717850c26c9cd0d89d
+# expect-out: git ce013625030ba8dba906f756967f9e9ca394464a
+# expect-out: 55 cef734ba81a024479e09eb5a75b6ddae62e6abf1
+# expect-out: 56 901305367c259952f4e7af8323f480d59f81335b
+# expect-out: 64 bb2fa3ee7afb9f54c6dfb5d021f14b1ffe40c163
+# expect-out: 1000 291e9a6c66994949b57ba5e650361e98fc36b1ba
+# expect-out: bytes true 169 153 157
+# expect-out: acabado ""
+# expect-out: adler 230228745
+# expect-out: zlib 8 true
+
+func equis(n: Int) -> String
+    s = ""
+    for i in (1..n)
+        s = s + "x"
+    end
+    return s
+end
+
+Main
+    Print sha1_text("")
+    Print sha1_text("abc")
+    # el objeto de git: "blob 6", un 0 y "hello\n"
+    g = sha1_new()
+    sha1_add_text(g, "blob 6")
+    sha1_add_byte(g, 0)
+    sha1_add_text(g, "hello\n")
+    Print "git #{sha1_hex(g)}"
+    Print "55 #{sha1_text(equis(55))}"
+    Print "56 #{sha1_text(equis(56))}"
+    Print "64 #{sha1_text(equis(64))}"
+    # 1000 "a" en un búfer, por trozos de 7 bytes (y lo que sobre)
+    b = buffer_alloc(1000)
+    buffer_fill(b, 0, 1000, 97)
+    h = sha1_new()
+    i = 0
+    while i < 1000
+        n = 7
+        if i + n > 1000
+            n = 1000 - i
+        end
+        tmp = buffer_alloc(7)
+        buffer_copy(tmp, 0, b, i, n)
+        sha1_add(h, tmp, n)
+        buffer_free(tmp)
+        i = i + n
+    end
+    Print "1000 #{sha1_hex(h)}"
+    # los 20 bytes: "abc" empieza por a9 99 y acaba en 9d (169, 153 y 157)
+    k = sha1_new()
+    sha1_add(k, b, 0)
+    sha1_add_text(k, "abc")
+    out = buffer_alloc(20)
+    ok = sha1_bytes(k, out)
+    Print "bytes #{ok} #{buffer_get_byte(out, 0)} #{buffer_get_byte(out, 1)} #{buffer_get_byte(out, 19)}"
+    Print "acabado \"#{sha1_hex(k)}\""
+    buffer_free(out)
+    buffer_free(b)
+    # un objeto de git: "hola git" en zlib, y detrás otro (aquí, 3 bytes): inflate_used dice dónde acaba
+    txt = buffer_alloc(8)
+    for j in (0..7)
+        buffer_set_byte(txt, j, str_code("hola git", j))
+    end
+    a = adler32(txt, 8, 1)
+    Print "adler #{a}"
+    z = buffer_alloc(64)
+    buffer_set_byte(z, 0, 0x78)
+    buffer_set_byte(z, 1, 0x9C)
+    raw = deflate(txt, 8, z + 2, 50, 6)
+    buffer_set_long(z, 2 + raw, a)
+    buffer_set_byte(z, 6 + raw, 88)
+    buffer_set_byte(z, 7 + raw, 89)
+    buffer_set_byte(z, 8 + raw, 90)
+    dst = buffer_alloc(32)
+    got = inflate_auto(z, 9 + raw, dst, 32)
+    Print "zlib #{got} #{inflate_used() == 6 + raw}"
+    buffer_free(dst)
+    buffer_free(z)
+    buffer_free(txt)
+end

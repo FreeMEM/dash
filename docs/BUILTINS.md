@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 909 funciones, 909 implementadas, 0 sin implementar.
+Total: 921 funciones, 921 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -564,6 +564,7 @@ Total: 909 funciones, 909 implementadas, 0 sin implementar.
 | `clock_minute()` | `LONG` | El minuto del último clock_read |  |
 | `clock_second()` | `LONG` | El segundo del último clock_read |  |
 | `date_text(format)` | `STRPTR` | La fecha y la hora de ahora como dice format, con el FormatDate de locale.library en el idioma y el país del usuario: %A día, %d-%m-%Y, %b mes, %H:%M:%S... (en inglés sin locale.library) |  |
+| `locale_gmt_offset()` | `LONG` | Cuántos minutos va el reloj del Amiga por delante de GMT (60 en España en invierno), de Locale; 0 sin locale.library. Así guarda git sus horas ("+0100") |  |
 | `locale_decimal_point()` | `STRPTR` | Lo que va antes de los decimales en el país del usuario: "," en España, "." en inglés (también sin locale.library) |  |
 | `locale_group_separator()` | `STRPTR` | Lo que separa los miles en el país del usuario: "." en España (1.234,5), "," en inglés (1,234.5); puede ser "" |  |
 | `locale_date_order()` | `STRPTR` | El orden de día, mes y año en la fecha corta del usuario: "DMY", "MDY" o "YMD" |  |
@@ -617,6 +618,16 @@ Total: 909 funciones, 909 implementadas, 0 sin implementar.
 | `inflate_auto(src, n, dest, max)` | `LONG` | inflate para gzip, zlib o deflate sin cabecera, según sus primeros bytes (un cuerpo HTTP con Content-Encoding gzip o deflate): los bytes escritos, o lo mismo que inflate |  |
 | `deflate(src, n, dest, max, level)` | `LONG` | Comprime n bytes del búfer src a dest como deflate sin cabecera, nivel 0 (sin comprimir) a 9 (lo más pequeño; -1: 6): los bytes escritos, -2 si no caben en max, -3 si no hay memoria (zlib; unos 260 KB mientras trabaja, con cualquier nivel) |  |
 | `crc32(buffer, n, crc)` | `LONG` | El CRC-32 (como en ZIP y PNG) de n bytes de un búfer, siguiendo desde crc (0 para empezar) |  |
+| `adler32(buffer, n, a)` | `LONG` | El Adler-32 (la suma del final de un zlib) de n bytes de un búfer, siguiendo desde a (1 para empezar) |  |
+| `inflate_used()` | `LONG` | Los bytes de entrada que usó el último inflate o inflate_auto (con cabecera zlib, también su adler32): dónde empieza el siguiente objeto en un pack de git |  |
+| `sha1(buffer, n)` | `STRPTR` | El SHA-1 de n bytes de un búfer, en 40 cifras hexadecimales (así nombra git sus objetos) |  |
+| `sha1_text(s)` | `STRPTR` | El SHA-1 de un texto, en 40 cifras hexadecimales |  |
+| `sha1_new()` | `LONG` | Un SHA-1 hecho por partes con sha1_add, sha1_add_text y sha1_add_byte: su número (1-8), 0 si están todos en uso. Lo acaban sha1_hex o sha1_bytes |  |
+| `sha1_add(sha, buffer, n)` | `void` | Añade n bytes de un búfer a un SHA-1 de sha1_new |  |
+| `sha1_add_text(sha, s)` | `void` | Añade un texto a un SHA-1 de sha1_new |  |
+| `sha1_add_byte(sha, b)` | `void` | Añade un byte (0-255) a un SHA-1 de sha1_new (el 0 tras el "blob 6" de git) |  |
+| `sha1_hex(sha)` | `STRPTR` | Acaba un SHA-1 de sha1_new: sus 40 cifras hexadecimales ("" si ese número no está en uso) |  |
+| `sha1_bytes(sha, out)` | `BOOL` | Acaba un SHA-1 de sha1_new: sus 20 bytes a un búfer (como los guarda git en los árboles y el índice); false si ese número no está en uso |  |
 
 ## UTF-8
 
@@ -719,6 +730,7 @@ Total: 909 funciones, 909 implementadas, 0 sin implementar.
 | `time_unix()` | `LONG` | El reloj del sistema en segundos desde el 1 de enero de 1970 (para fechas de HTTP y cookies) |  |
 | `clock_days()` | `LONG` | Los días desde el 1 de enero de 1978 según el reloj del sistema (el ds_Days de DateStamp) |  |
 | `mem_largest()` | `LONG` | El bloque de memoria libre más grande, chip o fast, en bytes |  |
+| `program_exit(rc)` | `void` | Acaba el programa ya con ese código de retorno (5 aviso, 10 error, 20 fallo), tras la limpieza de siempre: ventanas, ficheros y memoria |  |
 | `run_command(command)` | `LONG` | Ejecuta una orden y espera a que acabe, con su salida en la del programa: su código de retorno, -1 si no pudo empezar |  |
 | `wb_open(path)` | `BOOL` | Abre un cajón, un programa o un proyecto como un doble clic en su icono (workbench.library 44, OS 3.5+); false si no pudo |  |
 | `program_path()` | `STRPTR` | La ruta entera del programa ("Work:Tachyon/Tachyon"), desde un Shell o desde el Workbench |  |
