@@ -595,6 +595,8 @@ const BuiltinInfo builtin_info[] = {
     {"gt_wait_event", 0, 1, 1, 0},
     {"icon_draw", 3, 0, 1, 0},
     {"icon_draw", 3, 0, 1, 0},
+    {"icon_draw_size", 5, 0, 1, 0},
+    {"icon_draw_size", 5, 0, 1, 0},
     {"icon_free", 1, 0, 1, 0},
     {"icon_free", 1, 0, 1, 0},
     {"icon_height", 1, 1, 1, 0},
@@ -1844,7 +1846,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1842;
+const int builtin_count = 1844;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

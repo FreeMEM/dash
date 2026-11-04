@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 921 functions, 921 implemented, 0 not implemented.
+Total: 922 functions, 922 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -898,6 +898,7 @@ Total: 921 functions, 921 implemented, 0 not implemented.
 | `app_drop_y()` | `LONG` | Where the last icon of app_drop fell: y from the window's corner |  |
 | `icon_load(path)` | `LONG` | The icon (.info) of a program, drawer or file (path without ".info"), by icon.library, with the colours of the window's screen (3.5+: colour and PNG icons, and the default one of its type if it has none): a number for icon_draw, or 0 |  |
 | `icon_draw(icon, x, y)` | `void` | Draws an icon of icon_load with its top left corner at (x, y), as the Workbench does, without its name or frame |  |
+| `icon_draw_size(icon, x, y, width, height)` | `void` | Draws an icon of icon_load at (x, y) at width x height, smaller or bigger, with soft edges (on a true colour screen; on others, at its size, centred in that box) |  |
 | `icon_width(icon)` | `LONG` | The width of an icon of icon_load as icon_draw draws it (0 without it) |  |
 | `icon_height(icon)` | `LONG` | The height of an icon of icon_load as icon_draw draws it (0 without it) |  |
 | `icon_free(icon)` | `void` | Frees an icon of icon_load (the ones left, at exit) |  |

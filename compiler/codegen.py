@@ -4521,6 +4521,7 @@ static LONG _dash_app_drop_y(void) { return _dash_appw_y; }
 static struct Library *_dash_icons_lib = NULL;
 static struct DiskObject *_dash_icons[_DASH_ICONS_MAX + 1];
 static WORD _dash_icons_box[_DASH_ICONS_MAX + 1][4];    /* left, top (from where it is drawn), width, height */
+static UBYTE *_dash_icons_px[_DASH_ICONS_MAX + 1];      /* icon_draw_size: the scaled copy (see below) */
 
 static void _dash_icons_cleanup(void) {
     struct Library *IconBase = _dash_icons_lib;
@@ -4528,6 +4529,8 @@ static void _dash_icons_cleanup(void) {
     if (!IconBase) return;
     for (i = 1; i <= _DASH_ICONS_MAX; i++)
         if (_dash_icons[i]) {
+            if (_dash_icons_px[i]) FreeVec(_dash_icons_px[i]);
+            _dash_icons_px[i] = NULL;
             FreeDiskObject(_dash_icons[i]);
             _dash_icons[i] = NULL;
         }
@@ -4610,10 +4613,126 @@ static void _dash_icon_draw(LONG id, LONG x, LONG y) {
         DrawImage(_dash_rp, (struct Image *)d->do_Gadget.GadgetRender, x, y);
 }
 
+/* icon_draw_size: the icon drawn once in a bitmap of its own over black and over white (what changes between the
+   two is how see-through each pixel is: also the soft edges of colour and PNG icons), shrunk or grown to w x h with
+   an average of the pixels it covers, and kept (premultiplied colour and alpha, 4 bytes a pixel) until another size */
+static WORD _dash_icons_pw[_DASH_ICONS_MAX + 1], _dash_icons_ph[_DASH_ICONS_MAX + 1];
+
+static void _dash_icon_unscale(LONG id) {
+    if (_dash_icons_px[id]) {
+        FreeVec(_dash_icons_px[id]);
+        _dash_icons_px[id] = NULL;
+    }
+    _dash_icons_pw[id] = _dash_icons_ph[id] = 0;
+}
+
+static void _dash_icon_render(struct RastPort *rp, LONG id, struct DiskObject *d) {
+    struct Library *IconBase = _dash_icons_lib;
+    if (IconBase->lib_Version >= 44) {
+        struct TagItem tags[4];
+        tags[0].ti_Tag = ICONDRAWA_Borderless; tags[0].ti_Data = TRUE;
+        tags[1].ti_Tag = ICONDRAWA_Frameless; tags[1].ti_Data = TRUE;
+        tags[2].ti_Tag = ICONDRAWA_EraseBackground; tags[2].ti_Data = FALSE;
+        tags[3].ti_Tag = TAG_DONE;
+        DrawIconStateA(rp, d, NULL, -_dash_icons_box[id][0], -_dash_icons_box[id][1], IDS_NORMAL, tags);
+    } else if (d->do_Gadget.GadgetRender)
+        DrawImage(rp, (struct Image *)d->do_Gadget.GadgetRender, 0, 0);
+}
+
+/* The scaled copy of icon id at w x h, made if needed; NULL if it cannot be made */
+static UBYTE *_dash_icon_scaled(LONG id, LONG w, LONG h) {
+    struct DiskObject *d = _dash_icon_get(id);
+    LONG iw = _dash_icons_box[id][2], ih = _dash_icons_box[id][3], n, i, x, y;
+    struct BitMap *bm;
+    struct RastPort rp;
+    UBYTE *negro, *blanco, *px;
+    if (_dash_icons_px[id] && _dash_icons_pw[id] == w && _dash_icons_ph[id] == h) return _dash_icons_px[id];
+    _dash_icon_unscale(id);
+    if (!d || iw <= 0 || ih <= 0) return NULL;
+    n = iw * ih * 3;
+    bm = AllocBitMap(iw, ih, GetBitMapAttr(_dash_rp->BitMap, BMA_DEPTH), BMF_CLEAR, _dash_rp->BitMap);
+    negro = (UBYTE *)AllocVec(n * 2, MEMF_ANY | MEMF_CLEAR);
+    px = (UBYTE *)AllocVec(w * h * 4, MEMF_ANY);
+    if (!bm || !negro || !px) {
+        if (bm) FreeBitMap(bm);
+        if (negro) FreeVec(negro);
+        if (px) FreeVec(px);
+        return NULL;
+    }
+    blanco = negro + n;
+    InitRastPort(&rp);
+    rp.BitMap = bm;
+    _dash_rgb_block_rp(&rp, TRUE, negro, iw * 3, 0, 0, iw, ih);     /* over black */
+    _dash_icon_render(&rp, id, d);
+    _dash_rgb_block_rp(&rp, FALSE, negro, iw * 3, 0, 0, iw, ih);
+    for (i = 0; i < n; i++) blanco[i] = 255;                       /* and over white */
+    _dash_rgb_block_rp(&rp, TRUE, blanco, iw * 3, 0, 0, iw, ih);
+    _dash_icon_render(&rp, id, d);
+    _dash_rgb_block_rp(&rp, FALSE, blanco, iw * 3, 0, 0, iw, ih);
+    WaitBlit();
+    FreeBitMap(bm);
+    /* over black, a pixel is its colour times its alpha; over white, that plus 255 - alpha */
+    for (i = 0; i < n; i += 3) {
+        LONG a = 255 - ((LONG)blanco[i] - negro[i] + blanco[i + 1] - negro[i + 1] + blanco[i + 2] - negro[i + 2]) / 3;
+        blanco[i] = a < 0 ? 0 : a > 255 ? 255 : a;
+    }
+    for (y = 0; y < h; y++) {
+        LONG y0 = y * ih / h, y1 = (y + 1) * ih / h;
+        if (y1 <= y0) y1 = y0 + 1;
+        for (x = 0; x < w; x++) {
+            LONG x0 = x * iw / w, x1 = (x + 1) * iw / w, sa = 0, sr = 0, sg = 0, sb = 0, k = 0, u, v;
+            UBYTE *o = px + (y * w + x) * 4;
+            if (x1 <= x0) x1 = x0 + 1;
+            for (v = y0; v < y1; v++)
+                for (u = x0; u < x1; u++) {
+                    UBYTE *s = negro + (v * iw + u) * 3;
+                    sa += blanco[(v * iw + u) * 3];
+                    sr += s[0]; sg += s[1]; sb += s[2];
+                    k++;
+                }
+            o[0] = sa / k; o[1] = sr / k; o[2] = sg / k; o[3] = sb / k;
+        }
+    }
+    FreeVec(negro);
+    _dash_icons_px[id] = px;
+    _dash_icons_pw[id] = w;
+    _dash_icons_ph[id] = h;
+    return px;
+}
+
+/* Drawn at (x, y) of the window at w x h, over what is there, with soft edges (true colour screens; on others, as
+   icon_draw, centred in that box) */
+static void _dash_icon_draw_size(LONG id, LONG x, LONG y, LONG w, LONG h) {
+    UBYTE *px, *fondo;
+    LONG i, n;
+    if (!_dash_icon_get(id) || !_dash_rp || w <= 0 || h <= 0) return;
+    if (w == _dash_icons_box[id][2] && h == _dash_icons_box[id][3]) {
+        _dash_icon_draw(id, x, y);
+        return;
+    }
+    if (!_dash_blend_truecolor(_dash_rp) || !(px = _dash_icon_scaled(id, w, h))) {
+        _dash_icon_draw(id, x + (w - _dash_icons_box[id][2]) / 2, y + (h - _dash_icons_box[id][3]) / 2);
+        return;
+    }
+    n = w * h;
+    if (!(fondo = (UBYTE *)AllocVec(n * 3, MEMF_ANY))) return;
+    _dash_rgb_block(FALSE, fondo, w * 3, x, y, w, h);
+    for (i = 0; i < n; i++) {
+        UBYTE *s = px + i * 4, *f = fondo + i * 3;
+        LONG k = 255 - s[0];
+        f[0] = s[1] + (f[0] * k + 127) / 255;
+        f[1] = s[2] + (f[1] * k + 127) / 255;
+        f[2] = s[3] + (f[2] * k + 127) / 255;
+    }
+    _dash_rgb_block(TRUE, fondo, w * 3, x, y, w, h);
+    FreeVec(fondo);
+}
+
 static void _dash_icon_free(LONG id) {
     struct Library *IconBase = _dash_icons_lib;
     struct DiskObject *d = _dash_icon_get(id);
     if (!d || !IconBase) return;
+    _dash_icon_unscale(id);
     FreeDiskObject(d);
     _dash_icons[id] = NULL;
 }
@@ -25774,6 +25893,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_gfx = True
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
+        if self.uses_icons:
+            self.uses_blend = True     # icon_draw_size draws its RGB pixels with BLEND_RUNTIME (_dash_rgb_block)
         if self.uses_debugger:
             # dbg_value shows lists, dictionaries, Floats and Doubles of the debugged program
             self.uses_arrays = self.uses_dicts = self.uses_float = self.uses_double = True
