@@ -71,6 +71,18 @@ def main():
                 (caj / f"{nombre}.info").write_bytes(situar((pq / f"{nombre}.info").read_bytes(), x, 6))
         else:
             print(f"sin {nombre}: falta {pq / nombre} (python3 tools/paquete.py en su proyecto)")
+    # dashgit (un git escrito en Dash, GPLv2 como git: DASHGIT o ~/Projects/dashgit), compilado con este Dash: la
+    # orden DASH:dashgit y su licencia al lado; sus fuentes, en su repositorio (lo dice el LEEME)
+    dg = Path(os.environ.get("DASHGIT") or Path.home() / "Projects/dashgit")
+    if (dg / "src/main.dash").exists():
+        r = subprocess.run([str(raiz / "dash"), "src/main.dash", "-o", str(caj / "dashgit")], cwd=dg,
+                           capture_output=True, text=True)
+        if r.returncode:
+            sys.exit(f"dashgit no compila:\n{r.stdout}{r.stderr}")
+        (caj / "dashgit").chmod(0o755)
+        shutil.copy(dg / "LICENSE", caj / "dashgit.LICENSE")
+    else:
+        print(f"sin dashgit: falta {dg / 'src/main.dash'}")
     # el Amiga lee ISO-8859-1: el script (con el número de la versión) y los textos, de UTF-8 a Latin-1
     (caj / "Instalar").write_bytes((raiz / "paquete/Instalar").read_text().replace("@VERSION@", version)
                                    .encode("latin-1"))

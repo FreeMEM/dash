@@ -260,6 +260,10 @@ dash DASH:examples/hola.dash -o RAM:hola
 RAM:hola
 ```
 
+El paquete trae también Forja (el entorno de programación), Inferencia (la IA que programa en el Amiga) y dashgit,
+un git escrito en Dash (`DASH:dashgit`; con AmiSSL, `clone`, `pull` y `push` por HTTPS). dashgit tiene licencia
+GPLv2, como git (`DASH:dashgit.LICENSE`); sus fuentes están en https://github.com/FreeMEM/dashgit.
+
 Con el mismo fuente, el ejecutable sale idéntico al que hace `./dash` en el PC. En el Amiga no hay `--gcc`.
 
 ### Por C con gcc (`--gcc`)
