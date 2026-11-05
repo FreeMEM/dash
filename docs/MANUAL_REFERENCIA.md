@@ -3952,7 +3952,8 @@ end
 ### Lanzar programas: run_program y program_relaunch
 
 - `run_program(orden)`: lanza una línea de órdenes (`"SYS:Prefs/Font"`, con comillas si la ruta tiene espacios) en
-  otro proceso, sin esperarla, con la entrada y la salida a `NIL:`. `false` si no pudo arrancar.
+  otro proceso, sin esperarla, con la entrada y la salida a `NIL:`. `false` si no pudo arrancar. La orden busca en
+  el path del programa o, si arrancó desde el Workbench (que no da path), en el del Workbench. `run_command` igual.
 - `program_relaunch()`: al acabar el programa, lo vuelve a lanzar, después de todo lo demás del final (también el
   puerto de `single_instance`, así que la copia nueva no encuentra a la vieja) y como arrancó: desde el Workbench
   con `OpenWorkbenchObject` (3.5 o posterior: lee los tooltypes de su icono) o desde una Shell con los mismos

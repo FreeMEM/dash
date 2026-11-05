@@ -3953,7 +3953,9 @@ end
 ### Launching programs: run_program and program_relaunch
 
 - `run_program(orden)`: launches a command line (`"SYS:Prefs/Font"`, with quotes if the path contains spaces) in
-  another process, without waiting for it, with input and output to `NIL:`. `false` if it could not start.
+  another process, without waiting for it, with input and output to `NIL:`. `false` if it could not start. The
+  command is looked for in the program's path or, if it started from the Workbench (which gives none), in the
+  Workbench's. The same for `run_command`.
 - `program_relaunch()`: when the program ends, launches it again, after everything else at the end (including the
   `single_instance` port, so the new copy does not find the old one) and the way it was started: from the Workbench
   with `OpenWorkbenchObject` (3.5 or later: it reads the tooltypes of its icon) or from a Shell with the same
