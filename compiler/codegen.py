@@ -6362,6 +6362,7 @@ static struct Hook *_dash_edit_prepare(void) {
     if (!_dash_edit_io && (_dash_edit_io = _dash_clip_open(0, &_dash_edit_port))) atexit(_dash_edit_end);
     return &_dash_edit_hook;
 }
+#define _DASH_EDIT_HOOK _dash_edit_prepare()     /* (the text fields of GADTOOLS, GADGET and REACTION_RUNTIME) */
 
 static ULONG _dash_edit_fn(struct Hook *hk __asm("a0"), struct SGWork *sg __asm("a2"), ULONG *msg __asm("a1")) {
     struct InputEvent *ie;
@@ -17490,6 +17491,9 @@ static BOOL _dash_check_close(void) {
     # GadTools runtime
     GADTOOLS_RUNTIME = """\
 /* Dash GadTools Runtime */
+#ifndef _DASH_EDIT_HOOK
+#define _DASH_EDIT_HOOK NULL   /* (no text field in the program: no EDITKEYS_RUNTIME) */
+#endif
 #ifndef _DASH_GADTOOLSBASE
 #define _DASH_GADTOOLSBASE
 struct Library *GadToolsBase = NULL;
@@ -17590,7 +17594,7 @@ static LONG _dash_gt_string(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR
     _dash_gad = CreateGadget(STRING_KIND, _dash_gad, &ng,
         GTST_String, (ULONG)initial,
         GTST_MaxChars, maxchars,
-        GTST_EditHook, (ULONG)_dash_edit_prepare(),
+        GTST_EditHook, (ULONG)_DASH_EDIT_HOOK,
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
@@ -17607,7 +17611,7 @@ static LONG _dash_gt_integer(LONG x, LONG y, LONG w, LONG h, STRPTR label, LONG 
     };
     _dash_gad = CreateGadget(INTEGER_KIND, _dash_gad, &ng,
         GTIN_Number, initial,
-        GTIN_EditHook, (ULONG)_dash_edit_prepare(),
+        GTIN_EditHook, (ULONG)_DASH_EDIT_HOOK,
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
@@ -17881,6 +17885,9 @@ static LONG _dash_gt_wait_event(void) {
     # GT_GetIMsg and calls _dash_gadget_event() so "On Gadget" and gadget_id() work.
     GADGET_RUNTIME = """\
 /* Dash Gadget Handles */
+#ifndef _DASH_EDIT_HOOK
+#define _DASH_EDIT_HOOK NULL   /* (no text field in the program: no EDITKEYS_RUNTIME) */
+#endif
 #include <libraries/gadtools.h>
 #ifndef CHECKBOXWIDTH
 #define CHECKBOXWIDTH 26
@@ -18178,7 +18185,7 @@ static void _dash_slider_set(LONG h, LONG value) {
 
 static LONG _dash_textfield_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG maxlen) {
     struct TagItem tags[] = { { GTST_MaxChars, (ULONG)(maxlen > 0 ? maxlen : 64) },
-                              { GTST_EditHook, (ULONG)_dash_edit_prepare() }, { TAG_DONE, 0 } };
+                              { GTST_EditHook, (ULONG)_DASH_EDIT_HOOK }, { TAG_DONE, 0 } };
     return _dash_gad_new(win, _DASH_GK_TEXT, STRING_KIND, x, y, w, h, NULL, 0, tags);
 }
 
@@ -18299,7 +18306,7 @@ static LONG _dash_radio_create(LONG win, LONG x, LONG y, STRPTR options) {
 
 static LONG _dash_integer_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG value) {
     struct TagItem tags[] = { { GTIN_Number, (ULONG)value }, { GTIN_MaxChars, 10 },
-                              { GTIN_EditHook, (ULONG)_dash_edit_prepare() }, { TAG_DONE, 0 } };
+                              { GTIN_EditHook, (ULONG)_DASH_EDIT_HOOK }, { TAG_DONE, 0 } };
     LONG hd = _dash_gad_new(win, _DASH_GK_INTEGER, INTEGER_KIND, x, y, w, h, NULL, 0, tags);
     if (hd) _dash_gads[hd].value = value;
     return hd;
@@ -18835,6 +18842,9 @@ static void _dash_buffer_fill(APTR buffer, LONG offset, LONG length, UBYTE value
     # ReAction Runtime (for AmigaOS 3.2+ / 4.x)
     REACTION_RUNTIME = """\
 /* ReAction Runtime */
+#ifndef _DASH_EDIT_HOOK
+#define _DASH_EDIT_HOOK NULL   /* (no text field in the program: no EDITKEYS_RUNTIME) */
+#endif
 #define ALL_REACTION_CLASSES
 #define ALL_REACTION_MACROS
 #include <reaction/reaction.h>
@@ -19235,7 +19245,7 @@ static LONG ra_add_string(LONG id, STRPTR initial, LONG maxchars) {
         GA_RelVerify, TRUE,
         STRINGA_TextVal, initial,
         STRINGA_MaxChars, maxchars,
-        STRINGA_EditHook, _dash_edit_prepare(),
+        STRINGA_EditHook, _DASH_EDIT_HOOK,
         TAG_DONE);
 
     if (str) {
