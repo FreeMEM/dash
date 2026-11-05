@@ -6359,7 +6359,7 @@ static void _dash_edit_end(void) {
 
 /* Before the first text field: clipboard.device in memory while the program runs */
 static struct Hook *_dash_edit_prepare(void) {
-    if (!_dash_edit_io && (_dash_edit_io = _dash_clip_open(0, &_dash_edit_port))) atexit(_dash_edit_end);
+    if (!_dash_edit_io && (_dash_edit_io = _dash_clip_open(0, &_dash_edit_port))) _dash_atexit(_dash_edit_end);
     return &_dash_edit_hook;
 }
 #define _DASH_EDIT_HOOK _dash_edit_prepare()     /* (the text fields of GADTOOLS, GADGET and REACTION_RUNTIME) */
