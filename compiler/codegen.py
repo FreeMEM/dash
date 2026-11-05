@@ -6335,6 +6335,101 @@ static BPTR _dash_wb_path(void) {
 #endif
 """
 
+    # Text fields (Ferrán García, Trasfondo and Tachyon): one string edit hook for GadTools, ReAction and MUI
+    EDITKEYS_RUNTIME = """\
+/* Dash text fields of GadTools and ReAction: Ctrl, left Amiga or right Amiga with V pastes the text of the
+   clipboard at the cursor (its first line; in a number field, only its digits), with C copies the whole text and
+   with X cuts it. Intuition's string gadgets do none of it (right Amiga + V wrote a "v"), so they get this string
+   edit hook (GTST_EditHook, GTIN_EditHook, STRINGA_EditHook). MUI's strings paste by themselves (right Amiga or
+   Ctrl + V, and copy what is selected), and their edit hook does not get the keys held down: not there.
+   Intuition calls it from input.device's task: clipboard.device is kept open by the program, so opening it there
+   again never loads it from disk, and nothing of Dash's memory is touched. */
+#include <intuition/sghooks.h>
+#include <utility/hooks.h>
+
+static ULONG _dash_edit_fn(struct Hook *hk __asm("a0"), struct SGWork *sg __asm("a2"), ULONG *msg __asm("a1"));
+static struct Hook _dash_edit_hook = { { NULL, NULL }, (ULONG (*)())_dash_edit_fn, NULL, NULL };
+static struct MsgPort *_dash_edit_port;
+static struct IOClipReq *_dash_edit_io;
+
+static void _dash_edit_end(void) {
+    if (_dash_edit_io) _dash_clip_close(_dash_edit_io, _dash_edit_port);
+    _dash_edit_io = NULL;
+}
+
+/* Before the first text field: clipboard.device in memory while the program runs */
+static struct Hook *_dash_edit_prepare(void) {
+    if (!_dash_edit_io && (_dash_edit_io = _dash_clip_open(0, &_dash_edit_port))) atexit(_dash_edit_end);
+    return &_dash_edit_hook;
+}
+
+static ULONG _dash_edit_fn(struct Hook *hk __asm("a0"), struct SGWork *sg __asm("a2"), ULONG *msg __asm("a1")) {
+    struct InputEvent *ie;
+    UBYTE *w, *clip, *form, *data;
+    UWORD q, code;
+    LONG pos, n, max, add, i;
+    ULONG len, fn, at, id, size;
+    BOOL number;
+    if (*msg != SGH_KEY) return 0;
+    ie = sg->IEvent;
+    if (!ie || ie->ie_Class != IECLASS_RAWKEY || (ie->ie_Code & IECODE_UP_PREFIX)) return ~0UL;
+    q = ie->ie_Qualifier;
+    code = ie->ie_Code;
+    if (code != 0x34 && code != 0x33 && code != 0x32) return ~0UL;              /* V, C, X */
+    if (!(q & (IEQUALIFIER_CONTROL | IEQUALIFIER_LCOMMAND | IEQUALIFIER_RCOMMAND)))
+        return ~0UL;
+    /* the field as it was before this key: Intuition has already done its own edit with it (with right Amiga,
+       the letter put in; ReAction's PrevBuffer is the text from before the field was activated, not this key's) */
+    if (sg->EditOp == EO_BIGCHANGE) return ~0UL;    /* it did it itself (3.2's string.gadget, right Amiga + V) */
+    w = (UBYTE *)sg->WorkBuffer;
+    pos = sg->BufferPos;
+    n = sg->NumChars;
+    if (sg->EditOp == EO_INSERTCHAR && pos > 0) {
+        memmove(w + pos - 1, w + pos, n - pos + 1);
+        pos--;
+        n--;
+    } else if (sg->EditOp == EO_CLEAR && sg->PrevBuffer && sg->StringInfo) {   /* (right Amiga + X clears it) */
+        n = strlen((char *)sg->PrevBuffer);
+        CopyMem(sg->PrevBuffer, w, n + 1);
+        pos = sg->StringInfo->BufferPos;
+    }
+    w[n] = 0;
+    max = sg->StringInfo ? sg->StringInfo->MaxChars - 1 : 0;
+    if (pos < 0 || pos > n) pos = n;
+    if (code == 0x33 || code == 0x32)                                            /* copy (and cut): the whole text */
+        _dash_clip_put(0, _DASH_CLIP_ID('F', 'T', 'X', 'T'), _DASH_CLIP_ID('C', 'H', 'R', 'S'), w, n, FALSE);
+    if (code == 0x32) {
+        w[0] = 0;
+        n = pos = 0;
+    } else {
+        if (code == 0x34 && (clip = _dash_clip_get(0, &len))) {                /* paste at the cursor */
+            number = sg->Gadget && (sg->Gadget->Activation & GACT_LONGINT);
+            if ((form = _dash_clip_form(clip, len, _DASH_CLIP_ID('F', 'T', 'X', 'T'), &fn)))
+                for (at = 0; _dash_clip_chunk(form, fn, &at, &id, &data, &size); )
+                    if (id == _DASH_CLIP_ID('C', 'H', 'R', 'S')) {
+                        for (add = 0; add < (LONG)size && data[add] != 10 && data[add] != 13; add++)
+                            ;
+                        for (i = 0; i < add && n < max; i++) {
+                            UBYTE c = data[i];
+                            if (c < 32 || c == 127 || (number && !((c >= '0' && c <= '9') || c == '-'))) continue;
+                            memmove(w + pos + 1, w + pos, n - pos + 1);
+                            w[pos++] = c;
+                            n++;
+                        }
+                        break;                                                   /* (the first text only) */
+                    }
+            FreeVec(clip);
+        }
+    }
+    sg->NumChars = n;
+    sg->BufferPos = pos;
+    sg->EditOp = EO_BIGCHANGE;
+    sg->Actions = (sg->Actions | SGA_USE | SGA_REDISPLAY) & ~(SGA_BEEP | SGA_END);
+    return ~0UL;
+}
+
+"""
+
     PROC_RUNTIME = """\
 /* Dash program runtime: run_program(command) starts a command line in another process without waiting
    (SystemTags, input and output NIL:; from the Workbench, with its path); program_relaunch() starts the program
@@ -14937,15 +15032,36 @@ static LONG _dash_screen_font_text_width(STRPTR text) {
     return w;
 }
 
-/* ChangeWindowBox takes absolute values (MoveWindow/SizeWindow take deltas) */
+/* ChangeWindowBox takes absolute values (MoveWindow/SizeWindow take deltas). Intuition does it later: until then
+   the window still has its old box, and a move just after a resize (or the other way round) would put the old
+   size (or place) back (Ferrán García: Trasfondo's bar left a gap when it got narrower). The box asked for last
+   is kept: while the window still has the box it had then, it is the one to start from. */
+static struct Window *_dash_box_win;
+static WORD _dash_box_was[4], _dash_box_asked[4];
+
+static void _dash_window_box(struct Window *w, LONG x, LONG y, LONG width, LONG height, BOOL place, BOOL size) {
+    WORD *b = _dash_box_asked;
+    BOOL pending = _dash_box_win == w && w->LeftEdge == _dash_box_was[0] && w->TopEdge == _dash_box_was[1]
+                   && w->Width == _dash_box_was[2] && w->Height == _dash_box_was[3];
+    if (!place) { x = pending ? b[0] : w->LeftEdge; y = pending ? b[1] : w->TopEdge; }
+    if (!size) { width = pending ? b[2] : w->Width; height = pending ? b[3] : w->Height; }
+    if (!pending) {
+        _dash_box_win = w;
+        _dash_box_was[0] = w->LeftEdge; _dash_box_was[1] = w->TopEdge;
+        _dash_box_was[2] = w->Width; _dash_box_was[3] = w->Height;
+    }
+    b[0] = (WORD)x; b[1] = (WORD)y; b[2] = (WORD)width; b[3] = (WORD)height;
+    ChangeWindowBox(w, x, y, width, height);
+}
+
 static void _dash_window_move(LONG h, LONG x, LONG y) {
     struct Window *w = _dash_window_get(h);
-    if (w) ChangeWindowBox(w, x, y, w->Width, w->Height);
+    if (w) _dash_window_box(w, x, y, 0, 0, TRUE, FALSE);
 }
 
 static void _dash_window_resize(LONG h, LONG width, LONG height) {
     struct Window *w = _dash_window_get(h);
-    if (w) ChangeWindowBox(w, w->LeftEdge, w->TopEdge, width, height);
+    if (w) _dash_window_box(w, 0, 0, width, height, FALSE, TRUE);
 }
 
 static void _dash_window_title(LONG h, STRPTR title) {
@@ -17474,6 +17590,7 @@ static LONG _dash_gt_string(LONG x, LONG y, LONG w, LONG h, STRPTR label, STRPTR
     _dash_gad = CreateGadget(STRING_KIND, _dash_gad, &ng,
         GTST_String, (ULONG)initial,
         GTST_MaxChars, maxchars,
+        GTST_EditHook, (ULONG)_dash_edit_prepare(),
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
@@ -17490,6 +17607,7 @@ static LONG _dash_gt_integer(LONG x, LONG y, LONG w, LONG h, STRPTR label, LONG 
     };
     _dash_gad = CreateGadget(INTEGER_KIND, _dash_gad, &ng,
         GTIN_Number, initial,
+        GTIN_EditHook, (ULONG)_dash_edit_prepare(),
         TAG_DONE);
     if (_dash_gad) {
         _dash_gadgets[_dash_gadget_count] = _dash_gad;
@@ -18059,7 +18177,8 @@ static void _dash_slider_set(LONG h, LONG value) {
 }
 
 static LONG _dash_textfield_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG maxlen) {
-    struct TagItem tags[] = { { GTST_MaxChars, (ULONG)(maxlen > 0 ? maxlen : 64) }, { TAG_DONE, 0 } };
+    struct TagItem tags[] = { { GTST_MaxChars, (ULONG)(maxlen > 0 ? maxlen : 64) },
+                              { GTST_EditHook, (ULONG)_dash_edit_prepare() }, { TAG_DONE, 0 } };
     return _dash_gad_new(win, _DASH_GK_TEXT, STRING_KIND, x, y, w, h, NULL, 0, tags);
 }
 
@@ -18179,7 +18298,8 @@ static LONG _dash_radio_create(LONG win, LONG x, LONG y, STRPTR options) {
 }
 
 static LONG _dash_integer_create(LONG win, LONG x, LONG y, LONG w, LONG h, LONG value) {
-    struct TagItem tags[] = { { GTIN_Number, (ULONG)value }, { GTIN_MaxChars, 10 }, { TAG_DONE, 0 } };
+    struct TagItem tags[] = { { GTIN_Number, (ULONG)value }, { GTIN_MaxChars, 10 },
+                              { GTIN_EditHook, (ULONG)_dash_edit_prepare() }, { TAG_DONE, 0 } };
     LONG hd = _dash_gad_new(win, _DASH_GK_INTEGER, INTEGER_KIND, x, y, w, h, NULL, 0, tags);
     if (hd) _dash_gads[hd].value = value;
     return hd;
@@ -19115,6 +19235,7 @@ static LONG ra_add_string(LONG id, STRPTR initial, LONG maxchars) {
         GA_RelVerify, TRUE,
         STRINGA_TextVal, initial,
         STRINGA_MaxChars, maxchars,
+        STRINGA_EditHook, _dash_edit_prepare(),
         TAG_DONE);
 
     if (str) {
@@ -22410,6 +22531,7 @@ _RUNTIME_FLAGS = [
     ("REGEX_RUNTIME", "uses_regex"),        # Lorraine D45
     ("SIMINPUT_RUNTIME", "uses_siminput"),  # Lorraine D46
     ("CLIP_RUNTIME", "uses_clip"),          # Lorraine D18
+    ("EDITKEYS_RUNTIME", "uses_editkeys"),  # pasting in the text fields (Ferrán García)
     ("DESK_RUNTIME", "uses_desk"),          # Trasfondo
     ("CLICK_RUNTIME", "uses_click"),        # dashweb D27
     ("LOOP_TIMER_RUNTIME", "uses_loop_timer"),
@@ -22757,6 +22879,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_sort: bool = False  # l.sort(f) (SORT_RUNTIME, Lorraine D8)
         self.uses_siminput: bool = False  # input_key, input_click... (SIMINPUT_RUNTIME, Lorraine D46)
         self.uses_clip: bool = False      # clip_write_text, clip_read_block... (CLIP_RUNTIME, Lorraine D18)
+        self.uses_editkeys: bool = False  # a text field: pasting with Ctrl or Amiga + V (EDITKEYS_RUNTIME)
         self._dbl_ctx = 0               # > 0: Float literals are written as C doubles (_double_value)
         self.uses_fixed: bool = False  # Fixed values (16.16): FIXED_RUNTIME
         self.global_strings: Set[str] = set()  # String globals: owned, set with _dash_str_set
@@ -22965,6 +23088,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.SIMINPUT_RUNTIME)
         if self.uses_clip:
             parts.append(CTemplates.CLIP_RUNTIME)
+        if self.uses_editkeys:
+            parts.append(CTemplates.EDITKEYS_RUNTIME)
         if self.uses_split:
             parts.append(CTemplates.SPLIT_RUNTIME)
         if self.uses_text_io or self.uses_net:
@@ -26072,6 +26197,10 @@ static {ret_type} {method_name}({params_str}) {{
         # an ASL builtin is used: _get_main_template drops it otherwise)
         if self.needs_gadtools:
             self.needs_gfx = True
+        if builtin.name in ("gt_string", "gt_integer", "textfield_create", "integer_create", "ra_add_string"):
+            self.uses_editkeys = True  # its edit hook: pasting with Ctrl or Amiga + V (EDITKEYS_RUNTIME)
+        if self.uses_editkeys:
+            self.uses_clip = True      # which reads and writes the clipboard with CLIP_RUNTIME
         if self.uses_images:
             self.uses_blend = True     # image_from_rgb writes RTG bitmaps with BLEND_RUNTIME (D54)
         if self.uses_icons:

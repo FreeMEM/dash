@@ -1,0 +1,40 @@
+# window_move and window_resize one just after the other (Ferrán García: Trasfondo's bar in the title bar left a
+# gap when it got narrower): Intuition changes the box later, so the second one must start from the box the first
+# one asked for, not from the old one still in the window.
+# expect-out: encoger y mover: 200 0 50 20
+# expect-out: mover y agrandar: 40 10 120 30
+# expect-out: dos veces: 60 5 80 25
+# expect-out: fin
+
+@native func caja() -> String
+"""
+    static char b[40];
+    struct Window *w = _dash_window_get(0);
+    if (!w) return _dash_str_dup((STRPTR)"sin ventana", TRUE);
+    sprintf(b, "%ld %ld %ld %ld", (long)w->LeftEdge, (long)w->TopEdge, (long)w->Width, (long)w->Height);
+    return _dash_str_dup((STRPTR)b, TRUE);
+"""
+end
+
+Main
+    if window_create("Caja", 0, 0, 100, 20, 0) == 0
+        Print "sin ventana"
+    end
+    time_delay(10)
+    window_resize(0, 50, 20)
+    window_move(0, 200, 0)
+    time_delay(25)
+    Print "encoger y mover: " + caja()
+    window_move(0, 40, 10)
+    window_resize(0, 120, 30)
+    time_delay(25)
+    Print "mover y agrandar: " + caja()
+    window_resize(0, 90, 25)
+    window_move(0, 70, 5)
+    window_resize(0, 80, 25)
+    window_move(0, 60, 5)
+    time_delay(25)
+    Print "dos veces: " + caja()
+    window_close(0)
+    Print "fin"
+end

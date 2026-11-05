@@ -1,0 +1,62 @@
+# Pasting in MUI text fields (Ferrán García, Tachyon's address bar): MUI's strings paste by themselves with right
+# Amiga + V and with Ctrl + V (Dash's edit hook of GadTools and ReAction is not for them: MUI does not give it the
+# keys held down). The program started again as "teclas" types them.
+# emu-needs: muimaster.library
+# expect-out: Amiga derecha + V: [http://freemem.space]
+# expect-out: Ctrl + V: [ab http://freemem.space]
+# expect-out: fin
+
+func teclas(paso: String)
+    t = 0
+    while input_active_title() != "Pegar" and t < 200
+        time_delay(5)
+        t = t + 1
+    end
+    time_delay(25)
+    if paso == "derecha"
+        input_key(0x34, 8)
+    else
+        input_text("ab ")
+        input_key(0x34, 2)
+    end
+    time_delay(25)
+    input_key(0x44, 0)        # Return: the event
+end
+
+func probar(s: Int, w: Int, paso: String) -> String
+    mui_set_text(s, "")
+    mui_set_active(w, s)
+    h = run_start("\"" + program_path() + "\" " + paso, 30000)
+    ev = 0
+    vueltas = 0
+    while ev != 7 and vueltas < 60
+        mui_timer(100, 1)
+        if mui_wait_event() == 7
+            ev = 7
+        end
+        vueltas = vueltas + 1
+    end
+    r = run_finish(h)
+    return "[" + mui_get_text(s) + "]"
+end
+
+Main
+    if arg(0) != ""
+        teclas(arg(0))
+    elif mui_app_begin("Pegar", "DASHPEGAR") == 0
+        Print "sin MUI"
+    else
+        ok = clip_write_text("http://freemem.space")
+        w = mui_window_begin("Pegar", 0)
+            s = mui_string("", 200)
+            s2 = mui_string("", 200)
+        mui_window_end()
+        mui_on_ack(s, 7)
+        mui_on_ack(s2, 7)
+        mui_window_open(w)
+        Print "Amiga derecha + V: " + probar(s, w, "derecha")
+        Print "Ctrl + V: " + probar(s2, w, "ctrl")    # (another field: the same one once more did not get the keys)
+        mui_app_end()
+        Print "fin"
+    end
+end

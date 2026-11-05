@@ -2968,6 +2968,11 @@ end
 | `gt_enable(id)`, `gt_disable(id)` | Enable or disable a gadget |
 | `gt_set_text(id, texto)` | Change the text of a `gt_text` or `gt_string` |
 
+In text and number fields (`gt_string`, `gt_integer`, and also `textfield_create`, `integer_create` and
+`ra_add_string`), right Amiga, left Amiga or Ctrl with V paste the clipboard at the cursor (its first line; in a
+number field, only the digits), with C copy the whole text and with X cut it. MUI's paste by themselves, with right
+Amiga or Ctrl + V, and copy what is selected.
+
 ---
 
 ## 20. User Interface - ReAction
