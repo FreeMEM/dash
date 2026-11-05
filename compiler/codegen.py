@@ -6305,25 +6305,57 @@ static LONG _dash_file_notify_signal(void) {
 """
 
     # Running programs (Trasfondo 0.7: updating itself)
+    # In PROC_RUNTIME and SYSINFO_RUNTIME (run_program and run_command), once in a C file
+    WB_PATH_C = """\
+#ifndef _DASH_WB_PATH_DEF
+#define _DASH_WB_PATH_DEF
+/* A program started from the Workbench has no CLI and so no path: the shells of run_program and run_command
+   would only find C:, and so would a Shell opened through C:WBRun (Workbench gives it its caller's path).
+   They get a copy of the Workbench's own path, the one a double click gives (the new shell owns it).
+   0 if the caller has a CLI: its path is copied as usual. */
+static BPTR _dash_wb_path(void) {
+    struct Process *wb;
+    struct CommandLineInterface *cli;
+    BPTR p, first = 0, *last = &first;
+    if (((struct Process *)FindTask(NULL))->pr_CLI) return 0;
+    Forbid();
+    wb = (struct Process *)FindTask((CONST_STRPTR)"Workbench");
+    cli = (wb && wb->pr_Task.tc_Node.ln_Type == NT_PROCESS) ? (struct CommandLineInterface *)BADDR(wb->pr_CLI) : NULL;
+    if (cli)
+        for (p = cli->cli_CommandDir; p; p = ((BPTR *)BADDR(p))[0]) {
+            BPTR *node = (BPTR *)AllocVec(8, MEMF_PUBLIC | MEMF_CLEAR);   /* (as dos makes them: next, lock) */
+            if (!node) break;
+            node[1] = DupLock(((BPTR *)BADDR(p))[1]);
+            *last = MKBADDR(node);
+            last = &node[0];
+        }
+    Permit();
+    return first;
+}
+#endif
+"""
+
     PROC_RUNTIME = """\
 /* Dash program runtime: run_program(command) starts a command line in another process without waiting
-   (SystemTags, input and output NIL:); program_relaunch() starts the program again when it ends, after
-   everything else of the end (its single_instance port too), the way it started: from the Workbench with
-   OpenWorkbenchObject (3.5+: it reads its icon), else from a Shell with the same arguments. */
+   (SystemTags, input and output NIL:; from the Workbench, with its path); program_relaunch() starts the program
+   again when it ends, after everything else of the end (its single_instance port too), the way it started: from
+   the Workbench with OpenWorkbenchObject (3.5+: it reads its icon), else from a Shell with the same arguments. */
 #include <dos/dostags.h>
 #include <workbench/startup.h>
 #include <proto/wb.h>
 extern struct WBStartup *_WBenchMsg;
 static BOOL _dash_relaunch = FALSE;
-
+""" + WB_PATH_C + """
 static BOOL _dash_run_program(STRPTR command) {
-    BPTR in, out;
+    BPTR in, out, path;
     if (!command || !*command) return FALSE;
     in = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE);
     out = Open((CONST_STRPTR)"NIL:", MODE_NEWFILE);
     if (!in || !out) { if (in) Close(in); if (out) Close(out); return FALSE; }
-    if (SystemTags(command, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 16384, TAG_DONE) == -1) {
-        Close(in);
+    path = _dash_wb_path();
+    if (SystemTags(command, SYS_Input, in, SYS_Output, out, SYS_Asynch, TRUE, NP_StackSize, 16384,
+                   path ? NP_Path : TAG_IGNORE, path, TAG_DONE) == -1) {
+        Close(in);                   /* (a path given is lost: rare, and dos may have freed it) */
         Close(out);
         return FALSE;
     }
@@ -6378,7 +6410,7 @@ static void _dash_relaunch_now(void) {
 #include <libraries/locale.h>
 #include <proto/locale.h>
 extern struct WBStartup *_WBenchMsg;
-
+""" + WB_PATH_C + """
 static LONG _dash_time_unix(void) {
     struct DateStamp d;
     DateStamp(&d);
@@ -6407,13 +6439,15 @@ static void _dash_console_flush(void) {
 }
 
 static LONG _dash_run_command(STRPTR command) {
-    BPTR nil;
+    BPTR nil, path;
     LONG rc;
     if (!command || !*command) return -1;
     if (!(nil = Open((CONST_STRPTR)"NIL:", MODE_OLDFILE))) return -1;
     _dash_console_flush();          /* what Print left in the buffer goes before the command's output */
+    path = _dash_wb_path();         /* (from the Workbench: its path) */
     /* (waiting for it, System does not close them) */
-    rc = SystemTags(command, SYS_Input, nil, SYS_Output, Output() ? Output() : nil, NP_StackSize, 16384, TAG_DONE);
+    rc = SystemTags(command, SYS_Input, nil, SYS_Output, Output() ? Output() : nil, NP_StackSize, 16384,
+                    path ? NP_Path : TAG_IGNORE, path, TAG_DONE);
     Close(nil);
     return rc;
 }

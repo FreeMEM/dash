@@ -42,6 +42,9 @@ What Trasfondo 2.2's dock and notifications need. All new features; what already
   `rexx_reply(rc, result)`. Before, Dash could only send commands (`rexx_send`). Manual, section 18.
 - **Notifications:** `notify(title, text)` leaves a notification on the desktop, with the program's name: to
   Trasfondo's bar by ARexx (port `TRASFONDO`) or, if it isn't running, in its list, which it shows when it starts.
+- **Fix:** `run_program` and `run_command` in a program started from the Workbench gave the command only `C:` in
+  its path, and so did a Shell opened through `C:WBRun` (Trasfondo's dock). Now they give it a copy of the
+  Workbench's path, the same one a double click gives.
 - Tested on emulated A1200 (3.1 and 3.2) and A500, through both paths.
 
 ### 2.3.1 (2026-11-04)

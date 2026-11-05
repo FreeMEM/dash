@@ -1,0 +1,110 @@
+# run_program and run_command from the Workbench (TrasfondoDock, a Shell opened through C:WBRun): a program
+# started from the Workbench has no CLI and no path, and its commands only found C:. They get a copy of the
+# Workbench's path now. The test puts RAM: in the Workbench's path, opens itself as a double click does, and that
+# copy runs Path with both builtins: RAM: must be in what they list.
+# workbench
+# expect-out: run_program con el path del Workbench: true
+# expect-out: run_command con el path del Workbench: true
+# expect-out: fin
+
+@header "#include <workbench/startup.h>"
+@header "#include <proto/wb.h>"
+@header "extern struct WBStartup *_WBenchMsg;"
+
+@native func escribir(path: String, text: String)
+"""
+    BPTR f = Open((CONST_STRPTR)path, MODE_NEWFILE);
+    if (f) { Write(f, text, strlen((char *)text)); Close(f); }
+"""
+end
+
+# up to 15 s for a file with that text in it
+@native func esperar(path: String, hasta: String) -> String
+"""
+    static char b[600];
+    LONG i, n;
+    BPTR f;
+    b[0] = 0;
+    for (i = 0; i < 750; i++) {
+        if ((f = Open((CONST_STRPTR)path, MODE_OLDFILE))) {
+            n = Read(f, b, sizeof(b) - 1);
+            Close(f);
+            if (n > 0) { b[n] = 0; if (strstr(b, (char *)hasta)) break; }
+        }
+        Delay(2);
+    }
+    return _dash_str_dup((STRPTR)b, TRUE);
+"""
+end
+
+@native func existe(path: String) -> Bool
+"""
+    BPTR l = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (l) UnLock(l);
+    return l != 0;
+"""
+end
+
+# RAM: at the head of the Workbench's path (as Path ADD does for a Shell), or out of it again
+@native func ram_en_path_wb(poner: Bool) -> Bool
+"""
+    static BPTR *node = NULL;
+    struct Process *wb;
+    struct CommandLineInterface *cli;
+    Forbid();
+    wb = (struct Process *)FindTask((CONST_STRPTR)"Workbench");
+    cli = (wb && wb->pr_Task.tc_Node.ln_Type == NT_PROCESS) ? (struct CommandLineInterface *)BADDR(wb->pr_CLI) : NULL;
+    if (cli && poner && !node && (node = (BPTR *)AllocVec(8, MEMF_PUBLIC | MEMF_CLEAR))) {
+        node[0] = cli->cli_CommandDir;
+        node[1] = Lock((CONST_STRPTR)"RAM:", ACCESS_READ);
+        cli->cli_CommandDir = MKBADDR(node);
+    } else if (cli && !poner && node && cli->cli_CommandDir == MKBADDR(node)) {
+        cli->cli_CommandDir = node[0];
+        UnLock(node[1]);
+        FreeVec(node);
+        node = NULL;
+    }
+    Permit();
+    return cli != NULL;
+"""
+end
+
+@native func desde_workbench() -> Bool
+"""
+    return _WBenchMsg != NULL;
+"""
+end
+
+# as a double click on it
+@native func abrir_en_workbench() -> Bool
+"""
+    char path[300], name[120];
+    struct Library *WorkbenchBase = OpenLibrary((CONST_STRPTR)"workbench.library", 44);
+    BOOL r = FALSE;
+    if (!WorkbenchBase) return FALSE;
+    if (NameFromLock(GetProgramDir(), (STRPTR)path, sizeof(path)) && GetProgramName((STRPTR)name, sizeof(name))) {
+        AddPart((STRPTR)path, FilePart((CONST_STRPTR)name), sizeof(path));
+        r = OpenWorkbenchObjectA((STRPTR)path, NULL);
+    }
+    CloseLibrary(WorkbenchBase);
+    return r;
+"""
+end
+
+Main
+    if desde_workbench()
+        ok = run_program("C:Path >RAM:wbp1.txt")
+        rc = run_command("C:Path >RAM:wbp2.txt")
+        escribir("RAM:wbp_hecho.txt", "fin\n")
+    else
+        ram_en_path_wb(true)
+        abrir_en_workbench()
+        h = esperar("RAM:wbp_hecho.txt", "fin")
+        uno = str_contains(esperar("RAM:wbp1.txt", "C:"), "RAM Disk")
+        dos = str_contains(esperar("RAM:wbp2.txt", "C:"), "RAM Disk")
+        ram_en_path_wb(false)
+        Print "run_program con el path del Workbench: #{uno}"
+        Print "run_command con el path del Workbench: #{dos}"
+        Print "fin"
+    end
+end

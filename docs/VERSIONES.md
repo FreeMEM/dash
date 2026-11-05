@@ -43,6 +43,9 @@ Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que y
   `rexx_reply(rc, resultado)`. Antes Dash solo podía mandar órdenes (`rexx_send`). Manual, sección 18.
 - **Avisos:** `notify(titulo, texto)` deja un aviso en el escritorio, con el nombre del programa: a la barra de
   Trasfondo por ARexx (puerto `TRASFONDO`) o, si no está en marcha, en su lista, que enseña al arrancar.
+- **Arreglo:** `run_program` y `run_command` en un programa arrancado desde el Workbench daban a la orden solo `C:`
+  en el path, y así también a un Shell abierto con `C:WBRun` (el del dock de Trasfondo). Ahora le dan una copia
+  del path del Workbench, el mismo que da un doble clic.
 - Probado en A1200 (3.1 y 3.2) y A500 emulados, por los dos caminos.
 
 ### 2.3.1 (2026-11-04)
