@@ -2967,6 +2967,11 @@ end
 | `gt_enable(id)`, `gt_disable(id)` | Activar o desactivar un gadget |
 | `gt_set_text(id, texto)` | Cambiar el texto de un `gt_text` o `gt_string` |
 
+En los campos de texto y de números (`gt_string`, `gt_integer`, y también `textfield_create`, `integer_create` y
+`ra_add_string`), Amiga derecha, Amiga izquierda o Ctrl con V pegan el portapapeles donde está el cursor (su
+primera línea; en uno de números, solo las cifras), con C copian todo el texto y con X lo cortan. Los de MUI pegan
+solos, con Amiga derecha o Ctrl + V, y copian lo que esté seleccionado.
+
 ---
 
 ## 20. Interfaz de Usuario - ReAction

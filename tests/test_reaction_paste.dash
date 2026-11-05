@@ -1,0 +1,79 @@
+# Pasting in a ReAction text field (AmigaOS 3.2): string.gadget is Intuition's, and wrote a "v". With Dash's edit
+# hook, right Amiga, left Amiga and Ctrl with V paste the clipboard at the cursor. The program started again as
+# "teclas" clicks on the field and types them.
+# workbench
+# emu-needs: window.class
+# emu-needs: layout.gadget
+# expect-out: Amiga derecha + V: [a41.38b]
+# expect-out: Amiga izquierda + V: [41.38]
+# expect-out: Ctrl + V: [41.38]
+# expect-out: fin
+
+const STR_LAT = 1
+
+# a key with left Amiga, which input_key does not have (its 8 is right Amiga)
+@native func amiga_izq(code: Int)
+"""
+    _dash_input_raw(0x66, IEQUALIFIER_LCOMMAND);
+    _dash_input_raw((UWORD)code, IEQUALIFIER_LCOMMAND);
+    _dash_input_raw((UWORD)code | IECODE_UP_PREFIX, IEQUALIFIER_LCOMMAND);
+    _dash_input_raw(0x66 | IECODE_UP_PREFIX, 0);
+"""
+end
+
+func teclas(paso: String, x: Int, y: Int)
+    t = 0
+    while input_active_title() != "Pegar" and t < 200
+        time_delay(5)
+        t = t + 1
+    end
+    time_delay(25)
+    input_click(x, y, 0)
+    time_delay(60)
+    if paso == "derecha"
+        input_text("a")
+        input_key(0x34, 8)
+        input_text("b")
+    elif paso == "izquierda"
+        amiga_izq(0x34)
+    else
+        input_key(0x34, 2)
+    end
+    time_delay(10)
+    input_key(0x44, 0)
+end
+
+func probar(paso: String) -> String
+    ra_set_string(STR_LAT, "")
+    x = ra_window_width() / 2
+    y = 24                   # the field: at the top, under the title bar
+    h = run_start("\"" + program_path() + "\" " + paso + " #{x} #{y}", 30000)
+    vueltas = 0
+    while vueltas < 400
+        if ra_handle_events() == STR_LAT
+            vueltas = 1000
+        end
+        time_delay(2)
+        vueltas = vueltas + 1
+    end
+    r = run_finish(h)
+    return "[" + ra_get_string(STR_LAT) + "]"
+end
+
+Main
+    if arg(0) != ""
+        teclas(arg(0), Int(arg(1)), Int(arg(2)))
+    else
+        ok = clip_write_text("41.38")
+        ra_window_create("Pegar", 300, 60)
+        ra_add_string(STR_LAT, "", 40)
+        if ra_window_open() == 0
+            Print "sin ventana"
+        end
+        Print "Amiga derecha + V: " + probar("derecha")
+        Print "Amiga izquierda + V: " + probar("izquierda")
+        Print "Ctrl + V: " + probar("ctrl")
+        ra_window_close()
+        Print "fin"
+    end
+end

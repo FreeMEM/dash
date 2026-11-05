@@ -46,6 +46,13 @@ Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que y
 - **Arreglo:** `run_program` y `run_command` en un programa arrancado desde el Workbench daban a la orden solo `C:`
   en el path, y así también a un Shell abierto con `C:WBRun` (el del dock de Trasfondo). Ahora le dan una copia
   del path del Workbench, el mismo que da un doble clic.
+- **Pegar en los campos de texto:** en los de GadTools y ReAction (`gt_string`, `gt_integer`, `textfield_create`,
+  `integer_create`, `ra_add_string`), Amiga derecha, Amiga izquierda o Ctrl con V pegan el portapapeles donde está
+  el cursor (su primera línea; en uno de números, solo las cifras), con C copian todo el texto y con X lo cortan.
+  Antes, Amiga + V escribía una "v". Los de MUI ya pegan solos, con Amiga derecha o Ctrl + V.
+- **Arreglo:** `window_move` justo después de `window_resize` (o al revés) devolvía a la ventana el tamaño (o el
+  sitio) de antes, porque el sistema cambia la ventana más tarde. Ahora la segunda parte de lo pedido por la
+  primera. Se notaba en la barra de Trasfondo en la de título: al encoger dejaba un hueco.
 - Probado en A1200 (3.1 y 3.2) y A500 emulados, por los dos caminos.
 
 ### 2.3.1 (2026-11-04)

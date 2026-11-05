@@ -45,6 +45,13 @@ What Trasfondo 2.2's dock and notifications need. All new features; what already
 - **Fix:** `run_program` and `run_command` in a program started from the Workbench gave the command only `C:` in
   its path, and so did a Shell opened through `C:WBRun` (Trasfondo's dock). Now they give it a copy of the
   Workbench's path, the same one a double click gives.
+- **Pasting in text fields:** in GadTools and ReAction ones (`gt_string`, `gt_integer`, `textfield_create`,
+  `integer_create`, `ra_add_string`), right Amiga, left Amiga or Ctrl with V paste the clipboard at the cursor
+  (its first line; in a number field, only the digits), with C copy the whole text and with X cut it. Before,
+  Amiga + V typed a "v". MUI's already paste by themselves, with right Amiga or Ctrl + V.
+- **Fix:** `window_move` just after `window_resize` (or the other way round) gave the window back its old size
+  (or place), because the system changes the window later. Now the second one starts from what the first asked
+  for. It showed in Trasfondo's bar in the title bar: when it got narrower it left a gap.
 - Tested on emulated A1200 (3.1 and 3.2) and A500, through both paths.
 
 ### 2.3.1 (2026-11-04)

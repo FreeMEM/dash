@@ -18,6 +18,7 @@ from pathlib import Path
 raiz = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(raiz / "tools"))
 from iconos_wb import cajon, documento, instalador, info, WBDRAWER, WBPROJECT   # noqa: E402
+from leeme import texto80   # noqa: E402
 
 
 def situar(icono, x, y):
@@ -95,9 +96,10 @@ def main():
     # los cajones de los ejemplos y de lib/, en la segunda fila
     (caj / "examples.info").write_bytes(situar(info(cajon(), WBDRAWER), 10, 80))
     (caj / "lib.info").write_bytes(situar(info(cajon(), WBDRAWER), 90, 80))
-    (caj / "LEEME").write_bytes((raiz / "README.es.md").read_text().encode("latin-1", "replace"))
+    # (a 80 columnas, como texto llano: en el Amiga no hay que desplazarse de lado, tools/leeme.py)
+    (caj / "LEEME").write_bytes(texto80((raiz / "README.es.md").read_text()).encode("latin-1", "replace"))
     (caj / "LEEME.info").write_bytes(situar(info(documento(), WBPROJECT, herramienta="SYS:Utilities/MultiView"), 90, 6))
-    (caj / "README").write_bytes((raiz / "README.md").read_text().encode("latin-1", "replace"))
+    (caj / "README").write_bytes(texto80((raiz / "README.md").read_text()).encode("latin-1", "replace"))
     (caj / "README.info").write_bytes(situar(info(documento(), WBPROJECT, herramienta="SYS:Utilities/MultiView"), 170, 6))
     shutil.copy(raiz / "LICENSE", caj / "LICENSE")
     lha = raiz / f"build/dash-{version}-amiga.lha"
