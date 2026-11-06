@@ -60,6 +60,7 @@ LONG VPrintf(CONST_STRPTR fmt, const intptr_t *args);
 LONG PutStr(CONST_STRPTR s);
 LONG Write(BPTR fh, const void *buf, LONG len);
 LONG Flush(BPTR fh);
+void Delay(LONG ticks);
 
 /* la libc que usa el runtime */
 void *memcpy(void *d, const void *s, size_t n);
@@ -82,6 +83,7 @@ void free(void *p);
 long dash_plat_write(const void *buf, long len);      /* a la salida del programa */
 void dash_plat_exit(int code) __attribute__((noreturn));
 void *dash_plat_pages(unsigned long bytes);           /* páginas nuevas, a cero, alineadas a 4 KB; NULL sin memoria */
+void dash_plat_sleep(unsigned long us);               /* esperar sin gastar CPU (A7: Delay) */
 /* memoria para estructuras de AmigaOS (@amiga struct: amiga_alloc), por debajo de 4 GB: la de la caja Amiga */
 void *dash_plat_box_alloc(unsigned long bytes);
 void dash_plat_box_free(void *p, unsigned long bytes);

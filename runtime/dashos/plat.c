@@ -3,8 +3,10 @@
 
    Las de plataforma hablan con el sistema por svc #0 (número en x8, argumentos en x0..x5, resultado en x0):
    - DashOS (por defecto; llamadas provisionales de su C19): escribir = 1 (256 bytes como mucho por llamada),
-     salir = 2, memoria_crear = 7 (4 MB como mucho por objeto), memoria_proyectar = 8 (no encima de algo).
-   - Linux (-DDASH_PLAT_LINUX), para probar en el PC con qemu-aarch64 (o qemu-aarch64_be): write = 64, exit_group = 94, mmap = 222.
+     salir = 2, canal_crear = 3, canal_leer = 5, cerrar = 6, memoria_crear = 7 (4 MB como mucho por objeto),
+     memoria_proyectar = 8 (no encima de algo), temporizador_crear = 24 (C49, para esperar).
+   - Linux (-DDASH_PLAT_LINUX), para probar en el PC con qemu-aarch64 (o qemu-aarch64_be): write = 64, exit_group = 94,
+     mmap = 222, nanosleep = 101.
 
    La memoria de Dash empieza en 4 GB (DASH_HEAP_BASE): un puntero cortado a 32 bits cae fuera y el programa se
    para en el acto, en vez de seguir con datos de otro sitio. */
@@ -24,12 +26,32 @@ static long _svc(long n, long a, long b, long c, long d, long e, long f)
     return x0;
 }
 
+/* como _svc, y además lo que deja la llamada en x1 (canal_crear da ahí el segundo extremo) */
+static long _svc2(long n, long a, long b, long c, long *x1_out)
+{
+    register long x8 __asm__("x8") = n;
+    register long x0 __asm__("x0") = a;
+    register long x1 __asm__("x1") = b;
+    register long x2 __asm__("x2") = c;
+    register long x3 __asm__("x3") = 0;
+    register long x4 __asm__("x4") = 0;
+    __asm__ volatile("svc #0" : "+r"(x0), "+r"(x1) : "r"(x8), "r"(x2), "r"(x3), "r"(x4) : "memory");
+    *x1_out = x1;
+    return x0;
+}
+
 #define DASH_HEAP_BASE 0x100000000UL
 static unsigned long heap_next = DASH_HEAP_BASE;   /* (los PIE de DashOS van de 128 a 256 GB: no chocan) */
 
 #ifdef DASH_PLAT_LINUX
 long dash_plat_write(const void *buf, long len) { return _svc(64, 1, (long)buf, len, 0, 0, 0); }
 void dash_plat_exit(int code) { for (;;) _svc(94, code, 0, 0, 0, 0, 0); }
+void dash_plat_sleep(unsigned long us)
+{
+    long ts[2] = { (long)(us / 1000000), (long)(us % 1000000) * 1000 };
+    (void)_svc2;
+    _svc(101, (long)ts, 0, 0, 0, 0, 0);   /* nanosleep */
+}
 void *dash_plat_pages(unsigned long bytes)
 {
     /* MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, PROT_READ | PROT_WRITE */
@@ -51,6 +73,31 @@ long dash_plat_write(const void *buf, long len)
     return done;
 }
 void dash_plat_exit(int code) { for (;;) _svc(2, code, 0, 0, 0, 0, 0); }
+
+/* Esperar sin gastar CPU (DashOS C49): un canal nuevo, un temporizador de una vez que avisa por él, y leer. La
+   resolución es la del tic de DashOS, 10 ms. Si el kernel no tiene temporizadores, se espera girando sobre el
+   contador del sistema. */
+void dash_plat_sleep(unsigned long us)
+{
+    long a, b, t;
+    unsigned char aviso[8];
+    if (us == 0) return;
+    a = _svc2(3, 0, 0, 0, &b);                       /* canal_crear: (a, b) */
+    t = a > 0 ? _svc(24, b, (long)us, 0, 0, 0, 0) : -1;   /* temporizador_crear(b, us, una vez) */
+    if (t > 0) {
+        _svc(5, a, (long)aviso, sizeof aviso, 0, 0, 0);   /* canal_leer: llega a los us */
+        _svc(6, t, 0, 0, 0, 0, 0);
+    } else {
+        unsigned long f, c0, c;
+        __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(f));
+        __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(c0));
+        do __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(c)); while ((c - c0) < us * (f / 1000000));
+    }
+    if (a > 0) {
+        _svc(6, a, 0, 0, 0, 0, 0);
+        _svc(6, b, 0, 0, 0, 0, 0);
+    }
+}
 
 /* memoria_crear da como mucho 4 MB por objeto (C35): un trozo mayor son varios objetos proyectados seguidos desde
    at. Devuelve cuántos bytes quedaron proyectados (bytes si todo fue bien); memoria_crear la da a cero */
@@ -283,6 +330,8 @@ void FreeMem(APTR mem, ULONG size) { (void)size; blk_free(mem); }
 APTR AllocVec(ULONG size, ULONG flags) { return blk_alloc(size, (flags & MEMF_CLEAR) != 0); }
 void FreeVec(APTR mem) { blk_free(mem); }
 void CopyMem(const void *src, void *dst, ULONG size) { memmove(dst, src, size); }
+/* dos: esperar tics de 1/50 s (A7) */
+void Delay(LONG ticks) { if (ticks > 0) dash_plat_sleep((unsigned long)ticks * 20000UL); }
 
 /* las de la libc, para las bibliotecas del runtime (Ryu, zlib) */
 int errno;
