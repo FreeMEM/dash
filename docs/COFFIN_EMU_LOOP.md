@@ -56,3 +56,6 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
   usa el mismo desktop_canvas. En las otras máquinas pasa. Pendiente de mirar aparte (¿dos lienzos a la vez?).
 - Fallos del entorno, no de Dash: idioma español (test_catalog*, test_clock: esperan inglés), Trasfondo ya es dueño
   del semáforo dash.cpu (test_cpu_shared), pantalla RTG por defecto (test_copper, test_bobs, test_blend).
+- Confirmado: con Trasfondo parado (se para lanzándolo otra vez) test_desktop_canvas pasa entero en Coffin; con
+  Trasfondo en marcha se cuelga. Fallo de Dash: dos desktop_canvas a la vez bloquean la pantalla. En el runner,
+  COFFIN_SKIP deja fuera en esta máquina los tests que esperan el sistema pelado (idioma, dash.cpu, AGA, lienzo).

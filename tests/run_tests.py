@@ -817,6 +817,20 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
     return results
 
 
+# Tests that do not fit the CoffinOS machine: they expect the plain systems of the other machines
+COFFIN_SKIP = {
+    "test_catalog": "the system is in Spanish; it expects English",
+    "test_catalog_fresh": "the system is in Spanish; it expects English",
+    "test_clock": "the system is in Spanish; it expects English",
+    "test_cpu_shared": "Trasfondo already owns the dash.cpu semaphore",
+    "test_copper": "the default screen is RTG (no copper)",
+    "test_bobs": "the default screen is RTG",
+    "test_blend": "the default screen is RTG",
+}
+# Trasfondo already draws on the desktop: a second desktop_canvas hangs the display (docs/COFFIN_EMU_LOOP.md)
+COFFIN_SKIP_PREFIX = {"test_desktop_canvas": "Trasfondo already has the desktop canvas (two at once hang)"}
+
+
 def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memcheck: bool) -> List[TestResult]:
     """A machine with a whole system on its disk (--emu-coffin): MUI, AmiSSL, the Workbench, a 68040 and a
     graphics card are all there, so every test runs in one boot (with the servers of the network tests)."""
@@ -832,6 +846,11 @@ def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memc
     for t in [t for t in runnable if emu_shots(t)]:
         print(f"  {prefix}/{t.stem}: SKIP (its pixels are those of the other machines' screens)")
     runnable = [t for t in runnable if not emu_shots(t)]
+    def unfit(t):
+        return COFFIN_SKIP.get(t.stem) or next((r for p, r in COFFIN_SKIP_PREFIX.items() if t.stem.startswith(p)), None)
+    for t in [t for t in runnable if unfit(t)]:
+        print(f"  {prefix}/{t.stem}: SKIP ({unfit(t)})")
+    runnable = [t for t in runnable if not unfit(t)]
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import COFFIN_CONFIG
     machine = dict(machine, config=COFFIN_CONFIG)
