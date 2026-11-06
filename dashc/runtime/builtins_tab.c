@@ -1827,6 +1827,8 @@ const BuiltinInfo builtin_info[] = {
     {"wm_at", 2, 1, 1, 0},
     {"wm_back", 1, 2, 1, 0},
     {"wm_back", 1, 2, 1, 0},
+    {"wm_bar_gadgets", 0, 1, 1, 0},
+    {"wm_bar_gadgets", 0, 1, 1, 0},
     {"wm_bar_height", 0, 1, 1, 0},
     {"wm_bar_height", 0, 1, 1, 0},
     {"wm_box", 2, 1, 1, 0},
@@ -1854,7 +1856,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1852;
+const int builtin_count = 1854;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

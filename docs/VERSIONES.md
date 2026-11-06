@@ -46,6 +46,8 @@ Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que y
 - **Arreglo:** `run_program` y `run_command` en un programa arrancado desde el Workbench daban a la orden solo `C:`
   en el path, y así también a un Shell abierto con `C:WBRun` (el del dock de Trasfondo). Ahora le dan una copia
   del path del Workbench, el mismo que da un doble clic.
+- **`wm_bar_gadgets()`:** a qué distancia del borde derecho empiezan los botones de la barra de título de la
+  pantalla del Workbench (el de profundidad), preguntado a la pantalla.
 - **Pegar en los campos de texto:** en los de GadTools y ReAction (`gt_string`, `gt_integer`, `textfield_create`,
   `integer_create`, `ra_add_string`), Amiga derecha, Amiga izquierda o Ctrl con V pegan el portapapeles donde está
   el cursor (su primera línea; en uno de números, solo las cifras), con C copian todo el texto y con X lo cortan.

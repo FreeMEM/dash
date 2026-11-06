@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 926 functions, 926 implemented, 0 not implemented.
+Total: 927 functions, 927 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -895,6 +895,7 @@ Total: 926 functions, 926 implemented, 0 not implemented.
 | `wm_pointer_x()` | `LONG` | Where the pointer is on the Workbench screen: x |  |
 | `wm_pointer_y()` | `LONG` | Where the pointer is on the Workbench screen: y |  |
 | `wm_bar_height()` | `LONG` | The height of the Workbench screen's title bar (where windows usually start) |  |
+| `wm_bar_gadgets()` | `LONG` | How far from the right edge of the Workbench screen's title bar its system gadgets start (the depth gadget), asked to the screen; 0 if it cannot tell |  |
 | `file_real_path(path)` | `STRPTR` | The real path of a file or drawer as its filesystem names it ("SYS:Utilities/Clock" gives "System:Utilities/Clock"), to compare it with wm_path: "" if it is not there |  |
 | `app_window(handle)` | `BOOL` | The window (0 the current one, or a handle of window_create) takes icons dropped on it from the Workbench (AppWindow): true if it does. app_drop gives them |  |
 | `app_drop()` | `STRPTR` | The path of the next icon dropped on an app_window, "" if none (poll it from On Timer); app_drop_x and app_drop_y, where it fell |  |

@@ -1,0 +1,15 @@
+# wm_bar_gadgets (Trasfondo's bar in the title bar, Ferrán García): how far from the right edge the system gadgets
+# of the Workbench screen's title bar start, asked to the screen (its depth gadget), not guessed from its pixels.
+# workbench
+# expect-out: botones: true
+# expect-out: fin
+
+Main
+    g = wm_bar_gadgets()
+    ok = g > 10 and g < 100
+    Print "botones: #{ok}"
+    if not ok
+        Print "#{g}"
+    end
+    Print "fin"
+end

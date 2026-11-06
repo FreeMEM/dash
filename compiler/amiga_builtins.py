@@ -4933,6 +4933,10 @@ TASK_FUNCTIONS = {
     "wm_bar_height": BuiltinFunc(
         name="wm_bar_height", params=[], return_type="LONG", c_template="_dash_wm_bar_height()",
         description="The height of the Workbench screen's title bar (where windows usually start)"),
+    "wm_bar_gadgets": BuiltinFunc(
+        name="wm_bar_gadgets", params=[], return_type="LONG", c_template="_dash_wm_bar_gadgets()",
+        description="How far from the right edge of the Workbench screen's title bar its system gadgets start (the "
+                    "depth gadget), asked to the screen; 0 if it cannot tell"),
     # Trasfondo: disks, network and WiFi for a meter; each reading afresh, none waits longer than its time
     "disks_read": BuiltinFunc(
         name="disks_read", params=["ms"], return_type="LONG",
@@ -5919,7 +5923,7 @@ IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decoded_free", "image_from_decoded"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
-    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "file_real_path", "app_window",
+    "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "file_real_path", "app_window",
     "app_drop", "app_drop_x", "app_drop_y", "icon_load", "icon_draw", "icon_draw_size", "icon_width", "icon_height", "icon_free"])
 TTF_FUNCTIONS = _move(FONT_FUNCTIONS, ["font_from_ttf", "font_ttf_icon", "font_ttf_free", "font_ttf_forget"])
 NETBG_FUNCTIONS = _move(NET_FUNCTIONS, [n for n in list(NET_FUNCTIONS) if n.startswith("net_bg_")])
