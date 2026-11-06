@@ -374,7 +374,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             else:
                 print("68040/68060 without C/SetPatch and Libs/68040.library in the Workbench files: "
                       "--fpu programs may hang (tools/emu_sys_from_hdf.sh copies them)", file=sys.stderr)
-        if workbench:
+        if workbench and not disk:   # a system disk loads its own Workbench
             if not (hd / "C" / "LoadWB").exists():
                 raise RuntimeError("--workbench needs C/LoadWB in the Workbench files (tools/emu_sys_from_hdf.sh)")
             lines.append("C:LoadWB")

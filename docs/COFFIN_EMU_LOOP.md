@@ -17,9 +17,9 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
 - [x] P1. Ver qué hay en cada partición de Coffin (arrancar un sistema auxiliar con una copia de la imagen).
 - [x] P2. Disco nuevo: copia (reflink) de Coffin sin la partición de juegos; quitar juegos y demos que queden y lo
   que los busque al arrancar.
-- [ ] P3. Universo Dash: paquete de Dash (orden dash, Forja, Inferencia, dashgit), Trasfondo, Tachyon.
+- [x] P3. Universo Dash: paquete de Dash (orden dash, Forja, Inferencia, dashgit), Trasfondo, Tachyon.
 - [x] P4. DOpus5 y fondo.
-- [ ] P5. Configuraciones de FS-UAE y Amiberry; arrancar en los dos con captura.
+- [x] P5. Configuraciones de FS-UAE y Amiberry; arrancar en los dos con captura.
 - [ ] P6. `tools/emu_run.py --machine coffin` y el runner: arranque desde una copia del disco, programas desde un
   volumen del PC.
 - [ ] P7. Documentar (INSTALACION, AGENTS) y PR.
@@ -44,3 +44,8 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
 - P6. Gancho en S:Startup-Sequence (tras LoadWB): si existe DASHRUN:, ejecuta DASHRUN:Run-Sequence. `emu_run.py
   --machine coffin` (FS-UAE y Amiberry) arranca una copia reflink del disco y deja los programas en DASHRUN: (DH9).
   hola.dash: 30 s con una captura a los 25 en FS-UAE, 20 s en Amiberry.
+- P3, comprobado en el emulador con capturas: `dash` 2.4.0 compila y ejecuta hola.dash dentro del Amiga; DOpus5,
+  Forja 0.3 y Tachyon 0.9.0-alfa abren. `tools/coffin/disco.py actualizar` (16 s) toma lo último: el lha más nuevo
+  de Trasfondo era ya el 2.8 sin publicar de la sesión universo.
+- P6. Runner: `--emu-coffin` (toda la batería en un arranque; los `# emu-shot` se saltan porque sus píxeles son los
+  de las otras pantallas). Primera tanda: fallo del runner (pedía LoadWB en la carpeta de sistema), arreglado.
