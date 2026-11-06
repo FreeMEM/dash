@@ -24,7 +24,7 @@ the assigns (MUI: see tools/emu_sys_mui.sh).
 
     tools/emu_run.py --kickstart kick323.rom --system ~/.cache/dash-emu/sys32 --workbench prog.dash
 
---machine a1200|a500|a1200-32|rtg takes the ROM, Workbench files and options of a machine of the
+--machine a1200|a500|a1200-32|rtg|coffin takes the ROM, Workbench files and options of a machine of the
 test runner from its variables ($DASH_KICKSTART_A500, $DASH_EMU_SYS_32...); --emulator amiberry runs
 it in Amiberry (A1200, A500) instead of FS-UAE; --window shows the emulator's window (no time limit);
 --follow prints the programs' output while they run (and compiles .dash with DASH_PRINT_FLUSH=1, so
@@ -79,6 +79,16 @@ uae_cpu_speed = max
 {kickstart}"""
 
 
+# The machine of CoffinOS (Amiberry's and FS-UAE's coffin configurations): 68040 with JIT at full speed, 8 MB of
+# Chip, 512 MB of Zorro III Fast, uaegfx on Zorro III (32-bit RTG), the PC's bsdsocket
+COFFIN_CONFIG = ("cpu = 68040-NOMMU\njit_compiler = 1\nuae_cpu_speed = max\nchip_memory = 8192\n"
+                 "zorro_iii_memory = 524288\ngraphics_card = uaegfx-z3\ngraphics_memory = 65536\n"
+                 "bsdsocket_library = 1\nuae_rtg_modes = 0x112\n")
+# and the same in Amiberry: the whole configuration, from tools/coffin/coffin.uae.in (Amiberry's own keys, as in
+# ~/Amiberry/Configurations/coffin.uae; with only the -s options of a quickstart A1200 the Workbench stays on AGA)
+COFFIN_AMIBERRY = ROOT / "tools" / "coffin" / "coffin.uae.in"
+
+
 # --machine: the emulated machines of the test runner, each with its ROM and Workbench files from the
 # environment (the same variables as tests/run_tests.py) and its FS-UAE options
 MACHINES = {
@@ -89,6 +99,10 @@ MACHINES = {
     "rtg": dict(rom="DASH_KICKSTART_32", system="DASH_EMU_SYS_32_RTG", workbench=False, model="A1200",
                 config="cpu = 68040\nfpu = 68040\njit_compiler = 1\nuae_cpu_speed = max\n"
                        "zorro_iii_memory = 131072\ngraphics_card = uaegfx\n"),
+    # an Amiga like CoffinOS (docs/COFFIN_EMU_LOOP.md): it boots its own disk ($DASH_EMU_DISK_COFFIN, a copy
+    # each time) with the Workbench, Trasfondo, MUI...; the programs come from DASHRUN: (see run_programs)
+    "coffin": dict(rom="DASH_KICKSTART_32", system=None, disk="DASH_EMU_DISK_COFFIN", workbench=False, model="A1200",
+                   config=COFFIN_CONFIG),
 }
 
 
@@ -292,7 +306,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
                  model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None,
-                 dbgserver: int = 0):
+                 dbgserver: int = 0, disk: str = None, amiberry_config: Path = None):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -305,11 +319,18 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
     so extra_config, screenshots and debug are FS-UAE's only). on_disk(hd): called with the emulated
     disk's directory (DH0: on the PC) once it is ready, before the emulator starts: to add files there and
     talk to the programs through it while they run (tools/emu_preview.py). dbgserver: a port; the first
-    program runs under tools/amiga/dbgserver.dash, which listens there (see --dbgserver)."""
+    program runs under tools/amiga/dbgserver.dash, which listens there (see --dbgserver). disk: a hard disk image
+    with a whole system (--machine coffin) that boots instead of the Workbench files, from a copy (reflink where the
+    file system allows it) thrown away afterwards; the programs then come from a host directory mounted as DASHRUN:,
+    whose Run-Sequence that system's Startup-Sequence runs after LoadWB. amiberry_config: that machine in Amiberry, a
+    .uae with {kickstart}, {disk} and {run} in it."""
     if not shutil.which(emulator):
         raise RuntimeError(f"{emulator} not found")
-    if emulator == "amiberry" and (debug is not None or screenshot or extra_config.strip()):
-        raise RuntimeError("amiberry: --debug, --screenshot and FS-UAE options (--set, --machine rtg) need FS-UAE")
+    if disk and not Path(disk).is_file():
+        raise RuntimeError(f"disk image not found: {disk}")
+    if emulator == "amiberry" and (debug is not None or extra_config.strip() or screenshot and not disk):
+        raise RuntimeError("amiberry: --debug, --screenshot and FS-UAE options (--set, --machine rtg) need FS-UAE "
+                           "(--screenshot works with --machine coffin)")
     with tempfile.TemporaryDirectory(prefix="dash_emu_") as tmp:
         tmp = Path(tmp)
         hd = tmp / "hd"
@@ -324,7 +345,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         lines = []
         names = []
         inner_port = (_free_port() if relay else gdbserver) if gdbserver else 0
-        system = system or os.environ.get("DASH_EMU_SYS")
+        system = None if disk else system or os.environ.get("DASH_EMU_SYS")
         if system:
             if not Path(system).is_dir():
                 raise RuntimeError(f"Workbench files directory not found: {system}")
@@ -345,7 +366,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                 lines += [l for l in extra.read_text().splitlines() if l.strip()]
         # A 68040/68060 leaves some FPU instructions (fsin, fintrz...) to 68040.library, which
         # SetPatch loads: without it a --fpu program stops at the first one
-        if re.search(r"^\s*cpu\s*=\s*680[46]0", extra_config, re.M):
+        if re.search(r"^\s*cpu\s*=\s*680[46]0", extra_config, re.M) and not disk:
             if any("SetPatch" in l for l in lines):
                 pass   # the system's Startup-Extra runs it already
             elif (hd / "C" / "SetPatch").exists():
@@ -423,6 +444,15 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         # FailAt 21: a program that ends with 20 (a runtime error, Dash's TRAP_RUNTIME) does not stop the
         # script, so the next programs run and the end is signalled (its code is in rcN.txt)
         (hd / "S" / "Startup-Sequence").write_text("\n".join(["FailAt 21"] + lines) + "\n")
+        if disk:
+            # the system on the disk runs DASHRUN:Run-Sequence (its own C: has no dash_shot or dbgserver)
+            text = "\n".join(["FailAt 21"] + lines) + "\n"
+            for tool in ("dash_shot", "bgdbserver", "dbgserver"):
+                text = text.replace(f"C:{tool} ", f"DH0:C/{tool} ")
+            (hd / "Run-Sequence").write_text(text.replace("DH0:", "DASHRUN:"), encoding="latin-1")
+            copy_dir = Path(tempfile.mkdtemp(prefix=".dash_emu_", dir=Path(disk).parent))
+            disk_copy = copy_dir / Path(disk).name
+            subprocess.run(["cp", "--reflink=auto", str(disk), str(disk_copy)], check=True)
         if on_disk is not None:
             on_disk(hd)
         config = tmp / "run.fs-uae"
@@ -431,6 +461,10 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             raise RuntimeError(f"Kickstart ROM not found: {kickstart}")
         ks_line = f"kickstart_file = {kickstart}\n" if kickstart else ""
         base = FSUAE_CONFIG.format(hd=hd, kickstart=ks_line)
+        if disk:   # DH0-DH2 are the disk's partitions: DASHRUN: is DH9
+            base = base.replace(f"hard_drive_0 = {hd}\nhard_drive_0_label = DH0\n",
+                                f"hard_drive_0 = {disk_copy}\nhard_drive_9 = {hd}\nhard_drive_9_label = DASHRUN\n"
+                                "hard_drive_9_priority = -128\n").replace("fast_memory = 8192\n", "")
         if window:   # to be seen and heard
             base = base.replace("volume = 0\n", "").replace("floppy_drive_volume = 0\n", "floppy_drive_volume = 0\n")
         config.write_text(base + extra_config)
@@ -444,9 +478,22 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
         if emulator == "amiberry":
             if not kickstart:
                 raise RuntimeError("amiberry needs a Kickstart ROM (--kickstart or the machine's variable)")
-            proc = subprocess.Popen(["amiberry", "-G", "--model", model, "-r", kickstart,
-                                     "-s", f"filesystem2=rw,DH0:DH0:{hd},10", "-s", "bsdsocket_emu=true",
-                                     "-s", "fastmem_size=8"], cwd=tmp, env=env, stdin=subprocess.DEVNULL,
+            if disk and amiberry_config:
+                uae = tmp / "run.uae"
+                uae.write_text(Path(amiberry_config).read_text().replace("{kickstart}", kickstart)
+                               .replace("{disk}", str(disk_copy)).replace("{run}", str(hd)))
+                command = ["amiberry", "-f", str(uae), "-G"]
+                if not window and shutil.which("xvfb-run"):
+                    # with SDL's offscreen driver Amiberry leaves out the graphics card (the Workbench stays on AGA):
+                    # a virtual X display of its own instead
+                    command = ["xvfb-run", "-a", "-s", "-screen 0 1920x1200x24 -nolisten tcp"] + command
+                    env = dict(env, SDL_VIDEODRIVER="x11")
+                    env.pop("WAYLAND_DISPLAY", None)
+            else:
+                command = ["amiberry", "-G", "--model", model, "-r", kickstart,
+                           "-s", f"filesystem2=rw,DH0:DH0:{hd},10", "-s", "bsdsocket_emu=true", "-s", "fastmem_size=8"]
+            proc = subprocess.Popen(command,
+                                    cwd=tmp, env=env, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         elif debug is not None:   # the debugger talks on FS-UAE's stdin/stdout
             proc = subprocess.Popen(["fs-uae", str(config)], cwd=tmp, env=env,
@@ -489,6 +536,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
             except ProcessLookupError:
                 pass
             proc.wait()
+            if disk:
+                shutil.rmtree(copy_dir, ignore_errors=True)
 
         if keep:
             shutil.copytree(hd, keep, dirs_exist_ok=True)
@@ -561,7 +610,12 @@ def main():
     args = parser.parse_args()
     machine = MACHINES.get(args.machine) if args.machine else None
     kickstart = args.kickstart or (os.environ.get(machine["rom"]) if machine else None)
-    system = args.system or (os.environ.get(machine["system"]) if machine else None)
+    system = args.system or (os.environ.get(machine["system"]) if machine and machine["system"] else None)
+    disk = os.environ.get(machine["disk"]) if machine and machine.get("disk") else None
+    if machine and machine.get("disk") and not disk:
+        print(f"--machine {args.machine} needs ${machine['disk']} (its disk image)", file=sys.stderr)
+        return 2
+    amiberry_disk = bool(disk) and args.emulator == "amiberry"
     if machine and not kickstart:
         print(f"--machine {args.machine} needs ${machine['rom']} (or --kickstart)", file=sys.stderr)
         return 2
@@ -577,14 +631,15 @@ def main():
     try:
         results = run_programs(args.programs, timeout, args.opt, kickstart,
                                args.autoclose,
-                               (machine["config"] if machine else "") +
+                               (machine["config"] if machine and not amiberry_disk else "") +
                                "".join(f"{kv.split('=', 1)[0].strip()} = {kv.split('=', 1)[1].strip()}\n"
                                        for kv in args.set),
                                args.keep, args.fpu, system, args.workbench or bool(machine and machine["workbench"]),
                                args.screenshot, debug=args.debug, window=args.window, follow=follow,
                                emulator=args.emulator, model=machine["model"] if machine else "A1200",
                                gdbserver=args.gdbserver or 0, relay=not args.no_relay,
-                               dbgserver=args.dbgserver or 0)
+                               dbgserver=args.dbgserver or 0, disk=disk,
+                               amiberry_config=COFFIN_AMIBERRY if amiberry_disk else None)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2
