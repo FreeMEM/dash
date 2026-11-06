@@ -32,7 +32,7 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
-### 2.4.0 (unreleased)
+### 2.4.0 (2026-11-06)
 
 What Trasfondo 2.2's dock and notifications need. All new features; what already compiled stays the same.
 
@@ -55,6 +55,8 @@ What Trasfondo 2.2's dock and notifications need. All new features; what already
   (or place), because the system changes the window later. Now the second one starts from what the first asked
   for. It showed in Trasfondo's bar in the title bar: when it got narrower it left a gap.
 - Tested on emulated A1200 (3.1 and 3.2) and A500, through both paths.
+- **Fix:** in MUI, a text's colour (`mui_set_text_pen`, a `.dashui`'s `"color"`) uses a pen of the screen on every
+  screen. On a 32-bit one with MUI 5 the text stayed dark (Forja).
 
 ### 2.3.1 (2026-11-04)
 

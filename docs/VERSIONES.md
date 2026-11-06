@@ -33,7 +33,7 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
-### 2.4.0 (sin publicar)
+### 2.4.0 (2026-11-06)
 
 Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que ya compilaba sigue igual.
 
@@ -56,6 +56,8 @@ Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que y
   sitio) de antes, porque el sistema cambia la ventana más tarde. Ahora la segunda parte de lo pedido por la
   primera. Se notaba en la barra de Trasfondo en la de título: al encoger dejaba un hueco.
 - Probado en A1200 (3.1 y 3.2) y A500 emulados, por los dos caminos.
+- **Arreglo:** en MUI, el color de un texto (`mui_set_text_pen`, el `"color"` de un `.dashui`) usa un color de la
+  paleta de la pantalla en todas las pantallas. En una de 32 bits con MUI 5 el texto se quedaba oscuro (Forja).
 
 ### 2.3.1 (2026-11-04)
 
