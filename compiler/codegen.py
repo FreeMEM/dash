@@ -4394,6 +4394,24 @@ static LONG _dash_wm_bar_height(void) {
     return s ? s->BarHeight + 1 : 0;
 }
 
+/* How far from the right edge the system gadgets of its title bar start (the depth gadget; Trasfondo's bar goes
+   just left of them): asked to the screen, not guessed from its pixels (Ferrán García: they left a gap). 0 if
+   there is no screen or no such gadget */
+static LONG _dash_wm_bar_gadgets(void) {
+    struct Screen *s = _dash_wm_screen();
+    struct Gadget *g;
+    LONG left = 0x7FFF, x;
+    if (!s) return 0;
+    Forbid();
+    for (g = s->FirstGadget; g; g = g->NextGadget) {
+        if (!(g->GadgetType & GTYP_SYSGADGET) || g->TopEdge > s->BarHeight) continue;
+        x = (g->Flags & GFLG_RELRIGHT) ? s->Width + g->LeftEdge - 1 : g->LeftEdge;
+        if (x > s->Width / 2 && x < left) left = x;
+    }
+    Permit();
+    return left < s->Width ? s->Width - left : 0;
+}
+
 """
 
     # Trasfondo 2.0 (the dock): icons dropped on a window of the program from the Workbench

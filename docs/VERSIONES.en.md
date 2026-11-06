@@ -45,6 +45,8 @@ What Trasfondo 2.2's dock and notifications need. All new features; what already
 - **Fix:** `run_program` and `run_command` in a program started from the Workbench gave the command only `C:` in
   its path, and so did a Shell opened through `C:WBRun` (Trasfondo's dock). Now they give it a copy of the
   Workbench's path, the same one a double click gives.
+- **`wm_bar_gadgets()`:** how far from the right edge the gadgets of the Workbench screen's title bar start (the
+  depth gadget), asked to the screen.
 - **Pasting in text fields:** in GadTools and ReAction ones (`gt_string`, `gt_integer`, `textfield_create`,
   `integer_create`, `ra_add_string`), right Amiga, left Amiga or Ctrl with V paste the clipboard at the cursor
   (its first line; in a number field, only the digits), with C copy the whole text and with X cut it. Before,
