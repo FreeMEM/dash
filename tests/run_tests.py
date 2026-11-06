@@ -496,6 +496,10 @@ EMU_MACHINES = [
     # waits for the Workbench, so LoadWB runs first, as on a real Amiga
     dict(option="emu_32", prefix="emu32", label="FS-UAE A1200 OS 3.2", rom_env="DASH_KICKSTART_32",
          sys_env="DASH_EMU_SYS_32", mui_sys_env="DASH_EMU_SYS_32_MUI", config="", timeout=480, workbench=True),
+    # an Amiga like CoffinOS (docs/COFFIN_EMU_LOOP.md): 68040 with JIT, RTG in 32 bits, its own disk with MUI,
+    # AmiSSL, Trasfondo, DOpus5...; every test in one boot from a copy of $DASH_EMU_DISK_COFFIN
+    dict(option="emu_coffin", prefix="emucoffin", label="FS-UAE CoffinOS (68040, RTG)", rom_env="DASH_KICKSTART_32",
+         sys_env=None, disk_env="DASH_EMU_DISK_COFFIN", mui_sys_env=None, config="", timeout=900, workbench=True),
 ]
 
 
@@ -715,6 +719,8 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['rom_env']}")]
     runnable = [t for t in tests if t.stem in compiled and expected_output(t)]
+    if machine.get("disk_env"):
+        return run_disk_tests(runnable, machine, rom, memcheck)
     if memcheck:
         for t in [t for t in runnable if skips_memcheck(t)]:
             print(f"  {prefix}/{t.stem}: SKIP (its output is the normal build's: # no-memcheck)")
@@ -811,14 +817,42 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
     return results
 
 
+def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memcheck: bool) -> List[TestResult]:
+    """A machine with a whole system on its disk (--emu-coffin): MUI, AmiSSL, the Workbench, a 68040 and a
+    graphics card are all there, so every test runs in one boot (with the servers of the network tests)."""
+    prefix = machine["prefix"]
+    disk = os.environ.get(machine["disk_env"])
+    if not disk or not Path(disk).is_file():
+        return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
+                           error_message=f"--{machine['option'].replace('_', '-')} needs ${machine['disk_env']}")]
+    if memcheck:
+        for t in [t for t in runnable if skips_memcheck(t)]:
+            print(f"  {prefix}/{t.stem}: SKIP (its output is the normal build's: # no-memcheck)")
+        runnable = [t for t in runnable if not skips_memcheck(t)]
+    for t in [t for t in runnable if emu_shots(t)]:
+        print(f"  {prefix}/{t.stem}: SKIP (its pixels are those of the other machines' screens)")
+    runnable = [t for t in runnable if not emu_shots(t)]
+    sys.path.insert(0, str(PROJECT_ROOT / "tools"))
+    from emu_run import COFFIN_CONFIG
+    machine = dict(machine, config=COFFIN_CONFIG)
+    net = [t for t in runnable if emu_net_port(t) is not None]
+    server = _EchoServer(sorted({emu_net_port(t) for t in net}), {emu_net_port(t) for t in net if emu_net_tls(t)},
+                         {emu_net_port(t) for t in net if emu_http(t)}) if net else None
+    try:
+        return run_emu_boot(runnable, machine, rom, None, memcheck, disk=disk)
+    finally:
+        if server:
+            server.close()
+
+
 def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: Optional[str],
-                 memcheck: bool, extra_config: str = "", shots: List[tuple] = ()) -> List[TestResult]:
+                 memcheck: bool, extra_config: str = "", shots: List[tuple] = (), disk: str = None) -> List[TestResult]:
     """Run these tests in one boot of the machine with these Workbench files (shots: emu_shots of
     the only test, checked after it)."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
     from emu_run import run_programs
     prefix = machine["prefix"]
-    selected = [(t, expected_output(t)) for t in tests if emu_needs_met(t, system, prefix)]
+    selected = [(t, expected_output(t)) for t in tests if disk or emu_needs_met(t, system, prefix)]
     if not selected:
         return []
     start_time = time.time()
@@ -843,7 +877,7 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
                             timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"] + extra_config,
                             system=system, workbench=machine["workbench"],
                             screenshot=[(s[0], f) for s, f in zip(shots, shot_files)] or None,
-                            on_disk=catalogs)
+                            on_disk=catalogs, disk=disk)
     except RuntimeError as e:
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=str(e))]
@@ -933,6 +967,9 @@ def main():
     parser.add_argument("--emu-32", action="store_true",
                         help="Also run them on an A1200 with AmigaOS 3.2 (needs $DASH_KICKSTART_32 "
                              "and $DASH_EMU_SYS_32)")
+    parser.add_argument("--emu-coffin", action="store_true",
+                        help="Also run them on an Amiga like CoffinOS: 68040, RTG, its own system disk (needs "
+                             "$DASH_KICKSTART_32 and $DASH_EMU_DISK_COFFIN, see tools/coffin/README.md)")
     parser.add_argument("--memcheck", action="store_true",
                         help="Build every test as ./dash --memcheck; with --emu, a test also fails on a memory "
                              "warning or on objects/strings alive at exit that did not escape")
