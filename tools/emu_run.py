@@ -306,7 +306,7 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                  screenshot: tuple = None, args: list = None, background: list = None,
                  debug: list = None, window: bool = False, follow=None, emulator: str = "fs-uae",
                  model: str = "A1200", gdbserver: int = 0, relay: bool = True, on_disk=None,
-                 dbgserver: int = 0, disk: str = None, amiberry_config: Path = None):
+                 dbgserver: int = 0, disk: str = None, amiberry_config: Path = None, stall: float = 0):
     """programs: list of .dash sources or Amiga executables. system: Workbench
     files directory (default $DASH_EMU_SYS). screenshot: (seconds, file.png) saves the
     front screen that many seconds after boot; a list of them takes several in the same run. background: (program, arguments) pairs
@@ -323,7 +323,8 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
     with a whole system (--machine coffin) that boots instead of the Workbench files, from a copy (reflink where the
     file system allows it) thrown away afterwards; the programs then come from a host directory mounted as DASHRUN:,
     whose Run-Sequence that system's Startup-Sequence runs after LoadWB. amiberry_config: that machine in Amiberry, a
-    .uae with {kickstart}, {disk} and {run} in it."""
+    .uae with {kickstart}, {disk} and {run} in it. stall: seconds without a program ending (once the first one
+    started) after which the run stops, as if the time were up (the runner then boots again from the next one)."""
     if not shutil.which(emulator):
         raise RuntimeError(f"{emulator} not found")
     if disk and not Path(disk).is_file():
@@ -517,9 +518,16 @@ def run_programs(programs, timeout: float = 60.0, optimize: bool = False,
                         if len(data) > shown[i]:
                             follow(i, data[shown[i]:].decode("latin-1"))
                             shown[i] = len(data)
+            ended, progress = -1, time.time()
             while time.time() < deadline and not (hd / "done.txt").exists():
                 if proc.poll() is not None:
                     break
+                if stall:
+                    now = sum((hd / f"rc{i}.txt").exists() for i in range(len(names)))
+                    if now != ended or not (hd / "out0.txt").exists():
+                        ended, progress = now, time.time()   # (the boot itself is not counted)
+                    elif time.time() - progress > stall:
+                        break
                 follow_outputs()
                 time.sleep(0.2)
             time.sleep(0.3)

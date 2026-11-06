@@ -839,14 +839,26 @@ def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memc
     server = _EchoServer(sorted({emu_net_port(t) for t in net}), {emu_net_port(t) for t in net if emu_net_tls(t)},
                          {emu_net_port(t) for t in net if emu_http(t)}) if net else None
     try:
-        return run_emu_boot(runnable, machine, rom, None, memcheck, disk=disk)
+        # a program that hangs would leave every later one without its turn: boot again from the next one
+        results, todo = [], list(runnable)
+        while todo:
+            batch = run_emu_boot(todo, machine, rom, None, memcheck, disk=disk, stall=120)
+            hung = next((i for i, r in enumerate(batch) if r.error_message and r.error_message.startswith("timeout")),
+                        None)
+            if hung is None or len(batch) != len(todo):
+                results += batch
+                break
+            results += batch[:hung + 1]
+            todo = todo[hung + 1:]
+        return results
     finally:
         if server:
             server.close()
 
 
 def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: Optional[str],
-                 memcheck: bool, extra_config: str = "", shots: List[tuple] = (), disk: str = None) -> List[TestResult]:
+                 memcheck: bool, extra_config: str = "", shots: List[tuple] = (), disk: str = None,
+                 stall: float = 0) -> List[TestResult]:
     """Run these tests in one boot of the machine with these Workbench files (shots: emu_shots of
     the only test, checked after it)."""
     sys.path.insert(0, str(PROJECT_ROOT / "tools"))
@@ -877,7 +889,7 @@ def run_emu_boot(tests: List[Path], machine: dict, rom: Optional[str], system: O
                             timeout=machine["timeout"], kickstart=rom, extra_config=machine["config"] + extra_config,
                             system=system, workbench=machine["workbench"],
                             screenshot=[(s[0], f) for s, f in zip(shots, shot_files)] or None,
-                            on_disk=catalogs, disk=disk)
+                            on_disk=catalogs, disk=disk, stall=stall)
     except RuntimeError as e:
         return [TestResult(name=prefix, passed=False, transpile_ok=True, compile_ok=True,
                            error_message=str(e))]

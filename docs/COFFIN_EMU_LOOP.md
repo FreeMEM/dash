@@ -49,3 +49,10 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
   de Trasfondo era ya el 2.8 sin publicar de la sesión universo.
 - P6. Runner: `--emu-coffin` (toda la batería en un arranque; los `# emu-shot` se saltan porque sus píxeles son los
   de las otras pantallas). Primera tanda: fallo del runner (pedía LoadWB en la carpeta de sistema), arreglado.
+- 2ª tanda (2026-11-07): 588/863 en total; casi todos los fallos eran por tiempo detrás de un cuelgue. Ahora el
+  runner, si un programa pasa 120 s sin acabar, arranca otra vez desde el siguiente (`stall` en run_programs).
+- Hallazgo: `test_desktop_canvas` (y los demás `desktop_canvas*`) se cuelga en Coffin con Trasfondo en marcha: no
+  llega a escribir nada y tampoco se hace la captura (dash_shot), así que algo deja las capas bloqueadas. Trasfondo
+  usa el mismo desktop_canvas. En las otras máquinas pasa. Pendiente de mirar aparte (¿dos lienzos a la vez?).
+- Fallos del entorno, no de Dash: idioma español (test_catalog*, test_clock: esperan inglés), Trasfondo ya es dueño
+  del semáforo dash.cpu (test_cpu_shared), pantalla RTG por defecto (test_copper, test_bobs, test_blend).
