@@ -21179,7 +21179,9 @@ static void _dash_mui_set_text_pen(APTR obj, LONG r, LONG g, LONG b) {
             pen = _dash_mui_pen_esc[_dash_mui_npens++];
         }
         if (!_dash_mui_pen_scr && (_dash_mui_pen_scr = LockPubScreen(NULL))) _dash_mui_on_end(_dash_mui_pens_free);
-        if (_dash_mui_pen_scr && GetBitMapAttr(_dash_mui_pen_scr->RastPort.BitMap, BMA_DEPTH) <= 8) {
+        /* a pen of the screen with that colour, on any screen: MUI 5 on a 32-bit screen (Ferrán García) left the
+           text dark with the \\33P[rrggbb] form, which only some MUI take */
+        if (_dash_mui_pen_scr) {
             LONG n = ObtainBestPen(_dash_mui_pen_scr->ViewPort.ColorMap, (r & 255) * 0x01010101UL,
                                    (g & 255) * 0x01010101UL, (b & 255) * 0x01010101UL,
                                    OBP_Precision, PRECISION_GUI, TAG_DONE);
