@@ -23584,7 +23584,38 @@ static LONG _dash_event_window_handle(void) {{
         program = program.replace("    _dash_trap_on();\n", "", 1)
         program = re.sub(r"^ *(IntuitionBase|DOSBase) = \(struct \w+ \*\)OpenLibrary\(.*\n", "", program, flags=re.M)
         program = re.sub(r"^ *if \((IntuitionBase|DOSBase)\) CloseLibrary\(.*\n", "", program, flags=re.M)
+        # The clock (time_ms, A7): the system counter of the CPU instead of timer.device
+        if CTemplates.TIME_RUNTIME in program:
+            program = program.replace(CTemplates.TIME_RUNTIME, self.DASHOS_TIME_RUNTIME, 1)
         return program
+
+    # time_ms on DashOS (docs/AARCH64_LOOP.md, A7): milliseconds since the program started, from the generic timer
+    # of the CPU (CNTVCT_EL0, readable from EL0 in DashOS and in Linux under qemu-aarch64)
+    DASHOS_TIME_RUNTIME = """\
+/* Dash Time Runtime (DashOS: the system counter) */
+static unsigned long _dash_time_c0 = 0;
+
+static unsigned long _dash_time_count(void) {
+    unsigned long c;
+    __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(c));
+    return c;
+}
+
+static void _dash_time_init(void) {
+    if (!_dash_time_c0) _dash_time_c0 = _dash_time_count();
+}
+
+/* Milliseconds since the first call (and so since the program started, see main) */
+static LONG _dash_time_ms(void) {
+    unsigned long f;
+    _dash_time_init();
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(f));
+    return f ? (LONG)((_dash_time_count() - _dash_time_c0) * 1000UL / f) : 0;
+}
+
+static void _dash_time_cleanup(void) {}
+
+"""
 
     def _get_main_template(self) -> Template:
         """Get the appropriate main template based on features used."""
