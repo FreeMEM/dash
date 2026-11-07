@@ -3,7 +3,8 @@
 
     tools/coffin/disco.py actualizar          # Dash, Forja, Inferencia, dashgit, Trasfondo y Tachyon, lo último
     tools/coffin/disco.py fondo               # vuelve a hacer el fondo (tools/coffin/fondo.py) y lo instala
-    tools/coffin/disco.py ejecutar orden.txt  # unas líneas de AmigaDOS (DASHRUN: es la carpeta de trabajo)
+    tools/coffin/disco.py ejecutar orden.txt [fichero...]   # unas líneas de AmigaDOS (DASHRUN: es la carpeta de
+                                                            # trabajo, con esos ficheros del PC)
 
 Arranca en FS-UAE el propio disco ($DASH_EMU_DISK_COFFIN, no una copia) con la ROM de $DASH_KICKSTART_32 y le deja
 las órdenes en DASHRUN:Run-Sequence, que su Startup-Sequence ejecuta tras LoadWB. Al final espera unos segundos
@@ -127,6 +128,8 @@ def main():
         elif sys.argv[1] == "fondo":
             fondo(trabajo)
         else:
+            for f in sys.argv[3:]:
+                shutil.copy(f, trabajo / Path(f).name)
             arrancar(Path(sys.argv[2]).read_text(encoding="latin-1").splitlines(), trabajo)
             for f in sorted(trabajo.glob("*.txt")):   # lo que las órdenes dejaron en DASHRUN:x.txt
                 if f.name != "hecho.txt":

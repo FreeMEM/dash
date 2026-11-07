@@ -838,9 +838,12 @@ COFFIN_SKIP = {
     "test_sysinfo": "a 68040, not a 68020",
     "test_task": "with the JIT the task ends before the main loop turns twice",
     "test_meter_disks": "its bsdsocket.library counts as a running network stack",
+    **{t: "its Workbench keeps the backdrop window when it leaves backdrop mode; the test does not find it again"
+       for t in ("test_desktop_canvas_modes", "test_desktop_canvas_modes_rtg")},
+    "test_desktop_canvas_otro": "Trasfondo's canvas goes to the test's backdrop window too",
+    "test_desktop_canvas_rtg": "after the other canvas tests of the boot its last update repaints more than it "
+                               "expects (alone it passes)",
 }
-# Trasfondo already draws on the desktop: a second desktop_canvas hangs the display (docs/COFFIN_EMU_LOOP.md)
-COFFIN_SKIP_PREFIX = {"test_desktop_canvas": "Trasfondo already has the desktop canvas (two at once hang)"}
 
 
 def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memcheck: bool) -> List[TestResult]:
@@ -859,7 +862,7 @@ def run_disk_tests(runnable: List[Path], machine: dict, rom: Optional[str], memc
         print(f"  {prefix}/{t.stem}: SKIP (its pixels are those of the other machines' screens)")
     runnable = [t for t in runnable if not emu_shots(t)]
     def unfit(t):
-        return COFFIN_SKIP.get(t.stem) or next((r for p, r in COFFIN_SKIP_PREFIX.items() if t.stem.startswith(p)), None)
+        return COFFIN_SKIP.get(t.stem)
     for t in [t for t in runnable if unfit(t)]:
         print(f"  {prefix}/{t.stem}: SKIP ({unfit(t)})")
     runnable = [t for t in runnable if not unfit(t)]

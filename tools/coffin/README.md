@@ -43,7 +43,7 @@ lo cambian y pueden ir varias a la vez. Los programas van en una carpeta del PC 
 python3 tools/paquete_amiga.py           # el paquete de Dash
 tools/coffin/disco.py actualizar         # Dash, Trasfondo (su último lha) y Tachyon, en el propio disco
 tools/coffin/disco.py fondo              # rehacer el fondo
-tools/coffin/disco.py ejecutar ordenes.txt   # otras órdenes de AmigaDOS
+tools/coffin/disco.py ejecutar ordenes.txt [ficheros]   # otras órdenes de AmigaDOS (los ficheros, en DASHRUN:)
 ```
 
 `disco.py` arranca el disco de verdad, no una copia. Antes de apagar espera unos segundos: PFS3 guarda en caché lo
