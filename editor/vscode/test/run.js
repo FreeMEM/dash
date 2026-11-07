@@ -509,6 +509,31 @@ async function previewTests() {
             fs.rmSync(dir, { recursive: true, force: true });
         }
     });
+    await check('new project: a game (V6): player, tileset, level with collisions and its start, and it compiles', () => {
+        const N = require('../newProject.js');
+        const I = require('../media/iff.js');
+        const { name, files } = N.projectFiles('Salta', null, 'game');
+        assert.strictEqual(name, 'Salta');
+        assert.deepStrictEqual(Object.keys(files).sort(),
+            ['.gitignore', '.vscode/launch.json', 'Salta.dash', 'jugador.iff', 'nivel.fmap', 'tiles.iff']);
+        const p = I.readIlbm(files['jugador.iff']), t = I.readIlbm(files['tiles.iff']), m = I.readFmap(files['nivel.fmap']);
+        assert.deepStrictEqual([p.hardware, p.width, p.height, p.planes, p.frames.length], [true, 16, 16, 2, 2]);
+        assert.deepStrictEqual([t.width, t.height, t.frames.length], [16, 16, 3]);
+        assert.deepStrictEqual([m.width, m.height, m.tile, m.tileset, m.layers.length, m.layers[1].type], [20, 16, 16, 'tiles.iff', 2, 1]);
+        assert.strictEqual(m.layers[1].cells[14 * 20 + 2], 1);                 // the ground under the start, solid
+        assert.deepStrictEqual(m.objects.map((o) => [o.kind, o.x, o.y]), [['jugador', 32, 208]]);
+        assert.match(files['Salta.dash'], /tilemap_object_find\(0, "jugador", 0\)/);
+        const repo = path.resolve(__dirname, '..', '..', '..');
+        if (!fs.existsSync(path.join(repo, 'dashc', 'dashc'))) return;
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'dash_juego_'));
+        try {
+            const prog = N.writeProject(dir, 'Salta', null, 'game');
+            const out = require('child_process').spawnSync(path.join(repo, 'dash'), [prog, '-o', path.join(dir, 'prog')], { cwd: repo, encoding: 'utf8' });
+            assert.strictEqual(out.status, 0, out.stdout + out.stderr);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
     await check('video: subtitles and the video of pictures at their times (video/rodaje.js)', () => {
         const V = require('../video/rodaje.js');
         assert.strictEqual(V.srtTime(3723456), '01:02:03,456');

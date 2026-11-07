@@ -45,7 +45,7 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
       sprite); ancho, alto, zoom, rejilla; "Copiar código Dash" con los choques y los objetos.
 - [x] V5. **Ver en Amiga** para un sprite o un mapa: un programa pequeño lo enseña en el emulador, como la vista
       previa de MUI (`tools/emu_preview.py`).
-- [ ] V6. **Proyecto de juego**: "Dash: Nuevo proyecto" pregunta el tipo (aplicación MUI, como ahora, o juego); el
+- [x] V6. **Proyecto de juego**: "Dash: Nuevo proyecto" pregunta el tipo (aplicación MUI, como ahora, o juego); el
       juego trae un sprite, un mapa y un `main.dash` que los carga y mueve al jugador.
 - [ ] V7. **Escenas (Godot)**: cuando Forja tenga su editor de escenas, el mismo en la extensión.
 - [ ] V8. **Cierre**: README, CHANGELOG, capturas, versión, y la tienda (con el token del usuario).
@@ -92,3 +92,12 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
   guardado o no. Comprobado en FS-UAE (A1200, 3.1): Dash carga el BOB, el sprite acoplado y el mapa que escribe la
   extensión (lo que faltaba de V1). Pruebas en `test/amigaView.js`: los programas compilan con `./dash`; con
   `DASH_PREVIEW_EMU=1`, 4 en el emulador.
+- 2026-11-07, V6: "Dash: Nuevo proyecto" pregunta el tipo: aplicación MUI (como antes) o juego (`newProject.js`,
+  `gameFiles`). El juego trae `jugador.iff` (sprite de hardware de 2 fotogramas), `tiles.iff` (BOB de 3 tiles),
+  `nivel.fmap` (20 x 16, capa de choques con suelo sólido y plataformas que se cruzan desde abajo, y el objeto
+  "jugador" donde empieza) y un programa que corre y salta con joystick o flechas, con `tilemap_get` en la capa de
+  choques. No necesita MUI (va también en un A500). Probado en FS-UAE: el jugador cae y queda de pie en el suelo.
+  Encontrado al probar: la captura (`tools/amiga/shot.c`) lee el dibujo de la pantalla y los sprites de hardware no
+  están en él; "Ver en Amiga" de un sprite pinta además sus fotogramas ampliados con los lápices 17-31, que son los
+  colores del sprite. Y un fallo de Dash, pasado a la sesión de Dash para la 2.6.0: `_dash_is_rtg_screen` toma una
+  pantalla PAL nativa (0x21000) por RTG y `sprite_load` avisa "RTG screen detected".

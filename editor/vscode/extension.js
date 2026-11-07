@@ -268,10 +268,19 @@ async function newWindowFile() {
  * "Dash: Nuevo proyecto": a folder with a program and its window (newProject.js), opened. parent and name
  * (tests): without questions; open false: not opened. Returns the program's path.
  */
-async function newProject(parent, name, open) {
+async function newProject(parent, name, open, kind) {
+    if (!kind && name) kind = 'mui';                 // (the tests, and the walkthrough's: the MUI program)
+    if (!kind) {
+        const picked = await vscode.window.showQuickPick([
+            { id: 'mui', label: 'Aplicación con ventana MUI', detail: 'Un programa con su ventana del editor visual (MUI y un 68020)' },
+            { id: 'game', label: 'Juego', detail: 'Un jugador (sprite de hardware), un nivel (mapa de tiles con choques) y el programa que lo mueve con el joystick' },
+        ], { title: 'Nuevo proyecto de Dash', placeHolder: 'Qué clase de programa' });
+        if (!picked) return null;
+        kind = picked.id;
+    }
     if (!name) {
         name = await vscode.window.showInputBox({ title: 'Nuevo proyecto de Dash', prompt: 'Nombre del programa',
-                                                  value: 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
+                                                  value: kind === 'game' ? 'juego' : 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
         if (!name) return null;
     }
     if (!parent) {
@@ -285,7 +294,7 @@ async function newProject(parent, name, open) {
     try {
         // the compiler: the setting (nothing to write), or the Dash repository the folder is in
         const configured = vscode.workspace.getConfiguration('dash').get('path');
-        program = writeProject(folder, name, configured ? null : findDash(path.join(folder, 'x')));
+        program = writeProject(folder, name, configured ? null : findDash(path.join(folder, 'x')), kind);
     } catch (e) {
         vscode.window.showErrorMessage('No se pudo crear el proyecto: ' + e.message);
         return null;

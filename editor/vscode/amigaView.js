@@ -14,15 +14,29 @@ function spriteProgram(s, file) {
     const f = q(file), n = s.frames.length;
     const lines = [`# Ver en Amiga: ${f}`, 'Main'];
     if (s.hardware) {
+        // the picture of the screen does not have the hardware sprites (the chip puts them over it): beside the
+        // sprite, each frame painted big with its pens (the sprite's colours are the screen's 17 to 31)
         const attached = s.planes === 4;
         lines.push(
-            `    if not screen_open_mode(0x21000, 320, 256, 2, "${f}")`, '        Print "No se puede abrir la pantalla"', '        return', '    end',
-            `    gfx_rgb(0, ${(s.palette[0] >> 16) & 255}, ${(s.palette[0] >> 8) & 255}, ${s.palette[0] & 255})`,
+            `    if not screen_open_mode(0x21000, 320, 256, 5, "${f}")`, '        Print "No se puede abrir la pantalla"', '        return', '    end',
             `    if not ${attached ? 'sprite_load_attached' : 'sprite_load'}(0, "${f}")`,
             `        Print "No se puede cargar ${f}"`, '        screen_close()', '        return', '    end',
             `    sprite_load_colors(0, "${f}")`,
-            `    Print "cargado: ${attached ? 'sprite acoplado' : 'sprite'} de ${n} fotogramas"`,
-            '    sprite_pos(0, 152, 120)', '    sprite_show(0)',
+            `    Print "cargado: ${attached ? 'sprite acoplado' : 'sprite'} de ${n} fotogramas"`);
+        const z = 3, step = 16 * z + 8;
+        s.frames.forEach((px, i) => {
+            const ox = 16 + (i % 5) * step, oy = 24 + Math.floor(i / 5) * (s.height * z + 8);
+            for (let y = 0; y < s.height; y++)
+                for (let x = 0; x < 16;) {
+                    const c = px[y * 16 + x];
+                    let e = x + 1;
+                    while (e < 16 && px[y * 16 + e] === c) e++;
+                    if (c) lines.push(`    gfx_pen(${16 + c})`, `    gfx_rect(${ox + x * z}, ${oy + y * z}, ${ox + e * z - 1}, ${oy + y * z + z - 1})`);
+                    x = e;
+                }
+        });
+        lines.push(
+            '    sprite_pos(0, 152, 200)', '    sprite_show(0)',
             '    cuenta = 0', '    while cuenta < 500',
             `        sprite_frame(0, (cuenta / ${s.speed}) % ${n})`, '        wait_vblank()', '        cuenta = cuenta + 1', '    end',
             '    sprite_hide(0)', '    screen_close()', 'end', '');

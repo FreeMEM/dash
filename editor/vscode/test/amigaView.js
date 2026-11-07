@@ -65,6 +65,14 @@ async function amigaViewTests(check, assert) {
         const r = await run(programs.map, [{ name: 'nivel.fmap', bytes: I.writeFmap(map) }, { name: 'tiles.iff', bytes: I.writeIlbm(tiles) }]);
         assert.match(r.output, /cargado: mapa de 40 x 20, 3 capas/);
     });
+    await check('new game project (emulator): the player falls onto the ground of the level and stays there', async () => {
+        const N = require('../newProject.js');
+        const f = N.projectFiles('Salta', null, 'game').files;
+        const program = f['Salta.dash'].replace('    while not key_down(ESC)', '    while cuenta < 150')
+            .replace('    sprite_hide(0)', '    Print "jugador: #{x} #{y} suelo #{en_suelo}"\n    sprite_hide(0)');
+        const r = await run(program, ['jugador.iff', 'tiles.iff', 'nivel.fmap'].map((name) => ({ name, bytes: f[name] })));
+        assert.match(r.output, /jugador: 32 208 suelo true/);
+    });
     await check('ver en amiga (emulator): a file Dash cannot load says so', async () => {
         await assert.rejects(run(programs.bob, [{ name: 'nave.iff', bytes: new Uint8Array(40) }]), /No se puede cargar nave.iff/);
     });
