@@ -81,7 +81,7 @@ bibliotecas de la caja Amiga). Rama `aarch64`, worktree `.worktrees/aarch64`.
 | A4 | Codificador de AArch64 y escritor de ELF (enlaza el runtime, un `.o` ELF) | Enteros, funciones, control y `Print`, contra A2 |
 | A5 | Cobertura en ARM: textos, listas, structs, diccionarios, Float y Double (FPU de ARM) | Los tests de A2 por el camino directo, misma salida |
 | A6 | Structs de Amiga con punteros de 32 bits, en los dos caminos | Tests en ARM; en 68k, ejecutables idénticos |
-| A7 | Builtins de DashOS | Cuando DashOS tenga su API (S11). Fuera de este bucle |
+| A7 | Builtins de DashOS | Los comunes que se puedan, sobre las llamadas de DashOS; los propios (canales, procesos, llaves, grupos), cuando se decida su API para Dash (S11) |
 
 Con A2 hecho, el camino por C es el oráculo del directo, como hoy `./dash --gcc` lo es del directo de 68k.
 
@@ -338,3 +338,21 @@ Print offsetof(Node, ln_Name)  # 10
 - 2026-11-03: DashOS C48 (28c7819): lo que escribe un programa sale por un registro de 64 KB y la consola (un
   proceso), con "│ " delante de cada línea; si el registro se llena, lo nuevo se pierde. Para comparar la salida en
   DashOS con la de qemu, quitar esa marca. 22 memoria_dma y 23 registro_leer son para controladores.
+- 2026-11-07 (sesión DashOS, que lleva DashOS y Dash para AArch64 desde el 2026-11-06): **A7, primera parte.**
+  - `Delay` en `runtime/dashos/plat.c` con el temporizador de DashOS (C49): un canal, un temporizador de una vez y
+    leer; en Linux (qemu-aarch64), `nanosleep`. Así `time_delay` y `time_delay_ms` valen en DashOS sin tocar el
+    compilador. `dash_plat_sleep(us)` es la función de plataforma nueva.
+  - `time_ms` con el contador del sistema de la CPU (`CNTVCT_EL0`, legible desde EL0 en DashOS y en qemu-aarch64):
+    `_dashos_port` de `compiler/codegen.py` cambia `TIME_RUNTIME` por `DASHOS_TIME_RUNTIME`. Solo actúa con
+    `DASH_TARGET=dashos`: el 68k no cambia.
+  - Builtins que compilan para DashOS: de 91 a 92 (más `time_delay`, `time_delay_ms` ya contados al regenerar).
+    `tests/dashos_tests.py`: por C, de 92 a 101 de 313 (nuevos: `test_time_ms`, `test_autoclose_loop`,
+    `test_struct`, `test_matrix` y otros cinco que esperaban); por el directo, de 86 a 88. Ninguno deja de pasar
+    (listas comparadas con un worktree de `origin/main`).
+  - En DashOS de verdad (QEMU `raspi4b`, metidos un momento en `lanzador`): un programa con `time_delay` y
+    `time_delay_ms` acaba bien, y otro que mide 200 ms con `time_ms` da entre 180 y 1000 ms.
+  - **Pendiente de decidir (usuario):** los builtins propios de DashOS (canales, procesos, llaves, grupos,
+    temporizadores) y sus nombres. S11 dice que la API nativa será "Amiga moderna" (puertos y mensajes sobre canales);
+    no está definida función a función. Y no hay forma de marcar un builtin como solo de DashOS (en el Amiga
+    debería dar un error claro).
+  - **Sin fusionar:** rama `dashos-a7`. Toca `compiler/codegen.py`: avisar a la sesión freememlang antes.
