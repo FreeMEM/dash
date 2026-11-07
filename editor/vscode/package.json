@@ -2,8 +2,13 @@
   "name": "dash-mui-editor",
   "displayName": "Dash for Amiga",
   "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "FreeMEM",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1f2d5c",
+    "theme": "dark"
+  },
   "author": {
     "name": "Francisco Antonio Tapias Bravo",
     "url": "https://github.com/FreeMEM"
@@ -567,7 +572,7 @@
   },
   "scripts": {
     "test": "node test/run.js",
-    "package": "npm run build -- --minify && vsce package --no-dependencies",
+    "package": "npm run build -- --minify && vsce package --no-dependencies --baseContentUrl https://github.com/FreeMEM/dash/blob/HEAD/editor/vscode --baseImagesUrl https://github.com/FreeMEM/dash/raw/HEAD/editor/vscode",
     "test:vscode": "npm run build && sh test/integration/run.sh",
     "build": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --target=node18 --outfile=dist/extension.js"
   },

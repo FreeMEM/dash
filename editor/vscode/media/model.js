@@ -39,7 +39,7 @@
                     ['help', 'string', ''], ['context_menu', 'string', '']];   // (the name of a context menu, Lorraine D15)
     const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
     // words of the language: not names (compiler/dashui.py reserved(), the same list; a test compares them)
-    const RESERVED = new Set(["EventLoop", "Main", "Print", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "interface", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
+    const RESERVED = new Set(["EventLoop", "Main", "Print", "Ptr", "Stop", "Wait", "Window", "and", "borrow", "break", "const", "continue", "elif", "else", "end", "enum", "false", "fn", "for", "func", "if", "import", "in", "interface", "nil", "not", "or", "return", "self", "step", "struct", "true", "var", "weak", "while"]);
     /** Why a name of a window or object is not valid, or null */
     function badName(name) {
         if (!IDENT.test(String(name || ''))) return 'letras sin tilde, cifras y _, sin empezar por cifra';

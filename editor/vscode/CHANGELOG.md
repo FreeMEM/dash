@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 (2026-11-07)
+
+The first version in the Visual Studio Marketplace (search for "Dash for Amiga"), for Dash 2.4.
+
+- Highlighting: the builtins added to Dash since 0.4.0, about 120: tile maps (`tilemap_*`), sprites and bobs
+  (`sprite_load_attached`, `sprite_rgb8`, `bob_paste`, `bob_frames`...), screens (`screen_double_buffer`,
+  `screen_flip`, `screen_open_mode`, `dialog_screen_mode`, `screen_clone_wb`...), the program's own ARexx port
+  (`rexx_port`, `rexx_get`, `rexx_reply`), `notify`, Workbench icons and AppWindow (`icon_*`, `app_window`,
+  `app_drop`, `mui_on_drop`), `sha1_*`, `key_down`, and the builtins and `@amiga` structs of DashOS.
+- When `./dash` says that its compiler is not built, the extension says how: `make -C dashc` in Dash's folder.
+- The notice of a new version of Dash says how to get it: `git pull` and `make -C dashc`.
+- The README and the walkthrough: Dash compiles straight to 68000 code, and the Amiga gcc is only needed for
+  programs with C, `./dash --gcc` and debugging with gdb. Installing from the Marketplace.
+- Visual editor: `Ptr` (a word of the language since `@amiga` structs) is refused as a name, as the compiler does.
+- An icon for the Marketplace.
+
 ## 0.4.0 (2026-11-02)
 
 For Dash 2.0.1, where `./dash` compiles straight to hunk and `./dash --gcc` goes through C with gcc (with an older

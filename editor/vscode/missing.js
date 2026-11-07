@@ -3,6 +3,8 @@
 // to get it (docs/IDE_VIDEO_LOOP.md, v12). No vscode here: the tests use it as it is.
 
 const KNOWN = [
+    [/dash: falta el compilador; /,
+     () => 'Falta construir el compilador de Dash: en la carpeta de Dash, ejecuta make -C dashc (una vez, y tras cada git pull).'],
     [/m68k-amigaos-gcc not found|Falta el compilador de Amiga/,
      () => 'Falta el compilador de Amiga (m68k-amigaos-gcc, en /opt/amiga/bin): instálalo como dice el README de Dash ' +
            '(o pon su carpeta en DASH_TOOLCHAIN).'],

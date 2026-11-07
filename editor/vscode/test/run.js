@@ -831,6 +831,7 @@ async function taskTests() {
             ['--machine a1200 needs $DASH_EMU_SYS_MUI (Workbench files with MUI) or --system', /"dash\.emulator\.muiSystem"/],
             ['--machine a500 needs $DASH_KICKSTART_A500 (or --kickstart)', /kickstartA500/],
             ['--machine a1200-32 needs $DASH_KICKSTART_32 (or --kickstart)', /kickstart32/],
+            ['dash: falta el compilador; constrúyelo con: make -C dashc', /make -C dashc/],
         ];
         for (const [text, want] of cases) assert(want.test(missing(text) || ''), text + ' -> ' + missing(text));
         assert.strictEqual(missing('=== x: RC=0\nhola'), null);
@@ -1239,7 +1240,7 @@ async function updateTests() {
         const fetch = () => { asked++; return releases(); };
         fake.choice = undefined;
         const got = await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 });
-        assert(got && got.version === '1.1.0' && f.shown.length === 1 && /1\.1\.0.*1\.0\.0/.test(f.shown[0]), f.shown.join());
+        assert(got && got.version === '1.1.0' && f.shown.length === 1 && /1\.1\.0.*1\.0\.0.*git pull y make -C dashc/.test(f.shown[0]), f.shown.join());
         assert.strictEqual(await checkUpdates(f.vscode, f.context, () => dir, { fetch, now: () => 1e12 + 3600e3 }), null);
         assert.strictEqual(asked, 1);                       // (no request again the same day)
         fake.choice = 'No avisar de esta';

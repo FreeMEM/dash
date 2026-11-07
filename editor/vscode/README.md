@@ -1,6 +1,7 @@
 # Dash for VS Code
 
-Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to C for the Amiga.
+Support for [Dash](https://github.com/FreeMEM/dash), a high-level language for the Amiga that compiles straight to
+68000 code (or through C with gcc, `./dash --gcc`).
 
 By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
 
@@ -15,11 +16,15 @@ running, debugging, and debugging a real Amiga.
 
 ## Installing
 
-1. Dash and the Amiga toolchain, as in the
-   [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
-   emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. This extension: `dash-mui-editor-0.4.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.4.0), then in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.4.0.vsix`.
+1. Dash, as in the [installation](https://github.com/FreeMEM/dash#installation) of the Dash
+   repository: `git clone`, then `make -C dashc` (the compiler). For the emulator, FS-UAE and a Kickstart ROM; for
+   MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`. The Amiga gcc (`m68k-amigaos-gcc`) is only
+   needed for programs with C in them, `./dash --gcc` and debugging with gdb.
+2. This extension: search for **Dash for Amiga** in the Extensions view of VS Code (1.86 or later), or
+   `code --install-extension FreeMEM.dash-mui-editor`. It also comes as a `.vsix` in each
+   [release](https://github.com/FreeMEM/dash/releases?q=vscode) (**Extensions: Install from VSIX...**).
+
+To update Dash: `git pull` and `make -C dashc` in its folder. The extension says when there is a new version.
 
 ## How it works with Dash
 
@@ -37,8 +42,9 @@ reinstalling it.
 
 ## Getting started
 
-1. You need VS Code 1.86 or later, the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain
-   (`m68k-amigaos-gcc` in `/opt/amiga`, or its folder in `DASH_TOOLCHAIN`) and, for the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For MUI
+1. You need VS Code 1.86 or later, the Dash repository (with `./dash`, `compiler/` and `dashc/` built) and, for
+   the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For programs with C, the Amiga toolchain
+   (`m68k-amigaos-gcc` in `/opt/amiga`, or its folder in `DASH_TOOLCHAIN`). For MUI
    windows, the MUI SDK (`tools/get_mui_sdk.sh`) and Workbench files with MUI for the emulator
    (`tools/emu_sys_mui.sh`, setting `dash.emulator.muiSystem`). When something is missing, the extension says
    what, and how to get it.
@@ -198,11 +204,12 @@ npm run package    # dash-mui-editor-<version>.vsix (the bundle minified)
 node test/screenshots.js   # images/editor.png and images/icon.png again (headless Chromium)
 ```
 
-Install the package with `code --install-extension dash-mui-editor-<version>.vsix`. To publish it (not done yet):
-the Visual Studio Marketplace needs the publisher `FreeMEM` made there and a personal access token of Azure DevOps
-(`npx vsce publish --packagePath dash-mui-editor-<version>.vsix`); Open VSX (VSCodium, and other editors) needs
-the namespace `FreeMEM` and its token (`npx ovsx publish dash-mui-editor-<version>.vsix -p <token>`). The
-version and the `CHANGELOG.md` go up first.
+Install the package with `code --install-extension dash-mui-editor-<version>.vsix`. To publish a version: the
+version and `CHANGELOG.md` go up first, then `npm run package`, the GitHub release `vscode-<version>` with the
+`.vsix` (`gh release create ... --latest=false`, so that Dash's own release stays the latest) and
+`npx vsce publish --packagePath dash-mui-editor-<version>.vsix` (Visual Studio Marketplace, publisher `FreeMEM`,
+with its Azure DevOps token in `VSCE_PAT`). Open VSX (VSCodium and other editors):
+`npx ovsx publish dash-mui-editor-<version>.vsix -p <token>`, with the namespace `FreeMEM`.
 
 ## Author
 
