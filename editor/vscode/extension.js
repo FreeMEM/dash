@@ -182,7 +182,6 @@ async function showOnAmiga(document, windowName, webview, auto) {
     }
 }
 
-/** New .dashui file with one empty window, opened in the visual editor */
 /**
  * "Dash: Nuevo sprite, BOB o mapa" (Amiga-B in Forja): which, where (from the explorer, the folder clicked), and it
  * opens in its editor. kind and target (tests): without questions.
@@ -209,6 +208,55 @@ async function newGraphic(folder, kind, target) {
     return uri;
 }
 
+/**
+ * "Ver en Amiga" of the sprite and map editors (amigaView.js): the file as the editor has it, loaded by a small
+ * program as a game would, pictured in the emulator. message: {tx, ty} (a map: the top left cell of the view)
+ */
+let graphicRunning = false;
+async function graphicOnAmiga(kind, doc, webview, message) {
+    const say = (m) => webview.postMessage(Object.assign({ type: 'amiga', busy: false }, m));
+    const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
+    if (graphicRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
+    if (!trusted()) { fail(UNTRUSTED); return; }
+    const file = doc.uri.fsPath, dashDir = findDash(file);
+    if (!dashDir) { fail(noDash()); return; }
+    const IFF = require('./media/iff.js'), AV = require('./amigaView');
+    const name = path.basename(file);
+    const files = [{ name, bytes: doc.bytes }];
+    let program;
+    try {
+        if (kind === 'sprite') program = AV.spriteProgram(IFF.readIlbm(doc.bytes), name);
+        else {
+            const m = IFF.readFmap(doc.bytes);
+            let tileset = '', depth = 4;
+            if (m.tileset) {
+                const p = path.resolve(path.dirname(file), m.tileset);
+                if (!fs.existsSync(p)) throw new Error(`no encuentro el tileset ${m.tileset}`);
+                const bytes = fs.readFileSync(p);
+                depth = IFF.readIlbm(new Uint8Array(bytes)).planes;
+                tileset = path.basename(p) === name ? 'tileset_' + path.basename(p) : path.basename(p);
+                files.push({ name: tileset, bytes });
+            }
+            program = AV.mapProgram(m, name, tileset, message && message.tx, message && message.ty, depth);
+        }
+    } catch (e) { fail(e.message); return; }
+    const machine = vscode.workspace.getConfiguration('dash.emulator').get('machine') || undefined;
+    graphicRunning = true;
+    say({ status: `${name} en el Amiga emulado…`, busy: true });
+    try {
+        const work = () => AV.runView({ dashDir, program, files, env: emulatorEnv(), machine });
+        const { png } = vscode.window.withProgress
+            ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Ver en Amiga: ${name}` }, work)
+            : await work();
+        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `${name} en el Amiga emulado` });
+    } catch (e) {
+        fail(missing(e.message) || 'No se pudo: ' + e.message);
+    } finally {
+        graphicRunning = false;
+    }
+}
+
+/** New .dashui file with one empty window, opened in the visual editor */
 async function newWindowFile() {
     const uri = await vscode.window.showSaveDialog({ filters: { 'Ventanas MUI': ['dashui'] } });
     if (!uri) return;
@@ -297,8 +345,8 @@ function activate(context) {
         vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
-    registerSpriteEditor(context);                    // .iff: the sprite and BOB editor (as Forja's)
-    registerMapEditor(context);                       // .fmap: the tile map editor (as Forja's)
+    registerSpriteEditor(context, (doc, webview, m) => graphicOnAmiga('sprite', doc, webview, m));   // .iff (as Forja's)
+    registerMapEditor(context, (doc, webview, m) => graphicOnAmiga('map', doc, webview, m));         // .fmap (as Forja's)
     setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
     reopenStartupDashui();
     // a project just made in this window: its program open, beside the walkthrough
@@ -330,4 +378,4 @@ function deactivate() {
     return stopLanguageServer();
 }
 
-module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject, newGraphic };
+module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject, newGraphic, graphicOnAmiga };

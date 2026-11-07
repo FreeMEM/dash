@@ -1394,6 +1394,7 @@ async function updateTests() {
     await iffTests();
     await require('./sprite.js').spriteTests(check, assert);
     await require('./map.js').mapTests(check, assert);
+    await require('./amigaView.js').amigaViewTests(check, assert);
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);
 })();

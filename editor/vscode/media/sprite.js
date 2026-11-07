@@ -213,6 +213,8 @@
         bar.append(el('button', { title: 'Rehacer (Ctrl+Y)', onclick: () => vscode.postMessage({ type: 'redo' }) }, '↷'));
         bar.append(el('span', { className: 'sep' }));
         bar.append(el('button', { id: 'code', title: 'Copiar las líneas de Dash que lo cargan (C)', onclick: ops.code }, 'Copiar código'));
+        bar.append(el('button', { id: 'amiga', className: 'on', disabled: amiga.busy, title: 'Cargarlo en el Amiga emulado como lo haría un juego',
+            onclick: () => vscode.postMessage({ type: 'amiga' }) }, 'Ver en Amiga'));
     }
 
     function renderPalette() {
@@ -383,6 +385,31 @@
         }
         e.preventDefault();
     }
+
+
+    // --- Ver en Amiga: the picture of the emulated Amiga (the extension runs it) -------------------------------
+    const amiga = { busy: false, status: '', error: '', src: '' };
+    function renderAmiga() {
+        const pane = $('amiga-pane');
+        if (!pane) return;
+        pane.replaceChildren();
+        if (!amiga.status && !amiga.error && !amiga.src) return;
+        pane.append(el('h3', {}, 'Ver en Amiga'));
+        if (amiga.error) pane.append(el('div', { className: 'hint error' }, amiga.error));
+        else if (amiga.status) pane.append(el('div', { className: 'hint' }, amiga.status));
+        if (amiga.src) pane.append(el('img', { id: 'amiga-shot', src: amiga.src, alt: 'La pantalla del Amiga emulado' }));
+    }
+    window.addEventListener('message', (ev) => {
+        const m = ev.data;
+        if (!m || m.type !== 'amiga') return;
+        amiga.busy = !!m.busy;
+        amiga.status = m.status || '';
+        amiga.error = m.error || '';
+        if (m.src) amiga.src = m.src;
+        const b = document.getElementById('amiga');
+        if (b) b.disabled = amiga.busy;
+        renderAmiga();
+    });
 
     // --- messages ----------------------------------------------------------------------------------------------
     window.addEventListener('message', (ev) => {

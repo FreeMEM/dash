@@ -59,3 +59,6 @@ input[type=range] { padding: 0; flex: 1; }
 .list-row .name { flex: 1; }
 .collision { display: flex; align-items: center; gap: 6px; width: 100%; margin: 2px 0; text-align: left; }
 .collision i { width: 14px; height: 14px; display: inline-block; border: 1px solid #0008; }
+#amiga-shot { display: block; width: 100%; image-rendering: pixelated; margin-top: 4px; border: 1px solid var(--vscode-panel-border, #444); }
+.hint.error { color: var(--vscode-errorForeground, #f48771); }
+#layout.map #side { display: flex; flex-direction: column; }

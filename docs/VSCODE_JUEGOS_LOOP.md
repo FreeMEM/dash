@@ -43,7 +43,7 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
       caja, relleno, cuentagotas, borrar, espejo H y V; capas (ver, nueva, quitar, orden), capa de choques
       (sólido, plataforma, escalera, daño, con su trama), objetos (jugador, enemigo, moneda, puerta, otro; con
       sprite); ancho, alto, zoom, rejilla; "Copiar código Dash" con los choques y los objetos.
-- [ ] V5. **Ver en Amiga** para un sprite o un mapa: un programa pequeño lo enseña en el emulador, como la vista
+- [x] V5. **Ver en Amiga** para un sprite o un mapa: un programa pequeño lo enseña en el emulador, como la vista
       previa de MUI (`tools/emu_preview.py`).
 - [ ] V6. **Proyecto de juego**: "Dash: Nuevo proyecto" pregunta el tipo (aplicación MUI, como ahora, o juego); el
       juego trae un sprite, un mapa y un `main.dash` que los carga y mueve al jugador.
@@ -84,3 +84,11 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
   en el menú de una carpeta del explorador. Pregunta el tipo (sprite de hardware 16 x 16, acoplado, BOB 32 x 32 de 16
   colores, mapa 64 x 32 de tiles de 16: los tamaños de Forja), dónde guardarlo, y lo abre en su editor. Prueba en
   `extension: a new sprite, BOB or map`.
+- 2026-11-07, V5: "Ver en Amiga" en los dos editores (`amigaView.js`). Un programa de Dash carga el fichero como un
+  juego (BOB: todos los fotogramas con `bob_paste` y uno animado; sprite o acoplado: `sprite_load(_attached)` y
+  animado; mapa: `tilemap_load` y su tileset con `tilemap_draw` y `tilemap_draw_masked` desde la esquina de la vista,
+  sin las capas de choques ni las ocultas) en una pantalla PAL de baja resolución; `tools/emu_run.py --file` (nuevo:
+  copia ficheros al disco emulado) lo ejecuta y la captura sale en el panel del editor. Va lo que tiene el editor,
+  guardado o no. Comprobado en FS-UAE (A1200, 3.1): Dash carga el BOB, el sprite acoplado y el mapa que escribe la
+  extensión (lo que faltaba de V1). Pruebas en `test/amigaView.js`: los programas compilan con `./dash`; con
+  `DASH_PREVIEW_EMU=1`, 4 en el emulador.

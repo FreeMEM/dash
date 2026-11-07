@@ -20,9 +20,10 @@ class BinaryDocument {
 class BinaryEditorProvider {
     /**
      * @param {vscode.ExtensionContext} context
-     * @param {{page: string, scripts: string[], empty?: (uri: vscode.Uri) => Uint8Array | null}} kind
+     * @param {{page: string, scripts: string[], empty?: (uri: vscode.Uri) => Uint8Array | null,
+     *   onAmiga?: (doc: BinaryDocument, webview: vscode.Webview, message: any) => void}} kind
      *   page: the HTML in media/; scripts: the files it loads ({{name}} in the page); empty: the bytes of a new
-     *   file (an empty file opened)
+     *   file (an empty file opened); onAmiga: "Ver en Amiga"
      */
     constructor(context, kind) {
         this.context = context;
@@ -90,6 +91,8 @@ class BinaryEditorProvider {
                     filters: { 'Imágenes IFF': ['iff', 'ilbm', 'lbm', 'brush', 'bob', 'spr'] }, title: m.title });
                 const rel = got && got[0] ? path.relative(base.fsPath, got[0].fsPath).split(path.sep).join('/') : null;
                 panel.webview.postMessage({ type: 'picked', id: m.id, path: rel });
+            } else if (m.type === 'amiga' && this.kind.onAmiga) {
+                this.kind.onAmiga(doc, panel.webview, m);
             } else if (m.type === 'error') {
                 vscode.window.showErrorMessage(m.text);
             }
@@ -122,12 +125,13 @@ class BinaryEditorProvider {
 }
 
 /** The sprite and BOB editor, for .iff, .ilbm, .lbm, .brush, .bob and .spr */
-function registerSpriteEditor(context) {
+function registerSpriteEditor(context, onAmiga) {
     const IFF = require('./media/iff.js');
     const provider = new BinaryEditorProvider(context, {
         page: 'sprite.html', scripts: ['sprite.css', 'iff.js', 'spriteModel.js', 'sprite.js'],
         // an empty file: a BOB of 32 x 32 and 16 colours, as Forja's Amiga-B
         empty: () => IFF.writeIlbm(IFF.newSprite('bob', 32, 32, 4)),
+        onAmiga,
     });
     context.subscriptions.push(vscode.window.registerCustomEditorProvider('dash.spriteEditor', provider,
         { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: true }));
@@ -135,12 +139,13 @@ function registerSpriteEditor(context) {
 }
 
 /** The tile map editor, for .fmap (Forja's FORM FMAP) */
-function registerMapEditor(context) {
+function registerMapEditor(context, onAmiga) {
     const IFF = require('./media/iff.js');
     const provider = new BinaryEditorProvider(context, {
         page: 'map.html', scripts: ['sprite.css', 'iff.js', 'mapModel.js', 'map.js'],
         // an empty file: 64 x 32 tiles of 16, one layer, as Forja's Amiga-B
         empty: () => IFF.writeFmap(IFF.newMap(64, 32, 16, '')),
+        onAmiga,
     });
     context.subscriptions.push(vscode.window.registerCustomEditorProvider('dash.mapEditor', provider,
         { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: true }));
