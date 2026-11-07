@@ -2522,10 +2522,14 @@ static int gen_dash_builtin(Node *n)
     for (b = 0; b < builtin_count; b++)
         if (!strcmp(builtin_info[b].name, n->name)) break;
     if (b == builtin_count) fatal_node(n, "la función %s no existe", n->name);
+#ifndef DASH_A64
+    if (builtin_info[b].dashos) fatal_node(n, "%s es solo de DashOS (./dash --dashos)", n->name);
+#endif
     sym = xmalloc(strlen(n->name) + 5);
     strcpy(sym, "_db_");
     strcat(sym, n->name);
-    if (!runtime_has(sym))
+    /* (los de DashOS no están en el runtime del 68k, el que mira runtime_has: los pone runtime/dashos/build.py) */
+    if (!builtin_info[b].dashos && !runtime_has(sym))
         fatal_node(n, "(sin --gcc) el builtin %s aún no está (ventanas y gráficos, Double...)", n->name);
     np = builtin_info[b].nparams;
     if (n->args.n > np) fatal_node(n, "%s pide %d argumentos y se le dan %d", n->name, np, n->args.n);

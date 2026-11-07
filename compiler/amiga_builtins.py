@@ -25,6 +25,7 @@ class BuiltinFunc:
     needs_rtg: bool = False      # Needs CyberGraphX/Picasso96 for RTG support
     reads_only: bool = False     # Only reads its String/object arguments during the call (no copy kept)
     list_of: Optional[str] = None  # Returns a new list of these ("String": a [String] it owns)
+    needs_dashos: bool = False   # Only on DashOS (./dash --dashos): its kernel calls (A7); on the Amiga, an error
     description: str = ""        # Documentation
 
 
@@ -3820,6 +3821,14 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_on_close(${win}, ${id})",
         description="mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1)"
     ),
+    "mui_on_drop": BuiltinFunc(
+        name="mui_on_drop",
+        params=["obj", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_drop(${obj}, ${id})",
+        description="mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: "
+                    "anywhere on it); app_drop gives their paths, app_drop_x/y where they fell"
+    ),
     "mui_press": BuiltinFunc(
         name="mui_press",
         params=["obj"],
@@ -5937,6 +5946,111 @@ OTHERWIN_FUNCTIONS = _move(SIMINPUT_FUNCTIONS, [
     "window_find", "window_found_activate", "window_found_box", "gadget_index", "gadget_x", "gadget_y",
     "gadget_selected", "screen_pixel", "screen_pixel_rgb", "screen_pen_rgb", "cx_send"])
 
+# =============================================================================
+# DashOS (docs/AARCH64_LOOP.md, A7): channels, handles, timers, memory objects, processes and groups of the
+# DashOS kernel. Only with ./dash --dashos; on the Amiga they are a compile error. Handles are numbers (> 0);
+# errors, negative numbers (dashos_error_text says which).
+# =============================================================================
+
+def _os(name, params, ret, template, desc, reads_only=False):
+    return BuiltinFunc(name=name, params=params, return_type=ret, c_template=template, description=desc,
+                       needs_dashos=True, reads_only=reads_only)
+
+
+DASHOS_FUNCTIONS = {
+    "channel_create": _os("channel_create", [], "LONG", "_dash_channel_create()",
+                          "A new channel: one of its two ends (the other, channel_other); a negative error"),
+    "channel_other": _os("channel_other", [], "LONG", "_dash_channel_other()",
+                         "The other end of the last channel_create (what is written on one end is read on the other)"),
+    "channel_pass": _os("channel_pass", ["handle"], "LONG", "_dash_channel_pass(${handle})",
+                        "Puts a handle (with the right to pass it) in the next channel_send: it leaves this program; "
+                        "up to 8 per message; 0, or -1 if there are 8 already"),
+    "channel_send": _os("channel_send", ["handle", "text"], "LONG", "_dash_channel_send(${handle}, ${text})",
+                        "Sends a text (up to 256 bytes) to the other end of the channel, without waiting: 0 or a "
+                        "negative error", reads_only=True),
+    "channel_send_buffer": _os("channel_send_buffer", ["handle", "buffer", "length"], "LONG",
+                               "_dash_channel_send_buffer(${handle}, ${buffer}, ${length})",
+                               "Sends length bytes (up to 256) of a buffer: 0 or a negative error"),
+    "channel_receive": _os("channel_receive", ["handle"], "STRPTR", "_dash_channel_receive(${handle})",
+                           "Waits for the next message of the channel and gives it as text; nil on error "
+                           "(channel_error); its handles: channel_handles, channel_handle; who sent it: channel_mark"),
+    "channel_receive_buffer": _os("channel_receive_buffer", ["handle", "buffer", "max"], "LONG",
+                                  "_dash_channel_receive_buffer(${handle}, ${buffer}, ${max})",
+                                  "Waits for the next message and copies it to a buffer (max bytes, 256 is enough): "
+                                  "its length or a negative error"),
+    "channel_handles": _os("channel_handles", [], "LONG", "_dash_channel_handles()",
+                           "How many handles came with the last message received"),
+    "channel_handle": _os("channel_handle", ["i"], "LONG", "_dash_channel_handle(${i})",
+                          "Handle i (from 0) of the last message received; 0 if there is none"),
+    "channel_mark": _os("channel_mark", [], "LONG", "_dash_channel_mark()",
+                        "The mark of the handle that wrote the last message received (handle_copy): who sent it; 0 "
+                        "unmarked or the kernel (timers)"),
+    "channel_error": _os("channel_error", [], "LONG", "_dash_channel_error()",
+                         "The error of the last channel_receive (0: none; -4: the other end closed)"),
+    "handle_copy": _os("handle_copy", ["handle", "rights", "mark"], "LONG",
+                       "_dash_handle_copy(${handle}, ${rights}, ${mark})",
+                       "A copy of a handle with these rights or fewer (1 read, 2 write, 4 pass; added up) and a "
+                       "mark if it had none (0: keep its own): the new handle or a negative error"),
+    "handle_close": _os("handle_close", ["handle"], "LONG", "_dash_handle_close(${handle})",
+                        "Closes a handle (the last one of a channel end closes that end): 0 or a negative error"),
+    "handle_revocable": _os("handle_revocable", ["handle"], "LONG", "_dash_handle_revocable(${handle})",
+                            "A copy of a handle that can be taken back (its revoker: handle_revoker): the copy or a "
+                            "negative error"),
+    "handle_revoker": _os("handle_revoker", [], "LONG", "_dash_handle_revoker()",
+                          "The revoker of the last handle_revocable"),
+    "handle_revoke": _os("handle_revoke", ["revoker"], "LONG", "_dash_handle_revoke(${revoker})",
+                         "Revokes the handle of a revoker and the copies made from it: from then on they are worth "
+                         "nothing: 0 or a negative error"),
+    "timer_create": _os("timer_create", ["handle", "first_ms", "period_ms"], "LONG",
+                        "_dash_timer_create(${handle}, ${first_ms}, ${period_ms})",
+                        "A timer that sends a message to the other end of the channel after first_ms, and then "
+                        "every period_ms (0: once); 10 ms steps; it stops when its handle is closed: the handle or a "
+                        "negative error"),
+    "memory_create": _os("memory_create", ["size"], "LONG", "_dash_memory_create(${size})",
+                         "A memory object of size bytes (up to 4 MB), all zero; it can be passed to another program "
+                         "(shared memory): its handle or a negative error"),
+    "memory_map": _os("memory_map", ["handle", "writable"], "APTR", "_dash_memory_map(${handle}, ${writable})",
+                      "Maps a memory object in this program, for buffer_* (writable: true to write in it): the "
+                      "buffer, or 0"),
+    "memory_unmap": _os("memory_unmap", ["buffer"], "LONG", "_dash_memory_unmap(${buffer})",
+                        "Unmaps what memory_map gave (the object lives on while it has handles): 0 or a negative "
+                        "error"),
+    "process_give": _os("process_give", ["handle"], "LONG", "_dash_process_give(${handle})",
+                        "A handle for the next process_start: the new program gets them as handles 1, 2... in "
+                        "this order; up to 16; 0, or -1 if there are 16 already"),
+    "process_group": _os("process_group", ["group"], "void", "_dash_process_group(${group})",
+                         "The group of the next processes started (0: this program's own)"),
+    "process_start": _os("process_start", ["memory", "size"], "LONG", "_dash_process_start(${memory}, ${size})",
+                         "Starts a program from the ELF in a memory object (its first size bytes), with the handles "
+                         "of process_give: the process or a negative error"),
+    "process_start_buffer": _os("process_start_buffer", ["buffer", "length"], "LONG",
+                                "_dash_process_start_buffer(${buffer}, ${length})",
+                                "process_start with an ELF in a buffer (copied to a new memory object, up to 4 MB)"),
+    "process_kill": _os("process_kill", ["process"], "LONG", "_dash_process_kill(${process})",
+                        "Ends a process: 0 or a negative error"),
+    "process_wait": _os("process_wait", ["process"], "LONG", "_dash_process_wait(${process})",
+                        "Waits for a process to end: its exit code (how it ended: process_end), or a negative error"),
+    "process_end": _os("process_end", [], "LONG", "_dash_process_end()",
+                       "How the process of the last process_wait ended: 0 it exited, 1 it was killed, 2 it failed"),
+    "group_create": _os("group_create", ["bytes"], "LONG", "_dash_group_create(${bytes})",
+                        "A group with a memory budget taken from this program's: what its processes create is "
+                        "charged to it: the group or a negative error"),
+    "group_kill": _os("group_kill", ["group"], "LONG", "_dash_group_kill(${group})",
+                      "Ends every process of a group and frees all it had: 0 or a negative error"),
+    "group_used": _os("group_used", ["group"], "LONG", "_dash_group_used(${group})",
+                      "The bytes a group has used (0: this program's group), or a negative error"),
+    "group_limit": _os("group_limit", ["group"], "LONG", "_dash_group_limit(${group})",
+                       "The budget of a group in bytes (0: this program's group), or a negative error"),
+    "dashos_error_text": _os("dashos_error_text", ["code"], "STRPTR", "_dash_dashos_error_text(${code})",
+                             "What a negative error of DashOS means, as text"),
+}
+
+
+# On DashOS some builtins have another C (A7): their own runtime there is AmigaOS's (SYSINFO_RUNTIME...)
+DASHOS_TEMPLATES = {
+    "program_exit": "_dash_exit((int)(${rc}))",
+}
+
 ALL_BUILTINS = {
     **GRAPHICS_BASIC,
     **GRAPHICS_ADVANCED,
@@ -5978,6 +6092,7 @@ ALL_BUILTINS = {
     **INTUITION_EXPANDED,
     **RTG_FUNCTIONS,
     **MUI_FUNCTIONS,
+    **DASHOS_FUNCTIONS,        # A7
 }
 
 

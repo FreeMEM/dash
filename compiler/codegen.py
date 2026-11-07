@@ -4518,28 +4518,32 @@ static BOOL _dash_app_window(LONG h) {
     return TRUE;
 }
 
-/* The messages waiting, each icon to the queue (when full, the oldest goes) */
-static void _dash_appw_take(void) {
-    struct AppMessage *am;
+/* Each icon of a message to the queue (when full, the oldest goes); also MUI's (mui_on_drop) */
+static void _dash_appw_put(struct AppMessage *am) {
     char path[256];
     LONG i, k;
+    for (i = 0; i < am->am_NumArgs; i++) {
+        struct WBArg *a = &am->am_ArgList[i];
+        path[0] = 0;
+        if (!a->wa_Lock || !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) continue;
+        if (a->wa_Name && a->wa_Name[0] && !AddPart((STRPTR)path, a->wa_Name, sizeof(path))) continue;
+        if (_dash_appw_n == _DASH_APPW_Q) {
+            _dash_appw_head = (_dash_appw_head + 1) % _DASH_APPW_Q;
+            _dash_appw_n--;
+        }
+        k = (_dash_appw_head + _dash_appw_n++) % _DASH_APPW_Q;
+        strcpy(_dash_appw_q[k], path);
+        _dash_appw_qx[k] = am->am_MouseX;
+        _dash_appw_qy[k] = am->am_MouseY;
+    }
+}
+
+/* The messages waiting, to the queue */
+static void _dash_appw_take(void) {
+    struct AppMessage *am;
     if (!_dash_appw_port) return;
     while ((am = (struct AppMessage *)GetMsg(_dash_appw_port))) {
-        if (am->am_Type == AMTYPE_APPWINDOW)
-            for (i = 0; i < am->am_NumArgs; i++) {
-                struct WBArg *a = &am->am_ArgList[i];
-                path[0] = 0;
-                if (!a->wa_Lock || !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) continue;
-                if (a->wa_Name && a->wa_Name[0] && !AddPart((STRPTR)path, a->wa_Name, sizeof(path))) continue;
-                if (_dash_appw_n == _DASH_APPW_Q) {
-                    _dash_appw_head = (_dash_appw_head + 1) % _DASH_APPW_Q;
-                    _dash_appw_n--;
-                }
-                k = (_dash_appw_head + _dash_appw_n++) % _DASH_APPW_Q;
-                strcpy(_dash_appw_q[k], path);
-                _dash_appw_qx[k] = am->am_MouseX;
-                _dash_appw_qy[k] = am->am_MouseY;
-            }
+        if (am->am_Type == AMTYPE_APPWINDOW) _dash_appw_put(am);
         ReplyMsg((struct Message *)am);
     }
 }
@@ -18943,6 +18947,154 @@ static void _dash_buffer_fill(APTR buffer, LONG offset, LONG length, UBYTE value
 
 """
 
+    # DashOS Runtime (docs/AARCH64_LOOP.md, A7): the builtins of DASHOS_FUNCTIONS, over the kernel calls of DashOS
+    # (dash_os_call, runtime/dashos/plat.c; under Linux, plat.c imitates them in the program itself)
+    DASHOS_RUNTIME = """\
+/* Dash DashOS Runtime: channels, handles, timers, memory objects, processes and groups */
+static LONG _dash_os_other = 0, _dash_os_revoker = 0, _dash_os_mark = 0, _dash_os_error = 0;
+static LONG _dash_os_end = 0, _dash_os_group = 0, _dash_os_npass = 0, _dash_os_ngot = 0, _dash_os_ngive = 0;
+static ULONG _dash_os_pass[8], _dash_os_got[8], _dash_os_give[16];
+static ULONG _dash_os_maps = 0;   /* memory_map: 32 places of 4 MB from 0x7000_0000 (runtime/dashos/plat.c) */
+
+static LONG _dash_os(long n, long a, long b, long c, long d, long e, long *out) {
+    long o[2];
+    long r = dash_os_call(n, a, b, c, d, e, o);
+    if (out) { out[0] = o[0]; out[1] = o[1]; }
+    return (LONG)r;
+}
+
+static LONG _dash_channel_create(void) {
+    long o[2];
+    LONG r = _dash_os(3, 0, 0, 0, 0, 0, o);
+    _dash_os_other = r > 0 ? (LONG)o[0] : 0;
+    return r;
+}
+static LONG _dash_channel_other(void) { return _dash_os_other; }
+
+static LONG _dash_channel_pass(LONG h) {
+    if (_dash_os_npass >= 8) return -1;
+    _dash_os_pass[_dash_os_npass++] = (ULONG)h;
+    return 0;
+}
+
+static LONG _dash_channel_send_bytes(LONG h, const void *p, LONG n) {
+    LONG r = n < 0 || n > 256 ? -5 : _dash_os(4, h, (long)p, n, (long)_dash_os_pass, _dash_os_npass, NULL);
+    _dash_os_npass = 0;
+    return r;
+}
+static LONG _dash_channel_send(LONG h, STRPTR s) {
+    return _dash_channel_send_bytes(h, s ? (const void *)s : (const void *)"", s ? (LONG)strlen((const char *)s) : 0);
+}
+static LONG _dash_channel_send_buffer(LONG h, APTR b, LONG n) { return _dash_channel_send_bytes(h, b, n); }
+
+static LONG _dash_channel_receive_buffer(LONG h, APTR b, LONG max) {
+    long o[2];
+    LONG r = _dash_os(5, h, (long)b, max < 0 ? 0 : max, (long)_dash_os_got, 8, o);
+    _dash_os_ngot = r >= 0 ? (LONG)o[0] : 0;
+    _dash_os_mark = r >= 0 ? (LONG)o[1] : 0;
+    _dash_os_error = r < 0 ? r : 0;
+    return r;
+}
+/* (a 0 byte in the message ends the text early: binary messages go through channel_receive_buffer) */
+static STRPTR _dash_channel_receive(LONG h) {
+    STRPTR r = _dash_str_alloc(256, TRUE);
+    LONG n;
+    if (!r) return NULL;
+    n = _dash_channel_receive_buffer(h, r, 256);
+    if (n < 0) return NULL;
+    r[n] = 0;
+    _dash_str_setlen(r, (ULONG)strlen((const char *)r));
+    return r;
+}
+static LONG _dash_channel_handles(void) { return _dash_os_ngot; }
+static LONG _dash_channel_handle(LONG i) { return i >= 0 && i < _dash_os_ngot ? (LONG)_dash_os_got[i] : 0; }
+static LONG _dash_channel_mark(void) { return _dash_os_mark; }
+static LONG _dash_channel_error(void) { return _dash_os_error; }
+
+static LONG _dash_handle_copy(LONG h, LONG rights, LONG mark) { return _dash_os(15, h, rights, mark, 0, 0, NULL); }
+static LONG _dash_handle_close(LONG h) { return _dash_os(6, h, 0, 0, 0, 0, NULL); }
+static LONG _dash_handle_revocable(LONG h) {
+    long o[2];
+    LONG r = _dash_os(16, h, 0, 0, 0, 0, o);
+    _dash_os_revoker = r > 0 ? (LONG)o[0] : 0;
+    return r;
+}
+static LONG _dash_handle_revoker(void) { return _dash_os_revoker; }
+static LONG _dash_handle_revoke(LONG r) { return _dash_os(17, r, 0, 0, 0, 0, NULL); }
+
+static LONG _dash_timer_create(LONG h, LONG first_ms, LONG period_ms) {
+    if (first_ms < 0 || period_ms < 0) return -1;
+    return _dash_os(24, h, (long)first_ms * 1000, (long)period_ms * 1000, 0, 0, NULL);
+}
+
+static LONG _dash_memory_create(LONG size) { return size <= 0 ? -1 : _dash_os(7, size, 0, 0, 0, 0, NULL); }
+static APTR _dash_memory_map(LONG h, LONG writable) {
+    LONG i;
+    _DashUP at;
+    for (i = 0; i < 32 && (_dash_os_maps >> i & 1); i++) ;
+    if (i == 32) return NULL;
+    at = 0x70000000UL + ((_DashUP)i << 22);
+    if (_dash_os(8, h, (long)at, writable ? 3 : 1, 0, 0, NULL) != 0) return NULL;
+    _dash_os_maps |= 1UL << i;
+    return (APTR)at;
+}
+static LONG _dash_memory_unmap(APTR b) {
+    _DashUP i = ((_DashUP)b - 0x70000000UL) >> 22;
+    LONG r = _dash_os(21, (long)b, 0, 0, 0, 0, NULL);
+    if (r == 0 && i < 32) _dash_os_maps &= ~(1UL << i);
+    return r;
+}
+
+static LONG _dash_process_give(LONG h) {
+    if (_dash_os_ngive >= 16) return -1;
+    _dash_os_give[_dash_os_ngive++] = (ULONG)h;
+    return 0;
+}
+static void _dash_process_group(LONG g) { _dash_os_group = g; }
+static LONG _dash_process_start(LONG m, LONG size) {
+    LONG r = _dash_os(12, m, size, (long)_dash_os_give, _dash_os_ngive, _dash_os_group, NULL);
+    _dash_os_ngive = 0;
+    return r;
+}
+static LONG _dash_process_start_buffer(APTR b, LONG n) {
+    LONG m = _dash_memory_create(n), r;
+    APTR p;
+    if (m < 0) { _dash_os_ngive = 0; return m; }
+    if (!(p = _dash_memory_map(m, TRUE))) { _dash_handle_close(m); _dash_os_ngive = 0; return -1; }
+    memcpy(p, b, (size_t)n);
+    _dash_memory_unmap(p);
+    r = _dash_process_start(m, n);
+    _dash_handle_close(m);
+    return r;
+}
+static LONG _dash_process_kill(LONG p) { return _dash_os(13, p, 0, 0, 0, 0, NULL); }
+static LONG _dash_process_wait(LONG p) {
+    long o[2];
+    LONG r = _dash_os(14, p, 0, 0, 0, 0, o);
+    if (r < 0) return r;
+    _dash_os_end = r;
+    return (LONG)o[0];
+}
+static LONG _dash_process_end(void) { return _dash_os_end; }
+
+static LONG _dash_group_create(LONG bytes) { return _dash_os(18, bytes, 0, 0, 0, 0, NULL); }
+static LONG _dash_group_kill(LONG g) { return _dash_os(19, g, 0, 0, 0, 0, NULL); }
+static LONG _dash_group_used(LONG g) {
+    long o[2];
+    LONG r = _dash_os(20, g, 0, 0, 0, 0, o);
+    return r < 0 ? r : (LONG)o[0];
+}
+static LONG _dash_group_limit(LONG g) { return _dash_os(20, g, 0, 0, 0, 0, NULL); }
+
+static STRPTR _dash_dashos_error_text(LONG code) {
+    static const char *const t[] = {"no hay error", "argumento no válido", "la llave no vale",
+        "faltan derechos en la llave", "el otro lado del canal está cerrado", "tamaño no válido",
+        "la llave no es de ese tipo", "sin memoria en el grupo", "límite alcanzado"};
+    return _dash_str_dup((STRPTR)(code <= 0 && code >= -8 ? t[-code] : "error desconocido"), TRUE);
+}
+
+"""
+
     # ReAction Runtime (for AmigaOS 3.2+ / 4.x)
     REACTION_RUNTIME = """\
 /* ReAction Runtime */
@@ -20277,6 +20429,30 @@ static LONG ra_window_is_open(void) {
     # RTG Runtime (CyberGraphX / Picasso96 support)
     # MUI 5 (muimaster.library), design in docs/MUI_DISEÑO.md. Objects are handles
     # (LONG in Dash, like buffers and files); MUI owns them until _dash_mui_app_end().
+    # dashweb D83 (Tachyon, idea de Ferrán García): icons dropped from the Workbench on a MUI window
+    MUI_APPDROP_RUNTIME = """\
+/* mui_on_drop(obj, id): icons dropped on that object (or anywhere on it, for a window) make mui_wait_event return
+   id; app_drop() then gives their paths one by one (the queue of APPWIN_RUNTIME), app_drop_x/y where they fell.
+   Every MUI window is an AppWindow (MUIA_Window_AppWindow only goes at creation); MUI hands the AppMessage to a
+   hook, valid only during the call, so its paths are copied there. Only on the Workbench screen. */
+static struct Hook _dash_mui_drop_hook;
+
+static ULONG _dash_mui_drop_entry(struct Hook *h __asm("a0"), Object *obj __asm("a2"), IPTR *args __asm("a1")) {
+    struct AppMessage *am = (struct AppMessage *)args[0];
+    (void)h; (void)obj;
+    if (am) _dash_appw_put(am);
+    if (_dash_mui_app && args[1]) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, args[1]);
+    return 0;
+}
+
+static void _dash_mui_on_drop(APTR obj, LONG id) {
+    _dash_mui_drop_hook.h_Entry = (ULONG (*)())_dash_mui_drop_entry;
+    if (obj)
+        _DASH_MUI_DO(obj, MUIM_Notify, MUIA_AppMessage, MUIV_EveryTime, MUIV_Notify_Self, 4,
+                     MUIM_CallHook, (IPTR)&_dash_mui_drop_hook, MUIV_TriggerValue, id);
+}
+"""
+
     MUI_RUNTIME = """\
 /* MUI (muimaster.library). NO_INLINE_STDARG: the SDK's inline MUI_NewObject() takes &tags of its first
    variable argument, and once GCC inlines it at -O2 the tags after it are garbage;
@@ -20472,6 +20648,7 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
         MUIA_Window_ID, (id > 0 && id < 256) ? MAKE_ID('D', 'A', 'S', id) : 0,
         MUIA_Window_RootObject, (IPTR)root,
         MUIA_Window_Menustrip, (IPTR)strip,
+        MUIA_Window_AppWindow, TRUE,       /* icons can be dropped on it (mui_on_drop); only at creation */
         MUIA_UserData, _DASH_MUI_WINDOW);
     if (!win) {
         MUI_DisposeObject(root);
@@ -22672,9 +22849,11 @@ _RUNTIME_FLAGS = [
     ("GADGET_RUNTIME", "uses_gadgets"),
     ("ASL_RUNTIME", "needs_asl"),
     ("FILEIO_RUNTIME", "needs_fileio"),
+    ("DASHOS_RUNTIME", "needs_dashos"),
     ("REACTION_RUNTIME", "needs_reaction"),
     ("RTG_RUNTIME", "needs_rtg"),
     ("MUI_RUNTIME", "needs_mui"),
+    ("MUI_APPDROP_RUNTIME", "uses_mui_drop"),   # dashweb D83: icons dropped on a MUI window
     ("MUI_CANVAS_RUNTIME", "uses_mui_canvas"),
     ("MUI_TIMER_RUNTIME", "uses_mui_timer"),
 ]
@@ -22936,6 +23115,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
         self.uses_wm: bool = False       # wm_read, wm_set_box... (WM_RUNTIME, Trasfondo 2.0)
         self.uses_appwin: bool = False   # app_window, app_drop (APPWIN_RUNTIME, Trasfondo 2.0)
+        self.uses_mui_drop: bool = False # mui_on_drop (MUI_APPDROP_RUNTIME, dashweb D83)
         self.uses_sha1: bool = False     # sha1, sha1_new... (SHA1_RUNTIME, dashgit)
         self.uses_icons: bool = False    # icon_load, icon_draw (ICON_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
@@ -22980,6 +23160,7 @@ class CodeGenerator(ASTVisitor):
         self.needs_audio: bool = False
         self.needs_asl: bool = False
         self.needs_fileio: bool = False
+        self.needs_dashos: bool = False
         self.needs_gadtools: bool = False
         self.needs_reaction: bool = False  # Track if ReAction is used
         self.needs_mui: bool = False  # MUI builtins (mui_*)
@@ -23367,6 +23548,8 @@ class CodeGenerator(ASTVisitor):
         # Add File I/O runtime if needed
         if self.needs_fileio:
             parts.append(CTemplates.FILEIO_RUNTIME)
+        if self.needs_dashos:
+            parts.append(CTemplates.DASHOS_RUNTIME)
 
         # Add ReAction runtime if needed
         if self.needs_reaction:
@@ -23383,6 +23566,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.RTG_RUNTIME)
         if self.needs_mui:
             parts.append(CTemplates.MUI_RUNTIME)
+        if self.uses_mui_drop:
+            parts.append(CTemplates.MUI_APPDROP_RUNTIME)
         if self.uses_mui_canvas:
             parts.append(CTemplates.MUI_CANVAS_RUNTIME)
         if self.uses_mui_timer:
@@ -23670,7 +23855,47 @@ static LONG _dash_event_window_handle(void) {{
         program = program.replace("    _dash_trap_on();\n", "", 1)
         program = re.sub(r"^ *(IntuitionBase|DOSBase) = \(struct \w+ \*\)OpenLibrary\(.*\n", "", program, flags=re.M)
         program = re.sub(r"^ *if \((IntuitionBase|DOSBase)\) CloseLibrary\(.*\n", "", program, flags=re.M)
+        # Buffers (A7): FILEIO_RUNTIME without its file functions, that are AmigaOS's dos (no files in DashOS yet)
+        if CTemplates.FILEIO_RUNTIME in program:
+            f = CTemplates.FILEIO_RUNTIME
+            a, b = f.index("static LONG _dash_file_size("), f.index("static APTR _dash_alloc_buffer(")
+            c, d = f.index("static LONG _dash_file_load("), f.index("static UBYTE _dash_buffer_get_byte(")
+            program = program.replace(f, f[:a] + f[b:c] + f[d:], 1)
+            program = program.replace("    return AllocVec(size, MEMF_ANY | MEMF_CLEAR);\n",
+                                      "    return size > 0 ? dash_plat_buffer_alloc((unsigned long)size) : NULL;\n", 1)
+            program = program.replace("    if (buffer) FreeVec(buffer);\n", "    dash_plat_buffer_free(buffer);\n", 1)
+        # The clock (time_ms, A7): the system counter of the CPU instead of timer.device
+        if CTemplates.TIME_RUNTIME in program:
+            program = program.replace(CTemplates.TIME_RUNTIME, self.DASHOS_TIME_RUNTIME, 1)
         return program
+
+    # time_ms on DashOS (docs/AARCH64_LOOP.md, A7): milliseconds since the program started, from the generic timer
+    # of the CPU (CNTVCT_EL0, readable from EL0 in DashOS and in Linux under qemu-aarch64)
+    DASHOS_TIME_RUNTIME = """\
+/* Dash Time Runtime (DashOS: the system counter) */
+static unsigned long _dash_time_c0 = 0;
+
+static unsigned long _dash_time_count(void) {
+    unsigned long c;
+    __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(c));
+    return c;
+}
+
+static void _dash_time_init(void) {
+    if (!_dash_time_c0) _dash_time_c0 = _dash_time_count();
+}
+
+/* Milliseconds since the first call (and so since the program started, see main) */
+static LONG _dash_time_ms(void) {
+    unsigned long f;
+    _dash_time_init();
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(f));
+    return f ? (LONG)((_dash_time_count() - _dash_time_c0) * 1000UL / f) : 0;
+}
+
+static void _dash_time_cleanup(void) {}
+
+"""
 
     def _get_main_template(self) -> Template:
         """Get the appropriate main template based on features used."""
@@ -26277,6 +26502,11 @@ static {ret_type} {method_name}({params_str}) {{
 
     def _generate_builtin_call(self, builtin: BuiltinFunc, arguments: List[ASTNode]) -> str:
         """Generate C code for a builtin function call."""
+        if self.target == "dashos":
+            from compiler.amiga_builtins import DASHOS_TEMPLATES
+            if builtin.name in DASHOS_TEMPLATES:   # (its own C on DashOS)
+                from dataclasses import replace
+                builtin = replace(builtin, c_template=DASHOS_TEMPLATES[builtin.name])
         # Track library requirements
         if builtin.needs_gfx:
             self.needs_gfx = True
@@ -26286,6 +26516,8 @@ static {ret_type} {method_name}({params_str}) {{
             self.needs_asl = True
         if builtin.needs_fileio:
             self.needs_fileio = True
+        if builtin.needs_dashos:
+            self.needs_dashos = self.uses_strings = True   # channel_receive, dashos_error_text
         if builtin.needs_gadtools:
             self.needs_gadtools = True
         if builtin.needs_audio:
@@ -26334,6 +26566,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
         if self.uses_sha1:
             self.uses_strings = True   # sha1 gives a String
+        if self.uses_mui_drop:
+            self.uses_appwin = True    # its queue, read with app_drop
+            self.needs_mui = True
         if self.uses_appwin:
             self.uses_strings = True   # app_drop gives a String
             self.uses_winmgr = True    # app_window takes a window handle (_dash_window_get)
@@ -26464,7 +26699,8 @@ static {ret_type} {method_name}({params_str}) {{
                 name = placeholder.group(1)
                 arg_index = builtin.params.index(name) if name in builtin.params else -1
                 if 0 <= arg_index < len(arguments) and self._infer_c_type(arguments[arg_index]) == "LONG":
-                    param_values[name] = f"({param_types[i]}){param_values[name]}"
+                    via = "(_DashP)" if self.target == "dashos" else ""
+                    param_values[name] = f"({param_types[i]}){via}{param_values[name]}"
 
         # Substitute into template
         template = Template(builtin.c_template)
@@ -26473,7 +26709,8 @@ static {ret_type} {method_name}({params_str}) {{
             code = "({ " + " ".join(hoisted) + " " + code + "; })"
         if (sig and _is_c_pointer(sig[0]) and builtin.return_type != "STRPTR"
                 and builtin.return_type not in ("DashArrayLong *", "DashDict *")):
-            code = f"(LONG){code}"   # (a handle the program keeps as an Int: AmigaOS only)
+            # (a handle the program keeps as an Int: on DashOS, only what is below 2 GB, as the buffers)
+            code = f"(LONG)(_DashP){code}" if self.target == "dashos" else f"(LONG){code}"
         return code
 
     def _fast_int_op(self, node: BinaryOp) -> Optional[str]:

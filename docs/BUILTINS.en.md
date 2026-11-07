@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 928 functions, 928 implemented, 0 not implemented.
+Total: 961 functions, 961 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -1053,6 +1053,7 @@ Total: 928 functions, 928 implemented, 0 not implemented.
 | `mui_button(label)` | `APTR` | Button (an underscore before a letter makes it the keyboard shortcut) |  |
 | `mui_on_press(obj, id)` | `void` | mui_wait_event returns id when the button is pressed |  |
 | `mui_on_close(win, id)` | `void` | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
+| `mui_on_drop(obj, id)` | `void` | mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: anywhere on it); app_drop gives their paths, app_drop_x/y where they fell |  |
 | `mui_press(obj)` | `void` | Send the mui_on_press event of a button as if it were pressed |  |
 | `mui_label(text)` | `APTR` | Label for a form row (right-aligned) |  |
 | `mui_string(initial, maxlen)` | `APTR` | Text field with up to maxlen characters |  |
@@ -1136,3 +1137,40 @@ Total: 928 functions, 928 implemented, 0 not implemented.
 | `mui_height(obj)` | `LONG` | Height of an object on screen in pixels (0 before its window opens) |  |
 | `mui_wait_event()` | `LONG` | Wait for the next event and return its number; -1 to quit |  |
 | `mui_poll_event()` | `LONG` | Like mui_wait_event without waiting: 0 when there is no event |  |
+
+## DashOS (only with ./dash --dashos)
+
+| Function | Returns | Description | Status |
+|---|---|---|---|
+| `channel_create()` | `LONG` | A new channel: one of its two ends (the other, channel_other); a negative error |  |
+| `channel_other()` | `LONG` | The other end of the last channel_create (what is written on one end is read on the other) |  |
+| `channel_pass(handle)` | `LONG` | Puts a handle (with the right to pass it) in the next channel_send: it leaves this program; up to 8 per message; 0, or -1 if there are 8 already |  |
+| `channel_send(handle, text)` | `LONG` | Sends a text (up to 256 bytes) to the other end of the channel, without waiting: 0 or a negative error |  |
+| `channel_send_buffer(handle, buffer, length)` | `LONG` | Sends length bytes (up to 256) of a buffer: 0 or a negative error |  |
+| `channel_receive(handle)` | `STRPTR` | Waits for the next message of the channel and gives it as text; nil on error (channel_error); its handles: channel_handles, channel_handle; who sent it: channel_mark |  |
+| `channel_receive_buffer(handle, buffer, max)` | `LONG` | Waits for the next message and copies it to a buffer (max bytes, 256 is enough): its length or a negative error |  |
+| `channel_handles()` | `LONG` | How many handles came with the last message received |  |
+| `channel_handle(i)` | `LONG` | Handle i (from 0) of the last message received; 0 if there is none |  |
+| `channel_mark()` | `LONG` | The mark of the handle that wrote the last message received (handle_copy): who sent it; 0 unmarked or the kernel (timers) |  |
+| `channel_error()` | `LONG` | The error of the last channel_receive (0: none; -4: the other end closed) |  |
+| `handle_copy(handle, rights, mark)` | `LONG` | A copy of a handle with these rights or fewer (1 read, 2 write, 4 pass; added up) and a mark if it had none (0: keep its own): the new handle or a negative error |  |
+| `handle_close(handle)` | `LONG` | Closes a handle (the last one of a channel end closes that end): 0 or a negative error |  |
+| `handle_revocable(handle)` | `LONG` | A copy of a handle that can be taken back (its revoker: handle_revoker): the copy or a negative error |  |
+| `handle_revoker()` | `LONG` | The revoker of the last handle_revocable |  |
+| `handle_revoke(revoker)` | `LONG` | Revokes the handle of a revoker and the copies made from it: from then on they are worth nothing: 0 or a negative error |  |
+| `timer_create(handle, first_ms, period_ms)` | `LONG` | A timer that sends a message to the other end of the channel after first_ms, and then every period_ms (0: once); 10 ms steps; it stops when its handle is closed: the handle or a negative error |  |
+| `memory_create(size)` | `LONG` | A memory object of size bytes (up to 4 MB), all zero; it can be passed to another program (shared memory): its handle or a negative error |  |
+| `memory_map(handle, writable)` | `APTR` | Maps a memory object in this program, for buffer_* (writable: true to write in it): the buffer, or 0 |  |
+| `memory_unmap(buffer)` | `LONG` | Unmaps what memory_map gave (the object lives on while it has handles): 0 or a negative error |  |
+| `process_give(handle)` | `LONG` | A handle for the next process_start: the new program gets them as handles 1, 2... in this order; up to 16; 0, or -1 if there are 16 already |  |
+| `process_group(group)` | `void` | The group of the next processes started (0: this program's own) |  |
+| `process_start(memory, size)` | `LONG` | Starts a program from the ELF in a memory object (its first size bytes), with the handles of process_give: the process or a negative error |  |
+| `process_start_buffer(buffer, length)` | `LONG` | process_start with an ELF in a buffer (copied to a new memory object, up to 4 MB) |  |
+| `process_kill(process)` | `LONG` | Ends a process: 0 or a negative error |  |
+| `process_wait(process)` | `LONG` | Waits for a process to end: its exit code (how it ended: process_end), or a negative error |  |
+| `process_end()` | `LONG` | How the process of the last process_wait ended: 0 it exited, 1 it was killed, 2 it failed |  |
+| `group_create(bytes)` | `LONG` | A group with a memory budget taken from this program's: what its processes create is charged to it: the group or a negative error |  |
+| `group_kill(group)` | `LONG` | Ends every process of a group and frees all it had: 0 or a negative error |  |
+| `group_used(group)` | `LONG` | The bytes a group has used (0: this program's group), or a negative error |  |
+| `group_limit(group)` | `LONG` | The budget of a group in bytes (0: this program's group), or a negative error |  |
+| `dashos_error_text(code)` | `STRPTR` | What a negative error of DashOS means, as text |  |

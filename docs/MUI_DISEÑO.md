@@ -105,6 +105,7 @@ Los textos los copia MUI (`MUIV_List_ConstructHook_String`). Para muchas líneas
 | `mui_on_ack(string, id)` | Intro en un campo de texto (`MUIA_String_Acknowledge`) |
 | `mui_on_double(lista, id)` | doble clic en una lista |
 | `mui_on_close(win, id)` | botón de cerrar de la ventana. Sin llamarla, cerrar la primera ventana = -1 (salir). |
+| `mui_on_drop(obj, id)` | iconos soltados desde el Workbench sobre el objeto (una ventana: en toda ella); las rutas, con `app_drop()` |
 | `mui_menu_begin(titulo)`, `mui_menu_item(texto, tecla, id)`, `mui_menu_separator()`, `mui_menu_end()` | menú de la ventana abierta (`Menustrip`) |
 | `mui_menu_check(texto, tecla, id, marcada)`, `mui_submenu_begin(titulo)` / `mui_submenu_end()` | opción con marca (`mui_get_value`/`mui_set_value`) y submenú de un nivel |
 | `mui_context_menu_begin(titulo)` ... `mui_menu_end()`, `mui_set_context_menu(obj, menu)` | menú contextual (botón derecho sobre `obj`): sus opciones dan sus eventos; MUI no lo libera con el objeto, Dash lo hace al acabar |

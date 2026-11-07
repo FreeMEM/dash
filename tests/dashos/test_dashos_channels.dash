@@ -1,0 +1,69 @@
+# Test (solo DashOS, A7): canales, llaves, temporizadores y memoria de DashOS. En qemu-aarch64 corre sobre la
+# imitación de runtime/dashos/plat.c; en DashOS, sobre su kernel.
+# expect-out: canal: hola 0
+# expect-out: llaves: 1 recibida, marca 7
+# expect-out: por la llave recibida: adiós
+# expect-out: búfer: 3 bytes, 1 2 3
+# expect-out: revocada: -2
+# expect-out: temporizador: 8 bytes, 1 vez
+# expect-out: memoria compartida: 42
+# expect-out: cerrado: -4 el otro lado del canal está cerrado
+# expect-out: tipo: -6 la llave no es de ese tipo
+Main
+    a = channel_create()
+    b = channel_other()
+    r = channel_send(b, "hola")
+    m = channel_receive(a)
+    Print "canal: #{m} #{r}"
+
+    # una copia marcada de b viaja por otro canal (no por el suyo): quien la use escribe con marca 7
+    x = channel_create()
+    y = channel_other()
+    c = handle_copy(b, 6, 7)
+    channel_pass(c)
+    channel_send(y, "toma")
+    m = channel_receive(x)
+    n = channel_handles()
+    k = channel_handle(0)
+    channel_send(k, "adiós")
+    m2 = channel_receive(a)
+    Print "llaves: #{n} recibida, marca #{channel_mark()}"
+    Print "por la llave recibida: #{m2}"
+
+    buf = buffer_alloc(16)
+    buffer_set_byte(buf, 0, 1)
+    buffer_set_byte(buf, 1, 2)
+    buffer_set_byte(buf, 2, 3)
+    channel_send_buffer(b, buf, 3)
+    out = buffer_alloc(256)
+    n = channel_receive_buffer(a, out, 256)
+    Print "búfer: #{n} bytes, #{buffer_get_byte(out, 0)} #{buffer_get_byte(out, 1)} #{buffer_get_byte(out, 2)}"
+
+    rv = handle_revocable(b)
+    handle_revoke(handle_revoker())
+    e = channel_send(rv, "x")
+    Print "revocada: #{e}"
+
+    t = timer_create(b, 20, 0)
+    n = channel_receive_buffer(a, out, 256)
+    Print "temporizador: #{n} bytes, #{buffer_get_byte(out, 0)} vez"
+    handle_close(t)
+
+    mem = memory_create(4096)
+    p1 = memory_map(mem, true)
+    p2 = memory_map(mem, false)
+    buffer_set_byte(p1, 100, 42)
+    Print "memoria compartida: #{buffer_get_byte(p2, 100)}"
+    memory_unmap(p1)
+    memory_unmap(p2)
+
+    handle_close(b)
+    handle_close(k)
+    handle_close(rv)
+    m = channel_receive(a)
+    e = channel_error()
+    Print "cerrado: #{e} #{dashos_error_text(e)}"
+    e = channel_send(mem, "x")
+    Print "tipo: #{e} #{dashos_error_text(e)}"
+    handle_close(mem)
+end

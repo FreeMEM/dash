@@ -1,0 +1,79 @@
+# Test (solo en DashOS de verdad, A7): procesos y grupos. Como las pruebas de lanzador con ayudante (DashOS C43,
+# C51): la llave 1 es un objeto de memoria con el ELF de test_dashos_hijo y por la 2 llega su tamaño (8 bytes).
+# Sale con 47 si todo cuadra; si no, con el número del paso que falló.
+# dashos-skip: necesita DashOS (procesos: en Linux no hay); se prueba metido en lanzador
+Main
+    buf = buffer_alloc(256)
+    n = channel_receive_buffer(2, buf, 256)
+    size = buffer_get_byte(buf, 0) + buffer_get_byte(buf, 1) * 256 + buffer_get_byte(buf, 2) * 65536
+    if n != 8 or size <= 0
+        program_exit(1)
+    end
+    a = channel_create()
+    b = channel_other()
+    g = group_create(16777216)
+    if g <= 0
+        program_exit(2)
+    end
+    process_group(g)
+    # el hijo recibe una copia de b marcada con 5: sus mensajes llegan con esa marca
+    process_give(handle_copy(b, 7, 5))
+    p = process_start(1, size)
+    if p <= 0
+        Print "padre: process_start: #{p} #{dashos_error_text(p)}"
+        program_exit(3)
+    end
+    m = channel_receive(a)
+    Print "padre: #{m} (marca #{channel_mark()})"
+    if m != "hola, soy el hijo" or channel_mark() != 5
+        program_exit(4)
+    end
+    # memoria compartida: el hijo escribe en un objeto que el padre ve
+    mem = memory_create(4096)
+    view = memory_map(mem, false)
+    channel_pass(handle_copy(mem, 7, 0))
+    channel_send(a, "toma memoria")
+    m = channel_receive(a)
+    Print "padre: #{m}; byte compartido #{buffer_get_byte(view, 0)}"
+    if m != "escrito" or buffer_get_byte(view, 0) != 77
+        program_exit(5)
+    end
+    # con el hijo vivo, su grupo tiene gasto; cuando acaba, todo vuelve
+    used = group_used(g)
+    channel_send(a, "adiós")
+    code = process_wait(p)
+    Print "padre: el hijo salió con #{code} (fin #{process_end()}); su grupo gastaba #{used} bytes de #{group_limit(g)} y después #{group_used(g)}"
+    if code != 7 or process_end() != 0 or used <= 0 or group_used(g) != 0
+        program_exit(6)
+    end
+    # otro hijo que gira para siempre: se mata y se espera
+    a2 = channel_create()
+    process_give(channel_other())
+    p2 = process_start(1, size)
+    m = channel_receive(a2)
+    channel_send(a2, "gira")
+    t = time_ms()
+    process_kill(p2)
+    code = process_wait(p2)
+    Print "padre: el que giraba acabó con fin #{process_end()}"
+    if process_end() != 1
+        program_exit(8)
+    end
+    # un temporizador periódico: tres avisos de 30 ms
+    tc = channel_create()
+    tm = timer_create(channel_other(), 30, 30)
+    t = time_ms()
+    for i in (1..3)
+        n = channel_receive_buffer(tc, buf, 256)
+    end
+    t = time_ms() - t
+    handle_close(tm)
+    Print "padre: tres avisos en #{t} ms"
+    if t < 80 or t > 2000
+        program_exit(9)
+    end
+    if group_kill(g) != 0
+        program_exit(10)
+    end
+    program_exit(47)
+end

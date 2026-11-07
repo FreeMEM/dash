@@ -3429,6 +3429,11 @@ y `mui_press(boton)` lanza el evento del botón como si se pulsara (en una opci�
 Se pueden crear varias ventanas (cada una con su `mui_window_begin` ... `mui_window_end`). Cerrar una
 ventana que no es la primera solo la cierra, salvo que tenga su `mui_on_close`.
 
+Las ventanas MUI admiten iconos soltados desde el Workbench. `mui_on_drop(objeto, id)` hace que `mui_wait_event()`
+devuelva `id` cuando se suelta uno sobre ese objeto (sobre una ventana: en cualquier sitio de ella). Después,
+`app_drop()` da la ruta de cada icono, uno a uno, hasta `""`, y `app_drop_x()`/`app_drop_y()` dónde cayó. Solo en
+la pantalla del Workbench.
+
 ### Funciones
 
 | Función | Qué hace |

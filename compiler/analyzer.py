@@ -950,6 +950,8 @@ class SemanticAnalyzer(ASTVisitor):
             if node.name in unimplemented_builtins():
                 self.error(f"Builtin '{node.name}' is declared but not implemented yet "
                            f"(no C runtime for it)", node)
+            if builtin.needs_dashos and os.environ.get("DASH_TARGET") != "dashos":
+                self.error(f"'{node.name}' is only for DashOS (./dash --dashos)", node)
             # Validate argument count for builtin
             expected = len(builtin.params)
             actual = len(node.arguments)

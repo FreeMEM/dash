@@ -173,7 +173,8 @@ GUI = ()
 LIB_FLAGS = ()
 
 
-def builtins():
+def builtins(dashos=False):
+    """Los builtins que van en la librería (los de DashOS, needs_dashos, solo en la de DashOS)"""
     sys.path.insert(0, str(REPO))
     from compiler import amiga_builtins as ab
     out = {}
@@ -182,7 +183,7 @@ def builtins():
             for n, b in v.items():
                 if (isinstance(b, ab.BuiltinFunc) and not any(getattr(b, f) for f in LIB_FLAGS) and
                         not n.startswith(GUI) and
-                        True):
+                        (dashos or not b.needs_dashos)):
                     out[n] = b
     return out
 
