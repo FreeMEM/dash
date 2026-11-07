@@ -1,0 +1,61 @@
+# mui_on_drop de verdad (dashweb D83): con el Workbench cargado, arrastra el icono del disco (el primero del
+# escritorio, por el ARexx del Workbench) sobre la ventana MUI, como haría alguien con el ratón. El programa recibe
+# su evento y app_drop da la ruta. Probado también a mano con MUI 3.8 (la máquina RTG con sys32rtg38).
+# workbench
+# emu-needs: muimaster.library
+# autoclose: 30
+# expect-out: soltado: DH0: (dentro)
+# expect-out: fin
+
+func wb(q: String) -> String
+    return rexx_send("WORKBENCH", "GETATTR " + q + " NAME root")
+end
+
+Main
+    if mui_app_begin("Soltar", "DASHDROP") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Suelta aqui", 0)
+        t = mui_text("Suelta un icono aqui, por favor, en esta ventana")
+        mui_window_end()
+        mui_on_drop(win, 7)
+        mui_window_open(win)
+        time_delay(100)
+
+        l = Int(wb("WINDOW.ICONS.ALL.0.LEFT"))
+        tp = Int(wb("WINDOW.ICONS.ALL.0.TOP"))
+        w = Int(wb("WINDOW.ICONS.ALL.0.WIDTH"))
+        h = Int(wb("WINDOW.ICONS.ALL.0.HEIGHT"))
+        v = window_find("Suelta aqui")
+        vx = window_found_box(v, 0) + window_found_box(v, 2) / 2
+        vy = window_found_box(v, 1) + window_found_box(v, 3) / 2
+        x0 = l + w / 2
+        y0 = tp + h / 2 + wm_bar_height()
+
+        input_move_screen(x0, y0, 0)
+        input_button(1, true)
+        input_move_screen(x0 + 10, y0 + 10, 1)
+        input_move_screen(vx, vy, 1)
+        time_delay(10)
+        input_button(1, false)
+        n = 0
+        while n < 20
+            ev = mui_poll_event()
+            if ev == 7
+                r = app_drop()
+                while r != ""
+                    dentro = "fuera"
+                    if app_drop_x() > 0 and app_drop_y() > 0
+                        dentro = "dentro"
+                    end
+                    Print "soltado: #{r} (#{dentro})"
+                    r = app_drop()
+                end
+            end
+            time_delay(10)
+            n = n + 1
+        end
+        Print "fin"
+        mui_app_end()
+    end
+end

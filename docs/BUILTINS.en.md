@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 960 functions, 960 implemented, 0 not implemented.
+Total: 961 functions, 961 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -1053,6 +1053,7 @@ Total: 960 functions, 960 implemented, 0 not implemented.
 | `mui_button(label)` | `APTR` | Button (an underscore before a letter makes it the keyboard shortcut) |  |
 | `mui_on_press(obj, id)` | `void` | mui_wait_event returns id when the button is pressed |  |
 | `mui_on_close(win, id)` | `void` | mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1) |  |
+| `mui_on_drop(obj, id)` | `void` | mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: anywhere on it); app_drop gives their paths, app_drop_x/y where they fell |  |
 | `mui_press(obj)` | `void` | Send the mui_on_press event of a button as if it were pressed |  |
 | `mui_label(text)` | `APTR` | Label for a form row (right-aligned) |  |
 | `mui_string(initial, maxlen)` | `APTR` | Text field with up to maxlen characters |  |

@@ -3821,6 +3821,14 @@ MUI_FUNCTIONS = {
         c_template="_dash_mui_on_close(${win}, ${id})",
         description="mui_wait_event returns id when the window's close gadget is clicked (default for the first window: -1)"
     ),
+    "mui_on_drop": BuiltinFunc(
+        name="mui_on_drop",
+        params=["obj", "id"],
+        return_type="void",
+        c_template="_dash_mui_on_drop(${obj}, ${id})",
+        description="mui_wait_event returns id when icons are dropped from the Workbench on that object (a window: "
+                    "anywhere on it); app_drop gives their paths, app_drop_x/y where they fell"
+    ),
     "mui_press": BuiltinFunc(
         name="mui_press",
         params=["obj"],

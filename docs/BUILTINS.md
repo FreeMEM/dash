@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 960 funciones, 960 implementadas, 0 sin implementar.
+Total: 961 funciones, 961 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -1053,6 +1053,7 @@ Total: 960 funciones, 960 implementadas, 0 sin implementar.
 | `mui_button(label)` | `APTR` | Un botón (un guion bajo delante de una letra la hace su atajo de teclado) |  |
 | `mui_on_press(obj, id)` | `void` | mui_wait_event da id cuando se pulsa el botón |  |
 | `mui_on_close(win, id)` | `void` | mui_wait_event da id cuando se pulsa el botón de cerrar de la ventana (en la primera ventana, por defecto: -1) |  |
+| `mui_on_drop(obj, id)` | `void` | mui_wait_event devuelve id cuando se sueltan iconos del Workbench sobre ese objeto (una ventana: en cualquier sitio de ella); app_drop da sus rutas y app_drop_x/y dónde cayeron |  |
 | `mui_press(obj)` | `void` | Envía el evento mui_on_press de un botón como si se hubiera pulsado |  |
 | `mui_label(text)` | `APTR` | La etiqueta de una fila de un formulario (alineada a la derecha) |  |
 | `mui_string(initial, maxlen)` | `APTR` | Un campo de texto de hasta maxlen caracteres |  |
