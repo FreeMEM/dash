@@ -4518,28 +4518,32 @@ static BOOL _dash_app_window(LONG h) {
     return TRUE;
 }
 
-/* The messages waiting, each icon to the queue (when full, the oldest goes) */
-static void _dash_appw_take(void) {
-    struct AppMessage *am;
+/* Each icon of a message to the queue (when full, the oldest goes); also MUI's (mui_on_drop) */
+static void _dash_appw_put(struct AppMessage *am) {
     char path[256];
     LONG i, k;
+    for (i = 0; i < am->am_NumArgs; i++) {
+        struct WBArg *a = &am->am_ArgList[i];
+        path[0] = 0;
+        if (!a->wa_Lock || !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) continue;
+        if (a->wa_Name && a->wa_Name[0] && !AddPart((STRPTR)path, a->wa_Name, sizeof(path))) continue;
+        if (_dash_appw_n == _DASH_APPW_Q) {
+            _dash_appw_head = (_dash_appw_head + 1) % _DASH_APPW_Q;
+            _dash_appw_n--;
+        }
+        k = (_dash_appw_head + _dash_appw_n++) % _DASH_APPW_Q;
+        strcpy(_dash_appw_q[k], path);
+        _dash_appw_qx[k] = am->am_MouseX;
+        _dash_appw_qy[k] = am->am_MouseY;
+    }
+}
+
+/* The messages waiting, to the queue */
+static void _dash_appw_take(void) {
+    struct AppMessage *am;
     if (!_dash_appw_port) return;
     while ((am = (struct AppMessage *)GetMsg(_dash_appw_port))) {
-        if (am->am_Type == AMTYPE_APPWINDOW)
-            for (i = 0; i < am->am_NumArgs; i++) {
-                struct WBArg *a = &am->am_ArgList[i];
-                path[0] = 0;
-                if (!a->wa_Lock || !NameFromLock(a->wa_Lock, (STRPTR)path, sizeof(path))) continue;
-                if (a->wa_Name && a->wa_Name[0] && !AddPart((STRPTR)path, a->wa_Name, sizeof(path))) continue;
-                if (_dash_appw_n == _DASH_APPW_Q) {
-                    _dash_appw_head = (_dash_appw_head + 1) % _DASH_APPW_Q;
-                    _dash_appw_n--;
-                }
-                k = (_dash_appw_head + _dash_appw_n++) % _DASH_APPW_Q;
-                strcpy(_dash_appw_q[k], path);
-                _dash_appw_qx[k] = am->am_MouseX;
-                _dash_appw_qy[k] = am->am_MouseY;
-            }
+        if (am->am_Type == AMTYPE_APPWINDOW) _dash_appw_put(am);
         ReplyMsg((struct Message *)am);
     }
 }
@@ -20374,6 +20378,30 @@ static LONG ra_window_is_open(void) {
     # RTG Runtime (CyberGraphX / Picasso96 support)
     # MUI 5 (muimaster.library), design in docs/MUI_DISEÑO.md. Objects are handles
     # (LONG in Dash, like buffers and files); MUI owns them until _dash_mui_app_end().
+    # dashweb D83 (Tachyon, idea de Ferrán García): icons dropped from the Workbench on a MUI window
+    MUI_APPDROP_RUNTIME = """\
+/* mui_on_drop(obj, id): icons dropped on that object (or anywhere on it, for a window) make mui_wait_event return
+   id; app_drop() then gives their paths one by one (the queue of APPWIN_RUNTIME), app_drop_x/y where they fell.
+   Every MUI window is an AppWindow (MUIA_Window_AppWindow only goes at creation); MUI hands the AppMessage to a
+   hook, valid only during the call, so its paths are copied there. Only on the Workbench screen. */
+static struct Hook _dash_mui_drop_hook;
+
+static ULONG _dash_mui_drop_entry(struct Hook *h __asm("a0"), Object *obj __asm("a2"), IPTR *args __asm("a1")) {
+    struct AppMessage *am = (struct AppMessage *)args[0];
+    (void)h; (void)obj;
+    if (am) _dash_appw_put(am);
+    if (_dash_mui_app && args[1]) _DASH_MUI_DO(_dash_mui_app, MUIM_Application_ReturnID, args[1]);
+    return 0;
+}
+
+static void _dash_mui_on_drop(APTR obj, LONG id) {
+    _dash_mui_drop_hook.h_Entry = (ULONG (*)())_dash_mui_drop_entry;
+    if (obj)
+        _DASH_MUI_DO(obj, MUIM_Notify, MUIA_AppMessage, MUIV_EveryTime, MUIV_Notify_Self, 4,
+                     MUIM_CallHook, (IPTR)&_dash_mui_drop_hook, MUIV_TriggerValue, id);
+}
+"""
+
     MUI_RUNTIME = """\
 /* MUI (muimaster.library). NO_INLINE_STDARG: the SDK's inline MUI_NewObject() takes &tags of its first
    variable argument, and once GCC inlines it at -O2 the tags after it are garbage;
@@ -20569,6 +20597,7 @@ static APTR _dash_mui_window_begin(STRPTR title, LONG id) {
         MUIA_Window_ID, (id > 0 && id < 256) ? MAKE_ID('D', 'A', 'S', id) : 0,
         MUIA_Window_RootObject, (IPTR)root,
         MUIA_Window_Menustrip, (IPTR)strip,
+        MUIA_Window_AppWindow, TRUE,       /* icons can be dropped on it (mui_on_drop); only at creation */
         MUIA_UserData, _DASH_MUI_WINDOW);
     if (!win) {
         MUI_DisposeObject(root);
@@ -22773,6 +22802,7 @@ _RUNTIME_FLAGS = [
     ("REACTION_RUNTIME", "needs_reaction"),
     ("RTG_RUNTIME", "needs_rtg"),
     ("MUI_RUNTIME", "needs_mui"),
+    ("MUI_APPDROP_RUNTIME", "uses_mui_drop"),   # dashweb D83: icons dropped on a MUI window
     ("MUI_CANVAS_RUNTIME", "uses_mui_canvas"),
     ("MUI_TIMER_RUNTIME", "uses_mui_timer"),
 ]
@@ -23034,6 +23064,7 @@ class CodeGenerator(ASTVisitor):
         self.uses_meter: bool = False    # disks_read, net_ifs_read, wifi_read, pistorm_temperature (METER_RUNTIME)
         self.uses_wm: bool = False       # wm_read, wm_set_box... (WM_RUNTIME, Trasfondo 2.0)
         self.uses_appwin: bool = False   # app_window, app_drop (APPWIN_RUNTIME, Trasfondo 2.0)
+        self.uses_mui_drop: bool = False # mui_on_drop (MUI_APPDROP_RUNTIME, dashweb D83)
         self.uses_sha1: bool = False     # sha1, sha1_new... (SHA1_RUNTIME, dashgit)
         self.uses_icons: bool = False    # icon_load, icon_draw (ICON_RUNTIME, Trasfondo 2.0)
         self.uses_mouse: bool = False    # mouse_curve, usb_hid_*, mouse_prefs_* (MOUSE_RUNTIME, Ratonera)
@@ -23484,6 +23515,8 @@ class CodeGenerator(ASTVisitor):
             parts.append(CTemplates.RTG_RUNTIME)
         if self.needs_mui:
             parts.append(CTemplates.MUI_RUNTIME)
+        if self.uses_mui_drop:
+            parts.append(CTemplates.MUI_APPDROP_RUNTIME)
         if self.uses_mui_canvas:
             parts.append(CTemplates.MUI_CANVAS_RUNTIME)
         if self.uses_mui_timer:
@@ -26482,6 +26515,9 @@ static {ret_type} {method_name}({params_str}) {{
             self.uses_strings = True   # tooltype, disk_name, net_if_name and wm_title give a String
         if self.uses_sha1:
             self.uses_strings = True   # sha1 gives a String
+        if self.uses_mui_drop:
+            self.uses_appwin = True    # its queue, read with app_drop
+            self.needs_mui = True
         if self.uses_appwin:
             self.uses_strings = True   # app_drop gives a String
             self.uses_winmgr = True    # app_window takes a window handle (_dash_window_get)

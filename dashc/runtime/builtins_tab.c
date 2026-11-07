@@ -977,6 +977,8 @@ const BuiltinInfo builtin_info[] = {
     {"mui_on_close", 2, 0, 1, 0, 0},
     {"mui_on_double", 2, 0, 1, 0, 0},
     {"mui_on_double", 2, 0, 1, 0, 0},
+    {"mui_on_drop", 2, 0, 1, 0, 0},
+    {"mui_on_drop", 2, 0, 1, 0, 0},
     {"mui_on_press", 2, 0, 1, 0, 0},
     {"mui_on_press", 2, 0, 1, 0, 0},
     {"mui_poll_event", 0, 1, 1, 0, 0},
@@ -1922,7 +1924,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0, 0},
     {"wm_zip", 1, 2, 1, 0, 0},
 };
-const int builtin_count = 1920;
+const int builtin_count = 1922;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

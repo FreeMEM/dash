@@ -1,0 +1,40 @@
+# mui_on_drop (dashweb D83, Tachyon: abrir una página guardada soltando su icono, idea de Ferrán García): las
+# ventanas MUI son AppWindows y los iconos soltados sobre un objeto dan su evento; app_drop da las rutas. Aquí, que
+# la ventana abre con eso puesto y que la cola empieza vacía (soltar un icono de verdad necesita el Workbench).
+# emu-needs: muimaster.library
+# autoclose: 3
+# expect-c: MUIA_Window_AppWindow, TRUE
+# expect-c: MUIM_CallHook, (IPTR)&_dash_mui_drop_hook
+# expect-out: ventana abierta
+# expect-out: nada soltado: []
+# expect-out: fin
+
+Main
+    if mui_app_begin("Soltar", "DASHDROP") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Suelta un icono", 0)
+        campo = mui_string("", 200)
+        lienzo = mui_text("Suéltalo aquí")
+        mui_window_end()
+        mui_on_drop(win, 7)
+        mui_on_drop(campo, 8)
+        if mui_window_open(win)
+            Print "ventana abierta"
+        end
+        Print "nada soltado: [#{app_drop()}]"
+        ev = 0
+        while ev != -1
+            ev = mui_wait_event()
+            if ev == 7 or ev == 8
+                r = app_drop()
+                while r != ""
+                    Print "soltado en #{ev}: #{r} (#{app_drop_x()}, #{app_drop_y()})"
+                    r = app_drop()
+                end
+            end
+        end
+        Print "fin"
+        mui_app_end()
+    end
+end

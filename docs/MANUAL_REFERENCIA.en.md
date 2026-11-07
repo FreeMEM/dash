@@ -3430,6 +3430,10 @@ and `mui_press(boton)` fires the button's event as if it were pressed (on a menu
 Several windows can be created (each with its own `mui_window_begin` ... `mui_window_end`). Closing a
 window that is not the first one just closes it, unless it has its own `mui_on_close`.
 
+MUI windows take icons dropped from the Workbench. `mui_on_drop(object, id)` makes `mui_wait_event()` return `id`
+when one is dropped on that object (on a window: anywhere on it). Then `app_drop()` gives the path of each icon,
+one by one, until `""`, and `app_drop_x()`/`app_drop_y()` where it fell. Only on the Workbench screen.
+
 ### Functions
 
 | Function | What it does |
