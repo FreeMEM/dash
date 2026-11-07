@@ -673,9 +673,28 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.mapEditor', 'editor:dash.spriteEditor']);
+            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newGraphic', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.mapEditor', 'editor:dash.spriteEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
+    await check('extension: a new sprite, BOB or map (Amiga-B in Forja) is written and opened in its editor', async () => {
+        const I = require('../media/iff.js');
+        const written = {}, opened = [];
+        fakeVscode.workspace.fs = { writeFile: async (u, b) => { written[u.fsPath] = b; } };
+        fakeVscode.commands.executeCommand = async (...a) => { opened.push([a[0], a[1].fsPath, a[2]]); };
+        const u = (p) => ({ fsPath: p });
+        await ext.newGraphic(null, 'sprite', u('/p/s.iff'));
+        await ext.newGraphic(null, 'attached', u('/p/a.iff'));
+        await ext.newGraphic(null, 'bob', u('/p/b.iff'));
+        await ext.newGraphic(null, 'map', u('/p/m.fmap'));
+        const s = I.readIlbm(written['/p/s.iff']), a = I.readIlbm(written['/p/a.iff']), b = I.readIlbm(written['/p/b.iff']);
+        assert.deepStrictEqual([s.width, s.height, s.planes, s.hardware], [16, 16, 2, true]);
+        assert.deepStrictEqual([a.width, a.planes, a.hardware], [16, 4, true]);
+        assert.deepStrictEqual([b.width, b.height, b.planes, b.hardware], [32, 32, 4, false]);
+        const m = I.readFmap(written['/p/m.fmap']);
+        assert.deepStrictEqual([m.width, m.height, m.tile, m.layers.length, m.layers[0].name], [64, 32, 16, 1, 'fondo']);
+        assert.deepStrictEqual(opened.map((o) => o[2]), ['dash.spriteEditor', 'dash.spriteEditor', 'dash.spriteEditor', 'dash.mapEditor']);
+        assert(opened.every((o) => o[0] === 'vscode.openWith'));
+    });
     await check('extension: compile command', () => {
         const c = ext.compileCommand(repo, file);
         assert(c.includes(`'${repo}/dash' '${file}' -o '${repo}/examples/bin/mui_hola'`), c);

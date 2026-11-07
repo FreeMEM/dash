@@ -38,7 +38,7 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
       para sprites de hardware, 8 para BOBs); fotogramas (nuevo, duplicar, quitar, vaciar, espejo H y V, mover,
       desplazar, copiar y pegar), piel de cebolla, vista animada con velocidad (FRJA); tamaño y tipo (sprite de
       hardware de 16 de ancho y 3 colores, acoplado de 15, BOB); "Copiar código Dash".
-- [ ] V3. **Nuevo sprite, BOB o mapa** (orden y menú del explorador), como Amiga-B de Forja.
+- [x] V3. **Nuevo sprite, BOB o mapa** (orden y menú del explorador), como Amiga-B de Forja.
 - [x] V4. **Editor de mapas** (`.fmap`): el tileset desde un BOB (un fotograma por tile de 8, 16 o 32); lápiz,
       caja, relleno, cuentagotas, borrar, espejo H y V; capas (ver, nueva, quitar, orden), capa de choques
       (sólido, plataforma, escalera, daño, con su trama), objetos (jugador, enemigo, moneda, puerta, otro; con
@@ -80,3 +80,7 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
   un `.fmap` vacío se abre como 64 x 32 tiles de 16. Pruebas: 4 del modelo y 7 del webview (`test/map.js`).
   Arreglado al probar: la caché de tiles guardaba "sin imagen" antes de llegar el tileset; ocultar una capa ya no
   cambia la capa elegida.
+- 2026-11-07, V3: "Dash: Nuevo sprite, BOB o mapa" (`dash.newGraphic`, `newGraphic.js`), en la paleta de órdenes y
+  en el menú de una carpeta del explorador. Pregunta el tipo (sprite de hardware 16 x 16, acoplado, BOB 32 x 32 de 16
+  colores, mapa 64 x 32 de tiles de 16: los tamaños de Forja), dónde guardarlo, y lo abre en su editor. Prueba en
+  `extension: a new sprite, BOB or map`.

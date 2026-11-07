@@ -183,6 +183,32 @@ async function showOnAmiga(document, windowName, webview, auto) {
 }
 
 /** New .dashui file with one empty window, opened in the visual editor */
+/**
+ * "Dash: Nuevo sprite, BOB o mapa" (Amiga-B in Forja): which, where (from the explorer, the folder clicked), and it
+ * opens in its editor. kind and target (tests): without questions.
+ */
+async function newGraphic(folder, kind, target) {
+    const { KINDS, newGraphicBytes } = require('./newGraphic');
+    let k = KINDS.find((x) => x.id === kind);
+    if (!k) {
+        k = await vscode.window.showQuickPick(KINDS.map((x) => Object.assign({ description: x.file }, x)),
+            { title: 'Nuevo sprite, BOB o mapa', placeHolder: 'Qué quieres crear' });
+        if (!k) return null;
+    }
+    let uri = target;
+    if (!uri) {
+        const base = folder && folder.fsPath ? folder
+            : vscode.window.activeTextEditor ? vscode.Uri.file(path.dirname(vscode.window.activeTextEditor.document.fileName))
+                : (vscode.workspace.workspaceFolders || [])[0] && vscode.workspace.workspaceFolders[0].uri;
+        uri = await vscode.window.showSaveDialog({ defaultUri: base ? vscode.Uri.joinPath(base, k.file) : undefined,
+            filters: k.id === 'map' ? { 'Mapas de tiles': ['fmap'] } : { 'Imágenes IFF': ['iff', 'bob', 'spr'] }, title: k.label });
+        if (!uri) return null;
+    }
+    await vscode.workspace.fs.writeFile(uri, newGraphicBytes(k.id));
+    await vscode.commands.executeCommand('vscode.openWith', uri, k.view);
+    return uri;
+}
+
 async function newWindowFile() {
     const uri = await vscode.window.showSaveDialog({ filters: { 'Ventanas MUI': ['dashui'] } });
     if (!uri) return;
@@ -264,6 +290,7 @@ function activate(context) {
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),
         vscode.commands.registerCommand('dash.newWindowFile', newWindowFile),
+        vscode.commands.registerCommand('dash.newGraphic', (folder) => newGraphic(folder)),
         vscode.commands.registerCommand('dash.newProject', newProject),
         vscode.commands.registerCommand('dash.choosePath', choosePath),
         vscode.commands.registerCommand('dash.newline', () => newline(vscode)),   // Enter: the "end" by itself
@@ -303,4 +330,4 @@ function deactivate() {
     return stopLanguageServer();
 }
 
-module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject };
+module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject, newGraphic };

@@ -104,6 +104,11 @@
         "category": "Dash"
       },
       {
+        "command": "dash.newGraphic",
+        "title": "Nuevo sprite, BOB o mapa",
+        "category": "Dash"
+      },
+      {
         "command": "dash.newline",
         "title": "Nueva línea (con end)",
         "category": "Dash"
@@ -168,7 +173,14 @@
           "group": "navigation@2"
         }
       ],
-      "commandPalette": [
+    "explorer/context": [
+      {
+        "command": "dash.newGraphic",
+        "when": "explorerResourceIsFolder",
+        "group": "navigation@9"
+      }
+    ],
+    "commandPalette": [
         {
           "command": "dash.newline",
           "when": "false"
