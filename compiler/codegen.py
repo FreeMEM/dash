@@ -15369,6 +15369,13 @@ static LONG _dash_desk_ox = 0, _dash_desk_oy = 0;   /* the desktop's top left co
 static struct Hook _dash_desk_hook;
 static struct Hook *_dash_desk_old = LAYERS_BACKFILL;    /* the backdrop layer's hook before ours */
 static struct Hook *_dash_desk_iold = LAYERS_BACKFILL;   /* the LayerInfo's */
+/* Another program may have canvases too (Trasfondo and a widget): the hooks go in a chain, each one's "before"
+   being the next. A canvas's hook says so with h_SubEntry (odd: no code there) and points with h_Data to where
+   its program keeps its hooks before. Without it each program put its hook back on top at its next update,
+   the "before" of one being the other's: a repaint called them round and round and the display hung */
+#define _DASH_DESK_MARK 0x44534B31UL        /* "DSK1" */
+struct _DashDeskLink { struct Hook **old, **iold; };
+static struct _DashDeskLink _dash_desk_link = { &_dash_desk_old, &_dash_desk_iold };
 static ULONG _dash_desk_rects_last = 0;         /* rectangles of the last update (tests, measures) */
 static ULONG _dash_desk_attached = 0;           /* times our hook was put somewhere */
 #ifdef DASH_DESK_TIMES
@@ -15394,6 +15401,43 @@ static void _dash_desk_fill_old(struct RastPort *rp, struct _DashDeskFill *m) {
         return;
     }
     CallHookPkt(old, rp, m);
+}
+
+/* With the screen's LayerInfo locked (no program changes the chain meanwhile): where the chain from *top (the
+   layer's BackFill or the LayerInfo's BlankHook) holds our hook, through the canvases' hooks of other
+   programs over ours; NULL if ours is not in it */
+static struct Hook **_dash_desk_slot(struct Hook **top, BOOL layer) {
+    struct Hook **s = top;
+    LONG n;
+    for (n = 0; n < 32; n++) {
+        struct Hook *h = *s;
+        struct _DashDeskLink *k;
+        if (h == &_dash_desk_hook) return s;
+        if (h == LAYERS_BACKFILL || h == LAYERS_NOBACKFILL || (ULONG)h->h_SubEntry != _DASH_DESK_MARK) return NULL;
+        k = (struct _DashDeskLink *)h->h_Data;
+        s = layer ? k->old : k->iold;
+    }
+    return NULL;
+}
+
+/* That layer is still on the screen (with its LayerInfo locked): the Workbench may keep its backdrop window
+   when it leaves backdrop mode (hidden, or not the desktop's size any more) */
+static BOOL _dash_desk_alive(struct Layer *ly) {
+    struct Layer *l;
+    for (l = _dash_desk_scr->LayerInfo.top_layer; l; l = l->back) if (l == ly) return TRUE;
+    return FALSE;
+}
+
+/* Our hook out of the chain of that layer (or of the LayerInfo, ly NULL), the one before in its place: over
+   another program's, in that program's "before" */
+static void _dash_desk_unlink(struct Layer *ly, struct Layer_Info *li) {
+    struct Hook **top = ly ? &ly->BackFill : &li->BlankHook;
+    struct Hook **s = _dash_desk_slot(top, ly != NULL);
+    struct Hook *old = ly ? _dash_desk_old : _dash_desk_iold;
+    if (!s) return;
+    if (s != top) *s = old;
+    else if (ly) InstallLayerHook(ly, old);
+    else InstallLayerInfoHook(li, old);
 }
 
 /* Our hook (on the backdrop layer, or the LayerInfo): the one before, the canvases' front bitmaps
@@ -15550,6 +15594,16 @@ static void _dash_desk_reset(struct _DashDesk *d) {
     d->all_new = TRUE;
 }
 
+/* With the screen's LayerInfo locked: our hook out of the backdrop window it was on, if the window is still
+   there (usually it is gone with its hook) */
+static void _dash_desk_leave_layer(void) {
+    struct Layer *ly = _dash_desk_layer;
+    if (_dash_desk_mode != _DASH_DESK_BACKDROP || !ly || !_dash_desk_alive(ly)) return;
+    LockLayer(0, ly);
+    _dash_desk_unlink(ly, &_dash_desk_scr->LayerInfo);
+    UnlockLayer(ly);
+}
+
 /* With the screen's LayerInfo locked: our hook where the Workbench's desktop is now (the backdrop
    window, or the screen's background), moved there if it was elsewhere or the Workbench put its own
    back; the canvases then start again from the wallpaper and the icons on the screen */
@@ -15558,25 +15612,28 @@ static void _dash_desk_attach(void) {
     struct Layer_Info *li = &_dash_desk_scr->LayerInfo;
     struct _DashDesk *d;
     _dash_desk_hook.h_Entry = (void *)_dash_desk_hook_fn;
-    _dash_desk_hook.h_SubEntry = NULL;
-    _dash_desk_hook.h_Data = NULL;
+    _dash_desk_hook.h_SubEntry = (void *)_DASH_DESK_MARK;
+    _dash_desk_hook.h_Data = &_dash_desk_link;
     if (w) {
         if (_dash_desk_mode == _DASH_DESK_BACKDROP && w == _dash_desk_win && w->WLayer == _dash_desk_layer &&
-            w->WLayer->BackFill == &_dash_desk_hook)
+            _dash_desk_slot(&w->WLayer->BackFill, TRUE))
             return;
-        if (_dash_desk_mode == _DASH_DESK_SCREEN && li->BlankHook == &_dash_desk_hook)
-            InstallLayerInfoHook(li, _dash_desk_iold);      /* the background is the window's now */
+        if (_dash_desk_mode == _DASH_DESK_SCREEN)
+            _dash_desk_unlink(NULL, li);                    /* the background is the window's now */
+        else if (w->WLayer != _dash_desk_layer)
+            _dash_desk_leave_layer();                       /* another window is the desktop now */
         LockLayer(0, w->WLayer);
-        if (w->WLayer->BackFill != &_dash_desk_hook) _dash_desk_old = InstallLayerHook(w->WLayer, &_dash_desk_hook);
+        if (!_dash_desk_slot(&w->WLayer->BackFill, TRUE))
+            _dash_desk_old = InstallLayerHook(w->WLayer, &_dash_desk_hook);
         _dash_desk_mode = _DASH_DESK_BACKDROP;
         _dash_desk_win = w;
         _dash_desk_layer = w->WLayer;
         _dash_desk_ox = w->LeftEdge;
         _dash_desk_oy = w->TopEdge;
     } else {
-        if (_dash_desk_mode == _DASH_DESK_SCREEN && li->BlankHook == &_dash_desk_hook) return;
-        /* (the backdrop window, if it was ours, is gone with its hook) */
-        if (li->BlankHook != &_dash_desk_hook) _dash_desk_iold = InstallLayerInfoHook(li, &_dash_desk_hook);
+        if (_dash_desk_mode == _DASH_DESK_SCREEN && _dash_desk_slot(&li->BlankHook, FALSE)) return;
+        _dash_desk_leave_layer();
+        if (!_dash_desk_slot(&li->BlankHook, FALSE)) _dash_desk_iold = InstallLayerInfoHook(li, &_dash_desk_hook);
         _dash_desk_mode = _DASH_DESK_SCREEN;
         _dash_desk_win = NULL;
         _dash_desk_layer = NULL;
@@ -16167,14 +16224,8 @@ static void _dash_desk_free(APTR c) {
                 break;
             }
         if (!_dash_desks) {
-            struct Window *w = _dash_desk_find();
-            if (_dash_desk_mode == _DASH_DESK_BACKDROP && w && w == _dash_desk_win && w->WLayer == _dash_desk_layer &&
-                w->WLayer->BackFill == &_dash_desk_hook) {
-                LockLayer(0, w->WLayer);
-                InstallLayerHook(w->WLayer, _dash_desk_old);
-                UnlockLayer(w->WLayer);
-            }
-            if (li->BlankHook == &_dash_desk_hook) InstallLayerInfoHook(li, _dash_desk_iold);
+            _dash_desk_leave_layer();
+            _dash_desk_unlink(NULL, li);
             _dash_desk_mode = 0;
             _dash_desk_win = NULL;
             _dash_desk_layer = NULL;

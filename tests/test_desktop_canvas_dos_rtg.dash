@@ -1,0 +1,132 @@
+# Test (RTG: 68040 with uaegfx, the Workbench in 16 bits): two programs with a desktop_canvas at once, as
+# test_desktop_canvas_dos.dash.
+# workbench
+# rtg
+# expect-out: lienzo: true
+# expect-out: en cadena: true
+# expect-out: bien con el otro: true
+# expect-out: tras tapar: true
+# expect-out: el otro fuera: true
+# expect-out: tras tapar sin el otro: true
+# expect-out: devuelto: true
+# expect-out: como estaba: true
+# expect-out: fin
+
+import "lib/escritorio_iconos.dash"
+
+@header "static struct Hook *_t_antes_gancho;"
+
+# the hook of the Workbench's backdrop window (where the canvases go)
+@native func gancho() -> Int
+"""
+    struct Screen *s = LockPubScreen((CONST_STRPTR)"Workbench");
+    struct Window *w;
+    struct Hook *h = NULL;
+    if (!s) return 0;
+    Forbid();
+    for (w = s->FirstWindow; w; w = w->NextWindow)
+        if ((w->Flags & WFLG_WBENCHWINDOW) && (w->Flags & WFLG_BACKDROP)) { h = w->WLayer->BackFill; break; }
+    Permit();
+    UnlockPubScreen(NULL, s);
+    return (LONG)h;
+"""
+end
+
+@native func guardar_gancho() -> Int
+"""
+    _t_antes_gancho = (struct Hook *)gancho();
+    return 0;
+"""
+end
+
+# ours on top, the other's under it (a canvas's hook) and the Workbench's under that: no loop
+@native func en_cadena() -> Bool
+"""
+    struct Hook *h = _dash_desk_old;
+    if (gancho() != (LONG)&_dash_desk_hook || h == LAYERS_BACKFILL || h == LAYERS_NOBACKFILL) return FALSE;
+    if ((ULONG)h->h_SubEntry != _DASH_DESK_MARK) return FALSE;
+    return *((struct _DashDeskLink *)h->h_Data)->old == _t_antes_gancho;
+"""
+end
+
+@native func el_otro_fuera() -> Bool
+"""
+    return gancho() == (LONG)&_dash_desk_hook && _dash_desk_old == _t_antes_gancho;
+"""
+end
+
+@native func devuelto() -> Bool
+"""
+    return gancho() == (LONG)_t_antes_gancho;
+"""
+end
+
+@native func mi_nombre() -> String
+"""
+    static char n[256];
+    if (!GetProgramName((STRPTR)n, sizeof(n))) n[0] = 0;
+    return (STRPTR)n;
+"""
+end
+
+func pintar_otro(x, y, w, h)
+    gfx_pen(2)
+    gfx_rect(0, 0, w - 1, h - 1)
+end
+
+# el otro programa: un lienzo debajo del del test, al día una y otra vez hasta Ctrl-C
+func otro()
+    c = desktop_canvas(4, 100, 200, 40)
+    if c == 0
+        return
+    end
+    desktop_canvas_on_draw(c, pintar_otro)
+    while not break_check()
+        desktop_canvas_update(c)
+        time_delay(2)
+    end
+    desktop_canvas_free(c)
+end
+
+func prueba()
+    esperar_workbench()
+    guardar_gancho()
+    r = run_start(mi_nombre() + " otro", 0)
+    time_delay(100)
+    c = desktop_canvas(4, 4, 200, 60)
+    Print "lienzo: #{c != 0}"
+    if c != 0
+        guardar(c)
+        desktop_canvas_on_draw(c, pintar)
+        for i in (1..10)
+            desktop_canvas_update(c)
+            time_delay(5)
+        end
+        Print "en cadena: #{en_cadena()}"
+        Print "bien con el otro: #{mal() == 0}"
+        tapar()
+        time_delay(20)
+        desktop_canvas_update(c)
+        Print "tras tapar: #{mal() == 0}"
+        run_break(r)
+        run_finish(r)
+        Print "el otro fuera: #{el_otro_fuera()}"
+        tapar()
+        time_delay(20)
+        desktop_canvas_update(c)
+        Print "tras tapar sin el otro: #{mal() == 0}"
+        desktop_canvas_free(c)
+        time_delay(50)
+        Print "devuelto: #{devuelto()}"
+        Print "como estaba: #{distintos() == 0}"
+    end
+    Print "fin"
+end
+
+Main
+    if arg_count() > 0
+        otro()
+    else
+        prueba()
+    end
+end

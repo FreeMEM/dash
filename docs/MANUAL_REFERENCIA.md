@@ -4191,6 +4191,10 @@ fondo y el lienzo lo pinta encima.
 Al liberar (`desktop_canvas_free`, o al acabar el programa) la zona vuelve a ser la del Workbench: se
 repinta una vez, y los iconos de debajo parpadean entonces.
 
+Varios programas pueden tener lienzos a la vez (Trasfondo y otro), en zonas distintas del escritorio, y acabar en
+cualquier orden. Hasta Dash 2.5.0 el segundo colgaba la pantalla: los dos programas
+tienen que estar compilados con una versión posterior.
+
 Coste medido en FS-UAE con un lienzo de 300x90 a 4 colores con iconos debajo:
 
 | Maquina | Cambia casi todo | Cambia una cifra | `update_area` de 120x20 |

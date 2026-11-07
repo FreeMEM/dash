@@ -69,7 +69,24 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
   test_window_handles: window_create de tamaño 0 devuelve 0 en Coffin). TLS pasa con la CA. Las máquinas de
   siempre (a1200, a1200-32, Amiberry a1200) siguen dando bien con emu_run. PR #122.
 
+- 2026-11-07, urgente: el cuelgue de dos desktop_canvas. Cada programa pone su gancho de repintado en la ventana
+  de fondo y, si en la siguiente actualización no era el de arriba, lo volvía a poner: con dos programas, el
+  "anterior" de cada uno acababa siendo el del otro, y un repintado los llamaba sin fin. Ahora los ganchos de lienzo
+  se marcan (h_SubEntry impar y h_Data con dónde guarda su programa el anterior) y forman una cadena: un programa
+  que ya está en ella no se vuelve a poner encima, y al acabar se quita de donde esté (si hay otro encima, en el
+  "anterior" de ese). test_desktop_canvas_dos (y _rtg): el test se lanza a sí mismo como el otro programa; con el
+  runtime de antes se cuelga. Hace falta que los dos programas estén compilados con este Dash: un Trasfondo viejo
+  se sigue poniendo encima.
+- Segundo fallo, visto en Coffin con test_desktop_canvas_modes: al quitar el backdrop, el Workbench de Coffin no
+  cierra su ventana de fondo, y el lienzo daba por hecho que se iba con su gancho: el gancho se quedaba en ella
+  después de acabar el programa. Ahora se quita de la ventana si sigue en la pantalla.
+- Con Trasfondo recompilado con este Dash, en Coffin: 11 de los 15 tests del lienzo pasan y ninguno se cuelga; antes
+  se saltaban todos. COFFIN_SKIP deja fuera 4 con su motivo: _modes y _modes_rtg (el Workbench de Coffin conserva
+  su ventana de fondo al salir de backdrop y el test no la vuelve a encontrar), _otro (el lienzo de Trasfondo
+  también va a la ventana de fondo del test) y _rtg (tras los otros tests del arranque su última actualización
+  repinta más de lo que espera; él solo pasa; sin mirar por qué). En A1200 3.1, A500, 3.2 y 3.2 RTG pasan los 52.
+
 ## Pendiente (fuera de este encargo)
 
-- desktop_canvas con Trasfondo en marcha: un segundo lienzo cuelga la pantalla.
 - Los cuatro tests de arriba en Coffin.
+- Publicar Trasfondo compilado con este Dash (el del disco de pruebas ya lo está, sin publicar).
