@@ -199,6 +199,7 @@ La extensión es una capa fina: lo que hace lo hacen las herramientas de este re
 | Compilar | `./dash` |
 | Ejecutar, memoria y perfil | `./dash` y `tools/emu_run.py` (FS-UAE o Amiberry) |
 | Editor visual y Ver en Amiga | `.dashui` (`compiler/dashui.py`) y `tools/emu_preview.py` |
+| Editores de sprites, BOBs y mapas de tiles (como en Forja) | `editor/vscode/media/` (los mismos ficheros que Forja y Dash); Ver en Amiga, `tools/emu_run.py --file` |
 | Depurar (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` y `tools/amiga/dbgserver.dash`; con C en el programa, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
 
 Por eso, al actualizar Dash (`git pull`), lo que la extensión sabe del lenguaje se actualiza también, sin

@@ -47,8 +47,8 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
       previa de MUI (`tools/emu_preview.py`).
 - [x] V6. **Proyecto de juego**: "Dash: Nuevo proyecto" pregunta el tipo (aplicación MUI, como ahora, o juego); el
       juego trae un sprite, un mapa y un `main.dash` que los carga y mueve al jugador.
-- [ ] V7. **Escenas (Godot)**: cuando Forja tenga su editor de escenas, el mismo en la extensión.
-- [ ] V8. **Cierre**: README, CHANGELOG, capturas, versión, y la tienda (con el token del usuario).
+- [~] V7. **Escenas (Godot)**: cuando Forja tenga su editor de escenas, el mismo en la extensión.
+- [~] V8. **Cierre**: README, CHANGELOG, capturas, versión, y la tienda (con el token del usuario).
 
 ## Decisiones
 
@@ -101,3 +101,12 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
   están en él; "Ver en Amiga" de un sprite pinta además sus fotogramas ampliados con los lápices 17-31, que son los
   colores del sprite. Y un fallo de Dash, pasado a la sesión de Dash para la 2.6.0: `_dash_is_rtg_screen` toma una
   pantalla PAL nativa (0x21000) por RTG y `sprite_load` avisa "RTG screen detected".
+- 2026-11-07, V7: en espera. Forja aún no tiene editor de escenas (su `docs/JUEGOS_DISENO.md`, fase 4) ni Fragua pasa
+  de la fase 1. Cuando Forja lo tenga, el mismo en la extensión, a la vez (decisión del usuario).
+- 2026-11-07, V8 (sin la tienda): capturas `images/sprites.png` y `images/mapas.png` (con los ficheros del proyecto
+  de juego), README de la extensión (sección "Games", tabla de piezas), README y README.es de Dash (fila de los
+  editores), CHANGELOG de la 0.5.0, descripción y palabras clave de la tienda en `package.json` (quitado un `icon` y
+  un `galleryBanner` repetidos). Arreglado: la rejilla del editor de sprites se calculaba antes de pintar la tira de
+  fotogramas y quedaba cortada. Paquete `dash-mui-editor-0.5.0.vsix` de 33 ficheros. Sin probar dentro de VS Code de
+  verdad (`npm run test:vscode` abre una ventana). Falta: fusionar la PR #127, la release `vscode-0.5.0` con
+  `--latest=false` y la tienda (editor FreeMEM y token del usuario).

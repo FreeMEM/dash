@@ -1,14 +1,9 @@
 {
   "name": "dash-mui-editor",
   "displayName": "Dash for Amiga",
-  "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, and a visual editor for MUI windows.",
+  "description": "Dash, a language for the Commodore Amiga: highlighting, errors while typing, completion, compile and run in FS-UAE, debugging on the emulated or a real Amiga, a visual editor for MUI windows, and sprite, BOB and tile map editors for games (as in Forja).",
   "version": "0.5.0",
   "publisher": "FreeMEM",
-  "icon": "images/icon.png",
-  "galleryBanner": {
-    "color": "#0055AA",
-    "theme": "dark"
-  },
   "author": {
     "name": "Francisco Antonio Tapias Bravo",
     "url": "https://github.com/FreeMEM"
@@ -636,7 +631,11 @@
     "68k",
     "retro",
     "amigaos",
-    "workbench"
+    "workbench",
+    "sprite",
+    "tilemap",
+    "pixel art",
+    "gamedev"
   ],
   "homepage": "https://github.com/FreeMEM/dash/tree/main/editor/vscode",
   "bugs": {

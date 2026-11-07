@@ -199,6 +199,7 @@ The extension is a thin layer: what it does is done by the tools in this reposit
 | Compile | `./dash` |
 | Run, memory and profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
 | Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
+| Sprite, BOB and tile map editors (as in Forja) | `editor/vscode/media/` (the same files as Forja and Dash); Ver en Amiga, `tools/emu_run.py --file` |
 | Debug (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` and `tools/amiga/dbgserver.dash`; with C in the program, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py` and `bgdbserver` |
 
 That is why, when you update Dash (`git pull`), what the extension knows about the language is updated too, without

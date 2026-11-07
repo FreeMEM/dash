@@ -2,7 +2,19 @@
 
 ## 0.5.0 (2026-11-07)
 
-The first version in the Visual Studio Marketplace (search for "Dash for Amiga"), for Dash 2.4.
+The first version in the Visual Studio Marketplace (search for "Dash for Amiga"), for Dash 2.4. It brings the game
+tools of Forja, Dash's IDE on the Amiga, with the same files and keys (docs/VSCODE_JUEGOS_LOOP.md).
+
+- **Sprite and BOB editor** for IFF ILBM (`.iff`, `.ilbm`, `.lbm`, `.brush`, `.bob`, `.spr`): hardware sprites,
+  attached sprites and BOBs; pencil, line, box, fill, picker and grab point; colours; frames, onion skin and the
+  animated view; size and kind; "Copiar código" with the Dash lines that load it.
+- **Tile map editor** for `.fmap` (`FORM FMAP`): tileset from a BOB, layers, collision layers, objects with a kind,
+  a name and a sprite, size and tile side; "Copiar código".
+- **Ver en Amiga** for sprites, BOBs and maps: loaded by Dash in FS-UAE as a game would, pictured in the editor.
+- **Dash: Nuevo sprite, BOB o mapa**, also in the explorer's menu of a folder.
+- **Dash: Nuevo proyecto** asks for the kind: a MUI application, as before, or a **game** (player, level with
+  collisions and the program that moves the player).
+- The files are written byte for byte as Forja and Dash write them (`media/iff.js`).
 
 - Highlighting: the builtins added to Dash since 0.4.0, about 120: tile maps (`tilemap_*`), sprites and bobs
   (`sprite_load_attached`, `sprite_rgb8`, `bob_paste`, `bob_frames`...), screens (`screen_double_buffer`,

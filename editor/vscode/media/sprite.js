@@ -314,7 +314,8 @@
     function render() {
         if (!E.s) return;
         clampState();
-        renderToolbar(); renderGrid(); renderPalette(); renderSize(); renderAnim(); renderFrames(); renderStatus();
+        renderToolbar(); renderPalette(); renderSize(); renderAnim(); renderFrames(); renderStatus();
+        renderGrid();                                  // the last: its zoom fits what the other panes left
     }
 
     // --- the animated view -------------------------------------------------------------------------------------
