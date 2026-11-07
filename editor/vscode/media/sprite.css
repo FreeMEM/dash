@@ -48,3 +48,14 @@ input[type=range] { padding: 0; flex: 1; }
 .tiles { display: flex; flex-wrap: wrap; gap: 1px; }
 .tile { padding: 0; border: 1px solid transparent; background: none; line-height: 0; }
 .tile.selected { border-color: var(--vscode-focusBorder, #07f); }
+/* the map editor: the view takes the whole pane (it is drawn by pieces), the side has pages */
+#layout.map { grid-template-rows: auto 1fr auto; }
+#layout.map #canvas-pane { display: block; overflow: hidden; }
+#layout.map #view { display: block; cursor: crosshair; outline: none; }
+#layout.map #side { grid-row: 2; }
+#pages { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
+#pages button[aria-selected=true] { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+.list-row input[type=checkbox] { margin: 0; }
+.list-row .name { flex: 1; }
+.collision { display: flex; align-items: center; gap: 6px; width: 100%; margin: 2px 0; text-align: left; }
+.collision i { width: 14px; height: 14px; display: inline-block; border: 1px solid #0008; }

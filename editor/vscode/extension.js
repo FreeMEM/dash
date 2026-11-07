@@ -5,7 +5,7 @@ const vscode = require('vscode');
 const path = require('path');
 const fs = require('fs');
 const { DashUIEditorProvider } = require('./dashuiEditor');
-const { registerSpriteEditor } = require('./spriteEditor');
+const { registerSpriteEditor, registerMapEditor } = require('./spriteEditor');
 const DashUI = require('./media/model');
 const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
@@ -271,6 +271,7 @@ function activate(context) {
         DashUIEditorProvider.register(context, showOnAmiga),
     );
     registerSpriteEditor(context);                    // .iff: the sprite and BOB editor (as Forja's)
+    registerMapEditor(context);                       // .fmap: the tile map editor (as Forja's)
     setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
     reopenStartupDashui();
     // a project just made in this window: its program open, beside the walkthrough

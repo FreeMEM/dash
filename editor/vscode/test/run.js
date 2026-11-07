@@ -673,7 +673,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.spriteEditor']);
+            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.mapEditor', 'editor:dash.spriteEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {
@@ -1374,6 +1374,7 @@ async function updateTests() {
     await updateTests();
     await iffTests();
     await require('./sprite.js').spriteTests(check, assert);
+    await require('./map.js').mapTests(check, assert);
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);
 })();

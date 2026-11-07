@@ -134,4 +134,17 @@ function registerSpriteEditor(context) {
     return provider;
 }
 
-module.exports = { BinaryEditorProvider, BinaryDocument, registerSpriteEditor };
+/** The tile map editor, for .fmap (Forja's FORM FMAP) */
+function registerMapEditor(context) {
+    const IFF = require('./media/iff.js');
+    const provider = new BinaryEditorProvider(context, {
+        page: 'map.html', scripts: ['sprite.css', 'iff.js', 'mapModel.js', 'map.js'],
+        // an empty file: 64 x 32 tiles of 16, one layer, as Forja's Amiga-B
+        empty: () => IFF.writeFmap(IFF.newMap(64, 32, 16, '')),
+    });
+    context.subscriptions.push(vscode.window.registerCustomEditorProvider('dash.mapEditor', provider,
+        { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: true }));
+    return provider;
+}
+
+module.exports = { BinaryEditorProvider, BinaryDocument, registerSpriteEditor, registerMapEditor };

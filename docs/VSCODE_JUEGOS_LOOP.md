@@ -39,7 +39,7 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
       desplazar, copiar y pegar), piel de cebolla, vista animada con velocidad (FRJA); tamaño y tipo (sprite de
       hardware de 16 de ancho y 3 colores, acoplado de 15, BOB); "Copiar código Dash".
 - [ ] V3. **Nuevo sprite, BOB o mapa** (orden y menú del explorador), como Amiga-B de Forja.
-- [ ] V4. **Editor de mapas** (`.fmap`): el tileset desde un BOB (un fotograma por tile de 8, 16 o 32); lápiz,
+- [x] V4. **Editor de mapas** (`.fmap`): el tileset desde un BOB (un fotograma por tile de 8, 16 o 32); lápiz,
       caja, relleno, cuentagotas, borrar, espejo H y V; capas (ver, nueva, quitar, orden), capa de choques
       (sólido, plataforma, escalera, daño, con su trama), objetos (jugador, enemigo, moneda, puerta, otro; con
       sprite); ancho, alto, zoom, rejilla; "Copiar código Dash" con los choques y los objetos.
@@ -71,3 +71,12 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
   sirve también para el editor de mapas). Un fichero vacío se abre como BOB de 32 x 32 y 16 colores. Un `.iff` que no
   es ILBM (un 8SVX) dice que se abra con otro editor. Pruebas: 5 del modelo, 2 del proveedor y 8 del webview en
   Chromium sin ventana con clics y teclas de verdad (`test/sprite.js`, `test/sprite.html`).
+- 2026-11-07, V4 (antes que V3, que necesita el editor de mapas para abrir uno nuevo): editor de mapas `.fmap`.
+  `media/mapModel.js` (de `src/mapas.dash` de Forja: celdas, línea, caja, relleno, capas hasta 8, capa de choques,
+  objetos hasta 256 que se mueven de celda en celda, tamaño hasta 1.024, y el mismo texto de "C"; además, renombrar
+  capa y lado del tile, que Forja no tiene); `media/map.{html,js}` (vista por trozos con zoom 1-8, tileset leído
+  junto al mapa por `readFile`, choques con su color, objetos con su sprite o su inicial; páginas Tiles, Capas, Mapa
+  y Objetos; teclas de Forja: P B F K E, H V, coma y punto, G, + -, flechas, Supr). Mismo `BinaryEditorProvider`;
+  un `.fmap` vacío se abre como 64 x 32 tiles de 16. Pruebas: 4 del modelo y 7 del webview (`test/map.js`).
+  Arreglado al probar: la caché de tiles guardaba "sin imagen" antes de llegar el tileset; ocultar una capa ya no
+  cambia la capa elegida.

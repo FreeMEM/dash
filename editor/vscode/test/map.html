@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval';">
+<link rel="stylesheet" href="../media/sprite.css">
+<title>Editor de mapas</title>
+</head>
+<body style="width: 900px; height: 600px">
+<div id="error" role="alert"></div>
+<div id="layout" class="map">
+  <div id="toolbar" role="toolbar" aria-label="Herramientas"></div>
+  <div id="canvas-pane"><canvas id="view" tabindex="0" aria-label="Mapa"></canvas></div>
+  <div id="side">
+    <div id="pages" role="tablist" aria-label="Páginas"></div>
+    <section id="page" role="tabpanel"></section>
+  </div>
+  <div id="status" role="status" aria-live="polite"></div>
+</div>
+<script src="../media/iff.js"></script>
+<script src="../media/mapModel.js"></script>
+<script src="../media/map.js"></script>
+</body>
+</html>

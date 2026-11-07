@@ -318,6 +318,14 @@
           { "filenamePattern": "*.spr" }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "dash.mapEditor",
+        "displayName": "Editor de mapas de tiles",
+        "selector": [
+          { "filenamePattern": "*.fmap" }
+        ],
+        "priority": "default"
       }
     ],
     "snippets": [
