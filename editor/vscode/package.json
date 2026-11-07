@@ -6,7 +6,7 @@
   "publisher": "FreeMEM",
   "icon": "images/icon.png",
   "galleryBanner": {
-    "color": "#1f2d5c",
+    "color": "#0055AA",
     "theme": "dark"
   },
   "author": {
@@ -592,7 +592,7 @@
   },
   "icon": "images/icon.png",
   "galleryBanner": {
-    "color": "#1f2d5c",
+    "color": "#0055AA",
     "theme": "dark"
   },
   "keywords": [

@@ -14,7 +14,7 @@ The first version in the Visual Studio Marketplace (search for "Dash for Amiga")
 - The README and the walkthrough: Dash compiles straight to 68000 code, and the Amiga gcc is only needed for
   programs with C, `./dash --gcc` and debugging with gdb. Installing from the Marketplace.
 - Visual editor: `Ptr` (a word of the language since `@amiga` structs) is refused as a name, as the compiler does.
-- An icon for the Marketplace.
+- The Dash logo (docs/logo) as the icon of the extension and of `.dash` files.
 
 ## 0.4.0 (2026-11-02)
 
