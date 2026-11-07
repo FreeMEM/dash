@@ -29,7 +29,7 @@ def main():
                 continue
             keeps = n not in CodeGenerator._STRING_READERS and not b.reads_only
             dmask = sum(1 << i for i in double_params(n, b))
-            rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}}},\n')
+            rows.append(f'    {{"{n}", {len(b.params)}, {ret}, {int(keeps)}, {dmask}, {int(b.needs_dashos)}}},\n')
     from compiler.ast_nodes import KEY_NAMES
     keys = "".join(f'    {{"{k}", {v}}},\n' for k, v in sorted(KEY_NAMES.items()))
     out = Path(sys.argv[1])

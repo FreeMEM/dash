@@ -84,6 +84,13 @@ long dash_plat_write(const void *buf, long len);      /* a la salida del program
 void dash_plat_exit(int code) __attribute__((noreturn));
 void *dash_plat_pages(unsigned long bytes);           /* páginas nuevas, a cero, alineadas a 4 KB; NULL sin memoria */
 void dash_plat_sleep(unsigned long us);               /* esperar sin gastar CPU (A7: Delay) */
+/* una llamada al kernel de DashOS (A7: canales, llaves, procesos...): el número y hasta 5 argumentos; da x0, y x1 y
+   x2 en out[0] y out[1]. En Linux (qemu-aarch64), plat.c imita en el propio programa los canales, las llaves, los
+   temporizadores y la memoria; procesos y grupos dan E_TIPO (-6) */
+long dash_os_call(long n, long a, long b, long c, long d, long e, long out[2]);
+/* buffer_alloc y buffer_free (A7): memoria por debajo de 2 GB, a cero, para que un búfer quepa en un Int */
+void *dash_plat_buffer_alloc(unsigned long bytes);
+void dash_plat_buffer_free(void *p);
 /* memoria para estructuras de AmigaOS (@amiga struct: amiga_alloc), por debajo de 4 GB: la de la caja Amiga */
 void *dash_plat_box_alloc(unsigned long bytes);
 void dash_plat_box_free(void *p, unsigned long bytes);

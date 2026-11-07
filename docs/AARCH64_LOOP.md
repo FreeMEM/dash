@@ -356,3 +356,40 @@ Print offsetof(Node, ln_Name)  # 10
     no está definida función a función. Y no hay forma de marcar un builtin como solo de DashOS (en el Amiga
     debería dar un error claro).
   - **Sin fusionar:** rama `dashos-a7`. Toca `compiler/codegen.py`: avisar a la sesión freememlang antes.
+- 2026-11-07 (sesión DashOS): **A7, segunda parte: los builtins propios de DashOS.** El usuario dejó los nombres a
+  mi criterio ("decide los nombres"). 32 builtins, en inglés como los demás, en `DASHOS_FUNCTIONS`
+  (`compiler/amiga_builtins.py`), con su texto en `builtins_es.py` y su apartado en `docs/BUILTINS.md`:
+  - Canales: `channel_create` (un lado; el otro, `channel_other`), `channel_send`, `channel_send_buffer`,
+    `channel_pass` (una llave para el siguiente envío), `channel_receive` (texto; espera), `channel_receive_buffer`,
+    `channel_handles`, `channel_handle(i)`, `channel_mark`, `channel_error`.
+  - Llaves: `handle_copy(h, derechos, marca)`, `handle_close`, `handle_revocable` + `handle_revoker`,
+    `handle_revoke`. (No `key_*`: ya son del teclado.)
+  - `timer_create(h, primero_ms, periodo_ms)`; `memory_create`, `memory_map` (da un búfer para `buffer_*`),
+    `memory_unmap`.
+  - Procesos: `process_give(h)` (llaves 1, 2... del hijo), `process_group(g)`, `process_start(memoria, tamaño)`,
+    `process_start_buffer`, `process_kill`, `process_wait` (código) + `process_end` (0 salió, 1 matado, 2 fallo).
+  - Grupos: `group_create`, `group_kill`, `group_used`, `group_limit`; y `dashos_error_text(código)`.
+  - Las llaves son Int (> 0); los errores, negativos (los de DashOS, −1 a −8).
+  Cómo va:
+  - `BuiltinFunc.needs_dashos`: en el Amiga es un error ("'x' is only for DashOS (./dash --dashos)" por C;
+    "x es solo de DashOS" por el directo, con un byte nuevo en `BuiltinInfo`). `tests/errors/dashos_only.dash`.
+    `gen_lib.builtins()` los deja fuera de la librería del 68k (sin cambios en `dashrt*.o`: solo cambiaba la hora
+    de compilación).
+  - `DASHOS_RUNTIME` (codegen) sobre `dash_os_call` de `runtime/dashos/plat.c`: en DashOS, `svc` con x0..x2 de
+    vuelta; en Linux, una imitación en el propio programa (canales de dos lados, llaves con derechos, marca y
+    revocador, temporizadores, memoria con memfd; procesos y grupos dan E_TIPO) para probar en qemu-aarch64.
+  - Búferes en DashOS: `buffer_*` ahora compilan (`FILEIO_RUNTIME` sin sus ficheros de dos). Un Int es de 32 bits y
+    un puntero de 64, así que `buffer_alloc` y `memory_map` dan memoria entre 1,5 y 2 GB (`dash_plat_buffer_alloc`):
+    su dirección cabe en un Int. Los cambios de Int a puntero pasan por `_DashP` solo en DashOS.
+  - `program_exit` en DashOS es `_dash_exit` (`DASHOS_TEMPLATES`: su runtime del Amiga es de AmigaOS).
+  - Pruebas: `tests/dashos/test_dashos_channels.dash` (qemu, por C y por el directo, little, big y PIE);
+    `test_dashos_padre.dash` y `test_dashos_hijo.dash` (solo DashOS: procesos). En DashOS de verdad (QEMU
+    `raspi4b`, metidos un momento en `lanzador` en un worktree aparte, sin commit), por C y por el directo:
+    canales, llave pasada con marca, revocar, temporizador, memoria compartida, lado cerrado y tipo equivocado
+    dan lo esperado; el padre lanza al hijo en un grupo de 16 MB, recibe su mensaje con la marca 5, comparten
+    memoria, el hijo sale con 7, el grupo gastaba 1,2-1,4 MB y queda a 0, otro hijo que gira se mata (fin 1), y
+    tres avisos de un temporizador de 30 ms llegan en 91-110 ms. Sale con 47.
+  - Sin regresiones: `tests/run_tests.py` 558/558; en qemu, por C 104 de 315 (`origin/main`: 93 de 314) y por el
+    directo 91 (`origin/main`: 87); ningún test que pasa en `origin/main` deja de pasar (listas comparadas).
+  - **Sin fusionar:** rama `dashos-a7`. Toca `compiler/codegen.py`, `amiga_builtins.py`, `analyzer.py` y `dashc/`:
+    avisar a freememlang antes.

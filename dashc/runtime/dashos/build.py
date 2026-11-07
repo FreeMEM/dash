@@ -43,7 +43,7 @@ def runtime_c(memcheck):
     """El C del runtime: el de la cocina (más una llamada a cada builtin que se puede usar) sin lo del programa"""
     sys.path.insert(0, str(DASHC / "runtime"))
     import gen_lib
-    bs = gen_lib.builtins()
+    bs = gen_lib.builtins(dashos=True)
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "cocina.dash"
         src.write_text((HERE / "cocina.dash").read_text(encoding="utf-8") + "\nfunc _cocina_builtins()\n" +
@@ -103,7 +103,8 @@ def builtin_wrappers():
     from string import Template
     sys.path.insert(0, str(DASHC / "runtime"))
     import gen_lib
-    bs = gen_lib.builtins()
+    bs = gen_lib.builtins(dashos=True)
+    from compiler import amiga_builtins as ab
     out = ["\n/* ---- builtins (compiler/amiga_builtins.py) ---- */\n"
            "#pragma clang diagnostic ignored \"-Wint-conversion\"\n"
            "#pragma clang diagnostic ignored \"-Wint-to-pointer-cast\"\n"
@@ -112,7 +113,7 @@ def builtin_wrappers():
         b = bs[n]
         params = ", ".join(f"_DashP _a{i}" for i in range(len(b.params))) or "void"
         dp = gen_lib.double_params(n, b)
-        code = Template(b.c_template).substitute({p: f"dl_dget((STRPTR)_a{i})" if i in dp else f"_a{i}"
+        code = Template(ab.DASHOS_TEMPLATES.get(n, b.c_template)).substitute({p: f"dl_dget((STRPTR)_a{i})" if i in dp else f"_a{i}"
                                                   for i, p in enumerate(b.params)})
         if b.return_type == "double":
             out.append(f"_DashP db_{n}({params}) {{ return (_DashP)dl_dbox({code}); }}\n")

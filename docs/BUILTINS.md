@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 928 funciones, 928 implementadas, 0 sin implementar.
+Total: 960 funciones, 960 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -1136,3 +1136,40 @@ Total: 928 funciones, 928 implementadas, 0 sin implementar.
 | `mui_height(obj)` | `LONG` | El alto de un objeto en la pantalla en píxeles (0 antes de abrirse su ventana) |  |
 | `mui_wait_event()` | `LONG` | Espera el siguiente evento y da su número; -1 para salir |  |
 | `mui_poll_event()` | `LONG` | Como mui_wait_event sin esperar: 0 si no hay evento |  |
+
+## DashOS (solo con ./dash --dashos)
+
+| Función | Devuelve | Descripción | Estado |
+|---|---|---|---|
+| `channel_create()` | `LONG` | Un canal nuevo: uno de sus dos lados (el otro, channel_other); o un error negativo |  |
+| `channel_other()` | `LONG` | El otro lado del último channel_create (lo que se escribe en un lado se lee en el otro) |  |
+| `channel_pass(handle)` | `LONG` | Mete una llave (con derecho a pasarla) en el siguiente channel_send: sale de este programa; hasta 8 por mensaje; 0, o -1 si ya hay 8 |  |
+| `channel_send(handle, text)` | `LONG` | Manda un texto (hasta 256 bytes) al otro lado del canal, sin esperar: 0 o un error negativo |  |
+| `channel_send_buffer(handle, buffer, length)` | `LONG` | Manda length bytes (hasta 256) de un búfer: 0 o un error negativo |  |
+| `channel_receive(handle)` | `STRPTR` | Espera el siguiente mensaje del canal y lo da como texto; nil si hay un error (channel_error); sus llaves: channel_handles, channel_handle; quién lo mandó: channel_mark |  |
+| `channel_receive_buffer(handle, buffer, max)` | `LONG` | Espera el siguiente mensaje y lo copia en un búfer (max bytes; con 256 basta): su largo o un error negativo |  |
+| `channel_handles()` | `LONG` | Cuántas llaves llegaron con el último mensaje recibido |  |
+| `channel_handle(i)` | `LONG` | La llave i (desde 0) del último mensaje recibido; 0 si no hay |  |
+| `channel_mark()` | `LONG` | La marca de la llave que escribió el último mensaje recibido (handle_copy): quién lo mandó; 0 sin marca o el kernel (temporizadores) |  |
+| `channel_error()` | `LONG` | El error del último channel_receive (0: ninguno; -4: el otro lado se cerró) |  |
+| `handle_copy(handle, rights, mark)` | `LONG` | Una copia de una llave con esos derechos o menos (1 leer, 2 escribir, 4 pasar; sumados) y una marca si no tenía (0: la suya): la llave nueva o un error negativo |  |
+| `handle_close(handle)` | `LONG` | Cierra una llave (la última de un lado de canal cierra ese lado): 0 o un error negativo |  |
+| `handle_revocable(handle)` | `LONG` | Una copia de una llave que se puede retirar (su revocador: handle_revoker): la copia o un error negativo |  |
+| `handle_revoker()` | `LONG` | El revocador del último handle_revocable |  |
+| `handle_revoke(revoker)` | `LONG` | Retira la llave de un revocador y las copias hechas de ella: desde entonces no valen: 0 o un error negativo |  |
+| `timer_create(handle, first_ms, period_ms)` | `LONG` | Un temporizador que manda un mensaje al otro lado del canal a los first_ms, y luego cada period_ms (0: una vez); pasos de 10 ms; se para al cerrar su llave: la llave o un error negativo |  |
+| `memory_create(size)` | `LONG` | Un objeto de memoria de size bytes (hasta 4 MB), a cero; se puede pasar a otro programa (memoria compartida): su llave o un error negativo |  |
+| `memory_map(handle, writable)` | `APTR` | Proyecta un objeto de memoria en este programa, para buffer_* (writable: true para escribir): el búfer, o 0 |  |
+| `memory_unmap(buffer)` | `LONG` | Quita lo que dio memory_map (el objeto sigue mientras tenga llaves): 0 o un error negativo |  |
+| `process_give(handle)` | `LONG` | Una llave para el siguiente process_start: el programa nuevo las recibe como llaves 1, 2... en este orden; hasta 16; 0, o -1 si ya hay 16 |  |
+| `process_group(group)` | `void` | El grupo de los siguientes procesos (0: el de este programa) |  |
+| `process_start(memory, size)` | `LONG` | Lanza un programa desde el ELF de un objeto de memoria (sus primeros size bytes), con las llaves de process_give: el proceso o un error negativo |  |
+| `process_start_buffer(buffer, length)` | `LONG` | process_start con un ELF en un búfer (se copia a un objeto de memoria nuevo, hasta 4 MB) |  |
+| `process_kill(process)` | `LONG` | Acaba un proceso: 0 o un error negativo |  |
+| `process_wait(process)` | `LONG` | Espera a que acabe un proceso: su código de salida (cómo acabó: process_end), o un error negativo |  |
+| `process_end()` | `LONG` | Cómo acabó el proceso del último process_wait: 0 salió, 1 lo mataron, 2 falló |  |
+| `group_create(bytes)` | `LONG` | Un grupo con un presupuesto de memoria sacado del de este programa: lo que crean sus procesos se cobra ahí: el grupo o un error negativo |  |
+| `group_kill(group)` | `LONG` | Acaba todos los procesos de un grupo y suelta todo lo que tenía: 0 o un error negativo |  |
+| `group_used(group)` | `LONG` | Los bytes que lleva gastados un grupo (0: el de este programa), o un error negativo |  |
+| `group_limit(group)` | `LONG` | El presupuesto de un grupo en bytes (0: el de este programa), o un error negativo |  |
+| `dashos_error_text(code)` | `STRPTR` | Qué quiere decir un error negativo de DashOS, como texto |  |
