@@ -819,13 +819,25 @@ def run_emu_tests(tests: List[Path], compiled: set, machine: dict = EMU_MACHINES
 
 # Tests that do not fit the CoffinOS machine: they expect the plain systems of the other machines
 COFFIN_SKIP = {
-    "test_catalog": "the system is in Spanish; it expects English",
-    "test_catalog_fresh": "the system is in Spanish; it expects English",
-    "test_clock": "the system is in Spanish; it expects English",
+    **{t: "the system is in Spanish; it expects English" for t in
+       ("test_catalog", "test_catalog_fresh", "test_clock", "test_locale_numeros")},
     "test_cpu_shared": "Trasfondo already owns the dash.cpu semaphore",
-    "test_copper": "the default screen is RTG (no copper)",
-    "test_bobs": "the default screen is RTG",
-    "test_blend": "the default screen is RTG",
+    "test_rexx_port": "Trasfondo's bar already has the TRASFONDO port",
+    **{t: "Trasfondo's window manager places and sizes the windows" for t in ("test_wm", "test_window_box_pending")},
+    "test_string_memory": "the resident programs use memory meanwhile",
+    **{t: "the default screen is RTG, not AGA" for t in
+       ("test_copper", "test_bobs", "test_blend", "test_gfx_pen_cache", "test_gfx_pens_draw", "test_image",
+        "test_image_rgb", "test_load_colors", "test_sprite_load", "test_sprite_rgb8", "test_screen_mode",
+        "test_mui_canvas_update")},
+    **{t: "its clicks are placed for the 640-pixel screens of the other machines" for t in
+       ("test_gt_events", "test_gt_more", "test_gt_paste", "test_ra_menus", "test_ra_more", "test_dialogs",
+        "test_dialogs_asl", "test_reaction_paste", "test_mui_paste", "test_mui_context_menu",
+        "test_mui_canvas_qualifiers")},
+    **{t: "MUI 3.8, not MUI 5" for t in ("test_mui_open", "test_mui_fullscreen")},
+    **{t: "Poseidon is installed" for t in ("test_usb_hid", "test_mouse_curve")},
+    "test_sysinfo": "a 68040, not a 68020",
+    "test_task": "with the JIT the task ends before the main loop turns twice",
+    "test_meter_disks": "its bsdsocket.library counts as a running network stack",
 }
 # Trasfondo already draws on the desktop: a second desktop_canvas hangs the display (docs/COFFIN_EMU_LOOP.md)
 COFFIN_SKIP_PREFIX = {"test_desktop_canvas": "Trasfondo already has the desktop canvas (two at once hang)"}

@@ -95,6 +95,13 @@ def actualizar(trabajo: Path):
             lineas.append("C:Copy DASHRUN:Tachyon.info Programs:Network/Tachyon.info CLONE QUIET")
     else:
         print(f"sin Tachyon (no hay {TACHYON}/Tachyon)")
+    # la CA de los servidores TLS del runner (tools/emu_sys_amissl.sh la hace), para los tests de TLS
+    ca = Path(os.environ.get("DASH_AMISSL_DIR", Path.home() / ".cache/dash-amissl")) / "testca/ca.pem"
+    if ca.is_file():
+        nombre = subprocess.run(["openssl", "x509", "-hash", "-noout", "-in", str(ca)], capture_output=True,
+                                text=True, check=True).stdout.strip() + ".0"
+        shutil.copy(ca, trabajo / nombre)
+        lineas.append(f"C:Copy DASHRUN:{nombre} AmiSSL:Certs/{nombre} QUIET")
     lineas.append("Version Programs:Programming/Dash/dash >DASHRUN:version.txt")
     arrancar(lineas, trabajo)
     print((trabajo / "version.txt").read_text(encoding="latin-1").strip())
