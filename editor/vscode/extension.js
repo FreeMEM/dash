@@ -10,7 +10,7 @@ const DashUI = require('./media/model');
 const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
 const { setupLanguageServer, stopLanguageServer } = require('./lspClient');
-const { setupTasks, emulatorOptions, savedFile } = require('./tasks');
+const { setupTasks, emulatorOptions, savedFile, outputFile, outputFolder } = require('./tasks');
 const { missing } = require('./missing');
 const { setupDebugger } = require('./debug');
 const { setupDashuiCode } = require('./dashuiCode');
@@ -86,8 +86,8 @@ async function activeDashFile() {
 }
 
 /** Commands that the terminal will run (exported for the tests). */
-function compileCommand(dashDir, file) {
-    const out = path.join(path.dirname(file), 'bin', path.basename(file, '.dash'));
+function compileCommand(dashDir, file, folder = '') {
+    const out = outputFile(file, folder);
     return `mkdir -p ${quote(path.dirname(out))} && ${quote(path.join(dashDir, 'dash'))} ${quote(file)} -o ${quote(out)}`;
 }
 
@@ -129,7 +129,7 @@ async function run(kind) {
     }
     const t = dashTerminal(emulatorEnv());
     t.show(true);
-    if (kind === 'compile') t.sendText(`cd ${quote(dashDir)} && ${compileCommand(dashDir, file)}`);
+    if (kind === 'compile') t.sendText(`cd ${quote(dashDir)} && ${compileCommand(dashDir, file, outputFolder(vscode))}`);
     else t.sendText(`cd ${quote(dashDir)} && ${runCommand(dashDir, file,
         vscode.workspace.getConfiguration('dash.emulator').get('autoclose'))}`);
 }

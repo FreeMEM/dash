@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `dash.outputFolder`: where the executables go when compiling (empty: `bin/` next to the `.dash`, as before);
+  also the debugger's build. Like Forja's new "Ejecutables en:" preference.
+
 ## 0.5.0 (2026-11-07)
 
 The first version in the Visual Studio Marketplace (search for "Dash for Amiga"), for Dash 2.4. It brings the game

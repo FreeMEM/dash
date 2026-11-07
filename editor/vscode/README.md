@@ -131,7 +131,7 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   (`dash.emulator.window`) and its output shows in the task's panel while it runs; stopping the task stops the
   emulator. MUI programs on the A1200 3.1 get `dash.emulator.muiSystem`.
 - **Build and run** as VS Code tasks (type `dash`: `compile`, `run`, `memcheck`, `profile`; Terminal > Run Task,
-  Ctrl+Shift+B, or in `tasks.json` with `"file": "${file}"`): **Dash: Compilar** (to `bin/` next to the file),
+  Ctrl+Shift+B, or in `tasks.json` with `"file": "${file}"`): **Dash: Compilar** (to `bin/` next to the file, or to `dash.outputFolder`),
   **Dash: Ejecutar en emulador** (FS-UAE, `tools/emu_run.py`), **con comprobación de memoria** (`--memcheck`) and
   **con perfil** (`--profile`). Errors go through the `$dash` problem matcher (`file:line:column: Error: ...`) and
   `$gcc`, to Problems and onto the code. A CodeLens over `Main` (▶ Ejecutar · Compilar · Memoria · Perfil) and a
@@ -212,6 +212,8 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
 ## Settings
 
 - `dash.path`: folder of the Dash compiler (the one with `./dash`). Empty: looked for up from the file.
+- `dash.outputFolder`: folder for the executables (absolute, `~/...` or relative to the `.dash`'s folder), like
+  Forja's "Ejecutables en:". Empty: `bin/` next to each `.dash`.
 - `dash.emulator.kickstart`, `dash.emulator.system`: Kickstart ROM and Workbench files for FS-UAE
   (the same as `DASH_KICKSTART` and `DASH_EMU_SYS`); `kickstartA500`, `kickstart32`, `system32`, `systemRtg`
   for the other machines (`DASH_KICKSTART_A500`, `DASH_KICKSTART_32`, `DASH_EMU_SYS_32`, `DASH_EMU_SYS_32_RTG`).

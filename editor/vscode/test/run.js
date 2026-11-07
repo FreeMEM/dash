@@ -723,6 +723,8 @@ async function extensionTests() {
     await check('extension: compile command', () => {
         const c = ext.compileCommand(repo, file);
         assert(c.includes(`'${repo}/dash' '${file}' -o '${repo}/examples/bin/mui_hola'`), c);
+        const o = ext.compileCommand(repo, file, '/tmp/exes');
+        assert(o.startsWith("mkdir -p '/tmp/exes' && ") && o.endsWith(" -o '/tmp/exes/mui_hola'"), o);
     });
     await check('extension: run command with autoclose', () => {
         const c = ext.runCommand(repo, file, 5);
@@ -915,6 +917,13 @@ async function taskTests() {
                            "mkdir -p '/p/bin' && DASH_FALLBACK_DASH1=1 DASH_PRINT_FLUSH=1 '/d/dash' -q '/p/x.dash' -o '/p/bin/x' && " +
                            "python3 '/d/tools/emu_run.py' --follow --machine 'a500' --emulator amiberry --system '/s y' '/p/bin/x'");
         assert.throws(() => taskCommand('otra', '/d', '/p/x.dash'));
+        // dash.outputFolder: absolute, relative to the .dash or ~/...
+        assert.strictEqual(taskCommand('compile', '/d', '/p/x.dash', { outputFolder: '/tmp/exes' }),
+                           "mkdir -p '/tmp/exes' && DASH_FALLBACK_DASH1=1 '/d/dash' -q '/p/x.dash' -o '/tmp/exes/x'");
+        const { outputFile } = require('../tasks.js');
+        assert.strictEqual(outputFile('/p/src/x.dash', '../build'), '/p/build/x');
+        assert.strictEqual(outputFile('/p/x.dash', '  '), '/p/bin/x');
+        assert.strictEqual(outputFile('/p/x.dash', '~/amiga', '.debug'), require('path').join(require('os').homedir(), 'amiga', 'x.debug'));
     });
     await check('tasks: the profile table and the memcheck matcher', () => {
         const { parseProfile } = require('../tasks.js');

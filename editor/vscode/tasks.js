@@ -4,8 +4,29 @@
 // file:line:column: Error: message, as compiler/main.py prints them) and "$gcc" for the C, so the errors
 // land in Problems and on the code. Also the CodeLens over Main and the status bar button.
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { missing } = require('./missing');
+
+/**
+ * Where the executable of a .dash goes: bin/ next to it (the default) or the folder of dash.outputFolder (absolute,
+ * ~/..., or relative to the .dash's folder), like Forja's "Ejecutables en:".
+ * @param {string} file the .dash
+ * @param {string} [folder] dash.outputFolder
+ * @param {string} [suffix] '.debug' for the debugger's build
+ */
+function outputFile(file, folder, suffix = '') {
+    const name = path.basename(file, '.dash') + suffix;
+    let dir = String(folder || '').trim();
+    if (!dir) return path.join(path.dirname(file), 'bin', name);
+    if (dir === '~' || dir.startsWith('~/')) dir = path.join(os.homedir(), dir.slice(1));
+    return path.join(path.resolve(path.dirname(file), dir), name);
+}
+
+/** dash.outputFolder ('' without it) */
+function outputFolder(vscode) {
+    try { return vscode.workspace.getConfiguration('dash').get('outputFolder') || ''; } catch (e) { return ''; }
+}
 
 // ./dash: Dash 2.0 (dashc), which has what these tasks use (--fpu, --cpu, DASH_TEST_AUTOCLOSE, DASH_PRINT_FLUSH); a
 // program with C in it ./dash compiles it through C with gcc (DASH_FALLBACK_DASH1 for Dash 2.0.0)
@@ -34,12 +55,13 @@ const MACHINES = {
  * @param {string} kind compile, run, memcheck or profile
  * @param {string} dashDir
  * @param {string} file the .dash
- * @param {{autoclose?: number, machine?: string, emulator?: string, window?: boolean, system?: string}} [options]
+ * @param {{autoclose?: number, machine?: string, emulator?: string, window?: boolean, system?: string,
+ *          outputFolder?: string}} [options]
  */
 function taskCommand(kind, dashDir, file, options = {}) {
     const k = KINDS[kind];
     if (!k) throw new Error('tarea desconocida: ' + kind);
-    const out = path.join(path.dirname(file), 'bin', path.basename(file, '.dash'));
+    const out = outputFile(file, options.outputFolder);
     // a program that waits for its window to be closed ends by itself in the emulator after autoclose s
     // (test mode, DASH_TEST_AUTOCLOSE, read when it is compiled)
     const seconds = k.run && options.autoclose && options.autoclose > 0 ? Math.floor(options.autoclose) : 0;
@@ -342,11 +364,11 @@ function emulatorOptions(vscode, file) {
     const config = vscode.workspace.getConfiguration('dash.emulator');
     const machine = config.get('machine') || 'a1200';
     const options = { autoclose: Number(config.get('autoclose')) || 0, machine, emulator: config.get('program') || 'fs-uae',
-                      window: config.get('window') !== false };
+                      window: config.get('window') !== false, outputFolder: outputFolder(vscode) };
     let text = '';
     try { text = require('fs').readFileSync(file, 'utf8'); } catch (e) { /* not saved yet */ }
     if (machine === 'a1200' && config.get('muiSystem') && /\bmui_|\.dashui"/.test(text)) options.system = config.get('muiSystem');
     return options;
 }
 
-module.exports = { taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal, savedFile };
+module.exports = { outputFile, outputFolder, taskCommand, makeTask, setupTasks, KINDS, MACHINES, emulatorOptions, parseProfile, shellTerminal, savedFile };
