@@ -651,6 +651,7 @@ async function extensionTests() {
             createTerminal: (opts) => ({ exitStatus: undefined, env: opts.env, show() {}, sendText: (t) => sent.push(t) }),
         },
         commands: { registerCommand: (name, fn) => { registered[name] = fn; return { dispose() {} }; } },
+        EventEmitter: class { constructor() { this.l = []; this.event = (f) => this.l.push(f); } fire(m) { for (const f of this.l) f(m); } dispose() {} },
     };
     fakeVscode.window.registerCustomEditorProvider = (viewType) => { registered['editor:' + viewType] = true;
                                                                      return { dispose() {} }; };
@@ -672,7 +673,7 @@ async function extensionTests() {
     await check('extension: registers its commands', () => {
         ext.activate({ subscriptions: [] });
         assert.deepStrictEqual(Object.keys(registered).sort(),
-            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor']);
+            ['dash.choosePath', 'dash.compile', 'dash.gotoEvent', 'dash.newProject', 'dash.newWindowFile', 'dash.newline', 'dash.restartLanguageServer', 'dash.runInEmulator', 'editor:dash.dashuiEditor', 'editor:dash.spriteEditor']);
     });
     await check('extension: finds the Dash folder from the file', () => assert.strictEqual(ext.findDash(file), repo));
     await check('extension: compile command', () => {
@@ -1372,6 +1373,7 @@ async function updateTests() {
     await extensionTests();
     await updateTests();
     await iffTests();
+    await require('./sprite.js').spriteTests(check, assert);
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);
 })();

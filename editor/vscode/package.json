@@ -305,6 +305,19 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "dash.spriteEditor",
+        "displayName": "Editor de sprites y BOBs",
+        "selector": [
+          { "filenamePattern": "*.iff" },
+          { "filenamePattern": "*.ilbm" },
+          { "filenamePattern": "*.lbm" },
+          { "filenamePattern": "*.brush" },
+          { "filenamePattern": "*.bob" },
+          { "filenamePattern": "*.spr" }
+        ],
+        "priority": "default"
       }
     ],
     "snippets": [

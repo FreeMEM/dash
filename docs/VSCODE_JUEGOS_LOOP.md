@@ -33,7 +33,7 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
 - [x] V1. **Leer y escribir los ficheros en JS** (`iff.js`): ILBM (BMHD, CMAP, GRAB, FRJA, BODY sin comprimir y
       ByteRun1, masking 0, 1 y 2; sin FRJA, la regla de `bob_load`) y FMAP (MHDR, TSET, LAYR, OBJS). Pruebas con
       ficheros escritos por Forja y por Dash (`bitmap_save`, `tilemap_save`) y la vuelta: leer, escribir, igual.
-- [ ] V2. **Editor de sprites y BOBs** (`.iff`, `.ilbm`, `.lbm`, `.brush`, `.bob`, `.spr`): rejilla con zoom;
+- [x] V2. **Editor de sprites y BOBs** (`.iff`, `.ilbm`, `.lbm`, `.brush`, `.bob`, `.spr`): rejilla con zoom;
       lápiz, línea, caja (rellena con Mayúsculas), relleno, cuentagotas, punto de agarre; paleta con R G B (4 bits
       para sprites de hardware, 8 para BOBs); fotogramas (nuevo, duplicar, quitar, vaciar, espejo H y V, mover,
       desplazar, copiar y pegar), piel de cebolla, vista animada con velocidad (FRJA); tamaño y tipo (sprite de
@@ -63,3 +63,11 @@ Code, cuando la extensión esté lista. Rama `vscode-0.5.0` (worktree `.worktree
   escritos con `tests/iff.py` y `tests/fmap.py` de Forja (sin compresión, ByteRun1 con máscara, sprite de hardware,
   mapa con espejos, choques y objetos). Volver a escribir da los mismos bytes. 9 pruebas en `npm test`. Falta
   comprobar en el emulador que `bob_load` y `tilemap_load` leen lo que escribe la extensión: en V5.
+- 2026-11-07, V2: editor de sprites y BOBs. `media/spriteModel.js` (las operaciones de `src/sprites.dash` de Forja:
+  Bresenham, caja, relleno por lados, fotogramas, tamaño, T de tipo, colores de 4 bits en sprites de hardware,
+  velocidad 1-50 y el mismo texto de "C"); `media/sprite.{html,css,js}` (el webview, con las teclas de Forja; el
+  botón derecho también borra; Ctrl+rueda acerca); `spriteEditor.js` (`BinaryEditorProvider`, documento binario:
+  cada cambio llega como el fichero entero, con deshacer, rehacer, guardar, revertir y copia de seguridad de VS Code;
+  sirve también para el editor de mapas). Un fichero vacío se abre como BOB de 32 x 32 y 16 colores. Un `.iff` que no
+  es ILBM (un 8SVX) dice que se abra con otro editor. Pruebas: 5 del modelo, 2 del proveedor y 8 del webview en
+  Chromium sin ventana con clics y teclas de verdad (`test/sprite.js`, `test/sprite.html`).
