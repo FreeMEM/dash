@@ -5,6 +5,7 @@ const vscode = require('vscode');
 const path = require('path');
 const fs = require('fs');
 const { DashUIEditorProvider } = require('./dashuiEditor');
+const { registerSpriteEditor, registerMapEditor } = require('./spriteEditor');
 const DashUI = require('./media/model');
 const { preview, previewMachine, stopServers } = require('./amigaPreview');
 const { newline, onTyped } = require('./endwise');
@@ -181,6 +182,80 @@ async function showOnAmiga(document, windowName, webview, auto) {
     }
 }
 
+/**
+ * "Dash: Nuevo sprite, BOB o mapa" (Amiga-B in Forja): which, where (from the explorer, the folder clicked), and it
+ * opens in its editor. kind and target (tests): without questions.
+ */
+async function newGraphic(folder, kind, target) {
+    const { KINDS, newGraphicBytes } = require('./newGraphic');
+    let k = KINDS.find((x) => x.id === kind);
+    if (!k) {
+        k = await vscode.window.showQuickPick(KINDS.map((x) => Object.assign({ description: x.file }, x)),
+            { title: 'Nuevo sprite, BOB o mapa', placeHolder: 'Qué quieres crear' });
+        if (!k) return null;
+    }
+    let uri = target;
+    if (!uri) {
+        const base = folder && folder.fsPath ? folder
+            : vscode.window.activeTextEditor ? vscode.Uri.file(path.dirname(vscode.window.activeTextEditor.document.fileName))
+                : (vscode.workspace.workspaceFolders || [])[0] && vscode.workspace.workspaceFolders[0].uri;
+        uri = await vscode.window.showSaveDialog({ defaultUri: base ? vscode.Uri.joinPath(base, k.file) : undefined,
+            filters: k.id === 'map' ? { 'Mapas de tiles': ['fmap'] } : { 'Imágenes IFF': ['iff', 'bob', 'spr'] }, title: k.label });
+        if (!uri) return null;
+    }
+    await vscode.workspace.fs.writeFile(uri, newGraphicBytes(k.id));
+    await vscode.commands.executeCommand('vscode.openWith', uri, k.view);
+    return uri;
+}
+
+/**
+ * "Ver en Amiga" of the sprite and map editors (amigaView.js): the file as the editor has it, loaded by a small
+ * program as a game would, pictured in the emulator. message: {tx, ty} (a map: the top left cell of the view)
+ */
+let graphicRunning = false;
+async function graphicOnAmiga(kind, doc, webview, message) {
+    const say = (m) => webview.postMessage(Object.assign({ type: 'amiga', busy: false }, m));
+    const fail = (error) => { say({ error }); vscode.window.showErrorMessage('Ver en Amiga: ' + error); };
+    if (graphicRunning) { say({ status: 'Ya hay una vista en marcha…', busy: true }); return; }
+    if (!trusted()) { fail(UNTRUSTED); return; }
+    const file = doc.uri.fsPath, dashDir = findDash(file);
+    if (!dashDir) { fail(noDash()); return; }
+    const IFF = require('./media/iff.js'), AV = require('./amigaView');
+    const name = path.basename(file);
+    const files = [{ name, bytes: doc.bytes }];
+    let program;
+    try {
+        if (kind === 'sprite') program = AV.spriteProgram(IFF.readIlbm(doc.bytes), name);
+        else {
+            const m = IFF.readFmap(doc.bytes);
+            let tileset = '', depth = 4;
+            if (m.tileset) {
+                const p = path.resolve(path.dirname(file), m.tileset);
+                if (!fs.existsSync(p)) throw new Error(`no encuentro el tileset ${m.tileset}`);
+                const bytes = fs.readFileSync(p);
+                depth = IFF.readIlbm(new Uint8Array(bytes)).planes;
+                tileset = path.basename(p) === name ? 'tileset_' + path.basename(p) : path.basename(p);
+                files.push({ name: tileset, bytes });
+            }
+            program = AV.mapProgram(m, name, tileset, message && message.tx, message && message.ty, depth);
+        }
+    } catch (e) { fail(e.message); return; }
+    const machine = vscode.workspace.getConfiguration('dash.emulator').get('machine') || undefined;
+    graphicRunning = true;
+    say({ status: `${name} en el Amiga emulado…`, busy: true });
+    try {
+        const work = () => AV.runView({ dashDir, program, files, env: emulatorEnv(), machine });
+        const { png } = vscode.window.withProgress
+            ? await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Ver en Amiga: ${name}` }, work)
+            : await work();
+        say({ src: 'data:image/png;base64,' + png.toString('base64'), status: `${name} en el Amiga emulado` });
+    } catch (e) {
+        fail(missing(e.message) || 'No se pudo: ' + e.message);
+    } finally {
+        graphicRunning = false;
+    }
+}
+
 /** New .dashui file with one empty window, opened in the visual editor */
 async function newWindowFile() {
     const uri = await vscode.window.showSaveDialog({ filters: { 'Ventanas MUI': ['dashui'] } });
@@ -193,10 +268,19 @@ async function newWindowFile() {
  * "Dash: Nuevo proyecto": a folder with a program and its window (newProject.js), opened. parent and name
  * (tests): without questions; open false: not opened. Returns the program's path.
  */
-async function newProject(parent, name, open) {
+async function newProject(parent, name, open, kind) {
+    if (!kind && name) kind = 'mui';                 // (the tests, and the walkthrough's: the MUI program)
+    if (!kind) {
+        const picked = await vscode.window.showQuickPick([
+            { id: 'mui', label: 'Aplicación con ventana MUI', detail: 'Un programa con su ventana del editor visual (MUI y un 68020)' },
+            { id: 'game', label: 'Juego', detail: 'Un jugador (sprite de hardware), un nivel (mapa de tiles con choques) y el programa que lo mueve con el joystick' },
+        ], { title: 'Nuevo proyecto de Dash', placeHolder: 'Qué clase de programa' });
+        if (!picked) return null;
+        kind = picked.id;
+    }
     if (!name) {
         name = await vscode.window.showInputBox({ title: 'Nuevo proyecto de Dash', prompt: 'Nombre del programa',
-                                                  value: 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
+                                                  value: kind === 'game' ? 'juego' : 'hola', validateInput: (v) => (v.trim() ? null : 'Pon un nombre') });
         if (!name) return null;
     }
     if (!parent) {
@@ -210,7 +294,7 @@ async function newProject(parent, name, open) {
     try {
         // the compiler: the setting (nothing to write), or the Dash repository the folder is in
         const configured = vscode.workspace.getConfiguration('dash').get('path');
-        program = writeProject(folder, name, configured ? null : findDash(path.join(folder, 'x')));
+        program = writeProject(folder, name, configured ? null : findDash(path.join(folder, 'x')), kind);
     } catch (e) {
         vscode.window.showErrorMessage('No se pudo crear el proyecto: ' + e.message);
         return null;
@@ -263,12 +347,15 @@ function activate(context) {
         vscode.commands.registerCommand('dash.compile', () => run('compile')),
         vscode.commands.registerCommand('dash.runInEmulator', () => run('emulator')),
         vscode.commands.registerCommand('dash.newWindowFile', newWindowFile),
+        vscode.commands.registerCommand('dash.newGraphic', (folder) => newGraphic(folder)),
         vscode.commands.registerCommand('dash.newProject', newProject),
         vscode.commands.registerCommand('dash.choosePath', choosePath),
         vscode.commands.registerCommand('dash.newline', () => newline(vscode)),   // Enter: the "end" by itself
         vscode.workspace.onDidChangeTextDocument((e) => onTyped(vscode, e)),     // else/elif/end to their level
         DashUIEditorProvider.register(context, showOnAmiga),
     );
+    registerSpriteEditor(context, (doc, webview, m) => graphicOnAmiga('sprite', doc, webview, m));   // .iff (as Forja's)
+    registerMapEditor(context, (doc, webview, m) => graphicOnAmiga('map', doc, webview, m));         // .fmap (as Forja's)
     setupDashuiCode(vscode, context);                 // .dashui problems, and from an event to its code
     reopenStartupDashui();
     // a project just made in this window: its program open, beside the walkthrough
@@ -300,4 +387,4 @@ function deactivate() {
     return stopLanguageServer();
 }
 
-module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject };
+module.exports = { activate, deactivate, compileCommand, runCommand, findDash, showOnAmiga, newProject, newGraphic, graphicOnAmiga };

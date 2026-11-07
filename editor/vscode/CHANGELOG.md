@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0 (2026-11-07)
+
+The first version in the Visual Studio Marketplace (search for "Dash for Amiga"), for Dash 2.4. It brings the game
+tools of Forja, Dash's IDE on the Amiga, with the same files and keys (docs/VSCODE_JUEGOS_LOOP.md).
+
+- **Sprite and BOB editor** for IFF ILBM (`.iff`, `.ilbm`, `.lbm`, `.brush`, `.bob`, `.spr`): hardware sprites,
+  attached sprites and BOBs; pencil, line, box, fill, picker and grab point; colours; frames, onion skin and the
+  animated view; size and kind; "Copiar código" with the Dash lines that load it.
+- **Tile map editor** for `.fmap` (`FORM FMAP`): tileset from a BOB, layers, collision layers, objects with a kind,
+  a name and a sprite, size and tile side; "Copiar código".
+- **Ver en Amiga** for sprites, BOBs and maps: loaded by Dash in FS-UAE as a game would, pictured in the editor.
+- **Dash: Nuevo sprite, BOB o mapa**, also in the explorer's menu of a folder.
+- **Dash: Nuevo proyecto** asks for the kind: a MUI application, as before, or a **game** (player, level with
+  collisions and the program that moves the player).
+- The files are written byte for byte as Forja and Dash write them (`media/iff.js`).
+
+- Highlighting: the builtins added to Dash since 0.4.0, about 120: tile maps (`tilemap_*`), sprites and bobs
+  (`sprite_load_attached`, `sprite_rgb8`, `bob_paste`, `bob_frames`...), screens (`screen_double_buffer`,
+  `screen_flip`, `screen_open_mode`, `dialog_screen_mode`, `screen_clone_wb`...), the program's own ARexx port
+  (`rexx_port`, `rexx_get`, `rexx_reply`), `notify`, Workbench icons and AppWindow (`icon_*`, `app_window`,
+  `app_drop`, `mui_on_drop`), `sha1_*`, `key_down`, and the builtins and `@amiga` structs of DashOS.
+- When `./dash` says that its compiler is not built, the extension says how: `make -C dashc` in Dash's folder.
+- The notice of a new version of Dash says how to get it: `git pull` and `make -C dashc`.
+- The README and the walkthrough: Dash compiles straight to 68000 code, and the Amiga gcc is only needed for
+  programs with C, `./dash --gcc` and debugging with gdb. Installing from the Marketplace.
+- Visual editor: `Ptr` (a word of the language since `@amiga` structs) is refused as a name, as the compiler does.
+- The Dash logo (docs/logo) as the icon of the extension and of `.dash` files.
+
 ## 0.4.0 (2026-11-02)
 
 For Dash 2.0.1, where `./dash` compiles straight to hunk and `./dash --gcc` goes through C with gcc (with an older

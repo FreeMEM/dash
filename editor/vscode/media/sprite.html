@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src {{cspSource}} data:; style-src {{cspSource}} 'unsafe-inline'; script-src {{cspSource}};">
+<link rel="stylesheet" href="{{sprite.css}}">
+<title>Editor de sprites</title>
+</head>
+<body>
+<div id="error" role="alert"></div>
+<div id="layout">
+  <div id="toolbar" role="toolbar" aria-label="Herramientas"></div>
+  <div id="canvas-pane"><canvas id="grid" tabindex="0" aria-label="Fotograma"></canvas></div>
+  <div id="side">
+    <section id="palette-pane" aria-label="Colores"></section>
+    <section id="size-pane" aria-label="Tamaño y tipo"></section>
+    <section id="anim-pane" aria-label="Animar"></section>
+    <section id="amiga-pane" aria-label="Ver en Amiga"></section>
+  </div>
+  <div id="frames" role="listbox" aria-label="Fotogramas"></div>
+  <div id="status" role="status" aria-live="polite"></div>
+</div>
+<script src="{{iff.js}}"></script>
+<script src="{{spriteModel.js}}"></script>
+<script src="{{sprite.js}}"></script>
+</body>
+</html>

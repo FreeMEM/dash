@@ -587,6 +587,9 @@ def main():
     parser.add_argument("--system", metavar="DIR", help="Workbench files (Libs/, C/, Classes/; default: $DASH_EMU_SYS)")
     parser.add_argument("--workbench", action="store_true", help="run C:LoadWB first (AmigaOS 3.2 ReAction needs it)")
     parser.add_argument("--keep", metavar="DIR", help="copy the emulated disk (outputs, files the programs wrote) to DIR")
+    parser.add_argument("--file", action="append", default=[], metavar="PATH",
+                        help="copy a file to the emulated disk, where the programs run (repeatable): the sprites "
+                             "and maps a program loads by their name (the VS Code extension's Ver en Amiga)")
     parser.add_argument("--screenshot", nargs=2, action="append", metavar=("SECONDS", "FILE.png"),
                         help="save the front screen SECONDS after boot (tools/amiga/shot.c); repeatable "
                              "for several in the same run; use --autoclose so the program is still open then")
@@ -647,7 +650,9 @@ def main():
                                emulator=args.emulator, model=machine["model"] if machine else "A1200",
                                gdbserver=args.gdbserver or 0, relay=not args.no_relay,
                                dbgserver=args.dbgserver or 0, disk=disk,
-                               amiberry_config=COFFIN_AMIBERRY if amiberry_disk else None)
+                               amiberry_config=COFFIN_AMIBERRY if amiberry_disk else None,
+                               on_disk=(lambda hd: [shutil.copy(f, Path(hd) / Path(f).name) for f in args.file])
+                               if args.file else None)
     except RuntimeError as e:
         print(e, file=sys.stderr)
         return 2

@@ -87,7 +87,8 @@ async function checkUpdates(vscode, context, dashDir, opts = {}) {
     await state.update('dash.updates.last', now);
     if (!latest || !isNewer(latest.version, mine) || state.get('dash.updates.skipped') === latest.version) return null;
     const see = 'Ver novedades', skip = 'No avisar de esta';
-    vscode.window.showInformationMessage(`Hay una versión nueva de Dash: ${latest.version} (tienes la ${mine}).`, see, skip)
+    vscode.window.showInformationMessage(`Hay una versión nueva de Dash: ${latest.version} (tienes la ${mine}). ` +
+            'Para tenerla, en la carpeta de Dash: git pull y make -C dashc.', see, skip)
         .then((choice) => {
             if (choice === see) vscode.env.openExternal(vscode.Uri.parse(latest.url));
             else if (choice === skip) state.update('dash.updates.skipped', latest.version);
