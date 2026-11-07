@@ -313,7 +313,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_sprite_load_attached(${id}, ${filename})",
         needs_gfx=True,
-        description="Sprite of 15 colours from a picture: an attached pair of hardware sprites, pens 1-15 (0 clear) are colours 17-31; FALSE if it cannot"
+        reads_only=True, description="Sprite of 15 colours from a picture: an attached pair of hardware sprites, pens 1-15 (0 clear) are colours 17-31; FALSE if it cannot"
     ),
     "sprite_create": BuiltinFunc(
         name="sprite_create",
@@ -361,7 +361,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_sprite_load_colors(${id}, ${filename})",
         needs_gfx=True,
-        description="Colours 1-3 (1-15 for an attached pair) of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none"
+        reads_only=True, description="Colours 1-3 (1-15 for an attached pair) of a picture's palette (CMAP) as the sprite's colours, 8 bits; false if the file has none"
     ),
     "bob_load_colors": BuiltinFunc(
         name="bob_load_colors",
@@ -369,7 +369,7 @@ GRAPHICS_ADVANCED = {
         return_type="LONG",
         c_template="_dash_bob_load_colors(${filename}, ${first})",
         needs_gfx=True,
-        description="The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many"
+        reads_only=True, description="The colours of a picture's palette (CMAP) in the screen's palette from colour first on: how many"
     ),
     "sprite_rgb8": BuiltinFunc(
         name="sprite_rgb8",
@@ -501,7 +501,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_bob_load(${id}, ${filename})",
         needs_gfx=True,
-        description="Load BOB from file"
+        reads_only=True, description="Load BOB from file"
     ),
     "bob_create": BuiltinFunc(
         name="bob_create",
@@ -605,7 +605,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_tilemap_load(${id}, ${filename})",
         needs_gfx=True,
-        description="Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one"
+        reads_only=True, description="Load a tile map (IFF FORM FMAP, the one Forja's map editor saves) into id; false if it is not one"
     ),
     "tilemap_save": BuiltinFunc(
         name="tilemap_save",
@@ -613,7 +613,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_tilemap_save(${id}, ${filename})",
         needs_gfx=True,
-        description="Save a tile map as IFF FORM FMAP; false if it cannot"
+        reads_only=True, description="Save a tile map as IFF FORM FMAP; false if it cannot"
     ),
     "tilemap_free": BuiltinFunc(
         name="tilemap_free",
@@ -853,7 +853,7 @@ GRAPHICS_ADVANCED = {
         return_type="LONG",
         c_template="_dash_tilemap_object_find(${id}, ${kind}, ${from})",
         needs_gfx=True,
-        description="The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies)"
+        reads_only=True, description="The first object of that kind from number from on; -1 if there is none (to find the player, or go through the enemies)"
     ),
     "bob_collision": BuiltinFunc(
         name="bob_collision",
@@ -937,7 +937,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_bitmap_load(${id}, ${filename})",
         needs_gfx=True,
-        description="Load IFF bitmap"
+        reads_only=True, description="Load IFF bitmap"
     ),
     "bitmap_save": BuiltinFunc(
         name="bitmap_save",
@@ -945,7 +945,7 @@ GRAPHICS_ADVANCED = {
         return_type="BOOL",
         c_template="_dash_bitmap_save(${id}, ${filename})",
         needs_gfx=True,
-        description="Save IFF bitmap"
+        reads_only=True, description="Save IFF bitmap"
     ),
     "bitmap_free": BuiltinFunc(
         name="bitmap_free",
@@ -2687,7 +2687,7 @@ DOS_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_dir_change(${path})",
         needs_dos=True,
-        description="Change current directory"
+        reads_only=True, description="Change current directory"
     ),
     "dir_current": BuiltinFunc(
         name="dir_current",
@@ -2864,7 +2864,7 @@ AUDIO_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_sound_load(${id}, ${filename})",
         needs_audio=True,
-        description="Load an IFF 8SVX sound (uncompressed)"
+        reads_only=True, description="Load an IFF 8SVX sound (uncompressed)"
     ),
     "sound_sample": BuiltinFunc(
         name="sound_sample",
@@ -2950,7 +2950,7 @@ AUDIO_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_music_load(${filename})",
         needs_audio=True,
-        description="Load MOD file"
+        reads_only=True, description="Load MOD file"
     ),
     "music_play": BuiltinFunc(
         name="music_play",
@@ -4985,14 +4985,14 @@ TASK_FUNCTIONS = {
     "wifi_read": BuiltinFunc(
         name="wifi_read", params=["interface", "ms"], return_type="LONG",
         c_template="_dash_wifi_read(${interface}, ${ms})",
-        description="Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at "
+        reads_only=True, description="Asks the SANA-II driver of a Roadshow interface for its WiFi signal, waiting ms milliseconds at "
                     "most: 0 read (wifi_signal, wifi_noise), 1 no answer in time, 2 the driver does not tell, 3 no "
                     "such interface, 4 the driver gives an error (offline), 5 the stack has the driver only for "
                     "itself, -1 no Roadshow"),
     "wifi_read_device": BuiltinFunc(
         name="wifi_read_device", params=["driver", "unit", "ms"], return_type="LONG",
         c_template="_dash_wifi_read_device(${driver}, ${unit}, ${ms})",
-        description="Like wifi_read, asking a SANA-II driver that is in use (\"wifipi.device\", unit 0) directly, "
+        reads_only=True, description="Like wifi_read, asking a SANA-II driver that is in use (\"wifipi.device\", unit 0) directly, "
                     "with any TCP/IP stack: 0 read, 1 no answer in time, 2 the driver does not tell, 3 no such driver "
                     "in use, 4 offline, 5 the stack has it only for itself"),
     "net_drivers_read": BuiltinFunc(
@@ -5008,7 +5008,7 @@ TASK_FUNCTIONS = {
     "net_driver_read": BuiltinFunc(
         name="net_driver_read", params=["driver", "unit", "ms"], return_type="LONG",
         c_template="_dash_net_driver_read(${driver}, ${unit}, ${ms})",
-        description="Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of "
+        reads_only=True, description="Asks a SANA-II driver in use for its packets in and out, waiting ms at most: the codes of "
                     "wifi_read_device (0 read: net_driver_packets_in, net_driver_packets_out)"),
     "net_driver_has_bytes": BuiltinFunc(
         name="net_driver_has_bytes", params=[], return_type="BOOL",
@@ -5267,7 +5267,7 @@ TASK_FUNCTIONS = {
                     "next rexx_get answers it with RC 0)"),
     "rexx_reply": BuiltinFunc(
         name="rexx_reply", params=["rc", "result"], return_type="void", c_template="_dash_rexx_reply(${rc}, ${result})",
-        description="Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT (\"\": "
+        reads_only=True, description="Answers the command of rexx_get: rc (0 fine, 5, 10, 20) and, with 0, result as RESULT (\"\": "
                     "none)"),
     "notify": BuiltinFunc(
         name="notify", params=["title", "text"], return_type="BOOL", c_template="_dash_notify_send(${title}, ${text})",
@@ -5663,7 +5663,7 @@ SIMINPUT_FUNCTIONS = {
                     "(added up) held around it"),
     "input_text": BuiltinFunc(
         name="input_text", params=["text"], return_type="void", c_template="_dash_input_text(${text})",
-        description="Type a text in the active window with the keyboard's keymap (\"=SUM(A1:A3)\"); a character "
+        reads_only=True, description="Type a text in the active window with the keyboard's keymap (\"=SUM(A1:A3)\"); a character "
                     "the keymap cannot type is left out"),
     "input_move": BuiltinFunc(
         name="input_move", params=["x", "y"], return_type="void", c_template="_dash_input_move(${x}, ${y})",
