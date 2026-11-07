@@ -1,0 +1,24 @@
+# Test: a screen in the PAL mode (0x21000) is not a graphics card's. The check counted as RTG every mode
+# with a monitor ID (PAL_MONITOR_ID is 0x21000) and sprite_load printed "WARNING: RTG screen detected" on a
+# plain A1200 (seen with the game of the VS Code extension). Now it asks the display database only. The
+# sprite_load of a missing file prints no warning either.
+# expect-out: pantalla true
+# expect-out: rtg false
+# expect-out: fin
+
+@native func es_rtg() -> Bool
+"""
+    return _dash_is_rtg_screen();
+"""
+end
+
+Main
+    ok = screen_open_mode(0x21000, 320, 256, 3, "PAL")
+    Print "pantalla #{ok}"
+    if ok
+        Print "rtg #{es_rtg()}"
+        sprite_load(0, "T:no_hay_sprite")
+        screen_close()
+    end
+    Print "fin"
+end

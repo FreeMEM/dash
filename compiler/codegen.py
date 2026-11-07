@@ -16833,18 +16833,11 @@ static BOOL _dash_is_rtg_screen(void) {
     modeID = GetVPModeID(&_dash_screen->ViewPort);
     if (modeID == INVALID_ID) return TRUE; /* Assume RTG if invalid */
 
-    /* Native Amiga modes have monitor ID 0x00000000 (default) or specific PAL/NTSC IDs */
-    /* RTG modes typically have different monitor IDs (0x00010000+) */
-    if ((modeID & 0xFFFF0000) >= 0x00010000) {
-        return TRUE; /* Likely RTG */
-    }
-
-    /* Additional check using DisplayInfo */
+    /* the monitor ID does not tell it (PAL_MONITOR_ID is 0x21000, NTSC 0x11000): a mode of a graphics card is
+       "foreign" or has no hardware sprites */
     if (GetDisplayInfoData(NULL, (UBYTE *)&dispinfo, sizeof(dispinfo), DTAG_DISP, modeID)) {
-        /* If no sprites property, likely RTG */
-        if (!(dispinfo.PropertyFlags & DIPF_IS_SPRITES)) {
+        if ((dispinfo.PropertyFlags & DIPF_IS_FOREIGN) || !(dispinfo.PropertyFlags & DIPF_IS_SPRITES))
             return TRUE;
-        }
     }
 
     return FALSE;
