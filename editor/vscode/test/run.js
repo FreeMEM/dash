@@ -1203,6 +1203,94 @@ async function dashcDebugTests() {
     });
 }
 
+// --- the files of Forja's sprite and map editors (media/iff.js, V1) -------------------------
+// test/fixtures: written by Forja's own test scripts (tests/iff.py and tests/fmap.py of Forja, which write what Forja
+// and Dash's tilemap_save write); esperado.json has their pixels.
+async function iffTests() {
+    const I = require('../media/iff.js');
+    const fx = (n) => new Uint8Array(fs.readFileSync(path.join(__dirname, 'fixtures', n)));
+    const want = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'esperado.json'), 'utf8'));
+    const strip = (s) => {   // the frames side by side again, as rows
+        const rows = [];
+        for (let y = 0; y < s.height; y++) {
+            const r = [];
+            for (const f of s.frames) for (let x = 0; x < s.width; x++) r.push(f[y * s.width + x]);
+            rows.push(r);
+        }
+        return rows;
+    };
+    await check('iff: an ILBM of Forja, with FRJA (3 frames of 8) and GRAB', () => {
+        const s = I.readIlbm(fx('bob_forja.iff'));
+        assert.deepStrictEqual([s.width, s.height, s.planes, s.hardware, s.frames.length, s.speed, s.grabX, s.grabY],
+            [8, 5, 3, false, 3, 4, 2, 3]);
+        assert.deepStrictEqual(strip(s), want.filas);
+        assert.deepStrictEqual(s.palette.slice(0, 8), want.paleta);
+        assert.strictEqual(s.palette[8], I.initialPalette(false)[8]);   // the rest, Forja's colours
+    });
+    await check('iff: written again, the same bytes as Forja (sp_escribir)', () => {
+        assert.deepStrictEqual(Buffer.from(I.writeIlbm(I.readIlbm(fx('bob_forja.iff')))), Buffer.from(fx('bob_forja.iff')));
+        assert.deepStrictEqual(Buffer.from(I.writeIlbm(I.readIlbm(fx('sprite_hw.iff')))), Buffer.from(fx('sprite_hw.iff')));
+    });
+    await check('iff: ByteRun1 and a mask plane, without FRJA: square frames (bob_load)', () => {
+        const s = I.readIlbm(fx('bob_rle_mask.iff'));
+        assert.deepStrictEqual([s.width, s.frames.length, s.speed, s.grabX], [24, 1, 6, 0]);   // 24 is not 5 x n: one frame
+        assert.deepStrictEqual(strip(s), want.filas);
+        const sq = I.newSprite('bob', 4, 4, 2);                     // 3 frames of 4x4 written without FRJA: 3 again
+        sq.frames.push(new Uint8Array(16).fill(1), new Uint8Array(16).fill(2));
+        const b = I.writeIlbm(sq);
+        const frja = Buffer.from(b).indexOf('FRJA');
+        b.set([88, 88, 88, 88], frja);                              // (the chunk renamed: skipped as unknown)
+        const r = I.readIlbm(b);
+        assert.deepStrictEqual([r.width, r.frames.length, r.speed], [4, 3, 6]);
+    });
+    await check('iff: a hardware sprite (FRJA kind 1, 16 wide)', () => {
+        const s = I.readIlbm(fx('sprite_hw.iff'));
+        assert.deepStrictEqual([s.width, s.height, s.planes, s.hardware, s.frames.length, I.isAttached(s)], [16, 4, 2, true, 2, false]);
+        assert.deepStrictEqual(strip(s), want.sprite_filas);
+    });
+    await check('iff: new sprites, BOBs and attached ones; what is written is read back', () => {
+        for (const [kind, w, h, pl, wantPl] of [['sprite', 99, 12, 0, 2], ['attached', 1, 7, 0, 4], ['bob', 20, 10, 5, 5]]) {
+            const s = I.newSprite(kind, w, h, pl);
+            s.frames[0][3] = (1 << wantPl) - 1;
+            s.frames.push(s.frames[0].map((v, i) => i % (1 << wantPl)));
+            s.grabX = -2; s.grabY = 5; s.speed = 9;
+            const r = I.readIlbm(I.writeIlbm(s));
+            assert.deepStrictEqual([r.width, r.height, r.planes, r.hardware, r.speed, r.grabX, r.grabY],
+                [s.width, s.height, wantPl, kind !== 'bob', 9, -2, 5], kind);
+            assert.deepStrictEqual(r.frames.map((f) => [...f]), s.frames.map((f) => [...f]), kind);
+            assert.deepStrictEqual(r.palette.slice(0, 1 << wantPl), s.palette.slice(0, 1 << wantPl), kind);
+        }
+    });
+    await check('iff: what is not an ILBM, or is cut short, says why', () => {
+        assert.throws(() => I.readIlbm(new Uint8Array(20)), /IFF ILBM/);
+        const b = fx('bob_forja.iff');
+        assert.throws(() => I.readIlbm(b.subarray(0, b.length - 10)), /cortada|falta/);
+    });
+    await check('fmap: a map as tilemap_save writes it: layers, mirrors, collisions and objects', () => {
+        const m = I.readFmap(fx('mapa.fmap'));
+        assert.deepStrictEqual([m.width, m.height, m.tile, m.tileset, m.layers.length], [3, 2, 16, 'tiles.iff', 2]);
+        assert.deepStrictEqual([...m.layers[0].cells], [1, 2, 16387, 0, 32769, 5]);
+        assert.deepStrictEqual([m.layers[0].name, m.layers[0].type, m.layers[0].visible], ['fondo', 0, true]);
+        assert.deepStrictEqual([m.layers[1].name, m.layers[1].type, m.layers[1].visible], ['choques', 1, false]);
+        assert.deepStrictEqual(m.objects, [{ x: 16, y: 160, kind: 'jugador', name: '', sprite: '' },
+            { x: 40, y: -3, kind: 'moneda', name: 'oro', sprite: 'moneda.iff' }]);
+        assert.strictEqual(m.layers[0].cells[2] & I.TILE_MASK, 3);
+        assert(m.layers[0].cells[2] & I.MIRROR_H && m.layers[0].cells[4] & I.MIRROR_V);
+    });
+    await check('fmap: written again, the same bytes; a new map is read back', () => {
+        assert.deepStrictEqual(Buffer.from(I.writeFmap(I.readFmap(fx('mapa.fmap')))), Buffer.from(fx('mapa.fmap')));
+        const m = I.newMap(5, 4, 8, 't.iff');
+        m.layers[0].cells[7] = 9 | I.MIRROR_V;
+        m.layers.push({ name: 'impar', type: 1, visible: true, cells: new Uint16Array(20).fill(2) });
+        m.objects.push({ x: -1, y: 2, kind: 'puerta', name: 'a', sprite: '' });
+        const r = I.readFmap(I.writeFmap(m));
+        assert.deepStrictEqual([r.width, r.height, r.tile, r.tileset], [5, 4, 8, 't.iff']);
+        assert.deepStrictEqual(r.layers.map((l) => [l.name, l.type, [...l.cells]]), m.layers.map((l) => [l.name, l.type, [...l.cells]]));
+        assert.deepStrictEqual(r.objects, m.objects);
+        assert.throws(() => I.readFmap(fx('bob_forja.iff')), /FMAP/);
+    });
+}
+
 // --- new versions of Dash (updates.js) ---------------------------------------------
 async function updateTests() {
     const { checkUpdates, latestRelease, isNewer, localVersion } = require('../updates');
@@ -1283,6 +1371,7 @@ async function updateTests() {
     await previewTests();
     await extensionTests();
     await updateTests();
+    await iffTests();
     console.log(failures ? `${failures} test(s) failed` : 'all tests passed');
     process.exit(failures ? 1 : 0);
 })();
