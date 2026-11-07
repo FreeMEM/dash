@@ -2669,7 +2669,7 @@ DOS_FUNCTIONS = {
         return_type="BOOL",
         c_template="_dash_file_copy(${src}, ${dest})",
         needs_fileio=True,
-        description="Copy file"
+        reads_only=True, description="Copy file"
     ),
 
     # Directories
@@ -3070,7 +3070,7 @@ INTUITION_EXPANDED = {
     "screen_font_text_width": BuiltinFunc(
         name="screen_font_text_width", params=["text"], return_type="LONG",
         c_template="_dash_screen_font_text_width(${text})",
-        description="The width of a text in the screen's font"),
+        reads_only=True, description="The width of a text in the screen's font"),
     "window_close": BuiltinFunc(
         name="window_close",
         params=["handle"],
@@ -4801,7 +4801,7 @@ TASK_FUNCTIONS = {
     "tooltype": BuiltinFunc(
         name="tooltype", params=["name", "default"], return_type="STRPTR",
         c_template="_dash_tooltype(${name}, ${default})",
-        description="A tooltype of the program: from the Shell, the argument NAME=value (NAME=\"a b\" too); else (or "
+        reads_only=True, description="A tooltype of the program: from the Shell, the argument NAME=value (NAME=\"a b\" too); else (or "
                     "from the Workbench) the tooltype of its icon; default if it is in neither"),
     "cx_broker": BuiltinFunc(
         name="cx_broker", params=["name", "title", "description", "priority"], return_type="BOOL",
@@ -5146,7 +5146,7 @@ TASK_FUNCTIONS = {
         description="The second of the last clock_read"),
     "date_text": BuiltinFunc(
         name="date_text", params=["format"], return_type="STRPTR", c_template="_dash_date_text(${format})",
-        description="The date and time now as format says, with locale.library's FormatDate in the user's language "
+        reads_only=True, description="The date and time now as format says, with locale.library's FormatDate in the user's language "
                     "and country: %A day, %d-%m-%Y, %b month, %H:%M:%S... (in English without locale.library)"),
     # Lorraine D19: how numbers and dates are written in the user's language and country
     "locale_gmt_offset": BuiltinFunc(
@@ -5271,7 +5271,7 @@ TASK_FUNCTIONS = {
                     "none)"),
     "notify": BuiltinFunc(
         name="notify", params=["title", "text"], return_type="BOOL", c_template="_dash_notify_send(${title}, ${text})",
-        description="A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx "
+        reads_only=True, description="A notification for the desktop, with the program's name: to Trasfondo's bar by ARexx "
                     "(port TRASFONDO) or, without it, into its list (ENV:Trasfondo.avisos), which it shows when it "
                     "starts. False if it got to neither"),
     "ports_read": BuiltinFunc(
