@@ -5742,7 +5742,9 @@ static void gen_function_pass(int label, Func *f, NodeList *body)
 }
 
 /* lo generado hasta un punto, para deshacer lo que venga después */
-typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n; long sink; } Mark;
+/* (también lo de la depuración: una función generada y tirada no debe dejar líneas que apunten a código que ya no
+   está; el depurador ponía su NOP encima de otro código. Lo vio Forja) */
+typedef struct { size_t code_n, data_n; int relocs_n, fixups_n, labels_n, dlines_n, dfuncs_n, dvars_n; long sink; } Mark;
 
 static Mark mark(void)
 {
@@ -5752,6 +5754,9 @@ static Mark mark(void)
     m.relocs_n = obj->relocs.n;
     m.fixups_n = fixups.n;
     m.labels_n = labels.n;
+    m.dlines_n = dbg_lines.n;
+    m.dfuncs_n = dbg_funcs.n;
+    m.dvars_n = dbg_vars.n;
     m.sink = sink_off;
     return m;
 }
@@ -5764,6 +5769,9 @@ static void undo(Mark *m)
     obj->relocs.n = m->relocs_n;
     fixups.n = m->fixups_n;
     labels.n = m->labels_n;
+    dbg_lines.n = m->dlines_n;
+    dbg_funcs.n = m->dfuncs_n;
+    dbg_vars.n = m->dvars_n;
     sink_off = m->sink;
 }
 
