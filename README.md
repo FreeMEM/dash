@@ -179,8 +179,9 @@ debugging and debugging on a real Amiga.
 
 1. Dash, as in [Installation](#installation) (for `--gcc` and programs with C, bebbo's gcc too; for the emulator, FS-UAE and a
    Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. The extension: the file `dash-mui-editor-0.4.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.4.0), and in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.4.0.vsix`. It can also
+2. The extension: search for **Dash for Amiga** in the Extensions view of VS Code (1.86 or later), or
+   `code --install-extension FreeMEM.dash-mui-editor`. Each [release](https://github.com/FreeMEM/dash/releases?q=vscode)
+   also has its `.vsix` (**Extensions: Install from VSIX...**). It can also
    be built: `cd editor/vscode && npm install && npm run package`.
 3. A project: **Dash: Nuevo proyecto**. If its folder is not inside this repository, **Dash: Elegir la
    carpeta del compilador** (the `dash.path` setting). The **Primeros pasos con Dash** walkthrough guides you step by step, and if
@@ -198,6 +199,7 @@ The extension is a thin layer: what it does is done by the tools in this reposit
 | Compile | `./dash` |
 | Run, memory and profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
 | Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
+| Sprite, BOB and tile map editors (as in Forja) | `editor/vscode/media/` (the same files as Forja and Dash); Ver en Amiga, `tools/emu_run.py --file` |
 | Debug (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` and `tools/amiga/dbgserver.dash`; with C in the program, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py` and `bgdbserver` |
 
 That is why, when you update Dash (`git pull`), what the extension knows about the language is updated too, without

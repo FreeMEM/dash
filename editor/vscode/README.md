@@ -1,12 +1,17 @@
 # Dash for VS Code
 
-Support for [Dash](https://github.com/FreeMEM/dash), a language that compiles to C for the Amiga.
+Support for [Dash](https://github.com/FreeMEM/dash), a high-level language for the Amiga that compiles straight to
+68000 code (or through C with gcc, `./dash --gcc`).
 
 By **Francisco Antonio Tapias Bravo** ([FreeMEM](https://github.com/FreeMEM)).
 
 ![The visual editor of a MUI window](images/editor.png)
 
 ![The same window on the emulated Amiga](images/amiga.png)
+
+![The sprite editor with the player of the game project](images/sprites.png)
+
+![The tile map editor with its level](images/mapas.png)
 
 **Video tutorial** (6 minutes, subtitles in Spanish): a first project, writing code, the window, compiling and
 running, debugging, and debugging a real Amiga.
@@ -15,11 +20,15 @@ running, debugging, and debugging a real Amiga.
 
 ## Installing
 
-1. Dash and the Amiga toolchain, as in the
-   [quick installation](https://github.com/FreeMEM/dash#instalación-rápida) of the Dash repository (for the
-   emulator, FS-UAE and a Kickstart ROM; for MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`).
-2. This extension: `dash-mui-editor-0.4.0.vsix` from the [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.4.0), then in VS Code (1.86 or later)
-   **Extensions: Install from VSIX...**, or `code --install-extension dash-mui-editor-0.4.0.vsix`.
+1. Dash, as in the [installation](https://github.com/FreeMEM/dash#installation) of the Dash
+   repository: `git clone`, then `make -C dashc` (the compiler). For the emulator, FS-UAE and a Kickstart ROM; for
+   MUI windows, `tools/get_mui_sdk.sh` and `tools/emu_sys_mui.sh`. The Amiga gcc (`m68k-amigaos-gcc`) is only
+   needed for programs with C in them, `./dash --gcc` and debugging with gdb.
+2. This extension: search for **Dash for Amiga** in the Extensions view of VS Code (1.86 or later), or
+   `code --install-extension FreeMEM.dash-mui-editor`. It also comes as a `.vsix` in each
+   [release](https://github.com/FreeMEM/dash/releases?q=vscode) (**Extensions: Install from VSIX...**).
+
+To update Dash: `git pull` and `make -C dashc` in its folder. The extension says when there is a new version.
 
 ## How it works with Dash
 
@@ -33,16 +42,19 @@ reinstalling it.
 | Compile | `./dash` |
 | Run, memory check, profile | `./dash` and `tools/emu_run.py` (FS-UAE or Amiberry) |
 | Visual editor and Ver en Amiga | `.dashui` (`compiler/dashui.py`) and `tools/emu_preview.py` |
+| Sprite, BOB and map editors | The extension itself (the same files as Forja and Dash); Ver en Amiga, `tools/emu_run.py --file` |
 | Debugging (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` and `tools/amiga/dbgserver.dash` (the `dbg_*` builtins); with C in the program, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` with `tools/gdb/dash.py`, `bgdbserver` |
 
 ## Getting started
 
-1. You need VS Code 1.86 or later, the Dash repository (with `./dash` and `compiler/`), the Amiga toolchain
-   (`m68k-amigaos-gcc` in `/opt/amiga`, or its folder in `DASH_TOOLCHAIN`) and, for the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For MUI
+1. You need VS Code 1.86 or later, the Dash repository (with `./dash`, `compiler/` and `dashc/` built) and, for
+   the emulator, FS-UAE and a Kickstart ROM (settings `dash.emulator.*`). For programs with C, the Amiga toolchain
+   (`m68k-amigaos-gcc` in `/opt/amiga`, or its folder in `DASH_TOOLCHAIN`). For MUI
    windows, the MUI SDK (`tools/get_mui_sdk.sh`) and Workbench files with MUI for the emulator
    (`tools/emu_sys_mui.sh`, setting `dash.emulator.muiSystem`). When something is missing, the extension says
    what, and how to get it.
-2. **Dash: Nuevo proyecto** makes a folder with a program, its window (`ventana.dashui`) and a `launch.json`.
+2. **Dash: Nuevo proyecto** makes a folder with a program, its window (`ventana.dashui`) and a `launch.json`; or,
+   for a game, a player, a level and the program that moves the player (see below).
    If the folder is not inside the Dash repository, **Dash: Elegir la carpeta del compilador** (setting
    `dash.path`).
 3. Open the window with the visual editor (**Ver en Amiga** shows it on the emulated Amiga), run the program
@@ -147,6 +159,37 @@ The walkthrough **Primeros pasos con Dash** (Help > Welcome, or "Welcome: Open W
   a moment after each change; it goes off by itself if the emulator fails. (Since 0.2.2.)
 - **Dash: Nuevo fichero de ventanas MUI**: a new `.dashui` with one empty window.
 
+### Games: sprites, BOBs and tile maps (as in Forja)
+
+The same editors as [Forja](https://github.com/FreeMEM/forja), Dash's IDE on the Amiga, with the same files and
+keys: what one saves, the other opens, and so do `sprite_load`, `bob_load` and `tilemap_load`.
+
+- **Sprite and BOB editor** (`.iff`, `.ilbm`, `.lbm`, `.brush`, `.bob`, `.spr`: IFF ILBM with the frames side by side,
+  also DPaint brushes). A hardware sprite (16 wide, 3 colours and the transparent one), an attached one (15 colours)
+  or a BOB (any size and up to 256 colours); T goes to the next kind. Tools: P pencil, L line, B box (filled with
+  Shift at the start), F fill, K picker, A grab point; Alt + click (or the right button) erases, Ctrl + click picks
+  the colour; up, down and the digits choose the colour, and the R G B bars change it (4 bits in a hardware
+  sprite). Frames: arrows to go from one to another, N new, D duplicate, Delete remove, Backspace clear, H and V
+  mirror, Alt + arrows move, Shift + arrows shift the drawing, Ctrl+C/X/V copy, cut and paste. O onion skin,
+  Space the animated view, + and - its speed (saved in the file), Ctrl + arrows the size. C copies the Dash
+  lines that load it, with its colours and how to animate it. Undo, redo and save are VS Code's.
+- **Tile map editor** (`.fmap`, Forja's IFF `FORM FMAP`). The tileset is a BOB of the sprite editor with a frame
+  per tile of 8, 16 or 32, next to the map. Tools: P pencil, B box, F fill, K picker, E erase; Alt + click erases,
+  Ctrl + click picks the tile; H and V mirror the tile, comma and period change it. Pages: Tiles; Capas (up to 8:
+  see or hide, new, remove, back and front, rename, and collision layers with solid, platform, ladder and damage,
+  seen as a colour over the map); Mapa (width, height up to 1,024, tile side, zoom, grid, tileset); Objetos
+  (player, enemy, coin, door, other: a click puts one or chooses it, dragging moves it, Delete removes it; with a
+  name and a sprite). Arrows and the wheel move the view (with Shift, a screen at a time), the middle button drags
+  it, + and - zoom. C copies the Dash lines that load and draw it, read the collisions and find the objects.
+- **Ver en Amiga** in both: a small program loads the file as a game would, in FS-UAE, on a PAL low resolution
+  screen, and the picture shows in the editor. A BOB: every frame and one animated; a map: from the corner of the
+  view, with its tileset. The picture of the screen does not have hardware sprites (the chip puts them over it),
+  so their frames are also painted big with their own colours.
+- **Dash: Nuevo sprite, BOB o mapa** (also in the menu of a folder in the explorer), as Amiga-B in Forja.
+- **Dash: Nuevo proyecto**, **Juego**: `jugador.iff` (a hardware sprite), `tiles.iff`, `nivel.fmap` (with a
+  collision layer and the player's start as an object) and a program that runs and jumps with the joystick or the
+  arrow keys. It does not need MUI: it runs on an A500 too.
+
 ## Debugging on a real Amiga
 
 The Amiga needs a TCP/IP stack (Roadshow, AmiTCP, Miami...) and `bgdbserver` (Aminet `dev/debug/bgdbserver`;
@@ -198,11 +241,12 @@ npm run package    # dash-mui-editor-<version>.vsix (the bundle minified)
 node test/screenshots.js   # images/editor.png and images/icon.png again (headless Chromium)
 ```
 
-Install the package with `code --install-extension dash-mui-editor-<version>.vsix`. To publish it (not done yet):
-the Visual Studio Marketplace needs the publisher `FreeMEM` made there and a personal access token of Azure DevOps
-(`npx vsce publish --packagePath dash-mui-editor-<version>.vsix`); Open VSX (VSCodium, and other editors) needs
-the namespace `FreeMEM` and its token (`npx ovsx publish dash-mui-editor-<version>.vsix -p <token>`). The
-version and the `CHANGELOG.md` go up first.
+Install the package with `code --install-extension dash-mui-editor-<version>.vsix`. To publish a version: the
+version and `CHANGELOG.md` go up first, then `npm run package`, the GitHub release `vscode-<version>` with the
+`.vsix` (`gh release create ... --latest=false`, so that Dash's own release stays the latest) and
+`npx vsce publish --packagePath dash-mui-editor-<version>.vsix` (Visual Studio Marketplace, publisher `FreeMEM`,
+with its Azure DevOps token in `VSCE_PAT`). Open VSX (VSCodium and other editors):
+`npx ovsx publish dash-mui-editor-<version>.vsix -p <token>`, with the namespace `FreeMEM`.
 
 ## Author
 

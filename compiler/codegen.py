@@ -24484,8 +24484,12 @@ static {ret_type} {method_name}({params_str}) {{
 
     def visit_MainBlock(self, node: MainBlock):
         """Generate code for the main block."""
+        self._in_main, self._main_return = True, False
         for stmt in node.body:
             self.visit(stmt)
+        self._in_main = False
+        if self._main_return:
+            self.emit("_dash_main_end: ;\n")
         # --memcheck: Main's variables and temporaries are let go at the end, so
         # the exit summary shows only what nothing could free (normally the pool
         # deletion at exit frees them)
@@ -25905,6 +25909,11 @@ static {ret_type} {method_name}({params_str}) {{
         string survives as a temporary of the caller), then return."""
         indent = self.context.indent
         owned = self.context.owned_until({"func"})
+        if owned is None and getattr(self, "_in_main", False) and not node.value:
+            # return in Main: to its end (what Main leaves for later: --memcheck, the cleanup at exit)
+            self._main_return = True
+            self.emit(f"{indent}goto _dash_main_end;\n")
+            return
         if owned is None:  # not inside a function
             if node.value:
                 self.emit(f"{indent}return {self._generate_expression(node.value)};\n")

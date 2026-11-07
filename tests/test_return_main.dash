@@ -1,0 +1,24 @@
+# return en Main (sin valor) acaba el programa, como en ./dash; también desde dentro de un bucle
+# expect-out: f 1
+# expect-out: vuelta 0
+# expect-out: vuelta 1
+# expect-out: sale en 2
+func f(n: Int)
+    if n > 1
+        return
+    end
+    Print "f #{n}"
+end
+
+Main
+    f(1)
+    f(2)
+    for i in (0..3)
+        if i == 2
+            Print "sale en #{i}"
+            return
+        end
+        Print "vuelta #{i}"
+    end
+    Print "no sale"
+end

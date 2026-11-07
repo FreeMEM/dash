@@ -1,0 +1,64 @@
+/* Sprite and BOB editor (and the tile map editor): VS Code's colours for the panes, the Amiga's colours in the
+   pictures */
+body { margin: 0; padding: 0; font-family: var(--vscode-font-family, sans-serif); font-size: 13px;
+       color: var(--vscode-foreground, #ccc); background: var(--vscode-editor-background, #1e1e1e); }
+#layout { display: grid; grid-template-columns: 1fr minmax(210px, 260px); grid-template-rows: auto 1fr auto auto;
+          height: 100vh; }
+#toolbar { grid-column: 1 / 3; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px;
+           border-bottom: 1px solid var(--vscode-panel-border, #444); align-items: center; }
+#canvas-pane { grid-column: 1; grid-row: 2; overflow: auto; display: flex; align-items: center; justify-content: center;
+               min-width: 0; min-height: 0; }
+#side { grid-column: 2; grid-row: 2 / 4; overflow: auto; padding: 4px 6px; border-left: 1px solid var(--vscode-panel-border, #444); }
+#frames { grid-column: 1; grid-row: 3; display: flex; gap: 4px; padding: 4px; overflow-x: auto;
+          border-top: 1px solid var(--vscode-panel-border, #444); align-items: flex-end; }
+#status { grid-column: 1 / 3; padding: 2px 6px; font-size: 0.9em; color: var(--vscode-descriptionForeground, #aaa);
+          border-top: 1px solid var(--vscode-panel-border, #444); min-height: 1.3em; }
+#status .message { color: var(--vscode-foreground, #ccc); margin-right: 1em; }
+#error { display: none; padding: 8px; color: var(--vscode-errorForeground, #f48771); }
+#error.shown { display: block; }
+canvas { image-rendering: pixelated; }
+#grid { cursor: crosshair; outline: none; }
+#grid:focus-visible { outline: 1px solid var(--vscode-focusBorder, #07f); }
+h3 { font-size: 0.85em; text-transform: uppercase; margin: 8px 0 4px; color: var(--vscode-descriptionForeground, #aaa); }
+button, input, select {
+    font: inherit; color: var(--vscode-input-foreground, #ccc); background: var(--vscode-input-background, #3c3c3c);
+    border: 1px solid var(--vscode-input-border, var(--vscode-panel-border, #555)); border-radius: 2px; padding: 2px 6px; }
+button { color: var(--vscode-button-secondaryForeground, #ccc); background: var(--vscode-button-secondaryBackground, #3a3d41);
+         cursor: pointer; }
+button:hover { background: var(--vscode-button-secondaryHoverBackground, #45494e); }
+button.on, button[aria-pressed=true] { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+button:disabled, input:disabled, select:disabled { opacity: 0.5; cursor: default; }
+button:focus-visible, input:focus, select:focus { outline: 1px solid var(--vscode-focusBorder, #07f); outline-offset: -1px; }
+input[type=number] { width: 4.5em; }
+input[type=range] { padding: 0; flex: 1; }
+.sep { width: 1px; align-self: stretch; background: var(--vscode-panel-border, #444); margin: 0 2px; }
+.row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.row label { min-width: 4.5em; }
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.swatch { height: 18px; padding: 0; border: 1px solid #0006; border-radius: 0; position: relative; font-size: 9px;
+          color: #fff; text-shadow: 0 0 2px #000; }
+.swatch.selected { outline: 2px solid var(--vscode-focusBorder, #07f); outline-offset: 0; z-index: 1; }
+.frame { padding: 2px; border: 1px solid transparent; background: none; display: flex; flex-direction: column;
+         align-items: center; font-size: 0.8em; }
+.frame.selected { border-color: var(--vscode-focusBorder, #07f); background: var(--vscode-list-activeSelectionBackground, #094771); }
+#preview { display: block; margin: 4px auto; }
+.hint { font-size: 0.85em; color: var(--vscode-descriptionForeground, #aaa); }
+.list-row { padding: 2px 4px; cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.list-row.selected { background: var(--vscode-list-activeSelectionBackground, #094771); }
+.tiles { display: flex; flex-wrap: wrap; gap: 1px; }
+.tile { padding: 0; border: 1px solid transparent; background: none; line-height: 0; }
+.tile.selected { border-color: var(--vscode-focusBorder, #07f); }
+/* the map editor: the view takes the whole pane (it is drawn by pieces), the side has pages */
+#layout.map { grid-template-rows: auto 1fr auto; }
+#layout.map #canvas-pane { display: block; overflow: hidden; }
+#layout.map #view { display: block; cursor: crosshair; outline: none; }
+#layout.map #side { grid-row: 2; }
+#pages { display: flex; gap: 2px; flex-wrap: wrap; margin-bottom: 4px; }
+#pages button[aria-selected=true] { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0e639c); }
+.list-row input[type=checkbox] { margin: 0; }
+.list-row .name { flex: 1; }
+.collision { display: flex; align-items: center; gap: 6px; width: 100%; margin: 2px 0; text-align: left; }
+.collision i { width: 14px; height: 14px; display: inline-block; border: 1px solid #0008; }
+#amiga-shot { display: block; width: 100%; image-rendering: pixelated; margin-top: 4px; border: 1px solid var(--vscode-panel-border, #444); }
+.hint.error { color: var(--vscode-errorForeground, #f48771); }
+#layout.map #side { display: flex; flex-direction: column; }

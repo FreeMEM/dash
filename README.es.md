@@ -179,8 +179,9 @@ depurar y depurar en un Amiga de verdad.
 
 1. Dash, como en [Instalación](#instalación) (para `--gcc` y los programas con C, también el gcc de bebbo; para el emulador, FS-UAE y una
    ROM de Kickstart; para ventanas MUI, `tools/get_mui_sdk.sh` y `tools/emu_sys_mui.sh`).
-2. La extensión: el fichero `dash-mui-editor-0.4.0.vsix` de la [release](https://github.com/FreeMEM/dash/releases/tag/vscode-0.4.0), y en VS Code (1.86 o posterior)
-   **Extensions: Install from VSIX...**, o `code --install-extension dash-mui-editor-0.4.0.vsix`. También se
+2. La extensión: busca **Dash for Amiga** en la vista de extensiones de VS Code (1.86 o posterior), o
+   `code --install-extension FreeMEM.dash-mui-editor`. Cada [release](https://github.com/FreeMEM/dash/releases?q=vscode)
+   trae también su `.vsix` (**Extensions: Install from VSIX...**). También se
    puede construir: `cd editor/vscode && npm install && npm run package`.
 3. Un proyecto: **Dash: Nuevo proyecto**. Si su carpeta no está dentro de este repositorio, **Dash: Elegir la
    carpeta del compilador** (el ajuste `dash.path`). La guía **Primeros pasos con Dash** lleva paso a paso, y si
@@ -198,6 +199,7 @@ La extensión es una capa fina: lo que hace lo hacen las herramientas de este re
 | Compilar | `./dash` |
 | Ejecutar, memoria y perfil | `./dash` y `tools/emu_run.py` (FS-UAE o Amiberry) |
 | Editor visual y Ver en Amiga | `.dashui` (`compiler/dashui.py`) y `tools/emu_preview.py` |
+| Editores de sprites, BOBs y mapas de tiles (como en Forja) | `editor/vscode/media/` (los mismos ficheros que Forja y Dash); Ver en Amiga, `tools/emu_run.py --file` |
 | Depurar (F5) | `./dash --debug`, `tools/emu_run.py --dbgserver` y `tools/amiga/dbgserver.dash`; con C en el programa, `./dash --gcc --debug`, `tools/emu_run.py --gdbserver`, `m68k-amigaos-gdb` con `tools/gdb/dash.py` y `bgdbserver` |
 
 Por eso, al actualizar Dash (`git pull`), lo que la extensión sabe del lenguaje se actualiza también, sin
