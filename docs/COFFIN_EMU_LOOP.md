@@ -20,9 +20,9 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
 - [x] P3. Universo Dash: paquete de Dash (orden dash, Forja, Inferencia, dashgit), Trasfondo, Tachyon.
 - [x] P4. DOpus5 y fondo.
 - [x] P5. Configuraciones de FS-UAE y Amiberry; arrancar en los dos con captura.
-- [ ] P6. `tools/emu_run.py --machine coffin` y el runner: arranque desde una copia del disco, programas desde un
+- [x] P6. `tools/emu_run.py --machine coffin` y el runner: arranque desde una copia del disco, programas desde un
   volumen del PC.
-- [ ] P7. Documentar (INSTALACION, AGENTS) y PR.
+- [x] P7. Documentar (INSTALACION, AGENTS) y PR.
 
 ## Bitácora
 
@@ -65,3 +65,11 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
   va ahora en AmiSSL:Certs (disco.py actualizar). test_rtg_pub_screen esperaba la misma profundidad de
   CyberGraphX y de BMA_DEPTH: en 32 bits son 32 y 24; arreglado el test. Quedan por mirar: test_run_program_wb(path)
   (desde_workbench falso al relanzar), test_window_handles, test_window_find.
+- 4ª tanda: 807/811; en Coffin solo fallan los cuatro por mirar (test_run_program_wb y wbpath, test_window_find,
+  test_window_handles: window_create de tamaño 0 devuelve 0 en Coffin). TLS pasa con la CA. Las máquinas de
+  siempre (a1200, a1200-32, Amiberry a1200) siguen dando bien con emu_run. PR #122.
+
+## Pendiente (fuera de este encargo)
+
+- desktop_canvas con Trasfondo en marcha: un segundo lienzo cuelga la pantalla.
+- Los cuatro tests de arriba en Coffin.
