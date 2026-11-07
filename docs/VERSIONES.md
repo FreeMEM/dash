@@ -33,6 +33,19 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.6.0 (2026-11-07)
+
+Soltar iconos sobre las ventanas MUI y los builtins propios de DashOS. Lo que ya compilaba sigue igual.
+
+- **Iconos soltados sobre una ventana MUI:** `mui_on_drop(objeto, id)` hace que `mui_wait_event()` devuelva `id`
+  cuando se suelta un icono del Workbench sobre ese objeto (sobre una ventana, en cualquier sitio de ella). Las
+  rutas, con `app_drop()`. Todas las ventanas MUI admiten ya iconos. Lo usa Tachyon para abrir una página guardada
+  (idea de Ferrán García). Probado con MUI 3.8 y MUI 5.
+- **DashOS:** 32 builtins propios (canales, llaves, temporizadores, memoria compartida, procesos y grupos). Solo
+  compilan para DashOS; en el Amiga dan un error que lo dice.
+- **`return` en `Main`:** sin valor, acaba el programa, ahora también con `./dash --gcc` (antes solo con `./dash`).
+- Probado en A1200 (3.1 y 3.2) y A500 emulados, por los dos caminos.
+
 ### 2.5.0 (2026-11-07)
 
 Arreglos del compilador que encontró Forja, la fuga de memoria de Trasfondo y un builtin para las imágenes de su

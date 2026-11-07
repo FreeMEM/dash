@@ -4,7 +4,7 @@
 # workbench
 # emu-needs: muimaster.library
 # autoclose: 30
-# expect-out: soltado: DH0: (dentro)
+# expect-out: soltado: un volumen (dentro)
 # expect-out: fin
 
 func wb(q: String) -> String
@@ -22,13 +22,33 @@ Main
         mui_window_open(win)
         time_delay(100)
 
-        l = Int(wb("WINDOW.ICONS.ALL.0.LEFT"))
-        tp = Int(wb("WINDOW.ICONS.ALL.0.TOP"))
-        w = Int(wb("WINDOW.ICONS.ALL.0.WIDTH"))
-        h = Int(wb("WINDOW.ICONS.ALL.0.HEIGHT"))
         v = window_find("Suelta aqui")
-        vx = window_found_box(v, 0) + window_found_box(v, 2) / 2
-        vy = window_found_box(v, 1) + window_found_box(v, 3) / 2
+        bx = window_found_box(v, 0)
+        by = window_found_box(v, 1)
+        bw = window_found_box(v, 2)
+        bh = window_found_box(v, 3)
+        vx = bx + bw / 2
+        vy = by + bh / 2
+        # el primer icono del escritorio que no quede debajo de la ventana (Tachyon lo vio tapado)
+        l = 0
+        tp = 0
+        w = 0
+        h = 0
+        i = 0
+        n = Int(wb("WINDOW.ICONS.ALL.COUNT"))
+        while i < n
+            l = Int(wb("WINDOW.ICONS.ALL.#{i}.LEFT"))
+            tp = Int(wb("WINDOW.ICONS.ALL.#{i}.TOP"))
+            w = Int(wb("WINDOW.ICONS.ALL.#{i}.WIDTH"))
+            h = Int(wb("WINDOW.ICONS.ALL.#{i}.HEIGHT"))
+            cx = l + w / 2
+            cy = tp + h / 2 + wm_bar_height()
+            if cx < bx or cx >= bx + bw or cy < by or cy >= by + bh
+                i = n
+            else
+                i = i + 1
+            end
+        end
         x0 = l + w / 2
         y0 = tp + h / 2 + wm_bar_height()
 
@@ -48,7 +68,11 @@ Main
                     if app_drop_x() > 0 and app_drop_y() > 0
                         dentro = "dentro"
                     end
-                    Print "soltado: #{r} (#{dentro})"
+                    que = r
+                    if str_ends(r, ":")
+                        que = "un volumen"
+                    end
+                    Print "soltado: #{que} (#{dentro})"
                     r = app_drop()
                 end
             end

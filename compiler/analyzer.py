@@ -419,8 +419,10 @@ class SemanticAnalyzer(ASTVisitor):
     def visit_MainBlock(self, node: MainBlock):
         """Visit the main block."""
         self.enter_scope("main")
+        self.in_main = True        # return (without a value) ends Main, as in ./dash
         for stmt in node.body:
             self.visit(stmt)
+        self.in_main = False
         self.exit_scope()
 
     def visit_WindowOpen(self, node: WindowOpen):
@@ -1025,7 +1027,9 @@ class SemanticAnalyzer(ASTVisitor):
 
     def visit_ReturnStmt(self, node: ReturnStmt):
         """Visit a return statement."""
-        if not self.in_function:
+        if not self.in_function and node.value is not None and getattr(self, "in_main", False):
+            self.error("'return' with a value outside of a function (in Main, return ends the program)", node)
+        elif not self.in_function and not getattr(self, "in_main", False):
             self.error("'return' outside of function", node)
         if node.value:
             self.visit(node.value)

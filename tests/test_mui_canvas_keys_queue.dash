@@ -1,0 +1,43 @@
+# mui_canvas: varias teclas seguidas antes de que el programa las lea (lo vio el agente de Forja: con prisa se
+# perdían y se repetía la última). Cada evento de mui_wait_event trae su tecla: llegan las 5, en orden.
+# emu-needs: muimaster.library
+# autoclose: 20
+# expect-out: teclas: abcde
+# expect-out: fin
+
+Main
+    if mui_app_begin("Teclas", "DASHKEYS") == 0
+        Print "sin MUI"
+    else
+        win = mui_window_begin("Teclas seguidas", 0)
+        lienzo = mui_canvas(300, 120)
+        mui_window_end()
+        mui_canvas_on_input(lienzo, 5)
+        mui_window_open(win)
+        time_delay(50)
+        w = window_find("Teclas seguidas")
+        window_found_activate(w)
+        time_delay(10)
+        input_move(window_found_box(w, 2) / 2, window_found_box(w, 3) / 2)
+        time_delay(10)
+        # a, b, c, d, e de golpe, sin leer entre medias
+        for k in [0x20, 0x35, 0x33, 0x22, 0x12]
+            input_key(k, 0)
+        end
+        time_delay(25)
+        texto = ""
+        n = 0
+        while n < 50 and texto.length < 5
+            ev = mui_poll_event()
+            if ev == 5
+                texto = texto + mui_canvas_char(lienzo)
+            elif ev == 0
+                time_delay(2)
+                n = n + 1
+            end
+        end
+        Print "teclas: #{texto}"
+        Print "fin"
+        mui_app_end()
+    end
+end

@@ -1,0 +1,5 @@
+# Test: return con valor en Main
+# expect: 'return' with a value outside of a function
+Main
+    return 3
+end

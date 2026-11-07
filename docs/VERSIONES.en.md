@@ -32,6 +32,20 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.6.0 (2026-11-07)
+
+Dropping icons on MUI windows and DashOS's own builtins. What compiled before still does the same.
+
+- **Icons dropped on a MUI window:** `mui_on_drop(object, id)` makes `mui_wait_event()` return `id` when a
+  Workbench icon is dropped on that object (on a window, anywhere on it). The paths, with `app_drop()`. Every MUI
+  window now takes icons. Tachyon uses it to open a saved page (idea by Ferrán García). Tested with MUI 3.8 and
+  MUI 5.
+- **DashOS:** 32 builtins of its own (channels, keys, timers, shared memory, processes and groups). They only
+  compile for DashOS; on the Amiga they give an error that says so.
+- **`return` in `Main`:** without a value it ends the program, now also with `./dash --gcc` (before, only with
+  `./dash`).
+- Tested on emulated A1200 (3.1 and 3.2) and A500, both ways.
+
 ### 2.5.0 (2026-11-07)
 
 Compiler fixes found by Forja, Trasfondo's memory leak and a builtin for the pictures of its dock. What compiled
