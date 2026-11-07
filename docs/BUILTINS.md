@@ -7,7 +7,7 @@
 Las marcadas **sin implementar** están declaradas pero no tienen código C:
 usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 927 funciones, 927 implementadas, 0 sin implementar.
+Total: 928 funciones, 928 implementadas, 0 sin implementar.
 
 ## Gráficos básicos
 
@@ -831,6 +831,7 @@ Total: 927 funciones, 927 implementadas, 0 sin implementar.
 | `image_decoded_pixels(d)` | `APTR` | Los píxeles de una imagen decodificada, fila tras fila: un búfer para buffer_get_byte o image_from_rgb |  |
 | `image_decoded_free(d)` | `void` | Libera una imagen decodificada |  |
 | `image_from_decoded(d)` | `LONG` | Una imagen (como image_from_rgb) de una imagen decodificada, que hay que liberar después |  |
+| `image_from_decoded_size(d, w, h)` | `LONG` | Como image_from_decoded, pero a ancho x alto, con los bordes suaves (cada punto, la media de los que cubre, también la transparencia); la imagen decodificada hay que liberarla después |  |
 
 ## Fuentes TrueType, WOFF y WOFF2
 

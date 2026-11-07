@@ -7,7 +7,7 @@
 The ones marked **not implemented** are declared but have no C code:
 using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
-Total: 927 functions, 927 implemented, 0 not implemented.
+Total: 928 functions, 928 implemented, 0 not implemented.
 
 ## Basic graphics
 
@@ -831,6 +831,7 @@ Total: 927 functions, 927 implemented, 0 not implemented.
 | `image_decoded_pixels(d)` | `APTR` | The pixels of a decoded picture, row after row: a buffer for buffer_get_byte or image_from_rgb |  |
 | `image_decoded_free(d)` | `void` | Free a decoded picture |  |
 | `image_from_decoded(d)` | `LONG` | An image (as image_from_rgb) from a decoded picture, which is still to be freed |  |
+| `image_from_decoded_size(d, w, h)` | `LONG` | As image_from_decoded, made w x h first with smooth edges (each pixel the average of the ones it covers, alpha too); the decoded picture is still to be freed |  |
 
 ## TrueType, WOFF and WOFF2 fonts
 

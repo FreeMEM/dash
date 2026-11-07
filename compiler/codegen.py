@@ -3404,6 +3404,41 @@ static LONG _dash_image_from_rgb_direct(UBYTE *pixels, LONG w, LONG h, LONG alph
     return 0;
 }
 
+/* image_from_decoded_size: the pixels made w x h first (Trasfondo's dock: the PNG pictures of a dock, at the size
+   of its boxes). Each pixel of the new size is the average of the ones it covers (a box filter), with the colour
+   weighted by the alpha so the edges do not darken; then image_from_rgb. 0 if there is no memory. */
+static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha);
+static LONG _dash_image_from_rgb_sized(APTR pixels, LONG sw, LONG sh, LONG alpha, LONG w, LONG h) {
+    UBYTE *src = (UBYTE *)pixels, *dst, *o;
+    LONG bpp = alpha ? 4 : 3, x, y, r;
+    if (!src || sw <= 0 || sh <= 0) return 0;
+    if (w <= 0 || h <= 0 || (w == sw && h == sh)) return _dash_image_from_rgb(pixels, sw, sh, alpha);
+    if (!(dst = (UBYTE *)AllocVec(w * h * bpp, MEMF_ANY))) return 0;
+    o = dst;
+    for (y = 0; y < h; y++) {
+        LONG y0 = y * sh / h, y1 = (y + 1) * sh / h;
+        if (y1 <= y0) y1 = y0 + 1;
+        for (x = 0; x < w; x++) {
+            LONG x0 = x * sw / w, x1 = (x + 1) * sw / w, i, j;
+            ULONG sr = 0, sg = 0, sb = 0, sa = 0, n = 0;
+            if (x1 <= x0) x1 = x0 + 1;
+            for (j = y0; j < y1; j++)
+                for (i = x0; i < x1; i++) {
+                    UBYTE *p = src + (j * sw + i) * bpp;
+                    ULONG a = alpha ? p[3] : 255;
+                    sr += p[0] * a; sg += p[1] * a; sb += p[2] * a; sa += a; n++;
+                }
+            if (sa) { o[0] = (UBYTE)(sr / sa); o[1] = (UBYTE)(sg / sa); o[2] = (UBYTE)(sb / sa); }
+            else o[0] = o[1] = o[2] = 0;
+            if (alpha) o[3] = (UBYTE)(sa / n);
+            o += bpp;
+        }
+    }
+    r = _dash_image_from_rgb(dst, w, h, alpha);
+    FreeVec(dst);
+    return r;
+}
+
 static LONG _dash_image_from_rgb(APTR pixels, LONG w, LONG h, LONG alpha) {
     struct Screen *scr, *pub = NULL;
     struct BitMapHeader *bmh = NULL;
