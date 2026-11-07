@@ -59,3 +59,9 @@ demos). Configurado y probado en FS-UAE y en Amiberry. Worktree `.worktrees/coff
 - Confirmado: con Trasfondo parado (se para lanzándolo otra vez) test_desktop_canvas pasa entero en Coffin; con
   Trasfondo en marcha se cuelga. Fallo de Dash: dos desktop_canvas a la vez bloquean la pantalla. En el runner,
   COFFIN_SKIP deja fuera en esta máquina los tests que esperan el sistema pelado (idioma, dash.cpu, AGA, lienzo).
+- 3ª tanda: 800/843 en total; en Coffin 245 bien, 43 mal, 26 saltados. Clasificados: entorno (RTG frente a AGA,
+  MUI 3.8, clics colocados para 640 px, gestor de ventanas y puerto ARexx de Trasfondo, Poseidon, idioma, 68040, JIT
+  demasiado rápido para test_task, pila de red) en COFFIN_SKIP con su motivo. La CA de los servidores TLS del runner
+  va ahora en AmiSSL:Certs (disco.py actualizar). test_rtg_pub_screen esperaba la misma profundidad de
+  CyberGraphX y de BMA_DEPTH: en 32 bits son 32 y 24; arreglado el test. Quedan por mirar: test_run_program_wb(path)
+  (desde_workbench falso al relanzar), test_window_handles, test_window_find.
