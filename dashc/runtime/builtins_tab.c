@@ -631,6 +631,8 @@ const BuiltinInfo builtin_info[] = {
     {"image_free", 1, 0, 0, 0},
     {"image_from_decoded", 1, 1, 0, 0},
     {"image_from_decoded", 1, 1, 0, 0},
+    {"image_from_decoded_size", 3, 1, 0, 0},
+    {"image_from_decoded_size", 3, 1, 0, 0},
     {"image_from_rgb", 4, 1, 0, 0},
     {"image_from_rgb", 4, 1, 0, 0},
     {"image_height", 1, 1, 0, 0},
@@ -1856,7 +1858,7 @@ const BuiltinInfo builtin_info[] = {
     {"wm_zip", 1, 2, 1, 0},
     {"wm_zip", 1, 2, 1, 0},
 };
-const int builtin_count = 1854;
+const int builtin_count = 1856;
 /* On Key "NOMBRE": su código de tecla (compiler/ast_nodes.py KEY_NAMES) */
 const KeyName key_names[] = {
     {"BACKSPACE", 65},

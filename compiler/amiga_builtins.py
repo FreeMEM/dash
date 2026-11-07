@@ -5461,6 +5461,12 @@ IMAGE_FUNCTIONS = {
                                  "image_from_rgb"),
     "image_decoded_free": _dec("image_decoded_free", ["d"], "void", "_dash_image_decoded_free(${d})",
                                "Free a decoded picture"),
+    "image_from_decoded_size": _gfx("image_from_decoded_size", ["d", "w", "h"], "LONG",
+                                    "_dash_image_from_rgb_sized(_dash_image_decoded_pixels(${d}), "
+                                    "_dash_image_decoded_width(${d}), _dash_image_decoded_height(${d}), "
+                                    "_dash_image_decoded_alpha(${d}), ${w}, ${h})",
+                                    "As image_from_decoded, made w x h first with smooth edges (each pixel the "
+                                    "average of the ones it covers, alpha too); the decoded picture is still to be freed"),
     "image_from_decoded": _gfx("image_from_decoded", ["d"], "LONG",
                                "_dash_image_from_rgb(_dash_image_decoded_pixels(${d}), _dash_image_decoded_width(${d}), "
                                "_dash_image_decoded_height(${d}), _dash_image_decoded_alpha(${d}))",
@@ -5920,7 +5926,7 @@ SYSPROG_FUNCTIONS = _move(TASK_FUNCTIONS, [
 IMGDEC_FUNCTIONS = _move(IMAGE_FUNCTIONS, [
     "image_decode", "image_decode_start", "image_decode_ready", "image_decode_finish", "image_decoded_width",
     "image_decoded_height", "image_decoded_alpha", "image_decoded_pixels",
-    "image_decoded_free", "image_from_decoded"])
+    "image_decoded_free", "image_from_decoded", "image_from_decoded_size"])
 WM_FUNCTIONS = _move(TASK_FUNCTIONS, [
     "wm_read", "wm_id", "wm_title", "wm_task", "wm_path", "wm_box", "wm_flags", "wm_set_box", "wm_front", "wm_back",
     "wm_activate", "wm_zip", "wm_active", "wm_at", "wm_pointer_x", "wm_pointer_y", "wm_bar_height", "wm_bar_gadgets", "file_real_path", "app_window",
