@@ -33,6 +33,23 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.5.0 (2026-11-07)
+
+Arreglos del compilador que encontró Forja, la fuga de memoria de Trasfondo y un builtin para las imágenes de su
+dock. Lo que ya compilaba sigue igual.
+
+- **Imágenes a otro tamaño:** `image_from_decoded_size(d, ancho, alto)` hace una imagen de una decodificada (un PNG
+  con transparencia, por ejemplo) a otro tamaño, con los bordes suaves.
+- **Arreglo (fuga de memoria):** las funciones que solo leen sus textos recibían una copia que no se liberaba nunca
+  cuando el texto era calculado. Ahora reciben el texto tal cual: `tooltype`, `date_text`, `file_copy`, `notify`,
+  `screen_font_text_width`, `wifi_read`, `net_driver_read`, `rexx_reply`, `dir_change`, `input_text` y las que
+  cargan o guardan ficheros. Era la memoria que perdía el fondo de Trasfondo con las horas.
+- **Arreglo (`./dash`):** en un programa muy largo, un salto que había que alargar podía pisar la instrucción
+  siguiente.
+- **Arreglo (`./dash --debug`):** una función que nadie llama ya no deja datos de depuración que apuntan a otra
+  función. El depurador de Forja podía romper el programa al ir paso a paso.
+- Probado en A1200 (3.1 y 3.2) y A500 emulados, por los dos caminos.
+
 ### 2.4.0 (2026-11-06)
 
 Lo que piden el dock y los avisos de Trasfondo 2.2. Todo son novedades; lo que ya compilaba sigue igual.

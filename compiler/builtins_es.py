@@ -614,6 +614,7 @@ DESC_ES = {
                             "image_from_rgb",
     "image_decoded_free": "Libera una imagen decodificada",
     "image_from_decoded": "Una imagen (como image_from_rgb) de una imagen decodificada, que hay que liberar después",
+    "image_from_decoded_size": "Como image_from_decoded, pero a ancho x alto, con los bordes suaves (cada punto, la media de los que cubre, también la transparencia); la imagen decodificada hay que liberarla después",
     # Fuentes TrueType
     "font_from_ttf": "Una fuente TrueType (TTF, un OTF con contornos TrueType, o un WOFF o WOFF2 de ellos) a size "
                      "píxeles de em y al width % de su ancho (0: 100), sus caracteres Latin-1 en un plano de 1 bit "

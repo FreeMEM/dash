@@ -428,11 +428,16 @@ Picasso96 on a 16-bit screen. Dash does not ship a script to make it (Tachyon, t
 `tools/emu_sys_rtg.sh` in [its repository](https://github.com/FreeMEM/tachyon)); without it, the `# rtg` tests are
 skipped.
 
+The `coffin` machine is a whole Amiga like CoffinOS: a 68040 with JIT, 32-bit RTG at 1280x1024, and a disk with its
+own system (MUI, AmiSSL, DOpus5, Trasfondo...) in `DASH_EMU_DISK_COFFIN`. It boots a copy of the disk and puts the
+programs in `DASHRUN:`. It runs in FS-UAE and Amiberry, and `--emu-coffin` runs the whole test suite there. How the
+disk was made and how to update it: `tools/coffin/README.md`.
+
 Try it: `python3 tools/emu_run.py examples/hola.dash` and `python3 tests/run_tests.py --emu`. Options of
 `tools/emu_run.py`:
 
-- `--machine a1200|a500|a1200-32|rtg`: the machine, with its ROM and its system from the variables above.
-- `--emulator amiberry`: Amiberry instead of FS-UAE (A1200 and A500 only). Its `bsdsocket` provides socket events.
+- `--machine a1200|a500|a1200-32|rtg|coffin`: the machine, with its ROM and its system from the variables above.
+- `--emulator amiberry`: Amiberry instead of FS-UAE (A1200, A500 and `coffin`). Its `bsdsocket` provides socket events.
 - `--screenshot SEGUNDOS fichero.png`: a screenshot of the Amiga screen.
 - `--debug ORDEN`: the emulator's debugger from a `debug_break()` in the program (see the reference manual).
 - `--gdbserver PUERTO`: the program under `bgdbserver`, for `m68k-amigaos-gdb` (used by the extension, step 9).

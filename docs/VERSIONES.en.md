@@ -32,6 +32,22 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.5.0 (2026-11-07)
+
+Compiler fixes found by Forja, Trasfondo's memory leak and a builtin for the pictures of its dock. What compiled
+before still does the same.
+
+- **Pictures at another size:** `image_from_decoded_size(d, width, height)` makes an image from a decoded picture
+  (a PNG with transparency, say) at another size, with smooth edges.
+- **Fix (memory leak):** builtins that only read their strings got a copy that was never freed when the string was
+  computed. Now they get the string as it is: `tooltype`, `date_text`, `file_copy`, `notify`,
+  `screen_font_text_width`, `wifi_read`, `net_driver_read`, `rexx_reply`, `dir_change`, `input_text` and the ones
+  that load or save files. It was the memory Trasfondo's backdrop lost over the hours.
+- **Fix (`./dash`):** in a very long program, a branch that had to grow could overwrite the next instruction.
+- **Fix (`./dash --debug`):** a function nobody calls no longer leaves debug data pointing at another function.
+  Forja's debugger could break the program when stepping.
+- Tested on emulated A1200 (3.1 and 3.2) and A500, both ways.
+
 ### 2.4.0 (2026-11-06)
 
 What Trasfondo 2.2's dock and notifications need. All new features; what already compiled stays the same.

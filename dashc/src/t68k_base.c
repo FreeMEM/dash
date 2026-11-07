@@ -263,6 +263,8 @@ static void grow_branches(void)
                 if (d >= -128 && d <= 127) continue;
                 p[1] = 0;                                  /* Bcc.s -> Bcc.w */
                 insert_code(at, 2);
+                f = &fixups.v[i];
+                f->at = at;              /* (insert_code movió también este salto: su desplazamiento va justo aquí) */
                 f->size = 2;
                 changed = 1;
                 continue;
