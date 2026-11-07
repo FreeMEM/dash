@@ -23,7 +23,9 @@ end
 
 Main
     d = rtg_get_depth()
-    Print "profundidad: #{d > 0 and d == del_workbench(0)}"
+    # (en una pantalla de 32 bits, CyberGraphX da 32 y la bitmap 24: el byte de alfa no cuenta en BMA_DEPTH)
+    b = del_workbench(0)
+    Print "profundidad: #{d > 0 and (d == b or d == 32 and b == 24)}"
     Print "ancho: #{rtg_get_width() == del_workbench(1)}"
     Print "alto: #{rtg_get_height() == del_workbench(2)}"
     Print "fin"
