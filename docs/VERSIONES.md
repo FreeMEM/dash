@@ -33,6 +33,17 @@ compilador que usa (ajuste `dash.updates.check`; la consulta va a `api.github.co
 
 ## Notas de cada versión
 
+### 2.6.1 (2026-11-07)
+
+Dos arreglos. Lo que ya compilaba sigue igual.
+
+- **Arreglo (`desktop_canvas`):** dos programas con lienzo en el escritorio a la vez (Trasfondo y otro) colgaban la
+  pantalla. Ahora pueden estar los dos, y cada uno deja el fondo como estaba al acabar. Los dos programas tienen que
+  estar compilados con esta versión o una posterior.
+- **Arreglo (sprites):** en una pantalla PAL o NTSC normal, `sprite_load` avisaba de que era una pantalla de
+  tarjeta gráfica (RTG). Lo vio la sesión de la extensión de VS Code con su juego de ejemplo.
+- Probado en A1200 (3.1 y 3.2), A500 y un CoffinOS emulados.
+
 ### 2.6.0 (2026-11-07)
 
 Soltar iconos sobre las ventanas MUI y los builtins propios de DashOS. Lo que ya compilaba sigue igual.

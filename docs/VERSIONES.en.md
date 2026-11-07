@@ -32,6 +32,17 @@ compiler it uses (setting `dash.updates.check`; the request goes to `api.github.
 
 ## Notes of each version
 
+### 2.6.1 (2026-11-07)
+
+Two fixes. What compiled before still does the same.
+
+- **Fix (`desktop_canvas`):** two programs with a desktop canvas at once (Trasfondo and another) hung the display.
+  Now both can run, and each one leaves the backdrop as it was when it ends. Both programs must be built with this
+  version or a later one.
+- **Fix (sprites):** on a plain PAL or NTSC screen, `sprite_load` warned that it was a graphics card (RTG) screen.
+  Found with the example game of the VS Code extension.
+- Tested on emulated A1200 (3.1 and 3.2), A500 and CoffinOS.
+
 ### 2.6.0 (2026-11-07)
 
 Dropping icons on MUI windows and DashOS's own builtins. What compiled before still does the same.

@@ -4197,6 +4197,10 @@ background and the canvas paints over it.
 On freeing (`desktop_canvas_free`, or when the program ends) the area goes back to the Workbench: it is
 repainted once, and the icons underneath flicker at that point.
 
+Several programs can have canvases at once (Trasfondo and another), in different parts of the desktop, and end in
+any order. Up to Dash 2.5.0 the second one hung the display: both programs must
+be compiled with a later version.
+
 Cost measured in FS-UAE with a 300x90 canvas in 4 colors with icons underneath:
 
 | Machine | Almost everything changes | One figure changes | 120x20 `update_area` |
