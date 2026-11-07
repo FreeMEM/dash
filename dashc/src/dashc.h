@@ -302,7 +302,7 @@ extern int cpu020;     /* --fpu o --cpu 68020 y más */   /* --memcheck: como ./
 /* builtins (build/builtins_tab.c): ret 0 nada, 1 Int, 2 Bool, 3 String, 4 [String]; keeps: guarda lo
    que recibe (un texto o un objeto pasa escapado) */
 /* ret: 0 nada, 1 Int, 2 Bool, 3 String, 4 [String], 5 Double; dparams: los parámetros Double (bits) */
-typedef struct { const char *name; unsigned char nparams, ret, keeps, dparams; } BuiltinInfo;
+typedef struct { const char *name; unsigned char nparams, ret, keeps, dparams, dashos; } BuiltinInfo;  /* dashos: solo de DashOS (A7) */
 extern const BuiltinInfo builtin_info[];
 extern const int builtin_count;
 typedef struct { const char *name; int code; } KeyName;

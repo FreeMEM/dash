@@ -1,0 +1,17 @@
+# Test (solo en DashOS de verdad, A7): el hijo de test_dashos_padre. Su llave 1 es un lado de un canal con el padre.
+# dashos-skip: lo lanza test_dashos_padre en DashOS (procesos: en Linux no hay)
+Main
+    channel_send(1, "hola, soy el hijo")
+    m = channel_receive(1)
+    if m == "toma memoria" and channel_handles() == 1
+        p = memory_map(channel_handle(0), true)
+        buffer_set_byte(p, 0, 77)
+        channel_send(1, "escrito")
+    end
+    m = channel_receive(1)
+    if m == "gira"
+        while true
+        end
+    end
+    program_exit(7)
+end

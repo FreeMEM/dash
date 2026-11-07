@@ -62,6 +62,7 @@ GROUPS = [
     ("INTUITION_EXPANDED", "Intuition", "Intuition"),
     ("RTG_FUNCTIONS", "RTG (CyberGraphX / Picasso96)", "RTG (CyberGraphX / Picasso96)"),
     ("MUI_FUNCTIONS", "MUI", "MUI"),
+    ("DASHOS_FUNCTIONS", "DashOS (solo con ./dash --dashos)", "DashOS (only with ./dash --dashos)"),   # A7
 ]
 
 # The generator's own texts. The descriptions of the builtins: in English in the code (BUILTINS.en.md), in Spanish in

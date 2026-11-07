@@ -1,0 +1,6 @@
+# Test: a builtin of DashOS (A7) in an Amiga program
+# expect: 'channel_create' is only for DashOS (./dash --dashos)
+Main
+    a = channel_create()
+    Print a
+end

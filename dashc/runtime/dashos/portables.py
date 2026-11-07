@@ -34,7 +34,7 @@ def try_one(name, b, tmp):
 
 
 def main():
-    bs = gen_lib.builtins()
+    bs = gen_lib.builtins(dashos=True)
     with tempfile.TemporaryDirectory() as tmp, cf.ThreadPoolExecutor(os.cpu_count()) as ex:
         res = dict(zip(bs, ex.map(lambda n: try_one(n, bs[n], tmp), bs)))
     ok = sorted(n for n, v in res.items() if v)
