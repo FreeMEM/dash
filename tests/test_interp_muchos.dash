@@ -1,0 +1,20 @@
+# Test: una interpolación con más de 16 números. Los números se pasan a texto en 16 huecos que van rotando: con 17 o
+# más en una sola unión, los últimos pisaban a los primeros ("43" por "40"). Lo vio la sonda del editor de mapas de
+# Forja, con 19 números en una línea. También una cadena larga de + con números.
+# expect-out: 40 16 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18
+# expect-out: 40-16-1-2-3-4-5-6-7-8-9-10-11-12-13-14-15-16-17-18
+# expect-out: largo 50
+
+func dieciseis() -> Int
+    return 16
+end
+
+Main
+    a = 40
+    n = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    t = "#{a} #{dieciseis()} #{n[0]} #{n[1]} #{n[2]} #{n[3]} #{n[4]} #{n[5]} #{n[6]} #{n[7]} #{n[8]} #{n[9]} #{n[10]} #{n[11]} #{n[12]} #{n[13]} #{n[14]} #{n[15]} #{n[16]} #{n[17]}"
+    Print t
+    u = "" + a + "-" + dieciseis() + "-" + n[0] + "-" + n[1] + "-" + n[2] + "-" + n[3] + "-" + n[4] + "-" + n[5] + "-" + n[6] + "-" + n[7] + "-" + n[8] + "-" + n[9] + "-" + n[10] + "-" + n[11] + "-" + n[12] + "-" + n[13] + "-" + n[14] + "-" + n[15] + "-" + n[16] + "-" + n[17]
+    Print u
+    Print "largo #{t.length}"
+end
