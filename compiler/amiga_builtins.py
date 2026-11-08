@@ -188,8 +188,9 @@ GRAPHICS_BASIC = {
         name="gfx_flood",
         params=["x", "y", "mode"],
         return_type="void",
-        c_template="Flood(_dash_rp, ${mode}, ${x}, ${y})",
+        c_template="_dash_flood(${x}, ${y}, ${mode})",
         needs_gfx=True,
+        needs_area=True,
         description="Flood fill"
     ),
 

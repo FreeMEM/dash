@@ -1,0 +1,26 @@
+# gfx_flood rellena también en una ventana de window_create, que no tiene búfer de relleno (TmpRas): sin él,
+# Flood no pintaba nada. Modo 0 hasta el color del borde, modo 1 los vecinos del mismo color.
+# expect-out: modo 0 en la caja: 2
+# expect-out: modo 1 en el circulo: 3 fuera 0
+# expect-out: modo 1 fuera: 4 dentro 3
+
+Main
+    screen_open_custom(320, 200, 3, "Relleno")
+    v = window_create("Relleno", 0, 12, 300, 150, 8)
+    gfx_clear()
+    gfx_pen(1)
+    gfx_circle(100, 60, 25)
+    gfx_box(200, 40, 260, 80)
+    gfx_pen_outline(1)
+    gfx_pen(2)
+    gfx_flood(230, 60, 0)
+    Print "modo 0 en la caja: #{gfx_pixel_read(230, 60)}"
+    gfx_pen(3)
+    gfx_flood(100, 60, 1)
+    Print "modo 1 en el circulo: #{gfx_pixel_read(100, 60)} fuera #{gfx_pixel_read(10, 140)}"
+    gfx_pen(4)
+    gfx_flood(10, 140, 1)
+    Print "modo 1 fuera: #{gfx_pixel_read(10, 140)} dentro #{gfx_pixel_read(100, 60)}"
+    window_close(v)
+    screen_close()
+end

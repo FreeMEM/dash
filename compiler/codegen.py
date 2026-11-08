@@ -16784,6 +16784,14 @@ static void _dash_poly_end(void) {
     _dash_area_off();
 }
 
+/* gfx_flood: Flood needs a TmpRas the size of the raster; without one it fills nothing. A window of Dash's has one
+   when the program fills; any other RastPort (a MUI area, the screen) borrows ours while the fill lasts */
+static void _dash_flood(LONG x, LONG y, LONG mode) {
+    _dash_area_on();
+    if (_dash_rp && _dash_rp->TmpRas) Flood(_dash_rp, mode, x, y);
+    _dash_area_off();
+}
+
 static void _dash_area_free_own(void) {
     if (_dash_own_trbuf) { FreeRaster(_dash_own_trbuf, _dash_own_tr_w, _dash_own_tr_h); _dash_own_trbuf = NULL; }
     _dash_own_tr_w = _dash_own_tr_h = 0;

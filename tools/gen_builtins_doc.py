@@ -15,6 +15,7 @@ import compiler.amiga_builtins as builtins_module  # noqa: E402
 from compiler.amiga_builtins import BuiltinFunc  # noqa: E402
 from compiler.codegen import unimplemented_builtins  # noqa: E402
 from compiler.builtins_es import DESC_ES  # noqa: E402
+from compiler import builtins_doc  # noqa: E402
 
 OUTPUTS = {"es": PROJECT_ROOT / "docs" / "BUILTINS.md", "en": PROJECT_ROOT / "docs" / "BUILTINS.en.md"}
 
@@ -77,6 +78,12 @@ TEXTS = {
         "header": "| Función | Devuelve | Descripción | Estado |",
         "unimplemented": "**sin implementar**",
         "total": "Total: {total} funciones, {implemented} implementadas, {missing} sin implementar.",
+        "example": "**Ejemplo** (`{path}`: se compila y se prueba en el emulador con los tests):",
+        "index": "**Índice.** Las que tienen enlace están explicadas más abajo.",
+        "returns": "Devuelve",
+        "see": "Ver también",
+        "types": {"LONG": "Int", "ULONG": "Int", "BOOL": "Bool", "STRPTR": "String", "double": "Double",
+                  "APTR": "Int (dirección)", "DashArrayLong *": "[Int]"},
     },
     "en": {
         "switch": "*English | [Castellano](BUILTINS.md)*",
@@ -87,8 +94,60 @@ TEXTS = {
         "header": "| Function | Returns | Description | Status |",
         "unimplemented": "**not implemented**",
         "total": "Total: {total} functions, {implemented} implemented, {missing} not implemented.",
+        "example": "**Example** (`{path}`: the tests compile it and run it on the emulator):",
+        "index": "**Index.** The ones with a link are explained further down.",
+        "returns": "Returns",
+        "see": "See also",
+        "types": {"LONG": "Int", "ULONG": "Int", "BOOL": "Bool", "STRPTR": "String", "double": "Double",
+                  "APTR": "Int (address)", "DashArrayLong *": "[Int]"},
     },
 }
+
+
+# lines of a test that are for the runner, not for the reader
+RUNNER_LINES = ("# expect", "# emu-", "# ignore-", "# memcheck")
+
+
+def example(path: str) -> str:
+    """The code of a group's example, without the runner's lines"""
+    lines = (PROJECT_ROOT / path).read_text().splitlines()
+    return "\n".join(line for line in lines if not line.startswith(RUNNER_LINES)).strip("\n")
+
+
+def details(lang: str, group: dict, t: dict) -> list:
+    """The explained functions of a group: a heading with an anchor each, the text and the related ones"""
+    out = []
+    for name, b in group.items():
+        doc = builtins_doc.FUNCS.get(name)
+        if not doc:
+            continue
+        ret = t["types"].get(b.return_type)
+        head = f"### `{name}({', '.join(b.params)})`"
+        out += [f'<a id="{name}"></a>', "", head + (f" → `{ret}`" if ret else ""), "", doc[lang].strip(), ""]
+        if doc.get("see"):
+            out += [t["see"] + ": " + ", ".join(f"[`{s}`](#{s})" if s in builtins_doc.FUNCS else f"`{s}`"
+                                                for s in doc["see"]) + ".", ""]
+    return out
+
+
+def check_doc():
+    """Every name in compiler/builtins_doc.py is a builtin and a group, with both languages"""
+    groups = {attr for attr, _, _ in GROUPS}
+    for attr, doc in builtins_doc.GROUPS.items():
+        if attr not in groups:
+            raise SystemExit(f"compiler/builtins_doc.py: {attr} is not a group of GROUPS")
+        if not (doc.get("es") and doc.get("en")):
+            raise SystemExit(f"compiler/builtins_doc.py: the group {attr} needs es and en")
+        if doc.get("example") and not (PROJECT_ROOT / doc["example"]).exists():
+            raise SystemExit(f"compiler/builtins_doc.py: {doc['example']} does not exist")
+    for name, doc in builtins_doc.FUNCS.items():
+        if name not in builtins_module.ALL_BUILTINS:
+            raise SystemExit(f"compiler/builtins_doc.py: {name} is not a builtin")
+        if not (doc.get("es") and doc.get("en")):
+            raise SystemExit(f"compiler/builtins_doc.py: {name} needs es and en")
+        for s in doc.get("see", []):
+            if s not in builtins_module.ALL_BUILTINS:
+                raise SystemExit(f"compiler/builtins_doc.py: {name} sees {s}, which is not a builtin")
 
 
 def render(lang: str) -> str:
@@ -113,9 +172,21 @@ def render(lang: str) -> str:
                 desc = DESC_ES[name].replace("|", "\\|")
             else:
                 desc = b.description.replace("|", "\\|")
-            rows.append(f"| `{name}({params})` | `{b.return_type}` | {desc} | {status} |")
+            call = f"`{name}({params})`"
+            if name in builtins_doc.FUNCS:
+                call = f"[{call}](#{name})"
+            ret = t["types"].get(b.return_type, b.return_type) if b.return_type != "void" else "—"
+            rows.append(f"| {call} | {ret} | {desc} | {status} |")
         title = title_es if lang == "es" else title_en
-        sections += [f"## {title}", "", t["header"], "|---|---|---|---|", *rows, ""]
+        sections += [f"## {title}", ""]
+        gdoc = builtins_doc.GROUPS.get(attr)
+        if gdoc:
+            sections += [gdoc[lang].strip(), ""]
+            if gdoc.get("example"):
+                sections += [t["example"].format(path=gdoc["example"]), "", "```dash", example(gdoc["example"]),
+                             "```", "", t["index"], ""]
+        sections += [t["header"], "|---|---|---|---|", *rows, ""]
+        sections += details(lang, group, t)
     # every builtin must be in a group: a new group missing from GROUPS would be left out silently
     listed = {name for attr, _, _ in GROUPS for name in getattr(builtins_module, attr)}
     left_out = sorted(set(builtins_module.ALL_BUILTINS) - listed)
@@ -127,6 +198,7 @@ def render(lang: str) -> str:
 
 
 def main():
+    check_doc()
     stale = []
     for lang, output in OUTPUTS.items():
         text = render(lang)
