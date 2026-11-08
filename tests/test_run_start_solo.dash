@@ -1,0 +1,14 @@
+# Test: run_start and run_finish in a program that uses no texts link (RUNCAP_RUNTIME also has run_capture, which
+# makes texts with _dash_str_dup: by ./dash --gcc it was an undefined reference). No interpolation: it would
+# bring the texts in.
+# expect-out: lanzado
+# expect-out: fin
+
+Main
+    r = run_start("C:Wait 1", 0)
+    if r != 0
+        Print "lanzado"
+    end
+    run_finish(r)
+    Print "fin"
+end
