@@ -1191,11 +1191,33 @@ static void args_to_stack(Node **a, int n, const char *str)
     }
 }
 
-/* "a#{x}b": DashString_join(n, trozos), con los trozos en un array en la pila */
+/* "a#{x}b": DashString_join(n, trozos), con los trozos en un array en la pila. Con muchos trozos, los primeros se
+   unen antes: DashString_from_int pasa los números a texto en 16 huecos que van rotando, y un número 17 pisaba al
+   primero antes de la unión (la sonda del mapa de Forja, con 19 números, daba "41 20 -1" por "40 20 16"). Como
+   ./dash --gcc, que une de 6 en 6. */
+#define INTERP_TANDA 12
+
 static void gen_interp(Node *n)
 {
     int np = n->args.n, i;
-    char *str = xmalloc(np + 1);
+    char *str;
+    if (np > INTERP_TANDA) {
+        Node head, rest;
+        memset(&head, 0, sizeof head);
+        head.kind = E_INTERP;
+        head.line = n->line;
+        head.col = n->col;
+        head.file = n->file;
+        rest = head;
+        for (i = 0; i < INTERP_TANDA; i++) VEC_PUSH(head.args, n->args.v[i]);
+        VEC_PUSH(rest.args, &head);
+        for (i = INTERP_TANDA; i < np; i++) VEC_PUSH(rest.args, n->args.v[i]);
+        gen_interp(&rest);
+        free(head.args.v);
+        free(rest.args.v);
+        return;
+    }
+    str = xmalloc(np + 1);
     for (i = 0; i < np; i++) str[i] = 1;
     args_to_stack(n->args.v, np, str);
     free(str);
