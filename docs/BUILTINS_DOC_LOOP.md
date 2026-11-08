@@ -49,8 +49,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T9i. ReAction (`REACTION_FUNCTIONS`, 79), con `tests/test_doc_reaction.dash` (en la máquina de 3.2).
 - [x] T9j. RTG, con `tests/test_doc_rtg.dash`.
 - [x] T9k. DashOS, con `tests/dashos/test_dashos_channels.dash` (`tools/dashos_run.py`, en qemu).
-- [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
-  explicar) y `SINTAXIS`, y enlazar a `BUILTINS.md` en vez de repetir.
+- [x] T10. Otras guías: enlaces a `BUILTINS.md`, recuentos al día, el joystick en el puerto 1.
 
 ## Bitácora
 
@@ -128,3 +127,8 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   tiene número: documentado así. Probado en la máquina de 3.2 por los dos caminos.
 - 2026-11-08: T9k. DashOS (32). Las 961 funciones tienen ya su explicación. El texto del ejemplo dice ahora "que
   también es un test" (el del depurador y el de DashOS no van por el runner del emulador).
+- 2026-11-08: T10. El manual y la chuleta usaban el joystick en el puerto 0 (el del ratón): ahora el 1. El manual
+  decía que `wait_click` gasta CPU. La tabla "Funciones por categoría" del manual (738, desfasada) pasa a un enlace a
+  `BUILTINS.md`; los recuentos del README y de DOCUMENTACION_LENGUAJE, a 961. Las secciones 11 a 16, GadTools,
+  ReAction y MUI del manual enlazan con su grupo (cada grupo tiene ahora un ancla sin acentos, `#graphics_basic`).
+  Revisado que todos los enlaces a `BUILTINS.md` llevan a un ancla que existe. SINTAXIS ya enlazaba. Plan terminado.

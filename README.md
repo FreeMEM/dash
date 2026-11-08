@@ -93,7 +93,7 @@ errors").
 
 ### Amiga API
 
-836 built-in functions, all implemented (list generated from the code in [docs/BUILTINS.en.md](docs/BUILTINS.en.md)).
+961 built-in functions, all implemented, each one explained with its parameters and an example per group in [docs/BUILTINS.en.md](docs/BUILTINS.en.md) (generated from the code).
 
 - **Intuition** — Windows, screens, event loops (also across several windows), menus, `On Click`, `On Timer`;
   `window_create` with the inner size (flag 8) and the window borders (`window_border_top`...) and the
@@ -468,7 +468,7 @@ docs/                 Documentation
 - [Reference manual](docs/MANUAL_REFERENCIA.en.md) — Programmer's reference
 - [Comparison with Blitz, AMOS and C](docs/COMPARATIVA.en.md) — Speed, memory and stability measured on the A500 and A1200
 - [Quick Reference](docs/QUICK_REFERENCE.en.md) — Cheat sheet
-- [Built-in functions](docs/BUILTINS.en.md) — The actual list, generated from the code
+- [Built-in functions](docs/BUILTINS.en.md) — Every function explained, by group, generated from the code
 - [Versions](docs/VERSIONES.en.md) — What each number means and the notes of each version
 - [MUI in Dash](docs/MUI_DISEÑO.en.md) — Design of the MUI API
 - [MUI visual editor](docs/MUI_EDITOR.en.md) — The `.dashui` format and the VS Code extension

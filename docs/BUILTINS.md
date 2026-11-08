@@ -9,6 +9,8 @@ usarlas da el error `Builtin 'x' is declared but not implemented yet`.
 
 Total: 961 funciones, 961 implementadas, 0 sin implementar.
 
+<a id="graphics_basic"></a>
+
 ## Gráficos básicos
 
 Dibujo con la `graphics.library` del sistema: puntos, líneas, rectángulos, círculos, polígonos y texto, con los
@@ -450,6 +452,8 @@ Copia un rectángulo del destino a otro sitio del mismo destino. La zona de orig
 un bitmap fuera de pantalla están los `bitmap_*`.
 
 Ver también: [`gfx_scroll`](#gfx_scroll), [`bitmap_draw_to`](#bitmap_draw_to).
+
+<a id="graphics_advanced"></a>
 
 ## Gráficos avanzados
 
@@ -1677,6 +1681,8 @@ Los `gfx_*` vuelven a dibujar donde dibujaban antes del `bitmap_draw_to`: la ven
 
 Ver también: [`bitmap_draw_to`](#bitmap_draw_to).
 
+<a id="input_functions"></a>
+
 ## Entrada (teclado, ratón, joystick)
 
 El teclado, el ratón y el joystick, y las pantallas propias del programa.
@@ -2164,6 +2170,8 @@ Devuelve `true` si el botón de disparo está pulsado. Es `joy_button`.
 
 Ver también: [`joy_button`](#joy_button).
 
+<a id="gadtools_functions"></a>
+
 ## GadTools
 
 Gadgets de GadTools para una sola ventana, con su propio bucle de eventos. Es la forma más antigua de Dash; para
@@ -2459,6 +2467,8 @@ Cambia lo que enseña un `gt_text` o un `gt_string`.
 
 Ver también: [`gt_get_string`](#gt_get_string).
 
+<a id="menu_functions"></a>
+
 ## Menús
 
 Los menús de la barra de la pantalla para la ventana de `gt_init`. Se describen en orden (`menu_title`, sus
@@ -2580,6 +2590,8 @@ Va después de `menu_attach`.
 
 Ver también: [`menu_attach`](#menu_attach).
 
+<a id="asl_functions"></a>
+
 ## Requesters ASL
 
 La petición de ficheros del sistema en dos pasos: `file_open_dialog` o `file_save_dialog` la enseñan, y después
@@ -2638,6 +2650,8 @@ Ver también: [`file_get_path`](#file_get_path), [`file_fullpath`](#file_fullpat
 Devuelve la ruta entera de la última petición aceptada: el cajón y el nombre, con su `/` si hace falta.
 
 Ver también: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file).
+
+<a id="reaction_functions"></a>
 
 ## ReAction
 
@@ -3526,6 +3540,8 @@ Lo añade al grupo abierto de la ventana actual. Devuelve 1, o 0 si no pudo.
 
 Ver también: [`ra_get_string`](#ra_get_string).
 
+<a id="system_functions"></a>
+
 ## Sistema y memoria
 
 La memoria del Amiga, esperar, números al azar y lo más cercano a la máquina: leer y escribir direcciones de memoria.
@@ -3922,6 +3938,8 @@ Solo vale antes de que el programa pida memoria: la primera línea de `Main`. Tr
 datos; pequeños, en un Amiga con poca memoria. Devuelve `false` si ya es tarde o el tamaño no vale.
 
 Ver también: [`mem_trim`](#mem_trim).
+
+<a id="dos_functions"></a>
 
 ## Ficheros (DOS)
 
@@ -4355,6 +4373,8 @@ Guarda el búfer como el fichero entero. Devuelve los bytes escritos: si no es `
 
 Ver también: [`file_load`](#file_load), [`file_write_text`](#file_write_text).
 
+<a id="buffer_functions"></a>
+
 ## Buffers
 
 Memoria en bruto para datos binarios: ficheros que no son texto, imágenes, lo que se manda por la red. Un búfer es
@@ -4485,6 +4505,8 @@ Ver también: [`buffer_fill`](#buffer_fill).
 - `value`: el byte con el que se llenan.
 
 Ver también: [`buffer_copy`](#buffer_copy).
+
+<a id="text_functions"></a>
 
 ## Texto
 
@@ -4767,6 +4789,8 @@ Ver también: [`str_to_buffer`](#str_to_buffer).
 Copia los bytes del texto, sin el 0 del final, y devuelve cuántos copió.
 
 Ver también: [`str_from_buffer`](#str_from_buffer).
+
+<a id="net_functions"></a>
 
 ## Red (TCP)
 
@@ -5121,6 +5145,8 @@ Devuelve la señal que dan los sockets con cada novedad (conectado, datos, cerra
 
 Ver también: [`mui_wait_event_signals`](#mui_wait_event_signals).
 
+<a id="tls_functions"></a>
+
 ## TLS (AmiSSL)
 
 Conexiones cifradas (TLS, lo de HTTPS) con AmiSSL, que tiene que estar instalado. Se conecta el socket con
@@ -5231,6 +5257,8 @@ Ver también: [`net_close`](#net_close).
 - `tls`: la conexión TLS.
 
 Devuelve `true` si retomó una sesión anterior con el mismo servidor, sin volver a intercambiar claves (más rápido).
+
+<a id="font_functions"></a>
 
 ## Fuentes y colores
 
@@ -5410,6 +5438,8 @@ Avisa de que ese color ya no hace falta. Cuando no queda ningún uso, el sistema
 
 Ver también: [`color_pen`](#color_pen).
 
+<a id="blend_functions"></a>
+
 ## Transparencia y degradados
 
 Color semitransparente sobre lo ya dibujado. En pantallas de color verdadero (RTG de 15 bits o más) se mezcla de
@@ -5457,6 +5487,8 @@ Devuelve el color de ese píxel como `0xRRGGBB`; en una pantalla de paleta, el d
 
 Ver también: [`gfx_pixel_read`](#gfx_pixel_read).
 
+<a id="rgb_functions"></a>
+
 ## Imágenes RGB desde un buffer (vídeo)
 
 Dibujar una imagen que el programa tiene en un búfer, con 3 bytes por píxel (rojo, verde, azul), como un fotograma
@@ -5490,6 +5522,8 @@ Ver también: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#
 La dibuja agrandada o reducida, tomando para cada punto el píxel más cercano.
 
 Ver también: [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+<a id="task_functions"></a>
 
 ## Tareas, reloj, traducciones y escritorio
 
@@ -6491,6 +6525,8 @@ La olvida y deja libre su número; si sigue en marcha, espera a que acabe.
 
 Ver también: [`task_start`](#task_start).
 
+<a id="image_functions"></a>
+
 ## Imágenes (datatypes)
 
 Imágenes de fichero con los datatypes del sistema: ILBM siempre; PNG, GIF o JPEG si están instalados sus
@@ -6597,6 +6633,8 @@ Devuelve una imagen con esos píxeles, para `image_draw`, o 0. En pantallas de p
 
 Ver también: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decoded).
 
+<a id="args_functions"></a>
+
 ## Argumentos
 
 Lo que recibe el programa al arrancar: los argumentos del Shell, o los iconos de proyecto con los que se abrió
@@ -6700,6 +6738,8 @@ Devuelve los milisegundos desde que empezó el programa, con el reloj fino del s
 algo o mover las cosas de un juego al mismo ritmo en cualquier máquina.
 
 Ver también: [`time_delay`](#time_delay).
+
+<a id="zlib_functions"></a>
 
 ## Compresión (zlib)
 
@@ -6867,6 +6907,8 @@ Lo acaba y escribe sus 20 bytes en `out`. Devuelve `false` si ese número no est
 
 Ver también: [`sha1_hex`](#sha1_hex).
 
+<a id="utf8_functions"></a>
+
 ## UTF-8
 
 Los textos de Dash son Latin-1, pero lo que llega de la red suele ser UTF-8, donde un carácter ocupa de 1 a 4
@@ -6969,6 +7011,8 @@ Devuelve la posición del primer byte que no es UTF-8 válido (o empieza un car�
 
 Ver también: [`utf8_to_latin1`](#utf8_to_latin1).
 
+<a id="bufsearch_functions"></a>
+
 ## Comparar y buscar en un búfer
 
 Comparar y buscar dentro de un búfer sin pasarlo a texto, para leer formatos o protocolos deprisa.
@@ -7017,6 +7061,8 @@ Devuelve la posición del primer byte que sea cualquiera de los de `bytes`, o -1
 
 Ver también: [`buffer_find_byte`](#buffer_find_byte).
 
+<a id="double_functions"></a>
+
 ## Double y texto
 
 Pasar un `Double` (64 bits) a texto con los decimales que se quieran, y un texto a `Double`, sin perder cifras.
@@ -7046,6 +7092,8 @@ Ver también: [`str_to_double`](#str_to_double).
 Devuelve el número del principio del texto, exacto hasta 17 cifras; 0.0 si no hay número. Es `Double(s)`.
 
 Ver también: [`str_from_double`](#str_from_double).
+
+<a id="math_functions"></a>
 
 ## Matemáticas de Double
 
@@ -7272,6 +7320,8 @@ Devuelve `true` si `x` es `inf` o `-inf`, como `1.0 / 0.0`.
 
 Ver también: [`is_nan`](#is_nan).
 
+<a id="regex_functions"></a>
+
 ## Expresiones regulares y comodines
 
 Expresiones regulares (la sintaxis común de ICU) y comodines de hoja de cálculo sobre textos UTF-8; las
@@ -7336,6 +7386,8 @@ Ver también: [`regex_match`](#regex_match).
 Devuelve `true` si el texto entero encaja. Para los comodines de AmigaDOS (`#?`), `dialog_file`.
 
 Ver también: [`regex_match`](#regex_match).
+
+<a id="siminput_functions"></a>
 
 ## Simular teclado y ratón
 
@@ -7498,6 +7550,8 @@ Devuelve el título de la ventana activa, o `""`. Para esperar a que se abra la 
 
 Ver también: [`window_find`](#window_find).
 
+<a id="clip_functions"></a>
+
 ## Portapapeles
 
 El portapapeles del sistema: copiar y pegar texto con los demás programas, y bloques propios que solo entiende el
@@ -7563,6 +7617,8 @@ Copia el bloque. Devuelve sus bytes, -1 si no hay, -2 si no cabe.
 
 Ver también: [`clip_block_size`](#clip_block_size).
 
+<a id="collate_functions"></a>
+
 ## Ordenar textos según el idioma
 
 Ordenar textos como lo hace el idioma del usuario, no por el código de cada letra.
@@ -7580,6 +7636,8 @@ Ordenar textos como lo hace el idioma del usuario, no por el código de cada let
 
 Devuelve -1 si `a` va antes, 0 si son iguales y 1 si va antes `b`, en el orden del idioma del usuario: los acentos
 y las mayúsculas cuentan solo después de las letras ("árbol" antes que "barco").
+
+<a id="sysprog_functions"></a>
 
 ## Sistema y programa
 
@@ -8067,6 +8125,8 @@ Devuelve adónde apunta: un cajón (`"Workbench:C"`), varios separados por `;`, 
 
 Ver también: [`assign_name`](#assign_name).
 
+<a id="json_functions"></a>
+
 ## JSON leído en C (para lib/json.dash)
 
 La parte en C del lector de JSON. Para usar JSON en un programa, mejor el módulo `lib/json.dash`, que hace con
@@ -8139,6 +8199,8 @@ Ver también: [`json_scan_name`](#json_scan_name).
 Devuelve su nombre dentro de su objeto; `""` en una lista o arriba del todo.
 
 Ver también: [`json_scan_text`](#json_scan_text).
+
+<a id="debugger_functions"></a>
 
 ## Depurador (el programa depurado, con dash --debug)
 
@@ -8517,6 +8579,8 @@ Devuelve todo lo que el programa ha escrito hasta ahora, su salida y sus errores
 
 Ver también: [`dbg_rc`](#dbg_rc).
 
+<a id="imgdec_functions"></a>
+
 ## Imágenes decodificadas por el programa (sin datatypes)
 
 Decodificar JPEG, WebP, PNG, GIF, BMP y SVG con código del propio programa, sin datatypes: va en cualquier Amiga.
@@ -8653,6 +8717,8 @@ Como `image_from_decoded`, a ese tamaño y con los bordes suaves: cada punto es 
 
 Ver también: [`image_from_decoded`](#image_from_decoded).
 
+<a id="ttf_functions"></a>
+
 ## Fuentes TrueType, WOFF y WOFF2
 
 Fuentes TrueType (TTF, OTF con contornos TrueType, WOFF y WOFF2) convertidas a una fuente del Amiga de un tamaño,
@@ -8711,6 +8777,8 @@ Ver también: [`font_from_ttf`](#font_from_ttf).
 olvida. Para cuando el fichero ha cambiado.
 
 Ver también: [`font_from_ttf`](#font_from_ttf).
+
+<a id="netbg_functions"></a>
 
 ## Red en una tarea aparte
 
@@ -8857,6 +8925,8 @@ Acaba la tarea de la red ya, cerrando lo que esté abierto, y la espera. Al acab
 
 Ver también: [`net_bg_idle`](#net_bg_idle).
 
+<a id="otherwin_functions"></a>
+
 ## Ventanas de otros programas (pruebas)
 
 Encontrar la ventana de otro programa por su título, ponerla delante, saber dónde están sus gadgets y leer los
@@ -8990,6 +9060,8 @@ Ver también: [`color_pen`](#color_pen).
 - `command`: como Exchange: 15 desactivar, 17 activar, 19 enseñar, 21 ocultar, 23 quitar.
 
 Devuelve 0 si se hizo, -1 si no hay esa commodity, -2 si no tiene puerto, -99 sin `commodities.library`.
+
+<a id="wm_functions"></a>
 
 ## Gestor de ventanas (las de todos los programas)
 
@@ -9305,6 +9377,8 @@ Lo libera. Los que queden, al acabar.
 
 Ver también: [`icon_load`](#icon_load).
 
+<a id="audio_functions"></a>
+
 ## Audio
 
 Sonido con los cuatro canales del Amiga (Paula), por el `audio.device` del sistema: efectos (`sound_*`), música de
@@ -9588,6 +9662,8 @@ Toca un tono puro (una onda senoidal) y vuelve enseguida, sin esperar a que acab
 ningún fichero.
 
 Ver también: [`sound_play`](#sound_play).
+
+<a id="intuition_expanded"></a>
 
 ## Intuition
 
@@ -10360,6 +10436,8 @@ Abre la petición de fuentes del sistema y espera. Devuelve la fuente elegida co
 
 Ver también: [`font_open`](#font_open).
 
+<a id="rtg_functions"></a>
+
 ## RTG (CyberGraphX / Picasso96)
 
 Tarjetas gráficas (RTG) con CyberGraphX o Picasso96: pantallas de 16, 24 o 32 bits donde cada píxel lleva su
@@ -10632,6 +10710,8 @@ Ver también: [`rtg_scale_blit`](#rtg_scale_blit).
 Como `rtg_blit`, agrandando o reduciendo.
 
 Ver también: [`rtg_blit`](#rtg_blit).
+
+<a id="mui_functions"></a>
 
 ## MUI
 
@@ -12025,6 +12105,8 @@ Como `mui_wait_event` sin esperar: devuelve 0 si no hay evento. Para un bucle qu
 solo espera, `mui_wait_event` o `mui_timer` gastan menos.
 
 Ver también: [`mui_wait_event`](#mui_wait_event).
+
+<a id="dashos_functions"></a>
 
 ## DashOS (solo con ./dash --dashos)
 

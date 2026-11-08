@@ -9,6 +9,8 @@ using them gives the error `Builtin 'x' is declared but not implemented yet`.
 
 Total: 961 functions, 961 implemented, 0 not implemented.
 
+<a id="graphics_basic"></a>
+
 ## Basic graphics
 
 Drawing with the system's `graphics.library`: points, lines, rectangles, circles, polygons and text, with the
@@ -450,6 +452,8 @@ Copies a rectangle of the target to another place in the same target. The source
 an off-screen bitmap there are the `bitmap_*` functions.
 
 See also: [`gfx_scroll`](#gfx_scroll), [`bitmap_draw_to`](#bitmap_draw_to).
+
+<a id="graphics_advanced"></a>
 
 ## Advanced graphics
 
@@ -1675,6 +1679,8 @@ The `gfx_*` functions go back to drawing where they drew before `bitmap_draw_to`
 
 See also: [`bitmap_draw_to`](#bitmap_draw_to).
 
+<a id="input_functions"></a>
+
 ## Input (keyboard, mouse, joystick)
 
 The keyboard, the mouse and the joystick, and the program's own screens.
@@ -2160,6 +2166,8 @@ Returns `true` if the fire button is held. It is `joy_button`.
 
 See also: [`joy_button`](#joy_button).
 
+<a id="gadtools_functions"></a>
+
 ## GadTools
 
 GadTools gadgets for a single window, with their own event loop. It is Dash's oldest way; for new programs, the
@@ -2456,6 +2464,8 @@ Changes what a `gt_text` or a `gt_string` shows.
 
 See also: [`gt_get_string`](#gt_get_string).
 
+<a id="menu_functions"></a>
+
 ## Menus
 
 The screen bar's menus for the `gt_init` window. They are described in order (`menu_title`, its `menu_item`s, the
@@ -2577,6 +2587,8 @@ It goes after `menu_attach`.
 
 See also: [`menu_attach`](#menu_attach).
 
+<a id="asl_functions"></a>
+
 ## ASL requesters
 
 The system's file requester in two steps: `file_open_dialog` or `file_save_dialog` show it, and then
@@ -2635,6 +2647,8 @@ See also: [`file_get_path`](#file_get_path), [`file_fullpath`](#file_fullpath).
 Returns the full path of the last accepted requester: the drawer and the name, with a `/` when needed.
 
 See also: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file).
+
+<a id="reaction_functions"></a>
 
 ## ReAction
 
@@ -3524,6 +3538,8 @@ Adds it to the current window's open group. Returns 1, or 0 if it could not.
 
 See also: [`ra_get_string`](#ra_get_string).
 
+<a id="system_functions"></a>
+
 ## System and memory
 
 The Amiga's memory, waiting, random numbers and what is closest to the machine: reading and writing memory
@@ -3922,6 +3938,8 @@ It only works before the program asks for memory: the first line of `Main`. Larg
 ones, an Amiga short of memory. Returns `false` if it is too late or the size is not valid.
 
 See also: [`mem_trim`](#mem_trim).
+
+<a id="dos_functions"></a>
 
 ## Files (DOS)
 
@@ -4357,6 +4375,8 @@ create it).
 
 See also: [`file_load`](#file_load), [`file_write_text`](#file_write_text).
 
+<a id="buffer_functions"></a>
+
 ## Buffers
 
 Raw memory for binary data: files that are not text, pictures, what goes over the network. A buffer is the address
@@ -4486,6 +4506,8 @@ See also: [`buffer_fill`](#buffer_fill).
 - `value`: the byte to fill them with.
 
 See also: [`buffer_copy`](#buffer_copy).
+
+<a id="text_functions"></a>
 
 ## Text
 
@@ -4767,6 +4789,8 @@ See also: [`str_to_buffer`](#str_to_buffer).
 Copies the text's bytes, without the final 0, and returns how many it copied.
 
 See also: [`str_from_buffer`](#str_from_buffer).
+
+<a id="net_functions"></a>
 
 ## Network (TCP)
 
@@ -5122,6 +5146,8 @@ Returns the signal sockets give on every change (connected, data, closed), for
 
 See also: [`mui_wait_event_signals`](#mui_wait_event_signals).
 
+<a id="tls_functions"></a>
+
 ## TLS (AmiSSL)
 
 Encrypted connections (TLS, what HTTPS uses) with AmiSSL, which must be installed. Connect the socket with
@@ -5232,6 +5258,8 @@ See also: [`net_close`](#net_close).
 - `tls`: the TLS connection.
 
 Returns `true` if it resumed an earlier session with the same server, without exchanging keys again (faster).
+
+<a id="font_functions"></a>
 
 ## Fonts and colors
 
@@ -5410,6 +5438,8 @@ Says that colour is no longer needed. When no use is left, the system may give i
 
 See also: [`color_pen`](#color_pen).
 
+<a id="blend_functions"></a>
+
 ## Transparency and gradients
 
 Semi-transparent colour over what is already drawn. On true-colour screens (RTG of 15 bits or more) it really
@@ -5457,6 +5487,8 @@ Returns that pixel's colour as `0xRRGGBB`; on a palette screen, the one of its c
 
 See also: [`gfx_pixel_read`](#gfx_pixel_read).
 
+<a id="rgb_functions"></a>
+
 ## RGB images from a buffer (video)
 
 Drawing a picture the program holds in a buffer, 3 bytes per pixel (red, green, blue), like a video frame. On RTG
@@ -5490,6 +5522,8 @@ See also: [`gfx_rgb_draw_scaled`](#gfx_rgb_draw_scaled), [`gfx_pens_draw`](#gfx_
 Draws it enlarged or reduced, taking the nearest pixel for each point.
 
 See also: [`gfx_rgb_draw`](#gfx_rgb_draw).
+
+<a id="task_functions"></a>
 
 ## Tasks, clock, translations and desktop
 
@@ -6493,6 +6527,8 @@ Forgets it and frees its number; if it is still running, it waits for it to end.
 
 See also: [`task_start`](#task_start).
 
+<a id="image_functions"></a>
+
 ## Images (datatypes)
 
 Pictures from files with the system's datatypes: always ILBM; PNG, GIF or JPEG if their datatypes are installed.
@@ -6598,6 +6634,8 @@ Returns a picture with those pixels, for `image_draw`, or 0. On palette screens 
 
 See also: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decoded).
 
+<a id="args_functions"></a>
+
 ## Arguments
 
 What the program gets when it starts: the Shell arguments, or the project icons it was opened with from the
@@ -6701,6 +6739,8 @@ Returns the milliseconds since the program started, with the system's fine clock
 game's things at the same pace on any machine.
 
 See also: [`time_delay`](#time_delay).
+
+<a id="zlib_functions"></a>
 
 ## Compression (zlib)
 
@@ -6868,6 +6908,8 @@ Finishes it and writes its 20 bytes to `out`. Returns `false` if that number is 
 
 See also: [`sha1_hex`](#sha1_hex).
 
+<a id="utf8_functions"></a>
+
 ## UTF-8
 
 Dash's texts are Latin-1, but what comes from the network is usually UTF-8, where a character takes 1 to 4 bytes.
@@ -6969,6 +7011,8 @@ Returns the position of the first byte that is not valid UTF-8 (or starts a char
 
 See also: [`utf8_to_latin1`](#utf8_to_latin1).
 
+<a id="bufsearch_functions"></a>
+
 ## Comparing and searching in a buffer
 
 Compare and search inside a buffer without turning it into a text, to read formats or protocols quickly.
@@ -7017,6 +7061,8 @@ Returns the position of the first byte that is any of those in `bytes`, or -1.
 
 See also: [`buffer_find_byte`](#buffer_find_byte).
 
+<a id="double_functions"></a>
+
 ## Double and text
 
 Turning a `Double` (64 bits) into a text with the decimals you want, and a text into a `Double`, without losing
@@ -7047,6 +7093,8 @@ See also: [`str_to_double`](#str_to_double).
 Returns the number at the start of the text, exact to 17 digits; 0.0 if there is no number. It is `Double(s)`.
 
 See also: [`str_from_double`](#str_from_double).
+
+<a id="math_functions"></a>
 
 ## Double math
 
@@ -7273,6 +7321,8 @@ Returns `true` if `x` is `inf` or `-inf`, like `1.0 / 0.0`.
 
 See also: [`is_nan`](#is_nan).
 
+<a id="regex_functions"></a>
+
 ## Regular expressions and wildcards
 
 Regular expressions (ICU's common syntax) and spreadsheet wildcards on UTF-8 texts; positions and lengths are in
@@ -7337,6 +7387,8 @@ See also: [`regex_match`](#regex_match).
 Returns `true` if the whole text matches. For AmigaDOS wildcards (`#?`), `dialog_file`.
 
 See also: [`regex_match`](#regex_match).
+
+<a id="siminput_functions"></a>
 
 ## Simulated keyboard and mouse
 
@@ -7500,6 +7552,8 @@ Returns the active window's title, or `""`. To wait for the window of the progra
 
 See also: [`window_find`](#window_find).
 
+<a id="clip_functions"></a>
+
 ## Clipboard
 
 The system clipboard: copying and pasting text with other programs, and blocks of your own that only the program
@@ -7565,6 +7619,8 @@ Copies the block. Returns its bytes, -1 if there is none, -2 if it does not fit.
 
 See also: [`clip_block_size`](#clip_block_size).
 
+<a id="collate_functions"></a>
+
 ## Sorting texts by language
 
 Sorting texts the way the user's language does, not by each letter's code.
@@ -7582,6 +7638,8 @@ Sorting texts the way the user's language does, not by each letter's code.
 
 Returns -1 if `a` goes first, 0 if they are equal and 1 if `b` goes first, in the user's language order: accents and
 case only count after the letters ("árbol" before "barco").
+
+<a id="sysprog_functions"></a>
 
 ## System and program
 
@@ -8069,6 +8127,8 @@ Returns where it points: a drawer (`"Workbench:C"`), several separated by `;`, o
 
 See also: [`assign_name`](#assign_name).
 
+<a id="json_functions"></a>
+
 ## JSON read in C (for lib/json.dash)
 
 The C part of the JSON reader. To use JSON in a program, the `lib/json.dash` module is better: it builds an
@@ -8141,6 +8201,8 @@ See also: [`json_scan_name`](#json_scan_name).
 Returns its name inside its object; `""` in a list or at the top.
 
 See also: [`json_scan_text`](#json_scan_text).
+
+<a id="debugger_functions"></a>
 
 ## Debugger (the debugged program, built with dash --debug)
 
@@ -8518,6 +8580,8 @@ Returns everything the program has written so far, its output and its errors.
 
 See also: [`dbg_rc`](#dbg_rc).
 
+<a id="imgdec_functions"></a>
+
 ## Pictures decoded by the program (no datatypes)
 
 Decoding JPEG, WebP, PNG, GIF, BMP and SVG with the program's own code, without datatypes: it works on any Amiga.
@@ -8654,6 +8718,8 @@ Like `image_from_decoded`, at that size and with smooth edges: each point is the
 
 See also: [`image_from_decoded`](#image_from_decoded).
 
+<a id="ttf_functions"></a>
+
 ## TrueType, WOFF and WOFF2 fonts
 
 TrueType fonts (TTF, OTF with TrueType outlines, WOFF and WOFF2) turned into an Amiga font of one size, with their
@@ -8711,6 +8777,8 @@ See also: [`font_from_ttf`](#font_from_ttf).
 one. For when the file has changed.
 
 See also: [`font_from_ttf`](#font_from_ttf).
+
+<a id="netbg_functions"></a>
 
 ## Network in a task of its own
 
@@ -8858,6 +8926,8 @@ Ends the network task now, closing whatever is open, and waits for it. It happen
 
 See also: [`net_bg_idle`](#net_bg_idle).
 
+<a id="otherwin_functions"></a>
+
 ## Other programs' windows (tests)
 
 Finding another program's window by its title, bringing it to the front, finding out where its gadgets are and
@@ -8991,6 +9061,8 @@ See also: [`color_pen`](#color_pen).
 - `command`: as Exchange does: 15 disable, 17 enable, 19 show, 21 hide, 23 quit.
 
 Returns 0 if done, -1 if there is no such commodity, -2 if it has no port, -99 without `commodities.library`.
+
+<a id="wm_functions"></a>
 
 ## Window manager (every program's windows)
 
@@ -9306,6 +9378,8 @@ Frees it. Those left, at the end.
 
 See also: [`icon_load`](#icon_load).
 
+<a id="audio_functions"></a>
+
 ## Audio
 
 Sound with the Amiga's four channels (Paula), through the system's `audio.device`: effects (`sound_*`), ProTracker
@@ -9588,6 +9662,8 @@ Plays a pure tone (a sine wave) and returns at once, without waiting for it to e
 file.
 
 See also: [`sound_play`](#sound_play).
+
+<a id="intuition_expanded"></a>
 
 ## Intuition
 
@@ -10356,6 +10432,8 @@ or `""` if it was cancelled. To open it, the name and the size go separately to 
 
 See also: [`font_open`](#font_open).
 
+<a id="rtg_functions"></a>
+
 ## RTG (CyberGraphX / Picasso96)
 
 Graphics cards (RTG) with CyberGraphX or Picasso96: 16, 24 or 32-bit screens where each pixel carries its RGB
@@ -10627,6 +10705,8 @@ See also: [`rtg_scale_blit`](#rtg_scale_blit).
 Like `rtg_blit`, enlarging or reducing.
 
 See also: [`rtg_blit`](#rtg_blit).
+
+<a id="mui_functions"></a>
 
 ## MUI
 
@@ -12018,6 +12098,8 @@ Like `mui_wait_event` without waiting: returns 0 if there is no event. For a loo
 time; if it only waits, `mui_wait_event` or `mui_timer` use less.
 
 See also: [`mui_wait_event`](#mui_wait_event).
+
+<a id="dashos_functions"></a>
 
 ## DashOS (only with ./dash --dashos)
 

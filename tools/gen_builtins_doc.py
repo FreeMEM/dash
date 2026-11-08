@@ -180,7 +180,7 @@ def render(lang: str) -> str:
             ret = t["types"].get(b.return_type, b.return_type) if b.return_type != "void" else "—"
             rows.append(f"| {call} | {ret} | {desc} | {status} |")
         title = title_es if lang == "es" else title_en
-        sections += [f"## {title}", ""]
+        sections += [f'<a id="{attr.lower()}"></a>', "", f"## {title}", ""]   # an anchor without accents
         gdoc = builtins_doc.GROUPS.get(attr)
         if gdoc:
             sections += [gdoc[lang].strip(), ""]
