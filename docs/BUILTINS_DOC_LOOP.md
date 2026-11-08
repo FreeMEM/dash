@@ -48,7 +48,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T9h. Depurador (`DEBUGGER_FUNCTIONS`), con `dashc/tests/depurar/basico.dash` de ejemplo (`dashc/tests/depurar.py`).
 - [x] T9i. ReAction (`REACTION_FUNCTIONS`, 79), con `tests/test_doc_reaction.dash` (en la máquina de 3.2).
 - [x] T9j. RTG, con `tests/test_doc_rtg.dash`.
-- [ ] T9k. DashOS.
+- [x] T9k. DashOS, con `tests/dashos/test_dashos_channels.dash` (`tools/dashos_run.py`, en qemu).
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
   explicar) y `SINTAXIS`, y enlazar a `BUILTINS.md` en vez de repetir.
 
@@ -126,3 +126,5 @@ Primero los grupos que más usa la gente del grupo de Telegram.
   del ratón sin ejemplo propio (necesitan el Workbench cargado o hardware); los cubren sus tests.
 - 2026-11-08: T9i. ReAction (79). Los `ra_add_*` devuelven 1 o 0 (no el número del gadget) y `ra_add_label` no
   tiene número: documentado así. Probado en la máquina de 3.2 por los dos caminos.
+- 2026-11-08: T9k. DashOS (32). Las 961 funciones tienen ya su explicación. El texto del ejemplo dice ahora "que
+  también es un test" (el del depurador y el de DashOS no van por el runner del emulador).

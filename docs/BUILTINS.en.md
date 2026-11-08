@@ -34,7 +34,7 @@ with any RGB colour without thinking about the palette there are `color_pen` (Fo
 **The usual flow:** open the screen or the window, set the colours, pick the pen, draw, wait (`key_wait`, an
 `EventLoop`) and close.
 
-**Example** (`tests/test_doc_graficos.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_graficos.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Gráficos básicos: una pantalla propia con su paleta, una ventana y unas figuras.
@@ -483,7 +483,7 @@ go.
 
 Pictures come from IFF ILBM files, the ones Deluxe Paint, PPaint and Forja's sprite editor save.
 
-**Example** (`tests/test_doc_sprites.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_sprites.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Gráficos avanzados: un BOB de dos fotogramas dibujado desde el programa, que se mueve sobre un fondo y choca con
@@ -540,7 +540,7 @@ Main
 end
 ```
 
-**Example** (`tests/test_doc_tiles.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_tiles.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Mapas de tiles: un nivel hecho desde el programa, con un tileset de dos tiles, pintado en la pantalla, guardado y
@@ -592,7 +592,7 @@ Main
 end
 ```
 
-**Example** (`tests/test_doc_bitmaps.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_bitmaps.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Bitmaps y copper: un fondo preparado fuera de pantalla y copiado de golpe, guardado en un IFF y vuelto a cargar,
@@ -1700,7 +1700,7 @@ plugged in there.
 done close the windows and then the screen. There is one at a time. To animate without flicker,
 `screen_double_buffer` and `screen_flip`.
 
-**Example** (`tests/test_doc_entrada.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_entrada.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Entrada: el bucle de un juego que mueve un cuadrado con el joystick o las flechas, en una pantalla propia.
@@ -2179,7 +2179,7 @@ MUI.
 `gt_init` again starts from scratch: it frees the previous gadgets and menus. Everything is freed when the program
 ends.
 
-**Example** (`tests/test_doc_gadtools.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_gadtools.dash`, which is also a test: it runs with the others):
 
 ```dash
 # GadTools y menús: una ventana con gadgets, un menú con una opción de marca, y su bucle.
@@ -2655,7 +2655,7 @@ numbered gadgets.
 
 Values are read and changed by the gadget's number: `ra_get_value`, `ra_set_value`, `ra_get_string`...
 
-**Example** (`tests/test_doc_reaction.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_reaction.dash`, which is also a test: it runs with the others):
 
 ```dash
 # ReAction (AmigaOS 3.2): una ventana que se coloca sola, con un formulario y botones, y su bucle.
@@ -3540,7 +3540,7 @@ for the screen's next frame, to animate at its pace.
 Amiga. `retain` and `release` touch the reference count Dash keeps on its own: getting it wrong frees an object
 still in use.
 
-**Example** (`tests/test_doc_sistema.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_sistema.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Sistema y memoria: cuánta memoria hay, números al azar repetibles, una arena y esperar.
@@ -3946,7 +3946,7 @@ drawer). A path without a volume counts from the current drawer. Case does not m
 `file_write_line`, `file_print`) use a `dos.library` buffer, fast for small things. `file_read` and `file_write` go
 direct. Do not mix them on the same file without a `file_seek` in between.
 
-**Example** (`tests/test_doc_ficheros.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_ficheros.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Ficheros: escribir unas líneas, leerlas una a una, mirar un cajón, renombrar y borrar.
@@ -4499,7 +4499,7 @@ Texts are Latin-1, one byte per character: ñ and accented vowels take one. A te
 data from a file or a buffer becomes a text, 0 bytes turn into spaces. For binary data, buffers. For UTF-8 text
 (from the network), the UTF-8 group.
 
-**Example** (`tests/test_doc_texto.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_texto.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Texto y búferes: leer un fichero de ajustes "clave = valor", y la cabecera de un fichero binario en un búfer.
@@ -4786,7 +4786,7 @@ something else, the "Network in a task of its own" group.
 
 **HTTPS** and other encrypted protocols: the connected socket switches to TLS with `tls_connect` (TLS group).
 
-**Example** (`tests/test_doc_red.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_red.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Red: un cliente TCP que manda una línea a un servidor y lee la respuesta (el de las pruebas contesta "eco: ...").
@@ -5244,7 +5244,7 @@ use. For TrueType fonts, `font_from_ttf`.
 **RGB colours.** A palette screen has only a few colours. `color_pen(r, g, b)` finds the closest one on the screen
 (or takes a free one) and returns its number, for `gfx_pen`. When it is no longer needed, `color_pen_free`.
 
-**Example** (`tests/test_doc_fuentes.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_fuentes.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Fuentes y colores: escribir con una fuente del sistema, colores por su valor RGB, una sombra translúcida y una
@@ -5508,7 +5508,7 @@ commands without using CPU.
 **Translations.** `tr(n, "text")` gives text number `n` of the program's catalog in the user's language, or the one
 inside the program if there is no catalog (`@catalog` and `tools/catalogo.py`).
 
-**Example** (`tests/test_doc_tareas.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_tareas.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Tareas y escritorio: un cálculo en otro proceso mientras el programa sigue, una sola copia del programa, el reloj,
@@ -6603,7 +6603,7 @@ See also: [`image_draw`](#image_draw), [`image_from_decoded`](#image_from_decode
 What the program gets when it starts: the Shell arguments, or the project icons it was opened with from the
 Workbench. And two more things from that stage of the language: where the last click was and the program's clock.
 
-**Example** (`tests/test_doc_varios.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_varios.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Utilidades: argumentos, comprimir y descomprimir, SHA-1, UTF-8, Double, expresiones regulares, comodines, JSON y el
@@ -7344,7 +7344,7 @@ Fake keys and clicks, as if the user made them, through the system's `input.devi
 the program's or another's. They are for testing a program unattended (Forja's and Dash's tests use them) and for
 automating others. Coordinates count from the active window's outer corner, borders included.
 
-**Example** (`tests/test_doc_otros.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_otros.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Manejar una ventana como un usuario: buscarla por su título, hacer clic en un campo y escribir en él, y verla en
@@ -7598,7 +7598,7 @@ send commands to yours: `rexx_port`, `rexx_get` and `rexx_reply` (with MUI, `mui
 **Lists.** `ports_read`, `tasks_read` and `assigns_read` take a snapshot of what is there now and return how many;
 each one's functions give them by number, from 0, until the next read.
 
-**Example** (`tests/test_doc_sysprog.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_sysprog.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Sistema y programa: el procesador, una librería, ejecutar una orden y recoger lo que escribe, una variable de
@@ -8160,7 +8160,7 @@ it, go line by line and look at its variables.
 There is one debugged program at a time. Calls are numbered from the stopping point: 0 where it stopped, 1 its
 caller...
 
-**Example** (`dashc/tests/depurar/basico.dash`: the tests compile it and run it on the emulator):
+**Example** (`dashc/tests/depurar/basico.dash`, which is also a test: it runs with the others):
 
 ```dash
 # El depurador: cargar un programa en pausa, un punto de parada, seguir hasta él, dónde está, registros y memoria,
@@ -9322,7 +9322,7 @@ asynchronous: `sound_play` returns at once and the sound goes on while the progr
 **Music.** `music_load` loads a 4-channel ProTracker module; while it plays, the channels are its own: a `sound_*`
 at the same time would clash with it. The most used effects are there (the list in the manual, section 15).
 
-**Example** (`tests/test_doc_audio.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_audio.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Audio: un sonido hecho muestra a muestra, que suena mientras el programa sigue, y un tono.
@@ -9618,7 +9618,7 @@ need to count the borders.
 **Bigger programs.** For many windows, or windows that resize on their own, MUI is easier (see the MUI group). The
 `gt_*` functions (GadTools) are for a single window.
 
-**Example** (`tests/test_doc_ventanas.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_ventanas.dash`, which is also a test: it runs with the others):
 
 ```dash
 # Ventanas: una ventana declarada, sus gadgets y su bucle de eventos.
@@ -10366,7 +10366,7 @@ Colours go as `0xRRGGBB` (`rtg_rgb` builds them). On a palette screen, `rtg_writ
 palette's closest colour; `rtg_write_array` and `rtg_read_array` only work on RTG. To draw with RGB on any screen,
 there are also `color_pen` and `gfx_rgb_draw`.
 
-**Example** (`tests/test_doc_rtg.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_rtg.dash`, which is also a test: it runs with the others):
 
 ```dash
 # RTG: colores RGB que valen con tarjeta gráfica y sin ella. Sin tarjeta (como en el emulador de las pruebas),
@@ -10653,7 +10653,7 @@ option, the chosen line...); `mui_get_text` and `mui_set_text`, its text.
 `.dashui`; the program uses it with `import "window.dashui"` (see `docs/MUI_EDITOR.md`). The API's design is in
 `docs/MUI_DISEÑO.md`.
 
-**Example** (`tests/test_doc_mui.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_mui.dash`, which is also a test: it runs with the others):
 
 ```dash
 # MUI: una ventana con un formulario, una lista y botones, y su bucle de eventos.
@@ -10713,7 +10713,7 @@ Main
 end
 ```
 
-**Example** (`tests/test_doc_mui_lienzo.dash`: the tests compile it and run it on the emulator):
+**Example** (`tests/test_doc_mui_lienzo.dash`, which is also a test: it runs with the others):
 
 ```dash
 # MUI: una zona de dibujo que MUI repinta cuando hace falta, con los gfx_, y que responde a los clics.
@@ -12021,37 +12021,432 @@ See also: [`mui_wait_event`](#mui_wait_event).
 
 ## DashOS (only with ./dash --dashos)
 
+The calls to the kernel of DashOS, the ARM system being built with Dash. They only exist when compiling with
+`./dash --dashos`; on the Amiga they are a compile error.
+
+**Handles.** Everything in the system (a channel, a timer, a memory object, a process) is handled with a handle: a
+number with rights (1 read, 2 write, 4 pass). A handle can be copied with fewer rights (`handle_copy`), passed to
+another program over a channel (`channel_pass`) or withdrawn later (`handle_revocable`). Whoever lacks the handle
+cannot touch the thing.
+
+**Channels.** `channel_create` gives one end and `channel_other` the other: what is sent on one is received on the
+other, up to 256 bytes per message and up to 8 handles.
+
+**Processes and groups.** `process_start` launches a program with the handles it is given (`process_give`); a group
+(`group_create`) gives them a memory budget and can be ended all at once.
+
+Errors are negative numbers; `dashos_error_text` explains them.
+
+**Example** (`tests/dashos/test_dashos_channels.dash`, which is also a test: it runs with the others):
+
+```dash
+# Test (solo DashOS, A7): canales, llaves, temporizadores y memoria de DashOS. En qemu-aarch64 corre sobre la
+# imitación de runtime/dashos/plat.c; en DashOS, sobre su kernel.
+Main
+    a = channel_create()
+    b = channel_other()
+    r = channel_send(b, "hola")
+    m = channel_receive(a)
+    Print "canal: #{m} #{r}"
+
+    # una copia marcada de b viaja por otro canal (no por el suyo): quien la use escribe con marca 7
+    x = channel_create()
+    y = channel_other()
+    c = handle_copy(b, 6, 7)
+    channel_pass(c)
+    channel_send(y, "toma")
+    m = channel_receive(x)
+    n = channel_handles()
+    k = channel_handle(0)
+    channel_send(k, "adiós")
+    m2 = channel_receive(a)
+    Print "llaves: #{n} recibida, marca #{channel_mark()}"
+    Print "por la llave recibida: #{m2}"
+
+    buf = buffer_alloc(16)
+    buffer_set_byte(buf, 0, 1)
+    buffer_set_byte(buf, 1, 2)
+    buffer_set_byte(buf, 2, 3)
+    channel_send_buffer(b, buf, 3)
+    out = buffer_alloc(256)
+    n = channel_receive_buffer(a, out, 256)
+    Print "búfer: #{n} bytes, #{buffer_get_byte(out, 0)} #{buffer_get_byte(out, 1)} #{buffer_get_byte(out, 2)}"
+
+    rv = handle_revocable(b)
+    handle_revoke(handle_revoker())
+    e = channel_send(rv, "x")
+    Print "revocada: #{e}"
+
+    t = timer_create(b, 20, 0)
+    n = channel_receive_buffer(a, out, 256)
+    Print "temporizador: #{n} bytes, #{buffer_get_byte(out, 0)} vez"
+    handle_close(t)
+
+    mem = memory_create(4096)
+    p1 = memory_map(mem, true)
+    p2 = memory_map(mem, false)
+    buffer_set_byte(p1, 100, 42)
+    Print "memoria compartida: #{buffer_get_byte(p2, 100)}"
+    memory_unmap(p1)
+    memory_unmap(p2)
+
+    handle_close(b)
+    handle_close(k)
+    handle_close(rv)
+    m = channel_receive(a)
+    e = channel_error()
+    Print "cerrado: #{e} #{dashos_error_text(e)}"
+    e = channel_send(mem, "x")
+    Print "tipo: #{e} #{dashos_error_text(e)}"
+    handle_close(mem)
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `channel_create()` | Int | A new channel: one of its two ends (the other, channel_other); a negative error |  |
-| `channel_other()` | Int | The other end of the last channel_create (what is written on one end is read on the other) |  |
-| `channel_pass(handle)` | Int | Puts a handle (with the right to pass it) in the next channel_send: it leaves this program; up to 8 per message; 0, or -1 if there are 8 already |  |
-| `channel_send(handle, text)` | Int | Sends a text (up to 256 bytes) to the other end of the channel, without waiting: 0 or a negative error |  |
-| `channel_send_buffer(handle, buffer, length)` | Int | Sends length bytes (up to 256) of a buffer: 0 or a negative error |  |
-| `channel_receive(handle)` | String | Waits for the next message of the channel and gives it as text; nil on error (channel_error); its handles: channel_handles, channel_handle; who sent it: channel_mark |  |
-| `channel_receive_buffer(handle, buffer, max)` | Int | Waits for the next message and copies it to a buffer (max bytes, 256 is enough): its length or a negative error |  |
-| `channel_handles()` | Int | How many handles came with the last message received |  |
-| `channel_handle(i)` | Int | Handle i (from 0) of the last message received; 0 if there is none |  |
-| `channel_mark()` | Int | The mark of the handle that wrote the last message received (handle_copy): who sent it; 0 unmarked or the kernel (timers) |  |
-| `channel_error()` | Int | The error of the last channel_receive (0: none; -4: the other end closed) |  |
-| `handle_copy(handle, rights, mark)` | Int | A copy of a handle with these rights or fewer (1 read, 2 write, 4 pass; added up) and a mark if it had none (0: keep its own): the new handle or a negative error |  |
-| `handle_close(handle)` | Int | Closes a handle (the last one of a channel end closes that end): 0 or a negative error |  |
-| `handle_revocable(handle)` | Int | A copy of a handle that can be taken back (its revoker: handle_revoker): the copy or a negative error |  |
-| `handle_revoker()` | Int | The revoker of the last handle_revocable |  |
-| `handle_revoke(revoker)` | Int | Revokes the handle of a revoker and the copies made from it: from then on they are worth nothing: 0 or a negative error |  |
-| `timer_create(handle, first_ms, period_ms)` | Int | A timer that sends a message to the other end of the channel after first_ms, and then every period_ms (0: once); 10 ms steps; it stops when its handle is closed: the handle or a negative error |  |
-| `memory_create(size)` | Int | A memory object of size bytes (up to 4 MB), all zero; it can be passed to another program (shared memory): its handle or a negative error |  |
-| `memory_map(handle, writable)` | Int (address) | Maps a memory object in this program, for buffer_* (writable: true to write in it): the buffer, or 0 |  |
-| `memory_unmap(buffer)` | Int | Unmaps what memory_map gave (the object lives on while it has handles): 0 or a negative error |  |
-| `process_give(handle)` | Int | A handle for the next process_start: the new program gets them as handles 1, 2... in this order; up to 16; 0, or -1 if there are 16 already |  |
-| `process_group(group)` | — | The group of the next processes started (0: this program's own) |  |
-| `process_start(memory, size)` | Int | Starts a program from the ELF in a memory object (its first size bytes), with the handles of process_give: the process or a negative error |  |
-| `process_start_buffer(buffer, length)` | Int | process_start with an ELF in a buffer (copied to a new memory object, up to 4 MB) |  |
-| `process_kill(process)` | Int | Ends a process: 0 or a negative error |  |
-| `process_wait(process)` | Int | Waits for a process to end: its exit code (how it ended: process_end), or a negative error |  |
-| `process_end()` | Int | How the process of the last process_wait ended: 0 it exited, 1 it was killed, 2 it failed |  |
-| `group_create(bytes)` | Int | A group with a memory budget taken from this program's: what its processes create is charged to it: the group or a negative error |  |
-| `group_kill(group)` | Int | Ends every process of a group and frees all it had: 0 or a negative error |  |
-| `group_used(group)` | Int | The bytes a group has used (0: this program's group), or a negative error |  |
-| `group_limit(group)` | Int | The budget of a group in bytes (0: this program's group), or a negative error |  |
-| `dashos_error_text(code)` | String | What a negative error of DashOS means, as text |  |
+| [`channel_create()`](#channel_create) | Int | A new channel: one of its two ends (the other, channel_other); a negative error |  |
+| [`channel_other()`](#channel_other) | Int | The other end of the last channel_create (what is written on one end is read on the other) |  |
+| [`channel_pass(handle)`](#channel_pass) | Int | Puts a handle (with the right to pass it) in the next channel_send: it leaves this program; up to 8 per message; 0, or -1 if there are 8 already |  |
+| [`channel_send(handle, text)`](#channel_send) | Int | Sends a text (up to 256 bytes) to the other end of the channel, without waiting: 0 or a negative error |  |
+| [`channel_send_buffer(handle, buffer, length)`](#channel_send_buffer) | Int | Sends length bytes (up to 256) of a buffer: 0 or a negative error |  |
+| [`channel_receive(handle)`](#channel_receive) | String | Waits for the next message of the channel and gives it as text; nil on error (channel_error); its handles: channel_handles, channel_handle; who sent it: channel_mark |  |
+| [`channel_receive_buffer(handle, buffer, max)`](#channel_receive_buffer) | Int | Waits for the next message and copies it to a buffer (max bytes, 256 is enough): its length or a negative error |  |
+| [`channel_handles()`](#channel_handles) | Int | How many handles came with the last message received |  |
+| [`channel_handle(i)`](#channel_handle) | Int | Handle i (from 0) of the last message received; 0 if there is none |  |
+| [`channel_mark()`](#channel_mark) | Int | The mark of the handle that wrote the last message received (handle_copy): who sent it; 0 unmarked or the kernel (timers) |  |
+| [`channel_error()`](#channel_error) | Int | The error of the last channel_receive (0: none; -4: the other end closed) |  |
+| [`handle_copy(handle, rights, mark)`](#handle_copy) | Int | A copy of a handle with these rights or fewer (1 read, 2 write, 4 pass; added up) and a mark if it had none (0: keep its own): the new handle or a negative error |  |
+| [`handle_close(handle)`](#handle_close) | Int | Closes a handle (the last one of a channel end closes that end): 0 or a negative error |  |
+| [`handle_revocable(handle)`](#handle_revocable) | Int | A copy of a handle that can be taken back (its revoker: handle_revoker): the copy or a negative error |  |
+| [`handle_revoker()`](#handle_revoker) | Int | The revoker of the last handle_revocable |  |
+| [`handle_revoke(revoker)`](#handle_revoke) | Int | Revokes the handle of a revoker and the copies made from it: from then on they are worth nothing: 0 or a negative error |  |
+| [`timer_create(handle, first_ms, period_ms)`](#timer_create) | Int | A timer that sends a message to the other end of the channel after first_ms, and then every period_ms (0: once); 10 ms steps; it stops when its handle is closed: the handle or a negative error |  |
+| [`memory_create(size)`](#memory_create) | Int | A memory object of size bytes (up to 4 MB), all zero; it can be passed to another program (shared memory): its handle or a negative error |  |
+| [`memory_map(handle, writable)`](#memory_map) | Int (address) | Maps a memory object in this program, for buffer_* (writable: true to write in it): the buffer, or 0 |  |
+| [`memory_unmap(buffer)`](#memory_unmap) | Int | Unmaps what memory_map gave (the object lives on while it has handles): 0 or a negative error |  |
+| [`process_give(handle)`](#process_give) | Int | A handle for the next process_start: the new program gets them as handles 1, 2... in this order; up to 16; 0, or -1 if there are 16 already |  |
+| [`process_group(group)`](#process_group) | — | The group of the next processes started (0: this program's own) |  |
+| [`process_start(memory, size)`](#process_start) | Int | Starts a program from the ELF in a memory object (its first size bytes), with the handles of process_give: the process or a negative error |  |
+| [`process_start_buffer(buffer, length)`](#process_start_buffer) | Int | process_start with an ELF in a buffer (copied to a new memory object, up to 4 MB) |  |
+| [`process_kill(process)`](#process_kill) | Int | Ends a process: 0 or a negative error |  |
+| [`process_wait(process)`](#process_wait) | Int | Waits for a process to end: its exit code (how it ended: process_end), or a negative error |  |
+| [`process_end()`](#process_end) | Int | How the process of the last process_wait ended: 0 it exited, 1 it was killed, 2 it failed |  |
+| [`group_create(bytes)`](#group_create) | Int | A group with a memory budget taken from this program's: what its processes create is charged to it: the group or a negative error |  |
+| [`group_kill(group)`](#group_kill) | Int | Ends every process of a group and frees all it had: 0 or a negative error |  |
+| [`group_used(group)`](#group_used) | Int | The bytes a group has used (0: this program's group), or a negative error |  |
+| [`group_limit(group)`](#group_limit) | Int | The budget of a group in bytes (0: this program's group), or a negative error |  |
+| [`dashos_error_text(code)`](#dashos_error_text) | String | What a negative error of DashOS means, as text |  |
+
+<a id="channel_create"></a>
+
+### `channel_create()` → `Int`
+
+Creates a channel and returns the handle of one of its ends (the other, `channel_other`), or a negative error.
+
+See also: [`channel_other`](#channel_other), [`channel_send`](#channel_send).
+
+<a id="channel_other"></a>
+
+### `channel_other()` → `Int`
+
+Returns the handle of the other end of the last `channel_create`.
+
+See also: [`channel_create`](#channel_create).
+
+<a id="channel_pass"></a>
+
+### `channel_pass(handle)` → `Int`
+
+- `handle`: the handle.
+
+Puts it in the next `channel_send`: it leaves this program (the pass right is needed). Up to 8 per message. Returns 0, or -1 if there are 8 already.
+
+See also: [`channel_send`](#channel_send), [`channel_handles`](#channel_handles).
+
+<a id="channel_send"></a>
+
+### `channel_send(handle, text)` → `Int`
+
+- `handle`: the handle.
+- `text`: up to 256 bytes.
+
+Sends it to the other end without waiting. Returns 0, or a negative error.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="channel_send_buffer"></a>
+
+### `channel_send_buffer(handle, buffer, length)` → `Int`
+
+- `handle`: the handle.
+- `buffer`, `length`: up to 256 bytes.
+
+Like `channel_send`, with binary data. Returns 0, or a negative error.
+
+See also: [`channel_send`](#channel_send).
+
+<a id="channel_receive"></a>
+
+### `channel_receive(handle)` → `String`
+
+- `handle`: the handle.
+
+Waits for the next message and returns it as a text, or `nil` on an error (`channel_error`). Its handles, with `channel_handles`; who sent it, with `channel_mark`.
+
+See also: [`channel_handles`](#channel_handles), [`channel_mark`](#channel_mark), [`channel_error`](#channel_error).
+
+<a id="channel_receive_buffer"></a>
+
+### `channel_receive_buffer(handle, buffer, max)` → `Int`
+
+- `handle`: the handle.
+- `buffer`, `max`: where and how much fits (256 is enough).
+
+Waits for the next message and copies it. Returns its length or a negative error.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="channel_handles"></a>
+
+### `channel_handles()` → `Int`
+
+Returns how many handles came with the last message received.
+
+See also: [`channel_handle`](#channel_handle).
+
+<a id="channel_handle"></a>
+
+### `channel_handle(i)` → `Int`
+
+- `i`: the handle, from 0.
+
+Returns that handle of the last message received; 0 if none.
+
+See also: [`channel_handles`](#channel_handles).
+
+<a id="channel_mark"></a>
+
+### `channel_mark()` → `Int`
+
+Returns the mark of the handle the last message was written with (`handle_copy`): who sent it. 0 without a mark or from the kernel (timers).
+
+See also: [`handle_copy`](#handle_copy).
+
+<a id="channel_error"></a>
+
+### `channel_error()` → `Int`
+
+Returns the last `channel_receive` error: 0 none, -4 the other end closed.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="handle_copy"></a>
+
+### `handle_copy(handle, rights, mark)` → `Int`
+
+- `handle`: the handle.
+- `rights`: the copy's rights, the same or fewer: 1 read, 2 write, 4 pass, added up.
+- `mark`: a mark for the copy if the handle had none (0: its own).
+
+Returns the new handle or a negative error.
+
+See also: [`channel_mark`](#channel_mark), [`handle_close`](#handle_close).
+
+<a id="handle_close"></a>
+
+### `handle_close(handle)` → `Int`
+
+- `handle`: the handle.
+
+Closes it; the last handle of a channel end closes that end. Returns 0, or a negative error.
+
+See also: [`handle_copy`](#handle_copy).
+
+<a id="handle_revocable"></a>
+
+### `handle_revocable(handle)` → `Int`
+
+- `handle`: the handle.
+
+Returns a copy that can be withdrawn later (its revoker, `handle_revoker`), or a negative error.
+
+See also: [`handle_revoker`](#handle_revoker), [`handle_revoke`](#handle_revoke).
+
+<a id="handle_revoker"></a>
+
+### `handle_revoker()` → `Int`
+
+Returns the revoker of the last `handle_revocable`.
+
+See also: [`handle_revoke`](#handle_revoke).
+
+<a id="handle_revoke"></a>
+
+### `handle_revoke(revoker)` → `Int`
+
+- `revoker`: the revoker.
+
+Withdraws the handle and every copy made from it: from then on they are not valid. Returns 0, or a negative error.
+
+See also: [`handle_revocable`](#handle_revocable).
+
+<a id="timer_create"></a>
+
+### `timer_create(handle, first_ms, period_ms)` → `Int`
+
+- `handle`: one end of a channel.
+- `first_ms`: when the first message arrives.
+- `period_ms`: how often the next ones; 0 just once. In steps of 10 ms.
+
+A timer that sends messages to the other end of the channel; it stops when its handle closes. Returns the handle or a
+negative error.
+
+See also: [`channel_receive`](#channel_receive).
+
+<a id="memory_create"></a>
+
+### `memory_create(size)` → `Int`
+
+- `size`: up to 4 MB.
+
+A zeroed memory object that can be passed to another program (shared memory). Returns its handle or a negative error.
+
+See also: [`memory_map`](#memory_map).
+
+<a id="memory_map"></a>
+
+### `memory_map(handle, writable)` → `Int (address)`
+
+- `handle`: the handle.
+- `writable`: `true` to write.
+
+Maps it into this program's memory and returns a buffer for the `buffer_*` functions, or 0.
+
+See also: [`memory_unmap`](#memory_unmap), [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="memory_unmap"></a>
+
+### `memory_unmap(buffer)` → `Int`
+
+- `buffer`: what `memory_map` gave.
+
+Unmaps it; the object lives on while it has handles. Returns 0, or a negative error.
+
+See also: [`memory_map`](#memory_map).
+
+<a id="process_give"></a>
+
+### `process_give(handle)` → `Int`
+
+- `handle`: the handle.
+
+A handle for the next `process_start`: the new program gets them as handles 1, 2... in this order. Up to 16. Returns 0, or -1 if there are 16 already.
+
+See also: [`process_start`](#process_start).
+
+<a id="process_group"></a>
+
+### `process_group(group)`
+
+- `group`: the group of the following processes; 0 this program's.
+
+See also: [`group_create`](#group_create).
+
+<a id="process_start"></a>
+
+### `process_start(memory, size)` → `Int`
+
+- `memory`: a memory object holding the program (ELF).
+- `size`: its first bytes making it up.
+
+Launches it with the `process_give` handles. Returns the process or a negative error.
+
+See also: [`process_wait`](#process_wait), [`process_start_buffer`](#process_start_buffer).
+
+<a id="process_start_buffer"></a>
+
+### `process_start_buffer(buffer, length)` → `Int`
+
+- `buffer`, `length`: the ELF, up to 4 MB.
+
+Like `process_start`, with the program in a buffer.
+
+See also: [`process_start`](#process_start).
+
+<a id="process_kill"></a>
+
+### `process_kill(process)` → `Int`
+
+- `process`: the process.
+
+Ends it. Returns 0, or a negative error.
+
+See also: [`process_wait`](#process_wait).
+
+<a id="process_wait"></a>
+
+### `process_wait(process)` → `Int`
+
+- `process`: the process.
+
+Waits for it to end and returns its exit code (how it ended, `process_end`), or a negative error.
+
+See also: [`process_end`](#process_end).
+
+<a id="process_end"></a>
+
+### `process_end()` → `Int`
+
+Returns how the process of the last `process_wait` ended: 0 exited, 1 killed, 2 crashed.
+
+See also: [`process_wait`](#process_wait).
+
+<a id="group_create"></a>
+
+### `group_create(bytes)` → `Int`
+
+- `bytes`: the budget, taken from this program's.
+
+A group: what its processes create is charged there. Returns the group or a negative error.
+
+See also: [`process_group`](#process_group), [`group_kill`](#group_kill).
+
+<a id="group_kill"></a>
+
+### `group_kill(group)` → `Int`
+
+- `group`: the group.
+
+Ends all its processes and releases everything it held. Returns 0, or a negative error.
+
+See also: [`group_create`](#group_create).
+
+<a id="group_used"></a>
+
+### `group_used(group)` → `Int`
+
+- `group`: the group; 0 this program's.
+
+Returns the bytes it has spent, or a negative error.
+
+See also: [`group_limit`](#group_limit).
+
+<a id="group_limit"></a>
+
+### `group_limit(group)` → `Int`
+
+- `group`: the group; 0 this program's.
+
+Returns its budget in bytes, or a negative error.
+
+See also: [`group_used`](#group_used).
+
+<a id="dashos_error_text"></a>
+
+### `dashos_error_text(code)` → `String`
+
+- `code`: a negative DashOS error.
+
+Returns what it means, as a text.
