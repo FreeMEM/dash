@@ -34,7 +34,7 @@ Primero los grupos que más usa la gente del grupo de Telegram.
 - [x] T7b. Mapas de tiles (`tilemap_*`), con `tests/test_doc_tiles.dash`.
 - [x] T7c. Copper y bitmaps, con `tests/test_doc_bitmaps.dash`.
 - [x] T8a. Texto, búferes y buscar en un búfer, con `tests/test_doc_texto.dash`.
-- [ ] T8b. Sistema y memoria (`SYSTEM_FUNCTIONS`).
+- [x] T8b. Sistema y memoria (`SYSTEM_FUNCTIONS`), con `tests/test_doc_sistema.dash`.
 - [ ] T8c. Audio (`AUDIO_FUNCTIONS`).
 - [ ] T9. El resto de grupos.
 - [ ] T10. Otras guías escuetas: repasar `QUICK_REFERENCE`, `MANUAL_REFERENCIA` (secciones de una tabla sin
@@ -84,3 +84,8 @@ Primero los grupos que más usa la gente del grupo de Telegram.
     como con `./dash` (el literal de Lark acababa en la comilla de dentro). `tests/test_interp_comillas.dash`;
     `./compile_all.sh` 34/34. Sigue distinto un caso raro: un `#{` sin cerrar seguido de otra interpolación en el
     mismo texto (`./dash --gcc` lo deja todo como texto, `./dash` interpola la segunda).
+- 2026-11-08: T8b. Sistema y memoria.
+  - Arreglo: `random_range(min, max)` con `max` = `min` - 1 dividía por cero (un fallo de la CPU) y con `max` menor
+    daba números fuera; ahora `max <= min` devuelve `min`. En `tests/test_doc_sistema.dash`.
+  - Visto: `random` da solo 15 bits (0 a 32767), las arenas no se liberan solas y `arena_alloc` no pone a cero
+    tras un `arena_reset`; documentado.

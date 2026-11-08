@@ -2348,40 +2348,400 @@ Ver también: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_f
 
 ## Sistema y memoria
 
+La memoria del Amiga, esperar, números al azar y lo más cercano a la máquina: leer y escribir direcciones de memoria.
+
+**Memoria.** El Amiga tiene memoria chip, la única que ven los chips de vídeo y sonido (imágenes, sprites,
+sonidos), y memoria fast, solo para el procesador. `mem_*` dicen cuánta hay. Los textos, listas y structs de Dash
+salen de un pool que se libera solo al acabar; los búferes, las arenas y `amiga_alloc` no: hay que liberarlos.
+
+**Esperar.** `time_delay` cuenta en tics de 1/50 de segundo y no gasta CPU mientras espera. `wait_vblank` espera al
+siguiente fotograma de la pantalla, para animar a su ritmo.
+
+**Lo peligroso.** `peek_*` y `poke_*` leen y escriben cualquier dirección: escribir donde no se debe cuelga el
+Amiga. `retain` y `release` tocan el contador de referencias que Dash lleva solo: equivocarse libera un objeto que
+se sigue usando.
+
+**Ejemplo** (`tests/test_doc_sistema.dash`: se compila y se prueba en el emulador con los tests):
+
+```dash
+# Sistema y memoria: cuánta memoria hay, números al azar repetibles, una arena y esperar.
+
+Main
+    Print "chip libre de la total: #{mem_chip_free() <= mem_chip_total()}"
+
+    random_seed(1234)
+    a = random_range(1, 6)
+    b = random_range(1, 6)
+    random_seed(1234)                          # la misma semilla, la misma serie
+    iguales = random_range(1, 6) == a and random_range(1, 6) == b
+    Print "dados iguales con la misma semilla: #{iguales}"
+    bien = true
+    i = 0
+    while i < 200
+        d = random_range(-3, 3)
+        if d < -3 or d > 3
+            bien = false
+        end
+        i = i + 1
+    end
+    Print "dentro del rango: #{bien}, y con max <= min: #{random_range(7, 2)}"
+
+    ar = arena_new(100)
+    p1 = arena_alloc(ar, 5)                    # se alinea a 4: ocupa 8
+    p2 = arena_alloc(ar, 4)
+    poke_long(p2, 0x12345678)
+    Print "arena: #{arena_used(ar)} usados, #{arena_available(ar)} libres"
+    arena_free(ar)                             # las arenas no se liberan solas
+
+    time_delay(10)                             # una quinta parte de un segundo
+    Print "fin"
+end
+```
+
+**Índice.** Las que tienen enlace están explicadas más abajo.
+
 | Función | Devuelve | Descripción | Estado |
 |---|---|---|---|
-| `debug_break()` | — | Para en el depurador del emulador UAE (en un Amiga de verdad no hace nada; tools/emu_run.py --debug) |  |
-| `mem_chip_free()` | Int | La memoria chip libre |  |
-| `mem_fast_free()` | Int | La memoria fast libre |  |
-| `mem_total()` | Int | La memoria libre, chip y fast (la que queda, no el tamaño de la RAM) |  |
-| `mem_chip_total()` | Int | El tamaño de la memoria chip en bytes (libre y en uso: AvailMem con MEMF_TOTAL) |  |
-| `mem_fast_total()` | Int | El tamaño de la memoria fast en bytes (libre y en uso: AvailMem con MEMF_TOTAL) |  |
-| `peek_byte(addr)` | Int | Lee un byte de una dirección de memoria |  |
-| `peek_word(addr)` | Int | Lee un word (16 bits) de una dirección de memoria |  |
-| `peek_long(addr)` | Int | Lee un long (32 bits) de una dirección de memoria |  |
-| `poke_byte(addr, value)` | — | Escribe un byte en una dirección de memoria |  |
-| `poke_word(addr, value)` | — | Escribe un word (16 bits) en una dirección de memoria |  |
-| `amiga_alloc(size)` | Int | size bytes para estructuras de AmigaOS (@amiga struct), a cero: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) en el Amiga, memoria de la caja Amiga (por debajo de 4 GB) en DashOS; 0 si no hay memoria |  |
-| `amiga_free(addr, size)` | — | Devuelve lo que dio amiga_alloc (con el mismo tamaño) |  |
-| `poke_long(addr, value)` | — | Escribe un long (32 bits) en una dirección de memoria |  |
-| `time_delay(ticks)` | — | Espera tics (50 por segundo) |  |
-| `time_delay_ms(ms)` | — | Espera milisegundos (de 20 en 20: lo que dura un tic) |  |
-| `random()` | Int | Un número al azar |  |
-| `random_range(min, max)` | Int | Un número al azar entre min y max (los dos incluidos) |  |
-| `random_seed(seed)` | — | Pone la semilla de los números al azar |  |
-| `wait_vblank()` | — | Espera al retrazado vertical |  |
-| `wait_blit()` | — | Espera a que acabe el blitter |  |
-| `arena_new(size)` | Int | Crea una arena (memoria que se reparte por orden) de ese tamaño en bytes |  |
-| `arena_alloc(arena, size)` | Int | Pide memoria de una arena (muy rápido) |  |
-| `arena_reset(arena)` | — | Vacía una arena (reusa la memoria sin liberarla) |  |
-| `arena_free(arena)` | — | Libera una arena y toda su memoria |  |
-| `arena_used(arena)` | Int | Los bytes usados de una arena |  |
-| `arena_available(arena)` | Int | Los bytes libres de una arena |  |
-| `refcount(obj)` | Int | El contador de referencias de un objeto |  |
-| `retain(obj)` | — | Suma una referencia a mano |  |
-| `release(obj)` | — | Quita una referencia a mano (libera el objeto si llega a 0) |  |
-| `mem_trim()` | Int | Devuelve al sistema los charcos de bloques pequeños (hasta 128 bytes) que están del todo libres; los bytes devueltos |  |
-| `mem_puddle(bytes)` | Bool | El tamaño de los charcos del pool de memoria (de 1 KB a 1 MB; 4 KB si no); solo antes de pedir memoria |  |
+| [`debug_break()`](#debug_break) | — | Para en el depurador del emulador UAE (en un Amiga de verdad no hace nada; tools/emu_run.py --debug) |  |
+| [`mem_chip_free()`](#mem_chip_free) | Int | La memoria chip libre |  |
+| [`mem_fast_free()`](#mem_fast_free) | Int | La memoria fast libre |  |
+| [`mem_total()`](#mem_total) | Int | La memoria libre, chip y fast (la que queda, no el tamaño de la RAM) |  |
+| [`mem_chip_total()`](#mem_chip_total) | Int | El tamaño de la memoria chip en bytes (libre y en uso: AvailMem con MEMF_TOTAL) |  |
+| [`mem_fast_total()`](#mem_fast_total) | Int | El tamaño de la memoria fast en bytes (libre y en uso: AvailMem con MEMF_TOTAL) |  |
+| [`peek_byte(addr)`](#peek_byte) | Int | Lee un byte de una dirección de memoria |  |
+| [`peek_word(addr)`](#peek_word) | Int | Lee un word (16 bits) de una dirección de memoria |  |
+| [`peek_long(addr)`](#peek_long) | Int | Lee un long (32 bits) de una dirección de memoria |  |
+| [`poke_byte(addr, value)`](#poke_byte) | — | Escribe un byte en una dirección de memoria |  |
+| [`poke_word(addr, value)`](#poke_word) | — | Escribe un word (16 bits) en una dirección de memoria |  |
+| [`amiga_alloc(size)`](#amiga_alloc) | Int | size bytes para estructuras de AmigaOS (@amiga struct), a cero: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) en el Amiga, memoria de la caja Amiga (por debajo de 4 GB) en DashOS; 0 si no hay memoria |  |
+| [`amiga_free(addr, size)`](#amiga_free) | — | Devuelve lo que dio amiga_alloc (con el mismo tamaño) |  |
+| [`poke_long(addr, value)`](#poke_long) | — | Escribe un long (32 bits) en una dirección de memoria |  |
+| [`time_delay(ticks)`](#time_delay) | — | Espera tics (50 por segundo) |  |
+| [`time_delay_ms(ms)`](#time_delay_ms) | — | Espera milisegundos (de 20 en 20: lo que dura un tic) |  |
+| [`random()`](#random) | Int | Un número al azar |  |
+| [`random_range(min, max)`](#random_range) | Int | Un número al azar entre min y max (los dos incluidos) |  |
+| [`random_seed(seed)`](#random_seed) | — | Pone la semilla de los números al azar |  |
+| [`wait_vblank()`](#wait_vblank) | — | Espera al retrazado vertical |  |
+| [`wait_blit()`](#wait_blit) | — | Espera a que acabe el blitter |  |
+| [`arena_new(size)`](#arena_new) | Int | Crea una arena (memoria que se reparte por orden) de ese tamaño en bytes |  |
+| [`arena_alloc(arena, size)`](#arena_alloc) | Int | Pide memoria de una arena (muy rápido) |  |
+| [`arena_reset(arena)`](#arena_reset) | — | Vacía una arena (reusa la memoria sin liberarla) |  |
+| [`arena_free(arena)`](#arena_free) | — | Libera una arena y toda su memoria |  |
+| [`arena_used(arena)`](#arena_used) | Int | Los bytes usados de una arena |  |
+| [`arena_available(arena)`](#arena_available) | Int | Los bytes libres de una arena |  |
+| [`refcount(obj)`](#refcount) | Int | El contador de referencias de un objeto |  |
+| [`retain(obj)`](#retain) | — | Suma una referencia a mano |  |
+| [`release(obj)`](#release) | — | Quita una referencia a mano (libera el objeto si llega a 0) |  |
+| [`mem_trim()`](#mem_trim) | Int | Devuelve al sistema los charcos de bloques pequeños (hasta 128 bytes) que están del todo libres; los bytes devueltos |  |
+| [`mem_puddle(bytes)`](#mem_puddle) | Bool | El tamaño de los charcos del pool de memoria (de 1 KB a 1 MB; 4 KB si no); solo antes de pedir memoria |  |
+
+<a id="debug_break"></a>
+
+### `debug_break()`
+
+Para el programa en el depurador del emulador (`tools/emu_run.py --debug`). En un Amiga de verdad, o en un emulador
+sin ese depurador, no hace nada.
+
+<a id="mem_chip_free"></a>
+
+### `mem_chip_free()` → `Int`
+
+Devuelve los bytes de memoria chip libres ahora.
+
+Ver también: [`mem_chip_total`](#mem_chip_total), [`mem_fast_free`](#mem_fast_free).
+
+<a id="mem_fast_free"></a>
+
+### `mem_fast_free()` → `Int`
+
+Devuelve los bytes de memoria fast libres ahora; 0 en un Amiga sin fast.
+
+Ver también: [`mem_fast_total`](#mem_fast_total), [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_total"></a>
+
+### `mem_total()` → `Int`
+
+Devuelve los bytes libres sumando chip y fast. Es lo que queda, no el tamaño de la memoria.
+
+Ver también: [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_chip_total"></a>
+
+### `mem_chip_total()` → `Int`
+
+Devuelve el tamaño de la memoria chip en bytes, libre y en uso: algo menos de 2 MB en un A1200.
+
+Ver también: [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_fast_total"></a>
+
+### `mem_fast_total()` → `Int`
+
+Devuelve el tamaño de la memoria fast en bytes, libre y en uso.
+
+Ver también: [`mem_fast_free`](#mem_fast_free).
+
+<a id="peek_byte"></a>
+
+### `peek_byte(addr)` → `Int`
+
+- `addr`: la dirección.
+
+Devuelve el byte que hay en ella, de 0 a 255.
+
+Ver también: [`poke_byte`](#poke_byte), [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="peek_word"></a>
+
+### `peek_word(addr)` → `Int`
+
+- `addr`: la dirección, par.
+
+Devuelve los 16 bits que hay en ella. En un 68000, una dirección impar es un error de la CPU.
+
+Ver también: [`poke_word`](#poke_word).
+
+<a id="peek_long"></a>
+
+### `peek_long(addr)` → `Int`
+
+- `addr`: la dirección, par.
+
+Devuelve los 32 bits que hay en ella.
+
+Ver también: [`poke_long`](#poke_long).
+
+<a id="poke_byte"></a>
+
+### `poke_byte(addr, value)`
+
+- `addr`: la dirección.
+- `value`: el byte.
+
+Lo escribe ahí. Una dirección equivocada cuelga el Amiga.
+
+Ver también: [`peek_byte`](#peek_byte).
+
+<a id="poke_word"></a>
+
+### `poke_word(addr, value)`
+
+- `addr`: la dirección, par.
+- `value`: los 16 bits.
+
+Ver también: [`peek_word`](#peek_word).
+
+<a id="amiga_alloc"></a>
+
+### `amiga_alloc(size)` → `Int`
+
+- `size`: cuántos bytes.
+
+Memoria a cero para estructuras de AmigaOS (`@amiga struct`) que se pasan al sistema. Devuelve la dirección, o 0
+sin memoria. Se devuelve con `amiga_free` y el mismo tamaño; no se libera sola.
+
+Ver también: [`amiga_free`](#amiga_free), [`buffer_alloc`](#buffer_alloc).
+
+<a id="amiga_free"></a>
+
+### `amiga_free(addr, size)`
+
+- `addr`: lo que dio `amiga_alloc`.
+- `size`: el mismo tamaño que se pidió.
+
+Ver también: [`amiga_alloc`](#amiga_alloc).
+
+<a id="poke_long"></a>
+
+### `poke_long(addr, value)`
+
+- `addr`: la dirección, par.
+- `value`: los 32 bits.
+
+Ver también: [`peek_long`](#peek_long).
+
+<a id="time_delay"></a>
+
+### `time_delay(ticks)`
+
+- `ticks`: cuántos tics; hay 50 por segundo (`time_delay(50)` es un segundo).
+
+Espera sin gastar CPU: los demás programas siguen.
+
+Ver también: [`time_delay_ms`](#time_delay_ms), [`wait_vblank`](#wait_vblank).
+
+<a id="time_delay_ms"></a>
+
+### `time_delay_ms(ms)`
+
+- `ms`: cuántos milisegundos.
+
+Como `time_delay`, en milisegundos, de 20 en 20: menos de 20 no espera nada.
+
+Ver también: [`time_delay`](#time_delay).
+
+<a id="random"></a>
+
+### `random()` → `Int`
+
+Devuelve un número al azar de 0 a 32767. La serie es siempre la misma si no se cambia la semilla:
+`random_seed(time_ms())` al empezar da una distinta cada vez.
+
+Ver también: [`random_range`](#random_range), [`random_seed`](#random_seed).
+
+<a id="random_range"></a>
+
+### `random_range(min, max)` → `Int`
+
+- `min`, `max`: los extremos, los dos incluidos.
+
+Devuelve un número al azar entre ellos: `random_range(1, 6)` es un dado. Con `max` menor o igual que `min`
+devuelve `min`. Para rangos de más de 32768 números, no salen todos.
+
+Ver también: [`random`](#random), [`random_seed`](#random_seed).
+
+<a id="random_seed"></a>
+
+### `random_seed(seed)`
+
+- `seed`: la semilla.
+
+Con la misma semilla sale la misma serie de números.
+
+Ver también: [`random`](#random).
+
+<a id="wait_vblank"></a>
+
+### `wait_vblank()`
+
+Espera al siguiente retrazado vertical: 50 veces por segundo en PAL, 60 en NTSC. En el bucle de un juego, una
+espera por vuelta lo hace ir al ritmo de la pantalla. Con `screen_flip` no hace falta.
+
+Ver también: [`screen_flip`](#screen_flip), [`time_delay`](#time_delay).
+
+<a id="wait_blit"></a>
+
+### `wait_blit()`
+
+Espera a que el blitter acabe lo que está haciendo. Los builtins de Dash ya esperan cuando hace falta; sirve para
+código propio que lee memoria que el blitter está escribiendo.
+
+<a id="arena_new"></a>
+
+### `arena_new(size)` → `Int`
+
+- `size`: cuántos bytes.
+
+Crea una arena: un bloque de memoria que se reparte por orden, muy deprisa, y se vacía de golpe. Para muchos datos
+pequeños que viven lo mismo (un fotograma, un nivel). Devuelve la arena, o 0 sin memoria. Hay que liberarla con
+`arena_free`.
+
+Ver también: [`arena_alloc`](#arena_alloc), [`arena_reset`](#arena_reset), [`arena_free`](#arena_free).
+
+<a id="arena_alloc"></a>
+
+### `arena_alloc(arena, size)` → `Int`
+
+- `arena`: la arena de `arena_new`.
+- `size`: cuántos bytes.
+
+Devuelve la dirección de un trozo nuevo, o 0 si ya no cabe. Los trozos van alineados a 4 bytes. Tras un
+`arena_reset` traen lo que hubiera antes: no vienen a cero. No se liberan sueltos: se vacía toda la arena.
+
+Ver también: [`arena_reset`](#arena_reset), [`arena_available`](#arena_available).
+
+<a id="arena_reset"></a>
+
+### `arena_reset(arena)`
+
+- `arena`: la arena de `arena_new`.
+
+La vacía: lo pedido ya no vale y se vuelve a repartir desde el principio.
+
+Ver también: [`arena_alloc`](#arena_alloc).
+
+<a id="arena_free"></a>
+
+### `arena_free(arena)`
+
+- `arena`: la arena de `arena_new`.
+
+Devuelve su memoria al sistema.
+
+Ver también: [`arena_new`](#arena_new).
+
+<a id="arena_used"></a>
+
+### `arena_used(arena)` → `Int`
+
+- `arena`: la arena de `arena_new`.
+
+Devuelve cuántos bytes se han repartido.
+
+Ver también: [`arena_available`](#arena_available).
+
+<a id="arena_available"></a>
+
+### `arena_available(arena)` → `Int`
+
+- `arena`: la arena de `arena_new`.
+
+Devuelve cuántos bytes quedan.
+
+Ver también: [`arena_used`](#arena_used).
+
+<a id="refcount"></a>
+
+### `refcount(obj)` → `Int`
+
+- `obj`: una lista o un struct.
+
+Devuelve cuántas referencias tiene: cuántas variables, campos o listas lo guardan. Para buscar fugas de memoria;
+`./dash --memcheck` lo hace mejor.
+
+Ver también: [`retain`](#retain), [`release`](#release).
+
+<a id="retain"></a>
+
+### `retain(obj)`
+
+- `obj`: el objeto.
+
+Le suma una referencia, para que no se libere aunque Dash crea que nadie lo usa: por ejemplo, si solo lo guarda
+código en C. Cada `retain` necesita su `release`.
+
+Ver también: [`release`](#release), [`refcount`](#refcount).
+
+<a id="release"></a>
+
+### `release(obj)`
+
+- `obj`: el objeto.
+
+Le quita una referencia; si llega a 0, lo libera. Solo para deshacer un `retain`.
+
+Ver también: [`retain`](#retain).
+
+<a id="mem_trim"></a>
+
+### `mem_trim()` → `Int`
+
+Devuelve al sistema los bloques de memoria pequeña de Dash (hasta 128 bytes) que han quedado del todo libres.
+Devuelve cuántos bytes devolvió. Útil tras soltar muchos datos en un programa que sigue en marcha.
+
+Ver también: [`mem_puddle`](#mem_puddle).
+
+<a id="mem_puddle"></a>
+
+### `mem_puddle(bytes)` → `Bool`
+
+- `bytes`: el tamaño de cada trozo que Dash pide al sistema para su memoria, de 1 KB a 1 MB; 4 KB si no se dice.
+
+Solo vale antes de que el programa pida memoria: la primera línea de `Main`. Trozos grandes van mejor con muchos
+datos; pequeños, en un Amiga con poca memoria. Devuelve `false` si ya es tarde o el tamaño no vale.
+
+Ver también: [`mem_trim`](#mem_trim).
 
 ## Ficheros (DOS)
 

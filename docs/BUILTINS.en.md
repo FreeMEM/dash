@@ -2344,40 +2344,402 @@ See also: [`file_open_dialog`](#file_open_dialog), [`dialog_file`](#dialog_file)
 
 ## System and memory
 
+The Amiga's memory, waiting, random numbers and what is closest to the machine: reading and writing memory
+addresses.
+
+**Memory.** The Amiga has chip memory, the only one the video and sound chips see (pictures, sprites, sounds), and
+fast memory, for the processor only. `mem_*` say how much there is. Dash's texts, lists and structs come from a pool
+freed on its own at the end; buffers, arenas and `amiga_alloc` are not: they must be freed.
+
+**Waiting.** `time_delay` counts in ticks of 1/50 of a second and uses no CPU while it waits. `wait_vblank` waits
+for the screen's next frame, to animate at its pace.
+
+**The dangerous part.** `peek_*` and `poke_*` read and write any address: writing where you should not hangs the
+Amiga. `retain` and `release` touch the reference count Dash keeps on its own: getting it wrong frees an object
+still in use.
+
+**Example** (`tests/test_doc_sistema.dash`: the tests compile it and run it on the emulator):
+
+```dash
+# Sistema y memoria: cuánta memoria hay, números al azar repetibles, una arena y esperar.
+
+Main
+    Print "chip libre de la total: #{mem_chip_free() <= mem_chip_total()}"
+
+    random_seed(1234)
+    a = random_range(1, 6)
+    b = random_range(1, 6)
+    random_seed(1234)                          # la misma semilla, la misma serie
+    iguales = random_range(1, 6) == a and random_range(1, 6) == b
+    Print "dados iguales con la misma semilla: #{iguales}"
+    bien = true
+    i = 0
+    while i < 200
+        d = random_range(-3, 3)
+        if d < -3 or d > 3
+            bien = false
+        end
+        i = i + 1
+    end
+    Print "dentro del rango: #{bien}, y con max <= min: #{random_range(7, 2)}"
+
+    ar = arena_new(100)
+    p1 = arena_alloc(ar, 5)                    # se alinea a 4: ocupa 8
+    p2 = arena_alloc(ar, 4)
+    poke_long(p2, 0x12345678)
+    Print "arena: #{arena_used(ar)} usados, #{arena_available(ar)} libres"
+    arena_free(ar)                             # las arenas no se liberan solas
+
+    time_delay(10)                             # una quinta parte de un segundo
+    Print "fin"
+end
+```
+
+**Index.** The ones with a link are explained further down.
+
 | Function | Returns | Description | Status |
 |---|---|---|---|
-| `debug_break()` | — | Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug) |  |
-| `mem_chip_free()` | Int | Available chip RAM |  |
-| `mem_fast_free()` | Int | Available fast RAM |  |
-| `mem_total()` | Int | Free memory, chip and fast (what is available: not the size of the RAM) |  |
-| `mem_chip_total()` | Int | Size of the chip RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
-| `mem_fast_total()` | Int | Size of the fast RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
-| `peek_byte(addr)` | Int | Read byte from memory address |  |
-| `peek_word(addr)` | Int | Read word from memory address |  |
-| `peek_long(addr)` | Int | Read long from memory address |  |
-| `poke_byte(addr, value)` | — | Write byte to memory address |  |
-| `poke_word(addr, value)` | — | Write word to memory address |  |
-| `amiga_alloc(size)` | Int | size bytes for AmigaOS structures (@amiga struct), cleared: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) on the Amiga, memory of the Amiga box (below 4 GB) on DashOS; 0 without memory |  |
-| `amiga_free(addr, size)` | — | Gives back what amiga_alloc gave (with the same size) |  |
-| `poke_long(addr, value)` | — | Write long to memory address |  |
-| `time_delay(ticks)` | — | Delay in ticks (50 per second) |  |
-| `time_delay_ms(ms)` | — | Delay in milliseconds |  |
-| `random()` | Int | Random number |  |
-| `random_range(min, max)` | Int | Random in range [min, max] |  |
-| `random_seed(seed)` | — | Set random seed |  |
-| `wait_vblank()` | — | Wait for vertical blank |  |
-| `wait_blit()` | — | Wait for blitter |  |
-| `arena_new(size)` | Int | Create arena allocator with given size in bytes |  |
-| `arena_alloc(arena, size)` | Int | Allocate from arena (fast bump allocator) |  |
-| `arena_reset(arena)` | — | Reset arena (reuse memory without freeing) |  |
-| `arena_free(arena)` | — | Free arena and all its memory |  |
-| `arena_used(arena)` | Int | Get bytes used in arena |  |
-| `arena_available(arena)` | Int | Get bytes available in arena |  |
-| `refcount(obj)` | Int | Get reference count of object |  |
-| `retain(obj)` | — | Manually increment reference count |  |
-| `release(obj)` | — | Manually decrement reference count (frees if 0) |  |
-| `mem_trim()` | Int | Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back |  |
-| `mem_puddle(bytes)` | Bool | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
+| [`debug_break()`](#debug_break) | — | Stop in the UAE emulator's debugger (nothing on a real Amiga; tools/emu_run.py --debug) |  |
+| [`mem_chip_free()`](#mem_chip_free) | Int | Available chip RAM |  |
+| [`mem_fast_free()`](#mem_fast_free) | Int | Available fast RAM |  |
+| [`mem_total()`](#mem_total) | Int | Free memory, chip and fast (what is available: not the size of the RAM) |  |
+| [`mem_chip_total()`](#mem_chip_total) | Int | Size of the chip RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
+| [`mem_fast_total()`](#mem_fast_total) | Int | Size of the fast RAM, in bytes (free and in use: AvailMem with MEMF_TOTAL) |  |
+| [`peek_byte(addr)`](#peek_byte) | Int | Read byte from memory address |  |
+| [`peek_word(addr)`](#peek_word) | Int | Read word from memory address |  |
+| [`peek_long(addr)`](#peek_long) | Int | Read long from memory address |  |
+| [`poke_byte(addr, value)`](#poke_byte) | — | Write byte to memory address |  |
+| [`poke_word(addr, value)`](#poke_word) | — | Write word to memory address |  |
+| [`amiga_alloc(size)`](#amiga_alloc) | Int | size bytes for AmigaOS structures (@amiga struct), cleared: AllocMem(MEMF_PUBLIC \| MEMF_CLEAR) on the Amiga, memory of the Amiga box (below 4 GB) on DashOS; 0 without memory |  |
+| [`amiga_free(addr, size)`](#amiga_free) | — | Gives back what amiga_alloc gave (with the same size) |  |
+| [`poke_long(addr, value)`](#poke_long) | — | Write long to memory address |  |
+| [`time_delay(ticks)`](#time_delay) | — | Delay in ticks (50 per second) |  |
+| [`time_delay_ms(ms)`](#time_delay_ms) | — | Delay in milliseconds |  |
+| [`random()`](#random) | Int | Random number |  |
+| [`random_range(min, max)`](#random_range) | Int | Random in range [min, max] |  |
+| [`random_seed(seed)`](#random_seed) | — | Set random seed |  |
+| [`wait_vblank()`](#wait_vblank) | — | Wait for vertical blank |  |
+| [`wait_blit()`](#wait_blit) | — | Wait for blitter |  |
+| [`arena_new(size)`](#arena_new) | Int | Create arena allocator with given size in bytes |  |
+| [`arena_alloc(arena, size)`](#arena_alloc) | Int | Allocate from arena (fast bump allocator) |  |
+| [`arena_reset(arena)`](#arena_reset) | — | Reset arena (reuse memory without freeing) |  |
+| [`arena_free(arena)`](#arena_free) | — | Free arena and all its memory |  |
+| [`arena_used(arena)`](#arena_used) | Int | Get bytes used in arena |  |
+| [`arena_available(arena)`](#arena_available) | Int | Get bytes available in arena |  |
+| [`refcount(obj)`](#refcount) | Int | Get reference count of object |  |
+| [`retain(obj)`](#retain) | — | Manually increment reference count |  |
+| [`release(obj)`](#release) | — | Manually decrement reference count (frees if 0) |  |
+| [`mem_trim()`](#mem_trim) | Int | Give the slabs of small blocks (up to 128 bytes) that are all free back to the system; bytes given back |  |
+| [`mem_puddle(bytes)`](#mem_puddle) | Bool | Size of the memory pool's puddles (1 KB to 1 MB, 4 KB by default); only before the first allocation |  |
+
+<a id="debug_break"></a>
+
+### `debug_break()`
+
+Stops the program in the emulator's debugger (`tools/emu_run.py --debug`). On a real Amiga, or an emulator without
+that debugger, it does nothing.
+
+<a id="mem_chip_free"></a>
+
+### `mem_chip_free()` → `Int`
+
+Returns the bytes of chip memory free now.
+
+See also: [`mem_chip_total`](#mem_chip_total), [`mem_fast_free`](#mem_fast_free).
+
+<a id="mem_fast_free"></a>
+
+### `mem_fast_free()` → `Int`
+
+Returns the bytes of fast memory free now; 0 on an Amiga without fast.
+
+See also: [`mem_fast_total`](#mem_fast_total), [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_total"></a>
+
+### `mem_total()` → `Int`
+
+Returns the free bytes adding chip and fast. It is what is left, not the size of the memory.
+
+See also: [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_chip_total"></a>
+
+### `mem_chip_total()` → `Int`
+
+Returns the size of chip memory in bytes, free and in use: a little under 2 MB on an A1200.
+
+See also: [`mem_chip_free`](#mem_chip_free).
+
+<a id="mem_fast_total"></a>
+
+### `mem_fast_total()` → `Int`
+
+Returns the size of fast memory in bytes, free and in use.
+
+See also: [`mem_fast_free`](#mem_fast_free).
+
+<a id="peek_byte"></a>
+
+### `peek_byte(addr)` → `Int`
+
+- `addr`: the address.
+
+Returns the byte there, 0 to 255.
+
+See also: [`poke_byte`](#poke_byte), [`buffer_get_byte`](#buffer_get_byte).
+
+<a id="peek_word"></a>
+
+### `peek_word(addr)` → `Int`
+
+- `addr`: the address, even.
+
+Returns the 16 bits there. On a 68000, an odd address is a CPU error.
+
+See also: [`poke_word`](#poke_word).
+
+<a id="peek_long"></a>
+
+### `peek_long(addr)` → `Int`
+
+- `addr`: the address, even.
+
+Returns the 32 bits there.
+
+See also: [`poke_long`](#poke_long).
+
+<a id="poke_byte"></a>
+
+### `poke_byte(addr, value)`
+
+- `addr`: the address.
+- `value`: the byte.
+
+Writes it there. A wrong address hangs the Amiga.
+
+See also: [`peek_byte`](#peek_byte).
+
+<a id="poke_word"></a>
+
+### `poke_word(addr, value)`
+
+- `addr`: the address, even.
+- `value`: the 16 bits.
+
+See also: [`peek_word`](#peek_word).
+
+<a id="amiga_alloc"></a>
+
+### `amiga_alloc(size)` → `Int`
+
+- `size`: how many bytes.
+
+Zeroed memory for AmigaOS structures (`@amiga struct`) handed to the system. Returns the address, or 0 without
+memory. Give it back with `amiga_free` and the same size; it is not freed on its own.
+
+See also: [`amiga_free`](#amiga_free), [`buffer_alloc`](#buffer_alloc).
+
+<a id="amiga_free"></a>
+
+### `amiga_free(addr, size)`
+
+- `addr`: what `amiga_alloc` gave.
+- `size`: the same size that was asked for.
+
+See also: [`amiga_alloc`](#amiga_alloc).
+
+<a id="poke_long"></a>
+
+### `poke_long(addr, value)`
+
+- `addr`: the address, even.
+- `value`: the 32 bits.
+
+See also: [`peek_long`](#peek_long).
+
+<a id="time_delay"></a>
+
+### `time_delay(ticks)`
+
+- `ticks`: how many ticks; there are 50 a second (`time_delay(50)` is one second).
+
+Waits without using CPU: other programs carry on.
+
+See also: [`time_delay_ms`](#time_delay_ms), [`wait_vblank`](#wait_vblank).
+
+<a id="time_delay_ms"></a>
+
+### `time_delay_ms(ms)`
+
+- `ms`: how many milliseconds.
+
+Like `time_delay`, in milliseconds, in steps of 20: under 20 does not wait at all.
+
+See also: [`time_delay`](#time_delay).
+
+<a id="random"></a>
+
+### `random()` → `Int`
+
+Returns a random number from 0 to 32767. The series is always the same unless the seed changes:
+`random_seed(time_ms())` at the start gives a different one each time.
+
+See also: [`random_range`](#random_range), [`random_seed`](#random_seed).
+
+<a id="random_range"></a>
+
+### `random_range(min, max)` → `Int`
+
+- `min`, `max`: the ends, both included.
+
+Returns a random number between them: `random_range(1, 6)` is a die. With `max` less than or equal to `min` it
+returns `min`. For ranges of more than 32768 numbers, not all of them come up.
+
+See also: [`random`](#random), [`random_seed`](#random_seed).
+
+<a id="random_seed"></a>
+
+### `random_seed(seed)`
+
+- `seed`: the seed.
+
+The same seed gives the same series of numbers.
+
+See also: [`random`](#random).
+
+<a id="wait_vblank"></a>
+
+### `wait_vblank()`
+
+Waits for the next vertical blank: 50 times a second on PAL, 60 on NTSC. In a game loop, one wait per turn keeps it
+at the screen's pace. With `screen_flip` it is not needed.
+
+See also: [`screen_flip`](#screen_flip), [`time_delay`](#time_delay).
+
+<a id="wait_blit"></a>
+
+### `wait_blit()`
+
+Waits for the blitter to finish what it is doing. Dash's builtins already wait when needed; it is for code of your
+own reading memory the blitter is writing.
+
+<a id="arena_new"></a>
+
+### `arena_new(size)` → `Int`
+
+- `size`: how many bytes.
+
+Creates an arena: a block of memory handed out in order, very fast, and emptied in one go. For lots of small data
+living the same time (a frame, a level). Returns the arena, or 0 without memory. It must be freed with
+`arena_free`.
+
+See also: [`arena_alloc`](#arena_alloc), [`arena_reset`](#arena_reset), [`arena_free`](#arena_free).
+
+<a id="arena_alloc"></a>
+
+### `arena_alloc(arena, size)` → `Int`
+
+- `arena`: the arena from `arena_new`.
+- `size`: how many bytes.
+
+Returns the address of a new piece, or 0 if it no longer fits. Pieces are aligned to 4 bytes. After an
+`arena_reset` they hold whatever was there before: they are not zeroed. They are not freed one by one: the whole
+arena is emptied.
+
+See also: [`arena_reset`](#arena_reset), [`arena_available`](#arena_available).
+
+<a id="arena_reset"></a>
+
+### `arena_reset(arena)`
+
+- `arena`: the arena from `arena_new`.
+
+Empties it: what was handed out is no longer valid and handing out starts over.
+
+See also: [`arena_alloc`](#arena_alloc).
+
+<a id="arena_free"></a>
+
+### `arena_free(arena)`
+
+- `arena`: the arena from `arena_new`.
+
+Gives its memory back to the system.
+
+See also: [`arena_new`](#arena_new).
+
+<a id="arena_used"></a>
+
+### `arena_used(arena)` → `Int`
+
+- `arena`: the arena from `arena_new`.
+
+Returns how many bytes have been handed out.
+
+See also: [`arena_available`](#arena_available).
+
+<a id="arena_available"></a>
+
+### `arena_available(arena)` → `Int`
+
+- `arena`: the arena from `arena_new`.
+
+Returns how many bytes are left.
+
+See also: [`arena_used`](#arena_used).
+
+<a id="refcount"></a>
+
+### `refcount(obj)` → `Int`
+
+- `obj`: a list or a struct.
+
+Returns how many references it has: how many variables, fields or lists hold it. For hunting memory leaks;
+`./dash --memcheck` does it better.
+
+See also: [`retain`](#retain), [`release`](#release).
+
+<a id="retain"></a>
+
+### `retain(obj)`
+
+- `obj`: the object.
+
+Adds a reference to it, so it is not freed even if Dash thinks nobody uses it: for instance, if only C code keeps
+it. Each `retain` needs its `release`.
+
+See also: [`release`](#release), [`refcount`](#refcount).
+
+<a id="release"></a>
+
+### `release(obj)`
+
+- `obj`: the object.
+
+Takes a reference away; if it reaches 0, it frees it. Only to undo a `retain`.
+
+See also: [`retain`](#retain).
+
+<a id="mem_trim"></a>
+
+### `mem_trim()` → `Int`
+
+Gives back to the system Dash's small-memory blocks (up to 128 bytes) left completely free. Returns how many bytes
+it gave back. Handy after dropping lots of data in a program that keeps running.
+
+See also: [`mem_puddle`](#mem_puddle).
+
+<a id="mem_puddle"></a>
+
+### `mem_puddle(bytes)` → `Bool`
+
+- `bytes`: the size of each piece Dash asks the system for its memory, 1 KB to 1 MB; 4 KB if not set.
+
+It only works before the program asks for memory: the first line of `Main`. Large pieces suit lots of data; small
+ones, an Amiga short of memory. Returns `false` if it is too late or the size is not valid.
+
+See also: [`mem_trim`](#mem_trim).
 
 ## Files (DOS)
 
