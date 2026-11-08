@@ -95,7 +95,7 @@ function runCommand(dashDir, file, autoclose) {
     const tool = path.join(dashDir, 'tools', 'emu_run.py');
     const close = autoclose > 0 ? ` --autoclose ${Math.floor(autoclose)}` : '';
     // (--dash2: compiled with ./dash, Dash 2.0; a program with C goes through C with gcc)
-    return `python3 ${quote(tool)} --dash2${close} ${quote(file)}`;
+    return `python3 ${quote(tool)} --dash2${close} --cd ${quote(path.dirname(file))} ${quote(file)}`;
 }
 
 function emulatorEnv() {

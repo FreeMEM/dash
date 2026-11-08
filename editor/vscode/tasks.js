@@ -71,7 +71,9 @@ function taskCommand(kind, dashDir, file, options = {}) {
         `${quote(path.join(dashDir, dashExe(dashDir)))} -q` + (k.flag ? ' ' + k.flag : '') + ` ${quote(file)} -o ${quote(out)}`;
     if (!k.run) return compile;
     // the program is built here (with its option) and the emulator runs the binary as it is
-    const emu = [' --follow'];
+    // run in the folder of the .dash (Proyecto: in the emulator): it finds its files with a relative path, as Forja
+    // runs it in the drawer of its .dash, wherever the executable goes (dash.outputFolder)
+    const emu = [' --follow', ` --cd ${quote(path.dirname(file))}`];
     if (options.window !== false) emu.push(' --window');
     if (options.machine && options.machine !== 'a1200') emu.push(` --machine ${quote(options.machine)}`);
     if (options.emulator === 'amiberry') emu.push(' --emulator amiberry');

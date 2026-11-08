@@ -213,7 +213,8 @@ variable `DASH_OUT`: `SetEnv DASH_OUT RAM:salida.txt`). Tried with the emulator 
 
 - `dash.path`: folder of the Dash compiler (the one with `./dash`). Empty: looked for up from the file.
 - `dash.outputFolder`: folder for the executables (absolute, `~/...` or relative to the `.dash`'s folder), like
-  Forja's "Ejecutables en:". Empty: `bin/` next to each `.dash`.
+  Forja's "Ejecutables en:" (an idea of Ferrán García). Empty: `bin/` next to each `.dash`. Wherever it goes, the
+  program runs in the emulator in the folder of its `.dash` (`Proyecto:`), so it finds its files.
 - `dash.emulator.kickstart`, `dash.emulator.system`: Kickstart ROM and Workbench files for FS-UAE
   (the same as `DASH_KICKSTART` and `DASH_EMU_SYS`); `kickstartA500`, `kickstart32`, `system32`, `systemRtg`
   for the other machines (`DASH_KICKSTART_A500`, `DASH_KICKSTART_32`, `DASH_EMU_SYS_32`, `DASH_EMU_SYS_32_RTG`).
